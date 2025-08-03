@@ -44,14 +44,16 @@
   #endif
 
   #include "assert.h"
+  #include "threads.h"
 #else
+  #include "assert.h"
+  #include "stdbool.h"
+  #include "stddef.h"
   #include "stdint.h" 
   #include "stdio.h"
-  #include "stdbool.h"
-  #include "assert.h"
-  #include "string.h"
   #include "stdlib.h"
-  #include "stddef.h"
+  #include "string.h"
+  #include "threads.h"
   #include "wchar.h"
 #endif
 
@@ -860,7 +862,7 @@ void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   
   for (s32 i = 0; i < 3; i++) {
     fractional_part *= 10;
-    s32 digit = (s32)fractional_part;
+    c8 digit = (c8)fractional_part;
     sp_str_builder_append_c8(builder, '0' + digit);
     fractional_part -= digit;
   }
@@ -2024,10 +2026,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 ///////////////
 // THREADING //
 ///////////////
-
 #ifdef _WIN32
-///// WINDOWS THREADING /////
-
 void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   sp_thread_launch_t launch = SP_LVAL(sp_thread_launch_t) {
     .fn = fn,
@@ -2104,7 +2103,7 @@ void sp_semaphore_signal(sp_semaphore_t* semaphore) {
 }  
 
 void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
-  sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)sp_alloc(sizeof(sp_os_win32_file_monitor));
+  sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)sp_alloc(sizeof(sp_os_win32_file_monitor_t));
   sp_dynamic_array_init(&os->directory_infos, sizeof(sp_monitored_dir_t));
   monitor->os = os;
 }
@@ -2140,7 +2139,7 @@ void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t direc
   info->notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
   sp_os_zero_memory(info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
 
-  sp_os_file_monitor_issue_one_read(monitor, info);
+  sp_os_win32_file_monitor_issue_one_read(monitor, info);
   sp_free(directory_cstr);
 }
 

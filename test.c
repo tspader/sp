@@ -1,6 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS
 #define SP_IMPLEMENTATION
-#define SP_NO_FILE_MONITOR  // Disable file monitor for portability
 #include "sp.h"
 
 #include "external/utest/utest.h"
