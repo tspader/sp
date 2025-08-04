@@ -906,7 +906,7 @@ void sp_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   for (s32 i = 0; i < 3; i++) {
     fractional_part *= 10;
     s32 digit = (s32)fractional_part;
-    sp_str_builder_append_c8(builder, '0' + digit);
+    sp_str_builder_append_c8(builder, (c8)('0' + digit));
     fractional_part -= digit;
   }
 }
@@ -984,50 +984,37 @@ void sp_format_date_time(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_os_date_time_t* dt = (sp_os_date_time_t*)arg->data;
   
   // Format year
-  s32 year = dt->year;
-  c8 year_digits[4];
-  for (s32 i = 3; i >= 0; i--) {
-    year_digits[i] = '0' + (year % 10);
-    year /= 10;
-  }
-  for (s32 i = 0; i < 4; i++) {
-    sp_str_builder_append_c8(builder, year_digits[i]);
-  }
+  sp_format_signed(builder, dt->year, 10);
   
   sp_str_builder_append_c8(builder, '-');
   
   // Format month (2 digits)
   if (dt->month < 10) sp_str_builder_append_c8(builder, '0');
-  if (dt->month >= 10) sp_str_builder_append_c8(builder, '0' + dt->month / 10);
-  sp_str_builder_append_c8(builder, '0' + dt->month % 10);
+  sp_format_signed(builder, dt->month, 10);
   
   sp_str_builder_append_c8(builder, '-');
   
   // Format day (2 digits)
   if (dt->day < 10) sp_str_builder_append_c8(builder, '0');
-  if (dt->day >= 10) sp_str_builder_append_c8(builder, '0' + dt->day / 10);
-  sp_str_builder_append_c8(builder, '0' + dt->day % 10);
+  sp_format_signed(builder, dt->day, 10);
   
   sp_str_builder_append_c8(builder, 'T');
   
   // Format hour (2 digits)
   if (dt->hour < 10) sp_str_builder_append_c8(builder, '0');
-  if (dt->hour >= 10) sp_str_builder_append_c8(builder, '0' + dt->hour / 10);
-  sp_str_builder_append_c8(builder, '0' + dt->hour % 10);
+  sp_format_signed(builder, dt->hour, 10);
   
   sp_str_builder_append_c8(builder, ':');
   
   // Format minute (2 digits)
   if (dt->minute < 10) sp_str_builder_append_c8(builder, '0');
-  if (dt->minute >= 10) sp_str_builder_append_c8(builder, '0' + dt->minute / 10);
-  sp_str_builder_append_c8(builder, '0' + dt->minute % 10);
+  sp_format_signed(builder, dt->minute, 10);
   
   sp_str_builder_append_c8(builder, ':');
   
   // Format second (2 digits)
   if (dt->second < 10) sp_str_builder_append_c8(builder, '0');
-  if (dt->second >= 10) sp_str_builder_append_c8(builder, '0' + dt->second / 10);
-  sp_str_builder_append_c8(builder, '0' + dt->second % 10);
+  sp_format_signed(builder, dt->second, 10);
   
   // Add milliseconds if non-zero
   if (dt->millisecond > 0) {
@@ -1036,19 +1023,7 @@ void sp_format_date_time(sp_str_builder_t* builder, sp_format_arg_t* arg) {
     // Format milliseconds (3 digits)
     if (dt->millisecond < 100) sp_str_builder_append_c8(builder, '0');
     if (dt->millisecond < 10) sp_str_builder_append_c8(builder, '0');
-    
-    s32 ms = dt->millisecond;
-    c8 ms_digits[3];
-    s32 dc = 0;
-    
-    while (ms > 0) {
-      ms_digits[dc++] = '0' + (ms % 10);
-      ms /= 10;
-    }
-    
-    for (s32 i = dc - 1; i >= 0; i--) {
-      sp_str_builder_append_c8(builder, ms_digits[i]);
-    }
+    sp_format_signed(builder, dt->millisecond, 10);
   }
 }
 
@@ -1652,11 +1627,11 @@ sp_str_t sp_os_path_extension(sp_str_t path) {
       if (sp_cstr_equal(find_data.cFileName, ".")) continue;
       if (sp_cstr_equal(find_data.cFileName, "..")) continue;
       
-      sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-      sp_str_builder_append(&builder, path);
-      sp_str_builder_append(&builder, sp_str_lit("/"));
-      sp_str_builder_append_cstr(&builder, find_data.cFileName);
-      sp_str_t file_path = sp_str_builder_write(&builder);
+      sp_str_builder_t entry_builder = SP_ZERO_INITIALIZE();
+      sp_str_builder_append(&entry_builder, path);
+      sp_str_builder_append(&entry_builder, sp_str_lit("/"));
+      sp_str_builder_append_cstr(&entry_builder, find_data.cFileName);
+      sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
       sp_os_directory_entry_t entry  = SP_LVAL(sp_os_directory_entry_t) {

@@ -300,7 +300,6 @@ UTEST(dynamic_array, growth) {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
     
-    u32 old_cap = arr.capacity;
     sp_dynamic_array_grow(&arr, 10);
     
     ASSERT_GE(arr.capacity, 10);
@@ -321,7 +320,6 @@ UTEST(dynamic_array, growth) {
       sp_dynamic_array_push(&arr, &i);
     }
     
-    u32 old_cap = arr.capacity;
     u32 old_bytes = sp_test_memory_tracker_bytes_used(&tracker);
     
     // Force growth
@@ -332,7 +330,7 @@ UTEST(dynamic_array, growth) {
     
     // Verify all data preserved
     for (u32 i = 0; i < 10; i++) {
-      ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), i);
+      ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), (s32)i);
     }
   }
   
@@ -467,7 +465,7 @@ UTEST(dynamic_array, edge_cases) {
     // Sequential access
     for (u32 i = 0; i < 10; i++) {
       s32* elem = (s32*)sp_dynamic_array_at(&arr, i);
-      ASSERT_EQ(*elem, i);
+      ASSERT_EQ(*elem, (s32)i);
     }
     
     // Boundary access
@@ -494,7 +492,7 @@ UTEST(dynamic_array, stress_test) {
       sp_dynamic_array_push(&arr, &i);
     }
     
-    ASSERT_EQ(arr.size, iterations);
+    ASSERT_EQ(arr.size, (u32)iterations);
     
     // Verify sampling
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
@@ -660,7 +658,7 @@ UTEST(formatter, character_types) {
 UTEST(formatter, pointer_type) {
   sp_test_use_malloc();
   
-  void* ptr = (void*)0xDEADBEEF;
+  void* ptr = (void*)(uintptr_t)0xDEADBEEF;
   sp_str_t result = sp_fmt(sp_str_lit("ptr: {}"), SP_FMT_PTR(ptr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("ptr: 0xDEADBEEF")));
   
@@ -818,7 +816,7 @@ UTEST(sp_str_builder, edge_cases) {
   
   // Test building a large string
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
-  for (int i = 0; i < 100; i++) {
+  for (s32 i = 0; i < 100; i++) {
     sp_str_builder_append_cstr(&builder2, "test ");
   }
   ASSERT_EQ(builder2.buffer.count, 500); // 100 * 5
