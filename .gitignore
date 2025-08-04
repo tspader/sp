@@ -1,3 +1,8 @@
 build/*
 !build/build.sh
 .vscode
+.spackle/*
+!.spackle/spackle.py
+.claude
+.mcp.json
+claude.md
