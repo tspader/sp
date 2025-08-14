@@ -1,14 +1,42 @@
 #ifndef SP_SPACE_H
 #define SP_SPACE_H
 
+////////////////////////////
+// PLATFORM CONFIGURATION //
+////////////////////////////
 #ifdef _WIN32
+  #define SP_WIN32
+#endif
+
+#ifdef __APPLE__
+  #define SP_MACOS
+  #define SP_POSIX
+#endif
+
+#ifdef __linux__
+  #define SP_LINUX
+  #define SP_POSIX
+#endif
+
+#ifdef __cplusplus
+  #define SP_CPP
+#endif
+
+// #define SP_WIN32_NO_WINDOWS_H
+// #define SP_NO_STDLIB
+
+
+/////////////////
+// OS INCLUDES //
+/////////////////
+#ifdef SP_WIN32
   #undef UNICODE
   #define WIN32_LEAN_AND_MEAN
   #define NOMINMAX
   #define _CRT_RAND_S
   #define _AMD64_
 
-  #ifdef SP_NO_WINDOWS_H
+  #ifdef SP_WIN32_NO_WINDOWS_H
     #include "windef.h"
     #include "winbase.h"
     #include "wingdi.h"
@@ -26,7 +54,7 @@
   #endif
 
   #include "threads.h"
-#endif // _WIN32
+#endif
 
 #ifdef __APPLE__
   #include "pthread.h"
@@ -36,6 +64,10 @@
   #include "threads.h"
 #endif
 
+
+/////////////////////////////////
+// C STANDARD LIBRARY INCLUDES //
+/////////////////////////////////
 #ifdef SP_NO_STDLIB
   typedef signed char        int8_t;
   typedef short              int16_t;
@@ -45,9 +77,9 @@
   typedef unsigned short     uint16_t;
   typedef unsigned int       uint32_t;
   typedef unsigned long long uint64_t;
-  typedef unsigned long      uintptr_t;  // Add for pointer conversions
+  typedef unsigned long      uintptr_t;
 
-  #ifndef __cplusplus
+  #ifndef SP_CPP
     #define bool  _Bool
     #define false 0
     #define true  1
@@ -56,6 +88,7 @@
   #include "assert.h"
 #else
   #include "assert.h"
+  #include "stdarg.h"
   #include "stdbool.h"
   #include "stddef.h"
   #include "stdint.h" 
@@ -99,7 +132,7 @@ typedef void* sp_opaque_ptr;
 #define SP_API
 #define SP_IMP
 
-#ifdef __cplusplus
+#ifdef SP_CPP
   #define SP_LVAL(T)
   #define SP_THREAD_LOCAL thread_local
   #define SP_BEGIN_EXTERN_C() extern "C" {
@@ -434,7 +467,7 @@ typedef struct sp_formatter {
 
 #define SP_FMT_ID(T) sp_hash_cstr(SP_MACRO_STR(T))
 
-#ifdef __cplusplus 
+#ifdef SP_CPP 
   #define SP_FMT_ARG(T, V) sp_make_format_arg(SP_FMT_ID(T), (V))
 #else
   #define SP_FMT_ARG(T, V) SP_LVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .data = (void*)&(V) }
@@ -540,7 +573,7 @@ typedef enum {
 
 // typedef FILE*              sp_os_file_t;
 
-#ifdef _WIN32
+#ifdef SP_WIN32
   typedef HANDLE              sp_win32_handle_t;
   typedef DWORD               sp_win32_dword_t;
   typedef WIN32_FIND_DATA     sp_win32_find_data_t;
@@ -663,7 +696,7 @@ SP_END_EXTERN_C()
 // ██║     ██╔═══╝ ██╔═══╝ 
 // ╚██████╗██║     ██║     
 //  ╚═════╝╚═╝     ╚═╝     
-#ifdef __cplusplus
+#ifdef SP_CPP
   sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
   sp_str_t operator/(const sp_str_t& a, const c8* b);
 
@@ -1558,7 +1591,118 @@ sp_str_t sp_os_path_extension(sp_str_t path) {
   return sp_str(c, (path.data + path.len) - (c));
 }
 
-#ifdef _WIN32
+
+///////////////////
+// DYNAMIC ARRAY //
+///////////////////
+void sp_dynamic_array_init(sp_dynamic_array_t* arr, u32 element_size) {
+  SP_ASSERT(arr);
+
+  arr->size = 0;
+  arr->capacity = 2;
+  arr->element_size = element_size;
+  arr->data = (u8*)sp_alloc(arr->capacity * element_size);
+}
+
+u8* sp_dynamic_array_at(sp_dynamic_array_t* arr, u32 index) {
+  SP_ASSERT(arr);
+  return arr->data + (index * arr->element_size);
+}
+
+u8*  sp_dynamic_array_push(sp_dynamic_array_t* arr, void* data) {
+  return sp_dynamic_array_push_n(arr, data, 1);
+}
+
+u8* sp_dynamic_array_push_n(sp_dynamic_array_t* arr, void* data, u32 count) {
+  SP_ASSERT(arr);
+
+  u8* reserved = sp_dynamic_array_reserve(arr, count);
+  if (data) sp_os_memory_copy(data, reserved, arr->element_size * count);
+  return reserved;
+}
+
+u8* sp_dynamic_array_reserve(sp_dynamic_array_t* arr, u32 count) {
+  SP_ASSERT(arr);
+
+  sp_dynamic_array_grow(arr, arr->size + count);
+
+  u8* element = sp_dynamic_array_at(arr, arr->size);
+  arr->size += count;
+  return element;
+}
+
+void sp_dynamic_array_clear(sp_dynamic_array_t* arr) {
+  SP_ASSERT(arr);
+
+  arr->size = 0;
+}
+
+u32 sp_dynamic_array_byte_size(sp_dynamic_array_t* arr) {
+  SP_ASSERT(arr);
+
+  return arr->size * arr->element_size;
+}
+
+void sp_dynamic_array_grow(sp_dynamic_array_t* arr, u32 capacity) {
+  SP_ASSERT(arr);
+
+  if (arr->capacity >= capacity) return;
+  arr->capacity = SP_MAX(arr->capacity * 2, capacity);
+  arr->data = (u8*)sp_realloc(arr->data, arr->capacity * arr->element_size);
+}
+
+
+/////////////////
+// FIXED ARRAY //
+/////////////////
+void sp_fixed_array_init(sp_fixed_array_t* buffer, u32 max_vertices, u32 element_size) {
+  SP_ASSERT(buffer);
+
+  buffer->size = 0;
+  buffer->capacity = max_vertices;
+  buffer->element_size = element_size;
+  buffer->data = (u8*)sp_alloc(max_vertices * element_size);
+}
+
+u8* sp_fixed_array_at(sp_fixed_array_t* buffer, u32 index) {
+  SP_ASSERT(buffer);
+  return buffer->data + (index * buffer->element_size);
+}
+
+u8* sp_fixed_array_push(sp_fixed_array_t* buffer, void* data, u32 count) {
+  SP_ASSERT(buffer);
+  SP_ASSERT(buffer->size < buffer->capacity);
+
+  u8* reserved = sp_fixed_array_reserve(buffer, count);
+  if (data) sp_os_memory_copy(data, reserved, buffer->element_size * count);
+  return reserved;
+}
+
+u8* sp_fixed_array_reserve(sp_fixed_array_t* buffer, u32 count) {
+  SP_ASSERT(buffer);
+
+  u8* element = sp_fixed_array_at(buffer, buffer->size);
+  buffer->size += count;
+  return element;
+}
+
+void sp_fixed_array_clear(sp_fixed_array_t* buffer) {
+  SP_ASSERT(buffer);
+
+  buffer->size = 0;
+}
+
+u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
+  SP_ASSERT(buffer);
+
+  return buffer->size * buffer->element_size;
+}
+
+
+///////////
+// WIN32 //
+///////////
+#ifdef SP_WIN32
   void* sp_os_allocate_memory(u32 size) {
     return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
   }
@@ -1768,248 +1912,7 @@ sp_str_t sp_os_path_extension(sp_str_t path) {
     str8[size_needed] = '\0';
     return str8;
   }
-#endif // _WIN32
 
-#ifdef __APPLE__
-  void* sp_os_allocate_memory(u32 size) {
-    void* ptr = malloc(size);
-    if (ptr) memset(ptr, 0, size);
-    return ptr;
-  }
-
-  void* sp_os_reallocate_memory(void* ptr, u32 size) {
-    if (!ptr) return sp_os_allocate_memory(size);
-    if (!size) { free(ptr); return NULL; }
-    return realloc(ptr, size);
-  }
-
-  void sp_os_free_memory(void* ptr) {
-    if (!ptr) return;
-    free(ptr);
-  }
-
-  bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
-    return !memcmp(a, b, len);
-  }
-
-  void sp_os_memory_copy(const void* source, void* dest, u32 num_bytes) {
-    memcpy(dest, source, num_bytes);
-  }
-
-  void sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
-    u8* current_byte = (u8*)buffer;
-
-    s32 i = 0;
-    while (true) {
-      if (i + fill_size > buffer_size) return;
-      memcpy(current_byte + i, (u8*)fill, fill_size);
-      i += fill_size;
-    }
-  }
-
-  void sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill) {
-  sp_os_fill_memory(buffer, buffer_size, &fill, sizeof(u8));
-  }
-
-  void sp_os_zero_memory(void* buffer, u32 buffer_size) {
-  sp_os_fill_memory_u8(buffer, buffer_size, 0);
-  }
-
-  bool sp_os_does_path_exist(sp_str_t path) {
-    (void)path;
-    return false; // Minimal implementation for now
-  }
-
-  bool sp_os_is_regular_file(sp_str_t path) {
-    (void)path;
-    return false; // Minimal implementation for now
-  }
-
-  bool sp_os_is_directory(sp_str_t path) {
-    (void)path;
-    return false; // Minimal implementation for now
-  }
-
-  void sp_os_remove_directory(sp_str_t path) {
-    (void)path; // Minimal implementation for now
-  }
-
-  void sp_os_create_directory(sp_str_t path) {
-    (void)path; // Minimal implementation for now
-  }
-
-  void sp_os_create_file(sp_str_t path) {
-    (void)path; // Minimal implementation for now
-  }
-
-  void sp_os_remove_file(sp_str_t path) {
-    (void)path; // Minimal implementation for now
-  }
-
-  sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
-    (void)path;
-    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
-  }
-
-  sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
-    (void)path;
-    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
-  }
-
-  sp_os_date_time_t sp_os_get_date_time() {
-    return SP_ZERO_STRUCT(sp_os_date_time_t);
-  }
-
-  sp_precise_epoch_time_t sp_os_file_mod_time_precise(sp_str_t file_path) {
-    (void)file_path;
-    return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
-  }
-
-  void sp_os_sleep_ms(f64 ms) {
-    (void)ms; // Minimal implementation for now
-  }
-
-  sp_str_t sp_os_get_executable_path() {
-    return sp_str_lit(""); // Minimal implementation for now
-  }
-
-  sp_str_t sp_os_canonicalize_path(sp_str_t path) {
-    return sp_str_copy(path); // Minimal implementation for now
-  }
-
-  c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
-    if (!str16 || len == 0) {
-      c8* result = (c8*)sp_alloc(1);
-      result[0] = '\0';
-      return result;
-    }
-    
-    // Simple conversion for ASCII characters
-    c8* result = (c8*)sp_alloc(len + 1);
-    for (u32 i = 0; i < len; i++) {
-      if (str16[i] < 128) {
-        result[i] = (c8)str16[i];
-      } else {
-        result[i] = '?';  // Replace non-ASCII with '?'
-      }
-    }
-    result[len] = '\0';
-    return result;
-  }
-#endif // __APPLE__
-
-
-
-///////////////////
-// DYNAMIC ARRAY //
-///////////////////
-void sp_dynamic_array_init(sp_dynamic_array_t* arr, u32 element_size) {
-  SP_ASSERT(arr);
-
-  arr->size = 0;
-  arr->capacity = 2;
-  arr->element_size = element_size;
-  arr->data = (u8*)sp_alloc(arr->capacity * element_size);
-}
-
-u8* sp_dynamic_array_at(sp_dynamic_array_t* arr, u32 index) {
-  SP_ASSERT(arr);
-  return arr->data + (index * arr->element_size);
-}
-
-u8*  sp_dynamic_array_push(sp_dynamic_array_t* arr, void* data) {
-  return sp_dynamic_array_push_n(arr, data, 1);
-}
-
-u8* sp_dynamic_array_push_n(sp_dynamic_array_t* arr, void* data, u32 count) {
-  SP_ASSERT(arr);
-
-  u8* reserved = sp_dynamic_array_reserve(arr, count);
-  if (data) sp_os_memory_copy(data, reserved, arr->element_size * count);
-  return reserved;
-}
-
-u8* sp_dynamic_array_reserve(sp_dynamic_array_t* arr, u32 count) {
-  SP_ASSERT(arr);
-
-  sp_dynamic_array_grow(arr, arr->size + count);
-
-  u8* element = sp_dynamic_array_at(arr, arr->size);
-  arr->size += count;
-  return element;
-}
-
-void sp_dynamic_array_clear(sp_dynamic_array_t* arr) {
-  SP_ASSERT(arr);
-
-  arr->size = 0;
-}
-
-u32 sp_dynamic_array_byte_size(sp_dynamic_array_t* arr) {
-  SP_ASSERT(arr);
-
-  return arr->size * arr->element_size;
-}
-
-void sp_dynamic_array_grow(sp_dynamic_array_t* arr, u32 capacity) {
-  SP_ASSERT(arr);
-
-  if (arr->capacity >= capacity) return;
-  arr->capacity = SP_MAX(arr->capacity * 2, capacity);
-  arr->data = (u8*)sp_realloc(arr->data, arr->capacity * arr->element_size);
-}
-
-
-/////////////////
-// FIXED ARRAY //
-/////////////////
-void sp_fixed_array_init(sp_fixed_array_t* buffer, u32 max_vertices, u32 element_size) {
-  SP_ASSERT(buffer);
-
-  buffer->size = 0;
-  buffer->capacity = max_vertices;
-  buffer->element_size = element_size;
-  buffer->data = (u8*)sp_alloc(max_vertices * element_size);
-}
-
-u8* sp_fixed_array_at(sp_fixed_array_t* buffer, u32 index) {
-  SP_ASSERT(buffer);
-  return buffer->data + (index * buffer->element_size);
-}
-
-u8* sp_fixed_array_push(sp_fixed_array_t* buffer, void* data, u32 count) {
-  SP_ASSERT(buffer);
-  SP_ASSERT(buffer->size < buffer->capacity);
-
-  u8* reserved = sp_fixed_array_reserve(buffer, count);
-  if (data) sp_os_memory_copy(data, reserved, buffer->element_size * count);
-  return reserved;
-}
-
-u8* sp_fixed_array_reserve(sp_fixed_array_t* buffer, u32 count) {
-  SP_ASSERT(buffer);
-
-  u8* element = sp_fixed_array_at(buffer, buffer->size);
-  buffer->size += count;
-  return element;
-}
-
-void sp_fixed_array_clear(sp_fixed_array_t* buffer) {
-  SP_ASSERT(buffer);
-
-  buffer->size = 0;
-}
-
-u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
-  SP_ASSERT(buffer);
-
-  return buffer->size * buffer->element_size;
-}
-
-///////////////
-// THREADING //
-///////////////
-#ifdef _WIN32
   void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
     sp_thread_launch_t launch = SP_LVAL(sp_thread_launch_t) {
       .fn = fn,
@@ -2239,9 +2142,139 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   
     ReadDirectoryChangesW(info->handle, info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE, true, notify_filter, NULL, &info->overlapped, NULL);
   }
-#endif
+#endif // SP_WIN32
 
-#ifdef __APPLE__
+
+///////////
+// POSIX //
+///////////
+#ifdef SP_POSIX 
+  void* sp_os_allocate_memory(u32 size) {
+    void* ptr = malloc(size);
+    if (ptr) memset(ptr, 0, size);
+    return ptr;
+  }
+
+  void* sp_os_reallocate_memory(void* ptr, u32 size) {
+    if (!ptr) return sp_os_allocate_memory(size);
+    if (!size) { free(ptr); return NULL; }
+    return realloc(ptr, size);
+  }
+
+  void sp_os_free_memory(void* ptr) {
+    if (!ptr) return;
+    free(ptr);
+  }
+
+  bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
+    return !memcmp(a, b, len);
+  }
+
+  void sp_os_memory_copy(const void* source, void* dest, u32 num_bytes) {
+    memcpy(dest, source, num_bytes);
+  }
+
+  void sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
+    u8* current_byte = (u8*)buffer;
+
+    s32 i = 0;
+    while (true) {
+      if (i + fill_size > buffer_size) return;
+      memcpy(current_byte + i, (u8*)fill, fill_size);
+      i += fill_size;
+    }
+  }
+
+  void sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill) {
+  sp_os_fill_memory(buffer, buffer_size, &fill, sizeof(u8));
+  }
+
+  void sp_os_zero_memory(void* buffer, u32 buffer_size) {
+  sp_os_fill_memory_u8(buffer, buffer_size, 0);
+  }
+
+  bool sp_os_does_path_exist(sp_str_t path) {
+    (void)path;
+    return false; // Minimal implementation for now
+  }
+
+  bool sp_os_is_regular_file(sp_str_t path) {
+    (void)path;
+    return false; // Minimal implementation for now
+  }
+
+  bool sp_os_is_directory(sp_str_t path) {
+    (void)path;
+    return false; // Minimal implementation for now
+  }
+
+  void sp_os_remove_directory(sp_str_t path) {
+    (void)path; // Minimal implementation for now
+  }
+
+  void sp_os_create_directory(sp_str_t path) {
+    (void)path; // Minimal implementation for now
+  }
+
+  void sp_os_create_file(sp_str_t path) {
+    (void)path; // Minimal implementation for now
+  }
+
+  void sp_os_remove_file(sp_str_t path) {
+    (void)path; // Minimal implementation for now
+  }
+
+  sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
+    (void)path;
+    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+  }
+
+  sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
+    (void)path;
+    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+  }
+
+  sp_os_date_time_t sp_os_get_date_time() {
+    return SP_ZERO_STRUCT(sp_os_date_time_t);
+  }
+
+  sp_precise_epoch_time_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+    (void)file_path;
+    return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
+  }
+
+  void sp_os_sleep_ms(f64 ms) {
+    (void)ms; // Minimal implementation for now
+  }
+
+  sp_str_t sp_os_get_executable_path() {
+    return sp_str_lit(""); // Minimal implementation for now
+  }
+
+  sp_str_t sp_os_canonicalize_path(sp_str_t path) {
+    return sp_str_copy(path); // Minimal implementation for now
+  }
+
+  c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
+    if (!str16 || len == 0) {
+      c8* result = (c8*)sp_alloc(1);
+      result[0] = '\0';
+      return result;
+    }
+    
+    // Simple conversion for ASCII characters
+    c8* result = (c8*)sp_alloc(len + 1);
+    for (u32 i = 0; i < len; i++) {
+      if (str16[i] < 128) {
+        result[i] = (c8)str16[i];
+      } else {
+        result[i] = '?';  // Replace non-ASCII with '?'
+      }
+    }
+    result[len] = '\0';
+    return result;
+  }
+
   void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
     (void)thread; (void)fn; (void)userdata;
   }
@@ -2307,7 +2340,8 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
     (void)monitor;
   }
-#endif // __APPLE__
+#endif // SP_POSIX
+
 
 //////////////////
 // FILE MONITOR //
@@ -2392,7 +2426,7 @@ sp_hash_t sp_hash_cstr(const c8* str) {
 
 SP_END_EXTERN_C()
 
-#ifdef __cplusplus
+#ifdef SP_CPP
 sp_str_t operator/(const sp_str_t& a, const sp_str_t& b) {
   sp_str_builder_t builder = {0};
   sp_str_builder_append(&builder, a);
