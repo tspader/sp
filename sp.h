@@ -2406,7 +2406,20 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   void sp_thread_join(sp_thread_t* thread) {
     pthread_join(*thread, NULL);
   }
+
+  void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
+    sp_thread_launch_t launch = SP_LVAL(sp_thread_launch_t) {
+      .fn = fn,
+      .userdata = userdata,
+      .context = *sp_context,
+      .semaphore = SP_ZERO_STRUCT(sp_semaphore_t)
+    };
+    sp_semaphore_init(&launch.semaphore);
   
+    pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
+    sp_semaphore_wait(&launch.semaphore);
+  }
+
   void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
