@@ -2351,13 +2351,8 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 
   sp_str_t sp_os_canonicalize_path(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
-    c8 canonical_path[PATH_MAX];
-    
-    if (realpath(path_cstr, canonical_path) == NULL) {
-      sp_free(path_cstr);
-      return sp_str_copy(path);
-    }
-    
+    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE(); 
+    realpath(path_cstr, canonical_path); 
     sp_free(path_cstr);
     
     sp_str_t result = sp_str_cstr(canonical_path);

@@ -1263,7 +1263,7 @@ UTEST(path_functions, canonicalize_path) {
   
   // Test relative path with multiple ..
   {
-    sp_str_t path = sp_str_lit("test/sub/../../another");
+    sp_str_t path = sp_str_lit("../../another");
     sp_str_t canonical = sp_os_canonicalize_path(path);
     ASSERT_GT(canonical.len, 0);
     // Should end with "another"

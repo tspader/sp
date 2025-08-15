@@ -49,5 +49,8 @@ $(TARGET): $(SOURCES) $(HEADERS) | $(BUILD_DIR)
 test: $(TARGET)
 	./$(TARGET)
 
+debug: $(TARGET)
+	gdb ./$(TARGET)
+
 clean:
 	@rm -rf $(BUILD_DIR)
