@@ -1429,6 +1429,31 @@ UTEST(path_functions, integration_test) {
   ASSERT_FALSE(has_double_slash);
 }
 
+#ifdef SP_POSIX
+UTEST(posix, smoke) {
+  sp_allocator_malloc_t allocator;
+  sp_allocator_t alloc = sp_allocator_malloc_init(&allocator);
+  sp_context_t ctx = { .allocator = &alloc };
+  sp_context_set(ctx);
+  
+  sp_str_t path = sp_str_lit("/tmp/test");
+  bool exists = sp_os_does_path_exist(path);
+  printf("Path exists: %d\n", exists);
+  
+  sp_mutex_t mutex;
+  sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
+  sp_mutex_lock(&mutex);
+  sp_mutex_unlock(&mutex);
+  sp_mutex_destroy(&mutex);
+  
+  sp_semaphore_t sem;
+  sp_semaphore_init(&sem);
+  sp_semaphore_signal(&sem);
+  sp_semaphore_wait(&sem);
+  sp_semaphore_destroy(&sem);
+}
+#endif
+
 #ifdef __cplusplus
 UTEST(string_cpp, path_concatenation_operator) {
   sp_test_use_malloc();

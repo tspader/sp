@@ -60,9 +60,15 @@
 #ifdef SP_POSIX
   #define SP_IMPORT 
   #define SP_EXPORT __attribute__((visibility("default")))
-  
-  #define _POSIX_C_SOURCE 200809L
-  #define _GNU_SOURCE
+
+  #ifndef _POSIX_C_SOURCE
+    #define _POSIX_C_SOURCE 200809L
+  #endif
+
+  #ifndef _GNU_SOURCE
+    #define _GNU_SOURCE
+  #endif
+
   #include <errno.h>
   #include <dirent.h>
   #include <fcntl.h>
@@ -2384,27 +2390,21 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     return result;
   }
 
-  void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
-    sp_thread_launch_t* launch = (sp_thread_launch_t*)sp_alloc(sizeof(sp_thread_launch_t));
-    launch->fn = fn;
-    launch->userdata = userdata;
-    launch->context = *sp_context;
-    sp_semaphore_init(&launch->semaphore);
-    
-    pthread_create(thread, NULL, (void*(*)(void*))sp_thread_launch, launch);
-    sp_semaphore_wait(&launch->semaphore);
-    sp_semaphore_destroy(&launch->semaphore);
-    sp_free(launch);
+  void* sp_posix_thread_launch(void* args) {
+    return (void*)(intptr_t)sp_thread_launch(args);
   }
-  
+
   s32 sp_thread_launch(void* args) {
     sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
-    sp_context_push(launch->context);
     void* userdata = launch->userdata;
     sp_thread_fn_t fn = launch->fn;
+
+    sp_context_push(launch->context);
     sp_semaphore_signal(&launch->semaphore);
     s32 result = fn(userdata);
+
     sp_context_pop();
+
     return result;
   }
   
