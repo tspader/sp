@@ -36,6 +36,9 @@
   #define _CRT_RAND_S
   #define _AMD64_
 
+  #define SP_IMPORT declspec(__dllimport)
+  #define SP_EXPORT declspec(__dllexport)
+
   #ifdef SP_WIN32_NO_WINDOWS_H
     #include "windef.h"
     #include "winbase.h"
@@ -54,6 +57,11 @@
   #endif
 
   #include "threads.h"
+#endif
+
+#ifdef SP_POSIX
+  #define SP_IMPORT 
+  #define SP_EXPORT __attribute__((visibility("default")))
 #endif
 
 #ifdef __APPLE__
@@ -523,7 +531,7 @@ void sp_format_semaphore(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 
-sp_str_t sp_fmt(sp_str_t fmt, ...);
+sp_str_t sp_fmt(sp_str_t fmt, ...); 
 
 #define SP_BUILTIN_FORMATTERS \
   SP_FORMATTER(ptr, sp_format_ptr), \
