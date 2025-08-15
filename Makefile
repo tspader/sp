@@ -35,6 +35,9 @@ TARGET := $(BUILD_DIR)/$(EXE_NAME)
 ###########
 # TARGETS #
 ###########
+.PHONY: all
+all: $(TARGET)
+
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
