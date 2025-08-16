@@ -87,8 +87,9 @@
   #include "pthread.h"
 #endif
 
-#ifdef __LINUX__
-  #include "threads.h"
+#ifdef SP_LINUX
+  #include <sys/inotify.h>
+  #include <poll.h>
 #endif
 
 
@@ -638,9 +639,20 @@ typedef enum {
     typedef void*               sp_semaphore_t;
   #endif
 
-  typedef struct {
-    void* placeholder;
-  } sp_os_file_monitor_t;
+  #ifdef SP_LINUX
+    typedef struct {
+      s32 fd;                          // inotify file descriptor
+      sp_dynamic_array_t watch_descs;  // array of s32 watch descriptors
+      sp_dynamic_array_t watch_paths;  // array of sp_str_t paths
+      u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+    } sp_os_linux_file_monitor_t;
+    
+    typedef sp_os_linux_file_monitor_t sp_os_file_monitor_t;
+  #else
+    typedef struct {
+      void* placeholder;
+    } sp_os_file_monitor_t;
+  #endif
 #endif
 
 SP_TYPEDEF_FN(s32,         sp_thread_fn_t, void*);
@@ -2471,7 +2483,134 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     sem_post(semaphore);
   }
-  
+
+#ifdef SP_LINUX
+  void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
+    sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)sp_alloc(sizeof(sp_os_linux_file_monitor_t));
+    
+    linux_monitor->fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (linux_monitor->fd == -1) {
+      // Handle error but don't crash
+      linux_monitor->fd = 0;
+    }
+    
+    sp_dynamic_array_init(&linux_monitor->watch_descs, sizeof(s32));
+    sp_dynamic_array_init(&linux_monitor->watch_paths, sizeof(sp_str_t));
+    
+    monitor->os = linux_monitor;
+  }
+
+  void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path) {
+    if (!monitor->os) return;
+    sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)monitor->os;
+    
+    if (linux_monitor->fd <= 0) return;
+    
+    c8* path_cstr = sp_str_to_cstr(path);
+    
+    // Build mask based on what events we want to watch
+    u32 mask = 0;
+    if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
+      mask |= IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE;
+    }
+    if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_ADDED) {
+      mask |= IN_CREATE | IN_MOVED_TO;
+    }
+    if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_REMOVED) {
+      mask |= IN_DELETE | IN_MOVED_FROM;
+    }
+    
+    s32 wd = inotify_add_watch(linux_monitor->fd, path_cstr, mask);
+    
+    if (wd != -1) {
+      sp_dynamic_array_push(&linux_monitor->watch_descs, &wd);
+      sp_str_t path_copy = sp_str_copy(path);
+      sp_dynamic_array_push(&linux_monitor->watch_paths, &path_copy);
+    }
+    
+    sp_free(path_cstr);
+  }
+
+  void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
+    // For inotify, we need to watch the directory containing the file
+    sp_str_t dir_path = sp_os_parent_path(file_path);
+    if (dir_path.len > 0) {
+      sp_os_file_monitor_add_directory(monitor, dir_path);
+    }
+  }
+
+  void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
+    if (!monitor->os) return;
+
+    sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)monitor->os;
+    if (linux_monitor->fd <= 0) return;
+    
+    ssize_t len = read(linux_monitor->fd, linux_monitor->buffer, sizeof(linux_monitor->buffer));
+    if (len <= 0) return;
+    
+    // Process all events in buffer
+    char* ptr = (char*)linux_monitor->buffer;
+    while (ptr < (char*)linux_monitor->buffer + len) {
+      struct inotify_event* event = (struct inotify_event*)ptr;
+      
+      // Find which path this watch descriptor corresponds to
+      for (u32 i = 0; i < linux_monitor->watch_descs.size; i++) {
+        s32* wd = (s32*)sp_dynamic_array_at(&linux_monitor->watch_descs, i);
+        if (*wd == event->wd) {
+          sp_str_t* dir_path = (sp_str_t*)sp_dynamic_array_at(&linux_monitor->watch_paths, i);
+          
+          // Build full path if there's a filename
+          sp_str_t file_name = SP_ZERO_STRUCT(sp_str_t);
+          sp_str_t file_path = SP_ZERO_STRUCT(sp_str_t);
+          
+          if (event->len > 0 && event->name[0] != '\0') {
+            file_name = sp_str(event->name, strlen(event->name));
+            
+            // Build full path
+            sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+            sp_str_builder_append(&builder, *dir_path);
+            sp_str_builder_append(&builder, sp_str_lit("/"));
+            sp_str_builder_append(&builder, file_name);
+            file_path = sp_str_builder_write(&builder);
+          } else {
+            file_path = sp_str_copy(*dir_path);
+            file_name = sp_os_extract_file_name(file_path);
+          }
+          
+          // Convert inotify mask to our events
+          sp_file_change_event_t events = SP_FILE_CHANGE_EVENT_NONE;
+          if (event->mask & (IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE)) {
+            events = (sp_file_change_event_t)(events | SP_FILE_CHANGE_EVENT_MODIFIED);
+          }
+          if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
+            events = (sp_file_change_event_t)(events | SP_FILE_CHANGE_EVENT_ADDED);
+          }
+          if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {
+            events = (sp_file_change_event_t)(events | SP_FILE_CHANGE_EVENT_REMOVED);
+          }
+          
+          // Add change to monitor's change list  
+          if (events != SP_FILE_CHANGE_EVENT_NONE) {
+            sp_file_change_t change = {
+              .file_path = file_path,
+              .file_name = file_name,
+              .events = events,
+              .time = 0  // TODO: get actual time
+            };
+            sp_dynamic_array_push(&monitor->changes, &change);
+          }
+          break;
+        }
+      }
+      
+      ptr += sizeof(struct inotify_event) + event->len;
+    }
+    
+    // Emit changes with debouncing
+    sp_file_monitor_emit_changes(monitor);
+  }
+#else
+  // Non-Linux POSIX stubs
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
     monitor->os = NULL;
   }
@@ -2487,6 +2626,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
     (void)monitor;
   }
+#endif // SP_LINUX
 #endif // SP_POSIX
 
 
