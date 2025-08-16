@@ -688,7 +688,7 @@ typedef struct {
 SP_API void*                        sp_os_allocate_memory(u32 size);
 SP_API void*                        sp_os_reallocate_memory(void* ptr, u32 size);
 SP_API void                         sp_os_free_memory(void* ptr);
-SP_API void                         sp_os_memory_copy(const void* source, void* dest, u32 num_bytes);
+SP_API void                         sp_os_copy_memory(const void* source, void* dest, u32 num_bytes);
 SP_API bool                         sp_os_is_memory_equal(const void* a, const void* b, size_t len);
 SP_API void                         sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
 SP_API void                         sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);
@@ -1340,7 +1340,7 @@ void* sp_allocator_malloc_on_alloc(void* user_data, sp_allocator_mode_t mode, u3
       }
 
       void* buffer = sp_allocator_malloc_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
-      sp_os_memory_copy(ptr, buffer, metadata->size);
+      sp_os_copy_memory(ptr, buffer, metadata->size);
       sp_allocator_malloc_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
 
       return buffer;
@@ -1487,7 +1487,7 @@ sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length) {
   copy.len = SP_MIN(str_len, length);
   copy.data = (c8*)sp_alloc(copy.len);
 
-  sp_os_memory_copy(str, copy.data, copy.len);
+  sp_os_copy_memory(str, copy.data, copy.len);
   return copy;
 }
 
@@ -1496,7 +1496,7 @@ sp_str_t sp_str_copy_cstr(const c8* str) {
   copy.len = sp_cstr_len(str);
   copy.data = (c8*)sp_alloc(copy.len);
 
-  sp_os_memory_copy(str, copy.data, copy.len);
+  sp_os_copy_memory(str, copy.data, copy.len);
   return copy;
 }
 
@@ -1506,17 +1506,17 @@ sp_str_t sp_str_copy(sp_str_t str) {
     .data = (c8*)sp_alloc(str.len),
   };
 
-  sp_os_memory_copy(str.data, copy.data, str.len);
+  sp_os_copy_memory(str.data, copy.data, str.len);
   return copy;
 }
 
 void sp_str_copy_to_str(sp_str_t source, sp_str_t* dest, u32 capacity) {
   dest->len = SP_MIN(source.len, capacity);
-  sp_os_memory_copy(source.data, dest->data, dest->len);
+  sp_os_copy_memory(source.data, dest->data, dest->len);
 }
 
 void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
-  sp_os_memory_copy(str.data, buffer, SP_MIN(str.len, capacity));
+  sp_os_copy_memory(str.data, buffer, SP_MIN(str.len, capacity));
 }
 
 void sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity) {
@@ -1529,14 +1529,14 @@ void sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity) {
 
 void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
   sp_str_builder_grow(builder, builder->buffer.count + str.len);
-  sp_os_memory_copy(str.data, builder->buffer.data + builder->buffer.count, str.len);
+  sp_os_copy_memory(str.data, builder->buffer.data + builder->buffer.count, str.len);
   builder->buffer.count += str.len;
 }
 
 void sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str) {
   u32 len = sp_cstr_len(str);
   sp_str_builder_grow(builder, builder->buffer.count + len);
-  sp_os_memory_copy(str, builder->buffer.data + builder->buffer.count, len);
+  sp_os_copy_memory(str, builder->buffer.data + builder->buffer.count, len);
   builder->buffer.count += len;
 }
 
@@ -1550,7 +1550,7 @@ sp_str_t sp_str_builder_write(sp_str_builder_t* builder) {
     .data = (c8*)sp_alloc(builder->buffer.count),
   };
 
-  sp_os_memory_copy(builder->buffer.data, string.data, builder->buffer.count);
+  sp_os_copy_memory(builder->buffer.data, string.data, builder->buffer.count);
   return string;
 }
 
@@ -1665,7 +1665,7 @@ u8* sp_dynamic_array_push_n(sp_dynamic_array_t* arr, void* data, u32 count) {
   SP_ASSERT(arr);
 
   u8* reserved = sp_dynamic_array_reserve(arr, count);
-  if (data) sp_os_memory_copy(data, reserved, arr->element_size * count);
+  if (data) sp_os_copy_memory(data, reserved, arr->element_size * count);
   return reserved;
 }
 
@@ -1722,7 +1722,7 @@ u8* sp_fixed_array_push(sp_fixed_array_t* buffer, void* data, u32 count) {
   SP_ASSERT(buffer->size < buffer->capacity);
 
   u8* reserved = sp_fixed_array_reserve(buffer, count);
-  if (data) sp_os_memory_copy(data, reserved, buffer->element_size * count);
+  if (data) sp_os_copy_memory(data, reserved, buffer->element_size * count);
   return reserved;
 }
 
@@ -1894,7 +1894,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     return !memcmp(a, b, len);
   }
 
-  void sp_os_memory_copy(const void* source, void* dest, u32 num_bytes) {
+  void sp_os_copy_memory(const void* source, void* dest, u32 num_bytes) {
     memcpy(dest, source, num_bytes);
   }
 
@@ -2218,7 +2218,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     return !memcmp(a, b, len);
   }
 
-  void sp_os_memory_copy(const void* source, void* dest, u32 num_bytes) {
+  void sp_os_copy_memory(const void* source, void* dest, u32 num_bytes) {
     memcpy(dest, source, num_bytes);
   }
 
