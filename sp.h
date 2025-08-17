@@ -1232,9 +1232,9 @@ void sp_context_push_allocator(sp_allocator_t* allocator) {
 
 void sp_context_pop() {
   SP_ASSERT(sp_context);
+  sp_context_check_index();
   *sp_context = SP_ZERO_STRUCT(sp_context_t); // Not required, just for the debugger
   sp_context--;
-  sp_context_check_index();
 }
 
 void* sp_alloc(u32 size) {
