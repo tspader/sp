@@ -2101,4 +2101,382 @@ UTEST(combined, multiple_arrays_in_hash_table) {
     sp_hash_table_free(ht);
 }
 
+////////////////////////////
+// RING BUFFER TESTS
+////////////////////////////
+
+UTEST(ring_buffer, basic_operations) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 10, sizeof(int));
+    
+    ASSERT_EQ(rb.size, 0);
+    ASSERT_EQ(rb.capacity, 10);
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
+    ASSERT_FALSE(sp_ring_buffer_is_full(&rb));
+    
+    int val = 42;
+    sp_ring_buffer_push(&rb, &val);
+    ASSERT_EQ(rb.size, 1);
+    ASSERT_FALSE(sp_ring_buffer_is_empty(&rb));
+    
+    int* back = (int*)sp_ring_buffer_back(&rb);
+    ASSERT_EQ(*back, 42);
+    
+    for (int i = 1; i < 10; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    
+    ASSERT_EQ(rb.size, 10);
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+    
+    int* popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 42);
+    ASSERT_EQ(rb.size, 9);
+    
+    sp_ring_buffer_clear(&rb);
+    ASSERT_EQ(rb.size, 0);
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
+    
+    sp_ring_buffer_destroy(&rb);
+    ASSERT_EQ(rb.data, NULL);
+}
+
+UTEST(ring_buffer, push_literal_macro) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 5, sizeof(u32));
+    
+    sp_ring_buffer_push_literal(&rb, u32, 69);
+    sp_ring_buffer_push_literal(&rb, u32, 420);
+    sp_ring_buffer_push_literal(&rb, u32, 1337);
+    
+    ASSERT_EQ(rb.size, 3);
+    
+    u32* val1 = (u32*)sp_ring_buffer_at(&rb, 0);
+    u32* val2 = (u32*)sp_ring_buffer_at(&rb, 1);
+    u32* val3 = (u32*)sp_ring_buffer_at(&rb, 2);
+    
+    ASSERT_EQ(*val1, 69);
+    ASSERT_EQ(*val2, 420);
+    ASSERT_EQ(*val3, 1337);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, circular_behavior) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 3, sizeof(int));
+    
+    for (int i = 0; i < 3; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+    
+    int* popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 0);
+    
+    int val = 3;
+    sp_ring_buffer_push(&rb, &val);
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+    
+    popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 1);
+    popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 2);
+    popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 3);
+    
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, overwrite_behavior) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 3, sizeof(int));
+    
+    for (int i = 0; i < 5; i++) {
+        sp_ring_buffer_push_overwrite(&rb, &i);
+    }
+    
+    ASSERT_EQ(rb.size, 3);
+    
+    int* val0 = (int*)sp_ring_buffer_pop(&rb);
+    int* val1 = (int*)sp_ring_buffer_pop(&rb);
+    int* val2 = (int*)sp_ring_buffer_pop(&rb);
+    
+    ASSERT_EQ(*val0, 2);
+    ASSERT_EQ(*val1, 3);
+    ASSERT_EQ(*val2, 4);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, push_zero) {
+    sp_test_use_malloc();
+    
+    typedef struct {
+        int x, y, z;
+    } point_t;
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 5, sizeof(point_t));
+    
+    point_t* p = (point_t*)sp_ring_buffer_push_zero(&rb);
+    ASSERT_EQ(p->x, 0);
+    ASSERT_EQ(p->y, 0);
+    ASSERT_EQ(p->z, 0);
+    
+    point_t val = {1, 2, 3};
+    sp_ring_buffer_push(&rb, &val);
+    
+    p = (point_t*)sp_ring_buffer_push_overwrite_zero(&rb);
+    ASSERT_EQ(p->x, 0);
+    ASSERT_EQ(p->y, 0);
+    ASSERT_EQ(p->z, 0);
+    
+    ASSERT_EQ(rb.size, 3);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, iteration_forward) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 10, sizeof(int));
+    
+    for (int i = 0; i < 5; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    
+    int expected = 0;
+    sp_ring_buffer_for(rb, it) {
+        int* val = sp_rb_it(it, int);
+        ASSERT_EQ(*val, expected);
+        expected++;
+    }
+    ASSERT_EQ(expected, 5);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, iteration_reverse) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 10, sizeof(int));
+    
+    for (int i = 0; i < 5; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    
+    int expected = 4;
+    sp_ring_buffer_rfor(rb, it) {
+        int* val = sp_rb_it(it, int);
+        ASSERT_EQ(*val, expected);
+        expected--;
+    }
+    ASSERT_EQ(expected, -1);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, iteration_after_wrap) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 3, sizeof(int));
+    
+    for (int i = 0; i < 3; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    
+    sp_ring_buffer_pop(&rb);
+    sp_ring_buffer_pop(&rb);
+    
+    int val3 = 3, val4 = 4;
+    sp_ring_buffer_push(&rb, &val3);
+    sp_ring_buffer_push(&rb, &val4);
+    
+    int values[3];
+    int idx = 0;
+    sp_ring_buffer_for(rb, it) {
+        int* val = sp_rb_it(it, int);
+        values[idx++] = *val;
+    }
+    
+    ASSERT_EQ(values[0], 2);
+    ASSERT_EQ(values[1], 3);
+    ASSERT_EQ(values[2], 4);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, struct_type) {
+    sp_test_use_malloc();
+    
+    typedef struct {
+        float x, y;
+        int id;
+    } entity_t;
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 5, sizeof(entity_t));
+    
+    for (int i = 0; i < 5; i++) {
+        entity_t e = {(float)i * 1.5f, (float)i * 2.5f, i};
+        sp_ring_buffer_push(&rb, &e);
+    }
+    
+    entity_t* e = (entity_t*)sp_ring_buffer_at(&rb, 2);
+    ASSERT_EQ(e->x, 3.0f);
+    ASSERT_EQ(e->y, 5.0f);
+    ASSERT_EQ(e->id, 2);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, large_buffer_stress) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 1000, sizeof(u64));
+    
+    for (u64 i = 0; i < 1000; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+    
+    for (u64 i = 0; i < 500; i++) {
+        u64* val = (u64*)sp_ring_buffer_pop(&rb);
+        ASSERT_EQ(*val, i);
+    }
+    
+    for (u64 i = 1000; i < 1500; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+    
+    u64 expected = 500;
+    sp_ring_buffer_for(rb, it) {
+        u64* val = sp_rb_it(it, u64);
+        ASSERT_EQ(*val, expected);
+        expected++;
+    }
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, continuous_overwrite_stress) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 100, sizeof(int));
+    
+    for (int i = 0; i < 10000; i++) {
+        sp_ring_buffer_push_overwrite(&rb, &i);
+    }
+    
+    ASSERT_EQ(rb.size, 100);
+    
+    for (int i = 0; i < 100; i++) {
+        int* val = (int*)sp_ring_buffer_pop(&rb);
+        ASSERT_EQ(*val, 9900 + i);
+    }
+    
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, edge_cases) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb1;
+    sp_ring_buffer_init(&rb1, 1, sizeof(int));
+    
+    int val = 42;
+    sp_ring_buffer_push(&rb1, &val);
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb1));
+    
+    int* popped = (int*)sp_ring_buffer_pop(&rb1);
+    ASSERT_EQ(*popped, 42);
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb1));
+    
+    sp_ring_buffer_destroy(&rb1);
+    
+    sp_ring_buffer_t rb2;
+    sp_ring_buffer_init(&rb2, 2, sizeof(float));
+    
+    float f1 = 1.5f, f2 = 2.5f, f3 = 3.5f;
+    sp_ring_buffer_push(&rb2, &f1);
+    sp_ring_buffer_push(&rb2, &f2);
+    sp_ring_buffer_push_overwrite(&rb2, &f3);
+    
+    float* fp1 = (float*)sp_ring_buffer_pop(&rb2);
+    float* fp2 = (float*)sp_ring_buffer_pop(&rb2);
+    
+    ASSERT_EQ(*fp1, 2.5f);
+    ASSERT_EQ(*fp2, 3.5f);
+    
+    sp_ring_buffer_destroy(&rb2);
+}
+
+UTEST(ring_buffer, bytes_calculation) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 10, sizeof(double));
+    
+    ASSERT_EQ(sp_ring_buffer_bytes(&rb), 10 * sizeof(double));
+    
+    sp_ring_buffer_destroy(&rb);
+    
+    sp_ring_buffer_init(&rb, 100, sizeof(char));
+    ASSERT_EQ(sp_ring_buffer_bytes(&rb), 100);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, iterator_manual) {
+    sp_test_use_malloc();
+    
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 5, sizeof(int));
+    
+    for (int i = 10; i < 15; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    
+    sp_ring_buffer_iterator_t it = sp_ring_buffer_iter(&rb);
+    ASSERT_FALSE(sp_ring_buffer_iter_done(&it));
+    
+    int* val = (int*)sp_ring_buffer_iter_deref(&it);
+    ASSERT_EQ(*val, 10);
+    
+    sp_ring_buffer_iter_next(&it);
+    val = (int*)sp_ring_buffer_iter_deref(&it);
+    ASSERT_EQ(*val, 11);
+    
+    sp_ring_buffer_iterator_t rit = sp_ring_buffer_riter(&rb);
+    val = (int*)sp_ring_buffer_iter_deref(&rit);
+    ASSERT_EQ(*val, 14);
+    
+    sp_ring_buffer_iter_prev(&rit);
+    val = (int*)sp_ring_buffer_iter_deref(&rit);
+    ASSERT_EQ(*val, 13);
+    
+    sp_ring_buffer_destroy(&rb);
+}
+
 UTEST_MAIN()

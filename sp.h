@@ -595,6 +595,56 @@ u32 sp_hash_table_get_key_index_func(void** data, void* key, u32 key_len, u32 va
         }\
     } while (0)
 
+////////////////////////////
+// RING BUFFER
+////////////////////////////
+
+typedef struct {
+    u8* data;
+    u32 element_size;
+    u32 head;
+    u32 size;
+    u32 capacity;
+} sp_ring_buffer_t;
+
+#define sp_ring_buffer(t) sp_ring_buffer_t
+
+typedef struct {
+    s32 index;
+    bool reverse;
+    sp_ring_buffer_t* buffer;
+} sp_ring_buffer_iterator_t;
+
+SP_API void*                     sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index);
+SP_API void                      sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_size);
+SP_API void*                     sp_ring_buffer_back(sp_ring_buffer_t* buffer);
+SP_API void*                     sp_ring_buffer_push(sp_ring_buffer_t* buffer, void* data);
+SP_API void*                     sp_ring_buffer_push_zero(sp_ring_buffer_t* buffer);
+SP_API void*                     sp_ring_buffer_push_overwrite(sp_ring_buffer_t* buffer, void* data);
+SP_API void*                     sp_ring_buffer_push_overwrite_zero(sp_ring_buffer_t* buffer);
+SP_API void*                     sp_ring_buffer_pop(sp_ring_buffer_t* buffer);
+SP_API u32                       sp_ring_buffer_bytes(sp_ring_buffer_t* buffer);
+SP_API void                      sp_ring_buffer_clear(sp_ring_buffer_t* buffer);
+SP_API void                      sp_ring_buffer_destroy(sp_ring_buffer_t* buffer);
+SP_API bool                      sp_ring_buffer_is_full(sp_ring_buffer_t* buffer);
+SP_API bool                      sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer);
+SP_API void*                     sp_ring_buffer_iter_deref(sp_ring_buffer_iterator_t* it);
+SP_API void                      sp_ring_buffer_iter_next(sp_ring_buffer_iterator_t* it);
+SP_API void                      sp_ring_buffer_iter_prev(sp_ring_buffer_iterator_t* it);
+SP_API bool                      sp_ring_buffer_iter_done(sp_ring_buffer_iterator_t* it);
+SP_API sp_ring_buffer_iterator_t sp_ring_buffer_iter(sp_ring_buffer_t* buffer);
+SP_API sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer);
+
+#define sp_ring_buffer_for(rb, it)  for (sp_ring_buffer_iterator_t (it) = sp_ring_buffer_iter(&(rb)); !sp_ring_buffer_iter_done(&(it)); sp_ring_buffer_iter_next(&(it)))
+#define sp_ring_buffer_rfor(rb, it) for (sp_ring_buffer_iterator_t (it) = sp_ring_buffer_riter(&(rb)); !sp_ring_buffer_iter_done(&(it)); sp_ring_buffer_iter_prev(&(it)))
+#define sp_rb_it(it, t) ((t*)sp_ring_buffer_iter_deref(&(it)))
+
+#define sp_ring_buffer_push_literal(__RB_PTR, __TYPE, __VALUE) \
+    do { \
+        __TYPE __sp_rb_tmp = (__VALUE); \
+        sp_ring_buffer_push((__RB_PTR), &__sp_rb_tmp); \
+    } while (0)
+
 #define sp_hash_table_insert(__HT, __K, __V)\
     do {\
         if ((__HT) == NULL) {\
@@ -3119,6 +3169,128 @@ void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u3
             break;
         }
     }
+}
+
+////////////////////////////
+// RING BUFFER IMPLEMENTATION
+////////////////////////////
+
+void* sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index) {
+    return buffer->data + ((buffer->head + buffer->element_size * index) % (buffer->capacity * buffer->element_size));
+}
+
+void sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_size) {
+    buffer->size = 0;
+    buffer->head = 0;
+    buffer->capacity = capacity;
+    buffer->element_size = element_size;
+    buffer->data = (u8*)sp_alloc(capacity * element_size);
+    sp_os_zero_memory(buffer->data, capacity * element_size);
+}
+
+void* sp_ring_buffer_back(sp_ring_buffer_t* buffer) {
+    SP_ASSERT(buffer->size);
+    return sp_ring_buffer_at(buffer, buffer->size - 1);
+}
+
+void* sp_ring_buffer_push(sp_ring_buffer_t* buffer, void* data) {
+    SP_ASSERT(buffer->size < buffer->capacity);
+    
+    u32 index = (buffer->head + buffer->size * buffer->element_size) % (buffer->capacity * buffer->element_size);
+    sp_os_copy_memory(data, buffer->data + index, buffer->element_size);
+    buffer->size += 1;
+    return sp_ring_buffer_back(buffer);
+}
+
+void* sp_ring_buffer_push_zero(sp_ring_buffer_t* buffer) {
+    SP_ASSERT(buffer->size < buffer->capacity);
+    
+    u32 index = (buffer->head + buffer->size * buffer->element_size) % (buffer->capacity * buffer->element_size);
+    sp_os_zero_memory(buffer->data + index, buffer->element_size);
+    buffer->size += 1;
+    return sp_ring_buffer_back(buffer);
+}
+
+void* sp_ring_buffer_push_overwrite(sp_ring_buffer_t* buffer, void* data) {
+    if (buffer->size == buffer->capacity) sp_ring_buffer_pop(buffer);
+    return sp_ring_buffer_push(buffer, data);
+}
+
+void* sp_ring_buffer_push_overwrite_zero(sp_ring_buffer_t* buffer) {
+    if (buffer->size == buffer->capacity) sp_ring_buffer_pop(buffer);
+    return sp_ring_buffer_push_zero(buffer);
+}
+
+void* sp_ring_buffer_pop(sp_ring_buffer_t* buffer) {
+    SP_ASSERT(buffer->size);
+    
+    void* element = buffer->data + buffer->head;
+    buffer->head = (buffer->head + buffer->element_size) % (buffer->capacity * buffer->element_size);
+    buffer->size--;
+    return element;
+}
+
+u32 sp_ring_buffer_bytes(sp_ring_buffer_t* buffer) {
+    return buffer->capacity * buffer->element_size;
+}
+
+void sp_ring_buffer_clear(sp_ring_buffer_t* buffer) {
+    sp_os_zero_memory(buffer->data, sp_ring_buffer_bytes(buffer));
+    buffer->size = 0;
+    buffer->head = 0;
+}
+
+void sp_ring_buffer_destroy(sp_ring_buffer_t* buffer) {
+    if (buffer->data) {
+        sp_free(buffer->data);
+        buffer->data = NULL;
+        buffer->size = 0;
+        buffer->capacity = 0;
+        buffer->head = 0;
+    }
+}
+
+bool sp_ring_buffer_is_full(sp_ring_buffer_t* buffer) {
+    return buffer->capacity == buffer->size;
+}
+
+bool sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer) {
+    return buffer->size == 0;
+}
+
+void* sp_ring_buffer_iter_deref(sp_ring_buffer_iterator_t* it) {
+    return sp_ring_buffer_at(it->buffer, it->index);
+}
+
+void sp_ring_buffer_iter_next(sp_ring_buffer_iterator_t* it) {
+    SP_ASSERT(it->index < (s32)it->buffer->size);
+    it->index++;
+}
+
+void sp_ring_buffer_iter_prev(sp_ring_buffer_iterator_t* it) {
+    SP_ASSERT(it->index >= 0 && it->index < (s32)it->buffer->size);
+    it->index--;
+}
+
+bool sp_ring_buffer_iter_done(sp_ring_buffer_iterator_t* it) {
+    if (it->reverse) return it->index < 0;
+    return it->index >= (s32)it->buffer->size;
+}
+
+sp_ring_buffer_iterator_t sp_ring_buffer_iter(sp_ring_buffer_t* buffer) {
+    sp_ring_buffer_iterator_t iterator;
+    iterator.index = 0;
+    iterator.reverse = false;
+    iterator.buffer = buffer;
+    return iterator;
+}
+
+sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer) {
+    sp_ring_buffer_iterator_t iterator;
+    iterator.index = buffer->size - 1;
+    iterator.reverse = true;
+    iterator.buffer = buffer;
+    return iterator;
 }
 
 SP_END_EXTERN_C()
