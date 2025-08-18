@@ -58,7 +58,7 @@
 #endif
 
 #ifdef SP_POSIX
-  #define SP_IMPORT 
+  #define SP_IMPORT
   #define SP_EXPORT __attribute__((visibility("default")))
 
   #ifndef _POSIX_C_SOURCE
@@ -119,7 +119,7 @@
   #include "stdarg.h"
   #include "stdbool.h"
   #include "stddef.h"
-  #include "stdint.h" 
+  #include "stdint.h"
   #include "stdio.h"
   #include "stdlib.h"
   #include "string.h"
@@ -170,6 +170,16 @@ typedef void* sp_opaque_ptr;
   #define SP_THREAD_LOCAL _Thread_local
   #define SP_BEGIN_EXTERN_C()
   #define SP_END_EXTERN_C()
+#endif
+
+#if defined(__cplusplus) && __cplusplus >= 201703L
+    #define SP_FALLTHROUGH() [[fallthrough]]
+#elif defined(__GNUC__) && __GNUC__ >= 7
+    #define SP_FALLTHROUGH() __attribute__((fallthrough))
+#elif defined(__clang__)
+    #define SP_FALLTHROUGH() __attribute__((fallthrough))
+#else
+    #define SP_FALLTHROUGH() ((void)0)
 #endif
 
 #define SP_ZERO_INITIALIZE() {0}
@@ -269,7 +279,7 @@ typedef struct {
     u32 line;
   } with;
 } sp_context_t;
-       
+
 #define SP_MAX_CONTEXT 16
 SP_THREAD_LOCAL sp_context_t sp_context_stack [SP_MAX_CONTEXT] = SP_ZERO_INITIALIZE();
 SP_THREAD_LOCAL sp_context_t* sp_context = SP_ZERO_INITIALIZE();
@@ -302,6 +312,7 @@ void                  sp_free(void* memory);
 typedef u64 sp_hash_t;
 
 sp_hash_t sp_hash_cstr(const c8* str);
+sp_hash_t sp_hash_bytes(void* p, u32 len, u64 seed);
 
 
 //  ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗
@@ -422,8 +433,262 @@ SP_API u32  sp_dynamic_array_byte_size(sp_dynamic_array_t* arr);
 SP_API u8*  sp_dynamic_array_at(sp_dynamic_array_t* arr, u32 index);
 SP_API void sp_dynamic_array_grow(sp_dynamic_array_t* arr, u32 capacity);
 
+//////////////////////////////
+// GUNSLINGER DYNAMIC ARRAY //
+//////////////////////////////
+typedef struct sp_dyn_array {
+    s32 size;
+    s32 capacity;
+} sp_dyn_array;
 
-// ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗ 
+#define sp_dyn_array(T) T*
+
+#define sp_dyn_array_head(__ARR)\
+    ((sp_dyn_array*)((u8*)(__ARR) - sizeof(sp_dyn_array)))
+
+#define sp_dyn_array_size(__ARR)\
+    (__ARR == NULL ? 0 : sp_dyn_array_head((__ARR))->size)
+
+#define sp_dyn_array_capacity(__ARR)\
+    (__ARR == NULL ? 0 : sp_dyn_array_head((__ARR))->capacity)
+
+#define sp_dyn_array_empty(__ARR)\
+    (sp_dyn_array_size(__ARR) == 0)
+
+#define sp_dyn_array_full(__ARR)\
+    ((sp_dyn_array_size((__ARR)) == sp_dyn_array_capacity((__ARR))))
+
+#define sp_dyn_array_clear(__ARR)\
+    do {\
+        if (__ARR) {\
+            sp_dyn_array_head(__ARR)->size = 0;\
+        }\
+    } while (0)
+
+#define sp_dyn_array_free(__ARR)\
+    do {\
+        if (__ARR) {\
+            sp_free(sp_dyn_array_head(__ARR));\
+            (__ARR) = NULL;\
+        }\
+    } while (0)
+
+void* sp_dyn_array_resize_impl(void* arr, u32 sz, u32 amount);
+void** sp_dyn_array_init(void** arr, u32 val_len);
+void sp_dyn_array_push_data(void** arr, void* val, u32 val_len);
+
+#define sp_dyn_array_need_grow(__ARR, __N)\
+    ((__ARR) == 0 || sp_dyn_array_size(__ARR) + (__N) >= sp_dyn_array_capacity(__ARR))
+
+#define sp_dyn_array_grow(__ARR)\
+    sp_dyn_array_resize_impl((__ARR), sizeof(*(__ARR)), sp_dyn_array_capacity(__ARR) ? sp_dyn_array_capacity(__ARR) * 2 : 1)
+
+#define sp_dyn_array_push(__ARR, __VAL)\
+    do {\
+        sp_dyn_array_init((void**)&(__ARR), sizeof(*(__ARR)));\
+        if (!(__ARR) || ((__ARR) && sp_dyn_array_need_grow(__ARR, 1))) {\
+            *((void **)&(__ARR)) = sp_dyn_array_grow(__ARR); \
+        }\
+        (__ARR)[sp_dyn_array_size(__ARR)] = (__VAL);\
+        sp_dyn_array_head(__ARR)->size++;\
+    } while(0)
+
+#define sp_dyn_array_reserve(__ARR, __AMOUNT)\
+    do {\
+        if ((!__ARR)) sp_dyn_array_init((void**)&(__ARR), sizeof(*(__ARR)));\
+        if ((!__ARR) || (u32)__AMOUNT > sp_dyn_array_capacity(__ARR)) {\
+            *((void **)&(__ARR)) = sp_dyn_array_resize_impl(__ARR, sizeof(*__ARR), __AMOUNT);\
+        }\
+    } while(0)
+
+#define sp_dyn_array_pop(__ARR)\
+    do {\
+        if (__ARR && !sp_dyn_array_empty(__ARR)) {\
+            sp_dyn_array_head(__ARR)->size -= 1;\
+        }\
+    } while (0)
+
+#define sp_dyn_array_back(__ARR)\
+    *(__ARR + (sp_dyn_array_size(__ARR) ? sp_dyn_array_size(__ARR) - 1 : 0))
+
+#define sp_dyn_array_new(__T)\
+    ((__T*)sp_dyn_array_resize_impl(NULL, sizeof(__T), 0))
+
+////////////////
+// HASH TABLE //
+////////////////
+#define SP_HASH_TABLE_HASH_SEED         0x31415296
+#define SP_HASH_TABLE_INVALID_INDEX     UINT32_MAX
+
+typedef enum sp_hash_table_entry_state {
+    SP_HASH_TABLE_ENTRY_INACTIVE = 0x00,
+    SP_HASH_TABLE_ENTRY_ACTIVE = 0x01
+} sp_hash_table_entry_state;
+
+#define __sp_hash_table_entry(__K, __V)\
+    struct\
+    {\
+        __K key;\
+        __V val;\
+        sp_hash_table_entry_state state;\
+    }
+
+#define sp_hash_table(__K, __V)\
+    struct {\
+        __sp_hash_table_entry(__K, __V)* data;\
+        __K tmp_key;\
+        __V tmp_val;\
+        u32 stride;\
+        u32 klpvl;\
+        u32 tmp_idx;\
+    }*
+
+#define sp_hash_table_new(__K, __V) NULL
+
+void __sp_hash_table_init_impl(void** ht, u32 sz);
+u32 sp_hash_table_get_key_index_func(void** data, void* key, u32 key_len, u32 val_len, u32 stride, u32 klpvl);
+
+#define sp_hash_table_init(__HT, __K, __V)\
+    do {\
+        u32 entry_sz = sizeof(*__HT->data);\
+        u32 ht_sz = sizeof(*__HT);\
+        __sp_hash_table_init_impl((void**)&(__HT), ht_sz);\
+        memset((__HT), 0, ht_sz);\
+        sp_dyn_array_reserve(__HT->data, 2);\
+        __HT->data[0].state = SP_HASH_TABLE_ENTRY_INACTIVE;\
+        __HT->data[1].state = SP_HASH_TABLE_ENTRY_INACTIVE;\
+        uintptr_t d0 = (uintptr_t)&((__HT)->data[0]);\
+        uintptr_t d1 = (uintptr_t)&((__HT)->data[1]);\
+        ptrdiff_t diff = (d1 - d0);\
+        ptrdiff_t klpvl = (uintptr_t)&(__HT->data[0].state) - (uintptr_t)(&__HT->data[0]);\
+        (__HT)->stride = (u32)(diff);\
+        (__HT)->klpvl = (u32)(klpvl);\
+    } while (0)
+
+#define sp_hash_table_size(__HT)\
+    ((__HT) != NULL ? sp_dyn_array_size((__HT)->data) : 0)
+
+#define sp_hash_table_capacity(__HT)\
+    ((__HT) != NULL ? sp_dyn_array_capacity((__HT)->data) : 0)
+
+#define sp_hash_table_empty(__HT)\
+    ((__HT) != NULL ? sp_dyn_array_size((__HT)->data) == 0 : true)
+
+#define sp_hash_table_clear(__HT)\
+    do {\
+        if ((__HT) != NULL) {\
+            u32 capacity = sp_dyn_array_capacity((__HT)->data);\
+            for (u32 i = 0; i < capacity; ++i) {\
+                (__HT)->data[i].state = SP_HASH_TABLE_ENTRY_INACTIVE;\
+            }\
+            sp_dyn_array_clear((__HT)->data);\
+        }\
+    } while (0)
+
+#define sp_hash_table_free(__HT)\
+    do {\
+        if ((__HT) != NULL) {\
+            sp_dyn_array_free((__HT)->data);\
+            (__HT)->data = NULL;\
+            sp_free(__HT);\
+            (__HT) = NULL;\
+        }\
+    } while (0)
+
+#define sp_hash_table_insert(__HT, __K, __V)\
+    do {\
+        if ((__HT) == NULL) {\
+            sp_hash_table_init((__HT), (__K), (__V));\
+        }\
+        u32 __CAP = sp_hash_table_capacity(__HT);\
+        f32 __LF = __CAP ? (f32)(sp_hash_table_size(__HT)) / (f32)(__CAP) : 0.f;\
+        if (__LF >= 0.5f || !__CAP)\
+        {\
+            u32 NEW_CAP = __CAP ? __CAP * 2 : 2;\
+            sp_dyn_array_reserve((__HT)->data, NEW_CAP);\
+            for (u32 __I = __CAP; __I < NEW_CAP; ++__I) {\
+                (__HT)->data[__I].state = SP_HASH_TABLE_ENTRY_INACTIVE;\
+            }\
+            __CAP = sp_hash_table_capacity(__HT);\
+        }\
+        (__HT)->tmp_key = (__K);\
+        u64 __HSH = sp_hash_bytes((void*)&((__HT)->tmp_key), sizeof((__HT)->tmp_key), SP_HASH_TABLE_HASH_SEED);\
+        u32 __HSH_IDX = __HSH % __CAP;\
+        (__HT)->tmp_key = (__HT)->data[__HSH_IDX].key;\
+        u32 c = 0;\
+        while (\
+            c < __CAP\
+            && __HSH != sp_hash_bytes((void*)&(__HT)->tmp_key, sizeof((__HT)->tmp_key), SP_HASH_TABLE_HASH_SEED)\
+            && (__HT)->data[__HSH_IDX].state == SP_HASH_TABLE_ENTRY_ACTIVE)\
+        {\
+            __HSH_IDX = ((__HSH_IDX + 1) % __CAP);\
+            (__HT)->tmp_key = (__HT)->data[__HSH_IDX].key;\
+            ++c;\
+        }\
+        (__HT)->data[__HSH_IDX].key = (__K);\
+        (__HT)->data[__HSH_IDX].val = (__V);\
+        (__HT)->data[__HSH_IDX].state = SP_HASH_TABLE_ENTRY_ACTIVE;\
+        sp_dyn_array_head((__HT)->data)->size++;\
+    } while (0)
+
+#define sp_hash_table_get(__HT, __K)\
+    ((__HT)->tmp_key = (__K),\
+        ((__HT)->data[\
+            sp_hash_table_get_key_index_func((void**)&(__HT)->data, (void*)&((__HT)->tmp_key),\
+                sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), (__HT)->stride, (__HT)->klpvl)].val))
+
+#define sp_hash_table_getp(__HT, __K)\
+    (\
+        (__HT)->tmp_key = (__K),\
+        ((__HT)->tmp_idx = sp_hash_table_get_key_index_func((void**)&(__HT->data), (void*)&(__HT->tmp_key), sizeof(__HT->tmp_key),\
+            sizeof(__HT->tmp_val), __HT->stride, __HT->klpvl)),\
+        ((__HT)->tmp_idx != SP_HASH_TABLE_INVALID_INDEX ? &(__HT)->data[(__HT)->tmp_idx].val : NULL)\
+    )
+
+#define sp_hash_table_exists(__HT, __K)\
+    ((__HT) && ((__HT)->tmp_key = (__K),\
+        (sp_hash_table_get_key_index_func((void**)&(__HT->data), (void*)&(__HT->tmp_key), sizeof(__HT->tmp_key),\
+            sizeof(__HT->tmp_val), __HT->stride, __HT->klpvl) != SP_HASH_TABLE_INVALID_INDEX)))
+
+#define sp_hash_table_key_exists(__HT, __K) sp_hash_table_exists((__HT), (__K))
+
+#define sp_hash_table_erase(__HT, __K)\
+    do {\
+        if ((__HT))\
+        {\
+            (__HT)->tmp_key = (__K);\
+            u32 __IDX = sp_hash_table_get_key_index_func((void**)&(__HT)->data, (void*)&((__HT)->tmp_key), sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), (__HT)->stride, (__HT)->klpvl);\
+            if (__IDX != SP_HASH_TABLE_INVALID_INDEX) {\
+                (__HT)->data[__IDX].state = SP_HASH_TABLE_ENTRY_INACTIVE;\
+                if (sp_dyn_array_head((__HT)->data)->size) sp_dyn_array_head((__HT)->data)->size--;\
+            }\
+        }\
+    } while (0)
+
+typedef u32 sp_hash_table_iter;
+
+#define sp_hash_table_iter_valid(__HT, __IT)\
+    ((__IT) < sp_hash_table_capacity((__HT)))
+
+void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u32* it, u32 stride, u32 klpvl);
+
+#define sp_hash_table_iter_advance(__HT, __IT)\
+    (__sp_hash_table_iter_advance_func((void**)&(__HT)->data, sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), &(__IT), (__HT)->stride, (__HT)->klpvl))
+
+#define sp_hash_table_iter_get(__HT, __IT)\
+    ((__HT)->data[(__IT)].val)
+
+#define sp_hash_table_iter_getp(__HT, __IT)\
+    (&((__HT)->data[(__IT)].val))
+
+#define sp_hash_table_iter_getk(__HT, __IT)\
+    ((__HT)->data[(__IT)].key)
+
+#define sp_hash_table_iter_getkp(__HT, __IT)\
+    (&((__HT)->data[(__IT)].key))
+
+
+// ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
 // ██╔════╝██║██║     ██╔════╝    ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
 // █████╗  ██║██║     █████╗      ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
 // ██╔══╝  ██║██║     ██╔══╝      ██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║   ██║   ██║██╔══██╗
@@ -462,7 +727,7 @@ typedef struct sp_file_monitor {
 	sp_dynamic_array_t changes;
 	sp_dynamic_array_t cache;
   sp_opaque_ptr os;
-} sp_file_monitor_t; 
+} sp_file_monitor_t;
 
 SP_API void              sp_file_monitor_init(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata);
 SP_API void              sp_file_monitor_init_debounce(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata, u32 debounce_ms);
@@ -476,14 +741,14 @@ SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* mon
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
 // ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
-// █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║   
-// ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║   
-// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║   
+// █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
+// ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
+// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
 typedef struct sp_format_arg_t {
   sp_hash_t id;
   void* data;
-} sp_format_arg_t; 
+} sp_format_arg_t;
 
 typedef struct sp_formatter sp_formatter_t;
 SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
@@ -495,7 +760,7 @@ typedef struct sp_formatter {
 
 #define SP_FMT_ID(T) sp_hash_cstr(SP_MACRO_STR(T))
 
-#ifdef SP_CPP 
+#ifdef SP_CPP
   #define SP_FMT_ARG(T, V) sp_make_format_arg(SP_FMT_ID(T), (V))
 #else
   #define SP_FMT_ARG(T, V) SP_LVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .data = (void*)&(V) }
@@ -525,7 +790,7 @@ typedef struct sp_formatter {
 #define SP_FMT_SEMAPHORE(V) SP_FMT_ARG(semaphore, V)
 #define SP_FMT_FIXED_ARRAY(V) SP_FMT_ARG(fixed_array, V)
 #define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
- 
+
 void sp_format_ptr(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_str(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_cstr(sp_str_builder_t* builder, sp_format_arg_t* buffer);
@@ -551,7 +816,7 @@ void sp_format_semaphore(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 
-sp_str_t sp_fmt(sp_str_t fmt, ...); 
+sp_str_t sp_fmt(sp_str_t fmt, ...);
 
 #define SP_BUILTIN_FORMATTERS \
   SP_FORMATTER(ptr, sp_format_ptr), \
@@ -625,7 +890,7 @@ typedef enum {
   typedef struct {
 	  sp_dynamic_array_t directory_infos;
   } sp_os_win32_file_monitor_t;
-  
+
   SP_IMP void sp_os_win32_file_monitor_add_change(sp_file_monitor_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_file_change_event_t events);
   SP_IMP void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info);
 #else
@@ -646,7 +911,7 @@ typedef enum {
       sp_dynamic_array_t watch_paths;  // array of sp_str_t paths
       u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
     } sp_os_linux_file_monitor_t;
-    
+
     typedef sp_os_linux_file_monitor_t sp_os_file_monitor_t;
   #else
     typedef struct {
@@ -735,17 +1000,17 @@ SP_API void                         sp_semaphore_signal(sp_semaphore_t* semaphor
 SP_END_EXTERN_C()
 
 
-//  ██████╗██████╗ ██████╗ 
+//  ██████╗██████╗ ██████╗
 // ██╔════╝██╔══██╗██╔══██╗
 // ██║     ██████╔╝██████╔╝
-// ██║     ██╔═══╝ ██╔═══╝ 
-// ╚██████╗██║     ██║     
-//  ╚═════╝╚═╝     ╚═╝     
+// ██║     ██╔═══╝ ██╔═══╝
+// ╚██████╗██║     ██║
+//  ╚═════╝╚═╝     ╚═╝
 #ifdef SP_CPP
   sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
   sp_str_t operator/(const sp_str_t& a, const c8* b);
 
-  template <typename T> 
+  template <typename T>
   sp_format_arg_t sp_make_format_arg(sp_hash_t id, T&& data) {
     sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
     result.id = id;
@@ -770,24 +1035,24 @@ SP_BEGIN_EXTERN_C()
 // Shared formatting utilities
 void sp_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
     SP_ASSERT(builder);
-    
+
     if (num == 0) {
         sp_str_builder_grow(builder, builder->buffer.count + 1);
         sp_str_builder_append_c8(builder, '0');
         return;
     }
-    
+
     c8 digits[20]; // max 20 digits for u64
     s32 digit_count = 0;
-    
+
     while (num > 0) {
         digits[digit_count++] = '0' + (num % 10);
         num /= 10;
     }
-    
+
     SP_ASSERT((u32)digit_count <= max_digits);
     sp_str_builder_grow(builder, builder->buffer.count + digit_count);
-    
+
     for (s32 i = digit_count - 1; i >= 0; i--) {
         sp_str_builder_append_c8(builder, digits[i]);
     }
@@ -795,10 +1060,10 @@ void sp_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
 
 void sp_format_signed(sp_str_builder_t* builder, s64 num, u32 max_digits) {
     SP_ASSERT(builder);
-    
+
     bool negative = num < 0;
     u64 abs_value;
-    
+
     if (negative) {
         // Handle INT_MIN properly by casting to unsigned first
         abs_value = (u64)(-(num + 1)) + 1;
@@ -807,17 +1072,17 @@ void sp_format_signed(sp_str_builder_t* builder, s64 num, u32 max_digits) {
     } else {
         abs_value = (u64)num;
     }
-    
+
     sp_format_unsigned(builder, abs_value, max_digits);
 }
 
 void sp_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, const c8* prefix) {
     SP_ASSERT(builder);
-    
+
     if (prefix) {
         sp_str_builder_append_cstr(builder, prefix);
     }
-    
+
     if (value == 0) {
         u32 zero_count = min_width > 0 ? min_width : 1;
         sp_str_builder_grow(builder, builder->buffer.count + zero_count);
@@ -826,33 +1091,33 @@ void sp_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, const c8
         }
         return;
     }
-    
+
     c8 hex_digits[16]; // max 16 hex digits for 64-bit
     s32 digit_count = 0;
-    
+
     while (value > 0) {
         u8 digit = value & 0xF;
         hex_digits[digit_count++] = digit < 10 ? '0' + digit : 'A' + (digit - 10);
         value >>= 4;
     }
-    
+
     // Pad to minimum width
     while (digit_count < (s32)min_width) {
         hex_digits[digit_count++] = '0';
     }
-    
+
     sp_str_builder_grow(builder, builder->buffer.count + digit_count);
-    
+
     for (s32 i = digit_count - 1; i >= 0; i--) {
         sp_str_builder_append_c8(builder, hex_digits[i]);
     }
 }
-  
+
 void sp_format_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_t* value = (sp_str_t*)arg->data;
   SP_ASSERT(builder);
   SP_ASSERT(value);
-  
+
   sp_str_builder_append(builder, *value);
 }
 
@@ -861,7 +1126,7 @@ void sp_format_cstr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   SP_ASSERT(builder);
   SP_ASSERT(value);
   SP_ASSERT(*value);
-  
+
   sp_str_builder_append_cstr(builder, *value);
 }
 
@@ -914,17 +1179,17 @@ void sp_format_u64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   f32* value = (f32*)arg->data;
   f32 num = *value;
-  
+
   // Handle negative
   if (num < 0) {
     sp_str_builder_append_c8(builder, '-');
     num = -num;
   }
-  
+
   // Extract integer part
   s32 integer_part = (s32)num;
   f32 fractional_part = num - integer_part;
-  
+
   // Format integer part
   if (integer_part == 0) {
     sp_str_builder_append_c8(builder, '0');
@@ -932,20 +1197,20 @@ void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
     c8 digits[10];
     s32 digit_count = 0;
     s32 temp = integer_part;
-    
+
     while (temp > 0) {
       digits[digit_count++] = '0' + (temp % 10);
       temp /= 10;
     }
-    
+
     for (s32 i = digit_count - 1; i >= 0; i--) {
       sp_str_builder_append_c8(builder, digits[i]);
     }
   }
-  
+
   // Add decimal point and 3 decimal places
   sp_str_builder_append_c8(builder, '.');
-  
+
   for (s32 i = 0; i < 3; i++) {
     fractional_part *= 10;
     c8 digit = (c8)fractional_part;
@@ -957,17 +1222,17 @@ void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 void sp_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   f64* value = (f64*)arg->data;
   f64 num = *value;
-  
+
   // Handle negative
   if (num < 0) {
     sp_str_builder_append_c8(builder, '-');
     num = -num;
   }
-  
+
   // Extract integer part
   s64 integer_part = (s64)num;
   f64 fractional_part = num - integer_part;
-  
+
   // Format integer part
   if (integer_part == 0) {
     sp_str_builder_append_c8(builder, '0');
@@ -975,20 +1240,20 @@ void sp_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
     c8 digits[20];
     s32 digit_count = 0;
     s64 temp = integer_part;
-    
+
     while (temp > 0) {
       digits[digit_count++] = '0' + (temp % 10);
       temp /= 10;
     }
-    
+
     for (s32 i = digit_count - 1; i >= 0; i--) {
       sp_str_builder_append_c8(builder, digits[i]);
     }
   }
-  
+
   // Add decimal point and 3 decimal places
   sp_str_builder_append_c8(builder, '.');
-  
+
   for (s32 i = 0; i < 3; i++) {
     fractional_part *= 10;
     s32 digit = (s32)fractional_part;
@@ -1001,7 +1266,7 @@ void sp_format_c8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   c8* value = (c8*)arg->data;
   SP_ASSERT(builder);
   SP_ASSERT(value);
-  
+
   sp_str_builder_grow(builder, builder->buffer.count + 3); // two quotes + character
   sp_str_builder_append_c8(builder, '\'');
   sp_str_builder_append_c8(builder, *value);
@@ -1012,7 +1277,7 @@ void sp_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   c16* value = (c16*)arg->data;
   SP_ASSERT(builder);
   SP_ASSERT(value);
-  
+
   // Grow buffer for worst case: 'U+XXXX' (7 chars)
   sp_str_builder_grow(builder, builder->buffer.count + 7);
   sp_str_builder_append_c8(builder, '\'');
@@ -1046,66 +1311,66 @@ void sp_format_hash(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 
 void sp_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_builder_t* sb = (sp_str_builder_t*)arg->data;
-  
+
   sp_str_builder_append_cstr(builder, "{ buffer: (");
-  
+
   // Format data pointer
   u64 addr = (u64)sb->buffer.data;
   sp_format_hex(builder, addr, 8, "0x");
-  
+
   sp_str_builder_append_cstr(builder, ", ");
-  
+
   // Format count
   sp_format_unsigned(builder, sb->buffer.count, 10);
-  
+
   sp_str_builder_append_cstr(builder, "), capacity: ");
-  
+
   // Format capacity
   sp_format_unsigned(builder, sb->buffer.capacity, 10);
-  
+
   sp_str_builder_append_cstr(builder, " }");
 }
 
 void sp_format_date_time(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_os_date_time_t* dt = (sp_os_date_time_t*)arg->data;
-  
+
   // Format year
   sp_format_signed(builder, dt->year, 10);
-  
+
   sp_str_builder_append_c8(builder, '-');
-  
+
   // Format month (2 digits)
   if (dt->month < 10) sp_str_builder_append_c8(builder, '0');
   sp_format_signed(builder, dt->month, 10);
-  
+
   sp_str_builder_append_c8(builder, '-');
-  
+
   // Format day (2 digits)
   if (dt->day < 10) sp_str_builder_append_c8(builder, '0');
   sp_format_signed(builder, dt->day, 10);
-  
+
   sp_str_builder_append_c8(builder, 'T');
-  
+
   // Format hour (2 digits)
   if (dt->hour < 10) sp_str_builder_append_c8(builder, '0');
   sp_format_signed(builder, dt->hour, 10);
-  
+
   sp_str_builder_append_c8(builder, ':');
-  
+
   // Format minute (2 digits)
   if (dt->minute < 10) sp_str_builder_append_c8(builder, '0');
   sp_format_signed(builder, dt->minute, 10);
-  
+
   sp_str_builder_append_c8(builder, ':');
-  
+
   // Format second (2 digits)
   if (dt->second < 10) sp_str_builder_append_c8(builder, '0');
   sp_format_signed(builder, dt->second, 10);
-  
+
   // Add milliseconds if non-zero
   if (dt->millisecond > 0) {
     sp_str_builder_append_c8(builder, '.');
-    
+
     // Format milliseconds (3 digits)
     if (dt->millisecond < 100) sp_str_builder_append_c8(builder, '0');
     if (dt->millisecond < 10) sp_str_builder_append_c8(builder, '0');
@@ -1115,27 +1380,27 @@ void sp_format_date_time(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 
 void sp_format_thread(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_thread_t* thread = (sp_thread_t*)arg->data;
-  
+
   // Thread is a thrd_t which is a struct on Windows, cast to pointer size
   u64 tid = (u64)(uintptr_t)thread;
-  
+
   sp_str_builder_append_cstr(builder, "Thread ");
   sp_format_unsigned(builder, tid, 20);
 }
 
 void sp_format_mutex(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_mutex_t* mutex = (sp_mutex_t*)arg->data;
-  
+
   // mtx_t is an opaque type, just show pointer address
   u64 addr = (u64)mutex;
-  
+
   sp_str_builder_append_cstr(builder, "Mutex ");
   sp_format_hex(builder, addr, 8, "0x");
 }
 
 void sp_format_semaphore(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_semaphore_t* sem = (sp_semaphore_t*)arg->data;
-  
+
   sp_str_builder_append_cstr(builder, "Semaphore ");
   #ifdef SP_WIN32
     u64 handle = (u64)*sem;
@@ -1148,7 +1413,7 @@ void sp_format_semaphore(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 
 void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_fixed_array_t* arr = (sp_fixed_array_t*)arg->data;
-  
+
   sp_str_builder_append_cstr(builder, "{ size: ");
   sp_format_unsigned(builder, arr->size, 10);
   sp_str_builder_append_cstr(builder, ", capacity: ");
@@ -1158,7 +1423,7 @@ void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 
 void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_dynamic_array_t* arr = (sp_dynamic_array_t*)arg->data;
-  
+
   sp_str_builder_append_cstr(builder, "{ size: ");
   sp_format_unsigned(builder, arr->size, 10);
   sp_str_builder_append_cstr(builder, ", capacity: ");
@@ -1168,7 +1433,7 @@ void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 
 sp_str_t sp_fmt(sp_str_t fmt, ...) {
   #define SP_FORMATTER(T, FN) SP_LVAL(sp_formatter_t) { .id = sp_hash_cstr(SP_MACRO_STR(T)), .fn = FN }
-  sp_formatter_t formatters [] = { 
+  sp_formatter_t formatters [] = {
     SP_BUILTIN_FORMATTERS
   };
 
@@ -1189,15 +1454,15 @@ sp_str_t sp_fmt(sp_str_t fmt, ...) {
             break;
           }
         }
-        
+
         index++;
         index++;
 
-      } 
+      }
       else {
         sp_str_builder_append_c8(&builder, sp_str_at(fmt, index));
         index++;
-      }      
+      }
     }
 
     va_end(args);
@@ -1213,7 +1478,7 @@ void sp_context_check_index() {
 
 void sp_context_set(sp_context_t context) {
   sp_context = sp_context ? sp_context : &sp_context_stack[1];
-  *sp_context = context;    
+  *sp_context = context;
 }
 
 void sp_context_push(sp_context_t context) {
@@ -1265,7 +1530,7 @@ sp_allocator_t sp_bump_allocator_init(sp_bump_allocator_t* allocator, u32 capaci
   allocator->buffer = (u8*)sp_os_allocate_memory(capacity);
   allocator->capacity = capacity;
   allocator->bytes_used = 0;
-  
+
   sp_allocator_t result;
   result.on_alloc = sp_bump_allocator_on_alloc;
   result.user_data = allocator;
@@ -1462,7 +1727,7 @@ s32 sp_str_compare_alphabetical(sp_str_t a, sp_str_t b) {
     if (i >= a.len && i >= b.len) return SP_QSORT_EQUAL;
     if (i >= a.len)               return SP_QSORT_A_FIRST;
     if (i >= b.len)               return SP_QSORT_B_FIRST;
-    
+
     if (a.data[i] == b.data[i]) {
       i++;
       continue;
@@ -1571,21 +1836,21 @@ void sp_os_normalize_path(sp_str_t path) {
 
 sp_str_t sp_os_extract_file_name(sp_str_t path) {
   if (path.len == 0) return sp_str_lit("");
-  
+
   c8* last_slash = NULL;
   for (u32 i = 0; i < path.len; i++) {
     if (path.data[i] == '/' || path.data[i] == '\\') {
       last_slash = &path.data[i];
     }
   }
-  
+
   if (!last_slash) {
     return path;
   }
-  
+
   u32 filename_start = (u32)(last_slash - path.data) + 1;
   if (filename_start >= path.len) return sp_str_lit("");
-  
+
   u32 filename_len = path.len - filename_start;
   return sp_str(path.data + filename_start, filename_len);
 }
@@ -1593,20 +1858,20 @@ sp_str_t sp_os_extract_file_name(sp_str_t path) {
 
 sp_str_t sp_os_parent_path(sp_str_t path) {
   if (path.len == 0) return path;
-  
+
   // Start from the end of the string
   c8* c = path.data + path.len - 1;
-  
+
   // Skip any trailing slashes
   while (c > path.data && *c == '/') {
     c--;
   }
-  
+
   // Now find the next slash
   while (c > path.data && *c != '/') {
     c--;
   }
-  
+
   // If we found a slash and it's not the only character, exclude it
   if (c > path.data) {
     path.len = (u32)(c - path.data);
@@ -1617,7 +1882,7 @@ sp_str_t sp_os_parent_path(sp_str_t path) {
     // No parent found
     path.len = 0;
   }
-  
+
   return path;
 }
 
@@ -1826,7 +2091,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     do {
       if (sp_cstr_equal(find_data.cFileName, ".")) continue;
       if (sp_cstr_equal(find_data.cFileName, "..")) continue;
-      
+
       sp_str_builder_t entry_builder = SP_ZERO_INITIALIZE();
       sp_str_builder_append(&entry_builder, path);
       sp_str_builder_append(&entry_builder, sp_str_lit("/"));
@@ -1876,7 +2141,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 
     // Convert to Unix epoch
     u64 unix_100ns = time.QuadPart - 116444736000000000LL;
-    
+
     return SP_LVAL(sp_precise_epoch_time_t) {
       unix_100ns / 10000000,           // seconds
       (unix_100ns % 10000000) * 100    // remainder to nanoseconds
@@ -1924,32 +2189,32 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   sp_str_t sp_os_get_executable_path() {
     c8 exe_path[SP_MAX_PATH_LEN];
     GetModuleFileNameA(NULL, exe_path, SP_MAX_PATH_LEN);
-    
+
     sp_str_t exe_path_str = sp_str_cstr(exe_path);
     sp_os_normalize_path(exe_path_str);
-    
+
     return sp_str_copy(exe_path_str);
   }
 
   sp_str_t sp_os_canonicalize_path(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     c8 canonical_path[SP_MAX_PATH_LEN];
-    
+
     if (GetFullPathNameA(path_cstr, SP_MAX_PATH_LEN, canonical_path, NULL) == 0) {
       sp_free(path_cstr);
       return sp_str_copy(path);
     }
-    
+
     sp_free(path_cstr);
-    
+
     sp_str_t result = sp_str_cstr(canonical_path);
     sp_os_normalize_path(result);
-    
+
     // Remove trailing slash if present
     if (result.len > 0 && result.data[result.len - 1] == '/') {
       result.len--;
     }
-    
+
     return sp_str_copy(result);
   }
 
@@ -1969,11 +2234,11 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
       .semaphore = SP_ZERO_STRUCT(sp_semaphore_t)
     };
     sp_semaphore_init(&launch.semaphore);
-  
+
     thrd_create(thread, sp_thread_launch, &launch);
     sp_semaphore_wait(&launch.semaphore);
   }
-  
+
   s32 sp_thread_launch(void* args) {
     sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
     sp_context_push(launch->context);
@@ -1982,75 +2247,75 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     sp_semaphore_signal(&launch->semaphore);
     return fn(userdata);
   }
-  
+
   void sp_thread_join(sp_thread_t* thread) {
     s32 result = 0;
     thrd_join(*thread, &result);
   }
-  
+
   s32 sp_mutex_kind_to_c11(sp_mutex_kind_t kind) {
     s32 c11_kind;
-    if (kind & SP_MUTEX_PLAIN) c11_kind = mtx_plain; 
-    if (kind & SP_MUTEX_TIMED) c11_kind = mtx_timed; 
-    if (kind & SP_MUTEX_RECURSIVE) c11_kind |= mtx_recursive; 
-  
+    if (kind & SP_MUTEX_PLAIN) c11_kind = mtx_plain;
+    if (kind & SP_MUTEX_TIMED) c11_kind = mtx_timed;
+    if (kind & SP_MUTEX_RECURSIVE) c11_kind |= mtx_recursive;
+
     return c11_kind;
-  } 
-  
+  }
+
   void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
     mtx_init(mutex, sp_mutex_kind_to_c11(kind));
   }
-  
+
   void sp_mutex_lock(sp_mutex_t* mutex) {
     mtx_lock(mutex);
   }
-  
+
   void sp_mutex_unlock(sp_mutex_t* mutex) {
     mtx_unlock(mutex);
   }
-  
+
   void sp_mutex_destroy(sp_mutex_t* mutex) {
     mtx_destroy(mutex);
   }
-      
-  
+
+
   void sp_semaphore_init(sp_semaphore_t* semaphore) {
-    *semaphore = CreateSemaphoreW(NULL, 0, 1, NULL); 
+    *semaphore = CreateSemaphoreW(NULL, 0, 1, NULL);
   }
-  
+
   void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
     CloseHandle(*semaphore);
   }
-  
+
   void sp_semaphore_wait(sp_semaphore_t* semaphore) {
     WaitForSingleObject(*semaphore, INFINITE);
-  }    
-   
-  
+  }
+
+
   bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
     sp_win32_dword_t result = WaitForSingleObject(*semaphore, ms);
     return result == WAIT_OBJECT_0;
-  }    
-  
+  }
+
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     ReleaseSemaphore(*semaphore, 1, NULL);
-  }  
-  
+  }
+
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
     sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)sp_alloc(sizeof(sp_os_win32_file_monitor_t));
     sp_dynamic_array_init(&os->directory_infos, sizeof(sp_monitored_dir_t));
     monitor->os = os;
   }
-  
+
   void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t directory_path) {
     sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)monitor->os;
-  
+
     sp_win32_handle_t event = CreateEventW(NULL, false, false, NULL);
     if (!event) return;
-    
+
     c8* directory_cstr = sp_str_to_cstr(directory_path);
     sp_win32_handle_t handle = CreateFileA(
-      directory_cstr, 
+      directory_cstr,
       FILE_LIST_DIRECTORY,
       FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
       NULL,
@@ -2058,13 +2323,13 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
       FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
       NULL
     );
-    
+
     if (handle == INVALID_HANDLE_VALUE) {
       CloseHandle(event);
       sp_free(directory_cstr);
       return;
     }
-  
+
     sp_monitored_dir_t* info = (sp_monitored_dir_t*)sp_dynamic_array_push(&os->directory_infos, NULL);
     sp_os_zero_memory(&info->overlapped, sizeof(sp_win32_overlapped_t));
     info->overlapped.hEvent = event;
@@ -2072,27 +2337,27 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     info->path = sp_str_copy(directory_path);
     info->notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
     sp_os_zero_memory(info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
-  
+
     sp_os_win32_file_monitor_issue_one_read(monitor, info);
     sp_free(directory_cstr);
   }
-  
+
   void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
   }
-  
+
   void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
     sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)monitor->os;
-  
+
     for (u32 i = 0; i < os->directory_infos.size; i++) {
       sp_monitored_dir_t* info = (sp_monitored_dir_t*)sp_dynamic_array_at(&os->directory_infos, i);
       assert(info->handle != INVALID_HANDLE_VALUE);
-  
+
       if (!HasOverlappedIoCompleted(&info->overlapped)) continue;
-  
+
       s32 bytes_written = 0;
       bool success = GetOverlappedResult(info->handle, &info->overlapped, (LPDWORD) &bytes_written, false);
       if (!success || bytes_written == 0) break;
-  
+
       FILE_NOTIFY_INFORMATION* notify = (FILE_NOTIFY_INFORMATION*)info->notify_information;
       while (true) {
         sp_file_change_event_t events = SP_FILE_CHANGE_EVENT_NONE;
@@ -2106,53 +2371,53 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
           events = SP_FILE_CHANGE_EVENT_REMOVED;
         }
         else if (notify->Action == FILE_ACTION_RENAMED_OLD_NAME) {
-          
+
         }
         else if (notify->Action == FILE_ACTION_RENAMED_NEW_NAME) {
-  
+
         }
         else {
           continue;
         }
-  
+
         c8* partial_path_cstr = sp_wstr_to_cstr(&notify->FileName[0], (u32)(notify->FileNameLength / 2));
         sp_str_t partial_path_str = sp_str_cstr(partial_path_cstr);
-        
+
         sp_str_builder_t builder = SP_ZERO_INITIALIZE();
         sp_str_builder_append(&builder, info->path);
         sp_str_builder_append(&builder, sp_str_lit("/"));
         sp_str_builder_append(&builder, partial_path_str);
         sp_str_t full_path = sp_str_builder_write(&builder);
-        
+
         sp_os_normalize_path(full_path);
-  
+
         sp_str_t file_name = sp_os_extract_file_name(full_path);
         sp_os_win32_file_monitor_add_change(monitor, full_path, file_name, events);
-        
+
         sp_free(partial_path_cstr);
-  
+
         if (notify->NextEntryOffset == 0) break;
         notify = (FILE_NOTIFY_INFORMATION*)((char*)notify + notify->NextEntryOffset);
       }
-  
+
       sp_os_win32_file_monitor_issue_one_read(monitor, info);
     }
-  
+
     sp_file_monitor_emit_changes(monitor);
   }
-  
+
   void sp_os_win32_file_monitor_add_change(sp_file_monitor_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_file_change_event_t events) {
     f32 time = (f32)(GetTickCount64() / 1000.0);
-  
+
     if (sp_os_is_directory(file_path)) return;
-  
+
     if (file_name.data && file_name.len > 0) {
       if (file_name.data[0] == '.' && file_name.len > 1 && file_name.data[1] == '#') return;
       if (file_name.data[0] ==  '#') return;
     }
-  
+
     if (!sp_file_monitor_check_cache(monitor, file_path, time)) return;
-  
+
     for (u32 i = 0; i < monitor->changes.size; i++) {
       sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_at(&monitor->changes, i);
       if (sp_str_equal(change->file_path, file_path)) {
@@ -2167,17 +2432,17 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
         return;
       }
     }
-  
+
     sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_push(&monitor->changes, NULL);
     change->file_path = sp_str_copy(file_path);
     change->file_name = sp_str_copy(file_name);
     change->events = events;
     change->time = time;
   }
-  
+
   void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info) {
     SP_ASSERT(info->handle != INVALID_HANDLE_VALUE);
-  
+
     s32 notify_filter = 0;
     if (monitor->events_to_watch & (SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_REMOVED)) {
       notify_filter |= FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_CREATION;
@@ -2185,9 +2450,9 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
       notify_filter |= FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE;
     }
-  
+
     info->bytes_returned = 0;
-  
+
     ReadDirectoryChangesW(info->handle, info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE, true, notify_filter, NULL, &info->overlapped, NULL);
   }
 #endif // SP_WIN32
@@ -2196,7 +2461,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 ///////////
 // POSIX //
 ///////////
-#ifdef SP_POSIX 
+#ifdef SP_POSIX
   void* sp_os_allocate_memory(u32 size) {
     void* ptr = malloc(size);
     if (ptr) memset(ptr, 0, size);
@@ -2306,11 +2571,11 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     time_t raw_time;
     struct tm* time_info;
     struct timeval tv;
-    
+
     time(&raw_time);
     time_info = localtime(&raw_time);
     gettimeofday(&tv, NULL);
-    
+
     return SP_LVAL(sp_os_date_time_t) {
       .year = time_info->tm_year + 1900,
       .month = time_info->tm_mon + 1,
@@ -2327,15 +2592,15 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     c8* path_cstr = sp_str_to_cstr(file_path);
     s32 result = stat(path_cstr, &st);
     sp_free(path_cstr);
-    
+
     if (result != 0) {
       return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
     }
-    
+
     if (st.st_size == 0) {
       return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
     }
-    
+
     return SP_LVAL(sp_precise_epoch_time_t) {
       .s = (u64)st.st_mtime,
       .ns = 0
@@ -2363,17 +2628,17 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 
   sp_str_t sp_os_canonicalize_path(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
-    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE(); 
-    realpath(path_cstr, canonical_path); 
+    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+    realpath(path_cstr, canonical_path);
     sp_free(path_cstr);
-    
+
     sp_str_t result = sp_str_cstr(canonical_path);
     sp_os_normalize_path(result);
-    
+
     if (result.len > 0 && result.data[result.len - 1] == '/') {
       result.len--;
     }
-    
+
     return sp_str_copy(result);
   }
 
@@ -2383,7 +2648,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
       result[0] = '\0';
       return result;
     }
-    
+
     // Simple conversion for ASCII characters
     c8* result = (c8*)sp_alloc(len + 1);
     for (u32 i = 0; i < len; i++) {
@@ -2414,7 +2679,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 
     return result;
   }
-  
+
   void sp_thread_join(sp_thread_t* thread) {
     pthread_join(*thread, NULL);
   }
@@ -2427,7 +2692,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
       .semaphore = SP_ZERO_STRUCT(sp_semaphore_t)
     };
     sp_semaphore_init(&launch.semaphore);
-  
+
     pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
     sp_semaphore_wait(&launch.semaphore);
   }
@@ -2435,39 +2700,39 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
-    
+
     if (kind & SP_MUTEX_RECURSIVE) {
       pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
     }
-    
+
     pthread_mutex_init(mutex, &attr);
     pthread_mutexattr_destroy(&attr);
   }
-  
+
   void sp_mutex_lock(sp_mutex_t* mutex) {
     pthread_mutex_lock(mutex);
   }
-  
+
   void sp_mutex_unlock(sp_mutex_t* mutex) {
     pthread_mutex_unlock(mutex);
   }
-  
+
   void sp_mutex_destroy(sp_mutex_t* mutex) {
     pthread_mutex_destroy(mutex);
   }
-  
+
   void sp_semaphore_init(sp_semaphore_t* semaphore) {
     sem_init(semaphore, 0, 0);
   }
-  
+
   void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
     sem_destroy(semaphore);
   }
-  
+
   void sp_semaphore_wait(sp_semaphore_t* semaphore) {
     sem_wait(semaphore);
   }
-  
+
   bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -2479,7 +2744,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     }
     return sem_timedwait(semaphore, &ts) == 0;
   }
-  
+
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     sem_post(semaphore);
   }
@@ -2487,27 +2752,27 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 #ifdef SP_LINUX
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
     sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)sp_alloc(sizeof(sp_os_linux_file_monitor_t));
-    
+
     linux_monitor->fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
     if (linux_monitor->fd == -1) {
       // Handle error but don't crash
       linux_monitor->fd = 0;
     }
-    
+
     sp_dynamic_array_init(&linux_monitor->watch_descs, sizeof(s32));
     sp_dynamic_array_init(&linux_monitor->watch_paths, sizeof(sp_str_t));
-    
+
     monitor->os = linux_monitor;
   }
 
   void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path) {
     if (!monitor->os) return;
     sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)monitor->os;
-    
+
     if (linux_monitor->fd <= 0) return;
-    
+
     c8* path_cstr = sp_str_to_cstr(path);
-    
+
     // Build mask based on what events we want to watch
     u32 mask = 0;
     if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
@@ -2519,15 +2784,15 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_REMOVED) {
       mask |= IN_DELETE | IN_MOVED_FROM;
     }
-    
+
     s32 wd = inotify_add_watch(linux_monitor->fd, path_cstr, mask);
-    
+
     if (wd != -1) {
       sp_dynamic_array_push(&linux_monitor->watch_descs, &wd);
       sp_str_t path_copy = sp_str_copy(path);
       sp_dynamic_array_push(&linux_monitor->watch_paths, &path_copy);
     }
-    
+
     sp_free(path_cstr);
   }
 
@@ -2544,28 +2809,28 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 
     sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)monitor->os;
     if (linux_monitor->fd <= 0) return;
-    
+
     ssize_t len = read(linux_monitor->fd, linux_monitor->buffer, sizeof(linux_monitor->buffer));
     if (len <= 0) return;
-    
+
     // Process all events in buffer
     char* ptr = (char*)linux_monitor->buffer;
     while (ptr < (char*)linux_monitor->buffer + len) {
       struct inotify_event* event = (struct inotify_event*)ptr;
-      
+
       // Find which path this watch descriptor corresponds to
       for (u32 i = 0; i < linux_monitor->watch_descs.size; i++) {
         s32* wd = (s32*)sp_dynamic_array_at(&linux_monitor->watch_descs, i);
         if (*wd == event->wd) {
           sp_str_t* dir_path = (sp_str_t*)sp_dynamic_array_at(&linux_monitor->watch_paths, i);
-          
+
           // Build full path if there's a filename
           sp_str_t file_name = SP_ZERO_STRUCT(sp_str_t);
           sp_str_t file_path = SP_ZERO_STRUCT(sp_str_t);
-          
+
           if (event->len > 0 && event->name[0] != '\0') {
             file_name = sp_str(event->name, strlen(event->name));
-            
+
             // Build full path
             sp_str_builder_t builder = SP_ZERO_INITIALIZE();
             sp_str_builder_append(&builder, *dir_path);
@@ -2576,7 +2841,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
             file_path = sp_str_copy(*dir_path);
             file_name = sp_os_extract_file_name(file_path);
           }
-          
+
           // Convert inotify mask to our events
           sp_file_change_event_t events = SP_FILE_CHANGE_EVENT_NONE;
           if (event->mask & (IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE)) {
@@ -2588,8 +2853,8 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
           if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {
             events = (sp_file_change_event_t)(events | SP_FILE_CHANGE_EVENT_REMOVED);
           }
-          
-          // Add change to monitor's change list  
+
+          // Add change to monitor's change list
           if (events != SP_FILE_CHANGE_EVENT_NONE) {
             sp_file_change_t change = {
               .file_path = file_path,
@@ -2602,10 +2867,10 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
           break;
         }
       }
-      
+
       ptr += sizeof(struct inotify_event) + event->len;
     }
-    
+
     // Emit changes with debouncing
     sp_file_monitor_emit_changes(monitor);
   }
@@ -2614,15 +2879,15 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
     monitor->os = NULL;
   }
-  
+
   void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t directory_path) {
     (void)monitor; (void)directory_path;
   }
-  
+
   void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
     (void)monitor; (void)file_path;
   }
-  
+
   void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
     (void)monitor;
   }
@@ -2672,7 +2937,7 @@ sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, s
   c8* file_path_cstr = sp_str_to_cstr(file_path);
   sp_hash_t file_hash = sp_hash_cstr(file_path_cstr);
   sp_free(file_path_cstr);
-  
+
   sp_cache_entry_t* found = NULL;
   for (u32 i = 0; i < monitor->cache.size; i++) {
     sp_cache_entry_t* entry = (sp_cache_entry_t*)sp_dynamic_array_at(&monitor->cache, i);
@@ -2686,7 +2951,7 @@ sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, s
     found = (sp_cache_entry_t*)sp_dynamic_array_push(&monitor->cache, NULL);
     found->hash = file_hash;
   }
-  
+
   return found;
 }
 
@@ -2703,12 +2968,157 @@ sp_hash_t sp_hash_cstr(const c8* str) {
 
   sp_hash_t hash = 0;
   c8 c = 0;
-  
+
   while ((c = *str++)) {
     hash = c + (hash * prime);
   }
 
   return hash;
+}
+
+#define SP_SIZE_T_BITS  ((sizeof(size_t)) * 8)
+#define SP_SIPHASH_C_ROUNDS 1
+#define SP_SIPHASH_D_ROUNDS 1
+#define sp_rotate_left(__V, __N)   (((__V) << (__N)) | ((__V) >> (SP_SIZE_T_BITS - (__N))))
+#define sp_rotate_right(__V, __N)  (((__V) >> (__N)) | ((__V) << (SP_SIZE_T_BITS - (__N))))
+
+sp_hash_t sp_hash_bytes(void *p, u32 len, u64 seed) {
+  unsigned char *d = (unsigned char *) p;
+  size_t i,j;
+  size_t v0,v1,v2,v3, data;
+
+  v0 = ((((size_t) 0x736f6d65 << 16) << 16) + 0x70736575) ^  seed;
+  v1 = ((((size_t) 0x646f7261 << 16) << 16) + 0x6e646f6d) ^ ~seed;
+  v2 = ((((size_t) 0x6c796765 << 16) << 16) + 0x6e657261) ^  seed;
+  v3 = ((((size_t) 0x74656462 << 16) << 16) + 0x79746573) ^ ~seed;
+
+  #define sp_sipround() \
+    do {                   \
+      v0 += v1; v1 = sp_rotate_left(v1, 13);  v1 ^= v0; v0 = sp_rotate_left(v0,SP_SIZE_T_BITS/2); \
+      v2 += v3; v3 = sp_rotate_left(v3, 16);  v3 ^= v2;                                                 \
+      v2 += v1; v1 = sp_rotate_left(v1, 17);  v1 ^= v2; v2 = sp_rotate_left(v2,SP_SIZE_T_BITS/2); \
+      v0 += v3; v3 = sp_rotate_left(v3, 21);  v3 ^= v0;                                                 \
+    } while (0)
+
+  for (i=0; i+sizeof(size_t) <= len; i += sizeof(size_t), d += sizeof(size_t)) {
+    data = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
+    data |= (size_t) (d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24)) << 16 << 16;
+
+    v3 ^= data;
+    for (j=0; j < SP_SIPHASH_C_ROUNDS; ++j)
+      sp_sipround();
+    v0 ^= data;
+  }
+  data = len << (SP_SIZE_T_BITS-8);
+  switch (len - i) {
+    case 7: data |= ((size_t) d[6] << 24) << 24; SP_FALLTHROUGH();
+    case 6: data |= ((size_t) d[5] << 20) << 20; SP_FALLTHROUGH();
+    case 5: data |= ((size_t) d[4] << 16) << 16; SP_FALLTHROUGH();
+    case 4: data |= (d[3] << 24); SP_FALLTHROUGH();
+    case 3: data |= (d[2] << 16); SP_FALLTHROUGH();
+    case 2: data |= (d[1] << 8); SP_FALLTHROUGH();
+    case 1: data |= d[0]; SP_FALLTHROUGH();
+    case 0: break;
+  }
+  v3 ^= data;
+  for (j=0; j < SP_SIPHASH_C_ROUNDS; ++j)
+    sp_sipround();
+  v0 ^= data;
+  v2 ^= 0xff;
+  for (j=0; j < SP_SIPHASH_D_ROUNDS; ++j)
+    sp_sipround();
+
+  return v1^v2^v3;
+}
+
+void* sp_dyn_array_resize_impl(void* arr, u32 sz, u32 amount) {
+    u32 capacity;
+
+    if (arr) {
+        capacity = amount;
+    } else {
+        capacity = 0;
+    }
+
+    sp_dyn_array* data = (sp_dyn_array*)sp_realloc(arr ? sp_dyn_array_head(arr) : 0, capacity * sz + sizeof(sp_dyn_array));
+
+    if (data) {
+        if (!arr) {
+            data->size = 0;
+        }
+        data->capacity = (s32)capacity;
+        return ((s32*)data + 2);
+    }
+
+    return NULL;
+}
+
+void** sp_dyn_array_init(void** arr, u32 val_len) {
+    if (*arr == NULL) {
+        sp_dyn_array* data = (sp_dyn_array*)sp_alloc(val_len + sizeof(sp_dyn_array));
+        data->size = 0;
+        data->capacity = 1;
+        *arr = ((s32*)data + 2);
+    }
+    return arr;
+}
+
+void sp_dyn_array_push_data(void** arr, void* val, u32 val_len) {
+    if (*arr == NULL) {
+        sp_dyn_array_init(arr, val_len);
+    }
+    if (sp_dyn_array_need_grow(*arr, 1)) {
+        s32 capacity = sp_dyn_array_capacity(*arr) * 2;
+
+        sp_dyn_array* data = (sp_dyn_array*)sp_realloc(sp_dyn_array_head(*arr), capacity * val_len + sizeof(sp_dyn_array));
+
+        if (data) {
+            data->capacity = capacity;
+            *arr = ((s32*)data + 2);
+        }
+    }
+    u32 offset = sp_dyn_array_size(*arr);
+    memcpy(((u8*)(*arr)) + offset * val_len, val, val_len);
+    sp_dyn_array_head(*arr)->size++;
+}
+
+void __sp_hash_table_init_impl(void** ht, u32 sz) {
+    *ht = sp_alloc(sz);
+}
+
+u32 sp_hash_table_get_key_index_func(void** data, void* key, u32 key_len, u32 val_len, u32 stride, u32 klpvl) {
+    if (!data || !key) return SP_HASH_TABLE_INVALID_INDEX;
+
+    u32 capacity = sp_dyn_array_capacity(*data);
+    u32 size = sp_dyn_array_size(*data);
+    if (!capacity || !size) return SP_HASH_TABLE_INVALID_INDEX;
+    u32 idx = SP_HASH_TABLE_INVALID_INDEX;
+    u64 hash = sp_hash_bytes(key, key_len, SP_HASH_TABLE_HASH_SEED);
+    u32 hash_idx = (hash % capacity);
+
+    for (u32 i = hash_idx, c = 0; c < capacity; ++c, i = ((i + 1) % capacity)) {
+        u32 offset = (i * stride);
+        void* k = ((c8*)(*data) + (offset));
+        u64 kh = sp_hash_bytes(k, key_len, SP_HASH_TABLE_HASH_SEED);
+        bool comp = memcmp(k, key, key_len) == 0;
+        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((c8*)(*data) + offset + (klpvl));
+        if (comp && hash == kh && state == SP_HASH_TABLE_ENTRY_ACTIVE) {
+            idx = i;
+            break;
+        }
+    }
+    return idx;
+}
+
+void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u32* it, u32 stride, u32 klpvl) {
+    (*it)++;
+    for (; *it < sp_dyn_array_capacity(*data); ++*it) {
+        u32 offset = (*it * stride);
+        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((u8*)*data + offset + (klpvl));
+        if (state == SP_HASH_TABLE_ENTRY_ACTIVE) {
+            break;
+        }
+    }
 }
 
 SP_END_EXTERN_C()

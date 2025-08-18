@@ -96,32 +96,32 @@ static void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_ch
 
 UTEST(file_monitor, detects_file_modifications) {
   sp_test_use_malloc();
-  
+
   // Create a test file
   c8* test_filename = sp_test_generate_random_filename();
   sp_test_create_file(test_filename, "Initial content");
-  
+
   // Set up file monitor
   sp_test_file_monitor_data test_data = {};
   sp_file_monitor_t monitor = {};
   sp_file_monitor_init(&monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &test_data);
-  
+
   // Get current directory and add it to monitor
   c8 current_dir[SP_MAX_PATH_LEN] = {};
   GetCurrentDirectoryA(SP_MAX_PATH_LEN, current_dir);
   sp_str_t current_dir_str = sp_str_cstr(current_dir);
   sp_file_monitor_add_directory(&monitor, current_dir_str);
-  
+
   // Process any initial changes
   sp_file_monitor_process_changes(&monitor);
   test_data.change_detected = false;
-  
+
   // Modify the file
   sp_test_modify_file(test_filename, "Modified content");
-  
+
   // Wait a bit for the file system to register the change
   Sleep(100);
-  
+
   // Process changes
   sp_file_monitor_process_changes(&monitor);
 
@@ -129,7 +129,7 @@ UTEST(file_monitor, detects_file_modifications) {
   ASSERT_TRUE(test_data.change_detected);
   ASSERT_EQ(test_data.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
   ASSERT_NE(strstr(test_data.last_file_path, test_filename), NULL);
-  
+
   // Clean up
   sp_test_delete_file(test_filename);
   sp_free(test_filename);
@@ -163,18 +163,18 @@ static void sp_test_memory_tracker_destroy(sp_test_memory_tracker* tracker) {
 UTEST(dynamic_array, initialization) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024); // 1MB
-  
+
   // Test default initialization
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     ASSERT_EQ(arr.size, 0);
     ASSERT_EQ(arr.capacity, 2);
     ASSERT_EQ(arr.element_size, sizeof(s32));
     ASSERT_NE(arr.data, NULL);
   }
-  
+
   // Test different element sizes
   {
   struct test_sizes {
@@ -188,36 +188,36 @@ UTEST(dynamic_array, initialization) {
       {64, "cache_line"},
       {256, "large_struct"}
     };
-    
+
     for (u32 test_idx = 0; test_idx < sizeof(sizes)/sizeof(sizes[0]); test_idx++) {
       struct test_sizes* test = &sizes[test_idx];
       sp_dynamic_array_t arr;
       sp_dynamic_array_init(&arr, test->size);
-      
+
       ASSERT_EQ(arr.element_size, test->size);
       ASSERT_EQ(arr.capacity, 2);
       ASSERT_EQ(arr.size, 0);
-      
+
       // Verify memory allocation
       u32 expected_alloc = test->size * 2; // capacity * element_size
       ASSERT_GE(sp_test_memory_tracker_bytes_used(&tracker), expected_alloc);
-      
+
       sp_test_memory_tracker_clear(&tracker);
     }
   }
-  
+
   sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(dynamic_array, push_operations) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-  
+
   // Test push single elements
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     // Push first element
     s32 val1 = 42;
     u8* elem1 = sp_dynamic_array_push(&arr, &val1);
@@ -225,7 +225,7 @@ UTEST(dynamic_array, push_operations) {
     ASSERT_EQ(arr.size, 1);
     ASSERT_EQ(*(s32*)elem1, 42);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 42);
-    
+
     // Push second element
     s32 val2 = 69;
     u8* elem2 = sp_dynamic_array_push(&arr, &val2);
@@ -233,117 +233,117 @@ UTEST(dynamic_array, push_operations) {
     ASSERT_EQ(arr.size, 2);
     ASSERT_EQ(*(s32*)elem2, 69);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 1), 69);
-    
+
     // Verify first element unchanged
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 42);
   }
-  
+
   // Test push with NULL data
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     u8* elem = sp_dynamic_array_push(&arr, NULL);
     ASSERT_NE(elem, NULL);
     ASSERT_EQ(arr.size, 1);
     // Element exists but uninitialized
   }
-  
+
   // Test push_n multiple elements
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     s32 values[] = {10, 20, 30, 40, 50};
     u8* elems = sp_dynamic_array_push_n(&arr, values, 5);
-    
+
     ASSERT_NE(elems, NULL);
     ASSERT_EQ(arr.size, 5);
-    
+
     // Verify all elements
     for (u32 i = 0; i < 5; i++) {
       ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), values[i]);
     }
   }
-  
+
   sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(dynamic_array, growth) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-  
+
   // Test automatic growth on push
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     ASSERT_EQ(arr.capacity, 2);
-    
+
     // Push beyond initial capacity
     s32 values[] = {1, 2, 3};
     for (s32 i = 0; i < 3; i++) {
       sp_dynamic_array_push(&arr, &values[i]);
     }
-    
+
     ASSERT_EQ(arr.size, 3);
     ASSERT_GE(arr.capacity, 3);
-    
+
     // Verify data preserved after growth
     for (u32 i = 0; i < 3; i++) {
       ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), values[i]);
     }
   }
-  
+
   // Test manual growth
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     sp_dynamic_array_grow(&arr, 10);
-    
+
     ASSERT_GE(arr.capacity, 10);
     ASSERT_EQ(arr.size, 0); // Size unchanged
-    
+
     // Growth should at least double or meet requirement
     sp_dynamic_array_grow(&arr, 5);
     ASSERT_GE(arr.capacity, 10); // No shrinking
   }
-  
+
   // Test growth preserves data
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     // Fill array
     for (s32 i = 0; i < 10; i++) {
       sp_dynamic_array_push(&arr, &i);
     }
-    
+
     u32 old_bytes = sp_test_memory_tracker_bytes_used(&tracker);
-    
+
     // Force growth
     sp_dynamic_array_grow(&arr, 100);
-    
+
     ASSERT_GE(arr.capacity, 100);
     ASSERT_GT(sp_test_memory_tracker_bytes_used(&tracker), old_bytes);
-    
+
     // Verify all data preserved
     for (u32 i = 0; i < 10; i++) {
       ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), (s32)i);
     }
   }
-  
+
   sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(dynamic_array, reserve) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-  
+
   sp_dynamic_array_t arr;
   sp_dynamic_array_init(&arr, sizeof(s32));
-  
+
   // Test reserve on empty array
   {
     u8* reserved = sp_dynamic_array_reserve(&arr, 5);
@@ -351,63 +351,63 @@ UTEST(dynamic_array, reserve) {
     ASSERT_EQ(arr.size, 5);
     ASSERT_GE(arr.capacity, 5);
   }
-  
+
   // Test reserve triggers growth
   {
     // Reset array
     sp_dynamic_array_clear(&arr);
-    
+
     // Fill to capacity
     s32 val = 1;
     sp_dynamic_array_push(&arr, &val);
     sp_dynamic_array_push(&arr, &val);
-    
+
     ASSERT_EQ(arr.size, 2);
     ASSERT_GE(arr.capacity, 2);
-    
+
     // Reserve more
     u8* reserved = sp_dynamic_array_reserve(&arr, 3);
     ASSERT_NE(reserved, NULL);
     ASSERT_EQ(arr.size, 5);
     ASSERT_GE(arr.capacity, 5);
   }
-  
+
   sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(dynamic_array, clear_and_reuse) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-  
+
   sp_dynamic_array_t arr;
   sp_dynamic_array_init(&arr, sizeof(s32));
-  
+
   // Add elements
   for (s32 i = 0; i < 10; i++) {
     sp_dynamic_array_push(&arr, &i);
   }
-  
+
   u32 old_cap = arr.capacity;
-  
+
   // Clear
   sp_dynamic_array_clear(&arr);
   ASSERT_EQ(arr.size, 0);
   ASSERT_EQ(arr.capacity, old_cap); // Capacity unchanged
   ASSERT_NE(arr.data, NULL);
-  
+
   // Reuse
   s32 val = 99;
   sp_dynamic_array_push(&arr, &val);
   ASSERT_EQ(arr.size, 1);
   ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 99);
-  
+
   sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(dynamic_array, byte_size) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-  
+
   // Test various element sizes
   {
     struct test_case {
@@ -419,102 +419,102 @@ UTEST(dynamic_array, byte_size) {
       {8, 13},
       {64, 7}
     };
-    
+
     for (u32 tc_idx = 0; tc_idx < sizeof(cases)/sizeof(cases[0]); tc_idx++) {
       struct test_case* tc = &cases[tc_idx];
       sp_dynamic_array_t arr;
       sp_dynamic_array_init(&arr, tc->elem_size);
-      
+
       for (u32 i = 0; i < tc->count; i++) {
       sp_dynamic_array_push(&arr, NULL);
       }
-      
+
       u32 expected = tc->elem_size * tc->count;
       ASSERT_EQ(sp_dynamic_array_byte_size(&arr), expected);
-      
+
       sp_test_memory_tracker_clear(&tracker);
     }
   }
-  
+
   sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(dynamic_array, edge_cases) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-  
+
   // Test zero elements after clear
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     sp_dynamic_array_clear(&arr);
     ASSERT_EQ(sp_dynamic_array_byte_size(&arr), 0);
   }
-  
+
   // Test access patterns
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     // Add elements
     for (s32 i = 0; i < 10; i++) {
       sp_dynamic_array_push(&arr, &i);
     }
-    
+
     // Sequential access
     for (u32 i = 0; i < 10; i++) {
       s32* elem = (s32*)sp_dynamic_array_at(&arr, i);
       ASSERT_EQ(*elem, (s32)i);
     }
-    
+
     // Boundary access
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 9), 9);
   }
-  
+
   sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(dynamic_array, stress_test) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 128 * 1024 * 1024); // 128MB for stress test
-  
+
   // Test millions of operations
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     const s32 iterations = 1000000;
-    
+
     // Push a million elements
     for (s32 i = 0; i < iterations; i++) {
       sp_dynamic_array_push(&arr, &i);
     }
-    
+
     ASSERT_EQ(arr.size, (u32)iterations);
-    
+
     // Verify sampling
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations/2), iterations/2);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations-1), iterations-1);
-    
+
     // Clear and reuse
     sp_dynamic_array_clear(&arr);
     ASSERT_EQ(arr.size, 0);
-    
+
     // Push again
     for (s32 i = 0; i < 1000; i++) {
       sp_dynamic_array_push(&arr, &i);
     }
     ASSERT_EQ(arr.size, 1000);
   }
-  
+
   // Test random operations
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
-    
+
     // Mix of operations
     for (u32 i = 0; i < 10000; i++) {
       u32 op = i % 4;
@@ -544,19 +544,19 @@ UTEST(dynamic_array, stress_test) {
       }
       }
     }
-    
+
     // Array should still be functional
     s32 final_val = 9999;
     sp_dynamic_array_push(&arr, &final_val);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, arr.size - 1), 9999);
   }
-  
+
   sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(formatter, basic) {
   sp_test_use_malloc();
-  
+
   // Test simple format with one argument
   u32 answer = 69;
   sp_str_t result = sp_fmt(sp_str_lit("answer: {}"), SP_FMT_U32(answer));
@@ -565,41 +565,41 @@ UTEST(formatter, basic) {
 
 UTEST(formatter, numeric_types) {
   sp_test_use_malloc();
-  
+
   // Test unsigned integers
   u8 u8_val = 255;
   sp_str_t result = sp_fmt(sp_str_lit("u8: {}"), SP_FMT_U8(u8_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("u8: 255")));
-  
+
   u16 u16_val = 65535;
   result = sp_fmt(sp_str_lit("u16: {}"), SP_FMT_U16(u16_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("u16: 65535")));
-  
+
   u32 u32_val = 1234567890;
   result = sp_fmt(sp_str_lit("u32: {}"), SP_FMT_U32(u32_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("u32: 1234567890")));
-  
+
   u64 u64_val = 9876543210ULL;
   result = sp_fmt(sp_str_lit("u64: {}"), SP_FMT_U64(u64_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("u64: 9876543210")));
-  
+
   // Test signed integers
   s8 s8_val = -128;
   result = sp_fmt(sp_str_lit("s8: {}"), SP_FMT_S8(s8_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("s8: -128")));
-  
+
   s16 s16_val = -32768;
   result = sp_fmt(sp_str_lit("s16: {}"), SP_FMT_S16(s16_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("s16: -32768")));
-  
+
   s32 s32_val = -2147483647;
   result = sp_fmt(sp_str_lit("s32: {}"), SP_FMT_S32(s32_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("s32: -2147483647")));
-  
+
   s64 s64_val = -9223372036854775807LL;
   result = sp_fmt(sp_str_lit("s64: {}"), SP_FMT_S64(s64_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("s64: -9223372036854775807")));
-  
+
   // Test zero values
   u32 zero = 0;
   result = sp_fmt(sp_str_lit("zero: {}"), SP_FMT_U32(zero));
@@ -608,19 +608,19 @@ UTEST(formatter, numeric_types) {
 
 UTEST(formatter, floating_point) {
   sp_test_use_malloc();
-  
+
   f32 f32_val = 3.14159f;
   sp_str_t result = sp_fmt(sp_str_lit("f32: {}"), SP_FMT_F32(f32_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("f32: 3.141")));
-  
+
   f64 f64_val = -2.71828;
   result = sp_fmt(sp_str_lit("f64: {}"), SP_FMT_F64(f64_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("f64: -2.718")));
-  
+
   f32 f32_zero = 0.0f;
   result = sp_fmt(sp_str_lit("f32 zero: {}"), SP_FMT_F32(f32_zero));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("f32 zero: 0.000")));
-  
+
   f32 f32_int = 42.0f;
   result = sp_fmt(sp_str_lit("f32 int: {}"), SP_FMT_F32(f32_int));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("f32 int: 42.000")));
@@ -628,11 +628,11 @@ UTEST(formatter, floating_point) {
 
 UTEST(formatter, string_types) {
   sp_test_use_malloc();
-  
+
   sp_str_t str_val = sp_str_lit("hello world");
   sp_str_t result = sp_fmt(sp_str_lit("str: {}"), SP_FMT_STR(str_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("str: hello world")));
-  
+
   const c8* cstr_val = "c string";
   result = sp_fmt(sp_str_lit("cstr: {}"), SP_FMT_CSTR(cstr_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("cstr: c string")));
@@ -640,15 +640,15 @@ UTEST(formatter, string_types) {
 
 UTEST(formatter, character_types) {
   sp_test_use_malloc();
-  
+
   c8 c8_val = 'A';
   sp_str_t result = sp_fmt(sp_str_lit("c8: {}"), SP_FMT_C8(c8_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("c8: 'A'")));
-  
+
   c16 c16_val = 'Z';
   result = sp_fmt(sp_str_lit("c16: {}"), SP_FMT_C16(c16_val));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("c16: 'Z'")));
-  
+
   // Test non-ASCII c16
   c16 c16_unicode = 0x1234;
   result = sp_fmt(sp_str_lit("c16 unicode: {}"), SP_FMT_C16(c16_unicode));
@@ -657,11 +657,11 @@ UTEST(formatter, character_types) {
 
 UTEST(formatter, pointer_type) {
   sp_test_use_malloc();
-  
+
   void* ptr = (void*)(uintptr_t)0xDEADBEEF;
   sp_str_t result = sp_fmt(sp_str_lit("ptr: {}"), SP_FMT_PTR(ptr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("ptr: 0xDEADBEEF")));
-  
+
   void* null_ptr = NULL;
   result = sp_fmt(sp_str_lit("null: {}"), SP_FMT_PTR(null_ptr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("null: 0x00000000")));
@@ -669,11 +669,11 @@ UTEST(formatter, pointer_type) {
 
 UTEST(formatter, hash_type) {
   sp_test_use_malloc();
-  
+
   sp_hash_t hash = 0xABCDEF12;
   sp_str_t result = sp_fmt(sp_str_lit("hash: {}"), SP_FMT_HASH(hash));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("hash: ABCDEF12")));
-  
+
   sp_hash_t zero_hash = 0;
   result = sp_fmt(sp_str_lit("zero hash: {}"), SP_FMT_HASH(zero_hash));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("zero hash: 0")));
@@ -681,29 +681,29 @@ UTEST(formatter, hash_type) {
 
 UTEST(formatter, array_types) {
   sp_test_use_malloc();
-  
+
   sp_fixed_array_t fixed_arr;
   fixed_arr.size = 10;
   fixed_arr.capacity = 20;
   fixed_arr.element_size = 4;
   fixed_arr.data = NULL;
-  
+
   sp_str_t result = sp_fmt(sp_str_lit("fixed: {}"), SP_FMT_FIXED_ARRAY(fixed_arr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("fixed: { size: 10, capacity: 20 }")));
-  
+
   sp_dynamic_array_t dyn_arr;
   dyn_arr.size = 5;
   dyn_arr.capacity = 16;
   dyn_arr.element_size = 8;
   dyn_arr.data = NULL;
-  
+
   result = sp_fmt(sp_str_lit("dynamic: {}"), SP_FMT_DYNAMIC_ARRAY(dyn_arr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("dynamic: { size: 5, capacity: 16 }")));
 }
 
 UTEST(formatter, date_time) {
   sp_test_use_malloc();
-  
+
   sp_os_date_time_t dt;
   dt.year = 2024;
   dt.month = 12;
@@ -712,10 +712,10 @@ UTEST(formatter, date_time) {
   dt.minute = 30;
   dt.second = 45;
   dt.millisecond = 123;
-  
+
   sp_str_t result = sp_fmt(sp_str_lit("datetime: {}"), SP_FMT_DATE_TIME(dt));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("datetime: 2024-12-25T14:30:45.123")));
-  
+
   // Test without milliseconds
   dt.millisecond = 0;
   result = sp_fmt(sp_str_lit("datetime no ms: {}"), SP_FMT_DATE_TIME(dt));
@@ -724,49 +724,49 @@ UTEST(formatter, date_time) {
 
 UTEST(formatter, multiple_args) {
   sp_test_use_malloc();
-  
+
   u32 count = 42;
   sp_str_t name = sp_str_lit("test");
   f32 value = 3.14f;
-  
-  sp_str_t result = sp_fmt(sp_str_lit("Count: {}, Name: {}, Value: {}"), 
+
+  sp_str_t result = sp_fmt(sp_str_lit("Count: {}, Name: {}, Value: {}"),
     SP_FMT_U32(count), SP_FMT_STR(name), SP_FMT_F32(value));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("Count: 42, Name: test, Value: 3.140")));
 }
 
 UTEST(sp_str_builder, basic_operations) {
   sp_test_use_malloc();
-  
+
   // Test initialization
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   ASSERT_EQ(builder.buffer.data, NULL);
   ASSERT_EQ(builder.buffer.count, 0);
   ASSERT_EQ(builder.buffer.capacity, 0);
-  
+
   // Test grow - should allocate enough capacity
   sp_str_builder_grow(&builder, 10);
   ASSERT_GE(builder.buffer.capacity, 10);
   ASSERT_NE(builder.buffer.data, NULL);
   ASSERT_EQ(builder.buffer.count, 0);
-  
+
   // Test append string
   sp_str_t test_str = sp_str_lit("Hello");
   sp_str_builder_append(&builder, test_str);
   ASSERT_EQ(builder.buffer.count, 5);
-  
+
   // Test append C string
   sp_str_builder_append_cstr(&builder, " World");
   ASSERT_EQ(builder.buffer.count, 11);
-  
+
   // Test append character
   sp_str_builder_append_c8(&builder, '!');
   ASSERT_EQ(builder.buffer.count, 12);
-  
+
   // Test write
   sp_str_t result = sp_str_builder_write(&builder);
   ASSERT_EQ(result.len, 12);
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("Hello World!")));
-  
+
   // Test write_cstr
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   sp_str_builder_append_cstr(&builder2, "Test");
@@ -777,19 +777,19 @@ UTEST(sp_str_builder, basic_operations) {
 
 UTEST(sp_str_builder, growth_behavior) {
   sp_test_use_malloc();
-  
+
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  
+
   // Test multiple grow calls
   sp_str_builder_grow(&builder, 5);
   u32 cap1 = builder.buffer.capacity;
   ASSERT_GE(cap1, 5);
-  
+
   sp_str_builder_grow(&builder, 10);
   u32 cap2 = builder.buffer.capacity;
   ASSERT_GE(cap2, 10);
   ASSERT_GE(cap2, cap1);
-  
+
   // Test automatic growth on append
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   sp_str_t long_str = sp_str_lit("This is a much longer string that will trigger growth");
@@ -800,20 +800,20 @@ UTEST(sp_str_builder, growth_behavior) {
 
 UTEST(sp_str_builder, edge_cases) {
   sp_test_use_malloc();
-  
+
   // Test with empty strings
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&builder, sp_str_lit(""));
   ASSERT_EQ(builder.buffer.count, 0);
-  
+
   sp_str_builder_append_cstr(&builder, "");
   ASSERT_EQ(builder.buffer.count, 0);
-  
+
   // Test NULL data string (invalid)
   sp_str_t null_str = {.len = 0, .data = NULL};
   sp_str_builder_append(&builder, null_str);
   ASSERT_EQ(builder.buffer.count, 0);
-  
+
   // Test building a large string
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   for (s32 i = 0; i < 100; i++) {
@@ -826,30 +826,30 @@ UTEST(sp_str_builder, edge_cases) {
 
 UTEST(sp_cstr_copy, all_variations) {
   sp_test_use_malloc();
-  
+
   // Test sp_cstr_copy
   const c8* original = "Hello World";
   c8* copy = sp_cstr_copy(original);
   ASSERT_TRUE(sp_cstr_equal(copy, original));
   ASSERT_NE(copy, original); // Different pointers
   sp_free(copy);
-  
+
   // Test sp_cstr_copy_n
   c8* partial = sp_cstr_copy_n(original, 5);
   ASSERT_TRUE(sp_cstr_equal(partial, "Hello"));
   sp_free(partial);
-  
+
   // Test sp_cstr_copy_c8
   c8* copy_c8 = sp_cstr_copy_c8(original, 5);
   ASSERT_TRUE(sp_cstr_equal(copy_c8, "Hello"));
   sp_free(copy_c8);
-  
+
   // Test with empty string
   const c8* empty = "";
   c8* empty_copy = sp_cstr_copy(empty);
   ASSERT_TRUE(sp_cstr_equal(empty_copy, ""));
   sp_free(empty_copy);
-  
+
   // Test with NULL - sp_cstr_len(NULL) returns 0, so it allocates 1 byte for null terminator
   c8* null_copy = sp_cstr_copy(NULL);
   ASSERT_EQ(null_copy[0], '\0');
@@ -858,41 +858,41 @@ UTEST(sp_cstr_copy, all_variations) {
 
 UTEST(sp_cstr_copy_to, buffer_operations) {
   sp_test_use_malloc();
-  
+
   // Test sp_cstr_copy_to with sufficient buffer
   const c8* source = "Hello World";
   c8 buffer[20];
   sp_os_zero_memory(buffer, 20);
   sp_cstr_copy_to(source, buffer, 20);
   ASSERT_TRUE(sp_cstr_equal(buffer, source));
-  
+
   // Test with exact size buffer
   c8 exact[12]; // "Hello World" + null
   sp_os_zero_memory(exact, 12);
   sp_cstr_copy_to(source, exact, 12);
   ASSERT_TRUE(sp_cstr_equal(exact, source));
-  
+
   // Test with insufficient buffer
   char small_buffer[6];
   sp_os_zero_memory(small_buffer, 6);
   sp_cstr_copy_to(source, small_buffer, 6);
   ASSERT_TRUE(sp_cstr_equal(small_buffer, "Hello")); // Should be truncated
-   
+
   // Test sp_cstr_copy_to_n
   c8 partial_buffer[10];
   sp_os_zero_memory(partial_buffer, 10);
   sp_cstr_copy_to_n(source, 5, partial_buffer, 10);
   ASSERT_TRUE(sp_cstr_equal(partial_buffer, "Hello"));
-  
+
   // Test with NULL source - buffer should remain unchanged
   c8 null_buffer[10];
   sp_cstr_copy_to("test", null_buffer, 10);
   sp_cstr_copy_to(NULL, null_buffer, 10);
   ASSERT_TRUE(sp_cstr_equal(null_buffer, "test")); // Should remain unchanged
-  
+
   // Test with NULL buffer
   sp_cstr_copy_to(source, NULL, 10); // Should not crash
-  
+
   // Test with zero buffer length
   c8 zero_buffer[10] = "unchanged";
   sp_cstr_copy_to(source, zero_buffer, 0);
@@ -901,37 +901,37 @@ UTEST(sp_cstr_copy_to, buffer_operations) {
 
 UTEST(sp_cstr_equal, comparison_tests) {
   sp_test_use_malloc();
-  
+
   // Test equal strings
   ASSERT_TRUE(sp_cstr_equal("Hello", "Hello"));
   ASSERT_TRUE(sp_cstr_equal("", ""));
-  
+
   // Test different strings
   ASSERT_FALSE(sp_cstr_equal("Hello", "World"));
   ASSERT_FALSE(sp_cstr_equal("Hello", "Hello!"));
   ASSERT_FALSE(sp_cstr_equal("Hello", "Hell"));
-  
+
   // Test with NULL - both should have len 0 so they're equal
   ASSERT_TRUE(sp_cstr_equal(NULL, NULL));
   // One NULL and one non-NULL will have different lengths
   ASSERT_FALSE(sp_cstr_equal("Hello", NULL));
   ASSERT_FALSE(sp_cstr_equal(NULL, "Hello"));
-  
+
   // Test case sensitivity
   ASSERT_FALSE(sp_cstr_equal("Hello", "hello"));
 }
 
 UTEST(sp_cstr_len, length_tests) {
   sp_test_use_malloc();
-  
+
   // Test normal strings
   ASSERT_EQ(sp_cstr_len("Hello"), 5);
   ASSERT_EQ(sp_cstr_len("Hello World!"), 12);
   ASSERT_EQ(sp_cstr_len(""), 0);
-  
+
   // Test with NULL
   ASSERT_EQ(sp_cstr_len(NULL), 0);
-  
+
   // Test with embedded nulls (should stop at first null)
   const c8 embedded[] = {'H', 'e', '\0', 'l', 'o', '\0'};
   ASSERT_EQ(sp_cstr_len(embedded), 2);
@@ -939,19 +939,19 @@ UTEST(sp_cstr_len, length_tests) {
 
 UTEST(sp_wstr_to_cstr, wide_string_conversion) {
   sp_test_use_malloc();
-  
+
   // Test basic conversion
   c16 wide_str[] = L"Hello";
   c8* converted = sp_wstr_to_cstr(wide_str, 5);
   ASSERT_TRUE(sp_cstr_equal(converted, "Hello"));
   sp_free(converted);
-  
+
   // Test empty string
   c16 empty[] = L"";
   c8* empty_converted = sp_wstr_to_cstr(empty, 0);
   ASSERT_TRUE(sp_cstr_equal(empty_converted, ""));
   sp_free(empty_converted);
-  
+
   // Test with special characters
   c16 special[] = L"Test 123!";
   c8* special_converted = sp_wstr_to_cstr(special, 9);
@@ -961,25 +961,25 @@ UTEST(sp_wstr_to_cstr, wide_string_conversion) {
 
 UTEST(sp_str_to, conversion_functions) {
   sp_test_use_malloc();
-  
+
   // Test sp_str_to_cstr
   sp_str_t str = sp_str_lit("Hello World");
   c8* cstr = sp_str_to_cstr(str);
   ASSERT_TRUE(sp_cstr_equal(cstr, "Hello World"));
   sp_free(cstr);
-  
+
   // Test sp_str_to_cstr_ex (same as sp_str_to_cstr)
   c8* cstr_ex = sp_str_to_cstr_ex(str);
   ASSERT_TRUE(sp_cstr_equal(cstr_ex, "Hello World"));
   sp_free(cstr_ex);
-  
+
   // Test sp_str_to_double_null_terminated
   sp_str_t path = sp_str_lit("C:\\test");
   c8* double_null = sp_str_to_double_null_terminated(path);
   ASSERT_EQ(double_null[7], '\0'); // First null
   ASSERT_EQ(double_null[8], '\0'); // Second null
   sp_free(double_null);
-  
+
   // Test with empty string
   sp_str_t empty = sp_str_lit("");
   c8* empty_cstr = sp_str_to_cstr(empty);
@@ -989,36 +989,36 @@ UTEST(sp_str_to, conversion_functions) {
 
 UTEST(sp_str_copy, string_copy_operations) {
   sp_test_use_malloc();
-  
+
   // Test sp_str_copy
   sp_str_t original = sp_str_lit("Hello World");
   sp_str_t copy = sp_str_copy(original);
   ASSERT_EQ(copy.len, original.len);
   ASSERT_TRUE(sp_str_equal(copy, original));
   ASSERT_NE(copy.data, original.data); // Different pointers
-  
+
   // Test sp_str_copy_cstr
   sp_str_t from_cstr = sp_str_copy_cstr("Test String");
   ASSERT_EQ(from_cstr.len, 11);
   ASSERT_TRUE(sp_str_equal_cstr(from_cstr, "Test String"));
-  
+
   // Test sp_str_copy_cstr_n - now correctly uses the length parameter
   sp_str_t partial = sp_str_copy_cstr_n("Hello World", 5);
   ASSERT_EQ(partial.len, 5);
   ASSERT_TRUE(sp_str_equal(partial, sp_str_lit("Hello")));
-  
+
   // Test sp_str_copy_to_str
   sp_str_t dest = sp_str_alloc(20);
   sp_str_copy_to_str(original, &dest, 20);
   ASSERT_EQ(dest.len, original.len);
   ASSERT_TRUE(sp_str_equal(dest, original));
-  
+
   // Test sp_str_copy_to
   c8 buffer[20];
   sp_os_zero_memory(buffer, 20);
   sp_str_copy_to(original, buffer, 20);
   ASSERT_TRUE(sp_os_is_memory_equal(buffer, original.data, original.len));
-  
+
   // Test with truncation
   c8 small_buffer[5];
   sp_os_zero_memory(small_buffer, 5);
@@ -1028,23 +1028,23 @@ UTEST(sp_str_copy, string_copy_operations) {
 
 UTEST(sp_str, string_creation) {
   sp_test_use_malloc();
-  
+
   // Test sp_str macro
   sp_str_t str1 = sp_str("Hello", 5);
   ASSERT_EQ(str1.len, 5);
   ASSERT_EQ(str1.data[0], 'H');
-  
+
   // Test sp_str_lit macro
   sp_str_t str2 = sp_str_lit("World");
   ASSERT_EQ(str2.len, 5);
   ASSERT_TRUE(sp_str_equal_cstr(str2, "World"));
-  
+
   // Test sp_str_cstr macro
   const c8* cstr = "Dynamic";
   sp_str_t str3 = sp_str_cstr(cstr);
   ASSERT_EQ(str3.len, 7);
   ASSERT_TRUE(sp_str_equal_cstr(str3, "Dynamic"));
-  
+
   // Test sp_str_alloc
   sp_str_t allocated = sp_str_alloc(100);
   ASSERT_EQ(allocated.len, 0);
@@ -1053,28 +1053,28 @@ UTEST(sp_str, string_creation) {
 
 UTEST(sp_str_equal, string_comparison) {
   sp_test_use_malloc();
-  
+
   // Test sp_str_equal
   sp_str_t str1 = sp_str_lit("Hello");
   sp_str_t str2 = sp_str_lit("Hello");
   sp_str_t str3 = sp_str_lit("World");
   sp_str_t str4 = sp_str_lit("Hell");
-  
+
   ASSERT_TRUE(sp_str_equal(str1, str2));
   ASSERT_FALSE(sp_str_equal(str1, str3));
   ASSERT_FALSE(sp_str_equal(str1, str4));
-  
+
   // Test sp_str_equal_cstr
   ASSERT_TRUE(sp_str_equal_cstr(str1, "Hello"));
   ASSERT_FALSE(sp_str_equal_cstr(str1, "World"));
   ASSERT_FALSE(sp_str_equal_cstr(str1, "Hell"));
-  
+
   // Test empty strings
   sp_str_t empty1 = sp_str_lit("");
   sp_str_t empty2 = sp_str_lit("");
   ASSERT_TRUE(sp_str_equal(empty1, empty2));
   ASSERT_TRUE(sp_str_equal_cstr(empty1, ""));
-  
+
   // Test with different lengths
   sp_str_t long_str = sp_str_lit("Hello World!");
   ASSERT_FALSE(sp_str_equal(str1, long_str));
@@ -1082,7 +1082,7 @@ UTEST(sp_str_equal, string_comparison) {
 
 UTEST(sp_str_sort_kernel_alphabetical, sorting_tests) {
   sp_test_use_malloc();
-  
+
   // Create array of strings
   sp_str_t strings[] = {
     sp_str_lit("zebra"),
@@ -1091,22 +1091,22 @@ UTEST(sp_str_sort_kernel_alphabetical, sorting_tests) {
     sp_str_lit("aardvark"),
     sp_str_lit("zoo")
   };
-  
+
   // Sort using qsort
   qsort(strings, 5, sizeof(sp_str_t), sp_str_sort_kernel_alphabetical);
-  
+
   // Verify sorted order
   ASSERT_TRUE(sp_str_equal(strings[0], sp_str_lit("aardvark")));
   ASSERT_TRUE(sp_str_equal(strings[1], sp_str_lit("apple")));
   ASSERT_TRUE(sp_str_equal(strings[2], sp_str_lit("banana")));
   ASSERT_TRUE(sp_str_equal(strings[3], sp_str_lit("zebra")));
   ASSERT_TRUE(sp_str_equal(strings[4], sp_str_lit("zoo")));
-  
+
   // Test sp_str_compare_alphabetical directly
   ASSERT_EQ(sp_str_compare_alphabetical(sp_str_lit("a"), sp_str_lit("b")), SP_QSORT_A_FIRST);
   ASSERT_EQ(sp_str_compare_alphabetical(sp_str_lit("b"), sp_str_lit("a")), SP_QSORT_B_FIRST);
   ASSERT_EQ(sp_str_compare_alphabetical(sp_str_lit("same"), sp_str_lit("same")), SP_QSORT_EQUAL);
-  
+
   // Test with different lengths
   ASSERT_EQ(sp_str_compare_alphabetical(sp_str_lit("ab"), sp_str_lit("abc")), SP_QSORT_A_FIRST);
   ASSERT_EQ(sp_str_compare_alphabetical(sp_str_lit("abc"), sp_str_lit("ab")), SP_QSORT_B_FIRST);
@@ -1114,16 +1114,16 @@ UTEST(sp_str_sort_kernel_alphabetical, sorting_tests) {
 
 UTEST(sp_str_utilities, valid_and_at) {
   sp_test_use_malloc();
-  
+
   // Test sp_str_valid
   sp_str_t valid = sp_str_lit("Hello");
   sp_str_t invalid = {.len = 5, .data = NULL};
   sp_str_t empty = sp_str_lit("");
-  
+
   ASSERT_TRUE(sp_str_valid(valid));
   ASSERT_FALSE(sp_str_valid(invalid));
   ASSERT_TRUE(sp_str_valid(empty)); // Empty but valid
-  
+
   // Test sp_str_at
   sp_str_t str = sp_str_lit("Hello");
   ASSERT_EQ(sp_str_at(str, 0), 'H');
@@ -1147,7 +1147,7 @@ UTEST(sp_str_utilities, valid_and_at) {
 
 UTEST(path_functions, normalize_path) {
   sp_test_use_malloc();
-  
+
   // Test path with backslashes
   {
     sp_str_t path = sp_str_lit("C:\\Users\\Test\\file.txt");
@@ -1155,7 +1155,7 @@ UTEST(path_functions, normalize_path) {
     sp_os_normalize_path(copy);
     ASSERT_TRUE(sp_str_equal(copy, sp_str_lit("C:/Users/Test/file.txt")));
   }
-  
+
   // Test path already normalized
   {
     sp_str_t path = sp_str_lit("C:/Users/Test/file.txt");
@@ -1163,7 +1163,7 @@ UTEST(path_functions, normalize_path) {
     sp_os_normalize_path(copy);
     ASSERT_TRUE(sp_str_equal(copy, sp_str_lit("C:/Users/Test/file.txt")));
   }
-  
+
   // Test mixed slashes
   {
     sp_str_t path = sp_str_lit("C:/Users\\Test/sub\\file.txt");
@@ -1171,7 +1171,7 @@ UTEST(path_functions, normalize_path) {
     sp_os_normalize_path(copy);
     ASSERT_TRUE(sp_str_equal(copy, sp_str_lit("C:/Users/Test/sub/file.txt")));
   }
-  
+
   // Test empty string
   {
     sp_str_t path = sp_str_lit("");
@@ -1179,7 +1179,7 @@ UTEST(path_functions, normalize_path) {
     sp_os_normalize_path(copy);
     ASSERT_TRUE(sp_str_equal(copy, sp_str_lit("")));
   }
-  
+
   // Test path ending with backslash
   {
     sp_str_t path = sp_str_lit("C:\\Users\\Test\\");
@@ -1191,56 +1191,56 @@ UTEST(path_functions, normalize_path) {
 
 UTEST(path_functions, parent_path) {
   sp_test_use_malloc();
-  
+
   // Test normal path
   {
     sp_str_t path = sp_str_lit("C:/Users/Test/file.txt");
     sp_str_t parent = sp_os_parent_path(path);
     ASSERT_TRUE(sp_str_equal(parent, sp_str_lit("C:/Users/Test")));
   }
-  
+
   // Test path with trailing slash
   {
     sp_str_t path = sp_str_lit("C:/Users/Test/");
     sp_str_t parent = sp_os_parent_path(path);
     ASSERT_TRUE(sp_str_equal(parent, sp_str_lit("C:/Users")));
   }
-  
+
   // Test multiple trailing slashes
   {
     sp_str_t path = sp_str_lit("C:/Users/Test///");
     sp_str_t parent = sp_os_parent_path(path);
     ASSERT_TRUE(sp_str_equal(parent, sp_str_lit("C:/Users")));
   }
-  
+
   // Test root path
   {
     sp_str_t path = sp_str_lit("C:/");
     sp_str_t parent = sp_os_parent_path(path);
     ASSERT_EQ(parent.len, 0);
   }
-  
+
   // Test single directory
   {
     sp_str_t path = sp_str_lit("Test");
     sp_str_t parent = sp_os_parent_path(path);
     ASSERT_EQ(parent.len, 0);
   }
-  
+
   // Test empty string
   {
     sp_str_t path = sp_str_lit("");
     sp_str_t parent = sp_os_parent_path(path);
     ASSERT_EQ(parent.len, 0);
   }
-  
+
   // Test Unix-style root
   {
     sp_str_t path = sp_str_lit("/");
     sp_str_t parent = sp_os_parent_path(path);
     ASSERT_EQ(parent.len, 0);
   }
-  
+
   // Test Unix-style path
   {
     sp_str_t path = sp_str_lit("/home/user/file");
@@ -1251,7 +1251,7 @@ UTEST(path_functions, parent_path) {
 
 UTEST(path_functions, canonicalize_path) {
   sp_test_use_malloc();
-  
+
   // Test relative path with single ..
   {
     sp_str_t path = sp_str_lit("test/..");
@@ -1260,7 +1260,7 @@ UTEST(path_functions, canonicalize_path) {
     ASSERT_GT(canonical.len, 0);
     ASSERT_NE(canonical.data[canonical.len - 1], '/'); // Should NOT end with slash
   }
-  
+
   // Test relative path with multiple ..
   {
     sp_str_t path = sp_str_lit("../../another");
@@ -1270,14 +1270,14 @@ UTEST(path_functions, canonicalize_path) {
     sp_str_t filename = sp_os_extract_file_name(canonical);
     ASSERT_TRUE(sp_str_equal(filename, sp_str_lit("another")));
   }
-  
+
   // Test absolute path
   {
     sp_str_t exe = sp_os_get_executable_path();
     sp_str_t canonical = sp_os_canonicalize_path(exe);
     ASSERT_TRUE(sp_str_equal(canonical, exe));
   }
-  
+
   // Test path with trailing slash removal
   {
     sp_str_t path = sp_str_lit("test/");
@@ -1285,7 +1285,7 @@ UTEST(path_functions, canonicalize_path) {
     ASSERT_GT(canonical.len, 0);
     ASSERT_NE(canonical.data[canonical.len - 1], '/');
   }
-  
+
   // Test empty path
   {
     sp_str_t path = sp_str_lit("");
@@ -1296,28 +1296,28 @@ UTEST(path_functions, canonicalize_path) {
 
 UTEST(path_functions, path_extension) {
   sp_test_use_malloc();
-  
+
   // Create a temporary test file for extension testing
   c8* test_filename = sp_test_generate_random_filename();
   sp_test_create_file(test_filename, "test");
   sp_str_t test_path = sp_str_cstr(test_filename);
-  
+
   // Test normal file extension
   {
     sp_str_t ext = sp_os_path_extension(test_path);
     ASSERT_TRUE(sp_str_equal(ext, sp_str_lit(".tmp")));
   }
-  
+
   sp_test_delete_file(test_filename);
   sp_free(test_filename);
-  
+
   // Test path without extension (directory)
   {
     sp_str_t path = sp_str_lit(".");
     sp_str_t ext = sp_os_path_extension(path);
     ASSERT_EQ(ext.len, 0);
   }
-  
+
   // Test non-existent file
   {
     sp_str_t path = sp_str_lit("nonexistent.txt");
@@ -1328,42 +1328,42 @@ UTEST(path_functions, path_extension) {
 
 UTEST(path_functions, extract_file_name) {
   sp_test_use_malloc();
-  
+
   // Test normal path
   {
     sp_str_t path = sp_str_lit("C:/Users/Test/file.txt");
     sp_str_t filename = sp_os_extract_file_name(path);
     ASSERT_TRUE(sp_str_equal(filename, sp_str_lit("file.txt")));
   }
-  
+
   // Test path with trailing slash
   {
     sp_str_t path = sp_str_lit("C:/Users/Test/");
     sp_str_t filename = sp_os_extract_file_name(path);
     ASSERT_EQ(filename.len, 0);
   }
-  
+
   // Test path with backslashes
   {
     sp_str_t path = sp_str_lit("C:\\Users\\Test\\file.txt");
     sp_str_t filename = sp_os_extract_file_name(path);
     ASSERT_TRUE(sp_str_equal(filename, sp_str_lit("file.txt")));
   }
-  
+
   // Test filename only
   {
     sp_str_t path = sp_str_lit("file.txt");
     sp_str_t filename = sp_os_extract_file_name(path);
     ASSERT_TRUE(sp_str_equal(filename, sp_str_lit("file.txt")));
   }
-  
+
   // Test empty string
   {
     sp_str_t path = sp_str_lit("");
     sp_str_t filename = sp_os_extract_file_name(path);
     ASSERT_EQ(filename.len, 0);
   }
-  
+
   // Test Unix-style path
   {
     sp_str_t path = sp_str_lit("/home/user/document.pdf");
@@ -1374,12 +1374,12 @@ UTEST(path_functions, extract_file_name) {
 
 UTEST(path_functions, get_executable_path) {
   sp_test_use_malloc();
-  
+
   sp_str_t exe_path = sp_os_get_executable_path();
-  
+
   // Should not be empty
   ASSERT_GT(exe_path.len, 0);
-  
+
   // Should be normalized (no backslashes)
   bool has_backslash = false;
   for (u32 i = 0; i < exe_path.len; i++) {
@@ -1389,10 +1389,10 @@ UTEST(path_functions, get_executable_path) {
     }
   }
   ASSERT_FALSE(has_backslash);
-  
+
   // Should not end with slash
   ASSERT_NE(exe_path.data[exe_path.len - 1], '/');
-  
+
   // Should end with an executable name
   sp_str_t filename = sp_os_extract_file_name(exe_path);
   ASSERT_GT(filename.len, 0);
@@ -1400,24 +1400,24 @@ UTEST(path_functions, get_executable_path) {
 
 UTEST(path_functions, integration_test) {
   sp_test_use_malloc();
-  
+
   // Test the complete workflow used in main.cpp
   sp_str_t exe = sp_os_get_executable_path();
   sp_str_t parent1 = sp_os_parent_path(exe);
   sp_str_t parent2 = sp_os_parent_path(parent1);
   sp_str_t parent3 = sp_os_parent_path(parent2);
   sp_str_t install = sp_os_canonicalize_path(parent3);
-  
+
   // Verify we got a valid install path
   ASSERT_GT(install.len, 0);
   ASSERT_NE(install.data[install.len - 1], '/');
-  
+
   // Build a path similar to how it's done in main.cpp
   sp_str_builder_t builder = {0};
   sp_str_builder_append(&builder, install);
   sp_str_builder_append(&builder, sp_str_lit("/build/space-dll.bat"));
   sp_str_t dll_path = sp_str_builder_write(&builder);
-  
+
   // Verify the path doesn't have double slashes
   bool has_double_slash = false;
   for (u32 i = 1; i < dll_path.len; i++) {
@@ -1435,17 +1435,17 @@ UTEST(posix, smoke) {
   sp_allocator_t alloc = sp_allocator_malloc_init(&allocator);
   sp_context_t ctx = { .allocator = &alloc };
   sp_context_set(ctx);
-  
+
   sp_str_t path = sp_str_lit("/tmp/test");
   bool exists = sp_os_does_path_exist(path);
   printf("Path exists: %d\n", exists);
-  
+
   sp_mutex_t mutex;
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
   sp_mutex_lock(&mutex);
   sp_mutex_unlock(&mutex);
   sp_mutex_destroy(&mutex);
-  
+
   sp_semaphore_t sem;
   sp_semaphore_init(&sem);
   sp_semaphore_signal(&sem);
@@ -1457,48 +1457,648 @@ UTEST(posix, smoke) {
 #ifdef __cplusplus
 UTEST(string_cpp, path_concatenation_operator) {
   sp_test_use_malloc();
-  
+
   // Test basic concatenation
   sp_str_t path1 = sp_str_lit("home");
   sp_str_t path2 = sp_str_lit("user");
   sp_str_t result = path1 / path2;
-  
+
   ASSERT_EQ(result.len, 9); // "home/user"
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("home/user")));
-  
+
   // Test with backslashes (should be normalized)
   sp_str_t win_path1 = sp_str_lit("C:\\Windows");
   sp_str_t win_path2 = sp_str_lit("System32");
   sp_str_t win_result = win_path1 / win_path2;
-  
+
   ASSERT_TRUE(sp_str_equal(win_result, sp_str_lit("C:/Windows/System32")));
-  
+
   // Test empty paths
   sp_str_t empty = sp_str_lit("");
   sp_str_t filename = sp_str_lit("file.txt");
   sp_str_t empty_result = empty / filename;
-  
+
   ASSERT_TRUE(sp_str_equal(empty_result, sp_str_lit("/file.txt")));
-  
+
   // Test chaining
   sp_str_t base = sp_str_lit("root");
   sp_str_t dir = sp_str_lit("subdir");
   sp_str_t file = sp_str_lit("file.txt");
   sp_str_t chained = base / dir / file;
-  
+
   ASSERT_TRUE(sp_str_equal(chained, sp_str_lit("root/subdir/file.txt")));
-  
+
   // Test operator/ with C string literals
   sp_str_t path = sp_str_lit("home");
   sp_str_t result_cstr = path / "documents";
-  
+
   ASSERT_EQ(result_cstr.len, 14); // "home/documents"
   ASSERT_TRUE(sp_str_equal(result_cstr, sp_str_lit("home/documents")));
-  
+
   // Test chaining with C string literals
   sp_str_t chained_cstr = base / "data" / "files";
   ASSERT_TRUE(sp_str_equal(chained_cstr, sp_str_lit("root/data/files")));
 }
 #endif
+////////////////////////////
+// DYNAMIC ARRAY TESTS
+////////////////////////////
+
+UTEST(dyn_array, basic_operations) {
+    sp_test_use_malloc();
+    
+    sp_dyn_array(int) arr = NULL;
+    
+    ASSERT_EQ(sp_dyn_array_size(arr), 0);
+    ASSERT_EQ(sp_dyn_array_capacity(arr), 0);
+    ASSERT_TRUE(sp_dyn_array_empty(arr));
+    
+    sp_dyn_array_push(arr, 42);
+    ASSERT_EQ(sp_dyn_array_size(arr), 1);
+    ASSERT_GE(sp_dyn_array_capacity(arr), 1);
+    ASSERT_FALSE(sp_dyn_array_empty(arr));
+    ASSERT_EQ(arr[0], 42);
+    
+    for (int i = 1; i < 10; i++) {
+        sp_dyn_array_push(arr, i * 10);
+    }
+    ASSERT_EQ(sp_dyn_array_size(arr), 10);
+    
+    ASSERT_EQ(arr[0], 42);
+    for (int i = 1; i < 10; i++) {
+        ASSERT_EQ(arr[i], i * 10);
+    }
+    
+    sp_dyn_array_pop(arr);
+    ASSERT_EQ(sp_dyn_array_size(arr), 9);
+    
+    ASSERT_EQ(sp_dyn_array_back(arr), 80);
+    
+    sp_dyn_array_clear(arr);
+    ASSERT_EQ(sp_dyn_array_size(arr), 0);
+    ASSERT_TRUE(sp_dyn_array_empty(arr));
+    
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, reserve_capacity) {
+    sp_test_use_malloc();
+    
+    sp_dyn_array(float) arr = NULL;
+    
+    sp_dyn_array_reserve(arr, 100);
+    ASSERT_GE(sp_dyn_array_capacity(arr), 100);
+    ASSERT_EQ(sp_dyn_array_size(arr), 0);
+    
+    for (int i = 0; i < 50; i++) {
+        sp_dyn_array_push(arr, (float)i * 0.5f);
+    }
+    ASSERT_GE(sp_dyn_array_capacity(arr), 100);
+    ASSERT_EQ(sp_dyn_array_size(arr), 50);
+    
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, growth_pattern) {
+    sp_test_use_malloc();
+    
+    sp_dyn_array(u32) arr = NULL;
+    
+    u32 prev_capacity = 0;
+    
+    for (u32 i = 0; i < 100; i++) {
+        sp_dyn_array_push(arr, i);
+        
+        u32 current_capacity = sp_dyn_array_capacity(arr);
+        if (current_capacity != prev_capacity) {
+            if (prev_capacity > 0) {
+                ASSERT_EQ(current_capacity, prev_capacity * 2);
+            }
+            prev_capacity = current_capacity;
+        }
+    }
+    
+    ASSERT_EQ(sp_dyn_array_size(arr), 100);
+    
+    sp_dyn_array_free(arr);
+}
+
+typedef struct test_struct {
+    int id;
+    float value;
+    char name[32];
+} test_struct;
+
+UTEST(dyn_array, struct_type) {
+    sp_test_use_malloc();
+    
+    sp_dyn_array(test_struct) arr = NULL;
+    
+    for (int i = 0; i < 10; i++) {
+        test_struct s = {0};
+        s.id = i;
+        s.value = (float)i * 1.5f;
+        snprintf(s.name, sizeof(s.name), "Item_%d", i);
+        sp_dyn_array_push(arr, s);
+    }
+    
+    ASSERT_EQ(sp_dyn_array_size(arr), 10);
+    
+    for (int i = 0; i < 10; i++) {
+        ASSERT_EQ(arr[i].id, i);
+        ASSERT_EQ(arr[i].value, (float)i * 1.5f);
+        
+        char expected[32];
+        snprintf(expected, sizeof(expected), "Item_%d", i);
+        ASSERT_STREQ(arr[i].name, expected);
+    }
+    
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, pointer_type) {
+    sp_test_use_malloc();
+    
+    sp_dyn_array(char*) arr = NULL;
+    
+    const char* strings[] = {"Hello", "World", "Dynamic", "Array", "Test"};
+    
+    for (int i = 0; i < 5; i++) {
+        char* str = sp_alloc(strlen(strings[i]) + 1);
+        strcpy(str, strings[i]);
+        sp_dyn_array_push(arr, str);
+    }
+    
+    ASSERT_EQ(sp_dyn_array_size(arr), 5);
+    
+    for (int i = 0; i < 5; i++) {
+        ASSERT_STREQ(arr[i], strings[i]);
+    }
+    
+    for (int i = 0; i < sp_dyn_array_size(arr); i++) {
+        sp_free(arr[i]);
+    }
+    
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, large_stress_test) {
+    sp_test_use_malloc();
+    
+    sp_dyn_array(u64) arr = NULL;
+    
+    const int count = 100000;
+    
+    for (int i = 0; i < count; i++) {
+        sp_dyn_array_push(arr, (u64)i * 12345);
+    }
+    
+    ASSERT_EQ(sp_dyn_array_size(arr), count);
+    
+    for (int i = 0; i < count; i++) {
+        ASSERT_EQ(arr[i], (u64)i * 12345);
+    }
+    
+    sp_dyn_array_clear(arr);
+    ASSERT_EQ(sp_dyn_array_size(arr), 0);
+    
+    for (int i = 0; i < 1000; i++) {
+        sp_dyn_array_push(arr, (u64)i);
+    }
+    ASSERT_EQ(sp_dyn_array_size(arr), 1000);
+    
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, edge_cases) {
+    sp_test_use_malloc();
+    
+    sp_dyn_array(int) arr1 = NULL;
+    sp_dyn_array_free(arr1);
+    sp_dyn_array_free(arr1);
+    
+    sp_dyn_array(int) arr2 = NULL;
+    sp_dyn_array_pop(arr2);
+    ASSERT_EQ(sp_dyn_array_size(arr2), 0);
+    
+    sp_dyn_array_clear(arr2);
+    
+    sp_dyn_array_push(arr2, 42);
+    sp_dyn_array_free(arr2);
+    
+    sp_dyn_array(int) arr3 = NULL;
+    sp_dyn_array_reserve(arr3, 0);
+    ASSERT_GE(sp_dyn_array_capacity(arr3), 0);
+    sp_dyn_array_free(arr3);
+}
+
+////////////////////////////
+// HASH TABLE TESTS
+////////////////////////////
+
+UTEST(hash_table, basic_operations) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(int, float) ht = NULL;
+    
+    ASSERT_EQ(sp_hash_table_size(ht), 0);
+    ASSERT_TRUE(sp_hash_table_empty(ht));
+    ASSERT_FALSE(sp_hash_table_exists(ht, 42));
+    
+    sp_hash_table_insert(ht, 42, 3.14f);
+    ASSERT_EQ(sp_hash_table_size(ht), 1);
+    ASSERT_FALSE(sp_hash_table_empty(ht));
+    ASSERT_TRUE(sp_hash_table_exists(ht, 42));
+    ASSERT_EQ(sp_hash_table_get(ht, 42), 3.14f);
+    
+    sp_hash_table_insert(ht, 10, 1.5f);
+    sp_hash_table_insert(ht, 20, 2.5f);
+    sp_hash_table_insert(ht, 30, 3.5f);
+    ASSERT_EQ(sp_hash_table_size(ht), 4);
+    
+    ASSERT_EQ(sp_hash_table_get(ht, 10), 1.5f);
+    ASSERT_EQ(sp_hash_table_get(ht, 20), 2.5f);
+    ASSERT_EQ(sp_hash_table_get(ht, 30), 3.5f);
+    ASSERT_EQ(sp_hash_table_get(ht, 42), 3.14f);
+    
+    sp_hash_table_insert(ht, 42, 6.28f);
+    ASSERT_EQ(sp_hash_table_get(ht, 42), 6.28f);
+    ASSERT_EQ(sp_hash_table_size(ht), 5);
+    
+    sp_hash_table_erase(ht, 20);
+    ASSERT_FALSE(sp_hash_table_exists(ht, 20));
+    ASSERT_EQ(sp_hash_table_size(ht), 4);
+    
+    sp_hash_table_clear(ht);
+    ASSERT_EQ(sp_hash_table_size(ht), 0);
+    ASSERT_TRUE(sp_hash_table_empty(ht));
+    
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, pointer_retrieval) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(u32, double) ht = NULL;
+    
+    sp_hash_table_insert(ht, 100, 123.456);
+    sp_hash_table_insert(ht, 200, 789.012);
+    
+    double* ptr1 = sp_hash_table_getp(ht, 100);
+    ASSERT_NE(ptr1, NULL);
+    ASSERT_EQ(*ptr1, 123.456);
+    
+    *ptr1 = 999.999;
+    ASSERT_EQ(sp_hash_table_get(ht, 100), 999.999);
+    
+    double* ptr2 = sp_hash_table_getp(ht, 999);
+    ASSERT_EQ(ptr2, NULL);
+    
+    sp_hash_table_free(ht);
+}
+
+typedef struct {
+    float x, y, z;
+} vec3_t;
+
+UTEST(hash_table, struct_values) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(int, vec3_t) ht = NULL;
+    
+    vec3_t v1 = {1.0f, 2.0f, 3.0f};
+    vec3_t v2 = {4.0f, 5.0f, 6.0f};
+    vec3_t v3 = {7.0f, 8.0f, 9.0f};
+    
+    sp_hash_table_insert(ht, 1, v1);
+    sp_hash_table_insert(ht, 2, v2);
+    sp_hash_table_insert(ht, 3, v3);
+    
+    vec3_t retrieved = sp_hash_table_get(ht, 2);
+    ASSERT_EQ(retrieved.x, 4.0f);
+    ASSERT_EQ(retrieved.y, 5.0f);
+    ASSERT_EQ(retrieved.z, 6.0f);
+    
+    sp_hash_table_free(ht);
+}
+
+typedef struct {
+    int id;
+    int type;
+} compound_key_t;
+
+UTEST(hash_table, struct_keys) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(compound_key_t, const char*) ht = NULL;
+    
+    compound_key_t k1 = {100, 1};
+    compound_key_t k2 = {200, 2};
+    compound_key_t k3 = {300, 3};
+    
+    sp_hash_table_insert(ht, k1, "First");
+    sp_hash_table_insert(ht, k2, "Second");
+    sp_hash_table_insert(ht, k3, "Third");
+    
+    ASSERT_EQ(sp_hash_table_size(ht), 3);
+    
+    compound_key_t lookup = {200, 2};
+    ASSERT_TRUE(sp_hash_table_exists(ht, lookup));
+    const char* value = sp_hash_table_get(ht, lookup);
+    ASSERT_STREQ(value, "Second");
+    
+    compound_key_t missing = {200, 3};
+    ASSERT_FALSE(sp_hash_table_exists(ht, missing));
+    
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, string_keys) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(u64, int) ht = NULL;
+    
+    const char* s1 = "apple";
+    const char* s2 = "banana";
+    const char* s3 = "cherry";
+    
+    u64 k1 = sp_hash_cstr(s1);
+    u64 k2 = sp_hash_cstr(s2);
+    u64 k3 = sp_hash_cstr(s3);
+    
+    sp_hash_table_insert(ht, k1, 10);
+    sp_hash_table_insert(ht, k2, 20);
+    sp_hash_table_insert(ht, k3, 30);
+    
+    u64 lookup = sp_hash_cstr("banana");
+    ASSERT_TRUE(sp_hash_table_exists(ht, lookup));
+    ASSERT_EQ(sp_hash_table_get(ht, lookup), 20);
+    
+    lookup = sp_hash_cstr("dragonfruit");
+    ASSERT_FALSE(sp_hash_table_exists(ht, lookup));
+    
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, collision_handling) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(int, int) ht = NULL;
+    
+    for (int i = 0; i < 100; i++) {
+        sp_hash_table_insert(ht, i, i * 100);
+    }
+    
+    ASSERT_EQ(sp_hash_table_size(ht), 100);
+    
+    for (int i = 0; i < 100; i++) {
+        ASSERT_TRUE(sp_hash_table_exists(ht, i));
+        ASSERT_EQ(sp_hash_table_get(ht, i), i * 100);
+    }
+    
+    for (int i = 0; i < 100; i += 3) {
+        sp_hash_table_erase(ht, i);
+    }
+    
+    for (int i = 0; i < 100; i++) {
+        if (i % 3 == 0) {
+            ASSERT_FALSE(sp_hash_table_exists(ht, i));
+        } else {
+            ASSERT_TRUE(sp_hash_table_exists(ht, i));
+            ASSERT_EQ(sp_hash_table_get(ht, i), i * 100);
+        }
+    }
+    
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, iteration) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(int, float) ht = NULL;
+    
+    for (int i = 0; i < 10; i++) {
+        sp_hash_table_insert(ht, i * 10, (float)i * 0.5f);
+    }
+    
+    int count = 0;
+    float sum = 0.0f;
+    
+    for (sp_hash_table_iter it = 0; sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
+        int key = sp_hash_table_iter_getk(ht, it);
+        float val = sp_hash_table_iter_get(ht, it);
+        
+        ASSERT_EQ(val, (float)(key / 10) * 0.5f);
+        
+        count++;
+        sum += val;
+    }
+    
+    ASSERT_EQ(count, 10);
+    ASSERT_EQ(sum, 22.5f);
+    
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, large_stress_test) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(u64, u64) ht = NULL;
+    
+    const int count = 10000;
+    
+    for (u64 i = 0; i < count; i++) {
+        sp_hash_table_insert(ht, i, i * i);
+    }
+    
+    ASSERT_EQ(sp_hash_table_size(ht), count);
+    
+    for (int i = 0; i < 100; i++) {
+        u64 key = rand() % count;
+        ASSERT_TRUE(sp_hash_table_exists(ht, key));
+        ASSERT_EQ(sp_hash_table_get(ht, key), key * key);
+    }
+    
+    for (u64 i = 0; i < count; i += 2) {
+        sp_hash_table_erase(ht, i);
+    }
+    
+    ASSERT_EQ(sp_hash_table_size(ht), count / 2);
+    
+    for (u64 i = 1; i < count; i += 2) {
+        ASSERT_TRUE(sp_hash_table_exists(ht, i));
+        ASSERT_EQ(sp_hash_table_get(ht, i), i * i);
+    }
+    
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, edge_cases) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(int, int) ht1 = NULL;
+    ASSERT_EQ(sp_hash_table_size(ht1), 0);
+    ASSERT_TRUE(sp_hash_table_empty(ht1));
+    ASSERT_FALSE(sp_hash_table_exists(ht1, 42));
+    
+    sp_hash_table_clear(ht1);
+    sp_hash_table_free(ht1);
+    
+    sp_hash_table(int, int) ht2 = NULL;
+    sp_hash_table_insert(ht2, 1, 100);
+    sp_hash_table_erase(ht2, 1);
+    ASSERT_EQ(sp_hash_table_size(ht2), 0);
+    sp_hash_table_free(ht2);
+    
+    sp_hash_table(int, int) ht3 = NULL;
+    sp_hash_table_insert(ht3, 1, 100);
+    sp_hash_table_erase(ht3, 999);
+    ASSERT_EQ(sp_hash_table_size(ht3), 1);
+    sp_hash_table_free(ht3);
+}
+
+////////////////////////////
+// SIPHASH TESTS
+////////////////////////////
+
+UTEST(siphash, consistency) {
+    sp_test_use_malloc();
+    
+    const char* data = "Hello, World!";
+    u64 seed = 0x12345678;
+    
+    u64 hash1 = sp_hash_bytes((void*)data, strlen(data), seed);
+    u64 hash2 = sp_hash_bytes((void*)data, strlen(data), seed);
+    
+    ASSERT_EQ(hash1, hash2);
+    
+    u64 hash3 = sp_hash_bytes((void*)data, strlen(data), seed + 1);
+    ASSERT_NE(hash1, hash3);
+}
+
+UTEST(siphash, different_lengths) {
+    sp_test_use_malloc();
+    
+    u64 seed = 0xABCDEF;
+    
+    u8 data1[1] = {0x42};
+    u8 data2[7] = {1, 2, 3, 4, 5, 6, 7};
+    u8 data3[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    u8 data4[15] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    u8 data5[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    u8 data6[17] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
+    
+    u64 h1 = sp_hash_bytes(data1, sizeof(data1), seed);
+    u64 h2 = sp_hash_bytes(data2, sizeof(data2), seed);
+    u64 h3 = sp_hash_bytes(data3, sizeof(data3), seed);
+    u64 h4 = sp_hash_bytes(data4, sizeof(data4), seed);
+    u64 h5 = sp_hash_bytes(data5, sizeof(data5), seed);
+    u64 h6 = sp_hash_bytes(data6, sizeof(data6), seed);
+    
+    ASSERT_NE(h1, h2);
+    ASSERT_NE(h2, h3);
+    ASSERT_NE(h3, h4);
+    ASSERT_NE(h4, h5);
+    ASSERT_NE(h5, h6);
+}
+
+UTEST(siphash, collision_resistance) {
+    sp_test_use_malloc();
+    
+    u64 seed = 0x31415926;
+    
+    const int count = 1000;
+    u64* hashes = sp_alloc(sizeof(u64) * count);
+    
+    for (int i = 0; i < count; i++) {
+        hashes[i] = sp_hash_bytes(&i, sizeof(i), seed);
+    }
+    
+    int collisions = 0;
+    for (int i = 0; i < count; i++) {
+        for (int j = i + 1; j < count; j++) {
+            if (hashes[i] == hashes[j]) {
+                collisions++;
+            }
+        }
+    }
+    
+    ASSERT_EQ(collisions, 0);
+    
+    sp_free(hashes);
+}
+
+////////////////////////////
+// COMBINED STRESS TEST
+////////////////////////////
+
+UTEST(combined, hash_table_with_dyn_array_values) {
+    sp_test_use_malloc();
+    
+    typedef int* int_array;
+    sp_hash_table(int, int_array) ht = NULL;
+    
+    for (int i = 0; i < 5; i++) {
+        sp_dyn_array(int) arr = NULL;
+        
+        for (int j = 0; j < 10; j++) {
+            sp_dyn_array_push(arr, i * 100 + j);
+        }
+        
+        sp_hash_table_insert(ht, i, arr);
+    }
+    
+    for (int i = 0; i < 5; i++) {
+        ASSERT_TRUE(sp_hash_table_exists(ht, i));
+        
+        int_array arr = sp_hash_table_get(ht, i);
+        ASSERT_EQ(sp_dyn_array_size(arr), 10);
+        
+        for (int j = 0; j < 10; j++) {
+            ASSERT_EQ(arr[j], i * 100 + j);
+        }
+    }
+    
+    for (int i = 0; i < 5; i++) {
+        int_array arr = sp_hash_table_get(ht, i);
+        sp_dyn_array_free(arr);
+    }
+    
+    sp_hash_table_free(ht);
+}
+
+UTEST(combined, multiple_arrays_in_hash_table) {
+    sp_test_use_malloc();
+    
+    sp_hash_table(int, void*) ht = NULL;
+    
+    for (int key = 0; key < 5; key++) {
+        sp_dyn_array(int) arr = NULL;
+        
+        for (int j = 0; j < 20; j++) {
+            sp_dyn_array_push(arr, key * 1000 + j);
+        }
+        
+        sp_hash_table_insert(ht, key, (void*)arr);
+    }
+    
+    for (int key = 0; key < 5; key++) {
+        ASSERT_TRUE(sp_hash_table_exists(ht, key));
+        
+        int* arr = (int*)sp_hash_table_get(ht, key);
+        ASSERT_EQ(sp_dyn_array_size(arr), 20);
+        
+        for (int j = 0; j < 20; j++) {
+            ASSERT_EQ(arr[j], key * 1000 + j);
+        }
+    }
+    
+    for (int key = 0; key < 5; key++) {
+        int* arr = (int*)sp_hash_table_get(ht, key);
+        sp_dyn_array_free(arr);
+    }
+    
+    sp_hash_table_free(ht);
+}
 
 UTEST_MAIN()
