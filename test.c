@@ -1,11 +1,27 @@
-#define _CRT_SECURE_NO_WARNINGS
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
 #include "external/utest/utest.h"
 
-// Test utilities
-static c8* sp_test_generate_random_filename() {
+
+// ██╗   ██╗████████╗██╗██╗     ██╗████████╗██╗███████╗███████╗
+// ██║   ██║╚══██╔══╝██║██║     ██║╚══██╔══╝██║██╔════╝██╔════╝
+// ██║   ██║   ██║   ██║██║     ██║   ██║   ██║█████╗  ███████╗
+// ██║   ██║   ██║   ██║██║     ██║   ██║   ██║██╔══╝  ╚════██║
+// ╚██████╔╝   ██║   ██║███████╗██║   ██║   ██║███████╗███████║
+//  ╚═════╝    ╚═╝   ╚═╝╚══════╝╚═╝   ╚═╝   ╚═╝╚══════╝╚══════╝
+typedef struct sp_test_memory_tracker {
+  sp_bump_allocator_t* bump;
+  sp_allocator_t* allocator;
+} sp_test_memory_tracker;
+
+typedef struct sp_test_file_monitor_data {
+  bool change_detected;
+  sp_file_change_event_t last_event;
+  c8 last_file_path[SP_MAX_PATH_LEN];
+} sp_test_file_monitor_data;
+
+c8* sp_test_generate_random_filename() {
   static u32 counter = 0;
   c8* filename = (c8*)sp_alloc(64);
 #ifdef _WIN32
@@ -18,7 +34,7 @@ static c8* sp_test_generate_random_filename() {
   return filename;
 }
 
-static void sp_test_create_file(const c8* filename, const c8* content) {
+void sp_test_create_file(const c8* filename, const c8* content) {
   FILE* file = fopen(filename, "w");
   if (file) {
   fputs(content, file);
@@ -26,7 +42,7 @@ static void sp_test_create_file(const c8* filename, const c8* content) {
   }
 }
 
-static void sp_test_modify_file(const c8* filename, const c8* new_content) {
+void sp_test_modify_file(const c8* filename, const c8* new_content) {
   FILE* file = fopen(filename, "w");
   if (file) {
   fputs(new_content, file);
@@ -34,7 +50,7 @@ static void sp_test_modify_file(const c8* filename, const c8* new_content) {
   }
 }
 
-static void sp_test_delete_file(const c8* filename) {
+void sp_test_delete_file(const c8* filename) {
 #ifdef _WIN32
   DeleteFileA(filename);
 #else
@@ -42,7 +58,7 @@ static void sp_test_delete_file(const c8* filename) {
 #endif
 }
 
-static bool sp_test_file_exists(const c8* filename) {
+bool sp_test_file_exists(const c8* filename) {
 #ifdef _WIN32
   DWORD attrs = GetFileAttributesA(filename);
   return (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY));
@@ -79,87 +95,38 @@ void sp_test_use_bump_allocator(u32 capacity) {
   sp_context_push_allocator(&allocator);
 }
 
-#ifdef _WIN32
-// File monitor test data
-typedef struct sp_test_file_monitor_data {
-  bool change_detected;
-  sp_file_change_event_t last_event;
-  c8 last_file_path[SP_MAX_PATH_LEN];
-} sp_test_file_monitor_data;
+void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) {
+  sp_test_use_bump_allocator(capacity);
+  tracker->bump = (sp_bump_allocator_t*)sp_context->allocator->user_data;
+  tracker->allocator = sp_context->allocator;
+}
 
-static void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t* change, void* userdata) {
+u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
+  return tracker->bump->bytes_used;
+}
+
+void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker) {
+  sp_bump_allocator_clear(tracker->bump);
+}
+
+void sp_test_memory_tracker_destroy(sp_test_memory_tracker* tracker) {
+  sp_bump_allocator_destroy(tracker->bump);
+}
+
+void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t* change, void* userdata) {
   sp_test_file_monitor_data* data = (sp_test_file_monitor_data*)userdata;
   data->change_detected = true;
   data->last_event = change->events;
   sp_str_copy_to(change->file_path, data->last_file_path, SP_MAX_PATH_LEN);
 }
 
-UTEST(file_monitor, detects_file_modifications) {
-  sp_test_use_malloc();
 
-  // Create a test file
-  c8* test_filename = sp_test_generate_random_filename();
-  sp_test_create_file(test_filename, "Initial content");
-
-  // Set up file monitor
-  sp_test_file_monitor_data test_data = {};
-  sp_file_monitor_t monitor = {};
-  sp_file_monitor_init(&monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &test_data);
-
-  // Get current directory and add it to monitor
-  c8 current_dir[SP_MAX_PATH_LEN] = {};
-  GetCurrentDirectoryA(SP_MAX_PATH_LEN, current_dir);
-  sp_str_t current_dir_str = sp_str_cstr(current_dir);
-  sp_file_monitor_add_directory(&monitor, current_dir_str);
-
-  // Process any initial changes
-  sp_file_monitor_process_changes(&monitor);
-  test_data.change_detected = false;
-
-  // Modify the file
-  sp_test_modify_file(test_filename, "Modified content");
-
-  // Wait a bit for the file system to register the change
-  Sleep(100);
-
-  // Process changes
-  sp_file_monitor_process_changes(&monitor);
-
-  // Check that the change was detected
-  ASSERT_TRUE(test_data.change_detected);
-  ASSERT_EQ(test_data.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
-  ASSERT_NE(strstr(test_data.last_file_path, test_filename), NULL);
-
-  // Clean up
-  sp_test_delete_file(test_filename);
-  sp_free(test_filename);
-}
-#endif
-
-// Dynamic array test utilities
-typedef struct sp_test_memory_tracker {
-  sp_bump_allocator_t* bump;
-  sp_allocator_t* allocator;
-} sp_test_memory_tracker;
-
-static void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) {
-  sp_test_use_bump_allocator(capacity);
-  tracker->bump = (sp_bump_allocator_t*)sp_context->allocator->user_data;
-  tracker->allocator = sp_context->allocator;
-}
-
-static u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
-  return tracker->bump->bytes_used;
-}
-
-static void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker) {
-  sp_bump_allocator_clear(tracker->bump);
-}
-
-static void sp_test_memory_tracker_destroy(sp_test_memory_tracker* tracker) {
-  sp_bump_allocator_destroy(tracker->bump);
-}
-
+//  ██████╗ ██████╗ ██████╗ ███████╗
+// ██╔════╝██╔═══██╗██╔══██╗██╔════╝
+// ██║     ██║   ██║██████╔╝█████╗
+// ██║     ██║   ██║██╔══██╗██╔══╝
+// ╚██████╗╚██████╔╝██║  ██║███████╗
+//  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
 UTEST(dynamic_array, initialization) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024); // 1MB
@@ -172,7 +139,7 @@ UTEST(dynamic_array, initialization) {
     ASSERT_EQ(arr.size, 0);
     ASSERT_EQ(arr.capacity, 2);
     ASSERT_EQ(arr.element_size, sizeof(s32));
-    ASSERT_NE(arr.data, NULL);
+    ASSERT_NE(arr.data, SP_NULLPTR);
   }
 
   // Test different element sizes
@@ -221,7 +188,7 @@ UTEST(dynamic_array, push_operations) {
     // Push first element
     s32 val1 = 42;
     u8* elem1 = sp_dynamic_array_push(&arr, &val1);
-    ASSERT_NE(elem1, NULL);
+    ASSERT_NE(elem1, SP_NULLPTR);
     ASSERT_EQ(arr.size, 1);
     ASSERT_EQ(*(s32*)elem1, 42);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 42);
@@ -229,7 +196,7 @@ UTEST(dynamic_array, push_operations) {
     // Push second element
     s32 val2 = 69;
     u8* elem2 = sp_dynamic_array_push(&arr, &val2);
-    ASSERT_NE(elem2, NULL);
+    ASSERT_NE(elem2, SP_NULLPTR);
     ASSERT_EQ(arr.size, 2);
     ASSERT_EQ(*(s32*)elem2, 69);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 1), 69);
@@ -243,8 +210,8 @@ UTEST(dynamic_array, push_operations) {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
 
-    u8* elem = sp_dynamic_array_push(&arr, NULL);
-    ASSERT_NE(elem, NULL);
+    u8* elem = sp_dynamic_array_push(&arr, SP_NULLPTR);
+    ASSERT_NE(elem, SP_NULLPTR);
     ASSERT_EQ(arr.size, 1);
     // Element exists but uninitialized
   }
@@ -257,7 +224,7 @@ UTEST(dynamic_array, push_operations) {
     s32 values[] = {10, 20, 30, 40, 50};
     u8* elems = sp_dynamic_array_push_n(&arr, values, 5);
 
-    ASSERT_NE(elems, NULL);
+    ASSERT_NE(elems, SP_NULLPTR);
     ASSERT_EQ(arr.size, 5);
 
     // Verify all elements
@@ -347,7 +314,7 @@ UTEST(dynamic_array, reserve) {
   // Test reserve on empty array
   {
     u8* reserved = sp_dynamic_array_reserve(&arr, 5);
-    ASSERT_NE(reserved, NULL);
+    ASSERT_NE(reserved, SP_NULLPTR);
     ASSERT_EQ(arr.size, 5);
     ASSERT_GE(arr.capacity, 5);
   }
@@ -367,7 +334,7 @@ UTEST(dynamic_array, reserve) {
 
     // Reserve more
     u8* reserved = sp_dynamic_array_reserve(&arr, 3);
-    ASSERT_NE(reserved, NULL);
+    ASSERT_NE(reserved, SP_NULLPTR);
     ASSERT_EQ(arr.size, 5);
     ASSERT_GE(arr.capacity, 5);
   }
@@ -393,7 +360,7 @@ UTEST(dynamic_array, clear_and_reuse) {
   sp_dynamic_array_clear(&arr);
   ASSERT_EQ(arr.size, 0);
   ASSERT_EQ(arr.capacity, old_cap); // Capacity unchanged
-  ASSERT_NE(arr.data, NULL);
+  ASSERT_NE(arr.data, SP_NULLPTR);
 
   // Reuse
   s32 val = 99;
@@ -426,7 +393,7 @@ UTEST(dynamic_array, byte_size) {
       sp_dynamic_array_init(&arr, tc->elem_size);
 
       for (u32 i = 0; i < tc->count; i++) {
-      sp_dynamic_array_push(&arr, NULL);
+      sp_dynamic_array_push(&arr, SP_NULLPTR);
       }
 
       u32 expected = tc->elem_size * tc->count;
@@ -471,84 +438,6 @@ UTEST(dynamic_array, edge_cases) {
     // Boundary access
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
     ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 9), 9);
-  }
-
-  sp_test_memory_tracker_destroy(&tracker);
-}
-
-UTEST(dynamic_array, stress_test) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 128 * 1024 * 1024); // 128MB for stress test
-
-  // Test millions of operations
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    const s32 iterations = 1000000;
-
-    // Push a million elements
-    for (s32 i = 0; i < iterations; i++) {
-      sp_dynamic_array_push(&arr, &i);
-    }
-
-    ASSERT_EQ(arr.size, (u32)iterations);
-
-    // Verify sampling
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations/2), iterations/2);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations-1), iterations-1);
-
-    // Clear and reuse
-    sp_dynamic_array_clear(&arr);
-    ASSERT_EQ(arr.size, 0);
-
-    // Push again
-    for (s32 i = 0; i < 1000; i++) {
-      sp_dynamic_array_push(&arr, &i);
-    }
-    ASSERT_EQ(arr.size, 1000);
-  }
-
-  // Test random operations
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    // Mix of operations
-    for (u32 i = 0; i < 10000; i++) {
-      u32 op = i % 4;
-      switch (op) {
-      case 0: { // Push
-          s32 val = i;
-          sp_dynamic_array_push(&arr, &val);
-          break;
-      }
-      case 1: { // Push_n
-          s32 vals[10];
-          for (u32 j = 0; j < 10; j++) vals[j] = i + j;
-          sp_dynamic_array_push_n(&arr, vals, 10);
-          break;
-      }
-      case 2: { // Reserve
-          if (arr.size < 100000) {
-          sp_dynamic_array_reserve(&arr, 5);
-          }
-          break;
-      }
-      case 3: { // Clear periodically
-          if (i % 1000 == 0 && i > 0) {
-          sp_dynamic_array_clear(&arr);
-          }
-          break;
-      }
-      }
-    }
-
-    // Array should still be functional
-    s32 final_val = 9999;
-    sp_dynamic_array_push(&arr, &final_val);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, arr.size - 1), 9999);
   }
 
   sp_test_memory_tracker_destroy(&tracker);
@@ -662,7 +551,7 @@ UTEST(formatter, pointer_type) {
   sp_str_t result = sp_fmt(sp_str_lit("ptr: {}"), SP_FMT_PTR(ptr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("ptr: 0xDEADBEEF")));
 
-  void* null_ptr = NULL;
+  void* null_ptr = SP_NULLPTR;
   result = sp_fmt(sp_str_lit("null: {}"), SP_FMT_PTR(null_ptr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("null: 0x00000000")));
 }
@@ -686,7 +575,7 @@ UTEST(formatter, array_types) {
   fixed_arr.size = 10;
   fixed_arr.capacity = 20;
   fixed_arr.element_size = 4;
-  fixed_arr.data = NULL;
+  fixed_arr.data = SP_NULLPTR;
 
   sp_str_t result = sp_fmt(sp_str_lit("fixed: {}"), SP_FMT_FIXED_ARRAY(fixed_arr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("fixed: { size: 10, capacity: 20 }")));
@@ -695,7 +584,7 @@ UTEST(formatter, array_types) {
   dyn_arr.size = 5;
   dyn_arr.capacity = 16;
   dyn_arr.element_size = 8;
-  dyn_arr.data = NULL;
+  dyn_arr.data = SP_NULLPTR;
 
   result = sp_fmt(sp_str_lit("dynamic: {}"), SP_FMT_DYNAMIC_ARRAY(dyn_arr));
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("dynamic: { size: 5, capacity: 16 }")));
@@ -739,14 +628,14 @@ UTEST(sp_str_builder, basic_operations) {
 
   // Test initialization
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  ASSERT_EQ(builder.buffer.data, NULL);
+  ASSERT_EQ(builder.buffer.data, SP_NULLPTR);
   ASSERT_EQ(builder.buffer.count, 0);
   ASSERT_EQ(builder.buffer.capacity, 0);
 
   // Test grow - should allocate enough capacity
   sp_str_builder_grow(&builder, 10);
   ASSERT_GE(builder.buffer.capacity, 10);
-  ASSERT_NE(builder.buffer.data, NULL);
+  ASSERT_NE(builder.buffer.data, SP_NULLPTR);
   ASSERT_EQ(builder.buffer.count, 0);
 
   // Test append string
@@ -810,7 +699,7 @@ UTEST(sp_str_builder, edge_cases) {
   ASSERT_EQ(builder.buffer.count, 0);
 
   // Test NULL data string (invalid)
-  sp_str_t null_str = {.len = 0, .data = NULL};
+  sp_str_t null_str = {.len = 0, .data = SP_NULLPTR};
   sp_str_builder_append(&builder, null_str);
   ASSERT_EQ(builder.buffer.count, 0);
 
@@ -851,7 +740,7 @@ UTEST(sp_cstr_copy, all_variations) {
   sp_free(empty_copy);
 
   // Test with NULL - sp_cstr_len(NULL) returns 0, so it allocates 1 byte for null terminator
-  c8* null_copy = sp_cstr_copy(NULL);
+  c8* null_copy = sp_cstr_copy(SP_NULLPTR);
   ASSERT_EQ(null_copy[0], '\0');
   sp_free(null_copy);
 }
@@ -887,11 +776,11 @@ UTEST(sp_cstr_copy_to, buffer_operations) {
   // Test with NULL source - buffer should remain unchanged
   c8 null_buffer[10];
   sp_cstr_copy_to("test", null_buffer, 10);
-  sp_cstr_copy_to(NULL, null_buffer, 10);
+  sp_cstr_copy_to(SP_NULLPTR, null_buffer, 10);
   ASSERT_TRUE(sp_cstr_equal(null_buffer, "test")); // Should remain unchanged
 
   // Test with NULL buffer
-  sp_cstr_copy_to(source, NULL, 10); // Should not crash
+  sp_cstr_copy_to(source, SP_NULLPTR, 10); // Should not crash
 
   // Test with zero buffer length
   c8 zero_buffer[10] = "unchanged";
@@ -912,10 +801,10 @@ UTEST(sp_cstr_equal, comparison_tests) {
   ASSERT_FALSE(sp_cstr_equal("Hello", "Hell"));
 
   // Test with NULL - both should have len 0 so they're equal
-  ASSERT_TRUE(sp_cstr_equal(NULL, NULL));
+  ASSERT_TRUE(sp_cstr_equal(SP_NULLPTR, SP_NULLPTR));
   // One NULL and one non-NULL will have different lengths
-  ASSERT_FALSE(sp_cstr_equal("Hello", NULL));
-  ASSERT_FALSE(sp_cstr_equal(NULL, "Hello"));
+  ASSERT_FALSE(sp_cstr_equal("Hello", SP_NULLPTR));
+  ASSERT_FALSE(sp_cstr_equal(SP_NULLPTR, "Hello"));
 
   // Test case sensitivity
   ASSERT_FALSE(sp_cstr_equal("Hello", "hello"));
@@ -930,7 +819,7 @@ UTEST(sp_cstr_len, length_tests) {
   ASSERT_EQ(sp_cstr_len(""), 0);
 
   // Test with NULL
-  ASSERT_EQ(sp_cstr_len(NULL), 0);
+  ASSERT_EQ(sp_cstr_len(SP_NULLPTR), 0);
 
   // Test with embedded nulls (should stop at first null)
   const c8 embedded[] = {'H', 'e', '\0', 'l', 'o', '\0'};
@@ -1048,7 +937,7 @@ UTEST(sp_str, string_creation) {
   // Test sp_str_alloc
   sp_str_t allocated = sp_str_alloc(100);
   ASSERT_EQ(allocated.len, 0);
-  ASSERT_NE(allocated.data, NULL);
+  ASSERT_NE(allocated.data, SP_NULLPTR);
 }
 
 UTEST(sp_str_equal, string_comparison) {
@@ -1117,7 +1006,7 @@ UTEST(sp_str_utilities, valid_and_at) {
 
   // Test sp_str_valid
   sp_str_t valid = sp_str_lit("Hello");
-  sp_str_t invalid = {.len = 5, .data = NULL};
+  sp_str_t invalid = {.len = 5, .data = SP_NULLPTR};
   sp_str_t empty = sp_str_lit("");
 
   ASSERT_TRUE(sp_str_valid(valid));
@@ -1412,8 +1301,8 @@ UTEST(path_functions, integration_test) {
   ASSERT_GT(install.len, 0);
   ASSERT_NE(install.data[install.len - 1], '/');
 
-  // Build a path similar to how it's done in main.cpp
-  sp_str_builder_t builder = {0};
+  // Build a path
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&builder, install);
   sp_str_builder_append(&builder, sp_str_lit("/build/space-dll.bat"));
   sp_str_t dll_path = sp_str_builder_write(&builder);
@@ -1429,6 +1318,936 @@ UTEST(path_functions, integration_test) {
   ASSERT_FALSE(has_double_slash);
 }
 
+UTEST(dyn_array, basic_operations) {
+    sp_test_use_malloc();
+
+    sp_dyn_array(int) arr = SP_NULLPTR;
+
+    ASSERT_EQ(sp_dyn_array_size(arr), 0);
+    ASSERT_EQ(sp_dyn_array_capacity(arr), 0);
+    ASSERT_TRUE(sp_dyn_array_empty(arr));
+
+    sp_dyn_array_push(arr, 42);
+    ASSERT_EQ(sp_dyn_array_size(arr), 1);
+    ASSERT_GE(sp_dyn_array_capacity(arr), 1);
+    ASSERT_FALSE(sp_dyn_array_empty(arr));
+    ASSERT_EQ(arr[0], 42);
+
+    for (s32 i = 1; i < 10; i++) {
+        sp_dyn_array_push(arr, i * 10);
+    }
+    ASSERT_EQ(sp_dyn_array_size(arr), 10);
+
+    ASSERT_EQ(arr[0], 42);
+    for (s32 i = 1; i < 10; i++) {
+        ASSERT_EQ(arr[i], i * 10);
+    }
+
+    sp_dyn_array_pop(arr);
+    ASSERT_EQ(sp_dyn_array_size(arr), 9);
+
+    ASSERT_EQ(sp_dyn_array_back(arr), 80);
+
+    sp_dyn_array_clear(arr);
+    ASSERT_EQ(sp_dyn_array_size(arr), 0);
+    ASSERT_TRUE(sp_dyn_array_empty(arr));
+
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, reserve_capacity) {
+    sp_test_use_malloc();
+
+    sp_dyn_array(float) arr = SP_NULLPTR;
+
+    sp_dyn_array_reserve(arr, 100);
+    ASSERT_GE(sp_dyn_array_capacity(arr), 100);
+    ASSERT_EQ(sp_dyn_array_size(arr), 0);
+
+    for (s32 i = 0; i < 50; i++) {
+        sp_dyn_array_push(arr, (float)i * 0.5f);
+    }
+    ASSERT_GE(sp_dyn_array_capacity(arr), 100);
+    ASSERT_EQ(sp_dyn_array_size(arr), 50);
+
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, growth_pattern) {
+    sp_test_use_malloc();
+
+    sp_dyn_array(u32) arr = SP_NULLPTR;
+
+    u32 prev_capacity = 0;
+
+    for (u32 i = 0; i < 100; i++) {
+        sp_dyn_array_push(arr, i);
+
+        u32 current_capacity = sp_dyn_array_capacity(arr);
+        if (current_capacity != prev_capacity) {
+            if (prev_capacity > 0) {
+                ASSERT_EQ(current_capacity, prev_capacity * 2);
+            }
+            prev_capacity = current_capacity;
+        }
+    }
+
+    ASSERT_EQ(sp_dyn_array_size(arr), 100);
+
+    sp_dyn_array_free(arr);
+}
+
+typedef struct test_struct {
+    s32 id;
+    float value;
+    char name[32];
+} test_struct;
+
+UTEST(dyn_array, struct_type) {
+    sp_test_use_malloc();
+
+    sp_dyn_array(test_struct) arr = SP_NULLPTR;
+
+    for (s32 i = 0; i < 10; i++) {
+        test_struct s = SP_ZERO_INITIALIZE();
+        s.id = i;
+        s.value = (float)i * 1.5f;
+        snprintf(s.name, sizeof(s.name), "Item_%d", i);
+        sp_dyn_array_push(arr, s);
+    }
+
+    ASSERT_EQ(sp_dyn_array_size(arr), 10);
+
+    for (s32 i = 0; i < 10; i++) {
+        ASSERT_EQ(arr[i].id, i);
+        ASSERT_EQ(arr[i].value, (float)i * 1.5f);
+
+        char expected[32];
+        snprintf(expected, sizeof(expected), "Item_%d", i);
+        ASSERT_STREQ(arr[i].name, expected);
+    }
+
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, pointer_type) {
+    sp_test_use_malloc();
+
+    sp_dyn_array(char*) arr = SP_NULLPTR;
+
+    const char* strings[] = {"Hello", "World", "Dynamic", "Array", "Test"};
+
+    for (s32 i = 0; i < 5; i++) {
+        c8* str = (c8*)sp_alloc(strlen(strings[i]) + 1);
+        strcpy(str, strings[i]);
+        sp_dyn_array_push(arr, str);
+    }
+
+    ASSERT_EQ(sp_dyn_array_size(arr), 5);
+
+    for (s32 i = 0; i < 5; i++) {
+        ASSERT_STREQ(arr[i], strings[i]);
+    }
+
+    for (s32 i = 0; i < sp_dyn_array_size(arr); i++) {
+        sp_free(arr[i]);
+    }
+
+    sp_dyn_array_free(arr);
+}
+
+UTEST(dyn_array, edge_cases) {
+    sp_test_use_malloc();
+
+    sp_dyn_array(int) arr1 = SP_NULLPTR;
+    sp_dyn_array_free(arr1);
+    sp_dyn_array_free(arr1);
+
+    sp_dyn_array(int) arr2 = SP_NULLPTR;
+    sp_dyn_array_pop(arr2);
+    ASSERT_EQ(sp_dyn_array_size(arr2), 0);
+
+    sp_dyn_array_clear(arr2);
+
+    sp_dyn_array_push(arr2, 42);
+    sp_dyn_array_free(arr2);
+
+    sp_dyn_array(int) arr3 = SP_NULLPTR;
+    sp_dyn_array_reserve(arr3, 0);
+    ASSERT_GE(sp_dyn_array_capacity(arr3), 0);
+    sp_dyn_array_free(arr3);
+}
+
+//////////////////////
+// HASH TABLE TESTS //
+//////////////////////
+
+UTEST(hash_table, basic_operations) {
+    sp_test_use_malloc();
+
+    sp_hash_table(int, float) ht = SP_NULLPTR;
+
+    ASSERT_EQ(sp_hash_table_size(ht), 0);
+    ASSERT_TRUE(sp_hash_table_empty(ht));
+    ASSERT_FALSE(sp_hash_table_exists(ht, 42));
+
+    sp_hash_table_insert(ht, 42, 3.14f);
+    ASSERT_EQ(sp_hash_table_size(ht), 1);
+    ASSERT_FALSE(sp_hash_table_empty(ht));
+    ASSERT_TRUE(sp_hash_table_exists(ht, 42));
+    ASSERT_EQ(sp_hash_table_get(ht, 42), 3.14f);
+
+    sp_hash_table_insert(ht, 10, 1.5f);
+    sp_hash_table_insert(ht, 20, 2.5f);
+    sp_hash_table_insert(ht, 30, 3.5f);
+    ASSERT_EQ(sp_hash_table_size(ht), 4);
+
+    ASSERT_EQ(sp_hash_table_get(ht, 10), 1.5f);
+    ASSERT_EQ(sp_hash_table_get(ht, 20), 2.5f);
+    ASSERT_EQ(sp_hash_table_get(ht, 30), 3.5f);
+    ASSERT_EQ(sp_hash_table_get(ht, 42), 3.14f);
+
+    sp_hash_table_insert(ht, 42, 6.28f);
+    ASSERT_EQ(sp_hash_table_get(ht, 42), 6.28f);
+    ASSERT_EQ(sp_hash_table_size(ht), 5);
+
+    sp_hash_table_erase(ht, 20);
+    ASSERT_FALSE(sp_hash_table_exists(ht, 20));
+    ASSERT_EQ(sp_hash_table_size(ht), 4);
+
+    sp_hash_table_clear(ht);
+    ASSERT_EQ(sp_hash_table_size(ht), 0);
+    ASSERT_TRUE(sp_hash_table_empty(ht));
+
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, pointer_retrieval) {
+    sp_test_use_malloc();
+
+    sp_hash_table(u32, double) ht = SP_NULLPTR;
+
+    sp_hash_table_insert(ht, 100, 123.456);
+    sp_hash_table_insert(ht, 200, 789.012);
+
+    double* ptr1 = sp_hash_table_getp(ht, 100);
+    ASSERT_NE(ptr1, SP_NULLPTR);
+    ASSERT_EQ(*ptr1, 123.456);
+
+    *ptr1 = 999.999;
+    ASSERT_EQ(sp_hash_table_get(ht, 100), 999.999);
+
+    double* ptr2 = sp_hash_table_getp(ht, 999);
+    ASSERT_EQ(ptr2, SP_NULLPTR);
+
+    sp_hash_table_free(ht);
+}
+
+typedef struct {
+    float x, y, z;
+} vec3_t;
+
+UTEST(hash_table, struct_values) {
+    sp_test_use_malloc();
+
+    sp_hash_table(int, vec3_t) ht = SP_NULLPTR;
+
+    vec3_t v1 = {1.0f, 2.0f, 3.0f};
+    vec3_t v2 = {4.0f, 5.0f, 6.0f};
+    vec3_t v3 = {7.0f, 8.0f, 9.0f};
+
+    sp_hash_table_insert(ht, 1, v1);
+    sp_hash_table_insert(ht, 2, v2);
+    sp_hash_table_insert(ht, 3, v3);
+
+    vec3_t retrieved = sp_hash_table_get(ht, 2);
+    ASSERT_EQ(retrieved.x, 4.0f);
+    ASSERT_EQ(retrieved.y, 5.0f);
+    ASSERT_EQ(retrieved.z, 6.0f);
+
+    sp_hash_table_free(ht);
+}
+
+typedef struct {
+    s32 id;
+    s32 type;
+} compound_key_t;
+
+UTEST(hash_table, struct_keys) {
+    sp_test_use_malloc();
+
+    sp_hash_table(compound_key_t, const char*) ht = SP_NULLPTR;
+
+    compound_key_t k1 = {100, 1};
+    compound_key_t k2 = {200, 2};
+    compound_key_t k3 = {300, 3};
+
+    sp_hash_table_insert(ht, k1, "First");
+    sp_hash_table_insert(ht, k2, "Second");
+    sp_hash_table_insert(ht, k3, "Third");
+
+    ASSERT_EQ(sp_hash_table_size(ht), 3);
+
+    compound_key_t lookup = {200, 2};
+    ASSERT_TRUE(sp_hash_table_exists(ht, lookup));
+    const char* value = sp_hash_table_get(ht, lookup);
+    ASSERT_STREQ(value, "Second");
+
+    compound_key_t missing = {200, 3};
+    ASSERT_FALSE(sp_hash_table_exists(ht, missing));
+
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, string_keys) {
+    sp_test_use_malloc();
+
+    sp_hash_table(u64, int) ht = SP_NULLPTR;
+
+    const char* s1 = "apple";
+    const char* s2 = "banana";
+    const char* s3 = "cherry";
+
+    u64 k1 = sp_hash_cstr(s1);
+    u64 k2 = sp_hash_cstr(s2);
+    u64 k3 = sp_hash_cstr(s3);
+
+    sp_hash_table_insert(ht, k1, 10);
+    sp_hash_table_insert(ht, k2, 20);
+    sp_hash_table_insert(ht, k3, 30);
+
+    u64 lookup = sp_hash_cstr("banana");
+    ASSERT_TRUE(sp_hash_table_exists(ht, lookup));
+    ASSERT_EQ(sp_hash_table_get(ht, lookup), 20);
+
+    lookup = sp_hash_cstr("dragonfruit");
+    ASSERT_FALSE(sp_hash_table_exists(ht, lookup));
+
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, collision_handling) {
+    sp_test_use_malloc();
+
+    sp_hash_table(int, int) ht = SP_NULLPTR;
+
+    for (s32 i = 0; i < 100; i++) {
+        sp_hash_table_insert(ht, i, i * 100);
+    }
+
+    ASSERT_EQ(sp_hash_table_size(ht), 100);
+
+    for (s32 i = 0; i < 100; i++) {
+        ASSERT_TRUE(sp_hash_table_exists(ht, i));
+        ASSERT_EQ(sp_hash_table_get(ht, i), i * 100);
+    }
+
+    for (s32 i = 0; i < 100; i += 3) {
+        sp_hash_table_erase(ht, i);
+    }
+
+    for (s32 i = 0; i < 100; i++) {
+        if (i % 3 == 0) {
+            ASSERT_FALSE(sp_hash_table_exists(ht, i));
+        } else {
+            ASSERT_TRUE(sp_hash_table_exists(ht, i));
+            ASSERT_EQ(sp_hash_table_get(ht, i), i * 100);
+        }
+    }
+
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, iteration) {
+    sp_test_use_malloc();
+
+    sp_hash_table(int, float) ht = SP_NULLPTR;
+
+    for (s32 i = 0; i < 10; i++) {
+        sp_hash_table_insert(ht, i * 10, (float)i * 0.5f);
+    }
+
+    s32 count = 0;
+    float sum = 0.0f;
+
+    for (sp_hash_table_iter it = 0; sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
+        s32 key = sp_hash_table_iter_getk(ht, it);
+        float val = sp_hash_table_iter_get(ht, it);
+
+        ASSERT_EQ(val, (float)(key / 10) * 0.5f);
+
+        count++;
+        sum += val;
+    }
+
+    ASSERT_EQ(count, 10);
+    ASSERT_EQ(sum, 22.5f);
+
+    sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, edge_cases) {
+    sp_test_use_malloc();
+
+    sp_hash_table(int, int) ht1 = SP_NULLPTR;
+    ASSERT_EQ(sp_hash_table_size(ht1), 0);
+    ASSERT_TRUE(sp_hash_table_empty(ht1));
+    ASSERT_FALSE(sp_hash_table_exists(ht1, 42));
+
+    sp_hash_table_clear(ht1);
+    sp_hash_table_free(ht1);
+
+    sp_hash_table(int, int) ht2 = SP_NULLPTR;
+    sp_hash_table_insert(ht2, 1, 100);
+    sp_hash_table_erase(ht2, 1);
+    ASSERT_EQ(sp_hash_table_size(ht2), 0);
+    sp_hash_table_free(ht2);
+
+    sp_hash_table(int, int) ht3 = SP_NULLPTR;
+    sp_hash_table_insert(ht3, 1, 100);
+    sp_hash_table_erase(ht3, 999);
+    ASSERT_EQ(sp_hash_table_size(ht3), 1);
+    sp_hash_table_free(ht3);
+}
+
+////////////////////////////
+// SIPHASH TESTS
+////////////////////////////
+
+UTEST(siphash, consistency) {
+    sp_test_use_malloc();
+
+    const char* data = "Hello, World!";
+    u64 seed = 0x12345678;
+
+    u64 hash1 = sp_hash_bytes((void*)data, strlen(data), seed);
+    u64 hash2 = sp_hash_bytes((void*)data, strlen(data), seed);
+
+    ASSERT_EQ(hash1, hash2);
+
+    u64 hash3 = sp_hash_bytes((void*)data, strlen(data), seed + 1);
+    ASSERT_NE(hash1, hash3);
+}
+
+UTEST(siphash, different_lengths) {
+    sp_test_use_malloc();
+
+    u64 seed = 0xABCDEF;
+
+    u8 data1[1] = {0x42};
+    u8 data2[7] = {1, 2, 3, 4, 5, 6, 7};
+    u8 data3[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    u8 data4[15] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    u8 data5[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    u8 data6[17] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
+
+    u64 h1 = sp_hash_bytes(data1, sizeof(data1), seed);
+    u64 h2 = sp_hash_bytes(data2, sizeof(data2), seed);
+    u64 h3 = sp_hash_bytes(data3, sizeof(data3), seed);
+    u64 h4 = sp_hash_bytes(data4, sizeof(data4), seed);
+    u64 h5 = sp_hash_bytes(data5, sizeof(data5), seed);
+    u64 h6 = sp_hash_bytes(data6, sizeof(data6), seed);
+
+    ASSERT_NE(h1, h2);
+    ASSERT_NE(h2, h3);
+    ASSERT_NE(h3, h4);
+    ASSERT_NE(h4, h5);
+    ASSERT_NE(h5, h6);
+}
+
+UTEST(siphash, collision_resistance) {
+    sp_test_use_malloc();
+
+    u64 seed = 0x31415926;
+
+    const s32 count = 1000;
+    u64* hashes = (u64*)sp_alloc(sizeof(u64) * count);
+
+    for (s32 i = 0; i < count; i++) {
+        hashes[i] = sp_hash_bytes(&i, sizeof(i), seed);
+    }
+
+    s32 collisions = 0;
+    for (s32 i = 0; i < count; i++) {
+        for (s32 j = i + 1; j < count; j++) {
+            if (hashes[i] == hashes[j]) {
+                collisions++;
+            }
+        }
+    }
+
+    ASSERT_EQ(collisions, 0);
+
+    sp_free(hashes);
+}
+
+////////////////////////////
+// COMBINED STRESS TEST
+////////////////////////////
+
+UTEST(combined, hash_table_with_dyn_array_values) {
+    sp_test_use_malloc();
+
+    typedef int* int_array;
+    sp_hash_table(int, int_array) ht = SP_NULLPTR;
+
+    for (s32 i = 0; i < 5; i++) {
+        sp_dyn_array(int) arr = SP_NULLPTR;
+
+        for (s32 j = 0; j < 10; j++) {
+            sp_dyn_array_push(arr, i * 100 + j);
+        }
+
+        sp_hash_table_insert(ht, i, arr);
+    }
+
+    for (s32 i = 0; i < 5; i++) {
+        ASSERT_TRUE(sp_hash_table_exists(ht, i));
+
+        int_array arr = sp_hash_table_get(ht, i);
+        ASSERT_EQ(sp_dyn_array_size(arr), 10);
+
+        for (s32 j = 0; j < 10; j++) {
+            ASSERT_EQ(arr[j], i * 100 + j);
+        }
+    }
+
+    for (s32 i = 0; i < 5; i++) {
+        int_array arr = sp_hash_table_get(ht, i);
+        sp_dyn_array_free(arr);
+    }
+
+    sp_hash_table_free(ht);
+}
+
+UTEST(combined, multiple_arrays_in_hash_table) {
+    sp_test_use_malloc();
+
+    sp_hash_table(int, void*) ht = SP_NULLPTR;
+
+    for (s32 key = 0; key < 5; key++) {
+        sp_dyn_array(int) arr = SP_NULLPTR;
+
+        for (s32 j = 0; j < 20; j++) {
+            sp_dyn_array_push(arr, key * 1000 + j);
+        }
+
+        sp_hash_table_insert(ht, key, (void*)arr);
+    }
+
+    for (s32 key = 0; key < 5; key++) {
+        ASSERT_TRUE(sp_hash_table_exists(ht, key));
+
+        int* arr = (int*)sp_hash_table_get(ht, key);
+        ASSERT_EQ(sp_dyn_array_size(arr), 20);
+
+        for (s32 j = 0; j < 20; j++) {
+            ASSERT_EQ(arr[j], key * 1000 + j);
+        }
+    }
+
+    for (s32 key = 0; key < 5; key++) {
+        int* arr = (int*)sp_hash_table_get(ht, key);
+        sp_dyn_array_free(arr);
+    }
+
+    sp_hash_table_free(ht);
+}
+
+////////////////////////////
+// RING BUFFER TESTS
+////////////////////////////
+
+UTEST(ring_buffer, basic_operations) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 10, sizeof(int));
+
+    ASSERT_EQ(rb.size, 0);
+    ASSERT_EQ(rb.capacity, 10);
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
+    ASSERT_FALSE(sp_ring_buffer_is_full(&rb));
+
+    s32 val = 42;
+    sp_ring_buffer_push(&rb, &val);
+    ASSERT_EQ(rb.size, 1);
+    ASSERT_FALSE(sp_ring_buffer_is_empty(&rb));
+
+    int* back = (int*)sp_ring_buffer_back(&rb);
+    ASSERT_EQ(*back, 42);
+
+    for (s32 i = 1; i < 10; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+
+    ASSERT_EQ(rb.size, 10);
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+
+    int* popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 42);
+    ASSERT_EQ(rb.size, 9);
+
+    sp_ring_buffer_clear(&rb);
+    ASSERT_EQ(rb.size, 0);
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
+
+    sp_ring_buffer_destroy(&rb);
+    ASSERT_EQ(rb.data, SP_NULLPTR);
+}
+
+UTEST(ring_buffer, push_literal_macro) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 5, sizeof(u32));
+
+    sp_ring_buffer_push_literal(&rb, u32, 69);
+    sp_ring_buffer_push_literal(&rb, u32, 420);
+    sp_ring_buffer_push_literal(&rb, u32, 1337);
+
+    ASSERT_EQ(rb.size, 3);
+
+    u32* val1 = (u32*)sp_ring_buffer_at(&rb, 0);
+    u32* val2 = (u32*)sp_ring_buffer_at(&rb, 1);
+    u32* val3 = (u32*)sp_ring_buffer_at(&rb, 2);
+
+    ASSERT_EQ(*val1, 69);
+    ASSERT_EQ(*val2, 420);
+    ASSERT_EQ(*val3, 1337);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, circular_behavior) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 3, sizeof(int));
+
+    for (s32 i = 0; i < 3; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+
+    int* popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 0);
+
+    s32 val = 3;
+    sp_ring_buffer_push(&rb, &val);
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+
+    popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 1);
+    popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 2);
+    popped = (int*)sp_ring_buffer_pop(&rb);
+    ASSERT_EQ(*popped, 3);
+
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, overwrite_behavior) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 3, sizeof(int));
+
+    for (s32 i = 0; i < 5; i++) {
+        sp_ring_buffer_push_overwrite(&rb, &i);
+    }
+
+    ASSERT_EQ(rb.size, 3);
+
+    int* val0 = (int*)sp_ring_buffer_pop(&rb);
+    int* val1 = (int*)sp_ring_buffer_pop(&rb);
+    int* val2 = (int*)sp_ring_buffer_pop(&rb);
+
+    ASSERT_EQ(*val0, 2);
+    ASSERT_EQ(*val1, 3);
+    ASSERT_EQ(*val2, 4);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, push_zero) {
+    sp_test_use_malloc();
+
+    typedef struct {
+        s32 x, y, z;
+    } point_t;
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 5, sizeof(point_t));
+
+    point_t* p = (point_t*)sp_ring_buffer_push_zero(&rb);
+    ASSERT_EQ(p->x, 0);
+    ASSERT_EQ(p->y, 0);
+    ASSERT_EQ(p->z, 0);
+
+    point_t val = {1, 2, 3};
+    sp_ring_buffer_push(&rb, &val);
+
+    p = (point_t*)sp_ring_buffer_push_overwrite_zero(&rb);
+    ASSERT_EQ(p->x, 0);
+    ASSERT_EQ(p->y, 0);
+    ASSERT_EQ(p->z, 0);
+
+    ASSERT_EQ(rb.size, 3);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, iteration_forward) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 10, sizeof(int));
+
+    for (s32 i = 0; i < 5; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+
+    s32 expected = 0;
+    sp_ring_buffer_for(rb, it) {
+        int* val = sp_rb_it(it, int);
+        ASSERT_EQ(*val, expected);
+        expected++;
+    }
+    ASSERT_EQ(expected, 5);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, iteration_reverse) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 10, sizeof(int));
+
+    for (s32 i = 0; i < 5; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+
+    s32 expected = 4;
+    sp_ring_buffer_rfor(rb, it) {
+        int* val = sp_rb_it(it, int);
+        ASSERT_EQ(*val, expected);
+        expected--;
+    }
+    ASSERT_EQ(expected, -1);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, iteration_after_wrap) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 3, sizeof(int));
+
+    for (s32 i = 0; i < 3; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+
+    sp_ring_buffer_pop(&rb);
+    sp_ring_buffer_pop(&rb);
+
+    s32 val3 = 3, val4 = 4;
+    sp_ring_buffer_push(&rb, &val3);
+    sp_ring_buffer_push(&rb, &val4);
+
+    s32 values[3];
+    s32 idx = 0;
+    sp_ring_buffer_for(rb, it) {
+        int* val = sp_rb_it(it, int);
+        values[idx++] = *val;
+    }
+
+    ASSERT_EQ(values[0], 2);
+    ASSERT_EQ(values[1], 3);
+    ASSERT_EQ(values[2], 4);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, struct_type) {
+    sp_test_use_malloc();
+
+    typedef struct {
+        float x, y;
+        s32 id;
+    } entity_t;
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 5, sizeof(entity_t));
+
+    for (s32 i = 0; i < 5; i++) {
+        entity_t e = {(float)i * 1.5f, (float)i * 2.5f, i};
+        sp_ring_buffer_push(&rb, &e);
+    }
+
+    entity_t* e = (entity_t*)sp_ring_buffer_at(&rb, 2);
+    ASSERT_EQ(e->x, 3.0f);
+    ASSERT_EQ(e->y, 5.0f);
+    ASSERT_EQ(e->id, 2);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, edge_cases) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb1;
+    sp_ring_buffer_init(&rb1, 1, sizeof(int));
+
+    s32 val = 42;
+    sp_ring_buffer_push(&rb1, &val);
+    ASSERT_TRUE(sp_ring_buffer_is_full(&rb1));
+
+    int* popped = (int*)sp_ring_buffer_pop(&rb1);
+    ASSERT_EQ(*popped, 42);
+    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb1));
+
+    sp_ring_buffer_destroy(&rb1);
+
+    sp_ring_buffer_t rb2;
+    sp_ring_buffer_init(&rb2, 2, sizeof(float));
+
+    float f1 = 1.5f, f2 = 2.5f, f3 = 3.5f;
+    sp_ring_buffer_push(&rb2, &f1);
+    sp_ring_buffer_push(&rb2, &f2);
+    sp_ring_buffer_push_overwrite(&rb2, &f3);
+
+    float* fp1 = (float*)sp_ring_buffer_pop(&rb2);
+    float* fp2 = (float*)sp_ring_buffer_pop(&rb2);
+
+    ASSERT_EQ(*fp1, 2.5f);
+    ASSERT_EQ(*fp2, 3.5f);
+
+    sp_ring_buffer_destroy(&rb2);
+}
+
+UTEST(ring_buffer, bytes_calculation) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 10, sizeof(double));
+
+    ASSERT_EQ(sp_ring_buffer_bytes(&rb), 10 * sizeof(double));
+
+    sp_ring_buffer_destroy(&rb);
+
+    sp_ring_buffer_init(&rb, 100, sizeof(char));
+    ASSERT_EQ(sp_ring_buffer_bytes(&rb), 100);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(ring_buffer, iterator_manual) {
+    sp_test_use_malloc();
+
+    sp_ring_buffer_t rb;
+    sp_ring_buffer_init(&rb, 5, sizeof(int));
+
+    for (s32 i = 10; i < 15; i++) {
+        sp_ring_buffer_push(&rb, &i);
+    }
+
+    sp_ring_buffer_iterator_t it = sp_ring_buffer_iter(&rb);
+    ASSERT_FALSE(sp_ring_buffer_iter_done(&it));
+
+    int* val = (int*)sp_ring_buffer_iter_deref(&it);
+    ASSERT_EQ(*val, 10);
+
+    sp_ring_buffer_iter_next(&it);
+    val = (int*)sp_ring_buffer_iter_deref(&it);
+    ASSERT_EQ(*val, 11);
+
+    sp_ring_buffer_iterator_t rit = sp_ring_buffer_riter(&rb);
+    val = (int*)sp_ring_buffer_iter_deref(&rit);
+    ASSERT_EQ(*val, 14);
+
+    sp_ring_buffer_iter_prev(&rit);
+    val = (int*)sp_ring_buffer_iter_deref(&rit);
+    ASSERT_EQ(*val, 13);
+
+    sp_ring_buffer_destroy(&rb);
+}
+
+UTEST(asset_registry, smoke) {
+  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_init(&registry, (sp_asset_registry_config_t) {
+    .importers = (sp_asset_importer_config_t []) {
+       {
+         .kind = 0,
+         .on_import = SP_NULLPTR,
+         .on_completion = SP_NULLPTR,
+       }
+    }
+  });
+}
+
+
+// ██╗    ██╗██╗███╗   ██╗██████╗ ██████╗
+// ██║    ██║██║████╗  ██║╚════██╗╚════██╗
+// ██║ █╗ ██║██║██╔██╗ ██║ █████╔╝ █████╔╝
+// ██║███╗██║██║██║╚██╗██║ ╚═══██╗██╔═══╝
+// ╚███╔███╔╝██║██║ ╚████║██████╔╝███████╗
+//  ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
+#ifdef SP_WIN32
+UTEST(file_monitor, detects_file_modifications) {
+  sp_test_use_malloc();
+
+  // Create a test file
+  c8* test_filename = sp_test_generate_random_filename();
+  sp_test_create_file(test_filename, "Initial content");
+
+  // Set up file monitor
+  sp_test_file_monitor_data test_data = {};
+  sp_file_monitor_t monitor = {};
+  sp_file_monitor_init(&monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &test_data);
+
+  // Get current directory and add it to monitor
+  c8 current_dir[SP_MAX_PATH_LEN] = {};
+  GetCurrentDirectoryA(SP_MAX_PATH_LEN, current_dir);
+  sp_str_t current_dir_str = sp_str_cstr(current_dir);
+  sp_file_monitor_add_directory(&monitor, current_dir_str);
+
+  // Process any initial changes
+  sp_file_monitor_process_changes(&monitor);
+  test_data.change_detected = false;
+
+  // Modify the file
+  sp_test_modify_file(test_filename, "Modified content");
+
+  // Wait a bit for the file system to register the change
+  Sleep(100);
+
+  // Process changes
+  sp_file_monitor_process_changes(&monitor);
+
+  // Check that the change was detected
+  ASSERT_TRUE(test_data.change_detected);
+  ASSERT_EQ(test_data.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
+  ASSERT_NE(strstr(test_data.last_file_path, test_filename), SP_NULLPTR);
+
+  // Clean up
+  sp_test_delete_file(test_filename);
+  sp_free(test_filename);
+}
+#endif
+
+
+
+// ██████╗  ██████╗ ███████╗██╗██╗  ██╗
+// ██╔══██╗██╔═══██╗██╔════╝██║╚██╗██╔╝
+// ██████╔╝██║   ██║███████╗██║ ╚███╔╝
+// ██╔═══╝ ██║   ██║╚════██║██║ ██╔██╗
+// ██║     ╚██████╔╝███████║██║██╔╝ ██╗
+// ╚═╝      ╚═════╝ ╚══════╝╚═╝╚═╝  ╚═╝
 #ifdef SP_POSIX
 UTEST(posix, smoke) {
   sp_allocator_malloc_t allocator;
@@ -1438,7 +2257,6 @@ UTEST(posix, smoke) {
 
   sp_str_t path = sp_str_lit("/tmp/test");
   bool exists = sp_os_does_path_exist(path);
-  printf("Path exists: %d\n", exists);
 
   sp_mutex_t mutex;
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
@@ -1454,6 +2272,13 @@ UTEST(posix, smoke) {
 }
 #endif
 
+
+//  ██████╗██████╗ ██████╗
+// ██╔════╝██╔══██╗██╔══██╗
+// ██║     ██████╔╝██████╔╝
+// ██║     ██╔═══╝ ██╔═══╝
+// ╚██████╗██║     ██║
+//  ╚═════╝╚═╝     ╚═╝
 #ifdef __cplusplus
 UTEST(string_cpp, path_concatenation_operator) {
   sp_test_use_malloc();
@@ -1500,983 +2325,208 @@ UTEST(string_cpp, path_concatenation_operator) {
   ASSERT_TRUE(sp_str_equal(chained_cstr, sp_str_lit("root/data/files")));
 }
 #endif
-////////////////////////////
-// DYNAMIC ARRAY TESTS
-////////////////////////////
 
-UTEST(dyn_array, basic_operations) {
-    sp_test_use_malloc();
-    
-    sp_dyn_array(int) arr = NULL;
-    
-    ASSERT_EQ(sp_dyn_array_size(arr), 0);
-    ASSERT_EQ(sp_dyn_array_capacity(arr), 0);
-    ASSERT_TRUE(sp_dyn_array_empty(arr));
-    
-    sp_dyn_array_push(arr, 42);
-    ASSERT_EQ(sp_dyn_array_size(arr), 1);
-    ASSERT_GE(sp_dyn_array_capacity(arr), 1);
-    ASSERT_FALSE(sp_dyn_array_empty(arr));
-    ASSERT_EQ(arr[0], 42);
-    
-    for (int i = 1; i < 10; i++) {
-        sp_dyn_array_push(arr, i * 10);
-    }
-    ASSERT_EQ(sp_dyn_array_size(arr), 10);
-    
-    ASSERT_EQ(arr[0], 42);
-    for (int i = 1; i < 10; i++) {
-        ASSERT_EQ(arr[i], i * 10);
-    }
-    
-    sp_dyn_array_pop(arr);
-    ASSERT_EQ(sp_dyn_array_size(arr), 9);
-    
-    ASSERT_EQ(sp_dyn_array_back(arr), 80);
-    
-    sp_dyn_array_clear(arr);
-    ASSERT_EQ(sp_dyn_array_size(arr), 0);
-    ASSERT_TRUE(sp_dyn_array_empty(arr));
-    
-    sp_dyn_array_free(arr);
-}
 
-UTEST(dyn_array, reserve_capacity) {
-    sp_test_use_malloc();
-    
-    sp_dyn_array(float) arr = NULL;
-    
-    sp_dyn_array_reserve(arr, 100);
-    ASSERT_GE(sp_dyn_array_capacity(arr), 100);
-    ASSERT_EQ(sp_dyn_array_size(arr), 0);
-    
-    for (int i = 0; i < 50; i++) {
-        sp_dyn_array_push(arr, (float)i * 0.5f);
-    }
-    ASSERT_GE(sp_dyn_array_capacity(arr), 100);
-    ASSERT_EQ(sp_dyn_array_size(arr), 50);
-    
-    sp_dyn_array_free(arr);
-}
+// ███████╗████████╗██████╗ ███████╗███████╗███████╗
+// ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██╔════╝██╔════╝
+// ███████╗   ██║   ██████╔╝█████╗  ███████╗███████╗
+// ╚════██║   ██║   ██╔══██╗██╔══╝  ╚════██║╚════██║
+// ███████║   ██║   ██║  ██║███████╗███████║███████║
+// ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝
+#ifdef SP_TEST_ENABLE_STRESS_TESTS
+UTEST(dynamic_array, stress_test) {
+  sp_test_memory_tracker tracker;
+  sp_test_memory_tracker_init(&tracker, 128 * 1024 * 1024); // 128MB for stress test
 
-UTEST(dyn_array, growth_pattern) {
-    sp_test_use_malloc();
-    
-    sp_dyn_array(u32) arr = NULL;
-    
-    u32 prev_capacity = 0;
-    
-    for (u32 i = 0; i < 100; i++) {
-        sp_dyn_array_push(arr, i);
-        
-        u32 current_capacity = sp_dyn_array_capacity(arr);
-        if (current_capacity != prev_capacity) {
-            if (prev_capacity > 0) {
-                ASSERT_EQ(current_capacity, prev_capacity * 2);
-            }
-            prev_capacity = current_capacity;
-        }
-    }
-    
-    ASSERT_EQ(sp_dyn_array_size(arr), 100);
-    
-    sp_dyn_array_free(arr);
-}
+  // Test millions of operations
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
 
-typedef struct test_struct {
-    int id;
-    float value;
-    char name[32];
-} test_struct;
+    const s32 iterations = 1000000;
 
-UTEST(dyn_array, struct_type) {
-    sp_test_use_malloc();
-    
-    sp_dyn_array(test_struct) arr = NULL;
-    
-    for (int i = 0; i < 10; i++) {
-        test_struct s = {0};
-        s.id = i;
-        s.value = (float)i * 1.5f;
-        snprintf(s.name, sizeof(s.name), "Item_%d", i);
-        sp_dyn_array_push(arr, s);
+    // Push a million elements
+    for (s32 i = 0; i < iterations; i++) {
+      sp_dynamic_array_push(&arr, &i);
     }
-    
-    ASSERT_EQ(sp_dyn_array_size(arr), 10);
-    
-    for (int i = 0; i < 10; i++) {
-        ASSERT_EQ(arr[i].id, i);
-        ASSERT_EQ(arr[i].value, (float)i * 1.5f);
-        
-        char expected[32];
-        snprintf(expected, sizeof(expected), "Item_%d", i);
-        ASSERT_STREQ(arr[i].name, expected);
-    }
-    
-    sp_dyn_array_free(arr);
-}
 
-UTEST(dyn_array, pointer_type) {
-    sp_test_use_malloc();
-    
-    sp_dyn_array(char*) arr = NULL;
-    
-    const char* strings[] = {"Hello", "World", "Dynamic", "Array", "Test"};
-    
-    for (int i = 0; i < 5; i++) {
-        char* str = sp_alloc(strlen(strings[i]) + 1);
-        strcpy(str, strings[i]);
-        sp_dyn_array_push(arr, str);
+    ASSERT_EQ(arr.size, (u32)iterations);
+
+    // Verify sampling
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations/2), iterations/2);
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations-1), iterations-1);
+
+    // Clear and reuse
+    sp_dynamic_array_clear(&arr);
+    ASSERT_EQ(arr.size, 0);
+
+    // Push again
+    for (s32 i = 0; i < 1000; i++) {
+      sp_dynamic_array_push(&arr, &i);
     }
-    
-    ASSERT_EQ(sp_dyn_array_size(arr), 5);
-    
-    for (int i = 0; i < 5; i++) {
-        ASSERT_STREQ(arr[i], strings[i]);
+    ASSERT_EQ(arr.size, 1000);
+  }
+
+  // Test random operations
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    // Mix of operations
+    for (u32 i = 0; i < 10000; i++) {
+      u32 op = i % 4;
+      switch (op) {
+      case 0: { // Push
+          s32 val = i;
+          sp_dynamic_array_push(&arr, &val);
+          break;
+      }
+      case 1: { // Push_n
+          s32 vals[10];
+          for (u32 j = 0; j < 10; j++) vals[j] = i + j;
+          sp_dynamic_array_push_n(&arr, vals, 10);
+          break;
+      }
+      case 2: { // Reserve
+          if (arr.size < 100000) {
+          sp_dynamic_array_reserve(&arr, 5);
+          }
+          break;
+      }
+      case 3: { // Clear periodically
+          if (i % 1000 == 0 && i > 0) {
+          sp_dynamic_array_clear(&arr);
+          }
+          break;
+      }
+      }
     }
-    
-    for (int i = 0; i < sp_dyn_array_size(arr); i++) {
-        sp_free(arr[i]);
-    }
-    
-    sp_dyn_array_free(arr);
+
+    // Array should still be functional
+    s32 final_val = 9999;
+    sp_dynamic_array_push(&arr, &final_val);
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, arr.size - 1), 9999);
+  }
+
+  sp_test_memory_tracker_destroy(&tracker);
 }
 
 UTEST(dyn_array, large_stress_test) {
     sp_test_use_malloc();
-    
-    sp_dyn_array(u64) arr = NULL;
-    
-    const int count = 100000;
-    
-    for (int i = 0; i < count; i++) {
+
+    sp_dyn_array(u64) arr = SP_NULLPTR;
+
+    const s32 count = 100000;
+
+    for (s32 i = 0; i < count; i++) {
         sp_dyn_array_push(arr, (u64)i * 12345);
     }
-    
+
     ASSERT_EQ(sp_dyn_array_size(arr), count);
-    
-    for (int i = 0; i < count; i++) {
+
+    for (s32 i = 0; i < count; i++) {
         ASSERT_EQ(arr[i], (u64)i * 12345);
     }
-    
+
     sp_dyn_array_clear(arr);
     ASSERT_EQ(sp_dyn_array_size(arr), 0);
-    
-    for (int i = 0; i < 1000; i++) {
+
+    for (s32 i = 0; i < 1000; i++) {
         sp_dyn_array_push(arr, (u64)i);
     }
     ASSERT_EQ(sp_dyn_array_size(arr), 1000);
-    
+
     sp_dyn_array_free(arr);
-}
-
-UTEST(dyn_array, edge_cases) {
-    sp_test_use_malloc();
-    
-    sp_dyn_array(int) arr1 = NULL;
-    sp_dyn_array_free(arr1);
-    sp_dyn_array_free(arr1);
-    
-    sp_dyn_array(int) arr2 = NULL;
-    sp_dyn_array_pop(arr2);
-    ASSERT_EQ(sp_dyn_array_size(arr2), 0);
-    
-    sp_dyn_array_clear(arr2);
-    
-    sp_dyn_array_push(arr2, 42);
-    sp_dyn_array_free(arr2);
-    
-    sp_dyn_array(int) arr3 = NULL;
-    sp_dyn_array_reserve(arr3, 0);
-    ASSERT_GE(sp_dyn_array_capacity(arr3), 0);
-    sp_dyn_array_free(arr3);
-}
-
-////////////////////////////
-// HASH TABLE TESTS
-////////////////////////////
-
-UTEST(hash_table, basic_operations) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(int, float) ht = NULL;
-    
-    ASSERT_EQ(sp_hash_table_size(ht), 0);
-    ASSERT_TRUE(sp_hash_table_empty(ht));
-    ASSERT_FALSE(sp_hash_table_exists(ht, 42));
-    
-    sp_hash_table_insert(ht, 42, 3.14f);
-    ASSERT_EQ(sp_hash_table_size(ht), 1);
-    ASSERT_FALSE(sp_hash_table_empty(ht));
-    ASSERT_TRUE(sp_hash_table_exists(ht, 42));
-    ASSERT_EQ(sp_hash_table_get(ht, 42), 3.14f);
-    
-    sp_hash_table_insert(ht, 10, 1.5f);
-    sp_hash_table_insert(ht, 20, 2.5f);
-    sp_hash_table_insert(ht, 30, 3.5f);
-    ASSERT_EQ(sp_hash_table_size(ht), 4);
-    
-    ASSERT_EQ(sp_hash_table_get(ht, 10), 1.5f);
-    ASSERT_EQ(sp_hash_table_get(ht, 20), 2.5f);
-    ASSERT_EQ(sp_hash_table_get(ht, 30), 3.5f);
-    ASSERT_EQ(sp_hash_table_get(ht, 42), 3.14f);
-    
-    sp_hash_table_insert(ht, 42, 6.28f);
-    ASSERT_EQ(sp_hash_table_get(ht, 42), 6.28f);
-    ASSERT_EQ(sp_hash_table_size(ht), 5);
-    
-    sp_hash_table_erase(ht, 20);
-    ASSERT_FALSE(sp_hash_table_exists(ht, 20));
-    ASSERT_EQ(sp_hash_table_size(ht), 4);
-    
-    sp_hash_table_clear(ht);
-    ASSERT_EQ(sp_hash_table_size(ht), 0);
-    ASSERT_TRUE(sp_hash_table_empty(ht));
-    
-    sp_hash_table_free(ht);
-}
-
-UTEST(hash_table, pointer_retrieval) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(u32, double) ht = NULL;
-    
-    sp_hash_table_insert(ht, 100, 123.456);
-    sp_hash_table_insert(ht, 200, 789.012);
-    
-    double* ptr1 = sp_hash_table_getp(ht, 100);
-    ASSERT_NE(ptr1, NULL);
-    ASSERT_EQ(*ptr1, 123.456);
-    
-    *ptr1 = 999.999;
-    ASSERT_EQ(sp_hash_table_get(ht, 100), 999.999);
-    
-    double* ptr2 = sp_hash_table_getp(ht, 999);
-    ASSERT_EQ(ptr2, NULL);
-    
-    sp_hash_table_free(ht);
-}
-
-typedef struct {
-    float x, y, z;
-} vec3_t;
-
-UTEST(hash_table, struct_values) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(int, vec3_t) ht = NULL;
-    
-    vec3_t v1 = {1.0f, 2.0f, 3.0f};
-    vec3_t v2 = {4.0f, 5.0f, 6.0f};
-    vec3_t v3 = {7.0f, 8.0f, 9.0f};
-    
-    sp_hash_table_insert(ht, 1, v1);
-    sp_hash_table_insert(ht, 2, v2);
-    sp_hash_table_insert(ht, 3, v3);
-    
-    vec3_t retrieved = sp_hash_table_get(ht, 2);
-    ASSERT_EQ(retrieved.x, 4.0f);
-    ASSERT_EQ(retrieved.y, 5.0f);
-    ASSERT_EQ(retrieved.z, 6.0f);
-    
-    sp_hash_table_free(ht);
-}
-
-typedef struct {
-    int id;
-    int type;
-} compound_key_t;
-
-UTEST(hash_table, struct_keys) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(compound_key_t, const char*) ht = NULL;
-    
-    compound_key_t k1 = {100, 1};
-    compound_key_t k2 = {200, 2};
-    compound_key_t k3 = {300, 3};
-    
-    sp_hash_table_insert(ht, k1, "First");
-    sp_hash_table_insert(ht, k2, "Second");
-    sp_hash_table_insert(ht, k3, "Third");
-    
-    ASSERT_EQ(sp_hash_table_size(ht), 3);
-    
-    compound_key_t lookup = {200, 2};
-    ASSERT_TRUE(sp_hash_table_exists(ht, lookup));
-    const char* value = sp_hash_table_get(ht, lookup);
-    ASSERT_STREQ(value, "Second");
-    
-    compound_key_t missing = {200, 3};
-    ASSERT_FALSE(sp_hash_table_exists(ht, missing));
-    
-    sp_hash_table_free(ht);
-}
-
-UTEST(hash_table, string_keys) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(u64, int) ht = NULL;
-    
-    const char* s1 = "apple";
-    const char* s2 = "banana";
-    const char* s3 = "cherry";
-    
-    u64 k1 = sp_hash_cstr(s1);
-    u64 k2 = sp_hash_cstr(s2);
-    u64 k3 = sp_hash_cstr(s3);
-    
-    sp_hash_table_insert(ht, k1, 10);
-    sp_hash_table_insert(ht, k2, 20);
-    sp_hash_table_insert(ht, k3, 30);
-    
-    u64 lookup = sp_hash_cstr("banana");
-    ASSERT_TRUE(sp_hash_table_exists(ht, lookup));
-    ASSERT_EQ(sp_hash_table_get(ht, lookup), 20);
-    
-    lookup = sp_hash_cstr("dragonfruit");
-    ASSERT_FALSE(sp_hash_table_exists(ht, lookup));
-    
-    sp_hash_table_free(ht);
-}
-
-UTEST(hash_table, collision_handling) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(int, int) ht = NULL;
-    
-    for (int i = 0; i < 100; i++) {
-        sp_hash_table_insert(ht, i, i * 100);
-    }
-    
-    ASSERT_EQ(sp_hash_table_size(ht), 100);
-    
-    for (int i = 0; i < 100; i++) {
-        ASSERT_TRUE(sp_hash_table_exists(ht, i));
-        ASSERT_EQ(sp_hash_table_get(ht, i), i * 100);
-    }
-    
-    for (int i = 0; i < 100; i += 3) {
-        sp_hash_table_erase(ht, i);
-    }
-    
-    for (int i = 0; i < 100; i++) {
-        if (i % 3 == 0) {
-            ASSERT_FALSE(sp_hash_table_exists(ht, i));
-        } else {
-            ASSERT_TRUE(sp_hash_table_exists(ht, i));
-            ASSERT_EQ(sp_hash_table_get(ht, i), i * 100);
-        }
-    }
-    
-    sp_hash_table_free(ht);
-}
-
-UTEST(hash_table, iteration) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(int, float) ht = NULL;
-    
-    for (int i = 0; i < 10; i++) {
-        sp_hash_table_insert(ht, i * 10, (float)i * 0.5f);
-    }
-    
-    int count = 0;
-    float sum = 0.0f;
-    
-    for (sp_hash_table_iter it = 0; sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
-        int key = sp_hash_table_iter_getk(ht, it);
-        float val = sp_hash_table_iter_get(ht, it);
-        
-        ASSERT_EQ(val, (float)(key / 10) * 0.5f);
-        
-        count++;
-        sum += val;
-    }
-    
-    ASSERT_EQ(count, 10);
-    ASSERT_EQ(sum, 22.5f);
-    
-    sp_hash_table_free(ht);
 }
 
 UTEST(hash_table, large_stress_test) {
     sp_test_use_malloc();
-    
-    sp_hash_table(u64, u64) ht = NULL;
-    
-    const int count = 10000;
-    
+
+    sp_hash_table(u64, u64) ht = SP_NULLPTR;
+
+    const s32 count = 10000;
+
     for (u64 i = 0; i < count; i++) {
         sp_hash_table_insert(ht, i, i * i);
     }
-    
+
     ASSERT_EQ(sp_hash_table_size(ht), count);
-    
-    for (int i = 0; i < 100; i++) {
+
+    for (s32 i = 0; i < 100; i++) {
         u64 key = rand() % count;
         ASSERT_TRUE(sp_hash_table_exists(ht, key));
         ASSERT_EQ(sp_hash_table_get(ht, key), key * key);
     }
-    
+
     for (u64 i = 0; i < count; i += 2) {
         sp_hash_table_erase(ht, i);
     }
-    
+
     ASSERT_EQ(sp_hash_table_size(ht), count / 2);
-    
+
     for (u64 i = 1; i < count; i += 2) {
         ASSERT_TRUE(sp_hash_table_exists(ht, i));
         ASSERT_EQ(sp_hash_table_get(ht, i), i * i);
     }
-    
+
     sp_hash_table_free(ht);
-}
-
-UTEST(hash_table, edge_cases) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(int, int) ht1 = NULL;
-    ASSERT_EQ(sp_hash_table_size(ht1), 0);
-    ASSERT_TRUE(sp_hash_table_empty(ht1));
-    ASSERT_FALSE(sp_hash_table_exists(ht1, 42));
-    
-    sp_hash_table_clear(ht1);
-    sp_hash_table_free(ht1);
-    
-    sp_hash_table(int, int) ht2 = NULL;
-    sp_hash_table_insert(ht2, 1, 100);
-    sp_hash_table_erase(ht2, 1);
-    ASSERT_EQ(sp_hash_table_size(ht2), 0);
-    sp_hash_table_free(ht2);
-    
-    sp_hash_table(int, int) ht3 = NULL;
-    sp_hash_table_insert(ht3, 1, 100);
-    sp_hash_table_erase(ht3, 999);
-    ASSERT_EQ(sp_hash_table_size(ht3), 1);
-    sp_hash_table_free(ht3);
-}
-
-////////////////////////////
-// SIPHASH TESTS
-////////////////////////////
-
-UTEST(siphash, consistency) {
-    sp_test_use_malloc();
-    
-    const char* data = "Hello, World!";
-    u64 seed = 0x12345678;
-    
-    u64 hash1 = sp_hash_bytes((void*)data, strlen(data), seed);
-    u64 hash2 = sp_hash_bytes((void*)data, strlen(data), seed);
-    
-    ASSERT_EQ(hash1, hash2);
-    
-    u64 hash3 = sp_hash_bytes((void*)data, strlen(data), seed + 1);
-    ASSERT_NE(hash1, hash3);
-}
-
-UTEST(siphash, different_lengths) {
-    sp_test_use_malloc();
-    
-    u64 seed = 0xABCDEF;
-    
-    u8 data1[1] = {0x42};
-    u8 data2[7] = {1, 2, 3, 4, 5, 6, 7};
-    u8 data3[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-    u8 data4[15] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-    u8 data5[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-    u8 data6[17] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
-    
-    u64 h1 = sp_hash_bytes(data1, sizeof(data1), seed);
-    u64 h2 = sp_hash_bytes(data2, sizeof(data2), seed);
-    u64 h3 = sp_hash_bytes(data3, sizeof(data3), seed);
-    u64 h4 = sp_hash_bytes(data4, sizeof(data4), seed);
-    u64 h5 = sp_hash_bytes(data5, sizeof(data5), seed);
-    u64 h6 = sp_hash_bytes(data6, sizeof(data6), seed);
-    
-    ASSERT_NE(h1, h2);
-    ASSERT_NE(h2, h3);
-    ASSERT_NE(h3, h4);
-    ASSERT_NE(h4, h5);
-    ASSERT_NE(h5, h6);
-}
-
-UTEST(siphash, collision_resistance) {
-    sp_test_use_malloc();
-    
-    u64 seed = 0x31415926;
-    
-    const int count = 1000;
-    u64* hashes = sp_alloc(sizeof(u64) * count);
-    
-    for (int i = 0; i < count; i++) {
-        hashes[i] = sp_hash_bytes(&i, sizeof(i), seed);
-    }
-    
-    int collisions = 0;
-    for (int i = 0; i < count; i++) {
-        for (int j = i + 1; j < count; j++) {
-            if (hashes[i] == hashes[j]) {
-                collisions++;
-            }
-        }
-    }
-    
-    ASSERT_EQ(collisions, 0);
-    
-    sp_free(hashes);
-}
-
-////////////////////////////
-// COMBINED STRESS TEST
-////////////////////////////
-
-UTEST(combined, hash_table_with_dyn_array_values) {
-    sp_test_use_malloc();
-    
-    typedef int* int_array;
-    sp_hash_table(int, int_array) ht = NULL;
-    
-    for (int i = 0; i < 5; i++) {
-        sp_dyn_array(int) arr = NULL;
-        
-        for (int j = 0; j < 10; j++) {
-            sp_dyn_array_push(arr, i * 100 + j);
-        }
-        
-        sp_hash_table_insert(ht, i, arr);
-    }
-    
-    for (int i = 0; i < 5; i++) {
-        ASSERT_TRUE(sp_hash_table_exists(ht, i));
-        
-        int_array arr = sp_hash_table_get(ht, i);
-        ASSERT_EQ(sp_dyn_array_size(arr), 10);
-        
-        for (int j = 0; j < 10; j++) {
-            ASSERT_EQ(arr[j], i * 100 + j);
-        }
-    }
-    
-    for (int i = 0; i < 5; i++) {
-        int_array arr = sp_hash_table_get(ht, i);
-        sp_dyn_array_free(arr);
-    }
-    
-    sp_hash_table_free(ht);
-}
-
-UTEST(combined, multiple_arrays_in_hash_table) {
-    sp_test_use_malloc();
-    
-    sp_hash_table(int, void*) ht = NULL;
-    
-    for (int key = 0; key < 5; key++) {
-        sp_dyn_array(int) arr = NULL;
-        
-        for (int j = 0; j < 20; j++) {
-            sp_dyn_array_push(arr, key * 1000 + j);
-        }
-        
-        sp_hash_table_insert(ht, key, (void*)arr);
-    }
-    
-    for (int key = 0; key < 5; key++) {
-        ASSERT_TRUE(sp_hash_table_exists(ht, key));
-        
-        int* arr = (int*)sp_hash_table_get(ht, key);
-        ASSERT_EQ(sp_dyn_array_size(arr), 20);
-        
-        for (int j = 0; j < 20; j++) {
-            ASSERT_EQ(arr[j], key * 1000 + j);
-        }
-    }
-    
-    for (int key = 0; key < 5; key++) {
-        int* arr = (int*)sp_hash_table_get(ht, key);
-        sp_dyn_array_free(arr);
-    }
-    
-    sp_hash_table_free(ht);
-}
-
-////////////////////////////
-// RING BUFFER TESTS
-////////////////////////////
-
-UTEST(ring_buffer, basic_operations) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 10, sizeof(int));
-    
-    ASSERT_EQ(rb.size, 0);
-    ASSERT_EQ(rb.capacity, 10);
-    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
-    ASSERT_FALSE(sp_ring_buffer_is_full(&rb));
-    
-    int val = 42;
-    sp_ring_buffer_push(&rb, &val);
-    ASSERT_EQ(rb.size, 1);
-    ASSERT_FALSE(sp_ring_buffer_is_empty(&rb));
-    
-    int* back = (int*)sp_ring_buffer_back(&rb);
-    ASSERT_EQ(*back, 42);
-    
-    for (int i = 1; i < 10; i++) {
-        sp_ring_buffer_push(&rb, &i);
-    }
-    
-    ASSERT_EQ(rb.size, 10);
-    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
-    
-    int* popped = (int*)sp_ring_buffer_pop(&rb);
-    ASSERT_EQ(*popped, 42);
-    ASSERT_EQ(rb.size, 9);
-    
-    sp_ring_buffer_clear(&rb);
-    ASSERT_EQ(rb.size, 0);
-    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
-    
-    sp_ring_buffer_destroy(&rb);
-    ASSERT_EQ(rb.data, NULL);
-}
-
-UTEST(ring_buffer, push_literal_macro) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 5, sizeof(u32));
-    
-    sp_ring_buffer_push_literal(&rb, u32, 69);
-    sp_ring_buffer_push_literal(&rb, u32, 420);
-    sp_ring_buffer_push_literal(&rb, u32, 1337);
-    
-    ASSERT_EQ(rb.size, 3);
-    
-    u32* val1 = (u32*)sp_ring_buffer_at(&rb, 0);
-    u32* val2 = (u32*)sp_ring_buffer_at(&rb, 1);
-    u32* val3 = (u32*)sp_ring_buffer_at(&rb, 2);
-    
-    ASSERT_EQ(*val1, 69);
-    ASSERT_EQ(*val2, 420);
-    ASSERT_EQ(*val3, 1337);
-    
-    sp_ring_buffer_destroy(&rb);
-}
-
-UTEST(ring_buffer, circular_behavior) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 3, sizeof(int));
-    
-    for (int i = 0; i < 3; i++) {
-        sp_ring_buffer_push(&rb, &i);
-    }
-    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
-    
-    int* popped = (int*)sp_ring_buffer_pop(&rb);
-    ASSERT_EQ(*popped, 0);
-    
-    int val = 3;
-    sp_ring_buffer_push(&rb, &val);
-    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
-    
-    popped = (int*)sp_ring_buffer_pop(&rb);
-    ASSERT_EQ(*popped, 1);
-    popped = (int*)sp_ring_buffer_pop(&rb);
-    ASSERT_EQ(*popped, 2);
-    popped = (int*)sp_ring_buffer_pop(&rb);
-    ASSERT_EQ(*popped, 3);
-    
-    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
-    
-    sp_ring_buffer_destroy(&rb);
-}
-
-UTEST(ring_buffer, overwrite_behavior) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 3, sizeof(int));
-    
-    for (int i = 0; i < 5; i++) {
-        sp_ring_buffer_push_overwrite(&rb, &i);
-    }
-    
-    ASSERT_EQ(rb.size, 3);
-    
-    int* val0 = (int*)sp_ring_buffer_pop(&rb);
-    int* val1 = (int*)sp_ring_buffer_pop(&rb);
-    int* val2 = (int*)sp_ring_buffer_pop(&rb);
-    
-    ASSERT_EQ(*val0, 2);
-    ASSERT_EQ(*val1, 3);
-    ASSERT_EQ(*val2, 4);
-    
-    sp_ring_buffer_destroy(&rb);
-}
-
-UTEST(ring_buffer, push_zero) {
-    sp_test_use_malloc();
-    
-    typedef struct {
-        int x, y, z;
-    } point_t;
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 5, sizeof(point_t));
-    
-    point_t* p = (point_t*)sp_ring_buffer_push_zero(&rb);
-    ASSERT_EQ(p->x, 0);
-    ASSERT_EQ(p->y, 0);
-    ASSERT_EQ(p->z, 0);
-    
-    point_t val = {1, 2, 3};
-    sp_ring_buffer_push(&rb, &val);
-    
-    p = (point_t*)sp_ring_buffer_push_overwrite_zero(&rb);
-    ASSERT_EQ(p->x, 0);
-    ASSERT_EQ(p->y, 0);
-    ASSERT_EQ(p->z, 0);
-    
-    ASSERT_EQ(rb.size, 3);
-    
-    sp_ring_buffer_destroy(&rb);
-}
-
-UTEST(ring_buffer, iteration_forward) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 10, sizeof(int));
-    
-    for (int i = 0; i < 5; i++) {
-        sp_ring_buffer_push(&rb, &i);
-    }
-    
-    int expected = 0;
-    sp_ring_buffer_for(rb, it) {
-        int* val = sp_rb_it(it, int);
-        ASSERT_EQ(*val, expected);
-        expected++;
-    }
-    ASSERT_EQ(expected, 5);
-    
-    sp_ring_buffer_destroy(&rb);
-}
-
-UTEST(ring_buffer, iteration_reverse) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 10, sizeof(int));
-    
-    for (int i = 0; i < 5; i++) {
-        sp_ring_buffer_push(&rb, &i);
-    }
-    
-    int expected = 4;
-    sp_ring_buffer_rfor(rb, it) {
-        int* val = sp_rb_it(it, int);
-        ASSERT_EQ(*val, expected);
-        expected--;
-    }
-    ASSERT_EQ(expected, -1);
-    
-    sp_ring_buffer_destroy(&rb);
-}
-
-UTEST(ring_buffer, iteration_after_wrap) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 3, sizeof(int));
-    
-    for (int i = 0; i < 3; i++) {
-        sp_ring_buffer_push(&rb, &i);
-    }
-    
-    sp_ring_buffer_pop(&rb);
-    sp_ring_buffer_pop(&rb);
-    
-    int val3 = 3, val4 = 4;
-    sp_ring_buffer_push(&rb, &val3);
-    sp_ring_buffer_push(&rb, &val4);
-    
-    int values[3];
-    int idx = 0;
-    sp_ring_buffer_for(rb, it) {
-        int* val = sp_rb_it(it, int);
-        values[idx++] = *val;
-    }
-    
-    ASSERT_EQ(values[0], 2);
-    ASSERT_EQ(values[1], 3);
-    ASSERT_EQ(values[2], 4);
-    
-    sp_ring_buffer_destroy(&rb);
-}
-
-UTEST(ring_buffer, struct_type) {
-    sp_test_use_malloc();
-    
-    typedef struct {
-        float x, y;
-        int id;
-    } entity_t;
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 5, sizeof(entity_t));
-    
-    for (int i = 0; i < 5; i++) {
-        entity_t e = {(float)i * 1.5f, (float)i * 2.5f, i};
-        sp_ring_buffer_push(&rb, &e);
-    }
-    
-    entity_t* e = (entity_t*)sp_ring_buffer_at(&rb, 2);
-    ASSERT_EQ(e->x, 3.0f);
-    ASSERT_EQ(e->y, 5.0f);
-    ASSERT_EQ(e->id, 2);
-    
-    sp_ring_buffer_destroy(&rb);
 }
 
 UTEST(ring_buffer, large_buffer_stress) {
     sp_test_use_malloc();
-    
+
     sp_ring_buffer_t rb;
     sp_ring_buffer_init(&rb, 1000, sizeof(u64));
-    
+
     for (u64 i = 0; i < 1000; i++) {
         sp_ring_buffer_push(&rb, &i);
     }
-    
+
     ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
-    
+
     for (u64 i = 0; i < 500; i++) {
         u64* val = (u64*)sp_ring_buffer_pop(&rb);
         ASSERT_EQ(*val, i);
     }
-    
+
     for (u64 i = 1000; i < 1500; i++) {
         sp_ring_buffer_push(&rb, &i);
     }
-    
+
     ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
-    
+
     u64 expected = 500;
     sp_ring_buffer_for(rb, it) {
         u64* val = sp_rb_it(it, u64);
         ASSERT_EQ(*val, expected);
         expected++;
     }
-    
+
     sp_ring_buffer_destroy(&rb);
 }
 
 UTEST(ring_buffer, continuous_overwrite_stress) {
     sp_test_use_malloc();
-    
+
     sp_ring_buffer_t rb;
     sp_ring_buffer_init(&rb, 100, sizeof(int));
-    
-    for (int i = 0; i < 10000; i++) {
+
+    for (s32 i = 0; i < 10000; i++) {
         sp_ring_buffer_push_overwrite(&rb, &i);
     }
-    
+
     ASSERT_EQ(rb.size, 100);
-    
-    for (int i = 0; i < 100; i++) {
+
+    for (s32 i = 0; i < 100; i++) {
         int* val = (int*)sp_ring_buffer_pop(&rb);
         ASSERT_EQ(*val, 9900 + i);
     }
-    
+
     ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
-    
-    sp_ring_buffer_destroy(&rb);
-}
 
-UTEST(ring_buffer, edge_cases) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb1;
-    sp_ring_buffer_init(&rb1, 1, sizeof(int));
-    
-    int val = 42;
-    sp_ring_buffer_push(&rb1, &val);
-    ASSERT_TRUE(sp_ring_buffer_is_full(&rb1));
-    
-    int* popped = (int*)sp_ring_buffer_pop(&rb1);
-    ASSERT_EQ(*popped, 42);
-    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb1));
-    
-    sp_ring_buffer_destroy(&rb1);
-    
-    sp_ring_buffer_t rb2;
-    sp_ring_buffer_init(&rb2, 2, sizeof(float));
-    
-    float f1 = 1.5f, f2 = 2.5f, f3 = 3.5f;
-    sp_ring_buffer_push(&rb2, &f1);
-    sp_ring_buffer_push(&rb2, &f2);
-    sp_ring_buffer_push_overwrite(&rb2, &f3);
-    
-    float* fp1 = (float*)sp_ring_buffer_pop(&rb2);
-    float* fp2 = (float*)sp_ring_buffer_pop(&rb2);
-    
-    ASSERT_EQ(*fp1, 2.5f);
-    ASSERT_EQ(*fp2, 3.5f);
-    
-    sp_ring_buffer_destroy(&rb2);
-}
-
-UTEST(ring_buffer, bytes_calculation) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 10, sizeof(double));
-    
-    ASSERT_EQ(sp_ring_buffer_bytes(&rb), 10 * sizeof(double));
-    
-    sp_ring_buffer_destroy(&rb);
-    
-    sp_ring_buffer_init(&rb, 100, sizeof(char));
-    ASSERT_EQ(sp_ring_buffer_bytes(&rb), 100);
-    
     sp_ring_buffer_destroy(&rb);
 }
-
-UTEST(ring_buffer, iterator_manual) {
-    sp_test_use_malloc();
-    
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 5, sizeof(int));
-    
-    for (int i = 10; i < 15; i++) {
-        sp_ring_buffer_push(&rb, &i);
-    }
-    
-    sp_ring_buffer_iterator_t it = sp_ring_buffer_iter(&rb);
-    ASSERT_FALSE(sp_ring_buffer_iter_done(&it));
-    
-    int* val = (int*)sp_ring_buffer_iter_deref(&it);
-    ASSERT_EQ(*val, 10);
-    
-    sp_ring_buffer_iter_next(&it);
-    val = (int*)sp_ring_buffer_iter_deref(&it);
-    ASSERT_EQ(*val, 11);
-    
-    sp_ring_buffer_iterator_t rit = sp_ring_buffer_riter(&rb);
-    val = (int*)sp_ring_buffer_iter_deref(&rit);
-    ASSERT_EQ(*val, 14);
-    
-    sp_ring_buffer_iter_prev(&rit);
-    val = (int*)sp_ring_buffer_iter_deref(&rit);
-    ASSERT_EQ(*val, 13);
-    
-    sp_ring_buffer_destroy(&rb);
-}
+#endif
 
 UTEST_MAIN()

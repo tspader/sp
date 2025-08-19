@@ -13,44 +13,63 @@ else
   EXE_NAME := test
 endif
 
+
 ##################
 # COMPILER FLAGS #
 ##################
+WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
 CC := gcc
-CFLAGS := -std=c11 $(FLAGS) \
-  -Wall -Wextra -Wno-sign-compare -Wno-unused-parameter \
-  -Wno-unused-variable -Wno-unused-function \
-  -I.
-LDFLAGS := -lpthread -lm
+CFLAGS := -std=c11 $(FLAGS) $(WARNINGS) -I.
+
+CPP := g++
+CPPFLAGS := -std=c++20 $(FLAGS) $(WARNINGS) -I.
+
+LOADER_FLAGS := -lpthread -lm
+
+RUN_FLAGS := --enable-mixed-units --random-order
 
 #########
 # PATHS #
 #########
 BUILD_DIR := build
+C_TARGET := $(BUILD_DIR)/$(EXE_NAME)-c11
+CPP_TARGET := $(BUILD_DIR)/$(EXE_NAME)-cpp20
+STRESS_TARGET := $(BUILD_DIR)/$(EXE_NAME)-c11-stress
 
 SOURCES := test.c
 HEADERS := sp.h
-TARGET := $(BUILD_DIR)/$(EXE_NAME)
 
 ###########
 # TARGETS #
 ###########
 .PHONY: all
-all: $(TARGET)
+all: $(C_TARGET) $(CPP_TARGET) $(STRESS_TARGET)
 
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
-$(TARGET): $(SOURCES) $(HEADERS) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(SOURCES) $(LDFLAGS) -o $(TARGET)
+$(CPP_TARGET): $(SOURCES) $(HEADERS) | $(BUILD_DIR)
+	$(CPP) $(CPPFLAGS) $(SOURCES) $(LOADER_FLAGS) -o $(CPP_TARGET)
 
-.PHONY: test clean 
+$(C_TARGET): $(SOURCES) $(HEADERS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(SOURCES) $(LOADER_FLAGS) -o $(C_TARGET)
 
-test: $(TARGET)
-	./$(TARGET)
+$(STRESS_TARGET): $(SOURCES) $(HEADERS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -DSP_TEST_ENABLE_STRESS_TESTS $(SOURCES) $(LOADER_FLAGS) -o $(STRESS_TARGET)
 
-debug: $(TARGET)
-	gdb ./$(TARGET)
+.PHONY: c cpp run debug clean
+
+c: $(C_TARGET)
+cpp: $(CPP_TARGET)
+stress: $(STRESS_TARGET)
+
+run: c cpp stress
+	./$(C_TARGET) $(RUN_FLAGS)
+	./$(CPP_TARGET) $(RUN_FLAGS)
+	./$(STRESS_TARGET) $(RUN_FLAGS)
+
+debug: c
+	gdb ./$(C_TARGET)
 
 clean:
 	@rm -rf $(BUILD_DIR)
