@@ -1,9 +1,22 @@
+//  ad88888ba   88888888ba      db         ,ad8888ba,   88888888888  88
+// d8"     "8b  88      "8b    d88b       d8"'    `"8b  88           88
+// Y8,          88      ,8P   d8'`8b     d8'            88           88
+// `Y8aaaaa,    88aaaaaa8P'  d8'  `8b    88             88aaaaa      88
+//   `"""""8b,  88""""""'   d8YaaaaY8b   88             88"""""      88
+//         `8b  88         d8""""""""8b  Y8,            88           ""
+// Y8a     a8P  88        d8'        `8b  Y8a.    .a8P  88           aa
+//  "Y88888P"   88       d8'          `8b  `"Y8888Y"'   88888888888  88
+
+
 #ifndef SP_SPACE_H
 #define SP_SPACE_H
 
-////////////////////////////
-// PLATFORM CONFIGURATION //
-////////////////////////////
+//  ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗ ██╗   ██╗██████╗  █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
+// ██╔════╝██╔═══██╗████╗  ██║██╔════╝██║██╔════╝ ██║   ██║██╔══██╗██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║
+// ██║     ██║   ██║██╔██╗ ██║█████╗  ██║██║  ███╗██║   ██║██████╔╝███████║   ██║   ██║██║   ██║██╔██╗ ██║
+// ██║     ██║   ██║██║╚██╗██║██╔══╝  ██║██║   ██║██║   ██║██╔══██╗██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
+// ╚██████╗╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝╚██████╔╝██║  ██║██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
+//  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 #ifdef _WIN32
   #define SP_WIN32
 #endif
@@ -25,159 +38,134 @@
 /////////////////
 // OS INCLUDES //
 /////////////////
-#ifdef SP_WIN32
-  #undef UNICODE
-  #define WIN32_LEAN_AND_MEAN
-  #define NOMINMAX
-  #define _CRT_RAND_S
-  #define _AMD64_
-
-  #define SP_IMPORT declspec(__dllimport)
-  #define SP_EXPORT declspec(__dllexport)
-
-  #ifdef SP_WIN32_NO_WINDOWS_H
-    #include "windef.h"
-    #include "winbase.h"
-    #include "wingdi.h"
-    #include "winuser.h"
-    #include "synchapi.h"
-    #include "fileapi.h"
-    #include "handleapi.h"
-    #include "shellapi.h"
-    #include "stringapiset.h"
-  #else
-    #include "windows.h"
-    #include "shlobj.h"
-    #include "commdlg.h"
-    #include "shellapi.h"
-  #endif
-
-  #include "threads.h"
+#if !defined(SP_OS_BACKEND_SDL) && !defined(SP_OS_BACKEND_NATIVE)
+  #define SP_OS_BACKEND_NATIVE
 #endif
 
-#ifdef SP_POSIX
-  #define SP_IMPORT
-  #define SP_EXPORT __attribute__((visibility("default")))
-
-  #ifndef _POSIX_C_SOURCE
-    #define _POSIX_C_SOURCE 200809L
-  #endif
-
-  #ifndef _GNU_SOURCE
-    #define _GNU_SOURCE
-  #endif
-
-  #include <errno.h>
-  #include <dirent.h>
-  #include <fcntl.h>
-  #include <limits.h>
-  #include <pthread.h>
-  #include <semaphore.h>
-  #include <time.h>
-  #include <unistd.h>
-  #include <stdlib.h>
-  #include <sys/stat.h>
-  #include <sys/types.h>
-  #include <sys/time.h>
+#ifdef SP_OS_BACKEND_SDL
 #endif
 
-#ifdef SP_MACOS
-  #include "pthread.h"
+#ifdef SP_OS_BACKEND_NATIVE
+  // WIN32
+  #ifdef SP_WIN32
+    #undef UNICODE
+    #define WIN32_LEAN_AND_MEAN
+    #define NOMINMAX
+    #define _CRT_RAND_S
+    #define _AMD64_
+
+    #ifdef SP_WIN32_NO_WINDOWS_H
+      #include "windef.h"
+      #include "winbase.h"
+      #include "wingdi.h"
+      #include "winuser.h"
+      #include "synchapi.h"
+      #include "fileapi.h"
+      #include "handleapi.h"
+      #include "shellapi.h"
+      #include "stringapiset.h"
+    #else
+      #include "windows.h"
+      #include "shlobj.h"
+      #include "commdlg.h"
+      #include "shellapi.h"
+    #endif
+
+    #include "threads.h"
+  #endif
+
+  // POSIX
+  #ifdef SP_POSIX
+    #ifndef _POSIX_C_SOURCE
+      #define _POSIX_C_SOURCE 200809L
+    #endif
+
+    #ifndef _GNU_SOURCE
+      #define _GNU_SOURCE
+    #endif
+
+    #include <errno.h>
+    #include <dirent.h>
+    #include <fcntl.h>
+    #include <limits.h>
+    #include <pthread.h>
+    #include <semaphore.h>
+    #include <time.h>
+    #include <unistd.h>
+    #include <stdlib.h>
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <sys/time.h>
+  #endif
+
+  // MACOS
+  #ifdef SP_MACOS
+    #include "pthread.h"
+  #endif
+
+  // LINUX
+  #ifdef SP_LINUX
+    #include "pthread.h"
+  #endif
+
+  #include "string.h"
 #endif
 
+/////////////////
+// OS SPECIFIC //
+/////////////////
 #ifdef SP_LINUX
   #include <sys/inotify.h>
   #include <poll.h>
 #endif
 
-
-
-/////////////////////////////////
-// C STANDARD LIBRARY INCLUDES //
-/////////////////////////////////
-#ifdef SP_NO_STDLIB
-  typedef signed char        int8_t;
-  typedef short              int16_t;
-  typedef int                int32_t;
-  typedef long long          int64_t;
-  typedef unsigned char      uint8_t;
-  typedef unsigned short     uint16_t;
-  typedef unsigned int       uint32_t;
-  typedef unsigned long long uint64_t;
-  typedef unsigned long      uintptr_t;
-
-  #ifndef SP_CPP
-    #define bool  _Bool
-    #define false 0
-    #define true  1
-  #endif
-
-  #include "assert.h"
-#else
-  #include "assert.h"
-  #include "stdarg.h"
-  #include "stdbool.h"
-  #include "stddef.h"
-  #include "stdint.h"
-  #include "stdio.h"
-  #include "stdlib.h"
-  #include "string.h"
-  #include "wchar.h"
+#ifdef SP_CPP
+  #include <atomic>
 #endif
 
+#include "assert.h"
+#include "stdarg.h"
+#include "stdbool.h"
 
-///////////
-// TYPES //
-///////////
-typedef int8_t   s8;
-typedef int16_t  s16;
-typedef int32_t  s32;
-typedef int64_t  s64;
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef float    f32;
-typedef double   f64;
-typedef char     c8;
-typedef wchar_t  c16;
 
-typedef struct {
-  u64 s;
-  u64 ns;
-} sp_precise_epoch_time_t;
 
-typedef sp_precise_epoch_time_t sp_time_t;
-
-typedef u64 sp_precise_time_t;
-
-typedef void* sp_opaque_ptr;
-
-////////////
-// MACROS //
-////////////
-#define SP_API
-#define SP_IMP
-
+// ███╗   ███╗ █████╗  ██████╗██████╗  ██████╗ ███████╗
+// ████╗ ████║██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔════╝
+// ██╔████╔██║███████║██║     ██████╔╝██║   ██║███████╗
+// ██║╚██╔╝██║██╔══██║██║     ██╔══██╗██║   ██║╚════██║
+// ██║ ╚═╝ ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║
+// ╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 #ifdef SP_CPP
   #define SP_LVAL(T)
   #define SP_THREAD_LOCAL thread_local
   #define SP_BEGIN_EXTERN_C() extern "C" {
   #define SP_END_EXTERN_C() }
-  #define SP_FALLTHROUGH() [[fallthrough]]
   #define SP_ZERO_INITIALIZE() {}
   #define SP_NULL 0
   #define SP_NULLPTR nullptr
+  #define SP_ATOMIC(T) ::std::atomic<T>
 #else
   #define SP_LVAL(T) (T)
   #define SP_THREAD_LOCAL _Thread_local
   #define SP_BEGIN_EXTERN_C()
   #define SP_END_EXTERN_C()
-  #define SP_FALLTHROUGH() ((void)0)
   #define SP_ZERO_INITIALIZE() {0}
   #define SP_NULL 0
   #define SP_NULLPTR ((void*)0)
+  #define SP_ATOMIC(T) _Atomic T
 #endif
+
+#ifdef SP_WIN32
+  #define SP_IMPORT declspec(__dllimport)
+  #define SP_EXPORT declspec(__dllexport)
+#endif
+
+#ifdef SP_POSIX
+  #define SP_IMPORT
+  #define SP_EXPORT __attribute__((visibility("default")))
+#endif
+
+#define SP_FALLTHROUGH() ((void)0)
 
 #define SP_ZERO_STRUCT(t) SP_LVAL(t) SP_ZERO_INITIALIZE()
 #define SP_ZERO_RETURN(t) { t __SP_ZERO_RETURN = SP_ZERO_STRUCT(t); return __dn_zero_return; }
@@ -226,8 +214,40 @@ typedef void* sp_opaque_ptr;
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
 
+#define SP_API
+#define SP_IMP
+
 
 SP_BEGIN_EXTERN_C()
+
+// ████████╗██╗   ██╗██████╗ ███████╗███████╗
+// ╚══██╔══╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔════╝
+//    ██║    ╚████╔╝ ██████╔╝█████╗  ███████╗
+//    ██║     ╚██╔╝  ██╔═══╝ ██╔══╝  ╚════██║
+//    ██║      ██║   ██║     ███████╗███████║
+//    ╚═╝      ╚═╝   ╚═╝     ╚══════╝╚══════╝
+typedef int8_t   s8;
+typedef int16_t  s16;
+typedef int32_t  s32;
+typedef int64_t  s64;
+typedef uint8_t  u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef float    f32;
+typedef double   f64;
+typedef char     c8;
+typedef wchar_t  c16;
+
+typedef struct {
+  u64 s;
+  u64 ns;
+} sp_precise_epoch_time_t;
+typedef sp_precise_epoch_time_t sp_time_t;
+typedef u64 sp_precise_time_t;
+
+typedef void* sp_opaque_ptr;
+
 
 //  ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
 //  ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
@@ -272,7 +292,7 @@ typedef struct {
 } sp_context_t;
 
 #define SP_MAX_CONTEXT 16
-SP_THREAD_LOCAL sp_context_t sp_context_stack [SP_MAX_CONTEXT] = SP_ZERO_INITIALIZE();
+SP_THREAD_LOCAL sp_context_t  sp_context_stack [SP_MAX_CONTEXT] = SP_ZERO_INITIALIZE();
 SP_THREAD_LOCAL sp_context_t* sp_context = SP_ZERO_INITIALIZE();
 
 void                  sp_context_set(sp_context_t context);
@@ -338,7 +358,7 @@ typedef struct {
   sp_str_builder_buffer_t buffer;
 } sp_str_builder_t;
 
-#define sp_str_cstr(STR)   sp_str((STR), strlen(STR))
+#define sp_str_cstr(STR)   sp_str((STR), sp_cstr_len(STR))
 #define sp_str_lit(STR)    sp_str((STR), sizeof(STR) - 1)
 #define sp_str(STR, LEN) SP_LVAL(sp_str_t) { .len = (u32)(LEN), .data = (c8*)(STR) }
 
@@ -451,6 +471,7 @@ void sp_dyn_array_push_data(void** arr, void* val, u32 val_len);
 #define sp_dyn_array_pop(__ARR)
 #define sp_dyn_array_back(__ARR)
 #define sp_dyn_array_new(__T)
+#define sp_dyn_array_for(__IT, __ARR) for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
 
 ////////////////
 // HASH TABLE //
@@ -726,9 +747,10 @@ typedef enum {
   SP_MUTEX_RECURSIVE = 4
 } sp_mutex_kind_t;
 
-// typedef FILE*              sp_os_file_t;
-
 #ifdef SP_WIN32
+  typedef thrd_t              sp_thread_t;
+  typedef mtx_t               sp_mutex_t;
+  typedef HANDLE              sp_semaphore_t;
   typedef HANDLE              sp_win32_handle_t;
   typedef DWORD               sp_win32_dword_t;
   typedef WIN32_FIND_DATA     sp_win32_find_data_t;
@@ -737,9 +759,6 @@ typedef enum {
   typedef PROCESS_INFORMATION sp_win32_process_information_t;
   typedef STARTUPINFO         sp_win32_startup_info_t;
   typedef SECURITY_ATTRIBUTES sp_win32_security_attributes_t;
-  typedef thrd_t              sp_thread_t;
-  typedef mtx_t               sp_mutex_t;
-  typedef HANDLE              sp_semaphore_t;
 
   typedef struct {
   	sp_str_t path;
@@ -755,34 +774,48 @@ typedef enum {
 
   SP_IMP void sp_os_win32_file_monitor_add_change(sp_file_monitor_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_file_change_event_t events);
   SP_IMP void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info);
-#else
-  #ifdef SP_POSIX
-    typedef pthread_t           sp_thread_t;
-    typedef pthread_mutex_t     sp_mutex_t;
-    typedef sem_t               sp_semaphore_t;
-  #else
-    typedef void*               sp_thread_t;
-    typedef void*               sp_mutex_t;
-    typedef void*               sp_semaphore_t;
-  #endif
+#endif
 
-  #ifdef SP_LINUX
-    typedef struct {
-      s32 fd;                          // inotify file descriptor
-      sp_dynamic_array_t watch_descs;  // array of s32 watch descriptors
-      sp_dynamic_array_t watch_paths;  // array of sp_str_t paths
-      u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
-    } sp_os_linux_file_monitor_t;
+#ifdef SP_POSIX
+  typedef pthread_t sp_thread_t;
+  typedef pthread_mutex_t sp_mutex_t;
+  typedef sem_t sp_semaphore_t;
+#endif
 
-    typedef sp_os_linux_file_monitor_t sp_os_file_monitor_t;
-  #else
-    typedef struct {
-      void* placeholder;
-    } sp_os_file_monitor_t;
-  #endif
+#ifdef SP_LINUX
+  typedef struct {
+    s32 fd;
+    sp_dynamic_array_t watch_descs;
+    sp_dynamic_array_t watch_paths;
+    u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+  } sp_os_linux_file_monitor_t;
+
+  typedef sp_os_linux_file_monitor_t sp_os_file_monitor_t;
+#endif
+
+#ifdef SP_MACOS
+  typedef struct {
+    void* placeholder;
+  } sp_os_file_monitor_t;
 #endif
 
 SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
+
+typedef struct {
+  sp_thread_fn_t fn;
+  void* userdata;
+  sp_context_t context;
+  sp_semaphore_t semaphore;
+} sp_thread_launch_t;
+
+typedef SP_ATOMIC(bool) sp_atomic_bool_t;
+
+typedef struct {
+  sp_allocator_t* allocator;
+  sp_atomic_bool_t ready;
+  void* value;
+  u32 size;
+} sp_future_t;
 
 typedef struct {
   s32 year;
@@ -804,13 +837,6 @@ typedef struct {
   sp_os_directory_entry_t* data;
   u32 count;
 } sp_os_directory_entry_list_t;
-
-typedef struct {
-  sp_thread_fn_t fn;
-  void* userdata;
-  sp_context_t context;
-  sp_semaphore_t semaphore;
-} sp_thread_launch_t;
 
 SP_API void*                        sp_os_allocate_memory(u32 size);
 SP_API void*                        sp_os_reallocate_memory(void* ptr, u32 size);
@@ -857,21 +883,35 @@ SP_API void                         sp_semaphore_destroy(sp_semaphore_t* semapho
 SP_API void                         sp_semaphore_wait(sp_semaphore_t* semaphore);
 SP_API bool                         sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
 SP_API void                         sp_semaphore_signal(sp_semaphore_t* semaphore);
+SP_API sp_future_t*                 sp_future_create(u32 size);
+SP_API void                         sp_future_set_value(sp_future_t* future, void* data);
+SP_API void                         sp_future_destroy(sp_future_t* future);
 
 
+typedef enum {
+  SP_ASSET_STATE_QUEUED,
+  SP_ASSET_STATE_IMPORTED,
+  SP_ASSET_STATE_COMPLETED,
+} sp_asset_state_t;
 
-// assets
+typedef enum {
+  SP_ASSET_KIND_NONE,
+} sp_builtin_asset_kind_t;
+
 typedef u32 sp_asset_kind_t;
 
-SP_TYPEDEF_FN(void, sp_asset_import_fn_t, void* user_data);
-SP_TYPEDEF_FN(void, sp_asset_completion_fn_t, void* user_data);
-
 typedef struct sp_asset_registry sp_asset_registry_t;
+typedef struct sp_asset_import_context sp_asset_import_context_t;
+
+SP_TYPEDEF_FN(void, sp_asset_import_fn_t, sp_asset_import_context_t* context);
+SP_TYPEDEF_FN(void, sp_asset_completion_fn_t, sp_asset_import_context_t* context);
+
 
 typedef struct {
   sp_asset_kind_t kind;
+  sp_asset_state_t state;
   sp_str_t name;
-  u8* buffer;
+  void* data;
 } sp_asset_t;
 
 typedef struct {
@@ -887,35 +927,39 @@ typedef struct {
   sp_asset_registry_t* registry;
 } sp_asset_importer_t;
 
-typedef struct {
+typedef struct sp_asset_import_context {
+  sp_asset_registry_t* registry;
   sp_asset_importer_t* importer;
+  sp_asset_t* asset;
+  sp_future_t* future;
   void* user_data;
 } sp_asset_import_context_t;
 
-
+#define SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS 32
 typedef struct {
-  struct {
-    sp_asset_importer_config_t* data;
-    u32 count;
-  } importers;
+  sp_asset_importer_config_t importers [SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS];
 } sp_asset_registry_config_t;
 
 typedef struct sp_asset_registry {
   sp_mutex_t mutex;
+  sp_mutex_t import_mutex;
+  sp_mutex_t completion_mutex;
   sp_semaphore_t semaphore;
   sp_thread_t thread;
 
+  sp_dyn_array(sp_asset_t) assets;
   sp_dyn_array(sp_asset_importer_t) importers;
   sp_ring_buffer(sp_asset_import_context_t) import_queue;
   sp_ring_buffer(sp_asset_import_context_t) completion_queue;
 } sp_asset_registry_t;
 
-void       sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config);
-void       sp_asset_registry_complete(sp_asset_registry_t* registry);
-void       sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, void* user_data);
-void       sp_asset_registry_add(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, u8* blob);
-sp_asset_t sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name);
-s32        sp_asset_registry_thread_fn(void* user_data);
+void                  sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config);
+sp_future_t*          sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, void* user_data);
+sp_asset_t            sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name);
+void                  sp_asset_registry_process_completions(sp_asset_registry_t* registry);
+sp_asset_t*           sp_asset_registry_reserve(sp_asset_registry_t* registry);
+sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind);
+s32                   sp_asset_registry_thread_fn(void* user_data);
 
 SP_END_EXTERN_C()
 
@@ -1096,7 +1140,7 @@ sp_hash_t sp_hash_bytes(void *p, u64 len, u64 seed) {
     } while (0)
 
 #define sp_dyn_array_back(__ARR)\
-    *(__ARR + (sp_dyn_array_size(__ARR) ? sp_dyn_array_size(__ARR) - 1 : 0))
+    (__ARR + (sp_dyn_array_size(__ARR) ? sp_dyn_array_size(__ARR) - 1 : 0))
 
 #define sp_dyn_array_new(__T)\
     ((__T*)sp_dyn_array_resize_impl(NULL, sizeof(__T), 0))
@@ -1322,7 +1366,7 @@ void sp_dyn_array_push_data(void** arr, void* val, u32 val_len) {
         }
     }
     u32 offset = sp_dyn_array_size(*arr);
-    memcpy(((u8*)(*arr)) + offset * val_len, val, val_len);
+    sp_os_copy_memory(val, ((u8*)(*arr)) + offset * val_len, val_len);
     sp_dyn_array_head(*arr)->size++;
 }
 
@@ -1366,15 +1410,27 @@ void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u3
 }
 
 
+////////////////////
+// ASSET REGISTRY //
+////////////////////
 void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
+  sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
+  sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
+  sp_mutex_init(&registry->completion_mutex, SP_MUTEX_PLAIN);
+
+  sp_semaphore_init(&registry->semaphore);
+
   sp_ring_buffer_init(&registry->import_queue, 128, sizeof(sp_asset_import_context_t));
   sp_ring_buffer_init(&registry->completion_queue, 128, sizeof(sp_asset_import_context_t));
 
-  for (u32 index = 0; index < config.importers.count; index++) {
-    sp_asset_importer_t importer = SP_LVAL(sp_asset_importer_t) {
-      .kind = config.importers.data[index].kind,
-      .on_import = config.importers.data[index].on_import,
-      .on_completion = config.importers.data[index].on_completion,
+  for (u32 index = 0; index < SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS; index++) {
+    sp_asset_importer_config_t* cfg = &config.importers[index];
+    if (cfg->kind == SP_ASSET_KIND_NONE) break;
+
+    sp_asset_importer_t importer = (sp_asset_importer_t) {
+      .kind = cfg->kind,
+      .on_import = cfg->on_import,
+      .on_completion = cfg->on_completion,
       .registry = registry
     };
     sp_dyn_array_push(registry->importers, importer);
@@ -1383,39 +1439,88 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
   sp_thread_init(&registry->thread, sp_asset_registry_thread_fn, registry);
 }
 
-void  sp_asset_registry_complete(sp_asset_registry_t* registry) {
+void sp_asset_registry_process_completions(sp_asset_registry_t* registry) {
+  sp_mutex_lock(&registry->completion_mutex);
+  while (!sp_ring_buffer_is_empty(&registry->completion_queue)) {
+    sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->completion_queue));
+    sp_mutex_unlock(&registry->completion_mutex);
 
+    context.importer->on_completion(&context);
+    context.asset->state = SP_ASSET_STATE_COMPLETED;
+    sp_future_set_value(context.future, &context.asset);
+
+    sp_mutex_lock(&registry->completion_mutex);
+  }
+  sp_mutex_unlock(&registry->completion_mutex);
 }
 
-void  sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, void* user_data) {
-
+sp_asset_t* sp_asset_registry_reserve(sp_asset_registry_t* registry) {
+  sp_dyn_array_reserve(registry->assets, 1);
+  return sp_dyn_array_back(registry->assets);
 }
 
-void  sp_asset_registry_add(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, u8* blob) {
+sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, void* user_data) {
+  sp_asset_import_context_t context = {
+    .registry = registry,
+    .importer = sp_asset_registry_find_importer(registry, kind),
+    .asset = sp_asset_registry_reserve(registry),
+    .future = sp_future_create(sizeof(sp_asset_t*)),
+    .user_data = user_data,
+  };
+  SP_ASSERT(context.importer);
 
+  context.asset->kind = kind;
+  context.asset->state = SP_ASSET_STATE_QUEUED;
+
+  sp_mutex_lock(&registry->import_mutex);
+  sp_ring_buffer_push(&registry->import_queue, &context);
+  sp_mutex_unlock(&registry->import_mutex);
+
+  sp_semaphore_signal(&registry->semaphore);
+
+  return context.future;
 }
 
 sp_asset_t sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name) {
   return SP_ZERO_STRUCT(sp_asset_t);
 }
 
+sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind) {
+  sp_mutex_lock(&registry->mutex);
+  sp_dyn_array_for(index, registry->importers) {
+    sp_asset_importer_t* importer = &registry->importers[index];
+    if (importer->kind == kind) {
+      sp_mutex_unlock(&registry->mutex);
+      return importer;
+    }
+  }
+
+  sp_mutex_unlock(&registry->mutex);
+  return SP_NULLPTR;
+}
+
 s32 sp_asset_registry_thread_fn(void* user_data) {
   sp_asset_registry_t* registry = (sp_asset_registry_t*)user_data;
   while (true) {
     sp_semaphore_wait(&registry->semaphore);
+    sp_mutex_lock(&registry->import_mutex);
 
     while (!sp_ring_buffer_is_empty(&registry->import_queue)) {
-      sp_mutex_lock(&registry->mutex);
-      sp_asset_import_context_t context = SP_ZERO_STRUCT(sp_asset_import_context_t);
-      sp_os_copy_memory(sp_ring_buffer_pop(&registry->import_queue), &context, sizeof(sp_asset_import_context_t));
-      sp_mutex_unlock(&registry->mutex);
+      sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->import_queue));
 
-      context.importer->on_import(context.user_data);
+      sp_mutex_unlock(&registry->import_mutex);
 
-      sp_mutex_lock(&registry->mutex);
+      context.importer->on_import(&context);
+      context.asset->state = SP_ASSET_STATE_IMPORTED;
+
+      sp_mutex_lock(&registry->completion_mutex);
       sp_ring_buffer_push(&registry->completion_queue, &context);
-      sp_mutex_unlock(&registry->mutex);
+      sp_mutex_unlock(&registry->completion_mutex);
+
+      sp_mutex_lock(&registry->import_mutex);
     }
+
+    sp_mutex_unlock(&registry->import_mutex);
   }
 
   return 0;
@@ -1960,7 +2065,7 @@ void* sp_bump_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
       void* memory_block = sp_bump_allocator_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
-      memcpy(memory_block, old_memory, size);
+      sp_os_copy_memory(old_memory, memory_block, size);
       return memory_block;
     }
     default: {
@@ -2310,7 +2415,7 @@ u8* sp_dynamic_array_at(sp_dynamic_array_t* arr, u32 index) {
   return arr->data + (index * arr->element_size);
 }
 
-u8*  sp_dynamic_array_push(sp_dynamic_array_t* arr, void* data) {
+u8* sp_dynamic_array_push(sp_dynamic_array_t* arr, void* data) {
   return sp_dynamic_array_push_n(arr, data, 1);
 }
 
@@ -3215,7 +3320,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
           sp_str_t file_path = SP_ZERO_STRUCT(sp_str_t);
 
           if (event->len > 0 && event->name[0] != '\0') {
-            file_name = sp_str(event->name, strlen(event->name));
+            file_name = sp_str(event->name, sp_cstr_len(event->name));
 
             // Build full path
             sp_str_builder_t builder = SP_ZERO_INITIALIZE();
@@ -3470,6 +3575,25 @@ sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer) {
     iterator.buffer = buffer;
     return iterator;
 }
+
+  sp_future_t* sp_future_create(u32 size) {
+    sp_future_t* future = (sp_future_t*)sp_alloc(sizeof(sp_future_t));
+    future->allocator = sp_context->allocator;
+    future->ready = false;
+    future->value = sp_alloc(size);
+    future->size = size;
+    return future;
+  }
+
+  void sp_future_destroy(sp_future_t* future) {
+    sp_context_push_allocator(future->allocator);
+    sp_free(future);
+    sp_context_pop();
+  }
+
+  void sp_future_set_value(sp_future_t* future, void* value) {
+    sp_os_copy_memory(value, future->value, future->size);
+  }
 
 SP_END_EXTERN_C()
 

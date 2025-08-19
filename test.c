@@ -120,6 +120,19 @@ void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t*
   sp_str_copy_to(change->file_path, data->last_file_path, SP_MAX_PATH_LEN);
 }
 
+typedef struct {
+  sp_str_t file_path;
+} sp_test_import_request_t;
+
+void sp_test_import_fn(sp_asset_import_context_t* context) {
+  sp_test_import_request_t* request = (sp_test_import_request_t*)context->user_data;
+  printf("on_import");
+}
+
+void sp_test_completion_fn(sp_asset_import_context_t* context) {
+  sp_test_import_request_t* request = (sp_test_import_request_t*)context->user_data;
+  printf("on_completion");
+}
 
 //  ██████╗ ██████╗ ██████╗ ███████╗
 // ██╔════╝██╔═══██╗██╔══██╗██╔════╝
@@ -1346,7 +1359,7 @@ UTEST(dyn_array, basic_operations) {
     sp_dyn_array_pop(arr);
     ASSERT_EQ(sp_dyn_array_size(arr), 9);
 
-    ASSERT_EQ(sp_dyn_array_back(arr), 80);
+    ASSERT_EQ(*sp_dyn_array_back(arr), 80);
 
     sp_dyn_array_clear(arr);
     ASSERT_EQ(sp_dyn_array_size(arr), 0);
@@ -2178,16 +2191,23 @@ UTEST(ring_buffer, iterator_manual) {
 }
 
 UTEST(asset_registry, smoke) {
+  sp_test_use_malloc();
+
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_init(&registry, (sp_asset_registry_config_t) {
-    .importers = (sp_asset_importer_config_t []) {
+    .importers = {
        {
-         .kind = 0,
-         .on_import = SP_NULLPTR,
-         .on_completion = SP_NULLPTR,
+         .kind = 1,
+         .on_import = sp_test_import_fn,
+         .on_completion = sp_test_completion_fn,
        }
     }
   });
+
+  sp_future_t* future = sp_asset_registry_import(&registry, 1, SP_NULLPTR);
+  while (!future->ready) {
+
+  }
 }
 
 
