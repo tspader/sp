@@ -1,13 +1,3 @@
-//  ad88888ba   88888888ba      db         ,ad8888ba,   88888888888  88
-// d8"     "8b  88      "8b    d88b       d8"'    `"8b  88           88
-// Y8,          88      ,8P   d8'`8b     d8'            88           88
-// `Y8aaaaa,    88aaaaaa8P'  d8'  `8b    88             88aaaaa      88
-//   `"""""8b,  88""""""'   d8YaaaaY8b   88             88"""""      88
-//         `8b  88         d8""""""""8b  Y8,            88           ""
-// Y8a     a8P  88        d8'        `8b  Y8a.    .a8P  88           aa
-//  "Y88888P"   88       d8'          `8b  `"Y8888Y"'   88888888888  88
-
-
 #ifndef SP_SPACE_H
 #define SP_SPACE_H
 
@@ -84,7 +74,6 @@
       #define _GNU_SOURCE
     #endif
 
-    #include <errno.h>
     #include <dirent.h>
     #include <fcntl.h>
     #include <limits.h>
@@ -888,6 +877,7 @@ SP_API void                         sp_future_set_value(sp_future_t* future, voi
 SP_API void                         sp_future_destroy(sp_future_t* future);
 
 
+#ifdef SP_APP
 typedef enum {
   SP_ASSET_STATE_QUEUED,
   SP_ASSET_STATE_IMPORTED,
@@ -905,7 +895,6 @@ typedef struct sp_asset_import_context sp_asset_import_context_t;
 
 SP_TYPEDEF_FN(void, sp_asset_import_fn_t, sp_asset_import_context_t* context);
 SP_TYPEDEF_FN(void, sp_asset_completion_fn_t, sp_asset_import_context_t* context);
-
 
 typedef struct {
   sp_asset_kind_t kind;
@@ -960,6 +949,7 @@ void                  sp_asset_registry_process_completions(sp_asset_registry_t*
 sp_asset_t*           sp_asset_registry_reserve(sp_asset_registry_t* registry);
 sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind);
 s32                   sp_asset_registry_thread_fn(void* user_data);
+#endif
 
 SP_END_EXTERN_C()
 
@@ -993,7 +983,11 @@ SP_END_EXTERN_C()
 // ██║██║╚██╔╝██║██╔═══╝ ██║     ██╔══╝  ██║╚██╔╝██║██╔══╝  ██║╚██╗██║   ██║   ██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
 // ██║██║ ╚═╝ ██║██║     ███████╗███████╗██║ ╚═╝ ██║███████╗██║ ╚████║   ██║   ██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
 // ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+#ifndef SP_SP_C
+#define SP_SP_C
+
 #ifdef SP_IMPLEMENTATION
+
 SP_BEGIN_EXTERN_C()
 sp_hash_t sp_hash_cstr(const c8* str) {
   const size_t prime = 31;
@@ -1407,123 +1401,6 @@ void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u3
             break;
         }
     }
-}
-
-
-////////////////////
-// ASSET REGISTRY //
-////////////////////
-void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
-  sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
-  sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
-  sp_mutex_init(&registry->completion_mutex, SP_MUTEX_PLAIN);
-
-  sp_semaphore_init(&registry->semaphore);
-
-  sp_ring_buffer_init(&registry->import_queue, 128, sizeof(sp_asset_import_context_t));
-  sp_ring_buffer_init(&registry->completion_queue, 128, sizeof(sp_asset_import_context_t));
-
-  for (u32 index = 0; index < SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS; index++) {
-    sp_asset_importer_config_t* cfg = &config.importers[index];
-    if (cfg->kind == SP_ASSET_KIND_NONE) break;
-
-    sp_asset_importer_t importer = (sp_asset_importer_t) {
-      .kind = cfg->kind,
-      .on_import = cfg->on_import,
-      .on_completion = cfg->on_completion,
-      .registry = registry
-    };
-    sp_dyn_array_push(registry->importers, importer);
-  }
-
-  sp_thread_init(&registry->thread, sp_asset_registry_thread_fn, registry);
-}
-
-void sp_asset_registry_process_completions(sp_asset_registry_t* registry) {
-  sp_mutex_lock(&registry->completion_mutex);
-  while (!sp_ring_buffer_is_empty(&registry->completion_queue)) {
-    sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->completion_queue));
-    sp_mutex_unlock(&registry->completion_mutex);
-
-    context.importer->on_completion(&context);
-    context.asset->state = SP_ASSET_STATE_COMPLETED;
-    sp_future_set_value(context.future, &context.asset);
-
-    sp_mutex_lock(&registry->completion_mutex);
-  }
-  sp_mutex_unlock(&registry->completion_mutex);
-}
-
-sp_asset_t* sp_asset_registry_reserve(sp_asset_registry_t* registry) {
-  sp_dyn_array_reserve(registry->assets, 1);
-  return sp_dyn_array_back(registry->assets);
-}
-
-sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, void* user_data) {
-  sp_asset_import_context_t context = {
-    .registry = registry,
-    .importer = sp_asset_registry_find_importer(registry, kind),
-    .asset = sp_asset_registry_reserve(registry),
-    .future = sp_future_create(sizeof(sp_asset_t*)),
-    .user_data = user_data,
-  };
-  SP_ASSERT(context.importer);
-
-  context.asset->kind = kind;
-  context.asset->state = SP_ASSET_STATE_QUEUED;
-
-  sp_mutex_lock(&registry->import_mutex);
-  sp_ring_buffer_push(&registry->import_queue, &context);
-  sp_mutex_unlock(&registry->import_mutex);
-
-  sp_semaphore_signal(&registry->semaphore);
-
-  return context.future;
-}
-
-sp_asset_t sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name) {
-  return SP_ZERO_STRUCT(sp_asset_t);
-}
-
-sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind) {
-  sp_mutex_lock(&registry->mutex);
-  sp_dyn_array_for(index, registry->importers) {
-    sp_asset_importer_t* importer = &registry->importers[index];
-    if (importer->kind == kind) {
-      sp_mutex_unlock(&registry->mutex);
-      return importer;
-    }
-  }
-
-  sp_mutex_unlock(&registry->mutex);
-  return SP_NULLPTR;
-}
-
-s32 sp_asset_registry_thread_fn(void* user_data) {
-  sp_asset_registry_t* registry = (sp_asset_registry_t*)user_data;
-  while (true) {
-    sp_semaphore_wait(&registry->semaphore);
-    sp_mutex_lock(&registry->import_mutex);
-
-    while (!sp_ring_buffer_is_empty(&registry->import_queue)) {
-      sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->import_queue));
-
-      sp_mutex_unlock(&registry->import_mutex);
-
-      context.importer->on_import(&context);
-      context.asset->state = SP_ASSET_STATE_IMPORTED;
-
-      sp_mutex_lock(&registry->completion_mutex);
-      sp_ring_buffer_push(&registry->completion_queue, &context);
-      sp_mutex_unlock(&registry->completion_mutex);
-
-      sp_mutex_lock(&registry->import_mutex);
-    }
-
-    sp_mutex_unlock(&registry->import_mutex);
-  }
-
-  return 0;
 }
 
 void sp_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
@@ -3576,24 +3453,142 @@ sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer) {
     return iterator;
 }
 
-  sp_future_t* sp_future_create(u32 size) {
-    sp_future_t* future = (sp_future_t*)sp_alloc(sizeof(sp_future_t));
-    future->allocator = sp_context->allocator;
-    future->ready = false;
-    future->value = sp_alloc(size);
-    future->size = size;
-    return future;
+sp_future_t* sp_future_create(u32 size) {
+  sp_future_t* future = (sp_future_t*)sp_alloc(sizeof(sp_future_t));
+  future->allocator = sp_context->allocator;
+  future->ready = false;
+  future->value = sp_alloc(size);
+  future->size = size;
+  return future;
+}
+
+void sp_future_destroy(sp_future_t* future) {
+  sp_context_push_allocator(future->allocator);
+  sp_free(future);
+  sp_context_pop();
+}
+
+void sp_future_set_value(sp_future_t* future, void* value) {
+  sp_os_copy_memory(value, future->value, future->size);
+}
+
+#ifdef SP_APP
+////////////////////
+// ASSET REGISTRY //
+////////////////////
+void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
+  sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
+  sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
+  sp_mutex_init(&registry->completion_mutex, SP_MUTEX_PLAIN);
+
+  sp_semaphore_init(&registry->semaphore);
+
+  sp_ring_buffer_init(&registry->import_queue, 128, sizeof(sp_asset_import_context_t));
+  sp_ring_buffer_init(&registry->completion_queue, 128, sizeof(sp_asset_import_context_t));
+
+  for (u32 index = 0; index < SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS; index++) {
+    sp_asset_importer_config_t* cfg = &config.importers[index];
+    if (cfg->kind == SP_ASSET_KIND_NONE) break;
+
+    sp_asset_importer_t importer = (sp_asset_importer_t) {
+      .kind = cfg->kind,
+      .on_import = cfg->on_import,
+      .on_completion = cfg->on_completion,
+      .registry = registry
+    };
+    sp_dyn_array_push(registry->importers, importer);
   }
 
-  void sp_future_destroy(sp_future_t* future) {
-    sp_context_push_allocator(future->allocator);
-    sp_free(future);
-    sp_context_pop();
+  sp_thread_init(&registry->thread, sp_asset_registry_thread_fn, registry);
+}
+
+void sp_asset_registry_process_completions(sp_asset_registry_t* registry) {
+  sp_mutex_lock(&registry->completion_mutex);
+  while (!sp_ring_buffer_is_empty(&registry->completion_queue)) {
+    sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->completion_queue));
+    sp_mutex_unlock(&registry->completion_mutex);
+
+    context.importer->on_completion(&context);
+    context.asset->state = SP_ASSET_STATE_COMPLETED;
+    sp_future_set_value(context.future, &context.asset);
+
+    sp_mutex_lock(&registry->completion_mutex);
+  }
+  sp_mutex_unlock(&registry->completion_mutex);
+}
+
+sp_asset_t* sp_asset_registry_reserve(sp_asset_registry_t* registry) {
+  sp_dyn_array_reserve(registry->assets, 1);
+  return sp_dyn_array_back(registry->assets);
+}
+
+sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, void* user_data) {
+  sp_asset_import_context_t context = {
+    .registry = registry,
+    .importer = sp_asset_registry_find_importer(registry, kind),
+    .asset = sp_asset_registry_reserve(registry),
+    .future = sp_future_create(sizeof(sp_asset_t*)),
+    .user_data = user_data,
+  };
+  SP_ASSERT(context.importer);
+
+  context.asset->kind = kind;
+  context.asset->state = SP_ASSET_STATE_QUEUED;
+
+  sp_mutex_lock(&registry->import_mutex);
+  sp_ring_buffer_push(&registry->import_queue, &context);
+  sp_mutex_unlock(&registry->import_mutex);
+
+  sp_semaphore_signal(&registry->semaphore);
+
+  return context.future;
+}
+
+sp_asset_t sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name) {
+  return SP_ZERO_STRUCT(sp_asset_t);
+}
+
+sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind) {
+  sp_mutex_lock(&registry->mutex);
+  sp_dyn_array_for(index, registry->importers) {
+    sp_asset_importer_t* importer = &registry->importers[index];
+    if (importer->kind == kind) {
+      sp_mutex_unlock(&registry->mutex);
+      return importer;
+    }
   }
 
-  void sp_future_set_value(sp_future_t* future, void* value) {
-    sp_os_copy_memory(value, future->value, future->size);
+  sp_mutex_unlock(&registry->mutex);
+  return SP_NULLPTR;
+}
+
+s32 sp_asset_registry_thread_fn(void* user_data) {
+  sp_asset_registry_t* registry = (sp_asset_registry_t*)user_data;
+  while (true) {
+    sp_semaphore_wait(&registry->semaphore);
+    sp_mutex_lock(&registry->import_mutex);
+
+    while (!sp_ring_buffer_is_empty(&registry->import_queue)) {
+      sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->import_queue));
+
+      sp_mutex_unlock(&registry->import_mutex);
+
+      context.importer->on_import(&context);
+      context.asset->state = SP_ASSET_STATE_IMPORTED;
+
+      sp_mutex_lock(&registry->completion_mutex);
+      sp_ring_buffer_push(&registry->completion_queue, &context);
+      sp_mutex_unlock(&registry->completion_mutex);
+
+      sp_mutex_lock(&registry->import_mutex);
+    }
+
+    sp_mutex_unlock(&registry->import_mutex);
   }
+
+  return 0;
+}
+#endif
 
 SP_END_EXTERN_C()
 
@@ -3619,4 +3614,5 @@ sp_str_t operator/(const sp_str_t& a, const c8* b) {
 }
 #endif
 
+#endif // SP_SP_C
 #endif // SP_IMPLEMENTATION
