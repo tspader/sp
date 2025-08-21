@@ -7,6 +7,9 @@
 // ██║     ██║   ██║██║╚██╗██║██╔══╝  ██║██║   ██║██║   ██║██╔══██╗██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
 // ╚██████╗╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝╚██████╔╝██║  ██║██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
 //  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+////////////////////////
+// PLATFORM SELECTION //
+////////////////////////
 #ifdef _WIN32
   #define SP_WIN32
 #endif
@@ -25,25 +28,33 @@
   #define SP_CPP
 #endif
 
-/////////////////
-// OS INCLUDES //
-/////////////////
+//////////////////////////
+// OS BACKEND SELECTION //
+//////////////////////////
 #if !defined(SP_OS_BACKEND_SDL) && !defined(SP_OS_BACKEND_NATIVE)
   #define SP_OS_BACKEND_NATIVE
 #endif
 
-#ifdef SP_OS_BACKEND_SDL
+#ifdef SP_WIN32
+  #undef UNICODE
+  #define WIN32_LEAN_AND_MEAN
+  #define NOMINMAX
+  #define _CRT_RAND_S
+  #define _AMD64_
 #endif
 
-#ifdef SP_OS_BACKEND_NATIVE
-  // WIN32
-  #ifdef SP_WIN32
-    #undef UNICODE
-    #define WIN32_LEAN_AND_MEAN
-    #define NOMINMAX
-    #define _CRT_RAND_S
-    #define _AMD64_
+#ifdef SP_POSIX
+  #ifdef _POSIX_C_SOURCE
+    #define _POSIX_C_SOURCE 200809L
+  #endif
 
+  #ifndef _GNU_SOURCE
+    #define _GNU_SOURCE
+  #endif
+#endif
+
+#if defined(SP_OS_BACKEND_NATIVE)
+  #ifdef SP_WIN32
     #ifdef SP_WIN32_NO_WINDOWS_H
       #include "windef.h"
       #include "winbase.h"
@@ -54,26 +65,17 @@
       #include "handleapi.h"
       #include "shellapi.h"
       #include "stringapiset.h"
+      #include "threads.h"
     #else
       #include "windows.h"
       #include "shlobj.h"
       #include "commdlg.h"
       #include "shellapi.h"
+      #include "threads.h"
     #endif
-
-    #include "threads.h"
   #endif
 
-  // POSIX
   #ifdef SP_POSIX
-    #ifndef _POSIX_C_SOURCE
-      #define _POSIX_C_SOURCE 200809L
-    #endif
-
-    #ifndef _GNU_SOURCE
-      #define _GNU_SOURCE
-    #endif
-
     #include <dirent.h>
     #include <fcntl.h>
     #include <limits.h>
@@ -87,25 +89,49 @@
     #include <sys/time.h>
   #endif
 
-  // MACOS
   #ifdef SP_MACOS
     #include "pthread.h"
   #endif
 
-  // LINUX
   #ifdef SP_LINUX
     #include "pthread.h"
   #endif
 
   #include "string.h"
+
+#elif defined(SP_OS_BACKEND_SDL)
+  #include "SDL3/SDL.h"
+
+  #ifdef SP_WIN32
+  #endif
+
+  #ifdef SP_POSIX
+    #include <unistd.h>
+    #include <stdlib.h>
+  #endif
+
+  #ifdef SP_LINUX
+  #endif
+
+  #ifdef SP_MACOS
+  #endif
 #endif
 
-/////////////////
-// OS SPECIFIC //
-/////////////////
+////////////////
+// OS HEADERS //
+////////////////
+#ifdef SP_WIN32
+#endif
+
+#ifdef SP_POSIX
+#endif
+
 #ifdef SP_LINUX
   #include <sys/inotify.h>
   #include <poll.h>
+#endif
+
+#ifdef SP_MACOS
 #endif
 
 #ifdef SP_CPP
@@ -723,23 +749,22 @@ sp_str_t sp_fmt(sp_str_t fmt, ...);
 //  ██║   ██║╚════██║
 //  ╚██████╔╝███████║
 //   ╚═════╝ ╚══════╝
-typedef enum {
-  SP_OS_FILE_ATTR_NONE = 0,
-  SP_OS_FILE_ATTR_REGULAR_FILE = 1,
-  SP_OS_FILE_ATTR_DIRECTORY = 2,
-} sp_os_file_attr_t;
+#if defined(SP_OS_BACKEND_NATIVE) && defined(SP_WIN32)
+  typedef thrd_t          sp_thread_t;
+  typedef mtx_t           sp_mutex_t;
+  typedef HANDLE          sp_semaphore_t;
+#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_POSIX)
+  typedef pthread_t       sp_thread_t;
+  typedef pthread_mutex_t sp_mutex_t;
+  typedef sem_t           sp_semaphore_t;
+#elif defined(SP_OS_BACKEND_SDL)
+  typedef SDL_Mutex*             sp_mutex_t;
+  typedef SDL_Thread*             sp_thread_t;
+  typedef SDL_Semaphore*             sp_semaphore_t;
+#endif
 
-typedef enum {
-  SP_MUTEX_NONE = 0,
-  SP_MUTEX_PLAIN = 1,
-  SP_MUTEX_TIMED = 2,
-  SP_MUTEX_RECURSIVE = 4
-} sp_mutex_kind_t;
-
+// FILE MONITOR
 #ifdef SP_WIN32
-  typedef thrd_t              sp_thread_t;
-  typedef mtx_t               sp_mutex_t;
-  typedef HANDLE              sp_semaphore_t;
   typedef HANDLE              sp_win32_handle_t;
   typedef DWORD               sp_win32_dword_t;
   typedef WIN32_FIND_DATA     sp_win32_find_data_t;
@@ -765,12 +790,6 @@ typedef enum {
   SP_IMP void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info);
 #endif
 
-#ifdef SP_POSIX
-  typedef pthread_t sp_thread_t;
-  typedef pthread_mutex_t sp_mutex_t;
-  typedef sem_t sp_semaphore_t;
-#endif
-
 #ifdef SP_LINUX
   typedef struct {
     s32 fd;
@@ -787,6 +806,20 @@ typedef enum {
     void* placeholder;
   } sp_os_file_monitor_t;
 #endif
+
+typedef enum {
+  SP_OS_FILE_ATTR_NONE = 0,
+  SP_OS_FILE_ATTR_REGULAR_FILE = 1,
+  SP_OS_FILE_ATTR_DIRECTORY = 2,
+} sp_os_file_attr_t;
+
+typedef enum {
+  SP_MUTEX_NONE = 0,
+  SP_MUTEX_PLAIN = 1,
+  SP_MUTEX_TIMED = 2,
+  SP_MUTEX_RECURSIVE = 4
+} sp_mutex_kind_t;
+
 
 SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
 
@@ -987,7 +1020,6 @@ SP_END_EXTERN_C()
 #define SP_SP_C
 
 #ifdef SP_IMPLEMENTATION
-
 SP_BEGIN_EXTERN_C()
 sp_hash_t sp_hash_cstr(const c8* str) {
   const size_t prime = 31;
@@ -1139,7 +1171,9 @@ sp_hash_t sp_hash_bytes(void *p, u64 len, u64 seed) {
 #define sp_dyn_array_new(__T)\
     ((__T*)sp_dyn_array_resize_impl(NULL, sizeof(__T), 0))
 
-// Undefine sp_hash_table macros
+////////////////
+// HASH TABLE //
+////////////////
 #undef sp_hash_table
 #undef sp_hash_table_new
 #undef sp_hash_table_init
@@ -1161,7 +1195,6 @@ sp_hash_t sp_hash_bytes(void *p, u64 len, u64 seed) {
 #undef sp_hash_table_iter_getk
 #undef sp_hash_table_iter_getkp
 
-// Define sp_hash_table macros
 #define sp_hash_table(__K, __V)\
     struct {\
         __sp_hash_table_entry(__K, __V)* data;\
@@ -1312,7 +1345,6 @@ sp_hash_t sp_hash_bytes(void *p, u64 len, u64 seed) {
 ////////////////////////////
 // DYN ARRAY IMPLEMENTATION
 ////////////////////////////
-
 void* sp_dyn_array_resize_impl(void* arr, u32 sz, u32 amount) {
     u32 capacity;
 
@@ -2385,7 +2417,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 ///////////
 // WIN32 //
 ///////////
-#ifdef SP_WIN32
+#if defined(SP_OS_BACKEND_NATIVE) && defined(SP_WIN32)
   void* sp_os_allocate_memory(u32 size) {
     return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
   }
@@ -2670,7 +2702,605 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     ReleaseSemaphore(*semaphore, 1, NULL);
   }
+#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_POSIX)
+  void* sp_os_allocate_memory(u32 size) {
+    void* ptr = malloc(size);
+    if (ptr) memset(ptr, 0, size);
+    return ptr;
+  }
 
+  void* sp_os_reallocate_memory(void* ptr, u32 size) {
+    if (!ptr) return sp_os_allocate_memory(size);
+    if (!size) { free(ptr); return NULL; }
+    return realloc(ptr, size);
+  }
+
+  void sp_os_free_memory(void* ptr) {
+    if (!ptr) return;
+    free(ptr);
+  }
+
+  bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
+    return !memcmp(a, b, len);
+  }
+
+  void sp_os_copy_memory(const void* source, void* dest, u32 num_bytes) {
+    memcpy(dest, source, num_bytes);
+  }
+
+  void sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
+    u8* current_byte = (u8*)buffer;
+
+    s32 i = 0;
+    while (true) {
+      if (i + fill_size > buffer_size) return;
+      memcpy(current_byte + i, (u8*)fill, fill_size);
+      i += fill_size;
+    }
+  }
+
+  void sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill) {
+    sp_os_fill_memory(buffer, buffer_size, &fill, sizeof(u8));
+  }
+
+  void sp_os_zero_memory(void* buffer, u32 buffer_size) {
+    sp_os_fill_memory_u8(buffer, buffer_size, 0);
+  }
+
+  bool sp_os_does_path_exist(sp_str_t path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(path);
+    s32 result = stat(path_cstr, &st);
+    sp_free(path_cstr);
+    return result == 0;
+  }
+
+  bool sp_os_is_regular_file(sp_str_t path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(path);
+    s32 result = stat(path_cstr, &st);
+    sp_free(path_cstr);
+    if (result != 0) return false;
+    return S_ISREG(st.st_mode);
+  }
+
+  bool sp_os_is_directory(sp_str_t path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(path);
+    s32 result = stat(path_cstr, &st);
+    sp_free(path_cstr);
+    if (result != 0) return false;
+    return S_ISDIR(st.st_mode);
+  }
+
+  void sp_os_remove_directory(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    rmdir(path_cstr);
+    sp_free(path_cstr);
+  }
+
+  void sp_os_create_directory(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    mkdir(path_cstr, 0755);
+    sp_free(path_cstr);
+  }
+
+  void sp_os_create_file(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    s32 fd = open(path_cstr, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (fd >= 0) close(fd);
+    sp_free(path_cstr);
+  }
+
+  void sp_os_remove_file(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    unlink(path_cstr);
+    sp_free(path_cstr);
+  }
+
+  sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
+    (void)path;
+    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+  }
+
+  sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
+    (void)path;
+    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+  }
+
+  sp_os_date_time_t sp_os_get_date_time() {
+    time_t raw_time;
+    struct tm* time_info;
+    struct timeval tv;
+
+    time(&raw_time);
+    time_info = localtime(&raw_time);
+    gettimeofday(&tv, NULL);
+
+    return SP_LVAL(sp_os_date_time_t) {
+      .year = time_info->tm_year + 1900,
+      .month = time_info->tm_mon + 1,
+      .day = time_info->tm_mday,
+      .hour = time_info->tm_hour,
+      .minute = time_info->tm_min,
+      .second = time_info->tm_sec,
+      .millisecond = (s32)(tv.tv_usec / 1000)
+    };
+  }
+
+  sp_precise_epoch_time_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(file_path);
+    s32 result = stat(path_cstr, &st);
+    sp_free(path_cstr);
+
+    if (result != 0) {
+      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
+    }
+
+    if (st.st_size == 0) {
+      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
+    }
+
+    return SP_LVAL(sp_precise_epoch_time_t) {
+      .s = (u64)st.st_mtime,
+      .ns = 0
+    };
+  }
+
+  void sp_os_sleep_ms(f64 ms) {
+    struct timespec ts;
+    ts.tv_sec = (time_t)(ms / 1000.0);
+    ts.tv_nsec = (long)((ms - (ts.tv_sec * 1000.0)) * 1000000.0);
+    nanosleep(&ts, NULL);
+  }
+
+  sp_str_t sp_os_get_executable_path() {
+    c8 exe_path[PATH_MAX];
+    size_t len = readlink("/proc/self/exe", exe_path, PATH_MAX - 1);
+    if (len > 0) {
+      exe_path[len] = '\0';
+      sp_str_t exe_path_str = sp_str_cstr(exe_path);
+      sp_os_normalize_path(exe_path_str);
+      return sp_str_copy(exe_path_str);
+    }
+    return sp_str_lit("");
+  }
+
+  sp_str_t sp_os_canonicalize_path(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+    realpath(path_cstr, canonical_path);
+    sp_free(path_cstr);
+
+    sp_str_t result = sp_str_cstr(canonical_path);
+    sp_os_normalize_path(result);
+
+    if (result.len > 0 && result.data[result.len - 1] == '/') {
+      result.len--;
+    }
+
+    return sp_str_copy(result);
+  }
+
+  c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
+    if (!str16 || len == 0) {
+      c8* result = (c8*)sp_alloc(1);
+      result[0] = '\0';
+      return result;
+    }
+
+    // Simple conversion for ASCII characters
+    c8* result = (c8*)sp_alloc(len + 1);
+    for (u32 i = 0; i < len; i++) {
+      if (str16[i] < 128) {
+        result[i] = (c8)str16[i];
+      } else {
+        result[i] = '?';  // Replace non-ASCII with '?'
+      }
+    }
+    result[len] = '\0';
+    return result;
+  }
+
+  void* sp_posix_thread_launch(void* args) {
+    return (void*)(intptr_t)sp_thread_launch(args);
+  }
+
+  s32 sp_thread_launch(void* args) {
+    sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
+    void* userdata = launch->userdata;
+    sp_thread_fn_t fn = launch->fn;
+
+    sp_context_push(launch->context);
+    sp_semaphore_signal(&launch->semaphore);
+    s32 result = fn(userdata);
+
+    sp_context_pop();
+
+    return result;
+  }
+
+  void sp_thread_join(sp_thread_t* thread) {
+    pthread_join(*thread, NULL);
+  }
+
+  void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
+    sp_thread_launch_t launch = SP_ZERO_INITIALIZE();
+    launch.fn = fn;
+    launch.userdata = userdata;
+    launch.context = *sp_context;
+    sp_semaphore_init(&launch.semaphore);
+
+    pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
+    sp_semaphore_wait(&launch.semaphore);
+  }
+
+  void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+
+    if (kind & SP_MUTEX_RECURSIVE) {
+      pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    }
+
+    pthread_mutex_init(mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+  }
+
+  void sp_mutex_lock(sp_mutex_t* mutex) {
+    pthread_mutex_lock(mutex);
+  }
+
+  void sp_mutex_unlock(sp_mutex_t* mutex) {
+    pthread_mutex_unlock(mutex);
+  }
+
+  void sp_mutex_destroy(sp_mutex_t* mutex) {
+    pthread_mutex_destroy(mutex);
+  }
+
+  void sp_semaphore_init(sp_semaphore_t* semaphore) {
+    sem_init(semaphore, 0, 0);
+  }
+
+  void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+    sem_destroy(semaphore);
+  }
+
+  void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+    sem_wait(semaphore);
+  }
+
+  bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += ms / 1000;
+    ts.tv_nsec += (ms % 1000) * 1000000;
+    if (ts.tv_nsec >= 1000000000) {
+      ts.tv_sec++;
+      ts.tv_nsec -= 1000000000;
+    }
+    return sem_timedwait(semaphore, &ts) == 0;
+  }
+
+  void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+    sem_post(semaphore);
+  }
+#elif defined(SP_OS_BACKEND_SDL)
+  void* sp_os_allocate_memory(u32 size) {
+    void* ptr = SDL_malloc(size);
+    if (ptr) SDL_memset(ptr, 0, size);
+    return ptr;
+  }
+
+  void* sp_os_reallocate_memory(void* ptr, u32 size) {
+    if (!ptr) return sp_os_allocate_memory(size);
+    if (!size) { SDL_free(ptr); return NULL; }
+    return SDL_realloc(ptr, size);
+  }
+
+  void sp_os_free_memory(void* ptr) {
+    if (!ptr) return;
+    SDL_free(ptr);
+  }
+
+  bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
+    return !SDL_memcmp(a, b, len);
+  }
+
+  void sp_os_copy_memory(const void* source, void* dest, u32 num_bytes) {
+    SDL_memcpy(dest, source, num_bytes);
+  }
+
+  void sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
+    u8* current_byte = (u8*)buffer;
+
+    s32 i = 0;
+    while (true) {
+      if (i + fill_size > buffer_size) return;
+      SDL_memcpy(current_byte + i, (u8*)fill, fill_size);
+      i += fill_size;
+    }
+  }
+
+  void sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill) {
+    SDL_memset(buffer, fill, buffer_size);
+  }
+
+  void sp_os_zero_memory(void* buffer, u32 buffer_size) {
+    SDL_memset(buffer, 0, buffer_size);
+  }
+
+  bool sp_os_does_path_exist(sp_str_t path) {
+    return SDL_GetPathInfo(sp_str_to_cstr(path), NULL);
+  }
+
+  bool sp_os_is_regular_file(sp_str_t path) {
+    c8* file_path = sp_str_to_cstr(path);
+    SDL_PathInfo info = SP_ZERO_INITIALIZE();
+    if (!SDL_GetPathInfo(file_path, &info)) {
+      sp_free(file_path);
+      return false;
+    }
+
+    sp_free(file_path);
+    return info.type == SDL_PATHTYPE_FILE;
+  }
+
+  bool sp_os_is_directory(sp_str_t path) {
+    c8* file_path = sp_str_to_cstr(path);
+    SDL_PathInfo info = SP_ZERO_INITIALIZE();
+    if (!SDL_GetPathInfo(file_path, &info)) {
+      sp_free(file_path);
+      return false;
+    }
+
+    sp_free(file_path);
+    return info.type == SDL_PATHTYPE_DIRECTORY;
+  }
+
+  void sp_os_remove_directory(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    SDL_RemovePath(path_cstr);
+    sp_free(path_cstr);
+  }
+
+  void sp_os_create_directory(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    SDL_CreateDirectory(path_cstr);
+    sp_free(path_cstr);
+  }
+
+  void sp_os_create_file(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    SDL_IOStream* io = SDL_IOFromFile(path_cstr, "w");
+    if (io) SDL_CloseIO(io);
+    sp_free(path_cstr);
+  }
+
+  void sp_os_remove_file(sp_str_t path) {
+    c8* file_path = sp_str_to_cstr(path);
+    SDL_RemovePath(file_path);
+    sp_free(file_path);
+  }
+
+  SDL_EnumerationResult sp_os_sdl_scan_directory_callback(void* user_data, const c8* directory, const c8* file_name) {
+    SDL_Log("%s", "sp_os_sdl_scan_directory_callback(): this doesnt report attributes correctly");
+    sp_dynamic_array_t* entries = (sp_dynamic_array_t*)user_data;
+    sp_os_directory_entry_t entry = {
+      .file_path = sp_str_copy_cstr(file_name),
+      .file_name = sp_str_copy_cstr(file_name),
+      .attributes = 0
+    };
+    sp_dynamic_array_push(entries, &entry);
+    return SDL_ENUM_CONTINUE;
+  }
+
+  sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
+    sp_dynamic_array(sp_os_directory_entry_t) entries;
+    sp_dynamic_array_init(&entries, sizeof(sp_os_directory_entry_t));
+
+    c8* directory = sp_str_to_cstr(path);
+    SDL_EnumerateDirectory(directory, sp_os_sdl_scan_directory_callback, SP_NULL);
+    sp_free(directory);
+
+    return SP_LVAL(sp_os_directory_entry_list_t) {
+      .data = (sp_os_directory_entry_t*)entries.data,
+      .count = entries.size
+    };
+  }
+
+  sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
+    return sp_os_scan_directory(path);
+  }
+
+  sp_os_date_time_t sp_os_get_date_time() {
+    SDL_Time now;
+    SDL_GetCurrentTime(&now);  // nanoseconds since unix epoch
+
+    SDL_DateTime dt;
+    SDL_TimeToDateTime(now, &dt, true);  // true = localtime
+
+    return SP_LVAL(sp_os_date_time_t) {
+        .year = dt.year,
+        .month = dt.month,
+        .day = dt.day,
+        .hour = dt.hour,
+        .minute = dt.minute,
+        .second = dt.second,
+        .millisecond = dt.nanosecond / 1000000
+    };
+}
+
+  sp_precise_epoch_time_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+    SDL_PathInfo info;
+    c8* path = sp_str_to_cstr(file_path);
+    bool exists = SDL_GetPathInfo(path, &info);
+    sp_free(path);
+
+    if (!exists || info.size == 0) {
+      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
+    }
+
+    return SP_LVAL(sp_precise_epoch_time_t) {
+      .s = info.modify_time / 1000000000,
+      .ns = info.modify_time % 1000000000
+    };
+}
+
+  void sp_os_sleep_ms(f64 ms) {
+    SDL_Delay((u32)ms);
+  }
+
+  sp_str_t sp_os_get_executable_path() {
+    const c8* base_path = SDL_GetBasePath();
+    if (!base_path) {
+      return sp_str_lit("");
+    }
+
+    sp_str_t result = sp_str_copy(sp_str_cstr(base_path));
+
+    sp_os_normalize_path(result);
+
+    if (result.len > 0 && result.data[result.len - 1] == '/') {
+      result.len--;
+    }
+
+    return result;
+  }
+
+  sp_str_t sp_os_canonicalize_path(sp_str_t path) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+    realpath(path_cstr, canonical_path);
+    sp_free(path_cstr);
+
+    sp_str_t result = sp_str_cstr(canonical_path);
+    sp_os_normalize_path(result);
+
+    if (result.len > 0 && result.data[result.len - 1] == '/') {
+      result.len--;
+    }
+
+    return sp_str_copy(result);
+  }
+
+  c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
+    if (!str16 || len == 0) {
+      c8* result = (c8*)sp_alloc(1);
+      result[0] = '\0';
+      return result;
+    }
+
+    c8* result = (c8*)sp_alloc(len + 1);
+    for (u32 i = 0; i < len; i++) {
+      if (str16[i] < 128) {
+        result[i] = (c8)str16[i];
+      } else {
+        result[i] = '?';
+      }
+    }
+    result[len] = '\0';
+    return result;
+  }
+
+  typedef struct {
+    SDL_Thread* thread;
+    sp_thread_fn_t fn;
+    void* userdata;
+    sp_context_t context;
+    SDL_Semaphore* semaphore;
+  } sp_sdl_thread_launch_t;
+
+  s32 sp_sdl_thread_launch(void* args) {
+    sp_sdl_thread_launch_t* launch = (sp_sdl_thread_launch_t*)args;
+    void* userdata = launch->userdata;
+    sp_thread_fn_t fn = launch->fn;
+
+    sp_context_push(launch->context);
+    SDL_SignalSemaphore(launch->semaphore);
+    s32 result = fn(userdata);
+
+    sp_context_pop();
+
+    return result;
+  }
+
+  s32 sp_thread_launch(void* args) {
+    sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
+    void* userdata = launch->userdata;
+    sp_thread_fn_t fn = launch->fn;
+
+    sp_context_push(launch->context);
+    sp_semaphore_signal(&launch->semaphore);
+    s32 result = fn(userdata);
+
+    sp_context_pop();
+
+    return result;
+  }
+
+  void sp_thread_join(sp_thread_t* thread) {
+    SDL_WaitThread((SDL_Thread*)*thread, NULL);
+  }
+
+  void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
+    sp_sdl_thread_launch_t* launch = (sp_sdl_thread_launch_t*)sp_alloc(sizeof(sp_sdl_thread_launch_t));
+    launch->fn = fn;
+    launch->userdata = userdata;
+    launch->context = *sp_context;
+    launch->semaphore = SDL_CreateSemaphore(0);
+
+    launch->thread = SDL_CreateThread(sp_sdl_thread_launch, "sp_thread", launch);
+    *thread = (sp_thread_t)launch->thread;
+
+    SDL_WaitSemaphore(launch->semaphore);
+    SDL_DestroySemaphore(launch->semaphore);
+    sp_free(launch);
+  }
+
+  void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
+    *mutex = (sp_mutex_t)SDL_CreateMutex();
+  }
+
+  void sp_mutex_lock(sp_mutex_t* mutex) {
+    SDL_LockMutex((SDL_Mutex*)*mutex);
+  }
+
+  void sp_mutex_unlock(sp_mutex_t* mutex) {
+    SDL_UnlockMutex((SDL_Mutex*)*mutex);
+  }
+
+  void sp_mutex_destroy(sp_mutex_t* mutex) {
+    SDL_DestroyMutex((SDL_Mutex*)*mutex);
+  }
+
+  void sp_semaphore_init(sp_semaphore_t* semaphore) {
+    *semaphore = (sp_semaphore_t)SDL_CreateSemaphore(0);
+  }
+
+  void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+    SDL_DestroySemaphore((SDL_Semaphore*)*semaphore);
+  }
+
+  void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+    SDL_WaitSemaphore((SDL_Semaphore*)*semaphore);
+  }
+
+  bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+    return SDL_WaitSemaphoreTimeout((SDL_Semaphore*)*semaphore, ms) == 0;
+  }
+
+  void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+    SDL_SignalSemaphore((SDL_Semaphore*)*semaphore);
+  }
+#endif
+
+//////////////////
+// FILE MONITOR //
+//////////////////
+#ifdef SP_WIN32
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
     sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)sp_alloc(sizeof(sp_os_win32_file_monitor_t));
     sp_dynamic_array_init(&os->directory_infos, sizeof(sp_monitored_dir_t));
@@ -2825,297 +3455,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 
     ReadDirectoryChangesW(info->handle, info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE, true, notify_filter, NULL, &info->overlapped, NULL);
   }
-#endif // SP_WIN32
-
-
-///////////
-// POSIX //
-///////////
-#ifdef SP_POSIX
-  void* sp_os_allocate_memory(u32 size) {
-    void* ptr = malloc(size);
-    if (ptr) memset(ptr, 0, size);
-    return ptr;
-  }
-
-  void* sp_os_reallocate_memory(void* ptr, u32 size) {
-    if (!ptr) return sp_os_allocate_memory(size);
-    if (!size) { free(ptr); return NULL; }
-    return realloc(ptr, size);
-  }
-
-  void sp_os_free_memory(void* ptr) {
-    if (!ptr) return;
-    free(ptr);
-  }
-
-  bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
-    return !memcmp(a, b, len);
-  }
-
-  void sp_os_copy_memory(const void* source, void* dest, u32 num_bytes) {
-    memcpy(dest, source, num_bytes);
-  }
-
-  void sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
-    u8* current_byte = (u8*)buffer;
-
-    s32 i = 0;
-    while (true) {
-      if (i + fill_size > buffer_size) return;
-      memcpy(current_byte + i, (u8*)fill, fill_size);
-      i += fill_size;
-    }
-  }
-
-  void sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill) {
-  sp_os_fill_memory(buffer, buffer_size, &fill, sizeof(u8));
-  }
-
-  void sp_os_zero_memory(void* buffer, u32 buffer_size) {
-  sp_os_fill_memory_u8(buffer, buffer_size, 0);
-  }
-
-  bool sp_os_does_path_exist(sp_str_t path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = stat(path_cstr, &st);
-    sp_free(path_cstr);
-    return result == 0;
-  }
-
-  bool sp_os_is_regular_file(sp_str_t path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = stat(path_cstr, &st);
-    sp_free(path_cstr);
-    if (result != 0) return false;
-    return S_ISREG(st.st_mode);
-  }
-
-  bool sp_os_is_directory(sp_str_t path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = stat(path_cstr, &st);
-    sp_free(path_cstr);
-    if (result != 0) return false;
-    return S_ISDIR(st.st_mode);
-  }
-
-  void sp_os_remove_directory(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    rmdir(path_cstr);
-    sp_free(path_cstr);
-  }
-
-  void sp_os_create_directory(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    mkdir(path_cstr, 0755);
-    sp_free(path_cstr);
-  }
-
-  void sp_os_create_file(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 fd = open(path_cstr, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-    if (fd >= 0) close(fd);
-    sp_free(path_cstr);
-  }
-
-  void sp_os_remove_file(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    unlink(path_cstr);
-    sp_free(path_cstr);
-  }
-
-  sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
-    (void)path;
-    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
-  }
-
-  sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
-    (void)path;
-    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
-  }
-
-  sp_os_date_time_t sp_os_get_date_time() {
-    time_t raw_time;
-    struct tm* time_info;
-    struct timeval tv;
-
-    time(&raw_time);
-    time_info = localtime(&raw_time);
-    gettimeofday(&tv, NULL);
-
-    return SP_LVAL(sp_os_date_time_t) {
-      .year = time_info->tm_year + 1900,
-      .month = time_info->tm_mon + 1,
-      .day = time_info->tm_mday,
-      .hour = time_info->tm_hour,
-      .minute = time_info->tm_min,
-      .second = time_info->tm_sec,
-      .millisecond = (s32)(tv.tv_usec / 1000)
-    };
-  }
-
-  sp_precise_epoch_time_t sp_os_file_mod_time_precise(sp_str_t file_path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(file_path);
-    s32 result = stat(path_cstr, &st);
-    sp_free(path_cstr);
-
-    if (result != 0) {
-      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
-    }
-
-    if (st.st_size == 0) {
-      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
-    }
-
-    return SP_LVAL(sp_precise_epoch_time_t) {
-      .s = (u64)st.st_mtime,
-      .ns = 0
-    };
-  }
-
-  void sp_os_sleep_ms(f64 ms) {
-    struct timespec ts;
-    ts.tv_sec = (time_t)(ms / 1000.0);
-    ts.tv_nsec = (long)((ms - (ts.tv_sec * 1000.0)) * 1000000.0);
-    nanosleep(&ts, NULL);
-  }
-
-  sp_str_t sp_os_get_executable_path() {
-    c8 exe_path[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", exe_path, PATH_MAX - 1);
-    if (len > 0) {
-      exe_path[len] = '\0';
-      sp_str_t exe_path_str = sp_str_cstr(exe_path);
-      sp_os_normalize_path(exe_path_str);
-      return sp_str_copy(exe_path_str);
-    }
-    return sp_str_lit("");
-  }
-
-  sp_str_t sp_os_canonicalize_path(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-    realpath(path_cstr, canonical_path);
-    sp_free(path_cstr);
-
-    sp_str_t result = sp_str_cstr(canonical_path);
-    sp_os_normalize_path(result);
-
-    if (result.len > 0 && result.data[result.len - 1] == '/') {
-      result.len--;
-    }
-
-    return sp_str_copy(result);
-  }
-
-  c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
-    if (!str16 || len == 0) {
-      c8* result = (c8*)sp_alloc(1);
-      result[0] = '\0';
-      return result;
-    }
-
-    // Simple conversion for ASCII characters
-    c8* result = (c8*)sp_alloc(len + 1);
-    for (u32 i = 0; i < len; i++) {
-      if (str16[i] < 128) {
-        result[i] = (c8)str16[i];
-      } else {
-        result[i] = '?';  // Replace non-ASCII with '?'
-      }
-    }
-    result[len] = '\0';
-    return result;
-  }
-
-  void* sp_posix_thread_launch(void* args) {
-    return (void*)(intptr_t)sp_thread_launch(args);
-  }
-
-  s32 sp_thread_launch(void* args) {
-    sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
-    void* userdata = launch->userdata;
-    sp_thread_fn_t fn = launch->fn;
-
-    sp_context_push(launch->context);
-    sp_semaphore_signal(&launch->semaphore);
-    s32 result = fn(userdata);
-
-    sp_context_pop();
-
-    return result;
-  }
-
-  void sp_thread_join(sp_thread_t* thread) {
-    pthread_join(*thread, NULL);
-  }
-
-  void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
-    sp_thread_launch_t launch = SP_ZERO_INITIALIZE();
-    launch.fn = fn;
-    launch.userdata = userdata;
-    launch.context = *sp_context;
-    sp_semaphore_init(&launch.semaphore);
-
-    pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
-    sp_semaphore_wait(&launch.semaphore);
-  }
-
-  void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-
-    if (kind & SP_MUTEX_RECURSIVE) {
-      pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    }
-
-    pthread_mutex_init(mutex, &attr);
-    pthread_mutexattr_destroy(&attr);
-  }
-
-  void sp_mutex_lock(sp_mutex_t* mutex) {
-    pthread_mutex_lock(mutex);
-  }
-
-  void sp_mutex_unlock(sp_mutex_t* mutex) {
-    pthread_mutex_unlock(mutex);
-  }
-
-  void sp_mutex_destroy(sp_mutex_t* mutex) {
-    pthread_mutex_destroy(mutex);
-  }
-
-  void sp_semaphore_init(sp_semaphore_t* semaphore) {
-    sem_init(semaphore, 0, 0);
-  }
-
-  void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-    sem_destroy(semaphore);
-  }
-
-  void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-    sem_wait(semaphore);
-  }
-
-  bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += ms / 1000;
-    ts.tv_nsec += (ms % 1000) * 1000000;
-    if (ts.tv_nsec >= 1000000000) {
-      ts.tv_sec++;
-      ts.tv_nsec -= 1000000000;
-    }
-    return sem_timedwait(semaphore, &ts) == 0;
-  }
-
-  void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-    sem_post(semaphore);
-  }
+#endif
 
 #ifdef SP_LINUX
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
@@ -3178,7 +3518,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)monitor->os;
     if (linux_monitor->fd <= 0) return;
 
-    ssize_t len = read(linux_monitor->fd, linux_monitor->buffer, sizeof(linux_monitor->buffer));
+    size_t len = read(linux_monitor->fd, linux_monitor->buffer, sizeof(linux_monitor->buffer));
     if (len <= 0) return;
 
     // Process all events in buffer
@@ -3242,30 +3582,30 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     // Emit changes with debouncing
     sp_file_monitor_emit_changes(monitor);
   }
-#else
-  // Non-Linux POSIX stubs
+#endif
+
+#ifdef SP_MACOS
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
-    monitor->os = NULL;
+    (void)monitor;
+    SP_BROKEN();
   }
 
   void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t directory_path) {
     (void)monitor; (void)directory_path;
+    SP_BROKEN();
   }
 
   void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
     (void)monitor; (void)file_path;
+    SP_BROKEN();
   }
 
   void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
     (void)monitor;
+    SP_BROKEN();
   }
-#endif // SP_LINUX
-#endif // SP_POSIX
+#endif
 
-
-//////////////////
-// FILE MONITOR //
-//////////////////
 void sp_file_monitor_init(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata) {
   sp_file_monitor_init_debounce(monitor, callback, events, userdata, 0);
 }
@@ -3334,7 +3674,6 @@ bool sp_file_monitor_check_cache(sp_file_monitor_t* monitor, sp_str_t file_path,
 ////////////////////////////
 // RING BUFFER IMPLEMENTATION
 ////////////////////////////
-
 void* sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index) {
     return buffer->data + ((buffer->head + buffer->element_size * index) % (buffer->capacity * buffer->element_size));
 }
