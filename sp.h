@@ -2856,15 +2856,17 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   }
 
   sp_str_t sp_os_get_executable_path() {
-    c8 exe_path[PATH_MAX];
-    size_t len = readlink("/proc/self/exe", exe_path, PATH_MAX - 1);
-    if (len > 0) {
-      exe_path[len] = '\0';
-      sp_str_t exe_path_str = sp_str_cstr(exe_path);
-      sp_os_normalize_path(exe_path_str);
-      return sp_str_copy(exe_path_str);
+    c8 exe_path [PATH_MAX];
+    sp_str_t file_path = {
+      .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
+      .data = exe_path
+    };
+
+    if (!file_path.len) {
+      return sp_str_lit("");
     }
-    return sp_str_lit("");
+
+    return sp_str_copy(sp_os_parent_path(file_path));
   }
 
   sp_str_t sp_os_canonicalize_path(sp_str_t path) {
@@ -3091,7 +3093,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     sp_os_directory_entry_t entry = {
       .file_path = sp_str_copy_cstr(file_name),
       .file_name = sp_str_copy_cstr(file_name),
-      .attributes = 0
+      .attributes = SP_OS_FILE_ATTR_NONE
     };
     sp_dynamic_array_push(entries, &entry);
     return SDL_ENUM_CONTINUE;
@@ -3144,8 +3146,8 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     }
 
     return SP_LVAL(sp_precise_epoch_time_t) {
-      .s = info.modify_time / 1000000000,
-      .ns = info.modify_time % 1000000000
+      .s  = (u64)(info.modify_time / 1000000000),
+      .ns = (u64)(info.modify_time % 1000000000)
     };
 }
 
