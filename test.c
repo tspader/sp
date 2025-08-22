@@ -1,4 +1,7 @@
-#define SP_IMPLEMENTATION
+// Normally, you'd define SP_IMPLEMENTATION in *one* C/++ file, before you include the header. However, since this
+// project is one file anyway, we define it on the command line so clangd can see it
+//
+// #define SP_IMPLEMENTATION
 #include "sp.h"
 
 #include "external/utest/utest.h"
@@ -443,7 +446,7 @@ UTEST(dynamic_array, edge_cases) {
   sp_test_memory_tracker_destroy(&tracker);
 }
 
-UTEST(formatter, basic) {
+UTEST(sp_fmt, basic) {
   sp_test_use_malloc();
 
   // Test simple format with one argument
@@ -452,7 +455,7 @@ UTEST(formatter, basic) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("answer: 69")));
 }
 
-UTEST(formatter, numeric_types) {
+UTEST(sp_fmt, numeric_types) {
   sp_test_use_malloc();
 
   // Test unsigned integers
@@ -495,7 +498,7 @@ UTEST(formatter, numeric_types) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("zero: 0")));
 }
 
-UTEST(formatter, floating_point) {
+UTEST(sp_fmt, floating_point) {
   sp_test_use_malloc();
 
   f32 f32_val = 3.14159f;
@@ -515,7 +518,7 @@ UTEST(formatter, floating_point) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("f32 int: 42.000")));
 }
 
-UTEST(formatter, string_types) {
+UTEST(sp_fmt, string_types) {
   sp_test_use_malloc();
 
   sp_str_t str_val = sp_str_lit("hello world");
@@ -527,7 +530,7 @@ UTEST(formatter, string_types) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("cstr: c string")));
 }
 
-UTEST(formatter, character_types) {
+UTEST(sp_fmt, character_types) {
   sp_test_use_malloc();
 
   c8 c8_val = 'A';
@@ -544,7 +547,7 @@ UTEST(formatter, character_types) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("c16 unicode: 'U+1234'")));
 }
 
-UTEST(formatter, pointer_type) {
+UTEST(sp_fmt, pointer_type) {
   sp_test_use_malloc();
 
   void* ptr = (void*)(uintptr_t)0xDEADBEEF;
@@ -556,7 +559,7 @@ UTEST(formatter, pointer_type) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("null: 0x00000000")));
 }
 
-UTEST(formatter, hash_type) {
+UTEST(sp_fmt, hash_type) {
   sp_test_use_malloc();
 
   sp_hash_t hash = 0xABCDEF12;
@@ -568,7 +571,7 @@ UTEST(formatter, hash_type) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("zero hash: 0")));
 }
 
-UTEST(formatter, array_types) {
+UTEST(sp_fmt, array_types) {
   sp_test_use_malloc();
 
   sp_fixed_array_t fixed_arr;
@@ -590,7 +593,7 @@ UTEST(formatter, array_types) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("dynamic: { size: 5, capacity: 16 }")));
 }
 
-UTEST(formatter, date_time) {
+UTEST(sp_fmt, date_time) {
   sp_test_use_malloc();
 
   sp_os_date_time_t dt;
@@ -611,7 +614,7 @@ UTEST(formatter, date_time) {
   ASSERT_TRUE(sp_str_equal(result, sp_str_lit("datetime no ms: 2024-12-25T14:30:45")));
 }
 
-UTEST(formatter, multiple_args) {
+UTEST(sp_fmt, multiple_args) {
   sp_test_use_malloc();
 
   u32 count = 42;
@@ -2266,7 +2269,7 @@ UTEST(posix, smoke) {
 // ██║     ██╔═══╝ ██╔═══╝
 // ╚██████╗██║     ██║
 //  ╚═════╝╚═╝     ╚═╝
-#ifdef __cplusplus
+#ifdef SP_CPP
 UTEST(string_cpp, path_concatenation_operator) {
   sp_test_use_malloc();
 

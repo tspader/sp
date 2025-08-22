@@ -715,6 +715,7 @@ void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 
 sp_str_t sp_fmt(sp_str_t fmt, ...);
+sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
 
 #define SP_BUILTIN_FORMATTERS \
   SP_FORMATTER(ptr, sp_format_ptr), \
@@ -743,12 +744,24 @@ sp_str_t sp_fmt(sp_str_t fmt, ...);
   SP_FORMATTER(dynamic_array, sp_format_dynamic_array)
 
 
+// ██╗      ██████╗  ██████╗
+// ██║     ██╔═══██╗██╔════╝
+// ██║     ██║   ██║██║  ███╗
+// ██║     ██║   ██║██║   ██║
+// ███████╗╚██████╔╝╚██████╔╝
+// ╚══════╝ ╚═════╝  ╚═════╝
+void sp_log(sp_str_t fmt, ...);
+
+
 //   ██████╗ ███████╗
 //  ██╔═══██╗██╔════╝
 //  ██║   ██║███████╗
 //  ██║   ██║╚════██║
 //  ╚██████╔╝███████║
 //   ╚═════╝ ╚══════╝
+//////////////////
+// COMMON TYPES //
+//////////////////
 #if defined(SP_OS_BACKEND_NATIVE) && defined(SP_WIN32)
   typedef thrd_t          sp_thread_t;
   typedef mtx_t           sp_mutex_t;
@@ -763,7 +776,9 @@ sp_str_t sp_fmt(sp_str_t fmt, ...);
   typedef SDL_Semaphore*             sp_semaphore_t;
 #endif
 
-// FILE MONITOR
+//////////////
+// OS TYPES //
+//////////////
 #ifdef SP_WIN32
   typedef HANDLE              sp_win32_handle_t;
   typedef DWORD               sp_win32_dword_t;
@@ -893,6 +908,7 @@ SP_IMP void                         sp_os_file_monitor_add_directory(sp_file_mon
 SP_IMP void                         sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
 SP_IMP void                         sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
 SP_API void                         sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
+SP_API void                         sp_os_log(sp_str_t message);
 SP_API void                         sp_thread_join(sp_thread_t* thread);
 SP_API s32                          sp_thread_launch(void* userdata);
 SP_API void                         sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind);
@@ -1834,13 +1850,20 @@ void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 }
 
 sp_str_t sp_fmt(sp_str_t fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t str = sp_fmt_v(fmt, args);
+  va_end(args);
+
+  return str;
+}
+
+sp_str_t sp_fmt_v(sp_str_t fmt, va_list args) {
   #define SP_FORMATTER(T, FN) SP_LVAL(sp_formatter_t) { .id = sp_hash_cstr(SP_MACRO_STR(T)), .fn = FN }
   sp_formatter_t formatters [] = {
     SP_BUILTIN_FORMATTERS
   };
 
-  va_list args;
-  va_start(args, fmt); {
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
     u32 index = 0;
@@ -1867,9 +1890,16 @@ sp_str_t sp_fmt(sp_str_t fmt, ...) {
       }
     }
 
-    va_end(args);
     return sp_str_builder_write(&builder);
-  }
+}
+
+void sp_log(sp_str_t fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t formatted = sp_fmt_v(fmt, args);
+  va_end(args);
+
+  sp_os_log(formatted);
 }
 
 void sp_context_check_index() {
@@ -2225,87 +2255,6 @@ c8* sp_str_builder_write_cstr(sp_str_builder_t* builder) {
   return sp_cstr_copy_n((c8*)builder->buffer.data, builder->buffer.count);
 }
 
-////////
-// OS //
-////////
-void sp_os_normalize_path(sp_str_t path) {
-  for (u32 i = 0; i < path.len; i++) {
-    if (path.data[i] == '\\') {
-      path.data[i] = '/';
-    }
-  }
-}
-
-sp_str_t sp_os_extract_file_name(sp_str_t path) {
-  if (path.len == 0) return sp_str_lit("");
-
-  c8* last_slash = NULL;
-  for (u32 i = 0; i < path.len; i++) {
-    if (path.data[i] == '/' || path.data[i] == '\\') {
-      last_slash = &path.data[i];
-    }
-  }
-
-  if (!last_slash) {
-    return path;
-  }
-
-  u32 filename_start = (u32)(last_slash - path.data) + 1;
-  if (filename_start >= path.len) return sp_str_lit("");
-
-  u32 filename_len = path.len - filename_start;
-  return sp_str(path.data + filename_start, filename_len);
-}
-
-
-sp_str_t sp_os_parent_path(sp_str_t path) {
-  if (path.len == 0) return path;
-
-  // Start from the end of the string
-  c8* c = path.data + path.len - 1;
-
-  // Skip any trailing slashes
-  while (c > path.data && *c == '/') {
-    c--;
-  }
-
-  // Now find the next slash
-  while (c > path.data && *c != '/') {
-    c--;
-  }
-
-  // If we found a slash and it's not the only character, exclude it
-  if (c > path.data) {
-    path.len = (u32)(c - path.data);
-  } else if (c == path.data && *c == '/') {
-    // Root path case: "/" -> ""
-    path.len = 0;
-  } else {
-    // No parent found
-    path.len = 0;
-  }
-
-  return path;
-}
-
-sp_str_t sp_os_path_extension(sp_str_t path) {
-  if (!sp_os_is_regular_file(path)) {
-    return sp_str_lit("");
-  }
-
-  c8* c = path.data + path.len;
-  while (true) {
-    if ((*c == '/') || (c == path.data)) {
-      return sp_str_lit("");
-    }
-
-    if (*c == '.') break;
-    c--;
-  }
-
-  return sp_str(c, (path.data + path.len) - (c));
-}
-
 
 ///////////////////
 // DYNAMIC ARRAY //
@@ -2413,6 +2362,86 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   return buffer->size * buffer->element_size;
 }
 
+
+////////
+// OS //
+////////
+void sp_os_normalize_path(sp_str_t path) {
+  for (u32 i = 0; i < path.len; i++) {
+    if (path.data[i] == '\\') {
+      path.data[i] = '/';
+    }
+  }
+}
+
+sp_str_t sp_os_extract_file_name(sp_str_t path) {
+  if (path.len == 0) return sp_str_lit("");
+
+  c8* last_slash = NULL;
+  for (u32 i = 0; i < path.len; i++) {
+    if (path.data[i] == '/' || path.data[i] == '\\') {
+      last_slash = &path.data[i];
+    }
+  }
+
+  if (!last_slash) {
+    return path;
+  }
+
+  u32 filename_start = (u32)(last_slash - path.data) + 1;
+  if (filename_start >= path.len) return sp_str_lit("");
+
+  u32 filename_len = path.len - filename_start;
+  return sp_str(path.data + filename_start, filename_len);
+}
+
+sp_str_t sp_os_parent_path(sp_str_t path) {
+  if (path.len == 0) return path;
+
+  // Start from the end of the string
+  c8* c = path.data + path.len - 1;
+
+  // Skip any trailing slashes
+  while (c > path.data && *c == '/') {
+    c--;
+  }
+
+  // Now find the next slash
+  while (c > path.data && *c != '/') {
+    c--;
+  }
+
+  // If we found a slash and it's not the only character, exclude it
+  if (c > path.data) {
+    path.len = (u32)(c - path.data);
+  } else if (c == path.data && *c == '/') {
+    // Root path case: "/" -> ""
+    path.len = 0;
+  } else {
+    // No parent found
+    path.len = 0;
+  }
+
+  return path;
+}
+
+sp_str_t sp_os_path_extension(sp_str_t path) {
+  if (!sp_os_is_regular_file(path)) {
+    return sp_str_lit("");
+  }
+
+  c8* c = path.data + path.len;
+  while (true) {
+    if ((*c == '/') || (c == path.data)) {
+      return sp_str_lit("");
+    }
+
+    if (*c == '.') break;
+    c--;
+  }
+
+  return sp_str(c, (path.data + path.len) - (c));
+}
 
 ///////////
 // WIN32 //
@@ -2628,6 +2657,13 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     return str8;
   }
 
+  void sp_os_log(sp_str_t message) {
+    HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD written;
+    WriteConsoleA(console, message.data, message.len, &written, NULL);
+    WriteConsoleA(console, "\n", 1, &written, NULL);
+  }
+
   void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
     sp_thread_launch_t launch = SP_LVAL(sp_thread_launch_t) {
       .fn = fn,
@@ -2692,7 +2728,6 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
   void sp_semaphore_wait(sp_semaphore_t* semaphore) {
     WaitForSingleObject(*semaphore, INFINITE);
   }
-
 
   bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
     sp_win32_dword_t result = WaitForSingleObject(*semaphore, ms);
@@ -2903,6 +2938,11 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     }
     result[len] = '\0';
     return result;
+  }
+
+  void sp_os_log(sp_str_t message) {
+    write(STDOUT_FILENO, message.data, message.len);
+    write(STDOUT_FILENO, "\n", 1);
   }
 
   void* sp_posix_thread_launch(void* args) {
@@ -3207,6 +3247,10 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     return result;
   }
 
+  void sp_os_log(sp_str_t message) {
+    SDL_Log("%.*s", message.len, message.data);
+  }
+
   typedef struct {
     SDL_Thread* thread;
     sp_thread_fn_t fn;
@@ -3298,6 +3342,7 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
     SDL_SignalSemaphore((SDL_Semaphore*)*semaphore);
   }
 #endif
+
 
 //////////////////
 // FILE MONITOR //

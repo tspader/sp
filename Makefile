@@ -24,8 +24,9 @@ CMAKE_TYPE := Debug
 ##################
 SP_FLAG_INCLUDES := -I.
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
-SP_FLAGS_LINKER := -lpthread -lm
-SP_FLAGS_COMMON := $(SP_FLAG_INCLUDES) $(SP_FLAG_WARNINGS) $(SP_FLAGS_LINKER)
+SP_FLAG_LINKER := -lpthread -lm
+SP_FLAG_DEFINES := -DSP_IMPLEMENTATION # Do it here so clangd picks it up when it intercepts our compile commands
+SP_FLAGS_COMMON := $(SP_FLAG_INCLUDES) $(SP_FLAG_WARNINGS) $(SP_FLAG_LINKER) $(SP_FLAG_DEFINES)
 
 # C
 CC := gcc
@@ -50,11 +51,10 @@ SP_FLAGS_RUN := --enable-mixed-units --random-order
 
 SP_SOURCE_FILES := test.c
 
-
 ###########
 # TARGETS #
 ###########
-all: $(SP_OUTPUT_C) $(SP_OUTPUT_CPP) $(SP_OUTPUT_STRESS) $(SP_OUTPUT_SDL)
+all: clangd build
 
 $(SP_DIR_BUILD_OUTPUT):
 	@mkdir -p $(SP_DIR_BUILD_OUTPUT)
@@ -79,12 +79,19 @@ $(SP_OUTPUT_SDL): $(SDL_OUTPUT) $(SOURCES) $(HEADERS) | $(SP_DIR_BUILD_OUTPUT)
 $(SP_OUTPUT_STRESS): $(SOURCES) $(HEADERS) | $(SP_DIR_BUILD_OUTPUT)
 	$(CC) $(SP_FLAGS_STRESS) $(SP_SOURCE_FILES) -o $(SP_OUTPUT_STRESS)
 
+$(SP_COMPILE_DB): $(SP_MAKEFILE)
+	@make clean
+	@bear -- make build
+
 c: $(SP_OUTPUT_C)
 cpp: $(SP_OUTPUT_CPP)
 stress: $(SP_OUTPUT_STRESS)
 sdl: $(SP_OUTPUT_SDL)
+build: c cpp stress sdl
 
-run: c cpp stress sdl
+clangd: $(SP_COMPILE_DB)
+
+run: build
 	./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)
 	./$(SP_OUTPUT_CPP) $(SP_FLAGS_RUN)
 	./$(SP_OUTPUT_STRESS) $(SP_FLAGS_RUN)
@@ -93,10 +100,11 @@ run: c cpp stress sdl
 debug: c
 	gdb ./$(SP_OUTPUT_C)
 
+clean:
+	@rm -rf $(SP_DIR_BUILD_OUTPUT)
+	@rm -f $(SP_COMPILE_DB)
+
 nuke:
 	@rm -rf $(SP_DIR_BUILD)
 
-clean:
-	@rm -rf $(SP_DIR_BUILD_OUTPUT)
-
-.PHONY: c cpp stress sdl run debug clean nuke all
+.PHONY: c cpp stress sdl build run debug clean nuke all
