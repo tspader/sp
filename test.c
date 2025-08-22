@@ -1249,7 +1249,7 @@ UTEST(path_functions, path_extension) {
   };
 
   SP_CARR_FOR(cases, index) {
-    sp_str_t extension = sp_os_path_extension(cases[index].file_path);
+    sp_str_t extension = sp_os_extract_extension(cases[index].file_path);
     SP_EXPECT_STREQ(extension, cases[index].extension);
   }
 }
@@ -1290,7 +1290,7 @@ UTEST(path_functions, path_stem) {
   };
 
   SP_CARR_FOR(cases, index) {
-    sp_str_t stem = sp_os_path_stem(cases[index].file_path);
+    sp_str_t stem = sp_os_extract_stem(cases[index].file_path);
     SP_EXPECT_STREQ(stem, cases[index].stem);
   }
 
@@ -2596,5 +2596,47 @@ UTEST(ring_buffer, continuous_overwrite_stress) {
     sp_ring_buffer_destroy(&rb);
 }
 #endif
+
+UTEST(os_functions, recursive_directory_removal) {
+  sp_test_use_malloc();
+
+  sp_str_t foo = sp_str_lit("foo");
+  sp_str_t   bar = sp_str_lit("foo/bar");
+  sp_str_t     baz = sp_str_lit("foo/bar/baz");
+  sp_str_t       phil = sp_str_lit("foo/bar/baz/phil.txt");
+  sp_str_t     bobby = sp_str_lit("foo/bar/bobby.txt");
+  sp_str_t   qux = sp_str_lit("foo/qux");
+  sp_str_t     billy = sp_str_lit("foo/qux/billy.txt");
+  sp_str_t   jerry = sp_str_lit("foo/jerry.txt");
+
+  sp_os_create_directory(foo);
+  sp_os_create_directory(bar);
+  sp_os_create_directory(qux);
+  sp_os_create_directory(baz);
+  sp_os_create_file(jerry);
+  sp_os_create_file(bobby);
+  sp_os_create_file(phil);
+  sp_os_create_file(billy);
+
+  ASSERT_TRUE(sp_os_is_directory(foo));
+  ASSERT_TRUE(sp_os_is_directory(bar));
+  ASSERT_TRUE(sp_os_is_directory(qux));
+  ASSERT_TRUE(sp_os_is_directory(baz));
+  ASSERT_TRUE(sp_os_is_regular_file(jerry));
+  ASSERT_TRUE(sp_os_is_regular_file(bobby));
+  ASSERT_TRUE(sp_os_is_regular_file(phil));
+  ASSERT_TRUE(sp_os_is_regular_file(billy));
+
+  sp_os_remove_directory(foo);
+
+  ASSERT_FALSE(sp_os_does_path_exist(foo));
+  ASSERT_FALSE(sp_os_does_path_exist(bar));
+  ASSERT_FALSE(sp_os_does_path_exist(qux));
+  ASSERT_FALSE(sp_os_does_path_exist(baz));
+  ASSERT_FALSE(sp_os_does_path_exist(jerry));
+  ASSERT_FALSE(sp_os_does_path_exist(bobby));
+  ASSERT_FALSE(sp_os_does_path_exist(phil));
+  ASSERT_FALSE(sp_os_does_path_exist(billy));
+}
 
 UTEST_MAIN()

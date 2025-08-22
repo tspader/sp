@@ -1,4 +1,4 @@
-#ifndef SP_SPACE_MAT
+#ifndef SP_SPACE_H
 #define SP_SPACE_H
 
 //  ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗ ██╗   ██╗██████╗  █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
@@ -387,7 +387,6 @@ typedef struct {
 #define SP_LIT(STR) sp_str_lit(STR)
 #define SP_CSTR(STR) sp_str_cstr(STR)
 #define SP_SUBSTR(STR, INDEX, LEN) sp_str((STR).data + (INDEX), LEN)
-#define SP_SUBSTR_REVERSE(STR, INDEX, LEN) SP_SUBSTR((STR), (STR).len - 1 - (INDEX) - (LEN), (LEN))
 #define SP_SUBSTR_END(STR, LEN) sp_str((STR).data + (STR).len - (LEN), LEN)
 
 SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
@@ -419,6 +418,7 @@ SP_API c8*      sp_str_to_cstr_ex(sp_str_t str);
 SP_API sp_str_t sp_str_copy(sp_str_t str);
 SP_API sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length);
 SP_API sp_str_t sp_str_copy_cstr(const c8* str);
+SP_API sp_str_t sp_str_copy_cstr_null(const c8* str);
 SP_API void     sp_str_copy_to_str(sp_str_t str, sp_str_t* dest, u32 capacity);
 SP_API void     sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
 SP_API sp_str_t sp_str_alloc(u32 capacity);
@@ -921,13 +921,12 @@ SP_API void                         sp_os_remove_directory(sp_str_t path);
 SP_API void                         sp_os_create_file(sp_str_t path);
 SP_API void                         sp_os_remove_file(sp_str_t path);
 SP_API sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path);
-SP_API sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path);
 SP_API sp_os_date_time_t            sp_os_get_date_time();
 SP_API void                         sp_os_normalize_path(sp_str_t path);
 SP_API sp_str_t                     sp_os_parent_path(sp_str_t path);
 SP_API sp_str_t                     sp_os_join_path(sp_str_t a, sp_str_t b);
-SP_API sp_str_t                     sp_os_path_extension(sp_str_t path);
-SP_API sp_str_t                     sp_os_path_stem(sp_str_t path);
+SP_API sp_str_t                     sp_os_extract_extension(sp_str_t path);
+SP_API sp_str_t                     sp_os_extract_stem(sp_str_t path);
 SP_API sp_str_t                     sp_os_extract_file_name(sp_str_t path);
 SP_API void                         sp_os_sleep_ms(f64 ms);
 SP_API sp_str_t                     sp_os_get_executable_path();
@@ -2278,6 +2277,16 @@ sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length) {
   return copy;
 }
 
+sp_str_t sp_str_copy_cstr_null(const c8* str) {
+  sp_str_t copy;
+  copy.len = sp_cstr_len(str);
+  copy.data = (c8*)sp_alloc(copy.len + 1);
+
+  sp_os_copy_memory(str, copy.data, copy.len);
+  copy.data[copy.len] = 0;
+  return copy;
+}
+
 sp_str_t sp_str_copy_cstr(const c8* str) {
   sp_str_t copy;
   copy.len = sp_cstr_len(str);
@@ -2554,7 +2563,7 @@ sp_str_t sp_os_join_path(sp_str_t a, sp_str_t b) {
   return sp_str_join(a, b, SP_LIT("/"));
 }
 
-sp_str_t sp_os_path_extension(sp_str_t path) {
+sp_str_t sp_os_extract_extension(sp_str_t path) {
   for (u32 index = 0; index < path.len; index++) {
     c8 c = sp_str_at_reverse(path, index);
 
@@ -2568,11 +2577,11 @@ sp_str_t sp_os_path_extension(sp_str_t path) {
   return SP_SUBSTR_END(path, 0);
 }
 
-sp_str_t sp_os_path_stem(sp_str_t path) {
+sp_str_t sp_os_extract_stem(sp_str_t path) {
   sp_str_t file_name = sp_os_extract_file_name(path);
   if (!file_name.len) return path;
 
-  sp_str_t extension = sp_os_path_extension(path);
+  sp_str_t extension = sp_os_extract_extension(path);
 
   sp_str_t stem = {
     .len = file_name.len - extension.len,
@@ -3240,18 +3249,31 @@ sp_str_t sp_os_path_stem(sp_str_t path) {
     c8* file_path = sp_str_to_cstr(path);
     SDL_PathInfo info = SP_ZERO_INITIALIZE();
     if (!SDL_GetPathInfo(file_path, &info)) {
-      sp_free(file_path);
       return false;
     }
 
-    sp_free(file_path);
     return info.type == SDL_PATHTYPE_DIRECTORY;
   }
 
+  void sp_os_remove_directory_recursive(sp_str_t path) {
+    sp_os_directory_entry_list_t entries = sp_os_scan_directory(path);
+
+    for (u32 i = 0; i < entries.count; i++) {
+      sp_os_directory_entry_t* entry = &entries.data[i];
+
+      if (sp_os_is_directory(entry->file_path)) {
+        sp_os_remove_directory_recursive(entry->file_path);
+      }
+      if (sp_os_is_regular_file(entry->file_path)) {
+        sp_os_remove_file(entry->file_path);
+      }
+    }
+
+    SDL_RemovePath(sp_str_to_cstr(path));
+  }
+
   void sp_os_remove_directory(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    SDL_RemovePath(path_cstr);
-    sp_free(path_cstr);
+    sp_os_remove_directory_recursive(path);
   }
 
   void sp_os_create_directory(sp_str_t path) {
@@ -3274,13 +3296,21 @@ sp_str_t sp_os_path_stem(sp_str_t path) {
   }
 
   SDL_EnumerationResult sp_os_sdl_scan_directory_callback(void* user_data, const c8* directory, const c8* file_name) {
-    SDL_Log("%s", "sp_os_sdl_scan_directory_callback(): this doesnt report attributes correctly");
     sp_dynamic_array_t* entries = (sp_dynamic_array_t*)user_data;
-    sp_os_directory_entry_t entry = {
-      .file_path = sp_str_copy_cstr(file_name),
-      .file_name = sp_str_copy_cstr(file_name),
-      .attributes = SP_OS_FILE_ATTR_NONE
-    };
+
+    sp_os_directory_entry_t entry = SP_ZERO_INITIALIZE();
+    entry.file_name = sp_str_copy_cstr_null(file_name);
+    entry.file_path = sp_os_join_path(SP_CSTR(directory), entry.file_name);
+
+    SDL_PathInfo info;
+    if (SDL_GetPathInfo(entry.file_name.data, &info)) {
+      switch (info.type) {
+        case SDL_PATHTYPE_DIRECTORY: { entry.attributes = SP_OS_FILE_ATTR_DIRECTORY; break; }
+        case SDL_PATHTYPE_FILE:      { entry.attributes = SP_OS_FILE_ATTR_REGULAR_FILE; break; }
+        default:                     { break; }
+      }
+    }
+
     sp_dynamic_array_push(entries, &entry);
     return SDL_ENUM_CONTINUE;
   }
@@ -3289,18 +3319,12 @@ sp_str_t sp_os_path_stem(sp_str_t path) {
     sp_dynamic_array(sp_os_directory_entry_t) entries;
     sp_dynamic_array_init(&entries, sizeof(sp_os_directory_entry_t));
 
-    c8* directory = sp_str_to_cstr(path);
-    SDL_EnumerateDirectory(directory, sp_os_sdl_scan_directory_callback, &entries);
-    sp_free(directory);
+    SDL_EnumerateDirectory(sp_str_to_cstr(path), sp_os_sdl_scan_directory_callback, &entries);
 
     return SP_LVAL(sp_os_directory_entry_list_t) {
       .data = (sp_os_directory_entry_t*)entries.data,
       .count = entries.size
     };
-  }
-
-  sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
-    return sp_os_scan_directory(path);
   }
 
   sp_os_date_time_t sp_os_get_date_time() {
