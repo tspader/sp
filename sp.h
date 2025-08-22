@@ -384,6 +384,7 @@ SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
 SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
 SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
 SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...);
+SP_API void     sp_str_builder_new_line(sp_str_builder_t* builder);
 SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
 SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
 
@@ -2258,6 +2259,9 @@ void sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...) {
   va_end(args);
 
   sp_str_builder_append(builder, formatted);
+}
+void sp_str_builder_new_line(sp_str_builder_t* builder) {
+  sp_str_builder_append_c8(builder, '\n');
 }
 
 sp_str_t sp_str_builder_write(sp_str_builder_t* builder) {
