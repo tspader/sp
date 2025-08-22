@@ -13,6 +13,33 @@
 // ██║   ██║   ██║   ██║██║     ██║   ██║   ██║██╔══╝  ╚════██║
 // ╚██████╔╝   ██║   ██║███████╗██║   ██║   ██║███████╗███████║
 //  ╚═════╝    ╚═╝   ╚═╝╚══════╝╚═╝   ╚═╝   ╚═╝╚══════╝╚══════╝
+#define SP_TEST_REPORT(fmt, ...) \
+  do { \
+    sp_str_t formatted = SP_FMT(fmt, ##__VA_ARGS__); \
+    UTEST_PRINTF("%s\n", sp_str_to_cstr(formatted)); \
+  } while (0)
+
+#define SP_EXPECT_STREQ(a, b) SP_TEST_STREQ((a), (b), false)
+#define SP_TEST_STREQ(a, b, is_assert) \
+  UTEST_SURPRESS_WARNING_BEGIN do { \
+    if (!sp_str_equal((a), (b))) { \
+      const c8* __sp_test_file_lval = __FILE__; \
+      const u32 __sp_test_line_lval = __LINE__; \
+      sp_str_builder_t __sp_test_builder = SP_ZERO_INITIALIZE(); \
+      sp_str_builder_append_fmt(&__sp_test_builder, SP_LIT("{}:{} Failure:"), SP_FMT_CSTR(__sp_test_file_lval), SP_FMT_U32(__sp_test_line_lval)); \
+      sp_str_builder_new_line(&__sp_test_builder); \
+      sp_str_builder_indent(&__sp_test_builder); \
+      sp_str_builder_append_fmt(&__sp_test_builder, SP_LIT("{} != {}"), SP_FMT_QUOTED_STR((a)), SP_FMT_QUOTED_STR((b))); \
+      SP_TEST_REPORT(sp_str_builder_write(&__sp_test_builder)); \
+      *utest_result = UTEST_TEST_FAILURE; \
+ \
+      if (is_assert) { \
+        return; \
+      } \
+    } \
+  } while (0) \
+  UTEST_SURPRESS_WARNING_END
+
 typedef struct sp_test_memory_tracker {
   sp_bump_allocator_t* bump;
   sp_allocator_t* allocator;
@@ -24,7 +51,7 @@ typedef struct sp_test_file_monitor_data {
   c8 last_file_path[SP_MAX_PATH_LEN];
 } sp_test_file_monitor_data;
 
-c8* sp_test_generate_random_filename() {
+sp_str_t sp_test_generate_random_filename() {
   static u32 counter = 0;
   c8* filename = (c8*)sp_alloc(64);
 #ifdef _WIN32
@@ -34,7 +61,7 @@ c8* sp_test_generate_random_filename() {
   unsigned int rand_val = counter * 12345 + 67890;  // Simple deterministic value for portability
 #endif
   snprintf(filename, 64, "test_file_%u_%u.tmp", rand_val, counter++);
-  return filename;
+  return sp_str_copy_cstr(filename);
 }
 
 void sp_test_create_file(const c8* filename, const c8* content) {
@@ -1186,36 +1213,87 @@ UTEST(path_functions, canonicalize_path) {
   }
 }
 
+typedef struct {
+  sp_str_t file_path;
+  sp_str_t extension;
+} sp_test_file_extension_case_t;
+
 UTEST(path_functions, path_extension) {
   sp_test_use_malloc();
 
-  // Create a temporary test file for extension testing
-  c8* test_filename = sp_test_generate_random_filename();
-  sp_test_create_file(test_filename, "test");
-  sp_str_t test_path = sp_str_cstr(test_filename);
+  sp_test_file_extension_case_t cases [] = {
+    {
+      .file_path = SP_LIT("foo.bar"),
+      .extension = SP_LIT("bar")
+    },
+    {
+      .file_path = SP_LIT("foo."),
+      .extension = SP_LIT("")
+    },
+    {
+      .file_path = SP_LIT("foo.bar.baz"),
+      .extension = SP_LIT("baz")
+    },
+    {
+      .file_path = SP_LIT("foo"),
+      .extension = SP_LIT("")
+    },
+    {
+      .file_path = SP_LIT("foo.bar."),
+      .extension = SP_LIT("")
+    },
+    {
+      .file_path = SP_LIT(".foo"),
+      .extension = SP_LIT("foo")
+    },
+  };
 
-  // Test normal file extension
-  {
-    sp_str_t ext = sp_os_path_extension(test_path);
-    ASSERT_TRUE(sp_str_equal(ext, sp_str_lit(".tmp")));
+  SP_CARR_FOR(cases, index) {
+    sp_str_t extension = sp_os_path_extension(cases[index].file_path);
+    SP_EXPECT_STREQ(extension, cases[index].extension);
+  }
+}
+
+typedef struct {
+  sp_str_t file_path;
+  sp_str_t stem;
+} sp_test_file_stem_case_t;
+
+UTEST(path_functions, path_stem) {
+  sp_test_use_malloc();
+
+  sp_test_file_stem_case_t cases [] = {
+    {
+      .file_path = SP_LIT("foo.bar"),
+      .stem = SP_LIT("foo")
+    },
+    {
+      .file_path = SP_LIT("foo."),
+      .stem = SP_LIT("foo")
+    },
+    {
+      .file_path = SP_LIT("foo.bar.baz"),
+      .stem = SP_LIT("foo.bar")
+    },
+    {
+      .file_path = SP_LIT("foo"),
+      .stem = SP_LIT("foo")
+    },
+    {
+      .file_path = SP_LIT("foo.bar."),
+      .stem = SP_LIT("foo.bar")
+    },
+    {
+      .file_path = SP_LIT(".foo"),
+      .stem = SP_LIT("")
+    },
+  };
+
+  SP_CARR_FOR(cases, index) {
+    sp_str_t stem = sp_os_path_stem(cases[index].file_path);
+    SP_EXPECT_STREQ(stem, cases[index].stem);
   }
 
-  sp_test_delete_file(test_filename);
-  sp_free(test_filename);
-
-  // Test path without extension (directory)
-  {
-    sp_str_t path = sp_str_lit(".");
-    sp_str_t ext = sp_os_path_extension(path);
-    ASSERT_EQ(ext.len, 0);
-  }
-
-  // Test non-existent file
-  {
-    sp_str_t path = sp_str_lit("nonexistent.txt");
-    sp_str_t ext = sp_os_path_extension(path);
-    ASSERT_EQ(ext.len, 0);
-  }
 }
 
 UTEST(path_functions, extract_file_name) {

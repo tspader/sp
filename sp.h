@@ -374,6 +374,10 @@ typedef struct {
 
 typedef struct {
   sp_str_builder_buffer_t buffer;
+  struct {
+    sp_str_t word;
+    u32 level;
+  } indent;
 } sp_str_builder_t;
 
 #define sp_str_cstr(STR)   sp_str((STR), sp_cstr_len(STR))
@@ -382,10 +386,15 @@ typedef struct {
 #define SP_STR(STR, LEN) sp_str(STR, LEN)
 #define SP_LIT(STR) sp_str_lit(STR)
 #define SP_CSTR(STR) sp_str_cstr(STR)
-#define SP_SUBSTR(STR, OFFSET, LEN) sp_str((STR).data + (OFFSET), LEN)
-#define SP_REVERSE_SUBSTR(STR, OFFSET, LEN) sp_str((STR).data + (STR).len - (OFFSET), LEN)
+#define SP_SUBSTR(STR, INDEX, LEN) sp_str((STR).data + (INDEX), LEN)
+#define SP_SUBSTR_REVERSE(STR, INDEX, LEN) SP_SUBSTR((STR), (STR).len - 1 - (INDEX) - (LEN), (LEN))
+#define SP_SUBSTR_END(STR, LEN) sp_str((STR).data + (STR).len - (LEN), LEN)
 
 SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
+SP_API void     sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
+SP_API void     sp_str_builder_indent(sp_str_builder_t* builder);
+SP_API void     sp_str_builder_dedent(sp_str_builder_t* builder);
+SP_API void     sp_str_builder_append_raw(sp_str_builder_t* builder, sp_str_t str);
 SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
 SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
 SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
@@ -420,9 +429,11 @@ SP_API s32      sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 SP_API s32      sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
 SP_API bool     sp_str_valid(sp_str_t str);
 SP_API c8       sp_str_at(sp_str_t str, u32 index);
+SP_API c8       sp_str_at_reverse(sp_str_t str, u32 index);
 SP_API c8       sp_str_back(sp_str_t str);
 SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
 SP_API sp_str_t sp_str_strip_right(sp_str_t str);
+SP_API sp_str_t sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
 
 
 //   ██████╗ ██████╗ ███╗   ██╗████████╗ █████╗ ██╗███╗   ██╗███████╗██████╗ ███████╗
@@ -659,7 +670,7 @@ SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* mon
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
 typedef struct sp_format_arg_t {
   sp_hash_t id;
-  void* data;
+  const void* data;
 } sp_format_arg_t;
 
 typedef struct sp_formatter sp_formatter_t;
@@ -730,6 +741,7 @@ void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 
+#define SP_FMT(fmt, ...) sp_fmt(fmt, ##__VA_ARGS__);
 sp_str_t sp_fmt(sp_str_t fmt, ...);
 sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
 
@@ -2182,7 +2194,7 @@ bool sp_str_equal_cstr(sp_str_t a, const c8* b) {
 bool sp_str_ends_with(sp_str_t haystack, sp_str_t needle) {
   if (haystack.len < needle.len) return false;
 
-  return sp_str_equal(SP_REVERSE_SUBSTR(haystack, 0, needle.len), needle);
+  return sp_str_equal(SP_SUBSTR_END(haystack, needle.len), needle);
 }
 
 s32 sp_str_sort_kernel_alphabetical(const void* a, const void* b) {
@@ -2214,6 +2226,10 @@ c8 sp_str_at(sp_str_t str, u32 index) {
   return str.data[index];
 }
 
+c8 sp_str_at_reverse(sp_str_t str, u32 index) {
+  return str.data[str.len - index - 1];
+}
+
 c8 sp_str_back(sp_str_t str) {
   return str.data[str.len - 1];
 }
@@ -2241,6 +2257,15 @@ sp_str_t sp_str_strip_right(sp_str_t str) {
   }
 
   return str;
+}
+
+sp_str_t sp_str_sub(sp_str_t str, u32 index, u32 len) {
+  sp_str_t substr = {
+    .len = len,
+    .data = str.data + index
+  };
+  SP_ASSERT(index + len < str.len);
+  return substr;
 }
 
 sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length) {
@@ -2289,21 +2314,44 @@ void sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity) {
   }
 }
 
-void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
-  sp_str_builder_grow(builder, builder->buffer.count + str.len);
+void sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount) {
+  sp_str_builder_grow(builder, builder->buffer.count + amount);
+}
+
+void sp_str_builder_indent(sp_str_builder_t* builder) {
+  builder->indent.level++;
+}
+
+void sp_str_builder_dedent(sp_str_builder_t* builder) {
+  if (builder->indent.level) {
+    builder->indent.level--;
+  }
+}
+
+void sp_str_builder_append_raw(sp_str_builder_t* builder, sp_str_t str) {
+  sp_str_builder_add_capacity(builder, str.len);
   sp_os_copy_memory(str.data, builder->buffer.data + builder->buffer.count, str.len);
   builder->buffer.count += str.len;
 }
 
+void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
+  if (!sp_str_valid(builder->indent.word)) {
+    builder->indent.word = SP_LIT("  ");
+  }
+
+  for (u32 index = 0; index < builder->indent.level; index++) {
+    sp_str_builder_append_raw(builder, builder->indent.word);
+  }
+
+  sp_str_builder_append_raw(builder, str);
+}
+
 void sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str) {
-  u32 len = sp_cstr_len(str);
-  sp_str_builder_grow(builder, builder->buffer.count + len);
-  sp_os_copy_memory(str, builder->buffer.data + builder->buffer.count, len);
-  builder->buffer.count += len;
+  sp_str_builder_append(builder, SP_CSTR(str));
 }
 
 void sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c) {
-  sp_str_builder_append(builder, sp_str(&c, 1));
+  sp_str_builder_append(builder, SP_STR(&c, 1));
 }
 
 void sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...) {
@@ -2507,27 +2555,38 @@ sp_str_t sp_os_join_path(sp_str_t a, sp_str_t b) {
 }
 
 sp_str_t sp_os_path_extension(sp_str_t path) {
-  if (!sp_os_is_regular_file(path)) {
-    return SP_LIT("");
-  }
+  for (u32 index = 0; index < path.len; index++) {
+    c8 c = sp_str_at_reverse(path, index);
 
-  c8* c = path.data + path.len;
-  while (true) {
-    if ((*c == '/') || (c == path.data)) {
-      return SP_LIT("");
+    switch (c) {
+      case '.': return SP_SUBSTR_END(path, index);
+      case '/': return SP_SUBSTR_END(path, 0);
+      default:  break;
     }
-
-    if (*c == '.') break;
-    c--;
   }
 
-  return SP_STR(c, (path.data + path.len) - (c));
+  return SP_SUBSTR_END(path, 0);
 }
 
 sp_str_t sp_os_path_stem(sp_str_t path) {
   sp_str_t file_name = sp_os_extract_file_name(path);
+  if (!file_name.len) return path;
+
   sp_str_t extension = sp_os_path_extension(path);
-  return SP_REVERSE_SUBSTR(file_name, 0, extension.len);
+
+  sp_str_t stem = {
+    .len = file_name.len - extension.len,
+    .data = file_name.data
+  };
+
+  while (true) {
+    if (!stem.len) break;
+    if (sp_str_back(stem) != '.') break;
+
+    stem.len--;
+  }
+
+  return stem;
 }
 
 ///////////
@@ -3231,7 +3290,7 @@ sp_str_t sp_os_path_stem(sp_str_t path) {
     sp_dynamic_array_init(&entries, sizeof(sp_os_directory_entry_t));
 
     c8* directory = sp_str_to_cstr(path);
-    SDL_EnumerateDirectory(directory, sp_os_sdl_scan_directory_callback, SP_NULL);
+    SDL_EnumerateDirectory(directory, sp_os_sdl_scan_directory_callback, &entries);
     sp_free(directory);
 
     return SP_LVAL(sp_os_directory_entry_list_t) {
