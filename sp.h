@@ -189,7 +189,7 @@
 #define SP_UNREACHABLE() SP_ASSERT(false)
 #define SP_UNREACHABLE_CASE() SP_ASSERT(false); break;
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
-#define SP_FATAL() SP_ASSERT(false)
+#define SP_FATAL(MESSAGE) do { SP_LOG((MESSAGE)); SP_ASSERT(false); } while (false);
 #define SP_BROKEN() SP_ASSERT(false)
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
@@ -376,11 +376,14 @@ typedef struct {
 #define sp_str_cstr(STR)   sp_str((STR), sp_cstr_len(STR))
 #define sp_str_lit(STR)    sp_str((STR), sizeof(STR) - 1)
 #define sp_str(STR, LEN) SP_LVAL(sp_str_t) { .len = (u32)(LEN), .data = (c8*)(STR) }
+#define SP_LIT(STR) sp_str_lit(STR)
+#define SP_CSTR(STR) sp_str_cstr(STR)
 
 SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
 SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
 SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
 SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
+SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...);
 SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
 SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
 
@@ -409,6 +412,7 @@ SP_API s32      sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 SP_API s32      sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
 SP_API bool     sp_str_valid(sp_str_t str);
 SP_API c8       sp_str_at(sp_str_t str, u32 index);
+SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
 
 
 //   ██████╗ ██████╗ ███╗   ██╗████████╗ █████╗ ██╗███╗   ██╗███████╗██████╗ ███████╗
@@ -750,6 +754,7 @@ sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
 // ██║     ██║   ██║██║   ██║
 // ███████╗╚██████╔╝╚██████╔╝
 // ╚══════╝ ╚═════╝  ╚═════╝
+#define SP_LOG(CSTR, ...) sp_log(sp_str_lit((CSTR)), ##__VA_ARGS__)
 void sp_log(sp_str_t fmt, ...);
 
 
@@ -895,6 +900,7 @@ SP_API sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path
 SP_API sp_os_date_time_t            sp_os_get_date_time();
 SP_API void                         sp_os_normalize_path(sp_str_t path);
 SP_API sp_str_t                     sp_os_parent_path(sp_str_t path);
+SP_API sp_str_t                     sp_os_join_path(sp_str_t a, sp_str_t b);
 SP_API sp_str_t                     sp_os_path_extension(sp_str_t path);
 SP_API sp_str_t                     sp_os_extract_file_name(sp_str_t path);
 SP_API void                         sp_os_sleep_ms(f64 ms);
@@ -2178,6 +2184,10 @@ c8 sp_str_at(sp_str_t str, u32 index) {
   return str.data[index];
 }
 
+sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
+  return sp_fmt(SP_LIT("{}{}{}"), SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
+}
+
 sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length) {
   sp_str_t copy;
   u32 str_len = sp_cstr_len(str);
@@ -2239,6 +2249,15 @@ void sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str) {
 
 void sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c) {
   sp_str_builder_append(builder, sp_str(&c, 1));
+}
+
+void sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t formatted = sp_fmt_v(fmt, args);
+  va_end(args);
+
+  sp_str_builder_append(builder, formatted);
 }
 
 sp_str_t sp_str_builder_write(sp_str_builder_t* builder) {
@@ -2423,6 +2442,10 @@ sp_str_t sp_os_parent_path(sp_str_t path) {
   }
 
   return path;
+}
+
+sp_str_t sp_os_join_path(sp_str_t a, sp_str_t b) {
+  return sp_str_join(a, b, SP_LIT("/"));
 }
 
 sp_str_t sp_os_path_extension(sp_str_t path) {
@@ -3222,6 +3245,7 @@ sp_str_t sp_os_path_extension(sp_str_t path) {
     sp_os_normalize_path(result);
 
     if (result.len > 0 && result.data[result.len - 1] == '/') {
+      result.data[result.len - 1] = 0;
       result.len--;
     }
 
