@@ -1,4 +1,4 @@
-#ifndef SP_SPACE_H
+#ifndef SP_SPACE_MAT
 #define SP_SPACE_H
 
 //  ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗ ██╗   ██╗██████╗  █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
@@ -189,7 +189,7 @@
 #define SP_UNREACHABLE() SP_ASSERT(false)
 #define SP_UNREACHABLE_CASE() SP_ASSERT(false); break;
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
-#define SP_FATAL(MESSAGE) do { SP_LOG((MESSAGE)); SP_ASSERT(false); } while (false);
+#define SP_FATAL(MESSAGE, ...) do { SP_LOG((MESSAGE), ##__VA_ARGS__); SP_ASSERT(false); } while (false);
 #define SP_BROKEN() SP_ASSERT(false)
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
@@ -669,30 +669,31 @@ typedef struct sp_formatter {
   #define SP_FMT_ARG(T, V) SP_LVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .data = (void*)&(V) }
 #endif
 
-#define SP_FMT_PTR(V) SP_FMT_ARG(ptr, V)
-#define SP_FMT_STR(V) SP_FMT_ARG(str, V)
-#define SP_FMT_CSTR(V) SP_FMT_ARG(cstr, V)
-#define SP_FMT_S8(V) SP_FMT_ARG(s8, V)
-#define SP_FMT_S16(V) SP_FMT_ARG(s16, V)
-#define SP_FMT_S32(V) SP_FMT_ARG(s32, V)
-#define SP_FMT_S64(V) SP_FMT_ARG(s64, V)
-#define SP_FMT_U8(V) SP_FMT_ARG(u8, V)
-#define SP_FMT_U16(V) SP_FMT_ARG(u16, V)
-#define SP_FMT_U32(V) SP_FMT_ARG(u32, V)
-#define SP_FMT_U64(V) SP_FMT_ARG(u64, V)
-#define SP_FMT_F32(V) SP_FMT_ARG(f32, V)
-#define SP_FMT_F64(V) SP_FMT_ARG(f64, V)
-#define SP_FMT_C8(V) SP_FMT_ARG(c8, V)
-#define SP_FMT_C16(V) SP_FMT_ARG(c16, V)
-#define SP_FMT_CONTEXT(V) SP_FMT_ARG(context, V)
-#define SP_FMT_HASH(V) SP_FMT_ARG(hash, V)
-#define SP_FMT_STR_BUILDER(V) SP_FMT_ARG(str_builder, V)
-#define SP_FMT_DATE_TIME(V) SP_FMT_ARG(date_time, V)
-#define SP_FMT_THREAD(V) SP_FMT_ARG(thread, V)
-#define SP_FMT_MUTEX(V) SP_FMT_ARG(mutex, V)
-#define SP_FMT_SEMAPHORE(V) SP_FMT_ARG(semaphore, V)
-#define SP_FMT_FIXED_ARRAY(V) SP_FMT_ARG(fixed_array, V)
+#define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
+#define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
+#define SP_FMT_CSTR(V)          SP_FMT_ARG(cstr, V)
+#define SP_FMT_S8(V)            SP_FMT_ARG(s8, V)
+#define SP_FMT_S16(V)           SP_FMT_ARG(s16, V)
+#define SP_FMT_S32(V)           SP_FMT_ARG(s32, V)
+#define SP_FMT_S64(V)           SP_FMT_ARG(s64, V)
+#define SP_FMT_U8(V)            SP_FMT_ARG(u8, V)
+#define SP_FMT_U16(V)           SP_FMT_ARG(u16, V)
+#define SP_FMT_U32(V)           SP_FMT_ARG(u32, V)
+#define SP_FMT_U64(V)           SP_FMT_ARG(u64, V)
+#define SP_FMT_F32(V)           SP_FMT_ARG(f32, V)
+#define SP_FMT_F64(V)           SP_FMT_ARG(f64, V)
+#define SP_FMT_C8(V)            SP_FMT_ARG(c8, V)
+#define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
+#define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
+#define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
+#define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
+#define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
+#define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
+#define SP_FMT_MUTEX(V)         SP_FMT_ARG(mutex, V)
+#define SP_FMT_SEMAPHORE(V)     SP_FMT_ARG(semaphore, V)
+#define SP_FMT_FIXED_ARRAY(V)   SP_FMT_ARG(fixed_array, V)
 #define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
+#define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
 
 void sp_format_ptr(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_str(sp_str_builder_t* builder, sp_format_arg_t* buffer);
@@ -718,6 +719,7 @@ void sp_format_mutex(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_semaphore(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
+void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 
 sp_str_t sp_fmt(sp_str_t fmt, ...);
 sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
@@ -746,7 +748,8 @@ sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
   SP_FORMATTER(mutex, sp_format_mutex), \
   SP_FORMATTER(semaphore, sp_format_semaphore), \
   SP_FORMATTER(fixed_array, sp_format_fixed_array), \
-  SP_FORMATTER(dynamic_array, sp_format_dynamic_array)
+  SP_FORMATTER(dynamic_array, sp_format_dynamic_array), \
+  SP_FORMATTER(quoted_str, sp_format_quoted_str), \
 
 
 // ██╗      ██████╗  ██████╗
@@ -1854,6 +1857,16 @@ void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_builder_append_cstr(builder, ", capacity: ");
   sp_format_unsigned(builder, arr->capacity, 10);
   sp_str_builder_append_cstr(builder, " }");
+}
+
+void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+  sp_str_t* value = (sp_str_t*)arg->data;
+  SP_ASSERT(builder);
+  SP_ASSERT(value);
+
+  sp_str_builder_append_c8(builder, '"');
+  sp_str_builder_append(builder, *value);
+  sp_str_builder_append_c8(builder, '"');
 }
 
 sp_str_t sp_fmt(sp_str_t fmt, ...) {
