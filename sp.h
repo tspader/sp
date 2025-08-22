@@ -232,6 +232,8 @@
 #define SP_API
 #define SP_IMP
 
+#define SP_SDL_IGNORE_STDIO true
+#define SP_SDL_PIPE_STDIO true
 
 SP_BEGIN_EXTERN_C()
 
@@ -253,6 +255,7 @@ typedef float    f32;
 typedef double   f64;
 typedef char     c8;
 typedef wchar_t  c16;
+typedef size_t   sp_size_t;
 
 typedef struct {
   u64 s;
@@ -376,8 +379,11 @@ typedef struct {
 #define sp_str_cstr(STR)   sp_str((STR), sp_cstr_len(STR))
 #define sp_str_lit(STR)    sp_str((STR), sizeof(STR) - 1)
 #define sp_str(STR, LEN) SP_LVAL(sp_str_t) { .len = (u32)(LEN), .data = (c8*)(STR) }
+#define SP_STR(STR, LEN) sp_str(STR, LEN)
 #define SP_LIT(STR) sp_str_lit(STR)
 #define SP_CSTR(STR) sp_str_cstr(STR)
+#define SP_SUBSTR(STR, OFFSET, LEN) sp_str((STR).data + (OFFSET), LEN)
+#define SP_REVERSE_SUBSTR(STR, OFFSET, LEN) sp_str((STR).data + (STR).len - (OFFSET), LEN)
 
 SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
 SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
@@ -409,11 +415,14 @@ SP_API void     sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
 SP_API sp_str_t sp_str_alloc(u32 capacity);
 SP_API bool     sp_str_equal(sp_str_t a, sp_str_t b);
 SP_API bool     sp_str_equal_cstr(sp_str_t a, const c8* b);
+SP_API bool     sp_str_ends_with(sp_str_t a, sp_str_t b);
 SP_API s32      sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 SP_API s32      sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
 SP_API bool     sp_str_valid(sp_str_t str);
 SP_API c8       sp_str_at(sp_str_t str, u32 index);
+SP_API c8       sp_str_back(sp_str_t str);
 SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API sp_str_t sp_str_strip_right(sp_str_t str);
 
 
 //   ██████╗ ██████╗ ███╗   ██╗████████╗ █████╗ ██╗███╗   ██╗███████╗██████╗ ███████╗
@@ -491,7 +500,7 @@ void sp_dyn_array_push_data(void** arr, void* val, u32 val_len);
 #define sp_dyn_array_pop(__ARR)
 #define sp_dyn_array_back(__ARR)
 #define sp_dyn_array_new(__T)
-#define sp_dyn_array_for(__IT, __ARR) for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
+#define sp_dyn_array_for(__ARR, __IT) for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
 
 ////////////////
 // HASH TABLE //
@@ -906,6 +915,7 @@ SP_API void                         sp_os_normalize_path(sp_str_t path);
 SP_API sp_str_t                     sp_os_parent_path(sp_str_t path);
 SP_API sp_str_t                     sp_os_join_path(sp_str_t a, sp_str_t b);
 SP_API sp_str_t                     sp_os_path_extension(sp_str_t path);
+SP_API sp_str_t                     sp_os_path_stem(sp_str_t path);
 SP_API sp_str_t                     sp_os_extract_file_name(sp_str_t path);
 SP_API void                         sp_os_sleep_ms(f64 ms);
 SP_API sp_str_t                     sp_os_get_executable_path();
@@ -2169,6 +2179,12 @@ bool sp_str_equal_cstr(sp_str_t a, const c8* b) {
   return sp_os_is_memory_equal(a.data, b, len);
 }
 
+bool sp_str_ends_with(sp_str_t haystack, sp_str_t needle) {
+  if (haystack.len < needle.len) return false;
+
+  return sp_str_equal(SP_REVERSE_SUBSTR(haystack, 0, needle.len), needle);
+}
+
 s32 sp_str_sort_kernel_alphabetical(const void* a, const void* b) {
   return sp_str_compare_alphabetical(*(sp_str_t*)a, *(sp_str_t*)b);
 }
@@ -2198,8 +2214,33 @@ c8 sp_str_at(sp_str_t str, u32 index) {
   return str.data[index];
 }
 
+c8 sp_str_back(sp_str_t str) {
+  return str.data[str.len - 1];
+}
+
 sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
   return sp_fmt(SP_LIT("{}{}{}"), SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
+}
+
+sp_str_t sp_str_strip_right(sp_str_t str) {
+  while (str.len) {
+    c8 c = sp_str_back(str);
+
+    switch (c) {
+      case ' ':
+      case '\t':
+      case '\r':
+      case '\n': {
+        str.len--;
+        break;
+      }
+      default: {
+        return str;
+      }
+    }
+  }
+
+  return str;
 }
 
 sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length) {
@@ -2467,20 +2508,26 @@ sp_str_t sp_os_join_path(sp_str_t a, sp_str_t b) {
 
 sp_str_t sp_os_path_extension(sp_str_t path) {
   if (!sp_os_is_regular_file(path)) {
-    return sp_str_lit("");
+    return SP_LIT("");
   }
 
   c8* c = path.data + path.len;
   while (true) {
     if ((*c == '/') || (c == path.data)) {
-      return sp_str_lit("");
+      return SP_LIT("");
     }
 
     if (*c == '.') break;
     c--;
   }
 
-  return sp_str(c, (path.data + path.len) - (c));
+  return SP_STR(c, (path.data + path.len) - (c));
+}
+
+sp_str_t sp_os_path_stem(sp_str_t path) {
+  sp_str_t file_name = sp_os_extract_file_name(path);
+  sp_str_t extension = sp_os_path_extension(path);
+  return SP_REVERSE_SUBSTR(file_name, 0, extension.len);
 }
 
 ///////////
@@ -3977,7 +4024,7 @@ sp_asset_t sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t
 
 sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind) {
   sp_mutex_lock(&registry->mutex);
-  sp_dyn_array_for(index, registry->importers) {
+  sp_dyn_array_for(registry->importers, index) {
     sp_asset_importer_t* importer = &registry->importers[index];
     if (importer->kind == kind) {
       sp_mutex_unlock(&registry->mutex);
