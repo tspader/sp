@@ -185,11 +185,28 @@
 #define SP_ZERO_STRUCT(t) SP_LVAL(t) SP_ZERO_INITIALIZE()
 #define SP_ZERO_RETURN(t) { t __SP_ZERO_RETURN = SP_ZERO_STRUCT(t); return __dn_zero_return; }
 
+#define SP_EXIT_SUCCESS() exit(0)
+#define SP_EXIT_FAILURE() exit(1)
 #define SP_ASSERT(condition) assert((condition))
+#define SP_ASSERT_FMT(COND, FMT, ...) \
+  do { \
+    if (!(COND)) { \
+      const c8* condition = SP_MACRO_STR(COND); \
+      sp_str_t message = sp_fmt_c8((FMT), ##__VA_ARGS__); \
+      SP_LOG("SP_ASSERT({}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
+      SP_EXIT_FAILURE(); \
+    } \
+  } while (0)
+#define SP_FATAL(FMT, ...) \
+  do { \
+    sp_str_t message = sp_fmt_c8((FMT), ##__VA_ARGS__); \
+    SP_LOG("SP_FATAL(): {}", SP_FMT_STR(message)); \
+    SP_EXIT_FAILURE(); \
+  } while (0)
+
 #define SP_UNREACHABLE() SP_ASSERT(false)
 #define SP_UNREACHABLE_CASE() SP_ASSERT(false); break;
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
-#define SP_FATAL(MESSAGE, ...) do { SP_LOG((MESSAGE), ##__VA_ARGS__); SP_ASSERT(false); } while (false);
 #define SP_BROKEN() SP_ASSERT(false)
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
@@ -234,6 +251,8 @@
 
 #define SP_SDL_IGNORE_STDIO true
 #define SP_SDL_PIPE_STDIO true
+#define SP_SDL_INHERIT_ENVIRONMENT true
+#define SP_SDL_CLEAN_ENVIRONMENT false
 
 SP_BEGIN_EXTERN_C()
 
@@ -398,6 +417,7 @@ SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
 SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
 SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
 SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...);
+SP_API void     sp_str_builder_append_fmt_c8(sp_str_builder_t* builder, const c8* fmt, ...);
 SP_API void     sp_str_builder_new_line(sp_str_builder_t* builder);
 SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
 SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
@@ -431,7 +451,9 @@ SP_API bool     sp_str_valid(sp_str_t str);
 SP_API c8       sp_str_at(sp_str_t str, u32 index);
 SP_API c8       sp_str_at_reverse(sp_str_t str, u32 index);
 SP_API c8       sp_str_back(sp_str_t str);
+SP_API sp_str_t sp_str_concat(sp_str_t a, sp_str_t b);
 SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API sp_str_t sp_str_replace(sp_str_t str, c8 from, c8 to);
 SP_API sp_str_t sp_str_strip_right(sp_str_t str);
 SP_API sp_str_t sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
 
@@ -743,6 +765,7 @@ void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 
 #define SP_FMT(fmt, ...) sp_fmt(fmt, ##__VA_ARGS__);
 sp_str_t sp_fmt(sp_str_t fmt, ...);
+sp_str_t sp_fmt_c8(const c8* fmt, ...);
 sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
 
 #define SP_BUILTIN_FORMATTERS \
@@ -779,8 +802,10 @@ sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
 // ██║     ██║   ██║██║   ██║
 // ███████╗╚██████╔╝╚██████╔╝
 // ╚══════╝ ╚═════╝  ╚═════╝
-#define SP_LOG(CSTR, ...) sp_log(sp_str_lit((CSTR)), ##__VA_ARGS__)
+#define SP_LOG(CSTR, ...)    sp_log(SP_CSTR((CSTR)), ##__VA_ARGS__)
+#define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
 void sp_log(sp_str_t fmt, ...);
+void sp_log_raw(sp_str_t fmt, ...);
 
 
 //   ██████╗ ███████╗
@@ -1899,6 +1924,15 @@ sp_str_t sp_fmt(sp_str_t fmt, ...) {
   return str;
 }
 
+sp_str_t sp_fmt_c8(const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t str = sp_fmt_v(SP_CSTR(fmt), args);
+  va_end(args);
+
+  return str;
+}
+
 sp_str_t sp_fmt_v(sp_str_t fmt, va_list args) {
   #define SP_FORMATTER(T, FN) SP_LVAL(sp_formatter_t) { .id = sp_hash_cstr(SP_MACRO_STR(T)), .fn = FN }
   sp_formatter_t formatters [] = {
@@ -2233,9 +2267,32 @@ c8 sp_str_back(sp_str_t str) {
   return str.data[str.len - 1];
 }
 
+sp_str_t sp_str_concat(sp_str_t a, sp_str_t b) {
+  return sp_fmt_c8("{}{}", SP_FMT_STR(a), SP_FMT_STR(b));
+}
+
 sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
   return sp_fmt(SP_LIT("{}{}{}"), SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
 }
+
+sp_str_t sp_str_to_upper(sp_str_t str) {
+  for (u32 i = 0; i < str.len; i++) {
+    if (str.data[i] >= 'a' && str.data[i] <= 'z') {
+      str.data[i] -= 32;
+    }
+  }
+  return str;
+}
+
+sp_str_t sp_str_replace(sp_str_t str, c8 from, c8 to) {
+  for (u32 i = 0; i < str.len; i++) {
+    if (str.data[i] == from) {
+      str.data[i] = to;
+    }
+  }
+  return str;
+}
+
 
 sp_str_t sp_str_strip_right(sp_str_t str) {
   while (str.len) {
@@ -2371,6 +2428,16 @@ void sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...) {
 
   sp_str_builder_append(builder, formatted);
 }
+
+void sp_str_builder_append_fmt_c8(sp_str_builder_t* builder, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t formatted = sp_fmt_v(SP_CSTR(fmt), args);
+  va_end(args);
+
+  sp_str_builder_append(builder, formatted);
+}
+
 void sp_str_builder_new_line(sp_str_builder_t* builder) {
   sp_str_builder_append_c8(builder, '\n');
 }
