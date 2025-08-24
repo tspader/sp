@@ -253,6 +253,8 @@
 #define SP_SDL_PIPE_STDIO true
 #define SP_SDL_INHERIT_ENVIRONMENT true
 #define SP_SDL_CLEAN_ENVIRONMENT false
+#define SP_SDL_OVERWRITE_ENV_VAR true
+#define SP_SDL_DO_NOT_OVERWRITE_ENV_VAR false
 
 SP_BEGIN_EXTERN_C()
 
@@ -360,6 +362,7 @@ void                  sp_free(void* memory);
 typedef u64 sp_hash_t;
 
 sp_hash_t sp_hash_cstr(const c8* str);
+sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes);
 sp_hash_t sp_hash_bytes(void* p, u64 len, u64 seed);
 
 
@@ -412,8 +415,8 @@ SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_cap
 SP_API void     sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
 SP_API void     sp_str_builder_indent(sp_str_builder_t* builder);
 SP_API void     sp_str_builder_dedent(sp_str_builder_t* builder);
-SP_API void     sp_str_builder_append_raw(sp_str_builder_t* builder, sp_str_t str);
 SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
+SP_API void     sp_str_builder_append_raw(sp_str_builder_t* builder, sp_str_t str);
 SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
 SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
 SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...);
@@ -1093,6 +1096,13 @@ SP_END_EXTERN_C()
 
 #ifdef SP_IMPLEMENTATION
 SP_BEGIN_EXTERN_C()
+
+#define SP_SIZE_T_BITS  ((sizeof(size_t)) * 8)
+#define SP_SIPHASH_C_ROUNDS 1
+#define SP_SIPHASH_D_ROUNDS 1
+#define sp_rotate_left(__V, __N)   (((__V) << (__N)) | ((__V) >> (SP_SIZE_T_BITS - (__N))))
+#define sp_rotate_right(__V, __N)  (((__V) >> (__N)) | ((__V) << (SP_SIZE_T_BITS - (__N))))
+
 sp_hash_t sp_hash_cstr(const c8* str) {
   const size_t prime = 31;
 
@@ -1106,11 +1116,9 @@ sp_hash_t sp_hash_cstr(const c8* str) {
   return hash;
 }
 
-#define SP_SIZE_T_BITS  ((sizeof(size_t)) * 8)
-#define SP_SIPHASH_C_ROUNDS 1
-#define SP_SIPHASH_D_ROUNDS 1
-#define sp_rotate_left(__V, __N)   (((__V) << (__N)) | ((__V) >> (SP_SIZE_T_BITS - (__N))))
-#define sp_rotate_right(__V, __N)  (((__V) >> (__N)) | ((__V) << (SP_SIZE_T_BITS - (__N))))
+sp_hash_t sp_hash_str(sp_str_t str) {
+  return sp_hash_bytes(str.data, str.len, 0);
+}
 
 sp_hash_t sp_hash_bytes(void *p, u64 len, u64 seed) {
   unsigned char *d = (unsigned char *) p;
@@ -1159,6 +1167,10 @@ sp_hash_t sp_hash_bytes(void *p, u64 len, u64 seed) {
     sp_sipround();
 
   return v1^v2^v3;
+}
+
+sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
+  return sp_hash_bytes(hashes, num_hashes * sizeof(sp_hash_t), 0);
 }
 
 #undef sp_dyn_array_head
