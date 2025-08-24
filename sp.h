@@ -246,6 +246,8 @@
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
 
+#define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
+
 #define SP_API
 #define SP_IMP
 
@@ -456,6 +458,7 @@ SP_API c8       sp_str_at_reverse(sp_str_t str, u32 index);
 SP_API c8       sp_str_back(sp_str_t str);
 SP_API sp_str_t sp_str_concat(sp_str_t a, sp_str_t b);
 SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
 SP_API sp_str_t sp_str_replace(sp_str_t str, c8 from, c8 to);
 SP_API sp_str_t sp_str_strip_right(sp_str_t str);
 SP_API sp_str_t sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
@@ -2285,6 +2288,19 @@ sp_str_t sp_str_concat(sp_str_t a, sp_str_t b) {
 
 sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
   return sp_fmt(SP_LIT("{}{}{}"), SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
+}
+
+sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) {
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  for (u32 index = 0; index < num_strings; index++) {
+    sp_str_builder_append_cstr(&builder, strings[index]);
+
+    if (index != (num_strings - 1)) {
+      sp_str_builder_append(&builder, join);
+    }
+  }
+
+  return sp_str_builder_write(&builder);
 }
 
 sp_str_t sp_str_to_upper(sp_str_t str) {
