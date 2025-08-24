@@ -802,6 +802,41 @@ sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
   SP_FORMATTER(quoted_str, sp_format_quoted_str), \
 
 
+// parsers
+SP_API u8        sp_parse_u8(sp_str_t str);
+SP_API u16       sp_parse_u16(sp_str_t str);
+SP_API u32       sp_parse_u32(sp_str_t str);
+SP_API u64       sp_parse_u64(sp_str_t str);
+SP_API s8        sp_parse_s8(sp_str_t str);
+SP_API s16       sp_parse_s16(sp_str_t str);
+SP_API s32       sp_parse_s32(sp_str_t str);
+SP_API s64       sp_parse_s64(sp_str_t str);
+SP_API f32       sp_parse_f32(sp_str_t str);
+SP_API f64       sp_parse_f64(sp_str_t str);
+SP_API c8        sp_parse_c8(sp_str_t str);
+SP_API c16       sp_parse_c16(sp_str_t str);
+SP_API void*     sp_parse_ptr(sp_str_t str);
+SP_API bool      sp_parse_bool(sp_str_t str);
+SP_API sp_hash_t sp_parse_hash(sp_str_t str);
+SP_API u64       sp_parse_hex(sp_str_t str);
+
+SP_API bool      sp_parse_u8_ex(sp_str_t str, u8* out);
+SP_API bool      sp_parse_u16_ex(sp_str_t str, u16* out);
+SP_API bool      sp_parse_u32_ex(sp_str_t str, u32* out);
+SP_API bool      sp_parse_u64_ex(sp_str_t str, u64* out);
+SP_API bool      sp_parse_s8_ex(sp_str_t str, s8* out);
+SP_API bool      sp_parse_s16_ex(sp_str_t str, s16* out);
+SP_API bool      sp_parse_s32_ex(sp_str_t str, s32* out);
+SP_API bool      sp_parse_s64_ex(sp_str_t str, s64* out);
+SP_API bool      sp_parse_f32_ex(sp_str_t str, f32* out);
+SP_API bool      sp_parse_f64_ex(sp_str_t str, f64* out);
+SP_API bool      sp_parse_c8_ex(sp_str_t str, c8* out);
+SP_API bool      sp_parse_c16_ex(sp_str_t str, c16* out);
+SP_API bool      sp_parse_ptr_ex(sp_str_t str, void** out);
+SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
+SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
+SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
+
 // ██╗      ██████╗  ██████╗
 // ██║     ██╔═══██╗██╔════╝
 // ██║     ██║   ██║██║  ███╗
@@ -1521,6 +1556,362 @@ void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u3
         }
     }
 }
+
+bool sp_parse_u64_ex(sp_str_t str, u64* out) {
+    if (str.len == 0) return false;
+
+    u64 result = 0;
+    for (u32 i = 0; i < str.len; i++) {
+        c8 ch = str.data[i];
+        if (ch < '0' || ch > '9') return false;
+
+        u64 digit = ch - '0';
+        if (result > (UINT64_MAX - digit) / 10) return false; // overflow check
+        result = result * 10 + digit;
+    }
+
+    *out = result;
+    return true;
+}
+
+bool sp_parse_s64_ex(sp_str_t str, s64* out) {
+    if (str.len == 0) return false;
+
+    bool negative = false;
+    u32 start = 0;
+
+    if (str.data[0] == '-') {
+        negative = true;
+        start = 1;
+    } else if (str.data[0] == '+') {
+        start = 1;
+    }
+
+    if (start >= str.len) return false;
+
+    sp_str_t num_str = sp_str(str.data + start, str.len - start);
+    u64 abs_value;
+    if (!sp_parse_u64_ex(num_str, &abs_value)) return false;
+
+    if (negative) {
+        if (abs_value > (u64)INT64_MAX + 1) return false; // overflow
+        *out = -(s64)abs_value;
+    } else {
+        if (abs_value > INT64_MAX) return false; // overflow
+        *out = (s64)abs_value;
+    }
+
+    return true;
+}
+
+bool sp_parse_u32_ex(sp_str_t str, u32* out) {
+    u64 val;
+    if (!sp_parse_u64_ex(str, &val)) return false;
+    if (val > UINT32_MAX) return false;
+    *out = (u32)val;
+    return true;
+}
+
+bool sp_parse_s32_ex(sp_str_t str, s32* out) {
+    s64 val;
+    if (!sp_parse_s64_ex(str, &val)) return false;
+    if (val < INT32_MIN || val > INT32_MAX) return false;
+    *out = (s32)val;
+    return true;
+}
+
+bool sp_parse_u16_ex(sp_str_t str, u16* out) {
+    u64 val;
+    if (!sp_parse_u64_ex(str, &val)) return false;
+    if (val > UINT16_MAX) return false;
+    *out = (u16)val;
+    return true;
+}
+
+bool sp_parse_s16_ex(sp_str_t str, s16* out) {
+    s64 val;
+    if (!sp_parse_s64_ex(str, &val)) return false;
+    if (val < INT16_MIN || val > INT16_MAX) return false;
+    *out = (s16)val;
+    return true;
+}
+
+bool sp_parse_u8_ex(sp_str_t str, u8* out) {
+    u64 val;
+    if (!sp_parse_u64_ex(str, &val)) return false;
+    if (val > UINT8_MAX) return false;
+    *out = (u8)val;
+    return true;
+}
+
+bool sp_parse_s8_ex(sp_str_t str, s8* out) {
+    s64 val;
+    if (!sp_parse_s64_ex(str, &val)) return false;
+    if (val < INT8_MIN || val > INT8_MAX) return false;
+    *out = (s8)val;
+    return true;
+}
+
+static inline bool is_digit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+bool sp_parse_f32_ex(sp_str_t str, f32* out) {
+    size_t i = 0;
+    int sign = 1;
+    f32 value = 0.0f;
+    f32 scale = 1.0f;
+    int exponent = 0;
+    int exp_sign = 1;
+    bool has_digits = false;
+
+    if (i < str.len && (str.data[i] == '-' || str.data[i] == '+')) {
+        if (str.data[i] == '-') sign = -1;
+        i++;
+    }
+
+    while (i < str.len && is_digit(str.data[i])) {
+        has_digits = true;
+        value = value * 10.0f + (f32)(str.data[i] - '0');
+        i++;
+    }
+
+    if (i < str.len && str.data[i] == '.') {
+        i++;
+        while (i < str.len && is_digit(str.data[i])) {
+            has_digits = true;
+            scale /= 10.0f;
+            value += (f32)(str.data[i] - '0') * scale;
+            i++;
+        }
+    }
+
+    if (i < str.len && (str.data[i] == 'e' || str.data[i] == 'E')) {
+        i++;
+        if (i < str.len && (str.data[i] == '-' || str.data[i] == '+')) {
+            if (str.data[i] == '-') exp_sign = -1;
+            i++;
+        }
+        if (i >= str.len || !is_digit(str.data[i])) {
+            return false;
+        }
+        while (i < str.len && is_digit(str.data[i])) {
+            exponent = exponent * 10 + (str.data[i] - '0');
+            i++;
+        }
+        exponent *= exp_sign;
+    }
+
+    if (i != str.len || !has_digits) {
+        return false;
+    }
+
+    if (exponent > 0) {
+        for (int j = 0; j < exponent; j++) {
+            value *= 10.0f;
+        }
+    } else if (exponent < 0) {
+        for (int j = 0; j < -exponent; j++) {
+            value /= 10.0f;
+        }
+    }
+
+    *out = sign * value;
+    return true;
+}
+
+bool sp_parse_f64_ex(sp_str_t str, f64* out) {
+  SP_BROKEN();
+  return false;
+}
+
+bool sp_parse_ptr_ex(sp_str_t str, void** out) {
+    u64 addr;
+    if (!sp_parse_hex_ex(str, &addr)) return false;
+    *out = (void*)(uintptr_t)addr;
+    return true;
+}
+
+bool sp_parse_c8_ex(sp_str_t str, c8* out) {
+    // handle 'a' format
+    if (str.len == 3 && str.data[0] == '\'' && str.data[2] == '\'') {
+        *out = str.data[1];
+        return true;
+    }
+    // handle plain character
+    if (str.len == 1) {
+        *out = str.data[0];
+        return true;
+    }
+    return false;
+}
+
+bool sp_parse_c16_ex(sp_str_t str, c16* out) {
+    // handle 'a' format
+    if (str.len == 3 && str.data[0] == '\'' && str.data[2] == '\'') {
+        *out = (c16)str.data[1];
+        return true;
+    }
+    // handle 'U+XXXX' format
+    if (str.len >= 8 && str.data[0] == '\'' && str.data[1] == 'U' &&
+        str.data[2] == '+' && str.data[str.len-1] == '\'') {
+        sp_str_t hex_str = sp_str(str.data + 3, str.len - 4);
+        u64 val;
+        if (sp_parse_hex_ex(hex_str, &val) && val <= UINT16_MAX) {
+            *out = (c16)val;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool sp_parse_hex_ex(sp_str_t str, u64* out) {
+    if (str.len == 0) return false;
+
+    u32 start = 0;
+
+    // skip 0x prefix if present
+    if (str.len >= 2 && str.data[0] == '0' && (str.data[1] == 'x' || str.data[1] == 'X')) {
+        start = 2;
+    }
+
+    if (start >= str.len) return false;
+
+    u64 result = 0;
+    for (u32 i = start; i < str.len; i++) {
+        c8 ch = str.data[i];
+        u8 digit;
+
+        if (ch >= '0' && ch <= '9') {
+            digit = ch - '0';
+        } else if (ch >= 'a' && ch <= 'f') {
+            digit = ch - 'a' + 10;
+        } else if (ch >= 'A' && ch <= 'F') {
+            digit = ch - 'A' + 10;
+        } else {
+            return false;
+        }
+
+        if (result > (UINT64_MAX >> 4)) return false; // overflow check
+        result = (result << 4) | digit;
+    }
+
+    *out = result;
+    return true;
+}
+
+bool sp_parse_hash_ex(sp_str_t str, sp_hash_t* out) {
+    return sp_parse_hex_ex(str, out);
+}
+
+bool sp_parse_bool_ex(sp_str_t str, bool* out) {
+    if (sp_str_equal(str, SP_LIT("true")) || sp_str_equal(str, SP_LIT("1"))) {
+        *out = true;
+        return true;
+    }
+    if (sp_str_equal(str, SP_LIT("false")) || sp_str_equal(str, SP_LIT("0"))) {
+        *out = false;
+        return true;
+    }
+    return false;
+}
+
+u8 sp_parse_u8(sp_str_t str) {
+  u8 value = SP_ZERO_INITIALIZE();
+  sp_parse_u8_ex(str, &value);
+  return value;
+}
+
+u16 sp_parse_u16(sp_str_t str) {
+  u16 value = SP_ZERO_INITIALIZE();
+  sp_parse_u16_ex(str, &value);
+  return value;
+}
+
+u32 sp_parse_u32(sp_str_t str) {
+  u32 value = SP_ZERO_INITIALIZE();
+  sp_parse_u32_ex(str, &value);
+  return value;
+}
+
+u64 sp_parse_u64(sp_str_t str) {
+  u64 value = SP_ZERO_INITIALIZE();
+  sp_parse_u64_ex(str, &value);
+  return value;
+}
+
+s8 sp_parse_s8(sp_str_t str) {
+  s8 value = SP_ZERO_INITIALIZE();
+  sp_parse_s8_ex(str, &value);
+  return value;
+}
+
+s16 sp_parse_s16(sp_str_t str) {
+  s16 value = SP_ZERO_INITIALIZE();
+  sp_parse_s16_ex(str, &value);
+  return value;
+}
+
+s32 sp_parse_s32(sp_str_t str) {
+  s32 value = SP_ZERO_INITIALIZE();
+  sp_parse_s32_ex(str, &value);
+  return value;
+}
+
+s64 sp_parse_s64(sp_str_t str) {
+  s64 value = SP_ZERO_INITIALIZE();
+  sp_parse_s64_ex(str, &value);
+  return value;
+}
+
+f32 sp_parse_f32(sp_str_t str) {
+  f32 value = SP_ZERO_INITIALIZE();
+  sp_parse_f32_ex(str, &value);
+  return value;
+}
+
+f64 sp_parse_f64(sp_str_t str) {
+  f64 value = SP_ZERO_INITIALIZE();
+  sp_parse_f64_ex(str, &value);
+  return value;
+}
+
+c8 sp_parse_c8(sp_str_t str) {
+  c8 value = SP_ZERO_INITIALIZE();
+  sp_parse_c8_ex(str, &value);
+  return value;
+}
+
+c16 sp_parse_c16(sp_str_t str) {
+  c16 value = SP_ZERO_INITIALIZE();
+  sp_parse_c16_ex(str, &value);
+  return value;
+}
+
+u64 sp_parse_hex(sp_str_t str) {
+  u64 value = SP_ZERO_INITIALIZE();
+  sp_parse_hex_ex(str, &value);
+  return value;
+}
+
+void* sp_parse_ptr(sp_str_t str) {
+  void* value = SP_ZERO_INITIALIZE();
+  sp_parse_ptr_ex(str, &value);
+  return value;
+}
+
+bool sp_parse_bool(sp_str_t str) {
+  bool value = SP_ZERO_INITIALIZE();
+  sp_parse_bool_ex(str, &value);
+  return value;
+}
+
+sp_hash_t sp_parse_hash(sp_str_t str) {
+  sp_hash_t value = SP_ZERO_INITIALIZE();
+  sp_parse_hash_ex(str, &value);
+  return value;
+}
+
 
 void sp_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
     SP_ASSERT(builder);
