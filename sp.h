@@ -453,8 +453,8 @@ SP_API bool     sp_str_ends_with(sp_str_t a, sp_str_t b);
 SP_API s32      sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 SP_API s32      sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
 SP_API bool     sp_str_valid(sp_str_t str);
-SP_API c8       sp_str_at(sp_str_t str, u32 index);
-SP_API c8       sp_str_at_reverse(sp_str_t str, u32 index);
+SP_API c8       sp_str_at(sp_str_t str, s32 index);
+SP_API c8       sp_str_at_reverse(sp_str_t str, s32 index);
 SP_API c8       sp_str_back(sp_str_t str);
 SP_API sp_str_t sp_str_concat(sp_str_t a, sp_str_t b);
 SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
@@ -734,7 +734,6 @@ typedef struct sp_formatter {
 #define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
 #define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
 #define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
-#define SP_FMT_SHORT_HASH(V)    SP_FMT_ARG(hash_short, V)
 #define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
 #define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
 #define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
@@ -761,7 +760,6 @@ void sp_format_c8(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_c16(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_context(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_hash(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_date_time(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_thread(sp_str_builder_t* builder, sp_format_arg_t* buffer);
@@ -771,46 +769,40 @@ void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 
-#define SP_BUILTIN_FORMATTERS \
-  SP_FORMATTER(ptr,           sp_format_ptr), \
-  SP_FORMATTER(str,           sp_format_str), \
-  SP_FORMATTER(cstr,          sp_format_cstr), \
-  SP_FORMATTER(s8,            sp_format_s8), \
-  SP_FORMATTER(s16,           sp_format_s16), \
-  SP_FORMATTER(s32,           sp_format_s32), \
-  SP_FORMATTER(s64,           sp_format_s64), \
-  SP_FORMATTER(u8,            sp_format_u8), \
-  SP_FORMATTER(u16,           sp_format_u16), \
-  SP_FORMATTER(u32,           sp_format_u32), \
-  SP_FORMATTER(u64,           sp_format_u64), \
-  SP_FORMATTER(f32,           sp_format_f32), \
-  SP_FORMATTER(f64,           sp_format_f64), \
-  SP_FORMATTER(c8,            sp_format_c8), \
-  SP_FORMATTER(c16,           sp_format_c16), \
-  SP_FORMATTER(context,       sp_format_context), \
-  SP_FORMATTER(hash,          sp_format_hash), \
-  SP_FORMATTER(hash_short,    sp_format_hash_short), \
-  SP_FORMATTER(str_builder,   sp_format_str_builder), \
-  SP_FORMATTER(date_time,     sp_format_date_time), \
-  SP_FORMATTER(thread,        sp_format_thread), \
-  SP_FORMATTER(mutex,         sp_format_mutex), \
-  SP_FORMATTER(semaphore,     sp_format_semaphore), \
-  SP_FORMATTER(fixed_array,   sp_format_fixed_array), \
-  SP_FORMATTER(dynamic_array, sp_format_dynamic_array), \
-  SP_FORMATTER(quoted_str,    sp_format_quoted_str), \
-
 #define SP_FMT(fmt, ...) sp_fmt(fmt, ##__VA_ARGS__);
 sp_str_t sp_fmt(sp_str_t fmt, ...);
 sp_str_t sp_fmt_c8(const c8* fmt, ...);
 sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
 
+#define SP_BUILTIN_FORMATTERS \
+  SP_FORMATTER(ptr, sp_format_ptr), \
+  SP_FORMATTER(str, sp_format_str), \
+  SP_FORMATTER(cstr, sp_format_cstr), \
+  SP_FORMATTER(s8, sp_format_s8), \
+  SP_FORMATTER(s16, sp_format_s16), \
+  SP_FORMATTER(s32, sp_format_s32), \
+  SP_FORMATTER(s64, sp_format_s64), \
+  SP_FORMATTER(u8, sp_format_u8), \
+  SP_FORMATTER(u16, sp_format_u16), \
+  SP_FORMATTER(u32, sp_format_u32), \
+  SP_FORMATTER(u64, sp_format_u64), \
+  SP_FORMATTER(f32, sp_format_f32), \
+  SP_FORMATTER(f64, sp_format_f64), \
+  SP_FORMATTER(c8, sp_format_c8), \
+  SP_FORMATTER(c16, sp_format_c16), \
+  SP_FORMATTER(context, sp_format_context), \
+  SP_FORMATTER(hash, sp_format_hash), \
+  SP_FORMATTER(str_builder, sp_format_str_builder), \
+  SP_FORMATTER(date_time, sp_format_date_time), \
+  SP_FORMATTER(thread, sp_format_thread), \
+  SP_FORMATTER(mutex, sp_format_mutex), \
+  SP_FORMATTER(semaphore, sp_format_semaphore), \
+  SP_FORMATTER(fixed_array, sp_format_fixed_array), \
+  SP_FORMATTER(dynamic_array, sp_format_dynamic_array), \
+  SP_FORMATTER(quoted_str, sp_format_quoted_str), \
 
-// ██████╗  █████╗ ██████╗ ███████╗███████╗██████╗ ███████╗
-// ██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝██╔══██╗██╔════╝
-// ██████╔╝███████║██████╔╝███████╗█████╗  ██████╔╝███████╗
-// ██╔═══╝ ██╔══██║██╔══██╗╚════██║██╔══╝  ██╔══██╗╚════██║
-// ██║     ██║  ██║██║  ██║███████║███████╗██║  ██║███████║
-// ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝╚══════╝
+
+// parsers
 SP_API u8        sp_parse_u8(sp_str_t str);
 SP_API u16       sp_parse_u16(sp_str_t str);
 SP_API u32       sp_parse_u32(sp_str_t str);
@@ -844,7 +836,6 @@ SP_API bool      sp_parse_ptr_ex(sp_str_t str, void** out);
 SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
 SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
-
 
 // ██╗      ██████╗  ██████╗
 // ██║     ██╔═══██╗██╔════╝
@@ -1986,7 +1977,7 @@ void sp_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, const c8
 
     while (value > 0) {
         u8 digit = value & 0xF;
-        hex_digits[digit_count++] = digit < 10 ? '0' + digit : 'a' + (digit - 10);
+        hex_digits[digit_count++] = digit < 10 ? '0' + digit : 'A' + (digit - 10);
         value >>= 4;
     }
 
@@ -2196,12 +2187,6 @@ void sp_format_hash(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_hash_t* value = (sp_hash_t*)arg->data;
   u64 hash = (u64)*value;
   sp_format_hex(builder, hash, 0, NULL);
-}
-
-void sp_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_hash_t* value = (sp_hash_t*)arg->data;
-  u64 hash = (u64)*value;
-  sp_format_hex(builder, hash >> 32, 0, NULL);
 }
 
 void sp_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) {
@@ -2676,11 +2661,17 @@ bool sp_str_valid(sp_str_t str) {
   return str.data != NULL;
 }
 
-c8 sp_str_at(sp_str_t str, u32 index) {
+c8 sp_str_at(sp_str_t str, s32 index) {
+  if (index < 0) {
+    index = str.len + index;
+  }
   return str.data[index];
 }
 
-c8 sp_str_at_reverse(sp_str_t str, u32 index) {
+c8 sp_str_at_reverse(sp_str_t str, s32 index) {
+  if (index < 0) {
+    index = str.len + index;
+  }
   return str.data[str.len - index - 1];
 }
 
@@ -3099,9 +3090,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   return stem;
 }
 
-///////////
-// WIN32 //
-///////////
 #if defined(SP_OS_BACKEND_NATIVE) && defined(SP_WIN32)
   void* sp_os_allocate_memory(u32 size) {
     return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
@@ -3393,7 +3381,9 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     ReleaseSemaphore(*semaphore, 1, NULL);
   }
-#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_POSIX)
+#endif
+
+#if defined(SP_OS_BACKEND_NATIVE) && defined(SP_POSIX)
   void* sp_os_allocate_memory(u32 size) {
     void* ptr = malloc(size);
     if (ptr) memset(ptr, 0, size);
@@ -3465,6 +3455,19 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   }
 
   void sp_os_remove_directory(sp_str_t path) {
+    sp_os_directory_entry_list_t entries = sp_os_scan_directory(path);
+
+    for (u32 i = 0; i < entries.count; i++) {
+      sp_os_directory_entry_t* entry = &entries.data[i];
+
+      if (sp_os_is_directory(entry->file_path)) {
+        sp_os_remove_directory(entry->file_path);
+      }
+      if (sp_os_is_regular_file(entry->file_path)) {
+        sp_os_remove_file(entry->file_path);
+      }
+    }
+
     c8* path_cstr = sp_str_to_cstr(path);
     rmdir(path_cstr);
     sp_free(path_cstr);
@@ -3490,13 +3493,47 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   }
 
   sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
-    (void)path;
-    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
-  }
+    if (!sp_os_is_directory(path) || !sp_os_does_path_exist(path)) {
+      return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+    }
 
-  sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
-    (void)path;
-    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+    sp_dynamic_array(sp_os_directory_entry_t) entries;
+    sp_dynamic_array_init(&entries, sizeof(sp_os_directory_entry_t));
+
+    c8* path_cstr = sp_str_to_cstr(path);
+    DIR* dir = opendir(path_cstr);
+    sp_free(path_cstr);
+
+    if (!dir) {
+      return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+      if (sp_cstr_equal(entry->d_name, ".")) continue;
+      if (sp_cstr_equal(entry->d_name, "..")) continue;
+
+      sp_str_builder_t entry_builder = SP_ZERO_INITIALIZE();
+      sp_str_builder_append(&entry_builder, path);
+      sp_str_builder_append(&entry_builder, sp_str_lit("/"));
+      sp_str_builder_append_cstr(&entry_builder, entry->d_name);
+      sp_str_t file_path = sp_str_builder_write(&entry_builder);
+      sp_os_normalize_path(file_path);
+
+      sp_os_directory_entry_t dir_entry = SP_LVAL(sp_os_directory_entry_t) {
+        .file_path = file_path,
+        .file_name = sp_str_copy_cstr(entry->d_name),
+        .attributes = SP_OS_FILE_ATTR_NONE,
+      };
+      sp_dynamic_array_push(&entries, &dir_entry);
+    }
+
+    closedir(dir);
+
+    return SP_LVAL(sp_os_directory_entry_list_t) {
+      .data = (sp_os_directory_entry_t*)entries.data,
+      .count = entries.size
+    };
   }
 
   sp_os_date_time_t sp_os_get_date_time() {
@@ -3685,7 +3722,9 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     sem_post(semaphore);
   }
-#elif defined(SP_OS_BACKEND_SDL)
+#endif
+
+#if defined(SP_OS_BACKEND_SDL)
   void* sp_os_allocate_memory(u32 size) {
     void* ptr = SDL_malloc(size);
     if (ptr) SDL_memset(ptr, 0, size);

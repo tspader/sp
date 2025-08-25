@@ -92,7 +92,7 @@ build: c cpp stress sdl
 
 clangd: $(SP_COMPILE_DB)
 
-run: build
+test: build
 	./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)
 	./$(SP_OUTPUT_CPP) $(SP_FLAGS_RUN)
 	./$(SP_OUTPUT_STRESS) $(SP_FLAGS_RUN)
@@ -108,4 +108,4 @@ clean:
 nuke:
 	@rm -rf $(SP_DIR_BUILD)
 
-.PHONY: c cpp stress sdl build run debug clean nuke all
+.PHONY: c cpp stress sdl build test debug clean nuke all
