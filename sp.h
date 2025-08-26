@@ -258,6 +258,17 @@
 #define SP_SDL_OVERWRITE_ENV_VAR true
 #define SP_SDL_DO_NOT_OVERWRITE_ENV_VAR false
 
+#define SP_ANSI_FORE_BOLD "\033[1m"
+#define SP_ANSI_FORE_RESET "\033[0m"
+#define SP_ANSI_FORE_BLACK "\033[30m"
+#define SP_ANSI_FORE_RED "\033[31m"
+#define SP_ANSI_FORE_GREEN "\033[32m"
+#define SP_ANSI_FORE_YELLOW "\033[33m"
+#define SP_ANSI_FORE_BLUE "\033[34m"
+#define SP_ANSI_FORE_PURPLE "\033[35m"
+#define SP_ANSI_FORE_CYAN "\033[36m"
+#define SP_ANSI_FORE_WHITE "\033[37m"
+
 SP_BEGIN_EXTERN_C()
 
 // ████████╗██╗   ██╗██████╗ ███████╗███████╗
