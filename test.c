@@ -19,7 +19,6 @@
     UTEST_PRINTF("%s\n", sp_str_to_cstr(formatted)); \
   } while (0)
 
-#define SP_EXPECT_STREQ(a, b) SP_TEST_STREQ((a), (b), false)
 #define SP_TEST_STREQ(a, b, is_assert) \
   UTEST_SURPRESS_WARNING_BEGIN do { \
     if (!sp_str_equal((a), (b))) { \
@@ -39,6 +38,9 @@
     } \
   } while (0) \
   UTEST_SURPRESS_WARNING_END
+
+#define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), SP_CSTR(b), false)
+#define SP_EXPECT_STR_EQ(a, b) SP_TEST_STREQ((a), (b), false)
 
 typedef struct sp_test_memory_tracker {
   sp_bump_allocator_t* bump;
@@ -444,7 +446,10 @@ UTEST(sp_fmt, basic) {
 
   u32 answer = 69;
   sp_str_t result = sp_fmt(SP_LIT("answer: {}"), SP_FMT_U32(answer));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("answer: 69")));
+  SP_EXPECT_STR_EQ_CSTR(result, "answer: 69");
+
+  result = sp_fmt_c8("{}", SP_FMT_U32(69));
+  SP_EXPECT_STR_EQ_CSTR(result, "69");
 }
 
 UTEST(sp_fmt, numeric_types) {
@@ -452,39 +457,39 @@ UTEST(sp_fmt, numeric_types) {
 
   u8 u8_val = 255;
   sp_str_t result = sp_fmt(SP_LIT("u8: {}"), SP_FMT_U8(u8_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("u8: 255")));
+  SP_EXPECT_STR_EQ_CSTR(result, "u8: 255");
 
   u16 u16_val = 65535;
   result = sp_fmt(SP_LIT("u16: {}"), SP_FMT_U16(u16_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("u16: 65535")));
+  SP_EXPECT_STR_EQ_CSTR(result, "u16: 65535");
 
   u32 u32_val = 1234567890;
   result = sp_fmt(SP_LIT("u32: {}"), SP_FMT_U32(u32_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("u32: 1234567890")));
+  SP_EXPECT_STR_EQ_CSTR(result, "u32: 1234567890");
 
   u64 u64_val = 9876543210ULL;
   result = sp_fmt(SP_LIT("u64: {}"), SP_FMT_U64(u64_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("u64: 9876543210")));
+  SP_EXPECT_STR_EQ_CSTR(result, "u64: 9876543210");
 
   s8 s8_val = -128;
   result = sp_fmt(SP_LIT("s8: {}"), SP_FMT_S8(s8_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("s8: -128")));
+  SP_EXPECT_STR_EQ_CSTR(result, "s8: -128");
 
   s16 s16_val = -32768;
   result = sp_fmt(SP_LIT("s16: {}"), SP_FMT_S16(s16_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("s16: -32768")));
+  SP_EXPECT_STR_EQ_CSTR(result, "s16: -32768");
 
   s32 s32_val = -2147483647;
   result = sp_fmt(SP_LIT("s32: {}"), SP_FMT_S32(s32_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("s32: -2147483647")));
+  SP_EXPECT_STR_EQ_CSTR(result, "s32: -2147483647");
 
   s64 s64_val = -9223372036854775807LL;
   result = sp_fmt(SP_LIT("s64: {}"), SP_FMT_S64(s64_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("s64: -9223372036854775807")));
+  SP_EXPECT_STR_EQ_CSTR(result, "s64: -9223372036854775807");
 
   u32 zero = 0;
   result = sp_fmt(SP_LIT("zero: {}"), SP_FMT_U32(zero));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("zero: 0")));
+  SP_EXPECT_STR_EQ_CSTR(result, "zero: 0");
 }
 
 UTEST(sp_fmt, floating_point) {
@@ -492,19 +497,19 @@ UTEST(sp_fmt, floating_point) {
 
   f32 f32_val = 3.14159f;
   sp_str_t result = sp_fmt(SP_LIT("f32: {}"), SP_FMT_F32(f32_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("f32: 3.141")));
+  SP_EXPECT_STR_EQ_CSTR(result, "f32: 3.141");
 
   f64 f64_val = -2.71828;
   result = sp_fmt(SP_LIT("f64: {}"), SP_FMT_F64(f64_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("f64: -2.718")));
+  SP_EXPECT_STR_EQ_CSTR(result, "f64: -2.718");
 
   f32 f32_zero = 0.0f;
   result = sp_fmt(SP_LIT("f32 zero: {}"), SP_FMT_F32(f32_zero));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("f32 zero: 0.000")));
+  SP_EXPECT_STR_EQ_CSTR(result, "f32 zero: 0.000");
 
   f32 f32_int = 42.0f;
   result = sp_fmt(SP_LIT("f32 int: {}"), SP_FMT_F32(f32_int));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("f32 int: 42.000")));
+  SP_EXPECT_STR_EQ_CSTR(result, "f32 int: 42.000");
 }
 
 UTEST(sp_fmt, string_types) {
@@ -512,27 +517,32 @@ UTEST(sp_fmt, string_types) {
 
   sp_str_t str_val = SP_LIT("hello world");
   sp_str_t result = sp_fmt(SP_LIT("str: {}"), SP_FMT_STR(str_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("str: hello world")));
+  SP_EXPECT_STR_EQ_CSTR(result, "str: hello world");
 
   const c8* cstr_val = "c string";
   result = sp_fmt(SP_LIT("cstr: {}"), SP_FMT_CSTR(cstr_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("cstr: c string")));
+  SP_EXPECT_STR_EQ_CSTR(result, "cstr: c string");
 }
 
 UTEST(sp_fmt, character_types) {
   sp_test_use_malloc();
+  sp_str_t expected;
+  sp_str_t actual;
 
   c8 c8_val = 'A';
-  sp_str_t result = sp_fmt(SP_LIT("c8: {}"), SP_FMT_C8(c8_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("c8: 'A'")));
+  expected = SP_LIT("A");
+  actual = sp_fmt(SP_LIT("{}"), SP_FMT_C8(c8_val));
+  SP_EXPECT_STR_EQ(actual, expected);
 
   c16 c16_val = 'Z';
-  result = sp_fmt(SP_LIT("c16: {}"), SP_FMT_C16(c16_val));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("c16: 'Z'")));
+  expected = SP_LIT("Z");
+  actual = sp_fmt(SP_LIT("{}"), SP_FMT_C16(c16_val));
+  SP_EXPECT_STR_EQ(actual, expected);
 
   c16 c16_unicode = 0x1234;
-  result = sp_fmt(SP_LIT("c16 unicode: {}"), SP_FMT_C16(c16_unicode));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("c16 unicode: 'U+1234'")));
+  expected = SP_LIT("U+1234");
+  actual = sp_fmt(SP_LIT("{}"), SP_FMT_C16(c16_unicode));
+  SP_EXPECT_STR_EQ(actual, expected);
 }
 
 UTEST(sp_fmt, pointer_type) {
@@ -540,11 +550,11 @@ UTEST(sp_fmt, pointer_type) {
 
   void* ptr = (void*)(uintptr_t)0xDEADBEEF;
   sp_str_t result = sp_fmt(SP_LIT("ptr: {}"), SP_FMT_PTR(ptr));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("ptr: 0xDEADBEEF")));
+  SP_EXPECT_STR_EQ_CSTR(result, "ptr: 0xDEADBEEF");
 
   void* null_ptr = SP_NULLPTR;
   result = sp_fmt(SP_LIT("null: {}"), SP_FMT_PTR(null_ptr));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("null: 0x00000000")));
+  SP_EXPECT_STR_EQ_CSTR(result, "null: 0x00000000");
 }
 
 UTEST(sp_fmt, hash_type) {
@@ -552,11 +562,11 @@ UTEST(sp_fmt, hash_type) {
 
   sp_hash_t hash = 0xABCDEF12;
   sp_str_t result = sp_fmt(SP_LIT("hash: {}"), SP_FMT_HASH(hash));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("hash: ABCDEF12")));
+  SP_EXPECT_STR_EQ_CSTR(result, "hash: ABCDEF12");
 
   sp_hash_t zero_hash = 0;
   result = sp_fmt(SP_LIT("zero hash: {}"), SP_FMT_HASH(zero_hash));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("zero hash: 0")));
+  SP_EXPECT_STR_EQ_CSTR(result, "zero hash: 0");
 }
 
 UTEST(sp_fmt, array_types) {
@@ -569,7 +579,7 @@ UTEST(sp_fmt, array_types) {
   fixed_arr.data = SP_NULLPTR;
 
   sp_str_t result = sp_fmt(SP_LIT("fixed: {}"), SP_FMT_FIXED_ARRAY(fixed_arr));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("fixed: { size: 10, capacity: 20 }")));
+  SP_EXPECT_STR_EQ_CSTR(result, "fixed: { size: 10, capacity: 20 }");
 
   sp_dynamic_array_t dyn_arr;
   dyn_arr.size = 5;
@@ -578,27 +588,7 @@ UTEST(sp_fmt, array_types) {
   dyn_arr.data = SP_NULLPTR;
 
   result = sp_fmt(SP_LIT("dynamic: {}"), SP_FMT_DYNAMIC_ARRAY(dyn_arr));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("dynamic: { size: 5, capacity: 16 }")));
-}
-
-UTEST(sp_fmt, date_time) {
-  sp_test_use_malloc();
-
-  sp_os_date_time_t dt;
-  dt.year = 2024;
-  dt.month = 12;
-  dt.day = 25;
-  dt.hour = 14;
-  dt.minute = 30;
-  dt.second = 45;
-  dt.millisecond = 123;
-
-  sp_str_t result = sp_fmt(SP_LIT("datetime: {}"), SP_FMT_DATE_TIME(dt));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("datetime: 2024-12-25T14:30:45.123")));
-
-  dt.millisecond = 0;
-  result = sp_fmt(SP_LIT("datetime no ms: {}"), SP_FMT_DATE_TIME(dt));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("datetime no ms: 2024-12-25T14:30:45")));
+  SP_EXPECT_STR_EQ_CSTR(result, "dynamic: { size: 5, capacity: 16 }");
 }
 
 UTEST(sp_fmt, multiple_args) {
@@ -610,7 +600,7 @@ UTEST(sp_fmt, multiple_args) {
 
   sp_str_t result = sp_fmt(SP_LIT("Count: {}, Name: {}, Value: {}"),
     SP_FMT_U32(count), SP_FMT_STR(name), SP_FMT_F32(value));
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("Count: 42, Name: test, Value: 3.140")));
+  SP_EXPECT_STR_EQ_CSTR(result, "Count: 42, Name: test, Value: 3.140");
 }
 
 UTEST(sp_str_builder, basic_operations) {
@@ -638,7 +628,7 @@ UTEST(sp_str_builder, basic_operations) {
 
   sp_str_t result = sp_str_builder_write(&builder);
   ASSERT_EQ(result.len, 12);
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("Hello World!")));
+  SP_EXPECT_STR_EQ_CSTR(result, "Hello World!");
 
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   sp_str_builder_append_cstr(&builder2, "Test");
@@ -730,7 +720,7 @@ UTEST(sp_str_builder, capacity_operations) {
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   builder2.indent.level = 1;
   sp_str_builder_append_raw(&builder2, SP_LIT("raw"));
-  ASSERT_TRUE(sp_str_equal(sp_str_builder_write(&builder2), SP_LIT("raw")));
+  SP_EXPECT_STR_EQ_CSTR(sp_str_builder_write(&builder2), "raw");
 }
 
 UTEST(sp_str_builder, format_append) {
@@ -890,11 +880,11 @@ UTEST(sp_str_copy, string_copy_operations) {
 
   sp_str_t from_cstr = sp_str_copy_cstr("Test String");
   ASSERT_EQ(from_cstr.len, 11);
-  ASSERT_TRUE(sp_str_equal_cstr(from_cstr, "Test String"));
+  SP_EXPECT_STR_EQ_CSTR(from_cstr, "Test String");
 
   sp_str_t partial = sp_str_copy_cstr_n("Hello World", 5);
   ASSERT_EQ(partial.len, 5);
-  ASSERT_TRUE(sp_str_equal(partial, SP_LIT("Hello")));
+  SP_EXPECT_STR_EQ_CSTR(partial, "Hello");
 
   sp_str_t dest = sp_str_alloc(20);
   sp_str_copy_to_str(original, &dest, 20);
@@ -921,12 +911,12 @@ UTEST(sp_str, string_creation) {
 
   sp_str_t str2 = SP_LIT("World");
   ASSERT_EQ(str2.len, 5);
-  ASSERT_TRUE(sp_str_equal_cstr(str2, "World"));
+  SP_EXPECT_STR_EQ_CSTR(str2, "World");
 
   const c8* cstr = "Dynamic";
   sp_str_t str3 = sp_str_cstr(cstr);
   ASSERT_EQ(str3.len, 7);
-  ASSERT_TRUE(sp_str_equal_cstr(str3, "Dynamic"));
+  SP_EXPECT_STR_EQ_CSTR(str3, "Dynamic");
 
   sp_str_t allocated = sp_str_alloc(100);
   ASSERT_EQ(allocated.len, 0);
@@ -945,14 +935,14 @@ UTEST(sp_str_equal, string_comparison) {
   ASSERT_FALSE(sp_str_equal(str1, str3));
   ASSERT_FALSE(sp_str_equal(str1, str4));
 
-  ASSERT_TRUE(sp_str_equal_cstr(str1, "Hello"));
+  SP_EXPECT_STR_EQ_CSTR(str1, "Hello");
   ASSERT_FALSE(sp_str_equal_cstr(str1, "World"));
   ASSERT_FALSE(sp_str_equal_cstr(str1, "Hell"));
 
   sp_str_t empty1 = SP_LIT("");
   sp_str_t empty2 = SP_LIT("");
   ASSERT_TRUE(sp_str_equal(empty1, empty2));
-  ASSERT_TRUE(sp_str_equal_cstr(empty1, ""));
+  SP_EXPECT_STR_EQ_CSTR(empty1, "");
 
   sp_str_t long_str = SP_LIT("Hello World!");
   ASSERT_FALSE(sp_str_equal(str1, long_str));
@@ -971,11 +961,11 @@ UTEST(sp_str_sort_kernel_alphabetical, sorting_tests) {
 
   qsort(strings, 5, sizeof(sp_str_t), sp_str_sort_kernel_alphabetical);
 
-  ASSERT_TRUE(sp_str_equal(strings[0], SP_LIT("aardvark")));
-  ASSERT_TRUE(sp_str_equal(strings[1], SP_LIT("apple")));
-  ASSERT_TRUE(sp_str_equal(strings[2], SP_LIT("banana")));
-  ASSERT_TRUE(sp_str_equal(strings[3], SP_LIT("zebra")));
-  ASSERT_TRUE(sp_str_equal(strings[4], SP_LIT("zoo")));
+  SP_EXPECT_STR_EQ_CSTR(strings[0], "aardvark");
+  SP_EXPECT_STR_EQ_CSTR(strings[1], "apple");
+  SP_EXPECT_STR_EQ_CSTR(strings[2], "banana");
+  SP_EXPECT_STR_EQ_CSTR(strings[3], "zebra");
+  SP_EXPECT_STR_EQ_CSTR(strings[4], "zoo");
 
   ASSERT_EQ(sp_str_compare_alphabetical(SP_LIT("a"), SP_LIT("b")), SP_QSORT_A_FIRST);
   ASSERT_EQ(sp_str_compare_alphabetical(SP_LIT("b"), SP_LIT("a")), SP_QSORT_B_FIRST);
@@ -995,18 +985,18 @@ UTEST(sp_str_t, map_reduce) {
     SP_LIT("jerry"), SP_LIT("bobby"), SP_LIT("phil")
   };
   sp_dyn_array(sp_str_t) result = sp_str_map(&band[0], SP_CARR_LEN(band), SP_NULLPTR, sp_test_map_band_member);
-  SP_EXPECT_STREQ(result[0], SP_LIT("jerry is in the band"));
-  SP_EXPECT_STREQ(result[1], SP_LIT("bobby is in the band"));
-  SP_EXPECT_STREQ(result[2], SP_LIT("phil is in the band"));
+  SP_EXPECT_STR_EQ_CSTR(result[0], "jerry is in the band");
+  SP_EXPECT_STR_EQ_CSTR(result[1], "bobby is in the band");
+  SP_EXPECT_STR_EQ_CSTR(result[2], "phil is in the band");
 
   sp_str_t joined = sp_str_join_n(band, SP_CARR_LEN(band), SP_LIT(" and "));
-  SP_EXPECT_STREQ(joined, SP_LIT("jerry and bobby and phil"));
+  SP_EXPECT_STR_EQ_CSTR(joined, "jerry and bobby and phil");
 
   u32 len = 3;
   sp_dyn_array(sp_str_t) clipped = sp_str_map(&band[0], SP_CARR_LEN(band), &len, sp_str_map_kernel_prefix);
-  SP_EXPECT_STREQ(clipped[0], SP_LIT("jer"));
-  SP_EXPECT_STREQ(clipped[1], SP_LIT("bob"));
-  SP_EXPECT_STREQ(clipped[2], SP_LIT("phi"));
+  SP_EXPECT_STR_EQ_CSTR(clipped[0], "jer");
+  SP_EXPECT_STR_EQ_CSTR(clipped[1], "bob");
+  SP_EXPECT_STR_EQ_CSTR(clipped[2], "phi");
 
 }
 
@@ -1056,20 +1046,20 @@ UTEST(sp_str_manipulation, ends_with) {
 UTEST(sp_str_manipulation, concat) {
   sp_test_use_malloc();
 
-  ASSERT_TRUE(sp_str_equal(sp_str_concat(SP_LIT("Jerry"), SP_LIT("Garcia")), SP_LIT("JerryGarcia")));
-  ASSERT_TRUE(sp_str_equal(SP_LIT("Jerry"), sp_str_concat(SP_LIT("Jerry"), SP_LIT(""))));
-  ASSERT_TRUE(sp_str_equal(SP_LIT("Jerry"), sp_str_concat(SP_LIT(""),      SP_LIT("Jerry"))));
+  SP_EXPECT_STR_EQ_CSTR(sp_str_concat(SP_LIT("Jerry"), SP_LIT("Garcia")), "JerryGarcia");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_concat(SP_LIT("Jerry"), SP_LIT("")), "Jerry");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_concat(SP_LIT(""), SP_LIT("Jerry")), "Jerry");
 }
 
 UTEST(sp_str_manipulation, join_operations) {
   sp_test_use_malloc();
 
-  ASSERT_TRUE(sp_str_equal(sp_str_join(SP_LIT("hello"), SP_LIT("world"), SP_LIT(" - ")), SP_LIT("hello - world")));
-  ASSERT_TRUE(sp_str_equal(sp_str_join(SP_LIT("hello"), SP_LIT("world"), SP_LIT("")), SP_LIT("helloworld")));
+  SP_EXPECT_STR_EQ_CSTR(sp_str_join(SP_LIT("hello"), SP_LIT("world"), SP_LIT(" - ")), "hello - world");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_join(SP_LIT("hello"), SP_LIT("world"), SP_LIT("")), "helloworld");
 
   const c8* strings[] = {"apple", "banana", "cherry"};
-  ASSERT_TRUE(sp_str_equal(sp_str_join_cstr_n(strings, 3, SP_LIT(", ")), SP_LIT("apple, banana, cherry")));
-  ASSERT_TRUE(sp_str_equal(sp_str_join_cstr_n(strings, 1, SP_LIT(", ")), SP_LIT("apple")));
+  SP_EXPECT_STR_EQ_CSTR(sp_str_join_cstr_n(strings, 3, SP_LIT(", ")), "apple, banana, cherry");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_join_cstr_n(strings, 1, SP_LIT(", ")), "apple");
   ASSERT_EQ(sp_str_join_cstr_n(strings, 0, SP_LIT(", ")).len, 0);
 }
 
@@ -1080,35 +1070,35 @@ UTEST(path_functions, normalize_path) {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\file.txt");
     sp_str_t copy = sp_str_copy(path);
     sp_os_normalize_path(copy);
-    ASSERT_TRUE(sp_str_equal(copy, SP_LIT("C:/Users/Test/file.txt")));
+    SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
     sp_str_t copy = sp_str_copy(path);
     sp_os_normalize_path(copy);
-    ASSERT_TRUE(sp_str_equal(copy, SP_LIT("C:/Users/Test/file.txt")));
+    SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users\\Test/sub\\file.txt");
     sp_str_t copy = sp_str_copy(path);
     sp_os_normalize_path(copy);
-    ASSERT_TRUE(sp_str_equal(copy, SP_LIT("C:/Users/Test/sub/file.txt")));
+    SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/sub/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("");
     sp_str_t copy = sp_str_copy(path);
     sp_os_normalize_path(copy);
-    ASSERT_TRUE(sp_str_equal(copy, SP_LIT("")));
+    SP_EXPECT_STR_EQ_CSTR(copy, "");
   }
 
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\");
     sp_str_t copy = sp_str_copy(path);
     sp_os_normalize_path(copy);
-    ASSERT_TRUE(sp_str_equal(copy, SP_LIT("C:/Users/Test/")));
+    SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/");
   }
 }
 
@@ -1118,19 +1108,19 @@ UTEST(path_functions, parent_path) {
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
     sp_str_t parent = sp_os_parent_path(path);
-    ASSERT_TRUE(sp_str_equal(parent, SP_LIT("C:/Users/Test")));
+    SP_EXPECT_STR_EQ_CSTR(parent, "C:/Users/Test");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users/Test/");
     sp_str_t parent = sp_os_parent_path(path);
-    ASSERT_TRUE(sp_str_equal(parent, SP_LIT("C:/Users")));
+    SP_EXPECT_STR_EQ_CSTR(parent, "C:/Users");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users/Test///");
     sp_str_t parent = sp_os_parent_path(path);
-    ASSERT_TRUE(sp_str_equal(parent, SP_LIT("C:/Users")));
+    SP_EXPECT_STR_EQ_CSTR(parent, "C:/Users");
   }
 
   {
@@ -1160,7 +1150,7 @@ UTEST(path_functions, parent_path) {
   {
     sp_str_t path = SP_LIT("/home/user/file");
     sp_str_t parent = sp_os_parent_path(path);
-    ASSERT_TRUE(sp_str_equal(parent, SP_LIT("/home/user")));
+    SP_EXPECT_STR_EQ_CSTR(parent, "/home/user");
   }
 }
 
@@ -1179,7 +1169,7 @@ UTEST(path_functions, canonicalize_path) {
     sp_str_t canonical = sp_os_canonicalize_path(path);
     ASSERT_GT(canonical.len, 0);
     sp_str_t filename = sp_os_extract_file_name(canonical);
-    ASSERT_TRUE(sp_str_equal(filename, SP_LIT("another")));
+    SP_EXPECT_STR_EQ_CSTR(filename, "another");
   }
 
   {
@@ -1239,7 +1229,7 @@ UTEST(path_functions, path_extension) {
 
   SP_CARR_FOR(cases, index) {
     sp_str_t extension = sp_os_extract_extension(cases[index].file_path);
-    SP_EXPECT_STREQ(extension, cases[index].extension);
+    SP_EXPECT_STR_EQ(extension, cases[index].extension);
   }
 }
 
@@ -1280,7 +1270,7 @@ UTEST(path_functions, path_stem) {
 
   SP_CARR_FOR(cases, index) {
     sp_str_t stem = sp_os_extract_stem(cases[index].file_path);
-    SP_EXPECT_STREQ(stem, cases[index].stem);
+    SP_EXPECT_STR_EQ(stem, cases[index].stem);
   }
 
 }
@@ -1291,7 +1281,7 @@ UTEST(path_functions, extract_file_name) {
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
     sp_str_t filename = sp_os_extract_file_name(path);
-    ASSERT_TRUE(sp_str_equal(filename, SP_LIT("file.txt")));
+    SP_EXPECT_STR_EQ_CSTR(filename, "file.txt");
   }
 
   {
@@ -1303,13 +1293,13 @@ UTEST(path_functions, extract_file_name) {
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\file.txt");
     sp_str_t filename = sp_os_extract_file_name(path);
-    ASSERT_TRUE(sp_str_equal(filename, SP_LIT("file.txt")));
+    SP_EXPECT_STR_EQ_CSTR(filename, "file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("file.txt");
     sp_str_t filename = sp_os_extract_file_name(path);
-    ASSERT_TRUE(sp_str_equal(filename, SP_LIT("file.txt")));
+    SP_EXPECT_STR_EQ_CSTR(filename, "file.txt");
   }
 
   {
@@ -1321,7 +1311,7 @@ UTEST(path_functions, extract_file_name) {
   {
     sp_str_t path = SP_LIT("/home/user/document.pdf");
     sp_str_t filename = sp_os_extract_file_name(path);
-    ASSERT_TRUE(sp_str_equal(filename, SP_LIT("document.pdf")));
+    SP_EXPECT_STR_EQ_CSTR(filename, "document.pdf");
   }
 }
 
@@ -2381,21 +2371,21 @@ UTEST(string_cpp, path_concatenation_operator) {
   sp_str_t result = path1 / path2;
 
   ASSERT_EQ(result.len, 9);
-  ASSERT_TRUE(sp_str_equal(result, SP_LIT("home/user")));
+  SP_EXPECT_STR_EQ_CSTR(result, "home/user");
 
   // Test with backslashes (should be normalized)
   sp_str_t win_path1 = SP_LIT("C:\\Windows");
   sp_str_t win_path2 = SP_LIT("System32");
   sp_str_t win_result = win_path1 / win_path2;
 
-  ASSERT_TRUE(sp_str_equal(win_result, SP_LIT("C:/Windows/System32")));
+  SP_EXPECT_STR_EQ_CSTR(win_result, "C:/Windows/System32");
 
   // Test empty paths
   sp_str_t empty = SP_LIT("");
   sp_str_t filename = SP_LIT("file.txt");
   sp_str_t empty_result = empty / filename;
 
-  ASSERT_TRUE(sp_str_equal(empty_result, SP_LIT("/file.txt")));
+  SP_EXPECT_STR_EQ_CSTR(empty_result, "/file.txt");
 
   // Test chaining
   sp_str_t base = SP_LIT("root");
@@ -2403,18 +2393,18 @@ UTEST(string_cpp, path_concatenation_operator) {
   sp_str_t file = SP_LIT("file.txt");
   sp_str_t chained = base / dir / file;
 
-  ASSERT_TRUE(sp_str_equal(chained, SP_LIT("root/subdir/file.txt")));
+  SP_EXPECT_STR_EQ_CSTR(chained, "root/subdir/file.txt");
 
   // Test operator/ with C string literals
   sp_str_t path = SP_LIT("home");
   sp_str_t result_cstr = path / "documents";
 
   ASSERT_EQ(result_cstr.len, 14);
-  ASSERT_TRUE(sp_str_equal(result_cstr, SP_LIT("home/documents")));
+  SP_EXPECT_STR_EQ_CSTR(result_cstr, "home/documents");
 
   // Test chaining with C string literals
   sp_str_t chained_cstr = base / "data" / "files";
-  ASSERT_TRUE(sp_str_equal(chained_cstr, SP_LIT("root/data/files")));
+  SP_EXPECT_STR_EQ_CSTR(chained_cstr, "root/data/files");
 }
 #endif
 

@@ -713,156 +713,6 @@ SP_API bool              sp_file_monitor_check_cache(sp_file_monitor_t* monitor,
 SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, sp_str_t file_path);
 
 
-// ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
-// ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
-// █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
-// ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
-// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
-// ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
-typedef struct sp_format_arg_t {
-  sp_hash_t id;
-  const void* data;
-} sp_format_arg_t;
-
-typedef struct sp_formatter sp_formatter_t;
-SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
-
-typedef struct sp_formatter {
-    sp_hash_t id;
-    sp_format_fn_t fn;
-} sp_formatter_t;
-
-#define SP_FMT_ID(T) sp_hash_cstr(SP_MACRO_STR(T))
-
-#ifdef SP_CPP
-  #define SP_FMT_ARG(T, V) sp_make_format_arg(SP_FMT_ID(T), (V))
-#else
-  #define SP_FMT_ARG(T, V) SP_RVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .data = (void*)&(V) }
-#endif
-
-#define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
-#define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
-#define SP_FMT_CSTR(V)          SP_FMT_ARG(cstr, V)
-#define SP_FMT_S8(V)            SP_FMT_ARG(s8, V)
-#define SP_FMT_S16(V)           SP_FMT_ARG(s16, V)
-#define SP_FMT_S32(V)           SP_FMT_ARG(s32, V)
-#define SP_FMT_S64(V)           SP_FMT_ARG(s64, V)
-#define SP_FMT_U8(V)            SP_FMT_ARG(u8, V)
-#define SP_FMT_U16(V)           SP_FMT_ARG(u16, V)
-#define SP_FMT_U32(V)           SP_FMT_ARG(u32, V)
-#define SP_FMT_U64(V)           SP_FMT_ARG(u64, V)
-#define SP_FMT_F32(V)           SP_FMT_ARG(f32, V)
-#define SP_FMT_F64(V)           SP_FMT_ARG(f64, V)
-#define SP_FMT_C8(V)            SP_FMT_ARG(c8, V)
-#define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
-#define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
-#define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
-#define SP_FMT_SHORT_HASH(V)    SP_FMT_ARG(hash_short, V)
-#define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
-#define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
-#define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
-#define SP_FMT_MUTEX(V)         SP_FMT_ARG(mutex, V)
-#define SP_FMT_SEMAPHORE(V)     SP_FMT_ARG(semaphore, V)
-#define SP_FMT_FIXED_ARRAY(V)   SP_FMT_ARG(fixed_array, V)
-#define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
-#define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
-
-void sp_format_ptr(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_str(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_cstr(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_s8(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_s16(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_s32(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_s64(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_u8(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_u16(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_u32(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_u64(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_f64(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_c8(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_c16(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_context(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_hash(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_date_time(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_thread(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_mutex(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_semaphore(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-
-#define SP_FMT(fmt, ...) sp_fmt(fmt, ##__VA_ARGS__);
-sp_str_t sp_fmt(sp_str_t fmt, ...);
-sp_str_t sp_fmt_c8(const c8* fmt, ...);
-sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
-
-#define SP_BUILTIN_FORMATTERS \
-  SP_FORMATTER(ptr, sp_format_ptr), \
-  SP_FORMATTER(str, sp_format_str), \
-  SP_FORMATTER(cstr, sp_format_cstr), \
-  SP_FORMATTER(s8, sp_format_s8), \
-  SP_FORMATTER(s16, sp_format_s16), \
-  SP_FORMATTER(s32, sp_format_s32), \
-  SP_FORMATTER(s64, sp_format_s64), \
-  SP_FORMATTER(u8, sp_format_u8), \
-  SP_FORMATTER(u16, sp_format_u16), \
-  SP_FORMATTER(u32, sp_format_u32), \
-  SP_FORMATTER(u64, sp_format_u64), \
-  SP_FORMATTER(f32, sp_format_f32), \
-  SP_FORMATTER(f64, sp_format_f64), \
-  SP_FORMATTER(c8, sp_format_c8), \
-  SP_FORMATTER(c16, sp_format_c16), \
-  SP_FORMATTER(context, sp_format_context), \
-  SP_FORMATTER(hash, sp_format_hash), \
-  SP_FORMATTER(hash_short, sp_format_hash_short), \
-  SP_FORMATTER(str_builder, sp_format_str_builder), \
-  SP_FORMATTER(date_time, sp_format_date_time), \
-  SP_FORMATTER(thread, sp_format_thread), \
-  SP_FORMATTER(mutex, sp_format_mutex), \
-  SP_FORMATTER(semaphore, sp_format_semaphore), \
-  SP_FORMATTER(fixed_array, sp_format_fixed_array), \
-  SP_FORMATTER(dynamic_array, sp_format_dynamic_array), \
-  SP_FORMATTER(quoted_str, sp_format_quoted_str), \
-
-
-// parsers
-SP_API u8        sp_parse_u8(sp_str_t str);
-SP_API u16       sp_parse_u16(sp_str_t str);
-SP_API u32       sp_parse_u32(sp_str_t str);
-SP_API u64       sp_parse_u64(sp_str_t str);
-SP_API s8        sp_parse_s8(sp_str_t str);
-SP_API s16       sp_parse_s16(sp_str_t str);
-SP_API s32       sp_parse_s32(sp_str_t str);
-SP_API s64       sp_parse_s64(sp_str_t str);
-SP_API f32       sp_parse_f32(sp_str_t str);
-SP_API f64       sp_parse_f64(sp_str_t str);
-SP_API c8        sp_parse_c8(sp_str_t str);
-SP_API c16       sp_parse_c16(sp_str_t str);
-SP_API void*     sp_parse_ptr(sp_str_t str);
-SP_API bool      sp_parse_bool(sp_str_t str);
-SP_API sp_hash_t sp_parse_hash(sp_str_t str);
-SP_API u64       sp_parse_hex(sp_str_t str);
-
-SP_API bool      sp_parse_u8_ex(sp_str_t str, u8* out);
-SP_API bool      sp_parse_u16_ex(sp_str_t str, u16* out);
-SP_API bool      sp_parse_u32_ex(sp_str_t str, u32* out);
-SP_API bool      sp_parse_u64_ex(sp_str_t str, u64* out);
-SP_API bool      sp_parse_s8_ex(sp_str_t str, s8* out);
-SP_API bool      sp_parse_s16_ex(sp_str_t str, s16* out);
-SP_API bool      sp_parse_s32_ex(sp_str_t str, s32* out);
-SP_API bool      sp_parse_s64_ex(sp_str_t str, s64* out);
-SP_API bool      sp_parse_f32_ex(sp_str_t str, f32* out);
-SP_API bool      sp_parse_f64_ex(sp_str_t str, f64* out);
-SP_API bool      sp_parse_c8_ex(sp_str_t str, c8* out);
-SP_API bool      sp_parse_c16_ex(sp_str_t str, c16* out);
-SP_API bool      sp_parse_ptr_ex(sp_str_t str, void** out);
-SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
-SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
-SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
-
 // ██╗      ██████╗  ██████╗
 // ██║     ██╔═══██╗██╔════╝
 // ██║     ██║   ██║██║  ███╗
@@ -1048,6 +898,139 @@ SP_API sp_future_t*                 sp_future_create(u32 size);
 SP_API void                         sp_future_set_value(sp_future_t* future, void* data);
 SP_API void                         sp_future_destroy(sp_future_t* future);
 
+// ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
+// ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
+// █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
+// ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
+// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
+// ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
+
+// X-Macro for all supported format types
+#define SP_FORMAT_TYPES \
+ SP_FMT_X(ptr, void*) \
+ SP_FMT_X(str, sp_str_t) \
+ SP_FMT_X(cstr, const c8*) \
+ SP_FMT_X(s8, s8) \
+ SP_FMT_X(s16, s16) \
+ SP_FMT_X(s32, s32) \
+ SP_FMT_X(s64, s64) \
+ SP_FMT_X(u8, u8) \
+ SP_FMT_X(u16, u16) \
+ SP_FMT_X(u32, u32) \
+ SP_FMT_X(u64, u64) \
+ SP_FMT_X(f32, f32) \
+ SP_FMT_X(f64, f64) \
+ SP_FMT_X(c8, c8) \
+ SP_FMT_X(c16, c16) \
+ SP_FMT_X(context, sp_context_t*) \
+ SP_FMT_X(hash, sp_hash_t) \
+ SP_FMT_X(hash_short, sp_hash_t) \
+ SP_FMT_X(str_builder, sp_str_builder_t) \
+ SP_FMT_X(fixed_array, sp_fixed_array_t) \
+ SP_FMT_X(dynamic_array, sp_dynamic_array_t) \
+ SP_FMT_X(quoted_str, sp_str_t)
+
+#define SP_FMT_ID(id) SP_MACRO_STR(id)
+#define SP_FMT_FN(id) sp_format_##id
+#define SP_FMT_UNION(T) SP_MACRO_CAT(T, _value)
+
+typedef struct sp_format_arg_t {
+  const c8* id;
+
+  union {
+    #undef SP_FMT_X
+    #define SP_FMT_X(name, type) type SP_FMT_UNION(name);
+    SP_FORMAT_TYPES
+  };
+
+} sp_format_arg_t;
+
+SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
+
+typedef struct sp_formatter {
+    const c8* id;
+    sp_format_fn_t fn;
+} sp_formatter_t;
+
+
+#ifdef SP_CPP
+  #define SP_FMT_ARG(T, V) sp_make_format_arg(SP_FMT_ID(T), (V))
+#else
+  #define SP_FMT_ARG(T, V) SP_RVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .SP_FMT_UNION(T) = (V) }
+#endif
+
+#define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
+#define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
+#define SP_FMT_CSTR(V)          SP_FMT_ARG(cstr, V)
+#define SP_FMT_S8(V)            SP_FMT_ARG(s8, V)
+#define SP_FMT_S16(V)           SP_FMT_ARG(s16, V)
+#define SP_FMT_S32(V)           SP_FMT_ARG(s32, V)
+#define SP_FMT_S64(V)           SP_FMT_ARG(s64, V)
+#define SP_FMT_U8(V)            SP_FMT_ARG(u8, V)
+#define SP_FMT_U16(V)           SP_FMT_ARG(u16, V)
+#define SP_FMT_U32(V)           SP_FMT_ARG(u32, V)
+#define SP_FMT_U64(V)           SP_FMT_ARG(u64, V)
+#define SP_FMT_F32(V)           SP_FMT_ARG(f32, V)
+#define SP_FMT_F64(V)           SP_FMT_ARG(f64, V)
+#define SP_FMT_C8(V)            SP_FMT_ARG(c8, V)
+#define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
+#define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
+#define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
+#define SP_FMT_SHORT_HASH(V)    SP_FMT_ARG(hash_short, V)
+#define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
+#define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
+#define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
+#define SP_FMT_MUTEX(V)         SP_FMT_ARG(mutex, V)
+#define SP_FMT_SEMAPHORE(V)     SP_FMT_ARG(semaphore, V)
+#define SP_FMT_FIXED_ARRAY(V)   SP_FMT_ARG(fixed_array, V)
+#define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
+#define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
+
+#undef SP_FMT_X
+#define SP_FMT_X(name, type) void sp_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
+SP_FORMAT_TYPES
+
+#define SP_FMT(fmt, ...) sp_fmt(fmt, ##__VA_ARGS__);
+sp_str_t sp_fmt(sp_str_t fmt, ...);
+sp_str_t sp_fmt_c8(const c8* fmt, ...);
+sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
+
+// parsers
+SP_API u8        sp_parse_u8(sp_str_t str);
+SP_API u16       sp_parse_u16(sp_str_t str);
+SP_API u32       sp_parse_u32(sp_str_t str);
+SP_API u64       sp_parse_u64(sp_str_t str);
+SP_API s8        sp_parse_s8(sp_str_t str);
+SP_API s16       sp_parse_s16(sp_str_t str);
+SP_API s32       sp_parse_s32(sp_str_t str);
+SP_API s64       sp_parse_s64(sp_str_t str);
+SP_API f32       sp_parse_f32(sp_str_t str);
+SP_API f64       sp_parse_f64(sp_str_t str);
+SP_API c8        sp_parse_c8(sp_str_t str);
+SP_API c16       sp_parse_c16(sp_str_t str);
+SP_API void*     sp_parse_ptr(sp_str_t str);
+SP_API bool      sp_parse_bool(sp_str_t str);
+SP_API sp_hash_t sp_parse_hash(sp_str_t str);
+SP_API u64       sp_parse_hex(sp_str_t str);
+
+SP_API bool      sp_parse_u8_ex(sp_str_t str, u8* out);
+SP_API bool      sp_parse_u16_ex(sp_str_t str, u16* out);
+SP_API bool      sp_parse_u32_ex(sp_str_t str, u32* out);
+SP_API bool      sp_parse_u64_ex(sp_str_t str, u64* out);
+SP_API bool      sp_parse_s8_ex(sp_str_t str, s8* out);
+SP_API bool      sp_parse_s16_ex(sp_str_t str, s16* out);
+SP_API bool      sp_parse_s32_ex(sp_str_t str, s32* out);
+SP_API bool      sp_parse_s64_ex(sp_str_t str, s64* out);
+SP_API bool      sp_parse_f32_ex(sp_str_t str, f32* out);
+SP_API bool      sp_parse_f64_ex(sp_str_t str, f64* out);
+SP_API bool      sp_parse_c8_ex(sp_str_t str, c8* out);
+SP_API bool      sp_parse_c16_ex(sp_str_t str, c16* out);
+SP_API bool      sp_parse_ptr_ex(sp_str_t str, void** out);
+SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
+SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
+SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
+
+
 #ifdef SP_APP
 typedef enum {
   SP_ASSET_STATE_QUEUED,
@@ -1136,10 +1119,11 @@ SP_END_EXTERN_C()
   sp_str_t operator/(const sp_str_t& a, const c8* b);
 
   template <typename T>
-  sp_format_arg_t sp_make_format_arg(sp_hash_t id, T&& data) {
+  sp_format_arg_t sp_make_format_arg(const c8* id, T&& data) {
     sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
     result.id = id;
-    result.data = &data;
+    sp_os_copy_memory(&data, &result.u8_value, sizeof(T));
+
     return result;
   }
 #endif
@@ -2019,71 +2003,69 @@ void sp_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, const c8
 }
 
 void sp_format_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_str_t* value = (sp_str_t*)arg->data;
+  sp_str_t value = arg->str_value;
   SP_ASSERT(builder);
-  SP_ASSERT(value);
 
-  sp_str_builder_append(builder, *value);
+  sp_str_builder_append(builder, value);
 }
 
 void sp_format_cstr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  c8** value = (c8**)arg->data;
+  const c8* value = arg->cstr_value;
   SP_ASSERT(builder);
   SP_ASSERT(value);
-  SP_ASSERT(*value);
 
-  sp_str_builder_append_cstr(builder, *value);
+  sp_str_builder_append_cstr(builder, value);
 }
 
 void sp_format_ptr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  void** value = (void**)arg->data;
-  u64 addr = (u64)*value;
+  void* value = arg->ptr_value;
+  u64 addr = (u64)value;
   sp_format_hex(builder, addr, 8, "0x");
 }
 
 void sp_format_s8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  s8* value = (s8*)arg->data;
-  sp_format_signed(builder, *value, 3);
+  s8 value = arg->s8_value;
+  sp_format_signed(builder, value, 3);
 }
 
 void sp_format_s16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  s16* value = (s16*)arg->data;
-  sp_format_signed(builder, *value, 5);
+  s16 value = arg->s16_value;
+  sp_format_signed(builder, value, 5);
 }
 
 void sp_format_s32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  s32* value = (s32*)arg->data;
-  sp_format_signed(builder, *value, 10);
+  s32 value = arg->s32_value;
+  sp_format_signed(builder, value, 10);
 }
 
 void sp_format_s64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  s64* value = (s64*)arg->data;
-  sp_format_signed(builder, *value, 20);
+  s64 value = arg->s64_value;
+  sp_format_signed(builder, value, 20);
 }
 
 void sp_format_u8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  u8* value = (u8*)arg->data;
-  sp_format_unsigned(builder, *value, 3);
+  u8 value = arg->u8_value;
+  sp_format_unsigned(builder, value, 3);
 }
 
 void sp_format_u16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  u16* value = (u16*)arg->data;
-  sp_format_unsigned(builder, *value, 5);
+  u16 value = arg->u16_value;
+  sp_format_unsigned(builder, value, 5);
 }
 
 void sp_format_u32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  u32* value = (u32*)arg->data;
-  sp_format_unsigned(builder, *value, 10);
+  u32 value = arg->u32_value;
+  sp_format_unsigned(builder, value, 10);
 }
 
 void sp_format_u64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  u64* value = (u64*)arg->data;
-  sp_format_unsigned(builder, *value, 20);
+  u64 value = arg->u64_value;
+  sp_format_unsigned(builder, value, 20);
 }
 
 void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  f32* value = (f32*)arg->data;
-  f32 num = *value;
+  f32 value = arg->f32_value;
+  f32 num = value;
 
   // Handle negative
   if (num < 0) {
@@ -2125,8 +2107,8 @@ void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 }
 
 void sp_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  f64* value = (f64*)arg->data;
-  f64 num = *value;
+  f64 value = arg->f64_value;
+  f64 num = value;
 
   // Handle negative
   if (num < 0) {
@@ -2168,34 +2150,23 @@ void sp_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 }
 
 void sp_format_c8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  c8* value = (c8*)arg->data;
+  c8 value = arg->c8_value;
   SP_ASSERT(builder);
-  SP_ASSERT(value);
-
-  sp_str_builder_grow(builder, builder->buffer.count + 3); // two quotes + character
-  sp_str_builder_append_c8(builder, '\'');
-  sp_str_builder_append_c8(builder, *value);
-  sp_str_builder_append_c8(builder, '\'');
+  sp_str_builder_append_c8(builder, arg->c8_value);
 }
 
 void sp_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  c16* value = (c16*)arg->data;
+  c16 value = arg->c16_value;
   SP_ASSERT(builder);
-  SP_ASSERT(value);
 
-  // Grow buffer for worst case: 'U+XXXX' (7 chars)
-  sp_str_builder_grow(builder, builder->buffer.count + 7);
-  sp_str_builder_append_c8(builder, '\'');
-  // Convert c16 to c8 if it's in ASCII range
-  if (*value < 128) {
-    sp_str_builder_append_c8(builder, (c8)*value);
-  } else {
-    // Just show the numeric value for non-ASCII
+  if (value < 128) {
+    sp_str_builder_append_c8(builder, (c8)value);
+  }
+  else {
     sp_str_builder_append_c8(builder, 'U');
     sp_str_builder_append_c8(builder, '+');
-    sp_format_hex(builder, *value, 4, NULL);
+    sp_format_hex(builder, value, 4, SP_NULL);
   }
-  sp_str_builder_append_c8(builder, '\'');
 }
 
 void sp_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
@@ -2209,146 +2180,65 @@ void sp_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 }
 
 void sp_format_hash(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_hash_t* value = (sp_hash_t*)arg->data;
-  u64 hash = (u64)*value;
+  sp_hash_t value = arg->hash_value;
+  u64 hash = (u64)value;
   sp_format_hex(builder, hash, 0, NULL);
 }
 
 void sp_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_hash_t* value = (sp_hash_t*)arg->data;
-  u64 hash = (u64)*value;
+  sp_hash_t value = arg->hash_short_value;
+  u64 hash = (u64)value;
   sp_format_hex(builder, hash >> 32, 0, NULL);
 }
 
 void sp_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_str_builder_t* sb = (sp_str_builder_t*)arg->data;
+  sp_str_builder_t sb = arg->str_builder_value;
 
   sp_str_builder_append_cstr(builder, "{ buffer: (");
 
   // Format data pointer
-  u64 addr = (u64)sb->buffer.data;
+  u64 addr = (u64)sb.buffer.data;
   sp_format_hex(builder, addr, 8, "0x");
 
   sp_str_builder_append_cstr(builder, ", ");
 
   // Format count
-  sp_format_unsigned(builder, sb->buffer.count, 10);
+  sp_format_unsigned(builder, sb.buffer.count, 10);
 
   sp_str_builder_append_cstr(builder, "), capacity: ");
 
   // Format capacity
-  sp_format_unsigned(builder, sb->buffer.capacity, 10);
+  sp_format_unsigned(builder, sb.buffer.capacity, 10);
 
   sp_str_builder_append_cstr(builder, " }");
 }
 
-void sp_format_date_time(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_os_date_time_t* dt = (sp_os_date_time_t*)arg->data;
-
-  // Format year
-  sp_format_signed(builder, dt->year, 10);
-
-  sp_str_builder_append_c8(builder, '-');
-
-  // Format month (2 digits)
-  if (dt->month < 10) sp_str_builder_append_c8(builder, '0');
-  sp_format_signed(builder, dt->month, 10);
-
-  sp_str_builder_append_c8(builder, '-');
-
-  // Format day (2 digits)
-  if (dt->day < 10) sp_str_builder_append_c8(builder, '0');
-  sp_format_signed(builder, dt->day, 10);
-
-  sp_str_builder_append_c8(builder, 'T');
-
-  // Format hour (2 digits)
-  if (dt->hour < 10) sp_str_builder_append_c8(builder, '0');
-  sp_format_signed(builder, dt->hour, 10);
-
-  sp_str_builder_append_c8(builder, ':');
-
-  // Format minute (2 digits)
-  if (dt->minute < 10) sp_str_builder_append_c8(builder, '0');
-  sp_format_signed(builder, dt->minute, 10);
-
-  sp_str_builder_append_c8(builder, ':');
-
-  // Format second (2 digits)
-  if (dt->second < 10) sp_str_builder_append_c8(builder, '0');
-  sp_format_signed(builder, dt->second, 10);
-
-  // Add milliseconds if non-zero
-  if (dt->millisecond > 0) {
-    sp_str_builder_append_c8(builder, '.');
-
-    // Format milliseconds (3 digits)
-    if (dt->millisecond < 100) sp_str_builder_append_c8(builder, '0');
-    if (dt->millisecond < 10) sp_str_builder_append_c8(builder, '0');
-    sp_format_signed(builder, dt->millisecond, 10);
-  }
-}
-
-void sp_format_thread(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_thread_t* thread = (sp_thread_t*)arg->data;
-
-  // Thread is a thrd_t which is a struct on Windows, cast to pointer size
-  u64 tid = (u64)(uintptr_t)thread;
-
-  sp_str_builder_append_cstr(builder, "Thread ");
-  sp_format_unsigned(builder, tid, 20);
-}
-
-void sp_format_mutex(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_mutex_t* mutex = (sp_mutex_t*)arg->data;
-
-  // mtx_t is an opaque type, just show pointer address
-  u64 addr = (u64)mutex;
-
-  sp_str_builder_append_cstr(builder, "Mutex ");
-  sp_format_hex(builder, addr, 8, "0x");
-}
-
-void sp_format_semaphore(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_semaphore_t* sem = (sp_semaphore_t*)arg->data;
-
-  sp_str_builder_append_cstr(builder, "Semaphore ");
-  #ifdef SP_WIN32
-    u64 handle = (u64)*sem;
-    sp_format_hex(builder, handle, 8, "0x");
-  #else
-    u64 addr = (u64)sem;
-    sp_format_hex(builder, addr, 8, "0x");
-  #endif
-}
-
 void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_fixed_array_t* arr = (sp_fixed_array_t*)arg->data;
+  sp_fixed_array_t arr = arg->fixed_array_value;
 
   sp_str_builder_append_cstr(builder, "{ size: ");
-  sp_format_unsigned(builder, arr->size, 10);
+  sp_format_unsigned(builder, arr.size, 10);
   sp_str_builder_append_cstr(builder, ", capacity: ");
-  sp_format_unsigned(builder, arr->capacity, 10);
+  sp_format_unsigned(builder, arr.capacity, 10);
   sp_str_builder_append_cstr(builder, " }");
 }
 
 void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_dynamic_array_t* arr = (sp_dynamic_array_t*)arg->data;
+  sp_dynamic_array_t arr = arg->dynamic_array_value;
 
   sp_str_builder_append_cstr(builder, "{ size: ");
-  sp_format_unsigned(builder, arr->size, 10);
+  sp_format_unsigned(builder, arr.size, 10);
   sp_str_builder_append_cstr(builder, ", capacity: ");
-  sp_format_unsigned(builder, arr->capacity, 10);
+  sp_format_unsigned(builder, arr.capacity, 10);
   sp_str_builder_append_cstr(builder, " }");
 }
 
 void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_str_t* value = (sp_str_t*)arg->data;
+  sp_str_t value = arg->quoted_str_value;
   SP_ASSERT(builder);
-  SP_ASSERT(value);
 
   sp_str_builder_append_c8(builder, '"');
-  sp_str_builder_append(builder, *value);
+  sp_str_builder_append(builder, value);
   sp_str_builder_append_c8(builder, '"');
 }
 
@@ -2371,9 +2261,11 @@ sp_str_t sp_fmt_c8(const c8* fmt, ...) {
 }
 
 sp_str_t sp_fmt_v(sp_str_t fmt, va_list args) {
-  #define SP_FORMATTER(T, FN) SP_RVAL(sp_formatter_t) { .id = sp_hash_cstr(SP_MACRO_STR(T)), .fn = FN }
-  sp_formatter_t formatters [] = {
-    SP_BUILTIN_FORMATTERS
+  #undef SP_FMT_X
+  #define SP_FMT_X(ID, t) (sp_formatter_t) { .id = SP_FMT_ID(ID), .fn = SP_FMT_FN(ID) },
+
+  static sp_formatter_t formatters [] = {
+    SP_FORMAT_TYPES
   };
 
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
@@ -2385,7 +2277,7 @@ sp_str_t sp_fmt_v(sp_str_t fmt, va_list args) {
       if (sp_str_at(fmt, index) == '{') {
         sp_format_arg_t arg = va_arg(args, sp_format_arg_t);
         SP_CARR_FOR(formatters, formatter_index) {
-          if (formatters[formatter_index].id == arg.id) {
+          if (sp_cstr_equal(formatters[formatter_index].id, arg.id)) {
             sp_format_fn_t fn = formatters[formatter_index].fn;
             fn(&builder, &arg);
             break;
