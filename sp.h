@@ -734,6 +734,7 @@ typedef struct sp_formatter {
 #define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
 #define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
 #define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
+#define SP_FMT_SHORT_HASH(V)    SP_FMT_ARG(hash_short, V)
 #define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
 #define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
 #define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
@@ -760,6 +761,7 @@ void sp_format_c8(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_c16(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_context(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_hash(sp_str_builder_t* builder, sp_format_arg_t* buffer);
+void sp_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_date_time(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 void sp_format_thread(sp_str_builder_t* builder, sp_format_arg_t* buffer);
@@ -792,6 +794,7 @@ sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
   SP_FORMATTER(c16, sp_format_c16), \
   SP_FORMATTER(context, sp_format_context), \
   SP_FORMATTER(hash, sp_format_hash), \
+  SP_FORMATTER(hash_short, sp_format_hash_short), \
   SP_FORMATTER(str_builder, sp_format_str_builder), \
   SP_FORMATTER(date_time, sp_format_date_time), \
   SP_FORMATTER(thread, sp_format_thread), \
@@ -2187,6 +2190,12 @@ void sp_format_hash(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_hash_t* value = (sp_hash_t*)arg->data;
   u64 hash = (u64)*value;
   sp_format_hex(builder, hash, 0, NULL);
+}
+
+void sp_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+  sp_hash_t* value = (sp_hash_t*)arg->data;
+  u64 hash = (u64)*value;
+  sp_format_hex(builder, hash >> 32, 0, NULL);
 }
 
 void sp_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) {
