@@ -376,7 +376,7 @@ typedef u64 sp_hash_t;
 
 sp_hash_t sp_hash_cstr(const c8* str);
 sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes);
-sp_hash_t sp_hash_bytes(void* p, u64 len, u64 seed);
+sp_hash_t sp_hash_bytes(const void* p, u64 len, u64 seed);
 
 
 //   ██████╗ ██████╗ ███╗   ██╗████████╗ █████╗ ██╗███╗   ██╗███████╗██████╗ ███████╗
@@ -562,7 +562,7 @@ SP_API sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer);
 //  ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
 typedef struct {
   u32 len;
-  c8* data;
+  const c8* data;
 } sp_str_t;
 
 typedef struct {
@@ -596,7 +596,7 @@ SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
 #define sp_str_cstr(STR)   sp_str((STR), sp_cstr_len(STR))
 #define sp_str_lit(STR)    sp_str((STR), sizeof(STR) - 1)
-#define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .len = (u32)(LEN), .data = (c8*)(STR) }
+#define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .len = (u32)(LEN), .data = (const c8*)(STR) }
 #define SP_STR(STR, LEN) sp_str(STR, LEN)
 #define SP_LIT(STR) sp_str_lit(STR)
 #define SP_CSTR(STR) sp_str_cstr(STR)
@@ -634,7 +634,6 @@ SP_API sp_str_t sp_str_copy(sp_str_t str);
 SP_API sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length);
 SP_API sp_str_t sp_str_copy_cstr(const c8* str);
 SP_API sp_str_t sp_str_copy_cstr_null(const c8* str);
-SP_API void     sp_str_copy_to_str(sp_str_t str, sp_str_t* dest, u32 capacity);
 SP_API void     sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
 SP_API sp_str_t sp_str_alloc(u32 capacity);
 SP_API bool     sp_str_equal(sp_str_t a, sp_str_t b);
@@ -864,7 +863,7 @@ SP_API void                         sp_os_create_file(sp_str_t path);
 SP_API void                         sp_os_remove_file(sp_str_t path);
 SP_API sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path);
 SP_API sp_os_date_time_t            sp_os_get_date_time();
-SP_API void                         sp_os_normalize_path(sp_str_t path);
+SP_API sp_str_t                     sp_os_normalize_path(sp_str_t path);
 SP_API sp_str_t                     sp_os_parent_path(sp_str_t path);
 SP_API sp_str_t                     sp_os_join_path(sp_str_t a, sp_str_t b);
 SP_API sp_str_t                     sp_os_extract_extension(sp_str_t path);
@@ -1167,7 +1166,7 @@ sp_hash_t sp_hash_str(sp_str_t str) {
   return sp_hash_bytes(str.data, str.len, 0);
 }
 
-sp_hash_t sp_hash_bytes(void *p, u64 len, u64 seed) {
+sp_hash_t sp_hash_bytes(const void *p, u64 len, u64 seed) {
   unsigned char *d = (unsigned char *) p;
   size_t i,j;
   size_t v0,v1,v2,v3, data;
@@ -2624,23 +2623,28 @@ sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) 
 }
 
 sp_str_t sp_str_to_upper(sp_str_t str) {
+  c8* buffer = (c8*)sp_alloc(str.len);
+
   for (u32 i = 0; i < str.len; i++) {
     if (str.data[i] >= 'a' && str.data[i] <= 'z') {
-      str.data[i] -= 32;
+      buffer[i] -= 32;
     }
   }
-  return str;
+
+  return SP_STR(buffer, str.len);
 }
 
 sp_str_t sp_str_replace(sp_str_t str, c8 from, c8 to) {
+  c8* buffer = (c8*)sp_alloc(str.len);
+
   for (u32 i = 0; i < str.len; i++) {
     if (str.data[i] == from) {
-      str.data[i] = to;
+      buffer[i] = to;
     }
   }
-  return str;
-}
 
+  return SP_STR(buffer, str.len);
+}
 
 sp_str_t sp_str_strip_right(sp_str_t str) {
   while (str.len) {
@@ -2673,47 +2677,36 @@ sp_str_t sp_str_sub(sp_str_t str, u32 index, u32 len) {
 }
 
 sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length) {
-  sp_str_t copy;
-  u32 str_len = sp_cstr_len(str);
-  copy.len = SP_MIN(str_len, length);
-  copy.data = (c8*)sp_alloc(copy.len);
+  c8* buffer = (c8*)sp_alloc(length);
+  u32 len = sp_cstr_len(str);
+  len = SP_MIN(len, length);
+  sp_os_copy_memory(str, buffer, len);
 
-  sp_os_copy_memory(str, copy.data, copy.len);
-  return copy;
+  return SP_STR(buffer, len);
 }
 
 sp_str_t sp_str_copy_cstr_null(const c8* str) {
-  sp_str_t copy;
-  copy.len = sp_cstr_len(str);
-  copy.data = (c8*)sp_alloc(copy.len + 1);
+  u32 len = sp_cstr_len(str);
+  c8* buffer = (c8*)sp_alloc(len + 1);
+  sp_os_copy_memory(str, buffer, len);
+  buffer[len] = 0;
 
-  sp_os_copy_memory(str, copy.data, copy.len);
-  copy.data[copy.len] = 0;
-  return copy;
+  return SP_STR(buffer, len);
 }
 
 sp_str_t sp_str_copy_cstr(const c8* str) {
-  sp_str_t copy;
-  copy.len = sp_cstr_len(str);
-  copy.data = (c8*)sp_alloc(copy.len);
+  u32 len = sp_cstr_len(str);
+  c8* buffer = (c8*)sp_alloc(len + 1);
+  sp_os_copy_memory(str, buffer, len);
 
-  sp_os_copy_memory(str, copy.data, copy.len);
-  return copy;
+  return SP_STR(buffer, len);
 }
 
 sp_str_t sp_str_copy(sp_str_t str) {
-  sp_str_t copy = {
-    .len = str.len,
-    .data = (c8*)sp_alloc(str.len),
-  };
+  c8* buffer = (c8*)sp_alloc(str.len);
+  sp_os_copy_memory(str.data, buffer, str.len);
 
-  sp_os_copy_memory(str.data, copy.data, str.len);
-  return copy;
-}
-
-void sp_str_copy_to_str(sp_str_t source, sp_str_t* dest, u32 capacity) {
-  dest->len = SP_MIN(source.len, capacity);
-  sp_os_copy_memory(source.data, dest->data, dest->len);
+  return SP_STR(buffer, str.len);
 }
 
 void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
@@ -2798,8 +2791,10 @@ sp_str_t sp_str_builder_write(sp_str_builder_t* builder) {
     .data = (c8*)sp_alloc(builder->buffer.count),
   };
 
-  sp_os_copy_memory(builder->buffer.data, string.data, builder->buffer.count);
-  return string;
+  c8* buffer = (c8*)sp_alloc(builder->buffer.count);
+  sp_os_copy_memory(builder->buffer.data, buffer, builder->buffer.count);
+
+  return SP_STR(buffer, builder->buffer.count);
 }
 
 c8* sp_str_builder_write_cstr(sp_str_builder_t* builder) {
@@ -2965,18 +2960,27 @@ u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
 ////////
 // OS //
 ////////
-void sp_os_normalize_path(sp_str_t path) {
+sp_str_t sp_os_normalize_path(sp_str_t path) {
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+
   for (u32 i = 0; i < path.len; i++) {
     if (path.data[i] == '\\') {
-      path.data[i] = '/';
+      sp_str_builder_append_c8(&builder, '/');
+    }
+    else {
+      sp_str_builder_append_c8(&builder, path.data[i]);
     }
   }
+
+  return sp_str_builder_write(&builder);
 }
 
 sp_str_t sp_os_extract_file_name(sp_str_t path) {
-  if (path.len == 0) return sp_str_lit("");
+  if (!path.len) return sp_str_copy_cstr("");
 
-  c8* last_slash = NULL;
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+
+  const c8* last_slash = NULL;
   for (u32 i = 0; i < path.len; i++) {
     if (path.data[i] == '/' || path.data[i] == '\\') {
       last_slash = &path.data[i];
@@ -2998,7 +3002,7 @@ sp_str_t sp_os_parent_path(sp_str_t path) {
   if (path.len == 0) return path;
 
   // Start from the end of the string
-  c8* c = path.data + path.len - 1;
+  const c8* c = path.data + path.len - 1;
 
   // Skip any trailing slashes
   while (c > path.data && *c == '/') {
@@ -3021,7 +3025,7 @@ sp_str_t sp_os_parent_path(sp_str_t path) {
     path.len = 0;
   }
 
-  return path;
+  return sp_str_copy(path);
 }
 
 sp_str_t sp_os_join_path(sp_str_t a, sp_str_t b) {
@@ -3249,14 +3253,11 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     c8 canonical_path[SP_MAX_PATH_LEN];
 
     if (GetFullPathNameA(path_cstr, SP_MAX_PATH_LEN, canonical_path, NULL) == 0) {
-      sp_free(path_cstr);
       return sp_str_copy(path);
     }
 
-    sp_free(path_cstr);
-
-    sp_str_t result = sp_str_cstr(canonical_path);
-    sp_os_normalize_path(result);
+    sp_str_t result = sp_str_copy_cstr(canonical_path);
+    result = sp_os_normalize_path(result);
 
     // Remove trailing slash if present
     if (result.len > 0 && result.data[result.len - 1] == '/') {
@@ -3899,13 +3900,11 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
     realpath(path_cstr, canonical_path);
-    sp_free(path_cstr);
 
-    sp_str_t result = sp_str_cstr(canonical_path);
-    sp_os_normalize_path(result);
+    sp_str_t result = sp_str_copy_cstr(canonical_path);
+    result = sp_os_normalize_path(result);
 
     if (result.len > 0 && result.data[result.len - 1] == '/') {
-      result.data[result.len - 1] = 0;
       result.len--;
     }
 
@@ -4669,8 +4668,7 @@ sp_str_t operator/(const sp_str_t& a, const sp_str_t& b) {
   sp_str_builder_append_c8(&builder, '/');
   sp_str_builder_append(&builder, b);
   sp_str_t result = sp_str_builder_write(&builder);
-  sp_os_normalize_path(result);
-  return result;
+  return sp_os_normalize_path(result);
 }
 
 sp_str_t operator/(const sp_str_t& a, const c8* b) {
@@ -4679,8 +4677,7 @@ sp_str_t operator/(const sp_str_t& a, const c8* b) {
   sp_str_builder_append_c8(&builder, '/');
   sp_str_builder_append_cstr(&builder, b);
   sp_str_t result = sp_str_builder_write(&builder);
-  sp_os_normalize_path(result);
-  return result;
+  return sp_os_normalize_path(result);
 }
 #endif
 

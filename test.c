@@ -886,11 +886,6 @@ UTEST(sp_str_copy, string_copy_operations) {
   ASSERT_EQ(partial.len, 5);
   SP_EXPECT_STR_EQ_CSTR(partial, "Hello");
 
-  sp_str_t dest = sp_str_alloc(20);
-  sp_str_copy_to_str(original, &dest, 20);
-  ASSERT_EQ(dest.len, original.len);
-  ASSERT_TRUE(sp_str_equal(dest, original));
-
   c8 buffer[20];
   sp_os_zero_memory(buffer, 20);
   sp_str_copy_to(original, buffer, 20);
@@ -1068,36 +1063,31 @@ UTEST(path_functions, normalize_path) {
 
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\file.txt");
-    sp_str_t copy = sp_str_copy(path);
-    sp_os_normalize_path(copy);
+    sp_str_t copy = sp_os_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
-    sp_str_t copy = sp_str_copy(path);
-    sp_os_normalize_path(copy);
+    sp_str_t copy = sp_os_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users\\Test/sub\\file.txt");
-    sp_str_t copy = sp_str_copy(path);
-    sp_os_normalize_path(copy);
+    sp_str_t copy = sp_os_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/sub/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("");
-    sp_str_t copy = sp_str_copy(path);
-    sp_os_normalize_path(copy);
+    sp_str_t copy = sp_os_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "");
   }
 
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\");
-    sp_str_t copy = sp_str_copy(path);
-    sp_os_normalize_path(copy);
+    sp_str_t copy = sp_os_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/");
   }
 }
