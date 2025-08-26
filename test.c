@@ -985,6 +985,32 @@ UTEST(sp_str_sort_kernel_alphabetical, sorting_tests) {
   ASSERT_EQ(sp_str_compare_alphabetical(SP_LIT("abc"), SP_LIT("ab")), SP_QSORT_B_FIRST);
 }
 
+sp_str_t sp_test_map_band_member(sp_str_t str, sp_opaque_ptr user_data) {
+  return sp_str_concat(str, SP_LIT(" is in the band"));
+}
+
+UTEST(sp_str_t, map_reduce) {
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_t band [] = {
+    SP_LIT("jerry"), SP_LIT("bobby"), SP_LIT("phil")
+  };
+  sp_dyn_array(sp_str_t) result = sp_str_map(&band[0], SP_CARR_LEN(band), SP_NULLPTR, sp_test_map_band_member);
+  SP_EXPECT_STREQ(result[0], SP_LIT("jerry is in the band"));
+  SP_EXPECT_STREQ(result[1], SP_LIT("bobby is in the band"));
+  SP_EXPECT_STREQ(result[2], SP_LIT("phil is in the band"));
+
+  sp_str_t joined = sp_str_join_n(band, SP_CARR_LEN(band), SP_LIT(" and "));
+  SP_EXPECT_STREQ(joined, SP_LIT("jerry and bobby and phil"));
+
+  u32 len = 3;
+  sp_dyn_array(sp_str_t) clipped = sp_str_map(&band[0], SP_CARR_LEN(band), &len, sp_str_map_kernel_prefix);
+  SP_EXPECT_STREQ(clipped[0], SP_LIT("jer"));
+  SP_EXPECT_STREQ(clipped[1], SP_LIT("bob"));
+  SP_EXPECT_STREQ(clipped[2], SP_LIT("phi"));
+
+}
+
+
 UTEST(sp_str_utilities, valid_and_at) {
   sp_test_use_malloc();
 

@@ -151,7 +151,7 @@
 // ██║ ╚═╝ ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║
 // ╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 #ifdef SP_CPP
-  #define SP_LVAL(T)
+  #define SP_RVAL(T) (T)
   #define SP_THREAD_LOCAL thread_local
   #define SP_BEGIN_EXTERN_C() extern "C" {
   #define SP_END_EXTERN_C() }
@@ -160,7 +160,7 @@
   #define SP_NULLPTR nullptr
   #define SP_ATOMIC(T) ::std::atomic<T>
 #else
-  #define SP_LVAL(T) (T)
+  #define SP_RVAL(T) (T)
   #define SP_THREAD_LOCAL _Thread_local
   #define SP_BEGIN_EXTERN_C()
   #define SP_END_EXTERN_C()
@@ -182,7 +182,7 @@
 
 #define SP_FALLTHROUGH() ((void)0)
 
-#define SP_ZERO_STRUCT(t) SP_LVAL(t) SP_ZERO_INITIALIZE()
+#define SP_ZERO_STRUCT(t) SP_RVAL(t) SP_ZERO_INITIALIZE()
 #define SP_ZERO_RETURN(t) { t __SP_ZERO_RETURN = SP_ZERO_STRUCT(t); return __dn_zero_return; }
 
 #define SP_EXIT_SUCCESS() exit(0)
@@ -379,102 +379,6 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes);
 sp_hash_t sp_hash_bytes(void* p, u64 len, u64 seed);
 
 
-//  ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗
-//  ██╔════╝╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝
-//  ███████╗   ██║   ██████╔╝██║██╔██╗ ██║██║  ███╗
-//  ╚════██║   ██║   ██╔══██╗██║██║╚██╗██║██║   ██║
-//  ███████║   ██║   ██║  ██║██║██║ ╚████║╚██████╔╝
-//  ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
-typedef struct {
-  u32 len;
-  c8* data;
-} sp_str_t;
-
-// sp_str_buffer_t is for defining fixed size, stack allocated strings that have a length attached. Then, you
-// can use sp_str_buffer_view() or sp_str_buffer_view_ptr() to turn it into a sp_str_t and use the normal
-// string APIs.
-#define sp_str_buffer_t(n) struct { u32 len; c8 data [n]; }
-#define sp_str_buffer_capacity(buffer) (sizeof((buffer)->data))
-#define sp_str_buffer_view(buffer) SP_LVAL(sp_str_t) { .len = (buffer).len, .data = (buffer).data }
-#define sp_str_buffer_view_ptr(buffer) ((sp_str_t*)(buffer))
-#define sp_str_copy_to_str_buffer(str, buffer) { sp_str_copy_to((str), (buffer)->data, sp_str_buffer_capacity(buffer)); (buffer)->len = (str).len; }
-
-typedef c8 sp_path_t [SP_MAX_PATH_LEN];
-
-typedef struct {
-  c8* data;
-  u32 count;
-  u32 capacity;
-} sp_str_builder_buffer_t;
-
-typedef struct {
-  sp_str_builder_buffer_t buffer;
-  struct {
-    sp_str_t word;
-    u32 level;
-  } indent;
-} sp_str_builder_t;
-
-#define sp_str_cstr(STR)   sp_str((STR), sp_cstr_len(STR))
-#define sp_str_lit(STR)    sp_str((STR), sizeof(STR) - 1)
-#define sp_str(STR, LEN) SP_LVAL(sp_str_t) { .len = (u32)(LEN), .data = (c8*)(STR) }
-#define SP_STR(STR, LEN) sp_str(STR, LEN)
-#define SP_LIT(STR) sp_str_lit(STR)
-#define SP_CSTR(STR) sp_str_cstr(STR)
-#define SP_SUBSTR(STR, INDEX, LEN) sp_str((STR).data + (INDEX), LEN)
-#define SP_SUBSTR_END(STR, LEN) sp_str((STR).data + (STR).len - (LEN), LEN)
-
-SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
-SP_API void     sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
-SP_API void     sp_str_builder_indent(sp_str_builder_t* builder);
-SP_API void     sp_str_builder_dedent(sp_str_builder_t* builder);
-SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
-SP_API void     sp_str_builder_append_raw(sp_str_builder_t* builder, sp_str_t str);
-SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
-SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
-SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...);
-SP_API void     sp_str_builder_append_fmt_c8(sp_str_builder_t* builder, const c8* fmt, ...);
-SP_API void     sp_str_builder_new_line(sp_str_builder_t* builder);
-SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
-SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
-
-SP_API c8*      sp_cstr_copy(const c8* str);
-SP_API c8*      sp_cstr_copy_n(const c8* str, u32 length);
-SP_API c8*      sp_cstr_copy_c8(const c8* str, u32 length);
-SP_API void     sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length);
-SP_API void     sp_cstr_copy_to_n(const c8* str, u32 length, c8* buffer, u32 buffer_length);
-SP_API bool     sp_cstr_equal(const c8* a, const c8* b);
-SP_API u32      sp_cstr_len(const c8* str);
-
-SP_API c8*      sp_wstr_to_cstr(c16* str, u32 len);
-
-SP_API c8*      sp_str_to_cstr(sp_str_t str);
-SP_API c8*      sp_str_to_double_null_terminated(sp_str_t str);
-SP_API c8*      sp_str_to_cstr_ex(sp_str_t str);
-SP_API sp_str_t sp_str_copy(sp_str_t str);
-SP_API sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length);
-SP_API sp_str_t sp_str_copy_cstr(const c8* str);
-SP_API sp_str_t sp_str_copy_cstr_null(const c8* str);
-SP_API void     sp_str_copy_to_str(sp_str_t str, sp_str_t* dest, u32 capacity);
-SP_API void     sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
-SP_API sp_str_t sp_str_alloc(u32 capacity);
-SP_API bool     sp_str_equal(sp_str_t a, sp_str_t b);
-SP_API bool     sp_str_equal_cstr(sp_str_t a, const c8* b);
-SP_API bool     sp_str_ends_with(sp_str_t a, sp_str_t b);
-SP_API s32      sp_str_sort_kernel_alphabetical(const void* a, const void* b);
-SP_API s32      sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
-SP_API bool     sp_str_valid(sp_str_t str);
-SP_API c8       sp_str_at(sp_str_t str, s32 index);
-SP_API c8       sp_str_at_reverse(sp_str_t str, s32 index);
-SP_API c8       sp_str_back(sp_str_t str);
-SP_API sp_str_t sp_str_concat(sp_str_t a, sp_str_t b);
-SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
-SP_API sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
-SP_API sp_str_t sp_str_replace(sp_str_t str, c8 from, c8 to);
-SP_API sp_str_t sp_str_strip_right(sp_str_t str);
-SP_API sp_str_t sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
-
-
 //   ██████╗ ██████╗ ███╗   ██╗████████╗ █████╗ ██╗███╗   ██╗███████╗██████╗ ███████╗
 //  ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝██╔══██╗██╔════╝
 //  ██║     ██║   ██║██╔██╗ ██║   ██║   ███████║██║██╔██╗ ██║█████╗  ██████╔╝███████╗
@@ -650,6 +554,114 @@ SP_API sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer);
     } while (0)
 
 
+//  ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗
+//  ██╔════╝╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝
+//  ███████╗   ██║   ██████╔╝██║██╔██╗ ██║██║  ███╗
+//  ╚════██║   ██║   ██╔══██╗██║██║╚██╗██║██║   ██║
+//  ███████║   ██║   ██║  ██║██║██║ ╚████║╚██████╔╝
+//  ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
+typedef struct {
+  u32 len;
+  c8* data;
+} sp_str_t;
+
+typedef struct {
+  struct {
+   c8* data;
+   u32 count;
+   u32 capacity;
+  } buffer;
+
+  struct {
+    sp_str_t word;
+    u32 level;
+  } indent;
+} sp_str_builder_t;
+
+typedef struct {
+  void* user_data;
+
+  sp_str_builder_t builder;
+  struct {
+    sp_str_t* data;
+    u32 len;
+  } elements;
+
+  sp_str_t str;
+  u32 index;
+} sp_str_reduce_context_t;
+
+SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_t str, void* user_data);
+SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
+
+#define sp_str_cstr(STR)   sp_str((STR), sp_cstr_len(STR))
+#define sp_str_lit(STR)    sp_str((STR), sizeof(STR) - 1)
+#define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .len = (u32)(LEN), .data = (c8*)(STR) }
+#define SP_STR(STR, LEN) sp_str(STR, LEN)
+#define SP_LIT(STR) sp_str_lit(STR)
+#define SP_CSTR(STR) sp_str_cstr(STR)
+#define SP_SUBSTR(STR, INDEX, LEN) sp_str((STR).data + (INDEX), LEN)
+#define SP_SUBSTR_END(STR, LEN) sp_str((STR).data + (STR).len - (LEN), LEN)
+
+SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
+SP_API void     sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
+SP_API void     sp_str_builder_indent(sp_str_builder_t* builder);
+SP_API void     sp_str_builder_dedent(sp_str_builder_t* builder);
+SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
+SP_API void     sp_str_builder_append_raw(sp_str_builder_t* builder, sp_str_t str);
+SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
+SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
+SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...);
+SP_API void     sp_str_builder_append_fmt_c8(sp_str_builder_t* builder, const c8* fmt, ...);
+SP_API void     sp_str_builder_new_line(sp_str_builder_t* builder);
+SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
+SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
+
+SP_API c8*      sp_cstr_copy(const c8* str);
+SP_API c8*      sp_cstr_copy_n(const c8* str, u32 length);
+SP_API c8*      sp_cstr_copy_c8(const c8* str, u32 length);
+SP_API void     sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length);
+SP_API void     sp_cstr_copy_to_n(const c8* str, u32 length, c8* buffer, u32 buffer_length);
+SP_API bool     sp_cstr_equal(const c8* a, const c8* b);
+SP_API u32      sp_cstr_len(const c8* str);
+
+SP_API c8*      sp_wstr_to_cstr(c16* str, u32 len);
+
+SP_API c8*      sp_str_to_cstr(sp_str_t str);
+SP_API c8*      sp_str_to_double_null_terminated(sp_str_t str);
+SP_API c8*      sp_str_to_cstr_ex(sp_str_t str);
+SP_API sp_str_t sp_str_copy(sp_str_t str);
+SP_API sp_str_t sp_str_copy_cstr_n(const c8* str, u32 length);
+SP_API sp_str_t sp_str_copy_cstr(const c8* str);
+SP_API sp_str_t sp_str_copy_cstr_null(const c8* str);
+SP_API void     sp_str_copy_to_str(sp_str_t str, sp_str_t* dest, u32 capacity);
+SP_API void     sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
+SP_API sp_str_t sp_str_alloc(u32 capacity);
+SP_API bool     sp_str_equal(sp_str_t a, sp_str_t b);
+SP_API bool     sp_str_equal_cstr(sp_str_t a, const c8* b);
+SP_API bool     sp_str_ends_with(sp_str_t a, sp_str_t b);
+SP_API s32      sp_str_sort_kernel_alphabetical(const void* a, const void* b);
+SP_API s32      sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
+SP_API bool     sp_str_valid(sp_str_t str);
+SP_API c8       sp_str_at(sp_str_t str, s32 index);
+SP_API c8       sp_str_at_reverse(sp_str_t str, s32 index);
+SP_API c8       sp_str_back(sp_str_t str);
+SP_API sp_str_t sp_str_concat(sp_str_t a, sp_str_t b);
+SP_API sp_str_t sp_str_replace(sp_str_t str, c8 from, c8 to);
+SP_API sp_str_t sp_str_strip_right(sp_str_t str);
+SP_API sp_str_t sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
+SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
+
+SP_API sp_str_t sp_str_reduce(sp_str_t* strs, u32 n, void* user_data, sp_str_reduce_fn_t fn);
+SP_API void     sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
+SP_API sp_str_t sp_str_join_n(sp_str_t* strings, u32 num_strings, sp_str_t joiner);
+SP_API sp_str_t sp_str_map_kernel_prefix(sp_str_t str, sp_opaque_ptr user_data);
+
+SP_API sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* strs, u32 num_strs, sp_opaque_ptr user_data, sp_str_map_fn_t fn);
+
+
+
 // ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
 // ██╔════╝██║██║     ██╔════╝    ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
 // █████╗  ██║██║     █████╗      ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
@@ -725,7 +737,7 @@ typedef struct sp_formatter {
 #ifdef SP_CPP
   #define SP_FMT_ARG(T, V) sp_make_format_arg(SP_FMT_ID(T), (V))
 #else
-  #define SP_FMT_ARG(T, V) SP_LVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .data = (void*)&(V) }
+  #define SP_FMT_ARG(T, V) SP_RVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .data = (void*)&(V) }
 #endif
 
 #define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
@@ -1035,7 +1047,6 @@ SP_API void                         sp_semaphore_signal(sp_semaphore_t* semaphor
 SP_API sp_future_t*                 sp_future_create(u32 size);
 SP_API void                         sp_future_set_value(sp_future_t* future, void* data);
 SP_API void                         sp_future_destroy(sp_future_t* future);
-
 
 #ifdef SP_APP
 typedef enum {
@@ -2360,7 +2371,7 @@ sp_str_t sp_fmt_c8(const c8* fmt, ...) {
 }
 
 sp_str_t sp_fmt_v(sp_str_t fmt, va_list args) {
-  #define SP_FORMATTER(T, FN) SP_LVAL(sp_formatter_t) { .id = sp_hash_cstr(SP_MACRO_STR(T)), .fn = FN }
+  #define SP_FORMATTER(T, FN) SP_RVAL(sp_formatter_t) { .id = sp_hash_cstr(SP_MACRO_STR(T)), .fn = FN }
   sp_formatter_t formatters [] = {
     SP_BUILTIN_FORMATTERS
   };
@@ -2631,7 +2642,7 @@ c8* sp_str_to_double_null_terminated(sp_str_t str) {
 }
 
 sp_str_t sp_str_alloc(u32 capacity) {
-  return SP_LVAL(sp_str_t) {
+  return SP_RVAL(sp_str_t) {
     .len = 0,
     .data = (c8*)sp_alloc(capacity),
   };
@@ -2846,15 +2857,9 @@ void sp_str_builder_append_raw(sp_str_builder_t* builder, sp_str_t str) {
 }
 
 void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
-  if (!sp_str_valid(builder->indent.word)) {
-    builder->indent.word = SP_LIT("  ");
-  }
-
-  for (u32 index = 0; index < builder->indent.level; index++) {
-    sp_str_builder_append_raw(builder, builder->indent.word);
-  }
-
-  sp_str_builder_append_raw(builder, str);
+  sp_str_builder_add_capacity(builder, str.len);
+  sp_os_copy_memory(str.data, builder->buffer.data + builder->buffer.count, str.len);
+  builder->buffer.count += str.len;
 }
 
 void sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str) {
@@ -2885,6 +2890,14 @@ void sp_str_builder_append_fmt_c8(sp_str_builder_t* builder, const c8* fmt, ...)
 
 void sp_str_builder_new_line(sp_str_builder_t* builder) {
   sp_str_builder_append_c8(builder, '\n');
+
+  if (!sp_str_valid(builder->indent.word)) {
+    builder->indent.word = SP_LIT("  ");
+  }
+
+  for (u32 index = 0; index < builder->indent.level; index++) {
+    sp_str_builder_append(builder, builder->indent.word);
+  }
 }
 
 sp_str_t sp_str_builder_write(sp_str_builder_t* builder) {
@@ -2899,6 +2912,54 @@ sp_str_t sp_str_builder_write(sp_str_builder_t* builder) {
 
 c8* sp_str_builder_write_cstr(sp_str_builder_t* builder) {
   return sp_cstr_copy_n((c8*)builder->buffer.data, builder->buffer.count);
+}
+
+// REDUCE
+sp_str_t sp_str_reduce(sp_str_t* strings, u32 num_strings, void* user_data, sp_str_reduce_fn_t fn) {
+  sp_str_reduce_context_t context = {
+    .user_data = user_data,
+    .builder = SP_ZERO_INITIALIZE(),
+    .elements = {
+      .data = strings,
+      .len = num_strings
+    },
+  };
+
+  for (u32 index = 0; index < num_strings; index++) {
+    context.str = strings[index];
+    context.index = index;
+    fn(&context);
+  }
+
+  return sp_str_builder_write(&context.builder);
+}
+
+void sp_str_reduce_kernel_join(sp_str_reduce_context_t* context) {
+  sp_str_t joiner = *(sp_str_t*)context->user_data;
+  sp_str_builder_append(&context->builder, context->str);
+  if (context->index != (context->elements.len - 1)) {
+    sp_str_builder_append(&context->builder, joiner);
+  }
+}
+
+sp_str_t sp_str_join_n(sp_str_t* strings, u32 num_strings, sp_str_t joiner) {
+  return sp_str_reduce(strings, num_strings, &joiner, sp_str_reduce_kernel_join);
+}
+
+// MAP
+sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* strs, u32 num_strs, sp_opaque_ptr user_data, sp_str_map_fn_t fn) {
+  sp_dyn_array(sp_str_t) results = SP_NULLPTR;
+
+  for (u32 index = 0; index < num_strs; index++) {
+    sp_str_t result = fn(strs[index], user_data);
+    sp_dyn_array_push(results, result);
+  }
+
+  return results;
+}
+
+sp_str_t sp_str_map_kernel_prefix(sp_str_t str, sp_opaque_ptr user_data) {
+  return sp_str_sub(str, 0, *(u32*)user_data);
 }
 
 
@@ -3194,7 +3255,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
-      sp_os_directory_entry_t entry  = SP_LVAL(sp_os_directory_entry_t) {
+      sp_os_directory_entry_t entry  = SP_RVAL(sp_os_directory_entry_t) {
         .file_path = file_path,
         .file_name = sp_str_copy_cstr(find_data.cFileName),
         .attributes = sp_os_winapi_attr_to_sp_attr(GetFileAttributesA(sp_str_to_cstr(file_path))),
@@ -3204,7 +3265,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
     FindClose(handle);
 
-    return SP_LVAL(sp_os_directory_entry_list_t) {
+    return SP_RVAL(sp_os_directory_entry_list_t) {
       .data = (sp_os_directory_entry_t*)entries.data,
       .count = entries.size
     };
@@ -3237,7 +3298,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     // Convert to Unix epoch
     u64 unix_100ns = time.QuadPart - 116444736000000000LL;
 
-    return SP_LVAL(sp_precise_epoch_time_t) {
+    return SP_RVAL(sp_precise_epoch_time_t) {
       unix_100ns / 10000000,           // seconds
       (unix_100ns % 10000000) * 100    // remainder to nanoseconds
     };
@@ -3329,7 +3390,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   }
 
   void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
-    sp_thread_launch_t launch = SP_LVAL(sp_thread_launch_t) {
+    sp_thread_launch_t launch = SP_RVAL(sp_thread_launch_t) {
       .fn = fn,
       .userdata = userdata,
       .context = *sp_context,
@@ -3540,7 +3601,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
-      sp_os_directory_entry_t dir_entry = SP_LVAL(sp_os_directory_entry_t) {
+      sp_os_directory_entry_t dir_entry = SP_RVAL(sp_os_directory_entry_t) {
         .file_path = file_path,
         .file_name = sp_str_copy_cstr(entry->d_name),
         .attributes = SP_OS_FILE_ATTR_NONE,
@@ -3550,7 +3611,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
     closedir(dir);
 
-    return SP_LVAL(sp_os_directory_entry_list_t) {
+    return SP_RVAL(sp_os_directory_entry_list_t) {
       .data = (sp_os_directory_entry_t*)entries.data,
       .count = entries.size
     };
@@ -3565,7 +3626,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     time_info = localtime(&raw_time);
     gettimeofday(&tv, NULL);
 
-    return SP_LVAL(sp_os_date_time_t) {
+    return SP_RVAL(sp_os_date_time_t) {
       .year = time_info->tm_year + 1900,
       .month = time_info->tm_mon + 1,
       .day = time_info->tm_mday,
@@ -3590,7 +3651,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
     }
 
-    return SP_LVAL(sp_precise_epoch_time_t) {
+    return SP_RVAL(sp_precise_epoch_time_t) {
       .s = (u64)st.st_mtime,
       .ns = 0
     };
@@ -3881,7 +3942,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
     SDL_EnumerateDirectory(sp_str_to_cstr(path), sp_os_sdl_scan_directory_callback, &entries);
 
-    return SP_LVAL(sp_os_directory_entry_list_t) {
+    return SP_RVAL(sp_os_directory_entry_list_t) {
       .data = (sp_os_directory_entry_t*)entries.data,
       .count = entries.size
     };
@@ -3894,7 +3955,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     SDL_DateTime dt;
     SDL_TimeToDateTime(now, &dt, true);  // true = localtime
 
-    return SP_LVAL(sp_os_date_time_t) {
+    return SP_RVAL(sp_os_date_time_t) {
         .year = dt.year,
         .month = dt.month,
         .day = dt.day,
@@ -3915,7 +3976,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
     }
 
-    return SP_LVAL(sp_precise_epoch_time_t) {
+    return SP_RVAL(sp_precise_epoch_time_t) {
       .s  = (u64)(info.modify_time / 1000000000),
       .ns = (u64)(info.modify_time % 1000000000)
     };
