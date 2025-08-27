@@ -4885,6 +4885,11 @@ void sp_future_set_value(sp_future_t* future, void* value) {
   sp_os_copy_memory(value, future->value, future->size);
 }
 
+void sp_init(sp_config_t config) {
+  SP_ASSERT(config.allocator.on_alloc);
+  sp_context_push_allocator(config.allocator);
+}
+
 #ifdef SP_APP
 ////////////////////
 // ASSET REGISTRY //
