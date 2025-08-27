@@ -2439,44 +2439,6 @@ UTEST(sp_str_kernels, map_trim) {
   SP_EXPECT_STR_EQ_CSTR(results[3], "no_trim");
 }
 
-UTEST(sp_str_kernels, map_trim_prefix_suffix) {
-  sp_test_use_malloc();
-
-  sp_str_t strings[] = {
-    SP_LIT("http://example.com"),
-    SP_LIT("https://secure.com"),
-    SP_LIT("ftp://files.org"),
-    SP_LIT("example.com"),
-  };
-
-  // Test trim prefix
-  sp_str_t http_prefix = SP_LIT("http://");
-  sp_dyn_array(sp_str_t) results = sp_str_map(strings, 4, &http_prefix, sp_str_map_kernel_trim_prefix);
-
-  ASSERT_EQ(sp_dyn_array_size(results), 4);
-  SP_EXPECT_STR_EQ_CSTR(results[0], "example.com");
-  SP_EXPECT_STR_EQ_CSTR(results[1], "https://secure.com");
-  SP_EXPECT_STR_EQ_CSTR(results[2], "ftp://files.org");
-  SP_EXPECT_STR_EQ_CSTR(results[3], "example.com");
-
-  // Test trim suffix
-  sp_str_t strings2[] = {
-    SP_LIT("file.txt"),
-    SP_LIT("document.txt"),
-    SP_LIT("image.png"),
-    SP_LIT("no_extension"),
-  };
-
-  sp_str_t txt_suffix = SP_LIT(".txt");
-  results = sp_str_map(strings2, 4, &txt_suffix, sp_str_map_kernel_trim_suffix);
-
-  ASSERT_EQ(sp_dyn_array_size(results), 4);
-  SP_EXPECT_STR_EQ_CSTR(results[0], "file");
-  SP_EXPECT_STR_EQ_CSTR(results[1], "document");
-  SP_EXPECT_STR_EQ_CSTR(results[2], "image.png");
-  SP_EXPECT_STR_EQ_CSTR(results[3], "no_extension");
-}
-
 UTEST(sp_str_kernels, map_case_transform) {
   sp_test_use_malloc();
 

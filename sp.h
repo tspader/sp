@@ -659,24 +659,15 @@ SP_API sp_str_t sp_str_sub(sp_str_t str, u32 index, u32 len);
 SP_API sp_str_t sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
 SP_API sp_str_t sp_str_concat(sp_str_t a, sp_str_t b);
 SP_API sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to);
-SP_API sp_str_t sp_str_strip_right(sp_str_t str);
+SP_API sp_str_t sp_str_pad(sp_str_t str, u32 n);
 SP_API sp_str_t sp_str_trim(sp_str_t str);
-SP_API sp_str_t sp_str_trim_prefix(sp_str_t str, sp_str_t prefix);
-SP_API sp_str_t sp_str_trim_suffix(sp_str_t str, sp_str_t suffix);
+SP_API sp_str_t sp_str_trim_right(sp_str_t str);
 SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
 SP_API sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
 SP_API sp_str_t sp_str_to_upper(sp_str_t str);
 SP_API sp_str_t sp_str_to_lower(sp_str_t str);
 SP_API sp_str_t sp_str_capitalize_words(sp_str_t str);
 
-// arrays
-SP_API bool     sp_str_contains_n(sp_str_t* strings, u32 num_strings, sp_str_t needle);
-SP_API sp_str_t sp_str_join_n(sp_str_t* strings, u32 num_strings, sp_str_t joiner);
-SP_API u32      sp_str_count_n(sp_str_t* strings, u32 num_strings, sp_str_t needle);
-SP_API sp_str_t sp_str_find_longest_n(sp_str_t* strings, u32 num_strings);
-SP_API sp_str_t sp_str_find_shortest_n(sp_str_t* strings, u32 num_strings);
-
-// reduce
 SP_API sp_str_t sp_str_reduce(sp_str_t* strs, u32 n, void* user_data, sp_str_reduce_fn_t fn);
 SP_API void     sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
 SP_API void     sp_str_reduce_kernel_contains(sp_str_reduce_context_t* context);
@@ -684,18 +675,21 @@ SP_API void     sp_str_reduce_kernel_count(sp_str_reduce_context_t* context);
 SP_API void     sp_str_reduce_kernel_longest(sp_str_reduce_context_t* context);
 SP_API void     sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context);
 
-// map
 SP_API sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr u, sp_str_map_fn_t fn);
 SP_API sp_str_t sp_str_map_kernel_prefix(sp_str_t str, sp_opaque_ptr user_data);
 SP_API sp_str_t sp_str_map_kernel_trim(sp_str_t str, sp_opaque_ptr user_data);
-SP_API sp_str_t sp_str_map_kernel_trim_prefix(sp_str_t str, sp_opaque_ptr user_data);
-SP_API sp_str_t sp_str_map_kernel_trim_suffix(sp_str_t str, sp_opaque_ptr user_data);
+SP_API sp_str_t sp_str_map_kernel_pad(sp_str_t str, sp_opaque_ptr user_data);
 SP_API sp_str_t sp_str_map_kernel_to_upper(sp_str_t str, sp_opaque_ptr user_data);
 SP_API sp_str_t sp_str_map_kernel_to_lower(sp_str_t str, sp_opaque_ptr user_data);
 SP_API sp_str_t sp_str_map_kernel_capitalize_words(sp_str_t str, sp_opaque_ptr user_data);
-
-// qsort
 SP_API s32      sp_str_sort_kernel_alphabetical(const void* a, const void* b);
+
+SP_API bool     sp_str_contains_n(sp_str_t* strings, u32 num_strings, sp_str_t needle);
+SP_API sp_str_t sp_str_join_n(sp_str_t* strings, u32 num_strings, sp_str_t joiner);
+SP_API u32      sp_str_count_n(sp_str_t* strings, u32 num_strings, sp_str_t needle);
+SP_API sp_str_t sp_str_find_longest_n(sp_str_t* strings, u32 num_strings);
+SP_API sp_str_t sp_str_find_shortest_n(sp_str_t* strings, u32 num_strings);
+SP_API sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strings, u32 num_strings);
 
 
 // ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
@@ -2803,7 +2797,7 @@ sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to) {
   return sp_str_builder_write(&builder);
 }
 
-sp_str_t sp_str_strip_right(sp_str_t str) {
+sp_str_t sp_str_trim_right(sp_str_t str) {
   while (str.len) {
     c8 c = sp_str_back(str);
 
@@ -2983,9 +2977,20 @@ sp_str_t sp_str_join_n(sp_str_t* strings, u32 num_strings, sp_str_t joiner) {
   return sp_str_reduce(strings, num_strings, &joiner, sp_str_reduce_kernel_join);
 }
 
-// Core string transformation functions
+sp_str_t sp_str_pad(sp_str_t str, u32 n) {
+  s32 delta = (s32)n - (s32)str.len;
+  if (delta <= 0) return sp_str_copy(str);
+
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_append(&builder, str);
+  for (u32 index = 0; index < delta; index++) {
+    sp_str_builder_append_c8(&builder, ' ');
+  }
+
+  return sp_str_builder_write(&builder);
+}
+
 sp_str_t sp_str_trim(sp_str_t str) {
-  // Trim whitespace from both ends
   u32 start = 0;
   u32 end = str.len;
 
@@ -3002,20 +3007,6 @@ sp_str_t sp_str_trim(sp_str_t str) {
   }
 
   return sp_str_sub(str, start, end - start);
-}
-
-sp_str_t sp_str_trim_prefix(sp_str_t str, sp_str_t prefix) {
-  if (str.len >= prefix.len && sp_os_is_memory_equal(str.data, prefix.data, prefix.len)) {
-    return sp_str_sub(str, prefix.len, str.len - prefix.len);
-  }
-  return str;
-}
-
-sp_str_t sp_str_trim_suffix(sp_str_t str, sp_str_t suffix) {
-  if (str.len >= suffix.len && sp_os_is_memory_equal(str.data + str.len - suffix.len, suffix.data, suffix.len)) {
-    return sp_str_sub(str, 0, str.len - suffix.len);
-  }
-  return str;
 }
 
 sp_str_t sp_str_to_upper(sp_str_t str) {
@@ -3089,19 +3080,13 @@ sp_str_t sp_str_map_kernel_prefix(sp_str_t str, sp_opaque_ptr user_data) {
   return sp_str_sub(str, 0, *(u32*)user_data);
 }
 
+sp_str_t sp_str_map_kernel_pad(sp_str_t str, sp_opaque_ptr user_data) {
+  return sp_str_pad(str, *(u32*)user_data);
+}
+
 sp_str_t sp_str_map_kernel_trim(sp_str_t str, sp_opaque_ptr user_data) {
   SP_UNUSED(user_data);
   return sp_str_trim(str);
-}
-
-sp_str_t sp_str_map_kernel_trim_prefix(sp_str_t str, sp_opaque_ptr user_data) {
-  sp_str_t prefix = *(sp_str_t*)user_data;
-  return sp_str_trim_prefix(str, prefix);
-}
-
-sp_str_t sp_str_map_kernel_trim_suffix(sp_str_t str, sp_opaque_ptr user_data) {
-  sp_str_t suffix = *(sp_str_t*)user_data;
-  return sp_str_trim_suffix(str, suffix);
 }
 
 sp_str_t sp_str_map_kernel_to_upper(sp_str_t str, sp_opaque_ptr user_data) {
@@ -3192,6 +3177,11 @@ sp_str_t sp_str_find_shortest_n(sp_str_t* strings, u32 num_strings) {
   sp_str_t shortest = sp_str_lit("");
   sp_str_reduce(strings, num_strings, &shortest, sp_str_reduce_kernel_shortest);
   return shortest;
+}
+
+sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strings, u32 num_strings) {
+  sp_str_t longest = sp_str_find_longest_n(strings, num_strings);
+  return sp_str_map(strings, num_strings, &longest.len, sp_str_map_kernel_pad);
 }
 
 
