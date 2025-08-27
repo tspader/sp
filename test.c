@@ -15,7 +15,7 @@
 //  ╚═════╝    ╚═╝   ╚═╝╚══════╝╚═╝   ╚═╝   ╚═╝╚══════╝╚══════╝
 #define SP_TEST_REPORT(fmt, ...) \
   do { \
-    sp_str_t formatted = SP_FMT(fmt, ##__VA_ARGS__); \
+    sp_str_t formatted = sp_format_str(fmt, ##__VA_ARGS__); \
     UTEST_PRINTF("%s\n", sp_str_to_cstr(formatted)); \
   } while (0)
 
@@ -441,54 +441,76 @@ UTEST(dynamic_array, edge_cases) {
   sp_test_memory_tracker_destroy(&tracker);
 }
 
+typedef struct {
+  const c8* expected;
+  sp_str_t actual;
+} sp_test_format_case_t;
+
 UTEST(sp_fmt, basic) {
   sp_test_use_malloc();
 
-  u32 answer = 69;
-  sp_str_t result = sp_fmt(SP_LIT("answer: {}"), SP_FMT_U32(answer));
+  sp_str_t result;
+
+  result = sp_format("answer: {}", SP_FMT_U32(69));
   SP_EXPECT_STR_EQ_CSTR(result, "answer: 69");
 
-  result = sp_fmt_c8("{}", SP_FMT_U32(69));
-  SP_EXPECT_STR_EQ_CSTR(result, "69");
+  result = sp_format("{}", SP_FMT_U32(420));
+  SP_EXPECT_STR_EQ_CSTR(result, "420");
+
+  result = sp_format("answer");
+  SP_EXPECT_STR_EQ_CSTR(result, "answer");
+
+  result = sp_format("answer");
+  SP_EXPECT_STR_EQ_CSTR(result, "answer");
+
+  result = sp_format_str(SP_LIT("answer: {}"), SP_FMT_U32(690));
+  SP_EXPECT_STR_EQ_CSTR(result, "answer: 690");
+
+  result = sp_format_str(SP_LIT("{}"), SP_FMT_U32(4200));
+  SP_EXPECT_STR_EQ_CSTR(result, "4200");
+
+  result = sp_format_str(SP_LIT("answer"));
+  SP_EXPECT_STR_EQ_CSTR(result, "answer");
+
 }
 
 UTEST(sp_fmt, numeric_types) {
   sp_test_use_malloc();
 
   u8 u8_val = 255;
-  sp_str_t result = sp_fmt(SP_LIT("u8: {}"), SP_FMT_U8(u8_val));
+  sp_str_t result = sp_format("u8: {}", SP_FMT_U8(u8_val));
   SP_EXPECT_STR_EQ_CSTR(result, "u8: 255");
 
   u16 u16_val = 65535;
-  result = sp_fmt(SP_LIT("u16: {}"), SP_FMT_U16(u16_val));
+  result = sp_format("u16: {}", SP_FMT_U16(u16_val));
   SP_EXPECT_STR_EQ_CSTR(result, "u16: 65535");
 
   u32 u32_val = 1234567890;
-  result = sp_fmt(SP_LIT("u32: {}"), SP_FMT_U32(u32_val));
+  result = sp_format("u32: {}", SP_FMT_U32(u32_val));
   SP_EXPECT_STR_EQ_CSTR(result, "u32: 1234567890");
 
   u64 u64_val = 9876543210ULL;
-  result = sp_fmt(SP_LIT("u64: {}"), SP_FMT_U64(u64_val));
+  result = sp_format("u64: {}", SP_FMT_U64(u64_val));
   SP_EXPECT_STR_EQ_CSTR(result, "u64: 9876543210");
 
   s8 s8_val = -128;
-  result = sp_fmt(SP_LIT("s8: {}"), SP_FMT_S8(s8_val));
+  result = sp_format("s8: {}", SP_FMT_S8(s8_val));
   SP_EXPECT_STR_EQ_CSTR(result, "s8: -128");
 
   s16 s16_val = -32768;
-  result = sp_fmt(SP_LIT("s16: {}"), SP_FMT_S16(s16_val));
+  result = sp_format("s16: {}", SP_FMT_S16(s16_val));
   SP_EXPECT_STR_EQ_CSTR(result, "s16: -32768");
 
   s32 s32_val = -2147483647;
-  result = sp_fmt(SP_LIT("s32: {}"), SP_FMT_S32(s32_val));
+  result = sp_format("s32: {}", SP_FMT_S32(s32_val));
   SP_EXPECT_STR_EQ_CSTR(result, "s32: -2147483647");
 
   s64 s64_val = -9223372036854775807LL;
-  result = sp_fmt(SP_LIT("s64: {}"), SP_FMT_S64(s64_val));
+  result = sp_format("s64: {}", SP_FMT_S64(s64_val));
   SP_EXPECT_STR_EQ_CSTR(result, "s64: -9223372036854775807");
 
   u32 zero = 0;
-  result = sp_fmt(SP_LIT("zero: {}"), SP_FMT_U32(zero));
+  result = sp_format("zero: {}", SP_FMT_U32(zero));
   SP_EXPECT_STR_EQ_CSTR(result, "zero: 0");
 }
 
@@ -496,19 +518,19 @@ UTEST(sp_fmt, floating_point) {
   sp_test_use_malloc();
 
   f32 f32_val = 3.14159f;
-  sp_str_t result = sp_fmt(SP_LIT("f32: {}"), SP_FMT_F32(f32_val));
+  sp_str_t result = sp_format("f32: {}", SP_FMT_F32(f32_val));
   SP_EXPECT_STR_EQ_CSTR(result, "f32: 3.141");
 
   f64 f64_val = -2.71828;
-  result = sp_fmt(SP_LIT("f64: {}"), SP_FMT_F64(f64_val));
+  result = sp_format("f64: {}", SP_FMT_F64(f64_val));
   SP_EXPECT_STR_EQ_CSTR(result, "f64: -2.718");
 
   f32 f32_zero = 0.0f;
-  result = sp_fmt(SP_LIT("f32 zero: {}"), SP_FMT_F32(f32_zero));
+  result = sp_format("f32 zero: {}", SP_FMT_F32(f32_zero));
   SP_EXPECT_STR_EQ_CSTR(result, "f32 zero: 0.000");
 
   f32 f32_int = 42.0f;
-  result = sp_fmt(SP_LIT("f32 int: {}"), SP_FMT_F32(f32_int));
+  result = sp_format("f32 int: {}", SP_FMT_F32(f32_int));
   SP_EXPECT_STR_EQ_CSTR(result, "f32 int: 42.000");
 }
 
@@ -516,11 +538,11 @@ UTEST(sp_fmt, string_types) {
   sp_test_use_malloc();
 
   sp_str_t str_val = SP_LIT("hello world");
-  sp_str_t result = sp_fmt(SP_LIT("str: {}"), SP_FMT_STR(str_val));
+  sp_str_t result = sp_format("str: {}", SP_FMT_STR(str_val));
   SP_EXPECT_STR_EQ_CSTR(result, "str: hello world");
 
   const c8* cstr_val = "c string";
-  result = sp_fmt(SP_LIT("cstr: {}"), SP_FMT_CSTR(cstr_val));
+  result = sp_format("cstr: {}", SP_FMT_CSTR(cstr_val));
   SP_EXPECT_STR_EQ_CSTR(result, "cstr: c string");
 }
 
@@ -531,17 +553,17 @@ UTEST(sp_fmt, character_types) {
 
   c8 c8_val = 'A';
   expected = SP_LIT("A");
-  actual = sp_fmt(SP_LIT("{}"), SP_FMT_C8(c8_val));
+  actual = sp_format("{}", SP_FMT_C8(c8_val));
   SP_EXPECT_STR_EQ(actual, expected);
 
   c16 c16_val = 'Z';
   expected = SP_LIT("Z");
-  actual = sp_fmt(SP_LIT("{}"), SP_FMT_C16(c16_val));
+  actual = sp_format("{}", SP_FMT_C16(c16_val));
   SP_EXPECT_STR_EQ(actual, expected);
 
   c16 c16_unicode = 0x1234;
   expected = SP_LIT("U+1234");
-  actual = sp_fmt(SP_LIT("{}"), SP_FMT_C16(c16_unicode));
+  actual = sp_format("{}", SP_FMT_C16(c16_unicode));
   SP_EXPECT_STR_EQ(actual, expected);
 }
 
@@ -549,11 +571,11 @@ UTEST(sp_fmt, pointer_type) {
   sp_test_use_malloc();
 
   void* ptr = (void*)(uintptr_t)0xDEADBEEF;
-  sp_str_t result = sp_fmt(SP_LIT("ptr: {}"), SP_FMT_PTR(ptr));
+  sp_str_t result = sp_format("ptr: {}", SP_FMT_PTR(ptr));
   SP_EXPECT_STR_EQ_CSTR(result, "ptr: 0xDEADBEEF");
 
   void* null_ptr = SP_NULLPTR;
-  result = sp_fmt(SP_LIT("null: {}"), SP_FMT_PTR(null_ptr));
+  result = sp_format("null: {}", SP_FMT_PTR(null_ptr));
   SP_EXPECT_STR_EQ_CSTR(result, "null: 0x00000000");
 }
 
@@ -561,11 +583,11 @@ UTEST(sp_fmt, hash_type) {
   sp_test_use_malloc();
 
   sp_hash_t hash = 0xABCDEF12;
-  sp_str_t result = sp_fmt(SP_LIT("hash: {}"), SP_FMT_HASH(hash));
+  sp_str_t result = sp_format("hash: {}", SP_FMT_HASH(hash));
   SP_EXPECT_STR_EQ_CSTR(result, "hash: ABCDEF12");
 
   sp_hash_t zero_hash = 0;
-  result = sp_fmt(SP_LIT("zero hash: {}"), SP_FMT_HASH(zero_hash));
+  result = sp_format("zero hash: {}", SP_FMT_HASH(zero_hash));
   SP_EXPECT_STR_EQ_CSTR(result, "zero hash: 0");
 }
 
@@ -578,7 +600,7 @@ UTEST(sp_fmt, array_types) {
   fixed_arr.element_size = 4;
   fixed_arr.data = SP_NULLPTR;
 
-  sp_str_t result = sp_fmt(SP_LIT("fixed: {}"), SP_FMT_FIXED_ARRAY(fixed_arr));
+  sp_str_t result = sp_format("fixed: {}", SP_FMT_FIXED_ARRAY(fixed_arr));
   SP_EXPECT_STR_EQ_CSTR(result, "fixed: { size: 10, capacity: 20 }");
 
   sp_dynamic_array_t dyn_arr;
@@ -587,7 +609,7 @@ UTEST(sp_fmt, array_types) {
   dyn_arr.element_size = 8;
   dyn_arr.data = SP_NULLPTR;
 
-  result = sp_fmt(SP_LIT("dynamic: {}"), SP_FMT_DYNAMIC_ARRAY(dyn_arr));
+  result = sp_format("dynamic: {}", SP_FMT_DYNAMIC_ARRAY(dyn_arr));
   SP_EXPECT_STR_EQ_CSTR(result, "dynamic: { size: 5, capacity: 16 }");
 }
 
@@ -598,7 +620,7 @@ UTEST(sp_fmt, multiple_args) {
   sp_str_t name = SP_LIT("test");
   f32 value = 3.14f;
 
-  sp_str_t result = sp_fmt(SP_LIT("Count: {}, Name: {}, Value: {}"),
+  sp_str_t result = sp_format("Count: {}, Name: {}, Value: {}",
     SP_FMT_U32(count), SP_FMT_STR(name), SP_FMT_F32(value));
   SP_EXPECT_STR_EQ_CSTR(result, "Count: 42, Name: test, Value: 3.140");
 }
@@ -713,7 +735,7 @@ UTEST(sp_str_builder, format_append) {
   sp_test_use_malloc();
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_str_builder_append_fmt_c8(&builder, "Value: %d", 123);
+  sp_str_builder_append_fmt_c8(&builder, "Value: {}", SP_FMT_U32(123));
   sp_str_t result = sp_str_builder_write(&builder);
   ASSERT_GT(result.len, 0);
   ASSERT_NE(result.data, SP_NULLPTR);

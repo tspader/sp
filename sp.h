@@ -192,14 +192,14 @@
   do { \
     if (!(COND)) { \
       const c8* condition = SP_MACRO_STR(COND); \
-      sp_str_t message = sp_fmt_c8((FMT), ##__VA_ARGS__); \
+      sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
       SP_LOG("SP_ASSERT({}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
       SP_EXIT_FAILURE(); \
     } \
   } while (0)
 #define SP_FATAL(FMT, ...) \
   do { \
-    sp_str_t message = sp_fmt_c8((FMT), ##__VA_ARGS__); \
+    sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
     SP_LOG("SP_FATAL(): {}", SP_FMT_STR(message)); \
     SP_EXIT_FAILURE(); \
   } while (0)
@@ -654,6 +654,7 @@ SP_API c8       sp_str_at_reverse(sp_str_t str, s32 index);
 SP_API c8       sp_str_back(sp_str_t str);
 SP_API s32      sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
 
+SP_API sp_str_t sp_str_sub(sp_str_t str, u32 index, u32 len);
 SP_API sp_str_t sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
 SP_API sp_str_t sp_str_concat(sp_str_t a, sp_str_t b);
 SP_API sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to);
@@ -939,7 +940,6 @@ SP_API void                         sp_future_destroy(sp_future_t* future);
 // ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
 
-// X-Macro for all supported format types
 #define SP_FORMAT_TYPES \
  SP_FMT_X(ptr, void*) \
  SP_FMT_X(str, sp_str_t) \
@@ -962,14 +962,21 @@ SP_API void                         sp_future_destroy(sp_future_t* future);
  SP_FMT_X(str_builder, sp_str_builder_t) \
  SP_FMT_X(fixed_array, sp_fixed_array_t) \
  SP_FMT_X(dynamic_array, sp_dynamic_array_t) \
- SP_FMT_X(quoted_str, sp_str_t)
+ SP_FMT_X(quoted_str, sp_str_t) \
+ SP_FMT_X(color, const c8*) \
 
-#define SP_FMT_ID(id) SP_MACRO_STR(id)
-#define SP_FMT_FN(id) sp_format_##id
+#define SP_FMT_ID(id) SP_MACRO_CAT(sp_format_id_, id)
+#define SP_FMT_FN(id) SP_MACRO_CAT(sp_fmt_format_, id)
 #define SP_FMT_UNION(T) SP_MACRO_CAT(T, _value)
 
+typedef enum {
+  #undef SP_FMT_X
+  #define SP_FMT_X(id, type) SP_FMT_ID(id),
+  SP_FORMAT_TYPES
+} sp_format_id_t;
+
 typedef struct sp_format_arg_t {
-  const c8* id;
+  sp_format_id_t id;
 
   union {
     #undef SP_FMT_X
@@ -982,8 +989,8 @@ typedef struct sp_format_arg_t {
 SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
 
 typedef struct sp_formatter {
-    const c8* id;
-    sp_format_fn_t fn;
+  sp_format_id_t id;
+  sp_format_fn_t fn;
 } sp_formatter_t;
 
 
@@ -1019,15 +1026,18 @@ typedef struct sp_formatter {
 #define SP_FMT_FIXED_ARRAY(V)   SP_FMT_ARG(fixed_array, V)
 #define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
 #define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
+#define SP_FMT_COLOR(V)         SP_FMT_ARG(color, V)
+#define SP_FMT_YELLOW()         SP_FMT_COLOR(SP_ANSI_FORE_YELLOW)
+#define SP_FMT_CYAN()           SP_FMT_COLOR(SP_ANSI_FORE_CYAN)
+#define SP_FMT_CLEAR()          SP_FMT_COLOR(SP_ANSI_FORE_RESET)
 
 #undef SP_FMT_X
-#define SP_FMT_X(name, type) void sp_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
+#define SP_FMT_X(name, type) void sp_fmt_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 SP_FORMAT_TYPES
 
-#define SP_FMT(fmt, ...) sp_fmt(fmt, ##__VA_ARGS__);
-sp_str_t sp_fmt(sp_str_t fmt, ...);
-sp_str_t sp_fmt_c8(const c8* fmt, ...);
-sp_str_t sp_fmt_v(sp_str_t fmt, va_list args);
+sp_str_t sp_format_str(sp_str_t fmt, ...);
+sp_str_t sp_format(const c8* fmt, ...);
+sp_str_t sp_format_v(sp_str_t fmt, va_list args);
 
 // parsers
 SP_API u8        sp_parse_u8(sp_str_t str);
@@ -1153,7 +1163,7 @@ SP_END_EXTERN_C()
   sp_str_t operator/(const sp_str_t& a, const c8* b);
 
   template <typename T>
-  sp_format_arg_t sp_make_format_arg(const c8* id, T&& data) {
+  sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
     sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
     result.id = id;
     sp_os_copy_memory(&data, &result.u8_value, sizeof(T));
@@ -1956,7 +1966,7 @@ sp_hash_t sp_parse_hash(sp_str_t str) {
 }
 
 
-void sp_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
+void sp_fmt_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
     SP_ASSERT(builder);
 
     if (num == 0) {
@@ -1981,7 +1991,7 @@ void sp_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
     }
 }
 
-void sp_format_signed(sp_str_builder_t* builder, s64 num, u32 max_digits) {
+void sp_fmt_format_signed(sp_str_builder_t* builder, s64 num, u32 max_digits) {
     SP_ASSERT(builder);
 
     bool negative = num < 0;
@@ -1996,10 +2006,10 @@ void sp_format_signed(sp_str_builder_t* builder, s64 num, u32 max_digits) {
         abs_value = (u64)num;
     }
 
-    sp_format_unsigned(builder, abs_value, max_digits);
+    sp_fmt_format_unsigned(builder, abs_value, max_digits);
 }
 
-void sp_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, const c8* prefix) {
+void sp_fmt_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, const c8* prefix) {
     SP_ASSERT(builder);
 
     if (prefix) {
@@ -2035,15 +2045,19 @@ void sp_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, const c8
         sp_str_builder_append_c8(builder, hex_digits[i]);
     }
 }
+void sp_fmt_format_color(sp_str_builder_t *builder, sp_format_arg_t *buffer) {
+  SP_ASSERT(builder);
+  sp_str_builder_append_cstr(builder, buffer->color_value);
+}
 
-void sp_format_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_t value = arg->str_value;
   SP_ASSERT(builder);
 
   sp_str_builder_append(builder, value);
 }
 
-void sp_format_cstr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_cstr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   const c8* value = arg->cstr_value;
   SP_ASSERT(builder);
   SP_ASSERT(value);
@@ -2051,53 +2065,53 @@ void sp_format_cstr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_builder_append_cstr(builder, value);
 }
 
-void sp_format_ptr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_ptr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   void* value = arg->ptr_value;
   u64 addr = (u64)value;
-  sp_format_hex(builder, addr, 8, "0x");
+  sp_fmt_format_hex(builder, addr, 8, "0x");
 }
 
-void sp_format_s8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_s8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   s8 value = arg->s8_value;
-  sp_format_signed(builder, value, 3);
+  sp_fmt_format_signed(builder, value, 3);
 }
 
-void sp_format_s16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_s16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   s16 value = arg->s16_value;
-  sp_format_signed(builder, value, 5);
+  sp_fmt_format_signed(builder, value, 5);
 }
 
-void sp_format_s32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_s32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   s32 value = arg->s32_value;
-  sp_format_signed(builder, value, 10);
+  sp_fmt_format_signed(builder, value, 10);
 }
 
-void sp_format_s64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_s64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   s64 value = arg->s64_value;
-  sp_format_signed(builder, value, 20);
+  sp_fmt_format_signed(builder, value, 20);
 }
 
-void sp_format_u8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_u8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   u8 value = arg->u8_value;
-  sp_format_unsigned(builder, value, 3);
+  sp_fmt_format_unsigned(builder, value, 3);
 }
 
-void sp_format_u16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_u16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   u16 value = arg->u16_value;
-  sp_format_unsigned(builder, value, 5);
+  sp_fmt_format_unsigned(builder, value, 5);
 }
 
-void sp_format_u32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_u32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   u32 value = arg->u32_value;
-  sp_format_unsigned(builder, value, 10);
+  sp_fmt_format_unsigned(builder, value, 10);
 }
 
-void sp_format_u64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_u64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   u64 value = arg->u64_value;
-  sp_format_unsigned(builder, value, 20);
+  sp_fmt_format_unsigned(builder, value, 20);
 }
 
-void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   f32 value = arg->f32_value;
   f32 num = value;
 
@@ -2140,7 +2154,7 @@ void sp_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   }
 }
 
-void sp_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   f64 value = arg->f64_value;
   f64 num = value;
 
@@ -2183,13 +2197,13 @@ void sp_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   }
 }
 
-void sp_format_c8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_c8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   c8 value = arg->c8_value;
   SP_ASSERT(builder);
   sp_str_builder_append_c8(builder, arg->c8_value);
 }
 
-void sp_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   c16 value = arg->c16_value;
   SP_ASSERT(builder);
 
@@ -2199,75 +2213,75 @@ void sp_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   else {
     sp_str_builder_append_c8(builder, 'U');
     sp_str_builder_append_c8(builder, '+');
-    sp_format_hex(builder, value, 4, SP_NULL);
+    sp_fmt_format_hex(builder, value, 4, SP_NULL);
   }
 }
 
-void sp_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   // Context is passed as pointer but we don't use it
   if (sp_context) {
     u32 index = (u32)(sp_context - sp_context_stack);
-    sp_format_unsigned(builder, index, 10);
+    sp_fmt_format_unsigned(builder, index, 10);
   } else {
     sp_str_builder_append_cstr(builder, "NULL");
   }
 }
 
-void sp_format_hash(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_hash(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_hash_t value = arg->hash_value;
   u64 hash = (u64)value;
-  sp_format_hex(builder, hash, 0, NULL);
+  sp_fmt_format_hex(builder, hash, 0, NULL);
 }
 
-void sp_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_hash_t value = arg->hash_short_value;
   u64 hash = (u64)value;
-  sp_format_hex(builder, hash >> 32, 0, NULL);
+  sp_fmt_format_hex(builder, hash >> 32, 0, NULL);
 }
 
-void sp_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_builder_t sb = arg->str_builder_value;
 
   sp_str_builder_append_cstr(builder, "{ buffer: (");
 
   // Format data pointer
   u64 addr = (u64)sb.buffer.data;
-  sp_format_hex(builder, addr, 8, "0x");
+  sp_fmt_format_hex(builder, addr, 8, "0x");
 
   sp_str_builder_append_cstr(builder, ", ");
 
   // Format count
-  sp_format_unsigned(builder, sb.buffer.count, 10);
+  sp_fmt_format_unsigned(builder, sb.buffer.count, 10);
 
   sp_str_builder_append_cstr(builder, "), capacity: ");
 
   // Format capacity
-  sp_format_unsigned(builder, sb.buffer.capacity, 10);
+  sp_fmt_format_unsigned(builder, sb.buffer.capacity, 10);
 
   sp_str_builder_append_cstr(builder, " }");
 }
 
-void sp_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_fixed_array_t arr = arg->fixed_array_value;
 
   sp_str_builder_append_cstr(builder, "{ size: ");
-  sp_format_unsigned(builder, arr.size, 10);
+  sp_fmt_format_unsigned(builder, arr.size, 10);
   sp_str_builder_append_cstr(builder, ", capacity: ");
-  sp_format_unsigned(builder, arr.capacity, 10);
+  sp_fmt_format_unsigned(builder, arr.capacity, 10);
   sp_str_builder_append_cstr(builder, " }");
 }
 
-void sp_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_dynamic_array_t arr = arg->dynamic_array_value;
 
   sp_str_builder_append_cstr(builder, "{ size: ");
-  sp_format_unsigned(builder, arr.size, 10);
+  sp_fmt_format_unsigned(builder, arr.size, 10);
   sp_str_builder_append_cstr(builder, ", capacity: ");
-  sp_format_unsigned(builder, arr.capacity, 10);
+  sp_fmt_format_unsigned(builder, arr.capacity, 10);
   sp_str_builder_append_cstr(builder, " }");
 }
 
-void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+void sp_fmt_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_t value = arg->quoted_str_value;
   SP_ASSERT(builder);
 
@@ -2279,22 +2293,129 @@ void sp_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 sp_str_t sp_fmt(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_str_t str = sp_fmt_v(fmt, args);
+  sp_str_t str = sp_format_v(fmt, args);
   va_end(args);
 
   return str;
 }
 
-sp_str_t sp_fmt_c8(const c8* fmt, ...) {
+sp_str_t sp_format_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_str_t str = sp_fmt_v(SP_CSTR(fmt), args);
+  sp_str_t str = sp_format_v(fmt, args);
   va_end(args);
 
   return str;
 }
 
-sp_str_t sp_fmt_v(sp_str_t fmt, va_list args) {
+sp_str_t sp_format(const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t str = sp_format_v(SP_CSTR(fmt), args);
+  va_end(args);
+
+  return str;
+}
+
+typedef enum {
+  SP_FORMAT_SPECIFIER_FLAG_NONE = 0,
+  SP_FORMAT_SPECIFIER_FLAG_COLOR = 1 << 0,
+} sp_format_specifier_flag_t;
+
+
+typedef struct {
+  sp_str_t fmt;
+  u32 it;
+} sp_format_parser_t;
+
+typedef struct {
+  u32 flags;
+  sp_str_t color;
+} sp_format_specifier_t;
+
+c8 sp_format_parser_peek(sp_format_parser_t* parser) {
+  return sp_str_at(parser->fmt, parser->it);
+}
+
+void sp_format_parser_eat(sp_format_parser_t* parser) {
+  parser->it++;
+}
+
+void sp_format_parser_eat_and_assert(sp_format_parser_t* parser, c8 c) {
+  SP_ASSERT(sp_format_parser_peek(parser) == c);
+  sp_format_parser_eat(parser);
+}
+
+bool sp_format_parser_is_alpha(sp_format_parser_t* parser) {
+  c8 c = sp_format_parser_peek(parser);
+  if (c >= 'a' && c <= 'z') return true;
+  if (c >= 'A' && c <= 'Z') return true;
+  return false;
+}
+
+bool sp_format_parser_is_done(sp_format_parser_t* parser) {
+  return parser->it >= parser->fmt.len;
+}
+
+sp_str_t sp_format_parser_id(sp_format_parser_t* parser) {
+  sp_str_t id = sp_str_sub(parser->fmt, parser->it, 0);
+  while (sp_format_parser_is_alpha(parser)) {
+    sp_format_parser_eat(parser);
+    id.len++;
+  }
+  return id;
+}
+
+sp_format_specifier_flag_t sp_format_specifier_flag_to_str(sp_str_t id) {
+  if (sp_str_equal_cstr(id, "color")) return SP_FORMAT_SPECIFIER_FLAG_COLOR;
+  return SP_FORMAT_SPECIFIER_FLAG_NONE;
+}
+
+sp_str_t sp_format_color_id_to_ansi(sp_str_t id) {
+  if (sp_str_equal_cstr(id, "yellow")) return SP_CSTR(SP_ANSI_FORE_YELLOW);
+  if (sp_str_equal_cstr(id, "blue")) return SP_CSTR(SP_ANSI_FORE_BLUE);
+  if (sp_str_equal_cstr(id, "cyan")) return SP_CSTR(SP_ANSI_FORE_CYAN);
+  if (sp_str_equal_cstr(id, "red")) return SP_CSTR(SP_ANSI_FORE_RED);
+  if (sp_str_equal_cstr(id, "green")) return SP_CSTR(SP_ANSI_FORE_GREEN);
+  if (sp_str_equal_cstr(id, "black")) return SP_CSTR(SP_ANSI_FORE_BLACK);
+  if (sp_str_equal_cstr(id, "purple")) return SP_CSTR(SP_ANSI_FORE_PURPLE);
+  return SP_CSTR(SP_ANSI_FORE_RESET);
+}
+
+sp_format_specifier_t sp_format_parser_specifier(sp_format_parser_t* parser) {
+  sp_format_specifier_t spec = SP_ZERO_INITIALIZE();
+
+  c8 c = sp_format_parser_peek(parser);
+  switch (c) {
+    case ':': {
+      sp_format_parser_eat_and_assert(parser, ':');
+      sp_str_t id = sp_format_parser_id(parser);
+      sp_format_parser_eat_and_assert(parser, ' ');
+      sp_str_t value = sp_format_parser_id(parser);
+
+      sp_format_specifier_flag_t flag = sp_format_specifier_flag_to_str(id);
+      switch (flag) {
+        case SP_FORMAT_SPECIFIER_FLAG_COLOR: {
+          spec.color = sp_format_color_id_to_ansi(value);
+          break;
+        }
+        default: {
+          SP_UNREACHABLE_CASE();
+        }
+      }
+
+      spec.flags |= flag;
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+
+  return spec;
+}
+
+sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
   #undef SP_FMT_X
   #define SP_FMT_X(ID, t) (sp_formatter_t) { .id = SP_FMT_ID(ID), .fn = SP_FMT_FN(ID) },
 
@@ -2302,39 +2423,55 @@ sp_str_t sp_fmt_v(sp_str_t fmt, va_list args) {
     SP_FORMAT_TYPES
   };
 
-    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
-    u32 index = 0;
-    while (true) {
-      if (index >= fmt.len) break;
+  sp_format_parser_t parser = SP_ZERO_INITIALIZE();
+  parser.fmt = fmt;
+  while (true) {
+    if (sp_format_parser_is_done(&parser)) {
+      break;
+    }
 
-      if (sp_str_at(fmt, index) == '{') {
+    c8 c = sp_format_parser_peek(&parser);
+    switch (c) {
+      case '{': {
+        sp_format_parser_eat(&parser);
+        sp_format_specifier_t specifier = sp_format_parser_specifier(&parser);
+        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_COLOR) {
+          sp_str_builder_append(&builder, specifier.color);
+        }
+        sp_format_parser_eat_and_assert(&parser, '}');
+
         sp_format_arg_t arg = va_arg(args, sp_format_arg_t);
-        SP_CARR_FOR(formatters, formatter_index) {
-          if (sp_cstr_equal(formatters[formatter_index].id, arg.id)) {
-            sp_format_fn_t fn = formatters[formatter_index].fn;
+        SP_CARR_FOR(formatters, i) {
+          if (arg.id == formatters[i].id) {
+            sp_format_fn_t fn = formatters[i].fn;
             fn(&builder, &arg);
             break;
           }
         }
 
-        index++;
-        index++;
+        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_COLOR) {
+          sp_str_builder_append_cstr(&builder, SP_ANSI_FORE_RESET);
+        }
 
+        break;
       }
-      else {
-        sp_str_builder_append_c8(&builder, sp_str_at(fmt, index));
-        index++;
+      default: {
+        sp_str_builder_append_c8(&builder, c);
+        sp_format_parser_eat(&parser);
+        break;
       }
     }
+  }
 
-    return sp_str_builder_write(&builder);
+  return sp_str_builder_write(&builder);
 }
 
 void sp_log(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_str_t formatted = sp_fmt_v(fmt, args);
+  sp_str_t formatted = sp_format_v(fmt, args);
   va_end(args);
 
   sp_os_log(formatted);
@@ -2629,11 +2766,11 @@ c8 sp_str_back(sp_str_t str) {
 }
 
 sp_str_t sp_str_concat(sp_str_t a, sp_str_t b) {
-  return sp_fmt_c8("{}{}", SP_FMT_STR(a), SP_FMT_STR(b));
+  return sp_format("{}{}", SP_FMT_STR(a), SP_FMT_STR(b));
 }
 
 sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
-  return sp_fmt(SP_LIT("{}{}{}"), SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
+  return sp_format("{}{}{}", SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
 }
 
 sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) {
@@ -2770,7 +2907,7 @@ void sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c) {
 void sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_str_t formatted = sp_fmt_v(fmt, args);
+  sp_str_t formatted = sp_format_v(fmt, args);
   va_end(args);
 
   sp_str_builder_append(builder, formatted);
@@ -2779,7 +2916,7 @@ void sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...) {
 void sp_str_builder_append_fmt_c8(sp_str_builder_t* builder, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_str_t formatted = sp_fmt_v(SP_CSTR(fmt), args);
+  sp_str_t formatted = sp_format_v(SP_CSTR(fmt), args);
   va_end(args);
 
   sp_str_builder_append(builder, formatted);
