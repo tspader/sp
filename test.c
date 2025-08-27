@@ -63,7 +63,7 @@ sp_str_t sp_test_generate_random_filename() {
   unsigned int rand_val = counter * 12345 + 67890;  // Simple deterministic value for portability
 #endif
   snprintf(filename, 64, "test_file_%u_%u.tmp", rand_val, counter++);
-  return sp_str_copy_cstr(filename);
+  return sp_str_from_cstr(filename);
 }
 
 void sp_test_create_file(const c8* filename, const c8* content) {
@@ -709,20 +709,6 @@ UTEST(sp_str_builder, indent_operations) {
   ASSERT_EQ(builder2.indent.level, 0);
 }
 
-UTEST(sp_str_builder, capacity_operations) {
-  sp_test_use_malloc();
-
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  u32 initial_cap = builder.buffer.capacity;
-  sp_str_builder_add_capacity(&builder, 100);
-  ASSERT_GE(builder.buffer.capacity, initial_cap + 100);
-
-  sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
-  builder2.indent.level = 1;
-  sp_str_builder_append_raw(&builder2, SP_LIT("raw"));
-  SP_EXPECT_STR_EQ_CSTR(sp_str_builder_write(&builder2), "raw");
-}
-
 UTEST(sp_str_builder, format_append) {
   sp_test_use_malloc();
 
@@ -742,13 +728,9 @@ UTEST(sp_cstr_copy, all_variations) {
   ASSERT_NE(copy, original);
   sp_free(copy);
 
-  c8* partial = sp_cstr_copy_n(original, 5);
+  c8* partial = sp_cstr_copy_sized(original, 5);
   ASSERT_TRUE(sp_cstr_equal(partial, "Hello"));
   sp_free(partial);
-
-  c8* copy_c8 = sp_cstr_copy_c8(original, 5);
-  ASSERT_TRUE(sp_cstr_equal(copy_c8, "Hello"));
-  sp_free(copy_c8);
 
   const c8* empty = "";
   c8* empty_copy = sp_cstr_copy(empty);
@@ -781,7 +763,7 @@ UTEST(sp_cstr_copy_to, buffer_operations) {
 
   c8 partial_buffer[10];
   sp_os_zero_memory(partial_buffer, 10);
-  sp_cstr_copy_to_n(source, 5, partial_buffer, 10);
+  sp_cstr_copy_to_sized(source, 5, partial_buffer, 10);
   ASSERT_TRUE(sp_cstr_equal(partial_buffer, "Hello"));
 
   c8 null_buffer[10];
@@ -853,12 +835,8 @@ UTEST(sp_str_to, conversion_functions) {
   ASSERT_TRUE(sp_cstr_equal(cstr, "Hello World"));
   sp_free(cstr);
 
-  c8* cstr_ex = sp_str_to_cstr_ex(str);
-  ASSERT_TRUE(sp_cstr_equal(cstr_ex, "Hello World"));
-  sp_free(cstr_ex);
-
   sp_str_t path = SP_LIT("C:\\test");
-  c8* double_null = sp_str_to_double_null_terminated(path);
+  c8* double_null = sp_str_to_cstr_double_nt(path);
   ASSERT_EQ(double_null[7], '\0');
   ASSERT_EQ(double_null[8], '\0');
   sp_free(double_null);
@@ -878,11 +856,11 @@ UTEST(sp_str_copy, string_copy_operations) {
   ASSERT_TRUE(sp_str_equal(copy, original));
   ASSERT_NE(copy.data, original.data);
 
-  sp_str_t from_cstr = sp_str_copy_cstr("Test String");
+  sp_str_t from_cstr = sp_str_from_cstr("Test String");
   ASSERT_EQ(from_cstr.len, 11);
   SP_EXPECT_STR_EQ_CSTR(from_cstr, "Test String");
 
-  sp_str_t partial = sp_str_copy_cstr_n("Hello World", 5);
+  sp_str_t partial = sp_str_from_cstr_sized("Hello World", 5);
   ASSERT_EQ(partial.len, 5);
   SP_EXPECT_STR_EQ_CSTR(partial, "Hello");
 
@@ -909,7 +887,7 @@ UTEST(sp_str, string_creation) {
   SP_EXPECT_STR_EQ_CSTR(str2, "World");
 
   const c8* cstr = "Dynamic";
-  sp_str_t str3 = sp_str_cstr(cstr);
+  sp_str_t str3 = SP_CSTR(cstr);
   ASSERT_EQ(str3.len, 7);
   SP_EXPECT_STR_EQ_CSTR(str3, "Dynamic");
 
@@ -1026,6 +1004,27 @@ UTEST(sp_str_utilities, valid_and_at) {
   ASSERT_EQ(sp_str_back(str), 'o');
   sp_str_t single = SP_LIT("X");
   ASSERT_EQ(sp_str_back(single), 'X');
+}
+
+UTEST(sp_str_manipulation, to_upper_and_replace) {
+  sp_test_use_malloc();
+
+  // Test sp_str_to_upper
+  sp_str_t lowercase = SP_LIT("hello world!");
+  sp_str_t uppercase = sp_str_to_upper(lowercase);
+  SP_EXPECT_STR_EQ_CSTR(uppercase, "HELLO WORLD!");
+
+  sp_str_t mixed = SP_LIT("HeLLo WoRLd!");
+  sp_str_t upper_mixed = sp_str_to_upper(mixed);
+  SP_EXPECT_STR_EQ_CSTR(upper_mixed, "HELLO WORLD!");
+
+  // Test sp_str_replace
+  sp_str_t original = SP_LIT("hello world");
+  sp_str_t replaced = sp_str_replace_c8(original, 'l', 'X');
+  SP_EXPECT_STR_EQ_CSTR(replaced, "heXXo worXd");
+
+  sp_str_t no_match = sp_str_replace_c8(original, 'z', 'X');
+  SP_EXPECT_STR_EQ_CSTR(no_match, "hello world");
 }
 
 UTEST(sp_str_manipulation, ends_with) {
@@ -2285,7 +2284,7 @@ UTEST(file_monitor, detects_file_modifications) {
   // Get current directory and add it to monitor
   c8 current_dir[SP_MAX_PATH_LEN] = {};
   GetCurrentDirectoryA(SP_MAX_PATH_LEN, current_dir);
-  sp_str_t current_dir_str = sp_str_cstr(current_dir);
+  sp_str_t current_dir_str = SP_CSTR(current_dir);
   sp_file_monitor_add_directory(&monitor, current_dir_str);
 
   // Process any initial changes
@@ -2397,6 +2396,160 @@ UTEST(string_cpp, path_concatenation_operator) {
   SP_EXPECT_STR_EQ_CSTR(chained_cstr, "root/data/files");
 }
 #endif
+
+UTEST(sp_str_kernels, map_trim) {
+  sp_test_use_malloc();
+
+  // Test trim
+  sp_str_t strings[] = {
+    SP_LIT("  hello  "),
+    SP_LIT("\tworld\n"),
+    SP_LIT("  \t\n\r  "),
+    SP_LIT("no_trim"),
+  };
+
+  sp_dyn_array(sp_str_t) results = sp_str_map(strings, 4, NULL, sp_str_map_kernel_trim);
+
+  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  SP_EXPECT_STR_EQ_CSTR(results[0], "hello");
+  SP_EXPECT_STR_EQ_CSTR(results[1], "world");
+  SP_EXPECT_STR_EQ_CSTR(results[2], "");
+  SP_EXPECT_STR_EQ_CSTR(results[3], "no_trim");
+}
+
+UTEST(sp_str_kernels, map_trim_prefix_suffix) {
+  sp_test_use_malloc();
+
+  sp_str_t strings[] = {
+    SP_LIT("http://example.com"),
+    SP_LIT("https://secure.com"),
+    SP_LIT("ftp://files.org"),
+    SP_LIT("example.com"),
+  };
+
+  // Test trim prefix
+  sp_str_t http_prefix = SP_LIT("http://");
+  sp_dyn_array(sp_str_t) results = sp_str_map(strings, 4, &http_prefix, sp_str_map_kernel_trim_prefix);
+
+  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  SP_EXPECT_STR_EQ_CSTR(results[0], "example.com");
+  SP_EXPECT_STR_EQ_CSTR(results[1], "https://secure.com");
+  SP_EXPECT_STR_EQ_CSTR(results[2], "ftp://files.org");
+  SP_EXPECT_STR_EQ_CSTR(results[3], "example.com");
+
+  // Test trim suffix
+  sp_str_t strings2[] = {
+    SP_LIT("file.txt"),
+    SP_LIT("document.txt"),
+    SP_LIT("image.png"),
+    SP_LIT("no_extension"),
+  };
+
+  sp_str_t txt_suffix = SP_LIT(".txt");
+  results = sp_str_map(strings2, 4, &txt_suffix, sp_str_map_kernel_trim_suffix);
+
+  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  SP_EXPECT_STR_EQ_CSTR(results[0], "file");
+  SP_EXPECT_STR_EQ_CSTR(results[1], "document");
+  SP_EXPECT_STR_EQ_CSTR(results[2], "image.png");
+  SP_EXPECT_STR_EQ_CSTR(results[3], "no_extension");
+}
+
+UTEST(sp_str_kernels, map_case_transform) {
+  sp_test_use_malloc();
+
+  sp_str_t strings[] = {
+    SP_LIT("Hello World"),
+    SP_LIT("ALREADY UPPER"),
+    SP_LIT("already lower"),
+    SP_LIT("MiXeD cAsE"),
+  };
+
+  // Test uppercase
+  sp_dyn_array(sp_str_t) results = sp_str_map(strings, 4, NULL, sp_str_map_kernel_to_upper);
+  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  SP_EXPECT_STR_EQ_CSTR(results[0], "HELLO WORLD");
+  SP_EXPECT_STR_EQ_CSTR(results[1], "ALREADY UPPER");
+  SP_EXPECT_STR_EQ_CSTR(results[2], "ALREADY LOWER");
+  SP_EXPECT_STR_EQ_CSTR(results[3], "MIXED CASE");
+
+  // Test lowercase
+  results = sp_str_map(strings, 4, NULL, sp_str_map_kernel_to_lower);
+  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  SP_EXPECT_STR_EQ_CSTR(results[0], "hello world");
+  SP_EXPECT_STR_EQ_CSTR(results[1], "already upper");
+  SP_EXPECT_STR_EQ_CSTR(results[2], "already lower");
+  SP_EXPECT_STR_EQ_CSTR(results[3], "mixed case");
+
+  // Test capitalize
+  sp_str_t strings2[] = {
+    SP_LIT("hello world"),
+    SP_LIT("the quick brown fox"),
+    SP_LIT("SHOUTING TEXT"),
+    SP_LIT("123 numbers first"),
+  };
+
+  results = sp_str_map(strings2, 4, NULL, sp_str_map_kernel_capitalize_words);
+  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  SP_EXPECT_STR_EQ_CSTR(results[0], "Hello World");
+  SP_EXPECT_STR_EQ_CSTR(results[1], "The Quick Brown Fox");
+  SP_EXPECT_STR_EQ_CSTR(results[2], "Shouting Text");
+  SP_EXPECT_STR_EQ_CSTR(results[3], "123 Numbers First");
+}
+
+UTEST(sp_str_kernels, reduce_contains) {
+  sp_test_use_malloc();
+
+  sp_str_t strings[] = {
+    SP_LIT("apple"),
+    SP_LIT("banana"),
+    SP_LIT("cherry"),
+    SP_LIT("date"),
+  };
+
+  // Test contains - found case
+  ASSERT_TRUE(sp_str_contains_n(strings, 4, SP_LIT("ana")));
+
+  // Test contains - not found case
+  ASSERT_FALSE(sp_str_contains_n(strings, 4, SP_LIT("xyz")));
+}
+
+UTEST(sp_str_kernels, reduce_count) {
+  sp_test_use_malloc();
+
+  sp_str_t strings[] = {
+    SP_LIT("hello world"),
+    SP_LIT("hello hello"),
+    SP_LIT("world"),
+    SP_LIT("hello"),
+  };
+
+  // Count "hello"
+  ASSERT_EQ(sp_str_count_n(strings, 4, SP_LIT("hello")), 4); // "hello" appears 4 times total
+
+  // Count "world"
+  ASSERT_EQ(sp_str_count_n(strings, 4, SP_LIT("world")), 2); // "world" appears 2 times total
+}
+
+UTEST(sp_str_kernels, reduce_longest_shortest) {
+  sp_test_use_malloc();
+
+  sp_str_t strings[] = {
+    SP_LIT("short"),
+    SP_LIT("medium length"),
+    SP_LIT("x"),
+    SP_LIT("this is the longest string here"),
+    SP_LIT("tiny"),
+  };
+
+  // Test longest
+  sp_str_t longest = sp_str_find_longest_n(strings, 5);
+  SP_EXPECT_STR_EQ_CSTR(longest, "this is the longest string here");
+
+  // Test shortest
+  sp_str_t shortest = sp_str_find_shortest_n(strings, 5);
+  SP_EXPECT_STR_EQ_CSTR(shortest, "x");
+}
 
 
 // ███████╗████████╗██████╗ ███████╗███████╗███████╗
