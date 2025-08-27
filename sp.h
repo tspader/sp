@@ -193,14 +193,14 @@
     if (!(COND)) { \
       const c8* condition = SP_MACRO_STR(COND); \
       sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
-      SP_LOG("SP_ASSERT({}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
+      SP_LOG("SP_ASSERT({:color red}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
       SP_EXIT_FAILURE(); \
     } \
   } while (0)
 #define SP_FATAL(FMT, ...) \
   do { \
     sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
-    SP_LOG("SP_FATAL(): {}", SP_FMT_STR(message)); \
+    SP_LOG("{:color red}: {}", SP_FMT_CSTR("SP_FATAL()"), SP_FMT_STR(message)); \
     SP_EXIT_FAILURE(); \
   } while (0)
 
@@ -269,6 +269,7 @@
 #define SP_ANSI_FORE_PURPLE "\033[35m"
 #define SP_ANSI_FORE_CYAN "\033[36m"
 #define SP_ANSI_FORE_WHITE "\033[37m"
+#define SP_ANSI_FORE_BRIGHT_BLACK "\033[90m"
 
 SP_BEGIN_EXTERN_C()
 
@@ -2379,6 +2380,7 @@ sp_str_t sp_format_color_id_to_ansi(sp_str_t id) {
   if (sp_str_equal_cstr(id, "green")) return SP_CSTR(SP_ANSI_FORE_GREEN);
   if (sp_str_equal_cstr(id, "black")) return SP_CSTR(SP_ANSI_FORE_BLACK);
   if (sp_str_equal_cstr(id, "purple")) return SP_CSTR(SP_ANSI_FORE_PURPLE);
+  if (sp_str_equal_cstr(id, "brightblack")) return SP_CSTR(SP_ANSI_FORE_BRIGHT_BLACK);
   return SP_CSTR(SP_ANSI_FORE_RESET);
 }
 
