@@ -339,10 +339,10 @@ typedef struct {
 
 typedef struct {
   sp_allocator_t allocator;
-} sp_allocator_malloc_t;
+} sp_malloc_allocator_t;
 
 typedef struct {
-  sp_allocator_t* allocator;
+  sp_allocator_t allocator;
 } sp_context_t;
 
 #define SP_MAX_CONTEXT 16
@@ -351,8 +351,9 @@ SP_THREAD_LOCAL sp_context_t* sp_context = SP_ZERO_INITIALIZE();
 
 void                  sp_context_set(sp_context_t context);
 void                  sp_context_push(sp_context_t context);
-void                  sp_context_push_allocator(sp_allocator_t* allocator);
+void                  sp_context_push_allocator(sp_allocator_t allocator);
 void                  sp_context_pop();
+sp_allocator_t        sp_allocator_default();
 void*                 sp_allocator_alloc(sp_allocator_t allocator, u32 size);
 void*                 sp_allocator_realloc(sp_allocator_t allocator, void* memory, u32 size);
 void                  sp_allocator_free(sp_allocator_t allocator, void* buffer);
@@ -360,8 +361,8 @@ sp_allocator_t        sp_bump_allocator_init(sp_bump_allocator_t* allocator, u32
 void                  sp_bump_allocator_clear(sp_bump_allocator_t* allocator);
 void                  sp_bump_allocator_destroy(sp_bump_allocator_t* allocator);
 void*                 sp_bump_allocator_on_alloc(void* allocator, sp_allocator_mode_t mode, u32 size, void* old_memory);
-sp_allocator_t        sp_allocator_malloc_init(sp_allocator_malloc_t* allocator);
-void*                 sp_allocator_malloc_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr);
+sp_allocator_t        sp_malloc_allocator_init();
+void*                 sp_malloc_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr);
 sp_malloc_metadata_t* sp_malloc_allocator_get_metadata(void* ptr);
 void*                 sp_alloc(u32 size);
 void*                 sp_realloc(void* memory, u32 size);
@@ -850,7 +851,7 @@ typedef struct {
 typedef SP_ATOMIC(bool) sp_atomic_bool_t;
 
 typedef struct {
-  sp_allocator_t* allocator;
+  sp_allocator_t allocator;
   sp_atomic_bool_t ready;
   void* value;
   u32 size;
@@ -1069,7 +1070,11 @@ SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
 SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 
+typedef struct {
+  sp_allocator_t allocator;
+} sp_config_t;
 
+void sp_init(sp_config_t config);
 #ifdef SP_APP
 typedef enum {
   SP_ASSET_STATE_QUEUED,
@@ -2491,7 +2496,7 @@ void sp_context_push(sp_context_t context) {
   sp_context_check_index();
 }
 
-void sp_context_push_allocator(sp_allocator_t* allocator) {
+void sp_context_push_allocator(sp_allocator_t allocator) {
   sp_context_t context = SP_ZERO_STRUCT(sp_context_t);
   if (sp_context) context = *sp_context;
   context.allocator = allocator;
@@ -2506,15 +2511,19 @@ void sp_context_pop() {
 }
 
 void* sp_alloc(u32 size) {
-  return sp_allocator_alloc(*sp_context->allocator, size);
+  return sp_allocator_alloc(sp_context->allocator, size);
 }
 
 void* sp_realloc(void* memory, u32 size) {
-  return sp_allocator_realloc(*sp_context->allocator, memory, size);
+  return sp_allocator_realloc(sp_context->allocator, memory, size);
 }
 
 void sp_free(void* memory) {
-  sp_allocator_free(*sp_context->allocator, memory);
+  sp_allocator_free(sp_context->allocator, memory);
+}
+
+sp_allocator_t sp_allocator_default() {
+  return sp_malloc_allocator_init();
 }
 
 void* sp_allocator_alloc(sp_allocator_t allocator, u32 size) {
@@ -2589,7 +2598,7 @@ sp_malloc_metadata_t* sp_malloc_allocator_get_metadata(void* ptr) {
   return ((sp_malloc_metadata_t*)ptr) - 1;
 }
 
-void* sp_allocator_malloc_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr) {
+void* sp_malloc_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr) {
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
       u32 total_size = size + sizeof(sp_malloc_metadata_t);
@@ -2599,7 +2608,7 @@ void* sp_allocator_malloc_on_alloc(void* user_data, sp_allocator_mode_t mode, u3
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
       if (!ptr) {
-        return sp_allocator_malloc_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+        return sp_malloc_allocator_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       }
 
       sp_malloc_metadata_t* metadata = sp_malloc_allocator_get_metadata(ptr);
@@ -2607,9 +2616,9 @@ void* sp_allocator_malloc_on_alloc(void* user_data, sp_allocator_mode_t mode, u3
         return ptr;
       }
 
-      void* buffer = sp_allocator_malloc_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+      void* buffer = sp_malloc_allocator_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       sp_os_copy_memory(ptr, buffer, metadata->size);
-      sp_allocator_malloc_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
+      sp_malloc_allocator_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
 
       return buffer;
     }
@@ -2624,10 +2633,11 @@ void* sp_allocator_malloc_on_alloc(void* user_data, sp_allocator_mode_t mode, u3
   }
 }
 
-sp_allocator_t sp_allocator_malloc_init(sp_allocator_malloc_t* allocator) {
-  allocator->allocator.on_alloc = sp_allocator_malloc_on_alloc;
-  allocator->allocator.user_data = NULL;
-  return allocator->allocator;
+sp_allocator_t sp_malloc_allocator_init() {
+  sp_allocator_t allocator;
+  allocator.on_alloc = sp_malloc_allocator_on_alloc;
+  allocator.user_data = NULL;
+  return allocator;
 }
 
 

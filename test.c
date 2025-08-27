@@ -44,7 +44,7 @@
 
 typedef struct sp_test_memory_tracker {
   sp_bump_allocator_t* bump;
-  sp_allocator_t* allocator;
+  sp_allocator_t allocator;
 } sp_test_memory_tracker;
 
 typedef struct sp_test_file_monitor_data {
@@ -105,31 +105,26 @@ bool sp_test_file_exists(const c8* filename) {
 }
 
 void sp_test_use_malloc() {
-  static sp_allocator_malloc_t malloc_allocator = SP_ZERO_INITIALIZE();
+  static sp_malloc_allocator_t malloc_allocator = SP_ZERO_INITIALIZE();
   static sp_allocator_t allocator = SP_ZERO_INITIALIZE();
 
-  sp_context = &sp_context_stack[0];
-  *sp_context = SP_ZERO_STRUCT(sp_context_t);
-  allocator = sp_allocator_malloc_init(&malloc_allocator);
-  sp_context_push_allocator(&allocator);
+  sp_os_zero_memory(sp_context_stack, sizeof(sp_context_stack));
+  sp_context = sp_context_stack;
+  sp_context_push_allocator(sp_malloc_allocator_init());
 }
 
 void sp_test_use_bump_allocator(u32 capacity) {
   static sp_bump_allocator_t bump_allocator;
-  static sp_allocator_t allocator;
 
   bump_allocator = SP_ZERO_STRUCT(sp_bump_allocator_t);
-  allocator = SP_ZERO_STRUCT(sp_allocator_t);
 
-  sp_context = &sp_context_stack[0];
-  *sp_context = SP_ZERO_STRUCT(sp_context_t);
-  allocator = sp_bump_allocator_init(&bump_allocator, capacity);
-  sp_context_push_allocator(&allocator);
+  sp_allocator_t allocator = sp_bump_allocator_init(&bump_allocator, capacity);
+  sp_context_push_allocator(allocator);
 }
 
 void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) {
   sp_test_use_bump_allocator(capacity);
-  tracker->bump = (sp_bump_allocator_t*)sp_context->allocator->user_data;
+  tracker->bump = (sp_bump_allocator_t*)sp_context->allocator.user_data;
   tracker->allocator = sp_context->allocator;
 }
 
@@ -975,6 +970,8 @@ sp_str_t sp_test_map_band_member(sp_str_t str, sp_opaque_ptr user_data) {
 }
 
 UTEST(sp_str_t, map_reduce) {
+  sp_test_use_malloc();
+
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_t band [] = {
     SP_LIT("jerry"), SP_LIT("bobby"), SP_LIT("phil")
@@ -2343,10 +2340,7 @@ UTEST(file_monitor, detects_file_modifications) {
 // ╚═╝      ╚═════╝ ╚══════╝╚═╝╚═╝  ╚═╝
 #ifdef SP_POSIX
 UTEST(posix, smoke) {
-  sp_allocator_malloc_t allocator;
-  sp_allocator_t alloc = sp_allocator_malloc_init(&allocator);
-  sp_context_t ctx = { .allocator = &alloc };
-  sp_context_set(ctx);
+  sp_test_use_malloc();
 
   sp_str_t path = SP_LIT("/tmp/test");
   bool exists = sp_os_does_path_exist(path);
