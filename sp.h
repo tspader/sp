@@ -912,6 +912,7 @@ SP_IMP void                         sp_os_file_monitor_add_directory(sp_file_mon
 SP_IMP void                         sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
 SP_IMP void                         sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
 SP_API void                         sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
+SP_API void                         sp_os_print(sp_str_t message);
 SP_API void                         sp_os_log(sp_str_t message);
 SP_API void                         sp_thread_join(sp_thread_t* thread);
 SP_API s32                          sp_thread_launch(void* userdata);
@@ -3620,11 +3621,15 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     return str8;
   }
 
-  void sp_os_log(sp_str_t message) {
+  void sp_os_print(sp_str_t message) {
     HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD written;
     WriteConsoleA(console, message.data, message.len, &written, NULL);
-    WriteConsoleA(console, "\n", 1, &written, NULL);
+  }
+
+  void sp_os_log(sp_str_t message) {
+    sp_os_print(message);
+    sp_os_print(SP_LIT("\n"));
   }
 
   void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
@@ -3951,9 +3956,13 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     return result;
   }
 
-  void sp_os_log(sp_str_t message) {
+  void sp_os_print(sp_str_t message) {
     write(STDOUT_FILENO, message.data, message.len);
-    write(STDOUT_FILENO, "\n", 1);
+  }
+
+  void sp_os_log(sp_str_t message) {
+    sp_os_print(message);
+    sp_os_print(SP_LIT("\n"));
   }
 
   void* sp_posix_thread_launch(void* args) {
@@ -4243,7 +4252,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   sp_str_t sp_os_canonicalize_path(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-    realpath(path_cstr, canonical_path);
+    sp_str_copy_to(path, canonical_path, SP_MAX_PATH_LEN);
 
     sp_str_t result = sp_str_from_cstr(canonical_path);
     result = sp_os_normalize_path(result);
@@ -4272,6 +4281,9 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     }
     result[len] = '\0';
     return result;
+  }
+
+  void sp_os_print(sp_str_t message) {
   }
 
   void sp_os_log(sp_str_t message) {
