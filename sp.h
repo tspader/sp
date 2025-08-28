@@ -91,6 +91,7 @@
 
   #ifdef SP_MACOS
     #include "pthread.h"
+    #include <dispatch/dispatch.h>
   #endif
 
   #ifdef SP_LINUX
@@ -98,8 +99,9 @@
   #endif
 
   #include "string.h"
+#endif
 
-#elif defined(SP_OS_BACKEND_SDL)
+#if defined(SP_OS_BACKEND_SDL)
   #include "SDL3/SDL.h"
 
   #ifdef SP_WIN32
@@ -766,17 +768,21 @@ void sp_log_raw(sp_str_t fmt, ...);
 // COMMON TYPES //
 //////////////////
 #if defined(SP_OS_BACKEND_NATIVE) && defined(SP_WIN32)
-  typedef thrd_t          sp_thread_t;
-  typedef mtx_t           sp_mutex_t;
-  typedef HANDLE          sp_semaphore_t;
-#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_POSIX)
-  typedef pthread_t       sp_thread_t;
-  typedef pthread_mutex_t sp_mutex_t;
-  typedef sem_t           sp_semaphore_t;
+  typedef thrd_t               sp_thread_t;
+  typedef mtx_t                sp_mutex_t;
+  typedef HANDLE               sp_semaphore_t;
+#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_LINUX)
+  typedef pthread_t            sp_thread_t;
+  typedef pthread_mutex_t      sp_mutex_t;
+  typedef sem_t                sp_semaphore_t;
+#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_MACOS)
+  typedef pthread_t            sp_thread_t;
+  typedef pthread_mutex_t      sp_mutex_t;
+  typedef dispatch_semaphore_t sp_semaphore_t;
 #elif defined(SP_OS_BACKEND_SDL)
-  typedef SDL_Mutex*             sp_mutex_t;
-  typedef SDL_Thread*             sp_thread_t;
-  typedef SDL_Semaphore*             sp_semaphore_t;
+  typedef SDL_Mutex*           sp_mutex_t;
+  typedef SDL_Thread*          sp_thread_t;
+  typedef SDL_Semaphore*       sp_semaphore_t;
 #endif
 
 //////////////
@@ -4012,7 +4018,32 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   void sp_mutex_destroy(sp_mutex_t* mutex) {
     pthread_mutex_destroy(mutex);
   }
+#endif
 
+#if defined(SP_OS_BACKEND_NATIVE) && defined(SP_MACOS)
+  void sp_semaphore_init(sp_semaphore_t* semaphore) {
+      *semaphore = dispatch_semaphore_create(0);
+  }
+
+  void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+      dispatch_release(*semaphore);
+  }
+
+  void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+      dispatch_semaphore_wait(*semaphore, DISPATCH_TIME_FOREVER);
+  }
+
+  bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+      dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, ms * NSEC_PER_MSEC);
+      return dispatch_semaphore_wait(*semaphore, timeout) == 0;
+  }
+
+  void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+      dispatch_semaphore_signal(*semaphore);
+  }
+#endif
+
+#if defined(SP_OS_BACKEND_NATIVE) && defined(SP_LINUX)
   void sp_semaphore_init(sp_semaphore_t* semaphore) {
     sem_init(semaphore, 0, 0);
   }
