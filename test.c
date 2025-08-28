@@ -2774,4 +2774,5 @@ UTEST(os_functions, recursive_directory_removal) {
   ASSERT_FALSE(sp_os_does_path_exist(billy));
 }
 
+
 UTEST_MAIN()
