@@ -655,8 +655,8 @@ SP_API void     sp_str_builder_dedent(sp_str_builder_t* builder);
 SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
 SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
 SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
-SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...);
-SP_API void     sp_str_builder_append_fmt_c8(sp_str_builder_t* builder, const c8* fmt, ...);
+SP_API void     sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...);
+SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...);
 SP_API void     sp_str_builder_new_line(sp_str_builder_t* builder);
 SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
 SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
@@ -2915,7 +2915,7 @@ void sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c) {
   sp_str_builder_append(builder, SP_STR(&c, 1));
 }
 
-void sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...) {
+void sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_str_t formatted = sp_format_v(fmt, args);
@@ -2924,7 +2924,7 @@ void sp_str_builder_append_fmt(sp_str_builder_t* builder, sp_str_t fmt, ...) {
   sp_str_builder_append(builder, formatted);
 }
 
-void sp_str_builder_append_fmt_c8(sp_str_builder_t* builder, const c8* fmt, ...) {
+void sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_str_t formatted = sp_format_v(SP_CSTR(fmt), args);

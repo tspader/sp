@@ -25,10 +25,10 @@
       const c8* __sp_test_file_lval = __FILE__; \
       const u32 __sp_test_line_lval = __LINE__; \
       sp_str_builder_t __sp_test_builder = SP_ZERO_INITIALIZE(); \
-      sp_str_builder_append_fmt(&__sp_test_builder, SP_LIT("{}:{} Failure:"), SP_FMT_CSTR(__sp_test_file_lval), SP_FMT_U32(__sp_test_line_lval)); \
+      sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("{}:{} Failure:"), SP_FMT_CSTR(__sp_test_file_lval), SP_FMT_U32(__sp_test_line_lval)); \
       sp_str_builder_new_line(&__sp_test_builder); \
       sp_str_builder_indent(&__sp_test_builder); \
-      sp_str_builder_append_fmt(&__sp_test_builder, SP_LIT("{} != {}"), SP_FMT_QUOTED_STR((a)), SP_FMT_QUOTED_STR((b))); \
+      sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("{} != {}"), SP_FMT_QUOTED_STR((a)), SP_FMT_QUOTED_STR((b))); \
       SP_TEST_REPORT(sp_str_builder_write(&__sp_test_builder)); \
       *utest_result = UTEST_TEST_FAILURE; \
  \
@@ -730,7 +730,7 @@ UTEST(sp_str_builder, format_append) {
   sp_test_use_malloc();
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_str_builder_append_fmt_c8(&builder, "Value: {}", SP_FMT_U32(123));
+  sp_str_builder_append_fmt(&builder, "Value: {}", SP_FMT_U32(123));
   sp_str_t result = sp_str_builder_write(&builder);
   ASSERT_GT(result.len, 0);
   ASSERT_NE(result.data, SP_NULLPTR);
