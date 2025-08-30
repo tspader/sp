@@ -260,17 +260,48 @@
 #define SP_SDL_OVERWRITE_ENV_VAR true
 #define SP_SDL_DO_NOT_OVERWRITE_ENV_VAR false
 
-#define SP_ANSI_FORE_BOLD "\033[1m"
-#define SP_ANSI_FORE_RESET "\033[0m"
-#define SP_ANSI_FORE_BLACK "\033[30m"
-#define SP_ANSI_FORE_RED "\033[31m"
-#define SP_ANSI_FORE_GREEN "\033[32m"
-#define SP_ANSI_FORE_YELLOW "\033[33m"
-#define SP_ANSI_FORE_BLUE "\033[34m"
-#define SP_ANSI_FORE_PURPLE "\033[35m"
-#define SP_ANSI_FORE_CYAN "\033[36m"
-#define SP_ANSI_FORE_WHITE "\033[37m"
-#define SP_ANSI_FORE_BRIGHT_BLACK "\033[90m"
+#define SP_ANSI_RESET             "\033[0m"
+#define SP_ANSI_BOLD              "\033[1m"
+#define SP_ANSI_DIM               "\033[2m"
+#define SP_ANSI_ITALIC            "\033[3m"
+#define SP_ANSI_UNDERLINE         "\033[4m"
+#define SP_ANSI_BLINK             "\033[5m"
+#define SP_ANSI_REVERSE           "\033[7m"
+#define SP_ANSI_HIDDEN            "\033[8m"
+#define SP_ANSI_STRIKETHROUGH     "\033[9m"
+#define SP_ANSI_FG_BLACK          "\033[30m"
+#define SP_ANSI_FG_RED            "\033[31m"
+#define SP_ANSI_FG_GREEN          "\033[32m"
+#define SP_ANSI_FG_YELLOW         "\033[33m"
+#define SP_ANSI_FG_BLUE           "\033[34m"
+#define SP_ANSI_FG_MAGENTA        "\033[35m"
+#define SP_ANSI_FG_CYAN           "\033[36m"
+#define SP_ANSI_FG_WHITE          "\033[37m"
+#define SP_ANSI_BG_BLACK          "\033[40m"
+#define SP_ANSI_BG_RED            "\033[41m"
+#define SP_ANSI_BG_GREEN          "\033[42m"
+#define SP_ANSI_BG_YELLOW         "\033[43m"
+#define SP_ANSI_BG_BLUE           "\033[44m"
+#define SP_ANSI_BG_MAGENTA        "\033[45m"
+#define SP_ANSI_BG_CYAN           "\033[46m"
+#define SP_ANSI_BG_WHITE          "\033[47m"
+#define SP_ANSI_FG_BRIGHT_BLACK   "\033[90m"
+#define SP_ANSI_FG_BRIGHT_RED     "\033[91m"
+#define SP_ANSI_FG_BRIGHT_GREEN   "\033[92m"
+#define SP_ANSI_FG_BRIGHT_YELLOW  "\033[93m"
+#define SP_ANSI_FG_BRIGHT_BLUE    "\033[94m"
+#define SP_ANSI_FG_BRIGHT_MAGENTA "\033[95m"
+#define SP_ANSI_FG_BRIGHT_CYAN    "\033[96m"
+#define SP_ANSI_FG_BRIGHT_WHITE   "\033[97m"
+#define SP_ANSI_BG_BRIGHT_BLACK   "\033[100m"
+#define SP_ANSI_BG_BRIGHT_RED     "\033[101m"
+#define SP_ANSI_BG_BRIGHT_GREEN   "\033[102m"
+#define SP_ANSI_BG_BRIGHT_YELLOW  "\033[103m"
+#define SP_ANSI_BG_BRIGHT_BLUE    "\033[104m"
+#define SP_ANSI_BG_BRIGHT_MAGENTA "\033[105m"
+#define SP_ANSI_BG_BRIGHT_CYAN    "\033[106m"
+#define SP_ANSI_BG_BRIGHT_WHITE   "\033[107m"
+
 
 SP_BEGIN_EXTERN_C()
 
@@ -1019,9 +1050,9 @@ typedef struct sp_formatter {
 #define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
 #define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
 #define SP_FMT_COLOR(V)         SP_FMT_ARG(color, V)
-#define SP_FMT_YELLOW()         SP_FMT_COLOR(SP_ANSI_FORE_YELLOW)
-#define SP_FMT_CYAN()           SP_FMT_COLOR(SP_ANSI_FORE_CYAN)
-#define SP_FMT_CLEAR()          SP_FMT_COLOR(SP_ANSI_FORE_RESET)
+#define SP_FMT_YELLOW()         SP_FMT_COLOR(SP_ANSI_FG_YELLOW)
+#define SP_FMT_CYAN()           SP_FMT_COLOR(SP_ANSI_FG_CYAN)
+#define SP_FMT_CLEAR()          SP_FMT_COLOR(SP_ANSI_FG_RESET)
 
 #undef SP_FMT_X
 #define SP_FMT_X(name, type) void sp_fmt_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
@@ -2315,7 +2346,8 @@ sp_str_t sp_format(const c8* fmt, ...) {
 
 typedef enum {
   SP_FORMAT_SPECIFIER_FLAG_NONE = 0,
-  SP_FORMAT_SPECIFIER_FLAG_COLOR = 1 << 0,
+  SP_FORMAT_SPECIFIER_FLAG_FG_COLOR = 1 << 0,
+  SP_FORMAT_SPECIFIER_FLAG_BG_COLOR = 1 << 1,
 } sp_format_specifier_flag_t;
 
 
@@ -2363,20 +2395,30 @@ sp_str_t sp_format_parser_id(sp_format_parser_t* parser) {
 }
 
 sp_format_specifier_flag_t sp_format_specifier_flag_to_str(sp_str_t id) {
-  if (sp_str_equal_cstr(id, "color")) return SP_FORMAT_SPECIFIER_FLAG_COLOR;
+  if (sp_str_equal_cstr(id, "color")) return SP_FORMAT_SPECIFIER_FLAG_FG_COLOR;
+  if (sp_str_equal_cstr(id, "fg")) return SP_FORMAT_SPECIFIER_FLAG_FG_COLOR;
+  if (sp_str_equal_cstr(id, "bg")) return SP_FORMAT_SPECIFIER_FLAG_BG_COLOR;
   return SP_FORMAT_SPECIFIER_FLAG_NONE;
 }
 
-sp_str_t sp_format_color_id_to_ansi(sp_str_t id) {
-  if (sp_str_equal_cstr(id, "yellow")) return SP_CSTR(SP_ANSI_FORE_YELLOW);
-  if (sp_str_equal_cstr(id, "blue")) return SP_CSTR(SP_ANSI_FORE_BLUE);
-  if (sp_str_equal_cstr(id, "cyan")) return SP_CSTR(SP_ANSI_FORE_CYAN);
-  if (sp_str_equal_cstr(id, "red")) return SP_CSTR(SP_ANSI_FORE_RED);
-  if (sp_str_equal_cstr(id, "green")) return SP_CSTR(SP_ANSI_FORE_GREEN);
-  if (sp_str_equal_cstr(id, "black")) return SP_CSTR(SP_ANSI_FORE_BLACK);
-  if (sp_str_equal_cstr(id, "purple")) return SP_CSTR(SP_ANSI_FORE_PURPLE);
-  if (sp_str_equal_cstr(id, "brightblack")) return SP_CSTR(SP_ANSI_FORE_BRIGHT_BLACK);
-  return SP_CSTR(SP_ANSI_FORE_RESET);
+sp_str_t sp_format_color_id_to_ansi_fg(sp_str_t id) {
+  if (sp_str_equal_cstr(id, "black")) return SP_CSTR(SP_ANSI_FG_BLACK);
+  if (sp_str_equal_cstr(id, "red")) return SP_CSTR(SP_ANSI_FG_RED);
+  if (sp_str_equal_cstr(id, "green")) return SP_CSTR(SP_ANSI_FG_GREEN);
+  if (sp_str_equal_cstr(id, "yellow")) return SP_CSTR(SP_ANSI_FG_YELLOW);
+  if (sp_str_equal_cstr(id, "blue")) return SP_CSTR(SP_ANSI_FG_BLUE);
+  if (sp_str_equal_cstr(id, "magenta")) return SP_CSTR(SP_ANSI_FG_MAGENTA);
+  if (sp_str_equal_cstr(id, "cyan")) return SP_CSTR(SP_ANSI_FG_CYAN);
+  if (sp_str_equal_cstr(id, "white")) return SP_CSTR(SP_ANSI_FG_WHITE);
+  if (sp_str_equal_cstr(id, "brightblack")) return SP_CSTR(SP_ANSI_FG_BRIGHT_BLACK);
+  if (sp_str_equal_cstr(id, "brightred")) return SP_CSTR(SP_ANSI_FG_BRIGHT_RED);
+  if (sp_str_equal_cstr(id, "brightgreen")) return SP_CSTR(SP_ANSI_FG_BRIGHT_GREEN);
+  if (sp_str_equal_cstr(id, "brightyellow")) return SP_CSTR(SP_ANSI_FG_BRIGHT_YELLOW);
+  if (sp_str_equal_cstr(id, "brightblue")) return SP_CSTR(SP_ANSI_FG_BRIGHT_BLUE);
+  if (sp_str_equal_cstr(id, "brightmagenta")) return SP_CSTR(SP_ANSI_FG_BRIGHT_MAGENTA);
+  if (sp_str_equal_cstr(id, "brightcyan")) return SP_CSTR(SP_ANSI_FG_BRIGHT_CYAN);
+  if (sp_str_equal_cstr(id, "brightwhite")) return SP_CSTR(SP_ANSI_FG_BRIGHT_WHITE);
+  return SP_CSTR(SP_ANSI_RESET);
 }
 
 sp_format_specifier_t sp_format_parser_specifier(sp_format_parser_t* parser) {
@@ -2392,8 +2434,8 @@ sp_format_specifier_t sp_format_parser_specifier(sp_format_parser_t* parser) {
 
       sp_format_specifier_flag_t flag = sp_format_specifier_flag_to_str(id);
       switch (flag) {
-        case SP_FORMAT_SPECIFIER_FLAG_COLOR: {
-          spec.color = sp_format_color_id_to_ansi(value);
+        case SP_FORMAT_SPECIFIER_FLAG_FG_COLOR: {
+          spec.color = sp_format_color_id_to_ansi_fg(value);
           break;
         }
         default: {
@@ -2434,7 +2476,7 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
       case '{': {
         sp_format_parser_eat(&parser);
         sp_format_specifier_t specifier = sp_format_parser_specifier(&parser);
-        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_COLOR) {
+        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_FG_COLOR) {
           sp_str_builder_append(&builder, specifier.color);
         }
         sp_format_parser_eat_and_assert(&parser, '}');
@@ -2448,8 +2490,11 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
           }
         }
 
-        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_COLOR) {
-          sp_str_builder_append_cstr(&builder, SP_ANSI_FORE_RESET);
+        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_FG_COLOR) {
+          sp_str_builder_append_cstr(&builder, SP_ANSI_RESET);
+        }
+        else if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_BG_COLOR) {
+          sp_str_builder_append_cstr(&builder, SP_ANSI_RESET);
         }
 
         break;
