@@ -1,3 +1,4 @@
+
 #ifndef SP_SPACE_H
 #define SP_SPACE_H
 
@@ -629,68 +630,62 @@ SP_API void     sp_str_builder_new_line(sp_str_builder_t* builder);
 SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
 SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
 
-// c strings
-SP_API c8*      sp_cstr_copy(const c8* str);
-SP_API void     sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length);
-SP_API c8*      sp_cstr_copy_sized(const c8* str, u32 length);
-SP_API void     sp_cstr_copy_to_sized(const c8* str, u32 length, c8* buffer, u32 buffer_length);
-SP_API bool     sp_cstr_equal(const c8* a, const c8* b);
-SP_API u32      sp_cstr_len(const c8* str);
-SP_API c8*      sp_wstr_to_cstr(c16* str, u32 len);
-
-SP_API c8*      sp_str_to_cstr(sp_str_t str);
-SP_API c8*      sp_str_to_cstr_double_nt(sp_str_t str);
-SP_API sp_str_t sp_str_copy(sp_str_t str);
-SP_API void     sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
-SP_API sp_str_t sp_str_from_cstr(const c8* str);
-SP_API sp_str_t sp_str_from_cstr_sized(const c8* str, u32 length);
-SP_API sp_str_t sp_str_from_cstr_null(const c8* str);
-
-SP_API sp_str_t sp_str_alloc(u32 capacity);
-SP_API bool     sp_str_equal(sp_str_t a, sp_str_t b);
-SP_API bool     sp_str_equal_cstr(sp_str_t a, const c8* b);
-SP_API bool     sp_str_ends_with(sp_str_t a, sp_str_t b);
-SP_API bool     sp_str_valid(sp_str_t str);
-SP_API c8       sp_str_at(sp_str_t str, s32 index);
-SP_API c8       sp_str_at_reverse(sp_str_t str, s32 index);
-SP_API c8       sp_str_back(sp_str_t str);
-SP_API s32      sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
-
-SP_API sp_str_t sp_str_sub(sp_str_t str, u32 index, u32 len);
-SP_API sp_str_t sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
-SP_API sp_str_t sp_str_concat(sp_str_t a, sp_str_t b);
-SP_API sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to);
-SP_API sp_str_t sp_str_pad(sp_str_t str, u32 n);
-SP_API sp_str_t sp_str_trim(sp_str_t str);
-SP_API sp_str_t sp_str_trim_right(sp_str_t str);
-SP_API sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
-SP_API sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
-SP_API sp_str_t sp_str_to_upper(sp_str_t str);
-SP_API sp_str_t sp_str_to_lower(sp_str_t str);
-SP_API sp_str_t sp_str_capitalize_words(sp_str_t str);
-
-SP_API sp_str_t sp_str_reduce(sp_str_t* strs, u32 n, void* user_data, sp_str_reduce_fn_t fn);
-SP_API void     sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
-SP_API void     sp_str_reduce_kernel_contains(sp_str_reduce_context_t* context);
-SP_API void     sp_str_reduce_kernel_count(sp_str_reduce_context_t* context);
-SP_API void     sp_str_reduce_kernel_longest(sp_str_reduce_context_t* context);
-SP_API void     sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context);
-
-SP_API sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr u, sp_str_map_fn_t fn);
-SP_API sp_str_t sp_str_map_kernel_prefix(sp_str_t str, sp_opaque_ptr user_data);
-SP_API sp_str_t sp_str_map_kernel_trim(sp_str_t str, sp_opaque_ptr user_data);
-SP_API sp_str_t sp_str_map_kernel_pad(sp_str_t str, sp_opaque_ptr user_data);
-SP_API sp_str_t sp_str_map_kernel_to_upper(sp_str_t str, sp_opaque_ptr user_data);
-SP_API sp_str_t sp_str_map_kernel_to_lower(sp_str_t str, sp_opaque_ptr user_data);
-SP_API sp_str_t sp_str_map_kernel_capitalize_words(sp_str_t str, sp_opaque_ptr user_data);
-SP_API s32      sp_str_sort_kernel_alphabetical(const void* a, const void* b);
-
-SP_API bool     sp_str_contains_n(sp_str_t* strings, u32 num_strings, sp_str_t needle);
-SP_API sp_str_t sp_str_join_n(sp_str_t* strings, u32 num_strings, sp_str_t joiner);
-SP_API u32      sp_str_count_n(sp_str_t* strings, u32 num_strings, sp_str_t needle);
-SP_API sp_str_t sp_str_find_longest_n(sp_str_t* strings, u32 num_strings);
-SP_API sp_str_t sp_str_find_shortest_n(sp_str_t* strings, u32 num_strings);
+SP_API c8*                    sp_cstr_copy(const c8* str);
+SP_API void                   sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length);
+SP_API c8*                    sp_cstr_copy_sized(const c8* str, u32 length);
+SP_API void                   sp_cstr_copy_to_sized(const c8* str, u32 length, c8* buffer, u32 buffer_length);
+SP_API bool                   sp_cstr_equal(const c8* a, const c8* b);
+SP_API u32                    sp_cstr_len(const c8* str);
+SP_API c8*                    sp_wstr_to_cstr(c16* str, u32 len);
+SP_API c8*                    sp_str_to_cstr(sp_str_t str);
+SP_API c8*                    sp_str_to_cstr_double_nt(sp_str_t str);
+SP_API sp_str_t               sp_str_copy(sp_str_t str);
+SP_API void                   sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
+SP_API sp_str_t               sp_str_from_cstr(const c8* str);
+SP_API sp_str_t               sp_str_from_cstr_sized(const c8* str, u32 length);
+SP_API sp_str_t               sp_str_from_cstr_null(const c8* str);
+SP_API sp_str_t               sp_str_alloc(u32 capacity);
+SP_API bool                   sp_str_equal(sp_str_t a, sp_str_t b);
+SP_API bool                   sp_str_equal_cstr(sp_str_t a, const c8* b);
+SP_API bool                   sp_str_ends_with(sp_str_t a, sp_str_t b);
+SP_API bool                   sp_str_valid(sp_str_t str);
+SP_API c8                     sp_str_at(sp_str_t str, s32 index);
+SP_API c8                     sp_str_at_reverse(sp_str_t str, s32 index);
+SP_API c8                     sp_str_back(sp_str_t str);
+SP_API s32                    sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
+SP_API sp_str_t               sp_str_sub(sp_str_t str, u32 index, u32 len);
+SP_API sp_str_t               sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
+SP_API sp_str_t               sp_str_concat(sp_str_t a, sp_str_t b);
+SP_API sp_str_t               sp_str_replace_c8(sp_str_t str, c8 from, c8 to);
+SP_API sp_str_t               sp_str_pad(sp_str_t str, u32 n);
+SP_API sp_str_t               sp_str_trim(sp_str_t str);
+SP_API sp_str_t               sp_str_trim_right(sp_str_t str);
+SP_API sp_str_t               sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API sp_str_t               sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
+SP_API sp_str_t               sp_str_to_upper(sp_str_t str);
+SP_API sp_str_t               sp_str_to_lower(sp_str_t str);
+SP_API sp_str_t               sp_str_capitalize_words(sp_str_t str);
+SP_API sp_dyn_array(sp_str_t) sp_str_split_c8(sp_str_t, c8 c);
+SP_API bool                   sp_str_contains_n(sp_str_t* strings, u32 num_strings, sp_str_t needle);
+SP_API sp_str_t               sp_str_join_n(sp_str_t* strings, u32 num_strings, sp_str_t joiner);
+SP_API u32                    sp_str_count_n(sp_str_t* strings, u32 num_strings, sp_str_t needle);
+SP_API sp_str_t               sp_str_find_longest_n(sp_str_t* strings, u32 num_strings);
+SP_API sp_str_t               sp_str_find_shortest_n(sp_str_t* strings, u32 num_strings);
 SP_API sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strings, u32 num_strings);
+SP_API sp_str_t               sp_str_reduce(sp_str_t* strs, u32 n, void* user_data, sp_str_reduce_fn_t fn);
+SP_API void                   sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
+SP_API void                   sp_str_reduce_kernel_contains(sp_str_reduce_context_t* context);
+SP_API void                   sp_str_reduce_kernel_count(sp_str_reduce_context_t* context);
+SP_API void                   sp_str_reduce_kernel_longest(sp_str_reduce_context_t* context);
+SP_API void                   sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context);
+SP_API sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr u, sp_str_map_fn_t fn);
+SP_API sp_str_t               sp_str_map_kernel_prefix(sp_str_t str, sp_opaque_ptr user_data);
+SP_API sp_str_t               sp_str_map_kernel_trim(sp_str_t str, sp_opaque_ptr user_data);
+SP_API sp_str_t               sp_str_map_kernel_pad(sp_str_t str, sp_opaque_ptr user_data);
+SP_API sp_str_t               sp_str_map_kernel_to_upper(sp_str_t str, sp_opaque_ptr user_data);
+SP_API sp_str_t               sp_str_map_kernel_to_lower(sp_str_t str, sp_opaque_ptr user_data);
+SP_API sp_str_t               sp_str_map_kernel_capitalize_words(sp_str_t str, sp_opaque_ptr user_data);
+SP_API s32                    sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 
 
 // ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
@@ -2031,7 +2026,7 @@ void sp_fmt_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, cons
 
     while (value > 0) {
         u8 digit = value & 0xF;
-        hex_digits[digit_count++] = digit < 10 ? '0' + digit : 'A' + (digit - 10);
+        hex_digits[digit_count++] = digit < 10 ? '0' + digit : 'a' + (digit - 10);
         value >>= 4;
     }
 
@@ -2793,42 +2788,6 @@ sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) 
   return sp_str_builder_write(&builder);
 }
 
-sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to) {
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-
-  for (u32 i = 0; i < str.len; i++) {
-    c8 c = str.data[i];
-    if (c == from) {
-      sp_str_builder_append_c8(&builder, to);
-    } else {
-      sp_str_builder_append_c8(&builder, c);
-    }
-  }
-
-  return sp_str_builder_write(&builder);
-}
-
-sp_str_t sp_str_trim_right(sp_str_t str) {
-  while (str.len) {
-    c8 c = sp_str_back(str);
-
-    switch (c) {
-      case ' ':
-      case '\t':
-      case '\r':
-      case '\n': {
-        str.len--;
-        break;
-      }
-      default: {
-        return str;
-      }
-    }
-  }
-
-  return str;
-}
-
 sp_str_t sp_str_sub(sp_str_t str, u32 index, u32 len) {
   sp_str_t substr = {
     .len = len,
@@ -2999,6 +2958,65 @@ sp_str_t sp_str_pad(sp_str_t str, u32 n) {
   }
 
   return sp_str_builder_write(&builder);
+}
+
+sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to) {
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+
+  for (u32 i = 0; i < str.len; i++) {
+    c8 c = str.data[i];
+    if (c == from) {
+      sp_str_builder_append_c8(&builder, to);
+    } else {
+      sp_str_builder_append_c8(&builder, c);
+    }
+  }
+
+  return sp_str_builder_write(&builder);
+}
+
+sp_dyn_array(sp_str_t) sp_str_split_c8(sp_str_t str, c8 delimiter) {
+  sp_dyn_array(sp_str_t) result = SP_NULLPTR;
+
+  if (str.len == 0) {
+    return result;
+  }
+
+  u32 start = 0;
+  for (u32 i = 0; i < str.len; i++) {
+    if (str.data[i] == delimiter) {
+      sp_str_t part = sp_str(str.data + start, i - start);
+      sp_dyn_array_push(result, part);
+      start = i + 1;
+    }
+  }
+
+  // Add the last part (or the whole string if no delimiter was found)
+  sp_str_t last_part = sp_str(str.data + start, str.len - start);
+  sp_dyn_array_push(result, last_part);
+
+  return result;
+}
+
+sp_str_t sp_str_trim_right(sp_str_t str) {
+  while (str.len) {
+    c8 c = sp_str_back(str);
+
+    switch (c) {
+      case ' ':
+      case '\t':
+      case '\r':
+      case '\n': {
+        str.len--;
+        break;
+      }
+      default: {
+        return str;
+      }
+    }
+  }
+
+  return str;
 }
 
 sp_str_t sp_str_trim(sp_str_t str) {
@@ -4165,9 +4183,10 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   SDL_EnumerationResult sp_os_sdl_scan_directory_callback(void* user_data, const c8* directory, const c8* file_name) {
     sp_dynamic_array_t* entries = (sp_dynamic_array_t*)user_data;
 
+    sp_str_t dir = sp_os_normalize_path(SP_CSTR(directory));
     sp_os_directory_entry_t entry = SP_ZERO_INITIALIZE();
     entry.file_name = sp_str_from_cstr_null(file_name);
-    entry.file_path = sp_os_join_path(SP_CSTR(directory), entry.file_name);
+    entry.file_path = sp_os_join_path(dir, entry.file_name);
 
     SDL_PathInfo info;
     if (SDL_GetPathInfo(entry.file_name.data, &info)) {

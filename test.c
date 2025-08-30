@@ -567,7 +567,7 @@ UTEST(sp_fmt, pointer_type) {
 
   void* ptr = (void*)(uintptr_t)0xDEADBEEF;
   sp_str_t result = sp_format("ptr: {}", SP_FMT_PTR(ptr));
-  SP_EXPECT_STR_EQ_CSTR(result, "ptr: 0xDEADBEEF");
+  SP_EXPECT_STR_EQ_CSTR(result, "ptr: 0xdeadbeef");
 
   void* null_ptr = SP_NULLPTR;
   result = sp_format("null: {}", SP_FMT_PTR(null_ptr));
@@ -579,7 +579,7 @@ UTEST(sp_fmt, hash_type) {
 
   sp_hash_t hash = 0xABCDEF12;
   sp_str_t result = sp_format("hash: {}", SP_FMT_HASH(hash));
-  SP_EXPECT_STR_EQ_CSTR(result, "hash: ABCDEF12");
+  SP_EXPECT_STR_EQ_CSTR(result, "hash: abcdef12");
 
   sp_hash_t zero_hash = 0;
   result = sp_format("zero hash: {}", SP_FMT_HASH(zero_hash));
