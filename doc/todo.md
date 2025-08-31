@@ -1,0 +1,2 @@
+- only use c strings at api boundaries. use SDL as an example (e.g. SDL_Log)
+- prefer switch statements + enumerations to if/else

@@ -1,4 +1,4 @@
-Use sp_str_builder_new_line() instead of appending \n for better readability and consistency.
+Use sp_str_builder_new_line() instead of appending \n for better readability and consistency. NEVER use a raw "\n" in a literal with format strings.
 
 # Good
 ```c
