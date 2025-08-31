@@ -1544,6 +1544,46 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
 #define sp_hash_table_iter_getkp(__HT, __IT)\
     (&((__HT)->data[(__IT)].key))
 
+void __sp_hash_table_init_impl(void** ht, u32 sz) {
+    *ht = sp_alloc(sz);
+}
+
+u32 sp_hash_table_get_key_index_func(void** data, void* key, u32 key_len, u32 val_len, u32 stride, u32 klpvl) {
+    if (!data || !key) return SP_HASH_TABLE_INVALID_INDEX;
+
+    u32 capacity = sp_dyn_array_capacity(*data);
+    u32 size = sp_dyn_array_size(*data);
+    if (!capacity || !size) return SP_HASH_TABLE_INVALID_INDEX;
+    u32 idx = SP_HASH_TABLE_INVALID_INDEX;
+    u64 hash = sp_hash_bytes(key, key_len, SP_HASH_TABLE_HASH_SEED);
+    u32 hash_idx = (hash % capacity);
+
+    for (u32 i = hash_idx, c = 0; c < capacity; ++c, i = ((i + 1) % capacity)) {
+        u32 offset = (i * stride);
+        void* k = ((c8*)(*data) + (offset));
+        u64 kh = sp_hash_bytes(k, key_len, SP_HASH_TABLE_HASH_SEED);
+        bool comp = memcmp(k, key, key_len) == 0;
+        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((c8*)(*data) + offset + (klpvl));
+        if (comp && hash == kh && state == SP_HASH_TABLE_ENTRY_ACTIVE) {
+            idx = i;
+            break;
+        }
+    }
+    return idx;
+}
+
+void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u32* it, u32 stride, u32 klpvl) {
+    (*it)++;
+    for (; *it < sp_dyn_array_capacity(*data); ++*it) {
+        u32 offset = (*it * stride);
+        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((u8*)*data + offset + (klpvl));
+        if (state == SP_HASH_TABLE_ENTRY_ACTIVE) {
+            break;
+        }
+    }
+}
+
+
 ////////////////////////////
 // DYN ARRAY IMPLEMENTATION
 ////////////////////////////
@@ -1596,45 +1636,6 @@ void sp_dyn_array_push_data(void** arr, void* val, u32 val_len) {
     u32 offset = sp_dyn_array_size(*arr);
     sp_os_copy_memory(val, ((u8*)(*arr)) + offset * val_len, val_len);
     sp_dyn_array_head(*arr)->size++;
-}
-
-void __sp_hash_table_init_impl(void** ht, u32 sz) {
-    *ht = sp_alloc(sz);
-}
-
-u32 sp_hash_table_get_key_index_func(void** data, void* key, u32 key_len, u32 val_len, u32 stride, u32 klpvl) {
-    if (!data || !key) return SP_HASH_TABLE_INVALID_INDEX;
-
-    u32 capacity = sp_dyn_array_capacity(*data);
-    u32 size = sp_dyn_array_size(*data);
-    if (!capacity || !size) return SP_HASH_TABLE_INVALID_INDEX;
-    u32 idx = SP_HASH_TABLE_INVALID_INDEX;
-    u64 hash = sp_hash_bytes(key, key_len, SP_HASH_TABLE_HASH_SEED);
-    u32 hash_idx = (hash % capacity);
-
-    for (u32 i = hash_idx, c = 0; c < capacity; ++c, i = ((i + 1) % capacity)) {
-        u32 offset = (i * stride);
-        void* k = ((c8*)(*data) + (offset));
-        u64 kh = sp_hash_bytes(k, key_len, SP_HASH_TABLE_HASH_SEED);
-        bool comp = memcmp(k, key, key_len) == 0;
-        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((c8*)(*data) + offset + (klpvl));
-        if (comp && hash == kh && state == SP_HASH_TABLE_ENTRY_ACTIVE) {
-            idx = i;
-            break;
-        }
-    }
-    return idx;
-}
-
-void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u32* it, u32 stride, u32 klpvl) {
-    (*it)++;
-    for (; *it < sp_dyn_array_capacity(*data); ++*it) {
-        u32 offset = (*it * stride);
-        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((u8*)*data + offset + (klpvl));
-        if (state == SP_HASH_TABLE_ENTRY_ACTIVE) {
-            break;
-        }
-    }
 }
 
 bool sp_parse_u64_ex(sp_str_t str, u64* out) {

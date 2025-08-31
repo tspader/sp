@@ -1,10 +1,7 @@
-// Normally, you'd define SP_IMPLEMENTATION in *one* C/++ file, before you include the header. However, since this
-// project is one file anyway, we define it on the command line so clangd can see it
-//
-// #define SP_IMPLEMENTATION
+#define SP_IMPLEMENTATION
 #include "sp.h"
 
-#include "external/utest/utest.h"
+#include "utest.h"
 
 
 // ██╗   ██╗████████╗██╗██╗     ██╗████████╗██╗███████╗███████╗
