@@ -52,3 +52,7 @@ const char* event_type_to_string(event_type_t type) {
 
 printf("Processing event: %s\n", event_type_to_string(type));
 ```
+
+# Tags
+- api.strings.cstr
+- api.logging

@@ -16,3 +16,7 @@ sp_str_builder_append(&builder, SP_LIT("[[package]]\n"));
 sp_str_builder_append_fmt_c8(&builder, "name = {}\n", SP_FMT_QUOTED_STR(entry->name));
 sp_str_builder_append_fmt_c8(&builder, "git_url = {}\n", SP_FMT_QUOTED_STR(entry->git_url));
 ```
+
+# Tags
+- api.strings.sp_str_builder_t
+- api.os.formatting

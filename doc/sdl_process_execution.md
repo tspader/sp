@@ -36,3 +36,9 @@ char buffer[1024];
 fgets(buffer, sizeof(buffer), fp);
 pclose(fp);
 ```
+
+# Tags
+- api.strings.cstr
+- api.strings.sp_str_t.copy
+- api.logging
+- usage.general

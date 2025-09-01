@@ -91,3 +91,7 @@ const char* get_command_description(const char* cmd) {
     return "Unknown command";
 }
 ```
+
+# Tags
+- api.strings.sp_str_t.comparison
+- usage.general

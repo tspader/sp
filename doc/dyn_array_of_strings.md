@@ -1,4 +1,4 @@
-Use sp_dyn_array to build a dynamic array of strings.
+Use sp_dyn_array to build a dynamic array (e.g. of strings)
 
 ## GOOD
 
@@ -23,3 +23,8 @@ sp_dyn_array_for(args, i) {
 }
 sp_dyn_array_clear(args);
 ```
+
+# Tags
+- api.sp_dynamic_array_t
+- api.strings.cstr
+- api.os.formatting

@@ -1,4 +1,4 @@
-Use sp_thread and synchronization primitives for cross-platform threading.
+Use sp_thread and synchronization primitives instead of native APIs for cross-platform threading.
 
 ## Good
 ```c
@@ -39,3 +39,7 @@ sp_thread_join(&thread);
     pthread_join(thread, NULL);
 #endif
 ```
+
+# Tags
+- api.os.threading
+- api.os.time

@@ -1,4 +1,4 @@
-Long-lived contexts should be members of the app struct, not local variables.
+Declare a global struct called `app`, and place anything whose lifetime is the duration of the program inside this struct. Do not pass the struct to functions; reference it from the global scope.
 
 # Good
 ```c
@@ -33,3 +33,6 @@ void spn_project_build(spn_project_t* project) {
   spn_lock_file_generate(&context);
 }
 ```
+
+# Tags
+- usage.general

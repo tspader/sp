@@ -44,3 +44,8 @@ void test_string_trimming() {
     assert(strlen(result) == 0);
 }
 ```
+
+# Tags
+- api.strings.sp_str_t.copy
+- api.strings.sp_str_t.comparison
+- api.os.formatting

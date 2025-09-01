@@ -31,3 +31,8 @@ void report_task_complete(build_task_t* task) {
   sp_log(status);
 }
 ```
+
+# Tags
+- api.logging
+- api.os.formatting
+- api.os.time

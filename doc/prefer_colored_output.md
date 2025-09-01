@@ -24,3 +24,8 @@ sp_log(error);
 printf("Built: %s\n", target);
 printf("Error: %s\n", file);
 ```
+
+# Tags
+- api.logging
+- api.os.formatting
+- usage.general

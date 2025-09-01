@@ -19,3 +19,8 @@ sp_str_t version_str = sp_format(
   SP_FMT_STR(build_id)
 );
 ```
+
+# Tags
+- api.hashing
+- api.strings.sp_str_t.common_operations
+- api.os.formatting

@@ -36,3 +36,7 @@ for (int i = 0; i < 3; i++) {
     padded[i] = sp_str_pad(lines[i], 20);
 }
 ```
+
+# Tags
+- api.strings.sp_str_t.map
+- api.sp_dynamic_array_t

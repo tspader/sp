@@ -36,3 +36,9 @@ if (strlen(path) > 4 && strcmp(path + strlen(path) - 4, ".txt") == 0) {
     without_ext[strlen(path) - 4] = '\0';
 }
 ```
+
+# Tags
+- api.strings.sp_str_t.copy
+- api.strings.sp_str_t.common_operations
+- api.os.filesystem
+- api.sp_dynamic_array_t

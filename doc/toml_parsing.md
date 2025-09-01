@@ -43,3 +43,9 @@ while (fgets(line, sizeof(line), f)) {
 }
 fclose(f);
 ```
+
+# Tags
+- api.strings.cstr
+- api.strings.sp_str_t.copy
+- api.strings.sp_str_builder_t
+- api.os.filesystem

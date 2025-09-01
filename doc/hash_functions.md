@@ -30,3 +30,7 @@ int find_in_cache(const char* path) {
     return -1;
 }
 ```
+
+# Tags
+- api.hashing
+- api.strings.cstr

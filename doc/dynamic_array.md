@@ -33,3 +33,6 @@ for (int i = 0; i < file_count; i++) {
     compile_file(files[i]);
 }
 ```
+
+# Tags
+- api.sp_dynamic_array_t

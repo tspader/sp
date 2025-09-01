@@ -17,3 +17,8 @@ bool load_optional_config(sp_str_t path) {
   return true;
 }
 ```
+
+# Tags
+- api.os.filesystem
+- api.logging
+- usage.general

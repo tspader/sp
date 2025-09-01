@@ -34,3 +34,10 @@ for (int i = 0; i < token_count; i++) {
 }
 free(tokens);
 ```
+
+# Tags
+- api.memory
+- api.sp_context_t
+- api.sp_dynamic_array_t
+- api.containers
+- api.strings.sp_str_t.copy

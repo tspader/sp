@@ -26,3 +26,6 @@ if (filename) filename++;
 
 char* ext = strrchr(filename, '.');
 ```
+
+# Tags
+- api.os.filesystem

@@ -34,3 +34,8 @@ sp_str_t status = sp_format("{}{}{}",
     SP_FMT_STR(status_text),
     SP_FMT_COLOR(SP_ANSI_RESET));
 ```
+
+# Tags
+- api.strings.sp_str_builder_t
+- api.logging
+- api.os.formatting

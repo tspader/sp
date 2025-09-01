@@ -41,3 +41,6 @@ void spn_project_build(spn_project_t* project) {
   tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
 }
 ```
+
+# Tags
+- usage.general

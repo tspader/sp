@@ -44,3 +44,10 @@ sp_str_t base_path = sp_str_from_cstr(SDL_GetBasePath());
 char* path = getenv("PATH");
 setenv("CUSTOM_VAR", "value", 1);
 ```
+
+# Tags
+- api.strings.cstr
+- api.strings.sp_str_t.copy
+- api.os
+- api.os.formatting
+- usage.general

@@ -25,3 +25,7 @@ bool dispatch_command(sp_str_t cmd_name, app_t* app) {
   return false;
 }
 ```
+
+# Tags
+- api.strings.sp_str_t.comparison
+- api.logging

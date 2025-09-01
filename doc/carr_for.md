@@ -31,3 +31,6 @@ for (int i = 0; i < 3; i++) {
     }
 }
 ```
+
+# Tags
+- usage.general

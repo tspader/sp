@@ -44,3 +44,6 @@ printf("count = %d\n", count);
 typedef struct window_impl_t* window_t;
 typedef struct renderer_impl_t* renderer_t;
 ```
+
+# Tags
+- usage.general

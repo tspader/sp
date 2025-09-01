@@ -37,3 +37,8 @@ while (running) {
     read(fd, events, sizeof(events));
 #endif
 ```
+
+# Tags
+- api.file_monitor
+- api.strings.sp_str_t.common_operations
+- api.os.time

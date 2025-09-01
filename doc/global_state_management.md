@@ -25,3 +25,6 @@ void spn_tui_update_noninteractive(spn_tui_t* tui, spn_build_context_t* context)
 // Called from build function:
 spn_tui_update_noninteractive(&tui, &context);
 ```
+
+# Tags
+- usage.general

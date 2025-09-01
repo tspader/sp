@@ -22,3 +22,7 @@ if (!file_exists(path)) {
 
 assert(config_file != NULL);
 ```
+
+# Tags
+- api.logging
+- usage.general

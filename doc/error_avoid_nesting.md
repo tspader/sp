@@ -55,3 +55,8 @@ bool process_file(sp_str_t path) {
   return success;
 }
 ```
+
+# Tags
+- api.strings.cstr
+- api.logging
+- usage.general

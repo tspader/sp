@@ -27,3 +27,6 @@ if (input_char == dep->confirm_keys[0] ||
 // Declaring array with magic number
 c8 confirm_keys[3];
 ```
+
+# Tags
+- usage.general

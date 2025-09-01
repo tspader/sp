@@ -42,3 +42,7 @@ void log_error(const char* file, int line, const char* msg) {
 #define LOG_DEBUG(msg) \
     printf("[DEBUG] %s (%s:%d)\n", msg, __FILE__, __LINE__)
 ```
+
+# Tags
+- api.logging
+- api.os.formatting

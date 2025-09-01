@@ -40,3 +40,7 @@ int compare_strings(const void* a, const void* b) {
 }
 qsort(files, file_count, sizeof(char*), compare_strings);
 ```
+
+# Tags
+- api.strings.sp_str_t.comparison
+- api.sp_dynamic_array_t

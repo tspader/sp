@@ -38,3 +38,7 @@ for (int i = 0; i < table_size; i++) {
     }
 }
 ```
+
+# Tags
+- api.containers
+- api.hashing

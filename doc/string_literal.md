@@ -20,3 +20,8 @@ sp_str_t delimiter = sp_str(delim, strlen(delim));
 
 sp_str_builder_append_cstr(&builder, "Error: ");
 ```
+
+# Tags
+- api.strings.sp_str_t.copy
+- api.strings.sp_str_builder_t
+- api.strings.sp_str_t.comparison

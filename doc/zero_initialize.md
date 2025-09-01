@@ -25,3 +25,10 @@ complex_data_t data;
 data.count = 0;
 data.values = NULL;
 ```
+
+# Tags
+- api.file_monitor
+- api.strings.sp_str_builder_t
+- api.sp_ring_buffer_t
+- api.os.threading
+- usage.general

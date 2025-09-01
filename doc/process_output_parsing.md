@@ -25,3 +25,9 @@ if (output && return_code == 0) {
 
 SDL_free(output);
 ```
+
+# Tags
+- api.strings.sp_str_t.copy
+- api.strings.sp_str_t.common_operations
+- api.sp_dynamic_array_t
+- api.logging

@@ -30,3 +30,7 @@ sp_str_t format_size(u64 bytes) {
   );
 }
 ```
+
+# Tags
+- api.os.formatting
+- usage.general

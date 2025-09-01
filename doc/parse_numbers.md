@@ -35,3 +35,6 @@ sscanf(hex_color, "%x", &color);
 char* fps_str = "60.5";
 float fps = atof(fps_str);
 ```
+
+# Tags
+- api.os.parsing

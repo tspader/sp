@@ -48,3 +48,9 @@ void process_config(const char* config_path) {
     }
 }
 ```
+
+# Tags
+- api.strings.cstr
+- api.strings.sp_str_t.copy
+- api.os.filesystem
+- usage.general

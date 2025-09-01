@@ -33,3 +33,9 @@ return result;
 
 sp_str_t substr = { end - start, str.data + start };
 ```
+
+# Tags
+- api.strings.sp_str_t.copy
+- api.os.time
+- api.os.filesystem
+- usage.general

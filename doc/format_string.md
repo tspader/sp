@@ -30,3 +30,6 @@ snprintf(path, PATH_MAX, "%s/%s", base_dir, filename);
 char quoted[512];
 sprintf(quoted, "Error in file \"%s\"", filename);
 ```
+
+# Tags
+- api.os.formatting
