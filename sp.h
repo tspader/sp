@@ -1,4 +1,3 @@
-
 #ifndef SP_SPACE_H
 #define SP_SPACE_H
 
@@ -648,8 +647,6 @@ SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 #define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .len = (u32)(LEN), .data = (const c8*)(STR) }
 #define SP_STR(STR, LEN) sp_str(STR, LEN)
 #define SP_LIT(STR) sp_str_lit(STR)
-#define SP_SUBSTR(STR, INDEX, LEN) sp_str((STR).data + (INDEX), LEN)
-#define SP_SUBSTR_END(STR, LEN) sp_str((STR).data + (STR).len - (LEN), LEN)
 
 SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
 SP_API void     sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
@@ -681,14 +678,15 @@ SP_API sp_str_t               sp_str_from_cstr_null(const c8* str);
 SP_API sp_str_t               sp_str_alloc(u32 capacity);
 SP_API bool                   sp_str_equal(sp_str_t a, sp_str_t b);
 SP_API bool                   sp_str_equal_cstr(sp_str_t a, const c8* b);
-SP_API bool                   sp_str_ends_with(sp_str_t a, sp_str_t b);
+SP_API bool                   sp_str_starts_with(sp_str_t str, sp_str_t prefix);
+SP_API bool                   sp_str_ends_with(sp_str_t str, sp_str_t suffix);
 SP_API bool                   sp_str_valid(sp_str_t str);
 SP_API c8                     sp_str_at(sp_str_t str, s32 index);
 SP_API c8                     sp_str_at_reverse(sp_str_t str, s32 index);
 SP_API c8                     sp_str_back(sp_str_t str);
 SP_API s32                    sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
-SP_API sp_str_t               sp_str_sub(sp_str_t str, u32 index, u32 len);
-SP_API sp_str_t               sp_str_sub_reverse(sp_str_t str, u32 index, u32 len);
+SP_API sp_str_t               sp_str_sub(sp_str_t str, s32 index, s32 len);
+SP_API sp_str_t               sp_str_sub_reverse(sp_str_t str, s32 index, s32 len);
 SP_API sp_str_t               sp_str_concat(sp_str_t a, sp_str_t b);
 SP_API sp_str_t               sp_str_replace_c8(sp_str_t str, c8 from, c8 to);
 SP_API sp_str_t               sp_str_pad(sp_str_t str, u32 n);
@@ -2767,10 +2765,16 @@ bool sp_str_equal_cstr(sp_str_t a, const c8* b) {
   return sp_os_is_memory_equal(a.data, b, len);
 }
 
-bool sp_str_ends_with(sp_str_t haystack, sp_str_t needle) {
-  if (haystack.len < needle.len) return false;
+bool sp_str_starts_with(sp_str_t str, sp_str_t prefix) {
+  if (str.len < prefix.len) return false;
 
-  return sp_str_equal(SP_SUBSTR_END(haystack, needle.len), needle);
+  return sp_str_equal(sp_str_sub(str, 0, prefix.len), prefix);
+}
+
+bool sp_str_ends_with(sp_str_t str, sp_str_t suffix) {
+  if (str.len < suffix.len) return false;
+
+  return sp_str_equal(sp_str_sub_reverse(str, 0, suffix.len), suffix);
 }
 
 s32 sp_str_sort_kernel_alphabetical(const void* a, const void* b) {
@@ -2837,12 +2841,20 @@ sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) 
   return sp_str_builder_write(&builder);
 }
 
-sp_str_t sp_str_sub(sp_str_t str, u32 index, u32 len) {
+sp_str_t sp_str_sub(sp_str_t str, s32 index, s32 len) {
   sp_str_t substr = {
-    .len = len,
+    .len = (u32)len,
     .data = str.data + index
   };
   SP_ASSERT(index + len <= str.len);
+  return substr;
+}
+
+sp_str_t sp_str_sub_reverse(sp_str_t str, s32 index, s32 len) {
+  sp_str_t substr = {
+    .len = (u32)len,
+    .data = str.data + str.len + index - len
+  };
   return substr;
 }
 
@@ -3450,13 +3462,13 @@ sp_str_t sp_os_extract_extension(sp_str_t path) {
     c8 c = sp_str_at_reverse(path, index);
 
     switch (c) {
-      case '.': return SP_SUBSTR_END(path, index);
-      case '/': return SP_SUBSTR_END(path, 0);
+      case '.': return sp_str_sub_reverse(path, 0, index);
+      case '/': return sp_str_sub_reverse(path, 0, 0);
       default:  break;
     }
   }
 
-  return SP_SUBSTR_END(path, 0);
+  return sp_str_sub_reverse(path, 0, 0);
 }
 
 sp_str_t sp_os_extract_stem(sp_str_t path) {

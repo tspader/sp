@@ -935,6 +935,12 @@ UTEST(sp_str_equal, string_comparison) {
   ASSERT_FALSE(sp_str_equal(str1, long_str));
 }
 
+UTEST(sp_str_sub, substrings) {
+  sp_str_t str = SP_LIT("Jerry Garcia");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_sub(str, 0, 5), "Jerry");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_sub(str, 6, 6), "Garcia");
+}
+
 UTEST(sp_str_sort_kernel_alphabetical, sorting_tests) {
   sp_test_use_malloc();
 
