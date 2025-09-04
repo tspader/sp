@@ -1,0 +1,12 @@
+[[package]]
+name = "sdl3"
+git_url = "git@github.com:libsdl-org/SDL.git"
+git_commit = "a9b5a1e785"
+build_id = "928714c9"
+
+[[package]]
+name = "utest"
+git_url = "git@github.com:sheredom/utest.h.git"
+git_commit = "fb622dc480"
+build_id = "b1d3b34a"
+

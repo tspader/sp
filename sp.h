@@ -477,7 +477,7 @@ typedef struct sp_dyn_array {
 
 void* sp_dyn_array_resize_impl(void* arr, u32 sz, u32 amount);
 void** sp_dyn_array_init(void** arr, u32 val_len);
-void sp_dyn_array_push_data(void** arr, void* val, u32 val_len);
+void sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
 
 #define sp_dyn_array(T) T*
 #define sp_dyn_array_head(__ARR)
@@ -1629,23 +1629,21 @@ void** sp_dyn_array_init(void** arr, u32 val_len) {
     return arr;
 }
 
-void sp_dyn_array_push_data(void** arr, void* val, u32 val_len) {
-    if (*arr == NULL) {
-        sp_dyn_array_init(arr, val_len);
-    }
-    if (sp_dyn_array_need_grow(*arr, 1)) {
-        s32 capacity = sp_dyn_array_capacity(*arr) * 2;
-
-        sp_dyn_array* data = (sp_dyn_array*)sp_realloc(sp_dyn_array_head(*arr), capacity * val_len + sizeof(sp_dyn_array));
-
-        if (data) {
-            data->capacity = capacity;
-            *arr = ((s32*)data + 2);
+void sp_dyn_array_push_f(void** arr, void* val, u32 val_len) {
+    sp_dyn_array_init(arr, val_len);
+    if (!(*arr) || sp_dyn_array_need_grow(*arr, 1)) {
+        u32 new_capacity = sp_dyn_array_capacity(*arr);
+        if (new_capacity == 0) {
+            new_capacity = 1;
+        } else {
+            new_capacity *= 2;
         }
+        *arr = sp_dyn_array_resize_impl(*arr, val_len, new_capacity);
     }
-    u32 offset = sp_dyn_array_size(*arr);
-    sp_os_copy_memory(val, ((u8*)(*arr)) + offset * val_len, val_len);
-    sp_dyn_array_head(*arr)->size++;
+    if (*arr) {
+        sp_os_copy_memory(val, ((u8*)(*arr)) + sp_dyn_array_size(*arr) * val_len, val_len);
+        sp_dyn_array_head(*arr)->size++;
+    }
 }
 
 bool sp_parse_u64_ex(sp_str_t str, u64* out) {
