@@ -18,7 +18,7 @@ CMAKE_TYPE := Debug
 ##################
 # COMPILER FLAGS #
 ##################
-SP_FLAG_INCLUDES := $(shell spn flags include) $(shell spn flags lib-include) $(shell spn flags libs)
+SP_FLAG_INCLUDES := $(shell spn print --compiler gcc)
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
 SP_FLAG_LINKER := -lpthread -lm
 SP_FLAG_OPTIMIZATION := -g

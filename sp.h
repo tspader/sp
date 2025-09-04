@@ -1170,8 +1170,8 @@ typedef struct sp_asset_registry {
 } sp_asset_registry_t;
 
 void                  sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config);
-sp_future_t*          sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, void* user_data);
-sp_asset_t            sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name);
+sp_future_t*          sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, void* user_data);
+sp_asset_t*           sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name);
 void                  sp_asset_registry_process_completions(sp_asset_registry_t* registry);
 sp_asset_t*           sp_asset_registry_reserve(sp_asset_registry_t* registry);
 sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind);
@@ -5040,7 +5040,7 @@ sp_asset_t* sp_asset_registry_reserve(sp_asset_registry_t* registry) {
   return sp_dyn_array_back(registry->assets);
 }
 
-sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, void* user_data) {
+sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, void* user_data) {
   sp_asset_import_context_t context = {
     .registry = registry,
     .importer = sp_asset_registry_find_importer(registry, kind),
@@ -5051,6 +5051,7 @@ sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_ki
   SP_ASSERT(context.importer);
 
   context.asset->kind = kind;
+  context.asset->name = name;
   context.asset->state = SP_ASSET_STATE_QUEUED;
 
   sp_mutex_lock(&registry->import_mutex);
@@ -5062,8 +5063,15 @@ sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_ki
   return context.future;
 }
 
-sp_asset_t sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name) {
-  return SP_ZERO_STRUCT(sp_asset_t);
+sp_asset_t* sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name) {
+  sp_dyn_array_for(registry->assets, index) {
+    sp_asset_t* asset = registry->assets + index;
+    if (asset->kind == kind && !sp_str_equal(asset->name, name)) {
+      return asset;
+    }
+  }
+
+  return SP_NULLPTR;
 }
 
 sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind) {
