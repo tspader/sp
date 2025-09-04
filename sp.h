@@ -44,6 +44,10 @@
 #endif
 
 #ifdef SP_POSIX
+  #ifndef _POSIX_C_SOURCE
+    #define _POSIX_C_SOURCE 200809L
+  #endif
+
   #ifndef _GNU_SOURCE
     #define _GNU_SOURCE
   #endif
@@ -138,6 +142,9 @@
 #include "stdarg.h"
 #include "stdbool.h"
 
+#if defined(SP_POSIX) && defined(strnlen)
+  #undef SP_STRNLEN
+#endif
 
 
 // ███╗   ███╗ █████╗  ██████╗██████╗  ██████╗ ███████╗
@@ -663,6 +670,7 @@ SP_API c8*                    sp_cstr_copy_sized(const c8* str, u32 length);
 SP_API void                   sp_cstr_copy_to_sized(const c8* str, u32 length, c8* buffer, u32 buffer_length);
 SP_API bool                   sp_cstr_equal(const c8* a, const c8* b);
 SP_API u32                    sp_cstr_len(const c8* str);
+SP_API u32                    sp_cstr_len_sized(const c8* str, u32 n);
 SP_API c8*                    sp_wstr_to_cstr(c16* str, u32 len);
 SP_API c8*                    sp_str_to_cstr(sp_str_t str);
 SP_API c8*                    sp_str_to_cstr_double_nt(sp_str_t str);
@@ -847,6 +855,10 @@ void sp_log_raw(sp_str_t fmt, ...);
   typedef struct {
     void* placeholder;
   } sp_os_file_monitor_t;
+#endif
+
+#ifdef SP_STRNLEN
+  size_t strnlen(const char* str, size_t n);
 #endif
 
 typedef enum {
@@ -2728,6 +2740,15 @@ u32 sp_cstr_len(const c8* str) {
   return len;
 }
 
+u32 sp_cstr_len_sized(const c8* str, u32 n) {
+  u32 len = 0;
+  if (str) {
+    while (len < n && str[len]) len++;
+  }
+
+  return len;
+}
+
 c8* sp_wstr_to_cstr(c16* str16, u32 len) {
   return sp_os_wstr_to_cstr(str16, len);
 }
@@ -4463,6 +4484,20 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     SDL_SignalSemaphore((SDL_Semaphore*)*semaphore);
+  }
+#endif
+
+
+///////////
+// SHIMS //
+///////////
+#ifdef SP_STRNLEN
+  size_t strnlen(const c8* str, size_t n) {
+    size_t len = 0;
+    while (len < n && str[len]) {
+        ++len;
+    }
+    return len;
   }
 #endif
 
