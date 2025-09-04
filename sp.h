@@ -244,7 +244,7 @@
 #define SP_SWITCH_ENUM_TO_CSTR(NAME)         case NAME: { return SP_MACRO_STR(NAME); }
 #define SP_SWITCH_ENUM_TO_STRING(NAME)       case NAME: { return SP_LIT(SP_MACRO_STR(NAME)); }
 #define SP_SWITCH_ENUM_TO_STRING_UPPER(NAME) case NAME: { return sp_str_to_upper(SP_LIT(SP_MACRO_STR(NAME))); }
-#define SP_SWITCH_ENUM_TO_STRING_LOWER(NAME) case NAME: { return sp_srt_to_lower(SP_LIT(SP_MACRO_STR(NAME))); }
+#define SP_SWITCH_ENUM_TO_STRING_LOWER(NAME) case NAME: { return sp_str_to_lower(SP_LIT(SP_MACRO_STR(NAME))); }
 
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
