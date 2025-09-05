@@ -3420,6 +3420,20 @@ sp_str_t sp_os_normalize_path(sp_str_t path) {
     }
   }
 
+
+  if (path.len) {
+    switch (sp_str_back(path)) {
+      case '/':
+      case '\\': {
+        builder.buffer.count--;
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  }
+
   return sp_str_builder_write(&builder);
 }
 
