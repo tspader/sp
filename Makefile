@@ -29,13 +29,12 @@ SP_FLAG_INCLUDES := $(shell spn print --compiler gcc)
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
 SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
 SP_FLAG_OPTIMIZATION := -g
-SP_FLAG_DEFINES := -DSP_IMPLEMENTATION
 ifeq ($(UNAME), Darwin)
 	SP_FLAG_RPATH := -Wl,-rpath,'@loader_path'
 else ifeq ($(UNAME), Linux)
 	SP_FLAG_RPATH := -Wl,-rpath,$$ORIGIN
 endif
-SP_FLAGS_COMMON := $(SP_FLAG_INCLUDES) $(SP_FLAG_WARNINGS) $(SP_FLAG_LINKER) $(SP_FLAG_RPATH) $(SP_FLAG_DEFINES) $(SP_FLAG_OPTIMIZATION)
+SP_FLAGS_COMMON := $(SP_FLAG_INCLUDES) $(SP_FLAG_WARNINGS) $(SP_FLAG_LINKER) $(SP_FLAG_RPATH) $(SP_FLAG_OPTIMIZATION)
 
 
 # C
