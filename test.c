@@ -2291,6 +2291,141 @@ UTEST(sp_format, edge_cases) {
   SP_EXPECT_STR_EQ_CSTR(result, "zeros: 0 0 0.000 0");
 }
 
+//////////////////////////////
+// FORMAT PARSER TESTS      //
+//////////////////////////////
+
+UTEST(sp_format_parser, basic_placeholders) {
+  sp_test_use_malloc();
+
+  // Test parsing simple placeholders
+  sp_format_parser_t parser = SP_ZERO_INITIALIZE();
+  parser.fmt = SP_LIT("{}");
+  parser.it = 0;
+
+  ASSERT_EQ(sp_format_parser_peek(&parser), '{');
+  sp_format_parser_eat(&parser);
+  ASSERT_EQ(sp_format_parser_peek(&parser), '}');
+  sp_format_parser_eat(&parser);
+  ASSERT_TRUE(sp_format_parser_is_done(&parser));
+
+  // Test multiple placeholders
+  parser.fmt = SP_LIT("{} and {}");
+  parser.it = 0;
+
+  ASSERT_EQ(sp_format_parser_peek(&parser), '{');
+  sp_format_parser_eat(&parser);
+  ASSERT_EQ(sp_format_parser_peek(&parser), '}');
+  sp_format_parser_eat(&parser);
+  ASSERT_EQ(sp_format_parser_peek(&parser), ' ');
+
+  // Skip to next placeholder
+  while (parser.it < parser.fmt.len && sp_format_parser_peek(&parser) != '{') {
+    sp_format_parser_eat(&parser);
+  }
+
+  ASSERT_EQ(sp_format_parser_peek(&parser), '{');
+  sp_format_parser_eat(&parser);
+  ASSERT_EQ(sp_format_parser_peek(&parser), '}');
+}
+
+UTEST(sp_format_parser, alpha_detection) {
+  sp_test_use_malloc();
+
+  sp_format_parser_t parser = SP_ZERO_INITIALIZE();
+
+  // Test alphabetic characters
+  parser.fmt = SP_LIT("abc");
+  parser.it = 0;
+  ASSERT_TRUE(sp_format_parser_is_alpha(&parser));
+
+  parser.fmt = SP_LIT("123");
+  parser.it = 0;
+  ASSERT_FALSE(sp_format_parser_is_alpha(&parser));
+
+  parser.fmt = SP_LIT("_test");
+  parser.it = 0;
+  ASSERT_FALSE(sp_format_parser_is_alpha(&parser)); // underscore is NOT alpha
+
+  parser.fmt = SP_LIT(" space");
+  parser.it = 0;
+  ASSERT_FALSE(sp_format_parser_is_alpha(&parser));
+}
+
+UTEST(sp_format_parser, identifier_parsing) {
+  sp_test_use_malloc();
+
+  sp_format_parser_t parser = SP_ZERO_INITIALIZE();
+
+  // Parse simple identifier
+  parser.fmt = SP_LIT("color red");
+  parser.it = 0;
+
+  sp_str_t id = sp_format_parser_id(&parser);
+  SP_EXPECT_STR_EQ_CSTR(id, "color");
+
+  // Skip space
+  sp_format_parser_eat(&parser);
+
+  id = sp_format_parser_id(&parser);
+  SP_EXPECT_STR_EQ_CSTR(id, "red");
+
+  // Identifiers stop at underscore or numbers
+  parser.fmt = SP_LIT("my_var_123");
+  parser.it = 0;
+
+  id = sp_format_parser_id(&parser);
+  SP_EXPECT_STR_EQ_CSTR(id, "my");
+}
+
+UTEST(sp_format_parser, edge_cases) {
+  sp_test_use_malloc();
+
+  sp_format_parser_t parser = SP_ZERO_INITIALIZE();
+
+  // Empty format string
+  parser.fmt = SP_LIT("");
+  parser.it = 0;
+  ASSERT_TRUE(sp_format_parser_is_done(&parser));
+
+  // Index at end
+  parser.fmt = SP_LIT("test");
+  parser.it = 4;
+  ASSERT_TRUE(sp_format_parser_is_done(&parser));
+
+  // Index beyond end (shouldn't happen but test safety)
+  parser.fmt = SP_LIT("test");
+  parser.it = 10;
+  ASSERT_TRUE(sp_format_parser_is_done(&parser));
+}
+
+UTEST(sp_format_parser, peek_and_eat) {
+  sp_test_use_malloc();
+
+  sp_format_parser_t parser = SP_ZERO_INITIALIZE();
+  parser.fmt = SP_LIT("abc");
+  parser.it = 0;
+
+  // Peek doesn't advance
+  ASSERT_EQ(sp_format_parser_peek(&parser), 'a');
+  ASSERT_EQ(parser.it, 0);
+  ASSERT_EQ(sp_format_parser_peek(&parser), 'a');
+  ASSERT_EQ(parser.it, 0);
+
+  // Eat advances
+  sp_format_parser_eat(&parser);
+  ASSERT_EQ(parser.it, 1);
+  ASSERT_EQ(sp_format_parser_peek(&parser), 'b');
+
+  sp_format_parser_eat(&parser);
+  ASSERT_EQ(parser.it, 2);
+  ASSERT_EQ(sp_format_parser_peek(&parser), 'c');
+
+  sp_format_parser_eat(&parser);
+  ASSERT_EQ(parser.it, 3);
+  ASSERT_TRUE(sp_format_parser_is_done(&parser));
+}
+
 // Commented out - color code format syntax causes assertion failure
 // UTEST(sp_format, color_codes) {
 //   sp_test_use_malloc();
