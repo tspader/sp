@@ -1,3 +1,12 @@
+BUILD_TYPE := debug
+CMAKE_TYPE := Debug
+UNAME := $(shell uname)
+ifeq ($(UNAME), Darwin)
+  DLL_EXTENSION := dylib
+else ifeq ($(UNAME), Linux)
+	DLL_EXTENSION := so
+endif
+
 #########
 # PATHS #
 #########
@@ -12,17 +21,22 @@ SP_COMPILE_DB := compile_commands.json
 SP_CLANGD := .clangd
 SP_SP_H := sp.h
 
-BUILD_TYPE := debug
-CMAKE_TYPE := Debug
 
 ##################
 # COMPILER FLAGS #
 ##################
 SP_FLAG_INCLUDES := $(shell spn print --compiler gcc)
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
-SP_FLAG_LINKER := -lpthread -lm
+SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
 SP_FLAG_OPTIMIZATION := -g
-SP_FLAGS_COMMON := $(SP_FLAG_INCLUDES) $(SP_FLAG_WARNINGS) $(SP_FLAG_LINKER) $(SP_FLAG_OPTIMIZATION)
+SP_FLAG_DEFINES := -DSP_IMPLEMENTATION
+ifeq ($(UNAME), Darwin)
+	SP_FLAG_RPATH := -Wl,-rpath,'@loader_path'
+else ifeq ($(UNAME), Linux)
+	SP_FLAG_RPATH := -Wl,-rpath,$$ORIGIN
+endif
+SP_FLAGS_COMMON := $(SP_FLAG_INCLUDES) $(SP_FLAG_WARNINGS) $(SP_FLAG_LINKER) $(SP_FLAG_RPATH) $(SP_FLAG_DEFINES) $(SP_FLAG_OPTIMIZATION)
+
 
 # C
 CC := gcc
@@ -59,7 +73,7 @@ $(SP_DIR_BUILD_SDL):
 	@mkdir -p $(SP_DIR_BUILD_SDL)
 
 $(SP_OUTPUT_CPP): $(SP_SOURCE_FILES) $(SP_SP_H) | $(SP_DIR_BUILD_OUTPUT)
-	$(CPP) $(SP_FLAGS_CPP) $(SP_SOURCE_FILES) -o $(SP_OUTPUT_CPP)
+	$(CPP) $(SP_FLAGS_CPP) -x c++ test.c -o $(SP_OUTPUT_CPP)
 
 $(SP_OUTPUT_C): $(SP_SOURCE_FILES) $(SP_SP_H) | $(SP_DIR_BUILD_OUTPUT)
 	$(CC) $(SP_FLAGS_CC) $(SP_SOURCE_FILES) -o $(SP_OUTPUT_C)
