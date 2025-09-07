@@ -1027,11 +1027,7 @@ typedef struct sp_formatter {
 } sp_formatter_t;
 
 
-#ifdef SP_CPP
-  #define SP_FMT_ARG(T, V) sp_make_format_arg(SP_FMT_ID(T), (V))
-#else
-  #define SP_FMT_ARG(T, V) SP_RVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .SP_FMT_UNION(T) = (V) }
-#endif
+#define SP_FMT_ARG(T, V) SP_RVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .SP_FMT_UNION(T) = (V) }
 
 #define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
 #define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
@@ -1203,7 +1199,7 @@ SP_END_EXTERN_C()
   sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
     sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
     result.id = id;
-    sp_os_copy_memory(&data, &result.u8_value, sizeof(T));
+    sp_os_copy_memory(&data, &result.u8_value, sizeof(data));
 
     return result;
   }

@@ -536,6 +536,9 @@ UTEST(sp_fmt, string_types) {
   const c8* cstr_val = "c string";
   result = sp_format("cstr: {}", SP_FMT_CSTR(cstr_val));
   SP_EXPECT_STR_EQ_CSTR(result, "cstr: c string");
+
+  result = sp_format("literal: {}", SP_FMT_CSTR("literal"));
+  SP_EXPECT_STR_EQ_CSTR(result, "literal: literal");
 }
 
 UTEST(sp_fmt, character_types) {
@@ -1109,7 +1112,7 @@ UTEST(path_functions, normalize_path) {
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\");
     sp_str_t copy = sp_os_normalize_path(path);
-    SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/");
+    SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test");
   }
 }
 
@@ -1537,40 +1540,40 @@ UTEST(dyn_array, edge_cases) {
 
 UTEST(sp_dyn_array_push_f, basic_int_push) {
     sp_test_use_malloc();
-    
+
     int* arr = SP_NULLPTR;
-    
+
     ASSERT_EQ(sp_dyn_array_size(arr), 0);
     ASSERT_EQ(sp_dyn_array_capacity(arr), 0);
-    
+
     int val1 = 42;
     sp_dyn_array_push_f((void**)&arr, &val1, sizeof(int));
-    
+
     ASSERT_NE(arr, SP_NULLPTR);
     ASSERT_EQ(sp_dyn_array_size(arr), 1);
     ASSERT_GE(sp_dyn_array_capacity(arr), 1);
     ASSERT_EQ(arr[0], 42);
-    
+
     int val2 = 69;
     sp_dyn_array_push_f((void**)&arr, &val2, sizeof(int));
     ASSERT_EQ(sp_dyn_array_size(arr), 2);
     ASSERT_EQ(arr[1], 69);
-    
+
     int val3 = 420;
     sp_dyn_array_push_f((void**)&arr, &val3, sizeof(int));
     ASSERT_EQ(sp_dyn_array_size(arr), 3);
     ASSERT_EQ(arr[2], 420);
-    
+
     ASSERT_EQ(arr[0], 42);
     ASSERT_EQ(arr[1], 69);
     ASSERT_EQ(arr[2], 420);
-    
+
     sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, different_types) {
     sp_test_use_malloc();
-    
+
     {
         u8* arr = SP_NULLPTR;
         for (u8 i = 0; i < 10; i++) {
@@ -1582,7 +1585,7 @@ UTEST(sp_dyn_array_push_f, different_types) {
         }
         sp_dyn_array_free(arr);
     }
-    
+
     {
         u16* arr = SP_NULLPTR;
         u16 vals[] = {100, 200, 300, 400, 500};
@@ -1595,7 +1598,7 @@ UTEST(sp_dyn_array_push_f, different_types) {
         }
         sp_dyn_array_free(arr);
     }
-    
+
     {
         u64* arr = SP_NULLPTR;
         u64 val = 0xDEADBEEFCAFEBABE;
@@ -1604,7 +1607,7 @@ UTEST(sp_dyn_array_push_f, different_types) {
         ASSERT_EQ(arr[0], 0xDEADBEEFCAFEBABE);
         sp_dyn_array_free(arr);
     }
-    
+
     {
         float* arr = SP_NULLPTR;
         float vals[] = {3.14f, 2.71f, 1.41f};
@@ -1621,157 +1624,157 @@ UTEST(sp_dyn_array_push_f, different_types) {
 
 UTEST(sp_dyn_array_push_f, struct_type) {
     sp_test_use_malloc();
-    
+
     typedef struct {
         int id;
         float value;
         u8 flags;
     } test_struct_t;
-    
+
     test_struct_t* arr = SP_NULLPTR;
-    
+
     test_struct_t item1 = {.id = 1, .value = 3.14f, .flags = 0xFF};
     sp_dyn_array_push_f((void**)&arr, &item1, sizeof(test_struct_t));
-    
+
     test_struct_t item2 = {.id = 2, .value = 2.71f, .flags = 0x42};
     sp_dyn_array_push_f((void**)&arr, &item2, sizeof(test_struct_t));
-    
+
     test_struct_t item3 = {.id = 3, .value = 1.41f, .flags = 0x69};
     sp_dyn_array_push_f((void**)&arr, &item3, sizeof(test_struct_t));
-    
+
     ASSERT_EQ(sp_dyn_array_size(arr), 3);
-    
+
     ASSERT_EQ(arr[0].id, 1);
     ASSERT_NEAR(arr[0].value, 3.14f, 0.001f);
     ASSERT_EQ(arr[0].flags, 0xFF);
-    
+
     ASSERT_EQ(arr[1].id, 2);
     ASSERT_NEAR(arr[1].value, 2.71f, 0.001f);
     ASSERT_EQ(arr[1].flags, 0x42);
-    
+
     ASSERT_EQ(arr[2].id, 3);
     ASSERT_NEAR(arr[2].value, 1.41f, 0.001f);
     ASSERT_EQ(arr[2].flags, 0x69);
-    
+
     sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, growth_behavior) {
     sp_test_use_malloc();
-    
+
     int* arr = SP_NULLPTR;
-    
+
     for (int i = 0; i < 100; i++) {
         sp_dyn_array_push_f((void**)&arr, &i, sizeof(int));
     }
-    
+
     ASSERT_EQ(sp_dyn_array_size(arr), 100);
     ASSERT_GE(sp_dyn_array_capacity(arr), 100);
-    
+
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(arr[i], i);
     }
-    
+
     s32 old_capacity = sp_dyn_array_capacity(arr);
     int val = 1000;
     // Fill up to capacity - 1 (because pushing when size == capacity - 1 will trigger growth)
     while (sp_dyn_array_size(arr) < sp_dyn_array_capacity(arr) - 1) {
         sp_dyn_array_push_f((void**)&arr, &val, sizeof(int));
     }
-    
+
     // Now we're at capacity - 1, next push should trigger growth
     sp_dyn_array_push_f((void**)&arr, &val, sizeof(int));
     ASSERT_GT(sp_dyn_array_capacity(arr), old_capacity);
-    
+
     sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, alignment_test) {
     sp_test_use_malloc();
-    
+
     typedef struct {
         u8 a;
         u64 b;
         u8 c;
     } aligned_struct_t;
-    
+
     aligned_struct_t* arr = SP_NULLPTR;
-    
+
     for (int i = 0; i < 10; i++) {
         aligned_struct_t item = {.a = (u8)i, .b = (u64)(i * 1000), .c = (u8)(255 - i)};
         sp_dyn_array_push_f((void**)&arr, &item, sizeof(aligned_struct_t));
     }
-    
+
     ASSERT_EQ(sp_dyn_array_size(arr), 10);
-    
+
     for (int i = 0; i < 10; i++) {
         ASSERT_EQ(arr[i].a, i);
         ASSERT_EQ(arr[i].b, i * 1000);
         ASSERT_EQ(arr[i].c, 255 - i);
     }
-    
+
     sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, zero_initialization) {
     sp_test_use_malloc();
-    
+
     typedef struct {
         int values[10];
     } big_struct_t;
-    
+
     big_struct_t* arr = SP_NULLPTR;
     big_struct_t zero_struct = {0};
-    
+
     for (int i = 0; i < 5; i++) {
         sp_dyn_array_push_f((void**)&arr, &zero_struct, sizeof(big_struct_t));
     }
-    
+
     ASSERT_EQ(sp_dyn_array_size(arr), 5);
-    
+
     for (int i = 0; i < 5; i++) {
         for (int j = 0; j < 10; j++) {
             ASSERT_EQ(arr[i].values[j], 0);
         }
     }
-    
+
     sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, mixed_with_macros) {
     sp_test_use_malloc();
-    
+
     int* arr = SP_NULLPTR;
-    
+
     int val1 = 10;
     sp_dyn_array_push_f((void**)&arr, &val1, sizeof(int));
-    
+
     sp_dyn_array_push(arr, 20);
-    
+
     int val3 = 30;
     sp_dyn_array_push_f((void**)&arr, &val3, sizeof(int));
-    
+
     sp_dyn_array_push(arr, 40);
-    
+
     ASSERT_EQ(sp_dyn_array_size(arr), 4);
     ASSERT_EQ(arr[0], 10);
     ASSERT_EQ(arr[1], 20);
     ASSERT_EQ(arr[2], 30);
     ASSERT_EQ(arr[3], 40);
-    
+
     sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, stress_test) {
     sp_test_use_malloc();
-    
+
     typedef struct {
         u32 id;
         c8 data[256];
     } large_struct_t;
-    
+
     large_struct_t* arr = SP_NULLPTR;
-    
+
     for (u32 i = 0; i < 1000; i++) {
         large_struct_t item;
         item.id = i;
@@ -1780,22 +1783,22 @@ UTEST(sp_dyn_array_push_f, stress_test) {
         }
         sp_dyn_array_push_f((void**)&arr, &item, sizeof(large_struct_t));
     }
-    
+
     ASSERT_EQ(sp_dyn_array_size(arr), 1000);
-    
+
     for (u32 i = 0; i < 1000; i++) {
         ASSERT_EQ(arr[i].id, i);
         for (int j = 0; j < 256; j++) {
             ASSERT_EQ(arr[i].data[j], (c8)((i + j) % 256));
         }
     }
-    
+
     sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, edge_cases) {
     sp_test_use_malloc();
-    
+
     {
         c8* arr = SP_NULLPTR;
         c8 single_byte = 0xFF;
@@ -1804,25 +1807,25 @@ UTEST(sp_dyn_array_push_f, edge_cases) {
         ASSERT_EQ(arr[0], (c8)0xFF);
         sp_dyn_array_free(arr);
     }
-    
+
     {
         int* arr = SP_NULLPTR;
         sp_dyn_array_reserve(arr, 50);
-        
+
         for (int i = 0; i < 25; i++) {
             sp_dyn_array_push_f((void**)&arr, &i, sizeof(int));
         }
-        
+
         ASSERT_EQ(sp_dyn_array_size(arr), 25);
         ASSERT_GE(sp_dyn_array_capacity(arr), 50);
-        
+
         for (int i = 0; i < 25; i++) {
             ASSERT_EQ(arr[i], i);
         }
-        
+
         sp_dyn_array_free(arr);
     }
-    
+
 }
 
 //////////////////////
