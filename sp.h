@@ -92,6 +92,7 @@
   #ifdef SP_MACOS
     #include "pthread.h"
     #include <dispatch/dispatch.h>
+    #include <mach-o/dyld.h>
   #endif
 
   #ifdef SP_LINUX
@@ -4025,20 +4026,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     nanosleep(&ts, NULL);
   }
 
-  sp_str_t sp_os_get_executable_path() {
-    c8 exe_path [PATH_MAX];
-    sp_str_t file_path = {
-      .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
-      .data = exe_path
-    };
-
-    if (!file_path.len) {
-      return sp_str_lit("");
-    }
-
-    return sp_str_copy(sp_os_parent_path(file_path));
-  }
-
   sp_str_t sp_os_canonicalize_path(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
@@ -4162,6 +4149,18 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
       dispatch_semaphore_signal(*semaphore);
   }
+  
+  sp_str_t sp_os_get_executable_path() {
+    c8 exe_path[PATH_MAX];
+    u32 size = PATH_MAX;
+    if (_NSGetExecutablePath(exe_path, &size) == 0) {
+      c8 real_path[PATH_MAX];
+      if (realpath(exe_path, real_path)) {
+        return sp_str_copy(sp_os_parent_path(sp_str_from_cstr(real_path)));
+      }
+    }
+    return sp_str_lit("");
+  }
 #endif
 
 #if defined(SP_OS_BACKEND_NATIVE) && defined(SP_LINUX)
@@ -4191,6 +4190,20 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     sem_post(semaphore);
+  }
+  
+  sp_str_t sp_os_get_executable_path() {
+    c8 exe_path [PATH_MAX];
+    sp_str_t file_path = {
+      .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
+      .data = exe_path
+    };
+
+    if (!file_path.len) {
+      return sp_str_lit("");
+    }
+
+    return sp_str_copy(sp_os_parent_path(file_path));
   }
 #endif
 
