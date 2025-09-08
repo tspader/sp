@@ -3883,7 +3883,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     struct stat st;
     c8* path_cstr = sp_str_to_cstr(path);
     s32 result = stat(path_cstr, &st);
-    sp_free(path_cstr);
     return result == 0;
   }
 
@@ -3891,7 +3890,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     struct stat st;
     c8* path_cstr = sp_str_to_cstr(path);
     s32 result = stat(path_cstr, &st);
-    sp_free(path_cstr);
     if (result != 0) return false;
     return S_ISREG(st.st_mode);
   }
@@ -3900,7 +3898,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     struct stat st;
     c8* path_cstr = sp_str_to_cstr(path);
     s32 result = stat(path_cstr, &st);
-    sp_free(path_cstr);
     if (result != 0) return false;
     return S_ISDIR(st.st_mode);
   }
@@ -3921,26 +3918,22 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
     c8* path_cstr = sp_str_to_cstr(path);
     rmdir(path_cstr);
-    sp_free(path_cstr);
   }
 
   void sp_os_create_directory(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     mkdir(path_cstr, 0755);
-    sp_free(path_cstr);
   }
 
   void sp_os_create_file(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     s32 fd = open(path_cstr, O_CREAT | O_WRONLY | O_TRUNC, 0644);
     if (fd >= 0) close(fd);
-    sp_free(path_cstr);
   }
 
   void sp_os_remove_file(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     unlink(path_cstr);
-    sp_free(path_cstr);
   }
 
   sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
@@ -3953,7 +3946,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
     c8* path_cstr = sp_str_to_cstr(path);
     DIR* dir = opendir(path_cstr);
-    sp_free(path_cstr);
 
     if (!dir) {
       return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
@@ -3971,10 +3963,21 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
+      // Determine file attributes using stat
+      sp_os_file_attr_t attributes = SP_OS_FILE_ATTR_NONE;
+      struct stat st;
+      if (stat(sp_str_to_cstr(file_path), &st) == 0) {
+        if (S_ISDIR(st.st_mode)) {
+          attributes = SP_OS_FILE_ATTR_DIRECTORY;
+        } else if (S_ISREG(st.st_mode)) {
+          attributes = SP_OS_FILE_ATTR_REGULAR_FILE;
+        }
+      }
+
       sp_os_directory_entry_t dir_entry = SP_RVAL(sp_os_directory_entry_t) {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(entry->d_name),
-        .attributes = SP_OS_FILE_ATTR_NONE,
+        .attributes = attributes,
       };
       sp_dynamic_array_push(&entries, &dir_entry);
     }
@@ -4011,7 +4014,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     struct stat st;
     c8* path_cstr = sp_str_to_cstr(file_path);
     s32 result = stat(path_cstr, &st);
-    sp_free(path_cstr);
 
     if (result != 0) {
       return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
@@ -4157,7 +4159,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
       dispatch_semaphore_signal(*semaphore);
   }
-  
+
   sp_str_t sp_os_get_executable_path() {
     c8 exe_path[PATH_MAX];
     u32 size = PATH_MAX;
@@ -4199,7 +4201,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     sem_post(semaphore);
   }
-  
+
   sp_str_t sp_os_get_executable_path() {
     c8 exe_path [PATH_MAX];
     sp_str_t file_path = {
@@ -4268,11 +4270,9 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     c8* file_path = sp_str_to_cstr(path);
     SDL_PathInfo info = SP_ZERO_INITIALIZE();
     if (!SDL_GetPathInfo(file_path, &info)) {
-      sp_free(file_path);
       return false;
     }
 
-    sp_free(file_path);
     return info.type == SDL_PATHTYPE_FILE;
   }
 
@@ -4310,20 +4310,17 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   void sp_os_create_directory(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     SDL_CreateDirectory(path_cstr);
-    sp_free(path_cstr);
   }
 
   void sp_os_create_file(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     SDL_IOStream* io = SDL_IOFromFile(path_cstr, "w");
     if (io) SDL_CloseIO(io);
-    sp_free(path_cstr);
   }
 
   void sp_os_remove_file(sp_str_t path) {
     c8* file_path = sp_str_to_cstr(path);
     SDL_RemovePath(file_path);
-    sp_free(file_path);
   }
 
   SDL_EnumerationResult sp_os_sdl_scan_directory_callback(void* user_data, const c8* directory, const c8* file_name) {
@@ -4382,7 +4379,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     SDL_PathInfo info;
     c8* path = sp_str_to_cstr(file_path);
     bool exists = SDL_GetPathInfo(path, &info);
-    sp_free(path);
 
     if (!exists || info.size == 0) {
       return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
@@ -4508,7 +4504,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
     SDL_WaitSemaphore(launch->semaphore);
     SDL_DestroySemaphore(launch->semaphore);
-    sp_free(launch);
   }
 
   void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
@@ -4592,7 +4587,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
     if (handle == INVALID_HANDLE_VALUE) {
       CloseHandle(event);
-      sp_free(directory_cstr);
       return;
     }
 
@@ -4605,7 +4599,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     sp_os_zero_memory(info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
 
     sp_os_win32_file_monitor_issue_one_read(monitor, info);
-    sp_free(directory_cstr);
   }
 
   void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
@@ -4660,7 +4653,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
         sp_str_t file_name = sp_os_extract_file_name(full_path);
         sp_os_win32_file_monitor_add_change(monitor, full_path, file_name, events);
 
-        sp_free(partial_path_cstr);
 
         if (notify->NextEntryOffset == 0) break;
         notify = (FILE_NOTIFY_INFORMATION*)((char*)notify + notify->NextEntryOffset);
@@ -4767,7 +4759,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       sp_dynamic_array_push(&linux_monitor->watch_paths, &path_copy);
     }
 
-    sp_free(path_cstr);
   }
 
   void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
@@ -4910,7 +4901,6 @@ void sp_file_monitor_emit_changes(sp_file_monitor_t* monitor) {
 sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, sp_str_t file_path) {
   c8* file_path_cstr = sp_str_to_cstr(file_path);
   sp_hash_t file_hash = sp_hash_cstr(file_path_cstr);
-  sp_free(file_path_cstr);
 
   sp_cache_entry_t* found = NULL;
   for (u32 i = 0; i < monitor->cache.size; i++) {
@@ -5007,7 +4997,6 @@ void sp_ring_buffer_clear(sp_ring_buffer_t* buffer) {
 
 void sp_ring_buffer_destroy(sp_ring_buffer_t* buffer) {
     if (buffer->data) {
-        sp_free(buffer->data);
         buffer->data = NULL;
         buffer->size = 0;
         buffer->capacity = 0;
