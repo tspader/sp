@@ -679,6 +679,7 @@ SP_API c8*                    sp_str_to_cstr(sp_str_t str);
 SP_API c8*                    sp_str_to_cstr_double_nt(sp_str_t str);
 SP_API sp_str_t               sp_str_copy(sp_str_t str);
 SP_API void                   sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
+SP_API sp_str_t               sp_str_null_terminate(sp_str_t str);
 SP_API sp_str_t               sp_str_from_cstr(const c8* str);
 SP_API sp_str_t               sp_str_from_cstr_sized(const c8* str, u32 length);
 SP_API sp_str_t               sp_str_from_cstr_null(const c8* str);
@@ -2921,6 +2922,13 @@ void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
   sp_os_copy_memory(str.data, buffer, SP_MIN(str.len, capacity));
 }
 
+sp_str_t sp_str_null_terminate(sp_str_t str) {
+  c8* buffer = (c8*)sp_alloc(str.len + 1);
+  sp_os_copy_memory(str.data, buffer, str.len);
+  buffer[str.len] = 0;
+  return SP_STR(buffer, str.len);
+}
+
 void sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity) {
   while (builder->buffer.capacity < requested_capacity) {
     u32 capacity = SP_MAX(builder->buffer.capacity * 2, 8);
@@ -4323,11 +4331,12 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
     sp_str_t dir = sp_os_normalize_path(SP_CSTR(directory));
     sp_os_directory_entry_t entry = SP_ZERO_INITIALIZE();
-    entry.file_name = sp_str_from_cstr_null(file_name);
+    entry.file_name = sp_str_from_cstr(file_name);
     entry.file_path = sp_os_join_path(dir, entry.file_name);
+    entry.file_path = sp_str_null_terminate(entry.file_path);
 
     SDL_PathInfo info;
-    if (SDL_GetPathInfo(entry.file_name.data, &info)) {
+    if (SDL_GetPathInfo(entry.file_path.data, &info)) {
       switch (info.type) {
         case SDL_PATHTYPE_DIRECTORY: { entry.attributes = SP_OS_FILE_ATTR_DIRECTORY; break; }
         case SDL_PATHTYPE_FILE:      { entry.attributes = SP_OS_FILE_ATTR_REGULAR_FILE; break; }
