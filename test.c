@@ -3729,5 +3729,198 @@ UTEST(os_functions, recursive_directory_removal) {
   ASSERT_FALSE(sp_os_does_path_exist(billy));
 }
 
+// ███████╗ ██████╗ █████╗ ███╗   ██╗    ██████╗ ██╗██████╗ 
+// ██╔════╝██╔════╝██╔══██╗████╗  ██║    ██╔══██╗██║██╔══██╗
+// ███████╗██║     ███████║██╔██╗ ██║    ██║  ██║██║██████╔╝
+// ╚════██║██║     ██╔══██║██║╚██╗██║    ██║  ██║██║██╔══██╗
+// ███████║╚██████╗██║  ██║██║ ╚████║    ██████╔╝██║██║  ██║
+// ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝    ╚═════╝ ╚═╝╚═╝  ╚═╝
+
+void sp_test_cleanup_scan_dir() {
+  sp_str_t test_dir = SP_LIT("build/scan_test");
+  if (sp_os_does_path_exist(test_dir)) {
+    sp_os_remove_directory(test_dir);
+  }
+}
+
+UTEST(sp_os_scan_directory, basic_scan) {
+  sp_test_cleanup_scan_dir();
+  
+  sp_str_t base = SP_LIT("build/scan_test");
+  sp_os_create_directory(base);
+  
+  sp_str_t file1 = sp_os_join_path(base, SP_LIT("file1.txt"));
+  sp_str_t file2 = sp_os_join_path(base, SP_LIT("file2.log"));
+  sp_str_t dir1 = sp_os_join_path(base, SP_LIT("subdir1"));
+  sp_str_t dir2 = sp_os_join_path(base, SP_LIT("subdir2"));
+  
+  sp_os_create_file(file1);
+  sp_os_create_file(file2);
+  sp_os_create_directory(dir1);
+  sp_os_create_directory(dir2);
+  
+  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  
+  ASSERT_EQ(entries.count, 4);
+  
+  u32 file_count = 0;
+  u32 dir_count = 0;
+  
+  for (u32 i = 0; i < entries.count; i++) {
+    sp_os_directory_entry_t* entry = &entries.data[i];
+    if (entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE) {
+      file_count++;
+    }
+    if (entry->attributes & SP_OS_FILE_ATTR_DIRECTORY) {
+      dir_count++;
+    }
+  }
+  
+  ASSERT_EQ(file_count, 2);
+  ASSERT_EQ(dir_count, 2);
+  
+  sp_test_cleanup_scan_dir();
+}
+
+UTEST(sp_os_scan_directory, file_names_validation) {
+  sp_test_cleanup_scan_dir();
+  
+  sp_str_t base = SP_LIT("build/scan_test");
+  sp_os_create_directory(base);
+  
+  const c8* expected_names[] = {
+    "alpha.txt",
+    "beta.log",
+    "gamma.c",
+    "delta"
+  };
+  
+  for (u32 i = 0; i < 4; i++) {
+    sp_str_t file_path = sp_os_join_path(base, SP_CSTR(expected_names[i]));
+    sp_os_create_file(file_path);
+  }
+  
+  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  
+  ASSERT_EQ(entries.count, 4);
+  
+  bool found[4] = {false, false, false, false};
+  
+  for (u32 i = 0; i < entries.count; i++) {
+    for (u32 j = 0; j < 4; j++) {
+      if (sp_str_equal_cstr(entries.data[i].file_name, expected_names[j])) {
+        found[j] = true;
+        break;
+      }
+    }
+  }
+  
+  for (u32 i = 0; i < 4; i++) {
+    ASSERT_TRUE(found[i]);
+  }
+  
+  sp_test_cleanup_scan_dir();
+}
+
+UTEST(sp_os_scan_directory, file_attributes) {
+  sp_test_cleanup_scan_dir();
+  
+  sp_str_t base = SP_LIT("build/scan_test");
+  sp_os_create_directory(base);
+  
+  sp_str_t test_file = sp_os_join_path(base, SP_LIT("test.txt"));
+  sp_str_t test_dir = sp_os_join_path(base, SP_LIT("testdir"));
+  
+  sp_os_create_file(test_file);
+  sp_os_create_directory(test_dir);
+  
+  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  
+  ASSERT_EQ(entries.count, 2);
+  
+  bool found_file = false;
+  bool found_dir = false;
+  
+  for (u32 i = 0; i < entries.count; i++) {
+    sp_os_directory_entry_t* entry = &entries.data[i];
+    
+    if (sp_str_equal_cstr(entry->file_name, "test.txt")) {
+      ASSERT_TRUE(entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE);
+      ASSERT_FALSE(entry->attributes & SP_OS_FILE_ATTR_DIRECTORY);
+      found_file = true;
+    }
+    
+    if (sp_str_equal_cstr(entry->file_name, "testdir")) {
+      ASSERT_TRUE(entry->attributes & SP_OS_FILE_ATTR_DIRECTORY);
+      ASSERT_FALSE(entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE);
+      found_dir = true;
+    }
+  }
+  
+  ASSERT_TRUE(found_file);
+  ASSERT_TRUE(found_dir);
+  
+  sp_test_cleanup_scan_dir();
+}
+
+UTEST(sp_os_scan_directory, empty_directory) {
+  sp_test_cleanup_scan_dir();
+  
+  sp_str_t base = SP_LIT("build/scan_test");
+  sp_os_create_directory(base);
+  
+  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  
+  ASSERT_EQ(entries.count, 0);
+  ASSERT_TRUE(entries.data == SP_NULLPTR || entries.count == 0);
+  
+  sp_test_cleanup_scan_dir();
+}
+
+UTEST(sp_os_scan_directory, non_existent_directory) {
+  sp_test_cleanup_scan_dir();
+  
+  sp_str_t non_existent = SP_LIT("build/scan_test/does_not_exist");
+  
+  sp_os_directory_entry_list_t entries = sp_os_scan_directory(non_existent);
+  
+  ASSERT_EQ(entries.count, 0);
+  ASSERT_TRUE(entries.data == SP_NULLPTR || entries.count == 0);
+}
+
+UTEST(sp_os_scan_directory, file_path_correctness) {
+  sp_test_cleanup_scan_dir();
+  
+  sp_str_t base = SP_LIT("build/scan_test");
+  sp_os_create_directory(base);
+  
+  sp_str_t file1 = sp_os_join_path(base, SP_LIT("test1.txt"));
+  sp_str_t dir1 = sp_os_join_path(base, SP_LIT("subdir"));
+  
+  sp_os_create_file(file1);
+  sp_os_create_directory(dir1);
+  
+  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  
+  ASSERT_EQ(entries.count, 2);
+  
+  for (u32 i = 0; i < entries.count; i++) {
+    sp_os_directory_entry_t* entry = &entries.data[i];
+    
+    ASSERT_TRUE(sp_str_starts_with(entry->file_path, base));
+    
+    ASSERT_TRUE(sp_os_does_path_exist(entry->file_path));
+    
+    if (sp_str_equal_cstr(entry->file_name, "test1.txt")) {
+      ASSERT_TRUE(sp_str_ends_with(entry->file_path, SP_LIT("test1.txt")));
+    }
+    if (sp_str_equal_cstr(entry->file_name, "subdir")) {
+      ASSERT_TRUE(sp_str_ends_with(entry->file_path, SP_LIT("subdir")));
+    }
+  }
+  
+  sp_test_cleanup_scan_dir();
+}
+
 
 UTEST_MAIN()
