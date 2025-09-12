@@ -7,6 +7,7 @@ else ifeq ($(UNAME), Linux)
 	DLL_EXTENSION := so
 endif
 
+
 #########
 # PATHS #
 #########
@@ -29,16 +30,29 @@ SP_FLAG_INCLUDES := $(shell spn print --compiler gcc)
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
 SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
 SP_FLAG_OPTIMIZATION := -g
-ifeq ($(UNAME), Darwin)
-	SP_FLAG_RPATH := -Wl,-rpath,'@loader_path'
-else ifeq ($(UNAME), Linux)
-	SP_FLAG_RPATH := -Wl,-rpath,$$ORIGIN
+ifeq ($(OS),Windows_NT)
+  CC := gcc
+  MAKE := make
+  CMAKE := cmake
+  SP_FLAG_RPATH :=
+else
+  CC := bear --append -- gcc
+  MAKE := bear --append -- make
+  CMAKE := bear --append -- cmake
+
+  ifeq ($(shell uname),Darwin)
+    SP_FLAG_RPATH := -Wl,-rpath,@loader_path
+  endif
+
+  ifeq ($(shell uname),Linux)
+    SP_FLAG_RPATH := -Wl,-rpath,\$$ORIGIN
+  endif
 endif
+
 SP_FLAGS_COMMON := $(SP_FLAG_INCLUDES) $(SP_FLAG_WARNINGS) $(SP_FLAG_LINKER) $(SP_FLAG_RPATH) $(SP_FLAG_OPTIMIZATION)
 
 
 # C
-CC := gcc
 SP_FLAG_CC_LANGUAGE := -std=c11
 SP_FLAGS_CC := $(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE)
 
@@ -67,6 +81,8 @@ all: clangd build
 
 $(SP_DIR_BUILD_OUTPUT):
 	@mkdir -p $(SP_DIR_BUILD_OUTPUT)
+	spn build
+	spn copy $(SP_DIR_BUILD_OUTPUT)
 
 $(SP_DIR_BUILD_SDL):
 	@mkdir -p $(SP_DIR_BUILD_SDL)
