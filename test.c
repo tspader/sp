@@ -3909,4 +3909,309 @@ UTEST(sp_os_scan_directory, file_path_correctness) {
 }
 
 
+// ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗     ████████╗███████╗███████╗████████╗███████╗
+// ██╔════╝╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝     ╚══██╔══╝██╔════╝██╔════╝╚══██╔══╝██╔════╝
+// ███████╗   ██║   ██████╔╝██║██╔██╗ ██║██║  ███╗       ██║   █████╗  ███████╗   ██║   ███████╗
+// ╚════██║   ██║   ██╔══██╗██║██║╚██╗██║██║   ██║       ██║   ██╔══╝  ╚════██║   ██║   ╚════██║
+// ███████║   ██║   ██║  ██║██║██║ ╚████║╚██████╔╝       ██║   ███████╗███████║   ██║   ███████║
+// ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝        ╚═╝   ╚══════╝╚══════╝   ╚═╝   ╚══════╝
+UTEST(sp_str_trim, whitespace_handling) {
+  sp_test_use_malloc();
+
+  // basic trim operations
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("  hello  ")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("\thello\t")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("\nhello\n")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("  \t\nhello\n\t  ")), SP_LIT("hello"));
+
+  // edge cases
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("")), SP_LIT(""));
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("   ")), SP_LIT(""));
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("\t\n\r")), SP_LIT(""));
+
+  // no whitespace
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("hello")), SP_LIT("hello"));
+
+  // internal whitespace preserved
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("  hello world  ")), SP_LIT("hello world"));
+  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("\ttab\tseparated\t")), SP_LIT("tab\tseparated"));
+}
+
+UTEST(sp_str_trim_right, trailing_whitespace) {
+  sp_test_use_malloc();
+
+  // basic right trim
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello  ")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello\t")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello\n")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello\t\n  ")), SP_LIT("hello"));
+
+  // leading whitespace preserved
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("  hello")), SP_LIT("  hello"));
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("\thello")), SP_LIT("\thello"));
+
+  // edge cases
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("")), SP_LIT(""));
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("   ")), SP_LIT(""));
+
+  // no trailing whitespace
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello")), SP_LIT("hello"));
+
+  // internal whitespace preserved
+  SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello world  ")), SP_LIT("hello world"));
+}
+
+UTEST(sp_str_split_c8, delimiter_splitting) {
+  sp_test_use_malloc();
+
+  // basic split
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello,world,test"), ',');
+    ASSERT_EQ(sp_dyn_array_size(parts), 3);
+    SP_EXPECT_STR_EQ(parts[0], SP_LIT("hello"));
+    SP_EXPECT_STR_EQ(parts[1], SP_LIT("world"));
+    SP_EXPECT_STR_EQ(parts[2], SP_LIT("test"));
+  }
+
+  // path splitting
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("/home/user/file.txt"), '/');
+    ASSERT_EQ(sp_dyn_array_size(parts), 4);
+    SP_EXPECT_STR_EQ(parts[0], SP_LIT(""));
+    SP_EXPECT_STR_EQ(parts[1], SP_LIT("home"));
+    SP_EXPECT_STR_EQ(parts[2], SP_LIT("user"));
+    SP_EXPECT_STR_EQ(parts[3], SP_LIT("file.txt"));
+  }
+
+  // consecutive delimiters
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,b"), ',');
+    ASSERT_EQ(sp_dyn_array_size(parts), 3);
+    SP_EXPECT_STR_EQ(parts[0], SP_LIT("a"));
+    SP_EXPECT_STR_EQ(parts[1], SP_LIT(""));
+    SP_EXPECT_STR_EQ(parts[2], SP_LIT("b"));
+  }
+
+  // no delimiter found
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello"), ',');
+    ASSERT_EQ(sp_dyn_array_size(parts), 1);
+    SP_EXPECT_STR_EQ(parts[0], SP_LIT("hello"));
+  }
+
+  // empty string - returns null
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT(""), ',');
+    ASSERT_EQ(parts, SP_NULLPTR);
+  }
+
+  // delimiter at start and end
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT(",hello,world,"), ',');
+    ASSERT_EQ(sp_dyn_array_size(parts), 4);
+    SP_EXPECT_STR_EQ(parts[0], SP_LIT(""));
+    SP_EXPECT_STR_EQ(parts[1], SP_LIT("hello"));
+    SP_EXPECT_STR_EQ(parts[2], SP_LIT("world"));
+    SP_EXPECT_STR_EQ(parts[3], SP_LIT(""));
+  }
+}
+
+UTEST(sp_str_pad, padding_operations) {
+  sp_test_use_malloc();
+
+  // basic padding
+  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello"), 10), SP_LIT("hello     "));
+  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hi"), 5), SP_LIT("hi   "));
+
+  // string already longer than padding
+  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello world"), 5), SP_LIT("hello world"));
+
+  // exact length
+  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello"), 5), SP_LIT("hello"));
+
+  // empty string
+  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT(""), 5), SP_LIT("     "));
+
+  // zero padding
+  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello"), 0), SP_LIT("hello"));
+}
+
+UTEST(sp_str_pad_to_longest, array_padding) {
+  sp_test_use_malloc();
+
+  // basic array padding
+  {
+    sp_str_t strings[] = {
+      SP_LIT("hi"),
+      SP_LIT("hello"),
+      SP_LIT("world!")
+    };
+    sp_dyn_array(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
+    ASSERT_EQ(sp_dyn_array_size(padded), 3);
+    SP_EXPECT_STR_EQ(padded[0], SP_LIT("hi    "));
+    SP_EXPECT_STR_EQ(padded[1], SP_LIT("hello "));
+    SP_EXPECT_STR_EQ(padded[2], SP_LIT("world!"));
+  }
+
+  // all same length
+  {
+    sp_str_t strings[] = {
+      SP_LIT("aaa"),
+      SP_LIT("bbb"),
+      SP_LIT("ccc")
+    };
+    sp_dyn_array(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
+    ASSERT_EQ(sp_dyn_array_size(padded), 3);
+    SP_EXPECT_STR_EQ(padded[0], SP_LIT("aaa"));
+    SP_EXPECT_STR_EQ(padded[1], SP_LIT("bbb"));
+    SP_EXPECT_STR_EQ(padded[2], SP_LIT("ccc"));
+  }
+
+  // single string
+  {
+    sp_str_t strings[] = {
+      SP_LIT("hello")
+    };
+    sp_dyn_array(sp_str_t) padded = sp_str_pad_to_longest(strings, 1);
+    ASSERT_EQ(sp_dyn_array_size(padded), 1);
+    SP_EXPECT_STR_EQ(padded[0], SP_LIT("hello"));
+  }
+
+  // empty strings
+  {
+    sp_str_t strings[] = {
+      SP_LIT(""),
+      SP_LIT("hello"),
+      SP_LIT("")
+    };
+    sp_dyn_array(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
+    ASSERT_EQ(sp_dyn_array_size(padded), 3);
+    SP_EXPECT_STR_EQ(padded[0], SP_LIT("     "));
+    SP_EXPECT_STR_EQ(padded[1], SP_LIT("hello"));
+    SP_EXPECT_STR_EQ(padded[2], SP_LIT("     "));
+  }
+}
+
+UTEST(sp_str_starts_with, prefix_checking) {
+  sp_test_use_malloc();
+
+  // basic prefix checks
+  ASSERT_TRUE(sp_str_starts_with(SP_LIT("hello world"), SP_LIT("hello")));
+  ASSERT_TRUE(sp_str_starts_with(SP_LIT("hello"), SP_LIT("h")));
+  ASSERT_FALSE(sp_str_starts_with(SP_LIT("hello"), SP_LIT("world")));
+
+  // exact match
+  ASSERT_TRUE(sp_str_starts_with(SP_LIT("hello"), SP_LIT("hello")));
+
+  // prefix longer than string
+  ASSERT_FALSE(sp_str_starts_with(SP_LIT("hi"), SP_LIT("hello")));
+
+  // empty cases
+  ASSERT_TRUE(sp_str_starts_with(SP_LIT("hello"), SP_LIT("")));
+  ASSERT_TRUE(sp_str_starts_with(SP_LIT(""), SP_LIT("")));
+  ASSERT_FALSE(sp_str_starts_with(SP_LIT(""), SP_LIT("hello")));
+
+  // path checking
+  ASSERT_TRUE(sp_str_starts_with(SP_LIT("/home/user/file.txt"), SP_LIT("/home")));
+  ASSERT_TRUE(sp_str_starts_with(SP_LIT("/home/user/file.txt"), SP_LIT("/home/user")));
+  ASSERT_FALSE(sp_str_starts_with(SP_LIT("/home/user/file.txt"), SP_LIT("/usr")));
+
+  // case sensitivity
+  ASSERT_FALSE(sp_str_starts_with(SP_LIT("Hello"), SP_LIT("hello")));
+  ASSERT_FALSE(sp_str_starts_with(SP_LIT("hello"), SP_LIT("HELLO")));
+}
+
+UTEST(sp_str_view, view_creation) {
+  sp_test_use_malloc();
+
+  // basic view creation
+  {
+    const c8* cstr = "hello world";
+    sp_str_t view = sp_str_view(cstr);
+    ASSERT_EQ(view.len, 11);
+    ASSERT_EQ(view.data, cstr);
+    SP_EXPECT_STR_EQ(view, SP_LIT("hello world"));
+  }
+
+  // empty string view
+  {
+    const c8* cstr = "";
+    sp_str_t view = sp_str_view(cstr);
+    ASSERT_EQ(view.len, 0);
+    ASSERT_EQ(view.data, cstr);
+    SP_EXPECT_STR_EQ(view, SP_LIT(""));
+  }
+
+  // null pointer
+  {
+    sp_str_t view = sp_str_view(SP_NULLPTR);
+    ASSERT_EQ(view.len, 0);
+    ASSERT_EQ(view.data, SP_NULLPTR);
+  }
+
+  // view doesn't copy
+  {
+    c8 buffer[] = "mutable";
+    sp_str_t view = sp_str_view(buffer);
+    buffer[0] = 'M';
+    ASSERT_EQ(view.data[0], 'M');
+  }
+}
+
+UTEST(sp_str_from_cstr, string_from_cstr) {
+  sp_test_use_malloc();
+
+  // basic string creation
+  {
+    const c8* cstr = "hello world";
+    sp_str_t str = sp_str_from_cstr(cstr);
+    ASSERT_EQ(str.len, 11);
+    SP_EXPECT_STR_EQ(str, sp_str_view(cstr));
+    // verify it's a copy
+    ASSERT_NE(str.data, cstr);
+  }
+
+  // empty string
+  {
+    sp_str_t str = sp_str_from_cstr("");
+    ASSERT_EQ(str.len, 0);
+    SP_EXPECT_STR_EQ(str, SP_LIT(""));
+  }
+
+  // null pointer
+  {
+    sp_str_t str = sp_str_from_cstr(SP_NULLPTR);
+    ASSERT_EQ(str.len, 0);
+    // sp_str_from_cstr returns an empty allocated string for null, not null
+    ASSERT_NE(str.data, SP_NULLPTR);
+  }
+
+  // verify deep copy
+  {
+    c8 buffer[] = "mutable";
+    sp_str_t str = sp_str_from_cstr(buffer);
+    buffer[0] = 'M';
+    ASSERT_EQ(str.data[0], 'm');  // should still be lowercase
+  }
+
+  // sized variant
+  {
+    sp_str_t str = sp_str_from_cstr_sized("hello world", 5);
+    ASSERT_EQ(str.len, 5);
+    SP_EXPECT_STR_EQ(str, SP_LIT("hello"));
+  }
+
+  // null variant
+  {
+    sp_str_t str = sp_str_from_cstr_null(SP_NULLPTR);
+    ASSERT_EQ(str.len, 0);
+    // sp_str_from_cstr_null also allocates for null input
+    ASSERT_NE(str.data, SP_NULLPTR);
+
+    str = sp_str_from_cstr_null("hello");
+    ASSERT_EQ(str.len, 5);
+    SP_EXPECT_STR_EQ(str, SP_LIT("hello"));
+  }
+}
+
 UTEST_MAIN()

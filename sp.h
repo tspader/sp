@@ -1182,7 +1182,8 @@ typedef struct sp_asset_registry {
 } sp_asset_registry_t;
 
 void                  sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config);
-sp_future_t*          sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, void* user_data);
+sp_future_t*          sp_asset_registry_import(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* user_data);
+sp_asset_t*           sp_asset_registry_add(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* user_data);
 sp_asset_t*           sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name);
 void                  sp_asset_registry_process_completions(sp_asset_registry_t* registry);
 sp_asset_t*           sp_asset_registry_reserve(sp_asset_registry_t* registry);
@@ -5121,6 +5122,15 @@ sp_asset_t* sp_asset_registry_reserve(sp_asset_registry_t* registry) {
   return sp_dyn_array_back(registry->assets);
 }
 
+sp_asset_t* sp_asset_registry_add(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, void* user_data) {
+  sp_asset_t* asset = sp_asset_registry_reserve(registry);
+  asset->kind = kind;
+  asset->name = sp_str_copy(name);
+  asset->state = SP_ASSET_STATE_COMPLETED;
+  asset->data = user_data;
+  return asset;
+}
+
 sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, void* user_data) {
   sp_asset_import_context_t context = {
     .registry = registry,
@@ -5132,7 +5142,7 @@ sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_ki
   SP_ASSERT(context.importer);
 
   context.asset->kind = kind;
-  context.asset->name = name;
+  context.asset->name = sp_str_copy(name);
   context.asset->state = SP_ASSET_STATE_QUEUED;
 
   sp_mutex_lock(&registry->import_mutex);
