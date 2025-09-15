@@ -29,7 +29,7 @@ SP_SP_H := sp.h
 SP_FLAG_INCLUDES := $(shell spn print --compiler gcc)
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
 SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
-SP_FLAG_OPTIMIZATION := -g
+SP_FLAG_OPTIMIZATION := -g -fsanitize=address
 ifeq ($(OS),Windows_NT)
   CC := gcc
   MAKE := make

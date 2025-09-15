@@ -5065,6 +5065,7 @@ void sp_future_destroy(sp_future_t* future) {
 
 void sp_future_set_value(sp_future_t* future, void* value) {
   sp_os_copy_memory(value, future->value, future->size);
+  future->ready = true;
 }
 
 void sp_init(sp_config_t config) {
@@ -5118,32 +5119,40 @@ void sp_asset_registry_process_completions(sp_asset_registry_t* registry) {
 }
 
 sp_asset_t* sp_asset_registry_reserve(sp_asset_registry_t* registry) {
-  sp_dyn_array_reserve(registry->assets, 1);
+  sp_asset_t memory = SP_ZERO_INITIALIZE();
+  sp_dyn_array_push(registry->assets, memory);
   return sp_dyn_array_back(registry->assets);
 }
 
 sp_asset_t* sp_asset_registry_add(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, void* user_data) {
+  sp_mutex_lock(&registry->mutex);
   sp_asset_t* asset = sp_asset_registry_reserve(registry);
   asset->kind = kind;
   asset->name = sp_str_copy(name);
   asset->state = SP_ASSET_STATE_COMPLETED;
   asset->data = user_data;
+  sp_mutex_unlock(&registry->mutex);
   return asset;
 }
 
 sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name, void* user_data) {
+  sp_asset_importer_t* importer = sp_asset_registry_find_importer(registry, kind);
+  SP_ASSERT(importer);
+
+  sp_mutex_lock(&registry->mutex);
+  sp_asset_t* asset = sp_asset_registry_reserve(registry);
+  asset->kind = kind;
+  asset->name = sp_str_copy(name);
+  asset->state = SP_ASSET_STATE_QUEUED;
+  sp_mutex_unlock(&registry->mutex);
+
   sp_asset_import_context_t context = {
     .registry = registry,
-    .importer = sp_asset_registry_find_importer(registry, kind),
-    .asset = sp_asset_registry_reserve(registry),
+    .importer = importer,
+    .asset = asset,
     .future = sp_future_create(sizeof(sp_asset_t*)),
     .user_data = user_data,
   };
-  SP_ASSERT(context.importer);
-
-  context.asset->kind = kind;
-  context.asset->name = sp_str_copy(name);
-  context.asset->state = SP_ASSET_STATE_QUEUED;
 
   sp_mutex_lock(&registry->import_mutex);
   sp_ring_buffer_push(&registry->import_queue, &context);
@@ -5155,14 +5164,17 @@ sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_ki
 }
 
 sp_asset_t* sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name) {
+  sp_mutex_lock(&registry->mutex);
+  sp_asset_t* found = SP_NULLPTR;
   sp_dyn_array_for(registry->assets, index) {
     sp_asset_t* asset = registry->assets + index;
-    if (asset->kind == kind && !sp_str_equal(asset->name, name)) {
-      return asset;
+    if (asset->kind == kind && sp_str_equal(asset->name, name)) {
+      found = asset;
+      break;
     }
   }
-
-  return SP_NULLPTR;
+  sp_mutex_unlock(&registry->mutex);
+  return found;
 }
 
 sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind) {
