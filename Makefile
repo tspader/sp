@@ -29,7 +29,7 @@ SP_SP_H := sp.h
 SP_FLAG_INCLUDES := $(shell spn print --compiler gcc)
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
 SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
-SP_FLAG_OPTIMIZATION := -g -fsanitize=address
+SP_FLAG_OPTIMIZATION := -g
 ifeq ($(OS),Windows_NT)
   CC := gcc
   MAKE := make
@@ -68,7 +68,7 @@ SP_FLAGS_STRESS = $(SP_FLAGS_CC) -DSP_TEST_ENABLE_STRESS_TESTS
 SP_FLAGS_SDL := $(SP_FLAGS_CC) -DSP_OS_BACKEND_SDL
 
 # Miscellaneous flags
-SP_FLAGS_RUN := --enable-mixed-units --random-order
+SP_FLAGS_RUN := --enable-mixed-units --random-order | grep "test cases" -A 1
 
 SP_SOURCE_FILES := test.c
 

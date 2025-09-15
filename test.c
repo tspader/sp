@@ -4233,7 +4233,12 @@ void sp_test_asset_import(sp_asset_import_context_t* context) {
   sp_test_asset_data_t* data = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
   data->content = sp_str_copy(input->content);
   data->value = input->value;
-  context->asset->data = data;
+
+  // Get asset from context and set data (thread-safe with mutex)
+  sp_mutex_lock(&context->registry->mutex);
+  sp_asset_t* asset = sp_asset_import_context_get_asset(context);
+  asset->data = data;
+  sp_mutex_unlock(&context->registry->mutex);
 }
 
 void sp_test_asset_complete(sp_asset_import_context_t* context) {
@@ -4270,6 +4275,7 @@ UTEST(asset_registry, basic_add_and_find) {
   sp_asset_t* not_found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("nonexistent"));
   ASSERT_EQ(not_found, SP_NULLPTR);
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 
@@ -4299,6 +4305,7 @@ UTEST(asset_registry, same_name_different_types) {
   ASSERT_EQ(asset2->data, (void*)0x2);
   ASSERT_EQ(asset3->data, (void*)0x3);
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 
@@ -4329,6 +4336,7 @@ UTEST(asset_registry, string_copying) {
   sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("temp_asset"));
   ASSERT_EQ(found, asset);
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 
@@ -4350,6 +4358,7 @@ UTEST(asset_registry, null_user_data) {
   ASSERT_EQ(found, asset);
   ASSERT_EQ(found->data, SP_NULLPTR);
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 
@@ -4371,6 +4380,7 @@ UTEST(asset_registry, empty_names) {
   ASSERT_EQ(found, asset);
   ASSERT_EQ(found->data, (void*)0xDEAD);
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 
@@ -4423,6 +4433,7 @@ UTEST(asset_registry, import_completion_pipeline) {
   ASSERT_TRUE(sp_str_equal(result_data->content, SP_LIT("async content")));
   ASSERT_EQ(result_data->value, 999);
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 
@@ -4469,6 +4480,7 @@ UTEST(asset_registry, state_transitions) {
   asset = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"));
   ASSERT_EQ(asset->state, SP_ASSET_STATE_COMPLETED);
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 
@@ -4535,6 +4547,7 @@ UTEST(asset_registry, concurrent_find_during_import) {
     ASSERT_NE(found, SP_NULLPTR);
   }
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 
@@ -4574,6 +4587,7 @@ UTEST(asset_registry, stress_many_assets) {
     ASSERT_EQ(found->data, (void*)(uintptr_t)id);
   }
 
+  sp_asset_registry_shutdown(&registry);
   sp_context_pop();
 }
 #endif // SP_APP
