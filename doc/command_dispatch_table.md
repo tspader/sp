@@ -15,7 +15,7 @@ static const command_t commands[] = {
 };
 
 bool dispatch_command(sp_str_t cmd_name, app_t* app) {
-  for (u32 i = 0; i < SP_CARR_SIZE(commands); i++) {
+   for (u32 i = 0; i < SP_CARR_LEN(commands); i++) {
     if (sp_str_equal(commands[i].name, cmd_name)) {
       return commands[i].func(app);
     }

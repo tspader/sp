@@ -9,7 +9,7 @@ sp_str_t extension = sp_os_extract_extension(path);
 sp_str_t stem = sp_os_extract_stem(path);
 
 sp_str_t first_10 = sp_str_sub(path, 0, 10);
-sp_str_t last_4 = SP_SUBSTR_END(path, 4);
+sp_str_t last_4 = sp_str_sub_reverse(path, 0, 4);
 
 if (sp_str_ends_with(path, SP_LIT(".txt"))) {
     sp_str_t without_ext = sp_str_sub(path, 0, path.len - 4);

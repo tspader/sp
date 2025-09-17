@@ -12,7 +12,7 @@ sp_str_t path = sp_str_from_cstr(filename);
 sp_dyn_array(sp_str_t) parts = sp_str_split_c8(path, '/');
 
 // Switch back to the standard allocator, implicitly freeing all memory allocated above
-sp_context_pop_allocator()
+sp_context_pop()
 ```
 
 ## Bad

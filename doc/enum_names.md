@@ -11,10 +11,10 @@ typedef enum {
 
 const c8* event_type_to_cstr(event_type_t type) {
     switch (type) {
-        SP_ENUM_NAME_CASE(EVENT_INIT);
-        SP_ENUM_NAME_CASE(EVENT_UPDATE);
-        SP_ENUM_NAME_CASE(EVENT_DRAW);
-        SP_ENUM_NAME_CASE(EVENT_QUIT);
+        SP_SWITCH_ENUM_TO_CSTR(EVENT_INIT);
+        SP_SWITCH_ENUM_TO_CSTR(EVENT_UPDATE);
+        SP_SWITCH_ENUM_TO_CSTR(EVENT_DRAW);
+        SP_SWITCH_ENUM_TO_CSTR(EVENT_QUIT);
         default: return "UNKNOWN";
     }
 }
