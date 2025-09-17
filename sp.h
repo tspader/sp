@@ -1077,7 +1077,6 @@ sp_str_t sp_format_str(sp_str_t fmt, ...);
 sp_str_t sp_format(const c8* fmt, ...);
 sp_str_t sp_format_v(sp_str_t fmt, va_list args);
 
-// parsers
 SP_API u8        sp_parse_u8(sp_str_t str);
 SP_API u16       sp_parse_u16(sp_str_t str);
 SP_API u32       sp_parse_u32(sp_str_t str);
@@ -1094,7 +1093,6 @@ SP_API void*     sp_parse_ptr(sp_str_t str);
 SP_API bool      sp_parse_bool(sp_str_t str);
 SP_API sp_hash_t sp_parse_hash(sp_str_t str);
 SP_API u64       sp_parse_hex(sp_str_t str);
-
 SP_API bool      sp_parse_u8_ex(sp_str_t str, u8* out);
 SP_API bool      sp_parse_u16_ex(sp_str_t str, u16* out);
 SP_API bool      sp_parse_u32_ex(sp_str_t str, u32* out);
@@ -1111,6 +1109,7 @@ SP_API bool      sp_parse_ptr_ex(sp_str_t str, void** out);
 SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
 SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
+SP_API bool      sp_parse_is_digit(c8 c);
 
 typedef struct {
   sp_allocator_t allocator;
@@ -1751,7 +1750,7 @@ bool sp_parse_s8_ex(sp_str_t str, s8* out) {
     return true;
 }
 
-static inline bool is_digit(char c) {
+bool sp_parse_is_digit(c8 c) {
     return c >= '0' && c <= '9';
 }
 
@@ -1769,7 +1768,7 @@ bool sp_parse_f32_ex(sp_str_t str, f32* out) {
         i++;
     }
 
-    while (i < str.len && is_digit(str.data[i])) {
+    while (i < str.len && sp_parse_is_digit(str.data[i])) {
         has_digits = true;
         value = value * 10.0f + (f32)(str.data[i] - '0');
         i++;
@@ -1777,7 +1776,7 @@ bool sp_parse_f32_ex(sp_str_t str, f32* out) {
 
     if (i < str.len && str.data[i] == '.') {
         i++;
-        while (i < str.len && is_digit(str.data[i])) {
+        while (i < str.len && sp_parse_is_digit(str.data[i])) {
             has_digits = true;
             scale /= 10.0f;
             value += (f32)(str.data[i] - '0') * scale;
@@ -1791,10 +1790,10 @@ bool sp_parse_f32_ex(sp_str_t str, f32* out) {
             if (str.data[i] == '-') exp_sign = -1;
             i++;
         }
-        if (i >= str.len || !is_digit(str.data[i])) {
+        if (i >= str.len || !sp_parse_is_digit(str.data[i])) {
             return false;
         }
-        while (i < str.len && is_digit(str.data[i])) {
+        while (i < str.len && sp_parse_is_digit(str.data[i])) {
             exponent = exponent * 10 + (str.data[i] - '0');
             i++;
         }
