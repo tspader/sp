@@ -950,6 +950,7 @@ SP_API void                         sp_os_sleep_ms(f64 ms);
 SP_API sp_str_t                     sp_os_get_executable_path();
 SP_API sp_str_t                     sp_os_canonicalize_path(sp_str_t path);
 SP_API sp_precise_epoch_time_t      sp_os_file_mod_time_precise(sp_str_t path);
+SP_API sp_os_file_attr_t            sp_os_file_attributes(sp_str_t path);
 SP_API c8*                          sp_os_wstr_to_cstr(c16* str, u32 len);
 SP_IMP sp_os_file_attr_t            sp_os_winapi_attr_to_sp_attr(u32 attr);
 SP_IMP void                         sp_os_file_monitor_init(sp_file_monitor_t* monitor);
@@ -3632,7 +3633,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       sp_os_directory_entry_t entry  = SP_RVAL(sp_os_directory_entry_t) {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(find_data.cFileName),
-        .attributes = sp_os_winapi_attr_to_sp_attr(GetFileAttributesA(sp_str_to_cstr(file_path))),
+        .attributes = sp_os_file_attributes(file_path),
       };
       sp_dynamic_array_push(&entries, &entry);
     } while (FindNextFile(handle, &find_data));
@@ -3676,6 +3677,10 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       unix_100ns / 10000000,           // seconds
       (unix_100ns % 10000000) * 100    // remainder to nanoseconds
     };
+  }
+
+  sp_os_file_attr_t sp_os_file_attributes(sp_str_t path) {
+    return sp_os_winapi_attr_to_sp_attr(GetFileAttributesA(sp_str_to_cstr(path)));
   }
 
   sp_os_file_attr_t sp_os_winapi_attr_to_sp_attr(u32 attr) {
@@ -3976,21 +3981,10 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
-      // Determine file attributes using stat
-      sp_os_file_attr_t attributes = SP_OS_FILE_ATTR_NONE;
-      struct stat st;
-      if (stat(sp_str_to_cstr(file_path), &st) == 0) {
-        if (S_ISDIR(st.st_mode)) {
-          attributes = SP_OS_FILE_ATTR_DIRECTORY;
-        } else if (S_ISREG(st.st_mode)) {
-          attributes = SP_OS_FILE_ATTR_REGULAR_FILE;
-        }
-      }
-
       sp_os_directory_entry_t dir_entry = SP_RVAL(sp_os_directory_entry_t) {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(entry->d_name),
-        .attributes = attributes,
+        .attributes = sp_os_file_attributes(file_path),
       };
       sp_dynamic_array_push(&entries, &dir_entry);
     }
@@ -4082,6 +4076,18 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     }
     result[len] = '\0';
     return result;
+  }
+
+  sp_os_file_attr_t sp_os_file_attributes(sp_str_t path) {
+    struct stat st;
+    if (stat(sp_str_to_cstr(path), &st) == 0) {
+      if (S_ISDIR(st.st_mode)) {
+        return SP_OS_FILE_ATTR_DIRECTORY;
+      } else if (S_ISREG(st.st_mode)) {
+        return SP_OS_FILE_ATTR_REGULAR_FILE;
+      }
+    }
+    return SP_OS_FILE_ATTR_NONE;
   }
 
   void sp_os_print(sp_str_t message) {
@@ -4349,14 +4355,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     entry.file_path = sp_os_join_path(dir, entry.file_name);
     entry.file_path = sp_str_null_terminate(entry.file_path);
 
-    SDL_PathInfo info;
-    if (SDL_GetPathInfo(entry.file_path.data, &info)) {
-      switch (info.type) {
-        case SDL_PATHTYPE_DIRECTORY: { entry.attributes = SP_OS_FILE_ATTR_DIRECTORY; break; }
-        case SDL_PATHTYPE_FILE:      { entry.attributes = SP_OS_FILE_ATTR_REGULAR_FILE; break; }
-        default:                     { break; }
-      }
-    }
+    entry.attributes = sp_os_file_attributes(entry.file_path);
 
     sp_dynamic_array_push(entries, &entry);
     return SDL_ENUM_CONTINUE;
@@ -4406,6 +4405,17 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
       .ns = (u64)(info.modify_time % 1000000000)
     };
 }
+  sp_os_file_attr_t sp_os_file_attributes(sp_str_t path) {
+    SDL_PathInfo info;
+    if (SDL_GetPathInfo(sp_str_to_cstr(path), &info)) {
+      switch (info.type) {
+        case SDL_PATHTYPE_DIRECTORY: return SP_OS_FILE_ATTR_DIRECTORY;
+        case SDL_PATHTYPE_FILE: return SP_OS_FILE_ATTR_REGULAR_FILE;
+        default: break;
+      }
+    }
+    return SP_OS_FILE_ATTR_NONE;
+  }
 
   void sp_os_sleep_ms(f64 ms) {
     SDL_Delay((u32)ms);
