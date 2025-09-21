@@ -941,6 +941,7 @@ SP_API void                         sp_os_remove_file(sp_str_t path);
 SP_API sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path);
 SP_API sp_os_date_time_t            sp_os_get_date_time();
 SP_API sp_str_t                     sp_os_normalize_path(sp_str_t path);
+SP_API void                         sp_os_normalize_path_soft(sp_str_t* path);
 SP_API sp_str_t                     sp_os_parent_path(sp_str_t path);
 SP_API sp_str_t                     sp_os_join_path(sp_str_t a, sp_str_t b);
 SP_API sp_str_t                     sp_os_extract_extension(sp_str_t path);
@@ -3454,6 +3455,15 @@ sp_str_t sp_os_normalize_path(sp_str_t path) {
   return sp_str_builder_write(&builder);
 }
 
+void sp_os_normalize_path_soft(sp_str_t* path) {
+  if (!path || path->len == 0) return;
+
+  // Remove trailing slash by decrementing length
+  if (path->len > 0 && (path->data[path->len - 1] == '/' || path->data[path->len - 1] == '\\')) {
+    path->len--;
+  }
+}
+
 sp_str_t sp_os_extract_file_name(sp_str_t path) {
   if (!path.len) return sp_str_from_cstr("");
 
@@ -3504,11 +3514,21 @@ sp_str_t sp_os_parent_path(sp_str_t path) {
     path.len = 0;
   }
 
-  return sp_str_copy(path);
+  sp_str_t result = sp_str_copy(path);
+  sp_os_normalize_path_soft(&result);
+  return result;
 }
 
 sp_str_t sp_os_join_path(sp_str_t a, sp_str_t b) {
-  return sp_str_join(a, b, SP_LIT("/"));
+  // Remove trailing slash from first path to avoid double slash
+  sp_str_t a_copy = a;
+  if (a_copy.len > 0 && (a_copy.data[a_copy.len - 1] == '/' || a_copy.data[a_copy.len - 1] == '\\')) {
+    a_copy.len--;
+  }
+
+  sp_str_t result = sp_str_join(a_copy, b, SP_LIT("/"));
+  sp_os_normalize_path_soft(&result);
+  return result;
 }
 
 sp_str_t sp_os_extract_extension(sp_str_t path) {

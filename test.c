@@ -4040,6 +4040,98 @@ UTEST(sp_os_file_attributes, special_names_and_nesting) {
   sp_test_build_scan_directory();
 }
 
+UTEST(sp_os_normalize_path_soft, trailing_slash_removal) {
+  sp_test_use_malloc();
+
+  // Test forward slash removal
+  sp_str_t path1 = sp_str_copy(SP_LIT("path/to/dir/"));
+  sp_os_normalize_path_soft(&path1);
+  SP_EXPECT_STR_EQ(path1, SP_LIT("path/to/dir"));
+
+  // Test backslash removal
+  sp_str_t path2 = sp_str_copy(SP_LIT("path\\to\\dir\\"));
+  sp_os_normalize_path_soft(&path2);
+  SP_EXPECT_STR_EQ(path2, SP_LIT("path\\to\\dir"));
+
+  // Test no change needed
+  sp_str_t path3 = sp_str_copy(SP_LIT("path/to/file.txt"));
+  sp_os_normalize_path_soft(&path3);
+  SP_EXPECT_STR_EQ(path3, SP_LIT("path/to/file.txt"));
+
+  // Test empty path
+  sp_str_t empty = sp_str_copy(SP_LIT(""));
+  sp_os_normalize_path_soft(&empty);
+  SP_EXPECT_STR_EQ(empty, SP_LIT(""));
+
+  // Test single slash
+  sp_str_t single = sp_str_copy(SP_LIT("/"));
+  sp_os_normalize_path_soft(&single);
+  SP_EXPECT_STR_EQ(single, SP_LIT(""));
+}
+
+UTEST(sp_os_join_path, empty_path_handling) {
+  sp_test_use_malloc();
+
+  // Left side empty
+  sp_str_t left_empty = sp_os_join_path(SP_LIT(""), SP_LIT("file.txt"));
+  SP_EXPECT_STR_EQ(left_empty, SP_LIT("/file.txt"));
+
+  sp_str_t left_empty_dir = sp_os_join_path(SP_LIT(""), SP_LIT("dir/"));
+  SP_EXPECT_STR_EQ(left_empty_dir, SP_LIT("/dir"));
+
+  // Right side empty
+  sp_str_t right_empty = sp_os_join_path(SP_LIT("path/to"), SP_LIT(""));
+  SP_EXPECT_STR_EQ(right_empty, SP_LIT("path/to"));
+
+  sp_str_t right_empty_slash = sp_os_join_path(SP_LIT("path/to/"), SP_LIT(""));
+  SP_EXPECT_STR_EQ(right_empty_slash, SP_LIT("path/to"));
+
+  // Both sides empty
+  sp_str_t both_empty = sp_os_join_path(SP_LIT(""), SP_LIT(""));
+  SP_EXPECT_STR_EQ(both_empty, SP_LIT(""));
+
+  // Single character paths
+  sp_str_t single_char = sp_os_join_path(SP_LIT("a"), SP_LIT("b"));
+  SP_EXPECT_STR_EQ(single_char, SP_LIT("a/b"));
+}
+
+UTEST(path_functions, normalized_join_and_parent) {
+  sp_test_use_malloc();
+
+  // Test join path removes trailing slash
+  sp_str_t joined = sp_os_join_path(SP_LIT("path/to/dir/"), SP_LIT("file.txt"));
+  SP_EXPECT_STR_EQ(joined, SP_LIT("path/to/dir/file.txt"));
+
+  // Test parent path removes trailing slash
+  sp_str_t parent = sp_os_parent_path(SP_LIT("path/to/file.txt/"));
+  SP_EXPECT_STR_EQ(parent, SP_LIT("path/to"));
+
+  // Test joining with empty paths
+  sp_str_t empty_left = sp_os_join_path(SP_LIT(""), SP_LIT("file.txt"));
+  SP_EXPECT_STR_EQ(empty_left, SP_LIT("/file.txt"));
+
+  sp_str_t empty_right = sp_os_join_path(SP_LIT("path/to"), SP_LIT(""));
+  SP_EXPECT_STR_EQ(empty_right, SP_LIT("path/to"));
+
+  sp_str_t both_empty = sp_os_join_path(SP_LIT(""), SP_LIT(""));
+  SP_EXPECT_STR_EQ(both_empty, SP_LIT(""));
+
+  // Verify consistency - no trailing slashes in results
+  for (u32 i = 0; i < joined.len; i++) {
+    if (i == joined.len - 1) {
+      ASSERT_NE(joined.data[i], '/');
+      ASSERT_NE(joined.data[i], '\\');
+    }
+  }
+
+  for (u32 i = 0; i < parent.len; i++) {
+    if (i == parent.len - 1) {
+      ASSERT_NE(parent.data[i], '/');
+      ASSERT_NE(parent.data[i], '\\');
+    }
+  }
+}
+
 
 // ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗     ████████╗███████╗███████╗████████╗███████╗
 // ██╔════╝╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝     ╚══██╔══╝██╔════╝██╔════╝╚══██╔══╝██╔════╝
