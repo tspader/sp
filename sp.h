@@ -3456,11 +3456,18 @@ sp_str_t sp_os_normalize_path(sp_str_t path) {
 }
 
 void sp_os_normalize_path_soft(sp_str_t* path) {
-  if (!path || path->len == 0) return;
+  if (!path) return;
+  if (!path->len) return;
 
-  // Remove trailing slash by decrementing length
-  if (path->len > 0 && (path->data[path->len - 1] == '/' || path->data[path->len - 1] == '\\')) {
-    path->len--;
+  switch (sp_str_back(*path)) {
+    case '/':
+    case '\\': {
+      path->len--;
+      break;
+    }
+    default: {
+      break;
+    }
   }
 }
 
