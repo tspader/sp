@@ -1,7 +1,6 @@
 build
 .cache
 compile_commands.json
-.clangd
 
 .spackle/*
 !.spackle/spackle.py

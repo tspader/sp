@@ -1,0 +1,5 @@
+CompileFlags:
+  Add:
+    - -DSP_IMPLEMENTATION
+    - -DSP_APP
+    - -DSP_APP_IMPLEMENTATION

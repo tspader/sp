@@ -19,7 +19,6 @@ SP_DIR_BUILD:= build
     SP_OUTPUT_SDL := $(SP_DIR_BUILD_OUTPUT)/sp-sdl
 SP_MAKEFILE := Makefile
 SP_COMPILE_DB := compile_commands.json
-SP_CLANGD := .clangd
 SP_SP_H := sp.h
 
 
@@ -68,7 +67,7 @@ SP_FLAGS_STRESS = $(SP_FLAGS_CC) -DSP_TEST_ENABLE_STRESS_TESTS
 SP_FLAGS_SDL := $(SP_FLAGS_CC) -DSP_OS_BACKEND_SDL
 
 # Miscellaneous flags
-SP_FLAGS_RUN := --enable-mixed-units --random-order | grep "test cases" -A 1
+SP_FLAGS_RUN := --enable-mixed-units --random-order
 
 SP_SOURCE_FILES := test.c
 
@@ -103,29 +102,27 @@ $(SP_COMPILE_DB): $(SP_MAKEFILE)
 	@make clean
 	@bear -- make build
 
-$(SP_CLANGD): $(SP_MAKEFILE)
-	@printf "CompileFlags:\n  Add: [-DSP_IMPLEMENTATION]\n" > $(SP_CLANGD)
-
+build: $(SP_OUTPUT_C) $(SP_OUTPUT_CPP) $(SP_OUTPUT_STRESS) $(SP_OUTPUT_SDL)
+test: c cpp stress sdl
 
 c: $(SP_OUTPUT_C)
-cpp: $(SP_OUTPUT_CPP)
-stress: $(SP_OUTPUT_STRESS)
-sdl: $(SP_OUTPUT_SDL)
-build: c cpp stress sdl
-
-clangd: $(SP_COMPILE_DB) $(SP_CLANGD)
-
-test: build
 	./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)
+
+cpp: $(SP_OUTPUT_CPP)
 	./$(SP_OUTPUT_CPP) $(SP_FLAGS_RUN)
+
+stress: $(SP_OUTPUT_STRESS)
 	./$(SP_OUTPUT_STRESS) $(SP_FLAGS_RUN)
+
+sdl: $(SP_OUTPUT_SDL)
 	./$(SP_OUTPUT_SDL) $(SP_FLAGS_RUN)
 
+clangd: $(SP_COMPILE_DB)
+
 debug: c
-	gdb ./$(SP_OUTPUT_C)
+	gdb --args ./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)
 
 clean:
 	@rm -rf $(SP_DIR_BUILD)
 	@rm -f $(SP_COMPILE_DB)
-	@rm -f $(SP_CLANGD)
 
