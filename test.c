@@ -973,8 +973,8 @@ UTEST(sp_str_sort_kernel_alphabetical, sorting_tests) {
   ASSERT_EQ(sp_str_compare_alphabetical(SP_LIT("abc"), SP_LIT("ab")), SP_QSORT_B_FIRST);
 }
 
-sp_str_t sp_test_map_band_member(sp_str_t str, sp_opaque_ptr user_data) {
-  return sp_str_concat(str, SP_LIT(" is in the band"));
+sp_str_t sp_test_map_band_member(sp_str_map_context_t* context) {
+  return sp_str_concat(context->str, SP_LIT(" is in the band"));
 }
 
 UTEST(sp_str_t, map_reduce) {
@@ -3407,11 +3407,15 @@ UTEST(sp_str_kernels, reduce_contains) {
     SP_LIT("date"),
   };
 
-  // Test contains - found case
-  ASSERT_TRUE(sp_str_contains_n(strings, 4, SP_LIT("ana")));
+  // Test array contains - found in multiple strings
+  ASSERT_TRUE(sp_str_contains_n(strings, 4, SP_LIT("a")));  // in apple, banana, date
+  ASSERT_TRUE(sp_str_contains_n(strings, 4, SP_LIT("ana"))); // in banana
 
-  // Test contains - not found case
+  // Test array contains - not found in any string
   ASSERT_FALSE(sp_str_contains_n(strings, 4, SP_LIT("xyz")));
+
+  // Test empty array
+  ASSERT_FALSE(sp_str_contains_n(strings, 0, SP_LIT("apple")));
 }
 
 UTEST(sp_str_kernels, reduce_count) {
@@ -4343,6 +4347,39 @@ UTEST(sp_str_starts_with, prefix_checking) {
   // case sensitivity
   ASSERT_FALSE(sp_str_starts_with(SP_LIT("Hello"), SP_LIT("hello")));
   ASSERT_FALSE(sp_str_starts_with(SP_LIT("hello"), SP_LIT("HELLO")));
+}
+
+UTEST(sp_str_contains, substring_searching) {
+  sp_test_use_malloc();
+
+  // basic substring checks
+  ASSERT_TRUE(sp_str_contains(SP_LIT("hello world"), SP_LIT("world")));
+  ASSERT_TRUE(sp_str_contains(SP_LIT("hello world"), SP_LIT("lo w")));
+  ASSERT_TRUE(sp_str_contains(SP_LIT("banana"), SP_LIT("ana")));
+  ASSERT_FALSE(sp_str_contains(SP_LIT("hello"), SP_LIT("world")));
+
+  // exact match
+  ASSERT_TRUE(sp_str_contains(SP_LIT("hello"), SP_LIT("hello")));
+
+  // needle longer than string
+  ASSERT_FALSE(sp_str_contains(SP_LIT("hi"), SP_LIT("hello")));
+
+  // empty cases
+  ASSERT_TRUE(sp_str_contains(SP_LIT("hello"), SP_LIT("")));
+  ASSERT_TRUE(sp_str_contains(SP_LIT(""), SP_LIT("")));
+  ASSERT_FALSE(sp_str_contains(SP_LIT(""), SP_LIT("hello")));
+
+  // edge cases - beginning and end
+  ASSERT_TRUE(sp_str_contains(SP_LIT("hello world"), SP_LIT("hello")));
+  ASSERT_TRUE(sp_str_contains(SP_LIT("hello world"), SP_LIT("world")));
+
+  // case sensitivity
+  ASSERT_FALSE(sp_str_contains(SP_LIT("Hello World"), SP_LIT("hello")));
+  ASSERT_FALSE(sp_str_contains(SP_LIT("hello world"), SP_LIT("WORLD")));
+
+  // repeated patterns
+  ASSERT_TRUE(sp_str_contains(SP_LIT("aaaa"), SP_LIT("aa")));
+  ASSERT_TRUE(sp_str_contains(SP_LIT("abababab"), SP_LIT("abab")));
 }
 
 UTEST(sp_str_view, view_creation) {
