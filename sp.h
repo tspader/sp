@@ -689,6 +689,7 @@ SP_API sp_str_t               sp_str_from_cstr_sized(const c8* str, u32 length);
 SP_API sp_str_t               sp_str_from_cstr_null(const c8* str);
 SP_API sp_str_t               sp_str_alloc(u32 capacity);
 SP_API sp_str_t               sp_str_view(const c8* cstr);
+SP_API bool                   sp_str_empty(sp_str_t);
 SP_API bool                   sp_str_equal(sp_str_t a, sp_str_t b);
 SP_API bool                   sp_str_equal_cstr(sp_str_t a, const c8* b);
 SP_API bool                   sp_str_starts_with(sp_str_t str, sp_str_t prefix);
@@ -2791,6 +2792,10 @@ sp_str_t sp_str_view(const c8* cstr) {
     .len = sp_cstr_len(cstr),
     .data = cstr
   };
+}
+
+bool sp_str_empty(sp_str_t str) {
+  return !str.len;
 }
 
 bool sp_str_equal(sp_str_t a, sp_str_t b) {
