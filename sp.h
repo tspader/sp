@@ -3061,9 +3061,12 @@ sp_str_t sp_str_reduce(sp_str_t* strings, u32 num_strings, void* user_data, sp_s
 }
 
 void sp_str_reduce_kernel_join(sp_str_reduce_context_t* context) {
-  sp_str_t joiner = *(sp_str_t*)context->user_data;
+  if (sp_str_empty(context->str)) return;
+
   sp_str_builder_append(&context->builder, context->str);
+
   if (context->index != (context->elements.len - 1)) {
+    sp_str_t joiner = *(sp_str_t*)context->user_data;
     sp_str_builder_append(&context->builder, joiner);
   }
 }
