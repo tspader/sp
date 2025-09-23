@@ -5189,7 +5189,10 @@ void sp_future_set_value(sp_future_t* future, void* value) {
 }
 
 void sp_init(sp_config_t config) {
-  SP_ASSERT(config.allocator.on_alloc);
+  if (!config.allocator.on_alloc) {
+    config.allocator = sp_allocator_default();
+  }
+
   sp_context_push_allocator(config.allocator);
 }
 
