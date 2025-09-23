@@ -21,11 +21,18 @@ SP_MAKEFILE := Makefile
 SP_COMPILE_DB := compile_commands.json
 SP_SP_H := sp.h
 
+SPN := $(shell command -v spn)
+BEAR := $(shell command -v bear)
+
 
 ##################
 # COMPILER FLAGS #
 ##################
-SP_FLAG_INCLUDES := $(shell spn print --compiler gcc)
+ifeq ($(SPN),)
+SP_FLAG_INCLUDES :=
+else
+SP_FLAG_INCLUDES := $(shell $(SPN) print --compiler gcc)
+endif
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
 SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
 SP_FLAG_OPTIMIZATION := -g
@@ -35,9 +42,15 @@ ifeq ($(OS),Windows_NT)
   CMAKE := cmake
   SP_FLAG_RPATH :=
 else
-  CC := bear --append -- gcc
-  MAKE := bear --append -- make
-  CMAKE := bear --append -- cmake
+  ifeq ($(BEAR),)
+    CC := gcc
+    MAKE := make
+    CMAKE := cmake
+  else
+    CC := bear --append -- gcc
+    MAKE := bear --append -- make
+    CMAKE := bear --append -- cmake
+  endif
 
   ifeq ($(shell uname),Darwin)
     SP_FLAG_RPATH := -Wl,-rpath,@loader_path
@@ -71,17 +84,51 @@ SP_FLAGS_RUN := --enable-mixed-units --random-order
 
 SP_SOURCE_FILES := test.c
 
+EXAMPLES := ansi_colors \
+            bump_allocator \
+            c_strings_only_at_api_boundaries \
+            carr_for \
+            compound_literals \
+            context_allocator \
+            dynamic_array \
+            enum_names \
+            error_avoid_nesting \
+            file_monitor \
+            format_string \
+            hash_functions \
+            logging \
+            macro_utilities \
+            parse_numbers \
+            path_operations \
+            qsort_compare \
+            ring_buffer \
+            sdl_integration \
+            string_literal \
+            string_map \
+            string_padding \
+            string_prefix_checking \
+            string_slicing \
+            switch_over_if \
+            switch_patterns \
+            test_macros \
+            thread_sync \
+            zero_initialize
+
+EXAMPLE_TARGETS := $(addprefix $(SP_DIR_BUILD_OUTPUT)/,$(EXAMPLES))
+
 ###########
 # TARGETS #
 ###########
 all: clangd build
 
-.PHONY: c cpp stress sdl build test debug clean all
+.PHONY: c cpp stress sdl build test debug clean all examples $(EXAMPLES)
 
 $(SP_DIR_BUILD_OUTPUT):
 	@mkdir -p $(SP_DIR_BUILD_OUTPUT)
-	spn build
-	spn copy $(SP_DIR_BUILD_OUTPUT)
+ifneq ($(SPN),)
+	$(SPN) build
+	$(SPN) copy $(SP_DIR_BUILD_OUTPUT)
+endif
 
 $(SP_DIR_BUILD_SDL):
 	@mkdir -p $(SP_DIR_BUILD_SDL)
@@ -97,6 +144,13 @@ $(SP_OUTPUT_SDL): $(SDL_OUTPUT) $(SP_SOURCE_FILES) $(SP_SP_H) | $(SP_DIR_BUILD_O
 
 $(SP_OUTPUT_STRESS): $(SP_SOURCE_FILES) $(SP_SP_H) | $(SP_DIR_BUILD_OUTPUT)
 	$(CC) $(SP_FLAGS_STRESS) $(SP_SOURCE_FILES) -o $(SP_OUTPUT_STRESS)
+
+$(SP_DIR_BUILD_OUTPUT)/%: examples/%.c | $(SP_DIR_BUILD_OUTPUT)
+	$(CC) $(SP_FLAGS_CC) $< -o $@
+
+examples: $(EXAMPLE_TARGETS)
+
+$(EXAMPLES): %: $(SP_DIR_BUILD_OUTPUT)/%
 
 $(SP_COMPILE_DB): $(SP_MAKEFILE)
 	@make clean
