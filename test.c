@@ -4600,7 +4600,6 @@ UTEST(asset_registry, string_copying) {
   sp_context_pop();
 }
 
-// Test: NULL user data handling
 UTEST(asset_registry, null_user_data) {
   sp_context_push_allocator(sp_malloc_allocator_init());
 
@@ -4622,7 +4621,6 @@ UTEST(asset_registry, null_user_data) {
   sp_context_pop();
 }
 
-// Test: Empty name strings
 UTEST(asset_registry, empty_names) {
   sp_context_push_allocator(sp_malloc_allocator_init());
 
@@ -4644,7 +4642,6 @@ UTEST(asset_registry, empty_names) {
   sp_context_pop();
 }
 
-// Test: Import/completion pipeline with actual threading
 UTEST(asset_registry, import_completion_pipeline) {
   sp_context_push_allocator(sp_malloc_allocator_init());
 
@@ -4697,7 +4694,6 @@ UTEST(asset_registry, import_completion_pipeline) {
   sp_context_pop();
 }
 
-// Test: State transitions
 UTEST(asset_registry, state_transitions) {
   sp_context_push_allocator(sp_malloc_allocator_init());
 

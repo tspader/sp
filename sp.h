@@ -890,6 +890,11 @@ typedef enum {
   SP_MUTEX_RECURSIVE = 4
 } sp_mutex_kind_t;
 
+typedef enum {
+  SP_OS_PLATFORM_LINUX,
+  SP_OS_PLATFORM_WIN32,
+  SP_OS_PLATFORM_MACOS,
+} sp_os_platform_kind_t;
 
 SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
 
@@ -939,6 +944,8 @@ SP_API bool                         sp_os_is_memory_equal(const void* a, const v
 SP_API void                         sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
 SP_API void                         sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);
 SP_API void                         sp_os_zero_memory(void* buffer, u32 buffer_size);
+SP_API sp_os_platform_kind_t        sp_os_platform_kind();
+SP_API sp_str_t                     sp_os_platform_name();
 SP_API bool                         sp_os_does_path_exist(sp_str_t path);
 SP_API bool                         sp_os_is_regular_file(sp_str_t path);
 SP_API bool                         sp_os_is_directory(sp_str_t path);
@@ -4648,10 +4655,18 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 #endif
 
 
-//////////////////
-// FILE MONITOR //
-//////////////////
+//////////////
+// PLATFORM //
+//////////////
 #ifdef SP_WIN32
+  sp_os_platform_kind_t sp_os_platform_kind() {
+    return SP_OS_PLATFORM_WIN32;
+  }
+
+  sp_str_t sp_os_platform_name() {
+    return sp_str_lit("win32");
+  }
+
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
     sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)sp_alloc(sizeof(sp_os_win32_file_monitor_t));
     sp_dynamic_array_init(&os->directory_infos, sizeof(sp_monitored_dir_t));
@@ -4806,6 +4821,14 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 #endif
 
 #ifdef SP_LINUX
+  sp_os_platform_kind_t sp_os_platform_kind() {
+    return SP_OS_PLATFORM_LINUX;
+  }
+
+  sp_str_t sp_os_platform_name() {
+    return sp_str_lit("linux");
+  }
+
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
     sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)sp_alloc(sizeof(sp_os_linux_file_monitor_t));
 
@@ -4932,6 +4955,14 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 #endif
 
 #ifdef SP_MACOS
+  sp_os_platform_kind_t sp_os_platform_kind() {
+    return SP_OS_PLATFORM_MACOS;
+  }
+
+  sp_str_t sp_os_platform_name() {
+    return sp_str_lit("macos");
+  }
+
   void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
     (void)monitor;
     SP_BROKEN();
