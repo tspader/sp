@@ -1133,6 +1133,7 @@ typedef struct {
 } sp_config_t;
 
 void sp_init(sp_config_t config);
+void sp_init_default();
 #ifdef SP_APP
 typedef enum {
   SP_ASSET_STATE_QUEUED,
