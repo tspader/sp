@@ -257,8 +257,14 @@
 
 #define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
 
-#define SP_API
-#define SP_IMP
+#ifndef SP_API
+  #define SP_API
+#endif
+
+#ifndef SP_IMP
+  #define SP_IMP
+#endif
+
 #define SP_UNUSED(x) ((void)(x))
 
 #define SP_SDL_IGNORE_STDIO true

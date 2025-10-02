@@ -6,7 +6,7 @@ return {
       name = "sdl3"
     },
     utest = {
-      build_id = "1c0dd392",
+      build_id = "182676f6",
       commit = "fb622dc480",
       name = "utest"
     }
