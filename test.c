@@ -3455,38 +3455,34 @@ UTEST(sp_str_kernels, reduce_longest_shortest) {
   SP_EXPECT_STR_EQ_CSTR(shortest, "x");
 }
 
+
+#define SP_TEST_ENUM(X) \
+  X(SP_ENUM_FOO) \
+  X(SP_ENUM_BAR) \
+  X(SP_ENUM_BAZ) \
+  X(SP_ENUM_QUX)
+
 typedef enum {
-  SP_ENUM_FOO,
-  SP_ENUM_BAR,
-  SP_ENUM_BAZ,
-  SP_ENUM_QUX,
+  SP_TEST_ENUM(SP_XENUM_DEFINE)
 } sp_test_enum_t;
+
+sp_str_t sp_test_enum_to_str(sp_test_enum_t e) {
+  switch (e) {
+    SP_TEST_ENUM(SP_XENUM_CASE_TO_STRING)
+    default: SP_UNREACHABLE_RETURN(sp_str_lit(""));
+  }
+}
 
 const c8* sp_test_enum_to_cstr(sp_test_enum_t e) {
   switch (e) {
-    SP_SWITCH_ENUM_TO_CSTR(SP_ENUM_FOO)
-    SP_SWITCH_ENUM_TO_CSTR(SP_ENUM_BAR)
-    SP_SWITCH_ENUM_TO_CSTR(SP_ENUM_BAZ)
-    SP_SWITCH_ENUM_TO_CSTR(SP_ENUM_QUX)
+    SP_TEST_ENUM(SP_XENUM_CASE_TO_CSTR)
+    default: SP_UNREACHABLE_RETURN("");
   }
-
-  SP_UNREACHABLE_RETURN("");
-}
-
-sp_str_t sp_test_enum_to_string(sp_test_enum_t e) {
-  switch (e) {
-    SP_SWITCH_ENUM_TO_STRING(SP_ENUM_FOO)
-    SP_SWITCH_ENUM_TO_STRING(SP_ENUM_BAR)
-    SP_SWITCH_ENUM_TO_STRING(SP_ENUM_BAZ)
-    SP_SWITCH_ENUM_TO_STRING(SP_ENUM_QUX)
-  }
-
-  SP_UNREACHABLE_RETURN(SP_LIT(""));
 }
 
 UTEST(sp_enum_macros, name_generation) {
   ASSERT_STREQ(sp_test_enum_to_cstr(SP_ENUM_BAZ), "SP_ENUM_BAZ");
-  SP_EXPECT_STR_EQ_CSTR(sp_test_enum_to_string(SP_ENUM_QUX), "SP_ENUM_QUX");
+  SP_EXPECT_STR_EQ_CSTR(sp_test_enum_to_str(SP_ENUM_QUX), "SP_ENUM_QUX");
 }
 
 
