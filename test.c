@@ -3463,19 +3463,19 @@ UTEST(sp_str_kernels, reduce_longest_shortest) {
   X(SP_ENUM_QUX)
 
 typedef enum {
-  SP_TEST_ENUM(SP_XENUM_DEFINE)
+  SP_TEST_ENUM(SP_X_ENUM_DEFINE)
 } sp_test_enum_t;
 
 sp_str_t sp_test_enum_to_str(sp_test_enum_t e) {
   switch (e) {
-    SP_TEST_ENUM(SP_XENUM_CASE_TO_STRING)
+    SP_TEST_ENUM(SP_X_ENUM_CASE_TO_STRING)
     default: SP_UNREACHABLE_RETURN(sp_str_lit(""));
   }
 }
 
 const c8* sp_test_enum_to_cstr(sp_test_enum_t e) {
   switch (e) {
-    SP_TEST_ENUM(SP_XENUM_CASE_TO_CSTR)
+    SP_TEST_ENUM(SP_X_ENUM_CASE_TO_CSTR)
     default: SP_UNREACHABLE_RETURN("");
   }
 }

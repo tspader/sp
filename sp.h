@@ -247,11 +247,17 @@
 
 #define SP_MAX_PATH_LEN 260
 
-#define SP_XENUM_CASE_TO_CSTR(NAME)         case NAME: { return SP_MACRO_STR(NAME); }
-#define SP_XENUM_CASE_TO_STRING(NAME)       case NAME: { return SP_LIT(SP_MACRO_STR(NAME)); }
-#define SP_XENUM_CASE_TO_STRING_UPPER(NAME) case NAME: { return sp_str_to_upper(SP_LIT(SP_MACRO_STR(NAME))); }
-#define SP_XENUM_CASE_TO_STRING_LOWER(NAME) case NAME: { return sp_str_to_lower(SP_LIT(SP_MACRO_STR(NAME))); }
-#define SP_XENUM_DEFINE(X) X,
+#define SP_X_ENUM_CASE_TO_CSTR(ID)         case ID: { return SP_MACRO_STR(ID); }
+#define SP_X_ENUM_CASE_TO_STRING(ID)       case ID: { return SP_LIT(SP_MACRO_STR(ID)); }
+#define SP_X_ENUM_CASE_TO_STRING_UPPER(ID) case ID: { return sp_str_to_upper(SP_LIT(SP_MACRO_STR(ID))); }
+#define SP_X_ENUM_CASE_TO_STRING_LOWER(ID) case ID: { return sp_str_to_lower(SP_LIT(SP_MACRO_STR(ID))); }
+#define SP_X_ENUM_DEFINE(ID) ID,
+
+#define SP_X_NAMED_ENUM_CASE_TO_CSTR(ID, NAME)         case ID: { return (NAME); }
+#define SP_X_NAMED_ENUM_CASE_TO_STRING(ID, NAME)       case ID: { return sp_str_lit(NAME); }
+#define SP_X_NAMED_ENUM_CASE_TO_STRING_UPPER(ID, NAME) case ID: { return sp_str_to_upper(sp_str_lit(NAME)); }
+#define SP_X_NAMED_ENUM_CASE_TO_STRING_LOWER(ID, NAME) case ID: { return sp_str_to_lower(sp_str_LIT(NAME)); }
+#define SP_X_NAMED_ENUM_DEFINE(ID, NAME) ID,
 
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
