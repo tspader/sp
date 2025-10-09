@@ -622,6 +622,140 @@ UTEST(sp_fmt, multiple_args) {
   SP_EXPECT_STR_EQ_CSTR(result, "Count: 42, Name: test, Value: 3.140");
 }
 
+UTEST(sp_fmt, padding) {
+  sp_test_use_malloc();
+
+  sp_str_t result;
+
+  result = sp_format("{:pad 10}", SP_FMT_U32(42));
+  SP_EXPECT_STR_EQ_CSTR(result, "42        ");
+
+  result = sp_format("{:pad 5}", SP_FMT_CSTR("hi"));
+  SP_EXPECT_STR_EQ_CSTR(result, "hi   ");
+
+  sp_str_t foo_str = SP_LIT("foo");
+  result = sp_format("{:pad 8}", SP_FMT_STR(foo_str));
+  SP_EXPECT_STR_EQ_CSTR(result, "foo     ");
+
+  result = sp_format("{:pad 15}", SP_FMT_S32(-123));
+  SP_EXPECT_STR_EQ_CSTR(result, "-123           ");
+
+  result = sp_format("{:pad 0}", SP_FMT_U32(42));
+  SP_EXPECT_STR_EQ_CSTR(result, "42");
+
+  result = sp_format("{:pad 1}", SP_FMT_U32(42));
+  SP_EXPECT_STR_EQ_CSTR(result, "42");
+
+  result = sp_format("{:pad 2}", SP_FMT_U32(42));
+  SP_EXPECT_STR_EQ_CSTR(result, "42");
+
+  result = sp_format("{:pad 3}", SP_FMT_U32(42));
+  SP_EXPECT_STR_EQ_CSTR(result, "42 ");
+
+  result = sp_format("{:pad 5}", SP_FMT_CSTR("hello"));
+  SP_EXPECT_STR_EQ_CSTR(result, "hello");
+
+  result = sp_format("{:pad 6}", SP_FMT_CSTR("hello"));
+  SP_EXPECT_STR_EQ_CSTR(result, "hello ");
+
+  result = sp_format("{:pad 10}", SP_FMT_CSTR(""));
+  SP_EXPECT_STR_EQ_CSTR(result, "          ");
+
+  result = sp_format("{:pad 10}", SP_FMT_U8(255));
+  SP_EXPECT_STR_EQ_CSTR(result, "255       ");
+
+  result = sp_format("{:pad 10}", SP_FMT_U16(65535));
+  SP_EXPECT_STR_EQ_CSTR(result, "65535     ");
+
+  result = sp_format("{:pad 20}", SP_FMT_U64(9876543210ULL));
+  SP_EXPECT_STR_EQ_CSTR(result, "9876543210          ");
+
+  result = sp_format("{:pad 10}", SP_FMT_S8(-128));
+  SP_EXPECT_STR_EQ_CSTR(result, "-128      ");
+
+  result = sp_format("{:pad 10}", SP_FMT_S16(-32768));
+  SP_EXPECT_STR_EQ_CSTR(result, "-32768    ");
+
+  result = sp_format("{:pad 15}", SP_FMT_F32(3.14f));
+  SP_EXPECT_STR_EQ_CSTR(result, "3.140          ");
+
+  result = sp_format("{:pad 10}", SP_FMT_C8('A'));
+  SP_EXPECT_STR_EQ_CSTR(result, "A         ");
+}
+
+UTEST(sp_fmt, padding_in_context) {
+  sp_test_use_malloc();
+
+  sp_str_t result;
+
+  result = sp_format("Name: {:pad 20} Age: {:pad 5}",
+    SP_FMT_CSTR("Alice"), SP_FMT_U32(30));
+  SP_EXPECT_STR_EQ_CSTR(result, "Name: Alice                Age: 30   ");
+
+  result = sp_format("[{:pad 10}] [{:pad 10}] [{:pad 10}]",
+    SP_FMT_CSTR("left"), SP_FMT_CSTR("center"), SP_FMT_CSTR("right"));
+  SP_EXPECT_STR_EQ_CSTR(result, "[left      ] [center    ] [right     ]");
+
+  result = sp_format("ID:{:pad 6} Value:{:pad 8}",
+    SP_FMT_U32(42), SP_FMT_F32(3.14f));
+  SP_EXPECT_STR_EQ_CSTR(result, "ID:42     Value:3.140   ");
+}
+
+UTEST(sp_fmt, padding_large_widths) {
+  sp_test_use_malloc();
+
+  sp_str_t result;
+
+  result = sp_format("{:pad 50}", SP_FMT_CSTR("x"));
+  ASSERT_EQ(result.len, 50);
+  ASSERT_EQ(result.data[0], 'x');
+  for (u32 i = 1; i < 50; i++) {
+    ASSERT_EQ(result.data[i], ' ');
+  }
+
+  result = sp_format("{:pad 100}", SP_FMT_U32(1));
+  ASSERT_EQ(result.len, 100);
+  ASSERT_EQ(result.data[0], '1');
+  for (u32 i = 1; i < 100; i++) {
+    ASSERT_EQ(result.data[i], ' ');
+  }
+}
+
+UTEST(sp_fmt, padding_combined_with_text) {
+  sp_test_use_malloc();
+
+  sp_str_t result;
+
+  result = sp_format("Start {:pad 10} End", SP_FMT_CSTR("mid"));
+  SP_EXPECT_STR_EQ_CSTR(result, "Start mid        End");
+
+  result = sp_format("{:pad 5}|{:pad 5}|{:pad 5}",
+    SP_FMT_U32(1), SP_FMT_U32(22), SP_FMT_U32(333));
+  SP_EXPECT_STR_EQ_CSTR(result, "1    |22   |333  ");
+
+  result = sp_format("Column1: {:pad 15} Column2: {:pad 15}",
+    SP_FMT_CSTR("short"), SP_FMT_CSTR("also short"));
+  SP_EXPECT_STR_EQ_CSTR(result, "Column1: short           Column2: also short     ");
+}
+
+UTEST(sp_fmt, padding_numeric_parsing) {
+  sp_test_use_malloc();
+
+  sp_str_t result;
+
+  result = sp_format("{:pad 1}", SP_FMT_U32(42));
+  SP_EXPECT_STR_EQ_CSTR(result, "42");
+
+  result = sp_format("{:pad 10}", SP_FMT_U32(42));
+  SP_EXPECT_STR_EQ_CSTR(result, "42        ");
+
+  result = sp_format("{:pad 100}", SP_FMT_U32(42));
+  ASSERT_EQ(result.len, 100);
+
+  result = sp_format("{:pad 999}", SP_FMT_CSTR("a"));
+  ASSERT_EQ(result.len, 999);
+}
+
 UTEST(sp_str_builder, basic_operations) {
   sp_test_use_malloc();
 

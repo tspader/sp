@@ -2397,6 +2397,7 @@ typedef enum {
   SP_FORMAT_SPECIFIER_FLAG_NONE = 0,
   SP_FORMAT_SPECIFIER_FLAG_FG_COLOR = 1 << 0,
   SP_FORMAT_SPECIFIER_FLAG_BG_COLOR = 1 << 1,
+  SP_FORMAT_SPECIFIER_FLAG_PAD = 1 << 2,
 } sp_format_specifier_flag_t;
 
 
@@ -2408,6 +2409,7 @@ typedef struct {
 typedef struct {
   u32 flags;
   sp_str_t color;
+  u32 pad;
 } sp_format_specifier_t;
 
 c8 sp_format_parser_peek(sp_format_parser_t* parser) {
@@ -2430,6 +2432,14 @@ bool sp_format_parser_is_alpha(sp_format_parser_t* parser) {
   return false;
 }
 
+bool sp_format_parser_is_alphanumeric(sp_format_parser_t* parser) {
+  c8 c = sp_format_parser_peek(parser);
+  if (c >= 'a' && c <= 'z') return true;
+  if (c >= 'A' && c <= 'Z') return true;
+  if (c >= '0' && c <= '9') return true;
+  return false;
+}
+
 bool sp_format_parser_is_done(sp_format_parser_t* parser) {
   return parser->it >= parser->fmt.len;
 }
@@ -2443,10 +2453,20 @@ sp_str_t sp_format_parser_id(sp_format_parser_t* parser) {
   return id;
 }
 
-sp_format_specifier_flag_t sp_format_specifier_flag_to_str(sp_str_t id) {
+sp_str_t sp_format_parser_value(sp_format_parser_t* parser) {
+  sp_str_t value = sp_str_sub(parser->fmt, parser->it, 0);
+  while (sp_format_parser_is_alphanumeric(parser)) {
+    sp_format_parser_eat(parser);
+    value.len++;
+  }
+  return value;
+}
+
+sp_format_specifier_flag_t sp_format_specifier_flag_from_str(sp_str_t id) {
   if (sp_str_equal_cstr(id, "color")) return SP_FORMAT_SPECIFIER_FLAG_FG_COLOR;
   if (sp_str_equal_cstr(id, "fg")) return SP_FORMAT_SPECIFIER_FLAG_FG_COLOR;
   if (sp_str_equal_cstr(id, "bg")) return SP_FORMAT_SPECIFIER_FLAG_BG_COLOR;
+  if (sp_str_equal_cstr(id, "pad")) return SP_FORMAT_SPECIFIER_FLAG_PAD;
   return SP_FORMAT_SPECIFIER_FLAG_NONE;
 }
 
@@ -2473,30 +2493,36 @@ sp_str_t sp_format_color_id_to_ansi_fg(sp_str_t id) {
 sp_format_specifier_t sp_format_parser_specifier(sp_format_parser_t* parser) {
   sp_format_specifier_t spec = SP_ZERO_INITIALIZE();
 
-  c8 c = sp_format_parser_peek(parser);
-  switch (c) {
-    case ':': {
-      sp_format_parser_eat_and_assert(parser, ':');
-      sp_str_t id = sp_format_parser_id(parser);
-      sp_format_parser_eat_and_assert(parser, ' ');
-      sp_str_t value = sp_format_parser_id(parser);
-
-      sp_format_specifier_flag_t flag = sp_format_specifier_flag_to_str(id);
-      switch (flag) {
-        case SP_FORMAT_SPECIFIER_FLAG_FG_COLOR: {
-          spec.color = sp_format_color_id_to_ansi_fg(value);
-          break;
-        }
-        default: {
-          SP_UNREACHABLE_CASE();
-        }
-      }
-
-      spec.flags |= flag;
+  while (!sp_format_parser_is_done(parser)) {
+    c8 c = sp_format_parser_peek(parser);
+    if (c != ':') {
       break;
     }
-    default: {
-      break;
+
+    sp_format_parser_eat_and_assert(parser, ':');
+    sp_str_t id = sp_format_parser_id(parser);
+    sp_format_parser_eat_and_assert(parser, ' ');
+    sp_str_t value = sp_format_parser_value(parser);
+
+    sp_format_specifier_flag_t flag = sp_format_specifier_flag_from_str(id);
+    switch (flag) {
+      case SP_FORMAT_SPECIFIER_FLAG_FG_COLOR: {
+        spec.color = sp_format_color_id_to_ansi_fg(value);
+        break;
+      }
+      case SP_FORMAT_SPECIFIER_FLAG_PAD: {
+        spec.pad = sp_parse_u32(value);
+        break;
+      }
+      default: {
+        SP_UNREACHABLE_CASE();
+      }
+    }
+
+    spec.flags |= flag;
+
+    if (!sp_format_parser_is_done(parser) && sp_format_parser_peek(parser) == ' ') {
+      sp_format_parser_eat(parser);
     }
   }
 
@@ -2531,11 +2557,22 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
         sp_format_parser_eat_and_assert(&parser, '}');
 
         sp_format_arg_t arg = va_arg(args, sp_format_arg_t);
+        u32 formatted_value_start = builder.buffer.count;
         SP_CARR_FOR(formatters, i) {
           if (arg.id == formatters[i].id) {
             sp_format_fn_t fn = formatters[i].fn;
             fn(&builder, &arg);
             break;
+          }
+        }
+        sp_str_t formatted_value = sp_str(builder.buffer.data + formatted_value_start, builder.buffer.count - formatted_value_start);
+
+        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_PAD) {
+          if (formatted_value.len < specifier.pad) {
+            u32 spaces_needed = specifier.pad - formatted_value.len;
+            for (u32 i = 0; i < spaces_needed; i++) {
+              sp_str_builder_append_c8(&builder, ' ');
+            }
           }
         }
 
