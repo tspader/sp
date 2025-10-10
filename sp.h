@@ -810,7 +810,6 @@ SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* mon
 #define SP_LOG(CSTR, ...)    sp_log(SP_CSTR((CSTR)), ##__VA_ARGS__)
 #define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
 void sp_log(sp_str_t fmt, ...);
-void sp_log_raw(sp_str_t fmt, ...);
 
 
 //   ██████╗ ███████╗
@@ -819,27 +818,6 @@ void sp_log_raw(sp_str_t fmt, ...);
 //  ██║   ██║╚════██║
 //  ╚██████╔╝███████║
 //   ╚═════╝ ╚══════╝
-//////////////////
-// COMMON TYPES //
-//////////////////
-#if defined(SP_OS_BACKEND_NATIVE) && defined(SP_WIN32)
-  typedef thrd_t               sp_thread_t;
-  typedef mtx_t                sp_mutex_t;
-  typedef HANDLE               sp_semaphore_t;
-#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_LINUX)
-  typedef pthread_t            sp_thread_t;
-  typedef pthread_mutex_t      sp_mutex_t;
-  typedef sem_t                sp_semaphore_t;
-#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_MACOS)
-  typedef pthread_t            sp_thread_t;
-  typedef pthread_mutex_t      sp_mutex_t;
-  typedef dispatch_semaphore_t sp_semaphore_t;
-#elif defined(SP_OS_BACKEND_SDL)
-  typedef SDL_Mutex*           sp_mutex_t;
-  typedef SDL_Thread*          sp_thread_t;
-  typedef SDL_Semaphore*       sp_semaphore_t;
-#endif
-
 //////////////
 // OS TYPES //
 //////////////
@@ -909,24 +887,6 @@ typedef enum {
   SP_OS_PLATFORM_MACOS,
 } sp_os_platform_kind_t;
 
-SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
-
-typedef struct {
-  sp_thread_fn_t fn;
-  void* userdata;
-  sp_context_t context;
-  sp_semaphore_t semaphore;
-} sp_thread_launch_t;
-
-typedef SP_ATOMIC(bool) sp_atomic_bool_t;
-
-typedef struct {
-  sp_allocator_t allocator;
-  sp_atomic_bool_t ready;
-  void* value;
-  u32 size;
-} sp_future_t;
-
 typedef struct {
   s32 year;
   s32 month;
@@ -986,24 +946,139 @@ SP_IMP void                         sp_os_file_monitor_init(sp_file_monitor_t* m
 SP_IMP void                         sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
 SP_IMP void                         sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
 SP_IMP void                         sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
-SP_API void                         sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
 SP_API void                         sp_os_print(sp_str_t message);
 SP_API void                         sp_os_log(sp_str_t message);
-SP_API void                         sp_thread_join(sp_thread_t* thread);
-SP_API s32                          sp_thread_launch(void* userdata);
-SP_API void                         sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind);
-SP_API void                         sp_mutex_lock(sp_mutex_t* mutex);
-SP_API void                         sp_mutex_unlock(sp_mutex_t* mutex);
-SP_API void                         sp_mutex_destroy(sp_mutex_t* mutex);
-SP_API s32                          sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
-SP_API void                         sp_semaphore_init(sp_semaphore_t* semaphore);
-SP_API void                         sp_semaphore_destroy(sp_semaphore_t* semaphore);
-SP_API void                         sp_semaphore_wait(sp_semaphore_t* semaphore);
-SP_API bool                         sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
-SP_API void                         sp_semaphore_signal(sp_semaphore_t* semaphore);
-SP_API sp_future_t*                 sp_future_create(u32 size);
-SP_API void                         sp_future_set_value(sp_future_t* future, void* data);
-SP_API void                         sp_future_destroy(sp_future_t* future);
+
+
+//////////////////
+// COMMON TYPES //
+//////////////////
+#if defined(SP_OS_BACKEND_NATIVE) && defined(SP_WIN32)
+  typedef thrd_t               sp_thread_t;
+  typedef mtx_t                sp_mutex_t;
+  typedef HANDLE               sp_semaphore_t;
+#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_LINUX)
+  typedef pthread_t            sp_thread_t;
+  typedef pthread_mutex_t      sp_mutex_t;
+  typedef sem_t                sp_semaphore_t;
+#elif defined(SP_OS_BACKEND_NATIVE) && defined(SP_MACOS)
+  typedef pthread_t            sp_thread_t;
+  typedef pthread_mutex_t      sp_mutex_t;
+  typedef dispatch_semaphore_t sp_semaphore_t;
+#elif defined(SP_OS_BACKEND_SDL)
+  typedef SDL_Mutex*           sp_mutex_t;
+  typedef SDL_Thread*          sp_thread_t;
+  typedef SDL_Semaphore*       sp_semaphore_t;
+#endif
+
+SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
+
+typedef struct {
+  sp_thread_fn_t fn;
+  void* userdata;
+  sp_context_t context;
+  sp_semaphore_t semaphore;
+} sp_thread_launch_t;
+
+typedef SP_ATOMIC(bool) sp_atomic_bool_t;
+
+typedef struct {
+  sp_allocator_t allocator;
+  sp_atomic_bool_t ready;
+  void* value;
+  u32 size;
+} sp_future_t;
+
+SP_API void         sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
+SP_API void         sp_thread_join(sp_thread_t* thread);
+SP_API s32          sp_thread_launch(void* userdata);
+SP_API void         sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind);
+SP_API void         sp_mutex_lock(sp_mutex_t* mutex);
+SP_API void         sp_mutex_unlock(sp_mutex_t* mutex);
+SP_API void         sp_mutex_destroy(sp_mutex_t* mutex);
+SP_API s32          sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
+SP_API void         sp_semaphore_init(sp_semaphore_t* semaphore);
+SP_API void         sp_semaphore_destroy(sp_semaphore_t* semaphore);
+SP_API void         sp_semaphore_wait(sp_semaphore_t* semaphore);
+SP_API bool         sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
+SP_API void         sp_semaphore_signal(sp_semaphore_t* semaphore);
+SP_API sp_future_t* sp_future_create(u32 size);
+SP_API void         sp_future_set_value(sp_future_t* future, void* data);
+SP_API void         sp_future_destroy(sp_future_t* future);
+
+
+////////
+// IO //
+typedef enum {
+  SP_ERR_OK = 0,
+  SP_ERR_IO_EOF,
+  SP_ERR_IO,
+  SP_ERR_IO_SEEK_INVALID,
+  SP_ERR_IO_SEEK_FAILED,
+  SP_ERR_IO_WRITE_FAILED,
+  SP_ERR_IO_CLOSE_FAILED,
+  SP_ERR_IO_READ_FAILED,
+} sp_err_t;
+
+void sp_err_set(sp_err_t err);
+
+typedef enum {
+  SP_IO_SEEK_SET,
+  SP_IO_SEEK_CUR,
+  SP_IO_SEEK_END,
+} sp_io_whence_t;
+
+typedef enum {
+  SP_IO_MODE_READ   = 1 << 0,
+  SP_IO_MODE_WRITE  = 1 << 1,
+  SP_IO_MODE_APPEND = 1 << 2,
+} sp_io_mode_t;
+
+typedef struct sp_io_stream_t sp_io_stream_t;
+
+SP_TYPEDEF_FN(s64, sp_io_size_fn, sp_io_stream_t* stream);
+SP_TYPEDEF_FN(s64, sp_io_seek_fn, sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
+SP_TYPEDEF_FN(u64, sp_io_read_fn, sp_io_stream_t* stream, void* ptr, u64 size);
+SP_TYPEDEF_FN(u64, sp_io_write_fn, sp_io_stream_t* stream, const void* ptr, u64 size);
+SP_TYPEDEF_FN(void, sp_io_close_fn, sp_io_stream_t* stream);
+
+typedef struct {
+  sp_io_size_fn  size;
+  sp_io_seek_fn  seek;
+  sp_io_read_fn  read;
+  sp_io_write_fn write;
+  sp_io_close_fn close;
+} sp_io_callbacks_t;
+
+typedef struct {
+  int fd;
+  bool autoclose;
+} sp_io_file_data_t;
+
+typedef struct {
+  u8* base;
+  u8* here;
+  u8* stop;
+} sp_io_memory_data_t;
+
+struct sp_io_stream_t {
+  sp_io_callbacks_t callbacks;
+  union {
+    sp_io_file_data_t file;
+    sp_io_memory_data_t memory;
+  };
+  sp_allocator_t allocator;
+};
+
+sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
+sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
+u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
+u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
+s64            sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
+s64            sp_io_size(sp_io_stream_t* stream);
+void           sp_io_close(sp_io_stream_t* stream);
+sp_str_t       sp_io_read_file(sp_str_t path);
+
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
 // ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
@@ -5249,6 +5324,246 @@ void sp_init(sp_config_t config) {
   }
 
   sp_context_push_allocator(config.allocator);
+}
+
+void sp_err_set(sp_err_t err) {
+  (void)err;
+}
+
+s64 sp_io_memory_size(sp_io_stream_t* stream) {
+  sp_io_memory_data_t* data = &stream->memory;
+  return data->stop - data->base;
+}
+
+s64 sp_io_memory_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+  sp_io_memory_data_t* data = &stream->memory;
+  u8* new_pos;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      new_pos = data->base + offset;
+      break;
+    }
+    case SP_IO_SEEK_CUR: {
+      new_pos = data->here + offset;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      new_pos = data->stop + offset;
+      break;
+    }
+    default: {
+      SP_UNREACHABLE();
+    }
+  }
+
+  if (new_pos < data->base || new_pos > data->stop) {
+    sp_err_set(SP_ERR_IO_SEEK_INVALID);
+    return -1;
+  }
+  data->here = new_pos;
+  return data->here - data->base;
+}
+
+u64 sp_io_memory_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+  sp_io_memory_data_t* data = &stream->memory;
+  u64 available = data->stop - data->here;
+  u64 to_read = SP_MIN(size, available);
+
+  sp_os_copy_memory(data->here, ptr, to_read);
+  data->here += to_read;
+  return to_read;
+}
+
+u64 sp_io_memory_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+  sp_io_memory_data_t* data = &stream->memory;
+  u64 available = data->stop - data->here;
+  u64 to_write = SP_MIN(size, available);
+
+  sp_os_copy_memory(ptr, data->here, to_write);
+  data->here += to_write;
+  return to_write;
+}
+
+void sp_io_memory_close(sp_io_stream_t* stream) {
+  (void)stream;
+}
+
+s64 sp_io_file_size(sp_io_stream_t* stream) {
+  sp_io_file_data_t* data = &stream->file;
+  s64 current = lseek(data->fd, 0, SEEK_CUR);
+  if (current < 0) {
+    sp_err_set(SP_ERR_IO);
+    return -1;
+  }
+  s64 size = lseek(data->fd, 0, SEEK_END);
+  if (size < 0) {
+    sp_err_set(SP_ERR_IO);
+    return -1;
+  }
+  lseek(data->fd, current, SEEK_SET);
+  return size;
+}
+
+s64 sp_io_file_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+  sp_io_file_data_t* data = &stream->file;
+  int posix_whence;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      posix_whence = SEEK_SET;
+      break;
+    }
+    case SP_IO_SEEK_CUR: {
+      posix_whence = SEEK_CUR;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      posix_whence = SEEK_END;
+      break;
+    }
+    default: {
+      SP_UNREACHABLE();
+    }
+  }
+
+  s64 pos = lseek(data->fd, offset, posix_whence);
+  if (pos < 0) {
+    sp_err_set(SP_ERR_IO);
+  }
+  return pos;
+}
+
+u64 sp_io_file_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+  sp_io_file_data_t* data = &stream->file;
+  s64 result = read(data->fd, ptr, size);
+  if (result < 0) {
+    sp_err_set(SP_ERR_IO);
+    return 0;
+  }
+  return (u64)result;
+}
+
+u64 sp_io_file_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+  sp_io_file_data_t* data = &stream->file;
+  s64 result = write(data->fd, ptr, size);
+  if (result < 0) {
+    sp_err_set(SP_ERR_IO);
+    return 0;
+  }
+  return (u64)result;
+}
+
+void sp_io_file_close(sp_io_stream_t* stream) {
+  sp_io_file_data_t* data = &stream->file;
+  if (data->autoclose) {
+    if (close(data->fd) < 0) {
+      sp_err_set(SP_ERR_IO);
+    }
+  }
+}
+
+sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
+  int flags = 0;
+
+  if ((mode & SP_IO_MODE_READ) && (mode & SP_IO_MODE_WRITE)) {
+    flags = O_RDWR | O_CREAT;
+  } else if ((mode & SP_IO_MODE_READ) && (mode & SP_IO_MODE_APPEND)) {
+    flags = O_RDWR | O_CREAT | O_APPEND;
+  } else if (mode & SP_IO_MODE_READ) {
+    flags = O_RDONLY;
+  } else if (mode & SP_IO_MODE_WRITE) {
+    flags = O_WRONLY | O_CREAT | O_TRUNC;
+  } else if (mode & SP_IO_MODE_APPEND) {
+    flags = O_WRONLY | O_CREAT | O_APPEND;
+  }
+  const char* cpath = sp_str_to_cstr(path);
+  int fd = open(cpath, flags, 0644);
+
+  sp_io_stream_t stream = SP_ZERO_INITIALIZE();
+  stream.callbacks = (sp_io_callbacks_t) {
+    .size = sp_io_file_size,
+    .seek = sp_io_file_seek,
+    .read = sp_io_file_read,
+    .write = sp_io_file_write,
+    .close = sp_io_file_close,
+  };
+  stream.file.fd = fd;
+  stream.file.autoclose = true;
+
+  if (fd < 0) {
+    sp_err_set(SP_ERR_IO);
+    return stream;
+  }
+
+  SP_ASSERT(sp_os_is_regular_file(path));
+
+  return stream;
+}
+
+sp_io_stream_t sp_io_from_memory(void* memory, u64 size) {
+  sp_io_stream_t stream = SP_ZERO_INITIALIZE();
+  stream.memory.base = (u8*)memory;
+  stream.memory.here = (u8*)memory;
+  stream.memory.stop = (u8*)memory + size;
+  stream.callbacks.size = sp_io_memory_size;
+  stream.callbacks.seek = sp_io_memory_seek;
+  stream.callbacks.read = sp_io_memory_read;
+  stream.callbacks.write = sp_io_memory_write;
+  stream.callbacks.close = sp_io_memory_close;
+
+  return stream;
+}
+
+u64 sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+  SP_ASSERT(stream && ptr);
+  u64 bytes = stream->callbacks.read(stream, ptr, size);
+  if (bytes < size) sp_err_set(SP_ERR_IO_EOF);
+  return bytes;
+}
+
+u64 sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+  SP_ASSERT(stream && ptr);
+  return stream->callbacks.write(stream, ptr, size);
+}
+
+s64 sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+  SP_ASSERT(stream);
+  return stream->callbacks.seek(stream, offset, whence);
+}
+
+s64 sp_io_size(sp_io_stream_t* stream) {
+  SP_ASSERT(stream);
+  return stream->callbacks.size(stream);
+}
+
+void sp_io_close(sp_io_stream_t* stream) {
+  SP_ASSERT(stream);
+  stream->callbacks.close(stream);
+}
+
+sp_str_t sp_io_read_file(sp_str_t path) {
+  sp_io_stream_t stream = sp_io_from_file(path, SP_IO_MODE_READ);
+  if (stream.file.fd < 0) {
+    return SP_ZERO_STRUCT(sp_str_t);
+  }
+
+  s64 size = sp_io_size(&stream);
+  if (size < 0) {
+    sp_io_close(&stream);
+    return SP_ZERO_STRUCT(sp_str_t);
+  }
+
+  sp_str_t result = sp_str_alloc((u32)size);
+  u64 bytes = sp_io_read(&stream, (void*)result.data, (u64)size);
+  sp_io_close(&stream);
+
+  if (bytes != (u64)size) {
+    return SP_ZERO_STRUCT(sp_str_t);
+  }
+
+  result.len = (u32)size;
+  return result;
 }
 
 #ifdef SP_APP

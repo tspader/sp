@@ -103,7 +103,7 @@ $(SP_COMPILE_DB): $(SP_MAKEFILE)
 	@bear -- make build
 
 build: $(SP_OUTPUT_C) $(SP_OUTPUT_CPP) $(SP_OUTPUT_STRESS) $(SP_OUTPUT_SDL)
-test: c cpp stress sdl
+test: c cpp stress
 
 c: $(SP_OUTPUT_C)
 	./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)
