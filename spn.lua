@@ -1,7 +1,8 @@
 local project = {
   name = 'sp',
   deps = {
-    utest = {}
+    utest = {},
+    argparse = {},
   }
 }
 return project
