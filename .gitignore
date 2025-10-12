@@ -5,6 +5,9 @@ compile_commands.json
 .spackle/*
 !.spackle/spackle.py
 
+external/*
+!external/llm
+
 .claude
 .mcp.json
 CLAUDE.md

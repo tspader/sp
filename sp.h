@@ -29,7 +29,6 @@
   #define SP_CPP
 #endif
 
-
 //////////////////////
 // PLATFORM HEADERS //
 //////////////////////
@@ -74,12 +73,13 @@
   #include <limits.h>
   #include <pthread.h>
   #include <semaphore.h>
-  #include <time.h>
-  #include <unistd.h>
+  #include <signal.h>
+  #include <spawn.h>
   #include <stdlib.h>
   #include <sys/stat.h>
-  #include <sys/types.h>
   #include <sys/time.h>
+  #include <sys/types.h>
+  #include <time.h>
 #endif
 
 #ifdef SP_MACOS
@@ -216,6 +216,7 @@
 #define SP_X_NAMED_ENUM_CASE_TO_STRING_UPPER(ID, NAME) case ID: { return sp_str_to_upper(sp_str_lit(NAME)); }
 #define SP_X_NAMED_ENUM_CASE_TO_STRING_LOWER(ID, NAME) case ID: { return sp_str_to_lower(sp_str_LIT(NAME)); }
 #define SP_X_NAMED_ENUM_DEFINE(ID, NAME) ID,
+#define SP_X_NAMED_ENUM_STR_TO_ENUM(ID, NAME) if (sp_str_equal(str, SP_LIT(NAME))) return ID;
 
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
@@ -314,6 +315,27 @@ typedef u64 sp_precise_time_t;
 typedef void* sp_opaque_ptr;
 
 
+// ███████╗██████╗ ██████╗  ██████╗ ██████╗
+// ██╔════╝██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
+// █████╗  ██████╔╝██████╔╝██║   ██║██████╔╝
+// ██╔══╝  ██╔══██╗██╔══██╗██║   ██║██╔══██╗
+// ███████╗██║  ██║██║  ██║╚██████╔╝██║  ██║
+// ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝
+typedef enum {
+  SP_ERR_OK = 0,
+  SP_ERR_IO_EOF,
+  SP_ERR_IO,
+  SP_ERR_IO_SEEK_INVALID,
+  SP_ERR_IO_SEEK_FAILED,
+  SP_ERR_IO_WRITE_FAILED,
+  SP_ERR_IO_CLOSE_FAILED,
+  SP_ERR_IO_READ_FAILED,
+} sp_err_t;
+
+void sp_err_set(sp_err_t err);
+
+
+
 //  ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
 //  ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
 //  ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝ ╚████╔╝
@@ -364,6 +386,7 @@ void                  sp_context_set(sp_context_t context);
 void                  sp_context_push(sp_context_t context);
 void                  sp_context_push_allocator(sp_allocator_t allocator);
 void                  sp_context_pop();
+void                  sp_context_ensure();
 sp_allocator_t        sp_allocator_default();
 void*                 sp_allocator_alloc(sp_allocator_t allocator, u32 size);
 void*                 sp_allocator_realloc(sp_allocator_t allocator, void* memory, u32 size);
@@ -776,6 +799,8 @@ void sp_log(sp_str_t fmt, ...);
 //  ██║   ██║╚════██║
 //  ╚██████╔╝███████║
 //   ╚═════╝ ╚══════╝
+// @spader @platform_declarations any internal stuff used by a platform should be declared here, even if it's "private". we don't hide anything, and we always declare functions, even if private. use the existing ifdef blocks;
+
 //////////////
 // OS TYPES //
 //////////////
@@ -788,6 +813,7 @@ void sp_log(sp_str_t fmt, ...);
   typedef PROCESS_INFORMATION sp_win32_process_information_t;
   typedef STARTUPINFO         sp_win32_startup_info_t;
   typedef SECURITY_ATTRIBUTES sp_win32_security_attributes_t;
+  typedef HANDLE              sp_os_file_handle_t;
 
   typedef struct {
   	sp_str_t path;
@@ -803,6 +829,10 @@ void sp_log(sp_str_t fmt, ...);
 
   SP_IMP void sp_os_win32_file_monitor_add_change(sp_file_monitor_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_file_change_event_t events);
   SP_IMP void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info);
+#endif
+
+#if defined(SP_POSIX)
+  typedef s32 sp_os_file_handle_t;
 #endif
 
 #ifdef SP_LINUX
@@ -967,21 +997,12 @@ SP_API void         sp_future_set_value(sp_future_t* future, void* data);
 SP_API void         sp_future_destroy(sp_future_t* future);
 
 
-////////
-// IO //
-typedef enum {
-  SP_ERR_OK = 0,
-  SP_ERR_IO_EOF,
-  SP_ERR_IO,
-  SP_ERR_IO_SEEK_INVALID,
-  SP_ERR_IO_SEEK_FAILED,
-  SP_ERR_IO_WRITE_FAILED,
-  SP_ERR_IO_CLOSE_FAILED,
-  SP_ERR_IO_READ_FAILED,
-} sp_err_t;
-
-void sp_err_set(sp_err_t err);
-
+// ██╗ ██████╗
+// ██║██╔═══██╗
+// ██║██║   ██║
+// ██║██║   ██║
+// ██║╚██████╔╝
+// ╚═╝ ╚═════╝
 typedef enum {
   SP_IO_SEEK_SET,
   SP_IO_SEEK_CUR,
@@ -1010,9 +1031,14 @@ typedef struct {
   sp_io_close_fn close;
 } sp_io_callbacks_t;
 
+typedef enum {
+  SP_IO_FILE_CLOSE_MODE_NONE,
+  SP_IO_FILE_CLOSE_MODE_AUTO,
+} sp_io_file_close_mode_t;
+
 typedef struct {
-  int fd;
-  bool autoclose;
+  s32 fd;
+  sp_io_file_close_mode_t close_mode;
 } sp_io_file_data_t;
 
 typedef struct {
@@ -1032,13 +1058,173 @@ struct sp_io_stream_t {
 
 sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
 sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
+sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode);
 u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
 u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
+u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
 s64            sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
 s64            sp_io_size(sp_io_stream_t* stream);
 void           sp_io_close(sp_io_stream_t* stream);
 sp_str_t       sp_io_read_file(sp_str_t path);
 
+
+
+#define SP_PROC_MAX_ARGS 8
+#define SP_PROC_MAX_ENV 16
+#define SP_PROC_PIPE_READ 0
+#define SP_PROC_PIPE_WRITE 1
+
+
+typedef struct {
+  sp_str_t key;
+  sp_str_t value;
+} sp_env_var_t;
+
+typedef struct {
+  sp_dyn_array(sp_env_var_t) vars;
+} sp_env_t;
+
+// PROCESS CONFIG
+typedef enum {
+  SP_PROC_IO_INHERIT,
+  SP_PROC_IO_NULL,
+  SP_PROC_IO_CREATE,
+  SP_PROC_IO_EXISTING,
+} sp_proc_io_mode_t;
+
+typedef enum {
+  SP_PROC_ENV_INHERIT,
+  SP_PROC_ENV_CLEAN,
+  SP_PROC_ENV_EXISTING,
+} sp_proc_env_mode_t;
+
+#define SP_PROC_NO_STDIO { \
+  .in = { .mode = SP_PROC_IO_NULL }, \
+  .out = { .mode = SP_PROC_IO_NULL }, \
+  .err = { .mode = SP_PROC_IO_NULL }, \
+}
+typedef struct {
+  sp_proc_io_mode_t mode;
+  sp_io_stream_t stream;
+} sp_proc_io_stream_config_t;
+
+typedef struct {
+  sp_proc_io_stream_config_t in;
+  sp_proc_io_stream_config_t out;
+  sp_proc_io_stream_config_t err;
+} sp_proc_io_config_t;
+
+typedef sp_proc_io_config_t sp_proc_io_t;
+
+typedef struct {
+  sp_proc_env_mode_t mode;
+  sp_env_t env;
+  sp_env_var_t extra [SP_PROC_MAX_ENV];
+} sp_proc_env_config_t;
+
+typedef struct {
+  sp_str_t command;
+  sp_str_t args [SP_PROC_MAX_ARGS];
+  sp_str_t cwd;
+  sp_proc_env_config_t env;
+  sp_proc_io_config_t io;
+} sp_proc_config_t;
+
+// PROCESS PLATFORM TYPES
+#if defined(SP_POSIX)
+typedef struct {
+  s32 read;
+  s32 write;
+} sp_proc_pipe_t;
+
+typedef struct {
+  c8** argv;
+  c8** envp;
+  sp_proc_env_mode_t env_mode;
+} sp_os_process_data_t;
+#elif defined(SP_WIN32)
+typedef struct {
+  void* placeholder;
+} sp_os_process_data_t;
+#endif
+
+// PROCESS RUNTIME
+typedef enum {
+  SP_PROC_STATE_INIT,
+  SP_PROC_STATE_RUNNING,
+  SP_PROC_STATE_DONE
+} sp_proc_state_t;
+
+typedef struct {
+  pid_t pid;
+  sp_proc_state_t state;
+  s32 exit_code;
+  sp_proc_io_t io;
+  sp_os_process_data_t os_data;
+  sp_allocator_t allocator;
+} sp_proc_t;
+
+typedef struct {
+  sp_str_t data;
+  u64 size;
+  s32 exit_code;
+} sp_proc_read_result_t;
+
+typedef struct {
+  sp_proc_state_t state;
+  s32 exit_code;
+} sp_proc_wait_result_t;
+
+SP_API sp_env_t               sp_env_capture();
+SP_API sp_env_t               sp_env_copy(sp_env_t* env);
+SP_API sp_str_t               sp_env_get(sp_env_t* env, sp_str_t name);
+SP_API void                   sp_env_set(sp_env_t* env, sp_str_t name, sp_str_t value);
+SP_API void                   sp_env_unset(sp_env_t* env, sp_str_t name);
+SP_API void                   sp_env_destroy(sp_env_t* env);
+SP_API sp_proc_config_t       sp_proc_config_copy(const sp_proc_config_t* src);
+SP_API void                   sp_proc_config_add_arg(sp_proc_config_t* config, sp_str_t arg);
+SP_API sp_proc_t              sp_proc_create(sp_proc_config_t config);
+SP_API sp_io_stream_t*        sp_proc_stdin(sp_proc_t* proc);
+SP_API sp_io_stream_t*        sp_proc_stdout(sp_proc_t* proc);
+SP_API sp_io_stream_t*        sp_proc_stderr(sp_proc_t* proc);
+SP_API sp_proc_wait_result_t  sp_proc_wait(sp_proc_t* proc);
+SP_API sp_proc_wait_result_t  sp_proc_poll(sp_proc_t* proc, u32 timeout_ms);
+SP_API bool                   sp_proc_kill(sp_proc_t* proc);
+SP_API void                   sp_proc_destroy(sp_proc_t* proc);
+
+#if defined(SP_POSIX)
+typedef struct {
+  struct {
+    s32 read;
+    s32 write;
+  } fds;
+  struct {
+    bool read;
+    bool write;
+  } blocking;
+} sp_proc_pipes_config_t;
+
+typedef struct {
+  posix_spawn_file_actions_t* fa;
+  s32 file;
+  s32 flag;
+  s32 mode;
+  sp_proc_pipes_config_t pipes;
+} sp_proc_posix_stdio_stream_config_t;
+
+typedef struct {
+  sp_proc_posix_stdio_stream_config_t in;
+  sp_proc_posix_stdio_stream_config_t out;
+  sp_proc_posix_stdio_stream_config_t err;
+} sp_proc_posix_stdio_config_t;
+
+SP_IMP void sp_proc_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
+SP_IMP bool sp_proc_create_pipes(s32 pipes [2]);
+SP_IMP c8** sp_proc_build_posix_args(sp_proc_config_t* config);
+SP_IMP void sp_proc_free_posix_args(c8** argv);
+SP_IMP c8** sp_proc_build_posix_env(sp_proc_env_config_t* env_config);
+SP_IMP void sp_proc_set_nonblocking(s32 fd);
+#endif
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
 // ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
@@ -2646,6 +2832,10 @@ void sp_context_check_index() {
   SP_ASSERT(index < SP_MAX_CONTEXT);
 }
 
+void sp_context_ensure() {
+  if (!sp_context) sp_init_default();
+}
+
 void sp_context_set(sp_context_t context) {
   sp_context = sp_context ? sp_context : &sp_context_stack[1];
   *sp_context = context;
@@ -2673,14 +2863,17 @@ void sp_context_pop() {
 }
 
 void* sp_alloc(u32 size) {
+  sp_context_ensure();
   return sp_allocator_alloc(sp_context->allocator, size);
 }
 
 void* sp_realloc(void* memory, u32 size) {
+  sp_context_ensure();
   return sp_allocator_realloc(sp_context->allocator, memory, size);
 }
 
 void sp_free(void* memory) {
+  sp_context_ensure();
   sp_allocator_free(sp_context->allocator, memory);
 }
 
@@ -4032,6 +4225,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   }
 #endif
 
+// @spader @posix this is where posix implementations go
 #if defined(SP_POSIX)
   void* sp_os_allocate_memory(u32 size) {
     void* ptr = malloc(size);
@@ -4358,6 +4552,408 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   void sp_mutex_destroy(sp_mutex_t* mutex) {
     pthread_mutex_destroy(mutex);
   }
+
+sp_env_t sp_env_capture() {
+  sp_env_t env = SP_ZERO_INITIALIZE();
+  for (c8** envp = (c8**)environ; *envp != SP_NULLPTR; envp++) {
+    sp_str_t env_str = SP_CSTR(*envp);
+    sp_str_t key = SP_ZERO_INITIALIZE();
+    sp_str_t value = SP_ZERO_INITIALIZE();
+    for (u32 i = 0; i < env_str.len; i++) {
+      if (env_str.data[i] == '=') {
+        key = sp_str(env_str.data, i);
+        value = sp_str(env_str.data + i + 1, env_str.len - i - 1);
+        break;
+      }
+    }
+    if (key.len > 0) {
+      sp_env_var_t var = {
+        .key = sp_str_copy(key),
+        .value = sp_str_copy(value)
+      };
+      sp_dyn_array_push(env.vars, var);
+    }
+  }
+  return env;
+}
+
+sp_env_t sp_env_copy(sp_env_t* env) {
+  sp_env_t copy = SP_ZERO_INITIALIZE();
+  sp_dyn_array_for(env->vars, i) {
+    sp_env_var_t var = {
+      .key = sp_str_copy(env->vars[i].key),
+      .value = sp_str_copy(env->vars[i].value)
+    };
+    sp_dyn_array_push(copy.vars, var);
+  }
+  return copy;
+}
+
+sp_str_t sp_env_get(sp_env_t* env, sp_str_t name) {
+  sp_dyn_array_for(env->vars, i) {
+    if (sp_str_equal(env->vars[i].key, name)) {
+      return env->vars[i].value;
+    }
+  }
+  return sp_str_lit("");
+}
+
+void sp_env_set(sp_env_t* env, sp_str_t name, sp_str_t value) {
+  sp_dyn_array_for(env->vars, i) {
+    if (sp_str_equal(env->vars[i].key, name)) {
+      env->vars[i].value = sp_str_copy(value);
+      return;
+    }
+  }
+  sp_env_var_t var = {
+    .key = sp_str_copy(name),
+    .value = sp_str_copy(value)
+  };
+  sp_dyn_array_push(env->vars, var);
+}
+
+void sp_env_unset(sp_env_t* env, sp_str_t name) {
+  for (u32 i = 0; i < sp_dyn_array_size(env->vars); i++) {
+    if (sp_str_equal(env->vars[i].key, name)) {
+      u32 size = sp_dyn_array_size(env->vars);
+      for (u32 j = i; j < size - 1; j++) {
+        env->vars[j] = env->vars[j + 1];
+      }
+      sp_dyn_array_pop(env->vars);
+      return;
+    }
+  }
+}
+
+void sp_env_destroy(sp_env_t* env) {
+  sp_dyn_array_free(env->vars);
+  env->vars = SP_NULLPTR;
+}
+
+
+bool sp_proc_create_pipes(s32 pipes [2]) {
+  if (pipe(pipes) < 0) {
+    return false;
+  }
+
+  fcntl(pipes[0], F_SETFD, fcntl(pipes[0], F_GETFD) | FD_CLOEXEC);
+  fcntl(pipes[1], F_SETFD, fcntl(pipes[1], F_GETFD) | FD_CLOEXEC);
+
+  signal(SIGPIPE, SIG_IGN);
+
+  return true;
+}
+
+void sp_proc_set_nonblocking(s32 fd) {
+  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+}
+
+c8** sp_proc_build_posix_args(sp_proc_config_t* config) {
+  u32 arg_count = 1;
+  for (u32 i = 0; i < SP_PROC_MAX_ARGS; i++) {
+    if (sp_str_empty(config->args[i])) break;
+    arg_count++;
+  }
+
+  c8** args = (c8**)sp_alloc(sizeof(c8*) * (arg_count + 1));
+  args[0] = (c8*)sp_str_to_cstr(config->command);
+
+  for (u32 i = 0; i < arg_count - 1; i++) {
+    args[i + 1] = (c8*)sp_str_to_cstr(config->args[i]);
+  }
+  args[arg_count] = SP_NULLPTR;
+
+  return args;
+}
+
+void sp_proc_free_posix_args(c8** args) {
+  if (!args) return;
+  for (u32 i = 0; args[i] != SP_NULLPTR; i++) {
+    sp_free((void*)args[i]);
+  }
+  sp_free(args);
+}
+
+c8** sp_proc_build_posix_env(sp_proc_env_config_t* config) {
+  sp_dyn_array(c8*) envp = SP_NULLPTR;
+
+  if (config->mode == SP_PROC_ENV_INHERIT) {
+    for (c8** env = (c8**)environ; *env != SP_NULLPTR; env++) {
+      sp_dyn_array_push(envp, *env);
+    }
+  }
+  else if (config->mode == SP_PROC_ENV_EXISTING) {
+    u32 n = sp_dyn_array_size(config->env.vars);
+    for (u32 i = 0; i < n; i++) {
+      sp_env_var_t var = config->env.vars[i];
+      sp_str_t env_str = sp_format_str(SP_LIT("{}={}"), SP_FMT_STR(var.key), SP_FMT_STR(var.value));
+      sp_dyn_array_push(envp, (c8*)sp_str_to_cstr(env_str));
+    }
+  }
+
+  for (u32 i = 0; i < SP_PROC_MAX_ENV; i++) {
+    if (sp_str_empty(config->extra[i].key)) break;
+
+    sp_str_t key = config->extra[i].key;
+    sp_str_t value = config->extra[i].value;
+    sp_str_t env_str = sp_format_str(SP_LIT("{}={}"), SP_FMT_STR(key), SP_FMT_STR(value));
+    sp_dyn_array_push(envp, (c8*)sp_str_to_cstr(env_str));
+  }
+
+  sp_dyn_array_push(envp, SP_NULLPTR);
+  return envp;
+}
+
+void sp_proc_free_envp(c8** env, sp_proc_env_mode_t mode) {
+  if (!env) return;
+
+  u32 start_index = 0;
+  if (mode == SP_PROC_ENV_INHERIT) {
+    for (c8** env = (c8**)environ; *env != SP_NULLPTR; env++) {
+      start_index++;
+    }
+  }
+
+  for (u32 i = start_index; env[i] != SP_NULLPTR; i++) {
+    sp_free(env[i]);
+  }
+  sp_dyn_array_free(env);
+}
+
+sp_proc_config_t sp_proc_config_copy(const sp_proc_config_t* src) {
+  sp_proc_config_t dst = SP_ZERO_INITIALIZE();
+
+  dst.command = sp_str_copy(src->command);
+  dst.cwd = sp_str_copy(src->cwd);
+
+  for (u32 i = 0; i < SP_PROC_MAX_ARGS; i++) {
+    if (sp_str_empty(src->args[i])) break;
+    dst.args[i] = sp_str_copy(src->args[i]);
+  }
+
+  dst.env.mode = src->env.mode;
+
+  sp_dyn_array_for(src->env.env.vars, i) {
+    sp_env_var_t vs = src->env.env.vars[i];
+    sp_env_var_t vd = {
+      .key = sp_str_copy(vs.key),
+      .value = sp_str_copy(vs.value)
+    };
+    sp_dyn_array_push(dst.env.env.vars, vd);
+  }
+
+  for (u32 i = 0; i < SP_PROC_MAX_ENV; i++) {
+    if (sp_str_empty(src->env.extra[i].key)) break;
+    dst.env.extra[i].key = sp_str_copy(src->env.extra[i].key);
+    dst.env.extra[i].value = sp_str_copy(src->env.extra[i].value);
+  }
+
+  dst.io = src->io;
+
+  return dst;
+}
+
+void sp_proc_config_add_arg(sp_proc_config_t* config, sp_str_t arg) {
+  SP_ASSERT(config != SP_NULLPTR);
+
+  if (sp_str_empty(arg)) return;
+
+  for (u32 i = 0; i < SP_PROC_MAX_ARGS; i++) {
+    if (sp_str_empty(config->args[i])) {
+      config->args[i] = arg;
+      if (i + 1 < SP_PROC_MAX_ARGS) {
+        config->args[i + 1] = SP_ZERO_STRUCT(sp_str_t);
+      }
+      return;
+    }
+  }
+
+  SP_FATAL("sp_proc_config_add_arg: exceeded SP_PROC_MAX_ARGS ({})", SP_FMT_U32(SP_PROC_MAX_ARGS));
+}
+
+void sp_proc_configure_io_stream(sp_proc_io_stream_config_t* io, sp_proc_posix_stdio_stream_config_t* p) {
+  switch (io->mode) {
+    case SP_PROC_IO_NULL: {
+      SP_ASSERT(posix_spawn_file_actions_addopen(p->fa, p->file, "/dev/null", p->flag, p->mode) == 0);
+      break;
+    }
+    case SP_PROC_IO_CREATE: {
+      s32 pipes [2] = { -1, -1 };
+      SP_ASSERT(sp_proc_create_pipes(pipes));
+      p->pipes.fds.read = pipes[0];
+      p->pipes.fds.write = pipes[1];
+
+      if (!p->pipes.blocking.read) sp_proc_set_nonblocking(p->pipes.fds.read);
+      if (!p->pipes.blocking.write) sp_proc_set_nonblocking(p->pipes.fds.write);
+
+      s32 duped = p->file == STDIN_FILENO ? p->pipes.fds.read : p->pipes.fds.write;
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, duped, p->file) == 0);
+      break;
+    }
+    case SP_PROC_IO_EXISTING: {
+      SP_ASSERT(io->stream.file.fd);
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, io->stream.file.fd, p->file) == 0);
+      break;
+    }
+    case SP_PROC_IO_INHERIT:
+    default: {
+      break;
+    }
+  }
+}
+
+sp_proc_t sp_proc_create(sp_proc_config_t config) {
+  sp_context_ensure();
+
+  sp_proc_t proc = SP_ZERO_STRUCT(sp_proc_t);
+  proc.state = SP_PROC_STATE_INIT;
+  proc.allocator = sp_context->allocator;
+  proc.io = config.io;
+
+  SP_ASSERT(!sp_str_empty(config.command));
+
+  c8** argv = sp_proc_build_posix_args(&config);
+  c8** envp = sp_proc_build_posix_env(&config.env);
+
+  posix_spawnattr_t attr;
+  posix_spawn_file_actions_t fa;
+
+  SP_ASSERT(posix_spawnattr_init(&attr) == 0);
+  SP_ASSERT(posix_spawn_file_actions_init(&fa) == 0);
+
+  if (!sp_str_empty(config.cwd)) {
+    sp_proc_set_cwd(&fa, config.cwd);
+  }
+
+  sp_proc_posix_stdio_config_t io = {
+    .in = (sp_proc_posix_stdio_stream_config_t) {
+      .fa = &fa,
+      .file = STDIN_FILENO,
+      .flag = O_RDONLY,
+      .mode = 0x000,
+      .pipes = {
+        .fds = { .read = -1, .write = -1 }
+      }
+    },
+    .out = (sp_proc_posix_stdio_stream_config_t) {
+      .fa = &fa,
+      .file = STDOUT_FILENO,
+      .flag = O_WRONLY,
+      .mode = 0x644,
+      .pipes = {
+        .fds = { .read = -1, .write = -1 }
+      }
+    },
+    .err = (sp_proc_posix_stdio_stream_config_t) {
+      .fa = &fa,
+      .file = STDERR_FILENO,
+      .flag = O_WRONLY,
+      .mode = 0x644,
+      .pipes = {
+        .fds = { .read = -1, .write = -1 }
+      }
+    },
+  };
+
+  sp_proc_configure_io_stream(&proc.io.in, &io.in);
+  sp_proc_configure_io_stream(&proc.io.out, &io.out);
+  sp_proc_configure_io_stream(&proc.io.err, &io.err);
+
+
+  pid_t pid;
+  if (posix_spawnp(&pid, argv[0], &fa, &attr, argv, envp) != 0) {
+    posix_spawn_file_actions_destroy(&fa);
+    posix_spawnattr_destroy(&attr);
+    sp_proc_free_posix_args(argv);
+    sp_proc_free_envp(envp, config.env.mode);
+    if (io.in.pipes.fds.read >= 0) { close(io.in.pipes.fds.read); close(io.in.pipes.fds.write); }
+    if (io.out.pipes.fds.read >= 0) { close(io.out.pipes.fds.read); close(io.out.pipes.fds.write); }
+    if (io.err.pipes.fds.read >= 0) { close(io.err.pipes.fds.read); close(io.err.pipes.fds.write); }
+
+    // @spader return a zero'd out struct? does that work?
+    return proc;
+  }
+
+  proc.pid = pid;
+  proc.state = SP_PROC_STATE_RUNNING;
+  proc.exit_code = 0;
+
+  if (io.in.pipes.fds.read >= 0) {
+    close(io.in.pipes.fds.read);  // Close read end - parent writes
+    proc.io.in.stream = sp_io_from_file_handle(io.in.pipes.fds.write, SP_IO_FILE_CLOSE_MODE_AUTO);
+  }
+
+  if (io.out.pipes.fds.read >= 0) {
+    close(io.out.pipes.fds.write); // Close write end - parent reads
+    proc.io.out.stream = sp_io_from_file_handle(io.out.pipes.fds.read, SP_IO_FILE_CLOSE_MODE_AUTO);
+  }
+
+  if (io.err.pipes.fds.read >= 0) {
+    close(io.err.pipes.fds.write); // Close write end - parent reads
+    proc.io.err.stream = sp_io_from_file_handle(io.err.pipes.fds.read, SP_IO_FILE_CLOSE_MODE_AUTO);
+  }
+
+  posix_spawn_file_actions_destroy(&fa);
+  posix_spawnattr_destroy(&attr);
+  sp_proc_free_posix_args(argv);
+  sp_proc_free_envp(envp, config.env.mode);
+
+  return proc;
+}
+
+void sp_proc_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
+  const c8* cwd_cstr = sp_str_to_cstr(cwd);
+  SP_ASSERT(posix_spawn_file_actions_addchdir_np(fa, cwd_cstr) == 0);
+}
+
+sp_io_stream_t* sp_proc_stdin(sp_proc_t* proc) {
+  SP_ASSERT(proc != SP_NULLPTR);
+  switch (proc->io.in.mode) {
+    case SP_PROC_IO_CREATE:
+    case SP_PROC_IO_EXISTING: {
+      return &proc->io.in.stream;
+    }
+    case SP_PROC_IO_INHERIT:
+    case SP_PROC_IO_NULL: {
+      return SP_NULLPTR;
+    }
+  }
+
+  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+}
+
+sp_io_stream_t* sp_proc_stdout(sp_proc_t* proc) {
+  SP_ASSERT(proc != SP_NULLPTR);
+  switch (proc->io.out.mode) {
+    case SP_PROC_IO_CREATE:
+    case SP_PROC_IO_EXISTING: {
+      return &proc->io.out.stream;
+    }
+    case SP_PROC_IO_INHERIT:
+    case SP_PROC_IO_NULL: {
+      return SP_NULLPTR;
+    }
+  }
+
+  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+}
+
+sp_io_stream_t* sp_proc_stderr(sp_proc_t* proc) {
+  SP_ASSERT(proc != SP_NULLPTR);
+  switch (proc->io.err.mode) {
+    case SP_PROC_IO_CREATE:
+    case SP_PROC_IO_EXISTING: {
+      return &proc->io.err.stream;
+    }
+    case SP_PROC_IO_INHERIT:
+    case SP_PROC_IO_NULL: {
+      return SP_NULLPTR;
+    }
+  }
+
+  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+}
+
 #endif
 
 #if defined(SP_MACOS)
@@ -4968,6 +5564,8 @@ sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer) {
 }
 
 sp_future_t* sp_future_create(u32 size) {
+  sp_context_ensure();
+
   sp_future_t* future = (sp_future_t*)sp_alloc(sizeof(sp_future_t));
   future->allocator = sp_context->allocator;
   future->ready = false;
@@ -4988,7 +5586,7 @@ void sp_future_set_value(sp_future_t* future, void* value) {
 }
 
 void sp_init_default() {
-  sp_init(SP_ZERO_STRUCT(sp_config_t));
+  sp_init((sp_config_t){});
 }
 
 void sp_init(sp_config_t config) {
@@ -5129,7 +5727,7 @@ u64 sp_io_file_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
 
 void sp_io_file_close(sp_io_stream_t* stream) {
   sp_io_file_data_t* data = &stream->file;
-  if (data->autoclose) {
+  if (data->close_mode == SP_IO_FILE_CLOSE_MODE_AUTO) {
     if (close(data->fd) < 0) {
       sp_err_set(SP_ERR_IO);
     }
@@ -5162,7 +5760,7 @@ sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
     .close = sp_io_file_close,
   };
   stream.file.fd = fd;
-  stream.file.autoclose = true;
+  stream.file.close_mode = SP_IO_FILE_CLOSE_MODE_AUTO;
 
   if (fd < 0) {
     sp_err_set(SP_ERR_IO);
@@ -5188,6 +5786,21 @@ sp_io_stream_t sp_io_from_memory(void* memory, u64 size) {
   return stream;
 }
 
+sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode) {
+  sp_io_stream_t stream = SP_ZERO_INITIALIZE();
+  stream.callbacks = (sp_io_callbacks_t) {
+    .size = sp_io_file_size,
+    .seek = sp_io_file_seek,
+    .read = sp_io_file_read,
+    .write = sp_io_file_write,
+    .close = sp_io_file_close,
+  };
+  stream.file.fd = handle;
+  stream.file.close_mode = close_mode;
+
+  return stream;
+}
+
 u64 sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size) {
   SP_ASSERT(stream && ptr);
   u64 bytes = stream->callbacks.read(stream, ptr, size);
@@ -5198,6 +5811,18 @@ u64 sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size) {
 u64 sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
   SP_ASSERT(stream && ptr);
   return stream->callbacks.write(stream, ptr, size);
+}
+
+u64 sp_io_write_str(sp_io_stream_t* stream, sp_str_t str) {
+  SP_ASSERT(stream);
+  SP_ASSERT(sp_str_valid(str));
+  return sp_io_write(stream, str.data, str.len);
+}
+
+u64 sp_io_write_cstr(sp_io_stream_t* stream, const c8* cstr) {
+  SP_ASSERT(stream);
+  SP_ASSERT(cstr);
+  return sp_io_write(stream, cstr, sp_cstr_len(cstr));
 }
 
 s64 sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
@@ -5415,6 +6040,14 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
   return 0;
 }
 #endif
+
+// ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
+// ██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔════╝██╔════╝██╔════╝
+// ██████╔╝██████╔╝██║   ██║██║     █████╗  ███████╗███████╗
+// ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
+// ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
+// ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
+// @spader we do NOT put platform implementations in their own ifdef; there is one ifdef per-platform for implementations. in other words, every single posix function goes in ONE ifdef block. i tagged it @posix; move all this code there.
 
 SP_END_EXTERN_C()
 
