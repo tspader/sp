@@ -1514,6 +1514,166 @@ UTEST(path_functions, integration_test) {
   ASSERT_FALSE(has_double_slash);
 }
 
+UTEST(sp_os_is_path_root, various_roots) {
+  sp_test_use_malloc();
+
+  ASSERT_TRUE(sp_os_is_path_root(SP_LIT("")));
+  ASSERT_TRUE(sp_os_is_path_root(SP_LIT("/")));
+
+#ifdef SP_WIN32
+  ASSERT_TRUE(sp_os_is_path_root(SP_LIT("C:")));
+  ASSERT_TRUE(sp_os_is_path_root(SP_LIT("C:/")));
+  ASSERT_TRUE(sp_os_is_path_root(SP_LIT("C:\\")));
+  ASSERT_FALSE(sp_os_is_path_root(SP_LIT("C:/foo")));
+  ASSERT_FALSE(sp_os_is_path_root(SP_LIT("C:\\foo")));
+#endif
+
+  ASSERT_FALSE(sp_os_is_path_root(SP_LIT("/home")));
+  ASSERT_FALSE(sp_os_is_path_root(SP_LIT("/home/user")));
+  ASSERT_FALSE(sp_os_is_path_root(SP_LIT("relative/path")));
+}
+
+UTEST(sp_os_create_directory, path_exists_as_directory) {
+  sp_test_use_malloc();
+
+  sp_str_t test_dir = SP_LIT("test_dir_exists");
+
+  sp_os_create_directory(test_dir);
+  ASSERT_TRUE(sp_os_does_path_exist(test_dir));
+  ASSERT_TRUE(sp_os_is_directory(test_dir));
+
+  sp_os_create_directory(test_dir);
+  ASSERT_TRUE(sp_os_is_directory(test_dir));
+
+  sp_os_remove_directory(test_dir);
+}
+
+UTEST(sp_os_create_directory, path_exists_as_file) {
+  sp_test_use_malloc();
+
+  sp_str_t test_file = SP_LIT("test_file_conflict.txt");
+
+  sp_os_create_file(test_file);
+  ASSERT_TRUE(sp_os_does_path_exist(test_file));
+  ASSERT_TRUE(sp_os_is_regular_file(test_file));
+
+  sp_os_create_directory(test_file);
+  ASSERT_TRUE(sp_os_is_regular_file(test_file));
+  ASSERT_FALSE(sp_os_is_directory(test_file));
+
+  sp_os_remove_file(test_file);
+}
+
+UTEST(sp_os_create_directory, path_doesnt_exist_no_nesting) {
+  sp_test_use_malloc();
+
+  sp_str_t test_dir = SP_LIT("test_simple_dir");
+
+  if (sp_os_does_path_exist(test_dir)) {
+    sp_os_remove_directory(test_dir);
+  }
+
+  ASSERT_FALSE(sp_os_does_path_exist(test_dir));
+
+  sp_os_create_directory(test_dir);
+
+  ASSERT_TRUE(sp_os_does_path_exist(test_dir));
+  ASSERT_TRUE(sp_os_is_directory(test_dir));
+
+  sp_os_remove_directory(test_dir);
+}
+
+UTEST(sp_os_create_directory, path_doesnt_exist_requires_nesting) {
+  sp_test_use_malloc();
+
+  sp_str_t test_root = SP_LIT("test_nested_root");
+  sp_str_t test_path = SP_LIT("test_nested_root/level1/level2/level3");
+
+  if (sp_os_does_path_exist(test_root)) {
+    sp_os_remove_directory(test_root);
+  }
+
+  ASSERT_FALSE(sp_os_does_path_exist(test_root));
+  ASSERT_FALSE(sp_os_does_path_exist(test_path));
+
+  sp_os_create_directory(test_path);
+
+  ASSERT_TRUE(sp_os_does_path_exist(test_path));
+  ASSERT_TRUE(sp_os_is_directory(test_path));
+  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_nested_root/level1")));
+  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_nested_root/level1/level2")));
+
+  sp_os_remove_directory(test_root);
+}
+
+UTEST(sp_os_create_directory, malformed_paths) {
+  sp_test_use_malloc();
+
+  sp_str_t test_root = SP_LIT("test_malformed");
+
+  if (sp_os_does_path_exist(test_root)) {
+    sp_os_remove_directory(test_root);
+  }
+
+  sp_os_create_directory(SP_LIT("test_malformed//double//slash"));
+  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_malformed/double/slash")));
+
+  sp_os_create_directory(SP_LIT("test_malformed/trailing/slash/"));
+  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_malformed/trailing/slash")));
+
+  sp_os_create_directory(SP_LIT("test_malformed///many////slashes///end/"));
+  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_malformed/many/slashes/end")));
+
+  sp_os_remove_directory(test_root);
+}
+
+UTEST(sp_os_create_directory, deep_nesting) {
+  sp_test_use_malloc();
+
+  sp_str_t test_root = SP_LIT("test_deep");
+  sp_str_t deep_path = SP_LIT("test_deep/a/b/c/d/e/f/g/h/i/j");
+
+  if (sp_os_does_path_exist(test_root)) {
+    sp_os_remove_directory(test_root);
+  }
+
+  ASSERT_FALSE(sp_os_does_path_exist(deep_path));
+
+  sp_os_create_directory(deep_path);
+
+  ASSERT_TRUE(sp_os_does_path_exist(deep_path));
+  ASSERT_TRUE(sp_os_is_directory(deep_path));
+
+  sp_os_remove_directory(test_root);
+}
+
+UTEST(sp_os_create_directory, empty_path) {
+  sp_test_use_malloc();
+
+  sp_os_create_directory(SP_LIT(""));
+}
+
+UTEST(sp_os_create_directory, partially_existing_path) {
+  sp_test_use_malloc();
+
+  sp_str_t test_root = SP_LIT("test_partial");
+  sp_str_t partial = SP_LIT("test_partial/exists");
+  sp_str_t full = SP_LIT("test_partial/exists/deep/nested");
+
+  if (sp_os_does_path_exist(test_root)) {
+    sp_os_remove_directory(test_root);
+  }
+
+  sp_os_create_directory(partial);
+  ASSERT_TRUE(sp_os_does_path_exist(partial));
+
+  sp_os_create_directory(full);
+  ASSERT_TRUE(sp_os_does_path_exist(full));
+  ASSERT_TRUE(sp_os_is_directory(full));
+
+  sp_os_remove_directory(test_root);
+}
+
 UTEST(dyn_array, basic_operations) {
     sp_test_use_malloc();
 

@@ -880,6 +880,7 @@ SP_API sp_str_t                     sp_os_platform_name();
 SP_API bool                         sp_os_does_path_exist(sp_str_t path);
 SP_API bool                         sp_os_is_regular_file(sp_str_t path);
 SP_API bool                         sp_os_is_directory(sp_str_t path);
+SP_API bool                         sp_os_is_path_root(sp_str_t path);
 SP_API void                         sp_os_create_directory(sp_str_t path);
 SP_API void                         sp_os_remove_directory(sp_str_t path);
 SP_API void                         sp_os_create_file(sp_str_t path);
@@ -3579,8 +3580,8 @@ sp_str_t sp_os_normalize_path(sp_str_t path) {
 }
 
 void sp_os_normalize_path_soft(sp_str_t* path) {
-  if (!path) return;
-  if (!path->len) return;
+  if (!sp_str_valid(*path)) return;
+  if (sp_str_empty(*path)) return;
 
   switch (sp_str_back(*path)) {
     case '/':
@@ -3729,6 +3730,14 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     return attribute & FILE_ATTRIBUTE_DIRECTORY;
   }
 
+  bool sp_os_is_path_root(sp_str_t path) {
+    if (path.len == 0) return true;
+    if (path.len == 1 && path.data[0] == '/') return true;
+    if (path.len == 2 && path.data[1] == ':') return true;
+    if (path.len == 3 && path.data[1] == ':' && (path.data[2] == '/' || path.data[2] == '\\')) return true;
+    return false;
+  }
+
   void sp_os_remove_directory(sp_str_t path) {
     SHFILEOPSTRUCTA file_op = SP_ZERO_INITIALIZE();
     file_op.wFunc = FO_DELETE;
@@ -3738,7 +3747,27 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   }
 
   void sp_os_create_directory(sp_str_t path) {
-    CreateDirectoryA(sp_str_to_cstr(path), NULL);
+    if (path.len == 0) return;
+
+    sp_str_t normalized = sp_os_normalize_path(path);
+    while (normalized.len > 0 && (normalized.data[normalized.len - 1] == '/' || normalized.data[normalized.len - 1] == '\\')) {
+      normalized = sp_str(normalized.data, normalized.len - 1);
+    }
+
+    if (sp_os_does_path_exist(normalized)) return;
+
+    c8* path_cstr = sp_str_to_cstr(normalized);
+    if (CreateDirectoryA(path_cstr, NULL)) {
+      return;
+    }
+
+    if (sp_os_is_path_root(normalized)) return;
+
+    sp_str_t parent = sp_os_parent_path(normalized);
+    if (parent.len > 0 && !sp_str_equal(parent, normalized)) {
+      sp_os_create_directory(parent);
+      CreateDirectoryA(path_cstr, NULL);
+    }
   }
 
   void sp_os_create_file(sp_str_t path) {
@@ -4070,6 +4099,13 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     return S_ISDIR(st.st_mode);
   }
 
+  bool sp_os_is_path_root(sp_str_t path) {
+    if (sp_str_empty(path)) return true;
+    if (sp_str_equal_cstr(path, "/")) return true;
+
+    return false;
+  }
+
   void sp_os_remove_directory(sp_str_t path) {
     sp_os_directory_entry_list_t entries = sp_os_scan_directory(path);
 
@@ -4089,8 +4125,20 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   }
 
   void sp_os_create_directory(sp_str_t path) {
+    sp_os_normalize_path_soft(&path);
     c8* path_cstr = sp_str_to_cstr(path);
-    mkdir(path_cstr, 0755);
+
+    if (sp_str_empty(path)) return;
+    if (sp_os_is_path_root(path)) return;
+    if (sp_os_does_path_exist(path)) return;
+
+    s32 result = mkdir(path_cstr, 0755);
+    if (!result) return;
+
+    sp_os_create_directory(sp_os_parent_path(path));
+
+    result = mkdir(path_cstr, 0755);
+    if (!result) return;
   }
 
   void sp_os_create_file(sp_str_t path) {
