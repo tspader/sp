@@ -41,17 +41,6 @@
 #define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), SP_CSTR(b), false)
 #define SP_EXPECT_STR_EQ(a, b) SP_TEST_STREQ((a), (b), false)
 
-typedef struct sp_test_memory_tracker {
-  sp_bump_allocator_t* bump;
-  sp_allocator_t allocator;
-} sp_test_memory_tracker;
-
-typedef struct sp_test_file_monitor_data {
-  bool change_detected;
-  sp_file_change_event_t last_event;
-  c8 last_file_path[SP_MAX_PATH_LEN];
-} sp_test_file_monitor_data;
-
 sp_str_t sp_test_generate_random_filename() {
   static u32 counter = 0;
   c8* filename = (c8*)sp_alloc(64);
@@ -121,6 +110,24 @@ void sp_test_use_bump_allocator(u32 capacity) {
   sp_context_push_allocator(allocator);
 }
 
+typedef struct {
+  sp_str_t base;
+} sp_test_file_provider_t;
+
+
+
+
+// ██████╗ ██╗   ██╗███╗   ██╗     █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
+// ██╔══██╗╚██╗ ██╔╝████╗  ██║    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
+// ██║  ██║ ╚████╔╝ ██╔██╗ ██║    ███████║██████╔╝██████╔╝███████║ ╚████╔╝
+// ██║  ██║  ╚██╔╝  ██║╚██╗██║    ██╔══██║██╔══██╗██╔══██╗██╔══██║  ╚██╔╝
+// ██████╔╝   ██║   ██║ ╚████║    ██║  ██║██║  ██║██║  ██║██║  ██║   ██║
+// ╚═════╝    ╚═╝   ╚═╝  ╚═══╝    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
+typedef struct sp_test_memory_tracker {
+  sp_bump_allocator_t* bump;
+  sp_allocator_t allocator;
+} sp_test_memory_tracker;
+
 void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) {
   sp_test_use_bump_allocator(capacity);
   tracker->bump = (sp_bump_allocator_t*)sp_context->allocator.user_data;
@@ -139,20 +146,6 @@ void sp_test_memory_tracker_destroy(sp_test_memory_tracker* tracker) {
   sp_bump_allocator_destroy(tracker->bump);
 }
 
-void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t* change, void* userdata) {
-  sp_test_file_monitor_data* data = (sp_test_file_monitor_data*)userdata;
-  data->change_detected = true;
-  data->last_event = change->events;
-  sp_str_copy_to(change->file_path, data->last_file_path, SP_MAX_PATH_LEN);
-}
-
-
-//  ██████╗ ██████╗ ██████╗ ███████╗
-// ██╔════╝██╔═══██╗██╔══██╗██╔════╝
-// ██║     ██║   ██║██████╔╝█████╗
-// ██║     ██║   ██║██╔══██╗██╔══╝
-// ╚██████╗╚██████╔╝██║  ██║███████╗
-//  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
 UTEST(dynamic_array, initialization) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 1024 * 1024);
@@ -435,6 +428,13 @@ UTEST(dynamic_array, edge_cases) {
   sp_test_memory_tracker_destroy(&tracker);
 }
 
+
+// ███████╗██████╗    ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
+// ██╔════╝██╔══██╗   ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
+// ███████╗██████╔╝   █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
+// ╚════██║██╔═══╝    ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
+// ███████║██║███████╗██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
+// ╚══════╝╚═╝╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
 typedef struct {
   const c8* expected;
   sp_str_t actual;
@@ -465,7 +465,6 @@ UTEST(sp_fmt, basic) {
 
   result = sp_format_str(SP_LIT("answer"));
   SP_EXPECT_STR_EQ_CSTR(result, "answer");
-
 }
 
 UTEST(sp_fmt, numeric_types) {
@@ -756,6 +755,13 @@ UTEST(sp_fmt, padding_numeric_parsing) {
   ASSERT_EQ(result.len, 999);
 }
 
+
+// ███████╗████████╗██████╗     ██████╗ ██╗   ██╗██╗██╗     ██████╗ ███████╗██████╗
+// ██╔════╝╚══██╔══╝██╔══██╗    ██╔══██╗██║   ██║██║██║     ██╔══██╗██╔════╝██╔══██╗
+// ███████╗   ██║   ██████╔╝    ██████╔╝██║   ██║██║██║     ██║  ██║█████╗  ██████╔╝
+// ╚════██║   ██║   ██╔══██╗    ██╔══██╗██║   ██║██║██║     ██║  ██║██╔══╝  ██╔══██╗
+// ███████║   ██║   ██║  ██║    ██████╔╝╚██████╔╝██║███████╗██████╔╝███████╗██║  ██║
+// ╚══════╝   ╚═╝   ╚═╝  ╚═╝    ╚═════╝  ╚═════╝ ╚═╝╚══════╝╚═════╝ ╚══════╝╚═╝  ╚═╝
 UTEST(sp_str_builder, basic_operations) {
   sp_test_use_malloc();
 
@@ -1533,136 +1539,120 @@ UTEST(sp_os_is_path_root, various_roots) {
   ASSERT_FALSE(sp_os_is_path_root(SP_LIT("relative/path")));
 }
 
-UTEST(sp_os_create_directory, path_exists_as_directory) {
+
+////////////////////////////
+// sp_os_create_directory //
+////////////////////////////
+typedef struct sp_os_create_directory_fixture {
+  s32 foo;
+} sp_os_create_directory_fixture;
+
+UTEST_F_SETUP(sp_os_create_directory_fixture) {
   sp_test_use_malloc();
-
-  sp_str_t test_dir = SP_LIT("test_dir_exists");
-
-  sp_os_create_directory(test_dir);
-  ASSERT_TRUE(sp_os_does_path_exist(test_dir));
-  ASSERT_TRUE(sp_os_is_directory(test_dir));
-
-  sp_os_create_directory(test_dir);
-  ASSERT_TRUE(sp_os_is_directory(test_dir));
-
-  sp_os_remove_directory(test_dir);
+}
+UTEST_F_TEARDOWN(sp_os_create_directory_fixture) {
+  sp_test_use_malloc();
 }
 
-UTEST(sp_os_create_directory, path_exists_as_file) {
-  sp_test_use_malloc();
+UTEST_F(sp_os_create_directory_fixture, path_exists_as_directory) {
+  sp_str_t dir = SP_LIT("jerry");
+  ASSERT_FALSE(sp_os_does_path_exist(dir));
 
-  sp_str_t test_file = SP_LIT("test_file_conflict.txt");
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
 
-  sp_os_create_file(test_file);
-  ASSERT_TRUE(sp_os_does_path_exist(test_file));
-  ASSERT_TRUE(sp_os_is_regular_file(test_file));
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_is_directory(dir));
 
-  sp_os_create_directory(test_file);
-  ASSERT_TRUE(sp_os_is_regular_file(test_file));
-  ASSERT_FALSE(sp_os_is_directory(test_file));
-
-  sp_os_remove_file(test_file);
+  sp_os_remove_directory(dir);
 }
 
-UTEST(sp_os_create_directory, path_doesnt_exist_no_nesting) {
-  sp_test_use_malloc();
+UTEST_F(sp_os_create_directory_fixture, path_exists_as_file) {
+  sp_str_t file = SP_LIT("test_file_conflict.txt");
+  ASSERT_FALSE(sp_os_does_path_exist(file));
 
-  sp_str_t test_dir = SP_LIT("test_simple_dir");
+  sp_os_create_file(file);
+  ASSERT_TRUE(sp_os_does_path_exist(file));
+  ASSERT_TRUE(sp_os_is_regular_file(file));
 
-  if (sp_os_does_path_exist(test_dir)) {
-    sp_os_remove_directory(test_dir);
-  }
+  sp_os_create_directory(file);
+  ASSERT_TRUE(sp_os_is_regular_file(file));
+  ASSERT_FALSE(sp_os_is_directory(file));
 
-  ASSERT_FALSE(sp_os_does_path_exist(test_dir));
-
-  sp_os_create_directory(test_dir);
-
-  ASSERT_TRUE(sp_os_does_path_exist(test_dir));
-  ASSERT_TRUE(sp_os_is_directory(test_dir));
-
-  sp_os_remove_directory(test_dir);
+  sp_os_remove_file(file);
 }
 
-UTEST(sp_os_create_directory, path_doesnt_exist_requires_nesting) {
-  sp_test_use_malloc();
+UTEST_F(sp_os_create_directory_fixture, path_doesnt_exist_no_nesting) {
+  sp_str_t dir = SP_LIT("test_simple_dir");
+  ASSERT_FALSE(sp_os_does_path_exist(dir));
 
-  sp_str_t test_root = SP_LIT("test_nested_root");
-  sp_str_t test_path = SP_LIT("test_nested_root/level1/level2/level3");
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
 
-  if (sp_os_does_path_exist(test_root)) {
-    sp_os_remove_directory(test_root);
-  }
+  sp_os_remove_directory(dir);
+}
 
-  ASSERT_FALSE(sp_os_does_path_exist(test_root));
-  ASSERT_FALSE(sp_os_does_path_exist(test_path));
+UTEST_F(sp_os_create_directory_fixture, path_doesnt_exist_requires_nesting) {
+  sp_str_t root = SP_LIT("test_nested_root");
+  sp_str_t dir = SP_LIT("test_nested_root/level1/level2/level3");
+  ASSERT_FALSE(sp_os_does_path_exist(dir));
 
-  sp_os_create_directory(test_path);
+  sp_os_create_directory(dir);
 
-  ASSERT_TRUE(sp_os_does_path_exist(test_path));
-  ASSERT_TRUE(sp_os_is_directory(test_path));
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
   ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_nested_root/level1")));
   ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_nested_root/level1/level2")));
 
-  sp_os_remove_directory(test_root);
+  sp_os_remove_directory(root);
 }
 
-UTEST(sp_os_create_directory, malformed_paths) {
-  sp_test_use_malloc();
 
-  sp_str_t test_root = SP_LIT("test_malformed");
 
-  if (sp_os_does_path_exist(test_root)) {
-    sp_os_remove_directory(test_root);
+UTEST_F(sp_os_create_directory_fixture, malformed_paths) {
+  sp_str_t root = SP_LIT("test_malformed");
+  ASSERT_FALSE(sp_os_does_path_exist(root));
+
+  struct {
+    sp_str_t malformed;
+    sp_str_t formed;
+  } dirs [] = {
+    { .malformed = SP_LIT("test_malformed//double//slash"), .formed = SP_LIT("test_malformed/double/slash") },
+    { .malformed = SP_LIT("test_malformed/trailing/slash/"), .formed = SP_LIT("test_malformed/trailing/slash") },
+    { .malformed = SP_LIT("test_malformed///both///kinds/"), .formed = SP_LIT("test_malformed/both/kinds") }
+  };
+
+  SP_CARR_FOR(dirs, i) {
+    sp_os_create_directory(dirs[i].malformed);
+    ASSERT_TRUE(sp_os_does_path_exist(dirs[i].formed));
   }
 
-  sp_os_create_directory(SP_LIT("test_malformed//double//slash"));
-  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_malformed/double/slash")));
-
-  sp_os_create_directory(SP_LIT("test_malformed/trailing/slash/"));
-  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_malformed/trailing/slash")));
-
-  sp_os_create_directory(SP_LIT("test_malformed///many////slashes///end/"));
-  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_malformed/many/slashes/end")));
-
-  sp_os_remove_directory(test_root);
+  sp_os_remove_directory(root);
 }
 
-UTEST(sp_os_create_directory, deep_nesting) {
-  sp_test_use_malloc();
+UTEST_F(sp_os_create_directory_fixture, deep_nesting) {
+  sp_str_t root = SP_LIT("test_deep");
+  sp_str_t dir = SP_LIT("test_deep/a/b/c/d/e/f/g/h/i/j");
+  ASSERT_FALSE(sp_os_does_path_exist(dir));
 
-  sp_str_t test_root = SP_LIT("test_deep");
-  sp_str_t deep_path = SP_LIT("test_deep/a/b/c/d/e/f/g/h/i/j");
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
 
-  if (sp_os_does_path_exist(test_root)) {
-    sp_os_remove_directory(test_root);
-  }
-
-  ASSERT_FALSE(sp_os_does_path_exist(deep_path));
-
-  sp_os_create_directory(deep_path);
-
-  ASSERT_TRUE(sp_os_does_path_exist(deep_path));
-  ASSERT_TRUE(sp_os_is_directory(deep_path));
-
-  sp_os_remove_directory(test_root);
+  sp_os_remove_directory(root);
 }
 
-UTEST(sp_os_create_directory, empty_path) {
-  sp_test_use_malloc();
-
+UTEST_F(sp_os_create_directory_fixture, empty_path) {
   sp_os_create_directory(SP_LIT(""));
 }
 
-UTEST(sp_os_create_directory, partially_existing_path) {
-  sp_test_use_malloc();
-
-  sp_str_t test_root = SP_LIT("test_partial");
+UTEST_F(sp_os_create_directory_fixture, partially_existing_path) {
+  sp_str_t root = SP_LIT("test_partial");
   sp_str_t partial = SP_LIT("test_partial/exists");
   sp_str_t full = SP_LIT("test_partial/exists/deep/nested");
-
-  if (sp_os_does_path_exist(test_root)) {
-    sp_os_remove_directory(test_root);
-  }
+  ASSERT_FALSE(sp_os_does_path_exist(root));
 
   sp_os_create_directory(partial);
   ASSERT_TRUE(sp_os_does_path_exist(partial));
@@ -1671,12 +1661,109 @@ UTEST(sp_os_create_directory, partially_existing_path) {
   ASSERT_TRUE(sp_os_does_path_exist(full));
   ASSERT_TRUE(sp_os_is_directory(full));
 
-  sp_os_remove_directory(test_root);
+  sp_os_remove_directory(root);
+}
+
+UTEST_F(sp_os_create_directory_fixture, path_with_spaces) {
+  sp_str_t root = SP_LIT("test_spaces");
+  sp_str_t dir = SP_LIT("test_spaces/dir with spaces");
+  ASSERT_FALSE(sp_os_does_path_exist(root));
+
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
+
+  sp_os_remove_directory(root);
+}
+
+UTEST_F(sp_os_create_directory_fixture, hidden_directory) {
+  sp_str_t root = SP_LIT("test_hidden");
+  sp_str_t dir = SP_LIT("test_hidden/.hidden");
+  ASSERT_FALSE(sp_os_does_path_exist(root));
+
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
+
+  sp_os_remove_directory(root);
+}
+
+UTEST_F(sp_os_create_directory_fixture, unicode_characters) {
+  sp_str_t root = SP_LIT("test_unicode");
+  sp_str_t dir = SP_LIT("test_unicode/ñame_with_üñíçødé");
+  ASSERT_FALSE(sp_os_does_path_exist(root));
+
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
+
+  sp_os_remove_directory(root);
+}
+
+UTEST_F(sp_os_create_directory_fixture, special_symbols) {
+  sp_str_t root = SP_LIT("test_symbols");
+  sp_str_t dir = SP_LIT("test_symbols/dir-with_dashes.and.dots");
+  ASSERT_FALSE(sp_os_does_path_exist(root));
+
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
+
+  sp_os_remove_directory(root);
+}
+
+UTEST_F(sp_os_create_directory_fixture, trailing_slashes_variations) {
+  sp_str_t root = SP_LIT("test_trailing");
+  ASSERT_FALSE(sp_os_does_path_exist(root));
+
+  sp_os_create_directory(SP_LIT("test_trailing/dir1/"));
+  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_trailing/dir1")));
+  ASSERT_TRUE(sp_os_is_directory(SP_LIT("test_trailing/dir1")));
+
+  sp_os_create_directory(SP_LIT("test_trailing/dir2//"));
+  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_trailing/dir2")));
+  ASSERT_TRUE(sp_os_is_directory(SP_LIT("test_trailing/dir2")));
+
+  sp_os_create_directory(SP_LIT("test_trailing/dir3///"));
+  ASSERT_TRUE(sp_os_does_path_exist(SP_LIT("test_trailing/dir3")));
+  ASSERT_TRUE(sp_os_is_directory(SP_LIT("test_trailing/dir3")));
+
+  sp_os_remove_directory(root);
+}
+
+UTEST_F(sp_os_create_directory_fixture, leading_slashes) {
+  sp_str_t dir = SP_LIT("/tmp/sp_test_absolute");
+  ASSERT_FALSE(sp_os_does_path_exist(dir));
+
+  sp_os_create_directory(dir);
+  ASSERT_TRUE(sp_os_does_path_exist(dir));
+  ASSERT_TRUE(sp_os_is_directory(dir));
+
+  sp_os_remove_directory(dir);
+}
+
+UTEST_F(sp_os_create_directory_fixture, very_long_path) {
+  sp_str_t dir = SP_LIT("test_long");
+  ASSERT_FALSE(sp_os_does_path_exist(dir));
+
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_append(&builder, dir);
+  sp_str_builder_append_c8(&builder, '/');
+
+  for (int i = 0; i < 10; i++) {
+    sp_str_builder_append(&builder, SP_LIT("very_long_directory_name_"));
+  }
+
+  sp_str_t long_path = sp_str_builder_write(&builder);
+
+  sp_os_create_directory(long_path);
+  ASSERT_TRUE(sp_os_does_path_exist(long_path));
+  ASSERT_TRUE(sp_os_is_directory(long_path));
+
+  sp_os_remove_directory(dir);
 }
 
 UTEST(dyn_array, basic_operations) {
-    sp_test_use_malloc();
-
     sp_dyn_array(int) arr = SP_NULLPTR;
 
     ASSERT_EQ(sp_dyn_array_size(arr), 0);
@@ -3503,6 +3590,27 @@ UTEST(fixed_array, capacity_limits) {
 // ██║███╗██║██║██║╚██╗██║ ╚═══██╗██╔═══╝
 // ╚███╔███╔╝██║██║ ╚████║██████╔╝███████╗
 //  ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
+
+
+// ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
+// ██╔════╝██║██║     ██╔════╝    ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
+// █████╗  ██║██║     █████╗      ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
+// ██╔══╝  ██║██║     ██╔══╝      ██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║   ██║   ██║██╔══██╗
+// ██║     ██║███████╗███████╗    ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██║   ██║   ╚██████╔╝██║  ██║
+// ╚═╝     ╚═╝╚══════╝╚══════╝    ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
+typedef struct sp_test_file_monitor_data {
+  bool change_detected;
+  sp_file_change_event_t last_event;
+  c8 last_file_path[SP_MAX_PATH_LEN];
+} sp_test_file_monitor_data;
+
+void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t* change, void* userdata) {
+  sp_test_file_monitor_data* data = (sp_test_file_monitor_data*)userdata;
+  data->change_detected = true;
+  data->last_event = change->events;
+  sp_str_copy_to(change->file_path, data->last_file_path, SP_MAX_PATH_LEN);
+}
+
 #ifdef SP_WIN32
 UTEST(file_monitor, detects_file_modifications) {
   sp_test_use_malloc();
