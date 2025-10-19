@@ -2816,20 +2816,20 @@ UTEST(hash_table, basic_operations) {
     ASSERT_EQ(sp_hash_table_size(ht), 1);
     ASSERT_FALSE(sp_hash_table_empty(ht));
     ASSERT_TRUE(sp_hash_table_exists(ht, 42));
-    ASSERT_EQ(sp_hash_table_get(ht, 42), 3.14f);
+    ASSERT_EQ(*sp_hash_table_getp(ht, 42), 3.14f);
 
     sp_hash_table_insert(ht, 10, 1.5f);
     sp_hash_table_insert(ht, 20, 2.5f);
     sp_hash_table_insert(ht, 30, 3.5f);
     ASSERT_EQ(sp_hash_table_size(ht), 4);
 
-    ASSERT_EQ(sp_hash_table_get(ht, 10), 1.5f);
-    ASSERT_EQ(sp_hash_table_get(ht, 20), 2.5f);
-    ASSERT_EQ(sp_hash_table_get(ht, 30), 3.5f);
-    ASSERT_EQ(sp_hash_table_get(ht, 42), 3.14f);
+    ASSERT_EQ(*sp_hash_table_getp(ht, 10), 1.5f);
+    ASSERT_EQ(*sp_hash_table_getp(ht, 20), 2.5f);
+    ASSERT_EQ(*sp_hash_table_getp(ht, 30), 3.5f);
+    ASSERT_EQ(*sp_hash_table_getp(ht, 42), 3.14f);
 
     sp_hash_table_insert(ht, 42, 6.28f);
-    ASSERT_EQ(sp_hash_table_get(ht, 42), 6.28f);
+    ASSERT_EQ(*sp_hash_table_getp(ht, 42), 6.28f);
     ASSERT_EQ(sp_hash_table_size(ht), 4);
 
     sp_hash_table_erase(ht, 20);
@@ -2856,7 +2856,7 @@ UTEST(hash_table, pointer_retrieval) {
     ASSERT_EQ(*ptr1, 123.456);
 
     *ptr1 = 999.999;
-    ASSERT_EQ(sp_hash_table_get(ht, 100), 999.999);
+    ASSERT_EQ(*sp_hash_table_getp(ht, 100), 999.999);
 
     double* ptr2 = sp_hash_table_getp(ht, 999);
     ASSERT_EQ(ptr2, SP_NULLPTR);
@@ -2881,7 +2881,7 @@ UTEST(hash_table, struct_values) {
     sp_hash_table_insert(ht, 2, v2);
     sp_hash_table_insert(ht, 3, v3);
 
-    vec3_t retrieved = sp_hash_table_get(ht, 2);
+    vec3_t retrieved = *sp_hash_table_getp(ht, 2);
     ASSERT_EQ(retrieved.x, 4.0f);
     ASSERT_EQ(retrieved.y, 5.0f);
     ASSERT_EQ(retrieved.z, 6.0f);
@@ -2911,7 +2911,7 @@ UTEST(hash_table, struct_keys) {
 
     compound_key_t lookup = {200, 2};
     ASSERT_TRUE(sp_hash_table_exists(ht, lookup));
-    const char* value = sp_hash_table_get(ht, lookup);
+    const char* value = *sp_hash_table_getp(ht, lookup);
     ASSERT_STREQ(value, "Second");
 
     compound_key_t missing = {200, 3};
@@ -2939,7 +2939,7 @@ UTEST(hash_table, string_keys) {
 
     u64 lookup = sp_hash_cstr("banana");
     ASSERT_TRUE(sp_hash_table_exists(ht, lookup));
-    ASSERT_EQ(sp_hash_table_get(ht, lookup), 20);
+    ASSERT_EQ(*sp_hash_table_getp(ht, lookup), 20);
 
     lookup = sp_hash_cstr("dragonfruit");
     ASSERT_FALSE(sp_hash_table_exists(ht, lookup));
@@ -2960,7 +2960,7 @@ UTEST(hash_table, collision_handling) {
 
     for (s32 i = 0; i < 100; i++) {
         ASSERT_TRUE(sp_hash_table_exists(ht, i));
-        ASSERT_EQ(sp_hash_table_get(ht, i), i * 100);
+        ASSERT_EQ(*sp_hash_table_getp(ht, i), i * 100);
     }
 
     for (s32 i = 0; i < 100; i += 3) {
@@ -2972,7 +2972,7 @@ UTEST(hash_table, collision_handling) {
             ASSERT_FALSE(sp_hash_table_exists(ht, i));
         } else {
             ASSERT_TRUE(sp_hash_table_exists(ht, i));
-            ASSERT_EQ(sp_hash_table_get(ht, i), i * 100);
+            ASSERT_EQ(*sp_hash_table_getp(ht, i), i * 100);
         }
     }
 
@@ -2990,8 +2990,8 @@ UTEST(hash_table, iteration) {
   s32 sum = 0;
 
   for (sp_hash_table_iter it = sp_hash_table_iter_init(ht); sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
-    s32 key = sp_hash_table_iter_getk(ht, it);
-    float val = sp_hash_table_iter_get(ht, it);
+    s32 key = *sp_hash_table_iter_getkp(ht, it);
+    float val = *sp_hash_table_iter_getp(ht, it);
 
     count++;
     sum += val;
@@ -3041,7 +3041,7 @@ UTEST(hash_table, pathological_all_same_hash) {
 
   for (u32 i = 0; i < cap; i++) {
     ASSERT_TRUE(sp_hash_table_exists(ht, i));
-    ASSERT_EQ(i * 100, sp_hash_table_get(ht, i));
+    ASSERT_EQ(i * 100, *sp_hash_table_getp(ht, i));
   }
 
   sp_hash_table_free(ht);
@@ -3053,18 +3053,18 @@ UTEST(sp_hash_table, duplicate_key_insert_size_bug) {
     // Insert initial key-value pair
     sp_hash_table_insert(table, 42, 100);
     ASSERT_EQ(sp_hash_table_size(table), 1);
-    ASSERT_EQ(sp_hash_table_get(table, 42), 100);
+    ASSERT_EQ(*sp_hash_table_getp(table, 42), 100);
 
     // Insert same key with different value - this should overwrite, not increment size
     sp_hash_table_insert(table, 42, 200);
     ASSERT_EQ(sp_hash_table_size(table), 1);
-    ASSERT_EQ(sp_hash_table_get(table, 42), 200);
+    ASSERT_EQ(*sp_hash_table_getp(table, 42), 200);
 
     // Insert another unique key
     sp_hash_table_insert(table, 99, 300);
     ASSERT_EQ(sp_hash_table_size(table), 2);
-    ASSERT_EQ(sp_hash_table_get(table, 42), 200);
-    ASSERT_EQ(sp_hash_table_get(table, 99), 300);
+    ASSERT_EQ(*sp_hash_table_getp(table, 42), 200);
+    ASSERT_EQ(*sp_hash_table_getp(table, 99), 300);
 
     sp_hash_table_free(table);
 }
@@ -3079,8 +3079,8 @@ UTEST(sp_hash_table, iterator_yields_inactive_entry_at_slot_zero) {
 
   u64 iteration_count = 0;
   for (sp_hash_table_iter it = sp_hash_table_iter_init(ht); sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
-    u64 key = sp_hash_table_iter_getk(ht, it);
-    u64 val = sp_hash_table_iter_get(ht, it);
+    u64 key = *sp_hash_table_iter_getkp(ht, it);
+    u64 val = *sp_hash_table_iter_getp(ht, it);
     iteration_count++;
   }
 
@@ -3125,9 +3125,9 @@ UTEST(hash_table, collision) {
   ASSERT_TRUE(sp_hash_table_exists(ht, keys[1]));
   ASSERT_TRUE(sp_hash_table_exists(ht, keys[2]));
 
-  ASSERT_EQ(sp_hash_table_get(ht, keys[0]), 0);
-  ASSERT_EQ(sp_hash_table_get(ht, keys[1]), 1);
-  ASSERT_EQ(sp_hash_table_get(ht, keys[2]), 2);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[0]), 0);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[1]), 1);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[2]), 2);
 
   // remove the first key that maps to bucket 0
   sp_hash_table_erase(ht, keys[0]);
@@ -3136,15 +3136,15 @@ UTEST(hash_table, collision) {
   ASSERT_TRUE(sp_hash_table_exists(ht, keys[1]));
   ASSERT_TRUE(sp_hash_table_exists(ht, keys[2]));
 
-  ASSERT_EQ(sp_hash_table_get(ht, keys[1]), 1);
-  ASSERT_EQ(sp_hash_table_get(ht, keys[2]), 2);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[1]), 1);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[2]), 2);
 
   // put it back
   sp_hash_table_insert(ht, keys[0], 0);
 
   ASSERT_EQ(sp_hash_table_size(ht), 3);
   ASSERT_TRUE(sp_hash_table_exists(ht, keys[0]));
-  ASSERT_EQ(sp_hash_table_get(ht, keys[0]), 0);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[0]), 0);
 
   // remove the third key that maps to bucket 0
   sp_hash_table_erase(ht, keys[2]);
@@ -3153,13 +3153,13 @@ UTEST(hash_table, collision) {
   ASSERT_TRUE(sp_hash_table_exists(ht, keys[1]));
   ASSERT_FALSE(sp_hash_table_exists(ht, keys[2]));
 
-  ASSERT_EQ(sp_hash_table_get(ht, keys[0]), 0);
-  ASSERT_EQ(sp_hash_table_get(ht, keys[1]), 1);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[0]), 0);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[1]), 1);
 
   // put it back
   sp_hash_table_insert(ht, keys[2], 2);
   ASSERT_TRUE(sp_hash_table_exists(ht, keys[2]));
-  ASSERT_EQ(sp_hash_table_get(ht, keys[2]), 2);
+  ASSERT_EQ(*sp_hash_table_getp(ht, keys[2]), 2);
 }
 
 ////////////////////////////
@@ -3249,7 +3249,7 @@ UTEST(combined, hash_table_with_dyn_array_values) {
     for (s32 i = 0; i < 5; i++) {
         ASSERT_TRUE(sp_hash_table_exists(ht, i));
 
-        int_array arr = sp_hash_table_get(ht, i);
+        int_array arr = *sp_hash_table_getp(ht, i);
         ASSERT_EQ(sp_dyn_array_size(arr), 10);
 
         for (s32 j = 0; j < 10; j++) {
@@ -3258,7 +3258,7 @@ UTEST(combined, hash_table_with_dyn_array_values) {
     }
 
     for (s32 i = 0; i < 5; i++) {
-        int_array arr = sp_hash_table_get(ht, i);
+        int_array arr = *sp_hash_table_getp(ht, i);
         sp_dyn_array_free(arr);
     }
 
@@ -3283,7 +3283,7 @@ UTEST(combined, multiple_arrays_in_hash_table) {
     for (s32 key = 0; key < 5; key++) {
         ASSERT_TRUE(sp_hash_table_exists(ht, key));
 
-        int* arr = (int*)sp_hash_table_get(ht, key);
+        int* arr = (int*)*sp_hash_table_getp(ht, key);
         ASSERT_EQ(sp_dyn_array_size(arr), 20);
 
         for (s32 j = 0; j < 20; j++) {
@@ -3292,7 +3292,7 @@ UTEST(combined, multiple_arrays_in_hash_table) {
     }
 
     for (s32 key = 0; key < 5; key++) {
-        int* arr = (int*)sp_hash_table_get(ht, key);
+        int* arr = (int*)*sp_hash_table_getp(ht, key);
         sp_dyn_array_free(arr);
     }
 
@@ -4099,7 +4099,7 @@ UTEST(hash_table, stress) {
   for (s32 i = 0; i < 100; i++) {
       u64 key = rand() % count;
       ASSERT_TRUE(sp_hash_table_exists(ht, key));
-      ASSERT_EQ(sp_hash_table_get(ht, key), key * key);
+      ASSERT_EQ(*sp_hash_table_getp(ht, key), key * key);
   }
 
   for (u64 i = 0; i < count; i += 2) {
@@ -4110,7 +4110,7 @@ UTEST(hash_table, stress) {
 
   for (u64 i = 1; i < count; i += 2) {
       ASSERT_TRUE(sp_hash_table_exists(ht, i));
-      ASSERT_EQ(sp_hash_table_get(ht, i), i * i);
+      ASSERT_EQ(*sp_hash_table_getp(ht, i), i * i);
   }
 
   sp_hash_table_free(ht);
@@ -6150,4 +6150,43 @@ UTEST(hash_table, iterator_returns_zero_entries_for_populated_table) {
   ASSERT_EQ(count, 2);
 
   sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, null_safety) {
+  sp_hash_table(s32, s32) null_ht = NULL;
+
+  // Test all operations with NULL hash table - should not crash
+  ASSERT_EQ(sp_hash_table_size(null_ht), 0);
+  ASSERT_EQ(sp_hash_table_capacity(null_ht), 0);
+  ASSERT_TRUE(sp_hash_table_empty(null_ht));
+  ASSERT_FALSE(sp_hash_table_exists(null_ht, 42));
+
+  // Test get operations return defaults
+  s32* default_val = sp_hash_table_getp(null_ht, 42);
+  ASSERT_EQ(default_val, SP_NULLPTR);
+
+  // Test iterator operations with NULL
+  sp_hash_table_iter it = sp_hash_table_iter_init(null_ht);
+  ASSERT_EQ(it, 0);
+  ASSERT_FALSE(sp_hash_table_iter_valid(null_ht, it));
+
+  sp_hash_table_iter_advance(null_ht, it); // Should not crash
+
+  s32* iter_key = sp_hash_table_iter_getkp(null_ht, it);
+  s32* iter_val = sp_hash_table_iter_getp(null_ht, it);
+  ASSERT_EQ(iter_key, SP_NULLPTR);
+  ASSERT_EQ(iter_val, SP_NULLPTR);
+
+  // Test operations that should be no-ops
+  sp_hash_table_clear(null_ht); // Should not crash
+  sp_hash_table_erase(null_ht, 42); // Should not crash
+  sp_hash_table_free(null_ht); // Should not crash
+
+  // Test insert auto-initializes
+  sp_hash_table_insert(null_ht, 42, 100);
+  ASSERT_NE(null_ht, SP_NULLPTR);
+  ASSERT_EQ(sp_hash_table_size(null_ht), 1);
+  ASSERT_EQ(*sp_hash_table_getp(null_ht, 42), 100);
+
+  sp_hash_table_free(null_ht);
 }

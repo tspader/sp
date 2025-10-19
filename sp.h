@@ -529,16 +529,13 @@ void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u3
 #define sp_hash_table_clear(__HT)
 #define sp_hash_table_free(__HT)
 #define sp_hash_table_insert(__HT, __K, __V)
-#define sp_hash_table_get(__HT, __K)
 #define sp_hash_table_getp(__HT, __K)
 #define sp_hash_table_exists(__HT, __K)
 #define sp_hash_table_key_exists(__HT, __K)
 #define sp_hash_table_erase(__HT, __K)
 #define sp_hash_table_iter_valid(__HT, __IT)
 #define sp_hash_table_iter_advance(__HT, __IT)
-#define sp_hash_table_iter_get(__HT, __IT)
 #define sp_hash_table_iter_getp(__HT, __IT)
-#define sp_hash_table_iter_getk(__HT, __IT)
 #define sp_hash_table_iter_getkp(__HT, __IT)
 
 ///////////////
@@ -1656,7 +1653,6 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
 #undef sp_hash_table_clear
 #undef sp_hash_table_free
 #undef sp_hash_table_insert
-#undef sp_hash_table_get
 #undef sp_hash_table_getp
 #undef sp_hash_table_exists
 #undef sp_hash_table_key_exists
@@ -1665,7 +1661,6 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
 #undef sp_hash_table_iter_advance
 #undef sp_hash_table_iter_get
 #undef sp_hash_table_iter_getp
-#undef sp_hash_table_iter_getk
 #undef sp_hash_table_iter_getkp
 
 #define sp_hash_table(__K, __V)\
@@ -1765,18 +1760,13 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
         if (!__KEY_EXISTS) sp_dyn_array_head((__HT)->data)->size++;\
     } while (0)
 
-#define sp_hash_table_get(__HT, __K)\
-    ((__HT)->tmp_key = (__K),\
-        ((__HT)->data[\
-            sp_hash_table_get_key_index_func((void**)&(__HT)->data, (void*)&((__HT)->tmp_key),\
-                sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), (__HT)->stride, (__HT)->klpvl)].val))
-
 #define sp_hash_table_getp(__HT, __K)\
     (\
-        (__HT)->tmp_key = (__K),\
+        (__HT) == NULL ? NULL :\
+        ((__HT)->tmp_key = (__K),\
         ((__HT)->tmp_idx = sp_hash_table_get_key_index_func((void**)&(__HT->data), (void*)&(__HT->tmp_key), sizeof(__HT->tmp_key),\
             sizeof(__HT->tmp_val), __HT->stride, __HT->klpvl)),\
-        ((__HT)->tmp_idx != SP_HASH_TABLE_INVALID_INDEX ? &(__HT)->data[(__HT)->tmp_idx].val : NULL)\
+        ((__HT)->tmp_idx != SP_HASH_TABLE_INVALID_INDEX ? &(__HT)->data[(__HT)->tmp_idx].val : NULL))\
     )
 
 #define sp_hash_table_exists(__HT, __K)\
@@ -1800,25 +1790,19 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
     } while (0)
 
 #define sp_hash_table_iter_valid(__HT, __IT)\
-    (((__IT) < sp_hash_table_capacity((__HT))) && ((__HT)->data[(__IT)].state == SP_HASH_TABLE_ENTRY_ACTIVE))
+    ((__HT) == NULL ? false : (((__IT) < sp_hash_table_capacity((__HT))) && ((__HT)->data[(__IT)].state == SP_HASH_TABLE_ENTRY_ACTIVE)))
 
 #define sp_hash_table_iter_advance(__HT, __IT)\
-    (__sp_hash_table_iter_advance_func((void**)&(__HT)->data, sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), &(__IT), (__HT)->stride, (__HT)->klpvl))
-
-#define sp_hash_table_iter_get(__HT, __IT)\
-    ((__HT)->data[(__IT)].val)
+    ((__HT) == NULL ? (void)0 : (__sp_hash_table_iter_advance_func((void**)&(__HT)->data, sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), &(__IT), (__HT)->stride, (__HT)->klpvl)))
 
 #define sp_hash_table_iter_getp(__HT, __IT)\
-    (&((__HT)->data[(__IT)].val))
-
-#define sp_hash_table_iter_getk(__HT, __IT)\
-    ((__HT)->data[(__IT)].key)
+    ((__HT) == NULL ? NULL : (&((__HT)->data[(__IT)].val)))
 
 #define sp_hash_table_iter_getkp(__HT, __IT)\
-    (&((__HT)->data[(__IT)].key))
+    ((__HT) == NULL ? NULL : (&((__HT)->data[(__IT)].key)))
 
 #define sp_hash_table_iter_init(__HT)\
-    ((__sp_hash_table_iter_init_func)((void**)&(__HT)->data, sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), (__HT)->stride, (__HT)->klpvl))
+    ((__HT) == NULL ? 0 : ((__sp_hash_table_iter_init_func)((void**)&(__HT)->data, sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), (__HT)->stride, (__HT)->klpvl)))
 
 void __sp_hash_table_init_impl(void** ht, u32 sz) {
     *ht = sp_alloc(sz);
@@ -1849,6 +1833,7 @@ u32 sp_hash_table_get_key_index_func(void** data, void* key, u32 key_len, u32 va
 }
 
 sp_hash_table_iter __sp_hash_table_iter_init_func(void** data, u32 key_len, u32 val_len, u32 stride, u32 klpvl) {
+    if (!data || !*data) return 0;
     sp_hash_table_iter it = 0;
     for (; it < sp_dyn_array_capacity(*data); ++it) {
         u32 offset = (it * stride);
@@ -1861,6 +1846,7 @@ sp_hash_table_iter __sp_hash_table_iter_init_func(void** data, u32 key_len, u32 
 }
 
 void __sp_hash_table_iter_advance_func(void** data, u32 key_len, u32 val_len, u32* it, u32 stride, u32 klpvl) {
+    if (!data || !*data) return;
     (*it)++;
     for (; *it < sp_dyn_array_capacity(*data); ++*it) {
         u32 offset = (*it * stride);
