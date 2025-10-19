@@ -1181,9 +1181,9 @@ SP_API void                   sp_env_destroy(sp_env_t* env);
 SP_API sp_proc_config_t       sp_proc_config_copy(const sp_proc_config_t* src);
 SP_API void                   sp_proc_config_add_arg(sp_proc_config_t* config, sp_str_t arg);
 SP_API sp_proc_t              sp_proc_create(sp_proc_config_t config);
-SP_API sp_io_stream_t*        sp_proc_stdin(sp_proc_t* proc);
-SP_API sp_io_stream_t*        sp_proc_stdout(sp_proc_t* proc);
-SP_API sp_io_stream_t*        sp_proc_stderr(sp_proc_t* proc);
+SP_API sp_io_stream_t*        sp_proc_io_in(sp_proc_t* proc);
+SP_API sp_io_stream_t*        sp_proc_io_out(sp_proc_t* proc);
+SP_API sp_io_stream_t*        sp_proc_io_err(sp_proc_t* proc);
 SP_API sp_proc_wait_result_t  sp_proc_wait(sp_proc_t* proc);
 SP_API sp_proc_wait_result_t  sp_proc_poll(sp_proc_t* proc, u32 timeout_ms);
 SP_API bool                   sp_proc_kill(sp_proc_t* proc);
@@ -4909,7 +4909,7 @@ void sp_proc_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
   SP_ASSERT(posix_spawn_file_actions_addchdir_np(fa, cwd_cstr) == 0);
 }
 
-sp_io_stream_t* sp_proc_stdin(sp_proc_t* proc) {
+sp_io_stream_t* sp_proc_io_in(sp_proc_t* proc) {
   SP_ASSERT(proc != SP_NULLPTR);
   switch (proc->io.in.mode) {
     case SP_PROC_IO_CREATE:
@@ -4925,7 +4925,7 @@ sp_io_stream_t* sp_proc_stdin(sp_proc_t* proc) {
   SP_UNREACHABLE_RETURN(SP_NULLPTR);
 }
 
-sp_io_stream_t* sp_proc_stdout(sp_proc_t* proc) {
+sp_io_stream_t* sp_proc_io_out(sp_proc_t* proc) {
   SP_ASSERT(proc != SP_NULLPTR);
   switch (proc->io.out.mode) {
     case SP_PROC_IO_CREATE:
@@ -4941,7 +4941,7 @@ sp_io_stream_t* sp_proc_stdout(sp_proc_t* proc) {
   SP_UNREACHABLE_RETURN(SP_NULLPTR);
 }
 
-sp_io_stream_t* sp_proc_stderr(sp_proc_t* proc) {
+sp_io_stream_t* sp_proc_io_err(sp_proc_t* proc) {
   SP_ASSERT(proc != SP_NULLPTR);
   switch (proc->io.err.mode) {
     case SP_PROC_IO_CREATE:
