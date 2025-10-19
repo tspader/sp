@@ -1744,6 +1744,8 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
             __CAP = sp_hash_table_capacity(__HT);\
         }\
         (__HT)->tmp_key = (__K);\
+        u32 __EXISTING_IDX = sp_hash_table_get_key_index_func((void**)&(__HT)->data, (void*)&(__HT)->tmp_key, sizeof((__HT)->tmp_key), sizeof((__HT)->tmp_val), (__HT)->stride, (__HT)->klpvl);\
+        bool __KEY_EXISTS = (__EXISTING_IDX != SP_HASH_TABLE_INVALID_INDEX);\
         u64 __HSH = sp_hash_bytes((void*)&((__HT)->tmp_key), sizeof((__HT)->tmp_key), SP_HASH_TABLE_HASH_SEED);\
         u32 __HSH_IDX = __HSH % __CAP;\
         (__HT)->tmp_key = (__HT)->data[__HSH_IDX].key;\
@@ -1760,7 +1762,7 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
         (__HT)->data[__HSH_IDX].key = (__K);\
         (__HT)->data[__HSH_IDX].val = (__V);\
         (__HT)->data[__HSH_IDX].state = SP_HASH_TABLE_ENTRY_ACTIVE;\
-        sp_dyn_array_head((__HT)->data)->size++;\
+        if (!__KEY_EXISTS) sp_dyn_array_head((__HT)->data)->size++;\
     } while (0)
 
 #define sp_hash_table_get(__HT, __K)\

@@ -2217,8 +2217,6 @@ UTEST(sp_parse, unsigned_integers) {
 }
 
 UTEST(sp_parse, signed_integers) {
-
-
   // sp_parse_s8
   ASSERT_EQ(sp_parse_s8(SP_LIT("0")), 0);
   ASSERT_EQ(sp_parse_s8(SP_LIT("127")), 127);
@@ -2807,10 +2805,7 @@ UTEST(sp_format_parser, peek_and_eat) {
 //////////////////////
 // HASH TABLE TESTS //
 //////////////////////
-
 UTEST(hash_table, basic_operations) {
-
-
     sp_hash_table(int, float) ht = SP_NULLPTR;
 
     ASSERT_EQ(sp_hash_table_size(ht), 0);
@@ -2835,11 +2830,11 @@ UTEST(hash_table, basic_operations) {
 
     sp_hash_table_insert(ht, 42, 6.28f);
     ASSERT_EQ(sp_hash_table_get(ht, 42), 6.28f);
-    ASSERT_EQ(sp_hash_table_size(ht), 5);
+    ASSERT_EQ(sp_hash_table_size(ht), 4);
 
     sp_hash_table_erase(ht, 20);
     ASSERT_FALSE(sp_hash_table_exists(ht, 20));
-    ASSERT_EQ(sp_hash_table_size(ht), 4);
+    ASSERT_EQ(sp_hash_table_size(ht), 3);
 
     sp_hash_table_clear(ht);
     ASSERT_EQ(sp_hash_table_size(ht), 0);
@@ -3013,98 +3008,226 @@ UTEST(hash_table, iteration) {
 }
 
 UTEST(hash_table, edge_cases) {
+  sp_hash_table(int, int) ht1 = SP_NULLPTR;
+  ASSERT_EQ(sp_hash_table_size(ht1), 0);
+  ASSERT_TRUE(sp_hash_table_empty(ht1));
+  ASSERT_FALSE(sp_hash_table_exists(ht1, 42));
 
+  sp_hash_table_clear(ht1);
+  sp_hash_table_free(ht1);
 
-    sp_hash_table(int, int) ht1 = SP_NULLPTR;
-    ASSERT_EQ(sp_hash_table_size(ht1), 0);
-    ASSERT_TRUE(sp_hash_table_empty(ht1));
-    ASSERT_FALSE(sp_hash_table_exists(ht1, 42));
+  sp_hash_table(int, int) ht2 = SP_NULLPTR;
+  sp_hash_table_insert(ht2, 1, 100);
+  sp_hash_table_erase(ht2, 1);
+  ASSERT_EQ(sp_hash_table_size(ht2), 0);
+  sp_hash_table_free(ht2);
 
-    sp_hash_table_clear(ht1);
-    sp_hash_table_free(ht1);
+  sp_hash_table(int, int) ht3 = SP_NULLPTR;
+  sp_hash_table_insert(ht3, 1, 100);
+  sp_hash_table_erase(ht3, 999);
+  ASSERT_EQ(sp_hash_table_size(ht3), 1);
+  sp_hash_table_free(ht3);
+}
 
-    sp_hash_table(int, int) ht2 = SP_NULLPTR;
-    sp_hash_table_insert(ht2, 1, 100);
-    sp_hash_table_erase(ht2, 1);
-    ASSERT_EQ(sp_hash_table_size(ht2), 0);
-    sp_hash_table_free(ht2);
+UTEST(hash_table, pathological_all_same_hash) {
+  sp_hash_table(u32, u32) ht = sp_hash_table_new(u32, u32);
 
-    sp_hash_table(int, int) ht3 = SP_NULLPTR;
-    sp_hash_table_insert(ht3, 1, 100);
-    sp_hash_table_erase(ht3, 999);
-    ASSERT_EQ(sp_hash_table_size(ht3), 1);
-    sp_hash_table_free(ht3);
+  u32 cap = sp_hash_table_capacity(ht);
+  if (cap < 2) {
+    sp_hash_table_insert(ht, 0, 0);
+    sp_hash_table_insert(ht, 1, 0);
+    cap = sp_hash_table_capacity(ht);
+  }
+
+  for (u32 i = 0; i < cap; i++) {
+    sp_hash_table_insert(ht, i, i * 100);
+  }
+
+  for (u32 i = 0; i < cap; i++) {
+    ASSERT_TRUE(sp_hash_table_exists(ht, i));
+    ASSERT_EQ(i * 100, sp_hash_table_get(ht, i));
+  }
+
+  sp_hash_table_free(ht);
+}
+
+UTEST(sp_hash_table, duplicate_key_insert_size_bug) {
+    sp_hash_table(u32, u32) table = SP_NULLPTR;
+
+    // Insert initial key-value pair
+    sp_hash_table_insert(table, 42, 100);
+    ASSERT_EQ(sp_hash_table_size(table), 1);
+    ASSERT_EQ(sp_hash_table_get(table, 42), 100);
+
+    // Insert same key with different value - this should overwrite, not increment size
+    sp_hash_table_insert(table, 42, 200);
+    ASSERT_EQ(sp_hash_table_size(table), 1);
+    ASSERT_EQ(sp_hash_table_get(table, 42), 200);
+
+    // Insert another unique key
+    sp_hash_table_insert(table, 99, 300);
+    ASSERT_EQ(sp_hash_table_size(table), 2);
+    ASSERT_EQ(sp_hash_table_get(table, 42), 200);
+    ASSERT_EQ(sp_hash_table_get(table, 99), 300);
+
+    sp_hash_table_free(table);
+}
+
+UTEST(sp_hash_table, iterator_yields_inactive_entry_at_slot_zero) {
+  sp_hash_table(u64, u64) ht = sp_hash_table_new(u64, u64);
+
+  sp_hash_table_insert(ht, 0, 999);
+  sp_hash_table_erase(ht, 0);
+
+  ASSERT_EQ(sp_hash_table_size(ht), 0);
+
+  u64 iteration_count = 0;
+  for (sp_hash_table_iter it = 0; sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
+    u64 key = sp_hash_table_iter_getk(ht, it);
+    u64 val = sp_hash_table_iter_get(ht, it);
+    iteration_count++;
+  }
+
+  ASSERT_EQ(iteration_count, 0);
+
+  sp_hash_table_free(ht);
+}
+
+UTEST(hash_table, collision) {
+  sp_hash_table(s32, s32) ht = SP_NULLPTR;
+
+  for (u32 i = 0; i < 8; i++) {
+    sp_hash_table_insert(ht, i, i);
+  }
+
+  u32 capacity = sp_hash_table_capacity(ht);
+  s32 keys [3] = { -1, -1, -1 };
+  s32 num_found = 0;
+
+  for (u32 candidate = 0; candidate < 1000; candidate++) {
+    sp_hash_t hash = sp_hash_bytes(&candidate, sizeof(candidate), SP_HASH_TABLE_HASH_SEED);
+
+    u32 bucket = hash % capacity;
+    if (bucket == 0) {
+      keys[num_found++] = candidate;
+    }
+
+    if (num_found == SP_CARR_LEN(keys)) {
+      break;
+    }
+  }
+
+  ASSERT_EQ(num_found, 3);
+
+  sp_hash_table_clear(ht);
+
+  sp_hash_table_insert(ht, keys[0], 0);
+  sp_hash_table_insert(ht, keys[1], 1);
+  sp_hash_table_insert(ht, keys[2], 2);
+
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[0]));
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[1]));
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[2]));
+
+  ASSERT_EQ(sp_hash_table_get(ht, keys[0]), 0);
+  ASSERT_EQ(sp_hash_table_get(ht, keys[1]), 1);
+  ASSERT_EQ(sp_hash_table_get(ht, keys[2]), 2);
+
+  // remove the first key that maps to bucket 0
+  sp_hash_table_erase(ht, keys[0]);
+
+  ASSERT_FALSE(sp_hash_table_exists(ht, keys[0]));
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[1]));
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[2]));
+
+  ASSERT_EQ(sp_hash_table_get(ht, keys[1]), 1);
+  ASSERT_EQ(sp_hash_table_get(ht, keys[2]), 2);
+
+  // put it back
+  sp_hash_table_insert(ht, keys[0], 0);
+
+  ASSERT_EQ(sp_hash_table_size(ht), 3);
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[0]));
+  ASSERT_EQ(sp_hash_table_get(ht, keys[0]), 0);
+
+  // remove the third key that maps to bucket 0
+  sp_hash_table_erase(ht, keys[2]);
+
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[0]));
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[1]));
+  ASSERT_FALSE(sp_hash_table_exists(ht, keys[2]));
+
+  ASSERT_EQ(sp_hash_table_get(ht, keys[0]), 0);
+  ASSERT_EQ(sp_hash_table_get(ht, keys[1]), 1);
+
+  // put it back
+  sp_hash_table_insert(ht, keys[2], 2);
+  ASSERT_TRUE(sp_hash_table_exists(ht, keys[2]));
+  ASSERT_EQ(sp_hash_table_get(ht, keys[2]), 2);
 }
 
 ////////////////////////////
 // SIPHASH TESTS
 ////////////////////////////
-
 UTEST(siphash, consistency) {
+  const char* data = "Hello, World!";
+  u64 seed = 0x12345678;
 
+  u64 hash1 = sp_hash_bytes((void*)data, strlen(data), seed);
+  u64 hash2 = sp_hash_bytes((void*)data, strlen(data), seed);
 
-    const char* data = "Hello, World!";
-    u64 seed = 0x12345678;
+  ASSERT_EQ(hash1, hash2);
 
-    u64 hash1 = sp_hash_bytes((void*)data, strlen(data), seed);
-    u64 hash2 = sp_hash_bytes((void*)data, strlen(data), seed);
-
-    ASSERT_EQ(hash1, hash2);
-
-    u64 hash3 = sp_hash_bytes((void*)data, strlen(data), seed + 1);
-    ASSERT_NE(hash1, hash3);
+  u64 hash3 = sp_hash_bytes((void*)data, strlen(data), seed + 1);
+  ASSERT_NE(hash1, hash3);
 }
 
 UTEST(siphash, different_lengths) {
+  u64 seed = 0xABCDEF;
 
+  u8 data1[1] = {0x42};
+  u8 data2[7] = {1, 2, 3, 4, 5, 6, 7};
+  u8 data3[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+  u8 data4[15] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+  u8 data5[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  u8 data6[17] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
 
-    u64 seed = 0xABCDEF;
+  u64 h1 = sp_hash_bytes(data1, sizeof(data1), seed);
+  u64 h2 = sp_hash_bytes(data2, sizeof(data2), seed);
+  u64 h3 = sp_hash_bytes(data3, sizeof(data3), seed);
+  u64 h4 = sp_hash_bytes(data4, sizeof(data4), seed);
+  u64 h5 = sp_hash_bytes(data5, sizeof(data5), seed);
+  u64 h6 = sp_hash_bytes(data6, sizeof(data6), seed);
 
-    u8 data1[1] = {0x42};
-    u8 data2[7] = {1, 2, 3, 4, 5, 6, 7};
-    u8 data3[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-    u8 data4[15] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-    u8 data5[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-    u8 data6[17] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
-
-    u64 h1 = sp_hash_bytes(data1, sizeof(data1), seed);
-    u64 h2 = sp_hash_bytes(data2, sizeof(data2), seed);
-    u64 h3 = sp_hash_bytes(data3, sizeof(data3), seed);
-    u64 h4 = sp_hash_bytes(data4, sizeof(data4), seed);
-    u64 h5 = sp_hash_bytes(data5, sizeof(data5), seed);
-    u64 h6 = sp_hash_bytes(data6, sizeof(data6), seed);
-
-    ASSERT_NE(h1, h2);
-    ASSERT_NE(h2, h3);
-    ASSERT_NE(h3, h4);
-    ASSERT_NE(h4, h5);
-    ASSERT_NE(h5, h6);
+  ASSERT_NE(h1, h2);
+  ASSERT_NE(h2, h3);
+  ASSERT_NE(h3, h4);
+  ASSERT_NE(h4, h5);
+  ASSERT_NE(h5, h6);
 }
 
 UTEST(siphash, collision_resistance) {
+  u64 seed = 0x31415926;
 
+  const s32 count = 1000;
+  u64* hashes = (u64*)sp_alloc(sizeof(u64) * count);
 
-    u64 seed = 0x31415926;
+  for (s32 i = 0; i < count; i++) {
+      hashes[i] = sp_hash_bytes(&i, sizeof(i), seed);
+  }
 
-    const s32 count = 1000;
-    u64* hashes = (u64*)sp_alloc(sizeof(u64) * count);
+  s32 collisions = 0;
+  for (s32 i = 0; i < count; i++) {
+      for (s32 j = i + 1; j < count; j++) {
+          if (hashes[i] == hashes[j]) {
+              collisions++;
+          }
+      }
+  }
 
-    for (s32 i = 0; i < count; i++) {
-        hashes[i] = sp_hash_bytes(&i, sizeof(i), seed);
-    }
+  ASSERT_EQ(collisions, 0);
 
-    s32 collisions = 0;
-    for (s32 i = 0; i < count; i++) {
-        for (s32 j = i + 1; j < count; j++) {
-            if (hashes[i] == hashes[j]) {
-                collisions++;
-            }
-        }
-    }
-
-    ASSERT_EQ(collisions, 0);
-
-    sp_free(hashes);
+  sp_free(hashes);
 }
 
 ////////////////////////////
@@ -3868,14 +3991,12 @@ UTEST(dynamic_array, stress_test) {
   sp_test_memory_tracker tracker;
   sp_test_memory_tracker_init(&tracker, 128 * 1024 * 1024);
 
-  // Test millions of operations
   {
     sp_dynamic_array_t arr;
     sp_dynamic_array_init(&arr, sizeof(s32));
 
     const s32 iterations = 1000000;
 
-    // Push a million elements
     for (s32 i = 0; i < iterations; i++) {
       sp_dynamic_array_push(&arr, &i);
     }
@@ -3943,125 +4064,115 @@ UTEST(dynamic_array, stress_test) {
 }
 
 UTEST(dyn_array, large_stress_test) {
+  sp_dyn_array(u64) arr = SP_NULLPTR;
 
+  const s32 count = 100000;
 
-    sp_dyn_array(u64) arr = SP_NULLPTR;
+  for (s32 i = 0; i < count; i++) {
+      sp_dyn_array_push(arr, (u64)i * 12345);
+  }
 
-    const s32 count = 100000;
+  ASSERT_EQ(sp_dyn_array_size(arr), count);
 
-    for (s32 i = 0; i < count; i++) {
-        sp_dyn_array_push(arr, (u64)i * 12345);
-    }
+  for (s32 i = 0; i < count; i++) {
+      ASSERT_EQ(arr[i], (u64)i * 12345);
+  }
 
-    ASSERT_EQ(sp_dyn_array_size(arr), count);
+  sp_dyn_array_clear(arr);
+  ASSERT_EQ(sp_dyn_array_size(arr), 0);
 
-    for (s32 i = 0; i < count; i++) {
-        ASSERT_EQ(arr[i], (u64)i * 12345);
-    }
+  for (s32 i = 0; i < 1000; i++) {
+      sp_dyn_array_push(arr, (u64)i);
+  }
+  ASSERT_EQ(sp_dyn_array_size(arr), 1000);
 
-    sp_dyn_array_clear(arr);
-    ASSERT_EQ(sp_dyn_array_size(arr), 0);
-
-    for (s32 i = 0; i < 1000; i++) {
-        sp_dyn_array_push(arr, (u64)i);
-    }
-    ASSERT_EQ(sp_dyn_array_size(arr), 1000);
-
-    sp_dyn_array_free(arr);
+  sp_dyn_array_free(arr);
 }
 
-UTEST(hash_table, large_stress_test) {
+UTEST(hash_table, stress) {
+  sp_hash_table(u64, u64) ht = SP_NULLPTR;
 
+  const s32 count = 10000;
 
-    sp_hash_table(u64, u64) ht = SP_NULLPTR;
+  for (u64 i = 0; i < count; i++) {
+      sp_hash_table_insert(ht, i, i * i);
+  }
 
-    const s32 count = 10000;
+  ASSERT_EQ(sp_hash_table_size(ht), count);
 
-    for (u64 i = 0; i < count; i++) {
-        sp_hash_table_insert(ht, i, i * i);
-    }
+  for (s32 i = 0; i < 100; i++) {
+      u64 key = rand() % count;
+      ASSERT_TRUE(sp_hash_table_exists(ht, key));
+      ASSERT_EQ(sp_hash_table_get(ht, key), key * key);
+  }
 
-    ASSERT_EQ(sp_hash_table_size(ht), count);
+  for (u64 i = 0; i < count; i += 2) {
+      sp_hash_table_erase(ht, i);
+  }
 
-    for (s32 i = 0; i < 100; i++) {
-        u64 key = rand() % count;
-        ASSERT_TRUE(sp_hash_table_exists(ht, key));
-        ASSERT_EQ(sp_hash_table_get(ht, key), key * key);
-    }
+  ASSERT_EQ(sp_hash_table_size(ht), count / 2);
 
-    for (u64 i = 0; i < count; i += 2) {
-        sp_hash_table_erase(ht, i);
-    }
+  for (u64 i = 1; i < count; i += 2) {
+      ASSERT_TRUE(sp_hash_table_exists(ht, i));
+      ASSERT_EQ(sp_hash_table_get(ht, i), i * i);
+  }
 
-    ASSERT_EQ(sp_hash_table_size(ht), count / 2);
-
-    for (u64 i = 1; i < count; i += 2) {
-        ASSERT_TRUE(sp_hash_table_exists(ht, i));
-        ASSERT_EQ(sp_hash_table_get(ht, i), i * i);
-    }
-
-    sp_hash_table_free(ht);
+  sp_hash_table_free(ht);
 }
 
 UTEST(ring_buffer, large_buffer_stress) {
+  sp_ring_buffer_t rb;
+  sp_ring_buffer_init(&rb, 1000, sizeof(u64));
 
+  for (u64 i = 0; i < 1000; i++) {
+      sp_ring_buffer_push(&rb, &i);
+  }
 
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 1000, sizeof(u64));
+  ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
 
-    for (u64 i = 0; i < 1000; i++) {
-        sp_ring_buffer_push(&rb, &i);
-    }
+  for (u64 i = 0; i < 500; i++) {
+      u64* val = (u64*)sp_ring_buffer_pop(&rb);
+      ASSERT_EQ(*val, i);
+  }
 
-    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+  for (u64 i = 1000; i < 1500; i++) {
+      sp_ring_buffer_push(&rb, &i);
+  }
 
-    for (u64 i = 0; i < 500; i++) {
-        u64* val = (u64*)sp_ring_buffer_pop(&rb);
-        ASSERT_EQ(*val, i);
-    }
+  ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
 
-    for (u64 i = 1000; i < 1500; i++) {
-        sp_ring_buffer_push(&rb, &i);
-    }
+  u64 expected = 500;
+  sp_ring_buffer_for(rb, it) {
+      u64* val = sp_rb_it(it, u64);
+      ASSERT_EQ(*val, expected);
+      expected++;
+  }
 
-    ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
-
-    u64 expected = 500;
-    sp_ring_buffer_for(rb, it) {
-        u64* val = sp_rb_it(it, u64);
-        ASSERT_EQ(*val, expected);
-        expected++;
-    }
-
-    sp_ring_buffer_destroy(&rb);
+  sp_ring_buffer_destroy(&rb);
 }
 
 UTEST(ring_buffer, continuous_overwrite_stress) {
+  sp_ring_buffer_t rb;
+  sp_ring_buffer_init(&rb, 100, sizeof(int));
 
+  for (s32 i = 0; i < 10000; i++) {
+      sp_ring_buffer_push_overwrite(&rb, &i);
+  }
 
-    sp_ring_buffer_t rb;
-    sp_ring_buffer_init(&rb, 100, sizeof(int));
+  ASSERT_EQ(rb.size, 100);
 
-    for (s32 i = 0; i < 10000; i++) {
-        sp_ring_buffer_push_overwrite(&rb, &i);
-    }
+  for (s32 i = 0; i < 100; i++) {
+      int* val = (int*)sp_ring_buffer_pop(&rb);
+      ASSERT_EQ(*val, 9900 + i);
+  }
 
-    ASSERT_EQ(rb.size, 100);
+  ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
 
-    for (s32 i = 0; i < 100; i++) {
-        int* val = (int*)sp_ring_buffer_pop(&rb);
-        ASSERT_EQ(*val, 9900 + i);
-    }
-
-    ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
-
-    sp_ring_buffer_destroy(&rb);
+  sp_ring_buffer_destroy(&rb);
 }
 #endif
 
 UTEST(os_functions, recursive_directory_removal) {
-
-
   sp_str_t foo = SP_LIT("foo");
   sp_str_t   bar = SP_LIT("foo/bar");
   sp_str_t     baz = SP_LIT("foo/bar/baz");
