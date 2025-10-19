@@ -2042,55 +2042,51 @@ UTEST(sp_dyn_array_push_f, growth_behavior) {
 }
 
 UTEST(sp_dyn_array_push_f, alignment_test) {
+  typedef struct {
+    u8 a;
+    u64 b;
+    u8 c;
+  } aligned_struct_t;
 
+  aligned_struct_t* arr = SP_NULLPTR;
 
-    typedef struct {
-        u8 a;
-        u64 b;
-        u8 c;
-    } aligned_struct_t;
+  for (int i = 0; i < 10; i++) {
+    aligned_struct_t item = {.a = (u8)i, .b = (u64)(i * 1000), .c = (u8)(255 - i)};
+    sp_dyn_array_push_f((void**)&arr, &item, sizeof(aligned_struct_t));
+  }
 
-    aligned_struct_t* arr = SP_NULLPTR;
+  ASSERT_EQ(sp_dyn_array_size(arr), 10);
 
-    for (int i = 0; i < 10; i++) {
-        aligned_struct_t item = {.a = (u8)i, .b = (u64)(i * 1000), .c = (u8)(255 - i)};
-        sp_dyn_array_push_f((void**)&arr, &item, sizeof(aligned_struct_t));
-    }
+  for (int i = 0; i < 10; i++) {
+    ASSERT_EQ(arr[i].a, i);
+    ASSERT_EQ(arr[i].b, i * 1000);
+    ASSERT_EQ(arr[i].c, 255 - i);
+  }
 
-    ASSERT_EQ(sp_dyn_array_size(arr), 10);
-
-    for (int i = 0; i < 10; i++) {
-        ASSERT_EQ(arr[i].a, i);
-        ASSERT_EQ(arr[i].b, i * 1000);
-        ASSERT_EQ(arr[i].c, 255 - i);
-    }
-
-    sp_dyn_array_free(arr);
+  sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, zero_initialization) {
+  typedef struct {
+    int values[10];
+  } big_struct_t;
 
+  big_struct_t* arr = SP_NULLPTR;
+  big_struct_t zero_struct = {0};
 
-    typedef struct {
-        int values[10];
-    } big_struct_t;
+  for (int i = 0; i < 5; i++) {
+    sp_dyn_array_push_f((void**)&arr, &zero_struct, sizeof(big_struct_t));
+  }
 
-    big_struct_t* arr = SP_NULLPTR;
-    big_struct_t zero_struct = {0};
+  ASSERT_EQ(sp_dyn_array_size(arr), 5);
 
-    for (int i = 0; i < 5; i++) {
-        sp_dyn_array_push_f((void**)&arr, &zero_struct, sizeof(big_struct_t));
+  for (int i = 0; i < 5; i++) {
+    for (int j = 0; j < 10; j++) {
+      ASSERT_EQ(arr[i].values[j], 0);
     }
+  }
 
-    ASSERT_EQ(sp_dyn_array_size(arr), 5);
-
-    for (int i = 0; i < 5; i++) {
-        for (int j = 0; j < 10; j++) {
-            ASSERT_EQ(arr[i].values[j], 0);
-        }
-    }
-
-    sp_dyn_array_free(arr);
+  sp_dyn_array_free(arr);
 }
 
 UTEST(sp_dyn_array_push_f, mixed_with_macros) {
@@ -3199,6 +3195,58 @@ UTEST(hash_table, null_safety) {
   sp_hash_table_free(null_ht);
 }
 
+sp_hash_t sp_test_string_hash(void* key, u32 size) {
+  (void)size;
+  sp_str_t* str = (sp_str_t*)key;
+  return sp_hash_bytes(str->data, str->len, SP_HASH_TABLE_HASH_SEED);
+}
+
+bool sp_test_string_compare(void* ka, void* kb, u32 size) {
+  (void)size;
+  sp_str_t* a = (sp_str_t*)ka;
+  sp_str_t* b = (sp_str_t*)kb;
+  return sp_str_equal(*a, *b);
+}
+
+UTEST(hash_table, string_key_custom_hash) {
+  sp_hash_table(sp_str_t, int) ht = SP_NULLPTR;
+
+  sp_hash_table_init(ht, sp_str_lit(""), 0);
+  ht->info.fn.hash = sp_test_string_hash;
+  ht->info.fn.compare = sp_test_string_compare;
+
+  sp_str_t ka = sp_str_copy(sp_str_lit("hello"));
+  sp_str_t kb = sp_str_copy(sp_str_lit("world"));
+  sp_str_t kc = sp_str_copy(sp_str_lit("test"));
+
+  sp_hash_table_insert(ht, ka, 100);
+  sp_hash_table_insert(ht, kb, 200);
+  sp_hash_table_insert(ht, kc, 300);
+
+  ASSERT_TRUE(sp_hash_table_exists(ht, ka));
+  ASSERT_TRUE(sp_hash_table_exists(ht, kb));
+  ASSERT_TRUE(sp_hash_table_exists(ht, kc));
+
+  ASSERT_EQ(*sp_hash_table_getp(ht, ka), 100);
+  ASSERT_EQ(*sp_hash_table_getp(ht, kb), 200);
+  ASSERT_EQ(*sp_hash_table_getp(ht, kc), 300);
+
+  sp_str_t ka_copy = sp_str_copy(SP_LIT("hello"));
+  sp_str_t kb_copy = sp_str_copy(SP_LIT("world"));
+
+  ASSERT_TRUE(sp_hash_table_exists(ht, ka_copy));
+  ASSERT_TRUE(sp_hash_table_exists(ht, kb_copy));
+
+  ASSERT_EQ(*sp_hash_table_getp(ht, ka_copy), 100);
+  ASSERT_EQ(*sp_hash_table_getp(ht, kb_copy), 200);
+
+  sp_str_t kd = sp_str_copy(SP_LIT("missing"));
+  ASSERT_FALSE(sp_hash_table_exists(ht, kd));
+  ASSERT_EQ(sp_hash_table_getp(ht, kd), SP_NULLPTR);
+
+  sp_hash_table_free(ht);
+}
+
 ////////////////////////////
 // SIPHASH TESTS
 ////////////////////////////
@@ -3266,10 +3314,7 @@ UTEST(siphash, collision_resistance) {
 ////////////////////////////
 // COMBINED STRESS TEST
 ////////////////////////////
-
 UTEST(combined, hash_table_with_dyn_array_values) {
-
-
     typedef int* int_array;
     sp_hash_table(int, int_array) ht = SP_NULLPTR;
 
@@ -3303,38 +3348,319 @@ UTEST(combined, hash_table_with_dyn_array_values) {
 }
 
 UTEST(combined, multiple_arrays_in_hash_table) {
+  sp_hash_table(int, void*) ht = SP_NULLPTR;
 
+  for (s32 key = 0; key < 5; key++) {
+    sp_dyn_array(int) arr = SP_NULLPTR;
 
-    sp_hash_table(int, void*) ht = SP_NULLPTR;
-
-    for (s32 key = 0; key < 5; key++) {
-        sp_dyn_array(int) arr = SP_NULLPTR;
-
-        for (s32 j = 0; j < 20; j++) {
-            sp_dyn_array_push(arr, key * 1000 + j);
-        }
-
-        sp_hash_table_insert(ht, key, (void*)arr);
+    for (s32 j = 0; j < 20; j++) {
+        sp_dyn_array_push(arr, key * 1000 + j);
     }
 
-    for (s32 key = 0; key < 5; key++) {
-        ASSERT_TRUE(sp_hash_table_exists(ht, key));
+    sp_hash_table_insert(ht, key, (void*)arr);
+  }
 
-        int* arr = (int*)*sp_hash_table_getp(ht, key);
-        ASSERT_EQ(sp_dyn_array_size(arr), 20);
+  for (s32 key = 0; key < 5; key++) {
+    ASSERT_TRUE(sp_hash_table_exists(ht, key));
 
-        for (s32 j = 0; j < 20; j++) {
-            ASSERT_EQ(arr[j], key * 1000 + j);
-        }
+    int* arr = (int*)*sp_hash_table_getp(ht, key);
+    ASSERT_EQ(sp_dyn_array_size(arr), 20);
+
+    for (s32 j = 0; j < 20; j++) {
+        ASSERT_EQ(arr[j], key * 1000 + j);
     }
+  }
 
-    for (s32 key = 0; key < 5; key++) {
-        int* arr = (int*)*sp_hash_table_getp(ht, key);
-        sp_dyn_array_free(arr);
-    }
+  for (s32 key = 0; key < 5; key++) {
+    int* arr = (int*)*sp_hash_table_getp(ht, key);
+    sp_dyn_array_free(arr);
+  }
 
-    sp_hash_table_free(ht);
+  sp_hash_table_free(ht);
 }
+
+UTEST(dynamic_array, initialization) {
+  sp_test_memory_tracker tracker;
+  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    ASSERT_EQ(arr.size, 0);
+    ASSERT_EQ(arr.capacity, 2);
+    ASSERT_EQ(arr.element_size, sizeof(s32));
+    ASSERT_NE(arr.data, SP_NULLPTR);
+  }
+
+  {
+  struct test_sizes {
+      u32 size;
+      const c8* name;
+    } sizes[] = {
+      {1, "u8"},
+      {4, "s32"},
+      {8, "f64"},
+      {16, "vec4"},
+      {64, "cache_line"},
+      {256, "large_struct"}
+    };
+
+    for (u32 test_idx = 0; test_idx < sizeof(sizes)/sizeof(sizes[0]); test_idx++) {
+      struct test_sizes* test = &sizes[test_idx];
+      sp_dynamic_array_t arr;
+      sp_dynamic_array_init(&arr, test->size);
+
+      ASSERT_EQ(arr.element_size, test->size);
+      ASSERT_EQ(arr.capacity, 2);
+      ASSERT_EQ(arr.size, 0);
+
+      u32 expected_alloc = test->size * 2;
+      ASSERT_GE(sp_test_memory_tracker_bytes_used(&tracker), expected_alloc);
+
+      sp_test_memory_tracker_clear(&tracker);
+    }
+  }
+
+  sp_test_memory_tracker_deinit(&tracker);
+}
+
+UTEST(dynamic_array, push_operations) {
+  sp_test_memory_tracker tracker;
+  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    s32 val1 = 42;
+    u8* elem1 = sp_dynamic_array_push(&arr, &val1);
+    ASSERT_NE(elem1, SP_NULLPTR);
+    ASSERT_EQ(arr.size, 1);
+    ASSERT_EQ(*(s32*)elem1, 42);
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 42);
+
+    s32 val2 = 69;
+    u8* elem2 = sp_dynamic_array_push(&arr, &val2);
+    ASSERT_NE(elem2, SP_NULLPTR);
+    ASSERT_EQ(arr.size, 2);
+    ASSERT_EQ(*(s32*)elem2, 69);
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 1), 69);
+
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 42);
+  }
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    u8* elem = sp_dynamic_array_push(&arr, SP_NULLPTR);
+    ASSERT_NE(elem, SP_NULLPTR);
+    ASSERT_EQ(arr.size, 1);
+  }
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    s32 values[] = {10, 20, 30, 40, 50};
+    u8* elems = sp_dynamic_array_push_n(&arr, values, 5);
+
+    ASSERT_NE(elems, SP_NULLPTR);
+    ASSERT_EQ(arr.size, 5);
+
+    for (u32 i = 0; i < 5; i++) {
+      ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), values[i]);
+    }
+  }
+
+  sp_test_memory_tracker_deinit(&tracker);
+}
+
+UTEST(dynamic_array, growth) {
+  sp_test_memory_tracker tracker;
+  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    ASSERT_EQ(arr.capacity, 2);
+
+    s32 values[] = {1, 2, 3};
+    for (s32 i = 0; i < 3; i++) {
+      sp_dynamic_array_push(&arr, &values[i]);
+    }
+
+    ASSERT_EQ(arr.size, 3);
+    ASSERT_GE(arr.capacity, 3);
+
+    for (u32 i = 0; i < 3; i++) {
+      ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), values[i]);
+    }
+  }
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    sp_dynamic_array_grow(&arr, 10);
+
+    ASSERT_GE(arr.capacity, 10);
+    ASSERT_EQ(arr.size, 0);
+
+    sp_dynamic_array_grow(&arr, 5);
+    ASSERT_GE(arr.capacity, 10);
+  }
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    for (s32 i = 0; i < 10; i++) {
+      sp_dynamic_array_push(&arr, &i);
+    }
+
+    u32 old_bytes = sp_test_memory_tracker_bytes_used(&tracker);
+
+    sp_dynamic_array_grow(&arr, 100);
+
+    ASSERT_GE(arr.capacity, 100);
+    ASSERT_GT(sp_test_memory_tracker_bytes_used(&tracker), old_bytes);
+
+    for (u32 i = 0; i < 10; i++) {
+      ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), (s32)i);
+    }
+  }
+
+  sp_test_memory_tracker_deinit(&tracker);
+}
+
+UTEST(dynamic_array, reserve) {
+  sp_test_memory_tracker tracker;
+  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
+
+  sp_dynamic_array_t arr;
+  sp_dynamic_array_init(&arr, sizeof(s32));
+
+  {
+    u8* reserved = sp_dynamic_array_reserve(&arr, 5);
+    ASSERT_NE(reserved, SP_NULLPTR);
+    ASSERT_EQ(arr.size, 5);
+    ASSERT_GE(arr.capacity, 5);
+  }
+
+  {
+    sp_dynamic_array_clear(&arr);
+
+    s32 val = 1;
+    sp_dynamic_array_push(&arr, &val);
+    sp_dynamic_array_push(&arr, &val);
+
+    ASSERT_EQ(arr.size, 2);
+    ASSERT_GE(arr.capacity, 2);
+
+    u8* reserved = sp_dynamic_array_reserve(&arr, 3);
+    ASSERT_NE(reserved, SP_NULLPTR);
+    ASSERT_EQ(arr.size, 5);
+    ASSERT_GE(arr.capacity, 5);
+  }
+
+  sp_test_memory_tracker_deinit(&tracker);
+}
+
+UTEST(dynamic_array, clear_and_reuse) {
+  sp_test_memory_tracker tracker;
+  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
+
+  sp_dynamic_array_t arr;
+  sp_dynamic_array_init(&arr, sizeof(s32));
+
+  for (s32 i = 0; i < 10; i++) {
+    sp_dynamic_array_push(&arr, &i);
+  }
+
+  u32 old_cap = arr.capacity;
+
+  sp_dynamic_array_clear(&arr);
+  ASSERT_EQ(arr.size, 0);
+  ASSERT_EQ(arr.capacity, old_cap);
+  ASSERT_NE(arr.data, SP_NULLPTR);
+
+  s32 val = 99;
+  sp_dynamic_array_push(&arr, &val);
+  ASSERT_EQ(arr.size, 1);
+  ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 99);
+
+  sp_test_memory_tracker_deinit(&tracker);
+}
+
+UTEST(dynamic_array, byte_size) {
+  sp_test_memory_tracker tracker;
+  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
+
+  {
+    struct test_case {
+      u32 elem_size;
+      u32 count;
+    } cases[] = {
+      {1, 10},
+      {4, 25},
+      {8, 13},
+      {64, 7}
+    };
+
+    for (u32 tc_idx = 0; tc_idx < sizeof(cases)/sizeof(cases[0]); tc_idx++) {
+      struct test_case* tc = &cases[tc_idx];
+      sp_dynamic_array_t arr;
+      sp_dynamic_array_init(&arr, tc->elem_size);
+
+      for (u32 i = 0; i < tc->count; i++) {
+      sp_dynamic_array_push(&arr, SP_NULLPTR);
+      }
+
+      u32 expected = tc->elem_size * tc->count;
+      ASSERT_EQ(sp_dynamic_array_byte_size(&arr), expected);
+
+      sp_test_memory_tracker_clear(&tracker);
+    }
+  }
+
+  sp_test_memory_tracker_deinit(&tracker);
+}
+
+UTEST(dynamic_array, edge_cases) {
+  sp_test_memory_tracker tracker;
+  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    sp_dynamic_array_clear(&arr);
+    ASSERT_EQ(sp_dynamic_array_byte_size(&arr), 0);
+  }
+
+  {
+    sp_dynamic_array_t arr;
+    sp_dynamic_array_init(&arr, sizeof(s32));
+
+    for (s32 i = 0; i < 10; i++) {
+      sp_dynamic_array_push(&arr, &i);
+    }
+
+    for (u32 i = 0; i < 10; i++) {
+      s32* elem = (s32*)sp_dynamic_array_at(&arr, i);
+      ASSERT_EQ(*elem, (s32)i);
+    }
+
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
+    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 9), 9);
+  }
+
+  sp_test_memory_tracker_deinit(&tracker);
+}
+
 
 ////////////////////////////
 // RING BUFFER TESTS
