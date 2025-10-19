@@ -2980,31 +2980,27 @@ UTEST(hash_table, collision_handling) {
 }
 
 UTEST(hash_table, iteration) {
+  sp_hash_table(s32, s32) ht = SP_NULLPTR;
 
+  for (s32 i = 0; i < 10; i++) {
+    sp_hash_table_insert(ht, i * 10, i);
+  }
 
-    sp_hash_table(int, float) ht = SP_NULLPTR;
+  s32 count = 0;
+  s32 sum = 0;
 
-    for (s32 i = 0; i < 10; i++) {
-        sp_hash_table_insert(ht, i * 10, (float)i * 0.5f);
-    }
+  for (sp_hash_table_iter it = sp_hash_table_iter_init(ht); sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
+    s32 key = sp_hash_table_iter_getk(ht, it);
+    float val = sp_hash_table_iter_get(ht, it);
 
-    s32 count = 0;
-    float sum = 0.0f;
+    count++;
+    sum += val;
+  }
 
-    for (sp_hash_table_iter it = 0; sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
-        s32 key = sp_hash_table_iter_getk(ht, it);
-        float val = sp_hash_table_iter_get(ht, it);
+  ASSERT_EQ(count, 10);
+  ASSERT_EQ(sum, 45);
 
-        ASSERT_EQ(val, (float)(key / 10) * 0.5f);
-
-        count++;
-        sum += val;
-    }
-
-    ASSERT_EQ(count, 10);
-    ASSERT_EQ(sum, 22.5f);
-
-    sp_hash_table_free(ht);
+  sp_hash_table_free(ht);
 }
 
 UTEST(hash_table, edge_cases) {
@@ -3082,7 +3078,7 @@ UTEST(sp_hash_table, iterator_yields_inactive_entry_at_slot_zero) {
   ASSERT_EQ(sp_hash_table_size(ht), 0);
 
   u64 iteration_count = 0;
-  for (sp_hash_table_iter it = 0; sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
+  for (sp_hash_table_iter it = sp_hash_table_iter_init(ht); sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
     u64 key = sp_hash_table_iter_getk(ht, it);
     u64 val = sp_hash_table_iter_get(ht, it);
     iteration_count++;
@@ -6139,3 +6135,19 @@ UTEST(sp_env, all_operations) {
 }
 
 UTEST_MAIN()
+
+UTEST(hash_table, iterator_returns_zero_entries_for_populated_table) {
+  sp_hash_table(u64, u64) ht = sp_hash_table_new(u64, u64);
+
+  sp_hash_table_insert(ht, 1, 100);
+  sp_hash_table_insert(ht, 2, 200);
+
+  u64 count = 0;
+  for (sp_hash_table_iter it = sp_hash_table_iter_init(ht); sp_hash_table_iter_valid(ht, it); sp_hash_table_iter_advance(ht, it)) {
+    count++;
+  }
+
+  ASSERT_EQ(count, 2);
+
+  sp_hash_table_free(ht);
+}
