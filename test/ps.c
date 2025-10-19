@@ -141,9 +141,9 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   sp_proc_t ps = sp_proc_create(config);
   SP_ASSERT(ps.pid != 0);
 
-  sp_io_stream_t* in = sp_proc_stdin(&ps);
-  sp_io_stream_t* out = sp_proc_stdout(&ps);
-  sp_io_stream_t* err = sp_proc_stderr(&ps);
+  sp_io_stream_t* in = sp_proc_io_in(&ps);
+  sp_io_stream_t* out = sp_proc_io_out(&ps);
+  sp_io_stream_t* err = sp_proc_io_err(&ps);
 
   if (!sp_str_empty(test.input)) {
     u64 bytes_written = sp_io_write(in, test.input.data, test.input.len);
@@ -448,8 +448,8 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
   sp_proc_t ps = sp_proc_create(config);
   SP_ASSERT(ps.pid);
 
-  sp_io_stream_t* in = sp_proc_stdin(&ps);
-  sp_io_stream_t* out = sp_proc_stdout(&ps);
+  sp_io_stream_t* in = sp_proc_io_in(&ps);
+  sp_io_stream_t* out = sp_proc_io_out(&ps);
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   for (u32 i = 0; i < 8; i++) {
