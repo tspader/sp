@@ -17,7 +17,6 @@ SP_DIR_BUILD:= build
     SP_OUTPUT_CPP := $(SP_DIR_BUILD_OUTPUT)/sp-cpp
     SP_OUTPUT_STRESS := $(SP_DIR_BUILD_OUTPUT)/sp-stress
 SP_MAKEFILE := Makefile
-SP_COMPILE_DB := compile_commands.json
 SP_SP_H := sp.h
 
 
@@ -72,7 +71,7 @@ SP_TEST_PS_SOURCES := sp.h test/test.h
 ###########
 # TARGETS #
 ###########
-all: clangd build
+all: build
 
 .PHONY: c cpp stress ps build test debug deps clean all
 
@@ -96,10 +95,6 @@ build/bin/ps: $(SP_TEST_PS_SOURCES) test/ps.c build/bin/process | $(SP_DIR_BUILD
 build/bin/process: test/tools/process.* | $(SP_DIR_BUILD_OUTPUT)
 	$(CC) $(SP_FLAGS_CC) test/tools/process.c -o build/bin/process
 
-$(SP_COMPILE_DB): $(SP_MAKEFILE)
-	@make clean
-	@bear -- make build
-
 build: $(SP_OUTPUT_C)
 test: c cpp stress ps
 
@@ -114,10 +109,6 @@ stress: $(SP_OUTPUT_STRESS)
 
 ps: build/bin/ps
 	./build/bin/ps $(SP_FLAGS_RUN)
-
-
-
-clangd: $(SP_COMPILE_DB)
 
 debug: c
 	gdb --args ./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)
