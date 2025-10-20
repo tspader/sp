@@ -719,20 +719,23 @@ typedef struct {
         }\
     } while (0)
 
-#define sp_ht_it_valid(__HT, __IT)\
-    ((__HT) == NULL ? false : (((__IT) < sp_ht_capacity((__HT))) && ((__HT)->data[(__IT)].state == SP_HT_ENTRY_ACTIVE)))
+#define sp_ht_it_valid(__ht, __it)\
+  ((__ht) == NULL ? false : (((__it) < sp_ht_capacity((__ht))) && ((__ht)->data[(__it)].state == SP_HT_ENTRY_ACTIVE)))
 
-#define sp_ht_it_advance(__HT, __IT)\
-    ((__HT) == NULL ? (void)0 : (sp_ht_it_advance_fn((void**)&(__HT)->data, &(__IT), (__HT)->info)))
+#define sp_ht_it_advance(__ht, __it)\
+  ((__ht) == NULL ? (void)0 : (sp_ht_it_advance_fn((void**)&(__ht)->data, &(__it), (__ht)->info)))
 
-#define sp_ht_it_getp(__HT, __IT)\
-    ((__HT) == NULL ? NULL : (&((__HT)->data[(__IT)].val)))
+#define sp_ht_it_getp(__ht, __it)\
+  ((__ht) == NULL ? NULL : (&((__ht)->data[(__it)].val)))
 
-#define sp_ht_it_getkp(__HT, __IT)\
-    ((__HT) == NULL ? NULL : (&((__HT)->data[(__IT)].key)))
+#define sp_ht_it_getkp(__ht, __it)\
+  ((__ht) == NULL ? NULL : (&((__ht)->data[(__it)].key)))
 
-#define sp_ht_it_init(__HT)\
-    ((__HT) == NULL ? 0 : (sp_ht_it_init_fn((void**)&(__HT)->data, (__HT)->info)))
+#define sp_ht_it_init(__ht)\
+  ((__ht) == NULL ? 0 : (sp_ht_it_init_fn((void**)&(__ht)->data, (__ht)->info)))
+
+#define sp_ht_for(__ht, __it)\
+  for (sp_ht_it __it = sp_ht_it_init(__ht); sp_ht_it_valid(__ht, __it); sp_ht_it_advance(__ht, __it))
 
 #define sp_ht_tmp_key_index(__HT) sp_ht_get_key_index_fn((void**)&((__HT)->data), (void*)&((__HT)->tmp_key), (__HT)->info)
 
@@ -849,6 +852,11 @@ typedef struct {
   u32 count;
 } sp_str_count_context_t;
 
+typedef struct {
+  sp_str_t first;
+  sp_str_t second;
+} sp_str_pair_t;
+
 SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
 SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
@@ -912,6 +920,7 @@ SP_API sp_str_t               sp_str_join_cstr_n(const c8** strings, u32 num_str
 SP_API sp_str_t               sp_str_to_upper(sp_str_t str);
 SP_API sp_str_t               sp_str_to_lower(sp_str_t str);
 SP_API sp_str_t               sp_str_capitalize_words(sp_str_t str);
+SP_API sp_str_pair_t          sp_str_cleave_c8(sp_str_t str, c8 delimiter);
 SP_API sp_dyn_array(sp_str_t) sp_str_split_c8(sp_str_t, c8 c);
 SP_API bool                   sp_str_contains_n(sp_str_t* strs, u32 n, sp_str_t needle);
 SP_API sp_str_t               sp_str_join_n(sp_str_t* strs, u32 n, sp_str_t joiner);
@@ -3383,25 +3392,35 @@ sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to) {
 }
 
 sp_dyn_array(sp_str_t) sp_str_split_c8(sp_str_t str, c8 delimiter) {
+  if (sp_str_empty(str)) return SP_NULLPTR;
+
   sp_dyn_array(sp_str_t) result = SP_NULLPTR;
 
-  if (str.len == 0) {
-    return result;
-  }
-
-  u32 start = 0;
-  for (u32 i = 0; i < str.len; i++) {
-    if (str.data[i] == delimiter) {
-      sp_str_t part = sp_str(str.data + start, i - start);
-      sp_dyn_array_push(result, part);
-      start = i + 1;
+  u32 i = 0, j = 0;
+  for (; j < str.len; j++) {
+    if (sp_str_at(str, j) == delimiter) {
+      sp_dyn_array_push(result, sp_str_sub(str, i, j - i));
+      i = j + 1;
     }
   }
 
-  // Add the last part (or the whole string if no delimiter was found)
-  sp_str_t last_part = sp_str(str.data + start, str.len - start);
-  sp_dyn_array_push(result, last_part);
+  sp_dyn_array_push(result, sp_str_sub(str, i, j - i));
 
+  return result;
+}
+sp_str_pair_t sp_str_cleave_c8(sp_str_t str, c8 delimiter) {
+  sp_str_pair_t result = SP_ZERO_STRUCT(sp_str_pair_t);
+
+  for (u32 i = 0; i < str.len; i++) {
+    if (sp_str_at(str, i) == delimiter) {
+      result.first = sp_str_sub(str, 0, i);
+      result.second = sp_str_sub(str, i + 1, str.len - i - 1);
+      return result;
+    }
+  }
+
+  result.first = str;
+  result.second = SP_ZERO_STRUCT(sp_str_t);
   return result;
 }
 
@@ -4555,20 +4574,10 @@ sp_env_t sp_env_capture() {
   sp_env_init(&env);
 
   for (c8** envp = (c8**)environ; *envp != SP_NULLPTR; envp++) {
-    sp_str_t env_str = SP_CSTR(*envp);
-    sp_str_t key = SP_ZERO_INITIALIZE();
-    sp_str_t value = SP_ZERO_INITIALIZE();
-    for (u32 i = 0; i < env_str.len; i++) {
-      if (env_str.data[i] == '=') {
-        key = sp_str(env_str.data, i);
-        value = sp_str(env_str.data + i + 1, env_str.len - i - 1);
-        break;
-      }
-    }
-    if (key.len > 0) {
-      sp_ht_insert(env.vars, sp_str_copy(key), sp_str_copy(value));
-    }
+    sp_str_pair_t pair = sp_str_cleave_c8(sp_str_view(*envp), '=');
+    sp_ht_insert(env.vars, pair.first, pair.second);
   }
+
   return env;
 }
 
@@ -4576,10 +4585,9 @@ sp_env_t sp_env_copy(sp_env_t* env) {
   sp_env_t copy = SP_ZERO_INITIALIZE();
   sp_env_init(&copy);
 
-  sp_env_table_t ht = env->vars;
-  for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
-    sp_str_t key = *sp_ht_it_getkp(ht, it);
-    sp_str_t val = *sp_ht_it_getp(ht, it);
+  sp_ht_for(env->vars, it) {
+    sp_str_t key = *sp_ht_it_getkp(env->vars, it);
+    sp_str_t val = *sp_ht_it_getp(env->vars, it);
     sp_env_set(&copy, key, val);
   }
 
@@ -4651,28 +4659,43 @@ void sp_proc_free_posix_args(c8** args) {
 c8** sp_proc_build_posix_env(sp_proc_env_config_t* config) {
   sp_dyn_array(c8*) envp = SP_NULLPTR;
 
-  if (config->mode == SP_PROC_ENV_INHERIT) {
-    for (c8** env = (c8**)environ; *env != SP_NULLPTR; env++) {
-      sp_dyn_array_push(envp, *env);
+  sp_env_t env = SP_ZERO_INITIALIZE();
+  sp_env_init(&env);
+
+  // Apply the base environment
+  switch (config->mode) {
+    case SP_PROC_ENV_INHERIT: {
+      for (c8** kvp = (c8**)environ; *kvp != SP_NULLPTR; kvp++) {
+        sp_str_pair_t pair = sp_str_cleave_c8(sp_str_view(*kvp), '=');
+        sp_ht_insert(env.vars, pair.first, pair.second);
+      }
+
+      break;
     }
-  }
-  else if (config->mode == SP_PROC_ENV_EXISTING) {
-    sp_env_table_t ht = config->env.vars;
-    for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
-      sp_str_t key = *sp_ht_it_getkp(ht, it);
-      sp_str_t val = *sp_ht_it_getp(ht, it);
-      sp_str_t env_str = sp_format_str(SP_LIT("{}={}"), SP_FMT_STR(key), SP_FMT_STR(val));
-      sp_dyn_array_push(envp, (c8*)sp_str_to_cstr(env_str));
+    case SP_PROC_ENV_EXISTING: {
+      env = sp_env_copy(&config->env);
+      break;
+    }
+    case SP_PROC_ENV_CLEAN: {
     }
   }
 
+  // Clean just means the base environment, so always apply extras
   for (u32 i = 0; i < SP_PROC_MAX_ENV; i++) {
     if (sp_str_empty(config->extra[i].key)) break;
 
     sp_str_t key = config->extra[i].key;
-    sp_str_t value = config->extra[i].value;
-    sp_str_t env_str = sp_format_str(SP_LIT("{}={}"), SP_FMT_STR(key), SP_FMT_STR(value));
-    sp_dyn_array_push(envp, (c8*)sp_str_to_cstr(env_str));
+    sp_str_t val = config->extra[i].value;
+    sp_ht_insert(env.vars, key, val);
+  }
+
+  sp_ht_for(env.vars, it) {
+    sp_str_t key = *sp_ht_it_getkp(env.vars, it);
+    sp_str_t val = *sp_ht_it_getp(env.vars, it);
+
+    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+    sp_str_builder_append_fmt(&builder, "{}={}", SP_FMT_STR(key), SP_FMT_STR(val));
+    sp_dyn_array_push(envp, sp_str_builder_write_cstr(&builder));
   }
 
   sp_dyn_array_push(envp, SP_NULLPTR);

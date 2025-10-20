@@ -1,417 +1,24 @@
-//#define SP_IMPLEMENTATION
 #define SP_APP
 #include "sp.h"
+
+#define SP_TEST_IMPLEMENTATION
 #include "test.h"
 
 #include "utest.h"
 
 
-// ██╗   ██╗████████╗██╗██╗     ██╗████████╗██╗███████╗███████╗
-// ██║   ██║╚══██╔══╝██║██║     ██║╚══██╔══╝██║██╔════╝██╔════╝
-// ██║   ██║   ██║   ██║██║     ██║   ██║   ██║█████╗  ███████╗
-// ██║   ██║   ██║   ██║██║     ██║   ██║   ██║██╔══╝  ╚════██║
-// ╚██████╔╝   ██║   ██║███████╗██║   ██║   ██║███████╗███████║
-//  ╚═════╝    ╚═╝   ╚═╝╚══════╝╚═╝   ╚═╝   ╚═╝╚══════╝╚══════╝
-
-sp_str_t sp_test_generate_random_filename() {
-  static u32 counter = 0;
-  c8* filename = (c8*)sp_alloc(64);
-#ifdef _WIN32
-  unsigned int rand_val;
-  rand_s(&rand_val);
-#else
-  unsigned int rand_val = counter * 12345 + 67890;  // Simple deterministic value for portability
-#endif
-  snprintf(filename, 64, "test_file_%u_%u.tmp", rand_val, counter++);
-  return sp_str_from_cstr(filename);
-}
-
-void sp_test_create_file(const c8* filename, const c8* content) {
-  FILE* file = fopen(filename, "w");
-  if (file) {
-  fputs(content, file);
-  fclose(file);
-  }
-}
-
-void sp_test_modify_file(const c8* filename, const c8* new_content) {
-  FILE* file = fopen(filename, "w");
-  if (file) {
-  fputs(new_content, file);
-  fclose(file);
-  }
-}
-
-void sp_test_delete_file(const c8* filename) {
-#ifdef _WIN32
-  DeleteFileA(filename);
-#else
-  remove(filename);
-#endif
-}
-
-bool sp_test_file_exists(const c8* filename) {
-#ifdef _WIN32
-  DWORD attrs = GetFileAttributesA(filename);
-  return (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY));
-#else
-  FILE* file = fopen(filename, "r");
-  if (file) {
-    fclose(file);
-    return true;
-  }
-  return false;
-#endif
-}
-
-
-
-void sp_test_use_bump_allocator(u32 capacity) {
-  static sp_bump_allocator_t bump_allocator;
-
-  bump_allocator = SP_ZERO_STRUCT(sp_bump_allocator_t);
-
-  sp_allocator_t allocator = sp_bump_allocator_init(&bump_allocator, capacity);
-  sp_context_push_allocator(allocator);
-}
-
-typedef struct {
-  sp_str_t base;
-} sp_test_file_provider_t;
-
-
-
-
-// ██████╗ ██╗   ██╗███╗   ██╗     █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
-// ██╔══██╗╚██╗ ██╔╝████╗  ██║    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
-// ██║  ██║ ╚████╔╝ ██╔██╗ ██║    ███████║██████╔╝██████╔╝███████║ ╚████╔╝
-// ██║  ██║  ╚██╔╝  ██║╚██╗██║    ██╔══██║██╔══██╗██╔══██╗██╔══██║  ╚██╔╝
-// ██████╔╝   ██║   ██║ ╚████║    ██║  ██║██║  ██║██║  ██║██║  ██║   ██║
-// ╚═════╝    ╚═╝   ╚═╝  ╚═══╝    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
-typedef struct sp_test_memory_tracker {
-  sp_bump_allocator_t* bump;
-  sp_allocator_t allocator;
-} sp_test_memory_tracker;
-
-void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) {
-  sp_test_use_bump_allocator(capacity);
-  tracker->bump = (sp_bump_allocator_t*)sp_context->allocator.user_data;
-  tracker->allocator = sp_context->allocator;
-}
-
-void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker) {
-  sp_bump_allocator_destroy(tracker->bump);
-  sp_context_pop();
-}
-
-u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
-  return tracker->bump->bytes_used;
-}
-
-void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker) {
-  sp_bump_allocator_clear(tracker->bump);
-}
-
-void sp_test_memory_tracker_destroy(sp_test_memory_tracker* tracker) {
-  sp_bump_allocator_destroy(tracker->bump);
-}
-
-UTEST(dynamic_array, initialization) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    ASSERT_EQ(arr.size, 0);
-    ASSERT_EQ(arr.capacity, 2);
-    ASSERT_EQ(arr.element_size, sizeof(s32));
-    ASSERT_NE(arr.data, SP_NULLPTR);
-  }
-
-  {
-  struct test_sizes {
-      u32 size;
-      const c8* name;
-    } sizes[] = {
-      {1, "u8"},
-      {4, "s32"},
-      {8, "f64"},
-      {16, "vec4"},
-      {64, "cache_line"},
-      {256, "large_struct"}
-    };
-
-    for (u32 test_idx = 0; test_idx < sizeof(sizes)/sizeof(sizes[0]); test_idx++) {
-      struct test_sizes* test = &sizes[test_idx];
-      sp_dynamic_array_t arr;
-      sp_dynamic_array_init(&arr, test->size);
-
-      ASSERT_EQ(arr.element_size, test->size);
-      ASSERT_EQ(arr.capacity, 2);
-      ASSERT_EQ(arr.size, 0);
-
-      u32 expected_alloc = test->size * 2;
-      ASSERT_GE(sp_test_memory_tracker_bytes_used(&tracker), expected_alloc);
-
-      sp_test_memory_tracker_clear(&tracker);
-    }
-  }
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
-
-UTEST(dynamic_array, push_operations) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    s32 val1 = 42;
-    u8* elem1 = sp_dynamic_array_push(&arr, &val1);
-    ASSERT_NE(elem1, SP_NULLPTR);
-    ASSERT_EQ(arr.size, 1);
-    ASSERT_EQ(*(s32*)elem1, 42);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 42);
-
-    s32 val2 = 69;
-    u8* elem2 = sp_dynamic_array_push(&arr, &val2);
-    ASSERT_NE(elem2, SP_NULLPTR);
-    ASSERT_EQ(arr.size, 2);
-    ASSERT_EQ(*(s32*)elem2, 69);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 1), 69);
-
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 42);
-  }
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    u8* elem = sp_dynamic_array_push(&arr, SP_NULLPTR);
-    ASSERT_NE(elem, SP_NULLPTR);
-    ASSERT_EQ(arr.size, 1);
-  }
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    s32 values[] = {10, 20, 30, 40, 50};
-    u8* elems = sp_dynamic_array_push_n(&arr, values, 5);
-
-    ASSERT_NE(elems, SP_NULLPTR);
-    ASSERT_EQ(arr.size, 5);
-
-    for (u32 i = 0; i < 5; i++) {
-      ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), values[i]);
-    }
-  }
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
-
-UTEST(dynamic_array, growth) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    ASSERT_EQ(arr.capacity, 2);
-
-    s32 values[] = {1, 2, 3};
-    for (s32 i = 0; i < 3; i++) {
-      sp_dynamic_array_push(&arr, &values[i]);
-    }
-
-    ASSERT_EQ(arr.size, 3);
-    ASSERT_GE(arr.capacity, 3);
-
-    for (u32 i = 0; i < 3; i++) {
-      ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), values[i]);
-    }
-  }
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    sp_dynamic_array_grow(&arr, 10);
-
-    ASSERT_GE(arr.capacity, 10);
-    ASSERT_EQ(arr.size, 0);
-
-    sp_dynamic_array_grow(&arr, 5);
-    ASSERT_GE(arr.capacity, 10);
-  }
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    for (s32 i = 0; i < 10; i++) {
-      sp_dynamic_array_push(&arr, &i);
-    }
-
-    u32 old_bytes = sp_test_memory_tracker_bytes_used(&tracker);
-
-    sp_dynamic_array_grow(&arr, 100);
-
-    ASSERT_GE(arr.capacity, 100);
-    ASSERT_GT(sp_test_memory_tracker_bytes_used(&tracker), old_bytes);
-
-    for (u32 i = 0; i < 10; i++) {
-      ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, i), (s32)i);
-    }
-  }
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
-
-UTEST(dynamic_array, reserve) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-
-  sp_dynamic_array_t arr;
-  sp_dynamic_array_init(&arr, sizeof(s32));
-
-  {
-    u8* reserved = sp_dynamic_array_reserve(&arr, 5);
-    ASSERT_NE(reserved, SP_NULLPTR);
-    ASSERT_EQ(arr.size, 5);
-    ASSERT_GE(arr.capacity, 5);
-  }
-
-  {
-    sp_dynamic_array_clear(&arr);
-
-    s32 val = 1;
-    sp_dynamic_array_push(&arr, &val);
-    sp_dynamic_array_push(&arr, &val);
-
-    ASSERT_EQ(arr.size, 2);
-    ASSERT_GE(arr.capacity, 2);
-
-    u8* reserved = sp_dynamic_array_reserve(&arr, 3);
-    ASSERT_NE(reserved, SP_NULLPTR);
-    ASSERT_EQ(arr.size, 5);
-    ASSERT_GE(arr.capacity, 5);
-  }
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
-
-UTEST(dynamic_array, clear_and_reuse) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-
-  sp_dynamic_array_t arr;
-  sp_dynamic_array_init(&arr, sizeof(s32));
-
-  for (s32 i = 0; i < 10; i++) {
-    sp_dynamic_array_push(&arr, &i);
-  }
-
-  u32 old_cap = arr.capacity;
-
-  sp_dynamic_array_clear(&arr);
-  ASSERT_EQ(arr.size, 0);
-  ASSERT_EQ(arr.capacity, old_cap);
-  ASSERT_NE(arr.data, SP_NULLPTR);
-
-  s32 val = 99;
-  sp_dynamic_array_push(&arr, &val);
-  ASSERT_EQ(arr.size, 1);
-  ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 99);
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
-
-UTEST(dynamic_array, byte_size) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-
-  {
-    struct test_case {
-      u32 elem_size;
-      u32 count;
-    } cases[] = {
-      {1, 10},
-      {4, 25},
-      {8, 13},
-      {64, 7}
-    };
-
-    for (u32 tc_idx = 0; tc_idx < sizeof(cases)/sizeof(cases[0]); tc_idx++) {
-      struct test_case* tc = &cases[tc_idx];
-      sp_dynamic_array_t arr;
-      sp_dynamic_array_init(&arr, tc->elem_size);
-
-      for (u32 i = 0; i < tc->count; i++) {
-      sp_dynamic_array_push(&arr, SP_NULLPTR);
-      }
-
-      u32 expected = tc->elem_size * tc->count;
-      ASSERT_EQ(sp_dynamic_array_byte_size(&arr), expected);
-
-      sp_test_memory_tracker_clear(&tracker);
-    }
-  }
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
-
-UTEST(dynamic_array, edge_cases) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 1024 * 1024);
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    sp_dynamic_array_clear(&arr);
-    ASSERT_EQ(sp_dynamic_array_byte_size(&arr), 0);
-  }
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    for (s32 i = 0; i < 10; i++) {
-      sp_dynamic_array_push(&arr, &i);
-    }
-
-    for (u32 i = 0; i < 10; i++) {
-      s32* elem = (s32*)sp_dynamic_array_at(&arr, i);
-      ASSERT_EQ(*elem, (s32)i);
-    }
-
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 9), 9);
-  }
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
-
-
-// ███████╗██████╗    ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
-// ██╔════╝██╔══██╗   ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
-// ███████╗██████╔╝   █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
-// ╚════██║██╔═══╝    ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
-// ███████║██║███████╗██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
-// ╚══════╝╚═╝╚══════╝╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
+//  ██████╗ ██████╗ ██████╗ ███████╗
+// ██╔════╝██╔═══██╗██╔══██╗██╔════╝
+// ██║     ██║   ██║██████╔╝█████╗
+// ██║     ██║   ██║██╔══██╗██╔══╝
+// ╚██████╗╚██████╔╝██║  ██║███████╗
+//  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
 typedef struct {
   const c8* expected;
   sp_str_t actual;
 } sp_test_format_case_t;
 
 UTEST(sp_fmt, basic) {
-
   sp_str_t result;
 
   result = sp_format("answer: {}", SP_FMT_U32(69));
@@ -437,8 +44,6 @@ UTEST(sp_fmt, basic) {
 }
 
 UTEST(sp_fmt, numeric_types) {
-
-
   u8 u8_val = 255;
   sp_str_t result = sp_format("u8: {}", SP_FMT_U8(u8_val));
   SP_EXPECT_STR_EQ_CSTR(result, "u8: 255");
@@ -477,8 +82,6 @@ UTEST(sp_fmt, numeric_types) {
 }
 
 UTEST(sp_fmt, floating_point) {
-
-
   f32 f32_val = 3.14159f;
   sp_str_t result = sp_format("f32: {}", SP_FMT_F32(f32_val));
   SP_EXPECT_STR_EQ_CSTR(result, "f32: 3.141");
@@ -497,8 +100,6 @@ UTEST(sp_fmt, floating_point) {
 }
 
 UTEST(sp_fmt, string_types) {
-
-
   sp_str_t str_val = SP_LIT("hello world");
   sp_str_t result = sp_format("str: {}", SP_FMT_STR(str_val));
   SP_EXPECT_STR_EQ_CSTR(result, "str: hello world");
@@ -512,7 +113,6 @@ UTEST(sp_fmt, string_types) {
 }
 
 UTEST(sp_fmt, character_types) {
-
   sp_str_t expected;
   sp_str_t actual;
 
@@ -533,8 +133,6 @@ UTEST(sp_fmt, character_types) {
 }
 
 UTEST(sp_fmt, pointer_type) {
-
-
   void* ptr = (void*)(uintptr_t)0xDEADBEEF;
   sp_str_t result = sp_format("ptr: {}", SP_FMT_PTR(ptr));
   SP_EXPECT_STR_EQ_CSTR(result, "ptr: 0xdeadbeef");
@@ -545,8 +143,6 @@ UTEST(sp_fmt, pointer_type) {
 }
 
 UTEST(sp_fmt, hash_type) {
-
-
   sp_hash_t hash = 0xABCDEF12;
   sp_str_t result = sp_format("hash: {}", SP_FMT_HASH(hash));
   SP_EXPECT_STR_EQ_CSTR(result, "hash: abcdef12");
@@ -557,8 +153,6 @@ UTEST(sp_fmt, hash_type) {
 }
 
 UTEST(sp_fmt, array_types) {
-
-
   sp_fixed_array_t fixed_arr;
   fixed_arr.size = 10;
   fixed_arr.capacity = 20;
@@ -579,8 +173,6 @@ UTEST(sp_fmt, array_types) {
 }
 
 UTEST(sp_fmt, multiple_args) {
-
-
   u32 count = 42;
   sp_str_t name = SP_LIT("test");
   f32 value = 3.14f;
@@ -591,8 +183,6 @@ UTEST(sp_fmt, multiple_args) {
 }
 
 UTEST(sp_fmt, padding) {
-
-
   sp_str_t result;
 
   result = sp_format("{:pad 10}", SP_FMT_U32(42));
@@ -652,8 +242,6 @@ UTEST(sp_fmt, padding) {
 }
 
 UTEST(sp_fmt, padding_in_context) {
-
-
   sp_str_t result;
 
   result = sp_format("Name: {:pad 20} Age: {:pad 5}",
@@ -670,8 +258,6 @@ UTEST(sp_fmt, padding_in_context) {
 }
 
 UTEST(sp_fmt, padding_large_widths) {
-
-
   sp_str_t result;
 
   result = sp_format("{:pad 50}", SP_FMT_CSTR("x"));
@@ -2090,89 +1676,55 @@ UTEST(sp_dyn_array_push_f, zero_initialization) {
 }
 
 UTEST(sp_dyn_array_push_f, mixed_with_macros) {
+  int* arr = SP_NULLPTR;
 
+  int val1 = 10;
+  sp_dyn_array_push_f((void**)&arr, &val1, sizeof(int));
 
-    int* arr = SP_NULLPTR;
+  sp_dyn_array_push(arr, 20);
 
-    int val1 = 10;
-    sp_dyn_array_push_f((void**)&arr, &val1, sizeof(int));
+  int val3 = 30;
+  sp_dyn_array_push_f((void**)&arr, &val3, sizeof(int));
 
-    sp_dyn_array_push(arr, 20);
+  sp_dyn_array_push(arr, 40);
 
-    int val3 = 30;
-    sp_dyn_array_push_f((void**)&arr, &val3, sizeof(int));
+  ASSERT_EQ(sp_dyn_array_size(arr), 4);
+  ASSERT_EQ(arr[0], 10);
+  ASSERT_EQ(arr[1], 20);
+  ASSERT_EQ(arr[2], 30);
+  ASSERT_EQ(arr[3], 40);
 
-    sp_dyn_array_push(arr, 40);
-
-    ASSERT_EQ(sp_dyn_array_size(arr), 4);
-    ASSERT_EQ(arr[0], 10);
-    ASSERT_EQ(arr[1], 20);
-    ASSERT_EQ(arr[2], 30);
-    ASSERT_EQ(arr[3], 40);
-
-    sp_dyn_array_free(arr);
+  sp_dyn_array_free(arr);
 }
 
-UTEST(sp_dyn_array_push_f, stress_test) {
-
-
-    typedef struct {
-        u32 id;
-        c8 data[256];
-    } large_struct_t;
-
-    large_struct_t* arr = SP_NULLPTR;
-
-    for (u32 i = 0; i < 1000; i++) {
-        large_struct_t item;
-        item.id = i;
-        for (int j = 0; j < 256; j++) {
-            item.data[j] = (c8)((i + j) % 256);
-        }
-        sp_dyn_array_push_f((void**)&arr, &item, sizeof(large_struct_t));
-    }
-
-    ASSERT_EQ(sp_dyn_array_size(arr), 1000);
-
-    for (u32 i = 0; i < 1000; i++) {
-        ASSERT_EQ(arr[i].id, i);
-        for (int j = 0; j < 256; j++) {
-            ASSERT_EQ(arr[i].data[j], (c8)((i + j) % 256));
-        }
-    }
-
-    sp_dyn_array_free(arr);
-}
 
 UTEST(sp_dyn_array_push_f, edge_cases) {
+  {
+    c8* arr = SP_NULLPTR;
+    c8 single_byte = 0xFF;
+    sp_dyn_array_push_f((void**)&arr, &single_byte, sizeof(c8));
+    ASSERT_EQ(sp_dyn_array_size(arr), 1);
+    ASSERT_EQ(arr[0], (c8)0xFF);
+    sp_dyn_array_free(arr);
+  }
 
+  {
+    int* arr = SP_NULLPTR;
+    sp_dyn_array_reserve(arr, 50);
 
-    {
-        c8* arr = SP_NULLPTR;
-        c8 single_byte = 0xFF;
-        sp_dyn_array_push_f((void**)&arr, &single_byte, sizeof(c8));
-        ASSERT_EQ(sp_dyn_array_size(arr), 1);
-        ASSERT_EQ(arr[0], (c8)0xFF);
-        sp_dyn_array_free(arr);
+    for (int i = 0; i < 25; i++) {
+      sp_dyn_array_push_f((void**)&arr, &i, sizeof(int));
     }
 
-    {
-        int* arr = SP_NULLPTR;
-        sp_dyn_array_reserve(arr, 50);
+    ASSERT_EQ(sp_dyn_array_size(arr), 25);
+    ASSERT_GE(sp_dyn_array_capacity(arr), 50);
 
-        for (int i = 0; i < 25; i++) {
-            sp_dyn_array_push_f((void**)&arr, &i, sizeof(int));
-        }
-
-        ASSERT_EQ(sp_dyn_array_size(arr), 25);
-        ASSERT_GE(sp_dyn_array_capacity(arr), 50);
-
-        for (int i = 0; i < 25; i++) {
-            ASSERT_EQ(arr[i], i);
-        }
-
-        sp_dyn_array_free(arr);
+    for (int i = 0; i < 25; i++) {
+      ASSERT_EQ(arr[i], i);
     }
+
+    sp_dyn_array_free(arr);
+  }
 
 }
 
@@ -4060,46 +3612,6 @@ void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t*
 }
 
 #ifdef SP_WIN32
-UTEST(file_monitor, detects_file_modifications) {
-
-
-  // Create a test file
-  c8* test_filename = sp_test_generate_random_filename();
-  sp_test_create_file(test_filename, "Initial content");
-
-  // Set up file monitor
-  sp_test_file_monitor_data test_data = {};
-  sp_file_monitor_t monitor = {};
-  sp_file_monitor_init(&monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &test_data);
-
-  // Get current directory and add it to monitor
-  c8 current_dir[SP_MAX_PATH_LEN] = {};
-  GetCurrentDirectoryA(SP_MAX_PATH_LEN, current_dir);
-  sp_str_t current_dir_str = SP_CSTR(current_dir);
-  sp_file_monitor_add_directory(&monitor, current_dir_str);
-
-  // Process any initial changes
-  sp_file_monitor_process_changes(&monitor);
-  test_data.change_detected = false;
-
-  // Modify the file
-  sp_test_modify_file(test_filename, "Modified content");
-
-  // Wait a bit for the file system to register the change
-  Sleep(100);
-
-  // Process changes
-  sp_file_monitor_process_changes(&monitor);
-
-  // Check that the change was detected
-  ASSERT_TRUE(test_data.change_detected);
-  ASSERT_EQ(test_data.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
-  ASSERT_NE(strstr(test_data.last_file_path, test_filename), SP_NULLPTR);
-
-  // Clean up
-  sp_test_delete_file(test_filename);
-  sp_free(test_filename);
-}
 #endif
 
 
@@ -4112,8 +3624,6 @@ UTEST(file_monitor, detects_file_modifications) {
 // ╚═╝      ╚═════╝ ╚══════╝╚═╝╚═╝  ╚═╝
 #ifdef SP_POSIX
 UTEST(posix, smoke) {
-
-
   sp_str_t path = SP_LIT("/tmp/test");
   bool exists = sp_os_does_path_exist(path);
 
@@ -4335,198 +3845,6 @@ UTEST(sp_enum_macros, name_generation) {
   SP_EXPECT_STR_EQ_CSTR(sp_test_enum_to_str(SP_ENUM_QUX), "SP_ENUM_QUX");
 }
 
-
-// ███████╗████████╗██████╗ ███████╗███████╗███████╗
-// ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██╔════╝██╔════╝
-// ███████╗   ██║   ██████╔╝█████╗  ███████╗███████╗
-// ╚════██║   ██║   ██╔══██╗██╔══╝  ╚════██║╚════██║
-// ███████║   ██║   ██║  ██║███████╗███████║███████║
-// ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝
-#ifdef SP_TEST_ENABLE_STRESS_TESTS
-UTEST(dynamic_array, stress_test) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 128 * 1024 * 1024);
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    const s32 iterations = 1000000;
-
-    for (s32 i = 0; i < iterations; i++) {
-      sp_dynamic_array_push(&arr, &i);
-    }
-
-    ASSERT_EQ(arr.size, (u32)iterations);
-
-    // Verify sampling
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations/2), iterations/2);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations-1), iterations-1);
-
-    // Clear and reuse
-    sp_dynamic_array_clear(&arr);
-    ASSERT_EQ(arr.size, 0);
-
-    // Push again
-    for (s32 i = 0; i < 1000; i++) {
-      sp_dynamic_array_push(&arr, &i);
-    }
-    ASSERT_EQ(arr.size, 1000);
-  }
-
-  // Test random operations
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    // Mix of operations
-    for (u32 i = 0; i < 10000; i++) {
-      u32 op = i % 4;
-      switch (op) {
-      case 0: { // Push
-          s32 val = i;
-          sp_dynamic_array_push(&arr, &val);
-          break;
-      }
-      case 1: { // Push_n
-          s32 vals[10];
-          for (u32 j = 0; j < 10; j++) vals[j] = i + j;
-          sp_dynamic_array_push_n(&arr, vals, 10);
-          break;
-      }
-      case 2: { // Reserve
-          if (arr.size < 100000) {
-          sp_dynamic_array_reserve(&arr, 5);
-          }
-          break;
-      }
-      case 3: { // Clear periodically
-          if (i % 1000 == 0 && i > 0) {
-          sp_dynamic_array_clear(&arr);
-          }
-          break;
-      }
-      }
-    }
-
-    // Array should still be functional
-    s32 final_val = 9999;
-    sp_dynamic_array_push(&arr, &final_val);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, arr.size - 1), 9999);
-  }
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
-
-UTEST(dyn_array, large_stress_test) {
-  sp_dyn_array(u64) arr = SP_NULLPTR;
-
-  const s32 count = 100000;
-
-  for (s32 i = 0; i < count; i++) {
-      sp_dyn_array_push(arr, (u64)i * 12345);
-  }
-
-  ASSERT_EQ(sp_dyn_array_size(arr), count);
-
-  for (s32 i = 0; i < count; i++) {
-      ASSERT_EQ(arr[i], (u64)i * 12345);
-  }
-
-  sp_dyn_array_clear(arr);
-  ASSERT_EQ(sp_dyn_array_size(arr), 0);
-
-  for (s32 i = 0; i < 1000; i++) {
-      sp_dyn_array_push(arr, (u64)i);
-  }
-  ASSERT_EQ(sp_dyn_array_size(arr), 1000);
-
-  sp_dyn_array_free(arr);
-}
-
-UTEST(hash_table, stress) {
-  sp_ht(u64, u64) ht = SP_NULLPTR;
-
-  const s32 count = 10000;
-
-  for (u64 i = 0; i < count; i++) {
-      sp_ht_insert(ht, i, i * i);
-  }
-
-  ASSERT_EQ(sp_ht_size(ht), count);
-
-  for (s32 i = 0; i < 100; i++) {
-      u64 key = rand() % count;
-      ASSERT_TRUE(sp_ht_exists(ht, key));
-      ASSERT_EQ(*sp_ht_getp(ht, key), key * key);
-  }
-
-  for (u64 i = 0; i < count; i += 2) {
-      sp_ht_erase(ht, i);
-  }
-
-  ASSERT_EQ(sp_ht_size(ht), count / 2);
-
-  for (u64 i = 1; i < count; i += 2) {
-      ASSERT_TRUE(sp_ht_exists(ht, i));
-      ASSERT_EQ(*sp_ht_getp(ht, i), i * i);
-  }
-
-  sp_ht_free(ht);
-}
-
-UTEST(ring_buffer, large_buffer_stress) {
-  sp_ring_buffer_t rb;
-  sp_ring_buffer_init(&rb, 1000, sizeof(u64));
-
-  for (u64 i = 0; i < 1000; i++) {
-      sp_ring_buffer_push(&rb, &i);
-  }
-
-  ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
-
-  for (u64 i = 0; i < 500; i++) {
-      u64* val = (u64*)sp_ring_buffer_pop(&rb);
-      ASSERT_EQ(*val, i);
-  }
-
-  for (u64 i = 1000; i < 1500; i++) {
-      sp_ring_buffer_push(&rb, &i);
-  }
-
-  ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
-
-  u64 expected = 500;
-  sp_ring_buffer_for(rb, it) {
-      u64* val = sp_rb_it(it, u64);
-      ASSERT_EQ(*val, expected);
-      expected++;
-  }
-
-  sp_ring_buffer_destroy(&rb);
-}
-
-UTEST(ring_buffer, continuous_overwrite_stress) {
-  sp_ring_buffer_t rb;
-  sp_ring_buffer_init(&rb, 100, sizeof(int));
-
-  for (s32 i = 0; i < 10000; i++) {
-      sp_ring_buffer_push_overwrite(&rb, &i);
-  }
-
-  ASSERT_EQ(rb.size, 100);
-
-  for (s32 i = 0; i < 100; i++) {
-      int* val = (int*)sp_ring_buffer_pop(&rb);
-      ASSERT_EQ(*val, 9900 + i);
-  }
-
-  ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
-
-  sp_ring_buffer_destroy(&rb);
-}
-#endif
 
 UTEST(os_functions, recursive_directory_removal) {
   sp_str_t foo = SP_LIT("foo");
@@ -4977,9 +4295,7 @@ UTEST(path_functions, normalized_join_and_parent) {
 // ╚════██║   ██║   ██╔══██╗██║██║╚██╗██║██║   ██║       ██║   ██╔══╝  ╚════██║   ██║   ╚════██║
 // ███████║   ██║   ██║  ██║██║██║ ╚████║╚██████╔╝       ██║   ███████╗███████║   ██║   ███████║
 // ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝        ╚═╝   ╚══════╝╚══════╝   ╚═╝   ╚══════╝
-UTEST(sp_str_trim, whitespace_handling) {
-
-
+UTEST(sp_str, trim) {
   // basic trim operations
   SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("  hello  ")), SP_LIT("hello"));
   SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("\thello\t")), SP_LIT("hello"));
@@ -4999,9 +4315,7 @@ UTEST(sp_str_trim, whitespace_handling) {
   SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("\ttab\tseparated\t")), SP_LIT("tab\tseparated"));
 }
 
-UTEST(sp_str_trim_right, trailing_whitespace) {
-
-
+UTEST(sp_str, trim_right) {
   // basic right trim
   SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello  ")), SP_LIT("hello"));
   SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello\t")), SP_LIT("hello"));
@@ -5023,64 +4337,128 @@ UTEST(sp_str_trim_right, trailing_whitespace) {
   SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello world  ")), SP_LIT("hello world"));
 }
 
-UTEST(sp_str_split_c8, delimiter_splitting) {
-
-
+UTEST(sp_str, split_c8) {
   // basic split
   {
     sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello,world,test"), ',');
     ASSERT_EQ(sp_dyn_array_size(parts), 3);
-    SP_EXPECT_STR_EQ(parts[0], SP_LIT("hello"));
-    SP_EXPECT_STR_EQ(parts[1], SP_LIT("world"));
-    SP_EXPECT_STR_EQ(parts[2], SP_LIT("test"));
+    SP_EXPECT_STR_EQ_CSTR(parts[0], "hello");
+    SP_EXPECT_STR_EQ_CSTR(parts[1], "world");
+    SP_EXPECT_STR_EQ_CSTR(parts[2], "test");
   }
 
   // path splitting
   {
     sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("/home/user/file.txt"), '/');
     ASSERT_EQ(sp_dyn_array_size(parts), 4);
-    SP_EXPECT_STR_EQ(parts[0], SP_LIT(""));
-    SP_EXPECT_STR_EQ(parts[1], SP_LIT("home"));
-    SP_EXPECT_STR_EQ(parts[2], SP_LIT("user"));
-    SP_EXPECT_STR_EQ(parts[3], SP_LIT("file.txt"));
+    SP_EXPECT_STR_EQ_CSTR(parts[0], "");
+    SP_EXPECT_STR_EQ_CSTR(parts[1], "home");
+    SP_EXPECT_STR_EQ_CSTR(parts[2], "user");
+    SP_EXPECT_STR_EQ_CSTR(parts[3], "file.txt");
   }
 
   // consecutive delimiters
   {
     sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,b"), ',');
     ASSERT_EQ(sp_dyn_array_size(parts), 3);
-    SP_EXPECT_STR_EQ(parts[0], SP_LIT("a"));
-    SP_EXPECT_STR_EQ(parts[1], SP_LIT(""));
-    SP_EXPECT_STR_EQ(parts[2], SP_LIT("b"));
+    SP_EXPECT_STR_EQ_CSTR(parts[0], "a");
+    SP_EXPECT_STR_EQ_CSTR(parts[1], "");
+    SP_EXPECT_STR_EQ_CSTR(parts[2], "b");
+  }
+  //
+  // multiple consecutive delimiters
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,,b"), ',');
+    ASSERT_EQ(sp_dyn_array_size(parts), 4);
+    SP_EXPECT_STR_EQ_CSTR(parts[0], "a");
+    SP_EXPECT_STR_EQ_CSTR(parts[1], "");
+    SP_EXPECT_STR_EQ_CSTR(parts[2], "");
+    SP_EXPECT_STR_EQ_CSTR(parts[3], "b");
   }
 
   // no delimiter found
   {
     sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello"), ',');
     ASSERT_EQ(sp_dyn_array_size(parts), 1);
-    SP_EXPECT_STR_EQ(parts[0], SP_LIT("hello"));
+    SP_EXPECT_STR_EQ_CSTR(parts[0], "hello");
   }
 
   // empty string - returns null
   {
     sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT(""), ',');
-    ASSERT_EQ(parts, SP_NULLPTR);
+    EXPECT_EQ(parts, SP_NULLPTR);
   }
 
   // delimiter at start and end
   {
     sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT(",hello,world,"), ',');
     ASSERT_EQ(sp_dyn_array_size(parts), 4);
+    SP_EXPECT_STR_EQ_CSTR(parts[0], "");
+    SP_EXPECT_STR_EQ_CSTR(parts[1], "hello");
+    SP_EXPECT_STR_EQ_CSTR(parts[2], "world");
+    SP_EXPECT_STR_EQ_CSTR(parts[3], "");
+  }
+
+  // single delimiter only
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT(","), ',');
+    ASSERT_EQ(sp_dyn_array_size(parts), 2);
     SP_EXPECT_STR_EQ(parts[0], SP_LIT(""));
-    SP_EXPECT_STR_EQ(parts[1], SP_LIT("hello"));
-    SP_EXPECT_STR_EQ(parts[2], SP_LIT("world"));
-    SP_EXPECT_STR_EQ(parts[3], SP_LIT(""));
+    SP_EXPECT_STR_EQ(parts[1], SP_LIT(""));
   }
 }
 
-UTEST(sp_str_pad, padding_operations) {
+UTEST(sp_str, cleave_c8) {
+  {
+    sp_str_pair_t result = sp_str_cleave_c8(SP_LIT("hello,world"), ',');
+    SP_EXPECT_STR_EQ_CSTR(result.first, "hello");
+    SP_EXPECT_STR_EQ_CSTR(result.second, "world");
+  }
 
+  {
+    sp_str_pair_t result = sp_str_cleave_c8(SP_LIT("key=value"), '=');
+    SP_EXPECT_STR_EQ_CSTR(result.first, "key");
+    SP_EXPECT_STR_EQ_CSTR(result.second, "value");
+  }
 
+  {
+    sp_str_pair_t result = sp_str_cleave_c8(SP_LIT("no_delimiter"), ',');
+    SP_EXPECT_STR_EQ_CSTR(result.first, "no_delimiter");
+    SP_EXPECT_STR_EQ(result.second, SP_LIT(""));
+  }
+
+  {
+    sp_str_pair_t result = sp_str_cleave_c8(SP_LIT("a,b,c"), ',');
+    SP_EXPECT_STR_EQ_CSTR(result.first, "a");
+    SP_EXPECT_STR_EQ_CSTR(result.second, "b,c");
+  }
+
+  {
+    sp_str_pair_t result = sp_str_cleave_c8(SP_LIT(",trailing"), ',');
+    SP_EXPECT_STR_EQ(result.first, SP_LIT(""));
+    SP_EXPECT_STR_EQ_CSTR(result.second, "trailing");
+  }
+
+  {
+    sp_str_pair_t result = sp_str_cleave_c8(SP_LIT("leading,"), ',');
+    SP_EXPECT_STR_EQ_CSTR(result.first, "leading");
+    SP_EXPECT_STR_EQ(result.second, SP_LIT(""));
+  }
+
+  {
+    sp_str_pair_t result = sp_str_cleave_c8(SP_LIT(""), ',');
+    SP_EXPECT_STR_EQ(result.first, SP_LIT(""));
+    SP_EXPECT_STR_EQ(result.second, SP_LIT(""));
+  }
+
+  {
+    sp_str_pair_t result = sp_str_cleave_c8(SP_LIT(","), ',');
+    SP_EXPECT_STR_EQ(result.first, SP_LIT(""));
+    SP_EXPECT_STR_EQ(result.second, SP_LIT(""));
+  }
+}
+
+UTEST(sp_str, pad) {
   // basic padding
   SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello"), 10), SP_LIT("hello     "));
   SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hi"), 5), SP_LIT("hi   "));
@@ -5098,9 +4476,7 @@ UTEST(sp_str_pad, padding_operations) {
   SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello"), 0), SP_LIT("hello"));
 }
 
-UTEST(sp_str_pad_to_longest, array_padding) {
-
-
+UTEST(sp_str, pad_to_longest) {
   // basic array padding
   {
     sp_str_t strings[] = {
@@ -5154,9 +4530,7 @@ UTEST(sp_str_pad_to_longest, array_padding) {
   }
 }
 
-UTEST(sp_str_starts_with, prefix_checking) {
-
-
+UTEST(sp_str, starts_with) {
   // basic prefix checks
   ASSERT_TRUE(sp_str_starts_with(SP_LIT("hello world"), SP_LIT("hello")));
   ASSERT_TRUE(sp_str_starts_with(SP_LIT("hello"), SP_LIT("h")));
@@ -5309,410 +4683,36 @@ UTEST(sp_str_from_cstr, string_from_cstr) {
   }
 }
 
-// Asset Registry Tests
-#ifdef SP_APP
-// Test asset type (user-defined, not in sp.h)
-typedef enum {
-  SP_ASSET_KIND_TEST = 1000,
-} sp_test_asset_kind_t;
 
-typedef struct {
-  sp_str_t content;
-  s32 value;
-} sp_test_asset_data_t;
-
-// Simple importer that just copies the data
-void sp_test_asset_import(sp_asset_import_context_t* context) {
-  sp_test_asset_data_t* input = (sp_test_asset_data_t*)context->user_data;
-  sp_test_asset_data_t* data = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
-  data->content = sp_str_copy(input->content);
-  data->value = input->value;
-
-  // Get asset from context and set data (thread-safe with mutex)
-  sp_mutex_lock(&context->registry->mutex);
-  sp_asset_t* asset = sp_asset_import_context_get_asset(context);
-  asset->data = data;
-  sp_mutex_unlock(&context->registry->mutex);
-}
-
-void sp_test_asset_complete(sp_asset_import_context_t* context) {
-  // Nothing special to do on completion for test assets
-}
-
-// Test: Basic synchronous add and find
-UTEST(asset_registry, basic_add_and_find) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
-  sp_asset_registry_init(&registry, config);
-
-  // Add an asset
-  sp_test_asset_data_t* data1 = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
-  data1->content = SP_LIT("test content");
-  data1->value = 42;
-
-  sp_asset_t* added = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT("test_asset"), data1);
-  ASSERT_NE(added, SP_NULLPTR);
-  ASSERT_EQ(added->kind, SP_ASSET_KIND_TEST);
-  ASSERT_TRUE(sp_str_equal(added->name, SP_LIT("test_asset")));
-  ASSERT_EQ(added->state, SP_ASSET_STATE_COMPLETED);
-  ASSERT_EQ(added->data, data1);
-
-  // Find the asset
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("test_asset"));
-  ASSERT_NE(found, SP_NULLPTR);
-  ASSERT_EQ(found, added);
-  ASSERT_EQ(found->data, data1);
-
-  // Find non-existent asset
-  sp_asset_t* not_found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("nonexistent"));
-  ASSERT_EQ(not_found, SP_NULLPTR);
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-
-// Test: Multiple assets with same name but different types
-UTEST(asset_registry, same_name_different_types) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
-  sp_asset_registry_init(&registry, config);
-
-  // Add assets with same name but different types
-  sp_asset_registry_add(&registry, 1001, SP_LIT("shared_name"), (void*)0x1);
-  sp_asset_registry_add(&registry, 1002, SP_LIT("shared_name"), (void*)0x2);
-  sp_asset_registry_add(&registry, 1003, SP_LIT("shared_name"), (void*)0x3);
-
-  // Find each one
-  sp_asset_t* asset1 = sp_asset_registry_find(&registry, 1001, SP_LIT("shared_name"));
-  sp_asset_t* asset2 = sp_asset_registry_find(&registry, 1002, SP_LIT("shared_name"));
-  sp_asset_t* asset3 = sp_asset_registry_find(&registry, 1003, SP_LIT("shared_name"));
-
-  ASSERT_NE(asset1, SP_NULLPTR);
-  ASSERT_NE(asset2, SP_NULLPTR);
-  ASSERT_NE(asset3, SP_NULLPTR);
-
-  ASSERT_EQ(asset1->data, (void*)0x1);
-  ASSERT_EQ(asset2->data, (void*)0x2);
-  ASSERT_EQ(asset3->data, (void*)0x3);
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-
-// Test: String copying (verify names are copied, not referenced)
-UTEST(asset_registry, string_copying) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
-  sp_asset_registry_init(&registry, config);
-
-  // Create a temporary string
-  c8 temp_buffer[32];
-  snprintf(temp_buffer, sizeof(temp_buffer), "temp_asset");
-  sp_str_t temp_name = sp_str_from_cstr(temp_buffer);
-
-  // Add asset with temporary name
-  sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, temp_name, SP_NULLPTR);
-
-  // Modify the original buffer
-  snprintf(temp_buffer, sizeof(temp_buffer), "modified!");
-
-  // The asset's name should still be intact
-  ASSERT_TRUE(sp_str_equal(asset->name, SP_LIT("temp_asset")));
-  ASSERT_FALSE(sp_str_equal(asset->name, sp_str_from_cstr(temp_buffer)));
-
-  // Should still be findable with original name
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("temp_asset"));
-  ASSERT_EQ(found, asset);
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-
-UTEST(asset_registry, null_user_data) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
-  sp_asset_registry_init(&registry, config);
-
-  // Add asset with NULL data
-  sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT("null_asset"), SP_NULLPTR);
-  ASSERT_NE(asset, SP_NULLPTR);
-  ASSERT_EQ(asset->data, SP_NULLPTR);
-
-  // Should be findable
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("null_asset"));
-  ASSERT_EQ(found, asset);
-  ASSERT_EQ(found->data, SP_NULLPTR);
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-
-UTEST(asset_registry, empty_names) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
-  sp_asset_registry_init(&registry, config);
-
-  // Add asset with empty name
-  sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT(""), (void*)0xDEAD);
-  ASSERT_NE(asset, SP_NULLPTR);
-  ASSERT_EQ(asset->name.len, 0);
-
-  // Should be findable with empty name
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT(""));
-  ASSERT_EQ(found, asset);
-  ASSERT_EQ(found->data, (void*)0xDEAD);
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-
-UTEST(asset_registry, import_completion_pipeline) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = {
-    .importers = {
-      {
-        .kind = SP_ASSET_KIND_TEST,
-        .on_import = sp_test_asset_import,
-        .on_completion = sp_test_asset_complete
-      }
-    }
-  };
-  sp_asset_registry_init(&registry, config);
-
-  // Create test data
-  sp_test_asset_data_t input_data = {
-    .content = SP_LIT("async content"),
-    .value = 999
-  };
-
-  // Import an asset (goes through the async pipeline)
-  sp_future_t* future = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("async_asset"), &input_data);
-  ASSERT_NE(future, SP_NULLPTR);
-
-  // Signal the worker thread
-  sp_semaphore_signal(&registry.semaphore);
-
-  // Wait a bit for import to complete
-  sp_os_sleep_ms(50);
-
-  // Process completions on main thread
-  sp_asset_registry_process_completions(&registry);
-
-  // Check the future is ready
-  ASSERT_TRUE(future->ready);
-
-  // Find the completed asset
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("async_asset"));
-  ASSERT_NE(found, SP_NULLPTR);
-  ASSERT_EQ(found->state, SP_ASSET_STATE_COMPLETED);
-
-  // Verify the data was copied correctly
-  sp_test_asset_data_t* result_data = (sp_test_asset_data_t*)found->data;
-  ASSERT_NE(result_data, SP_NULLPTR);
-  ASSERT_TRUE(sp_str_equal(result_data->content, SP_LIT("async content")));
-  ASSERT_EQ(result_data->value, 999);
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-
-UTEST(asset_registry, state_transitions) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = {
-    .importers = {
-      {
-        .kind = SP_ASSET_KIND_TEST,
-        .on_import = sp_test_asset_import,
-        .on_completion = sp_test_asset_complete
-      }
-    }
-  };
-  sp_asset_registry_init(&registry, config);
-
-  sp_test_asset_data_t input = {
-    .content = SP_LIT("state test"),
-    .value = 777
-  };
-
-  // Start import - should be QUEUED initially
-  sp_future_t* future = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"), &input);
-
-  // Find immediately after import (should be QUEUED)
-  sp_asset_t* asset = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"));
-  ASSERT_NE(asset, SP_NULLPTR);
-  ASSERT_EQ(asset->state, SP_ASSET_STATE_QUEUED);
-
-  // Signal and wait for import
-  sp_semaphore_signal(&registry.semaphore);
-  sp_os_sleep_ms(50);
-
-  // Should now be IMPORTED (but not yet COMPLETED)
-  // Note: This is racy without better synchronization, but should work most of the time
-
-  // Process completions
-  sp_asset_registry_process_completions(&registry);
-
-  // Should now be COMPLETED
-  asset = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"));
-  ASSERT_EQ(asset->state, SP_ASSET_STATE_COMPLETED);
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-
-// Test: Concurrent find operations while importing
-UTEST(asset_registry, concurrent_find_during_import) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = {
-    .importers = {
-      {
-        .kind = SP_ASSET_KIND_TEST,
-        .on_import = sp_test_asset_import,
-        .on_completion = sp_test_asset_complete
-      }
-    }
-  };
-  sp_asset_registry_init(&registry, config);
-
-  // Add some assets first
-  for (s32 i = 0; i < 10; i++) {
-    c8 name[32];
-    snprintf(name, sizeof(name), "asset_%d", i);
-    sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, sp_str_from_cstr(name), (void*)(uintptr_t)i);
-  }
-
-  // Start importing more assets
-  for (s32 i = 10; i < 20; i++) {
-    c8 name[32];
-    snprintf(name, sizeof(name), "asset_%d", i);
-    sp_test_asset_data_t* data = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
-    data->content = sp_str_from_cstr(name);
-    data->value = i;
-    sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, sp_str_from_cstr(name), data);
-  }
-
-  // Signal worker thread
-  sp_semaphore_signal(&registry.semaphore);
-
-  // Concurrent finds while import is happening
-  for (s32 iter = 0; iter < 100; iter++) {
-    s32 id = iter % 20;
-    c8 name[32];
-    snprintf(name, sizeof(name), "asset_%d", id);
-
-    sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_from_cstr(name));
-    if (id < 10) {
-      // These were added synchronously, should always be found
-      ASSERT_NE(found, SP_NULLPTR);
-      ASSERT_EQ(found->data, (void*)(uintptr_t)id);
-    }
-    // Assets 10-19 might or might not be ready yet (that's ok)
-  }
-
-  // Let imports finish
-  sp_os_sleep_ms(50);
-  sp_asset_registry_process_completions(&registry);
-
-  // Now all should be findable
-  for (s32 i = 0; i < 20; i++) {
-    c8 name[32];
-    snprintf(name, sizeof(name), "asset_%d", i);
-    sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_from_cstr(name));
-    ASSERT_NE(found, SP_NULLPTR);
-  }
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-
-// Test: Many assets stress test
-UTEST(asset_registry, stress_many_assets) {
-  sp_context_push_allocator(sp_malloc_allocator_init());
-
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
-  sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
-  sp_asset_registry_init(&registry, config);
-
-  const s32 ASSET_COUNT = 1000;
-
-  // Add many assets
-  for (s32 i = 0; i < ASSET_COUNT; i++) {
-    c8 name[32];
-    snprintf(name, sizeof(name), "stress_%d", i);
-    sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, sp_str_from_cstr(name), (void*)(uintptr_t)i);
-  }
-
-  // Verify all can be found
-  for (s32 i = 0; i < ASSET_COUNT; i++) {
-    c8 name[32];
-    snprintf(name, sizeof(name), "stress_%d", i);
-    sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_from_cstr(name));
-    ASSERT_NE(found, SP_NULLPTR);
-    ASSERT_EQ(found->data, (void*)(uintptr_t)i);
-  }
-
-  // Random access pattern
-  for (s32 iter = 0; iter < ASSET_COUNT * 2; iter++) {
-    s32 id = (iter * 7919) % ASSET_COUNT;  // Prime number for good distribution
-    c8 name[32];
-    snprintf(name, sizeof(name), "stress_%d", id);
-    sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_from_cstr(name));
-    ASSERT_NE(found, SP_NULLPTR);
-    ASSERT_EQ(found->data, (void*)(uintptr_t)id);
-  }
-
-  sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
-}
-#endif // SP_APP
-
-struct sp_io_fixture {
+struct sp_io {
   sp_str_t test_file_path;
+  sp_test_file_manager_t file_manager;
 };
 
-UTEST_F_SETUP(sp_io_fixture) {
-
-  utest_fixture->test_file_path = sp_format("/tmp/sp_io_test_{}.txt", SP_FMT_U64((u64)utest_fixture));
-  const char* cpath = sp_str_to_cstr(utest_fixture->test_file_path);
-  sp_test_delete_file(cpath);
+UTEST_F_SETUP(sp_io) {
+  sp_test_file_manager_init(&ut.file_manager);
+  ut.test_file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("sp_io.file"));
 }
 
-UTEST_F_TEARDOWN(sp_io_fixture) {
-  const char* cpath = sp_str_to_cstr(utest_fixture->test_file_path);
-  sp_test_delete_file(cpath);
+UTEST_F_TEARDOWN(sp_io) {
+  sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
-UTEST_F(sp_io_fixture, memory_open) {
+UTEST_F(sp_io, memory_open) {
   u8 buffer[64];
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
   ASSERT_TRUE(true);
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_close) {
+UTEST_F(sp_io, memory_close) {
   u8 buffer[64];
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
   sp_io_close(&stream);
   ASSERT_TRUE(true);
 }
 
-UTEST_F(sp_io_fixture, memory_size) {
+UTEST_F(sp_io, memory_size) {
   u8 buffer[128];
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
   s64 size = sp_io_size(&stream);
@@ -5720,7 +4720,7 @@ UTEST_F(sp_io_fixture, memory_size) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_read_full) {
+UTEST_F(sp_io, memory_read_full) {
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
   u8 dest[16] = SP_ZERO_INITIALIZE();
 
@@ -5734,7 +4734,7 @@ UTEST_F(sp_io_fixture, memory_read_full) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_read_partial) {
+UTEST_F(sp_io, memory_read_partial) {
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
   u8 dest[8] = SP_ZERO_INITIALIZE();
 
@@ -5748,7 +4748,7 @@ UTEST_F(sp_io_fixture, memory_read_partial) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_read_past_end) {
+UTEST_F(sp_io, memory_read_past_end) {
   u8 source[8] = {1,2,3,4,5,6,7,8};
   u8 dest[16] = SP_ZERO_INITIALIZE();
 
@@ -5759,7 +4759,7 @@ UTEST_F(sp_io_fixture, memory_read_past_end) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_write_in_bounds) {
+UTEST_F(sp_io, memory_write_in_bounds) {
   u8 buffer[16] = SP_ZERO_INITIALIZE();
   u8 source[8] = {1,2,3,4,5,6,7,8};
 
@@ -5773,7 +4773,7 @@ UTEST_F(sp_io_fixture, memory_write_in_bounds) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_write_overflow) {
+UTEST_F(sp_io, memory_write_overflow) {
   u8 buffer[8] = SP_ZERO_INITIALIZE();
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
@@ -5784,7 +4784,7 @@ UTEST_F(sp_io_fixture, memory_write_overflow) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_seek_set) {
+UTEST_F(sp_io, memory_seek_set) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
 
@@ -5794,7 +4794,7 @@ UTEST_F(sp_io_fixture, memory_seek_set) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_seek_bounds) {
+UTEST_F(sp_io, memory_seek_bounds) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
 
@@ -5810,7 +4810,7 @@ UTEST_F(sp_io_fixture, memory_seek_bounds) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_seek_invalid) {
+UTEST_F(sp_io, memory_seek_invalid) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
 
@@ -5823,7 +4823,7 @@ UTEST_F(sp_io_fixture, memory_seek_invalid) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_open_read) {
+UTEST_F(sp_io, file_open_read) {
   const char* test_content = "Hello, World!";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 13);
@@ -5834,28 +4834,25 @@ UTEST_F(sp_io_fixture, file_open_read) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_open_write) {
+UTEST_F(sp_io, file_open_write) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   ASSERT_TRUE(stream.file.fd >= 0);
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_open_nonexistent) {
-  sp_str_t nonexistent = SP_LIT("/tmp/sp_io_nonexistent_file.txt");
-  const char* cpath = sp_str_to_cstr(nonexistent);
-  sp_test_delete_file(cpath);
-
-  sp_io_stream_t stream = sp_io_from_file(nonexistent, SP_IO_MODE_READ);
+UTEST_F(sp_io, file_open_nonexistent) {
+  sp_str_t file_path = sp_test_file_path(&ut.file_manager, sp_str_lit("sp_io.file_open_nonexistent.file"));
+  sp_io_stream_t stream = sp_io_from_file(file_path, SP_IO_MODE_READ);
   ASSERT_TRUE(stream.file.fd < 0);
 }
 
-UTEST_F(sp_io_fixture, file_close) {
+UTEST_F(sp_io, file_close) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
   ASSERT_TRUE(true);
 }
 
-UTEST_F(sp_io_fixture, file_read_full) {
+UTEST_F(sp_io, file_read_full) {
   const char* test_content = "0123456789ABCDEF";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 16);
@@ -5872,7 +4869,7 @@ UTEST_F(sp_io_fixture, file_read_full) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_read_partial) {
+UTEST_F(sp_io, file_read_partial) {
   const char* test_content = "0123456789ABCDEF";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 16);
@@ -5889,7 +4886,7 @@ UTEST_F(sp_io_fixture, file_read_partial) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_read_past_eof) {
+UTEST_F(sp_io, file_read_past_eof) {
   const char* test_content = "0123";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 4);
@@ -5903,7 +4900,7 @@ UTEST_F(sp_io_fixture, file_read_past_eof) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_write_new) {
+UTEST_F(sp_io, file_write_new) {
   const char* test_content = "test data";
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   u64 bytes = sp_io_write(&stream, test_content, 9);
@@ -5913,7 +4910,7 @@ UTEST_F(sp_io_fixture, file_write_new) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_write_overwrite) {
+UTEST_F(sp_io, file_write_overwrite) {
   const char* first = "XXXXXXXX";
   const char* second = "1234";
 
@@ -5937,7 +4934,7 @@ UTEST_F(sp_io_fixture, file_write_overwrite) {
   sp_io_close(&read_stream);
 }
 
-UTEST_F(sp_io_fixture, file_seek_set) {
+UTEST_F(sp_io, file_seek_set) {
   const char* test_content = "0123456789";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 10);
@@ -5953,7 +4950,7 @@ UTEST_F(sp_io_fixture, file_seek_set) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_seek_cur) {
+UTEST_F(sp_io, file_seek_cur) {
   const char* test_content = "0123456789";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 10);
@@ -5971,7 +4968,7 @@ UTEST_F(sp_io_fixture, file_seek_cur) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_seek_end) {
+UTEST_F(sp_io, file_seek_end) {
   const char* test_content = "0123456789";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 10);
@@ -5987,7 +4984,7 @@ UTEST_F(sp_io_fixture, file_seek_end) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_size_regular) {
+UTEST_F(sp_io, file_size_regular) {
   const char* test_content = "0123456789ABCDEF";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 16);
@@ -5999,7 +4996,7 @@ UTEST_F(sp_io_fixture, file_size_regular) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_size_empty) {
+UTEST_F(sp_io, file_size_empty) {
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_close(&write_stream);
 
@@ -6009,7 +5006,7 @@ UTEST_F(sp_io_fixture, file_size_empty) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_to_memory) {
+UTEST_F(sp_io, file_to_memory) {
   const char* test_content = "file to memory test";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 19);
@@ -6032,7 +5029,7 @@ UTEST_F(sp_io_fixture, file_to_memory) {
   sp_io_close(&mem_stream);
 }
 
-UTEST_F(sp_io_fixture, memory_to_file) {
+UTEST_F(sp_io, memory_to_file) {
   const char* test_content = "memory to file test";
   char buffer[32] = {0};
   sp_os_copy_memory(test_content, buffer, 19);
@@ -6056,7 +5053,7 @@ UTEST_F(sp_io_fixture, memory_to_file) {
   }
 }
 
-UTEST_F(sp_io_fixture, load_file_helper) {
+UTEST_F(sp_io, load_file_helper) {
   const char* test_content = "load file helper test";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 21);
@@ -6069,7 +5066,7 @@ UTEST_F(sp_io_fixture, load_file_helper) {
   }
 }
 
-UTEST_F(sp_io_fixture, file_write_append) {
+UTEST_F(sp_io, file_write_append) {
   const char* first = "first";
   const char* second = "second";
 
@@ -6089,7 +5086,7 @@ UTEST_F(sp_io_fixture, file_write_append) {
   ASSERT_EQ(loaded.data[10], 'd');
 }
 
-UTEST_F(sp_io_fixture, file_read_invalid_fd) {
+UTEST_F(sp_io, file_read_invalid_fd) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
@@ -6099,7 +5096,7 @@ UTEST_F(sp_io_fixture, file_read_invalid_fd) {
   ASSERT_EQ(bytes, 0);
 }
 
-UTEST_F(sp_io_fixture, file_write_invalid_fd) {
+UTEST_F(sp_io, file_write_invalid_fd) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
@@ -6108,7 +5105,7 @@ UTEST_F(sp_io_fixture, file_write_invalid_fd) {
   ASSERT_EQ(bytes, 0);
 }
 
-UTEST_F(sp_io_fixture, file_seek_invalid_fd) {
+UTEST_F(sp_io, file_seek_invalid_fd) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
@@ -6117,7 +5114,7 @@ UTEST_F(sp_io_fixture, file_seek_invalid_fd) {
   ASSERT_EQ(pos, -1);
 }
 
-UTEST_F(sp_io_fixture, file_size_invalid_fd) {
+UTEST_F(sp_io, file_size_invalid_fd) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
@@ -6126,7 +5123,7 @@ UTEST_F(sp_io_fixture, file_size_invalid_fd) {
   ASSERT_EQ(size, -1);
 }
 
-UTEST_F(sp_io_fixture, file_close_autoclose_false) {
+UTEST_F(sp_io, file_close_autoclose_false) {
   const char* test_content = "autoclose test";
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   stream.file.close_mode = SP_IO_FILE_CLOSE_MODE_NONE;
@@ -6147,7 +5144,7 @@ UTEST_F(sp_io_fixture, file_close_autoclose_false) {
   }
 }
 
-UTEST_F(sp_io_fixture, file_close_autoclose_true) {
+UTEST_F(sp_io, file_close_autoclose_true) {
   const char* test_content = "autoclose true";
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&stream, test_content, 14);
@@ -6161,7 +5158,7 @@ UTEST_F(sp_io_fixture, file_close_autoclose_true) {
   }
 }
 
-UTEST_F(sp_io_fixture, file_seek_invalid_negative) {
+UTEST_F(sp_io, file_seek_invalid_negative) {
   const char* test_content = "seek test";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 9);
@@ -6173,7 +5170,7 @@ UTEST_F(sp_io_fixture, file_seek_invalid_negative) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_write_to_readonly) {
+UTEST_F(sp_io, file_write_to_readonly) {
   const char* test_content = "initial";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 7);
@@ -6185,7 +5182,7 @@ UTEST_F(sp_io_fixture, file_write_to_readonly) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_read_from_writeonly) {
+UTEST_F(sp_io, file_read_from_writeonly) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   char buffer[10] = {0};
   u64 bytes = sp_io_read(&stream, buffer, 10);
@@ -6193,7 +5190,7 @@ UTEST_F(sp_io_fixture, file_read_from_writeonly) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_open_read_write) {
+UTEST_F(sp_io, file_open_read_write) {
   const char* initial = "initial data";
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, (sp_io_mode_t)(SP_IO_MODE_READ | SP_IO_MODE_WRITE));
   ASSERT_TRUE(stream.file.fd >= 0);
@@ -6214,7 +5211,7 @@ UTEST_F(sp_io_fixture, file_open_read_write) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_seek_cur_forward) {
+UTEST_F(sp_io, memory_seek_cur_forward) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   for (u32 i = 0; i < 64; i++) buffer[i] = (u8)i;
 
@@ -6231,7 +5228,7 @@ UTEST_F(sp_io_fixture, memory_seek_cur_forward) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_seek_cur_backward) {
+UTEST_F(sp_io, memory_seek_cur_backward) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   for (u32 i = 0; i < 64; i++) buffer[i] = (u8)i;
 
@@ -6248,7 +5245,7 @@ UTEST_F(sp_io_fixture, memory_seek_cur_backward) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_seek_cur_invalid) {
+UTEST_F(sp_io, memory_seek_cur_invalid) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
 
@@ -6262,7 +5259,7 @@ UTEST_F(sp_io_fixture, memory_seek_cur_invalid) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_sequential_reads) {
+UTEST_F(sp_io, memory_sequential_reads) {
   u8 source[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
   sp_io_stream_t stream = sp_io_from_memory(source, sizeof(source));
 
@@ -6281,7 +5278,7 @@ UTEST_F(sp_io_fixture, memory_sequential_reads) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_sequential_writes) {
+UTEST_F(sp_io, memory_sequential_writes) {
   u8 buffer[16] = SP_ZERO_INITIALIZE();
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
 
@@ -6300,7 +5297,7 @@ UTEST_F(sp_io_fixture, memory_sequential_writes) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_interleaved_operations) {
+UTEST_F(sp_io, memory_interleaved_operations) {
   u8 buffer[32] = SP_ZERO_INITIALIZE();
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
 
@@ -6325,7 +5322,7 @@ UTEST_F(sp_io_fixture, memory_interleaved_operations) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_size_zero) {
+UTEST_F(sp_io, memory_size_zero) {
   u8 dummy;
   sp_io_stream_t stream = sp_io_from_memory(&dummy, 0);
 
@@ -6338,7 +5335,7 @@ UTEST_F(sp_io_fixture, memory_size_zero) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_read_zero_bytes) {
+UTEST_F(sp_io, file_read_zero_bytes) {
   const char* content = "test";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, content, 4);
@@ -6351,7 +5348,7 @@ UTEST_F(sp_io_fixture, file_read_zero_bytes) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_read_zero_bytes) {
+UTEST_F(sp_io, memory_read_zero_bytes) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
 
@@ -6362,14 +5359,14 @@ UTEST_F(sp_io_fixture, memory_read_zero_bytes) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_write_zero_bytes) {
+UTEST_F(sp_io, file_write_zero_bytes) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   u64 bytes = sp_io_write(&stream, "test", 0);
   ASSERT_EQ(bytes, 0);
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, sp_io_read_file_nonexistent) {
+UTEST_F(sp_io, sp_io_read_file_nonexistent) {
   sp_str_t path = SP_LIT("/tmp/sp_io_nonexistent_xyz_12345.txt");
   sp_str_t result = sp_io_read_file(path);
 
@@ -6377,7 +5374,7 @@ UTEST_F(sp_io_fixture, sp_io_read_file_nonexistent) {
   ASSERT_EQ(result.data, SP_NULLPTR);
 }
 
-UTEST_F(sp_io_fixture, sp_io_read_file_empty) {
+UTEST_F(sp_io, sp_io_read_file_empty) {
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
@@ -6386,7 +5383,7 @@ UTEST_F(sp_io_fixture, sp_io_read_file_empty) {
   ASSERT_EQ(result.len, 0);
 }
 
-UTEST_F(sp_io_fixture, file_seek_all_whence_zero_offset) {
+UTEST_F(sp_io, file_seek_all_whence_zero_offset) {
   const char* content = "0123456789";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, content, 10);
@@ -6407,7 +5404,7 @@ UTEST_F(sp_io_fixture, file_seek_all_whence_zero_offset) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, memory_position_tracking) {
+UTEST_F(sp_io, memory_position_tracking) {
   u8 buffer[16];
   for (u32 i = 0; i < 16; i++) buffer[i] = (u8)i;
 
@@ -6429,7 +5426,7 @@ UTEST_F(sp_io_fixture, memory_position_tracking) {
   sp_io_close(&stream);
 }
 
-UTEST_F(sp_io_fixture, file_write_read_roundtrip) {
+UTEST_F(sp_io, file_write_read_roundtrip) {
   const char* data = "roundtrip test data";
 
   sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, (sp_io_mode_t)(SP_IO_MODE_READ | SP_IO_MODE_WRITE));
