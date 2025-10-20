@@ -581,4 +581,52 @@ UTEST_F(sp_ps, env_existing) {
 }
 
 
+//////////////////
+// SP_PROC_WAIT //
+//////////////////
+UTEST_F(sp_ps, wait) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("wait"),
+      sp_str_lit("600")
+    },
+  });
+
+  sp_os_date_time_t begin = sp_os_get_date_time();
+  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  sp_os_date_time_t end = sp_os_get_date_time();
+  SP_LOG(
+    "{:fg brightcyan}; started at {:fg brightyellow}.{:fg brightyellow}, ended at {:fg brightyellow}.{:fg brightyellow}",
+    SP_FMT_S32(result.exit_code),
+    SP_FMT_S32(begin.second),
+    SP_FMT_S32(begin.millisecond),
+    SP_FMT_S32(end.second),
+    SP_FMT_S32(end.millisecond)
+  );
+}
+
+UTEST_F(sp_ps, poll) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("wait"),
+      sp_str_lit("600")
+    },
+  });
+
+  sp_os_date_time_t begin = sp_os_get_date_time();
+  sp_proc_wait_result_t result = sp_proc_poll(&ps, 1000);
+  sp_os_date_time_t end = sp_os_get_date_time();
+  SP_LOG(
+    "{:fg brightcyan}; started at {:fg brightyellow}.{:fg brightyellow}, ended at {:fg brightyellow}.{:fg brightyellow}",
+    SP_FMT_S32(result.exit_code),
+    SP_FMT_S32(begin.second),
+    SP_FMT_S32(begin.millisecond),
+    SP_FMT_S32(end.second),
+    SP_FMT_S32(end.millisecond)
+  );
+
+}
+
 UTEST_MAIN()

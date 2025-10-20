@@ -1,3 +1,4 @@
+// SP_IMPLEMENTATION is defined in the Makefile to make clangd happy
 #include "sp.h"
 
 #include "process.h"
@@ -5,16 +6,16 @@
 #define ARGPARSE_IMPLEMENTATION
 #include "argparse.h"
 
-static const char* const usage[] = {
+static const c8* const usage[] = {
   "test_proc [options] --fn <function>",
   NULL,
 };
 
-int main(int argc, const char** argv) {
-  const char* function_str = NULL;
-  int exit_code = 0;
-  int stdout_enabled = 0;
-  int stderr_enabled = 0;
+s32 main(s32 num_args, const c8** args) {
+  const c8* function_str = NULL;
+  s32 exit_code = 0;
+  s32 stdout_enabled = 0;
+  s32 stderr_enabled = 0;
 
   struct argparse_option options[] = {
     OPT_HELP(),
@@ -28,23 +29,23 @@ int main(int argc, const char** argv) {
   struct argparse argparse;
   argparse_init(&argparse, options, usage, 0);
   argparse_describe(&argparse, "\nTest process for sp_proc testing", "");
-  argc = argparse_parse(&argparse, argc, argv);
+  num_args = argparse_parse(&argparse, num_args, args);
 
   if (!function_str) {
     argparse_usage(&argparse);
-    return 1;
+    SP_EXIT_FAILURE();
   }
 
   test_proc_function_t function = test_proc_function_from_str(sp_str_view(function_str));
 
   if (function == TEST_PROC_FUNCTION_INVALID) {
-    fprintf(stderr, "Unknown function: %s\n", function_str);
-    return 1;
+    SP_LOG("unknown function: {:fg brightred}", SP_FMT_CSTR(function_str));
+    SP_EXIT_FAILURE();
   }
 
   switch (function) {
     case TEST_PROC_FUNCTION_ECHO: {
-      char buffer[1024];
+      c8 buffer[1024];
       while (fgets(buffer, sizeof(buffer), stdin)) {
         if (stdout_enabled) fprintf(stdout, "%s", buffer);
         if (stderr_enabled) fprintf(stderr, "%s", buffer);
@@ -65,15 +66,15 @@ int main(int argc, const char** argv) {
       break;
     }
     case TEST_PROC_FUNCTION_PRINT_ENV: {
-      char line[256];
+      c8 line[256];
       while (fgets(line, sizeof(line), stdin)) {
         size_t len = strlen(line);
         if (len > 0 && line[len - 1] == '\n') {
           line[len - 1] = '\0';
         }
         if (len == 0 || line[0] == '\0') break;
-        
-        const char* value = getenv(line);
+
+        const c8* value = getenv(line);
         if (stdout_enabled) {
           if (value) {
             fprintf(stdout, "%s %s\n", line, value);
@@ -92,6 +93,14 @@ int main(int argc, const char** argv) {
         }
       }
       break;
+    }
+    case TEST_PROC_FUNCTION_WAIT: {
+      sp_str_t arg = sp_str_view(args[0]);
+      f64 ms = sp_parse_f64(arg);
+      SP_LOG("{:fg brightyellow} is sleeping for {:fg cyan}ms", SP_FMT_STR(sp_os_get_executable_path()), SP_FMT_F64(ms));
+      sp_os_sleep_ms(ms);
+      SP_LOG("{:fg brightyellow} is done", SP_FMT_STR(sp_os_get_executable_path()));
+      return 69;
     }
     case TEST_PROC_FUNCTION_EXIT_CODE: {
       return exit_code;
