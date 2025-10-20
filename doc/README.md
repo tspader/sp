@@ -14,7 +14,7 @@ This directory contains the 'SP' project, a C/C++ library providing a collection
 *   **Core Concepts:**
     *   **Single Header Library:** The main library code is in `sp.h`. Implementation is included by defining `SP_IMPLEMENTATION`.
     *   **Custom Allocators:** Centralized memory management using `sp_allocator_t`, with implementations like `sp_bump_allocator_t` and `sp_allocator_malloc_t`.
-    *   **Data Structures:** Provides `sp_dynamic_array_t`, `sp_fixed_array_t`, `sp_hash_table`, `sp_ring_buffer_t`.
+    *   **Data Structures:** Provides `sp_dynamic_array_t`, `sp_fixed_array_t`, `sp_ht`, `sp_ring_buffer_t`.
     *   **String Handling:** A dedicated `sp_str_t` type and extensive functions for string manipulation, formatting, and building (`sp_str_builder_t`).
     *   **OS Abstraction:** Abstracts OS-specific functionalities (threads, mutexes, semaphores, file system operations) under a unified interface, switchable between native (Win32/POSIX) and SDL backends.
     *   **File Monitoring:** Includes `sp_file_monitor_t` for watching file system changes.
@@ -53,7 +53,7 @@ The project uses a `Makefile` for building. Key targets are defined within the `
 *   **Testing:** Unit tests are written using the `utest.h` framework within `test.c`.
 *   **Memory Management:** Prefer using the custom allocator system (`sp_alloc`, `sp_free`, etc.) over direct `malloc/free`.
 *   **String Handling:** Use `sp_str_t` and associated functions for string operations.
-*   **Data Structures:** Utilize the provided generic data structures (`sp_dynamic_array_t`, `sp_hash_table`, `sp_ring_buffer_t`).
+*   **Data Structures:** Utilize the provided generic data structures (`sp_dynamic_array_t`, `sp_ht`, `sp_ring_buffer_t`).
 *   **Formatting:** Use the `sp_fmt` system for creating formatted strings.
 *   **OS Interaction:** Use the abstraction layer functions in `sp.h` (e.g., `sp_os_*`, `sp_thread_*`, `sp_mutex_*`, `sp_semaphore_*`) for portability.
 

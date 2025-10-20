@@ -550,17 +550,17 @@ void sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
 ////////////////
 // HASH TABLE //
 ////////////////
-#define SP_HASH_TABLE_HASH_SEED         0x31415296
-#define SP_HASH_TABLE_INVALID_INDEX     UINT32_MAX
+#define SP_HT_HASH_SEED         0x31415296
+#define SP_HT_INVALID_INDEX     UINT32_MAX
 
-typedef u32 sp_hash_table_iter;
-SP_TYPEDEF_FN(sp_hash_t, sp_hash_table_hash_key_fn_t, void*, u32);
-SP_TYPEDEF_FN(bool, sp_hash_table_compare_key_fn_t, void*, void*, u32);
+typedef u32 sp_ht_it;
+SP_TYPEDEF_FN(sp_hash_t, sp_ht_hash_key_fn_t, void*, u32);
+SP_TYPEDEF_FN(bool, sp_ht_compare_key_fn_t, void*, void*, u32);
 
-typedef enum sp_hash_table_entry_state {
-    SP_HASH_TABLE_ENTRY_INACTIVE = 0x00,
-    SP_HASH_TABLE_ENTRY_ACTIVE = 0x01
-} sp_hash_table_entry_state;
+typedef enum sp_ht_entry_state {
+    SP_HT_ENTRY_INACTIVE = 0x00,
+    SP_HT_ENTRY_ACTIVE = 0x01
+} sp_ht_entry_state;
 
 typedef struct {
   u32 stride;
@@ -571,37 +571,37 @@ typedef struct {
     u32 value;
   } size;
   struct {
-    sp_hash_table_hash_key_fn_t hash;
-    sp_hash_table_compare_key_fn_t compare;
+    sp_ht_hash_key_fn_t hash;
+    sp_ht_compare_key_fn_t compare;
   } fn;
-} sp_hash_table_info_t;
+} sp_ht_info_t;
 
-#define __sp_hash_table_entry(__K, __V)\
+#define __sp_ht_entry(__K, __V)\
     struct\
     {\
         __K key;\
         __V val;\
-        sp_hash_table_entry_state state;\
+        sp_ht_entry_state state;\
     }
-#define sp_hash_table(__K, __V)                \
+#define sp_ht(__K, __V)                \
     struct {                                   \
-        __sp_hash_table_entry(__K, __V)* data; \
+        __sp_ht_entry(__K, __V)* data; \
         __K tmp_key;                           \
         __V tmp_val;                           \
-        sp_hash_table_info_t info; \
+        sp_ht_info_t info; \
     }*
 
-#define sp_hash_table_new(__K, __V) SP_NULLPTR
+#define sp_ht_new(__K, __V) SP_NULLPTR
 
 
-#define sp_hash_table_init(ht)\
+#define sp_ht_init(ht)\
     do {\
         *((void**)(&(ht))) = sp_alloc(sizeof(*ht));                    \
         sp_os_zero_memory((ht), sizeof(*ht));                          \
                                                                        \
         sp_dyn_array_reserve(ht->data, 2);                             \
-        ht->data[0].state = SP_HASH_TABLE_ENTRY_INACTIVE;              \
-        ht->data[1].state = SP_HASH_TABLE_ENTRY_INACTIVE;              \
+        ht->data[0].state = SP_HT_ENTRY_INACTIVE;              \
+        ht->data[1].state = SP_HT_ENTRY_INACTIVE;              \
                                                                        \
         u8* d0 = (u8*)&((ht)->data[0]);                                \
         u8* d1 = (u8*)&((ht)->data[1]);                                \
@@ -613,36 +613,36 @@ typedef struct {
         (ht)->info.size.value = (u32)(sizeof((ht)->data[0].val));      \
         (ht)->info.stride = (u32)(diff);                               \
         (ht)->info.klpvl = (u32)(klpvl);                               \
-        (ht)->info.fn.hash = sp_hash_table_on_hash_key;                \
-        (ht)->info.fn.compare = sp_hash_table_on_compare_key;          \
+        (ht)->info.fn.hash = sp_ht_on_hash_key;                \
+        (ht)->info.fn.compare = sp_ht_on_compare_key;          \
     } while (0)
 
-#define sp_hash_table_set_fns(ht, hash, compare) \
-  if (!(ht)) sp_hash_table_init(ht);             \
-  (ht)->info.fn.hash = (hash);                   \
-  (ht)->info.fn.compare = (compare);
+#define sp_ht_set_fns(ht, hash_fn, cmp_fn) \
+  if (!(ht)) sp_ht_init(ht);             \
+  (ht)->info.fn.hash = (hash_fn);                   \
+  (ht)->info.fn.compare = (cmp_fn);
 
-#define sp_hash_table_size(ht)\
+#define sp_ht_size(ht)\
     ((ht) != NULL ? sp_dyn_array_size((ht)->data) : 0)
 
-#define sp_hash_table_capacity(ht)\
+#define sp_ht_capacity(ht)\
     ((ht) != NULL ? sp_dyn_array_capacity((ht)->data) : 0)
 
-#define sp_hash_table_empty(ht)\
+#define sp_ht_empty(ht)\
     ((ht) != NULL ? sp_dyn_array_size((ht)->data) == 0 : true)
 
-#define sp_hash_table_clear(ht)\
+#define sp_ht_clear(ht)\
     do {\
         if ((ht) != NULL) {\
             u32 capacity = sp_dyn_array_capacity((ht)->data);\
             for (u32 i = 0; i < capacity; ++i) {\
-                (ht)->data[i].state = SP_HASH_TABLE_ENTRY_INACTIVE;\
+                (ht)->data[i].state = SP_HT_ENTRY_INACTIVE;\
             }\
             sp_dyn_array_clear((ht)->data);\
         }\
     } while (0)
 
-#define sp_hash_table_free(ht)\
+#define sp_ht_free(ht)\
     do {\
         if ((ht) != NULL) {\
             sp_dyn_array_free((ht)->data);\
@@ -652,26 +652,26 @@ typedef struct {
         }\
     } while (0)
 
-#define sp_hash_table_insert(__HT, __K, __V)\
+#define sp_ht_insert(__HT, __K, __V)\
     do {\
         if ((__HT) == SP_NULLPTR) {\
-            sp_hash_table_init((__HT));\
+            sp_ht_init((__HT));\
         }\
-        sp_hash_table_info_t __INFO = (__HT)->info;\
-        u32 __CAP = sp_hash_table_capacity(__HT);\
-        f32 __LF = __CAP ? (f32)(sp_hash_table_size(__HT)) / (f32)(__CAP) : 0.f;\
+        sp_ht_info_t __INFO = (__HT)->info;\
+        u32 __CAP = sp_ht_capacity(__HT);\
+        f32 __LF = __CAP ? (f32)(sp_ht_size(__HT)) / (f32)(__CAP) : 0.f;\
         if (__LF >= 0.5f || !__CAP)\
         {\
             u32 NEW_CAP = __CAP ? __CAP * 2 : 2;\
             sp_dyn_array_reserve((__HT)->data, NEW_CAP);\
             for (u32 __I = __CAP; __I < NEW_CAP; ++__I) {\
-                (__HT)->data[__I].state = SP_HASH_TABLE_ENTRY_INACTIVE;\
+                (__HT)->data[__I].state = SP_HT_ENTRY_INACTIVE;\
             }\
-            __CAP = sp_hash_table_capacity(__HT);\
+            __CAP = sp_ht_capacity(__HT);\
         }\
         (__HT)->tmp_key = (__K);\
-        u32 __EXISTING_IDX = sp_hash_table_tmp_key_index(__HT);\
-        bool __KEY_EXISTS = (__EXISTING_IDX != SP_HASH_TABLE_INVALID_INDEX);\
+        u32 __EXISTING_IDX = sp_ht_tmp_key_index(__HT);\
+        bool __KEY_EXISTS = (__EXISTING_IDX != SP_HT_INVALID_INDEX);\
         sp_hash_t __HSH = __INFO.fn.hash((void*)(&(__HT)->tmp_key), __INFO.size.key);\
         u32 __HSH_IDX = __HSH % __CAP;\
         (__HT)->tmp_key = (__HT)->data[__HSH_IDX].key;\
@@ -679,7 +679,7 @@ typedef struct {
         while (\
             c < __CAP\
             && __HSH != __INFO.fn.hash((void*)(&(__HT)->tmp_key), __INFO.size.key)\
-            && (__HT)->data[__HSH_IDX].state == SP_HASH_TABLE_ENTRY_ACTIVE)\
+            && (__HT)->data[__HSH_IDX].state == SP_HT_ENTRY_ACTIVE)\
         {\
             __HSH_IDX = ((__HSH_IDX + 1) % __CAP);\
             (__HT)->tmp_key = (__HT)->data[__HSH_IDX].key;\
@@ -687,61 +687,60 @@ typedef struct {
         }\
         (__HT)->data[__HSH_IDX].key = (__K);\
         (__HT)->data[__HSH_IDX].val = (__V);\
-        (__HT)->data[__HSH_IDX].state = SP_HASH_TABLE_ENTRY_ACTIVE;\
+        (__HT)->data[__HSH_IDX].state = SP_HT_ENTRY_ACTIVE;\
         if (!__KEY_EXISTS) sp_dyn_array_head((__HT)->data)->size++;\
     } while (0)
 
-#define sp_hash_table_getp(__HT, __K)\
+#define sp_ht_getp(__HT, __K)\
     (\
         (__HT) == SP_NULLPTR ? SP_NULLPTR :\
         ((__HT)->tmp_key = (__K), \
-        ((__HT)->info.tmp_idx = sp_hash_table_tmp_key_index(__HT), \
-        ((__HT)->info.tmp_idx != SP_HASH_TABLE_INVALID_INDEX ? &(__HT)->data[(__HT)->info.tmp_idx].val : NULL))) \
+        ((__HT)->info.tmp_idx = sp_ht_tmp_key_index(__HT), \
+        ((__HT)->info.tmp_idx != SP_HT_INVALID_INDEX ? &(__HT)->data[(__HT)->info.tmp_idx].val : NULL))) \
     )
 
-#define sp_hash_table_exists(__HT, __K) ((__HT) && ((__HT)->tmp_key = (__K), sp_hash_table_tmp_key_index(__HT) != SP_HASH_TABLE_INVALID_INDEX))
+#define sp_ht_exists(__HT, __K) ((__HT) && ((__HT)->tmp_key = (__K), sp_ht_tmp_key_index(__HT) != SP_HT_INVALID_INDEX))
 
-#define sp_hash_table_key_exists(__HT, __K) sp_hash_table_exists((__HT), (__K))
+#define sp_ht_key_exists(__HT, __K) sp_ht_exists((__HT), (__K))
 
-#define sp_hash_table_erase(__HT, __K)\
+#define sp_ht_erase(__HT, __K)\
     do {\
         if ((__HT))\
         {\
             (__HT)->tmp_key = (__K);\
-            u32 __IDX = sp_hash_table_tmp_key_index(__HT);\
-            if (__IDX != SP_HASH_TABLE_INVALID_INDEX) {\
-                (__HT)->data[__IDX].state = SP_HASH_TABLE_ENTRY_INACTIVE;\
+            u32 __IDX = sp_ht_tmp_key_index(__HT);\
+            if (__IDX != SP_HT_INVALID_INDEX) {\
+                (__HT)->data[__IDX].state = SP_HT_ENTRY_INACTIVE;\
                 if (sp_dyn_array_head((__HT)->data)->size) sp_dyn_array_head((__HT)->data)->size--;\
             }\
         }\
     } while (0)
 
-#define sp_hash_table_iter_valid(__HT, __IT)\
-    ((__HT) == NULL ? false : (((__IT) < sp_hash_table_capacity((__HT))) && ((__HT)->data[(__IT)].state == SP_HASH_TABLE_ENTRY_ACTIVE)))
+#define sp_ht_it_valid(__HT, __IT)\
+    ((__HT) == NULL ? false : (((__IT) < sp_ht_capacity((__HT))) && ((__HT)->data[(__IT)].state == SP_HT_ENTRY_ACTIVE)))
 
-#define sp_hash_table_iter_advance(__HT, __IT)\
-    ((__HT) == NULL ? (void)0 : (sp_hash_table_iter_advance_fn((void**)&(__HT)->data, &(__IT), (__HT)->info)))
+#define sp_ht_it_advance(__HT, __IT)\
+    ((__HT) == NULL ? (void)0 : (sp_ht_it_advance_fn((void**)&(__HT)->data, &(__IT), (__HT)->info)))
 
-#define sp_hash_table_iter_getp(__HT, __IT)\
+#define sp_ht_it_getp(__HT, __IT)\
     ((__HT) == NULL ? NULL : (&((__HT)->data[(__IT)].val)))
 
-#define sp_hash_table_iter_getkp(__HT, __IT)\
+#define sp_ht_it_getkp(__HT, __IT)\
     ((__HT) == NULL ? NULL : (&((__HT)->data[(__IT)].key)))
 
-#define sp_hash_table_iter_init(__HT)\
-    ((__HT) == NULL ? 0 : (sp_hash_table_iter_init_fn((void**)&(__HT)->data, (__HT)->info)))
+#define sp_ht_it_init(__HT)\
+    ((__HT) == NULL ? 0 : (sp_ht_it_init_fn((void**)&(__HT)->data, (__HT)->info)))
 
-#define sp_hash_table_tmp_key_index(__HT) sp_hash_table_get_key_index_fn((void**)&((__HT)->data), (void*)&((__HT)->tmp_key), (__HT)->info)
+#define sp_ht_tmp_key_index(__HT) sp_ht_get_key_index_fn((void**)&((__HT)->data), (void*)&((__HT)->tmp_key), (__HT)->info)
 
-u32                sp_hash_table_get_key_index_fn(void** data, void* key, sp_hash_table_info_t info);
-sp_hash_table_iter sp_hash_table_iter_init_fn(void** data, sp_hash_table_info_t info);
-void               sp_hash_table_iter_advance_fn(void** data, u32* it, sp_hash_table_info_t info);
+u32        sp_ht_get_key_index_fn(void** data, void* key, sp_ht_info_t info);
+sp_ht_it sp_ht_it_init_fn(void** data, sp_ht_info_t info);
+void       sp_ht_it_advance_fn(void** data, u32* it, sp_ht_info_t info);
 
-sp_hash_t sp_hash_table_on_hash_key(void* key, u32 size);
-bool sp_hash_table_on_compare_key(void* ka, void* kb, u32 size);
-
-sp_hash_t sp_hash_table_on_hash_str_key(void* key, u32 size);
-bool sp_hash_table_on_compare_str_key(void* ka, void* kb, u32 size);
+sp_hash_t  sp_ht_on_hash_key(void* key, u32 size);
+bool       sp_ht_on_compare_key(void* ka, void* kb, u32 size);
+sp_hash_t sp_ht_on_hash_str_key(void* key, u32 size);
+bool      sp_ht_on_compare_str_key(void* ka, void* kb, u32 size);
 
 
 
@@ -1284,8 +1283,10 @@ typedef struct {
   sp_str_t value;
 } sp_env_var_t;
 
+typedef sp_ht(sp_str_t, sp_str_t) sp_env_table_t;
+
 typedef struct {
-  sp_hash_table(sp_str_t, sp_str_t) vars;
+  sp_env_table_t vars;
 } sp_env_t;
 
 // PROCESS CONFIG
@@ -1767,21 +1768,32 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
   return sp_hash_bytes(hashes, num_hashes * sizeof(sp_hash_t), 0);
 }
 
-bool sp_hash_table_on_compare_key(void* ka, void* kb, u32 size) {
+bool sp_ht_on_compare_key(void* ka, void* kb, u32 size) {
   return sp_os_is_memory_equal(ka, kb, size);
 }
 
-sp_hash_t sp_hash_table_on_hash_key(void *key, u32 size) {
-  return sp_hash_bytes(key, size, SP_HASH_TABLE_HASH_SEED);
+sp_hash_t sp_ht_on_hash_key(void *key, u32 size) {
+  return sp_hash_bytes(key, size, SP_HT_HASH_SEED);
 }
 
-u32 sp_hash_table_get_key_index_fn(void** data, void* key, sp_hash_table_info_t info) {
-    if (!data || !key) return SP_HASH_TABLE_INVALID_INDEX;
+sp_hash_t sp_ht_on_hash_str_key(void* key, u32 size) {
+  sp_str_t* str = (sp_str_t*) key;
+  return sp_hash_str(*str);
+}
+
+bool sp_ht_on_compare_str_key(void* ka, void* kb, u32 size) {
+  sp_str_t* sa = (sp_str_t*) ka;
+  sp_str_t* sb = (sp_str_t*) kb;
+  return sp_str_equal(*sa, *sb);
+}
+
+u32 sp_ht_get_key_index_fn(void** data, void* key, sp_ht_info_t info) {
+    if (!data || !key) return SP_HT_INVALID_INDEX;
 
     u32 capacity = sp_dyn_array_capacity(*data);
     u32 size = sp_dyn_array_size(*data);
-    if (!capacity || !size) return SP_HASH_TABLE_INVALID_INDEX;
-    u32 idx = SP_HASH_TABLE_INVALID_INDEX;
+    if (!capacity || !size) return SP_HT_INVALID_INDEX;
+    u32 idx = SP_HT_INVALID_INDEX;
     sp_hash_t hash = info.fn.hash(key, info.size.key);
     u32 hash_idx = (hash % capacity);
 
@@ -1790,8 +1802,8 @@ u32 sp_hash_table_get_key_index_fn(void** data, void* key, sp_hash_table_info_t 
         void* k = ((c8*)(*data) + (offset));
         sp_hash_t kh = info.fn.hash(k, info.size.key);
         bool equal = info.fn.compare(k, key, info.size.key);
-        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((c8*)(*data) + offset + (info.klpvl));
-        if (equal && hash == kh && state == SP_HASH_TABLE_ENTRY_ACTIVE) {
+        sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)(*data) + offset + (info.klpvl));
+        if (equal && hash == kh && state == SP_HT_ENTRY_ACTIVE) {
             idx = i;
             break;
         }
@@ -1799,26 +1811,26 @@ u32 sp_hash_table_get_key_index_fn(void** data, void* key, sp_hash_table_info_t 
     return idx;
 }
 
-sp_hash_table_iter sp_hash_table_iter_init_fn(void** data, sp_hash_table_info_t info) {
+sp_ht_it sp_ht_it_init_fn(void** data, sp_ht_info_t info) {
     if (!data || !*data) return 0;
-    sp_hash_table_iter it = 0;
+    sp_ht_it it = 0;
     for (; it < sp_dyn_array_capacity(*data); ++it) {
         u32 offset = (it * info.stride);
-        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((u8*)*data + offset + (info.klpvl));
-        if (state == SP_HASH_TABLE_ENTRY_ACTIVE) {
+        sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + (info.klpvl));
+        if (state == SP_HT_ENTRY_ACTIVE) {
             break;
         }
     }
     return it;
 }
 
-void sp_hash_table_iter_advance_fn(void** data, u32* it, sp_hash_table_info_t info) {
+void sp_ht_it_advance_fn(void** data, u32* it, sp_ht_info_t info) {
     if (!data || !*data) return;
     (*it)++;
     for (; *it < sp_dyn_array_capacity(*data); ++*it) {
         u32 offset = (*it * info.stride);
-        sp_hash_table_entry_state state = *(sp_hash_table_entry_state*)((u8*)*data + offset + (info.klpvl));
-        if (state == SP_HASH_TABLE_ENTRY_ACTIVE) {
+        sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + (info.klpvl));
+        if (state == SP_HT_ENTRY_ACTIVE) {
             break;
         }
     }
@@ -4527,11 +4539,13 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   }
 
 void sp_env_init(sp_env_t* env) {
-  sp_hash_table_set_fns(env->vars, sp_hash_str);
+  sp_ht_set_fns(env->vars, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 }
 
 sp_env_t sp_env_capture() {
   sp_env_t env = SP_ZERO_INITIALIZE();
+  sp_env_init(&env);
+
   for (c8** envp = (c8**)environ; *envp != SP_NULLPTR; envp++) {
     sp_str_t env_str = SP_CSTR(*envp);
     sp_str_t key = SP_ZERO_INITIALIZE();
@@ -4544,12 +4558,7 @@ sp_env_t sp_env_capture() {
       }
     }
     if (key.len > 0) {
-      sp_hash_table_insert(env.vars, key, value);
-      sp_env_var_t var = {
-        .key = sp_str_copy(key),
-        .value = sp_str_copy(value)
-      };
-      sp_dyn_array_push(env.vars, var);
+      sp_ht_insert(env.vars, sp_str_copy(key), sp_str_copy(value));
     }
   }
   return env;
@@ -4557,54 +4566,33 @@ sp_env_t sp_env_capture() {
 
 sp_env_t sp_env_copy(sp_env_t* env) {
   sp_env_t copy = SP_ZERO_INITIALIZE();
-  sp_dyn_array_for(env->vars, i) {
-    sp_env_var_t var = {
-      .key = sp_str_copy(env->vars[i].key),
-      .value = sp_str_copy(env->vars[i].value)
-    };
-    sp_dyn_array_push(copy.vars, var);
+  sp_env_init(&copy);
+
+  sp_env_table_t ht = env->vars;
+  for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
+    sp_str_t key = *sp_ht_it_getkp(ht, it);
+    sp_str_t val = *sp_ht_it_getp(ht, it);
+    sp_env_set(&copy, key, val);
   }
+
   return copy;
 }
 
 sp_str_t sp_env_get(sp_env_t* env, sp_str_t name) {
-  sp_dyn_array_for(env->vars, i) {
-    if (sp_str_equal(env->vars[i].key, name)) {
-      return env->vars[i].value;
-    }
-  }
-  return sp_str_lit("");
+  sp_str_t* val = sp_ht_getp(env->vars, name);
+  return val ? *val : SP_ZERO_STRUCT(sp_str_t);
 }
 
 void sp_env_set(sp_env_t* env, sp_str_t name, sp_str_t value) {
-  sp_dyn_array_for(env->vars, i) {
-    if (sp_str_equal(env->vars[i].key, name)) {
-      env->vars[i].value = sp_str_copy(value);
-      return;
-    }
-  }
-  sp_env_var_t var = {
-    .key = sp_str_copy(name),
-    .value = sp_str_copy(value)
-  };
-  sp_dyn_array_push(env->vars, var);
+  sp_ht_insert(env->vars, name, value);
 }
 
 void sp_env_unset(sp_env_t* env, sp_str_t name) {
-  for (u32 i = 0; i < sp_dyn_array_size(env->vars); i++) {
-    if (sp_str_equal(env->vars[i].key, name)) {
-      u32 size = sp_dyn_array_size(env->vars);
-      for (u32 j = i; j < size - 1; j++) {
-        env->vars[j] = env->vars[j + 1];
-      }
-      sp_dyn_array_pop(env->vars);
-      return;
-    }
-  }
+  sp_ht_erase(env->vars, name);
 }
 
 void sp_env_destroy(sp_env_t* env) {
-  sp_dyn_array_free(env->vars);
+  sp_ht_free(env->vars);
   env->vars = SP_NULLPTR;
 }
 
@@ -4661,10 +4649,11 @@ c8** sp_proc_build_posix_env(sp_proc_env_config_t* config) {
     }
   }
   else if (config->mode == SP_PROC_ENV_EXISTING) {
-    u32 n = sp_dyn_array_size(config->env.vars);
-    for (u32 i = 0; i < n; i++) {
-      sp_env_var_t var = config->env.vars[i];
-      sp_str_t env_str = sp_format_str(SP_LIT("{}={}"), SP_FMT_STR(var.key), SP_FMT_STR(var.value));
+    sp_env_table_t ht = config->env.vars;
+    for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
+      sp_str_t key = *sp_ht_it_getkp(ht, it);
+      sp_str_t val = *sp_ht_it_getp(ht, it);
+      sp_str_t env_str = sp_format_str(SP_LIT("{}={}"), SP_FMT_STR(key), SP_FMT_STR(val));
       sp_dyn_array_push(envp, (c8*)sp_str_to_cstr(env_str));
     }
   }
@@ -4711,13 +4700,11 @@ sp_proc_config_t sp_proc_config_copy(const sp_proc_config_t* src) {
 
   dst.env.mode = src->env.mode;
 
-  sp_dyn_array_for(src->env.env.vars, i) {
-    sp_env_var_t vs = src->env.env.vars[i];
-    sp_env_var_t vd = {
-      .key = sp_str_copy(vs.key),
-      .value = sp_str_copy(vs.value)
-    };
-    sp_dyn_array_push(dst.env.env.vars, vd);
+  sp_env_table_t ht = src->env.env.vars;
+  for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
+    sp_str_t key = *sp_ht_it_getkp(ht, it);
+    sp_str_t val = *sp_ht_it_getp(ht, it);
+    sp_env_set(&dst.env.env, key, val);
   }
 
   for (u32 i = 0; i < SP_PROC_MAX_ENV; i++) {
