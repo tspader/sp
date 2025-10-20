@@ -7,12 +7,12 @@ sp_allocator_t temp_allocator = sp_bump_allocator_init(&temp, 10 * 1024 * 1024);
 sp_context_push_allocator(temp_allocator);
 
 sp_dyn_array(sp_str_t) tokens = tokenize_file(source);
-sp_hash_table(sp_str_t, u32) symbol_table;
-sp_hash_table_init(&symbol_table, 512);
+sp_ht(sp_str_t, u32) symbol_table;
+sp_ht_init(&symbol_table, 512);
 
 for (u32 i = 0; i < sp_dyn_array_size(tokens); i++) {
     sp_str_t symbol = sp_str_copy(tokens[i]);
-    sp_hash_table_insert(&symbol_table, symbol, i);
+    sp_ht_insert(&symbol_table, symbol, i);
 }
 
 compile_result_t result = compile(&symbol_table);
