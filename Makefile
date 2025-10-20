@@ -13,9 +13,6 @@ endif
 #########
 SP_DIR_BUILD:= build
   SP_DIR_BUILD_OUTPUT := $(SP_DIR_BUILD)/bin
-    SP_OUTPUT_C := $(SP_DIR_BUILD_OUTPUT)/sp-c
-    SP_OUTPUT_CPP := $(SP_DIR_BUILD_OUTPUT)/sp-cpp
-    SP_OUTPUT_STRESS := $(SP_DIR_BUILD_OUTPUT)/sp-stress
 SP_MAKEFILE := Makefile
 SP_SP_H := sp.h
 
@@ -63,10 +60,10 @@ SP_FLAGS_CPP := $(SP_FLAGS_COMMON) $(SP_FLAG_CPP_LANGUAGE) $$(spn print)
 SP_FLAGS_STRESS = $(SP_FLAGS_CC) -DSP_TEST_ENABLE_STRESS_TESTS
 
 # Miscellaneous flags
-SP_FLAGS_RUN := --enable-mixed-units --random-order
+SP_FLAGS_RUN := --enable-mixed-units --random-order | grep -E "test cases ran|PASSED|FAILED"
 
 SP_SOURCE_FILES := test/main.c
-SP_TEST_PS_SOURCES := sp.h test/test.h
+SP_TEST_SOURCES := sp.h test/test.h
 
 ###########
 # TARGETS #
@@ -80,35 +77,50 @@ deps:
 	@spn build
 	@mkdir -p $(SP_DIR_BUILD_OUTPUT)
 
-$(SP_OUTPUT_CPP): $(SP_SOURCE_FILES) $(SP_SP_H) | $(SP_DIR_BUILD_OUTPUT)
-	$(CPP) $(SP_FLAGS_CPP) -x c++ $(SP_SOURCE_FILES) -o $(SP_OUTPUT_CPP)
+$(SP_DIR_BUILD_OUTPUT): | deps
 
-$(SP_OUTPUT_C): $(SP_SOURCE_FILES) $(SP_SP_H) | $(SP_DIR_BUILD_OUTPUT)
-	$(CC) $(SP_FLAGS_CC) $(SP_SOURCE_FILES) -o $(SP_OUTPUT_C)
+build/bin/c: $(SP_TEST_SOURCES) | $(SP_DIR_BUILD_OUTPUT)
+	$(CC) $(SP_FLAGS_CC) test/main.c -o build/bin/c
 
-$(SP_OUTPUT_STRESS): $(SP_SOURCE_FILES) $(SP_SP_H) | $(SP_DIR_BUILD_OUTPUT)
-	$(CC) $(SP_FLAGS_STRESS) $(SP_SOURCE_FILES) -o $(SP_OUTPUT_STRESS)
+build/bin/cpp: $(SP_TEST_SOURCES) | $(SP_DIR_BUILD_OUTPUT)
+	$(CPP) $(SP_FLAGS_CPP) -x c++ test/main.c -o build/bin/cpp
 
-build/bin/ps: $(SP_TEST_PS_SOURCES) test/ps.c build/bin/process | $(SP_DIR_BUILD_OUTPUT)
+build/bin/app: $(SP_TEST_SOURCES) test/app.c | $(SP_DIR_BUILD_OUTPUT)
+	$(CC) $(SP_FLAGS_CC) test/app.c -o build/bin/app
+
+build/bin/file_monitor: $(SP_TEST_SOURCES) test/file_monitor.c | $(SP_DIR_BUILD_OUTPUT)
+	$(CC) $(SP_FLAGS_CC) test/file_monitor.c -o build/bin/file_monitor
+
+build/bin/ps: $(SP_TEST_SOURCES) test/ps.c build/bin/process | $(SP_DIR_BUILD_OUTPUT)
 	$(CC) $(SP_FLAGS_CC) test/ps.c -o build/bin/ps
 
 build/bin/process: test/tools/process.* | $(SP_DIR_BUILD_OUTPUT)
 	$(CC) $(SP_FLAGS_CC) test/tools/process.c -o build/bin/process
 
-build: $(SP_OUTPUT_C)
-test: c cpp stress ps
+build/bin/stress: $(SP_TEST_SOURCES) test/stress.c | $(SP_DIR_BUILD_OUTPUT)
+	$(CC) $(SP_FLAGS_CC) test/stress.c -o build/bin/stress
 
-c: $(SP_OUTPUT_C)
-	./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)
+build: build/bin/c build/bin/app build/bin/file_monitor build/bin/ps build/bin/process build/bin/stress
+test: c cpp app file_monitor ps stress
 
-cpp: $(SP_OUTPUT_CPP)
-	./$(SP_OUTPUT_CPP) $(SP_FLAGS_RUN)
+c: build/bin/c
+	./build/bin/c $(SP_FLAGS_RUN)
 
-stress: $(SP_OUTPUT_STRESS)
-	./$(SP_OUTPUT_STRESS) $(SP_FLAGS_RUN)
+cpp: build/bin/cpp
+	./build/bin/cpp $(SP_FLAGS_RUN)
+
+app: build/bin/app
+	./build/bin/app $(SP_FLAGS_RUN)
+
+file_monitor: build/bin/file_monitor
+	./build/bin/file_monitor $(SP_FLAGS_RUN)
 
 ps: build/bin/ps
 	./build/bin/ps $(SP_FLAGS_RUN)
+
+stress: build/bin/stress
+	./build/bin/stress $(SP_FLAGS_RUN)
+
 
 debug: c
 	gdb --args ./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)

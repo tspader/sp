@@ -1,5 +1,6 @@
 //#define SP_IMPLEMENTATION
 #include "sp.h"
+#include <stdlib.h>
 
 #define SP_TEST_IMPLEMENTATION
 #include "test.h"
@@ -577,9 +578,35 @@ UTEST_F(sp_ps, env_existing) {
       { .key = sp_str_lit("billy"), .value = sp_str_lit("kreutzmann") },
     }
   });
-
 }
 
+UTEST_F(sp_ps, empty_env_var) {
+  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+    .config = {
+      .mode = SP_PROC_ENV_CLEAN,
+      .extra = {
+        { .key = sp_str_lit("jerry"), .value = sp_str_lit("") }
+      }
+    },
+    .expected = {
+      { .key = sp_str_lit("jerry"), .value = sp_str_lit("") },
+    }
+  });
+
+  setenv("jerry", "", true);
+  EXPECT_STREQ(getenv("jerry"), "");
+
+  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+    .config = {
+      .mode = SP_PROC_ENV_INHERIT,
+    },
+    .expected = {
+      { .key = sp_str_lit("jerry"), .value = sp_str_lit("") },
+    }
+  });
+
+  unsetenv("jerry");
+}
 
 //////////////////
 // SP_PROC_WAIT //
@@ -604,6 +631,9 @@ UTEST_F(sp_ps, wait) {
     SP_FMT_S32(end.second),
     SP_FMT_S32(end.millisecond)
   );
+
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
 UTEST_F(sp_ps, poll) {
@@ -611,12 +641,12 @@ UTEST_F(sp_ps, poll) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("600")
+      sp_str_lit("1000")
     },
   });
 
   sp_os_date_time_t begin = sp_os_get_date_time();
-  sp_proc_wait_result_t result = sp_proc_poll(&ps, 1000);
+  sp_proc_wait_result_t result = sp_proc_poll(&ps, 10);
   sp_os_date_time_t end = sp_os_get_date_time();
   SP_LOG(
     "{:fg brightcyan}; started at {:fg brightyellow}.{:fg brightyellow}, ended at {:fg brightyellow}.{:fg brightyellow}",
@@ -627,6 +657,12 @@ UTEST_F(sp_ps, poll) {
     SP_FMT_S32(end.millisecond)
   );
 
+  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
+  EXPECT_NE(result.exit_code, sp_test_ps_wait_exit_code);
+
+  result = sp_proc_wait(&ps);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
 UTEST_MAIN()

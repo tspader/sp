@@ -54,6 +54,21 @@ void sp_test_file_create_ex(sp_test_file_config_t config);
 sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t path);
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager);
 
+
+////////////////////
+// MEMORY TRACKER //
+////////////////////
+typedef struct sp_test_memory_tracker {
+  sp_bump_allocator_t* bump;
+  sp_allocator_t allocator;
+} sp_test_memory_tracker;
+
+void sp_test_use_bump_allocator(u32 capacity);
+void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity);
+void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker);
+u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker);
+void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker);
+
 #if defined(SP_TEST_IMPLEMENTATION)
 void sp_test_file_manager_init(sp_test_file_manager_t* manager) {
   manager->paths.bin = sp_os_get_executable_path();
@@ -95,5 +110,36 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t rel
 
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
   sp_os_remove_directory(manager->paths.test);
+}
+
+////////////////////
+// MEMORY TRACKER //
+////////////////////
+void sp_test_use_bump_allocator(u32 capacity) {
+  static sp_bump_allocator_t bump_allocator;
+
+  bump_allocator = SP_ZERO_STRUCT(sp_bump_allocator_t);
+
+  sp_allocator_t allocator = sp_bump_allocator_init(&bump_allocator, capacity);
+  sp_context_push_allocator(allocator);
+}
+
+void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) {
+  sp_test_use_bump_allocator(capacity);
+  tracker->bump = (sp_bump_allocator_t*)sp_context->allocator.user_data;
+  tracker->allocator = sp_context->allocator;
+}
+
+void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker) {
+  sp_bump_allocator_destroy(tracker->bump);
+  sp_context_pop();
+}
+
+u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
+  return tracker->bump->bytes_used;
+}
+
+void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker) {
+  sp_bump_allocator_clear(tracker->bump);
 }
 #endif

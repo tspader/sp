@@ -1,6 +1,7 @@
 #include "sp.h"
 
 sp_str_t sp_test_ps_canary = sp_str_lit("foo");
+s32 sp_test_ps_wait_exit_code = 69;
 
 #define TEST_PROC_STREAM(X) \
   X(TEST_PROC_STREAM_STDOUT, "stdout") \
