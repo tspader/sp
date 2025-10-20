@@ -69,6 +69,7 @@
   #endif
 
   #include <dirent.h>
+  #include <errno.h>
   #include <fcntl.h>
   #include <limits.h>
   #include <pthread.h>
@@ -79,6 +80,7 @@
   #include <sys/stat.h>
   #include <sys/time.h>
   #include <sys/types.h>
+  #include <sys/wait.h>
   #include <time.h>
 #endif
 
@@ -330,6 +332,7 @@ typedef enum {
   SP_ERR_IO_WRITE_FAILED,
   SP_ERR_IO_CLOSE_FAILED,
   SP_ERR_IO_READ_FAILED,
+  SP_ERR_LAZY,
 } sp_err_t;
 
 void sp_err_set(sp_err_t err);
@@ -1399,6 +1402,9 @@ SP_API bool                   sp_proc_kill(sp_proc_t* proc);
 SP_API void                   sp_proc_destroy(sp_proc_t* proc);
 
 #if defined(SP_POSIX)
+#define SP_POSIX_WAITPID_BLOCK 0
+#define SP_POSIX_WAITPID_NO_BLOCK WNOHANG
+
 typedef struct {
   struct {
     s32 read;
@@ -2053,8 +2059,10 @@ bool sp_parse_f32_ex(sp_str_t str, f32* out) {
 }
 
 bool sp_parse_f64_ex(sp_str_t str, f64* out) {
-  SP_BROKEN();
-  return false;
+  f32 hack = 0.0f;
+  bool result = sp_parse_f32_ex(str, &hack);
+  *out = hack;
+  return result;
 }
 
 bool sp_parse_ptr_ex(sp_str_t str, void** out) {
@@ -4918,6 +4926,70 @@ sp_io_stream_t* sp_proc_io_err(sp_proc_t* proc) {
 
   SP_UNREACHABLE_RETURN(SP_NULLPTR);
 }
+
+sp_proc_wait_result_t sp_proc_poll(sp_proc_t* ps, u32 timeout_ms) {
+  sp_proc_wait_result_t result = SP_ZERO_INITIALIZE();
+  s32 wait_status = 0;
+  s32 wait_result = 0;
+  s32 time_remaining = timeout_ms;
+  s32 poll_wait = SP_MIN(timeout_ms, 10);
+
+  do {
+    wait_result = waitpid(ps->pid, &wait_status, SP_POSIX_WAITPID_NO_BLOCK);
+    if (wait_result == EINTR) {
+      result.state = SP_PROC_STATE_RUNNING;
+    }
+    else if (wait_result > 0) {
+      ps->state = SP_PROC_STATE_DONE;
+
+      if (WIFEXITED(wait_status)) {
+        result.exit_code = WEXITSTATUS(wait_status);
+      }
+      else if (WIFSIGNALED(wait_status)) {
+        result.exit_code = -1 * WTERMSIG(wait_status);
+      }
+      else {
+        result.exit_code = -255;
+      }
+
+      break;
+    }
+    else if (wait_result < 0) {
+      sp_err_set(SP_ERR_LAZY);
+      break;
+    }
+
+    sp_os_sleep_ms(poll_wait);
+    time_remaining -= poll_wait;
+  } while (time_remaining > 0);
+
+
+  return result;
+}
+
+sp_proc_wait_result_t sp_proc_wait(sp_proc_t* ps) {
+  sp_proc_wait_result_t result = SP_ZERO_INITIALIZE();
+  s32 wait_status = 0;
+  s32 wait_result = 0;
+
+  wait_result = waitpid(ps->pid, &wait_status, SP_POSIX_WAITPID_BLOCK);
+  if (wait_result < 0) {
+    sp_err_set(SP_ERR_LAZY);
+  }
+
+  if (WIFEXITED(wait_status)) {
+    result.exit_code = WEXITSTATUS(wait_status);
+  }
+  else if (WIFSIGNALED(wait_status)) {
+    result.exit_code = -1 * WTERMSIG(wait_status);
+  }
+  else {
+    result.exit_code = -255;
+  }
+
+  return result;
+}
+
 
 #endif
 
