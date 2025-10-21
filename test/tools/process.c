@@ -108,6 +108,34 @@ s32 main(s32 num_args, const c8** args) {
       }
       break;
     }
+    case TEST_PROC_FUNCTION_SLOW_WRITE: {
+      const u32 chunk_size = 10;
+      const u32 total_size = 1024;
+      const u32 delay_ms = 20;
+      
+      u8 buffer[chunk_size];
+      for (u32 i = 0; i < chunk_size; i++) {
+        buffer[i] = (u8)('A' + (i % 26));
+      }
+      
+      u32 written = 0;
+      while (written < total_size) {
+        if (stdout_enabled) {
+          fwrite(buffer, 1, chunk_size, stdout);
+          fflush(stdout);
+        }
+        if (stderr_enabled) {
+          fwrite(buffer, 1, chunk_size, stderr);
+          fflush(stderr);
+        }
+        written += chunk_size;
+        
+        if (written < total_size) {
+          sp_os_sleep_ms(delay_ms);
+        }
+      }
+      break;
+    }
     case TEST_PROC_FUNCTION_WAIT: {
       sp_str_t arg = sp_str_view(args[0]);
       f64 ms = sp_parse_f64(arg);
