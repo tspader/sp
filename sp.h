@@ -845,6 +845,11 @@ typedef enum {
   SP_OS_PLATFORM_MACOS,
 } sp_os_platform_kind_t;
 
+typedef enum {
+  SP_OS_LIB_SHARED,
+  SP_OS_LIB_STATIC,
+} sp_os_lib_kind_t;
+
 typedef struct {
   s32 year;
   s32 month;
