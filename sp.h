@@ -11,6 +11,7 @@
 ////////////////////////
 // PLATFORM SELECTION //
 ////////////////////////
+#include <asm-generic/errno-base.h>
 #ifdef _WIN32
   #define SP_WIN32
 #endif
@@ -1283,13 +1284,48 @@ void           sp_io_close(sp_io_stream_t* stream);
 sp_str_t       sp_io_read_file(sp_str_t path);
 
 
-
+// ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
+// ██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔════╝██╔════╝██╔════╝
+// ██████╔╝██████╔╝██║   ██║██║     █████╗  ███████╗███████╗
+// ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
+// ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
+// ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
 #define SP_PROC_MAX_ARGS 8
 #define SP_PROC_MAX_ENV 16
-#define SP_PROC_PIPE_READ 0
-#define SP_PROC_PIPE_WRITE 1
 
+typedef enum {
+  SP_ENV_EXPORT_OVERWRITE_DUPES,
+  SP_ENV_EXPORT_SKIP_DUPES,
+} sp_env_export_overwrite_t;
 
+typedef enum {
+  SP_PROC_IO_INHERIT,
+  SP_PROC_IO_NULL,
+  SP_PROC_IO_CREATE,
+  SP_PROC_IO_EXISTING,
+} sp_proc_io_mode_t;
+
+typedef enum {
+  SP_PROC_IO_NONBLOCKING,
+  SP_PROC_IO_BLOCKING,
+} sp_proc_io_blocking_t;
+
+typedef enum {
+  SP_PROC_ENV_INHERIT,
+  SP_PROC_ENV_CLEAN,
+  SP_PROC_ENV_EXISTING,
+} sp_proc_env_mode_t;
+
+typedef enum {
+  SP_PROC_STATE_RUNNING,
+  SP_PROC_STATE_DONE
+} sp_proc_state_t;
+
+#define SP_PROC_NO_STDIO { \
+  .in = { .mode = SP_PROC_IO_NULL }, \
+  .out = { .mode = SP_PROC_IO_NULL }, \
+  .err = { .mode = SP_PROC_IO_NULL }, \
+}
 typedef struct {
   sp_str_t key;
   sp_str_t value;
@@ -1301,28 +1337,10 @@ typedef struct {
   sp_env_table_t vars;
 } sp_env_t;
 
-// PROCESS CONFIG
-typedef enum {
-  SP_PROC_IO_INHERIT,
-  SP_PROC_IO_NULL,
-  SP_PROC_IO_CREATE,
-  SP_PROC_IO_EXISTING,
-} sp_proc_io_mode_t;
-
-typedef enum {
-  SP_PROC_ENV_INHERIT,
-  SP_PROC_ENV_CLEAN,
-  SP_PROC_ENV_EXISTING,
-} sp_proc_env_mode_t;
-
-#define SP_PROC_NO_STDIO { \
-  .in = { .mode = SP_PROC_IO_NULL }, \
-  .out = { .mode = SP_PROC_IO_NULL }, \
-  .err = { .mode = SP_PROC_IO_NULL }, \
-}
 typedef struct {
   sp_proc_io_mode_t mode;
   sp_io_stream_t stream;
+  sp_proc_io_blocking_t block;
 } sp_proc_io_stream_config_t;
 
 typedef struct {
@@ -1347,40 +1365,6 @@ typedef struct {
   sp_proc_io_config_t io;
 } sp_proc_config_t;
 
-// PROCESS PLATFORM TYPES
-#if defined(SP_POSIX)
-typedef struct {
-  s32 read;
-  s32 write;
-} sp_proc_pipe_t;
-
-typedef struct {
-  c8** argv;
-  c8** envp;
-  sp_proc_env_mode_t env_mode;
-} sp_os_process_data_t;
-#elif defined(SP_WIN32)
-typedef struct {
-  void* placeholder;
-} sp_os_process_data_t;
-#endif
-
-// PROCESS RUNTIME
-typedef enum {
-  SP_PROC_STATE_INIT,
-  SP_PROC_STATE_RUNNING,
-  SP_PROC_STATE_DONE
-} sp_proc_state_t;
-
-typedef struct {
-  pid_t pid;
-  sp_proc_state_t state;
-  s32 exit_code;
-  sp_proc_io_t io;
-  sp_os_process_data_t os_data;
-  sp_allocator_t allocator;
-} sp_proc_t;
-
 typedef struct {
   sp_str_t data;
   u64 size;
@@ -1392,13 +1376,67 @@ typedef struct {
   s32 exit_code;
 } sp_proc_wait_result_t;
 
+//////////////
+// PLATFORM //
+//////////////
+// POSIX
+#if defined(SP_POSIX)
+#define SP_POSIX_WAITPID_BLOCK 0
+#define SP_POSIX_WAITPID_NO_BLOCK WNOHANG
+
+typedef struct {
+  posix_spawn_file_actions_t* fa;
+  s32 file;
+  s32 flag;
+  s32 mode;
+  struct {
+    s32 read;
+    s32 write;
+  } pipes;
+} sp_proc_posix_stdio_stream_config_t;
+
+typedef struct {
+  sp_proc_posix_stdio_stream_config_t in;
+  sp_proc_posix_stdio_stream_config_t out;
+  sp_proc_posix_stdio_stream_config_t err;
+} sp_proc_posix_stdio_config_t;
+
+typedef struct {
+  s32 read;
+  s32 write;
+} sp_proc_pipe_t;
+
+typedef struct {
+  c8** argv;
+  c8** envp;
+  sp_proc_env_mode_t env_mode;
+} sp_proc_platform_t;
+#endif
+
+// WIN32
+#if defined(SP_WIN32)
+typedef struct {
+  void* placeholder;
+} sp_proc_platform_t;
+#endif
+
+typedef struct {
+  pid_t pid;
+  sp_proc_io_t io;
+  sp_proc_platform_t platform;
+  sp_allocator_t allocator;
+} sp_proc_t;
+
 SP_API void                   sp_env_init(sp_env_t* env);
 SP_API sp_env_t               sp_env_capture();
 SP_API sp_env_t               sp_env_copy(sp_env_t* env);
 SP_API sp_str_t               sp_env_get(sp_env_t* env, sp_str_t name);
-SP_API void                   sp_env_set(sp_env_t* env, sp_str_t name, sp_str_t value);
-SP_API void                   sp_env_unset(sp_env_t* env, sp_str_t name);
+SP_API void                   sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
+SP_API void                   sp_env_erase(sp_env_t* env, sp_str_t name);
 SP_API void                   sp_env_destroy(sp_env_t* env);
+SP_API void                   sp_env_export_all(sp_env_t* env, sp_env_export_overwrite_t overwrite);
+SP_API void                   sp_env_export(sp_env_var_t var, sp_env_export_overwrite_t overwrite);
+SP_API void                   sp_env_clear(sp_str_t var);
 SP_API sp_proc_config_t       sp_proc_config_copy(const sp_proc_config_t* src);
 SP_API void                   sp_proc_config_add_arg(sp_proc_config_t* config, sp_str_t arg);
 SP_API sp_proc_t              sp_proc_create(sp_proc_config_t config);
@@ -1411,33 +1449,6 @@ SP_API bool                   sp_proc_kill(sp_proc_t* proc);
 SP_API void                   sp_proc_destroy(sp_proc_t* proc);
 
 #if defined(SP_POSIX)
-#define SP_POSIX_WAITPID_BLOCK 0
-#define SP_POSIX_WAITPID_NO_BLOCK WNOHANG
-
-typedef struct {
-  struct {
-    s32 read;
-    s32 write;
-  } fds;
-  struct {
-    bool read;
-    bool write;
-  } blocking;
-} sp_proc_pipes_config_t;
-
-typedef struct {
-  posix_spawn_file_actions_t* fa;
-  s32 file;
-  s32 flag;
-  s32 mode;
-  sp_proc_pipes_config_t pipes;
-} sp_proc_posix_stdio_stream_config_t;
-
-typedef struct {
-  sp_proc_posix_stdio_stream_config_t in;
-  sp_proc_posix_stdio_stream_config_t out;
-  sp_proc_posix_stdio_stream_config_t err;
-} sp_proc_posix_stdio_config_t;
 
 SP_IMP void sp_proc_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_IMP bool sp_proc_create_pipes(s32 pipes [2]);
@@ -1445,6 +1456,7 @@ SP_IMP c8** sp_proc_build_posix_args(sp_proc_config_t* config);
 SP_IMP void sp_proc_free_posix_args(c8** argv);
 SP_IMP c8** sp_proc_build_posix_env(sp_proc_env_config_t* env_config);
 SP_IMP void sp_proc_set_nonblocking(s32 fd);
+SP_IMP void sp_proc_set_blocking(s32 fd);
 #endif
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
@@ -4588,7 +4600,7 @@ sp_env_t sp_env_copy(sp_env_t* env) {
   sp_ht_for(env->vars, it) {
     sp_str_t key = *sp_ht_it_getkp(env->vars, it);
     sp_str_t val = *sp_ht_it_getp(env->vars, it);
-    sp_env_set(&copy, key, val);
+    sp_env_insert(&copy, key, val);
   }
 
   return copy;
@@ -4599,17 +4611,36 @@ sp_str_t sp_env_get(sp_env_t* env, sp_str_t name) {
   return val ? *val : SP_ZERO_STRUCT(sp_str_t);
 }
 
-void sp_env_set(sp_env_t* env, sp_str_t name, sp_str_t value) {
+void sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value) {
   sp_ht_insert(env->vars, name, value);
 }
 
-void sp_env_unset(sp_env_t* env, sp_str_t name) {
+void sp_env_erase(sp_env_t* env, sp_str_t name) {
   sp_ht_erase(env->vars, name);
 }
 
 void sp_env_destroy(sp_env_t* env) {
   sp_ht_free(env->vars);
   env->vars = SP_NULLPTR;
+}
+
+void sp_env_export_all(sp_env_t* env, sp_env_export_overwrite_t overwrite) {
+  sp_ht_for(env->vars, it) {
+    sp_env_export((sp_env_var_t) {
+      .key = *sp_ht_it_getkp(env->vars, it),
+      .value = *sp_ht_it_getp(env->vars, it)
+    }, overwrite);
+  }
+}
+
+void sp_env_export(sp_env_var_t var, sp_env_export_overwrite_t overwrite) {
+  const c8* key = sp_str_to_cstr(var.key);
+  const c8* value = sp_str_to_cstr(var.value);
+  setenv(key, value, overwrite);
+}
+
+void sp_env_clear(sp_str_t var) {
+
 }
 
 
@@ -4628,6 +4659,10 @@ bool sp_proc_create_pipes(s32 pipes [2]) {
 
 void sp_proc_set_nonblocking(s32 fd) {
   fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+}
+
+void sp_proc_set_blocking(s32 fd) {
+  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
 }
 
 c8** sp_proc_build_posix_args(sp_proc_config_t* config) {
@@ -4735,7 +4770,7 @@ sp_proc_config_t sp_proc_config_copy(const sp_proc_config_t* src) {
   for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
     sp_str_t key = *sp_ht_it_getkp(ht, it);
     sp_str_t val = *sp_ht_it_getp(ht, it);
-    sp_env_set(&dst.env.env, key, val);
+    sp_env_insert(&dst.env.env, key, val);
   }
 
   for (u32 i = 0; i < SP_PROC_MAX_ENV; i++) {
@@ -4776,13 +4811,10 @@ void sp_proc_configure_io_stream(sp_proc_io_stream_config_t* io, sp_proc_posix_s
     case SP_PROC_IO_CREATE: {
       s32 pipes [2] = { -1, -1 };
       SP_ASSERT(sp_proc_create_pipes(pipes));
-      p->pipes.fds.read = pipes[0];
-      p->pipes.fds.write = pipes[1];
+      p->pipes.read = pipes[0];
+      p->pipes.write = pipes[1];
 
-      if (!p->pipes.blocking.read) sp_proc_set_nonblocking(p->pipes.fds.read);
-      if (!p->pipes.blocking.write) sp_proc_set_nonblocking(p->pipes.fds.write);
-
-      s32 duped = p->file == STDIN_FILENO ? p->pipes.fds.read : p->pipes.fds.write;
+      s32 duped = p->file == STDIN_FILENO ? p->pipes.read : p->pipes.write;
       SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, duped, p->file) == 0);
       break;
     }
@@ -4802,7 +4834,6 @@ sp_proc_t sp_proc_create(sp_proc_config_t config) {
   sp_context_ensure();
 
   sp_proc_t proc = SP_ZERO_STRUCT(sp_proc_t);
-  proc.state = SP_PROC_STATE_INIT;
   proc.allocator = sp_context->allocator;
   proc.io = config.io;
 
@@ -4827,27 +4858,21 @@ sp_proc_t sp_proc_create(sp_proc_config_t config) {
       .file = STDIN_FILENO,
       .flag = O_RDONLY,
       .mode = 0x000,
-      .pipes = {
-        .fds = { .read = -1, .write = -1 }
-      }
+      .pipes = { .read = -1, .write = -1 }
     },
     .out = (sp_proc_posix_stdio_stream_config_t) {
       .fa = &fa,
       .file = STDOUT_FILENO,
       .flag = O_WRONLY,
       .mode = 0x644,
-      .pipes = {
-        .fds = { .read = -1, .write = -1 }
-      }
+      .pipes = { .read = -1, .write = -1 },
     },
     .err = (sp_proc_posix_stdio_stream_config_t) {
       .fa = &fa,
       .file = STDERR_FILENO,
       .flag = O_WRONLY,
       .mode = 0x644,
-      .pipes = {
-        .fds = { .read = -1, .write = -1 }
-      }
+      .pipes = { .read = -1, .write = -1 },
     },
   };
 
@@ -4862,31 +4887,45 @@ sp_proc_t sp_proc_create(sp_proc_config_t config) {
     posix_spawnattr_destroy(&attr);
     sp_proc_free_posix_args(argv);
     sp_proc_free_envp(envp, config.env.mode);
-    if (io.in.pipes.fds.read >= 0) { close(io.in.pipes.fds.read); close(io.in.pipes.fds.write); }
-    if (io.out.pipes.fds.read >= 0) { close(io.out.pipes.fds.read); close(io.out.pipes.fds.write); }
-    if (io.err.pipes.fds.read >= 0) { close(io.err.pipes.fds.read); close(io.err.pipes.fds.write); }
+    if (io.in.pipes.read >= 0) { close(io.in.pipes.read); close(io.in.pipes.write); }
+    if (io.out.pipes.read >= 0) { close(io.out.pipes.read); close(io.out.pipes.write); }
+    if (io.err.pipes.read >= 0) { close(io.err.pipes.read); close(io.err.pipes.write); }
 
-    // @spader return a zero'd out struct? does that work?
-    return proc;
+    return SP_ZERO_STRUCT(sp_proc_t);
   }
 
   proc.pid = pid;
-  proc.state = SP_PROC_STATE_RUNNING;
-  proc.exit_code = 0;
 
-  if (io.in.pipes.fds.read >= 0) {
-    close(io.in.pipes.fds.read);  // Close read end - parent writes
-    proc.io.in.stream = sp_io_from_file_handle(io.in.pipes.fds.write, SP_IO_FILE_CLOSE_MODE_AUTO);
+  // For the 3 IO streams, we have two pipes; one for reading, one for writing. The parent only needs one end of each
+  // (e.g. it doesn't make sense to read from the child's stdin), so close the unused end
+  if (io.in.pipes.read >= 0) {
+    close(io.in.pipes.read);
+
+    switch (config.io.in.block) {
+      case SP_PROC_IO_NONBLOCKING: sp_proc_set_nonblocking(io.in.pipes.write);
+      case SP_PROC_IO_BLOCKING: sp_proc_set_blocking(io.in.pipes.write);
+    }
+    proc.io.in.stream = sp_io_from_file_handle(io.in.pipes.write, SP_IO_FILE_CLOSE_MODE_AUTO);
   }
 
-  if (io.out.pipes.fds.read >= 0) {
-    close(io.out.pipes.fds.write); // Close write end - parent reads
-    proc.io.out.stream = sp_io_from_file_handle(io.out.pipes.fds.read, SP_IO_FILE_CLOSE_MODE_AUTO);
+  if (io.out.pipes.read >= 0) {
+    close(io.out.pipes.write);
+
+    switch (config.io.in.block) {
+      case SP_PROC_IO_NONBLOCKING: sp_proc_set_nonblocking(io.in.pipes.write);
+      case SP_PROC_IO_BLOCKING: sp_proc_set_blocking(io.in.pipes.write);
+    }
+    proc.io.out.stream = sp_io_from_file_handle(io.out.pipes.read, SP_IO_FILE_CLOSE_MODE_AUTO);
   }
 
-  if (io.err.pipes.fds.read >= 0) {
-    close(io.err.pipes.fds.write); // Close write end - parent reads
-    proc.io.err.stream = sp_io_from_file_handle(io.err.pipes.fds.read, SP_IO_FILE_CLOSE_MODE_AUTO);
+  if (io.err.pipes.read >= 0) {
+    close(io.err.pipes.write);
+
+    switch (config.io.in.block) {
+      case SP_PROC_IO_NONBLOCKING: sp_proc_set_nonblocking(io.in.pipes.write);
+      case SP_PROC_IO_BLOCKING: sp_proc_set_blocking(io.in.pipes.write);
+    }
+    proc.io.err.stream = sp_io_from_file_handle(io.err.pipes.read, SP_IO_FILE_CLOSE_MODE_AUTO);
   }
 
   posix_spawn_file_actions_destroy(&fa);
@@ -4952,18 +4991,18 @@ sp_io_stream_t* sp_proc_io_err(sp_proc_t* proc) {
 
 sp_proc_wait_result_t sp_proc_poll(sp_proc_t* ps, u32 timeout_ms) {
   sp_proc_wait_result_t result = SP_ZERO_INITIALIZE();
+
   s32 wait_status = 0;
   s32 wait_result = 0;
   s32 time_remaining = timeout_ms;
-  s32 poll_wait = SP_MIN(timeout_ms, 10);
 
   do {
     wait_result = waitpid(ps->pid, &wait_status, SP_POSIX_WAITPID_NO_BLOCK);
-    if (wait_result == EINTR) {
+    if (wait_result == 0) {
       result.state = SP_PROC_STATE_RUNNING;
     }
     else if (wait_result > 0) {
-      ps->state = SP_PROC_STATE_DONE;
+      result.state = SP_PROC_STATE_DONE;
 
       if (WIFEXITED(wait_status)) {
         result.exit_code = WEXITSTATUS(wait_status);
@@ -4975,30 +5014,45 @@ sp_proc_wait_result_t sp_proc_poll(sp_proc_t* ps, u32 timeout_ms) {
         result.exit_code = -255;
       }
 
-      break;
+      return result;
+    }
+    else if (wait_result < 0 && errno == EINTR) {
+      continue;
     }
     else if (wait_result < 0) {
       sp_err_set(SP_ERR_LAZY);
-      break;
+      result.state = SP_PROC_STATE_DONE;
+      return result;
     }
 
-    sp_os_sleep_ms(poll_wait);
-    time_remaining -= poll_wait;
+    s32 poll_wait = SP_MIN(time_remaining, 10);
+    if (poll_wait > 0) {
+      sp_os_sleep_ms(poll_wait);
+      time_remaining -= poll_wait;
+    }
   } while (time_remaining > 0);
-
 
   return result;
 }
 
 sp_proc_wait_result_t sp_proc_wait(sp_proc_t* ps) {
   sp_proc_wait_result_t result = SP_ZERO_INITIALIZE();
+
   s32 wait_status = 0;
   s32 wait_result = 0;
 
-  wait_result = waitpid(ps->pid, &wait_status, SP_POSIX_WAITPID_BLOCK);
+  do {
+    wait_result = waitpid(ps->pid, &wait_status, SP_POSIX_WAITPID_BLOCK);
+  } while (wait_result == -1 && errno == EINTR);
+
   if (wait_result < 0) {
     sp_err_set(SP_ERR_LAZY);
+    result.state = SP_PROC_STATE_DONE;
+    result.exit_code = -1;
+    return result;
   }
+
+  result.state = SP_PROC_STATE_DONE;
 
   if (WIFEXITED(wait_status)) {
     result.exit_code = WEXITSTATUS(wait_status);

@@ -29,11 +29,6 @@ typedef enum {
   SP_TEST_PS_OUTPUT_MISMATCH,
 } sp_test_ps_output_result_t;
 
-typedef struct {
-  u32 len;
-  u8* data;
-} sp_byte_buffer_t;
-
 typedef enum {
   SP_TEST_PROC_READ_EXACT,
   SP_TEST_PROC_READ_UNTIL_DONE,
@@ -549,9 +544,9 @@ UTEST_F(sp_ps, env_inherit) {
 
 UTEST_F(sp_ps, env_existing) {
   sp_env_t env = SP_ZERO_INITIALIZE();
-  sp_env_set(&env, sp_str_lit("jerry"), sp_str_lit("garcia"));
-  sp_env_set(&env, sp_str_lit("phil"), sp_str_lit("lesh"));
-  sp_env_set(&env, sp_str_lit("bobby"), sp_str_lit("weir"));
+  sp_env_insert(&env, sp_str_lit("jerry"), sp_str_lit("garcia"));
+  sp_env_insert(&env, sp_str_lit("phil"), sp_str_lit("lesh"));
+  sp_env_insert(&env, sp_str_lit("bobby"), sp_str_lit("weir"));
 
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
@@ -611,58 +606,203 @@ UTEST_F(sp_ps, empty_env_var) {
 //////////////////
 // SP_PROC_WAIT //
 //////////////////
-UTEST_F(sp_ps, wait) {
+UTEST_F(sp_ps, wait_after_process_complete) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("exit_code"),
+      sp_str_lit("--exit-code"), sp_str_lit("42")
+    },
+  });
+
+  sp_os_sleep_ms(100);
+
+  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 42);
+}
+
+UTEST_F(sp_ps, wait_while_process_running) {
   sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("600")
+      sp_str_lit("100")
     },
   });
 
-  sp_os_date_time_t begin = sp_os_get_date_time();
   sp_proc_wait_result_t result = sp_proc_wait(&ps);
-  sp_os_date_time_t end = sp_os_get_date_time();
-  SP_LOG(
-    "{:fg brightcyan}; started at {:fg brightyellow}.{:fg brightyellow}, ended at {:fg brightyellow}.{:fg brightyellow}",
-    SP_FMT_S32(result.exit_code),
-    SP_FMT_S32(begin.second),
-    SP_FMT_S32(begin.millisecond),
-    SP_FMT_S32(end.second),
-    SP_FMT_S32(end.millisecond)
-  );
-
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
-UTEST_F(sp_ps, poll) {
+UTEST_F(sp_ps, poll_while_process_running) {
   sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("1000")
+      sp_str_lit("100")
     },
   });
 
-  sp_os_date_time_t begin = sp_os_get_date_time();
-  sp_proc_wait_result_t result = sp_proc_poll(&ps, 10);
-  sp_os_date_time_t end = sp_os_get_date_time();
-  SP_LOG(
-    "{:fg brightcyan}; started at {:fg brightyellow}.{:fg brightyellow}, ended at {:fg brightyellow}.{:fg brightyellow}",
-    SP_FMT_S32(result.exit_code),
-    SP_FMT_S32(begin.second),
-    SP_FMT_S32(begin.millisecond),
-    SP_FMT_S32(end.second),
-    SP_FMT_S32(end.millisecond)
-  );
-
+  sp_proc_wait_result_t result = sp_proc_poll(&ps, 0);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
-  EXPECT_NE(result.exit_code, sp_test_ps_wait_exit_code);
+
+  result = sp_proc_wait(&ps);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+}
+
+UTEST_F(sp_ps, process_complete_during_poll) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("wait"),
+      sp_str_lit("100")
+    },
+  });
+
+  sp_proc_wait_result_t result = sp_proc_poll(&ps, 200);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
+}
+
+UTEST_F(sp_ps, poll_after_process_complete) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("exit_code"),
+      sp_str_lit("--exit-code"), sp_str_lit("72")
+    },
+  });
+
+  sp_os_sleep_ms(100);
+
+  sp_proc_wait_result_t result = sp_proc_poll(&ps, 0);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 72);
+}
+
+UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("exit_code"),
+      sp_str_lit("--exit-code"), sp_str_lit("72")
+    },
+  });
+
+  sp_os_sleep_ms(100);
+
+  sp_proc_wait_result_t result = sp_proc_poll(&ps, 100);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 72);
+}
+
+UTEST_F(sp_ps, wait_twice_while_process_running) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("exit_code"),
+      sp_str_lit("--exit-code"), sp_str_lit("72")
+    },
+  });
+
+  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 72);
+
+  result = sp_proc_wait(&ps);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, -1);
+}
+
+UTEST_F(sp_ps, poll_then_wait) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("wait"),
+      sp_str_lit("100")
+    },
+  });
+
+  sp_proc_wait_result_t result = sp_proc_poll(&ps, 0);
+  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
   result = sp_proc_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
+}
+
+UTEST_F(sp_ps, poll_multiple) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("wait"),
+      sp_str_lit("300")
+    },
+  });
+
+  sp_proc_wait_result_t result = SP_ZERO_INITIALIZE();
+
+  result = sp_proc_poll(&ps, 50);
+  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
+
+  result = sp_proc_poll(&ps, 50);
+  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
+
+  result = sp_proc_poll(&ps, 50);
+  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
+
+  result = sp_proc_poll(&ps, 500);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
+}
+
+UTEST_F(sp_ps, wait_with_output) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("print"),
+      sp_str_lit("--stdout")
+    },
+    .io = {
+      .in = { .mode = SP_PROC_IO_NULL },
+      .out = { .mode = SP_PROC_IO_CREATE },
+      .err = { .mode = SP_PROC_IO_NULL },
+    }
+  });
+
+  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 0);
+
+  u64 bytes_read = sp_io_read(sp_proc_io_out(&ps), ut.buffer.data, ut.buffer.len);
+  EXPECT_EQ(bytes_read, sp_test_ps_canary.len);
+  EXPECT_TRUE(sp_os_is_memory_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
+}
+
+UTEST_F(sp_ps, poll_with_io) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("wait"),
+      sp_str_lit("100")
+    },
+    .io = {
+      .in = { .mode = SP_PROC_IO_CREATE },
+      .out = { .mode = SP_PROC_IO_CREATE },
+      .err = { .mode = SP_PROC_IO_NULL },
+    }
+  });
+
+  sp_proc_wait_result_t r1 = sp_proc_poll(&ps, 10);
+  EXPECT_EQ(r1.state, SP_PROC_STATE_RUNNING);
+
+  sp_io_stream_t* in = sp_proc_io_in(&ps);
+  EXPECT_NE(in, SP_NULLPTR);
+
+  sp_proc_wait_result_t r2 = sp_proc_wait(&ps);
+  EXPECT_EQ(r2.state, SP_PROC_STATE_DONE);
 }
 
 UTEST_MAIN()
