@@ -617,7 +617,7 @@ UTEST_F(sp_ps, wait_after_process_complete) {
 
   sp_os_sleep_ms(100);
 
-  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  sp_proc_status_t result = sp_proc_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 42);
 }
@@ -631,7 +631,7 @@ UTEST_F(sp_ps, wait_while_process_running) {
     },
   });
 
-  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  sp_proc_status_t result = sp_proc_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
@@ -645,7 +645,7 @@ UTEST_F(sp_ps, poll_while_process_running) {
     },
   });
 
-  sp_proc_wait_result_t result = sp_proc_poll(&ps, 0);
+  sp_proc_status_t result = sp_proc_poll(&ps, 0);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
   result = sp_proc_wait(&ps);
@@ -661,7 +661,7 @@ UTEST_F(sp_ps, process_complete_during_poll) {
     },
   });
 
-  sp_proc_wait_result_t result = sp_proc_poll(&ps, 200);
+  sp_proc_status_t result = sp_proc_poll(&ps, 200);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
@@ -677,7 +677,7 @@ UTEST_F(sp_ps, poll_after_process_complete) {
 
   sp_os_sleep_ms(100);
 
-  sp_proc_wait_result_t result = sp_proc_poll(&ps, 0);
+  sp_proc_status_t result = sp_proc_poll(&ps, 0);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 }
@@ -693,7 +693,7 @@ UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
 
   sp_os_sleep_ms(100);
 
-  sp_proc_wait_result_t result = sp_proc_poll(&ps, 100);
+  sp_proc_status_t result = sp_proc_poll(&ps, 100);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 }
@@ -707,7 +707,7 @@ UTEST_F(sp_ps, wait_twice_while_process_running) {
     },
   });
 
-  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  sp_proc_status_t result = sp_proc_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 
@@ -725,7 +725,7 @@ UTEST_F(sp_ps, poll_then_wait) {
     },
   });
 
-  sp_proc_wait_result_t result = sp_proc_poll(&ps, 0);
+  sp_proc_status_t result = sp_proc_poll(&ps, 0);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
   result = sp_proc_wait(&ps);
@@ -742,7 +742,7 @@ UTEST_F(sp_ps, poll_multiple) {
     },
   });
 
-  sp_proc_wait_result_t result = SP_ZERO_INITIALIZE();
+  sp_proc_status_t result = SP_ZERO_INITIALIZE();
 
   result = sp_proc_poll(&ps, 50);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
@@ -772,7 +772,7 @@ UTEST_F(sp_ps, wait_with_output) {
     }
   });
 
-  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  sp_proc_status_t result = sp_proc_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 
@@ -795,13 +795,13 @@ UTEST_F(sp_ps, poll_with_io) {
     }
   });
 
-  sp_proc_wait_result_t r1 = sp_proc_poll(&ps, 10);
+  sp_proc_status_t r1 = sp_proc_poll(&ps, 10);
   EXPECT_EQ(r1.state, SP_PROC_STATE_RUNNING);
 
   sp_io_stream_t* in = sp_proc_io_in(&ps);
   EXPECT_NE(in, SP_NULLPTR);
 
-  sp_proc_wait_result_t r2 = sp_proc_wait(&ps);
+  sp_proc_status_t r2 = sp_proc_wait(&ps);
   EXPECT_EQ(r2.state, SP_PROC_STATE_DONE);
 }
 
@@ -840,7 +840,51 @@ UTEST_F(sp_ps, interleaved_read_write) {
 
   sp_io_close(in);
 
-  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  sp_proc_status_t result = sp_proc_wait(&ps);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 0);
+}
+
+UTEST_F(sp_ps, incremental_nonblocking_read) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("slow_write"),
+      sp_str_lit("--stdout")
+    },
+    .io = {
+      .in = { .mode = SP_PROC_IO_NULL },
+      .out = { .mode = SP_PROC_IO_CREATE },
+      .err = { .mode = SP_PROC_IO_NULL },
+    }
+  });
+
+  sp_io_stream_t* out = sp_proc_io_out(&ps);
+  EXPECT_NE(out, SP_NULLPTR);
+
+  const u32 expected_size = 1024;
+  u8 accumulated[expected_size];
+  u32 total_read = 0;
+
+  while (total_read < expected_size) {
+    u64 n = sp_io_read(out, accumulated + total_read, expected_size - total_read);
+    if (n > 0) {
+      total_read += n;
+    } else {
+      sp_proc_status_t result = sp_proc_poll(&ps, 10);
+      if (result.state == SP_PROC_STATE_DONE) break;
+    }
+  }
+
+  EXPECT_EQ(total_read, expected_size);
+
+  for (u32 i = 0; i < total_read; i++) {
+    u32 chunk_pos = i % 10;
+    u8 expected_byte = (u8)('A' + (chunk_pos % 26));
+    EXPECT_EQ(accumulated[i], expected_byte);
+  }
+
+  sp_proc_status_t result = sp_proc_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 }

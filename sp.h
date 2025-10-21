@@ -1374,7 +1374,7 @@ typedef struct {
 typedef struct {
   sp_proc_state_t state;
   s32 exit_code;
-} sp_proc_wait_result_t;
+} sp_proc_status_t;
 
 //////////////
 // PLATFORM //
@@ -1443,8 +1443,8 @@ SP_API sp_proc_t              sp_proc_create(sp_proc_config_t config);
 SP_API sp_io_stream_t*        sp_proc_io_in(sp_proc_t* proc);
 SP_API sp_io_stream_t*        sp_proc_io_out(sp_proc_t* proc);
 SP_API sp_io_stream_t*        sp_proc_io_err(sp_proc_t* proc);
-SP_API sp_proc_wait_result_t  sp_proc_wait(sp_proc_t* proc);
-SP_API sp_proc_wait_result_t  sp_proc_poll(sp_proc_t* proc, u32 timeout_ms);
+SP_API sp_proc_status_t  sp_proc_wait(sp_proc_t* proc);
+SP_API sp_proc_status_t  sp_proc_poll(sp_proc_t* proc, u32 timeout_ms);
 SP_API bool                   sp_proc_kill(sp_proc_t* proc);
 SP_API void                   sp_proc_destroy(sp_proc_t* proc);
 
@@ -4989,8 +4989,8 @@ sp_io_stream_t* sp_proc_io_err(sp_proc_t* proc) {
   SP_UNREACHABLE_RETURN(SP_NULLPTR);
 }
 
-sp_proc_wait_result_t sp_proc_poll(sp_proc_t* ps, u32 timeout_ms) {
-  sp_proc_wait_result_t result = SP_ZERO_INITIALIZE();
+sp_proc_status_t sp_proc_poll(sp_proc_t* ps, u32 timeout_ms) {
+  sp_proc_status_t result = SP_ZERO_INITIALIZE();
 
   s32 wait_status = 0;
   s32 wait_result = 0;
@@ -5035,8 +5035,8 @@ sp_proc_wait_result_t sp_proc_poll(sp_proc_t* ps, u32 timeout_ms) {
   return result;
 }
 
-sp_proc_wait_result_t sp_proc_wait(sp_proc_t* ps) {
-  sp_proc_wait_result_t result = SP_ZERO_INITIALIZE();
+sp_proc_status_t sp_proc_wait(sp_proc_t* ps) {
+  sp_proc_status_t result = SP_ZERO_INITIALIZE();
 
   s32 wait_status = 0;
   s32 wait_result = 0;
