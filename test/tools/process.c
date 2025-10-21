@@ -97,9 +97,9 @@ s32 main(s32 num_args, const c8** args) {
     case TEST_PROC_FUNCTION_WAIT: {
       sp_str_t arg = sp_str_view(args[0]);
       f64 ms = sp_parse_f64(arg);
-      SP_LOG("{:fg brightyellow} is sleeping for {:fg cyan}ms", SP_FMT_STR(sp_os_get_executable_path()), SP_FMT_F64(ms));
+      SP_LOG("process.c ({:fg brightyellow}) is sleeping for {:fg cyan}ms", SP_FMT_S32(getpid()), SP_FMT_F64(ms));
       sp_os_sleep_ms(ms);
-      SP_LOG("{:fg brightyellow} is done", SP_FMT_STR(sp_os_get_executable_path()));
+      SP_LOG("process.c ({:fg brightyellow}) is done", SP_FMT_S32(getpid()));
       return sp_test_ps_wait_exit_code;
     }
     case TEST_PROC_FUNCTION_EXIT_CODE: {

@@ -5454,19 +5454,19 @@ UTEST(sp_env, all_operations) {
   sp_str_t path = sp_env_get(&env, SP_LIT("PATH"));
   ASSERT_GT(path.len, 0);
 
-  sp_env_set(&env, SP_LIT("SP_TEST_VAR"), SP_LIT("test_value"));
+  sp_env_insert(&env, SP_LIT("SP_TEST_VAR"), SP_LIT("test_value"));
   sp_str_t result = sp_env_get(&env, SP_LIT("SP_TEST_VAR"));
   SP_EXPECT_STR_EQ_CSTR(result, "test_value");
 
-  sp_env_set(&env, SP_LIT("SP_TEST_VAR"), SP_LIT("updated_value"));
+  sp_env_insert(&env, SP_LIT("SP_TEST_VAR"), SP_LIT("updated_value"));
   result = sp_env_get(&env, SP_LIT("SP_TEST_VAR"));
   SP_EXPECT_STR_EQ_CSTR(result, "updated_value");
 
-  sp_env_unset(&env, SP_LIT("SP_TEST_VAR"));
+  sp_env_erase(&env, SP_LIT("SP_TEST_VAR"));
   result = sp_env_get(&env, SP_LIT("SP_TEST_VAR"));
   ASSERT_EQ(result.len, 0);
 
-  sp_env_set(&env, SP_LIT("SP_EMPTY"), SP_LIT(""));
+  sp_env_insert(&env, SP_LIT("SP_EMPTY"), SP_LIT(""));
   result = sp_env_get(&env, SP_LIT("SP_EMPTY"));
   ASSERT_EQ(result.len, 0);
 
@@ -5474,8 +5474,8 @@ UTEST(sp_env, all_operations) {
   ASSERT_EQ(nonexistent.len, 0);
 
   sp_env_t copy = sp_env_copy(&env);
-  sp_env_set(&env, SP_LIT("SP_ORIGINAL"), SP_LIT("original"));
-  sp_env_set(&copy, SP_LIT("SP_COPY"), SP_LIT("copy"));
+  sp_env_insert(&env, SP_LIT("SP_ORIGINAL"), SP_LIT("original"));
+  sp_env_insert(&copy, SP_LIT("SP_COPY"), SP_LIT("copy"));
 
   sp_str_t orig_val = sp_env_get(&env, SP_LIT("SP_ORIGINAL"));
   SP_EXPECT_STR_EQ_CSTR(orig_val, "original");

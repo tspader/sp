@@ -32,6 +32,15 @@
 #define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), SP_CSTR(b), false)
 #define SP_EXPECT_STR_EQ(a, b) SP_TEST_STREQ((a), (b), false)
 
+
+typedef struct {
+  u32 len;
+  u8* data;
+} sp_byte_buffer_t;
+
+void sp_byte_buffer_zero(sp_byte_buffer_t* buffer);
+
+
 typedef struct {
   sp_str_t root;
   sp_str_t   build;
@@ -141,5 +150,13 @@ u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
 
 void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker) {
   sp_bump_allocator_clear(tracker->bump);
+}
+
+/////////////////
+// BYTE BUFFER //
+/////////////////
+
+void sp_byte_buffer_zero(sp_byte_buffer_t* buffer) {
+  sp_os_zero_memory(buffer->data, buffer->len);
 }
 #endif
