@@ -322,23 +322,23 @@ UTEST(sp_str_builder, basic_operations) {
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   ASSERT_EQ(builder.buffer.data, SP_NULLPTR);
-  ASSERT_EQ(builder.buffer.count, 0);
+  ASSERT_EQ(builder.buffer.len, 0);
   ASSERT_EQ(builder.buffer.capacity, 0);
 
   sp_str_builder_grow(&builder, 10);
   ASSERT_GE(builder.buffer.capacity, 10);
   ASSERT_NE(builder.buffer.data, SP_NULLPTR);
-  ASSERT_EQ(builder.buffer.count, 0);
+  ASSERT_EQ(builder.buffer.len, 0);
 
   sp_str_t test_str = SP_LIT("Hello");
   sp_str_builder_append(&builder, test_str);
-  ASSERT_EQ(builder.buffer.count, 5);
+  ASSERT_EQ(builder.buffer.len, 5);
 
   sp_str_builder_append_cstr(&builder, " World");
-  ASSERT_EQ(builder.buffer.count, 11);
+  ASSERT_EQ(builder.buffer.len, 11);
 
   sp_str_builder_append_c8(&builder, '!');
-  ASSERT_EQ(builder.buffer.count, 12);
+  ASSERT_EQ(builder.buffer.len, 12);
 
   sp_str_t result = sp_str_builder_write(&builder);
   ASSERT_EQ(result.len, 12);
@@ -369,7 +369,7 @@ UTEST(sp_str_builder, growth_behavior) {
   sp_str_t long_str = SP_LIT("This is a much longer string that will trigger growth");
   sp_str_builder_append(&builder2, long_str);
   ASSERT_GE(builder2.buffer.capacity, long_str.len);
-  ASSERT_EQ(builder2.buffer.count, long_str.len);
+  ASSERT_EQ(builder2.buffer.len, long_str.len);
 }
 
 UTEST(sp_str_builder, edge_cases) {
@@ -377,20 +377,20 @@ UTEST(sp_str_builder, edge_cases) {
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&builder, SP_LIT(""));
-  ASSERT_EQ(builder.buffer.count, 0);
+  ASSERT_EQ(builder.buffer.len, 0);
 
   sp_str_builder_append_cstr(&builder, "");
-  ASSERT_EQ(builder.buffer.count, 0);
+  ASSERT_EQ(builder.buffer.len, 0);
 
   sp_str_t null_str = {.len = 0, .data = SP_NULLPTR};
   sp_str_builder_append(&builder, null_str);
-  ASSERT_EQ(builder.buffer.count, 0);
+  ASSERT_EQ(builder.buffer.len, 0);
 
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   for (s32 i = 0; i < 100; i++) {
     sp_str_builder_append_cstr(&builder2, "test ");
   }
-  ASSERT_EQ(builder2.buffer.count, 500);
+  ASSERT_EQ(builder2.buffer.len, 500);
   sp_str_t result = sp_str_builder_write(&builder2);
   ASSERT_EQ(result.len, 500);
 }

@@ -810,12 +810,13 @@ SP_API sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer);
 typedef struct {
   u32 len;
   const c8* data;
+  u32 capacity;
 } sp_str_t;
 
 typedef struct {
   struct {
    c8* data;
-   u32 count;
+   u32 len;
    u32 capacity;
   } buffer;
 
@@ -877,6 +878,7 @@ SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
 SP_API void     sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...);
 SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...);
 SP_API void     sp_str_builder_new_line(sp_str_builder_t* builder);
+SP_API sp_str_t sp_str_builder_move(sp_str_builder_t* builder);
 SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
 SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
 
@@ -1376,6 +1378,12 @@ typedef struct {
   s32 exit_code;
 } sp_proc_status_t;
 
+typedef struct {
+  sp_str_t out;
+  sp_str_t err;
+  sp_proc_status_t status;
+} sp_proc_output_t;
+
 //////////////
 // PLATFORM //
 //////////////
@@ -1440,11 +1448,13 @@ SP_API void                   sp_env_clear(sp_str_t var);
 SP_API sp_proc_config_t       sp_proc_config_copy(const sp_proc_config_t* src);
 SP_API void                   sp_proc_config_add_arg(sp_proc_config_t* config, sp_str_t arg);
 SP_API sp_proc_t              sp_proc_create(sp_proc_config_t config);
+SP_API sp_proc_output_t       sp_proc_run(sp_proc_config_t config);
 SP_API sp_io_stream_t*        sp_proc_io_in(sp_proc_t* proc);
 SP_API sp_io_stream_t*        sp_proc_io_out(sp_proc_t* proc);
 SP_API sp_io_stream_t*        sp_proc_io_err(sp_proc_t* proc);
-SP_API sp_proc_status_t  sp_proc_wait(sp_proc_t* proc);
-SP_API sp_proc_status_t  sp_proc_poll(sp_proc_t* proc, u32 timeout_ms);
+SP_API sp_proc_status_t       sp_proc_wait(sp_proc_t* proc);
+SP_API sp_proc_status_t       sp_proc_poll(sp_proc_t* proc, u32 timeout_ms);
+SP_API sp_proc_output_t       sp_proc_output(sp_proc_t* proc);
 SP_API bool                   sp_proc_kill(sp_proc_t* proc);
 SP_API void                   sp_proc_destroy(sp_proc_t* proc);
 
@@ -2278,7 +2288,7 @@ void sp_fmt_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) 
     SP_ASSERT(builder);
 
     if (num == 0) {
-        sp_str_builder_grow(builder, builder->buffer.count + 1);
+        sp_str_builder_grow(builder, builder->buffer.len + 1);
         sp_str_builder_append_c8(builder, '0');
         return;
     }
@@ -2292,7 +2302,7 @@ void sp_fmt_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) 
     }
 
     SP_ASSERT((u32)digit_count <= max_digits);
-    sp_str_builder_grow(builder, builder->buffer.count + digit_count);
+    sp_str_builder_grow(builder, builder->buffer.len + digit_count);
 
     for (s32 i = digit_count - 1; i >= 0; i--) {
         sp_str_builder_append_c8(builder, digits[i]);
@@ -2308,7 +2318,7 @@ void sp_fmt_format_signed(sp_str_builder_t* builder, s64 num, u32 max_digits) {
     if (negative) {
         // Handle INT_MIN properly by casting to unsigned first
         abs_value = (u64)(-(num + 1)) + 1;
-        sp_str_builder_grow(builder, builder->buffer.count + 1);
+        sp_str_builder_grow(builder, builder->buffer.len + 1);
         sp_str_builder_append_c8(builder, '-');
     } else {
         abs_value = (u64)num;
@@ -2326,7 +2336,7 @@ void sp_fmt_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, cons
 
     if (value == 0) {
         u32 zero_count = min_width > 0 ? min_width : 1;
-        sp_str_builder_grow(builder, builder->buffer.count + zero_count);
+        sp_str_builder_grow(builder, builder->buffer.len + zero_count);
         for (u32 i = 0; i < zero_count; i++) {
             sp_str_builder_append_c8(builder, '0');
         }
@@ -2347,7 +2357,7 @@ void sp_fmt_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, cons
         hex_digits[digit_count++] = '0';
     }
 
-    sp_str_builder_grow(builder, builder->buffer.count + digit_count);
+    sp_str_builder_grow(builder, builder->buffer.len + digit_count);
 
     for (s32 i = digit_count - 1; i >= 0; i--) {
         sp_str_builder_append_c8(builder, hex_digits[i]);
@@ -2559,7 +2569,7 @@ void sp_fmt_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) 
   sp_str_builder_append_cstr(builder, ", ");
 
   // Format count
-  sp_fmt_format_unsigned(builder, sb.buffer.count, 10);
+  sp_fmt_format_unsigned(builder, sb.buffer.len, 10);
 
   sp_str_builder_append_cstr(builder, "), capacity: ");
 
@@ -2789,7 +2799,7 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
         sp_format_parser_eat_and_assert(&parser, '}');
 
         sp_format_arg_t arg = va_arg(args, sp_format_arg_t);
-        u32 formatted_value_start = builder.buffer.count;
+        u32 formatted_value_start = builder.buffer.len;
         SP_CARR_FOR(formatters, i) {
           if (arg.id == formatters[i].id) {
             sp_format_fn_t fn = formatters[i].fn;
@@ -2797,7 +2807,7 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
             break;
           }
         }
-        sp_str_t formatted_value = sp_str(builder.buffer.data + formatted_value_start, builder.buffer.count - formatted_value_start);
+        sp_str_t formatted_value = sp_str(builder.buffer.data + formatted_value_start, builder.buffer.len - formatted_value_start);
 
         if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_PAD) {
           if (formatted_value.len < specifier.pad) {
@@ -3268,7 +3278,7 @@ void sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity) {
 }
 
 void sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount) {
-  sp_str_builder_grow(builder, builder->buffer.count + amount);
+  sp_str_builder_grow(builder, builder->buffer.len + amount);
 }
 
 void sp_str_builder_indent(sp_str_builder_t* builder) {
@@ -3283,8 +3293,8 @@ void sp_str_builder_dedent(sp_str_builder_t* builder) {
 
 void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
   sp_str_builder_add_capacity(builder, str.len);
-  sp_os_copy_memory(str.data, builder->buffer.data + builder->buffer.count, str.len);
-  builder->buffer.count += str.len;
+  sp_os_copy_memory(str.data, builder->buffer.data + builder->buffer.len, str.len);
+  builder->buffer.len += str.len;
 }
 
 void sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str) {
@@ -3325,20 +3335,18 @@ void sp_str_builder_new_line(sp_str_builder_t* builder) {
   }
 }
 
+sp_str_t sp_str_builder_move(sp_str_builder_t* builder) {
+  sp_str_t str = sp_str(builder->buffer.data, builder->buffer.len);
+  return str;
+}
+
 sp_str_t sp_str_builder_write(sp_str_builder_t* builder) {
-  sp_str_t string = {
-    .len = builder->buffer.count,
-    .data = (c8*)sp_alloc(builder->buffer.count),
-  };
-
-  c8* buffer = (c8*)sp_alloc(builder->buffer.count);
-  sp_os_copy_memory(builder->buffer.data, buffer, builder->buffer.count);
-
-  return SP_STR(buffer, builder->buffer.count);
+  sp_str_t str = sp_str(builder->buffer.data, builder->buffer.len);
+  return sp_str_copy(str);
 }
 
 c8* sp_str_builder_write_cstr(sp_str_builder_t* builder) {
-  return sp_cstr_copy_sized((c8*)builder->buffer.data, builder->buffer.count);
+  return sp_cstr_copy_sized(builder->buffer.data, builder->buffer.len);
 }
 
 sp_str_t sp_str_reduce(sp_str_t* strings, u32 num_strings, void* user_data, sp_str_reduce_fn_t fn) {
@@ -3789,7 +3797,7 @@ sp_str_t sp_os_normalize_path(sp_str_t path) {
     switch (sp_str_back(path)) {
       case '/':
       case '\\': {
-        builder.buffer.count--;
+        builder.buffer.len--;
         break;
       }
       default: {
@@ -4936,6 +4944,11 @@ sp_proc_t sp_proc_create(sp_proc_config_t config) {
   return proc;
 }
 
+sp_proc_output_t sp_proc_run(sp_proc_config_t config) {
+  sp_proc_t ps = sp_proc_create(config);
+  return sp_proc_output(&ps);
+}
+
 void sp_proc_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
   const c8* cwd_cstr = sp_str_to_cstr(cwd);
   SP_ASSERT(posix_spawn_file_actions_addchdir_np(fa, cwd_cstr) == 0);
@@ -5062,6 +5075,50 @@ sp_proc_status_t sp_proc_wait(sp_proc_t* ps) {
   }
   else {
     result.exit_code = -255;
+  }
+
+  return result;
+}
+
+sp_proc_output_t sp_proc_output(sp_proc_t* proc) {
+  sp_proc_output_t result = SP_ZERO_INITIALIZE();
+
+  result.status = sp_proc_wait(proc);
+
+  u8 buffer [4096] = SP_ZERO_INITIALIZE();
+
+  sp_io_stream_t* out = sp_proc_io_out(proc);
+  if (out) {
+    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+
+    while (true) {
+      u64 num_bytes = sp_io_read(out, buffer, sizeof(buffer));
+      if (!num_bytes) {
+        break;
+      }
+
+      sp_str_t chunk = sp_str(buffer, num_bytes);
+      sp_str_builder_append(&builder, chunk);
+    }
+
+    result.out = sp_str_builder_move(&builder);
+  }
+
+  sp_io_stream_t* err = sp_proc_io_out(proc);
+  if (err) {
+    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+
+    while (true) {
+      u64 num_bytes = sp_io_read(err, buffer, sizeof(buffer));
+      if (!num_bytes) {
+        break;
+      }
+
+      sp_str_t chunk = sp_str(buffer, num_bytes);
+      sp_str_builder_append(&builder, chunk);
+    }
+
+    result.err = sp_str_builder_move(&builder);
   }
 
   return result;

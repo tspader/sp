@@ -457,7 +457,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
     sp_str_builder_append_c8(&builder, '\n');
   }
 
-  sp_io_write(in, builder.buffer.data, builder.buffer.count);
+  sp_io_write(in, builder.buffer.data, builder.buffer.len);
   sp_io_close(in);
 
   sp_test_proc_stream_context_t ctx = {
@@ -887,6 +887,64 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
   sp_proc_status_t result = sp_proc_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
+}
+
+UTEST_F(sp_ps, output) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("print"),
+      sp_str_lit("--stdout")
+    },
+    .io = {
+      .in = { .mode = SP_PROC_IO_NULL },
+      .out = { .mode = SP_PROC_IO_CREATE },
+      .err = { .mode = SP_PROC_IO_NULL },
+    }
+  });
+
+  sp_proc_output_t output = sp_proc_output(&ps);
+
+  EXPECT_EQ(output.status.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(output.status.exit_code, 0);
+  EXPECT_TRUE(sp_str_equal(output.out, sp_test_ps_canary));
+  EXPECT_TRUE(sp_str_empty(output.err));
+}
+
+UTEST_F(sp_ps, large_stdin_write_no_deadlock) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("consume"),
+      sp_str_lit("--stdout"),
+    },
+    .io = {
+      .in = { .mode = SP_PROC_IO_CREATE },
+      .out = { .mode = SP_PROC_IO_CREATE },
+      .err = { .mode = SP_PROC_IO_NULL },
+    }
+  });
+
+  const u32 num_bytes = 1024 * 1024;
+  u8* buffer = (u8*)sp_alloc(num_bytes);
+  for (u32 i = 0; i < num_bytes; i++) {
+    buffer[i] = (u8)('A' + (i % 26));
+  }
+
+  sp_io_stream_t* in = sp_proc_io_in(&ps);
+  u64 num_written = sp_io_write(in, buffer, num_bytes);
+  EXPECT_EQ(num_written, num_bytes);
+  sp_io_close(in);
+
+  sp_os_sleep_ms(100);
+
+  sp_proc_output_t output = sp_proc_output(&ps);
+
+  EXPECT_EQ(output.status.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(output.status.exit_code, 0);
+
+  sp_str_t expected = sp_format("{}\n", SP_FMT_U64(num_bytes));
+  EXPECT_TRUE(sp_str_equal(output.out, expected));
 }
 
 UTEST_MAIN()
