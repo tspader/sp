@@ -19,6 +19,7 @@ typedef enum {
   X(TEST_PROC_FUNCTION_PRINT,        "print") \
   X(TEST_PROC_FUNCTION_PRINT_ENV,    "print_env") \
   X(TEST_PROC_FUNCTION_SLOW_WRITE,   "slow_write") \
+  X(TEST_PROC_FUNCTION_CONSUME,      "consume") \
   X(TEST_PROC_FUNCTION_WAIT,         "wait") \
   X(TEST_PROC_FUNCTION_EXIT_CODE,    "exit_code")
 
