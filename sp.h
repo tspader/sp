@@ -6154,14 +6154,6 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 }
 #endif
 
-// ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
-// ██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔════╝██╔════╝██╔════╝
-// ██████╔╝██████╔╝██║   ██║██║     █████╗  ███████╗███████╗
-// ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
-// ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
-// ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
-// @spader we do NOT put platform implementations in their own ifdef; there is one ifdef per-platform for implementations. in other words, every single posix function goes in ONE ifdef block. i tagged it @posix; move all this code there.
-
 SP_END_EXTERN_C()
 
 #ifdef SP_CPP
