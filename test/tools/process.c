@@ -54,6 +54,20 @@ s32 main(s32 num_args, const c8** args) {
       if (stderr_enabled) fflush(stderr);
       break;
     }
+    case TEST_PROC_FUNCTION_ECHO_LINE: {
+      c8 buffer[1024];
+      while (fgets(buffer, sizeof(buffer), stdin)) {
+        if (stdout_enabled) {
+          fprintf(stdout, "echo: %s", buffer);
+          fflush(stdout);
+        }
+        if (stderr_enabled) {
+          fprintf(stderr, "echo: %s", buffer);
+          fflush(stderr);
+        }
+      }
+      break;
+    }
     case TEST_PROC_FUNCTION_PRINT: {
       if (stdout_enabled) {
         fprintf(stdout, "%.*s", sp_test_ps_canary.len, sp_test_ps_canary.data);

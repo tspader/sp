@@ -805,4 +805,44 @@ UTEST_F(sp_ps, poll_with_io) {
   EXPECT_EQ(r2.state, SP_PROC_STATE_DONE);
 }
 
+UTEST_F(sp_ps, interleaved_read_write) {
+  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("echo_line"),
+      sp_str_lit("--stdout")
+    },
+    .io = {
+      .in = { .mode = SP_PROC_IO_CREATE },
+      .out = { .mode = SP_PROC_IO_CREATE },
+      .err = { .mode = SP_PROC_IO_NULL },
+    }
+  });
+
+  sp_io_stream_t* in = sp_proc_io_in(&ps);
+  sp_io_stream_t* out = sp_proc_io_out(&ps);
+
+  EXPECT_NE(in, SP_NULLPTR);
+  EXPECT_NE(out, SP_NULLPTR);
+
+  for (u32 i = 0; i < 10; i++) {
+    sp_str_t input = sp_format("line {}\n", SP_FMT_U32(i));
+
+    u64 written = sp_io_write_str(in, input);
+    EXPECT_EQ(written, input.len);
+
+    sp_os_sleep_ms(100);
+    u64 bytes_read = sp_io_read(out, ut.buffer.data, ut.buffer.len);
+    sp_str_t expected = sp_format("echo: line {}\n", SP_FMT_U32(i));
+    EXPECT_EQ(bytes_read, expected.len);
+    EXPECT_TRUE(sp_os_is_memory_equal(ut.buffer.data, expected.data, expected.len));
+  }
+
+  sp_io_close(in);
+
+  sp_proc_wait_result_t result = sp_proc_wait(&ps);
+  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 0);
+}
+
 UTEST_MAIN()

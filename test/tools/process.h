@@ -15,6 +15,7 @@ typedef enum {
 
 #define TEST_PROC_FUNCTION(X) \
   X(TEST_PROC_FUNCTION_ECHO,      "echo") \
+  X(TEST_PROC_FUNCTION_ECHO_LINE, "echo_line") \
   X(TEST_PROC_FUNCTION_PRINT,     "print") \
   X(TEST_PROC_FUNCTION_PRINT_ENV, "print_env") \
   X(TEST_PROC_FUNCTION_WAIT,      "wait") \
