@@ -386,9 +386,8 @@ typedef struct {
 
 extern pthread_key_t sp_context_stack_key;
 extern pthread_key_t sp_context_key;
-extern bool sp_context_keys_initialized;
+extern pthread_once_t sp_context_keys_once;
 
-void                  sp_context_keys_init();
 sp_context_t*         sp_context_get();
 void                  sp_context_set(sp_context_t context);
 void                  sp_context_push(sp_context_t context);
@@ -1188,7 +1187,6 @@ SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
 typedef struct {
   sp_thread_fn_t fn;
   void* userdata;
-  sp_context_t context;
   sp_semaphore_t semaphore;
 } sp_thread_launch_t;
 
@@ -4205,7 +4203,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     sp_thread_launch_t launch = SP_RVAL(sp_thread_launch_t) {
       .fn = fn,
       .userdata = userdata,
-      .context = *sp_context,
       .semaphore = SP_ZERO_STRUCT(sp_semaphore_t)
     };
     sp_semaphore_init(&launch.semaphore);
@@ -4216,7 +4213,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
 
   s32 sp_thread_launch(void* args) {
     sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
-    sp_context_push(launch->context);
     void* userdata = launch->userdata;
     sp_thread_fn_t fn = launch->fn;
     sp_semaphore_signal(&launch->semaphore);
@@ -4556,11 +4552,8 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     void* userdata = launch->userdata;
     sp_thread_fn_t fn = launch->fn;
 
-    sp_context_push(launch->context);
     sp_semaphore_signal(&launch->semaphore);
     s32 result = fn(userdata);
-
-    sp_context_pop();
 
     return result;
   }
@@ -4573,7 +4566,6 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     sp_thread_launch_t launch = SP_ZERO_INITIALIZE();
     launch.fn = fn;
     launch.userdata = userdata;
-    launch.context = *sp_context_get();
     sp_semaphore_init(&launch.semaphore);
 
     pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
@@ -5781,7 +5773,7 @@ void sp_init_default() {
 
 pthread_key_t sp_context_stack_key;
 pthread_key_t sp_context_key;
-bool sp_context_keys_initialized = false;
+pthread_once_t sp_context_keys_once = PTHREAD_ONCE_INIT;
 
 void sp_context_stack_cleanup(void* ptr) {
   if (ptr) {
@@ -5789,11 +5781,17 @@ void sp_context_stack_cleanup(void* ptr) {
   }
 }
 
-void sp_context_keys_init() {
-  if (sp_context_keys_initialized) return;
-
+void sp_context_keys_create_once() {
   pthread_key_create(&sp_context_stack_key, sp_context_stack_cleanup);
   pthread_key_create(&sp_context_key, NULL);
+}
+
+void sp_context_thread_init() {
+  pthread_once(&sp_context_keys_once, sp_context_keys_create_once);
+
+  if (pthread_getspecific(sp_context_stack_key) != NULL) {
+    return;
+  }
 
   sp_context_t* stack = (sp_context_t*)malloc(sizeof(sp_context_t) * SP_MAX_CONTEXT);
   memset(stack, 0, sizeof(sp_context_t) * SP_MAX_CONTEXT);
@@ -5802,21 +5800,20 @@ void sp_context_keys_init() {
   pthread_setspecific(sp_context_key, &stack[0]);
 
   stack[0].allocator = sp_malloc_allocator_init();
-
-  sp_context_keys_initialized = true;
 }
 
 sp_context_t* sp_context_get() {
-  if (!sp_context_keys_initialized) {
-    sp_context_keys_init();
+  pthread_once(&sp_context_keys_once, sp_context_keys_create_once);
+
+  sp_context_t* ctx = (sp_context_t*)pthread_getspecific(sp_context_key);
+  if (ctx == NULL) {
+    sp_context_thread_init();
+    ctx = (sp_context_t*)pthread_getspecific(sp_context_key);
   }
-  return (sp_context_t*)pthread_getspecific(sp_context_key);
+  return ctx;
 }
 
 void sp_init(sp_config_t config) {
-  sp_context_keys_init();
-  sp_context_t* stack = (sp_context_t*)pthread_getspecific(sp_context_stack_key);
-  pthread_setspecific(sp_context_key, &stack[0]);
   sp_context_t* ctx = sp_context_get();
   *ctx = (sp_context_t) {
     .allocator = sp_allocator_default()
