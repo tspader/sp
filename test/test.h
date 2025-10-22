@@ -135,8 +135,9 @@ void sp_test_use_bump_allocator(u32 capacity) {
 
 void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) {
   sp_test_use_bump_allocator(capacity);
-  tracker->bump = (sp_bump_allocator_t*)sp_context->allocator.user_data;
-  tracker->allocator = sp_context->allocator;
+  sp_context_t* ctx = sp_context_get();
+  tracker->bump = (sp_bump_allocator_t*)ctx->allocator.user_data;
+  tracker->allocator = ctx->allocator;
 }
 
 void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker) {

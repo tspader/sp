@@ -383,9 +383,13 @@ typedef struct {
 } sp_context_t;
 
 #define SP_MAX_CONTEXT 16
-SP_THREAD_LOCAL sp_context_t  sp_context_stack [SP_MAX_CONTEXT] = SP_ZERO_INITIALIZE();
-SP_THREAD_LOCAL sp_context_t* sp_context = SP_ZERO_INITIALIZE();
 
+extern pthread_key_t sp_context_stack_key;
+extern pthread_key_t sp_context_key;
+extern bool sp_context_keys_initialized;
+
+void                  sp_context_keys_init();
+sp_context_t*         sp_context_get();
 void                  sp_context_set(sp_context_t context);
 void                  sp_context_push(sp_context_t context);
 void                  sp_context_push_allocator(sp_allocator_t allocator);
@@ -2537,8 +2541,10 @@ void sp_fmt_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 
 void sp_fmt_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   // Context is passed as pointer but we don't use it
-  if (sp_context) {
-    u32 index = (u32)(sp_context - sp_context_stack);
+  sp_context_t* ctx = sp_context_get();
+  if (ctx) {
+    sp_context_t* stack = (sp_context_t*)pthread_getspecific(sp_context_stack_key);
+    u32 index = (u32)(ctx - stack);
     sp_fmt_format_unsigned(builder, index, 10);
   } else {
     sp_str_builder_append_cstr(builder, "NULL");
@@ -2848,57 +2854,70 @@ void sp_log(sp_str_t fmt, ...) {
 }
 
 void sp_context_check_index() {
-  u32 index = (u32)(sp_context - sp_context_stack);
+  sp_context_t* ctx = sp_context_get();
+  sp_context_t* stack = (sp_context_t*)pthread_getspecific(sp_context_stack_key);
+  u32 index = (u32)(ctx - stack);
   SP_ASSERT(index);
   SP_ASSERT(index < SP_MAX_CONTEXT);
 }
 
 void sp_context_ensure() {
-  if (!sp_context) sp_init_default();
+  if (!sp_context_get()) sp_init_default();
 }
 
 void sp_context_set(sp_context_t context) {
   sp_context_ensure();
-  sp_context = sp_context ? sp_context : &sp_context_stack[1];
-  *sp_context = context;
+  sp_context_t* ctx = sp_context_get();
+  sp_context_t* stack = (sp_context_t*)pthread_getspecific(sp_context_stack_key);
+  ctx = ctx ? ctx : &stack[1];
+  *ctx = context;
+  pthread_setspecific(sp_context_key, ctx);
 }
 
 void sp_context_push(sp_context_t context) {
   sp_context_ensure();
 
-  sp_context++;
-  *sp_context = context;
+  sp_context_t* ctx = sp_context_get();
+  ctx++;
+  *ctx = context;
+  pthread_setspecific(sp_context_key, ctx);
   sp_context_check_index();
 }
 
 void sp_context_push_allocator(sp_allocator_t allocator) {
   sp_context_ensure();
 
-  sp_context_t context = *sp_context;
+  sp_context_t* ctx = sp_context_get();
+  sp_context_t context = *ctx;
   context.allocator = allocator;
   sp_context_push(context);
 }
 
 void sp_context_pop() {
-  SP_ASSERT(sp_context);
+  sp_context_t* ctx = sp_context_get();
+  SP_ASSERT(ctx);
   sp_context_check_index();
-  *sp_context = SP_ZERO_STRUCT(sp_context_t); // Not required, just for the debugger
-  sp_context--;
+  *ctx = SP_ZERO_STRUCT(sp_context_t); // Not required, just for the debugger
+  ctx--;
+  pthread_setspecific(sp_context_key, ctx);
 }
 
 void* sp_alloc(u32 size) {
   sp_context_ensure();
-  return sp_allocator_alloc(sp_context->allocator, size);
+  sp_context_t* ctx = sp_context_get();
+  return sp_allocator_alloc(ctx->allocator, size);
 }
 
 void* sp_realloc(void* memory, u32 size) {
   sp_context_ensure();
-  return sp_allocator_realloc(sp_context->allocator, memory, size);
+  sp_context_t* ctx = sp_context_get();
+  return sp_allocator_realloc(ctx->allocator, memory, size);
 }
 
 void sp_free(void* memory) {
   sp_context_ensure();
-  sp_allocator_free(sp_context->allocator, memory);
+  sp_context_t* ctx = sp_context_get();
+  sp_allocator_free(ctx->allocator, memory);
 }
 
 sp_allocator_t sp_allocator_default() {
@@ -4554,7 +4573,7 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
     sp_thread_launch_t launch = SP_ZERO_INITIALIZE();
     launch.fn = fn;
     launch.userdata = userdata;
-    launch.context = *sp_context;
+    launch.context = *sp_context_get();
     sp_semaphore_init(&launch.semaphore);
 
     pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
@@ -4842,7 +4861,7 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
   sp_context_ensure();
 
   sp_ps_t proc = SP_ZERO_STRUCT(sp_ps_t);
-  proc.allocator = sp_context->allocator;
+  proc.allocator = sp_context_get()->allocator;
   proc.io = config.io;
 
   SP_ASSERT(!sp_str_empty(config.command));
@@ -5738,7 +5757,7 @@ sp_future_t* sp_future_create(u32 size) {
   sp_context_ensure();
 
   sp_future_t* future = (sp_future_t*)sp_alloc(sizeof(sp_future_t));
-  future->allocator = sp_context->allocator;
+  future->allocator = sp_context_get()->allocator;
   future->ready = false;
   future->value = sp_alloc(size);
   future->size = size;
@@ -5760,9 +5779,46 @@ void sp_init_default() {
   sp_init((sp_config_t){});
 }
 
+pthread_key_t sp_context_stack_key;
+pthread_key_t sp_context_key;
+bool sp_context_keys_initialized = false;
+
+void sp_context_stack_cleanup(void* ptr) {
+  if (ptr) {
+    free(ptr);
+  }
+}
+
+void sp_context_keys_init() {
+  if (sp_context_keys_initialized) return;
+
+  pthread_key_create(&sp_context_stack_key, sp_context_stack_cleanup);
+  pthread_key_create(&sp_context_key, NULL);
+
+  sp_context_t* stack = (sp_context_t*)malloc(sizeof(sp_context_t) * SP_MAX_CONTEXT);
+  memset(stack, 0, sizeof(sp_context_t) * SP_MAX_CONTEXT);
+  pthread_setspecific(sp_context_stack_key, stack);
+
+  pthread_setspecific(sp_context_key, &stack[0]);
+
+  stack[0].allocator = sp_malloc_allocator_init();
+
+  sp_context_keys_initialized = true;
+}
+
+sp_context_t* sp_context_get() {
+  if (!sp_context_keys_initialized) {
+    sp_context_keys_init();
+  }
+  return (sp_context_t*)pthread_getspecific(sp_context_key);
+}
+
 void sp_init(sp_config_t config) {
-  sp_context = &sp_context_stack[0];
-  *sp_context = (sp_context_t) {
+  sp_context_keys_init();
+  sp_context_t* stack = (sp_context_t*)pthread_getspecific(sp_context_stack_key);
+  pthread_setspecific(sp_context_key, &stack[0]);
+  sp_context_t* ctx = sp_context_get();
+  *ctx = (sp_context_t) {
     .allocator = sp_allocator_default()
   };
 }
