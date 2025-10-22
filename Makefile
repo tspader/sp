@@ -7,6 +7,35 @@ else ifeq ($(UNAME), Linux)
 	DLL_EXTENSION := so
 endif
 
+ANSI_FG_RED := \033[31m
+ANSI_FG_GREEN := \033[32m
+ANSI_FG_BRIGHT_BLACK := \033[90m
+ANSI_FG_BRIGHT_CYAN := \033[96m
+ANSI_FG_BRIGHT_YELLOW := \033[93m
+ANSI_RESET := \033[0m
+
+define print_color
+	@printf "$(1)$(2)$(ANSI_RESET)"
+endef
+
+define build_target
+	@printf '$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK)$(2) $(3) $$(spn print) $(4) -o $(1)$(ANSI_RESET)\n'
+	@$(2) $(3) $$(spn print) $(4) -o $(1)
+endef
+
+define run_tests
+	@printf "$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK) ./$(1) --enable-mixed-units --random-order\n";
+	@OUTPUT=$$(./$(1) --enable-mixed-units --random-order 2>&1); \
+	if echo "$$OUTPUT" | grep -q "PASSED"; then \
+		COUNT=$$(echo "$$OUTPUT" | grep -oP '\d+(?= tests?)' | head -1); \
+		printf ""; \
+		printf "$(ANSI_FG_BRIGHT_YELLOW)$(1) $(ANSI_FG_GREEN)OK$(ANSI_RESET) $$COUNT tests\n"; \
+	else \
+		printf "$(ANSI_FG_RED)FAIL$(ANSI_RESET) "; \
+		echo "$$OUTPUT" | grep -E "test cases ran|PASSED|FAILED"; \
+	fi
+endef
+
 
 #########
 # PATHS #
@@ -31,7 +60,7 @@ ifeq ($(OS),Windows_NT)
   CMAKE := cmake
   SP_FLAG_RPATH :=
 else
-  CC := bear --append -- tcc
+  CC := tcc
   MAKE := bear --append -- make
   CMAKE := bear --append -- cmake
 
@@ -60,7 +89,6 @@ SP_FLAGS_CPP := $(SP_FLAGS_COMMON) $(SP_FLAG_CPP_LANGUAGE) $$(spn print)
 SP_FLAGS_STRESS = $(SP_FLAGS_CC) -DSP_TEST_ENABLE_STRESS_TESTS
 
 # Miscellaneous flags
-SP_FLAGS_RUN := --enable-mixed-units --random-order | grep -E "test cases ran|PASSED|FAILED"
 
 SP_SOURCE_FILES := test/main.c
 SP_TEST_SOURCES := sp.h test/test.h
@@ -74,52 +102,52 @@ all: build
 
 # Ensure dependencies are built before any compilation
 deps:
-	@spn build
+	@spn build --output noninteractive
 	@mkdir -p $(SP_DIR_BUILD_OUTPUT)
 
 $(SP_DIR_BUILD_OUTPUT): | deps
 
 build/bin/c: $(SP_TEST_SOURCES) | $(SP_DIR_BUILD_OUTPUT)
-	$(CC) $(SP_FLAGS_CC) test/main.c -o build/bin/c
+	$(call build_target,build/bin/c,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/main.c)
 
 build/bin/cpp: $(SP_TEST_SOURCES) | $(SP_DIR_BUILD_OUTPUT)
-	$(CPP) $(SP_FLAGS_CPP) -x c++ test/main.c -o build/bin/cpp
+	$(call build_target,build/bin/cpp,$(CPP),$(SP_FLAGS_COMMON) $(SP_FLAG_CPP_LANGUAGE),-x c++ test/main.c)
 
 build/bin/app: $(SP_TEST_SOURCES) test/app.c | $(SP_DIR_BUILD_OUTPUT)
-	$(CC) $(SP_FLAGS_CC) test/app.c -o build/bin/app
+	$(call build_target,build/bin/app,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/app.c)
 
 build/bin/file_monitor: $(SP_TEST_SOURCES) test/file_monitor.c | $(SP_DIR_BUILD_OUTPUT)
-	$(CC) $(SP_FLAGS_CC) test/file_monitor.c -o build/bin/file_monitor
+	$(call build_target,build/bin/file_monitor,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/file_monitor.c)
 
 build/bin/ps: $(SP_TEST_SOURCES) test/ps.c build/bin/process | $(SP_DIR_BUILD_OUTPUT)
-	$(CC) $(SP_FLAGS_CC) test/ps.c -o build/bin/ps
+	$(call build_target,build/bin/ps,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/ps.c)
 
 build/bin/process: test/tools/process.* | $(SP_DIR_BUILD_OUTPUT)
-	$(CC) $(SP_FLAGS_CC) test/tools/process.c -o build/bin/process
+	$(call build_target,build/bin/process,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/tools/process.c)
 
 build/bin/stress: $(SP_TEST_SOURCES) test/stress.c | $(SP_DIR_BUILD_OUTPUT)
-	$(CC) $(SP_FLAGS_CC) test/stress.c -o build/bin/stress
+	$(call build_target,build/bin/stress,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/stress.c)
 
 build: build/bin/c build/bin/app build/bin/file_monitor build/bin/ps build/bin/process build/bin/stress
-test: c cpp app file_monitor ps stress
+test: c app file_monitor cpp ps stress
 
 c: build/bin/c
-	./build/bin/c $(SP_FLAGS_RUN)
+	$(call run_tests,build/bin/c)
 
 cpp: build/bin/cpp
-	./build/bin/cpp $(SP_FLAGS_RUN)
+	$(call run_tests,build/bin/cpp)
 
 app: build/bin/app
-	./build/bin/app $(SP_FLAGS_RUN)
+	$(call run_tests,build/bin/app)
 
 file_monitor: build/bin/file_monitor
-	./build/bin/file_monitor $(SP_FLAGS_RUN)
+	$(call run_tests,build/bin/file_monitor)
 
 ps: build/bin/ps
-	./build/bin/ps $(SP_FLAGS_RUN)
+	$(call run_tests,build/bin/ps)
 
 stress: build/bin/stress
-	./build/bin/stress $(SP_FLAGS_RUN)
+	$(call run_tests,build/bin/stress)
 
 
 debug: c
