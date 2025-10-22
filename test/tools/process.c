@@ -28,7 +28,7 @@ s32 main(s32 num_args, const c8** args) {
 
   struct argparse argparse;
   argparse_init(&argparse, options, usage, 0);
-  argparse_describe(&argparse, "\nTest process for sp_proc testing", "");
+  argparse_describe(&argparse, "\nTest process for sp_ps testing", "");
   num_args = argparse_parse(&argparse, num_args, args);
 
   if (!function_str) {

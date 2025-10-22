@@ -15,7 +15,7 @@ typedef struct {
 } sp_test_proc_io_stream_config_t;
 
 typedef struct {
-  sp_proc_io_config_t io;
+  sp_ps_io_config_t io;
   sp_str_t input;
   struct {
     sp_test_proc_io_stream_config_t out;
@@ -119,7 +119,7 @@ void sp_test_proc_check_stream(sp_test_proc_stream_context_t* ctx) {
 // SP_PROC_IO //
 ////////////////
 void sp_test_proc_io(sp_test_proc_io_config_t test) {
-  sp_proc_config_t config = {
+  sp_ps_config_t config = {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), SP_CSTR(test_proc_function_to_cstr(test.fn)),
@@ -128,18 +128,18 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   };
 
   if (test.output.out.enabled) {
-    sp_proc_config_add_arg(&config, sp_str_lit("--stdout"));
+    sp_ps_config_add_arg(&config, sp_str_lit("--stdout"));
   }
   if (test.output.err.enabled) {
-    sp_proc_config_add_arg(&config, sp_str_lit("--stderr"));
+    sp_ps_config_add_arg(&config, sp_str_lit("--stderr"));
   }
 
-  sp_proc_t ps = sp_proc_create(config);
+  sp_ps_t ps = sp_ps_create(config);
   SP_ASSERT(ps.pid != 0);
 
-  sp_io_stream_t* in = sp_proc_io_in(&ps);
-  sp_io_stream_t* out = sp_proc_io_out(&ps);
-  sp_io_stream_t* err = sp_proc_io_err(&ps);
+  sp_io_stream_t* in = sp_ps_io_in(&ps);
+  sp_io_stream_t* out = sp_ps_io_out(&ps);
+  sp_io_stream_t* err = sp_ps_io_err(&ps);
 
   if (!sp_str_empty(test.input)) {
     u64 bytes_written = sp_io_write(in, test.input.data, test.input.len);
@@ -275,7 +275,7 @@ UTEST_F(sp_ps, io_create_file_null) {
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
 
-  sp_os_sleep_ms(100); // @spader @sp_proc_wait
+  sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
   sp_io_seek(&io, 0, SP_IO_SEEK_SET);
 
@@ -331,7 +331,7 @@ UTEST_F(sp_ps, io_create_null_file) {
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
 
-  sp_os_sleep_ms(100); // @spader @sp_proc_wait
+  sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
   sp_io_seek(&io, 0, SP_IO_SEEK_SET);
 
@@ -367,7 +367,7 @@ UTEST_F(sp_ps, io_file_null_file) {
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
 
-  sp_os_sleep_ms(100); // @spader @sp_proc_wait
+  sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
   sp_io_seek(&err, 0, SP_IO_SEEK_SET);
 
@@ -384,7 +384,7 @@ UTEST_F(sp_ps, io_file_null_file) {
 // ENVIRONMENT //
 /////////////////
 typedef struct {
-  sp_proc_env_config_t config;
+  sp_ps_env_config_t config;
   sp_env_var_t expected [SP_PROC_MAX_ENV];
   sp_env_var_t* foo;
 } sp_test_proc_env_config_t;
@@ -427,7 +427,7 @@ sp_dyn_array(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u32 len) {
 }
 
 void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) {
-  sp_proc_config_t config = {
+  sp_ps_config_t config = {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), SP_CSTR(test_proc_function_to_cstr(TEST_PROC_FUNCTION_PRINT_ENV)),
@@ -441,11 +441,11 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
     .env = test.config
   };
 
-  sp_proc_t ps = sp_proc_create(config);
+  sp_ps_t ps = sp_ps_create(config);
   SP_ASSERT(ps.pid);
 
-  sp_io_stream_t* in = sp_proc_io_in(&ps);
-  sp_io_stream_t* out = sp_proc_io_out(&ps);
+  sp_io_stream_t* in = sp_ps_io_in(&ps);
+  sp_io_stream_t* out = sp_ps_io_out(&ps);
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   for (u32 i = 0; i < 8; i++) {
@@ -607,7 +607,7 @@ UTEST_F(sp_ps, empty_env_var) {
 // SP_PROC_WAIT //
 //////////////////
 UTEST_F(sp_ps, wait_after_process_complete) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
@@ -617,13 +617,13 @@ UTEST_F(sp_ps, wait_after_process_complete) {
 
   sp_os_sleep_ms(100);
 
-  sp_proc_status_t result = sp_proc_wait(&ps);
+  sp_ps_status_t result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 42);
 }
 
 UTEST_F(sp_ps, wait_while_process_running) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
@@ -631,13 +631,13 @@ UTEST_F(sp_ps, wait_while_process_running) {
     },
   });
 
-  sp_proc_status_t result = sp_proc_wait(&ps);
+  sp_ps_status_t result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
 UTEST_F(sp_ps, poll_while_process_running) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
@@ -645,15 +645,15 @@ UTEST_F(sp_ps, poll_while_process_running) {
     },
   });
 
-  sp_proc_status_t result = sp_proc_poll(&ps, 0);
+  sp_ps_status_t result = sp_ps_poll(&ps, 0);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
-  result = sp_proc_wait(&ps);
+  result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
 }
 
 UTEST_F(sp_ps, process_complete_during_poll) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
@@ -661,13 +661,13 @@ UTEST_F(sp_ps, process_complete_during_poll) {
     },
   });
 
-  sp_proc_status_t result = sp_proc_poll(&ps, 200);
+  sp_ps_status_t result = sp_ps_poll(&ps, 200);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
 UTEST_F(sp_ps, poll_after_process_complete) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
@@ -677,13 +677,13 @@ UTEST_F(sp_ps, poll_after_process_complete) {
 
   sp_os_sleep_ms(100);
 
-  sp_proc_status_t result = sp_proc_poll(&ps, 0);
+  sp_ps_status_t result = sp_ps_poll(&ps, 0);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 }
 
 UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
@@ -693,13 +693,13 @@ UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
 
   sp_os_sleep_ms(100);
 
-  sp_proc_status_t result = sp_proc_poll(&ps, 100);
+  sp_ps_status_t result = sp_ps_poll(&ps, 100);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 }
 
 UTEST_F(sp_ps, wait_twice_while_process_running) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
@@ -707,17 +707,17 @@ UTEST_F(sp_ps, wait_twice_while_process_running) {
     },
   });
 
-  sp_proc_status_t result = sp_proc_wait(&ps);
+  sp_ps_status_t result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 
-  result = sp_proc_wait(&ps);
+  result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, -1);
 }
 
 UTEST_F(sp_ps, poll_then_wait) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
@@ -725,16 +725,16 @@ UTEST_F(sp_ps, poll_then_wait) {
     },
   });
 
-  sp_proc_status_t result = sp_proc_poll(&ps, 0);
+  sp_ps_status_t result = sp_ps_poll(&ps, 0);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
-  result = sp_proc_wait(&ps);
+  result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
 UTEST_F(sp_ps, poll_multiple) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
@@ -742,24 +742,24 @@ UTEST_F(sp_ps, poll_multiple) {
     },
   });
 
-  sp_proc_status_t result = SP_ZERO_INITIALIZE();
+  sp_ps_status_t result = SP_ZERO_INITIALIZE();
 
-  result = sp_proc_poll(&ps, 50);
+  result = sp_ps_poll(&ps, 50);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
-  result = sp_proc_poll(&ps, 50);
+  result = sp_ps_poll(&ps, 50);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
-  result = sp_proc_poll(&ps, 50);
+  result = sp_ps_poll(&ps, 50);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
-  result = sp_proc_poll(&ps, 500);
+  result = sp_ps_poll(&ps, 500);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
 UTEST_F(sp_ps, wait_with_output) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
@@ -772,17 +772,17 @@ UTEST_F(sp_ps, wait_with_output) {
     }
   });
 
-  sp_proc_status_t result = sp_proc_wait(&ps);
+  sp_ps_status_t result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 
-  u64 bytes_read = sp_io_read(sp_proc_io_out(&ps), ut.buffer.data, ut.buffer.len);
+  u64 bytes_read = sp_io_read(sp_ps_io_out(&ps), ut.buffer.data, ut.buffer.len);
   EXPECT_EQ(bytes_read, sp_test_ps_canary.len);
   EXPECT_TRUE(sp_os_is_memory_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 }
 
 UTEST_F(sp_ps, poll_with_io) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
@@ -795,18 +795,18 @@ UTEST_F(sp_ps, poll_with_io) {
     }
   });
 
-  sp_proc_status_t r1 = sp_proc_poll(&ps, 10);
+  sp_ps_status_t r1 = sp_ps_poll(&ps, 10);
   EXPECT_EQ(r1.state, SP_PROC_STATE_RUNNING);
 
-  sp_io_stream_t* in = sp_proc_io_in(&ps);
+  sp_io_stream_t* in = sp_ps_io_in(&ps);
   EXPECT_NE(in, SP_NULLPTR);
 
-  sp_proc_status_t r2 = sp_proc_wait(&ps);
+  sp_ps_status_t r2 = sp_ps_wait(&ps);
   EXPECT_EQ(r2.state, SP_PROC_STATE_DONE);
 }
 
 UTEST_F(sp_ps, interleaved_read_write) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("echo_line"),
@@ -819,8 +819,8 @@ UTEST_F(sp_ps, interleaved_read_write) {
     }
   });
 
-  sp_io_stream_t* in = sp_proc_io_in(&ps);
-  sp_io_stream_t* out = sp_proc_io_out(&ps);
+  sp_io_stream_t* in = sp_ps_io_in(&ps);
+  sp_io_stream_t* out = sp_ps_io_out(&ps);
 
   EXPECT_NE(in, SP_NULLPTR);
   EXPECT_NE(out, SP_NULLPTR);
@@ -840,13 +840,13 @@ UTEST_F(sp_ps, interleaved_read_write) {
 
   sp_io_close(in);
 
-  sp_proc_status_t result = sp_proc_wait(&ps);
+  sp_ps_status_t result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 }
 
 UTEST_F(sp_ps, incremental_nonblocking_read) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("slow_write"),
@@ -859,7 +859,7 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
     }
   });
 
-  sp_io_stream_t* out = sp_proc_io_out(&ps);
+  sp_io_stream_t* out = sp_ps_io_out(&ps);
   EXPECT_NE(out, SP_NULLPTR);
 
   const u32 expected_size = 1024;
@@ -871,7 +871,7 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
     if (n > 0) {
       total_read += n;
     } else {
-      sp_proc_status_t result = sp_proc_poll(&ps, 10);
+      sp_ps_status_t result = sp_ps_poll(&ps, 10);
       if (result.state == SP_PROC_STATE_DONE) break;
     }
   }
@@ -884,13 +884,13 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
     EXPECT_EQ(accumulated[i], expected_byte);
   }
 
-  sp_proc_status_t result = sp_proc_wait(&ps);
+  sp_ps_status_t result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 }
 
 UTEST_F(sp_ps, output) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
@@ -903,7 +903,7 @@ UTEST_F(sp_ps, output) {
     }
   });
 
-  sp_proc_output_t output = sp_proc_output(&ps);
+  sp_ps_output_t output = sp_ps_output(&ps);
 
   EXPECT_EQ(output.status.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
@@ -912,7 +912,7 @@ UTEST_F(sp_ps, output) {
 }
 
 UTEST_F(sp_ps, large_stdin_write_no_deadlock) {
-  sp_proc_t ps = sp_proc_create((sp_proc_config_t) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("consume"),
@@ -931,14 +931,14 @@ UTEST_F(sp_ps, large_stdin_write_no_deadlock) {
     buffer[i] = (u8)('A' + (i % 26));
   }
 
-  sp_io_stream_t* in = sp_proc_io_in(&ps);
+  sp_io_stream_t* in = sp_ps_io_in(&ps);
   u64 num_written = sp_io_write(in, buffer, num_bytes);
   EXPECT_EQ(num_written, num_bytes);
   sp_io_close(in);
 
   sp_os_sleep_ms(100);
 
-  sp_proc_output_t output = sp_proc_output(&ps);
+  sp_ps_output_t output = sp_ps_output(&ps);
 
   EXPECT_EQ(output.status.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
