@@ -1076,8 +1076,6 @@ UTEST(path_functions, integration_test) {
 }
 
 UTEST(sp_os_is_path_root, various_roots) {
-  sp_test_use_malloc();
-
   ASSERT_TRUE(sp_os_is_path_root(SP_LIT("")));
   ASSERT_TRUE(sp_os_is_path_root(SP_LIT("/")));
 
@@ -1103,10 +1101,8 @@ typedef struct sp_os_create_directory_fixture {
 } sp_os_create_directory_fixture;
 
 UTEST_F_SETUP(sp_os_create_directory_fixture) {
-  sp_test_use_malloc();
 }
 UTEST_F_TEARDOWN(sp_os_create_directory_fixture) {
-  sp_test_use_malloc();
 }
 
 UTEST_F(sp_os_create_directory_fixture, path_exists_as_directory) {
