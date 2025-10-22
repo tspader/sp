@@ -5487,4 +5487,38 @@ UTEST(sp_env, all_operations) {
   sp_env_destroy(&copy);
 }
 
-UTEST_MAIN()
+
+typedef struct {
+  bool context_valid;
+  bool allocator_valid;
+  bool alloc_succeeded;
+  sp_str_t allocated_string;
+} sp_thread_context_test_data_t;
+
+s32 sp_thread_context_test_fn(void* userdata) {
+  sp_thread_context_test_data_t* data = (sp_thread_context_test_data_t*)userdata;
+
+  sp_context_t* ctx = sp_context_get();
+  data->context_valid = (ctx != SP_NULLPTR);
+  data->allocator_valid = (ctx != SP_NULLPTR && ctx->allocator.on_alloc != SP_NULLPTR);
+
+  sp_str_t test_str = sp_str_from_cstr("thread allocation test");
+  data->allocated_string = test_str;
+  data->alloc_succeeded = test_str.data != SP_NULLPTR && test_str.len > 0;
+
+  return 0;
+}
+
+UTEST(threading, context_in_child_thread) {
+  sp_thread_context_test_data_t data = SP_ZERO_INITIALIZE();
+
+  sp_thread_t thread;
+  sp_thread_init(&thread, sp_thread_context_test_fn, &data);
+  sp_thread_join(&thread);
+
+  ASSERT_TRUE(data.context_valid);
+  ASSERT_TRUE(data.allocator_valid);
+  ASSERT_TRUE(data.alloc_succeeded);
+  ASSERT_GT(data.allocated_string.len, 0);
+  SP_EXPECT_STR_EQ_CSTR(data.allocated_string, "thread allocation test");
+}
