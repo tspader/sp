@@ -1437,28 +1437,28 @@ typedef struct {
   sp_allocator_t allocator;
 } sp_ps_t;
 
-SP_API void                   sp_env_init(sp_env_t* env);
-SP_API sp_env_t               sp_env_capture();
-SP_API sp_env_t               sp_env_copy(sp_env_t* env);
-SP_API sp_str_t               sp_env_get(sp_env_t* env, sp_str_t name);
-SP_API void                   sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
-SP_API void                   sp_env_erase(sp_env_t* env, sp_str_t name);
-SP_API void                   sp_env_destroy(sp_env_t* env);
-SP_API void                   sp_env_export_all(sp_env_t* env, sp_env_export_overwrite_t overwrite);
-SP_API void                   sp_env_export(sp_env_var_t var, sp_env_export_overwrite_t overwrite);
-SP_API void                   sp_env_clear(sp_str_t var);
-SP_API sp_ps_config_t       sp_ps_config_copy(const sp_ps_config_t* src);
-SP_API void                   sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg);
-SP_API sp_ps_t              sp_ps_create(sp_ps_config_t config);
-SP_API sp_ps_output_t       sp_ps_run(sp_ps_config_t config);
-SP_API sp_io_stream_t*        sp_ps_io_in(sp_ps_t* proc);
-SP_API sp_io_stream_t*        sp_ps_io_out(sp_ps_t* proc);
-SP_API sp_io_stream_t*        sp_ps_io_err(sp_ps_t* proc);
-SP_API sp_ps_status_t       sp_ps_wait(sp_ps_t* proc);
-SP_API sp_ps_status_t       sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
-SP_API sp_ps_output_t       sp_ps_output(sp_ps_t* proc);
-SP_API bool                   sp_ps_kill(sp_ps_t* proc);
-SP_API void                   sp_ps_destroy(sp_ps_t* proc);
+SP_API void            sp_env_init(sp_env_t* env);
+SP_API sp_env_t        sp_env_capture();
+SP_API sp_env_t        sp_env_copy(sp_env_t* env);
+SP_API sp_str_t        sp_env_get(sp_env_t* env, sp_str_t name);
+SP_API void            sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
+SP_API void            sp_env_erase(sp_env_t* env, sp_str_t name);
+SP_API void            sp_env_destroy(sp_env_t* env);
+SP_API void            sp_env_export_all(sp_env_t* env, sp_env_export_overwrite_t overwrite);
+SP_API void            sp_env_export(sp_env_var_t var, sp_env_export_overwrite_t overwrite);
+SP_API void            sp_env_clear(sp_str_t var);
+SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
+SP_API void            sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg);
+SP_API sp_ps_t         sp_ps_create(sp_ps_config_t config);
+SP_API sp_ps_output_t  sp_ps_run(sp_ps_config_t config);
+SP_API sp_io_stream_t* sp_ps_io_in(sp_ps_t* proc);
+SP_API sp_io_stream_t* sp_ps_io_out(sp_ps_t* proc);
+SP_API sp_io_stream_t* sp_ps_io_err(sp_ps_t* proc);
+SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* proc);
+SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
+SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
+SP_API bool            sp_ps_kill(sp_ps_t* proc);
+SP_API void            sp_ps_destroy(sp_ps_t* proc);
 
 #if defined(SP_POSIX)
 
@@ -4956,6 +4956,9 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
 }
 
 sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
+  config.io.out = (sp_ps_io_stream_config_t) {
+    .mode = SP_PROC_IO_CREATE
+  };
   sp_ps_t ps = sp_ps_create(config);
   return sp_ps_output(&ps);
 }
