@@ -380,6 +380,8 @@ typedef struct {
 
 typedef struct {
   sp_allocator_t allocator;
+  sp_bump_allocator_t temp_allocator;
+  sp_allocator_t temp_allocator_interface;
 } sp_context_t;
 
 #define SP_MAX_CONTEXT 16
@@ -401,6 +403,8 @@ void                  sp_allocator_free(sp_allocator_t allocator, void* buffer);
 sp_allocator_t        sp_bump_allocator_init(sp_bump_allocator_t* allocator, u32 capacity);
 void                  sp_bump_allocator_clear(sp_bump_allocator_t* allocator);
 void                  sp_bump_allocator_destroy(sp_bump_allocator_t* allocator);
+u32                   sp_bump_allocator_push(sp_bump_allocator_t* allocator);
+void                  sp_bump_allocator_pop(sp_bump_allocator_t* allocator, u32 watermark);
 void*                 sp_bump_allocator_on_alloc(void* allocator, sp_allocator_mode_t mode, u32 size, void* old_memory);
 sp_allocator_t        sp_malloc_allocator_init();
 void*                 sp_malloc_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr);
@@ -408,6 +412,18 @@ sp_malloc_metadata_t* sp_malloc_allocator_get_metadata(void* ptr);
 void*                 sp_alloc(u32 size);
 void*                 sp_realloc(void* memory, u32 size);
 void                  sp_free(void* memory);
+
+// Get temp allocator for scratch/intermediate allocations
+// Usage pattern:
+//   sp_context_t* ctx = sp_context_get();
+//   u32 mark = sp_bump_allocator_push(&ctx->temp_allocator);
+//   sp_allocator_t temp = sp_temp_allocator_get();
+//   sp_str_t intermediate = sp_str_copy_ex(temp, some_string);
+//   // ... use intermediate for calculations ...
+//   sp_str_t result = sp_str_copy(final_result);  // allocate result with context allocator
+//   sp_bump_allocator_pop(&ctx->temp_allocator, mark);  // free all temp allocations
+//   return result;
+sp_allocator_t        sp_temp_allocator_get();
 
 
 //  ██╗  ██╗ █████╗ ███████╗██╗  ██╗██╗███╗   ██╗ ██████╗
@@ -950,6 +966,23 @@ SP_API sp_str_t               sp_str_map_kernel_to_upper(sp_str_map_context_t* c
 SP_API sp_str_t               sp_str_map_kernel_to_lower(sp_str_map_context_t* context);
 SP_API sp_str_t               sp_str_map_kernel_capitalize_words(sp_str_map_context_t* context);
 SP_API s32                    sp_str_sort_kernel_alphabetical(const void* a, const void* b);
+
+// _ex versions that take explicit allocator parameter
+SP_API sp_str_t               sp_str_alloc_ex(sp_allocator_t allocator, u32 capacity);
+SP_API sp_str_t               sp_str_from_cstr_ex(sp_allocator_t allocator, const c8* str);
+SP_API sp_str_t               sp_str_from_cstr_sized_ex(sp_allocator_t allocator, const c8* str, u32 length);
+SP_API sp_str_t               sp_str_from_cstr_null_ex(sp_allocator_t allocator, const c8* str);
+SP_API sp_str_t               sp_str_copy_ex(sp_allocator_t allocator, sp_str_t str);
+SP_API sp_str_t               sp_str_null_terminate_ex(sp_allocator_t allocator, sp_str_t str);
+SP_API sp_str_t               sp_str_concat_ex(sp_allocator_t allocator, sp_str_t a, sp_str_t b);
+SP_API sp_str_t               sp_str_join_ex(sp_allocator_t allocator, sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API sp_str_t               sp_str_join_cstr_n_ex(sp_allocator_t allocator, const c8** strings, u32 num_strings, sp_str_t join);
+SP_API sp_str_t               sp_str_join_n_ex(sp_allocator_t allocator, sp_str_t* strings, u32 num_strings, sp_str_t joiner);
+SP_API sp_str_t               sp_str_replace_c8_ex(sp_allocator_t allocator, sp_str_t str, c8 from, c8 to);
+SP_API sp_str_t               sp_str_pad_ex(sp_allocator_t allocator, sp_str_t str, u32 n);
+SP_API sp_str_t               sp_str_to_upper_ex(sp_allocator_t allocator, sp_str_t str);
+SP_API sp_str_t               sp_str_to_lower_ex(sp_allocator_t allocator, sp_str_t str);
+SP_API sp_str_t               sp_str_capitalize_words_ex(sp_allocator_t allocator, sp_str_t str);
 
 
 // ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
@@ -2918,6 +2951,12 @@ void sp_free(void* memory) {
   sp_allocator_free(ctx->allocator, memory);
 }
 
+sp_allocator_t sp_temp_allocator_get() {
+  sp_context_ensure();
+  sp_context_t* ctx = sp_context_get();
+  return ctx->temp_allocator_interface;
+}
+
 sp_allocator_t sp_allocator_default() {
   return sp_malloc_allocator_init();
 }
@@ -2948,6 +2987,15 @@ sp_allocator_t sp_bump_allocator_init(sp_bump_allocator_t* allocator, u32 capaci
 void sp_bump_allocator_clear(sp_bump_allocator_t* allocator) {
   memset(allocator->buffer, 0, allocator->bytes_used);
   allocator->bytes_used = 0;
+}
+
+u32 sp_bump_allocator_push(sp_bump_allocator_t* allocator) {
+  return allocator->bytes_used;
+}
+
+void sp_bump_allocator_pop(sp_bump_allocator_t* allocator, u32 watermark) {
+  SP_ASSERT(watermark <= allocator->bytes_used);
+  allocator->bytes_used = watermark;
 }
 
 void sp_bump_allocator_destroy(sp_bump_allocator_t* allocator) {
@@ -3107,6 +3155,13 @@ c8* sp_str_to_cstr_double_nt(sp_str_t str) {
   return (c8*)buffer;
 }
 
+sp_str_t sp_str_alloc_ex(sp_allocator_t allocator, u32 capacity) {
+  return SP_RVAL(sp_str_t) {
+    .len = 0,
+    .data = (c8*)sp_allocator_alloc(allocator, capacity),
+  };
+}
+
 sp_str_t sp_str_alloc(u32 capacity) {
   return SP_RVAL(sp_str_t) {
     .len = 0,
@@ -3204,12 +3259,54 @@ c8 sp_str_back(sp_str_t str) {
   return str.data[str.len - 1];
 }
 
+sp_str_t sp_str_concat_ex(sp_allocator_t allocator, sp_str_t a, sp_str_t b) {
+  u32 total_len = a.len + b.len;
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, total_len);
+  sp_os_copy_memory(a.data, buffer, a.len);
+  sp_os_copy_memory(b.data, buffer + a.len, b.len);
+  return SP_STR(buffer, total_len);
+}
+
 sp_str_t sp_str_concat(sp_str_t a, sp_str_t b) {
   return sp_format("{}{}", SP_FMT_STR(a), SP_FMT_STR(b));
 }
 
+sp_str_t sp_str_join_ex(sp_allocator_t allocator, sp_str_t a, sp_str_t b, sp_str_t join) {
+  u32 total_len = a.len + join.len + b.len;
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, total_len);
+  sp_os_copy_memory(a.data, buffer, a.len);
+  sp_os_copy_memory(join.data, buffer + a.len, join.len);
+  sp_os_copy_memory(b.data, buffer + a.len + join.len, b.len);
+  return SP_STR(buffer, total_len);
+}
+
 sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
   return sp_format("{}{}{}", SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
+}
+
+sp_str_t sp_str_join_cstr_n_ex(sp_allocator_t allocator, const c8** strings, u32 num_strings, sp_str_t join) {
+  // Calculate total length
+  u32 total_len = 0;
+  for (u32 i = 0; i < num_strings; i++) {
+    total_len += sp_cstr_len(strings[i]);
+  }
+  if (num_strings > 1) {
+    total_len += join.len * (num_strings - 1);
+  }
+
+  // Allocate and build result
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, total_len);
+  u32 offset = 0;
+  for (u32 i = 0; i < num_strings; i++) {
+    u32 len = sp_cstr_len(strings[i]);
+    sp_os_copy_memory(strings[i], buffer + offset, len);
+    offset += len;
+    if (i < num_strings - 1) {
+      sp_os_copy_memory(join.data, buffer + offset, join.len);
+      offset += join.len;
+    }
+  }
+  return SP_STR(buffer, total_len);
 }
 
 sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) {
@@ -3242,11 +3339,29 @@ sp_str_t sp_str_sub_reverse(sp_str_t str, s32 index, s32 len) {
   return substr;
 }
 
+sp_str_t sp_str_from_cstr_sized_ex(sp_allocator_t allocator, const c8* str, u32 length) {
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, length);
+  u32 len = sp_cstr_len(str);
+  len = SP_MIN(len, length);
+  sp_os_copy_memory(str, buffer, len);
+
+  return SP_STR(buffer, len);
+}
+
 sp_str_t sp_str_from_cstr_sized(const c8* str, u32 length) {
   c8* buffer = (c8*)sp_alloc(length);
   u32 len = sp_cstr_len(str);
   len = SP_MIN(len, length);
   sp_os_copy_memory(str, buffer, len);
+
+  return SP_STR(buffer, len);
+}
+
+sp_str_t sp_str_from_cstr_null_ex(sp_allocator_t allocator, const c8* str) {
+  u32 len = sp_cstr_len(str);
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, len + 1);
+  sp_os_copy_memory(str, buffer, len);
+  buffer[len] = 0;
 
   return SP_STR(buffer, len);
 }
@@ -3260,12 +3375,27 @@ sp_str_t sp_str_from_cstr_null(const c8* str) {
   return SP_STR(buffer, len);
 }
 
+sp_str_t sp_str_from_cstr_ex(sp_allocator_t allocator, const c8* str) {
+  u32 len = sp_cstr_len(str);
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, len + 1);
+  sp_os_copy_memory(str, buffer, len);
+
+  return SP_STR(buffer, len);
+}
+
 sp_str_t sp_str_from_cstr(const c8* str) {
   u32 len = sp_cstr_len(str);
   c8* buffer = (c8*)sp_alloc(len + 1);
   sp_os_copy_memory(str, buffer, len);
 
   return SP_STR(buffer, len);
+}
+
+sp_str_t sp_str_copy_ex(sp_allocator_t allocator, sp_str_t str) {
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, str.len);
+  sp_os_copy_memory(str.data, buffer, str.len);
+
+  return SP_STR(buffer, str.len);
 }
 
 sp_str_t sp_str_copy(sp_str_t str) {
@@ -3277,6 +3407,13 @@ sp_str_t sp_str_copy(sp_str_t str) {
 
 void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
   sp_os_copy_memory(str.data, buffer, SP_MIN(str.len, capacity));
+}
+
+sp_str_t sp_str_null_terminate_ex(sp_allocator_t allocator, sp_str_t str) {
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, str.len + 1);
+  sp_os_copy_memory(str.data, buffer, str.len);
+  buffer[str.len] = 0;
+  return SP_STR(buffer, str.len);
 }
 
 sp_str_t sp_str_null_terminate(sp_str_t str) {
@@ -3396,8 +3533,44 @@ void sp_str_reduce_kernel_join(sp_str_reduce_context_t* context) {
   }
 }
 
+sp_str_t sp_str_join_n_ex(sp_allocator_t allocator, sp_str_t* strings, u32 num_strings, sp_str_t joiner) {
+  // Calculate total length
+  u32 total_len = 0;
+  for (u32 i = 0; i < num_strings; i++) {
+    total_len += strings[i].len;
+  }
+  if (num_strings > 1) {
+    total_len += joiner.len * (num_strings - 1);
+  }
+
+  // Allocate and build result
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, total_len);
+  u32 offset = 0;
+  for (u32 i = 0; i < num_strings; i++) {
+    sp_os_copy_memory(strings[i].data, buffer + offset, strings[i].len);
+    offset += strings[i].len;
+    if (i < num_strings - 1) {
+      sp_os_copy_memory(joiner.data, buffer + offset, joiner.len);
+      offset += joiner.len;
+    }
+  }
+  return SP_STR(buffer, total_len);
+}
+
 sp_str_t sp_str_join_n(sp_str_t* strings, u32 num_strings, sp_str_t joiner) {
   return sp_str_reduce(strings, num_strings, &joiner, sp_str_reduce_kernel_join);
+}
+
+sp_str_t sp_str_pad_ex(sp_allocator_t allocator, sp_str_t str, u32 n) {
+  s32 delta = (s32)n - (s32)str.len;
+  if (delta <= 0) return sp_str_copy_ex(allocator, str);
+
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, n);
+  sp_os_copy_memory(str.data, buffer, str.len);
+  for (u32 i = 0; i < delta; i++) {
+    buffer[str.len + i] = ' ';
+  }
+  return SP_STR(buffer, n);
 }
 
 sp_str_t sp_str_pad(sp_str_t str, u32 n) {
@@ -3411,6 +3584,15 @@ sp_str_t sp_str_pad(sp_str_t str, u32 n) {
   }
 
   return sp_str_builder_write(&builder);
+}
+
+sp_str_t sp_str_replace_c8_ex(sp_allocator_t allocator, sp_str_t str, c8 from, c8 to) {
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, str.len);
+  for (u32 i = 0; i < str.len; i++) {
+    c8 c = str.data[i];
+    buffer[i] = (c == from) ? to : c;
+  }
+  return SP_STR(buffer, str.len);
 }
 
 sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to) {
@@ -3501,6 +3683,15 @@ sp_str_t sp_str_trim(sp_str_t str) {
   return sp_str_sub(str, start, end - start);
 }
 
+sp_str_t sp_str_to_upper_ex(sp_allocator_t allocator, sp_str_t str) {
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, str.len);
+  for (u32 i = 0; i < str.len; i++) {
+    c8 c = str.data[i];
+    buffer[i] = (c >= 'a' && c <= 'z') ? (c - 32) : c;
+  }
+  return SP_STR(buffer, str.len);
+}
+
 sp_str_t sp_str_to_upper(sp_str_t str) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
@@ -3516,6 +3707,15 @@ sp_str_t sp_str_to_upper(sp_str_t str) {
   return sp_str_builder_write(&builder);
 }
 
+sp_str_t sp_str_to_lower_ex(sp_allocator_t allocator, sp_str_t str) {
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, str.len);
+  for (u32 i = 0; i < str.len; i++) {
+    c8 c = str.data[i];
+    buffer[i] = (c >= 'A' && c <= 'Z') ? (c + 32) : c;
+  }
+  return SP_STR(buffer, str.len);
+}
+
 sp_str_t sp_str_to_lower(sp_str_t str) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
@@ -3529,6 +3729,31 @@ sp_str_t sp_str_to_lower(sp_str_t str) {
   }
 
   return sp_str_builder_write(&builder);
+}
+
+sp_str_t sp_str_capitalize_words_ex(sp_allocator_t allocator, sp_str_t str) {
+  if (str.len == 0) return str;
+
+  c8* buffer = (c8*)sp_allocator_alloc(allocator, str.len);
+  bool next_cap = true;
+
+  for (u32 i = 0; i < str.len; i++) {
+    c8 c = str.data[i];
+    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+      buffer[i] = c;
+      next_cap = true;
+    } else if (next_cap && c >= 'a' && c <= 'z') {
+      buffer[i] = c - 32;
+      next_cap = false;
+    } else if (!next_cap && c >= 'A' && c <= 'Z') {
+      buffer[i] = c + 32;
+      next_cap = false;
+    } else {
+      buffer[i] = c;
+      next_cap = false;
+    }
+  }
+  return SP_STR(buffer, str.len);
 }
 
 sp_str_t sp_str_capitalize_words(sp_str_t str) {
@@ -5821,6 +6046,8 @@ void sp_init(sp_config_t config) {
   *ctx = (sp_context_t) {
     .allocator = sp_allocator_default()
   };
+  // Initialize temp allocator with 1MB default capacity
+  ctx->temp_allocator_interface = sp_bump_allocator_init(&ctx->temp_allocator, 1024 * 1024);
 }
 
 void sp_err_set(sp_err_t err) {
