@@ -1443,9 +1443,10 @@ SP_API sp_str_t        sp_env_get(sp_env_t* env, sp_str_t name);
 SP_API void            sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
 SP_API void            sp_env_erase(sp_env_t* env, sp_str_t name);
 SP_API void            sp_env_destroy(sp_env_t* env);
-SP_API void            sp_env_export_all(sp_env_t* env, sp_env_export_overwrite_t overwrite);
-SP_API void            sp_env_export(sp_env_var_t var, sp_env_export_overwrite_t overwrite);
-SP_API void            sp_env_clear(sp_str_t var);
+SP_API sp_str_t        sp_os_get_env_var(sp_str_t key);
+SP_API void            sp_os_clear_env_var(sp_str_t var);
+SP_API void            sp_os_export_env_var(sp_env_var_t var, sp_env_export_overwrite_t overwrite);
+SP_API void            sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite);
 SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
 SP_API void            sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg);
 SP_API sp_ps_t         sp_ps_create(sp_ps_config_t config);
@@ -4642,25 +4643,29 @@ void sp_env_destroy(sp_env_t* env) {
   env->vars = SP_NULLPTR;
 }
 
-void sp_env_export_all(sp_env_t* env, sp_env_export_overwrite_t overwrite) {
+sp_str_t sp_os_get_env_var(sp_str_t key) {
+  const c8* value = getenv(sp_str_to_cstr(key));
+  return sp_str_view(value);
+}
+
+void sp_os_clear_env_var(sp_str_t key) {
+  unsetenv(sp_str_to_cstr(key));
+}
+
+void sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite) {
   sp_ht_for(env->vars, it) {
-    sp_env_export((sp_env_var_t) {
+    sp_os_export_env_var((sp_env_var_t) {
       .key = *sp_ht_it_getkp(env->vars, it),
       .value = *sp_ht_it_getp(env->vars, it)
     }, overwrite);
   }
 }
 
-void sp_env_export(sp_env_var_t var, sp_env_export_overwrite_t overwrite) {
+void sp_os_export_env_var(sp_env_var_t var, sp_env_export_overwrite_t overwrite) {
   const c8* key = sp_str_to_cstr(var.key);
   const c8* value = sp_str_to_cstr(var.value);
   setenv(key, value, overwrite);
 }
-
-void sp_env_clear(sp_str_t var) {
-
-}
-
 
 bool sp_ps_create_pipes(s32 pipes [2]) {
   if (pipe(pipes) < 0) {
