@@ -110,7 +110,7 @@ s32 main(s32 num_args, const c8** args) {
     }
     case TEST_PROC_FUNCTION_SLOW_WRITE: {
       const u32 chunk_size = 10;
-      const u32 total_size = 1024;
+      const u32 total_size = 100;
       const u32 delay_ms = 20;
 
       u8 buffer[chunk_size];

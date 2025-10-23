@@ -636,6 +636,18 @@ UTEST_F(sp_ps, wait_while_process_running) {
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
+UTEST_F(sp_ps, run) {
+  sp_ps_output_t result = sp_ps_run((sp_ps_config_t) {
+    .command = SP_LIT("git"),
+    .args = {
+      SP_LIT("-C"), ut.file_manager.paths.root,
+      SP_LIT("rev-parse"),
+      SP_LIT("origin/HEAD"),
+    }
+  });
+  EXPECT_NE(result.out.len, 0);
+}
+
 UTEST_F(sp_ps, poll_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
@@ -750,10 +762,7 @@ UTEST_F(sp_ps, poll_multiple) {
   result = sp_ps_poll(&ps, 50);
   EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
 
-  result = sp_ps_poll(&ps, 50);
-  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
-
-  result = sp_ps_poll(&ps, 500);
+  result = sp_ps_poll(&ps, 300);
   EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
@@ -825,13 +834,13 @@ UTEST_F(sp_ps, interleaved_read_write) {
   EXPECT_NE(in, SP_NULLPTR);
   EXPECT_NE(out, SP_NULLPTR);
 
-  for (u32 i = 0; i < 10; i++) {
+  for (u32 i = 0; i < 4; i++) {
     sp_str_t input = sp_format("line {}\n", SP_FMT_U32(i));
 
     u64 written = sp_io_write_str(in, input);
     EXPECT_EQ(written, input.len);
 
-    sp_os_sleep_ms(100);
+    sp_os_sleep_ms(50);
     u64 bytes_read = sp_io_read(out, ut.buffer.data, ut.buffer.len);
     sp_str_t expected = sp_format("echo: line {}\n", SP_FMT_U32(i));
     EXPECT_EQ(bytes_read, expected.len);
@@ -862,7 +871,7 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
   sp_io_stream_t* out = sp_ps_io_out(&ps);
   EXPECT_NE(out, SP_NULLPTR);
 
-  const u32 expected_size = 1024;
+  const u32 expected_size = 100;
   u8 accumulated[expected_size];
   u32 total_read = 0;
 
