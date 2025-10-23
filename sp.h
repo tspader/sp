@@ -174,6 +174,7 @@
 #define SP_UNREACHABLE_CASE() SP_ASSERT(false); break;
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
 #define SP_BROKEN() SP_ASSERT(false)
+#define SP_UNTESTED()
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
 
@@ -1444,6 +1445,7 @@ SP_API void            sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t valu
 SP_API void            sp_env_erase(sp_env_t* env, sp_str_t name);
 SP_API void            sp_env_destroy(sp_env_t* env);
 SP_API sp_str_t        sp_os_get_env_var(sp_str_t key);
+SP_API sp_str_t        sp_os_get_env_path(sp_str_t key);
 SP_API void            sp_os_clear_env_var(sp_str_t var);
 SP_API void            sp_os_export_env_var(sp_env_var_t var, sp_env_export_overwrite_t overwrite);
 SP_API void            sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite);
@@ -4646,6 +4648,13 @@ void sp_env_destroy(sp_env_t* env) {
 sp_str_t sp_os_get_env_var(sp_str_t key) {
   const c8* value = getenv(sp_str_to_cstr(key));
   return sp_str_view(value);
+}
+
+sp_str_t sp_os_get_env_path(sp_str_t key) {
+  SP_UNTESTED()
+  const c8* value = getenv(sp_str_to_cstr(key));
+  sp_str_t path = sp_str_view(value);
+  return sp_os_normalize_path(path);
 }
 
 void sp_os_clear_env_var(sp_str_t key) {
