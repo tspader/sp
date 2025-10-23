@@ -49,7 +49,7 @@ SP_SP_H := sp.h
 ##################
 # COMPILER FLAGS #
 ##################
-SP_FLAG_INCLUDES := -I. -Itest -Itest/tools
+SP_FLAG_INCLUDES := -I. -Itest -Itest/tools -Iexternal
 SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
 SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
 SP_FLAG_OPTIMIZATION := -g
