@@ -11,7 +11,6 @@
 ////////////////////////
 // PLATFORM SELECTION //
 ////////////////////////
-#include <asm-generic/errno-base.h>
 #ifdef _WIN32
   #define SP_WIN32
 #endif
