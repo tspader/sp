@@ -162,7 +162,6 @@
   #define SP_ZERO_INITIALIZE() {}
   #define SP_NULL 0
   #define SP_NULLPTR nullptr
-  #define SP_ATOMIC(T) ::std::atomic<T>
 #else
   #define SP_RVAL(T) (T)
   #define SP_THREAD_LOCAL _Thread_local
@@ -171,7 +170,6 @@
   #define SP_ZERO_INITIALIZE() {0}
   #define SP_NULL 0
   #define SP_NULLPTR ((void*)0)
-  #define SP_ATOMIC(T) _Atomic T
 #endif
 
 #ifdef SP_WIN32
@@ -1209,11 +1207,9 @@ typedef struct {
   sp_semaphore_t semaphore;
 } sp_thread_launch_t;
 
-typedef SP_ATOMIC(bool) sp_atomic_bool_t;
-
 typedef struct {
   sp_allocator_t allocator;
-  sp_atomic_bool_t ready;
+  sp_atomic_s32 ready;
   void* value;
   u32 size;
 } sp_future_t;
@@ -1238,6 +1234,10 @@ SP_API void         sp_spin_pause();
 SP_API bool         sp_spin_try_lock(sp_spin_lock_t* lock);
 SP_API void         sp_spin_lock(sp_spin_lock_t* lock);
 SP_API void         sp_spin_unlock(sp_spin_lock_t* lock);
+SP_API bool         sp_atomic_s32_cmp_and_swap(sp_atomic_s32* value, s32 current, s32 desired);
+SP_API s32          sp_atomic_s32_set(sp_atomic_s32* value, s32 desired);
+SP_API s32          sp_atomic_s32_add(sp_atomic_s32* value, s32 add);
+SP_API s32          sp_atomic_s32_get(sp_atomic_s32* value);
 
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
@@ -5947,7 +5947,7 @@ sp_future_t* sp_future_create(u32 size) {
 
   sp_future_t* future = (sp_future_t*)sp_alloc(sizeof(sp_future_t));
   future->allocator = sp_context_get()->allocator;
-  future->ready = false;
+  sp_atomic_s32_set(&future->ready, 0);
   future->value = sp_alloc(size);
   future->size = size;
   return future;
@@ -5961,7 +5961,7 @@ void sp_future_destroy(sp_future_t* future) {
 
 void sp_future_set_value(sp_future_t* future, void* value) {
   sp_os_copy_memory(value, future->value, future->size);
-  future->ready = true;
+  sp_atomic_s32_set(&future->ready, 1);
 }
 
 
