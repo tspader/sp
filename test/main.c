@@ -5720,6 +5720,15 @@ UTEST(sp_os, is_glob_without_wildcard) {
   ASSERT_FALSE(sp_os_is_glob(SP_LIT("build/test")));
 }
 
+UTEST(sp_os, is_program_on_path_exists) {
+  ASSERT_TRUE(sp_os_is_program_on_path(SP_LIT("sh")));
+  ASSERT_TRUE(sp_os_is_program_on_path(SP_LIT("ls")));
+}
+
+UTEST(sp_os, is_program_on_path_not_exists) {
+  ASSERT_FALSE(sp_os_is_program_on_path(SP_LIT("nonexistent_program_xyz_12345")));
+}
+
 struct sp_os_copy_tests {
   sp_test_file_manager_t file_manager;
 };
