@@ -19,13 +19,13 @@ define print_color
 endef
 
 define build_target
-	@printf '$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK)$(2) $(3) $$(spn print) $(4) -o $(1)$(ANSI_RESET)\n'
-	@$(2) $(3) $$(spn print) $(4) -o $(1)
+	@printf '$(ANSI_FG_BRIGHT_YELLOW)%-12s$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK)$(2) $(3) $$(spn print) $(4) -o $(1)$(ANSI_RESET)\n' $(1)
+	@$(2) $(3) $$(spn print) $(4) -o ./build/bin/$(1)
 endef
 
 define run_tests
-	@printf "$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK) ./$(1) --enable-mixed-units --random-order\n";
-	@OUTPUT=$$(./$(1) --enable-mixed-units --random-order 2>&1); \
+	@printf "$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK) ./build/bin/$(1) --enable-mixed-units --random-order\n";
+	@OUTPUT=$$(./build/bin/$(1) --enable-mixed-units --random-order 2>&1); \
 	if echo "$$OUTPUT" | grep -q "PASSED"; then \
 		COUNT=$$(echo "$$OUTPUT" | grep -oP '\d+(?= tests?)' | head -1); \
 		printf ""; \
@@ -50,7 +50,7 @@ SP_SP_H := sp.h
 # COMPILER FLAGS #
 ##################
 SP_FLAG_INCLUDES := -I. -Itest -Itest/tools
-SP_FLAG_WARNINGS := -Wall -Werror -Wno-sign-compare -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-parentheses -Wno-type-limits -Wno-missing-braces
+SP_FLAG_WARNINGS := -Wall -Werror
 SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
 SP_FLAG_OPTIMIZATION := -g
 SP_FLAG_DEFINES := -DSP_IMPLEMENTATION
@@ -60,7 +60,7 @@ ifeq ($(OS),Windows_NT)
   CMAKE := cmake
   SP_FLAG_RPATH :=
 else
-  CC := tcc
+  CC := gcc
   MAKE := bear --append -- make
   CMAKE := bear --append -- cmake
 
@@ -77,7 +77,7 @@ SP_FLAGS_COMMON := $(SP_FLAG_INCLUDES) $(SP_FLAG_WARNINGS) $(SP_FLAG_LINKER) $(S
 
 
 # C
-SP_FLAG_CC_LANGUAGE := -std=c11
+SP_FLAG_CC_LANGUAGE := -std=c99
 SP_FLAGS_CC := $(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE) $$(spn print)
 
 # C++
@@ -108,46 +108,46 @@ deps:
 $(SP_DIR_BUILD_OUTPUT): | deps
 
 build/bin/c: $(SP_TEST_SOURCES) | $(SP_DIR_BUILD_OUTPUT)
-	$(call build_target,build/bin/c,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/main.c)
+	$(call build_target,c,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/main.c)
 
 build/bin/cpp: $(SP_TEST_SOURCES) | $(SP_DIR_BUILD_OUTPUT)
-	$(call build_target,build/bin/cpp,$(CPP),$(SP_FLAGS_COMMON) $(SP_FLAG_CPP_LANGUAGE),-x c++ test/main.c)
+	$(call build_target,cpp,$(CPP),$(SP_FLAGS_COMMON) $(SP_FLAG_CPP_LANGUAGE),-x c++ test/main.c)
 
 build/bin/app: $(SP_TEST_SOURCES) test/app.c | $(SP_DIR_BUILD_OUTPUT)
-	$(call build_target,build/bin/app,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/app.c)
+	$(call build_target,app,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/app.c)
 
 build/bin/file_monitor: $(SP_TEST_SOURCES) test/file_monitor.c | $(SP_DIR_BUILD_OUTPUT)
-	$(call build_target,build/bin/file_monitor,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/file_monitor.c)
+	$(call build_target,file_monitor,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/file_monitor.c)
 
 build/bin/ps: $(SP_TEST_SOURCES) test/ps.c build/bin/process | $(SP_DIR_BUILD_OUTPUT)
-	$(call build_target,build/bin/ps,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/ps.c)
+	$(call build_target,ps,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/ps.c)
 
 build/bin/process: test/tools/process.* | $(SP_DIR_BUILD_OUTPUT)
-	$(call build_target,build/bin/process,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/tools/process.c)
+	$(call build_target,process,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/tools/process.c)
 
 build/bin/stress: $(SP_TEST_SOURCES) test/stress.c | $(SP_DIR_BUILD_OUTPUT)
-	$(call build_target,build/bin/stress,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/stress.c)
+	$(call build_target,stress,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/stress.c)
 
 build: build/bin/c build/bin/app build/bin/file_monitor build/bin/ps build/bin/process build/bin/stress
 test: c app file_monitor cpp ps stress
 
 c: build/bin/c
-	$(call run_tests,build/bin/c)
+	$(call run_tests,c)
 
 cpp: build/bin/cpp
-	$(call run_tests,build/bin/cpp)
+	$(call run_tests,cpp)
 
 app: build/bin/app
-	$(call run_tests,build/bin/app)
+	$(call run_tests,app)
 
 file_monitor: build/bin/file_monitor
-	$(call run_tests,build/bin/file_monitor)
+	$(call run_tests,file_monitor)
 
 ps: build/bin/ps
-	$(call run_tests,build/bin/ps)
+	$(call run_tests,ps)
 
 stress: build/bin/stress
-	$(call run_tests,build/bin/stress)
+	$(call run_tests,stress)
 
 
 debug: c

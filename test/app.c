@@ -242,7 +242,7 @@ UTEST(asset_registry, state_transitions) {
   };
 
   // Start import - should be QUEUED initially
-  sp_future_t* future = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"), &input);
+  sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"), &input);
 
   // Find immediately after import (should be QUEUED)
   sp_asset_t* asset = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"));

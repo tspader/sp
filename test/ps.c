@@ -116,7 +116,7 @@ void sp_test_proc_check_stream(sp_test_proc_stream_context_t* ctx) {
 
 
 ////////////////
-// SP_PROC_IO //
+// SP_PS_IO //
 ////////////////
 void sp_test_proc_io(sp_test_proc_io_config_t test) {
   sp_ps_config_t config = {
@@ -191,13 +191,13 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   }
 }
 
-// SP_PROC_IO_CREATE
+// SP_PS_IO_MODE_CREATE
 UTEST_F(sp_ps, io_create_create_null) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_CREATE },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     },
     .input = sp_test_ps_canary,
     .output.out = { .expected = sp_test_ps_canary, .enabled = true },
@@ -208,9 +208,9 @@ UTEST_F(sp_ps, io_create_create_null) {
 UTEST_F(sp_ps, io_create_null_create) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_CREATE },
-      .out = { .mode = SP_PROC_IO_NULL },
-      .err = { .mode = SP_PROC_IO_CREATE },
+      .in = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_NULL },
+      .err = { .mode = SP_PS_IO_MODE_CREATE },
     },
     .input = sp_test_ps_canary,
     .output.err = { .expected = sp_test_ps_canary, .enabled = true },
@@ -221,9 +221,9 @@ UTEST_F(sp_ps, io_create_null_create) {
 UTEST_F(sp_ps, io_null_create_null) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_NULL },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     },
     .output.out = { .expected = sp_test_ps_canary, .enabled = true },
     .fn = TEST_PROC_FUNCTION_PRINT,
@@ -233,9 +233,9 @@ UTEST_F(sp_ps, io_null_create_null) {
 UTEST_F(sp_ps, io_null_null_create) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_NULL },
-      .out = { .mode = SP_PROC_IO_NULL },
-      .err = { .mode = SP_PROC_IO_CREATE },
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_NULL },
+      .err = { .mode = SP_PS_IO_MODE_CREATE },
     },
     .output.err = { .expected = sp_test_ps_canary, .enabled = true },
     .fn = TEST_PROC_FUNCTION_PRINT,
@@ -245,9 +245,9 @@ UTEST_F(sp_ps, io_null_null_create) {
 UTEST_F(sp_ps, io_stdout_stderr) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_NULL },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_CREATE },
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_CREATE },
     },
     .output.out = { .expected = sp_test_ps_canary, .enabled = true },
     .output.err = { .expected = sp_test_ps_canary, .enabled = true },
@@ -255,16 +255,16 @@ UTEST_F(sp_ps, io_stdout_stderr) {
   });
 }
 
-// SP_PROC_IO_EXISTING
+// SP_PS_IO_MODE_EXISTING
 UTEST_F(sp_ps, io_create_file_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdout.file"));
   sp_io_stream_t io = sp_io_from_file(file_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_CREATE },
-      .out = { .mode = SP_PROC_IO_EXISTING, .stream = io },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_EXISTING, .stream = io },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     },
     .input = sp_test_ps_canary,
     .output = {
@@ -296,9 +296,9 @@ UTEST_F(sp_ps, io_file_create_null) {
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_EXISTING, .stream = io },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_EXISTING, .stream = io },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     },
     .output = {
       .out = {
@@ -318,9 +318,9 @@ UTEST_F(sp_ps, io_create_null_file) {
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_CREATE },
-      .out = { .mode = SP_PROC_IO_NULL },
-      .err = { .mode = SP_PROC_IO_EXISTING, .stream = io },
+      .in = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_NULL },
+      .err = { .mode = SP_PS_IO_MODE_EXISTING, .stream = io },
     },
     .input = sp_test_ps_canary,
     .output = {
@@ -355,9 +355,9 @@ UTEST_F(sp_ps, io_file_null_file) {
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PROC_IO_EXISTING, .stream = in },
-      .out = { .mode = SP_PROC_IO_NULL },
-      .err = { .mode = SP_PROC_IO_EXISTING, .stream = err },
+      .in = { .mode = SP_PS_IO_MODE_EXISTING, .stream = in },
+      .out = { .mode = SP_PS_IO_MODE_NULL },
+      .err = { .mode = SP_PS_IO_MODE_EXISTING, .stream = err },
     },
     .output = {
       .err = {
@@ -385,7 +385,7 @@ UTEST_F(sp_ps, io_file_null_file) {
 /////////////////
 typedef struct {
   sp_ps_env_config_t config;
-  sp_env_var_t expected [SP_PROC_MAX_ENV];
+  sp_env_var_t expected [SP_PS_MAX_ENV];
   sp_env_var_t* foo;
 } sp_test_proc_env_config_t;
 
@@ -434,9 +434,9 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
       sp_str_lit("--stdout")
     },
     .io = {
-      .in = { .mode = SP_PROC_IO_CREATE },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     },
     .env = test.config
   };
@@ -494,7 +494,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
 UTEST_F(sp_ps, env_clean) {
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PROC_ENV_CLEAN,
+      .mode = SP_PS_ENV_CLEAN,
     },
     .expected = {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("") },
@@ -503,7 +503,7 @@ UTEST_F(sp_ps, env_clean) {
 
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PROC_ENV_CLEAN,
+      .mode = SP_PS_ENV_CLEAN,
       .extra = {
         { .key = sp_str_lit("jerry"), .value = sp_str_lit("garcia") },
       }
@@ -515,7 +515,7 @@ UTEST_F(sp_ps, env_clean) {
 
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PROC_ENV_CLEAN,
+      .mode = SP_PS_ENV_CLEAN,
       .extra = {
         { .key = sp_str_lit("garcia"), .value = sp_str_lit("john") },
         { .key = sp_str_lit("garcia"), .value = sp_str_lit("jerome") },
@@ -532,7 +532,7 @@ UTEST_F(sp_ps, env_inherit) {
 
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PROC_ENV_INHERIT,
+      .mode = SP_PS_ENV_INHERIT,
     },
     .expected = {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("garcia") },
@@ -550,7 +550,7 @@ UTEST_F(sp_ps, env_existing) {
 
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PROC_ENV_EXISTING,
+      .mode = SP_PS_ENV_EXISTING,
       .env = env
     },
     .expected = {
@@ -563,7 +563,7 @@ UTEST_F(sp_ps, env_existing) {
   // Anything extra on top of the base env is applied
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PROC_ENV_EXISTING,
+      .mode = SP_PS_ENV_EXISTING,
       .env = env,
       .extra = {
         { .key = sp_str_lit("billy"), .value = sp_str_lit("kreutzmann") },
@@ -578,7 +578,7 @@ UTEST_F(sp_ps, env_existing) {
 UTEST_F(sp_ps, empty_env_var) {
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PROC_ENV_CLEAN,
+      .mode = SP_PS_ENV_CLEAN,
       .extra = {
         { .key = sp_str_lit("jerry"), .value = sp_str_lit("") }
       }
@@ -593,7 +593,7 @@ UTEST_F(sp_ps, empty_env_var) {
 
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PROC_ENV_INHERIT,
+      .mode = SP_PS_ENV_INHERIT,
     },
     .expected = {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("") },
@@ -604,7 +604,7 @@ UTEST_F(sp_ps, empty_env_var) {
 }
 
 //////////////////
-// SP_PROC_WAIT //
+// SP_PS_WAIT //
 //////////////////
 UTEST_F(sp_ps, wait_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
@@ -618,7 +618,7 @@ UTEST_F(sp_ps, wait_after_process_complete) {
   sp_os_sleep_ms(100);
 
   sp_ps_status_t result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 42);
 }
 
@@ -632,7 +632,7 @@ UTEST_F(sp_ps, wait_while_process_running) {
   });
 
   sp_ps_status_t result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
@@ -658,10 +658,10 @@ UTEST_F(sp_ps, poll_while_process_running) {
   });
 
   sp_ps_status_t result = sp_ps_poll(&ps, 0);
-  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
+  EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
 
   result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
 }
 
 UTEST_F(sp_ps, process_complete_during_poll) {
@@ -674,7 +674,7 @@ UTEST_F(sp_ps, process_complete_during_poll) {
   });
 
   sp_ps_status_t result = sp_ps_poll(&ps, 200);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
@@ -690,7 +690,7 @@ UTEST_F(sp_ps, poll_after_process_complete) {
   sp_os_sleep_ms(100);
 
   sp_ps_status_t result = sp_ps_poll(&ps, 0);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 }
 
@@ -706,7 +706,7 @@ UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
   sp_os_sleep_ms(100);
 
   sp_ps_status_t result = sp_ps_poll(&ps, 100);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 }
 
@@ -720,11 +720,11 @@ UTEST_F(sp_ps, wait_twice_while_process_running) {
   });
 
   sp_ps_status_t result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 72);
 
   result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, -1);
 }
 
@@ -738,10 +738,10 @@ UTEST_F(sp_ps, poll_then_wait) {
   });
 
   sp_ps_status_t result = sp_ps_poll(&ps, 0);
-  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
+  EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
 
   result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
@@ -757,13 +757,13 @@ UTEST_F(sp_ps, poll_multiple) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
 
   result = sp_ps_poll(&ps, 50);
-  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
+  EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
 
   result = sp_ps_poll(&ps, 50);
-  EXPECT_EQ(result.state, SP_PROC_STATE_RUNNING);
+  EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
 
   result = sp_ps_poll(&ps, 300);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
@@ -775,14 +775,14 @@ UTEST_F(sp_ps, wait_with_output) {
       sp_str_lit("--stdout")
     },
     .io = {
-      .in = { .mode = SP_PROC_IO_NULL },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
 
   sp_ps_status_t result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 
   u64 bytes_read = sp_io_read(sp_ps_io_out(&ps), ut.buffer.data, ut.buffer.len);
@@ -798,20 +798,20 @@ UTEST_F(sp_ps, poll_with_io) {
       sp_str_lit("100")
     },
     .io = {
-      .in = { .mode = SP_PROC_IO_CREATE },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
 
   sp_ps_status_t r1 = sp_ps_poll(&ps, 10);
-  EXPECT_EQ(r1.state, SP_PROC_STATE_RUNNING);
+  EXPECT_EQ(r1.state, SP_PS_STATE_RUNNING);
 
   sp_io_stream_t* in = sp_ps_io_in(&ps);
   EXPECT_NE(in, SP_NULLPTR);
 
   sp_ps_status_t r2 = sp_ps_wait(&ps);
-  EXPECT_EQ(r2.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(r2.state, SP_PS_STATE_DONE);
 }
 
 UTEST_F(sp_ps, interleaved_read_write) {
@@ -822,9 +822,9 @@ UTEST_F(sp_ps, interleaved_read_write) {
       sp_str_lit("--stdout")
     },
     .io = {
-      .in = { .mode = SP_PROC_IO_CREATE },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
 
@@ -850,7 +850,7 @@ UTEST_F(sp_ps, interleaved_read_write) {
   sp_io_close(in);
 
   sp_ps_status_t result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 }
 
@@ -862,9 +862,9 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
       sp_str_lit("--stdout")
     },
     .io = {
-      .in = { .mode = SP_PROC_IO_NULL },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
 
@@ -881,7 +881,7 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
       total_read += n;
     } else {
       sp_ps_status_t result = sp_ps_poll(&ps, 10);
-      if (result.state == SP_PROC_STATE_DONE) break;
+      if (result.state == SP_PS_STATE_DONE) break;
     }
   }
 
@@ -894,7 +894,7 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
   }
 
   sp_ps_status_t result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 }
 
@@ -906,21 +906,21 @@ UTEST_F(sp_ps, output) {
       sp_str_lit("--stdout")
     },
     .io = {
-      .in = { .mode = SP_PROC_IO_NULL },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
 
   sp_ps_output_t output = sp_ps_output(&ps);
 
-  EXPECT_EQ(output.status.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
   EXPECT_TRUE(sp_str_equal(output.out, sp_test_ps_canary));
   EXPECT_TRUE(sp_str_empty(output.err));
 }
 
-UTEST_F(sp_ps, large_stdin_write_no_deadlock) {
+UTEST_F(sp_ps, write_1mb_to_stdin) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/bin/process"),
     .args = {
@@ -928,9 +928,9 @@ UTEST_F(sp_ps, large_stdin_write_no_deadlock) {
       sp_str_lit("--stdout"),
     },
     .io = {
-      .in = { .mode = SP_PROC_IO_CREATE },
-      .out = { .mode = SP_PROC_IO_CREATE },
-      .err = { .mode = SP_PROC_IO_NULL },
+      .in = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
 
@@ -949,7 +949,7 @@ UTEST_F(sp_ps, large_stdin_write_no_deadlock) {
 
   sp_ps_output_t output = sp_ps_output(&ps);
 
-  EXPECT_EQ(output.status.state, SP_PROC_STATE_DONE);
+  EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
 
   sp_str_t expected = sp_format("{}\n", SP_FMT_U64(num_bytes));

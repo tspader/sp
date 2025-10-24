@@ -674,9 +674,6 @@ sp_str_t sp_test_map_band_member(sp_str_map_context_t* context) {
 }
 
 UTEST(sp_str_t, map_reduce) {
-
-
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_t band [] = {
     SP_LIT("jerry"), SP_LIT("bobby"), SP_LIT("phil")
   };
@@ -2517,7 +2514,6 @@ UTEST(hash_table, iteration) {
   s32 sum = 0;
 
   for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
-    s32 key = *sp_ht_it_getkp(ht, it);
     float val = *sp_ht_it_getp(ht, it);
 
     count++;
@@ -2604,14 +2600,12 @@ UTEST(sp_ht, iterator_yields_inactive_entry_at_slot_zero) {
 
   ASSERT_EQ(sp_ht_size(ht), 0);
 
-  u64 iteration_count = 0;
+  u64 num_entries = 0;
   for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
-    u64 key = *sp_ht_it_getkp(ht, it);
-    u64 val = *sp_ht_it_getp(ht, it);
-    iteration_count++;
+    num_entries++;
   }
 
-  ASSERT_EQ(iteration_count, 0);
+  ASSERT_EQ(num_entries, 0);
 
   sp_ht_free(ht);
 }
@@ -3621,9 +3615,6 @@ void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t*
 // ╚═╝      ╚═════╝ ╚══════╝╚═╝╚═╝  ╚═╝
 #ifdef SP_POSIX
 UTEST(posix, smoke) {
-  sp_str_t path = SP_LIT("/tmp/test");
-  bool exists = sp_os_does_path_exist(path);
-
   sp_mutex_t mutex;
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
   sp_mutex_lock(&mutex);
