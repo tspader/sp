@@ -211,6 +211,7 @@
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
 #define SP_BROKEN() SP_ASSERT(false)
 #define SP_UNTESTED()
+#define SP_INCOMPLETE()
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
 
@@ -932,6 +933,7 @@ SP_API sp_str_t               sp_str_replace_c8(sp_str_t str, c8 from, c8 to);
 SP_API sp_str_t               sp_str_pad(sp_str_t str, u32 n);
 SP_API sp_str_t               sp_str_trim(sp_str_t str);
 SP_API sp_str_t               sp_str_trim_right(sp_str_t str);
+SP_API sp_str_t               sp_str_truncate(sp_str_t str, u32 n, sp_str_t trailer);
 SP_API sp_str_t               sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
 SP_API sp_str_t               sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
 SP_API sp_str_t               sp_str_to_upper(sp_str_t str);
@@ -1148,10 +1150,16 @@ SP_API bool                         sp_os_does_path_exist(sp_str_t path);
 SP_API bool                         sp_os_is_regular_file(sp_str_t path);
 SP_API bool                         sp_os_is_directory(sp_str_t path);
 SP_API bool                         sp_os_is_path_root(sp_str_t path);
+SP_API bool                         sp_os_is_glob(sp_str_t path);
+SP_API bool                         sp_os_is_program_on_path(sp_str_t program);
 SP_API void                         sp_os_create_directory(sp_str_t path);
 SP_API void                         sp_os_remove_directory(sp_str_t path);
 SP_API void                         sp_os_create_file(sp_str_t path);
 SP_API void                         sp_os_remove_file(sp_str_t path);
+SP_API void                         sp_os_copy(sp_str_t from, sp_str_t to);
+SP_API void                         sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
+SP_API void                         sp_os_copy_file(sp_str_t from, sp_str_t to);
+SP_API void                         sp_os_copy_directory(sp_str_t from, sp_str_t to);
 SP_API sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path);
 SP_API sp_os_date_time_t            sp_os_get_date_time();
 SP_API sp_str_t                     sp_os_normalize_path(sp_str_t path);
@@ -3625,6 +3633,15 @@ sp_str_t sp_str_capitalize_words(sp_str_t str) {
   return sp_str_builder_write(&builder);
 }
 
+sp_str_t sp_str_truncate(sp_str_t str, u32 n, sp_str_t trailer) {
+  if (!n) return sp_str_copy(str);
+  if (str.len <= n) return sp_str_copy(str);
+  SP_ASSERT(trailer.len <= n);
+
+  str.len = n - trailer.len;
+  return sp_str_concat(str, trailer);
+}
+
 sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* strs, u32 num_strs, sp_opaque_ptr user_data, sp_str_map_fn_t fn) {
   sp_dyn_array(sp_str_t) results = SP_NULLPTR;
 
@@ -4211,6 +4228,90 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     DeleteFileA(sp_str_to_cstr(path));
   }
 
+  bool sp_os_is_glob(sp_str_t path) {
+    sp_str_t file_name = sp_os_extract_file_name(path);
+    return sp_str_contains_n(&file_name, 1, sp_str_lit("*"));
+  }
+
+  bool sp_os_is_program_on_path(sp_str_t program) {
+    sp_ps_config_t config = SP_ZERO_INITIALIZE();
+    config.command = SP_LIT("where");
+    sp_ps_config_add_arg(&config, program);
+    config.io.out.mode = SP_PS_IO_MODE_NULL;
+    config.io.err.mode = SP_PS_IO_MODE_NULL;
+
+    sp_ps_output_t output = sp_ps_run(config);
+
+    return output.status.exit_code == 0;
+  }
+
+  void sp_os_copy(sp_str_t from, sp_str_t to) {
+    if (sp_os_is_glob(from)) {
+      sp_os_copy_glob(sp_os_parent_path(from), sp_os_extract_file_name(from), to);
+    }
+    else if (sp_os_is_directory(from)) {
+      SP_ASSERT(sp_os_is_directory(to));
+      sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_stem(from)));
+    }
+    else if (sp_os_is_regular_file(from)) {
+      sp_os_copy_file(from, to);
+    }
+  }
+
+  void sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
+    sp_os_create_directory(to);
+
+    sp_os_directory_entry_list_t entries = sp_os_scan_directory(from);
+
+    for (u32 i = 0; i < entries.count; i++) {
+      sp_os_directory_entry_t* entry = &entries.data[i];
+      sp_str_t entry_name = entry->file_name;
+
+      bool matches = sp_str_equal(glob, sp_str_lit("*"));
+      if (!matches) {
+        matches = sp_str_equal(entry_name, glob);
+      }
+
+      if (matches) {
+        sp_str_t entry_path = sp_os_join_path(from, entry_name);
+        sp_os_copy(entry_path, to);
+      }
+    }
+  }
+
+  void sp_os_copy_file(sp_str_t from, sp_str_t to) {
+    if (sp_os_is_directory(to)) {
+      sp_os_create_directory(to);
+      to = sp_os_join_path(to, sp_os_extract_file_name(from));
+    }
+
+    sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
+    if (!src.file.fd) return;
+
+    sp_io_stream_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
+    if (!dst.file.fd) {
+      sp_io_close(&src);
+      return;
+    }
+
+    u8 buffer[4096];
+    u64 bytes_read;
+    while ((bytes_read = sp_io_read(&src, buffer, sizeof(buffer))) > 0) {
+      sp_io_write(&dst, buffer, bytes_read);
+    }
+
+    sp_io_close(&src);
+    sp_io_close(&dst);
+  }
+
+  void sp_os_copy_directory(sp_str_t from, sp_str_t to) {
+    if (sp_os_is_directory(to)) {
+      to = sp_os_join_path(to, sp_os_extract_file_name(from));
+    }
+
+    sp_os_copy_glob(from, sp_str_lit("*"), to);
+  }
+
   sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
     if (!sp_os_is_directory(path) || !sp_os_does_path_exist(path)) {
       return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
@@ -4581,6 +4682,92 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   void sp_os_remove_file(sp_str_t path) {
     c8* path_cstr = sp_str_to_cstr(path);
     unlink(path_cstr);
+  }
+
+  bool sp_os_is_glob(sp_str_t path) {
+    SP_INCOMPLETE()
+    sp_str_t file_name = sp_os_extract_file_name(path);
+    return sp_str_contains_n(&file_name, 1, sp_str_lit("*"));
+  }
+
+  bool sp_os_is_program_on_path(sp_str_t program) {
+    SP_INCOMPLETE()
+    sp_ps_config_t config = SP_ZERO_INITIALIZE();
+    config.command = SP_LIT("which");
+    sp_ps_config_add_arg(&config, program);
+    config.io.out.mode = SP_PS_IO_MODE_NULL;
+    config.io.err.mode = SP_PS_IO_MODE_NULL;
+
+    sp_ps_output_t output = sp_ps_run(config);
+
+    return output.status.exit_code == 0;
+  }
+
+  void sp_os_copy(sp_str_t from, sp_str_t to) {
+    if (sp_os_is_glob(from)) {
+      sp_os_copy_glob(sp_os_parent_path(from), sp_os_extract_file_name(from), to);
+    }
+    else if (sp_os_is_directory(from)) {
+      SP_ASSERT(sp_os_is_directory(to));
+      sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_stem(from)));
+    }
+    else if (sp_os_is_regular_file(from)) {
+      sp_os_copy_file(from, to);
+    }
+  }
+
+  void sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
+    sp_os_create_directory(to);
+
+    sp_os_directory_entry_list_t entries = sp_os_scan_directory(from);
+
+    for (u32 i = 0; i < entries.count; i++) {
+      sp_os_directory_entry_t* entry = &entries.data[i];
+      sp_str_t entry_name = entry->file_name;
+
+      bool matches = sp_str_equal(glob, sp_str_lit("*"));
+      if (!matches) {
+        matches = sp_str_equal(entry_name, glob);
+      }
+
+      if (matches) {
+        sp_str_t entry_path = sp_os_join_path(from, entry_name);
+        sp_os_copy(entry_path, to);
+      }
+    }
+  }
+
+  void sp_os_copy_file(sp_str_t from, sp_str_t to) {
+    if (sp_os_is_directory(to)) {
+      sp_os_create_directory(to);
+      to = sp_os_join_path(to, sp_os_extract_file_name(from));
+    }
+
+    sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
+    if (!src.file.fd) return;
+
+    sp_io_stream_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
+    if (!dst.file.fd) {
+      sp_io_close(&src);
+      return;
+    }
+
+    u8 buffer[4096];
+    u64 bytes_read;
+    while ((bytes_read = sp_io_read(&src, buffer, sizeof(buffer))) > 0) {
+      sp_io_write(&dst, buffer, bytes_read);
+    }
+
+    sp_io_close(&src);
+    sp_io_close(&dst);
+  }
+
+  void sp_os_copy_directory(sp_str_t from, sp_str_t to) {
+    if (sp_os_is_directory(to)) {
+      to = sp_os_join_path(to, sp_os_extract_file_name(from));
+    }
+
+    sp_os_copy_glob(from, sp_str_lit("*"), to);
   }
 
   sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
