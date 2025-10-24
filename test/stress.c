@@ -218,4 +218,52 @@ UTEST(sp_dyn_array_push_f, stress_test) {
   sp_dyn_array_free(arr);
 }
 
+typedef struct {
+  sp_spin_lock_t* lock;
+  s32* shared_counter;
+  s32 iterations;
+  s32 thread_id;
+} sp_spin_lock_stress_thread_data_t;
+
+s32 sp_spin_lock_stress_thread(void* userdata) {
+  sp_spin_lock_stress_thread_data_t* data = (sp_spin_lock_stress_thread_data_t*)userdata;
+
+  for (s32 i = 0; i < data->iterations; i++) {
+    sp_spin_lock(data->lock);
+    s32 old_value = *data->shared_counter;
+    sp_spin_pause();
+    *data->shared_counter = old_value + 1;
+    sp_spin_unlock(data->lock);
+  }
+
+  return 0;
+}
+
+#define SP_SPIN_LOCK_STRESS_THREADS 8
+#define SP_SPIN_LOCK_STRESS_ITERATIONS 5000
+
+UTEST(sp_spin_lock, stress_multiple_threads) {
+  sp_spin_lock_t lock = 0;
+  s32 shared_counter = 0;
+
+  sp_spin_lock_stress_thread_data_t thread_data[SP_SPIN_LOCK_STRESS_THREADS];
+  sp_thread_t threads[SP_SPIN_LOCK_STRESS_THREADS];
+
+  for (s32 i = 0; i < SP_SPIN_LOCK_STRESS_THREADS; i++) {
+    thread_data[i].lock = &lock;
+    thread_data[i].shared_counter = &shared_counter;
+    thread_data[i].iterations = SP_SPIN_LOCK_STRESS_ITERATIONS;
+    thread_data[i].thread_id = i;
+
+    sp_thread_init(&threads[i], sp_spin_lock_stress_thread, &thread_data[i]);
+  }
+
+  for (s32 i = 0; i < SP_SPIN_LOCK_STRESS_THREADS; i++) {
+    sp_thread_join(&threads[i]);
+  }
+
+  ASSERT_EQ(shared_counter, SP_SPIN_LOCK_STRESS_THREADS * SP_SPIN_LOCK_STRESS_ITERATIONS);
+  ASSERT_EQ(lock, 0);
+}
+
 UTEST_MAIN()

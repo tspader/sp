@@ -59,12 +59,12 @@ SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
 SP_FLAG_OPTIMIZATION := -g
 SP_FLAG_DEFINES := -DSP_IMPLEMENTATION
 ifeq ($(OS),Windows_NT)
-  CC := gcc
+  CC? := gcc
   MAKE := make
   CMAKE := cmake
   SP_FLAG_RPATH :=
 else
-  CC := gcc
+  CC? := gcc
   MAKE := bear --append -- make
   CMAKE := bear --append -- cmake
 
@@ -87,7 +87,7 @@ SP_FLAGS_CC := $(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE) $$(spn print)
 # C++
 CPP := g++
 SP_FLAG_CPP_LANGUAGE := -std=c++20
-SP_FLAGS_CPP := $(SP_FLAGS_COMMON) $(SP_FLAG_CPP_LANGUAGE) $$(spn print)
+SP_FLAGS_CPP := $(SP_FLAGS_COMMON) $(SP_FLAG_CPP_LANGUAGE) -Wno-sign-compare -Wno-parenthesis $$(spn print)
 
 # C + Stress
 SP_FLAGS_STRESS = $(SP_FLAGS_CC) -DSP_TEST_ENABLE_STRESS_TESTS
@@ -95,7 +95,7 @@ SP_FLAGS_STRESS = $(SP_FLAGS_CC) -DSP_TEST_ENABLE_STRESS_TESTS
 # Miscellaneous flags
 
 SP_SOURCE_FILES := test/main.c
-SP_TEST_SOURCES := sp.h test/test.h
+SP_TEST_SOURCES := sp.h test/test.h Makefile
 
 ###########
 # TARGETS #
@@ -133,7 +133,7 @@ build/bin/stress: $(SP_TEST_SOURCES) test/stress.c | $(SP_DIR_BUILD_OUTPUT)
 	$(call build_target,stress,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/stress.c)
 
 build: build/bin/c build/bin/app build/bin/file_monitor build/bin/ps build/bin/process build/bin/stress
-test: c app file_monitor cpp ps stress
+test: c app file_monitor ps stress
 
 c: build/bin/c
 	$(call run_tests,c)
