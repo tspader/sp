@@ -5514,3 +5514,102 @@ UTEST(threading, context_in_child_thread) {
   ASSERT_GT(data.allocated_string.len, 0);
   SP_EXPECT_STR_EQ_CSTR(data.allocated_string, "thread allocation test");
 }
+
+
+//  ███████╗██████╗ ██╗███╗   ██╗    ██╗      ██████╗  ██████╗██╗  ██╗
+//  ██╔════╝██╔══██╗██║████╗  ██║    ██║     ██╔═══██╗██╔════╝██║ ██╔╝
+//  ███████╗██████╔╝██║██╔██╗ ██║    ██║     ██║   ██║██║     █████╔╝
+//  ╚════██║██╔═══╝ ██║██║╚██╗██║    ██║     ██║   ██║██║     ██╔═██╗
+//  ███████║██║     ██║██║ ╚████║    ███████╗╚██████╔╝╚██████╔╝██║  ██╗
+//  ╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝    ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝
+
+UTEST(sp_spin_lock, basic_lock_unlock) {
+  sp_spin_lock_t lock = 0;
+
+  sp_spin_lock(&lock);
+  ASSERT_EQ(lock, 1);
+
+  sp_spin_unlock(&lock);
+  ASSERT_EQ(lock, 0);
+}
+
+UTEST(sp_spin_lock, try_lock_success) {
+  sp_spin_lock_t lock = 0;
+
+  bool acquired = sp_spin_try_lock(&lock);
+  ASSERT_TRUE(acquired);
+  ASSERT_EQ(lock, 1);
+
+  sp_spin_unlock(&lock);
+  ASSERT_EQ(lock, 0);
+}
+
+UTEST(sp_spin_lock, try_lock_fails_when_locked) {
+  sp_spin_lock_t lock = 0;
+
+  sp_spin_lock(&lock);
+  ASSERT_EQ(lock, 1);
+
+  bool second_acquire = sp_spin_try_lock(&lock);
+  ASSERT_FALSE(second_acquire);
+
+  sp_spin_unlock(&lock);
+}
+
+UTEST(sp_spin_lock, multiple_lock_unlock_cycles) {
+  sp_spin_lock_t lock = 0;
+
+  for (s32 i = 0; i < 1000; i++) {
+    sp_spin_lock(&lock);
+    ASSERT_EQ(lock, 1);
+    sp_spin_unlock(&lock);
+    ASSERT_EQ(lock, 0);
+  }
+}
+
+typedef struct {
+  sp_spin_lock_t* lock;
+  s32* shared_counter;
+  s32 iterations;
+  s32 thread_id;
+} sp_spin_lock_thread_data_t;
+
+s32 sp_spin_lock_increment_thread(void* userdata) {
+  sp_spin_lock_thread_data_t* data = (sp_spin_lock_thread_data_t*)userdata;
+
+  for (s32 i = 0; i < data->iterations; i++) {
+    sp_spin_lock(data->lock);
+    (*data->shared_counter)++;
+    sp_spin_unlock(data->lock);
+  }
+
+  return 0;
+}
+
+UTEST(sp_spin_lock, mutual_exclusion_two_threads) {
+  sp_spin_lock_t lock = 0;
+  s32 shared_counter = 0;
+  const s32 iterations_per_thread = 10000;
+
+  sp_spin_lock_thread_data_t data1 = SP_ZERO_INITIALIZE();
+  data1.lock = &lock;
+  data1.shared_counter = &shared_counter;
+  data1.iterations = iterations_per_thread;
+  data1.thread_id = 1;
+
+  sp_spin_lock_thread_data_t data2 = SP_ZERO_INITIALIZE();
+  data2.lock = &lock;
+  data2.shared_counter = &shared_counter;
+  data2.iterations = iterations_per_thread;
+  data2.thread_id = 2;
+
+  sp_thread_t thread1, thread2;
+  sp_thread_init(&thread1, sp_spin_lock_increment_thread, &data1);
+  sp_thread_init(&thread2, sp_spin_lock_increment_thread, &data2);
+
+  sp_thread_join(&thread1);
+  sp_thread_join(&thread2);
+
+  ASSERT_EQ(shared_counter, iterations_per_thread * 2);
+  ASSERT_EQ(lock, 0);
+}

@@ -25,9 +25,49 @@
   #define SP_POSIX
 #endif
 
+////////////////////////
+// COMPILER SELECTION //
+////////////////////////
+#ifdef _MSC_VER
+  #define SP_MSVC
+#endif
+
+#ifdef __clang__
+  #define SP_CLANG
+#endif
+
+#if defined(__GNUC__) && !defined(SP_CLANG)
+  #define SP_GCC
+#endif
+
+#if defined(__TINYC__)
+  #define SP_TCC
+#endif
+
+#if defined(SP_GCC) || defined(SP_CLANG)
+  #define SP_GNUISH
+#endif
+
+////////////////////////////
+// ARCHITECTURE SELECTION //
+////////////////////////////
+#if defined(__x86_64__) || defined(_M_X64)
+  #define SP_AMD64
+  #define SP_AMD
+#endif
+
+#if defined(__aarch64__) || defined(_M_ARM64)
+  #define SP_ARM64
+  #define SP_ARM
+#endif
+
+////////////////////////
+// LANGUAGE SELECTION //
+////////////////////////
 #ifdef __cplusplus
   #define SP_CPP
 #endif
+
 
 //////////////////////
 // PLATFORM HEADERS //
@@ -37,7 +77,6 @@
   #define WIN32_LEAN_AND_MEAN
   #define NOMINMAX
   #define _CRT_RAND_S
-  #define _AMD64_
 
   #ifdef SP_WIN32_NO_WINDOWS_H
     #include "windef.h"
@@ -96,8 +135,6 @@
   #include <poll.h>
 #endif
 
-#include "string.h"
-
 #ifdef SP_CPP
   #include <atomic>
 #endif
@@ -105,6 +142,7 @@
 #include "assert.h"
 #include "stdarg.h"
 #include "stdbool.h"
+#include "string.h"
 
 #if defined(SP_POSIX) && defined(strnlen)
   #undef SP_STRNLEN
@@ -236,13 +274,6 @@
 
 #define SP_UNUSED(x) ((void)(x))
 
-#define SP_SDL_IGNORE_STDIO true
-#define SP_SDL_PIPE_STDIO true
-#define SP_SDL_INHERIT_ENVIRONMENT true
-#define SP_SDL_CLEAN_ENVIRONMENT false
-#define SP_SDL_OVERWRITE_ENV_VAR true
-#define SP_SDL_DO_NOT_OVERWRITE_ENV_VAR false
-
 #define SP_ANSI_RESET             "\033[0m"
 #define SP_ANSI_BOLD              "\033[1m"
 #define SP_ANSI_DIM               "\033[2m"
@@ -339,7 +370,6 @@ typedef enum {
 void sp_err_set(sp_err_t err);
 
 
-
 //  ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
 //  ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
 //  ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝ ╚████╔╝
@@ -373,27 +403,10 @@ typedef struct {
   u32 size;
 } sp_malloc_metadata_t;
 
-
 typedef struct {
   sp_allocator_t allocator;
 } sp_malloc_allocator_t;
 
-typedef struct {
-  sp_allocator_t allocator;
-} sp_context_t;
-
-#define SP_MAX_CONTEXT 16
-
-extern pthread_key_t sp_context_stack_key;
-extern pthread_key_t sp_context_key;
-extern pthread_once_t sp_context_keys_once;
-
-sp_context_t*         sp_context_get();
-void                  sp_context_set(sp_context_t context);
-void                  sp_context_push(sp_context_t context);
-void                  sp_context_push_allocator(sp_allocator_t allocator);
-void                  sp_context_pop();
-void                  sp_context_ensure();
 sp_allocator_t        sp_allocator_default();
 void*                 sp_allocator_alloc(sp_allocator_t allocator, u32 size);
 void*                 sp_allocator_realloc(sp_allocator_t allocator, void* memory, u32 size);
@@ -1165,9 +1178,12 @@ SP_API void                         sp_os_print(sp_str_t message);
 SP_API void                         sp_os_log(sp_str_t message);
 
 
-//////////////////
-// COMMON TYPES //
-//////////////////
+// ████████╗██╗  ██╗██████╗ ███████╗ █████╗ ██████╗ ██╗███╗   ██╗ ██████╗
+// ╚══██╔══╝██║  ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗██║████╗  ██║██╔════╝
+//    ██║   ███████║██████╔╝█████╗  ███████║██║  ██║██║██╔██╗ ██║██║  ███╗
+//    ██║   ██╔══██║██╔══██╗██╔══╝  ██╔══██║██║  ██║██║██║╚██╗██║██║   ██║
+//    ██║   ██║  ██║██║  ██║███████╗██║  ██║██████╔╝██║██║ ╚████║╚██████╔╝
+//    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝
 #if defined(SP_WIN32)
   typedef thrd_t               sp_thread_t;
   typedef mtx_t                sp_mutex_t;
@@ -1181,6 +1197,9 @@ SP_API void                         sp_os_log(sp_str_t message);
   typedef pthread_mutex_t      sp_mutex_t;
   typedef dispatch_semaphore_t sp_semaphore_t;
 #endif
+
+typedef s32 sp_spin_lock_t;
+typedef s32 sp_atomic_s32;
 
 SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
 
@@ -1215,6 +1234,43 @@ SP_API void         sp_semaphore_signal(sp_semaphore_t* semaphore);
 SP_API sp_future_t* sp_future_create(u32 size);
 SP_API void         sp_future_set_value(sp_future_t* future, void* data);
 SP_API void         sp_future_destroy(sp_future_t* future);
+SP_API void         sp_spin_pause();
+SP_API bool         sp_spin_try_lock(sp_spin_lock_t* lock);
+SP_API void         sp_spin_lock(sp_spin_lock_t* lock);
+SP_API void         sp_spin_unlock(sp_spin_lock_t* lock);
+
+
+//  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
+// ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝
+// ██║     ██║   ██║██╔██╗ ██║   ██║   █████╗   ╚███╔╝    ██║
+// ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══╝   ██╔██╗    ██║
+// ╚██████╗╚██████╔╝██║ ╚████║   ██║   ███████╗██╔╝ ██╗   ██║
+//  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝
+typedef struct {
+  sp_allocator_t allocator;
+  sp_mutex_t mutex;
+} sp_context_t;
+
+#define SP_GLOBAL_NUM_SPIN_LOCKS 32
+typedef struct {
+  u8 initted;
+  sp_mutex_t mutex;
+  sp_spin_lock_t locks [SP_GLOBAL_NUM_SPIN_LOCKS];
+} sp_sp_t;
+static sp_sp_t sp_global = SP_ZERO_INITIALIZE();
+
+#define SP_MAX_CONTEXT 16
+
+extern pthread_key_t sp_context_stack_key;
+extern pthread_key_t sp_context_key;
+extern pthread_once_t sp_context_keys_once;
+
+sp_context_t*         sp_context_get();
+void                  sp_context_set(sp_context_t context);
+void                  sp_context_push(sp_context_t context);
+void                  sp_context_push_allocator(sp_allocator_t allocator);
+void                  sp_context_pop();
+void                  sp_context_ensure();
 
 
 // ██╗ ██████╗
@@ -1626,7 +1682,6 @@ typedef struct {
 } sp_config_t;
 
 void sp_init(sp_config_t config);
-void sp_init_default();
 #ifdef SP_APP
 typedef enum {
   SP_ASSET_STATE_QUEUED,
@@ -2873,7 +2928,7 @@ void sp_context_check_index() {
 }
 
 void sp_context_ensure() {
-  if (!sp_context_get()) sp_init_default();
+  if (!sp_context_get()) sp_init(SP_ZERO_STRUCT(sp_config_t));
 }
 
 void sp_context_set(sp_context_t context) {
@@ -3953,6 +4008,125 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   }
 
   return stem;
+}
+
+void sp_spin_pause() {
+  #if defined(SP_AMD64)
+    #if defined(SP_MSVC)
+      _mm_pause();
+    #elif defined(SP_GNUISH)
+      __asm__ __volatile__("pause");
+    #endif
+
+  #elif defined(SP_ARM64)
+    #if defined(SP_MSVC)
+      __yield();
+    #elif defined(SP_GNUISH)
+      __asm__ __volatile__("yield");
+    #endif
+  #endif
+}
+
+bool sp_spin_try_lock(sp_spin_lock_t* lock) {
+  #if defined(SP_GNUISH)
+    return __sync_lock_test_and_set(lock, 1) == 0;
+  #elif defined(SP_MSVC)
+    return _InterlockedExchange(lock, 1) == 0;
+  #else
+    sp_context_ensure();
+    sp_mutex_lock(&sp_global.mutex);
+
+    if (*lock == 0) {
+      *lock = 1;
+      sp_mutex_unlock(&sp_global.mutex);
+      return true;
+    }
+    else {
+      sp_mutex_unlock(&sp_global.mutex);
+      return false;
+    }
+  #endif
+}
+
+void sp_spin_lock(sp_spin_lock_t* lock) {
+  while (!sp_spin_try_lock(lock)) {
+    while (*lock) {
+      sp_spin_pause();
+    }
+  }
+}
+
+void sp_spin_unlock(sp_spin_lock_t* lock) {
+  #if defined(SP_GNUISH)
+    __sync_lock_release(lock);
+  #elif defined(SP_MSVC)
+    _InterlockedExchange(lock, 0);
+  #else
+    sp_context_ensure();
+    sp_mutex_lock(&sp_global.mutex);
+    *lock = 0;
+    sp_mutex_unlock(&sp_global.mutex);
+  #endif
+}
+
+bool sp_atomic_s32_cmp_and_swap(sp_atomic_s32* value, s32 current, s32 desired) {
+  #if defined(SP_MSVC)
+    return _InterlockedCompareExchange(&value, desired, current) == current;
+  #elif defined(SP_GNUISH)
+    return __sync_bool_compare_and_swap(value, current, desired);
+  #else
+    bool result = false;
+    size_t index = ((((size_t)value) >> 3) & 0x1f);
+    sp_spin_lock(&sp_global.locks[index]);
+    if (*value == current) {
+      *value = desired;
+      result = true;
+    }
+    sp_spin_unlock(&sp_global.locks[index]);
+    return result;
+  #endif
+}
+
+s32 sp_atomic_s32_set(sp_atomic_s32* value, s32 desired) {
+  #if defined(SP_MSVC)
+    return _InterlockedExchange((long*)value, desired);
+  #elif defined(SP_GNUISH)
+    return __sync_lock_test_and_set(value, desired);
+  #else
+    s32 old;
+    do {
+      old = *value;
+    } while (!sp_atomic_s32_cmp_and_swap(value, old, desired));
+    return old;
+  #endif
+}
+
+s32 sp_atomic_s32_add(sp_atomic_s32* value, s32 add) {
+  #if defined(SP_MSVC)
+    return _InterlockedExchangeAdd((long*)value, add);
+  #elif defined(SP_GNUISH)
+    return __sync_fetch_and_add(value, add);
+  #else
+    s32 old;
+    do {
+      old = *value;
+    } while (!sp_atomic_s32_cmp_and_swap(value, old, old + add));
+    return old;
+  #endif
+}
+
+s32 sp_atomic_s32_get(sp_atomic_s32* value) {
+  #if defined(SP_MSVC)
+    return _InterlockedOr((long*)value, 0);
+  #elif defined(SP_GNUISH)
+    return __sync_or_and_fetch(value, 0);
+  #else
+    s32 old;
+    do {
+      old = *value;
+    } while (!sp_atomic_s32_cmp_and_swap(value, old, old));
+    return old;
+  #endif
 }
 
 #if defined(SP_WIN32)
@@ -5159,8 +5333,6 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
 
   return result;
 }
-
-
 #endif
 
 #if defined(SP_MACOS)
@@ -5792,9 +5964,6 @@ void sp_future_set_value(sp_future_t* future, void* value) {
   future->ready = true;
 }
 
-void sp_init_default() {
-  sp_init((sp_config_t){});
-}
 
 pthread_key_t sp_context_stack_key;
 pthread_key_t sp_context_key;
@@ -5843,6 +6012,10 @@ void sp_init(sp_config_t config) {
   *ctx = (sp_context_t) {
     .allocator = sp_allocator_default()
   };
+
+  if (!sp_global.initted) {
+    sp_mutex_init(&sp_global.mutex, SP_MUTEX_PLAIN);
+  }
 }
 
 void sp_err_set(sp_err_t err) {
