@@ -19,7 +19,7 @@ define print_color
 endef
 
 define build_target
-	@printf '$(ANSI_FG_BRIGHT_YELLOW)%-12s$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK)$(2) $(3) $$(spn print) $(4) -o $(1)$(ANSI_RESET)\n' $(1)
+	@printf '$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK)$(2) $(3) $$(spn print) $(4) -o $(1)$(ANSI_RESET)\n'
 	@$(2) $(3) $$(spn print) $(4) -o ./build/bin/$(1)
 endef
 
@@ -59,12 +59,12 @@ SP_FLAG_LINKER := -lpthread -lm -Lbuild/bin
 SP_FLAG_OPTIMIZATION := -g
 SP_FLAG_DEFINES := -DSP_IMPLEMENTATION
 ifeq ($(OS),Windows_NT)
-  CC? := gcc
+  CC := gcc
   MAKE := make
   CMAKE := cmake
   SP_FLAG_RPATH :=
 else
-  CC? := gcc
+  CC := tcc
   MAKE := bear --append -- make
   CMAKE := bear --append -- cmake
 
@@ -111,10 +111,10 @@ deps:
 
 $(SP_DIR_BUILD_OUTPUT): | deps
 
-build/bin/c: $(SP_TEST_SOURCES) | $(SP_DIR_BUILD_OUTPUT)
+build/bin/c: $(SP_TEST_SOURCES) test/main.c | $(SP_DIR_BUILD_OUTPUT)
 	$(call build_target,c,$(CC),$(SP_FLAGS_COMMON) $(SP_FLAG_CC_LANGUAGE),test/main.c)
 
-build/bin/cpp: $(SP_TEST_SOURCES) | $(SP_DIR_BUILD_OUTPUT)
+build/bin/cpp: $(SP_TEST_SOURCES) test/main.c | $(SP_DIR_BUILD_OUTPUT)
 	$(call build_target,cpp,$(CPP),$(SP_FLAGS_COMMON) $(SP_FLAG_CPP_LANGUAGE),-x c++ test/main.c)
 
 build/bin/app: $(SP_TEST_SOURCES) test/app.c | $(SP_DIR_BUILD_OUTPUT)

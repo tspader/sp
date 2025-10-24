@@ -28,11 +28,11 @@
 ////////////////////////
 // COMPILER SELECTION //
 ////////////////////////
-#ifdef _MSC_VER
+#if defined(_MSC_VER)
   #define SP_MSVC
 #endif
 
-#ifdef __clang__
+#if defined(__clang__)
   #define SP_CLANG
 #endif
 
@@ -1033,8 +1033,6 @@ void sp_log(sp_str_t fmt, ...);
 //  ██║   ██║╚════██║
 //  ╚██████╔╝███████║
 //   ╚═════╝ ╚══════╝
-// @spader @platform_declarations any internal stuff used by a platform should be declared here, even if it's "private". we don't hide anything, and we always declare functions, even if private. use the existing ifdef blocks;
-
 //////////////
 // OS TYPES //
 //////////////
@@ -1084,10 +1082,6 @@ void sp_log(sp_str_t fmt, ...);
   typedef struct {
     void* placeholder;
   } sp_os_file_monitor_t;
-#endif
-
-#ifdef SP_STRNLEN
-  size_t strnlen(const char* str, size_t n);
 #endif
 
 typedef enum {
@@ -1146,12 +1140,18 @@ SP_API void                         sp_os_fill_memory_u8(void* buffer, u32 buffe
 SP_API void                         sp_os_zero_memory(void* buffer, u32 buffer_size);
 SP_API sp_os_platform_kind_t        sp_os_platform_kind();
 SP_API sp_str_t                     sp_os_platform_name();
-SP_API bool                         sp_os_does_path_exist(sp_str_t path);
+SP_API sp_os_date_time_t            sp_os_get_date_time();
+SP_API void                         sp_os_sleep_ms(f64 ms);
+SP_API c8*                          sp_os_wstr_to_cstr(c16* str, u32 len);
+SP_API void                         sp_os_print(sp_str_t message);
+SP_API void                         sp_os_log(sp_str_t message);
+
 SP_API bool                         sp_os_is_regular_file(sp_str_t path);
 SP_API bool                         sp_os_is_directory(sp_str_t path);
 SP_API bool                         sp_os_is_path_root(sp_str_t path);
 SP_API bool                         sp_os_is_glob(sp_str_t path);
 SP_API bool                         sp_os_is_program_on_path(sp_str_t program);
+SP_API bool                         sp_os_does_path_exist(sp_str_t path);
 SP_API void                         sp_os_create_directory(sp_str_t path);
 SP_API void                         sp_os_remove_directory(sp_str_t path);
 SP_API void                         sp_os_create_file(sp_str_t path);
@@ -1161,7 +1161,6 @@ SP_API void                         sp_os_copy_glob(sp_str_t from, sp_str_t glob
 SP_API void                         sp_os_copy_file(sp_str_t from, sp_str_t to);
 SP_API void                         sp_os_copy_directory(sp_str_t from, sp_str_t to);
 SP_API sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path);
-SP_API sp_os_date_time_t            sp_os_get_date_time();
 SP_API sp_str_t                     sp_os_normalize_path(sp_str_t path);
 SP_API void                         sp_os_normalize_path_soft(sp_str_t* path);
 SP_API sp_str_t                     sp_os_parent_path(sp_str_t path);
@@ -1169,19 +1168,17 @@ SP_API sp_str_t                     sp_os_join_path(sp_str_t a, sp_str_t b);
 SP_API sp_str_t                     sp_os_extract_extension(sp_str_t path);
 SP_API sp_str_t                     sp_os_extract_stem(sp_str_t path);
 SP_API sp_str_t                     sp_os_extract_file_name(sp_str_t path);
-SP_API void                         sp_os_sleep_ms(f64 ms);
 SP_API sp_str_t                     sp_os_get_executable_path();
+SP_API sp_str_t                     sp_os_get_storage_path();
+SP_API sp_str_t                     sp_os_get_config_path();
 SP_API sp_str_t                     sp_os_canonicalize_path(sp_str_t path);
 SP_API sp_precise_epoch_time_t      sp_os_file_mod_time_precise(sp_str_t path);
 SP_API sp_os_file_attr_t            sp_os_file_attributes(sp_str_t path);
-SP_API c8*                          sp_os_wstr_to_cstr(c16* str, u32 len);
 SP_IMP sp_os_file_attr_t            sp_os_winapi_attr_to_sp_attr(u32 attr);
 SP_IMP void                         sp_os_file_monitor_init(sp_file_monitor_t* monitor);
 SP_IMP void                         sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
 SP_IMP void                         sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
 SP_IMP void                         sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
-SP_API void                         sp_os_print(sp_str_t message);
-SP_API void                         sp_os_log(sp_str_t message);
 
 
 // ████████╗██╗  ██╗██████╗ ███████╗ █████╗ ██████╗ ██╗███╗   ██╗ ██████╗
@@ -1273,12 +1270,12 @@ extern pthread_key_t sp_context_stack_key;
 extern pthread_key_t sp_context_key;
 extern pthread_once_t sp_context_keys_once;
 
-sp_context_t*         sp_context_get();
-void                  sp_context_set(sp_context_t context);
-void                  sp_context_push(sp_context_t context);
-void                  sp_context_push_allocator(sp_allocator_t allocator);
-void                  sp_context_pop();
-void                  sp_context_ensure();
+sp_context_t* sp_context_get();
+void          sp_context_set(sp_context_t context);
+void          sp_context_push(sp_context_t context);
+void          sp_context_push_allocator(sp_allocator_t allocator);
+void          sp_context_pop();
+void          sp_context_ensure();
 
 
 // ██╗ ██████╗
@@ -1299,6 +1296,11 @@ typedef enum {
   SP_IO_MODE_APPEND = 1 << 2,
 } sp_io_mode_t;
 
+typedef enum {
+  SP_IO_FILE_CLOSE_MODE_NONE,
+  SP_IO_FILE_CLOSE_MODE_AUTO,
+} sp_io_file_close_mode_t;
+
 typedef struct sp_io_stream_t sp_io_stream_t;
 
 SP_TYPEDEF_FN(s64, sp_io_size_fn, sp_io_stream_t* stream);
@@ -1314,11 +1316,6 @@ typedef struct {
   sp_io_write_fn write;
   sp_io_close_fn close;
 } sp_io_callbacks_t;
-
-typedef enum {
-  SP_IO_FILE_CLOSE_MODE_NONE,
-  SP_IO_FILE_CLOSE_MODE_AUTO,
-} sp_io_file_close_mode_t;
 
 typedef struct {
   s32 fd;
@@ -1458,10 +1455,6 @@ typedef struct {
   sp_ps_status_t status;
 } sp_ps_output_t;
 
-//////////////
-// PLATFORM //
-//////////////
-// POSIX
 #if defined(SP_POSIX)
 #define SP_POSIX_WAITPID_BLOCK 0
 #define SP_POSIX_WAITPID_NO_BLOCK WNOHANG
@@ -1532,10 +1525,8 @@ SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* proc);
 SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
 SP_API bool            sp_ps_kill(sp_ps_t* proc);
-SP_API void            sp_ps_destroy(sp_ps_t* proc);
 
 #if defined(SP_POSIX)
-
 SP_IMP void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_IMP bool sp_ps_create_pipes(s32 pipes [2]);
 SP_IMP c8** sp_ps_build_posix_args(sp_ps_config_t* config);
@@ -1544,6 +1535,7 @@ SP_IMP c8** sp_ps_build_posix_env(sp_ps_env_config_t* env_config);
 SP_IMP void sp_ps_set_nonblocking(s32 fd);
 SP_IMP void sp_ps_set_blocking(s32 fd);
 #endif
+
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
 // ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
@@ -1686,6 +1678,14 @@ typedef struct {
 } sp_config_t;
 
 void sp_init(sp_config_t config);
+
+//  █████╗ ███████╗███████╗███████╗████████╗███████╗
+// ██╔══██╗██╔════╝██╔════╝██╔════╝╚══██╔══╝██╔════╝
+// ███████║███████╗███████╗█████╗     ██║   ███████╗
+// ██╔══██║╚════██║╚════██║██╔══╝     ██║   ╚════██║
+// ██║  ██║███████║███████║███████╗   ██║   ███████║
+// ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝   ╚══════╝
+
 #ifdef SP_APP
 typedef enum {
   SP_ASSET_STATE_QUEUED,
@@ -5554,61 +5554,66 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
 #endif
 
 #if defined(SP_LINUX)
-  void sp_semaphore_init(sp_semaphore_t* semaphore) {
-    sem_init(semaphore, 0, 0);
+void sp_semaphore_init(sp_semaphore_t* semaphore) {
+  sem_init(semaphore, 0, 0);
+}
+
+void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+  sem_destroy(semaphore);
+}
+
+void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+  sem_wait(semaphore);
+}
+
+bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  ts.tv_sec += ms / 1000;
+  ts.tv_nsec += (ms % 1000) * 1000000;
+  if (ts.tv_nsec >= 1000000000) {
+    ts.tv_sec++;
+    ts.tv_nsec -= 1000000000;
+  }
+  return sem_timedwait(semaphore, &ts) == 0;
+}
+
+void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+  sem_post(semaphore);
+}
+
+sp_str_t sp_os_get_executable_path() {
+  c8 exe_path [PATH_MAX];
+  sp_str_t file_path = {
+    .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
+    .data = exe_path
+  };
+
+  if (!file_path.len) {
+    return sp_str_lit("");
   }
 
-  void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-    sem_destroy(semaphore);
-  }
+  return sp_str_copy(sp_os_parent_path(file_path));
+}
 
-  void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-    sem_wait(semaphore);
-  }
+sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
+  sp_str_t path =  sp_os_get_env_var(xdg);
+  if (sp_str_valid(path)) return path;
 
-  bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += ms / 1000;
-    ts.tv_nsec += (ms % 1000) * 1000000;
-    if (ts.tv_nsec >= 1000000000) {
-      ts.tv_sec++;
-      ts.tv_nsec -= 1000000000;
-    }
-    return sem_timedwait(semaphore, &ts) == 0;
-  }
+  path = sp_os_get_env_var(SP_LIT("HOME"));
+  if (sp_str_valid(path)) return sp_os_join_path(path, home_suffix);
 
-  void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-    sem_post(semaphore);
-  }
+  return SP_ZERO_STRUCT(sp_str_t);
+}
 
-  sp_str_t sp_os_get_executable_path() {
-    c8 exe_path [PATH_MAX];
-    sp_str_t file_path = {
-      .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
-      .data = exe_path
-    };
+sp_str_t sp_os_get_storage_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
+}
 
-    if (!file_path.len) {
-      return sp_str_lit("");
-    }
+sp_str_t sp_os_get_config_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
 
-    return sp_str_copy(sp_os_parent_path(file_path));
-  }
-#endif
-
-
-///////////
-// SHIMS //
-///////////
-#ifdef SP_STRNLEN
-  size_t strnlen(const c8* str, size_t n) {
-    size_t len = 0;
-    while (len < n && str[len]) {
-        ++len;
-    }
-    return len;
-  }
+}
 #endif
 
 
