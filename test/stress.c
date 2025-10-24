@@ -266,4 +266,53 @@ UTEST(sp_spin_lock, stress_multiple_threads) {
   ASSERT_EQ(lock, 0);
 }
 
+typedef struct {
+  sp_atomic_s32* counter;
+  s32 iterations;
+  s32 thread_id;
+} sp_atomic_s32_stress_data_t;
+
+s32 sp_atomic_s32_stress_thread(void* userdata) {
+  sp_atomic_s32_stress_data_t* data = (sp_atomic_s32_stress_data_t*)userdata;
+  
+  for (s32 i = 0; i < data->iterations; i++) {
+    s32 op = i % 4;
+    switch (op) {
+      case 0: sp_atomic_s32_add(data->counter, 1); break;
+      case 1: sp_atomic_s32_set(data->counter, i); break;
+      case 2: sp_atomic_s32_get(data->counter); break;
+      case 3: {
+        s32 current = sp_atomic_s32_get(data->counter);
+        sp_atomic_s32_cmp_and_swap(data->counter, current, current + 1);
+        break;
+      }
+    }
+  }
+  
+  return 0;
+}
+
+UTEST(sp_atomic_s32, stress_concurrent_operations) {
+  sp_atomic_s32 counter = 0;
+  const s32 num_threads = 8;
+  const s32 iterations = 10000;
+  
+  sp_atomic_s32_stress_data_t thread_data[8];
+  sp_thread_t threads[8];
+  
+  for (s32 i = 0; i < num_threads; i++) {
+    thread_data[i].counter = &counter;
+    thread_data[i].iterations = iterations;
+    thread_data[i].thread_id = i;
+    sp_thread_init(&threads[i], sp_atomic_s32_stress_thread, &thread_data[i]);
+  }
+  
+  for (s32 i = 0; i < num_threads; i++) {
+    sp_thread_join(&threads[i]);
+  }
+  
+  s32 final = sp_atomic_s32_get(&counter);
+  ASSERT_TRUE(final >= 0);
+}
+
 UTEST_MAIN()
