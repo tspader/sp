@@ -1397,7 +1397,7 @@ typedef enum {
   SP_PS_STATE_DONE
 } sp_ps_state_t;
 
-#define SP_PS_NO_STDIO { \
+#define SP_PS_NO_STDIO (sp_ps_io_config_t) { \
   .in = { .mode = SP_PS_IO_NULL }, \
   .out = { .mode = SP_PS_IO_NULL }, \
   .err = { .mode = SP_PS_IO_NULL }, \
