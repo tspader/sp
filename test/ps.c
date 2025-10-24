@@ -956,4 +956,60 @@ UTEST_F(sp_ps, write_1mb_to_stdin) {
   EXPECT_TRUE(sp_str_equal(output.out, expected));
 }
 
+UTEST_F(sp_ps, redirect_stderr_to_stdout) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("print"),
+      sp_str_lit("--stdout"),
+      sp_str_lit("--stderr")
+    },
+    .io = {
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_REDIRECT },
+    }
+  });
+
+  sp_ps_output_t output = sp_ps_output(&ps);
+
+  EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
+  EXPECT_EQ(output.status.exit_code, 0);
+
+  sp_str_t expected = sp_format("{}{}", SP_FMT_STR(sp_test_ps_canary), SP_FMT_STR(sp_test_ps_canary));
+  EXPECT_TRUE(sp_str_equal(output.out, expected));
+  EXPECT_TRUE(sp_str_empty(output.err));
+
+  sp_io_stream_t* err = sp_ps_io_err(&ps);
+  EXPECT_EQ(err, SP_NULLPTR);
+}
+
+UTEST_F(sp_ps, redirect_stdout_to_stderr) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
+    .command = SP_LIT("./build/bin/process"),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("print"),
+      sp_str_lit("--stdout"),
+      sp_str_lit("--stderr")
+    },
+    .io = {
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_REDIRECT },
+      .err = { .mode = SP_PS_IO_MODE_CREATE },
+    }
+  });
+
+  sp_ps_output_t output = sp_ps_output(&ps);
+
+  EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
+  EXPECT_EQ(output.status.exit_code, 0);
+
+  sp_str_t expected = sp_format("{}{}", SP_FMT_STR(sp_test_ps_canary), SP_FMT_STR(sp_test_ps_canary));
+  EXPECT_TRUE(sp_str_empty(output.out));
+  EXPECT_TRUE(sp_str_equal(output.err, expected));
+
+  sp_io_stream_t* out = sp_ps_io_out(&ps);
+  EXPECT_EQ(out, SP_NULLPTR);
+}
+
 UTEST_MAIN()

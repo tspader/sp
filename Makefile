@@ -26,13 +26,17 @@ endef
 define run_tests
 	@printf "$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK) ./build/bin/$(1) --enable-mixed-units --random-order\n";
 	@OUTPUT=$$(./build/bin/$(1) --enable-mixed-units --random-order 2>&1); \
-	if echo "$$OUTPUT" | grep -q "PASSED"; then \
-		COUNT=$$(echo "$$OUTPUT" | grep -oP '\d+(?= tests?)' | head -1); \
-		printf ""; \
+	if echo "$$OUTPUT" | grep -q "FAILED.*test"; then \
+		printf "$(ANSI_FG_BRIGHT_YELLOW)$(1) $(ANSI_FG_RED)FAIL$(ANSI_RESET)\n"; \
+		echo "$$OUTPUT"; \
+		exit 1; \
+	elif echo "$$OUTPUT" | grep -q "PASSED"; then \
+		COUNT=$$(echo "$$OUTPUT" | grep -oP '(?<=PASSED  ] )\d+(?= test)'); \
 		printf "$(ANSI_FG_BRIGHT_YELLOW)$(1) $(ANSI_FG_GREEN)OK$(ANSI_RESET) $$COUNT tests\n"; \
 	else \
-		printf "$(ANSI_FG_RED)FAIL$(ANSI_RESET) "; \
-		echo "$$OUTPUT" | grep -E "test cases ran|PASSED|FAILED"; \
+		printf "$(ANSI_FG_BRIGHT_YELLOW)$(1) $(ANSI_FG_RED)ERROR$(ANSI_RESET)\n"; \
+		echo "$$OUTPUT"; \
+		exit 1; \
 	fi
 endef
 

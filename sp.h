@@ -1298,6 +1298,13 @@ sp_str_t       sp_io_read_file(sp_str_t path);
 #define SP_PS_MAX_ENV 16
 
 typedef enum {
+  SP_PS_IO_FILENO_NONE,
+  SP_PS_IO_FILENO_STDIN = 0,
+  SP_PS_IO_FILENO_STDOUT = 1,
+  SP_PS_IO_FILENO_STDERR = 2,
+} sp_ps_io_file_number_t;
+
+typedef enum {
   SP_ENV_EXPORT_OVERWRITE_DUPES,
   SP_ENV_EXPORT_SKIP_DUPES,
 } sp_env_export_overwrite_t;
@@ -1307,6 +1314,7 @@ typedef enum {
   SP_PS_IO_MODE_NULL,
   SP_PS_IO_MODE_CREATE,
   SP_PS_IO_MODE_EXISTING,
+  SP_PS_IO_MODE_REDIRECT,
 } sp_ps_io_mode_t;
 
 typedef enum {
@@ -1327,7 +1335,6 @@ typedef enum {
 
 typedef enum {
   SP_PS_IO_NONE,
-  SP_PS_IO_REDIRECT_STDERR_TO_STDOUT = 1 << 0,
 } sp_ps_io_flag_t;
 
 #define SP_PS_NO_STDIO { \
@@ -1356,7 +1363,6 @@ typedef struct {
   sp_ps_io_stream_config_t in;
   sp_ps_io_stream_config_t out;
   sp_ps_io_stream_config_t err;
-  sp_ps_io_flag_t flags;
 } sp_ps_io_config_t;
 
 typedef sp_ps_io_config_t sp_ps_io_t;
@@ -1402,7 +1408,7 @@ typedef struct {
 
 typedef struct {
   posix_spawn_file_actions_t* fa;
-  s32 file;
+  sp_ps_io_file_number_t file_number;
   s32 flag;
   s32 mode;
   struct {
@@ -4840,7 +4846,7 @@ void sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg) {
 void sp_ps_configure_io_stream(sp_ps_io_stream_config_t* io, sp_ps_posix_stdio_stream_config_t* p) {
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
-      SP_ASSERT(posix_spawn_file_actions_addopen(p->fa, p->file, "/dev/null", p->flag, p->mode) == 0);
+      SP_ASSERT(posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0);
       break;
     }
     case SP_PS_IO_MODE_CREATE: {
@@ -4849,17 +4855,21 @@ void sp_ps_configure_io_stream(sp_ps_io_stream_config_t* io, sp_ps_posix_stdio_s
       p->pipes.read = pipes[0];
       p->pipes.write = pipes[1];
 
-      s32 duped = p->file == STDIN_FILENO ? p->pipes.read : p->pipes.write;
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, duped, p->file) == 0);
+      s32 duped = p->file_number == STDIN_FILENO ? p->pipes.read : p->pipes.write;
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, duped, p->file_number) == 0);
       break;
     }
     case SP_PS_IO_MODE_EXISTING: {
       SP_ASSERT(io->stream.file.fd);
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, io->stream.file.fd, p->file) == 0);
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, io->stream.file.fd, p->file_number) == 0);
       break;
     }
-    case SP_PS_IO_MODE_INHERIT:
-    default: {
+    case SP_PS_IO_MODE_REDIRECT: {
+      s32 redirect = p->file_number == SP_PS_IO_FILENO_STDOUT ? SP_PS_IO_FILENO_STDERR : SP_PS_IO_FILENO_STDOUT;
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, redirect, p->file_number) == 0);
+      break;
+    }
+    case SP_PS_IO_MODE_INHERIT: {
       break;
     }
   }
@@ -4890,21 +4900,21 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
   sp_ps_posix_stdio_config_t io = {
     .in = (sp_ps_posix_stdio_stream_config_t) {
       .fa = &fa,
-      .file = STDIN_FILENO,
+      .file_number = SP_PS_IO_FILENO_STDIN,
       .flag = O_RDONLY,
       .mode = 0x000,
       .pipes = { .read = -1, .write = -1 }
     },
     .out = (sp_ps_posix_stdio_stream_config_t) {
       .fa = &fa,
-      .file = STDOUT_FILENO,
+      .file_number = SP_PS_IO_FILENO_STDOUT,
       .flag = O_WRONLY,
       .mode = 0x644,
       .pipes = { .read = -1, .write = -1 },
     },
     .err = (sp_ps_posix_stdio_stream_config_t) {
       .fa = &fa,
-      .file = STDERR_FILENO,
+      .file_number = SP_PS_IO_FILENO_STDERR,
       .flag = O_WRONLY,
       .mode = 0x644,
       .pipes = { .read = -1, .write = -1 },
@@ -4912,9 +4922,15 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
   };
 
   sp_ps_configure_io_stream(&proc.io.in, &io.in);
-  sp_ps_configure_io_stream(&proc.io.out, &io.out);
-  sp_ps_configure_io_stream(&proc.io.err, &io.err);
 
+  if (proc.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
+    sp_ps_configure_io_stream(&proc.io.err, &io.err);
+    sp_ps_configure_io_stream(&proc.io.out, &io.out);
+  }
+  else {
+    sp_ps_configure_io_stream(&proc.io.out, &io.out);
+    sp_ps_configure_io_stream(&proc.io.err, &io.err);
+  }
 
   pid_t pid;
   if (posix_spawnp(&pid, argv[0], &fa, &attr, argv, envp) != 0) {
@@ -4984,13 +5000,23 @@ void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
   SP_ASSERT(posix_spawn_file_actions_addchdir_np(fa, cwd_cstr) == 0);
 }
 
-sp_io_stream_t* sp_ps_io_in(sp_ps_t* proc) {
+sp_io_stream_t* sp_ps_io_redirect(sp_ps_t* proc, sp_ps_io_file_number_t file_number) {
+  switch (file_number) {
+    case SP_PS_IO_FILENO_STDIN: return &proc->io.in.stream;
+    case SP_PS_IO_FILENO_STDOUT: return &proc->io.out.stream;
+    case SP_PS_IO_FILENO_STDERR: return &proc->io.err.stream;
+  }
+  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+}
+
+sp_io_stream_t* sp_ps_io(sp_ps_t* proc, sp_ps_io_stream_config_t* config) {
   SP_ASSERT(proc != SP_NULLPTR);
-  switch (proc->io.in.mode) {
+  switch (config->mode) {
     case SP_PS_IO_MODE_CREATE:
     case SP_PS_IO_MODE_EXISTING: {
-      return &proc->io.in.stream;
+      return &config->stream;
     }
+    case SP_PS_IO_MODE_REDIRECT:
     case SP_PS_IO_MODE_INHERIT:
     case SP_PS_IO_MODE_NULL: {
       return SP_NULLPTR;
@@ -4998,38 +5024,18 @@ sp_io_stream_t* sp_ps_io_in(sp_ps_t* proc) {
   }
 
   SP_UNREACHABLE_RETURN(SP_NULLPTR);
+}
+
+sp_io_stream_t* sp_ps_io_in(sp_ps_t* proc) {
+  return sp_ps_io(proc, &proc->io.in);
 }
 
 sp_io_stream_t* sp_ps_io_out(sp_ps_t* proc) {
-  SP_ASSERT(proc != SP_NULLPTR);
-  switch (proc->io.out.mode) {
-    case SP_PS_IO_MODE_CREATE:
-    case SP_PS_IO_MODE_EXISTING: {
-      return &proc->io.out.stream;
-    }
-    case SP_PS_IO_MODE_INHERIT:
-    case SP_PS_IO_MODE_NULL: {
-      return SP_NULLPTR;
-    }
-  }
-
-  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+  return sp_ps_io(proc, &proc->io.out);
 }
 
 sp_io_stream_t* sp_ps_io_err(sp_ps_t* proc) {
-  SP_ASSERT(proc != SP_NULLPTR);
-  switch (proc->io.err.mode) {
-    case SP_PS_IO_MODE_CREATE:
-    case SP_PS_IO_MODE_EXISTING: {
-      return &proc->io.err.stream;
-    }
-    case SP_PS_IO_MODE_INHERIT:
-    case SP_PS_IO_MODE_NULL: {
-      return SP_NULLPTR;
-    }
-  }
-
-  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+  return sp_ps_io(proc, &proc->io.err);
 }
 
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
@@ -5134,7 +5140,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
     result.out = sp_str_builder_move(&builder);
   }
 
-  sp_io_stream_t* err = sp_ps_io_out(proc);
+  sp_io_stream_t* err = sp_ps_io_err(proc);
   if (err) {
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
