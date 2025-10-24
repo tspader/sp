@@ -5683,3 +5683,118 @@ UTEST(sp_atomic_s32, concurrent_adds) {
 
   ASSERT_EQ(sp_atomic_s32_get(&counter), iterations * 2);
 }
+
+UTEST(sp_str, truncate_longer_than_limit) {
+  sp_str_t str = SP_LIT("hello world");
+  sp_str_t result = sp_str_truncate(str, 8, SP_LIT("..."));
+  SP_EXPECT_STR_EQ_CSTR(result, "hello...");
+}
+
+UTEST(sp_str, truncate_shorter_than_limit) {
+  sp_str_t str = SP_LIT("hi");
+  sp_str_t result = sp_str_truncate(str, 10, SP_LIT("..."));
+  SP_EXPECT_STR_EQ_CSTR(result, "hi");
+}
+
+UTEST(sp_str, truncate_exact_limit) {
+  sp_str_t str = SP_LIT("exactly");
+  sp_str_t result = sp_str_truncate(str, 7, SP_LIT("..."));
+  SP_EXPECT_STR_EQ_CSTR(result, "exactly");
+}
+
+UTEST(sp_str, truncate_zero_limit) {
+  sp_str_t str = SP_LIT("test");
+  sp_str_t result = sp_str_truncate(str, 0, SP_LIT("..."));
+  SP_EXPECT_STR_EQ_CSTR(result, "test");
+}
+
+UTEST(sp_os, is_glob_with_wildcard) {
+  ASSERT_TRUE(sp_os_is_glob(SP_LIT("src/*.c")));
+  ASSERT_TRUE(sp_os_is_glob(SP_LIT("*")));
+  ASSERT_TRUE(sp_os_is_glob(SP_LIT("file*.txt")));
+}
+
+UTEST(sp_os, is_glob_without_wildcard) {
+  ASSERT_FALSE(sp_os_is_glob(SP_LIT("src/file.c")));
+  ASSERT_FALSE(sp_os_is_glob(SP_LIT("README.md")));
+  ASSERT_FALSE(sp_os_is_glob(SP_LIT("build/test")));
+}
+
+struct sp_os_copy_tests {
+  sp_test_file_manager_t file_manager;
+};
+
+UTEST_F_SETUP(sp_os_copy_tests) {
+  sp_test_file_manager_init(&ut.file_manager);
+}
+
+UTEST_F_TEARDOWN(sp_os_copy_tests) {
+  sp_test_file_manager_cleanup(&ut.file_manager);
+}
+
+UTEST_F(sp_os_copy_tests, copy_single_file) {
+  sp_str_t src = sp_test_file_path(&ut.file_manager, SP_LIT("source.txt"));
+  sp_str_t dst = sp_test_file_path(&ut.file_manager, SP_LIT("dest.txt"));
+
+  sp_str_t content = SP_LIT("test content");
+  sp_test_file_create_ex((sp_test_file_config_t){.path = src, .content = content});
+
+  sp_os_copy_file(src, dst);
+
+  ASSERT_TRUE(sp_os_does_path_exist(dst));
+
+  sp_io_stream_t read_stream = sp_io_from_file(dst, SP_IO_MODE_READ);
+  u8 buffer[256];
+  u64 bytes_read = sp_io_read(&read_stream, buffer, sizeof(buffer));
+  sp_io_close(&read_stream);
+
+  sp_str_t read_content = sp_str_from_cstr_sized((c8*)buffer, bytes_read);
+  SP_EXPECT_STR_EQ(read_content, content);
+}
+
+UTEST_F(sp_os_copy_tests, copy_file_to_directory) {
+  sp_str_t src = sp_test_file_path(&ut.file_manager, SP_LIT("file.txt"));
+  sp_str_t dst_dir = sp_test_file_path(&ut.file_manager, SP_LIT("dest"));
+  sp_os_create_directory(dst_dir);
+
+  sp_str_t content = SP_LIT("data");
+  sp_test_file_create_ex((sp_test_file_config_t){.path = src, .content = content});
+
+  sp_os_copy_file(src, dst_dir);
+
+  sp_str_t expected_dst = sp_os_join_path(dst_dir, SP_LIT("file.txt"));
+  ASSERT_TRUE(sp_os_does_path_exist(expected_dst));
+}
+
+UTEST_F(sp_os_copy_tests, copy_glob_files) {
+  sp_str_t src_dir = sp_test_file_path(&ut.file_manager, SP_LIT("src"));
+  sp_str_t dst_dir = sp_test_file_path(&ut.file_manager, SP_LIT("dst"));
+  sp_os_create_directory(src_dir);
+  sp_os_create_directory(dst_dir);
+
+  sp_os_create_file(sp_os_join_path(src_dir, SP_LIT("a.txt")));
+  sp_os_create_file(sp_os_join_path(src_dir, SP_LIT("b.txt")));
+  sp_os_create_file(sp_os_join_path(src_dir, SP_LIT("c.log")));
+
+  sp_os_copy_glob(src_dir, SP_LIT("*"), dst_dir);
+
+  ASSERT_TRUE(sp_os_does_path_exist(sp_os_join_path(dst_dir, SP_LIT("a.txt"))));
+  ASSERT_TRUE(sp_os_does_path_exist(sp_os_join_path(dst_dir, SP_LIT("b.txt"))));
+  ASSERT_TRUE(sp_os_does_path_exist(sp_os_join_path(dst_dir, SP_LIT("c.log"))));
+}
+
+UTEST_F(sp_os_copy_tests, copy_directory) {
+  sp_str_t src_dir = sp_test_file_path(&ut.file_manager, SP_LIT("source"));
+  sp_str_t dst_dir = sp_test_file_path(&ut.file_manager, SP_LIT("dest"));
+  sp_os_create_directory(src_dir);
+  sp_os_create_directory(dst_dir);
+
+  sp_os_create_file(sp_os_join_path(src_dir, SP_LIT("file1.txt")));
+  sp_os_create_file(sp_os_join_path(src_dir, SP_LIT("file2.txt")));
+
+  sp_os_copy_directory(src_dir, dst_dir);
+
+  sp_str_t copied_dir = sp_os_join_path(dst_dir, SP_LIT("source"));
+  ASSERT_TRUE(sp_os_does_path_exist(sp_os_join_path(copied_dir, SP_LIT("file1.txt"))));
+  ASSERT_TRUE(sp_os_does_path_exist(sp_os_join_path(copied_dir, SP_LIT("file2.txt"))));
+}
