@@ -826,7 +826,6 @@ SP_API sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer);
 typedef struct {
   u32 len;
   const c8* data;
-  u32 capacity;
 } sp_str_t;
 
 typedef struct {
