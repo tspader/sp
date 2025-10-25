@@ -2571,25 +2571,25 @@ UTEST(hash_table, pathological_all_same_hash) {
 }
 
 UTEST(hash_table, duplicate_key_insert_size_bug) {
-    sp_ht(u32, u32) table = SP_NULLPTR;
+  sp_ht(u32, u32) table = SP_NULLPTR;
 
-    // Insert initial key-value pair
-    sp_ht_insert(table, 42, 100);
-    ASSERT_EQ(sp_ht_size(table), 1);
-    ASSERT_EQ(*sp_ht_getp(table, 42), 100);
+  // Insert initial key-value pair
+  sp_ht_insert(table, 42, 100);
+  ASSERT_EQ(sp_ht_size(table), 1);
+  ASSERT_EQ(*sp_ht_getp(table, 42), 100);
 
-    // Insert same key with different value - this should overwrite, not increment size
-    sp_ht_insert(table, 42, 200);
-    ASSERT_EQ(sp_ht_size(table), 1);
-    ASSERT_EQ(*sp_ht_getp(table, 42), 200);
+  // Insert same key with different value - this should overwrite, not increment size
+  sp_ht_insert(table, 42, 200);
+  ASSERT_EQ(sp_ht_size(table), 1);
+  ASSERT_EQ(*sp_ht_getp(table, 42), 200);
 
-    // Insert another unique key
-    sp_ht_insert(table, 99, 300);
-    ASSERT_EQ(sp_ht_size(table), 2);
-    ASSERT_EQ(*sp_ht_getp(table, 42), 200);
-    ASSERT_EQ(*sp_ht_getp(table, 99), 300);
+  // Insert another unique key
+  sp_ht_insert(table, 99, 300);
+  ASSERT_EQ(sp_ht_size(table), 2);
+  ASSERT_EQ(*sp_ht_getp(table, 42), 200);
+  ASSERT_EQ(*sp_ht_getp(table, 99), 300);
 
-    sp_ht_free(table);
+  sp_ht_free(table);
 }
 
 UTEST(sp_ht, iterator_yields_inactive_entry_at_slot_zero) {
