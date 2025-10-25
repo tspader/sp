@@ -5807,3 +5807,51 @@ UTEST_F(sp_os_copy_tests, copy_directory) {
   ASSERT_TRUE(sp_os_does_path_exist(sp_os_join_path(copied_dir, SP_LIT("file1.txt"))));
   ASSERT_TRUE(sp_os_does_path_exist(sp_os_join_path(copied_dir, SP_LIT("file2.txt"))));
 }
+
+typedef struct sp_fs {
+  sp_test_env_manager_t env;
+} sp_fs_fixture;
+
+UTEST_F_SETUP(sp_fs) {
+  sp_test_env_manager_init(&utest_fixture->env);
+}
+
+UTEST_F_TEARDOWN(sp_fs) {
+  sp_test_env_manager_cleanup(&utest_fixture->env);
+}
+
+#ifdef SP_POSIX
+UTEST_F(sp_fs, sp_os_get_storage_path_with_xdg) {
+  sp_test_env_manager_set(&ut.env, SP_LIT("XDG_DATA_HOME"), SP_LIT("/custom/data"));
+  sp_str_t path = sp_os_get_storage_path();
+  SP_EXPECT_STR_EQ_CSTR(path, "/custom/data");
+}
+
+UTEST_F(sp_fs, sp_os_get_storage_path_without_xdg) {
+  sp_test_env_manager_unset(&ut.env, SP_LIT("XDG_DATA_HOME"));
+  sp_str_t path = sp_os_get_storage_path();
+  sp_str_t home = sp_os_get_env_var(SP_LIT("HOME"));
+  sp_str_t expected = sp_os_join_path(home, SP_LIT(".local/share"));
+  SP_EXPECT_STR_EQ(path, expected);
+}
+
+UTEST_F(sp_fs, sp_os_get_config_path_with_xdg) {
+  sp_test_env_manager_set(&ut.env, SP_LIT("XDG_CONFIG_HOME"), SP_LIT("/custom/config"));
+  sp_str_t path = sp_os_get_config_path();
+  SP_EXPECT_STR_EQ_CSTR(path, "/custom/config");
+}
+
+UTEST_F(sp_fs, sp_os_get_config_path_without_xdg) {
+  sp_test_env_manager_unset(&ut.env, SP_LIT("XDG_CONFIG_HOME"));
+  sp_str_t path = sp_os_get_config_path();
+  sp_str_t home = sp_os_get_env_var(SP_LIT("HOME"));
+  sp_str_t expected = sp_os_join_path(home, SP_LIT(".config"));
+  SP_EXPECT_STR_EQ(path, expected);
+}
+#endif
+
+UTEST(sp_os_get_cwd, smoke_test) {
+  sp_str_t cwd = sp_os_get_cwd();
+  ASSERT_TRUE(sp_str_valid(cwd));
+  ASSERT_TRUE(sp_os_is_directory(cwd));
+}

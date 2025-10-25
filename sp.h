@@ -11,6 +11,7 @@
 ////////////////////////
 // PLATFORM SELECTION //
 ////////////////////////
+#include <linux/limits.h>
 #ifdef _WIN32
   #define SP_WIN32
 #endif
@@ -1168,6 +1169,7 @@ SP_API sp_str_t                     sp_os_join_path(sp_str_t a, sp_str_t b);
 SP_API sp_str_t                     sp_os_extract_extension(sp_str_t path);
 SP_API sp_str_t                     sp_os_extract_stem(sp_str_t path);
 SP_API sp_str_t                     sp_os_extract_file_name(sp_str_t path);
+SP_API sp_str_t                     sp_os_get_cwd();
 SP_API sp_str_t                     sp_os_get_executable_path();
 SP_API sp_str_t                     sp_os_get_storage_path();
 SP_API sp_str_t                     sp_os_get_config_path();
@@ -1510,9 +1512,9 @@ SP_API void            sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t valu
 SP_API void            sp_env_erase(sp_env_t* env, sp_str_t name);
 SP_API void            sp_env_destroy(sp_env_t* env);
 SP_API sp_str_t        sp_os_get_env_var(sp_str_t key);
-SP_API sp_str_t        sp_os_get_env_path(sp_str_t key);
+SP_API sp_str_t        sp_os_get_env_as_path(sp_str_t key);
 SP_API void            sp_os_clear_env_var(sp_str_t var);
-SP_API void            sp_os_export_env_var(sp_env_var_t var, sp_env_export_overwrite_t overwrite);
+SP_API void            sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_overwrite_t overwrite);
 SP_API void            sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite);
 SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
 SP_API void            sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg);
@@ -5016,7 +5018,7 @@ sp_str_t sp_os_get_env_var(sp_str_t key) {
   return sp_str_view(value);
 }
 
-sp_str_t sp_os_get_env_path(sp_str_t key) {
+sp_str_t sp_os_get_env_as_path(sp_str_t key) {
   SP_UNTESTED()
   const c8* value = getenv(sp_str_to_cstr(key));
   sp_str_t path = sp_str_view(value);
@@ -5029,17 +5031,14 @@ void sp_os_clear_env_var(sp_str_t key) {
 
 void sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite) {
   sp_ht_for(env->vars, it) {
-    sp_os_export_env_var((sp_env_var_t) {
-      .key = *sp_ht_it_getkp(env->vars, it),
-      .value = *sp_ht_it_getp(env->vars, it)
-    }, overwrite);
+    sp_os_export_env_var(*sp_ht_it_getkp(env->vars, it), *sp_ht_it_getp(env->vars, it), overwrite);
   }
 }
 
-void sp_os_export_env_var(sp_env_var_t var, sp_env_export_overwrite_t overwrite) {
-  const c8* key = sp_str_to_cstr(var.key);
-  const c8* value = sp_str_to_cstr(var.value);
-  setenv(key, value, overwrite);
+void sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_overwrite_t overwrite) {
+  const c8* k = sp_str_to_cstr(key);
+  const c8* v = sp_str_to_cstr(value);
+  setenv(k, v, overwrite);
 }
 
 bool sp_ps_create_pipes(s32 pipes [2]) {
@@ -5580,6 +5579,16 @@ bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
 
 void sp_semaphore_signal(sp_semaphore_t* semaphore) {
   sem_post(semaphore);
+}
+
+sp_str_t sp_os_get_cwd() {
+  c8 path [PATH_MAX];
+  if (!getcwd(path, PATH_MAX - 1)) {
+    return SP_ZERO_STRUCT(sp_str_t);
+  }
+
+  sp_str_t cwd = sp_str_from_cstr(path);
+  return sp_os_normalize_path(cwd);
 }
 
 sp_str_t sp_os_get_executable_path() {
