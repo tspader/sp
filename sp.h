@@ -349,6 +349,7 @@ typedef u64 sp_precise_time_t;
 typedef void* sp_opaque_ptr;
 
 
+
 // ███████╗██████╗ ██████╗  ██████╗ ██████╗
 // ██╔════╝██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
 // █████╗  ██████╔╝██████╔╝██║   ██║██████╔╝
@@ -965,6 +966,35 @@ SP_API sp_str_t               sp_str_map_kernel_capitalize_words(sp_str_map_cont
 SP_API s32                    sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 
 
+// ███████╗██████╗ ██████╗  █████╗ ████████╗ █████╗
+// ██╔════╝██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗
+// █████╗  ██████╔╝██████╔╝███████║   ██║   ███████║
+// ██╔══╝  ██╔══██╗██╔══██╗██╔══██║   ██║   ██╔══██║
+// ███████╗██║  ██║██║  ██║██║  ██║   ██║   ██║  ██║
+// ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
+#define SP_TERNARY_X(X) \
+  X(SP_TERNARY_FALSE) \
+  X(SP_TERNARY_TRUE) \
+  X(SP_TERNARY_NULL)
+
+typedef enum {
+  SP_TERNARY_X(SP_X_ENUM_DEFINE)
+} sp_ternary_t;
+
+SP_API sp_str_t sp_ternary_to_str(sp_ternary_t ternary);
+
+
+// ██╗      ██████╗  ██████╗
+// ██║     ██╔═══██╗██╔════╝
+// ██║     ██║   ██║██║  ███╗
+// ██║     ██║   ██║██║   ██║
+// ███████╗╚██████╔╝╚██████╔╝
+// ╚══════╝ ╚═════╝  ╚═════╝
+#define SP_LOG(CSTR, ...)    sp_log(SP_CSTR((CSTR)), ##__VA_ARGS__)
+#define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
+void sp_log(sp_str_t fmt, ...);
+
+
 // ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
 // ██╔════╝██║██║     ██╔════╝    ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
 // █████╗  ██║██║     █████╗      ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
@@ -1014,17 +1044,6 @@ SP_API void              sp_file_monitor_process_changes(sp_file_monitor_t* moni
 SP_API void              sp_file_monitor_emit_changes(sp_file_monitor_t* monitor);
 SP_API bool              sp_file_monitor_check_cache(sp_file_monitor_t* monitor, sp_str_t file_path, f64 time);
 SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, sp_str_t file_path);
-
-
-// ██╗      ██████╗  ██████╗
-// ██║     ██╔═══██╗██╔════╝
-// ██║     ██║   ██║██║  ███╗
-// ██║     ██║   ██║██║   ██║
-// ███████╗╚██████╔╝╚██████╔╝
-// ╚══════╝ ╚═════╝  ╚═════╝
-#define SP_LOG(CSTR, ...)    sp_log(SP_CSTR((CSTR)), ##__VA_ARGS__)
-#define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
-void sp_log(sp_str_t fmt, ...);
 
 
 //   ██████╗ ███████╗
