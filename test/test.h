@@ -64,6 +64,22 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t pat
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager);
 
 
+typedef struct {
+  sp_str_t key;
+  sp_str_t before;
+  sp_str_t after;
+} sp_test_env_var_t;
+
+typedef struct {
+  sp_dyn_array(sp_test_env_var_t) vars;
+} sp_test_env_manager_t;
+
+void sp_test_env_manager_init(sp_test_env_manager_t* manager);
+void sp_test_env_manager_set(sp_test_env_manager_t* manager, sp_str_t key, sp_str_t value);
+void sp_test_env_manager_unset(sp_test_env_manager_t* manager, sp_str_t key);
+void sp_test_env_manager_cleanup(sp_test_env_manager_t* manager);
+
+
 ////////////////////
 // MEMORY TRACKER //
 ////////////////////
@@ -151,6 +167,48 @@ u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
 
 void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker) {
   sp_bump_allocator_clear(tracker->bump);
+}
+
+/////////////////
+// ENV MANAGER //
+/////////////////
+
+void sp_test_env_manager_init(sp_test_env_manager_t* manager) {
+  manager->vars = SP_NULLPTR;
+}
+
+void sp_test_env_manager_set(sp_test_env_manager_t* manager, sp_str_t key, sp_str_t value) {
+  sp_str_t before = sp_os_get_env_var(key);
+  sp_test_env_var_t var = {
+    .key = key,
+    .before = before,
+    .after = value,
+  };
+  sp_dyn_array_push(manager->vars, var);
+  sp_os_export_env_var(key, value, SP_ENV_EXPORT_OVERWRITE_DUPES);
+}
+
+void sp_test_env_manager_unset(sp_test_env_manager_t* manager, sp_str_t key) {
+  sp_str_t before = sp_os_get_env_var(key);
+  sp_test_env_var_t var = {
+    .key = key,
+    .before = before,
+    .after = SP_LIT(""),
+  };
+  sp_dyn_array_push(manager->vars, var);
+  sp_os_clear_env_var(key);
+}
+
+void sp_test_env_manager_cleanup(sp_test_env_manager_t* manager) {
+  sp_dyn_array_for(manager->vars, i) {
+    sp_test_env_var_t var = manager->vars[i];
+    if (!sp_str_empty(var.before)) {
+      sp_os_export_env_var(var.key, var.before, SP_ENV_EXPORT_OVERWRITE_DUPES);
+    } else {
+      sp_os_clear_env_var(var.key);
+    }
+  }
+  sp_dyn_array_free(manager->vars);
 }
 
 /////////////////

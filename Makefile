@@ -64,7 +64,7 @@ ifeq ($(OS),Windows_NT)
   CMAKE := cmake
   SP_FLAG_RPATH :=
 else
-  CC := tcc
+  CC := gcc
   MAKE := bear --append -- make
   CMAKE := bear --append -- cmake
 
