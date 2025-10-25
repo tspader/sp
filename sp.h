@@ -498,6 +498,7 @@ void** sp_dyn_array_init(void** arr, u32 val_len);
 void sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
 
 #define sp_dyn_array(T) T*
+#define sp_da(T) T*
 #define sp_dyn_array_for(__ARR, __IT) for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
 
 #define sp_dyn_array_head(__ARR)\
@@ -1143,66 +1144,61 @@ typedef struct {
   sp_str_t file_path;
   sp_str_t file_name;
   sp_os_file_attr_t attributes;
-} sp_os_directory_entry_t;
+} sp_os_dir_entry_t;
 
-typedef struct {
-  sp_os_directory_entry_t* data;
-  u32 count;
-} sp_os_directory_entry_list_t;
+SP_API void*                    sp_os_allocate_memory(u32 size);
+SP_API void*                    sp_os_reallocate_memory(void* ptr, u32 size);
+SP_API void                     sp_os_free_memory(void* ptr);
+SP_API void                     sp_os_copy_memory(const void* source, void* dest, u32 num_bytes);
+SP_API void                     sp_os_move_memory(const void* source, void* dest, u32 num_bytes);
+SP_API bool                     sp_os_is_memory_equal(const void* a, const void* b, size_t len);
+SP_API void                     sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
+SP_API void                     sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);
+SP_API void                     sp_os_zero_memory(void* buffer, u32 buffer_size);
+SP_API sp_os_platform_kind_t    sp_os_platform_kind();
+SP_API sp_str_t                 sp_os_platform_name();
+SP_API sp_os_date_time_t        sp_os_get_date_time();
+SP_API void                     sp_os_sleep_ms(f64 ms);
+SP_API c8*                      sp_os_wstr_to_cstr(c16* str, u32 len);
+SP_API void                     sp_os_print(sp_str_t message);
+SP_API void                     sp_os_log(sp_str_t message);
+SP_API sp_str_t                 sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
+SP_API sp_str_t                 sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
 
-SP_API void*                        sp_os_allocate_memory(u32 size);
-SP_API void*                        sp_os_reallocate_memory(void* ptr, u32 size);
-SP_API void                         sp_os_free_memory(void* ptr);
-SP_API void                         sp_os_copy_memory(const void* source, void* dest, u32 num_bytes);
-SP_API void                         sp_os_move_memory(const void* source, void* dest, u32 num_bytes);
-SP_API bool                         sp_os_is_memory_equal(const void* a, const void* b, size_t len);
-SP_API void                         sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
-SP_API void                         sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);
-SP_API void                         sp_os_zero_memory(void* buffer, u32 buffer_size);
-SP_API sp_os_platform_kind_t        sp_os_platform_kind();
-SP_API sp_str_t                     sp_os_platform_name();
-SP_API sp_os_date_time_t            sp_os_get_date_time();
-SP_API void                         sp_os_sleep_ms(f64 ms);
-SP_API c8*                          sp_os_wstr_to_cstr(c16* str, u32 len);
-SP_API void                         sp_os_print(sp_str_t message);
-SP_API void                         sp_os_log(sp_str_t message);
-SP_API sp_str_t                     sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
-SP_API sp_str_t                     sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
-
-SP_API bool                         sp_os_is_regular_file(sp_str_t path);
-SP_API bool                         sp_os_is_directory(sp_str_t path);
-SP_API bool                         sp_os_is_path_root(sp_str_t path);
-SP_API bool                         sp_os_is_glob(sp_str_t path);
-SP_API bool                         sp_os_is_program_on_path(sp_str_t program);
-SP_API bool                         sp_os_does_path_exist(sp_str_t path);
-SP_API void                         sp_os_create_directory(sp_str_t path);
-SP_API void                         sp_os_remove_directory(sp_str_t path);
-SP_API void                         sp_os_create_file(sp_str_t path);
-SP_API void                         sp_os_remove_file(sp_str_t path);
-SP_API void                         sp_os_copy(sp_str_t from, sp_str_t to);
-SP_API void                         sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
-SP_API void                         sp_os_copy_file(sp_str_t from, sp_str_t to);
-SP_API void                         sp_os_copy_directory(sp_str_t from, sp_str_t to);
-SP_API sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path);
-SP_API sp_str_t                     sp_os_normalize_path(sp_str_t path);
-SP_API void                         sp_os_normalize_path_soft(sp_str_t* path);
-SP_API sp_str_t                     sp_os_parent_path(sp_str_t path);
-SP_API sp_str_t                     sp_os_join_path(sp_str_t a, sp_str_t b);
-SP_API sp_str_t                     sp_os_extract_extension(sp_str_t path);
-SP_API sp_str_t                     sp_os_extract_stem(sp_str_t path);
-SP_API sp_str_t                     sp_os_extract_file_name(sp_str_t path);
-SP_API sp_str_t                     sp_os_get_cwd();
-SP_API sp_str_t                     sp_os_get_executable_path();
-SP_API sp_str_t                     sp_os_get_storage_path();
-SP_API sp_str_t                     sp_os_get_config_path();
-SP_API sp_str_t                     sp_os_canonicalize_path(sp_str_t path);
-SP_API sp_precise_epoch_time_t      sp_os_file_mod_time_precise(sp_str_t path);
-SP_API sp_os_file_attr_t            sp_os_file_attributes(sp_str_t path);
-SP_IMP sp_os_file_attr_t            sp_os_winapi_attr_to_sp_attr(u32 attr);
-SP_IMP void                         sp_os_file_monitor_init(sp_file_monitor_t* monitor);
-SP_IMP void                         sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
-SP_IMP void                         sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
-SP_IMP void                         sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
+SP_API bool                     sp_os_is_regular_file(sp_str_t path);
+SP_API bool                     sp_os_is_directory(sp_str_t path);
+SP_API bool                     sp_os_is_path_root(sp_str_t path);
+SP_API bool                     sp_os_is_glob(sp_str_t path);
+SP_API bool                     sp_os_is_program_on_path(sp_str_t program);
+SP_API bool                     sp_os_does_path_exist(sp_str_t path);
+SP_API void                     sp_os_create_directory(sp_str_t path);
+SP_API void                     sp_os_remove_directory(sp_str_t path);
+SP_API void                     sp_os_create_file(sp_str_t path);
+SP_API void                     sp_os_remove_file(sp_str_t path);
+SP_API void                     sp_os_copy(sp_str_t from, sp_str_t to);
+SP_API void                     sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
+SP_API void                     sp_os_copy_file(sp_str_t from, sp_str_t to);
+SP_API void                     sp_os_copy_directory(sp_str_t from, sp_str_t to);
+SP_API sp_da(sp_os_dir_entry_t) sp_os_scan_directory(sp_str_t path);
+SP_API sp_str_t                 sp_os_normalize_path(sp_str_t path);
+SP_API void                     sp_os_normalize_path_soft(sp_str_t* path);
+SP_API sp_str_t                 sp_os_parent_path(sp_str_t path);
+SP_API sp_str_t                 sp_os_join_path(sp_str_t a, sp_str_t b);
+SP_API sp_str_t                 sp_os_extract_extension(sp_str_t path);
+SP_API sp_str_t                 sp_os_extract_stem(sp_str_t path);
+SP_API sp_str_t                 sp_os_extract_file_name(sp_str_t path);
+SP_API sp_str_t                 sp_os_get_cwd();
+SP_API sp_str_t                 sp_os_get_executable_path();
+SP_API sp_str_t                 sp_os_get_storage_path();
+SP_API sp_str_t                 sp_os_get_config_path();
+SP_API sp_str_t                 sp_os_canonicalize_path(sp_str_t path);
+SP_API sp_precise_epoch_time_t  sp_os_file_mod_time_precise(sp_str_t path);
+SP_API sp_os_file_attr_t        sp_os_file_attributes(sp_str_t path);
+SP_IMP sp_os_file_attr_t        sp_os_winapi_attr_to_sp_attr(u32 attr);
+SP_IMP void                     sp_os_file_monitor_init(sp_file_monitor_t* monitor);
+SP_IMP void                     sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
+SP_IMP void                     sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
+SP_IMP void                     sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
 
 
 // ████████╗██╗  ██╗██████╗ ███████╗ █████╗ ██████╗ ██╗███╗   ██╗ ██████╗
@@ -4332,13 +4328,12 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     sp_os_copy_glob(from, sp_str_lit("*"), to);
   }
 
-  sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
+  sp_da(sp_os_dir_entry_t) sp_os_scan_directory(sp_str_t path) {
     if (!sp_os_is_directory(path) || !sp_os_does_path_exist(path)) {
-      return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+      return SP_NULLPTR;
     }
 
-    sp_dynamic_array(sp_os_directory_entry_t) entries;
-    sp_dynamic_array_init(&entries, sizeof(sp_os_directory_entry_t));
+    sp_dyn_array(sp_os_dir_entry_t) entries = SP_NULLPTR;
 
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
     sp_str_builder_append(&builder, path);
@@ -4348,7 +4343,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     sp_win32_find_data_t find_data;
     sp_win32_handle_t handle = FindFirstFile(sp_str_to_cstr(glob), &find_data);
     if (handle == INVALID_HANDLE_VALUE) {
-      return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+      return SP_NULLPTR;
     }
 
     do {
@@ -4362,20 +4357,17 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
-      sp_os_directory_entry_t entry  = SP_RVAL(sp_os_directory_entry_t) {
+      sp_os_dir_entry_t entry = SP_RVAL(sp_os_dir_entry_t) {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(find_data.cFileName),
         .attributes = sp_os_file_attributes(file_path),
       };
-      sp_dynamic_array_push(&entries, &entry);
+      sp_dyn_array_push(entries, entry);
     } while (FindNextFile(handle, &find_data));
 
     FindClose(handle);
 
-    return SP_RVAL(sp_os_directory_entry_list_t) {
-      .data = (sp_os_directory_entry_t*)entries.data,
-      .count = entries.size
-    };
+    return entries;
   }
 
   sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
@@ -4659,10 +4651,10 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   }
 
   void sp_os_remove_directory(sp_str_t path) {
-    sp_os_directory_entry_list_t entries = sp_os_scan_directory(path);
+    sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(path);
 
-    for (u32 i = 0; i < entries.count; i++) {
-      sp_os_directory_entry_t* entry = &entries.data[i];
+    sp_dyn_array_for(entries, i) {
+      sp_os_dir_entry_t* entry = &entries[i];
 
       if (sp_os_is_directory(entry->file_path)) {
         sp_os_remove_directory(entry->file_path);
@@ -4739,10 +4731,10 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   void sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
     sp_os_create_directory(to);
 
-    sp_os_directory_entry_list_t entries = sp_os_scan_directory(from);
+    sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(from);
 
-    for (u32 i = 0; i < entries.count; i++) {
-      sp_os_directory_entry_t* entry = &entries.data[i];
+    sp_dyn_array_for(entries, i) {
+      sp_os_dir_entry_t* entry = &entries[i];
       sp_str_t entry_name = entry->file_name;
 
       bool matches = sp_str_equal(glob, sp_str_lit("*"));
@@ -4790,19 +4782,18 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     sp_os_copy_glob(from, sp_str_lit("*"), to);
   }
 
-  sp_os_directory_entry_list_t sp_os_scan_directory(sp_str_t path) {
+  sp_da(sp_os_dir_entry_t) sp_os_scan_directory(sp_str_t path) {
     if (!sp_os_is_directory(path) || !sp_os_does_path_exist(path)) {
-      return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+      return SP_NULLPTR;
     }
 
-    sp_dynamic_array(sp_os_directory_entry_t) entries;
-    sp_dynamic_array_init(&entries, sizeof(sp_os_directory_entry_t));
+    sp_dyn_array(sp_os_dir_entry_t) entries = SP_NULLPTR;
 
     c8* path_cstr = sp_str_to_cstr(path);
     DIR* dir = opendir(path_cstr);
 
     if (!dir) {
-      return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
+      return entries;
     }
 
     struct dirent* entry;
@@ -4817,20 +4808,17 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
-      sp_os_directory_entry_t dir_entry = SP_RVAL(sp_os_directory_entry_t) {
+      sp_os_dir_entry_t dir_entry = {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(entry->d_name),
         .attributes = sp_os_file_attributes(file_path),
       };
-      sp_dynamic_array_push(&entries, &dir_entry);
+      sp_dyn_array_push(entries, dir_entry);
     }
 
     closedir(dir);
 
-    return SP_RVAL(sp_os_directory_entry_list_t) {
-      .data = (sp_os_directory_entry_t*)entries.data,
-      .count = entries.size
-    };
+    return entries;
   }
 
   sp_os_date_time_t sp_os_get_date_time() {
