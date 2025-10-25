@@ -106,7 +106,7 @@ all: build
 
 # Ensure dependencies are built before any compilation
 deps:
-	@spn build --output noninteractive
+	@spn --no-interactive build
 	@mkdir -p $(SP_DIR_BUILD_OUTPUT)
 
 $(SP_DIR_BUILD_OUTPUT): | deps
