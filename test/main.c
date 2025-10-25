@@ -3898,15 +3898,15 @@ UTEST(sp_os_scan_directory, basic_scan) {
   sp_os_create_directory(dir1);
   sp_os_create_directory(dir2);
 
-  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
 
-  ASSERT_EQ(entries.count, 4);
+  ASSERT_EQ(sp_dyn_array_size(entries), 4);
 
   u32 file_count = 0;
   u32 dir_count = 0;
 
-  for (u32 i = 0; i < entries.count; i++) {
-    sp_os_directory_entry_t* entry = &entries.data[i];
+  sp_dyn_array_for(entries, i) {
+    sp_os_dir_entry_t* entry = &entries[i];
     if (entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE) {
       file_count++;
     }
@@ -3937,15 +3937,15 @@ UTEST(sp_os_scan_directory, file_names_validation) {
     sp_os_create_file(file_path);
   }
 
-  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
 
-  ASSERT_EQ(entries.count, 4);
+  ASSERT_EQ(sp_dyn_array_size(entries), 4);
 
   bool found[4] = {false, false, false, false};
 
-  for (u32 i = 0; i < entries.count; i++) {
+  sp_dyn_array_for(entries, i) {
     for (u32 j = 0; j < 4; j++) {
-      if (sp_str_equal_cstr(entries.data[i].file_name, expected_names[j])) {
+      if (sp_str_equal_cstr(entries[i].file_name, expected_names[j])) {
         found[j] = true;
         break;
       }
@@ -3969,15 +3969,15 @@ UTEST(sp_os_scan_directory, file_attributes) {
   sp_os_create_file(test_file);
   sp_os_create_directory(test_dir);
 
-  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
 
-  ASSERT_EQ(entries.count, 2);
+  ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
   bool found_file = false;
   bool found_dir = false;
 
-  for (u32 i = 0; i < entries.count; i++) {
-    sp_os_directory_entry_t* entry = &entries.data[i];
+  sp_dyn_array_for(entries, i) {
+    sp_os_dir_entry_t* entry = &entries[i];
 
     if (sp_str_equal_cstr(entry->file_name, "test.txt")) {
       ASSERT_TRUE(entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE);
@@ -4002,10 +4002,10 @@ UTEST(sp_os_scan_directory, empty_directory) {
 
   sp_str_t base = sp_test_build_scan_directory();
 
-  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
 
-  ASSERT_EQ(entries.count, 0);
-  ASSERT_TRUE(entries.data == SP_NULLPTR || entries.count == 0);
+  ASSERT_EQ(sp_dyn_array_size(entries), 0);
+  ASSERT_TRUE(entries == SP_NULLPTR || sp_dyn_array_size(entries) == 0);
 
   sp_test_build_scan_directory();
 }
@@ -4016,9 +4016,9 @@ UTEST(sp_os_scan_directory, non_existent_directory) {
 
   sp_str_t non_existent = sp_os_join_path(base, SP_LIT("some_bullshit"));
 
-  sp_os_directory_entry_list_t entries = sp_os_scan_directory(non_existent);
+  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(non_existent);
 
-  ASSERT_EQ(entries.count, 0);
+  ASSERT_EQ(sp_dyn_array_size(entries), 0);
 }
 
 UTEST(sp_os_scan_directory, file_path_correctness) {
@@ -4031,12 +4031,12 @@ UTEST(sp_os_scan_directory, file_path_correctness) {
   sp_os_create_file(file1);
   sp_os_create_directory(dir1);
 
-  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
 
-  ASSERT_EQ(entries.count, 2);
+  ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
-  for (u32 i = 0; i < entries.count; i++) {
-    sp_os_directory_entry_t* entry = &entries.data[i];
+  sp_dyn_array_for(entries, i) {
+    sp_os_dir_entry_t* entry = &entries[i];
 
     ASSERT_TRUE(sp_str_starts_with(entry->file_path, base));
 
@@ -4075,11 +4075,11 @@ UTEST(sp_os_file_attributes, basic_functionality) {
   ASSERT_EQ(none_attr, SP_OS_FILE_ATTR_NONE);
 
   // verify consistency with sp_os_scan_directory
-  sp_os_directory_entry_list_t entries = sp_os_scan_directory(base);
-  ASSERT_EQ(entries.count, 2);
+  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
+  ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
-  for (u32 i = 0; i < entries.count; i++) {
-    sp_os_directory_entry_t* entry = &entries.data[i];
+  sp_dyn_array_for(entries, i) {
+    sp_os_dir_entry_t* entry = &entries[i];
     sp_os_file_attr_t direct_attr = sp_os_file_attributes(entry->file_path);
     ASSERT_EQ(entry->attributes, direct_attr);
   }
