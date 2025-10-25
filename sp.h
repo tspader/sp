@@ -1026,7 +1026,7 @@ typedef struct {
 
 #define SP_FILE_MONITOR_BUFFER_SIZE 4092
 
-typedef struct sp_file_monitor {
+struct sp_file_monitor {
 	sp_file_change_callback_t callback;
 	sp_file_change_event_t events_to_watch;
 	void* userdata;
@@ -1034,7 +1034,7 @@ typedef struct sp_file_monitor {
 	sp_dynamic_array_t changes;
 	sp_dynamic_array_t cache;
   sp_opaque_ptr os;
-} sp_file_monitor_t;
+};
 
 SP_API void              sp_file_monitor_init(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata);
 SP_API void              sp_file_monitor_init_debounce(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata, u32 debounce_ms);
