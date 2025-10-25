@@ -1164,6 +1164,8 @@ SP_API void                         sp_os_sleep_ms(f64 ms);
 SP_API c8*                          sp_os_wstr_to_cstr(c16* str, u32 len);
 SP_API void                         sp_os_print(sp_str_t message);
 SP_API void                         sp_os_log(sp_str_t message);
+SP_API sp_str_t                     sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
+SP_API sp_str_t                     sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
 
 SP_API bool                         sp_os_is_regular_file(sp_str_t path);
 SP_API bool                         sp_os_is_directory(sp_str_t path);
@@ -5571,6 +5573,19 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
 #endif
 
 #if defined(SP_LINUX)
+sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
+  switch (kind) {
+    case SP_OS_LIB_SHARED: return SP_LIT("so");
+    case SP_OS_LIB_STATIC: return SP_LIT("a");
+  }
+
+  SP_UNREACHABLE_RETURN(sp_str_lit(""));
+}
+
+sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
+  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+}
+
 void sp_semaphore_init(sp_semaphore_t* semaphore) {
   sem_init(semaphore, 0, 0);
 }
@@ -5648,6 +5663,18 @@ sp_str_t sp_os_get_config_path() {
 // PLATFORM //
 //////////////
 #ifdef SP_WIN32
+  sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) { switch (kind) {
+      case SP_OS_LIB_SHARED: return SP_LIT("dll");
+      case SP_OS_LIB_STATIC: return SP_LIT("lib");
+    }
+
+    SP_UNREACHABLE();
+  }
+
+  sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
+    return sp_format("{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+  }
+
   sp_os_platform_kind_t sp_os_platform_kind() {
     return SP_OS_PLATFORM_WIN32;
   }
@@ -5944,6 +5971,19 @@ sp_str_t sp_os_get_config_path() {
 #endif
 
 #ifdef SP_MACOS
+  sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
+    switch (kind) {
+      case SP_OS_LIB_SHARED: return SP_LIT("dylib");
+      case SP_OS_LIB_STATIC: return SP_LIT("a");
+    }
+
+    SP_UNREACHABLE();
+  }
+
+  sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
+    return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+  }
+
   sp_os_platform_kind_t sp_os_platform_kind() {
     return SP_OS_PLATFORM_MACOS;
   }
