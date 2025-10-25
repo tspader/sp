@@ -1052,6 +1052,8 @@ SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* mon
 //  ██║   ██║╚════██║
 //  ╚██████╔╝███████║
 //   ╚═════╝ ╚══════╝
+// @sp_os
+
 //////////////
 // OS TYPES //
 //////////////
@@ -1273,6 +1275,8 @@ SP_API s32          sp_atomic_s32_get(sp_atomic_s32* value);
 // ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══╝   ██╔██╗    ██║
 // ╚██████╗╚██████╔╝██║ ╚████║   ██║   ███████╗██╔╝ ██╗   ██║
 //  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝
+#define SP_MAX_CONTEXT 16
+
 typedef struct {
   sp_allocator_t allocator;
   sp_mutex_t mutex;
@@ -1286,7 +1290,9 @@ typedef struct {
 } sp_sp_t;
 static sp_sp_t sp_global = SP_ZERO_INITIALIZE();
 
-#define SP_MAX_CONTEXT 16
+typedef struct {
+  sp_allocator_t allocator;
+} sp_config_t;
 
 extern pthread_key_t sp_context_stack_key;
 extern pthread_key_t sp_context_key;
@@ -1298,6 +1304,7 @@ void          sp_context_push(sp_context_t context);
 void          sp_context_push_allocator(sp_allocator_t allocator);
 void          sp_context_pop();
 void          sp_context_ensure();
+void          sp_init(sp_config_t config);
 
 
 // ██╗ ██████╗
@@ -1695,11 +1702,6 @@ SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 SP_API bool      sp_parse_is_digit(c8 c);
 
-typedef struct {
-  sp_allocator_t allocator;
-} sp_config_t;
-
-void sp_init(sp_config_t config);
 
 //  █████╗ ███████╗███████╗███████╗████████╗███████╗
 // ██╔══██╗██╔════╝██╔════╝██╔════╝╚══██╔══╝██╔════╝
