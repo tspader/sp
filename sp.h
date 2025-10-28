@@ -4404,11 +4404,6 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
   }
 
-  sp_os_date_time_t sp_os_get_date_time() {
-    SP_BROKEN();
-    return SP_ZERO_STRUCT(sp_os_date_time_t);
-  }
-
   sp_tm_epoch_t sp_tm_now_epoch() {
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
@@ -4496,15 +4491,16 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   }
 
   sp_tm_date_time_t sp_tm_get_date_time() {
-    sp_os_date_time_t os_dt = sp_os_get_date_time();
+    SYSTEMTIME st;
+    GetLocalTime(&st);
     return SP_RVAL(sp_tm_date_time_t) {
-      .year = os_dt.year,
-      .month = os_dt.month,
-      .day = os_dt.day,
-      .hour = os_dt.hour,
-      .minute = os_dt.minute,
-      .second = os_dt.second,
-      .millisecond = os_dt.millisecond
+      .year = st.wYear,
+      .month = st.wMonth,
+      .day = st.wDay,
+      .hour = st.wHour,
+      .minute = st.wMinute,
+      .second = st.wSecond,
+      .millisecond = st.wMilliseconds
     };
   }
 
@@ -4949,7 +4945,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return entries;
   }
 
-  sp_os_date_time_t sp_tm_get_date_time() {
+  sp_tm_date_time_t sp_tm_get_date_time() {
     time_t raw_time;
     struct tm* time_info;
     struct timeval tv;
@@ -4958,7 +4954,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     time_info = localtime(&raw_time);
     gettimeofday(&tv, NULL);
 
-    return SP_RVAL(sp_os_date_time_t) {
+    return SP_RVAL(sp_tm_date_time_t) {
       .year = time_info->tm_year + 1900,
       .month = time_info->tm_mon + 1,
       .day = time_info->tm_mday,
@@ -5039,19 +5035,6 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     sp_tm_point_t now = sp_tm_now_point();
     timer->start = now;
     timer->previous = now;
-  }
-
-  sp_tm_date_time_t sp_tm_get_date_time() {
-    sp_tm_date_time_t os_dt = sp_tm_get_date_time();
-    return SP_RVAL(sp_tm_date_time_t) {
-      .year = os_dt.year,
-      .month = os_dt.month,
-      .day = os_dt.day,
-      .hour = os_dt.hour,
-      .minute = os_dt.minute,
-      .second = os_dt.second,
-      .millisecond = os_dt.millisecond
-    };
   }
 
   sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
@@ -6681,14 +6664,14 @@ sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_clo
 }
 
 u64 sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size) {
-  SP_ASSERT(stream && ptr);
+  SP_ASSERT(stream); SP_ASSERT(ptr); SP_ASSERT(stream->callbacks.read);
   u64 bytes = stream->callbacks.read(stream, ptr, size);
   if (bytes < size) sp_err_set(SP_ERR_IO_EOF);
   return bytes;
 }
 
 u64 sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
-  SP_ASSERT(stream && ptr);
+  SP_ASSERT(stream); SP_ASSERT(ptr); SP_ASSERT(stream->callbacks.write);
   return stream->callbacks.write(stream, ptr, size);
 }
 
@@ -6705,17 +6688,17 @@ u64 sp_io_write_cstr(sp_io_stream_t* stream, const c8* cstr) {
 }
 
 s64 sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
-  SP_ASSERT(stream);
+  SP_ASSERT(stream); SP_ASSERT(stream->callbacks.seek);
   return stream->callbacks.seek(stream, offset, whence);
 }
 
 s64 sp_io_size(sp_io_stream_t* stream) {
-  SP_ASSERT(stream);
+  SP_ASSERT(stream); SP_ASSERT(stream->callbacks.size);
   return stream->callbacks.size(stream);
 }
 
 void sp_io_close(sp_io_stream_t* stream) {
-  SP_ASSERT(stream);
+  SP_ASSERT(stream); SP_ASSERT(stream->callbacks.close);
   stream->callbacks.close(stream);
 }
 
