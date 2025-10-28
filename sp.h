@@ -338,16 +338,7 @@ typedef double   f64;
 typedef char     c8;
 typedef wchar_t  c16;
 typedef size_t   sp_size_t;
-
-typedef struct {
-  u64 s;
-  u64 ns;
-} sp_precise_epoch_time_t;
-typedef sp_precise_epoch_time_t sp_time_t;
-typedef u64 sp_precise_time_t;
-
-typedef void* sp_opaque_ptr;
-
+typedef void*    sp_opaque_ptr;
 
 
 // ███████╗██████╗ ██████╗  ██████╗ ██████╗
@@ -967,6 +958,45 @@ SP_API sp_str_t               sp_str_map_kernel_capitalize_words(sp_str_map_cont
 SP_API s32                    sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 
 
+// ████████╗██╗███╗   ███╗███████╗
+// ╚══██╔══╝██║████╗ ████║██╔════╝
+//    ██║   ██║██╔████╔██║█████╗
+//    ██║   ██║██║╚██╔╝██║██╔══╝
+//    ██║   ██║██║ ╚═╝ ██║███████╗
+//    ╚═╝   ╚═╝╚═╝     ╚═╝╚══════╝
+typedef struct {
+  u64 s;
+  u32 ns;
+} sp_tm_epoch_t;
+
+typedef u64 sp_tm_point_t;
+
+typedef struct {
+  s32 year;
+  s32 month;
+  s32 day;
+  s32 hour;
+  s32 minute;
+  s32 second;
+  s32 millisecond;
+} sp_tm_date_time_t;
+
+typedef struct {
+  sp_tm_point_t start;
+  sp_tm_point_t previous;
+} sp_tm_timer_t;
+
+SP_API sp_tm_epoch_t             sp_tm_now_epoch();
+SP_API sp_str_t                  sp_tm_to_iso8601(sp_tm_epoch_t time);
+SP_API sp_tm_point_t             sp_tm_now_point();
+SP_API u64                       sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older);
+SP_API sp_tm_timer_t             sp_tm_start_timer();
+SP_API u64                       sp_tm_read_timer(sp_tm_timer_t* timer);
+SP_API u64                       sp_tm_lap_timer(sp_tm_timer_t* timer);
+SP_API void                      sp_tm_reset_timer(sp_tm_timer_t* timer);
+SP_API sp_tm_date_time_t         sp_tm_get_date_time();
+
+
 // ███████╗██████╗ ██████╗  █████╗ ████████╗ █████╗
 // ██╔════╝██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗
 // █████╗  ██████╔╝██████╔╝███████║   ██║   ███████║
@@ -1157,7 +1187,6 @@ SP_API void                     sp_os_fill_memory_u8(void* buffer, u32 buffer_si
 SP_API void                     sp_os_zero_memory(void* buffer, u32 buffer_size);
 SP_API sp_os_platform_kind_t    sp_os_platform_kind();
 SP_API sp_str_t                 sp_os_platform_name();
-SP_API sp_os_date_time_t        sp_os_get_date_time();
 SP_API void                     sp_os_sleep_ms(f64 ms);
 SP_API c8*                      sp_os_wstr_to_cstr(c16* str, u32 len);
 SP_API void                     sp_os_print(sp_str_t message);
@@ -1192,7 +1221,7 @@ SP_API sp_str_t                 sp_os_get_executable_path();
 SP_API sp_str_t                 sp_os_get_storage_path();
 SP_API sp_str_t                 sp_os_get_config_path();
 SP_API sp_str_t                 sp_os_canonicalize_path(sp_str_t path);
-SP_API sp_precise_epoch_time_t  sp_os_file_mod_time_precise(sp_str_t path);
+SP_API sp_tm_epoch_t            sp_os_file_mod_time_precise(sp_str_t path);
 SP_API sp_os_file_attr_t        sp_os_file_attributes(sp_str_t path);
 SP_IMP sp_os_file_attr_t        sp_os_winapi_attr_to_sp_attr(u32 attr);
 SP_IMP void                     sp_os_file_monitor_init(sp_file_monitor_t* monitor);
@@ -4380,14 +4409,113 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return SP_ZERO_STRUCT(sp_os_date_time_t);
   }
 
-  sp_precise_epoch_time_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+  sp_tm_epoch_t sp_tm_now_epoch() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+
+    // Convert to Unix epoch
+    u64 windows_100ns = ((u64)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    u64 unix_100ns = windows_100ns - 116444736000000000ULL;
+
+    return SP_RVAL(sp_tm_epoch_t) {
+      .seconds = unix_100ns / 10000000,
+      .nanoseconds = (u32)((unix_100ns % 10000000) * 100)
+    };
+  }
+
+  sp_str_t sp_tm_to_iso8601(sp_tm_epoch_t time) {
+    FILETIME ft;
+    SYSTEMTIME st;
+
+    // Convert Unix epoch back to Windows FILETIME
+    u64 unix_100ns = time.seconds * 10000000ULL + time.nanoseconds / 100ULL;
+    u64 windows_100ns = unix_100ns + 116444736000000000ULL;
+
+    ft.dwHighDateTime = (u32)(windows_100ns >> 32);
+    ft.dwLowDateTime = (u32)(windows_100ns & 0xFFFFFFFF);
+
+    FileTimeToSystemTime(&ft, &st);
+
+    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+    sp_str_builder_append_fmt(&builder, "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+      SP_FMT_S32(st.wYear),
+      SP_FMT_S32(st.wMonth),
+      SP_FMT_S32(st.wDay),
+      SP_FMT_S32(st.wHour),
+      SP_FMT_S32(st.wMinute),
+      SP_FMT_S32(st.wSecond),
+      SP_FMT_U32(time.nanoseconds / 1000000));
+
+    return sp_str_builder_write(&builder);
+  }
+
+  sp_tm_point_t sp_tm_now_point() {
+    LARGE_INTEGER freq, counter;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&counter);
+
+    // Convert to nanoseconds
+    u64 ns = (counter.QuadPart * 1000000000ULL) / freq.QuadPart;
+    return (sp_tm_point_t)ns;
+  }
+
+  u64 sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older) {
+    return newer - older;
+  }
+
+  sp_tm_timer_t sp_tm_start_timer() {
+    sp_tm_point_t now = sp_tm_now_point();
+    return SP_RVAL(sp_tm_timer_t) {
+      .start = now,
+      .previous = now
+    };
+  }
+
+  u64 sp_tm_read_timer(sp_tm_timer_t* timer) {
+    sp_tm_point_t current = sp_tm_now_point();
+    if (current < timer->previous) {
+      timer->previous = current;
+    }
+    return sp_tm_point_diff(current, timer->start);
+  }
+
+  u64 sp_tm_lap_timer(sp_tm_timer_t* timer) {
+    sp_tm_point_t current = sp_tm_now_point();
+    if (current < timer->previous) {
+      timer->previous = current;
+    }
+    u64 elapsed = sp_tm_point_diff(current, timer->previous);
+    timer->previous = current;
+    return elapsed;
+  }
+
+  void sp_tm_reset_timer(sp_tm_timer_t* timer) {
+    sp_tm_point_t now = sp_tm_now_point();
+    timer->start = now;
+    timer->previous = now;
+  }
+
+  sp_tm_date_time_t sp_tm_get_date_time() {
+    sp_os_date_time_t os_dt = sp_os_get_date_time();
+    return SP_RVAL(sp_tm_date_time_t) {
+      .year = os_dt.year,
+      .month = os_dt.month,
+      .day = os_dt.day,
+      .hour = os_dt.hour,
+      .minute = os_dt.minute,
+      .second = os_dt.second,
+      .millisecond = os_dt.millisecond
+    };
+  }
+
+  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
     WIN32_FILE_ATTRIBUTE_DATA fad;
     if (!GetFileAttributesEx(sp_str_to_cstr(file_path), GetFileExInfoStandard, &fad)) {
-      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
     }
 
     if (fad.nFileSizeHigh == 0 && fad.nFileSizeLow == 0) {
-      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
     }
 
     LARGE_INTEGER time;
@@ -4397,7 +4525,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     // Convert to Unix epoch
     u64 unix_100ns = time.QuadPart - 116444736000000000LL;
 
-    return SP_RVAL(sp_precise_epoch_time_t) {
+    return SP_RVAL(sp_tm_epoch_t) {
       unix_100ns / 10000000,           // seconds
       (unix_100ns % 10000000) * 100    // remainder to nanoseconds
     };
@@ -4821,7 +4949,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return entries;
   }
 
-  sp_os_date_time_t sp_os_get_date_time() {
+  sp_os_date_time_t sp_tm_get_date_time() {
     time_t raw_time;
     struct tm* time_info;
     struct timeval tv;
@@ -4841,20 +4969,105 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     };
   }
 
-  sp_precise_epoch_time_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+  sp_tm_epoch_t sp_tm_now_epoch() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return SP_RVAL(sp_tm_epoch_t) {
+      .s = (u64)ts.tv_sec,
+      .ns = (u32)ts.tv_nsec
+    };
+  }
+
+  sp_str_t sp_tm_to_iso8601(sp_tm_epoch_t time) {
+    struct tm* time_info;
+    time_t raw_time = (time_t)time.s;
+    time_info = gmtime(&raw_time);
+
+    c8 buffer[32];
+    size_t len = strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", time_info);
+
+    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+    sp_str_builder_append(&builder, sp_str(buffer, len));
+    sp_str_builder_append_c8(&builder, '.');
+
+    u32 ms = time.ns / 1000000;
+    if (ms < 100) sp_str_builder_append_c8(&builder, '0');
+    if (ms < 10) sp_str_builder_append_c8(&builder, '0');
+    sp_str_builder_append_fmt(&builder, "{}", SP_FMT_U32(ms));
+    sp_str_builder_append_c8(&builder, 'Z');
+
+    return sp_str_builder_write(&builder);
+  }
+
+  sp_tm_point_t sp_tm_now_point() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (sp_tm_point_t)(ts.tv_sec * 1000000000ULL + ts.tv_nsec);
+  }
+
+  u64 sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older) {
+    return newer - older;
+  }
+
+  sp_tm_timer_t sp_tm_start_timer() {
+    sp_tm_point_t now = sp_tm_now_point();
+    return SP_RVAL(sp_tm_timer_t) {
+      .start = now,
+      .previous = now
+    };
+  }
+
+  u64 sp_tm_read_timer(sp_tm_timer_t* timer) {
+    sp_tm_point_t current = sp_tm_now_point();
+    if (current < timer->previous) {
+      timer->previous = current;
+    }
+    return sp_tm_point_diff(current, timer->start);
+  }
+
+  u64 sp_tm_lap_timer(sp_tm_timer_t* timer) {
+    sp_tm_point_t current = sp_tm_now_point();
+    if (current < timer->previous) {
+      timer->previous = current;
+    }
+    u64 elapsed = sp_tm_point_diff(current, timer->previous);
+    timer->previous = current;
+    return elapsed;
+  }
+
+  void sp_tm_reset_timer(sp_tm_timer_t* timer) {
+    sp_tm_point_t now = sp_tm_now_point();
+    timer->start = now;
+    timer->previous = now;
+  }
+
+  sp_tm_date_time_t sp_tm_get_date_time() {
+    sp_tm_date_time_t os_dt = sp_tm_get_date_time();
+    return SP_RVAL(sp_tm_date_time_t) {
+      .year = os_dt.year,
+      .month = os_dt.month,
+      .day = os_dt.day,
+      .hour = os_dt.hour,
+      .minute = os_dt.minute,
+      .second = os_dt.second,
+      .millisecond = os_dt.millisecond
+    };
+  }
+
+  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
     struct stat st;
     c8* path_cstr = sp_str_to_cstr(file_path);
     s32 result = stat(path_cstr, &st);
 
     if (result != 0) {
-      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
     }
 
     if (st.st_size == 0) {
-      return SP_ZERO_STRUCT(sp_precise_epoch_time_t);
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
     }
 
-    return SP_RVAL(sp_precise_epoch_time_t) {
+    return SP_RVAL(sp_tm_epoch_t) {
       .s = (u64)st.st_mtime,
       .ns = 0
     };
