@@ -27,5 +27,4 @@ char** parts = malloc(sizeof(char*) * 10);
 # Tags
 - api.memory
 - api.sp_context_t
-- api.strings.sp_str_t.copy
 - api.sp_dynamic_array_t

@@ -1,3 +1,4 @@
+@spader: make this more general; the array should just be of s32, inside loop is just // ...
 Use SP_CARR_FOR() to iterate over C arrays with automatic size calculation.
 
 ## Good
