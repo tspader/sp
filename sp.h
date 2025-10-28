@@ -4694,7 +4694,6 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   }
 #endif
 
-// @spader @posix this is where posix implementations go
 #if defined(SP_POSIX)
   void* sp_os_allocate_memory(u32 size) {
     void* ptr = malloc(size);

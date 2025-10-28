@@ -2,7 +2,6 @@ Use ANSI color constants and format extensions for colored terminal output.
 
 ## Good
 ```c
-sp_format("{:fg brightred}", SP_FMT_CSTR("FAILED"));
 sp_format("{:fg brightcyan} tests failed", SP_FMT_U32(failed_count));
 
 sp_str_builder_t output = SP_ZERO_INITIALIZE();

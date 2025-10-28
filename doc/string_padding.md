@@ -2,10 +2,9 @@ Use sp_str_pad() to pad strings to a fixed width for aligned output
 
 ## Good
 ```c
-// table formatting with aligned columns
-sp_str_t name = sp_str_pad(dep->name, 20);
-sp_str_t status = sp_str_pad(dep->status, 10);
-SP_LOG("{} {} {}", SP_FMT_STR(name), SP_FMT_STR(status), SP_FMT_STR(dep->path));
+sp_str_t name = SP_LIT("jerry");
+sp_str_t status = sp_str_pad(SP_LIT("guitar"), 10);
+SP_LOG("{:pad 20} {} {}", SP_FMT_STR(name), SP_FMT_STR(status), SP_FMT_STR(dep->path));
 
 // aligning array of strings to longest
 sp_str_t names[] = {
