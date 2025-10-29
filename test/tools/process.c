@@ -145,11 +145,11 @@ s32 main(s32 num_args, const c8** args) {
         total_read += n;
       }
       if (stdout_enabled) {
-        fprintf(stdout, "%lu\n", total_read);
+        fprintf(stdout, "%llu\n", total_read);
         fflush(stdout);
       }
       if (stderr_enabled) {
-        fprintf(stderr, "%lu\n", total_read);
+        fprintf(stderr, "%llu\n", total_read);
         fflush(stderr);
       }
       break;

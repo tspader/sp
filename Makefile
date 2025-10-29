@@ -31,7 +31,7 @@ define run_tests
 		echo "$$OUTPUT"; \
 		exit 1; \
 	elif echo "$$OUTPUT" | grep -q "PASSED"; then \
-		COUNT=$$(echo "$$OUTPUT" | grep -oP '(?<=PASSED  ] )\d+(?= test)'); \
+		COUNT=$$(echo "$$OUTPUT" | sed -n 's/.*PASSED  ] \([0-9][0-9]*\) test.*/\1/p'); \
 		printf "$(ANSI_FG_BRIGHT_YELLOW)$(1) $(ANSI_FG_GREEN)OK$(ANSI_RESET) $$COUNT tests\n"; \
 	else \
 		printf "$(ANSI_FG_BRIGHT_YELLOW)$(1) $(ANSI_FG_RED)ERROR$(ANSI_RESET)\n"; \
@@ -64,7 +64,7 @@ ifeq ($(OS),Windows_NT)
   CMAKE := cmake
   SP_FLAG_RPATH :=
 else
-  CC := gcc
+  CC := clang
   MAKE := bear --append -- make
   CMAKE := bear --append -- cmake
 
