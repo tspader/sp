@@ -44,8 +44,7 @@ sp_dyn_array_reserve(entries, 100);  // Pre-allocate space
 ### String to Integer Map
 
 ```c
-sp_ht(sp_str_t, int) map = sp_ht_new(sp_str_t, int);
-if (!map) sp_ht_init(map);
+sp_ht(sp_str_t, int) map = SP_NULLPTR;
 
 // Set custom hash/compare for string keys
 sp_ht_set_fns(map, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
@@ -158,7 +157,7 @@ sp_str_t command = sp_format("git -C {} checkout {}",
 
 ```c
 // For shell-safe output
-sp_str_t output = sp_format("SPN_INCLUDES={}", 
+sp_str_t output = sp_format("SPN_INCLUDES={}",
   SP_FMT_QUOTED_STR(includes));
 ```
 
@@ -289,13 +288,13 @@ typedef struct {
 
 s32 worker_fn(void* userdata) {
   worker_t* worker = (worker_t*)userdata;
-  
+
   sp_mutex_lock(&worker->mutex);
   worker->running = true;
   sp_mutex_unlock(&worker->mutex);
-  
+
   // Do work...
-  
+
   return 0;
 }
 
@@ -395,13 +394,13 @@ bool load_config(sp_str_t path, config_t* out) {
     SP_LOG("Config not found: {}", SP_FMT_STR(path));
     return false;
   }
-  
+
   sp_str_t contents = sp_io_read_file(path);
   if (!sp_str_valid(contents)) {
     SP_LOG("Failed to read config: {}", SP_FMT_STR(path));
     return false;
   }
-  
+
   // Parse config...
   return true;
 }
@@ -456,7 +455,7 @@ spn_output_mode_t spn_output_mode_from_str(sp_str_t str) {
   else if (sp_str_equal_cstr(str, "noninteractive")) return SPN_OUTPUT_MODE_NONINTERACTIVE;
   else if (sp_str_equal_cstr(str, "quiet"))          return SPN_OUTPUT_MODE_QUIET;
   else if (sp_str_equal_cstr(str, "none"))           return SPN_OUTPUT_MODE_NONE;
-  
+
   SP_FATAL("Unknown output mode {:fg brightyellow}", SP_FMT_STR(str));
   SP_UNREACHABLE_RETURN(SPN_OUTPUT_MODE_NONE);
 }
@@ -498,7 +497,7 @@ void init_context(my_context_t* ctx, sp_str_t name) {
     .map = sp_ht_new(sp_str_t, int),  // Hash table
     .mutex = SP_ZERO_INITIALIZE()
   };
-  
+
   sp_mutex_init(&ctx->mutex, SP_MUTEX_PLAIN);
   if (!ctx->map) sp_ht_init(ctx->map);
 }
