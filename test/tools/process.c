@@ -144,12 +144,13 @@ s32 main(s32 num_args, const c8** args) {
         if (n == 0) break;
         total_read += n;
       }
+      sp_str_t str = sp_format("{}", SP_FMT_U64(total_read));
       if (stdout_enabled) {
-        fprintf(stdout, "%llu\n", total_read);
+        fprintf(stdout, "%s\n", sp_str_to_cstr(str));
         fflush(stdout);
       }
       if (stderr_enabled) {
-        fprintf(stderr, "%llu\n", total_read);
+        fprintf(stderr, "%s\n", sp_str_to_cstr(str));
         fflush(stderr);
       }
       break;
