@@ -5808,6 +5808,7 @@ UTEST_F(sp_os_copy_tests, copy_directory) {
   ASSERT_TRUE(sp_os_does_path_exist(sp_os_join_path(copied_dir, SP_LIT("file2.txt"))));
 }
 
+#ifdef SP_LINUX
 typedef struct sp_fs {
   sp_test_env_manager_t env;
 } sp_fs_fixture;
@@ -5820,7 +5821,6 @@ UTEST_F_TEARDOWN(sp_fs) {
   sp_test_env_manager_cleanup(&utest_fixture->env);
 }
 
-#ifdef SP_POSIX
 UTEST_F(sp_fs, sp_os_get_storage_path_with_xdg) {
   sp_test_env_manager_set(&ut.env, SP_LIT("XDG_DATA_HOME"), SP_LIT("/custom/data"));
   sp_str_t path = sp_os_get_storage_path();
