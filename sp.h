@@ -33,21 +33,16 @@
   #define SP_MSVC
 #endif
 
-#if defined(__clang__)
-  #define SP_CLANG
-#endif
-
-#if defined(__GNUC__) && !defined(SP_CLANG)
-  #define SP_GCC
-#endif
-
 #if defined(__TINYC__)
   #define SP_TCC
-#endif
-
-#if defined(SP_GCC) || defined(SP_CLANG)
+#elif defined(__clang__)
+  #define SP_CLANG
+  #define SP_GNUISH
+#elif defined(__GNUC__) && !defined(SP_CLANG)
+  #define SP_GCC
   #define SP_GNUISH
 #endif
+
 
 ////////////////////////////
 // ARCHITECTURE SELECTION //
@@ -4084,6 +4079,8 @@ void sp_spin_pause() {
   #if defined(SP_AMD64)
     #if defined(SP_MSVC)
       _mm_pause();
+    #elif defined(SP_TCC)
+      volatile int x = 0; (void)x;
     #elif defined(SP_GNUISH)
       __asm__ __volatile__("pause");
     #endif
@@ -4091,6 +4088,8 @@ void sp_spin_pause() {
   #elif defined(SP_ARM64)
     #if defined(SP_MSVC)
       __yield();
+    #elif defined(SP_TCC)
+      volatile int x = 0; (void)x;
     #elif defined(SP_GNUISH)
       __asm__ __volatile__("yield");
     #endif
@@ -5746,7 +5745,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
   }
 
   void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-      dispatch_release(*semaphore);
+      //dispatch_release(*semaphore);
   }
 
   void sp_semaphore_wait(sp_semaphore_t* semaphore) {

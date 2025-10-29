@@ -154,7 +154,7 @@ stress: build/bin/stress
 	$(call run_tests,stress)
 
 compile:
-	clang -I. -Wall -Werror -lpthread -lm ./test/compile.c -std=c99 -o build/bin/compile
+	tcc -I. -Iexternal -Wall -Werror -lpthread -lm ./test/compile.c -std=c99 -o build/bin/compile
 
 debug: c
 	gdb --args ./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)
