@@ -19,7 +19,7 @@ define print_color
 endef
 
 define build_target
-	@printf '$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK)$(2) $(3) $$(spn print) $(4) -o $(1)$(ANSI_RESET)\n'
+	@printf '$(ANSI_FG_BRIGHT_YELLOW)$(1)$(ANSI_RESET) $(ANSI_FG_BRIGHT_BLACK)$(2) $(3) $$(spn print) $(4) -o build/bin/$(1)$(ANSI_RESET)\n'
 	@$(2) $(3) $$(spn print) $(4) -o ./build/bin/$(1)
 endef
 
@@ -153,6 +153,8 @@ ps: build/bin/ps
 stress: build/bin/stress
 	$(call run_tests,stress)
 
+compile:
+	clang -I. -Wall -Werror -lpthread -lm ./test/compile.c -std=c99 -o build/bin/compile
 
 debug: c
 	gdb --args ./$(SP_OUTPUT_C) $(SP_FLAGS_RUN)

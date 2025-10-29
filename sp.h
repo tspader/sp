@@ -111,6 +111,10 @@
 #endif
 
 #ifdef SP_LINUX
+  #ifndef _GNU_SOURCE
+    #define _GNU_SOURCE
+  #endif
+
   #include "pthread.h"
   #include <sys/inotify.h>
   #include <poll.h>
@@ -122,10 +126,6 @@
     #define _POSIX_C_SOURCE 200809L
   #endif
 
-  #ifndef _GNU_SOURCE
-    #define _GNU_SOURCE
-  #endif
-
   #include <dirent.h>
   #include <errno.h>
   #include <fcntl.h>
@@ -134,6 +134,7 @@
   #include <semaphore.h>
   #include <signal.h>
   #include <stdlib.h>
+  #include <unistd.h>
   #include <sys/stat.h>
   #include <sys/time.h>
   #include <sys/types.h>
