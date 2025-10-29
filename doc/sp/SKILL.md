@@ -1,12 +1,19 @@
 ---
-name: sp.h
-description: Guide for using sp.h, a single-header C standard library replacement. This skill should be used when working with C code that uses the sp.h library, implementing new features in sp.h, or when the user needs guidance on sp.h conventions, patterns, and APIs.
+name: sp
+description: Guide for using sp.h, a single-header C standard library replacement. This skill MUST be used when working with code that uses sp.h, implementing new features in sp.h, or questions about sp.h. You MUST read all of references/namespaces.md before proceeding with this skill.
 license: MIT
 ---
 
 # sp.h Usage Guide
 
 sp.h is a single-header C standard library replacement, designed like `stb` libraries but for the entire standard library. It provides memory management, strings, containers, I/O, formatting, threading, time operations, and OS abstractions.
+
+YOU MUST READ ALL OF `references/namespaces.md` BEFORE PROCEEDING. IT IS CRITICAL THAT YOU DO NOT GUESS NAMESPACES WHEN SEARCHING THROUGH THE INCLUDED FILES. YOU MUST READ `references/namespaces.md` TO UNDERSTAND WHAT APIS ARE PROVIDED.
+
+## The Most Important Rule
+You must NEVER assume that something exists in this library without finding an exact match in (a) the Markdown documentation or (b) `references/sp.h`, which contains the source code. This library is not in your training data; you have no knowledge of it. You MUST search through the provided files to provide an exact reference before using or mentioning an API or struct.
+
+The source code is a large file, so prefer to search the file rather than read the whole thing.
 
 ## When to Use This Skill
 
@@ -46,9 +53,6 @@ Key namespaces include:
 - **Threading** (`sp_thread`, `sp_mutex`, `sp_semaphore`, `sp_atomic`, `sp_spin_lock`) - Concurrency primitives
 - **Formatting** (`sp_format`, `SP_LOG`, `SP_FMT_*`) - Type-safe printf replacement
 
-### Real-World Examples
-
-For concrete usage patterns from production code, see `references/examples.md` which contains patterns extracted from spn.h (the package manager built with sp.h).
 
 ## Common Patterns
 
@@ -129,8 +133,8 @@ sp_ht_for(map, it) {
 
 ```c
 // Type-safe formatting with color support
-SP_LOG("Processing {:fg cyan} with {} items", 
-  SP_FMT_STR(name), 
+SP_LOG("Processing {:fg cyan} with {} items",
+  SP_FMT_STR(name),
   SP_FMT_U32(count));
 
 // Build strings
@@ -194,7 +198,7 @@ if (critical_failure) {
 
 3. **See real usage**: Check `references/examples.md` for concrete patterns from production code.
 
-4. **Follow conventions**: 
+4. **Follow conventions**:
    - Two-space indentation
    - Use `sp_str_t` everywhere except API boundaries
    - Initialize with `SP_ZERO_INITIALIZE()`
@@ -219,7 +223,7 @@ When adding tests, use the utest framework (see existing tests in `test/main.c`)
 UTEST(namespace, test_name) {
   // Setup
   sp_str_t str = SP_LIT("hello");
-  
+
   // Test
   ASSERT_TRUE(sp_str_valid(str));
   ASSERT_EQ(str.len, 5);

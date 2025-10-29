@@ -1,8 +1,8 @@
 # sp.h API Namespaces
 
-This document lists all public APIs in sp.h organized by namespace/category. See api_categories.md in the doc/ directory for function line numbers.
-
 ## Memory Management
+
+Tags: memory, allocator, allocation, context
 
 ### sp_context_t - Allocator Context
 
@@ -57,11 +57,15 @@ These use the current context allocator:
 
 ## Hashing
 
+Tags: hash, hashing, checksum
+
 - `sp_hash_cstr` - Hash a C string
 - `sp_hash_combine` - Combine multiple hashes
 - `sp_hash_bytes` - Hash arbitrary bytes
 
 ## Containers
+
+Tags: array, list, table, map
 
 ### sp_fixed_array_t - Fixed-Size Array
 
@@ -154,6 +158,8 @@ Custom hash/compare functions:
 - `sp_ring_buffer_iter_done` - Check if done
 
 ## Strings
+
+Tags: string, text, builder, format
 
 ### sp_str_builder_t - String Builder
 
@@ -261,14 +267,20 @@ Functional-style operations:
 
 ## Ternary
 
+Tags: ternary, boolean, three-state
+
 - `sp_ternary_to_str` - Convert three-state boolean to string
 
 ## Logging
+
+Tags: log, logging, print, output
 
 - `SP_LOG(fmt, ...)` - Log with color formatting (macro)
 - `sp_log` - Log function (use macro instead)
 
 ## File Monitor
+
+Tags: watch, monitor, file-changes, inotify
 
 Watch files/directories for changes:
 
@@ -283,160 +295,198 @@ Watch files/directories for changes:
 
 ## OS Abstractions
 
-### Platform Info
+Tags: os, platform, filesystem, path
 
-- `sp_os_platform_kind` - Get platform enum
-- `sp_os_platform_name` - Get platform name string
-- `sp_os_lib_kind_to_extension` - Get library extension (.so, .dll, etc.)
-- `sp_os_lib_to_file_name` - Convert lib name to filename
+### Platform Info
+sp_os_platform_kind_t    sp_os_platform_kind();
+sp_str_t                 sp_os_platform_name();
+sp_str_t                 sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
+sp_str_t                 sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
+
 
 ### Memory
 
-- `sp_os_allocate_memory` - Allocate from OS
-- `sp_os_reallocate_memory` - Reallocate
-- `sp_os_free_memory` - Free to OS
-- `sp_os_copy_memory` - Copy memory (memmove)
-- `sp_os_move_memory` - Move memory
-- `sp_os_is_memory_equal` - Compare memory
-- `sp_os_fill_memory` - Fill with pattern
-- `sp_os_fill_memory_u8` - Fill with byte
-- `sp_os_zero_memory` - Zero memory
+void* sp_os_allocate_memory(u32 size);
+void* sp_os_reallocate_memory(void* ptr, u32 size);
+void  sp_os_free_memory(void* ptr);
+void  sp_os_copy_memory(const void* source, void* dest, u32 num_bytes);
+void  sp_os_move_memory(const void* source, void* dest, u32 num_bytes);
+bool  sp_os_is_memory_equal(const void* a, const void* b, size_t len);
+void  sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
+void  sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);
+void  sp_os_zero_memory(void* buffer, u32 buffer_size);
 
 ### Filesystem
 
-- `sp_os_does_path_exist` - Check if path exists
-- `sp_os_is_regular_file` - Check if file
-- `sp_os_is_directory` - Check if directory
-- `sp_os_is_path_root` - Check if root path
-- `sp_os_is_glob` - Check if path contains glob patterns
-- `sp_os_is_program_on_path` - Check if program in PATH
-- `sp_os_create_directory` - Create directory (recursive)
-- `sp_os_remove_directory` - Remove directory
-- `sp_os_create_file` - Create empty file
-- `sp_os_remove_file` - Delete file
-- `sp_os_copy` - Copy file or directory
-- `sp_os_copy_glob` - Copy matching glob pattern
-- `sp_os_copy_file` - Copy file
-- `sp_os_copy_directory` - Copy directory recursively
-- `sp_os_scan_directory` - List directory contents
-- `sp_os_normalize_path` - Normalize path separators
-- `sp_os_normalize_path_soft` - Normalize in place
-- `sp_os_parent_path` - Get parent directory
-- `sp_os_join_path` - Join path components
-- `sp_os_extract_extension` - Get file extension
-- `sp_os_extract_stem` - Get filename without extension
-- `sp_os_extract_file_name` - Get filename from path
-- `sp_os_get_cwd` - Get current working directory
-- `sp_os_get_executable_path` - Get executable path
-- `sp_os_get_storage_path` - Get user storage path
-- `sp_os_get_config_path` - Get config directory
-- `sp_os_canonicalize_path` - Resolve to absolute path
-- `sp_os_file_attributes` - Get file attributes
-- `sp_os_sleep_ms` - Sleep for milliseconds
+bool                     sp_os_is_regular_file(sp_str_t path);
+bool                     sp_os_is_directory(sp_str_t path);
+bool                     sp_os_is_path_root(sp_str_t path);
+bool                     sp_os_is_glob(sp_str_t path);
+bool                     sp_os_is_program_on_path(sp_str_t program);
+bool                     sp_os_does_path_exist(sp_str_t path);
+void                     sp_os_create_directory(sp_str_t path);
+void                     sp_os_remove_directory(sp_str_t path);
+void                     sp_os_create_file(sp_str_t path);
+void                     sp_os_remove_file(sp_str_t path);
+void                     sp_os_copy(sp_str_t from, sp_str_t to);
+void                     sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
+void                     sp_os_copy_file(sp_str_t from, sp_str_t to);
+void                     sp_os_copy_directory(sp_str_t from, sp_str_t to);
+sp_da(sp_os_dir_entry_t) sp_os_scan_directory(sp_str_t path);
+sp_str_t                 sp_os_normalize_path(sp_str_t path);
+void                     sp_os_normalize_path_soft(sp_str_t* path);
+sp_str_t                 sp_os_parent_path(sp_str_t path);
+sp_str_t                 sp_os_join_path(sp_str_t a, sp_str_t b);
+sp_str_t                 sp_os_extract_extension(sp_str_t path);
+sp_str_t                 sp_os_extract_stem(sp_str_t path);
+sp_str_t                 sp_os_extract_file_name(sp_str_t path);
+sp_str_t                 sp_os_get_cwd();
+sp_str_t                 sp_os_get_executable_path();
+sp_str_t                 sp_os_get_storage_path();
+sp_str_t                 sp_os_get_config_path();
+sp_str_t                 sp_os_canonicalize_path(sp_str_t path);
+sp_tm_epoch_t            sp_os_file_mod_time_precise(sp_str_t path);
+sp_os_file_attr_t        sp_os_file_attributes(sp_str_t path);
 
 ### Environment Variables
 
-- `sp_os_get_env_var` - Get environment variable
-- `sp_os_get_env_as_path` - Get env var as path
-- `sp_os_clear_env_var` - Clear environment variable
-- `sp_os_export_env_var` - Set environment variable
-- `sp_os_export_env` - Export environment table
+Tags: environment, env, variable
 
-### Windows-Specific
-
-- `sp_os_wstr_to_cstr` - Convert wide string
-- `sp_os_winapi_attr_to_sp_attr` - Convert attributes
+sp_str_t        sp_os_get_env_var(sp_str_t key);
+sp_str_t        sp_os_get_env_as_path(sp_str_t key);
+void            sp_os_clear_env_var(sp_str_t var);
+void            sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_overwrite_t overwrite);
+void            sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite);
 
 ### Threading
 
-- `sp_thread_init` - Initialize thread
-- `sp_thread_join` - Wait for thread
-- `sp_thread_launch` - Thread entry point callback
-- `sp_mutex_init` - Initialize mutex
-- `sp_mutex_lock` - Lock mutex
-- `sp_mutex_unlock` - Unlock mutex
-- `sp_mutex_destroy` - Destroy mutex
-- `sp_mutex_kind_to_c11` - Convert mutex kind
-- `sp_semaphore_init` - Initialize semaphore
-- `sp_semaphore_destroy` - Destroy semaphore
-- `sp_semaphore_wait` - Wait on semaphore
-- `sp_semaphore_wait_for` - Wait with timeout
-- `sp_semaphore_signal` - Signal semaphore
-- `sp_spin_pause` - CPU pause hint
-- `sp_spin_try_lock` - Try to acquire spinlock
-- `sp_spin_lock` - Acquire spinlock
-- `sp_spin_unlock` - Release spinlock
-- `sp_atomic_s32_cmp_and_swap` - Atomic compare-and-swap
-- `sp_atomic_s32_set` - Atomic set
-- `sp_atomic_s32_add` - Atomic add
-- `sp_atomic_s32_get` - Atomic get
-- `sp_future_create` - Create future
-- `sp_future_set_value` - Set future value
-- `sp_future_destroy` - Destroy future
+Tags: thread, threading, mutex, atomic
 
-## I/O Streams
+SP_API void         sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
+SP_API void         sp_thread_join(sp_thread_t* thread);
+SP_API s32          sp_thread_launch(void* userdata);
+SP_API void         sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind);
+SP_API void         sp_mutex_lock(sp_mutex_t* mutex);
+SP_API void         sp_mutex_unlock(sp_mutex_t* mutex);
+SP_API void         sp_mutex_destroy(sp_mutex_t* mutex);
+SP_API s32          sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
+SP_API void         sp_semaphore_init(sp_semaphore_t* semaphore);
+SP_API void         sp_semaphore_destroy(sp_semaphore_t* semaphore);
+SP_API void         sp_semaphore_wait(sp_semaphore_t* semaphore);
+SP_API bool         sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
+SP_API void         sp_semaphore_signal(sp_semaphore_t* semaphore);
+SP_API sp_future_t* sp_future_create(u32 size);
+SP_API void         sp_future_set_value(sp_future_t* future, void* data);
+SP_API void         sp_future_destroy(sp_future_t* future);
+SP_API void         sp_spin_pause();
+SP_API bool         sp_spin_try_lock(sp_spin_lock_t* lock);
+SP_API void         sp_spin_lock(sp_spin_lock_t* lock);
+SP_API void         sp_spin_unlock(sp_spin_lock_t* lock);
+SP_API bool         sp_atomic_s32_cmp_and_swap(sp_atomic_s32* value, s32 current, s32 desired);
+SP_API s32          sp_atomic_s32_set(sp_atomic_s32* value, s32 desired);
+SP_API s32          sp_atomic_s32_add(sp_atomic_s32* value, s32 add);
+SP_API s32          sp_atomic_s32_get(sp_atomic_s32* value);
 
-- `sp_io_from_file` - Open file stream
-- `sp_io_from_memory` - Create memory stream
-- `sp_io_from_file_handle` - Wrap file handle
-- `sp_io_read` - Read bytes
-- `sp_io_write` - Write bytes
-- `sp_io_write_str` - Write sp_str_t
-- `sp_io_seek` - Seek in stream
-- `sp_io_size` - Get stream size
-- `sp_io_close` - Close stream
-- `sp_io_read_file` - Read entire file to string
+## Process
+
+void            sp_env_init(sp_env_t* env);
+sp_env_t        sp_env_capture();
+sp_env_t        sp_env_copy(sp_env_t* env);
+sp_str_t        sp_env_get(sp_env_t* env, sp_str_t name);
+void            sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
+void            sp_env_erase(sp_env_t* env, sp_str_t name);
+void            sp_env_destroy(sp_env_t* env);
+sp_str_t        sp_os_get_env_var(sp_str_t key);
+sp_str_t        sp_os_get_env_as_path(sp_str_t key);
+void            sp_os_clear_env_var(sp_str_t var);
+void            sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_overwrite_t overwrite);
+void            sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite);
+sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
+void            sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg);
+sp_ps_t         sp_ps_create(sp_ps_config_t config);
+sp_ps_output_t  sp_ps_run(sp_ps_config_t config);
+sp_io_stream_t* sp_ps_io_in(sp_ps_t* proc);
+sp_io_stream_t* sp_ps_io_out(sp_ps_t* proc);
+sp_io_stream_t* sp_ps_io_err(sp_ps_t* proc);
+sp_ps_status_t  sp_ps_wait(sp_ps_t* proc);
+sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
+sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
+bool            sp_ps_kill(sp_ps_t* proc);
+
+
+## IO Streams
+
+Tags: io, file, read, write
+
+sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
+sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
+sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode);
+u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
+u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
+u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
+s64            sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
+s64            sp_io_size(sp_io_stream_t* stream);
+void           sp_io_close(sp_io_stream_t* stream);
+sp_str_t       sp_io_read_file(sp_str_t path);
 
 ## Time
 
-### Epoch Time
+Tags: time, timer, clock, timestamp
 
-- `sp_tm_now_epoch` - Get current time as epoch
-- `sp_tm_to_iso8601` - Format epoch as ISO8601 string
-
-### Timers
-
-- `sp_tm_start_timer` - Start a timer
-- `sp_tm_read_timer` - Read elapsed time
-- `sp_tm_lap_timer` - Read and reset lap time
-- `sp_tm_reset_timer` - Reset timer
-
-### Time Points
-
-- `sp_tm_now_point` - Get current time point
-- `sp_tm_point_diff` - Diff between time points
-
-### Date/Time
-
-- `sp_tm_get_date_time` - Get current date/time
-- `sp_os_file_mod_time_precise` - Get file modification time
+sp_tm_epoch_t             sp_tm_now_epoch();
+sp_str_t                  sp_tm_to_iso8601(sp_tm_epoch_t time);
+sp_tm_point_t             sp_tm_now_point();
+u64                       sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older);
+sp_tm_timer_t             sp_tm_start_timer();
+u64                       sp_tm_read_timer(sp_tm_timer_t* timer);
+u64                       sp_tm_lap_timer(sp_tm_timer_t* timer);
+void                      sp_tm_reset_timer(sp_tm_timer_t* timer);
+sp_tm_date_time_t         sp_tm_get_date_time();
 
 ## Formatting
+Tags: format, formatting, printf, print
 
 ### Type Formatters
-
 All use `SP_FMT_TYPE(value)` macros:
 
-- `SP_FMT_PTR(v)` - Pointer
-- `SP_FMT_STR(v)` - sp_str_t
-- `SP_FMT_CSTR(v)` - C string
-- `SP_FMT_S8(v)`, `SP_FMT_S16(v)`, `SP_FMT_S32(v)`, `SP_FMT_S64(v)` - Signed integers
-- `SP_FMT_U8(v)`, `SP_FMT_U16(v)`, `SP_FMT_U32(v)`, `SP_FMT_U64(v)` - Unsigned integers
-- `SP_FMT_F32(v)`, `SP_FMT_F64(v)` - Floats
-- `SP_FMT_C8(v)`, `SP_FMT_C16(v)` - Characters
-- `SP_FMT_HASH(v)` - Hash (full)
-- `SP_FMT_SHORT_HASH(v)` - Hash (short)
-- `SP_FMT_QUOTED_STR(v)` - Quoted string
-- `SP_FMT_COLOR(v)` - ANSI color code
-- `SP_FMT_YELLOW()`, `SP_FMT_CYAN()`, `SP_FMT_CLEAR()` - Color shortcuts
+#define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
+#define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
+#define SP_FMT_CSTR(V)          SP_FMT_ARG(cstr, V)
+#define SP_FMT_S8(V)            SP_FMT_ARG(s8, V)
+#define SP_FMT_S16(V)           SP_FMT_ARG(s16, V)
+#define SP_FMT_S32(V)           SP_FMT_ARG(s32, V)
+#define SP_FMT_S64(V)           SP_FMT_ARG(s64, V)
+#define SP_FMT_U8(V)            SP_FMT_ARG(u8, V)
+#define SP_FMT_U16(V)           SP_FMT_ARG(u16, V)
+#define SP_FMT_U32(V)           SP_FMT_ARG(u32, V)
+#define SP_FMT_U64(V)           SP_FMT_ARG(u64, V)
+#define SP_FMT_F32(V)           SP_FMT_ARG(f32, V)
+#define SP_FMT_F64(V)           SP_FMT_ARG(f64, V)
+#define SP_FMT_C8(V)            SP_FMT_ARG(c8, V)
+#define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
+#define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
+#define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
+#define SP_FMT_SHORT_HASH(V)    SP_FMT_ARG(hash_short, V)
+#define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
+#define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
+#define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
+#define SP_FMT_MUTEX(V)         SP_FMT_ARG(mutex, V)
+#define SP_FMT_SEMAPHORE(V)     SP_FMT_ARG(semaphore, V)
+#define SP_FMT_FIXED_ARRAY(V)   SP_FMT_ARG(fixed_array, V)
+#define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
+#define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
+#define SP_FMT_COLOR(V)         SP_FMT_ARG(color, V)
+#define SP_FMT_YELLOW()         SP_FMT_COLOR(SP_ANSI_FG_YELLOW)
+#define SP_FMT_CYAN()           SP_FMT_COLOR(SP_ANSI_FG_CYAN)
+#define SP_FMT_CLEAR()          SP_FMT_COLOR(SP_ANSI_FG_RESET)
 
-### Format Functions
-
-- `sp_format` - Format with C string template
-- `sp_format_str` - Format with sp_str_t template
-- `sp_format_v` - Format with va_list
+sp_str_t sp_format_str(sp_str_t fmt, ...);
+sp_str_t sp_format(const c8* fmt, ...);
+sp_str_t sp_format_v(sp_str_t fmt, va_list args);
 
 ## Parsing
+
+Tags: parse, parsing, convert, number
 
 Parse strings to numbers:
 
