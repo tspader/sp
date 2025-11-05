@@ -1412,8 +1412,13 @@ SP_API sp_str_t       sp_io_read_file(sp_str_t path);
 // ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
-#define SP_PS_MAX_ARGS 8
-#define SP_PS_MAX_ENV 16
+#ifndef SP_PS_MAX_ARGS
+  #define SP_PS_MAX_ARGS 16
+#endif
+
+#ifndef SP_PS_MAX_ENV
+  #define SP_PS_MAX_ENV 16
+#endif
 
 typedef enum {
   SP_PS_IO_FILENO_NONE,
