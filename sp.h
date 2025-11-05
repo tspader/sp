@@ -264,6 +264,7 @@ extern char** environ;
 
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
+#define sp_carr_for(CARR, IT) SP_CARR_FOR(CARR, IT)
 
 #define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
 
@@ -1495,6 +1496,7 @@ typedef struct {
 typedef struct {
   sp_str_t command;
   sp_str_t args [SP_PS_MAX_ARGS];
+  sp_da(sp_str_t) dyn_args;
   sp_str_t cwd;
   sp_ps_env_config_t env;
   sp_ps_io_config_t io;
@@ -1591,7 +1593,7 @@ SP_API bool            sp_ps_kill(sp_ps_t* proc);
 #if defined(SP_POSIX)
 SP_IMP void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_IMP bool sp_ps_create_pipes(s32 pipes [2]);
-SP_IMP c8** sp_ps_build_posix_args(sp_ps_config_t* config);
+SP_IMP sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config);
 SP_IMP void sp_ps_free_posix_args(c8** argv);
 SP_IMP c8** sp_ps_build_posix_env(sp_ps_env_config_t* env_config);
 SP_IMP void sp_ps_set_nonblocking(s32 fd);
@@ -5289,30 +5291,28 @@ void sp_ps_set_blocking(s32 fd) {
   fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
 }
 
-c8** sp_ps_build_posix_args(sp_ps_config_t* config) {
-  u32 arg_count = 1;
-  for (u32 i = 0; i < SP_PS_MAX_ARGS; i++) {
-    if (sp_str_empty(config->args[i])) break;
-    arg_count++;
+sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config) {
+  sp_da(c8*) args = SP_NULLPTR;
+
+  sp_dyn_array_push(args, sp_str_to_cstr(config->command));
+
+  sp_carr_for(config->args, it) {
+    sp_str_t arg = config->args[it];
+    if (sp_str_empty(arg)) break;
+
+    sp_dyn_array_push(args, sp_str_to_cstr(arg));
   }
 
-  c8** args = (c8**)sp_alloc(sizeof(c8*) * (arg_count + 1));
-  args[0] = (c8*)sp_str_to_cstr(config->command);
-
-  for (u32 i = 0; i < arg_count - 1; i++) {
-    args[i + 1] = (c8*)sp_str_to_cstr(config->args[i]);
+  sp_dyn_array_for(config->dyn_args, it) {
+    sp_dyn_array_push(args, sp_str_to_cstr(config->dyn_args[it]));
   }
-  args[arg_count] = SP_NULLPTR;
 
+  sp_dyn_array_push(args, SP_NULLPTR);
   return args;
 }
 
 void sp_ps_free_posix_args(c8** args) {
-  if (!args) return;
-  for (u32 i = 0; args[i] != SP_NULLPTR; i++) {
-    sp_free((void*)args[i]);
-  }
-  sp_free(args);
+  sp_dyn_array_free(args);
 }
 
 c8** sp_ps_build_posix_env(sp_ps_env_config_t* config) {
@@ -5388,6 +5388,11 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
     dst.args[i] = sp_str_copy(src->args[i]);
   }
 
+  // Copy dynamic args
+  sp_dyn_array_for(src->dyn_args, i) {
+    sp_dyn_array_push(dst.dyn_args, sp_str_copy(src->dyn_args[i]));
+  }
+
   dst.env.mode = src->env.mode;
 
   sp_env_table_t ht = src->env.env.vars;
@@ -5409,21 +5414,11 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
 }
 
 void sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg) {
-  SP_ASSERT(config != SP_NULLPTR);
+  SP_ASSERT(config);
 
-  if (sp_str_empty(arg)) return;
-
-  for (u32 i = 0; i < SP_PS_MAX_ARGS; i++) {
-    if (sp_str_empty(config->args[i])) {
-      config->args[i] = arg;
-      if (i + 1 < SP_PS_MAX_ARGS) {
-        config->args[i + 1] = SP_ZERO_STRUCT(sp_str_t);
-      }
-      return;
-    }
+  if (!sp_str_empty(arg)) {
+    sp_dyn_array_push(config->dyn_args, arg);
   }
-
-  SP_FATAL("sp_ps_config_add_arg: exceeded SP_PS_MAX_ARGS ({})", SP_FMT_U32(SP_PS_MAX_ARGS));
 }
 
 void sp_ps_configure_io_stream(sp_ps_io_stream_config_t* io, sp_ps_posix_stdio_stream_config_t* p) {
