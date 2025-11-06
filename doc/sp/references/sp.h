@@ -11,7 +11,6 @@
 ////////////////////////
 // PLATFORM SELECTION //
 ////////////////////////
-#include <linux/limits.h>
 #ifdef _WIN32
   #define SP_WIN32
 #endif
@@ -26,6 +25,7 @@
   #define SP_POSIX
 #endif
 
+
 ////////////////////////
 // COMPILER SELECTION //
 ////////////////////////
@@ -33,21 +33,16 @@
   #define SP_MSVC
 #endif
 
-#if defined(__clang__)
-  #define SP_CLANG
-#endif
-
-#if defined(__GNUC__) && !defined(SP_CLANG)
-  #define SP_GCC
-#endif
-
 #if defined(__TINYC__)
   #define SP_TCC
-#endif
-
-#if defined(SP_GCC) || defined(SP_CLANG)
+#elif defined(__clang__)
+  #define SP_CLANG
+  #define SP_GNUISH
+#elif defined(__GNUC__) && !defined(SP_CLANG)
+  #define SP_GCC
   #define SP_GNUISH
 #endif
+
 
 ////////////////////////////
 // ARCHITECTURE SELECTION //
@@ -99,13 +94,31 @@
   #endif
 #endif
 
+#ifdef SP_MACOS
+  #ifndef _DARWIN_SOURCE
+    #define _DARWIN_SOURCE
+  #endif
+
+  #include "pthread.h"
+  #include <dispatch/dispatch.h>
+  #include <mach-o/dyld.h>
+  #include <spawn.h>
+#endif
+
+#ifdef SP_LINUX
+  #ifndef _GNU_SOURCE
+    #define _GNU_SOURCE
+  #endif
+
+  #include "pthread.h"
+  #include <sys/inotify.h>
+  #include <poll.h>
+  #include <spawn.h>
+#endif
+
 #ifdef SP_POSIX
   #ifndef _POSIX_C_SOURCE
     #define _POSIX_C_SOURCE 200809L
-  #endif
-
-  #ifndef _GNU_SOURCE
-    #define _GNU_SOURCE
   #endif
 
   #include <dirent.h>
@@ -115,25 +128,13 @@
   #include <pthread.h>
   #include <semaphore.h>
   #include <signal.h>
-  #include <spawn.h>
   #include <stdlib.h>
+  #include <unistd.h>
   #include <sys/stat.h>
   #include <sys/time.h>
   #include <sys/types.h>
   #include <sys/wait.h>
   #include <time.h>
-#endif
-
-#ifdef SP_MACOS
-  #include "pthread.h"
-  #include <dispatch/dispatch.h>
-  #include <mach-o/dyld.h>
-#endif
-
-#ifdef SP_LINUX
-  #include "pthread.h"
-  #include <sys/inotify.h>
-  #include <poll.h>
 #endif
 
 #ifdef SP_CPP
@@ -148,6 +149,8 @@
 #if defined(SP_POSIX) && defined(strnlen)
   #undef SP_STRNLEN
 #endif
+
+extern char** environ;
 
 // ███╗   ███╗ █████╗  ██████╗██████╗  ██████╗ ███████╗
 // ████╗ ████║██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔════╝
@@ -261,6 +264,7 @@
 
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
+#define sp_carr_for(CARR, IT) SP_CARR_FOR(CARR, IT)
 
 #define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
 
@@ -1391,16 +1395,16 @@ struct sp_io_stream_t {
   sp_allocator_t allocator;
 };
 
-sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
-sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
-sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode);
-u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
-u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
-u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
-s64            sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
-s64            sp_io_size(sp_io_stream_t* stream);
-void           sp_io_close(sp_io_stream_t* stream);
-sp_str_t       sp_io_read_file(sp_str_t path);
+SP_API sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
+SP_API sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
+SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode);
+SP_API u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
+SP_API u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
+SP_API u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
+SP_API s64            sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
+SP_API s64            sp_io_size(sp_io_stream_t* stream);
+SP_API void           sp_io_close(sp_io_stream_t* stream);
+SP_API sp_str_t       sp_io_read_file(sp_str_t path);
 
 
 // ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
@@ -1409,8 +1413,13 @@ sp_str_t       sp_io_read_file(sp_str_t path);
 // ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
-#define SP_PS_MAX_ARGS 8
-#define SP_PS_MAX_ENV 16
+#ifndef SP_PS_MAX_ARGS
+  #define SP_PS_MAX_ARGS 16
+#endif
+
+#ifndef SP_PS_MAX_ENV
+  #define SP_PS_MAX_ENV 16
+#endif
 
 typedef enum {
   SP_PS_IO_FILENO_NONE,
@@ -1487,6 +1496,7 @@ typedef struct {
 typedef struct {
   sp_str_t command;
   sp_str_t args [SP_PS_MAX_ARGS];
+  sp_da(sp_str_t) dyn_args;
   sp_str_t cwd;
   sp_ps_env_config_t env;
   sp_ps_io_config_t io;
@@ -1583,7 +1593,7 @@ SP_API bool            sp_ps_kill(sp_ps_t* proc);
 #if defined(SP_POSIX)
 SP_IMP void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_IMP bool sp_ps_create_pipes(s32 pipes [2]);
-SP_IMP c8** sp_ps_build_posix_args(sp_ps_config_t* config);
+SP_IMP sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config);
 SP_IMP void sp_ps_free_posix_args(c8** argv);
 SP_IMP c8** sp_ps_build_posix_env(sp_ps_env_config_t* env_config);
 SP_IMP void sp_ps_set_nonblocking(s32 fd);
@@ -1774,13 +1784,13 @@ typedef struct {
   sp_asset_registry_t* registry;
 } sp_asset_importer_t;
 
-typedef struct sp_asset_import_context {
+struct sp_asset_import_context {
   sp_asset_registry_t* registry;
   sp_asset_importer_t* importer;
   u32 asset_index;
   sp_future_t* future;
   void* user_data;
-} sp_asset_import_context_t;
+};
 
 #define sp_asset_import_context_get_asset(ctx) (&(ctx)->registry->assets[(ctx)->asset_index])
 
@@ -1789,7 +1799,7 @@ typedef struct {
   sp_asset_importer_config_t importers [SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS];
 } sp_asset_registry_config_t;
 
-typedef struct sp_asset_registry {
+struct sp_asset_registry {
   sp_mutex_t mutex;
   sp_mutex_t import_mutex;
   sp_mutex_t completion_mutex;
@@ -1801,7 +1811,7 @@ typedef struct sp_asset_registry {
   sp_dyn_array(sp_asset_importer_t) importers;
   sp_ring_buffer(sp_asset_import_context_t) import_queue;
   sp_ring_buffer(sp_asset_import_context_t) completion_queue;
-} sp_asset_registry_t;
+};
 
 void                  sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config);
 void                  sp_asset_registry_shutdown(sp_asset_registry_t* registry);
@@ -4076,6 +4086,8 @@ void sp_spin_pause() {
   #if defined(SP_AMD64)
     #if defined(SP_MSVC)
       _mm_pause();
+    #elif defined(SP_TCC)
+      volatile int x = 0; (void)x;
     #elif defined(SP_GNUISH)
       __asm__ __volatile__("pause");
     #endif
@@ -4083,6 +4095,8 @@ void sp_spin_pause() {
   #elif defined(SP_ARM64)
     #if defined(SP_MSVC)
       __yield();
+    #elif defined(SP_TCC)
+      volatile int x = 0; (void)x;
     #elif defined(SP_GNUISH)
       __asm__ __volatile__("yield");
     #endif
@@ -4695,6 +4709,16 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
 #endif
 
 #if defined(SP_POSIX)
+  sp_str_t sp_os_get_cwd() {
+    c8 path [PATH_MAX];
+    if (!getcwd(path, PATH_MAX - 1)) {
+      return SP_ZERO_STRUCT(sp_str_t);
+    }
+
+    sp_str_t cwd = sp_str_from_cstr(path);
+    return sp_os_normalize_path(cwd);
+  }
+
   void* sp_os_allocate_memory(u32 size) {
     void* ptr = malloc(size);
     if (ptr) memset(ptr, 0, size);
@@ -5267,30 +5291,28 @@ void sp_ps_set_blocking(s32 fd) {
   fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
 }
 
-c8** sp_ps_build_posix_args(sp_ps_config_t* config) {
-  u32 arg_count = 1;
-  for (u32 i = 0; i < SP_PS_MAX_ARGS; i++) {
-    if (sp_str_empty(config->args[i])) break;
-    arg_count++;
+sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config) {
+  sp_da(c8*) args = SP_NULLPTR;
+
+  sp_dyn_array_push(args, sp_str_to_cstr(config->command));
+
+  sp_carr_for(config->args, it) {
+    sp_str_t arg = config->args[it];
+    if (sp_str_empty(arg)) break;
+
+    sp_dyn_array_push(args, sp_str_to_cstr(arg));
   }
 
-  c8** args = (c8**)sp_alloc(sizeof(c8*) * (arg_count + 1));
-  args[0] = (c8*)sp_str_to_cstr(config->command);
-
-  for (u32 i = 0; i < arg_count - 1; i++) {
-    args[i + 1] = (c8*)sp_str_to_cstr(config->args[i]);
+  sp_dyn_array_for(config->dyn_args, it) {
+    sp_dyn_array_push(args, sp_str_to_cstr(config->dyn_args[it]));
   }
-  args[arg_count] = SP_NULLPTR;
 
+  sp_dyn_array_push(args, SP_NULLPTR);
   return args;
 }
 
 void sp_ps_free_posix_args(c8** args) {
-  if (!args) return;
-  for (u32 i = 0; args[i] != SP_NULLPTR; i++) {
-    sp_free((void*)args[i]);
-  }
-  sp_free(args);
+  sp_dyn_array_free(args);
 }
 
 c8** sp_ps_build_posix_env(sp_ps_env_config_t* config) {
@@ -5366,6 +5388,11 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
     dst.args[i] = sp_str_copy(src->args[i]);
   }
 
+  // Copy dynamic args
+  sp_dyn_array_for(src->dyn_args, i) {
+    sp_dyn_array_push(dst.dyn_args, sp_str_copy(src->dyn_args[i]));
+  }
+
   dst.env.mode = src->env.mode;
 
   sp_env_table_t ht = src->env.env.vars;
@@ -5387,21 +5414,11 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
 }
 
 void sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg) {
-  SP_ASSERT(config != SP_NULLPTR);
+  SP_ASSERT(config);
 
-  if (sp_str_empty(arg)) return;
-
-  for (u32 i = 0; i < SP_PS_MAX_ARGS; i++) {
-    if (sp_str_empty(config->args[i])) {
-      config->args[i] = arg;
-      if (i + 1 < SP_PS_MAX_ARGS) {
-        config->args[i + 1] = SP_ZERO_STRUCT(sp_str_t);
-      }
-      return;
-    }
+  if (!sp_str_empty(arg)) {
+    sp_dyn_array_push(config->dyn_args, arg);
   }
-
-  SP_FATAL("sp_ps_config_add_arg: exceeded SP_PS_MAX_ARGS ({})", SP_FMT_U32(SP_PS_MAX_ARGS));
 }
 
 void sp_ps_configure_io_stream(sp_ps_io_stream_config_t* io, sp_ps_posix_stdio_stream_config_t* p) {
@@ -5728,7 +5745,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
   }
 
   void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-      dispatch_release(*semaphore);
+      //dispatch_release(*semaphore);
   }
 
   void sp_semaphore_wait(sp_semaphore_t* semaphore) {
@@ -5799,16 +5816,6 @@ void sp_semaphore_signal(sp_semaphore_t* semaphore) {
   sem_post(semaphore);
 }
 
-sp_str_t sp_os_get_cwd() {
-  c8 path [PATH_MAX];
-  if (!getcwd(path, PATH_MAX - 1)) {
-    return SP_ZERO_STRUCT(sp_str_t);
-  }
-
-  sp_str_t cwd = sp_str_from_cstr(path);
-  return sp_os_normalize_path(cwd);
-}
-
 sp_str_t sp_os_get_executable_path() {
   c8 exe_path [PATH_MAX];
   sp_str_t file_path = {
@@ -5839,7 +5846,6 @@ sp_str_t sp_os_get_storage_path() {
 
 sp_str_t sp_os_get_config_path() {
   return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
-
 }
 #endif
 
@@ -6156,6 +6162,25 @@ sp_str_t sp_os_get_config_path() {
 #endif
 
 #ifdef SP_MACOS
+sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
+  sp_str_t path =  sp_os_get_env_var(xdg);
+  if (sp_str_valid(path)) return path;
+
+  path = sp_os_get_env_var(SP_LIT("HOME"));
+  if (sp_str_valid(path)) return sp_os_join_path(path, home_suffix);
+
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_str_t sp_os_get_storage_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
+}
+
+sp_str_t sp_os_get_config_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
+}
+
+
   sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
     switch (kind) {
       case SP_OS_LIB_SHARED: return SP_LIT("dylib");

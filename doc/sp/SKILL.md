@@ -1,57 +1,54 @@
 ---
 name: sp
-description: Guide for using sp.h, a single-header C standard library replacement. This skill MUST be used when working with code that uses sp.h, implementing new features in sp.h, or questions about sp.h. You MUST read all of references/namespaces.md before proceeding with this skill.
+description: Guide for sp.h, a single-header C standard library replacement. You must use this guide when using or discussing sp.h in any capacity.
 license: MIT
 ---
 
-# sp.h Usage Guide
+# sp.h Overview
+- sp.h is a single-header C standard library replacement
+- Consider it like `stb`, but for the entire standard library.
 
-sp.h is a single-header C standard library replacement, designed like `stb` libraries but for the entire standard library. It provides memory management, strings, containers, I/O, formatting, threading, time operations, and OS abstractions.
+## Usage
+- Search `references/namespaces.md` before trying to search through the codebase. Do not guess namespaces; refer to `references/namespaces.md` to find a precise search term.
+- Search through `references/sp.h` judiciously as needed; do not guess symbol names, function signatures, or implementation details. Read the source code.
+- Always follow the `sp.h` code style, whether working inside `sp.h` or in code that merely uses it.
+  - Always indent with two spaces
+  - Always wrap `case` statements in braces
+- Grep for functions within a namespace by looking for `SP_API`, then anything, then the namespace (e.g. `SP_API*sp_ps`). Function signatures are prefixed with `SP_API`
+- Grep for types within a namespace by looking for the namespace + `_t` (e.g. `sp_ps_*_t`)
 
-YOU MUST READ ALL OF `references/namespaces.md` BEFORE PROCEEDING. IT IS CRITICAL THAT YOU DO NOT GUESS NAMESPACES WHEN SEARCHING THROUGH THE INCLUDED FILES. YOU MUST READ `references/namespaces.md` TO UNDERSTAND WHAT APIS ARE PROVIDED.
+## Rules
+- Never use `malloc`, `calloc`, or `realloc`; use `sp_alloc` (which zero initializes)
+- Unless explicitly interfacing with an existing C API, never use `const char*`; use `sp_str_t` (pointer + length)
+- Never use `strcmp`, `strlen`, or any `string.h` functions with `sp_str_t`; use `sp_str_*`
+- Never use `strcmp`, `strlen`, or any `string.h` functions with `const char*`; use `sp_cstr_*`
+- Always use `SP_ZERO_INITIALIZE()`. When you need a type, use `SP_ZERO_STRUCT(T)`
+- Always use `sp_da(T)` and `sp_ht(T)` for dynamic arrays and hash maps (`sp_dyn_array_*` and `sp_ht_*`)
+- Always use `sp_dyn_array_for(arr, it)` and `sp_ht_for(ht, it)` to iterate sp_da and sp_ht
+- Never check `str.len > 0`; always use `!sp_str_empty(str)`
+- Always use C99 designated initializers for struct literals when possible
+- Always use short literal types (`s32`, `u8`, `c8`, `const c8*`)
+- Never use `printf` family; always use `SP_LOG()`
+- Always use `sp_carr_for()` when iterating a C array
 
-## The Most Important Rule
-You must NEVER assume that something exists in this library without finding an exact match in (a) the Markdown documentation or (b) `references/sp.h`, which contains the source code. This library is not in your training data; you have no knowledge of it. You MUST search through the provided files to provide an exact reference before using or mentioning an API or struct.
-
-The source code is a large file, so prefer to search the file rather than read the whole thing.
-
-## When to Use This Skill
-
-Use this skill when:
-- Writing C code that uses sp.h APIs
-- Implementing new features or tests for sp.h
-- Converting code from standard library to sp.h conventions
-- Understanding sp.h design patterns and idioms
-- Working with code that follows sp.h coding standards
-
-## Core Philosophy
-
-sp.h follows strict conventions:
-- **No C standard library**: Never use malloc, printf, strcmp, etc. Use sp_alloc, sp_format, sp_str_equal instead.
-- **Context-based allocation**: All allocation goes through sp_alloc which respects the current allocator context.
-- **String safety**: Use sp_str_t (length + pointer) everywhere except at API boundaries with external code.
-- **Zero initialization**: Always initialize structs with SP_ZERO_INITIALIZE().
-- **Designated initializers**: Use C99 designated initializers for struct literals.
+## Namespaces
+Grep for any of these namespaces for a good overview of the API.
+- Memory: `sp_alloc`, `sp_context`, `sp_allocator`, `sp_os`
+- Strings: `sp_str`, `sp_str_builder`, `sp_cstr`
+- Containers: `sp_dyn_array` / `sp_da`, `sp_ht`, `sp_ring_buffer`
+- IO: `sp_io`
+- Process: `sp_ps`
+- Filesystem: `sp_os`
+- Platform: `sp_os`
+- Time: `sp_tm`
+- Concurrency: `sp_thread`, `sp_mutex`, `sp_semaphore`, `sp_atomic`, `sp_spin_lock`
+- Logging: `sp_format`, `SP_LOG`, `SP_FMT_*`
 
 ## Quick Reference
 
 ### Essential Edicts
 
 Refer to `references/edicts.md` for the complete list of coding standards that must be followed when working with sp.h.
-
-### API Namespaces
-
-sp.h organizes its APIs into logical namespaces. For detailed documentation of each namespace and available functions, see `references/namespaces.md`.
-
-Key namespaces include:
-- **Memory** (`sp_alloc`, `sp_context`, `sp_allocator`) - Context-based allocation
-- **Strings** (`sp_str_t`, `sp_str_builder_t`) - Safe string handling
-- **Containers** (`sp_dyn_array`, `sp_ht`, `sp_ring_buffer`) - Data structures
-- **I/O** (`sp_io_*`) - Stream-based file I/O
-- **Time** (`sp_tm_*`) - Timers, epochs, date/time
-- **OS** (`sp_os_*`) - Cross-platform OS abstractions
-- **Threading** (`sp_thread`, `sp_mutex`, `sp_semaphore`, `sp_atomic`, `sp_spin_lock`) - Concurrency primitives
-- **Formatting** (`sp_format`, `SP_LOG`, `SP_FMT_*`) - Type-safe printf replacement
 
 
 ## Common Patterns
@@ -68,30 +65,23 @@ sp_dynamic_array_t arr = SP_ZERO_INITIALIZE();
 
 ```c
 // Create strings
-sp_str_t literal = SP_LIT("hello");           // Compile-time string literal
-sp_str_t from_cstr = SP_CSTR(some_char_ptr);  // Runtime C string (calculates length)
-sp_str_t copy = sp_str_from_cstr("hello");    // Allocates and copies
-
-// Only convert to C string at API boundaries
-const char* cstr = sp_str_to_cstr(str);  // For external APIs only
+sp_str_t literal = sp_str_lit("hello");     // Compile-time string literal
+sp_str_t view = sp_str_view(some_char_ptr); // Runtime C string (calculates length)
+sp_str_t copy = sp_str_from_cstr("hello");  // Allocates and copies
+const char* cstr = sp_str_to_cstr(str);
 ```
 
 ### Dynamic Arrays (stb-style)
 
 ```c
-// Initialize to NULL
 sp_dyn_array(int) numbers = SP_NULLPTR;
-
-// Push elements (automatically grows)
 sp_dyn_array_push(numbers, 42);
 sp_dyn_array_push(numbers, 100);
 
-// Iterate
 sp_dyn_array_for(numbers, i) {
   SP_LOG("numbers[{}] = {}", SP_FMT_U32(i), SP_FMT_S32(numbers[i]));
 }
 
-// Size and capacity
 u32 count = sp_dyn_array_size(numbers);
 u32 capacity = sp_dyn_array_capacity(numbers);
 
@@ -101,43 +91,35 @@ u32 capacity = sp_dyn_array_capacity(numbers);
 ### Hash Tables (stb-style)
 
 ```c
-// Initialize to NULL, specify key and value types
-sp_ht(sp_str_t, int) map = sp_ht_new(sp_str_t, int);
+sp_ht(s32, s32) hta = SP_NULLPTR;
+sp_ht(sp_str_t, s32) htb = SP_NULLPTR;
+sp_ht_set_fns(hta, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
-// Initialize if needed
-if (!map) sp_ht_init(map);
+sp_ht_insert(htb, SP_LIT("answer"), 42);
 
-// Insert
-sp_ht_insert(map, SP_LIT("answer"), 42);
+s32* value_ptr = sp_ht_getp(htb, SP_LIT("answer"));
 
-// Lookup
-int* value_ptr = sp_ht_getp(map, SP_LIT("answer"));
-if (value_ptr) {
-  SP_LOG("Found: {}", SP_FMT_S32(*value_ptr));
-}
+sp_ht_key_exists(htb, SP_LIT("answer"));
 
-// Check existence
-if (sp_ht_exists(map, SP_LIT("answer"))) {
-  // key exists
-}
-
-// Iterate
-sp_ht_for(map, it) {
+sp_ht_for(htb, it) {
   sp_str_t* key = sp_ht_it_getkp(map, it);
-  int* val = sp_ht_it_getp(map, it);
-  SP_LOG("{} -> {}", SP_FMT_STR(*key), SP_FMT_S32(*val));
+  s32* val = sp_ht_it_getp(map, it);
 }
+
+// Cleanup happens automatically via allocator
 ```
 
 ### Formatting and Logging
 
 ```c
 // Type-safe formatting with color support
-SP_LOG("Processing {:fg cyan} with {} items",
+SP_LOG(
+  "Processing {:fg cyan} with {} {}",
   SP_FMT_STR(name),
-  SP_FMT_U32(count));
+  SP_FMT_U32(count),
+  SP_FMT_CSTR("items")
+);
 
-// Build strings
 sp_str_t msg = sp_format("Result: {}", SP_FMT_S32(42));
 
 // Colors: :fg, :bg, :color
@@ -151,11 +133,9 @@ sp_str_t msg = sp_format("Result: {}", SP_FMT_S32(42));
 // Always use braces, always handle all cases
 switch (state) {
   case STATE_IDLE: {
-    // Handle idle
     break;
   }
   case STATE_RUNNING: {
-    // Handle running
     break;
   }
   default: {
@@ -167,66 +147,25 @@ switch (state) {
 ### Error Handling
 
 ```c
-// Return bool for recoverable errors
-bool load_config(sp_str_t path, config_t* config) {
+// Return an enum for recoverable errors (consumer app may have their own error type)
+sp_err_t load_config(sp_str_t path, config_t* config) {
   if (!sp_os_does_path_exist(path)) {
     SP_LOG("Config not found: {}", SP_FMT_STR(path));
-    return false;
+    return SP_ERR_WHATEVER;
   }
-  // ... load config
-  return true;
+
+  return SP_ERR_OK;
 }
 
-// Use SP_ASSERT for programming errors (non-recoverable)
+// Prefer to SP_ASSERT when possible
 void process_array(int* arr, u32 size) {
   SP_ASSERT(arr);
   SP_ASSERT(size > 0);
-  // ...
 }
 
-// Use SP_FATAL for fatal errors with formatted messages
+// SP_FATAL is SP_LOG + SP_ASSERT(false)
 if (critical_failure) {
   SP_FATAL("Cannot continue: {:fg red}", SP_FMT_STR(reason));
-}
-```
-
-## How to Use This Skill
-
-1. **Check edicts first**: When writing sp.h code, consult `references/edicts.md` for mandatory coding standards.
-
-2. **Find the right API**: Use `references/namespaces.md` to locate functions by category (memory, strings, I/O, etc.).
-
-3. **See real usage**: Check `references/examples.md` for concrete patterns from production code.
-
-4. **Follow conventions**:
-   - Two-space indentation
-   - Use `sp_str_t` everywhere except API boundaries
-   - Initialize with `SP_ZERO_INITIALIZE()`
-   - Never call standard library functions directly
-
-5. **Use the type system**:
-   - Sized integers: `s8`, `s16`, `s32`, `s64`, `u8`, `u16`, `u32`, `u64`
-   - Floats: `f32`, `f64`
-   - Characters: `c8`, `c16`
-
-6. **Leverage macros**:
-   - `SP_LIT("string")` for string literals
-   - `SP_CSTR(ptr)` for C string conversion
-   - `SP_CARR_FOR(array, i)` for C array iteration
-   - `SP_FMT_*` for type-safe formatting
-
-## Testing
-
-When adding tests, use the utest framework (see existing tests in `test/main.c`):
-
-```c
-UTEST(namespace, test_name) {
-  // Setup
-  sp_str_t str = SP_LIT("hello");
-
-  // Test
-  ASSERT_TRUE(sp_str_valid(str));
-  ASSERT_EQ(str.len, 5);
 }
 ```
 
