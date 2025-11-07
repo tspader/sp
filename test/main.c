@@ -1,10 +1,11 @@
 #define SP_APP
 #include "sp.h"
 
+#include "utest.h"
+
 #define SP_TEST_IMPLEMENTATION
 #include "test.h"
 
-#include "utest.h"
 
 UTEST_MAIN()
 
