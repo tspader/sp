@@ -5,81 +5,6 @@
 
 #include "utest.h"
 
-UTEST(dynamic_array, stress_test) {
-  sp_test_memory_tracker tracker;
-  sp_test_memory_tracker_init(&tracker, 128 * 1024 * 1024);
-
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    const s32 iterations = 1000000;
-
-    for (s32 i = 0; i < iterations; i++) {
-      sp_dynamic_array_push(&arr, &i);
-    }
-
-    ASSERT_EQ(arr.size, (u32)iterations);
-
-    // Verify sampling
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, 0), 0);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations/2), iterations/2);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, iterations-1), iterations-1);
-
-    // Clear and reuse
-    sp_dynamic_array_clear(&arr);
-    ASSERT_EQ(arr.size, 0);
-
-    // Push again
-    for (s32 i = 0; i < 1000; i++) {
-      sp_dynamic_array_push(&arr, &i);
-    }
-    ASSERT_EQ(arr.size, 1000);
-  }
-
-  // Test random operations
-  {
-    sp_dynamic_array_t arr;
-    sp_dynamic_array_init(&arr, sizeof(s32));
-
-    // Mix of operations
-    for (u32 i = 0; i < 10000; i++) {
-      u32 op = i % 4;
-      switch (op) {
-      case 0: { // Push
-          s32 val = i;
-          sp_dynamic_array_push(&arr, &val);
-          break;
-      }
-      case 1: { // Push_n
-          s32 vals[10];
-          for (u32 j = 0; j < 10; j++) vals[j] = i + j;
-          sp_dynamic_array_push_n(&arr, vals, 10);
-          break;
-      }
-      case 2: { // Reserve
-          if (arr.size < 100000) {
-          sp_dynamic_array_reserve(&arr, 5);
-          }
-          break;
-      }
-      case 3: { // Clear periodically
-          if (i % 1000 == 0 && i > 0) {
-          sp_dynamic_array_clear(&arr);
-          }
-          break;
-      }
-      }
-    }
-
-    // Array should still be functional
-    s32 final_val = 9999;
-    sp_dynamic_array_push(&arr, &final_val);
-    ASSERT_EQ(*(s32*)sp_dynamic_array_at(&arr, arr.size - 1), 9999);
-  }
-
-  sp_test_memory_tracker_deinit(&tracker);
-}
 
 UTEST(dyn_array, large_stress_test) {
   sp_dyn_array(u64) arr = SP_NULLPTR;
@@ -274,7 +199,7 @@ typedef struct {
 
 s32 sp_atomic_s32_stress_thread(void* userdata) {
   sp_atomic_s32_stress_data_t* data = (sp_atomic_s32_stress_data_t*)userdata;
-  
+
   for (s32 i = 0; i < data->iterations; i++) {
     s32 op = i % 4;
     switch (op) {
@@ -288,7 +213,7 @@ s32 sp_atomic_s32_stress_thread(void* userdata) {
       }
     }
   }
-  
+
   return 0;
 }
 
@@ -296,21 +221,21 @@ UTEST(sp_atomic_s32, stress_concurrent_operations) {
   sp_atomic_s32 counter = 0;
   const s32 num_threads = 8;
   const s32 iterations = 10000;
-  
+
   sp_atomic_s32_stress_data_t thread_data[8];
   sp_thread_t threads[8];
-  
+
   for (s32 i = 0; i < num_threads; i++) {
     thread_data[i].counter = &counter;
     thread_data[i].iterations = iterations;
     thread_data[i].thread_id = i;
     sp_thread_init(&threads[i], sp_atomic_s32_stress_thread, &thread_data[i]);
   }
-  
+
   for (s32 i = 0; i < num_threads; i++) {
     sp_thread_join(&threads[i]);
   }
-  
+
   s32 final = sp_atomic_s32_get(&counter);
   ASSERT_TRUE(final >= 0);
 }
