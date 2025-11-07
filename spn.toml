@@ -1,0 +1,39 @@
+[package]
+name = "sp"
+include = [".", "test/tools"]
+define = ["SP_IMPLEMENTATION"]
+
+[deps]
+utest = "1.0.0"
+argparse = "1.2.0"
+
+[[profile]]
+name = "debug"
+cc = "tcc"
+mode = "debug"
+language = "c11"
+
+
+[[bin]]
+name = "app"
+source = ["test/app.c"]
+
+[[bin]]
+name = "c"
+source = ["test/main.c"]
+
+[[bin]]
+name = "file_monitor"
+source = ["test/file_monitor.c"]
+
+[[bin]]
+name = "process"
+source = ["test/tools/process.c"]
+
+[[bin]]
+name = "ps"
+source = ["test/ps.c"]
+
+[[bin]]
+name = "stress"
+source = ["test/stress.c"]
