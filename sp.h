@@ -194,15 +194,6 @@ extern char** environ;
 #define SP_EXIT_SUCCESS() exit(0)
 #define SP_EXIT_FAILURE() exit(1)
 #define SP_ASSERT(condition) assert((condition))
-#define SP_ASSERT_FMT(COND, FMT, ...) \
-  do { \
-    if (!(COND)) { \
-      const c8* condition = SP_MACRO_STR(COND); \
-      sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
-      SP_LOG("SP_ASSERT({:color red}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
-      SP_EXIT_FAILURE(); \
-    } \
-  } while (0)
 #define SP_FATAL(FMT, ...) \
   do { \
     sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
@@ -214,10 +205,21 @@ extern char** environ;
 #define SP_UNREACHABLE_CASE() SP_ASSERT(false); break;
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
 #define SP_BROKEN() SP_ASSERT(false)
+#define SP_ASSERT_FMT(COND, FMT, ...) \
+  do { \
+    if (!(COND)) { \
+      const c8* condition = SP_MACRO_STR(COND); \
+      sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
+      SP_LOG("SP_ASSERT({:color red}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
+      SP_EXIT_FAILURE(); \
+    } \
+  } while (0)
 #define SP_UNTESTED()
 #define SP_INCOMPLETE()
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
+
+#define SP_UNUSED(x) ((void)(x))
 
 #define SP_PRINTF_U8 "%hhu"
 #define SP_PRINTF_U16 "%hu"
@@ -275,8 +277,6 @@ extern char** environ;
 #ifndef SP_IMP
   #define SP_IMP
 #endif
-
-#define SP_UNUSED(x) ((void)(x))
 
 #define SP_ANSI_RESET             "\033[0m"
 #define SP_ANSI_BOLD              "\033[1m"
@@ -380,12 +380,12 @@ typedef enum {
 
 SP_TYPEDEF_FN(
   void*,
-  sp_alloc_fn_t,
+  sp_allocator_fn_t,
   void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr
 );
 
 typedef struct sp_allocator_t {
-  sp_alloc_fn_t on_alloc;
+  sp_allocator_fn_t on_alloc;
   void* user_data;
 } sp_allocator_t;
 
@@ -459,26 +459,7 @@ SP_API void sp_fixed_array_clear(sp_fixed_array_t* fixed_array);
 SP_API u32  sp_fixed_array_byte_size(sp_fixed_array_t* fixed_array);
 SP_API u8*  sp_fixed_array_at(sp_fixed_array_t* fixed_array, u32 index);
 
-///////////////////
-// DYNAMIC ARRAY //
-///////////////////
-typedef struct {
-  u8* data;
-  u32 size;
-  u32 capacity;
-  u32 element_size;
-} sp_dynamic_array_t;
 
-#define sp_dynamic_array(t) sp_dynamic_array_t
-
-SP_API void sp_dynamic_array_init(sp_dynamic_array_t* arr, u32 element_size);
-SP_API u8*  sp_dynamic_array_push(sp_dynamic_array_t* arr, void* data);
-SP_API u8*  sp_dynamic_array_push_n(sp_dynamic_array_t* arr, void* data, u32 count);
-SP_API u8*  sp_dynamic_array_reserve(sp_dynamic_array_t* arr, u32 count);
-SP_API void sp_dynamic_array_clear(sp_dynamic_array_t* arr);
-SP_API u32  sp_dynamic_array_byte_size(sp_dynamic_array_t* arr);
-SP_API u8*  sp_dynamic_array_at(sp_dynamic_array_t* arr, u32 index);
-SP_API void sp_dynamic_array_grow(sp_dynamic_array_t* arr, u32 capacity);
 
 ///////////////////
 // DYNAMIC ARRAY //
@@ -1083,8 +1064,8 @@ struct sp_file_monitor {
 	sp_file_change_event_t events_to_watch;
 	void* userdata;
 	u32 debounce_time_ms;
-	sp_dynamic_array_t changes;
-	sp_dynamic_array_t cache;
+	sp_dyn_array(sp_file_change_t) changes;
+	sp_dyn_array(sp_cache_entry_t) cache;
   sp_opaque_ptr os;
 };
 
@@ -1143,8 +1124,8 @@ SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* mon
 #ifdef SP_LINUX
   typedef struct {
     s32 fd;
-    sp_dynamic_array_t watch_descs;
-    sp_dynamic_array_t watch_paths;
+    sp_dyn_array(s32) watch_descs;
+    sp_dyn_array(sp_str_t) watch_paths;
     u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
   } sp_os_linux_file_monitor_t;
 
@@ -1646,7 +1627,6 @@ SP_IMP void sp_ps_set_blocking(s32 fd);
  SP_FMT_X(hash_short, sp_hash_t) \
  SP_FMT_X(str_builder, sp_str_builder_t) \
  SP_FMT_X(fixed_array, sp_fixed_array_t) \
- SP_FMT_X(dynamic_array, sp_dynamic_array_t) \
  SP_FMT_X(quoted_str, sp_str_t) \
  SP_FMT_X(color, const c8*) \
 
@@ -2741,15 +2721,7 @@ void sp_fmt_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* arg) 
   sp_str_builder_append_cstr(builder, " }");
 }
 
-void sp_fmt_format_dynamic_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_dynamic_array_t arr = arg->dynamic_array_value;
 
-  sp_str_builder_append_cstr(builder, "{ size: ");
-  sp_fmt_format_unsigned(builder, arr.size, 10);
-  sp_str_builder_append_cstr(builder, ", capacity: ");
-  sp_fmt_format_unsigned(builder, arr.capacity, 10);
-  sp_str_builder_append_cstr(builder, " }");
-}
 
 void sp_fmt_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_t value = arg->quoted_str_value;
@@ -3846,62 +3818,7 @@ sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n) {
 
 ///////////////////
 // DYNAMIC ARRAY //
-///////////////////
-void sp_dynamic_array_init(sp_dynamic_array_t* arr, u32 element_size) {
-  SP_ASSERT(arr);
-
-  arr->size = 0;
-  arr->capacity = 2;
-  arr->element_size = element_size;
-  arr->data = (u8*)sp_alloc(arr->capacity * element_size);
-}
-
-u8* sp_dynamic_array_at(sp_dynamic_array_t* arr, u32 index) {
-  SP_ASSERT(arr);
-  return arr->data + (index * arr->element_size);
-}
-
-u8* sp_dynamic_array_push(sp_dynamic_array_t* arr, void* data) {
-  return sp_dynamic_array_push_n(arr, data, 1);
-}
-
-u8* sp_dynamic_array_push_n(sp_dynamic_array_t* arr, void* data, u32 count) {
-  SP_ASSERT(arr);
-
-  u8* reserved = sp_dynamic_array_reserve(arr, count);
-  if (data) sp_os_copy_memory(data, reserved, arr->element_size * count);
-  return reserved;
-}
-
-u8* sp_dynamic_array_reserve(sp_dynamic_array_t* arr, u32 count) {
-  SP_ASSERT(arr);
-
-  sp_dynamic_array_grow(arr, arr->size + count);
-
-  u8* element = sp_dynamic_array_at(arr, arr->size);
-  arr->size += count;
-  return element;
-}
-
-void sp_dynamic_array_clear(sp_dynamic_array_t* arr) {
-  SP_ASSERT(arr);
-
-  arr->size = 0;
-}
-
-u32 sp_dynamic_array_byte_size(sp_dynamic_array_t* arr) {
-  SP_ASSERT(arr);
-
-  return arr->size * arr->element_size;
-}
-
-void sp_dynamic_array_grow(sp_dynamic_array_t* arr, u32 capacity) {
-  SP_ASSERT(arr);
-
-  if (arr->capacity >= capacity) return;
-  arr->capacity = SP_MAX(arr->capacity * 2, capacity);
-  arr->data = (u8*)sp_realloc(arr->data, arr->capacity * arr->element_size);
-}
+//
 
 
 /////////////////
@@ -6062,9 +5979,6 @@ sp_str_t sp_os_get_config_path() {
       linux_monitor->fd = 0;
     }
 
-    sp_dynamic_array_init(&linux_monitor->watch_descs, sizeof(s32));
-    sp_dynamic_array_init(&linux_monitor->watch_paths, sizeof(sp_str_t));
-
     monitor->os = linux_monitor;
   }
 
@@ -6091,9 +6005,8 @@ sp_str_t sp_os_get_config_path() {
     s32 wd = inotify_add_watch(linux_monitor->fd, path_cstr, mask);
 
     if (wd != -1) {
-      sp_dynamic_array_push(&linux_monitor->watch_descs, &wd);
-      sp_str_t path_copy = sp_str_copy(path);
-      sp_dynamic_array_push(&linux_monitor->watch_paths, &path_copy);
+      sp_dyn_array_push(linux_monitor->watch_descs, wd);
+      sp_dyn_array_push(linux_monitor->watch_paths, sp_str_copy(path));
     }
 
   }
@@ -6121,10 +6034,10 @@ sp_str_t sp_os_get_config_path() {
       struct inotify_event* event = (struct inotify_event*)ptr;
 
       // Find which path this watch descriptor corresponds to
-      for (u32 i = 0; i < linux_monitor->watch_descs.size; i++) {
-        s32* wd = (s32*)sp_dynamic_array_at(&linux_monitor->watch_descs, i);
-        if (*wd == event->wd) {
-          sp_str_t* dir_path = (sp_str_t*)sp_dynamic_array_at(&linux_monitor->watch_paths, i);
+      sp_dyn_array_for(linux_monitor->watch_descs, it) {
+        s32 wd = linux_monitor->watch_descs[it];
+        if (wd == event->wd) {
+          sp_str_t dir_path = linux_monitor->watch_paths[it];
 
           // Build full path if there's a filename
           sp_str_t file_name = SP_ZERO_STRUCT(sp_str_t);
@@ -6135,12 +6048,12 @@ sp_str_t sp_os_get_config_path() {
 
             // Build full path
             sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-            sp_str_builder_append(&builder, *dir_path);
+            sp_str_builder_append(&builder, dir_path);
             sp_str_builder_append(&builder, sp_str_lit("/"));
             sp_str_builder_append(&builder, file_name);
             file_path = sp_str_builder_write(&builder);
           } else {
-            file_path = sp_str_copy(*dir_path);
+            file_path = sp_str_copy(dir_path);
             file_name = sp_os_extract_file_name(file_path);
           }
 
@@ -6164,7 +6077,7 @@ sp_str_t sp_os_get_config_path() {
               .events = events,
               .time = 0  // TODO: get actual time
             };
-            sp_dynamic_array_push(&monitor->changes, &change);
+            sp_dyn_array_push(monitor->changes, change);
           }
           break;
         }
@@ -6249,8 +6162,6 @@ void sp_file_monitor_init_debounce(sp_file_monitor_t* monitor, sp_file_change_ca
   monitor->events_to_watch = events;
   monitor->userdata = userdata;
   monitor->debounce_time_ms = debounce_ms;
-  sp_dynamic_array_init(&monitor->changes, sizeof(sp_file_change_t));
-  sp_dynamic_array_init(&monitor->cache, sizeof(sp_cache_entry_t));
   sp_os_file_monitor_init(monitor);
 }
 
@@ -6267,12 +6178,12 @@ void sp_file_monitor_process_changes(sp_file_monitor_t* monitor) {
 }
 
 void sp_file_monitor_emit_changes(sp_file_monitor_t* monitor) {
-  for (u32 i = 0; i < monitor->changes.size; i++) {
-    sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_at(&monitor->changes, i);
+  sp_dyn_array_for(monitor->changes, it) {
+    sp_file_change_t* change = &monitor->changes[it];
     monitor->callback(monitor, change, monitor->userdata);
   }
 
-  sp_dynamic_array_clear(&monitor->changes);
+  sp_dyn_array_clear(monitor->changes);
 }
 
 sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, sp_str_t file_path) {
@@ -6280,8 +6191,8 @@ sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, s
   sp_hash_t file_hash = sp_hash_cstr(file_path_cstr);
 
   sp_cache_entry_t* found = NULL;
-  for (u32 i = 0; i < monitor->cache.size; i++) {
-    sp_cache_entry_t* entry = (sp_cache_entry_t*)sp_dynamic_array_at(&monitor->cache, i);
+  for (u32 i = 0; i < sp_dyn_array_size(monitor->cache); i++) {
+    sp_cache_entry_t* entry = &monitor->cache[i];
     if (entry->hash == file_hash) {
       found = entry;
       break;
@@ -6289,7 +6200,8 @@ sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, s
   }
 
   if (!found) {
-    found = (sp_cache_entry_t*)sp_dynamic_array_push(&monitor->cache, NULL);
+    sp_dyn_array_push(monitor->cache, SP_ZERO_STRUCT(sp_cache_entry_t));
+    found = &monitor->cache[sp_dyn_array_size(monitor->cache) - 1];
     found->hash = file_hash;
   }
 
