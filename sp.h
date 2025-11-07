@@ -494,6 +494,23 @@ void sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
 
 #define sp_dyn_array(T) T*
 #define sp_da(T) T*
+
+#define sp_da_for(__ARR, __IT) sp_dyn_array_for(__ARR, __IT)
+#define sp_da_head(__ARR) sp_dyn_array_head(__ARR)
+#define sp_da_size(__ARR) sp_dyn_array_size(__ARR)
+#define sp_da_capacity(__ARR) sp_dyn_array_capacity(__ARR)
+#define sp_da_empty(__ARR) sp_dyn_array_empty(__ARR)
+#define sp_da_full(__ARR) sp_dyn_array_full(__ARR)
+#define sp_da_clear(__ARR) sp_dyn_array_clear(__ARR)
+#define sp_da_free(__ARR) sp_dyn_array_free(__ARR)
+#define sp_da_need_grow(__ARR, __N) sp_dyn_array_need_grow(__ARR, __N)
+#define sp_da_grow(__ARR) sp_dyn_array_grow(__ARR)
+#define sp_da_push(__ARR, __VAL) sp_dyn_array_push(__ARR, __VAL)
+#define sp_da_reserve(__ARR, __AMOUNT) sp_dyn_array_reserve(__ARR, __AMOUNT)
+#define sp_da_pop(__ARR) sp_dyn_array_pop(__ARR)
+#define sp_da_back(__ARR) sp_dyn_array_back(__ARR)
+#define sp_da_new(__T) sp_dyn_array_new(__T)
+
 #define sp_dyn_array_for(__ARR, __IT) for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
 
 #define sp_dyn_array_head(__ARR)\
