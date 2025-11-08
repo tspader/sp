@@ -120,7 +120,7 @@ void sp_test_proc_check_stream(sp_test_proc_stream_context_t* ctx) {
 ////////////////
 void sp_test_proc_io(sp_test_proc_io_config_t test) {
   sp_ps_config_t config = {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), SP_CSTR(test_proc_function_to_cstr(test.fn)),
     },
@@ -428,7 +428,7 @@ sp_dyn_array(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u32 len) {
 
 void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) {
   sp_ps_config_t config = {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), SP_CSTR(test_proc_function_to_cstr(TEST_PROC_FUNCTION_PRINT_ENV)),
       sp_str_lit("--stdout")
@@ -608,7 +608,7 @@ UTEST_F(sp_ps, empty_env_var) {
 //////////////////
 UTEST_F(sp_ps, wait_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("42")
@@ -624,7 +624,7 @@ UTEST_F(sp_ps, wait_after_process_complete) {
 
 UTEST_F(sp_ps, wait_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -650,7 +650,7 @@ UTEST_F(sp_ps, run) {
 
 UTEST_F(sp_ps, poll_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -666,7 +666,7 @@ UTEST_F(sp_ps, poll_while_process_running) {
 
 UTEST_F(sp_ps, process_complete_during_poll) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -680,7 +680,7 @@ UTEST_F(sp_ps, process_complete_during_poll) {
 
 UTEST_F(sp_ps, poll_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -696,7 +696,7 @@ UTEST_F(sp_ps, poll_after_process_complete) {
 
 UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -712,7 +712,7 @@ UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
 
 UTEST_F(sp_ps, wait_twice_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -730,7 +730,7 @@ UTEST_F(sp_ps, wait_twice_while_process_running) {
 
 UTEST_F(sp_ps, poll_then_wait) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -747,7 +747,7 @@ UTEST_F(sp_ps, poll_then_wait) {
 
 UTEST_F(sp_ps, poll_multiple) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("300")
@@ -769,7 +769,7 @@ UTEST_F(sp_ps, poll_multiple) {
 
 UTEST_F(sp_ps, wait_with_output) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout")
@@ -792,7 +792,7 @@ UTEST_F(sp_ps, wait_with_output) {
 
 UTEST_F(sp_ps, poll_with_io) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -816,7 +816,7 @@ UTEST_F(sp_ps, poll_with_io) {
 
 UTEST_F(sp_ps, interleaved_read_write) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("echo_line"),
       sp_str_lit("--stdout")
@@ -856,7 +856,7 @@ UTEST_F(sp_ps, interleaved_read_write) {
 
 UTEST_F(sp_ps, incremental_nonblocking_read) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("slow_write"),
       sp_str_lit("--stdout")
@@ -900,7 +900,7 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
 
 UTEST_F(sp_ps, output) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout")
@@ -922,7 +922,7 @@ UTEST_F(sp_ps, output) {
 
 UTEST_F(sp_ps, write_1mb_to_stdin) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("consume"),
       sp_str_lit("--stdout"),
@@ -958,7 +958,7 @@ UTEST_F(sp_ps, write_1mb_to_stdin) {
 
 UTEST_F(sp_ps, redirect_stderr_to_stdout) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout"),
@@ -986,7 +986,7 @@ UTEST_F(sp_ps, redirect_stderr_to_stdout) {
 
 UTEST_F(sp_ps, redirect_stdout_to_stderr) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = SP_LIT("./build/bin/process"),
+    .command = SP_LIT("./build/debug/process"),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout"),

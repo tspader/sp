@@ -28,6 +28,10 @@ name = "file_monitor"
 source = ["test/file_monitor.c"]
 
 [[bin]]
+name = "fs"
+source = ["test/fs.c"]
+
+[[bin]]
 name = "process"
 source = ["test/tools/process.c"]
 

@@ -7,7 +7,6 @@ license: MIT
 # sp.h Overview
 - sp.h is a single-header C standard library replacement
 - You MUST annotate references to functions from sp.h with verbatim function headers
-- Like `stb`, but an entire standard library
 - When providing references to code from `sp.h`, you MUST provide a matching declaration from `references/index.md`. Function names without the full declaration are COMPLETELY useless, and WILL NOT be tolerated.
 <example>
 user: How do I use the asset registry from sp.h?
@@ -17,6 +16,7 @@ assistant: [Reads the index, uses the Task tool to search through sources bundle
 user: Write a function that reads a file and logs its contends
 assistant: [Searches through bundled source code with Task tool to find relevant APIs and writes function]
 </example>
+- NEVER, EVER MODIFY THE REFERENCE CODE
 
 ## Usage
 - Search `references/index.md` before trying to search through the codebase. Do not guess; refer to `references/index.md` to find a precise search term.
