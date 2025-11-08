@@ -63,7 +63,7 @@ void                   sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env
 sp_str_t               sp_os_extract_extension(sp_str_t path);
 sp_str_t               sp_os_extract_file_name(sp_str_t path);
 sp_str_t               sp_os_extract_stem(sp_str_t path);
-sp_os_file_attr_t      sp_os_file_attributes(sp_str_t path);
+sp_os_file_attr_t      sp_os_get_file_attrs(sp_str_t path);
 sp_tm_epoch_t          sp_os_file_mod_time_precise(sp_str_t path);
 void                   sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
 void                   sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);

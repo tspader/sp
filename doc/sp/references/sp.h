@@ -1226,7 +1226,7 @@ SP_API sp_str_t                 sp_os_get_storage_path();
 SP_API sp_str_t                 sp_os_get_config_path();
 SP_API sp_str_t                 sp_os_canonicalize_path(sp_str_t path);
 SP_API sp_tm_epoch_t            sp_os_file_mod_time_precise(sp_str_t path);
-SP_API sp_os_file_attr_t        sp_os_file_attributes(sp_str_t path);
+SP_API sp_os_file_attr_t        sp_os_get_file_attrs(sp_str_t path);
 SP_IMP sp_os_file_attr_t        sp_os_winapi_attr_to_sp_attr(u32 attr);
 SP_IMP void                     sp_os_file_monitor_init(sp_file_monitor_t* monitor);
 SP_IMP void                     sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
@@ -4403,7 +4403,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       sp_os_dir_entry_t entry = SP_RVAL(sp_os_dir_entry_t) {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(find_data.cFileName),
-        .attributes = sp_os_file_attributes(file_path),
+        .attributes = sp_os_get_file_attrs(file_path),
       };
       sp_dyn_array_push(entries, entry);
     } while (FindNextFile(handle, &find_data));
@@ -4541,7 +4541,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     };
   }
 
-  sp_os_file_attr_t sp_os_file_attributes(sp_str_t path) {
+  sp_os_file_attr_t sp_os_get_file_attrs(sp_str_t path) {
     return sp_os_winapi_attr_to_sp_attr(GetFileAttributesA(sp_str_to_cstr(path)));
   }
 
@@ -4958,7 +4958,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       sp_os_dir_entry_t dir_entry = {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(entry->d_name),
-        .attributes = sp_os_file_attributes(file_path),
+        .attributes = sp_os_get_file_attrs(file_path),
       };
       sp_dyn_array_push(entries, dir_entry);
     }
@@ -5121,7 +5121,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return result;
   }
 
-  sp_os_file_attr_t sp_os_file_attributes(sp_str_t path) {
+  sp_os_file_attr_t sp_os_get_file_attrs(sp_str_t path) {
     struct stat st;
     if (stat(sp_str_to_cstr(path), &st) == 0) {
       if (S_ISDIR(st.st_mode)) {

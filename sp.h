@@ -361,6 +361,7 @@ typedef enum {
   SP_ERR_IO_CLOSE_FAILED,
   SP_ERR_IO_READ_FAILED,
   SP_ERR_LAZY,
+  SP_ERR_OS,
 } sp_err_t;
 
 void sp_err_set(sp_err_t err);
@@ -1147,8 +1148,9 @@ SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* mon
 
 typedef enum {
   SP_OS_FILE_ATTR_NONE = 0,
-  SP_OS_FILE_ATTR_REGULAR_FILE = 1,
-  SP_OS_FILE_ATTR_DIRECTORY = 2,
+  SP_OS_FILE_ATTR_REGULAR_FILE = (1 << 0),
+  SP_OS_FILE_ATTR_DIRECTORY    = (1 << 1),
+  SP_OS_FILE_ATTR_SYMLINK      = (1 << 2),
 } sp_os_file_attr_t;
 
 typedef enum {
@@ -1168,6 +1170,12 @@ typedef enum {
   SP_OS_LIB_SHARED,
   SP_OS_LIB_STATIC,
 } sp_os_lib_kind_t;
+
+typedef enum {
+  SP_OS_LINK_HARD,
+  SP_OS_LINK_SYMBOLIC,
+  SP_OS_LINK_COPY,
+} sp_os_link_kind_t;
 
 typedef struct {
   s32 year;
@@ -1204,7 +1212,10 @@ SP_API sp_str_t               sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind)
 SP_API sp_str_t               sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
 
 SP_API bool                   sp_os_is_regular_file(sp_str_t path);
+SP_API bool                   sp_os_is_symlink(sp_str_t path);
 SP_API bool                   sp_os_is_directory(sp_str_t path);
+SP_API bool                   sp_os_is_target_regular_file(sp_str_t path);
+SP_API bool                   sp_os_is_target_directory(sp_str_t path);
 SP_API bool                   sp_os_is_path_root(sp_str_t path);
 SP_API bool                   sp_os_is_glob(sp_str_t path);
 SP_API bool                   sp_os_is_program_on_path(sp_str_t program);
@@ -1213,10 +1224,13 @@ SP_API void                   sp_os_create_directory(sp_str_t path);
 SP_API void                   sp_os_remove_directory(sp_str_t path);
 SP_API void                   sp_os_create_file(sp_str_t path);
 SP_API void                   sp_os_remove_file(sp_str_t path);
-SP_API void                   sp_os_copy(sp_str_t from, sp_str_t to);
+SP_API sp_err_t               sp_os_copy(sp_str_t from, sp_str_t to);
 SP_API void                   sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
 SP_API void                   sp_os_copy_file(sp_str_t from, sp_str_t to);
 SP_API void                   sp_os_copy_directory(sp_str_t from, sp_str_t to);
+SP_API sp_err_t               sp_os_create_hard_link(sp_str_t target, sp_str_t link_path);
+SP_API sp_err_t               sp_os_create_symbolic_link(sp_str_t target, sp_str_t link_path);
+SP_API sp_err_t               sp_os_link(sp_str_t from, sp_str_t to, sp_os_link_kind_t kind);
 SP_API sp_da(sp_os_dir_ent_t) sp_os_scan_directory(sp_str_t path);
 SP_API sp_str_t               sp_os_normalize_path(sp_str_t path);
 SP_API void                   sp_os_normalize_path_soft(sp_str_t* path);
@@ -1231,7 +1245,7 @@ SP_API sp_str_t               sp_os_get_storage_path();
 SP_API sp_str_t               sp_os_get_config_path();
 SP_API sp_str_t               sp_os_canonicalize_path(sp_str_t path);
 SP_API sp_tm_epoch_t          sp_os_file_mod_time_precise(sp_str_t path);
-SP_API sp_os_file_attr_t      sp_os_file_attributes(sp_str_t path);
+SP_API sp_os_file_attr_t      sp_os_get_file_attrs(sp_str_t path);
 SP_IMP sp_os_file_attr_t      sp_os_winapi_attr_to_sp_attr(u32 attr);
 SP_IMP void                   sp_os_file_monitor_init(sp_file_monitor_t* monitor);
 SP_IMP void                   sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
@@ -4057,6 +4071,16 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   return stem;
 }
 
+sp_err_t sp_os_link(sp_str_t from, sp_str_t to, sp_os_link_kind_t kind) {
+  switch (kind) {
+    case SP_OS_LINK_HARD:     return sp_os_create_hard_link(from, to);
+    case SP_OS_LINK_SYMBOLIC: return sp_os_create_symbolic_link(from, to);
+    case SP_OS_LINK_COPY:     return sp_os_copy(from, to);
+  }
+
+  SP_UNREACHABLE_RETURN(SP_ERR_OK);
+}
+
 void sp_spin_pause() {
   #if defined(SP_AMD64)
     #if defined(SP_MSVC)
@@ -4213,6 +4237,24 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return attribute & FILE_ATTRIBUTE_DIRECTORY;
   }
 
+  bool sp_os_is_symlink(sp_str_t path) {
+    sp_win32_dword_t attr = GetFileAttributesA(sp_str_to_cstr(path));
+    if (attr == INVALID_FILE_ATTRIBUTES) return false;
+    return (attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+  }
+
+  bool sp_os_is_target_regular_file(sp_str_t path) {
+    sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
+    if (attribute == INVALID_FILE_ATTRIBUTES) return false;
+    return !(attribute & FILE_ATTRIBUTE_DIRECTORY);
+  }
+
+  bool sp_os_is_target_directory(sp_str_t path) {
+    sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
+    if (attribute == INVALID_FILE_ATTRIBUTES) return false;
+    return attribute & FILE_ATTRIBUTE_DIRECTORY;
+  }
+
   bool sp_os_is_path_root(sp_str_t path) {
     if (path.len == 0) return true;
     if (path.len == 1 && path.data[0] == '/') return true;
@@ -4259,7 +4301,14 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   }
 
   void sp_os_remove_file(sp_str_t path) {
-    DeleteFileA(sp_str_to_cstr(path));
+    sp_win32_dword_t attr = GetFileAttributesA(sp_str_to_cstr(path));
+    if (attr != INVALID_FILE_ATTRIBUTES &&
+        (attr & FILE_ATTRIBUTE_REPARSE_POINT) &&
+        (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+      RemoveDirectoryA(sp_str_to_cstr(path));
+    } else {
+      DeleteFileA(sp_str_to_cstr(path));
+    }
   }
 
   bool sp_os_is_glob(sp_str_t path) {
@@ -4279,17 +4328,19 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return output.status.exit_code == 0;
   }
 
-  void sp_os_copy(sp_str_t from, sp_str_t to) {
+  sp_err_t sp_os_copy(sp_str_t from, sp_str_t to) {
     if (sp_os_is_glob(from)) {
       sp_os_copy_glob(sp_os_parent_path(from), sp_os_extract_file_name(from), to);
     }
-    else if (sp_os_is_directory(from)) {
-      SP_ASSERT(sp_os_is_directory(to));
+    else if (sp_os_is_target_directory(from)) {
+      SP_ASSERT(sp_os_is_target_directory(to));
       sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_stem(from)));
     }
-    else if (sp_os_is_regular_file(from)) {
+    else if (sp_os_is_target_regular_file(from)) {
       sp_os_copy_file(from, to);
     }
+
+    return SP_ERR_OK;
   }
 
   void sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
@@ -4378,7 +4429,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       sp_os_dir_ent_t entry = SP_RVAL(sp_os_dir_ent_t) {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(find_data.cFileName),
-        .attributes = sp_os_file_attributes(file_path),
+        .attributes = sp_os_get_file_attrs(file_path),
       };
       sp_dyn_array_push(entries, entry);
     } while (FindNextFile(handle, &find_data));
@@ -4516,15 +4567,15 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     };
   }
 
-  sp_os_file_attr_t sp_os_file_attributes(sp_str_t path) {
+  sp_os_file_attr_t sp_os_get_file_attrs(sp_str_t path) {
     return sp_os_winapi_attr_to_sp_attr(GetFileAttributesA(sp_str_to_cstr(path)));
   }
 
   sp_os_file_attr_t sp_os_winapi_attr_to_sp_attr(u32 attr) {
-    u32 result = SP_OS_FILE_ATTR_NONE;
-    if ( (attr & FILE_ATTRIBUTE_DIRECTORY)) result |= SP_OS_FILE_ATTR_DIRECTORY;
-    if (!(attr & FILE_ATTRIBUTE_DIRECTORY)) result |= SP_OS_FILE_ATTR_REGULAR_FILE;
-    return (sp_os_file_attr_t)result;
+    if (attr == INVALID_FILE_ATTRIBUTES) return SP_OS_FILE_ATTR_NONE;
+    if (attr & FILE_ATTRIBUTE_REPARSE_POINT) return SP_OS_FILE_ATTR_SYMLINK;
+    if (attr & FILE_ATTRIBUTE_DIRECTORY) return SP_OS_FILE_ATTR_DIRECTORY;
+    return SP_OS_FILE_ATTR_REGULAR_FILE;
   }
 
   bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
@@ -4752,16 +4803,36 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   bool sp_os_is_regular_file(sp_str_t path) {
     struct stat st;
     c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = stat(path_cstr, &st);
+    s32 result = lstat(path_cstr, &st);
     if (result != 0) return false;
     return S_ISREG(st.st_mode);
+  }
+
+  bool sp_os_is_symlink(sp_str_t path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(path);
+    s32 result = lstat(path_cstr, &st);
+    if (result != 0) return false;
+    return S_ISLNK(st.st_mode);
   }
 
   bool sp_os_is_directory(sp_str_t path) {
     struct stat st;
     c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = stat(path_cstr, &st);
+    s32 result = lstat(path_cstr, &st);
     if (result != 0) return false;
+    return S_ISDIR(st.st_mode);
+  }
+
+  bool sp_os_is_target_regular_file(sp_str_t path) {
+    struct stat st;
+    if (stat(sp_str_to_cstr(path), &st) != 0) return false;
+    return S_ISREG(st.st_mode);
+  }
+
+  bool sp_os_is_target_directory(sp_str_t path) {
+    struct stat st;
+    if (stat(sp_str_to_cstr(path), &st) != 0) return false;
     return S_ISDIR(st.st_mode);
   }
 
@@ -4778,10 +4849,11 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     sp_dyn_array_for(entries, i) {
       sp_os_dir_ent_t* entry = &entries[i];
 
-      if (sp_os_is_directory(entry->file_path)) {
+      if (sp_os_is_symlink(entry->file_path)) {
+        sp_os_remove_file(entry->file_path);
+      } else if (sp_os_is_directory(entry->file_path)) {
         sp_os_remove_directory(entry->file_path);
-      }
-      if (sp_os_is_regular_file(entry->file_path)) {
+      } else if (sp_os_is_regular_file(entry->file_path)) {
         sp_os_remove_file(entry->file_path);
       }
     }
@@ -4837,17 +4909,19 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return output.status.exit_code == 0;
   }
 
-  void sp_os_copy(sp_str_t from, sp_str_t to) {
+  sp_err_t sp_os_copy(sp_str_t from, sp_str_t to) {
     if (sp_os_is_glob(from)) {
       sp_os_copy_glob(sp_os_parent_path(from), sp_os_extract_file_name(from), to);
     }
-    else if (sp_os_is_directory(from)) {
-      SP_ASSERT(sp_os_is_directory(to));
+    else if (sp_os_is_target_directory(from)) {
+      SP_ASSERT(sp_os_is_target_directory(to));
       sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_stem(from)));
     }
-    else if (sp_os_is_regular_file(from)) {
+    else if (sp_os_is_target_regular_file(from)) {
       sp_os_copy_file(from, to);
     }
+
+    return SP_ERR_OK;
   }
 
   void sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
@@ -4933,7 +5007,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       sp_os_dir_ent_t dir_ent = {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(entry->d_name),
-        .attributes = sp_os_file_attributes(file_path),
+        .attributes = sp_os_get_file_attrs(file_path),
       };
       sp_dyn_array_push(entries, dir_ent);
     }
@@ -5096,17 +5170,19 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return result;
   }
 
-  sp_os_file_attr_t sp_os_file_attributes(sp_str_t path) {
-    struct stat st;
-    if (stat(sp_str_to_cstr(path), &st) == 0) {
-      if (S_ISDIR(st.st_mode)) {
-        return SP_OS_FILE_ATTR_DIRECTORY;
-      } else if (S_ISREG(st.st_mode)) {
-        return SP_OS_FILE_ATTR_REGULAR_FILE;
-      }
+sp_os_file_attr_t sp_os_get_file_attrs(sp_str_t path) {
+  struct stat st;
+  if (lstat(sp_str_to_cstr(path), &st) == 0) {
+    if (S_ISLNK(st.st_mode)) {
+      return SP_OS_FILE_ATTR_SYMLINK;
+    } else if (S_ISDIR(st.st_mode)) {
+      return SP_OS_FILE_ATTR_DIRECTORY;
+    } else if (S_ISREG(st.st_mode)) {
+      return SP_OS_FILE_ATTR_REGULAR_FILE;
     }
-    return SP_OS_FILE_ATTR_NONE;
   }
+  return SP_OS_FILE_ATTR_NONE;
+}
 
   void sp_os_print(sp_str_t message) {
     write(STDOUT_FILENO, message.data, message.len);
@@ -5711,6 +5787,20 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
   }
 
   return result;
+}
+
+sp_err_t sp_os_create_hard_link(sp_str_t target, sp_str_t link_path) {
+  if (link(sp_str_to_cstr(target), sp_str_to_cstr(link_path))) {
+    return SP_ERR_OS;
+  }
+  return SP_ERR_OK;
+}
+
+sp_err_t sp_os_create_symbolic_link(sp_str_t target, sp_str_t link_path) {
+  if (symlink(sp_str_to_cstr(target), sp_str_to_cstr(link_path)) != 0) {
+    return SP_ERR_OS;
+  }
+  return SP_ERR_OK;
 }
 #endif
 
@@ -6622,8 +6712,7 @@ sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
     sp_err_set(SP_ERR_IO);
     return stream;
   }
-
-  SP_ASSERT(sp_os_is_regular_file(path));
+  SP_ASSERT(sp_os_is_target_regular_file(path));
 
   return stream;
 }

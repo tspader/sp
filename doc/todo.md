@@ -1,8 +1,7 @@
-- [ ] (mem) Implement internal SP allocator with configurable behavior
+- [ ] (mem) Implement internal SP allocator with configurable behavior (grow? buffer? initial size?)
 - [ ] (mem) Add watermark support with bump allocator
-- [ ] (mem) Update all functions to use proper allocation patterns
-- [ ] (mem) Add memory leak tests using bump allocator monitoring
-- [ ] (mem) Review alignment issues in memory allocation
+- [ ] (mem) Update all functions to allocate results and temporaries correctly
+- [ ] (mem) Review alignment issues in void* containers
 - [ ] (platform) Fix Windows compilation issues
 - [ ] (platform) Fix header include order problems (standard headers before SP.h)
 - [ ] (platform) Add 2-translation unit build test
@@ -21,12 +20,7 @@
 - [ ] (general) Add SP_EXTERN for environment declarations
 - [ ] (general) Move SP_ASSERT_FMT macro next to SP_BROKEN macro
 - [ ] (general) Move SP_UNUSED macro higher up
-- [ ] (general) Rename allocator_mode to allocator_fn
-- [ ] (general) Remove void pointer dynamic array (sp_dynamic_array_t)
 - [ ] (general) Add usage section at top of header (like other single-header libraries)
-- [ ] (general) Ensure consistent coding standards throughout
 - [ ] (sp_x) Switch sp_x namespace to sp_x_define_enum/sp_x_define_named_enum
-- [ ] (sp_str) Use sp_da() short alias in string declarations
-- [ ] (sp_str) Reduce excessive indentation in function headers
 - [ ] (test) Add test that calls every function in the API
-- [ ] (test) Add comprehensive memory leak detection tests
+- [ ] (test) Add tests that use the memory tracker to check individual functions for leaks
