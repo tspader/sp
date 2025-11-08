@@ -6,16 +6,27 @@ license: MIT
 
 # sp.h Overview
 - sp.h is a single-header C standard library replacement
-- Consider it like `stb`, but for the entire standard library.
+- You MUST annotate references to functions from sp.h with verbatim function headers
+- Like `stb`, but an entire standard library
+- When providing references to code from `sp.h`, you MUST provide a matching declaration from `references/index.md`. Function names without the full declaration are COMPLETELY useless, and WILL NOT be tolerated.
+<example>
+user: How do I use the asset registry from sp.h?
+assistant: [Reads the index, uses the Task tool to search through sources bundled with skill (sp.h, spn.c), includes "sp_str_t sp_str_sub(sp_str_t str, s32 index, s32 len)" in answer]
+</example>
+<example>
+user: Write a function that reads a file and logs its contends
+assistant: [Searches through bundled source code with Task tool to find relevant APIs and writes function]
+</example>
 
 ## Usage
-- Search `references/namespaces.md` before trying to search through the codebase. Do not guess namespaces; refer to `references/namespaces.md` to find a precise search term.
+- Search `references/index.md` before trying to search through the codebase. Do not guess; refer to `references/index.md` to find a precise search term.
+<example>
+user: How do I read a file in sp.h?
+assistant: [Reads index.md, searches through sp.h and spn.c with Task tool, provides concise, annotated answer]
+</example>
 - Search through `references/sp.h` judiciously as needed; do not guess symbol names, function signatures, or implementation details. Read the source code.
-- Always follow the `sp.h` code style, whether working inside `sp.h` or in code that merely uses it.
-  - Always indent with two spaces
-  - Always wrap `case` statements in braces
-- Grep for functions within a namespace by looking for `SP_API`, then anything, then the namespace (e.g. `SP_API*sp_ps`). Function signatures are prefixed with `SP_API`
-- Grep for types within a namespace by looking for the namespace + `_t` (e.g. `sp_ps_*_t`)
+- Function signatures are prefixed with `SP_API`
+- Types are prefixed with `sp_` and suffixed with `_t`
 
 ## Rules
 - Never use `malloc`, `calloc`, or `realloc`; use `sp_alloc` (which zero initializes)
@@ -30,12 +41,13 @@ license: MIT
 - Always use short literal types (`s32`, `u8`, `c8`, `const c8*`)
 - Never use `printf` family; always use `SP_LOG()`
 - Always use `sp_carr_for()` when iterating a C array
+- Always explicitly handle all enum cases in a switch statement. Fallthroughs are OK, `default` is not.
 
 ## Namespaces
-Grep for any of these namespaces for a good overview of the API.
+Use these when searching through `references/index.md`, `references/sp.h`, or `references/spn.c`
 - Memory: `sp_alloc`, `sp_context`, `sp_allocator`, `sp_os`
 - Strings: `sp_str`, `sp_str_builder`, `sp_cstr`
-- Containers: `sp_dyn_array` / `sp_da`, `sp_ht`, `sp_ring_buffer`
+- Containers: `sp_dyn_array` / `sp_da`, `sp_ht`, `sp_rb`
 - IO: `sp_io`
 - Process: `sp_ps`
 - Filesystem: `sp_os`
@@ -44,17 +56,8 @@ Grep for any of these namespaces for a good overview of the API.
 - Concurrency: `sp_thread`, `sp_mutex`, `sp_semaphore`, `sp_atomic`, `sp_spin_lock`
 - Logging: `sp_format`, `SP_LOG`, `SP_FMT_*`
 
-## Quick Reference
-
-### Essential Edicts
-
-Refer to `references/edicts.md` for the complete list of coding standards that must be followed when working with sp.h.
-
-
 ## Common Patterns
-
-### Initialization Pattern
-
+### Initialization
 ```c
 // Always zero-initialize structs
 sp_str_builder_t builder = SP_ZERO_INITIALIZE();
@@ -62,7 +65,6 @@ sp_dynamic_array_t arr = SP_ZERO_INITIALIZE();
 ```
 
 ### String Handling
-
 ```c
 // Create strings
 sp_str_t literal = sp_str_lit("hello");     // Compile-time string literal
@@ -72,7 +74,6 @@ const char* cstr = sp_str_to_cstr(str);
 ```
 
 ### Dynamic Arrays (stb-style)
-
 ```c
 sp_dyn_array(int) numbers = SP_NULLPTR;
 sp_dyn_array_push(numbers, 42);
@@ -89,7 +90,6 @@ u32 capacity = sp_dyn_array_capacity(numbers);
 ```
 
 ### Hash Tables (stb-style)
-
 ```c
 sp_ht(s32, s32) hta = SP_NULLPTR;
 sp_ht(sp_str_t, s32) htb = SP_NULLPTR;
@@ -110,7 +110,6 @@ sp_ht_for(htb, it) {
 ```
 
 ### Formatting and Logging
-
 ```c
 // Type-safe formatting with color support
 SP_LOG(
@@ -128,7 +127,6 @@ sp_str_t msg = sp_format("Result: {}", SP_FMT_S32(42));
 ```
 
 ### Switch Statements
-
 ```c
 // Always use braces, always handle all cases
 switch (state) {
@@ -145,7 +143,6 @@ switch (state) {
 ```
 
 ### Error Handling
-
 ```c
 // Return an enum for recoverable errors (consumer app may have their own error type)
 sp_err_t load_config(sp_str_t path, config_t* config) {
@@ -167,12 +164,4 @@ void process_array(int* arr, u32 size) {
 if (critical_failure) {
   SP_FATAL("Cannot continue: {:fg red}", SP_FMT_STR(reason));
 }
-```
-
-## Building
-
-```bash
-make c      # Build and run C tests
-make test   # Build and run C + C++ tests
-make ps     # Build and run process tests
 ```

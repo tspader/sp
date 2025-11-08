@@ -773,44 +773,44 @@ typedef struct {
   u32 head;
   u32 size;
   u32 capacity;
-} sp_ring_buffer_t;
+} sp_rb_t;
 
-#define sp_ring_buffer(t) sp_ring_buffer_t
+#define sp_rb(t) sp_rb_t
 
 typedef struct {
   s32 index;
   bool reverse;
-  sp_ring_buffer_t* buffer;
-} sp_ring_buffer_iterator_t;
+  sp_rb_t* buffer;
+} sp_rb_it_t;
 
-SP_API void*                     sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index);
-SP_API void                      sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_size);
-SP_API void*                     sp_ring_buffer_back(sp_ring_buffer_t* buffer);
-SP_API void*                     sp_ring_buffer_push(sp_ring_buffer_t* buffer, void* data);
-SP_API void*                     sp_ring_buffer_push_zero(sp_ring_buffer_t* buffer);
-SP_API void*                     sp_ring_buffer_push_overwrite(sp_ring_buffer_t* buffer, void* data);
-SP_API void*                     sp_ring_buffer_push_overwrite_zero(sp_ring_buffer_t* buffer);
-SP_API void*                     sp_ring_buffer_pop(sp_ring_buffer_t* buffer);
-SP_API u32                       sp_ring_buffer_bytes(sp_ring_buffer_t* buffer);
-SP_API void                      sp_ring_buffer_clear(sp_ring_buffer_t* buffer);
-SP_API void                      sp_ring_buffer_destroy(sp_ring_buffer_t* buffer);
-SP_API bool                      sp_ring_buffer_is_full(sp_ring_buffer_t* buffer);
-SP_API bool                      sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer);
-SP_API void*                     sp_ring_buffer_iter_deref(sp_ring_buffer_iterator_t* it);
-SP_API void                      sp_ring_buffer_iter_next(sp_ring_buffer_iterator_t* it);
-SP_API void                      sp_ring_buffer_iter_prev(sp_ring_buffer_iterator_t* it);
-SP_API bool                      sp_ring_buffer_iter_done(sp_ring_buffer_iterator_t* it);
-SP_API sp_ring_buffer_iterator_t sp_ring_buffer_iter(sp_ring_buffer_t* buffer);
-SP_API sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer);
+SP_API void*                     sp_rb_at(sp_rb_t* buffer, u32 index);
+SP_API void                      sp_rb_init(sp_rb_t* buffer, u32 capacity, u32 element_size);
+SP_API void*                     sp_rb_back(sp_rb_t* buffer);
+SP_API void*                     sp_rb_push(sp_rb_t* buffer, void* data);
+SP_API void*                     sp_rb_push_zero(sp_rb_t* buffer);
+SP_API void*                     sp_rb_push_overwrite(sp_rb_t* buffer, void* data);
+SP_API void*                     sp_rb_push_overwrite_zero(sp_rb_t* buffer);
+SP_API void*                     sp_rb_pop(sp_rb_t* buffer);
+SP_API u32                       sp_rb_bytes(sp_rb_t* buffer);
+SP_API void                      sp_rb_clear(sp_rb_t* buffer);
+SP_API void                      sp_rb_destroy(sp_rb_t* buffer);
+SP_API bool                      sp_rb_is_full(sp_rb_t* buffer);
+SP_API bool                      sp_rb_is_empty(sp_rb_t* buffer);
+SP_API void*                     sp_rb_it_deref(sp_rb_it_t* it);
+SP_API void                      sp_rb_it_next(sp_rb_it_t* it);
+SP_API void                      sp_rb_it_prev(sp_rb_it_t* it);
+SP_API bool                      sp_rb_it_done(sp_rb_it_t* it);
+SP_API sp_rb_it_t sp_rb_it(sp_rb_t* buffer);
+SP_API sp_rb_it_t sp_rb_riter(sp_rb_t* buffer);
 
-#define sp_ring_buffer_for(rb, it)  for (sp_ring_buffer_iterator_t (it) = sp_ring_buffer_iter(&(rb)); !sp_ring_buffer_iter_done(&(it)); sp_ring_buffer_iter_next(&(it)))
-#define sp_ring_buffer_rfor(rb, it) for (sp_ring_buffer_iterator_t (it) = sp_ring_buffer_riter(&(rb)); !sp_ring_buffer_iter_done(&(it)); sp_ring_buffer_iter_prev(&(it)))
-#define sp_rb_it(it, t) ((t*)sp_ring_buffer_iter_deref(&(it)))
+#define sp_rb_for(rb, it)  for (sp_rb_it_t (it) = sp_rb_it(&(rb)); !sp_rb_it_done(&(it)); sp_rb_it_next(&(it)))
+#define sp_rb_rfor(rb, it) for (sp_rb_it_t (it) = sp_rb_riter(&(rb)); !sp_rb_it_done(&(it)); sp_rb_it_prev(&(it)))
+#define sp_rb_it(it, t) ((t*)sp_rb_it_deref(&(it)))
 
-#define sp_ring_buffer_push_literal(__RB_PTR, __TYPE, __VALUE) \
+#define sp_rb_push_literal(__RB_PTR, __TYPE, __VALUE) \
     do { \
         __TYPE __sp_rb_tmp = (__VALUE); \
-        sp_ring_buffer_push((__RB_PTR), &__sp_rb_tmp); \
+        sp_rb_push((__RB_PTR), &__sp_rb_tmp); \
     } while (0)
 
 
@@ -937,20 +937,20 @@ SP_API sp_str_t               sp_str_to_upper(sp_str_t str);
 SP_API sp_str_t               sp_str_to_lower(sp_str_t str);
 SP_API sp_str_t               sp_str_capitalize_words(sp_str_t str);
 SP_API sp_str_pair_t          sp_str_cleave_c8(sp_str_t str, c8 delimiter);
-SP_API sp_dyn_array(sp_str_t) sp_str_split_c8(sp_str_t, c8 c);
+SP_API sp_da(sp_str_t) sp_str_split_c8(sp_str_t, c8 c);
 SP_API bool                   sp_str_contains_n(sp_str_t* strs, u32 n, sp_str_t needle);
 SP_API sp_str_t               sp_str_join_n(sp_str_t* strs, u32 n, sp_str_t joiner);
 SP_API u32                    sp_str_count_n(sp_str_t* strs, u32 n, sp_str_t needle);
 SP_API sp_str_t               sp_str_find_longest_n(sp_str_t* strs, u32 n);
 SP_API sp_str_t               sp_str_find_shortest_n(sp_str_t* strs, u32 n);
-SP_API sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n);
+SP_API sp_da(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n);
 SP_API sp_str_t               sp_str_reduce(sp_str_t* strs, u32 n, void* user_data, sp_str_reduce_fn_t fn);
 SP_API void                   sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
 SP_API void                   sp_str_reduce_kernel_contains(sp_str_reduce_context_t* context);
 SP_API void                   sp_str_reduce_kernel_count(sp_str_reduce_context_t* context);
 SP_API void                   sp_str_reduce_kernel_longest(sp_str_reduce_context_t* context);
 SP_API void                   sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context);
-SP_API sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr user_data, sp_str_map_fn_t fn);
+SP_API sp_da(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr user_data, sp_str_map_fn_t fn);
 SP_API sp_str_t               sp_str_map_kernel_prepend(sp_str_map_context_t* context);
 SP_API sp_str_t               sp_str_map_kernel_append(sp_str_map_context_t* context);
 SP_API sp_str_t               sp_str_map_kernel_prefix(sp_str_map_context_t* context);
@@ -1807,10 +1807,10 @@ struct sp_asset_registry {
   sp_thread_t thread;
   bool shutdown_requested;
 
-  sp_dyn_array(sp_asset_t) assets;
-  sp_dyn_array(sp_asset_importer_t) importers;
-  sp_ring_buffer(sp_asset_import_context_t) import_queue;
-  sp_ring_buffer(sp_asset_import_context_t) completion_queue;
+  sp_da(sp_asset_t) assets;
+  sp_da(sp_asset_importer_t) importers;
+  sp_rb(sp_asset_import_context_t) import_queue;
+  sp_rb(sp_asset_import_context_t) completion_queue;
 };
 
 void                  sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config);
@@ -3559,10 +3559,10 @@ sp_str_t sp_str_replace_c8(sp_str_t str, c8 from, c8 to) {
   return sp_str_builder_write(&builder);
 }
 
-sp_dyn_array(sp_str_t) sp_str_split_c8(sp_str_t str, c8 delimiter) {
+sp_da(sp_str_t) sp_str_split_c8(sp_str_t str, c8 delimiter) {
   if (sp_str_empty(str)) return SP_NULLPTR;
 
-  sp_dyn_array(sp_str_t) result = SP_NULLPTR;
+  sp_da(sp_str_t) result = SP_NULLPTR;
 
   u32 i = 0, j = 0;
   for (; j < str.len; j++) {
@@ -3697,8 +3697,8 @@ sp_str_t sp_str_truncate(sp_str_t str, u32 n, sp_str_t trailer) {
   return sp_str_concat(str, trailer);
 }
 
-sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* strs, u32 num_strs, sp_opaque_ptr user_data, sp_str_map_fn_t fn) {
-  sp_dyn_array(sp_str_t) results = SP_NULLPTR;
+sp_da(sp_str_t) sp_str_map(sp_str_t* strs, u32 num_strs, sp_opaque_ptr user_data, sp_str_map_fn_t fn) {
+  sp_da(sp_str_t) results = SP_NULLPTR;
 
   for (u32 index = 0; index < num_strs; index++) {
     sp_str_map_context_t context = SP_ZERO_INITIALIZE();
@@ -3821,7 +3821,7 @@ sp_str_t sp_str_find_shortest_n(sp_str_t* strs, u32 n) {
   return shortest;
 }
 
-sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n) {
+sp_da(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n) {
   sp_str_t longest = sp_str_find_longest_n(strs, n);
   return sp_str_map(strs, n, &longest.len, sp_str_map_kernel_pad);
 }
@@ -4376,7 +4376,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       return SP_NULLPTR;
     }
 
-    sp_dyn_array(sp_os_dir_entry_t) entries = SP_NULLPTR;
+    sp_da(sp_os_dir_entry_t) entries = SP_NULLPTR;
 
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
     sp_str_builder_append(&builder, path);
@@ -4934,7 +4934,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       return SP_NULLPTR;
     }
 
-    sp_dyn_array(sp_os_dir_entry_t) entries = SP_NULLPTR;
+    sp_da(sp_os_dir_entry_t) entries = SP_NULLPTR;
 
     c8* path_cstr = sp_str_to_cstr(path);
     DIR* dir = opendir(path_cstr);
@@ -5316,7 +5316,7 @@ void sp_ps_free_posix_args(c8** args) {
 }
 
 c8** sp_ps_build_posix_env(sp_ps_env_config_t* config) {
-  sp_dyn_array(c8*) envp = SP_NULLPTR;
+  sp_da(c8*) envp = SP_NULLPTR;
 
   sp_env_t env = SP_ZERO_INITIALIZE();
   sp_env_init(&env);
@@ -6290,11 +6290,11 @@ bool sp_file_monitor_check_cache(sp_file_monitor_t* monitor, sp_str_t file_path,
 ////////////////////////////
 // RING BUFFER IMPLEMENTATION
 ////////////////////////////
-void* sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index) {
+void* sp_rb_at(sp_rb_t* buffer, u32 index) {
     return buffer->data + ((buffer->head + buffer->element_size * index) % (buffer->capacity * buffer->element_size));
 }
 
-void sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_size) {
+void sp_rb_init(sp_rb_t* buffer, u32 capacity, u32 element_size) {
     buffer->size = 0;
     buffer->head = 0;
     buffer->capacity = capacity;
@@ -6303,40 +6303,40 @@ void sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_siz
     sp_os_zero_memory(buffer->data, capacity * element_size);
 }
 
-void* sp_ring_buffer_back(sp_ring_buffer_t* buffer) {
+void* sp_rb_back(sp_rb_t* buffer) {
     SP_ASSERT(buffer->size);
-    return sp_ring_buffer_at(buffer, buffer->size - 1);
+    return sp_rb_at(buffer, buffer->size - 1);
 }
 
-void* sp_ring_buffer_push(sp_ring_buffer_t* buffer, void* data) {
+void* sp_rb_push(sp_rb_t* buffer, void* data) {
     SP_ASSERT(buffer->size < buffer->capacity);
 
     u32 index = (buffer->head + buffer->size * buffer->element_size) % (buffer->capacity * buffer->element_size);
     sp_os_copy_memory(data, buffer->data + index, buffer->element_size);
     buffer->size += 1;
-    return sp_ring_buffer_back(buffer);
+    return sp_rb_back(buffer);
 }
 
-void* sp_ring_buffer_push_zero(sp_ring_buffer_t* buffer) {
+void* sp_rb_push_zero(sp_rb_t* buffer) {
     SP_ASSERT(buffer->size < buffer->capacity);
 
     u32 index = (buffer->head + buffer->size * buffer->element_size) % (buffer->capacity * buffer->element_size);
     sp_os_zero_memory(buffer->data + index, buffer->element_size);
     buffer->size += 1;
-    return sp_ring_buffer_back(buffer);
+    return sp_rb_back(buffer);
 }
 
-void* sp_ring_buffer_push_overwrite(sp_ring_buffer_t* buffer, void* data) {
-    if (buffer->size == buffer->capacity) sp_ring_buffer_pop(buffer);
-    return sp_ring_buffer_push(buffer, data);
+void* sp_rb_push_overwrite(sp_rb_t* buffer, void* data) {
+    if (buffer->size == buffer->capacity) sp_rb_pop(buffer);
+    return sp_rb_push(buffer, data);
 }
 
-void* sp_ring_buffer_push_overwrite_zero(sp_ring_buffer_t* buffer) {
-    if (buffer->size == buffer->capacity) sp_ring_buffer_pop(buffer);
-    return sp_ring_buffer_push_zero(buffer);
+void* sp_rb_push_overwrite_zero(sp_rb_t* buffer) {
+    if (buffer->size == buffer->capacity) sp_rb_pop(buffer);
+    return sp_rb_push_zero(buffer);
 }
 
-void* sp_ring_buffer_pop(sp_ring_buffer_t* buffer) {
+void* sp_rb_pop(sp_rb_t* buffer) {
     SP_ASSERT(buffer->size);
 
     void* element = buffer->data + buffer->head;
@@ -6345,17 +6345,17 @@ void* sp_ring_buffer_pop(sp_ring_buffer_t* buffer) {
     return element;
 }
 
-u32 sp_ring_buffer_bytes(sp_ring_buffer_t* buffer) {
+u32 sp_rb_bytes(sp_rb_t* buffer) {
     return buffer->capacity * buffer->element_size;
 }
 
-void sp_ring_buffer_clear(sp_ring_buffer_t* buffer) {
-    sp_os_zero_memory(buffer->data, sp_ring_buffer_bytes(buffer));
+void sp_rb_clear(sp_rb_t* buffer) {
+    sp_os_zero_memory(buffer->data, sp_rb_bytes(buffer));
     buffer->size = 0;
     buffer->head = 0;
 }
 
-void sp_ring_buffer_destroy(sp_ring_buffer_t* buffer) {
+void sp_rb_destroy(sp_rb_t* buffer) {
     if (buffer->data) {
         buffer->data = NULL;
         buffer->size = 0;
@@ -6364,43 +6364,43 @@ void sp_ring_buffer_destroy(sp_ring_buffer_t* buffer) {
     }
 }
 
-bool sp_ring_buffer_is_full(sp_ring_buffer_t* buffer) {
+bool sp_rb_is_full(sp_rb_t* buffer) {
     return buffer->capacity == buffer->size;
 }
 
-bool sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer) {
+bool sp_rb_is_empty(sp_rb_t* buffer) {
     return buffer->size == 0;
 }
 
-void* sp_ring_buffer_iter_deref(sp_ring_buffer_iterator_t* it) {
-    return sp_ring_buffer_at(it->buffer, it->index);
+void* sp_rb_it_deref(sp_rb_it_t* it) {
+    return sp_rb_at(it->buffer, it->index);
 }
 
-void sp_ring_buffer_iter_next(sp_ring_buffer_iterator_t* it) {
+void sp_rb_it_next(sp_rb_it_t* it) {
     SP_ASSERT(it->index < (s32)it->buffer->size);
     it->index++;
 }
 
-void sp_ring_buffer_iter_prev(sp_ring_buffer_iterator_t* it) {
+void sp_rb_it_prev(sp_rb_it_t* it) {
     SP_ASSERT(it->index >= 0 && it->index < (s32)it->buffer->size);
     it->index--;
 }
 
-bool sp_ring_buffer_iter_done(sp_ring_buffer_iterator_t* it) {
+bool sp_rb_it_done(sp_rb_it_t* it) {
     if (it->reverse) return it->index < 0;
     return it->index >= (s32)it->buffer->size;
 }
 
-sp_ring_buffer_iterator_t sp_ring_buffer_iter(sp_ring_buffer_t* buffer) {
-    sp_ring_buffer_iterator_t iterator;
+sp_rb_it_t sp_rb_it(sp_rb_t* buffer) {
+    sp_rb_it_t iterator;
     iterator.index = 0;
     iterator.reverse = false;
     iterator.buffer = buffer;
     return iterator;
 }
 
-sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer) {
-    sp_ring_buffer_iterator_t iterator;
+sp_rb_it_t sp_rb_riter(sp_rb_t* buffer) {
+    sp_rb_it_t iterator;
     iterator.index = buffer->size - 1;
     iterator.reverse = true;
     iterator.buffer = buffer;
@@ -6762,8 +6762,8 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
   sp_semaphore_init(&registry->semaphore);
   registry->shutdown_requested = false;
 
-  sp_ring_buffer_init(&registry->import_queue, 128, sizeof(sp_asset_import_context_t));
-  sp_ring_buffer_init(&registry->completion_queue, 128, sizeof(sp_asset_import_context_t));
+  sp_rb_init(&registry->import_queue, 128, sizeof(sp_asset_import_context_t));
+  sp_rb_init(&registry->completion_queue, 128, sizeof(sp_asset_import_context_t));
 
   for (u32 index = 0; index < SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS; index++) {
     sp_asset_importer_config_t* cfg = &config.importers[index];
@@ -6798,8 +6798,8 @@ void sp_asset_registry_shutdown(sp_asset_registry_t* registry) {
 
 void sp_asset_registry_process_completions(sp_asset_registry_t* registry) {
   sp_mutex_lock(&registry->completion_mutex);
-  while (!sp_ring_buffer_is_empty(&registry->completion_queue)) {
-    sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->completion_queue));
+  while (!sp_rb_is_empty(&registry->completion_queue)) {
+    sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_rb_pop(&registry->completion_queue));
     sp_mutex_unlock(&registry->completion_mutex);
 
     context.importer->on_completion(&context);
@@ -6853,7 +6853,7 @@ sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_ki
   };
 
   sp_mutex_lock(&registry->import_mutex);
-  sp_ring_buffer_push(&registry->import_queue, &context);
+  sp_rb_push(&registry->import_queue, &context);
   sp_mutex_unlock(&registry->import_mutex);
 
   sp_semaphore_signal(&registry->semaphore);
@@ -6901,8 +6901,8 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 
     sp_mutex_lock(&registry->import_mutex);
 
-    while (!sp_ring_buffer_is_empty(&registry->import_queue)) {
-      sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->import_queue));
+    while (!sp_rb_is_empty(&registry->import_queue)) {
+      sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_rb_pop(&registry->import_queue));
 
       sp_mutex_unlock(&registry->import_mutex);
 
@@ -6914,7 +6914,7 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
       sp_mutex_unlock(&registry->mutex);
 
       sp_mutex_lock(&registry->completion_mutex);
-      sp_ring_buffer_push(&registry->completion_queue, &context);
+      sp_rb_push(&registry->completion_queue, &context);
       sp_mutex_unlock(&registry->completion_mutex);
 
       sp_mutex_lock(&registry->import_mutex);
