@@ -3070,7 +3070,7 @@ UTEST(ring_buffer, iteration_forward) {
 
     s32 expected = 0;
     sp_ring_buffer_for(rb, it) {
-        int* val = sp_rb_it(it, int);
+        int* val = sp_rb_it_getp(&it, int);
         ASSERT_EQ(*val, expected);
         expected++;
     }
@@ -3091,7 +3091,7 @@ UTEST(ring_buffer, iteration_reverse) {
 
     s32 expected = 4;
     sp_ring_buffer_rfor(rb, it) {
-        int* val = sp_rb_it(it, int);
+        int* val = sp_rb_it_getp(&it, int);
         ASSERT_EQ(*val, expected);
         expected--;
     }
@@ -3120,7 +3120,7 @@ UTEST(ring_buffer, iteration_after_wrap) {
     s32 values[3];
     s32 idx = 0;
     sp_ring_buffer_for(rb, it) {
-        int* val = sp_rb_it(it, int);
+        int* val = sp_rb_it_getp(&it, int);
         values[idx++] = *val;
     }
 
@@ -3214,22 +3214,22 @@ UTEST(ring_buffer, iterator_manual) {
         sp_ring_buffer_push(&rb, &i);
     }
 
-    sp_ring_buffer_iterator_t it = sp_ring_buffer_iter(&rb);
-    ASSERT_FALSE(sp_ring_buffer_iter_done(&it));
+    sp_rb_it_t it = sp_rb_it_new(&rb);
+    ASSERT_FALSE(sp_rb_it_done(&it));
 
-    int* val = (int*)sp_ring_buffer_iter_deref(&it);
+    s32* val = sp_rb_it_getp(&it, s32);
     ASSERT_EQ(*val, 10);
 
-    sp_ring_buffer_iter_next(&it);
-    val = (int*)sp_ring_buffer_iter_deref(&it);
+    sp_rb_it_next(&it);
+    val = sp_rb_it_getp(&it, s32);
     ASSERT_EQ(*val, 11);
 
-    sp_ring_buffer_iterator_t rit = sp_ring_buffer_riter(&rb);
-    val = (int*)sp_ring_buffer_iter_deref(&rit);
+    sp_rb_it_t rit = sp_rb_rit_new(&rb);
+    val = sp_rb_it_getp(&rit, s32);
     ASSERT_EQ(*val, 14);
 
-    sp_ring_buffer_iter_prev(&rit);
-    val = (int*)sp_ring_buffer_iter_deref(&rit);
+    sp_rb_it_prev(&rit);
+    val = sp_rb_it_getp(&rit, s32);
     ASSERT_EQ(*val, 13);
 
     sp_ring_buffer_destroy(&rb);
@@ -3608,7 +3608,7 @@ UTEST(sp_os_scan_directory, basic_scan) {
   sp_os_create_directory(dir1);
   sp_os_create_directory(dir2);
 
-  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 4);
 
@@ -3616,7 +3616,7 @@ UTEST(sp_os_scan_directory, basic_scan) {
   u32 dir_count = 0;
 
   sp_dyn_array_for(entries, i) {
-    sp_os_dir_entry_t* entry = &entries[i];
+    sp_os_dir_ent_t* entry = &entries[i];
     if (entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE) {
       file_count++;
     }
@@ -3647,7 +3647,7 @@ UTEST(sp_os_scan_directory, file_names_validation) {
     sp_os_create_file(file_path);
   }
 
-  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 4);
 
@@ -3679,7 +3679,7 @@ UTEST(sp_os_scan_directory, file_attributes) {
   sp_os_create_file(test_file);
   sp_os_create_directory(test_dir);
 
-  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
@@ -3687,7 +3687,7 @@ UTEST(sp_os_scan_directory, file_attributes) {
   bool found_dir = false;
 
   sp_dyn_array_for(entries, i) {
-    sp_os_dir_entry_t* entry = &entries[i];
+    sp_os_dir_ent_t* entry = &entries[i];
 
     if (sp_str_equal_cstr(entry->file_name, "test.txt")) {
       ASSERT_TRUE(entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE);
@@ -3712,7 +3712,7 @@ UTEST(sp_os_scan_directory, empty_directory) {
 
   sp_str_t base = sp_test_build_scan_directory();
 
-  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 0);
   ASSERT_TRUE(entries == SP_NULLPTR || sp_dyn_array_size(entries) == 0);
@@ -3726,7 +3726,7 @@ UTEST(sp_os_scan_directory, non_existent_directory) {
 
   sp_str_t non_existent = sp_os_join_path(base, SP_LIT("some_bullshit"));
 
-  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(non_existent);
+  sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(non_existent);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 0);
 }
@@ -3741,12 +3741,12 @@ UTEST(sp_os_scan_directory, file_path_correctness) {
   sp_os_create_file(file1);
   sp_os_create_directory(dir1);
 
-  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
   sp_dyn_array_for(entries, i) {
-    sp_os_dir_entry_t* entry = &entries[i];
+    sp_os_dir_ent_t* entry = &entries[i];
 
     ASSERT_TRUE(sp_str_starts_with(entry->file_path, base));
 
@@ -3785,11 +3785,11 @@ UTEST(sp_os_file_attributes, basic_functionality) {
   ASSERT_EQ(none_attr, SP_OS_FILE_ATTR_NONE);
 
   // verify consistency with sp_os_scan_directory
-  sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(base);
+  sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(base);
   ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
   sp_dyn_array_for(entries, i) {
-    sp_os_dir_entry_t* entry = &entries[i];
+    sp_os_dir_ent_t* entry = &entries[i];
     sp_os_file_attr_t direct_attr = sp_os_file_attributes(entry->file_path);
     ASSERT_EQ(entry->attributes, direct_attr);
   }
@@ -3995,7 +3995,7 @@ UTEST(path_functions, normalized_join_and_parent) {
 // ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝        ╚═╝   ╚══════╝╚══════╝   ╚═╝   ╚══════╝
 UTEST(sp_str, trim) {
   // basic trim operations
-  SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("  hello  ")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ_CSTR(sp_str_trim(SP_LIT("  hello  ")), "hello");
   SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("\thello\t")), SP_LIT("hello"));
   SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("\nhello\n")), SP_LIT("hello"));
   SP_EXPECT_STR_EQ(sp_str_trim(SP_LIT("  \t\nhello\n\t  ")), SP_LIT("hello"));
@@ -4033,6 +4033,50 @@ UTEST(sp_str, trim_right) {
 
   // internal whitespace preserved
   SP_EXPECT_STR_EQ(sp_str_trim_right(SP_LIT("hello world  ")), SP_LIT("hello world"));
+}
+
+UTEST(sp_str, strip_left) {
+  // basic strip left
+  SP_EXPECT_STR_EQ(sp_str_strip_left(SP_LIT("sp_foo_t"), SP_LIT("sp")), SP_LIT("_foo_t"));
+  SP_EXPECT_STR_EQ(sp_str_strip_left(SP_LIT("___hello___"), SP_LIT("_")), SP_LIT("__hello___"));
+
+  // no match
+  SP_EXPECT_STR_EQ(sp_str_strip_left(SP_LIT("hello"), SP_LIT("xyz")), SP_LIT("hello"));
+
+  // edge cases
+  SP_EXPECT_STR_EQ(sp_str_strip_left(SP_LIT("hello"), SP_LIT("")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_strip_left(SP_LIT(""), SP_LIT("abc")), SP_LIT(""));
+}
+
+UTEST(sp_str, strip_right) {
+  // basic strip right
+  SP_EXPECT_STR_EQ(sp_str_strip_right(SP_LIT("foo_t_sp"), SP_LIT("sp")), SP_LIT("foo_t_"));
+  SP_EXPECT_STR_EQ(sp_str_strip_right(SP_LIT("___hello___"), SP_LIT("_")), SP_LIT("___hello__"));
+
+  // no match
+  SP_EXPECT_STR_EQ(sp_str_strip_right(SP_LIT("hello"), SP_LIT("xyz")), SP_LIT("hello"));
+
+  // edge cases
+  SP_EXPECT_STR_EQ(sp_str_strip_right(SP_LIT("hello"), SP_LIT("")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_strip_right(SP_LIT(""), SP_LIT("abc")), SP_LIT(""));
+}
+
+UTEST(sp_str, strip) {
+  // basic strip both sides
+  SP_EXPECT_STR_EQ(sp_str_strip(SP_LIT("sp_foo_t_sp"), SP_LIT("sp")), SP_LIT("_foo_t_"));
+  SP_EXPECT_STR_EQ(sp_str_strip(SP_LIT("___hello___"), SP_LIT("_")), SP_LIT("__hello__"));
+  SP_EXPECT_STR_EQ(sp_str_strip(SP_LIT("xyzabcxyz"), SP_LIT("xyz")), SP_LIT("abc"));
+
+  // only left or right
+  SP_EXPECT_STR_EQ(sp_str_strip(SP_LIT("sp_foo_t"), SP_LIT("sp")), SP_LIT("_foo_t"));
+  SP_EXPECT_STR_EQ(sp_str_strip(SP_LIT("foo_t_sp"), SP_LIT("sp")), SP_LIT("foo_t_"));
+
+  // no match
+  SP_EXPECT_STR_EQ(sp_str_strip(SP_LIT("hello"), SP_LIT("xyz")), SP_LIT("hello"));
+
+  // edge cases
+  SP_EXPECT_STR_EQ(sp_str_strip(SP_LIT("hello"), SP_LIT("")), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_strip(SP_LIT(""), SP_LIT("abc")), SP_LIT(""));
 }
 
 UTEST(sp_str, split_c8) {
@@ -4104,6 +4148,12 @@ UTEST(sp_str, split_c8) {
     SP_EXPECT_STR_EQ(parts[0], SP_LIT(""));
     SP_EXPECT_STR_EQ(parts[1], SP_LIT(""));
   }
+}
+
+UTEST(sp_str, prefix_suffix) {
+  sp_str_t str = sp_str_lit("jerry");
+
+  SP_EXPECT_STR_EQ_CSTR(sp_str_suffix(str, 3), "rry");
 }
 
 UTEST(sp_str, cleave_c8) {
