@@ -561,6 +561,7 @@ void sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
 #define sp_dyn_array_new(__T)\
     ((__T*)sp_dyn_array_resize_impl(NULL, sizeof(__T), 0))
 
+#define sp_dyn_array_sort(arr, fn) qsort(arr, sp_dyn_array_size(arr), sizeof((arr)[0]), fn)
 
 ////////////////
 // HASH TABLE //
