@@ -86,7 +86,7 @@ UTEST(ring_buffer, large_buffer_stress) {
 
   u64 expected = 500;
   sp_ring_buffer_for(rb, it) {
-      u64* val = sp_rb_it(it, u64);
+      u64* val = sp_rb_it_getp(&it, u64);
       ASSERT_EQ(*val, expected);
       expected++;
   }

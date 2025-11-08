@@ -780,31 +780,31 @@ typedef struct {
   s32 index;
   bool reverse;
   sp_ring_buffer_t* buffer;
-} sp_ring_buffer_iterator_t;
+} sp_rb_it_t;
 
-SP_API void*                     sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index);
-SP_API void                      sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_size);
-SP_API void*                     sp_ring_buffer_back(sp_ring_buffer_t* buffer);
-SP_API void*                     sp_ring_buffer_push(sp_ring_buffer_t* buffer, void* data);
-SP_API void*                     sp_ring_buffer_push_zero(sp_ring_buffer_t* buffer);
-SP_API void*                     sp_ring_buffer_push_overwrite(sp_ring_buffer_t* buffer, void* data);
-SP_API void*                     sp_ring_buffer_push_overwrite_zero(sp_ring_buffer_t* buffer);
-SP_API void*                     sp_ring_buffer_pop(sp_ring_buffer_t* buffer);
-SP_API u32                       sp_ring_buffer_bytes(sp_ring_buffer_t* buffer);
-SP_API void                      sp_ring_buffer_clear(sp_ring_buffer_t* buffer);
-SP_API void                      sp_ring_buffer_destroy(sp_ring_buffer_t* buffer);
-SP_API bool                      sp_ring_buffer_is_full(sp_ring_buffer_t* buffer);
-SP_API bool                      sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer);
-SP_API void*                     sp_ring_buffer_iter_deref(sp_ring_buffer_iterator_t* it);
-SP_API void                      sp_ring_buffer_iter_next(sp_ring_buffer_iterator_t* it);
-SP_API void                      sp_ring_buffer_iter_prev(sp_ring_buffer_iterator_t* it);
-SP_API bool                      sp_ring_buffer_iter_done(sp_ring_buffer_iterator_t* it);
-SP_API sp_ring_buffer_iterator_t sp_ring_buffer_iter(sp_ring_buffer_t* buffer);
-SP_API sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer);
+SP_API void*      sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index);
+SP_API void       sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_size);
+SP_API void*      sp_ring_buffer_back(sp_ring_buffer_t* buffer);
+SP_API void*      sp_ring_buffer_push(sp_ring_buffer_t* buffer, void* data);
+SP_API void*      sp_ring_buffer_push_zero(sp_ring_buffer_t* buffer);
+SP_API void*      sp_ring_buffer_push_overwrite(sp_ring_buffer_t* buffer, void* data);
+SP_API void*      sp_ring_buffer_push_overwrite_zero(sp_ring_buffer_t* buffer);
+SP_API void*      sp_ring_buffer_pop(sp_ring_buffer_t* buffer);
+SP_API u32        sp_ring_buffer_bytes(sp_ring_buffer_t* buffer);
+SP_API void       sp_ring_buffer_clear(sp_ring_buffer_t* buffer);
+SP_API void       sp_ring_buffer_destroy(sp_ring_buffer_t* buffer);
+SP_API bool       sp_ring_buffer_is_full(sp_ring_buffer_t* buffer);
+SP_API bool       sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer);
+SP_API void*      sp_rb_it_getvp(sp_rb_it_t* it);
+SP_API void       sp_rb_it_next(sp_rb_it_t* it);
+SP_API void       sp_rb_it_prev(sp_rb_it_t* it);
+SP_API bool       sp_rb_it_done(sp_rb_it_t* it);
+SP_API sp_rb_it_t sp_rb_it_new(sp_ring_buffer_t* buffer);
+SP_API sp_rb_it_t sp_rb_rit_new(sp_ring_buffer_t* buffer);
 
-#define sp_ring_buffer_for(rb, it)  for (sp_ring_buffer_iterator_t (it) = sp_ring_buffer_iter(&(rb)); !sp_ring_buffer_iter_done(&(it)); sp_ring_buffer_iter_next(&(it)))
-#define sp_ring_buffer_rfor(rb, it) for (sp_ring_buffer_iterator_t (it) = sp_ring_buffer_riter(&(rb)); !sp_ring_buffer_iter_done(&(it)); sp_ring_buffer_iter_prev(&(it)))
-#define sp_rb_it(it, t) ((t*)sp_ring_buffer_iter_deref(&(it)))
+#define sp_ring_buffer_for(rb, it)  for (sp_rb_it_t (it) = sp_rb_it_new(&(rb)); !sp_rb_it_done(&(it)); sp_rb_it_next(&(it)))
+#define sp_ring_buffer_rfor(rb, it) for (sp_rb_it_t (it) = sp_rb_rit_new(&(rb)); !sp_rb_it_done(&(it)); sp_rb_it_prev(&(it)))
+#define sp_rb_it_getp(it, t) ((t*)sp_rb_it_getvp((it)))
 
 #define sp_ring_buffer_push_literal(__RB_PTR, __TYPE, __VALUE) \
     do { \
@@ -1183,60 +1183,60 @@ typedef struct {
   sp_str_t file_path;
   sp_str_t file_name;
   sp_os_file_attr_t attributes;
-} sp_os_dir_entry_t;
+} sp_os_dir_ent_t;
 
-SP_API void*                    sp_os_allocate_memory(u32 size);
-SP_API void*                    sp_os_reallocate_memory(void* ptr, u32 size);
-SP_API void                     sp_os_free_memory(void* ptr);
-SP_API void                     sp_os_copy_memory(const void* source, void* dest, u32 num_bytes);
-SP_API void                     sp_os_move_memory(const void* source, void* dest, u32 num_bytes);
-SP_API bool                     sp_os_is_memory_equal(const void* a, const void* b, size_t len);
-SP_API void                     sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
-SP_API void                     sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);
-SP_API void                     sp_os_zero_memory(void* buffer, u32 buffer_size);
-SP_API sp_os_platform_kind_t    sp_os_platform_kind();
-SP_API sp_str_t                 sp_os_platform_name();
-SP_API void                     sp_os_sleep_ms(f64 ms);
-SP_API c8*                      sp_os_wstr_to_cstr(c16* str, u32 len);
-SP_API void                     sp_os_print(sp_str_t message);
-SP_API void                     sp_os_log(sp_str_t message);
-SP_API sp_str_t                 sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
-SP_API sp_str_t                 sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
+SP_API void*                  sp_os_allocate_memory(u32 size);
+SP_API void*                  sp_os_reallocate_memory(void* ptr, u32 size);
+SP_API void                   sp_os_free_memory(void* ptr);
+SP_API void                   sp_os_copy_memory(const void* source, void* dest, u32 num_bytes);
+SP_API void                   sp_os_move_memory(const void* source, void* dest, u32 num_bytes);
+SP_API bool                   sp_os_is_memory_equal(const void* a, const void* b, size_t len);
+SP_API void                   sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
+SP_API void                   sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);
+SP_API void                   sp_os_zero_memory(void* buffer, u32 buffer_size);
+SP_API sp_os_platform_kind_t  sp_os_platform_kind();
+SP_API sp_str_t               sp_os_platform_name();
+SP_API void                   sp_os_sleep_ms(f64 ms);
+SP_API c8*                    sp_os_wstr_to_cstr(c16* str, u32 len);
+SP_API void                   sp_os_print(sp_str_t message);
+SP_API void                   sp_os_log(sp_str_t message);
+SP_API sp_str_t               sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
+SP_API sp_str_t               sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
 
-SP_API bool                     sp_os_is_regular_file(sp_str_t path);
-SP_API bool                     sp_os_is_directory(sp_str_t path);
-SP_API bool                     sp_os_is_path_root(sp_str_t path);
-SP_API bool                     sp_os_is_glob(sp_str_t path);
-SP_API bool                     sp_os_is_program_on_path(sp_str_t program);
-SP_API bool                     sp_os_does_path_exist(sp_str_t path);
-SP_API void                     sp_os_create_directory(sp_str_t path);
-SP_API void                     sp_os_remove_directory(sp_str_t path);
-SP_API void                     sp_os_create_file(sp_str_t path);
-SP_API void                     sp_os_remove_file(sp_str_t path);
-SP_API void                     sp_os_copy(sp_str_t from, sp_str_t to);
-SP_API void                     sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
-SP_API void                     sp_os_copy_file(sp_str_t from, sp_str_t to);
-SP_API void                     sp_os_copy_directory(sp_str_t from, sp_str_t to);
-SP_API sp_da(sp_os_dir_entry_t) sp_os_scan_directory(sp_str_t path);
-SP_API sp_str_t                 sp_os_normalize_path(sp_str_t path);
-SP_API void                     sp_os_normalize_path_soft(sp_str_t* path);
-SP_API sp_str_t                 sp_os_parent_path(sp_str_t path);
-SP_API sp_str_t                 sp_os_join_path(sp_str_t a, sp_str_t b);
-SP_API sp_str_t                 sp_os_extract_extension(sp_str_t path);
-SP_API sp_str_t                 sp_os_extract_stem(sp_str_t path);
-SP_API sp_str_t                 sp_os_extract_file_name(sp_str_t path);
-SP_API sp_str_t                 sp_os_get_cwd();
-SP_API sp_str_t                 sp_os_get_executable_path();
-SP_API sp_str_t                 sp_os_get_storage_path();
-SP_API sp_str_t                 sp_os_get_config_path();
-SP_API sp_str_t                 sp_os_canonicalize_path(sp_str_t path);
-SP_API sp_tm_epoch_t            sp_os_file_mod_time_precise(sp_str_t path);
-SP_API sp_os_file_attr_t        sp_os_file_attributes(sp_str_t path);
-SP_IMP sp_os_file_attr_t        sp_os_winapi_attr_to_sp_attr(u32 attr);
-SP_IMP void                     sp_os_file_monitor_init(sp_file_monitor_t* monitor);
-SP_IMP void                     sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
-SP_IMP void                     sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
-SP_IMP void                     sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
+SP_API bool                   sp_os_is_regular_file(sp_str_t path);
+SP_API bool                   sp_os_is_directory(sp_str_t path);
+SP_API bool                   sp_os_is_path_root(sp_str_t path);
+SP_API bool                   sp_os_is_glob(sp_str_t path);
+SP_API bool                   sp_os_is_program_on_path(sp_str_t program);
+SP_API bool                   sp_os_does_path_exist(sp_str_t path);
+SP_API void                   sp_os_create_directory(sp_str_t path);
+SP_API void                   sp_os_remove_directory(sp_str_t path);
+SP_API void                   sp_os_create_file(sp_str_t path);
+SP_API void                   sp_os_remove_file(sp_str_t path);
+SP_API void                   sp_os_copy(sp_str_t from, sp_str_t to);
+SP_API void                   sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
+SP_API void                   sp_os_copy_file(sp_str_t from, sp_str_t to);
+SP_API void                   sp_os_copy_directory(sp_str_t from, sp_str_t to);
+SP_API sp_da(sp_os_dir_ent_t) sp_os_scan_directory(sp_str_t path);
+SP_API sp_str_t               sp_os_normalize_path(sp_str_t path);
+SP_API void                   sp_os_normalize_path_soft(sp_str_t* path);
+SP_API sp_str_t               sp_os_parent_path(sp_str_t path);
+SP_API sp_str_t               sp_os_join_path(sp_str_t a, sp_str_t b);
+SP_API sp_str_t               sp_os_extract_extension(sp_str_t path);
+SP_API sp_str_t               sp_os_extract_stem(sp_str_t path);
+SP_API sp_str_t               sp_os_extract_file_name(sp_str_t path);
+SP_API sp_str_t               sp_os_get_cwd();
+SP_API sp_str_t               sp_os_get_executable_path();
+SP_API sp_str_t               sp_os_get_storage_path();
+SP_API sp_str_t               sp_os_get_config_path();
+SP_API sp_str_t               sp_os_canonicalize_path(sp_str_t path);
+SP_API sp_tm_epoch_t          sp_os_file_mod_time_precise(sp_str_t path);
+SP_API sp_os_file_attr_t      sp_os_file_attributes(sp_str_t path);
+SP_IMP sp_os_file_attr_t      sp_os_winapi_attr_to_sp_attr(u32 attr);
+SP_IMP void                   sp_os_file_monitor_init(sp_file_monitor_t* monitor);
+SP_IMP void                   sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
+SP_IMP void                   sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
+SP_IMP void                   sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
 
 
 // ████████╗██╗  ██╗██████╗ ███████╗ █████╗ ██████╗ ██╗███╗   ██╗ ██████╗
@@ -4346,12 +4346,12 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     sp_os_copy_glob(from, sp_str_lit("*"), to);
   }
 
-  sp_da(sp_os_dir_entry_t) sp_os_scan_directory(sp_str_t path) {
+  sp_da(sp_os_dir_ent_t) sp_os_scan_directory(sp_str_t path) {
     if (!sp_os_is_directory(path) || !sp_os_does_path_exist(path)) {
       return SP_NULLPTR;
     }
 
-    sp_dyn_array(sp_os_dir_entry_t) entries = SP_NULLPTR;
+    sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
 
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
     sp_str_builder_append(&builder, path);
@@ -4375,7 +4375,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
-      sp_os_dir_entry_t entry = SP_RVAL(sp_os_dir_entry_t) {
+      sp_os_dir_ent_t entry = SP_RVAL(sp_os_dir_ent_t) {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(find_data.cFileName),
         .attributes = sp_os_file_attributes(file_path),
@@ -4773,10 +4773,10 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   }
 
   void sp_os_remove_directory(sp_str_t path) {
-    sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(path);
+    sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(path);
 
     sp_dyn_array_for(entries, i) {
-      sp_os_dir_entry_t* entry = &entries[i];
+      sp_os_dir_ent_t* entry = &entries[i];
 
       if (sp_os_is_directory(entry->file_path)) {
         sp_os_remove_directory(entry->file_path);
@@ -4853,10 +4853,10 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   void sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
     sp_os_create_directory(to);
 
-    sp_da(sp_os_dir_entry_t) entries = sp_os_scan_directory(from);
+    sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(from);
 
     sp_dyn_array_for(entries, i) {
-      sp_os_dir_entry_t* entry = &entries[i];
+      sp_os_dir_ent_t* entry = &entries[i];
       sp_str_t entry_name = entry->file_name;
 
       bool matches = sp_str_equal(glob, sp_str_lit("*"));
@@ -4904,12 +4904,12 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     sp_os_copy_glob(from, sp_str_lit("*"), to);
   }
 
-  sp_da(sp_os_dir_entry_t) sp_os_scan_directory(sp_str_t path) {
+  sp_da(sp_os_dir_ent_t) sp_os_scan_directory(sp_str_t path) {
     if (!sp_os_is_directory(path) || !sp_os_does_path_exist(path)) {
       return SP_NULLPTR;
     }
 
-    sp_dyn_array(sp_os_dir_entry_t) entries = SP_NULLPTR;
+    sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
 
     c8* path_cstr = sp_str_to_cstr(path);
     DIR* dir = opendir(path_cstr);
@@ -4930,12 +4930,12 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       sp_str_t file_path = sp_str_builder_write(&entry_builder);
       sp_os_normalize_path(file_path);
 
-      sp_os_dir_entry_t dir_entry = {
+      sp_os_dir_ent_t dir_ent = {
         .file_path = file_path,
         .file_name = sp_str_from_cstr(entry->d_name),
         .attributes = sp_os_file_attributes(file_path),
       };
-      sp_dyn_array_push(entries, dir_entry);
+      sp_dyn_array_push(entries, dir_ent);
     }
 
     closedir(dir);
@@ -6342,35 +6342,35 @@ bool sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer) {
     return buffer->size == 0;
 }
 
-void* sp_ring_buffer_iter_deref(sp_ring_buffer_iterator_t* it) {
+void* sp_rb_it_getvp(sp_rb_it_t* it) {
     return sp_ring_buffer_at(it->buffer, it->index);
 }
 
-void sp_ring_buffer_iter_next(sp_ring_buffer_iterator_t* it) {
+void sp_rb_it_next(sp_rb_it_t* it) {
     SP_ASSERT(it->index < (s32)it->buffer->size);
     it->index++;
 }
 
-void sp_ring_buffer_iter_prev(sp_ring_buffer_iterator_t* it) {
+void sp_rb_it_prev(sp_rb_it_t* it) {
     SP_ASSERT(it->index >= 0 && it->index < (s32)it->buffer->size);
     it->index--;
 }
 
-bool sp_ring_buffer_iter_done(sp_ring_buffer_iterator_t* it) {
+bool sp_rb_it_done(sp_rb_it_t* it) {
     if (it->reverse) return it->index < 0;
     return it->index >= (s32)it->buffer->size;
 }
 
-sp_ring_buffer_iterator_t sp_ring_buffer_iter(sp_ring_buffer_t* buffer) {
-    sp_ring_buffer_iterator_t iterator;
+sp_rb_it_t sp_rb_it_new(sp_ring_buffer_t* buffer) {
+    sp_rb_it_t iterator;
     iterator.index = 0;
     iterator.reverse = false;
     iterator.buffer = buffer;
     return iterator;
 }
 
-sp_ring_buffer_iterator_t sp_ring_buffer_riter(sp_ring_buffer_t* buffer) {
-    sp_ring_buffer_iterator_t iterator;
+sp_rb_it_t sp_rb_rit_new(sp_ring_buffer_t* buffer) {
+    sp_rb_it_t iterator;
     iterator.index = buffer->size - 1;
     iterator.reverse = true;
     iterator.buffer = buffer;
