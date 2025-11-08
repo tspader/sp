@@ -878,87 +878,93 @@ SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 #define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .len = (u32)(LEN), .data = (const c8*)(STR) }
 #define SP_STR(STR, LEN) sp_str(STR, LEN)
 #define SP_LIT(STR) sp_str_lit(STR)
+#define sp_str_for(str, it) for (u32 it = 0; it < str.len; it++)
 
-SP_API void     sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
-SP_API void     sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
-SP_API void     sp_str_builder_indent(sp_str_builder_t* builder);
-SP_API void     sp_str_builder_dedent(sp_str_builder_t* builder);
-SP_API void     sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
-SP_API void     sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
-SP_API void     sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
-SP_API void     sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...);
-SP_API void     sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...);
-SP_API void     sp_str_builder_new_line(sp_str_builder_t* builder);
-SP_API sp_str_t sp_str_builder_move(sp_str_builder_t* builder);
-SP_API sp_str_t sp_str_builder_write(sp_str_builder_t* builder);
-SP_API c8*      sp_str_builder_write_cstr(sp_str_builder_t* builder);
-
-SP_API c8*                    sp_cstr_copy(const c8* str);
-SP_API void                   sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length);
-SP_API c8*                    sp_cstr_copy_sized(const c8* str, u32 length);
-SP_API void                   sp_cstr_copy_to_sized(const c8* str, u32 length, c8* buffer, u32 buffer_length);
-SP_API bool                   sp_cstr_equal(const c8* a, const c8* b);
-SP_API u32                    sp_cstr_len(const c8* str);
-SP_API u32                    sp_cstr_len_sized(const c8* str, u32 n);
-SP_API c8*                    sp_wstr_to_cstr(c16* str, u32 len);
-SP_API c8*                    sp_str_to_cstr(sp_str_t str);
-SP_API c8*                    sp_str_to_cstr_double_nt(sp_str_t str);
-SP_API sp_str_t               sp_str_copy(sp_str_t str);
-SP_API void                   sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
-SP_API sp_str_t               sp_str_null_terminate(sp_str_t str);
-SP_API sp_str_t               sp_str_from_cstr(const c8* str);
-SP_API sp_str_t               sp_str_from_cstr_sized(const c8* str, u32 length);
-SP_API sp_str_t               sp_str_from_cstr_null(const c8* str);
-SP_API sp_str_t               sp_str_alloc(u32 capacity);
-SP_API sp_str_t               sp_str_view(const c8* cstr);
-SP_API bool                   sp_str_empty(sp_str_t);
-SP_API bool                   sp_str_equal(sp_str_t a, sp_str_t b);
-SP_API bool                   sp_str_equal_cstr(sp_str_t a, const c8* b);
-SP_API bool                   sp_str_starts_with(sp_str_t str, sp_str_t prefix);
-SP_API bool                   sp_str_ends_with(sp_str_t str, sp_str_t suffix);
-SP_API bool                   sp_str_contains(sp_str_t str, sp_str_t needle);
-SP_API bool                   sp_str_valid(sp_str_t str);
-SP_API c8                     sp_str_at(sp_str_t str, s32 index);
-SP_API c8                     sp_str_at_reverse(sp_str_t str, s32 index);
-SP_API c8                     sp_str_back(sp_str_t str);
-SP_API s32                    sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
-SP_API sp_str_t               sp_str_sub(sp_str_t str, s32 index, s32 len);
-SP_API sp_str_t               sp_str_sub_reverse(sp_str_t str, s32 index, s32 len);
-SP_API sp_str_t               sp_str_concat(sp_str_t a, sp_str_t b);
-SP_API sp_str_t               sp_str_replace_c8(sp_str_t str, c8 from, c8 to);
-SP_API sp_str_t               sp_str_pad(sp_str_t str, u32 n);
-SP_API sp_str_t               sp_str_trim(sp_str_t str);
-SP_API sp_str_t               sp_str_trim_right(sp_str_t str);
-SP_API sp_str_t               sp_str_truncate(sp_str_t str, u32 n, sp_str_t trailer);
-SP_API sp_str_t               sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
-SP_API sp_str_t               sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
-SP_API sp_str_t               sp_str_to_upper(sp_str_t str);
-SP_API sp_str_t               sp_str_to_lower(sp_str_t str);
-SP_API sp_str_t               sp_str_capitalize_words(sp_str_t str);
-SP_API sp_str_pair_t          sp_str_cleave_c8(sp_str_t str, c8 delimiter);
-SP_API sp_dyn_array(sp_str_t) sp_str_split_c8(sp_str_t, c8 c);
-SP_API bool                   sp_str_contains_n(sp_str_t* strs, u32 n, sp_str_t needle);
-SP_API sp_str_t               sp_str_join_n(sp_str_t* strs, u32 n, sp_str_t joiner);
-SP_API u32                    sp_str_count_n(sp_str_t* strs, u32 n, sp_str_t needle);
-SP_API sp_str_t               sp_str_find_longest_n(sp_str_t* strs, u32 n);
-SP_API sp_str_t               sp_str_find_shortest_n(sp_str_t* strs, u32 n);
-SP_API sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n);
-SP_API sp_str_t               sp_str_reduce(sp_str_t* strs, u32 n, void* user_data, sp_str_reduce_fn_t fn);
-SP_API void                   sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
-SP_API void                   sp_str_reduce_kernel_contains(sp_str_reduce_context_t* context);
-SP_API void                   sp_str_reduce_kernel_count(sp_str_reduce_context_t* context);
-SP_API void                   sp_str_reduce_kernel_longest(sp_str_reduce_context_t* context);
-SP_API void                   sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context);
-SP_API sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr user_data, sp_str_map_fn_t fn);
-SP_API sp_str_t               sp_str_map_kernel_prepend(sp_str_map_context_t* context);
-SP_API sp_str_t               sp_str_map_kernel_append(sp_str_map_context_t* context);
-SP_API sp_str_t               sp_str_map_kernel_prefix(sp_str_map_context_t* context);
-SP_API sp_str_t               sp_str_map_kernel_trim(sp_str_map_context_t* context);
-SP_API sp_str_t               sp_str_map_kernel_pad(sp_str_map_context_t* context);
-SP_API sp_str_t               sp_str_map_kernel_to_upper(sp_str_map_context_t* context);
-SP_API sp_str_t               sp_str_map_kernel_to_lower(sp_str_map_context_t* context);
-SP_API sp_str_t               sp_str_map_kernel_capitalize_words(sp_str_map_context_t* context);
-SP_API s32                    sp_str_sort_kernel_alphabetical(const void* a, const void* b);
+SP_API void            sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
+SP_API void            sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
+SP_API void            sp_str_builder_indent(sp_str_builder_t* builder);
+SP_API void            sp_str_builder_dedent(sp_str_builder_t* builder);
+SP_API void            sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
+SP_API void            sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
+SP_API void            sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
+SP_API void            sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...);
+SP_API void            sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...);
+SP_API void            sp_str_builder_new_line(sp_str_builder_t* builder);
+SP_API sp_str_t        sp_str_builder_move(sp_str_builder_t* builder);
+SP_API sp_str_t        sp_str_builder_write(sp_str_builder_t* builder);
+SP_API c8*             sp_str_builder_write_cstr(sp_str_builder_t* builder);
+SP_API c8*             sp_cstr_copy(const c8* str);
+SP_API void            sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length);
+SP_API c8*             sp_cstr_copy_sized(const c8* str, u32 length);
+SP_API void            sp_cstr_copy_to_sized(const c8* str, u32 length, c8* buffer, u32 buffer_length);
+SP_API bool            sp_cstr_equal(const c8* a, const c8* b);
+SP_API u32             sp_cstr_len(const c8* str);
+SP_API u32             sp_cstr_len_sized(const c8* str, u32 n);
+SP_API c8*             sp_wstr_to_cstr(c16* str, u32 len);
+SP_API c8*             sp_str_to_cstr(sp_str_t str);
+SP_API c8*             sp_str_to_cstr_double_nt(sp_str_t str);
+SP_API sp_str_t        sp_str_copy(sp_str_t str);
+SP_API void            sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
+SP_API sp_str_t        sp_str_null_terminate(sp_str_t str);
+SP_API sp_str_t        sp_str_from_cstr(const c8* str);
+SP_API sp_str_t        sp_str_from_cstr_sized(const c8* str, u32 length);
+SP_API sp_str_t        sp_str_from_cstr_null(const c8* str);
+SP_API sp_str_t        sp_str_alloc(u32 capacity);
+SP_API sp_str_t        sp_str_view(const c8* cstr);
+SP_API bool            sp_str_empty(sp_str_t);
+SP_API bool            sp_str_equal(sp_str_t a, sp_str_t b);
+SP_API bool            sp_str_equal_cstr(sp_str_t a, const c8* b);
+SP_API bool            sp_str_starts_with(sp_str_t str, sp_str_t prefix);
+SP_API bool            sp_str_ends_with(sp_str_t str, sp_str_t suffix);
+SP_API bool            sp_str_contains(sp_str_t str, sp_str_t needle);
+SP_API bool            sp_str_valid(sp_str_t str);
+SP_API c8              sp_str_at(sp_str_t str, s32 index);
+SP_API c8              sp_str_at_reverse(sp_str_t str, s32 index);
+SP_API c8              sp_str_back(sp_str_t str);
+SP_API s32             sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
+SP_API sp_str_t        sp_str_prefix(sp_str_t str, s32 len);
+SP_API sp_str_t        sp_str_suffix(sp_str_t str, s32 len);
+SP_API sp_str_t        sp_str_sub(sp_str_t str, s32 index, s32 len);
+SP_API sp_str_t        sp_str_sub_reverse(sp_str_t str, s32 index, s32 len);
+SP_API sp_str_t        sp_str_concat(sp_str_t a, sp_str_t b);
+SP_API sp_str_t        sp_str_replace_c8(sp_str_t str, c8 from, c8 to);
+SP_API sp_str_t        sp_str_pad(sp_str_t str, u32 n);
+SP_API sp_str_t        sp_str_trim_left(sp_str_t str);
+SP_API sp_str_t        sp_str_trim_right(sp_str_t str);
+SP_API sp_str_t        sp_str_trim(sp_str_t str);
+SP_API sp_str_t        sp_str_strip_left(sp_str_t str, sp_str_t strip);
+SP_API sp_str_t        sp_str_strip_right(sp_str_t str, sp_str_t strip);
+SP_API sp_str_t        sp_str_strip(sp_str_t str, sp_str_t strip);
+SP_API sp_str_t        sp_str_truncate(sp_str_t str, u32 n, sp_str_t trailer);
+SP_API sp_str_t        sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API sp_str_t        sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
+SP_API sp_str_t        sp_str_to_upper(sp_str_t str);
+SP_API sp_str_t        sp_str_to_lower(sp_str_t str);
+SP_API sp_str_t        sp_str_capitalize_words(sp_str_t str);
+SP_API sp_str_pair_t   sp_str_cleave_c8(sp_str_t str, c8 delimiter);
+SP_API sp_da(sp_str_t) sp_str_split_c8(sp_str_t, c8 c);
+SP_API bool            sp_str_contains_n(sp_str_t* strs, u32 n, sp_str_t needle);
+SP_API sp_str_t        sp_str_join_n(sp_str_t* strs, u32 n, sp_str_t joiner);
+SP_API u32             sp_str_count_n(sp_str_t* strs, u32 n, sp_str_t needle);
+SP_API sp_str_t        sp_str_find_longest_n(sp_str_t* strs, u32 n);
+SP_API sp_str_t        sp_str_find_shortest_n(sp_str_t* strs, u32 n);
+SP_API sp_da(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n);
+SP_API sp_str_t        sp_str_reduce(sp_str_t* strs, u32 n, void* user_data, sp_str_reduce_fn_t fn);
+SP_API void            sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
+SP_API void            sp_str_reduce_kernel_contains(sp_str_reduce_context_t* context);
+SP_API void            sp_str_reduce_kernel_count(sp_str_reduce_context_t* context);
+SP_API void            sp_str_reduce_kernel_longest(sp_str_reduce_context_t* context);
+SP_API void            sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context);
+SP_API sp_da(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr user_data, sp_str_map_fn_t fn);
+SP_API sp_str_t        sp_str_map_kernel_prepend(sp_str_map_context_t* context);
+SP_API sp_str_t        sp_str_map_kernel_append(sp_str_map_context_t* context);
+SP_API sp_str_t        sp_str_map_kernel_prefix(sp_str_map_context_t* context);
+SP_API sp_str_t        sp_str_map_kernel_trim(sp_str_map_context_t* context);
+SP_API sp_str_t        sp_str_map_kernel_pad(sp_str_map_context_t* context);
+SP_API sp_str_t        sp_str_map_kernel_to_upper(sp_str_map_context_t* context);
+SP_API sp_str_t        sp_str_map_kernel_to_lower(sp_str_map_context_t* context);
+SP_API sp_str_t        sp_str_map_kernel_capitalize_words(sp_str_map_context_t* context);
+SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 
 
 // ████████╗██╗███╗   ███╗███████╗
@@ -3346,6 +3352,14 @@ sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) 
   return sp_str_builder_write(&builder);
 }
 
+sp_str_t sp_str_prefix(sp_str_t str, s32 len) {
+  return sp_str_sub(str, 0, len);
+}
+
+sp_str_t sp_str_suffix(sp_str_t str, s32 len) {
+  return sp_str_sub(str, str.len - len, len);
+}
+
 sp_str_t sp_str_sub(sp_str_t str, s32 index, s32 len) {
   sp_str_t substr = {
     .len = (u32)len,
@@ -3603,23 +3617,49 @@ sp_str_t sp_str_trim_right(sp_str_t str) {
   return str;
 }
 
+sp_str_t sp_str_trim_left(sp_str_t str) {
+  sp_str_t trimmed = str;
+
+  sp_str_for(str, it) {
+    c8 c = sp_str_at(str, it);
+
+    switch (c) {
+      case ' ':
+      case '\t':
+      case '\r':
+      case '\n': {
+        trimmed.data++; trimmed.len--;
+        break;
+      }
+      default: {
+        return trimmed;
+      }
+    }
+  }
+
+  return trimmed;
+}
+
 sp_str_t sp_str_trim(sp_str_t str) {
-  u32 start = 0;
-  u32 end = str.len;
+  sp_str_t trimmed = str;
+  trimmed = sp_str_trim_left(trimmed);
+  trimmed = sp_str_trim_right(trimmed);
+  return trimmed;
+}
 
-  while (start < str.len) {
-    c8 c = str.data[start];
-    if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
-    start++;
-  }
+sp_str_t sp_str_strip_left(sp_str_t str, sp_str_t strip) {
+  if (!sp_str_starts_with(str, strip)) return str;
+  return sp_str_suffix(str, str.len - strip.len);
+}
 
-  while (end > start) {
-    c8 c = str.data[end - 1];
-    if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
-    end--;
-  }
+sp_str_t sp_str_strip_right(sp_str_t str, sp_str_t strip) {
+  if (!sp_str_ends_with(str, strip)) return str;
+  return sp_str_prefix(str, str.len - strip.len);
+}
 
-  return sp_str_sub(str, start, end - start);
+sp_str_t sp_str_strip(sp_str_t str, sp_str_t strip) {
+  sp_str_t result = sp_str_strip_left(str, strip);
+  return sp_str_strip_right(result, strip);
 }
 
 sp_str_t sp_str_to_upper(sp_str_t str) {
