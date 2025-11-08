@@ -38,3 +38,7 @@ source = ["test/ps.c"]
 [[bin]]
 name = "stress"
 source = ["test/stress.c"]
+
+[[bin]]
+name = "extract_fns"
+source = ["doc/tools/extract_fns.c"]
