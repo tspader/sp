@@ -1,2 +1,32 @@
-- only use c strings at api boundaries. use SDL as an example (e.g. SDL_Log)
-- prefer switch statements + enumerations to if/else
+- [ ] (mem) Implement internal SP allocator with configurable behavior
+- [ ] (mem) Add watermark support with bump allocator
+- [ ] (mem) Update all functions to use proper allocation patterns
+- [ ] (mem) Add memory leak tests using bump allocator monitoring
+- [ ] (mem) Review alignment issues in memory allocation
+- [ ] (platform) Fix Windows compilation issues
+- [ ] (platform) Fix header include order problems (standard headers before SP.h)
+- [ ] (platform) Add 2-translation unit build test
+- [ ] (platform) Test symbol resolution across translation units
+- [ ] (platform) Mark sp_global variable as static for multi-TU compilation
+- [ ] (platform) Mark everything as static where appropriate
+- [ ] (sp_os) Redesign SP_OS file system functions with intentional structure
+- [ ] (sp_os) Consider strongly typed paths with view-based struct (no copying)
+- [ ] (sp_os) Improve path manipulation API organization
+- [ ] (sp_os) Fix file monitor API limitations
+- [ ] (sp_os) Add directory/glob support using new globbing capabilities
+- [ ] (concurrency) Replace current threading primitives with C11 threads implementation
+- [ ] (concurrency) Consider using existing 600-line C11 threads header as reference
+- [ ] (concurrency) Fix Windows pthread compatibility
+- [ ] (concurrency) Evaluate whether to remove or macro-ize sp_future_t
+- [ ] (general) Add SP_EXTERN for environment declarations
+- [ ] (general) Move SP_ASSERT_FMT macro next to SP_BROKEN macro
+- [ ] (general) Move SP_UNUSED macro higher up
+- [ ] (general) Rename allocator_mode to allocator_fn
+- [ ] (general) Remove void pointer dynamic array (sp_dynamic_array_t)
+- [ ] (general) Add usage section at top of header (like other single-header libraries)
+- [ ] (general) Ensure consistent coding standards throughout
+- [ ] (sp_x) Switch sp_x namespace to sp_x_define_enum/sp_x_define_named_enum
+- [ ] (sp_str) Use sp_da() short alias in string declarations
+- [ ] (sp_str) Reduce excessive indentation in function headers
+- [ ] (test) Add test that calls every function in the API
+- [ ] (test) Add comprehensive memory leak detection tests
