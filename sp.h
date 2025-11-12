@@ -5620,6 +5620,15 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
 }
 
 sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
+  if (config.io.out.mode == SP_PS_IO_MODE_EXISTING || config.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
+    SP_FATAL(
+      "You called sp_ps_run() but your config redirected stdout. sp_ps_run() always creates a new "
+      "file descriptor for stdout, since its purpose is to run a command and capture output without "
+      "the command polluting the parent command's output. If you really wanted this, use sp_ps_create() "
+      "and sp_ps_output(). The failing command was {:fg brightyellow}",
+      SP_FMT_STR(config.command)
+    );
+  }
   config.io.out = (sp_ps_io_stream_config_t) {
     .mode = SP_PS_IO_MODE_CREATE
   };
