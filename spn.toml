@@ -32,6 +32,10 @@ name = "fs"
 source = ["test/fs.c"]
 
 [[bin]]
+name = "ht"
+source = ["test/ht.c"]
+
+[[bin]]
 name = "process"
 source = ["test/tools/process.c"]
 
