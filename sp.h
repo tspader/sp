@@ -751,6 +751,9 @@ typedef struct {
 #define sp_ht_for(__ht, __it)\
   for (sp_ht_it __it = sp_ht_it_init(__ht); sp_ht_it_valid(__ht, __it); sp_ht_it_advance(__ht, __it))
 
+#define sp_ht_front(__ht)\
+  ((__ht) == NULL || !sp_ht_it_valid(__ht, sp_ht_it_init(__ht)) ? NULL : sp_ht_it_getp(__ht, sp_ht_it_init(__ht)))
+
 #define sp_ht_tmp_key_index(__HT) sp_ht_get_key_index_fn((void**)&((__HT)->data), (void*)&((__HT)->tmp_key), (__HT)->info)
 
 u32        sp_ht_get_key_index_fn(void** data, void* key, sp_ht_info_t info);
