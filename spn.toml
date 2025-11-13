@@ -10,9 +10,12 @@ argparse = "1.2.0"
 
 [[profile]]
 name = "debug"
-cc = "tcc"
+# cc = "musl-gcc"
+cc = "gcc"
 mode = "debug"
 language = "c11"
+# libc = "cosmopolitan"
+linkage = "static"
 
 
 [[bin]]
@@ -20,7 +23,7 @@ name = "app"
 source = ["test/app.c"]
 
 [[bin]]
-name = "c"
+name = "core"
 source = ["test/main.c"]
 
 [[bin]]
