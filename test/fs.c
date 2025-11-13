@@ -143,4 +143,21 @@ UTEST_F(sp_test_fs, symlink_semantics) {
   SP_EXPECT_STR_EQ(content_link, content);
 }
 
+UTEST_F(sp_test_fs, copy_dir_with_nonalphanumeric) {
+  sp_str_t foo_bar_dir = sp_test_file_path(&ut.file_manager, SP_LIT("foo.bar"));
+  sp_os_create_directory(foo_bar_dir);
+  ASSERT_TRUE(sp_os_does_path_exist(foo_bar_dir));
+  ASSERT_TRUE(sp_os_is_directory(foo_bar_dir));
+
+  sp_str_t baz_dir = sp_test_file_path(&ut.file_manager, SP_LIT("baz"));
+  sp_os_create_directory(baz_dir);
+  ASSERT_TRUE(sp_os_does_path_exist(baz_dir));
+  ASSERT_TRUE(sp_os_is_directory(baz_dir));
+
+  sp_os_copy(foo_bar_dir, baz_dir);
+
+  sp_str_t expected_path = sp_test_file_path(&ut.file_manager, SP_LIT("baz/foo.bar"));
+  ASSERT_TRUE(sp_os_does_path_exist(expected_path));
+}
+
 UTEST_MAIN()
