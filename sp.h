@@ -4337,7 +4337,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     }
     else if (sp_os_is_target_directory(from)) {
       SP_ASSERT(sp_os_is_target_directory(to));
-      sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_stem(from)));
+      sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_file_name(from)));
     }
     else if (sp_os_is_target_regular_file(from)) {
       sp_os_copy_file(from, to);
@@ -4918,7 +4918,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     }
     else if (sp_os_is_target_directory(from)) {
       SP_ASSERT(sp_os_is_target_directory(to));
-      sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_stem(from)));
+      sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_file_name(from)));
     }
     else if (sp_os_is_target_regular_file(from)) {
       sp_os_copy_file(from, to);
