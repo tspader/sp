@@ -25,6 +25,10 @@
   #define SP_POSIX
 #endif
 
+#ifdef __COSMOPOLITAN__
+  #define SP_POSIX
+#endif
+
 
 ////////////////////////
 // COMPILER SELECTION //
@@ -135,6 +139,10 @@
   #include <sys/types.h>
   #include <sys/wait.h>
   #include <time.h>
+#endif
+
+#ifdef __COSMOPOLITAN__
+  #include <spawn.h>
 #endif
 
 #ifdef SP_CPP
@@ -1167,6 +1175,7 @@ typedef enum {
   SP_OS_PLATFORM_LINUX,
   SP_OS_PLATFORM_WIN32,
   SP_OS_PLATFORM_MACOS,
+  SP_OS_PLATFORM_COSMOPOLITAN,
 } sp_os_platform_kind_t;
 
 typedef enum {
@@ -1274,6 +1283,10 @@ SP_IMP void                   sp_os_file_monitor_process_changes(sp_file_monitor
   typedef pthread_t            sp_thread_t;
   typedef pthread_mutex_t      sp_mutex_t;
   typedef dispatch_semaphore_t sp_semaphore_t;
+#elif defined(__COSMOPOLITAN__)
+  typedef pthread_t            sp_thread_t;
+  typedef pthread_mutex_t      sp_mutex_t;
+  typedef sem_t                sp_semaphore_t;
 #endif
 
 typedef s32 sp_spin_lock_t;
@@ -5926,6 +5939,81 @@ sp_str_t sp_os_get_config_path() {
 }
 #endif
 
+#if defined(__COSMOPOLITAN__)
+sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
+  switch (kind) {
+    case SP_OS_LIB_SHARED: return SP_LIT("so");
+    case SP_OS_LIB_STATIC: return SP_LIT("a");
+  }
+
+  SP_UNREACHABLE_RETURN(sp_str_lit(""));
+}
+
+sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
+  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+}
+
+void sp_semaphore_init(sp_semaphore_t* semaphore) {
+  sem_init(semaphore, 0, 0);
+}
+
+void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+  sem_destroy(semaphore);
+}
+
+void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+  sem_wait(semaphore);
+}
+
+bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  ts.tv_sec += ms / 1000;
+  ts.tv_nsec += (ms % 1000) * 1000000;
+  if (ts.tv_nsec >= 1000000000) {
+    ts.tv_sec++;
+    ts.tv_nsec -= 1000000000;
+  }
+  return sem_timedwait(semaphore, &ts) == 0;
+}
+
+void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+  sem_post(semaphore);
+}
+
+sp_str_t sp_os_get_executable_path() {
+  c8 exe_path [PATH_MAX];
+  sp_str_t file_path = {
+    .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
+    .data = exe_path
+  };
+
+  if (!file_path.len) {
+    return sp_str_lit("");
+  }
+
+  return sp_str_copy(sp_os_parent_path(file_path));
+}
+
+sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
+  sp_str_t path =  sp_os_get_env_var(xdg);
+  if (sp_str_valid(path)) return path;
+
+  path = sp_os_get_env_var(SP_LIT("HOME"));
+  if (sp_str_valid(path)) return sp_os_join_path(path, home_suffix);
+
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_str_t sp_os_get_storage_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
+}
+
+sp_str_t sp_os_get_config_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
+}
+#endif
+
 
 //////////////
 // PLATFORM //
@@ -6232,6 +6320,59 @@ sp_str_t sp_os_get_config_path() {
     // Emit changes with debouncing
     sp_file_monitor_emit_changes(monitor);
   }
+#endif
+
+#if defined(__COSMOPOLITAN__)
+sp_os_platform_kind_t sp_os_platform_kind() {
+  return SP_OS_PLATFORM_COSMOPOLITAN;
+}
+
+sp_str_t sp_os_platform_name() {
+  return sp_str_lit("cosmopolitan");
+}
+
+void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
+  // Stub implementation for Cosmopolitan
+  monitor->os = sp_alloc(sizeof(s32));
+  *(s32*)monitor->os = 0;
+}
+
+void sp_os_file_monitor_destroy(sp_file_monitor_t* monitor) {
+  if (monitor->os) {
+    sp_free(monitor->os);
+    monitor->os = 0;
+  }
+}
+
+void sp_os_file_monitor_watch_path(sp_file_monitor_t* monitor, sp_str_t path, bool recursive) {
+  // Stub implementation - no actual monitoring
+  (void)monitor;
+  (void)path;
+  (void)recursive;
+}
+
+void sp_os_file_monitor_unwatch_path(sp_file_monitor_t* monitor, sp_str_t path) {
+  // Stub implementation
+  (void)monitor;
+  (void)path;
+}
+
+void sp_os_file_monitor_update(sp_file_monitor_t* monitor) {
+  // Stub implementation - no changes to process
+  (void)monitor;
+}
+
+void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path) {
+  sp_os_file_monitor_watch_path(monitor, path, true);
+}
+
+void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
+  sp_os_file_monitor_watch_path(monitor, file_path, false);
+}
+
+void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
+  sp_os_file_monitor_update(monitor);
+}
 #endif
 
 #ifdef SP_MACOS
