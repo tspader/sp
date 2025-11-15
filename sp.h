@@ -4373,6 +4373,8 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       to = sp_os_join_path(to, sp_os_extract_file_name(from));
     }
 
+    sp_win32_dword_t src_attrs = GetFileAttributesA(sp_str_to_cstr(from));
+
     sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
     if (!src.file.fd) return;
 
@@ -4390,6 +4392,10 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
 
     sp_io_close(&src);
     sp_io_close(&dst);
+
+    if (src_attrs != INVALID_FILE_ATTRIBUTES) {
+      SetFileAttributesA(sp_str_to_cstr(to), src_attrs);
+    }
   }
 
   void sp_os_copy_directory(sp_str_t from, sp_str_t to) {
@@ -4954,6 +4960,9 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
       to = sp_os_join_path(to, sp_os_extract_file_name(from));
     }
 
+    struct stat stf;
+    if (stat(sp_str_to_cstr(from), &stf)) return;
+
     sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
     if (!src.file.fd) return;
 
@@ -4971,6 +4980,8 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
 
     sp_io_close(&src);
     sp_io_close(&dst);
+
+    chmod(sp_str_to_cstr(to), stf.st_mode);
   }
 
   void sp_os_copy_directory(sp_str_t from, sp_str_t to) {

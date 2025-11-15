@@ -4,6 +4,7 @@
 #include "test.h"
 
 #include "utest.h"
+#include <sys/stat.h>
 
 struct sp_test_fs {
   sp_test_file_manager_t file_manager;
@@ -158,6 +159,47 @@ UTEST_F(sp_test_fs, copy_dir_with_nonalphanumeric) {
 
   sp_str_t expected_path = sp_test_file_path(&ut.file_manager, SP_LIT("baz/foo.bar"));
   ASSERT_TRUE(sp_os_does_path_exist(expected_path));
+}
+
+UTEST_F(sp_test_fs, copy_preserves_file_attributes) {
+  // Create a test file with specific content
+  sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source_attrs.txt"));
+  sp_str_t test_content = SP_LIT("Test content for attribute preservation - this should be preserved exactly");
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = source_file,
+    .content = test_content,
+  });
+
+  // Change file permissions to something specific (0o755 = rwxr-xr-x)
+  const c8* source_cstr = sp_str_to_cstr(source_file);
+  ASSERT_EQ(chmod(source_cstr, 0755), 0);
+
+  // Get original file stat information
+  struct stat original_stat = {0};
+  ASSERT_EQ(stat(source_cstr, &original_stat), 0);
+  
+  // Copy the file
+  sp_str_t copy_file = sp_test_file_path(&ut.file_manager, SP_LIT("copy_attrs.txt"));
+  ASSERT_EQ(sp_os_copy(source_file, copy_file), SP_ERR_OK);
+
+  // Verify copy exists and has same type
+  ASSERT_TRUE(sp_os_does_path_exist(copy_file));
+  ASSERT_TRUE(sp_os_is_regular_file(copy_file));
+  
+  // Get copied file stat information
+  const c8* copy_cstr = sp_str_to_cstr(copy_file);
+  struct stat copy_stat = {0};
+  ASSERT_EQ(stat(copy_cstr, &copy_stat), 0);
+
+  // Verify file permissions (mode) are preserved
+  ASSERT_EQ(original_stat.st_mode, copy_stat.st_mode);
+  
+  // Verify file size is preserved
+  ASSERT_EQ(original_stat.st_size, copy_stat.st_size);
+  
+  // Verify content is identical
+  sp_str_t copy_content = sp_io_read_file(copy_file);
+  SP_EXPECT_STR_EQ(copy_content, test_content);
 }
 
 UTEST_MAIN()
