@@ -5912,10 +5912,22 @@ void sp_semaphore_signal(sp_semaphore_t* semaphore) {
   sem_post(semaphore);
 }
 
+#if defined(SP_COSMO)
+extern char* program_invocation_name;
+
+sp_str_t sp_os_get_executable_path() {
+  c8 exe_path[PATH_MAX];
+  if (realpath(program_invocation_name, exe_path)) {
+    return sp_str_copy(sp_os_parent_path(sp_str_from_cstr(exe_path)));
+  }
+  return sp_str_lit("");
+}
+#else
 sp_str_t sp_os_get_executable_path() {
   c8 exe_path [PATH_MAX];
+  ssize_t len = readlink("/proc/self/exe", exe_path, PATH_MAX - 1);
   sp_str_t file_path = {
-    .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
+    .len = len < 0 ? 0 : (u32)len,
     .data = exe_path
   };
 
@@ -5923,8 +5935,10 @@ sp_str_t sp_os_get_executable_path() {
     return sp_str_lit("");
   }
 
+  exe_path[len] = '\0';
   return sp_str_copy(sp_os_parent_path(file_path));
 }
+#endif
 
 sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
   sp_str_t path =  sp_os_get_env_var(xdg);
