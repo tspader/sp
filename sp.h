@@ -26,6 +26,7 @@
 #endif
 
 #ifdef __COSMOPOLITAN__
+  #define SP_COSMO
   #define SP_POSIX
 #endif
 
@@ -109,7 +110,7 @@
   #include <spawn.h>
 #endif
 
-#ifdef SP_LINUX
+#if defined(SP_LINUX)
   #ifndef _GNU_SOURCE
     #define _GNU_SOURCE
   #endif
@@ -132,6 +133,7 @@
   #include <pthread.h>
   #include <semaphore.h>
   #include <signal.h>
+  #include <spawn.h>
   #include <stdlib.h>
   #include <unistd.h>
   #include <sys/stat.h>
@@ -139,10 +141,6 @@
   #include <sys/types.h>
   #include <sys/wait.h>
   #include <time.h>
-#endif
-
-#ifdef __COSMOPOLITAN__
-  #include <spawn.h>
 #endif
 
 #ifdef SP_CPP
@@ -1140,7 +1138,15 @@ SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* mon
   typedef s32 sp_os_file_handle_t;
 #endif
 
-#ifdef SP_LINUX
+#if defined(SP_COSMO)
+  typedef struct {
+    s32 dummy;
+  } sp_os_cosmo_file_monitor_t;
+
+  typedef sp_os_cosmo_file_monitor_t sp_os_file_monitor_t;
+#endif
+
+#if defined(SP_LINUX)
   typedef struct {
     s32 fd;
     sp_dyn_array(s32) watch_descs;
@@ -1275,15 +1281,11 @@ SP_IMP void                   sp_os_file_monitor_process_changes(sp_file_monitor
   typedef thrd_t               sp_thread_t;
   typedef mtx_t                sp_mutex_t;
   typedef HANDLE               sp_semaphore_t;
-#elif defined(SP_LINUX)
-  typedef pthread_t            sp_thread_t;
-  typedef pthread_mutex_t      sp_mutex_t;
-  typedef sem_t                sp_semaphore_t;
 #elif defined(SP_MACOS)
   typedef pthread_t            sp_thread_t;
   typedef pthread_mutex_t      sp_mutex_t;
   typedef dispatch_semaphore_t sp_semaphore_t;
-#elif defined(__COSMOPOLITAN__)
+#elif defined(SP_POSIX)
   typedef pthread_t            sp_thread_t;
   typedef pthread_mutex_t      sp_mutex_t;
   typedef sem_t                sp_semaphore_t;
@@ -5152,11 +5154,15 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
   }
 
   sp_str_t sp_os_canonicalize_path(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-    realpath(path_cstr, canonical_path);
+    sp_str_t result = path;
+    if (sp_os_does_path_exist(path)) {
+      c8* path_cstr = sp_str_to_cstr(path);
+      c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+      SP_ASSERT(realpath(path_cstr, canonical_path));
 
-    sp_str_t result = SP_CSTR(canonical_path);
+      result = SP_CSTR(canonical_path);
+    }
+
     result = sp_os_normalize_path(result);
 
     if (result.len > 0 && result.data[result.len - 1] == '/') {
@@ -5864,82 +5870,7 @@ sp_err_t sp_os_create_symbolic_link(sp_str_t target, sp_str_t link_path) {
   }
 #endif
 
-#if defined(SP_LINUX)
-sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
-  switch (kind) {
-    case SP_OS_LIB_SHARED: return SP_LIT("so");
-    case SP_OS_LIB_STATIC: return SP_LIT("a");
-  }
-
-  SP_UNREACHABLE_RETURN(sp_str_lit(""));
-}
-
-sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
-  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
-}
-
-void sp_semaphore_init(sp_semaphore_t* semaphore) {
-  sem_init(semaphore, 0, 0);
-}
-
-void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-  sem_destroy(semaphore);
-}
-
-void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-  sem_wait(semaphore);
-}
-
-bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-  struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
-  ts.tv_sec += ms / 1000;
-  ts.tv_nsec += (ms % 1000) * 1000000;
-  if (ts.tv_nsec >= 1000000000) {
-    ts.tv_sec++;
-    ts.tv_nsec -= 1000000000;
-  }
-  return sem_timedwait(semaphore, &ts) == 0;
-}
-
-void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-  sem_post(semaphore);
-}
-
-sp_str_t sp_os_get_executable_path() {
-  c8 exe_path [PATH_MAX];
-  sp_str_t file_path = {
-    .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
-    .data = exe_path
-  };
-
-  if (!file_path.len) {
-    return sp_str_lit("");
-  }
-
-  return sp_str_copy(sp_os_parent_path(file_path));
-}
-
-sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
-  sp_str_t path =  sp_os_get_env_var(xdg);
-  if (sp_str_valid(path)) return path;
-
-  path = sp_os_get_env_var(SP_LIT("HOME"));
-  if (sp_str_valid(path)) return sp_os_join_path(path, home_suffix);
-
-  return SP_ZERO_STRUCT(sp_str_t);
-}
-
-sp_str_t sp_os_get_storage_path() {
-  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
-}
-
-sp_str_t sp_os_get_config_path() {
-  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
-}
-#endif
-
-#if defined(__COSMOPOLITAN__)
+#if defined(SP_LINUX) || defined(SP_COSMO)
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
   switch (kind) {
     case SP_OS_LIB_SHARED: return SP_LIT("so");
@@ -6192,7 +6123,7 @@ sp_str_t sp_os_get_config_path() {
   }
 #endif
 
-#ifdef SP_LINUX
+#if defined(SP_LINUX)
   sp_os_platform_kind_t sp_os_platform_kind() {
     return SP_OS_PLATFORM_LINUX;
   }
@@ -6322,7 +6253,7 @@ sp_str_t sp_os_get_config_path() {
   }
 #endif
 
-#if defined(__COSMOPOLITAN__)
+#if defined(SP_COSMO)
 sp_os_platform_kind_t sp_os_platform_kind() {
   return SP_OS_PLATFORM_COSMOPOLITAN;
 }
