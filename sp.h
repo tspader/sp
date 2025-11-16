@@ -1629,6 +1629,23 @@ SP_IMP void sp_ps_set_blocking(s32 fd);
 // ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
 // ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
+//
+// User-defined format types:
+// 1. Define SP_USER_FORMAT_TYPES before #include "sp.h"
+// 2. Implement sp_fmt_format_<type> functions after first include
+// 3. #define SP_FORMAT_FINALIZE and #include "sp.h" again
+//
+// Example:
+//   typedef struct { f32 x, y; } vec2_t;
+//   #define SP_USER_FORMAT_TYPES SP_FMT_X(vec2, vec2_t)
+//   #include "sp.h"
+//   void sp_fmt_format_vec2(sp_str_builder_t* b, sp_format_arg_t* arg) {
+//     vec2_t v = arg->vec2_value;
+//     sp_str_t s = sp_format("({}, {})", SP_FMT_F32(v.x), SP_FMT_F32(v.y));
+//     sp_str_builder_append(b, s);
+//   }
+//   #define SP_FORMAT_FINALIZE
+//   #include "sp.h"
 
 #define SP_FORMAT_TYPES \
  SP_FMT_X(ptr, void*) \
@@ -1654,6 +1671,14 @@ SP_IMP void sp_ps_set_blocking(s32 fd);
  SP_FMT_X(quoted_str, sp_str_t) \
  SP_FMT_X(color, const c8*) \
 
+#ifndef SP_USER_FORMAT_TYPES
+#define SP_USER_FORMAT_TYPES
+#endif
+
+#define SP_ALL_FORMAT_TYPES \
+  SP_FORMAT_TYPES \
+  SP_USER_FORMAT_TYPES
+
 #define SP_FMT_ID(id) SP_MACRO_CAT(sp_format_id_, id)
 #define SP_FMT_FN(id) SP_MACRO_CAT(sp_fmt_format_, id)
 #define SP_FMT_UNION(T) SP_MACRO_CAT(T, _value)
@@ -1661,7 +1686,7 @@ SP_IMP void sp_ps_set_blocking(s32 fd);
 typedef enum {
   #undef SP_FMT_X
   #define SP_FMT_X(id, type) SP_FMT_ID(id),
-  SP_FORMAT_TYPES
+  SP_ALL_FORMAT_TYPES
 } sp_format_id_t;
 
 typedef struct sp_format_arg_t {
@@ -1670,7 +1695,7 @@ typedef struct sp_format_arg_t {
   union {
     #undef SP_FMT_X
     #define SP_FMT_X(name, type) type SP_FMT_UNION(name);
-    SP_FORMAT_TYPES
+    SP_ALL_FORMAT_TYPES
   };
 
 } sp_format_arg_t;
@@ -1718,7 +1743,7 @@ typedef struct sp_formatter {
 
 #undef SP_FMT_X
 #define SP_FMT_X(name, type) void sp_fmt_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-SP_FORMAT_TYPES
+SP_ALL_FORMAT_TYPES
 
 sp_str_t sp_format_str(sp_str_t fmt, ...);
 sp_str_t sp_format(const c8* fmt, ...);
@@ -2924,7 +2949,7 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
   #define SP_FMT_X(ID, t) (sp_formatter_t) { .id = SP_FMT_ID(ID), .fn = SP_FMT_FN(ID) },
 
   static sp_formatter_t formatters [] = {
-    SP_FORMAT_TYPES
+    SP_ALL_FORMAT_TYPES
   };
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
