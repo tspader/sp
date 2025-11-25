@@ -394,27 +394,35 @@ typedef struct {
   u8* buffer;
   u32 capacity;
   u32 bytes_used;
-} sp_bump_allocator_t;
+} sp_mem_arena_t;
 
 typedef struct {
   u32 size;
-} sp_malloc_metadata_t;
+} sp_mem_libc_metadata_t;
 
 typedef struct {
   sp_allocator_t allocator;
-} sp_malloc_allocator_t;
+} sp_mem_libc_allocator_t_t;
+
+typedef struct {
+  sp_mem_arena_t* arena;
+  u32 mark;
+} sp_mem_arena_marker_t;
 
 sp_allocator_t        sp_allocator_default();
-void*                 sp_allocator_alloc(sp_allocator_t allocator, u32 size);
-void*                 sp_allocator_realloc(sp_allocator_t allocator, void* memory, u32 size);
-void                  sp_allocator_free(sp_allocator_t allocator, void* buffer);
-sp_allocator_t        sp_bump_allocator_init(sp_bump_allocator_t* allocator, u32 capacity);
-void                  sp_bump_allocator_clear(sp_bump_allocator_t* allocator);
-void                  sp_bump_allocator_destroy(sp_bump_allocator_t* allocator);
-void*                 sp_bump_allocator_on_alloc(void* allocator, sp_allocator_mode_t mode, u32 size, void* old_memory);
-sp_allocator_t        sp_malloc_allocator_init();
-void*                 sp_malloc_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr);
-sp_malloc_metadata_t* sp_malloc_allocator_get_metadata(void* ptr);
+void*                 sp_allocator_alloc(sp_allocator_t a, u32 size);
+void*                 sp_allocator_realloc(sp_allocator_t a, void* memory, u32 size);
+void                  sp_allocator_free(sp_allocator_t a, void* buffer);
+
+sp_allocator_t        sp_mem_arena_init(sp_mem_arena_t* a, u32 capacity);
+void                  sp_mem_arena_clear(sp_mem_arena_t* a);
+void                  sp_mem_arena_destroy(sp_mem_arena_t* a);
+void*                 sp_mem_arena_on_alloc(void* a, sp_allocator_mode_t mode, u32 size, void* old_memory);
+sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* a);
+void                  sp_mem_arena_pop(sp_mem_arena_marker_t marker);
+sp_allocator_t        sp_mem_libc_allocator_t_init();
+void*                 sp_mem_libc_allocator_t_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr);
+sp_mem_libc_metadata_t* sp_mem_libc_allocator_get_metadata(void* ptr);
 void*                 sp_alloc(u32 size);
 void*                 sp_realloc(void* memory, u32 size);
 void                  sp_free(void* memory);
@@ -1326,36 +1334,60 @@ SP_API s32          sp_atomic_s32_get(sp_atomic_s32* value);
 // ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══╝   ██╔██╗    ██║
 // ╚██████╗╚██████╔╝██║ ╚████║   ██║   ███████╗██╔╝ ██╗   ██║
 //  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝
+
+#ifndef SP_MAX_CONTEXT
 #define SP_MAX_CONTEXT 16
+#endif
+
+#ifndef SP_GLOBAL_NUM_SPIN_LOCKS
+#define SP_GLOBAL_NUM_SPIN_LOCKS 32
+#endif
+
+#ifndef SP_SCRATCH_SIZE
+#define SP_SCRATCH_SIZE (1024 * 1024)
+#endif
+
+typedef struct {
+  pthread_key_t key;
+  pthread_once_t once;
+} sp_global_keys_t;
 
 typedef struct {
   sp_allocator_t allocator;
+  sp_mem_arena_t scratch;
   sp_mutex_t mutex;
 } sp_context_t;
 
-#define SP_GLOBAL_NUM_SPIN_LOCKS 32
+typedef struct {
+  sp_context_t contexts[SP_MAX_CONTEXT];
+  u32 index;
+} sp_thread_state_t;
+
 typedef struct {
   u8 initted;
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_GLOBAL_NUM_SPIN_LOCKS];
+  sp_global_keys_t keys;
 } sp_sp_t;
-static sp_sp_t sp_global = SP_ZERO_INITIALIZE();
+static sp_sp_t sp_global = {
+  .keys.once = PTHREAD_ONCE_INIT
+};
 
 typedef struct {
   sp_allocator_t allocator;
 } sp_config_t;
 
-extern pthread_key_t sp_context_stack_key;
-extern pthread_key_t sp_context_key;
-extern pthread_once_t sp_context_keys_once;
 
-sp_context_t* sp_context_get();
-void          sp_context_set(sp_context_t context);
-void          sp_context_push(sp_context_t context);
-void          sp_context_push_allocator(sp_allocator_t allocator);
-void          sp_context_pop();
-void          sp_context_ensure();
-void          sp_init(sp_config_t config);
+sp_thread_state_t*    sp_thread_state_get();
+sp_context_t*         sp_context_get();
+void                  sp_context_set(sp_context_t context);
+void                  sp_context_push(sp_context_t context);
+void                  sp_context_push_allocator(sp_allocator_t allocator);
+void                  sp_context_pop();
+void                  sp_context_ensure();
+void                  sp_init(sp_config_t config);
+sp_mem_arena_marker_t sp_mem_mark();
+void                  sp_mem_pop(sp_mem_arena_marker_t marker);
 
 
 // ██╗ ██████╗
@@ -2691,11 +2723,9 @@ void sp_fmt_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 
 void sp_fmt_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   // Context is passed as pointer but we don't use it
-  sp_context_t* ctx = sp_context_get();
-  if (ctx) {
-    sp_context_t* stack = (sp_context_t*)pthread_getspecific(sp_context_stack_key);
-    u32 index = (u32)(ctx - stack);
-    sp_fmt_format_unsigned(builder, index, 10);
+  sp_thread_state_t* state = sp_thread_state_get();
+  if (state) {
+    sp_fmt_format_unsigned(builder, state->index, 10);
   } else {
     sp_str_builder_append_cstr(builder, "NULL");
   }
@@ -2996,52 +3026,39 @@ void sp_log(sp_str_t fmt, ...) {
 }
 
 void sp_context_check_index() {
-  sp_context_t* ctx = sp_context_get();
-  sp_context_t* stack = (sp_context_t*)pthread_getspecific(sp_context_stack_key);
-  u32 index = (u32)(ctx - stack);
-  SP_ASSERT(index);
-  SP_ASSERT(index < SP_MAX_CONTEXT);
+  sp_thread_state_t* state = sp_thread_state_get();
+  SP_ASSERT(state->index > 0);
+  SP_ASSERT(state->index < SP_MAX_CONTEXT);
 }
 
 void sp_context_ensure() {
-  if (!sp_context_get()) sp_init(SP_ZERO_STRUCT(sp_config_t));
+  sp_context_get(); // Ensures thread state is initialized
 }
 
 void sp_context_set(sp_context_t context) {
-  sp_context_ensure();
-  sp_context_t* ctx = sp_context_get();
-  sp_context_t* stack = (sp_context_t*)pthread_getspecific(sp_context_stack_key);
-  ctx = ctx ? ctx : &stack[1];
-  *ctx = context;
-  pthread_setspecific(sp_context_key, ctx);
+  sp_thread_state_t* state = sp_thread_state_get();
+  state->contexts[state->index] = context;
 }
 
 void sp_context_push(sp_context_t context) {
-  sp_context_ensure();
-
-  sp_context_t* ctx = sp_context_get();
-  ctx++;
-  *ctx = context;
-  pthread_setspecific(sp_context_key, ctx);
-  sp_context_check_index();
+  sp_thread_state_t* state = sp_thread_state_get();
+  SP_ASSERT(state->index + 1 < SP_MAX_CONTEXT);
+  state->index++;
+  state->contexts[state->index] = context;
 }
 
 void sp_context_push_allocator(sp_allocator_t allocator) {
-  sp_context_ensure();
-
-  sp_context_t* ctx = sp_context_get();
-  sp_context_t context = *ctx;
+  sp_thread_state_t* state = sp_thread_state_get();
+  sp_context_t context = state->contexts[state->index];
   context.allocator = allocator;
   sp_context_push(context);
 }
 
 void sp_context_pop() {
-  sp_context_t* ctx = sp_context_get();
-  SP_ASSERT(ctx);
-  sp_context_check_index();
-  *ctx = SP_ZERO_STRUCT(sp_context_t); // Not required, just for the debugger
-  ctx--;
-  pthread_setspecific(sp_context_key, ctx);
+  sp_thread_state_t* state = sp_thread_state_get();
+  SP_ASSERT(state->index > 0);
+  state->contexts[state->index] = SP_ZERO_STRUCT(sp_context_t); // Not required, just for the debugger
+  state->index--;
 }
 
 void* sp_alloc(u32 size) {
@@ -3063,7 +3080,7 @@ void sp_free(void* memory) {
 }
 
 sp_allocator_t sp_allocator_default() {
-  return sp_malloc_allocator_init();
+  return sp_mem_libc_allocator_t_init();
 }
 
 void* sp_allocator_alloc(sp_allocator_t allocator, u32 size) {
@@ -3078,23 +3095,23 @@ void sp_allocator_free(sp_allocator_t allocator, void* buffer) {
   allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_FREE, 0, buffer);
 }
 
-sp_allocator_t sp_bump_allocator_init(sp_bump_allocator_t* allocator, u32 capacity) {
+sp_allocator_t sp_mem_arena_init(sp_mem_arena_t* allocator, u32 capacity) {
   allocator->buffer = (u8*)sp_os_allocate_memory(capacity);
   allocator->capacity = capacity;
   allocator->bytes_used = 0;
 
   sp_allocator_t result;
-  result.on_alloc = sp_bump_allocator_on_alloc;
+  result.on_alloc = sp_mem_arena_on_alloc;
   result.user_data = allocator;
   return result;
 }
 
-void sp_bump_allocator_clear(sp_bump_allocator_t* allocator) {
+void sp_mem_arena_clear(sp_mem_arena_t* allocator) {
   memset(allocator->buffer, 0, allocator->bytes_used);
   allocator->bytes_used = 0;
 }
 
-void sp_bump_allocator_destroy(sp_bump_allocator_t* allocator) {
+void sp_mem_arena_destroy(sp_mem_arena_t* allocator) {
   if (allocator->buffer) {
     sp_os_free_memory(allocator->buffer);
     allocator->buffer = NULL;
@@ -3103,8 +3120,8 @@ void sp_bump_allocator_destroy(sp_bump_allocator_t* allocator) {
   }
 }
 
-void* sp_bump_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* old_memory) {
-  sp_bump_allocator_t* bump = (sp_bump_allocator_t*)user_data;
+void* sp_mem_arena_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* old_memory) {
+  sp_mem_arena_t* bump = (sp_mem_arena_t*)user_data;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
       if (bump->bytes_used + size > bump->capacity) {
@@ -3123,8 +3140,10 @@ void* sp_bump_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 
       return NULL;
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
-      void* memory_block = sp_bump_allocator_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
-      sp_os_move_memory(old_memory, memory_block, size);
+      void* memory_block = sp_mem_arena_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+      if (old_memory) {
+        sp_os_move_memory(old_memory, memory_block, size);
+      }
       return memory_block;
     }
     default: {
@@ -3133,37 +3152,55 @@ void* sp_bump_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 
     }
   }
 }
-
-sp_malloc_metadata_t* sp_malloc_allocator_get_metadata(void* ptr) {
-  return ((sp_malloc_metadata_t*)ptr) - 1;
+sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* a) {
+  return (sp_mem_arena_marker_t) {
+    .arena = a,
+    .mark = a->bytes_used
+  };
 }
 
-void* sp_malloc_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr) {
+void sp_mem_arena_pop(sp_mem_arena_marker_t marker) {
+  marker.arena->bytes_used = marker.mark;
+}
+
+sp_mem_arena_marker_t sp_mem_mark() {
+  return sp_mem_arena_mark(&sp_context_get()->scratch);
+}
+
+void sp_mem_pop(sp_mem_arena_marker_t marker) {
+  sp_mem_arena_pop(marker);
+}
+
+sp_mem_libc_metadata_t* sp_mem_libc_allocator_get_metadata(void* ptr) {
+  return ((sp_mem_libc_metadata_t*)ptr) - 1;
+}
+
+void* sp_mem_libc_allocator_t_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr) {
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
-      u32 total_size = size + sizeof(sp_malloc_metadata_t);
-      sp_malloc_metadata_t* metadata = (sp_malloc_metadata_t*)sp_os_allocate_memory(total_size);
+      u32 total_size = size + sizeof(sp_mem_libc_metadata_t);
+      sp_mem_libc_metadata_t* metadata = (sp_mem_libc_metadata_t*)sp_os_allocate_memory(total_size);
       metadata->size = size;
       return metadata + 1;
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
       if (!ptr) {
-        return sp_malloc_allocator_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+        return sp_mem_libc_allocator_t_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       }
 
-      sp_malloc_metadata_t* metadata = sp_malloc_allocator_get_metadata(ptr);
+      sp_mem_libc_metadata_t* metadata = sp_mem_libc_allocator_get_metadata(ptr);
       if (metadata->size >= size) {
         return ptr;
       }
 
-      void* buffer = sp_malloc_allocator_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+      void* buffer = sp_mem_libc_allocator_t_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       sp_os_copy_memory(ptr, buffer, metadata->size);
-      sp_malloc_allocator_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
+      sp_mem_libc_allocator_t_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
 
       return buffer;
     }
     case SP_ALLOCATOR_MODE_FREE: {
-      sp_malloc_metadata_t* metadata = sp_malloc_allocator_get_metadata(ptr);
+      sp_mem_libc_metadata_t* metadata = sp_mem_libc_allocator_get_metadata(ptr);
       sp_os_free_memory(metadata);
       return NULL;
     }
@@ -3173,9 +3210,9 @@ void* sp_malloc_allocator_on_alloc(void* user_data, sp_allocator_mode_t mode, u3
   }
 }
 
-sp_allocator_t sp_malloc_allocator_init() {
+sp_allocator_t sp_mem_libc_allocator_t_init() {
   sp_allocator_t allocator;
-  allocator.on_alloc = sp_malloc_allocator_on_alloc;
+  allocator.on_alloc = sp_mem_libc_allocator_t_on_alloc;
   allocator.user_data = NULL;
   return allocator;
 }
@@ -3680,6 +3717,7 @@ sp_str_t sp_str_strip(sp_str_t str, sp_str_t strip) {
 }
 
 sp_str_t sp_str_to_upper(sp_str_t str) {
+  sp_mem_mark();
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
   for (u32 i = 0; i < str.len; i++) {
@@ -6513,46 +6551,42 @@ void sp_future_set_value(sp_future_t* future, void* value) {
 }
 
 
-pthread_key_t sp_context_stack_key;
-pthread_key_t sp_context_key;
-pthread_once_t sp_context_keys_once = PTHREAD_ONCE_INIT;
 
-void sp_context_stack_cleanup(void* ptr) {
+void sp_context_on_deinit(void* ptr) {
   if (ptr) {
+    sp_thread_state_t* state = (sp_thread_state_t*)ptr;
+    for (u32 i = 0; i <= state->index; i++) {
+      if (state->contexts[i].scratch.buffer) {
+        sp_mem_arena_destroy(&state->contexts[i].scratch);
+      }
+    }
     free(ptr);
   }
 }
 
-void sp_context_keys_create_once() {
-  pthread_key_create(&sp_context_stack_key, sp_context_stack_cleanup);
-  pthread_key_create(&sp_context_key, NULL);
+void sp_context_on_init() {
+  pthread_key_create(&sp_global.keys.key, sp_context_on_deinit);
 }
 
-void sp_context_thread_init() {
-  pthread_once(&sp_context_keys_once, sp_context_keys_create_once);
+sp_thread_state_t* sp_thread_state_get() {
+  pthread_once(&sp_global.keys.once, sp_context_on_init);
 
-  if (pthread_getspecific(sp_context_stack_key) != NULL) {
-    return;
+  sp_thread_state_t* state = (sp_thread_state_t*)pthread_getspecific(sp_global.keys.key);
+  if (!state) {
+    state = (sp_thread_state_t*)malloc(sizeof(sp_thread_state_t));
+    memset(state, 0, sizeof(sp_thread_state_t));
+    pthread_setspecific(sp_global.keys.key, state);
+
+    state->index = 0;
+    state->contexts[0].allocator = sp_mem_libc_allocator_t_init();
   }
 
-  sp_context_t* stack = (sp_context_t*)malloc(sizeof(sp_context_t) * SP_MAX_CONTEXT);
-  memset(stack, 0, sizeof(sp_context_t) * SP_MAX_CONTEXT);
-  pthread_setspecific(sp_context_stack_key, stack);
-
-  pthread_setspecific(sp_context_key, &stack[0]);
-
-  stack[0].allocator = sp_malloc_allocator_init();
+  return state;
 }
 
 sp_context_t* sp_context_get() {
-  pthread_once(&sp_context_keys_once, sp_context_keys_create_once);
-
-  sp_context_t* ctx = (sp_context_t*)pthread_getspecific(sp_context_key);
-  if (ctx == NULL) {
-    sp_context_thread_init();
-    ctx = (sp_context_t*)pthread_getspecific(sp_context_key);
-  }
-  return ctx;
+  sp_thread_state_t* state = sp_thread_state_get();
+  return &state->contexts[state->index];
 }
 
 void sp_init(sp_config_t config) {
@@ -6560,6 +6594,7 @@ void sp_init(sp_config_t config) {
   *ctx = (sp_context_t) {
     .allocator = sp_allocator_default()
   };
+  sp_mem_arena_init(&ctx->scratch, SP_SCRATCH_SIZE);
 
   if (!sp_global.initted) {
     sp_mutex_init(&sp_global.mutex, SP_MUTEX_PLAIN);

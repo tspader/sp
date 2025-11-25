@@ -10,7 +10,7 @@ argparse = "1.2.0"
 
 [[profile]]
 name = "debug"
-cc = "tcc"
+cc = "gcc"
 mode = "debug"
 language = "c11"
 
@@ -46,6 +46,10 @@ source = ["test/ps.c"]
 [[bin]]
 name = "stress"
 source = ["test/stress.c"]
+
+[[bin]]
+name = "context"
+source = ["test/context.c"]
 
 [[bin]]
 name = "extract_fns"
