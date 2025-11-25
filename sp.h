@@ -1348,11 +1348,6 @@ SP_API s32          sp_atomic_s32_get(sp_atomic_s32* value);
 #endif
 
 typedef struct {
-  pthread_key_t key;
-  pthread_once_t once;
-} sp_global_keys_t;
-
-typedef struct {
   sp_allocator_t allocator;
   sp_mem_arena_t scratch;
   sp_mutex_t mutex;
@@ -1367,10 +1362,14 @@ typedef struct {
   u8 initted;
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_GLOBAL_NUM_SPIN_LOCKS];
-  sp_global_keys_t keys;
-} sp_sp_t;
-static sp_sp_t sp_global = {
-  .keys.once = PTHREAD_ONCE_INIT
+  struct {
+    pthread_key_t key;
+    pthread_once_t once;
+  } tls;
+} sp_global_state_t;
+
+static sp_global_state_t sp_global = {
+  .tls.once = PTHREAD_ONCE_INIT
 };
 
 typedef struct {
@@ -5161,25 +5160,6 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     timer->previous = now;
   }
 
-  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(file_path);
-    s32 result = stat(path_cstr, &st);
-
-    if (result != 0) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
-    if (st.st_size == 0) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
-    return SP_RVAL(sp_tm_epoch_t) {
-      .s = (u64)st.st_mtime,
-      .ns = 0
-    };
-  }
-
   void sp_os_sleep_ms(f64 ms) {
     struct timespec ts;
     ts.tv_sec = (time_t)(ms / 1000.0);
@@ -6281,6 +6261,25 @@ sp_str_t sp_os_get_config_path() {
     // Emit changes with debouncing
     sp_file_monitor_emit_changes(monitor);
   }
+
+  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(file_path);
+    s32 result = stat(path_cstr, &st);
+
+    if (result != 0) {
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
+    }
+
+    if (st.st_size == 0) {
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
+    }
+
+    return SP_RVAL(sp_tm_epoch_t) {
+      .s = (u64)st.st_mtime,
+      .ns = (u32)st.st_mtim.tv_nsec
+    };
+  }
 #endif
 
 #ifdef SP_MACOS
@@ -6342,6 +6341,25 @@ sp_str_t sp_os_get_config_path() {
   void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
     (void)monitor;
     SP_BROKEN();
+  }
+
+  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(file_path);
+    s32 result = stat(path_cstr, &st);
+
+    if (result != 0) {
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
+    }
+
+    if (st.st_size == 0) {
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
+    }
+
+    return SP_RVAL(sp_tm_epoch_t) {
+      .s = (u64)st.st_mtime,
+      .ns = (u32)st.st_mtimespec.tv_nsec
+    };
   }
 #endif
 
@@ -6565,17 +6583,17 @@ void sp_context_on_deinit(void* ptr) {
 }
 
 void sp_context_on_init() {
-  pthread_key_create(&sp_global.keys.key, sp_context_on_deinit);
+  pthread_key_create(&sp_global.tls.key, sp_context_on_deinit);
 }
 
 sp_thread_state_t* sp_thread_state_get() {
-  pthread_once(&sp_global.keys.once, sp_context_on_init);
+  pthread_once(&sp_global.tls.once, sp_context_on_init);
 
-  sp_thread_state_t* state = (sp_thread_state_t*)pthread_getspecific(sp_global.keys.key);
+  sp_thread_state_t* state = (sp_thread_state_t*)pthread_getspecific(sp_global.tls.key);
   if (!state) {
     state = (sp_thread_state_t*)malloc(sizeof(sp_thread_state_t));
     memset(state, 0, sizeof(sp_thread_state_t));
-    pthread_setspecific(sp_global.keys.key, state);
+    pthread_setspecific(sp_global.tls.key, state);
 
     state->index = 0;
     state->contexts[0].allocator = sp_mem_libc_allocator_t_init();
