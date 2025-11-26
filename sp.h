@@ -25,6 +25,10 @@
   #define SP_POSIX
 #endif
 
+#if defined(__wasm__) || defined(__wasm32__) || defined(__wasm64__)
+  #define SP_WASM
+#endif
+
 
 ////////////////////////
 // COMPILER SELECTION //
@@ -55,6 +59,10 @@
 #if defined(__aarch64__) || defined(_M_ARM64)
   #define SP_ARM64
   #define SP_ARM
+#endif
+
+#if defined(__wasm32__)
+  #define SP_WASM32
 #endif
 
 ////////////////////////
@@ -137,6 +145,23 @@
   #include <time.h>
 #endif
 
+#ifdef SP_WASM
+  #include <stdint.h>
+  #include <stddef.h>
+  #include <stdlib.h>
+  #include <stdio.h>
+  #include <string.h>
+  #include <time.h>
+  #include <errno.h>
+  #include <fcntl.h>
+  #include <unistd.h>
+  #include <sys/stat.h>
+  #include <sys/types.h>
+
+  // wchar_t stub for WASM
+  typedef int wchar_t;
+#endif
+
 #ifdef SP_CPP
   #include <atomic>
 #endif
@@ -150,7 +175,9 @@
   #undef SP_STRNLEN
 #endif
 
-extern char** environ;
+#ifndef SP_WASM
+  extern char** environ;
+#endif
 
 // ███╗   ███╗ █████╗  ██████╗██████╗  ██████╗ ███████╗
 // ████╗ ████║██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔════╝
@@ -1140,6 +1167,13 @@ SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* mon
   typedef s32 sp_os_file_handle_t;
 #endif
 
+#if defined(SP_WASM)
+  typedef s32 sp_os_file_handle_t;
+  typedef struct {
+    void* placeholder;
+  } sp_os_file_monitor_t;
+#endif
+
 #ifdef SP_LINUX
   typedef struct {
     s32 fd;
@@ -1274,6 +1308,11 @@ SP_IMP void                   sp_os_file_monitor_process_changes(sp_file_monitor
   typedef thrd_t               sp_thread_t;
   typedef mtx_t                sp_mutex_t;
   typedef HANDLE               sp_semaphore_t;
+#elif defined(SP_WASM)
+  // WASM doesn't support real threading - stub types
+  typedef u32                  sp_thread_t;
+  typedef u32                  sp_mutex_t;
+  typedef u32                  sp_semaphore_t;
 #elif defined(SP_LINUX)
   typedef pthread_t            sp_thread_t;
   typedef pthread_mutex_t      sp_mutex_t;
@@ -1362,15 +1401,21 @@ typedef struct {
   u8 initted;
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_GLOBAL_NUM_SPIN_LOCKS];
+#ifndef SP_WASM
   struct {
     pthread_key_t key;
     pthread_once_t once;
   } tls;
+#endif
 } sp_global_state_t;
 
+#ifdef SP_WASM
+static sp_global_state_t sp_global = {0};
+#else
 static sp_global_state_t sp_global = {
   .tls.once = PTHREAD_ONCE_INIT
 };
+#endif
 
 typedef struct {
   sp_allocator_t allocator;
@@ -1612,8 +1657,20 @@ typedef struct {
 } sp_ps_platform_t;
 #endif
 
+// WASM
+#if defined(SP_WASM)
+typedef s32 pid_t;
 typedef struct {
+  void* placeholder;
+} sp_ps_platform_t;
+#endif
+
+typedef struct {
+#ifdef SP_WASM
+  s32 pid;
+#else
   pid_t pid;
+#endif
   sp_ps_io_t io;
   sp_ps_platform_t platform;
   sp_allocator_t allocator;
@@ -5845,6 +5902,125 @@ sp_err_t sp_os_create_symbolic_link(sp_str_t target, sp_str_t link_path) {
 }
 #endif
 
+#if defined(SP_WASM)
+  // WASM-specific implementations for core OS functions
+  void* sp_os_allocate_memory(u32 size) {
+    void* ptr = malloc(size);
+    if (ptr) memset(ptr, 0, size);
+    return ptr;
+  }
+
+  void* sp_os_reallocate_memory(void* ptr, u32 size) {
+    if (!ptr) return sp_os_allocate_memory(size);
+    if (!size) { free(ptr); return NULL; }
+    return realloc(ptr, size);
+  }
+
+  void sp_os_free_memory(void* ptr) {
+    if (!ptr) return;
+    free(ptr);
+  }
+
+  bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
+    return !memcmp(a, b, len);
+  }
+
+  void sp_os_copy_memory(const void* source, void* dest, u32 num_bytes) {
+    memcpy(dest, source, num_bytes);
+  }
+
+  void sp_os_move_memory(const void* source, void* dest, u32 num_bytes) {
+    memmove(dest, source, num_bytes);
+  }
+
+  void sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
+    u8* current_byte = (u8*)buffer;
+    s32 i = 0;
+    while (true) {
+      if (i + fill_size > buffer_size) return;
+      memcpy(current_byte + i, (u8*)fill, fill_size);
+      i += fill_size;
+    }
+  }
+
+  void sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill) {
+    sp_os_fill_memory(buffer, buffer_size, &fill, sizeof(u8));
+  }
+
+  void sp_os_zero_memory(void* buffer, u32 buffer_size) {
+    sp_os_fill_memory_u8(buffer, buffer_size, 0);
+  }
+
+  void sp_os_print(sp_str_t message) {
+    fwrite(message.data, 1, message.len, stdout);
+  }
+
+  void sp_os_log(sp_str_t message) {
+    sp_os_print(message);
+    sp_os_print(SP_LIT("\n"));
+  }
+
+  // Threading stubs for WASM (single-threaded)
+  void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
+    SP_UNUSED(thread);
+    SP_UNUSED(fn);
+    SP_UNUSED(userdata);
+    // WASM is single-threaded, cannot spawn threads
+  }
+
+  void sp_thread_join(sp_thread_t* thread) {
+    SP_UNUSED(thread);
+    // No-op for WASM
+  }
+
+  void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
+    SP_UNUSED(mutex);
+    SP_UNUSED(kind);
+    // No-op for WASM (single-threaded)
+  }
+
+  void sp_mutex_lock(sp_mutex_t* mutex) {
+    SP_UNUSED(mutex);
+    // No-op for WASM
+  }
+
+  void sp_mutex_unlock(sp_mutex_t* mutex) {
+    SP_UNUSED(mutex);
+    // No-op for WASM
+  }
+
+  void sp_mutex_destroy(sp_mutex_t* mutex) {
+    SP_UNUSED(mutex);
+    // No-op for WASM
+  }
+
+  void sp_semaphore_init(sp_semaphore_t* semaphore) {
+    SP_UNUSED(semaphore);
+    // No-op for WASM
+  }
+
+  void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+    SP_UNUSED(semaphore);
+    // No-op for WASM
+  }
+
+  void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+    SP_UNUSED(semaphore);
+    // No-op for WASM
+  }
+
+  bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+    SP_UNUSED(semaphore);
+    SP_UNUSED(ms);
+    return true; // Always succeeds immediately for WASM
+  }
+
+  void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+    SP_UNUSED(semaphore);
+    // No-op for WASM
+  }
+#endif
+
 #if defined(SP_MACOS)
   void sp_semaphore_init(sp_semaphore_t* semaphore) {
       *semaphore = dispatch_semaphore_create(0);
@@ -6570,6 +6746,21 @@ void sp_future_set_value(sp_future_t* future, void* value) {
 
 
 
+#ifdef SP_WASM
+// WASM: Single-threaded, use static thread state
+static sp_thread_state_t sp_wasm_thread_state = {0};
+static u8 sp_wasm_thread_state_initted = 0;
+
+sp_thread_state_t* sp_thread_state_get() {
+  if (!sp_wasm_thread_state_initted) {
+    sp_wasm_thread_state_initted = 1;
+    memset(&sp_wasm_thread_state, 0, sizeof(sp_thread_state_t));
+    sp_wasm_thread_state.index = 0;
+    sp_wasm_thread_state.contexts[0].allocator = sp_mem_libc_allocator_t_init();
+  }
+  return &sp_wasm_thread_state;
+}
+#else
 void sp_context_on_deinit(void* ptr) {
   if (ptr) {
     sp_thread_state_t* state = (sp_thread_state_t*)ptr;
@@ -6601,6 +6792,7 @@ sp_thread_state_t* sp_thread_state_get() {
 
   return state;
 }
+#endif
 
 sp_context_t* sp_context_get() {
   sp_thread_state_t* state = sp_thread_state_get();
