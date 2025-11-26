@@ -20,7 +20,7 @@ UTEST(sp_context, allocator_is_valid) {
 }
 
 UTEST(sp_context, thread_state_index_starts_at_zero) {
-  sp_thread_state_t* state = sp_thread_state_get();
+  sp_tls_rt_t* state = sp_tls_rt_get();
   ASSERT_EQ(state->index, 0);
 }
 
@@ -29,7 +29,7 @@ UTEST(sp_context, thread_state_index_starts_at_zero) {
 //////////////////////////
 
 UTEST(sp_context, push_pop_single) {
-  sp_thread_state_t* state = sp_thread_state_get();
+  sp_tls_rt_t* state = sp_tls_rt_get();
   u32 initial_index = state->index;
 
   sp_context_t ctx = *sp_context_get();
@@ -42,7 +42,7 @@ UTEST(sp_context, push_pop_single) {
 }
 
 UTEST(sp_context, push_pop_multiple) {
-  sp_thread_state_t* state = sp_thread_state_get();
+  sp_tls_rt_t* state = sp_tls_rt_get();
   u32 initial_index = state->index;
 
   sp_context_t ctx = *sp_context_get();
@@ -64,7 +64,7 @@ UTEST(sp_context, push_allocator_changes_allocator) {
   sp_context_t* ctx_before = sp_context_get();
   sp_allocator_t old_allocator = ctx_before->allocator;
 
-  sp_allocator_t new_allocator = sp_mem_libc_allocator_t_init();
+  sp_allocator_t new_allocator = sp_mem_libc_new();
   sp_context_push_allocator(new_allocator);
 
   sp_context_t* ctx_after = sp_context_get();
@@ -81,7 +81,7 @@ UTEST(sp_context, push_allocator_changes_allocator) {
 
 UTEST(sp_context, set_modifies_current) {
   sp_context_t ctx = *sp_context_get();
-  sp_allocator_t new_allocator = sp_mem_libc_allocator_t_init();
+  sp_allocator_t new_allocator = sp_mem_libc_new();
   ctx.allocator = new_allocator;
 
   sp_context_set(ctx);
@@ -198,7 +198,7 @@ s32 push_pop_thread_func(void* userdata) {
   data->all_passed = true;
 
   for (s32 i = 0; i < data->iterations; i++) {
-    sp_thread_state_t* state = sp_thread_state_get();
+    sp_tls_rt_t* state = sp_tls_rt_get();
     u32 initial_index = state->index;
 
     sp_context_t ctx = *sp_context_get();

@@ -13,10 +13,10 @@ s32 sp_tool_sort_kernel_fn_name_alphabetical(const void* a, const void* b) {
 }
 
 s32 main(s32 num_args, const c8** args) {
-  sp_str_t exe = sp_os_get_executable_path();
-  sp_str_t build = sp_os_parent_path(exe);
-  sp_str_t sp = sp_os_parent_path(build);
-  sp_str_t header = sp_os_join_path(sp, sp_str_lit("sp.h"));
+  sp_str_t exe = sp_fs_get_exe_path();
+  sp_str_t build = sp_fs_parent_path(exe);
+  sp_str_t sp = sp_fs_parent_path(build);
+  sp_str_t header = sp_fs_join_path(sp, sp_str_lit("sp.h"));
 
   sp_str_t content = sp_io_read_file(header);
   SP_ASSERT(!sp_str_empty(content));

@@ -28,32 +28,32 @@ UTEST_F(sp_test_fs, link) {
 
   // Test hard link
   sp_str_t hard_link = sp_test_file_path(&ut.file_manager, SP_LIT("hard_link.txt"));
-  ASSERT_EQ(sp_os_link(source_file, hard_link, SP_OS_LINK_HARD), SP_ERR_OK);
+  ASSERT_EQ(sp_fs_link(source_file, hard_link, SP_FS_LINK_HARD), SP_ERR_OK);
 
   // Verify hard link exists and has same content
-  ASSERT_TRUE(sp_os_does_path_exist(hard_link));
-  ASSERT_TRUE(sp_os_is_regular_file(hard_link));
+  ASSERT_TRUE(sp_fs_exists(hard_link));
+  ASSERT_TRUE(sp_fs_is_regular_file(hard_link));
 
   sp_str_t hard_content = sp_io_read_file(hard_link);
   SP_EXPECT_STR_EQ(hard_content, SP_LIT("Hello, World! This is test content for linking."));
 
   // Test symbolic link
   sp_str_t sym_link = sp_test_file_path(&ut.file_manager, SP_LIT("sym_link.txt"));
-  ASSERT_EQ(sp_os_link(source_file, sym_link, SP_OS_LINK_SYMBOLIC), SP_ERR_OK);
+  ASSERT_EQ(sp_fs_link(source_file, sym_link, SP_FS_LINK_SYMBOLIC), SP_ERR_OK);
 
   // Verify symbolic link exists
-  ASSERT_TRUE(sp_os_does_path_exist(sym_link));
+  ASSERT_TRUE(sp_fs_exists(sym_link));
 
   sp_str_t sym_content = sp_io_read_file(sym_link);
   SP_EXPECT_STR_EQ(sym_content, SP_LIT("Hello, World! This is test content for linking."));
 
   // Test copy functionality using sp_os_link with COPY kind
   sp_str_t copy_file = sp_test_file_path(&ut.file_manager, SP_LIT("copy.txt"));
-  ASSERT_EQ(sp_os_link(source_file, copy_file, SP_OS_LINK_COPY), SP_ERR_OK);
+  ASSERT_EQ(sp_fs_link(source_file, copy_file, SP_FS_LINK_COPY), SP_ERR_OK);
 
   // Verify copy exists and has same content
-  ASSERT_TRUE(sp_os_does_path_exist(copy_file));
-  ASSERT_TRUE(sp_os_is_regular_file(copy_file));
+  ASSERT_TRUE(sp_fs_exists(copy_file));
+  ASSERT_TRUE(sp_fs_is_regular_file(copy_file));
 
   sp_str_t copy_content = sp_io_read_file(copy_file);
   SP_EXPECT_STR_EQ(copy_content, SP_LIT("Hello, World! This is test content for linking."));
@@ -80,10 +80,10 @@ UTEST_F(sp_test_fs, link_error_cases) {
   });
 
   sp_str_t copy_file = sp_test_file_path(&ut.file_manager, SP_LIT("copy2.txt"));
-  ASSERT_EQ(sp_os_link(source_file, copy_file, SP_OS_LINK_COPY), SP_ERR_OK);
+  ASSERT_EQ(sp_fs_link(source_file, copy_file, SP_FS_LINK_COPY), SP_ERR_OK);
 
-  ASSERT_TRUE(sp_os_does_path_exist(copy_file));
-  ASSERT_TRUE(sp_os_is_regular_file(copy_file));
+  ASSERT_TRUE(sp_fs_exists(copy_file));
+  ASSERT_TRUE(sp_fs_is_regular_file(copy_file));
 
   sp_str_t copy_content = sp_io_read_file(copy_file);
   SP_EXPECT_STR_EQ(copy_content, SP_LIT("Another test file"));
@@ -99,45 +99,45 @@ UTEST_F(sp_test_fs, symlink_semantics) {
   });
 
   sp_str_t dir = sp_test_file_path(&ut.file_manager, SP_LIT("dir.real"));
-  sp_os_create_directory(dir);
+  sp_fs_create_dir(dir);
 
   // Create symlinks to both
   sp_str_t file_link = sp_test_file_path(&ut.file_manager, SP_LIT("file.link"));
-  ASSERT_EQ(sp_os_create_symbolic_link(file, file_link), SP_ERR_OK);
+  ASSERT_EQ(sp_fs_create_sym_link(file, file_link), SP_ERR_OK);
 
   sp_str_t dir_link = sp_test_file_path(&ut.file_manager, SP_LIT("dir.link"));
-  ASSERT_EQ(sp_os_create_symbolic_link(dir, dir_link), SP_ERR_OK);
+  ASSERT_EQ(sp_fs_create_sym_link(dir, dir_link), SP_ERR_OK);
 
   // regular files and directories report as what they are
-  ASSERT_TRUE(sp_os_is_regular_file(file));
-  ASSERT_FALSE(sp_os_is_directory(file));
-  ASSERT_FALSE(sp_os_is_symlink(file));
+  ASSERT_TRUE(sp_fs_is_regular_file(file));
+  ASSERT_FALSE(sp_fs_is_dir(file));
+  ASSERT_FALSE(sp_fs_is_symlink(file));
 
-  ASSERT_FALSE(sp_os_is_regular_file(dir));
-  ASSERT_TRUE(sp_os_is_directory(dir));
-  ASSERT_FALSE(sp_os_is_symlink(dir));
+  ASSERT_FALSE(sp_fs_is_regular_file(dir));
+  ASSERT_TRUE(sp_fs_is_dir(dir));
+  ASSERT_FALSE(sp_fs_is_symlink(dir));
 
-  ASSERT_EQ(sp_os_get_file_attrs(file),    SP_OS_FILE_ATTR_REGULAR_FILE);
-  ASSERT_EQ(sp_os_get_file_attrs(dir), SP_OS_FILE_ATTR_DIRECTORY);
+  ASSERT_EQ(sp_fs_get_file_attrs(file),    SP_OS_FILE_ATTR_REGULAR_FILE);
+  ASSERT_EQ(sp_fs_get_file_attrs(dir), SP_OS_FILE_ATTR_DIRECTORY);
 
   // symlinks report as symlinks
-  ASSERT_FALSE(sp_os_is_regular_file(file_link));
-  ASSERT_FALSE(sp_os_is_directory(file_link));
-  ASSERT_TRUE(sp_os_is_symlink(file_link));
+  ASSERT_FALSE(sp_fs_is_regular_file(file_link));
+  ASSERT_FALSE(sp_fs_is_dir(file_link));
+  ASSERT_TRUE(sp_fs_is_symlink(file_link));
 
-  ASSERT_FALSE(sp_os_is_regular_file(dir_link));
-  ASSERT_FALSE(sp_os_is_directory(dir_link));
-  ASSERT_TRUE(sp_os_is_symlink(dir_link));
+  ASSERT_FALSE(sp_fs_is_regular_file(dir_link));
+  ASSERT_FALSE(sp_fs_is_dir(dir_link));
+  ASSERT_TRUE(sp_fs_is_symlink(dir_link));
 
-  ASSERT_EQ(sp_os_get_file_attrs(file_link), SP_OS_FILE_ATTR_SYMLINK);
-  ASSERT_EQ(sp_os_get_file_attrs(dir_link),  SP_OS_FILE_ATTR_SYMLINK);
+  ASSERT_EQ(sp_fs_get_file_attrs(file_link), SP_OS_FILE_ATTR_SYMLINK);
+  ASSERT_EQ(sp_fs_get_file_attrs(dir_link),  SP_OS_FILE_ATTR_SYMLINK);
 
   // if you'd like to follow the symlink, use sp_os_is_target_*() instead of sp_os_is_*()
-  ASSERT_TRUE(sp_os_is_target_regular_file(file_link));
-  ASSERT_FALSE(sp_os_is_target_directory(file_link));
+  ASSERT_TRUE(sp_fs_is_target_regular_file(file_link));
+  ASSERT_FALSE(sp_fs_is_target_dir(file_link));
 
-  ASSERT_TRUE(sp_os_is_target_directory(dir_link));
-  ASSERT_FALSE(sp_os_is_directory(file_link));
+  ASSERT_TRUE(sp_fs_is_target_dir(dir_link));
+  ASSERT_FALSE(sp_fs_is_dir(file_link));
 
   // sp_io will follow symlinks, since not doing so seems quite surprising
   sp_str_t content_link = sp_io_read_file(file_link);
@@ -146,19 +146,19 @@ UTEST_F(sp_test_fs, symlink_semantics) {
 
 UTEST_F(sp_test_fs, copy_dir_with_nonalphanumeric) {
   sp_str_t foo_bar_dir = sp_test_file_path(&ut.file_manager, SP_LIT("foo.bar"));
-  sp_os_create_directory(foo_bar_dir);
-  ASSERT_TRUE(sp_os_does_path_exist(foo_bar_dir));
-  ASSERT_TRUE(sp_os_is_directory(foo_bar_dir));
+  sp_fs_create_dir(foo_bar_dir);
+  ASSERT_TRUE(sp_fs_exists(foo_bar_dir));
+  ASSERT_TRUE(sp_fs_is_dir(foo_bar_dir));
 
   sp_str_t baz_dir = sp_test_file_path(&ut.file_manager, SP_LIT("baz"));
-  sp_os_create_directory(baz_dir);
-  ASSERT_TRUE(sp_os_does_path_exist(baz_dir));
-  ASSERT_TRUE(sp_os_is_directory(baz_dir));
+  sp_fs_create_dir(baz_dir);
+  ASSERT_TRUE(sp_fs_exists(baz_dir));
+  ASSERT_TRUE(sp_fs_is_dir(baz_dir));
 
-  sp_os_copy(foo_bar_dir, baz_dir);
+  sp_fs_copy(foo_bar_dir, baz_dir);
 
   sp_str_t expected_path = sp_test_file_path(&ut.file_manager, SP_LIT("baz/foo.bar"));
-  ASSERT_TRUE(sp_os_does_path_exist(expected_path));
+  ASSERT_TRUE(sp_fs_exists(expected_path));
 }
 
 UTEST_F(sp_test_fs, copy_preserves_file_attributes) {
@@ -180,11 +180,11 @@ UTEST_F(sp_test_fs, copy_preserves_file_attributes) {
 
   // Copy the file
   sp_str_t copy_file = sp_test_file_path(&ut.file_manager, SP_LIT("copy_attrs.txt"));
-  ASSERT_EQ(sp_os_copy(source_file, copy_file), SP_ERR_OK);
+  ASSERT_EQ(sp_fs_copy(source_file, copy_file), SP_ERR_OK);
 
   // Verify copy exists and has same type
-  ASSERT_TRUE(sp_os_does_path_exist(copy_file));
-  ASSERT_TRUE(sp_os_is_regular_file(copy_file));
+  ASSERT_TRUE(sp_fs_exists(copy_file));
+  ASSERT_TRUE(sp_fs_is_regular_file(copy_file));
 
   // Get copied file stat information
   const c8* copy_cstr = sp_str_to_cstr(copy_file);
@@ -236,7 +236,7 @@ UTEST(path_functions, path_stem) {
   };
 
   SP_CARR_FOR(cases, index) {
-    sp_str_t stem = sp_os_extract_stem(cases[index].file_path);
+    sp_str_t stem = sp_fs_get_stem(cases[index].file_path);
     SP_EXPECT_STR_EQ(stem, cases[index].stem);
   }
 }
@@ -244,31 +244,31 @@ UTEST(path_functions, path_stem) {
 UTEST(path_functions, normalize_path) {
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\file.txt");
-    sp_str_t copy = sp_os_normalize_path(path);
+    sp_str_t copy = sp_fs_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
-    sp_str_t copy = sp_os_normalize_path(path);
+    sp_str_t copy = sp_fs_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users\\Test/sub\\file.txt");
-    sp_str_t copy = sp_os_normalize_path(path);
+    sp_str_t copy = sp_fs_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test/sub/file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("");
-    sp_str_t copy = sp_os_normalize_path(path);
+    sp_str_t copy = sp_fs_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "");
   }
 
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\");
-    sp_str_t copy = sp_os_normalize_path(path);
+    sp_str_t copy = sp_fs_normalize_path(path);
     SP_EXPECT_STR_EQ_CSTR(copy, "C:/Users/Test");
   }
 }
@@ -276,49 +276,49 @@ UTEST(path_functions, normalize_path) {
 UTEST(path_functions, parent_path) {
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
-    sp_str_t parent = sp_os_parent_path(path);
+    sp_str_t parent = sp_fs_parent_path(path);
     SP_EXPECT_STR_EQ_CSTR(parent, "C:/Users/Test");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users/Test/");
-    sp_str_t parent = sp_os_parent_path(path);
+    sp_str_t parent = sp_fs_parent_path(path);
     SP_EXPECT_STR_EQ_CSTR(parent, "C:/Users");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users/Test///");
-    sp_str_t parent = sp_os_parent_path(path);
+    sp_str_t parent = sp_fs_parent_path(path);
     SP_EXPECT_STR_EQ_CSTR(parent, "C:/Users");
   }
 
   {
     sp_str_t path = SP_LIT("C:/");
-    sp_str_t parent = sp_os_parent_path(path);
+    sp_str_t parent = sp_fs_parent_path(path);
     ASSERT_EQ(parent.len, 0);
   }
 
   {
     sp_str_t path = SP_LIT("Test");
-    sp_str_t parent = sp_os_parent_path(path);
+    sp_str_t parent = sp_fs_parent_path(path);
     ASSERT_EQ(parent.len, 0);
   }
 
   {
     sp_str_t path = SP_LIT("");
-    sp_str_t parent = sp_os_parent_path(path);
+    sp_str_t parent = sp_fs_parent_path(path);
     ASSERT_EQ(parent.len, 0);
   }
 
   {
     sp_str_t path = SP_LIT("/");
-    sp_str_t parent = sp_os_parent_path(path);
+    sp_str_t parent = sp_fs_parent_path(path);
     ASSERT_EQ(parent.len, 0);
   }
 
   {
     sp_str_t path = SP_LIT("/home/user/file");
-    sp_str_t parent = sp_os_parent_path(path);
+    sp_str_t parent = sp_fs_parent_path(path);
     SP_EXPECT_STR_EQ_CSTR(parent, "/home/user");
   }
 }
@@ -326,35 +326,35 @@ UTEST(path_functions, parent_path) {
 UTEST(path_functions, canonicalize_path) {
   {
     sp_str_t path = SP_LIT("test/..");
-    sp_str_t canonical = sp_os_canonicalize_path(path);
+    sp_str_t canonical = sp_fs_canonicalize_path(path);
     ASSERT_GT(canonical.len, 0);
     ASSERT_NE(canonical.data[canonical.len - 1], '/');
   }
 
   {
     sp_str_t path = SP_LIT("../../another");
-    sp_str_t canonical = sp_os_canonicalize_path(path);
+    sp_str_t canonical = sp_fs_canonicalize_path(path);
     ASSERT_GT(canonical.len, 0);
-    sp_str_t filename = sp_os_extract_file_name(canonical);
+    sp_str_t filename = sp_fs_get_name(canonical);
     SP_EXPECT_STR_EQ_CSTR(filename, "another");
   }
 
   {
-    sp_str_t exe = sp_os_get_executable_path();
-    sp_str_t canonical = sp_os_canonicalize_path(exe);
+    sp_str_t exe = sp_fs_get_exe_path();
+    sp_str_t canonical = sp_fs_canonicalize_path(exe);
     ASSERT_TRUE(sp_str_equal(canonical, exe));
   }
 
   {
     sp_str_t path = SP_LIT("test/");
-    sp_str_t canonical = sp_os_canonicalize_path(path);
+    sp_str_t canonical = sp_fs_canonicalize_path(path);
     ASSERT_GT(canonical.len, 0);
     ASSERT_NE(canonical.data[canonical.len - 1], '/');
   }
 
   {
     sp_str_t path = SP_LIT("");
-    sp_str_t canonical = sp_os_canonicalize_path(path);
+    sp_str_t canonical = sp_fs_canonicalize_path(path);
     ASSERT_EQ(canonical.len, 0);
   }
 }
@@ -393,7 +393,7 @@ UTEST(path_functions, path_extension) {
   };
 
   SP_CARR_FOR(cases, index) {
-    sp_str_t extension = sp_os_extract_extension(cases[index].file_path);
+    sp_str_t extension = sp_fs_get_ext(cases[index].file_path);
     SP_EXPECT_STR_EQ(extension, cases[index].extension);
   }
 }
@@ -402,43 +402,43 @@ UTEST(path_functions, path_extension) {
 UTEST(path_functions, extract_file_name) {
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
-    sp_str_t filename = sp_os_extract_file_name(path);
+    sp_str_t filename = sp_fs_get_name(path);
     SP_EXPECT_STR_EQ_CSTR(filename, "file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("C:/Users/Test/");
-    sp_str_t filename = sp_os_extract_file_name(path);
+    sp_str_t filename = sp_fs_get_name(path);
     ASSERT_EQ(filename.len, 0);
   }
 
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\file.txt");
-    sp_str_t filename = sp_os_extract_file_name(path);
+    sp_str_t filename = sp_fs_get_name(path);
     SP_EXPECT_STR_EQ_CSTR(filename, "file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("file.txt");
-    sp_str_t filename = sp_os_extract_file_name(path);
+    sp_str_t filename = sp_fs_get_name(path);
     SP_EXPECT_STR_EQ_CSTR(filename, "file.txt");
   }
 
   {
     sp_str_t path = SP_LIT("");
-    sp_str_t filename = sp_os_extract_file_name(path);
+    sp_str_t filename = sp_fs_get_name(path);
     ASSERT_EQ(filename.len, 0);
   }
 
   {
     sp_str_t path = SP_LIT("/home/user/document.pdf");
-    sp_str_t filename = sp_os_extract_file_name(path);
+    sp_str_t filename = sp_fs_get_name(path);
     SP_EXPECT_STR_EQ_CSTR(filename, "document.pdf");
   }
 }
 
 UTEST(path_functions, get_executable_path) {
-  sp_str_t exe_path = sp_os_get_executable_path();
+  sp_str_t exe_path = sp_fs_get_exe_path();
 
   ASSERT_GT(exe_path.len, 0);
 
@@ -453,16 +453,16 @@ UTEST(path_functions, get_executable_path) {
 
   ASSERT_NE(exe_path.data[exe_path.len - 1], '/');
 
-  sp_str_t filename = sp_os_extract_file_name(exe_path);
+  sp_str_t filename = sp_fs_get_name(exe_path);
   ASSERT_GT(filename.len, 0);
 }
 
 UTEST(path_functions, integration_test) {
-  sp_str_t exe = sp_os_get_executable_path();
-  sp_str_t parent1 = sp_os_parent_path(exe);
-  sp_str_t parent2 = sp_os_parent_path(parent1);
-  sp_str_t parent3 = sp_os_parent_path(parent2);
-  sp_str_t install = sp_os_canonicalize_path(parent3);
+  sp_str_t exe = sp_fs_get_exe_path();
+  sp_str_t parent1 = sp_fs_parent_path(exe);
+  sp_str_t parent2 = sp_fs_parent_path(parent1);
+  sp_str_t parent3 = sp_fs_parent_path(parent2);
+  sp_str_t install = sp_fs_canonicalize_path(parent3);
 
   ASSERT_GT(install.len, 0);
   ASSERT_NE(install.data[install.len - 1], '/');

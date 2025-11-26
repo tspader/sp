@@ -107,7 +107,7 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
 void sp_test_proc_check_stream(sp_test_proc_stream_context_t* ctx) {
   sp_test_proc_collect_stream(ctx);
 
-  if (ctx->bytes_read != ctx->expected.len || !sp_os_is_memory_equal(ctx->buffer.data, ctx->expected.data, ctx->expected.len)) {
+  if (ctx->bytes_read != ctx->expected.len || !sp_mem_is_equal(ctx->buffer.data, ctx->expected.data, ctx->expected.len)) {
     ctx->result = SP_TEST_PS_OUTPUT_MISMATCH;
   } else {
     ctx->result = SP_TEST_PS_OUTPUT_MATCH;
@@ -281,7 +281,7 @@ UTEST_F(sp_ps, io_create_file_null) {
 
   u64 bytes_read = sp_io_read(&io, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
-  SP_ASSERT(sp_os_is_memory_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
+  SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
   sp_io_close(&io);
 }
@@ -337,7 +337,7 @@ UTEST_F(sp_ps, io_create_null_file) {
 
   u64 bytes_read = sp_io_read(&io, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
-  SP_ASSERT(sp_os_is_memory_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
+  SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
   sp_io_close(&io);
 }
@@ -373,7 +373,7 @@ UTEST_F(sp_ps, io_file_null_file) {
 
   u64 bytes_read = sp_io_read(&err, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
-  SP_ASSERT(sp_os_is_memory_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
+  SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
   sp_io_close(&in);
   sp_io_close(&err);
@@ -787,7 +787,7 @@ UTEST_F(sp_ps, wait_with_output) {
 
   u64 bytes_read = sp_io_read(sp_ps_io_out(&ps), ut.buffer.data, ut.buffer.len);
   EXPECT_EQ(bytes_read, sp_test_ps_canary.len);
-  EXPECT_TRUE(sp_os_is_memory_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
+  EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 }
 
 UTEST_F(sp_ps, poll_with_io) {
@@ -844,7 +844,7 @@ UTEST_F(sp_ps, interleaved_read_write) {
     u64 bytes_read = sp_io_read(out, ut.buffer.data, ut.buffer.len);
     sp_str_t expected = sp_format("echo: line {}\n", SP_FMT_U32(i));
     EXPECT_EQ(bytes_read, expected.len);
-    EXPECT_TRUE(sp_os_is_memory_equal(ut.buffer.data, expected.data, expected.len));
+    EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, expected.data, expected.len));
   }
 
   sp_io_close(in);
