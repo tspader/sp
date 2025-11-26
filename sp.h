@@ -95,8 +95,8 @@
 #endif
 
 #ifdef SP_MACOS
-  #ifndef _DARWIN_SOURCE
-    #define _DARWIN_SOURCE
+  #ifndef _DARWIN_C_SOURCE
+    #define _DARWIN_C_SOURCE
   #endif
 
   #include "pthread.h"

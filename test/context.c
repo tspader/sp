@@ -70,13 +70,13 @@ UTEST(sp_context, push_allocator_changes_allocator) {
   sp_context_t* ctx_after = sp_context_get();
 
   // Allocator should be updated
-  ASSERT_EQ(ctx_after->allocator.on_alloc, new_allocator.on_alloc);
+  ASSERT_TRUE(ctx_after->allocator.on_alloc == new_allocator.on_alloc);
 
   sp_context_pop();
 
   // After pop, old allocator restored
   sp_context_t* ctx_restored = sp_context_get();
-  ASSERT_EQ(ctx_restored->allocator.on_alloc, old_allocator.on_alloc);
+  ASSERT_TRUE(ctx_restored->allocator.on_alloc == old_allocator.on_alloc);
 }
 
 UTEST(sp_context, set_modifies_current) {
@@ -87,7 +87,7 @@ UTEST(sp_context, set_modifies_current) {
   sp_context_set(ctx);
 
   sp_context_t* current = sp_context_get();
-  ASSERT_EQ(current->allocator.on_alloc, new_allocator.on_alloc);
+  ASSERT_TRUE(current->allocator.on_alloc == new_allocator.on_alloc);
 }
 
 //////////////////////////
