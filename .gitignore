@@ -2,6 +2,12 @@ build
 .cache
 compile_commands.json
 
+# WASM build artifacts
+hello
+hello_gcc
+hello.wasm
+*.wasm
+
 .spackle/*
 !.spackle/spackle.py
 
