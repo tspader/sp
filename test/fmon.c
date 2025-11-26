@@ -13,9 +13,9 @@
 typedef struct sp_test_file_monitor {
   sp_test_file_manager_t file_manager;
   sp_test_env_manager_t env_manager;
-  sp_file_monitor_t monitor;
+  sp_fmon_t monitor;
   bool change_detected;
-  sp_file_change_event_t last_event;
+  sp_fmon_event_kind_t last_event;
   sp_str_t last_file_path;
 } sp_test_file_monitor;
 
@@ -33,7 +33,7 @@ UTEST_F_TEARDOWN(sp_test_file_monitor) {
   sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
-void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t* change, void* userdata) {
+void sp_test_file_monitor_callback(sp_fmon_t* monitor, sp_fmon_event_t* change, void* userdata) {
   sp_test_file_monitor* fixture = (sp_test_file_monitor*)userdata;
   fixture->change_detected = true;
   fixture->last_event = change->events;
@@ -41,22 +41,22 @@ void sp_test_file_monitor_callback(sp_file_monitor_t* monitor, sp_file_change_t*
 }
 
 UTEST_F(sp_test_file_monitor, init_and_cleanup) {
-  sp_file_monitor_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   EXPECT_NE(ut.monitor.os, SP_NULLPTR);
 }
 
 UTEST_F(sp_test_file_monitor, detects_file_creation) {
-  sp_file_monitor_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_ADDED, &ut);
+  sp_fmon_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_ADDED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_os_create_directory(test_dir);
-  sp_file_monitor_add_directory(&ut.monitor, test_dir);
+  sp_fs_create_dir(test_dir);
+  sp_fmon_add_dir(&ut.monitor, test_dir);
 
-  sp_file_monitor_process_changes(&ut.monitor);
+  sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
-  sp_str_t test_file = sp_os_join_path(test_dir, sp_str_lit("new_file.txt"));
+  sp_str_t test_file = sp_fs_join_path(test_dir, sp_str_lit("new_file.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
     .content = SP_LIT("test content"),
@@ -64,7 +64,7 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
-    sp_file_monitor_process_changes(&ut.monitor);
+    sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
       break;
@@ -77,19 +77,19 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
 }
 
 UTEST_F(sp_test_file_monitor, detects_file_modification) {
-  sp_file_monitor_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &ut);
+  sp_fmon_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_os_create_directory(test_dir);
-  sp_file_monitor_add_directory(&ut.monitor, test_dir);
+  sp_fs_create_dir(test_dir);
+  sp_fmon_add_dir(&ut.monitor, test_dir);
 
-  sp_str_t test_file = sp_os_join_path(test_dir, sp_str_lit("modify_file.txt"));
+  sp_str_t test_file = sp_fs_join_path(test_dir, sp_str_lit("modify_file.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
     .content = SP_LIT("initial content"),
   });
 
-  sp_file_monitor_process_changes(&ut.monitor);
+  sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
   sp_test_file_create_ex((sp_test_file_config_t) {
@@ -99,7 +99,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
-    sp_file_monitor_process_changes(&ut.monitor);
+    sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
       break;
@@ -112,26 +112,26 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 }
 
 UTEST_F(sp_test_file_monitor, detects_file_deletion) {
-  sp_file_monitor_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
+  sp_fmon_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_os_create_directory(test_dir);
-  sp_file_monitor_add_directory(&ut.monitor, test_dir);
+  sp_fs_create_dir(test_dir);
+  sp_fmon_add_dir(&ut.monitor, test_dir);
 
-  sp_str_t test_file = sp_os_join_path(test_dir, sp_str_lit("delete_file.txt"));
+  sp_str_t test_file = sp_fs_join_path(test_dir, sp_str_lit("delete_file.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
     .content = SP_LIT("to be deleted"),
   });
 
-  sp_file_monitor_process_changes(&ut.monitor);
+  sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
-  sp_os_remove_file(test_file);
+  sp_fs_remove_file(test_file);
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
-    sp_file_monitor_process_changes(&ut.monitor);
+    sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
       break;
@@ -144,15 +144,15 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
 }
 
 UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
-  sp_file_monitor_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_os_create_directory(test_dir);
-  sp_file_monitor_add_directory(&ut.monitor, test_dir);
+  sp_fs_create_dir(test_dir);
+  sp_fmon_add_dir(&ut.monitor, test_dir);
 
-  sp_str_t test_file = sp_os_join_path(test_dir, sp_str_lit("lifecycle.txt"));
+  sp_str_t test_file = sp_fs_join_path(test_dir, sp_str_lit("lifecycle.txt"));
 
-  sp_file_monitor_process_changes(&ut.monitor);
+  sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
   // Create file - may be reported as ADDED or MODIFIED depending on platform
@@ -163,7 +163,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
-    sp_file_monitor_process_changes(&ut.monitor);
+    sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
       break;
@@ -182,7 +182,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 
   timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
-    sp_file_monitor_process_changes(&ut.monitor);
+    sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
       break;
@@ -194,11 +194,11 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 
   // Delete file
   ut.change_detected = false;
-  sp_os_remove_file(test_file);
+  sp_fs_remove_file(test_file);
 
   timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
-    sp_file_monitor_process_changes(&ut.monitor);
+    sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
       break;
@@ -210,18 +210,18 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 }
 
 UTEST_F(sp_test_file_monitor, no_events_without_changes) {
-  sp_file_monitor_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init(&ut.monitor, sp_test_file_monitor_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_os_create_directory(test_dir);
-  sp_file_monitor_add_directory(&ut.monitor, test_dir);
+  sp_fs_create_dir(test_dir);
+  sp_fmon_add_dir(&ut.monitor, test_dir);
 
-  sp_file_monitor_process_changes(&ut.monitor);
+  sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
   bool timed_out = false;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
-    sp_file_monitor_process_changes(&ut.monitor);
+    sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = true;
       break;

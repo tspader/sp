@@ -1,16 +1,102 @@
-#ifndef SP_SPACE_H
-#define SP_SPACE_H
+/*
+  sp.h -- the single header nonstandard library for C
 
-//  ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗ ██╗   ██╗██████╗  █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
-// ██╔════╝██╔═══██╗████╗  ██║██╔════╝██║██╔════╝ ██║   ██║██╔══██╗██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║
-// ██║     ██║   ██║██╔██╗ ██║█████╗  ██║██║  ███╗██║   ██║██████╔╝███████║   ██║   ██║██║   ██║██╔██╗ ██║
-// ██║     ██║   ██║██║╚██╗██║██╔══╝  ██║██║   ██║██║   ██║██╔══██╗██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
-// ╚██████╗╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝╚██████╔╝██║  ██║██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
-//  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+  ▗▖ ▗▖ ▗▄▄▖ ▗▄▖  ▗▄▄▖▗▄▄▄▖
+  ▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌   ▐▌
+  ▐▌ ▐▌ ▝▀▚▖▐▛▀▜▌▐▌▝▜▌▐▛▀▀▘
+  ▝▚▄▞▘▗▄▄▞▘▐▌ ▐▌▝▚▄▞▘▐▙▄▄▖
 
-////////////////////////
-// PLATFORM SELECTION //
-////////////////////////
+  Define the following before you include sp.h in exactly one C or C++ file[^1]:
+
+    #define SP_IMPLEMENTATION
+
+  You can change the linkage of sp.h by optionally defining the following macros
+  alongside SP_IMPLEMENTATION. Several modules provide their own module-specific
+  configurations.
+
+    SP_API
+    SP_EXPORT
+    SP_IMPORT
+    SP_PRIVATE
+    SP_GLOBAL
+    SP_SHARED_LIB
+
+
+  ▗▖  ▗▖ ▗▄▖ ▗▄▄▄ ▗▖ ▗▖▗▖   ▗▄▄▄▖ ▗▄▄▖
+  ▐▛▚▞▜▌▐▌ ▐▌▐▌  █▐▌ ▐▌▐▌   ▐▌   ▐▌
+  ▐▌  ▐▌▐▌ ▐▌▐▌  █▐▌ ▐▌▐▌   ▐▛▀▀▘ ▝▀▚▖
+  ▐▌  ▐▌▝▚▄▞▘▐▙▄▄▀▝▚▄▞▘▐▙▄▄▖▐▙▄▄▖▗▄▄▞▘
+
+  + marks a module which is particularly important
+  - marks a module which is kind of shitty, in implementation or design
+  @ marks a module which mostly exists as a wrapper
+
+      sp_asset         multithreaded asset registry, importers
+    @ sp_atomic        compiler intrinsic atomics
+    + sp_context       thread-local allocator, scratch memory
+    + sp_dyn_array     stb-style resizable array (macros)
+      sp_env           environment variables
+      sp_err           thread-local errno style error system
+      sp_fixed_array   fixed size array, from stack or heap (void*)
+    + sp_format        "a type-safe {:fg cyan} replacement", SP_FMT_CSTR("printf")
+      sp_fmon          os native filesystem watching
+    + sp_fs            path manipulation, filesystem, common system paths (e.g. appdata)
+    - sp_future        pollable, heap allocated values
+      sp_hash          pseudorandom hashing, terrible and stolen
+    + sp_hash_table    stb-style hash table (macros)
+    + sp_io            read and write to files and buffers
+      sp_mem           fundamental memory APIs, allocators, scratch storage
+    @ sp_mutex         os native mutex wrappers
+    - sp_os            grab bag of platform bullshit
+    + sp_ps            subprocesses
+      sp_ring_buffer   single threaded ring buffer (void*)
+    @ sp_semaphore     os native semaphore wrappers
+    @ sp_spin          efficient spin lock with pausing
+    + sp_str           ptr + len strings, no null termination, fundamental c string APIs
+    @ sp_thread        os native thread wrappers
+      sp_time          high resolution timers, dates and times, epochs
+
+
+    SP_RT_MAX_CONTEXT
+    SP_RT_NUM_SPIN_LOCK
+    SP_RT_SCRATCH_SIZE
+    SP_PS_MAX_ARGS
+    SP_PS_MAX_ENV
+
+  ▗▄▄▄▖ ▗▄▖  ▗▄▖▗▄▄▄▖▗▖  ▗▖ ▗▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▄▖
+  ▐▌   ▐▌ ▐▌▐▌ ▐▌ █  ▐▛▚▖▐▌▐▌ ▐▌ █  ▐▌   ▐▌
+  ▐▛▀▀▘▐▌ ▐▌▐▌ ▐▌ █  ▐▌ ▝▜▌▐▌ ▐▌ █  ▐▛▀▀▘ ▝▀▚▖
+  ▐▌   ▝▚▄▞▘▝▚▄▞▘ █  ▐▌  ▐▌▝▚▄▞▘ █  ▐▙▄▄▖▗▄▄▞▘
+
+  [^1]: C and C++ compile your program in translation units (TUs); roughly, an atomic
+  unit as far as the linker is concerned. Usually, it's accurate enough to think of a
+  TU as a C file. The linker doesn't have to link functions inside the same C file,
+  but it does have to link functions that live in a different C file, or a library.
+
+  sp.h does not, of course, have a C file. And yet, since we'd like to use it by
+  compiling it alongside our own program, it needs to go *somewhere*. There must be
+  *some* TU which has all its symbols.
+
+  This preprocessor guard lets you "turn on" the C file (the implementation) and jam
+  it into an actual C file. You can even make an sp.c in your project which solely
+  does this; or, you could compile sp.h into a genuine static or shared library.
+
+*/
+#ifndef SP_SP_H
+#define SP_SP_H
+
+
+
+//  ██████╗ ██████╗ ███╗   ██╗███████╗██╗ ██████╗
+// ██╔════╝██╔═══██╗████╗  ██║██╔════╝██║██╔════╝
+// ██║     ██║   ██║██╔██╗ ██║█████╗  ██║██║  ███╗
+// ██║     ██║   ██║██║╚██╗██║██╔══╝  ██║██║   ██║
+// ╚██████╗╚██████╔╝██║ ╚████║██║     ██║╚██████╔╝
+//  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝ ╚═════╝
+// @config
+//////////////
+// PLATFORM //
+//////////////
 #ifdef _WIN32
   #define SP_WIN32
 #endif
@@ -26,9 +112,9 @@
 #endif
 
 
-////////////////////////
-// COMPILER SELECTION //
-////////////////////////
+//////////////
+// COMPILER //
+//////////////
 #if defined(_MSC_VER)
   #define SP_MSVC
 #endif
@@ -43,10 +129,9 @@
   #define SP_GNUISH
 #endif
 
-
-////////////////////////////
-// ARCHITECTURE SELECTION //
-////////////////////////////
+//////////////////
+// ARCHITECTURE //
+//////////////////
 #if defined(__x86_64__) || defined(_M_X64)
   #define SP_AMD64
   #define SP_AMD
@@ -57,100 +142,58 @@
   #define SP_ARM
 #endif
 
-////////////////////////
-// LANGUAGE SELECTION //
-////////////////////////
+//////////////
+// LANGUAGE //
+//////////////
 #ifdef __cplusplus
   #define SP_CPP
 #endif
 
+/////////////
+// LINKAGE //
+/////////////
+#if !defined(SP_PRIVATE)
+  #define SP_PRIVATE static
+#endif
 
-//////////////////////
-// PLATFORM HEADERS //
-//////////////////////
-#ifdef SP_WIN32
-  #undef UNICODE
-  #define WIN32_LEAN_AND_MEAN
-  #define NOMINMAX
-  #define _CRT_RAND_S
-
-  #ifdef SP_WIN32_NO_WINDOWS_H
-    #include "windef.h"
-    #include "winbase.h"
-    #include "wingdi.h"
-    #include "winuser.h"
-    #include "synchapi.h"
-    #include "fileapi.h"
-    #include "handleapi.h"
-    #include "shellapi.h"
-    #include "stringapiset.h"
-    #include "threads.h"
+#if !defined(SP_IMPORT)
+  #if defined(SP_WIN32)
+    #define SP_IMPORT __declspec(__dllimport)
   #else
-    #include "windows.h"
-    #include "shlobj.h"
-    #include "commdlg.h"
-    #include "shellapi.h"
-    #include "threads.h"
+    #define SP_IMPORT
   #endif
 #endif
 
-#ifdef SP_MACOS
-  #ifndef _DARWIN_C_SOURCE
-    #define _DARWIN_C_SOURCE
+#if !defined(SP_EXPORT)
+  #if defined(SP_WIN32)
+    #define SP_EXPORT __declspec(__dllexport)
+  #else
+    #define SP_EXPORT __attribute__((visibility("default")))
   #endif
-
-  #include "pthread.h"
-  #include <dispatch/dispatch.h>
-  #include <mach-o/dyld.h>
-  #include <spawn.h>
 #endif
 
-#ifdef SP_LINUX
-  #ifndef _GNU_SOURCE
-    #define _GNU_SOURCE
+
+#if !defined(SP_API)
+  #if defined(SP_SHARED_LIB)
+    #if defined (SP_IMPLEMENTATION)
+      #define SP_API SP_EXPORT
+    #else
+      #define SP_API SP_IMPORT
+    #endif
+  #else
+    #define SP_API extern
   #endif
-
-  #include "pthread.h"
-  #include <sys/inotify.h>
-  #include <poll.h>
-  #include <spawn.h>
 #endif
 
-#ifdef SP_POSIX
-  #ifndef _POSIX_C_SOURCE
-    #define _POSIX_C_SOURCE 200809L
+#if !defined(SP_GLOBAL)
+  #if defined(SP_IMPLEMENTATION)
+    #define SP_GLOBAL
+  #else
+    #define SP_GLOBAL extern
   #endif
-
-  #include <dirent.h>
-  #include <errno.h>
-  #include <fcntl.h>
-  #include <limits.h>
-  #include <pthread.h>
-  #include <semaphore.h>
-  #include <signal.h>
-  #include <stdlib.h>
-  #include <unistd.h>
-  #include <sys/stat.h>
-  #include <sys/time.h>
-  #include <sys/types.h>
-  #include <sys/wait.h>
-  #include <time.h>
 #endif
 
-#ifdef SP_CPP
-  #include <atomic>
-#endif
 
-#include "assert.h"
-#include "stdarg.h"
-#include "stdbool.h"
-#include "string.h"
-
-#if defined(SP_POSIX) && defined(strnlen)
-  #undef SP_STRNLEN
-#endif
-
-extern char** environ;
 
 // ███╗   ███╗ █████╗  ██████╗██████╗  ██████╗ ███████╗
 // ████╗ ████║██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔════╝
@@ -158,6 +201,7 @@ extern char** environ;
 // ██║╚██╔╝██║██╔══██║██║     ██╔══██╗██║   ██║╚════██║
 // ██║ ╚═╝ ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║
 // ╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+// @macro
 #ifdef SP_CPP
   #define SP_RVAL(T) (T)
   #define SP_THREAD_LOCAL thread_local
@@ -174,16 +218,6 @@ extern char** environ;
   #define SP_ZERO_INITIALIZE() {0}
   #define SP_NULL 0
   #define SP_NULLPTR ((void*)0)
-#endif
-
-#ifdef SP_WIN32
-  #define SP_IMPORT declspec(__dllimport)
-  #define SP_EXPORT declspec(__dllexport)
-#endif
-
-#ifdef SP_POSIX
-  #define SP_IMPORT
-  #define SP_EXPORT __attribute__((visibility("default")))
 #endif
 
 #define SP_FALLTHROUGH() ((void)0)
@@ -267,16 +301,9 @@ extern char** environ;
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
 #define sp_carr_for(CARR, IT) SP_CARR_FOR(CARR, IT)
+#define sp_carr_len(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 
 #define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
-
-#ifndef SP_API
-  #define SP_API
-#endif
-
-#ifndef SP_IMP
-  #define SP_IMP
-#endif
 
 #define SP_ANSI_RESET             "\033[0m"
 #define SP_ANSI_BOLD              "\033[1m"
@@ -321,7 +348,94 @@ extern char** environ;
 #define SP_ANSI_BG_BRIGHT_WHITE   "\033[107m"
 
 
+// ███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗
+// ██╔════╝╚██╗ ██╔╝██╔════╝╚══██╔══╝██╔════╝████╗ ████║
+// ███████╗ ╚████╔╝ ███████╗   ██║   █████╗  ██╔████╔██║
+// ╚════██║  ╚██╔╝  ╚════██║   ██║   ██╔══╝  ██║╚██╔╝██║
+// ███████║   ██║   ███████║   ██║   ███████╗██║ ╚═╝ ██║
+// ╚══════╝   ╚═╝   ╚══════╝   ╚═╝   ╚══════╝╚═╝     ╚═╝
+// @system
 SP_BEGIN_EXTERN_C()
+
+#if defined(SP_WIN32)
+  #if defined(UNICODE)
+    #undef UNICODE
+  #endif
+
+  #if !defined(WIN32_LEAN_AND_MEAN)
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+
+  #if !defined(NOMINMAX)
+    #define NOMINMAX
+  #endif
+
+  #if !defined(_CRT_RAND_S)
+    #define _CRT_RAND_S
+  #endif
+
+  #include <windows.h>
+  #include <shlobj.h>
+  #include <commdlg.h>
+  #include <shellapi.h>
+  #include <threads.h>
+#endif
+
+#if defined(SP_LINUX)
+  #ifndef _GNU_SOURCE
+    #define _GNU_SOURCE
+  #endif
+
+  #include <pthread.h>
+  #include <sys/inotify.h>
+  #include <poll.h>
+  #include <spawn.h>
+#endif
+
+#if defined(SP_MACOS)
+  #ifndef _DARWIN_C_SOURCE
+    #define _DARWIN_C_SOURCE
+  #endif
+
+  #include <pthread.h>
+  #include <dispatch/dispatch.h>
+  #include <mach-o/dyld.h>
+  #include <spawn.h>
+
+#endif
+
+#if defined(SP_POSIX)
+  #ifndef _POSIX_C_SOURCE
+    #define _POSIX_C_SOURCE 200809L
+  #endif
+
+  #include <dirent.h>
+  #include <errno.h>
+  #include <fcntl.h>
+  #include <limits.h>
+  #include <pthread.h>
+  #include <semaphore.h>
+  #include <signal.h>
+  #include <stdlib.h>
+  #include <unistd.h>
+  #include <sys/stat.h>
+  #include <sys/time.h>
+  #include <sys/types.h>
+  #include <sys/wait.h>
+  #include <time.h>
+#endif
+
+#ifdef SP_CPP
+  #include <atomic>
+#endif
+
+#include <assert.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stdint.h>
+
+extern char** environ;
 
 // ████████╗██╗   ██╗██████╗ ███████╗███████╗
 // ╚══██╔══╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔════╝
@@ -329,6 +443,7 @@ SP_BEGIN_EXTERN_C()
 //    ██║     ╚██╔╝  ██╔═══╝ ██╔══╝  ╚════██║
 //    ██║      ██║   ██║     ███████╗███████║
 //    ╚═╝      ╚═╝   ╚═╝     ╚══════╝╚══════╝
+// @types
 typedef int8_t   s8;
 typedef int16_t  s16;
 typedef int32_t  s32;
@@ -347,10 +462,11 @@ typedef void*    sp_opaque_ptr;
 
 // ███████╗██████╗ ██████╗  ██████╗ ██████╗
 // ██╔════╝██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
-// █████╗  ██████╔╝██████╔╝██║   ██║██████╔╝
+// █████╗  ██████╔╝██████╔╝██║   █║██████╔╝
 // ██╔══╝  ██╔══██╗██╔══██╗██║   ██║██╔══██╗
-// ███████╗██║  ██║██║  ██║╚██████╔╝██║  ██║
+// ███████╗██║  ██║██║  ██║╚██████╔╝██║  ██
 // ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝
+// @error
 typedef enum {
   SP_ERR_OK = 0,
   SP_ERR_IO_EOF,
@@ -364,25 +480,28 @@ typedef enum {
   SP_ERR_OS,
 } sp_err_t;
 
-void sp_err_set(sp_err_t err);
+SP_API void sp_err_set(sp_err_t err);
+SP_API sp_err_t sp_err_get();
 
 
-//  ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
-//  ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
-//  ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝ ╚████╔╝
-//  ██║╚██╔╝██║██╔══╝  ██║╚██╔╝██║██║   ██║██╔══██╗  ╚██╔╝
-//  ██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║╚██████╔╝██║  ██║   ██║
-//  ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
+
+// ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
+// ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
+// ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝ ╚████╔╝
+// ██║╚██╔╝██║██╔══╝  ██║╚██╔╝██║██║   ██║██╔══██╗  ╚██╔╝
+// ██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║╚██████╔╝██║  ██║   ██║
+// ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
+// @memory
 typedef enum {
   SP_ALLOCATOR_MODE_ALLOC,
   SP_ALLOCATOR_MODE_FREE,
   SP_ALLOCATOR_MODE_RESIZE,
-} sp_allocator_mode_t;
+} sp_mem_alloc_mode_t;
 
 SP_TYPEDEF_FN(
   void*,
   sp_allocator_fn_t,
-  void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr
+  void* user_data, sp_mem_alloc_mode_t mode, u32 size, void* ptr
 );
 
 typedef struct sp_allocator_t {
@@ -402,54 +521,62 @@ typedef struct {
 
 typedef struct {
   sp_allocator_t allocator;
-} sp_mem_libc_allocator_t_t;
+} sp_mem_libc_allocator_t;
 
 typedef struct {
   sp_mem_arena_t* arena;
   u32 mark;
 } sp_mem_arena_marker_t;
 
-sp_allocator_t        sp_allocator_default();
-void*                 sp_allocator_alloc(sp_allocator_t a, u32 size);
-void*                 sp_allocator_realloc(sp_allocator_t a, void* memory, u32 size);
-void                  sp_allocator_free(sp_allocator_t a, void* buffer);
+SP_API void*                   sp_alloc(u32 size);
+SP_API void*                   sp_realloc(void* memory, u32 size);
+SP_API void                    sp_free(void* memory);
+SP_API void*                   sp_mem_os_alloc(u32 size);
+SP_API void*                   sp_mem_os_realloc(void* ptr, u32 size);
+SP_API void                    sp_mem_os_free(void* ptr);
+SP_API void                    sp_mem_copy(const void* source, void* dest, u32 num_bytes);
+SP_API void                    sp_mem_move(const void* source, void* dest, u32 num_bytes);
+SP_API bool                    sp_mem_is_equal(const void* a, const void* b, size_t len);
+SP_API void                    sp_mem_fill(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
+SP_API void                    sp_mem_fill_u8(void* buffer, u32 buffer_size, u8 fill);
+SP_API void                    sp_mem_zero(void* buffer, u32 buffer_size);
+SP_API void*                   sp_mem_allocator_alloc(sp_allocator_t a, u32 size);
+SP_API void*                   sp_mem_allocator_realloc(sp_allocator_t a, void* memory, u32 size);
+SP_API void                    sp_mem_allocator_free(sp_allocator_t a, void* buffer);
+SP_API sp_allocator_t          sp_mem_arena_init(sp_mem_arena_t* a, u32 capacity);
+SP_API void                    sp_mem_arena_clear(sp_mem_arena_t* a);
+SP_API void                    sp_mem_arena_destroy(sp_mem_arena_t* a);
+SP_API void*                   sp_mem_arena_on_alloc(void* ptr, sp_mem_alloc_mode_t mode, u32 n, void* old);
+SP_API sp_mem_arena_marker_t   sp_mem_arena_mark(sp_mem_arena_t* a);
+SP_API void                    sp_mem_arena_pop(sp_mem_arena_marker_t marker);
+SP_API sp_allocator_t          sp_mem_libc_new();
+SP_API void*                   sp_mem_libc_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size, void* ptr);
+SP_API sp_mem_libc_metadata_t* sp_mem_libc_get_metadata(void* ptr);
+SP_API sp_mem_arena_marker_t   sp_mem_mark();
+SP_API void                    sp_mem_pop(sp_mem_arena_marker_t marker);
 
-sp_allocator_t        sp_mem_arena_init(sp_mem_arena_t* a, u32 capacity);
-void                  sp_mem_arena_clear(sp_mem_arena_t* a);
-void                  sp_mem_arena_destroy(sp_mem_arena_t* a);
-void*                 sp_mem_arena_on_alloc(void* a, sp_allocator_mode_t mode, u32 size, void* old_memory);
-sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* a);
-void                  sp_mem_arena_pop(sp_mem_arena_marker_t marker);
-sp_allocator_t        sp_mem_libc_allocator_t_init();
-void*                 sp_mem_libc_allocator_t_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr);
-sp_mem_libc_metadata_t* sp_mem_libc_allocator_get_metadata(void* ptr);
-void*                 sp_alloc(u32 size);
-void*                 sp_realloc(void* memory, u32 size);
-void                  sp_free(void* memory);
 
-
-//  ██╗  ██╗ █████╗ ███████╗██╗  ██╗██╗███╗   ██╗ ██████╗
-//  ██║  ██║██╔══██╗██╔════╝██║  ██║██║████╗  ██║██╔════╝
-//  ███████║███████║███████╗███████║██║██╔██╗ ██║██║  ███╗
-//  ██╔══██║██╔══██║╚════██║██╔══██║██║██║╚██╗██║██║   ██║
-//  ██║  ██║██║  ██║███████║██║  ██║██║██║ ╚████║╚██████╔╝
-//  ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
+// ██╗  ██╗ █████╗ ███████╗██╗  ██╗
+// ██║  ██║██╔══██╗██╔════╝██║  ██║
+// ███████║███████║███████╗███████║
+// ██╔══██║██╔══██║╚════██║██╔══██║
+// ██║  ██║██║  ██║███████║██║  ██║
+// ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
+// @hash
 typedef u64 sp_hash_t;
 
-sp_hash_t sp_hash_cstr(const c8* str);
-sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes);
-sp_hash_t sp_hash_bytes(const void* p, u64 len, u64 seed);
+SP_API sp_hash_t sp_hash_cstr(const c8* str);
+SP_API sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes);
+SP_API sp_hash_t sp_hash_bytes(const void* p, u64 len, u64 seed);
 
 
-//   ██████╗ ██████╗ ███╗   ██╗████████╗ █████╗ ██╗███╗   ██╗███████╗██████╗ ███████╗
-//  ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝██╔══██╗██╔════╝
-//  ██║     ██║   ██║██╔██╗ ██║   ██║   ███████║██║██╔██╗ ██║█████╗  ██████╔╝███████╗
-//  ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══██║██║██║╚██╗██║██╔══╝  ██╔══██╗╚════██║
-//  ╚██████╗╚██████╔╝██║ ╚████║   ██║   ██║  ██║██║██║ ╚████║███████╗██║  ██║███████║
-//   ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚══════╝
-/////////////////
-// FIXED ARRAY //
-/////////////////
+// ███████╗██╗██╗  ██╗███████╗██████╗      █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
+// ██╔════╝██║╚██╗██╔╝██╔════╝██╔══██╗    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
+// █████╗  ██║ ╚███╔╝ █████╗  ██║  ██║    ███████║██████╔╝██████╔╝███████║ ╚████╔╝
+// ██╔══╝  ██║ ██╔██╗ ██╔══╝  ██║  ██║    ██╔══██║██╔══██╗██╔══██╗██╔══██║  ╚██╔╝
+// ██║     ██║██╔╝ ██╗███████╗██████╔╝    ██║  ██║██║  ██║██║  ██║██║  ██║   ██║
+// ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
+// @fixed_array
 typedef struct {
   u8* data;
   u32 size;
@@ -469,37 +596,38 @@ SP_API u32  sp_fixed_array_byte_size(sp_fixed_array_t* fixed_array);
 SP_API u8*  sp_fixed_array_at(sp_fixed_array_t* fixed_array, u32 index);
 
 
-
-///////////////////
-// DYNAMIC ARRAY //
-///////////////////
+// ██████╗ ██╗   ██╗███╗   ██╗     █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
+// ██╔══██╗╚██╗ ██╔╝████╗  ██║    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
+// ██║  ██║ ╚████╔╝ ██╔██╗ ██║    ███████║██████╔╝██████╔╝███████║ ╚████╔╝
+// ██║  ██║  ╚██╔╝  ██║╚██╗██║    ██╔══██║██╔══██╗██╔══██╗██╔══██║  ╚██╔╝
+// ██████╔╝   ██║   ██║ ╚████║    ██║  ██║██║  ██║██║  ██║██║  ██║   ██║
+// ╚═════╝    ╚═╝   ╚═╝  ╚═══╝    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
+// @dyn_array
 typedef struct sp_dyn_array {
     s32 size;
     s32 capacity;
 } sp_dyn_array;
 
-void* sp_dyn_array_resize_impl(void* arr, u32 sz, u32 amount);
-void** sp_dyn_array_init(void** arr, u32 val_len);
-void sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
-
-#define sp_dyn_array(T) T*
-#define sp_da(T) T*
-
-#define sp_da_for(__ARR, __IT) sp_dyn_array_for(__ARR, __IT)
-#define sp_da_head(__ARR) sp_dyn_array_head(__ARR)
-#define sp_da_size(__ARR) sp_dyn_array_size(__ARR)
-#define sp_da_capacity(__ARR) sp_dyn_array_capacity(__ARR)
-#define sp_da_empty(__ARR) sp_dyn_array_empty(__ARR)
-#define sp_da_full(__ARR) sp_dyn_array_full(__ARR)
-#define sp_da_clear(__ARR) sp_dyn_array_clear(__ARR)
-#define sp_da_free(__ARR) sp_dyn_array_free(__ARR)
+#define sp_dyn_array(T)             T*
+#define sp_da(T)                    T*
+SP_API void*                        sp_dyn_array_resize_impl(void* arr, u32 sz, u32 amount);
+SP_API void**                       sp_dyn_array_init(void** arr, u32 val_len);
+SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
+#define sp_da_for(__ARR, __IT)      sp_dyn_array_for(__ARR, __IT)
+#define sp_da_head(__ARR)           sp_dyn_array_head(__ARR)
+#define sp_da_size(__ARR)           sp_dyn_array_size(__ARR)
+#define sp_da_capacity(__ARR)       sp_dyn_array_capacity(__ARR)
+#define sp_da_empty(__ARR)          sp_dyn_array_empty(__ARR)
+#define sp_da_full(__ARR)           sp_dyn_array_full(__ARR)
+#define sp_da_clear(__ARR)          sp_dyn_array_clear(__ARR)
+#define sp_da_free(__ARR)           sp_dyn_array_free(__ARR)
 #define sp_da_need_grow(__ARR, __N) sp_dyn_array_need_grow(__ARR, __N)
-#define sp_da_grow(__ARR) sp_dyn_array_grow(__ARR)
-#define sp_da_push(__ARR, __VAL) sp_dyn_array_push(__ARR, __VAL)
-#define sp_da_reserve(__ARR, __AMOUNT) sp_dyn_array_reserve(__ARR, __AMOUNT)
-#define sp_da_pop(__ARR) sp_dyn_array_pop(__ARR)
-#define sp_da_back(__ARR) sp_dyn_array_back(__ARR)
-#define sp_da_new(__T) sp_dyn_array_new(__T)
+#define sp_da_grow(__ARR)           sp_dyn_array_grow(__ARR)
+#define sp_da_push(__ARR, __VAL)    sp_dyn_array_push(__ARR, __VAL)
+#define sp_da_reserve(__ARR, __N)   sp_dyn_array_reserve(__ARR, __N)
+#define sp_da_pop(__ARR)            sp_dyn_array_pop(__ARR)
+#define sp_da_back(__ARR)           sp_dyn_array_back(__ARR)
+#define sp_da_new(__T)              sp_dyn_array_new(__T)
 
 #define sp_dyn_array_for(__ARR, __IT) for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
 
@@ -572,9 +700,14 @@ void sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
 
 #define sp_dyn_array_sort(arr, fn) qsort(arr, sp_dyn_array_size(arr), sizeof((arr)[0]), fn)
 
-////////////////
-// HASH TABLE //
-////////////////
+
+// ██╗  ██╗ █████╗ ███████╗██╗  ██╗    ████████╗ █████╗ ██████╗ ██╗     ███████╗
+// ██║  ██║██╔══██╗██╔════╝██║  ██║    ╚══██╔══╝██╔══██╗██╔══██╗██║     ██╔════╝
+// ███████║███████║███████╗███████║       ██║   ███████║██████╔╝██║     █████╗
+// ██╔══██║██╔══██║╚════██║██╔══██║       ██║   ██╔══██║██╔══██╗██║     ██╔══╝
+// ██║  ██║██║  ██║███████║██║  ██║       ██║   ██║  ██║██████╔╝███████╗███████╗
+// ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝       ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝
+// @hash_table
 #define SP_HT_HASH_SEED         0x31415296
 #define SP_HT_INVALID_INDEX     UINT32_MAX
 
@@ -622,7 +755,7 @@ typedef struct {
 #define sp_ht_init(ht)\
     do {\
         *((void**)(&(ht))) = sp_alloc(sizeof(*ht));                    \
-        sp_os_zero_memory((ht), sizeof(*ht));                          \
+        sp_mem_zero((ht), sizeof(*ht));                          \
                                                                        \
         sp_dyn_array_reserve(ht->data, 2);                             \
         ht->data[0].state = SP_HT_ENTRY_INACTIVE;              \
@@ -764,20 +897,22 @@ typedef struct {
 
 #define sp_ht_tmp_key_index(__HT) sp_ht_get_key_index_fn((void**)&((__HT)->data), (void*)&((__HT)->tmp_key), (__HT)->info)
 
-u32        sp_ht_get_key_index_fn(void** data, void* key, sp_ht_info_t info);
-sp_ht_it sp_ht_it_init_fn(void** data, sp_ht_info_t info);
-void       sp_ht_it_advance_fn(void** data, u32* it, sp_ht_info_t info);
-
-sp_hash_t  sp_ht_on_hash_key(void* key, u32 size);
-bool       sp_ht_on_compare_key(void* ka, void* kb, u32 size);
-sp_hash_t sp_ht_on_hash_str_key(void* key, u32 size);
-bool      sp_ht_on_compare_str_key(void* ka, void* kb, u32 size);
-
+SP_API u32       sp_ht_get_key_index_fn(void** data, void* key, sp_ht_info_t info);
+SP_API sp_ht_it  sp_ht_it_init_fn(void** data, sp_ht_info_t info);
+SP_API void      sp_ht_it_advance_fn(void** data, u32* it, sp_ht_info_t info);
+SP_API sp_hash_t sp_ht_on_hash_key(void* key, u32 size);
+SP_API bool      sp_ht_on_compare_key(void* ka, void* kb, u32 size);
+SP_API sp_hash_t sp_ht_on_hash_str_key(void* key, u32 size);
+SP_API bool      sp_ht_on_compare_str_key(void* ka, void* kb, u32 size);
 
 
-///////////////
-// RING BUFFER/
-///////////////
+// ██████╗ ██╗███╗   ██╗ ██████╗     ██████╗ ██╗   ██╗███████╗███████╗███████╗██████╗
+// ██╔══██╗██║████╗  ██║██╔════╝     ██╔══██╗██║   ██║██╔════╝██╔════╝██╔════╝██╔══██╗
+// ██████╔╝██║██╔██╗ ██║██║  ███╗    ██████╔╝██║   ██║█████╗  █████╗  █████╗  ██████╔╝
+// ██╔══██╗██║██║╚██╗██║██║   ██║    ██╔══██╗██║   ██║██╔══╝  ██╔══╝  ██╔══╝  ██╔══██╗
+// ██║  ██║██║██║ ╚████║╚██████╔╝    ██████╔╝╚██████╔╝██║     ██║     ███████╗██║  ██║
+// ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝     ╚═════╝  ╚═════╝ ╚═╝     ╚═╝     ╚══════╝╚═╝  ╚═╝
+// @ring_buffer
 typedef struct {
   u8* data;
   u32 element_size;
@@ -787,6 +922,7 @@ typedef struct {
 } sp_ring_buffer_t;
 
 #define sp_ring_buffer(t) sp_ring_buffer_t
+#define sp_rb(t) sp_ring_buffer_t
 
 typedef struct {
   s32 index;
@@ -825,12 +961,13 @@ SP_API sp_rb_it_t sp_rb_rit_new(sp_ring_buffer_t* buffer);
     } while (0)
 
 
-//  ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗
-//  ██╔════╝╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝
-//  ███████╗   ██║   ██████╔╝██║██╔██╗ ██║██║  ███╗
-//  ╚════██║   ██║   ██╔══██╗██║██║╚██╗██║██║   ██║
-//  ███████║   ██║   ██║  ██║██║██║ ╚████║╚██████╔╝
-//  ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
+// ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗
+// ██╔════╝╚══██╔══╝██╔═██╗██║████╗  ██║██╔════╝
+// ███████╗   ██║   ██████╔╝██║██╔██╗ ██║██║  ███╗
+// ╚════██║   ██║   ██╔══██╗██║██║╚██╗██║██║   ██║
+// ███████║   ██║   ██║  ██║██║██║ ╚████║╚██████╔╝
+// ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
+// @string
 typedef struct {
   u32 len;
   const c8* data;
@@ -885,11 +1022,11 @@ typedef struct {
 SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
 SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
-#define SP_CSTR(STR)   sp_str((STR), sp_cstr_len(STR))
-#define sp_str_lit(STR)    sp_str((STR), sizeof(STR) - 1)
 #define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .len = (u32)(LEN), .data = (const c8*)(STR) }
 #define SP_STR(STR, LEN) sp_str(STR, LEN)
-#define SP_LIT(STR) sp_str_lit(STR)
+#define sp_str_lit(STR)  sp_str((STR), sizeof(STR) - 1)
+#define SP_LIT(STR)      sp_str_lit(STR)
+#define SP_CSTR(STR)     sp_str((STR), sp_cstr_len(STR))
 #define sp_str_for(str, it) for (u32 it = 0; it < str.len; it++)
 
 SP_API void            sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
@@ -908,7 +1045,7 @@ SP_API c8*             sp_str_builder_write_cstr(sp_str_builder_t* builder);
 SP_API c8*             sp_cstr_copy(const c8* str);
 SP_API void            sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length);
 SP_API c8*             sp_cstr_copy_sized(const c8* str, u32 length);
-SP_API void            sp_cstr_copy_to_sized(const c8* str, u32 length, c8* buffer, u32 buffer_length);
+SP_API void            sp_cstr_copy_to_sized(const c8* str, u32 n, c8* buffer, u32 bn);
 SP_API bool            sp_cstr_equal(const c8* a, const c8* b);
 SP_API u32             sp_cstr_len(const c8* str);
 SP_API u32             sp_cstr_len_sized(const c8* str, u32 n);
@@ -961,13 +1098,13 @@ SP_API u32             sp_str_count_n(sp_str_t* strs, u32 n, sp_str_t needle);
 SP_API sp_str_t        sp_str_find_longest_n(sp_str_t* strs, u32 n);
 SP_API sp_str_t        sp_str_find_shortest_n(sp_str_t* strs, u32 n);
 SP_API sp_da(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n);
-SP_API sp_str_t        sp_str_reduce(sp_str_t* strs, u32 n, void* user_data, sp_str_reduce_fn_t fn);
+SP_API sp_str_t        sp_str_reduce(sp_str_t* strs, u32 n, void* ud, sp_str_reduce_fn_t fn);
 SP_API void            sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
 SP_API void            sp_str_reduce_kernel_contains(sp_str_reduce_context_t* context);
 SP_API void            sp_str_reduce_kernel_count(sp_str_reduce_context_t* context);
 SP_API void            sp_str_reduce_kernel_longest(sp_str_reduce_context_t* context);
 SP_API void            sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context);
-SP_API sp_da(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr user_data, sp_str_map_fn_t fn);
+SP_API sp_da(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr ud, sp_str_map_fn_t fn);
 SP_API sp_str_t        sp_str_map_kernel_prepend(sp_str_map_context_t* context);
 SP_API sp_str_t        sp_str_map_kernel_append(sp_str_map_context_t* context);
 SP_API sp_str_t        sp_str_map_kernel_prefix(sp_str_map_context_t* context);
@@ -979,12 +1116,186 @@ SP_API sp_str_t        sp_str_map_kernel_capitalize_words(sp_str_map_context_t* 
 SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 
 
+// ██╗      ██████╗  ██████╗
+// ██║     ██╔═══██╗██╔════╝
+// ██║     ██║   ██║██║  ███╗
+// ██║     ██║   ██║██║   ██║
+// ███████╗╚██████╔╝╚██████╔╝
+// ╚══════╝ ╚═════╝  ╚═════╝
+// @log
+#define SP_LOG(CSTR, ...)    sp_log(SP_CSTR((CSTR)), ##__VA_ARGS__)
+#define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
+SP_API void sp_log(sp_str_t fmt, ...);
+
+
+// ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
+// ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
+// ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
+// ██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║   ██║   ██║██╔══██╗
+// ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██║   ██║   ╚██████╔╝██║  ██║
+// ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
+// @file_monitor
+typedef enum sp_file_change_event_t {
+	SP_FILE_CHANGE_EVENT_NONE = 0,
+	SP_FILE_CHANGE_EVENT_ADDED = 1 << 0,
+	SP_FILE_CHANGE_EVENT_MODIFIED = 1 << 1,
+	SP_FILE_CHANGE_EVENT_REMOVED = 1 << 2,
+} sp_fmon_event_kind_t;
+
+typedef struct {
+	sp_str_t file_path;
+	sp_str_t file_name;
+	sp_fmon_event_kind_t events;
+	f32 time;
+} sp_fmon_event_t;
+
+typedef struct sp_fmon sp_fmon_t;
+SP_TYPEDEF_FN(void, sp_fmon_fn_t, sp_fmon_t*, sp_fmon_event_t*, void*);
+
+typedef struct {
+	sp_hash_t hash;
+	f64 last_event_time;
+} sp_fmon_cache_t;
+
+#define SP_FILE_MONITOR_BUFFER_SIZE 4092
+
+struct sp_fmon {
+	sp_fmon_fn_t callback;
+	sp_fmon_event_kind_t events_to_watch;
+	void* userdata;
+	u32 debounce_time_ms;
+	sp_dyn_array(sp_fmon_event_t) changes;
+	sp_dyn_array(sp_fmon_cache_t) cache;
+  sp_opaque_ptr os;
+};
+
+SP_API void sp_fmon_init(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
+SP_API void sp_fmon_init_ex(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data, u32 debounce);
+SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
+SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
+SP_API bool sp_fmon_is_cached(sp_fmon_t* monitor, sp_str_t file_path, f64 time);
+SP_API sp_fmon_cache_t* sp_fmon_find_cache_entry(sp_fmon_t* monitor, sp_str_t file_path);
+
+///////////
+// WIN32 //
+///////////
+#if defined(SP_WIN32)
+  typedef struct {
+  sp_str_t path;
+  sp_win32_overlapped_t overlapped;
+  sp_win32_handle_t handle;
+  void* notify_information;
+  s32 bytes_returned;
+} sp_monitored_dir_t;
+
+typedef struct {
+  sp_dynamic_array_t directory_infos;
+} sp_os_win32_file_monitor_t;
+
+///////////
+// LINUX //
+///////////
+#elif defined(SP_LINUX)
+typedef s32 sp_os_file_handle_t;
+
+typedef struct {
+  s32 fd;
+  sp_dyn_array(s32) watch_descs;
+  sp_dyn_array(sp_str_t) watch_paths;
+  u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+} sp_fmon_os_t;
+
+///////////
+// MACOS //
+///////////
+#elif defined(SP_MACOS)
+typedef s32 sp_os_file_handle_t;
+
+typedef struct {
+  void* placeholder;
+} sp_fmon_os_t;
+#endif
+
+
+// ███████╗███╗   ██╗██╗   ██╗
+// ██╔════╝████╗  ██║██║   ██║
+// █████╗  ██╔██╗ ██║██║   ██║
+// ██╔══╝  ██║╚██╗██║╚██╗ ██╔╝
+// ███████╗██║ ╚████║ ╚████╔╝
+// ╚══════╝╚═╝  ╚═══╝  ╚═══╝
+// @env
+typedef struct {
+  sp_str_t key;
+  sp_str_t value;
+} sp_env_var_t;
+
+typedef sp_ht(sp_str_t, sp_str_t) sp_env_table_t;
+
+typedef struct {
+  sp_env_table_t vars;
+} sp_env_t;
+
+SP_API void     sp_env_init(sp_env_t* env);
+SP_API sp_env_t sp_env_capture();
+SP_API sp_env_t sp_env_copy(sp_env_t* env);
+SP_API sp_str_t sp_env_get(sp_env_t* env, sp_str_t name);
+SP_API void     sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
+SP_API void     sp_env_erase(sp_env_t* env, sp_str_t name);
+SP_API void     sp_env_destroy(sp_env_t* env);
+
+
+//  ██████╗ ███████╗
+// ██╔═══██╗██╔════╝
+// ██║   ██║███████╗
+// ██║   ██║╚════██║
+// ╚██████╔╝███████║
+//  ╚═════╝ ╚══════╝
+// @os
+typedef enum {
+  SP_OS_LINUX,
+  SP_OS_WIN32,
+  SP_OS_MACOS,
+} sp_os_kind_t;
+
+typedef enum {
+  SP_OS_LIB_SHARED,
+  SP_OS_LIB_STATIC,
+} sp_os_lib_kind_t;
+
+typedef enum {
+  SP_FS_LINK_HARD,
+  SP_FS_LINK_SYMBOLIC,
+  SP_FS_LINK_COPY,
+} sp_os_link_kind_t;
+
+typedef enum {
+  SP_ENV_EXPORT_OVERWRITE_DUPES,
+  SP_ENV_EXPORT_SKIP_DUPES,
+} sp_env_export_t;
+
+SP_API sp_os_kind_t sp_os_get_kind();
+SP_API sp_str_t     sp_os_get_name();
+SP_API void         sp_os_sleep_ms(f64 ms);
+SP_API c8*          sp_os_wstr_to_cstr(c16* str, u32 len);
+SP_API void         sp_os_print(sp_str_t message);
+SP_API sp_str_t     sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
+SP_API sp_str_t     sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
+SP_API sp_str_t     sp_os_get_env_var(sp_str_t key);
+SP_API sp_str_t     sp_os_get_env_as_path(sp_str_t key);
+SP_API void         sp_os_clear_env_var(sp_str_t var);
+SP_API void         sp_os_export_env_var(sp_str_t k, sp_str_t v, sp_env_export_t export);
+SP_API void         sp_os_export_env(sp_env_t* env, sp_env_export_t export);
+
+
 // ████████╗██╗███╗   ███╗███████╗
 // ╚══██╔══╝██║████╗ ████║██╔════╝
 //    ██║   ██║██╔████╔██║█████╗
 //    ██║   ██║██║╚██╔╝██║██╔══╝
 //    ██║   ██║██║ ╚═╝ ██║███████╗
 //    ╚═╝   ╚═╝╚═╝     ╚═╝╚══════╝
+// @time
 typedef struct {
   u64 s;
   u32 ns;
@@ -1007,187 +1318,6 @@ typedef struct {
   sp_tm_point_t previous;
 } sp_tm_timer_t;
 
-SP_API sp_tm_epoch_t             sp_tm_now_epoch();
-SP_API sp_str_t                  sp_tm_to_iso8601(sp_tm_epoch_t time);
-SP_API sp_tm_point_t             sp_tm_now_point();
-SP_API u64                       sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older);
-SP_API sp_tm_timer_t             sp_tm_start_timer();
-SP_API u64                       sp_tm_read_timer(sp_tm_timer_t* timer);
-SP_API u64                       sp_tm_lap_timer(sp_tm_timer_t* timer);
-SP_API void                      sp_tm_reset_timer(sp_tm_timer_t* timer);
-SP_API sp_tm_date_time_t         sp_tm_get_date_time();
-
-
-// ███████╗██████╗ ██████╗  █████╗ ████████╗ █████╗
-// ██╔════╝██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗
-// █████╗  ██████╔╝██████╔╝███████║   ██║   ███████║
-// ██╔══╝  ██╔══██╗██╔══██╗██╔══██║   ██║   ██╔══██║
-// ███████╗██║  ██║██║  ██║██║  ██║   ██║   ██║  ██║
-// ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
-#define SP_TERNARY_X(X) \
-  X(SP_TERNARY_FALSE) \
-  X(SP_TERNARY_TRUE) \
-  X(SP_TERNARY_NULL)
-
-typedef enum {
-  SP_TERNARY_X(SP_X_ENUM_DEFINE)
-} sp_ternary_t;
-
-SP_API sp_str_t sp_ternary_to_str(sp_ternary_t ternary);
-
-
-// ██╗      ██████╗  ██████╗
-// ██║     ██╔═══██╗██╔════╝
-// ██║     ██║   ██║██║  ███╗
-// ██║     ██║   ██║██║   ██║
-// ███████╗╚██████╔╝╚██████╔╝
-// ╚══════╝ ╚═════╝  ╚═════╝
-#define SP_LOG(CSTR, ...)    sp_log(SP_CSTR((CSTR)), ##__VA_ARGS__)
-#define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
-void sp_log(sp_str_t fmt, ...);
-
-
-// ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
-// ██╔════╝██║██║     ██╔════╝    ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
-// █████╗  ██║██║     █████╗      ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
-// ██╔══╝  ██║██║     ██╔══╝      ██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║   ██║   ██║██╔══██╗
-// ██║     ██║███████╗███████╗    ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██║   ██║   ╚██████╔╝██║  ██║
-// ╚═╝     ╚═╝╚══════╝╚══════╝    ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
-
-typedef enum sp_file_change_event_t {
-	SP_FILE_CHANGE_EVENT_NONE = 0,
-	SP_FILE_CHANGE_EVENT_ADDED = 1 << 0,
-	SP_FILE_CHANGE_EVENT_MODIFIED = 1 << 1,
-	SP_FILE_CHANGE_EVENT_REMOVED = 1 << 2,
-} sp_file_change_event_t;
-
-typedef struct {
-	sp_str_t file_path;
-	sp_str_t file_name;
-	sp_file_change_event_t events;
-	f32 time;
-} sp_file_change_t;
-
-typedef struct sp_file_monitor sp_file_monitor_t;
-SP_TYPEDEF_FN(void, sp_file_change_callback_t, sp_file_monitor_t*, sp_file_change_t*, void*);
-
-typedef struct {
-	sp_hash_t hash;
-	f64 last_event_time;
-} sp_cache_entry_t;
-
-#define SP_FILE_MONITOR_BUFFER_SIZE 4092
-
-struct sp_file_monitor {
-	sp_file_change_callback_t callback;
-	sp_file_change_event_t events_to_watch;
-	void* userdata;
-	u32 debounce_time_ms;
-	sp_dyn_array(sp_file_change_t) changes;
-	sp_dyn_array(sp_cache_entry_t) cache;
-  sp_opaque_ptr os;
-};
-
-SP_API void              sp_file_monitor_init(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata);
-SP_API void              sp_file_monitor_init_debounce(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata, u32 debounce_ms);
-SP_API void              sp_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
-SP_IMP void              sp_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
-SP_API void              sp_file_monitor_process_changes(sp_file_monitor_t* monitor);
-SP_API void              sp_file_monitor_emit_changes(sp_file_monitor_t* monitor);
-SP_API bool              sp_file_monitor_check_cache(sp_file_monitor_t* monitor, sp_str_t file_path, f64 time);
-SP_API sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, sp_str_t file_path);
-
-
-//   ██████╗ ███████╗
-//  ██╔═══██╗██╔════╝
-//  ██║   ██║███████╗
-//  ██║   ██║╚════██║
-//  ╚██████╔╝███████║
-//   ╚═════╝ ╚══════╝
-// @sp_os
-
-//////////////
-// OS TYPES //
-//////////////
-#ifdef SP_WIN32
-  typedef HANDLE              sp_win32_handle_t;
-  typedef DWORD               sp_win32_dword_t;
-  typedef WIN32_FIND_DATA     sp_win32_find_data_t;
-  typedef CRITICAL_SECTION    sp_win32_critical_section_t;
-  typedef OVERLAPPED          sp_win32_overlapped_t;
-  typedef PROCESS_INFORMATION sp_win32_process_information_t;
-  typedef STARTUPINFO         sp_win32_startup_info_t;
-  typedef SECURITY_ATTRIBUTES sp_win32_security_attributes_t;
-  typedef HANDLE              sp_os_file_handle_t;
-
-  typedef struct {
-  	sp_str_t path;
-  	sp_win32_overlapped_t overlapped;
-  	sp_win32_handle_t handle;
-  	void* notify_information;
-  	s32 bytes_returned;
-  } sp_monitored_dir_t;
-
-  typedef struct {
-	  sp_dynamic_array_t directory_infos;
-  } sp_os_win32_file_monitor_t;
-
-  SP_IMP void sp_os_win32_file_monitor_add_change(sp_file_monitor_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_file_change_event_t events);
-  SP_IMP void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info);
-#endif
-
-#if defined(SP_POSIX)
-  typedef s32 sp_os_file_handle_t;
-#endif
-
-#ifdef SP_LINUX
-  typedef struct {
-    s32 fd;
-    sp_dyn_array(s32) watch_descs;
-    sp_dyn_array(sp_str_t) watch_paths;
-    u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
-  } sp_os_linux_file_monitor_t;
-
-  typedef sp_os_linux_file_monitor_t sp_os_file_monitor_t;
-#endif
-
-#ifdef SP_MACOS
-  typedef struct {
-    void* placeholder;
-  } sp_os_file_monitor_t;
-#endif
-
-typedef enum {
-  SP_OS_FILE_ATTR_NONE = 0,
-  SP_OS_FILE_ATTR_REGULAR_FILE = (1 << 0),
-  SP_OS_FILE_ATTR_DIRECTORY    = (1 << 1),
-  SP_OS_FILE_ATTR_SYMLINK      = (1 << 2),
-} sp_os_file_attr_t;
-
-typedef enum {
-  SP_MUTEX_NONE = 0,
-  SP_MUTEX_PLAIN = 1,
-  SP_MUTEX_TIMED = 2,
-  SP_MUTEX_RECURSIVE = 4
-} sp_mutex_kind_t;
-
-typedef enum {
-  SP_OS_PLATFORM_LINUX,
-  SP_OS_PLATFORM_WIN32,
-  SP_OS_PLATFORM_MACOS,
-} sp_os_platform_kind_t;
-
-typedef enum {
-  SP_OS_LIB_SHARED,
-  SP_OS_LIB_STATIC,
-} sp_os_lib_kind_t;
-
-typedef enum {
-  SP_OS_LINK_HARD,
-  SP_OS_LINK_SYMBOLIC,
-  SP_OS_LINK_COPY,
-} sp_os_link_kind_t;
-
 typedef struct {
   s32 year;
   s32 month;
@@ -1198,95 +1328,190 @@ typedef struct {
   s32 millisecond;
 } sp_os_date_time_t;
 
+SP_API sp_tm_epoch_t     sp_tm_now_epoch();
+SP_API sp_str_t          sp_tm_to_iso8601(sp_tm_epoch_t time);
+SP_API sp_tm_point_t     sp_tm_now_point();
+SP_API u64               sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older);
+SP_API sp_tm_timer_t     sp_tm_start_timer();
+SP_API u64               sp_tm_read_timer(sp_tm_timer_t* timer);
+SP_API u64               sp_tm_lap_timer(sp_tm_timer_t* timer);
+SP_API void              sp_tm_reset_timer(sp_tm_timer_t* timer);
+SP_API sp_tm_date_time_t sp_tm_get_date_time();
+
+
+// ███████╗███████╗
+// ██╔════╝██╔════╝
+// █████╗  ███████╗
+// ██╔══╝  ╚════██║
+// ██║     ███████║
+// ╚═╝     ╚══════╝
+// @fs
+typedef enum {
+  SP_OS_FILE_ATTR_NONE = 0,
+  SP_OS_FILE_ATTR_REGULAR_FILE = (1 << 0),
+  SP_OS_FILE_ATTR_DIRECTORY    = (1 << 1),
+  SP_OS_FILE_ATTR_SYMLINK      = (1 << 2),
+} sp_os_file_attr_t;
+
 typedef struct {
   sp_str_t file_path;
   sp_str_t file_name;
   sp_os_file_attr_t attributes;
 } sp_os_dir_ent_t;
 
-SP_API void*                  sp_os_allocate_memory(u32 size);
-SP_API void*                  sp_os_reallocate_memory(void* ptr, u32 size);
-SP_API void                   sp_os_free_memory(void* ptr);
-SP_API void                   sp_os_copy_memory(const void* source, void* dest, u32 num_bytes);
-SP_API void                   sp_os_move_memory(const void* source, void* dest, u32 num_bytes);
-SP_API bool                   sp_os_is_memory_equal(const void* a, const void* b, size_t len);
-SP_API void                   sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size);
-SP_API void                   sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill);
-SP_API void                   sp_os_zero_memory(void* buffer, u32 buffer_size);
-SP_API sp_os_platform_kind_t  sp_os_platform_kind();
-SP_API sp_str_t               sp_os_platform_name();
-SP_API void                   sp_os_sleep_ms(f64 ms);
-SP_API c8*                    sp_os_wstr_to_cstr(c16* str, u32 len);
-SP_API void                   sp_os_print(sp_str_t message);
-SP_API void                   sp_os_log(sp_str_t message);
-SP_API sp_str_t               sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
-SP_API sp_str_t               sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
+SP_API bool                   sp_fs_is_regular_file(sp_str_t path);
+SP_API bool                   sp_fs_is_symlink(sp_str_t path);
+SP_API bool                   sp_fs_is_dir(sp_str_t path);
+SP_API bool                   sp_fs_is_target_regular_file(sp_str_t path);
+SP_API bool                   sp_fs_is_target_dir(sp_str_t path);
+SP_API bool                   sp_fs_is_root(sp_str_t path);
+SP_API bool                   sp_fs_is_glob(sp_str_t path);
+SP_API bool                   sp_fs_is_on_path(sp_str_t program);
+SP_API bool                   sp_fs_exists(sp_str_t path);
+SP_API void                   sp_fs_create_dir(sp_str_t path);
+SP_API void                   sp_fs_remove_dir(sp_str_t path);
+SP_API void                   sp_fs_create_file(sp_str_t path);
+SP_API void                   sp_fs_remove_file(sp_str_t path);
+SP_API sp_err_t               sp_fs_copy(sp_str_t from, sp_str_t to);
+SP_API void                   sp_fs_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
+SP_API void                   sp_fs_copy_file(sp_str_t from, sp_str_t to);
+SP_API void                   sp_fs_copy_dir(sp_str_t from, sp_str_t to);
+SP_API sp_err_t               sp_fs_link(sp_str_t from, sp_str_t to, sp_os_link_kind_t kind);
+SP_API sp_err_t               sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path);
+SP_API sp_err_t               sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path);
+SP_API sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path);
+SP_API sp_str_t               sp_fs_normalize_path(sp_str_t path);
+SP_API void                   sp_fs_normalize_path_soft(sp_str_t* path);
+SP_API sp_str_t               sp_fs_canonicalize_path(sp_str_t path);
+SP_API sp_str_t               sp_fs_parent_path(sp_str_t path);
+SP_API sp_str_t               sp_fs_join_path(sp_str_t a, sp_str_t b);
+SP_API sp_str_t               sp_fs_get_ext(sp_str_t path);
+SP_API sp_str_t               sp_fs_get_stem(sp_str_t path);
+SP_API sp_str_t               sp_fs_get_name(sp_str_t path);
+SP_API sp_str_t               sp_fs_get_cwd();
+SP_API sp_str_t               sp_fs_get_exe_path();
+SP_API sp_str_t               sp_fs_get_storage_path();
+SP_API sp_str_t               sp_fs_get_config_path();
+SP_API sp_tm_epoch_t          sp_fs_get_mod_time(sp_str_t path);
+SP_API sp_os_file_attr_t      sp_fs_get_file_attrs(sp_str_t path);
 
-SP_API bool                   sp_os_is_regular_file(sp_str_t path);
-SP_API bool                   sp_os_is_symlink(sp_str_t path);
-SP_API bool                   sp_os_is_directory(sp_str_t path);
-SP_API bool                   sp_os_is_target_regular_file(sp_str_t path);
-SP_API bool                   sp_os_is_target_directory(sp_str_t path);
-SP_API bool                   sp_os_is_path_root(sp_str_t path);
-SP_API bool                   sp_os_is_glob(sp_str_t path);
-SP_API bool                   sp_os_is_program_on_path(sp_str_t program);
-SP_API bool                   sp_os_does_path_exist(sp_str_t path);
-SP_API void                   sp_os_create_directory(sp_str_t path);
-SP_API void                   sp_os_remove_directory(sp_str_t path);
-SP_API void                   sp_os_create_file(sp_str_t path);
-SP_API void                   sp_os_remove_file(sp_str_t path);
-SP_API sp_err_t               sp_os_copy(sp_str_t from, sp_str_t to);
-SP_API void                   sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
-SP_API void                   sp_os_copy_file(sp_str_t from, sp_str_t to);
-SP_API void                   sp_os_copy_directory(sp_str_t from, sp_str_t to);
-SP_API sp_err_t               sp_os_create_hard_link(sp_str_t target, sp_str_t link_path);
-SP_API sp_err_t               sp_os_create_symbolic_link(sp_str_t target, sp_str_t link_path);
-SP_API sp_err_t               sp_os_link(sp_str_t from, sp_str_t to, sp_os_link_kind_t kind);
-SP_API sp_da(sp_os_dir_ent_t) sp_os_scan_directory(sp_str_t path);
-SP_API sp_str_t               sp_os_normalize_path(sp_str_t path);
-SP_API void                   sp_os_normalize_path_soft(sp_str_t* path);
-SP_API sp_str_t               sp_os_parent_path(sp_str_t path);
-SP_API sp_str_t               sp_os_join_path(sp_str_t a, sp_str_t b);
-SP_API sp_str_t               sp_os_extract_extension(sp_str_t path);
-SP_API sp_str_t               sp_os_extract_stem(sp_str_t path);
-SP_API sp_str_t               sp_os_extract_file_name(sp_str_t path);
-SP_API sp_str_t               sp_os_get_cwd();
-SP_API sp_str_t               sp_os_get_executable_path();
-SP_API sp_str_t               sp_os_get_storage_path();
-SP_API sp_str_t               sp_os_get_config_path();
-SP_API sp_str_t               sp_os_canonicalize_path(sp_str_t path);
-SP_API sp_tm_epoch_t          sp_os_file_mod_time_precise(sp_str_t path);
-SP_API sp_os_file_attr_t      sp_os_get_file_attrs(sp_str_t path);
-SP_IMP sp_os_file_attr_t      sp_os_winapi_attr_to_sp_attr(u32 attr);
-SP_IMP void                   sp_os_file_monitor_init(sp_file_monitor_t* monitor);
-SP_IMP void                   sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path);
-SP_IMP void                   sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path);
-SP_IMP void                   sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor);
+#if defined(SP_CPP)
+  SP_API sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
+  SP_API sp_str_t operator/(const sp_str_t& a, const c8* b);
+#endif
 
 
-// ████████╗██╗  ██╗██████╗ ███████╗ █████╗ ██████╗ ██╗███╗   ██╗ ██████╗
-// ╚══██╔══╝██║  ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗██║████╗  ██║██╔════╝
-//    ██║   ███████║██████╔╝█████╗  ███████║██║  ██║██║██╔██╗ ██║██║  ███╗
-//    ██║   ██╔══██║██╔══██╗██╔══╝  ██╔══██║██║  ██║██║██║╚██╗██║██║   ██║
-//    ██║   ██║  ██║██║  ██║███████╗██║  ██║██████╔╝██║██║ ╚████║╚██████╔╝
-//    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝
+//  █████╗ ████████╗ ██████╗ ███╗   ███╗██╗██████╗
+// ██╔══██╗╚══██╔══╝██╔═══██╗████╗ ████║██║██╔════╝
+// ███████║   ██║   ██║   ██║██╔████╔██║██║██║
+// ██╔══██║   ██║   ██║   ██║██║╚██╔╝██║██║██║
+// ██║  ██║   ██║   ╚██████╔╝██║ ╚═╝ ██║██║╚██████╗
+// ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝╚═╝ ╚═════╝
+// @atomic
+typedef s32 sp_atomic_s32;
+
+SP_API bool sp_atomic_s32_cmp_and_swap(sp_atomic_s32* value, s32 current, s32 desired);
+SP_API s32  sp_atomic_s32_set(sp_atomic_s32* value, s32 desired);
+SP_API s32  sp_atomic_s32_add(sp_atomic_s32* value, s32 add);
+SP_API s32  sp_atomic_s32_get(sp_atomic_s32* value);
+
+
+// ███╗   ███╗██╗   ██╗████████╗███████╗██╗  ██╗
+// ████╗ ████║██║   ██║╚══██╔══╝██╔════╝╚██╗██╔╝
+// ██╔████╔██║██║   ██║   ██║   █████╗   ╚███╔╝
+// ██║╚██╔╝██║██║   ██║   ██║   ██╔══╝   ██╔██╗
+// ██║ ╚═╝ ██║╚██████╔╝   ██║   ███████╗██╔╝ ██╗
+// ╚═╝     ╚═╝ ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝
+// @mutex
+typedef enum {
+  SP_MUTEX_NONE = 0,
+  SP_MUTEX_PLAIN = 1,
+  SP_MUTEX_TIMED = 2,
+  SP_MUTEX_RECURSIVE = 4
+} sp_mutex_kind_t;
+
 #if defined(SP_WIN32)
-  typedef thrd_t               sp_thread_t;
-  typedef mtx_t                sp_mutex_t;
-  typedef HANDLE               sp_semaphore_t;
+  typedef mtx_t sp_mutex_t;
+
 #elif defined(SP_LINUX)
-  typedef pthread_t            sp_thread_t;
-  typedef pthread_mutex_t      sp_mutex_t;
-  typedef sem_t                sp_semaphore_t;
+  typedef pthread_mutex_t sp_mutex_t;
+
 #elif defined(SP_MACOS)
-  typedef pthread_t            sp_thread_t;
-  typedef pthread_mutex_t      sp_mutex_t;
+  typedef pthread_mutex_t sp_mutex_t;
+#endif
+
+SP_API void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind);
+SP_API void sp_mutex_lock(sp_mutex_t* mutex);
+SP_API void sp_mutex_unlock(sp_mutex_t* mutex);
+SP_API void sp_mutex_destroy(sp_mutex_t* mutex);
+SP_API s32  sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
+
+
+// ███████╗███████╗███╗   ███╗ █████╗ ██████╗ ██╗  ██╗ ██████╗ ██████╗ ███████╗
+// ██╔════╝██╔════╝████╗ ████║██╔══██╗██╔══██╗██║  ██║██╔═══██╗██╔══██╗██╔════╝
+// ███████╗█████╗  ██╔████╔██║███████║██████╔╝███████║██║   ██║██████╔╝█████╗
+// ╚════██║██╔══╝  ██║╚██╔╝██║██╔══██║██╔═══╝ ██╔══██║██║   ██║██╔══██╗██╔══╝
+// ███████║███████╗██║ ╚═╝ ██║██║  ██║██║     ██║  ██║╚██████╔╝██║  ██║███████╗
+// ╚══════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
+// @semaphore
+#if defined(SP_WIN32)
+  typedef HANDLE sp_semaphore_t;
+
+#elif defined(SP_LINUX)
+  typedef sem_t sp_semaphore_t;
+
+#elif defined(SP_MACOS)
   typedef dispatch_semaphore_t sp_semaphore_t;
 #endif
 
-typedef s32 sp_spin_lock_t;
-typedef s32 sp_atomic_s32;
+SP_API void sp_semaphore_init(sp_semaphore_t* semaphore);
+SP_API void sp_semaphore_destroy(sp_semaphore_t* semaphore);
+SP_API void sp_semaphore_wait(sp_semaphore_t* semaphore);
+SP_API bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
+SP_API void sp_semaphore_signal(sp_semaphore_t* semaphore);
 
+
+// ███████╗██╗   ██╗████████╗██╗   ██╗██████╗ ███████╗
+// ██╔════╝██║   ██║╚══██╔══╝██║   ██║██╔══██╗██╔════╝
+// █████╗  ██║   ██║   ██║   ██║   ██║██████╔╝█████╗
+// ██╔══╝  ██║   ██║   ██║   ██║   ██║██╔══██╗██╔══╝
+// ██║     ╚██████╔╝   ██║   ╚██████╔╝██║  ██║███████╗
+// ╚═╝      ╚═════╝    ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝
+// @future
+typedef struct {
+  sp_allocator_t allocator;
+  sp_atomic_s32 ready;
+  void* value;
+  u32 size;
+} sp_future_t;
+
+SP_API sp_future_t* sp_future_create(u32 size);
+SP_API void         sp_future_set_value(sp_future_t* future, void* data);
+SP_API void         sp_future_destroy(sp_future_t* future);
+
+
+// ███████╗██████╗ ██╗███╗   ██╗
+// ██╔════╝██╔══██╗██║████╗  ██║
+// ███████╗██████╔╝██║██╔██╗ ██║
+// ╚════██║██╔═══╝ ██║██║╚██╗██║
+// ███████║██║     ██║██║ ╚████║
+// ╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝
+// @spin
+typedef s32 sp_spin_lock_t;
+
+SP_API void sp_spin_pause();
+SP_API bool sp_spin_try_lock(sp_spin_lock_t* lock);
+SP_API void sp_spin_lock(sp_spin_lock_t* lock);
+SP_API void sp_spin_unlock(sp_spin_lock_t* lock);
+
+
+// ████████╗██╗  ██╗██████╗ ███████╗ █████╗ ██████╗
+// ╚══██╔══╝██║  ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗
+//    ██║   ███████║██████╔╝█████╗  ███████║██║  ██║
+//    ██║   ██╔══██║██╔══██╗██╔══╝  ██╔══██║██║  ██║
+//    ██║   ██║  ██║██║  ██║███████╗██║  ██║██████╔╝
+//    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
+// @thread
 SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
 
 typedef struct {
@@ -1295,37 +1520,19 @@ typedef struct {
   sp_semaphore_t semaphore;
 } sp_thread_launch_t;
 
-typedef struct {
-  sp_allocator_t allocator;
-  sp_atomic_s32 ready;
-  void* value;
-  u32 size;
-} sp_future_t;
+#if defined(SP_WIN32)
+  typedef thrd_t sp_thread_t;
 
-SP_API void         sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
-SP_API void         sp_thread_join(sp_thread_t* thread);
-SP_API s32          sp_thread_launch(void* userdata);
-SP_API void         sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind);
-SP_API void         sp_mutex_lock(sp_mutex_t* mutex);
-SP_API void         sp_mutex_unlock(sp_mutex_t* mutex);
-SP_API void         sp_mutex_destroy(sp_mutex_t* mutex);
-SP_API s32          sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
-SP_API void         sp_semaphore_init(sp_semaphore_t* semaphore);
-SP_API void         sp_semaphore_destroy(sp_semaphore_t* semaphore);
-SP_API void         sp_semaphore_wait(sp_semaphore_t* semaphore);
-SP_API bool         sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
-SP_API void         sp_semaphore_signal(sp_semaphore_t* semaphore);
-SP_API sp_future_t* sp_future_create(u32 size);
-SP_API void         sp_future_set_value(sp_future_t* future, void* data);
-SP_API void         sp_future_destroy(sp_future_t* future);
-SP_API void         sp_spin_pause();
-SP_API bool         sp_spin_try_lock(sp_spin_lock_t* lock);
-SP_API void         sp_spin_lock(sp_spin_lock_t* lock);
-SP_API void         sp_spin_unlock(sp_spin_lock_t* lock);
-SP_API bool         sp_atomic_s32_cmp_and_swap(sp_atomic_s32* value, s32 current, s32 desired);
-SP_API s32          sp_atomic_s32_set(sp_atomic_s32* value, s32 desired);
-SP_API s32          sp_atomic_s32_add(sp_atomic_s32* value, s32 add);
-SP_API s32          sp_atomic_s32_get(sp_atomic_s32* value);
+#elif defined(SP_LINUX)
+  typedef pthread_t sp_thread_t;
+
+#elif defined(SP_MACOS)
+  typedef pthread_t            sp_thread_t;
+#endif
+
+SP_API void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
+SP_API void sp_thread_join(sp_thread_t* thread);
+SP_API s32  sp_thread_launch(void* userdata);
 
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
@@ -1334,17 +1541,17 @@ SP_API s32          sp_atomic_s32_get(sp_atomic_s32* value);
 // ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══╝   ██╔██╗    ██║
 // ╚██████╗╚██████╔╝██║ ╚████║   ██║   ███████╗██╔╝ ██╗   ██║
 //  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝
-
-#ifndef SP_MAX_CONTEXT
-#define SP_MAX_CONTEXT 16
+// @context
+#ifndef SP_RT_MAX_CONTEXT
+  #define SP_RT_MAX_CONTEXT 16
 #endif
 
-#ifndef SP_GLOBAL_NUM_SPIN_LOCKS
-#define SP_GLOBAL_NUM_SPIN_LOCKS 32
+#ifndef SP_RT_NUM_SPIN_LOCKS
+  #define SP_RT_NUM_SPIN_LOCKS 32
 #endif
 
-#ifndef SP_SCRATCH_SIZE
-#define SP_SCRATCH_SIZE (1024 * 1024)
+#ifndef SP_RT_SCRATCH_SIZE
+  #define SP_RT_SCRATCH_SIZE (1024 * 1024)
 #endif
 
 typedef struct {
@@ -1354,47 +1561,41 @@ typedef struct {
 } sp_context_t;
 
 typedef struct {
-  sp_context_t contexts[SP_MAX_CONTEXT];
+  sp_context_t contexts [SP_RT_MAX_CONTEXT];
   u32 index;
-} sp_thread_state_t;
+} sp_tls_rt_t;
 
 typedef struct {
   u8 initted;
   sp_mutex_t mutex;
-  sp_spin_lock_t locks [SP_GLOBAL_NUM_SPIN_LOCKS];
+  sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
   struct {
     pthread_key_t key;
     pthread_once_t once;
   } tls;
-} sp_global_state_t;
+} sp_rt_t;
 
-static sp_global_state_t sp_global = {
-  .tls.once = PTHREAD_ONCE_INIT
-};
+SP_GLOBAL sp_rt_t sp_rt;
 
 typedef struct {
   sp_allocator_t allocator;
 } sp_config_t;
 
-
-sp_thread_state_t*    sp_thread_state_get();
-sp_context_t*         sp_context_get();
-void                  sp_context_set(sp_context_t context);
-void                  sp_context_push(sp_context_t context);
-void                  sp_context_push_allocator(sp_allocator_t allocator);
-void                  sp_context_pop();
-void                  sp_context_ensure();
-void                  sp_init(sp_config_t config);
-sp_mem_arena_marker_t sp_mem_mark();
-void                  sp_mem_pop(sp_mem_arena_marker_t marker);
-
+sp_tls_rt_t*  sp_tls_rt_get();
+sp_context_t* sp_context_get();
+void          sp_context_set(sp_context_t context);
+void          sp_context_push(sp_context_t context);
+void          sp_context_push_allocator(sp_allocator_t allocator);
+void          sp_context_pop();
+void          sp_init(sp_config_t config);
 
 // ██╗ ██████╗
-// ██║██╔═══██╗
+// ██║██╔═══█╗
 // ██║██║   ██║
 // ██║██║   ██║
 // ██║╚██████╔╝
 // ╚═╝ ╚═════╝
+// @io
 typedef enum {
   SP_IO_SEEK_SET,
   SP_IO_SEEK_CUR,
@@ -1466,6 +1667,7 @@ SP_API sp_str_t       sp_io_read_file(sp_str_t path);
 // ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
+// @ps
 #ifndef SP_PS_MAX_ARGS
   #define SP_PS_MAX_ARGS 16
 #endif
@@ -1480,11 +1682,6 @@ typedef enum {
   SP_PS_IO_FILENO_STDOUT = 1,
   SP_PS_IO_FILENO_STDERR = 2,
 } sp_ps_io_file_number_t;
-
-typedef enum {
-  SP_ENV_EXPORT_OVERWRITE_DUPES,
-  SP_ENV_EXPORT_SKIP_DUPES,
-} sp_env_export_overwrite_t;
 
 typedef enum {
   SP_PS_IO_MODE_INHERIT,
@@ -1515,16 +1712,6 @@ typedef enum {
   .out = { .mode = SP_PS_IO_NULL }, \
   .err = { .mode = SP_PS_IO_NULL }, \
 }
-typedef struct {
-  sp_str_t key;
-  sp_str_t value;
-} sp_env_var_t;
-
-typedef sp_ht(sp_str_t, sp_str_t) sp_env_table_t;
-
-typedef struct {
-  sp_env_table_t vars;
-} sp_env_t;
 
 typedef struct {
   sp_ps_io_mode_t mode;
@@ -1572,7 +1759,12 @@ typedef struct {
   sp_ps_status_t status;
 } sp_ps_output_t;
 
-#if defined(SP_POSIX)
+#if defined(SP_WIN32)
+typedef struct {
+  void* placeholder;
+} sp_ps_platform_t;
+
+#elif defined(SP_POSIX)
 #define SP_POSIX_WAITPID_BLOCK 0
 #define SP_POSIX_WAITPID_NO_BLOCK WNOHANG
 
@@ -1605,13 +1797,6 @@ typedef struct {
 } sp_ps_platform_t;
 #endif
 
-// WIN32
-#if defined(SP_WIN32)
-typedef struct {
-  void* placeholder;
-} sp_ps_platform_t;
-#endif
-
 typedef struct {
   pid_t pid;
   sp_ps_io_t io;
@@ -1619,18 +1804,6 @@ typedef struct {
   sp_allocator_t allocator;
 } sp_ps_t;
 
-SP_API void            sp_env_init(sp_env_t* env);
-SP_API sp_env_t        sp_env_capture();
-SP_API sp_env_t        sp_env_copy(sp_env_t* env);
-SP_API sp_str_t        sp_env_get(sp_env_t* env, sp_str_t name);
-SP_API void            sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
-SP_API void            sp_env_erase(sp_env_t* env, sp_str_t name);
-SP_API void            sp_env_destroy(sp_env_t* env);
-SP_API sp_str_t        sp_os_get_env_var(sp_str_t key);
-SP_API sp_str_t        sp_os_get_env_as_path(sp_str_t key);
-SP_API void            sp_os_clear_env_var(sp_str_t var);
-SP_API void            sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_overwrite_t overwrite);
-SP_API void            sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite);
 SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
 SP_API void            sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg);
 SP_API sp_ps_t         sp_ps_create(sp_ps_config_t config);
@@ -1643,24 +1816,14 @@ SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
 SP_API bool            sp_ps_kill(sp_ps_t* proc);
 
-#if defined(SP_POSIX)
-SP_IMP void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
-SP_IMP bool sp_ps_create_pipes(s32 pipes [2]);
-SP_IMP sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config);
-SP_IMP void sp_ps_free_posix_args(c8** argv);
-SP_IMP c8** sp_ps_build_posix_env(sp_ps_env_config_t* env_config);
-SP_IMP void sp_ps_set_nonblocking(s32 fd);
-SP_IMP void sp_ps_set_blocking(s32 fd);
-#endif
-
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
 // ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
 // █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
 // ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
-// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
+// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║ ██║   ██║
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
-
+// @format
 #define SP_FORMAT_TYPES \
  SP_FMT_X(ptr, void*) \
  SP_FMT_X(str, sp_str_t) \
@@ -1751,10 +1914,9 @@ typedef struct sp_formatter {
 #define SP_FMT_X(name, type) void sp_fmt_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 SP_FORMAT_TYPES
 
-sp_str_t sp_format_str(sp_str_t fmt, ...);
-sp_str_t sp_format(const c8* fmt, ...);
-sp_str_t sp_format_v(sp_str_t fmt, va_list args);
-
+SP_API sp_str_t sp_format_str(sp_str_t fmt, ...);
+SP_API sp_str_t sp_format(const c8* fmt, ...);
+SP_API sp_str_t sp_format_v(sp_str_t fmt, va_list args);
 SP_API u8        sp_parse_u8(sp_str_t str);
 SP_API u16       sp_parse_u16(sp_str_t str);
 SP_API u32       sp_parse_u32(sp_str_t str);
@@ -1789,15 +1951,25 @@ SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 SP_API bool      sp_parse_is_digit(c8 c);
 
+#ifdef SP_CPP
+  template <typename T>
+  SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
+    sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
+    result.id = id;
+    sp_os_copy_memory(&data, &result.u8_value, sizeof(data));
 
-//  █████╗ ███████╗███████╗███████╗████████╗███████╗
-// ██╔══██╗██╔════╝██╔════╝██╔════╝╚══██╔══╝██╔════╝
-// ███████║███████╗███████╗█████╗     ██║   ███████╗
-// ██╔══██║╚════██║╚════██║██╔══╝     ██║   ╚════██║
-// ██║  ██║███████║███████║███████╗   ██║   ███████║
-// ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝   ╚══════╝
+    return result;
+  }
+#endif
 
-#ifdef SP_APP
+
+//  █████╗ ███████╗███████╗███████╗████████╗
+// ██╔══██╗██╔════╝██╔════╝██╔════╝╚══██╔══╝
+// ███████║███████╗███████╗█████╗     ██║
+// ██╔══██║╚════██║╚════██║██╔══╝     ██║
+// ██║  ██║███████║███████║███████╗   ██║
+// ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝
+// @asset
 typedef enum {
   SP_ASSET_STATE_QUEUED,
   SP_ASSET_STATE_IMPORTED,
@@ -1859,62 +2031,52 @@ struct sp_asset_registry {
   sp_thread_t thread;
   bool shutdown_requested;
 
-  sp_dyn_array(sp_asset_t) assets;
-  sp_dyn_array(sp_asset_importer_t) importers;
-  sp_ring_buffer(sp_asset_import_context_t) import_queue;
-  sp_ring_buffer(sp_asset_import_context_t) completion_queue;
+  sp_da(sp_asset_t) assets;
+  sp_da(sp_asset_importer_t) importers;
+  sp_rb(sp_asset_import_context_t) import_queue;
+  sp_rb(sp_asset_import_context_t) completion_queue;
 };
 
-void                  sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config);
-void                  sp_asset_registry_shutdown(sp_asset_registry_t* registry);
-sp_future_t*          sp_asset_registry_import(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* user_data);
-sp_asset_t*           sp_asset_registry_add(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* user_data);
-sp_asset_t*           sp_asset_registry_find(sp_asset_registry_t* registry, sp_asset_kind_t kind, sp_str_t name);
-void                  sp_asset_registry_process_completions(sp_asset_registry_t* registry);
-sp_asset_t*           sp_asset_registry_reserve(sp_asset_registry_t* registry);
-sp_asset_importer_t*  sp_asset_registry_find_importer(sp_asset_registry_t* registry, sp_asset_kind_t kind);
-s32                   sp_asset_registry_thread_fn(void* user_data);
-#endif
+SP_API void                 sp_asset_registry_init(sp_asset_registry_t* r, sp_asset_registry_config_t config);
+SP_API void                 sp_asset_registry_shutdown(sp_asset_registry_t* r);
+SP_API sp_future_t*         sp_asset_registry_import(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* user_data);
+SP_API sp_asset_t*          sp_asset_registry_add(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* user_data);
+SP_API sp_asset_t*          sp_asset_registry_find(sp_asset_registry_t* r, sp_asset_kind_t kind, sp_str_t name);
+SP_API void                 sp_asset_registry_process_completions(sp_asset_registry_t* r);
+SP_API sp_asset_t*          sp_asset_registry_reserve(sp_asset_registry_t* r);
+SP_API sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_asset_kind_t kind);
+SP_API s32                  sp_asset_registry_thread_fn(void* user_data);
 
 SP_END_EXTERN_C()
 
-
-//  ██████╗██████╗ ██████╗
-// ██╔════╝██╔══██╗██╔══██╗
-// ██║     ██████╔╝██████╔╝
-// ██║     ██╔═══╝ ██╔═══╝
-// ╚██████╗██║     ██║
-//  ╚═════╝╚═╝     ╚═╝
-#ifdef SP_CPP
-  sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
-  sp_str_t operator/(const sp_str_t& a, const c8* b);
-
-  template <typename T>
-  sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
-    sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
-    result.id = id;
-    sp_os_copy_memory(&data, &result.u8_value, sizeof(data));
-
-    return result;
-  }
 #endif
 
 
-#endif // SP_SPACE_H
 
 
-// ██╗███╗   ███╗██████╗ ██╗     ███████╗███╗   ███╗███████╗███╗   ██╗████████╗ █████╗ ████████╗██╗ ██████╗ ███╗   ██╗
-// ██║████╗ ████║██╔══██╗██║     ██╔════╝████╗ ████║██╔════╝████╗  ██║╚══██╔══╝██╔══██╗╚══██╔══╝██║██╔═══██╗████╗  ██║
-// ██║██╔████╔██║██████╔╝██║     █████╗  ██╔████╔██║█████╗  ██╔██╗ ██║   ██║   ███████║   ██║   ██║██║   ██║██╔██╗ ██║
-// ██║██║╚██╔╝██║██╔═══╝ ██║     ██╔══╝  ██║╚██╔╝██║██╔══╝  ██║╚██╗██║   ██║   ██╔══██║   ██║   ██║██║   ██║██║╚██╗██║
-// ██║██║ ╚═╝ ██║██║     ███████╗███████╗██║ ╚═╝ ██║███████╗██║ ╚████║   ██║   ██║  ██║   ██║   ██║╚██████╔╝██║ ╚████║
-// ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝╚══════╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+
+
+
+
 #ifndef SP_SP_C
 #define SP_SP_C
 
 #ifdef SP_IMPLEMENTATION
+// @implementation
+
 SP_BEGIN_EXTERN_C()
 
+SP_GLOBAL sp_rt_t sp_rt = {
+  .tls.once = PTHREAD_ONCE_INIT
+};
+
+//  ██╗  ██╗ █████╗ ███████╗██╗  ██╗██╗███╗   ██╗ ██████╗
+//  ██║  ██║██╔══██╗██╔════╝██║  ██║██║████╗  ██║██╔════╝
+//  ███████║███████║███████╗███████║██║██╔██╗ ██║██║  ███╗
+//  ██╔══██║██╔══██║╚════██║██╔══██║██║██║╚██╗██║██║   ██║
+//  ██║  ██║██║  ██║███████║██║  ██║██║██║ ╚████║╚██████╔╝
+//  ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ═════╝
+//  @hash
 #define SP_SIZE_T_BITS  ((sizeof(size_t)) * 8)
 #define SP_SIPHASH_C_ROUNDS 1
 #define SP_SIPHASH_D_ROUNDS 1
@@ -1991,8 +2153,15 @@ sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes) {
   return sp_hash_bytes(hashes, num_hashes * sizeof(sp_hash_t), 0);
 }
 
+// ██╗  ██╗ █████╗ ███████╗██╗  ██╗    ████████╗ █████╗ ██████╗ ██╗     ███████╗
+// ██║  ██║██╔══██╗██╔════╝██║  ██║    ╚══██╔══╝██╔══██╗██╔══██╗██║     ██╔════╝
+// ███████║███████║███████╗███████║       ██║   ███████║██████╔╝██║     █████╗
+// ██╔══██║██╔══██║╚════██║██╔══██║       ██║   ██╔══██║██╔══██╗██║     ██╔══╝
+// ██║  ██║██║  ██║███████║██║  ██║       ██║   ██║  ██║██████╔╝███████╗███████╗
+// ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝       ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝
+// @hash_table @ht
 bool sp_ht_on_compare_key(void* ka, void* kb, u32 size) {
-  return sp_os_is_memory_equal(ka, kb, size);
+  return sp_mem_is_equal(ka, kb, size);
 }
 
 sp_hash_t sp_ht_on_hash_key(void *key, u32 size) {
@@ -2011,107 +2180,290 @@ bool sp_ht_on_compare_str_key(void* ka, void* kb, u32 size) {
 }
 
 u32 sp_ht_get_key_index_fn(void** data, void* key, sp_ht_info_t info) {
-    if (!data || !key) return SP_HT_INVALID_INDEX;
+  if (!data || !key) return SP_HT_INVALID_INDEX;
 
-    u32 capacity = sp_dyn_array_capacity(*data);
-    u32 size = sp_dyn_array_size(*data);
-    if (!capacity || !size) return SP_HT_INVALID_INDEX;
-    u32 idx = SP_HT_INVALID_INDEX;
-    sp_hash_t hash = info.fn.hash(key, info.size.key);
-    u32 hash_idx = (hash % capacity);
+  u32 capacity = sp_dyn_array_capacity(*data);
+  u32 size = sp_dyn_array_size(*data);
+  if (!capacity || !size) return SP_HT_INVALID_INDEX;
+  u32 idx = SP_HT_INVALID_INDEX;
+  sp_hash_t hash = info.fn.hash(key, info.size.key);
+  u32 hash_idx = (hash % capacity);
 
-    for (u32 i = hash_idx, c = 0; c < capacity; ++c, i = ((i + 1) % capacity)) {
-        u32 offset = (i * info.stride);
-        void* k = ((c8*)(*data) + (offset));
-        sp_hash_t kh = info.fn.hash(k, info.size.key);
-        bool equal = info.fn.compare(k, key, info.size.key);
-        sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)(*data) + offset + (info.klpvl));
-        if (equal && hash == kh && state == SP_HT_ENTRY_ACTIVE) {
-            idx = i;
-            break;
-        }
+  for (u32 i = hash_idx, c = 0; c < capacity; ++c, i = ((i + 1) % capacity)) {
+    u32 offset = (i * info.stride);
+    void* k = ((c8*)(*data) + (offset));
+    sp_hash_t kh = info.fn.hash(k, info.size.key);
+    bool equal = info.fn.compare(k, key, info.size.key);
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)(*data) + offset + (info.klpvl));
+    if (equal && hash == kh && state == SP_HT_ENTRY_ACTIVE) {
+      idx = i;
+      break;
     }
-    return idx;
+  }
+  return idx;
 }
 
 sp_ht_it sp_ht_it_init_fn(void** data, sp_ht_info_t info) {
-    if (!data || !*data) return 0;
-    sp_ht_it it = 0;
-    for (; it < sp_dyn_array_capacity(*data); ++it) {
-        u32 offset = (it * info.stride);
-        sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + (info.klpvl));
-        if (state == SP_HT_ENTRY_ACTIVE) {
-            break;
-        }
+  if (!data || !*data) return 0;
+  sp_ht_it it = 0;
+  for (; it < sp_dyn_array_capacity(*data); ++it) {
+    u32 offset = (it * info.stride);
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + (info.klpvl));
+    if (state == SP_HT_ENTRY_ACTIVE) {
+      break;
     }
-    return it;
+  }
+  return it;
 }
 
 void sp_ht_it_advance_fn(void** data, u32* it, sp_ht_info_t info) {
-    if (!data || !*data) return;
-    (*it)++;
-    for (; *it < sp_dyn_array_capacity(*data); ++*it) {
-        u32 offset = (*it * info.stride);
-        sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + (info.klpvl));
-        if (state == SP_HT_ENTRY_ACTIVE) {
-            break;
-        }
+  if (!data || !*data) return;
+  (*it)++;
+  for (; *it < sp_dyn_array_capacity(*data); ++*it) {
+    u32 offset = (*it * info.stride);
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + (info.klpvl));
+    if (state == SP_HT_ENTRY_ACTIVE) {
+      break;
     }
+  }
 }
 
-
-////////////////////////////
-// DYN ARRAY IMPLEMENTATION
-////////////////////////////
+// ██████╗ ██╗   ██╗███╗   ██╗   █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
+// ██╔══██╗╚██╗ ██╔╝████╗  ██║  ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
+// ██║  ██║ ╚████╔╝ ██╔██╗ ██║  ███████║██████╔╝██████╔╝███████║ ╚████╔╝
+// ██║  ██║  ╚██╔╝  ██║╚██╗██║  ██╔══██║██╔══██╗██╔══██╗██╔══██║  ╚██╔╝
+// ██████╔╝   ██║   ██║ ╚████║  ██║  ██║██║  ██║██║  ██║██║  ██║   ██║
+// ╚═════╝    ╚═╝   ╚═╝  ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
+// @dyn_array @da
 void* sp_dyn_array_resize_impl(void* arr, u32 sz, u32 amount) {
-    u32 capacity;
+  u32 capacity;
 
-    if (arr) {
-        capacity = amount;
-    } else {
-        capacity = 0;
+  if (arr) {
+    capacity = amount;
+  } else {
+    capacity = 0;
+  }
+
+  sp_dyn_array* data = (sp_dyn_array*)sp_realloc(arr ? sp_dyn_array_head(arr) : 0, capacity * sz + sizeof(sp_dyn_array));
+
+  if (data) {
+    if (!arr) {
+      data->size = 0;
     }
+    data->capacity = (s32)capacity;
+    return ((s32*)data + 2);
+  }
 
-    sp_dyn_array* data = (sp_dyn_array*)sp_realloc(arr ? sp_dyn_array_head(arr) : 0, capacity * sz + sizeof(sp_dyn_array));
-
-    if (data) {
-        if (!arr) {
-            data->size = 0;
-        }
-        data->capacity = (s32)capacity;
-        return ((s32*)data + 2);
-    }
-
-    return NULL;
+  return NULL;
 }
 
 void** sp_dyn_array_init(void** arr, u32 val_len) {
-    if (*arr == NULL) {
-        sp_dyn_array* data = (sp_dyn_array*)sp_alloc(val_len + sizeof(sp_dyn_array));
-        data->size = 0;
-        data->capacity = 1;
-        *arr = ((s32*)data + 2);
-    }
-    return arr;
+  if (*arr == NULL) {
+    sp_dyn_array* data = (sp_dyn_array*)sp_alloc(val_len + sizeof(sp_dyn_array));
+    data->size = 0;
+    data->capacity = 1;
+    *arr = ((s32*)data + 2);
+  }
+  return arr;
 }
 
 void sp_dyn_array_push_f(void** arr, void* val, u32 val_len) {
-    sp_dyn_array_init(arr, val_len);
-    if (!(*arr) || sp_dyn_array_need_grow(*arr, 1)) {
-        u32 new_capacity = sp_dyn_array_capacity(*arr);
-        if (new_capacity == 0) {
-            new_capacity = 1;
-        } else {
-            new_capacity *= 2;
-        }
-        *arr = sp_dyn_array_resize_impl(*arr, val_len, new_capacity);
+  sp_dyn_array_init(arr, val_len);
+  if (!(*arr) || sp_dyn_array_need_grow(*arr, 1)) {
+    u32 new_capacity = sp_dyn_array_capacity(*arr);
+    if (new_capacity == 0) {
+      new_capacity = 1;
+    } else {
+      new_capacity *= 2;
     }
-    if (*arr) {
-        sp_os_copy_memory(val, ((u8*)(*arr)) + sp_dyn_array_size(*arr) * val_len, val_len);
-        sp_dyn_array_head(*arr)->size++;
+    *arr = sp_dyn_array_resize_impl(*arr, val_len, new_capacity);
+  }
+  if (*arr) {
+    sp_mem_copy(val, ((u8*)(*arr)) + sp_dyn_array_size(*arr) * val_len, val_len);
+    sp_dyn_array_head(*arr)->size++;
+  }
+}
+// ███████╗██╗██╗  ██╗███████╗██████╗      █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
+// ██╔════╝██║╚██╗██╔╝██╔════╝██╔══██╗    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
+// █████╗  ██║ ╚███╔╝ █████╗  ██║  ██║    ███████║██████╔╝██████╔╝███████║ ╚███╔╝
+// ██╔══╝  ██║ ██╔██╗ ██╔══╝  ██║  ██║    ██╔══██║██╔══██╗██╔══██╗██╔══██║  ╚██╔╝
+// ██║     ██║██╔╝ ██╗███████╗██████╔╝    ██║  ██║██║  ██║██║  ██║██║  ██║   ██║
+// ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
+// @fixed_array
+void sp_fixed_array_init(sp_fixed_array_t* buffer, u32 max_vertices, u32 element_size) {
+  SP_ASSERT(buffer);
+
+  buffer->size = 0;
+  buffer->capacity = max_vertices;
+  buffer->element_size = element_size;
+  buffer->data = (u8*)sp_alloc(max_vertices * element_size);
+}
+
+u8* sp_fixed_array_at(sp_fixed_array_t* buffer, u32 index) {
+  SP_ASSERT(buffer);
+  return buffer->data + (index * buffer->element_size);
+}
+
+u8* sp_fixed_array_push(sp_fixed_array_t* buffer, void* data, u32 count) {
+  SP_ASSERT(buffer);
+  SP_ASSERT(buffer->size < buffer->capacity);
+
+  u8* reserved = sp_fixed_array_reserve(buffer, count);
+  if (data) sp_mem_copy(data, reserved, buffer->element_size * count);
+  return reserved;
+}
+
+u8* sp_fixed_array_reserve(sp_fixed_array_t* buffer, u32 count) {
+  SP_ASSERT(buffer);
+
+  u8* element = sp_fixed_array_at(buffer, buffer->size);
+  buffer->size += count;
+  return element;
+}
+
+void sp_fixed_array_clear(sp_fixed_array_t* buffer) {
+  SP_ASSERT(buffer);
+
+  buffer->size = 0;
+}
+
+u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
+  SP_ASSERT(buffer);
+
+  return buffer->size * buffer->element_size;
+}
+
+// ██████╗ ██╗███╗   ██╗ ██████╗     ██████╗ ██╗   ██╗███████╗███████╗███████╗██████╗
+// ██╔══██╗██║████╗  ██║██╔════╝     ██╔══██╗██║   ██║██╔════╝██╔════╝██╔════╝██╔══██╗
+// ██████╔╝██║██╔██╗ ██║██║  ███╗    ██████╔╝██║   ██║█████╗  █████╗  █████╗  ██████╔╝
+// ██╔══██╗██║██║╚██╗██║██║   ██║    ██╔══██╗██║   ██║██╔══╝  ██╔══╝  ██╔══╝  ██╔══██╗
+// ██║  ██║██║██║ ╚████║╚██████╔╝    ██████╔╝╚██████╔╝██║     ██║     ███████╗██║  ██║
+// ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝     ╚═════╝  ╚═════╝ ╚═╝     ╚═╝     ╚══════╝╚═╝  ╚═╝
+void* sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index) {
+    return buffer->data + ((buffer->head + buffer->element_size * index) % (buffer->capacity * buffer->element_size));
+}
+
+void sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_size) {
+    buffer->size = 0;
+    buffer->head = 0;
+    buffer->capacity = capacity;
+    buffer->element_size = element_size;
+    buffer->data = (u8*)sp_alloc(capacity * element_size);
+    sp_mem_zero(buffer->data, capacity * element_size);
+}
+
+void* sp_ring_buffer_back(sp_ring_buffer_t* buffer) {
+    SP_ASSERT(buffer->size);
+    return sp_ring_buffer_at(buffer, buffer->size - 1);
+}
+
+void* sp_ring_buffer_push(sp_ring_buffer_t* buffer, void* data) {
+    SP_ASSERT(buffer->size < buffer->capacity);
+
+    u32 index = (buffer->head + buffer->size * buffer->element_size) % (buffer->capacity * buffer->element_size);
+    sp_mem_copy(data, buffer->data + index, buffer->element_size);
+    buffer->size += 1;
+    return sp_ring_buffer_back(buffer);
+}
+
+void* sp_ring_buffer_push_zero(sp_ring_buffer_t* buffer) {
+    SP_ASSERT(buffer->size < buffer->capacity);
+
+    u32 index = (buffer->head + buffer->size * buffer->element_size) % (buffer->capacity * buffer->element_size);
+    sp_mem_zero(buffer->data + index, buffer->element_size);
+    buffer->size += 1;
+    return sp_ring_buffer_back(buffer);
+}
+
+void* sp_ring_buffer_push_overwrite(sp_ring_buffer_t* buffer, void* data) {
+    if (buffer->size == buffer->capacity) sp_ring_buffer_pop(buffer);
+    return sp_ring_buffer_push(buffer, data);
+}
+
+void* sp_ring_buffer_push_overwrite_zero(sp_ring_buffer_t* buffer) {
+    if (buffer->size == buffer->capacity) sp_ring_buffer_pop(buffer);
+    return sp_ring_buffer_push_zero(buffer);
+}
+
+void* sp_ring_buffer_pop(sp_ring_buffer_t* buffer) {
+    SP_ASSERT(buffer->size);
+
+    void* element = buffer->data + buffer->head;
+    buffer->head = (buffer->head + buffer->element_size) % (buffer->capacity * buffer->element_size);
+    buffer->size--;
+    return element;
+}
+
+u32 sp_ring_buffer_bytes(sp_ring_buffer_t* buffer) {
+    return buffer->capacity * buffer->element_size;
+}
+
+void sp_ring_buffer_clear(sp_ring_buffer_t* buffer) {
+    sp_mem_zero(buffer->data, sp_ring_buffer_bytes(buffer));
+    buffer->size = 0;
+    buffer->head = 0;
+}
+
+void sp_ring_buffer_destroy(sp_ring_buffer_t* buffer) {
+    if (buffer->data) {
+        buffer->data = NULL;
+        buffer->size = 0;
+        buffer->capacity = 0;
+        buffer->head = 0;
     }
 }
 
+bool sp_ring_buffer_is_full(sp_ring_buffer_t* buffer) {
+    return buffer->capacity == buffer->size;
+}
+
+bool sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer) {
+    return buffer->size == 0;
+}
+
+void* sp_rb_it_getvp(sp_rb_it_t* it) {
+    return sp_ring_buffer_at(it->buffer, it->index);
+}
+
+void sp_rb_it_next(sp_rb_it_t* it) {
+    SP_ASSERT(it->index < (s32)it->buffer->size);
+    it->index++;
+}
+
+void sp_rb_it_prev(sp_rb_it_t* it) {
+    SP_ASSERT(it->index >= 0 && it->index < (s32)it->buffer->size);
+    it->index--;
+}
+
+bool sp_rb_it_done(sp_rb_it_t* it) {
+    if (it->reverse) return it->index < 0;
+    return it->index >= (s32)it->buffer->size;
+}
+
+sp_rb_it_t sp_rb_it_new(sp_ring_buffer_t* buffer) {
+    sp_rb_it_t iterator;
+    iterator.index = 0;
+    iterator.reverse = false;
+    iterator.buffer = buffer;
+    return iterator;
+}
+
+sp_rb_it_t sp_rb_rit_new(sp_ring_buffer_t* buffer) {
+    sp_rb_it_t iterator;
+    iterator.index = buffer->size - 1;
+    iterator.reverse = true;
+    iterator.buffer = buffer;
+    return iterator;
+}
+
+
+
+// ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
+// ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
+// █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
+// ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
+// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
+// ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═     ╚═╝╚═╝  ╚═╝   ╚═╝
 bool sp_parse_u64_ex(sp_str_t str, u64* out) {
     if (str.len == 0) return false;
 
@@ -2722,7 +3074,7 @@ void sp_fmt_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 
 void sp_fmt_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   // Context is passed as pointer but we don't use it
-  sp_thread_state_t* state = sp_thread_state_get();
+  sp_tls_rt_t* state = sp_tls_rt_get();
   if (state) {
     sp_fmt_format_unsigned(builder, state->index, 10);
   } else {
@@ -2818,7 +3170,6 @@ typedef enum {
   SP_FORMAT_SPECIFIER_FLAG_BG_COLOR = 1 << 1,
   SP_FORMAT_SPECIFIER_FLAG_PAD = 1 << 2,
 } sp_format_specifier_flag_t;
-
 
 typedef struct {
   sp_str_t fmt;
@@ -3015,87 +3366,148 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
   return sp_str_builder_write(&builder);
 }
 
+// ██╗      ██████╗  ██████╗
+// ██║     ██╔═══██╗██╔════╝
+// ██║     ██║   ██║██║  ███╗
+// ██║     ██║   ██║██║   ██║
+// ███████╗╚██████╔╝╚██████╔
+// ╚══════╝ ╚═════╝  ╚═════╝
+// @log
 void sp_log(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_str_t formatted = sp_format_v(fmt, args);
   va_end(args);
 
-  sp_os_log(formatted);
+  sp_os_print(formatted);
+  sp_os_print(sp_str_lit("\n"));
 }
 
+
+//  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
+// ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝
+// ██║     ██║   ██║██╔██╗ ██║   ██║   █████╗   ╚███╔╝    ██║
+// ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══╝   ██╔██╗    ██║
+// ╚██████╗╚██████╔╝██║ ╚████║   ██║   ███████╗██╔╝ ██╗   ██║
+//  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ═╝   ╚═╝
+//  @context
 void sp_context_check_index() {
-  sp_thread_state_t* state = sp_thread_state_get();
+  sp_tls_rt_t* state = sp_tls_rt_get();
   SP_ASSERT(state->index > 0);
-  SP_ASSERT(state->index < SP_MAX_CONTEXT);
-}
-
-void sp_context_ensure() {
-  sp_context_get(); // Ensures thread state is initialized
+  SP_ASSERT(state->index < SP_RT_MAX_CONTEXT);
 }
 
 void sp_context_set(sp_context_t context) {
-  sp_thread_state_t* state = sp_thread_state_get();
+  sp_tls_rt_t* state = sp_tls_rt_get();
   state->contexts[state->index] = context;
 }
 
 void sp_context_push(sp_context_t context) {
-  sp_thread_state_t* state = sp_thread_state_get();
-  SP_ASSERT(state->index + 1 < SP_MAX_CONTEXT);
+  sp_tls_rt_t* state = sp_tls_rt_get();
+  SP_ASSERT(state->index + 1 < SP_RT_MAX_CONTEXT);
   state->index++;
   state->contexts[state->index] = context;
 }
 
 void sp_context_push_allocator(sp_allocator_t allocator) {
-  sp_thread_state_t* state = sp_thread_state_get();
+  sp_tls_rt_t* state = sp_tls_rt_get();
   sp_context_t context = state->contexts[state->index];
   context.allocator = allocator;
   sp_context_push(context);
 }
 
 void sp_context_pop() {
-  sp_thread_state_t* state = sp_thread_state_get();
+  sp_tls_rt_t* state = sp_tls_rt_get();
   SP_ASSERT(state->index > 0);
   state->contexts[state->index] = SP_ZERO_STRUCT(sp_context_t); // Not required, just for the debugger
   state->index--;
 }
 
-void* sp_alloc(u32 size) {
-  sp_context_ensure();
+void sp_context_on_deinit(void* ptr) {
+  if (ptr) {
+    sp_tls_rt_t* state = (sp_tls_rt_t*)ptr;
+    for (u32 i = 0; i <= state->index; i++) {
+      if (state->contexts[i].scratch.buffer) {
+        sp_mem_arena_destroy(&state->contexts[i].scratch);
+      }
+    }
+    sp_mem_os_free(ptr);
+  }
+}
+
+void sp_context_on_init() {
+  pthread_key_create(&sp_rt.tls.key, sp_context_on_deinit);
+}
+
+sp_tls_rt_t* sp_tls_rt_get() {
+  pthread_once(&sp_rt.tls.once, sp_context_on_init);
+
+  sp_tls_rt_t* state = (sp_tls_rt_t*)pthread_getspecific(sp_rt.tls.key);
+  if (!state) {
+    state = (sp_tls_rt_t*)sp_mem_os_alloc(sizeof(sp_tls_rt_t));
+    sp_mem_zero(state, sizeof(sp_tls_rt_t));
+    pthread_setspecific(sp_rt.tls.key, state);
+
+    state->index = 0;
+    state->contexts[0].allocator = sp_mem_libc_new();
+  }
+
+  return state;
+}
+
+sp_context_t* sp_context_get() {
+  sp_tls_rt_t* state = sp_tls_rt_get();
+  return &state->contexts[state->index];
+}
+
+void sp_init(sp_config_t config) {
   sp_context_t* ctx = sp_context_get();
-  return sp_allocator_alloc(ctx->allocator, size);
+  *ctx = (sp_context_t) {
+    .allocator = sp_mem_libc_new()
+  };
+  sp_mem_arena_init(&ctx->scratch, SP_RT_SCRATCH_SIZE);
+
+  if (!sp_rt.initted) {
+    sp_mutex_init(&sp_rt.mutex, SP_MUTEX_PLAIN);
+  }
+}
+
+// ███╗   ███╗███████╗███╗   ███╗ ██████╗ ██████╗ ██╗   ██╗
+// ████╗ ████║██╔════╝████╗ ████║██╔═══██╗██╔══██╗╚██╗ ██╔╝
+// ██╔████╔██║█████╗  ██╔████╔██║██║   ██║██████╔╝ ╚████╔╝
+// ██║╚██╔╝██║██╔══╝  ██║╚██╔╝██║██║   ██║██╔══██╗  ╚██╔╝
+// ██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║╚██████╔╝██║  ██║   ██║
+// ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
+// @memory
+void* sp_alloc(u32 size) {
+  sp_context_t* ctx = sp_context_get();
+  return sp_mem_allocator_alloc(ctx->allocator, size);
 }
 
 void* sp_realloc(void* memory, u32 size) {
-  sp_context_ensure();
   sp_context_t* ctx = sp_context_get();
-  return sp_allocator_realloc(ctx->allocator, memory, size);
+  return sp_mem_allocator_realloc(ctx->allocator, memory, size);
 }
 
 void sp_free(void* memory) {
-  sp_context_ensure();
   sp_context_t* ctx = sp_context_get();
-  sp_allocator_free(ctx->allocator, memory);
+  sp_mem_allocator_free(ctx->allocator, memory);
 }
 
-sp_allocator_t sp_allocator_default() {
-  return sp_mem_libc_allocator_t_init();
-}
-
-void* sp_allocator_alloc(sp_allocator_t allocator, u32 size) {
+void* sp_mem_allocator_alloc(sp_allocator_t allocator, u32 size) {
   return allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
 }
 
-void* sp_allocator_realloc(sp_allocator_t allocator, void* memory, u32 size) {
+void* sp_mem_allocator_realloc(sp_allocator_t allocator, void* memory, u32 size) {
   return allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_RESIZE, size, memory);
 }
 
-void sp_allocator_free(sp_allocator_t allocator, void* buffer) {
+void sp_mem_allocator_free(sp_allocator_t allocator, void* buffer) {
   allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_FREE, 0, buffer);
 }
 
 sp_allocator_t sp_mem_arena_init(sp_mem_arena_t* allocator, u32 capacity) {
-  allocator->buffer = (u8*)sp_os_allocate_memory(capacity);
+  allocator->buffer = (u8*)sp_mem_os_alloc(capacity);
   allocator->capacity = capacity;
   allocator->bytes_used = 0;
 
@@ -3112,21 +3524,20 @@ void sp_mem_arena_clear(sp_mem_arena_t* allocator) {
 
 void sp_mem_arena_destroy(sp_mem_arena_t* allocator) {
   if (allocator->buffer) {
-    sp_os_free_memory(allocator->buffer);
+    sp_mem_os_free(allocator->buffer);
     allocator->buffer = NULL;
     allocator->capacity = 0;
     allocator->bytes_used = 0;
   }
 }
 
-void* sp_mem_arena_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* old_memory) {
+void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size, void* old_memory) {
   sp_mem_arena_t* bump = (sp_mem_arena_t*)user_data;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
       if (bump->bytes_used + size > bump->capacity) {
-        // Resize buffer to at least double the capacity or enough for the allocation
         u32 new_capacity = SP_MAX(bump->capacity * 2, bump->bytes_used + size);
-        u8* new_buffer = (u8*)sp_os_reallocate_memory(bump->buffer, new_capacity);
+        u8* new_buffer = (u8*)sp_mem_os_realloc(bump->buffer, new_capacity);
         SP_ASSERT(new_buffer != NULL);
         bump->buffer = new_buffer;
         bump->capacity = new_capacity;
@@ -3141,7 +3552,7 @@ void* sp_mem_arena_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size,
     case SP_ALLOCATOR_MODE_RESIZE: {
       void* memory_block = sp_mem_arena_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       if (old_memory) {
-        sp_os_move_memory(old_memory, memory_block, size);
+        sp_mem_move(old_memory, memory_block, size);
       }
       return memory_block;
     }
@@ -3170,37 +3581,37 @@ void sp_mem_pop(sp_mem_arena_marker_t marker) {
   sp_mem_arena_pop(marker);
 }
 
-sp_mem_libc_metadata_t* sp_mem_libc_allocator_get_metadata(void* ptr) {
+sp_mem_libc_metadata_t* sp_mem_libc_get_metadata(void* ptr) {
   return ((sp_mem_libc_metadata_t*)ptr) - 1;
 }
 
-void* sp_mem_libc_allocator_t_on_alloc(void* user_data, sp_allocator_mode_t mode, u32 size, void* ptr) {
+void* sp_mem_libc_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size, void* ptr) {
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
       u32 total_size = size + sizeof(sp_mem_libc_metadata_t);
-      sp_mem_libc_metadata_t* metadata = (sp_mem_libc_metadata_t*)sp_os_allocate_memory(total_size);
+      sp_mem_libc_metadata_t* metadata = (sp_mem_libc_metadata_t*)sp_mem_os_alloc(total_size);
       metadata->size = size;
       return metadata + 1;
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
       if (!ptr) {
-        return sp_mem_libc_allocator_t_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+        return sp_mem_libc_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       }
 
-      sp_mem_libc_metadata_t* metadata = sp_mem_libc_allocator_get_metadata(ptr);
+      sp_mem_libc_metadata_t* metadata = sp_mem_libc_get_metadata(ptr);
       if (metadata->size >= size) {
         return ptr;
       }
 
-      void* buffer = sp_mem_libc_allocator_t_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
-      sp_os_copy_memory(ptr, buffer, metadata->size);
-      sp_mem_libc_allocator_t_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
+      void* buffer = sp_mem_libc_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+      sp_mem_copy(ptr, buffer, metadata->size);
+      sp_mem_libc_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
 
       return buffer;
     }
     case SP_ALLOCATOR_MODE_FREE: {
-      sp_mem_libc_metadata_t* metadata = sp_mem_libc_allocator_get_metadata(ptr);
-      sp_os_free_memory(metadata);
+      sp_mem_libc_metadata_t* metadata = sp_mem_libc_get_metadata(ptr);
+      sp_mem_os_free(metadata);
       return NULL;
     }
     default: {
@@ -3209,17 +3620,85 @@ void* sp_mem_libc_allocator_t_on_alloc(void* user_data, sp_allocator_mode_t mode
   }
 }
 
-sp_allocator_t sp_mem_libc_allocator_t_init() {
+sp_allocator_t sp_mem_libc_new() {
   sp_allocator_t allocator;
-  allocator.on_alloc = sp_mem_libc_allocator_t_on_alloc;
+  allocator.on_alloc = sp_mem_libc_on_alloc;
   allocator.user_data = NULL;
   return allocator;
 }
 
+bool sp_mem_is_equal(const void* a, const void* b, size_t len) {
+  return !memcmp(a, b, len);
+}
 
-////////////
-// STRING //
-////////////
+void sp_mem_copy(const void* source, void* dest, u32 num_bytes) {
+  memcpy(dest, source, num_bytes);
+}
+
+void sp_mem_move(const void* source, void* dest, u32 num_bytes) {
+  memmove(dest, source, num_bytes);
+}
+
+void sp_mem_fill(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
+  u8* current_byte = (u8*)buffer;
+
+  s32 i = 0;
+  while (true) {
+    if (i + fill_size > buffer_size) return;
+    memcpy(current_byte + i, (u8*)fill, fill_size);
+    i += fill_size;
+  }
+}
+
+void sp_mem_fill_u8(void* buffer, u32 buffer_size, u8 fill) {
+  sp_mem_fill(buffer, buffer_size, &fill, sizeof(u8));
+}
+
+void sp_mem_zero(void* buffer, u32 buffer_size) {
+  sp_mem_fill_u8(buffer, buffer_size, 0);
+}
+
+#if defined(SP_WIN32)
+void* sp_mem_os_alloc(u32 size) {
+  return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
+}
+
+void* sp_mem_os_realloc(void* ptr, u32 size) {
+  if (!ptr) return sp_mem_os_alloc(size);
+  if (!size) { HeapFree(GetProcessHeap(), 0, ptr); return NULL; }
+  return HeapReAlloc(GetProcessHeap(), 0, ptr, size);
+}
+
+void sp_mem_os_free(void* ptr) {
+  if (!ptr) return;
+  HeapFree(GetProcessHeap(), 0, ptr);
+}
+#elif defined(SP_POSIX)
+void* sp_mem_os_alloc(u32 size) {
+  void* ptr = malloc(size);
+  if (ptr) memset(ptr, 0, size);
+  return ptr;
+}
+
+void* sp_mem_os_realloc(void* ptr, u32 size) {
+  if (!ptr) return sp_mem_os_alloc(size);
+  if (!size) { free(ptr); return NULL; }
+  return realloc(ptr, size);
+}
+
+void sp_mem_os_free(void* ptr) {
+  if (!ptr) return;
+  free(ptr);
+}
+#endif
+
+// ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗
+// ██╔════╝╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝
+// ███████╗   ██║   ██████╔╝██║██╔██╗ ██║██║  ███╗
+// ╚════██║   ██║   ██╔══██╗██║██║╚██╗██║██║   ██║
+// ███████║   ██║   ██║  ██║██║██║ ╚████║╚██████╔╝
+// ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
+// @string
 c8* sp_cstr_copy_sized(const c8* str, u32 length) {
   u32 buffer_length = length + 1;
   c8* copy = (c8*)sp_alloc(buffer_length);
@@ -3252,7 +3731,7 @@ bool sp_cstr_equal(const c8* a, const c8* b) {
   u32 len_b = sp_cstr_len(b);
   if (len_a != len_b) return false;
 
-  return sp_os_is_memory_equal(a, b, len_a);
+  return sp_mem_is_equal(a, b, len_a);
 }
 
 u32 sp_cstr_len(const c8* str) {
@@ -3308,14 +3787,14 @@ bool sp_str_empty(sp_str_t str) {
 bool sp_str_equal(sp_str_t a, sp_str_t b) {
   if (a.len != b.len) return false;
 
-  return sp_os_is_memory_equal(a.data, b.data, a.len);
+  return sp_mem_is_equal(a.data, b.data, a.len);
 }
 
 bool sp_str_equal_cstr(sp_str_t a, const c8* b) {
   u32 len = sp_cstr_len(b);
   if (a.len != len) return false;
 
-  return sp_os_is_memory_equal(a.data, b, len);
+  return sp_mem_is_equal(a.data, b, len);
 }
 
 bool sp_str_starts_with(sp_str_t str, sp_str_t prefix) {
@@ -3334,7 +3813,7 @@ bool sp_str_contains(sp_str_t str, sp_str_t needle) {
   if (str.len < needle.len) return false;
 
   for (u32 i = 0; i <= str.len - needle.len; i++) {
-    if (sp_os_is_memory_equal(str.data + i, needle.data, needle.len)) {
+    if (sp_mem_is_equal(str.data + i, needle.data, needle.len)) {
       return true;
     }
   }
@@ -3434,7 +3913,7 @@ sp_str_t sp_str_from_cstr_sized(const c8* str, u32 length) {
   c8* buffer = (c8*)sp_alloc(length);
   u32 len = sp_cstr_len(str);
   len = SP_MIN(len, length);
-  sp_os_copy_memory(str, buffer, len);
+  sp_mem_copy(str, buffer, len);
 
   return SP_STR(buffer, len);
 }
@@ -3442,7 +3921,7 @@ sp_str_t sp_str_from_cstr_sized(const c8* str, u32 length) {
 sp_str_t sp_str_from_cstr_null(const c8* str) {
   u32 len = sp_cstr_len(str);
   c8* buffer = (c8*)sp_alloc(len + 1);
-  sp_os_copy_memory(str, buffer, len);
+  sp_mem_copy(str, buffer, len);
   buffer[len] = 0;
 
   return SP_STR(buffer, len);
@@ -3451,25 +3930,25 @@ sp_str_t sp_str_from_cstr_null(const c8* str) {
 sp_str_t sp_str_from_cstr(const c8* str) {
   u32 len = sp_cstr_len(str);
   c8* buffer = (c8*)sp_alloc(len + 1);
-  sp_os_copy_memory(str, buffer, len);
+  sp_mem_copy(str, buffer, len);
 
   return SP_STR(buffer, len);
 }
 
 sp_str_t sp_str_copy(sp_str_t str) {
   c8* buffer = (c8*)sp_alloc(str.len);
-  sp_os_copy_memory(str.data, buffer, str.len);
+  sp_mem_copy(str.data, buffer, str.len);
 
   return SP_STR(buffer, str.len);
 }
 
 void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
-  sp_os_copy_memory(str.data, buffer, SP_MIN(str.len, capacity));
+  sp_mem_copy(str.data, buffer, SP_MIN(str.len, capacity));
 }
 
 sp_str_t sp_str_null_terminate(sp_str_t str) {
   c8* buffer = (c8*)sp_alloc(str.len + 1);
-  sp_os_copy_memory(str.data, buffer, str.len);
+  sp_mem_copy(str.data, buffer, str.len);
   buffer[str.len] = 0;
   return SP_STR(buffer, str.len);
 }
@@ -3498,7 +3977,7 @@ void sp_str_builder_dedent(sp_str_builder_t* builder) {
 
 void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
   sp_str_builder_add_capacity(builder, str.len);
-  sp_os_copy_memory(str.data, builder->buffer.data + builder->buffer.len, str.len);
+  sp_mem_copy(str.data, builder->buffer.data + builder->buffer.len, str.len);
   builder->buffer.len += str.len;
 }
 
@@ -3850,7 +4329,7 @@ void sp_str_reduce_kernel_count(sp_str_reduce_context_t* context) {
 
   if (context->str.len >= data->needle.len) {
     for (u32 i = 0; i <= context->str.len - data->needle.len; i++) {
-      if (sp_os_is_memory_equal(context->str.data + i, data->needle.data, data->needle.len)) {
+      if (sp_mem_is_equal(context->str.data + i, data->needle.data, data->needle.len)) {
         data->count++;
         i += data->needle.len - 1; // Skip past the match
       }
@@ -3872,7 +4351,6 @@ void sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context) {
   }
 }
 
-// Wrapper functions for common operations
 bool sp_str_contains_n(sp_str_t* strs, u32 n, sp_str_t needle) {
   sp_str_contains_context_t context = {
     .needle = needle,
@@ -3910,63 +4388,14 @@ sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n) {
   return sp_str_map(strs, n, &longest.len, sp_str_map_kernel_pad);
 }
 
-
-///////////////////
-// DYNAMIC ARRAY //
-//
-
-
-/////////////////
-// FIXED ARRAY //
-/////////////////
-void sp_fixed_array_init(sp_fixed_array_t* buffer, u32 max_vertices, u32 element_size) {
-  SP_ASSERT(buffer);
-
-  buffer->size = 0;
-  buffer->capacity = max_vertices;
-  buffer->element_size = element_size;
-  buffer->data = (u8*)sp_alloc(max_vertices * element_size);
-}
-
-u8* sp_fixed_array_at(sp_fixed_array_t* buffer, u32 index) {
-  SP_ASSERT(buffer);
-  return buffer->data + (index * buffer->element_size);
-}
-
-u8* sp_fixed_array_push(sp_fixed_array_t* buffer, void* data, u32 count) {
-  SP_ASSERT(buffer);
-  SP_ASSERT(buffer->size < buffer->capacity);
-
-  u8* reserved = sp_fixed_array_reserve(buffer, count);
-  if (data) sp_os_copy_memory(data, reserved, buffer->element_size * count);
-  return reserved;
-}
-
-u8* sp_fixed_array_reserve(sp_fixed_array_t* buffer, u32 count) {
-  SP_ASSERT(buffer);
-
-  u8* element = sp_fixed_array_at(buffer, buffer->size);
-  buffer->size += count;
-  return element;
-}
-
-void sp_fixed_array_clear(sp_fixed_array_t* buffer) {
-  SP_ASSERT(buffer);
-
-  buffer->size = 0;
-}
-
-u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
-  SP_ASSERT(buffer);
-
-  return buffer->size * buffer->element_size;
-}
-
-
-////////
-// OS //
-////////
-sp_str_t sp_os_normalize_path(sp_str_t path) {
+// ███████╗██╗██╗     ███████╗███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗
+// ██╔════╝██║██║     ██╔════╝██╔════╝╚██╗ ██╔╝██╔════╝╚══██╔══╝██╔════╝████╗ ████║
+// █████╗  ██║██║     █████╗  ███████╗ ╚████╔╝ ███████╗   ██║   █████╗  ██╔████╔██║
+// ██╔══╝  ██║██║     ██╔══╝  ╚════██║  ╚██╔╝  ╚════██║   ██║   ██╔══╝  ██║╚██╔╝██║
+// ██║     ██║███████╗███████╗███████║   ██║   ███████║   ██║   ███████╗██║ ╚═╝ ██║
+// ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝   ╚══════╝   ╚═╝   ╚══════╝╚═╝     ╚═╝
+// @filesystem @fs
+sp_str_t sp_fs_normalize_path(sp_str_t path) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
   for (u32 i = 0; i < path.len; i++) {
@@ -3995,7 +4424,7 @@ sp_str_t sp_os_normalize_path(sp_str_t path) {
   return sp_str_builder_write(&builder);
 }
 
-void sp_os_normalize_path_soft(sp_str_t* path) {
+void sp_fs_normalize_path_soft(sp_str_t* path) {
   if (!sp_str_valid(*path)) return;
   if (sp_str_empty(*path)) return;
 
@@ -4011,7 +4440,7 @@ void sp_os_normalize_path_soft(sp_str_t* path) {
   }
 }
 
-sp_str_t sp_os_extract_file_name(sp_str_t path) {
+sp_str_t sp_fs_get_name(sp_str_t path) {
   if (sp_str_empty(path)) return SP_LIT("");
 
   const c8* last_slash = NULL;
@@ -4032,10 +4461,9 @@ sp_str_t sp_os_extract_file_name(sp_str_t path) {
   return sp_str(path.data + filename_start, filename_len);
 }
 
-sp_str_t sp_os_parent_path(sp_str_t path) {
+sp_str_t sp_fs_parent_path(sp_str_t path) {
   if (path.len == 0) return path;
 
-  // Start from the end of the string
   const c8* c = path.data + path.len - 1;
 
   // Skip any trailing slashes
@@ -4052,19 +4480,17 @@ sp_str_t sp_os_parent_path(sp_str_t path) {
   if (c > path.data) {
     path.len = (u32)(c - path.data);
   } else if (c == path.data && *c == '/') {
-    // Root path case: "/" -> ""
     path.len = 0;
   } else {
-    // No parent found
     path.len = 0;
   }
 
   sp_str_t result = sp_str_copy(path);
-  sp_os_normalize_path_soft(&result);
+  sp_fs_normalize_path_soft(&result);
   return result;
 }
 
-sp_str_t sp_os_join_path(sp_str_t a, sp_str_t b) {
+sp_str_t sp_fs_join_path(sp_str_t a, sp_str_t b) {
   // Remove trailing slash from first path to avoid double slash
   sp_str_t a_copy = a;
   if (a_copy.len > 0 && (a_copy.data[a_copy.len - 1] == '/' || a_copy.data[a_copy.len - 1] == '\\')) {
@@ -4072,11 +4498,11 @@ sp_str_t sp_os_join_path(sp_str_t a, sp_str_t b) {
   }
 
   sp_str_t result = sp_str_join(a_copy, b, SP_LIT("/"));
-  sp_os_normalize_path_soft(&result);
+  sp_fs_normalize_path_soft(&result);
   return result;
 }
 
-sp_str_t sp_os_extract_extension(sp_str_t path) {
+sp_str_t sp_fs_get_ext(sp_str_t path) {
   for (u32 index = 0; index < path.len; index++) {
     c8 c = sp_str_at_reverse(path, index);
 
@@ -4090,11 +4516,11 @@ sp_str_t sp_os_extract_extension(sp_str_t path) {
   return sp_str_sub_reverse(path, 0, 0);
 }
 
-sp_str_t sp_os_extract_stem(sp_str_t path) {
-  sp_str_t file_name = sp_os_extract_file_name(path);
+sp_str_t sp_fs_get_stem(sp_str_t path) {
+  sp_str_t file_name = sp_fs_get_name(path);
   if (!file_name.len) return path;
 
-  sp_str_t extension = sp_os_extract_extension(path);
+  sp_str_t extension = sp_fs_get_ext(path);
 
   sp_str_t stem = {
     .len = file_name.len - extension.len,
@@ -4111,16 +4537,1014 @@ sp_str_t sp_os_extract_stem(sp_str_t path) {
   return stem;
 }
 
-sp_err_t sp_os_link(sp_str_t from, sp_str_t to, sp_os_link_kind_t kind) {
+sp_err_t sp_fs_link(sp_str_t from, sp_str_t to, sp_os_link_kind_t kind) {
   switch (kind) {
-    case SP_OS_LINK_HARD:     return sp_os_create_hard_link(from, to);
-    case SP_OS_LINK_SYMBOLIC: return sp_os_create_symbolic_link(from, to);
-    case SP_OS_LINK_COPY:     return sp_os_copy(from, to);
+    case SP_FS_LINK_HARD:     return sp_fs_create_hard_link(from, to);
+    case SP_FS_LINK_SYMBOLIC: return sp_fs_create_sym_link(from, to);
+    case SP_FS_LINK_COPY:     return sp_fs_copy(from, to);
   }
 
   SP_UNREACHABLE_RETURN(SP_ERR_OK);
 }
 
+#if defined(SP_WIN32)
+SP_PRIVATE sp_os_file_attr_t sp_fs_winapi_attr_to_sp_attr(u32 attr);
+
+bool sp_fs_exists(sp_str_t path) {
+  sp_win32_dword_t attributes = GetFileAttributesA(sp_str_to_cstr(path));
+  return (attributes != INVALID_FILE_ATTRIBUTES);
+}
+
+bool sp_fs_is_regular_file(sp_str_t path) {
+  sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
+  if (attribute == INVALID_FILE_ATTRIBUTES) return false;
+  return !(attribute & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+bool sp_fs_is_dir(sp_str_t path) {
+  sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
+  if (attribute == INVALID_FILE_ATTRIBUTES) return false;
+  return attribute & FILE_ATTRIBUTE_DIRECTORY;
+}
+
+bool sp_fs_is_symlink(sp_str_t path) {
+  sp_win32_dword_t attr = GetFileAttributesA(sp_str_to_cstr(path));
+  if (attr == INVALID_FILE_ATTRIBUTES) return false;
+  return (attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+}
+
+bool sp_fs_is_target_regular_file(sp_str_t path) {
+  sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
+  if (attribute == INVALID_FILE_ATTRIBUTES) return false;
+  return !(attribute & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+bool sp_fs_is_target_dir(sp_str_t path) {
+  sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
+  if (attribute == INVALID_FILE_ATTRIBUTES) return false;
+  return attribute & FILE_ATTRIBUTE_DIRECTORY;
+}
+
+bool sp_fs_is_root(sp_str_t path) {
+  if (path.len == 0) return true;
+  if (path.len == 1 && path.data[0] == '/') return true;
+  if (path.len == 2 && path.data[1] == ':') return true;
+  if (path.len == 3 && path.data[1] == ':' && (path.data[2] == '/' || path.data[2] == '\\')) return true;
+  return false;
+}
+
+void sp_fs_remove_dir(sp_str_t path) {
+  SHFILEOPSTRUCTA file_op = SP_ZERO_INITIALIZE();
+  file_op.wFunc = FO_DELETE;
+  file_op.pFrom = sp_str_to_double_null_terminated(path);
+  file_op.fFlags = FOF_NO_UI;
+  SHFileOperationA(&file_op);
+}
+
+void sp_os_create_dir(sp_str_t path) {
+  if (path.len == 0) return;
+
+  sp_str_t normalized = sp_os_normalize_path(path);
+  while (normalized.len > 0 && (normalized.data[normalized.len - 1] == '/' || normalized.data[normalized.len - 1] == '\\')) {
+    normalized = sp_str(normalized.data, normalized.len - 1);
+  }
+
+  if (sp_os_does_path_exist(normalized)) return;
+
+  c8* path_cstr = sp_str_to_cstr(normalized);
+  if (CreateDirectoryA(path_cstr, NULL)) {
+    return;
+  }
+
+  if (sp_fs_is_root(normalized)) return;
+
+  sp_str_t parent = sp_os_parent_path(normalized);
+  if (parent.len > 0 && !sp_str_equal(parent, normalized)) {
+    sp_os_create_directory(parent);
+    CreateDirectoryA(path_cstr, NULL);
+  }
+}
+
+void sp_fs_create_file(sp_str_t path) {
+  sp_win32_handle_t handle = CreateFileA(sp_str_to_cstr(path), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  CloseHandle(handle);
+}
+
+void sp_fs_remove_file(sp_str_t path) {
+  sp_win32_dword_t attr = GetFileAttributesA(sp_str_to_cstr(path));
+  if (attr != INVALID_FILE_ATTRIBUTES &&
+      (attr & FILE_ATTRIBUTE_REPARSE_POINT) &&
+      (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+    RemoveDirectoryA(sp_str_to_cstr(path));
+  } else {
+    DeleteFileA(sp_str_to_cstr(path));
+  }
+}
+
+bool sp_fs_is_glob(sp_str_t path) {
+  sp_str_t file_name = sp_os_extract_file_name(path);
+  return sp_str_contains_n(&file_name, 1, sp_str_lit("*"));
+}
+
+bool sp_fs_is_on_path(sp_str_t program) {
+  sp_ps_config_t config = SP_ZERO_INITIALIZE();
+  config.command = SP_LIT("where");
+  sp_ps_config_add_arg(&config, program);
+  config.io.out.mode = SP_PS_IO_MODE_NULL;
+  config.io.err.mode = SP_PS_IO_MODE_NULL;
+
+  sp_ps_output_t output = sp_ps_run(config);
+
+  return output.status.exit_code == 0;
+}
+
+sp_err_t sp_fs_copy(sp_str_t from, sp_str_t to) {
+  if (sp_fs_is_glob(from)) {
+    sp_fs_copy_glob(sp_os_parent_path(from), sp_os_extract_file_name(from), to);
+  }
+  else if (sp_fs_is_target_dir(from)) {
+    SP_ASSERT(sp_fs_is_target_dir(to));
+    sp_fs_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_file_name(from)));
+  }
+  else if (sp_fs_is_target_regular_file(from)) {
+    sp_fs_copy_file(from, to);
+  }
+
+  return SP_ERR_OK;
+}
+
+void sp_fs_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
+  sp_fs_create_dir(to);
+
+  sp_da(sp_fs_dir_ent_t) entries = sp_fs_collect(from);
+
+  for (u32 i = 0; i < entries.count; i++) {
+    sp_fs_dir_ent_t* entry = &entries.data[i];
+    sp_str_t entry_name = entry->file_name;
+
+    bool matches = sp_str_equal(glob, sp_str_lit("*"));
+    if (!matches) {
+      matches = sp_str_equal(entry_name, glob);
+    }
+
+    if (matches) {
+      sp_str_t entry_path = sp_fs_join_path(from, entry_name);
+      sp_os_copy(entry_path, to);
+    }
+  }
+}
+
+void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
+  if (sp_fs_is_dir(to)) {
+    sp_fs_create_dir(to);
+    to = sp_fs_join_path(to, sp_fs_get_name(from));
+  }
+
+  sp_win32_dword_t src_attrs = GetFileAttributesA(sp_str_to_cstr(from));
+
+  sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
+  if (!src.file.fd) return;
+
+  sp_io_stream_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
+  if (!dst.file.fd) {
+    sp_io_close(&src);
+    return;
+  }
+
+  u8 buffer[4096];
+  u64 bytes_read;
+  while ((bytes_read = sp_io_read(&src, buffer, sizeof(buffer))) > 0) {
+    sp_io_write(&dst, buffer, bytes_read);
+  }
+
+  sp_io_close(&src);
+  sp_io_close(&dst);
+
+  if (src_attrs != INVALID_FILE_ATTRIBUTES) {
+    SetFileAttributesA(sp_str_to_cstr(to), src_attrs);
+  }
+}
+
+void sp_fs_copy_dir(sp_str_t from, sp_str_t to) {
+  if (sp_fs_is_dir(to)) {
+    to = sp_fs_join_path(to, sp_fs_get_name(from));
+  }
+
+  sp_fs_copy_glob(from, sp_str_lit("*"), to);
+}
+
+sp_da(sp_fs_dir_ent_t) sp_fs_collect(sp_str_t path) {
+  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
+    return SP_NULLPTR;
+  }
+
+  sp_dyn_array(sp_fs_dir_ent_t) entries = SP_NULLPTR;
+
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_append(&builder, path);
+  sp_str_builder_append(&builder, sp_str_lit("/*"));
+  sp_str_t glob = sp_str_builder_write(&builder);
+
+  sp_win32_find_data_t find_data;
+  sp_win32_handle_t handle = FindFirstFile(sp_str_to_cstr(glob), &find_data);
+  if (handle == INVALID_HANDLE_VALUE) {
+    return SP_NULLPTR;
+  }
+
+  do {
+    if (sp_cstr_equal(find_data.cFileName, ".")) continue;
+    if (sp_cstr_equal(find_data.cFileName, "..")) continue;
+
+    sp_str_builder_t entry_builder = SP_ZERO_INITIALIZE();
+    sp_str_builder_append(&entry_builder, path);
+    sp_str_builder_append(&entry_builder, sp_str_lit("/"));
+    sp_str_builder_append_cstr(&entry_builder, find_data.cFileName);
+    sp_str_t file_path = sp_str_builder_write(&entry_builder);
+    sp_fs_normalize_path(file_path);
+
+    sp_gs_dir_ent_t entry = SP_RVAL(sp_fs_dir_ent_t) {
+      .file_path = file_path,
+      .file_name = sp_str_from_cstr(find_data.cFileName),
+      .attributes = sp_fs_get_file_attrs(file_path),
+    };
+    sp_dyn_array_push(entries, entry);
+  } while (FindNextFile(handle, &find_data));
+
+  FindClose(handle);
+
+  return entries;
+}
+
+sp_fs_file_attr_t sp_fs_get_file_attrs(sp_str_t path) {
+  return sp_fs_winapi_attr_to_sp_attr(GetFileAttributesA(sp_str_to_cstr(path)));
+}
+
+sp_fs_file_attr_t sp_fs_winapi_attr_to_sp_attr(u32 attr) {
+  if (attr == INVALID_FILE_ATTRIBUTES) return SP_OS_FILE_ATTR_NONE;
+  if (attr & FILE_ATTRIBUTE_REPARSE_POINT) return SP_OS_FILE_ATTR_SYMLINK;
+  if (attr & FILE_ATTRIBUTE_DIRECTORY) return SP_OS_FILE_ATTR_DIRECTORY;
+  return SP_OS_FILE_ATTR_REGULAR_FILE;
+}
+
+sp_str_t sp_fs_get_exe_path() {
+  c8 exe_path[SP_MAX_PATH_LEN];
+  GetModuleFileNameA(NULL, exe_path, SP_MAX_PATH_LEN);
+
+  sp_str_t exe_path_str = SP_CSTR(exe_path);
+  sp_fs_normalize_path(exe_path_str);
+
+  return sp_str_copy(exe_path_str);
+}
+
+sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  c8* path_cstr = sp_str_to_cstr(path);
+  c8 canonical_path[SP_MAX_PATH_LEN];
+
+  if (GetFullPathNameA(path_cstr, SP_MAX_PATH_LEN, canonical_path, NULL) == 0) {
+    return sp_str_copy(path);
+  }
+
+  sp_str_t result = sp_str_from_cstr(canonical_path);
+  result = sp_fs_normalize_path(result);
+
+  // Remove trailing slash if present
+  if (result.len > 0 && result.data[result.len - 1] == '/') {
+    result.len--;
+  }
+
+  return sp_str_copy(result);
+}
+
+#elif defined(SP_POSIX)
+sp_str_t sp_fs_get_cwd() {
+  c8 path [PATH_MAX];
+  if (!getcwd(path, PATH_MAX - 1)) {
+    return SP_ZERO_STRUCT(sp_str_t);
+  }
+
+  sp_str_t cwd = sp_str_from_cstr(path);
+  return sp_fs_normalize_path(cwd);
+}
+
+bool sp_fs_exists(sp_str_t path) {
+  struct stat st;
+  c8* path_cstr = sp_str_to_cstr(path);
+  s32 result = stat(path_cstr, &st);
+  return result == 0;
+}
+
+bool sp_fs_is_regular_file(sp_str_t path) {
+  struct stat st;
+  c8* path_cstr = sp_str_to_cstr(path);
+  s32 result = lstat(path_cstr, &st);
+  if (result != 0) return false;
+  return S_ISREG(st.st_mode);
+}
+
+bool sp_fs_is_symlink(sp_str_t path) {
+  struct stat st;
+  c8* path_cstr = sp_str_to_cstr(path);
+  s32 result = lstat(path_cstr, &st);
+  if (result != 0) return false;
+  return S_ISLNK(st.st_mode);
+}
+
+bool sp_fs_is_dir(sp_str_t path) {
+  struct stat st;
+  c8* path_cstr = sp_str_to_cstr(path);
+  s32 result = lstat(path_cstr, &st);
+  if (result != 0) return false;
+  return S_ISDIR(st.st_mode);
+}
+
+bool sp_fs_is_target_regular_file(sp_str_t path) {
+  struct stat st;
+  if (stat(sp_str_to_cstr(path), &st) != 0) return false;
+  return S_ISREG(st.st_mode);
+}
+
+bool sp_fs_is_target_dir(sp_str_t path) {
+  struct stat st;
+  if (stat(sp_str_to_cstr(path), &st) != 0) return false;
+  return S_ISDIR(st.st_mode);
+}
+
+bool sp_fs_is_root(sp_str_t path) {
+  if (sp_str_empty(path)) return true;
+  if (sp_str_equal_cstr(path, "/")) return true;
+
+  return false;
+}
+
+void sp_fs_remove_dir(sp_str_t path) {
+  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(path);
+
+  sp_dyn_array_for(entries, i) {
+    sp_os_dir_ent_t* entry = &entries[i];
+
+    if (sp_fs_is_symlink(entry->file_path)) {
+      sp_fs_remove_file(entry->file_path);
+    } else if (sp_fs_is_dir(entry->file_path)) {
+      sp_fs_remove_dir(entry->file_path);
+    } else if (sp_fs_is_regular_file(entry->file_path)) {
+      sp_fs_remove_file(entry->file_path);
+    }
+  }
+
+  c8* path_cstr = sp_str_to_cstr(path);
+  rmdir(path_cstr);
+}
+
+void sp_fs_create_dir(sp_str_t path) {
+  sp_fs_normalize_path_soft(&path);
+  c8* path_cstr = sp_str_to_cstr(path);
+
+  if (sp_str_empty(path)) return;
+  if (sp_fs_is_root(path)) return;
+  if (sp_fs_exists(path)) return;
+
+  s32 result = mkdir(path_cstr, 0755);
+  if (!result) return;
+
+  sp_fs_create_dir(sp_fs_parent_path(path));
+
+  result = mkdir(path_cstr, 0755);
+  if (!result) return;
+}
+
+void sp_fs_create_file(sp_str_t path) {
+  c8* path_cstr = sp_str_to_cstr(path);
+  s32 fd = open(path_cstr, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  if (fd >= 0) close(fd);
+}
+
+void sp_fs_remove_file(sp_str_t path) {
+  c8* path_cstr = sp_str_to_cstr(path);
+  unlink(path_cstr);
+}
+
+bool sp_fs_is_glob(sp_str_t path) {
+  SP_INCOMPLETE()
+  sp_str_t file_name = sp_fs_get_name(path);
+  return sp_str_contains_n(&file_name, 1, sp_str_lit("*"));
+}
+
+bool sp_fs_is_on_path(sp_str_t program) {
+  SP_INCOMPLETE()
+  sp_ps_config_t config = SP_ZERO_INITIALIZE();
+  config.command = SP_LIT("which");
+  sp_ps_config_add_arg(&config, program);
+  config.io.out.mode = SP_PS_IO_MODE_NULL;
+  config.io.err.mode = SP_PS_IO_MODE_NULL;
+
+  sp_ps_output_t output = sp_ps_run(config);
+
+  return output.status.exit_code == 0;
+}
+
+sp_err_t sp_fs_copy(sp_str_t from, sp_str_t to) {
+  if (sp_fs_is_glob(from)) {
+    sp_fs_copy_glob(sp_fs_parent_path(from), sp_fs_get_name(from), to);
+  }
+  else if (sp_fs_is_target_dir(from)) {
+    SP_ASSERT(sp_fs_is_target_dir(to));
+    sp_fs_copy_glob(from, sp_str_lit("*"), sp_fs_join_path(to, sp_fs_get_name(from)));
+  }
+  else if (sp_fs_is_target_regular_file(from)) {
+    sp_fs_copy_file(from, to);
+  }
+
+  return SP_ERR_OK;
+}
+
+void sp_fs_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
+  sp_fs_create_dir(to);
+
+  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(from);
+
+  sp_dyn_array_for(entries, i) {
+    sp_os_dir_ent_t* entry = &entries[i];
+    sp_str_t entry_name = entry->file_name;
+
+    bool matches = sp_str_equal(glob, sp_str_lit("*"));
+    if (!matches) {
+      matches = sp_str_equal(entry_name, glob);
+    }
+
+    if (matches) {
+      sp_str_t entry_path = sp_fs_join_path(from, entry_name);
+      sp_fs_copy(entry_path, to);
+    }
+  }
+}
+
+void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
+  if (sp_fs_is_dir(to)) {
+    sp_fs_create_dir(to);
+    to = sp_fs_join_path(to, sp_fs_get_name(from));
+  }
+
+  struct stat stf;
+  if (stat(sp_str_to_cstr(from), &stf)) return;
+
+  sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
+  if (!src.file.fd) return;
+
+  sp_io_stream_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
+  if (!dst.file.fd) {
+    sp_io_close(&src);
+    return;
+  }
+
+  u8 buffer[4096];
+  u64 bytes_read;
+  while ((bytes_read = sp_io_read(&src, buffer, sizeof(buffer))) > 0) {
+    sp_io_write(&dst, buffer, bytes_read);
+  }
+
+  sp_io_close(&src);
+  sp_io_close(&dst);
+
+  chmod(sp_str_to_cstr(to), stf.st_mode);
+}
+
+void sp_fs_copy_dir(sp_str_t from, sp_str_t to) {
+  if (sp_fs_is_dir(to)) {
+    to = sp_fs_join_path(to, sp_fs_get_name(from));
+  }
+
+  sp_fs_copy_glob(from, sp_str_lit("*"), to);
+}
+
+sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
+  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
+    return SP_NULLPTR;
+  }
+
+  sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
+
+  c8* path_cstr = sp_str_to_cstr(path);
+  DIR* dir = opendir(path_cstr);
+
+  if (!dir) {
+    return entries;
+  }
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (sp_cstr_equal(entry->d_name, ".")) continue;
+    if (sp_cstr_equal(entry->d_name, "..")) continue;
+
+    sp_str_builder_t entry_builder = SP_ZERO_INITIALIZE();
+    sp_str_builder_append(&entry_builder, path);
+    sp_str_builder_append(&entry_builder, sp_str_lit("/"));
+    sp_str_builder_append_cstr(&entry_builder, entry->d_name);
+    sp_str_t file_path = sp_str_builder_write(&entry_builder);
+    sp_fs_normalize_path(file_path);
+
+    sp_os_dir_ent_t dir_ent = {
+      .file_path = file_path,
+      .file_name = sp_str_from_cstr(entry->d_name),
+      .attributes = sp_fs_get_file_attrs(file_path),
+    };
+    sp_dyn_array_push(entries, dir_ent);
+  }
+
+  closedir(dir);
+
+  return entries;
+}
+
+sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  c8* path_cstr = sp_str_to_cstr(path);
+  c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+  realpath(path_cstr, canonical_path);
+
+  sp_str_t result = SP_CSTR(canonical_path);
+  result = sp_fs_normalize_path(result);
+
+  if (result.len > 0 && result.data[result.len - 1] == '/') {
+    result.len--;
+  }
+
+  return sp_str_copy(result);
+}
+
+
+sp_os_file_attr_t sp_fs_get_file_attrs(sp_str_t path) {
+  struct stat st;
+  if (lstat(sp_str_to_cstr(path), &st) == 0) {
+    if (S_ISLNK(st.st_mode)) {
+      return SP_OS_FILE_ATTR_SYMLINK;
+    } else if (S_ISDIR(st.st_mode)) {
+      return SP_OS_FILE_ATTR_DIRECTORY;
+    } else if (S_ISREG(st.st_mode)) {
+      return SP_OS_FILE_ATTR_REGULAR_FILE;
+    }
+  }
+  return SP_OS_FILE_ATTR_NONE;
+}
+
+sp_err_t sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path) {
+  if (link(sp_str_to_cstr(target), sp_str_to_cstr(link_path))) {
+    return SP_ERR_OS;
+  }
+  return SP_ERR_OK;
+}
+
+sp_err_t sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path) {
+  if (symlink(sp_str_to_cstr(target), sp_str_to_cstr(link_path)) != 0) {
+    return SP_ERR_OS;
+  }
+  return SP_ERR_OK;
+}
+
+sp_str_t sp_fs_get_exe_path() {
+  c8 exe_path [PATH_MAX];
+  sp_str_t file_path = {
+    .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
+    .data = exe_path
+  };
+
+  if (!file_path.len) {
+    return sp_str_lit("");
+  }
+
+  return sp_str_copy(sp_fs_parent_path(file_path));
+}
+
+sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
+  sp_str_t path =  sp_os_get_env_var(xdg);
+  if (sp_str_valid(path)) return path;
+
+  path = sp_os_get_env_var(SP_LIT("HOME"));
+  if (sp_str_valid(path)) return sp_fs_join_path(path, home_suffix);
+
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_str_t sp_fs_get_storage_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
+}
+
+sp_str_t sp_fs_get_config_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
+}
+
+#elif defined(SP_MACOS)
+sp_str_t sp_os_get_executable_path() {
+  c8 exe_path[PATH_MAX];
+  u32 size = PATH_MAX;
+  if (_NSGetExecutablePath(exe_path, &size) == 0) {
+    c8 real_path[PATH_MAX];
+    if (realpath(exe_path, real_path)) {
+      return sp_str_copy(sp_os_parent_path(sp_str_from_cstr(real_path)));
+    }
+  }
+  return sp_str_lit("");
+}
+
+#endif
+
+//  ██████╗ ███████╗
+// ██╔═══██╗██╔════╝
+// ██║   ██║███████╗
+// ██║   ██║╚════██║
+// ╚██████╔╝███████║
+//  ╚═════╝ ╚══════╝
+//  @os
+#if defined(SP_WIN32)
+void sp_os_sleep_ms(f64 ms) {
+  Sleep((DWORD)ms);
+}
+
+c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
+  s32 size_needed = WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)str16, (s32)len, NULL, 0, NULL, NULL);
+  c8* str8 = (c8*)sp_alloc((u32)(size_needed + 1));
+  WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)str16, (s32)len, str8, size_needed, NULL, NULL);
+  str8[size_needed] = '\0';
+  return str8;
+}
+
+void sp_os_print(sp_str_t message) {
+  HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+  DWORD written;
+  WriteConsoleA(console, message.data, message.len, &written, NULL);
+}
+
+sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) { switch (kind) {
+    case SP_OS_LIB_SHARED: return SP_LIT("dll");
+    case SP_OS_LIB_STATIC: return SP_LIT("lib");
+  }
+
+  SP_UNREACHABLE();
+}
+
+sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
+  return sp_format("{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+}
+
+sp_os_platform_kind_t sp_os_platform_kind() {
+  return SP_OS_PLATFORM_WIN32;
+}
+
+sp_str_t sp_os_platform_name() {
+  return sp_str_lit("win32");
+}
+
+
+#elif defined(SP_POSIX)
+void sp_os_sleep_ms(f64 ms) {
+  struct timespec ts;
+  ts.tv_sec = (time_t)(ms / 1000.0);
+  ts.tv_nsec = (long)((ms - (ts.tv_sec * 1000.0)) * 1000000.0);
+  nanosleep(&ts, NULL);
+}
+
+c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
+  if (!str16 || len == 0) {
+    c8* result = (c8*)sp_alloc(1);
+    result[0] = '\0';
+    return result;
+  }
+
+  c8* result = (c8*)sp_alloc(len + 1);
+  for (u32 i = 0; i < len; i++) {
+    if (str16[i] < 128) {
+      result[i] = (c8)str16[i];
+    } else {
+      result[i] = '?';  // Replace non-ASCII with '?'
+    }
+  }
+  result[len] = '\0';
+  return result;
+}
+
+void sp_os_print(sp_str_t message) {
+  write(STDOUT_FILENO, message.data, message.len);
+}
+#endif
+
+#if defined(SP_MACOS)
+sp_os_kind_t sp_os_get_kind() {
+  return SP_OS_MACOS;
+}
+
+sp_str_t sp_os_get_name() {
+  return sp_str_lit("macos");
+}
+
+sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
+  switch (kind) {
+    case SP_OS_LIB_SHARED: return SP_LIT("dylib");
+    case SP_OS_LIB_STATIC: return SP_LIT("a");
+  }
+
+  SP_UNREACHABLE();
+}
+
+sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
+  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+}
+#endif
+
+#if defined(SP_LINUX)
+sp_os_kind_t sp_os_get_kind() {
+  return SP_OS_LINUX;
+}
+
+sp_str_t sp_os_get_name() {
+  return sp_str_lit("linux");
+}
+
+sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
+  switch (kind) {
+    case SP_OS_LIB_SHARED: return SP_LIT("so");
+    case SP_OS_LIB_STATIC: return SP_LIT("a");
+  }
+
+  SP_UNREACHABLE_RETURN(sp_str_lit(""));
+}
+
+sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
+  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+}
+#endif
+
+// ████████╗██╗███╗   ███╗███████╗
+// ╚══██╔══╝██║████╗ ████║██╔════╝
+//    ██║   ██║██╔████╔██║█████╗
+//    ██║   ██║██║╚██╔╝██║██╔══╝
+//    ██║   ██║██║ ╚═╝ ██║███████╗
+//    ╚═╝   ╚═╝╚═╝     ╚═╝╚══════╝
+#if defined(SP_WIN32)
+sp_tm_epoch_t sp_tm_now_epoch() {
+  FILETIME ft;
+  GetSystemTimeAsFileTime(&ft);
+
+  // Convert to Unix epoch
+  u64 windows_100ns = ((u64)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+  u64 unix_100ns = windows_100ns - 116444736000000000ULL;
+
+  return SP_RVAL(sp_tm_epoch_t) {
+    .seconds = unix_100ns / 10000000,
+    .nanoseconds = (u32)((unix_100ns % 10000000) * 100)
+  };
+}
+
+sp_str_t sp_tm_to_iso8601(sp_tm_epoch_t time) {
+  FILETIME ft;
+  SYSTEMTIME st;
+
+  // Convert Unix epoch back to Windows FILETIME
+  u64 unix_100ns = time.seconds * 10000000ULL + time.nanoseconds / 100ULL;
+  u64 windows_100ns = unix_100ns + 116444736000000000ULL;
+
+  ft.dwHighDateTime = (u32)(windows_100ns >> 32);
+  ft.dwLowDateTime = (u32)(windows_100ns & 0xFFFFFFFF);
+
+  FileTimeToSystemTime(&ft, &st);
+
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_append_fmt(&builder, "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+    SP_FMT_S32(st.wYear),
+    SP_FMT_S32(st.wMonth),
+    SP_FMT_S32(st.wDay),
+    SP_FMT_S32(st.wHour),
+    SP_FMT_S32(st.wMinute),
+    SP_FMT_S32(st.wSecond),
+    SP_FMT_U32(time.nanoseconds / 1000000));
+
+  return sp_str_builder_write(&builder);
+}
+
+sp_tm_point_t sp_tm_now_point() {
+  LARGE_INTEGER freq, counter;
+  QueryPerformanceFrequency(&freq);
+  QueryPerformanceCounter(&counter);
+
+  // Convert to nanoseconds
+  u64 ns = (counter.QuadPart * 1000000000ULL) / freq.QuadPart;
+  return (sp_tm_point_t)ns;
+}
+
+u64 sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older) {
+  return newer - older;
+}
+
+sp_tm_timer_t sp_tm_start_timer() {
+  sp_tm_point_t now = sp_tm_now_point();
+  return SP_RVAL(sp_tm_timer_t) {
+    .start = now,
+    .previous = now
+  };
+}
+
+u64 sp_tm_read_timer(sp_tm_timer_t* timer) {
+  sp_tm_point_t current = sp_tm_now_point();
+  if (current < timer->previous) {
+    timer->previous = current;
+  }
+  return sp_tm_point_diff(current, timer->start);
+}
+
+u64 sp_tm_lap_timer(sp_tm_timer_t* timer) {
+  sp_tm_point_t current = sp_tm_now_point();
+  if (current < timer->previous) {
+    timer->previous = current;
+  }
+  u64 elapsed = sp_tm_point_diff(current, timer->previous);
+  timer->previous = current;
+  return elapsed;
+}
+
+void sp_tm_reset_timer(sp_tm_timer_t* timer) {
+  sp_tm_point_t now = sp_tm_now_point();
+  timer->start = now;
+  timer->previous = now;
+}
+
+sp_tm_date_time_t sp_tm_get_date_time() {
+  SYSTEMTIME st;
+  GetLocalTime(&st);
+  return SP_RVAL(sp_tm_date_time_t) {
+    .year = st.wYear,
+    .month = st.wMonth,
+    .day = st.wDay,
+    .hour = st.wHour,
+    .minute = st.wMinute,
+    .second = st.wSecond,
+    .millisecond = st.wMilliseconds
+  };
+}
+
+sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+  WIN32_FILE_ATTRIBUTE_DATA fad;
+  if (!GetFileAttributesEx(sp_str_to_cstr(file_path), GetFileExInfoStandard, &fad)) {
+    return SP_ZERO_STRUCT(sp_tm_epoch_t);
+  }
+
+  if (fad.nFileSizeHigh == 0 && fad.nFileSizeLow == 0) {
+    return SP_ZERO_STRUCT(sp_tm_epoch_t);
+  }
+
+  LARGE_INTEGER time;
+  time.HighPart = fad.ftLastWriteTime.dwHighDateTime;
+  time.LowPart = fad.ftLastWriteTime.dwLowDateTime;
+
+  // Convert to Unix epoch
+  u64 unix_100ns = time.QuadPart - 116444736000000000LL;
+
+  return SP_RVAL(sp_tm_epoch_t) {
+    unix_100ns / 10000000,           // seconds
+    (unix_100ns % 10000000) * 100    // remainder to nanoseconds
+  };
+}
+
+#elif defined(SP_POSIX)
+sp_tm_date_time_t sp_tm_get_date_time() {
+  time_t raw_time;
+  struct tm* time_info;
+  struct timeval tv;
+
+  time(&raw_time);
+  time_info = localtime(&raw_time);
+  gettimeofday(&tv, NULL);
+
+  return SP_RVAL(sp_tm_date_time_t) {
+    .year = time_info->tm_year + 1900,
+    .month = time_info->tm_mon + 1,
+    .day = time_info->tm_mday,
+    .hour = time_info->tm_hour,
+    .minute = time_info->tm_min,
+    .second = time_info->tm_sec,
+    .millisecond = (s32)(tv.tv_usec / 1000)
+  };
+}
+
+sp_tm_epoch_t sp_tm_now_epoch() {
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  return SP_RVAL(sp_tm_epoch_t) {
+    .s = (u64)ts.tv_sec,
+    .ns = (u32)ts.tv_nsec
+  };
+}
+
+sp_str_t sp_tm_to_iso8601(sp_tm_epoch_t time) {
+  struct tm* time_info;
+  time_t raw_time = (time_t)time.s;
+  time_info = gmtime(&raw_time);
+
+  c8 buffer[32];
+  size_t len = strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", time_info);
+
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_append(&builder, sp_str(buffer, len));
+  sp_str_builder_append_c8(&builder, '.');
+
+  u32 ms = time.ns / 1000000;
+  if (ms < 100) sp_str_builder_append_c8(&builder, '0');
+  if (ms < 10) sp_str_builder_append_c8(&builder, '0');
+  sp_str_builder_append_fmt(&builder, "{}", SP_FMT_U32(ms));
+  sp_str_builder_append_c8(&builder, 'Z');
+
+  return sp_str_builder_write(&builder);
+}
+
+sp_tm_point_t sp_tm_now_point() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (sp_tm_point_t)(ts.tv_sec * 1000000000ULL + ts.tv_nsec);
+}
+
+u64 sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older) {
+  return newer - older;
+}
+
+sp_tm_timer_t sp_tm_start_timer() {
+  sp_tm_point_t now = sp_tm_now_point();
+  return SP_RVAL(sp_tm_timer_t) {
+    .start = now,
+    .previous = now
+  };
+}
+
+u64 sp_tm_read_timer(sp_tm_timer_t* timer) {
+  sp_tm_point_t current = sp_tm_now_point();
+  if (current < timer->previous) {
+    timer->previous = current;
+  }
+  return sp_tm_point_diff(current, timer->start);
+}
+
+u64 sp_tm_lap_timer(sp_tm_timer_t* timer) {
+  sp_tm_point_t current = sp_tm_now_point();
+  if (current < timer->previous) {
+    timer->previous = current;
+  }
+  u64 elapsed = sp_tm_point_diff(current, timer->previous);
+  timer->previous = current;
+  return elapsed;
+}
+
+void sp_tm_reset_timer(sp_tm_timer_t* timer) {
+  sp_tm_point_t now = sp_tm_now_point();
+  timer->start = now;
+  timer->previous = now;
+}
+#endif
+
+#if defined(SP_MACOS)
+  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(file_path);
+    s32 result = stat(path_cstr, &st);
+
+    if (result != 0) {
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
+    }
+
+    if (st.st_size == 0) {
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
+    }
+
+    return SP_RVAL(sp_tm_epoch_t) {
+      .s = (u64)st.st_mtime,
+      .ns = (u32)st.st_mtimespec.tv_nsec
+    };
+  }
+#endif
+
+#if defined(SP_LINUX)
+sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
+  struct stat st;
+  c8* path_cstr = sp_str_to_cstr(file_path);
+  s32 result = stat(path_cstr, &st);
+
+  if (result != 0) {
+    return SP_ZERO_STRUCT(sp_tm_epoch_t);
+  }
+
+  if (st.st_size == 0) {
+    return SP_ZERO_STRUCT(sp_tm_epoch_t);
+  }
+
+  return SP_RVAL(sp_tm_epoch_t) {
+    .s = (u64)st.st_mtime,
+    .ns = (u32)st.st_mtim.tv_nsec
+  };
+}
+#endif
+
+
+// ███████╗██████╗ ██╗███╗   ██╗
+// ██╔════╝██╔══██╗██║████╗  ██║
+// ███████╗██████╔╝██║██╔██╗ ██║
+// ╚════██║██╔═══╝ ██║██║╚██╗██║
+// ███████║██║     ██║██║ ╚████║
+// ╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝
+// @spin
 void sp_spin_pause() {
   #if defined(SP_AMD64)
     #if defined(SP_MSVC)
@@ -4148,16 +5572,15 @@ bool sp_spin_try_lock(sp_spin_lock_t* lock) {
   #elif defined(SP_MSVC)
     return _InterlockedExchange(lock, 1) == 0;
   #else
-    sp_context_ensure();
-    sp_mutex_lock(&sp_global.mutex);
+    sp_mutex_lock(&sp_rt.mutex);
 
     if (*lock == 0) {
       *lock = 1;
-      sp_mutex_unlock(&sp_global.mutex);
+      sp_mutex_unlock(&sp_rt.mutex);
       return true;
     }
     else {
-      sp_mutex_unlock(&sp_global.mutex);
+      sp_mutex_unlock(&sp_rt.mutex);
       return false;
     }
   #endif
@@ -4177,13 +5600,19 @@ void sp_spin_unlock(sp_spin_lock_t* lock) {
   #elif defined(SP_MSVC)
     _InterlockedExchange(lock, 0);
   #else
-    sp_context_ensure();
-    sp_mutex_lock(&sp_global.mutex);
+    sp_mutex_lock(&sp_rt.mutex);
     *lock = 0;
-    sp_mutex_unlock(&sp_global.mutex);
+    sp_mutex_unlock(&sp_rt.mutex);
   #endif
 }
 
+//  █████╗ ████████╗ ██████╗ ███╗   ███╗██╗ ██████╗
+// ██╔══██╗╚══██╔══╝██╔═══██╗████╗ ████║██║██╔════╝
+// ███████║   ██║   ██║   ██║██╔████╔██║██║██║
+// ██╔══██║   ██║   ██║   ██║██║╚██╔╝██║██║██║
+// ██║  ██║   ██║   ╚██████╔╝██║ ╚═╝ ██║██║╚██████╗
+// ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝     ═╝╚═╝ ╚═════╝
+// @atomic
 bool sp_atomic_s32_cmp_and_swap(sp_atomic_s32* value, s32 current, s32 desired) {
   #if defined(SP_MSVC)
     return _InterlockedCompareExchange(&value, desired, current) == current;
@@ -4192,12 +5621,12 @@ bool sp_atomic_s32_cmp_and_swap(sp_atomic_s32* value, s32 current, s32 desired) 
   #else
     bool result = false;
     size_t index = ((((size_t)value) >> 3) & 0x1f);
-    sp_spin_lock(&sp_global.locks[index]);
+    sp_spin_lock(&sp_rt.locks[index]);
     if (*value == current) {
       *value = desired;
       result = true;
     }
-    sp_spin_unlock(&sp_global.locks[index]);
+    sp_spin_unlock(&sp_rt.locks[index]);
     return result;
   #endif
 }
@@ -4243,1041 +5672,242 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
     return old;
   #endif
 }
-
+// ███████╗███████╗███╗   ███╗ █████╗ ██████╗ ██╗  ██╗ ██████╗ ██████╗ ███████╗
+// ██╔════╝██╔════╝████╗ ████║██╔══██╗██╔══██╗██║  ██║██╔═══██╗██╔══██╗██╔════╝
+// ███████╗█████╗  ██╔████╔██║███████║██████╔╝███████║██║   ██║██████╔╝█████╗
+// ╚════██║██╔══╝  ██║╚██╔╝██║██╔══██║██╔═══╝ ██╔══██║██║   ██║██╔══██╗██╔══╝
+// ███████║███████╗██║ ╚═╝ ██║██║  ██║██║     ██║  ██║╚██████╔╝██║  ██║███████╗
+// ╚══════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
+// @semaphore
 #if defined(SP_WIN32)
-  void* sp_os_allocate_memory(u32 size) {
-    return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
-  }
-
-  void* sp_os_reallocate_memory(void* ptr, u32 size) {
-    if (!ptr) return sp_os_allocate_memory(size);
-    if (!size) { HeapFree(GetProcessHeap(), 0, ptr); return NULL; }
-    return HeapReAlloc(GetProcessHeap(), 0, ptr, size);
-  }
-
-  void sp_os_free_memory(void* ptr) {
-    if (!ptr) return;
-    HeapFree(GetProcessHeap(), 0, ptr);
-  }
-
-  bool sp_os_does_path_exist(sp_str_t path) {
-    sp_win32_dword_t attributes = GetFileAttributesA(sp_str_to_cstr(path));
-    return (attributes != INVALID_FILE_ATTRIBUTES);
-  }
-
-  bool sp_os_is_regular_file(sp_str_t path) {
-    sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
-    if (attribute == INVALID_FILE_ATTRIBUTES) return false;
-    return !(attribute & FILE_ATTRIBUTE_DIRECTORY);
-  }
-
-  bool sp_os_is_directory(sp_str_t path) {
-    sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
-    if (attribute == INVALID_FILE_ATTRIBUTES) return false;
-    return attribute & FILE_ATTRIBUTE_DIRECTORY;
-  }
-
-  bool sp_os_is_symlink(sp_str_t path) {
-    sp_win32_dword_t attr = GetFileAttributesA(sp_str_to_cstr(path));
-    if (attr == INVALID_FILE_ATTRIBUTES) return false;
-    return (attr & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
-  }
-
-  bool sp_os_is_target_regular_file(sp_str_t path) {
-    sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
-    if (attribute == INVALID_FILE_ATTRIBUTES) return false;
-    return !(attribute & FILE_ATTRIBUTE_DIRECTORY);
-  }
-
-  bool sp_os_is_target_directory(sp_str_t path) {
-    sp_win32_dword_t attribute = GetFileAttributesA(sp_str_to_cstr(path));
-    if (attribute == INVALID_FILE_ATTRIBUTES) return false;
-    return attribute & FILE_ATTRIBUTE_DIRECTORY;
-  }
-
-  bool sp_os_is_path_root(sp_str_t path) {
-    if (path.len == 0) return true;
-    if (path.len == 1 && path.data[0] == '/') return true;
-    if (path.len == 2 && path.data[1] == ':') return true;
-    if (path.len == 3 && path.data[1] == ':' && (path.data[2] == '/' || path.data[2] == '\\')) return true;
-    return false;
-  }
-
-  void sp_os_remove_directory(sp_str_t path) {
-    SHFILEOPSTRUCTA file_op = SP_ZERO_INITIALIZE();
-    file_op.wFunc = FO_DELETE;
-    file_op.pFrom = sp_str_to_double_null_terminated(path);
-    file_op.fFlags = FOF_NO_UI;
-    SHFileOperationA(&file_op);
-  }
-
-  void sp_os_create_directory(sp_str_t path) {
-    if (path.len == 0) return;
-
-    sp_str_t normalized = sp_os_normalize_path(path);
-    while (normalized.len > 0 && (normalized.data[normalized.len - 1] == '/' || normalized.data[normalized.len - 1] == '\\')) {
-      normalized = sp_str(normalized.data, normalized.len - 1);
-    }
-
-    if (sp_os_does_path_exist(normalized)) return;
-
-    c8* path_cstr = sp_str_to_cstr(normalized);
-    if (CreateDirectoryA(path_cstr, NULL)) {
-      return;
-    }
-
-    if (sp_os_is_path_root(normalized)) return;
-
-    sp_str_t parent = sp_os_parent_path(normalized);
-    if (parent.len > 0 && !sp_str_equal(parent, normalized)) {
-      sp_os_create_directory(parent);
-      CreateDirectoryA(path_cstr, NULL);
-    }
-  }
-
-  void sp_os_create_file(sp_str_t path) {
-    sp_win32_handle_t handle = CreateFileA(sp_str_to_cstr(path), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    CloseHandle(handle);
-  }
-
-  void sp_os_remove_file(sp_str_t path) {
-    sp_win32_dword_t attr = GetFileAttributesA(sp_str_to_cstr(path));
-    if (attr != INVALID_FILE_ATTRIBUTES &&
-        (attr & FILE_ATTRIBUTE_REPARSE_POINT) &&
-        (attr & FILE_ATTRIBUTE_DIRECTORY)) {
-      RemoveDirectoryA(sp_str_to_cstr(path));
-    } else {
-      DeleteFileA(sp_str_to_cstr(path));
-    }
-  }
-
-  bool sp_os_is_glob(sp_str_t path) {
-    sp_str_t file_name = sp_os_extract_file_name(path);
-    return sp_str_contains_n(&file_name, 1, sp_str_lit("*"));
-  }
-
-  bool sp_os_is_program_on_path(sp_str_t program) {
-    sp_ps_config_t config = SP_ZERO_INITIALIZE();
-    config.command = SP_LIT("where");
-    sp_ps_config_add_arg(&config, program);
-    config.io.out.mode = SP_PS_IO_MODE_NULL;
-    config.io.err.mode = SP_PS_IO_MODE_NULL;
-
-    sp_ps_output_t output = sp_ps_run(config);
-
-    return output.status.exit_code == 0;
-  }
-
-  sp_err_t sp_os_copy(sp_str_t from, sp_str_t to) {
-    if (sp_os_is_glob(from)) {
-      sp_os_copy_glob(sp_os_parent_path(from), sp_os_extract_file_name(from), to);
-    }
-    else if (sp_os_is_target_directory(from)) {
-      SP_ASSERT(sp_os_is_target_directory(to));
-      sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_file_name(from)));
-    }
-    else if (sp_os_is_target_regular_file(from)) {
-      sp_os_copy_file(from, to);
-    }
-
-    return SP_ERR_OK;
-  }
-
-  void sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
-    sp_os_create_directory(to);
-
-    sp_os_directory_entry_list_t entries = sp_os_scan_directory(from);
-
-    for (u32 i = 0; i < entries.count; i++) {
-      sp_os_directory_entry_t* entry = &entries.data[i];
-      sp_str_t entry_name = entry->file_name;
-
-      bool matches = sp_str_equal(glob, sp_str_lit("*"));
-      if (!matches) {
-        matches = sp_str_equal(entry_name, glob);
-      }
-
-      if (matches) {
-        sp_str_t entry_path = sp_os_join_path(from, entry_name);
-        sp_os_copy(entry_path, to);
-      }
-    }
-  }
-
-  void sp_os_copy_file(sp_str_t from, sp_str_t to) {
-    if (sp_os_is_directory(to)) {
-      sp_os_create_directory(to);
-      to = sp_os_join_path(to, sp_os_extract_file_name(from));
-    }
-
-    sp_win32_dword_t src_attrs = GetFileAttributesA(sp_str_to_cstr(from));
-
-    sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
-    if (!src.file.fd) return;
-
-    sp_io_stream_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
-    if (!dst.file.fd) {
-      sp_io_close(&src);
-      return;
-    }
-
-    u8 buffer[4096];
-    u64 bytes_read;
-    while ((bytes_read = sp_io_read(&src, buffer, sizeof(buffer))) > 0) {
-      sp_io_write(&dst, buffer, bytes_read);
-    }
-
-    sp_io_close(&src);
-    sp_io_close(&dst);
-
-    if (src_attrs != INVALID_FILE_ATTRIBUTES) {
-      SetFileAttributesA(sp_str_to_cstr(to), src_attrs);
-    }
-  }
-
-  void sp_os_copy_directory(sp_str_t from, sp_str_t to) {
-    if (sp_os_is_directory(to)) {
-      to = sp_os_join_path(to, sp_os_extract_file_name(from));
-    }
-
-    sp_os_copy_glob(from, sp_str_lit("*"), to);
-  }
-
-  sp_da(sp_os_dir_ent_t) sp_os_scan_directory(sp_str_t path) {
-    if (!sp_os_is_directory(path) || !sp_os_does_path_exist(path)) {
-      return SP_NULLPTR;
-    }
-
-    sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
-
-    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-    sp_str_builder_append(&builder, path);
-    sp_str_builder_append(&builder, sp_str_lit("/*"));
-    sp_str_t glob = sp_str_builder_write(&builder);
-
-    sp_win32_find_data_t find_data;
-    sp_win32_handle_t handle = FindFirstFile(sp_str_to_cstr(glob), &find_data);
-    if (handle == INVALID_HANDLE_VALUE) {
-      return SP_NULLPTR;
-    }
-
-    do {
-      if (sp_cstr_equal(find_data.cFileName, ".")) continue;
-      if (sp_cstr_equal(find_data.cFileName, "..")) continue;
-
-      sp_str_builder_t entry_builder = SP_ZERO_INITIALIZE();
-      sp_str_builder_append(&entry_builder, path);
-      sp_str_builder_append(&entry_builder, sp_str_lit("/"));
-      sp_str_builder_append_cstr(&entry_builder, find_data.cFileName);
-      sp_str_t file_path = sp_str_builder_write(&entry_builder);
-      sp_os_normalize_path(file_path);
-
-      sp_os_dir_ent_t entry = SP_RVAL(sp_os_dir_ent_t) {
-        .file_path = file_path,
-        .file_name = sp_str_from_cstr(find_data.cFileName),
-        .attributes = sp_os_get_file_attrs(file_path),
-      };
-      sp_dyn_array_push(entries, entry);
-    } while (FindNextFile(handle, &find_data));
-
-    FindClose(handle);
-
-    return entries;
-  }
-
-  sp_os_directory_entry_list_t sp_os_scan_directory_recursive(sp_str_t path) {
-    SP_BROKEN();
-    return SP_ZERO_STRUCT(sp_os_directory_entry_list_t);
-  }
-
-  sp_tm_epoch_t sp_tm_now_epoch() {
-    FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
-
-    // Convert to Unix epoch
-    u64 windows_100ns = ((u64)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-    u64 unix_100ns = windows_100ns - 116444736000000000ULL;
-
-    return SP_RVAL(sp_tm_epoch_t) {
-      .seconds = unix_100ns / 10000000,
-      .nanoseconds = (u32)((unix_100ns % 10000000) * 100)
-    };
-  }
-
-  sp_str_t sp_tm_to_iso8601(sp_tm_epoch_t time) {
-    FILETIME ft;
-    SYSTEMTIME st;
-
-    // Convert Unix epoch back to Windows FILETIME
-    u64 unix_100ns = time.seconds * 10000000ULL + time.nanoseconds / 100ULL;
-    u64 windows_100ns = unix_100ns + 116444736000000000ULL;
-
-    ft.dwHighDateTime = (u32)(windows_100ns >> 32);
-    ft.dwLowDateTime = (u32)(windows_100ns & 0xFFFFFFFF);
-
-    FileTimeToSystemTime(&ft, &st);
-
-    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-    sp_str_builder_append_fmt(&builder, "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-      SP_FMT_S32(st.wYear),
-      SP_FMT_S32(st.wMonth),
-      SP_FMT_S32(st.wDay),
-      SP_FMT_S32(st.wHour),
-      SP_FMT_S32(st.wMinute),
-      SP_FMT_S32(st.wSecond),
-      SP_FMT_U32(time.nanoseconds / 1000000));
-
-    return sp_str_builder_write(&builder);
-  }
-
-  sp_tm_point_t sp_tm_now_point() {
-    LARGE_INTEGER freq, counter;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&counter);
-
-    // Convert to nanoseconds
-    u64 ns = (counter.QuadPart * 1000000000ULL) / freq.QuadPart;
-    return (sp_tm_point_t)ns;
-  }
-
-  u64 sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older) {
-    return newer - older;
-  }
-
-  sp_tm_timer_t sp_tm_start_timer() {
-    sp_tm_point_t now = sp_tm_now_point();
-    return SP_RVAL(sp_tm_timer_t) {
-      .start = now,
-      .previous = now
-    };
-  }
-
-  u64 sp_tm_read_timer(sp_tm_timer_t* timer) {
-    sp_tm_point_t current = sp_tm_now_point();
-    if (current < timer->previous) {
-      timer->previous = current;
-    }
-    return sp_tm_point_diff(current, timer->start);
-  }
-
-  u64 sp_tm_lap_timer(sp_tm_timer_t* timer) {
-    sp_tm_point_t current = sp_tm_now_point();
-    if (current < timer->previous) {
-      timer->previous = current;
-    }
-    u64 elapsed = sp_tm_point_diff(current, timer->previous);
-    timer->previous = current;
-    return elapsed;
-  }
-
-  void sp_tm_reset_timer(sp_tm_timer_t* timer) {
-    sp_tm_point_t now = sp_tm_now_point();
-    timer->start = now;
-    timer->previous = now;
-  }
-
-  sp_tm_date_time_t sp_tm_get_date_time() {
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    return SP_RVAL(sp_tm_date_time_t) {
-      .year = st.wYear,
-      .month = st.wMonth,
-      .day = st.wDay,
-      .hour = st.wHour,
-      .minute = st.wMinute,
-      .second = st.wSecond,
-      .millisecond = st.wMilliseconds
-    };
-  }
-
-  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
-    WIN32_FILE_ATTRIBUTE_DATA fad;
-    if (!GetFileAttributesEx(sp_str_to_cstr(file_path), GetFileExInfoStandard, &fad)) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
-    if (fad.nFileSizeHigh == 0 && fad.nFileSizeLow == 0) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
-    LARGE_INTEGER time;
-    time.HighPart = fad.ftLastWriteTime.dwHighDateTime;
-    time.LowPart = fad.ftLastWriteTime.dwLowDateTime;
-
-    // Convert to Unix epoch
-    u64 unix_100ns = time.QuadPart - 116444736000000000LL;
-
-    return SP_RVAL(sp_tm_epoch_t) {
-      unix_100ns / 10000000,           // seconds
-      (unix_100ns % 10000000) * 100    // remainder to nanoseconds
-    };
-  }
-
-  sp_os_file_attr_t sp_os_get_file_attrs(sp_str_t path) {
-    return sp_os_winapi_attr_to_sp_attr(GetFileAttributesA(sp_str_to_cstr(path)));
-  }
-
-  sp_os_file_attr_t sp_os_winapi_attr_to_sp_attr(u32 attr) {
-    if (attr == INVALID_FILE_ATTRIBUTES) return SP_OS_FILE_ATTR_NONE;
-    if (attr & FILE_ATTRIBUTE_REPARSE_POINT) return SP_OS_FILE_ATTR_SYMLINK;
-    if (attr & FILE_ATTRIBUTE_DIRECTORY) return SP_OS_FILE_ATTR_DIRECTORY;
-    return SP_OS_FILE_ATTR_REGULAR_FILE;
-  }
-
-  bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
-    return !memcmp(a, b, len);
-  }
-
-  void sp_os_copy_memory(const void* source, void* dest, u32 num_bytes) {
-    memcpy(dest, source, num_bytes);
-  }
-
-  void sp_os_move_memory(const void* source, void* dest, u32 num_bytes) {
-    memmove(dest, source, num_bytes);
-  }
-
-  void sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
-    u8* current_byte = (u8*)buffer;
-
-    s32 i = 0;
-    while (true) {
-      if (i + fill_size > buffer_size) return;
-      memcpy(current_byte + i, (u8*)fill, fill_size);
-      i += fill_size;
-    }
-  }
-
-  void sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill) {
-  sp_os_fill_memory(buffer, buffer_size, &fill, sizeof(u8));
-  }
-
-  void sp_os_zero_memory(void* buffer, u32 buffer_size) {
-  sp_os_fill_memory_u8(buffer, buffer_size, 0);
-  }
-
-  void sp_os_sleep_ms(f64 ms) {
-    Sleep((DWORD)ms);
-  }
-
-  sp_str_t sp_os_get_executable_path() {
-    c8 exe_path[SP_MAX_PATH_LEN];
-    GetModuleFileNameA(NULL, exe_path, SP_MAX_PATH_LEN);
-
-    sp_str_t exe_path_str = SP_CSTR(exe_path);
-    sp_os_normalize_path(exe_path_str);
-
-    return sp_str_copy(exe_path_str);
-  }
-
-  sp_str_t sp_os_canonicalize_path(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    c8 canonical_path[SP_MAX_PATH_LEN];
-
-    if (GetFullPathNameA(path_cstr, SP_MAX_PATH_LEN, canonical_path, NULL) == 0) {
-      return sp_str_copy(path);
-    }
-
-    sp_str_t result = sp_str_from_cstr(canonical_path);
-    result = sp_os_normalize_path(result);
-
-    // Remove trailing slash if present
-    if (result.len > 0 && result.data[result.len - 1] == '/') {
-      result.len--;
-    }
-
-    return sp_str_copy(result);
-  }
-
-  c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
-    s32 size_needed = WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)str16, (s32)len, NULL, 0, NULL, NULL);
-    c8* str8 = (c8*)sp_alloc((u32)(size_needed + 1));
-    WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)str16, (s32)len, str8, size_needed, NULL, NULL);
-    str8[size_needed] = '\0';
-    return str8;
-  }
-
-  void sp_os_print(sp_str_t message) {
-    HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
-    DWORD written;
-    WriteConsoleA(console, message.data, message.len, &written, NULL);
-  }
-
-  void sp_os_log(sp_str_t message) {
-    sp_os_print(message);
-    sp_os_print(SP_LIT("\n"));
-  }
-
-  void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
-    sp_thread_launch_t launch = SP_RVAL(sp_thread_launch_t) {
-      .fn = fn,
-      .userdata = userdata,
-      .semaphore = SP_ZERO_STRUCT(sp_semaphore_t)
-    };
-    sp_semaphore_init(&launch.semaphore);
-
-    thrd_create(thread, sp_thread_launch, &launch);
-    sp_semaphore_wait(&launch.semaphore);
-  }
-
-  s32 sp_thread_launch(void* args) {
-    sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
-    void* userdata = launch->userdata;
-    sp_thread_fn_t fn = launch->fn;
-    sp_semaphore_signal(&launch->semaphore);
-    return fn(userdata);
-  }
-
-  void sp_thread_join(sp_thread_t* thread) {
-    s32 result = 0;
-    thrd_join(*thread, &result);
-  }
-
-  s32 sp_mutex_kind_to_c11(sp_mutex_kind_t kind) {
-    s32 c11_kind;
-    if (kind & SP_MUTEX_PLAIN) c11_kind = mtx_plain;
-    if (kind & SP_MUTEX_TIMED) c11_kind = mtx_timed;
-    if (kind & SP_MUTEX_RECURSIVE) c11_kind |= mtx_recursive;
-
-    return c11_kind;
-  }
-
-  void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
-    mtx_init(mutex, sp_mutex_kind_to_c11(kind));
-  }
-
-  void sp_mutex_lock(sp_mutex_t* mutex) {
-    mtx_lock(mutex);
-  }
-
-  void sp_mutex_unlock(sp_mutex_t* mutex) {
-    mtx_unlock(mutex);
-  }
-
-  void sp_mutex_destroy(sp_mutex_t* mutex) {
-    mtx_destroy(mutex);
-  }
-
-
-  void sp_semaphore_init(sp_semaphore_t* semaphore) {
-    *semaphore = CreateSemaphoreW(NULL, 0, 1, NULL);
-  }
-
-  void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-    CloseHandle(*semaphore);
-  }
-
-  void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-    WaitForSingleObject(*semaphore, INFINITE);
-  }
-
-  bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-    sp_win32_dword_t result = WaitForSingleObject(*semaphore, ms);
-    return result == WAIT_OBJECT_0;
-  }
-
-  void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-    ReleaseSemaphore(*semaphore, 1, NULL);
-  }
-#endif
-
-#if defined(SP_POSIX)
-  sp_str_t sp_os_get_cwd() {
-    c8 path [PATH_MAX];
-    if (!getcwd(path, PATH_MAX - 1)) {
-      return SP_ZERO_STRUCT(sp_str_t);
-    }
-
-    sp_str_t cwd = sp_str_from_cstr(path);
-    return sp_os_normalize_path(cwd);
-  }
-
-  void* sp_os_allocate_memory(u32 size) {
-    void* ptr = malloc(size);
-    if (ptr) memset(ptr, 0, size);
-    return ptr;
-  }
-
-  void* sp_os_reallocate_memory(void* ptr, u32 size) {
-    if (!ptr) return sp_os_allocate_memory(size);
-    if (!size) { free(ptr); return NULL; }
-    return realloc(ptr, size);
-  }
-
-  void sp_os_free_memory(void* ptr) {
-    if (!ptr) return;
-    free(ptr);
-  }
-
-  bool sp_os_is_memory_equal(const void* a, const void* b, size_t len) {
-    return !memcmp(a, b, len);
-  }
-
-  void sp_os_copy_memory(const void* source, void* dest, u32 num_bytes) {
-    memcpy(dest, source, num_bytes);
-  }
-
-  void sp_os_move_memory(const void* source, void* dest, u32 num_bytes) {
-    memmove(dest, source, num_bytes);
-  }
-
-  void sp_os_fill_memory(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
-    u8* current_byte = (u8*)buffer;
-
-    s32 i = 0;
-    while (true) {
-      if (i + fill_size > buffer_size) return;
-      memcpy(current_byte + i, (u8*)fill, fill_size);
-      i += fill_size;
-    }
-  }
-
-  void sp_os_fill_memory_u8(void* buffer, u32 buffer_size, u8 fill) {
-    sp_os_fill_memory(buffer, buffer_size, &fill, sizeof(u8));
-  }
-
-  void sp_os_zero_memory(void* buffer, u32 buffer_size) {
-    sp_os_fill_memory_u8(buffer, buffer_size, 0);
-  }
-
-  bool sp_os_does_path_exist(sp_str_t path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = stat(path_cstr, &st);
-    return result == 0;
-  }
-
-  bool sp_os_is_regular_file(sp_str_t path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = lstat(path_cstr, &st);
-    if (result != 0) return false;
-    return S_ISREG(st.st_mode);
-  }
-
-  bool sp_os_is_symlink(sp_str_t path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = lstat(path_cstr, &st);
-    if (result != 0) return false;
-    return S_ISLNK(st.st_mode);
-  }
-
-  bool sp_os_is_directory(sp_str_t path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 result = lstat(path_cstr, &st);
-    if (result != 0) return false;
-    return S_ISDIR(st.st_mode);
-  }
-
-  bool sp_os_is_target_regular_file(sp_str_t path) {
-    struct stat st;
-    if (stat(sp_str_to_cstr(path), &st) != 0) return false;
-    return S_ISREG(st.st_mode);
-  }
-
-  bool sp_os_is_target_directory(sp_str_t path) {
-    struct stat st;
-    if (stat(sp_str_to_cstr(path), &st) != 0) return false;
-    return S_ISDIR(st.st_mode);
-  }
-
-  bool sp_os_is_path_root(sp_str_t path) {
-    if (sp_str_empty(path)) return true;
-    if (sp_str_equal_cstr(path, "/")) return true;
-
-    return false;
-  }
-
-  void sp_os_remove_directory(sp_str_t path) {
-    sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(path);
-
-    sp_dyn_array_for(entries, i) {
-      sp_os_dir_ent_t* entry = &entries[i];
-
-      if (sp_os_is_symlink(entry->file_path)) {
-        sp_os_remove_file(entry->file_path);
-      } else if (sp_os_is_directory(entry->file_path)) {
-        sp_os_remove_directory(entry->file_path);
-      } else if (sp_os_is_regular_file(entry->file_path)) {
-        sp_os_remove_file(entry->file_path);
-      }
-    }
-
-    c8* path_cstr = sp_str_to_cstr(path);
-    rmdir(path_cstr);
-  }
-
-  void sp_os_create_directory(sp_str_t path) {
-    sp_os_normalize_path_soft(&path);
-    c8* path_cstr = sp_str_to_cstr(path);
-
-    if (sp_str_empty(path)) return;
-    if (sp_os_is_path_root(path)) return;
-    if (sp_os_does_path_exist(path)) return;
-
-    s32 result = mkdir(path_cstr, 0755);
-    if (!result) return;
-
-    sp_os_create_directory(sp_os_parent_path(path));
-
-    result = mkdir(path_cstr, 0755);
-    if (!result) return;
-  }
-
-  void sp_os_create_file(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    s32 fd = open(path_cstr, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-    if (fd >= 0) close(fd);
-  }
-
-  void sp_os_remove_file(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    unlink(path_cstr);
-  }
-
-  bool sp_os_is_glob(sp_str_t path) {
-    SP_INCOMPLETE()
-    sp_str_t file_name = sp_os_extract_file_name(path);
-    return sp_str_contains_n(&file_name, 1, sp_str_lit("*"));
-  }
-
-  bool sp_os_is_program_on_path(sp_str_t program) {
-    SP_INCOMPLETE()
-    sp_ps_config_t config = SP_ZERO_INITIALIZE();
-    config.command = SP_LIT("which");
-    sp_ps_config_add_arg(&config, program);
-    config.io.out.mode = SP_PS_IO_MODE_NULL;
-    config.io.err.mode = SP_PS_IO_MODE_NULL;
-
-    sp_ps_output_t output = sp_ps_run(config);
-
-    return output.status.exit_code == 0;
-  }
-
-  sp_err_t sp_os_copy(sp_str_t from, sp_str_t to) {
-    if (sp_os_is_glob(from)) {
-      sp_os_copy_glob(sp_os_parent_path(from), sp_os_extract_file_name(from), to);
-    }
-    else if (sp_os_is_target_directory(from)) {
-      SP_ASSERT(sp_os_is_target_directory(to));
-      sp_os_copy_glob(from, sp_str_lit("*"), sp_os_join_path(to, sp_os_extract_file_name(from)));
-    }
-    else if (sp_os_is_target_regular_file(from)) {
-      sp_os_copy_file(from, to);
-    }
-
-    return SP_ERR_OK;
-  }
-
-  void sp_os_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
-    sp_os_create_directory(to);
-
-    sp_da(sp_os_dir_ent_t) entries = sp_os_scan_directory(from);
-
-    sp_dyn_array_for(entries, i) {
-      sp_os_dir_ent_t* entry = &entries[i];
-      sp_str_t entry_name = entry->file_name;
-
-      bool matches = sp_str_equal(glob, sp_str_lit("*"));
-      if (!matches) {
-        matches = sp_str_equal(entry_name, glob);
-      }
-
-      if (matches) {
-        sp_str_t entry_path = sp_os_join_path(from, entry_name);
-        sp_os_copy(entry_path, to);
-      }
-    }
-  }
-
-  void sp_os_copy_file(sp_str_t from, sp_str_t to) {
-    if (sp_os_is_directory(to)) {
-      sp_os_create_directory(to);
-      to = sp_os_join_path(to, sp_os_extract_file_name(from));
-    }
-
-    struct stat stf;
-    if (stat(sp_str_to_cstr(from), &stf)) return;
-
-    sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
-    if (!src.file.fd) return;
-
-    sp_io_stream_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
-    if (!dst.file.fd) {
-      sp_io_close(&src);
-      return;
-    }
-
-    u8 buffer[4096];
-    u64 bytes_read;
-    while ((bytes_read = sp_io_read(&src, buffer, sizeof(buffer))) > 0) {
-      sp_io_write(&dst, buffer, bytes_read);
-    }
-
-    sp_io_close(&src);
-    sp_io_close(&dst);
-
-    chmod(sp_str_to_cstr(to), stf.st_mode);
-  }
-
-  void sp_os_copy_directory(sp_str_t from, sp_str_t to) {
-    if (sp_os_is_directory(to)) {
-      to = sp_os_join_path(to, sp_os_extract_file_name(from));
-    }
-
-    sp_os_copy_glob(from, sp_str_lit("*"), to);
-  }
-
-  sp_da(sp_os_dir_ent_t) sp_os_scan_directory(sp_str_t path) {
-    if (!sp_os_is_directory(path) || !sp_os_does_path_exist(path)) {
-      return SP_NULLPTR;
-    }
-
-    sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
-
-    c8* path_cstr = sp_str_to_cstr(path);
-    DIR* dir = opendir(path_cstr);
-
-    if (!dir) {
-      return entries;
-    }
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-      if (sp_cstr_equal(entry->d_name, ".")) continue;
-      if (sp_cstr_equal(entry->d_name, "..")) continue;
-
-      sp_str_builder_t entry_builder = SP_ZERO_INITIALIZE();
-      sp_str_builder_append(&entry_builder, path);
-      sp_str_builder_append(&entry_builder, sp_str_lit("/"));
-      sp_str_builder_append_cstr(&entry_builder, entry->d_name);
-      sp_str_t file_path = sp_str_builder_write(&entry_builder);
-      sp_os_normalize_path(file_path);
-
-      sp_os_dir_ent_t dir_ent = {
-        .file_path = file_path,
-        .file_name = sp_str_from_cstr(entry->d_name),
-        .attributes = sp_os_get_file_attrs(file_path),
-      };
-      sp_dyn_array_push(entries, dir_ent);
-    }
-
-    closedir(dir);
-
-    return entries;
-  }
-
-  sp_tm_date_time_t sp_tm_get_date_time() {
-    time_t raw_time;
-    struct tm* time_info;
-    struct timeval tv;
-
-    time(&raw_time);
-    time_info = localtime(&raw_time);
-    gettimeofday(&tv, NULL);
-
-    return SP_RVAL(sp_tm_date_time_t) {
-      .year = time_info->tm_year + 1900,
-      .month = time_info->tm_mon + 1,
-      .day = time_info->tm_mday,
-      .hour = time_info->tm_hour,
-      .minute = time_info->tm_min,
-      .second = time_info->tm_sec,
-      .millisecond = (s32)(tv.tv_usec / 1000)
-    };
-  }
-
-  sp_tm_epoch_t sp_tm_now_epoch() {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return SP_RVAL(sp_tm_epoch_t) {
-      .s = (u64)ts.tv_sec,
-      .ns = (u32)ts.tv_nsec
-    };
-  }
-
-  sp_str_t sp_tm_to_iso8601(sp_tm_epoch_t time) {
-    struct tm* time_info;
-    time_t raw_time = (time_t)time.s;
-    time_info = gmtime(&raw_time);
-
-    c8 buffer[32];
-    size_t len = strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", time_info);
-
-    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-    sp_str_builder_append(&builder, sp_str(buffer, len));
-    sp_str_builder_append_c8(&builder, '.');
-
-    u32 ms = time.ns / 1000000;
-    if (ms < 100) sp_str_builder_append_c8(&builder, '0');
-    if (ms < 10) sp_str_builder_append_c8(&builder, '0');
-    sp_str_builder_append_fmt(&builder, "{}", SP_FMT_U32(ms));
-    sp_str_builder_append_c8(&builder, 'Z');
-
-    return sp_str_builder_write(&builder);
-  }
-
-  sp_tm_point_t sp_tm_now_point() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (sp_tm_point_t)(ts.tv_sec * 1000000000ULL + ts.tv_nsec);
-  }
-
-  u64 sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older) {
-    return newer - older;
-  }
-
-  sp_tm_timer_t sp_tm_start_timer() {
-    sp_tm_point_t now = sp_tm_now_point();
-    return SP_RVAL(sp_tm_timer_t) {
-      .start = now,
-      .previous = now
-    };
-  }
-
-  u64 sp_tm_read_timer(sp_tm_timer_t* timer) {
-    sp_tm_point_t current = sp_tm_now_point();
-    if (current < timer->previous) {
-      timer->previous = current;
-    }
-    return sp_tm_point_diff(current, timer->start);
-  }
-
-  u64 sp_tm_lap_timer(sp_tm_timer_t* timer) {
-    sp_tm_point_t current = sp_tm_now_point();
-    if (current < timer->previous) {
-      timer->previous = current;
-    }
-    u64 elapsed = sp_tm_point_diff(current, timer->previous);
-    timer->previous = current;
-    return elapsed;
-  }
-
-  void sp_tm_reset_timer(sp_tm_timer_t* timer) {
-    sp_tm_point_t now = sp_tm_now_point();
-    timer->start = now;
-    timer->previous = now;
-  }
-
-  void sp_os_sleep_ms(f64 ms) {
-    struct timespec ts;
-    ts.tv_sec = (time_t)(ms / 1000.0);
-    ts.tv_nsec = (long)((ms - (ts.tv_sec * 1000.0)) * 1000000.0);
-    nanosleep(&ts, NULL);
-  }
-
-  sp_str_t sp_os_canonicalize_path(sp_str_t path) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-    realpath(path_cstr, canonical_path);
-
-    sp_str_t result = SP_CSTR(canonical_path);
-    result = sp_os_normalize_path(result);
-
-    if (result.len > 0 && result.data[result.len - 1] == '/') {
-      result.len--;
-    }
-
-    return sp_str_copy(result);
-  }
-
-  c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
-    if (!str16 || len == 0) {
-      c8* result = (c8*)sp_alloc(1);
-      result[0] = '\0';
-      return result;
-    }
-
-    // Simple conversion for ASCII characters
-    c8* result = (c8*)sp_alloc(len + 1);
-    for (u32 i = 0; i < len; i++) {
-      if (str16[i] < 128) {
-        result[i] = (c8)str16[i];
-      } else {
-        result[i] = '?';  // Replace non-ASCII with '?'
-      }
-    }
-    result[len] = '\0';
-    return result;
-  }
-
-sp_os_file_attr_t sp_os_get_file_attrs(sp_str_t path) {
-  struct stat st;
-  if (lstat(sp_str_to_cstr(path), &st) == 0) {
-    if (S_ISLNK(st.st_mode)) {
-      return SP_OS_FILE_ATTR_SYMLINK;
-    } else if (S_ISDIR(st.st_mode)) {
-      return SP_OS_FILE_ATTR_DIRECTORY;
-    } else if (S_ISREG(st.st_mode)) {
-      return SP_OS_FILE_ATTR_REGULAR_FILE;
-    }
-  }
-  return SP_OS_FILE_ATTR_NONE;
+void sp_semaphore_init(sp_semaphore_t* semaphore) {
+  *semaphore = CreateSemaphoreW(NULL, 0, 1, NULL);
 }
 
-  void sp_os_print(sp_str_t message) {
-    write(STDOUT_FILENO, message.data, message.len);
+void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+  CloseHandle(*semaphore);
+}
+
+void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+  WaitForSingleObject(*semaphore, INFINITE);
+}
+
+bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+  sp_win32_dword_t result = WaitForSingleObject(*semaphore, ms);
+  return result == WAIT_OBJECT_0;
+}
+
+void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+  ReleaseSemaphore(*semaphore, 1, NULL);
+}
+#elif defined(SP_MACOS)
+void sp_semaphore_init(sp_semaphore_t* semaphore) {
+    *semaphore = dispatch_semaphore_create(0);
+}
+
+void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+    //dispatch_release(*semaphore);
+}
+
+void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+    dispatch_semaphore_wait(*semaphore, DISPATCH_TIME_FOREVER);
+}
+
+bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+    dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, ms * NSEC_PER_MSEC);
+    return dispatch_semaphore_wait(*semaphore, timeout) == 0;
+}
+
+void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+    dispatch_semaphore_signal(*semaphore);
+}
+#elif defined(SP_LINUX)
+void sp_semaphore_init(sp_semaphore_t* semaphore) {
+  sem_init(semaphore, 0, 0);
+}
+
+void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+  sem_destroy(semaphore);
+}
+
+void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+  sem_wait(semaphore);
+}
+
+bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  ts.tv_sec += ms / 1000;
+  ts.tv_nsec += (ms % 1000) * 1000000;
+  if (ts.tv_nsec >= 1000000000) {
+    ts.tv_sec++;
+    ts.tv_nsec -= 1000000000;
+  }
+  return sem_timedwait(semaphore, &ts) == 0;
+}
+
+void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+  sem_post(semaphore);
+}
+#endif
+
+// ███╗   ███╗██╗   ██╗████████╗███████╗██╗  ██╗
+// ████╗ ████║██║   ██║╚══██╔══╝██╔════╝╚██╗██╔╝
+// ██╔████╔██║██║   ██║   ██║   █████╗   ╚███╔╝
+// ██║╚██╔╝██║██║   ██║   ██║   ██╔══╝   ██╔██╗
+// ██║ ╚═╝ ██║╚██████╔╝   ██║   ███████╗██╔╝ ██╗
+// ╚═╝     ╚═╝ ╚═════╝    ╚╝   ╚══════╝╚═╝   ╚═╝
+// #mutex
+#if defined(SP_WIN32)
+s32 sp_mutex_kind_to_c11(sp_mutex_kind_t kind) {
+  s32 c11_kind;
+  if (kind & SP_MUTEX_PLAIN) c11_kind = mtx_plain;
+  if (kind & SP_MUTEX_TIMED) c11_kind = mtx_timed;
+  if (kind & SP_MUTEX_RECURSIVE) c11_kind |= mtx_recursive;
+
+  return c11_kind;
+}
+
+void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
+  mtx_init(mutex, sp_mutex_kind_to_c11(kind));
+}
+
+void sp_mutex_lock(sp_mutex_t* mutex) {
+  mtx_lock(mutex);
+}
+
+void sp_mutex_unlock(sp_mutex_t* mutex) {
+  mtx_unlock(mutex);
+}
+
+void sp_mutex_destroy(sp_mutex_t* mutex) {
+  mtx_destroy(mutex);
+}
+#elif defined(SP_POSIX)
+void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+
+  if (kind & SP_MUTEX_RECURSIVE) {
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
   }
 
-  void sp_os_log(sp_str_t message) {
-    sp_os_print(message);
-    sp_os_print(SP_LIT("\n"));
-  }
+  pthread_mutex_init(mutex, &attr);
+  pthread_mutexattr_destroy(&attr);
+}
 
-  void* sp_posix_thread_launch(void* args) {
-    return (void*)(intptr_t)sp_thread_launch(args);
-  }
+void sp_mutex_lock(sp_mutex_t* mutex) {
+  pthread_mutex_lock(mutex);
+}
 
-  s32 sp_thread_launch(void* args) {
-    sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
-    void* userdata = launch->userdata;
-    sp_thread_fn_t fn = launch->fn;
+void sp_mutex_unlock(sp_mutex_t* mutex) {
+  pthread_mutex_unlock(mutex);
+}
 
-    sp_semaphore_signal(&launch->semaphore);
-    s32 result = fn(userdata);
+void sp_mutex_destroy(sp_mutex_t* mutex) {
+  pthread_mutex_destroy(mutex);
+}
+#endif
 
-    return result;
-  }
+// ███████╗██╗   ██╗████████╗██╗   ██╗██████╗ ███████╗
+// ██╔════╝██║   ██║╚══██╔══╝██║   ██║██╔══██╗██╔════╝
+// █████╗  ██║   ██║   ██║   ██║   ██║██████╔╝█████╗
+// ██╔══╝  ██║   ██║   ██║   ██║   ██║██╔══██╗██╔══╝
+// ██║     ╚██████╔╝   ██║   ╚██████╔╝██║  ██║███████╗
+// ╚═╝      ╚═════╝    ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝
+sp_future_t* sp_future_create(u32 size) {
+  sp_future_t* future = (sp_future_t*)sp_alloc(sizeof(sp_future_t));
+  future->allocator = sp_context_get()->allocator;
+  sp_atomic_s32_set(&future->ready, 0);
+  future->value = sp_alloc(size);
+  future->size = size;
+  return future;
+}
 
-  void sp_thread_join(sp_thread_t* thread) {
-    pthread_join(*thread, NULL);
-  }
+void sp_future_destroy(sp_future_t* future) {
+  sp_context_push_allocator(future->allocator);
+  sp_free(future);
+  sp_context_pop();
+}
 
-  void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
-    sp_thread_launch_t launch = SP_ZERO_INITIALIZE();
-    launch.fn = fn;
-    launch.userdata = userdata;
-    sp_semaphore_init(&launch.semaphore);
+void sp_future_set_value(sp_future_t* future, void* value) {
+  sp_mem_copy(value, future->value, future->size);
+  sp_atomic_s32_set(&future->ready, 1);
+}
 
-    pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
-    sp_semaphore_wait(&launch.semaphore);
-  }
 
-  void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
+// ████████╗██╗  ██╗██████╗ ███████╗ █████╗ ██████╗
+// ╚══██╔══╝██║  ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗
+//    ██║   ███████║██████╔╝█████╗  ███████║██║  ██║
+//    ██║   ██╔══██║██╔══██╗██╔══╝  ██╔══██║██║  ██║
+//    ██║   ██║  ██║██║  ██║███████╗██║  ██║██████╔╝
+//    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
+// @thread
+#if defined(SP_WIN32)
+void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
+  sp_thread_launch_t launch = SP_RVAL(sp_thread_launch_t) {
+    .fn = fn,
+    .userdata = userdata,
+    .semaphore = SP_ZERO_STRUCT(sp_semaphore_t)
+  };
+  sp_semaphore_init(&launch.semaphore);
 
-    if (kind & SP_MUTEX_RECURSIVE) {
-      pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    }
+  thrd_create(thread, sp_thread_launch, &launch);
+  sp_semaphore_wait(&launch.semaphore);
+}
 
-    pthread_mutex_init(mutex, &attr);
-    pthread_mutexattr_destroy(&attr);
-  }
+s32 sp_thread_launch(void* args) {
+  sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
+  void* userdata = launch->userdata;
+  sp_thread_fn_t fn = launch->fn;
+  sp_semaphore_signal(&launch->semaphore);
+  return fn(userdata);
+}
 
-  void sp_mutex_lock(sp_mutex_t* mutex) {
-    pthread_mutex_lock(mutex);
-  }
+void sp_thread_join(sp_thread_t* thread) {
+  s32 result = 0;
+  thrd_join(*thread, &result);
+}
+#elif defined(SP_POSIX)
+void* sp_posix_thread_launch(void* args) {
+  return (void*)(intptr_t)sp_thread_launch(args);
+}
 
-  void sp_mutex_unlock(sp_mutex_t* mutex) {
-    pthread_mutex_unlock(mutex);
-  }
+s32 sp_thread_launch(void* args) {
+  sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
+  void* userdata = launch->userdata;
+  sp_thread_fn_t fn = launch->fn;
 
-  void sp_mutex_destroy(sp_mutex_t* mutex) {
-    pthread_mutex_destroy(mutex);
-  }
+  sp_semaphore_signal(&launch->semaphore);
+  s32 result = fn(userdata);
 
+  return result;
+}
+
+void sp_thread_join(sp_thread_t* thread) {
+  pthread_join(*thread, NULL);
+}
+
+void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
+  sp_thread_launch_t launch = SP_ZERO_INITIALIZE();
+  launch.fn = fn;
+  launch.userdata = userdata;
+  sp_semaphore_init(&launch.semaphore);
+
+  pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
+  sp_semaphore_wait(&launch.semaphore);
+}
+#endif
+
+
+// ███████╗███╗   ██╗██╗   ██╗
+// ██╔════╝████╗  ██║██║   ██║
+// █████╗  ██╔██╗ ██║██║   ██║
+// ██╔══╝  ██║╚██╗██║╚██╗ ██╔╝
+// ███████╗██║ ╚████║ ╚████╔╝
+// ╚══════╝╚═╝  ╚═══╝  ╚═══╝
+// @env
+#if defined(SP_POSIX)
 void sp_env_init(sp_env_t* env) {
   sp_ht_set_fns(env->vars, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 }
@@ -5334,24 +5964,41 @@ sp_str_t sp_os_get_env_as_path(sp_str_t key) {
   SP_UNTESTED()
   const c8* value = getenv(sp_str_to_cstr(key));
   sp_str_t path = sp_str_view(value);
-  return sp_os_normalize_path(path);
+  return sp_fs_normalize_path(path);
 }
 
 void sp_os_clear_env_var(sp_str_t key) {
   unsetenv(sp_str_to_cstr(key));
 }
 
-void sp_os_export_env(sp_env_t* env, sp_env_export_overwrite_t overwrite) {
+void sp_os_export_env(sp_env_t* env, sp_env_export_t overwrite) {
   sp_ht_for(env->vars, it) {
     sp_os_export_env_var(*sp_ht_it_getkp(env->vars, it), *sp_ht_it_getp(env->vars, it), overwrite);
   }
 }
 
-void sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_overwrite_t overwrite) {
+void sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_t overwrite) {
   const c8* k = sp_str_to_cstr(key);
   const c8* v = sp_str_to_cstr(value);
   setenv(k, v, overwrite);
 }
+#endif
+
+// ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
+// ██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔════╝██╔════╝██╔════╝
+// ██████╔╝██████╔╝██║   ██║██║     █████╗  ███████╗███████╗
+// ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
+// ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
+// ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
+#if defined(SP_POSIX)
+SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
+SP_PRIVATE bool sp_ps_create_pipes(s32 pipes [2]);
+SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config);
+SP_PRIVATE void sp_ps_free_posix_args(c8** argv);
+SP_PRIVATE c8** sp_ps_build_posix_env(sp_ps_env_config_t* env_config);
+SP_PRIVATE void sp_ps_set_nonblocking(s32 fd);
+SP_PRIVATE void sp_ps_set_blocking(s32 fd);
+
 
 bool sp_ps_create_pipes(s32 pipes [2]) {
   if (pipe(pipes) < 0) {
@@ -5537,8 +6184,6 @@ void sp_ps_configure_io_stream(sp_ps_io_stream_config_t* io, sp_ps_posix_stdio_s
 }
 
 sp_ps_t sp_ps_create(sp_ps_config_t config) {
-  sp_context_ensure();
-
   sp_ps_t proc = SP_ZERO_STRUCT(sp_ps_t);
   proc.allocator = sp_context_get()->allocator;
   proc.io = config.io;
@@ -5829,580 +6474,61 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
 
   return result;
 }
-
-sp_err_t sp_os_create_hard_link(sp_str_t target, sp_str_t link_path) {
-  if (link(sp_str_to_cstr(target), sp_str_to_cstr(link_path))) {
-    return SP_ERR_OS;
-  }
-  return SP_ERR_OK;
-}
-
-sp_err_t sp_os_create_symbolic_link(sp_str_t target, sp_str_t link_path) {
-  if (symlink(sp_str_to_cstr(target), sp_str_to_cstr(link_path)) != 0) {
-    return SP_ERR_OS;
-  }
-  return SP_ERR_OK;
-}
-#endif
-
-#if defined(SP_MACOS)
-  void sp_semaphore_init(sp_semaphore_t* semaphore) {
-      *semaphore = dispatch_semaphore_create(0);
-  }
-
-  void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-      //dispatch_release(*semaphore);
-  }
-
-  void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-      dispatch_semaphore_wait(*semaphore, DISPATCH_TIME_FOREVER);
-  }
-
-  bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-      dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, ms * NSEC_PER_MSEC);
-      return dispatch_semaphore_wait(*semaphore, timeout) == 0;
-  }
-
-  void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-      dispatch_semaphore_signal(*semaphore);
-  }
-
-  sp_str_t sp_os_get_executable_path() {
-    c8 exe_path[PATH_MAX];
-    u32 size = PATH_MAX;
-    if (_NSGetExecutablePath(exe_path, &size) == 0) {
-      c8 real_path[PATH_MAX];
-      if (realpath(exe_path, real_path)) {
-        return sp_str_copy(sp_os_parent_path(sp_str_from_cstr(real_path)));
-      }
-    }
-    return sp_str_lit("");
-  }
-#endif
-
-#if defined(SP_LINUX)
-sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
-  switch (kind) {
-    case SP_OS_LIB_SHARED: return SP_LIT("so");
-    case SP_OS_LIB_STATIC: return SP_LIT("a");
-  }
-
-  SP_UNREACHABLE_RETURN(sp_str_lit(""));
-}
-
-sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
-  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
-}
-
-void sp_semaphore_init(sp_semaphore_t* semaphore) {
-  sem_init(semaphore, 0, 0);
-}
-
-void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-  sem_destroy(semaphore);
-}
-
-void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-  sem_wait(semaphore);
-}
-
-bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-  struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
-  ts.tv_sec += ms / 1000;
-  ts.tv_nsec += (ms % 1000) * 1000000;
-  if (ts.tv_nsec >= 1000000000) {
-    ts.tv_sec++;
-    ts.tv_nsec -= 1000000000;
-  }
-  return sem_timedwait(semaphore, &ts) == 0;
-}
-
-void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-  sem_post(semaphore);
-}
-
-sp_str_t sp_os_get_executable_path() {
-  c8 exe_path [PATH_MAX];
-  sp_str_t file_path = {
-    .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
-    .data = exe_path
-  };
-
-  if (!file_path.len) {
-    return sp_str_lit("");
-  }
-
-  return sp_str_copy(sp_os_parent_path(file_path));
-}
-
-sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
-  sp_str_t path =  sp_os_get_env_var(xdg);
-  if (sp_str_valid(path)) return path;
-
-  path = sp_os_get_env_var(SP_LIT("HOME"));
-  if (sp_str_valid(path)) return sp_os_join_path(path, home_suffix);
-
-  return SP_ZERO_STRUCT(sp_str_t);
-}
-
-sp_str_t sp_os_get_storage_path() {
-  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
-}
-
-sp_str_t sp_os_get_config_path() {
-  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
-}
 #endif
 
 
-//////////////
-// PLATFORM //
-//////////////
-#ifdef SP_WIN32
-  sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) { switch (kind) {
-      case SP_OS_LIB_SHARED: return SP_LIT("dll");
-      case SP_OS_LIB_STATIC: return SP_LIT("lib");
-    }
-
-    SP_UNREACHABLE();
-  }
-
-  sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
-    return sp_format("{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
-  }
-
-  sp_os_platform_kind_t sp_os_platform_kind() {
-    return SP_OS_PLATFORM_WIN32;
-  }
-
-  sp_str_t sp_os_platform_name() {
-    return sp_str_lit("win32");
-  }
-
-  void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
-    sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)sp_alloc(sizeof(sp_os_win32_file_monitor_t));
-    sp_dynamic_array_init(&os->directory_infos, sizeof(sp_monitored_dir_t));
-    monitor->os = os;
-  }
-
-  void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t directory_path) {
-    sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)monitor->os;
-
-    sp_win32_handle_t event = CreateEventW(NULL, false, false, NULL);
-    if (!event) return;
-
-    c8* directory_cstr = sp_str_to_cstr(directory_path);
-    sp_win32_handle_t handle = CreateFileA(
-      directory_cstr,
-      FILE_LIST_DIRECTORY,
-      FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
-      NULL,
-      OPEN_EXISTING,
-      FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
-      NULL
-    );
-
-    if (handle == INVALID_HANDLE_VALUE) {
-      CloseHandle(event);
-      return;
-    }
-
-    sp_monitored_dir_t* info = (sp_monitored_dir_t*)sp_dynamic_array_push(&os->directory_infos, NULL);
-    sp_os_zero_memory(&info->overlapped, sizeof(sp_win32_overlapped_t));
-    info->overlapped.hEvent = event;
-    info->handle = handle;
-    info->path = sp_str_copy(directory_path);
-    info->notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
-    sp_os_zero_memory(info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
-
-    sp_os_win32_file_monitor_issue_one_read(monitor, info);
-  }
-
-  void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
-  }
-
-  void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
-    sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)monitor->os;
-
-    for (u32 i = 0; i < os->directory_infos.size; i++) {
-      sp_monitored_dir_t* info = (sp_monitored_dir_t*)sp_dynamic_array_at(&os->directory_infos, i);
-      assert(info->handle != INVALID_HANDLE_VALUE);
-
-      if (!HasOverlappedIoCompleted(&info->overlapped)) continue;
-
-      s32 bytes_written = 0;
-      bool success = GetOverlappedResult(info->handle, &info->overlapped, (LPDWORD) &bytes_written, false);
-      if (!success || bytes_written == 0) break;
-
-      FILE_NOTIFY_INFORMATION* notify = (FILE_NOTIFY_INFORMATION*)info->notify_information;
-      while (true) {
-        sp_file_change_event_t events = SP_FILE_CHANGE_EVENT_NONE;
-        if (notify->Action == FILE_ACTION_MODIFIED) {
-          events = SP_FILE_CHANGE_EVENT_MODIFIED;
-        }
-        else if (notify->Action == FILE_ACTION_ADDED) {
-          events = SP_FILE_CHANGE_EVENT_ADDED;
-        }
-        else if (notify->Action == FILE_ACTION_REMOVED) {
-          events = SP_FILE_CHANGE_EVENT_REMOVED;
-        }
-        else if (notify->Action == FILE_ACTION_RENAMED_OLD_NAME) {
-
-        }
-        else if (notify->Action == FILE_ACTION_RENAMED_NEW_NAME) {
-
-        }
-        else {
-          continue;
-        }
-
-        c8* partial_path_cstr = sp_wstr_to_cstr(&notify->FileName[0], (u32)(notify->FileNameLength / 2));
-        sp_str_t partial_path_str = SP_CSTR(partial_path_cstr);
-
-        sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-        sp_str_builder_append(&builder, info->path);
-        sp_str_builder_append(&builder, sp_str_lit("/"));
-        sp_str_builder_append(&builder, partial_path_str);
-        sp_str_t full_path = sp_str_builder_write(&builder);
-
-        sp_os_normalize_path(full_path);
-
-        sp_str_t file_name = sp_os_extract_file_name(full_path);
-        sp_os_win32_file_monitor_add_change(monitor, full_path, file_name, events);
-
-
-        if (notify->NextEntryOffset == 0) break;
-        notify = (FILE_NOTIFY_INFORMATION*)((char*)notify + notify->NextEntryOffset);
-      }
-
-      sp_os_win32_file_monitor_issue_one_read(monitor, info);
-    }
-
-    sp_file_monitor_emit_changes(monitor);
-  }
-
-  void sp_os_win32_file_monitor_add_change(sp_file_monitor_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_file_change_event_t events) {
-    f32 time = (f32)(GetTickCount64() / 1000.0);
-
-    if (sp_os_is_directory(file_path)) return;
-
-    if (file_name.data && file_name.len > 0) {
-      if (file_name.data[0] == '.' && file_name.len > 1 && file_name.data[1] == '#') return;
-      if (file_name.data[0] ==  '#') return;
-    }
-
-    if (!sp_file_monitor_check_cache(monitor, file_path, time)) return;
-
-    for (u32 i = 0; i < monitor->changes.size; i++) {
-      sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_at(&monitor->changes, i);
-      if (sp_str_equal(change->file_path, file_path)) {
-        if (monitor->debounce_time_ms > 0) {
-          f32 time_diff_ms = (time - change->time) * 1000.0f;
-          if (time_diff_ms < (f32)monitor->debounce_time_ms) {
-            return;
-          }
-        }
-        change->events = (sp_file_change_event_t)(change->events | events);
-        change->time = time;
-        return;
-      }
-    }
-
-    sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_push(&monitor->changes, NULL);
-    change->file_path = sp_str_copy(file_path);
-    change->file_name = sp_str_copy(file_name);
-    change->events = events;
-    change->time = time;
-  }
-
-  void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info) {
-    SP_ASSERT(info->handle != INVALID_HANDLE_VALUE);
-
-    s32 notify_filter = 0;
-    if (monitor->events_to_watch & (SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_REMOVED)) {
-      notify_filter |= FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_CREATION;
-    }
-    if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
-      notify_filter |= FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE;
-    }
-
-    info->bytes_returned = 0;
-
-    ReadDirectoryChangesW(info->handle, info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE, true, notify_filter, NULL, &info->overlapped, NULL);
-  }
-#endif
-
-#ifdef SP_LINUX
-  sp_os_platform_kind_t sp_os_platform_kind() {
-    return SP_OS_PLATFORM_LINUX;
-  }
-
-  sp_str_t sp_os_platform_name() {
-    return sp_str_lit("linux");
-  }
-
-  void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
-    sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)sp_alloc(sizeof(sp_os_linux_file_monitor_t));
-
-    linux_monitor->fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-    if (linux_monitor->fd == -1) {
-      // Handle error but don't crash
-      linux_monitor->fd = 0;
-    }
-
-    monitor->os = linux_monitor;
-  }
-
-  void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path) {
-    if (!monitor->os) return;
-    sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)monitor->os;
-
-    if (linux_monitor->fd <= 0) return;
-
-    c8* path_cstr = sp_str_to_cstr(path);
-
-    // Build mask based on what events we want to watch
-    u32 mask = 0;
-    if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
-      mask |= IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE;
-    }
-    if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_ADDED) {
-      mask |= IN_CREATE | IN_MOVED_TO;
-    }
-    if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_REMOVED) {
-      mask |= IN_DELETE | IN_MOVED_FROM;
-    }
-
-    s32 wd = inotify_add_watch(linux_monitor->fd, path_cstr, mask);
-
-    if (wd != -1) {
-      sp_dyn_array_push(linux_monitor->watch_descs, wd);
-      sp_dyn_array_push(linux_monitor->watch_paths, sp_str_copy(path));
-    }
-
-  }
-
-  void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
-    // For inotify, we need to watch the directory containing the file
-    sp_str_t dir_path = sp_os_parent_path(file_path);
-    if (dir_path.len > 0) {
-      sp_os_file_monitor_add_directory(monitor, dir_path);
-    }
-  }
-
-  void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
-    if (!monitor->os) return;
-
-    sp_os_linux_file_monitor_t* linux_monitor = (sp_os_linux_file_monitor_t*)monitor->os;
-    if (linux_monitor->fd <= 0) return;
-
-    size_t len = read(linux_monitor->fd, linux_monitor->buffer, sizeof(linux_monitor->buffer));
-    if (len <= 0) return;
-
-    // Process all events in buffer
-    char* ptr = (char*)linux_monitor->buffer;
-    while (ptr < (char*)linux_monitor->buffer + len) {
-      struct inotify_event* event = (struct inotify_event*)ptr;
-
-      // Find which path this watch descriptor corresponds to
-      sp_dyn_array_for(linux_monitor->watch_descs, it) {
-        s32 wd = linux_monitor->watch_descs[it];
-        if (wd == event->wd) {
-          sp_str_t dir_path = linux_monitor->watch_paths[it];
-
-          // Build full path if there's a filename
-          sp_str_t file_name = SP_ZERO_STRUCT(sp_str_t);
-          sp_str_t file_path = SP_ZERO_STRUCT(sp_str_t);
-
-          if (event->len > 0 && event->name[0] != '\0') {
-            file_name = sp_str(event->name, sp_cstr_len(event->name));
-
-            // Build full path
-            sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-            sp_str_builder_append(&builder, dir_path);
-            sp_str_builder_append(&builder, sp_str_lit("/"));
-            sp_str_builder_append(&builder, file_name);
-            file_path = sp_str_builder_write(&builder);
-          } else {
-            file_path = sp_str_copy(dir_path);
-            file_name = sp_os_extract_file_name(file_path);
-          }
-
-          // Convert inotify mask to our events
-          sp_file_change_event_t events = SP_FILE_CHANGE_EVENT_NONE;
-          if (event->mask & (IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE)) {
-            events = (sp_file_change_event_t)(events | SP_FILE_CHANGE_EVENT_MODIFIED);
-          }
-          if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
-            events = (sp_file_change_event_t)(events | SP_FILE_CHANGE_EVENT_ADDED);
-          }
-          if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {
-            events = (sp_file_change_event_t)(events | SP_FILE_CHANGE_EVENT_REMOVED);
-          }
-
-          // Add change to monitor's change list
-          if (events != SP_FILE_CHANGE_EVENT_NONE) {
-            sp_file_change_t change = {
-              .file_path = file_path,
-              .file_name = file_name,
-              .events = events,
-              .time = 0  // TODO: get actual time
-            };
-            sp_dyn_array_push(monitor->changes, change);
-          }
-          break;
-        }
-      }
-
-      ptr += sizeof(struct inotify_event) + event->len;
-    }
-
-    // Emit changes with debouncing
-    sp_file_monitor_emit_changes(monitor);
-  }
-
-  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(file_path);
-    s32 result = stat(path_cstr, &st);
-
-    if (result != 0) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
-    if (st.st_size == 0) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
-    return SP_RVAL(sp_tm_epoch_t) {
-      .s = (u64)st.st_mtime,
-      .ns = (u32)st.st_mtim.tv_nsec
-    };
-  }
-#endif
-
-#ifdef SP_MACOS
-sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
-  sp_str_t path =  sp_os_get_env_var(xdg);
-  if (sp_str_valid(path)) return path;
-
-  path = sp_os_get_env_var(SP_LIT("HOME"));
-  if (sp_str_valid(path)) return sp_os_join_path(path, home_suffix);
-
-  return SP_ZERO_STRUCT(sp_str_t);
+// ███████╗███╗   ███╗ ██████╗ ███╗   ██╗
+// ██╔════╝████╗ ████║██╔═══██╗████╗  ██║
+// █████╗  ██╔████╔██║██║   ██║██╔██╗ ██║
+// ██╔══╝  ██║╚██╔╝██║██║   ██║██║╚██╗██║
+// ██║     ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║
+// ╚═╝     ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+// @fmon
+SP_PRIVATE void             sp_fmon_os_init(sp_fmon_t* monitor);
+SP_PRIVATE void             sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_PRIVATE void             sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_PRIVATE void             sp_fmon_os_process_changes(sp_fmon_t* monitor);
+
+void sp_fmon_init(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata) {
+  sp_fmon_init_ex(monitor, callback, events, userdata, 0);
 }
 
-sp_str_t sp_os_get_storage_path() {
-  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
-}
-
-sp_str_t sp_os_get_config_path() {
-  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
-}
-
-
-  sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
-    switch (kind) {
-      case SP_OS_LIB_SHARED: return SP_LIT("dylib");
-      case SP_OS_LIB_STATIC: return SP_LIT("a");
-    }
-
-    SP_UNREACHABLE();
-  }
-
-  sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
-    return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
-  }
-
-  sp_os_platform_kind_t sp_os_platform_kind() {
-    return SP_OS_PLATFORM_MACOS;
-  }
-
-  sp_str_t sp_os_platform_name() {
-    return sp_str_lit("macos");
-  }
-
-  void sp_os_file_monitor_init(sp_file_monitor_t* monitor) {
-    (void)monitor;
-    SP_BROKEN();
-  }
-
-  void sp_os_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t directory_path) {
-    (void)monitor; (void)directory_path;
-    SP_BROKEN();
-  }
-
-  void sp_os_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
-    (void)monitor; (void)file_path;
-    SP_BROKEN();
-  }
-
-  void sp_os_file_monitor_process_changes(sp_file_monitor_t* monitor) {
-    (void)monitor;
-    SP_BROKEN();
-  }
-
-  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
-    struct stat st;
-    c8* path_cstr = sp_str_to_cstr(file_path);
-    s32 result = stat(path_cstr, &st);
-
-    if (result != 0) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
-    if (st.st_size == 0) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
-    return SP_RVAL(sp_tm_epoch_t) {
-      .s = (u64)st.st_mtime,
-      .ns = (u32)st.st_mtimespec.tv_nsec
-    };
-  }
-#endif
-
-void sp_file_monitor_init(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata) {
-  sp_file_monitor_init_debounce(monitor, callback, events, userdata, 0);
-}
-
-void sp_file_monitor_init_debounce(sp_file_monitor_t* monitor, sp_file_change_callback_t callback, sp_file_change_event_t events, void* userdata, u32 debounce_ms) {
+void sp_fmon_init_ex(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata, u32 debounce_ms) {
   monitor->callback = callback;
   monitor->events_to_watch = events;
   monitor->userdata = userdata;
   monitor->debounce_time_ms = debounce_ms;
-  sp_os_file_monitor_init(monitor);
+  sp_fmon_os_init(monitor);
 }
 
-void sp_file_monitor_add_directory(sp_file_monitor_t* monitor, sp_str_t path) {
-  sp_os_file_monitor_add_directory(monitor, path);
+void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path) {
+  sp_fmon_os_add_dir(monitor, path);
 }
 
-void sp_file_monitor_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
-  sp_os_file_monitor_add_file(monitor, file_path);
+void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+  sp_fmon_os_add_file(monitor, file_path);
 }
 
-void sp_file_monitor_process_changes(sp_file_monitor_t* monitor) {
-  sp_os_file_monitor_process_changes(monitor);
+void sp_fmon_process_changes(sp_fmon_t* monitor) {
+  sp_fmon_os_process_changes(monitor);
 }
 
-void sp_file_monitor_emit_changes(sp_file_monitor_t* monitor) {
+void sp_fmon_emit_changes(sp_fmon_t* monitor) {
   sp_dyn_array_for(monitor->changes, it) {
-    sp_file_change_t* change = &monitor->changes[it];
+    sp_fmon_event_t* change = &monitor->changes[it];
     monitor->callback(monitor, change, monitor->userdata);
   }
 
   sp_dyn_array_clear(monitor->changes);
 }
 
-sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, sp_str_t file_path) {
+sp_fmon_cache_t* sp_fmon_find_cache_entry(sp_fmon_t* monitor, sp_str_t file_path) {
   c8* file_path_cstr = sp_str_to_cstr(file_path);
   sp_hash_t file_hash = sp_hash_cstr(file_path_cstr);
 
-  sp_cache_entry_t* found = NULL;
+  sp_fmon_cache_t* found = NULL;
   for (u32 i = 0; i < sp_dyn_array_size(monitor->cache); i++) {
-    sp_cache_entry_t* entry = &monitor->cache[i];
+    sp_fmon_cache_t* entry = &monitor->cache[i];
     if (entry->hash == file_hash) {
       found = entry;
       break;
@@ -6410,7 +6536,7 @@ sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, s
   }
 
   if (!found) {
-    sp_dyn_array_push(monitor->cache, SP_ZERO_STRUCT(sp_cache_entry_t));
+    sp_dyn_array_push(monitor->cache, SP_ZERO_STRUCT(sp_fmon_cache_t));
     found = &monitor->cache[sp_dyn_array_size(monitor->cache) - 1];
     found->hash = file_hash;
   }
@@ -6418,211 +6544,337 @@ sp_cache_entry_t* sp_file_monitor_find_cache_entry(sp_file_monitor_t* monitor, s
   return found;
 }
 
-bool sp_file_monitor_check_cache(sp_file_monitor_t* monitor, sp_str_t file_path, f64 time) {
-  sp_cache_entry_t* entry = sp_file_monitor_find_cache_entry(monitor, file_path);
+bool sp_fmon_is_cached(sp_fmon_t* monitor, sp_str_t file_path, f64 time) {
+  sp_fmon_cache_t* entry = sp_fmon_find_cache_entry(monitor, file_path);
   f64 delta = time - entry->last_event_time;
   entry->last_event_time = time;
 
   return delta > (monitor->debounce_time_ms / 1000.0);
 }
 
-////////////////////////////
-// RING BUFFER IMPLEMENTATION
-////////////////////////////
-void* sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index) {
-    return buffer->data + ((buffer->head + buffer->element_size * index) % (buffer->capacity * buffer->element_size));
+#ifdef SP_WIN32
+SP_PRIVATE void sp_os_win32_file_monitor_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_t events);
+SP_PRIVATE void sp_os_win32_file_monitor_issue_one_read(sp_fmon_t * monitor, sp_fmon_dir_t* info);
+
+void sp_fmon_os_init(sp_file_monitor_t* monitor) {
+  sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)sp_alloc(sizeof(sp_os_win32_file_monitor_t));
+  sp_dynamic_array_init(&os->directory_infos, sizeof(sp_monitored_dir_t));
+  monitor->os = os;
 }
 
-void sp_ring_buffer_init(sp_ring_buffer_t* buffer, u32 capacity, u32 element_size) {
-    buffer->size = 0;
-    buffer->head = 0;
-    buffer->capacity = capacity;
-    buffer->element_size = element_size;
-    buffer->data = (u8*)sp_alloc(capacity * element_size);
-    sp_os_zero_memory(buffer->data, capacity * element_size);
+void sp_fmon_os_add_dir(sp_file_monitor_t* monitor, sp_str_t directory_path) {
+  sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)monitor->os;
+
+  sp_win32_handle_t event = CreateEventW(NULL, false, false, NULL);
+  if (!event) return;
+
+  c8* directory_cstr = sp_str_to_cstr(directory_path);
+  sp_win32_handle_t handle = CreateFileA(
+    directory_cstr,
+    FILE_LIST_DIRECTORY,
+    FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
+    NULL,
+    OPEN_EXISTING,
+    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+    NULL
+  );
+
+  if (handle == INVALID_HANDLE_VALUE) {
+    CloseHandle(event);
+    return;
+  }
+
+  sp_monitored_dir_t* info = (sp_monitored_dir_t*)sp_dynamic_array_push(&os->directory_infos, NULL);
+  sp_os_zero_memory(&info->overlapped, sizeof(sp_win32_overlapped_t));
+  info->overlapped.hEvent = event;
+  info->handle = handle;
+  info->path = sp_str_copy(directory_path);
+  info->notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
+  sp_os_zero_memory(info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
+
+  sp_os_win32_file_monitor_issue_one_read(monitor, info);
 }
 
-void* sp_ring_buffer_back(sp_ring_buffer_t* buffer) {
-    SP_ASSERT(buffer->size);
-    return sp_ring_buffer_at(buffer, buffer->size - 1);
+void sp_fmon_os_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
 }
 
-void* sp_ring_buffer_push(sp_ring_buffer_t* buffer, void* data) {
-    SP_ASSERT(buffer->size < buffer->capacity);
+void sp_fmon_os_process_changes(sp_file_monitor_t* monitor) {
+  sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)monitor->os;
 
-    u32 index = (buffer->head + buffer->size * buffer->element_size) % (buffer->capacity * buffer->element_size);
-    sp_os_copy_memory(data, buffer->data + index, buffer->element_size);
-    buffer->size += 1;
-    return sp_ring_buffer_back(buffer);
-}
+  for (u32 i = 0; i < os->directory_infos.size; i++) {
+    sp_monitored_dir_t* info = (sp_monitored_dir_t*)sp_dynamic_array_at(&os->directory_infos, i);
+    assert(info->handle != INVALID_HANDLE_VALUE);
 
-void* sp_ring_buffer_push_zero(sp_ring_buffer_t* buffer) {
-    SP_ASSERT(buffer->size < buffer->capacity);
+    if (!HasOverlappedIoCompleted(&info->overlapped)) continue;
 
-    u32 index = (buffer->head + buffer->size * buffer->element_size) % (buffer->capacity * buffer->element_size);
-    sp_os_zero_memory(buffer->data + index, buffer->element_size);
-    buffer->size += 1;
-    return sp_ring_buffer_back(buffer);
-}
+    s32 bytes_written = 0;
+    bool success = GetOverlappedResult(info->handle, &info->overlapped, (LPDWORD) &bytes_written, false);
+    if (!success || bytes_written == 0) break;
 
-void* sp_ring_buffer_push_overwrite(sp_ring_buffer_t* buffer, void* data) {
-    if (buffer->size == buffer->capacity) sp_ring_buffer_pop(buffer);
-    return sp_ring_buffer_push(buffer, data);
-}
+    FILE_NOTIFY_INFORMATION* notify = (FILE_NOTIFY_INFORMATION*)info->notify_information;
+    while (true) {
+      sp_file_change_event_t events = SP_FILE_CHANGE_EVENT_NONE;
+      if (notify->Action == FILE_ACTION_MODIFIED) {
+        events = SP_FILE_CHANGE_EVENT_MODIFIED;
+      }
+      else if (notify->Action == FILE_ACTION_ADDED) {
+        events = SP_FILE_CHANGE_EVENT_ADDED;
+      }
+      else if (notify->Action == FILE_ACTION_REMOVED) {
+        events = SP_FILE_CHANGE_EVENT_REMOVED;
+      }
+      else if (notify->Action == FILE_ACTION_RENAMED_OLD_NAME) {
 
-void* sp_ring_buffer_push_overwrite_zero(sp_ring_buffer_t* buffer) {
-    if (buffer->size == buffer->capacity) sp_ring_buffer_pop(buffer);
-    return sp_ring_buffer_push_zero(buffer);
-}
+      }
+      else if (notify->Action == FILE_ACTION_RENAMED_NEW_NAME) {
 
-void* sp_ring_buffer_pop(sp_ring_buffer_t* buffer) {
-    SP_ASSERT(buffer->size);
+      }
+      else {
+        continue;
+      }
 
-    void* element = buffer->data + buffer->head;
-    buffer->head = (buffer->head + buffer->element_size) % (buffer->capacity * buffer->element_size);
-    buffer->size--;
-    return element;
-}
+      c8* partial_path_cstr = sp_wstr_to_cstr(&notify->FileName[0], (u32)(notify->FileNameLength / 2));
+      sp_str_t partial_path_str = SP_CSTR(partial_path_cstr);
 
-u32 sp_ring_buffer_bytes(sp_ring_buffer_t* buffer) {
-    return buffer->capacity * buffer->element_size;
-}
+      sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+      sp_str_builder_append(&builder, info->path);
+      sp_str_builder_append(&builder, sp_str_lit("/"));
+      sp_str_builder_append(&builder, partial_path_str);
+      sp_str_t full_path = sp_str_builder_write(&builder);
 
-void sp_ring_buffer_clear(sp_ring_buffer_t* buffer) {
-    sp_os_zero_memory(buffer->data, sp_ring_buffer_bytes(buffer));
-    buffer->size = 0;
-    buffer->head = 0;
-}
+      sp_os_normalize_path(full_path);
 
-void sp_ring_buffer_destroy(sp_ring_buffer_t* buffer) {
-    if (buffer->data) {
-        buffer->data = NULL;
-        buffer->size = 0;
-        buffer->capacity = 0;
-        buffer->head = 0;
+      sp_str_t file_name = sp_os_extract_file_name(full_path);
+      sp_os_win32_file_monitor_add_change(monitor, full_path, file_name, events);
+
+
+      if (notify->NextEntryOffset == 0) break;
+      notify = (FILE_NOTIFY_INFORMATION*)((char*)notify + notify->NextEntryOffset);
     }
+
+    sp_os_win32_file_monitor_issue_one_read(monitor, info);
+  }
+
+  sp_fmon_emit_changes(monitor);
 }
 
-bool sp_ring_buffer_is_full(sp_ring_buffer_t* buffer) {
-    return buffer->capacity == buffer->size;
+void sp_os_win32_file_monitor_add_change(sp_file_monitor_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_file_change_event_t events) {
+  f32 time = (f32)(GetTickCount64() / 1000.0);
+
+  if (sp_os_is_directory(file_path)) return;
+
+  if (file_name.data && file_name.len > 0) {
+    if (file_name.data[0] == '.' && file_name.len > 1 && file_name.data[1] == '#') return;
+    if (file_name.data[0] ==  '#') return;
+  }
+
+  if (!sp_file_monitor_check_cache(monitor, file_path, time)) return;
+
+  for (u32 i = 0; i < monitor->changes.size; i++) {
+    sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_at(&monitor->changes, i);
+    if (sp_str_equal(change->file_path, file_path)) {
+      if (monitor->debounce_time_ms > 0) {
+        f32 time_diff_ms = (time - change->time) * 1000.0f;
+        if (time_diff_ms < (f32)monitor->debounce_time_ms) {
+          return;
+        }
+      }
+      change->events = (sp_file_change_event_t)(change->events | events);
+      change->time = time;
+      return;
+    }
+  }
+
+  sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_push(&monitor->changes, NULL);
+  change->file_path = sp_str_copy(file_path);
+  change->file_name = sp_str_copy(file_name);
+  change->events = events;
+  change->time = time;
 }
 
-bool sp_ring_buffer_is_empty(sp_ring_buffer_t* buffer) {
-    return buffer->size == 0;
+void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info) {
+  SP_ASSERT(info->handle != INVALID_HANDLE_VALUE);
+
+  s32 notify_filter = 0;
+  if (monitor->events_to_watch & (SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_REMOVED)) {
+    notify_filter |= FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_CREATION;
+  }
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
+    notify_filter |= FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE;
+  }
+
+  info->bytes_returned = 0;
+
+  ReadDirectoryChangesW(info->handle, info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE, true, notify_filter, NULL, &info->overlapped, NULL);
 }
 
-void* sp_rb_it_getvp(sp_rb_it_t* it) {
-    return sp_ring_buffer_at(it->buffer, it->index);
+#elif defined(SP_LINUX)
+void sp_fmon_os_init(sp_fmon_t* monitor) {
+  sp_fmon_os_t* linux_monitor = (sp_fmon_os_t*)sp_alloc(sizeof(sp_fmon_os_t));
+
+  linux_monitor->fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+  if (linux_monitor->fd == -1) {
+    // Handle error but don't crash
+    linux_monitor->fd = 0;
+  }
+
+  monitor->os = linux_monitor;
 }
 
-void sp_rb_it_next(sp_rb_it_t* it) {
-    SP_ASSERT(it->index < (s32)it->buffer->size);
-    it->index++;
+void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
+  if (!monitor->os) return;
+  sp_fmon_os_t* linux_monitor = (sp_fmon_os_t*)monitor->os;
+
+  if (linux_monitor->fd <= 0) return;
+
+  c8* path_cstr = sp_str_to_cstr(path);
+
+  // Build mask based on what events we want to watch
+  u32 mask = 0;
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
+    mask |= IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE;
+  }
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_ADDED) {
+    mask |= IN_CREATE | IN_MOVED_TO;
+  }
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_REMOVED) {
+    mask |= IN_DELETE | IN_MOVED_FROM;
+  }
+
+  s32 wd = inotify_add_watch(linux_monitor->fd, path_cstr, mask);
+
+  if (wd != -1) {
+    sp_dyn_array_push(linux_monitor->watch_descs, wd);
+    sp_dyn_array_push(linux_monitor->watch_paths, sp_str_copy(path));
+  }
+
 }
 
-void sp_rb_it_prev(sp_rb_it_t* it) {
-    SP_ASSERT(it->index >= 0 && it->index < (s32)it->buffer->size);
-    it->index--;
+void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+  // For inotify, we need to watch the directory containing the file
+  sp_str_t dir_path = sp_fs_parent_path(file_path);
+  if (dir_path.len > 0) {
+    sp_fmon_os_add_dir(monitor, dir_path);
+  }
 }
 
-bool sp_rb_it_done(sp_rb_it_t* it) {
-    if (it->reverse) return it->index < 0;
-    return it->index >= (s32)it->buffer->size;
-}
+void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+  if (!monitor->os) return;
 
-sp_rb_it_t sp_rb_it_new(sp_ring_buffer_t* buffer) {
-    sp_rb_it_t iterator;
-    iterator.index = 0;
-    iterator.reverse = false;
-    iterator.buffer = buffer;
-    return iterator;
-}
+  sp_fmon_os_t* linux_monitor = (sp_fmon_os_t*)monitor->os;
+  if (linux_monitor->fd <= 0) return;
 
-sp_rb_it_t sp_rb_rit_new(sp_ring_buffer_t* buffer) {
-    sp_rb_it_t iterator;
-    iterator.index = buffer->size - 1;
-    iterator.reverse = true;
-    iterator.buffer = buffer;
-    return iterator;
-}
+  size_t len = read(linux_monitor->fd, linux_monitor->buffer, sizeof(linux_monitor->buffer));
+  if (len <= 0) return;
 
-sp_future_t* sp_future_create(u32 size) {
-  sp_context_ensure();
+  // Process all events in buffer
+  char* ptr = (char*)linux_monitor->buffer;
+  while (ptr < (char*)linux_monitor->buffer + len) {
+    struct inotify_event* event = (struct inotify_event*)ptr;
 
-  sp_future_t* future = (sp_future_t*)sp_alloc(sizeof(sp_future_t));
-  future->allocator = sp_context_get()->allocator;
-  sp_atomic_s32_set(&future->ready, 0);
-  future->value = sp_alloc(size);
-  future->size = size;
-  return future;
-}
+    // Find which path this watch descriptor corresponds to
+    sp_dyn_array_for(linux_monitor->watch_descs, it) {
+      s32 wd = linux_monitor->watch_descs[it];
+      if (wd == event->wd) {
+        sp_str_t dir_path = linux_monitor->watch_paths[it];
 
-void sp_future_destroy(sp_future_t* future) {
-  sp_context_push_allocator(future->allocator);
-  sp_free(future);
-  sp_context_pop();
-}
+        // Build full path if there's a filename
+        sp_str_t file_name = SP_ZERO_STRUCT(sp_str_t);
+        sp_str_t file_path = SP_ZERO_STRUCT(sp_str_t);
 
-void sp_future_set_value(sp_future_t* future, void* value) {
-  sp_os_copy_memory(value, future->value, future->size);
-  sp_atomic_s32_set(&future->ready, 1);
-}
+        if (event->len > 0 && event->name[0] != '\0') {
+          file_name = sp_str(event->name, sp_cstr_len(event->name));
 
+          // Build full path
+          sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+          sp_str_builder_append(&builder, dir_path);
+          sp_str_builder_append(&builder, sp_str_lit("/"));
+          sp_str_builder_append(&builder, file_name);
+          file_path = sp_str_builder_write(&builder);
+        } else {
+          file_path = sp_str_copy(dir_path);
+          file_name = sp_fs_get_name(file_path);
+        }
 
+        // Convert inotify mask to our events
+        sp_fmon_event_kind_t events = SP_FILE_CHANGE_EVENT_NONE;
+        if (event->mask & (IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE)) {
+          events = (sp_fmon_event_kind_t)(events | SP_FILE_CHANGE_EVENT_MODIFIED);
+        }
+        if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
+          events = (sp_fmon_event_kind_t)(events | SP_FILE_CHANGE_EVENT_ADDED);
+        }
+        if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {
+          events = (sp_fmon_event_kind_t)(events | SP_FILE_CHANGE_EVENT_REMOVED);
+        }
 
-void sp_context_on_deinit(void* ptr) {
-  if (ptr) {
-    sp_thread_state_t* state = (sp_thread_state_t*)ptr;
-    for (u32 i = 0; i <= state->index; i++) {
-      if (state->contexts[i].scratch.buffer) {
-        sp_mem_arena_destroy(&state->contexts[i].scratch);
+        // Add change to monitor's change list
+        if (events != SP_FILE_CHANGE_EVENT_NONE) {
+          sp_fmon_event_t change = {
+            .file_path = file_path,
+            .file_name = file_name,
+            .events = events,
+            .time = 0  // TODO: get actual time
+          };
+          sp_dyn_array_push(monitor->changes, change);
+        }
+        break;
       }
     }
-    free(ptr);
-  }
-}
 
-void sp_context_on_init() {
-  pthread_key_create(&sp_global.tls.key, sp_context_on_deinit);
-}
-
-sp_thread_state_t* sp_thread_state_get() {
-  pthread_once(&sp_global.tls.once, sp_context_on_init);
-
-  sp_thread_state_t* state = (sp_thread_state_t*)pthread_getspecific(sp_global.tls.key);
-  if (!state) {
-    state = (sp_thread_state_t*)malloc(sizeof(sp_thread_state_t));
-    memset(state, 0, sizeof(sp_thread_state_t));
-    pthread_setspecific(sp_global.tls.key, state);
-
-    state->index = 0;
-    state->contexts[0].allocator = sp_mem_libc_allocator_t_init();
+    ptr += sizeof(struct inotify_event) + event->len;
   }
 
-  return state;
+  // Emit changes with debouncing
+  sp_fmon_emit_changes(monitor);
 }
 
-sp_context_t* sp_context_get() {
-  sp_thread_state_t* state = sp_thread_state_get();
-  return &state->contexts[state->index];
+#elif defined(SP_MACOS)
+void sp_fmon_os_init(sp_fmon_t* monitor) {
+  (void)monitor;
+  SP_BROKEN();
 }
 
-void sp_init(sp_config_t config) {
-  sp_context_t* ctx = sp_context_get();
-  *ctx = (sp_context_t) {
-    .allocator = sp_allocator_default()
-  };
-  sp_mem_arena_init(&ctx->scratch, SP_SCRATCH_SIZE);
-
-  if (!sp_global.initted) {
-    sp_mutex_init(&sp_global.mutex, SP_MUTEX_PLAIN);
-  }
+void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
+  (void)monitor; (void)directory_path;
+  SP_BROKEN();
 }
 
+void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+  (void)monitor; (void)file_path;
+  SP_BROKEN();
+}
+
+void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+  (void)monitor;
+  SP_BROKEN();
+}
+#endif
+
+
+// ███████╗██████╗ ██████╗  ██████╗ ██████╗
+// ██╔════╝██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
+// █████╗  ██████╔╝██████╔╝██║   ██║██████╔╝
+// ██╔══╝  ██╔══██╗██╔══██╗██║   ██║██╔══██╗
+// ███████╗██║  ██║██║  ██║╚██████╔╝██║  ██║
+// ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝
+// @error
 void sp_err_set(sp_err_t err) {
   (void)err;
 }
 
+sp_err_t sp_err_get() {
+  return SP_ERR_OK;
+}
+
+
+// ██╗ ██████╗
+// ██║██╔═══██╗
+// ██║██║   ██║
+// ██║██║   ██║
+// ██║╚██████╔╝
+// ╚═╝ ╚═════╝
+// @io
 s64 sp_io_memory_size(sp_io_stream_t* stream) {
   sp_io_memory_data_t* data = &stream->memory;
   return data->stop - data->base;
@@ -6663,7 +6915,7 @@ u64 sp_io_memory_read(sp_io_stream_t* stream, void* ptr, u64 size) {
   u64 available = data->stop - data->here;
   u64 to_read = SP_MIN(size, available);
 
-  sp_os_copy_memory(data->here, ptr, to_read);
+  sp_mem_copy(data->here, ptr, to_read);
   data->here += to_read;
   return to_read;
 }
@@ -6673,7 +6925,7 @@ u64 sp_io_memory_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
   u64 available = data->stop - data->here;
   u64 to_write = SP_MIN(size, available);
 
-  sp_os_copy_memory(ptr, data->here, to_write);
+  sp_mem_copy(ptr, data->here, to_write);
   data->here += to_write;
   return to_write;
 }
@@ -6788,7 +7040,7 @@ sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
     sp_err_set(SP_ERR_IO);
     return stream;
   }
-  SP_ASSERT(sp_os_is_target_regular_file(path));
+  SP_ASSERT(sp_fs_is_target_regular_file(path));
 
   return stream;
 }
@@ -6885,10 +7137,13 @@ sp_str_t sp_io_read_file(sp_str_t path) {
   return result;
 }
 
-#ifdef SP_APP
-////////////////////
-// ASSET REGISTRY //
-////////////////////
+//  █████╗ ███████╗███████╗███████╗████████╗
+// ██╔══██╗██╔════╝██╔════╝██╔════╝╚══██╔══╝
+// ███████║███████╗███████╗█████╗     ██║
+// ██╔══██║╚════██║╚════██║██╔══╝     ██║
+// ██║  ██║███████║███████║███████╗   ██║
+// ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝
+// @asset
 void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
   sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
   sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
@@ -7060,7 +7315,6 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 
   return 0;
 }
-#endif
 
 SP_END_EXTERN_C()
 

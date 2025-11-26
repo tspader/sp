@@ -94,7 +94,7 @@ void                   sp_os_print(sp_str_t message);
 void*                  sp_os_reallocate_memory(void* ptr, u32 size);
 void                   sp_os_remove_directory(sp_str_t path);
 void                   sp_os_remove_file(sp_str_t path);
-sp_da(sp_os_dir_ent_t) sp_os_scan_directory(sp_str_t path);
+sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path);
 void                   sp_os_sleep_ms(f64 ms);
 c8*                    sp_os_wstr_to_cstr(c16* str, u32 len);
 void                   sp_os_zero_memory(void* buffer, u32 buffer_size);

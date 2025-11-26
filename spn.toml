@@ -1,6 +1,6 @@
 [package]
 name = "sp"
-include = [".", "test/tools"]
+include = [".", "include", "test/tools"]
 define = ["SP_IMPLEMENTATION"]
 version = "1.6.2"
 
@@ -10,10 +10,13 @@ argparse = "1.2.0"
 
 [[profile]]
 name = "debug"
-cc = "gcc"
+cc = "tcc"
 mode = "debug"
 language = "c11"
 
+# [[bin]]
+# name = "amalg"
+# source = ["amalg/main.c"]
 
 [[bin]]
 name = "app"
@@ -24,8 +27,8 @@ name = "c"
 source = ["test/main.c"]
 
 [[bin]]
-name = "file_monitor"
-source = ["test/file_monitor.c"]
+name = "fmon"
+source = ["test/fmon.c"]
 
 [[bin]]
 name = "fs"
@@ -50,6 +53,10 @@ source = ["test/stress.c"]
 [[bin]]
 name = "context"
 source = ["test/context.c"]
+
+[[bin]]
+name = "linkage"
+source = ["test/linkage.c"]
 
 [[bin]]
 name = "extract_fns"
