@@ -90,36 +90,59 @@ UTEST(sp_context, set_modifies_current) {
   ASSERT_TRUE(current->allocator.on_alloc == new_allocator.on_alloc);
 }
 
-//////////////////////////
-// SCRATCH ARENA TESTS  //
-//////////////////////////
-
-UTEST(sp_context, scratch_initialized_after_sp_init) {
-  sp_init(SP_ZERO_STRUCT(sp_config_t));
+/////////////
+// SCRATCH //
+/////////////
+UTEST(sp_mem, scratch_initted) {
   sp_context_t* ctx = sp_context_get();
   ASSERT_TRUE(ctx->scratch.buffer != NULL);
   ASSERT_EQ(ctx->scratch.capacity, SP_RT_SCRATCH_SIZE);
 }
 
-UTEST(sp_mem_mark, returns_valid_marker) {
-  sp_init(SP_ZERO_STRUCT(sp_config_t));
-  sp_mem_arena_marker_t marker = sp_mem_mark();
-  ASSERT_TRUE(marker.arena != NULL);
+UTEST(sp_mem, begin_scratch) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  ASSERT_TRUE(scratch.marker.arena != NULL);
 }
 
-UTEST(sp_mem_mark, pop_resets_position) {
-  sp_init(SP_ZERO_STRUCT(sp_config_t));
+UTEST(sp_mem, end_scratch) {
   sp_context_t* ctx = sp_context_get();
 
-  sp_mem_arena_marker_t marker = sp_mem_mark();
-  u32 bytes_before = ctx->scratch.bytes_used;
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  EXPECT_EQ(ctx->scratch.bytes_used, 0);
 
-  // Allocate some memory from scratch arena
   sp_mem_arena_on_alloc(&ctx->scratch, SP_ALLOCATOR_MODE_ALLOC, 1024, NULL);
-  ASSERT_TRUE(ctx->scratch.bytes_used > bytes_before);
+  EXPECT_EQ(ctx->scratch.bytes_used, 1024);
 
-  sp_mem_pop(marker);
-  ASSERT_EQ(ctx->scratch.bytes_used, bytes_before);
+  sp_alloc(1024);
+  EXPECT_EQ(ctx->scratch.bytes_used, 2048);
+
+  sp_mem_end_scratch(scratch);
+  EXPECT_EQ(ctx->scratch.bytes_used, 0);
+}
+
+u8* use_scratch_arena(u32 fill) {
+  const u32 num_bytes = 64;
+
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  u8* buffer = sp_alloc(num_bytes);
+  sp_mem_fill_u8(buffer, num_bytes, fill);
+
+  sp_context_push_allocator(scratch.old_allocator);
+  u8* result = sp_alloc(num_bytes);
+  sp_mem_copy(buffer, result, num_bytes);
+  sp_context_pop();
+
+  sp_mem_end_scratch(scratch);
+  return result;
+}
+
+UTEST(sp_mem_mark, use_scratch_allocator_but_return_from_user_allocator) {
+  sp_context_t* ctx = sp_context_get();
+  EXPECT_EQ(ctx->scratch.bytes_used, 0);
+
+  u8* buffer = use_scratch_arena(69);
+  EXPECT_EQ(buffer[0], 69);
+  EXPECT_EQ(ctx->scratch.bytes_used, 0);
 }
 
 //////////////////////////
@@ -132,6 +155,7 @@ typedef struct {
   bool context_valid;
   bool allocator_works;
   bool independent_context;
+  bool scratch_zeroed;
 } context_thread_data_t;
 
 static sp_context_t* main_thread_context = NULL;
@@ -139,12 +163,10 @@ static sp_context_t* main_thread_context = NULL;
 s32 context_thread_func(void* userdata) {
   context_thread_data_t* data = (context_thread_data_t*)userdata;
 
-  // Verify context is properly initialized for this thread
   sp_context_t* ctx = sp_context_get();
   data->context_valid = (ctx != NULL);
-
-  // Verify this is a different context than main thread
   data->independent_context = (ctx != main_thread_context);
+  data->scratch_zeroed = (ctx->scratch.bytes_used == 0);
 
   // Verify allocator works
   void* p = sp_alloc(64);
@@ -161,15 +183,14 @@ UTEST(sp_context, multithread_independent_contexts) {
   main_thread_context = sp_context_get();
 
   sp_atomic_s32 done_count = 0;
-  context_thread_data_t thread_data[NUM_THREADS];
-  sp_thread_t threads[NUM_THREADS];
+  context_thread_data_t thread_data [NUM_THREADS] = SP_ZERO_INITIALIZE();
+  sp_thread_t threads [NUM_THREADS] = SP_ZERO_INITIALIZE();
 
   for (s32 i = 0; i < NUM_THREADS; i++) {
-    thread_data[i].done_count = &done_count;
-    thread_data[i].thread_id = i;
-    thread_data[i].context_valid = false;
-    thread_data[i].allocator_works = false;
-    thread_data[i].independent_context = false;
+    thread_data[i] = (context_thread_data_t) {
+      .done_count = &done_count,
+      .thread_id = i
+    };
     sp_thread_init(&threads[i], context_thread_func, &thread_data[i]);
   }
 
@@ -183,6 +204,7 @@ UTEST(sp_context, multithread_independent_contexts) {
     ASSERT_TRUE(thread_data[i].context_valid);
     ASSERT_TRUE(thread_data[i].allocator_works);
     ASSERT_TRUE(thread_data[i].independent_context);
+    ASSERT_TRUE(thread_data[i].scratch_zeroed);
   }
 }
 

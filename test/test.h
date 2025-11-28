@@ -144,8 +144,8 @@ void sp_test_use_mem_arena(u32 capacity) {
   static sp_mem_arena_t mem_arena;
 
   mem_arena = SP_ZERO_STRUCT(sp_mem_arena_t);
-
-  sp_allocator_t allocator = sp_mem_arena_init(&mem_arena, capacity);
+  sp_mem_arena_init(&mem_arena, capacity);
+  sp_allocator_t allocator = sp_mem_arena_as_allocator(&mem_arena);
   sp_context_push_allocator(allocator);
 }
 
