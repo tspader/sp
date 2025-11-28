@@ -104,52 +104,54 @@ def find_transitive_callers(reverse_graph: Dict[str, Set[str]], target: str) -> 
 
     return callers
 
-def print_call_chains(reverse_graph: Dict[str, Set[str]], target: str, callers: Dict[str, int]):
+def print_hierarchical_tree(call_graph: Dict[str, Set[str]], reverse_graph: Dict[str, Set[str]], target: str, callers: Dict[str, int]):
     """
-    Print call chains from each caller down to the target.
+    Print a hierarchical call tree with indentation.
+    Shows sp_alloc at root, with callers branching out.
     """
-    def get_chain(fn: str, visited: Set[str]) -> List[str]:
-        """Get the shortest chain from fn to target."""
-        if fn == target:
-            return [fn]
+    print(f"\n{'='*70}")
+    print(f"HIERARCHICAL CALL TREE: Functions calling '{target}'")
+    print(f"{'='*70}\n")
 
+    # Build a tree structure: for each function, find what it calls that leads to target
+    # We want: caller -> callee (where callee eventually calls target)
+    def get_callees_toward_target(fn: str) -> Set[str]:
+        """Get functions that fn calls which lead to target."""
+        result = set()
+        for callee in call_graph.get(fn, []):
+            if callee == target or callee in callers:
+                result.add(callee)
+        return result
+
+    def print_tree(fn: str, indent: int, visited: Set[str], is_last: bool, prefix: str):
+        """Recursively print the tree."""
         if fn in visited:
-            return []
+            connector = "└── " if is_last else "├── "
+            print(f"{prefix}{connector}{fn} (recursive)")
+            return
 
-        visited.add(fn)
+        visited = visited | {fn}
 
-        # Find callees of this function that lead to target
-        best_chain = None
-        for callee, callers_of_callee in reverse_graph.items():
-            if fn in callers_of_callee:
-                # fn calls callee
-                if callee == target or callee in callers:
-                    chain = get_chain(callee, visited.copy())
-                    if chain:
-                        candidate = [fn] + chain
-                        if best_chain is None or len(candidate) < len(best_chain):
-                            best_chain = candidate
+        connector = "└── " if is_last else "├── "
+        print(f"{prefix}{connector}{fn}")
 
-        return best_chain if best_chain else []
+        # Get callers of this function (functions that call fn)
+        callers_of_fn = sorted(reverse_graph.get(fn, []))
 
-    # Group by depth
-    by_depth = defaultdict(list)
-    for fn, depth in callers.items():
-        by_depth[depth].append(fn)
+        # New prefix for children
+        new_prefix = prefix + ("    " if is_last else "│   ")
 
-    print(f"\n{'='*60}")
-    print(f"CALL GRAPH ANALYSIS: Functions calling '{target}'")
-    print(f"{'='*60}\n")
+        for i, caller in enumerate(callers_of_fn):
+            is_last_child = (i == len(callers_of_fn) - 1)
+            print_tree(caller, indent + 1, visited, is_last_child, new_prefix)
 
-    for depth in sorted(by_depth.keys()):
-        fns = sorted(by_depth[depth])
-        print(f"\n--- Depth {depth} ({len(fns)} functions) ---")
-        for fn in fns:
-            chain = get_chain(fn, set())
-            if chain:
-                print(f"  {' -> '.join(chain)}")
-            else:
-                print(f"  {fn} -> ... -> {target}")
+    # Start from target (sp_alloc) and print upward
+    print(f"{target}")
+    direct_callers = sorted(reverse_graph.get(target, []))
+
+    for i, caller in enumerate(direct_callers):
+        is_last = (i == len(direct_callers) - 1)
+        print_tree(caller, 1, {target}, is_last, "")
 
 def main():
     # Initialize libclang
@@ -207,18 +209,8 @@ def main():
 
     print(f"\nFound {len(callers)} functions that call 'sp_alloc' directly or transitively.")
 
-    # Print organized output
-    print_call_chains(reverse_graph, 'sp_alloc', callers)
-
-    # Also print a summary sorted by function name
-    print(f"\n{'='*60}")
-    print("SUMMARY: All callers sorted alphabetically")
-    print(f"{'='*60}\n")
-
-    for fn in sorted(callers.keys()):
-        depth = callers[fn]
-        depth_str = "direct" if depth == 1 else f"depth {depth}"
-        print(f"  {fn} ({depth_str})")
+    # Print hierarchical tree
+    print_hierarchical_tree(call_graph, reverse_graph, 'sp_alloc', callers)
 
 if __name__ == '__main__':
     main()
