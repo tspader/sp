@@ -459,6 +459,26 @@ typedef wchar_t  c16;
 typedef size_t   sp_size_t;
 typedef void*    sp_opaque_ptr;
 
+#define SP_LIMIT_S8_MIN   INT8_MIN
+#define SP_LIMIT_S8_MAX   INT8_MAX
+#define SP_LIMIT_S16_MIN  INT16_MIN
+#define SP_LIMIT_S16_MAX  INT16_MAX
+#define SP_LIMIT_S32_MIN  INT32_MIN
+#define SP_LIMIT_S32_MAX  INT32_MAX
+#define SP_LIMIT_S64_MIN  INT64_MIN
+#define SP_LIMIT_S64_MAX  INT64_MAX
+#define SP_LIMIT_U8_MAX   UINT8_MAX
+#define SP_LIMIT_U16_MAX  UINT16_MAX
+#define SP_LIMIT_U32_MAX  UINT32_MAX
+#define SP_LIMIT_U64_MAX  UINT64_MAX
+#define SP_LIMIT_F32_MIN  FLT_MIN
+#define SP_LIMIT_F32_MAX  FLT_MAX
+#define SP_LIMIT_F64_MIN  DBL_MIN
+#define SP_LIMIT_F64_MAX  DBL_MAX
+
+#define SP_LIMIT_EPOCH_MIN SP_ZERO_STRUCT(sp_tm_epoch_t)
+#define SP_LIMIT_EPOCH_MAX SP_RVAL(sp_tm_epoch_t) { .s = SP_LIMIT_U64_MAX, .ns = SP_LIMIT_U32_MAX }
+
 typedef enum {
   SP_OPT_NONE = 0,
   SP_OPT_SOME = 1,
