@@ -459,6 +459,22 @@ typedef wchar_t  c16;
 typedef size_t   sp_size_t;
 typedef void*    sp_opaque_ptr;
 
+typedef enum {
+  SP_OPT_NONE = 0,
+  SP_OPT_SOME = 1,
+} sp_optional_t;
+
+#define sp_opt(T) struct { \
+  T value; \
+  sp_optional_t some; \
+}
+
+#define sp_opt_set(O, V)  do { (O).value = (V); (O).some = SP_OPT_SOME; } while (0)
+#define sp_opt_get(O)     (O).value
+#define sp_opt_some(V)    { .value = V, .some = SP_OPT_SOME }
+#define sp_opt_none(V)    { .some = SP_OPT_NONE }
+#define sp_opt_is_null(V) ((V).some == SP_OPT_NONE)
+
 
 // ███████╗██████╗ ██████╗  ██████╗ ██████╗
 // ██╔════╝██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
@@ -556,6 +572,7 @@ SP_API void*                   sp_mem_libc_on_alloc(void* ud, sp_mem_alloc_mode_
 SP_API sp_mem_libc_metadata_t* sp_mem_libc_get_metadata(void* ptr);
 SP_API sp_mem_scratch_t        sp_mem_begin_scratch();
 SP_API void                    sp_mem_end_scratch(sp_mem_scratch_t scratch);
+#define SP_ALLOC(T) (T*)sp_alloc(sizeof(T))
 
 
 // ██╗  ██╗ █████╗ ███████╗██╗  ██╗
@@ -615,6 +632,7 @@ typedef struct sp_dyn_array {
 SP_API void*                        sp_dyn_array_resize_impl(void* arr, u32 sz, u32 amount);
 SP_API void**                       sp_dyn_array_init(void** arr, u32 val_len);
 SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u32 val_len);
+#define sp_da_rfor(__ARR, __IT)     sp_dyn_array_rfor(__ARR, __IT)
 #define sp_da_for(__ARR, __IT)      sp_dyn_array_for(__ARR, __IT)
 #define sp_da_head(__ARR)           sp_dyn_array_head(__ARR)
 #define sp_da_size(__ARR)           sp_dyn_array_size(__ARR)
@@ -631,7 +649,8 @@ SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u
 #define sp_da_back(__ARR)           sp_dyn_array_back(__ARR)
 #define sp_da_new(__T)              sp_dyn_array_new(__T)
 
-#define sp_dyn_array_for(__ARR, __IT) for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
+#define sp_dyn_array_for(__ARR, __IT)  for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
+#define sp_dyn_array_rfor(__ARR, __IT) for (u32 __IT = sp_dyn_array_size(__ARR); __IT-- > 0; )
 
 #define sp_dyn_array_head(__ARR)\
     ((sp_dyn_array*)((u8*)(__ARR) - sizeof(sp_dyn_array)))
