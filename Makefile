@@ -12,4 +12,4 @@ fs:
 	clang $(INCLUDE) -Wall -Werror -lpthread -lm ./test/fs.c -std=c99 -o build/debug/fs -DSP_IMPLEMENTATION
 
 core:
-	clang $(INCLUDE) -Wall -Werror -lpthread -lm ./test/main.c -std=c99 -o build/debug/core -DSP_IMPLEMENTATION
+	clang $(INCLUDE) -Wall -Werror -lpthread -lm ./test/main.c -std=c99 -o build/debug/core -DSP_IMPLEMENTATION -Wpadded
