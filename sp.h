@@ -243,7 +243,8 @@
 #define SP_UNREACHABLE() SP_ASSERT(false)
 #define SP_UNREACHABLE_CASE() SP_ASSERT(false); break;
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
-#define SP_BROKEN() SP_ASSERT(false)
+//#define SP_BROKEN() SP_ASSERT(false)
+#define SP_BROKEN()
 #define SP_ASSERT_FMT(COND, FMT, ...) \
   do { \
     if (!(COND)) { \
@@ -374,8 +375,24 @@ SP_BEGIN_EXTERN_C()
   #ifndef _COSMO_SOURCE
     #define _COSMO_SOURCE
   #endif
+#endif
 
-  #include "libc/dce.h"
+#if defined(SP_LINUX)
+  #ifndef _DEFAULT_SOURCE
+    #define _DEFAULT_SOURCE
+  #endif
+#endif
+
+#if defined(SP_MACOS)
+  #ifndef _DARWIN_C_SOURCE
+    #define _DARWIN_C_SOURCE
+  #endif
+#endif
+
+#if defined(SP_POSIX)
+  #ifndef _POSIX_C_SOURCE
+    #define _POSIX_C_SOURCE 200809L
+  #endif
 #endif
 
 #if defined(SP_WIN32)
@@ -394,7 +411,9 @@ SP_BEGIN_EXTERN_C()
   #if !defined(_CRT_RAND_S)
     #define _CRT_RAND_S
   #endif
+#endif
 
+#if defined(SP_WIN32)
   #include <windows.h>
   #include <shlobj.h>
   #include <commdlg.h>
@@ -402,33 +421,21 @@ SP_BEGIN_EXTERN_C()
   #include <threads.h>
 #endif
 
-#if defined(SP_LINUX)
-  #ifndef _GNU_SOURCE
-    #define _GNU_SOURCE
-  #endif
+#if defined(SP_COSMO)
+  #include "libc/dce.h"
+#endif
 
-  #include <pthread.h>
-  #include <sys/inotify.h>
+#if defined(SP_LINUX)
   #include <poll.h>
-  #include <spawn.h>
+  #include <sys/inotify.h>
 #endif
 
 #if defined(SP_MACOS)
-  #ifndef _DARWIN_C_SOURCE
-    #define _DARWIN_C_SOURCE
-  #endif
-
-  #include <pthread.h>
   #include <dispatch/dispatch.h>
   #include <mach-o/dyld.h>
-  #include <spawn.h>
 #endif
 
 #if defined(SP_POSIX)
-  #ifndef _POSIX_C_SOURCE
-    #define _POSIX_C_SOURCE 200809L
-  #endif
-
   #include <dirent.h>
   #include <errno.h>
   #include <fcntl.h>
@@ -5672,7 +5679,7 @@ void sp_tm_reset_timer(sp_tm_timer_t* timer) {
 #endif
 
 #if defined(SP_MACOS)
-  sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+  sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
     struct stat st;
     c8* path_cstr = sp_str_to_cstr(file_path);
     s32 result = stat(path_cstr, &st);
