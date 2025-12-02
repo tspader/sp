@@ -21,17 +21,17 @@ UTEST_F_TEARDOWN(sp_test_context) {
 
 UTEST_F(sp_test_context, get_returns_non_null) {
   sp_context_t *ctx = sp_context_get();
-  ASSERT_TRUE(ctx != NULL);
+  EXPECT_TRUE(ctx != NULL);
 }
 
 UTEST_F(sp_test_context, allocator_is_valid) {
   sp_context_t *ctx = sp_context_get();
-  ASSERT_TRUE(ctx->allocator.on_alloc != NULL);
+  EXPECT_TRUE(ctx->allocator.on_alloc != NULL);
 }
 
 UTEST_F(sp_test_context, thread_state_index_starts_at_zero) {
   sp_tls_rt_t *state = sp_tls_rt_get();
-  ASSERT_EQ(state->index, 0);
+  EXPECT_EQ(state->index, 0);
 }
 
 UTEST_F(sp_test_context, push_pop_single) {
@@ -41,10 +41,10 @@ UTEST_F(sp_test_context, push_pop_single) {
   sp_context_t ctx = *sp_context_get();
   sp_context_push(ctx);
 
-  ASSERT_EQ(state->index, initial_index + 1);
+  EXPECT_EQ(state->index, initial_index + 1);
 
   sp_context_pop();
-  ASSERT_EQ(state->index, initial_index);
+  EXPECT_EQ(state->index, initial_index);
 }
 
 UTEST_F(sp_test_context, push_pop_multiple) {
@@ -57,13 +57,13 @@ UTEST_F(sp_test_context, push_pop_multiple) {
   sp_context_push(ctx);
   sp_context_push(ctx);
 
-  ASSERT_EQ(state->index, initial_index + 3);
+  EXPECT_EQ(state->index, initial_index + 3);
 
   sp_context_pop();
   sp_context_pop();
   sp_context_pop();
 
-  ASSERT_EQ(state->index, initial_index);
+  EXPECT_EQ(state->index, initial_index);
 }
 
 UTEST_F(sp_test_context, push_allocator_changes_allocator) {
@@ -76,13 +76,13 @@ UTEST_F(sp_test_context, push_allocator_changes_allocator) {
   sp_context_t *ctx_after = sp_context_get();
 
   // Allocator should be updated
-  ASSERT_TRUE(ctx_after->allocator.on_alloc == new_allocator.on_alloc);
+  EXPECT_TRUE(ctx_after->allocator.on_alloc == new_allocator.on_alloc);
 
   sp_context_pop();
 
   // After pop, old allocator restored
   sp_context_t *ctx_restored = sp_context_get();
-  ASSERT_TRUE(ctx_restored->allocator.on_alloc == old_allocator.on_alloc);
+  EXPECT_TRUE(ctx_restored->allocator.on_alloc == old_allocator.on_alloc);
 }
 
 UTEST_F(sp_test_context, set_modifies_current) {
@@ -93,18 +93,18 @@ UTEST_F(sp_test_context, set_modifies_current) {
   sp_context_set(ctx);
 
   sp_context_t *current = sp_context_get();
-  ASSERT_TRUE(current->allocator.on_alloc == new_allocator.on_alloc);
+  EXPECT_TRUE(current->allocator.on_alloc == new_allocator.on_alloc);
 }
 
 UTEST_F(sp_test_context, scratch_initted) {
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
-  ASSERT_TRUE(arena->buffer != NULL);
-  ASSERT_EQ(arena->capacity, SP_RT_SCRATCH_SIZE);
+  EXPECT_TRUE(arena->buffer != NULL);
+  EXPECT_EQ(arena->capacity, SP_RT_SCRATCH_SIZE);
 }
 
 UTEST_F(sp_test_context, begin_scratch) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  ASSERT_TRUE(scratch.marker.arena != NULL);
+  EXPECT_TRUE(scratch.marker.arena != NULL);
 }
 
 UTEST_F(sp_test_context, end_scratch) {
@@ -197,13 +197,13 @@ UTEST_F(sp_test_context, multithread_independent_contexts) {
     sp_thread_join(&threads[i]);
   }
 
-  ASSERT_EQ(sp_atomic_s32_get(&done_count), NUM_THREADS);
+  EXPECT_EQ(sp_atomic_s32_get(&done_count), NUM_THREADS);
 
   for (s32 i = 0; i < NUM_THREADS; i++) {
-    ASSERT_TRUE(thread_data[i].context_valid);
-    ASSERT_TRUE(thread_data[i].allocator_works);
-    ASSERT_TRUE(thread_data[i].independent_context);
-    ASSERT_TRUE(thread_data[i].scratch_zeroed);
+    EXPECT_TRUE(thread_data[i].context_valid);
+    EXPECT_TRUE(thread_data[i].allocator_works);
+    EXPECT_TRUE(thread_data[i].independent_context);
+    EXPECT_TRUE(thread_data[i].scratch_zeroed);
   }
 }
 
@@ -221,7 +221,7 @@ UTEST_F(sp_test_context, push_does_not_overwrite_scratch) {
   // Allocate and fill with 0xAA
   u8 *first = sp_alloc(64);
   sp_mem_fill_u8(first, 64, 0x01);
-  ASSERT_EQ(first[0], 0x01);
+  EXPECT_EQ(first[0], 0x01);
 
   // Push context with scratch arena as allocator
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
@@ -233,10 +233,87 @@ UTEST_F(sp_test_context, push_does_not_overwrite_scratch) {
   sp_mem_fill_u8(second, 64, 0x02);
 
   // first should still be 0xAA, but due to bug it's now 0xBB
-  ASSERT_EQ(first[0], 0x01);
+  EXPECT_EQ(first[0], 0x01);
 
   sp_context_pop();
   sp_mem_end_scratch(scratch);
+}
+
+
+UTEST_F(sp_test_context, nested_begin_scratch) {
+  sp_tls_rt_t* rt = sp_tls_rt_get();
+
+  sp_mem_scratch_t s1 = sp_mem_begin_scratch();
+  u8* a = sp_alloc(64);
+  sp_mem_fill_u8(a, 64, 0xAA);
+
+  sp_mem_scratch_t s2 = sp_mem_begin_scratch();
+  u8* b = sp_alloc(64);
+  sp_mem_fill_u8(b, 64, 0xBB);
+
+  EXPECT_EQ(a[0], 0xAA);
+  EXPECT_EQ(b[0], 0xBB);
+  EXPECT_NE(a, b);
+
+  sp_mem_end_scratch(s2);
+  EXPECT_EQ(a[0], 0xAA);
+
+  sp_mem_end_scratch(s1);
+  EXPECT_EQ(rt->scratch->bytes_used, 0);
+}
+
+UTEST_F(sp_test_context, begin_scratch_push_unrelated_allocator_end_scratch) {
+  sp_tls_rt_t* rt = sp_tls_rt_get();
+
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  u8* a = sp_alloc(64);
+  sp_mem_fill_u8(a, 64, 0xAA);
+
+  // push an unrelated allocator, verify that scratch is untouched
+  sp_context_push_allocator(sp_mem_libc_new());
+
+  u8* b = sp_alloc(64);
+  sp_mem_fill_u8(b, 64, 0xBB);
+  EXPECT_EQ(rt->scratch->bytes_used, 64);
+  EXPECT_EQ(a[0], 0xAA);
+  EXPECT_EQ(b[0], 0xBB);
+  sp_free(b);
+
+  // pop that allocator, allocate again, verify scratch was used
+  sp_context_pop();
+
+  u8* c = sp_alloc(64);
+  sp_mem_fill_u8(c, 64, 0xCC);
+  EXPECT_EQ(rt->scratch->bytes_used, 128);
+  EXPECT_EQ(a[0], 0xAA);
+  EXPECT_EQ(c[0], 0xCC);
+
+  // pop the scratch allocator, verify cleanup
+  sp_mem_end_scratch(scratch);
+  EXPECT_EQ(rt->scratch->bytes_used, 0);
+}
+
+UTEST_F(sp_test_context, nested_pop_from_scratch) {
+  sp_tls_rt_t* rt = sp_tls_rt_get();
+
+  // begin one scratch
+  sp_mem_scratch_t s1 = sp_mem_begin_scratch();
+  u8* a = sp_alloc(64);
+  sp_mem_fill_u8(a, 64, 0xAA);
+  EXPECT_EQ(rt->scratch->bytes_used, 64);
+  EXPECT_EQ(a[0], 0xAA);
+
+  // begin a nested scratch
+  sp_mem_scratch_t s2 = sp_mem_begin_scratch();
+  u8* b = sp_alloc(64);
+  sp_mem_fill_u8(b, 64, 0xBB);
+  EXPECT_EQ(rt->scratch->bytes_used, 128);
+  EXPECT_EQ(b[0], 0xBB);
+
+  // verify that you're able to bypass the nested scratch and restore to the original
+  sp_mem_end_scratch(s1);
+
+  EXPECT_EQ(rt->scratch->bytes_used, 0);
 }
 
 
@@ -287,10 +364,10 @@ UTEST_F(sp_test_context, multithread_push_pop) {
     sp_thread_join(&threads[i]);
   }
 
-  ASSERT_EQ(sp_atomic_s32_get(&done_count), NUM_THREADS);
+  EXPECT_EQ(sp_atomic_s32_get(&done_count), NUM_THREADS);
 
   for (s32 i = 0; i < NUM_THREADS; i++) {
-    ASSERT_TRUE(thread_data[i].all_passed);
+    EXPECT_TRUE(thread_data[i].all_passed);
   }
 }
 
