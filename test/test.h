@@ -134,7 +134,7 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t rel
 }
 
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
-  //sp_fs_remove_dir(manager->paths.test);
+  sp_fs_remove_dir(manager->paths.test);
 }
 
 ////////////////////
