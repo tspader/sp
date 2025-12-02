@@ -18,7 +18,7 @@ UTEST_F_SETUP(sp_compile) {
     ut.root = sp_fs_parent_path(ut.root);
   }
 
-  ut.source = sp_fs_join_path(ut.root, SP_LIT("test/tools/compile"));
+  ut.source = sp_fs_join_path(ut.root, SP_LIT("test/tools/linkage"));
 }
 
 UTEST_F_TEARDOWN(sp_compile) {
