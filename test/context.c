@@ -218,21 +218,19 @@ UTEST_F(sp_test_context, push_does_not_overwrite_scratch) {
   // Use scratch arena
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
 
-  // Allocate and fill with 0xAA
+  // allocate from scratch
   u8 *first = sp_alloc(64);
   sp_mem_fill_u8(first, 64, 0x01);
   EXPECT_EQ(first[0], 0x01);
 
-  // Push context with scratch arena as allocator
+  // manually push the scratch allocator and allocate
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
   sp_context_push_allocator(sp_mem_arena_as_allocator(arena));
 
-  // Allocate again - BUG: this overwrites 'first' because child context
-  // has bytes_used=0 but same buffer pointer
   u8 *second = sp_alloc(64);
   sp_mem_fill_u8(second, 64, 0x02);
 
-  // first should still be 0xAA, but due to bug it's now 0xBB
+  // verify that the first allocation isn't overwritten
   EXPECT_EQ(first[0], 0x01);
 
   sp_context_pop();

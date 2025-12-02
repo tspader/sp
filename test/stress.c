@@ -6,7 +6,7 @@
 #include "utest.h"
 
 
-UTEST(dyn_array, large_stress_test) {
+UTEST(stress, dyn_array) {
   sp_dyn_array(u64) arr = SP_NULLPTR;
 
   const s32 count = 100000;
@@ -32,7 +32,7 @@ UTEST(dyn_array, large_stress_test) {
   sp_dyn_array_free(arr);
 }
 
-UTEST(hash_table, stress) {
+UTEST(stress, hash_table) {
   sp_ht(u64, u64) ht = SP_NULLPTR;
 
   const s32 count = 10000;
@@ -63,7 +63,7 @@ UTEST(hash_table, stress) {
   sp_ht_free(ht);
 }
 
-UTEST(ring_buffer, large_buffer_stress) {
+UTEST(stress, ring_buffer) {
   sp_ring_buffer_t rb;
   sp_ring_buffer_init(&rb, 1000, sizeof(u64));
 
@@ -94,7 +94,7 @@ UTEST(ring_buffer, large_buffer_stress) {
   sp_ring_buffer_destroy(&rb);
 }
 
-UTEST(ring_buffer, continuous_overwrite_stress) {
+UTEST(stress, ring_buffer_continuous_overwrite) {
   sp_ring_buffer_t rb;
   sp_ring_buffer_init(&rb, 100, sizeof(int));
 
@@ -114,7 +114,7 @@ UTEST(ring_buffer, continuous_overwrite_stress) {
   sp_ring_buffer_destroy(&rb);
 }
 
-UTEST(sp_dyn_array_push_f, stress_test) {
+UTEST(stress, sp_dyn_array_push_f) {
   typedef struct {
     u32 id;
     c8 data[256];
@@ -167,7 +167,7 @@ s32 sp_spin_lock_stress_thread(void* userdata) {
 #define SP_SPIN_LOCK_STRESS_THREADS 8
 #define SP_SPIN_LOCK_STRESS_ITERATIONS 5000
 
-UTEST(sp_spin_lock, stress_multiple_threads) {
+UTEST(stress, sp_spin_lock) {
   sp_spin_lock_t lock = 0;
   s32 shared_counter = 0;
 
@@ -217,7 +217,7 @@ s32 sp_atomic_s32_stress_thread(void* userdata) {
   return 0;
 }
 
-UTEST(sp_atomic_s32, stress_concurrent_operations) {
+UTEST(stress, sp_atomic_s32) {
   sp_atomic_s32 counter = 0;
   const s32 num_threads = 8;
   const s32 iterations = 10000;
@@ -238,6 +238,81 @@ UTEST(sp_atomic_s32, stress_concurrent_operations) {
 
   s32 final = sp_atomic_s32_get(&counter);
   ASSERT_TRUE(final >= 0);
+}
+
+UTEST(stress, sp_context) {
+  srand(69);
+
+  sp_tls_rt_t* rt = sp_tls_rt_get();
+  u32 initial_index = rt->index;
+  sp_mem_arena_t* arena = sp_mem_get_scratch_arena();
+
+  const s32 iterations = 1000;
+  u64 sum = 0;
+
+  for (s32 iter = 0; iter < iterations; iter++) {
+    // 1. Push context with libc allocator
+    sp_context_push_allocator(sp_mem_libc_new());
+
+    // 2. Libc allocations - track with dynamic array (uses libc allocator)
+    s32 libc_count = 512 + (rand() % 513);  // 512-1024
+    sp_da(u32*) libc_allocs = SP_NULLPTR;
+
+    for (s32 i = 0; i < libc_count; i++) {
+      s32 size = 4 + (rand() % 509);  // 4-512 u32s
+      u32* buf = sp_alloc(size * sizeof(u32));
+      for (s32 j = 0; j < size; j++) {
+        buf[j] = (u32)(iter + i + j);
+        sum += buf[j];
+      }
+      sp_dyn_array_push(libc_allocs, buf);
+    }
+
+    // 3. Begin scratch
+    sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+
+    // 4. Scratch allocations - use fixed-size array since we know max count
+    // Limit: 1MB scratch arena, so max ~256 allocs of ~256 u32s = 256KB
+    s32 scratch_count = 64 + (rand() % 193);  // 64-256
+    u32* scratch_ptrs[256];
+    s32 scratch_sizes[256];
+
+    for (s32 i = 0; i < scratch_count; i++) {
+      s32 size = 4 + (rand() % 253);  // 4-256 u32s (16-1024 bytes)
+      u32* buf = sp_alloc(size * sizeof(u32));
+      for (s32 j = 0; j < size; j++) {
+        buf[j] = (u32)(iter * 1000 + i + j);
+        sum += buf[j];
+      }
+      scratch_ptrs[i] = buf;
+      scratch_sizes[i] = size;
+    }
+
+    // 5. Access all scratch buffers (for ASAN)
+    for (s32 i = 0; i < scratch_count; i++) {
+      u32* buf = scratch_ptrs[i];
+      s32 size = scratch_sizes[i];
+      for (s32 j = 0; j < size; j++) {
+        sum += buf[j];
+      }
+    }
+
+    // 6. End scratch
+    sp_mem_end_scratch(scratch);
+
+    // 7. Free libc allocations
+    sp_dyn_array_for(libc_allocs, i) {
+      sp_free(libc_allocs[i]);
+    }
+    sp_dyn_array_free(libc_allocs);
+
+    // 8. Pop context
+    sp_context_pop();
+  }
+
+  // Verify scratch arena is clean
+  ASSERT_EQ(arena->bytes_used, 0);
+  ASSERT_EQ(rt->index, initial_index);
 }
 
 SP_TEST_MAIN()
