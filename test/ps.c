@@ -49,12 +49,12 @@ typedef struct {
 // FIXTURES //
 //////////////
 
-typedef struct sp_ps {
+typedef struct ps {
   sp_test_file_manager_t file_manager;
   sp_byte_buffer_t buffer;
 } sp_ps;
 
-UTEST_F_SETUP(sp_ps) {
+UTEST_F_SETUP(ps) {
   sp_test_file_manager_init(&ut.file_manager);
   ut.buffer = (sp_byte_buffer_t) {
     .len = 1024,
@@ -62,7 +62,7 @@ UTEST_F_SETUP(sp_ps) {
   };
 }
 
-UTEST_F_TEARDOWN(sp_ps) {
+UTEST_F_TEARDOWN(ps) {
   fflush(stdin);
   fflush(stdout);
   fflush(stderr);
@@ -192,7 +192,7 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
 }
 
 // SP_PS_IO_MODE_CREATE
-UTEST_F(sp_ps, io_create_create_null) {
+UTEST_F(ps, io_create_create_null) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
@@ -205,7 +205,7 @@ UTEST_F(sp_ps, io_create_create_null) {
   });
 }
 
-UTEST_F(sp_ps, io_create_null_create) {
+UTEST_F(ps, io_create_null_create) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
@@ -218,7 +218,7 @@ UTEST_F(sp_ps, io_create_null_create) {
   });
 }
 
-UTEST_F(sp_ps, io_null_create_null) {
+UTEST_F(ps, io_null_create_null) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -230,7 +230,7 @@ UTEST_F(sp_ps, io_null_create_null) {
   });
 }
 
-UTEST_F(sp_ps, io_null_null_create) {
+UTEST_F(ps, io_null_null_create) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -242,7 +242,7 @@ UTEST_F(sp_ps, io_null_null_create) {
   });
 }
 
-UTEST_F(sp_ps, io_stdout_stderr) {
+UTEST_F(ps, io_stdout_stderr) {
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -256,7 +256,7 @@ UTEST_F(sp_ps, io_stdout_stderr) {
 }
 
 // SP_PS_IO_MODE_EXISTING
-UTEST_F(sp_ps, io_create_file_null) {
+UTEST_F(ps, io_create_file_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdout.file"));
   sp_io_stream_t io = sp_io_from_file(file_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
 
@@ -286,7 +286,7 @@ UTEST_F(sp_ps, io_create_file_null) {
   sp_io_close(&io);
 }
 
-UTEST_F(sp_ps, io_file_create_null) {
+UTEST_F(ps, io_file_create_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
   sp_io_stream_t io = sp_io_from_file(file_path, SP_IO_MODE_WRITE);
@@ -312,7 +312,7 @@ UTEST_F(sp_ps, io_file_create_null) {
   sp_io_close(&io);
 }
 
-UTEST_F(sp_ps, io_create_null_file) {
+UTEST_F(ps, io_create_null_file) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
   sp_io_stream_t io = sp_io_from_file(file_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
 
@@ -342,7 +342,7 @@ UTEST_F(sp_ps, io_create_null_file) {
   sp_io_close(&io);
 }
 
-UTEST_F(sp_ps, io_file_null_file) {
+UTEST_F(ps, io_file_null_file) {
   sp_str_t in_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
   sp_io_stream_t in = sp_io_from_file(in_path, SP_IO_MODE_WRITE);
@@ -491,7 +491,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
   }
 }
 
-UTEST_F(sp_ps, env_clean) {
+UTEST_F(ps, env_clean) {
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
@@ -527,7 +527,7 @@ UTEST_F(sp_ps, env_clean) {
   });
 }
 
-UTEST_F(sp_ps, env_inherit) {
+UTEST_F(ps, env_inherit) {
   setenv("jerry", "garcia", true);
 
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
@@ -542,7 +542,7 @@ UTEST_F(sp_ps, env_inherit) {
   unsetenv("jerry");
 }
 
-UTEST_F(sp_ps, env_existing) {
+UTEST_F(ps, env_existing) {
   sp_env_t env = SP_ZERO_INITIALIZE();
   sp_env_insert(&env, sp_str_lit("jerry"), sp_str_lit("garcia"));
   sp_env_insert(&env, sp_str_lit("phil"), sp_str_lit("lesh"));
@@ -575,7 +575,7 @@ UTEST_F(sp_ps, env_existing) {
   });
 }
 
-UTEST_F(sp_ps, empty_env_var) {
+UTEST_F(ps, empty_env_var) {
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
@@ -606,7 +606,7 @@ UTEST_F(sp_ps, empty_env_var) {
 //////////////////
 // SP_PS_WAIT //
 //////////////////
-UTEST_F(sp_ps, wait_after_process_complete) {
+UTEST_F(ps, wait_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -622,7 +622,7 @@ UTEST_F(sp_ps, wait_after_process_complete) {
   EXPECT_EQ(result.exit_code, 42);
 }
 
-UTEST_F(sp_ps, wait_while_process_running) {
+UTEST_F(ps, wait_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -636,7 +636,7 @@ UTEST_F(sp_ps, wait_while_process_running) {
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
-UTEST_F(sp_ps, run) {
+UTEST_F(ps, run) {
   sp_ps_output_t result = sp_ps_run((sp_ps_config_t) {
     .command = SP_LIT("git"),
     .args = {
@@ -648,7 +648,7 @@ UTEST_F(sp_ps, run) {
   EXPECT_NE(result.out.len, 0);
 }
 
-UTEST_F(sp_ps, poll_while_process_running) {
+UTEST_F(ps, poll_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -664,7 +664,7 @@ UTEST_F(sp_ps, poll_while_process_running) {
   EXPECT_EQ(result.state, SP_PS_STATE_DONE);
 }
 
-UTEST_F(sp_ps, process_complete_during_poll) {
+UTEST_F(ps, process_complete_during_poll) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -678,7 +678,7 @@ UTEST_F(sp_ps, process_complete_during_poll) {
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
-UTEST_F(sp_ps, poll_after_process_complete) {
+UTEST_F(ps, poll_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -694,7 +694,7 @@ UTEST_F(sp_ps, poll_after_process_complete) {
   EXPECT_EQ(result.exit_code, 72);
 }
 
-UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
+UTEST_F(ps, poll_with_timeout_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -710,7 +710,7 @@ UTEST_F(sp_ps, poll_with_timeout_after_process_complete) {
   EXPECT_EQ(result.exit_code, 72);
 }
 
-UTEST_F(sp_ps, wait_twice_while_process_running) {
+UTEST_F(ps, wait_twice_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -728,7 +728,7 @@ UTEST_F(sp_ps, wait_twice_while_process_running) {
   EXPECT_EQ(result.exit_code, -1);
 }
 
-UTEST_F(sp_ps, poll_then_wait) {
+UTEST_F(ps, poll_then_wait) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -745,7 +745,7 @@ UTEST_F(sp_ps, poll_then_wait) {
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
-UTEST_F(sp_ps, poll_multiple) {
+UTEST_F(ps, poll_multiple) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -767,7 +767,7 @@ UTEST_F(sp_ps, poll_multiple) {
   EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
 }
 
-UTEST_F(sp_ps, wait_with_output) {
+UTEST_F(ps, wait_with_output) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -790,7 +790,7 @@ UTEST_F(sp_ps, wait_with_output) {
   EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 }
 
-UTEST_F(sp_ps, poll_with_io) {
+UTEST_F(ps, poll_with_io) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -814,7 +814,7 @@ UTEST_F(sp_ps, poll_with_io) {
   EXPECT_EQ(r2.state, SP_PS_STATE_DONE);
 }
 
-UTEST_F(sp_ps, interleaved_read_write) {
+UTEST_F(ps, interleaved_read_write) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -854,7 +854,7 @@ UTEST_F(sp_ps, interleaved_read_write) {
   EXPECT_EQ(result.exit_code, 0);
 }
 
-UTEST_F(sp_ps, incremental_nonblocking_read) {
+UTEST_F(ps, incremental_nonblocking_read) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -898,7 +898,7 @@ UTEST_F(sp_ps, incremental_nonblocking_read) {
   EXPECT_EQ(result.exit_code, 0);
 }
 
-UTEST_F(sp_ps, output) {
+UTEST_F(ps, output) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -920,7 +920,7 @@ UTEST_F(sp_ps, output) {
   EXPECT_TRUE(sp_str_empty(output.err));
 }
 
-UTEST_F(sp_ps, write_1mb_to_stdin) {
+UTEST_F(ps, write_1mb_to_stdin) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -956,7 +956,7 @@ UTEST_F(sp_ps, write_1mb_to_stdin) {
   EXPECT_TRUE(sp_str_equal(output.out, expected));
 }
 
-UTEST_F(sp_ps, redirect_stderr_to_stdout) {
+UTEST_F(ps, redirect_stderr_to_stdout) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {
@@ -984,7 +984,7 @@ UTEST_F(sp_ps, redirect_stderr_to_stdout) {
   EXPECT_EQ(err, SP_NULLPTR);
 }
 
-UTEST_F(sp_ps, redirect_stdout_to_stderr) {
+UTEST_F(ps, redirect_stdout_to_stderr) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = SP_LIT("./build/debug/process"),
     .args = {

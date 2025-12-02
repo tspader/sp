@@ -307,6 +307,14 @@
 
 #define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
 
+#define SP_MEM_ALIGNMENT 16
+
+#define SP_PAD(size) u8 _pad[SP_MEM_ALIGNMENT - ((size) % SP_MEM_ALIGNMENT)]
+
+//#define sp_align_up(ptr, align) (((uintptr_t)ptr) & (align - 1))
+#define sp_align_up(ptr, align) ((void*)(((uintptr_t)(ptr) + ((align) - 1)) & ~((align) - 1)))
+#define sp_align_up_u32(val, align) ((((val) + ((align) - 1)) & ~((align) - 1)))
+
 #define SP_ANSI_RESET             "\033[0m"
 #define SP_ANSI_BOLD              "\033[1m"
 #define SP_ANSI_DIM               "\033[2m"
@@ -556,12 +564,13 @@ typedef struct {
 
 typedef struct {
   u32 size;
+  SP_PAD(4);
 } sp_mem_libc_metadata_t;
 
 typedef struct {
   sp_mem_arena_t* arena;
   u32 mark;
-  u8 padding[4];
+  SP_PAD(12);
 } sp_mem_arena_marker_t;
 
 typedef struct {
@@ -3594,8 +3603,8 @@ void sp_mem_allocator_free(sp_allocator_t allocator, void* buffer) {
 }
 
 sp_mem_arena_t* sp_mem_arena_new(u32 capacity) {
-  sp_mem_arena_t* arena = SP_ALLOC(sp_mem_arena_t);
-  sp_mem_arena_init(arena, (u8*)sp_alloc(capacity), capacity);
+  sp_mem_arena_t* arena = SP_OS_ALLOC(sp_mem_arena_t);
+  sp_mem_arena_init(arena, (u8*)sp_mem_os_alloc(capacity), capacity);
   return arena;
 }
 
@@ -3619,26 +3628,28 @@ void sp_mem_arena_clear(sp_mem_arena_t* arena) {
 
 void sp_mem_arena_destroy(sp_mem_arena_t* arena) {
   if (arena->buffer) {
-    sp_free(arena->buffer);
+    sp_mem_os_free(arena->buffer);
     arena->buffer = NULL;
     arena->capacity = 0;
     arena->bytes_used = 0;
   }
+  sp_mem_os_free(arena);
 }
 
 void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size, void* old_memory) {
   sp_mem_arena_t* bump = (sp_mem_arena_t*)user_data;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
-      if (bump->bytes_used + size > bump->capacity) {
-        u32 new_capacity = SP_MAX(bump->capacity * 2, bump->bytes_used + size);
+      u32 aligned_offset = sp_align_up_u32(bump->bytes_used, SP_MEM_ALIGNMENT);
+      if (aligned_offset + size > bump->capacity) {
+        u32 new_capacity = SP_MAX(bump->capacity * 2, aligned_offset + size);
         u8* new_buffer = (u8*)sp_mem_os_realloc(bump->buffer, new_capacity);
         SP_ASSERT(new_buffer != NULL);
         bump->buffer = new_buffer;
         bump->capacity = new_capacity;
       }
-      void* memory_block = bump->buffer + bump->bytes_used;
-      bump->bytes_used += size;
+      void* memory_block = bump->buffer + aligned_offset;
+      bump->bytes_used = aligned_offset + size;
       return memory_block;
     }
     case SP_ALLOCATOR_MODE_FREE: {

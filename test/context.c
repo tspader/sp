@@ -5,36 +5,36 @@
 
 #include "utest.h"
 
-struct sp_test_context {
+struct context {
 
 };
 
-UTEST_F_SETUP(sp_test_context) {
+UTEST_F_SETUP(context) {
   pthread_setspecific(sp_rt.tls.key, SP_NULLPTR);
   sp_tls_rt_get();
 }
 
-UTEST_F_TEARDOWN(sp_test_context) {
+UTEST_F_TEARDOWN(context) {
   pthread_setspecific(sp_rt.tls.key, SP_NULLPTR);
   sp_tls_rt_get();
 }
 
-UTEST_F(sp_test_context, get_returns_non_null) {
+UTEST_F(context, get_returns_non_null) {
   sp_context_t *ctx = sp_context_get();
   EXPECT_TRUE(ctx != NULL);
 }
 
-UTEST_F(sp_test_context, allocator_is_valid) {
+UTEST_F(context, allocator_is_valid) {
   sp_context_t *ctx = sp_context_get();
   EXPECT_TRUE(ctx->allocator.on_alloc != NULL);
 }
 
-UTEST_F(sp_test_context, thread_state_index_starts_at_zero) {
+UTEST_F(context, thread_state_index_starts_at_zero) {
   sp_tls_rt_t *state = sp_tls_rt_get();
   EXPECT_EQ(state->index, 0);
 }
 
-UTEST_F(sp_test_context, push_pop_single) {
+UTEST_F(context, push_pop_single) {
   sp_tls_rt_t *state = sp_tls_rt_get();
   u32 initial_index = state->index;
 
@@ -47,7 +47,7 @@ UTEST_F(sp_test_context, push_pop_single) {
   EXPECT_EQ(state->index, initial_index);
 }
 
-UTEST_F(sp_test_context, push_pop_multiple) {
+UTEST_F(context, push_pop_multiple) {
   sp_tls_rt_t *state = sp_tls_rt_get();
   u32 initial_index = state->index;
 
@@ -66,7 +66,7 @@ UTEST_F(sp_test_context, push_pop_multiple) {
   EXPECT_EQ(state->index, initial_index);
 }
 
-UTEST_F(sp_test_context, push_allocator_changes_allocator) {
+UTEST_F(context, push_allocator_changes_allocator) {
   sp_context_t *ctx_before = sp_context_get();
   sp_allocator_t old_allocator = ctx_before->allocator;
 
@@ -85,7 +85,7 @@ UTEST_F(sp_test_context, push_allocator_changes_allocator) {
   EXPECT_TRUE(ctx_restored->allocator.on_alloc == old_allocator.on_alloc);
 }
 
-UTEST_F(sp_test_context, set_modifies_current) {
+UTEST_F(context, set_modifies_current) {
   sp_context_t ctx = *sp_context_get();
   sp_allocator_t new_allocator = sp_mem_libc_new();
   ctx.allocator = new_allocator;
@@ -96,18 +96,18 @@ UTEST_F(sp_test_context, set_modifies_current) {
   EXPECT_TRUE(current->allocator.on_alloc == new_allocator.on_alloc);
 }
 
-UTEST_F(sp_test_context, scratch_initted) {
+UTEST_F(context, scratch_initted) {
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
   EXPECT_TRUE(arena->buffer != NULL);
   EXPECT_EQ(arena->capacity, SP_RT_SCRATCH_SIZE);
 }
 
-UTEST_F(sp_test_context, begin_scratch) {
+UTEST_F(context, begin_scratch) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   EXPECT_TRUE(scratch.marker.arena != NULL);
 }
 
-UTEST_F(sp_test_context, end_scratch) {
+UTEST_F(context, end_scratch) {
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
   sp_context_t *ctx = sp_context_get();
 
@@ -140,7 +140,7 @@ u8 *use_scratch_arena(u32 fill) {
   return result;
 }
 
-UTEST_F(sp_test_context, use_scratch_allocator_but_return_from_user_allocator) {
+UTEST_F(context, use_scratch_allocator_but_return_from_user_allocator) {
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
   EXPECT_EQ(arena->bytes_used, 0);
 
@@ -180,7 +180,7 @@ s32 context_thread_func(void *userdata) {
 
 #define NUM_THREADS 8
 
-UTEST_F(sp_test_context, multithread_independent_contexts) {
+UTEST_F(context, multithread_independent_contexts) {
   main_thread_context = sp_context_get();
 
   sp_atomic_s32 done_count = 0;
@@ -214,7 +214,7 @@ typedef struct {
   bool all_passed;
 } push_pop_thread_data_t;
 
-UTEST_F(sp_test_context, push_does_not_overwrite_scratch) {
+UTEST_F(context, push_does_not_overwrite_scratch) {
   // Use scratch arena
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
 
@@ -238,7 +238,7 @@ UTEST_F(sp_test_context, push_does_not_overwrite_scratch) {
 }
 
 
-UTEST_F(sp_test_context, nested_begin_scratch) {
+UTEST_F(context, nested_begin_scratch) {
   sp_tls_rt_t* rt = sp_tls_rt_get();
 
   sp_mem_scratch_t s1 = sp_mem_begin_scratch();
@@ -260,7 +260,7 @@ UTEST_F(sp_test_context, nested_begin_scratch) {
   EXPECT_EQ(rt->scratch->bytes_used, 0);
 }
 
-UTEST_F(sp_test_context, begin_scratch_push_unrelated_allocator_end_scratch) {
+UTEST_F(context, begin_scratch_push_unrelated_allocator_end_scratch) {
   sp_tls_rt_t* rt = sp_tls_rt_get();
 
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
@@ -291,7 +291,7 @@ UTEST_F(sp_test_context, begin_scratch_push_unrelated_allocator_end_scratch) {
   EXPECT_EQ(rt->scratch->bytes_used, 0);
 }
 
-UTEST_F(sp_test_context, nested_pop_from_scratch) {
+UTEST_F(context, nested_pop_from_scratch) {
   sp_tls_rt_t* rt = sp_tls_rt_get();
 
   // begin one scratch
@@ -345,7 +345,7 @@ s32 push_pop_thread_func(void *userdata) {
   return 0;
 }
 
-UTEST_F(sp_test_context, multithread_push_pop) {
+UTEST_F(context, multithread_push_pop) {
   sp_atomic_s32 done_count = 0;
   push_pop_thread_data_t thread_data[NUM_THREADS];
   sp_thread_t threads[NUM_THREADS];
@@ -369,4 +369,81 @@ UTEST_F(sp_test_context, multithread_push_pop) {
   }
 }
 
+
+#ifndef SP_MEM_ALIGNMENT
+  #define SP_MEM_ALIGNMENT 16
+#endif
+
+
+void* context(void* ptr) {
+  return sp_align_up(ptr, SP_MEM_ALIGNMENT);
+}
+
+#define EXPECT_ALIGNED(ptr) EXPECT_EQ(context(ptr), ptr)
+
+UTEST_F(context, malloc_wrapper_is_aligned) {
+  void *p1 = sp_alloc(1);
+  void *p2 = sp_alloc(8);
+  void *p3 = sp_alloc(16);
+
+  EXPECT_ALIGNED(p1);
+  EXPECT_ALIGNED(p2);
+  EXPECT_ALIGNED(p3);
+
+  sp_free(p1);
+  sp_free(p2);
+  sp_free(p3);
+}
+
+UTEST_F(context, arena_padding_after_byte) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+
+  u8* byte = sp_alloc(1);
+
+  u8* word = sp_alloc(8);
+
+  EXPECT_ALIGNED(byte);
+  EXPECT_ALIGNED(word);
+  EXPECT_TRUE((uintptr_t)word >= (uintptr_t)byte + 1);
+
+  sp_mem_end_scratch(scratch);
+}
+
+UTEST_F(context, arena_padding_mixed_sizes) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+
+  u8* p1 = sp_alloc(3);
+  u8* p2 = sp_alloc(13);
+  u8* p3 = sp_alloc(8);
+
+  EXPECT_ALIGNED(p1);
+  EXPECT_ALIGNED(p2);
+  EXPECT_ALIGNED(p3);
+
+  sp_mem_end_scratch(scratch);
+}
+
+UTEST_F(context, arena_capacity_check_includes_padding) {
+  u32 capacity = SP_MEM_ALIGNMENT + 4;
+  sp_mem_arena_t *arena = sp_mem_arena_new(capacity);
+  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  EXPECT_EQ(arena->bytes_used, 0);
+  EXPECT_EQ(arena->capacity, capacity);
+
+  // allocate a single byte, which forces the arena to use SP_MEM_ALIGNMENT - 1 bytes of padding
+  void* pa = sp_mem_allocator_alloc(allocator, 1);
+  EXPECT_ALIGNED(pa);
+  EXPECT_EQ(arena->bytes_used, 1);
+  EXPECT_EQ(arena->capacity, capacity);
+  EXPECT_EQ(pa, arena->buffer);
+
+  // allocate 8 bytes; the arena should have 4 bytes available after padding, but more than 8 if not padding
+  // this forces a realloc due to alignment padding
+  void* pb = sp_mem_allocator_alloc(allocator, 8);
+  EXPECT_ALIGNED(pb);
+  EXPECT_EQ(arena->bytes_used, SP_MEM_ALIGNMENT + 8);
+  EXPECT_GE(arena->capacity, capacity);
+
+  sp_mem_arena_destroy(arena);
+}
 SP_TEST_MAIN()

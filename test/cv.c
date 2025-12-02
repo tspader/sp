@@ -6,7 +6,7 @@
 #include "utest.h"
 SP_TEST_MAIN()
 
-UTEST(sp_cv, init_destroy) {
+UTEST(cv, init_destroy) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
   sp_cv_destroy(&cv);
@@ -34,7 +34,7 @@ s32 wait_notify_one_worker(void* userdata) {
   return 0;
 }
 
-UTEST(sp_cv, wait_notify_one) {
+UTEST(cv, wait_notify_one) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -92,7 +92,7 @@ s32 wait_notify_all_worker(void* userdata) {
   return 0;
 }
 
-UTEST(sp_cv, wait_notify_all) {
+UTEST(cv, wait_notify_all) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -154,7 +154,7 @@ s32 notify_one_wakes_single_worker(void* userdata) {
   return 0;
 }
 
-UTEST(sp_cv, notify_one_wakes_single) {
+UTEST(cv, notify_one_wakes_single) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -196,7 +196,7 @@ UTEST(sp_cv, notify_one_wakes_single) {
   sp_mutex_destroy(&mutex);
 }
 
-UTEST(sp_cv, wait_for_timeout) {
+UTEST(cv, wait_for_timeout) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -237,7 +237,7 @@ s32 wait_for_signaled_signaler(void* userdata) {
   return 0;
 }
 
-UTEST(sp_cv, wait_for_signaled) {
+UTEST(cv, wait_for_signaled) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -316,7 +316,7 @@ s32 consumer_fn(void* userdata) {
   return 0;
 }
 
-UTEST(sp_cv, multithread_producer_consumer) {
+UTEST(cv, multithread_producer_consumer) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_ring_buffer_t buffer = SP_ZERO_INITIALIZE();

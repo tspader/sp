@@ -23,8 +23,12 @@ name = "app"
 source = ["test/app.c"]
 
 [[bin]]
+name = "context"
+source = ["test/context.c"]
+
+[[bin]]
 name = "core"
-source = ["test/main.c"]
+source = ["test/core.c"]
 
 [[bin]]
 name = "cv"
@@ -43,8 +47,16 @@ name = "ht"
 source = ["test/ht.c"]
 
 [[bin]]
+name = "io"
+source = ["test/io.c"]
+
+[[bin]]
 name = "leak"
 source = ["test/leak.c"]
+
+[[bin]]
+name = "linkage"
+source = ["test/linkage.c"]
 
 [[bin]]
 name = "process"
@@ -59,12 +71,9 @@ name = "stress"
 source = ["test/stress.c"]
 
 [[bin]]
-name = "context"
-source = ["test/context.c"]
+name = "time"
+source = ["test/time.c"]
 
-[[bin]]
-name = "linkage"
-source = ["test/linkage.c"]
 
 [[bin]]
 name = "extract_fns"

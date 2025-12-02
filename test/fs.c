@@ -6,19 +6,19 @@
 #include "utest.h"
 #include <sys/stat.h>
 
-struct sp_test_fs {
+struct fs {
   sp_test_file_manager_t file_manager;
 };
 
-UTEST_F_SETUP(sp_test_fs) {
+UTEST_F_SETUP(fs) {
   sp_test_file_manager_init(&ut.file_manager);
 }
 
-UTEST_F_TEARDOWN(sp_test_fs) {
+UTEST_F_TEARDOWN(fs) {
   sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
-UTEST_F(sp_test_fs, mod_time) {
+UTEST_F(fs, mod_time) {
   sp_str_t file = sp_test_file_path(&ut.file_manager, sp_str_lit("a.file"));
   sp_str_t dir = sp_test_file_path(&ut.file_manager, sp_str_lit("a.dir"));
   sp_fs_create_dir(dir);
@@ -30,7 +30,7 @@ UTEST_F(sp_test_fs, mod_time) {
   EXPECT_TRUE(mod_time.s > 0);
 }
 
-UTEST_F(sp_test_fs, link) {
+UTEST_F(fs, link) {
   // Create a test file with content
   sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
@@ -83,7 +83,7 @@ UTEST_F(sp_test_fs, link) {
   SP_EXPECT_STR_EQ(unchanged_copy_content, SP_LIT("Hello, World! This is test content for linking."));
 }
 
-UTEST_F(sp_test_fs, link_error_cases) {
+UTEST_F(fs, link_error_cases) {
   // Test that copy works correctly for files
   sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source2.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
@@ -101,7 +101,7 @@ UTEST_F(sp_test_fs, link_error_cases) {
   SP_EXPECT_STR_EQ(copy_content, SP_LIT("Another test file"));
 }
 
-UTEST_F(sp_test_fs, symlink_semantics) {
+UTEST_F(fs, symlink_semantics) {
   // Create a regular file and a directory
   sp_str_t file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("file.real"));
   sp_str_t content = sp_str_lit("im a damn file");
@@ -156,7 +156,7 @@ UTEST_F(sp_test_fs, symlink_semantics) {
   SP_EXPECT_STR_EQ(content_link, content);
 }
 
-UTEST_F(sp_test_fs, copy_dir_with_nonalphanumeric) {
+UTEST_F(fs, copy_dir_with_nonalphanumeric) {
   sp_str_t foo_bar_dir = sp_test_file_path(&ut.file_manager, SP_LIT("foo.bar"));
   sp_fs_create_dir(foo_bar_dir);
   ASSERT_TRUE(sp_fs_exists(foo_bar_dir));
@@ -173,7 +173,7 @@ UTEST_F(sp_test_fs, copy_dir_with_nonalphanumeric) {
   ASSERT_TRUE(sp_fs_exists(expected_path));
 }
 
-UTEST_F(sp_test_fs, copy_preserves_file_attributes) {
+UTEST_F(fs, copy_preserves_file_attributes) {
   // Create a test file with specific content
   sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source_attrs.txt"));
   sp_str_t test_content = SP_LIT("Test content for attribute preservation - this should be preserved exactly");
@@ -219,7 +219,7 @@ typedef struct {
   sp_str_t stem;
 } sp_test_file_stem_case_t;
 
-UTEST(path_functions, path_stem) {
+UTEST(fs_path, path_stem) {
   sp_test_file_stem_case_t cases [] = {
     {
       .file_path = SP_LIT("foo.bar"),
@@ -253,7 +253,7 @@ UTEST(path_functions, path_stem) {
   }
 }
 
-UTEST(path_functions, normalize_path) {
+UTEST(fs_path, normalize_path) {
   {
     sp_str_t path = SP_LIT("C:\\Users\\Test\\file.txt");
     sp_str_t copy = sp_fs_normalize_path(path);
@@ -285,7 +285,7 @@ UTEST(path_functions, normalize_path) {
   }
 }
 
-UTEST(path_functions, parent_path) {
+UTEST(fs_path, parent_path) {
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
     sp_str_t parent = sp_fs_parent_path(path);
@@ -335,7 +335,7 @@ UTEST(path_functions, parent_path) {
   }
 }
 
-UTEST(path_functions, canonicalize_path) {
+UTEST(fs_path, canonicalize_path) {
   {
     sp_str_t path = SP_LIT("test/..");
     sp_str_t canonical = sp_fs_canonicalize_path(path);
@@ -376,7 +376,7 @@ typedef struct {
   sp_str_t extension;
 } sp_test_file_extension_case_t;
 
-UTEST(path_functions, path_extension) {
+UTEST(fs_path, path_extension) {
   sp_test_file_extension_case_t cases [] = {
     {
       .file_path = SP_LIT("foo.bar"),
@@ -411,7 +411,7 @@ UTEST(path_functions, path_extension) {
 }
 
 
-UTEST(path_functions, extract_file_name) {
+UTEST(fs_path, extract_file_name) {
   {
     sp_str_t path = SP_LIT("C:/Users/Test/file.txt");
     sp_str_t filename = sp_fs_get_name(path);
@@ -449,7 +449,7 @@ UTEST(path_functions, extract_file_name) {
   }
 }
 
-UTEST(path_functions, get_executable_path) {
+UTEST(fs_path, get_executable_path) {
   sp_str_t exe_path = sp_fs_get_exe_path();
 
   ASSERT_GT(exe_path.len, 0);
@@ -469,7 +469,7 @@ UTEST(path_functions, get_executable_path) {
   ASSERT_GT(filename.len, 0);
 }
 
-UTEST(path_functions, integration_test) {
+UTEST(fs_path, integration_test) {
   sp_str_t exe = sp_fs_get_exe_path();
   sp_str_t parent1 = sp_fs_parent_path(exe);
   sp_str_t parent2 = sp_fs_parent_path(parent1);

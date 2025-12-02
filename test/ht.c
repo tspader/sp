@@ -27,7 +27,7 @@ bool sp_test_string_compare(void* ka, void* kb, u32 size) {
   return sp_str_equal(*a, *b);
 }
 
-UTEST(hash_table, basic_operations) {
+UTEST(ht, basic_operations) {
   sp_ht(int, float) ht = SP_NULLPTR;
 
   EXPECT_EQ(sp_ht_size(ht), 0);
@@ -65,7 +65,7 @@ UTEST(hash_table, basic_operations) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, pointer_retrieval) {
+UTEST(ht, pointer_retrieval) {
   sp_ht(u32, double) ht = SP_NULLPTR;
 
   sp_ht_insert(ht, 100, 123.456);
@@ -84,7 +84,7 @@ UTEST(hash_table, pointer_retrieval) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, struct_values) {
+UTEST(ht, struct_values) {
   sp_ht(int, vec3_t) ht = SP_NULLPTR;
 
   vec3_t v1 = {1.0f, 2.0f, 3.0f};
@@ -103,7 +103,7 @@ UTEST(hash_table, struct_values) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, struct_keys) {
+UTEST(ht, struct_keys) {
   sp_ht(compound_key_t, const char*) ht = SP_NULLPTR;
 
   compound_key_t k1 = {100, 1};
@@ -127,7 +127,7 @@ UTEST(hash_table, struct_keys) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, string_keys) {
+UTEST(ht, string_keys) {
   sp_ht(u64, int) ht = SP_NULLPTR;
 
   const char* s1 = "apple";
@@ -152,7 +152,7 @@ UTEST(hash_table, string_keys) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, collision_handling) {
+UTEST(ht, collision_handling) {
   sp_ht(int, int) ht = SP_NULLPTR;
 
   for (s32 i = 0; i < 100; i++) {
@@ -182,7 +182,7 @@ UTEST(hash_table, collision_handling) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, iteration) {
+UTEST(ht, iteration) {
   sp_ht(s32, s32) ht = SP_NULLPTR;
 
   for (s32 i = 0; i < 10; i++) {
@@ -205,7 +205,7 @@ UTEST(hash_table, iteration) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, edge_cases) {
+UTEST(ht, edge_cases) {
   sp_ht(int, int) ht1 = SP_NULLPTR;
   EXPECT_EQ(sp_ht_size(ht1), 0);
   EXPECT_TRUE(sp_ht_empty(ht1));
@@ -227,7 +227,7 @@ UTEST(hash_table, edge_cases) {
   sp_ht_free(ht3);
 }
 
-UTEST(hash_table, pathological_all_same_hash) {
+UTEST(ht, pathological_all_same_hash) {
   sp_ht(u32, u32) ht = sp_ht_new(u32, u32);
 
   u32 cap = sp_ht_capacity(ht);
@@ -249,7 +249,7 @@ UTEST(hash_table, pathological_all_same_hash) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, duplicate_key_insert_size_bug) {
+UTEST(ht, duplicate_key_insert_size_bug) {
   sp_ht(u32, u32) table = SP_NULLPTR;
 
   sp_ht_insert(table, 42, 100);
@@ -268,7 +268,7 @@ UTEST(hash_table, duplicate_key_insert_size_bug) {
   sp_ht_free(table);
 }
 
-UTEST(sp_ht, iterator_yields_inactive_entry_at_slot_zero) {
+UTEST(ht, iterator_yields_inactive_entry_at_slot_zero) {
   sp_ht(u64, u64) ht = sp_ht_new(u64, u64);
 
   sp_ht_insert(ht, 0, 999);
@@ -286,7 +286,7 @@ UTEST(sp_ht, iterator_yields_inactive_entry_at_slot_zero) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, collision) {
+UTEST(ht, collision) {
   sp_ht(s32, s32) ht = SP_NULLPTR;
 
   for (u32 i = 0; i < 8; i++) {
@@ -357,7 +357,7 @@ UTEST(hash_table, collision) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, iterator_returns_zero_entries_for_populated_table) {
+UTEST(ht, iterator_returns_zero_entries_for_populated_table) {
   sp_ht(u64, u64) ht = sp_ht_new(u64, u64);
 
   sp_ht_insert(ht, 1, 100);
@@ -373,7 +373,7 @@ UTEST(hash_table, iterator_returns_zero_entries_for_populated_table) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, null_safety) {
+UTEST(ht, null_safety) {
   sp_ht(s32, s32) null_ht = NULL;
 
   EXPECT_EQ(sp_ht_size(null_ht), 0);
@@ -407,7 +407,7 @@ UTEST(hash_table, null_safety) {
   sp_ht_free(null_ht);
 }
 
-UTEST(hash_table, string_key_custom_hash) {
+UTEST(ht, string_key_custom_hash) {
   sp_ht(sp_str_t, int) ht = SP_NULLPTR;
   sp_ht_set_fns(ht, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
@@ -569,19 +569,19 @@ UTEST(combined, multiple_arrays_in_hash_table) {
   sp_ht_free(ht);
 }
 
-UTEST(sp_ht_front, null_table) {
+UTEST(ht_front, null_table) {
   sp_ht(int, int) ht = NULL;
   EXPECT_EQ(sp_ht_front(ht), NULL);
 }
 
-UTEST(sp_ht_front, empty_table) {
+UTEST(ht_front, empty_table) {
   sp_ht(int, int) ht = SP_NULLPTR;
   sp_ht_init(ht);
   EXPECT_EQ(sp_ht_front(ht), NULL);
   sp_ht_free(ht);
 }
 
-UTEST(sp_ht_front, single_item) {
+UTEST(ht_front, single_item) {
   sp_ht(int, int) ht = SP_NULLPTR;
   sp_ht_insert(ht, 42, 100);
 
@@ -592,7 +592,7 @@ UTEST(sp_ht_front, single_item) {
   sp_ht_free(ht);
 }
 
-UTEST(sp_ht_front, multiple_items) {
+UTEST(ht_front, multiple_items) {
   sp_ht(int, int) ht = SP_NULLPTR;
   sp_ht_insert(ht, 1, 10);
   sp_ht_insert(ht, 2, 20);
@@ -613,7 +613,7 @@ UTEST(sp_ht_front, multiple_items) {
   sp_ht_free(ht);
 }
 
-UTEST(sp_ht_front, after_erase) {
+UTEST(ht_front, after_erase) {
   sp_ht(int, int) ht = SP_NULLPTR;
   sp_ht_insert(ht, 1, 10);
   sp_ht_insert(ht, 2, 20);
@@ -638,7 +638,7 @@ UTEST(sp_ht_front, after_erase) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, for_kv_iteration) {
+UTEST(ht, for_kv_iteration) {
   sp_ht(s32, s32) ht = SP_NULLPTR;
   sp_ht(s32, bool) visited = SP_NULLPTR;
 
@@ -668,7 +668,7 @@ UTEST(hash_table, for_kv_iteration) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, for_kv_string_keys) {
+UTEST(ht, for_kv_string_keys) {
   sp_ht(sp_str_t, s32) ht = SP_NULLPTR;
   sp_ht_set_fns(ht, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
@@ -698,7 +698,7 @@ UTEST(hash_table, for_kv_string_keys) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, for_kv_empty_table) {
+UTEST(ht, for_kv_empty_table) {
   sp_ht(s32, s32) ht = SP_NULLPTR;
   sp_ht_init(ht);
 
@@ -713,7 +713,7 @@ UTEST(hash_table, for_kv_empty_table) {
   sp_ht_free(ht);
 }
 
-UTEST(hash_table, for_kv_null_table) {
+UTEST(ht, for_kv_null_table) {
   sp_ht(s32, s32) ht = SP_NULLPTR;
 
   s32 count = 0;
