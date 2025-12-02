@@ -15,6 +15,10 @@ mode = "debug"
 language = "c11"
 
 [[bin]]
+name = "amalg"
+source = ["test/amalg.c"]
+
+[[bin]]
 name = "app"
 source = ["test/app.c"]
 

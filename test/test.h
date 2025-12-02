@@ -1,3 +1,6 @@
+#ifndef SP_TEST_H
+#define SP_TEST_H
+
 #include "sp.h"
 
 #define ut (*utest_fixture)
@@ -80,9 +83,6 @@ void sp_test_env_manager_unset(sp_test_env_manager_t* manager, sp_str_t key);
 void sp_test_env_manager_cleanup(sp_test_env_manager_t* manager);
 
 
-////////////////////
-// MEMORY TRACKER //
-////////////////////
 typedef struct sp_test_memory_tracker {
   sp_mem_arena_t* bump;
   sp_allocator_t allocator;
@@ -93,6 +93,21 @@ void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity);
 void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker);
 u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker);
 void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker);
+
+#if defined(SP_TEST_AMALGAMATION)
+  #define SP_TEST_MAIN()
+#else
+  #define SP_TEST_MAIN() UTEST_MAIN()
+#endif
+#endif
+
+
+
+////////////////////
+// IMPLEMENTATION //
+////////////////////
+#if !defined(SP_TEST_C)
+#define SP_TEST_C
 
 #if defined(SP_TEST_IMPLEMENTATION)
 void sp_test_file_manager_init(sp_test_file_manager_t* manager) {
@@ -218,4 +233,5 @@ void sp_test_env_manager_cleanup(sp_test_env_manager_t* manager) {
 void sp_byte_buffer_zero(sp_byte_buffer_t* buffer) {
   sp_mem_zero(buffer->data, buffer->len);
 }
+#endif
 #endif

@@ -303,6 +303,8 @@
 #define sp_carr_for(CARR, IT) SP_CARR_FOR(CARR, IT)
 #define sp_carr_len(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 
+#define sp_for(it, n) for (u32 it = 0; it < n; it++)
+
 #define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
 
 #define SP_ANSI_RESET             "\033[0m"
