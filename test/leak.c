@@ -49,8 +49,17 @@
 #define SP_TEST_IMPLEMENTATION
 #include "test.h"
 
+//#define SP_LEAK_LOG_ONLY
+
+#if defined(SP_LEAK_LOG_ONLY)
+  #define SP_LEAK_VERIFY()
+#else
+  #define SP_LEAK_VERIFY() EXPECT_EQ(sp_mem_get_scratch_arena()->bytes_used, 0)
+#endif
+
 struct sp_test_leak {
   sp_test_memory_tracker tracker;
+  sp_mem_scratch_t marker;
   sp_str_t str;
 };
 
@@ -58,52 +67,67 @@ UTEST_F_SETUP(sp_test_leak) {
   ut.str = sp_str_lit("hello, world!");
 
   sp_mem_arena_clear(sp_mem_get_scratch_arena());
+
+  #if defined(SP_LEAK_LOG_ONLY)
+  ut.marker = sp_mem_begin_scratch();
+  #endif
 }
 
 UTEST_F_TEARDOWN(sp_test_leak) {
-  sp_context_t* context = sp_context_get();
-  SP_LOG("{} bytes", SP_FMT_U32(sp_mem_get_scratch_arena()->bytes_used));
+  #if defined(SP_LEAK_LOG_ONLY)
+    sp_mem_arena_t* arena = sp_mem_get_scratch_arena();
+    SP_LOG("{} bytes", SP_FMT_U32(arena->bytes_used));
+    sp_mem_end_scratch(ut.marker);
+  #endif
 }
 
 UTEST_F(sp_test_leak, to_upper) {
   sp_str_t result = sp_str_to_upper(ut.str);
-  SP_EXPECT_STR_EQ_CSTR(result, "HELLO, WORLD!");
+  SP_LEAK_VERIFY();
 }
 
-#if 0
 UTEST_F(sp_test_leak, sp_str_alloc) {
   sp_str_t result = sp_str_alloc(32);
+  SP_LEAK_VERIFY();
 }
 
 UTEST_F(sp_test_leak, sp_str_copy) {
   sp_str_t result = sp_str_copy(ut.str);
+  SP_LEAK_VERIFY();
 }
 
 UTEST_F(sp_test_leak, sp_str_from_cstr) {
   sp_str_t result = sp_str_from_cstr("test");
+  SP_LEAK_VERIFY();
 }
 
 UTEST_F(sp_test_leak, sp_str_from_cstr_null) {
   sp_str_t result = sp_str_from_cstr_null(SP_NULLPTR);
+  SP_LEAK_VERIFY();
 }
 
 UTEST_F(sp_test_leak, sp_str_from_cstr_sized) {
   sp_str_t result = sp_str_from_cstr_sized("test", 4);
+  SP_LEAK_VERIFY();
 }
 
 UTEST_F(sp_test_leak, sp_str_concat) {
   sp_str_t result = sp_str_concat(ut.str, SP_LIT(" extra"));
+  SP_LEAK_VERIFY();
 }
 
 UTEST_F(sp_test_leak, sp_str_join) {
   sp_str_t result = sp_str_join(ut.str, SP_LIT("test"), SP_LIT(" "));
+  SP_LEAK_VERIFY();
 }
 
 UTEST_F(sp_test_leak, sp_str_join_cstr_n) {
   const c8* strings[] = {"a", "b", "c"};
   sp_str_t result = sp_str_join_cstr_n(strings, 3, SP_LIT(","));
+  SP_LEAK_VERIFY();
 }
 
+#if 0
 UTEST_F(sp_test_leak, sp_str_join_n) {
   sp_str_t strs[] = {SP_LIT("a"), SP_LIT("b"), SP_LIT("c")};
   sp_str_t result = sp_str_join_n(strs, 3, SP_LIT(","));

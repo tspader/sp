@@ -43,6 +43,10 @@ name = "ht"
 source = ["test/ht.c"]
 
 [[bin]]
+name = "leak"
+source = ["test/leak.c"]
+
+[[bin]]
 name = "process"
 source = ["test/tools/process.c"]
 
