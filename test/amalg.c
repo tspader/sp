@@ -1,5 +1,7 @@
 #define SP_TEST_AMALGAMATION
 
+#include "sp.h"
+
 #include "utest.h"
 
 #include "main.c"
