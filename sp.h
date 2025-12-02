@@ -945,6 +945,12 @@ typedef struct {
 #define sp_ht_for(__ht, __it)\
   for (sp_ht_it __it = sp_ht_it_init(__ht); sp_ht_it_valid(__ht, __it); sp_ht_it_advance(__ht, __it))
 
+#define sp_ht_for_kv(__ht, __it) \
+  for (struct { sp_ht_it idx; __typeof__((__ht)->data[0].key)* key; __typeof__((__ht)->data[0].val)* val; } \
+       __it = { sp_ht_it_init(__ht), sp_ht_it_getkp(__ht, sp_ht_it_init(__ht)), sp_ht_it_getp(__ht, sp_ht_it_init(__ht)) }; \
+       sp_ht_it_valid(__ht, __it.idx); \
+       (sp_ht_it_advance(__ht, __it.idx), __it.key = sp_ht_it_getkp(__ht, __it.idx), __it.val = sp_ht_it_getp(__ht, __it.idx)))
+
 #define sp_ht_front(__ht)\
   ((__ht) == NULL || !sp_ht_it_valid(__ht, sp_ht_it_init(__ht)) ? NULL : sp_ht_it_getp(__ht, sp_ht_it_init(__ht)))
 
