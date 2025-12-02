@@ -1,15 +1,19 @@
 INCLUDE := -I. -Itest -Itest/tools -Iexternal/utest.h -Iexternal/argparse
+CC := clang
 
 .PHONY: all ps
 
-all: ps
+all: amalg
+
+amalg:
+	$(CC) $(INCLUDE) -Wall -Werror -lpthread -lm ./test/amalg.c -std=c99 -o build/debug/amalg -DSP_IMPLEMENTATION
 
 ps:
-	clang $(INCLUDE) -Wall -Werror -lpthread -lm ./test/tools/process.c -std=c99 -o build/debug/process -DSP_IMPLEMENTATION
-	clang $(INCLUDE) -Wall -Werror -lpthread -lm ./test/ps.c -std=c99 -o build/debug/ps -DSP_IMPLEMENTATION
+	$(CC) $(INCLUDE) -Wall -Werror -lpthread -lm ./test/tools/process.c -std=c99 -o build/debug/process -DSP_IMPLEMENTATION
+	$(CC) $(INCLUDE) -Wall -Werror -lpthread -lm ./test/ps.c -std=c99 -o build/debug/ps -DSP_IMPLEMENTATION
 
 fs:
-	clang $(INCLUDE) -Wall -Werror -lpthread -lm ./test/fs.c -std=c99 -o build/debug/fs -DSP_IMPLEMENTATION
+	$(CC) $(INCLUDE) -Wall -Werror -lpthread -lm ./test/fs.c -std=c99 -o build/debug/fs -DSP_IMPLEMENTATION
 
 core:
-	clang $(INCLUDE) -Wall -Werror -lpthread -lm ./test/main.c -std=c99 -o build/debug/core -DSP_IMPLEMENTATION -Wpadded
+	$(CC) $(INCLUDE) -Wall -Werror -lpthread -lm ./test/core.c -std=c99 -o build/debug/core -DSP_IMPLEMENTATION

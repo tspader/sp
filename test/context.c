@@ -109,7 +109,6 @@ UTEST_F(context, begin_scratch) {
 
 UTEST_F(context, end_scratch) {
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
-  sp_context_t *ctx = sp_context_get();
 
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   EXPECT_EQ(arena->bytes_used, 0);
@@ -302,7 +301,7 @@ UTEST_F(context, nested_pop_from_scratch) {
   EXPECT_EQ(a[0], 0xAA);
 
   // begin a nested scratch
-  sp_mem_scratch_t s2 = sp_mem_begin_scratch();
+  sp_mem_begin_scratch();
   u8* b = sp_alloc(64);
   sp_mem_fill_u8(b, 64, 0xBB);
   EXPECT_EQ(rt->scratch->bytes_used, 128);

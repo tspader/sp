@@ -15,19 +15,19 @@ UTEST(stress, dyn_array) {
       sp_dyn_array_push(arr, (u64)i * 12345);
   }
 
-  ASSERT_EQ(sp_dyn_array_size(arr), count);
+  EXPECT_EQ(sp_dyn_array_size(arr), count);
 
   for (s32 i = 0; i < count; i++) {
-      ASSERT_EQ(arr[i], (u64)i * 12345);
+      EXPECT_EQ(arr[i], (u64)i * 12345);
   }
 
   sp_dyn_array_clear(arr);
-  ASSERT_EQ(sp_dyn_array_size(arr), 0);
+  EXPECT_EQ(sp_dyn_array_size(arr), 0);
 
   for (s32 i = 0; i < 1000; i++) {
       sp_dyn_array_push(arr, (u64)i);
   }
-  ASSERT_EQ(sp_dyn_array_size(arr), 1000);
+  EXPECT_EQ(sp_dyn_array_size(arr), 1000);
 
   sp_dyn_array_free(arr);
 }
@@ -41,23 +41,23 @@ UTEST(stress, hash_table) {
       sp_ht_insert(ht, i, i * i);
   }
 
-  ASSERT_EQ(sp_ht_size(ht), count);
+  EXPECT_EQ(sp_ht_size(ht), count);
 
   for (s32 i = 0; i < 100; i++) {
       u64 key = rand() % count;
-      ASSERT_TRUE(sp_ht_exists(ht, key));
-      ASSERT_EQ(*sp_ht_getp(ht, key), key * key);
+      EXPECT_TRUE(sp_ht_exists(ht, key));
+      EXPECT_EQ(*sp_ht_getp(ht, key), key * key);
   }
 
   for (u64 i = 0; i < count; i += 2) {
       sp_ht_erase(ht, i);
   }
 
-  ASSERT_EQ(sp_ht_size(ht), count / 2);
+  EXPECT_EQ(sp_ht_size(ht), count / 2);
 
   for (u64 i = 1; i < count; i += 2) {
-      ASSERT_TRUE(sp_ht_exists(ht, i));
-      ASSERT_EQ(*sp_ht_getp(ht, i), i * i);
+      EXPECT_TRUE(sp_ht_exists(ht, i));
+      EXPECT_EQ(*sp_ht_getp(ht, i), i * i);
   }
 
   sp_ht_free(ht);
@@ -71,23 +71,23 @@ UTEST(stress, ring_buffer) {
       sp_ring_buffer_push(&rb, &i);
   }
 
-  ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+  EXPECT_TRUE(sp_ring_buffer_is_full(&rb));
 
   for (u64 i = 0; i < 500; i++) {
       u64* val = (u64*)sp_ring_buffer_pop(&rb);
-      ASSERT_EQ(*val, i);
+      EXPECT_EQ(*val, i);
   }
 
   for (u64 i = 1000; i < 1500; i++) {
       sp_ring_buffer_push(&rb, &i);
   }
 
-  ASSERT_TRUE(sp_ring_buffer_is_full(&rb));
+  EXPECT_TRUE(sp_ring_buffer_is_full(&rb));
 
   u64 expected = 500;
   sp_ring_buffer_for(rb, it) {
       u64* val = sp_rb_it_getp(&it, u64);
-      ASSERT_EQ(*val, expected);
+      EXPECT_EQ(*val, expected);
       expected++;
   }
 
@@ -102,14 +102,14 @@ UTEST(stress, ring_buffer_continuous_overwrite) {
       sp_ring_buffer_push_overwrite(&rb, &i);
   }
 
-  ASSERT_EQ(rb.size, 100);
+  EXPECT_EQ(rb.size, 100);
 
   for (s32 i = 0; i < 100; i++) {
       int* val = (int*)sp_ring_buffer_pop(&rb);
-      ASSERT_EQ(*val, 9900 + i);
+      EXPECT_EQ(*val, 9900 + i);
   }
 
-  ASSERT_TRUE(sp_ring_buffer_is_empty(&rb));
+  EXPECT_TRUE(sp_ring_buffer_is_empty(&rb));
 
   sp_ring_buffer_destroy(&rb);
 }
@@ -131,12 +131,12 @@ UTEST(stress, sp_dyn_array_push_f) {
     sp_dyn_array_push_f((void**)&arr, &item, sizeof(large_struct_t));
   }
 
-  ASSERT_EQ(sp_dyn_array_size(arr), 1000);
+  EXPECT_EQ(sp_dyn_array_size(arr), 1000);
 
   for (u32 i = 0; i < 1000; i++) {
-    ASSERT_EQ(arr[i].id, i);
+    EXPECT_EQ(arr[i].id, i);
     for (int j = 0; j < 256; j++) {
-      ASSERT_EQ(arr[i].data[j], (c8)((i + j) % 256));
+      EXPECT_EQ(arr[i].data[j], (c8)((i + j) % 256));
     }
   }
 
@@ -187,8 +187,8 @@ UTEST(stress, sp_spin_lock) {
     sp_thread_join(&threads[i]);
   }
 
-  ASSERT_EQ(shared_counter, SP_SPIN_LOCK_STRESS_THREADS * SP_SPIN_LOCK_STRESS_ITERATIONS);
-  ASSERT_EQ(lock, 0);
+  EXPECT_EQ(shared_counter, SP_SPIN_LOCK_STRESS_THREADS * SP_SPIN_LOCK_STRESS_ITERATIONS);
+  EXPECT_EQ(lock, 0);
 }
 
 typedef struct {
@@ -237,7 +237,7 @@ UTEST(stress, sp_atomic_s32) {
   }
 
   s32 final = sp_atomic_s32_get(&counter);
-  ASSERT_TRUE(final >= 0);
+  EXPECT_TRUE(final >= 0);
 }
 
 UTEST(stress, sp_context) {
@@ -311,8 +311,9 @@ UTEST(stress, sp_context) {
   }
 
   // Verify scratch arena is clean
-  ASSERT_EQ(arena->bytes_used, 0);
-  ASSERT_EQ(rt->index, initial_index);
+  EXPECT_EQ(arena->bytes_used, 0);
+  EXPECT_EQ(rt->index, initial_index);
+  SP_UNUSED(sum);
 }
 
 SP_TEST_MAIN()
