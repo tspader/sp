@@ -14,17 +14,17 @@ cc = "tcc"
 mode = "debug"
 language = "c11"
 
-# [[bin]]
-# name = "amalg"
-# source = ["amalg/main.c"]
-
 [[bin]]
 name = "app"
 source = ["test/app.c"]
 
 [[bin]]
-name = "c"
+name = "core"
 source = ["test/main.c"]
+
+[[bin]]
+name = "cv"
+source = ["test/cv.c"]
 
 [[bin]]
 name = "fmon"

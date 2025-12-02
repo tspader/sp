@@ -5,10 +5,6 @@
 
 #include "utest.h"
 
-//////////////////////////
-// BASIC CONTEXT TESTS  //
-//////////////////////////
-
 UTEST(sp_context, get_returns_non_null) {
   sp_context_t* ctx = sp_context_get();
   ASSERT_TRUE(ctx != NULL);
@@ -23,10 +19,6 @@ UTEST(sp_context, thread_state_index_starts_at_zero) {
   sp_tls_rt_t* state = sp_tls_rt_get();
   ASSERT_EQ(state->index, 0);
 }
-
-//////////////////////////
-// CONTEXT STACK TESTS  //
-//////////////////////////
 
 UTEST(sp_context, push_pop_single) {
   sp_tls_rt_t* state = sp_tls_rt_get();
@@ -90,9 +82,6 @@ UTEST(sp_context, set_modifies_current) {
   ASSERT_TRUE(current->allocator.on_alloc == new_allocator.on_alloc);
 }
 
-/////////////
-// SCRATCH //
-/////////////
 UTEST(sp_mem, scratch_initted) {
   sp_context_t* ctx = sp_context_get();
   ASSERT_TRUE(ctx->scratch.buffer != NULL);
@@ -144,10 +133,6 @@ UTEST(sp_mem_mark, use_scratch_allocator_but_return_from_user_allocator) {
   EXPECT_EQ(buffer[0], 69);
   EXPECT_EQ(ctx->scratch.bytes_used, 0);
 }
-
-//////////////////////////
-// MULTITHREADED TESTS  //
-//////////////////////////
 
 typedef struct {
   sp_atomic_s32* done_count;
