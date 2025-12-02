@@ -18,6 +18,18 @@ UTEST_F_TEARDOWN(sp_test_fs) {
   sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
+UTEST_F(sp_test_fs, mod_time) {
+  sp_str_t file = sp_test_file_path(&ut.file_manager, sp_str_lit("a.file"));
+  sp_str_t dir = sp_test_file_path(&ut.file_manager, sp_str_lit("a.dir"));
+  sp_fs_create_dir(dir);
+  sp_fs_create_file(file);
+  sp_tm_epoch_t mod_time = SP_ZERO_INITIALIZE();
+  mod_time = sp_fs_get_mod_time(file);
+  EXPECT_TRUE(mod_time.s > 0);
+  mod_time = sp_fs_get_mod_time(dir);
+  EXPECT_TRUE(mod_time.s > 0);
+}
+
 UTEST_F(sp_test_fs, link) {
   // Create a test file with content
   sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source.txt"));
@@ -481,6 +493,7 @@ UTEST(path_functions, integration_test) {
   }
   ASSERT_FALSE(has_double_slash);
 }
+
 
 
 UTEST_MAIN()
