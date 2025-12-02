@@ -57,13 +57,12 @@ struct sp_test_leak {
 UTEST_F_SETUP(sp_test_leak) {
   ut.str = sp_str_lit("hello, world!");
 
-  sp_context_t* context = sp_context_get();
-  sp_mem_arena_clear(&context->scratch);
+  sp_mem_arena_clear(sp_mem_get_scratch_arena());
 }
 
 UTEST_F_TEARDOWN(sp_test_leak) {
   sp_context_t* context = sp_context_get();
-  SP_LOG("{} bytes", SP_FMT_U32(context->scratch.bytes_used));
+  SP_LOG("{} bytes", SP_FMT_U32(sp_mem_get_scratch_arena()->bytes_used));
 }
 
 UTEST_F(sp_test_leak, to_upper) {
@@ -197,4 +196,4 @@ UTEST_F(sp_test_leak, sp_str_split_c8) {
   sp_da(sp_str_t) result = sp_str_split_c8(ut.str, ',');
 }
 #endif
-UTEST_MAIN()
+SP_TEST_MAIN()

@@ -583,6 +583,7 @@ SP_API void                    sp_mem_zero(void* buffer, u32 buffer_size);
 SP_API void*                   sp_mem_allocator_alloc(sp_allocator_t a, u32 size);
 SP_API void*                   sp_mem_allocator_realloc(sp_allocator_t a, void* ptr, u32 size);
 SP_API void                    sp_mem_allocator_free(sp_allocator_t a, void* buffer);
+SP_API sp_mem_arena_t*         sp_mem_arena_new(u32 capacity);
 SP_API void                    sp_mem_arena_init(sp_mem_arena_t* a, u32 capacity);
 SP_API sp_allocator_t          sp_mem_arena_as_allocator(sp_mem_arena_t* a);
 SP_API void                    sp_mem_arena_clear(sp_mem_arena_t* a);
@@ -593,6 +594,7 @@ SP_API void                    sp_mem_arena_pop(sp_mem_arena_marker_t marker);
 SP_API sp_allocator_t          sp_mem_libc_new();
 SP_API void*                   sp_mem_libc_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u32 size, void* ptr);
 SP_API sp_mem_libc_metadata_t* sp_mem_libc_get_metadata(void* ptr);
+SP_API sp_mem_arena_t*         sp_mem_get_scratch_arena();
 SP_API sp_mem_scratch_t        sp_mem_begin_scratch();
 SP_API void                    sp_mem_end_scratch(sp_mem_scratch_t scratch);
 #define SP_ALLOC(T) (T*)sp_alloc(sizeof(T))
@@ -1256,8 +1258,8 @@ typedef struct {
 typedef s32 sp_os_file_handle_t;
 
 typedef struct {
-  sp_dyn_array(s32) watch_descs;
-  sp_dyn_array(sp_str_t) watch_paths;
+  sp_da(s32) watch_descs;
+  sp_da(sp_str_t) watch_paths;
   u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
   s32 fd;
   u8 padding [4];
@@ -1628,11 +1630,11 @@ SP_API s32  sp_thread_launch(void* userdata);
 
 typedef struct {
   sp_allocator_t allocator;
-  sp_mem_arena_t scratch;
 } sp_context_t;
 
 typedef struct {
   sp_context_t contexts [SP_RT_MAX_CONTEXT];
+  sp_mem_arena_t* scratch;
   u32 index;
   u8 padding[4];
 } sp_tls_rt_t;
@@ -3512,11 +3514,7 @@ void sp_context_pop() {
 void sp_context_on_deinit(void* ptr) {
   if (ptr) {
     sp_tls_rt_t* state = (sp_tls_rt_t*)ptr;
-    for (u32 i = 0; i <= state->index; i++) {
-      if (state->contexts[i].scratch.buffer) {
-        sp_mem_arena_destroy(&state->contexts[i].scratch);
-      }
-    }
+    sp_mem_arena_destroy(state->scratch);
     sp_mem_os_free(ptr);
   }
 }
@@ -3531,12 +3529,15 @@ sp_tls_rt_t* sp_tls_rt_get() {
   sp_tls_rt_t* state = (sp_tls_rt_t*)pthread_getspecific(sp_rt.tls.key);
   if (!state) {
     state = (sp_tls_rt_t*)sp_mem_os_alloc(sizeof(sp_tls_rt_t));
-    sp_mem_zero(state, sizeof(sp_tls_rt_t));
+    *state = (sp_tls_rt_t) {
+      .index = 0,
+      .contexts = {
+        { .allocator = sp_mem_libc_new() }
+      },
+    };
     pthread_setspecific(sp_rt.tls.key, state);
 
-    state->index = 0;
-    state->contexts[0].allocator = sp_mem_libc_new();
-    sp_mem_arena_init(&state->contexts[0].scratch, SP_RT_SCRATCH_SIZE);
+    state->scratch = sp_mem_arena_new(SP_RT_SCRATCH_SIZE);
   }
 
   return state;
@@ -3581,10 +3582,16 @@ void sp_mem_allocator_free(sp_allocator_t allocator, void* buffer) {
   allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_FREE, 0, buffer);
 }
 
-void sp_mem_arena_init(sp_mem_arena_t* allocator, u32 capacity) {
-  allocator->buffer = (u8*)sp_mem_os_alloc(capacity);
-  allocator->capacity = capacity;
-  allocator->bytes_used = 0;
+sp_mem_arena_t* sp_mem_arena_new(u32 capacity) {
+  sp_mem_arena_t* arena = SP_ALLOC(sp_mem_arena_t);
+  sp_mem_arena_init(arena, capacity);
+  return arena;
+}
+
+void sp_mem_arena_init(sp_mem_arena_t* arena, u32 capacity) {
+  arena->buffer = (u8*)sp_alloc(capacity);
+  arena->capacity = capacity;
+  arena->bytes_used = 0;
 }
 
 sp_allocator_t sp_mem_arena_as_allocator(sp_mem_arena_t* a) {
@@ -3595,13 +3602,13 @@ sp_allocator_t sp_mem_arena_as_allocator(sp_mem_arena_t* a) {
 }
 
 void sp_mem_arena_clear(sp_mem_arena_t* allocator) {
-  memset(allocator->buffer, 0, allocator->bytes_used);
+  sp_mem_zero(allocator->buffer, allocator->bytes_used);
   allocator->bytes_used = 0;
 }
 
 void sp_mem_arena_destroy(sp_mem_arena_t* allocator) {
   if (allocator->buffer) {
-    sp_mem_os_free(allocator->buffer);
+    sp_free(allocator->buffer);
     allocator->buffer = NULL;
     allocator->capacity = 0;
     allocator->bytes_used = 0;
@@ -3650,13 +3657,20 @@ void sp_mem_arena_pop(sp_mem_arena_marker_t marker) {
   marker.arena->bytes_used = marker.mark;
 }
 
+sp_mem_arena_t* sp_mem_get_scratch_arena() {
+  sp_tls_rt_t* runtime = sp_tls_rt_get();
+  return runtime->scratch;
+}
+
 sp_mem_scratch_t sp_mem_begin_scratch() {
+  sp_tls_rt_t* runtime = sp_tls_rt_get();
   sp_context_t* ctx = sp_context_get();
+
   sp_mem_scratch_t scratch = {
-    .marker = sp_mem_arena_mark(&ctx->scratch),
+    .marker = sp_mem_arena_mark(runtime->scratch),
     .old_allocator = ctx->allocator
   };
-  sp_context_push_allocator(sp_mem_arena_as_allocator(&ctx->scratch));
+  sp_context_push_allocator(sp_mem_arena_as_allocator(runtime->scratch));
   return scratch;
 }
 
@@ -3760,13 +3774,13 @@ void sp_mem_os_free(void* ptr) {
 #elif defined(SP_POSIX)
 void* sp_mem_os_alloc(u32 size) {
   void* ptr = malloc(size);
-  if (ptr) memset(ptr, 0, size);
+  if (ptr) sp_mem_zero(ptr, size);
   return ptr;
 }
 
 void* sp_mem_os_realloc(void* ptr, u32 size) {
   if (!ptr) return sp_mem_os_alloc(size);
-  if (!size) { free(ptr); return NULL; }
+  if (!size) { sp_mem_os_free(ptr); return NULL; }
   return realloc(ptr, size);
 }
 
@@ -6859,7 +6873,7 @@ void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_moni
 
 #elif defined(SP_LINUX)
 void sp_fmon_os_init(sp_fmon_t* monitor) {
-  sp_fmon_os_t* linux_monitor = (sp_fmon_os_t*)sp_alloc(sizeof(sp_fmon_os_t));
+  sp_fmon_os_t* linux_monitor = SP_ALLOC(sp_fmon_os_t);
 
   linux_monitor->fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
   if (linux_monitor->fd == -1) {

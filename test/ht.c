@@ -638,4 +638,4 @@ UTEST(sp_ht_front, after_erase) {
   sp_ht_free(ht);
 }
 
-UTEST_MAIN()
+SP_TEST_MAIN()

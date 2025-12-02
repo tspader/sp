@@ -1012,4 +1012,4 @@ UTEST_F(sp_ps, redirect_stdout_to_stderr) {
   EXPECT_EQ(out, SP_NULLPTR);
 }
 
-UTEST_MAIN()
+SP_TEST_MAIN()

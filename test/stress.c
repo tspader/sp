@@ -240,4 +240,4 @@ UTEST(sp_atomic_s32, stress_concurrent_operations) {
   ASSERT_TRUE(final >= 0);
 }
 
-UTEST_MAIN()
+SP_TEST_MAIN()

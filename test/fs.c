@@ -496,4 +496,4 @@ UTEST(path_functions, integration_test) {
 
 
 
-UTEST_MAIN()
+SP_TEST_MAIN()

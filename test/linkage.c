@@ -176,4 +176,4 @@ UTEST_F(sp_compile, static_lib) {
   ASSERT_EQ(run.status.exit_code, 0);
 }
 
-UTEST_MAIN()
+SP_TEST_MAIN()

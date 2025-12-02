@@ -374,4 +374,4 @@ UTEST(asset_registry, stress_many_assets) {
   sp_context_pop();
 }
 
-UTEST_MAIN()
+SP_TEST_MAIN()

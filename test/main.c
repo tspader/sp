@@ -2407,37 +2407,6 @@ UTEST(fixed_array, capacity_limits) {
 }
 
 
-// ██╗    ██╗██╗███╗   ██╗██████╗ ██████╗
-// ██║    ██║██║████╗  ██║╚════██╗╚════██╗
-// ██║ █╗ ██║██║██╔██╗ ██║ █████╔╝ █████╔╝
-// ██║███╗██║██║██║╚██╗██║ ╚═══██╗██╔═══╝
-// ╚███╔███╔╝██║██║ ╚████║██████╔╝███████╗
-//  ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
-
-
-// ███████╗██╗██╗     ███████╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
-// ██╔════╝██║██║     ██╔════╝    ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
-// █████╗  ██║██║     █████╗      ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
-// ██╔══╝  ██║██║     ██╔══╝      ██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║   ██║   ██║██╔══██╗
-// ██║     ██║███████╗███████╗    ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██║   ██║   ╚██████╔╝██║  ██║
-// ╚═╝     ╚═╝╚══════╝╚══════╝    ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
-typedef struct sp_test_file_monitor_data {
-  bool change_detected;
-  sp_fmon_event_kind_t last_event;
-  c8 last_file_path[SP_MAX_PATH_LEN];
-} sp_test_file_monitor_data;
-
-void sp_test_file_monitor_callback(sp_fmon_t* monitor, sp_fmon_event_t* change, void* userdata) {
-  sp_test_file_monitor_data* data = (sp_test_file_monitor_data*)userdata;
-  data->change_detected = true;
-  data->last_event = change->events;
-  sp_str_copy_to(change->file_path, data->last_file_path, SP_MAX_PATH_LEN);
-}
-
-#ifdef SP_WIN32
-#endif
-
-
 
 // ██████╗  ██████╗ ███████╗██╗██╗  ██╗
 // ██╔══██╗██╔═══██╗██╔════╝██║╚██╗██╔╝
@@ -4312,10 +4281,6 @@ UTEST_F(sp_io, file_write_read_roundtrip) {
 
   sp_io_close(&stream);
 }
-
-typedef struct sp_ps {
-  s32 foo;
-} sp_ps_fixture;
 
 UTEST(sp_env, all_operations) {
   sp_env_t env = sp_env_capture();

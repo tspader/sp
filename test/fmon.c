@@ -231,4 +231,4 @@ UTEST_F(sp_test_file_monitor, no_events_without_changes) {
   EXPECT_FALSE(timed_out);
 }
 
-UTEST_MAIN()
+SP_TEST_MAIN()
