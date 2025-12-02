@@ -111,6 +111,11 @@
   #define SP_POSIX
 #endif
 
+#ifdef __COSMOPOLITAN__
+  #define SP_COSMO
+  #define SP_POSIX
+#endif
+
 
 //////////////
 // COMPILER //
@@ -365,6 +370,13 @@
 // ╚══════╝   ╚═╝   ╚══════╝   ╚═╝   ╚══════╝╚═╝     ╚═╝
 // @system
 SP_BEGIN_EXTERN_C()
+#if defined(SP_COSMO)
+  #ifndef _COSMO_SOURCE
+    #define _COSMO_SOURCE
+  #endif
+
+  #include "libc/dce.h"
+#endif
 
 #if defined(SP_WIN32)
   #if defined(UNICODE)
@@ -410,7 +422,6 @@ SP_BEGIN_EXTERN_C()
   #include <dispatch/dispatch.h>
   #include <mach-o/dyld.h>
   #include <spawn.h>
-
 #endif
 
 #if defined(SP_POSIX)
@@ -425,6 +436,7 @@ SP_BEGIN_EXTERN_C()
   #include <pthread.h>
   #include <semaphore.h>
   #include <signal.h>
+  #include <spawn.h>
   #include <stdlib.h>
   #include <unistd.h>
   #include <sys/stat.h>
@@ -1279,6 +1291,16 @@ typedef s32 sp_os_file_handle_t;
 typedef struct {
   void* placeholder;
 } sp_fmon_os_t;
+
+///////////
+// COSMO //
+///////////
+#elif defined(SP_COSMO)
+typedef s32 sp_os_file_handle_t;
+
+typedef struct {
+  s32 dummy;
+} sp_fmon_os_t;
 #endif
 
 
@@ -1496,10 +1518,7 @@ typedef enum {
 #if defined(SP_WIN32)
   typedef mtx_t sp_mutex_t;
 
-#elif defined(SP_LINUX)
-  typedef pthread_mutex_t sp_mutex_t;
-
-#elif defined(SP_MACOS)
+#elif defined(SP_POSIX)
   typedef pthread_mutex_t sp_mutex_t;
 #endif
 
@@ -1534,11 +1553,11 @@ SP_API void sp_cv_notify_all(sp_cv_t* cv);
 #if defined(SP_WIN32)
   typedef HANDLE sp_semaphore_t;
 
-#elif defined(SP_LINUX)
-  typedef sem_t sp_semaphore_t;
-
 #elif defined(SP_MACOS)
   typedef dispatch_semaphore_t sp_semaphore_t;
+
+#elif defined(SP_POSIX)
+  typedef sem_t sp_semaphore_t;
 #endif
 
 SP_API void sp_semaphore_init(sp_semaphore_t* semaphore);
@@ -1600,11 +1619,11 @@ typedef struct {
 #if defined(SP_WIN32)
   typedef thrd_t sp_thread_t;
 
-#elif defined(SP_LINUX)
+#elif defined(SP_MACOS)
   typedef pthread_t sp_thread_t;
 
-#elif defined(SP_MACOS)
-  typedef pthread_t            sp_thread_t;
+#elif defined(SP_POSIX)
+  typedef pthread_t sp_thread_t;
 #endif
 
 SP_API void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
@@ -5154,11 +5173,15 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
 }
 
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
-  c8* path_cstr = sp_str_to_cstr(path);
-  c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-  realpath(path_cstr, canonical_path);
+  sp_str_t result = path;
+  if (sp_fs_exists(path)) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+    if (realpath(path_cstr, canonical_path)) {
+      result = SP_CSTR(canonical_path);
+    }
+  }
 
-  sp_str_t result = SP_CSTR(canonical_path);
   result = sp_fs_normalize_path(result);
 
   if (result.len > 0 && result.data[result.len - 1] == '/') {
@@ -5216,17 +5239,30 @@ sp_str_t sp_fs_get_config_path() {
 }
 #endif
 
+#if defined(SP_COSMO)
+extern char* program_invocation_name;
+
+sp_str_t sp_fs_get_exe_path() {
+  c8 exe_path [PATH_MAX] = SP_ZERO_INITIALIZE();
+  if (realpath(program_invocation_name, exe_path)) {
+    return sp_str_copy(sp_fs_parent_path(SP_CSTR(exe_path)));
+  }
+  return sp_str_lit("");
+}
+#endif
+
 #if defined(SP_LINUX)
 sp_str_t sp_fs_get_exe_path() {
   c8 exe_path [PATH_MAX];
-  sp_str_t file_path = {
-    .len = (u32)readlink("/proc/self/exe", exe_path, PATH_MAX - 1),
-    .data = exe_path
-  };
-
-  if (!file_path.len) {
+  s64 len = readlink("/proc/self/exe", exe_path, PATH_MAX - 1);
+  if (len < 0) {
     return sp_str_lit("");
   }
+
+  sp_str_t file_path = {
+    .len = (u32)len,
+    .data = exe_path
+  };
 
   return sp_str_copy(sp_fs_parent_path(file_path));
 }
@@ -5342,6 +5378,45 @@ sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
   }
 
   SP_UNREACHABLE();
+}
+
+sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
+  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+}
+#endif
+
+#if defined(SP_COSMO)
+sp_os_kind_t sp_os_get_kind() {
+  if (IsLinux()) {
+    return SP_OS_LINUX;
+  }
+  else if (IsWindows()) {
+    return SP_OS_WIN32;
+  }
+  else if (IsXnu()) {
+    return SP_OS_MACOS;
+  }
+
+  SP_UNREACHABLE_RETURN(SP_OS_LINUX);
+}
+
+sp_str_t sp_os_get_name() {
+  switch (sp_os_get_kind()) {
+    case SP_OS_LINUX: return sp_str_lit("linux");
+    case SP_OS_WIN32: return sp_str_lit("windows");
+    case SP_OS_MACOS: return sp_str_lit("macos");
+  }
+
+  SP_UNREACHABLE_RETURN(sp_str_lit(""));
+}
+
+sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
+  switch (kind) {
+    case SP_OS_LIB_SHARED: return SP_LIT("so");
+    case SP_OS_LIB_STATIC: return SP_LIT("a");
+  }
+
+  SP_UNREACHABLE_RETURN(sp_str_lit(""));
 }
 
 sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
@@ -5613,7 +5688,7 @@ void sp_tm_reset_timer(sp_tm_timer_t* timer) {
   }
 #endif
 
-#if defined(SP_LINUX)
+#if defined(SP_LINUX) || defined(SP_COSMO)
 sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
   struct stat st;
   c8* path_cstr = sp_str_to_cstr(file_path);
@@ -5814,7 +5889,7 @@ bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
 void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     dispatch_semaphore_signal(*semaphore);
 }
-#elif defined(SP_LINUX)
+#elif defined(SP_POSIX)
 void sp_semaphore_init(sp_semaphore_t* semaphore) {
   sem_init(semaphore, 0, 0);
 }
@@ -7004,6 +7079,23 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
 void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   (void)monitor;
   SP_BROKEN();
+}
+
+#elif defined(SP_COSMO)
+void sp_fmon_os_init(sp_fmon_t* monitor) {
+  (void)monitor;
+}
+
+void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
+  (void)monitor; (void)directory_path;
+}
+
+void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+  (void)monitor; (void)file_path;
+}
+
+void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+  (void)monitor;
 }
 #endif
 

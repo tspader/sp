@@ -1,5 +1,5 @@
 INCLUDE := -I. -Itest -Itest/tools -Iexternal/utest.h -Iexternal/argparse
-CC := clang
+CC := cosmocc
 
 .PHONY: all ps
 
