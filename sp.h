@@ -558,6 +558,7 @@ typedef struct {
 typedef struct {
   sp_mem_arena_t* arena;
   u32 mark;
+  u8 padding[4];
 } sp_mem_arena_marker_t;
 
 typedef struct {
@@ -621,6 +622,7 @@ typedef struct {
   u32 size;
   u32 capacity;
   u32 element_size;
+  u8 padding[4];
 } sp_fixed_array_t;
 
 #define sp_fixed_array(t, n) sp_fixed_array_t
@@ -762,18 +764,20 @@ typedef enum sp_ht_entry_state {
 } sp_ht_entry_state;
 
 typedef struct {
-  u32 stride;
-  u32 klpvl;
-  u32 tmp_idx;
-  struct {
-    u32 key;
-    u32 value;
-  } size;
   struct {
     sp_ht_hash_key_fn_t hash;
     sp_ht_compare_key_fn_t compare;
   } fn;
+  struct {
+    u32 key;
+    u32 value;
+  } size;
+  u32 stride;
+  u32 klpvl;
+  u32 tmp_idx;
+  u8 padding [4];
 } sp_ht_info_t;
+
 
 #define __sp_ht_entry(__K, __V)\
     struct\
@@ -781,6 +785,7 @@ typedef struct {
         __K key;\
         __V val;\
         sp_ht_entry_state state;\
+        u8 padding [4]; \
     }
 #define sp_ht(__K, __V)                \
     struct {                                   \
@@ -966,9 +971,10 @@ typedef struct {
 #define sp_rb(t) sp_ring_buffer_t
 
 typedef struct {
+  sp_ring_buffer_t* buffer;
   s32 index;
   bool reverse;
-  sp_ring_buffer_t* buffer;
+  u8 padding[3];
 } sp_rb_it_t;
 
 SP_API void*      sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index);
@@ -1010,8 +1016,9 @@ SP_API sp_rb_it_t sp_rb_rit_new(sp_ring_buffer_t* buffer);
 // ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
 // @string
 typedef struct {
-  u32 len;
   const c8* data;
+  u32 len;
+  u8 padding[4];
 } sp_str_t;
 
 typedef struct {
@@ -1024,6 +1031,7 @@ typedef struct {
   struct {
     sp_str_t word;
     u32 level;
+    u8 padding[4];
   } indent;
 } sp_str_builder_t;
 
@@ -1034,10 +1042,12 @@ typedef struct {
   struct {
     sp_str_t* data;
     u32 len;
+    u8 padding[4];
   } elements;
 
   sp_str_t str;
   u32 index;
+  u8 padding[4];
 } sp_str_reduce_context_t;
 
 typedef struct {
@@ -1048,11 +1058,13 @@ typedef struct {
 typedef struct {
   sp_str_t needle;
   bool found;
+  u8 padding[7];
 } sp_str_contains_context_t;
 
 typedef struct {
   sp_str_t needle;
   u32 count;
+  u8 padding[4];
 } sp_str_count_context_t;
 
 typedef struct {
@@ -1202,12 +1214,12 @@ typedef struct {
 
 struct sp_fmon {
 	sp_fmon_fn_t callback;
-	sp_fmon_event_kind_t events_to_watch;
 	void* userdata;
-	u32 debounce_time_ms;
 	sp_dyn_array(sp_fmon_event_t) changes;
 	sp_dyn_array(sp_fmon_cache_t) cache;
-  sp_opaque_ptr os;
+	sp_opaque_ptr os;
+	sp_fmon_event_kind_t events_to_watch;
+	u32 debounce_time_ms;
 };
 
 SP_API void sp_fmon_init(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
@@ -1242,10 +1254,11 @@ typedef struct {
 typedef s32 sp_os_file_handle_t;
 
 typedef struct {
-  s32 fd;
   sp_dyn_array(s32) watch_descs;
   sp_dyn_array(sp_str_t) watch_paths;
   u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+  s32 fd;
+  u8 padding [4];
 } sp_fmon_os_t;
 
 ///////////
@@ -1340,6 +1353,7 @@ SP_API void         sp_os_export_env(sp_env_t* env, sp_env_export_t export);
 typedef struct {
   u64 s;
   u32 ns;
+  u8 padding[4];
 } sp_tm_epoch_t;
 
 typedef u64 sp_tm_point_t;
@@ -1398,6 +1412,7 @@ typedef struct {
   sp_str_t file_path;
   sp_str_t file_name;
   sp_os_file_attr_t attributes;
+  u8 padding[4];
 } sp_os_dir_ent_t;
 
 SP_API bool                   sp_fs_is_regular_file(sp_str_t path);
@@ -1488,6 +1503,20 @@ SP_API void sp_mutex_destroy(sp_mutex_t* mutex);
 SP_API s32  sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
 
 
+#if defined(SP_POSIX)
+typedef pthread_cond_t sp_cv_t;
+#elif defined(SP_WIN32)
+typedef CONDITION_VARIABLE sp_cv_t;
+#endif
+
+SP_API void sp_cv_init(sp_cv_t* cv);
+SP_API void sp_cv_destroy(sp_cv_t* cv);
+SP_API void sp_cv_wait(sp_cv_t* cv, sp_mutex_t* mutex);
+SP_API bool sp_cv_wait_for(sp_cv_t* cv, sp_mutex_t* mutex, u32 ms);
+SP_API void sp_cv_notify_one(sp_cv_t* cv);
+SP_API void sp_cv_notify_all(sp_cv_t* cv);
+
+
 // ███████╗███████╗███╗   ███╗ █████╗ ██████╗ ██╗  ██╗ ██████╗ ██████╗ ███████╗
 // ██╔════╝██╔════╝████╗ ████║██╔══██╗██╔══██╗██║  ██║██╔═══██╗██╔══██╗██╔════╝
 // ███████╗█████╗  ██╔████╔██║███████║██████╔╝███████║██║   ██║██████╔╝█████╗
@@ -1521,8 +1550,8 @@ SP_API void sp_semaphore_signal(sp_semaphore_t* semaphore);
 // @future
 typedef struct {
   sp_allocator_t allocator;
-  sp_atomic_s32 ready;
   void* value;
+  sp_atomic_s32 ready;
   u32 size;
 } sp_future_t;
 
@@ -1603,6 +1632,7 @@ typedef struct {
 typedef struct {
   sp_context_t contexts [SP_RT_MAX_CONTEXT];
   u32 index;
+  u8 padding[4];
 } sp_tls_rt_t;
 
 typedef struct {
@@ -1748,8 +1778,8 @@ typedef enum {
 }
 
 typedef struct {
-  sp_ps_io_mode_t mode;
   sp_io_stream_t stream;
+  sp_ps_io_mode_t mode;
   sp_ps_io_blocking_t block;
 } sp_ps_io_stream_config_t;
 
@@ -1762,9 +1792,10 @@ typedef struct {
 typedef sp_ps_io_config_t sp_ps_io_t;
 
 typedef struct {
-  sp_ps_env_mode_t mode;
   sp_env_t env;
   sp_env_var_t extra [SP_PS_MAX_ENV];
+  sp_ps_env_mode_t mode;
+  u8 padding[4];
 } sp_ps_env_config_t;
 
 typedef struct {
@@ -1780,6 +1811,7 @@ typedef struct {
   sp_str_t data;
   u64 size;
   s32 exit_code;
+  u8 padding[4];
 } sp_ps_read_result_t;
 
 typedef struct {
@@ -1811,6 +1843,7 @@ typedef struct {
     s32 read;
     s32 write;
   } pipes;
+  u8 padding[4];
 } sp_ps_posix_stdio_stream_config_t;
 
 typedef struct {
@@ -1828,14 +1861,16 @@ typedef struct {
   c8** argv;
   c8** envp;
   sp_ps_env_mode_t env_mode;
+  u8 padding[4];
 } sp_ps_platform_t;
 #endif
 
 typedef struct {
-  pid_t pid;
   sp_ps_io_t io;
   sp_ps_platform_t platform;
   sp_allocator_t allocator;
+  pid_t pid;
+  u8 padding[4];
 } sp_ps_t;
 
 SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
@@ -1893,21 +1928,22 @@ typedef enum {
 } sp_format_id_t;
 
 typedef struct sp_format_arg_t {
-  sp_format_id_t id;
-
   union {
     #undef SP_FMT_X
     #define SP_FMT_X(name, type) type SP_FMT_UNION(name);
     SP_FORMAT_TYPES
   };
 
+  sp_format_id_t id;
+  u8 padding[4];
 } sp_format_arg_t;
 
 SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
 
 typedef struct sp_formatter {
-  sp_format_id_t id;
   sp_format_fn_t fn;
+  sp_format_id_t id;
+  u8 padding[4];
 } sp_formatter_t;
 
 
@@ -2030,24 +2066,27 @@ typedef struct {
 } sp_asset_t;
 
 typedef struct {
-  sp_asset_kind_t kind;
   sp_asset_import_fn_t on_import;
   sp_asset_completion_fn_t on_completion;
+  sp_asset_kind_t kind;
+  u8 padding[4];
 } sp_asset_importer_config_t;
 
 typedef struct {
-  sp_asset_kind_t kind;
   sp_asset_import_fn_t on_import;
   sp_asset_completion_fn_t on_completion;
   sp_asset_registry_t* registry;
+  sp_asset_kind_t kind;
+  u8 padding[4];
 } sp_asset_importer_t;
 
 struct sp_asset_import_context {
   sp_asset_registry_t* registry;
   sp_asset_importer_t* importer;
-  u32 asset_index;
   sp_future_t* future;
   void* user_data;
+  u32 asset_index;
+  u8 padding[4];
 };
 
 #define sp_asset_import_context_get_asset(ctx) (&(ctx)->registry->assets[(ctx)->asset_index])
@@ -2063,12 +2102,12 @@ struct sp_asset_registry {
   sp_mutex_t completion_mutex;
   sp_semaphore_t semaphore;
   sp_thread_t thread;
-  bool shutdown_requested;
-
   sp_da(sp_asset_t) assets;
   sp_da(sp_asset_importer_t) importers;
   sp_rb(sp_asset_import_context_t) import_queue;
   sp_rb(sp_asset_import_context_t) completion_queue;
+  bool shutdown_requested;
+  u8 padding[7];
 };
 
 SP_API void                 sp_asset_registry_init(sp_asset_registry_t* r, sp_asset_registry_config_t config);
@@ -2477,17 +2516,17 @@ bool sp_rb_it_done(sp_rb_it_t* it) {
 
 sp_rb_it_t sp_rb_it_new(sp_ring_buffer_t* buffer) {
     sp_rb_it_t iterator;
+    iterator.buffer = buffer;
     iterator.index = 0;
     iterator.reverse = false;
-    iterator.buffer = buffer;
     return iterator;
 }
 
 sp_rb_it_t sp_rb_rit_new(sp_ring_buffer_t* buffer) {
     sp_rb_it_t iterator;
+    iterator.buffer = buffer;
     iterator.index = buffer->size - 1;
     iterator.reverse = true;
-    iterator.buffer = buffer;
     return iterator;
 }
 
@@ -3209,11 +3248,12 @@ typedef enum {
 typedef struct {
   sp_str_t fmt;
   u32 it;
+  u8 padding[4];
 } sp_format_parser_t;
 
 typedef struct {
-  u32 flags;
   sp_str_t color;
+  u32 flags;
   u32 pad;
 } sp_format_specifier_t;
 
@@ -4238,7 +4278,7 @@ sp_str_t sp_str_strip(sp_str_t str, sp_str_t strip) {
 }
 
 sp_str_t sp_str_to_upper(sp_str_t str) {
-  sp_mem_begin_scratch();
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
   for (u32 i = 0; i < str.len; i++) {
@@ -4250,7 +4290,12 @@ sp_str_t sp_str_to_upper(sp_str_t str) {
     }
   }
 
-  return sp_str_builder_write(&builder);
+  sp_context_push_allocator(scratch.old_allocator);
+  sp_str_t result = sp_str_builder_write(&builder);
+  sp_context_pop();
+
+  sp_mem_end_scratch(scratch);
+  return result;
 }
 
 sp_str_t sp_str_to_lower(sp_str_t str) {
@@ -5552,10 +5597,6 @@ void sp_tm_reset_timer(sp_tm_timer_t* timer) {
       return SP_ZERO_STRUCT(sp_tm_epoch_t);
     }
 
-    if (st.st_size == 0) {
-      return SP_ZERO_STRUCT(sp_tm_epoch_t);
-    }
-
     return SP_RVAL(sp_tm_epoch_t) {
       .s = (u64)st.st_mtime,
       .ns = (u32)st.st_mtimespec.tv_nsec
@@ -5570,10 +5611,6 @@ sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
   s32 result = stat(path_cstr, &st);
 
   if (result != 0) {
-    return SP_ZERO_STRUCT(sp_tm_epoch_t);
-  }
-
-  if (st.st_size == 0) {
     return SP_ZERO_STRUCT(sp_tm_epoch_t);
   }
 
@@ -5853,6 +5890,69 @@ void sp_mutex_unlock(sp_mutex_t* mutex) {
 
 void sp_mutex_destroy(sp_mutex_t* mutex) {
   pthread_mutex_destroy(mutex);
+}
+#endif
+
+#if defined(SP_POSIX)
+void sp_cv_init(sp_cv_t* cond) {
+  pthread_cond_init(cond, NULL);
+}
+
+void sp_cv_destroy(sp_cv_t* cond) {
+  pthread_cond_destroy(cond);
+}
+
+void sp_cv_wait(sp_cv_t* cond, sp_mutex_t* mutex) {
+  pthread_cond_wait(cond, mutex);
+}
+
+bool sp_cv_wait_for(sp_cv_t* cond, sp_mutex_t* mutex, u32 ms) {
+  sp_tm_epoch_t now = sp_tm_now_epoch();
+
+  struct timespec ts = {
+    .tv_sec = now.s + (ms / 1000),
+    .tv_nsec = now.ns + ((ms % 1000) * 1000000),
+  };
+
+  if (ts.tv_nsec >= 1000000000) {
+    ts.tv_sec++;
+    ts.tv_nsec -= 1000000000;
+  }
+
+  return pthread_cond_timedwait(cond, mutex, &ts) == 0;
+}
+
+void sp_cv_notify_one(sp_cv_t* cond) {
+  pthread_cond_signal(cond);
+}
+
+void sp_cv_notify_all(sp_cv_t* cond) {
+  pthread_cond_broadcast(cond);
+}
+
+#elif defined(SP_WIN32)
+void sp_cv_init(sp_cv_t* cond) {
+  InitializeConditionVariable(cond);
+}
+
+void sp_cv_destroy(sp_cv_t* cond) {
+  SP_UNUSED(cond);
+}
+
+void sp_cv_wait(sp_cv_t* cond, sp_mutex_t* mutex) {
+  SleepConditionVariableCS(cond, mutex, INFINITE);
+}
+
+bool sp_cv_wait_for(sp_cv_t* cond, sp_mutex_t* mutex, u32 ms) {
+  return SleepConditionVariableCS(cond, mutex, (DWORD)ms) != 0;
+}
+
+void sp_cv_notify_one(sp_cv_t* cond) {
+  WakeConditionVariable(cond);
+}
+
+void sp_cv_notify_all(sp_cv_t* cond) {
+  WakeAllConditionVariable(cond);
 }
 #endif
 
