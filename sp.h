@@ -309,11 +309,10 @@
 
 #define SP_MEM_ALIGNMENT 16
 
-#define SP_PAD(size) u8 _pad[SP_MEM_ALIGNMENT - ((size) % SP_MEM_ALIGNMENT)]
-
-//#define sp_align_up(ptr, align) (((uintptr_t)ptr) & (align - 1))
 #define sp_align_up(ptr, align) ((void*)(((uintptr_t)(ptr) + ((align) - 1)) & ~((align) - 1)))
-#define sp_align_up_u32(val, align) ((((val) + ((align) - 1)) & ~((align) - 1)))
+#define sp_align_offset(val, align) ((((val) + ((align) - 1)) & ~((align) - 1)))
+
+
 
 #define SP_ANSI_RESET             "\033[0m"
 #define SP_ANSI_BOLD              "\033[1m"
@@ -564,13 +563,12 @@ typedef struct {
 
 typedef struct {
   u32 size;
-  SP_PAD(4);
+  u8 padding [12];
 } sp_mem_libc_metadata_t;
 
 typedef struct {
   sp_mem_arena_t* arena;
   u32 mark;
-  SP_PAD(12);
 } sp_mem_arena_marker_t;
 
 typedef struct {
@@ -638,7 +636,6 @@ typedef struct {
   u32 size;
   u32 capacity;
   u32 element_size;
-  u8 padding[4];
 } sp_fixed_array_t;
 
 #define sp_fixed_array(t, n) sp_fixed_array_t
@@ -791,7 +788,6 @@ typedef struct {
   u32 stride;
   u32 klpvl;
   u32 tmp_idx;
-  u8 padding [4];
 } sp_ht_info_t;
 
 
@@ -801,7 +797,6 @@ typedef struct {
         __K key;\
         __V val;\
         sp_ht_entry_state state;\
-        u8 padding [4]; \
     }
 #define sp_ht(__K, __V)                \
     struct {                                   \
@@ -996,7 +991,6 @@ typedef struct {
   sp_ring_buffer_t* buffer;
   s32 index;
   bool reverse;
-  u8 padding[3];
 } sp_rb_it_t;
 
 SP_API void*      sp_ring_buffer_at(sp_ring_buffer_t* buffer, u32 index);
@@ -1040,7 +1034,6 @@ SP_API sp_rb_it_t sp_rb_rit_new(sp_ring_buffer_t* buffer);
 typedef struct {
   const c8* data;
   u32 len;
-  u8 padding[4];
 } sp_str_t;
 
 typedef struct {
@@ -1053,7 +1046,6 @@ typedef struct {
   struct {
     sp_str_t word;
     u32 level;
-    u8 padding[4];
   } indent;
 } sp_str_builder_t;
 
@@ -1064,12 +1056,10 @@ typedef struct {
   struct {
     sp_str_t* data;
     u32 len;
-    u8 padding[4];
   } elements;
 
   sp_str_t str;
   u32 index;
-  u8 padding[4];
 } sp_str_reduce_context_t;
 
 typedef struct {
@@ -1080,13 +1070,11 @@ typedef struct {
 typedef struct {
   sp_str_t needle;
   bool found;
-  u8 padding[7];
 } sp_str_contains_context_t;
 
 typedef struct {
   sp_str_t needle;
   u32 count;
-  u8 padding[4];
 } sp_str_count_context_t;
 
 typedef struct {
@@ -1280,7 +1268,6 @@ typedef struct {
   sp_da(sp_str_t) watch_paths;
   u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
   s32 fd;
-  u8 padding [4];
 } sp_fmon_os_t;
 
 ///////////
@@ -1375,7 +1362,6 @@ SP_API void         sp_os_export_env(sp_env_t* env, sp_env_export_t export);
 typedef struct {
   u64 s;
   u32 ns;
-  u8 padding[4];
 } sp_tm_epoch_t;
 
 typedef u64 sp_tm_point_t;
@@ -1434,7 +1420,6 @@ typedef struct {
   sp_str_t file_path;
   sp_str_t file_name;
   sp_os_file_attr_t attributes;
-  u8 padding[4];
 } sp_os_dir_ent_t;
 
 SP_API bool                   sp_fs_is_regular_file(sp_str_t path);
@@ -1654,7 +1639,6 @@ typedef struct {
   sp_context_t contexts [SP_RT_MAX_CONTEXT];
   sp_mem_arena_t* scratch;
   u32 index;
-  u8 padding[4];
 } sp_tls_rt_t;
 
 typedef struct {
@@ -1817,7 +1801,6 @@ typedef struct {
   sp_env_t env;
   sp_env_var_t extra [SP_PS_MAX_ENV];
   sp_ps_env_mode_t mode;
-  u8 padding[4];
 } sp_ps_env_config_t;
 
 typedef struct {
@@ -1833,7 +1816,6 @@ typedef struct {
   sp_str_t data;
   u64 size;
   s32 exit_code;
-  u8 padding[4];
 } sp_ps_read_result_t;
 
 typedef struct {
@@ -1865,7 +1847,6 @@ typedef struct {
     s32 read;
     s32 write;
   } pipes;
-  u8 padding[4];
 } sp_ps_posix_stdio_stream_config_t;
 
 typedef struct {
@@ -1883,7 +1864,6 @@ typedef struct {
   c8** argv;
   c8** envp;
   sp_ps_env_mode_t env_mode;
-  u8 padding[4];
 } sp_ps_platform_t;
 #endif
 
@@ -1892,7 +1872,6 @@ typedef struct {
   sp_ps_platform_t platform;
   sp_allocator_t allocator;
   pid_t pid;
-  u8 padding[4];
 } sp_ps_t;
 
 SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
@@ -1957,7 +1936,6 @@ typedef struct sp_format_arg_t {
   };
 
   sp_format_id_t id;
-  u8 padding[4];
 } sp_format_arg_t;
 
 SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
@@ -1965,7 +1943,6 @@ SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
 typedef struct sp_formatter {
   sp_format_fn_t fn;
   sp_format_id_t id;
-  u8 padding[4];
 } sp_formatter_t;
 
 
@@ -2091,7 +2068,6 @@ typedef struct {
   sp_asset_import_fn_t on_import;
   sp_asset_completion_fn_t on_completion;
   sp_asset_kind_t kind;
-  u8 padding[4];
 } sp_asset_importer_config_t;
 
 typedef struct {
@@ -2099,7 +2075,6 @@ typedef struct {
   sp_asset_completion_fn_t on_completion;
   sp_asset_registry_t* registry;
   sp_asset_kind_t kind;
-  u8 padding[4];
 } sp_asset_importer_t;
 
 struct sp_asset_import_context {
@@ -2108,7 +2083,6 @@ struct sp_asset_import_context {
   sp_future_t* future;
   void* user_data;
   u32 asset_index;
-  u8 padding[4];
 };
 
 #define sp_asset_import_context_get_asset(ctx) (&(ctx)->registry->assets[(ctx)->asset_index])
@@ -2129,7 +2103,6 @@ struct sp_asset_registry {
   sp_rb(sp_asset_import_context_t) import_queue;
   sp_rb(sp_asset_import_context_t) completion_queue;
   bool shutdown_requested;
-  u8 padding[7];
 };
 
 SP_API void                 sp_asset_registry_init(sp_asset_registry_t* r, sp_asset_registry_config_t config);
@@ -3270,7 +3243,6 @@ typedef enum {
 typedef struct {
   sp_str_t fmt;
   u32 it;
-  u8 padding[4];
 } sp_format_parser_t;
 
 typedef struct {
@@ -3640,7 +3612,7 @@ void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size,
   sp_mem_arena_t* bump = (sp_mem_arena_t*)user_data;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
-      u32 aligned_offset = sp_align_up_u32(bump->bytes_used, SP_MEM_ALIGNMENT);
+      u32 aligned_offset = sp_align_offset(bump->bytes_used, SP_MEM_ALIGNMENT);
       if (aligned_offset + size > bump->capacity) {
         u32 new_capacity = SP_MAX(bump->capacity * 2, aligned_offset + size);
         u8* new_buffer = (u8*)sp_mem_os_realloc(bump->buffer, new_capacity);
