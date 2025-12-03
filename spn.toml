@@ -3,6 +3,7 @@ name = "sp"
 include = [".", "include", "test/tools"]
 define = ["SP_IMPLEMENTATION"]
 version = "1.6.2"
+system_deps = ["m"]
 
 [deps]
 utest = "1.0.0"
