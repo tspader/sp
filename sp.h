@@ -6424,17 +6424,11 @@ sp_tm_timer_t sp_tm_start_timer() {
 
 u64 sp_tm_read_timer(sp_tm_timer_t* timer) {
   sp_tm_point_t current = sp_tm_now_point();
-  if (current < timer->previous) {
-    timer->previous = current;
-  }
   return sp_tm_point_diff(current, timer->start);
 }
 
 u64 sp_tm_lap_timer(sp_tm_timer_t* timer) {
   sp_tm_point_t current = sp_tm_now_point();
-  if (current < timer->previous) {
-    timer->previous = current;
-  }
   u64 elapsed = sp_tm_point_diff(current, timer->previous);
   timer->previous = current;
   return elapsed;
