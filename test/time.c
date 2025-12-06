@@ -44,7 +44,7 @@ UTEST(tm, timer_lap) {
 
 UTEST(tm, epoch_to_iso) {
   sp_tm_epoch_t epoch = sp_tm_now_epoch();
-  sp_str_t iso = sp_tm_to_iso8601(epoch);
+  sp_str_t iso = sp_tm_epoch_to_iso8601(epoch);
   EXPECT_GE(iso.len, 20);
   EXPECT_EQ(iso.data[4], '-');
   EXPECT_EQ(iso.data[7], '-');
@@ -69,4 +69,149 @@ UTEST(tm, date_time) {
   EXPECT_LE(dt.second, 59);
   EXPECT_GE(dt.millisecond, 0);
   EXPECT_LE(dt.millisecond, 999);
+}
+
+// Time unit conversion tests
+
+UTEST(tm, s_to_ms) {
+  EXPECT_EQ(sp_tm_s_to_ms(0), 0ULL);
+  EXPECT_EQ(sp_tm_s_to_ms(1), 1000ULL);
+  EXPECT_EQ(sp_tm_s_to_ms(60), 60000ULL);
+  EXPECT_EQ(sp_tm_s_to_ms(3600), 3600000ULL);
+}
+
+UTEST(tm, s_to_us) {
+  EXPECT_EQ(sp_tm_s_to_us(0), 0ULL);
+  EXPECT_EQ(sp_tm_s_to_us(1), 1000000ULL);
+  EXPECT_EQ(sp_tm_s_to_us(60), 60000000ULL);
+}
+
+UTEST(tm, s_to_ns) {
+  EXPECT_EQ(sp_tm_s_to_ns(0), 0ULL);
+  EXPECT_EQ(sp_tm_s_to_ns(1), 1000000000ULL);
+  EXPECT_EQ(sp_tm_s_to_ns(10), 10000000000ULL);
+}
+
+UTEST(tm, ms_to_s) {
+  EXPECT_EQ(sp_tm_ms_to_s(0), 0ULL);
+  EXPECT_EQ(sp_tm_ms_to_s(999), 0ULL);
+  EXPECT_EQ(sp_tm_ms_to_s(1000), 1ULL);
+  EXPECT_EQ(sp_tm_ms_to_s(1500), 1ULL);
+  EXPECT_EQ(sp_tm_ms_to_s(60000), 60ULL);
+}
+
+UTEST(tm, ms_to_us) {
+  EXPECT_EQ(sp_tm_ms_to_us(0), 0ULL);
+  EXPECT_EQ(sp_tm_ms_to_us(1), 1000ULL);
+  EXPECT_EQ(sp_tm_ms_to_us(1000), 1000000ULL);
+}
+
+UTEST(tm, ms_to_ns) {
+  EXPECT_EQ(sp_tm_ms_to_ns(0), 0ULL);
+  EXPECT_EQ(sp_tm_ms_to_ns(1), 1000000ULL);
+  EXPECT_EQ(sp_tm_ms_to_ns(1000), 1000000000ULL);
+}
+
+UTEST(tm, us_to_s) {
+  EXPECT_EQ(sp_tm_us_to_s(0), 0ULL);
+  EXPECT_EQ(sp_tm_us_to_s(999999), 0ULL);
+  EXPECT_EQ(sp_tm_us_to_s(1000000), 1ULL);
+  EXPECT_EQ(sp_tm_us_to_s(1500000), 1ULL);
+}
+
+UTEST(tm, us_to_ms) {
+  EXPECT_EQ(sp_tm_us_to_ms(0), 0ULL);
+  EXPECT_EQ(sp_tm_us_to_ms(999), 0ULL);
+  EXPECT_EQ(sp_tm_us_to_ms(1000), 1ULL);
+  EXPECT_EQ(sp_tm_us_to_ms(1500), 1ULL);
+}
+
+UTEST(tm, us_to_ns) {
+  EXPECT_EQ(sp_tm_us_to_ns(0), 0ULL);
+  EXPECT_EQ(sp_tm_us_to_ns(1), 1000ULL);
+  EXPECT_EQ(sp_tm_us_to_ns(1000), 1000000ULL);
+}
+
+UTEST(tm, ns_to_s) {
+  EXPECT_EQ(sp_tm_ns_to_s(0), 0ULL);
+  EXPECT_EQ(sp_tm_ns_to_s(999999999), 0ULL);
+  EXPECT_EQ(sp_tm_ns_to_s(1000000000), 1ULL);
+  EXPECT_EQ(sp_tm_ns_to_s(1500000000), 1ULL);
+}
+
+UTEST(tm, ns_to_ms) {
+  EXPECT_EQ(sp_tm_ns_to_ms(0), 0ULL);
+  EXPECT_EQ(sp_tm_ns_to_ms(999999), 0ULL);
+  EXPECT_EQ(sp_tm_ns_to_ms(1000000), 1ULL);
+  EXPECT_EQ(sp_tm_ns_to_ms(1500000), 1ULL);
+}
+
+UTEST(tm, ns_to_us) {
+  EXPECT_EQ(sp_tm_ns_to_us(0), 0ULL);
+  EXPECT_EQ(sp_tm_ns_to_us(999), 0ULL);
+  EXPECT_EQ(sp_tm_ns_to_us(1000), 1ULL);
+  EXPECT_EQ(sp_tm_ns_to_us(1500), 1ULL);
+}
+
+// Floating point conversion tests
+
+UTEST(tm, ms_to_s_f) {
+  EXPECT_NEAR(sp_tm_ms_to_s_f(0), 0.0, 0.0001);
+  EXPECT_NEAR(sp_tm_ms_to_s_f(500), 0.5, 0.0001);
+  EXPECT_NEAR(sp_tm_ms_to_s_f(1000), 1.0, 0.0001);
+  EXPECT_NEAR(sp_tm_ms_to_s_f(1500), 1.5, 0.0001);
+}
+
+UTEST(tm, us_to_ms_f) {
+  EXPECT_NEAR(sp_tm_us_to_ms_f(0), 0.0, 0.0001);
+  EXPECT_NEAR(sp_tm_us_to_ms_f(500), 0.5, 0.0001);
+  EXPECT_NEAR(sp_tm_us_to_ms_f(1000), 1.0, 0.0001);
+  EXPECT_NEAR(sp_tm_us_to_ms_f(1500), 1.5, 0.0001);
+}
+
+UTEST(tm, ns_to_us_f) {
+  EXPECT_NEAR(sp_tm_ns_to_us_f(0), 0.0, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_us_f(500), 0.5, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_us_f(1000), 1.0, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_us_f(1500), 1.5, 0.0001);
+}
+
+UTEST(tm, ns_to_ms_f) {
+  EXPECT_NEAR(sp_tm_ns_to_ms_f(0), 0.0, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_ms_f(500000), 0.5, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_ms_f(1000000), 1.0, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_ms_f(1500000), 1.5, 0.0001);
+}
+
+UTEST(tm, ns_to_s_f) {
+  EXPECT_NEAR(sp_tm_ns_to_s_f(0), 0.0, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_s_f(500000000), 0.5, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_s_f(1000000000), 1.0, 0.0001);
+  EXPECT_NEAR(sp_tm_ns_to_s_f(1500000000), 1.5, 0.0001);
+}
+
+UTEST(tm, us_to_s_f) {
+  EXPECT_NEAR(sp_tm_us_to_s_f(0), 0.0, 0.0001);
+  EXPECT_NEAR(sp_tm_us_to_s_f(500000), 0.5, 0.0001);
+  EXPECT_NEAR(sp_tm_us_to_s_f(1000000), 1.0, 0.0001);
+  EXPECT_NEAR(sp_tm_us_to_s_f(1500000), 1.5, 0.0001);
+}
+
+// Roundtrip tests
+UTEST(tm, roundtrip_s_ms) {
+  EXPECT_EQ(sp_tm_ms_to_s(sp_tm_s_to_ms(42)), 42ULL);
+  EXPECT_EQ(sp_tm_ms_to_s(sp_tm_s_to_ms(0)), 0ULL);
+  EXPECT_EQ(sp_tm_ms_to_s(sp_tm_s_to_ms(3600)), 3600ULL);
+}
+
+UTEST(tm, roundtrip_ms_us) {
+  EXPECT_EQ(sp_tm_us_to_ms(sp_tm_ms_to_us(42)), 42ULL);
+  EXPECT_EQ(sp_tm_us_to_ms(sp_tm_ms_to_us(0)), 0ULL);
+  EXPECT_EQ(sp_tm_us_to_ms(sp_tm_ms_to_us(1000)), 1000ULL);
+}
+
+UTEST(tm, roundtrip_us_ns) {
+  EXPECT_EQ(sp_tm_ns_to_us(sp_tm_us_to_ns(42)), 42ULL);
+  EXPECT_EQ(sp_tm_ns_to_us(sp_tm_us_to_ns(0)), 0ULL);
+  EXPECT_EQ(sp_tm_ns_to_us(sp_tm_us_to_ns(1000000)), 1000000ULL);
 }

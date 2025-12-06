@@ -699,6 +699,10 @@ typedef union sp_quat {
 
 typedef sp_vec4_t sp_color_t;
 
+sp_color_t sp_color_rgb_255(u8 r, u8 g, u8 b) {
+  return (sp_color_t) SP_COLOR_RGB(r, g, b);
+}
+
 f32 sp_inv_sqrtf(f32 value) {
   return 1.0f / SP_SQRTF(value);
 }
@@ -2107,7 +2111,7 @@ typedef struct {
 } sp_os_date_time_t;
 
 SP_API sp_tm_epoch_t     sp_tm_now_epoch();
-SP_API sp_str_t          sp_tm_to_iso8601(sp_tm_epoch_t time);
+SP_API sp_str_t          sp_tm_epoch_to_iso8601(sp_tm_epoch_t time);
 SP_API sp_tm_point_t     sp_tm_now_point();
 SP_API u64               sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older);
 SP_API sp_tm_timer_t     sp_tm_start_timer();
@@ -2115,6 +2119,31 @@ SP_API u64               sp_tm_read_timer(sp_tm_timer_t* timer);
 SP_API u64               sp_tm_lap_timer(sp_tm_timer_t* timer);
 SP_API void              sp_tm_reset_timer(sp_tm_timer_t* timer);
 SP_API sp_tm_date_time_t sp_tm_get_date_time();
+SP_API u64               sp_tm_fps_to_ns(u64 fps);
+SP_API u64               sp_tm_s_to_ms(u64 s);
+SP_API u64               sp_tm_s_to_us(u64 s);
+SP_API u64               sp_tm_s_to_ns(u64 s);
+SP_API u64               sp_tm_ms_to_s(u64 ms);
+SP_API u64               sp_tm_ms_to_us(u64 ms);
+SP_API u64               sp_tm_ms_to_ns(u64 ms);
+SP_API u64               sp_tm_us_to_s(u64 us);
+SP_API u64               sp_tm_us_to_ms(u64 us);
+SP_API u64               sp_tm_us_to_ns(u64 us);
+SP_API u64               sp_tm_ns_to_s(u64 ns);
+SP_API u64               sp_tm_ns_to_ms(u64 ns);
+SP_API u64               sp_tm_ns_to_us(u64 ns);
+SP_API f64               sp_tm_s_to_ms_f(f64 s);
+SP_API f64               sp_tm_s_to_us_f(f64 s);
+SP_API f64               sp_tm_s_to_ns_f(f64 s);
+SP_API f64               sp_tm_ms_to_s_f(f64 ms);
+SP_API f64               sp_tm_ms_to_us_f(f64 ms);
+SP_API f64               sp_tm_ms_to_ns_f(f64 ms);
+SP_API f64               sp_tm_us_to_s_f(f64 us);
+SP_API f64               sp_tm_us_to_ms_f(f64 us);
+SP_API f64               sp_tm_us_to_ns_f(f64 us);
+SP_API f64               sp_tm_ns_to_s_f(f64 ns);
+SP_API f64               sp_tm_ns_to_ms_f(f64 ns);
+SP_API f64               sp_tm_ns_to_us_f(f64 ns);
 
 
 // ███████╗███████╗
@@ -6300,7 +6329,7 @@ sp_tm_epoch_t sp_tm_now_epoch() {
   };
 }
 
-sp_str_t sp_tm_to_iso8601(sp_tm_epoch_t time) {
+sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
   struct tm* time_info;
   time_t raw_time = (time_t)time.s;
   time_info = gmtime(&raw_time);
@@ -6363,6 +6392,128 @@ void sp_tm_reset_timer(sp_tm_timer_t* timer) {
   timer->previous = now;
 }
 #endif
+
+#define SP_TM_S_TO_MS  1000ULL
+#define SP_TM_S_TO_US  1000000ULL
+#define SP_TM_S_TO_NS  1000000000ULL
+#define SP_TM_MS_TO_US 1000ULL
+#define SP_TM_MS_TO_NS 1000000ULL
+#define SP_TM_US_TO_NS 1000ULL
+
+#define SP_TM_S_TO_MS_MAX  (SP_LIMIT_U64_MAX / SP_TM_S_TO_MS)
+#define SP_TM_S_TO_US_MAX  (SP_LIMIT_U64_MAX / SP_TM_S_TO_US)
+#define SP_TM_S_TO_NS_MAX  (SP_LIMIT_U64_MAX / SP_TM_S_TO_NS)
+#define SP_TM_MS_TO_US_MAX (SP_LIMIT_U64_MAX / SP_TM_MS_TO_US)
+#define SP_TM_MS_TO_NS_MAX (SP_LIMIT_U64_MAX / SP_TM_MS_TO_NS)
+#define SP_TM_US_TO_NS_MAX (SP_LIMIT_U64_MAX / SP_TM_US_TO_NS)
+
+u64 sp_tm_s_to_ms(u64 s) {
+  SP_ASSERT(s <= SP_TM_S_TO_MS_MAX);
+  return s * SP_TM_S_TO_MS;
+}
+
+u64 sp_tm_s_to_us(u64 s) {
+  SP_ASSERT(s <= SP_TM_S_TO_US_MAX);
+  return s * SP_TM_S_TO_US;
+}
+
+u64 sp_tm_s_to_ns(u64 s) {
+  SP_ASSERT(s <= SP_TM_S_TO_NS_MAX);
+  return s * SP_TM_S_TO_NS;
+}
+
+u64 sp_tm_ms_to_s(u64 ms) {
+  return ms / SP_TM_S_TO_MS;
+}
+
+u64 sp_tm_ms_to_us(u64 ms) {
+  SP_ASSERT(ms <= SP_TM_MS_TO_US_MAX);
+  return ms * SP_TM_MS_TO_US;
+}
+
+u64 sp_tm_ms_to_ns(u64 ms) {
+  SP_ASSERT(ms <= SP_TM_MS_TO_NS_MAX);
+  return ms * SP_TM_MS_TO_NS;
+}
+
+u64 sp_tm_us_to_s(u64 us) {
+  return us / SP_TM_S_TO_US;
+}
+
+u64 sp_tm_us_to_ms(u64 us) {
+  return us / SP_TM_MS_TO_US;
+}
+
+u64 sp_tm_us_to_ns(u64 us) {
+  SP_ASSERT(us <= SP_TM_US_TO_NS_MAX);
+  return us * SP_TM_US_TO_NS;
+}
+
+u64 sp_tm_ns_to_s(u64 ns) {
+  return ns / SP_TM_S_TO_NS;
+}
+
+u64 sp_tm_ns_to_ms(u64 ns) {
+  return ns / SP_TM_MS_TO_NS;
+}
+
+u64 sp_tm_ns_to_us(u64 ns) {
+  return ns / SP_TM_US_TO_NS;
+}
+
+f64 sp_tm_s_to_ms_f(f64 s) {
+  return s * (f64)SP_TM_S_TO_MS;
+}
+
+f64 sp_tm_s_to_us_f(f64 s) {
+  return s * (f64)SP_TM_S_TO_US;
+}
+
+f64 sp_tm_s_to_ns_f(f64 s) {
+  return s * (f64)SP_TM_S_TO_NS;
+}
+
+f64 sp_tm_ms_to_s_f(f64 ms) {
+  return ms / (f64)SP_TM_S_TO_MS;
+}
+
+f64 sp_tm_ms_to_us_f(f64 ms) {
+  return ms * (f64)SP_TM_MS_TO_US;
+}
+
+f64 sp_tm_ms_to_ns_f(f64 ms) {
+  return ms * (f64)SP_TM_MS_TO_NS;
+}
+
+f64 sp_tm_us_to_s_f(f64 us) {
+  return us / (f64)SP_TM_S_TO_US;
+}
+
+f64 sp_tm_us_to_ms_f(f64 us) {
+  return us / (f64)SP_TM_MS_TO_US;
+}
+
+f64 sp_tm_us_to_ns_f(f64 us) {
+  return us * (f64)SP_TM_US_TO_NS;
+}
+
+f64 sp_tm_ns_to_s_f(f64 ns) {
+  return ns / (f64)SP_TM_S_TO_NS;
+}
+
+f64 sp_tm_ns_to_ms_f(f64 ns) {
+  return ns / (f64)SP_TM_MS_TO_NS;
+}
+
+f64 sp_tm_ns_to_us_f(f64 ns) {
+  return ns / (f64)SP_TM_US_TO_NS;
+}
+
+u64 sp_tm_fps_to_ns(u64 fps) {
+  f64 s = (1.f) / (f64)(fps);
+  f64 ns = sp_tm_s_to_ns_f(s);
+  return (u64)ns;
+}
 
 #if defined(SP_MACOS)
   sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {

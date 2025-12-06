@@ -2,7 +2,7 @@
 name = "sp"
 include = [".", "include", "test/tools"]
 define = ["SP_IMPLEMENTATION"]
-version = "1.6.2"
+version = "1.6.5"
 system_deps = ["m"]
 
 [deps]
@@ -12,8 +12,6 @@ argparse = "1.2.0"
 [[profile]]
 name = "debug"
 cc = "tcc"
-mode = "debug"
-language = "c11"
 
 [[bin]]
 name = "amalg"
