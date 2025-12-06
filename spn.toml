@@ -5,13 +5,13 @@ define = ["SP_IMPLEMENTATION"]
 version = "1.6.5"
 system_deps = ["m"]
 
-[deps]
+[deps.package]
 utest = "1.0.0"
 argparse = "1.2.0"
 
 [[profile]]
 name = "debug"
-cc = "tcc"
+cc = "clang"
 
 [[bin]]
 name = "amalg"
@@ -40,6 +40,15 @@ source = ["test/fmon.c"]
 [[bin]]
 name = "fs"
 source = ["test/fs.c"]
+
+[[bin]]
+name = "glob"
+source = ["test/glob.c"]
+
+[[bin]]
+name = "bench-glob"
+source = ["test/bench/glob.c"]
+include = ["test"]
 
 [[bin]]
 name = "ht"

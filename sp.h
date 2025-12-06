@@ -63,6 +63,7 @@
     SP_PS_MAX_ARGS
     SP_PS_MAX_ENV
 
+
   ▗▄▄▄▖ ▗▄▖  ▗▄▖▗▄▄▄▖▗▖  ▗▖ ▗▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▄▖
   ▐▌   ▐▌ ▐▌▐▌ ▐▌ █  ▐▛▚▖▐▌▐▌ ▐▌ █  ▐▌   ▐▌
   ▐▛▀▀▘▐▌ ▐▌▐▌ ▐▌ █  ▐▌ ▝▜▌▐▌ ▐▌ █  ▐▛▀▀▘ ▝▀▚▖
@@ -319,6 +320,7 @@
 #define sp_align_up(ptr, align) ((void*)(((uintptr_t)(ptr) + ((align) - 1)) & ~((align) - 1)))
 #define sp_align_offset(val, align) ((((val) + ((align) - 1)) & ~((align) - 1)))
 
+#define sp_try(expr) do { s32 _sp_result = (expr); if (_sp_result) return _sp_result; } while (0)
 
 
 #define SP_ANSI_RESET             "\033[0m"
@@ -1791,6 +1793,14 @@ typedef struct {
   sp_str_t second;
 } sp_str_pair_t;
 
+typedef struct {
+  sp_str_t str;
+  u32 index;
+  c8 c;
+} sp_str_it_t;
+
+
+
 SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
 SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
@@ -1800,7 +1810,11 @@ SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 #define SP_LIT(STR)      sp_str_lit(STR)
 #define SP_CSTR(STR)     sp_str((STR), sp_cstr_len(STR))
 #define sp_str_for(str, it) for (u32 it = 0; it < str.len; it++)
+#define sp_str_for_it(str, it) for (sp_str_it_t it = sp_str_it(str); sp_str_it_valid(&it); sp_str_it_next(&it))
 
+sp_str_it_t            sp_str_it(sp_str_t str);
+bool                   sp_str_it_valid(sp_str_it_t* it);
+void                   sp_str_it_next(sp_str_it_t* it);
 SP_API void            sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
 SP_API void            sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
 SP_API void            sp_str_builder_indent(sp_str_builder_t* builder);
@@ -4352,20 +4366,29 @@ void sp_mem_arena_destroy(sp_mem_arena_t* arena) {
   sp_mem_os_free(arena);
 }
 
+typedef struct {
+  u32 size;
+  u8 padding [12];
+} sp_arena_alloc_header_t;
+
 void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size, void* old_memory) {
   sp_mem_arena_t* bump = (sp_mem_arena_t*)user_data;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
+      u32 header_size = sizeof(sp_arena_alloc_header_t);
+      u32 total_size = header_size + size;
       u32 aligned_offset = sp_align_offset(bump->bytes_used, SP_MEM_ALIGNMENT);
-      if (aligned_offset + size > bump->capacity) {
-        u32 new_capacity = SP_MAX(bump->capacity * 2, aligned_offset + size);
+      if (aligned_offset + total_size > bump->capacity) {
+        u32 new_capacity = SP_MAX(bump->capacity * 2, aligned_offset + total_size);
         u8* new_buffer = (u8*)sp_mem_os_realloc(bump->buffer, new_capacity);
         SP_ASSERT(new_buffer != NULL);
         bump->buffer = new_buffer;
         bump->capacity = new_capacity;
       }
-      void* memory_block = bump->buffer + aligned_offset;
-      bump->bytes_used = aligned_offset + size;
+      sp_arena_alloc_header_t* header = (sp_arena_alloc_header_t*)(bump->buffer + aligned_offset);
+      header->size = size;
+      void* memory_block = (u8*)header + header_size;
+      bump->bytes_used = aligned_offset + total_size;
       return memory_block;
     }
     case SP_ALLOCATOR_MODE_FREE: {
@@ -4374,7 +4397,8 @@ void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size,
     case SP_ALLOCATOR_MODE_RESIZE: {
       void* memory_block = sp_mem_arena_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       if (old_memory) {
-        sp_mem_move(old_memory, memory_block, size);
+        sp_arena_alloc_header_t* header = (sp_arena_alloc_header_t*)((u8*)old_memory - sizeof(sp_arena_alloc_header_t));
+        sp_mem_move(old_memory, memory_block, SP_MIN(header->size, size));
       }
       return memory_block;
     }
@@ -4384,6 +4408,7 @@ void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size,
     }
   }
 }
+
 sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* a) {
   return (sp_mem_arena_marker_t) {
     .arena = a,
@@ -4789,6 +4814,23 @@ sp_str_t sp_str_null_terminate(sp_str_t str) {
   return SP_STR(buffer, str.len);
 }
 
+sp_str_it_t sp_str_it(sp_str_t str) {
+  return (sp_str_it_t) {
+    .str = str,
+    .index = 0,
+    .c = str.len ? str.data[0] : 0
+  };
+}
+
+bool sp_str_it_valid(sp_str_it_t* it) {
+  return it->index < it->str.len;
+}
+
+void sp_str_it_next(sp_str_it_t* it) {
+  it->index++;
+  it->c = sp_str_it_valid(it) ? it->str.data[it->index] : 0;
+}
+
 void sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity) {
   while (builder->buffer.capacity < requested_capacity) {
     u32 capacity = SP_MAX(builder->buffer.capacity * 2, 8);
@@ -4988,10 +5030,8 @@ sp_str_t sp_str_trim_right(sp_str_t str) {
 sp_str_t sp_str_trim_left(sp_str_t str) {
   sp_str_t trimmed = str;
 
-  sp_str_for(str, it) {
-    c8 c = sp_str_at(str, it);
-
-    switch (c) {
+  sp_str_for_it(str, it) {
+    switch (it.c) {
       case ' ':
       case '\t':
       case '\r':
@@ -6424,17 +6464,11 @@ sp_tm_timer_t sp_tm_start_timer() {
 
 u64 sp_tm_read_timer(sp_tm_timer_t* timer) {
   sp_tm_point_t current = sp_tm_now_point();
-  if (current < timer->previous) {
-    timer->previous = current;
-  }
   return sp_tm_point_diff(current, timer->start);
 }
 
 u64 sp_tm_lap_timer(sp_tm_timer_t* timer) {
   sp_tm_point_t current = sp_tm_now_point();
-  if (current < timer->previous) {
-    timer->previous = current;
-  }
   u64 elapsed = sp_tm_point_diff(current, timer->previous);
   timer->previous = current;
   return elapsed;
