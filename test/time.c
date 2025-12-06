@@ -197,7 +197,6 @@ UTEST(tm, us_to_s_f) {
   EXPECT_NEAR(sp_tm_us_to_s_f(1500000), 1.5, 0.0001);
 }
 
-// Roundtrip tests
 UTEST(tm, roundtrip_s_ms) {
   EXPECT_EQ(sp_tm_ms_to_s(sp_tm_s_to_ms(42)), 42ULL);
   EXPECT_EQ(sp_tm_ms_to_s(sp_tm_s_to_ms(0)), 0ULL);
@@ -214,4 +213,31 @@ UTEST(tm, roundtrip_us_ns) {
   EXPECT_EQ(sp_tm_ns_to_us(sp_tm_us_to_ns(42)), 42ULL);
   EXPECT_EQ(sp_tm_ns_to_us(sp_tm_us_to_ns(0)), 0ULL);
   EXPECT_EQ(sp_tm_ns_to_us(sp_tm_us_to_ns(1000000)), 1000000ULL);
+}
+
+UTEST(tm, sleep_ns_lower_bound) {
+  u64 sleep_ns = sp_tm_ms_to_ns(5);
+  sp_tm_point_t start = sp_tm_now_point();
+  sp_sleep_ns(sleep_ns);
+  sp_tm_point_t end = sp_tm_now_point();
+  u64 elapsed = sp_tm_point_diff(end, start);
+  EXPECT_GE(elapsed, sleep_ns);
+}
+
+UTEST(tm, sleep_ms_lower_bound) {
+  f64 sleep_ms = 10.0;
+  sp_tm_point_t start = sp_tm_now_point();
+  sp_sleep_ms(sleep_ms);
+  sp_tm_point_t end = sp_tm_now_point();
+  u64 elapsed = sp_tm_point_diff(end, start);
+  EXPECT_GE(elapsed, sp_tm_ms_to_ns(10));
+}
+
+UTEST(tm, os_sleep_ns_lower_bound) {
+  u64 sleep_ns = sp_tm_ms_to_ns(10);
+  sp_tm_point_t start = sp_tm_now_point();
+  sp_os_sleep_ns(sleep_ns);
+  sp_tm_point_t end = sp_tm_now_point();
+  u64 elapsed = sp_tm_point_diff(end, start);
+  EXPECT_GE(elapsed, sleep_ns);
 }

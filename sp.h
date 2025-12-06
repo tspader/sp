@@ -2060,6 +2060,9 @@ typedef enum {
 SP_API sp_os_kind_t sp_os_get_kind();
 SP_API sp_str_t     sp_os_get_name();
 SP_API void         sp_os_sleep_ms(f64 ms);
+SP_API void         sp_os_sleep_ns(u64 ns);
+SP_API void         sp_sleep_ns(u64 ns);
+SP_API void         sp_sleep_ms(f64 ms);
 SP_API c8*          sp_os_wstr_to_cstr(c16* str, u32 len);
 SP_API void         sp_os_print(sp_str_t message);
 SP_API sp_str_t     sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
@@ -6013,8 +6016,13 @@ sp_str_t sp_fs_get_exe_path() {
 //  ╚═════╝ ╚══════╝
 //  @os
 #if defined(SP_WIN32)
+void sp_os_sleep_ns(u64 ns) {
+  // Windows stub: just use millisecond Sleep
+  Sleep((DWORD)(ns / 1000000));
+}
+
 void sp_os_sleep_ms(f64 ms) {
-  Sleep((DWORD)ms);
+  sp_os_sleep_ns((u64)(ms * 1000000.0));
 }
 
 c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
@@ -6053,12 +6061,56 @@ sp_str_t sp_os_platform_name() {
 
 
 #elif defined(SP_POSIX)
-void sp_os_sleep_ms(f64 ms) {
-  struct timespec ts;
-  ts.tv_sec = (time_t)(ms / 1000.0);
-  ts.tv_nsec = (long)((ms - (ts.tv_sec * 1000.0)) * 1000000.0);
-  nanosleep(&ts, NULL);
+void sp_os_sleep_ns(u64 ns) {
+  struct timespec remaining = {
+    .tv_sec = (time_t)(ns / 1000000000ULL),
+    .tv_nsec = (long)(ns % 1000000000ULL)
+  };
+  int was_error;
+  do {
+    errno = 0;
+    was_error = nanosleep(&remaining, &remaining);
+  } while (was_error == -1 && errno == EINTR);
 }
+
+void sp_os_sleep_ms(f64 ms) {
+  sp_os_sleep_ns((u64)sp_tm_ms_to_ns_f(ms));
+}
+
+void sp_sleep_ns(u64 target) {
+  const u64 coarse = sp_tm_ms_to_ns(1);
+  u64 fine = coarse;
+
+  u64 elapsed = 0;
+  sp_tm_timer_t timer = sp_tm_start_timer();
+
+  // coarse sleep until we get pretty close
+  while (elapsed + fine < target) {
+    u64 before = sp_tm_read_timer(&timer);
+    sp_os_sleep_ns(coarse);
+    elapsed = sp_tm_read_timer(&timer);
+    fine = SP_MAX(fine, elapsed - before);
+  }
+
+  // fine sleep until we get really close
+  u64 margin = fine - coarse;
+  u64 remaining = target - elapsed;
+  if (remaining > margin) {
+    sp_os_sleep_ns(remaining - margin);
+    elapsed = sp_tm_read_timer(&timer);
+  }
+
+  // spin until we get so god damn close we can taste it
+  while (elapsed < target) {
+    sp_spin_pause();
+    elapsed = sp_tm_read_timer(&timer);
+  }
+}
+
+void sp_sleep_ms(f64 ms) {
+  sp_sleep_ns((u64)sp_tm_ms_to_ns_f(ms));
+}
+
 
 c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
   if (!str16 || len == 0) {
@@ -6190,7 +6242,7 @@ sp_tm_epoch_t sp_tm_now_epoch() {
   };
 }
 
-sp_str_t sp_tm_to_iso8601(sp_tm_epoch_t time) {
+sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
   FILETIME ft;
   SYSTEMTIME st;
 
@@ -6221,8 +6273,10 @@ sp_tm_point_t sp_tm_now_point() {
   QueryPerformanceFrequency(&freq);
   QueryPerformanceCounter(&counter);
 
-  // Convert to nanoseconds
-  u64 ns = (counter.QuadPart * 1000000000ULL) / freq.QuadPart;
+  u64 seconds = counter.QuadPart / freq.QuadPart;
+  u64 remainder = counter.QuadPart % freq.QuadPart;
+  u64 ns = seconds * 1000000000ULL + (remainder * 1000000000ULL) / freq.QuadPart;
+
   return (sp_tm_point_t)ns;
 }
 
@@ -6276,7 +6330,7 @@ sp_tm_date_time_t sp_tm_get_date_time() {
   };
 }
 
-sp_tm_epoch_t sp_os_file_mod_time_precise(sp_str_t file_path) {
+sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
   WIN32_FILE_ATTRIBUTE_DATA fad;
   if (!GetFileAttributesEx(sp_str_to_cstr(file_path), GetFileExInfoStandard, &fad)) {
     return SP_ZERO_STRUCT(sp_tm_epoch_t);
@@ -6510,7 +6564,7 @@ f64 sp_tm_ns_to_us_f(f64 ns) {
 }
 
 u64 sp_tm_fps_to_ns(u64 fps) {
-  f64 s = (1.f) / (f64)(fps);
+  f64 s = (1.0) / (f64)(fps);
   f64 ns = sp_tm_s_to_ns_f(s);
   return (u64)ns;
 }

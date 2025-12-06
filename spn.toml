@@ -77,3 +77,7 @@ source = ["test/time.c"]
 [[bin]]
 name = "extract_fns"
 source = ["doc/tools/extract_fns.c"]
+
+[[bin]]
+name = "sleep"
+source = ["doc/tools/sleep.c"]
