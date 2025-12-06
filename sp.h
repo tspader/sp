@@ -530,7 +530,7 @@ typedef enum {
 #define sp_opt_set(O, V)  do { (O).value = (V); (O).some = SP_OPT_SOME; } while (0)
 #define sp_opt_get(O)     (O).value
 #define sp_opt_some(V)    { .value = V, .some = SP_OPT_SOME }
-#define sp_opt_none(V)    { .some = SP_OPT_NONE }
+#define sp_opt_none()    { .some = SP_OPT_NONE }
 #define sp_opt_is_null(V) ((V).some == SP_OPT_NONE)
 
 // ███╗   ███╗ █████╗ ████████╗██╗  ██╗
