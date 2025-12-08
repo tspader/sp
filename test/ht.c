@@ -725,4 +725,130 @@ UTEST(ht, for_kv_null_table) {
   EXPECT_EQ(count, 0);
 }
 
+// Issue tests: reproduce bugs documented in doc/hash-table.md
+
+static sp_hash_t sp_test_constant_hash(void* key, u32 size) {
+  (void)key;
+  (void)size;
+  return 42;
+}
+
+static bool sp_test_s32_compare(void* ka, void* kb, u32 size) {
+  (void)size;
+  return *(s32*)ka == *(s32*)kb;
+}
+
+// Hash collision: insert uses hash equality instead of key equality for probing.
+// Constant hash forces all keys to same bucket; different keys overwrite each other.
+UTEST(ht_issue, hash_collision_overwrites_different_keys) {
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_set_fns(ht, sp_test_constant_hash, sp_test_s32_compare);
+
+  sp_ht_insert(ht, 100, 1);
+  sp_ht_insert(ht, 200, 2);
+  sp_ht_insert(ht, 300, 3);
+
+  EXPECT_EQ(sp_ht_size(ht), 3);
+  EXPECT_TRUE(sp_ht_exists(ht, 100));
+  EXPECT_TRUE(sp_ht_exists(ht, 200));
+  EXPECT_TRUE(sp_ht_exists(ht, 300));
+
+  s32* val_a = sp_ht_getp(ht, 100);
+  s32* val_b = sp_ht_getp(ht, 200);
+  s32* val_c = sp_ht_getp(ht, 300);
+
+  EXPECT_NE(val_a, SP_NULLPTR);
+  EXPECT_NE(val_b, SP_NULLPTR);
+  EXPECT_NE(val_c, SP_NULLPTR);
+
+  if (val_a && val_b && val_c) {
+    EXPECT_EQ(*val_a, 1);
+    EXPECT_EQ(*val_b, 2);
+    EXPECT_EQ(*val_c, 3);
+  }
+
+  sp_ht_free(ht);
+}
+
+static sp_hash_t sp_test_identity_hash(void* key, u32 size) {
+  (void)size;
+  return (sp_hash_t)(*(s32*)key);
+}
+
+// Rehash: resize extends array but doesn't rehash existing entries.
+// Key 2 at cap=2 goes to slot 2%2=0. After resize to cap=4, it should be at 2%4=2.
+// Directly check that entry is at correct slot after resize.
+UTEST(ht_issue, rehash_breaks_lookups_after_resize) {
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_set_fns(ht, sp_test_identity_hash, sp_test_s32_compare);
+  u32 ka = sp_ht_capacity(ht);
+  u32 slot_before_resize = ka % sp_ht_capacity(ht);
+  u32 initial_capacity = sp_ht_capacity(ht);
+
+  sp_ht_insert(ht, ka, 2000);
+  EXPECT_EQ(ht->data[slot_before_resize].key, ka);
+
+  // force a resize
+  sp_ht_insert(ht, 1, 0);
+  EXPECT_GE(sp_ht_capacity(ht), initial_capacity);
+
+  // sanity check that the key should actually be in a different slot
+  u32 slot_after_resize = ka % sp_ht_capacity(ht);
+  EXPECT_NE(slot_before_resize, slot_after_resize);
+
+  // if we're rehashing correctly, the old slot is clean and the new slot has the data
+  EXPECT_NE(ht->data[slot_before_resize].key, ka);
+  EXPECT_EQ(ht->data[slot_after_resize].key, ka);
+  EXPECT_EQ(ht->data[slot_after_resize].state, SP_HT_ENTRY_ACTIVE);
+
+  sp_ht_free(ht);
+}
+
+static u32 g_hash_call_count = 0;
+
+static sp_hash_t sp_test_counting_hash(void* key, u32 size) {
+  g_hash_call_count++;
+  return sp_hash_bytes(key, size, SP_HT_HASH_SEED);
+}
+
+static bool sp_test_counting_compare(void* ka, void* kb, u32 size) {
+  return sp_mem_is_equal(ka, kb, size);
+}
+
+// Linear scan: lookup probes entire capacity instead of stopping at INACTIVE.
+// With 1 element in cap=64 table, missing key lookup should be O(1), not O(N).
+UTEST(ht_issue, linear_scan_calls_hash_too_many_times) {
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_set_fns(ht, sp_test_counting_hash, sp_test_counting_compare);
+
+  for (s32 i = 0; i < 32; i++) {
+    sp_ht_insert(ht, i, i);
+  }
+  u32 capacity = sp_ht_capacity(ht);
+  sp_ht_clear(ht);
+
+  g_hash_call_count = 0;
+  sp_ht_insert(ht, 999, 42);
+
+  g_hash_call_count = 0;
+  s32* val = sp_ht_getp(ht, 999);
+  u32 found_calls = g_hash_call_count;
+
+  EXPECT_NE(val, SP_NULLPTR);
+  EXPECT_EQ(*val, 42);
+
+  g_hash_call_count = 0;
+  s32* missing = sp_ht_getp(ht, 12345);
+  u32 missing_calls = g_hash_call_count;
+
+  EXPECT_EQ(missing, SP_NULLPTR);
+
+  u32 max_acceptable = 10;
+  EXPECT_LT(found_calls, max_acceptable);
+  EXPECT_LT(missing_calls, max_acceptable);
+
+  (void)capacity;
+  sp_ht_free(ht);
+}
+
 SP_TEST_MAIN()

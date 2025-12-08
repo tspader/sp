@@ -1483,8 +1483,9 @@ SP_TYPEDEF_FN(sp_hash_t, sp_ht_hash_key_fn_t, void*, u32);
 SP_TYPEDEF_FN(bool, sp_ht_compare_key_fn_t, void*, void*, u32);
 
 typedef enum sp_ht_entry_state {
-    SP_HT_ENTRY_INACTIVE = 0x00,
-    SP_HT_ENTRY_ACTIVE = 0x01
+  SP_HT_ENTRY_INACTIVE = 0,
+  SP_HT_ENTRY_ACTIVE,
+  SP_HT_ENTRY_DELETED,
 } sp_ht_entry_state;
 
 typedef struct {
@@ -1514,6 +1515,8 @@ typedef struct {
         __sp_ht_entry(__K, __V)* data; \
         __K tmp_key;                           \
         __V tmp_val;                           \
+        u32 size;                              \
+        u32 capacity;                          \
         sp_ht_info_t info; \
     }*
 
@@ -1523,11 +1526,10 @@ typedef struct {
 #define sp_ht_init(ht)\
     do {\
         *((void**)(&(ht))) = sp_alloc(sizeof(*ht));                    \
-        sp_mem_zero((ht), sizeof(*ht));                          \
                                                                        \
-        sp_dyn_array_reserve(ht->data, 2);                             \
-        ht->data[0].state = SP_HT_ENTRY_INACTIVE;              \
-        ht->data[1].state = SP_HT_ENTRY_INACTIVE;              \
+        (ht)->data = sp_alloc(2 * sizeof((ht)->data[0]));              \
+        (ht)->size = 0;                                                \
+        (ht)->capacity = 2;                                            \
                                                                        \
         u8* d0 = (u8*)&((ht)->data[0]);                                \
         u8* d1 = (u8*)&((ht)->data[1]);                                \
@@ -1539,8 +1541,8 @@ typedef struct {
         (ht)->info.size.value = (u32)(sizeof((ht)->data[0].val));      \
         (ht)->info.stride = (u32)(diff);                               \
         (ht)->info.klpvl = (u32)(klpvl);                               \
-        (ht)->info.fn.hash = sp_ht_on_hash_key;                \
-        (ht)->info.fn.compare = sp_ht_on_compare_key;          \
+        (ht)->info.fn.hash = sp_ht_on_hash_key;                        \
+        (ht)->info.fn.compare = sp_ht_on_compare_key;                  \
     } while (0)
 
 #define sp_ht_set_fns(ht, hash_fn, cmp_fn) \
@@ -1549,29 +1551,28 @@ typedef struct {
   (ht)->info.fn.compare = (cmp_fn);
 
 #define sp_ht_size(ht)\
-    ((ht) != NULL ? sp_dyn_array_size((ht)->data) : 0)
+    ((ht) != NULL ? (ht)->size : 0)
 
 #define sp_ht_capacity(ht)\
-    ((ht) != NULL ? sp_dyn_array_capacity((ht)->data) : 0)
+    ((ht) != NULL ? (ht)->capacity : 0)
 
 #define sp_ht_empty(ht)\
-    ((ht) != NULL ? sp_dyn_array_size((ht)->data) == 0 : true)
+    ((ht) != NULL ? (ht)->size == 0 : true)
 
 #define sp_ht_clear(ht)\
     do {\
         if ((ht) != NULL) {\
-            u32 capacity = sp_dyn_array_capacity((ht)->data);\
-            for (u32 i = 0; i < capacity; ++i) {\
+            for (u32 i = 0; i < (ht)->capacity; ++i) {\
                 (ht)->data[i].state = SP_HT_ENTRY_INACTIVE;\
             }\
-            sp_dyn_array_clear((ht)->data);\
+            (ht)->size = 0;\
         }\
     } while (0)
 
 #define sp_ht_free(ht)\
     do {\
         if ((ht) != NULL) {\
-            sp_dyn_array_free((ht)->data);\
+            sp_free((ht)->data);\
             (ht)->data = NULL;\
             sp_free(ht);\
             (ht) = NULL;\
@@ -1584,37 +1585,30 @@ typedef struct {
             sp_ht_init((__HT));\
         }\
         sp_ht_info_t __INFO = (__HT)->info;\
-        u32 __CAP = sp_ht_capacity(__HT);\
-        f32 __LF = __CAP ? (f32)(sp_ht_size(__HT)) / (f32)(__CAP) : 0.f;\
-        if (__LF >= 0.5f || !__CAP)\
-        {\
-            u32 NEW_CAP = __CAP ? __CAP * 2 : 2;\
-            sp_dyn_array_reserve((__HT)->data, NEW_CAP);\
-            for (u32 __I = __CAP; __I < NEW_CAP; ++__I) {\
-                (__HT)->data[__I].state = SP_HT_ENTRY_INACTIVE;\
-            }\
-            __CAP = sp_ht_capacity(__HT);\
+        u32 __CAP = (__HT)->capacity;\
+        f32 __LF = __CAP ? (f32)((__HT)->size) / (f32)(__CAP) : 0.f;\
+        if (__LF >= 0.5f || !__CAP) {\
+            u32 __NEW_CAP = __CAP ? __CAP * 2 : 2;\
+            sp_ht_resize_impl((void**)&(__HT)->data, __CAP, __NEW_CAP, __INFO);\
+            (__HT)->capacity = __NEW_CAP;\
+            __CAP = __NEW_CAP;\
         }\
         (__HT)->tmp_key = (__K);\
         u32 __EXISTING_IDX = sp_ht_tmp_key_index(__HT);\
         bool __KEY_EXISTS = (__EXISTING_IDX != SP_HT_INVALID_INDEX);\
-        sp_hash_t __HSH = __INFO.fn.hash((void*)(&(__HT)->tmp_key), __INFO.size.key);\
-        u32 __HSH_IDX = __HSH % __CAP;\
-        (__HT)->tmp_key = (__HT)->data[__HSH_IDX].key;\
-        u32 c = 0;\
-        while (\
-            c < __CAP\
-            && __HSH != __INFO.fn.hash((void*)(&(__HT)->tmp_key), __INFO.size.key)\
-            && (__HT)->data[__HSH_IDX].state == SP_HT_ENTRY_ACTIVE)\
-        {\
-            __HSH_IDX = ((__HSH_IDX + 1) % __CAP);\
-            (__HT)->tmp_key = (__HT)->data[__HSH_IDX].key;\
-            ++c;\
+        if (__KEY_EXISTS) {\
+            (__HT)->data[__EXISTING_IDX].val = (__V);\
+        } else {\
+            sp_hash_t __HSH = __INFO.fn.hash((void*)(&(__HT)->tmp_key), __INFO.size.key);\
+            u32 __HSH_IDX = __HSH % __CAP;\
+            while ((__HT)->data[__HSH_IDX].state == SP_HT_ENTRY_ACTIVE) {\
+                __HSH_IDX = ((__HSH_IDX + 1) % __CAP);\
+            }\
+            (__HT)->data[__HSH_IDX].key = (__K);\
+            (__HT)->data[__HSH_IDX].val = (__V);\
+            (__HT)->data[__HSH_IDX].state = SP_HT_ENTRY_ACTIVE;\
+            (__HT)->size++;\
         }\
-        (__HT)->data[__HSH_IDX].key = (__K);\
-        (__HT)->data[__HSH_IDX].val = (__V);\
-        (__HT)->data[__HSH_IDX].state = SP_HT_ENTRY_ACTIVE;\
-        if (!__KEY_EXISTS) sp_dyn_array_head((__HT)->data)->size++;\
     } while (0)
 
 #define sp_ht_getp(__HT, __K)\
@@ -1636,8 +1630,8 @@ typedef struct {
             (__HT)->tmp_key = (__K);\
             u32 __IDX = sp_ht_tmp_key_index(__HT);\
             if (__IDX != SP_HT_INVALID_INDEX) {\
-                (__HT)->data[__IDX].state = SP_HT_ENTRY_INACTIVE;\
-                if (sp_dyn_array_head((__HT)->data)->size) sp_dyn_array_head((__HT)->data)->size--;\
+                (__HT)->data[__IDX].state = SP_HT_ENTRY_DELETED;\
+                if ((__HT)->size) (__HT)->size--;\
             }\
         }\
     } while (0)
@@ -1646,7 +1640,7 @@ typedef struct {
   ((__ht) == NULL ? false : (((__it) < sp_ht_capacity((__ht))) && ((__ht)->data[(__it)].state == SP_HT_ENTRY_ACTIVE)))
 
 #define sp_ht_it_advance(__ht, __it)\
-  ((__ht) == NULL ? (void)0 : (sp_ht_it_advance_fn((void**)&(__ht)->data, &(__it), (__ht)->info)))
+  ((__ht) == NULL ? (void)0 : (sp_ht_it_advance_fn((void**)&(__ht)->data, (__ht)->capacity, &(__it), (__ht)->info)))
 
 #define sp_ht_it_getp(__ht, __it)\
   ((__ht) == NULL ? NULL : (&((__ht)->data[(__it)].val)))
@@ -1655,7 +1649,7 @@ typedef struct {
   ((__ht) == NULL ? NULL : (&((__ht)->data[(__it)].key)))
 
 #define sp_ht_it_init(__ht)\
-  ((__ht) == NULL ? 0 : (sp_ht_it_init_fn((void**)&(__ht)->data, (__ht)->info)))
+  ((__ht) == NULL ? 0 : (sp_ht_it_init_fn((void**)&(__ht)->data, (__ht)->capacity, (__ht)->info)))
 
 #define sp_ht_for(__ht, __it)\
   for (sp_ht_it __it = sp_ht_it_init(__ht); sp_ht_it_valid(__ht, __it); sp_ht_it_advance(__ht, __it))
@@ -1669,11 +1663,12 @@ typedef struct {
 #define sp_ht_front(__ht)\
   ((__ht) == NULL || !sp_ht_it_valid(__ht, sp_ht_it_init(__ht)) ? NULL : sp_ht_it_getp(__ht, sp_ht_it_init(__ht)))
 
-#define sp_ht_tmp_key_index(__HT) sp_ht_get_key_index_fn((void**)&((__HT)->data), (void*)&((__HT)->tmp_key), (__HT)->info)
+#define sp_ht_tmp_key_index(__HT) sp_ht_get_key_index_fn((void**)&((__HT)->data), (void*)&((__HT)->tmp_key), (__HT)->capacity, (__HT)->info)
 
-SP_API u32       sp_ht_get_key_index_fn(void** data, void* key, sp_ht_info_t info);
-SP_API sp_ht_it  sp_ht_it_init_fn(void** data, sp_ht_info_t info);
-SP_API void      sp_ht_it_advance_fn(void** data, u32* it, sp_ht_info_t info);
+SP_API u32       sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t info);
+SP_API void      sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info);
+SP_API sp_ht_it  sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info);
+SP_API void      sp_ht_it_advance_fn(void** data, u32 capacity, u32* it, sp_ht_info_t info);
 SP_API sp_hash_t sp_ht_on_hash_key(void* key, u32 size);
 SP_API bool      sp_ht_on_compare_key(void* ka, void* kb, u32 size);
 SP_API sp_hash_t sp_ht_on_hash_str_key(void* key, u32 size);
@@ -3006,36 +3001,64 @@ bool sp_ht_on_compare_str_key(void* ka, void* kb, u32 size) {
   return sp_str_equal(*sa, *sb);
 }
 
-u32 sp_ht_get_key_index_fn(void** data, void* key, sp_ht_info_t info) {
-  if (!data || !key) return SP_HT_INVALID_INDEX;
+u32 sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t info) {
+  if (!data || !*data || !key || !capacity) return SP_HT_INVALID_INDEX;
 
-  u32 capacity = sp_dyn_array_capacity(*data);
-  u32 size = sp_dyn_array_size(*data);
-  if (!capacity || !size) return SP_HT_INVALID_INDEX;
-  u32 idx = SP_HT_INVALID_INDEX;
   sp_hash_t hash = info.fn.hash(key, info.size.key);
-  u32 hash_idx = (hash % capacity);
+  u32 hash_idx = hash % capacity;
 
-  for (u32 i = hash_idx, c = 0; c < capacity; ++c, i = ((i + 1) % capacity)) {
-    u32 offset = (i * info.stride);
-    void* k = ((c8*)(*data) + (offset));
-    sp_hash_t kh = info.fn.hash(k, info.size.key);
-    bool equal = info.fn.compare(k, key, info.size.key);
-    sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)(*data) + offset + (info.klpvl));
-    if (equal && hash == kh && state == SP_HT_ENTRY_ACTIVE) {
-      idx = i;
+  for (u32 c = 0; c < capacity; ++c) {
+    u32 i = (hash_idx + c) % capacity;
+    u32 offset = i * info.stride;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)(*data) + offset + info.klpvl);
+
+    if (state == SP_HT_ENTRY_INACTIVE) {
       break;
     }
+    if (state == SP_HT_ENTRY_DELETED) {
+      continue;
+    }
+    void* k = (c8*)(*data) + offset;
+    if (info.fn.compare(k, key, info.size.key)) {
+      return i;
+    }
   }
-  return idx;
+  return SP_HT_INVALID_INDEX;
 }
 
-sp_ht_it sp_ht_it_init_fn(void** data, sp_ht_info_t info) {
+void sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info) {
+  if (!data || new_cap <= old_cap) return;
+
+  void* old_data = *data;
+  void* new_data = sp_alloc(new_cap * info.stride);
+
+  for (u32 i = 0; i < old_cap; ++i) {
+    u32 offset = i * info.stride;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)old_data + offset + info.klpvl);
+    if (state != SP_HT_ENTRY_ACTIVE) continue;
+
+    void* old_key = (c8*)old_data + offset;
+    sp_hash_t hash = info.fn.hash(old_key, info.size.key);
+    u32 new_idx = hash % new_cap;
+
+    while (*(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride + info.klpvl) == SP_HT_ENTRY_ACTIVE) {
+      new_idx = (new_idx + 1) % new_cap;
+    }
+
+    sp_mem_copy(old_data + offset, (c8*)new_data + new_idx * info.stride, info.klpvl);
+    *(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride + info.klpvl) = SP_HT_ENTRY_ACTIVE;
+  }
+
+  sp_free(old_data);
+  *data = new_data;
+}
+
+sp_ht_it sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info) {
   if (!data || !*data) return 0;
   sp_ht_it it = 0;
-  for (; it < sp_dyn_array_capacity(*data); ++it) {
-    u32 offset = (it * info.stride);
-    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + (info.klpvl));
+  for (; it < capacity; ++it) {
+    u32 offset = it * info.stride;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + info.klpvl);
     if (state == SP_HT_ENTRY_ACTIVE) {
       break;
     }
@@ -3043,12 +3066,12 @@ sp_ht_it sp_ht_it_init_fn(void** data, sp_ht_info_t info) {
   return it;
 }
 
-void sp_ht_it_advance_fn(void** data, u32* it, sp_ht_info_t info) {
+void sp_ht_it_advance_fn(void** data, u32 capacity, u32* it, sp_ht_info_t info) {
   if (!data || !*data) return;
   (*it)++;
-  for (; *it < sp_dyn_array_capacity(*data); ++*it) {
-    u32 offset = (*it * info.stride);
-    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + (info.klpvl));
+  for (; *it < capacity; ++*it) {
+    u32 offset = *it * info.stride;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + info.klpvl);
     if (state == SP_HT_ENTRY_ACTIVE) {
       break;
     }
@@ -4334,7 +4357,7 @@ void sp_mem_allocator_free(sp_allocator_t allocator, void* buffer) {
 
 sp_mem_arena_t* sp_mem_arena_new(u32 capacity) {
   sp_mem_arena_t* arena = SP_OS_ALLOC(sp_mem_arena_t);
-  sp_mem_arena_init(arena, (u8*)sp_mem_os_alloc(capacity), capacity);
+  sp_mem_arena_init(arena, (u8*)sp_mem_os_alloc_zero(capacity), capacity);
   return arena;
 }
 
@@ -4389,6 +4412,7 @@ void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size,
       header->size = size;
       void* memory_block = (u8*)header + header_size;
       bump->bytes_used = aligned_offset + total_size;
+      sp_mem_zero(memory_block, size);
       return memory_block;
     }
     case SP_ALLOCATOR_MODE_FREE: {

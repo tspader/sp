@@ -486,3 +486,47 @@ UTEST_F(context, arena_realloc_does_not_read_past_old_size) {
 
   sp_mem_arena_destroy(arena);
 }
+
+UTEST_F(context, arena_allocations_are_zeroed) {
+  sp_mem_arena_t* arena = sp_mem_arena_new(256);
+  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+
+  sp_mem_arena_marker_t marker = sp_mem_arena_mark(arena);
+
+  u8* first = sp_mem_allocator_alloc(allocator, 64);
+  sp_mem_fill_u8(first, 64, 0x69);
+  EXPECT_EQ(first[0], 0x69);
+  EXPECT_EQ(first[63], 0x69);
+
+  sp_mem_arena_pop(marker);
+
+  u8* second = sp_mem_allocator_alloc(allocator, 64);
+  EXPECT_EQ(second, first);
+  EXPECT_EQ(second[0], 0x00);
+  EXPECT_EQ(second[63], 0x00);
+
+  sp_mem_arena_destroy(arena);
+}
+
+UTEST_F(context, arena_realloc_zeroes_new_portion) {
+  sp_mem_arena_t* arena = sp_mem_arena_new(256);
+  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+
+  sp_mem_arena_marker_t marker = sp_mem_arena_mark(arena);
+
+  u8* first = sp_mem_allocator_alloc(allocator, 64);
+  sp_mem_fill_u8(first, 64, 0xDE);
+
+  sp_mem_arena_pop(marker);
+
+  u8* small = sp_mem_allocator_alloc(allocator, 16);
+  sp_mem_fill_u8(small, 16, 0xAB);
+
+  u8* resized = sp_mem_allocator_realloc(allocator, small, 64);
+  EXPECT_EQ(resized[0], 0xAB);
+  EXPECT_EQ(resized[15], 0xAB);
+  EXPECT_EQ(resized[16], 0x00);
+  EXPECT_EQ(resized[63], 0x00);
+
+  sp_mem_arena_destroy(arena);
+}
