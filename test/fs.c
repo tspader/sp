@@ -1,10 +1,7 @@
 #include "sp.h"
-
-#define SP_TEST_IMPLEMENTATION
 #include "test.h"
 
 #include "utest.h"
-#include <sys/stat.h>
 
 struct fs {
   sp_test_file_manager_t file_manager;

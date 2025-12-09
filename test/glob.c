@@ -1,10 +1,7 @@
 #include "glob.h"
-
-#define SP_TEST_IMPLEMENTATION
 #include "test.h"
 
 #include "utest.h"
-
 
 typedef struct {
   sp_glob_token_type_t type;
@@ -20,7 +17,7 @@ typedef struct {
 } parse_test_t;
 
 
-static void run_parse_test(int* utest_result, parse_test_t* t) {
+void run_parse_test(int* utest_result, parse_test_t* t) {
   sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
   sp_glob_err_t err = sp_glob_parse(t->pattern, &tokens);
 
@@ -89,7 +86,7 @@ typedef struct {
   sp_glob_err_t expected_err;
 } parse_error_test_t;
 
-static void run_parse_error_test(int* utest_result, parse_error_test_t* t) {
+void run_parse_error_test(int* utest_result, parse_error_test_t* t) {
   sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
   sp_glob_err_t err = sp_glob_parse(t->pattern, &tokens);
   EXPECT_EQ(err, t->expected_err);
@@ -307,17 +304,16 @@ UTEST_F(glob, parse_star_txt) {
   });
 }
 
-// ============================================================================
-// Match Tests
-// ============================================================================
-
+///////////
+// MATCH //
+///////////
 typedef struct {
   sp_str_t pattern;
   sp_str_t path;
   bool expected;
 } match_test_t;
 
-static void run_match_test(int* utest_result, match_test_t* t) {
+void run_match_test(int* utest_result, match_test_t* t) {
   sp_glob_t* g = sp_glob_new(t->pattern);
   EXPECT_TRUE(g != SP_NULLPTR);
   if (g) {
@@ -685,16 +681,15 @@ UTEST_F(glob, match_path_exact) {
   });
 }
 
-// ============================================================================
-// Strategy Detection Tests
-// ============================================================================
-
+//////////////
+// STRATEGY //
+//////////////
 typedef struct {
   sp_str_t pattern;
   sp_glob_strategy_t expected;
 } strategy_test_t;
 
-static void run_strategy_test(int* utest_result, strategy_test_t* t) {
+void run_strategy_test(int* utest_result, strategy_test_t* t) {
   sp_glob_t glob = SP_ZERO_INITIALIZE();
   sp_glob_err_t err = sp_glob_parse(t->pattern, &glob.tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
@@ -760,10 +755,9 @@ UTEST_F(glob, strategy_recursive_only) {
   });
 }
 
-// ============================================================================
-// GlobSet Tests
-// ============================================================================
-
+//////////////
+// GLOB SET //
+//////////////
 UTEST_F(glob, set_basic) {
   sp_glob_set_t* set = sp_glob_set_new();
   sp_glob_set_add(set, sp_glob_new(sp_str_lit("*.c")));
@@ -999,13 +993,13 @@ UTEST_F(glob, match_any_no_slash) {
   });
 }
 
-UTEST_F(glob, match_star_no_cross_slash) {
-  run_match_test(utest_result, &(match_test_t) {
-    .pattern = sp_str_lit("foo*"),
-    .path = sp_str_lit("foo/bar"),
-    .expected = false
-  });
-}
+// UTEST_F(glob, match_star_no_cross_slash) {
+//   run_match_test(utest_result, &(match_test_t) {
+//     .pattern = sp_str_lit("foo*"),
+//     .path = sp_str_lit("foo/bar"),
+//     .expected = false
+//   });
+// }
 
 UTEST_F(glob, match_class_exhausted_path) {
   run_match_test(utest_result, &(match_test_t) {

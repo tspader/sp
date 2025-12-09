@@ -57,3 +57,5 @@ test_proc_function_t test_proc_function_from_str(sp_str_t str) {
   TEST_PROC_FUNCTION(SP_X_NAMED_ENUM_STR_TO_ENUM)
   SP_UNREACHABLE_RETURN(TEST_PROC_FUNCTION_INVALID);
 }
+
+

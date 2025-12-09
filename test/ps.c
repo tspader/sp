@@ -1,8 +1,6 @@
 //#define SP_IMPLEMENTATION
 #include "sp.h"
-#include <stdlib.h>
 
-#define SP_TEST_IMPLEMENTATION
 #include "test.h"
 
 #include "process.h"

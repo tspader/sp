@@ -4,6 +4,8 @@
 
 #include "utest.h"
 
+SP_TEST_MAIN()
+
 // Test asset type (user-defined, not in sp.h)
 typedef enum {
   SP_ASSET_KIND_TEST = 1000,
@@ -374,4 +376,3 @@ UTEST(asset_registry, stress_many_assets) {
   sp_context_pop();
 }
 
-SP_TEST_MAIN()

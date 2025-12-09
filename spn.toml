@@ -1,7 +1,7 @@
 [package]
 name = "sp"
-include = [".", "include", "test/tools"]
-define = ["SP_IMPLEMENTATION"]
+include = [".", "include", "test/tools", "test/tools/process"]
+define = ["SP_IMPLEMENTATION", "SP_TEST_IMPLEMENTATION"]
 version = "1.6.5"
 system_deps = ["m"]
 
@@ -68,7 +68,7 @@ source = ["test/linkage.c"]
 
 [[bin]]
 name = "process"
-source = ["test/tools/process.c"]
+source = ["test/tools/process/process.c"]
 
 [[bin]]
 name = "ps"

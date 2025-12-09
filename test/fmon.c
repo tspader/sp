@@ -1,10 +1,10 @@
 #define SP_APP
 #include "sp.h"
 
+#include "test.h"
+
 #include "utest.h"
 
-#define SP_TEST_IMPLEMENTATION
-#include "test.h"
 
 #define SP_FILE_CHANGE_EVENT_ALL (SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_MODIFIED | SP_FILE_CHANGE_EVENT_REMOVED)
 #define SP_TEST_POLL_ITERATIONS 50

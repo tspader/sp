@@ -43,11 +43,10 @@
 
 #define SP_APP
 #include "sp.h"
+#include "test.h"
 
 #include "utest.h"
 
-#define SP_TEST_IMPLEMENTATION
-#include "test.h"
 
 //#define SP_LEAK_LOG_ONLY
 
