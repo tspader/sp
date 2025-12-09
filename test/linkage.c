@@ -14,11 +14,12 @@ UTEST_F_SETUP(sp_compile) {
   sp_test_file_manager_init(&ut.files);
 
   ut.root = sp_fs_get_exe_path();
-  for (s32 i = 0; i < 2; i++) {
+  while (!sp_str_equal(sp_fs_get_name(ut.root), sp_str_lit("build"))) {
     ut.root = sp_fs_parent_path(ut.root);
   }
 
-  ut.source = sp_fs_join_path(ut.root, SP_LIT("test/tools/linkage"));
+  ut.root = sp_fs_parent_path(ut.root);
+  ut.source = sp_fs_join_path(ut.root, sp_str_lit("test/tools/linkage"));
 }
 
 UTEST_F_TEARDOWN(sp_compile) {
@@ -27,13 +28,13 @@ UTEST_F_TEARDOWN(sp_compile) {
 
 bool compile_to_exe(sp_compile* ctx, const c8* file, sp_str_t output) {
   sp_ps_output_t out = sp_ps_run((sp_ps_config_t) {
-    .command = SP_LIT("cc"),
+    .command = sp_str_lit("cc"),
     .args = {
       sp_fs_join_path(ctx->source, SP_CSTR(file)),
       sp_format("-I{}", SP_FMT_STR(ctx->root)),
-      SP_LIT("-o"), output,
+      sp_str_lit("-o"), output,
       sp_str_lit("-g"),
-      SP_LIT("-lpthread")
+      sp_str_lit("-lpthread"), sp_str_lit("-lm")
     },
   });
 
@@ -42,14 +43,14 @@ bool compile_to_exe(sp_compile* ctx, const c8* file, sp_str_t output) {
 
 bool compile_to_object(sp_compile* ctx, const c8* file, sp_str_t output) {
   sp_ps_output_t out = sp_ps_run((sp_ps_config_t) {
-    .command = SP_LIT("cc"),
+    .command = sp_str_lit("cc"),
     .args = {
       sp_str_lit("-c"),
       sp_fs_join_path(ctx->source, SP_CSTR(file)),
       sp_format("-I{}", SP_FMT_STR(ctx->root)),
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),
-      sp_str_lit("-lpthread")
+      sp_str_lit("-lpthread"), sp_str_lit("-lm")
     },
   });
 
@@ -58,8 +59,8 @@ bool compile_to_object(sp_compile* ctx, const c8* file, sp_str_t output) {
 
 bool compile_objects_to_exe(sp_str_t output, sp_str_t* objs, u32 len) {
   sp_ps_config_t cfg = {
-    .command = SP_LIT("cc"),
-    .args = { SP_LIT("-o"), output, SP_LIT("-lpthread") },
+    .command = sp_str_lit("cc"),
+    .args = { sp_str_lit("-o"), output, sp_str_lit("-lpthread"), sp_str_lit("-lm") },
   };
 
   for (u32 it = 0; it < len; it++) {
@@ -72,12 +73,13 @@ bool compile_objects_to_exe(sp_str_t output, sp_str_t* objs, u32 len) {
 
 bool compile_to_linked_exe(sp_compile* ctx, const c8* file, sp_str_t output, sp_str_t* libs, u32 len) {
   sp_ps_config_t cfg = {
-    .command = SP_LIT("cc"),
+    .command = sp_str_lit("cc"),
     .args = {
       sp_fs_join_path(ctx->source, SP_CSTR(file)),
       sp_format("-I{}", SP_FMT_STR(ctx->root)),
-      SP_LIT("-o"), output,
-      SP_LIT("-g"), SP_LIT("-lpthread")
+      sp_str_lit("-o"), output,
+      sp_str_lit("-g"),
+      sp_str_lit("-lpthread"), sp_str_lit("-lm")
     },
   };
 
@@ -91,9 +93,9 @@ bool compile_to_linked_exe(sp_compile* ctx, const c8* file, sp_str_t output, sp_
 
 bool create_archive(sp_compile* ctx, sp_str_t archive, sp_str_t* objs, u32 len) {
   sp_ps_config_t cfg = {
-    .command = SP_LIT("ar"),
+    .command = sp_str_lit("ar"),
     .args = {
-      SP_LIT("rcs")
+      sp_str_lit("rcs")
     },
   };
 
@@ -108,15 +110,15 @@ bool create_archive(sp_compile* ctx, sp_str_t archive, sp_str_t* objs, u32 len) 
 
 bool is_symbol_in_binary(sp_str_t binary, sp_str_t symbol) {
   sp_ps_output_t nm = sp_ps_run((sp_ps_config_t){
-    .command = SP_LIT("nm"),
-    .args = { SP_LIT("-g"), binary },
+    .command = sp_str_lit("nm"),
+    .args = { sp_str_lit("-g"), binary },
   });
 
   return !nm.status.exit_code && sp_str_contains(nm.out, symbol);
 }
 
 UTEST_F(sp_compile, single_tu) {
-  sp_str_t bin = sp_test_file_path(&ut.files, SP_LIT("header-single"));
+  sp_str_t bin = sp_test_file_path(&ut.files, sp_str_lit("header-single"));
   EXPECT_TRUE(compile_to_exe(&ut, "main.c", bin));
 
   sp_ps_output_t run = sp_ps_run((sp_ps_config_t){ .command = bin });
@@ -130,15 +132,15 @@ UTEST_F(sp_compile, multi_tu) {
   } target_t;
 
   target_t targets[] = {
-    { "lib-decl.c", sp_test_file_path(&ut.files, SP_LIT("multi-decl.o")) },
-    { "main-impl.c", sp_test_file_path(&ut.files, SP_LIT("multi-impl.o")) },
+    { "lib-decl.c", sp_test_file_path(&ut.files, sp_str_lit("multi-decl.o")) },
+    { "main-impl.c", sp_test_file_path(&ut.files, sp_str_lit("multi-impl.o")) },
   };
   sp_carr_for(targets, it) {
     EXPECT_TRUE(compile_to_object(&ut, targets[it].file, targets[it].output));
   }
 
   sp_str_t objs[] = { targets[0].output, targets[1].output };
-  sp_str_t bin = sp_test_file_path(&ut.files, SP_LIT("header-multi"));
+  sp_str_t bin = sp_test_file_path(&ut.files, sp_str_lit("header-multi"));
   EXPECT_TRUE(compile_objects_to_exe(bin, objs, sp_carr_len(objs)));
 
   sp_ps_output_t run = sp_ps_run((sp_ps_config_t){ .command = bin });
@@ -146,30 +148,30 @@ UTEST_F(sp_compile, multi_tu) {
 }
 
 UTEST_F(sp_compile, shared_lib) {
-  sp_str_t so = sp_test_file_path(&ut.files, SP_LIT("shared.so"));
+  sp_str_t so = sp_test_file_path(&ut.files, sp_str_lit("shared.so"));
 
   sp_ps_output_t out = sp_ps_run((sp_ps_config_t){
-    .command = SP_LIT("cc"),
+    .command = sp_str_lit("cc"),
     .args = {
-      SP_LIT("-shared"), SP_LIT("-fPIC"),
-      sp_fs_join_path(ut.source, SP_LIT("lib-impl.c")),
+      sp_str_lit("-shared"), sp_str_lit("-fPIC"),
+      sp_fs_join_path(ut.source, sp_str_lit("lib-impl.c")),
       sp_format("-I{}", SP_FMT_STR(ut.root)),
-      SP_LIT("-o"), so,
-      SP_LIT("-lpthread")
+      sp_str_lit("-o"), so,
+      sp_str_lit("-lpthread"), sp_str_lit("-lm")
     },
   });
   ASSERT_EQ(out.status.exit_code, 0);
-  EXPECT_TRUE(is_symbol_in_binary(so, SP_LIT("sp_alloc")));
+  EXPECT_TRUE(is_symbol_in_binary(so, sp_str_lit("sp_alloc")));
 }
 
 UTEST_F(sp_compile, static_lib) {
-  sp_str_t obj = sp_test_file_path(&ut.files, SP_LIT("sp.o"));
+  sp_str_t obj = sp_test_file_path(&ut.files, sp_str_lit("sp.o"));
   EXPECT_TRUE(compile_to_object(&ut, "lib-impl.c", obj));
 
-  sp_str_t archive = sp_test_file_path(&ut.files, SP_LIT("static.a"));
+  sp_str_t archive = sp_test_file_path(&ut.files, sp_str_lit("static.a"));
   EXPECT_TRUE(create_archive(&ut, archive, &obj, 1));
 
-  sp_str_t bin = sp_test_file_path(&ut.files, SP_LIT("static-single"));
+  sp_str_t bin = sp_test_file_path(&ut.files, sp_str_lit("static-single"));
   EXPECT_TRUE(compile_to_linked_exe(&ut, "main-decl.c", bin, &archive, 1));
 
   sp_ps_output_t run = sp_ps_run((sp_ps_config_t){ .command = bin });
