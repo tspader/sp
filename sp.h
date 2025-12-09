@@ -4395,42 +4395,43 @@ typedef struct {
 } sp_arena_alloc_header_t;
 
 void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size, void* old_memory) {
-  sp_mem_arena_t* bump = (sp_mem_arena_t*)user_data;
+  sp_mem_arena_t* arena = (sp_mem_arena_t*)user_data;
+
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
-      u32 header_size = sizeof(sp_arena_alloc_header_t);
-      u32 total_size = header_size + size;
-      u32 aligned_offset = sp_align_offset(bump->bytes_used, SP_MEM_ALIGNMENT);
-      if (aligned_offset + total_size > bump->capacity) {
-        u32 new_capacity = SP_MAX(bump->capacity * 2, aligned_offset + total_size);
-        u8* new_buffer = (u8*)sp_mem_os_realloc(bump->buffer, new_capacity);
-        SP_ASSERT(new_buffer != NULL);
-        bump->buffer = new_buffer;
-        bump->capacity = new_capacity;
+      u32 aligned = sp_align_offset(arena->bytes_used, SP_MEM_ALIGNMENT);
+      u32 total_bytes = aligned + sizeof(sp_arena_alloc_header_t) + size;
+
+      if (total_bytes > arena->capacity) {
+        u32 new_capacity = SP_MAX(arena->capacity * 2, total_bytes);
+        arena->buffer = (u8*)sp_mem_os_realloc(arena->buffer, new_capacity);
+        arena->capacity = new_capacity;
+        SP_ASSERT(arena->buffer);
       }
-      sp_arena_alloc_header_t* header = (sp_arena_alloc_header_t*)(bump->buffer + aligned_offset);
+
+      sp_arena_alloc_header_t* header = (sp_arena_alloc_header_t*)(arena->buffer + aligned);
       header->size = size;
-      void* memory_block = (u8*)header + header_size;
-      bump->bytes_used = aligned_offset + total_size;
-      sp_mem_zero(memory_block, size);
-      return memory_block;
-    }
-    case SP_ALLOCATOR_MODE_FREE: {
-      return NULL;
+
+      void* ptr = (u8*)header + sizeof(sp_arena_alloc_header_t);
+      sp_mem_zero(ptr, size);
+      arena->bytes_used = total_bytes;
+
+      return ptr;
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
-      void* memory_block = sp_mem_arena_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+      void* new_memory = sp_mem_arena_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       if (old_memory) {
         sp_arena_alloc_header_t* header = (sp_arena_alloc_header_t*)((u8*)old_memory - sizeof(sp_arena_alloc_header_t));
-        sp_mem_move(old_memory, memory_block, SP_MIN(header->size, size));
+        sp_mem_move(old_memory, new_memory, SP_MIN(header->size, size));
       }
-      return memory_block;
+      return new_memory;
     }
-    default: {
-      SP_UNREACHABLE();
-      return NULL;
+    case SP_ALLOCATOR_MODE_FREE: {
+      return SP_NULLPTR;
     }
   }
+
+  SP_UNREACHABLE_RETURN(SP_NULLPTR);
 }
 
 sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* a) {
