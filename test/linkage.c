@@ -176,4 +176,23 @@ UTEST_F(sp_compile, static_lib) {
   ASSERT_EQ(run.status.exit_code, 0);
 }
 
+UTEST_F(sp_compile, cpp_compat) {
+  sp_str_t obj = sp_test_file_path(&ut.files, sp_str_lit("cpp-main.o"));
+
+  sp_ps_output_t out = sp_ps_run((sp_ps_config_t){
+    .command = sp_str_lit("c++"),
+    .args = {
+      sp_str_lit("-c"),
+      sp_str_lit("-x"), sp_str_lit("c++"),
+      sp_fs_join_path(ut.source, sp_str_lit("main.c")),
+      sp_format("-I{}", SP_FMT_STR(ut.root)),
+      sp_str_lit("-o"), obj,
+      sp_str_lit("-g"),
+      sp_str_lit("-Werror"),
+    },
+  });
+
+  EXPECT_EQ(out.status.exit_code, 0);
+}
+
 SP_TEST_MAIN()

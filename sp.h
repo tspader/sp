@@ -457,10 +457,6 @@ SP_BEGIN_EXTERN_C()
   #include <time.h>
 #endif
 
-#ifdef SP_CPP
-  #include <atomic>
-#endif
-
 #if !defined(SP_NO_LIBM)
   #include <math.h>
   #define SP_SINF sinf
@@ -477,6 +473,15 @@ SP_BEGIN_EXTERN_C()
 #include <stdint.h>
 
 extern char** environ;
+
+SP_END_EXTERN_C()
+
+#ifdef SP_CPP
+  #include <atomic>
+#endif
+
+SP_BEGIN_EXTERN_C()
+
 
 // ████████╗██╗   ██╗██████╗ ███████╗███████╗
 // ╚══██╔══╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔════╝
@@ -1090,7 +1095,7 @@ typedef struct {
     do {\
         *((void**)(&(ht))) = sp_alloc(sizeof(*ht));                    \
                                                                        \
-        (ht)->data = sp_alloc(2 * sizeof((ht)->data[0]));              \
+        (ht)->data = (__typeof__((ht)->data))sp_alloc(2 * sizeof((ht)->data[0])); \
         (ht)->size = 0;                                                \
         (ht)->capacity = 2;                                            \
                                                                        \
@@ -1364,7 +1369,7 @@ typedef struct {
 SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
 SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
-#define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .len = (u32)(LEN), .data = (const c8*)(STR) }
+#define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(LEN) }
 #define SP_STR(STR, LEN) sp_str(STR, LEN)
 #define sp_str_lit(STR)  sp_str((STR), sizeof(STR) - 1)
 #define SP_LIT(STR)      sp_str_lit(STR)
@@ -1646,8 +1651,8 @@ SP_API sp_str_t     sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
 SP_API sp_str_t     sp_os_get_env_var(sp_str_t key);
 SP_API sp_str_t     sp_os_get_env_as_path(sp_str_t key);
 SP_API void         sp_os_clear_env_var(sp_str_t var);
-SP_API void         sp_os_export_env_var(sp_str_t k, sp_str_t v, sp_env_export_t export);
-SP_API void         sp_os_export_env(sp_env_t* env, sp_env_export_t export);
+SP_API void         sp_os_export_env_var(sp_str_t k, sp_str_t v, sp_env_export_t mode);
+SP_API void         sp_os_export_env(sp_env_t* env, sp_env_export_t mode);
 
 
 // ████████╗██╗███╗   ███╗███████╗
@@ -1781,10 +1786,7 @@ SP_API sp_str_t               sp_fs_get_config_path();
 SP_API sp_tm_epoch_t          sp_fs_get_mod_time(sp_str_t path);
 SP_API sp_os_file_attr_t      sp_fs_get_file_attrs(sp_str_t path);
 
-#if defined(SP_CPP)
-  SP_API sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
-  SP_API sp_str_t operator/(const sp_str_t& a, const c8* b);
-#endif
+
 
 
 //  █████╗ ████████╗ ██████╗ ███╗   ███╗██╗██████╗
@@ -1970,7 +1972,7 @@ typedef struct {
   } tls;
 } sp_rt_t;
 
-SP_GLOBAL sp_rt_t sp_rt;
+extern sp_rt_t sp_rt;
 
 sp_tls_rt_t*  sp_tls_rt_get();
 sp_context_t* sp_context_get();
@@ -2266,7 +2268,7 @@ typedef struct sp_formatter {
 } sp_formatter_t;
 
 
-#define SP_FMT_ARG(T, V) SP_RVAL(sp_format_arg_t) { .id =  SP_FMT_ID(T), .SP_FMT_UNION(T) = (V) }
+#define SP_FMT_ARG(T, V) SP_RVAL(sp_format_arg_t) { .SP_FMT_UNION(T) = (V), .id = SP_FMT_ID(T) }
 
 #define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
 #define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
@@ -2340,16 +2342,7 @@ SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 SP_API bool      sp_parse_is_digit(c8 c);
 
-#ifdef SP_CPP
-  template <typename T>
-  SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
-    sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
-    result.id = id;
-    sp_os_copy_memory(&data, &result.u8_value, sizeof(data));
 
-    return result;
-  }
-#endif
 
 
 //  █████╗ ███████╗███████╗███████╗████████╗
@@ -2437,6 +2430,20 @@ SP_API s32                  sp_asset_registry_thread_fn(void* user_data);
 
 SP_END_EXTERN_C()
 
+#ifdef SP_CPP
+SP_API sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
+SP_API sp_str_t operator/(const sp_str_t& a, const c8* b);
+
+template <typename T>
+SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
+  sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
+  result.id = id;
+  sp_os_copy_memory(&data, &result.u8_value, sizeof(data));
+
+  return result;
+}
+#endif
+
 #endif
 
 
@@ -2454,9 +2461,9 @@ SP_END_EXTERN_C()
 
 SP_BEGIN_EXTERN_C()
 
-SP_GLOBAL sp_rt_t sp_rt = {
+sp_rt_t sp_rt = {
   .mutex = PTHREAD_MUTEX_INITIALIZER,
-  .tls.once = PTHREAD_ONCE_INIT
+  .tls = { .once = PTHREAD_ONCE_INIT }
 };
 
 //  ███╗   ███╗ █████╗ ████████╗██╗  ██╗
@@ -2949,7 +2956,7 @@ void sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info)
       new_idx = (new_idx + 1) % new_cap;
     }
 
-    sp_mem_copy(old_data + offset, (c8*)new_data + new_idx * info.stride, info.klpvl);
+    sp_mem_copy((c8*)old_data + offset, (c8*)new_data + new_idx * info.stride, info.klpvl);
     *(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride + info.klpvl) = SP_HT_ENTRY_ACTIVE;
   }
 
@@ -4055,7 +4062,7 @@ sp_format_specifier_t sp_format_parser_specifier(sp_format_parser_t* parser) {
 
 sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
   #undef SP_FMT_X
-  #define SP_FMT_X(ID, t) (sp_formatter_t) { .id = SP_FMT_ID(ID), .fn = SP_FMT_FN(ID) },
+  #define SP_FMT_X(ID, t) (sp_formatter_t) { .fn = SP_FMT_FN(ID), .id = SP_FMT_ID(ID) },
 
   static sp_formatter_t formatters [] = {
     SP_FORMAT_TYPES
@@ -4206,15 +4213,15 @@ sp_tls_rt_t* sp_tls_rt_get() {
   if (!state) {
     state = (sp_tls_rt_t*)sp_mem_os_alloc(sizeof(sp_tls_rt_t));
     *state = (sp_tls_rt_t) {
-      .index = 0,
       .contexts = {
         { .allocator = sp_mem_libc_new() }
       },
-      .scratch = SP_OS_ALLOC(sp_mem_arena_t)
+      .scratch = SP_OS_ALLOC(sp_mem_arena_t),
+      .index = 0,
     };
     pthread_setspecific(sp_rt.tls.key, state);
 
-    sp_mem_arena_init(state->scratch, sp_mem_os_alloc(SP_RT_SCRATCH_SIZE), SP_RT_SCRATCH_SIZE);
+    sp_mem_arena_init(state->scratch, (u8*)sp_mem_os_alloc(SP_RT_SCRATCH_SIZE), SP_RT_SCRATCH_SIZE);
   }
 
   return state;
@@ -4558,15 +4565,15 @@ c8* sp_str_to_cstr_double_nt(sp_str_t str) {
 
 sp_str_t sp_str_alloc(u32 capacity) {
   return SP_RVAL(sp_str_t) {
-    .len = 0,
     .data = (c8*)sp_alloc(capacity),
+    .len = 0,
   };
 }
 
 sp_str_t sp_str_view(const c8* cstr) {
   return (sp_str_t) {
+    .data = cstr,
     .len = sp_cstr_len(cstr),
-    .data = cstr
   };
 }
 
@@ -4683,18 +4690,15 @@ sp_str_t sp_str_suffix(sp_str_t str, s32 len) {
 }
 
 sp_str_t sp_str_sub(sp_str_t str, s32 index, s32 len) {
-  sp_str_t substr = {
-    .len = (u32)len,
-    .data = str.data + index
-  };
+  sp_str_t substr = sp_str(str.data + index, (u32)len);
   SP_ASSERT(index + len <= str.len);
   return substr;
 }
 
 sp_str_t sp_str_sub_reverse(sp_str_t str, s32 index, s32 len) {
   sp_str_t substr = {
+    .data = str.data + str.len + index - len,
     .len = (u32)len,
-    .data = str.data + str.len + index - len
   };
   return substr;
 }
@@ -4747,7 +4751,7 @@ sp_str_it_t sp_str_it(sp_str_t str) {
   return (sp_str_it_t) {
     .str = str,
     .index = 0,
-    .c = str.len ? str.data[0] : 0
+    .c = str.len ? str.data[0] : '\0'
   };
 }
 
@@ -5333,8 +5337,8 @@ sp_str_t sp_fs_get_stem(sp_str_t path) {
   sp_str_t extension = sp_fs_get_ext(path);
 
   sp_str_t stem = {
+    .data = file_name.data,
     .len = file_name.len - extension.len,
-    .data = file_name.data
   };
 
   while (true) {
@@ -5954,8 +5958,8 @@ sp_str_t sp_fs_get_exe_path() {
   }
 
   sp_str_t file_path = {
+    .data = exe_path,
     .len = (u32)len,
-    .data = exe_path
   };
 
   return sp_str_copy(sp_fs_parent_path(file_path));
@@ -6855,7 +6859,7 @@ bool sp_cv_wait_for(sp_cv_t* cond, sp_mutex_t* mutex, u32 ms) {
   sp_tm_epoch_t now = sp_tm_now_epoch();
 
   struct timespec ts = {
-    .tv_sec = now.s + (ms / 1000),
+    .tv_sec = (time_t)(now.s + (ms / 1000)),
     .tv_nsec = now.ns + ((ms % 1000) * 1000000),
   };
 
@@ -8373,10 +8377,10 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
     if (cfg->kind == SP_ASSET_KIND_NONE) break;
 
     sp_asset_importer_t importer = (sp_asset_importer_t) {
-      .kind = cfg->kind,
       .on_import = cfg->on_import,
       .on_completion = cfg->on_completion,
-      .registry = registry
+      .registry = registry,
+      .kind = cfg->kind,
     };
     sp_dyn_array_push(registry->importers, importer);
   }
@@ -8450,9 +8454,9 @@ sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_ki
   sp_asset_import_context_t context = {
     .registry = registry,
     .importer = importer,
-    .asset_index = asset_index,
     .future = sp_future_create(sizeof(sp_asset_t*)),
     .user_data = user_data,
+    .asset_index = asset_index,
   };
 
   sp_mutex_lock(&registry->import_mutex);
@@ -8538,7 +8542,7 @@ sp_str_t operator/(const sp_str_t& a, const sp_str_t& b) {
   sp_str_builder_append_c8(&builder, '/');
   sp_str_builder_append(&builder, b);
   sp_str_t result = sp_str_builder_write(&builder);
-  return sp_os_normalize_path(result);
+  return sp_fs_normalize_path(result);
 }
 
 sp_str_t operator/(const sp_str_t& a, const c8* b) {
@@ -8547,7 +8551,7 @@ sp_str_t operator/(const sp_str_t& a, const c8* b) {
   sp_str_builder_append_c8(&builder, '/');
   sp_str_builder_append_cstr(&builder, b);
   sp_str_t result = sp_str_builder_write(&builder);
-  return sp_os_normalize_path(result);
+  return sp_fs_normalize_path(result);
 }
 #endif
 
