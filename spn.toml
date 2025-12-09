@@ -13,6 +13,11 @@ argparse = "1.2.0"
 name = "debug"
 cc = "clang"
 
+[[profile]]
+name = "bench"
+mode = "release"
+cc = "clang"
+
 [[bin]]
 name = "amalg"
 source = ["test/amalg.c"]
@@ -90,3 +95,11 @@ source = ["doc/tools/extract_fns.c"]
 [[bin]]
 name = "sleep"
 source = ["doc/tools/sleep.c"]
+
+
+
+
+[[bin]]
+name = "bench-ht"
+source = ["test/bench/ht.c"]
+include = ["doc"]
