@@ -1146,6 +1146,8 @@ typedef struct {
         if ((__HT) == SP_NULLPTR) {\
             sp_ht_init((__HT));\
         }\
+        __typeof__((__HT)->tmp_key) __KEY = (__K);\
+        __typeof__((__HT)->tmp_val) __VAL = (__V);\
         sp_ht_info_t __INFO = (__HT)->info;\
         u32 __CAP = (__HT)->capacity;\
         f32 __LF = __CAP ? (f32)((__HT)->size) / (f32)(__CAP) : 0.f;\
@@ -1155,19 +1157,19 @@ typedef struct {
             (__HT)->capacity = __NEW_CAP;\
             __CAP = __NEW_CAP;\
         }\
-        (__HT)->tmp_key = (__K);\
+        (__HT)->tmp_key = __KEY;\
         u32 __EXISTING_IDX = sp_ht_tmp_key_index(__HT);\
         bool __KEY_EXISTS = (__EXISTING_IDX != SP_HT_INVALID_INDEX);\
         if (__KEY_EXISTS) {\
-            (__HT)->data[__EXISTING_IDX].val = (__V);\
+            (__HT)->data[__EXISTING_IDX].val = __VAL;\
         } else {\
             sp_hash_t __HSH = __INFO.fn.hash((void*)(&(__HT)->tmp_key), __INFO.size.key);\
             u32 __HSH_IDX = __HSH % __CAP;\
             while ((__HT)->data[__HSH_IDX].state == SP_HT_ENTRY_ACTIVE) {\
                 __HSH_IDX = ((__HSH_IDX + 1) % __CAP);\
             }\
-            (__HT)->data[__HSH_IDX].key = (__K);\
-            (__HT)->data[__HSH_IDX].val = (__V);\
+            (__HT)->data[__HSH_IDX].key = __KEY;\
+            (__HT)->data[__HSH_IDX].val = __VAL;\
             (__HT)->data[__HSH_IDX].state = SP_HT_ENTRY_ACTIVE;\
             (__HT)->size++;\
         }\

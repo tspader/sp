@@ -849,4 +849,31 @@ UTEST(ht_issue, linear_scan_calls_hash_too_many_times) {
   sp_ht_free(ht);
 }
 
+static s32 g_key_eval_count = 0;
+static s32 g_val_eval_count = 0;
+
+static s32 eval_key(void) {
+  g_key_eval_count++;
+  return 42;
+}
+
+static s32 eval_val(void) {
+  g_val_eval_count++;
+  return 100;
+}
+
+UTEST(ht_issue, insert_evaluates_args_multiple_times) {
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+
+  g_key_eval_count = 0;
+  g_val_eval_count = 0;
+
+  sp_ht_insert(ht, eval_key(), eval_val());
+
+  EXPECT_EQ(g_key_eval_count, 1);
+  EXPECT_EQ(g_val_eval_count, 1);
+
+  sp_ht_free(ht);
+}
+
 SP_TEST_MAIN()
