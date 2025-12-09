@@ -701,363 +701,6 @@ typedef union sp_quat {
 
 typedef sp_vec4_t sp_color_t;
 
-sp_color_t sp_color_rgb_255(u8 r, u8 g, u8 b) {
-  return (sp_color_t) SP_COLOR_RGB(r, g, b);
-}
-
-f32 sp_inv_sqrtf(f32 value) {
-  return 1.0f / SP_SQRTF(value);
-}
-
-f32 sp_lerp(f32 a, f32 t, f32 b) {
-  return (1.0f - t) * a + t * b;
-}
-
-f32 sp_clamp(f32 low, f32 value, f32 high) {
-  f32 result = value;
-
-  if (result < low) {
-    result = low;
-  }
-
-  if (result > high) {
-    result = high;
-  }
-
-  return result;
-}
-
-
-/*
- * Vector initialization
- */
-
-sp_vec2_t sp_vec2(f32 x, f32 y) {
-  return (sp_vec2_t) {
-    .x = x,
-    .y = y,
-  };
-}
-
-sp_vec3_t sp_vec3(f32 x, f32 y, f32 z) {
-  return (sp_vec3_t) {
-    .x = x,
-    .y = y,
-    .z = z,
-  };
-}
-
-sp_vec4_t sp_vec4(f32 x, f32 y, f32 z, f32 w) {
-  return (sp_vec4_t) {
-    .x = x,
-    .y = y,
-    .z = z,
-    .w = w,
-  };
-}
-
-sp_vec4_t sp_vec4V(sp_vec3_t xyz, f32 w) {
-  return (sp_vec4_t) {
-    .xyz = xyz,
-    .w = w,
-  };
-}
-
-sp_vec2_t sp_vec2_add(sp_vec2_t left, sp_vec2_t right)
-{
-
-    sp_vec2_t Result;
-    Result.x = left.x + right.x;
-    Result.y = left.y + right.y;
-
-    return Result;
-}
-
-sp_vec3_t sp_vec3_add(sp_vec3_t left, sp_vec3_t right)
-{
-
-    sp_vec3_t Result;
-    Result.x = left.x + right.x;
-    Result.y = left.y + right.y;
-    Result.z = left.z + right.z;
-
-    return Result;
-}
-
-sp_vec4_t sp_vec4_add(sp_vec4_t left, sp_vec4_t right)
-{
-
-    sp_vec4_t Result;
-
-    Result.x = left.x + right.x;
-    Result.y = left.y + right.y;
-    Result.z = left.z + right.z;
-    Result.w = left.w + right.w;
-
-    return Result;
-}
-
-sp_vec2_t sp_vec2_sub(sp_vec2_t left, sp_vec2_t right) {
-  return (sp_vec2_t) {
-    .x = left.x - right.x,
-    .y = left.y - right.y,
-  };
-}
-
-sp_vec3_t sp_vec3_sub(sp_vec3_t left, sp_vec3_t right) {
-  return (sp_vec3_t) {
-    .x = left.x - right.x,
-    .y = left.y - right.y,
-    .z = left.z - right.z,
-  };
-}
-
-sp_vec4_t sp_vec4_sub(sp_vec4_t left, sp_vec4_t right) {
-  return (sp_vec4_t) {
-    .x = left.x - right.x,
-    .y = left.y - right.y,
-    .z = left.z - right.z,
-    .w = left.w - right.w,
-  };
-}
-
-sp_vec2_t sp_vec2_mul(sp_vec2_t left, sp_vec2_t right)
-{
-
-    sp_vec2_t Result;
-    Result.x = left.x * right.x;
-    Result.y = left.y * right.y;
-
-    return Result;
-}
-
-sp_vec2_t sp_vec2_scale(sp_vec2_t left, f32 right)
-{
-
-    sp_vec2_t Result;
-    Result.x = left.x * right;
-    Result.y = left.y * right;
-
-    return Result;
-}
-
-sp_vec3_t sp_vec3_mul(sp_vec3_t left, sp_vec3_t right)
-{
-
-    sp_vec3_t Result;
-    Result.x = left.x * right.x;
-    Result.y = left.y * right.y;
-    Result.z = left.z * right.z;
-
-    return Result;
-}
-
-sp_vec3_t sp_vec3_scale(sp_vec3_t left, f32 right)
-{
-
-    sp_vec3_t Result;
-    Result.x = left.x * right;
-    Result.y = left.y * right;
-    Result.z = left.z * right;
-
-    return Result;
-}
-
-sp_vec4_t sp_vec4_mul(sp_vec4_t left, sp_vec4_t right)
-{
-
-    sp_vec4_t Result;
-
-    Result.x = left.x * right.x;
-    Result.y = left.y * right.y;
-    Result.z = left.z * right.z;
-    Result.w = left.w * right.w;
-
-    return Result;
-}
-
-sp_vec4_t sp_vec4_scale(sp_vec4_t left, f32 right)
-{
-
-    sp_vec4_t Result;
-
-    Result.x = left.x * right;
-    Result.y = left.y * right;
-    Result.z = left.z * right;
-    Result.w = left.w * right;
-
-    return Result;
-}
-
-sp_vec2_t sp_vec2_div(sp_vec2_t left, sp_vec2_t right)
-{
-
-    sp_vec2_t Result;
-    Result.x = left.x / right.x;
-    Result.y = left.y / right.y;
-
-    return Result;
-}
-
-sp_vec2_t sp_vec2_divf(sp_vec2_t left, f32 right)
-{
-
-    sp_vec2_t Result;
-    Result.x = left.x / right;
-    Result.y = left.y / right;
-
-    return Result;
-}
-
-sp_vec3_t sp_vec3_div(sp_vec3_t left, sp_vec3_t right)
-{
-
-    sp_vec3_t Result;
-    Result.x = left.x / right.x;
-    Result.y = left.y / right.y;
-    Result.z = left.z / right.z;
-
-    return Result;
-}
-
-sp_vec3_t sp_vec3_divf(sp_vec3_t left, f32 right)
-{
-
-    sp_vec3_t Result;
-    Result.x = left.x / right;
-    Result.y = left.y / right;
-    Result.z = left.z / right;
-
-    return Result;
-}
-
-sp_vec4_t sp_vec4_div(sp_vec4_t left, sp_vec4_t right)
-{
-
-    sp_vec4_t Result;
-
-    Result.x = left.x / right.x;
-    Result.y = left.y / right.y;
-    Result.z = left.z / right.z;
-    Result.w = left.w / right.w;
-
-    return Result;
-}
-
-sp_vec4_t sp_vec4_divf(sp_vec4_t left, f32 right)
-{
-
-    sp_vec4_t Result;
-
-    Result.x = left.x / right;
-    Result.y = left.y / right;
-    Result.z = left.z / right;
-    Result.w = left.w / right;
-
-    return Result;
-}
-
-bool sp_vec2_eq(sp_vec2_t left, sp_vec2_t right)
-{
-    return left.x == right.x && left.y == right.y;
-}
-
-bool sp_vec3_eq(sp_vec3_t left, sp_vec3_t right)
-{
-    return left.x == right.x && left.y == right.y && left.z == right.z;
-}
-
-bool sp_vec4_eq(sp_vec4_t left, sp_vec4_t right)
-{
-    return left.x == right.x && left.y == right.y && left.z == right.z && left.w == right.w;
-}
-
-f32 sp_vec2_dot(sp_vec2_t left, sp_vec2_t right)
-{
-    return (left.x * right.x) + (left.y * right.y);
-}
-
-f32 sp_vec3_dot(sp_vec3_t left, sp_vec3_t right)
-{
-    return (left.x * right.x) + (left.y * right.y) + (left.z * right.z);
-}
-
-f32 sp_vec4_dot(sp_vec4_t left, sp_vec4_t right) {
-  return ((left.x * right.x) + (left.z * right.z)) + ((left.y * right.y) + (left.w * right.w));
-}
-
-sp_vec3_t sp_vec3_cross(sp_vec3_t left, sp_vec3_t right)
-{
-
-    sp_vec3_t result;
-    result.x = (left.y * right.z) - (left.z * right.y);
-    result.y = (left.z * right.x) - (left.x * right.z);
-    result.z = (left.x * right.y) - (left.y * right.x);
-
-    return result;
-}
-
-
-f32 sp_vec2_len_sqr(sp_vec2_t v)
-{
-    return sp_vec2_dot(v, v);
-}
-
-f32 sp_vec3_len_sqr(sp_vec3_t v)
-{
-    return sp_vec3_dot(v, v);
-}
-
-f32 sp_vec4_len_sqr(sp_vec4_t v)
-{
-    return sp_vec4_dot(v, v);
-}
-
-f32 sp_vec2_len(sp_vec2_t v)
-{
-    return sqrtf(sp_vec2_len_sqr(v));
-}
-
-f32 sp_vec3_len(sp_vec3_t v)
-{
-    return sqrtf(sp_vec3_len_sqr(v));
-}
-
-f32 sp_vec4_len(sp_vec4_t v)
-{
-    return sqrtf(sp_vec4_len_sqr(v));
-}
-
-sp_vec2_t sp_vec2_norm(sp_vec2_t v)
-{
-    return sp_vec2_scale(v, sp_inv_sqrtf(sp_vec2_dot(v, v)));
-}
-
-sp_vec3_t sp_vec3_norm(sp_vec3_t v)
-{
-    return sp_vec3_scale(v, sp_inv_sqrtf(sp_vec3_dot(v, v)));
-}
-
-sp_vec4_t sp_vec4_norm(sp_vec4_t v)
-{
-    return sp_vec4_scale(v, sp_inv_sqrtf(sp_vec4_dot(v, v)));
-}
-
-sp_vec2_t sp_vec2_lerp(sp_vec2_t a, f32 t, sp_vec2_t b)
-{
-    return sp_vec2_add(sp_vec2_scale(a, 1.0f - t), sp_vec2_scale(b, t));
-}
-
-sp_vec3_t sp_vec3_lerp(sp_vec3_t a, f32 t, sp_vec3_t b)
-{
-    return sp_vec3_add(sp_vec3_scale(a, 1.0f - t), sp_vec3_scale(b, t));
-}
-
-sp_vec4_t sp_vec4_lerp(sp_vec4_t a, f32 t, sp_vec4_t b)
-{
-    return sp_vec4_add(sp_vec4_scale(a, 1.0f - t), sp_vec4_scale(b, t));
-}
-
 typedef enum sp_interp_mode_t {
   SP_INTERP_MODE_LERP,
   SP_INTERP_MODE_EASE_IN,
@@ -1076,143 +719,62 @@ typedef struct sp_interp_t {
   f32 time_scale;
 } sp_interp_t;
 
-sp_interp_t sp_interp_build(f32 start, f32 target, f32 time) {
-  return (sp_interp_t) { .start = start, .delta = target - start, .t = 0, .time_scale = 1.0f / time };
-}
-
-bool sp_interp_update(sp_interp_t* interp, f32 dt) {
-  interp->t += dt * interp->time_scale;
-  if (interp->t > 1.0f) { interp->t = 1.0f; }
-  return interp->t >= 1.0f;
-}
-
-f32 sp_interp_lerp(sp_interp_t* interp) {
-  return interp->start + interp->delta * interp->t;
-}
-
-f32 sp_interp_ease_in(sp_interp_t* interp) {
-  f32 eased = interp->t * interp->t;
-  return interp->start + interp->delta * eased;
-}
-
-f32 sp_interp_ease_out(sp_interp_t* interp) {
-  f32 eased = 1.0f - (1.0f - interp->t) * (1.0f - interp->t);
-  return interp->start + interp->delta * eased;
-}
-
-f32 sp_interp_ease_inout(sp_interp_t* interp) {
-  f32 eased;
-  if (interp->t < 0.5f) {
-    eased = 2.0f * interp->t * interp->t;
-  } else {
-    eased = 1.0f - (-2.0f * interp->t + 2.0f) * (-2.0f * interp->t + 2.0f) / 2.0f;
-  }
-  return interp->start + interp->delta * eased;
-}
-
-f32 sp_interp_ease_inout_bounce(sp_interp_t* interp) {
-  f32 c1 = 1.70158f;
-  f32 c2 = c1 * 1.525f;
-  f32 eased;
-  if (interp->t < 0.5f) {
-    f32 x = 2.0f * interp->t;
-    eased = 0.5f * (x * x * ((c2 + 1.0f) * x - c2));
-  } else {
-    f32 x = 2.0f * interp->t - 2.0f;
-    eased = 0.5f * (x * x * ((c2 + 1.0f) * x + c2) + 2.0f);
-  }
-  return interp->start + interp->delta * eased;
-}
-
-f32 sp_interp_exponential(sp_interp_t* interp) {
-  f32 k = 5.0f;
-  f32 e_k = 148.413159f; // exp(5)
-  f32 eased = (expf(k * interp->t) - 1.0f) / (e_k - 1.0f);
-  return interp->start + interp->delta * eased;
-}
-
-f32 sp_interp_parabolic(sp_interp_t* interp) {
-  f32 x = 2.0f * interp->t - 1.0f;
-  f32 eased = 1.0f - x * x;
-  return interp->start + interp->delta * eased;
-}
-
-sp_color_t sp_color_rgb_to_hsv(sp_color_t color) {
-  f32 r = color.r;
-  f32 g = color.g;
-  f32 b = color.b;
-
-  f32 max = SP_MAX(r, SP_MAX(g, b));
-  f32 min = SP_MIN(r, SP_MIN(g, b));
-  f32 delta = max - min;
-
-  f32 h = 0.0f;
-  f32 s = 0.0f;
-  f32 v = max;
-
-  if (delta > 1e-6f && max > 1e-6f) {
-    s = delta / max;
-
-    if (max - r < 1e-6f) {
-      h = (g - b) / delta;
-    } else if (max - g < 1e-6f) {
-      h = 2.0f + (b - r) / delta;
-    } else {
-      h = 4.0f + (r - g) / delta;
-    }
-
-    h = h / 6.0f;
-    if (h < 0.0f) {
-      h += 1.0f;
-    }
-  }
-
-  return (sp_color_t){
-    .h = h * 360.0f,
-    .s = s * 100.0f,
-    .v = v * 100.0f,
-    .a = color.a
-  };
-}
-
-sp_color_t sp_color_hsv_to_rgb(sp_color_t color) {
-  f32 h = color.h / 360.0f;
-  f32 s = color.s / 100.0f;
-  f32 v = color.v / 100.0f;
-
-  f32 r = v;
-  f32 g = v;
-  f32 b = v;
-
-  if (s > 1e-6f) {
-    f32 h6 = h * 6.0f;
-    if (h6 >= 6.0f) {
-      h6 = 0.0f;
-    }
-    s32 sector = (s32)h6;
-    f32 f = h6 - (f32)sector;
-
-    f32 p = v * (1.0f - s);
-    f32 q = v * (1.0f - s * f);
-    f32 t = v * (1.0f - s * (1.0f - f));
-
-    switch (sector) {
-      case 0: { r = v; g = t; b = p; break; }
-      case 1: { r = q; g = v; b = p; break; }
-      case 2: { r = p; g = v; b = t; break; }
-      case 3: { r = p; g = q; b = v; break; }
-      case 4: { r = t; g = p; b = v; break; }
-      case 5: { r = v; g = p; b = q; break; }
-    }
-  }
-
-  return (sp_color_t){
-    .r = r,
-    .g = g,
-    .b = b,
-    .a = color.a
-  };
-}
+SP_API sp_color_t   sp_color_rgb_255(u8 r, u8 g, u8 b);
+SP_API sp_color_t   sp_color_rgb_to_hsv(sp_color_t color);
+SP_API sp_color_t   sp_color_hsv_to_rgb(sp_color_t color);
+SP_API f32          sp_inv_sqrtf(f32 value);
+SP_API f32          sp_lerp(f32 a, f32 t, f32 b);
+SP_API f32          sp_clamp(f32 low, f32 value, f32 high);
+SP_API sp_vec2_t    sp_vec2(f32 x, f32 y);
+SP_API sp_vec3_t    sp_vec3(f32 x, f32 y, f32 z);
+SP_API sp_vec4_t    sp_vec4(f32 x, f32 y, f32 z, f32 w);
+SP_API sp_vec4_t    sp_vec4V(sp_vec3_t xyz, f32 w);
+SP_API sp_vec2_t    sp_vec2_add(sp_vec2_t left, sp_vec2_t right);
+SP_API sp_vec3_t    sp_vec3_add(sp_vec3_t left, sp_vec3_t right);
+SP_API sp_vec4_t    sp_vec4_add(sp_vec4_t left, sp_vec4_t right);
+SP_API sp_vec2_t    sp_vec2_sub(sp_vec2_t left, sp_vec2_t right);
+SP_API sp_vec3_t    sp_vec3_sub(sp_vec3_t left, sp_vec3_t right);
+SP_API sp_vec4_t    sp_vec4_sub(sp_vec4_t left, sp_vec4_t right);
+SP_API sp_vec2_t    sp_vec2_mul(sp_vec2_t left, sp_vec2_t right);
+SP_API sp_vec2_t    sp_vec2_scale(sp_vec2_t left, f32 right);
+SP_API sp_vec3_t    sp_vec3_mul(sp_vec3_t left, sp_vec3_t right);
+SP_API sp_vec3_t    sp_vec3_scale(sp_vec3_t left, f32 right);
+SP_API sp_vec4_t    sp_vec4_mul(sp_vec4_t left, sp_vec4_t right);
+SP_API sp_vec4_t    sp_vec4_scale(sp_vec4_t left, f32 right);
+SP_API sp_vec2_t    sp_vec2_div(sp_vec2_t left, sp_vec2_t right);
+SP_API sp_vec2_t    sp_vec2_divf(sp_vec2_t left, f32 right);
+SP_API sp_vec3_t    sp_vec3_div(sp_vec3_t left, sp_vec3_t right);
+SP_API sp_vec3_t    sp_vec3_divf(sp_vec3_t left, f32 right);
+SP_API sp_vec4_t    sp_vec4_div(sp_vec4_t left, sp_vec4_t right);
+SP_API sp_vec4_t    sp_vec4_divf(sp_vec4_t left, f32 right);
+SP_API bool         sp_vec2_eq(sp_vec2_t left, sp_vec2_t right);
+SP_API bool         sp_vec3_eq(sp_vec3_t left, sp_vec3_t right);
+SP_API bool         sp_vec4_eq(sp_vec4_t left, sp_vec4_t right);
+SP_API f32          sp_vec2_dot(sp_vec2_t left, sp_vec2_t right);
+SP_API f32          sp_vec3_dot(sp_vec3_t left, sp_vec3_t right);
+SP_API f32          sp_vec4_dot(sp_vec4_t left, sp_vec4_t right);
+SP_API sp_vec3_t    sp_vec3_cross(sp_vec3_t left, sp_vec3_t right);
+SP_API f32          sp_vec2_len_sqr(sp_vec2_t v);
+SP_API f32          sp_vec3_len_sqr(sp_vec3_t v);
+SP_API f32          sp_vec4_len_sqr(sp_vec4_t v);
+SP_API f32          sp_vec2_len(sp_vec2_t v);
+SP_API f32          sp_vec3_len(sp_vec3_t v);
+SP_API f32          sp_vec4_len(sp_vec4_t v);
+SP_API sp_vec2_t    sp_vec2_norm(sp_vec2_t v);
+SP_API sp_vec3_t    sp_vec3_norm(sp_vec3_t v);
+SP_API sp_vec4_t    sp_vec4_norm(sp_vec4_t v);
+SP_API sp_vec2_t    sp_vec2_lerp(sp_vec2_t a, f32 t, sp_vec2_t b);
+SP_API sp_vec3_t    sp_vec3_lerp(sp_vec3_t a, f32 t, sp_vec3_t b);
+SP_API sp_vec4_t    sp_vec4_lerp(sp_vec4_t a, f32 t, sp_vec4_t b);
+SP_API sp_interp_t  sp_interp_build(f32 start, f32 target, f32 time);
+SP_API bool         sp_interp_update(sp_interp_t* interp, f32 dt);
+SP_API f32          sp_interp_lerp(sp_interp_t* interp);
+SP_API f32          sp_interp_ease_in(sp_interp_t* interp);
+SP_API f32          sp_interp_ease_out(sp_interp_t* interp);
+SP_API f32          sp_interp_ease_inout(sp_interp_t* interp);
+SP_API f32          sp_interp_ease_inout_bounce(sp_interp_t* interp);
+SP_API f32          sp_interp_exponential(sp_interp_t* interp);
+SP_API f32          sp_interp_parabolic(sp_interp_t* interp);
 
 
 
@@ -2891,6 +2453,343 @@ SP_GLOBAL sp_rt_t sp_rt = {
   .mutex = PTHREAD_MUTEX_INITIALIZER,
   .tls.once = PTHREAD_ONCE_INIT
 };
+
+//  ███╗   ███╗ █████╗ ████████╗██╗  ██╗
+//  ████╗ ████║██╔══██╗╚══██╔══╝██║  ██║
+//  ██╔████╔██║███████║   ██║   ███████║
+//  ██║╚██╔╝██║██╔══██║   ██║   ██╔══██║
+//  ██║ ╚═╝ ██║██║  ██║   ██║   ██║  ██║
+//  ╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
+//  @math
+
+sp_color_t sp_color_rgb_255(u8 r, u8 g, u8 b) {
+  return (sp_color_t) SP_COLOR_RGB(r, g, b);
+}
+
+sp_color_t sp_color_rgb_to_hsv(sp_color_t color) {
+  f32 r = color.r;
+  f32 g = color.g;
+  f32 b = color.b;
+
+  f32 max = SP_MAX(r, SP_MAX(g, b));
+  f32 min = SP_MIN(r, SP_MIN(g, b));
+  f32 delta = max - min;
+
+  f32 h = 0.0f;
+  f32 s = 0.0f;
+  f32 v = max;
+
+  if (delta > 1e-6f && max > 1e-6f) {
+    s = delta / max;
+
+    if (max - r < 1e-6f) {
+      h = (g - b) / delta;
+    } else if (max - g < 1e-6f) {
+      h = 2.0f + (b - r) / delta;
+    } else {
+      h = 4.0f + (r - g) / delta;
+    }
+
+    h = h / 6.0f;
+    if (h < 0.0f) {
+      h += 1.0f;
+    }
+  }
+
+  return (sp_color_t){
+    .h = h * 360.0f,
+    .s = s * 100.0f,
+    .v = v * 100.0f,
+    .a = color.a
+  };
+}
+
+sp_color_t sp_color_hsv_to_rgb(sp_color_t color) {
+  f32 h = color.h / 360.0f;
+  f32 s = color.s / 100.0f;
+  f32 v = color.v / 100.0f;
+
+  f32 r = v;
+  f32 g = v;
+  f32 b = v;
+
+  if (s > 1e-6f) {
+    f32 h6 = h * 6.0f;
+    if (h6 >= 6.0f) {
+      h6 = 0.0f;
+    }
+    s32 sector = (s32)h6;
+    f32 f = h6 - (f32)sector;
+
+    f32 p = v * (1.0f - s);
+    f32 q = v * (1.0f - s * f);
+    f32 t = v * (1.0f - s * (1.0f - f));
+
+    switch (sector) {
+      case 0: { r = v; g = t; b = p; break; }
+      case 1: { r = q; g = v; b = p; break; }
+      case 2: { r = p; g = v; b = t; break; }
+      case 3: { r = p; g = q; b = v; break; }
+      case 4: { r = t; g = p; b = v; break; }
+      case 5: { r = v; g = p; b = q; break; }
+    }
+  }
+
+  return (sp_color_t){
+    .r = r,
+    .g = g,
+    .b = b,
+    .a = color.a
+  };
+}
+
+f32 sp_inv_sqrtf(f32 value) {
+  return 1.0f / SP_SQRTF(value);
+}
+
+f32 sp_lerp(f32 a, f32 t, f32 b) {
+  return (1.0f - t) * a + t * b;
+}
+
+f32 sp_clamp(f32 low, f32 value, f32 high) {
+  f32 result = value;
+  if (result < low) {
+    result = low;
+  }
+  if (result > high) {
+    result = high;
+  }
+  return result;
+}
+
+sp_vec2_t sp_vec2(f32 x, f32 y) {
+  return (sp_vec2_t){ .x = x, .y = y };
+}
+
+sp_vec3_t sp_vec3(f32 x, f32 y, f32 z) {
+  return (sp_vec3_t){ .x = x, .y = y, .z = z };
+}
+
+sp_vec4_t sp_vec4(f32 x, f32 y, f32 z, f32 w) {
+  return (sp_vec4_t){ .x = x, .y = y, .z = z, .w = w };
+}
+
+sp_vec4_t sp_vec4V(sp_vec3_t xyz, f32 w) {
+  return (sp_vec4_t){ .xyz = xyz, .w = w };
+}
+
+sp_vec2_t sp_vec2_add(sp_vec2_t left, sp_vec2_t right) {
+  return (sp_vec2_t){ .x = left.x + right.x, .y = left.y + right.y };
+}
+
+sp_vec3_t sp_vec3_add(sp_vec3_t left, sp_vec3_t right) {
+  return (sp_vec3_t){ .x = left.x + right.x, .y = left.y + right.y, .z = left.z + right.z };
+}
+
+sp_vec4_t sp_vec4_add(sp_vec4_t left, sp_vec4_t right) {
+  return (sp_vec4_t){ .x = left.x + right.x, .y = left.y + right.y, .z = left.z + right.z, .w = left.w + right.w };
+}
+
+sp_vec2_t sp_vec2_sub(sp_vec2_t left, sp_vec2_t right) {
+  return (sp_vec2_t){ .x = left.x - right.x, .y = left.y - right.y };
+}
+
+sp_vec3_t sp_vec3_sub(sp_vec3_t left, sp_vec3_t right) {
+  return (sp_vec3_t){ .x = left.x - right.x, .y = left.y - right.y, .z = left.z - right.z };
+}
+
+sp_vec4_t sp_vec4_sub(sp_vec4_t left, sp_vec4_t right) {
+  return (sp_vec4_t){ .x = left.x - right.x, .y = left.y - right.y, .z = left.z - right.z, .w = left.w - right.w };
+}
+
+sp_vec2_t sp_vec2_mul(sp_vec2_t left, sp_vec2_t right) {
+  return (sp_vec2_t){ .x = left.x * right.x, .y = left.y * right.y };
+}
+
+sp_vec2_t sp_vec2_scale(sp_vec2_t left, f32 right) {
+  return (sp_vec2_t){ .x = left.x * right, .y = left.y * right };
+}
+
+sp_vec3_t sp_vec3_mul(sp_vec3_t left, sp_vec3_t right) {
+  return (sp_vec3_t){ .x = left.x * right.x, .y = left.y * right.y, .z = left.z * right.z };
+}
+
+sp_vec3_t sp_vec3_scale(sp_vec3_t left, f32 right) {
+  return (sp_vec3_t){ .x = left.x * right, .y = left.y * right, .z = left.z * right };
+}
+
+sp_vec4_t sp_vec4_mul(sp_vec4_t left, sp_vec4_t right) {
+  return (sp_vec4_t){ .x = left.x * right.x, .y = left.y * right.y, .z = left.z * right.z, .w = left.w * right.w };
+}
+
+sp_vec4_t sp_vec4_scale(sp_vec4_t left, f32 right) {
+  return (sp_vec4_t){ .x = left.x * right, .y = left.y * right, .z = left.z * right, .w = left.w * right };
+}
+
+sp_vec2_t sp_vec2_div(sp_vec2_t left, sp_vec2_t right) {
+  return (sp_vec2_t){ .x = left.x / right.x, .y = left.y / right.y };
+}
+
+sp_vec2_t sp_vec2_divf(sp_vec2_t left, f32 right) {
+  return (sp_vec2_t){ .x = left.x / right, .y = left.y / right };
+}
+
+sp_vec3_t sp_vec3_div(sp_vec3_t left, sp_vec3_t right) {
+  return (sp_vec3_t){ .x = left.x / right.x, .y = left.y / right.y, .z = left.z / right.z };
+}
+
+sp_vec3_t sp_vec3_divf(sp_vec3_t left, f32 right) {
+  return (sp_vec3_t){ .x = left.x / right, .y = left.y / right, .z = left.z / right };
+}
+
+sp_vec4_t sp_vec4_div(sp_vec4_t left, sp_vec4_t right) {
+  return (sp_vec4_t){ .x = left.x / right.x, .y = left.y / right.y, .z = left.z / right.z, .w = left.w / right.w };
+}
+
+sp_vec4_t sp_vec4_divf(sp_vec4_t left, f32 right) {
+  return (sp_vec4_t){ .x = left.x / right, .y = left.y / right, .z = left.z / right, .w = left.w / right };
+}
+
+bool sp_vec2_eq(sp_vec2_t left, sp_vec2_t right) {
+  return left.x == right.x && left.y == right.y;
+}
+
+bool sp_vec3_eq(sp_vec3_t left, sp_vec3_t right) {
+  return left.x == right.x && left.y == right.y && left.z == right.z;
+}
+
+bool sp_vec4_eq(sp_vec4_t left, sp_vec4_t right) {
+  return left.x == right.x && left.y == right.y && left.z == right.z && left.w == right.w;
+}
+
+f32 sp_vec2_dot(sp_vec2_t left, sp_vec2_t right) {
+  return (left.x * right.x) + (left.y * right.y);
+}
+
+f32 sp_vec3_dot(sp_vec3_t left, sp_vec3_t right) {
+  return (left.x * right.x) + (left.y * right.y) + (left.z * right.z);
+}
+
+f32 sp_vec4_dot(sp_vec4_t left, sp_vec4_t right) {
+  return ((left.x * right.x) + (left.z * right.z)) + ((left.y * right.y) + (left.w * right.w));
+}
+
+sp_vec3_t sp_vec3_cross(sp_vec3_t left, sp_vec3_t right) {
+  return (sp_vec3_t){
+    .x = (left.y * right.z) - (left.z * right.y),
+    .y = (left.z * right.x) - (left.x * right.z),
+    .z = (left.x * right.y) - (left.y * right.x)
+  };
+}
+
+f32 sp_vec2_len_sqr(sp_vec2_t v) {
+  return sp_vec2_dot(v, v);
+}
+
+f32 sp_vec3_len_sqr(sp_vec3_t v) {
+  return sp_vec3_dot(v, v);
+}
+
+f32 sp_vec4_len_sqr(sp_vec4_t v) {
+  return sp_vec4_dot(v, v);
+}
+
+f32 sp_vec2_len(sp_vec2_t v) {
+  return sqrtf(sp_vec2_len_sqr(v));
+}
+
+f32 sp_vec3_len(sp_vec3_t v) {
+  return sqrtf(sp_vec3_len_sqr(v));
+}
+
+f32 sp_vec4_len(sp_vec4_t v) {
+  return sqrtf(sp_vec4_len_sqr(v));
+}
+
+sp_vec2_t sp_vec2_norm(sp_vec2_t v) {
+  return sp_vec2_scale(v, sp_inv_sqrtf(sp_vec2_dot(v, v)));
+}
+
+sp_vec3_t sp_vec3_norm(sp_vec3_t v) {
+  return sp_vec3_scale(v, sp_inv_sqrtf(sp_vec3_dot(v, v)));
+}
+
+sp_vec4_t sp_vec4_norm(sp_vec4_t v) {
+  return sp_vec4_scale(v, sp_inv_sqrtf(sp_vec4_dot(v, v)));
+}
+
+sp_vec2_t sp_vec2_lerp(sp_vec2_t a, f32 t, sp_vec2_t b) {
+  return sp_vec2_add(sp_vec2_scale(a, 1.0f - t), sp_vec2_scale(b, t));
+}
+
+sp_vec3_t sp_vec3_lerp(sp_vec3_t a, f32 t, sp_vec3_t b) {
+  return sp_vec3_add(sp_vec3_scale(a, 1.0f - t), sp_vec3_scale(b, t));
+}
+
+sp_vec4_t sp_vec4_lerp(sp_vec4_t a, f32 t, sp_vec4_t b) {
+  return sp_vec4_add(sp_vec4_scale(a, 1.0f - t), sp_vec4_scale(b, t));
+}
+
+sp_interp_t sp_interp_build(f32 start, f32 target, f32 time) {
+  return (sp_interp_t){ .start = start, .delta = target - start, .t = 0, .time_scale = 1.0f / time };
+}
+
+bool sp_interp_update(sp_interp_t* interp, f32 dt) {
+  interp->t += dt * interp->time_scale;
+  if (interp->t > 1.0f) { interp->t = 1.0f; }
+  return interp->t >= 1.0f;
+}
+
+f32 sp_interp_lerp(sp_interp_t* interp) {
+  return interp->start + interp->delta * interp->t;
+}
+
+f32 sp_interp_ease_in(sp_interp_t* interp) {
+  f32 eased = interp->t * interp->t;
+  return interp->start + interp->delta * eased;
+}
+
+f32 sp_interp_ease_out(sp_interp_t* interp) {
+  f32 eased = 1.0f - (1.0f - interp->t) * (1.0f - interp->t);
+  return interp->start + interp->delta * eased;
+}
+
+f32 sp_interp_ease_inout(sp_interp_t* interp) {
+  f32 eased;
+  if (interp->t < 0.5f) {
+    eased = 2.0f * interp->t * interp->t;
+  } else {
+    eased = 1.0f - (-2.0f * interp->t + 2.0f) * (-2.0f * interp->t + 2.0f) / 2.0f;
+  }
+  return interp->start + interp->delta * eased;
+}
+
+f32 sp_interp_ease_inout_bounce(sp_interp_t* interp) {
+  f32 c1 = 1.70158f;
+  f32 c2 = c1 * 1.525f;
+  f32 eased;
+  if (interp->t < 0.5f) {
+    f32 x = 2.0f * interp->t;
+    eased = 0.5f * (x * x * ((c2 + 1.0f) * x - c2));
+  } else {
+    f32 x = 2.0f * interp->t - 2.0f;
+    eased = 0.5f * (x * x * ((c2 + 1.0f) * x + c2) + 2.0f);
+  }
+  return interp->start + interp->delta * eased;
+}
+
+f32 sp_interp_exponential(sp_interp_t* interp) {
+  f32 k = 5.0f;
+  f32 e_k = 148.413159f;
+  f32 eased = (expf(k * interp->t) - 1.0f) / (e_k - 1.0f);
+  return interp->start + interp->delta * eased;
+}
+
+f32 sp_interp_parabolic(sp_interp_t* interp) {
+  f32 x = 2.0f * interp->t - 1.0f;
+  f32 eased = 1.0f - x * x;
+  return interp->start + interp->delta * eased;
+}
 
 //  ██╗  ██╗ █████╗ ███████╗██╗  ██╗██╗███╗   ██╗ ██████╗
 //  ██║  ██║██╔══██╗██╔════╝██║  ██║██║████╗  ██║██╔════╝
