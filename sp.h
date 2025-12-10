@@ -436,6 +436,7 @@ SP_BEGIN_EXTERN_C()
 #if defined(SP_MACOS)
   #include <dispatch/dispatch.h>
   #include <mach-o/dyld.h>
+  #include <sys/event.h>
 #endif
 
 #if defined(SP_POSIX)
@@ -1559,7 +1560,9 @@ typedef struct {
 typedef s32 sp_os_file_handle_t;
 
 typedef struct {
-  void* placeholder;
+  s32 kq;
+  sp_da(s32) fds;
+  sp_da(sp_str_t) watch_paths;
 } sp_fmon_os_t;
 
 ///////////
@@ -7919,24 +7922,128 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 }
 
 #elif defined(SP_MACOS)
+#include <sys/event.h>
+#include <fcntl.h>
+
 void sp_fmon_os_init(sp_fmon_t* monitor) {
-  (void)monitor;
-  SP_BROKEN();
+  sp_fmon_os_t* os = SP_ALLOC(sp_fmon_os_t);
+
+  os->kq = kqueue();
+  if (os->kq == -1) {
+    os->kq = 0;
+  }
+
+  monitor->os = os;
 }
 
-void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
-  (void)monitor; (void)directory_path;
-  SP_BROKEN();
+void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
+  if (!monitor->os) return;
+  sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
+
+  if (os->kq <= 0) return;
+
+  s32 fd = open(sp_str_to_cstr(path), O_RDONLY | O_EVTONLY);
+  if (fd == -1) return;
+
+  u32 fflags = 0;
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
+    fflags |= NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB;
+  }
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_ADDED) {
+    fflags |= NOTE_WRITE | NOTE_LINK;
+  }
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_REMOVED) {
+    fflags |= NOTE_DELETE | NOTE_RENAME | NOTE_REVOKE;
+  }
+
+  struct kevent change;
+  EV_SET(&change, fd, EVFILT_VNODE, EV_ADD | EV_CLEAR, fflags, 0, NULL);
+
+  if (kevent(os->kq, &change, 1, NULL, 0, NULL) != -1) {
+    sp_da_push(os->fds, fd);
+    sp_da_push(os->watch_paths, sp_str_copy(path));
+  } else {
+    close(fd);
+  }
 }
 
-void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
-  (void)monitor; (void)file_path;
-  SP_BROKEN();
+void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
+  if (!monitor->os) return;
+  sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
+
+  if (os->kq <= 0) return;
+
+  s32 fd = open(sp_str_to_cstr(path), O_RDONLY | O_EVTONLY);
+  if (fd == -1) return;
+
+  u32 fflags = 0;
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
+    fflags |= NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB;
+  }
+  if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_REMOVED) {
+    fflags |= NOTE_DELETE | NOTE_RENAME | NOTE_REVOKE;
+  }
+
+  struct kevent change;
+  EV_SET(&change, fd, EVFILT_VNODE, EV_ADD | EV_CLEAR, fflags, 0, NULL);
+
+  if (kevent(os->kq, &change, 1, NULL, 0, NULL) != -1) {
+    sp_da_push(os->fds, fd);
+    sp_da_push(os->watch_paths, sp_str_copy(path));
+  } else {
+    close(fd);
+  }
 }
 
 void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
-  (void)monitor;
-  SP_BROKEN();
+  if (!monitor->os) return;
+
+  sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
+  if (os->kq <= 0) return;
+
+  struct kevent events[16];
+  struct timespec timeout = {0, 0};
+
+  s32 nev = kevent(os->kq, NULL, 0, events, 16, &timeout);
+  if (nev <= 0) return;
+
+  for (s32 i = 0; i < nev; i++) {
+    struct kevent* ev = &events[i];
+    s32 fd = (s32)ev->ident;
+
+    sp_da_for(os->fds, it) {
+      if (os->fds[it] == fd) {
+        sp_str_t path = os->watch_paths[it];
+
+        sp_fmon_event_kind_t event_kind = SP_FILE_CHANGE_EVENT_NONE;
+        if ((monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) &&
+            (ev->fflags & (NOTE_WRITE | NOTE_EXTEND | NOTE_ATTRIB))) {
+          event_kind = (sp_fmon_event_kind_t)(event_kind | SP_FILE_CHANGE_EVENT_MODIFIED);
+        }
+        if ((monitor->events_to_watch & SP_FILE_CHANGE_EVENT_ADDED) &&
+            (ev->fflags & NOTE_LINK)) {
+          event_kind = (sp_fmon_event_kind_t)(event_kind | SP_FILE_CHANGE_EVENT_ADDED);
+        }
+        if ((monitor->events_to_watch & SP_FILE_CHANGE_EVENT_REMOVED) &&
+            (ev->fflags & (NOTE_DELETE | NOTE_RENAME | NOTE_REVOKE))) {
+          event_kind = (sp_fmon_event_kind_t)(event_kind | SP_FILE_CHANGE_EVENT_REMOVED);
+        }
+
+        if (event_kind != SP_FILE_CHANGE_EVENT_NONE) {
+          sp_fmon_event_t change = {
+            .file_path = sp_str_copy(path),
+            .file_name = sp_fs_get_name(path),
+            .events = event_kind,
+            .time = 0
+          };
+          sp_dyn_array_push(monitor->changes, change);
+        }
+        break;
+      }
+    }
+  }
+
+  sp_fmon_emit_changes(monitor);
 }
 
 #elif defined(SP_COSMO)
