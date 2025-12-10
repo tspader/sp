@@ -5865,9 +5865,9 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
 
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
   sp_str_t result = path;
+  c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
   if (sp_fs_exists(path)) {
     c8* path_cstr = sp_str_to_cstr(path);
-    c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
     if (realpath(path_cstr, canonical_path)) {
       result = SP_CSTR(canonical_path);
     }
