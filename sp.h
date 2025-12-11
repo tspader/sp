@@ -6112,11 +6112,14 @@ void sp_sleep_ns(u64 target) {
   }
 
   // fine sleep until we get really close
-  u64 margin = fine - coarse;
-  u64 remaining = target - elapsed;
-  if (remaining > margin) {
-    sp_os_sleep_ns(remaining - margin);
-    elapsed = sp_tm_read_timer(&timer);
+  // guard against elapsed > target (can happen with debugger pauses or OS overshoots)
+  if (elapsed < target) {
+    u64 margin = fine - coarse;
+    u64 remaining = target - elapsed;
+    if (remaining > margin) {
+      sp_os_sleep_ns(remaining - margin);
+      elapsed = sp_tm_read_timer(&timer);
+    }
   }
 
   // spin until we get so god damn close we can taste it
