@@ -259,6 +259,7 @@
 #define SP_INCOMPLETE()
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
+#define sp_typedef_fn(return_type, name, ...) SP_TYPEDEF_FN(return_type, name, __VA_ARGS__)
 
 #define SP_UNUSED(x) ((void)(x))
 
@@ -2343,6 +2344,51 @@ SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 SP_API bool      sp_parse_is_digit(c8 c);
 
 
+// app
+typedef enum {
+  SP_APP_CONTINUE = 0,
+  SP_APP_ERR = 1,
+  SP_APP_QUIT = 2
+} sp_app_result_t;
+
+typedef struct sp_app sp_app_t;
+
+sp_typedef_fn(sp_app_result_t, sp_app_init_fn_t, sp_app_t*);
+sp_typedef_fn(sp_app_result_t, sp_app_poll_fn_t, sp_app_t*);
+sp_typedef_fn(sp_app_result_t, sp_app_update_fn_t, sp_app_t*);
+sp_typedef_fn(sp_app_result_t, sp_app_deinit_fn_t, sp_app_t*);
+
+typedef struct {
+  void* user_data;
+  sp_app_init_fn_t on_init;
+  sp_app_poll_fn_t on_poll;
+  sp_app_update_fn_t on_update;
+  sp_app_deinit_fn_t on_deinit;
+  u32 fps;
+} sp_app_config_t;
+
+struct sp_app {
+  void* user_data;
+  sp_app_init_fn_t on_init;
+  sp_app_poll_fn_t on_poll;
+  sp_app_update_fn_t on_update;
+  sp_app_deinit_fn_t on_deinit;
+
+  s32 return_code;
+  sp_atomic_s32 shutdown;
+
+  u32 fps;
+
+  struct {
+    sp_tm_timer_t timer;
+    u64 target;
+    u64 accumulated;
+    u64 num;
+  } frame;
+};
+
+extern sp_app_config_t sp_main(s32 num_args, const c8** args);
+SP_API sp_app_t*       sp_app_new(sp_app_config_t config);
 
 
 //  █████╗ ███████╗███████╗███████╗████████╗
@@ -7857,22 +7903,22 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
 void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   if (!monitor->os) return;
 
-  sp_fmon_os_t* linux_monitor = (sp_fmon_os_t*)monitor->os;
-  if (linux_monitor->fd <= 0) return;
+  sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
+  if (os->fd <= 0) return;
 
-  size_t len = read(linux_monitor->fd, linux_monitor->buffer, sizeof(linux_monitor->buffer));
+  size_t len = read(os->fd, os->buffer, sizeof(os->buffer));
   if (len <= 0) return;
 
   // Process all events in buffer
-  char* ptr = (char*)linux_monitor->buffer;
-  while (ptr < (char*)linux_monitor->buffer + len) {
+  char* ptr = (char*)os->buffer;
+  while (ptr < (char*)os->buffer + len) {
     struct inotify_event* event = (struct inotify_event*)ptr;
 
     // Find which path this watch descriptor corresponds to
-    sp_dyn_array_for(linux_monitor->watch_descs, it) {
-      s32 wd = linux_monitor->watch_descs[it];
+    sp_dyn_array_for(os->watch_descs, it) {
+      s32 wd = os->watch_descs[it];
       if (wd == event->wd) {
-        sp_str_t dir_path = linux_monitor->watch_paths[it];
+        sp_str_t dir_path = os->watch_paths[it];
 
         // Build full path if there's a filename
         sp_str_t file_name = SP_ZERO_STRUCT(sp_str_t);
@@ -8532,6 +8578,58 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 
   return 0;
 }
+
+sp_app_t* sp_app_new(sp_app_config_t config) {
+  sp_app_t* app = SP_ALLOC(sp_app_t);
+  *app = (sp_app_t) {
+    .user_data = config.user_data,
+    .on_init = config.on_init,
+    .on_poll = config.on_poll,
+    .on_update = config.on_update,
+    .on_deinit = config.on_deinit,
+    .fps = config.fps,
+    .frame = {
+      .target = sp_tm_fps_to_ns(config.fps),
+    }
+  };
+  return app;
+}
+
+#if defined(SP_MAIN)
+s32 main(s32 num_args, const c8** args) {
+  sp_app_config_t config = sp_main(num_args, args);
+  sp_app_t* sp = sp_app_new(config);
+
+  if (sp->on_init) {
+    sp_try(sp->on_init(sp));
+  }
+
+  sp->frame.timer = sp_tm_start_timer();
+  while (true) {
+    if (sp->on_poll) {
+      sp->on_poll(sp);
+    }
+
+    sp->frame.accumulated += sp_tm_lap_timer(&sp->frame.timer);
+    if (sp->frame.accumulated >= sp->frame.target) {
+      sp->frame.accumulated -= sp->frame.target;
+      sp->frame.num++;
+      if (sp->on_update(sp) != SP_APP_CONTINUE) {
+        break;
+      };
+    }
+    else {
+      sp_sleep_ns(sp->frame.target - sp->frame.accumulated);
+    }
+  }
+
+  if (sp->on_deinit) {
+    sp->on_deinit(sp);
+  }
+
+  return sp->return_code;
+}
+#endif
 
 SP_END_EXTERN_C()
 
