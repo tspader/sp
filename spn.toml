@@ -18,74 +18,71 @@ name = "bench"
 mode = "release"
 cc = "clang"
 
-[[bin]]
+[[test]]
 name = "amalg"
 source = ["test/amalg.c"]
 
-[[bin]]
+[[test]]
 name = "app"
 source = ["test/app.c"]
 
-[[bin]]
+[[test]]
 name = "context"
 source = ["test/context.c"]
 
-[[bin]]
+[[test]]
 name = "core"
 source = ["test/core.c"]
 
-[[bin]]
+[[test]]
 name = "cv"
 source = ["test/cv.c"]
 
-[[bin]]
+[[test]]
 name = "fmon"
 source = ["test/fmon.c"]
 
-[[bin]]
+[[test]]
 name = "fs"
 source = ["test/fs.c"]
 
-[[bin]]
+[[test]]
 name = "glob"
 source = ["test/glob.c"]
 
-[[bin]]
-name = "bench-glob"
-source = ["test/bench/glob.c"]
-include = ["test"]
-
-[[bin]]
+[[test]]
 name = "ht"
 source = ["test/ht.c"]
 
-[[bin]]
+[[test]]
 name = "io"
 source = ["test/io.c"]
 
-[[bin]]
+[[test]]
 name = "leak"
 source = ["test/leak.c"]
 
-[[bin]]
+[[test]]
 name = "linkage"
 source = ["test/linkage.c"]
+
+[[test]]
+name = "ps"
+source = ["test/ps.c"]
+
+[[test]]
+name = "stress"
+source = ["test/stress.c"]
+
+[[test]]
+name = "time"
+source = ["test/time.c"]
+
 
 [[bin]]
 name = "process"
 source = ["test/tools/process/process.c"]
 
-[[bin]]
-name = "ps"
-source = ["test/ps.c"]
-
-[[bin]]
-name = "stress"
-source = ["test/stress.c"]
-
-[[bin]]
-name = "time"
-source = ["test/time.c"]
 
 
 [[bin]]
@@ -98,8 +95,13 @@ source = ["doc/tools/sleep.c"]
 
 
 
-
 [[bin]]
 name = "bench-ht"
 source = ["test/bench/ht.c"]
 include = ["doc"]
+
+[[bin]]
+name = "bench-glob"
+source = ["test/bench/glob.c"]
+include = ["test"]
+
