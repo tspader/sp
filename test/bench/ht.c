@@ -389,7 +389,7 @@ static void kernel_mixed(bench_params_t p, bench_data_t* data) {
   (void)sum;
 }
 
-#define DEFAULT_ITERS 1000000
+#define DEFAULT_ITERS 10, 100, 1000, 100000
 
 s32 main(s32 argc, const c8** argv) {
   (void)argc;
