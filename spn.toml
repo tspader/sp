@@ -23,8 +23,8 @@ name = "amalg"
 source = ["test/amalg.c"]
 
 [[test]]
-name = "app"
-source = ["test/app.c"]
+name = "asset"
+source = ["test/asset.c"]
 
 [[test]]
 name = "context"
@@ -77,6 +77,10 @@ source = ["test/stress.c"]
 [[test]]
 name = "time"
 source = ["test/time.c"]
+
+[[test]]
+name = "app"
+source = ["test/app.c"]
 
 
 [[bin]]

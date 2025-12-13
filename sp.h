@@ -2389,6 +2389,7 @@ struct sp_app {
 
 extern sp_app_config_t sp_main(s32 num_args, const c8** args);
 SP_API sp_app_t*       sp_app_new(sp_app_config_t config);
+SP_API s32             sp_app_run(sp_app_config_t config);
 
 
 //  █████╗ ███████╗███████╗███████╗████████╗
@@ -8598,13 +8599,13 @@ sp_app_t* sp_app_new(sp_app_config_t config) {
   return app;
 }
 
-#if defined(SP_MAIN)
-s32 main(s32 num_args, const c8** args) {
-  sp_app_config_t config = sp_main(num_args, args);
+SP_API s32 sp_app_run(sp_app_config_t config) {
   sp_app_t* sp = sp_app_new(config);
 
   if (sp->on_init) {
-    sp_try(sp->on_init(sp));
+    if (sp->on_init(sp) != SP_APP_CONTINUE) {
+      goto deinit;
+    };
   }
 
   sp->frame.timer = sp_tm_start_timer();
@@ -8626,11 +8627,17 @@ s32 main(s32 num_args, const c8** args) {
     }
   }
 
+deinit:
   if (sp->on_deinit) {
     sp->on_deinit(sp);
   }
 
   return sp->return_code;
+}
+
+#if defined(SP_MAIN)
+s32 main(s32 num_args, const c8** args) {
+  return sp_app_run(sp_main(num_args, args));
 }
 #endif
 

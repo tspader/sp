@@ -5,6 +5,7 @@
 #include "utest.h"
 
 #include "app.c"
+#include "asset.c"
 #include "context.c"
 #include "core.c"
 #include "cv.c"
