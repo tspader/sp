@@ -117,6 +117,85 @@
   #define SP_POSIX
 #endif
 
+#if defined(__wasm__)
+  #define SP_WASM
+  #if defined(__EMSCRIPTEN__)
+    #define SP_WASM_EMSCRIPTEN
+    #ifdef __EMSCRIPTEN_PTHREADS__
+      #define SP_WASM_THREADS
+    #endif
+  #elif defined(__wasi__)
+    #define SP_WASM_WASI
+    #ifdef _REENTRANT
+      #define SP_WASM_THREADS
+    #endif
+  #else
+    #define SP_WASM_FREESTANDING
+  #endif
+#endif
+
+
+////////////////////
+// FEATURE MACROS //
+////////////////////
+// These macros control which submodules are compiled.
+// By default, all features are enabled on native platforms.
+// On WASM, some features are disabled due to platform limitations.
+
+// SP_ENABLE_PS - subprocess support (posix_spawn, etc.)
+// SP_ENABLE_IO_FILE - file I/O operations
+// SP_ENABLE_FMON - filesystem monitoring
+// SP_ENABLE_THREAD - threading primitives
+// SP_ENABLE_ENV - environment variables (extern environ)
+// SP_ENABLE_FS_ADVANCED - advanced filesystem ops (symlinks, etc.)
+// SP_ENABLE_TIMER - high-resolution timers
+
+#if !defined(SP_WASM)
+  // Native platforms: enable everything by default
+  #if !defined(SP_ENABLE_PS)
+    #define SP_ENABLE_PS
+  #endif
+  #if !defined(SP_ENABLE_IO_FILE)
+    #define SP_ENABLE_IO_FILE
+  #endif
+  #if !defined(SP_ENABLE_FMON)
+    #define SP_ENABLE_FMON
+  #endif
+  #if !defined(SP_ENABLE_THREAD)
+    #define SP_ENABLE_THREAD
+  #endif
+  #if !defined(SP_ENABLE_ENV)
+    #define SP_ENABLE_ENV
+  #endif
+  #if !defined(SP_ENABLE_FS_ADVANCED)
+    #define SP_ENABLE_FS_ADVANCED
+  #endif
+  #if !defined(SP_ENABLE_TIMER)
+    #define SP_ENABLE_TIMER
+  #endif
+#elif defined(SP_WASM_EMSCRIPTEN)
+  // Emscripten: enable file I/O, timers
+  #if !defined(SP_ENABLE_IO_FILE)
+    #define SP_ENABLE_IO_FILE
+  #endif
+  #if !defined(SP_ENABLE_TIMER)
+    #define SP_ENABLE_TIMER
+  #endif
+  #if !defined(SP_ENABLE_ENV)
+    #define SP_ENABLE_ENV
+  #endif
+#elif defined(SP_WASM_WASI)
+  // WASI: enable file I/O, environment, limited FS
+  #if !defined(SP_ENABLE_IO_FILE)
+    #define SP_ENABLE_IO_FILE
+  #endif
+  #if !defined(SP_ENABLE_ENV)
+    #define SP_ENABLE_ENV
+  #endif
+#else
+  // Freestanding WASM: minimal - only core features
+#endif
+
 
 //////////////
 // COMPILER //
@@ -146,6 +225,14 @@
 #if defined(__aarch64__) || defined(_M_ARM64)
   #define SP_ARM64
   #define SP_ARM
+#endif
+
+#if defined(__wasm32__)
+  #define SP_WASM32
+#endif
+
+#if defined(__wasm64__)
+  #define SP_WASM64
 #endif
 
 //////////////
@@ -458,6 +545,36 @@ SP_BEGIN_EXTERN_C()
   #include <time.h>
 #endif
 
+#if defined(SP_WASM_EMSCRIPTEN)
+  #include <emscripten.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <errno.h>
+  #include <fcntl.h>
+  #include <unistd.h>
+  #include <sys/stat.h>
+  #include <time.h>
+  #include <dirent.h>
+  #include <pthread.h>
+#endif
+
+#if defined(SP_WASM_WASI)
+  #include <stdlib.h>
+  #include <string.h>
+  #include <errno.h>
+  #include <fcntl.h>
+  #include <unistd.h>
+  #include <sys/stat.h>
+  #include <time.h>
+  #include <dirent.h>
+  #include <pthread.h>
+#endif
+
+#if defined(SP_WASM_FREESTANDING)
+  // Minimal headers for freestanding WASM
+  #include <stddef.h>
+#endif
+
 #if !defined(SP_NO_LIBM)
   #include <math.h>
   #define SP_SINF sinf
@@ -467,13 +584,27 @@ SP_BEGIN_EXTERN_C()
   #define SP_ACOSF acosf
 #endif
 
-#include <assert.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdint.h>
+#if !defined(SP_WASM_FREESTANDING)
+  #include <assert.h>
+  #include <stdarg.h>
+  #include <stdbool.h>
+  #include <string.h>
+  #include <stdint.h>
+#else
+  // Freestanding: minimal standard includes
+  #include <stdint.h>
+  #include <stddef.h>
+  #ifndef bool
+    typedef _Bool bool;
+    #define true 1
+    #define false 0
+  #endif
+  #define assert(x) ((void)0)
+#endif
 
-extern char** environ;
+#if defined(SP_ENABLE_ENV) && !defined(SP_WASM_FREESTANDING)
+  extern char** environ;
+#endif
 
 SP_END_EXTERN_C()
 
@@ -1912,6 +2043,7 @@ SP_API void sp_spin_unlock(sp_spin_lock_t* lock);
 //    ██║   ██║  ██║██║  ██║███████╗██║  ██║██████╔╝
 //    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
 // @thread
+#if defined(SP_ENABLE_THREAD)
 SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
 
 typedef struct {
@@ -1928,11 +2060,15 @@ typedef struct {
 
 #elif defined(SP_POSIX)
   typedef pthread_t sp_thread_t;
+
+#elif defined(SP_WASM_THREADS)
+  typedef pthread_t sp_thread_t;
 #endif
 
 SP_API void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
 SP_API void sp_thread_join(sp_thread_t* thread);
 SP_API s32  sp_thread_launch(void* userdata);
+#endif // SP_ENABLE_THREAD
 
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
@@ -1964,6 +2100,17 @@ typedef struct {
   u32 index;
 } sp_tls_rt_t;
 
+#if defined(SP_WASM) && !defined(SP_WASM_THREADS)
+// Single-threaded WASM: simple static storage for TLS
+typedef struct {
+  sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
+  struct {
+    sp_tls_rt_t* ptr;
+    bool initialized;
+  } tls;
+} sp_rt_t;
+#else
+// Native and threaded builds: use pthread TLS
 typedef struct {
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
@@ -1972,6 +2119,7 @@ typedef struct {
     pthread_once_t once;
   } tls;
 } sp_rt_t;
+#endif
 
 extern sp_rt_t sp_rt;
 
@@ -2061,6 +2209,7 @@ SP_API sp_str_t       sp_io_read_file(sp_str_t path);
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
 // @ps
+#if defined(SP_ENABLE_PS)
 #ifndef SP_PS_MAX_ARGS
   #define SP_PS_MAX_ARGS 16
 #endif
@@ -2208,6 +2357,7 @@ SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* proc);
 SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
 SP_API bool            sp_ps_kill(sp_ps_t* proc);
+#endif // SP_ENABLE_PS
 
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
@@ -2508,10 +2658,18 @@ SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
 
 SP_BEGIN_EXTERN_C()
 
+#if defined(SP_WASM) && !defined(SP_WASM_THREADS)
+// Single-threaded WASM: static TLS
+sp_rt_t sp_rt = {
+  .tls = { .ptr = NULL, .initialized = false }
+};
+#else
+// Native and threaded builds
 sp_rt_t sp_rt = {
   .mutex = PTHREAD_MUTEX_INITIALIZER,
   .tls = { .once = PTHREAD_ONCE_INIT }
 };
+#endif
 
 //  ███╗   ███╗ █████╗ ████████╗██╗  ██╗
 //  ████╗ ████║██╔══██╗╚══██╔══╝██║  ██║
@@ -4240,6 +4398,34 @@ void sp_context_pop() {
   state->index--;
 }
 
+#if defined(SP_WASM) && !defined(SP_WASM_THREADS)
+// Single-threaded WASM: simple static storage
+void sp_context_on_deinit(void* ptr) {
+  if (ptr) {
+    sp_tls_rt_t* state = (sp_tls_rt_t*)ptr;
+    sp_mem_os_free(state->scratch->buffer);
+    sp_mem_os_free(state->scratch);
+    sp_mem_os_free(ptr);
+  }
+}
+
+sp_tls_rt_t* sp_tls_rt_get() {
+  if (!sp_rt.tls.initialized) {
+    sp_rt.tls.ptr = (sp_tls_rt_t*)sp_mem_os_alloc(sizeof(sp_tls_rt_t));
+    *sp_rt.tls.ptr = (sp_tls_rt_t) {
+      .contexts = {
+        { .allocator = sp_mem_libc_new() }
+      },
+      .scratch = SP_OS_ALLOC(sp_mem_arena_t),
+      .index = 0,
+    };
+    sp_mem_arena_init(sp_rt.tls.ptr->scratch, (u8*)sp_mem_os_alloc(SP_RT_SCRATCH_SIZE), SP_RT_SCRATCH_SIZE);
+    sp_rt.tls.initialized = true;
+  }
+  return sp_rt.tls.ptr;
+}
+#else
+// Native and threaded builds: use pthread TLS
 void sp_context_on_deinit(void* ptr) {
   if (ptr) {
     sp_tls_rt_t* state = (sp_tls_rt_t*)ptr;
@@ -4273,6 +4459,7 @@ sp_tls_rt_t* sp_tls_rt_get() {
 
   return state;
 }
+#endif
 
 sp_context_t* sp_context_get() {
   sp_tls_rt_t* state = sp_tls_rt_get();
@@ -4516,6 +4703,73 @@ void* sp_mem_os_realloc(void* ptr, u32 size) {
 void sp_mem_os_free(void* ptr) {
   if (!ptr) return;
   HeapFree(GetProcessHeap(), 0, ptr);
+}
+#elif defined(SP_WASM_FREESTANDING)
+// Freestanding WASM: use __heap_base and memory.grow
+extern unsigned char __heap_base[];
+static unsigned char* sp__wasm_heap_ptr = 0;
+
+void* sp_mem_os_alloc(u32 size) {
+  if (!sp__wasm_heap_ptr) {
+    sp__wasm_heap_ptr = __heap_base;
+  }
+  // Align to 16 bytes
+  size = (size + 15) & ~15;
+
+  unsigned char* current_end = (unsigned char*)(__builtin_wasm_memory_size(0) << 16);
+  if (sp__wasm_heap_ptr + size > current_end) {
+    u32 pages_needed = ((sp__wasm_heap_ptr + size - current_end) + 0xFFFF) >> 16;
+    if (__builtin_wasm_memory_grow(0, pages_needed) == (size_t)-1) {
+      return 0;
+    }
+  }
+
+  void* result = sp__wasm_heap_ptr;
+  sp__wasm_heap_ptr += size;
+  // Zero initialize
+  for (u32 i = 0; i < size; i++) {
+    ((unsigned char*)result)[i] = 0;
+  }
+  return result;
+}
+
+void* sp_mem_os_alloc_zero(u32 size) {
+  return sp_mem_os_alloc(size);
+}
+
+void* sp_mem_os_realloc(void* ptr, u32 size) {
+  // Simple arena-style: just allocate new block
+  if (!ptr) return sp_mem_os_alloc(size);
+  void* new_ptr = sp_mem_os_alloc(size);
+  if (new_ptr && ptr) {
+    // Can't know old size, copy conservatively
+    for (u32 i = 0; i < size; i++) {
+      ((unsigned char*)new_ptr)[i] = ((unsigned char*)ptr)[i];
+    }
+  }
+  return new_ptr;
+}
+
+void sp_mem_os_free(void* ptr) {
+  // Arena-style: no-op
+  (void)ptr;
+}
+#elif defined(SP_WASM)
+// Emscripten/WASI: use standard malloc
+void* sp_mem_os_alloc(u32 size) {
+  return malloc(size);
+}
+
+void* sp_mem_os_alloc_zero(u32 size) {
+  return calloc(size, 1);
+}
+
+void* sp_mem_os_realloc(void* ptr, u32 size) {
+  return realloc(ptr, size);
+}
+
+void sp_mem_os_free(void* ptr) {
+  free(ptr);
 }
 #elif defined(SP_POSIX)
 void* sp_mem_os_alloc(u32 size) {
@@ -7136,7 +7390,7 @@ void sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_t overwrit
 // ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
-#if defined(SP_POSIX)
+#if defined(SP_POSIX) && defined(SP_ENABLE_PS)
 SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_PRIVATE bool sp_ps_create_pipes(s32 pipes [2]);
 SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config);
