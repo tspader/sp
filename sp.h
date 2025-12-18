@@ -2081,17 +2081,26 @@ typedef struct {
   u8* stop;
 } sp_io_memory_data_t;
 
+typedef struct {
+  u8* base;
+  u8* here;
+  u8* stop;
+  u8* max;
+} sp_io_buffer_data_t;
+
 struct sp_io_stream_t {
   sp_io_callbacks_t callbacks;
   union {
     sp_io_file_data_t file;
     sp_io_memory_data_t memory;
+    sp_io_buffer_data_t buffer;
   };
   sp_allocator_t allocator;
 };
 
 SP_API sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
 SP_API sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
+SP_API sp_io_stream_t sp_io_from_buffer(void);
 SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode);
 SP_API u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
 SP_API u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
@@ -2100,6 +2109,7 @@ SP_API s64            sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whenc
 SP_API s64            sp_io_size(sp_io_stream_t* stream);
 SP_API void           sp_io_close(sp_io_stream_t* stream);
 SP_API sp_str_t       sp_io_read_file(sp_str_t path);
+SP_API sp_str_t       sp_io_buffer_to_str(sp_io_stream_t* stream);
 
 
 // ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
@@ -8199,6 +8209,81 @@ void sp_io_memory_close(sp_io_stream_t* stream) {
   (void)stream;
 }
 
+s64 sp_io_buffer_size(sp_io_stream_t* stream) {
+  sp_io_buffer_data_t* data = &stream->buffer;
+  return data->stop - data->base;
+}
+
+s64 sp_io_buffer_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+  sp_io_buffer_data_t* data = &stream->buffer;
+  u8* new_pos;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      new_pos = data->base + offset;
+      break;
+    }
+    case SP_IO_SEEK_CUR: {
+      new_pos = data->here + offset;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      new_pos = data->stop + offset;
+      break;
+    }
+    default: {
+      SP_UNREACHABLE();
+    }
+  }
+
+  if (new_pos < data->base || new_pos > data->stop) {
+    sp_err_set(SP_ERR_IO_SEEK_INVALID);
+    return -1;
+  }
+  data->here = new_pos;
+  return data->here - data->base;
+}
+
+u64 sp_io_buffer_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+  sp_io_buffer_data_t* data = &stream->buffer;
+  u64 available = data->stop - data->here;
+  u64 to_read = SP_MIN(size, available);
+
+  sp_mem_copy(data->here, ptr, to_read);
+  data->here += to_read;
+  return to_read;
+}
+
+u64 sp_io_buffer_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+  sp_io_buffer_data_t* data = &stream->buffer;
+  u64 pos = data->here - data->base;
+  u64 required = pos + size;
+  u64 capacity = data->max - data->base;
+
+  if (required > capacity) {
+    u64 new_capacity = capacity ? capacity : 64;
+    while (new_capacity < required) {
+      new_capacity *= 2;
+    }
+    u64 content_size = data->stop - data->base;
+    data->base = (u8*)sp_realloc(data->base, (u32)new_capacity);
+    data->here = data->base + pos;
+    data->stop = data->base + content_size;
+    data->max = data->base + new_capacity;
+  }
+
+  sp_mem_copy(ptr, data->here, size);
+  data->here += size;
+  if (data->here > data->stop) {
+    data->stop = data->here;
+  }
+  return size;
+}
+
+void sp_io_buffer_close(sp_io_stream_t* stream) {
+  (void)stream;
+}
+
 s64 sp_io_file_size(sp_io_stream_t* stream) {
   sp_io_file_data_t* data = &stream->file;
   s64 current = lseek(data->fd, 0, SEEK_CUR);
@@ -8322,6 +8407,27 @@ sp_io_stream_t sp_io_from_memory(void* memory, u64 size) {
   stream.callbacks.close = sp_io_memory_close;
 
   return stream;
+}
+
+sp_io_stream_t sp_io_from_buffer() {
+  return (sp_io_stream_t) {
+    .callbacks = {
+      .size = sp_io_buffer_size,
+      .seek = sp_io_buffer_seek,
+      .read = sp_io_buffer_read,
+      .write = sp_io_buffer_write,
+      .close = sp_io_buffer_close,
+    }
+  };
+}
+
+sp_str_t sp_io_buffer_to_str(sp_io_stream_t* stream) {
+  SP_ASSERT(stream);
+  sp_io_buffer_data_t* data = &stream->buffer;
+  return (sp_str_t) {
+    .data = (c8*)data->base,
+    .len = (u32)(data->stop - data->base),
+  };
 }
 
 sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode) {

@@ -705,6 +705,210 @@ UTEST_F(io, sp_io_read_file_empty) {
   ASSERT_EQ(result.len, 0);
 }
 
+UTEST_F(io, buffer_open) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+  ASSERT_EQ(sp_io_size(&stream), 0);
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_write_small) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+  u8 data[] = {1, 2, 3, 4};
+  u64 written = sp_io_write(&stream, data, 4);
+
+  ASSERT_EQ(written, 4);
+  ASSERT_EQ(sp_io_size(&stream), 4);
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_write_grows) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  u8 data[256];
+  for (u32 i = 0; i < 256; i++) data[i] = (u8)i;
+
+  u64 written = sp_io_write(&stream, data, 256);
+  ASSERT_EQ(written, 256);
+  ASSERT_EQ(sp_io_size(&stream), 256);
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_write_read_roundtrip) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  u8 data[] = {10, 20, 30, 40, 50};
+  sp_io_write(&stream, data, 5);
+
+  sp_io_seek(&stream, 0, SP_IO_SEEK_SET);
+
+  u8 result[5] = SP_ZERO_INITIALIZE();
+  u64 read = sp_io_read(&stream, result, 5);
+
+  ASSERT_EQ(read, 5);
+  for (u32 i = 0; i < 5; i++) {
+    ASSERT_EQ(result[i], data[i]);
+  }
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_seek_set) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
+  sp_io_write(&stream, data, 8);
+
+  s64 pos = sp_io_seek(&stream, 4, SP_IO_SEEK_SET);
+  ASSERT_EQ(pos, 4);
+
+  u8 val;
+  sp_io_read(&stream, &val, 1);
+  ASSERT_EQ(val, 5);
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_seek_cur) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
+  sp_io_write(&stream, data, 8);
+  sp_io_seek(&stream, 2, SP_IO_SEEK_SET);
+
+  s64 pos = sp_io_seek(&stream, 3, SP_IO_SEEK_CUR);
+  ASSERT_EQ(pos, 5);
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_seek_end) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
+  sp_io_write(&stream, data, 8);
+
+  s64 pos = sp_io_seek(&stream, -2, SP_IO_SEEK_END);
+  ASSERT_EQ(pos, 6);
+
+  u8 val;
+  sp_io_read(&stream, &val, 1);
+  ASSERT_EQ(val, 7);
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_seek_invalid) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  u8 data[] = {1, 2, 3, 4};
+  sp_io_write(&stream, data, 4);
+
+  s64 pos = sp_io_seek(&stream, -1, SP_IO_SEEK_SET);
+  ASSERT_EQ(pos, -1);
+
+  pos = sp_io_seek(&stream, 100, SP_IO_SEEK_SET);
+  ASSERT_EQ(pos, -1);
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_to_str) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  const char* text = "hello world";
+  sp_io_write(&stream, text, 11);
+
+  sp_str_t str = sp_io_buffer_to_str(&stream);
+  ASSERT_EQ(str.len, 11);
+  ASSERT_TRUE(sp_str_equal(str, sp_str_lit("hello world")));
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_multiple_writes) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  sp_io_write(&stream, "abc", 3);
+  sp_io_write(&stream, "def", 3);
+  sp_io_write(&stream, "ghi", 3);
+
+  ASSERT_EQ(sp_io_size(&stream), 9);
+
+  sp_str_t str = sp_io_buffer_to_str(&stream);
+  ASSERT_TRUE(sp_str_equal(str, sp_str_lit("abcdefghi")));
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_write_at_position) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  sp_io_write(&stream, "XXXX", 4);
+  sp_io_seek(&stream, 1, SP_IO_SEEK_SET);
+  sp_io_write(&stream, "YY", 2);
+
+  sp_io_seek(&stream, 0, SP_IO_SEEK_SET);
+  u8 result[4];
+  sp_io_read(&stream, result, 4);
+
+  ASSERT_EQ(result[0], 'X');
+  ASSERT_EQ(result[1], 'Y');
+  ASSERT_EQ(result[2], 'Y');
+  ASSERT_EQ(result[3], 'X');
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_write_extends_size) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  sp_io_write(&stream, "abc", 3);
+  ASSERT_EQ(sp_io_size(&stream), 3);
+
+  sp_io_seek(&stream, 1, SP_IO_SEEK_SET);
+  sp_io_write(&stream, "XXXXX", 5);
+
+  ASSERT_EQ(sp_io_size(&stream), 6);
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_read_past_end) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  sp_io_write(&stream, "abc", 3);
+  sp_io_seek(&stream, 0, SP_IO_SEEK_SET);
+
+  u8 result[10] = SP_ZERO_INITIALIZE();
+  u64 read = sp_io_read(&stream, result, 10);
+
+  ASSERT_EQ(read, 3);
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, buffer_large_write) {
+  sp_io_stream_t stream = sp_io_from_buffer();
+
+  u8 data[4096];
+  for (u32 i = 0; i < 4096; i++) data[i] = (u8)(i & 0xFF);
+
+  u64 written = sp_io_write(&stream, data, 4096);
+  ASSERT_EQ(written, 4096);
+  ASSERT_EQ(sp_io_size(&stream), 4096);
+
+  sp_io_seek(&stream, 0, SP_IO_SEEK_SET);
+
+  u8 result[4096];
+  u64 read = sp_io_read(&stream, result, 4096);
+  ASSERT_EQ(read, 4096);
+
+  for (u32 i = 0; i < 4096; i++) {
+    ASSERT_EQ(result[i], data[i]);
+  }
+
+  sp_io_close(&stream);
+}
+
 UTEST_F(io, file_seek_all_whence_zero_offset) {
   const char* content = "0123456789";
   sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
