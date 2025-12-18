@@ -491,6 +491,93 @@ UTEST(fs_path, integration_test) {
   ASSERT_FALSE(has_double_slash);
 }
 
+UTEST_F(fs, collect_recursive_empty_dir) {
+  sp_str_t empty_dir = sp_test_file_path(&ut.file_manager, SP_LIT("empty_dir"));
+  sp_fs_create_dir(empty_dir);
 
+  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(empty_dir);
+  ASSERT_EQ(sp_dyn_array_size(results), 0);
+}
+
+UTEST_F(fs, collect_recursive_flat_dir) {
+  sp_str_t flat_dir = sp_test_file_path(&ut.file_manager, SP_LIT("flat_dir"));
+  sp_fs_create_dir(flat_dir);
+
+  sp_test_file_create_empty(&ut.file_manager, SP_LIT("flat_dir/a.txt"));
+  sp_test_file_create_empty(&ut.file_manager, SP_LIT("flat_dir/b.txt"));
+  sp_test_file_create_empty(&ut.file_manager, SP_LIT("flat_dir/c.txt"));
+
+  sp_da(sp_os_dir_ent_t) collect_results = sp_fs_collect(flat_dir);
+  sp_da(sp_os_dir_ent_t) recursive_results = sp_fs_collect_recursive(flat_dir);
+
+  ASSERT_EQ(sp_dyn_array_size(collect_results), sp_dyn_array_size(recursive_results));
+  ASSERT_EQ(sp_dyn_array_size(recursive_results), 3);
+}
+
+UTEST_F(fs, collect_recursive_nested_dirs) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("nested_root"));
+  sp_str_t sub = sp_test_file_path(&ut.file_manager, SP_LIT("nested_root/sub"));
+  sp_str_t deep = sp_test_file_path(&ut.file_manager, SP_LIT("nested_root/sub/deep"));
+
+  sp_fs_create_dir(root);
+  sp_fs_create_dir(sub);
+  sp_fs_create_dir(deep);
+
+  sp_test_file_create_empty(&ut.file_manager, SP_LIT("nested_root/a.txt"));
+  sp_test_file_create_empty(&ut.file_manager, SP_LIT("nested_root/sub/b.txt"));
+  sp_test_file_create_empty(&ut.file_manager, SP_LIT("nested_root/sub/deep/c.txt"));
+
+  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(root);
+
+  ASSERT_EQ(sp_dyn_array_size(results), 5);
+
+  u32 file_count = 0;
+  u32 dir_count = 0;
+  sp_dyn_array_for(results, i) {
+    if (results[i].attributes == SP_OS_FILE_ATTR_REGULAR_FILE) file_count++;
+    if (results[i].attributes == SP_OS_FILE_ATTR_DIRECTORY) dir_count++;
+  }
+  ASSERT_EQ(file_count, 3);
+  ASSERT_EQ(dir_count, 2);
+}
+
+UTEST_F(fs, collect_recursive_symlink_not_followed) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("symlink_root"));
+  sp_str_t real_dir = sp_test_file_path(&ut.file_manager, SP_LIT("symlink_root/real_dir"));
+
+  sp_fs_create_dir(root);
+  sp_fs_create_dir(real_dir);
+
+  sp_test_file_create_empty(&ut.file_manager, SP_LIT("symlink_root/real_dir/file.txt"));
+
+  sp_str_t link_path = sp_test_file_path(&ut.file_manager, SP_LIT("symlink_root/link"));
+  sp_fs_create_sym_link(real_dir, link_path);
+
+  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(root);
+
+  u32 symlink_count = 0;
+  bool found_file_through_link = false;
+  sp_dyn_array_for(results, i) {
+    if (results[i].attributes == SP_OS_FILE_ATTR_SYMLINK) symlink_count++;
+    if (sp_str_contains(results[i].file_path, SP_LIT("link/file.txt"))) {
+      found_file_through_link = true;
+    }
+  }
+
+  ASSERT_EQ(symlink_count, 1);
+  ASSERT_FALSE(found_file_through_link);
+}
+
+UTEST_F(fs, collect_recursive_nonexistent_path) {
+  sp_str_t nonexistent = sp_test_file_path(&ut.file_manager, SP_LIT("does_not_exist"));
+  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(nonexistent);
+  ASSERT_EQ(results, SP_NULLPTR);
+}
+
+UTEST_F(fs, collect_recursive_file_not_dir) {
+  sp_str_t file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("just_a_file.txt"));
+  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(file);
+  ASSERT_EQ(results, SP_NULLPTR);
+}
 
 SP_TEST_MAIN()

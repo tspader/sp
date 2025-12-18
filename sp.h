@@ -1819,6 +1819,7 @@ SP_API sp_err_t               sp_fs_link(sp_str_t from, sp_str_t to, sp_os_link_
 SP_API sp_err_t               sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path);
 SP_API sp_err_t               sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path);
 SP_API sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path);
+SP_API sp_da(sp_os_dir_ent_t) sp_fs_collect_recursive(sp_str_t path);
 SP_API sp_str_t               sp_fs_normalize_path(sp_str_t path);
 SP_API void                   sp_fs_normalize_path_soft(sp_str_t* path);
 SP_API sp_str_t               sp_fs_canonicalize_path(sp_str_t path);
@@ -5884,6 +5885,34 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
   closedir(dir);
 
   return entries;
+}
+
+sp_da(sp_os_dir_ent_t) sp_fs_collect_recursive(sp_str_t path) {
+  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
+    return SP_NULLPTR;
+  }
+
+  sp_rb(sp_str_t) queue = SP_NULLPTR;
+  sp_da(sp_os_dir_ent_t) results = SP_NULLPTR;
+
+  sp_rb_push(queue, path);
+
+  while (!sp_rb_empty(queue)) {
+    sp_str_t current = *sp_rb_peek(queue);
+    sp_rb_pop(queue);
+
+    sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(current);
+    sp_dyn_array_for(entries, i) {
+      sp_os_dir_ent_t* entry = &entries[i];
+      sp_dyn_array_push(results, *entry);
+      if (entry->attributes == SP_OS_FILE_ATTR_DIRECTORY) {
+        sp_rb_push(queue, entry->file_path);
+      }
+    }
+  }
+
+  sp_rb_free(queue);
+  return results;
 }
 
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
