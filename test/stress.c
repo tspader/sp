@@ -62,54 +62,57 @@ UTEST(stress, hash_table) {
 }
 
 UTEST(stress, ring_buffer) {
-  sp_ring_buffer_t rb;
-  sp_ring_buffer_init(&rb, 1000, sizeof(u64));
+  sp_rb(u64) rq = SP_NULLPTR;
 
   for (u64 i = 0; i < 1000; i++) {
-      sp_ring_buffer_push(&rb, &i);
+    sp_rb_push(rq, i);
   }
 
-  EXPECT_TRUE(sp_ring_buffer_is_full(&rb));
+  EXPECT_EQ(1000, sp_rb_size(rq));
 
   for (u64 i = 0; i < 500; i++) {
-      u64* val = (u64*)sp_ring_buffer_pop(&rb);
-      EXPECT_EQ(*val, i);
+    u64* val = sp_rb_peek(rq);
+    EXPECT_EQ(*val, i);
+    sp_rb_pop(rq);
   }
 
   for (u64 i = 1000; i < 1500; i++) {
-      sp_ring_buffer_push(&rb, &i);
+    sp_rb_push(rq, i);
   }
 
-  EXPECT_TRUE(sp_ring_buffer_is_full(&rb));
+  EXPECT_EQ(1000, sp_rb_size(rq));
 
   u64 expected = 500;
-  sp_ring_buffer_for(rb, it) {
-      u64* val = sp_rb_it_getp(&it, u64);
-      EXPECT_EQ(*val, expected);
-      expected++;
+  sp_rb_for(rq, it) {
+    EXPECT_EQ(sp_rb_at(rq, it), expected);
+    expected++;
   }
 
-  sp_ring_buffer_destroy(&rb);
+  sp_rb_free(rq);
 }
 
 UTEST(stress, ring_buffer_continuous_overwrite) {
-  sp_ring_buffer_t rb;
-  sp_ring_buffer_init(&rb, 100, sizeof(int));
+  sp_rb(s32) rq = SP_NULLPTR;
+
+  sp_rb_set_mode(rq, SP_RQ_MODE_OVERWRITE);
+
+  s32 cap = sp_rb_capacity(rq);
 
   for (s32 i = 0; i < 10000; i++) {
-      sp_ring_buffer_push_overwrite(&rb, &i);
+    sp_rb_push(rq, i);
   }
 
-  EXPECT_EQ(rb.size, 100);
+  EXPECT_EQ(cap, sp_rb_size(rq));
 
-  for (s32 i = 0; i < 100; i++) {
-      int* val = (int*)sp_ring_buffer_pop(&rb);
-      EXPECT_EQ(*val, 9900 + i);
+  for (s32 i = 0; i < cap; i++) {
+    s32* val = sp_rb_peek(rq);
+    EXPECT_EQ(*val, 10000 - cap + i);
+    sp_rb_pop(rq);
   }
 
-  EXPECT_TRUE(sp_ring_buffer_is_empty(&rb));
+  EXPECT_TRUE(sp_rb_empty(rq));
 
-  sp_ring_buffer_destroy(&rb);
+  sp_rb_free(rq);
 }
 
 UTEST(stress, sp_dyn_array_push_f) {

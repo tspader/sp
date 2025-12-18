@@ -273,7 +273,7 @@ UTEST(cv, wait_for_signaled) {
 typedef struct {
   sp_cv_t* cv;
   sp_mutex_t* mutex;
-  sp_ring_buffer_t* buffer;
+  sp_rb(s32)* buffer;
   bool done;
   sp_atomic_s32 produced_count;
   sp_atomic_s32 consumed_count;
@@ -285,7 +285,7 @@ s32 producer_fn(void* userdata) {
 
   for (s32 i = 0; i < data->items_to_produce; i++) {
     sp_mutex_lock(data->mutex);
-    sp_ring_buffer_push(data->buffer, &i);
+    sp_rb_push(*data->buffer, i);
     sp_atomic_s32_add(&data->produced_count, 1);
     sp_mutex_unlock(data->mutex);
     sp_cv_notify_one(data->cv);
@@ -299,14 +299,14 @@ s32 consumer_fn(void* userdata) {
 
   while (true) {
     sp_mutex_lock(data->mutex);
-    while (sp_ring_buffer_is_empty(data->buffer) && !data->done) {
+    while (sp_rb_empty(*data->buffer) && !data->done) {
       sp_cv_wait(data->cv, data->mutex);
     }
-    if (sp_ring_buffer_is_empty(data->buffer) && data->done) {
+    if (sp_rb_empty(*data->buffer) && data->done) {
       sp_mutex_unlock(data->mutex);
       break;
     }
-    sp_ring_buffer_pop(data->buffer);
+    sp_rb_pop(*data->buffer);
     sp_atomic_s32_add(&data->consumed_count, 1);
     sp_mutex_unlock(data->mutex);
   }
@@ -317,11 +317,10 @@ s32 consumer_fn(void* userdata) {
 UTEST(cv, multithread_producer_consumer) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
-  sp_ring_buffer_t buffer = SP_ZERO_INITIALIZE();
+  sp_rb(s32) buffer = SP_NULLPTR;
 
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
-  sp_ring_buffer_init(&buffer, PC_TOTAL_ITEMS + 1, sizeof(s32));
 
   producer_consumer_data_t data = {
     .cv = &cv,
@@ -360,7 +359,7 @@ UTEST(cv, multithread_producer_consumer) {
   EXPECT_EQ(sp_atomic_s32_get(&data.produced_count), PC_TOTAL_ITEMS);
   EXPECT_EQ(sp_atomic_s32_get(&data.consumed_count), PC_TOTAL_ITEMS);
 
-  sp_ring_buffer_destroy(&buffer);
+  sp_rb_free(buffer);
   sp_cv_destroy(&cv);
   sp_mutex_destroy(&mutex);
 }
