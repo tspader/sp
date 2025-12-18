@@ -582,6 +582,15 @@ SP_BEGIN_EXTERN_C()
   #define SP_TANF tanf
   #define SP_SQRTF sqrtf
   #define SP_ACOSF acosf
+  #define SP_EXPF expf
+#else
+  // Stubs for freestanding - user must provide implementations if needed
+  #define SP_SINF(x) (0.0f)
+  #define SP_COSF(x) (0.0f)
+  #define SP_TANF(x) (0.0f)
+  #define SP_SQRTF(x) (0.0f)
+  #define SP_ACOSF(x) (0.0f)
+  #define SP_EXPF(x) (0.0f)
 #endif
 
 #if !defined(SP_WASM_FREESTANDING)
@@ -600,6 +609,10 @@ SP_BEGIN_EXTERN_C()
     #define false 0
   #endif
   #define assert(x) ((void)0)
+  // User must provide these
+  void* memcpy(void* dest, const void* src, size_t n);
+  void* memmove(void* dest, const void* src, size_t n);
+  int memcmp(const void* s1, const void* s2, size_t n);
 #endif
 
 #if defined(SP_ENABLE_ENV) && !defined(SP_WASM_FREESTANDING)
@@ -1711,6 +1724,13 @@ typedef s32 sp_os_file_handle_t;
 typedef struct {
   s32 dummy;
 } sp_fmon_os_t;
+
+#elif defined(SP_WASM)
+typedef s32 sp_os_file_handle_t;
+
+typedef struct {
+  s32 dummy;
+} sp_fmon_os_t;
 #endif
 
 
@@ -1943,6 +1963,7 @@ SP_API s32  sp_atomic_s32_get(sp_atomic_s32* value);
 // ██║ ╚═╝ ██║╚██████╔╝   ██║   ███████╗██╔╝ ██╗
 // ╚═╝     ╚═╝ ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝
 // @mutex
+#if defined(SP_ENABLE_THREAD)
 typedef enum {
   SP_MUTEX_NONE = 0,
   SP_MUTEX_PLAIN = 1,
@@ -1952,8 +1973,7 @@ typedef enum {
 
 #if defined(SP_WIN32)
   typedef mtx_t sp_mutex_t;
-
-#elif defined(SP_POSIX)
+#elif defined(SP_POSIX) || defined(SP_WASM_THREADS)
   typedef pthread_mutex_t sp_mutex_t;
 #endif
 
@@ -1964,7 +1984,7 @@ SP_API void sp_mutex_destroy(sp_mutex_t* mutex);
 SP_API s32  sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
 
 
-#if defined(SP_POSIX)
+#if defined(SP_POSIX) || defined(SP_WASM_THREADS)
 typedef pthread_cond_t sp_cv_t;
 #elif defined(SP_WIN32)
 typedef CONDITION_VARIABLE sp_cv_t;
@@ -1987,11 +2007,9 @@ SP_API void sp_cv_notify_all(sp_cv_t* cv);
 // @semaphore
 #if defined(SP_WIN32)
   typedef HANDLE sp_semaphore_t;
-
 #elif defined(SP_MACOS)
   typedef dispatch_semaphore_t sp_semaphore_t;
-
-#elif defined(SP_POSIX)
+#elif defined(SP_POSIX) || defined(SP_WASM_THREADS)
   typedef sem_t sp_semaphore_t;
 #endif
 
@@ -2000,6 +2018,7 @@ SP_API void sp_semaphore_destroy(sp_semaphore_t* semaphore);
 SP_API void sp_semaphore_wait(sp_semaphore_t* semaphore);
 SP_API bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
 SP_API void sp_semaphore_signal(sp_semaphore_t* semaphore);
+#endif // SP_ENABLE_THREAD
 
 
 // ███████╗██╗   ██╗████████╗██╗   ██╗██████╗ ███████╗
@@ -2192,7 +2211,9 @@ struct sp_io_stream_t {
 
 SP_API sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
 SP_API sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
+#if !defined(SP_WASM)
 SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode);
+#endif
 SP_API u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
 SP_API u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
 SP_API u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
@@ -2456,9 +2477,11 @@ typedef struct sp_formatter {
 #define SP_FMT_X(name, type) void sp_fmt_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
 SP_FORMAT_TYPES
 
+#if !defined(SP_WASM_FREESTANDING)
 SP_API sp_str_t sp_format_str(sp_str_t fmt, ...);
 SP_API sp_str_t sp_format(const c8* fmt, ...);
 SP_API sp_str_t sp_format_v(sp_str_t fmt, va_list args);
+#endif
 SP_API u8        sp_parse_u8(sp_str_t str);
 SP_API u16       sp_parse_u16(sp_str_t str);
 SP_API u32       sp_parse_u32(sp_str_t str);
@@ -2549,6 +2572,7 @@ SP_API s32             sp_app_run(sp_app_config_t config);
 // ██║  ██║███████║███████║███████╗   ██║
 // ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝
 // @asset
+#if defined(SP_ENABLE_THREAD)
 typedef enum {
   SP_ASSET_STATE_QUEUED,
   SP_ASSET_STATE_IMPORTED,
@@ -2624,6 +2648,7 @@ SP_API void                 sp_asset_registry_process_completions(sp_asset_regis
 SP_API sp_asset_t*          sp_asset_registry_reserve(sp_asset_registry_t* r);
 SP_API sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_asset_kind_t kind);
 SP_API s32                  sp_asset_registry_thread_fn(void* user_data);
+#endif // SP_ENABLE_THREAD
 
 SP_END_EXTERN_C()
 
@@ -2912,15 +2937,15 @@ f32 sp_vec4_len_sqr(sp_vec4_t v) {
 }
 
 f32 sp_vec2_len(sp_vec2_t v) {
-  return sqrtf(sp_vec2_len_sqr(v));
+  return SP_SQRTF(sp_vec2_len_sqr(v));
 }
 
 f32 sp_vec3_len(sp_vec3_t v) {
-  return sqrtf(sp_vec3_len_sqr(v));
+  return SP_SQRTF(sp_vec3_len_sqr(v));
 }
 
 f32 sp_vec4_len(sp_vec4_t v) {
-  return sqrtf(sp_vec4_len_sqr(v));
+  return SP_SQRTF(sp_vec4_len_sqr(v));
 }
 
 sp_vec2_t sp_vec2_norm(sp_vec2_t v) {
@@ -2998,7 +3023,7 @@ f32 sp_interp_ease_inout_bounce(sp_interp_t* interp) {
 f32 sp_interp_exponential(sp_interp_t* interp) {
   f32 k = 5.0f;
   f32 e_k = 148.413159f;
-  f32 eased = (expf(k * interp->t) - 1.0f) / (e_k - 1.0f);
+  f32 eased = (SP_EXPF(k * interp->t) - 1.0f) / (e_k - 1.0f);
   return interp->start + interp->delta * eased;
 }
 
@@ -4103,6 +4128,7 @@ void sp_fmt_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_builder_append_c8(builder, '"');
 }
 
+#if !defined(SP_WASM_FREESTANDING)
 sp_str_t sp_fmt(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -4111,7 +4137,6 @@ sp_str_t sp_fmt(sp_str_t fmt, ...) {
 
   return str;
 }
-
 sp_str_t sp_format_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -4129,6 +4154,7 @@ sp_str_t sp_format(const c8* fmt, ...) {
 
   return str;
 }
+#endif
 
 typedef enum {
   SP_FORMAT_SPECIFIER_FLAG_NONE = 0,
@@ -4265,6 +4291,7 @@ sp_format_specifier_t sp_format_parser_specifier(sp_format_parser_t* parser) {
   return spec;
 }
 
+#if !defined(SP_WASM_FREESTANDING)
 sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
   #undef SP_FMT_X
   #define SP_FMT_X(ID, t) (sp_formatter_t) { .fn = SP_FMT_FN(ID), .id = SP_FMT_ID(ID) },
@@ -4357,6 +4384,7 @@ void sp_log(sp_str_t fmt, ...) {
   sp_os_print(formatted);
   sp_os_print(sp_str_lit("\n"));
 }
+#endif // !SP_WASM_FREESTANDING
 
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
@@ -4962,11 +4990,26 @@ c8 sp_str_back(sp_str_t str) {
 }
 
 sp_str_t sp_str_concat(sp_str_t a, sp_str_t b) {
+#if !defined(SP_WASM_FREESTANDING)
   return sp_format("{}{}", SP_FMT_STR(a), SP_FMT_STR(b));
+#else
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_append(&builder, a);
+  sp_str_builder_append(&builder, b);
+  return sp_str_builder_write(&builder);
+#endif
 }
 
 sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
+#if !defined(SP_WASM_FREESTANDING)
   return sp_format("{}{}{}", SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
+#else
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_append(&builder, a);
+  sp_str_builder_append(&builder, join);
+  sp_str_builder_append(&builder, b);
+  return sp_str_builder_write(&builder);
+#endif
 }
 
 sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) {
@@ -5101,6 +5144,7 @@ void sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c) {
   sp_str_builder_append(builder, SP_STR(&c, 1));
 }
 
+#if !defined(SP_WASM_FREESTANDING)
 void sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -5118,6 +5162,7 @@ void sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...) {
 
   sp_str_builder_append(builder, formatted);
 }
+#endif
 
 void sp_str_builder_new_line(sp_str_builder_t* builder) {
   sp_str_builder_append_c8(builder, '\n');
@@ -8370,6 +8415,23 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
 void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   (void)monitor;
 }
+
+#elif defined(SP_WASM)
+void sp_fmon_os_init(sp_fmon_t* monitor) {
+  (void)monitor;
+}
+
+void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
+  (void)monitor; (void)directory_path;
+}
+
+void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+  (void)monitor; (void)file_path;
+}
+
+void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+  (void)monitor;
+}
 #endif
 
 
@@ -8455,6 +8517,7 @@ void sp_io_memory_close(sp_io_stream_t* stream) {
   (void)stream;
 }
 
+#if !defined(SP_WASM_FREESTANDING)
 s64 sp_io_file_size(sp_io_stream_t* stream) {
   sp_io_file_data_t* data = &stream->file;
   s64 current = lseek(data->fd, 0, SEEK_CUR);
@@ -8565,6 +8628,7 @@ sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
 
   return stream;
 }
+#endif // !SP_WASM_FREESTANDING
 
 sp_io_stream_t sp_io_from_memory(void* memory, u64 size) {
   sp_io_stream_t stream = SP_ZERO_INITIALIZE();
@@ -8580,6 +8644,7 @@ sp_io_stream_t sp_io_from_memory(void* memory, u64 size) {
   return stream;
 }
 
+#if !defined(SP_WASM_FREESTANDING)
 sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode) {
   sp_io_stream_t stream = SP_ZERO_INITIALIZE();
   stream.callbacks = (sp_io_callbacks_t) {
@@ -8594,6 +8659,7 @@ sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_clo
 
   return stream;
 }
+#endif // !SP_WASM_FREESTANDING
 
 u64 sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size) {
   SP_ASSERT(stream); SP_ASSERT(ptr); SP_ASSERT(stream->callbacks.read);
@@ -8665,6 +8731,7 @@ sp_str_t sp_io_read_file(sp_str_t path) {
 // ██║  ██║███████║███████║███████╗   ██║
 // ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝
 // @asset
+#if defined(SP_ENABLE_THREAD)
 void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
   sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
   sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
@@ -8836,6 +8903,7 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 
   return 0;
 }
+#endif // SP_ENABLE_THREAD
 
 sp_app_t* sp_app_new(sp_app_config_t config) {
   sp_app_t* app = SP_ALLOC(sp_app_t);

@@ -9,7 +9,9 @@
  * Build with the accompanying wasm_build.sh script.
  */
 
+#ifndef SP_IMPLEMENTATION
 #define SP_IMPLEMENTATION
+#endif
 #include "../sp.h"
 
 // For freestanding WASM, we need minimal support functions
@@ -458,6 +460,7 @@ void test_format(void) {
 // For freestanding, export test function
 __attribute__((export_name("run_tests")))
 int run_tests(void) {
+  TEST_PRINT("cum");
 #else
 int main(void) {
 #endif
