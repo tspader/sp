@@ -1,0 +1,14 @@
+# Maintainer: tspader <https://github.com/tspader>
+pkgname=sp
+pkgver=1.6.7
+pkgrel=1
+pkgdesc="Single-header C utility library"
+arch=('any')
+url="https://github.com/tspader/sp"
+license=('MIT')
+source=("$pkgname::git+https://github.com/tspader/sp.git")
+sha256sums=('SKIP')
+
+package() {
+    install -Dm644 "$srcdir/$pkgname/sp.h" "$pkgdir/usr/include/sp.h"
+}

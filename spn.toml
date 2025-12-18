@@ -2,7 +2,7 @@
 name = "sp"
 include = [".", "include", "test/tools", "test/tools/process"]
 define = ["SP_IMPLEMENTATION", "SP_TEST_IMPLEMENTATION"]
-version = "1.6.5"
+version = "1.6.7"
 system_deps = ["m"]
 
 [deps.package]
@@ -21,6 +21,10 @@ cc = "clang"
 [[test]]
 name = "amalg"
 source = ["test/amalg.c"]
+
+[[test]]
+name = "app"
+source = ["test/app.c"]
 
 [[test]]
 name = "asset"
@@ -71,16 +75,16 @@ name = "ps"
 source = ["test/ps.c"]
 
 [[test]]
+name = "rb"
+source = ["test/rb.c"]
+
+[[test]]
 name = "stress"
 source = ["test/stress.c"]
 
 [[test]]
 name = "time"
 source = ["test/time.c"]
-
-[[test]]
-name = "app"
-source = ["test/app.c"]
 
 
 [[bin]]
@@ -91,11 +95,11 @@ source = ["test/tools/process/process.c"]
 
 [[bin]]
 name = "extract_fns"
-source = ["doc/tools/extract_fns.c"]
+source = ["tools/extract_fns.c"]
 
 [[bin]]
 name = "sleep"
-source = ["doc/tools/sleep.c"]
+source = ["tools/sleep.c"]
 
 
 

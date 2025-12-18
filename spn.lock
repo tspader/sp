@@ -1,0 +1,21 @@
+[spn]
+version = "1.0.0"
+commit = "00c0fa98"
+
+[package]
+system_deps = ["m"]
+
+[[dep]]
+name = "argparse"
+version = "1.2.0"
+commit = "f71ed6c7b11c"
+kind = "index"
+visibility = "public"
+
+[[dep]]
+name = "utest"
+version = "1.0.0"
+commit = "fb622dc480a5"
+kind = "index"
+visibility = "public"
+
