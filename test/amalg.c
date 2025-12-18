@@ -17,6 +17,7 @@
 #include "leak.c"
 #include "linkage.c"
 #include "ps.c"
+#include "rb.c"
 #include "stress.c"
 #include "time.c"
 

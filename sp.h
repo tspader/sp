@@ -887,6 +887,7 @@ SP_API sp_mem_arena_t*         sp_mem_get_scratch_arena();
 SP_API sp_mem_scratch_t        sp_mem_begin_scratch();
 SP_API void                    sp_mem_end_scratch(sp_mem_scratch_t scratch);
 #define SP_ALLOC(T) (T*)sp_alloc(sizeof(T))
+#define SP_ALLOC_N(T, n) (T*)sp_alloc((n) * sizeof(T))
 #define SP_OS_ALLOC(T) (T*)sp_mem_os_alloc(sizeof(T))
 
 
@@ -1035,6 +1036,108 @@ SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u
     ((__T*)sp_dyn_array_resize_impl(NULL, sizeof(__T), 0))
 
 #define sp_dyn_array_sort(arr, fn) qsort(arr, sp_dyn_array_size(arr), sizeof((arr)[0]), fn)
+
+
+// ██████╗ ██╗███╗   ██╗ ██████╗      ██████╗ ██╗   ██╗███████╗██╗   ██╗███████╗
+// ██╔══██╗██║████╗  ██║██╔════╝     ██╔═══██╗██║   ██║██╔════╝██║   ██║██╔════╝
+// ██████╔╝██║██╔██╗ ██║██║  ███╗    ██║   ██║██║   ██║█████╗  ██║   ██║█████╗
+// ██╔══██╗██║██║╚██╗██║██║   ██║    ██║▄▄ ██║██║   ██║██╔══╝  ██║   ██║██╔══╝
+// ██║  ██║██║██║ ╚████║╚██████╔╝    ╚██████╔╝╚██████╔╝███████╗╚██████╔╝███████╗
+// ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══▀▀═╝  ╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝
+// @ring_queue @rq
+typedef enum sp_rq_mode {
+    SP_RQ_MODE_GROW = 0,
+    SP_RQ_MODE_OVERWRITE,
+} sp_rq_mode;
+
+typedef struct sp_ring_queue {
+    s32 head;
+    s32 size;
+    s32 capacity;
+    sp_rq_mode mode;
+} sp_ring_queue;
+
+#define sp_rq(T) T*
+SP_API void* sp_rq_grow_impl(void* arr, u32 elem_size, u32 new_cap);
+
+#define sp_rq_head(__ARR)\
+    ((sp_ring_queue*)((u8*)(__ARR) - sizeof(sp_ring_queue)))
+
+#define sp_rq_size(__ARR)\
+    ((__ARR) == SP_NULLPTR ? 0 : sp_rq_head((__ARR))->size)
+
+#define sp_rq_capacity(__ARR)\
+    ((__ARR) == SP_NULLPTR ? 0 : sp_rq_head((__ARR))->capacity)
+
+#define sp_rq_empty(__ARR)\
+    (sp_rq_size(__ARR) == 0)
+
+#define sp_rq_full(__ARR)\
+    (sp_rq_size((__ARR)) == sp_rq_capacity((__ARR)))
+
+#define sp_rq_clear(__ARR)\
+    do {\
+        if (__ARR) {\
+            sp_rq_head(__ARR)->head = 0;\
+            sp_rq_head(__ARR)->size = 0;\
+        }\
+    } while (0)
+
+#define sp_rq_free(__ARR)\
+    do {\
+        if (__ARR) {\
+            sp_free(sp_rq_head(__ARR));\
+            (__ARR) = SP_NULLPTR;\
+        }\
+    } while (0)
+
+#define sp_rq_mode(__ARR)\
+    ((__ARR) == SP_NULLPTR ? SP_RQ_MODE_GROW : sp_rq_head(__ARR)->mode)
+
+#define sp_rq_set_mode(__ARR, __MODE)\
+    do {\
+        if ((__ARR) == SP_NULLPTR) {\
+            *((void**)&(__ARR)) = sp_rq_grow_impl(SP_NULLPTR, sizeof(*(__ARR)), 8);\
+        }\
+        sp_rq_head(__ARR)->mode = (__MODE);\
+    } while (0)
+
+#define sp_rq_at(__ARR, __IDX)\
+    ((__ARR)[(sp_rq_head(__ARR)->head + (__IDX)) % sp_rq_capacity(__ARR)])
+
+#define sp_rq_peek(__ARR)\
+    (sp_rq_empty(__ARR) ? SP_NULLPTR : &sp_rq_at(__ARR, 0))
+
+#define sp_rq_back(__ARR)\
+    (sp_rq_empty(__ARR) ? SP_NULLPTR : &sp_rq_at(__ARR, sp_rq_size(__ARR) - 1))
+
+#define sp_rq_push(__ARR, __VAL)\
+    do {\
+        if ((__ARR) == SP_NULLPTR) {\
+            *((void**)&(__ARR)) = sp_rq_grow_impl(SP_NULLPTR, sizeof(*(__ARR)), 8);\
+        } else if (sp_rq_full(__ARR)) {\
+            if (sp_rq_mode(__ARR) == SP_RQ_MODE_OVERWRITE) {\
+                sp_rq_head(__ARR)->head = (sp_rq_head(__ARR)->head + 1) % sp_rq_capacity(__ARR);\
+                sp_rq_head(__ARR)->size--;\
+            } else {\
+                *((void**)&(__ARR)) = sp_rq_grow_impl(__ARR, sizeof(*(__ARR)), sp_rq_capacity(__ARR) * 2);\
+            }\
+        }\
+        s32 __sp_rq_tail = (sp_rq_head(__ARR)->head + sp_rq_head(__ARR)->size) % sp_rq_capacity(__ARR);\
+        (__ARR)[__sp_rq_tail] = (__VAL);\
+        sp_rq_head(__ARR)->size++;\
+    } while (0)
+
+#define sp_rq_pop(__ARR)\
+    do {\
+        if ((__ARR) && !sp_rq_empty(__ARR)) {\
+            sp_rq_head(__ARR)->head = (sp_rq_head(__ARR)->head + 1) % sp_rq_capacity(__ARR);\
+            sp_rq_head(__ARR)->size--;\
+        }\
+    } while (0)
+
+#define sp_rq_for(__ARR, __IT)  for (s32 __IT = 0; __IT < sp_rq_size(__ARR); __IT++)
+#define sp_rq_rfor(__ARR, __IT) for (s32 __IT = sp_rq_size(__ARR) - 1; __IT >= 0; __IT--)
 
 
 // ██╗  ██╗ █████╗ ███████╗██╗  ██╗    ████████╗ █████╗ ██████╗ ██╗     ███████╗
@@ -2460,8 +2563,8 @@ struct sp_asset_registry {
   sp_thread_t thread;
   sp_da(sp_asset_t) assets;
   sp_da(sp_asset_importer_t) importers;
-  sp_rb(sp_asset_import_context_t) import_queue;
-  sp_rb(sp_asset_import_context_t) completion_queue;
+  sp_rq(sp_asset_import_context_t) import_queue;
+  sp_rq(sp_asset_import_context_t) completion_queue;
   bool shutdown_requested;
 };
 
@@ -3091,6 +3194,51 @@ void sp_dyn_array_push_f(void** arr, void* val, u32 val_len) {
     sp_dyn_array_head(*arr)->size++;
   }
 }
+
+// ██████╗ ██╗███╗   ██╗ ██████╗      ██████╗ ██╗   ██╗███████╗██╗   ██╗███████╗
+// ██╔══██╗██║████╗  ██║██╔════╝     ██╔═══██╗██║   ██║██╔════╝██║   ██║██╔════╝
+// ██████╔╝██║██╔██╗ ██║██║  ███╗    ██║   ██║██║   ██║█████╗  ██║   ██║█████╗
+// ██╔══██╗██║██║╚██╗██║██║   ██║    ██║▄▄ ██║██║   ██║██╔══╝  ██║   ██║██╔══╝
+// ██║  ██║██║██║ ╚████║╚██████╔╝    ╚██████╔╝╚██████╔╝███████╗╚██████╔╝███████╗
+// ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══▀▀═╝  ╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝
+// @ring_queue @rq
+void* sp_rq_grow_impl(void* arr, u32 elem_size, u32 new_cap) {
+  sp_ring_queue* new_data = (sp_ring_queue*)sp_alloc(new_cap * elem_size + sizeof(sp_ring_queue));
+  if (!new_data) return SP_NULLPTR;
+
+  new_data->head = 0;
+  new_data->capacity = (s32)new_cap;
+  new_data->mode = SP_RQ_MODE_GROW;
+
+  if (arr) {
+    sp_ring_queue* old = sp_rq_head(arr);
+    s32 old_size = old->size;
+    s32 old_cap = old->capacity;
+    s32 old_head = old->head;
+    new_data->size = old_size;
+    new_data->mode = old->mode;
+
+    u8* new_arr = (u8*)new_data + sizeof(sp_ring_queue);
+    u8* old_arr = (u8*)arr;
+
+    s32 first_chunk = old_cap - old_head;
+    if (first_chunk > old_size) first_chunk = old_size;
+    sp_mem_copy(old_arr + old_head * elem_size, new_arr, first_chunk * elem_size);
+
+    s32 second_chunk = old_size - first_chunk;
+    if (second_chunk > 0) {
+      sp_mem_copy(old_arr, new_arr + first_chunk * elem_size, second_chunk * elem_size);
+    }
+
+    sp_free(old);
+  }
+  else {
+    new_data->size = 0;
+  }
+
+  return (u8*)new_data + sizeof(sp_ring_queue);
+}
+
 // ███████╗██╗██╗  ██╗███████╗██████╗      █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
 // ██╔════╝██║╚██╗██╔╝██╔════╝██╔══██╗    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
 // █████╗  ██║ ╚███╔╝ █████╗  ██║  ██║    ███████║██████╔╝██████╔╝███████║ ╚███╔╝
@@ -8419,8 +8567,8 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
   sp_semaphore_init(&registry->semaphore);
   registry->shutdown_requested = false;
 
-  sp_ring_buffer_init(&registry->import_queue, 128, sizeof(sp_asset_import_context_t));
-  sp_ring_buffer_init(&registry->completion_queue, 128, sizeof(sp_asset_import_context_t));
+  registry->import_queue = SP_NULLPTR;
+  registry->completion_queue = SP_NULLPTR;
 
   for (u32 index = 0; index < SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS; index++) {
     sp_asset_importer_config_t* cfg = &config.importers[index];
@@ -8455,8 +8603,9 @@ void sp_asset_registry_shutdown(sp_asset_registry_t* registry) {
 
 void sp_asset_registry_process_completions(sp_asset_registry_t* registry) {
   sp_mutex_lock(&registry->completion_mutex);
-  while (!sp_ring_buffer_is_empty(&registry->completion_queue)) {
-    sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->completion_queue));
+  while (!sp_rq_empty(registry->completion_queue)) {
+    sp_asset_import_context_t context = *sp_rq_peek(registry->completion_queue);
+    sp_rq_pop(registry->completion_queue);
     sp_mutex_unlock(&registry->completion_mutex);
 
     context.importer->on_completion(&context);
@@ -8510,7 +8659,7 @@ sp_future_t* sp_asset_registry_import(sp_asset_registry_t* registry, sp_asset_ki
   };
 
   sp_mutex_lock(&registry->import_mutex);
-  sp_ring_buffer_push(&registry->import_queue, &context);
+  sp_rq_push(registry->import_queue, context);
   sp_mutex_unlock(&registry->import_mutex);
 
   sp_semaphore_signal(&registry->semaphore);
@@ -8558,8 +8707,9 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 
     sp_mutex_lock(&registry->import_mutex);
 
-    while (!sp_ring_buffer_is_empty(&registry->import_queue)) {
-      sp_asset_import_context_t context = *((sp_asset_import_context_t*)sp_ring_buffer_pop(&registry->import_queue));
+    while (!sp_rq_empty(registry->import_queue)) {
+      sp_asset_import_context_t context = *sp_rq_peek(registry->import_queue);
+      sp_rq_pop(registry->import_queue);
 
       sp_mutex_unlock(&registry->import_mutex);
 
@@ -8571,7 +8721,7 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
       sp_mutex_unlock(&registry->mutex);
 
       sp_mutex_lock(&registry->completion_mutex);
-      sp_ring_buffer_push(&registry->completion_queue, &context);
+      sp_rq_push(registry->completion_queue, context);
       sp_mutex_unlock(&registry->completion_mutex);
 
       sp_mutex_lock(&registry->import_mutex);
