@@ -43,6 +43,10 @@ name = "cv"
 source = ["test/cv.c"]
 
 [[test]]
+name = "elf"
+source = ["test/elf.c"]
+
+[[test]]
 name = "fmon"
 source = ["test/fmon.c"]
 
