@@ -258,6 +258,8 @@
 #define SP_UNTESTED()
 #define SP_INCOMPLETE()
 
+#define sp_assert(expr) SP_ASSERT(expr)
+
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
 #define sp_typedef_fn(return_type, name, ...) SP_TYPEDEF_FN(return_type, name, __VA_ARGS__)
 
@@ -322,7 +324,21 @@
 #define sp_align_up(ptr, align) ((void*)(((uintptr_t)(ptr) + ((align) - 1)) & ~((align) - 1)))
 #define sp_align_offset(val, align) ((((val) + ((align) - 1)) & ~((align) - 1)))
 
-#define sp_try(expr) do { s32 _sp_result = (expr); if (_sp_result) return _sp_result; } while (0)
+#if defined(SP_USE_ASSERTS)
+  #define sp_try(expr) sp_assert(!expr)
+  #define sp_try_as(expr, err) sp_assert(!expr)
+  #define sp_try_as_void(expr) sp_assert(!expr)
+#else
+  #define sp_try(expr) do { s32 _sp_result = (expr); if (_sp_result) return _sp_result; } while (0)
+  #define sp_try_as(expr, err) do { if (expr) return err; } while (0)
+  #define sp_try_as_void(expr) do { if (expr) return; } while (0)
+#endif
+
+#define sp_try_as_null(expr) sp_try_as((expr), SP_NULLPTR)
+#define sp_require(expr) sp_try_as_void(!(expr))
+#define sp_require_as(expr, err) sp_try_as(!(expr), err)
+#define sp_require_as_null(expr) sp_try_as(!(expr), SP_NULLPTR)
+
 
 
 #define SP_ANSI_RESET             "\033[0m"
@@ -887,9 +903,13 @@ SP_API sp_mem_libc_metadata_t* sp_mem_libc_get_metadata(void* ptr);
 SP_API sp_mem_arena_t*         sp_mem_get_scratch_arena();
 SP_API sp_mem_scratch_t        sp_mem_begin_scratch();
 SP_API void                    sp_mem_end_scratch(sp_mem_scratch_t scratch);
+
 #define SP_ALLOC(T) (T*)sp_alloc(sizeof(T))
 #define SP_ALLOC_N(T, n) (T*)sp_alloc((n) * sizeof(T))
 #define SP_OS_ALLOC(T) (T*)sp_mem_os_alloc(sizeof(T))
+#define sp_alloc_type(T) (T*)sp_alloc(sizeof(T))
+#define sp_alloc_n(T, n) (T*)sp_alloc((n) * sizeof(T))
+#define sp_os_alloc_type(T) (T*)sp_mem_os_alloc(sizeof(T))
 
 
 // ██╗  ██╗ █████╗ ███████╗██╗  ██╗
@@ -964,6 +984,7 @@ SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u
 #define sp_da_reserve(__ARR, __N)   sp_dyn_array_reserve(__ARR, __N)
 #define sp_da_pop(__ARR)            sp_dyn_array_pop(__ARR)
 #define sp_da_back(__ARR)           sp_dyn_array_back(__ARR)
+#define sp_da_bounds_ok(arr, it)    sp_dyn_array_bounds_ok(arr, it)
 #define sp_da_new(__T)              sp_dyn_array_new(__T)
 
 #define sp_dyn_array_for(__ARR, __IT)  for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
@@ -1037,6 +1058,7 @@ SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u
     ((__T*)sp_dyn_array_resize_impl(NULL, sizeof(__T), 0))
 
 #define sp_dyn_array_sort(arr, fn) qsort(arr, sp_dyn_array_size(arr), sizeof((arr)[0]), fn)
+#define sp_dyn_array_bounds_ok(arr, it) ((it) < sp_dyn_array_size(arr))
 
 
 // ██████╗ ██╗███╗   ██╗ ██████╗      ██████╗ ██╗   ██╗███████╗██╗   ██╗███████╗
@@ -2103,7 +2125,7 @@ struct sp_io_stream_t {
 
 SP_API sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
 SP_API sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
-SP_API sp_io_stream_t sp_io_from_buffer(void);
+SP_API sp_io_stream_t sp_io_from_buffer();
 SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode);
 SP_API u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
 SP_API u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
@@ -4745,7 +4767,7 @@ sp_str_t sp_str_from_cstr_sized(const c8* str, u32 length) {
 
 sp_str_t sp_str_from_cstr_null(const c8* str) {
   u32 len = sp_cstr_len(str);
-  c8* buffer = (c8*)sp_alloc(len + 1);
+  c8* buffer = sp_alloc_n(c8, len + 1);
   sp_mem_copy(str, buffer, len);
   buffer[len] = 0;
 
@@ -4754,14 +4776,14 @@ sp_str_t sp_str_from_cstr_null(const c8* str) {
 
 sp_str_t sp_str_from_cstr(const c8* str) {
   u32 len = sp_cstr_len(str);
-  c8* buffer = (c8*)sp_alloc(len + 1);
+  c8* buffer = sp_alloc_n(c8, len + 1);
   sp_mem_copy(str, buffer, len);
 
-  return SP_STR(buffer, len);
+  return sp_str(buffer, len);
 }
 
 sp_str_t sp_str_copy(sp_str_t str) {
-  c8* buffer = (c8*)sp_alloc(str.len);
+  c8* buffer = sp_alloc_n(c8, str.len);
   sp_mem_copy(str.data, buffer, str.len);
 
   return SP_STR(buffer, str.len);
