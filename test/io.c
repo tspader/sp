@@ -7,13 +7,13 @@ SP_TEST_MAIN()
 
 
 struct io {
-  sp_str_t test_file_path;
+  sp_str_t file_path;
   sp_test_file_manager_t file_manager;
 };
 
 UTEST_F_SETUP(io) {
   sp_test_file_manager_init(&ut.file_manager);
-  ut.test_file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("sp_io.file"));
+  ut.file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("sp_io.file"));
 }
 
 UTEST_F_TEARDOWN(io) {
@@ -147,17 +147,17 @@ UTEST_F(io, memory_seek_invalid) {
 
 UTEST_F(io, file_open_read) {
   const char* test_content = "Hello, World!";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 13);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   ASSERT_TRUE(stream.file.fd >= 0);
   sp_io_close(&stream);
 }
 
 UTEST_F(io, file_open_write) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   ASSERT_TRUE(stream.file.fd >= 0);
   sp_io_close(&stream);
 }
@@ -169,19 +169,19 @@ UTEST_F(io, file_open_nonexistent) {
 }
 
 UTEST_F(io, file_close) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
   ASSERT_TRUE(true);
 }
 
 UTEST_F(io, file_read_full) {
   const char* test_content = "0123456789ABCDEF";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 16);
   sp_io_close(&write_stream);
 
   char buffer[16] = {0};
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   u64 bytes = sp_io_read(&stream, buffer, 16);
 
   ASSERT_EQ(bytes, 16);
@@ -193,12 +193,12 @@ UTEST_F(io, file_read_full) {
 
 UTEST_F(io, file_read_partial) {
   const char* test_content = "0123456789ABCDEF";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 16);
   sp_io_close(&write_stream);
 
   char buffer[8] = {0};
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   u64 bytes = sp_io_read(&stream, buffer, 8);
 
   ASSERT_EQ(bytes, 8);
@@ -210,12 +210,12 @@ UTEST_F(io, file_read_partial) {
 
 UTEST_F(io, file_read_past_eof) {
   const char* test_content = "0123";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 4);
   sp_io_close(&write_stream);
 
   char buffer[16] = {0};
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   u64 bytes = sp_io_read(&stream, buffer, 16);
 
   ASSERT_EQ(bytes, 4);
@@ -224,11 +224,11 @@ UTEST_F(io, file_read_past_eof) {
 
 UTEST_F(io, file_write_new) {
   const char* test_content = "test data";
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   u64 bytes = sp_io_write(&stream, test_content, 9);
 
   ASSERT_EQ(bytes, 9);
-  ASSERT_TRUE(sp_fs_exists(utest_fixture->test_file_path));
+  ASSERT_TRUE(sp_fs_exists(utest_fixture->file_path));
   sp_io_close(&stream);
 }
 
@@ -236,16 +236,16 @@ UTEST_F(io, file_write_overwrite) {
   const char* first = "XXXXXXXX";
   const char* second = "1234";
 
-  sp_io_stream_t stream1 = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream1 = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&stream1, first, 8);
   sp_io_close(&stream1);
 
-  sp_io_stream_t stream2 = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream2 = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&stream2, second, 4);
   sp_io_close(&stream2);
 
   char buffer[8] = {0};
-  sp_io_stream_t read_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t read_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   u64 bytes = sp_io_read(&read_stream, buffer, 8);
 
   ASSERT_EQ(bytes, 4);
@@ -258,11 +258,11 @@ UTEST_F(io, file_write_overwrite) {
 
 UTEST_F(io, file_seek_set) {
   const char* test_content = "0123456789";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 10);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   s64 pos = sp_io_seek(&stream, 5, SP_IO_SEEK_SET);
   ASSERT_EQ(pos, 5);
 
@@ -274,11 +274,11 @@ UTEST_F(io, file_seek_set) {
 
 UTEST_F(io, file_seek_cur) {
   const char* test_content = "0123456789";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 10);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   char buffer[5] = {0};
   sp_io_read(&stream, buffer, 3);
 
@@ -292,11 +292,11 @@ UTEST_F(io, file_seek_cur) {
 
 UTEST_F(io, file_seek_end) {
   const char* test_content = "0123456789";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 10);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   s64 pos = sp_io_seek(&stream, -3, SP_IO_SEEK_END);
   ASSERT_EQ(pos, 7);
 
@@ -308,21 +308,21 @@ UTEST_F(io, file_seek_end) {
 
 UTEST_F(io, file_size_regular) {
   const char* test_content = "0123456789ABCDEF";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 16);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   s64 size = sp_io_size(&stream);
   ASSERT_EQ(size, 16);
   sp_io_close(&stream);
 }
 
 UTEST_F(io, file_size_empty) {
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   s64 size = sp_io_size(&stream);
   ASSERT_EQ(size, 0);
   sp_io_close(&stream);
@@ -330,11 +330,11 @@ UTEST_F(io, file_size_empty) {
 
 UTEST_F(io, file_to_memory) {
   const char* test_content = "file to memory test";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 19);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t file_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t file_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   s64 size = sp_io_size(&file_stream);
   char buffer[32] = {0};
   sp_io_read(&file_stream, buffer, size);
@@ -361,11 +361,11 @@ UTEST_F(io, memory_to_file) {
   sp_io_read(&mem_stream, temp, 19);
   sp_io_close(&mem_stream);
 
-  sp_io_stream_t file_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t file_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&file_stream, temp, 19);
   sp_io_close(&file_stream);
 
-  sp_io_stream_t read_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t read_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   char result[32] = {0};
   sp_io_read(&read_stream, result, 19);
   sp_io_close(&read_stream);
@@ -377,11 +377,11 @@ UTEST_F(io, memory_to_file) {
 
 UTEST_F(io, load_file_helper) {
   const char* test_content = "load file helper test";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 21);
   sp_io_close(&write_stream);
 
-  sp_str_t loaded = sp_io_read_file(utest_fixture->test_file_path);
+  sp_str_t loaded = sp_io_read_file(utest_fixture->file_path);
   ASSERT_EQ(loaded.len, 21);
   for (u32 i = 0; i < 21; i++) {
     ASSERT_EQ(loaded.data[i], test_content[i]);
@@ -392,15 +392,15 @@ UTEST_F(io, file_write_append) {
   const char* first = "first";
   const char* second = "second";
 
-  sp_io_stream_t stream1 = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream1 = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&stream1, first, 5);
   sp_io_close(&stream1);
 
-  sp_io_stream_t stream2 = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_APPEND);
+  sp_io_stream_t stream2 = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_APPEND);
   sp_io_write(&stream2, second, 6);
   sp_io_close(&stream2);
 
-  sp_str_t loaded = sp_io_read_file(utest_fixture->test_file_path);
+  sp_str_t loaded = sp_io_read_file(utest_fixture->file_path);
   ASSERT_EQ(loaded.len, 11);
   ASSERT_EQ(loaded.data[0], 'f');
   ASSERT_EQ(loaded.data[4], 't');
@@ -409,7 +409,7 @@ UTEST_F(io, file_write_append) {
 }
 
 UTEST_F(io, file_read_invalid_fd) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
   stream.file.fd = -1;
@@ -419,7 +419,7 @@ UTEST_F(io, file_read_invalid_fd) {
 }
 
 UTEST_F(io, file_write_invalid_fd) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
   stream.file.fd = -1;
@@ -428,7 +428,7 @@ UTEST_F(io, file_write_invalid_fd) {
 }
 
 UTEST_F(io, file_seek_invalid_fd) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
   stream.file.fd = -1;
@@ -437,7 +437,7 @@ UTEST_F(io, file_seek_invalid_fd) {
 }
 
 UTEST_F(io, file_size_invalid_fd) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
   stream.file.fd = -1;
@@ -447,7 +447,7 @@ UTEST_F(io, file_size_invalid_fd) {
 
 UTEST_F(io, file_close_autoclose_false) {
   const char* test_content = "autoclose test";
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   stream.file.close_mode = SP_IO_FILE_CLOSE_MODE_NONE;
   sp_io_write(&stream, test_content, 14);
   s32 fd = stream.file.fd;
@@ -459,7 +459,7 @@ UTEST_F(io, file_close_autoclose_false) {
   stream2.callbacks.close = sp_io_file_close;
   sp_io_close(&stream2);
 
-  sp_str_t loaded = sp_io_read_file(utest_fixture->test_file_path);
+  sp_str_t loaded = sp_io_read_file(utest_fixture->file_path);
   ASSERT_EQ(loaded.len, 14);
   for (u32 i = 0; i < 14; i++) {
     ASSERT_EQ(loaded.data[i], test_content[i]);
@@ -468,12 +468,12 @@ UTEST_F(io, file_close_autoclose_false) {
 
 UTEST_F(io, file_close_autoclose_true) {
   const char* test_content = "autoclose true";
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&stream, test_content, 14);
   ASSERT_TRUE(stream.file.close_mode == SP_IO_FILE_CLOSE_MODE_AUTO);
   sp_io_close(&stream);
 
-  sp_str_t loaded = sp_io_read_file(utest_fixture->test_file_path);
+  sp_str_t loaded = sp_io_read_file(utest_fixture->file_path);
   ASSERT_EQ(loaded.len, 14);
   for (u32 i = 0; i < 14; i++) {
     ASSERT_EQ(loaded.data[i], test_content[i]);
@@ -482,11 +482,11 @@ UTEST_F(io, file_close_autoclose_true) {
 
 UTEST_F(io, file_seek_invalid_negative) {
   const char* test_content = "seek test";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 9);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   s64 pos = sp_io_seek(&stream, -100, SP_IO_SEEK_SET);
   ASSERT_EQ(pos, -1);
   sp_io_close(&stream);
@@ -494,18 +494,18 @@ UTEST_F(io, file_seek_invalid_negative) {
 
 UTEST_F(io, file_write_to_readonly) {
   const char* test_content = "initial";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, test_content, 7);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   u64 bytes = sp_io_write(&stream, "data", 4);
   ASSERT_EQ(bytes, 0);
   sp_io_close(&stream);
 }
 
 UTEST_F(io, file_read_from_writeonly) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   char buffer[10] = {0};
   u64 bytes = sp_io_read(&stream, buffer, 10);
   ASSERT_EQ(bytes, 0);
@@ -514,7 +514,7 @@ UTEST_F(io, file_read_from_writeonly) {
 
 UTEST_F(io, file_open_read_write) {
   const char* initial = "initial data";
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, (sp_io_mode_t)(SP_IO_MODE_READ | SP_IO_MODE_WRITE));
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, (sp_io_mode_t)(SP_IO_MODE_READ | SP_IO_MODE_WRITE));
   ASSERT_TRUE(stream.file.fd >= 0);
 
   u64 written = sp_io_write(&stream, initial, 12);
@@ -659,11 +659,11 @@ UTEST_F(io, memory_size_zero) {
 
 UTEST_F(io, file_read_zero_bytes) {
   const char* content = "test";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, content, 4);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
   char buffer[10];
   u64 bytes = sp_io_read(&stream, buffer, 0);
   ASSERT_EQ(bytes, 0);
@@ -682,7 +682,7 @@ UTEST_F(io, memory_read_zero_bytes) {
 }
 
 UTEST_F(io, file_write_zero_bytes) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   u64 bytes = sp_io_write(&stream, "test", 0);
   ASSERT_EQ(bytes, 0);
   sp_io_close(&stream);
@@ -697,10 +697,10 @@ UTEST_F(io, sp_io_read_file_nonexistent) {
 }
 
 UTEST_F(io, sp_io_read_file_empty) {
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_close(&stream);
 
-  sp_str_t result = sp_io_read_file(utest_fixture->test_file_path);
+  sp_str_t result = sp_io_read_file(utest_fixture->file_path);
 
   ASSERT_EQ(result.len, 0);
 }
@@ -911,11 +911,11 @@ UTEST_F(io, buffer_large_write) {
 
 UTEST_F(io, file_seek_all_whence_zero_offset) {
   const char* content = "0123456789";
-  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_WRITE);
+  sp_io_stream_t write_stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_WRITE);
   sp_io_write(&write_stream, content, 10);
   sp_io_close(&write_stream);
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, SP_IO_MODE_READ);
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, SP_IO_MODE_READ);
 
   s64 pos = sp_io_seek(&stream, 0, SP_IO_SEEK_SET);
   ASSERT_EQ(pos, 0);
@@ -955,7 +955,7 @@ UTEST_F(io, memory_position_tracking) {
 UTEST_F(io, file_write_read_roundtrip) {
   const char* data = "roundtrip test data";
 
-  sp_io_stream_t stream = sp_io_from_file(utest_fixture->test_file_path, (sp_io_mode_t)(SP_IO_MODE_READ | SP_IO_MODE_WRITE));
+  sp_io_stream_t stream = sp_io_from_file(utest_fixture->file_path, (sp_io_mode_t)(SP_IO_MODE_READ | SP_IO_MODE_WRITE));
 
   sp_io_write(&stream, data, 19);
   sp_io_seek(&stream, 0, SP_IO_SEEK_SET);
@@ -970,3 +970,180 @@ UTEST_F(io, file_write_read_roundtrip) {
   sp_io_close(&stream);
 }
 
+UTEST_F(io, memory_pad_basic) {
+  u32 buffer_size = 32;
+  u32 pad_size = 8;
+
+  u8 buffer[32] = SP_ZERO_INITIALIZE();
+  sp_mem_fill_u8(buffer, buffer_size, 0xFF);
+
+  sp_io_stream_t io = sp_io_from_memory(buffer, buffer_size);
+  EXPECT_EQ(sp_io_pad(&io, pad_size), pad_size);
+
+  sp_for(it, 8) {
+    EXPECT_EQ(buffer[it], 0);
+  }
+
+  sp_for_range(it, 8, 32) {
+    EXPECT_EQ(buffer[it], 0xFF);
+  }
+
+  sp_io_close(&io);
+}
+
+UTEST_F(io, memory_pad_advances_position) {
+  u32 buffer_size = 32;
+  u32 pad_size = 10;
+
+  u8 buffer[32] = SP_ZERO_INITIALIZE();
+  sp_io_stream_t io = sp_io_from_memory(buffer, buffer_size);
+
+  sp_io_pad(&io, pad_size);
+  s64 pos = sp_io_seek(&io, 0, SP_IO_SEEK_CUR);
+  EXPECT_EQ(pos, pad_size);
+
+  sp_io_close(&io);
+}
+
+UTEST_F(io, memory_pad_overflow) {
+  u32 buffer_size = 16;
+  u32 pad_size = 32;
+
+  u8 buffer[16] = SP_ZERO_INITIALIZE();
+  sp_io_stream_t io = sp_io_from_memory(buffer, buffer_size);
+
+  u64 padded = sp_io_pad(&io, pad_size);
+  EXPECT_EQ(padded, buffer_size);
+
+  sp_io_close(&io);
+}
+
+UTEST_F(io, memory_pad_zero) {
+  u32 buffer_size = 16;
+  u32 pad_size = 0;
+
+  u8 buffer[16] = SP_ZERO_INITIALIZE();
+  sp_io_stream_t io = sp_io_from_memory(buffer, buffer_size);
+
+  u64 padded = sp_io_pad(&io, pad_size);
+  EXPECT_EQ(padded, 0);
+
+  s64 pos = sp_io_seek(&io, 0, SP_IO_SEEK_CUR);
+  EXPECT_EQ(pos, 0);
+
+  sp_io_close(&io);
+}
+
+UTEST_F(io, buffer_pad_basic) {
+  u32 pad_size = 16;
+
+  sp_io_stream_t io = sp_io_from_buffer();
+
+  u64 padded = sp_io_pad(&io, pad_size);
+  EXPECT_EQ(padded, pad_size);
+  EXPECT_EQ(sp_io_size(&io), pad_size);
+
+  sp_io_seek(&io, 0, SP_IO_SEEK_SET);
+  u8 result[16] = SP_ZERO_INITIALIZE();
+  sp_io_read(&io, result, pad_size);
+
+  sp_for(it, pad_size) {
+    EXPECT_EQ(result[it], 0);
+  }
+
+  sp_io_close(&io);
+}
+
+UTEST_F(io, buffer_pad_grows) {
+  u32 pad_size = 256;
+
+  sp_io_stream_t io = sp_io_from_buffer();
+
+  u64 padded = sp_io_pad(&io, pad_size);
+  EXPECT_EQ(padded, pad_size);
+  EXPECT_EQ(sp_io_size(&io), pad_size);
+
+  sp_io_close(&io);
+}
+
+UTEST_F(io, buffer_pad_after_write) {
+  u32 write_size = 3;
+  u32 pad_size = 5;
+  u32 total_size = write_size + pad_size;
+
+  sp_io_stream_t io = sp_io_from_buffer();
+
+  sp_io_write(&io, "abc", write_size);
+  u64 padded = sp_io_pad(&io, pad_size);
+
+  EXPECT_EQ(padded, pad_size);
+  EXPECT_EQ(sp_io_size(&io), total_size);
+
+  sp_io_seek(&io, 0, SP_IO_SEEK_SET);
+  u8 result[8] = SP_ZERO_INITIALIZE();
+  sp_io_read(&io, result, total_size);
+
+  EXPECT_EQ(result[0], 'a');
+  EXPECT_EQ(result[1], 'b');
+  EXPECT_EQ(result[2], 'c');
+
+  sp_for_range(it, write_size, total_size) {
+    EXPECT_EQ(result[it], 0);
+  }
+
+  sp_io_close(&io);
+}
+
+UTEST_F(io, file_pad_basic) {
+  u32 pad_size = 1972;
+  u8* buffer = sp_alloc_n(u8, pad_size);
+
+  {
+    sp_io_stream_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+    EXPECT_EQ(sp_io_pad(&io, pad_size), pad_size);
+    sp_io_close(&io);
+  }
+
+  {
+    sp_io_stream_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_READ);
+    EXPECT_EQ(sp_io_size(&io), pad_size);
+    sp_io_read(&io, buffer, pad_size);
+
+    sp_for(it, pad_size) {
+      EXPECT_EQ(buffer[it], 0);
+    }
+
+    sp_io_close(&io);
+  }
+}
+
+UTEST_F(io, file_pad_after_write) {
+  u32 write_size = 5;
+  u32 pad_size = 11;
+  u32 total_size = write_size + pad_size;
+  u8 buffer [16] = SP_ZERO_INITIALIZE();
+
+  {
+    sp_io_stream_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+
+    sp_io_write(&io, "hello", write_size);
+    EXPECT_EQ(sp_io_pad(&io, pad_size), pad_size);
+
+    sp_io_close(&io);
+  }
+
+  {
+    sp_io_stream_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_READ);
+
+    EXPECT_EQ(sp_io_size(&io), total_size);
+    EXPECT_EQ(sp_io_read(&io, buffer, total_size), total_size);
+    EXPECT_EQ(buffer[0], 'h');
+    EXPECT_EQ(buffer[4], 'o');
+
+    sp_for_range(it, write_size, total_size) {
+      EXPECT_EQ(buffer[it], 0);
+    }
+
+    sp_io_close(&io);
+  }
+}

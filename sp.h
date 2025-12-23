@@ -313,6 +313,7 @@
 #define sp_carr_len(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 
 #define sp_for(it, n) for (u32 it = 0; it < n; it++)
+#define sp_for_range(it, low, high) for (u32 it = (low); it < (high); it++)
 
 #define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
 
@@ -2060,6 +2061,7 @@ SP_TYPEDEF_FN(s64, sp_io_size_fn, sp_io_stream_t* stream);
 SP_TYPEDEF_FN(s64, sp_io_seek_fn, sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
 SP_TYPEDEF_FN(u64, sp_io_read_fn, sp_io_stream_t* stream, void* ptr, u64 size);
 SP_TYPEDEF_FN(u64, sp_io_write_fn, sp_io_stream_t* stream, const void* ptr, u64 size);
+SP_TYPEDEF_FN(u64, sp_io_pad_fn, sp_io_stream_t* stream, u64 size);
 SP_TYPEDEF_FN(void, sp_io_close_fn, sp_io_stream_t* stream);
 
 typedef struct {
@@ -2067,6 +2069,7 @@ typedef struct {
   sp_io_seek_fn  seek;
   sp_io_read_fn  read;
   sp_io_write_fn write;
+  sp_io_pad_fn   pad;
   sp_io_close_fn close;
 } sp_io_callbacks_t;
 
@@ -2105,6 +2108,7 @@ SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_f
 SP_API u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
 SP_API u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
 SP_API u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
+SP_API u64            sp_io_pad(sp_io_stream_t* stream, u64 size);
 SP_API s64            sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
 SP_API s64            sp_io_size(sp_io_stream_t* stream);
 SP_API void           sp_io_close(sp_io_stream_t* stream);
@@ -8205,6 +8209,16 @@ u64 sp_io_memory_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
   return to_write;
 }
 
+u64 sp_io_memory_pad(sp_io_stream_t* stream, u64 size) {
+  sp_io_memory_data_t* data = &stream->memory;
+  u64 available = data->stop - data->here;
+  u64 to_pad = SP_MIN(size, available);
+
+  sp_mem_zero(data->here, to_pad);
+  data->here += to_pad;
+  return to_pad;
+}
+
 void sp_io_memory_close(sp_io_stream_t* stream) {
   (void)stream;
 }
@@ -8273,6 +8287,32 @@ u64 sp_io_buffer_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
   }
 
   sp_mem_copy(ptr, data->here, size);
+  data->here += size;
+  if (data->here > data->stop) {
+    data->stop = data->here;
+  }
+  return size;
+}
+
+u64 sp_io_buffer_pad(sp_io_stream_t* stream, u64 size) {
+  sp_io_buffer_data_t* data = &stream->buffer;
+  u64 pos = data->here - data->base;
+  u64 required = pos + size;
+  u64 capacity = data->max - data->base;
+
+  if (required > capacity) {
+    u64 new_capacity = capacity ? capacity : 64;
+    while (new_capacity < required) {
+      new_capacity *= 2;
+    }
+    u64 content_size = data->stop - data->base;
+    data->base = (u8*)sp_realloc(data->base, (u32)new_capacity);
+    data->here = data->base + pos;
+    data->stop = data->base + content_size;
+    data->max = data->base + new_capacity;
+  }
+
+  sp_mem_zero(data->here, size);
   data->here += size;
   if (data->here > data->stop) {
     data->stop = data->here;
@@ -8349,6 +8389,18 @@ u64 sp_io_file_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
   return (u64)result;
 }
 
+u64 sp_io_file_pad(sp_io_stream_t* stream, u64 size) {
+  static const u8 zeros[64] = {0};
+  u64 written = 0;
+  while (written < size) {
+    u64 chunk = SP_MIN(size - written, 64);
+    u64 result = sp_io_file_write(stream, zeros, chunk);
+    if (result == 0) break;
+    written += result;
+  }
+  return written;
+}
+
 void sp_io_file_close(sp_io_stream_t* stream) {
   sp_io_file_data_t* data = &stream->file;
   if (data->close_mode == SP_IO_FILE_CLOSE_MODE_AUTO) {
@@ -8381,6 +8433,7 @@ sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
     .seek = sp_io_file_seek,
     .read = sp_io_file_read,
     .write = sp_io_file_write,
+    .pad = sp_io_file_pad,
     .close = sp_io_file_close,
   };
   stream.file.fd = fd;
@@ -8404,6 +8457,7 @@ sp_io_stream_t sp_io_from_memory(void* memory, u64 size) {
   stream.callbacks.seek = sp_io_memory_seek;
   stream.callbacks.read = sp_io_memory_read;
   stream.callbacks.write = sp_io_memory_write;
+  stream.callbacks.pad = sp_io_memory_pad;
   stream.callbacks.close = sp_io_memory_close;
 
   return stream;
@@ -8416,6 +8470,7 @@ sp_io_stream_t sp_io_from_buffer() {
       .seek = sp_io_buffer_seek,
       .read = sp_io_buffer_read,
       .write = sp_io_buffer_write,
+      .pad = sp_io_buffer_pad,
       .close = sp_io_buffer_close,
     }
   };
@@ -8437,6 +8492,7 @@ sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_clo
     .seek = sp_io_file_seek,
     .read = sp_io_file_read,
     .write = sp_io_file_write,
+    .pad = sp_io_file_pad,
     .close = sp_io_file_close,
   };
   stream.file.fd = handle;
@@ -8467,6 +8523,11 @@ u64 sp_io_write_cstr(sp_io_stream_t* stream, const c8* cstr) {
   SP_ASSERT(stream);
   SP_ASSERT(cstr);
   return sp_io_write(stream, cstr, sp_cstr_len(cstr));
+}
+
+u64 sp_io_pad(sp_io_stream_t* stream, u64 size) {
+  SP_ASSERT(stream); SP_ASSERT(stream->callbacks.pad);
+  return stream->callbacks.pad(stream, size);
 }
 
 s64 sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
