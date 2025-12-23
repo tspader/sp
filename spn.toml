@@ -14,6 +14,11 @@ name = "debug"
 cc = "clang"
 
 [[profile]]
+name = "sanity"
+mode = "debug"
+cc = "tcc"
+
+[[profile]]
 name = "bench"
 mode = "release"
 cc = "clang"
