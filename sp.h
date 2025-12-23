@@ -226,13 +226,25 @@
   #define SP_NULLPTR ((void*)0)
 #endif
 
+#define sp_rval(T) SP_RVAL(T)
+#define sp_begin_extern_c() SP_BEGIN_EXTERN_C()
+#define sp_end_extern_c() SP_END_EXTERN_C()
+#define sp_zero_initialize() SP_ZERO_INITIALIZE()
+#define sp_null SP_NULL
+#define sp_nullptr SP_NULLPTR
+
 #define SP_FALLTHROUGH() ((void)0)
+#define sp_fallthrough() SP_FALLTHROUGH()
 
 #define SP_ZERO_STRUCT(t) SP_RVAL(t) SP_ZERO_INITIALIZE()
+#define sp_zero_struct(t) SP_ZERO_STRUCT(t)
 #define SP_ZERO_RETURN(t) { t __SP_ZERO_RETURN = SP_ZERO_STRUCT(t); return __dn_zero_return; }
+#define sp_zero_return(t) SP_ZERO_RETURN(t)
 
 #define SP_EXIT_SUCCESS() exit(0)
+#define sp_exit_success() SP_EXIT_SUCCESS()
 #define SP_EXIT_FAILURE() exit(1)
+#define sp_exit_failure() SP_EXIT_FAILURE()
 #define SP_ASSERT(condition) assert((condition))
 #define SP_FATAL(FMT, ...) \
   do { \
@@ -240,12 +252,17 @@
     SP_LOG("{:color red}: {}", SP_FMT_CSTR("SP_FATAL()"), SP_FMT_STR(message)); \
     SP_EXIT_FAILURE(); \
   } while (0)
+#define sp_fatal(FMT, ...) SP_FATAL(FMT, ##__VA_ARGS__)
 
 #define SP_UNREACHABLE() SP_ASSERT(false)
+#define sp_unreachable() SP_UNREACHABLE()
 #define SP_UNREACHABLE_CASE() SP_ASSERT(false); break;
+#define sp_unreachable_case() SP_UNREACHABLE_CASE()
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
+#define sp_unreachable_return(v) SP_UNREACHABLE_RETURN(v)
 //#define SP_BROKEN() SP_ASSERT(false)
 #define SP_BROKEN()
+#define sp_broken() SP_BROKEN()
 #define SP_ASSERT_FMT(COND, FMT, ...) \
   do { \
     if (!(COND)) { \
@@ -255,8 +272,11 @@
       SP_EXIT_FAILURE(); \
     } \
   } while (0)
+#define sp_assert_fmt(COND, FMT, ...) SP_ASSERT_FMT(COND, FMT, ##__VA_ARGS__)
 #define SP_UNTESTED()
+#define sp_untested() SP_UNTESTED()
 #define SP_INCOMPLETE()
+#define sp_incomplete() SP_INCOMPLETE()
 
 #define sp_assert(expr) SP_ASSERT(expr)
 
@@ -264,6 +284,7 @@
 #define sp_typedef_fn(return_type, name, ...) SP_TYPEDEF_FN(return_type, name, __VA_ARGS__)
 
 #define SP_UNUSED(x) ((void)(x))
+#define sp_unused(x) SP_UNUSED(x)
 
 #define SP_PRINTF_U8 "%hhu"
 #define SP_PRINTF_U16 "%hu"
@@ -278,21 +299,29 @@
 
 #define _SP_MACRO_STR(x) #x
 #define SP_MACRO_STR(x) _SP_MACRO_STR(x)
+#define sp_macro_str(x) SP_MACRO_STR(x)
 #define _SP_MACRO_CAT(x, y) x##y
 #define SP_MACRO_CAT(x, y) _SP_MACRO_CAT(x, y)
+#define sp_macro_cat(x, y) SP_MACRO_CAT(x, y)
 
 #define SP_UNIQUE_ID() SP_MACRO_CAT(__sp_unique_name__, __LINE__)
+#define sp_unique_id() SP_UNIQUE_ID()
 
 #define SP_MAX(a, b) (a) > (b) ? (a) : (b)
+#define sp_max(a, b) SP_MAX(a, b)
 #define SP_MIN(a, b) (a) > (b) ? (b) : (a)
+#define sp_min(a, b) SP_MIN(a, b)
 #define SP_SWAP(t, a, b) { t SP_UNIQUE_ID() = (a); (a) = (b); (b) = SP_UNIQUE_ID(); }
+#define sp_swap(t, a, b) SP_SWAP(t, a, b)
 
 #define SP_QSORT_A_FIRST -1
 #define SP_QSORT_B_FIRST 1
 #define SP_QSORT_EQUAL 0
 
 #define SP_COLOR_RGB(RED, GREEN, BLUE) { .r = (RED) / 255.f, .g = (GREEN) / 255.f, .b = (BLUE) / 255.f, .a = 1.0 }
+#define sp_color_rgb_lit(RED, GREEN, BLUE) SP_COLOR_RGB(RED, GREEN, BLUE)
 #define SP_COLOR_HSV(H, S, V) { .h = (H), .s = (S), .v = (V) }
+#define sp_color_hsv_lit(H, S, V) SP_COLOR_HSV(H, S, V)
 
 #define SP_MAX_PATH_LEN 260
 
@@ -318,6 +347,7 @@
 #define sp_for_range(it, low, high) for (u32 it = (low); it < (high); it++)
 
 #define SP_SIZE_TO_INDEX(size) ((size) ? ((size) - 1) : 0)
+#define sp_size_to_index(size) SP_SIZE_TO_INDEX(size)
 
 #define SP_MEM_ALIGNMENT 16
 
@@ -635,8 +665,11 @@ typedef enum {
 //    Insofaras (@insofaras)
 //    Daniel Gibson (@DanielGibson)
 #define SP_ABS(a) ((a) > 0 ? (a) : -(a))
+#define sp_abs(a) SP_ABS(a)
 #define SP_MOD(a, m) (((a) % (m)) >= 0 ? ((a) % (m)) : (((a) % (m)) + (m)))
+#define sp_mod(a, m) SP_MOD(a, m)
 #define SP_SQUARE(x) ((x) * (x))
+#define sp_square(x) SP_SQUARE(x)
 
 typedef union sp_vec2 {
   struct {
@@ -1486,7 +1519,9 @@ SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 #define SP_STR(STR, LEN) sp_str(STR, LEN)
 #define sp_str_lit(STR)  sp_str((STR), sizeof(STR) - 1)
 #define SP_LIT(STR)      sp_str_lit(STR)
+#define sp_lit(STR)      SP_LIT(STR)
 #define SP_CSTR(STR)     sp_str((STR), sp_cstr_len(STR))
+#define sp_cstr(STR)     SP_CSTR(STR)
 #define sp_str_for(str, it) for (u32 it = 0; it < str.len; it++)
 #define sp_str_for_it(str, it) for (sp_str_it_t it = sp_str_it(str); sp_str_it_valid(&it); sp_str_it_next(&it))
 
@@ -1589,6 +1624,7 @@ SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void
 // @log
 #define SP_LOG(CSTR, ...)    sp_log(SP_CSTR((CSTR)), ##__VA_ARGS__)
 #define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
+#define sp_log_str(STR, ...) SP_LOG_STR(STR, ##__VA_ARGS__)
 SP_API void sp_log(sp_str_t fmt, ...);
 
 
