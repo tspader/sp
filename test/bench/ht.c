@@ -378,7 +378,8 @@ static void kernel_mixed(bench_params_t p, bench_data_t* data) {
       sp_for(i, p.n) {
         hmput(data->stb, (s32)i, (u64)i);
         if (i > 0) {
-          sum += hmget(data->stb, (s32)(i / 2));
+          s32 index = (s32)(i / 2);
+          sum += hmget(data->stb, index);
         }
         SP_COMPILER_BARRIER();
       }
