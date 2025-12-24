@@ -11,4 +11,5 @@ external/*
 .claude
 .mcp.json
 CLAUDE.md
-AGENTS.md
+doc/*
+!doc/skill

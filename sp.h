@@ -5,6 +5,7 @@
   ▐▌ ▐▌▐▌   ▐▌ ▐▌▐▌   ▐▌
   ▐▌ ▐▌ ▝▀▚▖▐▛▀▜▌▐▌▝▜▌▐▛▀▀▘
   ▝▚▄▞▘▗▄▄▞▘▐▌ ▐▌▝▚▄▞▘▐▙▄▄▖
+  @usage
 
   Define the following before you include sp.h in exactly one C or C++ file[^1]:
 
@@ -26,15 +27,18 @@
   ▐▛▚▞▜▌▐▌ ▐▌▐▌  █▐▌ ▐▌▐▌   ▐▌   ▐▌
   ▐▌  ▐▌▐▌ ▐▌▐▌  █▐▌ ▐▌▐▌   ▐▛▀▀▘ ▝▀▚▖
   ▐▌  ▐▌▝▚▄▞▘▐▙▄▄▀▝▚▄▞▘▐▙▄▄▖▐▙▄▄▖▗▄▄▞▘
+  @modules
 
   + marks a module which is particularly important
   - marks a module which is kind of shitty, in implementation or design
   @ marks a module which mostly exists as a wrapper
 
+      sp_app           minimal game-style main loop
       sp_asset         multithreaded asset registry, importers
     @ sp_atomic        compiler intrinsic atomics
     + sp_context       thread-local allocator, scratch memory
-    + sp_dyn_array     stb-style resizable array (macros)
+    + sp_dyn_array     stb-style resizable array (intrusive T* + macros)
+      sp_elf           minimal elf reading + writing + modification
       sp_env           environment variables
       sp_err           thread-local errno style error system
       sp_fixed_array   fixed size array, from stack or heap (void*)
@@ -49,7 +53,7 @@
     @ sp_mutex         os native mutex wrappers
     - sp_os            grab bag of platform bullshit
     + sp_ps            subprocesses
-      sp_ring_buffer   single threaded ring buffer (void*)
+      sp_ring_buffer   single threaded ring buffer (intrusive T* + macros)
     @ sp_semaphore     os native semaphore wrappers
     @ sp_spin          efficient spin lock with pausing
     + sp_str           ptr + len strings, no null termination, fundamental c string APIs
@@ -68,6 +72,7 @@
   ▐▌   ▐▌ ▐▌▐▌ ▐▌ █  ▐▛▚▖▐▌▐▌ ▐▌ █  ▐▌   ▐▌
   ▐▛▀▀▘▐▌ ▐▌▐▌ ▐▌ █  ▐▌ ▝▜▌▐▌ ▐▌ █  ▐▛▀▀▘ ▝▀▚▖
   ▐▌   ▝▚▄▞▘▝▚▄▞▘ █  ▐▌  ▐▌▝▚▄▞▘ █  ▐▙▄▄▖▗▄▄▞▘
+  @footnotes
 
   [^1]: C and C++ compile your program in translation units (TUs); roughly, an atomic
   unit as far as the linker is concerned. Usually, it's accurate enough to think of a
@@ -230,8 +235,6 @@
 #define sp_begin_extern_c() SP_BEGIN_EXTERN_C()
 #define sp_end_extern_c() SP_END_EXTERN_C()
 #define sp_zero_initialize() SP_ZERO_INITIALIZE()
-#define sp_null SP_NULL
-#define sp_nullptr SP_NULLPTR
 
 #define SP_FALLTHROUGH() ((void)0)
 #define sp_fallthrough() SP_FALLTHROUGH()
@@ -1136,13 +1139,13 @@ SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u
 #define sp_dyn_array_bounds_ok(arr, it) ((it) < sp_dyn_array_size(arr))
 
 
-// ██████╗ ██╗███╗   ██╗ ██████╗      ██████╗ ██╗   ██╗███████╗██╗   ██╗███████╗
-// ██╔══██╗██║████╗  ██║██╔════╝     ██╔═══██╗██║   ██║██╔════╝██║   ██║██╔════╝
-// ██████╔╝██║██╔██╗ ██║██║  ███╗    ██║   ██║██║   ██║█████╗  ██║   ██║█████╗
-// ██╔══██╗██║██║╚██╗██║██║   ██║    ██║▄▄ ██║██║   ██║██╔══╝  ██║   ██║██╔══╝
-// ██║  ██║██║██║ ╚████║╚██████╔╝    ╚██████╔╝╚██████╔╝███████╗╚██████╔╝███████╗
-// ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝      ╚══▀▀═╝  ╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝
-// @ring_buffer @rq
+// ██████╗ ██╗███╗   ██╗ ██████╗     ██████╗ ██╗   ██╗███████╗███████╗███████╗██████╗
+// ██╔══██╗██║████╗  ██║██╔════╝     ██╔══██╗██║   ██║██╔════╝██╔════╝██╔════╝██╔══██╗
+// ██████╔╝██║██╔██╗ ██║██║  ███╗    ██████╔╝██║   ██║█████╗  █████╗  █████╗  ██████╔╝
+// ██╔══██╗██║██║╚██╗██║██║   ██║    ██╔══██╗██║   ██║██╔══╝  ██╔══╝  ██╔══╝  ██╔══██╗
+// ██║  ██║██║██║ ╚████║╚██████╔╝    ██████╔╝╚██████╔╝██║     ██║     ███████╗██║  ██║
+// ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝     ╚═════╝  ╚═════╝ ╚═╝     ╚═╝     ╚══════╝╚═╝  ╚═╝
+// @ring_buffer @rb
 typedef enum sp_rb_mode {
     SP_RQ_MODE_GROW = 0,
     SP_RQ_MODE_OVERWRITE,
@@ -1244,7 +1247,7 @@ SP_API void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap);
 // ██╔══██║██╔══██║╚════██║██╔══██║       ██║   ██╔══██║██╔══██╗██║     ██╔══╝
 // ██║  ██║██║  ██║███████║██║  ██║       ██║   ██║  ██║██████╔╝███████╗███████╗
 // ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝       ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝
-// @hash_table
+// @hash_table @ht
 #define SP_HT_HASH_SEED         0x31415296
 #define SP_HT_INVALID_INDEX     UINT32_MAX
 

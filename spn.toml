@@ -14,6 +14,12 @@ name = "debug"
 cc = "clang"
 
 [[profile]]
+name = "musl-static"
+cc = "musl-gcc"
+libc = "musl"
+linkage = "static"
+
+[[profile]]
 name = "sanity"
 mode = "debug"
 cc = "tcc"
