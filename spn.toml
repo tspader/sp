@@ -94,6 +94,10 @@ name = "rb"
 source = ["test/rb.c"]
 
 [[test]]
+name = "str"
+source = ["test/str.c"]
+
+[[test]]
 name = "stress"
 source = ["test/stress.c"]
 

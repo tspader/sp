@@ -1,5 +1,5 @@
 // sp_str_alloc
-// sp_str_capitalize_words
+// sp_str_to_pascal_case
 // sp_str_cleave_c8
 // sp_str_copy
 // sp_str_copy_to
@@ -14,7 +14,7 @@
 // sp_str_to_lower
 // sp_str_map
 // sp_str_map_kernel_append
-// sp_str_map_kernel_capitalize_words
+// sp_str_map_kernel_to_pascal_case
 // sp_str_map_kernel_pad
 // sp_str_map_kernel_prepend
 // sp_str_map_kernel_to_lower
@@ -156,8 +156,8 @@ UTEST_F(sp_test_leak, sp_str_to_lower) {
   sp_str_t result = sp_str_to_lower(ut.str);
 }
 
-UTEST_F(sp_test_leak, sp_str_capitalize_words) {
-  sp_str_t result = sp_str_capitalize_words(ut.str);
+UTEST_F(sp_test_leak, sp_str_to_pascal_case) {
+  sp_str_t result = sp_str_to_pascal_case(ut.str);
 }
 
 UTEST_F(sp_test_leak, sp_str_truncate) {
@@ -197,9 +197,9 @@ UTEST_F(sp_test_leak, sp_str_map_kernel_to_lower) {
   sp_str_t result = sp_str_map_kernel_to_lower(&ctx);
 }
 
-UTEST_F(sp_test_leak, sp_str_map_kernel_capitalize_words) {
+UTEST_F(sp_test_leak, sp_str_map_kernel_to_pascal_case) {
   sp_str_map_context_t ctx = {.str = ut.str};
-  sp_str_t result = sp_str_map_kernel_capitalize_words(&ctx);
+  sp_str_t result = sp_str_map_kernel_to_pascal_case(&ctx);
 }
 
 UTEST_F(sp_test_leak, sp_str_reduce) {

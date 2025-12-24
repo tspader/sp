@@ -2,13 +2,13 @@
 #include "test.h"
 #include "utest.h"
 
-typedef struct sp_compile {
+typedef struct linkage {
   sp_test_file_manager_t files;
   sp_str_t root;
   sp_str_t source;
-} sp_compile;
+} linkage;
 
-UTEST_F_SETUP(sp_compile) {
+UTEST_F_SETUP(linkage) {
   sp_test_file_manager_init(&ut.files);
 
   ut.root = sp_fs_get_exe_path();
@@ -20,11 +20,11 @@ UTEST_F_SETUP(sp_compile) {
   ut.source = sp_fs_join_path(ut.root, sp_str_lit("test/tools/linkage"));
 }
 
-UTEST_F_TEARDOWN(sp_compile) {
+UTEST_F_TEARDOWN(linkage) {
   sp_test_file_manager_cleanup(&ut.files);
 }
 
-bool compile_to_exe(sp_compile* ctx, const c8* file, sp_str_t output) {
+bool compile_to_exe(linkage* ctx, const c8* file, sp_str_t output) {
   sp_ps_output_t out = sp_ps_run((sp_ps_config_t) {
     .command = sp_str_lit("cc"),
     .args = {
@@ -39,7 +39,7 @@ bool compile_to_exe(sp_compile* ctx, const c8* file, sp_str_t output) {
   return !out.status.exit_code;
 }
 
-bool compile_to_object(sp_compile* ctx, const c8* file, sp_str_t output) {
+bool compile_to_object(linkage* ctx, const c8* file, sp_str_t output) {
   sp_ps_output_t out = sp_ps_run((sp_ps_config_t) {
     .command = sp_str_lit("cc"),
     .args = {
@@ -69,7 +69,7 @@ bool compile_objects_to_exe(sp_str_t output, sp_str_t* objs, u32 len) {
   return !out.status.exit_code;
 }
 
-bool compile_to_linked_exe(sp_compile* ctx, const c8* file, sp_str_t output, sp_str_t* libs, u32 len) {
+bool compile_to_linked_exe(linkage* ctx, const c8* file, sp_str_t output, sp_str_t* libs, u32 len) {
   sp_ps_config_t cfg = {
     .command = sp_str_lit("cc"),
     .args = {
@@ -89,7 +89,7 @@ bool compile_to_linked_exe(sp_compile* ctx, const c8* file, sp_str_t output, sp_
   return !out.status.exit_code;
 }
 
-bool create_archive(sp_compile* ctx, sp_str_t archive, sp_str_t* objs, u32 len) {
+bool create_archive(linkage* ctx, sp_str_t archive, sp_str_t* objs, u32 len) {
   sp_ps_config_t cfg = {
     .command = sp_str_lit("ar"),
     .args = {
@@ -115,7 +115,7 @@ bool is_symbol_in_binary(sp_str_t binary, sp_str_t symbol) {
   return !nm.status.exit_code && sp_str_contains(nm.out, symbol);
 }
 
-UTEST_F(sp_compile, single_tu) {
+UTEST_F(linkage, single_tu) {
   sp_str_t bin = sp_test_file_path(&ut.files, sp_str_lit("header-single"));
   EXPECT_TRUE(compile_to_exe(&ut, "main.c", bin));
 
@@ -123,7 +123,7 @@ UTEST_F(sp_compile, single_tu) {
   ASSERT_EQ(run.status.exit_code, 0);
 }
 
-UTEST_F(sp_compile, multi_tu) {
+UTEST_F(linkage, multi_tu) {
   typedef struct {
     const c8* file;
     sp_str_t output;
@@ -145,7 +145,7 @@ UTEST_F(sp_compile, multi_tu) {
   EXPECT_EQ(run.status.exit_code, 0);
 }
 
-UTEST_F(sp_compile, shared_lib) {
+UTEST_F(linkage, shared_lib) {
   sp_str_t so = sp_test_file_path(&ut.files, sp_str_lit("shared.so"));
 
   sp_ps_output_t out = sp_ps_run((sp_ps_config_t){
@@ -162,7 +162,7 @@ UTEST_F(sp_compile, shared_lib) {
   EXPECT_TRUE(is_symbol_in_binary(so, sp_str_lit("sp_alloc")));
 }
 
-UTEST_F(sp_compile, static_lib) {
+UTEST_F(linkage, static_lib) {
   sp_str_t obj = sp_test_file_path(&ut.files, sp_str_lit("sp.o"));
   EXPECT_TRUE(compile_to_object(&ut, "lib-impl.c", obj));
 
@@ -176,7 +176,7 @@ UTEST_F(sp_compile, static_lib) {
   ASSERT_EQ(run.status.exit_code, 0);
 }
 
-UTEST_F(sp_compile, cpp_compat) {
+UTEST_F(linkage, cpp_compat) {
   sp_str_t obj = sp_test_file_path(&ut.files, sp_str_lit("cpp-main.o"));
 
   sp_ps_output_t out = sp_ps_run((sp_ps_config_t){

@@ -59,6 +59,7 @@
     + sp_str           ptr + len strings, no null termination, fundamental c string APIs
     @ sp_thread        os native thread wrappers
       sp_time          high resolution timers, dates and times, epochs
+      sp_utf8          encode, decode, validation, iteration
 
 
     SP_RT_MAX_CONTEXT
@@ -1513,37 +1514,59 @@ typedef struct {
   c8 c;
 } sp_str_it_t;
 
+#define SP_UTF8_REPLACEMENT   0xFFFD
+#define SP_UTF8_SURROGATE_MIN 0xD800
+#define SP_UTF8_SURROGATE_MAX 0xDFFF
+#define SP_UTF8_2_BYTE_MIN    0x80
+#define SP_UTF8_3_BYTE_MIN    0x800
+#define SP_UTF8_4_BYTE_MIN    0x10000
+#define SP_UTF8_MAX           0x10FFFF
+#define SP_UTF8_ASCII_MAX     0x80
 
+typedef struct {
+  struct { const u8* data; u32 len; } str;
+  s32 index;
+  u32 codepoint;
+  u8 codepoint_len;
+} sp_utf8_it_t;
 
 SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
 SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
-#define sp_str(STR, LEN) SP_RVAL(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(LEN) }
+#define sp_str(STR, LEN) sp_rval(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(LEN) }
 #define SP_STR(STR, LEN) sp_str(STR, LEN)
 #define sp_str_lit(STR)  sp_str((STR), sizeof(STR) - 1)
 #define SP_LIT(STR)      sp_str_lit(STR)
 #define sp_lit(STR)      SP_LIT(STR)
 #define SP_CSTR(STR)     sp_str((STR), sp_cstr_len(STR))
 #define sp_cstr(STR)     SP_CSTR(STR)
+
 #define sp_str_for(str, it) for (u32 it = 0; it < str.len; it++)
 #define sp_str_for_it(str, it) for (sp_str_it_t it = sp_str_it(str); sp_str_it_valid(&it); sp_str_it_next(&it))
+#define sp_str_for_utf8(str, it) for (sp_utf8_it_t it = sp_utf8_it(str); sp_utf8_it_valid(&it); sp_utf8_it_next(&it))
+#define sp_str_rfor_utf8(str, it) for (sp_utf8_it_t it = sp_utf8_rit(str); sp_utf8_it_valid(&it); sp_utf8_it_prev(&it))
 
 sp_str_it_t            sp_str_it(sp_str_t str);
 bool                   sp_str_it_valid(sp_str_it_t* it);
 void                   sp_str_it_next(sp_str_it_t* it);
-SP_API void            sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
-SP_API void            sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
-SP_API void            sp_str_builder_indent(sp_str_builder_t* builder);
-SP_API void            sp_str_builder_dedent(sp_str_builder_t* builder);
-SP_API void            sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
-SP_API void            sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
-SP_API void            sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
-SP_API void            sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...);
-SP_API void            sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...);
-SP_API void            sp_str_builder_new_line(sp_str_builder_t* builder);
-SP_API sp_str_t        sp_str_builder_move(sp_str_builder_t* builder);
-SP_API sp_str_t        sp_str_builder_write(sp_str_builder_t* builder);
-SP_API c8*             sp_str_builder_write_cstr(sp_str_builder_t* builder);
+SP_API u32             sp_utf8_decode(const u8* ptr);
+SP_API u8              sp_utf8_encode(u32 codepoint, u8* out);
+SP_API u8              sp_utf8_num_bytes_from_codepoint(u32 codepoint);
+SP_API u8              sp_utf8_num_bytes_from_ptr(const u8* ptr);
+SP_API u8              sp_utf8_num_bytes_from_byte(u8 byte);
+SP_API sp_utf8_it_t    sp_utf8_it(sp_str_t str);
+SP_API sp_utf8_it_t    sp_utf8_rit(sp_str_t str);
+SP_API bool            sp_utf8_it_valid(sp_utf8_it_t* it);
+SP_API void            sp_utf8_it_next(sp_utf8_it_t* it);
+SP_API void            sp_utf8_it_prev(sp_utf8_it_t* it);
+SP_API bool            sp_utf8_validate(sp_str_t str);
+SP_API bool            sp_utf8_is_byte_ascii(u8 b);
+SP_API bool            sp_utf8_is_codepoint_ascii(u32 codepoint);
+SP_API u32             sp_utf8_to_upper(u32 codepoint);
+SP_API u32             sp_utf8_to_lower(u32 codepoint);
+SP_API u32             sp_utf8_num_codepoints(sp_str_t str);
+SP_API c8              sp_c8_to_upper(c8 c);
+SP_API c8              sp_c8_to_lower(c8 c);
 SP_API c8*             sp_cstr_copy(const c8* str);
 SP_API void            sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length);
 SP_API c8*             sp_cstr_copy_sized(const c8* str, u32 length);
@@ -1591,7 +1614,7 @@ SP_API sp_str_t        sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join);
 SP_API sp_str_t        sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join);
 SP_API sp_str_t        sp_str_to_upper(sp_str_t str);
 SP_API sp_str_t        sp_str_to_lower(sp_str_t str);
-SP_API sp_str_t        sp_str_capitalize_words(sp_str_t str);
+SP_API sp_str_t        sp_str_to_pascal_case(sp_str_t str);
 SP_API sp_str_pair_t   sp_str_cleave_c8(sp_str_t str, c8 delimiter);
 SP_API sp_da(sp_str_t) sp_str_split_c8(sp_str_t, c8 c);
 SP_API bool            sp_str_contains_n(sp_str_t* strs, u32 n, sp_str_t needle);
@@ -1614,8 +1637,22 @@ SP_API sp_str_t        sp_str_map_kernel_trim(sp_str_map_context_t* context);
 SP_API sp_str_t        sp_str_map_kernel_pad(sp_str_map_context_t* context);
 SP_API sp_str_t        sp_str_map_kernel_to_upper(sp_str_map_context_t* context);
 SP_API sp_str_t        sp_str_map_kernel_to_lower(sp_str_map_context_t* context);
-SP_API sp_str_t        sp_str_map_kernel_capitalize_words(sp_str_map_context_t* context);
+SP_API sp_str_t        sp_str_map_kernel_pascal_case(sp_str_map_context_t* context);
 SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void* b);
+SP_API void            sp_str_builder_append_utf8(sp_str_builder_t* builder, u32 codepoint);
+SP_API void            sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity);
+SP_API void            sp_str_builder_add_capacity(sp_str_builder_t* builder, u32 amount);
+SP_API void            sp_str_builder_indent(sp_str_builder_t* builder);
+SP_API void            sp_str_builder_dedent(sp_str_builder_t* builder);
+SP_API void            sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
+SP_API void            sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
+SP_API void            sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
+SP_API void            sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...);
+SP_API void            sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...);
+SP_API void            sp_str_builder_new_line(sp_str_builder_t* builder);
+SP_API sp_str_t        sp_str_builder_move(sp_str_builder_t* builder);
+SP_API sp_str_t        sp_str_builder_write(sp_str_builder_t* builder);
+SP_API c8*             sp_str_builder_write_cstr(sp_str_builder_t* builder);
 
 
 // ██╗      ██████╗  ██████╗
@@ -4819,9 +4856,9 @@ void sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length) {
 }
 
 void sp_cstr_copy_to_sized(const c8* str, u32 length, c8* buffer, u32 buffer_length) {
-  if (!str) return;
-  if (!buffer) return;
-  if (!buffer_length) return;
+  sp_require(str);
+  sp_require(buffer);
+  sp_require(buffer_length);
 
   // @bad
   u32 copy_length = SP_MIN(length, buffer_length - 1);
@@ -4832,33 +4869,215 @@ void sp_cstr_copy_to_sized(const c8* str, u32 length, c8* buffer, u32 buffer_len
 }
 
 bool sp_cstr_equal(const c8* a, const c8* b) {
-  u32 len_a = sp_cstr_len(a);
-  u32 len_b = sp_cstr_len(b);
-  if (len_a != len_b) return false;
+  u32 la = sp_cstr_len(a);
+  u32 lb = sp_cstr_len(b);
+  if (la != lb) return false;
 
-  return sp_mem_is_equal(a, b, len_a);
+  return sp_mem_is_equal(a, b, la);
 }
 
 u32 sp_cstr_len(const c8* str) {
-  u32 len = 0;
-  if (str) {
-    while (str[len]) len++;
-  }
+  sp_require_as(str, 0);
 
+  u32 len = 0;
+  while (str[len]) len++;
   return len;
 }
 
 u32 sp_cstr_len_sized(const c8* str, u32 n) {
-  u32 len = 0;
-  if (str) {
-    while (len < n && str[len]) len++;
-  }
+  sp_require_as(str, 0);
 
+  u32 len = 0;
+  while (len < n && str[len]) len++;
   return len;
 }
 
 c8* sp_wstr_to_cstr(c16* str16, u32 len) {
   return sp_os_wstr_to_cstr(str16, len);
+}
+
+c8 sp_c8_to_lower(c8 c) {
+  return (c >= 'A' && c <= 'Z') ? (c + 32) : (c);
+}
+
+c8 sp_c8_to_upper(c8 c) {
+  return (c >= 'a' && c <= 'z') ? (c - 32) : (c);
+}
+
+u8 sp_utf8_num_bytes_from_byte(u8 byte) {
+  if (byte < SP_UTF8_2_BYTE_MIN) return 1;
+  if ((byte & 0xE0) == 0xC0) return 2;
+  if ((byte & 0xF0) == 0xE0) return 3;
+  if ((byte & 0xF8) == 0xF0) return 4;
+  return 0;
+}
+
+u8 sp_utf8_num_bytes_from_ptr(const u8* ptr) {
+  if (!ptr) return 0;
+  return sp_utf8_num_bytes_from_byte(*ptr);
+}
+
+u8 sp_utf8_num_bytes_from_codepoint(u32 codepoint) {
+  if (codepoint < SP_UTF8_2_BYTE_MIN) return 1;
+  if (codepoint < SP_UTF8_3_BYTE_MIN) return 2;
+  if (codepoint < SP_UTF8_4_BYTE_MIN) return 3;
+  if (codepoint <= SP_UTF8_MAX)       return 4;
+  return 0;
+}
+
+bool sp_utf8_is_cont(u8 b) {
+  return (b & 0xC0) == 0x80;
+}
+
+bool sp_utf8_is_surrogate(u32 codepoint) {
+  return (codepoint >= SP_UTF8_SURROGATE_MIN) && (codepoint <= SP_UTF8_SURROGATE_MAX);
+}
+
+bool sp_utf8_is_bounds_ok(u32 codepoint, u8 len) {
+  if (codepoint > SP_UTF8_MAX) return false;
+  switch (len) {
+    case 2: { return (codepoint >= SP_UTF8_2_BYTE_MIN); }
+    case 3: { return (codepoint >= SP_UTF8_3_BYTE_MIN); }
+    case 4: { return (codepoint >= SP_UTF8_4_BYTE_MIN); }
+  }
+
+  return true;
+}
+
+bool sp_utf8_is_byte_ascii(u8 b) {
+  return b < SP_UTF8_ASCII_MAX;
+}
+
+bool sp_utf8_is_codepoint_ascii(u32 codepoint) {
+  return codepoint < SP_UTF8_ASCII_MAX;
+}
+
+u32 sp_utf8_to_lower(u32 codepoint) {
+  if (!sp_utf8_is_codepoint_ascii(codepoint)) return codepoint;
+  return sp_c8_to_lower((c8)codepoint);
+}
+
+u32 sp_utf8_to_upper(u32 codepoint) {
+  if (!sp_utf8_is_codepoint_ascii(codepoint)) return codepoint;
+  return sp_c8_to_upper((c8)codepoint);
+}
+
+
+u32 sp_utf8_mask(u8 byte, u8 mask, u8 shift) {
+  return (u32)((byte & mask) << shift);
+}
+
+u32 sp_utf8_decode(const u8* ptr) {
+  sp_require_as(ptr, SP_UTF8_REPLACEMENT);
+  sp_require_as(!sp_utf8_is_byte_ascii(ptr[0]), ptr[0]);
+
+  switch (sp_utf8_num_bytes_from_byte(ptr[0])) {
+    case 2: return sp_utf8_mask(ptr[0], 0x1F, 6)  | sp_utf8_mask(ptr[1], 0x3F, 0);
+    case 3: return sp_utf8_mask(ptr[0], 0x0F, 12) | sp_utf8_mask(ptr[1], 0x3F, 6)  | sp_utf8_mask(ptr[2], 0x3F, 0);
+    case 4: return sp_utf8_mask(ptr[0], 0x07, 18) | sp_utf8_mask(ptr[1], 0x3F, 12) | sp_utf8_mask(ptr[2], 0x3F, 6) | sp_utf8_mask(ptr[3], 0x3f, 0);
+    default: return SP_UTF8_REPLACEMENT;
+  }
+
+  #undef sp_mask
+}
+
+u8 sp_utf8_encode(u32 cp, u8* out) {
+  sp_require_as(out, 0);
+
+  u8 len = sp_utf8_num_bytes_from_codepoint(cp);
+  switch (len) {
+    case 1: { out[0] = (u8)cp; break; }
+    case 2: { out[0] = 0xC0 | (cp >> 6); out[1] = 0x80 | (cp & 0x3F); break; }
+    case 3: { out[0] = 0xE0 | (cp >> 12); out[1] = 0x80 | ((cp >> 6) & 0x3F); out[2] = 0x80 | (cp & 0x3F); break; }
+    case 4: { out[0] = 0xF0 | (cp >> 18); out[1] = 0x80 | ((cp >> 12) & 0x3F); out[2] = 0x80 | ((cp >> 6) & 0x3F); out[3] = 0x80 | (cp & 0x3F); break; }
+  }
+  return len;
+}
+
+sp_utf8_it_t sp_utf8_it(sp_str_t str) {
+  sp_require_as(!sp_str_empty(str), sp_zero_struct(sp_utf8_it_t));
+
+  return (sp_utf8_it_t) {
+    .str = { .data = (const u8*)str.data, .len = str.len },
+    .index = 0,
+    .codepoint = sp_utf8_decode((const u8*)str.data),
+    .codepoint_len = sp_utf8_num_bytes_from_byte((u8)str.data[0]),
+  };
+}
+
+sp_utf8_it_t sp_utf8_rit(sp_str_t str) {
+  // @spader
+  // the cast is objectively wrong here. i just use s32 in the iterator to give me a sentinel when reverse
+  // iterating. which in and of itself is stupid. double down.
+  sp_require_as(!sp_str_empty(str), sp_zero_struct(sp_utf8_it_t));
+  sp_utf8_it_t it = {
+    .str = { .data = (const u8*)str.data, .len = str.len },
+    .index = (s32)str.len
+  };
+  sp_utf8_it_prev(&it);
+  return it;
+}
+
+bool sp_utf8_it_valid(sp_utf8_it_t* it) {
+  sp_require_as(it, false);
+  return (it->index < (s32)it->str.len) && (it->index >= 0) && (it->codepoint_len);
+}
+
+void sp_utf8_it_next(sp_utf8_it_t* it) {
+  sp_require(it);
+
+  it->index += it->codepoint_len;
+  if (it->index >= it->str.len) {
+    return;
+  }
+
+  it->codepoint = sp_utf8_decode(it->str.data + it->index);
+  it->codepoint_len = sp_utf8_num_bytes_from_byte(it->str.data[it->index]);
+}
+
+void sp_utf8_it_prev(sp_utf8_it_t* it) {
+  sp_require(it);
+
+  while (true) {
+    it->index--;
+    if (it->index < 0) return;
+    if (!sp_utf8_is_cont(it->str.data[it->index])) break;
+  }
+
+  it->codepoint = sp_utf8_decode(it->str.data + it->index);
+  it->codepoint_len = sp_utf8_num_bytes_from_byte(it->str.data[it->index]);
+}
+
+bool sp_utf8_validate(sp_str_t str) {
+  const u8* ptr = (const u8*)str.data;
+  u32 it = 0;
+
+  while (it < str.len) {
+    u8 len = sp_utf8_num_bytes_from_byte(ptr[it]);
+    if (!len) return false;
+    if (it + len > str.len) return false;
+
+    sp_for_range(j, 1, len) {
+      if (!sp_utf8_is_cont(ptr[it + j])) {
+        return false;
+      }
+    }
+
+    u32 codepoint = sp_utf8_decode(&ptr[it]);
+    if (sp_utf8_is_surrogate(codepoint)) return false;
+    if (!sp_utf8_is_bounds_ok(codepoint, len)) return false;
+
+    it += len;
+  }
+  return true;
+}
+
+u32 sp_utf8_num_codepoints(sp_str_t str) {
+  u32 count = 0;
+  sp_str_for_utf8(str, it) {
+    count++;
+  }
+  return count;
 }
 
 c8* sp_str_to_cstr(sp_str_t str) {
@@ -5101,12 +5320,21 @@ void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
 }
 
 void sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str) {
-  sp_str_builder_append(builder, SP_CSTR(str));
+  sp_str_builder_append(builder, sp_str_view(str));
 }
 
 void sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c) {
-  sp_str_builder_append(builder, SP_STR(&c, 1));
+  sp_str_builder_append(builder, sp_str(&c, 1));
 }
+
+void sp_str_builder_append_utf8(sp_str_builder_t* builder, u32 codepoint) {
+  u8 buf[4] = SP_ZERO_INITIALIZE();
+  u8 len = sp_utf8_encode(codepoint, buf);
+  sp_assert(len);
+
+  sp_str_builder_append(builder, sp_str(buf, len));
+}
+
 
 void sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...) {
   va_list args;
@@ -5315,13 +5543,8 @@ sp_str_t sp_str_to_upper(sp_str_t str) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
-  for (u32 i = 0; i < str.len; i++) {
-    c8 c = str.data[i];
-    if (c >= 'a' && c <= 'z') {
-      sp_str_builder_append_c8(&builder, c - 32);
-    } else {
-      sp_str_builder_append_c8(&builder, c);
-    }
+  sp_str_for_utf8(str, it) {
+    sp_str_builder_append_utf8(&builder, sp_utf8_to_upper(it.codepoint));
   }
 
   sp_context_push_allocator(scratch.old_allocator);
@@ -5333,62 +5556,73 @@ sp_str_t sp_str_to_upper(sp_str_t str) {
 }
 
 sp_str_t sp_str_to_lower(sp_str_t str) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
-  for (u32 i = 0; i < str.len; i++) {
-    c8 c = str.data[i];
-    if (c >= 'A' && c <= 'Z') {
-      sp_str_builder_append_c8(&builder, c + 32);
-    } else {
-      sp_str_builder_append_c8(&builder, c);
+  sp_str_for_utf8(str, it) {
+    sp_str_builder_append_utf8(&builder, sp_utf8_to_lower(it.codepoint));
+  }
+
+  sp_context_push_allocator(scratch.old_allocator);
+  sp_str_t result = sp_str_builder_write(&builder);
+  sp_context_pop();
+
+  sp_mem_end_scratch(scratch);
+  return result;
+}
+
+sp_str_t sp_str_to_pascal_case(sp_str_t str) {
+  if (sp_str_empty(str)) return sp_str_lit("");
+
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  bool word = true;
+
+  sp_str_for_utf8(str, it) {
+    switch (it.codepoint) {
+      case ' ':
+      case '\t':
+      case '\n':
+      case '\r': {
+        sp_str_builder_append_utf8(&builder, it.codepoint);
+        word = true;
+        break;
+      }
+      default: {
+        sp_str_builder_append_utf8(&builder, word ?
+          sp_utf8_to_upper(it.codepoint) :
+          sp_utf8_to_lower(it.codepoint)
+        );
+        word = false;
+        break;
+      }
     }
   }
 
-  return sp_str_builder_write(&builder);
+  sp_context_push_allocator(scratch.old_allocator);
+  sp_str_t result = sp_str_builder_write(&builder);
+  sp_context_pop();
+
+  sp_mem_end_scratch(scratch);
+  return result;
 }
 
-sp_str_t sp_str_capitalize_words(sp_str_t str) {
-  if (str.len == 0) return str;
+sp_str_t sp_str_truncate(sp_str_t str, u32 max_len, sp_str_t trailer) {
+  sp_require_as(max_len, sp_str_copy(str));
+  sp_require_as(str.len > max_len, sp_str_copy(str));
+  sp_require_as(trailer.len <= max_len, sp_str_copy(str));
 
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  bool next_cap = true;
-
-  for (u32 i = 0; i < str.len; i++) {
-    c8 c = str.data[i];
-    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-      sp_str_builder_append_c8(&builder, c);
-      next_cap = true;
-    } else if (next_cap && c >= 'a' && c <= 'z') {
-      sp_str_builder_append_c8(&builder, c - 32);
-      next_cap = false;
-    } else if (!next_cap && c >= 'A' && c <= 'Z') {
-      sp_str_builder_append_c8(&builder, c + 32);
-      next_cap = false;
-    } else {
-      sp_str_builder_append_c8(&builder, c);
-      next_cap = false;
-    }
-  }
-
-  return sp_str_builder_write(&builder);
-}
-
-sp_str_t sp_str_truncate(sp_str_t str, u32 n, sp_str_t trailer) {
-  if (!n) return sp_str_copy(str);
-  if (str.len <= n) return sp_str_copy(str);
-  SP_ASSERT(trailer.len <= n);
-
-  str.len = n - trailer.len;
-  return sp_str_concat(str, trailer);
+  return sp_str_concat(sp_str_prefix(str, max_len - trailer.len), trailer);
 }
 
 sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* strs, u32 num_strs, sp_opaque_ptr user_data, sp_str_map_fn_t fn) {
   sp_dyn_array(sp_str_t) results = SP_NULLPTR;
 
-  for (u32 index = 0; index < num_strs; index++) {
-    sp_str_map_context_t context = SP_ZERO_INITIALIZE();
-    context.str = strs[index];
-    context.user_data = user_data;
+  sp_for(it, num_strs) {
+    sp_str_map_context_t context = {
+      .str = strs[it],
+      .user_data = user_data
+    };
     sp_str_t result = fn(&context);
     sp_dyn_array_push(results, result);
   }
@@ -5417,23 +5651,19 @@ sp_str_t sp_str_map_kernel_pad(sp_str_map_context_t* context) {
 }
 
 sp_str_t sp_str_map_kernel_trim(sp_str_map_context_t* context) {
-  SP_UNUSED(context);
   return sp_str_trim(context->str);
 }
 
 sp_str_t sp_str_map_kernel_to_upper(sp_str_map_context_t* context) {
-  SP_UNUSED(context);
   return sp_str_to_upper(context->str);
 }
 
 sp_str_t sp_str_map_kernel_to_lower(sp_str_map_context_t* context) {
-  SP_UNUSED(context);
   return sp_str_to_lower(context->str);
 }
 
-sp_str_t sp_str_map_kernel_capitalize_words(sp_str_map_context_t* context) {
-  SP_UNUSED(context);
-  return sp_str_capitalize_words(context->str);
+sp_str_t sp_str_map_kernel_pascal_case(sp_str_map_context_t* context) {
+  return sp_str_to_pascal_case(context->str);
 }
 
 void sp_str_reduce_kernel_contains(sp_str_reduce_context_t* context) {
@@ -5509,6 +5739,7 @@ sp_dyn_array(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n) {
   sp_str_t longest = sp_str_find_longest_n(strs, n);
   return sp_str_map(strs, n, &longest.len, sp_str_map_kernel_pad);
 }
+
 
 // ███████╗██╗██╗     ███████╗███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗
 // ██╔════╝██║██║     ██╔════╝██╔════╝╚██╗ ██╔╝██╔════╝╚══██╔══╝██╔════╝████╗ ████║
