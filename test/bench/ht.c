@@ -198,14 +198,14 @@ static void kernel_seq_insert(bench_params_t p, bench_data_t* data) {
   switch (p.lib) {
     case BENCH_LIB_SP: {
       sp_for(i, p.n) {
-        sp_ht_insert(data->sp, (s32)i, (u64)i);
+        sp_ht_insert(data->sp, i, i);
         SP_COMPILER_BARRIER();
       }
       break;
     }
     case BENCH_LIB_STB: {
       sp_for(i, p.n) {
-        hmput(data->stb, (s32)i, (u64)i);
+        hmput(data->stb, i, i);
         SP_COMPILER_BARRIER();
       }
       break;
