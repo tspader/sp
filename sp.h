@@ -1270,7 +1270,7 @@ SP_API void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap);
 #define SP_HT_HASH_SEED         0x31415296
 #define SP_HT_INVALID_INDEX     UINT32_MAX
 
-typedef u32 sp_ht_it;
+typedef u32 sp_ht_it_t;
 SP_TYPEDEF_FN(sp_hash_t, sp_ht_hash_key_fn_t, void*, u32);
 SP_TYPEDEF_FN(bool, sp_ht_compare_key_fn_t, void*, void*, u32);
 
@@ -1286,11 +1286,19 @@ typedef struct {
     sp_ht_compare_key_fn_t compare;
   } fn;
   struct {
-    u32 key;
-    u32 value;
+    u64 key;
+    u64 value;
   } size;
-  u32 stride;
-  u32 klpvl;
+  struct {
+    u64 entry;
+    u64 kv;
+    u64 value;
+  } stride;
+  struct {
+    u64 size;
+    u64 capacity;
+  } header;
+  sp_allocator_t allocator;
   u32 tmp_idx;
 } sp_ht_info_t;
 
@@ -1298,7 +1306,7 @@ typedef struct {
 SP_END_EXTERN_C()
 template<typename T> static T* sp_ht_alloc_type(T* key, size_t size) {
   (void)key;
-  return (T*)sp_alloc((u32)size);
+  return (T*)sp_alloc(size);
 }
 SP_BEGIN_EXTERN_C()
 
@@ -1320,165 +1328,241 @@ SP_BEGIN_EXTERN_C()
         __sp_ht_entry(__K, __V)* data; \
         __K tmp_key;                           \
         __V tmp_val;                           \
-        u32 size;                              \
-        u32 capacity;                          \
-        sp_ht_info_t info; \
+        u64 size;                              \
+        u64 capacity;                          \
+        sp_ht_info_t info;                     \
     }*
 
 #define sp_ht_new(__K, __V) SP_NULLPTR
 
-
-#define sp_ht_init(ht)\
-    do {\
-        *((void**)(&(ht))) = sp_alloc(sizeof(*ht));                    \
-                                                                       \
-        (ht)->data = sp_ht_alloc_type((ht)->data, 2 * sizeof((ht)->data[0])); \
-        (ht)->size = 0;                                                \
-        (ht)->capacity = 2;                                            \
-                                                                       \
-        u8* d0 = (u8*)&((ht)->data[0]);                                \
-        u8* d1 = (u8*)&((ht)->data[1]);                                \
-        u32 diff = (d1 - d0);                                          \
-                                                                       \
-        u32 klpvl = (u8*)&(ht->data[0].state) - (u8*)(&ht->data[0]);   \
-                                                                       \
-        (ht)->info.size.key = (u32)(sizeof((ht)->data[0].key));        \
-        (ht)->info.size.value = (u32)(sizeof((ht)->data[0].val));      \
-        (ht)->info.stride = (u32)(diff);                               \
-        (ht)->info.klpvl = (u32)(klpvl);                               \
-        (ht)->info.fn.hash = sp_ht_on_hash_key;                        \
-        (ht)->info.fn.compare = sp_ht_on_compare_key;                  \
-    } while (0)
-
 #define sp_ht_set_fns(ht, hash_fn, cmp_fn) \
-  if (!(ht)) sp_ht_init(ht);             \
-  (ht)->info.fn.hash = (hash_fn);                   \
-  (ht)->info.fn.compare = (cmp_fn);
+  sp_ht_ensure(ht);                        \
+  (ht)->info.fn.hash = (hash_fn);          \
+  (ht)->info.fn.compare = (cmp_fn)
 
-#define sp_ht_size(ht)\
-    ((ht) != NULL ? (ht)->size : 0)
+#define sp_ht_size(ht) \
+  ((ht) ? (ht)->size : 0)
 
-#define sp_ht_capacity(ht)\
-    ((ht) != NULL ? (ht)->capacity : 0)
+#define sp_ht_capacity(ht) \
+  ((ht) ? (ht)->capacity : 0)
 
-#define sp_ht_empty(ht)\
-    ((ht) != NULL ? (ht)->size == 0 : true)
+#define sp_ht_empty(ht) \
+  ((ht) ? (ht)->size == 0 : true)
 
-#define sp_ht_clear(ht)\
-    do {\
-        if ((ht) != NULL) {\
-            for (u32 i = 0; i < (ht)->capacity; ++i) {\
-                (ht)->data[i].state = SP_HT_ENTRY_INACTIVE;\
-            }\
-            (ht)->size = 0;\
-        }\
-    } while (0)
+#define sp_ht_clear(ht)                                    \
+  do {                                                     \
+    if ((ht)) {                                            \
+      for (u32 i = 0; i < (ht)->capacity; ++i) {           \
+        (ht)->data[i].state = SP_HT_ENTRY_INACTIVE;        \
+      }                                                    \
+      (ht)->size = 0;                                      \
+    }                                                      \
+  } while (0)
 
-#define sp_ht_free(ht)\
-    do {\
-        if ((ht) != NULL) {\
-            sp_free((ht)->data);\
-            (ht)->data = NULL;\
-            sp_free(ht);\
-            (ht) = NULL;\
-        }\
-    } while (0)
+#define sp_ht_free(ht)        \
+  do {                        \
+    if ((ht)) {               \
+      sp_free((ht)->data);    \
+      (ht)->data = SP_NULLPTR;\
+      sp_free(ht);            \
+      (ht) = SP_NULLPTR;      \
+    }                         \
+  } while (0)
 
-#define sp_ht_insert(__HT, __K, __V)\
-    do {\
-        if ((__HT) == SP_NULLPTR) {\
-            sp_ht_init((__HT));\
-        }\
-        (__HT)->tmp_key = (__K);\
-        (__HT)->tmp_val = (__V);\
-        sp_ht_info_t __INFO = (__HT)->info;\
-        u32 __CAP = (__HT)->capacity;\
-        f32 __LF = __CAP ? (f32)((__HT)->size) / (f32)(__CAP) : 0.f;\
-        if (__LF >= 0.5f || !__CAP) {\
-            u32 __NEW_CAP = __CAP ? __CAP * 2 : 2;\
-            sp_ht_resize_impl((void**)&(__HT)->data, __CAP, __NEW_CAP, __INFO);\
-            (__HT)->capacity = __NEW_CAP;\
-            __CAP = __NEW_CAP;\
-        }\
-        u32 __EXISTING_IDX = sp_ht_tmp_key_index(__HT);\
-        bool __KEY_EXISTS = (__EXISTING_IDX != SP_HT_INVALID_INDEX);\
-        if (__KEY_EXISTS) {\
-            (__HT)->data[__EXISTING_IDX].val = (__HT)->tmp_val;\
-        } else {\
-            sp_hash_t __HSH = __INFO.fn.hash((void*)(&(__HT)->tmp_key), __INFO.size.key);\
-            u32 __HSH_IDX = __HSH % __CAP;\
-            while ((__HT)->data[__HSH_IDX].state == SP_HT_ENTRY_ACTIVE) {\
-                __HSH_IDX = ((__HSH_IDX + 1) % __CAP);\
-            }\
-            (__HT)->data[__HSH_IDX].key = (__HT)->tmp_key;\
-            (__HT)->data[__HSH_IDX].val = (__HT)->tmp_val;\
-            (__HT)->data[__HSH_IDX].state = SP_HT_ENTRY_ACTIVE;\
-            (__HT)->size++;\
-        }\
-    } while (0)
+#define sp_ht_ensure(ht) \
+  if (!(ht)) { sp_ht_init(ht); }
 
-#define sp_ht_getp(__HT, __K)\
-    (\
-        (__HT) == SP_NULLPTR ? SP_NULLPTR :\
-        ((__HT)->tmp_key = (__K), \
-        ((__HT)->info.tmp_idx = sp_ht_tmp_key_index(__HT), \
-        ((__HT)->info.tmp_idx != SP_HT_INVALID_INDEX ? &(__HT)->data[(__HT)->info.tmp_idx].val : NULL))) \
-    )
+#define sp_ht_data_u8_n(ht, n) ((u8*)(&((ht)->data[n])))
+#define sp_ht_data_u8(ht) sp_ht_data_u8_n(ht, 0)
+#define sp_ht_data_offset_u8(ht, field) (((u8*)(&((ht)->data[0].field))) - sp_ht_data_u8(ht))
+#define sp_ht_field_as_u8(ht, field) ((u8*)&((ht)->field))
+#define sp_ht_as_u8(ht) ((u8*)(ht))
+#define sp_ht_field_offset_u8(ht, field) (sp_ht_field_as_u8(ht, field) - sp_ht_as_u8(ht))
 
-#define sp_ht_exists(__HT, __K) ((__HT) && ((__HT)->tmp_key = (__K), sp_ht_tmp_key_index(__HT) != SP_HT_INVALID_INDEX))
+#define sp_ht_init(ht)                                                                    \
+  do {                                                                                    \
+    (ht)                       = sp_ht_alloc_type(ht, sizeof(*(ht)));                     \
+    (ht)->data                 = sp_ht_alloc_type((ht)->data, 2 * sizeof((ht)->data[0])); \
+    (ht)->info.allocator       = sp_context_get()->allocator;                             \
+    (ht)->size                 = 0;                                                       \
+    (ht)->capacity             = 2;                                                       \
+    (ht)->info.size.key        = sizeof((ht)->data[0].key);                               \
+    (ht)->info.size.value      = sizeof((ht)->data[0].val);                               \
+    (ht)->info.stride.entry    = sp_ht_data_u8_n(ht, 1) - sp_ht_data_u8_n(ht, 0);         \
+    (ht)->info.stride.value    = sp_ht_data_offset_u8(ht, val);                           \
+    (ht)->info.stride.kv       = sp_ht_data_offset_u8(ht, state);                         \
+    (ht)->info.header.size     = sp_ht_field_offset_u8(ht, size);                         \
+    (ht)->info.header.capacity = sp_ht_field_offset_u8(ht, capacity);                     \
+    (ht)->info.fn.hash         = sp_ht_on_hash_key;                                       \
+    (ht)->info.fn.compare      = sp_ht_on_compare_key;                                    \
+  } while (0)
 
-#define sp_ht_key_exists(__HT, __K) sp_ht_exists((__HT), (__K))
+#define sp_ht_insert_ex(ht, k, v)                                      \
+  do {                                                                 \
+    (ht)->tmp_key = (k);                                               \
+    (ht)->tmp_val = (v);                                               \
+    sp_ht_insert_impl(ht, &(ht)->tmp_key, &(ht)->tmp_val, (ht)->info); \
+  } while (0)
 
-#define sp_ht_erase(__HT, __K)\
-    do {\
-        if ((__HT))\
-        {\
-            (__HT)->tmp_key = (__K);\
-            u32 __IDX = sp_ht_tmp_key_index(__HT);\
-            if (__IDX != SP_HT_INVALID_INDEX) {\
-                (__HT)->data[__IDX].state = SP_HT_ENTRY_DELETED;\
-                if ((__HT)->size) (__HT)->size--;\
-            }\
-        }\
-    } while (0)
+#define sp_ht_insert(ht, k, v)  \
+  do {                          \
+    sp_ht_ensure(ht);           \
+    sp_ht_insert_ex(ht, (k), v);  \
+  } while (0)
 
-#define sp_ht_it_valid(__ht, __it)\
-  ((__ht) == NULL ? false : (((__it) < sp_ht_capacity((__ht))) && ((__ht)->data[(__it)].state == SP_HT_ENTRY_ACTIVE)))
+#define sp_ht_get_key_n(ht, n) \
+  (&(ht)->data[(n)].key)
 
-#define sp_ht_it_advance(__ht, __it)\
-  ((__ht) == NULL ? (void)0 : (sp_ht_it_advance_fn((void**)&(__ht)->data, (__ht)->capacity, &(__it), (__ht)->info)))
+#define sp_ht_get_n(ht, n) \
+  (&(ht)->data[(n)].val)
 
-#define sp_ht_it_getp(__ht, __it)\
-  ((__ht) == NULL ? NULL : (&((__ht)->data[(__it)].val)))
+#define sp_ht_get_tmp_n(ht) \
+  sp_ht_get_n(ht, (ht)->info.tmp_idx)
 
-#define sp_ht_it_getkp(__ht, __it)\
-  ((__ht) == NULL ? NULL : (&((__ht)->data[(__it)].key)))
+#define sp_ht_getp(ht, key) \
+  (!(ht) ? SP_NULLPTR : (   \
+    (ht)->tmp_key = (key),  \
+    (ht)->info.tmp_idx = sp_ht_tmp_key_index(ht), \
+    (ht)->info.tmp_idx == SP_HT_INVALID_INDEX ? SP_NULLPTR : sp_ht_get_tmp_n(ht)))
 
-#define sp_ht_it_init(__ht)\
-  ((__ht) == NULL ? 0 : (sp_ht_it_init_fn((void**)&(__ht)->data, (__ht)->capacity, (__ht)->info)))
+#define sp_ht_key_exists(ht, key) \
+  ((ht) && ((ht)->tmp_key = (key), sp_ht_tmp_key_index(ht) != SP_HT_INVALID_INDEX))
 
-#define sp_ht_for(__ht, __it)\
-  for (sp_ht_it __it = sp_ht_it_init(__ht); sp_ht_it_valid(__ht, __it); sp_ht_it_advance(__ht, __it))
+#define sp_ht_exists(ht, key) \
+  sp_ht_key_exists((ht), (key))
 
-#define sp_ht_for_kv(__ht, __it) \
-  for (struct { sp_ht_it idx; __typeof__((__ht)->data[0].key)* key; __typeof__((__ht)->data[0].val)* val; } \
-       __it = { sp_ht_it_init(__ht), sp_ht_it_getkp(__ht, sp_ht_it_init(__ht)), sp_ht_it_getp(__ht, sp_ht_it_init(__ht)) }; \
-       sp_ht_it_valid(__ht, __it.idx); \
-       (sp_ht_it_advance(__ht, __it.idx), __it.key = sp_ht_it_getkp(__ht, __it.idx), __it.val = sp_ht_it_getp(__ht, __it.idx)))
+#define sp_ht_erase(ht, k)                          \
+  do {                                              \
+    if ((ht)) {                                     \
+      (ht)->tmp_key = (k);                          \
+      u32 idx = sp_ht_tmp_key_index(ht);            \
+      if (idx != SP_HT_INVALID_INDEX) {             \
+        (ht)->data[idx].state = SP_HT_ENTRY_DELETED;\
+        if ((ht)->size) (ht)->size--;               \
+      }                                             \
+    }                                               \
+  } while (0)
 
-#define sp_ht_front(__ht)\
-  ((__ht) == NULL || !sp_ht_it_valid(__ht, sp_ht_it_init(__ht)) ? NULL : sp_ht_it_getp(__ht, sp_ht_it_init(__ht)))
+#define sp_ht_it_valid(ht, it) \
+  ((ht) && (it) < sp_ht_capacity(ht) && (ht)->data[(it)].state == SP_HT_ENTRY_ACTIVE)
 
-#define sp_ht_tmp_key_index(__HT) sp_ht_get_key_index_fn((void**)&((__HT)->data), (void*)&((__HT)->tmp_key), (__HT)->capacity, (__HT)->info)
+#define sp_ht_it_advance(ht, it) \
+  ((ht) ? sp_ht_it_advance_fn((void**)&(ht)->data, (ht)->capacity, &(it), (ht)->info) : (void)0)
 
-SP_API u32       sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t info);
-SP_API void      sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info);
-SP_API sp_ht_it  sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info);
-SP_API void      sp_ht_it_advance_fn(void** data, u32 capacity, u32* it, sp_ht_info_t info);
-SP_API sp_hash_t sp_ht_on_hash_key(void* key, u32 size);
-SP_API bool      sp_ht_on_compare_key(void* ka, void* kb, u32 size);
-SP_API sp_hash_t sp_ht_on_hash_str_key(void* key, u32 size);
-SP_API bool      sp_ht_on_compare_str_key(void* ka, void* kb, u32 size);
+#define sp_ht_it_getp(ht, it) \
+  (!(ht) ? SP_NULLPTR : sp_ht_get_n(ht, it))
+
+#define sp_ht_it_getkp(ht, it) \
+  (!(ht) ? SP_NULLPTR : sp_ht_get_key_n(ht, it))
+
+#define sp_ht_it_init(ht) \
+  (!(ht) ? 0 : sp_ht_it_init_fn((void**)&(ht)->data, (ht)->capacity, (ht)->info))
+
+#define sp_ht_for(ht, it) \
+  for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it))
+
+#define sp_ht_key_t(ht)   __typeof__((ht)->data[0].key)*
+#define sp_ht_value_t(ht) __typeof__((ht)->data[0].val)*
+
+#define sp_ht_for_kv(ht, it)                                                       \
+  for (                                                                            \
+    struct { sp_ht_it_t idx; sp_ht_key_t(ht) key; sp_ht_value_t(ht) val; } it = {  \
+      sp_ht_it_init(ht),                                                           \
+      sp_ht_it_getkp(ht, sp_ht_it_init(ht)),                                       \
+      sp_ht_it_getp(ht, sp_ht_it_init(ht))                                         \
+    };                                                                             \
+    sp_ht_it_valid(ht, it.idx);                                                    \
+    (sp_ht_it_advance(ht, it.idx),                                                 \
+     it.key = sp_ht_it_getkp(ht, it.idx),                                          \
+     it.val = sp_ht_it_getp(ht, it.idx))                                           \
+  )
+
+#define sp_ht_front(ht) \
+  (!(ht) || !sp_ht_it_valid(ht, sp_ht_it_init(ht)) ? SP_NULLPTR : sp_ht_it_getp(ht, sp_ht_it_init(ht)))
+
+#define sp_ht_tmp_key_index(ht) \
+  sp_ht_get_key_index_fn((void**)&(ht)->data, (void*)&(ht)->tmp_key, (ht)->capacity, (ht)->info)
+
+
+// STR_HT
+#define sp_str_ht(t) sp_ht(sp_str_t, t)
+
+#define sp_str_ht_ensure(ht) \
+  if (!(ht)) sp_str_ht_init(ht)
+
+#define sp_str_ht_init(ht)                       \
+  sp_ht_init(ht);                                \
+  (ht)->info.fn.hash = sp_ht_on_hash_str_key;    \
+  (ht)->info.fn.compare = sp_ht_on_compare_str_key
+
+#define sp_str_ht_insert(ht, key, value)  \
+  do {                                    \
+    sp_str_ht_ensure(ht);                 \
+    sp_ht_insert_ex(ht, key, value);      \
+  } while (0)
+
+#define sp_str_ht_get(ht, key)      sp_ht_getp(ht, key)
+#define sp_str_ht_exists(ht, key)   sp_ht_exists(ht, key)
+#define sp_str_ht_erase(ht, key)    sp_ht_erase(ht, key)
+#define sp_str_ht_size(ht)          sp_ht_size(ht)
+#define sp_str_ht_capacity(ht)      sp_ht_capacity(ht)
+#define sp_str_ht_empty(ht)         sp_ht_empty(ht)
+#define sp_str_ht_clear(ht)         sp_ht_clear(ht)
+#define sp_str_ht_free(ht)          sp_ht_free(ht)
+#define sp_str_ht_front(ht)         sp_ht_front(ht)
+#define sp_str_ht_for(ht, it)       sp_ht_for(ht, it)
+#define sp_str_ht_for_kv(ht, it)    sp_ht_for_kv(ht, it)
+#define sp_str_ht_it_init(ht)       sp_ht_it_init(ht)
+#define sp_str_ht_it_valid(ht, it)  sp_ht_it_valid(ht, it)
+#define sp_str_ht_it_advance(ht, it) sp_ht_it_advance(ht, it)
+#define sp_str_ht_it_getp(ht, it)   sp_ht_it_getp(ht, it)
+#define sp_str_ht_it_getkp(ht, it)  sp_ht_it_getkp(ht, it)
+
+// CSTR_HT
+#define sp_cstr_ht(t) sp_ht(const c8*, t)
+
+#define sp_cstr_ht_ensure(ht) \
+  if (!(ht)) sp_cstr_ht_init(ht)
+
+#define sp_cstr_ht_init(ht)                       \
+  sp_ht_init(ht);                                 \
+  (ht)->info.fn.hash = sp_ht_on_hash_cstr_key;    \
+  (ht)->info.fn.compare = sp_ht_on_compare_cstr_key
+
+#define sp_cstr_ht_insert(ht, key, value)  \
+  do {                                     \
+    sp_cstr_ht_ensure(ht);                 \
+    sp_ht_insert_ex(ht, key, value);       \
+  } while (0)
+
+#define sp_cstr_ht_get(ht, key)       sp_ht_getp(ht, key)
+#define sp_cstr_ht_exists(ht, key)    sp_ht_exists(ht, key)
+#define sp_cstr_ht_erase(ht, key)     sp_ht_erase(ht, key)
+#define sp_cstr_ht_size(ht)           sp_ht_size(ht)
+#define sp_cstr_ht_capacity(ht)       sp_ht_capacity(ht)
+#define sp_cstr_ht_empty(ht)          sp_ht_empty(ht)
+#define sp_cstr_ht_clear(ht)          sp_ht_clear(ht)
+#define sp_cstr_ht_free(ht)           sp_ht_free(ht)
+#define sp_cstr_ht_front(ht)          sp_ht_front(ht)
+#define sp_cstr_ht_for(ht, it)        sp_ht_for(ht, it)
+#define sp_cstr_ht_for_kv(ht, it)     sp_ht_for_kv(ht, it)
+#define sp_cstr_ht_it_init(ht)        sp_ht_it_init(ht)
+#define sp_cstr_ht_it_valid(ht, it)   sp_ht_it_valid(ht, it)
+#define sp_cstr_ht_it_advance(ht, it) sp_ht_it_advance(ht, it)
+#define sp_cstr_ht_it_getp(ht, it)    sp_ht_it_getp(ht, it)
+#define sp_cstr_ht_it_getkp(ht, it)   sp_ht_it_getkp(ht, it)
+
+SP_API u32         sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t info);
+SP_API void        sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info);
+SP_API void        sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info);
+SP_API sp_ht_it_t  sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info);
+SP_API void        sp_ht_it_advance_fn(void** data, u32 capacity, u32* it, sp_ht_info_t info);
+SP_API sp_hash_t   sp_ht_on_hash_key(void* key, u32 size);
+SP_API bool        sp_ht_on_compare_key(void* ka, void* kb, u32 size);
+SP_API sp_hash_t   sp_ht_on_hash_str_key(void* key, u32 size);
+SP_API bool        sp_ht_on_compare_str_key(void* ka, void* kb, u32 size);
+SP_API sp_hash_t   sp_ht_on_hash_cstr_key(void* key, u32 size);
+SP_API bool        sp_ht_on_compare_cstr_key(void* ka, void* kb, u32 size);
 
 // ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗
 // ██╔════╝╚══██╔══╝██╔═██╗██║████╗  ██║██╔════╝
@@ -3367,14 +3451,29 @@ sp_hash_t sp_ht_on_hash_key(void *key, u32 size) {
 }
 
 sp_hash_t sp_ht_on_hash_str_key(void* key, u32 size) {
-  sp_str_t* str = (sp_str_t*) key;
+  (void)size;
+  sp_str_t* str = (sp_str_t*)key;
   return sp_hash_str(*str);
 }
 
 bool sp_ht_on_compare_str_key(void* ka, void* kb, u32 size) {
-  sp_str_t* sa = (sp_str_t*) ka;
-  sp_str_t* sb = (sp_str_t*) kb;
+  (void)size;
+  sp_str_t* sa = (sp_str_t*)ka;
+  sp_str_t* sb = (sp_str_t*)kb;
   return sp_str_equal(*sa, *sb);
+}
+
+sp_hash_t sp_ht_on_hash_cstr_key(void* key, u32 size) {
+  (void)size;
+  const c8** str = (const c8**)key;
+  return sp_hash_cstr(*str);
+}
+
+bool sp_ht_on_compare_cstr_key(void* ka, void* kb, u32 size) {
+  (void)size;
+  const c8** sa = (const c8**)ka;
+  const c8** sb = (const c8**)kb;
+  return sp_cstr_equal(*sa, *sb);
 }
 
 u32 sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t info) {
@@ -3385,8 +3484,8 @@ u32 sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t in
 
   for (u32 c = 0; c < capacity; ++c) {
     u32 i = (hash_idx + c) % capacity;
-    u32 offset = i * info.stride;
-    sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)(*data) + offset + info.klpvl);
+    u32 offset = i * info.stride.entry;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)(*data) + offset + info.stride.kv);
 
     if (state == SP_HT_ENTRY_INACTIVE) {
       break;
@@ -3405,36 +3504,75 @@ u32 sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t in
 void sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info) {
   if (!data || new_cap <= old_cap) return;
 
+  sp_context_push_allocator(info.allocator);
+
   void* old_data = *data;
-  void* new_data = sp_alloc(new_cap * info.stride);
+  void* new_data = sp_alloc(new_cap * info.stride.entry);
 
   for (u32 i = 0; i < old_cap; ++i) {
-    u32 offset = i * info.stride;
-    sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)old_data + offset + info.klpvl);
+    u32 offset = i * info.stride.entry;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)old_data + offset + info.stride.kv);
     if (state != SP_HT_ENTRY_ACTIVE) continue;
 
     void* old_key = (c8*)old_data + offset;
     sp_hash_t hash = info.fn.hash(old_key, info.size.key);
     u32 new_idx = hash % new_cap;
 
-    while (*(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride + info.klpvl) == SP_HT_ENTRY_ACTIVE) {
+    while (*(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride.entry + info.stride.kv) == SP_HT_ENTRY_ACTIVE) {
       new_idx = (new_idx + 1) % new_cap;
     }
 
-    sp_mem_copy((c8*)old_data + offset, (c8*)new_data + new_idx * info.stride, info.klpvl);
-    *(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride + info.klpvl) = SP_HT_ENTRY_ACTIVE;
+    sp_mem_copy((c8*)old_data + offset, (c8*)new_data + new_idx * info.stride.entry, info.stride.kv);
+    *(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride.entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
   }
 
   sp_free(old_data);
   *data = new_data;
+  sp_context_pop();
 }
 
-sp_ht_it sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info) {
+void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
+  sp_context_push_allocator(info.allocator);
+  u8* base = (u8*)ht;
+  void** data = (void**)base;
+  u32* size = (u32*)(base + info.header.size);
+  u32* capacity = (u32*)(base + info.header.capacity);
+
+  u32 cap = *capacity;
+  f32 load = cap ? (f32)(*size) / (f32)cap : 0.f;
+  if (load >= 0.5f || !cap) {
+    u32 new_cap = cap ? cap * 2 : 2;
+    sp_ht_resize_impl(data, cap, new_cap, info);
+    *capacity = new_cap;
+    cap = new_cap;
+  }
+
+  u32 existing = sp_ht_get_key_index_fn(data, key, cap, info);
+  if (existing != SP_HT_INVALID_INDEX) {
+    u8* entry = (u8*)(*data) + existing * info.stride.entry;
+    sp_mem_copy(val, entry + info.stride.value, info.size.value);
+  }
+  else {
+    sp_hash_t hash = info.fn.hash(key, info.size.key);
+    u32 idx = hash % cap;
+    while (*(sp_ht_entry_state*)((u8*)(*data) + idx * info.stride.entry + info.stride.kv) == SP_HT_ENTRY_ACTIVE) {
+      idx = (idx + 1) % cap;
+    }
+    u8* entry = (u8*)(*data) + idx * info.stride.entry;
+    sp_mem_copy(key, entry, info.size.key);
+    sp_mem_copy(val, entry + info.stride.value, info.size.value);
+    *(sp_ht_entry_state*)(entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
+    (*size)++;
+  }
+  sp_context_pop();
+}
+
+sp_ht_it_t sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info) {
   if (!data || !*data) return 0;
-  sp_ht_it it = 0;
+  sp_ht_it_t it = 0;
   for (; it < capacity; ++it) {
-    u32 offset = it * info.stride;
-    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + info.klpvl);
+    u32 offset = it * info.stride.entry;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + info.stride.kv);
     if (state == SP_HT_ENTRY_ACTIVE) {
       break;
     }
@@ -3446,8 +3584,8 @@ void sp_ht_it_advance_fn(void** data, u32 capacity, u32* it, sp_ht_info_t info) 
   if (!data || !*data) return;
   (*it)++;
   for (; *it < capacity; ++*it) {
-    u32 offset = *it * info.stride;
-    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + info.klpvl);
+    u32 offset = *it * info.stride.entry;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + info.stride.kv);
     if (state == SP_HT_ENTRY_ACTIVE) {
       break;
     }
@@ -5110,7 +5248,7 @@ void sp_utf8_it_next(sp_utf8_it_t* it) {
   sp_require(it);
 
   it->index += it->codepoint_len;
-  if (it->index >= it->str.len) {
+  if (it->index >= (s32)it->str.len) {
     return;
   }
 
@@ -5301,7 +5439,7 @@ sp_str_t sp_str_suffix(sp_str_t str, s32 len) {
 
 sp_str_t sp_str_sub(sp_str_t str, s32 index, s32 len) {
   sp_str_t substr = sp_str(str.data + index, (u32)len);
-  SP_ASSERT(index + len <= str.len);
+  SP_ASSERT(index + len <= (s32)str.len);
   return substr;
 }
 
@@ -5503,7 +5641,7 @@ sp_str_t sp_str_pad(sp_str_t str, u32 n) {
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&builder, str);
-  for (u32 index = 0; index < delta; index++) {
+  for (s32 index = 0; index < delta; index++) {
     sp_str_builder_append_c8(&builder, ' ');
   }
 
@@ -7875,7 +8013,7 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
   dst.env.mode = src->env.mode;
 
   sp_env_table_t ht = src->env.env.vars;
-  for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
+  for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
     sp_str_t key = *sp_ht_it_getkp(ht, it);
     sp_str_t val = *sp_ht_it_getp(ht, it);
     sp_env_insert(&dst.env.env, key, val);
@@ -9922,7 +10060,7 @@ void sp_elf_symtab_sort(sp_elf_section_t* symtab, sp_elf_t* elf) {
   Elf64_Sym* syms = (Elf64_Sym*)symtab->buffer.data;
   Elf64_Sym* new_syms = sp_alloc_n(Elf64_Sym, count);
   u32 local_idx = 0;
-  u32 global_idx = count;
+  (void)count;
 
   for (u32 i = 0; i < count; i++) {
     if (ELF64_ST_BIND(syms[i].st_info) == STB_LOCAL) {
