@@ -9,21 +9,21 @@ UTEST(stress, dyn_array) {
 
   const s32 count = 100000;
 
-  for (s32 i = 0; i < count; i++) {
-      sp_dyn_array_push(arr, (u64)i * 12345);
+  sp_for(i, count) {
+    sp_dyn_array_push(arr, (u64)i * 12345);
   }
 
   EXPECT_EQ(sp_dyn_array_size(arr), count);
 
-  for (s32 i = 0; i < count; i++) {
-      EXPECT_EQ(arr[i], (u64)i * 12345);
+  sp_for(i, count) {
+    EXPECT_EQ(arr[i], (u64)i * 12345);
   }
 
   sp_dyn_array_clear(arr);
   EXPECT_EQ(sp_dyn_array_size(arr), 0);
 
-  for (s32 i = 0; i < 1000; i++) {
-      sp_dyn_array_push(arr, (u64)i);
+  sp_for(i, 1000) {
+    sp_dyn_array_push(arr, (u64)i);
   }
   EXPECT_EQ(sp_dyn_array_size(arr), 1000);
 
@@ -35,27 +35,27 @@ UTEST(stress, hash_table) {
 
   const s32 count = 10000;
 
-  for (u64 i = 0; i < count; i++) {
-      sp_ht_insert(ht, i, i * i);
+  sp_for(i, count) {
+    sp_ht_insert(ht, (u64)i, (u64)i * (u64)i);
   }
 
   EXPECT_EQ(sp_ht_size(ht), count);
 
-  for (s32 i = 0; i < 100; i++) {
-      u64 key = rand() % count;
-      EXPECT_TRUE(sp_ht_exists(ht, key));
-      EXPECT_EQ(*sp_ht_getp(ht, key), key * key);
+  sp_for(i, 100) {
+    u64 key = rand() % count;
+    EXPECT_TRUE(sp_ht_exists(ht, key));
+    EXPECT_EQ(*sp_ht_getp(ht, key), key * key);
   }
 
   for (u64 i = 0; i < count; i += 2) {
-      sp_ht_erase(ht, i);
+    sp_ht_erase(ht, i);
   }
 
   EXPECT_EQ(sp_ht_size(ht), count / 2);
 
   for (u64 i = 1; i < count; i += 2) {
-      EXPECT_TRUE(sp_ht_exists(ht, i));
-      EXPECT_EQ(*sp_ht_getp(ht, i), i * i);
+    EXPECT_TRUE(sp_ht_exists(ht, i));
+    EXPECT_EQ(*sp_ht_getp(ht, i), i * i);
   }
 
   sp_ht_free(ht);
@@ -64,15 +64,15 @@ UTEST(stress, hash_table) {
 UTEST(stress, ring_buffer) {
   sp_rb(u64) rq = SP_NULLPTR;
 
-  for (u64 i = 0; i < 1000; i++) {
-    sp_rb_push(rq, i);
+  sp_for(i, 1000) {
+    sp_rb_push(rq, (u64)i);
   }
 
   EXPECT_EQ(1000, sp_rb_size(rq));
 
-  for (u64 i = 0; i < 500; i++) {
+  sp_for(i, 500) {
     u64* val = sp_rb_peek(rq);
-    EXPECT_EQ(*val, i);
+    EXPECT_EQ(*val, (u64)i);
     sp_rb_pop(rq);
   }
 
@@ -98,13 +98,13 @@ UTEST(stress, ring_buffer_continuous_overwrite) {
 
   s32 cap = sp_rb_capacity(rq);
 
-  for (s32 i = 0; i < 10000; i++) {
+  sp_for(i, 10000) {
     sp_rb_push(rq, i);
   }
 
   EXPECT_EQ(cap, sp_rb_size(rq));
 
-  for (s32 i = 0; i < cap; i++) {
+  sp_for(i, cap) {
     s32* val = sp_rb_peek(rq);
     EXPECT_EQ(*val, 10000 - cap + i);
     sp_rb_pop(rq);
@@ -123,10 +123,10 @@ UTEST(stress, sp_dyn_array_push_f) {
 
   large_struct_t* arr = SP_NULLPTR;
 
-  for (u32 i = 0; i < 1000; i++) {
+  sp_for(i, 1000) {
     large_struct_t item;
     item.id = i;
-    for (int j = 0; j < 256; j++) {
+    sp_for(j, 256) {
       item.data[j] = (c8)((i + j) % 256);
     }
     sp_dyn_array_push_f((void**)&arr, &item, sizeof(large_struct_t));
@@ -134,9 +134,9 @@ UTEST(stress, sp_dyn_array_push_f) {
 
   EXPECT_EQ(sp_dyn_array_size(arr), 1000);
 
-  for (u32 i = 0; i < 1000; i++) {
-    EXPECT_EQ(arr[i].id, i);
-    for (int j = 0; j < 256; j++) {
+  sp_for(i, 1000) {
+    EXPECT_EQ(arr[i].id, (u32)i);
+    sp_for(j, 256) {
       EXPECT_EQ(arr[i].data[j], (c8)((i + j) % 256));
     }
   }
@@ -154,7 +154,7 @@ typedef struct {
 s32 sp_spin_lock_stress_thread(void* userdata) {
   sp_spin_lock_stress_thread_data_t* data = (sp_spin_lock_stress_thread_data_t*)userdata;
 
-  for (s32 i = 0; i < data->iterations; i++) {
+  sp_for(i, data->iterations) {
     sp_spin_lock(data->lock);
     s32 old_value = *data->shared_counter;
     sp_spin_pause();
@@ -175,7 +175,7 @@ UTEST(stress, sp_spin_lock) {
   sp_spin_lock_stress_thread_data_t thread_data[SP_SPIN_LOCK_STRESS_THREADS];
   sp_thread_t threads[SP_SPIN_LOCK_STRESS_THREADS];
 
-  for (s32 i = 0; i < SP_SPIN_LOCK_STRESS_THREADS; i++) {
+  sp_for(i, SP_SPIN_LOCK_STRESS_THREADS) {
     thread_data[i].lock = &lock;
     thread_data[i].shared_counter = &shared_counter;
     thread_data[i].iterations = SP_SPIN_LOCK_STRESS_ITERATIONS;
@@ -184,7 +184,7 @@ UTEST(stress, sp_spin_lock) {
     sp_thread_init(&threads[i], sp_spin_lock_stress_thread, &thread_data[i]);
   }
 
-  for (s32 i = 0; i < SP_SPIN_LOCK_STRESS_THREADS; i++) {
+  sp_for(i, SP_SPIN_LOCK_STRESS_THREADS) {
     sp_thread_join(&threads[i]);
   }
 
@@ -201,7 +201,7 @@ typedef struct {
 s32 sp_atomic_s32_stress_thread(void* userdata) {
   sp_atomic_s32_stress_data_t* data = (sp_atomic_s32_stress_data_t*)userdata;
 
-  for (s32 i = 0; i < data->iterations; i++) {
+  sp_for(i, data->iterations) {
     s32 op = i % 4;
     switch (op) {
       case 0: sp_atomic_s32_add(data->counter, 1); break;
@@ -226,14 +226,14 @@ UTEST(stress, sp_atomic_s32) {
   sp_atomic_s32_stress_data_t thread_data[8];
   sp_thread_t threads[8];
 
-  for (s32 i = 0; i < num_threads; i++) {
+  sp_for(i, num_threads) {
     thread_data[i].counter = &counter;
     thread_data[i].iterations = iterations;
     thread_data[i].thread_id = i;
     sp_thread_init(&threads[i], sp_atomic_s32_stress_thread, &thread_data[i]);
   }
 
-  for (s32 i = 0; i < num_threads; i++) {
+  sp_for(i, num_threads) {
     sp_thread_join(&threads[i]);
   }
 
@@ -241,80 +241,115 @@ UTEST(stress, sp_atomic_s32) {
   EXPECT_TRUE(final >= 0);
 }
 
+typedef enum {
+  CONTEXT_STRESS_FRAGMENTATION,
+  CONTEXT_STRESS_NESTING,
+  CONTEXT_STRESS_REALLOC,
+  CONTEXT_STRESS_ALIGNMENT,
+} context_stress_kind_t;
+
 UTEST(stress, sp_context) {
   srand(69);
 
+  const s32 total_ops = 250000;
   sp_tls_rt_t* rt = sp_tls_rt_get();
-  u32 initial_index = rt->index;
   sp_mem_arena_t* arena = sp_mem_get_scratch_arena();
+  u32 initial_bytes = sp_mem_arena_bytes_used(arena);
 
-  const s32 iterations = 1000;
-  u64 sum = 0;
+  sp_for(op, total_ops) {
+    context_stress_kind_t scenario = (context_stress_kind_t)(rand() % 4);
 
-  for (s32 iter = 0; iter < iterations; iter++) {
-    // 1. Push context with libc allocator
-    sp_context_push_allocator(sp_mem_libc_new());
+    switch (scenario) {
+      case CONTEXT_STRESS_FRAGMENTATION: {
+        sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+        s32 num_allocs = 10 + (rand() % 200);
+        u8** ptrs = sp_alloc_n(u8*, num_allocs);
+        u32* sizes = sp_alloc_n(u32, num_allocs);
 
-    // 2. Libc allocations - track with dynamic array (uses libc allocator)
-    s32 libc_count = 512 + (rand() % 513);  // 512-1024
-    sp_da(u32*) libc_allocs = SP_NULLPTR;
+        sp_for(it, num_allocs) {
+          sizes[it] = 1 + (rand() % 1024);
+          ptrs[it] = sp_alloc(sizes[it]);
+          u8 pattern = (u8)((it + op) & 0xFF);
+          sp_mem_fill_u8(ptrs[it], sizes[it], pattern);
+        }
 
-    for (s32 i = 0; i < libc_count; i++) {
-      s32 size = 4 + (rand() % 509);  // 4-512 u32s
-      u32* buf = sp_alloc(size * sizeof(u32));
-      for (s32 j = 0; j < size; j++) {
-        buf[j] = (u32)(iter + i + j);
-        sum += buf[j];
+        sp_for(j, num_allocs) {
+          u8 expected = (u8)((j + op) & 0xFF);
+          sp_for(k, sizes[j]) {
+            if (ptrs[j][k] != expected) {
+              ASSERT_TRUE(false);
+            }
+          }
+        }
+
+        sp_mem_end_scratch(scratch);
+        break;
       }
-      sp_dyn_array_push(libc_allocs, buf);
-    }
+      case CONTEXT_STRESS_NESTING: {
+        sp_mem_scratch_t s1 = sp_mem_begin_scratch();
+        u64* outer = sp_alloc(sizeof(u64));
+        *outer = 0xCAFEBABE;
+        {
+          sp_mem_scratch_t s2 = sp_mem_begin_scratch();
+          u64* inner = sp_alloc(sizeof(u64));
+          *inner = 0xDEADBEEF;
+          {
+             sp_mem_scratch_t s3 = sp_mem_begin_scratch();
+             u8* big = sp_alloc(5000);
+             sp_mem_fill_u8(big, 5000, 0xAA);
 
-    // 3. Begin scratch
-    sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+             ASSERT_EQ(*outer, 0xCAFEBABE);
+             ASSERT_EQ(*inner, 0xDEADBEEF);
+             ASSERT_EQ(big[4999], 0xAA);
+             sp_mem_end_scratch(s3);
+          }
+          ASSERT_EQ(*inner, 0xDEADBEEF);
+          ASSERT_EQ(*outer, 0xCAFEBABE);
+          sp_mem_end_scratch(s2);
+        }
+        ASSERT_EQ(*outer, 0xCAFEBABE);
 
-    // 4. Scratch allocations - use fixed-size array since we know max count
-    // Limit: 1MB scratch arena, so max ~256 allocs of ~256 u32s = 256KB
-    s32 scratch_count = 64 + (rand() % 193);  // 64-256
-    u32* scratch_ptrs[256];
-    s32 scratch_sizes[256];
-
-    for (s32 i = 0; i < scratch_count; i++) {
-      s32 size = 4 + (rand() % 253);  // 4-256 u32s (16-1024 bytes)
-      u32* buf = sp_alloc(size * sizeof(u32));
-      for (s32 j = 0; j < size; j++) {
-        buf[j] = (u32)(iter * 1000 + i + j);
-        sum += buf[j];
+        sp_mem_end_scratch(s1);
+        break;
       }
-      scratch_ptrs[i] = buf;
-      scratch_sizes[i] = size;
-    }
+      case CONTEXT_STRESS_REALLOC: {
+        sp_mem_scratch_t s = sp_mem_begin_scratch();
+        u8* ptr = sp_alloc(16);
 
-    // 5. Access all scratch buffers (for ASAN)
-    for (s32 i = 0; i < scratch_count; i++) {
-      u32* buf = scratch_ptrs[i];
-      s32 size = scratch_sizes[i];
-      for (s32 j = 0; j < size; j++) {
-        sum += buf[j];
+        sp_mem_fill_u8(ptr, 16, 0x11);
+        ptr = sp_realloc(ptr, 32);
+        sp_for(it, 16) EXPECT_EQ(ptr[it], 0x11);
+
+        sp_mem_fill_u8(ptr + 16, 16, 0x22);
+        ptr = sp_realloc(ptr, 8);
+        sp_for(it, 8) ASSERT_EQ(ptr[it], 0x11);
+
+        ptr = sp_realloc(ptr, 8000);
+        sp_for(it, 8) ASSERT_EQ(ptr[it], 0x11);
+
+        sp_mem_end_scratch(s);
+        break;
+      }
+      case CONTEXT_STRESS_ALIGNMENT: {
+        sp_mem_scratch_t s = sp_mem_begin_scratch();
+
+        sp_for(it, 50) {
+          u8* b = sp_alloc_type(u8);
+          *b = 0xFF;
+
+          u64* aligned = sp_alloc_type(u64);
+          uintptr_t address = (uintptr_t)aligned;
+          EXPECT_EQ(address % SP_MEM_ALIGNMENT, 0);
+          *aligned = (u64)it;
+        }
+
+        sp_mem_end_scratch(s);
+        break;
       }
     }
-
-    // 6. End scratch
-    sp_mem_end_scratch(scratch);
-
-    // 7. Free libc allocations
-    sp_dyn_array_for(libc_allocs, i) {
-      sp_free(libc_allocs[i]);
-    }
-    sp_dyn_array_free(libc_allocs);
-
-    // 8. Pop context
-    sp_context_pop();
   }
 
-  // Verify scratch arena is clean
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
-  EXPECT_EQ(rt->index, initial_index);
-  SP_UNUSED(sum);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), initial_bytes);
 }
 
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
