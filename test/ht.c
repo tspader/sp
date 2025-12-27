@@ -569,13 +569,13 @@ UTEST(combined, multiple_arrays_in_hash_table) {
 
 UTEST(ht_front, null_table) {
   sp_ht(int, int) ht = NULL;
-  EXPECT_EQ(sp_ht_front(ht), NULL);
+  EXPECT_EQ(sp_ht_front(ht), SP_NULLPTR);
 }
 
 UTEST(ht_front, empty_table) {
   sp_ht(int, int) ht = SP_NULLPTR;
   sp_ht_init(ht);
-  EXPECT_EQ(sp_ht_front(ht), NULL);
+  EXPECT_EQ(sp_ht_front(ht), SP_NULLPTR);
   sp_ht_free(ht);
 }
 
@@ -584,7 +584,7 @@ UTEST(ht_front, single_item) {
   sp_ht_insert(ht, 42, 100);
 
   int* front = sp_ht_front(ht);
-  EXPECT_NE(front, NULL);
+  EXPECT_NE(front, SP_NULLPTR);
   EXPECT_EQ(*front, 100);
 
   sp_ht_free(ht);
@@ -597,7 +597,7 @@ UTEST(ht_front, multiple_items) {
   sp_ht_insert(ht, 3, 30);
 
   int* front = sp_ht_front(ht);
-  EXPECT_NE(front, NULL);
+  EXPECT_NE(front, SP_NULLPTR);
 
   bool found = false;
   sp_ht_for(ht, it) {
@@ -617,19 +617,19 @@ UTEST(ht_front, after_erase) {
   sp_ht_insert(ht, 2, 20);
 
   int* first_front = sp_ht_front(ht);
-  EXPECT_NE(first_front, NULL);
+  EXPECT_NE(first_front, SP_NULLPTR);
 
   int first_val = *first_front;
 
   if (first_val == 10) {
     sp_ht_erase(ht, 1);
     int* new_front = sp_ht_front(ht);
-    EXPECT_NE(new_front, NULL);
+    EXPECT_NE(new_front, SP_NULLPTR);
     EXPECT_EQ(*new_front, 20);
   } else {
     sp_ht_erase(ht, 2);
     int* new_front = sp_ht_front(ht);
-    EXPECT_NE(new_front, NULL);
+    EXPECT_NE(new_front, SP_NULLPTR);
     EXPECT_EQ(*new_front, 10);
   }
 

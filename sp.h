@@ -1294,6 +1294,19 @@ typedef struct {
   u32 tmp_idx;
 } sp_ht_info_t;
 
+#if defined(SP_CPP)
+SP_END_EXTERN_C()
+template<typename T> static T* sp_ht_alloc_type(T* key, size_t size) {
+  (void)key;
+  return (T*)sp_alloc((u32)size);
+}
+SP_BEGIN_EXTERN_C()
+
+#else
+#define sp_ht_alloc_type(key, size) sp_alloc(size)
+#endif
+
+
 
 #define __sp_ht_entry(__K, __V)\
     struct\
@@ -1319,7 +1332,7 @@ typedef struct {
     do {\
         *((void**)(&(ht))) = sp_alloc(sizeof(*ht));                    \
                                                                        \
-        (ht)->data = (__typeof__((ht)->data))sp_alloc(2 * sizeof((ht)->data[0])); \
+        (ht)->data = sp_ht_alloc_type((ht)->data, 2 * sizeof((ht)->data[0])); \
         (ht)->size = 0;                                                \
         (ht)->capacity = 2;                                            \
                                                                        \
@@ -1376,8 +1389,8 @@ typedef struct {
         if ((__HT) == SP_NULLPTR) {\
             sp_ht_init((__HT));\
         }\
-        __typeof__((__HT)->tmp_key) __KEY = (__K);\
-        __typeof__((__HT)->tmp_val) __VAL = (__V);\
+        (__HT)->tmp_key = (__K);\
+        (__HT)->tmp_val = (__V);\
         sp_ht_info_t __INFO = (__HT)->info;\
         u32 __CAP = (__HT)->capacity;\
         f32 __LF = __CAP ? (f32)((__HT)->size) / (f32)(__CAP) : 0.f;\
@@ -1387,19 +1400,18 @@ typedef struct {
             (__HT)->capacity = __NEW_CAP;\
             __CAP = __NEW_CAP;\
         }\
-        (__HT)->tmp_key = __KEY;\
         u32 __EXISTING_IDX = sp_ht_tmp_key_index(__HT);\
         bool __KEY_EXISTS = (__EXISTING_IDX != SP_HT_INVALID_INDEX);\
         if (__KEY_EXISTS) {\
-            (__HT)->data[__EXISTING_IDX].val = __VAL;\
+            (__HT)->data[__EXISTING_IDX].val = (__HT)->tmp_val;\
         } else {\
             sp_hash_t __HSH = __INFO.fn.hash((void*)(&(__HT)->tmp_key), __INFO.size.key);\
             u32 __HSH_IDX = __HSH % __CAP;\
             while ((__HT)->data[__HSH_IDX].state == SP_HT_ENTRY_ACTIVE) {\
                 __HSH_IDX = ((__HSH_IDX + 1) % __CAP);\
             }\
-            (__HT)->data[__HSH_IDX].key = __KEY;\
-            (__HT)->data[__HSH_IDX].val = __VAL;\
+            (__HT)->data[__HSH_IDX].key = (__HT)->tmp_key;\
+            (__HT)->data[__HSH_IDX].val = (__HT)->tmp_val;\
             (__HT)->data[__HSH_IDX].state = SP_HT_ENTRY_ACTIVE;\
             (__HT)->size++;\
         }\
