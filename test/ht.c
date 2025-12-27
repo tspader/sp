@@ -834,27 +834,28 @@ static sp_hash_t sp_test_identity_hash(void* key, u32 size) {
 }
 
 // Rehash: resize extends array but doesn't rehash existing entries.
-// Key 2 at cap=2 goes to slot 2%2=0. After resize to cap=4, it should be at 2%4=2.
-// Directly check that entry is at correct slot after resize.
+// Insert a key whose slot changes after resize, verify it moves correctly.
 UTEST(ht_issue, rehash_breaks_lookups_after_resize) {
   sp_ht(s32, s32) ht = SP_NULLPTR;
   sp_ht_set_fns(ht, sp_test_identity_hash, sp_test_s32_compare);
-  s32 ka = (s32)sp_ht_capacity(ht);
-  u32 slot_before_resize = (u32)ka % sp_ht_capacity(ht);
-  u32 initial_capacity = sp_ht_capacity(ht);
 
+  sp_ht_insert(ht, 1, 0);
+  u64 initial_capacity = sp_ht_capacity(ht);
+
+  s32 ka = (s32)initial_capacity;
   sp_ht_insert(ht, ka, 2000);
+
+  u64 slot_before_resize = (u64)ka % initial_capacity;
   EXPECT_EQ(ht->data[slot_before_resize].key, ka);
 
-  // force a resize
-  sp_ht_insert(ht, 1, 0);
-  EXPECT_GE(sp_ht_capacity(ht), initial_capacity);
+  for (s32 i = 10000; sp_ht_capacity(ht) == initial_capacity; i++) {
+    sp_ht_insert(ht, i, 0);
+  }
+  EXPECT_GT(sp_ht_capacity(ht), initial_capacity);
 
-  // sanity check that the key should actually be in a different slot
-  u32 slot_after_resize = (u32)ka % sp_ht_capacity(ht);
+  u64 slot_after_resize = (u64)ka % sp_ht_capacity(ht);
   EXPECT_NE(slot_before_resize, slot_after_resize);
 
-  // if we're rehashing correctly, the old slot is clean and the new slot has the data
   EXPECT_NE(ht->data[slot_before_resize].key, ka);
   EXPECT_EQ(ht->data[slot_after_resize].key, ka);
   EXPECT_EQ(ht->data[slot_after_resize].state, SP_HT_ENTRY_ACTIVE);
