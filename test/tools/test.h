@@ -171,7 +171,7 @@ void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) 
 }
 
 void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker) {
-  sp_mem_arena_free(tracker->bump);
+  sp_mem_arena_destroy(tracker->bump);
   sp_context_pop();
 }
 

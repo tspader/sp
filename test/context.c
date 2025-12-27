@@ -420,7 +420,7 @@ UTEST_F(context, arena_basic_alloc) {
   EXPECT_ALIGNED(first);
   EXPECT_GT(sp_mem_arena_bytes_used(arena), 0);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
 }
 
 UTEST_F(context, arena_allocations_are_zeroed) {
@@ -431,7 +431,7 @@ UTEST_F(context, arena_allocations_are_zeroed) {
   EXPECT_EQ(first[0], 0x00);
   EXPECT_EQ(first[63], 0x00);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
 }
 
 UTEST_F(context, arena_pop_resets_bytes_used) {
@@ -447,7 +447,7 @@ UTEST_F(context, arena_pop_resets_bytes_used) {
   sp_mem_arena_pop(marker);
   EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
 }
 
 UTEST_F(context, arena_block_chaining) {
@@ -472,7 +472,7 @@ UTEST_F(context, arena_block_chaining) {
 
   EXPECT_GT(sp_mem_arena_capacity(arena), 64);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
 }
 
 UTEST_F(context, arena_pop_across_blocks) {
@@ -496,7 +496,7 @@ UTEST_F(context, arena_pop_across_blocks) {
 
   EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
 }
 
 UTEST_F(context, arena_realloc_copies_data) {
@@ -513,7 +513,7 @@ UTEST_F(context, arena_realloc_copies_data) {
   EXPECT_EQ(resized[16], 0x00);
   EXPECT_EQ(resized[31], 0x00);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
 }
 
 UTEST_F(context, arena_clear_resets_all_blocks) {
@@ -530,7 +530,7 @@ UTEST_F(context, arena_clear_resets_all_blocks) {
 
   EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
 }
 
 UTEST_F(context, arena_block_reuse_after_pop) {
@@ -553,7 +553,7 @@ UTEST_F(context, arena_block_reuse_after_pop) {
 
   EXPECT_EQ(sp_mem_arena_capacity(arena), capacity_after_allocs);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
 }
 
 UTEST_F(context, arena_reuse_logic_check) {
@@ -589,5 +589,13 @@ UTEST_F(context, arena_reuse_logic_check) {
   // FAILURE CONDITION: If cap_after > 128, the arena leaked a block instead of reusing.
   EXPECT_EQ(cap_after, 128);
 
-  sp_mem_arena_free(arena);
+  sp_mem_arena_destroy(arena);
+}
+
+UTEST_F(context, arena_wrappers) {
+  sp_mem_arena_t* arena = sp_mem_arena_new(64);
+  EXPECT_NE(sp_mem_arena_alloc(arena, 8), SP_NULLPTR);
+  void* ptr = sp_mem_arena_alloc(arena, 8);
+  EXPECT_NE(sp_mem_arena_realloc(arena, ptr, 72), SP_NULLPTR);
+  sp_mem_arena_free(arena, ptr);
 }
