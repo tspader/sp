@@ -955,6 +955,7 @@ typedef struct {
   sp_mem_arena_block_t* current;
   u32 block_size;
   sp_mem_arena_mode_t mode;
+  u8 alignment;
 } sp_mem_arena_t;
 
 typedef struct {
@@ -990,7 +991,7 @@ SP_API void*                   sp_mem_allocator_alloc(sp_allocator_t arena, u32 
 SP_API void*                   sp_mem_allocator_realloc(sp_allocator_t arena, void* ptr, u32 size);
 SP_API void                    sp_mem_allocator_free(sp_allocator_t arena, void* buffer);
 SP_API sp_mem_arena_t*         sp_mem_arena_new(u32 default_block_size);
-SP_API sp_mem_arena_t*         sp_mem_arena_new_ex(u32 block_size, sp_mem_arena_mode_t mode);
+SP_API sp_mem_arena_t*         sp_mem_arena_new_ex(u32 block_size, sp_mem_arena_mode_t mode, u8 alignment);
 SP_API sp_allocator_t          sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
 SP_API void                    sp_mem_arena_clear(sp_mem_arena_t* arena);
 SP_API void                    sp_mem_arena_destroy(sp_mem_arena_t* arena);
@@ -4818,13 +4819,14 @@ sp_mem_arena_block_t* sp_mem_arena_block_new(sp_mem_arena_t* arena, u32 capacity
 }
 
 sp_mem_arena_t* sp_mem_arena_new(u32 block_size) {
-  return sp_mem_arena_new_ex(block_size, SP_MEM_ARENA_MODE_DEFAULT);
+  return sp_mem_arena_new_ex(block_size, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
 }
 
-sp_mem_arena_t* sp_mem_arena_new_ex(u32 block_size, sp_mem_arena_mode_t mode) {
+sp_mem_arena_t* sp_mem_arena_new_ex(u32 block_size, sp_mem_arena_mode_t mode, u8 alignment) {
   sp_mem_arena_t* arena = sp_alloc_type(sp_mem_arena_t);
   arena->allocator = sp_context_get()->allocator;
   arena->mode = mode;
+  arena->alignment = alignment == 0 ? SP_MEM_ALIGNMENT : alignment;
 
   sp_mem_arena_block_t* block = sp_mem_arena_block_new(arena, block_size);
   arena->head = block;
@@ -4886,25 +4888,27 @@ void* sp_mem_arena_get_ptr(sp_mem_arena_header_t* header) {
   return (void*)(header + 1);
 }
 
-void* sp_mem_arena_align_block(sp_mem_arena_block_t* block) {
-  block->bytes_used = sp_align_offset(block->bytes_used, SP_MEM_ALIGNMENT);
+void* sp_mem_arena_align_block(sp_mem_arena_block_t* block, u8 alignment) {
+  block->bytes_used = sp_align_offset(block->bytes_used, alignment);
   return block->buffer + block->bytes_used;
 }
 
 sp_mem_arena_block_t* sp_mem_arena_get_block(sp_mem_arena_t* arena, u32 alloc_size) {
   sp_mem_arena_block_t* block = arena->current;
-  u32 aligned = sp_align_offset(block->bytes_used, SP_MEM_ALIGNMENT);
+  u32 offset = sp_align_offset(block->bytes_used, arena->alignment);
 
-  if (aligned + alloc_size <= block->capacity) {
+  if (offset + alloc_size <= block->capacity) {
+    block->bytes_used = offset;
     return block;
   }
 
-  u32 new_capacity = SP_MAX(arena->block_size, alloc_size);
+  u32 new_capacity = sp_max(arena->block_size, alloc_size);
 
   if (block->next && block->next->capacity >= alloc_size) {
     block->next->bytes_used = 0;
     block = block->next;
-  } else {
+  }
+  else {
     sp_mem_arena_block_t* new_block = sp_mem_arena_block_new(arena, new_capacity);
     new_block->next = block->next;
     block->next = new_block;
@@ -4919,7 +4923,7 @@ void* sp_mem_arena_alloc_with_header(sp_mem_arena_t* arena, u32 size) {
   u32 total = sizeof(sp_mem_arena_header_t) + size;
 
   sp_mem_arena_block_t* block = sp_mem_arena_get_block(arena, total);
-  sp_mem_arena_header_t* header = (sp_mem_arena_header_t*)sp_mem_arena_align_block(block);
+  sp_mem_arena_header_t* header = (sp_mem_arena_header_t*)sp_mem_arena_align_block(block, arena->alignment);
   header->size = size;
 
   void* ptr = sp_mem_arena_get_ptr(header);
@@ -4931,7 +4935,7 @@ void* sp_mem_arena_alloc_with_header(sp_mem_arena_t* arena, u32 size) {
 
 void* sp_mem_arena_alloc_no_header(sp_mem_arena_t* arena, u32 size) {
   sp_mem_arena_block_t* block = sp_mem_arena_get_block(arena, size);
-  void* ptr = sp_mem_arena_align_block(block);
+  void* ptr = sp_mem_arena_align_block(block, arena->alignment);
   sp_mem_zero(ptr, size);
   block->bytes_used += size;
 
@@ -4943,12 +4947,18 @@ void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u32 size,
 
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
-      return arena->mode == SP_MEM_ARENA_MODE_NO_REALLOC ?
-        sp_mem_arena_alloc_no_header(arena, size) :
-        sp_mem_arena_alloc_with_header(arena, size);
+      switch (arena->mode) {
+        case SP_MEM_ARENA_MODE_DEFAULT: {
+          return sp_mem_arena_alloc_with_header(arena, size);
+        }
+        case SP_MEM_ARENA_MODE_NO_REALLOC: {
+          return sp_mem_arena_alloc_no_header(arena, size);
+        }
+      }
+      SP_UNREACHABLE_RETURN(SP_NULLPTR);
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
-      sp_require_as_null(arena->mode != SP_MEM_ARENA_MODE_NO_REALLOC);
+      sp_require_as_null(arena->mode == SP_MEM_ARENA_MODE_DEFAULT);
 
       void* ptr = sp_mem_arena_alloc_with_header(arena, size);
       if (old_memory) {
