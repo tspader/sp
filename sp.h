@@ -1273,7 +1273,7 @@ SP_API void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap);
 #define SP_HT_HASH_SEED         0x31415296
 #define SP_HT_INVALID_INDEX     UINT32_MAX
 
-typedef u32 sp_ht_it_t;
+typedef u64 sp_ht_it_t;
 SP_TYPEDEF_FN(sp_hash_t, sp_ht_hash_key_fn_t, void*, u32);
 SP_TYPEDEF_FN(bool, sp_ht_compare_key_fn_t, void*, void*, u32);
 
@@ -1555,11 +1555,11 @@ SP_BEGIN_EXTERN_C()
 #define sp_cstr_ht_it_getp(ht, it)    sp_ht_it_getp(ht, it)
 #define sp_cstr_ht_it_getkp(ht, it)   sp_ht_it_getkp(ht, it)
 
-SP_API u32         sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t info);
-SP_API void        sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info);
+SP_API u64         sp_ht_get_key_index_fn(void** data, void* key, u64 capacity, sp_ht_info_t info);
+SP_API void        sp_ht_resize_impl(void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info);
 SP_API void        sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info);
-SP_API sp_ht_it_t  sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info);
-SP_API void        sp_ht_it_advance_fn(void** data, u32 capacity, u32* it, sp_ht_info_t info);
+SP_API sp_ht_it_t  sp_ht_it_init_fn(void** data, u64 capacity, sp_ht_info_t info);
+SP_API void        sp_ht_it_advance_fn(void** data, u64 capacity, u64* it, sp_ht_info_t info);
 SP_API sp_hash_t   sp_ht_on_hash_key(void* key, u32 size);
 SP_API bool        sp_ht_on_compare_key(void* ka, void* kb, u32 size);
 SP_API sp_hash_t   sp_ht_on_hash_str_key(void* key, u32 size);
@@ -3479,15 +3479,15 @@ bool sp_ht_on_compare_cstr_key(void* ka, void* kb, u32 size) {
   return sp_cstr_equal(*sa, *sb);
 }
 
-u32 sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t info) {
+u64 sp_ht_get_key_index_fn(void** data, void* key, u64 capacity, sp_ht_info_t info) {
   if (!data || !*data || !key || !capacity) return SP_HT_INVALID_INDEX;
 
   sp_hash_t hash = info.fn.hash(key, info.size.key);
-  u32 hash_idx = hash % capacity;
+  u64 hash_idx = hash % capacity;
 
-  for (u32 c = 0; c < capacity; ++c) {
-    u32 i = (hash_idx + c) % capacity;
-    u32 offset = i * info.stride.entry;
+  for (u64 c = 0; c < capacity; ++c) {
+    u64 i = (hash_idx + c) % capacity;
+    u64 offset = i * info.stride.entry;
     sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)(*data) + offset + info.stride.kv);
 
     if (state == SP_HT_ENTRY_INACTIVE) {
@@ -3504,7 +3504,7 @@ u32 sp_ht_get_key_index_fn(void** data, void* key, u32 capacity, sp_ht_info_t in
   return SP_HT_INVALID_INDEX;
 }
 
-void sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info) {
+void sp_ht_resize_impl(void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info) {
   if (!data || new_cap <= old_cap) return;
 
   sp_context_push_allocator(info.allocator);
@@ -3512,14 +3512,14 @@ void sp_ht_resize_impl(void** data, u32 old_cap, u32 new_cap, sp_ht_info_t info)
   void* old_data = *data;
   void* new_data = sp_alloc(new_cap * info.stride.entry);
 
-  for (u32 i = 0; i < old_cap; ++i) {
-    u32 offset = i * info.stride.entry;
+  for (u64 i = 0; i < old_cap; ++i) {
+    u64 offset = i * info.stride.entry;
     sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)old_data + offset + info.stride.kv);
     if (state != SP_HT_ENTRY_ACTIVE) continue;
 
     void* old_key = (c8*)old_data + offset;
     sp_hash_t hash = info.fn.hash(old_key, info.size.key);
-    u32 new_idx = hash % new_cap;
+    u64 new_idx = hash % new_cap;
 
     while (*(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride.entry + info.stride.kv) == SP_HT_ENTRY_ACTIVE) {
       new_idx = (new_idx + 1) % new_cap;
@@ -3538,26 +3538,25 @@ void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
   sp_context_push_allocator(info.allocator);
   u8* base = (u8*)ht;
   void** data = (void**)base;
-  u32* size = (u32*)(base + info.header.size);
-  u32* capacity = (u32*)(base + info.header.capacity);
+  u64* size = (u64*)(base + info.header.size);
+  u64* capacity = (u64*)(base + info.header.capacity);
 
-  u32 cap = *capacity;
-  f32 load = cap ? (f32)(*size) / (f32)cap : 0.f;
-  if (load >= 0.5f || !cap) {
-    u32 new_cap = cap ? cap * 2 : 2;
+  u64 cap = *capacity;
+  if (*size * 4 >= cap * 3) {
+    u64 new_cap = cap ? cap * 2 : 2;
     sp_ht_resize_impl(data, cap, new_cap, info);
     *capacity = new_cap;
     cap = new_cap;
   }
 
-  u32 existing = sp_ht_get_key_index_fn(data, key, cap, info);
+  u64 existing = sp_ht_get_key_index_fn(data, key, cap, info);
   if (existing != SP_HT_INVALID_INDEX) {
     u8* entry = (u8*)(*data) + existing * info.stride.entry;
     sp_mem_copy(val, entry + info.stride.value, info.size.value);
   }
   else {
     sp_hash_t hash = info.fn.hash(key, info.size.key);
-    u32 idx = hash % cap;
+    u64 idx = hash % cap;
     while (*(sp_ht_entry_state*)((u8*)(*data) + idx * info.stride.entry + info.stride.kv) == SP_HT_ENTRY_ACTIVE) {
       idx = (idx + 1) % cap;
     }
@@ -3570,11 +3569,11 @@ void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
   sp_context_pop();
 }
 
-sp_ht_it_t sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info) {
+sp_ht_it_t sp_ht_it_init_fn(void** data, u64 capacity, sp_ht_info_t info) {
   if (!data || !*data) return 0;
   sp_ht_it_t it = 0;
   for (; it < capacity; ++it) {
-    u32 offset = it * info.stride.entry;
+    u64 offset = it * info.stride.entry;
     sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + info.stride.kv);
     if (state == SP_HT_ENTRY_ACTIVE) {
       break;
@@ -3583,11 +3582,11 @@ sp_ht_it_t sp_ht_it_init_fn(void** data, u32 capacity, sp_ht_info_t info) {
   return it;
 }
 
-void sp_ht_it_advance_fn(void** data, u32 capacity, u32* it, sp_ht_info_t info) {
+void sp_ht_it_advance_fn(void** data, u64 capacity, u64* it, sp_ht_info_t info) {
   if (!data || !*data) return;
   (*it)++;
   for (; *it < capacity; ++*it) {
-    u32 offset = *it * info.stride.entry;
+    u64 offset = *it * info.stride.entry;
     sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)*data + offset + info.stride.kv);
     if (state == SP_HT_ENTRY_ACTIVE) {
       break;
