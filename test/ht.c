@@ -28,12 +28,12 @@ bool sp_test_string_compare(void* ka, void* kb, u32 size) {
 UTEST(ht, basic_operations) {
   sp_ht(int, float) ht = SP_NULLPTR;
 
-  EXPECT_EQ(sp_ht_size(ht), 0);
+  EXPECT_EQ(sp_ht_size(ht), 0u);
   EXPECT_TRUE(sp_ht_empty(ht));
   EXPECT_FALSE(sp_ht_exists(ht, 42));
 
   sp_ht_insert(ht, 42, 3.14f);
-  EXPECT_EQ(sp_ht_size(ht), 1);
+  EXPECT_EQ(sp_ht_size(ht), 1u);
   EXPECT_FALSE(sp_ht_empty(ht));
   EXPECT_TRUE(sp_ht_exists(ht, 42));
   EXPECT_EQ(*sp_ht_getp(ht, 42), 3.14f);
@@ -41,7 +41,7 @@ UTEST(ht, basic_operations) {
   sp_ht_insert(ht, 10, 1.5f);
   sp_ht_insert(ht, 20, 2.5f);
   sp_ht_insert(ht, 30, 3.5f);
-  EXPECT_EQ(sp_ht_size(ht), 4);
+  EXPECT_EQ(sp_ht_size(ht), 4u);
 
   EXPECT_EQ(*sp_ht_getp(ht, 10), 1.5f);
   EXPECT_EQ(*sp_ht_getp(ht, 20), 2.5f);
@@ -50,14 +50,14 @@ UTEST(ht, basic_operations) {
 
   sp_ht_insert(ht, 42, 6.28f);
   EXPECT_EQ(*sp_ht_getp(ht, 42), 6.28f);
-  EXPECT_EQ(sp_ht_size(ht), 4);
+  EXPECT_EQ(sp_ht_size(ht), 4u);
 
   sp_ht_erase(ht, 20);
   EXPECT_FALSE(sp_ht_exists(ht, 20));
-  EXPECT_EQ(sp_ht_size(ht), 3);
+  EXPECT_EQ(sp_ht_size(ht), 3u);
 
   sp_ht_clear(ht);
-  EXPECT_EQ(sp_ht_size(ht), 0);
+  EXPECT_EQ(sp_ht_size(ht), 0u);
   EXPECT_TRUE(sp_ht_empty(ht));
 
   sp_ht_free(ht);
@@ -112,7 +112,7 @@ UTEST(ht, struct_keys) {
   sp_ht_insert(ht, k2, "Second");
   sp_ht_insert(ht, k3, "Third");
 
-  EXPECT_EQ(sp_ht_size(ht), 3);
+  EXPECT_EQ(sp_ht_size(ht), 3u);
 
   compound_key_t lookup = {200, 2};
   EXPECT_TRUE(sp_ht_exists(ht, lookup));
@@ -157,7 +157,7 @@ UTEST(ht, collision_handling) {
       sp_ht_insert(ht, i, i * 100);
   }
 
-  EXPECT_EQ(sp_ht_size(ht), 100);
+  EXPECT_EQ(sp_ht_size(ht), 100u);
 
   for (s32 i = 0; i < 100; i++) {
       EXPECT_TRUE(sp_ht_exists(ht, i));
@@ -190,7 +190,7 @@ UTEST(ht, iteration) {
   s32 count = 0;
   s32 sum = 0;
 
-  for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
+  for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
     float val = *sp_ht_it_getp(ht, it);
 
     count++;
@@ -205,7 +205,7 @@ UTEST(ht, iteration) {
 
 UTEST(ht, edge_cases) {
   sp_ht(int, int) ht1 = SP_NULLPTR;
-  EXPECT_EQ(sp_ht_size(ht1), 0);
+  EXPECT_EQ(sp_ht_size(ht1), 0u);
   EXPECT_TRUE(sp_ht_empty(ht1));
   EXPECT_FALSE(sp_ht_exists(ht1, 42));
 
@@ -215,13 +215,13 @@ UTEST(ht, edge_cases) {
   sp_ht(int, int) ht2 = SP_NULLPTR;
   sp_ht_insert(ht2, 1, 100);
   sp_ht_erase(ht2, 1);
-  EXPECT_EQ(sp_ht_size(ht2), 0);
+  EXPECT_EQ(sp_ht_size(ht2), 0u);
   sp_ht_free(ht2);
 
   sp_ht(int, int) ht3 = SP_NULLPTR;
   sp_ht_insert(ht3, 1, 100);
   sp_ht_erase(ht3, 999);
-  EXPECT_EQ(sp_ht_size(ht3), 1);
+  EXPECT_EQ(sp_ht_size(ht3), 1u);
   sp_ht_free(ht3);
 }
 
@@ -251,17 +251,17 @@ UTEST(ht, duplicate_key_insert_size_bug) {
   sp_ht(u32, u32) table = SP_NULLPTR;
 
   sp_ht_insert(table, 42, 100);
-  EXPECT_EQ(sp_ht_size(table), 1);
-  EXPECT_EQ(*sp_ht_getp(table, 42), 100);
+  EXPECT_EQ(sp_ht_size(table), 1u);
+  EXPECT_EQ(*sp_ht_getp(table, 42), 100u);
 
   sp_ht_insert(table, 42, 200);
-  EXPECT_EQ(sp_ht_size(table), 1);
-  EXPECT_EQ(*sp_ht_getp(table, 42), 200);
+  EXPECT_EQ(sp_ht_size(table), 1u);
+  EXPECT_EQ(*sp_ht_getp(table, 42), 200u);
 
   sp_ht_insert(table, 99, 300);
-  EXPECT_EQ(sp_ht_size(table), 2);
-  EXPECT_EQ(*sp_ht_getp(table, 42), 200);
-  EXPECT_EQ(*sp_ht_getp(table, 99), 300);
+  EXPECT_EQ(sp_ht_size(table), 2u);
+  EXPECT_EQ(*sp_ht_getp(table, 42), 200u);
+  EXPECT_EQ(*sp_ht_getp(table, 99), 300u);
 
   sp_ht_free(table);
 }
@@ -272,14 +272,14 @@ UTEST(ht, iterator_yields_inactive_entry_at_slot_zero) {
   sp_ht_insert(ht, 0, 999);
   sp_ht_erase(ht, 0);
 
-  EXPECT_EQ(sp_ht_size(ht), 0);
+  EXPECT_EQ(sp_ht_size(ht), 0u);
 
   u64 num_entries = 0;
-  for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
+  for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
     num_entries++;
   }
 
-  EXPECT_EQ(num_entries, 0);
+  EXPECT_EQ(num_entries, 0u);
 
   sp_ht_free(ht);
 }
@@ -335,7 +335,7 @@ UTEST(ht, collision) {
 
   sp_ht_insert(ht, keys[0], 0);
 
-  EXPECT_EQ(sp_ht_size(ht), 3);
+  EXPECT_EQ(sp_ht_size(ht), 3u);
   EXPECT_TRUE(sp_ht_exists(ht, keys[0]));
   EXPECT_EQ(*sp_ht_getp(ht, keys[0]), 0);
 
@@ -362,11 +362,11 @@ UTEST(ht, iterator_returns_zero_entries_for_populated_table) {
   sp_ht_insert(ht, 2, 200);
 
   u64 count = 0;
-  for (sp_ht_it it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
+  for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
     count++;
   }
 
-  EXPECT_EQ(count, 2);
+  EXPECT_EQ(count, 2u);
 
   sp_ht_free(ht);
 }
@@ -374,16 +374,16 @@ UTEST(ht, iterator_returns_zero_entries_for_populated_table) {
 UTEST(ht, null_safety) {
   sp_ht(s32, s32) null_ht = NULL;
 
-  EXPECT_EQ(sp_ht_size(null_ht), 0);
-  EXPECT_EQ(sp_ht_capacity(null_ht), 0);
+  EXPECT_EQ(sp_ht_size(null_ht), 0u);
+  EXPECT_EQ(sp_ht_capacity(null_ht), 0u);
   EXPECT_TRUE(sp_ht_empty(null_ht));
   EXPECT_FALSE(sp_ht_exists(null_ht, 42));
 
   s32* default_val = sp_ht_getp(null_ht, 42);
   EXPECT_EQ(default_val, SP_NULLPTR);
 
-  sp_ht_it it = sp_ht_it_init(null_ht);
-  EXPECT_EQ(it, 0);
+  sp_ht_it_t it = sp_ht_it_init(null_ht);
+  EXPECT_EQ(it, 0u);
   EXPECT_FALSE(sp_ht_it_valid(null_ht, it));
 
   sp_ht_it_advance(null_ht, it);
@@ -399,7 +399,7 @@ UTEST(ht, null_safety) {
 
   sp_ht_insert(null_ht, 42, 100);
   EXPECT_NE(null_ht, SP_NULLPTR);
-  EXPECT_EQ(sp_ht_size(null_ht), 1);
+  EXPECT_EQ(sp_ht_size(null_ht), 1u);
   EXPECT_EQ(*sp_ht_getp(null_ht, 42), 100);
 
   sp_ht_free(null_ht);
@@ -439,6 +439,66 @@ UTEST(ht, string_key_custom_hash) {
   EXPECT_EQ(sp_ht_getp(ht, kd), SP_NULLPTR);
 
   sp_ht_free(ht);
+}
+
+UTEST(ht, str_key) {
+  sp_str_ht(s32) ht = SP_NULLPTR;
+
+  sp_str_t ka = sp_str_copy(sp_str_lit("hello"));
+  sp_str_t kb = sp_str_copy(sp_str_lit("world"));
+  sp_str_t kc = sp_str_copy(sp_str_lit("test"));
+
+  sp_str_ht_insert(ht, ka, 100);
+  sp_str_ht_insert(ht, kb, 200);
+  sp_str_ht_insert(ht, kc, 300);
+
+  EXPECT_TRUE(sp_str_ht_exists(ht, ka));
+  EXPECT_TRUE(sp_str_ht_exists(ht, kb));
+  EXPECT_TRUE(sp_str_ht_exists(ht, kc));
+
+  EXPECT_EQ(*sp_str_ht_get(ht, ka), 100);
+  EXPECT_EQ(*sp_str_ht_get(ht, kb), 200);
+  EXPECT_EQ(*sp_str_ht_get(ht, kc), 300);
+
+  sp_str_t ka_copy = sp_str_copy(SP_LIT("hello"));
+  sp_str_t kb_copy = sp_str_copy(SP_LIT("world"));
+
+  EXPECT_TRUE(sp_str_ht_exists(ht, ka_copy));
+  EXPECT_TRUE(sp_str_ht_exists(ht, kb_copy));
+
+  EXPECT_EQ(*sp_str_ht_get(ht, ka_copy), 100);
+  EXPECT_EQ(*sp_str_ht_get(ht, kb_copy), 200);
+
+  sp_str_t kd = sp_str_copy(SP_LIT("missing"));
+  EXPECT_FALSE(sp_str_ht_exists(ht, kd));
+  EXPECT_EQ(sp_str_ht_get(ht, kd), SP_NULLPTR);
+
+  sp_ht_free(ht);
+}
+
+UTEST(ht, cstr_key) {
+  sp_cstr_ht(s32) ht = SP_NULLPTR;
+
+  sp_cstr_ht_insert(ht, "hello", 100);
+  sp_cstr_ht_insert(ht, "world", 200);
+  sp_cstr_ht_insert(ht, "test", 300);
+
+  EXPECT_TRUE(sp_cstr_ht_exists(ht, "hello"));
+  EXPECT_TRUE(sp_cstr_ht_exists(ht, "world"));
+  EXPECT_TRUE(sp_cstr_ht_exists(ht, "test"));
+
+  EXPECT_EQ(*sp_cstr_ht_get(ht, "hello"), 100);
+  EXPECT_EQ(*sp_cstr_ht_get(ht, "world"), 200);
+  EXPECT_EQ(*sp_cstr_ht_get(ht, "test"), 300);
+
+  EXPECT_FALSE(sp_cstr_ht_exists(ht, "missing"));
+  EXPECT_EQ(sp_cstr_ht_get(ht, "missing"), SP_NULLPTR);
+
+  sp_cstr_ht_erase(ht, "world");
+  EXPECT_FALSE(sp_cstr_ht_exists(ht, "world"));
+  EXPECT_EQ(sp_cstr_ht_size(ht), 2u);
+
+  sp_cstr_ht_free(ht);
 }
 
 UTEST(siphash, consistency) {
@@ -520,7 +580,7 @@ UTEST(combined, hash_table_with_dyn_array_values) {
         EXPECT_TRUE(sp_ht_exists(ht, i));
 
         int_array arr = *sp_ht_getp(ht, i);
-        EXPECT_EQ(sp_dyn_array_size(arr), 10);
+        EXPECT_EQ(sp_dyn_array_size(arr), 10u);
 
         for (s32 j = 0; j < 10; j++) {
             EXPECT_EQ(arr[j], i * 100 + j);
@@ -552,7 +612,7 @@ UTEST(combined, multiple_arrays_in_hash_table) {
     EXPECT_TRUE(sp_ht_exists(ht, key));
 
     int* arr = (int*)*sp_ht_getp(ht, key);
-    EXPECT_EQ(sp_dyn_array_size(arr), 20);
+    EXPECT_EQ(sp_dyn_array_size(arr), 20u);
 
     for (s32 j = 0; j < 20; j++) {
         EXPECT_EQ(arr[j], key * 1000 + j);
@@ -746,7 +806,7 @@ UTEST(ht_issue, hash_collision_overwrites_different_keys) {
   sp_ht_insert(ht, 200, 2);
   sp_ht_insert(ht, 300, 3);
 
-  EXPECT_EQ(sp_ht_size(ht), 3);
+  EXPECT_EQ(sp_ht_size(ht), 3u);
   EXPECT_TRUE(sp_ht_exists(ht, 100));
   EXPECT_TRUE(sp_ht_exists(ht, 200));
   EXPECT_TRUE(sp_ht_exists(ht, 300));
@@ -779,8 +839,8 @@ static sp_hash_t sp_test_identity_hash(void* key, u32 size) {
 UTEST(ht_issue, rehash_breaks_lookups_after_resize) {
   sp_ht(s32, s32) ht = SP_NULLPTR;
   sp_ht_set_fns(ht, sp_test_identity_hash, sp_test_s32_compare);
-  u32 ka = sp_ht_capacity(ht);
-  u32 slot_before_resize = ka % sp_ht_capacity(ht);
+  s32 ka = (s32)sp_ht_capacity(ht);
+  u32 slot_before_resize = (u32)ka % sp_ht_capacity(ht);
   u32 initial_capacity = sp_ht_capacity(ht);
 
   sp_ht_insert(ht, ka, 2000);
@@ -791,7 +851,7 @@ UTEST(ht_issue, rehash_breaks_lookups_after_resize) {
   EXPECT_GE(sp_ht_capacity(ht), initial_capacity);
 
   // sanity check that the key should actually be in a different slot
-  u32 slot_after_resize = ka % sp_ht_capacity(ht);
+  u32 slot_after_resize = (u32)ka % sp_ht_capacity(ht);
   EXPECT_NE(slot_before_resize, slot_after_resize);
 
   // if we're rehashing correctly, the old slot is clean and the new slot has the data
