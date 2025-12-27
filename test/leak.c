@@ -53,7 +53,7 @@
 #if defined(SP_LEAK_LOG_ONLY)
   #define SP_LEAK_VERIFY()
 #else
-  #define SP_LEAK_VERIFY() EXPECT_EQ(sp_mem_get_scratch_arena()->bytes_used, 0)
+  #define SP_LEAK_VERIFY() EXPECT_EQ(sp_mem_arena_bytes_used(sp_mem_get_scratch_arena()), 0)
 #endif
 
 struct leak {

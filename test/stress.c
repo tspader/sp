@@ -312,7 +312,7 @@ UTEST(stress, sp_context) {
   }
 
   // Verify scratch arena is clean
-  EXPECT_EQ(arena->bytes_used, 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
   EXPECT_EQ(rt->index, initial_index);
   SP_UNUSED(sum);
 }
