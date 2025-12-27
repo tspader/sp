@@ -2279,7 +2279,9 @@ sp_context_t* sp_context_get();
 void          sp_context_set(sp_context_t context);
 void          sp_context_push(sp_context_t context);
 void          sp_context_push_allocator(sp_allocator_t allocator);
+void          sp_context_push_arena(sp_mem_arena_t* arena);
 void          sp_context_pop();
+
 
 // ██╗ ██████╗
 // ██║██╔═══█╗
@@ -4692,6 +4694,10 @@ void sp_context_push_allocator(sp_allocator_t allocator) {
   sp_context_t context = state->contexts[state->index];
   context.allocator = allocator;
   sp_context_push(context);
+}
+
+void sp_context_push_arena(sp_mem_arena_t* arena) {
+  sp_context_push_allocator(sp_mem_arena_as_allocator(arena));
 }
 
 void sp_context_pop() {
