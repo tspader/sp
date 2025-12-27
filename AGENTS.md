@@ -30,6 +30,10 @@
 - Always use `sp_carr_for()` when iterating a C array
 - Always explicitly handle all enum cases in a switch statement; do not use `default`
   - `default` is only acceptable when there are many cases, but only a few are handled differently
+- Prefer to use `for` macros when possible
+    - Use `sp_for(it, n)` instead of `for (int it = 0; it < n; it++)`
+    - Use `sp_for_range(it, low, high)` instead of `for (int it = low; it < high; it++)`
+
 - Never use `NULL`; always use `SP_NULL` or `SP_NULLPTR` (identical, just semantic aliases)
 - Never use `make`; the included Makefile is strictly for debugging. Instead, use `spn`
 
