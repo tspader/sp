@@ -34,6 +34,7 @@
 
 #define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), SP_CSTR(b), false)
 #define SP_EXPECT_STR_EQ(a, b) SP_TEST_STREQ((a), (b), false)
+#define SP_EXPECT_ERR(err) EXPECT_EQ(sp_err_get(), err)
 
 
 typedef struct {
