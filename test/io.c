@@ -22,21 +22,21 @@ UTEST_F_TEARDOWN(io) {
 
 UTEST_F(io, memory_open) {
   u8 buffer[64];
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
   ASSERT_TRUE(true);
   sp_io_close(&stream);
 }
 
 UTEST_F(io, memory_close) {
   u8 buffer[64];
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
   sp_io_close(&stream);
   ASSERT_TRUE(true);
 }
 
 UTEST_F(io, memory_size) {
   u8 buffer[128];
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
   s64 size = sp_io_size(&stream);
   ASSERT_EQ(size, 128);
   sp_io_close(&stream);
@@ -46,7 +46,7 @@ UTEST_F(io, memory_read_full) {
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
   u8 dest[16] = SP_ZERO_INITIALIZE();
 
-  sp_io_stream_t stream = sp_io_from_memory(source, sizeof(source));
+  sp_io_stream_t stream = sp_io_from_mem(source, sizeof(source));
   u64 bytes = sp_io_read(&stream, dest, sizeof(dest));
 
   ASSERT_EQ(bytes, 16);
@@ -60,7 +60,7 @@ UTEST_F(io, memory_read_partial) {
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
   u8 dest[8] = SP_ZERO_INITIALIZE();
 
-  sp_io_stream_t stream = sp_io_from_memory(source, sizeof(source));
+  sp_io_stream_t stream = sp_io_from_mem(source, sizeof(source));
   u64 bytes = sp_io_read(&stream, dest, sizeof(dest));
 
   ASSERT_EQ(bytes, 8);
@@ -74,7 +74,7 @@ UTEST_F(io, memory_read_past_end) {
   u8 source[8] = {1,2,3,4,5,6,7,8};
   u8 dest[16] = SP_ZERO_INITIALIZE();
 
-  sp_io_stream_t stream = sp_io_from_memory(source, sizeof(source));
+  sp_io_stream_t stream = sp_io_from_mem(source, sizeof(source));
   u64 bytes = sp_io_read(&stream, dest, sizeof(dest));
 
   ASSERT_EQ(bytes, 8);
@@ -85,7 +85,7 @@ UTEST_F(io, memory_write_in_bounds) {
   u8 buffer[16] = SP_ZERO_INITIALIZE();
   u8 source[8] = {1,2,3,4,5,6,7,8};
 
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
   u64 bytes = sp_io_write(&stream, source, sizeof(source));
 
   ASSERT_EQ(bytes, 8);
@@ -99,7 +99,7 @@ UTEST_F(io, memory_write_overflow) {
   u8 buffer[8] = SP_ZERO_INITIALIZE();
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
   u64 bytes = sp_io_write(&stream, source, sizeof(source));
 
   ASSERT_EQ(bytes, 8);
@@ -108,7 +108,7 @@ UTEST_F(io, memory_write_overflow) {
 
 UTEST_F(io, memory_seek_set) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   s64 pos = sp_io_seek(&stream, 32, SP_IO_SEEK_SET);
   ASSERT_EQ(pos, 32);
@@ -118,7 +118,7 @@ UTEST_F(io, memory_seek_set) {
 
 UTEST_F(io, memory_seek_bounds) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   s64 pos = sp_io_seek(&stream, 0, SP_IO_SEEK_SET);
   ASSERT_EQ(pos, 0);
@@ -134,7 +134,7 @@ UTEST_F(io, memory_seek_bounds) {
 
 UTEST_F(io, memory_seek_invalid) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   s64 pos = sp_io_seek(&stream, 100, SP_IO_SEEK_SET);
   ASSERT_EQ(pos, -1);
@@ -340,7 +340,7 @@ UTEST_F(io, file_to_memory) {
   sp_io_read(&file_stream, buffer, size);
   sp_io_close(&file_stream);
 
-  sp_io_stream_t mem_stream = sp_io_from_memory(buffer, size);
+  sp_io_stream_t mem_stream = sp_io_from_mem(buffer, size);
   char result[32] = {0};
   sp_io_read(&mem_stream, result, size);
 
@@ -356,7 +356,7 @@ UTEST_F(io, memory_to_file) {
   char buffer[32] = {0};
   sp_mem_copy(test_content, buffer, 19);
 
-  sp_io_stream_t mem_stream = sp_io_from_memory(buffer, 19);
+  sp_io_stream_t mem_stream = sp_io_from_mem(buffer, 19);
   char temp[32] = {0};
   sp_io_read(&mem_stream, temp, 19);
   sp_io_close(&mem_stream);
@@ -537,7 +537,7 @@ UTEST_F(io, memory_seek_cur_forward) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   for (u32 i = 0; i < 64; i++) buffer[i] = (u8)i;
 
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   sp_io_seek(&stream, 10, SP_IO_SEEK_SET);
   s64 pos = sp_io_seek(&stream, 5, SP_IO_SEEK_CUR);
@@ -554,7 +554,7 @@ UTEST_F(io, memory_seek_cur_backward) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   for (u32 i = 0; i < 64; i++) buffer[i] = (u8)i;
 
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   sp_io_seek(&stream, 30, SP_IO_SEEK_SET);
   s64 pos = sp_io_seek(&stream, -10, SP_IO_SEEK_CUR);
@@ -569,7 +569,7 @@ UTEST_F(io, memory_seek_cur_backward) {
 
 UTEST_F(io, memory_seek_cur_invalid) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   sp_io_seek(&stream, 10, SP_IO_SEEK_SET);
   s64 pos = sp_io_seek(&stream, -20, SP_IO_SEEK_CUR);
@@ -583,7 +583,7 @@ UTEST_F(io, memory_seek_cur_invalid) {
 
 UTEST_F(io, memory_sequential_reads) {
   u8 source[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
-  sp_io_stream_t stream = sp_io_from_memory(source, sizeof(source));
+  sp_io_stream_t stream = sp_io_from_mem(source, sizeof(source));
 
   u8 buf1[4], buf2[4], buf3[4], buf4[4];
 
@@ -602,7 +602,7 @@ UTEST_F(io, memory_sequential_reads) {
 
 UTEST_F(io, memory_sequential_writes) {
   u8 buffer[16] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   u8 data1[] = {1,2,3,4};
   u8 data2[] = {5,6,7,8};
@@ -621,7 +621,7 @@ UTEST_F(io, memory_sequential_writes) {
 
 UTEST_F(io, memory_interleaved_operations) {
   u8 buffer[32] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   u8 data[] = {1,2,3,4};
   sp_io_write(&stream, data, 4);
@@ -646,7 +646,7 @@ UTEST_F(io, memory_interleaved_operations) {
 
 UTEST_F(io, memory_size_zero) {
   u8 dummy;
-  sp_io_stream_t stream = sp_io_from_memory(&dummy, 0);
+  sp_io_stream_t stream = sp_io_from_mem(&dummy, 0);
 
   ASSERT_EQ(sp_io_size(&stream), 0);
 
@@ -672,7 +672,7 @@ UTEST_F(io, file_read_zero_bytes) {
 
 UTEST_F(io, memory_read_zero_bytes) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   u8 dest[10];
   u64 bytes = sp_io_read(&stream, dest, 0);
@@ -934,7 +934,7 @@ UTEST_F(io, memory_position_tracking) {
   u8 buffer[16];
   for (u32 i = 0; i < 16; i++) buffer[i] = (u8)i;
 
-  sp_io_stream_t stream = sp_io_from_memory(buffer, sizeof(buffer));
+  sp_io_stream_t stream = sp_io_from_mem(buffer, sizeof(buffer));
 
   u8 val;
   sp_io_read(&stream, &val, 1);
@@ -977,7 +977,7 @@ UTEST_F(io, memory_pad_basic) {
   u8 buffer[32] = SP_ZERO_INITIALIZE();
   sp_mem_fill_u8(buffer, buffer_size, 0xFF);
 
-  sp_io_stream_t io = sp_io_from_memory(buffer, buffer_size);
+  sp_io_stream_t io = sp_io_from_mem(buffer, buffer_size);
   EXPECT_EQ(sp_io_pad(&io, pad_size), pad_size);
 
   sp_for(it, 8) {
@@ -996,7 +996,7 @@ UTEST_F(io, memory_pad_advances_position) {
   u32 pad_size = 10;
 
   u8 buffer[32] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t io = sp_io_from_memory(buffer, buffer_size);
+  sp_io_stream_t io = sp_io_from_mem(buffer, buffer_size);
 
   sp_io_pad(&io, pad_size);
   s64 pos = sp_io_seek(&io, 0, SP_IO_SEEK_CUR);
@@ -1005,12 +1005,81 @@ UTEST_F(io, memory_pad_advances_position) {
   sp_io_close(&io);
 }
 
+UTEST_F(io, const_memory_open) {
+  const u8 buffer[64] = {0};
+  sp_io_stream_t stream = sp_io_from_const_mem(buffer, sizeof(buffer));
+  ASSERT_TRUE(true);
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, const_memory_size) {
+  const u8 buffer[128] = {0};
+  sp_io_stream_t stream = sp_io_from_const_mem(buffer, sizeof(buffer));
+  s64 size = sp_io_size(&stream);
+  ASSERT_EQ(size, 128);
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, const_memory_read) {
+  const u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+  u8 dest[16] = SP_ZERO_INITIALIZE();
+
+  sp_io_stream_t stream = sp_io_from_const_mem(source, sizeof(source));
+  u64 bytes = sp_io_read(&stream, dest, sizeof(dest));
+
+  ASSERT_EQ(bytes, 16);
+  sp_for(i, 16) {
+    ASSERT_EQ(dest[i], source[i]);
+  }
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, const_memory_seek) {
+  const u8 buffer[64] = {0};
+  sp_io_stream_t stream = sp_io_from_const_mem(buffer, sizeof(buffer));
+
+  s64 pos = sp_io_seek(&stream, 32, SP_IO_SEEK_SET);
+  ASSERT_EQ(pos, 32);
+
+  pos = sp_io_seek(&stream, 10, SP_IO_SEEK_CUR);
+  ASSERT_EQ(pos, 42);
+
+  pos = sp_io_seek(&stream, -4, SP_IO_SEEK_END);
+  ASSERT_EQ(pos, 60);
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, const_memory_write_fails) {
+  const u8 buffer[64] = {0};
+  sp_io_stream_t stream = sp_io_from_const_mem(buffer, sizeof(buffer));
+
+  u8 data[] = {1, 2, 3, 4};
+  u64 bytes = sp_io_write(&stream, data, sizeof(data));
+
+  ASSERT_EQ(bytes, 0);
+
+  sp_io_close(&stream);
+}
+
+UTEST_F(io, const_memory_pad_fails) {
+  const u8 buffer[64] = {0};
+  sp_io_stream_t stream = sp_io_from_const_mem(buffer, sizeof(buffer));
+
+  u64 bytes = sp_io_pad(&stream, 16);
+
+  ASSERT_EQ(bytes, 0);
+
+  sp_io_close(&stream);
+}
+
+
 UTEST_F(io, memory_pad_overflow) {
   u32 buffer_size = 16;
   u32 pad_size = 32;
 
   u8 buffer[16] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t io = sp_io_from_memory(buffer, buffer_size);
+  sp_io_stream_t io = sp_io_from_mem(buffer, buffer_size);
 
   u64 padded = sp_io_pad(&io, pad_size);
   EXPECT_EQ(padded, buffer_size);
@@ -1023,7 +1092,7 @@ UTEST_F(io, memory_pad_zero) {
   u32 pad_size = 0;
 
   u8 buffer[16] = SP_ZERO_INITIALIZE();
-  sp_io_stream_t io = sp_io_from_memory(buffer, buffer_size);
+  sp_io_stream_t io = sp_io_from_mem(buffer, buffer_size);
 
   u64 padded = sp_io_pad(&io, pad_size);
   EXPECT_EQ(padded, 0);

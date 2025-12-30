@@ -542,7 +542,7 @@ UTEST_F(elf, err_read_invalid_magic) {
   bad_data[2] = 'D';
   bad_data[3] = '!';
 
-  sp_io_stream_t buf = sp_io_from_memory(bad_data, sizeof(bad_data));
+  sp_io_stream_t buf = sp_io_from_mem(bad_data, sizeof(bad_data));
   sp_elf_t* read_elf = sp_elf_read(&buf);
 
   ASSERT_EQ(read_elf, SP_NULLPTR);
@@ -557,7 +557,7 @@ UTEST_F(elf, err_read_invalid_class) {
   bad_data[EI_CLASS] = ELFCLASS32;
   bad_data[EI_DATA] = ELFDATA2LSB;
 
-  sp_io_stream_t buf = sp_io_from_memory(bad_data, sizeof(bad_data));
+  sp_io_stream_t buf = sp_io_from_mem(bad_data, sizeof(bad_data));
   sp_elf_t* read_elf = sp_elf_read(&buf);
 
   ASSERT_EQ(read_elf, SP_NULLPTR);

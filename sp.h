@@ -900,6 +900,7 @@ typedef enum {
   SP_ERR_IO_WRITE_FAILED,
   SP_ERR_IO_CLOSE_FAILED,
   SP_ERR_IO_READ_FAILED,
+  SP_ERR_IO_READ_ONLY,
   SP_ERR_LAZY,
   SP_ERR_OS,
 } sp_err_t;
@@ -2241,6 +2242,12 @@ typedef struct {
 } sp_io_file_data_t;
 
 typedef struct {
+  const u8* base;
+  const u8* here;
+  const u8* stop;
+} sp_io_const_memory_data_t;
+
+typedef struct {
   u8* base;
   u8* here;
   u8* stop;
@@ -2258,15 +2265,17 @@ struct sp_io_stream_t {
   union {
     sp_io_file_data_t file;
     sp_io_memory_data_t memory;
+    sp_io_const_memory_data_t const_memory;
     sp_io_buffer_data_t buffer;
   };
   sp_allocator_t allocator;
 };
 
 SP_API sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
-SP_API sp_io_stream_t sp_io_from_memory(void* memory, u64 size);
+SP_API sp_io_stream_t sp_io_from_mem(void* memory, u64 size);
+SP_API sp_io_stream_t sp_io_from_const_mem(const void* memory, u64 size);
 SP_API sp_io_stream_t sp_io_from_buffer();
-SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode);
+SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t mode);
 SP_API u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
 SP_API u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
 SP_API u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
@@ -9217,14 +9226,14 @@ sp_err_t sp_err_get() {
 // ██║╚██████╔╝
 // ╚═╝ ╚═════╝
 // @io
-s64 sp_io_memory_size(sp_io_stream_t* stream) {
-  sp_io_memory_data_t* data = &stream->memory;
+s64 sp_io_const_memory_size(sp_io_stream_t* stream) {
+  sp_io_const_memory_data_t* data = &stream->const_memory;
   return data->stop - data->base;
 }
 
-s64 sp_io_memory_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
-  sp_io_memory_data_t* data = &stream->memory;
-  u8* new_pos;
+s64 sp_io_const_memory_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+  sp_io_const_memory_data_t* data = &stream->const_memory;
+  const u8* new_pos;
 
   switch (whence) {
     case SP_IO_SEEK_SET: {
@@ -9252,14 +9261,30 @@ s64 sp_io_memory_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence)
   return data->here - data->base;
 }
 
-u64 sp_io_memory_read(sp_io_stream_t* stream, void* ptr, u64 size) {
-  sp_io_memory_data_t* data = &stream->memory;
+u64 sp_io_const_memory_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+  sp_io_const_memory_data_t* data = &stream->const_memory;
   u64 available = data->stop - data->here;
   u64 to_read = SP_MIN(size, available);
 
   sp_mem_copy(data->here, ptr, to_read);
   data->here += to_read;
   return to_read;
+}
+
+u64 sp_io_const_memory_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+  (void)stream; (void)ptr; (void)size;
+  sp_err_set(SP_ERR_IO_READ_ONLY);
+  return 0;
+}
+
+u64 sp_io_const_memory_pad(sp_io_stream_t* stream, u64 size) {
+  (void)stream; (void)size;
+  sp_err_set(SP_ERR_IO_READ_ONLY);
+  return 0;
+}
+
+void sp_io_const_memory_close(sp_io_stream_t* stream) {
+  (void)stream;
 }
 
 u64 sp_io_memory_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
@@ -9280,10 +9305,6 @@ u64 sp_io_memory_pad(sp_io_stream_t* stream, u64 size) {
   sp_mem_zero(data->here, to_pad);
   data->here += to_pad;
   return to_pad;
-}
-
-void sp_io_memory_close(sp_io_stream_t* stream) {
-  (void)stream;
 }
 
 s64 sp_io_buffer_size(sp_io_stream_t* stream) {
@@ -9511,17 +9532,32 @@ sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
   return stream;
 }
 
-sp_io_stream_t sp_io_from_memory(void* memory, u64 size) {
+sp_io_stream_t sp_io_from_mem(void* memory, u64 size) {
   sp_io_stream_t stream = SP_ZERO_INITIALIZE();
   stream.memory.base = (u8*)memory;
   stream.memory.here = (u8*)memory;
   stream.memory.stop = (u8*)memory + size;
-  stream.callbacks.size = sp_io_memory_size;
-  stream.callbacks.seek = sp_io_memory_seek;
-  stream.callbacks.read = sp_io_memory_read;
+  stream.callbacks.size = sp_io_const_memory_size;
+  stream.callbacks.seek = sp_io_const_memory_seek;
+  stream.callbacks.read = sp_io_const_memory_read;
   stream.callbacks.write = sp_io_memory_write;
   stream.callbacks.pad = sp_io_memory_pad;
-  stream.callbacks.close = sp_io_memory_close;
+  stream.callbacks.close = sp_io_const_memory_close;
+
+  return stream;
+}
+
+sp_io_stream_t sp_io_from_const_mem(const void* memory, u64 size) {
+  sp_io_stream_t stream = SP_ZERO_INITIALIZE();
+  stream.const_memory.base = (const u8*)memory;
+  stream.const_memory.here = (const u8*)memory;
+  stream.const_memory.stop = (const u8*)memory + size;
+  stream.callbacks.size = sp_io_const_memory_size;
+  stream.callbacks.seek = sp_io_const_memory_seek;
+  stream.callbacks.read = sp_io_const_memory_read;
+  stream.callbacks.write = sp_io_const_memory_write;
+  stream.callbacks.pad = sp_io_const_memory_pad;
+  stream.callbacks.close = sp_io_const_memory_close;
 
   return stream;
 }
