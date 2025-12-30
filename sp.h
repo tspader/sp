@@ -2258,6 +2258,7 @@ typedef struct {
   u8* here;
   u8* stop;
   u8* max;
+  sp_allocator_t allocator;
 } sp_io_buffer_data_t;
 
 struct sp_io_stream_t {
@@ -2272,10 +2273,11 @@ struct sp_io_stream_t {
 };
 
 SP_API sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
+SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t mode);
 SP_API sp_io_stream_t sp_io_from_mem(void* memory, u64 size);
 SP_API sp_io_stream_t sp_io_from_const_mem(const void* memory, u64 size);
-SP_API sp_io_stream_t sp_io_from_buffer();
-SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t mode);
+SP_API sp_io_stream_t sp_io_from_dyn_mem(u8* buffer, u64 size);
+SP_API sp_io_stream_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator);
 SP_API u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
 SP_API u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
 SP_API u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
@@ -9562,7 +9564,11 @@ sp_io_stream_t sp_io_from_const_mem(const void* memory, u64 size) {
   return stream;
 }
 
-sp_io_stream_t sp_io_from_buffer() {
+sp_io_stream_t sp_io_from_dyn_mem(u8* buffer, u64 size) {
+  return sp_io_from_dyn_mem_ex(buffer, size, sp_context_get()->allocator);
+}
+
+sp_io_stream_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator) {
   return (sp_io_stream_t) {
     .callbacks = {
       .size = sp_io_buffer_size,
@@ -9571,6 +9577,9 @@ sp_io_stream_t sp_io_from_buffer() {
       .write = sp_io_buffer_write,
       .pad = sp_io_buffer_pad,
       .close = sp_io_buffer_close,
+    },
+    .buffer = {
+      .allocator = allocator
     }
   };
 }

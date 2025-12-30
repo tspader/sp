@@ -706,13 +706,13 @@ UTEST_F(io, sp_io_read_file_empty) {
 }
 
 UTEST_F(io, buffer_open) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   ASSERT_EQ(sp_io_size(&stream), 0);
   sp_io_close(&stream);
 }
 
 UTEST_F(io, buffer_write_small) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   u8 data[] = {1, 2, 3, 4};
   u64 written = sp_io_write(&stream, data, 4);
 
@@ -722,7 +722,7 @@ UTEST_F(io, buffer_write_small) {
 }
 
 UTEST_F(io, buffer_write_grows) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u8 data[256];
   for (u32 i = 0; i < 256; i++) data[i] = (u8)i;
@@ -735,7 +735,7 @@ UTEST_F(io, buffer_write_grows) {
 }
 
 UTEST_F(io, buffer_write_read_roundtrip) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u8 data[] = {10, 20, 30, 40, 50};
   sp_io_write(&stream, data, 5);
@@ -753,7 +753,7 @@ UTEST_F(io, buffer_write_read_roundtrip) {
 }
 
 UTEST_F(io, buffer_seek_set) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
   sp_io_write(&stream, data, 8);
@@ -769,7 +769,7 @@ UTEST_F(io, buffer_seek_set) {
 }
 
 UTEST_F(io, buffer_seek_cur) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
   sp_io_write(&stream, data, 8);
@@ -782,7 +782,7 @@ UTEST_F(io, buffer_seek_cur) {
 }
 
 UTEST_F(io, buffer_seek_end) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
   sp_io_write(&stream, data, 8);
@@ -798,7 +798,7 @@ UTEST_F(io, buffer_seek_end) {
 }
 
 UTEST_F(io, buffer_seek_invalid) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u8 data[] = {1, 2, 3, 4};
   sp_io_write(&stream, data, 4);
@@ -813,7 +813,7 @@ UTEST_F(io, buffer_seek_invalid) {
 }
 
 UTEST_F(io, buffer_to_str) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   const char* text = "hello world";
   sp_io_write(&stream, text, 11);
@@ -826,7 +826,7 @@ UTEST_F(io, buffer_to_str) {
 }
 
 UTEST_F(io, buffer_multiple_writes) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   sp_io_write(&stream, "abc", 3);
   sp_io_write(&stream, "def", 3);
@@ -841,7 +841,7 @@ UTEST_F(io, buffer_multiple_writes) {
 }
 
 UTEST_F(io, buffer_write_at_position) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   sp_io_write(&stream, "XXXX", 4);
   sp_io_seek(&stream, 1, SP_IO_SEEK_SET);
@@ -860,7 +860,7 @@ UTEST_F(io, buffer_write_at_position) {
 }
 
 UTEST_F(io, buffer_write_extends_size) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   sp_io_write(&stream, "abc", 3);
   ASSERT_EQ(sp_io_size(&stream), 3);
@@ -874,7 +874,7 @@ UTEST_F(io, buffer_write_extends_size) {
 }
 
 UTEST_F(io, buffer_read_past_end) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   sp_io_write(&stream, "abc", 3);
   sp_io_seek(&stream, 0, SP_IO_SEEK_SET);
@@ -887,7 +887,7 @@ UTEST_F(io, buffer_read_past_end) {
 }
 
 UTEST_F(io, buffer_large_write) {
-  sp_io_stream_t stream = sp_io_from_buffer();
+  sp_io_stream_t stream = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u8 data[4096];
   for (u32 i = 0; i < 4096; i++) data[i] = (u8)(i & 0xFF);
@@ -1106,7 +1106,7 @@ UTEST_F(io, memory_pad_zero) {
 UTEST_F(io, buffer_pad_basic) {
   u32 pad_size = 16;
 
-  sp_io_stream_t io = sp_io_from_buffer();
+  sp_io_stream_t io = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u64 padded = sp_io_pad(&io, pad_size);
   EXPECT_EQ(padded, pad_size);
@@ -1126,7 +1126,7 @@ UTEST_F(io, buffer_pad_basic) {
 UTEST_F(io, buffer_pad_grows) {
   u32 pad_size = 256;
 
-  sp_io_stream_t io = sp_io_from_buffer();
+  sp_io_stream_t io = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   u64 padded = sp_io_pad(&io, pad_size);
   EXPECT_EQ(padded, pad_size);
@@ -1140,7 +1140,7 @@ UTEST_F(io, buffer_pad_after_write) {
   u32 pad_size = 5;
   u32 total_size = write_size + pad_size;
 
-  sp_io_stream_t io = sp_io_from_buffer();
+  sp_io_stream_t io = sp_io_from_dyn_mem(SP_NULLPTR, 0);
 
   sp_io_write(&io, "abc", write_size);
   u64 padded = sp_io_pad(&io, pad_size);
