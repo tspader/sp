@@ -2218,14 +2218,14 @@ typedef enum {
   SP_IO_FILE_CLOSE_MODE_AUTO,
 } sp_io_file_close_mode_t;
 
-typedef struct sp_io_stream_t sp_io_stream_t;
+typedef struct sp_io sp_io_t;
 
-SP_TYPEDEF_FN(s64, sp_io_size_fn, sp_io_stream_t* stream);
-SP_TYPEDEF_FN(s64, sp_io_seek_fn, sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
-SP_TYPEDEF_FN(u64, sp_io_read_fn, sp_io_stream_t* stream, void* ptr, u64 size);
-SP_TYPEDEF_FN(u64, sp_io_write_fn, sp_io_stream_t* stream, const void* ptr, u64 size);
-SP_TYPEDEF_FN(u64, sp_io_pad_fn, sp_io_stream_t* stream, u64 size);
-SP_TYPEDEF_FN(void, sp_io_close_fn, sp_io_stream_t* stream);
+SP_TYPEDEF_FN(s64, sp_io_size_fn, sp_io_t* stream);
+SP_TYPEDEF_FN(s64, sp_io_seek_fn, sp_io_t* stream, s64 offset, sp_io_whence_t whence);
+SP_TYPEDEF_FN(u64, sp_io_read_fn, sp_io_t* stream, void* ptr, u64 size);
+SP_TYPEDEF_FN(u64, sp_io_write_fn, sp_io_t* stream, const void* ptr, u64 size);
+SP_TYPEDEF_FN(u64, sp_io_pad_fn, sp_io_t* stream, u64 size);
+SP_TYPEDEF_FN(void, sp_io_close_fn, sp_io_t* stream);
 
 typedef struct {
   sp_io_size_fn  size;
@@ -2261,7 +2261,7 @@ typedef struct {
   sp_allocator_t allocator;
 } sp_io_buffer_data_t;
 
-struct sp_io_stream_t {
+struct sp_io {
   sp_io_callbacks_t callbacks;
   union {
     sp_io_file_data_t file;
@@ -2272,21 +2272,21 @@ struct sp_io_stream_t {
   sp_allocator_t allocator;
 };
 
-SP_API sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
-SP_API sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t mode);
-SP_API sp_io_stream_t sp_io_from_mem(void* memory, u64 size);
-SP_API sp_io_stream_t sp_io_from_const_mem(const void* memory, u64 size);
-SP_API sp_io_stream_t sp_io_from_dyn_mem(u8* buffer, u64 size);
-SP_API sp_io_stream_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator);
-SP_API u64            sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size);
-SP_API u64            sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size);
-SP_API u64            sp_io_write_str(sp_io_stream_t* stream, sp_str_t str);
-SP_API u64            sp_io_pad(sp_io_stream_t* stream, u64 size);
-SP_API s64            sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence);
-SP_API s64            sp_io_size(sp_io_stream_t* stream);
-SP_API void           sp_io_close(sp_io_stream_t* stream);
+SP_API sp_io_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
+SP_API sp_io_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t mode);
+SP_API sp_io_t sp_io_from_mem(void* memory, u64 size);
+SP_API sp_io_t sp_io_from_const_mem(const void* memory, u64 size);
+SP_API sp_io_t sp_io_from_dyn_mem(u8* buffer, u64 size);
+SP_API sp_io_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator);
+SP_API u64            sp_io_read(sp_io_t* stream, void* ptr, u64 size);
+SP_API u64            sp_io_write(sp_io_t* stream, const void* ptr, u64 size);
+SP_API u64            sp_io_write_str(sp_io_t* stream, sp_str_t str);
+SP_API u64            sp_io_pad(sp_io_t* stream, u64 size);
+SP_API s64            sp_io_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence);
+SP_API s64            sp_io_size(sp_io_t* stream);
+SP_API void           sp_io_close(sp_io_t* stream);
 SP_API sp_str_t       sp_io_read_file(sp_str_t path);
-SP_API sp_str_t       sp_io_buffer_to_str(sp_io_stream_t* stream);
+SP_API sp_str_t       sp_io_buffer_to_str(sp_io_t* stream);
 
 
 // ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
@@ -2342,15 +2342,15 @@ typedef enum {
 }
 
 typedef struct {
-  sp_io_stream_t stream;
+  sp_io_t stream;
   sp_ps_io_mode_t mode;
   sp_ps_io_blocking_t block;
-} sp_ps_io_stream_config_t;
+} sp_ps_io_config_entry_t;
 
 typedef struct {
-  sp_ps_io_stream_config_t in;
-  sp_ps_io_stream_config_t out;
-  sp_ps_io_stream_config_t err;
+  sp_ps_io_config_entry_t in;
+  sp_ps_io_config_entry_t out;
+  sp_ps_io_config_entry_t err;
 } sp_ps_io_config_t;
 
 typedef sp_ps_io_config_t sp_ps_io_t;
@@ -2405,13 +2405,13 @@ typedef struct {
     s32 read;
     s32 write;
   } pipes;
-} sp_ps_posix_stdio_stream_config_t;
+} sp_ps_stdio_config_entry_t;
 
 typedef struct {
-  sp_ps_posix_stdio_stream_config_t in;
-  sp_ps_posix_stdio_stream_config_t out;
-  sp_ps_posix_stdio_stream_config_t err;
-} sp_ps_posix_stdio_config_t;
+  sp_ps_stdio_config_entry_t in;
+  sp_ps_stdio_config_entry_t out;
+  sp_ps_stdio_config_entry_t err;
+} sp_ps_stdio_config_t;
 
 typedef struct {
   s32 read;
@@ -2436,9 +2436,9 @@ SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
 SP_API void            sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg);
 SP_API sp_ps_t         sp_ps_create(sp_ps_config_t config);
 SP_API sp_ps_output_t  sp_ps_run(sp_ps_config_t config);
-SP_API sp_io_stream_t* sp_ps_io_in(sp_ps_t* proc);
-SP_API sp_io_stream_t* sp_ps_io_out(sp_ps_t* proc);
-SP_API sp_io_stream_t* sp_ps_io_err(sp_ps_t* proc);
+SP_API sp_io_t* sp_ps_io_in(sp_ps_t* proc);
+SP_API sp_io_t* sp_ps_io_out(sp_ps_t* proc);
+SP_API sp_io_t* sp_ps_io_err(sp_ps_t* proc);
 SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* proc);
 SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
@@ -2996,7 +2996,7 @@ void              sp_elf_symtab_sort(sp_elf_section_t* symtab, sp_elf_t* elf);
 Elf64_Rela*       sp_elf_rela_get(sp_elf_section_t* rela, u32 index);
 u32               sp_elf_strtab_size(sp_elf_section_t* strtab);
 sp_str_t          sp_elf_strtab_get(sp_elf_section_t* strtab, u32 offset);
-sp_err_t          sp_elf_write(sp_elf_t* elf, sp_io_stream_t* out);
+sp_err_t          sp_elf_write(sp_elf_t* elf, sp_io_t* out);
 sp_err_t          sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path);
 #endif
 
@@ -6365,10 +6365,10 @@ void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
 
   sp_win32_dword_t src_attrs = GetFileAttributesA(sp_str_to_cstr(from));
 
-  sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
+  sp_io_t src = sp_io_from_file(from, SP_IO_MODE_READ);
   if (!src.file.fd) return;
 
-  sp_io_stream_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
+  sp_io_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
   if (!dst.file.fd) {
     sp_io_close(&src);
     return;
@@ -6651,10 +6651,10 @@ void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
   struct stat stf;
   if (stat(sp_str_to_cstr(from), &stf)) return;
 
-  sp_io_stream_t src = sp_io_from_file(from, SP_IO_MODE_READ);
+  sp_io_t src = sp_io_from_file(from, SP_IO_MODE_READ);
   if (!src.file.fd) return;
 
-  sp_io_stream_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
+  sp_io_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
   if (!dst.file.fd) {
     sp_io_close(&src);
     return;
@@ -8127,7 +8127,7 @@ void sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg) {
   }
 }
 
-void sp_ps_configure_io_stream(sp_ps_io_stream_config_t* io, sp_ps_posix_stdio_stream_config_t* p) {
+void sp_ps_configure_io_entry(sp_ps_io_config_entry_t* io, sp_ps_stdio_config_entry_t* p) {
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
       SP_ASSERT(posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0);
@@ -8179,22 +8179,22 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     sp_ps_set_cwd(&fa, config.cwd);
   }
 
-  sp_ps_posix_stdio_config_t io = {
-    .in = (sp_ps_posix_stdio_stream_config_t) {
+  sp_ps_stdio_config_t io = {
+    .in = (sp_ps_stdio_config_entry_t) {
       .fa = &fa,
       .file_number = SP_PS_IO_FILENO_STDIN,
       .flag = O_RDONLY,
       .mode = 0x000,
       .pipes = { .read = -1, .write = -1 }
     },
-    .out = (sp_ps_posix_stdio_stream_config_t) {
+    .out = (sp_ps_stdio_config_entry_t) {
       .fa = &fa,
       .file_number = SP_PS_IO_FILENO_STDOUT,
       .flag = O_WRONLY,
       .mode = 0x644,
       .pipes = { .read = -1, .write = -1 },
     },
-    .err = (sp_ps_posix_stdio_stream_config_t) {
+    .err = (sp_ps_stdio_config_entry_t) {
       .fa = &fa,
       .file_number = SP_PS_IO_FILENO_STDERR,
       .flag = O_WRONLY,
@@ -8203,15 +8203,15 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     },
   };
 
-  sp_ps_configure_io_stream(&proc.io.in, &io.in);
+  sp_ps_configure_io_entry(&proc.io.in, &io.in);
 
   if (proc.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
-    sp_ps_configure_io_stream(&proc.io.err, &io.err);
-    sp_ps_configure_io_stream(&proc.io.out, &io.out);
+    sp_ps_configure_io_entry(&proc.io.err, &io.err);
+    sp_ps_configure_io_entry(&proc.io.out, &io.out);
   }
   else {
-    sp_ps_configure_io_stream(&proc.io.out, &io.out);
-    sp_ps_configure_io_stream(&proc.io.err, &io.err);
+    sp_ps_configure_io_entry(&proc.io.out, &io.out);
+    sp_ps_configure_io_entry(&proc.io.err, &io.err);
   }
 
   pid_t pid;
@@ -8279,7 +8279,7 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
       SP_FMT_STR(config.command)
     );
   }
-  config.io.out = (sp_ps_io_stream_config_t) {
+  config.io.out = (sp_ps_io_config_entry_t) {
     .mode = SP_PS_IO_MODE_CREATE
   };
   sp_ps_t ps = sp_ps_create(config);
@@ -8291,7 +8291,7 @@ void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
   SP_ASSERT(posix_spawn_file_actions_addchdir_np(fa, cwd_cstr) == 0);
 }
 
-sp_io_stream_t* sp_ps_io_redirect(sp_ps_t* proc, sp_ps_io_file_number_t file_number) {
+sp_io_t* sp_ps_io_redirect(sp_ps_t* proc, sp_ps_io_file_number_t file_number) {
   switch (file_number) {
     case SP_PS_IO_FILENO_STDIN: return &proc->io.in.stream;
     case SP_PS_IO_FILENO_STDOUT: return &proc->io.out.stream;
@@ -8300,7 +8300,7 @@ sp_io_stream_t* sp_ps_io_redirect(sp_ps_t* proc, sp_ps_io_file_number_t file_num
   SP_UNREACHABLE_RETURN(SP_NULLPTR);
 }
 
-sp_io_stream_t* sp_ps_io(sp_ps_t* proc, sp_ps_io_stream_config_t* config) {
+sp_io_t* sp_ps_io(sp_ps_t* proc, sp_ps_io_config_entry_t* config) {
   SP_ASSERT(proc != SP_NULLPTR);
   switch (config->mode) {
     case SP_PS_IO_MODE_CREATE:
@@ -8317,15 +8317,15 @@ sp_io_stream_t* sp_ps_io(sp_ps_t* proc, sp_ps_io_stream_config_t* config) {
   SP_UNREACHABLE_RETURN(SP_NULLPTR);
 }
 
-sp_io_stream_t* sp_ps_io_in(sp_ps_t* proc) {
+sp_io_t* sp_ps_io_in(sp_ps_t* proc) {
   return sp_ps_io(proc, &proc->io.in);
 }
 
-sp_io_stream_t* sp_ps_io_out(sp_ps_t* proc) {
+sp_io_t* sp_ps_io_out(sp_ps_t* proc) {
   return sp_ps_io(proc, &proc->io.out);
 }
 
-sp_io_stream_t* sp_ps_io_err(sp_ps_t* proc) {
+sp_io_t* sp_ps_io_err(sp_ps_t* proc) {
   return sp_ps_io(proc, &proc->io.err);
 }
 
@@ -8414,7 +8414,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
 
   u8 buffer [4096] = SP_ZERO_INITIALIZE();
 
-  sp_io_stream_t* out = sp_ps_io_out(proc);
+  sp_io_t* out = sp_ps_io_out(proc);
   if (out) {
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
@@ -8431,7 +8431,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
     result.out = sp_str_builder_move(&builder);
   }
 
-  sp_io_stream_t* err = sp_ps_io_err(proc);
+  sp_io_t* err = sp_ps_io_err(proc);
   if (err) {
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
@@ -9228,12 +9228,12 @@ sp_err_t sp_err_get() {
 // ██║╚██████╔╝
 // ╚═╝ ╚═════╝
 // @io
-s64 sp_io_const_memory_size(sp_io_stream_t* stream) {
+s64 sp_io_const_memory_size(sp_io_t* stream) {
   sp_io_const_memory_data_t* data = &stream->const_memory;
   return data->stop - data->base;
 }
 
-s64 sp_io_const_memory_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+s64 sp_io_const_memory_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
   sp_io_const_memory_data_t* data = &stream->const_memory;
   const u8* new_pos;
 
@@ -9263,7 +9263,7 @@ s64 sp_io_const_memory_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t w
   return data->here - data->base;
 }
 
-u64 sp_io_const_memory_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+u64 sp_io_const_memory_read(sp_io_t* stream, void* ptr, u64 size) {
   sp_io_const_memory_data_t* data = &stream->const_memory;
   u64 available = data->stop - data->here;
   u64 to_read = SP_MIN(size, available);
@@ -9273,23 +9273,23 @@ u64 sp_io_const_memory_read(sp_io_stream_t* stream, void* ptr, u64 size) {
   return to_read;
 }
 
-u64 sp_io_const_memory_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+u64 sp_io_const_memory_write(sp_io_t* stream, const void* ptr, u64 size) {
   (void)stream; (void)ptr; (void)size;
   sp_err_set(SP_ERR_IO_READ_ONLY);
   return 0;
 }
 
-u64 sp_io_const_memory_pad(sp_io_stream_t* stream, u64 size) {
+u64 sp_io_const_memory_pad(sp_io_t* stream, u64 size) {
   (void)stream; (void)size;
   sp_err_set(SP_ERR_IO_READ_ONLY);
   return 0;
 }
 
-void sp_io_const_memory_close(sp_io_stream_t* stream) {
+void sp_io_const_memory_close(sp_io_t* stream) {
   (void)stream;
 }
 
-u64 sp_io_memory_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+u64 sp_io_memory_write(sp_io_t* stream, const void* ptr, u64 size) {
   sp_io_memory_data_t* data = &stream->memory;
   u64 available = data->stop - data->here;
   u64 to_write = SP_MIN(size, available);
@@ -9299,7 +9299,7 @@ u64 sp_io_memory_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
   return to_write;
 }
 
-u64 sp_io_memory_pad(sp_io_stream_t* stream, u64 size) {
+u64 sp_io_memory_pad(sp_io_t* stream, u64 size) {
   sp_io_memory_data_t* data = &stream->memory;
   u64 available = data->stop - data->here;
   u64 to_pad = SP_MIN(size, available);
@@ -9309,12 +9309,12 @@ u64 sp_io_memory_pad(sp_io_stream_t* stream, u64 size) {
   return to_pad;
 }
 
-s64 sp_io_buffer_size(sp_io_stream_t* stream) {
+s64 sp_io_buffer_size(sp_io_t* stream) {
   sp_io_buffer_data_t* data = &stream->buffer;
   return data->stop - data->base;
 }
 
-s64 sp_io_buffer_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+s64 sp_io_buffer_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
   sp_io_buffer_data_t* data = &stream->buffer;
   u8* new_pos;
 
@@ -9344,7 +9344,7 @@ s64 sp_io_buffer_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence)
   return data->here - data->base;
 }
 
-u64 sp_io_buffer_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+u64 sp_io_buffer_read(sp_io_t* stream, void* ptr, u64 size) {
   sp_io_buffer_data_t* data = &stream->buffer;
   u64 available = data->stop - data->here;
   u64 to_read = SP_MIN(size, available);
@@ -9354,7 +9354,7 @@ u64 sp_io_buffer_read(sp_io_stream_t* stream, void* ptr, u64 size) {
   return to_read;
 }
 
-u64 sp_io_buffer_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+u64 sp_io_buffer_write(sp_io_t* stream, const void* ptr, u64 size) {
   sp_io_buffer_data_t* data = &stream->buffer;
   u64 pos = data->here - data->base;
   u64 required = pos + size;
@@ -9380,7 +9380,7 @@ u64 sp_io_buffer_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
   return size;
 }
 
-u64 sp_io_buffer_pad(sp_io_stream_t* stream, u64 size) {
+u64 sp_io_buffer_pad(sp_io_t* stream, u64 size) {
   sp_io_buffer_data_t* data = &stream->buffer;
   u64 pos = data->here - data->base;
   u64 required = pos + size;
@@ -9406,11 +9406,11 @@ u64 sp_io_buffer_pad(sp_io_stream_t* stream, u64 size) {
   return size;
 }
 
-void sp_io_buffer_close(sp_io_stream_t* stream) {
+void sp_io_buffer_close(sp_io_t* stream) {
   (void)stream;
 }
 
-s64 sp_io_file_size(sp_io_stream_t* stream) {
+s64 sp_io_file_size(sp_io_t* stream) {
   sp_io_file_data_t* data = &stream->file;
   s64 current = lseek(data->fd, 0, SEEK_CUR);
   if (current < 0) {
@@ -9426,7 +9426,7 @@ s64 sp_io_file_size(sp_io_stream_t* stream) {
   return size;
 }
 
-s64 sp_io_file_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+s64 sp_io_file_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
   sp_io_file_data_t* data = &stream->file;
   int posix_whence;
 
@@ -9455,7 +9455,7 @@ s64 sp_io_file_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
   return pos;
 }
 
-u64 sp_io_file_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+u64 sp_io_file_read(sp_io_t* stream, void* ptr, u64 size) {
   sp_io_file_data_t* data = &stream->file;
   s64 result = read(data->fd, ptr, size);
   if (result < 0) {
@@ -9465,7 +9465,7 @@ u64 sp_io_file_read(sp_io_stream_t* stream, void* ptr, u64 size) {
   return (u64)result;
 }
 
-u64 sp_io_file_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+u64 sp_io_file_write(sp_io_t* stream, const void* ptr, u64 size) {
   sp_io_file_data_t* data = &stream->file;
   s64 result = write(data->fd, ptr, size);
   if (result < 0) {
@@ -9475,7 +9475,7 @@ u64 sp_io_file_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
   return (u64)result;
 }
 
-u64 sp_io_file_pad(sp_io_stream_t* stream, u64 size) {
+u64 sp_io_file_pad(sp_io_t* stream, u64 size) {
   static const u8 zeros[64] = {0};
   u64 written = 0;
   while (written < size) {
@@ -9487,7 +9487,7 @@ u64 sp_io_file_pad(sp_io_stream_t* stream, u64 size) {
   return written;
 }
 
-void sp_io_file_close(sp_io_stream_t* stream) {
+void sp_io_file_close(sp_io_t* stream) {
   sp_io_file_data_t* data = &stream->file;
   if (data->close_mode == SP_IO_FILE_CLOSE_MODE_AUTO) {
     if (close(data->fd) < 0) {
@@ -9496,7 +9496,7 @@ void sp_io_file_close(sp_io_stream_t* stream) {
   }
 }
 
-sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
+sp_io_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
   int flags = 0;
 
   if ((mode & SP_IO_MODE_READ) && (mode & SP_IO_MODE_WRITE)) {
@@ -9513,7 +9513,7 @@ sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
   const char* cpath = sp_str_to_cstr(path);
   int fd = open(cpath, flags, 0644);
 
-  sp_io_stream_t stream = SP_ZERO_INITIALIZE();
+  sp_io_t stream = SP_ZERO_INITIALIZE();
   stream.callbacks = (sp_io_callbacks_t) {
     .size = sp_io_file_size,
     .seek = sp_io_file_seek,
@@ -9534,8 +9534,8 @@ sp_io_stream_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
   return stream;
 }
 
-sp_io_stream_t sp_io_from_mem(void* memory, u64 size) {
-  sp_io_stream_t stream = SP_ZERO_INITIALIZE();
+sp_io_t sp_io_from_mem(void* memory, u64 size) {
+  sp_io_t stream = SP_ZERO_INITIALIZE();
   stream.memory.base = (u8*)memory;
   stream.memory.here = (u8*)memory;
   stream.memory.stop = (u8*)memory + size;
@@ -9549,8 +9549,8 @@ sp_io_stream_t sp_io_from_mem(void* memory, u64 size) {
   return stream;
 }
 
-sp_io_stream_t sp_io_from_const_mem(const void* memory, u64 size) {
-  sp_io_stream_t stream = SP_ZERO_INITIALIZE();
+sp_io_t sp_io_from_const_mem(const void* memory, u64 size) {
+  sp_io_t stream = SP_ZERO_INITIALIZE();
   stream.const_memory.base = (const u8*)memory;
   stream.const_memory.here = (const u8*)memory;
   stream.const_memory.stop = (const u8*)memory + size;
@@ -9564,12 +9564,12 @@ sp_io_stream_t sp_io_from_const_mem(const void* memory, u64 size) {
   return stream;
 }
 
-sp_io_stream_t sp_io_from_dyn_mem(u8* buffer, u64 size) {
+sp_io_t sp_io_from_dyn_mem(u8* buffer, u64 size) {
   return sp_io_from_dyn_mem_ex(buffer, size, sp_context_get()->allocator);
 }
 
-sp_io_stream_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator) {
-  return (sp_io_stream_t) {
+sp_io_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator) {
+  return (sp_io_t) {
     .callbacks = {
       .size = sp_io_buffer_size,
       .seek = sp_io_buffer_seek,
@@ -9584,7 +9584,7 @@ sp_io_stream_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t alloca
   };
 }
 
-sp_str_t sp_io_buffer_to_str(sp_io_stream_t* stream) {
+sp_str_t sp_io_buffer_to_str(sp_io_t* stream) {
   SP_ASSERT(stream);
   sp_io_buffer_data_t* data = &stream->buffer;
   return (sp_str_t) {
@@ -9593,8 +9593,8 @@ sp_str_t sp_io_buffer_to_str(sp_io_stream_t* stream) {
   };
 }
 
-sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode) {
-  sp_io_stream_t stream = SP_ZERO_INITIALIZE();
+sp_io_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode) {
+  sp_io_t stream = SP_ZERO_INITIALIZE();
   stream.callbacks = (sp_io_callbacks_t) {
     .size = sp_io_file_size,
     .seek = sp_io_file_seek,
@@ -9609,52 +9609,52 @@ sp_io_stream_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_clo
   return stream;
 }
 
-u64 sp_io_read(sp_io_stream_t* stream, void* ptr, u64 size) {
+u64 sp_io_read(sp_io_t* stream, void* ptr, u64 size) {
   SP_ASSERT(stream); SP_ASSERT(ptr); SP_ASSERT(stream->callbacks.read);
   u64 bytes = stream->callbacks.read(stream, ptr, size);
   if (bytes < size) sp_err_set(SP_ERR_IO_EOF);
   return bytes;
 }
 
-u64 sp_io_write(sp_io_stream_t* stream, const void* ptr, u64 size) {
+u64 sp_io_write(sp_io_t* stream, const void* ptr, u64 size) {
   SP_ASSERT(stream); SP_ASSERT(ptr); SP_ASSERT(stream->callbacks.write);
   return stream->callbacks.write(stream, ptr, size);
 }
 
-u64 sp_io_write_str(sp_io_stream_t* stream, sp_str_t str) {
+u64 sp_io_write_str(sp_io_t* stream, sp_str_t str) {
   SP_ASSERT(stream);
   SP_ASSERT(sp_str_valid(str));
   return sp_io_write(stream, str.data, str.len);
 }
 
-u64 sp_io_write_cstr(sp_io_stream_t* stream, const c8* cstr) {
+u64 sp_io_write_cstr(sp_io_t* stream, const c8* cstr) {
   SP_ASSERT(stream);
   SP_ASSERT(cstr);
   return sp_io_write(stream, cstr, sp_cstr_len(cstr));
 }
 
-u64 sp_io_pad(sp_io_stream_t* stream, u64 size) {
+u64 sp_io_pad(sp_io_t* stream, u64 size) {
   SP_ASSERT(stream); SP_ASSERT(stream->callbacks.pad);
   return stream->callbacks.pad(stream, size);
 }
 
-s64 sp_io_seek(sp_io_stream_t* stream, s64 offset, sp_io_whence_t whence) {
+s64 sp_io_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
   SP_ASSERT(stream); SP_ASSERT(stream->callbacks.seek);
   return stream->callbacks.seek(stream, offset, whence);
 }
 
-s64 sp_io_size(sp_io_stream_t* stream) {
+s64 sp_io_size(sp_io_t* stream) {
   SP_ASSERT(stream); SP_ASSERT(stream->callbacks.size);
   return stream->callbacks.size(stream);
 }
 
-void sp_io_close(sp_io_stream_t* stream) {
+void sp_io_close(sp_io_t* stream) {
   SP_ASSERT(stream); SP_ASSERT(stream->callbacks.close);
   stream->callbacks.close(stream);
 }
 
 sp_str_t sp_io_read_file(sp_str_t path) {
-  sp_io_stream_t stream = sp_io_from_file(path, SP_IO_MODE_READ);
+  sp_io_t stream = sp_io_from_file(path, SP_IO_MODE_READ);
   if (stream.file.fd < 0) {
     return SP_ZERO_STRUCT(sp_str_t);
   }
@@ -10233,7 +10233,7 @@ sp_elf_section_t* sp_elf_find_or_create_shstrtab(sp_elf_t* elf) {
   return table;
 }
 
-sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_stream_t* out) {
+sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_t* out) {
   sp_require_as(elf, SP_ERR_LAZY);
   sp_require_as(out, SP_ERR_LAZY);
 
@@ -10336,13 +10336,13 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_stream_t* out) {
 }
 
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {
-  sp_io_stream_t f = sp_io_from_file(path, SP_IO_MODE_WRITE);
+  sp_io_t f = sp_io_from_file(path, SP_IO_MODE_WRITE);
   sp_err_t err = sp_elf_write(elf, &f);
   sp_io_close(&f);
   return err;
 }
 
-sp_elf_t* sp_elf_read(sp_io_stream_t* in) {
+sp_elf_t* sp_elf_read(sp_io_t* in) {
   sp_require_as_null(in);
 
   Elf64_Ehdr ehdr = SP_ZERO_INITIALIZE();
@@ -10435,7 +10435,7 @@ sp_elf_t* sp_elf_read(sp_io_stream_t* in) {
 }
 
 sp_elf_t* sp_elf_read_from_file(sp_str_t path) {
-  sp_io_stream_t f = sp_io_from_file(path, SP_IO_MODE_READ);
+  sp_io_t f = sp_io_from_file(path, SP_IO_MODE_READ);
   if (f.file.fd < 0) {
     sp_err_set(SP_ERR_LAZY);
     return SP_NULLPTR;

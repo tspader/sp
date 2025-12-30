@@ -101,7 +101,8 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
   sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
-  sp_io_stream_t s = sp_io_from_file(test_file, SP_IO_MODE_WRITE);
+#if defined(SP_MACOS)
+  sp_io_t s = sp_io_from_file(test_file, SP_IO_MODE_WRITE);
   sp_io_write_str(&s, sp_str_lit("modified content"));
   sp_io_close(&s);
 

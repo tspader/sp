@@ -233,7 +233,7 @@ UTEST_F(elf, err_add_reloc_null_section) {
 
 UTEST_F(elf, minimal_elf_format) {
   sp_elf_t* elf = sp_elf_new_with_null_section();
-  sp_io_stream_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
+  sp_io_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   sp_elf_write(elf, &buf);
   u8* data = buf.buffer.base;
   u64 size = buf.buffer.here - buf.buffer.base;
@@ -283,7 +283,7 @@ UTEST_F(elf, minimal_readelf_validates) {
 }
 
 UTEST_F(elf, err_write_null_elf) {
-  sp_io_stream_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
+  sp_io_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   sp_err_t err = sp_elf_write(SP_NULLPTR, &buf);
   ASSERT_NE(err, SP_ERR_OK);
   sp_io_close(&buf);
@@ -385,7 +385,7 @@ UTEST_F(elf, populated_section_alignment) {
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   sp_elf_section_reserve_bytes(data, 5);
 
-  sp_io_stream_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
+  sp_io_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.buffer.base;
 
@@ -409,7 +409,7 @@ UTEST_F(elf, populated_sections_no_overlap) {
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   sp_elf_section_reserve_bytes(data, 50);
 
-  sp_io_stream_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
+  sp_io_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.buffer.base;
 
@@ -439,7 +439,7 @@ UTEST_F(elf, populated_nobits_no_file_space) {
   sp_elf_section_t* bss = sp_elf_add_section(elf, sp_str_lit(".bss"), SHT_NOBITS, 8);
   bss->buffer.size = 1024;
 
-  sp_io_stream_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
+  sp_io_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.buffer.base;
 
@@ -463,7 +463,7 @@ UTEST_F(elf, populated_nobits_no_file_space) {
 UTEST_F(elf, roundtrip_minimal) {
   sp_elf_t* elf = sp_elf_new_with_null_section();
 
-  sp_io_stream_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
+  sp_io_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   sp_elf_write(elf, &buf);
 
   sp_io_seek(&buf, 0, SP_IO_SEEK_SET);
@@ -499,7 +499,7 @@ UTEST_F(elf, roundtrip_populated) {
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
   sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, sizeof(code), STB_GLOBAL, STT_FUNC, text->index);
 
-  sp_io_stream_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
+  sp_io_t buf = sp_io_from_dyn_mem(SP_NULLPTR, 0);
   sp_elf_write(elf, &buf);
 
   sp_io_seek(&buf, 0, SP_IO_SEEK_SET);
@@ -542,7 +542,7 @@ UTEST_F(elf, err_read_invalid_magic) {
   bad_data[2] = 'D';
   bad_data[3] = '!';
 
-  sp_io_stream_t buf = sp_io_from_mem(bad_data, sizeof(bad_data));
+  sp_io_t buf = sp_io_from_mem(bad_data, sizeof(bad_data));
   sp_elf_t* read_elf = sp_elf_read(&buf);
 
   ASSERT_EQ(read_elf, SP_NULLPTR);
@@ -557,7 +557,7 @@ UTEST_F(elf, err_read_invalid_class) {
   bad_data[EI_CLASS] = ELFCLASS32;
   bad_data[EI_DATA] = ELFDATA2LSB;
 
-  sp_io_stream_t buf = sp_io_from_mem(bad_data, sizeof(bad_data));
+  sp_io_t buf = sp_io_from_mem(bad_data, sizeof(bad_data));
   sp_elf_t* read_elf = sp_elf_read(&buf);
 
   ASSERT_EQ(read_elf, SP_NULLPTR);
@@ -619,7 +619,7 @@ UTEST_F(elf, integration_link_and_run) {
                "}\n");
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration.c"));
-  sp_io_stream_t f = sp_io_from_file(c_path, SP_IO_MODE_WRITE);
+  sp_io_t f = sp_io_from_file(c_path, SP_IO_MODE_WRITE);
   sp_io_write_str(&f, c_src);
   sp_io_close(&f);
 

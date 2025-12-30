@@ -127,7 +127,7 @@ sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name) {
 void sp_test_file_create_ex(sp_test_file_config_t config) {
   sp_fs_remove_file(config.path);
 
-  sp_io_stream_t stream = sp_io_from_file(config.path, SP_IO_MODE_WRITE);
+  sp_io_t stream = sp_io_from_file(config.path, SP_IO_MODE_WRITE);
   SP_ASSERT(stream.file.fd != 0);
 
   if (config.content.len > 0) {

@@ -10,14 +10,14 @@
 typedef struct {
   sp_str_t expected;
   bool enabled;
-} sp_test_proc_io_stream_config_t;
+} sp_test_proc_io_config_entry_t;
 
 typedef struct {
   sp_ps_io_config_t io;
   sp_str_t input;
   struct {
-    sp_test_proc_io_stream_config_t out;
-    sp_test_proc_io_stream_config_t err;
+    sp_test_proc_io_config_entry_t out;
+    sp_test_proc_io_config_entry_t err;
   } output;
   test_proc_function_t fn;
 } sp_test_proc_io_config_t;
@@ -33,7 +33,7 @@ typedef enum {
 } sp_test_proc_read_mode_t;
 
 typedef struct {
-  sp_io_stream_t* stream;
+  sp_io_t* stream;
   sp_byte_buffer_t buffer;
   sp_str_t expected;
   sp_test_proc_read_mode_t mode;
@@ -139,9 +139,9 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   sp_ps_t ps = sp_ps_create(config);
   SP_ASSERT(ps.pid != 0);
 
-  sp_io_stream_t* in = sp_ps_io_in(&ps);
-  sp_io_stream_t* out = sp_ps_io_out(&ps);
-  sp_io_stream_t* err = sp_ps_io_err(&ps);
+  sp_io_t* in = sp_ps_io_in(&ps);
+  sp_io_t* out = sp_ps_io_out(&ps);
+  sp_io_t* err = sp_ps_io_err(&ps);
 
   if (!sp_str_empty(test.input)) {
     u64 bytes_written = sp_io_write(in, test.input.data, test.input.len);
@@ -260,7 +260,7 @@ UTEST_F(ps, io_stdout_stderr) {
 // SP_PS_IO_MODE_EXISTING
 UTEST_F(ps, io_create_file_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdout.file"));
-  sp_io_stream_t io = sp_io_from_file(file_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
+  sp_io_t io = sp_io_from_file(file_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
@@ -291,7 +291,7 @@ UTEST_F(ps, io_create_file_null) {
 UTEST_F(ps, io_file_create_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
-  sp_io_stream_t io = sp_io_from_file(file_path, SP_IO_MODE_WRITE);
+  sp_io_t io = sp_io_from_file(file_path, SP_IO_MODE_WRITE);
   sp_io_write_str(&io, sp_test_ps_canary);
   sp_io_close(&io);
   io = sp_io_from_file(file_path, SP_IO_MODE_READ);
@@ -316,7 +316,7 @@ UTEST_F(ps, io_file_create_null) {
 
 UTEST_F(ps, io_create_null_file) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
-  sp_io_stream_t io = sp_io_from_file(file_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
+  sp_io_t io = sp_io_from_file(file_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
@@ -347,13 +347,13 @@ UTEST_F(ps, io_create_null_file) {
 UTEST_F(ps, io_file_null_file) {
   sp_str_t in_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
-  sp_io_stream_t in = sp_io_from_file(in_path, SP_IO_MODE_WRITE);
+  sp_io_t in = sp_io_from_file(in_path, SP_IO_MODE_WRITE);
   sp_io_write_str(&in, sp_test_ps_canary);
   sp_io_close(&in);
   in = sp_io_from_file(in_path, SP_IO_MODE_READ);
 
   sp_str_t err_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
-  sp_io_stream_t err = sp_io_from_file(err_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
+  sp_io_t err = sp_io_from_file(err_path, SP_IO_MODE_READ | SP_IO_MODE_APPEND);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
@@ -446,8 +446,8 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
   sp_ps_t ps = sp_ps_create(config);
   SP_ASSERT(ps.pid);
 
-  sp_io_stream_t* in = sp_ps_io_in(&ps);
-  sp_io_stream_t* out = sp_ps_io_out(&ps);
+  sp_io_t* in = sp_ps_io_in(&ps);
+  sp_io_t* out = sp_ps_io_out(&ps);
 
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   for (u32 i = 0; i < 8; i++) {
@@ -809,7 +809,7 @@ UTEST_F(ps, poll_with_io) {
   sp_ps_status_t r1 = sp_ps_poll(&ps, 10);
   EXPECT_EQ(r1.state, SP_PS_STATE_RUNNING);
 
-  sp_io_stream_t* in = sp_ps_io_in(&ps);
+  sp_io_t* in = sp_ps_io_in(&ps);
   EXPECT_NE(in, SP_NULLPTR);
 
   sp_ps_status_t r2 = sp_ps_wait(&ps);
@@ -830,8 +830,8 @@ UTEST_F(ps, interleaved_read_write) {
     }
   });
 
-  sp_io_stream_t* in = sp_ps_io_in(&ps);
-  sp_io_stream_t* out = sp_ps_io_out(&ps);
+  sp_io_t* in = sp_ps_io_in(&ps);
+  sp_io_t* out = sp_ps_io_out(&ps);
 
   EXPECT_NE(in, SP_NULLPTR);
   EXPECT_NE(out, SP_NULLPTR);
@@ -870,7 +870,7 @@ UTEST_F(ps, incremental_nonblocking_read) {
     }
   });
 
-  sp_io_stream_t* out = sp_ps_io_out(&ps);
+  sp_io_t* out = sp_ps_io_out(&ps);
   EXPECT_NE(out, SP_NULLPTR);
 
   const u32 expected_size = 100;
@@ -942,7 +942,7 @@ UTEST_F(ps, write_1mb_to_stdin) {
     buffer[i] = (u8)('A' + (i % 26));
   }
 
-  sp_io_stream_t* in = sp_ps_io_in(&ps);
+  sp_io_t* in = sp_ps_io_in(&ps);
   u64 num_written = sp_io_write(in, buffer, num_bytes);
   EXPECT_EQ(num_written, num_bytes);
   sp_io_close(in);
@@ -982,7 +982,7 @@ UTEST_F(ps, redirect_stderr_to_stdout) {
   EXPECT_TRUE(sp_str_equal(output.out, expected));
   EXPECT_TRUE(sp_str_empty(output.err));
 
-  sp_io_stream_t* err = sp_ps_io_err(&ps);
+  sp_io_t* err = sp_ps_io_err(&ps);
   EXPECT_EQ(err, SP_NULLPTR);
 }
 
@@ -1010,7 +1010,7 @@ UTEST_F(ps, redirect_stdout_to_stderr) {
   EXPECT_TRUE(sp_str_empty(output.out));
   EXPECT_TRUE(sp_str_equal(output.err, expected));
 
-  sp_io_stream_t* out = sp_ps_io_out(&ps);
+  sp_io_t* out = sp_ps_io_out(&ps);
   EXPECT_EQ(out, SP_NULLPTR);
 }
 
