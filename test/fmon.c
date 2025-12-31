@@ -8,7 +8,12 @@
 
 #define SP_FILE_CHANGE_EVENT_ALL (SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_MODIFIED | SP_FILE_CHANGE_EVENT_REMOVED)
 #define SP_TEST_POLL_ITERATIONS 50
+#define SP_TEST_POLL_SLEEP_MS 20
 #define sp_for_n(N) for (u32 _i = 0; _i < (N); _i++)
+
+static bool paths_equal(sp_str_t a, sp_str_t b) {
+  return sp_str_equal(sp_fs_canonicalize_path(a), sp_fs_canonicalize_path(b));
+}
 
 typedef struct sp_test_file_monitor {
   sp_test_file_manager_t file_manager;
@@ -37,7 +42,7 @@ void fmon_callback(sp_fmon_t* monitor, sp_fmon_event_t* change, void* userdata) 
   sp_test_file_monitor* fixture = (sp_test_file_monitor*)userdata;
   fixture->change_detected = true;
   fixture->last_event = change->events;
-  fixture->last_file_path = change->file_path;
+  fixture->last_file_path = sp_str_copy(change->file_path);
 }
 
 UTEST_F(sp_test_file_monitor, init_and_cleanup) {
@@ -46,7 +51,7 @@ UTEST_F(sp_test_file_monitor, init_and_cleanup) {
   EXPECT_NE(ut.monitor.os, SP_NULLPTR);
 }
 
-#if !defined(SP_MACOS)
+#if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, detects_file_creation) {
   sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ADDED, &ut);
 
@@ -65,6 +70,7 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
@@ -74,7 +80,7 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
 
   EXPECT_FALSE(timed_out);
   EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_ADDED);
-  EXPECT_TRUE(sp_str_equal(ut.last_file_path, file));
+  EXPECT_TRUE(paths_equal(ut.last_file_path, file));
 }
 #endif
 
@@ -90,28 +96,18 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
     .content = SP_LIT("initial content"),
   });
 
-#if defined(SP_MACOS)
   sp_fmon_add_file(&ut.monitor, test_file);
-#else
-  sp_fmon_add_dir(&ut.monitor, test_dir);
-#endif
 
   sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
-#if defined(SP_MACOS)
   sp_io_stream_t s = sp_io_from_file(test_file, SP_IO_MODE_WRITE);
   sp_io_write_str(&s, sp_str_lit("modified content"));
   sp_io_close(&s);
-#else
-  sp_test_file_create_ex((sp_test_file_config_t) {
-    .path = test_file,
-    .content = SP_LIT("modified content"),
-  });
-#endif
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
@@ -121,7 +117,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 
   EXPECT_FALSE(timed_out);
   EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
-  EXPECT_TRUE(sp_str_equal(ut.last_file_path, test_file));
+  EXPECT_TRUE(paths_equal(ut.last_file_path, test_file));
 }
 
 UTEST_F(sp_test_file_monitor, detects_file_deletion) {
@@ -136,11 +132,7 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
     .content = SP_LIT("to be deleted"),
   });
 
-#if defined(SP_MACOS)
   sp_fmon_add_file(&ut.monitor, test_file);
-#else
-  sp_fmon_add_dir(&ut.monitor, test_dir);
-#endif
 
   sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
@@ -149,6 +141,7 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
@@ -157,15 +150,11 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
   }
 
   EXPECT_FALSE(timed_out);
-#if defined(SP_MACOS)
   EXPECT_TRUE((ut.last_event & SP_FILE_CHANGE_EVENT_REMOVED) != 0);
-#else
-  EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_REMOVED);
-#endif
-  EXPECT_TRUE(sp_str_equal(ut.last_file_path, test_file));
+  EXPECT_TRUE(paths_equal(ut.last_file_path, test_file));
 }
 
-#if !defined(SP_MACOS)
+#if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
@@ -185,6 +174,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
@@ -193,7 +183,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   }
 
   EXPECT_FALSE(timed_out);
-  EXPECT_TRUE(ut.last_event == SP_FILE_CHANGE_EVENT_ADDED || ut.last_event == SP_FILE_CHANGE_EVENT_MODIFIED);
+  EXPECT_TRUE((ut.last_event & (SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_MODIFIED)) != 0);
 
   ut.change_detected = false;
   sp_test_file_create_ex((sp_test_file_config_t) {
@@ -203,6 +193,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 
   timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
@@ -211,13 +202,14 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   }
 
   EXPECT_FALSE(timed_out);
-  EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
+  EXPECT_TRUE((ut.last_event & SP_FILE_CHANGE_EVENT_MODIFIED) != 0);
 
   ut.change_detected = false;
   sp_fs_remove_file(test_file);
 
   timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       timed_out = false;
@@ -226,7 +218,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   }
 
   EXPECT_FALSE(timed_out);
-  EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_REMOVED);
+  EXPECT_TRUE((ut.last_event & SP_FILE_CHANGE_EVENT_REMOVED) != 0);
 }
 #endif
 
@@ -240,16 +232,16 @@ UTEST_F(sp_test_file_monitor, no_events_without_changes) {
   sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
-  bool timed_out = false;
+  bool spurious_event = false;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
-      timed_out = true;
+      spurious_event = true;
       break;
     }
   }
 
-  EXPECT_FALSE(timed_out);
+  EXPECT_FALSE(spurious_event);
 }
 
 SP_TEST_MAIN()

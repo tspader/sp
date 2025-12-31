@@ -317,4 +317,161 @@ UTEST(stress, sp_context) {
   SP_UNUSED(sum);
 }
 
+#if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
+#define FMON_STRESS_TOTAL_FILES 10000
+#define FMON_STRESS_BATCH_SIZE 1000
+#define FMON_STRESS_DIR_DEPTH 3
+#define FMON_STRESS_DIRS_PER_LEVEL 5
+
+typedef struct {
+  sp_atomic_s32 add_count;
+  sp_atomic_s32 mod_count;
+  sp_atomic_s32 rem_count;
+} fmon_stress_counters_t;
+
+void fmon_stress_callback(sp_fmon_t* monitor, sp_fmon_event_t* event, void* userdata) {
+  (void)monitor;
+  fmon_stress_counters_t* counters = (fmon_stress_counters_t*)userdata;
+  if (event->events & SP_FILE_CHANGE_EVENT_ADDED) {
+    sp_atomic_s32_add(&counters->add_count, 1);
+  }
+  if (event->events & SP_FILE_CHANGE_EVENT_MODIFIED) {
+    sp_atomic_s32_add(&counters->mod_count, 1);
+  }
+  if (event->events & SP_FILE_CHANGE_EVENT_REMOVED) {
+    sp_atomic_s32_add(&counters->rem_count, 1);
+  }
+}
+
+void fmon_stress_poll(sp_fmon_t* monitor) {
+  for (s32 i = 0; i < 5; i++) {
+    sp_fmon_process_changes(monitor);
+    sp_os_sleep_ms(50);
+  }
+}
+
+void fmon_stress_create_dir_tree(sp_str_t base, s32 depth, sp_da(sp_str_t)* dirs) {
+  sp_da_push(*dirs, sp_str_copy(base));
+  if (depth <= 0) return;
+
+  for (s32 i = 0; i < FMON_STRESS_DIRS_PER_LEVEL; i++) {
+    sp_str_t name = sp_format_str(SP_LIT("d{}"), SP_FMT_S32(i));
+    sp_str_t child = sp_fs_join_path(base, name);
+    sp_fs_create_dir(child);
+    fmon_stress_create_dir_tree(child, depth - 1, dirs);
+  }
+}
+
+UTEST(stress, fmon) {
+  sp_test_file_manager_t file_manager;
+  sp_test_file_manager_init(&file_manager);
+
+  fmon_stress_counters_t counters = {0};
+  sp_fmon_t* monitor = SP_ALLOC(sp_fmon_t);
+  sp_fmon_init(monitor, fmon_stress_callback,
+               SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_MODIFIED | SP_FILE_CHANGE_EVENT_REMOVED,
+               &counters);
+
+  // Create root watched directory
+  sp_str_t root = sp_test_file_path(&file_manager, sp_str_lit("fmon_stress"));
+  sp_fs_create_dir(root);
+  sp_fmon_add_dir(monitor, root);
+
+  // Create directory tree
+  sp_da(sp_str_t) dirs = SP_NULLPTR;
+  fmon_stress_create_dir_tree(root, FMON_STRESS_DIR_DEPTH, &dirs);
+
+  // Poll to clear initial dir creation events
+  fmon_stress_poll(monitor);
+  sp_atomic_s32_set(&counters.add_count, 0);
+  sp_atomic_s32_set(&counters.mod_count, 0);
+  sp_atomic_s32_set(&counters.rem_count, 0);
+
+  u32 num_dirs = sp_da_size(dirs);
+  UTEST_PRINTF("Created %u directories\n", num_dirs);
+
+  // Phase 1: Create files in batches
+  sp_da(sp_str_t) files = SP_NULLPTR;
+  u32 files_created = 0;
+  u32 dir_idx = 0;
+
+  while (files_created < FMON_STRESS_TOTAL_FILES) {
+    u32 batch_end = files_created + FMON_STRESS_BATCH_SIZE;
+    if (batch_end > FMON_STRESS_TOTAL_FILES) batch_end = FMON_STRESS_TOTAL_FILES;
+
+    while (files_created < batch_end) {
+      sp_str_t dir = dirs[dir_idx % num_dirs];
+      sp_str_t name = sp_format_str(SP_LIT("f{}.txt"), SP_FMT_U32(files_created));
+      sp_str_t path = sp_fs_join_path(dir, name);
+
+      sp_io_stream_t s = sp_io_from_file(path, SP_IO_MODE_WRITE);
+      sp_io_write_str(&s, sp_str_lit("initial"));
+      sp_io_close(&s);
+
+      sp_da_push(files, path);
+      files_created++;
+      dir_idx++;
+    }
+
+    // Poll between batches
+    fmon_stress_poll(monitor);
+  }
+
+  s32 add_after_create = sp_atomic_s32_get(&counters.add_count);
+  UTEST_PRINTF("Phase 1 (create): %d add events for %u files\n", add_after_create, files_created);
+
+  // Phase 2: Modify files in batches
+  u32 files_modified = 0;
+  while (files_modified < FMON_STRESS_TOTAL_FILES) {
+    u32 batch_end = files_modified + FMON_STRESS_BATCH_SIZE;
+    if (batch_end > FMON_STRESS_TOTAL_FILES) batch_end = FMON_STRESS_TOTAL_FILES;
+
+    while (files_modified < batch_end) {
+      sp_str_t path = files[files_modified];
+      sp_io_stream_t s = sp_io_from_file(path, SP_IO_MODE_WRITE);
+      sp_io_write_str(&s, sp_str_lit("modified"));
+      sp_io_close(&s);
+      files_modified++;
+    }
+
+    fmon_stress_poll(monitor);
+  }
+
+  s32 mod_after_modify = sp_atomic_s32_get(&counters.mod_count);
+  UTEST_PRINTF("Phase 2 (modify): %d mod events for %u files\n", mod_after_modify, files_modified);
+
+  // Phase 3: Delete files in batches
+  u32 files_deleted = 0;
+  while (files_deleted < FMON_STRESS_TOTAL_FILES) {
+    u32 batch_end = files_deleted + FMON_STRESS_BATCH_SIZE;
+    if (batch_end > FMON_STRESS_TOTAL_FILES) batch_end = FMON_STRESS_TOTAL_FILES;
+
+    while (files_deleted < batch_end) {
+      sp_str_t path = files[files_deleted];
+      sp_fs_remove_file(path);
+      files_deleted++;
+    }
+
+    fmon_stress_poll(monitor);
+  }
+
+  s32 rem_after_delete = sp_atomic_s32_get(&counters.rem_count);
+  UTEST_PRINTF("Phase 3 (delete): %d rem events for %u files\n", rem_after_delete, files_deleted);
+
+  // Verify we got a reasonable number of events (coalescing is expected)
+  s32 total_events = add_after_create + mod_after_modify + rem_after_delete;
+  UTEST_PRINTF("Total events: %d (expected ~%u operations)\n", total_events, FMON_STRESS_TOTAL_FILES * 3);
+
+  // Should get at least 10% of operations as events (very conservative due to coalescing)
+  EXPECT_TRUE(total_events > FMON_STRESS_TOTAL_FILES / 10);
+
+  // Cleanup
+  sp_fmon_deinit(monitor);
+  sp_free(monitor);
+  sp_da_free(files);
+  sp_da_free(dirs);
+  sp_test_file_manager_cleanup(&file_manager);
+}
+#endif
+
 SP_TEST_MAIN()
