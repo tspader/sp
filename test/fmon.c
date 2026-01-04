@@ -119,6 +119,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
   EXPECT_FALSE(timed_out);
   EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
   EXPECT_TRUE(paths_equal(ut.last_file_path, test_file));
+#endif
 }
 
 UTEST_F(sp_test_file_monitor, detects_file_deletion) {

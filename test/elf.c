@@ -4,6 +4,8 @@
 
 SP_TEST_MAIN()
 
+#if defined(SP_ELF)
+
 struct elf {
   sp_test_file_manager_t file_manager;
 };
@@ -636,3 +638,4 @@ UTEST_F(elf, integration_link_and_run) {
   });
   ASSERT_EQ(run.status.exit_code, 0);
 }
+#endif

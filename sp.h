@@ -2740,17 +2740,17 @@ struct sp_fmon {
 	sp_fmon_os_t* os;
 	sp_fmon_event_kind_t events_to_watch;
 	u32 debounce_time_ms;
-  sp_mem_arena_t* arena;
+  sp_allocator_t allocator;
 };
 
-SP_API void sp_fmon_init(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
-SP_API void sp_fmon_init_ex(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data, u32 debounce);
-SP_API void sp_fmon_deinit(sp_fmon_t* monitor);
-SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
-SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
-SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
-SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
-SP_API sp_fmon_cache_t* sp_fmon_find_cache_entry(sp_fmon_t* monitor, sp_str_t file_path);
+SP_API void             sp_fmon_init(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
+SP_API void             sp_fmon_init_ex(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data, u32 debounce, sp_allocator_t alloc);
+SP_API void             sp_fmon_deinit(sp_fmon_t* monitor);
+SP_API void             sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_API void             sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_API void             sp_fmon_process_changes(sp_fmon_t* monitor);
+SP_API void             sp_fmon_emit_changes(sp_fmon_t* monitor);
+SP_API sp_fmon_cache_t* sp_fmon_get_or_insert_cache(sp_fmon_t* monitor, sp_str_t file_path);
 
 
 //  █████╗ ███████╗███████╗███████╗████████╗
@@ -8470,21 +8470,22 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
 // ██║     ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║
 // ╚═╝     ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 // @fmon
-SP_PRIVATE void             sp_fmon_os_init(sp_fmon_t* monitor);
-SP_PRIVATE void             sp_fmon_os_deinit(sp_fmon_t* monitor);
-SP_PRIVATE void             sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
-SP_PRIVATE void             sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
-SP_PRIVATE void             sp_fmon_os_process_changes(sp_fmon_t* monitor);
+SP_PRIVATE void sp_fmon_os_init(sp_fmon_t* monitor);
+SP_PRIVATE void sp_fmon_os_deinit(sp_fmon_t* monitor);
+SP_PRIVATE void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_PRIVATE void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_PRIVATE void sp_fmon_os_process_changes(sp_fmon_t* monitor);
 
 void sp_fmon_init(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata) {
-  sp_fmon_init_ex(monitor, callback, events, userdata, 0);
+  sp_fmon_init_ex(monitor, callback, events, userdata, 0, sp_context_get()->allocator);
 }
 
-void sp_fmon_init_ex(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata, u32 debounce_ms) {
+void sp_fmon_init_ex(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata, u32 debounce, sp_allocator_t alloc) {
+  monitor->allocator = alloc;
   monitor->callback = callback;
   monitor->events_to_watch = events;
   monitor->userdata = userdata;
-  monitor->debounce_time_ms = debounce_ms;
+  monitor->debounce_time_ms = debounce;
   sp_fmon_os_init(monitor);
 }
 
@@ -8513,7 +8514,8 @@ void sp_fmon_emit_changes(sp_fmon_t* monitor) {
   sp_da_clear(monitor->changes);
 }
 
-sp_fmon_cache_t* sp_fmon_find_cache_entry(sp_fmon_t* monitor, sp_str_t file_path) {
+sp_fmon_cache_t* sp_fmon_get_or_insert_cache(sp_fmon_t* monitor, sp_str_t file_path) {
+  sp_context_push_allocator(monitor->allocator);
   c8* file_path_cstr = sp_str_to_cstr(file_path);
   sp_hash_t file_hash = sp_hash_cstr(file_path_cstr);
 
@@ -8531,6 +8533,8 @@ sp_fmon_cache_t* sp_fmon_find_cache_entry(sp_fmon_t* monitor, sp_str_t file_path
     found = &monitor->cache[sp_da_size(monitor->cache) - 1];
     found->hash = file_hash;
   }
+
+  sp_context_pop();
 
   return found;
 }
@@ -8956,6 +8960,7 @@ SP_PRIVATE void sp_fmon_fsevents_recreate_stream(sp_fmon_t* monitor) {
 }
 
 void sp_fmon_os_init(sp_fmon_t* monitor) {
+  sp_context_push_allocator(monitor->allocator);
   sp_fmon_os_t* os = sp_alloc_type(sp_fmon_os_t);
   os->queue = dispatch_queue_create("sp.fmon", DISPATCH_QUEUE_SERIAL);
   os->monitor = monitor;
@@ -8963,11 +8968,13 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
   os->watch_arena = sp_mem_arena_new(SP_FMON_ARENA_SIZE);
   os->event_arena = sp_mem_arena_new(SP_FMON_ARENA_SIZE);
   monitor->os = os;
+  sp_context_pop();
 }
 
 void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   sp_require(monitor);
   sp_require(monitor->os);
+  sp_context_push_allocator(monitor->allocator);
 
   sp_fmon_os_t* os = monitor->os;
 
@@ -8982,7 +8989,10 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   sp_mutex_destroy(&os->mutex);
   sp_mem_arena_destroy(os->watch_arena);
   sp_mem_arena_destroy(os->event_arena);
-  *os = sp_zero_struct(sp_fmon_os_t);
+  sp_free(os);
+  monitor->os = SP_NULLPTR;
+
+  sp_context_pop();
 }
 
 void sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir) {
@@ -9023,12 +9033,14 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
     sp_str_t dir = sp_fs_parent_path(sp_fs_canonicalize_path(path));
 
     bool found = false;
+    sp_mutex_lock(&os->mutex);
     sp_da_for(os->watch_paths, it) {
       if (sp_str_equal(os->watch_paths[it], dir)) {
         found = true;
         break;
       }
     }
+    sp_mutex_unlock(&os->mutex);
 
     if (!found) {
       sp_fmon_os_push_dir(os, dir);
@@ -9049,6 +9061,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   sp_mutex_lock(&os->mutex);
   sp_fmon_emit_changes(monitor);
   sp_mem_arena_clear(os->event_arena);
+  monitor->changes = SP_NULLPTR;
   sp_mutex_unlock(&os->mutex);
 }
 

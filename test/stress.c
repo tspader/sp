@@ -439,7 +439,7 @@ UTEST(stress, fmon) {
       sp_str_t name = sp_format_str(SP_LIT("f{}.txt"), SP_FMT_U32(files_created));
       sp_str_t path = sp_fs_join_path(dir, name);
 
-      sp_io_stream_t s = sp_io_from_file(path, SP_IO_MODE_WRITE);
+      sp_io_t s = sp_io_from_file(path, SP_IO_MODE_WRITE);
       sp_io_write_str(&s, sp_str_lit("initial"));
       sp_io_close(&s);
 
@@ -463,7 +463,7 @@ UTEST(stress, fmon) {
 
     while (files_modified < batch_end) {
       sp_str_t path = files[files_modified];
-      sp_io_stream_t s = sp_io_from_file(path, SP_IO_MODE_WRITE);
+      sp_io_t s = sp_io_from_file(path, SP_IO_MODE_WRITE);
       sp_io_write_str(&s, sp_str_lit("modified"));
       sp_io_close(&s);
       files_modified++;
