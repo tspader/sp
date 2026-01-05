@@ -600,6 +600,62 @@ UTEST_F(context, arena_wrappers) {
   sp_mem_arena_free(arena, ptr);
 }
 
+UTEST_F(context, slice_basic) {
+  u8 data[] = { 0x01, 0x02, 0x03, 0x04 };
+  sp_mem_slice_t slice = sp_mem_slice(data, 4);
+  EXPECT_EQ(slice.data, data);
+  EXPECT_EQ(slice.len, 4);
+}
+
+UTEST_F(context, slice_sub) {
+  u8 data[] = { 0x01, 0x02, 0x03, 0x04, 0x05 };
+  sp_mem_slice_t slice = sp_mem_slice(data, 5);
+  sp_mem_slice_t sub = sp_mem_slice_sub(slice, 1, 3);
+  EXPECT_EQ(sub.data, data + 1);
+  EXPECT_EQ(sub.len, 3);
+  EXPECT_EQ(sub.data[0], 0x02);
+}
+
+UTEST_F(context, slice_prefix_suffix) {
+  u8 data[] = { 0x01, 0x02, 0x03, 0x04, 0x05 };
+  sp_mem_slice_t slice = sp_mem_slice(data, 5);
+
+  sp_mem_slice_t prefix = sp_mem_slice_prefix(slice, 2);
+  EXPECT_EQ(prefix.len, 2);
+  EXPECT_EQ(prefix.data[0], 0x01);
+
+  sp_mem_slice_t suffix = sp_mem_slice_suffix(slice, 2);
+  EXPECT_EQ(suffix.len, 2);
+  EXPECT_EQ(suffix.data[0], 0x04);
+}
+
+UTEST_F(context, slice_iterator) {
+  u8 data[] = { 0xAA, 0xBB, 0xCC };
+  sp_mem_slice_t slice = sp_mem_slice(data, 3);
+
+  u64 count = 0;
+  u8 expected[] = { 0xAA, 0xBB, 0xCC };
+  sp_mem_slice_for_it(slice, it) {
+    EXPECT_EQ(it.byte, expected[count]);
+    count++;
+  }
+  EXPECT_EQ(count, 3);
+}
+
+UTEST_F(context, slice_copy) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+
+  u8 data[] = { 0x01, 0x02, 0x03 };
+  sp_mem_slice_t slice = sp_mem_slice(data, 3);
+  sp_mem_slice_t copy = sp_mem_slice_copy(slice);
+
+  EXPECT_NE(copy.data, slice.data);
+  EXPECT_EQ(copy.len, slice.len);
+  EXPECT_TRUE(sp_mem_is_equal(copy.data, slice.data, copy.len));
+
+  sp_mem_end_scratch(scratch);
+}
+
 UTEST_F(context, arena_no_realloc_basic) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 0);
   sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);

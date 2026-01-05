@@ -990,10 +990,10 @@ SP_API void*                   sp_mem_os_alloc(u32 size);
 SP_API void*                   sp_mem_os_alloc_zero(u32 size);
 SP_API void*                   sp_mem_os_realloc(void* ptr, u32 size);
 SP_API void                    sp_mem_os_free(void* ptr);
-SP_API void                    sp_mem_copy(const void* source, void* dest, u32 num_bytes);
-SP_API void                    sp_mem_move(const void* source, void* dest, u32 num_bytes);
-SP_API bool                    sp_mem_is_equal(const void* a, const void* b, size_t len);
-SP_API void                    sp_mem_fill(void* buffer, u32 bsize, void* fill, u32 fsize);
+SP_API void                    sp_mem_copy(const void* source, void* dest, u64 num_bytes);
+SP_API void                    sp_mem_move(const void* source, void* dest, u64 num_bytes);
+SP_API bool                    sp_mem_is_equal(const void* a, const void* b, u64 len);
+SP_API void                    sp_mem_fill(void* buffer, u32 bsize, void* fill, u64 fsize);
 SP_API void                    sp_mem_fill_u8(void* buffer, u32 buffer_size, u8 fill);
 SP_API void                    sp_mem_zero(void* buffer, u32 buffer_size);
 SP_API void*                   sp_mem_allocator_alloc(sp_allocator_t arena, u32 size);
@@ -1027,6 +1027,39 @@ SP_API void                    sp_mem_end_scratch(sp_mem_scratch_t scratch);
 #define sp_os_alloc_type(T) (T*)sp_mem_os_alloc(sizeof(T))
 #define sp_mem_allocator_alloc_type(a, T) (T*)sp_mem_allocator_alloc(a, sizeof(T))
 #define sp_mem_allocator_alloc_n(a, T, n) (T*)sp_mem_allocator_alloc(a, (n) * sizeof(T))
+
+
+// ███████╗██╗     ██╗ ██████╗███████╗
+// ██╔════╝██║     ██║██╔════╝██╔════╝
+// ███████╗██║     ██║██║     █████╗
+// ╚════██║██║     ██║██║     ██╔══╝
+// ███████║███████╗██║╚██████╗███████╗
+// ╚══════╝╚══════╝╚═╝ ╚═════╝╚══════╝
+// @slice
+typedef struct {
+  u8* data;
+  u64 len;
+} sp_mem_slice_t;
+
+typedef struct {
+  sp_mem_slice_t slice;
+  u64 index;
+  u8 byte;
+} sp_mem_slice_it_t;
+
+#define sp_mem_slice_for(slice, it) for (u64 it = 0; it < (slice).len; it++)
+#define sp_mem_slice_for_it(slice, it) for (sp_mem_slice_it_t it = sp_mem_slice_it(slice); sp_mem_slice_it_valid(&it); sp_mem_slice_it_next(&it))
+
+SP_API sp_mem_slice_t    sp_mem_slice(u8* ptr, u64 len);
+SP_API sp_mem_slice_t    sp_mem_slice_copy(sp_mem_slice_t slice);
+SP_API sp_mem_slice_t    sp_mem_slice_sub(sp_mem_slice_t slice, u64 start, u64 len);
+SP_API sp_mem_slice_t    sp_mem_slice_prefix(sp_mem_slice_t slice, u64 len);
+SP_API sp_mem_slice_t    sp_mem_slice_suffix(sp_mem_slice_t slice, u64 len);
+SP_API bool              sp_mem_slice_empty(sp_mem_slice_t slice);
+SP_API u8                sp_mem_slice_at(sp_mem_slice_t slice, u64 index);
+sp_mem_slice_it_t        sp_mem_slice_it(sp_mem_slice_t slice);
+bool                     sp_mem_slice_it_valid(sp_mem_slice_it_t* it);
+void                     sp_mem_slice_it_next(sp_mem_slice_it_t* it);
 
 
 // ██╗  ██╗ █████╗ ███████╗██╗  ██╗
@@ -5092,15 +5125,15 @@ bool sp_mem_is_equal(const void* a, const void* b, size_t len) {
   return !memcmp(a, b, len);
 }
 
-void sp_mem_copy(const void* source, void* dest, u32 num_bytes) {
+void sp_mem_copy(const void* source, void* dest, u64 num_bytes) {
   memcpy(dest, source, num_bytes);
 }
 
-void sp_mem_move(const void* source, void* dest, u32 num_bytes) {
+void sp_mem_move(const void* source, void* dest, u64 num_bytes) {
   memmove(dest, source, num_bytes);
 }
 
-void sp_mem_fill(void* buffer, u32 buffer_size, void* fill, u32 fill_size) {
+void sp_mem_fill(void* buffer, u32 buffer_size, void* fill, u64 fill_size) {
   u8* current_byte = (u8*)buffer;
 
   s32 i = 0;
@@ -5151,6 +5184,68 @@ void sp_mem_os_free(void* ptr) {
   free(ptr);
 }
 #endif
+
+
+// ███████╗██╗     ██╗ ██████╗███████╗
+// ██╔════╝██║     ██║██╔════╝██╔════╝
+// ███████╗██║     ██║██║     █████╗
+// ╚════██║██║     ██║██║     ██╔══╝
+// ███████║███████╗██║╚██████╗███████╗
+// ╚══════╝╚══════╝╚═╝ ╚═════╝╚══════╝
+// @slice
+sp_mem_slice_t sp_mem_slice(u8* ptr, u64 len) {
+  return (sp_mem_slice_t) { .data = ptr, .len = len };
+}
+
+sp_mem_slice_t sp_mem_slice_copy(sp_mem_slice_t slice) {
+  u8* buffer = sp_alloc_n(u8, slice.len);
+  sp_mem_copy(slice.data, buffer, (u32)slice.len);
+  return sp_mem_slice(buffer, slice.len);
+}
+
+sp_mem_slice_t sp_mem_slice_sub(sp_mem_slice_t slice, u64 start, u64 len) {
+  if (start >= slice.len) {
+    return sp_mem_slice(SP_NULLPTR, 0);
+  }
+  u64 actual_len = sp_min(len, slice.len - start);
+  return sp_mem_slice(slice.data + start, actual_len);
+}
+
+sp_mem_slice_t sp_mem_slice_prefix(sp_mem_slice_t slice, u64 len) {
+  return sp_mem_slice_sub(slice, 0, len);
+}
+
+sp_mem_slice_t sp_mem_slice_suffix(sp_mem_slice_t slice, u64 len) {
+  if (len >= slice.len) return slice;
+  return sp_mem_slice(slice.data + slice.len - len, len);
+}
+
+bool sp_mem_slice_empty(sp_mem_slice_t slice) {
+  return slice.len == 0 || slice.data == SP_NULLPTR;
+}
+
+u8 sp_mem_slice_at(sp_mem_slice_t slice, u64 index) {
+  SP_ASSERT(index < slice.len);
+  return slice.data[index];
+}
+
+sp_mem_slice_it_t sp_mem_slice_it(sp_mem_slice_t slice) {
+  return (sp_mem_slice_it_t) {
+    .slice = slice,
+    .index = 0,
+    .byte = slice.len ? slice.data[0] : 0
+  };
+}
+
+bool sp_mem_slice_it_valid(sp_mem_slice_it_t* it) {
+  return it->index < it->slice.len;
+}
+
+void sp_mem_slice_it_next(sp_mem_slice_it_t* it) {
+  it->index++;
+  it->byte = sp_mem_slice_it_valid(it) ? it->slice.data[it->index] : 0;
+}
+
 
 // ███████╗████████╗██████╗ ██╗███╗   ██╗ ██████╗
 // ██╔════╝╚══██╔══╝██╔══██╗██║████╗  ██║██╔════╝
@@ -9712,7 +9807,7 @@ sp_str_t sp_io_read_file(sp_str_t path) {
   }
 
   sp_str_t result = sp_str_alloc((u32)size);
-  u64 bytes = sp_io_read(&io, (void*)result.data, (u64)size);
+  sp_io_read(&io, (void*)result.data, (u64)size);
   if (sp_err_get()) {
     sp_io_close(&io);
     return SP_ZERO_STRUCT(sp_str_t);
