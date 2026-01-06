@@ -2409,10 +2409,10 @@ UTEST_F(sp_os_copy_tests, copy_single_file) {
 
   ASSERT_TRUE(sp_fs_exists(dst));
 
-  sp_io_t read_stream = sp_io_from_file(dst, SP_IO_MODE_READ);
+  sp_io_reader_t reader = sp_io_reader_from_file(dst);
   u8 buffer[256];
-  u64 bytes_read = sp_io_read(&read_stream, buffer, sizeof(buffer));
-  sp_io_close(&read_stream);
+  u64 bytes_read = sp_io_reader_read(&reader, buffer, sizeof(buffer));
+  sp_io_reader_close(&reader);
 
   sp_str_t read_content = sp_str_from_cstr_sized((c8*)buffer, bytes_read);
   SP_EXPECT_STR_EQ(read_content, content);

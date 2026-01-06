@@ -1062,6 +1062,13 @@ bool                     sp_mem_slice_it_valid(sp_mem_slice_it_t* it);
 void                     sp_mem_slice_it_next(sp_mem_slice_it_t* it);
 
 
+// @buffer
+typedef struct {
+  u8* data;
+  u64 len;
+  u64 capacity;
+} sp_mem_buffer_t;
+
 // ██╗  ██╗ █████╗ ███████╗██╗  ██╗
 // ██║  ██║██╔══██╗██╔════╝██║  ██║
 // ███████║███████║███████╗███████║
@@ -2256,88 +2263,110 @@ typedef enum {
 } sp_io_mode_t;
 
 typedef enum {
-  SP_IO_FILE_CLOSE_MODE_NONE,
-  SP_IO_FILE_CLOSE_MODE_AUTO,
-} sp_io_file_close_mode_t;
-
-typedef struct sp_io sp_io_t;
-
-SP_TYPEDEF_FN(s64, sp_io_size_fn, sp_io_t* stream);
-SP_TYPEDEF_FN(s64, sp_io_seek_fn, sp_io_t* stream, s64 offset, sp_io_whence_t whence);
-SP_TYPEDEF_FN(u64, sp_io_read_fn, sp_io_t* stream, void* ptr, u64 size);
-SP_TYPEDEF_FN(u64, sp_io_write_fn, sp_io_t* stream, const void* ptr, u64 size);
-SP_TYPEDEF_FN(u64, sp_io_pad_fn, sp_io_t* stream, u64 size);
-SP_TYPEDEF_FN(void, sp_io_close_fn, sp_io_t* stream);
-
-typedef struct {
-  sp_io_size_fn  size;
-  sp_io_seek_fn  seek;
-  sp_io_read_fn  read;
-  sp_io_write_fn write;
-  sp_io_pad_fn   pad;
-  sp_io_close_fn close;
-} sp_io_callbacks_t;
+  SP_IO_CLOSE_MODE_NONE,
+  SP_IO_CLOSE_MODE_AUTO,
+} sp_io_close_mode_t;
 
 typedef struct {
   s32 fd;
-  sp_io_file_close_mode_t close_mode;
+  sp_io_close_mode_t close_mode;
 } sp_io_file_data_t;
 
-typedef struct {
-  const u8* base;
-  const u8* here;
-  const u8* stop;
-} sp_io_const_mem_data_t;
+typedef enum {
+  SP_IO_WRITE_MODE_OVERWRITE,
+  SP_IO_WRITE_MODE_APPEND,
+} sp_io_write_mode_t;
+
+typedef struct sp_io_reader sp_io_reader_t;
+typedef struct sp_io_writer sp_io_writer_t;
+
+SP_TYPEDEF_FN(u64, sp_io_reader_read_cb, sp_io_reader_t* r, void* ptr, u64 size);
+SP_TYPEDEF_FN(s64, sp_io_reader_seek_cb, sp_io_reader_t* r, s64 offset, sp_io_whence_t whence);
+SP_TYPEDEF_FN(u64, sp_io_reader_size_cb, sp_io_reader_t* r);
+SP_TYPEDEF_FN(void, sp_io_reader_close_cb, sp_io_reader_t* r);
+
+SP_TYPEDEF_FN(u64, sp_io_writer_write_cb, sp_io_writer_t* w, const void* ptr, u64 size);
+SP_TYPEDEF_FN(s64, sp_io_writer_seek_cb, sp_io_writer_t* w, s64 offset, sp_io_whence_t whence);
+SP_TYPEDEF_FN(u64, sp_io_writer_size_cb, sp_io_writer_t* w);
+SP_TYPEDEF_FN(void, sp_io_writer_close_cb, sp_io_writer_t* w);
 
 typedef struct {
-  u8* base;
-  u8* here;
-  u8* stop;
-} sp_io_mem_data_t;
+  const u8* ptr;
+  u64 len;
+  u64 pos;
+} sp_io_reader_mem_t;
 
-typedef struct {
-  u8* base;
-  u8* here;
-  u8* stop;
-  u8* max;
-  sp_allocator_t allocator;
-} sp_io_dyn_mem_data_t;
+struct sp_io_reader {
+  struct {
+    sp_io_reader_read_cb  read;
+    sp_io_reader_seek_cb  seek;
+    sp_io_reader_size_cb  size;
+    sp_io_reader_close_cb close;
+  } vtable;
+
+  union {
+    sp_io_file_data_t file;
+    sp_io_reader_mem_t mem;
+  };
+
+  sp_mem_buffer_t buffer;
+  u64 seek;
+};
 
 typedef struct {
   u8* ptr;
-  u64 size;
-  u64 capacity;
-} sp_io_write_buffer_t;
+  u64 len;
+  u64 pos;
+} sp_io_writer_mem_t;
 
-struct sp_io {
-  sp_io_callbacks_t callbacks;
+typedef struct {
+  sp_allocator_t allocator;
+  sp_mem_buffer_t buffer;
+  u64 seek;
+} sp_io_writer_dyn_mem_t;
+
+
+struct sp_io_writer {
+  struct {
+    sp_io_writer_write_cb write;
+    sp_io_writer_seek_cb  seek;
+    sp_io_writer_size_cb  size;
+    sp_io_writer_close_cb close;
+  } vtable;
+
   union {
     sp_io_file_data_t file;
-    sp_io_mem_data_t memory;
-    sp_io_const_mem_data_t const_memory;
-    sp_io_dyn_mem_data_t buffer;
+    sp_io_writer_mem_t mem;
+    sp_io_writer_dyn_mem_t dyn_mem;
   };
-  sp_allocator_t allocator;
-  sp_io_write_buffer_t write_buffer;
+
+  sp_mem_buffer_t buffer;
 };
 
-SP_API sp_io_t  sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
-SP_API sp_io_t  sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t mode);
-SP_API sp_io_t  sp_io_from_mem(void* memory, u64 size);
-SP_API sp_io_t  sp_io_from_const_mem(const void* memory, u64 size);
-SP_API sp_io_t  sp_io_from_dyn_mem(u8* buffer, u64 size);
-SP_API sp_io_t  sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator);
-SP_API u64      sp_io_read(sp_io_t* stream, void* ptr, u64 size);
-SP_API u64      sp_io_write(sp_io_t* stream, const void* ptr, u64 size);
-SP_API u64      sp_io_write_str(sp_io_t* stream, sp_str_t str);
-SP_API u64      sp_io_pad(sp_io_t* stream, u64 size);
-SP_API s64      sp_io_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence);
-SP_API s64      sp_io_size(sp_io_t* stream);
-SP_API void     sp_io_close(sp_io_t* stream);
 SP_API sp_str_t sp_io_read_file(sp_str_t path);
-SP_API sp_str_t sp_io_buffer_to_str(sp_io_t* stream);
-SP_API void     sp_io_set_buffer(sp_io_t* stream, u8* buf, u64 capacity);
-SP_API sp_err_t sp_io_flush(sp_io_t* stream);
+SP_API sp_io_reader_t sp_io_reader_from_file(sp_str_t path);
+SP_API sp_io_reader_t sp_io_reader_from_handle(sp_os_file_handle_t fd, sp_io_close_mode_t mode);
+SP_API sp_io_reader_t sp_io_reader_from_mem(const void* ptr, u64 size);
+SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* r, u8* buf, u64 capacity);
+SP_API u64            sp_io_reader_read(sp_io_reader_t* r, void* ptr, u64 size);
+SP_API s64            sp_io_reader_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence);
+SP_API u64            sp_io_reader_size(sp_io_reader_t* r);
+SP_API void           sp_io_reader_close(sp_io_reader_t* r);
+
+SP_API sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode);
+SP_API sp_io_writer_t sp_io_writer_from_fd(s32 fd, sp_io_close_mode_t close_mode);
+SP_API sp_io_writer_t sp_io_writer_from_mem(void* ptr, u64 size);
+SP_API sp_io_writer_t sp_io_writer_from_dyn_mem(void);
+SP_API sp_io_writer_t sp_io_writer_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator);
+SP_API void           sp_io_writer_set_buffer(sp_io_writer_t* w, u8* buf, u64 capacity);
+SP_API u64            sp_io_writer_write(sp_io_writer_t* w, const void* ptr, u64 size);
+SP_API u64            sp_io_writer_write_str(sp_io_writer_t* w, sp_str_t str);
+SP_API u64            sp_io_writer_pad(sp_io_writer_t* w, u64 size);
+SP_API sp_err_t       sp_io_writer_flush(sp_io_writer_t* w);
+SP_API s64            sp_io_writer_seek(sp_io_writer_t* w, s64 offset, sp_io_whence_t whence);
+SP_API u64            sp_io_writer_size(sp_io_writer_t* w);
+SP_API void           sp_io_writer_close(sp_io_writer_t* w);
+SP_API sp_str_t       sp_io_writer_to_str(sp_io_writer_t* w);
 
 
 // ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
@@ -2393,15 +2422,21 @@ typedef enum {
 }
 
 typedef struct {
-  sp_io_t stream;
+  s32 fd;
   sp_ps_io_mode_t mode;
   sp_ps_io_blocking_t block;
-} sp_ps_io_config_entry_t;
+} sp_ps_io_in_config_t;
 
 typedef struct {
-  sp_ps_io_config_entry_t in;
-  sp_ps_io_config_entry_t out;
-  sp_ps_io_config_entry_t err;
+  s32 fd;
+  sp_ps_io_mode_t mode;
+  sp_ps_io_blocking_t block;
+} sp_ps_io_out_config_t;
+
+typedef struct {
+  sp_ps_io_in_config_t in;
+  sp_ps_io_out_config_t out;
+  sp_ps_io_out_config_t err;
 } sp_ps_io_config_t;
 
 typedef sp_ps_io_config_t sp_ps_io_t;
@@ -2487,9 +2522,9 @@ SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
 SP_API void            sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg);
 SP_API sp_ps_t         sp_ps_create(sp_ps_config_t config);
 SP_API sp_ps_output_t  sp_ps_run(sp_ps_config_t config);
-SP_API sp_io_t* sp_ps_io_in(sp_ps_t* proc);
-SP_API sp_io_t* sp_ps_io_out(sp_ps_t* proc);
-SP_API sp_io_t* sp_ps_io_err(sp_ps_t* proc);
+SP_API sp_io_writer_t* sp_ps_io_in(sp_ps_t* proc);
+SP_API sp_io_reader_t* sp_ps_io_out(sp_ps_t* proc);
+SP_API sp_io_reader_t* sp_ps_io_err(sp_ps_t* proc);
 SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* proc);
 SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
@@ -3047,8 +3082,10 @@ void              sp_elf_symtab_sort(sp_elf_section_t* symtab, sp_elf_t* elf);
 Elf64_Rela*       sp_elf_rela_get(sp_elf_section_t* rela, u32 index);
 u32               sp_elf_strtab_size(sp_elf_section_t* strtab);
 sp_str_t          sp_elf_strtab_get(sp_elf_section_t* strtab, u32 offset);
-sp_err_t          sp_elf_write(sp_elf_t* elf, sp_io_t* out);
+sp_err_t          sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out);
 sp_err_t          sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path);
+sp_elf_t*         sp_elf_read(sp_io_reader_t* in);
+sp_elf_t*         sp_elf_read_from_file(sp_str_t path);
 #endif
 
 
@@ -3062,7 +3099,7 @@ template <typename T>
 SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
   sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
   result.id = id;
-  sp_os_copy_memory(&data, &result.u8_value, sizeof(data));
+  sp_mem_copy(&data, &result.u8_value, sizeof(data));
 
   return result;
 }
@@ -5242,7 +5279,7 @@ sp_mem_slice_it_t sp_mem_slice_it(sp_mem_slice_t slice) {
   return (sp_mem_slice_it_t) {
     .slice = slice,
     .index = 0,
-    .byte = slice.len ? slice.data[0] : 0
+    .byte = (u8)(slice.len ? slice.data[0] : 0)
   };
 }
 
@@ -6765,23 +6802,22 @@ void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
   struct stat stf;
   if (stat(sp_str_to_cstr(from), &stf)) return;
 
-  sp_io_t src = sp_io_from_file(from, SP_IO_MODE_READ);
-  if (!src.file.fd) return;
+  sp_io_reader_t reader = sp_io_reader_from_file(from);
+  if (!reader.file.fd) return;
 
-  sp_io_t dst = sp_io_from_file(to, SP_IO_MODE_WRITE);
-  if (!dst.file.fd) {
-    sp_io_close(&src);
+  sp_io_writer_t writer = sp_io_writer_from_file(to, SP_IO_WRITE_MODE_OVERWRITE);
+  if (sp_err_get()) {
     return;
   }
 
   u8 buffer[4096];
   u64 bytes_read;
-  while ((bytes_read = sp_io_read(&src, buffer, sizeof(buffer))) > 0) {
-    sp_io_write(&dst, buffer, bytes_read);
+  while ((bytes_read = sp_io_reader_read(&reader, buffer, sizeof(buffer))) > 0) {
+    sp_io_writer_write(&writer, buffer, bytes_read);
   }
 
-  sp_io_close(&src);
-  sp_io_close(&dst);
+  sp_io_reader_close(&reader);
+  sp_io_writer_close(&writer);
 
   chmod(sp_str_to_cstr(to), stf.st_mode);
 }
@@ -8241,7 +8277,7 @@ void sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg) {
   }
 }
 
-void sp_ps_configure_io_entry(sp_ps_io_config_entry_t* io, sp_ps_stdio_config_entry_t* p) {
+void sp_ps_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_stdio_config_entry_t* p) {
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
       SP_ASSERT(posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0);
@@ -8252,14 +8288,40 @@ void sp_ps_configure_io_entry(sp_ps_io_config_entry_t* io, sp_ps_stdio_config_en
       SP_ASSERT(sp_ps_create_pipes(pipes));
       p->pipes.read = pipes[0];
       p->pipes.write = pipes[1];
-
-      s32 duped = p->file_number == STDIN_FILENO ? p->pipes.read : p->pipes.write;
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, duped, p->file_number) == 0);
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, p->pipes.read, p->file_number) == 0);
       break;
     }
     case SP_PS_IO_MODE_EXISTING: {
-      SP_ASSERT(io->stream.file.fd);
-      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, io->stream.file.fd, p->file_number) == 0);
+      SP_ASSERT(io->fd);
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, io->fd, p->file_number) == 0);
+      break;
+    }
+    case SP_PS_IO_MODE_REDIRECT: {
+      break;
+    }
+    case SP_PS_IO_MODE_INHERIT: {
+      break;
+    }
+  }
+}
+
+void sp_ps_configure_io_out(sp_ps_io_out_config_t* io, sp_ps_stdio_config_entry_t* p) {
+  switch (io->mode) {
+    case SP_PS_IO_MODE_NULL: {
+      SP_ASSERT(posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0);
+      break;
+    }
+    case SP_PS_IO_MODE_CREATE: {
+      s32 pipes [2] = { -1, -1 };
+      SP_ASSERT(sp_ps_create_pipes(pipes));
+      p->pipes.read = pipes[0];
+      p->pipes.write = pipes[1];
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, p->pipes.write, p->file_number) == 0);
+      break;
+    }
+    case SP_PS_IO_MODE_EXISTING: {
+      SP_ASSERT(io->fd);
+      SP_ASSERT(posix_spawn_file_actions_adddup2(p->fa, io->fd, p->file_number) == 0);
       break;
     }
     case SP_PS_IO_MODE_REDIRECT: {
@@ -8317,15 +8379,15 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     },
   };
 
-  sp_ps_configure_io_entry(&proc.io.in, &io.in);
+  sp_ps_configure_io_in(&proc.io.in, &io.in);
 
   if (proc.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
-    sp_ps_configure_io_entry(&proc.io.err, &io.err);
-    sp_ps_configure_io_entry(&proc.io.out, &io.out);
+    sp_ps_configure_io_out(&proc.io.err, &io.err);
+    sp_ps_configure_io_out(&proc.io.out, &io.out);
   }
   else {
-    sp_ps_configure_io_entry(&proc.io.out, &io.out);
-    sp_ps_configure_io_entry(&proc.io.err, &io.err);
+    sp_ps_configure_io_out(&proc.io.out, &io.out);
+    sp_ps_configure_io_out(&proc.io.err, &io.err);
   }
 
   pid_t pid;
@@ -8343,8 +8405,6 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
 
   proc.pid = pid;
 
-  // For the 3 IO streams, we have two pipes; one for reading, one for writing. The parent only needs one end of each
-  // (e.g. it doesn't make sense to read from the child's stdin), so close the unused end
   if (io.in.pipes.read >= 0) {
     close(io.in.pipes.read);
 
@@ -8352,27 +8412,27 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
       case SP_PS_IO_NONBLOCKING: sp_ps_set_nonblocking(io.in.pipes.write);
       case SP_PS_IO_BLOCKING: sp_ps_set_blocking(io.in.pipes.write);
     }
-    proc.io.in.stream = sp_io_from_file_handle(io.in.pipes.write, SP_IO_FILE_CLOSE_MODE_AUTO);
+    proc.io.in.fd = io.in.pipes.write;
   }
 
   if (io.out.pipes.read >= 0) {
     close(io.out.pipes.write);
 
-    switch (config.io.in.block) {
-      case SP_PS_IO_NONBLOCKING: sp_ps_set_nonblocking(io.in.pipes.write);
-      case SP_PS_IO_BLOCKING: sp_ps_set_blocking(io.in.pipes.write);
+    switch (config.io.out.block) {
+      case SP_PS_IO_NONBLOCKING: sp_ps_set_nonblocking(io.out.pipes.read);
+      case SP_PS_IO_BLOCKING: sp_ps_set_blocking(io.out.pipes.read);
     }
-    proc.io.out.stream = sp_io_from_file_handle(io.out.pipes.read, SP_IO_FILE_CLOSE_MODE_AUTO);
+    proc.io.out.fd = io.out.pipes.read;
   }
 
   if (io.err.pipes.read >= 0) {
     close(io.err.pipes.write);
 
-    switch (config.io.in.block) {
-      case SP_PS_IO_NONBLOCKING: sp_ps_set_nonblocking(io.in.pipes.write);
-      case SP_PS_IO_BLOCKING: sp_ps_set_blocking(io.in.pipes.write);
+    switch (config.io.err.block) {
+      case SP_PS_IO_NONBLOCKING: sp_ps_set_nonblocking(io.err.pipes.read);
+      case SP_PS_IO_BLOCKING: sp_ps_set_blocking(io.err.pipes.read);
     }
-    proc.io.err.stream = sp_io_from_file_handle(io.err.pipes.read, SP_IO_FILE_CLOSE_MODE_AUTO);
+    proc.io.err.fd = io.err.pipes.read;
   }
 
   posix_spawn_file_actions_destroy(&fa);
@@ -8393,7 +8453,7 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
       SP_FMT_STR(config.command)
     );
   }
-  config.io.out = (sp_ps_io_config_entry_t) {
+  config.io.out = (sp_ps_io_out_config_t) {
     .mode = SP_PS_IO_MODE_CREATE
   };
   sp_ps_t ps = sp_ps_create(config);
@@ -8405,42 +8465,45 @@ void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
   SP_ASSERT(posix_spawn_file_actions_addchdir_np(fa, cwd_cstr) == 0);
 }
 
-sp_io_t* sp_ps_io_redirect(sp_ps_t* proc, sp_ps_io_file_number_t file_number) {
-  switch (file_number) {
-    case SP_PS_IO_FILENO_STDIN: return &proc->io.in.stream;
-    case SP_PS_IO_FILENO_STDOUT: return &proc->io.out.stream;
-    case SP_PS_IO_FILENO_STDERR: return &proc->io.err.stream;
-  }
-  SP_UNREACHABLE_RETURN(SP_NULLPTR);
-}
-
-sp_io_t* sp_ps_io(sp_ps_t* proc, sp_ps_io_config_entry_t* config) {
-  SP_ASSERT(proc != SP_NULLPTR);
-  switch (config->mode) {
-    case SP_PS_IO_MODE_CREATE:
+sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode) {
+  switch (mode) {
+    case SP_PS_IO_MODE_CREATE: {
+      return SP_IO_CLOSE_MODE_AUTO;
+    }
     case SP_PS_IO_MODE_EXISTING: {
-      return &config->stream;
+      return SP_IO_CLOSE_MODE_NONE;
     }
-    case SP_PS_IO_MODE_REDIRECT:
+    case SP_PS_IO_MODE_NULL:
     case SP_PS_IO_MODE_INHERIT:
-    case SP_PS_IO_MODE_NULL: {
-      return SP_NULLPTR;
+    case SP_PS_IO_MODE_REDIRECT: {
+      return SP_IO_CLOSE_MODE_NONE;
     }
   }
-
-  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+  SP_UNREACHABLE_RETURN(SP_IO_CLOSE_MODE_NONE);
 }
 
-sp_io_t* sp_ps_io_in(sp_ps_t* proc) {
-  return sp_ps_io(proc, &proc->io.in);
+sp_io_writer_t* sp_ps_io_in(sp_ps_t* proc) {
+  SP_ASSERT(proc != SP_NULLPTR);
+  if (proc->io.in.fd <= 0) return SP_NULLPTR;
+  sp_io_writer_t* w = sp_alloc_type(sp_io_writer_t);
+  *w = sp_io_writer_from_fd(proc->io.in.fd, sp_ps_io_close_mode(proc->io.in.mode));
+  return w;
 }
 
-sp_io_t* sp_ps_io_out(sp_ps_t* proc) {
-  return sp_ps_io(proc, &proc->io.out);
+sp_io_reader_t* sp_ps_io_out(sp_ps_t* proc) {
+  SP_ASSERT(proc != SP_NULLPTR);
+  if (proc->io.out.fd <= 0) return SP_NULLPTR;
+  sp_io_reader_t* r = sp_alloc_type(sp_io_reader_t);
+  *r = sp_io_reader_from_handle(proc->io.out.fd, sp_ps_io_close_mode(proc->io.out.mode));
+  return r;
 }
 
-sp_io_t* sp_ps_io_err(sp_ps_t* proc) {
-  return sp_ps_io(proc, &proc->io.err);
+sp_io_reader_t* sp_ps_io_err(sp_ps_t* proc) {
+  SP_ASSERT(proc != SP_NULLPTR);
+  if (proc->io.err.fd <= 0) return SP_NULLPTR;
+  sp_io_reader_t* r = sp_alloc_type(sp_io_reader_t);
+  *r = sp_io_reader_from_handle(proc->io.err.fd, sp_ps_io_close_mode(proc->io.err.mode));
+  return r;
 }
 
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
@@ -8528,12 +8591,12 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
 
   u8 buffer [4096] = SP_ZERO_INITIALIZE();
 
-  sp_io_t* out = sp_ps_io_out(proc);
+  sp_io_reader_t* out = sp_ps_io_out(proc);
   if (out) {
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
     while (true) {
-      u64 num_bytes = sp_io_read(out, buffer, sizeof(buffer));
+      u64 num_bytes = sp_io_reader_read(out, buffer, sizeof(buffer));
       if (!num_bytes) {
         break;
       }
@@ -8545,12 +8608,12 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
     result.out = sp_str_builder_move(&builder);
   }
 
-  sp_io_t* err = sp_ps_io_err(proc);
+  sp_io_reader_t* err = sp_ps_io_err(proc);
   if (err) {
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
     while (true) {
-      u64 num_bytes = sp_io_read(err, buffer, sizeof(buffer));
+      u64 num_bytes = sp_io_reader_read(err, buffer, sizeof(buffer));
       if (!num_bytes) {
         break;
       }
@@ -9369,208 +9432,39 @@ sp_err_ext_t sp_err_get_ext() {
 // ██║╚██████╔╝
 // ╚═╝ ╚═════╝
 // @io
-s64 sp_io_const_mem_size(sp_io_t* stream) {
-  sp_io_const_mem_data_t* data = &stream->const_memory;
-  return data->stop - data->base;
-}
-
-s64 sp_io_const_mem_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
-  sp_io_const_mem_data_t* data = &stream->const_memory;
-  const u8* new_pos;
-
-  switch (whence) {
-    case SP_IO_SEEK_SET: {
-      new_pos = data->base + offset;
-      break;
-    }
-    case SP_IO_SEEK_CUR: {
-      new_pos = data->here + offset;
-      break;
-    }
-    case SP_IO_SEEK_END: {
-      new_pos = data->stop + offset;
-      break;
-    }
-    default: {
-      SP_UNREACHABLE();
-    }
+sp_str_t sp_io_read_file(sp_str_t path) {
+  sp_io_reader_t reader = sp_io_reader_from_file(path);
+  if (reader.file.fd <= 0) {
+    return SP_ZERO_STRUCT(sp_str_t);
   }
 
-  if (new_pos < data->base || new_pos > data->stop) {
-    sp_err_set(SP_ERR_IO_SEEK_INVALID);
-    return -1;
-  }
-  data->here = new_pos;
-  return data->here - data->base;
-}
-
-u64 sp_io_const_mem_read(sp_io_t* stream, void* ptr, u64 size) {
-  sp_io_const_mem_data_t* data = &stream->const_memory;
-  u64 available = data->stop - data->here;
-  u64 to_read = SP_MIN(size, available);
-
-  sp_mem_copy(data->here, ptr, to_read);
-  data->here += to_read;
-  return to_read;
-}
-
-u64 sp_io_const_mem_write(sp_io_t* stream, const void* ptr, u64 size) {
-  (void)stream; (void)ptr; (void)size;
-  sp_err_set(SP_ERR_IO_READ_ONLY);
-  return 0;
-}
-
-u64 sp_io_const_mem_pad(sp_io_t* stream, u64 size) {
-  (void)stream; (void)size;
-  sp_err_set(SP_ERR_IO_READ_ONLY);
-  return 0;
-}
-
-void sp_io_const_mem_close(sp_io_t* stream) {
-  (void)stream;
-}
-
-u64 sp_io_mem_write(sp_io_t* stream, const void* ptr, u64 size) {
-  sp_io_mem_data_t* data = &stream->memory;
-  u64 available = data->stop - data->here;
-  u64 to_write = SP_MIN(size, available);
-
-  sp_mem_copy(ptr, data->here, to_write);
-  data->here += to_write;
-  return to_write;
-}
-
-u64 sp_io_mem_pad(sp_io_t* stream, u64 size) {
-  sp_io_mem_data_t* data = &stream->memory;
-  u64 available = data->stop - data->here;
-  u64 to_pad = SP_MIN(size, available);
-
-  sp_mem_zero(data->here, to_pad);
-  data->here += to_pad;
-  return to_pad;
-}
-
-s64 sp_io_dyn_mem_size(sp_io_t* stream) {
-  sp_io_dyn_mem_data_t* data = &stream->buffer;
-  return data->stop - data->base;
-}
-
-s64 sp_io_buffer_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
-  sp_io_dyn_mem_data_t* data = &stream->buffer;
-  u8* new_pos;
-
-  switch (whence) {
-    case SP_IO_SEEK_SET: {
-      new_pos = data->base + offset;
-      break;
-    }
-    case SP_IO_SEEK_CUR: {
-      new_pos = data->here + offset;
-      break;
-    }
-    case SP_IO_SEEK_END: {
-      new_pos = data->stop + offset;
-      break;
-    }
-    default: {
-      SP_UNREACHABLE();
-    }
+  u64 size = sp_io_reader_size(&reader);
+  if (size == 0) {
+    sp_io_reader_close(&reader);
+    return SP_ZERO_STRUCT(sp_str_t);
   }
 
-  if (new_pos < data->base || new_pos > data->stop) {
-    sp_err_set(SP_ERR_IO_SEEK_INVALID);
-    return -1;
-  }
-  data->here = new_pos;
-  return data->here - data->base;
+  c8* data = (c8*)sp_alloc((u32)size);
+  u64 bytes_read = sp_io_reader_read(&reader, data, size);
+  sp_io_reader_close(&reader);
+
+  return (sp_str_t) {
+    .data = data,
+    .len = (u32)bytes_read
+  };
 }
 
-u64 sp_io_dyn_mem_read(sp_io_t* stream, void* ptr, u64 size) {
-  sp_io_dyn_mem_data_t* data = &stream->buffer;
-  u64 available = data->stop - data->here;
-  u64 to_read = SP_MIN(size, available);
-
-  sp_mem_copy(data->here, ptr, to_read);
-  data->here += to_read;
-  return to_read;
+u64 sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size) {
+  s64 result = read(reader->file.fd, ptr, size);
+  if (result < 0) {
+    sp_err_set(SP_ERR_IO_READ_FAILED);
+    return 0;
+  }
+  return (u64)result;
 }
 
-u64 sp_io_dyn_mem_write(sp_io_t* stream, const void* ptr, u64 size) {
-  sp_io_dyn_mem_data_t* data = &stream->buffer;
-  u64 pos = data->here - data->base;
-  u64 required = pos + size;
-  u64 capacity = data->max - data->base;
-
-  if (required > capacity) {
-    u64 new_capacity = capacity ? capacity : 64;
-    while (new_capacity < required) {
-      new_capacity *= 2;
-    }
-    u64 content_size = data->stop - data->base;
-    data->base = (u8*)sp_realloc(data->base, (u32)new_capacity);
-    data->here = data->base + pos;
-    data->stop = data->base + content_size;
-    data->max = data->base + new_capacity;
-  }
-
-  sp_mem_copy(ptr, data->here, size);
-  data->here += size;
-  if (data->here > data->stop) {
-    data->stop = data->here;
-  }
-  return size;
-}
-
-u64 sp_io_dyn_mem_pad(sp_io_t* stream, u64 size) {
-  sp_io_dyn_mem_data_t* data = &stream->buffer;
-  u64 pos = data->here - data->base;
-  u64 required = pos + size;
-  u64 capacity = data->max - data->base;
-
-  if (required > capacity) {
-    u64 new_capacity = capacity ? capacity : 64;
-    while (new_capacity < required) {
-      new_capacity *= 2;
-    }
-    u64 content_size = data->stop - data->base;
-    data->base = (u8*)sp_realloc(data->base, (u32)new_capacity);
-    data->here = data->base + pos;
-    data->stop = data->base + content_size;
-    data->max = data->base + new_capacity;
-  }
-
-  sp_mem_zero(data->here, size);
-  data->here += size;
-  if (data->here > data->stop) {
-    data->stop = data->here;
-  }
-  return size;
-}
-
-void sp_io_dyn_mem_close(sp_io_t* stream) {
-  (void)stream;
-}
-
-s64 sp_io_file_size(sp_io_t* stream) {
-  sp_io_file_data_t* data = &stream->file;
-  s64 current = lseek(data->fd, 0, SEEK_CUR);
-  if (current < 0) {
-    sp_err_set(SP_ERR_IO);
-    return -1;
-  }
-  s64 size = lseek(data->fd, 0, SEEK_END);
-  if (size < 0) {
-    sp_err_set(SP_ERR_IO_SEEK_FAILED);
-    return -1;
-  }
-  lseek(data->fd, current, SEEK_SET);
-  return size;
-}
-
-s64 sp_io_file_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
-  sp_io_file_data_t* data = &stream->file;
-  int posix_whence;
-
+s64 sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence) {
+  s32 posix_whence;
   switch (whence) {
     case SP_IO_SEEK_SET: {
       posix_whence = SEEK_SET;
@@ -9584,31 +9478,214 @@ s64 sp_io_file_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
       posix_whence = SEEK_END;
       break;
     }
-    default: {
-      SP_UNREACHABLE();
-    }
   }
 
-  s64 pos = lseek(data->fd, offset, posix_whence);
+  s64 pos = lseek(r->file.fd, offset, posix_whence);
   if (pos < 0) {
     sp_err_set(SP_ERR_IO_SEEK_FAILED);
   }
   return pos;
 }
 
-u64 sp_io_file_read(sp_io_t* stream, void* ptr, u64 size) {
-  sp_io_file_data_t* data = &stream->file;
-  s64 result = read(data->fd, ptr, size);
-  if (result < 0) {
-    sp_err_set(SP_ERR_IO_READ_FAILED);
+u64 sp_io_reader_file_size(sp_io_reader_t* r) {
+  s64 current = lseek(r->file.fd, 0, SEEK_CUR);
+  if (current < 0) {
+    sp_err_set(SP_ERR_IO);
     return 0;
   }
-  return (u64)result;
+
+  s64 size = lseek(r->file.fd, 0, SEEK_END);
+  if (size < 0) {
+    sp_err_set(SP_ERR_IO_SEEK_FAILED);
+    return 0;
+  }
+
+  lseek(r->file.fd, current, SEEK_SET);
+  return (u64)size;
 }
 
-u64 sp_io_file_write(sp_io_t* stream, const void* ptr, u64 size) {
-  sp_io_file_data_t* data = &stream->file;
-  s64 result = write(data->fd, ptr, size);
+void sp_io_reader_file_close(sp_io_reader_t* r) {
+  if (r->file.close_mode == SP_IO_CLOSE_MODE_AUTO) {
+    if (close(r->file.fd) < 0) {
+      sp_err_set(SP_ERR_IO_CLOSE_FAILED);
+    }
+  }
+}
+
+u64 sp_io_reader_mem_read(sp_io_reader_t* r, void* ptr, u64 size) {
+  u64 available = r->mem.len - r->mem.pos;
+  u64 n = SP_MIN(size, available);
+  sp_mem_copy(r->mem.ptr + r->mem.pos, ptr, n);
+  r->mem.pos += n;
+  return n;
+}
+
+s64 sp_io_reader_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence) {
+  s64 pos = 0;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      pos = offset;
+      break;
+    }
+    case SP_IO_SEEK_CUR: {
+      pos = (s64)r->mem.pos + offset;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      pos = (s64)r->mem.len + offset;
+      break;
+    }
+  }
+
+  if (pos < 0 || (u64)pos > r->mem.len) {
+    sp_err_set(SP_ERR_IO_SEEK_INVALID);
+    return -1;
+  }
+  r->mem.pos = (u64)pos;
+  return pos;
+}
+
+u64 sp_io_reader_mem_size(sp_io_reader_t* r) {
+  return r->mem.len;
+}
+
+void sp_io_reader_mem_close(sp_io_reader_t* r) {
+  (void)r;
+}
+
+sp_io_reader_t sp_io_reader_from_file(sp_str_t path) {
+  sp_io_reader_t r = {
+    .vtable = {
+      .read = sp_io_reader_file_read,
+      .seek = sp_io_reader_file_seek,
+      .size = sp_io_reader_file_size,
+      .close = sp_io_reader_file_close,
+    },
+    .file = {
+      .fd = open(sp_str_to_cstr(path), O_RDONLY),
+      .close_mode = SP_IO_CLOSE_MODE_AUTO
+    },
+  };
+
+  if (r.file.fd < 0) {
+    sp_err_set(SP_ERR_IO_OPEN_FAILED);
+    return SP_ZERO_STRUCT(sp_io_reader_t);
+  }
+  return r;
+}
+
+sp_io_reader_t sp_io_reader_from_handle(sp_os_file_handle_t fd, sp_io_close_mode_t mode) {
+  return (sp_io_reader_t) {
+    .vtable = {
+      .read = sp_io_reader_file_read,
+      .seek = sp_io_reader_file_seek,
+      .size = sp_io_reader_file_size,
+      .close = sp_io_reader_file_close,
+    },
+    .file = {
+      .fd = fd,
+      .close_mode = mode,
+    },
+  };
+}
+
+sp_io_reader_t sp_io_reader_from_mem(const void* ptr, u64 size) {
+  return (sp_io_reader_t) {
+    .vtable = {
+      .read = sp_io_reader_mem_read,
+      .seek = sp_io_reader_mem_seek,
+      .size = sp_io_reader_mem_size,
+      .close = sp_io_reader_mem_close,
+    },
+    .mem = {
+      .ptr = (const u8*)ptr,
+      .len = size,
+      .pos = 0,
+    },
+  };
+}
+
+void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
+  if (!reader) return;
+
+  reader->buffer = (sp_mem_buffer_t) {
+    .data = buf,
+    .len = 0,
+    .capacity = capacity,
+  };
+  reader->seek = 0;
+}
+
+u64 sp_io_reader_read(sp_io_reader_t* reader, void* ptr, u64 size) {
+  if (!reader) return 0;
+  if (!reader->vtable.read) return 0;
+  sp_err_clear();
+
+  if (!reader->buffer.data) {
+    return reader->vtable.read(reader, ptr, size);
+  }
+
+  u8* buffer = (u8*)ptr;
+  u64 total = 0;
+
+  u64 buffered = reader->buffer.len - reader->seek;
+  u64 n = SP_MIN(size, buffered);
+  sp_mem_copy(reader->buffer.data + reader->seek, buffer, n);
+
+  reader->seek += n;
+  buffer += n;
+  total += n;
+
+  if (total == size) return size;
+
+  u64 remaining = size - total;
+  if (remaining >= reader->buffer.capacity) {
+    return total + reader->vtable.read(reader, buffer, remaining);
+  }
+
+  reader->seek = 0;
+  reader->buffer.len = reader->vtable.read(reader, reader->buffer.data, reader->buffer.capacity);
+  n = SP_MIN(remaining, reader->buffer.len);
+  sp_mem_copy(reader->buffer.data, buffer, n);
+
+  reader->seek = n;
+  return total + n;
+}
+
+s64 sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence) {
+  if (!reader) return 0;
+  if (!reader->vtable.seek) return 0;
+
+  if (reader->buffer.data && reader->buffer.len > reader->seek) {
+    s64 buffered = (s64)(reader->buffer.len - reader->seek);
+    reader->vtable.seek(reader, -buffered, SP_IO_SEEK_CUR);
+    reader->seek = 0;
+    reader->buffer.len = 0;
+  }
+
+  sp_err_clear();
+  return reader->vtable.seek(reader, offset, whence);
+}
+
+u64 sp_io_reader_size(sp_io_reader_t* reader) {
+  if (!reader) return 0;
+  if (!reader->vtable.size) return 0;
+  sp_err_clear();
+
+  return reader->vtable.size(reader);
+}
+
+void sp_io_reader_close(sp_io_reader_t* reader) {
+  if (!reader) return;
+  if (!reader->vtable.close) return;
+  sp_err_clear();
+
+  reader->vtable.close(reader);
+}
+
+u64 sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
+  s64 result = write(writer->file.fd, ptr, size);
   if (result < 0) {
     sp_err_set(SP_ERR_IO_WRITE_FAILED);
     return 0;
@@ -9616,168 +9693,299 @@ u64 sp_io_file_write(sp_io_t* stream, const void* ptr, u64 size) {
   return (u64)result;
 }
 
-u64 sp_io_file_pad(sp_io_t* stream, u64 size) {
-  static const u8 zeros[64] = {0};
-  u64 written = 0;
-  while (written < size) {
-    u64 chunk = SP_MIN(size - written, 64);
-    u64 result = sp_io_file_write(stream, zeros, chunk);
-    if (result == 0) {
+s64 sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
+  int posix_whence;
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      posix_whence = SEEK_SET;
       break;
     }
-
-    written += result;
+    case SP_IO_SEEK_CUR: {
+      posix_whence = SEEK_CUR;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      posix_whence = SEEK_END;
+      break;
+    }
   }
+  s64 pos = lseek(writer->file.fd, offset, posix_whence);
+  if (pos < 0) {
+    sp_err_set(SP_ERR_IO_SEEK_FAILED);
+  }
+  return pos;
+}
+
+u64 sp_io_writer_file_size(sp_io_writer_t* writer) {
+  s64 current = lseek(writer->file.fd, 0, SEEK_CUR);
+  if (current < 0) {
+    sp_err_set(SP_ERR_IO);
+    return 0;
+  }
+
+  s64 size = lseek(writer->file.fd, 0, SEEK_END);
+  if (size < 0) {
+    sp_err_set(SP_ERR_IO_SEEK_FAILED);
+    return 0;
+  }
+
+  lseek(writer->file.fd, current, SEEK_SET);
+  return (u64)size;
+}
+
+void sp_io_writer_file_close(sp_io_writer_t* writer) {
+  if (writer->file.close_mode != SP_IO_CLOSE_MODE_AUTO) return;
+
+  if (close(writer->file.fd) < 0) {
+    sp_err_set(SP_ERR_IO_CLOSE_FAILED);
+  }
+}
+
+u64 sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
+  u64 available = writer->mem.len - writer->mem.pos;
+  u64 written = SP_MIN(size, available);
+
+  sp_mem_copy(ptr, writer->mem.ptr + writer->mem.pos, written);
+  writer->mem.pos += written;
   return written;
 }
 
-void sp_io_file_close(sp_io_t* stream) {
-  sp_io_file_data_t* data = &stream->file;
-  if (data->close_mode == SP_IO_FILE_CLOSE_MODE_AUTO) {
-    if (close(data->fd) < 0) {
-      sp_err_set(SP_ERR_IO_CLOSE_FAILED);
+s64 sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
+  s64 pos;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      pos = offset;
+      break;
+    }
+    case SP_IO_SEEK_CUR: {
+      pos = (s64)writer->mem.pos + offset;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      pos = (s64)writer->mem.len + offset;
+      break;
     }
   }
+
+  if (pos < 0 || (u64)pos > writer->mem.len) {
+    sp_err_set(SP_ERR_IO_SEEK_INVALID);
+    return -1;
+  }
+  writer->mem.pos = (u64)pos;
+  return pos;
 }
 
-sp_io_t sp_io_from_file(sp_str_t path, sp_io_mode_t mode) {
-  sp_io_t io = SP_ZERO_INITIALIZE();
+u64 sp_io_writer_mem_size(sp_io_writer_t* writer) {
+  return writer->mem.len;
+}
 
-  int flags = 0;
-  if ((mode & SP_IO_MODE_READ) && (mode & SP_IO_MODE_WRITE)) {
-    flags = O_RDWR | O_CREAT;
-  } else if ((mode & SP_IO_MODE_READ) && (mode & SP_IO_MODE_APPEND)) {
-    flags = O_RDWR | O_CREAT | O_APPEND;
-  } else if (mode & SP_IO_MODE_READ) {
-    flags = O_RDONLY;
-  } else if (mode & SP_IO_MODE_WRITE) {
-    flags = O_WRONLY | O_CREAT | O_TRUNC;
-  } else if (mode & SP_IO_MODE_APPEND) {
-    flags = O_WRONLY | O_CREAT | O_APPEND;
+void sp_io_writer_mem_close(sp_io_writer_t* writer) {
+  (void)writer;
+}
+
+u64 sp_io_writer_dyn_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
+  sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
+  u64 required = io->seek + size;
+
+  if (required > io->buffer.capacity) {
+    u64 new_capacity = io->buffer.capacity ? io->buffer.capacity : 64;
+    while (new_capacity < required) {
+      new_capacity *= 2;
+    }
+    io->buffer.data = (u8*)sp_mem_allocator_realloc(io->allocator, io->buffer.data, (u32)new_capacity);
+    io->buffer.capacity = new_capacity;
   }
 
-  int fd = open(sp_str_to_cstr(path), flags, 0644);
+  sp_mem_copy(ptr, io->buffer.data + io->seek, size);
+  io->seek += size;
+  if (io->seek > io->buffer.len) {
+    io->buffer.len = io->seek;
+  }
+  return size;
+}
+
+s64 sp_io_writer_dyn_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
+  sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
+  s64 pos;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      pos = offset;
+      break;
+    }
+    case SP_IO_SEEK_CUR: {
+      pos = (s64)io->seek + offset;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      pos = (s64)io->buffer.len + offset;
+      break;
+    }
+  }
+
+  if (pos < 0 || (u64)pos > io->buffer.len) {
+    sp_err_set(SP_ERR_IO_SEEK_INVALID);
+    return -1;
+  }
+  io->seek = (u64)pos;
+  return pos;
+}
+
+u64 sp_io_writer_dyn_size(sp_io_writer_t* writer) {
+  return writer->dyn_mem.buffer.len;
+}
+
+void sp_io_writer_dyn_close(sp_io_writer_t* writer) {
+  (void)writer;
+}
+
+sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode) {
+  s32 flags = O_WRONLY | O_CREAT;
+  switch (mode) {
+    case SP_IO_WRITE_MODE_OVERWRITE: {
+      flags |= O_TRUNC;
+      break;
+    }
+    case SP_IO_WRITE_MODE_APPEND: {
+      flags |= O_APPEND;
+      break;
+    }
+  }
+
+  s32 fd = open(sp_str_to_cstr(path), flags, 0644);
   if (fd < 0) {
     sp_err_set(SP_ERR_IO_OPEN_FAILED);
-    return io;
+    return SP_ZERO_STRUCT(sp_io_writer_t);
   }
 
-  io.callbacks = (sp_io_callbacks_t) {
-    .size = sp_io_file_size,
-    .seek = sp_io_file_seek,
-    .read = sp_io_file_read,
-    .write = sp_io_file_write,
-    .pad = sp_io_file_pad,
-    .close = sp_io_file_close,
-  };
-  io.file.fd = fd;
-  io.file.close_mode = SP_IO_FILE_CLOSE_MODE_AUTO;
-
-  return io;
-}
-
-sp_io_t sp_io_from_mem(void* memory, u64 size) {
-  sp_io_t io = SP_ZERO_INITIALIZE();
-  io.memory.base = (u8*)memory;
-  io.memory.here = (u8*)memory;
-  io.memory.stop = (u8*)memory + size;
-  io.callbacks.size = sp_io_const_mem_size;
-  io.callbacks.seek = sp_io_const_mem_seek;
-  io.callbacks.read = sp_io_const_mem_read;
-  io.callbacks.write = sp_io_mem_write;
-  io.callbacks.pad = sp_io_mem_pad;
-  io.callbacks.close = sp_io_const_mem_close;
-
-  return io;
-}
-
-sp_io_t sp_io_from_const_mem(const void* memory, u64 size) {
-  sp_io_t io = SP_ZERO_INITIALIZE();
-  io.const_memory.base = (const u8*)memory;
-  io.const_memory.here = (const u8*)memory;
-  io.const_memory.stop = (const u8*)memory + size;
-  io.callbacks.size = sp_io_const_mem_size;
-  io.callbacks.seek = sp_io_const_mem_seek;
-  io.callbacks.read = sp_io_const_mem_read;
-  io.callbacks.write = sp_io_const_mem_write;
-  io.callbacks.pad = sp_io_const_mem_pad;
-  io.callbacks.close = sp_io_const_mem_close;
-
-  return io;
-}
-
-sp_io_t sp_io_from_dyn_mem(u8* buffer, u64 size) {
-  return sp_io_from_dyn_mem_ex(buffer, size, sp_context_get()->allocator);
-}
-
-sp_io_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator) {
-  return (sp_io_t) {
-    .callbacks = {
-      .size = sp_io_dyn_mem_size,
-      .seek = sp_io_const_mem_seek,
-      .read = sp_io_const_mem_read,
-      .write = sp_io_dyn_mem_write,
-      .pad = sp_io_dyn_mem_pad,
-      .close = sp_io_dyn_mem_close,
+  sp_io_writer_t w = {
+    .vtable = {
+      .write = sp_io_writer_file_write,
+      .seek = sp_io_writer_file_seek,
+      .size = sp_io_writer_file_size,
+      .close = sp_io_writer_file_close,
     },
-    .buffer = {
-      .allocator = allocator
+    .file = {
+      .fd = fd,
+      .close_mode = SP_IO_CLOSE_MODE_AUTO,
+    },
+  };
+  return w;
+}
+
+sp_io_writer_t sp_io_writer_from_fd(s32 fd, sp_io_close_mode_t close_mode) {
+  sp_io_writer_t w = {
+    .vtable = {
+      .write = sp_io_writer_file_write,
+      .seek = sp_io_writer_file_seek,
+      .size = sp_io_writer_file_size,
+      .close = sp_io_writer_file_close,
+    },
+    .file = {
+      .fd = fd,
+      .close_mode = close_mode,
+    },
+  };
+  return w;
+}
+
+sp_io_writer_t sp_io_writer_from_mem(void* ptr, u64 size) {
+  sp_io_writer_t w = {
+    .vtable = {
+      .write = sp_io_writer_mem_write,
+      .seek = sp_io_writer_mem_seek,
+      .size = sp_io_writer_mem_size,
+      .close = sp_io_writer_mem_close,
+    },
+    .mem = {
+      .ptr = (u8*)ptr,
+      .len = size,
+      .pos = 0,
+    },
+  };
+  return w;
+}
+
+sp_io_writer_t sp_io_writer_from_dyn_mem(void) {
+  return sp_io_writer_from_dyn_mem_ex(SP_NULLPTR, 0, sp_context_get()->allocator);
+}
+
+sp_io_writer_t sp_io_writer_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator) {
+  return (sp_io_writer_t) {
+    .vtable = {
+      .write = sp_io_writer_dyn_write,
+      .seek = sp_io_writer_dyn_seek,
+      .size = sp_io_writer_dyn_size,
+      .close = sp_io_writer_dyn_close,
+    },
+    .dyn_mem = {
+      .allocator = allocator,
+      .buffer = {
+        .data = buffer,
+        .len = 0,
+        .capacity = size
+      }
     }
   };
 }
 
-sp_str_t sp_io_buffer_to_str(sp_io_t* stream) {
-  SP_ASSERT(stream);
-  sp_io_dyn_mem_data_t* data = &stream->buffer;
-  return (sp_str_t) {
-    .data = (c8*)data->base,
-    .len = (u32)(data->stop - data->base),
+void sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* ptr, u64 size) {
+  if (!writer) return;
+  sp_io_writer_flush(writer);
+
+  writer->buffer = (sp_mem_buffer_t) {
+    .data = ptr,
+    .len = 0,
+    .capacity = size
   };
 }
 
-sp_io_t sp_io_from_file_handle(sp_os_file_handle_t handle, sp_io_file_close_mode_t close_mode) {
-  sp_io_t stream = SP_ZERO_INITIALIZE();
-  stream.callbacks = (sp_io_callbacks_t) {
-    .size = sp_io_file_size,
-    .seek = sp_io_file_seek,
-    .read = sp_io_file_read,
-    .write = sp_io_file_write,
-    .pad = sp_io_file_pad,
-    .close = sp_io_file_close,
-  };
-  stream.file.fd = handle;
-  stream.file.close_mode = close_mode;
-
-  return stream;
-}
-
-u64 sp_io_read(sp_io_t* stream, void* ptr, u64 size) {
-  if (!stream) return 0;
-  if (!stream->callbacks.read) return 0;
-
-  sp_io_flush(stream);
-  sp_err_clear();
-  return stream->callbacks.read(stream, ptr, size);
-}
-
-u64 sp_io_write(sp_io_t* stream, const void* ptr, u64 size) {
-  if (!stream) return 0;
-  if (!stream->callbacks.write) return 0;
+sp_err_t sp_io_writer_flush(sp_io_writer_t* writer) {
+  if (!writer) return SP_ERR_OK;
+  if (!writer->vtable.write) return SP_ERR_OK;
+  if (writer->buffer.len == 0) return SP_ERR_OK;
   sp_err_clear();
 
-  sp_io_write_buffer_t* wb = &stream->write_buffer;
-  if (!wb->ptr) {
-    return stream->callbacks.write(stream, ptr, size);
+  u64 written = 0;
+  while (written < writer->buffer.len) {
+    u64 remaining = writer->buffer.len - written;
+    u64 result = writer->vtable.write(writer, writer->buffer.data + written, remaining);
+    if (result == 0) {
+      if (written > 0) {
+        sp_mem_move(writer->buffer.data + written, writer->buffer.data, writer->buffer.len - written);
+        writer->buffer.len -= written;
+      }
+      sp_err_t err = sp_err_get();
+      if (err == SP_ERR_OK) {
+        sp_err_set(SP_ERR_IO_WRITE_FAILED);
+        return SP_ERR_IO_WRITE_FAILED;
+      }
+      return err;
+    }
+    written += result;
+  }
+  writer->buffer.len = 0;
+  return SP_ERR_OK;
+}
+
+u64 sp_io_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
+  if (!writer) return 0;
+  if (!writer->vtable.write) return 0;
+  sp_err_clear();
+
+  if (!writer->buffer.data) {
+    return writer->vtable.write(writer, ptr, size);
   }
 
-  const u8* src = (const u8*)ptr;
+  const u8* p = (const u8*)ptr;
   u64 remaining = size;
 
-  if (size > wb->capacity) {
-    sp_io_flush(stream);
+  if (size > writer->buffer.capacity) {
+    if (sp_io_writer_flush(writer) != SP_ERR_OK) return 0;
     u64 written = 0;
     while (written < size) {
-      u64 result = stream->callbacks.write(stream, src + written, size - written);
+      u64 result = writer->vtable.write(writer, p + written, size - written);
       if (result == 0) return written;
       written += result;
     }
@@ -9785,117 +9993,71 @@ u64 sp_io_write(sp_io_t* stream, const void* ptr, u64 size) {
   }
 
   while (remaining > 0) {
-    u64 space = wb->capacity - wb->size;
+    u64 space = writer->buffer.capacity - writer->buffer.len;
     if (space == 0) {
-      sp_io_flush(stream);
+      sp_io_writer_flush(writer);
       if (sp_err_get()) return size - remaining;
-      space = wb->capacity;
+      space = writer->buffer.capacity;
     }
     u64 chunk = SP_MIN(remaining, space);
-    sp_mem_copy(src, wb->ptr + wb->size, chunk);
-    wb->size += chunk;
-    src += chunk;
+    sp_mem_copy(p, writer->buffer.data + writer->buffer.len, chunk);
+    writer->buffer.len += chunk;
+    p += chunk;
     remaining -= chunk;
   }
 
   return size;
 }
 
-u64 sp_io_write_str(sp_io_t* stream, sp_str_t str) {
-  return sp_io_write(stream, str.data, str.len);
+u64 sp_io_writer_write_str(sp_io_writer_t* writer, sp_str_t str) {
+  return sp_io_writer_write(writer, str.data, str.len);
 }
 
-u64 sp_io_write_cstr(sp_io_t* stream, const c8* cstr) {
-  return sp_io_write(stream, cstr, sp_cstr_len(cstr));
-}
+u64 sp_io_writer_pad(sp_io_writer_t* writer, u64 size) {
+  if (!writer) return 0;
+  sp_io_writer_flush(writer);
 
-u64 sp_io_pad(sp_io_t* stream, u64 size) {
-  if (!stream) return 0;
-  if (!stream->callbacks.pad) return 0;
-  sp_io_flush(stream);
-  sp_err_clear();
-  return stream->callbacks.pad(stream, size);
-}
-
-s64 sp_io_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
-  if (!stream) return 0;
-  if (!stream->callbacks.seek) return 0;
-  sp_io_flush(stream);
-  sp_err_clear();
-  return stream->callbacks.seek(stream, offset, whence);
-}
-
-s64 sp_io_size(sp_io_t* stream) {
-  if (!stream) return 0;
-  if (!stream->callbacks.size) return 0;
-  sp_io_flush(stream);
-  sp_err_clear();
-  return stream->callbacks.size(stream);
-}
-
-sp_err_t sp_io_flush(sp_io_t* stream) {
-  if (!stream) return SP_ERR_OK;
-  sp_io_write_buffer_t* wb = &stream->write_buffer;
-  if (wb->size == 0) return SP_ERR_OK;
-  if (!stream->callbacks.write) return SP_ERR_OK;
-
-  sp_err_clear();
+  static const u8 zeros[64] = {0};
   u64 written = 0;
-  while (written < wb->size) {
-    u64 result = stream->callbacks.write(stream, wb->ptr + written, wb->size - written);
-    if (result == 0) {
-      if (written > 0) {
-        sp_mem_move(wb->ptr + written, wb->ptr, wb->size - written);
-        wb->size -= written;
-      }
-      return sp_err_get();
-    }
+  while (written < size) {
+    u64 chunk = SP_MIN(size - written, 64);
+    u64 result = sp_io_writer_write(writer, zeros, chunk);
+    if (result == 0) break;
     written += result;
   }
-  wb->size = 0;
-  return SP_ERR_OK;
+  return written;
 }
 
-void sp_io_set_buffer(sp_io_t* stream, u8* buf, u64 capacity) {
-  if (!stream) return;
-  sp_io_flush(stream);
-  stream->write_buffer.ptr = buf;
-  stream->write_buffer.capacity = capacity;
-  stream->write_buffer.size = 0;
-}
-
-void sp_io_close(sp_io_t* stream) {
-  if (!stream) return;
-  sp_io_flush(stream);
-  if (!stream->callbacks.close) return;
+s64 sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
+  if (!writer) return 0;
+  if (!writer->vtable.seek) return 0;
+  sp_io_writer_flush(writer);
   sp_err_clear();
-  stream->callbacks.close(stream);
+  return writer->vtable.seek(writer, offset, whence);
 }
 
-sp_str_t sp_io_read_file(sp_str_t path) {
+u64 sp_io_writer_size(sp_io_writer_t* writer) {
+  if (!writer) return 0;
+  if (!writer->vtable.size) return 0;
+  sp_io_writer_flush(writer);
   sp_err_clear();
-  sp_io_t io = sp_io_from_file(path, SP_IO_MODE_READ);
-  if (sp_err_get()) {
-    return SP_ZERO_STRUCT(sp_str_t);
-  }
+  return writer->vtable.size(writer);
+}
 
-  s64 size = sp_io_size(&io);
-  if (sp_err_get()) {
-    sp_io_close(&io);
-    return SP_ZERO_STRUCT(sp_str_t);
-  }
+void sp_io_writer_close(sp_io_writer_t* writer) {
+  if (!writer) return;
+  sp_io_writer_flush(writer);
+  if (!writer->vtable.close) return;
+  sp_err_clear();
+  writer->vtable.close(writer);
+}
 
-  sp_str_t result = sp_str_alloc((u32)size);
-  sp_io_read(&io, (void*)result.data, (u64)size);
-  if (sp_err_get()) {
-    sp_io_close(&io);
-    return SP_ZERO_STRUCT(sp_str_t);
-  }
-
-  sp_io_close(&io);
-
-  result.len = (u32)size;
-  return result;
+sp_str_t sp_io_writer_to_str(sp_io_writer_t* writer) {
+  if (!writer) return SP_ZERO_STRUCT(sp_str_t);
+  return (sp_str_t) {
+    .data = (c8*)writer->dyn_mem.buffer.data,
+    .len = (u32)writer->dyn_mem.buffer.len,
+  };
 }
 
 //  █████╗ ███████╗███████╗███████╗████████╗
@@ -10454,7 +10616,7 @@ sp_elf_section_t* sp_elf_find_or_create_shstrtab(sp_elf_t* elf) {
   return table;
 }
 
-sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_t* out) {
+sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
   sp_require_as(elf, SP_ERR_LAZY);
   sp_require_as(out, SP_ERR_LAZY);
 
@@ -10530,11 +10692,11 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_t* out) {
   ehdr.e_ident[EI_OSABI] = ELFOSABI_NONE;
 
   u64 written = 0;
-  written += sp_io_write(out, &ehdr, sizeof(Elf64_Ehdr));
-  written += sp_io_pad(out, shoff - written);
+  written += sp_io_writer_write(out, &ehdr, sizeof(Elf64_Ehdr));
+  written += sp_io_writer_pad(out, shoff - written);
 
   sp_da_for(headers, i) {
-    written += sp_io_write(out, &headers[i], sizeof(Elf64_Shdr));
+    written += sp_io_writer_write(out, &headers[i], sizeof(Elf64_Shdr));
   }
 
   sp_da_for(elf->sections, i) {
@@ -10545,8 +10707,8 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_t* out) {
         break;
       }
       default: {
-        written += sp_io_pad(out, headers[i].sh_offset - written);
-        written += sp_io_write(out, sec->buffer.data, sec->buffer.size);
+        written += sp_io_writer_pad(out, headers[i].sh_offset - written);
+        written += sp_io_writer_write(out, sec->buffer.data, sec->buffer.size);
         break;
       }
     }
@@ -10557,17 +10719,17 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_t* out) {
 }
 
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {
-  sp_io_t f = sp_io_from_file(path, SP_IO_MODE_WRITE);
+  sp_io_writer_t f = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_err_t err = sp_elf_write(elf, &f);
-  sp_io_close(&f);
+  sp_io_writer_close(&f);
   return err;
 }
 
-sp_elf_t* sp_elf_read(sp_io_t* in) {
+sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
   sp_require_as_null(in);
 
   Elf64_Ehdr ehdr = SP_ZERO_INITIALIZE();
-  u64 bytes_read = sp_io_read(in, &ehdr, sizeof(Elf64_Ehdr));
+  u64 bytes_read = sp_io_reader_read(in, &ehdr, sizeof(Elf64_Ehdr));
   if (bytes_read != sizeof(Elf64_Ehdr)) {
     return SP_NULLPTR;
   }
@@ -10599,8 +10761,8 @@ sp_elf_t* sp_elf_read(sp_io_t* in) {
   }
 
   Elf64_Shdr* section_headers = sp_alloc_n(Elf64_Shdr, num_sections);
-  sp_io_seek(in, (s64)ehdr.e_shoff, SP_IO_SEEK_SET);
-  bytes_read = sp_io_read(in, section_headers, num_sections * sizeof(Elf64_Shdr));
+  sp_io_reader_seek(in, (s64)ehdr.e_shoff, SP_IO_SEEK_SET);
+  bytes_read = sp_io_reader_read(in, section_headers, num_sections * sizeof(Elf64_Shdr));
   if (bytes_read != num_sections * sizeof(Elf64_Shdr)) {
     return SP_NULLPTR;
   }
@@ -10610,8 +10772,8 @@ sp_elf_t* sp_elf_read(sp_io_t* in) {
   c8* string_table = SP_NULLPTR;
   if (string_header->sh_size) {
     string_table = sp_alloc_n(c8, string_header->sh_size);
-    sp_io_seek(in, string_header->sh_offset, SP_IO_SEEK_SET);
-    sp_io_read(in, string_table, string_header->sh_size);
+    sp_io_reader_seek(in, string_header->sh_offset, SP_IO_SEEK_SET);
+    sp_io_reader_read(in, string_table, string_header->sh_size);
   }
 
   sp_elf_t* elf = sp_elf_new();
@@ -10643,9 +10805,9 @@ sp_elf_t* sp_elf_read(sp_io_t* in) {
           break;
         }
         default: {
-          sp_io_seek(in, header->sh_offset, SP_IO_SEEK_SET);
+          sp_io_reader_seek(in, header->sh_offset, SP_IO_SEEK_SET);
           u8* ptr = sp_elf_section_reserve_bytes(section, header->sh_size);
-          sp_io_read(in, ptr, header->sh_size);
+          sp_io_reader_read(in, ptr, header->sh_size);
           break;
         }
       }
@@ -10656,13 +10818,13 @@ sp_elf_t* sp_elf_read(sp_io_t* in) {
 }
 
 sp_elf_t* sp_elf_read_from_file(sp_str_t path) {
-  sp_io_t f = sp_io_from_file(path, SP_IO_MODE_READ);
+  sp_io_reader_t f = sp_io_reader_from_file(path);
   if (f.file.fd < 0) {
     sp_err_set(SP_ERR_LAZY);
     return SP_NULLPTR;
   }
   sp_elf_t* elf = sp_elf_read(&f);
-  sp_io_close(&f);
+  sp_io_reader_close(&f);
   return elf;
 }
 

@@ -69,9 +69,9 @@ UTEST_F(fs, link) {
 
   // Test that modifying original affects hard link but not copy
   // Modify the original file by writing to it directly
-  sp_io_t stream = sp_io_from_file(source_file, SP_IO_MODE_WRITE);
-  sp_io_write_str(&stream, SP_LIT("Modified content"));
-  sp_io_close(&stream);
+  sp_io_writer_t stream = sp_io_writer_from_file(source_file, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_write_str(&stream, SP_LIT("Modified content"));
+  sp_io_writer_close(&stream);
 
   sp_str_t modified_hard_content = sp_io_read_file(hard_link);
   SP_EXPECT_STR_EQ(modified_hard_content, SP_LIT("Modified content"));

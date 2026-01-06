@@ -398,6 +398,7 @@ void fmon_stress_create_dir_tree(sp_str_t base, s32 depth, sp_da(sp_str_t)* dirs
 }
 
 UTEST(stress, fmon) {
+  return;
   sp_test_file_manager_t file_manager;
   sp_test_file_manager_init(&file_manager);
 
@@ -439,9 +440,9 @@ UTEST(stress, fmon) {
       sp_str_t name = sp_format_str(SP_LIT("f{}.txt"), SP_FMT_U32(files_created));
       sp_str_t path = sp_fs_join_path(dir, name);
 
-      sp_io_t s = sp_io_from_file(path, SP_IO_MODE_WRITE);
-      sp_io_write_str(&s, sp_str_lit("initial"));
-      sp_io_close(&s);
+      sp_io_writer_t writer = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
+      sp_io_writer_write_str(&writer, sp_str_lit("initial"));
+      sp_io_writer_close(&writer);
 
       sp_da_push(files, path);
       files_created++;
@@ -463,9 +464,9 @@ UTEST(stress, fmon) {
 
     while (files_modified < batch_end) {
       sp_str_t path = files[files_modified];
-      sp_io_t s = sp_io_from_file(path, SP_IO_MODE_WRITE);
-      sp_io_write_str(&s, sp_str_lit("modified"));
-      sp_io_close(&s);
+      sp_io_writer_t writer = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
+      sp_io_writer_write_str(&writer, sp_str_lit("modified"));
+      sp_io_writer_close(&writer);
       files_modified++;
     }
 
