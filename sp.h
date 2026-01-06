@@ -2355,6 +2355,7 @@ SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u
 
 SP_API u64            sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size);
 SP_API u64            sp_io_write_str(sp_io_writer_t* writer, sp_str_t str);
+SP_API u64            sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr);
 SP_API u64            sp_io_pad(sp_io_writer_t* writer, u64 size);
 SP_API sp_err_t       sp_io_flush(sp_io_writer_t* w);
 SP_API s64            sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence);
@@ -10011,6 +10012,10 @@ u64 sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
 
 u64 sp_io_write_str(sp_io_writer_t* writer, sp_str_t str) {
   return sp_io_write(writer, str.data, str.len);
+}
+
+u64 sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr) {
+  return sp_io_write(writer, cstr, sp_cstr_len(cstr));
 }
 
 u64 sp_io_pad(sp_io_writer_t* writer, u64 size) {
