@@ -2343,30 +2343,30 @@ struct sp_io_writer {
   sp_mem_buffer_t buffer;
 };
 
-SP_API sp_str_t sp_io_read_file(sp_str_t path);
+SP_API u64            sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size);
+SP_API sp_str_t       sp_io_read_file(sp_str_t path);
+SP_API s64            sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence);
+SP_API u64            sp_io_reader_size(sp_io_reader_t* r);
+SP_API void           sp_io_reader_close(sp_io_reader_t* r);
 SP_API sp_io_reader_t sp_io_reader_from_file(sp_str_t path);
 SP_API sp_io_reader_t sp_io_reader_from_handle(sp_os_file_handle_t fd, sp_io_close_mode_t mode);
 SP_API sp_io_reader_t sp_io_reader_from_mem(const void* ptr, u64 size);
-SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* r, u8* buf, u64 capacity);
-SP_API u64            sp_io_reader_read(sp_io_reader_t* r, void* ptr, u64 size);
-SP_API s64            sp_io_reader_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence);
-SP_API u64            sp_io_reader_size(sp_io_reader_t* r);
-SP_API void           sp_io_reader_close(sp_io_reader_t* r);
+SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
 
+SP_API u64            sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size);
+SP_API u64            sp_io_write_str(sp_io_writer_t* writer, sp_str_t str);
+SP_API u64            sp_io_pad(sp_io_writer_t* writer, u64 size);
+SP_API sp_err_t       sp_io_flush(sp_io_writer_t* w);
+SP_API s64            sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence);
+SP_API u64            sp_io_writer_size(sp_io_writer_t* w);
+SP_API void           sp_io_writer_close(sp_io_writer_t* w);
+SP_API sp_str_t       sp_io_writer_as_str(sp_io_writer_t* w);
 SP_API sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode);
 SP_API sp_io_writer_t sp_io_writer_from_fd(s32 fd, sp_io_close_mode_t close_mode);
 SP_API sp_io_writer_t sp_io_writer_from_mem(void* ptr, u64 size);
-SP_API sp_io_writer_t sp_io_writer_from_dyn_mem(void);
+SP_API sp_io_writer_t sp_io_writer_from_dyn_mem();
 SP_API sp_io_writer_t sp_io_writer_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator);
-SP_API void           sp_io_writer_set_buffer(sp_io_writer_t* w, u8* buf, u64 capacity);
-SP_API u64            sp_io_writer_write(sp_io_writer_t* w, const void* ptr, u64 size);
-SP_API u64            sp_io_writer_write_str(sp_io_writer_t* w, sp_str_t str);
-SP_API u64            sp_io_writer_pad(sp_io_writer_t* w, u64 size);
-SP_API sp_err_t       sp_io_writer_flush(sp_io_writer_t* w);
-SP_API s64            sp_io_writer_seek(sp_io_writer_t* w, s64 offset, sp_io_whence_t whence);
-SP_API u64            sp_io_writer_size(sp_io_writer_t* w);
-SP_API void           sp_io_writer_close(sp_io_writer_t* w);
-SP_API sp_str_t       sp_io_writer_to_str(sp_io_writer_t* w);
+SP_API void           sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
 
 
 // ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
@@ -6812,8 +6812,8 @@ void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
 
   u8 buffer[4096];
   u64 bytes_read;
-  while ((bytes_read = sp_io_reader_read(&reader, buffer, sizeof(buffer))) > 0) {
-    sp_io_writer_write(&writer, buffer, bytes_read);
+  while ((bytes_read = sp_io_read(&reader, buffer, sizeof(buffer))) > 0) {
+    sp_io_write(&writer, buffer, bytes_read);
   }
 
   sp_io_reader_close(&reader);
@@ -8596,7 +8596,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
     while (true) {
-      u64 num_bytes = sp_io_reader_read(out, buffer, sizeof(buffer));
+      u64 num_bytes = sp_io_read(out, buffer, sizeof(buffer));
       if (!num_bytes) {
         break;
       }
@@ -8613,7 +8613,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
 
     while (true) {
-      u64 num_bytes = sp_io_reader_read(err, buffer, sizeof(buffer));
+      u64 num_bytes = sp_io_read(err, buffer, sizeof(buffer));
       if (!num_bytes) {
         break;
       }
@@ -9445,7 +9445,7 @@ sp_str_t sp_io_read_file(sp_str_t path) {
   }
 
   c8* data = (c8*)sp_alloc((u32)size);
-  u64 bytes_read = sp_io_reader_read(&reader, data, size);
+  u64 bytes_read = sp_io_read(&reader, data, size);
   sp_io_reader_close(&reader);
 
   return (sp_str_t) {
@@ -9617,7 +9617,7 @@ void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
   reader->seek = 0;
 }
 
-u64 sp_io_reader_read(sp_io_reader_t* reader, void* ptr, u64 size) {
+u64 sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size) {
   if (!reader) return 0;
   if (!reader->vtable.read) return 0;
   sp_err_clear();
@@ -9907,7 +9907,7 @@ sp_io_writer_t sp_io_writer_from_mem(void* ptr, u64 size) {
   return w;
 }
 
-sp_io_writer_t sp_io_writer_from_dyn_mem(void) {
+sp_io_writer_t sp_io_writer_from_dyn_mem() {
   return sp_io_writer_from_dyn_mem_ex(SP_NULLPTR, 0, sp_context_get()->allocator);
 }
 
@@ -9932,7 +9932,7 @@ sp_io_writer_t sp_io_writer_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t
 
 void sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* ptr, u64 size) {
   if (!writer) return;
-  sp_io_writer_flush(writer);
+  sp_io_flush(writer);
 
   writer->buffer = (sp_mem_buffer_t) {
     .data = ptr,
@@ -9941,7 +9941,7 @@ void sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* ptr, u64 size) {
   };
 }
 
-sp_err_t sp_io_writer_flush(sp_io_writer_t* writer) {
+sp_err_t sp_io_flush(sp_io_writer_t* writer) {
   if (!writer) return SP_ERR_OK;
   if (!writer->vtable.write) return SP_ERR_OK;
   if (writer->buffer.len == 0) return SP_ERR_OK;
@@ -9969,7 +9969,7 @@ sp_err_t sp_io_writer_flush(sp_io_writer_t* writer) {
   return SP_ERR_OK;
 }
 
-u64 sp_io_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
+u64 sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
   if (!writer) return 0;
   if (!writer->vtable.write) return 0;
   sp_err_clear();
@@ -9982,7 +9982,7 @@ u64 sp_io_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
   u64 remaining = size;
 
   if (size > writer->buffer.capacity) {
-    if (sp_io_writer_flush(writer) != SP_ERR_OK) return 0;
+    if (sp_io_flush(writer) != SP_ERR_OK) return 0;
     u64 written = 0;
     while (written < size) {
       u64 result = writer->vtable.write(writer, p + written, size - written);
@@ -9995,7 +9995,7 @@ u64 sp_io_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
   while (remaining > 0) {
     u64 space = writer->buffer.capacity - writer->buffer.len;
     if (space == 0) {
-      sp_io_writer_flush(writer);
+      sp_io_flush(writer);
       if (sp_err_get()) return size - remaining;
       space = writer->buffer.capacity;
     }
@@ -10009,19 +10009,19 @@ u64 sp_io_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
   return size;
 }
 
-u64 sp_io_writer_write_str(sp_io_writer_t* writer, sp_str_t str) {
-  return sp_io_writer_write(writer, str.data, str.len);
+u64 sp_io_write_str(sp_io_writer_t* writer, sp_str_t str) {
+  return sp_io_write(writer, str.data, str.len);
 }
 
-u64 sp_io_writer_pad(sp_io_writer_t* writer, u64 size) {
+u64 sp_io_pad(sp_io_writer_t* writer, u64 size) {
   if (!writer) return 0;
-  sp_io_writer_flush(writer);
+  sp_io_flush(writer);
 
   static const u8 zeros[64] = {0};
   u64 written = 0;
   while (written < size) {
     u64 chunk = SP_MIN(size - written, 64);
-    u64 result = sp_io_writer_write(writer, zeros, chunk);
+    u64 result = sp_io_write(writer, zeros, chunk);
     if (result == 0) break;
     written += result;
   }
@@ -10031,7 +10031,7 @@ u64 sp_io_writer_pad(sp_io_writer_t* writer, u64 size) {
 s64 sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
   if (!writer) return 0;
   if (!writer->vtable.seek) return 0;
-  sp_io_writer_flush(writer);
+  sp_io_flush(writer);
   sp_err_clear();
   return writer->vtable.seek(writer, offset, whence);
 }
@@ -10039,20 +10039,20 @@ s64 sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence)
 u64 sp_io_writer_size(sp_io_writer_t* writer) {
   if (!writer) return 0;
   if (!writer->vtable.size) return 0;
-  sp_io_writer_flush(writer);
+  sp_io_flush(writer);
   sp_err_clear();
   return writer->vtable.size(writer);
 }
 
 void sp_io_writer_close(sp_io_writer_t* writer) {
   if (!writer) return;
-  sp_io_writer_flush(writer);
+  sp_io_flush(writer);
   if (!writer->vtable.close) return;
   sp_err_clear();
   writer->vtable.close(writer);
 }
 
-sp_str_t sp_io_writer_to_str(sp_io_writer_t* writer) {
+sp_str_t sp_io_writer_as_str(sp_io_writer_t* writer) {
   if (!writer) return SP_ZERO_STRUCT(sp_str_t);
   return (sp_str_t) {
     .data = (c8*)writer->dyn_mem.buffer.data,
@@ -10692,11 +10692,11 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
   ehdr.e_ident[EI_OSABI] = ELFOSABI_NONE;
 
   u64 written = 0;
-  written += sp_io_writer_write(out, &ehdr, sizeof(Elf64_Ehdr));
-  written += sp_io_writer_pad(out, shoff - written);
+  written += sp_io_write(out, &ehdr, sizeof(Elf64_Ehdr));
+  written += sp_io_pad(out, shoff - written);
 
   sp_da_for(headers, i) {
-    written += sp_io_writer_write(out, &headers[i], sizeof(Elf64_Shdr));
+    written += sp_io_write(out, &headers[i], sizeof(Elf64_Shdr));
   }
 
   sp_da_for(elf->sections, i) {
@@ -10707,8 +10707,8 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
         break;
       }
       default: {
-        written += sp_io_writer_pad(out, headers[i].sh_offset - written);
-        written += sp_io_writer_write(out, sec->buffer.data, sec->buffer.size);
+        written += sp_io_pad(out, headers[i].sh_offset - written);
+        written += sp_io_write(out, sec->buffer.data, sec->buffer.size);
         break;
       }
     }
@@ -10729,7 +10729,7 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
   sp_require_as_null(in);
 
   Elf64_Ehdr ehdr = SP_ZERO_INITIALIZE();
-  u64 bytes_read = sp_io_reader_read(in, &ehdr, sizeof(Elf64_Ehdr));
+  u64 bytes_read = sp_io_read(in, &ehdr, sizeof(Elf64_Ehdr));
   if (bytes_read != sizeof(Elf64_Ehdr)) {
     return SP_NULLPTR;
   }
@@ -10762,7 +10762,7 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
 
   Elf64_Shdr* section_headers = sp_alloc_n(Elf64_Shdr, num_sections);
   sp_io_reader_seek(in, (s64)ehdr.e_shoff, SP_IO_SEEK_SET);
-  bytes_read = sp_io_reader_read(in, section_headers, num_sections * sizeof(Elf64_Shdr));
+  bytes_read = sp_io_read(in, section_headers, num_sections * sizeof(Elf64_Shdr));
   if (bytes_read != num_sections * sizeof(Elf64_Shdr)) {
     return SP_NULLPTR;
   }
@@ -10773,7 +10773,7 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
   if (string_header->sh_size) {
     string_table = sp_alloc_n(c8, string_header->sh_size);
     sp_io_reader_seek(in, string_header->sh_offset, SP_IO_SEEK_SET);
-    sp_io_reader_read(in, string_table, string_header->sh_size);
+    sp_io_read(in, string_table, string_header->sh_size);
   }
 
   sp_elf_t* elf = sp_elf_new();
@@ -10807,7 +10807,7 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
         default: {
           sp_io_reader_seek(in, header->sh_offset, SP_IO_SEEK_SET);
           u8* ptr = sp_elf_section_reserve_bytes(section, header->sh_size);
-          sp_io_reader_read(in, ptr, header->sh_size);
+          sp_io_read(in, ptr, header->sh_size);
           break;
         }
       }

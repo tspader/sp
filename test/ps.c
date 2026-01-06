@@ -81,7 +81,7 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
   while (total_read < target_len && attempts < 10) {
     u8* ptr = ctx->buffer.data + total_read;
     u32 bytes_remaining = ctx->buffer.len - total_read;
-    u64 bytes_read = sp_io_reader_read(ctx->stream, ptr, bytes_remaining);
+    u64 bytes_read = sp_io_read(ctx->stream, ptr, bytes_remaining);
     if (!bytes_read) {
       if (ctx->mode == SP_TEST_PROC_READ_UNTIL_DONE) {
         sp_os_sleep_ms(10);
@@ -144,7 +144,7 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   sp_io_reader_t* err = sp_ps_io_err(&ps);
 
   if (!sp_str_empty(test.input)) {
-    u64 bytes_written = sp_io_writer_write(in, test.input.data, test.input.len);
+    u64 bytes_written = sp_io_write(in, test.input.data, test.input.len);
     SP_ASSERT_FMT(
       bytes_written == test.input.len,
       "stdin: tried to write {} ({}), but {:fg yellow} returned {}",
@@ -457,7 +457,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
     sp_str_builder_append_c8(&builder, '\n');
   }
 
-  sp_io_writer_write(in, builder.buffer.data, builder.buffer.len);
+  sp_io_write(in, builder.buffer.data, builder.buffer.len);
   sp_io_writer_close(in);
 
   sp_test_proc_stream_context_t ctx = {
@@ -785,7 +785,7 @@ UTEST_F(ps, wait_with_output) {
   EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 
-  u64 bytes_read = sp_io_reader_read(sp_ps_io_out(&ps), ut.buffer.data, ut.buffer.len);
+  u64 bytes_read = sp_io_read(sp_ps_io_out(&ps), ut.buffer.data, ut.buffer.len);
   EXPECT_EQ(bytes_read, sp_test_ps_canary.len);
   EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 }
@@ -837,11 +837,11 @@ UTEST_F(ps, interleaved_read_write) {
   for (u32 i = 0; i < 4; i++) {
     sp_str_t input = sp_format("line {}\n", SP_FMT_U32(i));
 
-    u64 written = sp_io_writer_write_str(in, input);
+    u64 written = sp_io_write_str(in, input);
     EXPECT_EQ(written, input.len);
 
     sp_os_sleep_ms(50);
-    u64 bytes_read = sp_io_reader_read(out, ut.buffer.data, ut.buffer.len);
+    u64 bytes_read = sp_io_read(out, ut.buffer.data, ut.buffer.len);
     sp_str_t expected = sp_format("echo: line {}\n", SP_FMT_U32(i));
     EXPECT_EQ(bytes_read, expected.len);
     EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, expected.data, expected.len));
@@ -876,7 +876,7 @@ UTEST_F(ps, incremental_nonblocking_read) {
   u32 total_read = 0;
 
   while (total_read < expected_size) {
-    u64 n = sp_io_reader_read(out, accumulated + total_read, expected_size - total_read);
+    u64 n = sp_io_read(out, accumulated + total_read, expected_size - total_read);
     if (n > 0) {
       total_read += n;
     } else {
@@ -941,7 +941,7 @@ UTEST_F(ps, write_1mb_to_stdin) {
   }
 
   sp_io_writer_t* in = sp_ps_io_in(&ps);
-  u64 num_written = sp_io_writer_write(in, buffer, num_bytes);
+  u64 num_written = sp_io_write(in, buffer, num_bytes);
   EXPECT_EQ(num_written, num_bytes);
   sp_io_writer_close(in);
 
