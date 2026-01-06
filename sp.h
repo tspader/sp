@@ -2287,13 +2287,13 @@ typedef struct {
   const u8* base;
   const u8* here;
   const u8* stop;
-} sp_io_const_memory_data_t;
+} sp_io_const_mem_data_t;
 
 typedef struct {
   u8* base;
   u8* here;
   u8* stop;
-} sp_io_memory_data_t;
+} sp_io_mem_data_t;
 
 typedef struct {
   u8* base;
@@ -2301,17 +2301,24 @@ typedef struct {
   u8* stop;
   u8* max;
   sp_allocator_t allocator;
-} sp_io_buffer_data_t;
+} sp_io_dyn_mem_data_t;
+
+typedef struct {
+  u8* ptr;
+  u64 size;
+  u64 capacity;
+} sp_io_write_buffer_t;
 
 struct sp_io {
   sp_io_callbacks_t callbacks;
   union {
     sp_io_file_data_t file;
-    sp_io_memory_data_t memory;
-    sp_io_const_memory_data_t const_memory;
-    sp_io_buffer_data_t buffer;
+    sp_io_mem_data_t memory;
+    sp_io_const_mem_data_t const_memory;
+    sp_io_dyn_mem_data_t buffer;
   };
   sp_allocator_t allocator;
+  sp_io_write_buffer_t write_buffer;
 };
 
 SP_API sp_io_t  sp_io_from_file(sp_str_t path, sp_io_mode_t mode);
@@ -2329,6 +2336,8 @@ SP_API s64      sp_io_size(sp_io_t* stream);
 SP_API void     sp_io_close(sp_io_t* stream);
 SP_API sp_str_t sp_io_read_file(sp_str_t path);
 SP_API sp_str_t sp_io_buffer_to_str(sp_io_t* stream);
+SP_API void     sp_io_set_buffer(sp_io_t* stream, u8* buf, u64 capacity);
+SP_API sp_err_t sp_io_flush(sp_io_t* stream);
 
 
 // ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
@@ -9361,12 +9370,12 @@ sp_err_ext_t sp_err_get_ext() {
 // ╚═╝ ╚═════╝
 // @io
 s64 sp_io_const_mem_size(sp_io_t* stream) {
-  sp_io_const_memory_data_t* data = &stream->const_memory;
+  sp_io_const_mem_data_t* data = &stream->const_memory;
   return data->stop - data->base;
 }
 
 s64 sp_io_const_mem_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
-  sp_io_const_memory_data_t* data = &stream->const_memory;
+  sp_io_const_mem_data_t* data = &stream->const_memory;
   const u8* new_pos;
 
   switch (whence) {
@@ -9396,7 +9405,7 @@ s64 sp_io_const_mem_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
 }
 
 u64 sp_io_const_mem_read(sp_io_t* stream, void* ptr, u64 size) {
-  sp_io_const_memory_data_t* data = &stream->const_memory;
+  sp_io_const_mem_data_t* data = &stream->const_memory;
   u64 available = data->stop - data->here;
   u64 to_read = SP_MIN(size, available);
 
@@ -9422,7 +9431,7 @@ void sp_io_const_mem_close(sp_io_t* stream) {
 }
 
 u64 sp_io_mem_write(sp_io_t* stream, const void* ptr, u64 size) {
-  sp_io_memory_data_t* data = &stream->memory;
+  sp_io_mem_data_t* data = &stream->memory;
   u64 available = data->stop - data->here;
   u64 to_write = SP_MIN(size, available);
 
@@ -9432,7 +9441,7 @@ u64 sp_io_mem_write(sp_io_t* stream, const void* ptr, u64 size) {
 }
 
 u64 sp_io_mem_pad(sp_io_t* stream, u64 size) {
-  sp_io_memory_data_t* data = &stream->memory;
+  sp_io_mem_data_t* data = &stream->memory;
   u64 available = data->stop - data->here;
   u64 to_pad = SP_MIN(size, available);
 
@@ -9442,12 +9451,12 @@ u64 sp_io_mem_pad(sp_io_t* stream, u64 size) {
 }
 
 s64 sp_io_dyn_mem_size(sp_io_t* stream) {
-  sp_io_buffer_data_t* data = &stream->buffer;
+  sp_io_dyn_mem_data_t* data = &stream->buffer;
   return data->stop - data->base;
 }
 
 s64 sp_io_buffer_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
-  sp_io_buffer_data_t* data = &stream->buffer;
+  sp_io_dyn_mem_data_t* data = &stream->buffer;
   u8* new_pos;
 
   switch (whence) {
@@ -9477,7 +9486,7 @@ s64 sp_io_buffer_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
 }
 
 u64 sp_io_dyn_mem_read(sp_io_t* stream, void* ptr, u64 size) {
-  sp_io_buffer_data_t* data = &stream->buffer;
+  sp_io_dyn_mem_data_t* data = &stream->buffer;
   u64 available = data->stop - data->here;
   u64 to_read = SP_MIN(size, available);
 
@@ -9487,7 +9496,7 @@ u64 sp_io_dyn_mem_read(sp_io_t* stream, void* ptr, u64 size) {
 }
 
 u64 sp_io_dyn_mem_write(sp_io_t* stream, const void* ptr, u64 size) {
-  sp_io_buffer_data_t* data = &stream->buffer;
+  sp_io_dyn_mem_data_t* data = &stream->buffer;
   u64 pos = data->here - data->base;
   u64 required = pos + size;
   u64 capacity = data->max - data->base;
@@ -9513,7 +9522,7 @@ u64 sp_io_dyn_mem_write(sp_io_t* stream, const void* ptr, u64 size) {
 }
 
 u64 sp_io_dyn_mem_pad(sp_io_t* stream, u64 size) {
-  sp_io_buffer_data_t* data = &stream->buffer;
+  sp_io_dyn_mem_data_t* data = &stream->buffer;
   u64 pos = data->here - data->base;
   u64 required = pos + size;
   u64 capacity = data->max - data->base;
@@ -9719,7 +9728,7 @@ sp_io_t sp_io_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator) {
 
 sp_str_t sp_io_buffer_to_str(sp_io_t* stream) {
   SP_ASSERT(stream);
-  sp_io_buffer_data_t* data = &stream->buffer;
+  sp_io_dyn_mem_data_t* data = &stream->buffer;
   return (sp_str_t) {
     .data = (c8*)data->base,
     .len = (u32)(data->stop - data->base),
@@ -9746,6 +9755,7 @@ u64 sp_io_read(sp_io_t* stream, void* ptr, u64 size) {
   if (!stream) return 0;
   if (!stream->callbacks.read) return 0;
 
+  sp_io_flush(stream);
   sp_err_clear();
   return stream->callbacks.read(stream, ptr, size);
 }
@@ -9754,7 +9764,41 @@ u64 sp_io_write(sp_io_t* stream, const void* ptr, u64 size) {
   if (!stream) return 0;
   if (!stream->callbacks.write) return 0;
   sp_err_clear();
-  return stream->callbacks.write(stream, ptr, size);
+
+  sp_io_write_buffer_t* wb = &stream->write_buffer;
+  if (!wb->ptr) {
+    return stream->callbacks.write(stream, ptr, size);
+  }
+
+  const u8* src = (const u8*)ptr;
+  u64 remaining = size;
+
+  if (size > wb->capacity) {
+    sp_io_flush(stream);
+    u64 written = 0;
+    while (written < size) {
+      u64 result = stream->callbacks.write(stream, src + written, size - written);
+      if (result == 0) return written;
+      written += result;
+    }
+    return written;
+  }
+
+  while (remaining > 0) {
+    u64 space = wb->capacity - wb->size;
+    if (space == 0) {
+      sp_io_flush(stream);
+      if (sp_err_get()) return size - remaining;
+      space = wb->capacity;
+    }
+    u64 chunk = SP_MIN(remaining, space);
+    sp_mem_copy(src, wb->ptr + wb->size, chunk);
+    wb->size += chunk;
+    src += chunk;
+    remaining -= chunk;
+  }
+
+  return size;
 }
 
 u64 sp_io_write_str(sp_io_t* stream, sp_str_t str) {
@@ -9768,6 +9812,7 @@ u64 sp_io_write_cstr(sp_io_t* stream, const c8* cstr) {
 u64 sp_io_pad(sp_io_t* stream, u64 size) {
   if (!stream) return 0;
   if (!stream->callbacks.pad) return 0;
+  sp_io_flush(stream);
   sp_err_clear();
   return stream->callbacks.pad(stream, size);
 }
@@ -9775,6 +9820,7 @@ u64 sp_io_pad(sp_io_t* stream, u64 size) {
 s64 sp_io_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
   if (!stream) return 0;
   if (!stream->callbacks.seek) return 0;
+  sp_io_flush(stream);
   sp_err_clear();
   return stream->callbacks.seek(stream, offset, whence);
 }
@@ -9782,12 +9828,45 @@ s64 sp_io_seek(sp_io_t* stream, s64 offset, sp_io_whence_t whence) {
 s64 sp_io_size(sp_io_t* stream) {
   if (!stream) return 0;
   if (!stream->callbacks.size) return 0;
+  sp_io_flush(stream);
   sp_err_clear();
   return stream->callbacks.size(stream);
 }
 
+sp_err_t sp_io_flush(sp_io_t* stream) {
+  if (!stream) return SP_ERR_OK;
+  sp_io_write_buffer_t* wb = &stream->write_buffer;
+  if (wb->size == 0) return SP_ERR_OK;
+  if (!stream->callbacks.write) return SP_ERR_OK;
+
+  sp_err_clear();
+  u64 written = 0;
+  while (written < wb->size) {
+    u64 result = stream->callbacks.write(stream, wb->ptr + written, wb->size - written);
+    if (result == 0) {
+      if (written > 0) {
+        sp_mem_move(wb->ptr + written, wb->ptr, wb->size - written);
+        wb->size -= written;
+      }
+      return sp_err_get();
+    }
+    written += result;
+  }
+  wb->size = 0;
+  return SP_ERR_OK;
+}
+
+void sp_io_set_buffer(sp_io_t* stream, u8* buf, u64 capacity) {
+  if (!stream) return;
+  sp_io_flush(stream);
+  stream->write_buffer.ptr = buf;
+  stream->write_buffer.capacity = capacity;
+  stream->write_buffer.size = 0;
+}
+
 void sp_io_close(sp_io_t* stream) {
   if (!stream) return;
+  sp_io_flush(stream);
   if (!stream->callbacks.close) return;
   sp_err_clear();
   stream->callbacks.close(stream);

@@ -1217,3 +1217,151 @@ UTEST_F(io, file_pad_after_write) {
     sp_io_close(&io);
   }
 }
+
+UTEST_F(io, buffered_write_1000_single_bytes) {
+  u8 write_buf[64];
+  sp_io_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+  sp_io_set_buffer(&io, write_buf, sizeof(write_buf));
+
+  sp_for(i, 1000) {
+    u8 byte = (u8)(i & 0xFF);
+    EXPECT_EQ(sp_io_write(&io, &byte, 1), 1);
+  }
+  sp_io_close(&io);
+
+  sp_io_t reader = sp_io_from_file(ut.file_path, SP_IO_MODE_READ);
+  EXPECT_EQ(sp_io_size(&reader), 1000);
+
+  sp_for(i, 1000) {
+    u8 byte;
+    EXPECT_EQ(sp_io_read(&reader, &byte, 1), 1);
+    EXPECT_EQ(byte, (u8)(i & 0xFF));
+  }
+  sp_io_close(&reader);
+}
+
+UTEST_F(io, buffered_write_larger_than_buffer) {
+  u8 write_buf[32];
+  u8 data[128];
+  sp_for(i, 128) data[i] = (u8)i;
+
+  sp_io_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+  sp_io_set_buffer(&io, write_buf, sizeof(write_buf));
+
+  EXPECT_EQ(sp_io_write(&io, data, 128), 128);
+  sp_io_close(&io);
+
+  sp_io_t reader = sp_io_from_file(ut.file_path, SP_IO_MODE_READ);
+  u8 result[128] = SP_ZERO_INITIALIZE();
+  EXPECT_EQ(sp_io_read(&reader, result, 128), 128);
+  sp_for(i, 128) {
+    EXPECT_EQ(result[i], data[i]);
+  }
+  sp_io_close(&reader);
+}
+
+UTEST_F(io, buffered_write_implicit_flush_on_close) {
+  u8 write_buf[64];
+  sp_io_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+  sp_io_set_buffer(&io, write_buf, sizeof(write_buf));
+
+  sp_io_write(&io, "hello", 5);
+  sp_io_close(&io);
+
+  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  EXPECT_EQ(loaded.len, 5);
+  EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("hello")));
+}
+
+UTEST_F(io, buffered_flush_empty_buffer_no_error) {
+  u8 write_buf[64];
+  sp_io_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+  sp_io_set_buffer(&io, write_buf, sizeof(write_buf));
+
+  sp_err_t err = sp_io_flush(&io);
+  EXPECT_EQ(err, SP_ERR_OK);
+  sp_io_close(&io);
+}
+
+UTEST_F(io, buffered_set_buffer_twice_flushes_first) {
+  u8 write_buf1[64];
+  u8 write_buf2[64];
+  sp_io_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+  sp_io_set_buffer(&io, write_buf1, sizeof(write_buf1));
+
+  sp_io_write(&io, "first", 5);
+  sp_io_set_buffer(&io, write_buf2, sizeof(write_buf2));
+  sp_io_write(&io, "second", 6);
+  sp_io_close(&io);
+
+  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  EXPECT_EQ(loaded.len, 11);
+  EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("firstsecond")));
+}
+
+UTEST_F(io, unbuffered_stream_still_works) {
+  sp_io_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+
+  sp_io_write(&io, "test", 4);
+  sp_io_close(&io);
+
+  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  EXPECT_EQ(loaded.len, 4);
+  EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("test")));
+}
+
+UTEST_F(io, buffered_write_seek_back_write) {
+  u8 write_buf[64];
+  sp_io_t io = sp_io_from_file(ut.file_path, (sp_io_mode_t)(SP_IO_MODE_READ | SP_IO_MODE_WRITE));
+  sp_io_set_buffer(&io, write_buf, sizeof(write_buf));
+
+  sp_io_write(&io, "AAAA", 4);
+  sp_io_seek(&io, 1, SP_IO_SEEK_SET);
+  sp_io_write(&io, "BB", 2);
+  sp_io_close(&io);
+
+  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  EXPECT_EQ(loaded.len, 4);
+  EXPECT_EQ(loaded.data[0], 'A');
+  EXPECT_EQ(loaded.data[1], 'B');
+  EXPECT_EQ(loaded.data[2], 'B');
+  EXPECT_EQ(loaded.data[3], 'A');
+}
+
+UTEST_F(io, buffered_write_read_back) {
+  u8 write_buf[64];
+  sp_io_t io = sp_io_from_file(ut.file_path, (sp_io_mode_t)(SP_IO_MODE_READ | SP_IO_MODE_WRITE));
+  sp_io_set_buffer(&io, write_buf, sizeof(write_buf));
+
+  sp_io_write(&io, "hello", 5);
+  sp_io_seek(&io, 0, SP_IO_SEEK_SET);
+
+  c8 result[5] = SP_ZERO_INITIALIZE();
+  EXPECT_EQ(sp_io_read(&io, result, 5), 5);
+  EXPECT_EQ(result[0], 'h');
+  EXPECT_EQ(result[4], 'o');
+  sp_io_close(&io);
+}
+
+UTEST_F(io, buffered_write_pad_write) {
+  u8 write_buf[64];
+  sp_io_t io = sp_io_from_file(ut.file_path, SP_IO_MODE_WRITE);
+  sp_io_set_buffer(&io, write_buf, sizeof(write_buf));
+
+  sp_io_write(&io, "AA", 2);
+  sp_io_pad(&io, 3);
+  sp_io_write(&io, "BB", 2);
+  sp_io_close(&io);
+
+  sp_io_t reader = sp_io_from_file(ut.file_path, SP_IO_MODE_READ);
+  u8 result[7] = SP_ZERO_INITIALIZE();
+  EXPECT_EQ(sp_io_read(&reader, result, 7), 7);
+  EXPECT_EQ(result[0], 'A');
+  EXPECT_EQ(result[1], 'A');
+  EXPECT_EQ(result[2], 0);
+  EXPECT_EQ(result[3], 0);
+  EXPECT_EQ(result[4], 0);
+  EXPECT_EQ(result[5], 'B');
+  EXPECT_EQ(result[6], 'B');
+  sp_io_close(&reader);
+}
