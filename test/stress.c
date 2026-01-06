@@ -441,7 +441,7 @@ UTEST(stress, fmon) {
       sp_str_t path = sp_fs_join_path(dir, name);
 
       sp_io_writer_t writer = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
-      sp_io_writer_write_str(&writer, sp_str_lit("initial"));
+      sp_io_write_str(&writer, sp_str_lit("initial"));
       sp_io_writer_close(&writer);
 
       sp_da_push(files, path);
@@ -465,7 +465,7 @@ UTEST(stress, fmon) {
     while (files_modified < batch_end) {
       sp_str_t path = files[files_modified];
       sp_io_writer_t writer = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
-      sp_io_writer_write_str(&writer, sp_str_lit("modified"));
+      sp_io_write_str(&writer, sp_str_lit("modified"));
       sp_io_writer_close(&writer);
       files_modified++;
     }

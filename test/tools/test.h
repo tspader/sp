@@ -132,7 +132,7 @@ void sp_test_file_create_ex(sp_test_file_config_t config) {
   SP_ASSERT(stream.file.fd != 0);
 
   if (config.content.len > 0) {
-    u64 bytes_written = sp_io_writer_write(&stream, config.content.data, config.content.len);
+    u64 bytes_written = sp_io_write(&stream, config.content.data, config.content.len);
     SP_ASSERT(bytes_written == config.content.len);
   }
 
