@@ -1,0 +1,2 @@
+all:
+	clang -I/home/spader/source/sp/. -I/home/spader/source/sp/include -I/home/spader/source/sp/test/tools -I/home/spader/source/sp/test/tools/process -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -lm -std=c99 -g /home/spader/source/sp/test/context.c -I/home/spader/.local/share/spn/cache/store/argparse/8c270f0f/include -I/home/spader/.local/share/spn/cache/store/utest/30018eb7/include -o /home/spader/source/sp/build/debug/store/bin/context -Werror=return-type -Wall -Wsign-compare
