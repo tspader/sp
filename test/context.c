@@ -32,7 +32,7 @@ UTEST_F(context, allocator_is_valid) {
 
 UTEST_F(context, thread_state_index_starts_at_zero) {
   sp_tls_rt_t *state = sp_tls_rt_get();
-  EXPECT_EQ(state->index, 0);
+  EXPECT_EQ(state->index, 0u);
 }
 
 UTEST_F(context, push_pop_single) {
@@ -97,7 +97,7 @@ UTEST_F(context, set_modifies_current) {
 UTEST_F(context, scratch_initted) {
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
   EXPECT_TRUE(arena->head != SP_NULLPTR);
-  EXPECT_GT(sp_mem_arena_capacity(arena), 0);
+  EXPECT_GT(sp_mem_arena_capacity(arena), 0u);
 }
 
 UTEST_F(context, begin_scratch) {
@@ -109,16 +109,16 @@ UTEST_F(context, end_scratch) {
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
 
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
   sp_mem_arena_on_alloc(arena, SP_ALLOCATOR_MODE_ALLOC, 1024, SP_NULLPTR);
-  EXPECT_GE(sp_mem_arena_bytes_used(arena), 1024);
+  EXPECT_GE(sp_mem_arena_bytes_used(arena), 1024u);
 
   sp_alloc(1024);
-  EXPECT_GE(sp_mem_arena_bytes_used(arena), 2048);
+  EXPECT_GE(sp_mem_arena_bytes_used(arena), 2048u);
 
   sp_mem_end_scratch(scratch);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 }
 
 u8 *use_scratch_arena(u32 fill) {
@@ -139,11 +139,11 @@ u8 *use_scratch_arena(u32 fill) {
 
 UTEST_F(context, use_scratch_allocator_but_return_from_user_allocator) {
   sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
   u8 *buffer = use_scratch_arena(69);
   EXPECT_EQ(buffer[0], 69);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 }
 
 typedef struct {
@@ -249,7 +249,7 @@ UTEST_F(context, nested_begin_scratch) {
   EXPECT_EQ(a[0], 0xAA);
 
   sp_mem_end_scratch(s1);
-  EXPECT_EQ(sp_mem_arena_bytes_used(rt->scratch), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(rt->scratch), 0u);
 }
 
 UTEST_F(context, begin_scratch_push_unrelated_allocator_end_scratch) {
@@ -263,7 +263,7 @@ UTEST_F(context, begin_scratch_push_unrelated_allocator_end_scratch) {
 
   u8* b = sp_alloc(64);
   sp_mem_fill_u8(b, 64, 0xBB);
-  EXPECT_GE(sp_mem_arena_bytes_used(rt->scratch), 64);
+  EXPECT_GE(sp_mem_arena_bytes_used(rt->scratch), 64u);
   EXPECT_EQ(a[0], 0xAA);
   EXPECT_EQ(b[0], 0xBB);
   sp_free(b);
@@ -272,12 +272,12 @@ UTEST_F(context, begin_scratch_push_unrelated_allocator_end_scratch) {
 
   u8* c = sp_alloc(64);
   sp_mem_fill_u8(c, 64, 0xCC);
-  EXPECT_GE(sp_mem_arena_bytes_used(rt->scratch), 128);
+  EXPECT_GE(sp_mem_arena_bytes_used(rt->scratch), 128u);
   EXPECT_EQ(a[0], 0xAA);
   EXPECT_EQ(c[0], 0xCC);
 
   sp_mem_end_scratch(scratch);
-  EXPECT_EQ(sp_mem_arena_bytes_used(rt->scratch), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(rt->scratch), 0u);
 }
 
 UTEST_F(context, nested_pop_from_scratch) {
@@ -286,18 +286,18 @@ UTEST_F(context, nested_pop_from_scratch) {
   sp_mem_scratch_t s1 = sp_mem_begin_scratch();
   u8* a = sp_alloc(64);
   sp_mem_fill_u8(a, 64, 0xAA);
-  EXPECT_GE(sp_mem_arena_bytes_used(rt->scratch), 64);
+  EXPECT_GE(sp_mem_arena_bytes_used(rt->scratch), 64u);
   EXPECT_EQ(a[0], 0xAA);
 
   sp_mem_begin_scratch();
   u8* b = sp_alloc(64);
   sp_mem_fill_u8(b, 64, 0xBB);
-  EXPECT_GE(sp_mem_arena_bytes_used(rt->scratch), 128);
+  EXPECT_GE(sp_mem_arena_bytes_used(rt->scratch), 128u);
   EXPECT_EQ(b[0], 0xBB);
 
   sp_mem_end_scratch(s1);
 
-  EXPECT_EQ(sp_mem_arena_bytes_used(rt->scratch), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(rt->scratch), 0u);
 }
 
 
@@ -413,12 +413,12 @@ UTEST_F(context, arena_basic_alloc) {
   sp_mem_arena_t* arena = sp_mem_arena_new(256);
   sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
 
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
-  EXPECT_EQ(sp_mem_arena_capacity(arena), 256);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
+  EXPECT_EQ(sp_mem_arena_capacity(arena), 256u);
 
   u8* first = sp_mem_allocator_alloc(allocator, 16);
   EXPECT_ALIGNED(first);
-  EXPECT_GT(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_GT(sp_mem_arena_bytes_used(arena), 0u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -442,10 +442,10 @@ UTEST_F(context, arena_pop_resets_bytes_used) {
 
   u8* first = sp_mem_allocator_alloc(allocator, 64);
   sp_mem_fill_u8(first, 64, 0x69);
-  EXPECT_GT(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_GT(sp_mem_arena_bytes_used(arena), 0u);
 
   sp_mem_arena_pop(marker);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -470,7 +470,7 @@ UTEST_F(context, arena_block_chaining) {
   EXPECT_EQ(b[0], 0xBB);
   EXPECT_EQ(c[0], 0xCC);
 
-  EXPECT_GT(sp_mem_arena_capacity(arena), 64);
+  EXPECT_GT(sp_mem_arena_capacity(arena), 64u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -490,11 +490,11 @@ UTEST_F(context, arena_pop_across_blocks) {
   sp_mem_fill_u8(c, 32, 0xCC);
 
   u32 used_before = sp_mem_arena_bytes_used(arena);
-  EXPECT_GT(used_before, 0);
+  EXPECT_GT(used_before, 0u);
 
   sp_mem_arena_pop(marker);
 
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -524,11 +524,11 @@ UTEST_F(context, arena_clear_resets_all_blocks) {
   sp_mem_allocator_alloc(allocator, 32);
   sp_mem_allocator_alloc(allocator, 32);
 
-  EXPECT_GT(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_GT(sp_mem_arena_bytes_used(arena), 0u);
 
   sp_mem_arena_clear(arena);
 
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -571,7 +571,7 @@ UTEST_F(context, arena_reuse_logic_check) {
 
   // Snapshot capacity. Should be 128 (64 + 64).
   u32 cap_initial = sp_mem_arena_capacity(arena);
-  EXPECT_EQ(cap_initial, 128);
+  EXPECT_EQ(cap_initial, 128u);
 
   // 4. Reset arena (pointers go back to Block A)
   sp_mem_arena_clear(arena);
@@ -587,7 +587,7 @@ UTEST_F(context, arena_reuse_logic_check) {
   u32 cap_after = sp_mem_arena_capacity(arena);
 
   // FAILURE CONDITION: If cap_after > 128, the arena leaked a block instead of reusing.
-  EXPECT_EQ(cap_after, 128);
+  EXPECT_EQ(cap_after, 128u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -604,7 +604,7 @@ UTEST_F(context, slice_basic) {
   u8 data[] = { 0x01, 0x02, 0x03, 0x04 };
   sp_mem_slice_t slice = sp_mem_slice(data, 4);
   EXPECT_EQ(slice.data, data);
-  EXPECT_EQ(slice.len, 4);
+  EXPECT_EQ(slice.len, 4u);
 }
 
 UTEST_F(context, slice_sub) {
@@ -612,7 +612,7 @@ UTEST_F(context, slice_sub) {
   sp_mem_slice_t slice = sp_mem_slice(data, 5);
   sp_mem_slice_t sub = sp_mem_slice_sub(slice, 1, 3);
   EXPECT_EQ(sub.data, data + 1);
-  EXPECT_EQ(sub.len, 3);
+  EXPECT_EQ(sub.len, 3u);
   EXPECT_EQ(sub.data[0], 0x02);
 }
 
@@ -621,11 +621,11 @@ UTEST_F(context, slice_prefix_suffix) {
   sp_mem_slice_t slice = sp_mem_slice(data, 5);
 
   sp_mem_slice_t prefix = sp_mem_slice_prefix(slice, 2);
-  EXPECT_EQ(prefix.len, 2);
+  EXPECT_EQ(prefix.len, 2u);
   EXPECT_EQ(prefix.data[0], 0x01);
 
   sp_mem_slice_t suffix = sp_mem_slice_suffix(slice, 2);
-  EXPECT_EQ(suffix.len, 2);
+  EXPECT_EQ(suffix.len, 2u);
   EXPECT_EQ(suffix.data[0], 0x04);
 }
 
@@ -639,7 +639,7 @@ UTEST_F(context, slice_iterator) {
     EXPECT_EQ(it.byte, expected[count]);
     count++;
   }
-  EXPECT_EQ(count, 3);
+  EXPECT_EQ(count, 3u);
 }
 
 UTEST_F(context, slice_copy) {
@@ -660,15 +660,15 @@ UTEST_F(context, arena_no_realloc_basic) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 0);
   sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
 
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
   u8* first = sp_mem_allocator_alloc(allocator, 16);
   EXPECT_ALIGNED(first);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 16);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 16u);
 
   u8* second = sp_mem_allocator_alloc(allocator, 32);
   EXPECT_ALIGNED(second);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 48);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 48u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -720,7 +720,7 @@ UTEST_F(context, arena_no_realloc_block_chaining) {
   EXPECT_EQ(b[0], 0xBB);
   EXPECT_EQ(c[0], 0xCC);
 
-  EXPECT_GT(sp_mem_arena_capacity(arena), 64);
+  EXPECT_GT(sp_mem_arena_capacity(arena), 64u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -732,10 +732,10 @@ UTEST_F(context, arena_no_realloc_mark_pop) {
   sp_mem_arena_marker_t marker = sp_mem_arena_mark(arena);
 
   sp_mem_allocator_alloc(allocator, 64);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 64);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 64u);
 
   sp_mem_arena_pop(marker);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -744,13 +744,13 @@ UTEST_F(context, arena_unaligned_basic) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 1);
   sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
 
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
   u8* first = sp_mem_allocator_alloc(allocator, 1);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 1);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 1u);
 
   u8* second = sp_mem_allocator_alloc(allocator, 1);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 2);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 2u);
   EXPECT_EQ(second, first + 1);
 
   sp_mem_arena_destroy(arena);
@@ -766,7 +766,7 @@ UTEST_F(context, arena_unaligned_no_padding) {
 
   EXPECT_EQ(b, a + 3);
   EXPECT_EQ(c, b + 5);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 15);
+  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 15u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -795,7 +795,7 @@ UTEST_F(context, arena_unaligned_block_chaining) {
   EXPECT_EQ(a[0], 0xAA);
   EXPECT_EQ(b[0], 0xBB);
 
-  EXPECT_GT(sp_mem_arena_capacity(arena), 64);
+  EXPECT_GT(sp_mem_arena_capacity(arena), 64u);
 
   sp_mem_arena_destroy(arena);
 }
@@ -808,9 +808,9 @@ UTEST_F(context, arena_custom_alignment_4) {
   u8* b = sp_mem_allocator_alloc(allocator, 1);
   u8* c = sp_mem_allocator_alloc(allocator, 1);
 
-  EXPECT_EQ((uintptr_t)a % 4, 0);
-  EXPECT_EQ((uintptr_t)b % 4, 0);
-  EXPECT_EQ((uintptr_t)c % 4, 0);
+  EXPECT_EQ((uintptr_t)a % 4, 0u);
+  EXPECT_EQ((uintptr_t)b % 4, 0u);
+  EXPECT_EQ((uintptr_t)c % 4, 0u);
 
   EXPECT_EQ(b, a + 4);
   EXPECT_EQ(c, b + 4);
@@ -825,8 +825,8 @@ UTEST_F(context, arena_custom_alignment_8) {
   u8* a = sp_mem_allocator_alloc(allocator, 3);
   u8* b = sp_mem_allocator_alloc(allocator, 5);
 
-  EXPECT_EQ((uintptr_t)a % 8, 0);
-  EXPECT_EQ((uintptr_t)b % 8, 0);
+  EXPECT_EQ((uintptr_t)a % 8, 0u);
+  EXPECT_EQ((uintptr_t)b % 8, 0u);
 
   EXPECT_EQ(b, a + 8);
 
