@@ -213,43 +213,111 @@
 // ██║     ███████╗██║  ██║   ██║   ╚██████╔╝██║  ██║███████╗███████║
 // ╚═╝     ╚══════╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝
 // @features
-// #define SP_ELF_DISABLE
-// #define SP_ELF_ENABLE
-
-#if defined(SP_ELF_ENABLE)
-  #define SP_ELF
+#if defined(SP_FREESTANDING)
+  #define SP_SYS_ENABLE
+  #define SP_MUTEX_DISABLE
+  #define SP_CV_DISABLE
+  #define SP_SEMAPHORE_DISABLE
+  #define SP_THREAD_DISABLE
+  #define SP_PS_DISABLE
+  #define SP_DATETIME_DISABLE
+  #define SP_FMON_DISABLE
+  #define SP_ASSET_DISABLE
+  #define SP_APP_DISABLE
+  #define SP_ELF_DISABLE
 #endif
 
-#if defined(SP_FMON_ENABLE)
-  #define SP_FMON
+#ifndef SP_SYS_DISABLE
+  #define SP_SYS
+#endif
+#if defined(SP_SYS_ENABLE)
+  #define SP_SYS
 #endif
 
-// LINUX
-#ifdef SP_LINUX
+#ifndef SP_MUTEX_DISABLE
+  #define SP_MUTEX
+#endif
+#if defined(SP_MUTEX_ENABLE)
+  #define SP_MUTEX
+#endif
+
+#ifndef SP_CV_DISABLE
+  #define SP_CV
+#endif
+#if defined(SP_CV_ENABLE)
+  #define SP_CV
+#endif
+
+#ifndef SP_SEMAPHORE_DISABLE
+  #define SP_SEMAPHORE
+#endif
+#if defined(SP_SEMAPHORE_ENABLE)
+  #define SP_SEMAPHORE
+#endif
+
+#ifndef SP_THREAD_DISABLE
+  #define SP_THREAD
+#endif
+#if defined(SP_THREAD_ENABLE)
+  #define SP_THREAD
+#endif
+
+#ifndef SP_PS_DISABLE
+  #define SP_PS
+#endif
+#if defined(SP_PS_ENABLE)
+  #define SP_PS
+#endif
+
+#ifndef SP_DATETIME_DISABLE
+  #define SP_DATETIME
+#endif
+#if defined(SP_DATETIME_ENABLE)
+  #define SP_DATETIME
+#endif
+
+#ifndef SP_ASSET_DISABLE
+  #define SP_ASSET
+#endif
+#if defined(SP_ASSET_ENABLE)
+  #define SP_ASSET
+#endif
+
+#ifndef SP_APP_DISABLE
+  #define SP_APP
+#endif
+#if defined(SP_APP_ENABLE)
+  #define SP_APP
+#endif
+
+#if defined(SP_LINUX)
   #ifndef SP_ELF_DISABLE
+    #define SP_ELF
+  #endif
+  #if defined(SP_ELF_ENABLE)
     #define SP_ELF
   #endif
 
   #ifndef SP_FMON_DISABLE
     #define SP_FMON
   #endif
-#endif
-
-// MACOS
-#if defined(SP_MACOS)
-  #if !defined(SP_FMON_DISABLE)
+  #if defined(SP_FMON_ENABLE)
     #define SP_FMON
   #endif
 #endif
 
-// WIN32
-#ifdef SP_WIN32
+#if defined(SP_MACOS)
+  #ifndef SP_FMON_DISABLE
+    #define SP_FMON
+  #endif
+  #if defined(SP_FMON_ENABLE)
+    #define SP_FMON
+  #endif
 #endif
 
 
-
 // ███╗   ███╗ █████╗  ██████╗██████╗  ██████╗ ███████╗
-// ████╗ ████║██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔════╝
+// ████╗ ████║██╔══██╗██╔════╝██╔══██╗██╔═══██╝██╔════╝
 // ██╔████╔██║███████║██║     ██████╔╝██║   ██║███████╗
 // ██║╚██╔╝██║██╔══██║██║     ██╔══██╗██║   ██║╚════██║
 // ██║ ╚═╝ ██║██║  ██║╚██████╗██║  ██║╚██████╔╝███████║
@@ -290,7 +358,7 @@
 #define sp_exit_success() SP_EXIT_SUCCESS()
 #define SP_EXIT_FAILURE() exit(1)
 #define sp_exit_failure() SP_EXIT_FAILURE()
-#define SP_ASSERT(condition) assert((condition))
+#define SP_ASSERT(condition) sp_assert((condition))
 #define SP_FATAL(FMT, ...) \
   do { \
     sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
@@ -322,8 +390,6 @@
 #define sp_untested() SP_UNTESTED()
 #define SP_INCOMPLETE()
 #define sp_incomplete() SP_INCOMPLETE()
-
-#define sp_assert(expr) SP_ASSERT(expr)
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
 #define sp_typedef_fn(return_type, name, ...) SP_TYPEDEF_FN(return_type, name, __VA_ARGS__)
@@ -457,14 +523,13 @@
 #define SP_ANSI_BG_BRIGHT_CYAN    "\033[106m"
 #define SP_ANSI_BG_BRIGHT_WHITE   "\033[107m"
 
-
-// ███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗
-// ██╔════╝╚██╗ ██╔╝██╔════╝╚══██╔══╝██╔════╝████╗ ████║
-// ███████╗ ╚████╔╝ ███████╗   ██║   █████╗  ██╔████╔██║
-// ╚════██║  ╚██╔╝  ╚════██║   ██║   ██╔══╝  ██║╚██╔╝██║
-// ███████║   ██║   ███████║   ██║   ███████╗██║ ╚═╝ ██║
-// ╚══════╝   ╚═╝   ╚══════╝   ╚═╝   ╚══════╝╚═╝     ╚═╝
-// @system
+// ██╗███╗   ██╗ ██████╗██╗     ██╗   ██╗██████╗ ███████╗
+// ██║████╗  ██║██╔════╝██║     ██║   ██║██╔══██╗██╔════╝
+// ██║██╔██╗ ██║██║     ██║     ██║   ██║██║  ██║█████╗
+// ██║██║╚██╗██║██║     ██║     ██║   ██║██║  ██║██╔══╝
+// ██║██║ ╚████║╚██████╗███████╗╚██████╔╝██████╔╝███████╗
+// ╚═╝╚═╝  ╚═══╝ ╚═════╝╚══════╝ ╚═════╝ ╚═════╝ ╚══════╝
+// @include
 SP_BEGIN_EXTERN_C()
 #if defined(SP_COSMO)
   #ifndef _COSMO_SOURCE
@@ -508,75 +573,71 @@ SP_BEGIN_EXTERN_C()
   #endif
 #endif
 
-#if defined(SP_WIN32)
-  #include <windows.h>
-  #include <shlobj.h>
-  #include <commdlg.h>
-  #include <shellapi.h>
-  #include <threads.h>
-#endif
-
-#if defined(SP_COSMO)
-  #include "libc/dce.h"
-#endif
-
-#if defined(SP_LINUX)
-  #include <poll.h>
-  #include <sys/inotify.h>
-#endif
-
-#if defined(SP_MACOS)
-  #include <dispatch/dispatch.h>
-  #include <mach-o/dyld.h>
-  #include <sys/event.h>
-  #if defined(SP_FMON_MACOS_USE_FSEVENTS)
-    #include <CoreServices/CoreServices.h>
+#if defined(SP_FREESTANDING)
+  #include <stdarg.h>
+  #include <stdbool.h>
+  #include <stdint.h>
+  #include <stddef.h>
+#else
+  #if defined(SP_WIN32)
+    #include <windows.h>
+    #include <shlobj.h>
+    #include <commdlg.h>
+    #include <shellapi.h>
+    #include <threads.h>
   #endif
-#endif
 
-#if defined(SP_POSIX)
-  #include <dirent.h>
-  #include <errno.h>
-  #include <fcntl.h>
-  #include <limits.h>
-  #include <pthread.h>
-  #include <semaphore.h>
-  #include <signal.h>
-  #include <spawn.h>
-  #include <stdlib.h>
-  #include <unistd.h>
-  #include <sys/stat.h>
-  #include <sys/time.h>
-  #include <sys/types.h>
-  #include <sys/wait.h>
-  #include <time.h>
-#endif
+  #if defined(SP_COSMO)
+    #include "libc/dce.h"
+  #endif
 
-#if !defined(SP_NO_LIBM)
+  #if defined(SP_LINUX)
+    #include <poll.h>
+    #include <sys/inotify.h>
+  #endif
+
+  #if defined(SP_MACOS)
+    #include <dispatch/dispatch.h>
+    #include <mach-o/dyld.h>
+    #include <sys/event.h>
+    #if defined(SP_FMON_MACOS_USE_FSEVENTS)
+      #include <CoreServices/CoreServices.h>
+    #endif
+  #endif
+
+  #if defined(SP_POSIX)
+    #include <dirent.h>
+    #include <errno.h>
+    #include <fcntl.h>
+    #include <limits.h>
+    #include <pthread.h>
+    #include <semaphore.h>
+    #include <signal.h>
+    #include <spawn.h>
+    #include <stdlib.h>
+    #include <unistd.h>
+    #include <sys/stat.h>
+    #include <sys/time.h>
+    #include <sys/types.h>
+    #include <sys/wait.h>
+    #include <time.h>
+  #endif
+
+  #ifdef SP_CPP
+    SP_END_EXTERN_C()
+    #include <atomic>
+    SP_BEGIN_EXTERN_C()
+  #endif
+
   #include <math.h>
-  #define SP_SINF sinf
-  #define SP_COSF cosf
-  #define SP_TANF tanf
-  #define SP_SQRTF sqrtf
-  #define SP_ACOSF acosf
+
+  #include <assert.h>
+  #include <stdarg.h>
+  #include <stdbool.h>
+  #include <string.h>
+
+  extern char** environ;
 #endif
-
-#include <assert.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdint.h>
-
-extern char** environ;
-
-SP_END_EXTERN_C()
-
-#ifdef SP_CPP
-  #include <atomic>
-#endif
-
-
-SP_BEGIN_EXTERN_C()
 
 
 // ████████╗██╗   ██╗██████╗ ███████╗███████╗
@@ -598,8 +659,6 @@ typedef float    f32;
 typedef double   f64;
 typedef char     c8;
 typedef wchar_t  c16;
-typedef size_t   sp_size_t;
-typedef void*    sp_opaque_ptr;
 typedef struct sp_io_reader sp_io_reader_t;
 typedef struct sp_io_writer sp_io_writer_t;
 
@@ -638,6 +697,505 @@ typedef enum {
 #define sp_opt_some(V)    { .value = V, .some = SP_OPT_SOME }
 #define sp_opt_none()    { .some = SP_OPT_NONE }
 #define sp_opt_is_null(V) ((V).some == SP_OPT_NONE)
+
+#define SP_POLLIN     0x0001
+#define SP_POLLPRI    0x0002
+#define SP_POLLOUT    0x0004
+#define SP_POLLERR    0x0008
+#define SP_POLLHUP    0x0010
+#define SP_POLLNVAL   0x0020
+
+#define SP_WNOHANG    1
+#define SP_WUNTRACED  2
+
+#define SP_WIFEXITED(s)    (((s) & 0x7f) == 0)
+#define SP_WEXITSTATUS(s)  (((s) >> 8) & 0xff)
+#define SP_WIFSIGNALED(s)  (((s) & 0x7f) != 0 && ((s) & 0x7f) != 0x7f)
+#define SP_WTERMSIG(s)     ((s) & 0x7f)
+#define SP_WIFSTOPPED(s)   (((s) & 0xff) == 0x7f)
+#define SP_WSTOPSIG(s)     SP_WEXITSTATUS(s)
+
+// ███████╗██╗   ██╗███████╗
+// ██╔════╝╚██╗ ██╔╝██╔════╝
+// ███████╗ ╚████╔╝ ███████╗
+// ╚════██║  ╚██╔╝  ╚════██║
+// ███████║   ██║   ███████║
+// ╚══════╝   ╚═╝   ╚══════╝
+// @sys
+#if defined(SP_SYS)
+
+// SYSCALLS
+#if defined(SP_AMD64)
+  #define SP_SYSCALL_NUM_READ              0
+  #define SP_SYSCALL_NUM_WRITE             1
+  #define SP_SYSCALL_NUM_OPEN              2
+  #define SP_SYSCALL_NUM_CLOSE             3
+  #define SP_SYSCALL_NUM_STAT              4
+  #define SP_SYSCALL_NUM_FSTAT             5
+  #define SP_SYSCALL_NUM_LSTAT             6
+  #define SP_SYSCALL_NUM_LSEEK             8
+  #define SP_SYSCALL_NUM_MMAP              9
+  #define SP_SYSCALL_NUM_MUNMAP            11
+  #define SP_SYSCALL_NUM_MREMAP            25
+  #define SP_SYSCALL_NUM_DUP2              33
+  #define SP_SYSCALL_NUM_NANOSLEEP         35
+  #define SP_SYSCALL_NUM_GETPID            39
+  #define SP_SYSCALL_NUM_CLONE             56
+  #define SP_SYSCALL_NUM_FORK              57
+  #define SP_SYSCALL_NUM_EXECVE            59
+  #define SP_SYSCALL_NUM_EXIT              60
+  #define SP_SYSCALL_NUM_WAIT4             61
+  #define SP_SYSCALL_NUM_KILL              62
+  #define SP_SYSCALL_NUM_FCNTL             72
+  #define SP_SYSCALL_NUM_GETCWD            79
+  #define SP_SYSCALL_NUM_CHDIR             80
+  #define SP_SYSCALL_NUM_RENAME            82
+  #define SP_SYSCALL_NUM_MKDIR             83
+  #define SP_SYSCALL_NUM_RMDIR             84
+  #define SP_SYSCALL_NUM_UNLINK            87
+  #define SP_SYSCALL_NUM_READLINK          89
+  #define SP_SYSCALL_NUM_CHMOD             90
+  #define SP_SYSCALL_NUM_FCHMOD            91
+  #define SP_SYSCALL_NUM_SYMLINK           88
+  #define SP_SYSCALL_NUM_LINK              86
+  #define SP_SYSCALL_NUM_GETTID            186
+  #define SP_SYSCALL_NUM_GETDENTS64        217
+  #define SP_SYSCALL_NUM_CLOCK_GETTIME     228
+  #define SP_SYSCALL_NUM_EXIT_GROUP        231
+  #define SP_SYSCALL_NUM_OPENAT            257
+  #define SP_SYSCALL_NUM_MKDIRAT           258
+  #define SP_SYSCALL_NUM_NEWFSTATAT        262
+  #define SP_SYSCALL_NUM_UNLINKAT          263
+  #define SP_SYSCALL_NUM_RENAMEAT          264
+  #define SP_SYSCALL_NUM_READLINKAT        267
+  #define SP_SYSCALL_NUM_FCHMODAT          268
+  #define SP_SYSCALL_NUM_DUP3              292
+  #define SP_SYSCALL_NUM_PIPE2             293
+  #define SP_SYSCALL_NUM_ARCH_PRCTL        158
+  #define SP_SYSCALL_NUM_INOTIFY_INIT1     294
+  #define SP_SYSCALL_NUM_INOTIFY_ADD_WATCH 254
+  #define SP_SYSCALL_NUM_INOTIFY_RM_WATCH  255
+  #define SP_SYSCALL_NUM_POLL              7
+
+  #define SP_ARCH_SET_FS 0x1002
+  #define SP_O_DIRECTORY 0200000
+
+  typedef struct {
+    u64 st_dev;
+    u64 st_ino;
+    u64 st_nlink;
+    u32 st_mode;
+    u32 st_uid;
+    u32 st_gid;
+    u32 __pad0;
+    u64 st_rdev;
+    s64 st_size;
+    s64 st_blksize;
+    s64 st_blocks;
+    u64 st_atime_sec;
+    u64 st_atime_nsec;
+    u64 st_mtime_sec;
+    u64 st_mtime_nsec;
+    u64 st_ctime_sec;
+    u64 st_ctime_nsec;
+    s64 __unused[3];
+  } sp_sys_stat_t;
+
+#elif defined(SP_ARM64)
+  #define SP_SYSCALL_NUM_GETCWD            17
+  #define SP_SYSCALL_NUM_DUP3              24
+  #define SP_SYSCALL_NUM_FCNTL             25
+  #define SP_SYSCALL_NUM_MKDIRAT           34
+  #define SP_SYSCALL_NUM_UNLINKAT          35
+  #define SP_SYSCALL_NUM_SYMLINKAT         36
+  #define SP_SYSCALL_NUM_LINKAT            37
+  #define SP_SYSCALL_NUM_RENAMEAT          38
+  #define SP_SYSCALL_NUM_CHDIR             49
+  #define SP_SYSCALL_NUM_FCHMOD            52
+  #define SP_SYSCALL_NUM_FCHMODAT          53
+  #define SP_SYSCALL_NUM_OPENAT            56
+  #define SP_SYSCALL_NUM_CLOSE             57
+  #define SP_SYSCALL_NUM_PIPE2             59
+  #define SP_SYSCALL_NUM_GETDENTS64        61
+  #define SP_SYSCALL_NUM_LSEEK             62
+  #define SP_SYSCALL_NUM_READ              63
+  #define SP_SYSCALL_NUM_WRITE             64
+  #define SP_SYSCALL_NUM_READLINKAT        78
+  #define SP_SYSCALL_NUM_NEWFSTATAT        79
+  #define SP_SYSCALL_NUM_FSTAT             80
+  #define SP_SYSCALL_NUM_EXIT              93
+  #define SP_SYSCALL_NUM_EXIT_GROUP        94
+  #define SP_SYSCALL_NUM_NANOSLEEP         101
+  #define SP_SYSCALL_NUM_CLOCK_GETTIME     113
+  #define SP_SYSCALL_NUM_KILL              129
+  #define SP_SYSCALL_NUM_GETPID            172
+  #define SP_SYSCALL_NUM_GETTID            178
+  #define SP_SYSCALL_NUM_MUNMAP            215
+  #define SP_SYSCALL_NUM_MREMAP            216
+  #define SP_SYSCALL_NUM_CLONE             220
+  #define SP_SYSCALL_NUM_EXECVE            221
+  #define SP_SYSCALL_NUM_MMAP              222
+  #define SP_SYSCALL_NUM_WAIT4             260
+  #define SP_SYSCALL_NUM_INOTIFY_INIT1     26
+  #define SP_SYSCALL_NUM_INOTIFY_ADD_WATCH 27
+  #define SP_SYSCALL_NUM_INOTIFY_RM_WATCH  28
+  #define SP_SYSCALL_NUM_PPOLL             73
+  #define SP_SYSCALL_NUM_OPEN              SP_SYSCALL_NUM_OPENAT
+  #define SP_SYSCALL_NUM_STAT              SP_SYSCALL_NUM_NEWFSTATAT
+  #define SP_SYSCALL_NUM_LSTAT             SP_SYSCALL_NUM_NEWFSTATAT
+  #define SP_SYSCALL_NUM_MKDIR             SP_SYSCALL_NUM_MKDIRAT
+  #define SP_SYSCALL_NUM_RMDIR             SP_SYSCALL_NUM_UNLINKAT
+  #define SP_SYSCALL_NUM_UNLINK            SP_SYSCALL_NUM_UNLINKAT
+  #define SP_SYSCALL_NUM_RENAME            SP_SYSCALL_NUM_RENAMEAT
+  #define SP_SYSCALL_NUM_READLINK          SP_SYSCALL_NUM_READLINKAT
+  #define SP_SYSCALL_NUM_CHMOD             SP_SYSCALL_NUM_FCHMODAT
+  #define SP_SYSCALL_NUM_FORK              SP_SYSCALL_NUM_CLONE
+  #define SP_SYSCALL_NUM_DUP2              SP_SYSCALL_NUM_DUP3
+  #define SP_SYSCALL_NUM_SYMLINK           SP_SYSCALL_NUM_SYMLINKAT
+  #define SP_SYSCALL_NUM_LINK              SP_SYSCALL_NUM_LINKAT
+
+  #define SP_O_DIRECTORY          040000
+
+  typedef struct {
+    u64 st_dev;
+    u64 st_ino;
+    u32 st_mode;
+    u32 st_nlink;
+    u32 st_uid;
+    u32 st_gid;
+    u64 st_rdev;
+    u64 __pad;
+    s64  st_size;
+    int32_t  st_blksize;
+    int32_t  __pad2;
+    s64  st_blocks;
+    u64 st_atime_sec;
+    u64 st_atime_nsec;
+    u64 st_mtime_sec;
+    u64 st_mtime_nsec;
+    u64 st_ctime_sec;
+    u64 st_ctime_nsec;
+    u32 __unused[2];
+  } sp_sys_stat_t;
+#endif
+
+#define SP_SYS_ALLOC_ALIGN    16
+#define SP_SYS_ALLOC_HEADER   16
+
+#define SP_PATH_MAX 4096
+
+#define SP_AT_FDCWD             (-100)
+#define SP_AT_SYMLINK_NOFOLLOW  0x100
+#define SP_AT_REMOVEDIR         0x200
+#define SP_AT_SYMLINK_FOLLOW    0x400
+#define SP_AT_EACCESS           0x200
+#define SP_AT_EMPTY_PATH        0x1000
+
+#define SP_O_RDONLY             0
+#define SP_O_WRONLY             1
+#define SP_O_RDWR               2
+#define SP_O_CREAT              0100
+#define SP_O_EXCL               0200
+#define SP_O_TRUNC              01000
+#define SP_O_APPEND             02000
+#define SP_O_NONBLOCK           04000
+#define SP_O_CLOEXEC            02000000
+
+#define SP_SEEK_SET             0
+#define SP_SEEK_CUR             1
+#define SP_SEEK_END             2
+
+#define SP_CLOCK_REALTIME       0
+#define SP_CLOCK_MONOTONIC      1
+
+#define SP_F_DUPFD              0
+#define SP_F_GETFD              1
+#define SP_F_SETFD              2
+#define SP_F_GETFL              3
+#define SP_F_SETFL              4
+#define SP_FD_CLOEXEC           1
+
+#define SP_PROT_NONE            0
+#define SP_PROT_READ            1
+#define SP_PROT_WRITE           2
+#define SP_PROT_EXEC            4
+
+#define SP_MAP_SHARED           0x01
+#define SP_MAP_PRIVATE          0x02
+#define SP_MAP_FIXED            0x10
+#define SP_MAP_ANONYMOUS        0x20
+
+#define SP_MAP_FAILED           ((void*)-1)
+
+#define SP_S_IFMT   0170000
+#define SP_S_IFSOCK 0140000
+#define SP_S_IFLNK  0120000
+#define SP_S_IFREG  0100000
+#define SP_S_IFBLK  0060000
+#define SP_S_IFDIR  0040000
+#define SP_S_IFCHR  0020000
+#define SP_S_IFIFO  0010000
+
+#define SP_S_ISDIR(m)  (((m) & SP_S_IFMT) == SP_S_IFDIR)
+#define SP_S_ISREG(m)  (((m) & SP_S_IFMT) == SP_S_IFREG)
+#define SP_S_ISLNK(m)  (((m) & SP_S_IFMT) == SP_S_IFLNK)
+
+#define SP_DT_UNKNOWN   0
+#define SP_DT_FIFO      1
+#define SP_DT_CHR       2
+#define SP_DT_DIR       4
+#define SP_DT_BLK       6
+#define SP_DT_REG       8
+#define SP_DT_LNK       10
+#define SP_DT_SOCK      12
+
+#define SP_IN_ACCESS        0x00000001
+#define SP_IN_MODIFY        0x00000002
+#define SP_IN_ATTRIB        0x00000004
+#define SP_IN_CLOSE_WRITE   0x00000008
+#define SP_IN_CLOSE_NOWRITE 0x00000010
+#define SP_IN_OPEN          0x00000020
+#define SP_IN_MOVED_FROM    0x00000040
+#define SP_IN_MOVED_TO      0x00000080
+#define SP_IN_CREATE        0x00000100
+#define SP_IN_DELETE        0x00000200
+#define SP_IN_DELETE_SELF   0x00000400
+#define SP_IN_MOVE_SELF     0x00000800
+#define SP_IN_NONBLOCK      0x00000800
+#define SP_IN_CLOEXEC       0x00080000
+
+typedef struct {
+  u64 d_ino;
+  s64 d_off;
+  u16 d_reclen;
+  u8  d_type;
+  char d_name[];
+} sp_sys_dirent64_t;
+
+typedef struct {
+  s64 tv_sec;
+  s64 tv_nsec;
+} sp_sys_timespec_t;
+
+typedef struct {
+  s32 wd;
+  u32 mask;
+  u32 cookie;
+  u32 len;
+  c8 name[];
+} sp_sys_inotify_event_t;
+
+typedef struct {
+  s32 fd;
+  s16 events;
+  s16 revents;
+} sp_sys_pollfd_t;
+
+s64   sp_syscall0(s64 n);
+s64   sp_syscall1(s64 n, s64 a1);
+s64   sp_syscall2(s64 n, s64 a1, s64 a2);
+s64   sp_syscall3(s64 n, s64 a1, s64 a2, s64 a3);
+s64   sp_syscall4(s64 n, s64 a1, s64 a2, s64 a3, s64 a4);
+s64   sp_syscall5(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5);
+s64   sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
+void* sp_sys_get_tp(void);
+int   sp_sys_set_tp(void* tp);
+void  sp_sys_init(void);
+void  sp_sys_exit(s32 code);
+void* sp_sys_mmap(void* addr, u64 len, s32 prot, s32 flags, s32 fd, s64 offset);
+s32   sp_sys_munmap(void* addr, u64 len);
+void* sp_sys_mremap(void* old_addr, u64 old_size, u64 new_size, s32 flags);
+void* sp_sys_alloc(u64 n);
+void* sp_sys_alloc_zero(u64 n);
+void  sp_sys_free(void* ptr);
+void* sp_sys_realloc(void* ptr, u64 new_size);
+s64   sp_sys_read(s32 fd, void* buf, u64 count);
+s64   sp_sys_write(s32 fd, const void* buf, u64 count);
+s32   sp_sys_open(const c8* path, s32 flags, s32 mode);
+s32   sp_sys_openat(s32 dirfd, const c8* path, s32 flags, s32 mode);
+s32   sp_sys_close(s32 fd);
+s64   sp_sys_lseek(s32 fd, s64 offset, s32 whence);
+s32   sp_sys_stat(const c8* path, sp_sys_stat_t* st);
+s32   sp_sys_lstat(const c8* path, sp_sys_stat_t* st);
+s32   sp_sys_fstat(s32 fd, sp_sys_stat_t* st);
+s32   sp_sys_mkdir(const c8* path, s32 mode);
+s32   sp_sys_rmdir(const c8* path);
+s32   sp_sys_unlink(const c8* path);
+s32   sp_sys_rename(const c8* oldpath, const c8* newpath);
+s64   sp_sys_getcwd(char* buf, u64 size);
+s32   sp_sys_chdir(const c8* path);
+s64   sp_sys_readlink(const c8* path, char* buf, u64 size);
+s64   sp_sys_getdents64(s32 fd, void* buf, u64 count);
+s32   sp_sys_symlink(const c8* target, const c8* linkpath);
+s32   sp_sys_link(const c8* oldpath, const c8* newpath);
+s32   sp_sys_chmod(const c8* path, s32 mode);
+s32   sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
+s32   sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
+s32   sp_sys_pipe2(s32 pipefd[2], s32 flags);
+s32   sp_sys_dup2(s32 oldfd, s32 newfd);
+s32   sp_sys_fcntl(s32 fd, s32 cmd, s64 arg);
+s32   sp_sys_getpid(void);
+s32   sp_sys_inotify_init1(s32 flags);
+s32   sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
+s32   sp_sys_inotify_rm_watch(s32 fd, s32 wd);
+s32   sp_sys_poll(sp_sys_pollfd_t* fds, u64 nfds, s32 timeout);
+s32   sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage);
+s32   sp_sys_memcmp(const void* vl, const void* vr, u64 n);
+void* sp_sys_memset(void* dest, s32 c, u64 n);
+f32   sp_sys_sqrtf(f32 x);
+f32   sp_sys_expf(f32 x);
+f32   sp_sys_sinf(f32 x);
+f32   sp_sys_cosf(f32 x);
+f32   sp_sys_tanf(f32 x);
+f32   sp_sys_acosf(f32 x);
+
+// THREAD LOCAL STORAGE
+typedef struct sp_sys_thread_block {
+  struct sp_sys_thread_block* self;
+  void* tls_data;
+} sp_sys_thread_block_t;
+
+void* sp_sys_tls_get(void);
+void  sp_sys_tls_set(void* data);
+static sp_sys_thread_block_t sp_sys_thread_block;
+
+// BUILTINS
+#if defined(SP_BUILTIN)
+void* memcpy(void* dest, const void* src, u64 n);
+void* memmove(void* dest, const void* src, u64 n);
+void* memset(void* dest, int c, u64 n);
+int memcmp(const void* a, const void* b, u64 n);
+u64 strlen(const char* s);
+#endif
+#endif
+
+
+#if defined(SP_FREESTANDING)
+  #define sp_sqrtf sp_sys_sqrtf
+  #define sp_expf sp_sys_expf
+  #define sp_sinf sp_sys_sinf
+  #define sp_cosf sp_sys_cosf
+  #define sp_tanf sp_sys_tanf
+  #define sp_acosf sp_sys_acosf
+
+  typedef sp_sys_stat_t sp_stat_t;
+  typedef sp_sys_timespec_t sp_timespec_t;
+
+  #define sp_assert(x)               ((void)(x))
+  #define sp_stat(path, st)          sp_sys_stat(path, st)
+  #define sp_lstat(path, st)         sp_sys_lstat(path, st)
+  #define sp_fstat(fd, st)           sp_sys_fstat(fd, st)
+  #define sp_S_ISREG(m)              SP_S_ISREG(m)
+  #define sp_S_ISDIR(m)              SP_S_ISDIR(m)
+  #define sp_S_ISLNK(m)              SP_S_ISLNK(m)
+  #define sp_getcwd(buf, size)       sp_sys_getcwd(buf, size)
+  #define sp_mkdir(path, mode)       sp_sys_mkdir(path, mode)
+  #define sp_rmdir(path)             sp_sys_rmdir(path)
+  #define sp_unlink(path)            sp_sys_unlink(path)
+  #define sp_rename(old, new)        sp_sys_rename(old, new)
+  #define sp_chdir(path)             sp_sys_chdir(path)
+  #define sp_readlink(p, b, s)       sp_sys_readlink(p, b, s)
+  #define sp_symlink(t, l)           sp_sys_symlink(t, l)
+  #define sp_link(old, new)          sp_sys_link(old, new)
+  #define sp_chmod(path, mode)       sp_sys_chmod(path, mode)
+  #define sp_open(p, f, m)           sp_sys_open(p, f, m)
+  #define sp_close(fd)               sp_sys_close(fd)
+  #define sp_read(fd, b, n)          sp_sys_read(fd, b, n)
+  #define sp_write(fd, b, n)         sp_sys_write(fd, b, n)
+  #define sp_lseek(fd, o, w)         sp_sys_lseek(fd, o, w)
+  #define sp_memcpy(d, s, n)         sp_sys_memcpy(d, s, n)
+  #define sp_memmove(d, s, n)        sp_sys_memmove(d, s, n)
+  #define sp_memset(d, c, n)         sp_sys_memset(d, c, n)
+  #define sp_memcmp(a, b, n)         sp_sys_memcmp(a, b, n)
+  #define sp_clock_gettime(c, ts)    sp_sys_clock_gettime(c, ts)
+  #define sp_poll(fds, n, t)         sp_sys_poll(fds, n, t)
+  #define sp_wait4(p, s, o, r)       sp_sys_wait4(p, s, o, r)
+
+  typedef sp_sys_pollfd_t sp_pollfd_t;
+
+  static int sp_sys_errno_storage = 0;
+  #define errno sp_sys_errno_storage
+
+  #define SP_CLOCK_REALTIME          0
+  #define SP_CLOCK_MONOTONIC         1
+
+  #if defined(SP_AMD64)
+    #define SP_ENTRY(fn) \
+      __attribute__((naked)) void _start(void) { \
+        __asm__ volatile ( \
+          "xor %%rbp, %%rbp\n" \
+          "mov (%%rsp), %%rdi\n" \
+          "lea 8(%%rsp), %%rsi\n" \
+          "call " #fn "\n" \
+          "mov %%rax, %%rdi\n" \
+          "mov $60, %%rax\n" \
+          "syscall\n" \
+          ::: "memory" \
+        ); \
+      }
+  #endif
+
+  #if defined(SP_ARM64)
+    #define SP_ENTRY(fn) \
+      __attribute__((naked)) void _start(void) { \
+        __asm__ volatile ( \
+          "ldr x0, [sp]\n" \
+          "add x1, sp, #8\n" \
+          "bl " #fn "\n" \
+          "mov x8, #93\n" \
+          "svc #0\n" \
+          ::: "memory" \
+        ); \
+      }
+  #endif
+
+#else
+  #define sp_sqrtf sqrtf
+  #define sp_expf expf
+  #define sp_sinf sinf
+  #define sp_cosf cosf
+  #define sp_tanf tanf
+  #define sp_acosf acosf
+
+  typedef struct stat sp_stat_t;
+  typedef struct timespec sp_timespec_t;
+
+  #define sp_assert(condition) assert((condition))
+
+  #define sp_stat(path, st)          stat(path, st)
+  #define sp_lstat(path, st)         lstat(path, st)
+  #define sp_fstat(fd, st)           fstat(fd, st)
+  #define sp_S_ISREG(m)              S_ISREG(m)
+  #define sp_S_ISDIR(m)              S_ISDIR(m)
+  #define sp_S_ISLNK(m)              S_ISLNK(m)
+  #define sp_getcwd(buf, size)       (getcwd(buf, size) ? 0 : -1)
+  #define sp_mkdir(path, mode)       mkdir(path, mode)
+  #define sp_rmdir(path)             rmdir(path)
+  #define sp_unlink(path)            unlink(path)
+  #define sp_rename(old, new)        rename(old, new)
+  #define sp_chdir(path)             chdir(path)
+  #define sp_readlink(p, b, s)       readlink(p, b, s)
+  #define sp_symlink(t, l)           symlink(t, l)
+  #define sp_link(old, new)          link(old, new)
+  #define sp_chmod(path, mode)       chmod(path, mode)
+  #define sp_open(p, f, m)           open(p, f, m)
+  #define sp_close(fd)               close(fd)
+  #define sp_read(fd, b, n)          read(fd, b, n)
+  #define sp_write(fd, b, n)         write(fd, b, n)
+  #define sp_lseek(fd, o, w)         lseek(fd, o, w)
+  #define sp_memcpy(d, s, n)         memcpy(d, s, n)
+  #define sp_memmove(d, s, n)        memmove(d, s, n)
+  #define sp_memset(d, c, n)         memset(d, c, n)
+  #define sp_memcmp(a, b, n)         memcmp(a, b, n)
+  #define sp_clock_gettime(c, ts)    clock_gettime(c, ts)
+  #define sp_poll(fds, n, t)         poll((struct pollfd*)(fds), n, t)
+  #define sp_wait4(p, s, o, r)       wait4(p, s, o, r)
+
+  typedef sp_sys_pollfd_t sp_pollfd_t;
+
+  #define SP_ENTRY(fn) s32 main(s32 num_args, const c8** args) { return fn(num_args, args); }
+#endif
+#endif
 
 // ███╗   ███╗ █████╗ ████████╗██╗  ██╗
 // ████╗ ████║██╔══██╗╚══██╔══╝██║  ██║
@@ -1333,7 +1891,6 @@ template<typename T> static T* sp_ht_alloc_type(T* key, size_t size) {
   return (T*)sp_alloc(size);
 }
 SP_BEGIN_EXTERN_C()
-
 #else
 #define sp_ht_alloc_type(key, size) sp_alloc(size)
 #endif
@@ -1630,7 +2187,7 @@ typedef struct {
 
 typedef struct {
   sp_str_t str;
-  sp_opaque_ptr user_data;
+  void* user_data;
 } sp_str_map_context_t;
 
 typedef struct {
@@ -1771,7 +2328,7 @@ SP_API void            sp_str_reduce_kernel_contains(sp_str_reduce_context_t* co
 SP_API void            sp_str_reduce_kernel_count(sp_str_reduce_context_t* context);
 SP_API void            sp_str_reduce_kernel_longest(sp_str_reduce_context_t* context);
 SP_API void            sp_str_reduce_kernel_shortest(sp_str_reduce_context_t* context);
-SP_API sp_da(sp_str_t) sp_str_map(sp_str_t* s, u32 n, sp_opaque_ptr ud, sp_str_map_fn_t fn);
+SP_API sp_da(sp_str_t) sp_str_map(sp_str_t* s, u32 n, void* ud, sp_str_map_fn_t fn);
 SP_API sp_str_t        sp_str_map_kernel_prepend(sp_str_map_context_t* context);
 SP_API sp_str_t        sp_str_map_kernel_append(sp_str_map_context_t* context);
 SP_API sp_str_t        sp_str_map_kernel_prefix(sp_str_map_context_t* context);
@@ -1843,6 +2400,7 @@ SP_API c8* sp_mem_buffer_as_cstr(sp_mem_buffer_t* buffer);
 #define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
 #define sp_log_str(STR, ...) SP_LOG_STR(STR, ##__VA_ARGS__)
 SP_API void sp_log(sp_str_t fmt, ...);
+SP_API void sp_log_err(sp_str_t fmt, ...);
 
 
 // ███████╗███╗   ██╗██╗   ██╗
@@ -1909,6 +2467,7 @@ SP_API void         sp_sleep_ns(u64 ns);
 SP_API void         sp_sleep_ms(f64 ms);
 SP_API c8*          sp_os_wstr_to_cstr(c16* str, u32 len);
 SP_API void         sp_os_print(sp_str_t message);
+SP_API void         sp_os_print_err(sp_str_t message);
 SP_API sp_str_t     sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
 SP_API sp_str_t     sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
 SP_API sp_str_t     sp_os_get_env_var(sp_str_t key);
@@ -2077,6 +2636,7 @@ SP_API s32  sp_atomic_s32_get(sp_atomic_s32* value);
 // ██║ ╚═╝ ██║╚██████╔╝   ██║   ███████╗██╔╝ ██╗
 // ╚═╝     ╚═╝ ╚═════╝    ╚═╝   ╚══════╝╚═╝  ╚═╝
 // @mutex
+#if defined(SP_MUTEX)
 typedef enum {
   SP_MUTEX_NONE = 0,
   SP_MUTEX_PLAIN = 1,
@@ -2086,7 +2646,6 @@ typedef enum {
 
 #if defined(SP_WIN32)
   typedef mtx_t sp_mutex_t;
-
 #elif defined(SP_POSIX)
   typedef pthread_mutex_t sp_mutex_t;
 #endif
@@ -2096,8 +2655,9 @@ SP_API void sp_mutex_lock(sp_mutex_t* mutex);
 SP_API void sp_mutex_unlock(sp_mutex_t* mutex);
 SP_API void sp_mutex_destroy(sp_mutex_t* mutex);
 SP_API s32  sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
+#endif
 
-
+#if defined(SP_CV)
 #if defined(SP_POSIX)
 typedef pthread_cond_t sp_cv_t;
 #elif defined(SP_WIN32)
@@ -2110,21 +2670,21 @@ SP_API void sp_cv_wait(sp_cv_t* cv, sp_mutex_t* mutex);
 SP_API bool sp_cv_wait_for(sp_cv_t* cv, sp_mutex_t* mutex, u32 ms);
 SP_API void sp_cv_notify_one(sp_cv_t* cv);
 SP_API void sp_cv_notify_all(sp_cv_t* cv);
+#endif
 
 
 // ███████╗███████╗███╗   ███╗ █████╗ ██████╗ ██╗  ██╗ ██████╗ ██████╗ ███████╗
-// ██╔════╝██╔════╝████╗ ████║██╔══██╗██╔══██╗██║  ██║██╔═══██╗██╔══██╗██╔════╝
+// ██╔════╝██╔════╝████╗ ████║██╔══██╗██╔══██╗██║  ██║██╔═══██╝██╔══██╗██╔════╝
 // ███████╗█████╗  ██╔████╔██║███████║██████╔╝███████║██║   ██║██████╔╝█████╗
 // ╚════██║██╔══╝  ██║╚██╔╝██║██╔══██║██╔═══╝ ██╔══██║██║   ██║██╔══██╗██╔══╝
 // ███████║███████╗██║ ╚═╝ ██║██║  ██║██║     ██║  ██║╚██████╔╝██║  ██║███████╗
 // ╚══════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
 // @semaphore
+#if defined(SP_SEMAPHORE)
 #if defined(SP_WIN32)
   typedef HANDLE sp_semaphore_t;
-
 #elif defined(SP_MACOS)
   typedef dispatch_semaphore_t sp_semaphore_t;
-
 #elif defined(SP_POSIX)
   typedef sem_t sp_semaphore_t;
 #endif
@@ -2134,6 +2694,7 @@ SP_API void sp_semaphore_destroy(sp_semaphore_t* semaphore);
 SP_API void sp_semaphore_wait(sp_semaphore_t* semaphore);
 SP_API bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
 SP_API void sp_semaphore_signal(sp_semaphore_t* semaphore);
+#endif
 
 
 // ███████╗██╗   ██╗████████╗██╗   ██╗██████╗ ███████╗
@@ -2177,6 +2738,7 @@ SP_API void sp_spin_unlock(sp_spin_lock_t* lock);
 //    ██║   ██║  ██║██║  ██║███████╗██║  ██║██████╔╝
 //    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
 // @thread
+#if defined(SP_THREAD)
 SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
 
 typedef struct {
@@ -2187,10 +2749,8 @@ typedef struct {
 
 #if defined(SP_WIN32)
   typedef thrd_t sp_thread_t;
-
 #elif defined(SP_MACOS)
   typedef pthread_t sp_thread_t;
-
 #elif defined(SP_POSIX)
   typedef pthread_t sp_thread_t;
 #endif
@@ -2198,6 +2758,7 @@ typedef struct {
 SP_API void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
 SP_API void sp_thread_join(sp_thread_t* thread);
 SP_API s32  sp_thread_launch(void* userdata);
+#endif
 
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
@@ -2226,6 +2787,7 @@ typedef struct {
   u32 index;
 } sp_tls_rt_t;
 
+#if !defined(SP_FREESTANDING)
 typedef struct {
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
@@ -2236,6 +2798,7 @@ typedef struct {
 } sp_rt_t;
 
 extern sp_rt_t sp_rt;
+#endif
 
 sp_tls_rt_t*  sp_tls_rt_get();
 sp_context_t* sp_context_get();
@@ -2376,6 +2939,7 @@ SP_API void           sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
 // @ps
+#if defined(SP_PS)
 #ifndef SP_PS_MAX_ARGS
   #define SP_PS_MAX_ARGS 16
 #endif
@@ -2480,7 +3044,7 @@ typedef struct {
 
 #elif defined(SP_POSIX)
 #define SP_POSIX_WAITPID_BLOCK 0
-#define SP_POSIX_WAITPID_NO_BLOCK WNOHANG
+#define SP_POSIX_WAITPID_NO_BLOCK SP_WNOHANG
 
 typedef struct {
   posix_spawn_file_actions_t* fa;
@@ -2529,6 +3093,7 @@ SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* proc);
 SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
 SP_API bool            sp_ps_kill(sp_ps_t* proc);
+#endif
 
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
@@ -2720,6 +3285,7 @@ SP_API s32             sp_app_run(sp_app_config_t config);
 // ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██║   ██║   ╚██████╔╝██║  ██║
 // ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
 // @file_monitor
+#if defined(SP_FMON)
 typedef enum sp_file_change_event_t {
 	SP_FILE_CHANGE_EVENT_NONE = 0,
 	SP_FILE_CHANGE_EVENT_ADDED = 1 << 0,
@@ -2765,7 +3331,7 @@ typedef struct {
 typedef struct {
   sp_da(s32) watch_descs;
   sp_da(sp_str_t) watch_paths;
-  u8 buffer[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
+  u8 buffer[4096] __attribute__((aligned(__alignof__(sp_sys_inotify_event_t))));
   s32 fd;
 } sp_fmon_os_t;
 
@@ -2828,6 +3394,7 @@ SP_API void             sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path)
 SP_API void             sp_fmon_process_changes(sp_fmon_t* monitor);
 SP_API void             sp_fmon_emit_changes(sp_fmon_t* monitor);
 SP_API sp_fmon_cache_t* sp_fmon_get_or_insert_cache(sp_fmon_t* monitor, sp_str_t file_path);
+#endif
 
 
 //  █████╗ ███████╗███████╗███████╗████████╗
@@ -2837,6 +3404,7 @@ SP_API sp_fmon_cache_t* sp_fmon_get_or_insert_cache(sp_fmon_t* monitor, sp_str_t
 // ██║  ██║███████║███████║███████╗   ██║
 // ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝
 // @asset
+#if defined(SP_ASSET)
 typedef enum {
   SP_ASSET_STATE_QUEUED,
   SP_ASSET_STATE_IMPORTED,
@@ -2912,6 +3480,7 @@ SP_API void                 sp_asset_registry_process_completions(sp_asset_regis
 SP_API sp_asset_t*          sp_asset_registry_reserve(sp_asset_registry_t* r);
 SP_API sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_asset_kind_t kind);
 SP_API s32                  sp_asset_registry_thread_fn(void* user_data);
+#endif
 
 // ███████╗██╗     ███████╗
 // ██╔════╝██║     ██╔════╝
@@ -2934,7 +3503,7 @@ SP_API s32                  sp_asset_registry_thread_fn(void* user_data);
   #define EI_NIDENT 16
 
   typedef struct {
-    unsigned char e_ident[EI_NIDENT];
+    u8 e_ident[EI_NIDENT];
     Elf64_Half    e_type;
     Elf64_Half    e_machine;
     Elf64_Word    e_version;
@@ -2965,8 +3534,8 @@ SP_API s32                  sp_asset_registry_thread_fn(void* user_data);
 
   typedef struct {
     Elf64_Word    st_name;
-    unsigned char st_info;
-    unsigned char st_other;
+    u8 st_info;
+    u8 st_other;
     Elf64_Half    st_shndx;
     Elf64_Addr    st_value;
     Elf64_Xword   st_size;
@@ -3011,6 +3580,7 @@ SP_API s32                  sp_asset_registry_thread_fn(void* user_data);
   #define SHF_EXECINSTR 0x4
 
   #define SHN_UNDEF 0
+  #define SHN_ABS   0xfff1
 
   #define STB_LOCAL  0
   #define STB_GLOBAL 1
@@ -3077,6 +3647,9 @@ u32               sp_elf_section_num_entries(sp_elf_section_t* section);
 void*             sp_elf_section_reserve_aligned(sp_elf_section_t* section, u64 size, u64 align);
 void*             sp_elf_section_reserve_entry(sp_elf_section_t* section);
 u8*               sp_elf_section_reserve_bytes(sp_elf_section_t* section, u64 size);
+sp_elf_section_t* sp_elf_symtab_new(sp_elf_t* elf);
+u32               sp_elf_add_string(sp_elf_section_t* strtab, sp_str_t str);
+u32               sp_elf_add_symbol(sp_elf_section_t* symbols, sp_elf_t* elf, sp_str_t name, u64 value, u64 size, u8 bind, u8 type, u16 shndx);
 Elf64_Sym*        sp_elf_symtab_get(sp_elf_section_t* symtab, u32 index);
 void              sp_elf_symtab_sort(sp_elf_section_t* symtab, sp_elf_t* elf);
 Elf64_Rela*       sp_elf_rela_get(sp_elf_section_t* rela, u32 index);
@@ -3091,6 +3664,7 @@ sp_elf_t*         sp_elf_read_from_file(sp_str_t path);
 
 SP_END_EXTERN_C()
 
+
 #ifdef SP_CPP
 SP_API sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
 SP_API sp_str_t operator/(const sp_str_t& a, const c8* b);
@@ -3103,8 +3677,6 @@ SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
 
   return result;
 }
-#endif
-
 #endif
 
 
@@ -3122,10 +3694,647 @@ SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
 
 SP_BEGIN_EXTERN_C()
 
+#if !defined(SP_FREESTANDING)
 sp_rt_t sp_rt = {
   .mutex = PTHREAD_MUTEX_INITIALIZER,
   .tls = { .once = PTHREAD_ONCE_INIT }
 };
+#endif
+
+#if defined(SP_SYS)
+#if defined(SP_AMD64)
+s64 sp_syscall0(s64 n) {
+  s64 ret;
+  __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n) : "rcx", "r11", "memory");
+  return ret;
+}
+
+s64 sp_syscall1(s64 n, s64 a1) {
+  s64 ret;
+  __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1) : "rcx", "r11", "memory");
+  return ret;
+}
+
+s64 sp_syscall2(s64 n, s64 a1, s64 a2) {
+  s64 ret;
+  __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2) : "rcx", "r11", "memory");
+  return ret;
+}
+
+s64 sp_syscall3(s64 n, s64 a1, s64 a2, s64 a3) {
+  s64 ret;
+  __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3) : "rcx", "r11", "memory");
+  return ret;
+}
+
+s64 sp_syscall4(s64 n, s64 a1, s64 a2, s64 a3, s64 a4) {
+  s64 ret;
+  register s64 r10 __asm__("r10") = a4;
+  __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r10) : "rcx", "r11", "memory");
+  return ret;
+}
+
+s64 sp_syscall5(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5) {
+  s64 ret;
+  register s64 r10 __asm__("r10") = a4;
+  register s64 r8  __asm__("r8")  = a5;
+  __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r10), "r"(r8) : "rcx", "r11", "memory");
+  return ret;
+}
+
+s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6) {
+  s64 ret;
+  register s64 r10 __asm__("r10") = a4;
+  register s64 r8  __asm__("r8")  = a5;
+  register s64 r9  __asm__("r9")  = a6;
+  __asm__ __volatile__ ("syscall" : "=a"(ret) : "a"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r10), "r"(r8), "r"(r9) : "rcx", "r11", "memory");
+  return ret;
+}
+
+void* sp_sys_get_tp(void) {
+  void* tp;
+  __asm__ __volatile__ ("mov %%fs:0, %0" : "=r"(tp));
+  return tp;
+}
+
+s32 sp_sys_set_tp(void* tp) {
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_ARCH_PRCTL, SP_ARCH_SET_FS, (s64)tp);
+}
+
+void* sp_sys_memcpy(void* dest, const void* src, size_t n) {
+  void* ret = dest;
+  if (n == 0) return ret;
+  __asm__ __volatile__ (
+    "cmp $8, %[n]\n\t"
+    "jc 2f\n\t"
+    "test $7, %%edi\n\t"
+    "jz 1f\n"
+    "3:\n\t"
+    "movsb\n\t"
+    "dec %[n]\n\t"
+    "test $7, %%edi\n\t"
+    "jnz 3b\n"
+    "1:\n\t"
+    "mov %[n], %%rcx\n\t"
+    "shr $3, %%rcx\n\t"
+    "rep movsq\n\t"
+    "and $7, %[n]\n\t"
+    "jz 4f\n"
+    "2:\n\t"
+    "movsb\n\t"
+    "dec %[n]\n\t"
+    "jnz 2b\n"
+    "4:\n"
+    : [n] "+d" (n), "+D" (dest), "+S" (src)
+    :
+    : "rcx", "memory"
+  );
+  return ret;
+}
+
+void* sp_sys_memmove(void* dest, const void* src, size_t n) {
+  void* ret = dest;
+  if ((uintptr_t)dest - (uintptr_t)src >= n) {
+    return sp_sys_memcpy(dest, src, n);
+  }
+  __asm__ __volatile__ (
+    "lea -1(%[dest], %[n]), %%rdi\n\t"
+    "lea -1(%[src], %[n]), %%rsi\n\t"
+    "mov %[n], %%rcx\n\t"
+    "std\n\t"
+    "rep movsb\n\t"
+    "cld"
+    :
+    : [dest] "r" (dest), [src] "r" (src), [n] "r" (n)
+    : "rdi", "rsi", "rcx", "memory"
+  );
+  return ret;
+}
+
+
+#elif defined(SP_ARM64)
+s64 sp_syscall0(s64 n) {
+  register s64 x8 __asm__("x8") = n;
+  register s64 x0 __asm__("x0");
+  __asm__ __volatile__ ("svc 0" : "=r"(x0) : "r"(x8) : "memory");
+  return x0;
+}
+
+s64 sp_syscall1(s64 n, s64 a1) {
+  register s64 x8 __asm__("x8") = n;
+  register s64 x0 __asm__("x0") = a1;
+  __asm__ __volatile__ ("svc 0" : "+r"(x0) : "r"(x8) : "memory");
+  return x0;
+}
+
+s64 sp_syscall2(s64 n, s64 a1, s64 a2) {
+  register s64 x8 __asm__("x8") = n;
+  register s64 x0 __asm__("x0") = a1;
+  register s64 x1 __asm__("x1") = a2;
+  __asm__ __volatile__ ("svc 0" : "+r"(x0) : "r"(x8), "r"(x1) : "memory");
+  return x0;
+}
+
+s64 sp_syscall3(s64 n, s64 a1, s64 a2, s64 a3) {
+  register s64 x8 __asm__("x8") = n;
+  register s64 x0 __asm__("x0") = a1;
+  register s64 x1 __asm__("x1") = a2;
+  register s64 x2 __asm__("x2") = a3;
+  __asm__ __volatile__ ("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2) : "memory");
+  return x0;
+}
+
+s64 sp_syscall4(s64 n, s64 a1, s64 a2, s64 a3, s64 a4) {
+  register s64 x8 __asm__("x8") = n;
+  register s64 x0 __asm__("x0") = a1;
+  register s64 x1 __asm__("x1") = a2;
+  register s64 x2 __asm__("x2") = a3;
+  register s64 x3 __asm__("x3") = a4;
+  __asm__ __volatile__ ("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3) : "memory");
+  return x0;
+}
+
+s64 sp_syscall5(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5) {
+  register s64 x8 __asm__("x8") = n;
+  register s64 x0 __asm__("x0") = a1;
+  register s64 x1 __asm__("x1") = a2;
+  register s64 x2 __asm__("x2") = a3;
+  register s64 x3 __asm__("x3") = a4;
+  register s64 x4 __asm__("x4") = a5;
+  __asm__ __volatile__ ("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4) : "memory");
+  return x0;
+}
+
+s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6) {
+  register s64 x8 __asm__("x8") = n;
+  register s64 x0 __asm__("x0") = a1;
+  register s64 x1 __asm__("x1") = a2;
+  register s64 x2 __asm__("x2") = a3;
+  register s64 x3 __asm__("x3") = a4;
+  register s64 x4 __asm__("x4") = a5;
+  register s64 x5 __asm__("x5") = a6;
+  __asm__ __volatile__ ("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5) : "memory");
+  return x0;
+}
+
+void* sp_sys_get_tp(void) {
+  void* tp;
+  __asm__ __volatile__ ("mrs %0, tpidr_el0" : "=r"(tp));
+  return tp;
+}
+
+s32 sp_sys_set_tp(void* tp) {
+  __asm__ __volatile__ ("msr tpidr_el0, %0" : : "r"(tp) : "memory");
+  return 0;
+}
+
+void* sp_sys_memcpy(void* dest, const void* src, size_t n) {
+  u8* d = dest;
+  const u8* s = src;
+  if (n == 0) return dest;
+  if (n < 16) {
+    while (n--) *d++ = *s++;
+    return dest;
+  }
+  u64* d64;
+  const u64* s64;
+  __asm__ __volatile__ (
+    "ldp x4, x5, [%[src]]\n\t"
+    "stp x4, x5, [%[dst]]"
+    : : [src] "r" (s), [dst] "r" (d)
+    : "x4", "x5", "memory"
+  );
+  if (n <= 32) {
+    __asm__ __volatile__ (
+      "ldp x4, x5, [%[src]]\n\t"
+      "stp x4, x5, [%[dst]]"
+      : : [src] "r" (s + n - 16), [dst] "r" (d + n - 16)
+      : "x4", "x5", "memory"
+    );
+    return dest;
+  }
+  size_t align = 16 - ((uintptr_t)d & 15);
+  if (align < 16) { d += align; s += align; n -= align; }
+  d64 = (u64*)d;
+  s64 = (const u64*)s;
+  while (n >= 64) {
+    __asm__ __volatile__ (
+      "ldp x4, x5, [%[src]]\n\t"
+      "ldp x6, x7, [%[src], #16]\n\t"
+      "ldp x8, x9, [%[src], #32]\n\t"
+      "ldp x10, x11, [%[src], #48]\n\t"
+      "stp x4, x5, [%[dst]]\n\t"
+      "stp x6, x7, [%[dst], #16]\n\t"
+      "stp x8, x9, [%[dst], #32]\n\t"
+      "stp x10, x11, [%[dst], #48]"
+      : : [src] "r" (s64), [dst] "r" (d64)
+      : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "memory"
+    );
+    d64 += 8; s64 += 8; n -= 64;
+  }
+  d = (u8*)d64;
+  s = (const u8*)s64;
+  if (n >= 32) {
+    __asm__ __volatile__ (
+      "ldp x4, x5, [%[src]]\n\t"
+      "ldp x6, x7, [%[src], #16]\n\t"
+      "stp x4, x5, [%[dst]]\n\t"
+      "stp x6, x7, [%[dst], #16]"
+      : : [src] "r" (s), [dst] "r" (d)
+      : "x4", "x5", "x6", "x7", "memory"
+    );
+    d += 32; s += 32; n -= 32;
+  }
+  if (n >= 16) {
+    __asm__ __volatile__ (
+      "ldp x4, x5, [%[src]]\n\t"
+      "stp x4, x5, [%[dst]]"
+      : : [src] "r" (s), [dst] "r" (d)
+      : "x4", "x5", "memory"
+    );
+    d += 16; s += 16; n -= 16;
+  }
+  while (n--) *d++ = *s++;
+  return dest;
+}
+
+void* sp_sys_memmove(void* dest, const void* src, size_t n) {
+  u8* d = dest;
+  const u8* s = src;
+  if (d == s || n == 0) return dest;
+  if ((uintptr_t)s - (uintptr_t)d - n <= -2*n) {
+    return sp_sys_memcpy(dest, src, n);
+  }
+  if (d < s) {
+    if ((uintptr_t)s % 8 == (uintptr_t)d % 8) {
+      while ((uintptr_t)d % 8) { if (!n--) return dest; *d++ = *s++; }
+      while (n >= 8) { *(u64*)d = *(const u64*)s; d += 8; s += 8; n -= 8; }
+    }
+    while (n--) *d++ = *s++;
+  } else {
+    if ((uintptr_t)s % 8 == (uintptr_t)d % 8) {
+      while ((uintptr_t)(d + n) % 8) { if (!n--) return dest; d[n] = s[n]; }
+      while (n >= 8) { n -= 8; *(u64*)(d + n) = *(const u64*)(s + n); }
+    }
+    while (n--) d[n] = s[n];
+  }
+  return dest;
+}
+#endif
+
+#if defined(SP_BUILTIN)
+void* memcpy(void* dest, const void* src, u64 n) {
+  return sp_sys_memcpy(dest, src, n);
+}
+
+void* memmove(void* dest, const void* src, u64 n) {
+  return sp_sys_memmove(dest, src, n);
+}
+
+void* memset(void* dest, s32 c, u64 n) {
+  return sp_sys_memset(dest, c, n);
+}
+
+s32 memcmp(const void* a, const void* b, u64 n) {
+  return sp_sys_memcmp(a, b, n);
+}
+
+u64 strlen(const char* s) {
+  u64 len = 0;
+  while (s[len]) len++;
+  return len;
+}
+#endif
+
+s32 sp_sys_memcmp(const void* vl, const void* vr, u64 n) {
+  const u8* l = (const u8*)vl;
+  const u8* r = (const u8*)vr;
+  while (n >= 8) {
+    u64 lv = *(const u64*)l;
+    u64 rv = *(const u64*)r;
+    if (lv != rv) break;
+    l += 8; r += 8; n -= 8;
+  }
+  for (; n && *l == *r; n--, l++, r++);
+  return n ? *l - *r : 0;
+}
+
+void* sp_sys_memset(void* dest, s32 c, u64 n) {
+  u8* d = (u8*)dest;
+  u8 v = (u8)c;
+#if defined(SP_AMD64)
+  if (n >= 8) {
+    u64 v64 = v;
+    v64 |= v64 << 8;
+    v64 |= v64 << 16;
+    v64 |= v64 << 32;
+    while ((uintptr_t)d & 7) { *d++ = v; n--; }
+    u64* d64 = (u64*)d;
+    while (n >= 8) { *d64++ = v64; n -= 8; }
+    d = (u8*)d64;
+  }
+#endif
+  while (n--) *d++ = v;
+  return dest;
+}
+
+void* sp_sys_tls_get(void) {
+  sp_sys_thread_block_t* tb = (sp_sys_thread_block_t*)sp_sys_get_tp();
+  return tb ? tb->tls_data : 0;
+}
+
+void sp_sys_tls_set(void* data) {
+  sp_sys_thread_block_t* tb = (sp_sys_thread_block_t*)sp_sys_get_tp();
+  if (tb) tb->tls_data = data;
+}
+
+f32 sp_sys_sqrtf(f32 x) {
+  if (x < 0) return 0;
+  if (x == 0) return 0;
+  f32 guess = x / 2.0f;
+  for (int i = 0; i < 10; i++) {
+    guess = (guess + x / guess) / 2.0f;
+  }
+  return guess;
+}
+f32 sp_sys_expf(f32 x) {
+  f32 result = 1.0f;
+  f32 term = 1.0f;
+  for (int i = 0; i < 20; i++) {
+    term *= x / (f32)(i + 1);
+    result += term;
+  }
+  return result;
+}
+f32 sp_sys_sinf(f32 x) {
+  while (x > 3.14159265f) x -= 6.28318530f;
+  while (x < -3.14159265f) x += 6.28318530f;
+  f32 x2 = x * x;
+  return x * (1.0f - x2/6.0f * (1.0f - x2/20.0f * (1.0f - x2/42.0f)));
+}
+f32 sp_sys_cosf(f32 x) {
+  while (x > 3.14159265f) x -= 6.28318530f;
+  while (x < -3.14159265f) x += 6.28318530f;
+  f32 x2 = x * x;
+  return 1.0f - x2/2.0f * (1.0f - x2/12.0f * (1.0f - x2/30.0f));
+}
+f32 sp_sys_tanf(f32 x) {
+  f32 c = sp_sys_cosf(x);
+  if (c == 0) return 0;
+  return sp_sys_sinf(x) / c;
+}
+f32 sp_sys_acosf(f32 x) {
+  if (x < -1.0f) x = -1.0f;
+  if (x > 1.0f) x = 1.0f;
+  return 1.5707963f - x - x*x*x/6.0f - 3.0f*x*x*x*x*x/40.0f;
+}
+
+void sp_sys_init(void) {
+  sp_sys_thread_block.self = &sp_sys_thread_block;
+  sp_sys_thread_block.tls_data = 0;
+  sp_sys_set_tp(&sp_sys_thread_block);
+}
+
+void sp_sys_exit(s32 code) {
+  sp_syscall1(SP_SYSCALL_NUM_EXIT_GROUP, code);
+  __builtin_unreachable();
+}
+
+void* sp_sys_mmap(void* addr, u64 len, s32 prot, s32 flags, s32 fd, s64 offset) {
+  return (void*)sp_syscall6(SP_SYSCALL_NUM_MMAP, (s64)addr, (s64)len, prot, flags, fd, offset);
+}
+
+s32 sp_sys_munmap(void* addr, u64 len) {
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_MUNMAP, (s64)addr, (s64)len);
+}
+
+void* sp_sys_mremap(void* old_addr, u64 old_size, u64 new_size, s32 flags) {
+  return (void*)sp_syscall4(SP_SYSCALL_NUM_MREMAP, (s64)old_addr, (s64)old_size, (s64)new_size, flags);
+}
+
+void* sp_sys_alloc(u64 n) {
+  if (n == 0) n = 1;
+  n = (n + SP_SYS_ALLOC_ALIGN - 1) & ~(SP_SYS_ALLOC_ALIGN - 1);
+  u64 total = n + SP_SYS_ALLOC_HEADER;
+  void* p = sp_sys_mmap(0, total, SP_PROT_READ | SP_PROT_WRITE, SP_MAP_PRIVATE | SP_MAP_ANONYMOUS, -1, 0);
+  if (p == SP_MAP_FAILED) return 0;
+  *(u64*)p = total;
+  return (char*)p + SP_SYS_ALLOC_HEADER;
+}
+
+void* sp_sys_alloc_zero(u64 n) {
+  return sp_sys_alloc(n);
+}
+
+void sp_sys_free(void* ptr) {
+  if (!ptr) return;
+  void* base = (char*)ptr - SP_SYS_ALLOC_HEADER;
+  u64 total = *(u64*)base;
+  sp_sys_munmap(base, total);
+}
+
+void* sp_sys_realloc(void* ptr, u64 new_size) {
+  if (!ptr) return sp_sys_alloc(new_size);
+  if (new_size == 0) { sp_sys_free(ptr); return 0; }
+  void* base = (char*)ptr - SP_SYS_ALLOC_HEADER;
+  u64 old_total = *(u64*)base;
+  new_size = (new_size + SP_SYS_ALLOC_ALIGN - 1) & ~(SP_SYS_ALLOC_ALIGN - 1);
+  u64 new_total = new_size + SP_SYS_ALLOC_HEADER;
+  void* new_base = sp_sys_mremap(base, old_total, new_total, 1);
+  if (new_base != SP_MAP_FAILED) {
+    *(u64*)new_base = new_total;
+    return (char*)new_base + SP_SYS_ALLOC_HEADER;
+  }
+  void* new_ptr = sp_sys_alloc(new_size);
+  if (!new_ptr) return 0;
+  u64 old_size = old_total - SP_SYS_ALLOC_HEADER;
+  u64 copy_size = old_size < new_size ? old_size : new_size;
+  u8* d = (u8*)new_ptr;
+  u8* s = (u8*)ptr;
+  for (u64 i = 0; i < copy_size; i++) d[i] = s[i];
+  sp_sys_free(ptr);
+  return new_ptr;
+}
+
+s64 sp_sys_read(s32 fd, void* buf, u64 count) {
+  return sp_syscall3(SP_SYSCALL_NUM_READ, fd, (s64)buf, (s64)count);
+}
+
+s64 sp_sys_write(s32 fd, const void* buf, u64 count) {
+  return sp_syscall3(SP_SYSCALL_NUM_WRITE, fd, (s64)buf, (s64)count);
+}
+
+s32 sp_sys_open(const c8* path, s32 flags, s32 mode) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_OPEN, (s64)path, flags, mode);
+#else
+  return (s32)sp_syscall4(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, (s64)path, flags, mode);
+#endif
+}
+
+s32 sp_sys_openat(s32 dirfd, const c8* path, s32 flags, s32 mode) {
+  return (s32)sp_syscall4(SP_SYSCALL_NUM_OPENAT, dirfd, (s64)path, flags, mode);
+}
+
+s32 sp_sys_close(s32 fd) {
+  return (s32)sp_syscall1(SP_SYSCALL_NUM_CLOSE, fd);
+}
+
+s64 sp_sys_lseek(s32 fd, s64 offset, s32 whence) {
+  return sp_syscall3(SP_SYSCALL_NUM_LSEEK, fd, offset, whence);
+}
+
+s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_STAT, (s64)path, (s64)st);
+#else
+  return (s32)sp_syscall4(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, (s64)path, (s64)st, 0);
+#endif
+}
+
+s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_LSTAT, (s64)path, (s64)st);
+#else
+  return (s32)sp_syscall4(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, (s64)path, (s64)st, SP_AT_SYMLINK_NOFOLLOW);
+#endif
+}
+
+s32 sp_sys_fstat(s32 fd, sp_sys_stat_t* st) {
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_FSTAT, fd, (s64)st);
+}
+
+s32 sp_sys_mkdir(const c8* path, s32 mode) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_MKDIR, (s64)path, mode);
+#else
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_MKDIRAT, SP_AT_FDCWD, (s64)path, mode);
+#endif
+}
+
+s32 sp_sys_rmdir(const c8* path) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall1(SP_SYSCALL_NUM_RMDIR, (s64)path);
+#else
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, (s64)path, SP_AT_REMOVEDIR);
+#endif
+}
+
+s32 sp_sys_unlink(const c8* path) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall1(SP_SYSCALL_NUM_UNLINK, (s64)path);
+#else
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, (s64)path, 0);
+#endif
+}
+
+s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_RENAME, (s64)oldpath, (s64)newpath);
+#else
+  return (s32)sp_syscall4(SP_SYSCALL_NUM_RENAMEAT, SP_AT_FDCWD, (s64)oldpath, SP_AT_FDCWD, (s64)newpath);
+#endif
+}
+
+s64 sp_sys_getcwd(char* buf, u64 size) {
+  return sp_syscall2(SP_SYSCALL_NUM_GETCWD, (s64)buf, (s64)size);
+}
+
+s32 sp_sys_chdir(const c8* path) {
+  return (s32)sp_syscall1(SP_SYSCALL_NUM_CHDIR, (s64)path);
+}
+
+s64 sp_sys_readlink(const c8* path, char* buf, u64 size) {
+#if defined(SP_AMD64)
+  return sp_syscall3(SP_SYSCALL_NUM_READLINK, (s64)path, (s64)buf, (s64)size);
+#else
+  return sp_syscall4(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, (s64)path, (s64)buf, (s64)size);
+#endif
+}
+
+s64 sp_sys_getdents64(s32 fd, void* buf, u64 count) {
+  return sp_syscall3(SP_SYSCALL_NUM_GETDENTS64, fd, (s64)buf, (s64)count);
+}
+
+s32 sp_sys_symlink(const c8* target, const c8* linkpath) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_SYMLINK, (s64)target, (s64)linkpath);
+#else
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_SYMLINKAT, (s64)target, SP_AT_FDCWD, (s64)linkpath);
+#endif
+}
+
+s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_LINK, (s64)oldpath, (s64)newpath);
+#else
+  return (s32)sp_syscall5(SP_SYSCALL_NUM_LINKAT, SP_AT_FDCWD, (s64)oldpath, SP_AT_FDCWD, (s64)newpath, 0);
+#endif
+}
+
+s32 sp_sys_chmod(const c8* path, s32 mode) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_CHMOD, (s64)path, mode);
+#else
+  return (s32)sp_syscall4(SP_SYSCALL_NUM_FCHMODAT, SP_AT_FDCWD, (s64)path, mode, 0);
+#endif
+}
+
+s32 sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_CLOCK_GETTIME, clockid, (s64)ts);
+}
+
+s32 sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_NANOSLEEP, (s64)req, (s64)rem);
+}
+
+s32 sp_sys_pipe2(s32 pipefd[2], s32 flags) {
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_PIPE2, (s64)pipefd, flags);
+}
+
+s32 sp_sys_dup2(s32 oldfd, s32 newfd) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_DUP2, oldfd, newfd);
+#else
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_DUP3, oldfd, newfd, 0);
+#endif
+}
+
+s32 sp_sys_fcntl(s32 fd, s32 cmd, s64 arg) {
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_FCNTL, fd, cmd, arg);
+}
+
+s32 sp_sys_getpid(void) {
+  return (s32)sp_syscall0(SP_SYSCALL_NUM_GETPID);
+}
+
+s32 sp_sys_inotify_init1(s32 flags) {
+  return (s32)sp_syscall1(SP_SYSCALL_NUM_INOTIFY_INIT1, flags);
+}
+
+s32 sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask) {
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_INOTIFY_ADD_WATCH, fd, (s64)pathname, mask);
+}
+
+s32 sp_sys_inotify_rm_watch(s32 fd, s32 wd) {
+  return (s32)sp_syscall2(SP_SYSCALL_NUM_INOTIFY_RM_WATCH, fd, wd);
+}
+
+s32 sp_sys_poll(sp_sys_pollfd_t* fds, u64 nfds, s32 timeout) {
+#if defined(SP_AMD64)
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_POLL, (s64)fds, (s64)nfds, timeout);
+#elif defined(SP_ARM64)
+  sp_sys_timespec_t ts = { .tv_sec = timeout / 1000, .tv_nsec = (timeout % 1000) * 1000000 };
+  sp_sys_timespec_t* tsp = timeout < 0 ? SP_NULLPTR : &ts;
+  return (s32)sp_syscall5(SP_SYSCALL_NUM_PPOLL, (s64)fds, (s64)nfds, (s64)tsp, 0, 0);
+#endif
+}
+
+s32 sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage) {
+  return (s32)sp_syscall4(SP_SYSCALL_NUM_WAIT4, pid, (s64)status, options, (s64)rusage);
+}
+
+#endif
 
 //  ███╗   ███╗ █████╗ ████████╗██╗  ██╗
 //  ████╗ ████║██╔══██╗╚══██╔══╝██║  ██║
@@ -3217,7 +4426,7 @@ sp_color_t sp_color_hsv_to_rgb(sp_color_t color) {
 }
 
 f32 sp_inv_sqrtf(f32 value) {
-  return 1.0f / SP_SQRTF(value);
+  return 1.0f / sp_sqrtf(value);
 }
 
 f32 sp_lerp(f32 a, f32 t, f32 b) {
@@ -3368,15 +4577,15 @@ f32 sp_vec4_len_sqr(sp_vec4_t v) {
 }
 
 f32 sp_vec2_len(sp_vec2_t v) {
-  return sqrtf(sp_vec2_len_sqr(v));
+  return sp_sqrtf(sp_vec2_len_sqr(v));
 }
 
 f32 sp_vec3_len(sp_vec3_t v) {
-  return sqrtf(sp_vec3_len_sqr(v));
+  return sp_sqrtf(sp_vec3_len_sqr(v));
 }
 
 f32 sp_vec4_len(sp_vec4_t v) {
-  return sqrtf(sp_vec4_len_sqr(v));
+  return sp_sqrtf(sp_vec4_len_sqr(v));
 }
 
 sp_vec2_t sp_vec2_norm(sp_vec2_t v) {
@@ -3454,7 +4663,7 @@ f32 sp_interp_ease_inout_bounce(sp_interp_t* interp) {
 f32 sp_interp_exponential(sp_interp_t* interp) {
   f32 k = 5.0f;
   f32 e_k = 148.413159f;
-  f32 eased = (expf(k * interp->t) - 1.0f) / (e_k - 1.0f);
+  f32 eased = (sp_expf(k * interp->t) - 1.0f) / (e_k - 1.0f);
   return interp->start + interp->delta * eased;
 }
 
@@ -3495,7 +4704,7 @@ sp_hash_t sp_hash_str(sp_str_t str) {
 }
 
 sp_hash_t sp_hash_bytes(const void *p, u64 len, u64 seed) {
-  unsigned char *d = (unsigned char *) p;
+  u8* d = (u8*) p;
   size_t i,j;
   size_t v0,v1,v2,v3, data;
 
@@ -4775,6 +5984,16 @@ void sp_log(sp_str_t fmt, ...) {
   sp_os_print(sp_str_lit("\n"));
 }
 
+void sp_log_err(sp_str_t fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t formatted = sp_format_v(fmt, args);
+  va_end(args);
+
+  sp_os_print_err(formatted);
+  sp_os_print_err(sp_str_lit("\n"));
+}
+
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
 // ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝
@@ -4819,6 +6038,23 @@ void sp_context_pop() {
   state->index--;
 }
 
+#if defined(SP_FREESTANDING)
+sp_tls_rt_t* sp_tls_rt_get() {
+  sp_tls_rt_t* state = (sp_tls_rt_t*)sp_sys_tls_get();
+  if (!state) {
+    state = (sp_tls_rt_t*)sp_mem_os_alloc(sizeof(sp_tls_rt_t));
+    *state = (sp_tls_rt_t) {
+      .contexts = {
+        { .allocator = sp_mem_libc_new() }
+      },
+      .index = 0,
+    };
+    sp_sys_tls_set(state);
+    state->scratch = sp_mem_arena_new(SP_MEM_ARENA_BLOCK_SIZE);
+  }
+  return state;
+}
+#else
 void sp_context_on_deinit(void* ptr) {
   if (ptr) {
     sp_tls_rt_t* state = (sp_tls_rt_t*)ptr;
@@ -4849,6 +6085,7 @@ sp_tls_rt_t* sp_tls_rt_get() {
 
   return state;
 }
+#endif
 
 sp_context_t* sp_context_get() {
   sp_tls_rt_t* state = sp_tls_rt_get();
@@ -5154,15 +6391,15 @@ sp_allocator_t sp_mem_libc_new() {
 }
 
 bool sp_mem_is_equal(const void* a, const void* b, size_t len) {
-  return !memcmp(a, b, len);
+  return sp_memcmp(a, b, len) == 0;
 }
 
 void sp_mem_copy(const void* source, void* dest, u64 num_bytes) {
-  memcpy(dest, source, num_bytes);
+  sp_memcpy(dest, source, num_bytes);
 }
 
 void sp_mem_move(const void* source, void* dest, u64 num_bytes) {
-  memmove(dest, source, num_bytes);
+  sp_memmove(dest, source, num_bytes);
 }
 
 void sp_mem_fill(void* buffer, u32 buffer_size, void* fill, u64 fill_size) {
@@ -5171,7 +6408,7 @@ void sp_mem_fill(void* buffer, u32 buffer_size, void* fill, u64 fill_size) {
   s32 i = 0;
   while (true) {
     if (i + fill_size > buffer_size) return;
-    memcpy(current_byte + i, (u8*)fill, fill_size);
+    sp_mem_copy((u8*)fill, current_byte + i, fill_size);
     i += fill_size;
   }
 }
@@ -5199,7 +6436,23 @@ void sp_mem_os_free(void* ptr) {
   if (!ptr) return;
   HeapFree(GetProcessHeap(), 0, ptr);
 }
-#elif defined(SP_POSIX)
+#elif defined(SP_FREESTANDING)
+void* sp_mem_os_alloc(u32 size) {
+  return sp_sys_alloc(size);
+}
+
+void* sp_mem_os_alloc_zero(u32 size) {
+  return sp_sys_alloc_zero(size);
+}
+
+void* sp_mem_os_realloc(void* ptr, u32 size) {
+  return sp_sys_realloc(ptr, size);
+}
+
+void sp_mem_os_free(void* ptr) {
+  sp_sys_free(ptr);
+}
+#else
 void* sp_mem_os_alloc(u32 size) {
   return malloc(size);
 }
@@ -6096,7 +7349,7 @@ sp_str_t sp_str_truncate(sp_str_t str, u32 max_len, sp_str_t trailer) {
   return sp_str_concat(sp_str_prefix(str, max_len - trailer.len), trailer);
 }
 
-sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* strs, u32 num_strs, sp_opaque_ptr user_data, sp_str_map_fn_t fn) {
+sp_dyn_array(sp_str_t) sp_str_map(sp_str_t* strs, u32 num_strs, void* user_data, sp_str_map_fn_t fn) {
   sp_dyn_array(sp_str_t) results = SP_NULLPTR;
 
   sp_for(it, num_strs) {
@@ -6646,56 +7899,55 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
 
 #if defined(SP_POSIX)
 sp_str_t sp_fs_get_cwd() {
-  c8 path [PATH_MAX];
-  if (!getcwd(path, PATH_MAX - 1)) {
+  c8 path[SP_PATH_MAX];
+  if (sp_getcwd(path, SP_PATH_MAX - 1) < 0) {
     return SP_ZERO_STRUCT(sp_str_t);
   }
-
   sp_str_t cwd = sp_str_from_cstr(path);
   return sp_fs_normalize_path(cwd);
 }
 
 bool sp_fs_exists(sp_str_t path) {
-  struct stat st;
-  c8* path_cstr = sp_str_to_cstr(path);
-  s32 result = stat(path_cstr, &st);
+  const c8* path_cstr = sp_str_to_cstr(path);
+  sp_stat_t st;
+  s32 result = sp_stat(path_cstr, &st);
   return result == 0;
 }
 
 bool sp_fs_is_regular_file(sp_str_t path) {
-  struct stat st;
   c8* path_cstr = sp_str_to_cstr(path);
-  s32 result = lstat(path_cstr, &st);
+  sp_stat_t st;
+  s32 result = sp_lstat(path_cstr, &st);
   if (result != 0) return false;
-  return S_ISREG(st.st_mode);
+  return sp_S_ISREG(st.st_mode);
 }
 
 bool sp_fs_is_symlink(sp_str_t path) {
-  struct stat st;
   c8* path_cstr = sp_str_to_cstr(path);
-  s32 result = lstat(path_cstr, &st);
+  sp_stat_t st;
+  s32 result = sp_lstat(path_cstr, &st);
   if (result != 0) return false;
-  return S_ISLNK(st.st_mode);
+  return sp_S_ISLNK(st.st_mode);
 }
 
 bool sp_fs_is_dir(sp_str_t path) {
-  struct stat st;
   c8* path_cstr = sp_str_to_cstr(path);
-  s32 result = lstat(path_cstr, &st);
+  sp_stat_t st;
+  s32 result = sp_lstat(path_cstr, &st);
   if (result != 0) return false;
-  return S_ISDIR(st.st_mode);
+  return sp_S_ISDIR(st.st_mode);
 }
 
 bool sp_fs_is_target_regular_file(sp_str_t path) {
-  struct stat st;
-  if (stat(sp_str_to_cstr(path), &st) != 0) return false;
-  return S_ISREG(st.st_mode);
+  sp_stat_t st;
+  if (sp_stat(sp_str_to_cstr(path), &st) != 0) return false;
+  return sp_S_ISREG(st.st_mode);
 }
 
 bool sp_fs_is_target_dir(sp_str_t path) {
-  struct stat st;
-  if (stat(sp_str_to_cstr(path), &st) != 0) return false;
-  return S_ISDIR(st.st_mode);
+  sp_stat_t st;
+  if (sp_stat(sp_str_to_cstr(path), &st) != 0) return false;
+  return sp_S_ISDIR(st.st_mode);
 }
 
 bool sp_fs_is_root(sp_str_t path) {
@@ -6721,7 +7973,7 @@ void sp_fs_remove_dir(sp_str_t path) {
   }
 
   c8* path_cstr = sp_str_to_cstr(path);
-  rmdir(path_cstr);
+  sp_rmdir(path_cstr);
 }
 
 void sp_fs_create_dir(sp_str_t path) {
@@ -6732,24 +7984,24 @@ void sp_fs_create_dir(sp_str_t path) {
   if (sp_fs_is_root(path)) return;
   if (sp_fs_exists(path)) return;
 
-  s32 result = mkdir(path_cstr, 0755);
+  s32 result = sp_mkdir(path_cstr, 0755);
   if (!result) return;
 
   sp_fs_create_dir(sp_fs_parent_path(path));
 
-  result = mkdir(path_cstr, 0755);
+  result = sp_mkdir(path_cstr, 0755);
   if (!result) return;
 }
 
 void sp_fs_create_file(sp_str_t path) {
   c8* path_cstr = sp_str_to_cstr(path);
-  s32 fd = open(path_cstr, O_CREAT | O_WRONLY | O_TRUNC, 0644);
-  if (fd >= 0) close(fd);
+  s32 fd = sp_open(path_cstr, SP_O_CREAT | SP_O_WRONLY | SP_O_TRUNC, 0644);
+  if (fd >= 0) sp_close(fd);
 }
 
 void sp_fs_remove_file(sp_str_t path) {
   c8* path_cstr = sp_str_to_cstr(path);
-  unlink(path_cstr);
+  sp_unlink(path_cstr);
 }
 
 bool sp_fs_is_glob(sp_str_t path) {
@@ -6758,6 +8010,7 @@ bool sp_fs_is_glob(sp_str_t path) {
   return sp_str_contains_n(&file_name, 1, sp_str_lit("*"));
 }
 
+#if defined(SP_PS)
 bool sp_fs_is_on_path(sp_str_t program) {
   SP_INCOMPLETE()
   sp_ps_config_t config = SP_ZERO_INITIALIZE();
@@ -6770,6 +8023,7 @@ bool sp_fs_is_on_path(sp_str_t program) {
 
   return output.status.exit_code == 0;
 }
+#endif
 
 sp_err_t sp_fs_copy(sp_str_t from, sp_str_t to) {
   if (sp_fs_is_glob(from)) {
@@ -6813,8 +8067,8 @@ void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
     to = sp_fs_join_path(to, sp_fs_get_name(from));
   }
 
-  struct stat stf;
-  if (stat(sp_str_to_cstr(from), &stf)) return;
+  sp_stat_t stf;
+  if (sp_stat(sp_str_to_cstr(from), &stf)) return;
 
   sp_io_reader_t reader = sp_io_reader_from_file(from);
   if (!reader.file.fd) return;
@@ -6833,7 +8087,7 @@ void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
   sp_io_reader_close(&reader);
   sp_io_writer_close(&writer);
 
-  chmod(sp_str_to_cstr(to), stf.st_mode);
+  sp_chmod(sp_str_to_cstr(to), stf.st_mode);
 }
 
 void sp_fs_copy_dir(sp_str_t from, sp_str_t to) {
@@ -6844,16 +8098,16 @@ void sp_fs_copy_dir(sp_str_t from, sp_str_t to) {
   sp_fs_copy_glob(from, sp_str_lit("*"), to);
 }
 
+#if !defined(SP_FREESTANDING)
 sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
   if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
     return SP_NULLPTR;
   }
 
   sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
-
   c8* path_cstr = sp_str_to_cstr(path);
-  DIR* dir = opendir(path_cstr);
 
+  DIR* dir = opendir(path_cstr);
   if (!dir) {
     return entries;
   }
@@ -6879,19 +8133,20 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
   }
 
   closedir(dir);
-
   return entries;
 }
+#endif
 
+#if !defined(SP_FREESTANDING)
 sp_da(sp_os_dir_ent_t) sp_fs_collect_recursive(sp_str_t path) {
   if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
     return SP_NULLPTR;
   }
 
   sp_rb(sp_str_t) queue = SP_NULLPTR;
-  sp_da(sp_os_dir_ent_t) results = SP_NULLPTR;
-
   sp_rb_push(queue, path);
+
+  sp_dyn_array(sp_os_dir_ent_t) results = SP_NULLPTR;
 
   while (!sp_rb_empty(queue)) {
     sp_str_t current = *sp_rb_peek(queue);
@@ -6929,16 +8184,17 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
 
   return sp_str_copy(result);
 }
+#endif
 
 
 sp_os_file_attr_t sp_fs_get_file_attrs(sp_str_t path) {
-  struct stat st;
-  if (lstat(sp_str_to_cstr(path), &st) == 0) {
-    if (S_ISLNK(st.st_mode)) {
+  sp_stat_t st;
+  if (sp_lstat(sp_str_to_cstr(path), &st) == 0) {
+    if (sp_S_ISLNK(st.st_mode)) {
       return SP_OS_FILE_ATTR_SYMLINK;
-    } else if (S_ISDIR(st.st_mode)) {
+    } else if (sp_S_ISDIR(st.st_mode)) {
       return SP_OS_FILE_ATTR_DIRECTORY;
-    } else if (S_ISREG(st.st_mode)) {
+    } else if (sp_S_ISREG(st.st_mode)) {
       return SP_OS_FILE_ATTR_REGULAR_FILE;
     }
   }
@@ -6946,19 +8202,125 @@ sp_os_file_attr_t sp_fs_get_file_attrs(sp_str_t path) {
 }
 
 sp_err_t sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path) {
-  if (link(sp_str_to_cstr(target), sp_str_to_cstr(link_path))) {
+  if (sp_link(sp_str_to_cstr(target), sp_str_to_cstr(link_path))) {
     return SP_ERR_OS;
   }
   return SP_ERR_OK;
 }
 
 sp_err_t sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path) {
-  if (symlink(sp_str_to_cstr(target), sp_str_to_cstr(link_path)) != 0) {
+  if (sp_symlink(sp_str_to_cstr(target), sp_str_to_cstr(link_path)) != 0) {
     return SP_ERR_OS;
   }
   return SP_ERR_OK;
 }
 
+#if defined(SP_FREESTANDING)
+sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
+  (void)xdg;
+  (void)home_suffix;
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_str_t sp_fs_get_storage_path() {
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_str_t sp_fs_get_config_path() {
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
+  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
+    return SP_NULLPTR;
+  }
+
+  sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
+  c8* path_cstr = sp_str_to_cstr(path);
+
+  s32 fd = sp_sys_open(path_cstr, SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  if (fd < 0) {
+    return entries;
+  }
+
+  c8 buf[2048];
+  s64 nread;
+  while ((nread = sp_sys_getdents64(fd, buf, sizeof(buf))) > 0) {
+    s64 pos = 0;
+    while (pos < nread) {
+      sp_sys_dirent64_t* d = (sp_sys_dirent64_t*)(buf + pos);
+      if (!sp_cstr_equal(d->d_name, ".") && !sp_cstr_equal(d->d_name, "..")) {
+        sp_str_builder_t entry_builder = SP_ZERO_INITIALIZE();
+        sp_str_builder_append(&entry_builder, path);
+        sp_str_builder_append(&entry_builder, sp_str_lit("/"));
+        sp_str_builder_append_cstr(&entry_builder, d->d_name);
+        sp_str_t file_path = sp_str_builder_to_str(&entry_builder);
+        sp_fs_normalize_path(file_path);
+
+        sp_os_dir_ent_t dir_ent = {
+          .file_path = file_path,
+          .file_name = sp_str_from_cstr(d->d_name),
+          .attributes = sp_fs_get_file_attrs(file_path),
+        };
+        sp_dyn_array_push(entries, dir_ent);
+      }
+      pos += d->d_reclen;
+    }
+  }
+
+  sp_sys_close(fd);
+  return entries;
+}
+
+sp_da(sp_os_dir_ent_t) sp_fs_collect_recursive(sp_str_t path) {
+  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
+    return SP_NULLPTR;
+  }
+
+  sp_rb(sp_str_t) queue = SP_NULLPTR;
+  sp_rb_push(queue, path);
+
+  sp_dyn_array(sp_os_dir_ent_t) results = SP_NULLPTR;
+
+  while (!sp_rb_empty(queue)) {
+    sp_str_t current = *sp_rb_peek(queue);
+    sp_rb_pop(queue);
+
+    sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(current);
+    sp_dyn_array_for(entries, i) {
+      sp_os_dir_ent_t* entry = &entries[i];
+      sp_dyn_array_push(results, *entry);
+      if (entry->attributes == SP_OS_FILE_ATTR_DIRECTORY) {
+        sp_rb_push(queue, entry->file_path);
+      }
+    }
+  }
+
+  sp_rb_free(queue);
+  return results;
+}
+
+sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  sp_str_t result = path;
+  c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+  if (sp_fs_exists(path)) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    s64 len = sp_readlink(path_cstr, canonical_path, SP_MAX_PATH_LEN - 1);
+    if (len > 0) {
+      canonical_path[len] = '\0';
+      result = SP_CSTR(canonical_path);
+    }
+  }
+
+  result = sp_fs_normalize_path(result);
+
+  if (result.len > 0 && result.data[result.len - 1] == '/') {
+    result.len--;
+  }
+
+  return sp_str_copy(result);
+}
+#else
 sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
   sp_str_t path =  sp_os_get_env_var(xdg);
   if (sp_str_valid(path)) return path;
@@ -6982,7 +8344,7 @@ sp_str_t sp_fs_get_config_path() {
 extern char* program_invocation_name;
 
 sp_str_t sp_fs_get_exe_path() {
-  c8 exe_path [PATH_MAX] = SP_ZERO_INITIALIZE();
+  c8 exe_path [SP_PATH_MAX] = SP_ZERO_INITIALIZE();
   if (realpath(program_invocation_name, exe_path)) {
     return sp_str_copy(sp_fs_parent_path(SP_CSTR(exe_path)));
   }
@@ -6992,8 +8354,8 @@ sp_str_t sp_fs_get_exe_path() {
 
 #if defined(SP_LINUX)
 sp_str_t sp_fs_get_exe_path() {
-  c8 exe_path [PATH_MAX];
-  s64 len = readlink("/proc/self/exe", exe_path, PATH_MAX - 1);
+  c8 exe_path[SP_PATH_MAX];
+  s64 len = sp_readlink("/proc/self/exe", exe_path, SP_PATH_MAX - 1);
   if (len < 0) {
     return sp_str_lit("");
   }
@@ -7009,10 +8371,10 @@ sp_str_t sp_fs_get_exe_path() {
 
 #if defined(SP_MACOS)
 sp_str_t sp_fs_get_exe_path() {
-  c8 exe_path[PATH_MAX];
-  u32 size = PATH_MAX;
+  c8 exe_path[SP_PATH_MAX];
+  u32 size = SP_PATH_MAX;
   if (_NSGetExecutablePath(exe_path, &size) == 0) {
-    c8 real_path[PATH_MAX];
+    c8 real_path[SP_PATH_MAX];
     if (realpath(exe_path, real_path)) {
       return sp_str_copy(sp_fs_parent_path(SP_CSTR(real_path)));
     }
@@ -7053,6 +8415,12 @@ void sp_os_print(sp_str_t message) {
   WriteConsoleA(console, message.data, message.len, &written, NULL);
 }
 
+void sp_os_eprint(sp_str_t message) {
+  HANDLE console = GetStdHandle(STD_ERROR_HANDLE);
+  DWORD written;
+  WriteConsoleA(console, message.data, message.len, &written, NULL);
+}
+
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) { switch (kind) {
     case SP_OS_LIB_SHARED: return SP_LIT("dll");
     case SP_OS_LIB_STATIC: return SP_LIT("lib");
@@ -7074,6 +8442,14 @@ sp_str_t sp_os_platform_name() {
 }
 
 
+#elif defined(SP_FREESTANDING)
+void sp_os_sleep_ns(u64 ns) {
+  sp_sys_timespec_t remaining = {
+    .tv_sec = (s64)(ns / 1000000000ULL),
+    .tv_nsec = (s64)(ns % 1000000000ULL)
+  };
+  sp_sys_nanosleep(&remaining, &remaining);
+}
 #elif defined(SP_POSIX)
 void sp_os_sleep_ns(u64 ns) {
   struct timespec now, deadline;
@@ -7085,9 +8461,11 @@ void sp_os_sleep_ns(u64 ns) {
     deadline.tv_sec++;
     deadline.tv_nsec -= 1000000000L;
   }
-
   while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, NULL) == -1 && errno == EINTR);
 }
+#endif
+
+#if defined(SP_POSIX)
 
 void sp_os_sleep_ms(f64 ms) {
   sp_os_sleep_ns((u64)sp_tm_ms_to_ns_f(ms));
@@ -7151,7 +8529,11 @@ c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
 }
 
 void sp_os_print(sp_str_t message) {
-  write(STDOUT_FILENO, message.data, message.len);
+  sp_write(1, message.data, message.len);
+}
+
+void sp_os_print_err(sp_str_t message) {
+  sp_write(2, message.data, message.len);
 }
 #endif
 
@@ -7373,6 +8755,7 @@ sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
 }
 
 #elif defined(SP_POSIX)
+#if defined(SP_DATETIME)
 sp_tm_date_time_t sp_tm_get_date_time() {
   time_t raw_time;
   struct tm* time_info;
@@ -7392,16 +8775,18 @@ sp_tm_date_time_t sp_tm_get_date_time() {
     .millisecond = (s32)(tv.tv_usec / 1000)
   };
 }
+#endif
 
 sp_tm_epoch_t sp_tm_now_epoch() {
-  struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
+  sp_timespec_t ts;
+  sp_clock_gettime(SP_CLOCK_REALTIME, &ts);
   return SP_RVAL(sp_tm_epoch_t) {
     .s = (u64)ts.tv_sec,
     .ns = (u32)ts.tv_nsec
   };
 }
 
+#if defined(SP_DATETIME)
 sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
   struct tm* time_info;
   time_t raw_time = (time_t)time.s;
@@ -7422,10 +8807,11 @@ sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
 
   return sp_str_builder_to_str(&builder);
 }
+#endif
 
 sp_tm_point_t sp_tm_now_point() {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
+  sp_timespec_t ts;
+  sp_clock_gettime(SP_CLOCK_MONOTONIC, &ts);
   return (sp_tm_point_t)(ts.tv_sec * 1000000000ULL + ts.tv_nsec);
 }
 
@@ -7599,11 +8985,26 @@ u64 sp_tm_fps_to_ns(u64 fps) {
   }
 #endif
 
-#if defined(SP_LINUX) || defined(SP_COSMO)
+#if defined(SP_FREESTANDING)
 sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
-  struct stat st;
   c8* path_cstr = sp_str_to_cstr(file_path);
-  s32 result = stat(path_cstr, &st);
+  sp_stat_t st;
+  s32 result = sp_stat(path_cstr, &st);
+
+  if (result != 0) {
+    return SP_ZERO_STRUCT(sp_tm_epoch_t);
+  }
+
+  return SP_RVAL(sp_tm_epoch_t) {
+    .s = (u64)st.st_mtime_sec,
+    .ns = (u32)st.st_mtime_nsec
+  };
+}
+#elif (defined(SP_LINUX) || defined(SP_COSMO))
+sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
+  c8* path_cstr = sp_str_to_cstr(file_path);
+  sp_stat_t st;
+  s32 result = sp_stat(path_cstr, &st);
 
   if (result != 0) {
     return SP_ZERO_STRUCT(sp_tm_epoch_t);
@@ -7758,6 +9159,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32* value) {
 // ███████║███████╗██║ ╚═╝ ██║██║  ██║██║     ██║  ██║╚██████╔╝██║  ██║███████╗
 // ╚══════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
 // @semaphore
+#if defined(SP_SEMAPHORE)
 #if defined(SP_WIN32)
 void sp_semaphore_init(sp_semaphore_t* semaphore) {
   *semaphore = CreateSemaphoreW(NULL, 0, 1, NULL);
@@ -7829,6 +9231,7 @@ void sp_semaphore_signal(sp_semaphore_t* semaphore) {
   sem_post(semaphore);
 }
 #endif
+#endif
 
 // ███╗   ███╗██╗   ██╗████████╗███████╗██╗  ██╗
 // ████╗ ████║██║   ██║╚══██╔══╝██╔════╝╚██╗██╔╝
@@ -7837,6 +9240,7 @@ void sp_semaphore_signal(sp_semaphore_t* semaphore) {
 // ██║ ╚═╝ ██║╚██████╔╝   ██║   ███████╗██╔╝ ██╗
 // ╚═╝     ╚═╝ ╚═════╝    ╚╝   ╚══════╝╚═╝   ╚═╝
 // #mutex
+#if defined(SP_MUTEX)
 #if defined(SP_WIN32)
 s32 sp_mutex_kind_to_c11(sp_mutex_kind_t kind) {
   s32 c11_kind;
@@ -7887,7 +9291,9 @@ void sp_mutex_destroy(sp_mutex_t* mutex) {
   pthread_mutex_destroy(mutex);
 }
 #endif
+#endif
 
+#if defined(SP_CV)
 #if defined(SP_POSIX)
 void sp_cv_init(sp_cv_t* cond) {
   pthread_cond_init(cond, NULL);
@@ -7950,6 +9356,7 @@ void sp_cv_notify_all(sp_cv_t* cond) {
   WakeAllConditionVariable(cond);
 }
 #endif
+#endif
 
 // ███████╗██╗   ██╗████████╗██╗   ██╗██████╗ ███████╗
 // ██╔════╝██║   ██║╚══██╔══╝██║   ██║██╔══██╗██╔════╝
@@ -7985,6 +9392,7 @@ void sp_future_set_value(sp_future_t* future, void* value) {
 //    ██║   ██║  ██║██║  ██║███████╗██║  ██║██████╔╝
 //    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
 // @thread
+#if defined(SP_THREAD)
 #if defined(SP_WIN32)
 void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   sp_thread_launch_t launch = SP_RVAL(sp_thread_launch_t) {
@@ -8040,6 +9448,7 @@ void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   sp_semaphore_wait(&launch.semaphore);
 }
 #endif
+#endif
 
 
 // ███████╗███╗   ██╗██╗   ██╗
@@ -8049,6 +9458,7 @@ void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
 // ███████╗██║ ╚████║ ╚████╔╝
 // ╚══════╝╚═╝  ╚═══╝  ╚═══╝
 // @env
+#if !defined(SP_FREESTANDING)
 #if defined(SP_POSIX)
 void sp_env_init(sp_env_t* env) {
   sp_ht_set_fns(env->vars, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
@@ -8125,6 +9535,7 @@ void sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_t overwrit
   setenv(k, v, overwrite);
 }
 #endif
+#endif
 
 // ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
 // ██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔════╝██╔════╝██╔════╝
@@ -8132,6 +9543,7 @@ void sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_t overwrit
 // ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
+#if defined(SP_PS)
 #if defined(SP_POSIX)
 SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_PRIVATE bool sp_ps_create_pipes(s32 pipes [2]);
@@ -8536,18 +9948,18 @@ sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
   s32 time_remaining = timeout_ms;
 
   do {
-    wait_result = waitpid(ps->pid, &wait_status, SP_POSIX_WAITPID_NO_BLOCK);
+    wait_result = sp_wait4(ps->pid, &wait_status, SP_POSIX_WAITPID_NO_BLOCK, SP_NULLPTR);
     if (wait_result == 0) {
       result.state = SP_PS_STATE_RUNNING;
     }
     else if (wait_result > 0) {
       result.state = SP_PS_STATE_DONE;
 
-      if (WIFEXITED(wait_status)) {
-        result.exit_code = WEXITSTATUS(wait_status);
+      if (SP_WIFEXITED(wait_status)) {
+        result.exit_code = SP_WEXITSTATUS(wait_status);
       }
-      else if (WIFSIGNALED(wait_status)) {
-        result.exit_code = -1 * WTERMSIG(wait_status);
+      else if (SP_WIFSIGNALED(wait_status)) {
+        result.exit_code = -1 * SP_WTERMSIG(wait_status);
       }
       else {
         result.exit_code = -255;
@@ -8580,9 +9992,8 @@ sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
   s32 wait_status = 0;
   s32 wait_result = 0;
 
-  // Wait, but retry if we're interrupted.
   do {
-    wait_result = waitpid(ps->pid, &wait_status, SP_POSIX_WAITPID_BLOCK);
+    wait_result = sp_wait4(ps->pid, &wait_status, SP_POSIX_WAITPID_BLOCK, SP_NULLPTR);
   } while (wait_result == -1 && errno == EINTR);
 
   if (wait_result < 0) {
@@ -8594,11 +10005,11 @@ sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
 
   result.state = SP_PS_STATE_DONE;
 
-  if (WIFEXITED(wait_status)) {
-    result.exit_code = WEXITSTATUS(wait_status);
+  if (SP_WIFEXITED(wait_status)) {
+    result.exit_code = SP_WEXITSTATUS(wait_status);
   }
-  else if (WIFSIGNALED(wait_status)) {
-    result.exit_code = -1 * WTERMSIG(wait_status);
+  else if (SP_WIFSIGNALED(wait_status)) {
+    result.exit_code = -1 * SP_WTERMSIG(wait_status);
   }
   else {
     result.exit_code = -255;
@@ -8624,34 +10035,33 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
     sp_str_builder_t err;
   } write = SP_ZERO_INITIALIZE();
 
-  struct pollfd fds[2];
+  sp_pollfd_t fds[2];
   sp_io_reader_t* readers[2];
   sp_str_builder_t* builders[2];
   s32 nfds = 0;
 
   if (read.out) {
-    fds[nfds] = (struct pollfd){ .fd = read.out->file.fd, .events = POLLIN };
+    fds[nfds] = (sp_pollfd_t){ .fd = read.out->file.fd, .events = SP_POLLIN };
     readers[nfds] = read.out;
     builders[nfds] = &write.out;
     nfds++;
   }
   if (read.err) {
-    fds[nfds] = (struct pollfd){ .fd = read.err->file.fd, .events = POLLIN };
+    fds[nfds] = (sp_pollfd_t){ .fd = read.err->file.fd, .events = SP_POLLIN };
     readers[nfds] = read.err;
     builders[nfds] = &write.err;
     nfds++;
   }
 
   while (nfds > 0) {
-    s32 ret = poll(fds, nfds, -1);
+    s32 ret = sp_poll(fds, nfds, -1);
     if (ret < 0) {
       if (errno == EINTR) continue;
       break;
     }
 
     sp_for(i, nfds) {
-      // POLLIN says there's data. POLLHUP says that the pipe closed, so there might be a last bit of data to drain.
-      if (!(fds[i].revents & (POLLIN | POLLHUP))) {
+      if (!(fds[i].revents & (SP_POLLIN | SP_POLLHUP))) {
         continue;
       }
 
@@ -8674,6 +10084,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   return result;
 }
 #endif
+#endif
 
 
 // ███████╗███╗   ███╗ ██████╗ ███╗   ██╗
@@ -8683,6 +10094,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
 // ██║     ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║
 // ╚═╝     ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 // @fmon
+#if defined(SP_FMON)
 SP_PRIVATE void sp_fmon_os_init(sp_fmon_t* monitor);
 SP_PRIVATE void sp_fmon_os_deinit(sp_fmon_t* monitor);
 SP_PRIVATE void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
@@ -8916,7 +10328,7 @@ void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_moni
 void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* linux_monitor = SP_ALLOC(sp_fmon_os_t);
 
-  linux_monitor->fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+  linux_monitor->fd = sp_sys_inotify_init1(SP_IN_NONBLOCK | SP_IN_CLOEXEC);
   if (linux_monitor->fd == -1) {
     // Handle error but don't crash
     linux_monitor->fd = 0;
@@ -8933,19 +10345,18 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
 
   c8* path_cstr = sp_str_to_cstr(path);
 
-  // Build mask based on what events we want to watch
   u32 mask = 0;
   if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
-    mask |= IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE;
+    mask |= SP_IN_MODIFY | SP_IN_ATTRIB | SP_IN_CLOSE_WRITE;
   }
   if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_ADDED) {
-    mask |= IN_CREATE | IN_MOVED_TO;
+    mask |= SP_IN_CREATE | SP_IN_MOVED_TO;
   }
   if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_REMOVED) {
-    mask |= IN_DELETE | IN_MOVED_FROM;
+    mask |= SP_IN_DELETE | SP_IN_MOVED_FROM;
   }
 
-  s32 wd = inotify_add_watch(linux_monitor->fd, path_cstr, mask);
+  s32 wd = sp_sys_inotify_add_watch(linux_monitor->fd, path_cstr, mask);
 
   if (wd != -1) {
     sp_dyn_array_push(linux_monitor->watch_descs, wd);
@@ -8958,7 +10369,7 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   if (!monitor->os) return;
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
   if (os->fd > 0) {
-    close(os->fd);
+    sp_close(os->fd);
   }
 }
 
@@ -8975,13 +10386,12 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
   if (os->fd <= 0) return;
 
-  size_t len = read(os->fd, os->buffer, sizeof(os->buffer));
+  s64 len = sp_read(os->fd, os->buffer, sizeof(os->buffer));
   if (len <= 0) return;
 
-  // Process all events in buffer
-  char* ptr = (char*)os->buffer;
-  while (ptr < (char*)os->buffer + len) {
-    struct inotify_event* event = (struct inotify_event*)ptr;
+  c8* ptr = (c8*)os->buffer;
+  while (ptr < (c8*)os->buffer + len) {
+    sp_sys_inotify_event_t* event = (sp_sys_inotify_event_t*)ptr;
 
     // Find which path this watch descriptor corresponds to
     sp_dyn_array_for(os->watch_descs, it) {
@@ -9007,15 +10417,14 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
           file_name = sp_fs_get_name(file_path);
         }
 
-        // Convert inotify mask to our events
         sp_fmon_event_kind_t events = SP_FILE_CHANGE_EVENT_NONE;
-        if (event->mask & (IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE)) {
+        if (event->mask & (SP_IN_MODIFY | SP_IN_ATTRIB | SP_IN_CLOSE_WRITE)) {
           events = (sp_fmon_event_kind_t)(events | SP_FILE_CHANGE_EVENT_MODIFIED);
         }
-        if (event->mask & (IN_CREATE | IN_MOVED_TO)) {
+        if (event->mask & (SP_IN_CREATE | SP_IN_MOVED_TO)) {
           events = (sp_fmon_event_kind_t)(events | SP_FILE_CHANGE_EVENT_ADDED);
         }
-        if (event->mask & (IN_DELETE | IN_MOVED_FROM)) {
+        if (event->mask & (SP_IN_DELETE | SP_IN_MOVED_FROM)) {
           events = (sp_fmon_event_kind_t)(events | SP_FILE_CHANGE_EVENT_REMOVED);
         }
 
@@ -9033,7 +10442,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
       }
     }
 
-    ptr += sizeof(struct inotify_event) + event->len;
+    ptr += sizeof(sp_sys_inotify_event_t) + event->len;
   }
 
   // Emit changes with debouncing
@@ -9439,6 +10848,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   (void)monitor;
 }
 #endif
+#endif
 
 
 // ███████╗██████╗ ██████╗  ██████╗ ██████╗
@@ -9501,10 +10911,7 @@ sp_str_t sp_io_read_file(sp_str_t path) {
 }
 
 u64 sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size) {
-  s64 result;
-  do {
-    result = read(reader->file.fd, ptr, size);
-  } while (result < 0 && errno == EINTR);
+  s64 result = sp_read(reader->file.fd, ptr, size);
   if (result < 0) {
     sp_err_set(SP_ERR_IO_READ_FAILED);
     return 0;
@@ -9516,20 +10923,20 @@ s64 sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence)
   s32 posix_whence;
   switch (whence) {
     case SP_IO_SEEK_SET: {
-      posix_whence = SEEK_SET;
+      posix_whence = SP_SEEK_SET;
       break;
     }
     case SP_IO_SEEK_CUR: {
-      posix_whence = SEEK_CUR;
+      posix_whence = SP_SEEK_CUR;
       break;
     }
     case SP_IO_SEEK_END: {
-      posix_whence = SEEK_END;
+      posix_whence = SP_SEEK_END;
       break;
     }
   }
 
-  s64 pos = lseek(r->file.fd, offset, posix_whence);
+  s64 pos = sp_lseek(r->file.fd, offset, posix_whence);
   if (pos < 0) {
     sp_err_set(SP_ERR_IO_SEEK_FAILED);
   }
@@ -9537,25 +10944,25 @@ s64 sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence)
 }
 
 u64 sp_io_reader_file_size(sp_io_reader_t* r) {
-  s64 current = lseek(r->file.fd, 0, SEEK_CUR);
+  s64 current = sp_lseek(r->file.fd, 0, SP_SEEK_CUR);
   if (current < 0) {
     sp_err_set(SP_ERR_IO);
     return 0;
   }
 
-  s64 size = lseek(r->file.fd, 0, SEEK_END);
+  s64 size = sp_lseek(r->file.fd, 0, SP_SEEK_END);
   if (size < 0) {
     sp_err_set(SP_ERR_IO_SEEK_FAILED);
     return 0;
   }
 
-  lseek(r->file.fd, current, SEEK_SET);
+  sp_lseek(r->file.fd, current, SP_SEEK_SET);
   return (u64)size;
 }
 
 void sp_io_reader_file_close(sp_io_reader_t* r) {
   if (r->file.close_mode == SP_IO_CLOSE_MODE_AUTO) {
-    if (close(r->file.fd) < 0) {
+    if (sp_close(r->file.fd) < 0) {
       sp_err_set(SP_ERR_IO_CLOSE_FAILED);
     }
   }
@@ -9604,6 +11011,7 @@ void sp_io_reader_mem_close(sp_io_reader_t* r) {
 }
 
 sp_io_reader_t sp_io_reader_from_file(sp_str_t path) {
+  s32 fd = sp_open(sp_str_to_cstr(path), SP_O_RDONLY, 0);
   sp_io_reader_t r = {
     .vtable = {
       .read = sp_io_reader_file_read,
@@ -9612,7 +11020,7 @@ sp_io_reader_t sp_io_reader_from_file(sp_str_t path) {
       .close = sp_io_reader_file_close,
     },
     .file = {
-      .fd = open(sp_str_to_cstr(path), O_RDONLY),
+      .fd = fd,
       .close_mode = SP_IO_CLOSE_MODE_AUTO
     },
   };
@@ -9734,7 +11142,7 @@ void sp_io_reader_close(sp_io_reader_t* reader) {
 }
 
 u64 sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
-  s64 result = write(writer->file.fd, ptr, size);
+  s64 result = sp_write(writer->file.fd, ptr, size);
   if (result < 0) {
     sp_err_set(SP_ERR_IO_WRITE_FAILED);
     return 0;
@@ -9746,19 +11154,19 @@ s64 sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t wh
   int posix_whence;
   switch (whence) {
     case SP_IO_SEEK_SET: {
-      posix_whence = SEEK_SET;
+      posix_whence = SP_SEEK_SET;
       break;
     }
     case SP_IO_SEEK_CUR: {
-      posix_whence = SEEK_CUR;
+      posix_whence = SP_SEEK_CUR;
       break;
     }
     case SP_IO_SEEK_END: {
-      posix_whence = SEEK_END;
+      posix_whence = SP_SEEK_END;
       break;
     }
   }
-  s64 pos = lseek(writer->file.fd, offset, posix_whence);
+  s64 pos = sp_lseek(writer->file.fd, offset, posix_whence);
   if (pos < 0) {
     sp_err_set(SP_ERR_IO_SEEK_FAILED);
   }
@@ -9766,26 +11174,26 @@ s64 sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t wh
 }
 
 u64 sp_io_writer_file_size(sp_io_writer_t* writer) {
-  s64 current = lseek(writer->file.fd, 0, SEEK_CUR);
+  s64 current = sp_lseek(writer->file.fd, 0, SP_SEEK_CUR);
   if (current < 0) {
     sp_err_set(SP_ERR_IO);
     return 0;
   }
 
-  s64 size = lseek(writer->file.fd, 0, SEEK_END);
+  s64 size = sp_lseek(writer->file.fd, 0, SP_SEEK_END);
   if (size < 0) {
     sp_err_set(SP_ERR_IO_SEEK_FAILED);
     return 0;
   }
 
-  lseek(writer->file.fd, current, SEEK_SET);
+  sp_lseek(writer->file.fd, current, SP_SEEK_SET);
   return (u64)size;
 }
 
 void sp_io_writer_file_close(sp_io_writer_t* writer) {
   if (writer->file.close_mode != SP_IO_CLOSE_MODE_AUTO) return;
 
-  if (close(writer->file.fd) < 0) {
+  if (sp_close(writer->file.fd) < 0) {
     sp_err_set(SP_ERR_IO_CLOSE_FAILED);
   }
 }
@@ -9893,19 +11301,19 @@ void sp_io_writer_dyn_close(sp_io_writer_t* writer) {
 }
 
 sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode) {
-  s32 flags = O_WRONLY | O_CREAT;
+  s32 flags = SP_O_WRONLY | SP_O_CREAT;
   switch (mode) {
     case SP_IO_WRITE_MODE_OVERWRITE: {
-      flags |= O_TRUNC;
+      flags |= SP_O_TRUNC;
       break;
     }
     case SP_IO_WRITE_MODE_APPEND: {
-      flags |= O_APPEND;
+      flags |= SP_O_APPEND;
       break;
     }
   }
 
-  s32 fd = open(sp_str_to_cstr(path), flags, 0644);
+  s32 fd = sp_open(sp_str_to_cstr(path), flags, 0644);
   if (fd < 0) {
     sp_err_set(SP_ERR_IO_OPEN_FAILED);
     return SP_ZERO_STRUCT(sp_io_writer_t);
@@ -10115,6 +11523,7 @@ void sp_io_writer_close(sp_io_writer_t* writer) {
 // ██║  ██║███████║███████║███████╗   ██║
 // ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝   ╚═╝
 // @asset
+#if defined(SP_ASSET)
 void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
   sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
   sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
@@ -10288,7 +11697,9 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 
   return 0;
 }
+#endif
 
+#if defined(SP_APP)
 sp_app_t* sp_app_new(sp_app_config_t config) {
   sp_app_t* app = SP_ALLOC(sp_app_t);
   *app = (sp_app_t) {
@@ -10345,6 +11756,7 @@ deinit:
 s32 main(s32 num_args, const c8** args) {
   return sp_app_run(sp_main(num_args, args));
 }
+#endif
 #endif
 
 #if defined(SP_ELF)
@@ -10508,13 +11920,13 @@ u32 sp_elf_add_string(sp_elf_section_t* strtab, sp_str_t str) {
 sp_elf_section_t* sp_elf_symtab_new(sp_elf_t* elf) {
   if (!elf) return SP_NULLPTR;
 
-  sp_elf_section_t* strtab = sp_elf_add_section(elf, sp_str_lit(".strtab"), SHT_STRTAB, 1);
-  if (!strtab) return SP_NULLPTR;
+  u32 strtab_idx = sp_elf_add_section(elf, sp_str_lit(".strtab"), SHT_STRTAB, 1)->index;
+  u32 symtab_idx = sp_elf_add_section(elf, sp_str_lit(".symtab"), SHT_SYMTAB, 8)->index;
 
-  sp_elf_section_t* symtab = sp_elf_add_section(elf, sp_str_lit(".symtab"), SHT_SYMTAB, 8);
-  if (!symtab) return SP_NULLPTR;
+  sp_elf_section_t* strtab = sp_elf_find_section_by_index(elf, strtab_idx);
+  sp_elf_section_t* symtab = sp_elf_find_section_by_index(elf, symtab_idx);
 
-  symtab->link = strtab->index;
+  symtab->link = strtab_idx;
   symtab->entry_size = sizeof(Elf64_Sym);
 
   sp_elf_add_string(strtab, sp_str_lit(""));
@@ -10902,3 +12314,4 @@ sp_str_t operator/(const sp_str_t& a, const c8* b) {
 
 #endif // SP_SP_C
 #endif // SP_IMPLEMENTATION
+#endif // SP_SP_H

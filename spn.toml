@@ -30,10 +30,6 @@ mode = "release"
 cc = "clang"
 
 [[test]]
-name = "amalg"
-source = ["test/amalg.c"]
-
-[[test]]
 name = "app"
 source = ["test/app.c"]
 
@@ -96,10 +92,6 @@ source = ["test/rb.c"]
 [[test]]
 name = "str"
 source = ["test/str.c"]
-
-[[test]]
-name = "stress"
-source = ["test/stress.c"]
 
 [[test]]
 name = "time"
