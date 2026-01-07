@@ -8559,6 +8559,7 @@ sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
   s32 wait_status = 0;
   s32 wait_result = 0;
 
+  // Wait, but retry if we're interrupted.
   do {
     wait_result = waitpid(ps->pid, &wait_status, SP_POSIX_WAITPID_BLOCK);
   } while (wait_result == -1 && errno == EINTR);
@@ -8585,47 +8586,70 @@ sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
   return result;
 }
 
-sp_ps_output_t sp_ps_output(sp_ps_t* proc) {
+sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   sp_ps_output_t result = SP_ZERO_INITIALIZE();
+  u8 buffer[4096];
 
-  result.status = sp_ps_wait(proc);
+  struct {
+    sp_io_reader_t* out;
+    sp_io_reader_t* err;
+  } read = {
+    .out = sp_ps_io_out(ps),
+    .err = sp_ps_io_err(ps),
+  };
 
-  u8 buffer [4096] = SP_ZERO_INITIALIZE();
+  struct {
+    sp_str_builder_t out;
+    sp_str_builder_t err;
+  } write = SP_ZERO_INITIALIZE();
 
-  sp_io_reader_t* out = sp_ps_io_out(proc);
-  if (out) {
-    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  struct pollfd fds[2];
+  sp_io_reader_t* readers[2];
+  sp_str_builder_t* builders[2];
+  s32 nfds = 0;
 
-    while (true) {
-      u64 num_bytes = sp_io_read(out, buffer, sizeof(buffer));
-      if (!num_bytes) {
-        break;
-      }
-
-      sp_str_t chunk = sp_str(buffer, num_bytes);
-      sp_str_builder_append(&builder, chunk);
-    }
-
-    result.out = sp_str_builder_move(&builder);
+  if (read.out) {
+    fds[nfds] = (struct pollfd){ .fd = read.out->file.fd, .events = POLLIN };
+    readers[nfds] = read.out;
+    builders[nfds] = &write.out;
+    nfds++;
+  }
+  if (read.err) {
+    fds[nfds] = (struct pollfd){ .fd = read.err->file.fd, .events = POLLIN };
+    readers[nfds] = read.err;
+    builders[nfds] = &write.err;
+    nfds++;
   }
 
-  sp_io_reader_t* err = sp_ps_io_err(proc);
-  if (err) {
-    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-
-    while (true) {
-      u64 num_bytes = sp_io_read(err, buffer, sizeof(buffer));
-      if (!num_bytes) {
-        break;
-      }
-
-      sp_str_t chunk = sp_str(buffer, num_bytes);
-      sp_str_builder_append(&builder, chunk);
+  while (nfds > 0) {
+    s32 ret = poll(fds, nfds, -1);
+    if (ret < 0) {
+      if (errno == EINTR) continue;
+      break;
     }
 
-    result.err = sp_str_builder_move(&builder);
+    sp_for(i, nfds) {
+      // POLLIN says there's data. POLLHUP says that the pipe closed, so there might be a last bit of data to drain.
+      if (!(fds[i].revents & (POLLIN | POLLHUP))) {
+        continue;
+      }
+
+      u64 n = sp_io_read(readers[i], buffer, sizeof(buffer));
+      if (n > 0) {
+        sp_str_builder_append(builders[i], sp_str((c8*)buffer, n));
+      } else {
+        fds[i] = fds[nfds - 1];
+        readers[i] = readers[nfds - 1];
+        builders[i] = builders[nfds - 1];
+        nfds--;
+        i--;
+      }
+    }
   }
 
+  result.out = sp_str_builder_move(&write.out);
+  result.err = sp_str_builder_move(&write.err);
+  result.status = sp_ps_wait(ps);
   return result;
 }
 #endif
@@ -9456,7 +9480,10 @@ sp_str_t sp_io_read_file(sp_str_t path) {
 }
 
 u64 sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size) {
-  s64 result = read(reader->file.fd, ptr, size);
+  s64 result;
+  do {
+    result = read(reader->file.fd, ptr, size);
+  } while (result < 0 && errno == EINTR);
   if (result < 0) {
     sp_err_set(SP_ERR_IO_READ_FAILED);
     return 0;

@@ -1012,4 +1012,53 @@ UTEST_F(ps, redirect_stdout_to_stderr) {
   EXPECT_EQ(out, SP_NULLPTR);
 }
 
+UTEST_F(ps, output_large_stdout_stderr_deadlock) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
+    .command = get_process_path(),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("flood"),
+      sp_str_lit("--stdout"),
+      sp_str_lit("--stderr")
+    },
+    .io = {
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_CREATE },
+    }
+  });
+
+  sp_ps_output_t output = sp_ps_output(&ps);
+
+  EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
+  EXPECT_EQ(output.status.exit_code, 0);
+
+  const u32 expected_size = 512 * 1024;
+  EXPECT_EQ(output.out.len, expected_size);
+  EXPECT_EQ(output.err.len, expected_size);
+}
+
+UTEST_F(ps, output_large_stdout_deadlock) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
+    .command = get_process_path(),
+    .args = {
+      sp_str_lit("--fn"), sp_str_lit("flood"),
+      sp_str_lit("--stdout"),
+    },
+    .io = {
+      .in = { .mode = SP_PS_IO_MODE_NULL },
+      .out = { .mode = SP_PS_IO_MODE_CREATE },
+      .err = { .mode = SP_PS_IO_MODE_CREATE },
+    }
+  });
+
+  sp_ps_output_t output = sp_ps_output(&ps);
+
+  EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
+  EXPECT_EQ(output.status.exit_code, 0);
+
+  const u32 expected_size = 512 * 1024;
+  EXPECT_EQ(output.out.len, expected_size);
+  EXPECT_EQ(output.err.len, 0);
+}
+
 SP_TEST_MAIN()
