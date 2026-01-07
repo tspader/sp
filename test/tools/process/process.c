@@ -166,6 +166,22 @@ s32 main(s32 num_args, const c8** args) {
     case TEST_PROC_FUNCTION_EXIT_CODE: {
       return exit_code;
     }
+    case TEST_PROC_FUNCTION_FLOOD: {
+      const u32 flood_size = 512 * 1024;
+      u8* buffer = (u8*)sp_alloc(flood_size);
+      for (u32 i = 0; i < flood_size; i++) {
+        buffer[i] = (u8)('A' + (i % 26));
+      }
+      if (stdout_enabled) {
+        fwrite(buffer, 1, flood_size, stdout);
+        fflush(stdout);
+      }
+      if (stderr_enabled) {
+        fwrite(buffer, 1, flood_size, stderr);
+        fflush(stderr);
+      }
+      break;
+    }
     default: {
       fprintf(stderr, "Unknown function: %s\n", function_str);
       return 1;

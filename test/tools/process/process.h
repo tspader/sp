@@ -21,7 +21,8 @@ typedef enum {
   X(TEST_PROC_FUNCTION_SLOW_WRITE,   "slow_write") \
   X(TEST_PROC_FUNCTION_CONSUME,      "consume") \
   X(TEST_PROC_FUNCTION_WAIT,         "wait") \
-  X(TEST_PROC_FUNCTION_EXIT_CODE,    "exit_code")
+  X(TEST_PROC_FUNCTION_EXIT_CODE,    "exit_code") \
+  X(TEST_PROC_FUNCTION_FLOOD,        "flood")
 
 typedef enum {
   TEST_PROC_FUNCTION(SP_X_NAMED_ENUM_DEFINE)
