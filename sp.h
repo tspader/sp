@@ -1647,6 +1647,8 @@ typedef struct {
     sp_str_t word;
     u32 level;
   } indent;
+
+  sp_allocator_t allocator;
 } sp_str_builder_t;
 
 typedef struct {
@@ -1827,6 +1829,7 @@ SP_API void            sp_str_builder_new_line(sp_str_builder_t* builder);
 SP_API sp_str_t        sp_str_builder_move(sp_str_builder_t* builder);
 SP_API sp_str_t        sp_str_builder_write(sp_str_builder_t* builder);
 SP_API c8*             sp_str_builder_write_cstr(sp_str_builder_t* builder);
+SP_API void            sp_str_builder_free(sp_str_builder_t* builder);
 
 
 // ██╗      ██████╗  ██████╗
@@ -2349,7 +2352,7 @@ SP_API s64            sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_i
 SP_API u64            sp_io_reader_size(sp_io_reader_t* r);
 SP_API void           sp_io_reader_close(sp_io_reader_t* r);
 SP_API sp_io_reader_t sp_io_reader_from_file(sp_str_t path);
-SP_API sp_io_reader_t sp_io_reader_from_handle(sp_os_file_handle_t fd, sp_io_close_mode_t mode);
+SP_API sp_io_reader_t sp_io_reader_from_fd(sp_os_file_handle_t fd, sp_io_close_mode_t mode);
 SP_API sp_io_reader_t sp_io_reader_from_mem(const void* ptr, u64 size);
 SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
 
@@ -5754,9 +5757,12 @@ void sp_str_it_next(sp_str_it_t* it) {
 }
 
 void sp_str_builder_grow(sp_str_builder_t* builder, u32 requested_capacity) {
+  if (!builder->allocator.on_alloc) {
+    builder->allocator = sp_context_get()->allocator;
+  }
   while (builder->buffer.capacity < requested_capacity) {
     u32 capacity = SP_MAX(builder->buffer.capacity * 2, 8);
-    builder->buffer.data = (c8*)sp_realloc(builder->buffer.data, capacity);
+    builder->buffer.data = (c8*)sp_mem_allocator_realloc(builder->allocator, builder->buffer.data, capacity);
     builder->buffer.capacity = capacity;
   }
 }
@@ -5840,6 +5846,15 @@ sp_str_t sp_str_builder_write(sp_str_builder_t* builder) {
 
 c8* sp_str_builder_write_cstr(sp_str_builder_t* builder) {
   return sp_cstr_copy_sized(builder->buffer.data, builder->buffer.len);
+}
+
+void sp_str_builder_free(sp_str_builder_t* builder) {
+  if (builder->buffer.data && builder->allocator.on_alloc) {
+    sp_mem_allocator_free(builder->allocator, builder->buffer.data);
+    builder->buffer.data = SP_NULLPTR;
+    builder->buffer.len = 0;
+    builder->buffer.capacity = 0;
+  }
 }
 
 sp_str_t sp_str_reduce(sp_str_t* strings, u32 num_strings, void* user_data, sp_str_reduce_fn_t fn) {
@@ -8126,6 +8141,9 @@ SP_PRIVATE c8** sp_ps_build_posix_env(sp_ps_env_config_t* env_config);
 SP_PRIVATE void sp_ps_set_nonblocking(s32 fd);
 SP_PRIVATE void sp_ps_set_blocking(s32 fd);
 
+bool sp_ps_is_fd_valid(sp_os_file_handle_t fd) {
+  return fd > 0;
+}
 
 bool sp_ps_create_pipes(s32 pipes [2]) {
   if (pipe(pipes) < 0) {
@@ -8483,28 +8501,31 @@ sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode) {
   SP_UNREACHABLE_RETURN(SP_IO_CLOSE_MODE_NONE);
 }
 
-sp_io_writer_t* sp_ps_io_in(sp_ps_t* proc) {
-  SP_ASSERT(proc != SP_NULLPTR);
-  if (proc->io.in.fd <= 0) return SP_NULLPTR;
-  sp_io_writer_t* w = sp_alloc_type(sp_io_writer_t);
-  *w = sp_io_writer_from_fd(proc->io.in.fd, sp_ps_io_close_mode(proc->io.in.mode));
-  return w;
+sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {
+  if (!ps) return SP_NULLPTR;
+  if (!sp_ps_is_fd_valid(ps->io.in.fd)) return SP_NULLPTR;
+
+  sp_io_writer_t* writer = sp_alloc_type(sp_io_writer_t);
+  *writer = sp_io_writer_from_fd(ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
+  return writer;
 }
 
-sp_io_reader_t* sp_ps_io_out(sp_ps_t* proc) {
-  SP_ASSERT(proc != SP_NULLPTR);
-  if (proc->io.out.fd <= 0) return SP_NULLPTR;
-  sp_io_reader_t* r = sp_alloc_type(sp_io_reader_t);
-  *r = sp_io_reader_from_handle(proc->io.out.fd, sp_ps_io_close_mode(proc->io.out.mode));
-  return r;
+sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
+  if (!ps) return SP_NULLPTR;
+  if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
+
+  sp_io_reader_t* reader = sp_alloc_type(sp_io_reader_t);
+  *reader = sp_io_reader_from_fd(ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
+  return reader;
 }
 
-sp_io_reader_t* sp_ps_io_err(sp_ps_t* proc) {
-  SP_ASSERT(proc != SP_NULLPTR);
-  if (proc->io.err.fd <= 0) return SP_NULLPTR;
-  sp_io_reader_t* r = sp_alloc_type(sp_io_reader_t);
-  *r = sp_io_reader_from_handle(proc->io.err.fd, sp_ps_io_close_mode(proc->io.err.mode));
-  return r;
+sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
+  if (!ps) return SP_NULLPTR;
+  if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
+
+  sp_io_reader_t* reader = sp_alloc_type(sp_io_reader_t);
+  *reader = sp_io_reader_from_fd(ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
+  return reader;
 }
 
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
@@ -9603,7 +9624,7 @@ sp_io_reader_t sp_io_reader_from_file(sp_str_t path) {
   return r;
 }
 
-sp_io_reader_t sp_io_reader_from_handle(sp_os_file_handle_t fd, sp_io_close_mode_t mode) {
+sp_io_reader_t sp_io_reader_from_fd(sp_os_file_handle_t fd, sp_io_close_mode_t mode) {
   return (sp_io_reader_t) {
     .vtable = {
       .read = sp_io_reader_file_read,
@@ -9865,7 +9886,10 @@ u64 sp_io_writer_dyn_size(sp_io_writer_t* writer) {
 }
 
 void sp_io_writer_dyn_close(sp_io_writer_t* writer) {
-  (void)writer;
+  if (writer->dyn_mem.buffer.data) {
+    sp_mem_allocator_free(writer->dyn_mem.allocator, writer->dyn_mem.buffer.data);
+    writer->dyn_mem.buffer = SP_ZERO_STRUCT(sp_mem_buffer_t);
+  }
 }
 
 sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode) {
