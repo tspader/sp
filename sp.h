@@ -7078,15 +7078,17 @@ sp_str_t sp_os_platform_name() {
 
 #elif defined(SP_POSIX)
 void sp_os_sleep_ns(u64 ns) {
-  struct timespec remaining = {
-    .tv_sec = (time_t)(ns / 1000000000ULL),
-    .tv_nsec = (long)(ns % 1000000000ULL)
-  };
-  int was_error;
-  do {
-    errno = 0;
-    was_error = nanosleep(&remaining, &remaining);
-  } while (was_error == -1 && errno == EINTR);
+  struct timespec now, deadline;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  deadline.tv_sec = now.tv_sec + ns / 1000000000ULL;
+  deadline.tv_nsec = now.tv_nsec + ns % 1000000000ULL;
+  if (deadline.tv_nsec >= 1000000000L) {
+    deadline.tv_sec++;
+    deadline.tv_nsec -= 1000000000L;
+  }
+
+  while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, NULL) == -1 && errno == EINTR);
 }
 
 void sp_os_sleep_ms(f64 ms) {
