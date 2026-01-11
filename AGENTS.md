@@ -11,8 +11,8 @@
 - `tools/`: random, unstructured bullshit which is not part of the official build
 
 # commands
-- `spn test` builds and runs all unit tests
-- `spn test --target target` builds and runs the specific test target (as defined in spn.toml)
+- `pspn test` builds and runs all unit tests
+- `pspn test --target $target` builds and runs the specific test target (as defined in spn.toml)
 
 # rules
 - Never comment any code, under any circumstances. Code with comments will be rejected outright.
@@ -33,6 +33,8 @@
 - Prefer to use `for` macros when possible
     - Use `sp_for(it, n)` instead of `for (int it = 0; it < n; it++)`
     - Use `sp_for_range(it, low, high)` instead of `for (int it = low; it < high; it++)`
+- Always use `sp_mem_begin_scratch()` and `sp_mem_end_scratch()` when allocating non-persistent heap memory
+    - Ensure that if any functions you call heap allocate persistent memory, you either use scratch or free it
 
 - Never use `NULL`; always use `SP_NULL` or `SP_NULLPTR` (identical, just semantic aliases)
 - Never use `make`; the included Makefile is strictly for debugging. Instead, use `spn`
