@@ -13,3 +13,5 @@ external/*
 CLAUDE.md
 doc/*
 !doc/skill
+**/.DS_Store
+**/*.dSYM

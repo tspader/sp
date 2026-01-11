@@ -603,6 +603,7 @@ SP_BEGIN_EXTERN_C()
     #include <dispatch/dispatch.h>
     #include <mach-o/dyld.h>
     #include <sys/event.h>
+    #include <poll.h>
     #if defined(SP_FMON_MACOS_USE_FSEVENTS)
       #include <CoreServices/CoreServices.h>
     #endif
@@ -878,7 +879,7 @@ typedef enum {
     u64 st_mtime_nsec;
     u64 st_ctime_sec;
     u64 st_ctime_nsec;
-    u32 __unused[2];
+    u32 padding [2];
   } sp_sys_stat_t;
 #endif
 
@@ -3935,8 +3936,8 @@ s32 sp_sys_set_tp(void* tp) {
 }
 
 void* sp_sys_memcpy(void* dest, const void* src, size_t n) {
-  u8* d = dest;
-  const u8* s = src;
+  u8* d = (u8*)dest;
+  const u8* s = (const u8*)src;
   if (n == 0) return dest;
   if (n < 16) {
     while (n--) *d++ = *s++;
@@ -4005,8 +4006,8 @@ void* sp_sys_memcpy(void* dest, const void* src, size_t n) {
 }
 
 void* sp_sys_memmove(void* dest, const void* src, size_t n) {
-  u8* d = dest;
-  const u8* s = src;
+  u8* d = (u8*)dest;
+  const u8* s = (const u8*)src;
   if (d == s || n == 0) return dest;
   if ((uintptr_t)s - (uintptr_t)d - n <= -2*n) {
     return sp_sys_memcpy(dest, src, n);
@@ -8496,7 +8497,8 @@ void sp_os_sleep_ns(u64 ns) {
   };
   sp_sys_nanosleep(&remaining, &remaining);
 }
-#elif defined(SP_POSIX)
+
+#elif defined(SP_LINUX)
 void sp_os_sleep_ns(u64 ns) {
   struct timespec now, deadline;
   clock_gettime(CLOCK_MONOTONIC, &now);
@@ -8509,8 +8511,20 @@ void sp_os_sleep_ns(u64 ns) {
   }
   while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, NULL) == -1 && errno == EINTR);
 }
-#endif
 
+#elif defined(SP_MACOS)
+void sp_os_sleep_ns(u64 ns) {
+  struct timespec req = {
+    .tv_sec = (time_t)(ns / 1000000000ULL),
+    .tv_nsec = (long)(ns % 1000000000ULL)
+  };
+  struct timespec rem;
+
+  while (nanosleep(&req, &rem) == -1 && errno == EINTR) {
+    req = rem;
+  }
+}
+#endif
 #if defined(SP_POSIX)
 
 void sp_os_sleep_ms(f64 ms) {
