@@ -1,0 +1,20 @@
+CC = clang
+CFLAGS = -std=c99 -g -Wall -Wextra -I.. -I../test/tools
+
+BUILD_DIR = ../build/macho_test
+
+all: $(BUILD_DIR)/macho_test
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(BUILD_DIR)/macho_test: macho_test.c ../sp.h $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ macho_test.c
+
+run: $(BUILD_DIR)/macho_test
+	$(BUILD_DIR)/macho_test
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+.PHONY: all run clean

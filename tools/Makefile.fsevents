@@ -1,0 +1,27 @@
+# Makefile for building fmon test with FSEvents support on macOS
+
+CC = clang
+CFLAGS = -I. -I./include -I./test/tools -I./test/tools/process \
+         -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -DSP_FMON_MACOS_USE_FSEVENTS \
+         -I$(HOME)/.local/share/spn/cache/store/utest/30018eb7/include \
+         -I$(HOME)/.local/share/spn/cache/store/argparse/8c270f0f/include \
+         -std=c99 -g -fsanitize=address
+LDFLAGS = -framework CoreServices -lm
+
+BUILD_DIR = build/debug/fsevents
+
+.PHONY: all clean test
+
+all: $(BUILD_DIR)/fmon
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(BUILD_DIR)/fmon: test/fmon.c sp.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) test/fmon.c -o $@
+
+test: $(BUILD_DIR)/fmon
+	./$(BUILD_DIR)/fmon
+
+clean:
+	rm -rf $(BUILD_DIR)
