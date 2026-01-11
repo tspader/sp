@@ -132,3 +132,8 @@ name = "bench-glob"
 source = ["test/bench/glob.c"]
 include = ["test"]
 
+[[bin]]
+name = "palette"
+source = ["example/palette/main.c"]
+include = ["example/palette"]
+define = ["SP_MAIN"]
