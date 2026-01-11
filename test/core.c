@@ -533,7 +533,7 @@ UTEST_F(sp_os_create_directory_fixture, very_long_path) {
     sp_str_builder_append(&builder, SP_LIT("very_long_directory_name_"));
   }
 
-  sp_str_t long_path = sp_str_builder_write(&builder);
+  sp_str_t long_path = sp_str_builder_to_str(&builder);
 
   sp_fs_create_dir(long_path);
   ASSERT_TRUE(sp_fs_exists(long_path));
@@ -1956,7 +1956,7 @@ UTEST(sp_os_get_file_attrs, path_edge_cases) {
   sp_str_builder_t slash_builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&slash_builder, dir_trail);
   sp_str_builder_append(&slash_builder, SP_LIT("/"));
-  sp_str_t dir_with_slash = sp_str_builder_write(&slash_builder);
+  sp_str_t dir_with_slash = sp_str_builder_to_str(&slash_builder);
   sp_os_file_attr_t trail_attr = sp_fs_get_file_attrs(dir_with_slash);
   ASSERT_EQ(trail_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
@@ -1964,7 +1964,7 @@ UTEST(sp_os_get_file_attrs, path_edge_cases) {
   sp_str_builder_t double_builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&double_builder, base);
   sp_str_builder_append(&double_builder, SP_LIT("//testdir"));
-  sp_str_t double_slash = sp_str_builder_write(&double_builder);
+  sp_str_t double_slash = sp_str_builder_to_str(&double_builder);
   sp_os_file_attr_t double_attr = sp_fs_get_file_attrs(double_slash);
   ASSERT_EQ(double_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
@@ -1976,7 +1976,7 @@ UTEST(sp_os_get_file_attrs, path_edge_cases) {
     sp_str_builder_append(&long_name, SP_LIT("long"));
   }
   sp_str_builder_append(&long_name, SP_LIT(".txt"));
-  sp_str_t long_path = sp_str_builder_write(&long_name);
+  sp_str_t long_path = sp_str_builder_to_str(&long_name);
   sp_fs_create_file(long_path);
   sp_os_file_attr_t long_attr = sp_fs_get_file_attrs(long_path);
   ASSERT_EQ(long_attr, SP_OS_FILE_ATTR_REGULAR_FILE);

@@ -99,7 +99,7 @@ sp_str_t palette_color_to_hex(sp_color_t c) {
   sp_fmt_format_hex(&b_out, r, 2, SP_NULLPTR);
   sp_fmt_format_hex(&b_out, g, 2, SP_NULLPTR);
   sp_fmt_format_hex(&b_out, b, 2, SP_NULLPTR);
-  return sp_str_builder_write(&b_out);
+  return sp_str_builder_to_str(&b_out);
 }
 
 void palette_render(palette_state_t* state) {
@@ -147,7 +147,7 @@ void palette_render(palette_state_t* state) {
   sp_str_builder_append_cstr(&out, "\n\n");
 
   sp_str_builder_append_cstr(&out, "[space] regenerate  [enter] save  [q/esc] quit\n");
-
+  
   sp_os_print(sp_str_builder_to_str(&out));
 }
 

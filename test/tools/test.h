@@ -22,7 +22,7 @@
       sp_str_builder_new_line(&__sp_test_builder); \
       sp_str_builder_indent(&__sp_test_builder); \
       sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("{} != {}"), SP_FMT_QUOTED_STR((a)), SP_FMT_QUOTED_STR((b))); \
-      SP_TEST_REPORT(sp_str_builder_write(&__sp_test_builder)); \
+      SP_TEST_REPORT(sp_str_builder_to_str(&__sp_test_builder)); \
       *utest_result = UTEST_TEST_FAILURE; \
  \
       if (is_assert) { \

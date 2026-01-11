@@ -447,7 +447,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
   sp_io_writer_t* in = sp_ps_io_in(&ps);
   sp_io_reader_t* out = sp_ps_io_out(&ps);
 
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_str_builder_t builder = sp_str_builder_from_writer(in);
   for (u32 i = 0; i < 8; i++) {
     if (sp_str_empty(test.expected[i].key)) {
       break;
@@ -457,7 +457,6 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
     sp_str_builder_append_c8(&builder, '\n');
   }
 
-  sp_io_write(in, builder.buffer.data, builder.buffer.len);
   sp_io_writer_close(in);
 
   sp_test_proc_stream_context_t ctx = {

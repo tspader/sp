@@ -479,7 +479,7 @@ UTEST(fs_path, integration_test) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&builder, install);
   sp_str_builder_append(&builder, SP_LIT("/build/space-dll.bat"));
-  sp_str_t dll_path = sp_str_builder_write(&builder);
+  sp_str_t dll_path = sp_str_builder_to_str(&builder);
 
   bool has_double_slash = false;
   for (u32 i = 1; i < dll_path.len; i++) {

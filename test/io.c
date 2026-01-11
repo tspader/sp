@@ -331,7 +331,7 @@ UTEST_F(io_rw, writer_dyn_to_str) {
   const char* text = "hello world";
   sp_io_write(&w, text, 11);
 
-  sp_str_t str = sp_io_writer_as_str(&w);
+  sp_str_t str = sp_mem_buffer_as_str(&w.dyn_mem.buffer);
   EXPECT_EQ(str.len, 11);
   EXPECT_TRUE(sp_str_equal(str, sp_str_lit("hello world")));
 
@@ -359,7 +359,7 @@ UTEST_F(io_rw, writer_dyn_multiple_writes) {
 
   EXPECT_EQ(sp_io_writer_size(&w), 9);
 
-  sp_str_t str = sp_io_writer_as_str(&w);
+  sp_str_t str = sp_mem_buffer_as_str(&w.dyn_mem.buffer);
   EXPECT_TRUE(sp_str_equal(str, sp_str_lit("abcdefghi")));
 
   sp_io_writer_close(&w);

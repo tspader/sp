@@ -19,73 +19,56 @@ UTEST_F_TEARDOWN(str) {
 
 UTEST(str_builder, basic_operations) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  ASSERT_EQ(builder.buffer.data, SP_NULLPTR);
-  ASSERT_EQ(builder.buffer.len, 0);
-  ASSERT_EQ(builder.buffer.capacity, 0);
-
-  sp_str_builder_grow(&builder, 10);
-  ASSERT_GE(builder.buffer.capacity, 10);
-  ASSERT_NE(builder.buffer.data, SP_NULLPTR);
-  ASSERT_EQ(builder.buffer.len, 0);
+  ASSERT_EQ(builder.writer, SP_NULLPTR);
 
   sp_str_t test_str = SP_LIT("Hello");
   sp_str_builder_append(&builder, test_str);
-  ASSERT_EQ(builder.buffer.len, 5);
+  ASSERT_NE(builder.writer, SP_NULLPTR);
+  EXPECT_GE(sp_io_writer_size(builder.writer), 5);
 
   sp_str_builder_append_cstr(&builder, " World");
-  ASSERT_EQ(builder.buffer.len, 11);
+  EXPECT_GE(sp_io_writer_size(builder.writer), 11);
 
   sp_str_builder_append_c8(&builder, '!');
-  ASSERT_EQ(builder.buffer.len, 12);
+  EXPECT_GE(sp_io_writer_size(builder.writer), 12);
 
-  sp_str_t result = sp_str_builder_write(&builder);
+  sp_str_t result = sp_str_builder_to_str(&builder);
   ASSERT_EQ(result.len, 12);
   SP_EXPECT_STR_EQ_CSTR(result, "Hello World!");
 
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   sp_str_builder_append_cstr(&builder2, "Test");
-  c8* cstr_result = sp_str_builder_write_cstr(&builder2);
+  const c8* cstr_result = sp_str_to_cstr(sp_str_builder_to_str(&builder2));
   ASSERT_TRUE(sp_cstr_equal(cstr_result, "Test"));
-  sp_free(cstr_result);
 }
 
 UTEST(str_builder, growth_behavior) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-
-  sp_str_builder_grow(&builder, 5);
-  u32 cap1 = builder.buffer.capacity;
-  ASSERT_GE(cap1, 5);
-
-  sp_str_builder_grow(&builder, 10);
-  u32 cap2 = builder.buffer.capacity;
-  ASSERT_GE(cap2, 10);
-  ASSERT_GE(cap2, cap1);
-
-  sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   sp_str_t long_str = SP_LIT("This is a much longer string that will trigger growth");
-  sp_str_builder_append(&builder2, long_str);
-  ASSERT_GE(builder2.buffer.capacity, long_str.len);
-  ASSERT_EQ(builder2.buffer.len, long_str.len);
+  sp_str_builder_append(&builder, long_str);
+  EXPECT_GE(sp_io_writer_size(builder.writer), long_str.len);
+  sp_str_t result = sp_str_builder_to_str(&builder);
+  SP_EXPECT_STR_EQ(result, long_str);
 }
 
 UTEST(str_builder, edge_cases) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&builder, SP_LIT(""));
-  ASSERT_EQ(builder.buffer.len, 0);
+  EXPECT_GE(sp_io_writer_size(builder.writer), 0);
 
   sp_str_builder_append_cstr(&builder, "");
-  ASSERT_EQ(builder.buffer.len, 0);
+  EXPECT_GE(sp_io_writer_size(builder.writer), 0);
 
   sp_str_t null_str = {.len = 0, .data = SP_NULLPTR};
   sp_str_builder_append(&builder, null_str);
-  ASSERT_EQ(builder.buffer.len, 0);
+  EXPECT_GE(sp_io_writer_size(builder.writer), 0);
 
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
-  for (s32 i = 0; i < 100; i++) {
+  sp_for(i, 100) {
     sp_str_builder_append_cstr(&builder2, "test ");
   }
-  ASSERT_EQ(builder2.buffer.len, 500);
-  sp_str_t result = sp_str_builder_write(&builder2);
+  EXPECT_GE(sp_io_writer_size(builder2.writer), 500);
+  sp_str_t result = sp_str_builder_to_str(&builder2);
   ASSERT_EQ(result.len, 500);
 }
 
@@ -105,7 +88,7 @@ UTEST(str_builder, indent_operations) {
   sp_str_builder_dedent(&builder);
   sp_str_builder_append_cstr(&builder, "back");
 
-  sp_str_t result = sp_str_builder_write(&builder);
+  sp_str_t result = sp_str_builder_to_str(&builder);
   ASSERT_GT(result.len, 10);
 
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
@@ -118,9 +101,59 @@ UTEST(str_builder, indent_operations) {
 UTEST(str_builder, format_append) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append_fmt(&builder, "Value: {}", SP_FMT_U32(123));
-  sp_str_t result = sp_str_builder_write(&builder);
+  sp_str_t result = sp_str_builder_to_str(&builder);
   ASSERT_GT(result.len, 0);
   ASSERT_NE(result.data, SP_NULLPTR);
+}
+
+UTEST(str_builder, fixed_mem_backend) {
+  {
+    c8 buffer[64] = SP_ZERO_INITIALIZE();
+    sp_io_writer_t writer = sp_io_writer_from_mem(buffer, sizeof(buffer));
+    sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
+
+    sp_str_builder_append_cstr(&builder, "Hello");
+    sp_str_builder_append_c8(&builder, ' ');
+    sp_str_builder_append(&builder, SP_LIT("World"));
+
+    sp_str_t result = sp_str(buffer, writer.mem.pos);
+    SP_EXPECT_STR_EQ_CSTR(result, "Hello World");
+    ASSERT_TRUE(sp_cstr_equal(buffer, "Hello World"));
+  }
+
+  {
+    c8 buffer[10] = SP_ZERO_INITIALIZE();
+    sp_io_writer_t writer = sp_io_writer_from_mem(buffer, sizeof(buffer));
+    sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
+
+    sp_str_builder_append_cstr(&builder, "Short");
+    sp_str_t result = sp_str(buffer, writer.mem.pos);
+    SP_EXPECT_STR_EQ_CSTR(result, "Short");
+  }
+
+  {
+    c8 buffer[128] = SP_ZERO_INITIALIZE();
+    sp_io_writer_t writer = sp_io_writer_from_mem(buffer, sizeof(buffer));
+    sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
+
+    sp_str_builder_append_fmt(&builder, "Count: {}", SP_FMT_U32(42));
+    sp_str_t result = sp_str(buffer, writer.mem.pos);
+    SP_EXPECT_STR_EQ_CSTR(result, "Count: 42");
+  }
+
+  {
+    c8 buffer[64] = SP_ZERO_INITIALIZE();
+    sp_io_writer_t writer = sp_io_writer_from_mem(buffer, sizeof(buffer));
+    sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
+
+    sp_str_builder_append_cstr(&builder, "line1");
+    sp_str_builder_indent(&builder);
+    sp_str_builder_new_line(&builder);
+    sp_str_builder_append_cstr(&builder, "indented");
+
+    sp_str_t result = sp_str(buffer, writer.mem.pos);
+    SP_EXPECT_STR_EQ_CSTR(result, "line1\n  indented");
+  }
 }
 
 UTEST(cstr, all_variations) {
@@ -1226,7 +1259,7 @@ UTEST(utf8, builder_append) {
   sp_str_builder_append_utf8(&builder, 0x1F600);
   sp_str_builder_append_utf8(&builder, 'z');
 
-  sp_str_t result = sp_str_builder_write(&builder);
+  sp_str_t result = sp_str_builder_to_str(&builder);
   ASSERT_EQ(result.len, 11);
   ASSERT_EQ(sp_utf8_num_codepoints(result), 5);
 

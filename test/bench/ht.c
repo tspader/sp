@@ -174,7 +174,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
       SP_FMT_CSTR(SP_ANSI_RESET));
   }
 
-  sp_str_t output = sp_str_builder_write(&sb);
+  sp_str_t output = sp_str_builder_to_str(&sb);
   sp_os_print(output);
 }
 
