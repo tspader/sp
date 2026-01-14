@@ -7918,22 +7918,25 @@ sp_str_t sp_fs_get_exe_path() {
   c8 exe_path[SP_MAX_PATH_LEN];
   GetModuleFileNameA(NULL, exe_path, SP_MAX_PATH_LEN);
 
-  sp_str_t exe_path_str = SP_CSTR(exe_path);
-  sp_fs_normalize_path(exe_path_str);
+  sp_str_t exe_path_str = sp_str_view(exe_path);
+  sp_fs_normalize_path_soft(&exe_path_str);
 
-  return sp_str_copy(exe_path_str);
+  return sp_fs_parent_path(exe_path_str);
 }
 
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* path_cstr = sp_str_to_cstr(path);
   c8 canonical_path[SP_MAX_PATH_LEN];
 
   if (GetFullPathNameA(path_cstr, SP_MAX_PATH_LEN, canonical_path, NULL) == 0) {
+    sp_mem_end_scratch(scratch);
     return sp_str_copy(path);
   }
+  sp_mem_end_scratch(scratch);
 
-  sp_str_t result = sp_str_from_cstr(canonical_path);
-  result = sp_fs_normalize_path(result);
+  sp_str_t result = sp_str_view(canonical_path);
+  sp_fs_normalize_path_soft(&result);
 
   // Remove trailing slash if present
   if (result.len > 0 && result.data[result.len - 1] == '/') {
@@ -7950,50 +7953,64 @@ sp_str_t sp_fs_get_cwd() {
   if (sp_getcwd(path, SP_PATH_MAX - 1) < 0) {
     return SP_ZERO_STRUCT(sp_str_t);
   }
-  sp_str_t cwd = sp_str_from_cstr(path);
+  sp_str_t cwd = sp_str_view(path);
   return sp_fs_normalize_path(cwd);
 }
 
 bool sp_fs_exists(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   const c8* path_cstr = sp_str_to_cstr(path);
   sp_stat_t st;
   s32 result = sp_stat(path_cstr, &st);
+  sp_mem_end_scratch(scratch);
   return result == 0;
 }
 
 bool sp_fs_is_regular_file(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* path_cstr = sp_str_to_cstr(path);
   sp_stat_t st;
   s32 result = sp_lstat(path_cstr, &st);
+  sp_mem_end_scratch(scratch);
   if (result != 0) return false;
   return sp_S_ISREG(st.st_mode);
 }
 
 bool sp_fs_is_symlink(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* path_cstr = sp_str_to_cstr(path);
   sp_stat_t st;
   s32 result = sp_lstat(path_cstr, &st);
+  sp_mem_end_scratch(scratch);
   if (result != 0) return false;
   return sp_S_ISLNK(st.st_mode);
 }
 
 bool sp_fs_is_dir(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* path_cstr = sp_str_to_cstr(path);
   sp_stat_t st;
   s32 result = sp_lstat(path_cstr, &st);
+  sp_mem_end_scratch(scratch);
   if (result != 0) return false;
   return sp_S_ISDIR(st.st_mode);
 }
 
 bool sp_fs_is_target_regular_file(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_stat_t st;
-  if (sp_stat(sp_str_to_cstr(path), &st) != 0) return false;
+  s32 result = sp_stat(sp_str_to_cstr(path), &st);
+  sp_mem_end_scratch(scratch);
+  if (result != 0) return false;
   return sp_S_ISREG(st.st_mode);
 }
 
 bool sp_fs_is_target_dir(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_stat_t st;
-  if (sp_stat(sp_str_to_cstr(path), &st) != 0) return false;
+  s32 result = sp_stat(sp_str_to_cstr(path), &st);
+  sp_mem_end_scratch(scratch);
+  if (result != 0) return false;
   return sp_S_ISDIR(st.st_mode);
 }
 
@@ -8005,6 +8022,7 @@ bool sp_fs_is_root(sp_str_t path) {
 }
 
 void sp_fs_remove_dir(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(path);
 
   sp_dyn_array_for(entries, i) {
@@ -8021,34 +8039,41 @@ void sp_fs_remove_dir(sp_str_t path) {
 
   c8* path_cstr = sp_str_to_cstr(path);
   sp_rmdir(path_cstr);
+  sp_mem_end_scratch(scratch);
 }
 
 void sp_fs_create_dir(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_fs_normalize_path_soft(&path);
   c8* path_cstr = sp_str_to_cstr(path);
 
-  if (sp_str_empty(path)) return;
-  if (sp_fs_is_root(path)) return;
-  if (sp_fs_exists(path)) return;
+  if (sp_str_empty(path)) { sp_mem_end_scratch(scratch); return; }
+  if (sp_fs_is_root(path)) { sp_mem_end_scratch(scratch); return; }
+  if (sp_fs_exists(path)) { sp_mem_end_scratch(scratch); return; }
 
   s32 result = sp_mkdir(path_cstr, 0755);
-  if (!result) return;
+  if (!result) { sp_mem_end_scratch(scratch); return; }
 
   sp_fs_create_dir(sp_fs_parent_path(path));
 
   result = sp_mkdir(path_cstr, 0755);
+  sp_mem_end_scratch(scratch);
   if (!result) return;
 }
 
 void sp_fs_create_file(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* path_cstr = sp_str_to_cstr(path);
   s32 fd = sp_open(path_cstr, SP_O_CREAT | SP_O_WRONLY | SP_O_TRUNC, 0644);
   if (fd >= 0) sp_close(fd);
+  sp_mem_end_scratch(scratch);
 }
 
 void sp_fs_remove_file(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* path_cstr = sp_str_to_cstr(path);
   sp_unlink(path_cstr);
+  sp_mem_end_scratch(scratch);
 }
 
 bool sp_fs_is_glob(sp_str_t path) {
@@ -8088,6 +8113,7 @@ sp_err_t sp_fs_copy(sp_str_t from, sp_str_t to) {
 }
 
 void sp_fs_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_fs_create_dir(to);
 
   sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(from);
@@ -8106,22 +8132,25 @@ void sp_fs_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
       sp_fs_copy(entry_path, to);
     }
   }
+  sp_mem_end_scratch(scratch);
 }
 
 void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   if (sp_fs_is_dir(to)) {
     sp_fs_create_dir(to);
     to = sp_fs_join_path(to, sp_fs_get_name(from));
   }
 
   sp_stat_t stf;
-  if (sp_stat(sp_str_to_cstr(from), &stf)) return;
+  if (sp_stat(sp_str_to_cstr(from), &stf)) { sp_mem_end_scratch(scratch); return; }
 
   sp_io_reader_t reader = sp_io_reader_from_file(from);
-  if (!reader.file.fd) return;
+  if (!reader.file.fd) { sp_mem_end_scratch(scratch); return; }
 
   sp_io_writer_t writer = sp_io_writer_from_file(to, SP_IO_WRITE_MODE_OVERWRITE);
   if (sp_err_get()) {
+    sp_mem_end_scratch(scratch);
     return;
   }
 
@@ -8135,6 +8164,7 @@ void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
   sp_io_writer_close(&writer);
 
   sp_chmod(sp_str_to_cstr(to), stf.st_mode);
+  sp_mem_end_scratch(scratch);
 }
 
 void sp_fs_copy_dir(sp_str_t from, sp_str_t to) {
@@ -8152,9 +8182,13 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
   }
 
   sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
-  c8* path_cstr = sp_str_to_cstr(path);
 
+  // Use scratch for temporary path_cstr
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  c8* path_cstr = sp_str_to_cstr(path);
   DIR* dir = opendir(path_cstr);
+  sp_mem_end_scratch(scratch);
+
   if (!dir) {
     return entries;
   }
@@ -8169,7 +8203,7 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
     sp_str_builder_append(&entry_builder, sp_str_lit("/"));
     sp_str_builder_append_cstr(&entry_builder, entry->d_name);
     sp_str_t file_path = sp_str_builder_to_str(&entry_builder);
-    sp_fs_normalize_path(file_path);
+    sp_fs_normalize_path_soft(&file_path);
 
     sp_os_dir_ent_t dir_ent = {
       .file_path = file_path,
@@ -8214,6 +8248,7 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect_recursive(sp_str_t path) {
 }
 
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_t result = path;
   c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
   if (sp_fs_exists(path)) {
@@ -8223,20 +8258,24 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
     }
   }
 
-  result = sp_fs_normalize_path(result);
+  sp_fs_normalize_path_soft(&result);
 
   if (result.len > 0 && result.data[result.len - 1] == '/') {
     result.len--;
   }
 
+  sp_mem_end_scratch(scratch);
   return sp_str_copy(result);
 }
 #endif
 
 
 sp_os_file_attr_t sp_fs_get_file_attrs(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_stat_t st;
-  if (sp_lstat(sp_str_to_cstr(path), &st) == 0) {
+  s32 result = sp_lstat(sp_str_to_cstr(path), &st);
+  sp_mem_end_scratch(scratch);
+  if (result == 0) {
     if (sp_S_ISLNK(st.st_mode)) {
       return SP_OS_FILE_ATTR_SYMLINK;
     } else if (sp_S_ISDIR(st.st_mode)) {
@@ -8249,14 +8288,20 @@ sp_os_file_attr_t sp_fs_get_file_attrs(sp_str_t path) {
 }
 
 sp_err_t sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path) {
-  if (sp_link(sp_str_to_cstr(target), sp_str_to_cstr(link_path))) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  s32 result = sp_link(sp_str_to_cstr(target), sp_str_to_cstr(link_path));
+  sp_mem_end_scratch(scratch);
+  if (result) {
     return SP_ERR_OS;
   }
   return SP_ERR_OK;
 }
 
 sp_err_t sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path) {
-  if (sp_symlink(sp_str_to_cstr(target), sp_str_to_cstr(link_path)) != 0) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  s32 result = sp_symlink(sp_str_to_cstr(target), sp_str_to_cstr(link_path));
+  sp_mem_end_scratch(scratch);
+  if (result != 0) {
     return SP_ERR_OS;
   }
   return SP_ERR_OK;
@@ -8283,9 +8328,13 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
   }
 
   sp_dyn_array(sp_os_dir_ent_t) entries = SP_NULLPTR;
-  c8* path_cstr = sp_str_to_cstr(path);
 
+  // Use scratch for temporary path_cstr
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  c8* path_cstr = sp_str_to_cstr(path);
   s32 fd = sp_sys_open(path_cstr, SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  sp_mem_end_scratch(scratch);
+
   if (fd < 0) {
     return entries;
   }
@@ -8302,7 +8351,7 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
         sp_str_builder_append(&entry_builder, sp_str_lit("/"));
         sp_str_builder_append_cstr(&entry_builder, d->d_name);
         sp_str_t file_path = sp_str_builder_to_str(&entry_builder);
-        sp_fs_normalize_path(file_path);
+        sp_fs_normalize_path_soft(&file_path);
 
         sp_os_dir_ent_t dir_ent = {
           .file_path = file_path,
@@ -8348,6 +8397,7 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect_recursive(sp_str_t path) {
 }
 
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_t result = path;
   c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
   if (sp_fs_exists(path)) {
@@ -8359,11 +8409,12 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
     }
   }
 
-  result = sp_fs_normalize_path(result);
+  sp_fs_normalize_path_soft(&result);
 
   if (result.len > 0 && result.data[result.len - 1] == '/') {
     result.len--;
   }
+  sp_mem_end_scratch(scratch);
 
   return sp_str_copy(result);
 }
@@ -8393,7 +8444,7 @@ extern char* program_invocation_name;
 sp_str_t sp_fs_get_exe_path() {
   c8 exe_path [SP_PATH_MAX] = SP_ZERO_INITIALIZE();
   if (realpath(program_invocation_name, exe_path)) {
-    return sp_str_copy(sp_fs_parent_path(SP_CSTR(exe_path)));
+    return sp_fs_parent_path(sp_str_view(exe_path));
   }
   return sp_str_lit("");
 }
@@ -8412,7 +8463,7 @@ sp_str_t sp_fs_get_exe_path() {
     .len = (u32)len,
   };
 
-  return sp_str_copy(sp_fs_parent_path(file_path));
+  return sp_fs_parent_path(file_path);
 }
 #endif
 
@@ -8423,7 +8474,7 @@ sp_str_t sp_fs_get_exe_path() {
   if (_NSGetExecutablePath(exe_path, &size) == 0) {
     c8 real_path[SP_PATH_MAX];
     if (realpath(exe_path, real_path)) {
-      return sp_str_copy(sp_fs_parent_path(SP_CSTR(real_path)));
+      return sp_fs_parent_path(sp_str_view(real_path));
     }
   }
   return sp_str_lit("");
@@ -8792,14 +8843,19 @@ sp_tm_date_time_t sp_tm_get_date_time() {
 }
 
 sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  const c8* path_cstr = sp_str_to_cstr(file_path);
   WIN32_FILE_ATTRIBUTE_DATA fad;
-  if (!GetFileAttributesEx(sp_str_to_cstr(file_path), GetFileExInfoStandard, &fad)) {
+  if (!GetFileAttributesEx(path_cstr, GetFileExInfoStandard, &fad)) {
+    sp_mem_end_scratch(scratch);
     return SP_ZERO_STRUCT(sp_tm_epoch_t);
   }
 
   if (fad.nFileSizeHigh == 0 && fad.nFileSizeLow == 0) {
+    sp_mem_end_scratch(scratch);
     return SP_ZERO_STRUCT(sp_tm_epoch_t);
   }
+  sp_mem_end_scratch(scratch);
 
   LARGE_INTEGER time;
   time.HighPart = fad.ftLastWriteTime.dwHighDateTime;
@@ -9030,9 +9086,11 @@ u64 sp_tm_fps_to_ns(u64 fps) {
 
 #if defined(SP_MACOS)
   sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
-    struct stat st;
+    sp_mem_scratch_t scratch = sp_mem_begin_scratch();
     c8* path_cstr = sp_str_to_cstr(file_path);
+    struct stat st;
     s32 result = stat(path_cstr, &st);
+    sp_mem_end_scratch(scratch);
 
     if (result != 0) {
       return SP_ZERO_STRUCT(sp_tm_epoch_t);
@@ -9047,9 +9105,11 @@ u64 sp_tm_fps_to_ns(u64 fps) {
 
 #if defined(SP_FREESTANDING)
 sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* path_cstr = sp_str_to_cstr(file_path);
   sp_stat_t st;
   s32 result = sp_stat(path_cstr, &st);
+  sp_mem_end_scratch(scratch);
 
   if (result != 0) {
     return SP_ZERO_STRUCT(sp_tm_epoch_t);
@@ -9062,9 +9122,11 @@ sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
 }
 #elif (defined(SP_LINUX) || defined(SP_COSMO))
 sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* path_cstr = sp_str_to_cstr(file_path);
   sp_stat_t st;
   s32 result = sp_stat(path_cstr, &st);
+  sp_mem_end_scratch(scratch);
 
   if (result != 0) {
     return SP_ZERO_STRUCT(sp_tm_epoch_t);
@@ -9568,19 +9630,28 @@ void sp_env_destroy(sp_env_t* env) {
 }
 
 sp_str_t sp_os_get_env_var(sp_str_t key) {
-  const c8* value = getenv(sp_str_to_cstr(key));
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  const c8* key_cstr = sp_str_to_cstr(key);
+  const c8* value = getenv(key_cstr);
+  sp_mem_end_scratch(scratch);
   return sp_str_view(value);
 }
 
 sp_str_t sp_os_get_env_as_path(sp_str_t key) {
   SP_UNTESTED()
-  const c8* value = getenv(sp_str_to_cstr(key));
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  const c8* key_cstr = sp_str_to_cstr(key);
+  const c8* value = getenv(key_cstr);
+  sp_mem_end_scratch(scratch);
   sp_str_t path = sp_str_view(value);
   return sp_fs_normalize_path(path);
 }
 
 void sp_os_clear_env_var(sp_str_t key) {
-  unsetenv(sp_str_to_cstr(key));
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  const c8* key_cstr = sp_str_to_cstr(key);
+  unsetenv(key_cstr);
+  sp_mem_end_scratch(scratch);
 }
 
 void sp_os_export_env(sp_env_t* env, sp_env_export_t overwrite) {
@@ -9590,9 +9661,11 @@ void sp_os_export_env(sp_env_t* env, sp_env_export_t overwrite) {
 }
 
 void sp_os_export_env_var(sp_str_t key, sp_str_t value, sp_env_export_t overwrite) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   const c8* k = sp_str_to_cstr(key);
   const c8* v = sp_str_to_cstr(value);
   setenv(k, v, overwrite);
+  sp_mem_end_scratch(scratch);
 }
 #endif
 #endif
@@ -9659,6 +9732,9 @@ sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config) {
 }
 
 void sp_ps_free_posix_args(c8** args) {
+  sp_dyn_array_for(args, i) {
+    if (args[i]) sp_free(args[i]);
+  }
   sp_dyn_array_free(args);
 }
 
@@ -9701,24 +9777,20 @@ c8** sp_ps_build_posix_env(sp_ps_env_config_t* config) {
 
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
     sp_str_builder_append_fmt(&builder, "{}={}", SP_FMT_STR(key), SP_FMT_STR(val));
-    sp_dyn_array_push(envp, sp_str_to_cstr(sp_str_builder_to_str(&builder)));
+    sp_dyn_array_push(envp, sp_str_to_cstr(sp_str_builder_as_str(&builder)));
+    sp_str_builder_free(&builder);
   }
 
+  sp_env_destroy(&env);
   sp_dyn_array_push(envp, SP_NULLPTR);
   return envp;
 }
 
 void sp_ps_free_envp(c8** env, sp_ps_env_mode_t mode) {
+  (void)mode; // All entries are allocated, regardless of mode
   if (!env) return;
 
-  u32 start_index = 0;
-  if (mode == SP_PS_ENV_INHERIT) {
-    for (c8** env = (c8**)environ; *env != SP_NULLPTR; env++) {
-      start_index++;
-    }
-  }
-
-  for (u32 i = start_index; env[i] != SP_NULLPTR; i++) {
+  for (u32 i = 0; env[i] != SP_NULLPTR; i++) {
     sp_free(env[i]);
   }
   sp_dyn_array_free(env);
@@ -9952,8 +10024,10 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
 }
 
 void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   const c8* cwd_cstr = sp_str_to_cstr(cwd);
   SP_ASSERT(posix_spawn_file_actions_addchdir_np(fa, cwd_cstr) == 0);
+  sp_mem_end_scratch(scratch);
 }
 
 sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode) {
