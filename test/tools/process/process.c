@@ -16,6 +16,9 @@ s32 main(s32 num_args, const c8** args) {
   s32 exit_code = 0;
   s32 stdout_enabled = 0;
   s32 stderr_enabled = 0;
+  const c8* pattern_char = "A";
+  s32 pattern_size = 100;
+  s32 pattern_count = 10;
 
   struct argparse_option options[] = {
     OPT_HELP(),
@@ -23,6 +26,9 @@ s32 main(s32 num_args, const c8** args) {
     OPT_INTEGER('e', "exit-code", &exit_code, "Exit code for exit_code function"),
     OPT_BOOLEAN(0, "stdout", &stdout_enabled, "Enable stdout"),
     OPT_BOOLEAN(0, "stderr", &stderr_enabled, "Enable stderr"),
+    OPT_STRING('c', "char", &pattern_char, "Character for pattern function"),
+    OPT_INTEGER('s', "size", &pattern_size, "Size of each write for pattern function"),
+    OPT_INTEGER('n', "count", &pattern_count, "Number of writes for pattern function"),
     OPT_END(),
   };
 
@@ -179,6 +185,23 @@ s32 main(s32 num_args, const c8** args) {
       if (stderr_enabled) {
         fwrite(buffer, 1, flood_size, stderr);
         fflush(stderr);
+      }
+      break;
+    }
+    case TEST_PROC_FUNCTION_PATTERN: {
+      u8* buffer = (u8*)sp_alloc(pattern_size);
+      for (s32 i = 0; i < pattern_size; i++) {
+        buffer[i] = (u8)pattern_char[0];
+      }
+      for (s32 i = 0; i < pattern_count; i++) {
+        if (stdout_enabled) {
+          fwrite(buffer, 1, pattern_size, stdout);
+          fflush(stdout);
+        }
+        if (stderr_enabled) {
+          fwrite(buffer, 1, pattern_size, stderr);
+          fflush(stderr);
+        }
       }
       break;
     }
