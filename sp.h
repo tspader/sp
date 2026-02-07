@@ -1075,13 +1075,6 @@ u64 strlen(const char* s);
 
 
 #if defined(SP_FREESTANDING)
-  #define sp_sqrtf sp_sys_sqrtf
-  #define sp_expf sp_sys_expf
-  #define sp_sinf sp_sys_sinf
-  #define sp_cosf sp_sys_cosf
-  #define sp_tanf sp_sys_tanf
-  #define sp_acosf sp_sys_acosf
-
   typedef sp_sys_stat_t sp_stat_t;
   typedef sp_sys_timespec_t sp_timespec_t;
 
@@ -1154,13 +1147,6 @@ u64 strlen(const char* s);
   #endif
 
 #else
-  #define sp_sqrtf sqrtf
-  #define sp_expf expf
-  #define sp_sinf sinf
-  #define sp_cosf cosf
-  #define sp_tanf tanf
-  #define sp_acosf acosf
-
   typedef struct stat sp_stat_t;
   typedef struct timespec sp_timespec_t;
 
@@ -1199,6 +1185,8 @@ u64 strlen(const char* s);
 
   #define SP_ENTRY(fn) s32 main(s32 num_args, const c8** args) { return fn(num_args, args); }
 #endif
+
+
 
 // ███╗   ███╗ █████╗ ████████╗██╗  ██╗
 // ████╗ ████║██╔══██╗╚══██╔══╝██║  ██║
@@ -1239,6 +1227,22 @@ u64 strlen(const char* s);
 #define sp_mod(a, m) SP_MOD(a, m)
 #define SP_SQUARE(x) ((x) * (x))
 #define sp_square(x) SP_SQUARE(x)
+
+#if defined (SP_USE_LIBM)
+  #define sp_sqrtf sqrtf
+  #define sp_expf expf
+  #define sp_sinf sinf
+  #define sp_cosf cosf
+  #define sp_tanf tanf
+  #define sp_acosf acosf
+#else
+  #define sp_sqrtf sp_sys_sqrtf
+  #define sp_expf sp_sys_expf
+  #define sp_sinf sp_sys_sinf
+  #define sp_cosf sp_sys_cosf
+  #define sp_tanf sp_sys_tanf
+  #define sp_acosf sp_sys_acosf
+#endif
 
 typedef union sp_vec2 {
   struct {
@@ -4095,47 +4099,6 @@ void sp_sys_tls_set(void* data) {
   if (tb) tb->tls_data = data;
 }
 
-f32 sp_sys_sqrtf(f32 x) {
-  if (x < 0) return 0;
-  if (x == 0) return 0;
-  f32 guess = x / 2.0f;
-  for (int i = 0; i < 10; i++) {
-    guess = (guess + x / guess) / 2.0f;
-  }
-  return guess;
-}
-f32 sp_sys_expf(f32 x) {
-  f32 result = 1.0f;
-  f32 term = 1.0f;
-  for (int i = 0; i < 20; i++) {
-    term *= x / (f32)(i + 1);
-    result += term;
-  }
-  return result;
-}
-f32 sp_sys_sinf(f32 x) {
-  while (x > 3.14159265f) x -= 6.28318530f;
-  while (x < -3.14159265f) x += 6.28318530f;
-  f32 x2 = x * x;
-  return x * (1.0f - x2/6.0f * (1.0f - x2/20.0f * (1.0f - x2/42.0f)));
-}
-f32 sp_sys_cosf(f32 x) {
-  while (x > 3.14159265f) x -= 6.28318530f;
-  while (x < -3.14159265f) x += 6.28318530f;
-  f32 x2 = x * x;
-  return 1.0f - x2/2.0f * (1.0f - x2/12.0f * (1.0f - x2/30.0f));
-}
-f32 sp_sys_tanf(f32 x) {
-  f32 c = sp_sys_cosf(x);
-  if (c == 0) return 0;
-  return sp_sys_sinf(x) / c;
-}
-f32 sp_sys_acosf(f32 x) {
-  if (x < -1.0f) x = -1.0f;
-  if (x > 1.0f) x = 1.0f;
-  return 1.5707963f - x - x*x*x/6.0f - 3.0f*x*x*x*x*x/40.0f;
-}
-
 void sp_sys_init(void) {
   sp_sys_thread_block.self = &sp_sys_thread_block;
   sp_sys_thread_block.tls_data = 0;
@@ -4390,6 +4353,51 @@ s32 sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage) {
 //  ██║ ╚═╝ ██║██║  ██║   ██║   ██║  ██║
 //  ╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
 //  @math
+f32 sp_sys_sqrtf(f32 x) {
+  if (x < 0) return 0;
+  if (x == 0) return 0;
+  f32 guess = x / 2.0f;
+  for (int i = 0; i < 10; i++) {
+    guess = (guess + x / guess) / 2.0f;
+  }
+  return guess;
+}
+
+f32 sp_sys_expf(f32 x) {
+  f32 result = 1.0f;
+  f32 term = 1.0f;
+  for (int i = 0; i < 20; i++) {
+    term *= x / (f32)(i + 1);
+    result += term;
+  }
+  return result;
+}
+
+f32 sp_sys_sinf(f32 x) {
+  while (x > 3.14159265f) x -= 6.28318530f;
+  while (x < -3.14159265f) x += 6.28318530f;
+  f32 x2 = x * x;
+  return x * (1.0f - x2/6.0f * (1.0f - x2/20.0f * (1.0f - x2/42.0f)));
+}
+
+f32 sp_sys_cosf(f32 x) {
+  while (x > 3.14159265f) x -= 6.28318530f;
+  while (x < -3.14159265f) x += 6.28318530f;
+  f32 x2 = x * x;
+  return 1.0f - x2/2.0f * (1.0f - x2/12.0f * (1.0f - x2/30.0f));
+}
+
+f32 sp_sys_tanf(f32 x) {
+  f32 c = sp_sys_cosf(x);
+  if (c == 0) return 0;
+  return sp_sys_sinf(x) / c;
+}
+
+f32 sp_sys_acosf(f32 x) {
+  if (x < -1.0f) x = -1.0f;
+  if (x > 1.0f) x = 1.0f;
+  return 1.5707963f - x - x*x*x/6.0f - 3.0f*x*x*x*x*x/40.0f;
+}
 
 sp_color_t sp_color_rgb_255(u8 r, u8 g, u8 b) {
   return (sp_color_t) SP_COLOR_RGB(r, g, b);

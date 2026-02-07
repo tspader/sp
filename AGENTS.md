@@ -11,8 +11,8 @@
 - `tools/`: random, unstructured bullshit which is not part of the official build
 
 # commands
-- `pspn test` builds and runs all unit tests
-- `pspn test --target $target` builds and runs the specific test target (as defined in spn.toml)
+- `bspn test` builds and runs all unit tests
+- `bspn test --target $target` builds and runs the specific test target (as defined in spn.toml)
 
 # rules
 - Never comment any code, under any circumstances. Code with comments will be rejected outright.
