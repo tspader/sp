@@ -645,6 +645,7 @@ SP_BEGIN_EXTERN_C()
 #endif
 
 
+
 // ████████╗██╗   ██╗██████╗ ███████╗███████╗
 // ╚══██╔══╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔════╝
 //    ██║    ╚████╔╝ ██████╔╝█████╗  ███████╗
@@ -727,6 +728,10 @@ typedef enum {
 // ███████║   ██║   ███████║
 // ╚══════╝   ╚═╝   ╚══════╝
 // @sys
+
+#define SP_SYS_ALLOC_ALIGN    16
+#define SP_SYS_ALLOC_HEADER   16
+
 #if defined(SP_SYS)
 
 // SYSCALLS
@@ -884,109 +889,6 @@ typedef enum {
   } sp_sys_stat_t;
 #endif
 
-#define SP_SYS_ALLOC_ALIGN    16
-#define SP_SYS_ALLOC_HEADER   16
-
-#define SP_PATH_MAX 4096
-
-#if defined(SP_FREESTANDING)
-  #define SP_AT_FDCWD             (-100)
-  #define SP_AT_SYMLINK_NOFOLLOW  0x100
-  #define SP_AT_REMOVEDIR         0x200
-  #define SP_AT_SYMLINK_FOLLOW    0x400
-  #define SP_AT_EACCESS           0x200
-  #define SP_AT_EMPTY_PATH        0x1000
-
-  #define SP_O_RDONLY             0
-  #define SP_O_WRONLY             1
-  #define SP_O_RDWR               2
-  #define SP_O_CREAT              0100
-  #define SP_O_EXCL               0200
-  #define SP_O_TRUNC              01000
-  #define SP_O_APPEND             02000
-  #define SP_O_NONBLOCK           04000
-  #define SP_O_CLOEXEC            02000000
-
-  #define SP_MAP_ANONYMOUS        0x20
-#else
-  #define SP_AT_FDCWD             AT_FDCWD
-  #define SP_AT_SYMLINK_NOFOLLOW  AT_SYMLINK_NOFOLLOW
-  #define SP_AT_REMOVEDIR         AT_REMOVEDIR
-  #define SP_AT_SYMLINK_FOLLOW    AT_SYMLINK_FOLLOW
-  #define SP_AT_EACCESS           AT_EACCESS
-
-  #define SP_O_RDONLY             O_RDONLY
-  #define SP_O_WRONLY             O_WRONLY
-  #define SP_O_RDWR               O_RDWR
-  #define SP_O_CREAT              O_CREAT
-  #define SP_O_EXCL               O_EXCL
-  #define SP_O_TRUNC              O_TRUNC
-  #define SP_O_APPEND             O_APPEND
-  #define SP_O_NONBLOCK           O_NONBLOCK
-  #define SP_O_CLOEXEC            O_CLOEXEC
-
-  #define SP_MAP_ANONYMOUS        MAP_ANON
-#endif
-
-#define SP_SEEK_SET             0
-#define SP_SEEK_CUR             1
-#define SP_SEEK_END             2
-
-#define SP_F_DUPFD              0
-#define SP_F_GETFD              1
-#define SP_F_SETFD              2
-#define SP_F_GETFL              3
-#define SP_F_SETFL              4
-#define SP_FD_CLOEXEC           1
-
-#define SP_PROT_NONE            0
-#define SP_PROT_READ            1
-#define SP_PROT_WRITE           2
-#define SP_PROT_EXEC            4
-
-#define SP_MAP_SHARED           0x01
-#define SP_MAP_PRIVATE          0x02
-#define SP_MAP_FIXED            0x10
-
-#define SP_MAP_FAILED           ((void*)-1)
-
-#define SP_S_IFMT   0170000
-#define SP_S_IFSOCK 0140000
-#define SP_S_IFLNK  0120000
-#define SP_S_IFREG  0100000
-#define SP_S_IFBLK  0060000
-#define SP_S_IFDIR  0040000
-#define SP_S_IFCHR  0020000
-#define SP_S_IFIFO  0010000
-
-#define SP_S_ISDIR(m)  (((m) & SP_S_IFMT) == SP_S_IFDIR)
-#define SP_S_ISREG(m)  (((m) & SP_S_IFMT) == SP_S_IFREG)
-#define SP_S_ISLNK(m)  (((m) & SP_S_IFMT) == SP_S_IFLNK)
-
-#define SP_DT_UNKNOWN   0
-#define SP_DT_FIFO      1
-#define SP_DT_CHR       2
-#define SP_DT_DIR       4
-#define SP_DT_BLK       6
-#define SP_DT_REG       8
-#define SP_DT_LNK       10
-#define SP_DT_SOCK      12
-
-#define SP_IN_ACCESS        0x00000001
-#define SP_IN_MODIFY        0x00000002
-#define SP_IN_ATTRIB        0x00000004
-#define SP_IN_CLOSE_WRITE   0x00000008
-#define SP_IN_CLOSE_NOWRITE 0x00000010
-#define SP_IN_OPEN          0x00000020
-#define SP_IN_MOVED_FROM    0x00000040
-#define SP_IN_MOVED_TO      0x00000080
-#define SP_IN_CREATE        0x00000100
-#define SP_IN_DELETE        0x00000200
-#define SP_IN_DELETE_SELF   0x00000400
-#define SP_IN_MOVE_SELF     0x00000800
-#define SP_IN_NONBLOCK      0x00000800
-#define SP_IN_CLOEXEC       0x00080000
-
 typedef struct {
   u64 d_ino;
   s64 d_off;
@@ -1084,14 +986,159 @@ static sp_sys_thread_block_t sp_sys_thread_block;
 
 // BUILTINS
 #if defined(SP_BUILTIN)
-void* memcpy(void* dest, const void* src, u64 n);
-void* memmove(void* dest, const void* src, u64 n);
-void* memset(void* dest, int c, u64 n);
-int memcmp(const void* a, const void* b, u64 n);
-u64 strlen(const char* s);
+  void* memcpy(void* dest, const void* src, u64 n);
+  void* memmove(void* dest, const void* src, u64 n);
+  void* memset(void* dest, int c, u64 n);
+  int memcmp(const void* a, const void* b, u64 n);
+  u64 strlen(const char* s);
 #endif
-#endif // SP_SYS
+#endif // if defined(SP_SYS)
 
+#define SP_PATH_MAX 4096
+
+#if defined(SP_FREESTANDING)
+  #define SP_AT_FDCWD             (-100)
+  #define SP_AT_SYMLINK_NOFOLLOW  0x100
+  #define SP_AT_REMOVEDIR         0x200
+  #define SP_AT_SYMLINK_FOLLOW    0x400
+  #define SP_AT_EACCESS           0x200
+  #define SP_AT_EMPTY_PATH        0x1000
+
+  #define SP_O_RDONLY             0
+  #define SP_O_WRONLY             1
+  #define SP_O_RDWR               2
+  #define SP_O_CREAT              0100
+  #define SP_O_EXCL               0200
+  #define SP_O_TRUNC              01000
+  #define SP_O_APPEND             02000
+  #define SP_O_NONBLOCK           04000
+  #define SP_O_CLOEXEC            02000000
+
+  #define SP_SEEK_SET             0
+  #define SP_SEEK_CUR             1
+  #define SP_SEEK_END             2
+
+  #define SP_F_DUPFD              0
+  #define SP_F_GETFD              1
+  #define SP_F_SETFD              2
+  #define SP_F_GETFL              3
+  #define SP_F_SETFL              4
+  #define SP_FD_CLOEXEC           1
+
+  #define SP_PROT_NONE            0
+  #define SP_PROT_READ            1
+  #define SP_PROT_WRITE           2
+  #define SP_PROT_EXEC            4
+
+  #define SP_MAP_SHARED           0x01
+  #define SP_MAP_PRIVATE          0x02
+  #define SP_MAP_FIXED            0x10
+  #define SP_MAP_ANONYMOUS        0x20
+  #define SP_MAP_FAILED           ((void*)-1)
+
+  #define SP_S_IFMT   0170000
+  #define SP_S_IFSOCK 0140000
+  #define SP_S_IFLNK  0120000
+  #define SP_S_IFREG  0100000
+  #define SP_S_IFBLK  0060000
+  #define SP_S_IFDIR  0040000
+  #define SP_S_IFCHR  0020000
+  #define SP_S_IFIFO  0010000
+
+  #define SP_S_ISDIR(m)  (((m) & SP_S_IFMT) == SP_S_IFDIR)
+  #define SP_S_ISREG(m)  (((m) & SP_S_IFMT) == SP_S_IFREG)
+  #define SP_S_ISLNK(m)  (((m) & SP_S_IFMT) == SP_S_IFLNK)
+
+  #define SP_DT_UNKNOWN   0
+  #define SP_DT_FIFO      1
+  #define SP_DT_CHR       2
+  #define SP_DT_DIR       4
+  #define SP_DT_BLK       6
+  #define SP_DT_REG       8
+  #define SP_DT_LNK       10
+  #define SP_DT_SOCK      12
+
+  #define SP_IN_ACCESS        0x00000001
+  #define SP_IN_MODIFY        0x00000002
+  #define SP_IN_ATTRIB        0x00000004
+  #define SP_IN_CLOSE_WRITE   0x00000008
+  #define SP_IN_CLOSE_NOWRITE 0x00000010
+  #define SP_IN_OPEN          0x00000020
+  #define SP_IN_MOVED_FROM    0x00000040
+  #define SP_IN_MOVED_TO      0x00000080
+  #define SP_IN_CREATE        0x00000100
+  #define SP_IN_DELETE        0x00000200
+  #define SP_IN_DELETE_SELF   0x00000400
+  #define SP_IN_MOVE_SELF     0x00000800
+  #define SP_IN_NONBLOCK      0x00000800
+  #define SP_IN_CLOEXEC       0x00080000
+
+  #define SP_CLOCK_REALTIME          0
+  #define SP_CLOCK_MONOTONIC         1
+#else
+  #define SP_AT_FDCWD             AT_FDCWD
+  #define SP_AT_SYMLINK_NOFOLLOW  AT_SYMLINK_NOFOLLOW
+  #define SP_AT_REMOVEDIR         AT_REMOVEDIR
+  #define SP_AT_SYMLINK_FOLLOW    AT_SYMLINK_FOLLOW
+  #define SP_AT_EACCESS           AT_EACCESS
+
+  #define SP_O_RDONLY             O_RDONLY
+  #define SP_O_WRONLY             O_WRONLY
+  #define SP_O_RDWR               O_RDWR
+  #define SP_O_CREAT              O_CREAT
+  #define SP_O_EXCL               O_EXCL
+  #define SP_O_TRUNC              O_TRUNC
+  #define SP_O_APPEND             O_APPEND
+  #define SP_O_NONBLOCK           O_NONBLOCK
+  #define SP_O_CLOEXEC            O_CLOEXEC
+
+  #define SP_SEEK_SET             SEEK_SET
+  #define SP_SEEK_CUR             SEEK_CUR
+  #define SP_SEEK_END             SEEK_END
+
+  #define SP_F_DUPFD              F_DUPFD
+  #define SP_F_GETFD              F_GETFD
+  #define SP_F_SETFD              F_SETFD
+  #define SP_F_GETFL              F_GETFL
+  #define SP_F_SETFL              F_SETFL
+  #define SP_FD_CLOEXEC           FD_CLOEXEC
+
+  #define SP_PROT_NONE            PROT_NONE
+  #define SP_PROT_READ            PROT_READ
+  #define SP_PROT_WRITE           PROT_WRITE
+  #define SP_PROT_EXEC            PROT_EXEC
+
+  #define SP_MAP_SHARED           MAP_SHARED
+  #define SP_MAP_PRIVATE          MAP_PRIVATE
+  #define SP_MAP_FIXED            MAP_FIXED
+  #define SP_MAP_ANONYMOUS        MAP_ANONYMOUS
+  #define SP_MAP_FAILED           MAP_FAILED
+
+  #define SP_S_IFMT               S_IFMT
+  #define SP_S_IFSOCK             S_IFSOCK
+  #define SP_S_IFLNK              S_IFLNK
+  #define SP_S_IFREG              S_IFREG
+  #define SP_S_IFBLK              S_IFBLK
+  #define SP_S_IFDIR              S_IFDIR
+  #define SP_S_IFCHR              S_IFCHR
+  #define SP_S_IFIFO              S_IFIFO
+
+  #define SP_S_ISDIR(m)           S_ISDIR(m)
+  #define SP_S_ISREG(m)           S_ISREG(m)
+  #define SP_S_ISLNK(m)           S_ISLNK(m)
+
+  #define SP_DT_UNKNOWN           DT_UNKNOWN
+  #define SP_DT_FIFO              DT_FIFO
+  #define SP_DT_CHR               DT_CHR
+  #define SP_DT_DIR               DT_DIR
+  #define SP_DT_BLK               DT_BLK
+  #define SP_DT_REG               DT_REG
+  #define SP_DT_LNK               DT_LNK
+  #define SP_DT_SOCK              DT_SOCK
+
+  #define SP_CLOCK_REALTIME          CLOCK_REALTIME
+  #define SP_CLOCK_MONOTONIC         CLOCK_MONOTONIC
+#endif
 
 #if defined(SP_FREESTANDING)
   typedef sp_sys_stat_t sp_stat_t;
@@ -1132,9 +1179,6 @@ u64 strlen(const char* s);
   static int sp_sys_errno_storage = 0;
   #define errno sp_sys_errno_storage
 
-  #define SP_CLOCK_REALTIME          0
-  #define SP_CLOCK_MONOTONIC         1
-
   #if defined(SP_AMD64)
     #define SP_ENTRY(fn) \
       __attribute__((naked)) void _start(void) { \
@@ -1168,6 +1212,7 @@ u64 strlen(const char* s);
 #else
   typedef struct stat sp_stat_t;
   typedef struct timespec sp_timespec_t;
+  typedef struct pollfd sp_pollfd_t;
 
   #define sp_assert(condition) assert((condition))
 
@@ -1200,14 +1245,8 @@ u64 strlen(const char* s);
   #define sp_poll(fds, n, t)         poll((struct pollfd*)(fds), n, t)
   #define sp_wait4(p, s, o, r)       wait4(p, s, o, r)
 
-  typedef sp_sys_pollfd_t sp_pollfd_t;
-
-  #define SP_CLOCK_REALTIME          CLOCK_REALTIME
-  #define SP_CLOCK_MONOTONIC         CLOCK_MONOTONIC
-
   #define SP_ENTRY(fn) s32 main(s32 num_args, const c8** args) { return fn(num_args, args); }
 #endif
-
 
 
 // ███╗   ███╗ █████╗ ████████╗██╗  ██╗
