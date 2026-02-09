@@ -97,6 +97,10 @@ source = ["test/str.c"]
 name = "time"
 source = ["test/time.c"]
 
+[[test]]
+name = "amalg"
+source = ["test/amalg.c"]
+
 
 [[bin]]
 name = "process"
