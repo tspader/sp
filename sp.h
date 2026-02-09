@@ -909,9 +909,6 @@ typedef enum {
 #define SP_SEEK_CUR             1
 #define SP_SEEK_END             2
 
-#define SP_CLOCK_REALTIME       0
-#define SP_CLOCK_MONOTONIC      1
-
 #define SP_F_DUPFD              0
 #define SP_F_GETFD              1
 #define SP_F_SETFD              2
@@ -1071,7 +1068,7 @@ void* memset(void* dest, int c, u64 n);
 int memcmp(const void* a, const void* b, u64 n);
 u64 strlen(const char* s);
 #endif
-#endif
+#endif // SP_SYS
 
 
 #if defined(SP_FREESTANDING)
@@ -1182,6 +1179,9 @@ u64 strlen(const char* s);
   #define sp_wait4(p, s, o, r)       wait4(p, s, o, r)
 
   typedef sp_sys_pollfd_t sp_pollfd_t;
+
+  #define SP_CLOCK_REALTIME          CLOCK_REALTIME
+  #define SP_CLOCK_MONOTONIC         CLOCK_MONOTONIC
 
   #define SP_ENTRY(fn) s32 main(s32 num_args, const c8** args) { return fn(num_args, args); }
 #endif

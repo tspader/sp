@@ -102,9 +102,9 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
   ut.change_detected = false;
 
 #if defined(SP_MACOS)
-  sp_io_t s = sp_io_from_file(test_file, SP_IO_MODE_WRITE);
+  sp_io_writer_t s = sp_io_writer_from_file(test_file, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write_str(&s, sp_str_lit("modified content"));
-  sp_io_close(&s);
+  sp_io_writer_close(&s);
 
   bool timed_out = true;
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
