@@ -214,6 +214,7 @@
 // ╚═╝     ╚══════╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝
 // @features
 #if defined(SP_FREESTANDING)
+  #assert SP_LINUX
   #define SP_SYS_ENABLE
   #define SP_MUTEX_DISABLE
   #define SP_CV_DISABLE
@@ -603,7 +604,6 @@ SP_BEGIN_EXTERN_C()
     #include <dispatch/dispatch.h>
     #include <mach-o/dyld.h>
     #include <sys/event.h>
-    #include <sys/mman.h>
     #include <poll.h>
     #if defined(SP_FMON_MACOS_USE_FSEVENTS)
       #include <CoreServices/CoreServices.h>
@@ -625,6 +625,7 @@ SP_BEGIN_EXTERN_C()
     #include <sys/time.h>
     #include <sys/types.h>
     #include <sys/wait.h>
+    #include <sys/mman.h>
     #include <time.h>
   #endif
 
@@ -1135,6 +1136,21 @@ static sp_sys_thread_block_t sp_sys_thread_block;
   #define SP_DT_REG               DT_REG
   #define SP_DT_LNK               DT_LNK
   #define SP_DT_SOCK              DT_SOCK
+
+  #define SP_IN_ACCESS        IN_ACCESS
+  #define SP_IN_MODIFY        IN_MODIFY
+  #define SP_IN_ATTRIB        IN_ATTRIB
+  #define SP_IN_CLOSE_WRITE   IN_CLOSE_WRITE
+  #define SP_IN_CLOSE_NOWRITE IN_CLOSE_NOWRITE
+  #define SP_IN_OPEN          IN_OPEN
+  #define SP_IN_MOVED_FROM    IN_MOVED_FROM
+  #define SP_IN_MOVED_TO      IN_MOVED_TO
+  #define SP_IN_CREATE        IN_CREATE
+  #define SP_IN_DELETE        IN_DELETE
+  #define SP_IN_DELETE_SELF   IN_DELETE_SELF
+  #define SP_IN_MOVE_SELF     IN_MOVE_SELF
+  #define SP_IN_NONBLOCK      IN_NONBLOCK
+  #define SP_IN_CLOEXEC       IN_CLOEXEC
 
   #define SP_CLOCK_REALTIME          CLOCK_REALTIME
   #define SP_CLOCK_MONOTONIC         CLOCK_MONOTONIC
