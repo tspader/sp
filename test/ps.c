@@ -1101,6 +1101,8 @@ sp_test_concurrent_analysis_t sp_test_analyze_concurrent_output(u8* data, u32 le
 UTEST_F(ps, concurrent_existing_fd_small_writes) {
   s32 pipes[2];
   ASSERT_EQ(pipe(pipes), 0);
+  fcntl(pipes[0], F_SETFD, fcntl(pipes[0], F_GETFD) | FD_CLOEXEC);
+  fcntl(pipes[1], F_SETFD, fcntl(pipes[1], F_GETFD) | FD_CLOEXEC);
 
   const s32 write_size = 100;
   const s32 write_count = 50;
@@ -1140,10 +1142,10 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   ASSERT_NE(ps_a.pid, 0);
   ASSERT_NE(ps_b.pid, 0);
 
+  close(pipes[1]);
+
   sp_ps_wait(&ps_a);
   sp_ps_wait(&ps_b);
-
-  close(pipes[1]);
 
   const u32 expected_total = write_size * write_count * 2;
   u8* buffer = (u8*)sp_alloc(expected_total + 1024);
@@ -1169,6 +1171,8 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
 UTEST_F(ps, concurrent_existing_fd_large_writes) {
   s32 pipes[2];
   ASSERT_EQ(pipe(pipes), 0);
+  fcntl(pipes[0], F_SETFD, fcntl(pipes[0], F_GETFD) | FD_CLOEXEC);
+  fcntl(pipes[1], F_SETFD, fcntl(pipes[1], F_GETFD) | FD_CLOEXEC);
 
   const s32 write_size = 8192;
   const s32 write_count = 10;
@@ -1211,18 +1215,36 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   ASSERT_NE(ps_a.pid, 0);
   ASSERT_NE(ps_b.pid, 0);
 
-  sp_ps_wait(&ps_a);
-  sp_ps_wait(&ps_b);
-
   close(pipes[1]);
 
   const u32 expected_total = write_size * write_count * 2;
   u8* buffer = (u8*)sp_alloc(expected_total + 1024);
   u32 total_read = 0;
 
-  while (total_read < expected_total) {
-    ssize_t n = read(pipes[0], buffer + total_read, expected_total - total_read);
-    if (n <= 0) break;
+  fcntl(pipes[0], F_SETFL, fcntl(pipes[0], F_GETFL) | O_NONBLOCK);
+
+  bool a_done = false;
+  bool b_done = false;
+  while (!a_done || !b_done) {
+    ssize_t n = read(pipes[0], buffer + total_read, expected_total + 1024 - total_read);
+    if (n > 0) {
+      total_read += n;
+    }
+    if (!a_done) {
+      sp_ps_status_t s = sp_ps_poll(&ps_a, 0);
+      if (s.state == SP_PS_STATE_DONE) a_done = true;
+    }
+    if (!b_done) {
+      sp_ps_status_t s = sp_ps_poll(&ps_b, 0);
+      if (s.state == SP_PS_STATE_DONE) b_done = true;
+    }
+    if (!a_done || !b_done) {
+      sp_os_sleep_ms(1);
+    }
+  }
+
+  ssize_t n;
+  while ((n = read(pipes[0], buffer + total_read, expected_total + 1024 - total_read)) > 0) {
     total_read += n;
   }
 

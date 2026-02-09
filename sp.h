@@ -603,6 +603,7 @@ SP_BEGIN_EXTERN_C()
     #include <dispatch/dispatch.h>
     #include <mach-o/dyld.h>
     #include <sys/event.h>
+    #include <sys/mman.h>
     #include <poll.h>
     #if defined(SP_FMON_MACOS_USE_FSEVENTS)
       #include <CoreServices/CoreServices.h>
@@ -888,22 +889,44 @@ typedef enum {
 
 #define SP_PATH_MAX 4096
 
-#define SP_AT_FDCWD             (-100)
-#define SP_AT_SYMLINK_NOFOLLOW  0x100
-#define SP_AT_REMOVEDIR         0x200
-#define SP_AT_SYMLINK_FOLLOW    0x400
-#define SP_AT_EACCESS           0x200
-#define SP_AT_EMPTY_PATH        0x1000
+#if defined(SP_FREESTANDING)
+  #define SP_AT_FDCWD             (-100)
+  #define SP_AT_SYMLINK_NOFOLLOW  0x100
+  #define SP_AT_REMOVEDIR         0x200
+  #define SP_AT_SYMLINK_FOLLOW    0x400
+  #define SP_AT_EACCESS           0x200
+  #define SP_AT_EMPTY_PATH        0x1000
 
-#define SP_O_RDONLY             0
-#define SP_O_WRONLY             1
-#define SP_O_RDWR               2
-#define SP_O_CREAT              0100
-#define SP_O_EXCL               0200
-#define SP_O_TRUNC              01000
-#define SP_O_APPEND             02000
-#define SP_O_NONBLOCK           04000
-#define SP_O_CLOEXEC            02000000
+  #define SP_O_RDONLY             0
+  #define SP_O_WRONLY             1
+  #define SP_O_RDWR               2
+  #define SP_O_CREAT              0100
+  #define SP_O_EXCL               0200
+  #define SP_O_TRUNC              01000
+  #define SP_O_APPEND             02000
+  #define SP_O_NONBLOCK           04000
+  #define SP_O_CLOEXEC            02000000
+
+  #define SP_MAP_ANONYMOUS        0x20
+#else
+  #define SP_AT_FDCWD             AT_FDCWD
+  #define SP_AT_SYMLINK_NOFOLLOW  AT_SYMLINK_NOFOLLOW
+  #define SP_AT_REMOVEDIR         AT_REMOVEDIR
+  #define SP_AT_SYMLINK_FOLLOW    AT_SYMLINK_FOLLOW
+  #define SP_AT_EACCESS           AT_EACCESS
+
+  #define SP_O_RDONLY             O_RDONLY
+  #define SP_O_WRONLY             O_WRONLY
+  #define SP_O_RDWR               O_RDWR
+  #define SP_O_CREAT              O_CREAT
+  #define SP_O_EXCL               O_EXCL
+  #define SP_O_TRUNC              O_TRUNC
+  #define SP_O_APPEND             O_APPEND
+  #define SP_O_NONBLOCK           O_NONBLOCK
+  #define SP_O_CLOEXEC            O_CLOEXEC
+
+  #define SP_MAP_ANONYMOUS        MAP_ANON
+#endif
 
 #define SP_SEEK_SET             0
 #define SP_SEEK_CUR             1
@@ -924,7 +947,6 @@ typedef enum {
 #define SP_MAP_SHARED           0x01
 #define SP_MAP_PRIVATE          0x02
 #define SP_MAP_FIXED            0x10
-#define SP_MAP_ANONYMOUS        0x20
 
 #define SP_MAP_FAILED           ((void*)-1)
 

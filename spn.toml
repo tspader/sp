@@ -116,10 +116,6 @@ source = ["tools/extract_fns.c"]
 name = "sleep"
 source = ["tools/sleep.c"]
 
-[[bin]]
-name = "gdb_harness"
-source = ["tools/gdb.c"]
-
 
 
 [[bin]]
