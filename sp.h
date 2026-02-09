@@ -205,6 +205,12 @@
   #endif
 #endif
 
+#if !defined(SP_MSVC)
+  #define SP_HAS_ATTRIBUTE(attr) __has_attribute(attr)
+#else
+  #define SP_HAS_ATTRIBUTE(attr) __has_attribute(0)
+#endif
+
 
 // ███████╗███████╗ █████╗ ████████╗██╗   ██╗██████╗ ███████╗███████╗
 // ██╔════╝██╔════╝██╔══██╗╚══██╔══╝██║   ██║██╔══██╗██╔════╝██╔════╝
@@ -226,13 +232,6 @@
   #define SP_ASSET_DISABLE
   #define SP_APP_DISABLE
   #define SP_ELF_DISABLE
-#endif
-
-#ifndef SP_SYS_DISABLE
-  #define SP_SYS
-#endif
-#if defined(SP_SYS_ENABLE)
-  #define SP_SYS
 #endif
 
 #ifndef SP_MUTEX_DISABLE
@@ -292,6 +291,10 @@
 #endif
 
 #if defined(SP_LINUX)
+  #if defined(SP_SYS_ENABLE)
+    #define SP_SYS
+  #endif
+
   #ifndef SP_ELF_DISABLE
     #define SP_ELF
   #endif
@@ -350,8 +353,13 @@
 #define sp_end_extern_c() SP_END_EXTERN_C()
 #define sp_zero_initialize() SP_ZERO_INITIALIZE()
 
-#define SP_FALLTHROUGH() ((void)0)
-#define sp_fallthrough() SP_FALLTHROUGH()
+#if SP_HAS_ATTRIBUTE(fallthrough)
+  #define SP_FALLTHROUGH() __attribute__((fallthrough))
+  #define sp_fallthrough() SP_FALLTHROUGH()
+#else
+  #define SP_FALLTHROUGH() ((void)0)
+  #define sp_fallthrough() ((void)0)
+#endif
 
 #define SP_ZERO_STRUCT(t) SP_RVAL(t) SP_ZERO_INITIALIZE()
 #define sp_zero_struct(t) SP_ZERO_STRUCT(t)
@@ -1159,6 +1167,7 @@ static sp_sys_thread_block_t sp_sys_thread_block;
 #if defined(SP_FREESTANDING)
   typedef sp_sys_stat_t sp_stat_t;
   typedef sp_sys_timespec_t sp_timespec_t;
+  typedef sp_sys_inotify_event sp_inotify_event_t;
 
   #define sp_assert(x)               ((void)(x))
   #define sp_stat(path, st)          sp_sys_stat(path, st)
@@ -1189,6 +1198,9 @@ static sp_sys_thread_block_t sp_sys_thread_block;
   #define sp_clock_gettime(c, ts)    sp_sys_clock_gettime(c, ts)
   #define sp_poll(fds, n, t)         sp_sys_poll(fds, n, t)
   #define sp_wait4(p, s, o, r)       sp_sys_wait4(p, s, o, r)
+  #define sp_inotify_init1(f)        sp_sys_inotify_init1(f)
+  #define sp_inotify_rm_watch(f, w)  sp_sys_inotify_rm_watch(f, w)
+  #define sp_inotify_add_watch(f, p, m) sp_sys_inotify_add_watch(f, p, m)
 
   typedef sp_sys_pollfd_t sp_pollfd_t;
 
@@ -1229,6 +1241,7 @@ static sp_sys_thread_block_t sp_sys_thread_block;
   typedef struct stat sp_stat_t;
   typedef struct timespec sp_timespec_t;
   typedef struct pollfd sp_pollfd_t;
+  typedef struct inotify_event sp_inotify_event_t;
 
   #define sp_assert(condition) assert((condition))
 
@@ -1260,6 +1273,9 @@ static sp_sys_thread_block_t sp_sys_thread_block;
   #define sp_clock_gettime(c, ts)    clock_gettime(c, ts)
   #define sp_poll(fds, n, t)         poll((struct pollfd*)(fds), n, t)
   #define sp_wait4(p, s, o, r)       wait4(p, s, o, r)
+  #define sp_inotify_init1(f)        inotify_init1(f)
+  #define sp_inotify_rm_watch(f, w)  inotify_rm_watch(f, w)
+  #define sp_inotify_add_watch(f, p, m) inotify_add_watch(f, p, m)
 
   #define SP_ENTRY(fn) s32 main(s32 num_args, const c8** args) { return fn(num_args, args); }
 #endif
@@ -3415,7 +3431,7 @@ typedef struct {
 typedef struct {
   sp_da(s32) watch_descs;
   sp_da(sp_str_t) watch_paths;
-  u8 buffer[4096] __attribute__((aligned(__alignof__(sp_sys_inotify_event_t))));
+  u8 buffer[4096] __attribute__((aligned(__alignof__(sp_inotify_event_t))));
   s32 fd;
 } sp_fmon_os_t;
 
@@ -9985,8 +10001,8 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     close(io.in.pipes.read);
 
     switch (config.io.in.block) {
-      case SP_PS_IO_NONBLOCKING: sp_ps_set_nonblocking(io.in.pipes.write);
-      case SP_PS_IO_BLOCKING: sp_ps_set_blocking(io.in.pipes.write);
+      case SP_PS_IO_NONBLOCKING: { sp_ps_set_nonblocking(io.in.pipes.write); break; }
+      case SP_PS_IO_BLOCKING: { sp_ps_set_blocking(io.in.pipes.write); break; }
     }
     proc.io.in.fd = io.in.pipes.write;
   }
@@ -9995,8 +10011,8 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     close(io.out.pipes.write);
 
     switch (config.io.out.block) {
-      case SP_PS_IO_NONBLOCKING: sp_ps_set_nonblocking(io.out.pipes.read);
-      case SP_PS_IO_BLOCKING: sp_ps_set_blocking(io.out.pipes.read);
+      case SP_PS_IO_NONBLOCKING: { sp_ps_set_nonblocking(io.out.pipes.read); break; }
+      case SP_PS_IO_BLOCKING: { sp_ps_set_blocking(io.out.pipes.read); break; }
     }
     proc.io.out.fd = io.out.pipes.read;
   }
@@ -10005,8 +10021,8 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     close(io.err.pipes.write);
 
     switch (config.io.err.block) {
-      case SP_PS_IO_NONBLOCKING: sp_ps_set_nonblocking(io.err.pipes.read);
-      case SP_PS_IO_BLOCKING: sp_ps_set_blocking(io.err.pipes.read);
+      case SP_PS_IO_NONBLOCKING: { sp_ps_set_nonblocking(io.err.pipes.read); break; }
+      case SP_PS_IO_BLOCKING:    { sp_ps_set_blocking(io.err.pipes.read);    break; }
     }
     proc.io.err.fd = io.err.pipes.read;
   }
@@ -10205,7 +10221,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
       break;
     }
 
-    sp_for(i, nfds) {
+    sp_for(i, (u32)nfds) {
       if (!(fds[i].revents & (SP_POLLIN | SP_POLLHUP))) {
         continue;
       }
@@ -10473,7 +10489,7 @@ void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_moni
 void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* linux_monitor = SP_ALLOC(sp_fmon_os_t);
 
-  linux_monitor->fd = sp_sys_inotify_init1(SP_IN_NONBLOCK | SP_IN_CLOEXEC);
+  linux_monitor->fd = sp_inotify_init1(SP_IN_NONBLOCK | SP_IN_CLOEXEC);
   if (linux_monitor->fd == -1) {
     // Handle error but don't crash
     linux_monitor->fd = 0;
@@ -10501,7 +10517,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
     mask |= SP_IN_DELETE | SP_IN_MOVED_FROM;
   }
 
-  s32 wd = sp_sys_inotify_add_watch(linux_monitor->fd, path_cstr, mask);
+  s32 wd = sp_inotify_add_watch(linux_monitor->fd, path_cstr, mask);
 
   if (wd != -1) {
     sp_dyn_array_push(linux_monitor->watch_descs, wd);
@@ -10536,7 +10552,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 
   c8* ptr = (c8*)os->buffer;
   while (ptr < (c8*)os->buffer + len) {
-    sp_sys_inotify_event_t* event = (sp_sys_inotify_event_t*)ptr;
+    sp_inotify_event_t* event = (sp_inotify_event_t*)ptr;
 
     // Find which path this watch descriptor corresponds to
     sp_dyn_array_for(os->watch_descs, it) {
@@ -10587,7 +10603,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
       }
     }
 
-    ptr += sizeof(sp_sys_inotify_event_t) + event->len;
+    ptr += sizeof(sp_inotify_event_t) + event->len;
   }
 
   // Emit changes with debouncing
@@ -11065,7 +11081,7 @@ u64 sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size) {
 }
 
 s64 sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence) {
-  s32 posix_whence;
+  s32 posix_whence = SP_SEEK_SET;
   switch (whence) {
     case SP_IO_SEEK_SET: {
       posix_whence = SP_SEEK_SET;
@@ -11296,7 +11312,7 @@ u64 sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
 }
 
 s64 sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
-  int posix_whence;
+  int posix_whence = SP_SEEK_SET;
   switch (whence) {
     case SP_IO_SEEK_SET: {
       posix_whence = SP_SEEK_SET;
@@ -11353,7 +11369,7 @@ u64 sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
 }
 
 s64 sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
-  s64 pos;
+  s64 pos = 0;
 
   switch (whence) {
     case SP_IO_SEEK_SET: {
@@ -11409,7 +11425,7 @@ u64 sp_io_writer_dyn_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
 
 s64 sp_io_writer_dyn_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
   sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
-  s64 pos;
+  s64 pos = 0;
 
   switch (whence) {
     case SP_IO_SEEK_SET: {
