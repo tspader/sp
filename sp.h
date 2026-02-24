@@ -5580,26 +5580,26 @@ sp_hash_t sp_parse_hash(sp_str_t str) {
 
 
 void sp_fmt_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
-    SP_ASSERT(builder);
+  SP_ASSERT(builder);
 
-    if (num == 0) {
-        sp_str_builder_append_c8(builder, '0');
-        return;
-    }
+  if (num == 0) {
+    sp_str_builder_append_c8(builder, '0');
+    return;
+  }
 
-    c8 digits[20];
-    s32 digit_count = 0;
+  c8 digits[20];
+  s32 digit_count = 0;
 
-    while (num > 0) {
-        digits[digit_count++] = '0' + (num % 10);
-        num /= 10;
-    }
+  while (num > 0) {
+    digits[digit_count++] = '0' + (num % 10);
+    num /= 10;
+  }
 
-    SP_ASSERT((u32)digit_count <= max_digits);
+  SP_ASSERT((u32)digit_count <= max_digits);
 
-    for (s32 i = digit_count - 1; i >= 0; i--) {
-        sp_str_builder_append_c8(builder, digits[i]);
-    }
+  for (s32 i = digit_count - 1; i >= 0; i--) {
+    sp_str_builder_append_c8(builder, digits[i]);
+  }
 }
 
 void sp_fmt_format_signed(sp_str_builder_t* builder, s64 num, u32 max_digits) {
