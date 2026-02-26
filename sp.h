@@ -6123,23 +6123,30 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
 // ╚══════╝ ╚═════╝  ╚═════╝
 // @log
 void sp_log(sp_str_t fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_str_t formatted = sp_format_v(fmt, args);
-  va_end(args);
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
+    va_list args;
+    va_start(args, fmt);
+    sp_str_t formatted = sp_format_v(fmt, args);
+    va_end(args);
 
-  sp_os_print(formatted);
-  sp_os_print(sp_str_lit("\n"));
+    sp_os_print(formatted);
+    sp_os_print(sp_str_lit("\n"));
+    sp_mem_end_scratch(scratch);
+  }
+
 }
 
 void sp_log_err(sp_str_t fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_str_t formatted = sp_format_v(fmt, args);
-  va_end(args);
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
+    va_list args;
+    va_start(args, fmt);
+    sp_str_t formatted = sp_format_v(fmt, args);
+    va_end(args);
 
-  sp_os_print_err(formatted);
-  sp_os_print_err(sp_str_lit("\n"));
+    sp_os_print_err(formatted);
+    sp_os_print_err(sp_str_lit("\n"));
+    sp_mem_end_scratch(scratch);
+  }
 }
 
 
