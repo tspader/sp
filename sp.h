@@ -3339,10 +3339,10 @@ typedef enum {
 
 typedef struct sp_app sp_app_t;
 
-sp_typedef_fn(sp_app_result_t, sp_app_init_fn_t, sp_app_t*);
-sp_typedef_fn(sp_app_result_t, sp_app_poll_fn_t, sp_app_t*);
+sp_typedef_fn(sp_app_result_t, sp_app_init_fn_t,   sp_app_t*);
+sp_typedef_fn(sp_app_result_t, sp_app_poll_fn_t,   sp_app_t*);
 sp_typedef_fn(sp_app_result_t, sp_app_update_fn_t, sp_app_t*);
-sp_typedef_fn(sp_app_result_t, sp_app_deinit_fn_t, sp_app_t*);
+sp_typedef_fn(void,            sp_app_deinit_fn_t, sp_app_t*);
 
 typedef struct {
   void* user_data;
@@ -3360,7 +3360,8 @@ struct sp_app {
   sp_app_update_fn_t on_update;
   sp_app_deinit_fn_t on_deinit;
 
-  s32 return_code;
+  s32 rc;
+  sp_app_result_t result;
   sp_atomic_s32 shutdown;
 
   u32 fps;
@@ -11888,24 +11889,29 @@ SP_API s32 sp_app_run(sp_app_config_t config) {
   sp_app_t* sp = sp_app_new(config);
 
   if (sp->on_init) {
-    if (sp->on_init(sp) != SP_APP_CONTINUE) {
+    sp->result = sp->on_init(sp);
+    if (sp->result != SP_APP_CONTINUE) {
       goto deinit;
-    };
+    }
   }
 
   sp->frame.timer = sp_tm_start_timer();
   while (true) {
     if (sp->on_poll) {
-      sp->on_poll(sp);
+      sp->result = sp->on_poll(sp);
+      if (sp->result != SP_APP_CONTINUE) {
+        goto deinit;
+      }
     }
 
     sp->frame.accumulated += sp_tm_lap_timer(&sp->frame.timer);
     if (sp->frame.accumulated >= sp->frame.target) {
       sp->frame.accumulated -= sp->frame.target;
       sp->frame.num++;
-      if (sp->on_update(sp) != SP_APP_CONTINUE) {
-        break;
-      };
+      sp->result = sp->on_update(sp);
+      if (sp->result != SP_APP_CONTINUE) {
+        goto deinit;
+      }
     }
     else {
       sp_sleep_ns(sp->frame.target - sp->frame.accumulated);
@@ -11917,7 +11923,15 @@ deinit:
     sp->on_deinit(sp);
   }
 
-  return sp->return_code;
+  // If the user explicitly returned SP_APP_ERR make sure to return something
+  // that's non-zero, but prefer whatever the user set
+  switch (sp->result) {
+    case SP_APP_ERR: return sp->rc ? sp->rc : 1;
+    case SP_APP_QUIT: return sp->rc;
+    case SP_APP_CONTINUE: { sp_unreachable_case(); }
+  }
+
+  sp_unreachable_return(1);
 }
 
 #if defined(SP_MAIN)

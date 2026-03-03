@@ -11,8 +11,8 @@
 - `tools/`: random, unstructured bullshit which is not part of the official build
 
 # commands
-- `bspn test` builds and runs all unit tests
-- `bspn test --target $target` builds and runs the specific test target (as defined in spn.toml)
+- `bspn build --target $target --profile debug --force`
+- `./build/debug/store/bin/$target`
 
 # rules
 - Never comment any code, under any circumstances. Code with comments will be rejected outright.
@@ -154,5 +154,24 @@ sp_err_t load_config(sp_str_t path, config_t* config) {
 
 void process_array(int* arr, u32 size) {
   if (!arr) return;
+}
+
+sp_err_t init_module() {
+  return SP_ERR_WHATEVER;
+}
+
+// Zig-style try with sp_try
+sp_err_t init() {
+  sp_try(init_module());
+}
+
+// Translate between error types or values with sp_try_as
+external_lib_err_t init_lib() {
+  sp_try_as(init_module(), EXTERNAL_LIB_ERR);
+}
+
+// Or return NULL in lieu of an error when appropriate
+foo_t* init_foo() {
+  sp_try_as_null(init_bar());
 }
 ```

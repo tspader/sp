@@ -63,14 +63,13 @@ static sp_app_result_t on_update_err(sp_app_t* app) {
 
 static sp_app_result_t on_update_with_code(sp_app_t* app) {
   g_update_called = true;
-  app->return_code = 42;
+  app->rc = 42;
   return SP_APP_QUIT;
 }
 
-static sp_app_result_t on_deinit_continue(sp_app_t* app) {
+static void on_deinit_continue(sp_app_t* app) {
   (void)app;
   g_deinit_called = true;
-  return SP_APP_CONTINUE;
 }
 
 
@@ -84,7 +83,7 @@ UTEST(app, run) {
     {
       .name = "update_err",
       .config = { .on_update = on_update_err, .fps = 1000 },
-      .expected_return_code = 0,
+      .expected_return_code = 1,
     },
     {
       .name = "update_sets_code",
@@ -104,7 +103,7 @@ UTEST(app, run) {
     {
       .name = "init_err",
       .config = { .on_init = on_init_err, .on_update = on_update_quit, .fps = 1000 },
-      .expected_return_code = 0,
+      .expected_return_code = 1,
     },
   };
 
