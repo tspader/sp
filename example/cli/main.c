@@ -147,7 +147,7 @@ void palette_render(palette_state_t* state) {
   sp_str_builder_append_cstr(&out, "\n\n");
 
   sp_str_builder_append_cstr(&out, "[space] regenerate  [enter] save  [q/esc] quit\n");
-  
+
   sp_os_print(sp_str_builder_to_str(&out));
 }
 
@@ -223,7 +223,7 @@ sp_app_result_t palette_on_update(sp_app_t* app) {
   return SP_APP_CONTINUE;
 }
 
-sp_app_result_t palette_on_deinit(sp_app_t* app) {
+void palette_on_deinit(sp_app_t* app) {
   palette_state_t* state = (palette_state_t*)app->user_data;
 
   palette_restore_terminal();
@@ -231,8 +231,6 @@ sp_app_result_t palette_on_deinit(sp_app_t* app) {
   sp_os_print(sp_str_lit("\033[H\033[2J"));
 
   palette_print_results(state);
-
-  return SP_APP_CONTINUE;
 }
 
 static const c8* const usage[] = {
