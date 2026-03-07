@@ -220,7 +220,9 @@
 // ╚═╝     ╚══════╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝
 // @features
 #if defined(SP_FREESTANDING)
-  #assert SP_LINUX
+  #if !defined(SP_LINUX)
+    #error "SP_FREESTANDING currently requires Linux"
+  #endif
   #define SP_SYS_ENABLE
   #define SP_MUTEX_DISABLE
   #define SP_CV_DISABLE
@@ -1167,7 +1169,7 @@ static sp_sys_thread_block_t sp_sys_thread_block;
 #if defined(SP_FREESTANDING)
   typedef sp_sys_stat_t sp_stat_t;
   typedef sp_sys_timespec_t sp_timespec_t;
-  typedef sp_sys_inotify_event sp_inotify_event_t;
+  typedef sp_sys_inotify_event_t sp_inotify_event_t;
 
   #define sp_assert(x)               ((void)(x))
   #define sp_stat(path, st)          sp_sys_stat(path, st)

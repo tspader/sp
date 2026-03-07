@@ -1,3 +1,6 @@
+#define SP_FREESTANDING
+#define SP_BUILTIN
+#define SP_IMPLEMENTATION
 #include "sp.h"
 
 typedef struct {
@@ -432,7 +435,7 @@ static jit_fn_t compile(sp_str_t source) {
 static bool run_test(const c8* name, sp_str_t src, s64 expected) {
   SP_LOG("{}:", SP_FMT_CSTR(name));
   SP_LOG("  source: {}", SP_FMT_STR(src));
-  
+
   jit_fn_t fn = compile(src);
   if (fn) {
     s64 result = fn();
@@ -440,7 +443,7 @@ static bool run_test(const c8* name, sp_str_t src, s64 expected) {
       SP_LOG("  result: {} {:fg green}", SP_FMT_S64(result), SP_FMT_CSTR("[OK]"));
       return true;
     } else {
-      SP_LOG("  result: {} (expected {}) {:fg red}", 
+      SP_LOG("  result: {} (expected {}) {:fg red}",
              SP_FMT_S64(result), SP_FMT_S64(expected), SP_FMT_CSTR("[FAIL]"));
     }
   }
