@@ -1,5 +1,5 @@
 #define SP_APP
-#include "sp.h"
+#include "sp/asset.h"
 #include "test.h"
 
 #include "utest.h"

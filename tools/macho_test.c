@@ -1,6 +1,6 @@
 #define SP_IMPLEMENTATION
 #define SP_TEST_IMPLEMENTATION
-#include "../sp.h"
+#include "../sp/macho.h"
 #include "../test/tools/test.h"
 #include "utest.h"
 
