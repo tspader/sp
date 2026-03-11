@@ -1,3 +1,5 @@
+// #define SP_FREESTANDING
+// #define SP_BUILTIN
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
@@ -253,7 +255,13 @@ static void sp_clack_usage(void) {
   }
 }
 
-s32 main(s32 argc, c8** argv) {
+s32 prompt_main(s32 argc, const c8** argv);
+SP_ENTRY(prompt_main)
+
+s32 prompt_main(s32 argc, const c8** argv) {
+#ifdef SP_FREESTANDING
+  sp_sys_init(); // @spader need to fix SP_ENTRY to do this
+#endif
   sp_clack_demo_fn_t run = SP_NULLPTR;
 
   if (argc >= 2) {

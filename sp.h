@@ -609,6 +609,7 @@ SP_BEGIN_EXTERN_C()
   #if defined(SP_LINUX)
     #include <poll.h>
     #include <sys/inotify.h>
+    #include <sys/ioctl.h>
   #endif
 
   #if defined(SP_MACOS)
@@ -631,6 +632,7 @@ SP_BEGIN_EXTERN_C()
     #include <signal.h>
     #include <spawn.h>
     #include <stdlib.h>
+    #include <termios.h>
     #include <unistd.h>
     #include <sys/stat.h>
     #include <sys/time.h>
@@ -768,6 +770,7 @@ typedef enum {
   #define SP_SYSCALL_NUM_EXIT              60
   #define SP_SYSCALL_NUM_WAIT4             61
   #define SP_SYSCALL_NUM_KILL              62
+  #define SP_SYSCALL_NUM_IOCTL             16
   #define SP_SYSCALL_NUM_FCNTL             72
   #define SP_SYSCALL_NUM_GETCWD            79
   #define SP_SYSCALL_NUM_CHDIR             80
@@ -850,6 +853,7 @@ typedef enum {
   #define SP_SYSCALL_NUM_NANOSLEEP         101
   #define SP_SYSCALL_NUM_CLOCK_GETTIME     113
   #define SP_SYSCALL_NUM_KILL              129
+  #define SP_SYSCALL_NUM_IOCTL             29
   #define SP_SYSCALL_NUM_GETPID            172
   #define SP_SYSCALL_NUM_GETTID            178
   #define SP_SYSCALL_NUM_MUNMAP            215
@@ -928,6 +932,16 @@ typedef struct {
   s16 revents;
 } sp_sys_pollfd_t;
 
+typedef struct {
+  u32 c_iflag;
+  u32 c_oflag;
+  u32 c_cflag;
+  u32 c_lflag;
+  u8 c_cc[20];
+  u32 _c_ispeed;
+  u32 _c_ospeed;
+} sp_sys_termios_t;
+
 s64   sp_syscall0(s64 n);
 s64   sp_syscall1(s64 n, s64 a1);
 s64   sp_syscall2(s64 n, s64 a1, s64 a2);
@@ -970,7 +984,10 @@ s32   sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
 s32   sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
 s32   sp_sys_pipe2(s32 pipefd[2], s32 flags);
 s32   sp_sys_dup2(s32 oldfd, s32 newfd);
+s32   sp_sys_ioctl(s32 fd, u64 request, void* argp);
 s32   sp_sys_fcntl(s32 fd, s32 cmd, s64 arg);
+s32   sp_sys_tcgetattr(s32 fd, sp_sys_termios_t* termios);
+s32   sp_sys_tcsetattr(s32 fd, s32 opt, const sp_sys_termios_t* termios);
 s32   sp_sys_getpid(void);
 s32   sp_sys_inotify_init1(s32 flags);
 s32   sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
@@ -1008,6 +1025,12 @@ static sp_sys_thread_block_t sp_sys_thread_block;
 
 #define SP_PATH_MAX 4096
 
+// CONSTANTS
+//
+// Any constant from the kernel or libc should be wrapped in a macro and its
+// definition vendored here for freestanding builds. Regular builds simply
+// point to the stock definition (for non-SysV platforms), but freestanding
+// builds pick up the values without needing the headers
 #if defined(SP_FREESTANDING)
   #define SP_AT_FDCWD             (-100)
   #define SP_AT_SYMLINK_NOFOLLOW  0x100
@@ -1087,6 +1110,26 @@ static sp_sys_thread_block_t sp_sys_thread_block;
 
   #define SP_CLOCK_REALTIME          0
   #define SP_CLOCK_MONOTONIC         1
+
+  #define SP_BRKINT                  0x0002
+  #define SP_ICRNL                   0x0100
+  #define SP_INPCK                   0x0010
+  #define SP_ISTRIP                  0x0020
+  #define SP_IXON                    0x0400
+  #define SP_OPOST                   0x0001
+  #define SP_CS8                     0x0030
+  #define SP_ECHO                    0x0008
+  #define SP_ICANON                  0x0002
+  #define SP_IEXTEN                  0x8000
+  #define SP_ISIG                    0x0001
+  #define SP_VTIME                   6
+  #define SP_VMIN                    7
+  #define SP_TCSANOW                 0
+  #define SP_TCSADRAIN               1
+  #define SP_TCSAFLUSH               2
+  #define SP_TCGETS                  0x5401
+  #define SP_TCSETS                  0x5402
+
 #else
   #define SP_AT_FDCWD             AT_FDCWD
   #define SP_AT_SYMLINK_NOFOLLOW  AT_SYMLINK_NOFOLLOW
@@ -1165,12 +1208,36 @@ static sp_sys_thread_block_t sp_sys_thread_block;
 
   #define SP_CLOCK_REALTIME          CLOCK_REALTIME
   #define SP_CLOCK_MONOTONIC         CLOCK_MONOTONIC
+
+  #define SP_BRKINT                  BRKINT
+  #define SP_ICRNL                   ICRNL
+  #define SP_INPCK                   INPCK
+  #define SP_ISTRIP                  ISTRIP
+  #define SP_IXON                    IXON
+  #define SP_OPOST                   OPOST
+  #define SP_CS8                     CS8
+  #define SP_ECHO                    ECHO
+  #define SP_ICANON                  ICANON
+  #define SP_IEXTEN                  IEXTEN
+  #define SP_ISIG                    ISIG
+  #define SP_VTIME                   VTIME
+  #define SP_VMIN                    VMIN
+  #define SP_TCSANOW                 TCSANOW
+  #define SP_TCSADRAIN               TCSADRAIN
+  #define SP_TCSAFLUSH               TCSAFLUSH
+  #define SP_TCGETS                  TCGETS
+  #define SP_TCSETS                  TCSETS
 #endif
 
+// SYSCALLS
+//
+// Exactly the same as constants; wrap syscalls, redefine depending on whether
+// you're linking to libc
 #if defined(SP_FREESTANDING)
   typedef sp_sys_stat_t sp_stat_t;
   typedef sp_sys_timespec_t sp_timespec_t;
   typedef sp_sys_inotify_event_t sp_inotify_event_t;
+  typedef sp_sys_termios_t sp_termios_t;
 
   #define sp_assert(x)               ((void)(x))
   #define sp_stat(path, st)          sp_sys_stat(path, st)
@@ -1204,6 +1271,8 @@ static sp_sys_thread_block_t sp_sys_thread_block;
   #define sp_inotify_init1(f)        sp_sys_inotify_init1(f)
   #define sp_inotify_rm_watch(f, w)  sp_sys_inotify_rm_watch(f, w)
   #define sp_inotify_add_watch(f, p, m) sp_sys_inotify_add_watch(f, p, m)
+  #define sp_prompt_tcgetattr(fd, tio) sp_sys_tcgetattr(fd, tio)
+  #define sp_prompt_tcsetattr(fd, opt, tio) sp_sys_tcsetattr(fd, opt, tio)
 
   typedef sp_sys_pollfd_t sp_pollfd_t;
 
@@ -1245,40 +1314,42 @@ static sp_sys_thread_block_t sp_sys_thread_block;
   typedef struct timespec sp_timespec_t;
   typedef struct pollfd sp_pollfd_t;
   typedef struct inotify_event sp_inotify_event_t;
+  typedef struct termios sp_termios_t;
 
-  #define sp_assert(condition) assert((condition))
-
-  #define sp_stat(path, st)          stat(path, st)
-  #define sp_lstat(path, st)         lstat(path, st)
-  #define sp_fstat(fd, st)           fstat(fd, st)
-  #define sp_S_ISREG(m)              S_ISREG(m)
-  #define sp_S_ISDIR(m)              S_ISDIR(m)
-  #define sp_S_ISLNK(m)              S_ISLNK(m)
-  #define sp_getcwd(buf, size)       (getcwd(buf, size) ? 0 : -1)
-  #define sp_mkdir(path, mode)       mkdir(path, mode)
-  #define sp_rmdir(path)             rmdir(path)
-  #define sp_unlink(path)            unlink(path)
-  #define sp_rename(old, new)        rename(old, new)
-  #define sp_chdir(path)             chdir(path)
-  #define sp_readlink(p, b, s)       readlink(p, b, s)
-  #define sp_symlink(t, l)           symlink(t, l)
-  #define sp_link(old, new)          link(old, new)
-  #define sp_chmod(path, mode)       chmod(path, mode)
-  #define sp_open(p, f, m)           open(p, f, m)
-  #define sp_close(fd)               close(fd)
-  #define sp_read(fd, b, n)          read(fd, b, n)
-  #define sp_write(fd, b, n)         write(fd, b, n)
-  #define sp_lseek(fd, o, w)         lseek(fd, o, w)
-  #define sp_memcpy(d, s, n)         memcpy(d, s, n)
-  #define sp_memmove(d, s, n)        memmove(d, s, n)
-  #define sp_memset(d, c, n)         memset(d, c, n)
-  #define sp_memcmp(a, b, n)         memcmp(a, b, n)
-  #define sp_clock_gettime(c, ts)    clock_gettime(c, ts)
-  #define sp_poll(fds, n, t)         poll((struct pollfd*)(fds), n, t)
-  #define sp_wait4(p, s, o, r)       wait4(p, s, o, r)
-  #define sp_inotify_init1(f)        inotify_init1(f)
-  #define sp_inotify_rm_watch(f, w)  inotify_rm_watch(f, w)
+  #define sp_assert(condition)          assert((condition))
+  #define sp_stat(path, st)             stat(path, st)
+  #define sp_lstat(path, st)            lstat(path, st)
+  #define sp_fstat(fd, st)              fstat(fd, st)
+  #define sp_S_ISREG(m)                 S_ISREG(m)
+  #define sp_S_ISDIR(m)                 S_ISDIR(m)
+  #define sp_S_ISLNK(m)                 S_ISLNK(m)
+  #define sp_getcwd(buf, size)          (getcwd(buf, size) ? 0 : -1)
+  #define sp_mkdir(path, mode)          mkdir(path, mode)
+  #define sp_rmdir(path)                rmdir(path)
+  #define sp_unlink(path)               unlink(path)
+  #define sp_rename(old, new)           rename(old, new)
+  #define sp_chdir(path)                chdir(path)
+  #define sp_readlink(p, b, s)          readlink(p, b, s)
+  #define sp_symlink(t, l)              symlink(t, l)
+  #define sp_link(old, new)             link(old, new)
+  #define sp_chmod(path, mode)          chmod(path, mode)
+  #define sp_open(p, f, m)              open(p, f, m)
+  #define sp_close(fd)                  close(fd)
+  #define sp_read(fd, b, n)             read(fd, b, n)
+  #define sp_write(fd, b, n)            write(fd, b, n)
+  #define sp_lseek(fd, o, w)            lseek(fd, o, w)
+  #define sp_memcpy(d, s, n)            memcpy(d, s, n)
+  #define sp_memmove(d, s, n)           memmove(d, s, n)
+  #define sp_memset(d, c, n)            memset(d, c, n)
+  #define sp_memcmp(a, b, n)            memcmp(a, b, n)
+  #define sp_clock_gettime(c, ts)       clock_gettime(c, ts)
+  #define sp_poll(fds, n, t)            poll((struct pollfd*)(fds), n, t)
+  #define sp_wait4(p, s, o, r)          wait4(p, s, o, r)
+  #define sp_inotify_init1(f)           inotify_init1(f)
+  #define sp_inotify_rm_watch(f, w)     inotify_rm_watch(f, w)
   #define sp_inotify_add_watch(f, p, m) inotify_add_watch(f, p, m)
+  #define sp_prompt_tcgetattr(fd, tio)  tcgetattr(fd, tio)
+  #define sp_prompt_tcsetattr(fd, opt, tio) tcsetattr(fd, opt, tio)
 
   #define SP_ENTRY(fn) s32 main(s32 num_args, const c8** args) { return fn(num_args, args); }
 #endif
@@ -4081,8 +4152,22 @@ s32 sp_sys_dup2(s32 oldfd, s32 newfd) {
 #endif
 }
 
+s32 sp_sys_ioctl(s32 fd, u64 request, void* argp) {
+  return (s32)sp_syscall3(SP_SYSCALL_NUM_IOCTL, fd, (s64)request, (s64)argp);
+}
+
 s32 sp_sys_fcntl(s32 fd, s32 cmd, s64 arg) {
   return (s32)sp_syscall3(SP_SYSCALL_NUM_FCNTL, fd, cmd, arg);
+}
+
+s32 sp_sys_tcgetattr(s32 fd, sp_sys_termios_t* termios) {
+  s32 result = sp_sys_ioctl(fd, SP_TCGETS, termios);
+  return result < 0 ? -1 : result;
+}
+
+s32 sp_sys_tcsetattr(s32 fd, s32 opt, const sp_sys_termios_t* termios) {
+  s32 result = sp_sys_ioctl(fd, SP_TCSETS + (u64)opt, (void*)termios);
+  return result < 0 ? -1 : result;
 }
 
 s32 sp_sys_getpid(void) {

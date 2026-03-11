@@ -4,8 +4,14 @@
 #ifndef SP_PROMPT_H
 #define SP_PROMPT_H
 
+#define sp_fd_stdin 0
+#define sp_fd_stdout 1
+
 #include "sp.h"
+
+#if !defined(SP_FREESTANDING)
 #include <termios.h>
+#endif
 
 typedef enum {
   SP_PROMPT_EVENT_NONE,
@@ -100,7 +106,7 @@ typedef struct {
   sp_da(sp_prompt_frame_t) frames;
   struct {
     struct { s32 in; s32 out; } fds;
-    struct termios cache;
+    sp_termios_t cache;
     bool raw;
   } terminal;
 } sp_prompt_ctx_t;
@@ -225,23 +231,23 @@ sp_prompt_widget_t sp_prompt_multiselect_widget(sp_prompt_multiselect_t* prompt)
 sp_prompt_widget_t sp_prompt_password_widget(sp_prompt_password_t* prompt);
 
 static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
-  if (!isatty(ctx->terminal.fds.in)) {
+  // if (!isatty(ctx->terminal.fds.in)) {
+  //   return -1;
+  // }
+
+  if (sp_prompt_tcgetattr(ctx->terminal.fds.in, &ctx->terminal.cache) == -1) {
     return -1;
   }
 
-  if (tcgetattr(ctx->terminal.fds.in, &ctx->terminal.cache) == -1) {
-    return -1;
-  }
+  sp_termios_t raw = ctx->terminal.cache;
+  raw.c_iflag &= (u32)~(SP_BRKINT | SP_ICRNL | SP_INPCK | SP_ISTRIP | SP_IXON);
+  raw.c_oflag &= (u32)~(SP_OPOST);
+  raw.c_cflag |= (u32)SP_CS8;
+  raw.c_lflag &= (u32)~(SP_ECHO | SP_ICANON | SP_IEXTEN | SP_ISIG);
+  raw.c_cc[SP_VMIN] = 1;
+  raw.c_cc[SP_VTIME] = 0;
 
-  struct termios raw = ctx->terminal.cache;
-  raw.c_iflag &= (u32)~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-  raw.c_oflag &= (u32)~(OPOST);
-  raw.c_cflag |= (u32)CS8;
-  raw.c_lflag &= (u32)~(ECHO | ICANON | IEXTEN | ISIG);
-  raw.c_cc[VMIN] = 1;
-  raw.c_cc[VTIME] = 0;
-
-  if (tcsetattr(ctx->terminal.fds.in, TCSAFLUSH, &raw) == -1) {
+  if (sp_prompt_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &raw) == -1) {
     return -1;
   }
 
@@ -283,8 +289,8 @@ sp_prompt_ctx_t* sp_prompt_begin() {
 }
 
 s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
-  ctx->terminal.fds.in = STDIN_FILENO;
-  ctx->terminal.fds.out = STDOUT_FILENO;
+  ctx->terminal.fds.in = sp_fd_stdin;
+  ctx->terminal.fds.out = sp_fd_stdout;
   ctx->terminal.raw = false;
 
   return sp_prompt_enable_raw_mode(ctx);
@@ -292,7 +298,7 @@ s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
 
 void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   if (ctx->terminal.raw) {
-    tcsetattr(ctx->terminal.fds.in, TCSAFLUSH, &ctx->terminal.cache);
+    sp_prompt_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &ctx->terminal.cache);
     ctx->terminal.raw = false;
   }
 
@@ -304,7 +310,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
   ctx->cols = cols;
   ctx->rows = rows;
   ctx->state = SP_PROMPT_STATE_ACTIVE;
-  ctx->writer_stdout = sp_io_writer_from_fd(STDOUT_FILENO, SP_IO_CLOSE_MODE_NONE);
+  ctx->writer_stdout = sp_io_writer_from_fd(sp_fd_stdout, SP_IO_CLOSE_MODE_NONE);
   ctx->writer = &ctx->writer_stdout;
   ctx->frames = SP_NULLPTR;
   sp_prompt_framebuffer_init(ctx);
@@ -434,7 +440,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
   *out = (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_NONE };
 
   u8 c = 0;
-  s64 nread = sp_read(STDIN_FILENO, &c, 1);
+  s64 nread = sp_read(sp_fd_stdin, &c, 1);
   if (nread <= 0) {
     return false;
   }
@@ -457,7 +463,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
   }
   if (c == 27) {
     sp_pollfd_t pfd = {
-      .fd = STDIN_FILENO,
+      .fd = sp_fd_stdin,
       .events = SP_POLLIN,
       .revents = 0,
     };
@@ -469,14 +475,14 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
     }
 
     u8 seq[2] = {0};
-    if (sp_read(STDIN_FILENO, &seq[0], 1) <= 0) {
+    if (sp_read(sp_fd_stdin, &seq[0], 1) <= 0) {
       out->kind = SP_PROMPT_EVENT_ESCAPE;
       return true;
     }
 
     poll_result = sp_poll(&pfd, 1, 0);
     if (poll_result > 0 && (pfd.revents & SP_POLLIN)) {
-      if (sp_read(STDIN_FILENO, &seq[1], 1) <= 0) {
+      if (sp_read(sp_fd_stdin, &seq[1], 1) <= 0) {
         seq[1] = 0;
       }
     }
@@ -525,7 +531,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
   }
 
   sp_for_range(i, 1, needed) {
-    if (sp_read(STDIN_FILENO, &utf8_bytes[i], 1) <= 0) {
+    if (sp_read(sp_fd_stdin, &utf8_bytes[i], 1) <= 0) {
       needed = i;
       break;
     }
