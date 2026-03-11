@@ -24,7 +24,7 @@ $(BUILD_DIR)/freestanding: test/freestanding.c sp.h | $(BUILD_DIR)
 $(EXAMPLE_DIR)/jit: example/freestanding/jit/jit.c sp.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
 
-$(EXAMPLE_DIR)/prompt: example/prompt/prompt.c sp.h sp/prompt.h | $(EXAMPLE_DIR)
+$(EXAMPLE_DIR)/prompt: example/cli/prompt.c sp.h sp/prompt.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS_RELEASE) -I. -Wall -o $@ $< -lm
 
 $(BUILD_DIR):
