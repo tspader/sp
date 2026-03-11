@@ -34,7 +34,6 @@
   @ marks a module which mostly exists as a wrapper
 
       sp_app           minimal game-style main loop
-      sp_asset         multithreaded asset registry, importers
     @ sp_atomic        compiler intrinsic atomics
     + sp_context       thread-local allocator, scratch memory
     + sp_dyn_array     stb-style resizable array (intrusive T* + macros)
@@ -44,7 +43,6 @@
     + sp_format        "a type-safe {:fg cyan} replacement", SP_FMT_CSTR("printf")
       sp_fmon          os native filesystem watching
     + sp_fs            path manipulation, filesystem, common system paths (e.g. appdata)
-    - sp_future        pollable, heap allocated values
       sp_hash          pseudorandom hashing, terrible and stolen
     + sp_hash_table    stb-style hash table (macros)
     + sp_io            read and write to files and buffers
@@ -68,7 +66,9 @@
 
     The following modules are extensions in separate headers
 
+      sp_asset         multithreaded asset registry, importers
       sp_elf           minimal elf reading + writing + modification
+      sp_glob
 
   ▗▄▄▄▖ ▗▄▖  ▗▄▖▗▄▄▄▖▗▖  ▗▖ ▗▄▖▗▄▄▄▖▗▄▄▄▖ ▗▄▄▖
   ▐▌   ▐▌ ▐▌▐▌ ▐▌ █  ▐▛▚▖▐▌▐▌ ▐▌ █  ▐▌   ▐▌
@@ -8706,18 +8706,7 @@ sp_tm_date_time_t sp_tm_get_date_time() {
     .millisecond = (s32)(tv.tv_usec / 1000)
   };
 }
-#endif
 
-sp_tm_epoch_t sp_tm_now_epoch() {
-  sp_timespec_t ts;
-  sp_clock_gettime(SP_CLOCK_REALTIME, &ts);
-  return SP_RVAL(sp_tm_epoch_t) {
-    .s = (u64)ts.tv_sec,
-    .ns = (u32)ts.tv_nsec
-  };
-}
-
-#if defined(SP_DATETIME)
 sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
   struct tm* time_info;
   time_t raw_time = (time_t)time.s;
@@ -8739,6 +8728,15 @@ sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
   return sp_str_builder_to_str(&builder);
 }
 #endif
+
+sp_tm_epoch_t sp_tm_now_epoch() {
+  sp_timespec_t ts;
+  sp_clock_gettime(SP_CLOCK_REALTIME, &ts);
+  return SP_RVAL(sp_tm_epoch_t) {
+    .s = (u64)ts.tv_sec,
+    .ns = (u32)ts.tv_nsec
+  };
+}
 
 sp_tm_point_t sp_tm_now_point() {
   sp_timespec_t ts;
