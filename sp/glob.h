@@ -1,5 +1,5 @@
-#ifndef SPN_TEST_GLOB_H
-#define SPN_TEST_GLOB_H
+#ifndef SPN_GLOB_H
+#define SPN_GLOB_H
 
 #include "sp.h"
 
