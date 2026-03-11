@@ -1,6 +1,6 @@
 [package]
 name = "sp"
-include = [".", "include", "test/tools", "test/tools/process"]
+include = [".", "include", "test/tools", "test/tools/process", "sp"]
 define = ["SP_IMPLEMENTATION", "SP_TEST_IMPLEMENTATION"]
 version = "1.6.7"
 system_deps = ["m"]
@@ -134,10 +134,10 @@ include = ["test"]
 
 [[bin]]
 name = "palette"
-source = ["example/palette/main.c"]
+source = ["example/cli/palette.c"]
 include = ["example/palette"]
 define = ["SP_MAIN"]
 
 [[bin]]
 name = "demo-prompt"
-source = ["example/prompt.c"]
+source = ["example/cli/prompt.c"]
