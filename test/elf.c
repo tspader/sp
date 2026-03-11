@@ -1,4 +1,4 @@
-#include "sp.h"
+#include "sp/elf.h"
 #include "test.h"
 #include "utest.h"
 
@@ -566,15 +566,22 @@ UTEST_F(elf, err_read_invalid_class) {
 }
 
 UTEST_F(elf, read_external_object) {
-  sp_str_t exe_path = sp_fs_get_exe_path();
-  sp_str_t root = exe_path;
-  while (!sp_str_equal(sp_fs_get_name(root), sp_str_lit("build"))) {
-    root = sp_fs_parent_path(root);
-  }
-  root = sp_fs_parent_path(root);
+  sp_str_t c_src =
+    sp_str_lit("int minimal_symbol(void) {\n"
+               "  return 42;\n"
+               "}\n");
 
-  sp_str_t fixture_path = sp_fs_join_path(root, sp_str_lit("build/debug/store/lib/minimal.o"));
+  sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.c"));
+  sp_io_writer_t c_file = sp_io_writer_from_file(c_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write_str(&c_file, c_src);
+  sp_io_writer_close(&c_file);
 
+  sp_str_t fixture_path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
+  sp_ps_output_t compile = sp_ps_run((sp_ps_config_t){
+    .command = sp_str_lit("cc"),
+    .args = {sp_str_lit("-c"), c_path, sp_str_lit("-o"), fixture_path},
+  });
+  ASSERT_EQ(compile.status.exit_code, 0);
   EXPECT_TRUE(sp_fs_exists(fixture_path));
 
   sp_elf_t* read_elf = sp_elf_read_from_file(fixture_path);
