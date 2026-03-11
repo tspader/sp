@@ -16,3 +16,4 @@ doc/*
 **/.DS_Store
 **/*.dSYM
 /.llm/reference
+/.llm

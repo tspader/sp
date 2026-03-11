@@ -8053,9 +8053,7 @@ sp_da(sp_os_dir_ent_t) sp_fs_collect(sp_str_t path) {
   closedir(dir);
   return entries;
 }
-#endif
 
-#if !defined(SP_FREESTANDING)
 sp_da(sp_os_dir_ent_t) sp_fs_collect_recursive(sp_str_t path) {
   if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
     return SP_NULLPTR;

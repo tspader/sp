@@ -580,4 +580,258 @@ UTEST_F(fs, collect_recursive_file_not_dir) {
   ASSERT_EQ(results, SP_NULLPTR);
 }
 
+//////////////////////
+// COLLECT FIXTURE  //
+//////////////////////
+
+typedef enum {
+  COLLECT_ENT_FILE,
+  COLLECT_ENT_DIR,
+  COLLECT_ENT_SYMLINK,
+} collect_ent_kind_t;
+
+typedef enum {
+  COLLECT_ROOT_DIR,
+  COLLECT_ROOT_FILE,
+  COLLECT_ROOT_MISSING,
+} collect_root_kind_t;
+
+typedef struct {
+  const c8* path;
+  collect_ent_kind_t kind;
+  const c8* symlink_target;
+} collect_setup_ent_t;
+
+typedef struct {
+  const c8* name;
+  sp_os_file_attr_t attr;
+} collect_expected_ent_t;
+
+typedef struct {
+  const c8* label;
+  collect_root_kind_t root_kind;
+  collect_setup_ent_t setup[16];
+  collect_expected_ent_t expected[16];
+  bool expect_null;
+} collect_test_t;
+
+struct fs_collect {
+  sp_test_file_manager_t file_manager;
+};
+
+UTEST_F_SETUP(fs_collect) {
+  sp_test_file_manager_init(&ut.file_manager);
+}
+
+UTEST_F_TEARDOWN(fs_collect) {
+  sp_test_file_manager_cleanup(&ut.file_manager);
+}
+
+static u32 collect_count_setup(collect_setup_ent_t* setup) {
+  u32 n = 0;
+  while (n < 16 && setup[n].path) n++;
+  return n;
+}
+
+static u32 collect_count_expected(collect_expected_ent_t* expected) {
+  u32 n = 0;
+  while (n < 16 && expected[n].name) n++;
+  return n;
+}
+
+static void run_collect_test(int* utest_result, sp_test_file_manager_t* fm, collect_test_t* t) {
+  sp_str_t collect_path = sp_test_file_path(fm, sp_str_view(t->label));
+
+  switch (t->root_kind) {
+    case COLLECT_ROOT_DIR: {
+      sp_fs_create_dir(collect_path);
+      break;
+    }
+    case COLLECT_ROOT_FILE: {
+      sp_test_file_create_ex((sp_test_file_config_t) { .path = collect_path });
+      break;
+    }
+    case COLLECT_ROOT_MISSING: {
+      break;
+    }
+  }
+
+  u32 setup_count = collect_count_setup(t->setup);
+  sp_for(i, setup_count) {
+    collect_setup_ent_t* s = &t->setup[i];
+    sp_str_t full = sp_fs_join_path(collect_path, sp_str_view(s->path));
+    switch (s->kind) {
+      case COLLECT_ENT_FILE: {
+        sp_str_t parent = sp_fs_parent_path(full);
+        if (!sp_str_empty(parent) && !sp_fs_exists(parent)) {
+          sp_fs_create_dir(parent);
+        }
+        sp_test_file_create_ex((sp_test_file_config_t) { .path = full });
+        break;
+      }
+      case COLLECT_ENT_DIR: {
+        sp_fs_create_dir(full);
+        break;
+      }
+      case COLLECT_ENT_SYMLINK: {
+        sp_str_t target = sp_fs_join_path(collect_path, sp_str_view(s->symlink_target));
+        sp_fs_create_sym_link(target, full);
+        break;
+      }
+    }
+  }
+
+  sp_da(sp_os_dir_ent_t) results = sp_fs_collect(collect_path);
+
+  if (t->expect_null) {
+    EXPECT_EQ(results, SP_NULLPTR);
+    return;
+  }
+
+  u32 expected_count = collect_count_expected(t->expected);
+  EXPECT_EQ(sp_da_size(results), expected_count);
+
+  sp_for(i, expected_count) {
+    collect_expected_ent_t* exp = &t->expected[i];
+    sp_str_t expected_name = sp_str_view(exp->name);
+    bool found = false;
+    sp_da_for(results, j) {
+      if (sp_str_equal(results[j].file_name, expected_name) &&
+          results[j].attributes == exp->attr) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      UTEST_PRINTF("  missing: name=\"%.*s\" attr=%d\n",
+        (int)expected_name.len, expected_name.data, exp->attr);
+      EXPECT_TRUE(found);
+    }
+  }
+
+  sp_da_for(results, i) {
+    sp_str_t expected_path = sp_fs_join_path(collect_path, results[i].file_name);
+    SP_TEST_STREQ(results[i].file_path, expected_path, false);
+  }
+}
+
+UTEST_F(fs_collect, empty_dir) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "empty_dir",
+  });
+}
+
+UTEST_F(fs_collect, nonexistent) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "nonexistent",
+    .root_kind = COLLECT_ROOT_MISSING,
+    .expect_null = true,
+  });
+}
+
+UTEST_F(fs_collect, file_not_dir) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "file_not_dir",
+    .root_kind = COLLECT_ROOT_FILE,
+    .expect_null = true,
+  });
+}
+
+UTEST_F(fs_collect, single_file) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "single_file",
+    .setup = {
+      { "hello.txt", COLLECT_ENT_FILE },
+    },
+    .expected = {
+      { "hello.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+    },
+  });
+}
+
+UTEST_F(fs_collect, multiple_files) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "multiple_files",
+    .setup = {
+      { "a.c", COLLECT_ENT_FILE },
+      { "b.h", COLLECT_ENT_FILE },
+      { "c.txt", COLLECT_ENT_FILE },
+    },
+    .expected = {
+      { "a.c", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "b.h", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "c.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+    },
+  });
+}
+
+UTEST_F(fs_collect, subdirectory) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "subdirectory",
+    .setup = {
+      { "child", COLLECT_ENT_DIR },
+    },
+    .expected = {
+      { "child", SP_OS_FILE_ATTR_DIRECTORY },
+    },
+  });
+}
+
+UTEST_F(fs_collect, mixed_types) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "mixed_types",
+    .setup = {
+      { "file.txt", COLLECT_ENT_FILE },
+      { "subdir", COLLECT_ENT_DIR },
+      { "link", COLLECT_ENT_SYMLINK, "file.txt" },
+    },
+    .expected = {
+      { "file.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "subdir", SP_OS_FILE_ATTR_DIRECTORY },
+      { "link", SP_OS_FILE_ATTR_SYMLINK },
+    },
+  });
+}
+
+UTEST_F(fs_collect, skips_dot_and_dotdot) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "skips_dot_and_dotdot",
+    .setup = {
+      { "real.txt", COLLECT_ENT_FILE },
+    },
+    .expected = {
+      { "real.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+    },
+  });
+}
+
+UTEST_F(fs_collect, hidden_file) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "hidden_file",
+    .setup = {
+      { ".gitignore", COLLECT_ENT_FILE },
+      { "visible.txt", COLLECT_ENT_FILE },
+    },
+    .expected = {
+      { ".gitignore", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "visible.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+    },
+  });
+}
+
+UTEST_F(fs_collect, does_not_recurse) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "does_not_recurse",
+    .setup = {
+      { "child", COLLECT_ENT_DIR },
+      { "child/deep.txt", COLLECT_ENT_FILE },
+      { "top.txt", COLLECT_ENT_FILE },
+    },
+    .expected = {
+      { "child", SP_OS_FILE_ATTR_DIRECTORY },
+      { "top.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+    },
+  });
+}
+
 SP_TEST_MAIN()
