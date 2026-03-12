@@ -170,6 +170,7 @@ UTEST_F(fs, copy_dir_with_nonalphanumeric) {
   ASSERT_TRUE(sp_fs_exists(expected_path));
 }
 
+#if defined(SP_POSIX)
 UTEST_F(fs, copy_preserves_file_attributes) {
   // Create a test file with specific content
   sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source_attrs.txt"));
@@ -210,6 +211,7 @@ UTEST_F(fs, copy_preserves_file_attributes) {
   sp_str_t copy_content = sp_io_read_file(copy_file);
   SP_EXPECT_STR_EQ(copy_content, test_content);
 }
+#endif
 
 typedef struct {
   sp_str_t file_path;

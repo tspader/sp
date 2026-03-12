@@ -17,3 +17,5 @@ doc/*
 **/*.dSYM
 /.llm/reference
 /.llm
+**/.vs
+**/*.vcxproj.user

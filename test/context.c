@@ -7,16 +7,28 @@
 SP_TEST_MAIN()
 
 struct context {
-
+  u8 placeholder;
 };
 
 UTEST_F_SETUP(context) {
-  pthread_setspecific(sp_rt.tls.key, SP_NULLPTR);
+  #if defined(SP_WIN32)
+    if (sp_rt.tls.key != TLS_OUT_OF_INDEXES) {
+      TlsSetValue(sp_rt.tls.key, SP_NULLPTR);
+    }
+  #else
+    pthread_setspecific(sp_rt.tls.key, SP_NULLPTR);
+  #endif
   sp_tls_rt_get();
 }
 
 UTEST_F_TEARDOWN(context) {
-  pthread_setspecific(sp_rt.tls.key, SP_NULLPTR);
+  #if defined(SP_WIN32)
+    if (sp_rt.tls.key != TLS_OUT_OF_INDEXES) {
+      TlsSetValue(sp_rt.tls.key, SP_NULLPTR);
+    }
+  #else
+    pthread_setspecific(sp_rt.tls.key, SP_NULLPTR);
+  #endif
   sp_tls_rt_get();
 }
 

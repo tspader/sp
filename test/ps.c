@@ -5,7 +5,6 @@
 
 #include "process.h"
 #include "utest.h"
-#include <unistd.h>
 
 typedef struct {
   sp_str_t expected;

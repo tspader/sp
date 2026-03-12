@@ -308,11 +308,11 @@ UTEST(sp_os_is_root, various_roots) {
   ASSERT_TRUE(sp_fs_is_root(SP_LIT("/")));
 
 #ifdef SP_WIN32
-  ASSERT_TRUE(sp_os_is_root(SP_LIT("C:")));
-  ASSERT_TRUE(sp_os_is_root(SP_LIT("C:/")));
-  ASSERT_TRUE(sp_os_is_root(SP_LIT("C:\\")));
-  ASSERT_FALSE(sp_os_is_root(SP_LIT("C:/foo")));
-  ASSERT_FALSE(sp_os_is_root(SP_LIT("C:\\foo")));
+  ASSERT_TRUE(sp_fs_is_root(SP_LIT("C:")));
+  ASSERT_TRUE(sp_fs_is_root(SP_LIT("C:/")));
+  ASSERT_TRUE(sp_fs_is_root(SP_LIT("C:\\")));
+  ASSERT_FALSE(sp_fs_is_root(SP_LIT("C:/foo")));
+  ASSERT_FALSE(sp_fs_is_root(SP_LIT("C:\\foo")));
 #endif
 
   ASSERT_FALSE(sp_fs_is_root(SP_LIT("/home")));
