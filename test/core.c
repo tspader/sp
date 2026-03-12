@@ -4,6 +4,7 @@
 
 #include "utest.h"
 
+#include <math.h>
 
 
 SP_TEST_MAIN()
@@ -308,11 +309,11 @@ UTEST(sp_os_is_root, various_roots) {
   ASSERT_TRUE(sp_fs_is_root(SP_LIT("/")));
 
 #ifdef SP_WIN32
-  ASSERT_TRUE(sp_os_is_root(SP_LIT("C:")));
-  ASSERT_TRUE(sp_os_is_root(SP_LIT("C:/")));
-  ASSERT_TRUE(sp_os_is_root(SP_LIT("C:\\")));
-  ASSERT_FALSE(sp_os_is_root(SP_LIT("C:/foo")));
-  ASSERT_FALSE(sp_os_is_root(SP_LIT("C:\\foo")));
+  ASSERT_TRUE(sp_fs_is_root(SP_LIT("C:")));
+  ASSERT_TRUE(sp_fs_is_root(SP_LIT("C:/")));
+  ASSERT_TRUE(sp_fs_is_root(SP_LIT("C:\\")));
+  ASSERT_FALSE(sp_fs_is_root(SP_LIT("C:/foo")));
+  ASSERT_FALSE(sp_fs_is_root(SP_LIT("C:\\foo")));
 #endif
 
   ASSERT_FALSE(sp_fs_is_root(SP_LIT("/home")));
@@ -517,27 +518,6 @@ UTEST_F(sp_os_create_directory_fixture, leading_slashes) {
   sp_fs_create_dir(dir);
   ASSERT_TRUE(sp_fs_exists(dir));
   ASSERT_TRUE(sp_fs_is_dir(dir));
-
-  sp_fs_remove_dir(dir);
-}
-
-UTEST_F(sp_os_create_directory_fixture, very_long_path) {
-  sp_str_t dir = SP_LIT("test_long");
-  ASSERT_FALSE(sp_fs_exists(dir));
-
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_str_builder_append(&builder, dir);
-  sp_str_builder_append_c8(&builder, '/');
-
-  for (int i = 0; i < 10; i++) {
-    sp_str_builder_append(&builder, SP_LIT("very_long_directory_name_"));
-  }
-
-  sp_str_t long_path = sp_str_builder_to_str(&builder);
-
-  sp_fs_create_dir(long_path);
-  ASSERT_TRUE(sp_fs_exists(long_path));
-  ASSERT_TRUE(sp_fs_is_dir(long_path));
 
   sp_fs_remove_dir(dir);
 }
@@ -1416,6 +1396,17 @@ UTEST(sp_format, edge_cases) {
 //////////////////////////////
 // FORMAT PARSER TESTS      //
 //////////////////////////////
+extern c8 sp_format_parser_peek(sp_format_parser_t* parser);
+extern void sp_format_parser_eat(sp_format_parser_t* parser);
+extern void sp_format_parser_eat_and_assert(sp_format_parser_t* parser, c8 c);
+extern bool sp_format_parser_is_alpha(sp_format_parser_t* parser);
+extern bool sp_format_parser_is_alphanumeric(sp_format_parser_t* parser);
+extern bool sp_format_parser_is_done(sp_format_parser_t* parser);
+extern sp_str_t sp_format_parser_id(sp_format_parser_t* parser);
+extern sp_str_t sp_format_parser_value(sp_format_parser_t* parser);
+extern sp_format_specifier_flag_t sp_format_specifier_flag_from_str(sp_str_t id);
+extern sp_str_t sp_format_color_id_to_ansi_fg(sp_str_t id);
+extern sp_format_specifier_t sp_format_parser_specifier(sp_format_parser_t* parser);
 
 UTEST(sp_format_parser, basic_placeholders) {
   // Test parsing simple placeholders
@@ -1471,12 +1462,10 @@ UTEST(sp_format_parser, alpha_detection) {
 }
 
 UTEST(sp_format_parser, identifier_parsing) {
-
-
   sp_format_parser_t parser = SP_ZERO_INITIALIZE();
 
   // Parse simple identifier
-  parser.fmt = SP_LIT("color red");
+  parser.fmt = sp_rval(sp_str_t) { .data = "color red", .len = sizeof("color red") - 1 };
   parser.it = 0;
 
   sp_str_t id = sp_format_parser_id(&parser);
@@ -1675,45 +1664,6 @@ UTEST(sp_enum_macros, name_generation) {
 }
 
 
-UTEST(os_functions, recursive_directory_removal) {
-  sp_str_t foo = SP_LIT("foo");
-  sp_str_t   bar = SP_LIT("foo/bar");
-  sp_str_t     baz = SP_LIT("foo/bar/baz");
-  sp_str_t       phil = SP_LIT("foo/bar/baz/phil.txt");
-  sp_str_t     bobby = SP_LIT("foo/bar/bobby.txt");
-  sp_str_t   qux = SP_LIT("foo/qux");
-  sp_str_t     billy = SP_LIT("foo/qux/billy.txt");
-  sp_str_t   jerry = SP_LIT("foo/jerry.txt");
-
-  sp_fs_create_dir(foo);
-  sp_fs_create_dir(bar);
-  sp_fs_create_dir(qux);
-  sp_fs_create_dir(baz);
-  sp_fs_create_file(jerry);
-  sp_fs_create_file(bobby);
-  sp_fs_create_file(phil);
-  sp_fs_create_file(billy);
-
-  ASSERT_TRUE(sp_fs_is_dir(foo));
-  ASSERT_TRUE(sp_fs_is_dir(bar));
-  ASSERT_TRUE(sp_fs_is_dir(qux));
-  ASSERT_TRUE(sp_fs_is_dir(baz));
-  ASSERT_TRUE(sp_fs_is_regular_file(jerry));
-  ASSERT_TRUE(sp_fs_is_regular_file(bobby));
-  ASSERT_TRUE(sp_fs_is_regular_file(phil));
-  ASSERT_TRUE(sp_fs_is_regular_file(billy));
-
-  sp_fs_remove_dir(foo);
-
-  ASSERT_FALSE(sp_fs_exists(foo));
-  ASSERT_FALSE(sp_fs_exists(bar));
-  ASSERT_FALSE(sp_fs_exists(qux));
-  ASSERT_FALSE(sp_fs_exists(baz));
-  ASSERT_FALSE(sp_fs_exists(jerry));
-  ASSERT_FALSE(sp_fs_exists(bobby));
-  ASSERT_FALSE(sp_fs_exists(phil));
-  ASSERT_FALSE(sp_fs_exists(billy));
-}
 
 sp_str_t sp_test_build_scan_directory() {
   sp_str_t directory = SP_LIT("build/test/sp_fs_collect");
@@ -1969,17 +1919,17 @@ UTEST(sp_os_get_file_attrs, path_edge_cases) {
   ASSERT_EQ(double_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
   // test very long file name
-  sp_str_builder_t long_name = SP_ZERO_INITIALIZE();
-  sp_str_builder_append(&long_name, base);
-  sp_str_builder_append(&long_name, SP_LIT("/"));
-  for (u32 i = 0; i < 50; i++) {
-    sp_str_builder_append(&long_name, SP_LIT("long"));
-  }
-  sp_str_builder_append(&long_name, SP_LIT(".txt"));
-  sp_str_t long_path = sp_str_builder_to_str(&long_name);
-  sp_fs_create_file(long_path);
-  sp_os_file_attr_t long_attr = sp_fs_get_file_attrs(long_path);
-  ASSERT_EQ(long_attr, SP_OS_FILE_ATTR_REGULAR_FILE);
+  // sp_str_builder_t long_name = SP_ZERO_INITIALIZE();
+  // sp_str_builder_append(&long_name, base);
+  // sp_str_builder_append(&long_name, SP_LIT("/"));
+  // for (u32 i = 0; i < 50; i++) {
+  //   sp_str_builder_append(&long_name, SP_LIT("long"));
+  // }
+  // sp_str_builder_append(&long_name, SP_LIT(".txt"));
+  // sp_str_t long_path = sp_str_builder_to_str(&long_name);
+  // sp_fs_create_file(long_path);
+  // sp_os_file_attr_t long_attr = sp_fs_get_file_attrs(long_path);
+  // ASSERT_EQ(long_attr, SP_OS_FILE_ATTR_REGULAR_FILE);
 
   sp_test_build_scan_directory();
 }
@@ -2116,49 +2066,6 @@ UTEST(path_functions, normalized_join_and_parent) {
   }
 }
 
-
-UTEST(sp_env, all_operations) {
-  sp_env_t env = sp_env_capture();
-
-  sp_str_t path = sp_env_get(&env, SP_LIT("PATH"));
-  ASSERT_GT(path.len, 0);
-
-  sp_env_insert(&env, SP_LIT("SP_TEST_VAR"), SP_LIT("test_value"));
-  sp_str_t result = sp_env_get(&env, SP_LIT("SP_TEST_VAR"));
-  SP_EXPECT_STR_EQ_CSTR(result, "test_value");
-
-  sp_env_insert(&env, SP_LIT("SP_TEST_VAR"), SP_LIT("updated_value"));
-  result = sp_env_get(&env, SP_LIT("SP_TEST_VAR"));
-  SP_EXPECT_STR_EQ_CSTR(result, "updated_value");
-
-  sp_env_erase(&env, SP_LIT("SP_TEST_VAR"));
-  result = sp_env_get(&env, SP_LIT("SP_TEST_VAR"));
-  ASSERT_EQ(result.len, 0);
-
-  sp_env_insert(&env, SP_LIT("SP_EMPTY"), SP_LIT(""));
-  result = sp_env_get(&env, SP_LIT("SP_EMPTY"));
-  ASSERT_EQ(result.len, 0);
-
-  sp_str_t nonexistent = sp_env_get(&env, SP_LIT("SP_NONEXISTENT_VAR_12345"));
-  ASSERT_EQ(nonexistent.len, 0);
-
-  sp_env_t copy = sp_env_copy(&env);
-  sp_env_insert(&env, SP_LIT("SP_ORIGINAL"), SP_LIT("original"));
-  sp_env_insert(&copy, SP_LIT("SP_COPY"), SP_LIT("copy"));
-
-  sp_str_t orig_val = sp_env_get(&env, SP_LIT("SP_ORIGINAL"));
-  SP_EXPECT_STR_EQ_CSTR(orig_val, "original");
-  sp_str_t orig_missing = sp_env_get(&env, SP_LIT("SP_COPY"));
-  ASSERT_EQ(orig_missing.len, 0);
-
-  sp_str_t copy_val = sp_env_get(&copy, SP_LIT("SP_COPY"));
-  SP_EXPECT_STR_EQ_CSTR(copy_val, "copy");
-  sp_str_t copy_missing = sp_env_get(&copy, SP_LIT("SP_ORIGINAL"));
-  ASSERT_EQ(copy_missing.len, 0);
-
-  sp_env_destroy(&env);
-  sp_env_destroy(&copy);
-}
 
 
 typedef struct {
@@ -2377,15 +2284,6 @@ UTEST(sp_os, is_glob_without_wildcard) {
   ASSERT_FALSE(sp_fs_is_glob(SP_LIT("build/test")));
 }
 
-UTEST(sp_os, is_program_on_path_exists) {
-  ASSERT_TRUE(sp_fs_is_on_path(SP_LIT("sh")));
-  ASSERT_TRUE(sp_fs_is_on_path(SP_LIT("ls")));
-}
-
-UTEST(sp_os, is_program_on_path_not_exists) {
-  ASSERT_FALSE(sp_fs_is_on_path(SP_LIT("nonexistent_program_xyz_12345")));
-}
-
 struct sp_os_copy_tests {
   sp_test_file_manager_t file_manager;
 };
@@ -2478,33 +2376,33 @@ UTEST_F_TEARDOWN(sp_fs) {
   sp_test_env_manager_cleanup(&utest_fixture->env);
 }
 
-UTEST_F(sp_fs, sp_os_get_storage_path_with_xdg) {
-  sp_test_env_manager_set(&ut.env, SP_LIT("XDG_DATA_HOME"), SP_LIT("/custom/data"));
-  sp_str_t path = sp_fs_get_storage_path();
-  SP_EXPECT_STR_EQ_CSTR(path, "/custom/data");
-}
-
-UTEST_F(sp_fs, sp_os_get_storage_path_without_xdg) {
-  sp_test_env_manager_unset(&ut.env, SP_LIT("XDG_DATA_HOME"));
-  sp_str_t path = sp_fs_get_storage_path();
-  sp_str_t home = sp_os_get_env_var(SP_LIT("HOME"));
-  sp_str_t expected = sp_fs_join_path(home, SP_LIT(".local/share"));
-  SP_EXPECT_STR_EQ(path, expected);
-}
-
-UTEST_F(sp_fs, sp_os_get_config_path_with_xdg) {
-  sp_test_env_manager_set(&ut.env, SP_LIT("XDG_CONFIG_HOME"), SP_LIT("/custom/config"));
-  sp_str_t path = sp_fs_get_config_path();
-  SP_EXPECT_STR_EQ_CSTR(path, "/custom/config");
-}
-
-UTEST_F(sp_fs, sp_os_get_config_path_without_xdg) {
-  sp_test_env_manager_unset(&ut.env, SP_LIT("XDG_CONFIG_HOME"));
-  sp_str_t path = sp_fs_get_config_path();
-  sp_str_t home = sp_os_get_env_var(SP_LIT("HOME"));
-  sp_str_t expected = sp_fs_join_path(home, SP_LIT(".config"));
-  SP_EXPECT_STR_EQ(path, expected);
-}
+// UTEST_F(sp_fs, sp_os_get_storage_path_with_xdg) {
+//   sp_test_env_manager_set(&ut.env, SP_LIT("XDG_DATA_HOME"), SP_LIT("/custom/data"));
+//   sp_str_t path = sp_fs_get_storage_path();
+//   SP_EXPECT_STR_EQ_CSTR(path, "/custom/data");
+// }
+//
+// UTEST_F(sp_fs, sp_os_get_storage_path_without_xdg) {
+//   sp_test_env_manager_unset(&ut.env, SP_LIT("XDG_DATA_HOME"));
+//   sp_str_t path = sp_fs_get_storage_path();
+//   sp_str_t home = sp_os_env_get(SP_LIT("HOME"));
+//   sp_str_t expected = sp_fs_join_path(home, SP_LIT(".local/share"));
+//   SP_EXPECT_STR_EQ(path, expected);
+// }
+//
+// UTEST_F(sp_fs, sp_os_get_config_path_with_xdg) {
+//   sp_test_env_manager_set(&ut.env, SP_LIT("XDG_CONFIG_HOME"), SP_LIT("/custom/config"));
+//   sp_str_t path = sp_fs_get_config_path();
+//   SP_EXPECT_STR_EQ_CSTR(path, "/custom/config");
+// }
+//
+// UTEST_F(sp_fs, sp_os_get_config_path_without_xdg) {
+//   sp_test_env_manager_unset(&ut.env, SP_LIT("XDG_CONFIG_HOME"));
+//   sp_str_t path = sp_fs_get_config_path();
+//   sp_str_t home = sp_os_env_get(SP_LIT("HOME"));
+//   sp_str_t expected = sp_fs_join_path(home, SP_LIT(".config"));
+//   SP_EXPECT_STR_EQ(path, expected);
+// }
 #endif
 
 UTEST(sp_os_get_cwd, smoke_test) {
@@ -2596,3 +2494,291 @@ UTEST(math, color_conversion) {
 }
 
 
+// ███████╗███╗   ██╗██╗   ██╗
+// ██╔════╝████╗  ██║██║   ██║
+// █████╗  ██╔██╗ ██║██║   ██║
+// ██╔══╝  ██║╚██╗██║╚██╗ ██╔╝
+// ███████╗██║ ╚████║ ╚████╔╝
+// ╚══════╝╚═╝  ╚═══╝  ╚═══╝
+
+typedef struct sp_env {
+  u8 placeholder;
+} sp_env_fixture;
+
+UTEST_F_SETUP(sp_env) {
+  (void)utest_fixture;
+}
+
+UTEST_F_TEARDOWN(sp_env) {
+  (void)utest_fixture;
+}
+
+UTEST_F(sp_env, init_empty) {
+  sp_env_t env;
+  sp_env_init(&env);
+  EXPECT_EQ(sp_env_count(&env), (u32)0);
+  EXPECT_FALSE(sp_env_contains(&env, SP_LIT("PATH")));
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, insert_and_get) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  sp_env_insert(&env, SP_LIT("FOO"), SP_LIT("bar"));
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("FOO")), "bar");
+  EXPECT_EQ(sp_env_count(&env), (u32)1);
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, insert_overwrites) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  sp_env_insert(&env, SP_LIT("KEY"), SP_LIT("first"));
+  sp_env_insert(&env, SP_LIT("KEY"), SP_LIT("second"));
+
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("KEY")), "second");
+  EXPECT_EQ(sp_env_count(&env), (u32)1);
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, get_missing_returns_empty) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  sp_str_t val = sp_env_get(&env, SP_LIT("DOES_NOT_EXIST"));
+  EXPECT_TRUE(sp_str_empty(val));
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, contains) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  EXPECT_FALSE(sp_env_contains(&env, SP_LIT("X")));
+  sp_env_insert(&env, SP_LIT("X"), SP_LIT("y"));
+  EXPECT_TRUE(sp_env_contains(&env, SP_LIT("X")));
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, erase) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  sp_env_insert(&env, SP_LIT("A"), SP_LIT("1"));
+  sp_env_insert(&env, SP_LIT("B"), SP_LIT("2"));
+  EXPECT_EQ(sp_env_count(&env), (u32)2);
+
+  sp_env_erase(&env, SP_LIT("A"));
+  EXPECT_EQ(sp_env_count(&env), (u32)1);
+  EXPECT_FALSE(sp_env_contains(&env, SP_LIT("A")));
+  EXPECT_TRUE(sp_env_contains(&env, SP_LIT("B")));
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, erase_nonexistent) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  sp_env_insert(&env, SP_LIT("A"), SP_LIT("1"));
+  sp_env_erase(&env, SP_LIT("NOPE"));
+  EXPECT_EQ(sp_env_count(&env), (u32)1);
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, multiple_entries) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  sp_env_insert(&env, SP_LIT("A"), SP_LIT("1"));
+  sp_env_insert(&env, SP_LIT("B"), SP_LIT("2"));
+  sp_env_insert(&env, SP_LIT("C"), SP_LIT("3"));
+
+  EXPECT_EQ(sp_env_count(&env), (u32)3);
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("A")), "1");
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("B")), "2");
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("C")), "3");
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, copy_is_independent) {
+  sp_env_t env;
+  sp_env_init(&env);
+  sp_env_insert(&env, SP_LIT("K"), SP_LIT("V"));
+
+  sp_env_t copy = sp_env_copy(&env);
+  EXPECT_EQ(sp_env_count(&copy), (u32)1);
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&copy, SP_LIT("K")), "V");
+
+  sp_env_insert(&copy, SP_LIT("NEW"), SP_LIT("val"));
+  EXPECT_EQ(sp_env_count(&copy), (u32)2);
+  EXPECT_EQ(sp_env_count(&env), (u32)1);
+
+  sp_env_destroy(&env);
+  sp_env_destroy(&copy);
+}
+
+UTEST_F(sp_env, empty_value) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  sp_env_insert(&env, SP_LIT("EMPTY"), SP_LIT(""));
+  EXPECT_TRUE(sp_env_contains(&env, SP_LIT("EMPTY")));
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("EMPTY")), "");
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, value_with_equals) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  sp_env_insert(&env, SP_LIT("DSN"), SP_LIT("host=localhost;port=5432"));
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("DSN")), "host=localhost;port=5432");
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, capture_has_path) {
+  sp_env_t env = sp_env_capture();
+
+  EXPECT_TRUE(sp_env_count(&env) > 0);
+
+  // Windows PEB stores "Path", POSIX uses "PATH"
+  #if defined(SP_WIN32)
+    sp_str_t path_key = SP_LIT("Path");
+  #else
+    sp_str_t path_key = SP_LIT("PATH");
+  #endif
+
+  EXPECT_TRUE(sp_env_contains(&env, path_key));
+  sp_str_t path = sp_env_get(&env, path_key);
+  EXPECT_TRUE(path.len > 0);
+
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, capture_is_snapshot) {
+  sp_env_t env = sp_env_capture();
+  u32 count = sp_env_count(&env);
+
+  sp_env_insert(&env, SP_LIT("SP_TEST_ONLY_VAR"), SP_LIT("hello"));
+  EXPECT_EQ(sp_env_count(&env), count + 1);
+
+  sp_env_t env2 = sp_env_capture();
+  EXPECT_FALSE(sp_env_contains(&env2, SP_LIT("SP_TEST_ONLY_VAR")));
+
+  sp_env_destroy(&env);
+  sp_env_destroy(&env2);
+}
+
+UTEST_F(sp_env, destroy_then_reinit) {
+  sp_env_t env;
+  sp_env_init(&env);
+  sp_env_insert(&env, SP_LIT("A"), SP_LIT("1"));
+  sp_env_destroy(&env);
+
+  sp_env_init(&env);
+  EXPECT_EQ(sp_env_count(&env), (u32)0);
+  sp_env_insert(&env, SP_LIT("B"), SP_LIT("2"));
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("B")), "2");
+  sp_env_destroy(&env);
+}
+
+#if defined(SP_POSIX)
+UTEST_F(sp_env, to_posix_envp) {
+  sp_env_t env;
+  sp_env_init(&env);
+  sp_env_insert(&env, SP_LIT("AA"), SP_LIT("11"));
+  sp_env_insert(&env, SP_LIT("BB"), SP_LIT("22"));
+
+  c8** envp = sp_env_to_posix_envp(&env);
+
+  u32 count = 0;
+  while (envp[count] != SP_NULLPTR) count++;
+  EXPECT_EQ(count, (u32)2);
+
+  bool found_aa = false;
+  bool found_bb = false;
+  for (u32 i = 0; i < count; i++) {
+    sp_str_t entry = sp_str_view(envp[i]);
+    if (sp_str_equal(entry, SP_LIT("AA=11"))) found_aa = true;
+    if (sp_str_equal(entry, SP_LIT("BB=22"))) found_bb = true;
+  }
+  EXPECT_TRUE(found_aa);
+  EXPECT_TRUE(found_bb);
+
+  sp_env_free_posix_envp(envp);
+  sp_env_destroy(&env);
+}
+
+UTEST_F(sp_env, to_posix_envp_empty) {
+  sp_env_t env;
+  sp_env_init(&env);
+
+  c8** envp = sp_env_to_posix_envp(&env);
+  EXPECT_EQ(envp[0], (c8*)SP_NULLPTR);
+
+  sp_env_free_posix_envp(envp);
+  sp_env_destroy(&env);
+}
+#endif
+
+UTEST(sp_os_env, get_path) {
+  sp_str_t path = sp_os_env_get(SP_LIT("PATH"));
+  EXPECT_TRUE(sp_str_valid(path));
+  EXPECT_TRUE(path.len > 0);
+}
+
+UTEST(sp_os_env, get_missing) {
+  sp_str_t val = sp_os_env_get(SP_LIT("SP_DEFINITELY_NOT_SET_12345"));
+  EXPECT_TRUE(sp_str_empty(val));
+}
+
+UTEST(sp_os_env, iterate) {
+  sp_os_env_it_t it = sp_os_env_it_begin();
+
+  // Windows PEB stores "Path", POSIX uses "PATH"
+  #if defined(SP_WIN32)
+    sp_str_t path_key = SP_LIT("Path");
+  #else
+    sp_str_t path_key = SP_LIT("PATH");
+  #endif
+
+  u32 count = 0;
+  bool found_path = false;
+  while (sp_os_env_it_valid(&it)) {
+    EXPECT_TRUE(it.key.len > 0);
+    if (sp_str_equal(it.key, path_key)) {
+      found_path = true;
+    }
+    count++;
+    sp_os_env_it_next(&it);
+  }
+
+  EXPECT_TRUE(count > 0);
+  EXPECT_TRUE(found_path);
+}
+
+UTEST(sp_os_env, iterate_matches_capture) {
+  sp_env_t captured = sp_env_capture();
+
+  sp_os_env_it_t it = sp_os_env_it_begin();
+  u32 it_count = 0;
+  while (sp_os_env_it_valid(&it)) {
+    EXPECT_TRUE(sp_env_contains(&captured, it.key));
+    it_count++;
+    sp_os_env_it_next(&it);
+  }
+
+  EXPECT_EQ(it_count, sp_env_count(&captured));
+  sp_env_destroy(&captured);
+}

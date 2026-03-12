@@ -133,7 +133,7 @@ UTEST(cv, wait_notify_all) {
 typedef struct {
   sp_cv_t* cv;
   sp_mutex_t* mutex;
-  bool signaled;
+  s32 tickets;
   sp_atomic_s32 waiting_count;
   sp_atomic_s32 woken_count;
 } notify_one_wakes_single_data_t;
@@ -143,12 +143,13 @@ s32 notify_one_wakes_single_worker(void* userdata) {
 
   sp_mutex_lock(data->mutex);
   sp_atomic_s32_add(&data->waiting_count, 1);
-  while (!data->signaled) {
+  while (data->tickets == 0) {
     sp_cv_wait(data->cv, data->mutex);
   }
-  sp_atomic_s32_add(&data->woken_count, 1);
+  data->tickets--;
   sp_mutex_unlock(data->mutex);
 
+  sp_atomic_s32_add(&data->woken_count, 1);
   return 0;
 }
 
@@ -161,7 +162,7 @@ UTEST(cv, notify_one_wakes_single) {
   notify_one_wakes_single_data_t data = {
     .cv = &cv,
     .mutex = &mutex,
-    .signaled = false,
+    .tickets = 0,
     .waiting_count = 0,
     .woken_count = 0
   };
@@ -176,19 +177,28 @@ UTEST(cv, notify_one_wakes_single) {
   }
 
   sp_mutex_lock(&mutex);
-  data.signaled = true;
+  data.tickets = 1;
   sp_mutex_unlock(&mutex);
   sp_cv_notify_one(&cv);
 
-  sp_os_sleep_ms(100);
+  {
+    sp_tm_timer_t t = sp_tm_start_timer();
+    while (sp_atomic_s32_get(&data.woken_count) < 1 && sp_tm_read_timer(&t) < 5000000000ULL) {
+      sp_spin_pause();
+    }
+    EXPECT_EQ(sp_atomic_s32_get(&data.woken_count), 1);
+  }
 
-  EXPECT_EQ(sp_atomic_s32_get(&data.woken_count), 1);
-
+  sp_mutex_lock(&mutex);
+  data.tickets = NOTIFY_ONE_NUM_WORKERS - 1;
+  sp_mutex_unlock(&mutex);
   sp_cv_notify_all(&cv);
 
   for (s32 i = 0; i < NOTIFY_ONE_NUM_WORKERS; i++) {
     sp_thread_join(&workers[i]);
   }
+
+  EXPECT_EQ(sp_atomic_s32_get(&data.woken_count), NOTIFY_ONE_NUM_WORKERS);
 
   sp_cv_destroy(&cv);
   sp_mutex_destroy(&mutex);

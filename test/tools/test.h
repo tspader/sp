@@ -6,7 +6,15 @@
 #define ut (*utest_fixture)
 #define ur (*utest_result)
 
+#define SP_FAIL() *utest_result = UTEST_TEST_FAILURE
+
 #define SP_TEST_REPORT(fmt, ...) \
+  do { \
+    sp_str_t formatted = sp_format(fmt, ##__VA_ARGS__); \
+    UTEST_PRINTF("%s\n", sp_str_to_cstr(formatted)); \
+  } while (0)
+
+#define SP_TEST_REPORT_STR(fmt, ...) \
   do { \
     sp_str_t formatted = sp_format_str(fmt, ##__VA_ARGS__); \
     UTEST_PRINTF("%s\n", sp_str_to_cstr(formatted)); \
@@ -22,7 +30,7 @@
       sp_str_builder_new_line(&__sp_test_builder); \
       sp_str_builder_indent(&__sp_test_builder); \
       sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("{} != {}"), SP_FMT_QUOTED_STR((a)), SP_FMT_QUOTED_STR((b))); \
-      SP_TEST_REPORT(sp_str_builder_to_str(&__sp_test_builder)); \
+      SP_TEST_REPORT_STR(sp_str_builder_to_str(&__sp_test_builder)); \
       *utest_result = UTEST_TEST_FAILURE; \
  \
       if (is_assert) { \
@@ -108,17 +116,76 @@ void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker);
 // IMPLEMENTATION //
 ////////////////////
 #if !defined(SP_TEST_C)
+#if defined(SP_TEST_IMPLEMENTATION)
 #define SP_TEST_C
 
-#if defined(SP_TEST_IMPLEMENTATION)
+static sp_str_t sp_test_file_manager_top_level = SP_ZERO_INITIALIZE();
+
+static sp_str_t sp_test_file_manager_get_repo_root() {
+  sp_str_t path = sp_fs_get_exe_path();
+  if (sp_fs_exists(path) && sp_fs_is_regular_file(path)) {
+    path = sp_fs_parent_path(path);
+  }
+
+  while (!sp_str_empty(path)) {
+    if (sp_str_equal(sp_fs_get_name(path), SP_LIT("sp"))) {
+      sp_str_t marker = sp_fs_join_path(path, SP_LIT("sp.h"));
+      if (sp_fs_exists(marker)) {
+        return sp_fs_canonicalize_path(path);
+      }
+    }
+
+    if (sp_fs_is_root(path)) {
+      break;
+    }
+
+    sp_str_t parent = sp_fs_parent_path(path);
+    if (sp_str_equal(parent, path)) {
+      break;
+    }
+
+    path = parent;
+  }
+
+  SP_ASSERT(false);
+  return sp_fs_canonicalize_path(sp_fs_get_cwd());
+}
+
+static sp_str_t sp_test_file_manager_get_top_level(sp_str_t repo_root) {
+  if (!sp_str_empty(sp_test_file_manager_top_level)) {
+    if (!sp_fs_exists(sp_test_file_manager_top_level)) {
+      sp_fs_create_dir(sp_test_file_manager_top_level);
+    }
+    return sp_test_file_manager_top_level;
+  }
+
+  sp_str_t tmp = sp_fs_join_path(repo_root, SP_LIT(".tmp"));
+  if (!sp_fs_exists(tmp)) {
+    sp_fs_create_dir(tmp);
+  }
+
+  sp_tm_epoch_t now = sp_tm_now_epoch();
+  sp_str_t iso = sp_tm_epoch_to_iso8601(now);
+  sp_str_t sanitized = sp_str_replace_c8(iso, ':', '-');
+  sp_str_t root = sp_fs_join_path(tmp, sanitized);
+
+  if (!sp_fs_exists(root)) {
+    sp_fs_create_dir(root);
+  }
+
+  sp_test_file_manager_top_level = sp_fs_canonicalize_path(root);
+  return sp_test_file_manager_top_level;
+}
+
 void sp_test_file_manager_init(sp_test_file_manager_t* manager) {
   manager->paths.bin = sp_fs_get_exe_path();
-  manager->paths.build = sp_fs_parent_path(manager->paths.bin);
-  manager->paths.root = sp_fs_parent_path(manager->paths.build);
-  manager->paths.test = sp_fs_join_path(manager->paths.build, sp_str_lit("test"));
+  manager->paths.root = sp_test_file_manager_get_repo_root();
+  manager->paths.build = manager->paths.root;
+  manager->paths.test = sp_test_file_manager_get_top_level(manager->paths.root);
 
-  //sp_fs_remove_dir(manager->paths.test);
-  sp_fs_create_dir(manager->paths.test);
+  if (!sp_fs_exists(manager->paths.test)) {
+    sp_fs_create_dir(manager->paths.test);
+  }
 }
 
 sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name) {
@@ -126,6 +193,11 @@ sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name) {
 }
 
 void sp_test_file_create_ex(sp_test_file_config_t config) {
+  sp_str_t parent = sp_fs_parent_path(config.path);
+  if (!sp_str_empty(parent) && !sp_str_equal(parent, config.path) && !sp_fs_exists(parent)) {
+    sp_fs_create_dir(parent);
+  }
+
   sp_fs_remove_file(config.path);
 
   sp_io_writer_t stream = sp_io_writer_from_file(config.path, SP_IO_WRITE_MODE_OVERWRITE);
@@ -150,7 +222,18 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t rel
 }
 
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
-  sp_fs_remove_dir(manager->paths.test);
+  if (sp_str_empty(manager->paths.test)) {
+    return;
+  }
+
+  if (sp_str_equal(manager->paths.test, manager->paths.root)) {
+    SP_ASSERT(false);
+    return;
+  }
+
+  if (sp_fs_exists(manager->paths.test)) {
+    sp_fs_remove_dir(manager->paths.test);
+  }
 }
 
 ////////////////////
@@ -192,35 +275,51 @@ void sp_test_env_manager_init(sp_test_env_manager_t* manager) {
   manager->vars = SP_NULLPTR;
 }
 
+SP_PRIVATE void sp_test_env_set_os(sp_str_t key, sp_str_t value) {
+  #if defined(SP_WIN32)
+    SetEnvironmentVariableA(sp_str_to_cstr(key), sp_str_to_cstr(value));
+  #else
+    setenv(sp_str_to_cstr(key), sp_str_to_cstr(value), 1);
+  #endif
+}
+
+SP_PRIVATE void sp_test_env_unset_os(sp_str_t key) {
+  #if defined(SP_WIN32)
+    SetEnvironmentVariableA(sp_str_to_cstr(key), SP_NULLPTR);
+  #else
+    unsetenv(sp_str_to_cstr(key));
+  #endif
+}
+
 void sp_test_env_manager_set(sp_test_env_manager_t* manager, sp_str_t key, sp_str_t value) {
-  sp_str_t before = sp_os_get_env_var(key);
+  sp_str_t before = sp_os_env_get(key);
   sp_test_env_var_t var = {
     .key = key,
     .before = before,
     .after = value,
   };
   sp_dyn_array_push(manager->vars, var);
-  sp_os_export_env_var(key, value, SP_ENV_EXPORT_OVERWRITE_DUPES);
+  sp_test_env_set_os(key, value);
 }
 
 void sp_test_env_manager_unset(sp_test_env_manager_t* manager, sp_str_t key) {
-  sp_str_t before = sp_os_get_env_var(key);
+  sp_str_t before = sp_os_env_get(key);
   sp_test_env_var_t var = {
     .key = key,
     .before = before,
     .after = SP_LIT(""),
   };
   sp_dyn_array_push(manager->vars, var);
-  sp_os_clear_env_var(key);
+  sp_test_env_unset_os(key);
 }
 
 void sp_test_env_manager_cleanup(sp_test_env_manager_t* manager) {
   sp_dyn_array_for(manager->vars, i) {
     sp_test_env_var_t var = manager->vars[i];
     if (!sp_str_empty(var.before)) {
-      sp_os_export_env_var(var.key, var.before, SP_ENV_EXPORT_OVERWRITE_DUPES);
+      sp_test_env_set_os(var.key, var.before);
     } else {
-      sp_os_clear_env_var(var.key);
+      sp_test_env_unset_os(var.key);
     }
   }
   sp_dyn_array_free(manager->vars);

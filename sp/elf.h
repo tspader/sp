@@ -601,7 +601,7 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
   }
 
   sp_da_free(headers);
-  return SP_ERR_OK;
+  return SP_OK;
 }
 
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {

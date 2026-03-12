@@ -6,6 +6,7 @@
 SP_TEST_MAIN()
 
 struct sp_rb {
+  u8 placeholder;
 };
 
 UTEST_F_SETUP(sp_rb) {

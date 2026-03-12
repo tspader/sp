@@ -17,3 +17,12 @@ doc/*
 **/*.dSYM
 /.llm/reference
 /.llm
+**/.vs
+**/*.vcxproj.user
+/mutagen.yml.lock
+.tmp
+**/*.exe
+**/*.ilk
+**/*.obj
+**/*.pdb
+/mutagen.yml

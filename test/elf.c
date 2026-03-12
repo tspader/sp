@@ -230,7 +230,7 @@ UTEST_F(elf, rela_info_encoding) {
 
 UTEST_F(elf, err_add_reloc_null_section) {
   sp_elf_add_relocation(SP_NULLPTR, 0, 0, 0, 0);
-  ASSERT_EQ(sp_err_get(), SP_ERR_OK);
+  ASSERT_EQ(sp_err_get(), SP_OK);
 }
 
 UTEST_F(elf, minimal_elf_format) {
@@ -287,7 +287,7 @@ UTEST_F(elf, minimal_readelf_validates) {
 UTEST_F(elf, err_write_null_elf) {
   sp_io_writer_t buf = sp_io_writer_from_dyn_mem();
   sp_err_t err = sp_elf_write(SP_NULLPTR, &buf);
-  ASSERT_NE(err, SP_ERR_OK);
+  ASSERT_NE(err, SP_OK);
   sp_io_writer_close(&buf);
 }
 
@@ -612,7 +612,7 @@ UTEST_F(elf, integration_link_and_run) {
 
   sp_str_t obj_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration.o"));
   sp_err_t err = sp_elf_write_to_file(elf, obj_path);
-  ASSERT_EQ(err, SP_ERR_OK);
+  ASSERT_EQ(err, SP_OK);
 
   sp_str_t c_src =
     sp_str_lit("#include <stdio.h>\n"

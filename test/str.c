@@ -451,6 +451,21 @@ UTEST(str, to_upper_and_replace) {
 
   sp_str_t no_match = sp_str_replace_c8(original, 'z', 'X');
   SP_EXPECT_STR_EQ_CSTR(no_match, "hello world");
+
+  // all same char
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT("aaa"), 'a', 'b'), "bbb");
+
+  // empty string
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT(""), 'a', 'b'), "");
+
+  // same from/to (no-op)
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT("abc"), 'a', 'a'), "abc");
+
+  // single char string
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT("x"), 'x', 'y'), "y");
+
+  // first and last positions
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT("/path/to/file/"), '/', '\\'), "\\path\\to\\file\\");
 }
 
 UTEST(str, ends_with) {
@@ -704,6 +719,12 @@ UTEST(str, split_c8) {
     SP_EXPECT_STR_EQ(parts[0], SP_LIT(""));
     SP_EXPECT_STR_EQ(parts[1], SP_LIT(""));
   }
+
+  {
+    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("x"), ',');
+    ASSERT_EQ(sp_dyn_array_size(parts), 1);
+    SP_EXPECT_STR_EQ_CSTR(parts[0], "x");
+  }
 }
 
 UTEST(str, prefix_suffix) {
@@ -868,6 +889,57 @@ UTEST(str, substring_searching) {
 
   ASSERT_TRUE(sp_str_contains(SP_LIT("aaaa"), SP_LIT("aa")));
   ASSERT_TRUE(sp_str_contains(SP_LIT("abababab"), SP_LIT("abab")));
+
+  // partial prefix: "la" appears before "lap"
+  ASSERT_TRUE(sp_str_contains(SP_LIT("la_ap_lap"), SP_LIT("lap")));
+
+  // single char
+  ASSERT_TRUE(sp_str_contains(SP_LIT("abc"), SP_LIT("b")));
+  ASSERT_FALSE(sp_str_contains(SP_LIT("abc"), SP_LIT("z")));
+}
+
+typedef struct {
+  sp_str_t str;
+  c8 needle;
+  s32 expected;
+} sp_str_find_c8_case_t;
+
+UTEST(str, char_find_c8) {
+  sp_str_find_c8_case_t cases[] = {
+    { SP_LIT("hello world"), 'h', 0 },
+    { SP_LIT("hello world"), 'o', 4 },
+    { SP_LIT("hello world"), 'd', 10 },
+    { SP_LIT("banana"), 'a', 1 },
+    { SP_LIT("banana"), 'n', 2 },
+    { SP_LIT("/home/user/file.txt"), '/', 0 },
+    { SP_LIT("/home/user/file.txt"), '.', 15 },
+    { SP_LIT(""), 'x', -1 },
+    { SP_LIT("hello"), 'z', -1 },
+    { SP_LIT("x"), 'x', 0 },
+  };
+
+  SP_CARR_FOR(cases, i) {
+    ASSERT_EQ(sp_str_find_c8(cases[i].str, cases[i].needle), cases[i].expected);
+  }
+}
+
+UTEST(str, char_find_c8_reverse) {
+  sp_str_find_c8_case_t cases[] = {
+    { SP_LIT("hello world"), 'h', 0 },
+    { SP_LIT("hello world"), 'o', 7 },
+    { SP_LIT("hello world"), 'd', 10 },
+    { SP_LIT("banana"), 'a', 5 },
+    { SP_LIT("banana"), 'n', 4 },
+    { SP_LIT("/home/user/file.txt"), '/', 10 },
+    { SP_LIT("/home/user/file.txt"), '.', 15 },
+    { SP_LIT(""), 'x', -1 },
+    { SP_LIT("hello"), 'z', -1 },
+    { SP_LIT("x"), 'x', 0 },
+  };
+
+  SP_CARR_FOR(cases, i) {
+    ASSERT_EQ(sp_str_find_c8_reverse(cases[i].str, cases[i].needle), cases[i].expected);
+  }
 }
 
 UTEST(str, view_creation) {

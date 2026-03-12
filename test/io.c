@@ -426,7 +426,7 @@ UTEST_F(io_rw, writer_buffered_flush_empty) {
   sp_io_writer_set_buffer(&w, write_buf, sizeof(write_buf));
 
   sp_err_t err = sp_io_flush(&w);
-  EXPECT_EQ(err, SP_ERR_OK);
+  EXPECT_EQ(err, SP_OK);
   sp_io_writer_close(&w);
 }
 

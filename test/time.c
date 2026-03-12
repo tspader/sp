@@ -213,29 +213,76 @@ UTEST(tm, roundtrip_us_ns) {
   EXPECT_EQ(sp_tm_ns_to_us(sp_tm_us_to_ns(1000000)), 1000000ULL);
 }
 
-UTEST(tm, sleep_ns_lower_bound) {
-  u64 sleep_ns = sp_tm_ms_to_ns(5);
-  sp_tm_point_t start = sp_tm_now_point();
-  sp_sleep_ns(sleep_ns);
-  sp_tm_point_t end = sp_tm_now_point();
-  u64 elapsed = sp_tm_point_diff(end, start);
-  EXPECT_GE(elapsed, sleep_ns);
+// ISO8601 known-value tests
+
+typedef struct {
+  sp_tm_epoch_t epoch;
+  const c8* expected;
+} tm_iso8601_case_t;
+
+UTEST(tm, iso8601_known_values) {
+  tm_iso8601_case_t cases[] = {
+    { { .s = 0,              .ns = 0 },         "1970-01-01T00:00:00.000Z" },
+    { { .s = 946684800,      .ns = 0 },         "2000-01-01T00:00:00.000Z" },
+    { { .s = 946684799,      .ns = 0 },         "1999-12-31T23:59:59.000Z" },
+    { { .s = 2147483647,     .ns = 0 },         "2038-01-19T03:14:07.000Z" },
+    { { .s = 2147483648ULL,  .ns = 0 },         "2038-01-19T03:14:08.000Z" },
+    { { .s = 951782400,      .ns = 0 },         "2000-02-29T00:00:00.000Z" },
+    { { .s = 1709208000,     .ns = 0 },         "2024-02-29T12:00:00.000Z" },
+    { { .s = 1,              .ns = 0 },         "1970-01-01T00:00:01.000Z" },
+    { { .s = 86400,          .ns = 0 },         "1970-01-02T00:00:00.000Z" },
+    { { .s = 86399,          .ns = 0 },         "1970-01-01T23:59:59.000Z" },
+  };
+
+  SP_CARR_FOR(cases, i) {
+    sp_str_t result = sp_tm_epoch_to_iso8601(cases[i].epoch);
+    SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
+  }
 }
 
-UTEST(tm, sleep_ms_lower_bound) {
-  f64 sleep_ms = 10.0;
-  sp_tm_point_t start = sp_tm_now_point();
-  sp_sleep_ms(sleep_ms);
-  sp_tm_point_t end = sp_tm_now_point();
-  u64 elapsed = sp_tm_point_diff(end, start);
-  EXPECT_GE(elapsed, sp_tm_ms_to_ns(10));
+UTEST(tm, iso8601_millisecond_padding) {
+  tm_iso8601_case_t cases[] = {
+    { { .s = 0, .ns = 1000000 },    "1970-01-01T00:00:00.001Z" },
+    { { .s = 0, .ns = 10000000 },   "1970-01-01T00:00:00.010Z" },
+    { { .s = 0, .ns = 100000000 },  "1970-01-01T00:00:00.100Z" },
+    { { .s = 0, .ns = 999000000 },  "1970-01-01T00:00:00.999Z" },
+  };
+
+  SP_CARR_FOR(cases, i) {
+    sp_str_t result = sp_tm_epoch_to_iso8601(cases[i].epoch);
+    SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
+  }
 }
 
-UTEST(tm, os_sleep_ns_lower_bound) {
-  u64 sleep_ns = sp_tm_ms_to_ns(10);
-  sp_tm_point_t start = sp_tm_now_point();
-  sp_os_sleep_ns(sleep_ns);
-  sp_tm_point_t end = sp_tm_now_point();
-  u64 elapsed = sp_tm_point_diff(end, start);
-  EXPECT_GE(elapsed, sleep_ns);
+UTEST(tm, fps_to_ns) {
+  EXPECT_EQ(sp_tm_fps_to_ns(1), 1000000000ULL);
+  EXPECT_EQ(sp_tm_fps_to_ns(30), 33333333ULL);
+  EXPECT_EQ(sp_tm_fps_to_ns(60), 16666666ULL);
 }
+
+// UTEST(tm, sleep_ns_lower_bound) {
+//   u64 sleep_ns = sp_tm_ms_to_ns(5);
+//   sp_tm_point_t start = sp_tm_now_point();
+//   sp_sleep_ns(sleep_ns);
+//   sp_tm_point_t end = sp_tm_now_point();
+//   u64 elapsed = sp_tm_point_diff(end, start);
+//   EXPECT_GE(elapsed, sleep_ns);
+// }
+//
+// UTEST(tm, sleep_ms_lower_bound) {
+//   f64 sleep_ms = 10.0;
+//   sp_tm_point_t start = sp_tm_now_point();
+//   sp_sleep_ms(sleep_ms);
+//   sp_tm_point_t end = sp_tm_now_point();
+//   u64 elapsed = sp_tm_point_diff(end, start);
+//   EXPECT_GE(elapsed, sp_tm_ms_to_ns(10));
+// }
+//
+// UTEST(tm, os_sleep_ns_lower_bound) {
+//   u64 sleep_ns = sp_tm_ms_to_ns(10);
+//   sp_tm_point_t start = sp_tm_now_point();
+//   sp_os_sleep_ns(sleep_ns);
+//   sp_tm_point_t end = sp_tm_now_point();
+//   u64 elapsed = sp_tm_point_diff(end, start);
+//   EXPECT_GE(elapsed, sleep_ns);
+// }

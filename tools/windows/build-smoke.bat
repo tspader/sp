@@ -1,0 +1,1 @@
+cl.exe /I. /I. /I.\include /I.\tools /I.\test\tools /I.\test\tools\process /I.\sp /Zi /JMC /nologo /W4 /WX- /diagnostics:column /sdl /Od /D _CRT_SECURE_NO_WARNINGS /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /std:c17 /external:W4 /Gd /TC /wd4100 /FC /errorReport:queue /we4715 .\test\smoke.c /Fe:smoke.exe /link shell32.lib

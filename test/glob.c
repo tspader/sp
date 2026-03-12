@@ -94,7 +94,9 @@ void run_parse_error_test(int* utest_result, parse_error_test_t* t) {
 
 SP_TEST_MAIN()
 
-struct glob {};
+struct glob {
+  u8 placeholder;
+};
 
 UTEST_F_SETUP(glob) {
   (void)utest_fixture;

@@ -98,6 +98,11 @@ name = "time"
 source = ["test/time.c"]
 
 [[test]]
+name = "mem"
+source = ["test/mem.c"]
+
+
+[[test]]
 name = "amalg"
 source = ["test/amalg.c"]
 
