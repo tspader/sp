@@ -1,6 +1,6 @@
 CC := clang
 
-CFLAGS_FREESTANDING = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined
+CFLAGS_FREESTANDING = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DBUILD_FREESTANDING_EXAMPLE
 CFLAGS_DEBUG = -O0 -g
 
 BUILD_DIR = build
@@ -18,7 +18,7 @@ all: $(TARGETS)
 $(BUILD_DIR)/freestanding: test/freestanding.c sp.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
 
-$(EXAMPLE_DIR)/jit: example/freestanding/jit/jit.c sp.h | $(EXAMPLE_DIR)
+$(EXAMPLE_DIR)/jit: example/freestanding/jit.c sp.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
 
 $(EXAMPLE_DIR)/prompt: example/cli/prompt.c sp.h sp/prompt.h | $(EXAMPLE_DIR)

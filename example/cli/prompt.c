@@ -1,5 +1,7 @@
-// #define SP_FREESTANDING
-// #define SP_BUILTIN
+#if defined(BUILD_FREESTANDING_EXAMPLE)
+  #define SP_FREESTANDING
+  #define SP_BUILTIN
+#endif
 #define SP_IMPLEMENTATION
 #include "sp.h"
 

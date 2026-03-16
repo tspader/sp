@@ -509,3 +509,30 @@ UTEST_F(io_rw, reader_buffered_seek_discards_buffer) {
 
   sp_io_reader_close(&r);
 }
+
+UTEST_F(io_rw, seek_beyond_4gb) {
+  s64 offset = (s64)5 * 1024 * 1024 * 1024;
+  u8 marker[4] = {0xDE, 0xAD, 0xBE, 0xEF};
+
+  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  s64 seek_pos = sp_io_writer_seek(&w, offset, SP_IO_SEEK_SET);
+  EXPECT_EQ(seek_pos, offset);
+  sp_io_write(&w, marker, 4);
+  sp_io_writer_close(&w);
+
+  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
+  u64 size = sp_io_reader_size(&r);
+  EXPECT_EQ(size, (u64)offset + 4);
+
+  s64 read_pos = sp_io_reader_seek(&r, offset, SP_IO_SEEK_SET);
+  EXPECT_EQ(read_pos, offset);
+
+  u8 result[4] = SP_ZERO_INITIALIZE();
+  u64 bytes = sp_io_read(&r, result, 4);
+  EXPECT_EQ(bytes, 4);
+  EXPECT_EQ(result[0], 0xDE);
+  EXPECT_EQ(result[1], 0xAD);
+  EXPECT_EQ(result[2], 0xBE);
+  EXPECT_EQ(result[3], 0xEF);
+  sp_io_reader_close(&r);
+}

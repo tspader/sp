@@ -10,9 +10,46 @@
   - `test/tools/*`: code for modules which test external processes
 - `tools/`: random, unstructured bullshit which is not part of the official build
 
-# commands
-- `bspn build --target $target --profile debug --force`
-- `./build/debug/store/bin/$target`
+# Build
+## Linux
+Build a test target:
+
+```sh
+spn-2026-01-14 build -t ht -p sanity -f
+```
+
+Run it:
+
+```sh
+./build/sanity/store/bin/fs
+```
+
+Replace `fs` with any other test target, like `str`, or `amalg` for all tests in one TU
+
+Before you finish, build and run with `clang` (the default compiler for our debug builds)
+```sh
+spn-2026-01-14 build -t $target -p debug -f
+./build/debug/store/bin/$target
+```
+
+## Windows
+Start a `tmux` session and `ssh spader@piotr`. Then, from `C:/Users/spader/source/sp`, load the MSVC environment:
+
+```powershell
+. .\tools\windows\devenv.ps1
+```
+
+Build and run fs tests:
+
+```powershell
+msbuild .\tools\windows\sp\fs.vcxproj /t:Run
+```
+
+Build and run the main amalgamated test app:
+
+```powershell
+msbuild .\tools\windows\sp\sp.vcxproj /t:Run
+```
 
 # rules
 - Never comment any code, under any circumstances. Code with comments will be rejected outright.

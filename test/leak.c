@@ -3,8 +3,6 @@
 // sp_str_cleave_c8
 // sp_str_copy
 // sp_str_copy_to
-// sp_str_find_longest_n
-// sp_str_find_shortest_n
 // sp_str_from_cstr
 // sp_str_from_cstr_null
 // sp_str_from_cstr_sized

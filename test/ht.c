@@ -12,13 +12,13 @@ typedef struct {
   s32 type;
 } compound_key_t;
 
-sp_hash_t sp_test_string_hash(void* key, u32 size) {
+sp_hash_t sp_test_string_hash(void* key, u64 size) {
   (void)size;
   sp_str_t* str = (sp_str_t*)key;
   return sp_hash_bytes(str->data, str->len, SP_HT_HASH_SEED);
 }
 
-bool sp_test_string_compare(void* ka, void* kb, u32 size) {
+bool sp_test_string_compare(void* ka, void* kb, u64 size) {
   (void)size;
   sp_str_t* a = (sp_str_t*)ka;
   sp_str_t* b = (sp_str_t*)kb;
@@ -194,7 +194,7 @@ UTEST(ht, iteration) {
     float val = *sp_ht_it_getp(ht, it);
 
     count++;
-    sum += val;
+    sum += (s32)val;
   }
 
   EXPECT_EQ(count, 10);
@@ -228,7 +228,7 @@ UTEST(ht, edge_cases) {
 UTEST(ht, pathological_all_same_hash) {
   sp_ht(u32, u32) ht = sp_ht_new(u32, u32);
 
-  u32 cap = sp_ht_capacity(ht);
+  u64 cap = sp_ht_capacity(ht);
   if (cap < 2) {
     sp_ht_insert(ht, 0, 0);
     sp_ht_insert(ht, 1, 0);
@@ -291,7 +291,7 @@ UTEST(ht, collision) {
     sp_ht_insert(ht, i, i);
   }
 
-  u32 capacity = sp_ht_capacity(ht);
+  u64 capacity = sp_ht_capacity(ht);
   s32 keys [3] = { -1, -1, -1 };
   s32 num_found = 0;
 
@@ -785,13 +785,13 @@ UTEST(ht, for_kv_null_table) {
 
 // Issue tests: reproduce bugs documented in doc/hash-table.md
 
-static sp_hash_t sp_test_constant_hash(void* key, u32 size) {
+static sp_hash_t sp_test_constant_hash(void* key, u64 size) {
   (void)key;
   (void)size;
   return 42;
 }
 
-static bool sp_test_s32_compare(void* ka, void* kb, u32 size) {
+static bool sp_test_s32_compare(void* ka, void* kb, u64 size) {
   (void)size;
   return *(s32*)ka == *(s32*)kb;
 }
@@ -828,7 +828,7 @@ UTEST(ht_issue, hash_collision_overwrites_different_keys) {
   sp_ht_free(ht);
 }
 
-static sp_hash_t sp_test_identity_hash(void* key, u32 size) {
+static sp_hash_t sp_test_identity_hash(void* key, u64 size) {
   (void)size;
   return (sp_hash_t)(*(s32*)key);
 }
@@ -865,12 +865,12 @@ UTEST(ht_issue, rehash_breaks_lookups_after_resize) {
 
 static u32 g_hash_call_count = 0;
 
-static sp_hash_t sp_test_counting_hash(void* key, u32 size) {
+static sp_hash_t sp_test_counting_hash(void* key, u64 size) {
   g_hash_call_count++;
   return sp_hash_bytes(key, size, SP_HT_HASH_SEED);
 }
 
-static bool sp_test_counting_compare(void* ka, void* kb, u32 size) {
+static bool sp_test_counting_compare(void* ka, void* kb, u64 size) {
   return sp_mem_is_equal(ka, kb, size);
 }
 
@@ -883,7 +883,7 @@ UTEST(ht_issue, linear_scan_calls_hash_too_many_times) {
   for (s32 i = 0; i < 32; i++) {
     sp_ht_insert(ht, i, i);
   }
-  u32 capacity = sp_ht_capacity(ht);
+  u64 capacity = sp_ht_capacity(ht);
   sp_ht_clear(ht);
 
   g_hash_call_count = 0;

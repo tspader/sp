@@ -501,7 +501,7 @@ UTEST_F(context, arena_pop_across_blocks) {
   sp_mem_fill_u8(b, 32, 0xBB);
   sp_mem_fill_u8(c, 32, 0xCC);
 
-  u32 used_before = sp_mem_arena_bytes_used(arena);
+  u64 used_before = sp_mem_arena_bytes_used(arena);
   EXPECT_GT(used_before, 0u);
 
   sp_mem_arena_pop(marker);
@@ -554,7 +554,7 @@ UTEST_F(context, arena_block_reuse_after_pop) {
   sp_mem_allocator_alloc(allocator, 32);
   sp_mem_allocator_alloc(allocator, 32);
 
-  u32 capacity_after_allocs = sp_mem_arena_capacity(arena);
+  u64 capacity_after_allocs = sp_mem_arena_capacity(arena);
 
   sp_mem_arena_pop(marker);
 
@@ -582,7 +582,7 @@ UTEST_F(context, arena_reuse_logic_check) {
   sp_mem_allocator_alloc(allocator, 40);
 
   // Snapshot capacity. Should be 128 (64 + 64).
-  u32 cap_initial = sp_mem_arena_capacity(arena);
+  u64 cap_initial = sp_mem_arena_capacity(arena);
   EXPECT_EQ(cap_initial, 128u);
 
   // 4. Reset arena (pointers go back to Block A)
@@ -596,7 +596,7 @@ UTEST_F(context, arena_reuse_logic_check) {
   // The allocator would incorrectly skip Block B and allocate Block C.
   sp_mem_allocator_alloc(allocator, 40);
 
-  u32 cap_after = sp_mem_arena_capacity(arena);
+  u64 cap_after = sp_mem_arena_capacity(arena);
 
   // FAILURE CONDITION: If cap_after > 128, the arena leaked a block instead of reusing.
   EXPECT_EQ(cap_after, 128u);
@@ -692,8 +692,8 @@ UTEST_F(context, arena_no_realloc_no_header_overhead) {
   sp_mem_arena_alloc(no_realloc, 16);
   sp_mem_arena_alloc(normal, 16);
 
-  u32 no_realloc_used = sp_mem_arena_bytes_used(no_realloc);
-  u32 normal_used = sp_mem_arena_bytes_used(normal);
+  u64 no_realloc_used = sp_mem_arena_bytes_used(no_realloc);
+  u64 normal_used = sp_mem_arena_bytes_used(normal);
 
   EXPECT_LT(no_realloc_used, normal_used);
 

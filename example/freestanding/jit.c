@@ -432,45 +432,48 @@ static jit_fn_t compile(sp_str_t source) {
   return (jit_fn_t)mem;
 }
 
-static bool run_test(const c8* name, sp_str_t src, s64 expected) {
-  SP_LOG("{}:", SP_FMT_CSTR(name));
-  SP_LOG("  source: {}", SP_FMT_STR(src));
+static u32 run_test(sp_str_t src, s64 expected) {
+  sp_str_builder_t b = sp_zero_initialize();
+  sp_str_builder_append_fmt(&b, "{:fg brightblack}", SP_FMT_STR(src));
+  sp_str_builder_append_c8(&b, ' ');
 
   jit_fn_t fn = compile(src);
   if (fn) {
     s64 result = fn();
     if (result == expected) {
-      SP_LOG("  result: {} {:fg green}", SP_FMT_S64(result), SP_FMT_CSTR("[OK]"));
-      return true;
+      sp_str_builder_append_fmt(&b, "{} {:fg green}", SP_FMT_S64(result), SP_FMT_CSTR("[OK]"));
+      sp_log(sp_str_builder_as_str(&b));
+      return 0;
     } else {
-      SP_LOG("  result: {} (expected {}) {:fg red}",
-             SP_FMT_S64(result), SP_FMT_S64(expected), SP_FMT_CSTR("[FAIL]"));
+      sp_str_builder_append_fmt(&b, "{} (expected {}) {:fg red}", SP_FMT_S64(result), SP_FMT_S64(expected), SP_FMT_CSTR("[FAIL]"));
     }
   }
-  return false;
+  sp_log(sp_str_builder_as_str(&b));
+  return 1;
 }
 
-s32 jit_main(s32 argc, const c8** argv);
+typedef struct {
+  sp_str_t program;
+  s32 result;
+} test_t;
+
+s32 jit_main(s32 num_args, const c8** args) {
+  SP_LOG("{:fg brightcyan} jit-r-done (compile + execute machine code on the fly)", SP_FMT_CSTR("sp.h"));
+
+  test_t tests [] = {
+    { sp_str_lit("int x = 10; int y = 32; return x + y;"), 42 },
+    { sp_str_lit("int a = 6; int b = 7; return a * b;"), 42 },
+    { sp_str_lit("int x = 5; int y = 3; int z = x * y + x - y; return z;"), 17 },
+    { sp_str_lit("int x = 10; x = x + 5; x = x * 2; return x;"), 30 },
+  };
+
+  u32 failed = 0;
+  sp_carr_for(tests, it) {
+    failed += run_test(tests[it].program, tests[it].result);
+  }
+
+  return failed;
+}
+
 SP_ENTRY(jit_main)
 
-s32 jit_main(s32 argc, const c8** argv) {
-  (void)argc; (void)argv;
-  sp_sys_init();
-  SP_LOG("=== sp.h JIT compiler test ===\n");
-
-  s32 failures = 0;
-  if (!run_test("test 1: simple arithmetic",
-           sp_str_lit("int x = 10; int y = 32; return x + y;"), 42)) failures++;
-
-  if (!run_test("test 2: multiplication",
-           sp_str_lit("int a = 6; int b = 7; return a * b;"), 42)) failures++;
-
-  if (!run_test("test 3: complex expression",
-           sp_str_lit("int x = 5; int y = 3; int z = x * y + x - y; return z;"), 17)) failures++;
-
-  if (!run_test("test 4: reassignment",
-           sp_str_lit("int x = 10; x = x + 5; x = x * 2; return x;"), 30)) failures++;
-
-  SP_LOG("\n=== done ===");
-  return failures;
-}

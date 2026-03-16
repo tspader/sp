@@ -100,7 +100,7 @@ typedef struct sp_test_memory_tracker {
 void sp_test_use_mem_arena(u32 capacity);
 void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity);
 void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker);
-u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker);
+u64 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker);
 void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker);
 
 #if defined(SP_TEST_AMALGAMATION)
@@ -259,7 +259,7 @@ void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker) {
   sp_context_pop();
 }
 
-u32 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
+u64 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
   return sp_mem_arena_bytes_used(tracker->bump);
 }
 

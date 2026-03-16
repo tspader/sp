@@ -397,4 +397,39 @@ UTEST_F(mem, zero_large) {
   run_mem_zero_test(utest_result, &(mem_zero_test_t){ .buffer_size = 400 });
 }
 
+void* mock_alloc_record_size(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
+  (void)mode;
+  (void)ptr;
+  *(u64*)user_data = size;
+  return SP_NULLPTR;
+}
+
+UTEST_F(mem, alloc_preserves_u64_size) {
+  u64 recorded_size = 0;
+  sp_allocator_t mock = {
+    .on_alloc = mock_alloc_record_size,
+    .user_data = &recorded_size,
+  };
+
+  sp_context_push_allocator(mock);
+  u64 requested = (u64)5 * 1024 * 1024 * 1024;
+  sp_alloc(requested);
+  sp_context_pop();
+
+  EXPECT_EQ(recorded_size, requested);
+}
+
+UTEST_F(mem, libc_metadata_stores_u64_size) {
+  sp_allocator_t libc = sp_mem_libc_new();
+
+  u64 size = 64;
+  void* ptr = sp_mem_allocator_alloc(libc, size);
+  ASSERT_TRUE(ptr);
+
+  sp_mem_libc_metadata_t* meta = sp_mem_libc_get_metadata(ptr);
+  EXPECT_EQ(meta->size, size);
+
+  sp_mem_allocator_free(libc, ptr);
+}
+
 SP_TEST_MAIN()

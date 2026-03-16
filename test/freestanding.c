@@ -251,10 +251,10 @@ void _start(void) {
   {
     sp_sys_init();
     void* tp = sp_sys_get_tp();
-    TEST("sp_sys_init + get_tp", tp == &sp_sys_thread_block);
+    TEST("sp_sys_init + get_tp", tp == &sp_tls_block);
 
-    sp_sys_tls_set((void*)0xDEADBEEF);
-    void* data = sp_sys_tls_get();
+    sp_tls_set((void*)0xDEADBEEF);
+    void* data = sp_tls_get();
     TEST("tls_set/get", data == (void*)0xDEADBEEF);
   }
 

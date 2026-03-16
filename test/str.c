@@ -546,50 +546,6 @@ UTEST(str_kernel, map_case_transform) {
   SP_EXPECT_STR_EQ_CSTR(results[3], "123 Numbers First");
 }
 
-UTEST(str_kernel, reduce_contains) {
-  sp_str_t strings[] = {
-    SP_LIT("apple"),
-    SP_LIT("banana"),
-    SP_LIT("cherry"),
-    SP_LIT("date"),
-  };
-
-  ASSERT_TRUE(sp_str_contains_n(strings, 4, SP_LIT("a")));
-  ASSERT_TRUE(sp_str_contains_n(strings, 4, SP_LIT("ana")));
-
-  ASSERT_FALSE(sp_str_contains_n(strings, 4, SP_LIT("xyz")));
-
-  ASSERT_FALSE(sp_str_contains_n(strings, 0, SP_LIT("apple")));
-}
-
-UTEST(str_kernel, reduce_count) {
-  sp_str_t strings[] = {
-    SP_LIT("hello world"),
-    SP_LIT("hello hello"),
-    SP_LIT("world"),
-    SP_LIT("hello"),
-  };
-
-  ASSERT_EQ(sp_str_count_n(strings, 4, SP_LIT("hello")), 4);
-
-  ASSERT_EQ(sp_str_count_n(strings, 4, SP_LIT("world")), 2);
-}
-
-UTEST(str_kernel, reduce_longest_shortest) {
-  sp_str_t strings[] = {
-    SP_LIT("short"),
-    SP_LIT("medium length"),
-    SP_LIT("x"),
-    SP_LIT("this is the longest string here"),
-    SP_LIT("tiny"),
-  };
-
-  sp_str_t longest = sp_str_find_longest_n(strings, 5);
-  SP_EXPECT_STR_EQ_CSTR(longest, "this is the longest string here");
-
-  sp_str_t shortest = sp_str_find_shortest_n(strings, 5);
-  SP_EXPECT_STR_EQ_CSTR(shortest, "x");
-}
 
 UTEST(str, trim) {
   SP_EXPECT_STR_EQ_CSTR(sp_str_trim(SP_LIT("  hello  ")), "hello");

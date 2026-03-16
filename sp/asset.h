@@ -14,7 +14,6 @@ sp_future_t* sp_future_create(u32 size);
 void sp_future_set_value(sp_future_t* future, void* data);
 void sp_future_destroy(sp_future_t* future);
 
-#if defined(SP_ASSET)
 typedef enum {
   SP_ASSET_STATE_QUEUED,
   SP_ASSET_STATE_IMPORTED,
@@ -91,8 +90,6 @@ sp_asset_t* sp_asset_registry_reserve(sp_asset_registry_t* r);
 sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_asset_kind_t kind);
 s32 sp_asset_registry_thread_fn(void* user_data);
 
-#endif
-
 #if defined(SP_IMPLEMENTATION)
 
 sp_future_t* sp_future_create(u32 size) {
@@ -115,7 +112,6 @@ void sp_future_set_value(sp_future_t* future, void* value) {
   sp_atomic_s32_set(&future->ready, 1);
 }
 
-#if defined(SP_ASSET)
 void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
   sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
   sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
@@ -289,8 +285,6 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 
   return 0;
 }
-#endif
 
-#endif
-
-#endif
+#endif // SP_ASSET_IMPLEMENTATION
+#endif // SP_ASSET_H
