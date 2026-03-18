@@ -2478,6 +2478,7 @@ SP_API bool            sp_str_equal_cstr(sp_str_t a, const c8* b);
 SP_API bool            sp_str_starts_with(sp_str_t str, sp_str_t prefix);
 SP_API bool            sp_str_ends_with(sp_str_t str, sp_str_t suffix);
 SP_API bool            sp_str_contains(sp_str_t str, sp_str_t needle);
+SP_API s32             sp_str_find(sp_str_t str, sp_str_t needle);
 SP_API s32             sp_str_find_c8(sp_str_t str, c8 needle);
 SP_API s32             sp_str_find_c8_reverse(sp_str_t str, c8 needle);
 SP_API bool            sp_str_valid(sp_str_t str);
@@ -6966,14 +6967,19 @@ bool sp_str_ends_with(sp_str_t str, sp_str_t suffix) {
 }
 
 bool sp_str_contains(sp_str_t str, sp_str_t needle) {
-  if (str.len < needle.len) return false;
+  return sp_str_find(str, needle) != SP_STR_NO_MATCH;
+}
+
+s32 sp_str_find(sp_str_t str, sp_str_t needle) {
+  if (needle.len == 0) return 0;
+  if (str.len < needle.len) return SP_STR_NO_MATCH;
 
   for (u32 i = 0; i <= str.len - needle.len; i++) {
     if (sp_mem_is_equal(str.data + i, needle.data, needle.len)) {
-      return true;
+      return (s32)i;
     }
   }
-  return false;
+  return SP_STR_NO_MATCH;
 }
 
 s32 sp_str_find_c8(sp_str_t str, c8 needle) {
@@ -8266,9 +8272,9 @@ sp_str_t sp_fs_get_exe_path() {
 }
 #endif
 
-/////////////////////////
-// STORAGE+CONFIG PATH //
-/////////////////////////
+//////////////////
+// SYSTEM PATHS //
+//////////////////
 #if defined(SP_WIN32)
 sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
   (void)xdg;
@@ -8277,11 +8283,11 @@ sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
 }
 
 sp_str_t sp_fs_get_storage_path() {
-  return SP_ZERO_STRUCT(sp_str_t);
+  return sp_os_env_get(SP_LIT("LOCALAPPDATA"));
 }
 
 sp_str_t sp_fs_get_config_path() {
-  return SP_ZERO_STRUCT(sp_str_t);
+  return sp_os_env_get(SP_LIT("APPDATA"));
 }
 #endif
 
@@ -8305,9 +8311,9 @@ sp_str_t sp_fs_get_config_path() {
 }
 #endif
 
-//////////////////////////
-// WIN32 PATH FOR API   //
-//////////////////////////
+/////////////////
+// WIN32 UTILS //
+/////////////////
 #if defined(SP_WIN32)
 SP_PRIVATE c8* sp_fs_win32_path_for_api(sp_str_t path) {
   sp_str_t normalized = sp_fs_normalize_path(path);
@@ -8508,16 +8514,23 @@ void sp_os_print_err(sp_str_t message) {
 #endif
 
 #if defined(SP_WIN32)
-void sp_os_print(sp_str_t message) {
-  HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+SP_PRIVATE void sp_os_win32_write(DWORD handle_id, sp_str_t message) {
+  HANDLE handle = GetStdHandle(handle_id);
   DWORD written;
-  WriteConsoleA(console, message.data, message.len, &written, NULL);
+  DWORD mode;
+  if (GetConsoleMode(handle, &mode)) {
+    WriteConsoleA(handle, message.data, message.len, &written, NULL);
+  } else {
+    WriteFile(handle, message.data, message.len, &written, NULL);
+  }
+}
+
+void sp_os_print(sp_str_t message) {
+  sp_os_win32_write(STD_OUTPUT_HANDLE, message);
 }
 
 void sp_os_print_err(sp_str_t message) {
-  HANDLE console = GetStdHandle(STD_ERROR_HANDLE);
-  DWORD written;
-  WriteConsoleA(console, message.data, message.len, &written, NULL);
+  sp_os_win32_write(STD_ERROR_HANDLE, message);
 }
 #endif
 
