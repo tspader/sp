@@ -1689,7 +1689,7 @@ UTEST(sp_fs_collect, basic_scan) {
   sp_fs_create_dir(dir1);
   sp_fs_create_dir(dir2);
 
-  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(base);
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 4);
 
@@ -1697,7 +1697,7 @@ UTEST(sp_fs_collect, basic_scan) {
   u32 dir_count = 0;
 
   sp_dyn_array_for(entries, i) {
-    sp_os_dir_ent_t* entry = &entries[i];
+    sp_fs_entry_t* entry = &entries[i];
     if (entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE) {
       file_count++;
     }
@@ -1728,7 +1728,7 @@ UTEST(sp_fs_collect, file_names_validation) {
     sp_fs_create_file(file_path);
   }
 
-  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(base);
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 4);
 
@@ -1760,7 +1760,7 @@ UTEST(sp_fs_collect, file_attributes) {
   sp_fs_create_file(test_file);
   sp_fs_create_dir(test_dir);
 
-  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(base);
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
@@ -1768,7 +1768,7 @@ UTEST(sp_fs_collect, file_attributes) {
   bool found_dir = false;
 
   sp_dyn_array_for(entries, i) {
-    sp_os_dir_ent_t* entry = &entries[i];
+    sp_fs_entry_t* entry = &entries[i];
 
     if (sp_str_equal_cstr(entry->file_name, "test.txt")) {
       ASSERT_TRUE(entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE);
@@ -1793,7 +1793,7 @@ UTEST(sp_fs_collect, empty_directory) {
 
   sp_str_t base = sp_test_build_scan_directory();
 
-  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(base);
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 0);
   ASSERT_TRUE(entries == SP_NULLPTR || sp_dyn_array_size(entries) == 0);
@@ -1807,7 +1807,7 @@ UTEST(sp_fs_collect, non_existent_directory) {
 
   sp_str_t non_existent = sp_fs_join_path(base, SP_LIT("some_bullshit"));
 
-  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(non_existent);
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect(non_existent);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 0);
 }
@@ -1822,12 +1822,12 @@ UTEST(sp_fs_collect, file_path_correctness) {
   sp_fs_create_file(file1);
   sp_fs_create_dir(dir1);
 
-  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(base);
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect(base);
 
   ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
   sp_dyn_array_for(entries, i) {
-    sp_os_dir_ent_t* entry = &entries[i];
+    sp_fs_entry_t* entry = &entries[i];
 
     ASSERT_TRUE(sp_str_starts_with(entry->file_path, base));
 
@@ -1844,60 +1844,60 @@ UTEST(sp_fs_collect, file_path_correctness) {
   sp_test_build_scan_directory();
 }
 
-UTEST(sp_os_get_file_attrs, basic_functionality) {
+UTEST(sp_fs_get_file_attrs_ex, basic_functionality) {
   sp_str_t base = sp_test_build_scan_directory();
 
   // test regular file - verify ONLY file flag is set
   sp_str_t file1 = sp_fs_join_path(base, SP_LIT("test_file.txt"));
   sp_fs_create_file(file1);
-  sp_os_file_attr_t file_attr = sp_fs_get_file_attrs(file1);
+  sp_fs_attr_t file_attr = sp_fs_get_file_attrs(file1);
   ASSERT_EQ(file_attr, SP_OS_FILE_ATTR_REGULAR_FILE);
 
   // test directory - verify ONLY directory flag is set
   sp_str_t dir1 = sp_fs_join_path(base, SP_LIT("test_dir"));
   sp_fs_create_dir(dir1);
-  sp_os_file_attr_t dir_attr = sp_fs_get_file_attrs(dir1);
+  sp_fs_attr_t dir_attr = sp_fs_get_file_attrs(dir1);
   ASSERT_EQ(dir_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
   // test non-existent path
   sp_str_t non_existent = sp_fs_join_path(base, SP_LIT("does_not_exist"));
-  sp_os_file_attr_t none_attr = sp_fs_get_file_attrs(non_existent);
+  sp_fs_attr_t none_attr = sp_fs_get_file_attrs(non_existent);
   ASSERT_EQ(none_attr, SP_OS_FILE_ATTR_NONE);
 
   // verify consistency with sp_fs_collect
-  sp_da(sp_os_dir_ent_t) entries = sp_fs_collect(base);
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect(base);
   ASSERT_EQ(sp_dyn_array_size(entries), 2);
 
   sp_dyn_array_for(entries, i) {
-    sp_os_dir_ent_t* entry = &entries[i];
-    sp_os_file_attr_t direct_attr = sp_fs_get_file_attrs(entry->file_path);
+    sp_fs_entry_t* entry = &entries[i];
+    sp_fs_attr_t direct_attr = sp_fs_get_file_attrs(entry->file_path);
     ASSERT_EQ(entry->attributes, direct_attr);
   }
 
   sp_test_build_scan_directory();
 }
 
-UTEST(sp_os_get_file_attrs, path_edge_cases) {
+UTEST(sp_fs_get_file_attrs_ex, path_edge_cases) {
 
   sp_str_t base = sp_test_build_scan_directory();
 
   // empty path
-  sp_os_file_attr_t empty_attr = sp_fs_get_file_attrs(SP_LIT(""));
+  sp_fs_attr_t empty_attr = sp_fs_get_file_attrs(SP_LIT(""));
   ASSERT_EQ(empty_attr, SP_OS_FILE_ATTR_NONE);
 
   // null-like sp_str_t
   sp_str_t null_str = SP_ZERO_STRUCT(sp_str_t);
   null_str.data = SP_NULLPTR;
   null_str.len = 0;
-  sp_os_file_attr_t null_attr = sp_fs_get_file_attrs(null_str);
+  sp_fs_attr_t null_attr = sp_fs_get_file_attrs(null_str);
   ASSERT_EQ(null_attr, SP_OS_FILE_ATTR_NONE);
 
   // current directory
-  sp_os_file_attr_t dot_attr = sp_fs_get_file_attrs(SP_LIT("."));
+  sp_fs_attr_t dot_attr = sp_fs_get_file_attrs(SP_LIT("."));
   ASSERT_EQ(dot_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
   // parent directory
-  sp_os_file_attr_t dotdot_attr = sp_fs_get_file_attrs(SP_LIT(".."));
+  sp_fs_attr_t dotdot_attr = sp_fs_get_file_attrs(SP_LIT(".."));
   ASSERT_EQ(dotdot_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
   // path with trailing slash (directory)
@@ -1907,7 +1907,7 @@ UTEST(sp_os_get_file_attrs, path_edge_cases) {
   sp_str_builder_append(&slash_builder, dir_trail);
   sp_str_builder_append(&slash_builder, SP_LIT("/"));
   sp_str_t dir_with_slash = sp_str_builder_to_str(&slash_builder);
-  sp_os_file_attr_t trail_attr = sp_fs_get_file_attrs(dir_with_slash);
+  sp_fs_attr_t trail_attr = sp_fs_get_file_attrs(dir_with_slash);
   ASSERT_EQ(trail_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
   // path with double slashes
@@ -1915,7 +1915,7 @@ UTEST(sp_os_get_file_attrs, path_edge_cases) {
   sp_str_builder_append(&double_builder, base);
   sp_str_builder_append(&double_builder, SP_LIT("//testdir"));
   sp_str_t double_slash = sp_str_builder_to_str(&double_builder);
-  sp_os_file_attr_t double_attr = sp_fs_get_file_attrs(double_slash);
+  sp_fs_attr_t double_attr = sp_fs_get_file_attrs(double_slash);
   ASSERT_EQ(double_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
   // test very long file name
@@ -1928,25 +1928,25 @@ UTEST(sp_os_get_file_attrs, path_edge_cases) {
   // sp_str_builder_append(&long_name, SP_LIT(".txt"));
   // sp_str_t long_path = sp_str_builder_to_str(&long_name);
   // sp_fs_create_file(long_path);
-  // sp_os_file_attr_t long_attr = sp_fs_get_file_attrs(long_path);
+  // sp_fs_attr_t long_attr = sp_fs_get_file_attrs(long_path);
   // ASSERT_EQ(long_attr, SP_OS_FILE_ATTR_REGULAR_FILE);
 
   sp_test_build_scan_directory();
 }
 
-UTEST(sp_os_get_file_attrs, special_names_and_nesting) {
+UTEST(sp_fs_get_file_attrs_ex, special_names_and_nesting) {
 
   sp_str_t base = sp_test_build_scan_directory();
 
   // test with spaces in names
   sp_str_t space_file = sp_fs_join_path(base, SP_LIT("file with spaces.txt"));
   sp_fs_create_file(space_file);
-  sp_os_file_attr_t space_attr = sp_fs_get_file_attrs(space_file);
+  sp_fs_attr_t space_attr = sp_fs_get_file_attrs(space_file);
   ASSERT_EQ(space_attr, SP_OS_FILE_ATTR_REGULAR_FILE);
 
   sp_str_t space_dir = sp_fs_join_path(base, SP_LIT("dir with spaces"));
   sp_fs_create_dir(space_dir);
-  sp_os_file_attr_t space_dir_attr = sp_fs_get_file_attrs(space_dir);
+  sp_fs_attr_t space_dir_attr = sp_fs_get_file_attrs(space_dir);
   ASSERT_EQ(space_dir_attr, SP_OS_FILE_ATTR_DIRECTORY);
 
   // test deeply nested paths
@@ -1968,7 +1968,7 @@ UTEST(sp_os_get_file_attrs, special_names_and_nesting) {
   sp_str_t temp_file = sp_fs_join_path(base, SP_LIT("temp.txt"));
   sp_fs_create_file(temp_file);
   sp_fs_remove_file(temp_file);
-  sp_os_file_attr_t deleted_attr = sp_fs_get_file_attrs(temp_file);
+  sp_fs_attr_t deleted_attr = sp_fs_get_file_attrs(temp_file);
   ASSERT_EQ(deleted_attr, SP_OS_FILE_ATTR_NONE);
 
   sp_test_build_scan_directory();

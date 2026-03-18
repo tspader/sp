@@ -51,6 +51,18 @@ Build and run the main amalgamated test app:
 msbuild .\tools\windows\sp\sp.vcxproj /t:Run
 ```
 
+## macOS
+Build over SSH on `spader@miles`; unlike Windows, no persistent session is needed. Build is the same as Linux, except:
+- The binary is just `spn`
+- Use the profile `macos`
+
+For example:
+```sh
+spn build -t $target -p macos -f
+./build/macos/store/bin/$target
+```
+
+
 # rules
 - Never comment any code, under any circumstances. Code with comments will be rejected outright.
 - Never use `malloc`, `calloc`, or `realloc`; use `sp_alloc` (which zero initializes)

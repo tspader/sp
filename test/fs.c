@@ -550,7 +550,7 @@ UTEST_F(fs, collect_recursive_empty_dir) {
   sp_str_t empty_dir = sp_test_file_path(&ut.file_manager, SP_LIT("empty_dir"));
   sp_fs_create_dir(empty_dir);
 
-  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(empty_dir);
+  sp_da(sp_fs_entry_t) results = sp_fs_collect_recursive(empty_dir);
   ASSERT_EQ(sp_dyn_array_size(results), 0);
 }
 
@@ -562,8 +562,8 @@ UTEST_F(fs, collect_recursive_flat_dir) {
   sp_test_file_create_empty(&ut.file_manager, SP_LIT("flat_dir/b.txt"));
   sp_test_file_create_empty(&ut.file_manager, SP_LIT("flat_dir/c.txt"));
 
-  sp_da(sp_os_dir_ent_t) collect_results = sp_fs_collect(flat_dir);
-  sp_da(sp_os_dir_ent_t) recursive_results = sp_fs_collect_recursive(flat_dir);
+  sp_da(sp_fs_entry_t) collect_results = sp_fs_collect(flat_dir);
+  sp_da(sp_fs_entry_t) recursive_results = sp_fs_collect_recursive(flat_dir);
 
   ASSERT_EQ(sp_dyn_array_size(collect_results), sp_dyn_array_size(recursive_results));
   ASSERT_EQ(sp_dyn_array_size(recursive_results), 3);
@@ -582,7 +582,7 @@ UTEST_F(fs, collect_recursive_nested_dirs) {
   sp_test_file_create_empty(&ut.file_manager, SP_LIT("nested_root/sub/b.txt"));
   sp_test_file_create_empty(&ut.file_manager, SP_LIT("nested_root/sub/deep/c.txt"));
 
-  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(root);
+  sp_da(sp_fs_entry_t) results = sp_fs_collect_recursive(root);
 
   ASSERT_EQ(sp_dyn_array_size(results), 5);
 
@@ -608,7 +608,7 @@ UTEST_F(fs, collect_recursive_symlink_not_followed) {
   sp_str_t link_path = sp_test_file_path(&ut.file_manager, SP_LIT("symlink_root/link"));
   sp_fs_create_sym_link(real_dir, link_path);
 
-  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(root);
+  sp_da(sp_fs_entry_t) results = sp_fs_collect_recursive(root);
 
   u32 symlink_count = 0;
   bool found_file_through_link = false;
@@ -625,13 +625,13 @@ UTEST_F(fs, collect_recursive_symlink_not_followed) {
 
 UTEST_F(fs, collect_recursive_nonexistent_path) {
   sp_str_t nonexistent = sp_test_file_path(&ut.file_manager, SP_LIT("does_not_exist"));
-  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(nonexistent);
+  sp_da(sp_fs_entry_t) results = sp_fs_collect_recursive(nonexistent);
   ASSERT_EQ(results, SP_NULLPTR);
 }
 
 UTEST_F(fs, collect_recursive_file_not_dir) {
   sp_str_t file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("just_a_file.txt"));
-  sp_da(sp_os_dir_ent_t) results = sp_fs_collect_recursive(file);
+  sp_da(sp_fs_entry_t) results = sp_fs_collect_recursive(file);
   ASSERT_EQ(results, SP_NULLPTR);
 }
 
@@ -658,7 +658,7 @@ typedef struct {
 
 typedef struct {
   const c8* name;
-  sp_os_file_attr_t attr;
+  sp_fs_attr_t attr;
 } collect_expected_ent_t;
 
 typedef struct {
@@ -735,7 +735,7 @@ static void run_collect_test(int* utest_result, sp_test_file_manager_t* fm, coll
     }
   }
 
-  sp_da(sp_os_dir_ent_t) results = sp_fs_collect(collect_path);
+  sp_da(sp_fs_entry_t) results = sp_fs_collect(collect_path);
 
   if (t->expect_null) {
     EXPECT_EQ(results, SP_NULLPTR);
@@ -909,7 +909,7 @@ typedef struct {
 typedef struct {
   const c8* path;
   bool exists;
-  sp_os_file_attr_t attr;
+  sp_fs_attr_t attr;
 } create_dir_expected_ent_t;
 
 typedef struct {
@@ -992,7 +992,7 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
     }
 
     if (exp->exists) {
-      sp_os_file_attr_t attr = sp_fs_get_file_attrs(expected_path);
+      sp_fs_attr_t attr = sp_fs_get_file_attrs(expected_path);
       if (attr != exp->attr) {
         SP_TEST_REPORT(
           "{} had attr {} but expected {}",
@@ -1129,7 +1129,7 @@ typedef struct {
 typedef struct {
   const c8* path;
   bool exists;
-  sp_os_file_attr_t attr;
+  sp_fs_attr_t attr;
 } fs_expected_path_t;
 
 static u32 fs_count_setup(fs_setup_t* setup) {
@@ -1157,7 +1157,7 @@ static void fs_expect_bool(s32* utest_result, sp_str_t path, const c8* label, bo
   SP_FAIL();
 }
 
-static void fs_expect_attr(s32* utest_result, sp_str_t path, sp_os_file_attr_t actual, sp_os_file_attr_t expected) {
+static void fs_expect_attr(s32* utest_result, sp_str_t path, sp_fs_attr_t actual, sp_fs_attr_t expected) {
   if (actual == expected) return;
 
   SP_TEST_REPORT(
@@ -1244,7 +1244,7 @@ typedef struct {
   bool is_symlink;
   bool is_target_regular_file;
   bool is_target_dir;
-  sp_os_file_attr_t attr;
+  sp_fs_attr_t attr;
 } fs_predicate_expected_t;
 
 typedef struct {
@@ -1792,6 +1792,174 @@ UTEST_F(fs, mod_time_updates_after_write) {
   sp_tm_epoch_t after = sp_fs_get_mod_time(file);
   ASSERT_TRUE(after.s > before.s || (after.s == before.s && after.ns >= before.ns));
   ASSERT_TRUE(after.s != before.s || after.ns != before.ns);
+}
+
+///////////////
+// UNICODE   //
+///////////////
+
+UTEST_F(fs, unicode_create_dir) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("unicode_create_dir"));
+  sp_str_t dir = sp_fs_join_path(root, SP_LIT("\xc3\xb1\x61\x6d\x65"));
+  sp_fs_create_dir(dir);
+  ASSERT_TRUE(sp_fs_exists(dir));
+  ASSERT_TRUE(sp_fs_is_dir(dir));
+}
+
+UTEST_F(fs, unicode_create_file) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("unicode_create_file"));
+  sp_fs_create_dir(root);
+  sp_str_t file = sp_fs_join_path(root, SP_LIT("\xc3\xbc\x6e\x69\x63\x6f\x64\x65.txt"));
+  sp_fs_create_file(file);
+  ASSERT_TRUE(sp_fs_exists(file));
+  ASSERT_TRUE(sp_fs_is_regular_file(file));
+}
+
+UTEST_F(fs, unicode_get_file_attrs) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("unicode_get_file_attrs"));
+  sp_str_t dir = sp_fs_join_path(root, SP_LIT("\xc3\xa9t\xc3\xa9"));
+  sp_fs_create_dir(dir);
+  ASSERT_EQ(sp_fs_get_file_attrs(dir), SP_OS_FILE_ATTR_DIRECTORY);
+
+  sp_str_t file = sp_fs_join_path(dir, SP_LIT("\xc3\xa9t\xc3\xa9.txt"));
+  sp_fs_create_file(file);
+  ASSERT_EQ(sp_fs_get_file_attrs(file), SP_OS_FILE_ATTR_REGULAR_FILE);
+}
+
+UTEST_F(fs, unicode_remove_file) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("unicode_remove_file"));
+  sp_fs_create_dir(root);
+  sp_str_t file = sp_fs_join_path(root, SP_LIT("\xc3\xb6\x70\x65\x6e.txt"));
+  sp_fs_create_file(file);
+  ASSERT_TRUE(sp_fs_exists(file));
+  sp_fs_remove_file(file);
+  ASSERT_FALSE(sp_fs_exists(file));
+}
+
+UTEST_F(fs, unicode_remove_dir) {
+  run_fs_remove_test(&ur, &ut.file_manager, &(fs_remove_test_t) {
+    .label = "unicode_remove_dir",
+    .setup = {
+      { .path = "\xc3\xa4\x62\x63", .kind = FS_SETUP_DIR },
+      { .path = "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt", .kind = FS_SETUP_FILE, .content = "data" },
+    },
+    .action = FS_REMOVE_ACTION_DIR,
+    .remove_path = "\xc3\xa4\x62\x63",
+    .expected = {
+      { .path = "\xc3\xa4\x62\x63", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
+      { .path = "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
+    },
+  });
+}
+
+UTEST_F(fs_collect, unicode_entries) {
+  run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
+    .label = "unicode_entries",
+    .setup = {
+      { "\xc3\xb1\x61\x6d\x65.txt", COLLECT_ENT_FILE },
+      { "\xc3\xbc\x6e\x69", COLLECT_ENT_DIR },
+    },
+    .expected = {
+      { "\xc3\xb1\x61\x6d\x65.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "\xc3\xbc\x6e\x69", SP_OS_FILE_ATTR_DIRECTORY },
+    },
+  });
+}
+
+UTEST_F(fs, unicode_iterator) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("unicode_iterator"));
+  sp_fs_create_dir(root);
+
+  sp_str_t dir = sp_fs_join_path(root, SP_LIT("\xc3\xa9t\xc3\xa9"));
+  sp_str_t file = sp_fs_join_path(root, SP_LIT("\xc3\xb6\x70\x65\x6e.txt"));
+  sp_fs_create_dir(dir);
+  sp_fs_create_file(file);
+
+  u32 count = 0;
+  bool found_dir = false;
+  bool found_file = false;
+  for (sp_fs_it_t it = sp_fs_it_new(root); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
+    count++;
+    if (sp_str_equal(it.entry.file_name, SP_LIT("\xc3\xa9t\xc3\xa9"))) {
+      ASSERT_EQ(it.entry.attributes, SP_OS_FILE_ATTR_DIRECTORY);
+      found_dir = true;
+    }
+    if (sp_str_equal(it.entry.file_name, SP_LIT("\xc3\xb6\x70\x65\x6e.txt"))) {
+      ASSERT_EQ(it.entry.attributes, SP_OS_FILE_ATTR_REGULAR_FILE);
+      found_file = true;
+    }
+  }
+  ASSERT_EQ(count, 2);
+  ASSERT_TRUE(found_dir);
+  ASSERT_TRUE(found_file);
+}
+
+UTEST_F(fs, unicode_canonicalize) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("unicode_canonicalize"));
+  sp_str_t dir = sp_fs_join_path(root, SP_LIT("\xc3\xa9t\xc3\xa9"));
+  sp_fs_create_dir(dir);
+
+  sp_str_t canonical = sp_fs_canonicalize_path(dir);
+  ASSERT_GT(canonical.len, 0);
+  ASSERT_TRUE(sp_fs_exists(canonical));
+}
+
+UTEST_F(fs, unicode_copy_file) {
+  sp_str_t root = sp_test_file_path(&ut.file_manager, SP_LIT("unicode_copy_file"));
+  sp_fs_create_dir(root);
+
+  sp_str_t src = sp_fs_join_path(root, SP_LIT("\xc3\xb6riginal.txt"));
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = src,
+    .content = SP_LIT("hello"),
+  });
+
+  sp_str_t dst = sp_fs_join_path(root, SP_LIT("\xc3\xbc\x63opy.txt"));
+  sp_fs_copy_file(src, dst);
+  ASSERT_TRUE(sp_fs_exists(dst));
+  SP_EXPECT_STR_EQ(sp_io_read_file(dst), SP_LIT("hello"));
+}
+
+UTEST_F(fs, unicode_predicate_matrix) {
+  run_fs_predicate_test(&ur, &ut.file_manager, &(fs_predicate_test_t) {
+    .label = "unicode_predicate_matrix",
+    .setup = {
+      { .path = "\xc3\xa9t\xc3\xa9.txt", .kind = FS_SETUP_FILE, .content = "data" },
+      { .path = "\xc3\xb1\x61\x6d\x65", .kind = FS_SETUP_DIR },
+    },
+    .expected = {
+      {
+        .path = "\xc3\xa9t\xc3\xa9.txt",
+        .exists = FS_EXPECT_EXIST,
+        .is_regular_file = true,
+        .is_dir = false,
+        .is_symlink = false,
+        .is_target_regular_file = true,
+        .is_target_dir = false,
+        .attr = SP_OS_FILE_ATTR_REGULAR_FILE,
+      },
+      {
+        .path = "\xc3\xb1\x61\x6d\x65",
+        .exists = FS_EXPECT_EXIST,
+        .is_regular_file = false,
+        .is_dir = true,
+        .is_symlink = false,
+        .is_target_regular_file = false,
+        .is_target_dir = true,
+        .attr = SP_OS_FILE_ATTR_DIRECTORY,
+      },
+      {
+        .path = "missing\xc3\xa9",
+        .exists = FS_EXPECT_NOT_EXIST,
+        .is_regular_file = false,
+        .is_dir = false,
+        .is_symlink = false,
+        .is_target_regular_file = false,
+        .is_target_dir = false,
+        .attr = SP_OS_FILE_ATTR_NONE,
+      },
+    },
+  });
 }
 
 SP_TEST_MAIN()
