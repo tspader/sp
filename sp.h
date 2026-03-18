@@ -7915,63 +7915,34 @@ void sp_fs_remove_file(sp_str_t path) {
   sp_os_remove_file(path);
 }
 
+////////////////
+// IS_ON_PATH //
+////////////////
 #if defined(SP_WIN32)
-SP_PRIVATE c8* sp_fs_win32_path_for_api(sp_str_t path) {
-  sp_str_t normalized = sp_fs_normalize_path(path);
-  c8* path_cstr = sp_str_to_cstr(normalized);
-  if (normalized.len < SP_MAX_PATH_LEN - 12) {
-    return path_cstr;
-  }
-
-  sp_win32_dword_t absolute_len = GetFullPathNameA(path_cstr, 0, SP_NULLPTR, SP_NULLPTR);
-  if (!absolute_len) {
-    return path_cstr;
-  }
-
-  c8* absolute = sp_alloc_n(c8, absolute_len);
-  if (!GetFullPathNameA(path_cstr, absolute_len, absolute, SP_NULLPTR)) {
-    sp_free(absolute);
-    return path_cstr;
-  }
-
-  sp_free(path_cstr);
-
-  u32 len = sp_cstr_len(absolute);
-  sp_for(i, len) {
-    if (absolute[i] == '/') {
-      absolute[i] = '\\';
-    }
-  }
-
-  bool is_unc = len >= 2 && absolute[0] == '\\' && absolute[1] == '\\';
-  c8* prefixed = sp_alloc_n(c8, len + (is_unc ? 7 : 4) + 1);
-  if (is_unc) {
-    prefixed[0] = '\\';
-    prefixed[1] = '\\';
-    prefixed[2] = '?';
-    prefixed[3] = '\\';
-    prefixed[4] = 'U';
-    prefixed[5] = 'N';
-    prefixed[6] = 'C';
-    prefixed[7] = '\\';
-    sp_mem_copy(absolute + 2, prefixed + 8, len - 1);
-  }
-  else {
-    prefixed[0] = '\\';
-    prefixed[1] = '\\';
-    prefixed[2] = '?';
-    prefixed[3] = '\\';
-    sp_mem_copy(absolute, prefixed + 4, len + 1);
-  }
-
-  sp_free(absolute);
-  return prefixed;
-}
-
 bool sp_fs_is_on_path(sp_str_t program) {
   return SearchPathA(SP_NULLPTR, sp_str_to_cstr(program), SP_NULLPTR, 0, SP_NULLPTR, SP_NULLPTR) > 0;
 }
+#endif
 
+#if defined(SP_POSIX) && defined(SP_PS)
+bool sp_fs_is_on_path(sp_str_t program) {
+  SP_INCOMPLETE()
+  sp_ps_config_t config = SP_ZERO_INITIALIZE();
+  config.command = SP_LIT("which");
+  sp_ps_config_add_arg(&config, program);
+  config.io.out.mode = SP_PS_IO_MODE_NULL;
+  config.io.err.mode = SP_PS_IO_MODE_NULL;
+
+  sp_ps_output_t output = sp_ps_run(config);
+
+  return output.status.exit_code == 0;
+}
+#endif
+
+//////////////
+// ITERATOR //
+//////////////
+#if defined(SP_WIN32)
 SP_PRIVATE void sp_fs_it_advance(sp_fs_it_t* it) {
   sp_win32_find_data_t find_data;
   while (FindNextFileA(it->handle, &find_data)) {
@@ -8034,145 +8005,9 @@ void sp_fs_it_deinit(sp_fs_it_t* it) {
   }
   it->valid = false;
 }
-
-sp_str_t sp_fs_get_exe_path() {
-  c8 exe_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-  GetModuleFileNameA(NULL, exe_path, SP_MAX_PATH_LEN);
-
-  sp_str_t exe_path_str = sp_fs_normalize_path(SP_CSTR(exe_path));
-
-  return sp_str_copy(exe_path_str);
-}
-
-sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
-  c8* path_cstr = sp_str_to_cstr(path);
-  c8 canonical_path[SP_MAX_PATH_LEN];
-
-  if (GetFullPathNameA(path_cstr, SP_MAX_PATH_LEN, canonical_path, NULL) == 0) {
-    return sp_str_copy(path);
-  }
-
-  sp_str_t result = sp_str_from_cstr(canonical_path);
-  result = sp_fs_normalize_path(result);
-
-  // Remove trailing slash if present
-  if (result.len > 0 && result.data[result.len - 1] == '/') {
-    result.len--;
-  }
-
-  return sp_str_copy(result);
-}
-
 #endif
 
-#if defined(SP_POSIX)
-
-#if defined(SP_PS)
-bool sp_fs_is_on_path(sp_str_t program) {
-  SP_INCOMPLETE()
-  sp_ps_config_t config = SP_ZERO_INITIALIZE();
-  config.command = SP_LIT("which");
-  sp_ps_config_add_arg(&config, program);
-  config.io.out.mode = SP_PS_IO_MODE_NULL;
-  config.io.err.mode = SP_PS_IO_MODE_NULL;
-
-  sp_ps_output_t output = sp_ps_run(config);
-
-  return output.status.exit_code == 0;
-}
-#endif
-
-
-#if !defined(SP_FREESTANDING)
-void sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path) {
-  *it = SP_ZERO_STRUCT(sp_fs_it_t);
-  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) return;
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  c8* path_cstr = sp_str_to_cstr(path);
-  sp_mem_end_scratch(scratch);
-
-  DIR* dir = opendir(path_cstr);
-  if (!dir) return;
-
-  it->dir_path = path;
-  it->dir = dir;
-  it->valid = true;
-  sp_fs_it_next(it);
-}
-
-void sp_fs_it_next(sp_fs_it_t* it) {
-  if (!it->valid) return;
-
-  struct dirent* entry;
-  while ((entry = readdir(it->dir)) != SP_NULLPTR) {
-    if (sp_cstr_equal(entry->d_name, ".")) continue;
-    if (sp_cstr_equal(entry->d_name, "..")) continue;
-
-    sp_str_t file_path = sp_fs_join_path(it->dir_path, sp_str_view(entry->d_name));
-    it->entry = SP_RVAL(sp_fs_entry_t) {
-      .file_path = file_path,
-      .file_name = sp_str_from_cstr(entry->d_name),
-      .attributes = sp_fs_get_file_attrs(file_path),
-    };
-    return;
-  }
-  sp_fs_it_deinit(it);
-}
-
-bool sp_fs_it_valid(sp_fs_it_t* it) {
-  return it->valid;
-}
-
-void sp_fs_it_deinit(sp_fs_it_t* it) {
-  if (it->dir) {
-    closedir(it->dir);
-    it->dir = SP_NULLPTR;
-  }
-  it->valid = false;
-}
-
-sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_str_t result = path;
-  c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-  if (sp_fs_exists(path)) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    if (realpath(path_cstr, canonical_path)) {
-      result = SP_CSTR(canonical_path);
-    }
-  }
-
-  result = sp_fs_normalize_path(result);
-
-  if (result.len > 0 && result.data[result.len - 1] == '/') {
-    result.len--;
-  }
-
-  sp_context_push_allocator(scratch.old_allocator);
-  sp_str_t copy = sp_str_copy(result);
-  sp_context_pop();
-
-  sp_mem_end_scratch(scratch);
-  return copy;
-}
-#endif
-
-#if defined(SP_FREESTANDING)
-sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
-  (void)xdg;
-  (void)home_suffix;
-  return SP_ZERO_STRUCT(sp_str_t);
-}
-
-sp_str_t sp_fs_get_storage_path() {
-  return SP_ZERO_STRUCT(sp_str_t);
-}
-
-sp_str_t sp_fs_get_config_path() {
-  return SP_ZERO_STRUCT(sp_str_t);
-}
-
+#if defined(SP_LINUX) && defined(SP_FREESTANDING)
 SP_PRIVATE void sp_fs_it_refill(sp_fs_it_t* it) {
   it->buf_end = sp_sys_getdents64(it->fd, it->buf, SP_FS_IT_BUF_SIZE);
   it->buf_pos = 0;
@@ -8243,7 +8078,82 @@ void sp_fs_it_deinit(sp_fs_it_t* it) {
   }
   it->valid = false;
 }
+#endif
 
+#if defined(SP_POSIX) && !defined(SP_FREESTANDING)
+void sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path) {
+  *it = SP_ZERO_STRUCT(sp_fs_it_t);
+  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) return;
+
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  c8* path_cstr = sp_str_to_cstr(path);
+  sp_mem_end_scratch(scratch);
+
+  DIR* dir = opendir(path_cstr);
+  if (!dir) return;
+
+  it->dir_path = path;
+  it->dir = dir;
+  it->valid = true;
+  sp_fs_it_next(it);
+}
+
+void sp_fs_it_next(sp_fs_it_t* it) {
+  if (!it->valid) return;
+
+  struct dirent* entry;
+  while ((entry = readdir(it->dir)) != SP_NULLPTR) {
+    if (sp_cstr_equal(entry->d_name, ".")) continue;
+    if (sp_cstr_equal(entry->d_name, "..")) continue;
+
+    sp_str_t file_path = sp_fs_join_path(it->dir_path, sp_str_view(entry->d_name));
+    it->entry = SP_RVAL(sp_fs_entry_t) {
+      .file_path = file_path,
+      .file_name = sp_str_from_cstr(entry->d_name),
+      .attributes = sp_fs_get_file_attrs(file_path),
+    };
+    return;
+  }
+  sp_fs_it_deinit(it);
+}
+
+bool sp_fs_it_valid(sp_fs_it_t* it) {
+  return it->valid;
+}
+
+void sp_fs_it_deinit(sp_fs_it_t* it) {
+  if (it->dir) {
+    closedir(it->dir);
+    it->dir = SP_NULLPTR;
+  }
+  it->valid = false;
+}
+#endif
+
+//////////////////
+// CANONICALIZE //
+//////////////////
+#if defined(SP_WIN32)
+sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  c8* path_cstr = sp_str_to_cstr(path);
+  c8 canonical_path[SP_MAX_PATH_LEN];
+
+  if (GetFullPathNameA(path_cstr, SP_MAX_PATH_LEN, canonical_path, NULL) == 0) {
+    return sp_str_copy(path);
+  }
+
+  sp_str_t result = sp_str_from_cstr(canonical_path);
+  result = sp_fs_normalize_path(result);
+
+  if (result.len > 0 && result.data[result.len - 1] == '/') {
+    result.len--;
+  }
+
+  return sp_str_copy(result);
+}
+#endif
+
+#if defined(SP_LINUX) && defined(SP_FREESTANDING)
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_t result = path;
@@ -8270,23 +8180,46 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
   sp_mem_end_scratch(scratch);
   return copy;
 }
-#else
-sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
-  sp_str_t path =  sp_os_env_get(xdg);
-  if (sp_str_valid(path)) return path;
+#endif
 
-  path = sp_os_env_get(SP_LIT("HOME"));
-  if (sp_str_valid(path)) return sp_fs_join_path(path, home_suffix);
+#if defined(SP_POSIX) && !defined(SP_FREESTANDING)
+sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_str_t result = path;
+  c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+  if (sp_fs_exists(path)) {
+    c8* path_cstr = sp_str_to_cstr(path);
+    if (realpath(path_cstr, canonical_path)) {
+      result = SP_CSTR(canonical_path);
+    }
+  }
 
-  return SP_ZERO_STRUCT(sp_str_t);
+  result = sp_fs_normalize_path(result);
+
+  if (result.len > 0 && result.data[result.len - 1] == '/') {
+    result.len--;
+  }
+
+  sp_context_push_allocator(scratch.old_allocator);
+  sp_str_t copy = sp_str_copy(result);
+  sp_context_pop();
+
+  sp_mem_end_scratch(scratch);
+  return copy;
 }
+#endif
 
-sp_str_t sp_fs_get_storage_path() {
-  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
-}
+//////////////
+// EXE PATH //
+//////////////
+#if defined(SP_WIN32)
+sp_str_t sp_fs_get_exe_path() {
+  c8 exe_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
+  GetModuleFileNameA(NULL, exe_path, SP_MAX_PATH_LEN);
 
-sp_str_t sp_fs_get_config_path() {
-  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
+  sp_str_t exe_path_str = sp_fs_normalize_path(SP_CSTR(exe_path));
+
+  return sp_str_copy(exe_path_str);
 }
 #endif
 
@@ -8331,9 +8264,103 @@ sp_str_t sp_fs_get_exe_path() {
   }
   return sp_str_lit("");
 }
-#endif // SP_MACOS
+#endif
 
-#endif // SP_POSIX
+/////////////////////////
+// STORAGE+CONFIG PATH //
+/////////////////////////
+#if defined(SP_WIN32)
+sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
+  (void)xdg;
+  (void)home_suffix;
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_str_t sp_fs_get_storage_path() {
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_str_t sp_fs_get_config_path() {
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+#endif
+
+#if defined(SP_POSIX)
+sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
+  sp_str_t path =  sp_os_env_get(xdg);
+  if (sp_str_valid(path)) return path;
+
+  path = sp_os_env_get(SP_LIT("HOME"));
+  if (sp_str_valid(path)) return sp_fs_join_path(path, home_suffix);
+
+  return SP_ZERO_STRUCT(sp_str_t);
+}
+
+sp_str_t sp_fs_get_storage_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"));
+}
+
+sp_str_t sp_fs_get_config_path() {
+  return sp_os_try_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"));
+}
+#endif
+
+//////////////////////////
+// WIN32 PATH FOR API   //
+//////////////////////////
+#if defined(SP_WIN32)
+SP_PRIVATE c8* sp_fs_win32_path_for_api(sp_str_t path) {
+  sp_str_t normalized = sp_fs_normalize_path(path);
+  c8* path_cstr = sp_str_to_cstr(normalized);
+  if (normalized.len < SP_MAX_PATH_LEN - 12) {
+    return path_cstr;
+  }
+
+  sp_win32_dword_t absolute_len = GetFullPathNameA(path_cstr, 0, SP_NULLPTR, SP_NULLPTR);
+  if (!absolute_len) {
+    return path_cstr;
+  }
+
+  c8* absolute = sp_alloc_n(c8, absolute_len);
+  if (!GetFullPathNameA(path_cstr, absolute_len, absolute, SP_NULLPTR)) {
+    sp_free(absolute);
+    return path_cstr;
+  }
+
+  sp_free(path_cstr);
+
+  u32 len = sp_cstr_len(absolute);
+  sp_for(i, len) {
+    if (absolute[i] == '/') {
+      absolute[i] = '\\';
+    }
+  }
+
+  bool is_unc = len >= 2 && absolute[0] == '\\' && absolute[1] == '\\';
+  c8* prefixed = sp_alloc_n(c8, len + (is_unc ? 7 : 4) + 1);
+  if (is_unc) {
+    prefixed[0] = '\\';
+    prefixed[1] = '\\';
+    prefixed[2] = '?';
+    prefixed[3] = '\\';
+    prefixed[4] = 'U';
+    prefixed[5] = 'N';
+    prefixed[6] = 'C';
+    prefixed[7] = '\\';
+    sp_mem_copy(absolute + 2, prefixed + 8, len - 1);
+  }
+  else {
+    prefixed[0] = '\\';
+    prefixed[1] = '\\';
+    prefixed[2] = '?';
+    prefixed[3] = '\\';
+    sp_mem_copy(absolute, prefixed + 4, len + 1);
+  }
+
+  sp_free(absolute);
+  return prefixed;
+}
+#endif
 
 
 //  ██████╗ ███████╗
