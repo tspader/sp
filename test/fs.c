@@ -1735,7 +1735,7 @@ UTEST(fs_path, join_reference) {
     {
       .a = "",
       .b = "bar",
-      .joined = "/bar",
+      .joined = "bar",
     },
   };
 

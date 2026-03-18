@@ -1974,44 +1974,15 @@ UTEST(sp_fs_get_file_attrs_ex, special_names_and_nesting) {
   sp_test_build_scan_directory();
 }
 
-UTEST(sp_os_normalize_path_soft, trailing_slash_removal) {
-
-
-  // Test forward slash removal
-  sp_str_t path1 = sp_str_copy(SP_LIT("path/to/dir/"));
-  sp_fs_normalize_path_soft(&path1);
-  SP_EXPECT_STR_EQ(path1, SP_LIT("path/to/dir"));
-
-  // Test backslash removal
-  sp_str_t path2 = sp_str_copy(SP_LIT("path\\to\\dir\\"));
-  sp_fs_normalize_path_soft(&path2);
-  SP_EXPECT_STR_EQ(path2, SP_LIT("path\\to\\dir"));
-
-  // Test no change needed
-  sp_str_t path3 = sp_str_copy(SP_LIT("path/to/file.txt"));
-  sp_fs_normalize_path_soft(&path3);
-  SP_EXPECT_STR_EQ(path3, SP_LIT("path/to/file.txt"));
-
-  // Test empty path
-  sp_str_t empty = sp_str_copy(SP_LIT(""));
-  sp_fs_normalize_path_soft(&empty);
-  SP_EXPECT_STR_EQ(empty, SP_LIT(""));
-
-  // Test single slash
-  sp_str_t single = sp_str_copy(SP_LIT("/"));
-  sp_fs_normalize_path_soft(&single);
-  SP_EXPECT_STR_EQ(single, SP_LIT(""));
-}
-
 UTEST(sp_os_join_path, empty_path_handling) {
 
 
   // Left side empty
   sp_str_t left_empty = sp_fs_join_path(SP_LIT(""), SP_LIT("file.txt"));
-  SP_EXPECT_STR_EQ(left_empty, SP_LIT("/file.txt"));
+  SP_EXPECT_STR_EQ(left_empty, SP_LIT("file.txt"));
 
   sp_str_t left_empty_dir = sp_fs_join_path(SP_LIT(""), SP_LIT("dir/"));
-  SP_EXPECT_STR_EQ(left_empty_dir, SP_LIT("/dir"));
+  SP_EXPECT_STR_EQ(left_empty_dir, SP_LIT("dir"));
 
   // Right side empty
   sp_str_t right_empty = sp_fs_join_path(SP_LIT("path/to"), SP_LIT(""));
@@ -2042,7 +2013,7 @@ UTEST(path_functions, normalized_join_and_parent) {
 
   // Test joining with empty paths
   sp_str_t empty_left = sp_fs_join_path(SP_LIT(""), SP_LIT("file.txt"));
-  SP_EXPECT_STR_EQ(empty_left, SP_LIT("/file.txt"));
+  SP_EXPECT_STR_EQ(empty_left, SP_LIT("file.txt"));
 
   sp_str_t empty_right = sp_fs_join_path(SP_LIT("path/to"), SP_LIT(""));
   SP_EXPECT_STR_EQ(empty_right, SP_LIT("path/to"));

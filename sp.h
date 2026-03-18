@@ -2846,16 +2846,11 @@ SP_API void                 sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path);
 SP_API void                 sp_fs_it_next(sp_fs_it_t* it);
 SP_API bool                 sp_fs_it_valid(sp_fs_it_t* it);
 SP_API void                 sp_fs_it_deinit(sp_fs_it_t* it);
+SP_API bool                 sp_fs_is_on_path(sp_str_t program);
 
 // Move to shared impl
 SP_API sp_str_t sp_fs_canonicalize_path(sp_str_t path);
 SP_API void                   sp_fs_remove_file(sp_str_t path);
-
-// Get rid of
-SP_API void                   sp_fs_normalize_path_soft(sp_str_t* path);
-
-// actually different per-platform + too specific for sp_os
-SP_API bool                   sp_fs_is_on_path(sp_str_t program);
 
 
 //  █████╗ ████████╗ ██████╗ ███╗   ███╗██╗██████╗
@@ -7598,22 +7593,6 @@ sp_str_t sp_fs_normalize_path(sp_str_t path) {
   return result;
 }
 
-void sp_fs_normalize_path_soft(sp_str_t* path) {
-  if (!sp_str_valid(*path)) return;
-  if (sp_str_empty(*path)) return;
-
-  switch (sp_str_back(*path)) {
-    case '/':
-    case '\\': {
-      path->len--;
-      break;
-    }
-    default: {
-      break;
-    }
-  }
-}
-
 sp_str_t sp_fs_get_name(sp_str_t path) {
   // The only valid separator is '/'. If you're calling this function on a path
   // that might contain a '\', normalize it first. Garbage in, garbage out.
@@ -7651,15 +7630,11 @@ sp_str_t sp_fs_trim_path(sp_str_t path) {
 }
 
 sp_str_t sp_fs_join_path(sp_str_t a, sp_str_t b) {
-  // Remove trailing slash from first path to avoid double slash
-  sp_str_t a_copy = a;
-  if (a_copy.len > 0 && (a_copy.data[a_copy.len - 1] == '/' || a_copy.data[a_copy.len - 1] == '\\')) {
-    a_copy.len--;
-  }
-
-  sp_str_t result = sp_str_join(a_copy, b, SP_LIT("/"));
-  sp_fs_normalize_path_soft(&result);
-  return result;
+  a = sp_fs_trim_path(a);
+  b = sp_fs_trim_path(b);
+  if (sp_str_empty(a)) return sp_str_copy(b);
+  if (sp_str_empty(b)) return sp_str_copy(a);
+  return sp_str_join(a, b, SP_LIT("/"));
 }
 
 sp_str_t sp_fs_get_ext(sp_str_t path) {
