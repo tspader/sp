@@ -7911,6 +7911,10 @@ sp_str_t sp_fs_get_cwd() {
   return result;
 }
 
+void sp_fs_remove_file(sp_str_t path) {
+  sp_os_remove_file(path);
+}
+
 #if defined(SP_WIN32)
 SP_PRIVATE c8* sp_fs_win32_path_for_api(sp_str_t path) {
   sp_str_t normalized = sp_fs_normalize_path(path);
@@ -7962,17 +7966,6 @@ SP_PRIVATE c8* sp_fs_win32_path_for_api(sp_str_t path) {
 
   sp_free(absolute);
   return prefixed;
-}
-
-void sp_fs_remove_file(sp_str_t path) {
-  sp_win32_dword_t attr = GetFileAttributesA(sp_str_to_cstr(path));
-  if (attr != INVALID_FILE_ATTRIBUTES &&
-      (attr & FILE_ATTRIBUTE_REPARSE_POINT) &&
-      (attr & FILE_ATTRIBUTE_DIRECTORY)) {
-    RemoveDirectoryA(sp_str_to_cstr(path));
-  } else {
-    DeleteFileA(sp_str_to_cstr(path));
-  }
 }
 
 bool sp_fs_is_on_path(sp_str_t program) {
@@ -8073,10 +8066,6 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
 #endif
 
 #if defined(SP_POSIX)
-void sp_fs_remove_file(sp_str_t path) {
-  c8* path_cstr = sp_str_to_cstr(path);
-  sp_unlink(path_cstr);
-}
 
 #if defined(SP_PS)
 bool sp_fs_is_on_path(sp_str_t program) {
