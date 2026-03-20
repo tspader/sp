@@ -4947,23 +4947,38 @@ void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
     cap = new_cap;
   }
 
-  u64 existing = sp_ht_get_key_index_fn(data, key, cap, info);
-  if (existing != SP_HT_INVALID_INDEX) {
-    u8* entry = (u8*)(*data) + existing * info.stride.entry;
-    sp_mem_copy(val, entry + info.stride.value, info.size.value);
-  }
-  else {
-    sp_hash_t hash = info.fn.hash(key, info.size.key);
-    u64 idx = hash % cap;
-    while (*(sp_ht_entry_state*)((u8*)(*data) + idx * info.stride.entry + info.stride.kv) == SP_HT_ENTRY_ACTIVE) {
-      idx = (idx + 1) % cap;
+  sp_hash_t hash = info.fn.hash(key, info.size.key);
+  u64 hash_idx = hash % cap;
+  u64 first_free = SP_HT_INVALID_INDEX;
+
+  for (u64 c = 0; c < cap; ++c) {
+    u64 i = (hash_idx + c) % cap;
+    u64 offset = i * info.stride.entry;
+    sp_ht_entry_state state = *(sp_ht_entry_state*)((u8*)(*data) + offset + info.stride.kv);
+
+    if (state == SP_HT_ENTRY_INACTIVE) {
+      if (first_free == SP_HT_INVALID_INDEX) first_free = i;
+      break;
     }
-    u8* entry = (u8*)(*data) + idx * info.stride.entry;
-    sp_mem_copy(key, entry, info.size.key);
-    sp_mem_copy(val, entry + info.stride.value, info.size.value);
-    *(sp_ht_entry_state*)(entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
-    (*size)++;
+    if (state == SP_HT_ENTRY_DELETED) {
+      if (first_free == SP_HT_INVALID_INDEX) first_free = i;
+      continue;
+    }
+    void* k = (u8*)(*data) + offset;
+    if (info.fn.compare(k, key, info.size.key)) {
+      u8* entry = (u8*)(*data) + offset;
+      sp_mem_copy(val, entry + info.stride.value, info.size.value);
+      sp_context_pop();
+      return;
+    }
   }
+
+  u64 idx = first_free != SP_HT_INVALID_INDEX ? first_free : hash_idx;
+  u8* entry = (u8*)(*data) + idx * info.stride.entry;
+  sp_mem_copy(key, entry, info.size.key);
+  sp_mem_copy(val, entry + info.stride.value, info.size.value);
+  *(sp_ht_entry_state*)(entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
+  (*size)++;
   sp_context_pop();
 }
 
