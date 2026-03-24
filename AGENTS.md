@@ -11,6 +11,8 @@
 - `tools/`: random, unstructured bullshit which is not part of the official build
 
 # Build
+We use Mutagen to synchronize between `aral` (our Linux box), `miles` (macOS), and `piotr` (Windows). No matter what machine you're on, you just edit files locally as you normally would and use SSH to build and run tests on the other platforms.
+
 ## Linux
 Build a test target:
 
@@ -33,13 +35,13 @@ Start a `tmux` session and `ssh spader@piotr`. Then, from `C:/Users/spader/sourc
 . .\tools\windows\devenv.ps1
 ```
 
-Build and run fs tests:
+To build and run fs tests:
 
 ```powershell
 msbuild .\tools\windows\sp\fs.vcxproj /t:Run
 ```
 
-Build and run the main amalgamated test app:
+To build and run the test amalgamation:
 
 ```powershell
 msbuild .\tools\windows\sp\sp.vcxproj /t:Run

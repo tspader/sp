@@ -1389,8 +1389,6 @@ static sp_tls_block_t sp_tls_block;
   #define sp_link(old, new)                 link(old, new)
   #define sp_chmod(path, mode)              chmod(path, mode)
   #define sp_open(p, f, m)                  open(p, f, m)
-  #define sp_read(fd, b, n)                 read(fd, b, n)
-  #define sp_write(fd, b, n)                write(fd, b, n)
   #define sp_memcpy(d, s, n)                memcpy(d, s, n)
   #define sp_memmove(d, s, n)               memmove(d, s, n)
   #define sp_memset(d, c, n)                memset(d, c, n)
@@ -1407,9 +1405,13 @@ static sp_tls_block_t sp_tls_block;
 #ifdef SP_WIN32
   #define sp_close(fd)                  _close(fd)
   #define sp_lseek(fd, o, w)            _lseeki64(fd, o, w)
+  #define sp_read(fd, b, n)             _read(fd, b, (unsigned int)(n))
+  #define sp_write(fd, b, n)            _write(fd, b, (unsigned int)(n))
 #else
   #define sp_close(fd)                  close(fd)
   #define sp_lseek(fd, o, w)            lseek(fd, o, w)
+  #define sp_read(fd, b, n)             read(fd, b, n)
+  #define sp_write(fd, b, n)            write(fd, b, n)
 #endif
 
   #define SP_ENTRY(fn) s32 main(s32 num_args, const c8** args) { return fn(num_args, args); }
@@ -2132,16 +2134,17 @@ SP_BEGIN_EXTERN_C()
 
 
 
-#define __sp_ht_entry(__K, __V)\
-    struct\
-    {\
-        __K key;\
-        __V val;\
-        sp_ht_entry_state state;\
+#define __sp_ht_entry(__K, __V)                \
+    struct                                     \
+    {                                          \
+        __K key;                               \
+        __V val;                               \
+        sp_ht_entry_state state;               \
     }
-#define sp_ht(__K, __V)                \
+
+#define sp_ht(__K, __V)                        \
     struct {                                   \
-        __sp_ht_entry(__K, __V)* data; \
+        __sp_ht_entry(__K, __V)* data;         \
         __K tmp_key;                           \
         __V tmp_val;                           \
         u64 size;                              \
@@ -2794,19 +2797,25 @@ typedef struct {
 } sp_fs_entry_t;
 
 typedef struct {
-  sp_fs_entry_t entry;
-  sp_str_t dir_path;
-  bool valid;
 #if defined(SP_WIN32)
   sp_win32_handle_t handle;
-#elif defined(SP_FREESTANDING)
-  s32 fd;
-  s64 buf_pos;
-  s64 buf_end;
-  c8 buf[SP_FS_IT_BUF_SIZE];
-#else
+  sp_win32_find_data_t find_data;
+  bool first;
+#elif defined(SP_MACOS)
   DIR* dir;
+#else
+  s32 fd;
+  u8 buf[SP_FS_IT_BUF_SIZE];
+  s32 buf_pos;
+  s32 buf_end;
 #endif
+  sp_str_t path;
+} sp_fs_it_frame_t;
+
+typedef struct {
+  sp_fs_entry_t entry;
+  sp_da(sp_fs_it_frame_t) stack;
+  bool recursive;
 } sp_fs_it_t;
 
 SP_API bool                 sp_fs_is_regular_file(sp_str_t path);
@@ -2842,6 +2851,7 @@ SP_API sp_str_t             sp_fs_get_storage_path();
 SP_API sp_str_t             sp_fs_get_config_path();
 SP_API sp_tm_epoch_t        sp_fs_get_mod_time(sp_str_t path);
 SP_API sp_fs_attr_t         sp_fs_get_file_attrs(sp_str_t path);
+SP_API sp_fs_it_t           sp_fs_it_new_recursive(sp_str_t path);
 SP_API sp_fs_it_t           sp_fs_it_new(sp_str_t path);
 SP_API void                 sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path);
 SP_API void                 sp_fs_it_next(sp_fs_it_t* it);
@@ -7698,12 +7708,6 @@ sp_err_t sp_fs_link(sp_str_t from, sp_str_t to, sp_os_link_kind_t kind) {
   SP_UNREACHABLE_RETURN(SP_OK);
 }
 
-sp_fs_it_t sp_fs_it_new(sp_str_t path) {
-  sp_fs_it_t it;
-  sp_fs_it_begin(&it, path);
-  return it;
-}
-
 sp_da(sp_fs_entry_t) sp_fs_collect(sp_str_t path) {
   sp_da(sp_fs_entry_t) entries = SP_NULLPTR;
 
@@ -7714,33 +7718,14 @@ sp_da(sp_fs_entry_t) sp_fs_collect(sp_str_t path) {
 }
 
 sp_da(sp_fs_entry_t) sp_fs_collect_recursive(sp_str_t path) {
-  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) {
-    return SP_NULLPTR;
+  sp_da(sp_fs_entry_t) entries = SP_NULLPTR;
+
+  for (sp_fs_it_t it = sp_fs_it_new_recursive(path); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
+    sp_da_push(entries, it.entry);
   }
-
-  sp_rb(sp_str_t) queue = SP_NULLPTR;
-  sp_rb_push(queue, path);
-
-  sp_dyn_array(sp_fs_entry_t) results = SP_NULLPTR;
-
-  while (!sp_rb_empty(queue)) {
-    sp_str_t current = *sp_rb_peek(queue);
-    sp_rb_pop(queue);
-
-    sp_da(sp_fs_entry_t) entries = sp_fs_collect(current);
-    sp_da_for(entries, i) {
-      sp_fs_entry_t* entry = &entries[i];
-      sp_da_push(results, *entry);
-      if (entry->attributes == SP_OS_FILE_ATTR_DIRECTORY) {
-        sp_rb_push(queue, entry->file_path);
-      }
-    }
-    sp_dyn_array_free(entries);
-  }
-
-  sp_rb_free(queue);
-  return results;
+  return entries;
 }
+
 
 sp_err_t sp_fs_create_dir(sp_str_t path) {
   // The return code answers whether the path:
@@ -7936,6 +7921,175 @@ void sp_fs_remove_file(sp_str_t path) {
   sp_os_remove_file(path);
 }
 
+SP_PRIVATE bool         sp_fs_it_os_open(sp_fs_it_frame_t* frame, sp_str_t path);
+SP_PRIVATE void         sp_fs_it_os_close(sp_fs_it_frame_t* frame);
+SP_PRIVATE bool         sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry);
+SP_PRIVATE void sp_fs_it_push(sp_fs_it_t* it, sp_str_t path);
+
+sp_fs_it_t sp_fs_it_new(sp_str_t path) {
+  sp_fs_it_t it = SP_ZERO_INITIALIZE();
+  sp_fs_it_begin(&it, path);
+  return it;
+}
+
+sp_fs_it_t sp_fs_it_new_recursive(sp_str_t path) {
+  sp_fs_it_t it = { .recursive = true };
+  sp_fs_it_begin(&it, path);
+  return it;
+}
+
+void sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path) {
+  if (sp_str_empty(path) || !sp_fs_is_dir(path)) return;
+
+  sp_fs_it_push(it, path);
+  sp_fs_it_next(it);
+}
+
+void sp_fs_it_push(sp_fs_it_t* it, sp_str_t path) {
+  sp_fs_it_frame_t frame = SP_ZERO_INITIALIZE();
+  if (!sp_fs_it_os_open(&frame, path)) {
+    return;
+  }
+
+  frame.path = sp_str_copy(path);
+  sp_da_push(it->stack, frame);
+}
+
+void sp_fs_it_next(sp_fs_it_t* it) {
+  while (!sp_da_empty(it->stack)) {
+    sp_fs_it_frame_t* top = sp_da_back(it->stack);
+
+    if (sp_fs_it_os_read(top, &it->entry)) {
+      it->entry.file_path = sp_fs_join_path(top->path, it->entry.file_name);
+
+      if (it->recursive && it->entry.attributes == SP_OS_FILE_ATTR_DIRECTORY) {
+        sp_fs_it_push(it, it->entry.file_path);
+      }
+      return;
+    }
+
+    sp_fs_it_os_close(top);
+    sp_da_pop(it->stack);
+  }
+}
+
+bool sp_fs_it_valid(sp_fs_it_t* it) {
+  return !sp_da_empty(it->stack);
+}
+
+void sp_fs_it_deinit(sp_fs_it_t* it) {
+  sp_da_for(it->stack, i) {
+    sp_fs_it_os_close(&it->stack[i]);
+  }
+  sp_da_free(it->stack);
+}
+
+//////////////
+// ITERATOR //
+//////////////
+SP_PRIVATE bool sp_fs_it_is_dot(const c8* name) {
+  return name[0] == '.' && (name[1] == 0 || (name[1] == '.' && name[2] == 0));
+}
+
+#if defined(SP_WIN32)
+
+SP_PRIVATE sp_fs_attr_t sp_fs_it_win32_attrs(sp_win32_dword_t attrs) {
+  if (attrs & FILE_ATTRIBUTE_REPARSE_POINT) return SP_OS_FILE_ATTR_SYMLINK;
+  if (attrs & FILE_ATTRIBUTE_DIRECTORY) return SP_OS_FILE_ATTR_DIRECTORY;
+  return SP_OS_FILE_ATTR_REGULAR_FILE;
+}
+
+bool sp_fs_it_os_open(sp_fs_it_frame_t* frame, sp_str_t path) {
+  sp_str_t pattern = sp_fs_join_path(path, sp_str_lit("*"));
+  frame->handle = FindFirstFileA(sp_str_to_cstr(pattern), &frame->find_data);
+  if (frame->handle == INVALID_HANDLE_VALUE) return false;
+  frame->first = true;
+  return true;
+}
+
+void sp_fs_it_os_close(sp_fs_it_frame_t* frame) {
+  FindClose(frame->handle);
+}
+
+bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
+  while (true) {
+    if (frame->first) {
+      frame->first = false;
+    } else {
+      if (!FindNextFileA(frame->handle, &frame->find_data)) return false;
+    }
+    if (sp_fs_it_is_dot(frame->find_data.cFileName)) continue;
+    entry->file_name = sp_str_from_cstr(frame->find_data.cFileName);
+    entry->attributes = sp_fs_it_win32_attrs(frame->find_data.dwFileAttributes);
+    return true;
+  }
+}
+
+#elif defined(SP_POSIX)
+
+SP_PRIVATE sp_fs_attr_t sp_fs_it_dtype_to_attr(u8 d_type) {
+  switch (d_type) {
+    case SP_DT_REG: { return SP_OS_FILE_ATTR_REGULAR_FILE; }
+    case SP_DT_DIR: { return SP_OS_FILE_ATTR_DIRECTORY; }
+    case SP_DT_LNK: { return SP_OS_FILE_ATTR_SYMLINK; }
+  }
+  return SP_OS_FILE_ATTR_NONE;
+}
+
+#if defined(SP_MACOS)
+
+bool sp_fs_it_os_open(sp_fs_it_frame_t* frame, sp_str_t path) {
+  frame->dir = opendir(sp_str_to_cstr(path));
+  return frame->dir != SP_NULLPTR;
+}
+
+void sp_fs_it_os_close(sp_fs_it_frame_t* frame) {
+  closedir(frame->dir);
+}
+
+bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
+  while (true) {
+    struct dirent* d = readdir(frame->dir);
+    if (!d) return false;
+    if (sp_fs_it_is_dot(d->d_name)) continue;
+    entry->file_name = sp_str_from_cstr(d->d_name);
+    entry->attributes = sp_fs_it_dtype_to_attr(d->d_type);
+    return true;
+  }
+}
+
+#else
+
+bool sp_fs_it_os_open(sp_fs_it_frame_t* frame, sp_str_t path) {
+  frame->fd = sp_open(sp_str_to_cstr(path), SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  return frame->fd >= 0;
+}
+
+void sp_fs_it_os_close(sp_fs_it_frame_t* frame) {
+  sp_close(frame->fd);
+}
+
+bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
+  while (true) {
+    if (frame->buf_pos < frame->buf_end) {
+      sp_sys_dirent64_t* d = (sp_sys_dirent64_t*)(frame->buf + frame->buf_pos);
+      frame->buf_pos += d->d_reclen;
+      if (sp_fs_it_is_dot(d->d_name)) continue;
+      entry->file_name = sp_str_from_cstr(d->d_name);
+      entry->attributes = sp_fs_it_dtype_to_attr(d->d_type);
+      return true;
+    }
+    s64 n = sp_sys_getdents64(frame->fd, frame->buf, SP_FS_IT_BUF_SIZE);
+    if (n <= 0) return false;
+    frame->buf_pos = 0;
+    frame->buf_end = (s32)n;
+  }
+}
+
+#endif
+#endif
+
+
 ////////////////
 // IS_ON_PATH //
 ////////////////
@@ -7957,197 +8111,6 @@ bool sp_fs_is_on_path(sp_str_t program) {
   sp_ps_output_t output = sp_ps_run(config);
 
   return output.status.exit_code == 0;
-}
-#endif
-
-//////////////
-// ITERATOR //
-//////////////
-#if defined(SP_WIN32)
-SP_PRIVATE void sp_fs_it_advance(sp_fs_it_t* it) {
-  sp_win32_find_data_t find_data;
-  while (FindNextFileA(it->handle, &find_data)) {
-    if (sp_cstr_equal(find_data.cFileName, ".")) continue;
-    if (sp_cstr_equal(find_data.cFileName, "..")) continue;
-
-    sp_str_t file_path = sp_fs_join_path(it->dir_path, sp_str_view(find_data.cFileName));
-    it->entry = SP_RVAL(sp_fs_entry_t) {
-      .file_path = file_path,
-      .file_name = sp_str_from_cstr(find_data.cFileName),
-      .attributes = sp_fs_get_file_attrs(file_path),
-    };
-    return;
-  }
-  sp_fs_it_deinit(it);
-}
-
-void sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path) {
-  *it = SP_ZERO_STRUCT(sp_fs_it_t);
-  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) return;
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_str_t glob = sp_fs_join_path(path, sp_str_lit("*"));
-  sp_win32_find_data_t find_data;
-  sp_win32_handle_t handle = FindFirstFileA(sp_str_to_cstr(glob), &find_data);
-  sp_mem_end_scratch(scratch);
-
-  if (handle == INVALID_HANDLE_VALUE) return;
-
-  it->dir_path = path;
-  it->handle = handle;
-  it->valid = true;
-
-  if (sp_cstr_equal(find_data.cFileName, ".") || sp_cstr_equal(find_data.cFileName, "..")) {
-    sp_fs_it_advance(it);
-    return;
-  }
-
-  sp_str_t file_path = sp_fs_join_path(path, sp_str_view(find_data.cFileName));
-  it->entry = SP_RVAL(sp_fs_entry_t) {
-    .file_path = file_path,
-    .file_name = sp_str_from_cstr(find_data.cFileName),
-    .attributes = sp_fs_get_file_attrs(file_path),
-  };
-}
-
-void sp_fs_it_next(sp_fs_it_t* it) {
-  if (!it->valid) return;
-  sp_fs_it_advance(it);
-}
-
-bool sp_fs_it_valid(sp_fs_it_t* it) {
-  return it->valid;
-}
-
-void sp_fs_it_deinit(sp_fs_it_t* it) {
-  if (it->handle) {
-    FindClose(it->handle);
-    it->handle = SP_NULLPTR;
-  }
-  it->valid = false;
-}
-#endif
-
-#if defined(SP_LINUX) && defined(SP_FREESTANDING)
-SP_PRIVATE void sp_fs_it_refill(sp_fs_it_t* it) {
-  it->buf_end = sp_sys_getdents64(it->fd, it->buf, SP_FS_IT_BUF_SIZE);
-  it->buf_pos = 0;
-  if (it->buf_end <= 0) {
-    sp_fs_it_deinit(it);
-    it->buf_end = 0;
-  }
-}
-
-void sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path) {
-  *it = SP_ZERO_STRUCT(sp_fs_it_t);
-  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) return;
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  c8* path_cstr = sp_str_to_cstr(path);
-  sp_mem_end_scratch(scratch);
-
-  s32 fd = sp_sys_open(path_cstr, SP_O_RDONLY | SP_O_DIRECTORY, 0);
-  if (fd < 0) return;
-
-  it->dir_path = path;
-  it->fd = fd;
-  it->valid = true;
-  sp_fs_it_refill(it);
-  sp_fs_it_next(it);
-}
-
-void sp_fs_it_next(sp_fs_it_t* it) {
-  if (!it->valid) return;
-
-  for (;;) {
-    if (it->buf_pos >= it->buf_end) {
-      sp_fs_it_refill(it);
-      if (!it->valid) return;
-    }
-
-    sp_sys_dirent64_t* d = (sp_sys_dirent64_t*)(it->buf + it->buf_pos);
-    it->buf_pos += d->d_reclen;
-
-    if (sp_cstr_equal(d->d_name, ".") || sp_cstr_equal(d->d_name, "..")) continue;
-
-    sp_str_t file_path = sp_fs_join_path(it->dir_path, sp_str_view(d->d_name));
-    sp_fs_attr_t attrs = SP_OS_FILE_ATTR_NONE;
-    switch (d->d_type) {
-      case SP_DT_REG: { attrs = SP_OS_FILE_ATTR_REGULAR_FILE; break; }
-      case SP_DT_DIR: { attrs = SP_OS_FILE_ATTR_DIRECTORY; break; }
-      case SP_DT_LNK: { attrs = SP_OS_FILE_ATTR_SYMLINK; break; }
-      default:        { attrs = sp_fs_get_file_attrs(file_path); break; }
-    }
-
-    it->entry = SP_RVAL(sp_fs_entry_t) {
-      .file_path = file_path,
-      .file_name = sp_str_from_cstr(d->d_name),
-      .attributes = attrs,
-    };
-    return;
-  }
-}
-
-bool sp_fs_it_valid(sp_fs_it_t* it) {
-  return it->valid;
-}
-
-void sp_fs_it_deinit(sp_fs_it_t* it) {
-  if (it->fd > 0) {
-    sp_sys_close(it->fd);
-    it->fd = 0;
-  }
-  it->valid = false;
-}
-#endif
-
-#if defined(SP_POSIX) && !defined(SP_FREESTANDING)
-void sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path) {
-  *it = SP_ZERO_STRUCT(sp_fs_it_t);
-  if (!sp_fs_is_dir(path) || !sp_fs_exists(path)) return;
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  c8* path_cstr = sp_str_to_cstr(path);
-  sp_mem_end_scratch(scratch);
-
-  DIR* dir = opendir(path_cstr);
-  if (!dir) return;
-
-  it->dir_path = path;
-  it->dir = dir;
-  it->valid = true;
-  sp_fs_it_next(it);
-}
-
-void sp_fs_it_next(sp_fs_it_t* it) {
-  if (!it->valid) return;
-
-  struct dirent* entry;
-  while ((entry = readdir(it->dir)) != SP_NULLPTR) {
-    if (sp_cstr_equal(entry->d_name, ".")) continue;
-    if (sp_cstr_equal(entry->d_name, "..")) continue;
-
-    sp_str_t file_path = sp_fs_join_path(it->dir_path, sp_str_view(entry->d_name));
-    it->entry = SP_RVAL(sp_fs_entry_t) {
-      .file_path = file_path,
-      .file_name = sp_str_from_cstr(entry->d_name),
-      .attributes = sp_fs_get_file_attrs(file_path),
-    };
-    return;
-  }
-  sp_fs_it_deinit(it);
-}
-
-bool sp_fs_it_valid(sp_fs_it_t* it) {
-  return it->valid;
-}
-
-void sp_fs_it_deinit(sp_fs_it_t* it) {
-  if (it->dir) {
-    closedir(it->dir);
-    it->dir = SP_NULLPTR;
-  }
-  it->valid = false;
 }
 #endif
 

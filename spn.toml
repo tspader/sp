@@ -64,6 +64,7 @@ source = ["test/fmon.c"]
 [[test]]
 name = "fs"
 source = ["test/fs.c"]
+include = [".", "include", "test/tools", "test/tools/process", "sp"]
 
 [[test]]
 name = "glob"
