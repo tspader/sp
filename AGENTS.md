@@ -1,4 +1,4 @@
-# overview
+ overview
 - sp.h is a single-header C standard library replacement
 
 # files
@@ -15,22 +15,16 @@
 Build a test target:
 
 ```sh
-spn-2026-01-14 build -t ht -p sanity -f
+spn build -t fs -p debug -f
 ```
 
 Run it:
 
 ```sh
-./build/sanity/store/bin/fs
+./build/debug/store/bin/fs
 ```
 
 Replace `fs` with any other test target, like `str`, or `amalg` for all tests in one TU
-
-Before you finish, build and run with `clang` (the default compiler for our debug builds)
-```sh
-spn-2026-01-14 build -t $target -p debug -f
-./build/debug/store/bin/$target
-```
 
 ## Windows
 Start a `tmux` session and `ssh spader@piotr`. Then, from `C:/Users/spader/source/sp`, load the MSVC environment:
