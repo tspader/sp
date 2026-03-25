@@ -2859,6 +2859,9 @@ SP_API bool                 sp_fs_it_valid(sp_fs_it_t* it);
 SP_API void                 sp_fs_it_deinit(sp_fs_it_t* it);
 SP_API bool                 sp_fs_is_on_path(sp_str_t program);
 
+#define sp_fs_for(dir, it) for (sp_fs_it_t it = sp_fs_it_new(dir); sp_fs_it_valid(&it); sp_fs_it_next(&it))
+#define sp_fs_for_recursive(dir, it) for (sp_fs_it_t it = sp_fs_it_new_recursive(dir); sp_fs_it_valid(&it); sp_fs_it_next(&it))
+
 // Move to shared impl
 SP_API sp_str_t sp_fs_canonicalize_path(sp_str_t path);
 SP_API void                   sp_fs_remove_file(sp_str_t path);
