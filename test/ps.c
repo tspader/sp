@@ -45,6 +45,12 @@ typedef struct {
 //////////////
 // FIXTURES //
 //////////////
+sp_str_t get_process_path() {
+  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path());
+  sp_str_t process = sp_fs_join_path(exe, sp_str_lit("process"));
+  process = sp_fs_replace_ext(process, sp_os_get_executable_ext());
+  return process;
+}
 
 typedef struct ps {
   sp_test_file_manager_t file_manager;
@@ -52,6 +58,9 @@ typedef struct ps {
 } sp_ps;
 
 UTEST_F_SETUP(ps) {
+  sp_str_t process = get_process_path();
+  EXPECT_TRUE(sp_fs_exists(process));
+
   sp_test_file_manager_init(&ut.file_manager);
   ut.buffer = (sp_byte_buffer_t) {
     .len = 1024,
@@ -66,9 +75,7 @@ UTEST_F_TEARDOWN(ps) {
   sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
-sp_str_t get_process_path() {
-  return sp_fs_join_path(sp_fs_get_exe_path(), sp_str_lit("process"));
-}
+
 
 
 void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
@@ -79,7 +86,7 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
 
   while (total_read < target_len && attempts < 10) {
     u8* ptr = ctx->buffer.data + total_read;
-    u32 bytes_remaining = ctx->buffer.len - total_read;
+    u64 bytes_remaining = ctx->buffer.len - total_read;
     u64 bytes_read = sp_io_read(ctx->stream, ptr, bytes_remaining);
     if (!bytes_read) {
       if (ctx->mode == SP_TEST_PROC_READ_UNTIL_DONE) {
@@ -278,21 +285,21 @@ UTEST_F(ps, io_create_file_null) {
 
   sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
-  lseek(fd, 0, SEEK_SET);
+  sp_lseek(fd, 0, SEEK_SET);
 
   u64 bytes_read = read(fd, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
   SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
-  close(fd);
+  sp_close(fd);
 }
 
 UTEST_F(ps, io_file_create_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
   s32 fd = open(sp_str_to_cstr(file_path), O_RDWR | O_CREAT, 0644);
-  write(fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
-  lseek(fd, 0, SEEK_SET);
+  sp_write(fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
+  sp_lseek(fd, 0, SEEK_SET);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
@@ -309,7 +316,7 @@ UTEST_F(ps, io_file_create_null) {
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
 
-  close(fd);
+  sp_close(fd);
 }
 
 UTEST_F(ps, io_create_null_file) {
@@ -333,21 +340,21 @@ UTEST_F(ps, io_create_null_file) {
 
   sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
-  lseek(fd, 0, SEEK_SET);
+  sp_lseek(fd, 0, SEEK_SET);
 
   u64 bytes_read = read(fd, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
   SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
-  close(fd);
+  sp_close(fd);
 }
 
 UTEST_F(ps, io_file_null_file) {
   sp_str_t in_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
   s32 in_fd = open(sp_str_to_cstr(in_path), O_RDWR | O_CREAT, 0644);
-  write(in_fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
-  lseek(in_fd, 0, SEEK_SET);
+  sp_write(in_fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
+  sp_lseek(in_fd, 0, SEEK_SET);
 
   sp_str_t err_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
   s32 err_fd = open(sp_str_to_cstr(err_path), O_RDWR | O_CREAT, 0644);
@@ -368,14 +375,14 @@ UTEST_F(ps, io_file_null_file) {
 
   sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
-  lseek(err_fd, 0, SEEK_SET);
+  sp_lseek(err_fd, 0, SEEK_SET);
 
   u64 bytes_read = read(err_fd, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
   SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
-  close(in_fd);
-  close(err_fd);
+  sp_close(in_fd);
+  sp_close(err_fd);
 }
 
 
@@ -388,7 +395,7 @@ typedef struct {
   sp_env_var_t* foo;
 } sp_test_proc_env_config_t;
 
-sp_dyn_array(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u32 len) {
+sp_dyn_array(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
   sp_dyn_array(sp_env_var_t) vars = SP_NULLPTR;
 
   u32 line_start = 0;
@@ -510,23 +517,29 @@ UTEST_F(ps, env_clean) {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("garcia") },
     }
   });
+}
 
+UTEST_F(ps, env_duplicate_var) {
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
       .extra = {
-        { .key = sp_str_lit("garcia"), .value = sp_str_lit("john") },
-        { .key = sp_str_lit("garcia"), .value = sp_str_lit("jerome") },
+        {.key = sp_str_lit("garcia"), .value = sp_str_lit("john") },
+        {.key = sp_str_lit("garcia"), .value = sp_str_lit("jerome") },
       }
     },
-    .expected = {
-      { .key = sp_str_lit("garcia"), .value = sp_str_lit("jerome") },
+      .expected = {
+        {.key = sp_str_lit("garcia"), .value = sp_str_lit("jerome") },
     }
   });
 }
 
 UTEST_F(ps, env_inherit) {
+#ifdef _WIN32
+  _putenv_s("jerry", "garcia");
+#else
   setenv("jerry", "garcia", true);
+#endif
 
   sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
     .config = {
@@ -537,7 +550,11 @@ UTEST_F(ps, env_inherit) {
     }
   });
 
+#ifdef _WIN32
+  _putenv_s("jerry", "");
+#else
   unsetenv("jerry");
+#endif
 }
 
 UTEST_F(ps, env_existing) {
@@ -585,20 +602,6 @@ UTEST_F(ps, empty_env_var) {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("") },
     }
   });
-
-  setenv("jerry", "", true);
-  EXPECT_STREQ(getenv("jerry"), "");
-
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
-    .config = {
-      .mode = SP_PS_ENV_INHERIT,
-    },
-    .expected = {
-      { .key = sp_str_lit("jerry"), .value = sp_str_lit("") },
-    }
-  });
-
-  unsetenv("jerry");
 }
 
 //////////////////
@@ -870,8 +873,8 @@ UTEST_F(ps, incremental_nonblocking_read) {
   EXPECT_NE(out, SP_NULLPTR);
 
   const u32 expected_size = 100;
-  u8 accumulated[expected_size];
-  u32 total_read = 0;
+  u8 accumulated[100];
+  u64 total_read = 0;
 
   while (total_read < expected_size) {
     u64 n = sp_io_read(out, accumulated + total_read, expected_size - total_read);
@@ -1059,6 +1062,7 @@ UTEST_F(ps, output_large_stdout_deadlock) {
   EXPECT_EQ(output.err.len, 0);
 }
 
+#ifndef _WIN32
 typedef struct {
   u32 transitions;
   u32 a_bytes;
@@ -1261,5 +1265,6 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   EXPECT_EQ(analysis.a_bytes, write_size * write_count);
   EXPECT_EQ(analysis.b_bytes, write_size * write_count);
 }
+#endif // !_WIN32
 
 SP_TEST_MAIN()

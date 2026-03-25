@@ -465,6 +465,7 @@
   #define sp_try(expr) sp_assert(!expr)
   #define sp_try_as(expr, err) sp_assert(!expr)
   #define sp_try_as_void(expr) sp_assert(!expr)
+  #define sp_try_as_goto(expr, label) sp_assert(!expr)
 #else
   #define sp_try(expr) do { \
     s32 _sp_result = (expr); \
@@ -476,7 +477,7 @@
   #define sp_try_as_void(expr) do { \
     if (expr) return; \
   } while (0)
-  #define sp_try_label(expr, label) do { \
+  #define sp_try_goto(expr, label) do { \
     s32 _sp_result = (expr); \
     if (_sp_result) goto label; \
   } while (0)
@@ -2531,7 +2532,6 @@ SP_API u32             sp_cstr_len(const c8* str);
 SP_API u32             sp_cstr_len_sized(const c8* str, u32 n);
 SP_API sp_str_t        sp_cstr_as_str(const c8* str);
 SP_API sp_str_t        sp_cstr_as_str_n(const c8* str, u32 n);
-SP_API c8*             sp_wstr_to_cstr(c16* str, u32 len);
 sp_str_it_t            sp_str_it(sp_str_t str);
 bool                   sp_str_it_valid(sp_str_it_t* it);
 void                   sp_str_it_next(sp_str_it_t* it);
@@ -2669,7 +2669,7 @@ SP_API c8*      sp_env_to_windows_block(sp_env_t* env);
 typedef struct {
   c16* block;
   c16* cursor;
-  c8* entry;
+  sp_str_t entry;
 } sp_win32_env_it_t;
 #endif
 
@@ -2842,6 +2842,7 @@ SP_API sp_str_t             sp_fs_normalize_path(sp_str_t path);
 SP_API sp_str_t             sp_fs_parent_path(sp_str_t path);
 SP_API sp_str_t             sp_fs_join_path(sp_str_t a, sp_str_t b);
 SP_API sp_str_t             sp_fs_trim_path(sp_str_t path);
+SP_API sp_str_t             sp_fs_replace_ext(sp_str_t path, sp_str_t ext);
 SP_API sp_str_t             sp_fs_get_ext(sp_str_t path);
 SP_API sp_str_t             sp_fs_get_stem(sp_str_t path);
 SP_API sp_str_t             sp_fs_get_name(sp_str_t path);
@@ -3022,11 +3023,11 @@ SP_API void           sp_sleep_ns(u64 ns);
 SP_API void           sp_sleep_ms(f64 ms);
 SP_API sp_os_kind_t   sp_os_get_kind();
 SP_API sp_str_t       sp_os_get_name();
+SP_API sp_str_t       sp_os_get_executable_ext();
 SP_API sp_str_t       sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
 SP_API sp_str_t       sp_os_lib_to_file_name(sp_str_t lib, sp_os_lib_kind_t kind);
 SP_API void           sp_os_sleep_ms(f64 ms);
 SP_API void           sp_os_sleep_ns(u64 ns);
-SP_API c8*            sp_os_wstr_to_cstr(c16* str, u32 len);
 SP_API void           sp_os_print(sp_str_t message);
 SP_API void           sp_os_print_err(sp_str_t message);
 SP_API sp_str_t       sp_os_env_get(sp_str_t key);
@@ -6752,10 +6753,6 @@ sp_str_t sp_cstr_as_str_n(const c8* str, u32 n) {
   };
 }
 
-c8* sp_wstr_to_cstr(c16* str16, u32 len) {
-  return sp_os_wstr_to_cstr(str16, len);
-}
-
 c8 sp_c8_to_lower(c8 c) {
   return (c >= 'A' && c <= 'Z') ? (c + 32) : (c);
 }
@@ -7671,6 +7668,13 @@ sp_str_t sp_fs_join_path(sp_str_t a, sp_str_t b) {
   return sp_str_join(a, b, SP_LIT("/"));
 }
 
+sp_str_t sp_fs_replace_ext(sp_str_t path, sp_str_t ext) {
+  sp_str_t stripped = sp_str_strip_right(path, sp_fs_get_ext(path));
+  return sp_str_empty(ext) ?
+    stripped :
+    sp_str_join(path, ext, sp_str_lit("."));
+}
+
 sp_str_t sp_fs_get_ext(sp_str_t path) {
   for (u32 index = 0; index < path.len; index++) {
     c8 c = sp_str_at_reverse(path, index);
@@ -8446,40 +8450,6 @@ void sp_sleep_ms(f64 ms) {
 }
 
 
-/////////////////
-// WIDE STRING //
-/////////////////
-#if defined(SP_WIN32)
-c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
-  s32 size_needed = WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)str16, (s32)len, NULL, 0, NULL, NULL);
-  c8* str8 = (c8*)sp_alloc((u32)(size_needed + 1));
-  WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)str16, (s32)len, str8, size_needed, NULL, NULL);
-  str8[size_needed] = '\0';
-  return str8;
-}
-#endif
-
-#if defined(SP_POSIX)
-c8* sp_os_wstr_to_cstr(c16* str16, u32 len) {
-  if (!str16 || len == 0) {
-    c8* result = (c8*)sp_alloc(1);
-    result[0] = '\0';
-    return result;
-  }
-
-  c8* result = (c8*)sp_alloc(len + 1);
-  for (u32 i = 0; i < len; i++) {
-    if (str16[i] < 128) {
-      result[i] = (c8)str16[i];
-    } else {
-      result[i] = '?';  // Replace non-ASCII with '?'
-    }
-  }
-  result[len] = '\0';
-  return result;
-}
-#endif
-
 
 ///////////
 // WRITE //
@@ -8528,6 +8498,10 @@ sp_str_t sp_os_get_name() {
   return sp_str_lit("windows");
 }
 
+sp_str_t sp_os_get_executable_ext() {
+  return sp_str_lit("exe");
+}
+
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
   switch (kind) {
     case SP_OS_LIB_SHARED: return SP_LIT("dll");
@@ -8551,6 +8525,10 @@ sp_str_t sp_os_get_name() {
   return sp_str_lit("macos");
 }
 
+sp_str_t sp_os_get_executable_ext() {
+  return sp_str_lit("");
+}
+
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
   switch (kind) {
     case SP_OS_LIB_SHARED: return SP_LIT("dylib");
@@ -8572,6 +8550,10 @@ sp_os_kind_t sp_os_get_kind() {
 
 sp_str_t sp_os_get_name() {
   return sp_str_lit("linux");
+}
+
+sp_str_t sp_os_get_executable_ext() {
+  return sp_str_lit("");
 }
 
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
@@ -8608,6 +8590,16 @@ sp_str_t sp_os_get_name() {
     case SP_OS_LINUX: return sp_str_lit("linux");
     case SP_OS_WIN32: return sp_str_lit("windows");
     case SP_OS_MACOS: return sp_str_lit("macos");
+  }
+
+  SP_UNREACHABLE_RETURN(sp_str_lit(""));
+}
+
+sp_str_t sp_os_get_executable_ext() {
+  switch (sp_os_get_kind()) {
+  case SP_OS_LINUX: return sp_str_lit("");
+  case SP_OS_WIN32: return sp_str_lit("exe");
+  case SP_OS_MACOS: return sp_str_lit("");
   }
 
   SP_UNREACHABLE_RETURN(sp_str_lit(""));
@@ -8878,47 +8870,67 @@ SP_PRIVATE sp_env_var_t sp_os_env_parse_var(sp_str_t entry) {
 
 #if defined(SP_WIN32)
 
-// Read the PEB environment block pointer. The block is a sequence of
-// null-terminated wide strings, double-null terminated.
-// Format: L"KEY=VALUE\0KEY=VALUE\0\0"
-SP_PRIVATE c16* sp_win32_peb_env_block() {
-  void* peb;
+typedef struct {
+  u8* base;
+  struct {
+    u8* base;
+    c16* env;
+  } params;
+} sp_win32_peb_t;
+
+SP_PRIVATE sp_win32_peb_t sp_win32_get_peb() {
+  static const s32 tpidr_el0 = 0x5E82;
+  static const u32 peb_offset = 0x60;
+
+  sp_win32_peb_t peb = SP_ZERO_INITIALIZE();
+
   #if defined(_MSC_VER)
     #if defined(_M_X64)
-      peb = (void*)__readgsqword(0x60);
-    #elif defined(_M_IX86)
-      peb = (void*)__readfsdword(0x30);
+      peb.base = (u8*)__readgsqword(0x60);
     #elif defined(_M_ARM64)
-      peb = *(void**)((c8*)_ReadStatusReg(0x5E82 /* TPIDR_EL0 */) + 0x60);
+      peb.base = *(u8**)(_ReadStatusReg(tpidr_el0) + peb_offset);
     #else
       #error "unsupported architecture"
     #endif
   #else
     #if defined(__x86_64__)
-      __asm__ volatile ("movq %%gs:0x60, %0" : "=r"(peb));
+      __asm__ volatile ("movq %%gs:0x60, %0" : "=r"(peb.base));
     #elif defined(__i386__)
-      __asm__ volatile ("movl %%fs:0x30, %0" : "=r"(peb));
+      __asm__ volatile ("movl %%fs:0x30, %0" : "=r"(peb.base));
     #elif defined(__aarch64__)
-      __asm__ volatile ("ldr %0, [x18, #0x60]" : "=r"(peb));
+      __asm__ volatile ("ldr %0, [x18, #0x60]" : "=r"(peb.base));
     #else
       #error "unsupported architecture"
     #endif
   #endif
-  // PEB->ProcessParameters is at offset 0x20 (x64) or 0x10 (x86)
-  #if defined(_M_X64) || defined(__x86_64__) || defined(_M_ARM64) || defined(__aarch64__)
-    void* params = *(void**)((c8*)peb + 0x20);
-  #else
-    void* params = *(void**)((c8*)peb + 0x10);
-  #endif
-  // RTL_USER_PROCESS_PARAMETERS->Environment is at offset 0x80 (x64) or 0x48 (x86)
-  #if defined(_M_X64) || defined(__x86_64__) || defined(_M_ARM64) || defined(__aarch64__)
-    return *(c16**)((c8*)params + 0x80);
-  #else
-    return *(c16**)((c8*)params + 0x48);
-  #endif
+
+  // PEB->ProcessParameters
+  peb.params.base = *(u8**)(peb.base + 0x20);
+
+  // RTL_USER_PROCESS_PARAMETERS->Environment
+  peb.params.env = *(c16**)(peb.params.base + 0x80);
+
+  return peb;
 }
 
-SP_PRIVATE bool sp_win32_wstr_ieq(const c16* a, u32 a_len, const c8* b, u32 b_len) {
+SP_PRIVATE sp_str_t sp_win32_utf16_to_utf8(const c16* utf16, s32 len) {
+  s32 num_bytes = WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)utf16, len, NULL, 0, NULL, NULL);
+  c8* utf8 = sp_alloc_n(c8, num_bytes + 1);
+  WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)utf16, len, utf8, num_bytes, NULL, NULL);
+  utf8[num_bytes] = '\0';
+  return sp_rval(sp_str_t) {
+    .data = utf8,
+    .len = num_bytes
+  };
+}
+
+SP_PRIVATE u32 sp_win32_utf16_len(const c16* str) {
+  u32 len = 0;
+  while (str[len]) len++;
+  return len;
+}
+
+SP_PRIVATE bool sp_win32_utf16_equals_cstr(const c16* a, u32 a_len, const c8* b, u32 b_len) {
   if (a_len != b_len) return false;
   for (u32 i = 0; i < a_len; i++) {
     c16 wa = a[i];
@@ -8931,25 +8943,20 @@ SP_PRIVATE bool sp_win32_wstr_ieq(const c16* a, u32 a_len, const c8* b, u32 b_le
 }
 
 sp_str_t sp_os_env_get(sp_str_t key) {
-  c16* block = sp_win32_peb_env_block();
-  if (!block) return SP_ZERO_STRUCT(sp_str_t);
+  sp_win32_peb_t peb = sp_win32_get_peb();
 
-  while (*block) {
-    c16* entry = block;
-    u32 entry_len = (u32)wcslen(entry);
+  c16* p = peb.params.env;
+  while (*p) {
+    u32 eq = (*p == L'=') ? 1 : 0;
+    while (p[eq] && p[eq] != L'=') eq++;
 
-    // Find '=' separator (skip leading '=' for special vars)
-    u32 eq = (entry[0] == L'=') ? 1 : 0;
-    while (eq < entry_len && entry[eq] != L'=') eq++;
-
-    if (sp_win32_wstr_ieq(entry, eq, key.data, key.len)) {
-      c16* val_start = entry + eq + 1;
-      u32 val_wlen = entry_len - eq - 1;
-      c8* val = sp_os_wstr_to_cstr(val_start, val_wlen);
-      return sp_str_view(val);
+    if (sp_win32_utf16_equals_cstr(p, eq, key.data, key.len)) {
+      c16* value = p + eq + 1;
+      u32 len = sp_win32_utf16_len(value);
+      return sp_win32_utf16_to_utf8(value, len);
     }
 
-    block += entry_len + 1;
+    p += sp_win32_utf16_len(p) + 1;
   }
 
   return SP_ZERO_STRUCT(sp_str_t);
@@ -8957,20 +8964,20 @@ sp_str_t sp_os_env_get(sp_str_t key) {
 
 SP_PRIVATE void sp_win32_env_it_set_current(sp_os_env_it_t* it) {
   sp_win32_env_it_t* state = (sp_win32_env_it_t*)it->os;
-  state->entry = sp_os_wstr_to_cstr(state->cursor, (u32)wcslen(state->cursor));
+  state->entry = sp_win32_utf16_to_utf8(state->cursor, sp_win32_utf16_len(state->cursor));
 
-  sp_env_var_t var = sp_os_env_parse_var(sp_str_view(state->entry));
+  sp_env_var_t var = sp_os_env_parse_var(state->entry);
   it->key = var.key;
   it->value = var.value;
 }
 
 sp_os_env_it_t sp_os_env_it_begin() {
   sp_os_env_it_t it = SP_ZERO_INITIALIZE();
-  sp_win32_env_it_t* state = (sp_win32_env_it_t*)sp_alloc(sizeof(sp_win32_env_it_t));
-  *state = SP_ZERO_STRUCT(sp_win32_env_it_t);
-  state->block = sp_win32_peb_env_block();
+  sp_win32_env_it_t* state = sp_alloc_type(sp_win32_env_it_t);
+  state->block = sp_win32_get_peb().params.env;
   state->cursor = state->block;
   it.os = state;
+
   if (state->block && state->cursor[0] != L'\0') {
     sp_win32_env_it_set_current(&it);
   }
@@ -8984,16 +8991,12 @@ bool sp_os_env_it_valid(sp_os_env_it_t* it) {
 
 void sp_os_env_it_next(sp_os_env_it_t* it) {
   sp_win32_env_it_t* state = (sp_win32_env_it_t*)it->os;
-  sp_free(state->entry);
-  state->entry = SP_NULLPTR;
   state->cursor += wcslen(state->cursor) + 1;
   if (state->cursor[0] != L'\0') {
     sp_win32_env_it_set_current(it);
   } else {
-    it->key = SP_ZERO_STRUCT(sp_str_t);
-    it->value = SP_ZERO_STRUCT(sp_str_t);
     sp_free(state);
-    it->os = SP_NULLPTR;
+    *it = SP_ZERO_STRUCT(sp_os_env_it_t);
   }
 }
 #endif
@@ -9945,11 +9948,8 @@ void sp_env_init(sp_env_t* env) {
 
 sp_env_t sp_env_capture() {
   sp_env_t env = SP_ZERO_INITIALIZE();
-
-  sp_os_env_it_t it = sp_os_env_it_begin();
-  while (sp_os_env_it_valid(&it)) {
+  for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
     sp_str_ht_insert(env.vars, sp_str_copy(it.key), sp_str_copy(it.value));
-    sp_os_env_it_next(&it);
   }
 
   return env;
@@ -10650,19 +10650,6 @@ c8* sp_ps_build_windows_cmdline(sp_ps_config_t* config) {
   return (c8*)buffer.data;
 }
 
-sp_win32_handle_t sp_ps_win32_dup_handle(sp_win32_handle_t handle, bool inherit) {
-  if (!handle || handle == INVALID_HANDLE_VALUE) {
-    return SP_NULLPTR;
-  }
-
-  sp_win32_handle_t result = SP_NULLPTR;
-  if (!DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(), &result, 0, inherit, DUPLICATE_SAME_ACCESS)) {
-    return SP_NULLPTR;
-  }
-
-  return result;
-}
-
 sp_win32_handle_t sp_ps_win32_open_null(sp_win32_dword_t access) {
   SECURITY_ATTRIBUTES attrs = SP_ZERO_INITIALIZE();
   attrs.nLength = sizeof(attrs);
@@ -10695,14 +10682,16 @@ typedef struct {
   sp_ps_win32_stdio_entry_t err;
 } sp_ps_win32_stdio_t;
 
-bool sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio_entry_t* entry) {
+#define SP_WIN32_INHERITABLE true
+
+sp_err_t sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio_entry_t* entry) {
   entry->child = SP_NULLPTR;
   entry->parent_fd = -1;
 
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
       entry->child = sp_ps_win32_open_null(GENERIC_READ);
-      return entry->child != SP_NULLPTR && entry->child != INVALID_HANDLE_VALUE;
+      return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERROR;
     }
     case SP_PS_IO_MODE_CREATE: {
       SECURITY_ATTRIBUTES attrs = SP_ZERO_INITIALIZE();
@@ -10712,46 +10701,53 @@ bool sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio_ent
       sp_win32_handle_t child_read = SP_NULLPTR;
       sp_win32_handle_t parent_write = SP_NULLPTR;
       if (!CreatePipe(&child_read, &parent_write, &attrs, 0)) {
-        return false;
+        return SP_ERROR;
       }
 
+      // When we CreateProcess, the child shouldn't inherit the handle the parent uses to write to its input
       SetHandleInformation(parent_write, HANDLE_FLAG_INHERIT, 0);
 
       s32 fd = _open_osfhandle((intptr_t)parent_write, _O_WRONLY | _O_BINARY);
       if (fd < 0) {
         CloseHandle(child_read);
         CloseHandle(parent_write);
-        return false;
+        return SP_ERROR;
       }
 
       entry->child = child_read;
       entry->parent_fd = fd;
-      return true;
+      return SP_OK;
     }
     case SP_PS_IO_MODE_EXISTING: {
-      entry->child = sp_ps_win32_dup_handle(sp_ps_win32_fd_to_handle(io->fd), true);
-      return entry->child != SP_NULLPTR;
+      sp_win32_handle_t process = GetCurrentProcess();
+      if (!DuplicateHandle(process, sp_ps_win32_fd_to_handle(io->fd), process, &entry->child, SP_NULL, SP_WIN32_INHERITABLE, DUPLICATE_SAME_ACCESS)) {
+        return SP_ERROR;
+      }
+      return entry->child == SP_NULLPTR ? SP_ERROR : SP_OK;
     }
     case SP_PS_IO_MODE_INHERIT: {
-      entry->child = sp_ps_win32_dup_handle(GetStdHandle(STD_INPUT_HANDLE), true);
-      return entry->child != SP_NULLPTR;
+      sp_win32_handle_t process = GetCurrentProcess();
+      if (!DuplicateHandle(process, GetStdHandle(STD_INPUT_HANDLE), process, &entry->child, SP_NULL, SP_WIN32_INHERITABLE, DUPLICATE_SAME_ACCESS)) {
+        return SP_ERROR;
+      }
+      return entry->child == SP_NULLPTR ? SP_ERROR : SP_OK;
     }
     case SP_PS_IO_MODE_REDIRECT: {
-      return true;
+      return SP_OK;
     }
   }
 
-  SP_UNREACHABLE_RETURN(false);
+  SP_UNREACHABLE_RETURN(SP_ERROR);
 }
 
-bool sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_t std_handle, sp_win32_dword_t null_access, s32 fd_flags, sp_ps_win32_stdio_entry_t* entry) {
+sp_err_t sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_t std_handle, sp_win32_dword_t null_access, sp_ps_win32_stdio_entry_t* entry) {
   entry->child = SP_NULLPTR;
   entry->parent_fd = -1;
 
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
       entry->child = sp_ps_win32_open_null(null_access);
-      return entry->child != SP_NULLPTR && entry->child != INVALID_HANDLE_VALUE;
+      return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERROR;
     }
     case SP_PS_IO_MODE_CREATE: {
       SECURITY_ATTRIBUTES attrs = SP_ZERO_INITIALIZE();
@@ -10761,32 +10757,40 @@ bool sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_t st
       sp_win32_handle_t parent_read = SP_NULLPTR;
       sp_win32_handle_t child_write = SP_NULLPTR;
       if (!CreatePipe(&parent_read, &child_write, &attrs, 0)) {
-        return false;
+        return SP_ERROR;
       }
 
       SetHandleInformation(parent_read, HANDLE_FLAG_INHERIT, 0);
 
-      s32 fd = _open_osfhandle((intptr_t)parent_read, fd_flags | _O_BINARY);
+      s32 fd = _open_osfhandle((intptr_t)parent_read, _O_RDONLY | _O_BINARY);
       if (fd < 0) {
         CloseHandle(parent_read);
         CloseHandle(child_write);
-        return false;
+        return SP_ERROR;
       }
 
       entry->child = child_write;
       entry->parent_fd = fd;
-      return true;
+      return SP_OK;
     }
     case SP_PS_IO_MODE_EXISTING: {
-      entry->child = sp_ps_win32_dup_handle(sp_ps_win32_fd_to_handle(io->fd), true);
-      return entry->child != SP_NULLPTR;
+      sp_win32_handle_t process = GetCurrentProcess();
+      if (!DuplicateHandle(process, sp_ps_win32_fd_to_handle(io->fd), process, &entry->child, SP_NULL, SP_WIN32_INHERITABLE, DUPLICATE_SAME_ACCESS)) {
+        return SP_ERROR;
+      }
+
+      return entry->child == SP_NULLPTR ? SP_ERROR : SP_OK;
     }
     case SP_PS_IO_MODE_INHERIT: {
-      entry->child = sp_ps_win32_dup_handle(GetStdHandle(std_handle), true);
-      return entry->child != SP_NULLPTR;
+      sp_win32_handle_t process = GetCurrentProcess();
+      if (!DuplicateHandle(process, GetStdHandle(std_handle), process, &entry->child, SP_NULL, SP_WIN32_INHERITABLE, DUPLICATE_SAME_ACCESS)) {
+        return SP_ERROR;
+      }
+
+      return entry->child == SP_NULLPTR ? SP_ERROR : SP_OK;
     }
     case SP_PS_IO_MODE_REDIRECT: {
-      return true;
+      return SP_OK;
     }
   }
 
@@ -10880,9 +10884,52 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
   SP_ASSERT(!sp_str_empty(config.command));
 
   c8* cmdline = sp_ps_build_windows_cmdline(&config);
-  sp_env_t env_map = sp_ps_build_env(&config.env);
-  c8* env = sp_env_to_windows_block(&env_map);
-  sp_env_destroy(&env_map);
+
+
+
+  sp_str_builder_t b = SP_ZERO_INITIALIZE();
+
+  switch (config.env.mode) {
+    case SP_PS_ENV_INHERIT: {
+      for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
+        sp_str_builder_append(&b, it.key);
+        sp_str_builder_append_c8(&b, '=');
+        sp_str_builder_append(&b, it.value);
+        sp_str_builder_append_c8(&b, '\0');
+      }
+      break;
+    }
+    case SP_PS_ENV_EXISTING: {
+      sp_env_t* env = &config.env.env;
+      sp_str_ht_for(env->vars, it) {
+        sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
+        sp_str_t val = *sp_str_ht_it_getp(env->vars, it);
+
+        sp_str_builder_append_fmt(&b, "{}={}", SP_FMT_STR(key), SP_FMT_STR(val));
+        sp_str_builder_append_c8(&b, '\0');
+      }
+
+      break;
+    }
+    case SP_PS_ENV_CLEAN: {
+      break;
+    }
+  }
+
+  for (s32 it = SP_PS_MAX_ENV - 1; it >= 0; it--) {
+    sp_env_var_t e = config.env.extra[it];
+    if (sp_str_empty(e.key)) continue;
+
+    sp_str_builder_append_fmt(&b, "{}={}", SP_FMT_STR(e.key), SP_FMT_STR(e.value));
+    sp_str_builder_append_c8(&b, '\0');
+  }
+
+  sp_str_builder_append_c8(&b, '\0');
+  sp_str_builder_append_c8(&b, '\0');
+
+  sp_mem_buffer_t buffer = sp_str_builder_into_buffer(&b);
+  c8* env = sp_mem_buffer_as_cstr(&buffer);
+
   c8* cwd = sp_str_empty(config.cwd) ? SP_NULLPTR : sp_str_to_cstr(config.cwd);
 
   sp_ps_win32_stdio_t io = {
@@ -10891,47 +10938,26 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     .err = { .parent_fd = -1 },
   };
 
-  bool ok = sp_ps_win32_configure_io_in(&proc.io.in, &io.in);
-  if (ok) {
-    if (proc.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
-      ok = sp_ps_win32_configure_io_out(&proc.io.err, STD_ERROR_HANDLE, GENERIC_WRITE, _O_RDONLY, &io.err);
-      if (ok) {
-        io.out.child = io.err.child;
-      }
-    } else {
-      ok = sp_ps_win32_configure_io_out(&proc.io.out, STD_OUTPUT_HANDLE, GENERIC_WRITE, _O_RDONLY, &io.out);
-    }
+  sp_try_goto(sp_ps_win32_configure_io_in(&proc.io.in, &io.in), error);
+
+  if (proc.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
+    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.err, STD_ERROR_HANDLE, GENERIC_WRITE, &io.err), error);
+    io.out.child = io.err.child;
+  } else if (proc.io.err.mode == SP_PS_IO_MODE_REDIRECT) {
+    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.out, STD_OUTPUT_HANDLE, GENERIC_WRITE, &io.out), error);
+    io.err.child = io.out.child;
+  } else {
+    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.out, STD_OUTPUT_HANDLE, GENERIC_WRITE, &io.out), error);
+    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.err, STD_ERROR_HANDLE, GENERIC_WRITE, &io.err), error);
   }
 
-  if (ok) {
-    if (proc.io.err.mode == SP_PS_IO_MODE_REDIRECT) {
-      if (!io.out.child) {
-        ok = sp_ps_win32_configure_io_out(&proc.io.out, STD_OUTPUT_HANDLE, GENERIC_WRITE, _O_RDONLY, &io.out);
-      }
-      if (ok) {
-        io.err.child = io.out.child;
-      }
-    } else if (proc.io.out.mode != SP_PS_IO_MODE_REDIRECT) {
-      ok = sp_ps_win32_configure_io_out(&proc.io.err, STD_ERROR_HANDLE, GENERIC_WRITE, _O_RDONLY, &io.err);
-    }
-  }
-
-  if (!ok) {
-    sp_ps_win32_close_child_handles(&io);
-    sp_ps_win32_close_parent_fds(&io);
-    sp_free(cmdline);
-    if (env) sp_free(env);
-    if (cwd) sp_free(cwd);
-    sp_err_set(SP_ERR_OS);
-    return SP_ZERO_STRUCT(sp_ps_t);
-  }
-
-  STARTUPINFOA startup = SP_ZERO_INITIALIZE();
-  startup.cb = sizeof(startup);
-  startup.dwFlags = STARTF_USESTDHANDLES;
-  startup.hStdInput = io.in.child;
-  startup.hStdOutput = io.out.child;
-  startup.hStdError = io.err.child;
+  STARTUPINFOA startup = {
+    .cb = sizeof(STARTUPINFOA),
+    .dwFlags = STARTF_USESTDHANDLES,
+    .hStdInput = io.in.child,
+    .hStdOutput = io.out.child,
+    .hStdError = io.err.child,
+  };
 
   PROCESS_INFORMATION process_info = SP_ZERO_INITIALIZE();
   if (!CreateProcessA(SP_NULLPTR, cmdline, SP_NULLPTR, SP_NULLPTR, true, 0, env, cwd, &startup, &process_info)) {
@@ -10963,6 +10989,15 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
   if (cwd) sp_free(cwd);
 
   return proc;
+
+error:
+  sp_ps_win32_close_child_handles(&io);
+  sp_ps_win32_close_parent_fds(&io);
+  sp_free(cmdline);
+  if (env) sp_free(env);
+  if (cwd) sp_free(cwd);
+  sp_err_set(SP_ERR_OS);
+  return SP_ZERO_STRUCT(sp_ps_t);
 }
 
 sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
@@ -10977,7 +11012,8 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
     .mode = SP_PS_IO_MODE_CREATE,
   };
   sp_ps_t ps = sp_ps_create(config);
-  return sp_ps_output(&ps);
+  if (ps.pid) return sp_ps_output(&ps);
+  return sp_zero_struct(sp_ps_output_t);
 }
 
 sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {
@@ -11010,37 +11046,24 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
 sp_ps_status_t sp_ps_win32_finish_process(sp_ps_t* ps) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
 
-  if (!ps || !ps->pid) {
-    result.state = SP_PS_STATE_DONE;
-    result.exit_code = -1;
-    return result;
-  }
-
   DWORD exit_code = 0;
   if (!GetExitCodeProcess(ps->pid, &exit_code)) {
     sp_err_set(SP_ERR_OS);
     result.state = SP_PS_STATE_DONE;
     result.exit_code = -1;
-    CloseHandle(ps->pid);
-    ps->pid = SP_NULLPTR;
-    return result;
+  }
+  else {
+    result.state = SP_PS_STATE_DONE;
+    result.exit_code = (s32)exit_code;
   }
 
-  result.state = SP_PS_STATE_DONE;
-  result.exit_code = (s32)exit_code;
   CloseHandle(ps->pid);
-  ps->pid = SP_NULLPTR;
   return result;
+
 }
 
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
-
-  if (!ps || !ps->pid) {
-    result.state = SP_PS_STATE_DONE;
-    result.exit_code = -1;
-    return result;
-  }
 
   DWORD wait = WaitForSingleObject(ps->pid, timeout_ms);
   switch (wait) {
@@ -11121,12 +11144,6 @@ u64 sp_ps_win32_read_available(sp_os_file_handle_t fd, sp_str_builder_t* builder
 
 sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   sp_ps_output_t result = SP_ZERO_INITIALIZE();
-
-  if (!ps) {
-    result.status.state = SP_PS_STATE_DONE;
-    result.status.exit_code = -1;
-    return result;
-  }
 
   bool out_open = sp_ps_is_fd_valid(ps->io.out.fd);
   bool err_open = sp_ps_is_fd_valid(ps->io.err.fd);

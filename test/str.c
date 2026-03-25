@@ -237,23 +237,6 @@ UTEST(cstr, length_tests) {
   ASSERT_EQ(sp_cstr_len(embedded), 2);
 }
 
-UTEST(wstr, wide_string_conversion) {
-  c16 wide_str[] = L"Hello";
-  c8* converted = sp_wstr_to_cstr(wide_str, 5);
-  ASSERT_TRUE(sp_cstr_equal(converted, "Hello"));
-  sp_free(converted);
-
-  c16 empty[] = L"";
-  c8* empty_converted = sp_wstr_to_cstr(empty, 0);
-  ASSERT_TRUE(sp_cstr_equal(empty_converted, ""));
-  sp_free(empty_converted);
-
-  c16 special[] = L"Test 123!";
-  c8* special_converted = sp_wstr_to_cstr(special, 9);
-  ASSERT_TRUE(sp_cstr_equal(special_converted, "Test 123!"));
-  sp_free(special_converted);
-}
-
 UTEST(str, conversion_functions) {
   sp_str_t str = SP_LIT("Hello World");
   c8* cstr = sp_str_to_cstr(str);
@@ -1343,3 +1326,25 @@ UTEST(string_cpp, path_concatenation_operator) {
   SP_EXPECT_STR_EQ_CSTR(chained_cstr, "root/data/files");
 }
 #endif
+
+#ifdef SP_WIN32
+c8* sp_win32_utf16_to_utf8(const c16* str, u32 len);
+
+UTEST(wstr, wide_string_conversion) {
+  c16 wide_str[] = L"Hello";
+  c8* converted = sp_utf16_to_utf8(wide_str, 5);
+  ASSERT_TRUE(sp_cstr_equal(converted, "Hello"));
+  sp_free(converted);
+
+  c16 empty[] = L"";
+  c8* empty_converted = sp_utf16_to_utf8(empty, 0);
+  ASSERT_TRUE(sp_cstr_equal(empty_converted, ""));
+  sp_free(empty_converted);
+
+  c16 special[] = L"Test 123!";
+  c8* special_converted = sp_utf16_to_utf8(special, 9);
+  ASSERT_TRUE(sp_cstr_equal(special_converted, "Test 123!"));
+  sp_free(special_converted);
+}
+#endif
+

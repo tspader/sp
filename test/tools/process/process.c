@@ -1,6 +1,12 @@
 // SP_IMPLEMENTATION is defined in the Makefile to make clangd happy
 #include "sp.h"
 
+#ifdef _WIN32
+  #define sp_getpid() ((s32)GetCurrentProcessId())
+#else
+  #define sp_getpid() getpid()
+#endif
+
 #include "process.h"
 
 #define ARGPARSE_IMPLEMENTATION
@@ -12,6 +18,14 @@ static const c8* const usage[] = {
 };
 
 s32 main(s32 num_args, const c8** args) {
+  // Some tests work by verifying specific output; make sure that we write in binary mode to avoid Windows tacking on
+  // carriage returns that we aren't expecting
+#ifdef _WIN32
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
+#endif
+
   const c8* function_str = NULL;
   s32 exit_code = 0;
   s32 stdout_enabled = 0;
@@ -119,7 +133,7 @@ s32 main(s32 num_args, const c8** args) {
       const u32 total_size = 100;
       const u32 delay_ms = 20;
 
-      u8 buffer[chunk_size];
+      u8 buffer[10];
       for (u32 i = 0; i < chunk_size; i++) {
         buffer[i] = (u8)('A' + (i % 26));
       }
@@ -164,9 +178,9 @@ s32 main(s32 num_args, const c8** args) {
     case TEST_PROC_FUNCTION_WAIT: {
       sp_str_t arg = sp_str_view(args[0]);
       f64 ms = sp_parse_f64(arg);
-      SP_LOG("process.c ({:fg brightyellow}) is sleeping for {:fg cyan}ms", SP_FMT_S32(getpid()), SP_FMT_F64(ms));
+      SP_LOG("process.c ({:fg brightyellow}) is sleeping for {:fg cyan}ms", SP_FMT_S32(sp_getpid()), SP_FMT_F64(ms));
       sp_os_sleep_ms(ms);
-      SP_LOG("process.c ({:fg brightyellow}) is done", SP_FMT_S32(getpid()));
+      SP_LOG("process.c ({:fg brightyellow}) is done", SP_FMT_S32(sp_getpid()));
       return sp_test_ps_wait_exit_code;
     }
     case TEST_PROC_FUNCTION_EXIT_CODE: {

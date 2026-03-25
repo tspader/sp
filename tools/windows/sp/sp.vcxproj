@@ -16,6 +16,7 @@
     <ProjectGuid>{D6EBC4DF-64B0-4DFA-8D03-3E4F0F4C5F31}</ProjectGuid>
     <RootNamespace>sp</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>amalgamation</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup>
@@ -93,6 +94,11 @@
   <ItemGroup>
     <ClInclude Include="..\..\..\sp.h" />
     <ClInclude Include="..\..\..\test\tools\utest.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="process.vcxproj">
+      <Project>{A1B2C3D4-E5F6-4A8B-9C0D-E1F2A3B4C5D6}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="Run" DependsOnTargets="Build">

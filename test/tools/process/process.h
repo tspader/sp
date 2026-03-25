@@ -1,6 +1,7 @@
 #include "sp.h"
 
-sp_str_t sp_test_ps_canary = sp_str_lit("foo");
+#define SP_TEST_PS_CANARY "foo"
+sp_str_t sp_test_ps_canary = { .data = SP_TEST_PS_CANARY, .len = sizeof(SP_TEST_PS_CANARY) - 1 };
 s32 sp_test_ps_wait_exit_code = 69;
 
 #define TEST_PROC_STREAM(X) \

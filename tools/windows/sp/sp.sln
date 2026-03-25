@@ -8,6 +8,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "fs", "fs.vcxproj", "{9A8D3D
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "core", "core.vcxproj", "{7E7E6A1A-FD3F-4281-BCF4-230506A66BE5}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "process", "process.vcxproj", "{A1B2C3D4-E5F6-4A8B-9C0D-E1F2A3B4C5D6}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ps", "ps.vcxproj", "{B3A7C8D1-E5F2-4A3B-9C6D-1F2E3A4B5C6D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -26,6 +30,14 @@ Global
 		{7E7E6A1A-FD3F-4281-BCF4-230506A66BE5}.Debug|x64.Build.0 = Debug|x64
 		{7E7E6A1A-FD3F-4281-BCF4-230506A66BE5}.Release|x64.ActiveCfg = Release|x64
 		{7E7E6A1A-FD3F-4281-BCF4-230506A66BE5}.Release|x64.Build.0 = Release|x64
+		{A1B2C3D4-E5F6-4A8B-9C0D-E1F2A3B4C5D6}.Debug|x64.ActiveCfg = Debug|x64
+		{A1B2C3D4-E5F6-4A8B-9C0D-E1F2A3B4C5D6}.Debug|x64.Build.0 = Debug|x64
+		{A1B2C3D4-E5F6-4A8B-9C0D-E1F2A3B4C5D6}.Release|x64.ActiveCfg = Release|x64
+		{A1B2C3D4-E5F6-4A8B-9C0D-E1F2A3B4C5D6}.Release|x64.Build.0 = Release|x64
+		{B3A7C8D1-E5F2-4A3B-9C6D-1F2E3A4B5C6D}.Debug|x64.ActiveCfg = Debug|x64
+		{B3A7C8D1-E5F2-4A3B-9C6D-1F2E3A4B5C6D}.Debug|x64.Build.0 = Debug|x64
+		{B3A7C8D1-E5F2-4A3B-9C6D-1F2E3A4B5C6D}.Release|x64.ActiveCfg = Release|x64
+		{B3A7C8D1-E5F2-4A3B-9C6D-1F2E3A4B5C6D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
