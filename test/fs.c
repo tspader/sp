@@ -3,16 +3,38 @@
 
 #include "utest.h"
 
+static bool sp_symlinks_available = false;
+static bool sp_symlinks_probed = false;
+
+static void sp_symlinks_probe(sp_str_t test_dir) {
+  if (sp_symlinks_probed) return;
+  sp_symlinks_probed = true;
+  sp_str_t target = sp_fs_join_path(test_dir, SP_LIT(".symlink_probe_target"));
+  sp_str_t link = sp_fs_join_path(test_dir, SP_LIT(".symlink_probe_link"));
+  sp_fs_create_file(target);
+  sp_symlinks_available = sp_fs_create_sym_link(target, link) == SP_OK;
+  if (sp_symlinks_available) sp_fs_remove_file(link);
+  sp_fs_remove_file(target);
+}
+
+#define SKIP_IF_NO_SYMLINKS() \
+  if (!sp_symlinks_available) { UTEST_SKIP("symlinks not available"); }
+
 struct fs {
   sp_test_file_manager_t file_manager;
 };
 
 UTEST_F_SETUP(fs) {
   sp_test_file_manager_init(&ut.file_manager);
+  sp_symlinks_probe(ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs) {
   sp_test_file_manager_cleanup(&ut.file_manager);
+}
+
+UTEST_F(fs, is_symlink_available) {
+  EXPECT_TRUE(sp_symlinks_available);
 }
 
 UTEST_F(fs, mod_time) {
@@ -404,6 +426,7 @@ struct fs_collect {
 
 UTEST_F_SETUP(fs_collect) {
   sp_test_file_manager_init(&ut.file_manager);
+  sp_symlinks_probe(ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_collect) {
@@ -557,6 +580,7 @@ UTEST_F(fs_collect, subdirectory) {
 }
 
 UTEST_F(fs_collect, mixed_types) {
+  SKIP_IF_NO_SYMLINKS();
   run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
     .label = "mixed_types",
     .setup = {
@@ -659,6 +683,7 @@ UTEST_F(fs_collect, recursive_nested_dirs) {
 }
 
 UTEST_F(fs_collect, recursive_symlink_not_followed) {
+  SKIP_IF_NO_SYMLINKS();
   run_collect_test(&ur, &ut.file_manager, &(collect_test_t) {
     .label = "recursive_symlink_not_followed",
     .recursive = true,
@@ -731,6 +756,7 @@ struct fs_create_dir {
 
 UTEST_F_SETUP(fs_create_dir) {
   sp_test_file_manager_init(&ut.file_manager);
+  sp_symlinks_probe(ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_create_dir) {
@@ -879,6 +905,7 @@ UTEST_F(fs_create_dir, destination_parent_is_file) {
 
 #if defined(SP_POSIX)
 UTEST_F(fs_create_dir, destination_is_symlink_to_directory) {
+  SKIP_IF_NO_SYMLINKS();
   run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
     .label = "destination_is_symlink_to_directory",
     .target = "sym_name",
@@ -895,6 +922,7 @@ UTEST_F(fs_create_dir, destination_is_symlink_to_directory) {
 }
 
 UTEST_F(fs_create_dir, destination_is_symlink_to_file) {
+  SKIP_IF_NO_SYMLINKS();
   run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
     .label = "destination_is_symlink_to_file",
     .target = "sym_name",
@@ -1101,6 +1129,7 @@ static void run_fs_predicate_test(s32* utest_result, sp_test_file_manager_t* fm,
 }
 
 UTEST_F(fs, predicate_matrix) {
+  SKIP_IF_NO_SYMLINKS();
   run_fs_predicate_test(&ur, &ut.file_manager, &(fs_predicate_test_t) {
     .label = "predicate_matrix",
     .setup = {
@@ -1270,6 +1299,7 @@ UTEST_F(fs, create_hard_link_directory_fails) {
 }
 
 UTEST_F(fs, create_symlink_file) {
+  SKIP_IF_NO_SYMLINKS();
   run_fs_link_test(&ur, &ut.file_manager, &(fs_link_test_t) {
     .label = "create_symlink_file",
     .setup = {
@@ -1291,6 +1321,7 @@ UTEST_F(fs, create_symlink_file) {
 }
 
 UTEST_F(fs, create_symlink_directory) {
+  SKIP_IF_NO_SYMLINKS();
   run_fs_link_test(&ur, &ut.file_manager, &(fs_link_test_t) {
     .label = "create_symlink_directory",
     .setup = {
@@ -1308,6 +1339,7 @@ UTEST_F(fs, create_symlink_directory) {
 }
 
 UTEST_F(fs, create_symlink_existing_destination_fails) {
+  SKIP_IF_NO_SYMLINKS();
   run_fs_link_test(&ur, &ut.file_manager, &(fs_link_test_t) {
     .label = "create_symlink_existing_destination_fails",
     .setup = {
@@ -1516,6 +1548,7 @@ UTEST_F(fs, remove_dir_recursive) {
 }
 
 UTEST_F(fs, remove_dir_does_not_follow_symlink) {
+  SKIP_IF_NO_SYMLINKS();
   run_fs_remove_test(&ur, &ut.file_manager, &(fs_remove_test_t) {
     .label = "remove_dir_does_not_follow_symlink",
     .setup = {
