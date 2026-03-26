@@ -785,6 +785,7 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
   #define SP_SYSCALL_NUM_LSEEK             8
   #define SP_SYSCALL_NUM_MMAP              9
   #define SP_SYSCALL_NUM_MUNMAP            11
+  #define SP_SYSCALL_NUM_SIGACTION         0x00D
   #define SP_SYSCALL_NUM_MREMAP            25
   #define SP_SYSCALL_NUM_DUP2              33
   #define SP_SYSCALL_NUM_NANOSLEEP         35
@@ -3009,8 +3010,15 @@ typedef enum {
   SP_OS_LIB_STATIC,
 } sp_os_lib_kind_t;
 
-typedef u32 sp_os_attr_t;
+typedef enum {
+  SP_OS_SIGNAL_INTERRUPT,
+  SP_OS_SIGNAL_TERMINAT,
+  SP_OS_SIGNAL_ABORT,
+} sp_os_signal_t;
 
+sp_typedef_fn(void, sp_os_signal_handler_t, sp_os_signal_t signal);
+
+typedef u32 sp_os_attr_t;
 typedef s32 sp_os_file_handle_t;
 
 SP_API void           sp_sleep_ns(u64 ns);
@@ -3040,7 +3048,7 @@ SP_API sp_str_t       sp_os_get_cwd();
 SP_API sp_str_t       sp_os_get_exe_path();
 SP_API sp_fs_attr_t   sp_os_get_file_attrs(sp_str_t path, sp_os_follow_symlink_t follow);
 SP_API sp_os_attr_t   sp_os_get_raw_file_attrs(sp_str_t path, sp_os_follow_symlink_t follow);
-
+SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal_handler_t);
 
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
@@ -3073,8 +3081,9 @@ typedef struct {
   u32 index;
 } sp_tls_rt_t;
 
-#if !defined(SP_FREESTANDING)
 typedef struct {
+  u32 dummy;
+#if !defined(SP_FREESTANDING)
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
   struct {
@@ -3086,10 +3095,10 @@ typedef struct {
       pthread_once_t once;
     #endif
   } tls;
+#endif
 } sp_rt_t;
 
 extern sp_rt_t sp_rt;
-#endif
 
 sp_tls_rt_t*  sp_tls_rt_get();
 sp_context_t* sp_context_get();
@@ -8844,6 +8853,9 @@ sp_err_t sp_os_create_sym_link(sp_str_t target, sp_str_t link_path) {
 }
 #endif
 
+/////////
+// ENV //
+/////////
 SP_PRIVATE sp_env_var_t sp_os_env_parse_var(sp_str_t entry) {
   sp_env_var_t result = { .key = entry };
   u32 start = 0;
@@ -8864,7 +8876,6 @@ SP_PRIVATE sp_env_var_t sp_os_env_parse_var(sp_str_t entry) {
 }
 
 #if defined(SP_WIN32)
-
 typedef struct {
   u8* base;
   struct {
@@ -9112,6 +9123,47 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
 }
 #endif
 
+////////////
+// SIGNAL //
+////////////
+#if defined(SP_WIN32)
+sp_win32_dword_t sp_os_signal_to_win32(sp_os_signal_t signal) {
+  switch (signal) {
+    case SP_OS_SIGNAL_INTERRUPT: return CTRL_C_EVENT;
+    case SP_OS_SIGNAL_TERMINATE: return CTRL_CLOSE_EVENT;
+    case SP_OS_SIGNAL_ABORT: return SIGABRT;
+  }
+  return 0;
+}
+
+void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
+
+}
+
+#elif defined(SP_LINUX)
+void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
+  sp_rt.dummy = 69;
+  // struct sigaction sa;
+  // sa.sa_handler = some_wrapper_that_invokes_handler();
+  // sigemptyset(&sa.sa_mask);
+  // sa.sa_flags = 0;
+  // sigaction(SIGINT, &sa, NULL);
+}
+
+#else
+s32 sp_os_signal_to_libc(sp_os_signal_t signal) {
+  switch (signal) {
+    case SP_OS_SIGNAL_INTERRUPT: return SIGINT;
+    case SP_OS_SIGNAL_TERMINATE: return SIGTERM;
+    case SP_OS_SIGNAL_ABORT: return SIGABRT;
+  }
+  return 0;
+}
+
+void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
+
+}
+#endif
 
 
 
