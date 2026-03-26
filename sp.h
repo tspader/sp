@@ -285,22 +285,16 @@
   #if defined(SP_SYS_ENABLE)
     #define SP_SYS
   #endif
+#endif
 
-  #ifndef SP_FMON_DISABLE
-    #define SP_FMON
-  #endif
-  #if defined(SP_FMON_ENABLE)
-    #define SP_FMON
-  #endif
+#ifndef SP_FMON_DISABLE
+  #define SP_FMON
+#endif
+#if defined(SP_FMON_ENABLE)
+  #define SP_FMON
 #endif
 
 #if defined(SP_MACOS)
-  #ifndef SP_FMON_DISABLE
-    #define SP_FMON
-  #endif
-  #if defined(SP_FMON_ENABLE)
-    #define SP_FMON
-  #endif
   #if !defined(SP_MACHO_DISABLE)
     #define SP_MACHO
   #endif
@@ -3643,11 +3637,12 @@ typedef struct {
   sp_win32_handle_t handle;
   void* notify_information;
   s32 bytes_returned;
-} sp_monitored_dir_t;
+} sp_fmon_dir_t;
 
 typedef struct {
-  sp_dynamic_array_t directory_infos;
-} sp_os_win32_file_monitor_t;
+  sp_da(sp_fmon_dir_t) dirs;
+  sp_da(sp_str_t) watch_files;
+} sp_fmon_os_t;
 
 #elif defined(SP_LINUX)
 ///////////
@@ -11357,21 +11352,38 @@ sp_fmon_cache_t* sp_fmon_get_or_insert_cache(sp_fmon_t* monitor, sp_str_t file_p
 }
 
 #ifdef SP_WIN32
-SP_PRIVATE void sp_os_win32_file_monitor_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_t events);
-SP_PRIVATE void sp_os_win32_file_monitor_issue_one_read(sp_fmon_t * monitor, sp_fmon_dir_t* info);
+SP_PRIVATE void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events);
+SP_PRIVATE void sp_win32_fmon_issue_read(sp_fmon_t* monitor, sp_fmon_dir_t* info);
 
-void sp_fmon_os_init(sp_file_monitor_t* monitor) {
-  sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)sp_alloc(sizeof(sp_os_win32_file_monitor_t));
-  sp_dynamic_array_init(&os->directory_infos, sizeof(sp_monitored_dir_t));
+void sp_fmon_os_init(sp_fmon_t* monitor) {
+  sp_fmon_os_t* os = SP_ALLOC(sp_fmon_os_t);
   monitor->os = os;
 }
 
-void sp_fmon_os_deinit(sp_file_monitor_t* monitor) {
-  (void)monitor;
+void sp_fmon_os_deinit(sp_fmon_t* monitor) {
+  if (!monitor->os) return;
+  sp_fmon_os_t* os = monitor->os;
+  sp_da_for(os->dirs, i) {
+    sp_fmon_dir_t* info = &os->dirs[i];
+    if (info->handle && info->handle != INVALID_HANDLE_VALUE) {
+      CancelIo(info->handle);
+      CloseHandle(info->handle);
+    }
+    if (info->overlapped.hEvent) {
+      CloseHandle(info->overlapped.hEvent);
+    }
+    if (info->notify_information) {
+      sp_free(info->notify_information);
+    }
+  }
+  sp_da_free(os->dirs);
+  sp_da_free(os->watch_files);
+  sp_free(os);
+  monitor->os = NULL;
 }
 
-void sp_fmon_os_add_dir(sp_file_monitor_t* monitor, sp_str_t directory_path) {
-  sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)monitor->os;
+void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
+  sp_fmon_os_t* os = monitor->os;
 
   sp_win32_handle_t event = CreateEventW(NULL, false, false, NULL);
   if (!event) return;
@@ -11392,36 +11404,66 @@ void sp_fmon_os_add_dir(sp_file_monitor_t* monitor, sp_str_t directory_path) {
     return;
   }
 
-  sp_monitored_dir_t* info = (sp_monitored_dir_t*)sp_dynamic_array_push(&os->directory_infos, NULL);
-  sp_os_zero_memory(&info->overlapped, sizeof(sp_win32_overlapped_t));
-  info->overlapped.hEvent = event;
-  info->handle = handle;
-  info->path = sp_str_copy(directory_path);
-  info->notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
-  sp_os_zero_memory(info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
+  sp_fmon_dir_t dir = SP_ZERO_INITIALIZE();
+  dir.overlapped.hEvent = event;
+  dir.handle = handle;
+  dir.path = sp_str_copy(directory_path);
+  dir.notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
+  sp_mem_zero(dir.notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
 
-  sp_os_win32_file_monitor_issue_one_read(monitor, info);
+  sp_dyn_array_push(os->dirs, dir);
+  sp_fmon_dir_t* info = &os->dirs[sp_da_size(os->dirs) - 1];
+  sp_win32_fmon_issue_read(monitor, info);
 }
 
-void sp_fmon_os_add_file(sp_file_monitor_t* monitor, sp_str_t file_path) {
+void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+  sp_fmon_os_t* os = monitor->os;
+  sp_str_t canonical = sp_fs_canonicalize_path(file_path);
+  sp_dyn_array_push(os->watch_files, canonical);
+
+  sp_str_t dir_path = sp_fs_parent_path(canonical);
+  if (dir_path.len > 0) {
+    bool found = false;
+    sp_da_for(os->dirs, i) {
+      if (sp_str_equal(sp_fs_canonicalize_path(os->dirs[i].path), dir_path)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      sp_fmon_os_add_dir(monitor, dir_path);
+    }
+  }
 }
 
-void sp_fmon_os_process_changes(sp_file_monitor_t* monitor) {
-  sp_os_win32_file_monitor_t* os = (sp_os_win32_file_monitor_t*)monitor->os;
+SP_PRIVATE bool sp_win32_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path) {
+  if (sp_da_size(os->watch_files) == 0) return true;
+  sp_str_t canonical = sp_fs_canonicalize_path(full_path);
+  sp_da_for(os->watch_files, i) {
+    if (sp_str_equal(os->watch_files[i], canonical)) return true;
+  }
+  return false;
+}
 
-  for (u32 i = 0; i < os->directory_infos.size; i++) {
-    sp_monitored_dir_t* info = (sp_monitored_dir_t*)sp_dynamic_array_at(&os->directory_infos, i);
-    assert(info->handle != INVALID_HANDLE_VALUE);
+void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+  sp_fmon_os_t* os = monitor->os;
+
+  sp_da_for(os->dirs, i) {
+    sp_fmon_dir_t* info = &os->dirs[i];
+    SP_ASSERT(info->handle != INVALID_HANDLE_VALUE);
 
     if (!HasOverlappedIoCompleted(&info->overlapped)) continue;
 
     s32 bytes_written = 0;
-    bool success = GetOverlappedResult(info->handle, &info->overlapped, (LPDWORD) &bytes_written, false);
-    if (!success || bytes_written == 0) break;
+    bool success = GetOverlappedResult(info->handle, &info->overlapped, (LPDWORD)&bytes_written, false);
+    if (!success || bytes_written == 0) {
+      sp_win32_fmon_issue_read(monitor, info);
+      continue;
+    }
 
     FILE_NOTIFY_INFORMATION* notify = (FILE_NOTIFY_INFORMATION*)info->notify_information;
     while (true) {
-      sp_file_change_event_t events = SP_FILE_CHANGE_EVENT_NONE;
+      sp_fmon_event_kind_t events = SP_FILE_CHANGE_EVENT_NONE;
       if (notify->Action == FILE_ACTION_MODIFIED) {
         events = SP_FILE_CHANGE_EVENT_MODIFIED;
       }
@@ -11432,75 +11474,65 @@ void sp_fmon_os_process_changes(sp_file_monitor_t* monitor) {
         events = SP_FILE_CHANGE_EVENT_REMOVED;
       }
       else if (notify->Action == FILE_ACTION_RENAMED_OLD_NAME) {
-
+        events = SP_FILE_CHANGE_EVENT_REMOVED;
       }
       else if (notify->Action == FILE_ACTION_RENAMED_NEW_NAME) {
-
-      }
-      else {
-        continue;
+        events = SP_FILE_CHANGE_EVENT_ADDED;
       }
 
-      c8* partial_path_cstr = sp_wstr_to_cstr(&notify->FileName[0], (u32)(notify->FileNameLength / 2));
-      sp_str_t partial_path_str = SP_CSTR(partial_path_cstr);
+      if (events != SP_FILE_CHANGE_EVENT_NONE) {
+        sp_str_t partial_path_str = sp_win32_utf16_to_utf8(&notify->FileName[0], (s32)(notify->FileNameLength / sizeof(WCHAR)));
 
-      sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-      sp_str_builder_append(&builder, info->path);
-      sp_str_builder_append(&builder, sp_str_lit("/"));
-      sp_str_builder_append(&builder, partial_path_str);
-      sp_str_t full_path = sp_str_builder_to_str(&builder);
+        sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+        sp_str_builder_append(&builder, info->path);
+        sp_str_builder_append(&builder, sp_str_lit("\\"));
+        sp_str_builder_append(&builder, partial_path_str);
+        sp_str_t full_path = sp_str_builder_to_str(&builder);
 
-      sp_os_normalize_path(full_path);
+        sp_fs_normalize_path(full_path);
 
-      sp_str_t file_name = sp_os_extract_file_name(full_path);
-      sp_os_win32_file_monitor_add_change(monitor, full_path, file_name, events);
-
+        if (sp_win32_fmon_file_matches(os, full_path)) {
+          sp_str_t file_name = sp_fs_get_name(full_path);
+          sp_win32_fmon_add_change(monitor, full_path, file_name, events);
+        }
+      }
 
       if (notify->NextEntryOffset == 0) break;
       notify = (FILE_NOTIFY_INFORMATION*)((char*)notify + notify->NextEntryOffset);
     }
 
-    sp_os_win32_file_monitor_issue_one_read(monitor, info);
+    sp_win32_fmon_issue_read(monitor, info);
   }
 
   sp_fmon_emit_changes(monitor);
 }
 
-void sp_os_win32_file_monitor_add_change(sp_file_monitor_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_file_change_event_t events) {
-  f32 time = (f32)(GetTickCount64() / 1000.0);
-
-  if (sp_os_is_directory(file_path)) return;
+void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events) {
+  if (sp_fs_is_dir(file_path)) return;
 
   if (file_name.data && file_name.len > 0) {
     if (file_name.data[0] == '.' && file_name.len > 1 && file_name.data[1] == '#') return;
     if (file_name.data[0] ==  '#') return;
   }
 
-  if (!sp_file_monitor_check_cache(monitor, file_path, time)) return;
-
-  for (u32 i = 0; i < monitor->changes.size; i++) {
-    sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_at(&monitor->changes, i);
+  // Coalesce within the current batch
+  sp_da_for(monitor->changes, i) {
+    sp_fmon_event_t* change = &monitor->changes[i];
     if (sp_str_equal(change->file_path, file_path)) {
-      if (monitor->debounce_time_ms > 0) {
-        f32 time_diff_ms = (time - change->time) * 1000.0f;
-        if (time_diff_ms < (f32)monitor->debounce_time_ms) {
-          return;
-        }
-      }
-      change->events = (sp_file_change_event_t)(change->events | events);
-      change->time = time;
+      change->events = (sp_fmon_event_kind_t)(change->events | events);
       return;
     }
   }
 
-  sp_file_change_t* change = (sp_file_change_t*)sp_dynamic_array_push(&monitor->changes, NULL);
-  change->file_path = sp_str_copy(file_path);
-  change->file_name = sp_str_copy(file_name);
-  change->events = events;
-  change->time = time;
+  sp_fmon_event_t change = {
+    .file_path = sp_str_copy(file_path),
+    .file_name = sp_str_copy(file_name),
+    .events = events,
+  };
+  sp_dyn_array_push(monitor->changes, change);
 }
 
-void sp_os_win32_file_monitor_issue_one_read(sp_file_monitor_t* monitor, sp_monitored_dir_t* info) {
+void sp_win32_fmon_issue_read(sp_fmon_t* monitor, sp_fmon_dir_t* info) {
   SP_ASSERT(info->handle != INVALID_HANDLE_VALUE);
 
   s32 notify_filter = 0;

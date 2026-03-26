@@ -38,11 +38,31 @@ UTEST_F_TEARDOWN(sp_test_file_monitor) {
   sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
+typedef struct {
+  sp_fmon_event_kind_t events;
+  sp_str_t file_path;
+} sp_test_fmon_record_t;
+
+#define SP_TEST_FMON_MAX_RECORDS 16
+
+typedef struct {
+  sp_test_fmon_record_t records[SP_TEST_FMON_MAX_RECORDS];
+  u32 count;
+} sp_test_fmon_history_t;
+
+static sp_test_fmon_history_t fmon_history;
+
 void fmon_callback(sp_fmon_t* monitor, sp_fmon_event_t* change, void* userdata) {
   sp_test_file_monitor* fixture = (sp_test_file_monitor*)userdata;
   fixture->change_detected = true;
   fixture->last_event = change->events;
   fixture->last_file_path = sp_str_copy(change->file_path);
+
+  if (fmon_history.count < SP_TEST_FMON_MAX_RECORDS) {
+    sp_test_fmon_record_t* r = &fmon_history.records[fmon_history.count++];
+    r->events = change->events;
+    r->file_path = sp_str_copy(change->file_path);
+  }
 }
 
 UTEST_F(sp_test_file_monitor, init_and_cleanup) {
@@ -221,6 +241,159 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 
   EXPECT_FALSE(timed_out);
   EXPECT_TRUE((ut.last_event & SP_FILE_CHANGE_EVENT_REMOVED) != 0);
+}
+#endif
+
+#if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
+UTEST_F(sp_test_file_monitor, event_filtering) {
+  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
+
+  sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("filter_test"));
+  sp_fs_create_dir(test_dir);
+
+  sp_str_t test_file = sp_fs_join_path(test_dir, sp_str_lit("filter.txt"));
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = test_file,
+    .content = SP_LIT("hello"),
+  });
+
+  sp_fmon_add_dir(&ut.monitor, test_dir);
+
+  sp_fmon_process_changes(&ut.monitor);
+  ut.change_detected = false;
+
+  // Modify the file — should NOT fire since we only watch REMOVED
+  {
+    sp_io_writer_t w = sp_io_writer_from_file(test_file, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write_str(&w, sp_str_lit("modified"));
+    sp_io_writer_close(&w);
+  }
+
+  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
+    sp_fmon_process_changes(&ut.monitor);
+  }
+
+  EXPECT_FALSE(ut.change_detected);
+
+  // Delete it — should fire
+  sp_fs_remove_file(test_file);
+
+  bool timed_out = true;
+  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
+    sp_fmon_process_changes(&ut.monitor);
+    if (ut.change_detected) {
+      timed_out = false;
+      break;
+    }
+  }
+
+  EXPECT_FALSE(timed_out);
+  EXPECT_TRUE((ut.last_event & SP_FILE_CHANGE_EVENT_REMOVED) != 0);
+}
+#endif
+
+UTEST_F(sp_test_file_monitor, add_file_filtering) {
+  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+
+  sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("file_filter_test"));
+  sp_fs_create_dir(test_dir);
+
+  sp_str_t watched_file = sp_fs_join_path(test_dir, sp_str_lit("watched.txt"));
+  sp_str_t ignored_file = sp_fs_join_path(test_dir, sp_str_lit("ignored.txt"));
+
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = watched_file,
+    .content = SP_LIT("initial"),
+  });
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = ignored_file,
+    .content = SP_LIT("initial"),
+  });
+
+  sp_fmon_add_file(&ut.monitor, watched_file);
+
+  sp_fmon_process_changes(&ut.monitor);
+  ut.change_detected = false;
+
+  // Modify the ignored file — should NOT fire
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = ignored_file,
+    .content = SP_LIT("changed"),
+  });
+
+  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
+    sp_fmon_process_changes(&ut.monitor);
+  }
+
+  EXPECT_FALSE(ut.change_detected);
+
+  // Modify the watched file — should fire
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = watched_file,
+    .content = SP_LIT("changed"),
+  });
+
+  bool timed_out = true;
+  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
+    sp_fmon_process_changes(&ut.monitor);
+    if (ut.change_detected) {
+      timed_out = false;
+      break;
+    }
+  }
+
+  EXPECT_FALSE(timed_out);
+  EXPECT_TRUE(paths_equal(ut.last_file_path, watched_file));
+}
+
+#if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
+UTEST_F(sp_test_file_monitor, rename_file) {
+  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+
+  sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("rename_test"));
+  sp_fs_create_dir(test_dir);
+
+  sp_str_t old_file = sp_fs_join_path(test_dir, sp_str_lit("before.txt"));
+  sp_str_t new_file = sp_fs_join_path(test_dir, sp_str_lit("after.txt"));
+
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = old_file,
+    .content = SP_LIT("rename me"),
+  });
+
+  sp_fmon_add_dir(&ut.monitor, test_dir);
+
+  sp_fmon_process_changes(&ut.monitor);
+  ut.change_detected = false;
+  fmon_history.count = 0;
+
+  rename(sp_str_to_cstr(old_file), sp_str_to_cstr(new_file));
+
+  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+    sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
+    sp_fmon_process_changes(&ut.monitor);
+    if (fmon_history.count >= 2) break;
+  }
+
+  bool got_removed = false;
+  bool got_added = false;
+
+  for (u32 i = 0; i < fmon_history.count; i++) {
+    sp_test_fmon_record_t* r = &fmon_history.records[i];
+    if ((r->events & SP_FILE_CHANGE_EVENT_REMOVED) && paths_equal(r->file_path, old_file)) {
+      got_removed = true;
+    }
+    if ((r->events & SP_FILE_CHANGE_EVENT_ADDED) && paths_equal(r->file_path, new_file)) {
+      got_added = true;
+    }
+  }
+
+  EXPECT_TRUE(got_removed);
+  EXPECT_TRUE(got_added);
 }
 #endif
 
