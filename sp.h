@@ -5706,7 +5706,7 @@ void sp_fmt_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
 }
 
 void sp_fmt_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  // Context is passed as pointer but we don't use it
+  SP_UNUSED(arg);
   sp_tls_rt_t* state = sp_tls_rt_get();
   if (state) {
     sp_fmt_format_unsigned(builder, state->index, 10);
@@ -6116,6 +6116,7 @@ void sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t fn) {
 
 #elif defined(SP_WIN32)
 void sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t on_deinit) {
+  SP_UNUSED(on_deinit);
   *key = TlsAlloc();
 }
 
@@ -6127,14 +6128,17 @@ void sp_tls_set(sp_tls_key_t key, void* data) {
   TlsSetValue(key, data);
 }
 
-SP_PRIVATE bool sp_tls_once_trampoline(PINIT_ONCE once, PVOID param, PVOID* ctx) {
-  sp_tls_once_fn_t fn = (sp_tls_once_fn_t)param;
+SP_PRIVATE BOOL CALLBACK sp_tls_once_trampoline(PINIT_ONCE once, PVOID param, PVOID* ctx) {
+  SP_UNUSED(once);
+  SP_UNUSED(ctx);
+  sp_tls_once_fn_t fn = *(sp_tls_once_fn_t*)param;
   fn();
-  return true;
+  return TRUE;
 }
 
 void sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t fn) {
-  InitOnceExecuteOnce(once, sp_tls_once_trampoline, fn, SP_NULLPTR);
+  sp_tls_once_fn_t callback = fn;
+  InitOnceExecuteOnce(once, sp_tls_once_trampoline, &callback, SP_NULLPTR);
 }
 
 #else
