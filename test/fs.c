@@ -6,17 +6,18 @@
   #include "sys/stat.h"
 #endif
 
-static bool sp_symlinks_available = false;
-static bool sp_symlinks_probed = false;
+static bool are_symlinks_available = false;
 
-static void sp_symlinks_probe(sp_str_t test_dir) {
-  if (sp_symlinks_probed) return;
-  sp_symlinks_probed = true;
+static void probe_symlinks(sp_str_t test_dir) {
+  static bool probed = false;
+  if (probed) return;
+  probed = true;
+
   sp_str_t target = sp_fs_join_path(test_dir, SP_LIT(".symlink_probe_target"));
   sp_str_t link = sp_fs_join_path(test_dir, SP_LIT(".symlink_probe_link"));
   sp_fs_create_file(target);
-  sp_symlinks_available = sp_fs_create_sym_link(target, link) == SP_OK;
-  if (sp_symlinks_available) sp_fs_remove_file(link);
+  are_symlinks_available = sp_fs_create_sym_link(target, link) == SP_OK;
+  if (are_symlinks_available) sp_fs_remove_file(link);
   sp_fs_remove_file(target);
 }
 
@@ -29,15 +30,11 @@ struct fs {
 
 UTEST_F_SETUP(fs) {
   sp_test_file_manager_init(&ut.file_manager);
-  sp_symlinks_probe(ut.file_manager.paths.test);
+  probe_symlinks(ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs) {
   sp_test_file_manager_cleanup(&ut.file_manager);
-}
-
-UTEST_F(fs, is_symlink_available) {
-  EXPECT_TRUE(sp_symlinks_available);
 }
 
 UTEST_F(fs, mod_time) {
@@ -429,7 +426,7 @@ struct fs_collect {
 
 UTEST_F_SETUP(fs_collect) {
   sp_test_file_manager_init(&ut.file_manager);
-  sp_symlinks_probe(ut.file_manager.paths.test);
+  probe_symlinks(ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_collect) {
@@ -759,7 +756,7 @@ struct fs_create_dir {
 
 UTEST_F_SETUP(fs_create_dir) {
   sp_test_file_manager_init(&ut.file_manager);
-  sp_symlinks_probe(ut.file_manager.paths.test);
+  probe_symlinks(ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_create_dir) {

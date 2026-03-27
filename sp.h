@@ -3660,8 +3660,10 @@ SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
 SP_BEGIN_EXTERN_C()
 
 sp_rt_t sp_rt;
+#if defined(SP_FREESTANDING)
 const c8** sp_envp;
 s32 errno;
+#endif
 
 //////////////////////////
 // THREAD LOCAL STORAGE //
@@ -8856,25 +8858,6 @@ sp_err_t sp_os_create_sym_link(sp_str_t target, sp_str_t link_path) {
 /////////
 // ENV //
 /////////
-SP_PRIVATE sp_env_var_t sp_os_env_parse_var(sp_str_t entry) {
-  sp_env_var_t result = { .key = entry };
-  u32 start = 0;
-
-  if (!sp_str_empty(entry) && entry.data[0] == '=') {
-    start = 1;
-  }
-
-  sp_for_range(i, start, entry.len) {
-    if (entry.data[i] == '=') {
-      result.key = sp_str_sub(entry, 0, i);
-      result.value = sp_str_sub(entry, i + 1, entry.len - i - 1);
-      break;
-    }
-  }
-
-  return result;
-}
-
 #if defined(SP_WIN32)
 typedef struct {
   u8* base;
@@ -8968,6 +8951,24 @@ sp_str_t sp_os_env_get(sp_str_t key) {
   return SP_ZERO_STRUCT(sp_str_t);
 }
 
+SP_PRIVATE sp_env_var_t sp_os_env_parse_var(sp_str_t entry) {
+  if (sp_str_empty(entry)) return sp_zero_struct(sp_env_var_t);
+
+  sp_env_var_t result = { .key = entry };
+  u32 start = entry.data[0] == '=' ? 1 : 0;
+
+  sp_for_range(i, start, entry.len) {
+    if (entry.data[i] == '=') {
+      result.key = sp_str_sub(entry, 0, i);
+      result.value = sp_str_sub(entry, i + 1, entry.len - i - 1);
+      break;
+    }
+  }
+
+  return result;
+}
+
+
 SP_PRIVATE void sp_win32_env_it_set_current(sp_os_env_it_t* it) {
   sp_win32_env_it_t* state = (sp_win32_env_it_t*)it->os;
   state->entry = sp_win32_utf16_to_utf8(state->cursor, sp_win32_utf16_len(state->cursor));
@@ -9005,9 +9006,8 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
     *it = SP_ZERO_STRUCT(sp_os_env_it_t);
   }
 }
-#endif
 
-#if defined(SP_LINUX) && defined(SP_FREESTANDING)
+#elif defined(SP_FREESTANDING)
 SP_PRIVATE void sp_linux_env_it_set_current(sp_os_env_it_t* it) {
   sp_linux_env_it_t* state = (sp_linux_env_it_t*)it->os;
   it->key = *sp_str_ht_it_getkp(state->env->vars, state->it);
@@ -9060,20 +9060,18 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
     it->os = SP_NULLPTR;
   }
 }
-#endif
 
-
-#if defined(SP_POSIX) && !defined(SP_FREESTANDING)
+#else
 sp_str_t sp_os_env_get(sp_str_t key) {
   const c8* value = getenv(sp_str_to_cstr(key));
   return sp_str_view(value);
 }
 
-SP_PRIVATE void sp_posix_env_it_set_current(sp_os_env_it_t* it) {
+SP_PRIVATE void sp_os_env_it_set(sp_os_env_it_t* it) {
   c8** envp = (c8**)it->os;
-  sp_env_var_t var = sp_os_env_parse_var(sp_str_view(*envp));
-  it->key = var.key;
-  it->value = var.value;
+  sp_str_pair_t pair = sp_str_cleave_c8(sp_str_view(*envp), '=');
+  it->key = pair.first;
+  it->value = pair.second;
 }
 
 sp_os_env_it_t sp_os_env_it_begin() {
@@ -9081,7 +9079,7 @@ sp_os_env_it_t sp_os_env_it_begin() {
   it.os = environ;
 
   if (sp_os_env_it_valid(&it)) {
-    sp_posix_env_it_set_current(&it);
+    sp_os_env_it_set(&it);
   }
 
   return it;
@@ -9098,7 +9096,7 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
 
   if (envp && *envp) {
     it->os = envp;
-    sp_posix_env_it_set_current(it);
+    sp_os_env_it_set(it);
   } else {
     it->key = SP_ZERO_STRUCT(sp_str_t);
     it->value = SP_ZERO_STRUCT(sp_str_t);

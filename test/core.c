@@ -647,11 +647,11 @@ UTEST(dyn_array, pointer_type) {
 
     ASSERT_EQ(sp_dyn_array_size(arr), 5);
 
-    for (s32 i = 0; i < 5; i++) {
+    for (u32 i = 0; i < 5; i++) {
         ASSERT_STREQ(arr[i], strings[i]);
     }
 
-    for (s32 i = 0; i < sp_dyn_array_size(arr); i++) {
+    for (u32 i = 0; i < sp_da_size(arr); i++) {
         sp_free(arr[i]);
     }
 
@@ -817,7 +817,7 @@ UTEST(sp_dyn_array_push_f, growth_behavior) {
         ASSERT_EQ(arr[i], i);
     }
 
-    s32 old_capacity = sp_dyn_array_capacity(arr);
+    u32 old_capacity = sp_dyn_array_capacity(arr);
     int val = 1000;
     // Fill up to capacity - 1 (because pushing when size == capacity - 1 will trigger growth)
     while (sp_dyn_array_size(arr) < sp_dyn_array_capacity(arr) - 1) {
@@ -904,11 +904,11 @@ UTEST(sp_dyn_array_push_f, mixed_with_macros) {
 
 UTEST(sp_dyn_array_push_f, edge_cases) {
   {
-    c8* arr = SP_NULLPTR;
-    c8 single_byte = 0xFF;
+    u8* arr = SP_NULLPTR;
+    u8 single_byte = 0xFF;
     sp_dyn_array_push_f((void**)&arr, &single_byte, sizeof(c8));
     ASSERT_EQ(sp_dyn_array_size(arr), 1);
-    ASSERT_EQ(arr[0], (c8)0xFF);
+    ASSERT_EQ(arr[0], (u8)0xFF);
     sp_dyn_array_free(arr);
   }
 
@@ -2283,7 +2283,7 @@ UTEST_F(sp_os_copy_tests, copy_single_file) {
   u64 bytes_read = sp_io_read(&reader, buffer, sizeof(buffer));
   sp_io_reader_close(&reader);
 
-  sp_str_t read_content = sp_str_from_cstr_sized((c8*)buffer, bytes_read);
+  sp_str_t read_content = sp_str_from_cstr_sized((c8*)buffer, (u32)bytes_read);
   SP_EXPECT_STR_EQ(read_content, content);
 }
 
