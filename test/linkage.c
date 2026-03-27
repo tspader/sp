@@ -6,6 +6,7 @@ typedef struct linkage {
   sp_test_file_manager_t files;
   sp_str_t root;
   sp_str_t source;
+  sp_opt(bool) has_compiler;
 } linkage;
 
 UTEST_F_SETUP(linkage) {
@@ -13,6 +14,14 @@ UTEST_F_SETUP(linkage) {
 
   ut.root = ut.files.paths.root;
   ut.source = sp_fs_join_path(ut.root, sp_str_lit("test/tools/linkage"));
+
+  if (!ut.has_compiler.some) {
+    sp_opt_set(ut.has_compiler, sp_fs_is_on_path(sp_str_lit("cl")));
+  }
+
+  if (!ut.has_compiler.value) {
+    UTEST_SKIP("cl.exe is not on path");
+  }
 }
 
 UTEST_F_TEARDOWN(linkage) {

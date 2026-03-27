@@ -191,7 +191,7 @@ UTEST(ht, iteration) {
   s32 sum = 0;
 
   for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
-    float val = *sp_ht_it_getp(ht, it);
+    s32 val = *sp_ht_it_getp(ht, it);
 
     count++;
     sum += (s32)val;
@@ -298,7 +298,7 @@ UTEST(ht, collision) {
   for (u32 candidate = 0; candidate < 1000; candidate++) {
     sp_hash_t hash = sp_hash_bytes(&candidate, sizeof(candidate), SP_HT_HASH_SEED);
 
-    u32 bucket = hash % capacity;
+    u64 bucket = hash % capacity;
     if (bucket == 0) {
       keys[num_found++] = candidate;
     }

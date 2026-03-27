@@ -924,7 +924,9 @@ UTEST_F(ps, output) {
 }
 
 UTEST_F(ps, write_1mb_to_stdin) {
-  UTEST_SKIP("need to drain in 64k (pipe max) increments");
+  if (sp_os_get_kind() == SP_OS_WIN32) {
+    UTEST_SKIP("need to drain in 64k (pipe max) increments");
+  }
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = get_process_path(),
     .args = {

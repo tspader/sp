@@ -138,7 +138,7 @@ u8 *use_scratch_arena(u32 fill) {
 
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   u8 *buffer = sp_alloc(num_bytes);
-  sp_mem_fill_u8(buffer, num_bytes, fill);
+  sp_mem_fill_u8(buffer, num_bytes, (u8)fill);
 
   sp_context_push_allocator(scratch.old_allocator);
   u8 *result = sp_alloc(num_bytes);

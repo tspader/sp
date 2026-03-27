@@ -22,7 +22,7 @@ static void probe_symlinks(sp_str_t test_dir) {
 }
 
 #define SKIP_IF_NO_SYMLINKS() \
-  if (!sp_symlinks_available) { UTEST_SKIP("symlinks not available"); }
+  if (!are_symlinks_available) { UTEST_SKIP("symlinks not available"); }
 
 struct fs {
   sp_test_file_manager_t file_manager;

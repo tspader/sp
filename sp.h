@@ -611,6 +611,7 @@ SP_BEGIN_EXTERN_C()
 #elif defined(SP_WIN32)
   #include <windows.h>
   #include <assert.h>
+  #include <direct.h>
   #include <fcntl.h>
   #include <io.h>
   #include <signal.h>
@@ -1255,10 +1256,46 @@ f32   sp_sys_acosf(f32 x);
 //////////////
 // SYSCALLS //
 //////////////
+// Prefer libc for highly tuned stuff where our naive implementation is actively harmful
+#if defined(SP_FREESTANDING)
+  #define sp_memcpy(d, s, n)                sp_sys_memcpy(d, s, n)
+  #define sp_memmove(d, s, n)               sp_sys_memmove(d, s, n)
+  #define sp_memset(d, c, n)                sp_sys_memset(d, c, n)
+  #define sp_memcmp(a, b, n)                sp_sys_memcmp(a, b, n)
+#else
+  #define sp_memcpy(d, s, n)                memcpy(d, s, n)
+  #define sp_memmove(d, s, n)               memmove(d, s, n)
+  #define sp_memset(d, c, n)                memset(d, c, n)
+  #define sp_memcmp(a, b, n)                memcmp(a, b, n)
+#endif
+
+// A few functions are deprecated on Windows
+#ifdef SP_WIN32
+  #define sp_chdir(path)                _chdir(path)
+  #define sp_close(fd)                  _close(fd)
+  #define sp_lseek(fd, o, w)            _lseeki64(fd, o, w)
+  #define sp_read(fd, b, n)             _read(fd, b, (unsigned int)(n))
+  #define sp_write(fd, b, n)            _write(fd, b, (unsigned int)(n))
+#elif defined(SP_LINUX)
+  #define sp_chdir(path)                sp_sys_chdir(path)
+  #define sp_close(fd)                  sp_sys_close(fd)
+  #define sp_read(fd, b, n)             sp_sys_read(fd, b, n)
+  #define sp_write(fd, b, n)            sp_sys_write(fd, b, n)
+  #define sp_lseek(fd, o, w)            sp_sys_lseek(fd, o, w)
+#else
+  #define sp_chdir(path)                chdir(path)
+  #define sp_close(fd)                  close(fd)
+  #define sp_lseek(fd, o, w)            lseek(fd, o, w)
+  #define sp_read(fd, b, n)             read(fd, b, n)
+  #define sp_write(fd, b, n)            write(fd, b, n)
+#endif
+
+// For everything else, prefer syscalls on Linux and libc everywhere else
 #if defined(SP_LINUX)
   typedef sp_sys_stat_t sp_stat_t;
   typedef sp_sys_timespec_t sp_timespec_t;
   typedef sp_sys_inotify_event_t sp_inotify_event_t;
+  typedef sp_sys_pollfd_t sp_pollfd_t;
   typedef sp_sys_termios_t sp_termios_t;
 
   #define sp_assert(x)                      ((void)(x))
@@ -1279,14 +1316,6 @@ f32   sp_sys_acosf(f32 x);
   #define sp_link(old, new)                 sp_sys_link(old, new)
   #define sp_chmod(path, mode)              sp_sys_chmod(path, mode)
   #define sp_open(p, f, m)                  sp_sys_open(p, f, m)
-  #define sp_close(fd)                      sp_sys_close(fd)
-  #define sp_read(fd, b, n)                 sp_sys_read(fd, b, n)
-  #define sp_write(fd, b, n)                sp_sys_write(fd, b, n)
-  #define sp_lseek(fd, o, w)                sp_sys_lseek(fd, o, w)
-  #define sp_memcpy(d, s, n)                sp_sys_memcpy(d, s, n)
-  #define sp_memmove(d, s, n)               sp_sys_memmove(d, s, n)
-  #define sp_memset(d, c, n)                sp_sys_memset(d, c, n)
-  #define sp_memcmp(a, b, n)                sp_sys_memcmp(a, b, n)
   #define sp_clock_gettime(c, ts)           sp_sys_clock_gettime(c, ts)
   #define sp_poll(fds, n, t)                sp_sys_poll(fds, n, t)
   #define sp_wait4(p, s, o, r)              sp_sys_wait4(p, s, o, r)
@@ -1295,8 +1324,6 @@ f32   sp_sys_acosf(f32 x);
   #define sp_inotify_add_watch(f, p, m)     sp_sys_inotify_add_watch(f, p, m)
   #define sp_prompt_tcgetattr(fd, tio)      sp_sys_tcgetattr(fd, tio)
   #define sp_prompt_tcsetattr(fd, opt, tio) sp_sys_tcsetattr(fd, opt, tio)
-
-  typedef sp_sys_pollfd_t sp_pollfd_t;
 #else
   typedef struct stat sp_stat_t;
   typedef struct timespec sp_timespec_t;
@@ -1314,39 +1341,13 @@ f32   sp_sys_acosf(f32 x);
   #define sp_getcwd(buf, size)              (getcwd(buf, size) ? 0 : -1)
   #define sp_mkdir(path, mode)              mkdir(path, mode)
   #define sp_rmdir(path)                    rmdir(path)
+  #define sp_open(p, f, m)                  open(p, f, m)
   #define sp_unlink(path)                   unlink(path)
   #define sp_rename(old, new)               rename(old, new)
-  #define sp_chdir(path)                    chdir(path)
   #define sp_readlink(p, b, s)              readlink(p, b, s)
   #define sp_symlink(t, l)                  symlink(t, l)
   #define sp_link(old, new)                 link(old, new)
-  #define sp_chmod(path, mode)              chmod(path, mode)
-  #define sp_open(p, f, m)                  open(p, f, m)
-  #define sp_memcpy(d, s, n)                memcpy(d, s, n)
-  #define sp_memmove(d, s, n)               memmove(d, s, n)
-  #define sp_memset(d, c, n)                memset(d, c, n)
-  #define sp_memcmp(a, b, n)                memcmp(a, b, n)
   #define sp_clock_gettime(c, ts)           clock_gettime(c, ts)
-  #define sp_poll(fds, n, t)                poll((struct pollfd*)(fds), n, t)
-  #define sp_wait4(p, s, o, r)              wait4(p, s, o, r)
-  #define sp_inotify_init1(f)               inotify_init1(f)
-  #define sp_inotify_rm_watch(f, w)         inotify_rm_watch(f, w)
-  #define sp_inotify_add_watch(f, p, m)     inotify_add_watch(f, p, m)
-  #define sp_prompt_tcgetattr(fd, tio)      tcgetattr(fd, tio)
-  #define sp_prompt_tcsetattr(fd, opt, tio) tcsetattr(fd, opt, tio)
-
-#ifdef SP_WIN32
-  #define sp_close(fd)                  _close(fd)
-  #define sp_lseek(fd, o, w)            _lseeki64(fd, o, w)
-  #define sp_read(fd, b, n)             _read(fd, b, (unsigned int)(n))
-  #define sp_write(fd, b, n)            _write(fd, b, (unsigned int)(n))
-#else
-  #define sp_close(fd)                  close(fd)
-  #define sp_lseek(fd, o, w)            lseek(fd, o, w)
-  #define sp_read(fd, b, n)             read(fd, b, n)
-  #define sp_write(fd, b, n)            write(fd, b, n)
-#endif
-
 #endif
 
 

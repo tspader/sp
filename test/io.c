@@ -153,6 +153,7 @@ UTEST_F(io_rw, reader_file_nonexistent) {
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("nonexistent.file"));
   sp_io_reader_t r = sp_io_reader_from_file(path);
   EXPECT_EQ(sp_err_get(), SP_ERR_IO_OPEN_FAILED);
+  sp_io_reader_close(&r);
 }
 
 UTEST_F(io_rw, writer_mem_write) {

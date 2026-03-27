@@ -21,6 +21,7 @@
     <SpSource>..\..\..\test\amalg.c</SpSource>
     <SpHeaders>..\..\..\sp.h;..\..\..\test\tools\utest.h</SpHeaders>
     <SpProjectReferences>process.vcxproj</SpProjectReferences>
+    <SpUseImplementationDefines>false</SpUseImplementationDefines>
     <SpPreprocessorDefinitions></SpPreprocessorDefinitions>
     <SpAdditionalIncludeDirectories></SpAdditionalIncludeDirectories>
     <SpAdditionalDependencies></SpAdditionalDependencies>

@@ -651,7 +651,7 @@ UTEST(dyn_array, pointer_type) {
         ASSERT_STREQ(arr[i], strings[i]);
     }
 
-    for (u32 i = 0; i < sp_da_size(arr); i++) {
+    for (u64 i = 0; i < sp_da_size(arr); i++) {
         sp_free(arr[i]);
     }
 
@@ -817,7 +817,7 @@ UTEST(sp_dyn_array_push_f, growth_behavior) {
         ASSERT_EQ(arr[i], i);
     }
 
-    u32 old_capacity = sp_dyn_array_capacity(arr);
+    u64 old_capacity = sp_dyn_array_capacity(arr);
     int val = 1000;
     // Fill up to capacity - 1 (because pushing when size == capacity - 1 will trigger growth)
     while (sp_dyn_array_size(arr) < sp_dyn_array_capacity(arr) - 1) {
@@ -908,7 +908,7 @@ UTEST(sp_dyn_array_push_f, edge_cases) {
     u8 single_byte = 0xFF;
     sp_dyn_array_push_f((void**)&arr, &single_byte, sizeof(c8));
     ASSERT_EQ(sp_dyn_array_size(arr), 1);
-    ASSERT_EQ(arr[0], (u8)0xFF);
+    ASSERT_EQ(arr[0], 0xFFu);
     sp_dyn_array_free(arr);
   }
 
@@ -1340,7 +1340,7 @@ UTEST(sp_format, pointer_and_hash) {
 
 
   // Testing pointer formatting - just verify we get output
-  void* ptr = (void*)0xDEADBEEF;
+  void* ptr = (void*)(uintptr_t)0xDEADBEEFu;
   sp_str_t result = sp_format("ptr: {}", SP_FMT_PTR(ptr));
   // Just verify we got something back
   ASSERT_GT(result.len, 0);

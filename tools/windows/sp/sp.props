@@ -1,5 +1,7 @@
 <Project>
   <PropertyGroup>
+    <SpUseImplementationDefines Condition="'$(SpUseImplementationDefines)' == ''">true</SpUseImplementationDefines>
+    <SpImplementationDefines Condition="'$(SpUseImplementationDefines)' == 'true' and '$(SpImplementationDefines)' == ''">SP_IMPLEMENTATION;SP_TEST_IMPLEMENTATION;</SpImplementationDefines>
     <OutDir>$(SolutionDir)build\vs\$(Configuration)\bin\</OutDir>
     <IntDir>$(SolutionDir)build\vs\$(Configuration)\obj\$(MSBuildProjectName)\</IntDir>
     <TargetName Condition="'$(SpTargetName)' != ''">$(SpTargetName)</TargetName>
@@ -9,7 +11,7 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>SP_IMPLEMENTATION;SP_TEST_IMPLEMENTATION;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;$(SpPreprocessorDefinitions);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(SpImplementationDefines)_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;$(SpPreprocessorDefinitions);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;..\..\..;..\..\..\include;..\..\..\tools;..\..\..\test\tools;..\..\..\test\tools\process;..\..\..\sp;$(SpAdditionalIncludeDirectories);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
@@ -30,7 +32,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>SP_IMPLEMENTATION;SP_TEST_IMPLEMENTATION;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;NDEBUG;$(SpPreprocessorDefinitions);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(SpImplementationDefines)_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;NDEBUG;$(SpPreprocessorDefinitions);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;..\..\..;..\..\..\include;..\..\..\tools;..\..\..\test\tools;..\..\..\test\tools\process;..\..\..\sp;$(SpAdditionalIncludeDirectories);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
