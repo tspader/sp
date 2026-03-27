@@ -69,6 +69,7 @@ include = [".", "include", "test/tools", "test/tools/process", "sp"]
 [[test]]
 name = "glob"
 source = ["test/glob.c"]
+define = ["SP_GLOB_IMPLEMENTATION"]
 
 [[test]]
 name = "ht"

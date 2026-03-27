@@ -1,5 +1,5 @@
-#ifndef SPN_GLOB_H
-#define SPN_GLOB_H
+#ifndef SP_GLOB_H
+#define SP_GLOB_H
 
 #include "sp.h"
 
@@ -93,10 +93,13 @@ typedef struct sp_glob_set_t {
   sp_da(sp_glob_set_fallback_entry_t) fallbacks;
 } sp_glob_set_t;
 
-sp_glob_t*          sp_glob_new(sp_str_t pattern);
+sp_glob_t*          sp_glob_new(const c8* pattern);
+sp_glob_t*          sp_glob_new_str(sp_str_t pattern);
 bool                sp_glob_match(sp_glob_t* g, sp_str_t path);
 sp_glob_set_t*      sp_glob_set_new();
-void                sp_glob_set_add(sp_glob_set_t* set, sp_glob_t* g);
+void                sp_glob_set_add(sp_glob_set_t* set, const c8* pattern);
+void                sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern);
+void                sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* glob);
 void                sp_glob_set_build(sp_glob_set_t* set);
 bool                sp_glob_set_match(sp_glob_set_t* set, sp_str_t path);
 void                sp_glob_set_matches(sp_glob_set_t* set, sp_str_t path, sp_da(u32)* out);
@@ -116,9 +119,9 @@ sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path);
 void                sp_glob_set_ht_add(sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx);
 void                sp_glob_set_ht_collect(sp_glob_set_index_table_t ht, sp_str_t key, sp_da(u32)* out);
 bool                sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* e, sp_str_t path);
+#endif // SP_GLOB_H
 
-
-
+#ifdef SP_GLOB_IMPLEMENTATION
 void sp_glob_push_literal(sp_da(sp_glob_token_t)* tokens, c8 c) {
   sp_da_push(*tokens, ((sp_glob_token_t) { .type = SP_GLOB_TOK_LITERAL, .literal = c }));
 }
@@ -478,7 +481,11 @@ sp_glob_strategy_t sp_glob_detect_strategy(sp_glob_t* glob) {
   return SP_GLOB_STRATEGY_FALLBACK;
 }
 
-sp_glob_t* sp_glob_new(sp_str_t pattern) {
+sp_glob_t* sp_glob_new(const c8* pattern) {
+  return sp_glob_new_str(sp_str_view(pattern));
+}
+
+sp_glob_t* sp_glob_new_str(sp_str_t pattern) {
   sp_glob_t* g = SP_ALLOC(sp_glob_t);
   g->pattern = pattern;
 
@@ -577,7 +584,15 @@ sp_glob_set_t* sp_glob_set_new() {
   return set;
 }
 
-void sp_glob_set_add(sp_glob_set_t* set, sp_glob_t* g) {
+void sp_glob_set_add(sp_glob_set_t* set, const c8* pattern) {
+  sp_glob_set_add_ex(set, sp_glob_new(pattern));
+}
+
+void sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern) {
+  sp_glob_set_add_ex(set, sp_glob_new_str(pattern));
+}
+
+void sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* g) {
   SP_ASSERT(set);
   SP_ASSERT(g);
   sp_da_push(set->globs, g);
@@ -725,4 +740,4 @@ bool sp_glob_set_match(sp_glob_set_t* set, sp_str_t path) {
   return false;
 }
 
-#endif // SPN_TEST_GLOB_H
+#endif // SP_GLOB_IMPLEMENTATION

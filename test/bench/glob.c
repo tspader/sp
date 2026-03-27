@@ -93,12 +93,12 @@ int main(int argc, char** argv) {
   sp_da(sp_glob_t*) globs = SP_NULLPTR;
   sp_da(sp_glob_set_t*) globsets = SP_NULLPTR;
   sp_carr_for(bench_cases, i) {
-    sp_glob_t* g = sp_glob_new(sp_str_view(bench_cases[i].pattern));
+    sp_glob_t* g = sp_glob_new(bench_cases[i].pattern);
     SP_ASSERT(g != SP_NULLPTR);
     sp_dyn_array_push(globs, g);
 
     sp_glob_set_t* set = sp_glob_set_new();
-    sp_glob_set_add(set, sp_glob_new(sp_str_view(bench_cases[i].pattern)));
+    sp_glob_set_add(set, bench_cases[i].pattern);
     sp_glob_set_build(set);
     sp_dyn_array_push(globsets, set);
   }
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
   // Pre-compile many_short globset
   sp_glob_set_t* many_short_set = sp_glob_set_new();
   sp_carr_for(many_short_patterns, i) {
-    sp_glob_set_add(many_short_set, sp_glob_new(sp_str_view(many_short_patterns[i])));
+    sp_glob_set_add(many_short_set, many_short_patterns[i]);
   }
   sp_glob_set_build(many_short_set);
 

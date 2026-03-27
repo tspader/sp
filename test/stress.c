@@ -193,7 +193,7 @@ UTEST(stress, sp_spin_lock) {
 }
 
 typedef struct {
-  sp_atomic_s32* counter;
+  sp_atomic_s32_t* counter;
   s32 iterations;
   s32 thread_id;
 } sp_atomic_s32_stress_data_t;
@@ -209,7 +209,7 @@ s32 sp_atomic_s32_stress_thread(void* userdata) {
       case 2: sp_atomic_s32_get(data->counter); break;
       case 3: {
         s32 current = sp_atomic_s32_get(data->counter);
-        sp_atomic_s32_cmp_and_swap(data->counter, current, current + 1);
+        sp_atomic_s32_cas(data->counter, current, current + 1);
         break;
       }
     }
