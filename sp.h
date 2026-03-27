@@ -8091,9 +8091,7 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
 
   return sp_str_copy(result);
 }
-#endif
-
-#if defined(SP_LINUX) && defined(SP_FREESTANDING)
+#elif defined(SP_FREESTANDING)
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_t result = path;
@@ -8120,9 +8118,7 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
   sp_mem_end_scratch(scratch);
   return copy;
 }
-#endif
-
-#if defined(SP_POSIX) && !defined(SP_FREESTANDING)
+#else
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_t result = path;
