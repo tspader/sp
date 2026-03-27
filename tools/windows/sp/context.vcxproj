@@ -13,12 +13,12 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{9A8D3D3E-4B20-4E12-B1F3-4C1A4A47D55E}</ProjectGuid>
-    <RootNamespace>fs</RootNamespace>
-    <ProjectName>fs</ProjectName>
+    <ProjectGuid>{DAB63B16-6845-4D24-85A1-B8D0EE5A07C6}</ProjectGuid>
+    <RootNamespace>context</RootNamespace>
+    <ProjectName>context</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <SpTargetName>fs</SpTargetName>
-    <SpSource>..\..\..\test\fs.c</SpSource>
+    <SpTargetName>context</SpTargetName>
+    <SpSource>..\..\..\test\context.c</SpSource>
     <SpHeaders>..\..\..\sp.h;..\..\..\test\tools\utest.h</SpHeaders>
     <SpProjectReferences></SpProjectReferences>
     <SpPreprocessorDefinitions></SpPreprocessorDefinitions>

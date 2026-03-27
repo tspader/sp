@@ -15,7 +15,15 @@
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{A3B2C1D0-1234-5678-9ABC-DEF012345678}</ProjectGuid>
     <RootNamespace>linkage</RootNamespace>
+    <ProjectName>linkage</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <SpTargetName>linkage</SpTargetName>
+    <SpSource>..\..\..\test\linkage.c</SpSource>
+    <SpHeaders>..\..\..\sp.h;..\..\..\test\tools\utest.h</SpHeaders>
+    <SpProjectReferences></SpProjectReferences>
+    <SpPreprocessorDefinitions></SpPreprocessorDefinitions>
+    <SpAdditionalIncludeDirectories></SpAdditionalIncludeDirectories>
+    <SpAdditionalDependencies></SpAdditionalDependencies>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup>
@@ -45,58 +53,8 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup>
-    <OutDir>$(SolutionDir)build\vs\$(Configuration)\bin\</OutDir>
-    <IntDir>$(SolutionDir)build\vs\$(Configuration)\obj\linkage\</IntDir>
-    <TargetName>linkage</TargetName>
-  </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClCompile>
-      <WarningLevel>Level4</WarningLevel>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>SP_IMPLEMENTATION;SP_TEST_IMPLEMENTATION;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;..\..\..;..\..\..\include;..\..\..\tools;..\..\..\test\tools;..\..\..\test\tools\process;..\..\..\sp;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <CompileAs>CompileAsC</CompileAs>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <Optimization>Disabled</Optimization>
-      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalOptions>/we4715 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ClCompile>
-      <WarningLevel>Level4</WarningLevel>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>SP_IMPLEMENTATION;SP_TEST_IMPLEMENTATION;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>.;..\..\..;..\..\..\include;..\..\..\tools;..\..\..\test\tools;..\..\..\test\tools\process;..\..\..\sp;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <CompileAs>CompileAsC</CompileAs>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <Optimization>MaxSpeed</Optimization>
-      <AdditionalOptions>/we4715 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
-  </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\..\test\linkage.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\..\sp.h" />
-    <ClInclude Include="..\..\..\test\tools\utest.h" />
-  </ItemGroup>
+  <Import Project="sp.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Target Name="Run" DependsOnTargets="Build">
-    <Exec Command="&quot;$(TargetPath)&quot;" />
-  </Target>
+  <Import Project="sp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

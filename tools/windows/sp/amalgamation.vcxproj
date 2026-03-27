@@ -13,14 +13,14 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{9A8D3D3E-4B20-4E12-B1F3-4C1A4A47D55E}</ProjectGuid>
-    <RootNamespace>fs</RootNamespace>
-    <ProjectName>fs</ProjectName>
+    <ProjectGuid>{D6EBC4DF-64B0-4DFA-8D03-3E4F0F4C5F31}</ProjectGuid>
+    <RootNamespace>amalgamation</RootNamespace>
+    <ProjectName>amalgamation</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <SpTargetName>fs</SpTargetName>
-    <SpSource>..\..\..\test\fs.c</SpSource>
+    <SpTargetName>amalgamation</SpTargetName>
+    <SpSource>..\..\..\test\amalg.c</SpSource>
     <SpHeaders>..\..\..\sp.h;..\..\..\test\tools\utest.h</SpHeaders>
-    <SpProjectReferences></SpProjectReferences>
+    <SpProjectReferences>process.vcxproj</SpProjectReferences>
     <SpPreprocessorDefinitions></SpPreprocessorDefinitions>
     <SpAdditionalIncludeDirectories></SpAdditionalIncludeDirectories>
     <SpAdditionalDependencies></SpAdditionalDependencies>

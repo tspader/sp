@@ -1,0 +1,17 @@
+<Project>
+  <ItemGroup Condition="'$(SpSource)' != ''">
+    <ClCompile Include="$(SpSource)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(SpHeaders)' != ''">
+    <ClInclude Include="$(SpHeaders)" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="sp.natvis" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(SpProjectReferences)' != ''">
+    <ProjectReference Include="$(SpProjectReferences)" />
+  </ItemGroup>
+  <Target Name="Run" DependsOnTargets="Build">
+    <Exec Command="&quot;$(TargetPath)&quot;" />
+  </Target>
+</Project>
