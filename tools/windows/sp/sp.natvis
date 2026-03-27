@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="sp_str_t">
+    <DisplayString Condition="data == 0">""</DisplayString>
+    <DisplayString Condition="data != 0">{data,[len]s8}</DisplayString>
+    <StringView Condition="data != 0">data,[len]s8</StringView>
+    <Expand>
+      <Item Name="data">data</Item>
+      <Item Name="len">len</Item>
+      <Item Name="text" Condition="data != 0">data,[len]s8</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_env_t">
+    <DisplayString Condition="vars == 0">env size=0 capacity=0</DisplayString>
+    <DisplayString Condition="vars != 0">env size={vars->size} capacity={vars->capacity}</DisplayString>
+    <Expand>
+      <Item Name="vars">vars</Item>
+      <Item Name="size" Condition="vars != 0">vars->size</Item>
+      <Item Name="capacity" Condition="vars != 0">vars->capacity</Item>
+      <Item Name="hash_fn" Condition="vars != 0">vars->info.fn.hash</Item>
+      <Item Name="compare_fn" Condition="vars != 0">vars->info.fn.compare</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_mem_arena_t">
+    <DisplayString Condition="current == 0">arena block_size={block_size} current=null</DisplayString>
+    <DisplayString Condition="current != 0">arena used={current->bytes_used}/{current->capacity} block_size={block_size}</DisplayString>
+    <Expand>
+      <Item Name="allocator_fn">allocator.on_alloc</Item>
+      <Item Name="allocator_user_data">allocator.user_data</Item>
+      <Item Name="head">head</Item>
+      <Item Name="current">current</Item>
+      <Item Name="current_buffer" Condition="current != 0">current->buffer</Item>
+      <Item Name="current_capacity" Condition="current != 0">current->capacity</Item>
+      <Item Name="current_bytes_used" Condition="current != 0">current->bytes_used</Item>
+      <Item Name="block_size">block_size</Item>
+      <Item Name="mode">mode</Item>
+      <Item Name="alignment">alignment</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_context_t">
+    <DisplayString>context err={err.sp} os={err.os}</DisplayString>
+    <Expand>
+      <Item Name="allocator_fn">allocator.on_alloc</Item>
+      <Item Name="allocator_user_data">allocator.user_data</Item>
+      <Item Name="err_sp">err.sp</Item>
+      <Item Name="err_os">err.os</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_mem_buffer_t">
+    <DisplayString Condition="data == 0">buffer len={len} cap={capacity} null</DisplayString>
+    <DisplayString Condition="data != 0">buffer len={len} cap={capacity} {data,[len]s8}</DisplayString>
+    <StringView Condition="data != 0">data,[len]s8</StringView>
+    <Expand>
+      <Item Name="data">data</Item>
+      <Item Name="len">len</Item>
+      <Item Name="capacity">capacity</Item>
+      <Item Name="text" Condition="data != 0">data,[len]s8</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_io_reader_t">
+    <DisplayString>reader seek={seek} buffered={buffer.len}/{buffer.capacity}</DisplayString>
+    <Expand>
+      <Item Name="read_fn">vtable.read</Item>
+      <Item Name="seek_fn">vtable.seek</Item>
+      <Item Name="size_fn">vtable.size</Item>
+      <Item Name="close_fn">vtable.close</Item>
+      <Item Name="file_fd">file.fd</Item>
+      <Item Name="file_close_mode">file.close_mode</Item>
+      <Item Name="mem_ptr">mem.ptr</Item>
+      <Item Name="mem_len">mem.len</Item>
+      <Item Name="mem_pos">mem.pos</Item>
+      <Item Name="buffer">buffer</Item>
+      <Item Name="seek">seek</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_io_writer_t">
+    <DisplayString>writer buffered={buffer.len}/{buffer.capacity}</DisplayString>
+    <Expand>
+      <Item Name="write_fn">vtable.write</Item>
+      <Item Name="seek_fn">vtable.seek</Item>
+      <Item Name="size_fn">vtable.size</Item>
+      <Item Name="close_fn">vtable.close</Item>
+      <Item Name="file_fd">file.fd</Item>
+      <Item Name="file_close_mode">file.close_mode</Item>
+      <Item Name="mem_ptr">mem.ptr</Item>
+      <Item Name="mem_len">mem.len</Item>
+      <Item Name="mem_pos">mem.pos</Item>
+      <Item Name="dyn_allocator_fn">dyn_mem.allocator.on_alloc</Item>
+      <Item Name="dyn_allocator_user_data">dyn_mem.allocator.user_data</Item>
+      <Item Name="dyn_buffer">dyn_mem.buffer</Item>
+      <Item Name="dyn_seek">dyn_mem.seek</Item>
+      <Item Name="buffer">buffer</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_fmon_t">
+    <DisplayString>fmon watch={events_to_watch} debounce={debounce_time_ms} changes={changes} cache={cache}</DisplayString>
+    <Expand>
+      <Item Name="callback">callback</Item>
+      <Item Name="userdata">userdata</Item>
+      <Item Name="changes">changes</Item>
+      <Item Name="cache">cache</Item>
+      <Item Name="os">os</Item>
+      <Item Name="events_to_watch">events_to_watch</Item>
+      <Item Name="debounce_time_ms">debounce_time_ms</Item>
+      <Item Name="allocator_fn">allocator.on_alloc</Item>
+      <Item Name="allocator_user_data">allocator.user_data</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_ps_t">
+    <DisplayString>ps pid={pid} in={io.in.mode} out={io.out.mode} err={io.err.mode}</DisplayString>
+    <Expand>
+      <Item Name="pid">pid</Item>
+      <Item Name="allocator_fn">allocator.on_alloc</Item>
+      <Item Name="allocator_user_data">allocator.user_data</Item>
+      <Item Name="stdin_fd">io.in.fd</Item>
+      <Item Name="stdin_mode">io.in.mode</Item>
+      <Item Name="stdin_block">io.in.block</Item>
+      <Item Name="stdout_fd">io.out.fd</Item>
+      <Item Name="stdout_mode">io.out.mode</Item>
+      <Item Name="stdout_block">io.out.block</Item>
+      <Item Name="stderr_fd">io.err.fd</Item>
+      <Item Name="stderr_mode">io.err.mode</Item>
+      <Item Name="stderr_block">io.err.block</Item>
+      <Item Name="platform">platform</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_thread_t">
+    <DisplayString>thread {*this}</DisplayString>
+    <Expand>
+      <Item Name="value">*this</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>
