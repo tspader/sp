@@ -26,3 +26,5 @@ doc/*
 **/*.obj
 **/*.pdb
 /mutagen.yml
+/tools/msys64
+/tools/w64devkit
