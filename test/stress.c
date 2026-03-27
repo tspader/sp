@@ -219,7 +219,7 @@ s32 sp_atomic_s32_stress_thread(void* userdata) {
 }
 
 UTEST(stress, sp_atomic_s32) {
-  sp_atomic_s32 counter = 0;
+  sp_atomic_s32_t counter = 0;
   const s32 num_threads = 8;
   const s32 iterations = 10000;
 
@@ -359,9 +359,9 @@ UTEST(stress, sp_context) {
 #define FMON_STRESS_DIRS_PER_LEVEL 5
 
 typedef struct {
-  sp_atomic_s32 add_count;
-  sp_atomic_s32 mod_count;
-  sp_atomic_s32 rem_count;
+  sp_atomic_s32_t add_count;
+  sp_atomic_s32_t mod_count;
+  sp_atomic_s32_t rem_count;
 } fmon_stress_counters_t;
 
 void fmon_stress_callback(sp_fmon_t* monitor, sp_fmon_event_t* event, void* userdata) {

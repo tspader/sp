@@ -9,6 +9,7 @@ EXAMPLE_DIR = build/example
 TARGETS =                   \
 	$(BUILD_DIR)/freestanding \
 	$(EXAMPLE_DIR)/jit        \
+	$(EXAMPLE_DIR)/signal     \
 	$(EXAMPLE_DIR)/prompt
 
 .PHONY: all clean
@@ -24,7 +25,7 @@ $(EXAMPLE_DIR)/jit: example/freestanding/jit.c sp.h | $(EXAMPLE_DIR)
 $(EXAMPLE_DIR)/prompt: example/cli/prompt.c sp.h sp/prompt.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
 
-$(EXAMPLE_DIR)/jit: example/freestanding/signal.c sp.h | $(EXAMPLE_DIR)
+$(EXAMPLE_DIR)/signal: example/freestanding/signal.c sp.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
 
 $(BUILD_DIR):

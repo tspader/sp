@@ -1,6 +1,6 @@
 #define SP_IMPLEMENTATION
 #define SP_FREESTANDING
-#define SP_BUILTIN
+#define SP_DEFINE_BUILTINS
 #include "sp.h"
 
 static void print(const char* s) {

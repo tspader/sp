@@ -159,7 +159,7 @@ UTEST_F(context, use_scratch_allocator_but_return_from_user_allocator) {
 }
 
 typedef struct {
-  sp_atomic_s32 *done_count;
+  sp_atomic_s32_t *done_count;
   s32 thread_id;
   bool context_valid;
   bool allocator_works;
@@ -191,7 +191,7 @@ s32 context_thread_func(void *userdata) {
 UTEST_F(context, multithread_independent_contexts) {
   main_thread_context = sp_context_get();
 
-  sp_atomic_s32 done_count = 0;
+  sp_atomic_s32_t done_count = 0;
   context_thread_data_t thread_data[NUM_THREADS] = SP_ZERO_INITIALIZE();
   sp_thread_t threads[NUM_THREADS] = SP_ZERO_INITIALIZE();
 
@@ -216,7 +216,7 @@ UTEST_F(context, multithread_independent_contexts) {
 }
 
 typedef struct {
-  sp_atomic_s32 *done_count;
+  sp_atomic_s32_t *done_count;
   s32 thread_id;
   s32 iterations;
   bool all_passed;
@@ -344,7 +344,7 @@ s32 push_pop_thread_func(void *userdata) {
 }
 
 UTEST_F(context, multithread_push_pop) {
-  sp_atomic_s32 done_count = 0;
+  sp_atomic_s32_t done_count = 0;
   push_pop_thread_data_t thread_data[NUM_THREADS];
   sp_thread_t threads[NUM_THREADS];
 

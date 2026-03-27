@@ -2169,7 +2169,7 @@ UTEST(sp_spin_lock, mutual_exclusion_two_threads) {
 
 
 UTEST(sp_atomic_s32, basic_operations) {
-  sp_atomic_s32 value = 0;
+  sp_atomic_s32_t value = 0;
 
   s32 old = sp_atomic_s32_set(&value, 42);
   ASSERT_EQ(old, 0);
@@ -2185,23 +2185,23 @@ UTEST(sp_atomic_s32, basic_operations) {
 }
 
 UTEST(sp_atomic_s32, cmp_and_swap_success) {
-  sp_atomic_s32 value = 100;
+  sp_atomic_s32_t value = 100;
 
-  bool result = sp_atomic_s32_cmp_and_swap(&value, 100, 200);
+  bool result = sp_atomic_s32_cas(&value, 100, 200);
   ASSERT_TRUE(result);
   ASSERT_EQ(sp_atomic_s32_get(&value), 200);
 }
 
 UTEST(sp_atomic_s32, cmp_and_swap_fails) {
-  sp_atomic_s32 value = 100;
+  sp_atomic_s32_t value = 100;
 
-  bool result = sp_atomic_s32_cmp_and_swap(&value, 50, 200);
+  bool result = sp_atomic_s32_cas(&value, 50, 200);
   ASSERT_FALSE(result);
   ASSERT_EQ(sp_atomic_s32_get(&value), 100);
 }
 
 UTEST(sp_atomic_s32, add_returns_old_value) {
-  sp_atomic_s32 value = 0;
+  sp_atomic_s32_t value = 0;
 
   for (s32 i = 0; i < 100; i++) {
     s32 old = sp_atomic_s32_add(&value, 1);
@@ -2212,7 +2212,7 @@ UTEST(sp_atomic_s32, add_returns_old_value) {
 }
 
 typedef struct {
-  sp_atomic_s32* counter;
+  sp_atomic_s32_t* counter;
   s32 iterations;
 } sp_atomic_s32_thread_data_t;
 
@@ -2227,7 +2227,7 @@ s32 sp_atomic_s32_add_thread(void* userdata) {
 }
 
 UTEST(sp_atomic_s32, concurrent_adds) {
-  sp_atomic_s32 counter = 0;
+  sp_atomic_s32_t counter = 0;
   const s32 iterations = 5000;
 
   sp_atomic_s32_thread_data_t data1 = {.counter = &counter, .iterations = iterations};

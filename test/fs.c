@@ -1,7 +1,10 @@
 #include "sp.h"
 #include "test.h"
-
 #include "utest.h"
+
+#if defined (SP_POSIX)
+  #include "sys/stat.h"
+#endif
 
 static bool sp_symlinks_available = false;
 static bool sp_symlinks_probed = false;

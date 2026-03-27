@@ -1,6 +1,6 @@
 #define SP_IMPLEMENTATION
 #define SP_FREESTANDING
-#define SP_BUILTIN
+#define SP_DEFINE_BUILTINS
 #include "sp.h"
 
 static void print(const char* s) {
@@ -258,7 +258,7 @@ void _start(void) {
     TEST("tls_set/get", data == (void*)0xDEADBEEF);
   }
 
-  print("=== SP_BUILTIN test ===\n");
+  print("=== SP_DEFINE_BUILTINS test ===\n");
 
   print("\n--- memcpy ---\n");
   {

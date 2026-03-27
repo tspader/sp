@@ -6,7 +6,7 @@
 typedef struct {
   sp_allocator_t allocator;
   void* value;
-  sp_atomic_s32 ready;
+  sp_atomic_s32_t ready;
   u32 size;
 } sp_future_t;
 

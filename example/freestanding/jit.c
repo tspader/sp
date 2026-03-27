@@ -1,5 +1,5 @@
 #define SP_FREESTANDING
-#define SP_BUILTIN
+#define SP_DEFINE_BUILTINS
 #define SP_IMPLEMENTATION
 #include "sp.h"
 

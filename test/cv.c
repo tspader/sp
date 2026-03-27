@@ -14,8 +14,8 @@ typedef struct {
   sp_cv_t* cv;
   sp_mutex_t* mutex;
   bool signaled;
-  sp_atomic_s32 ready;
-  sp_atomic_s32 done;
+  sp_atomic_s32_t ready;
+  sp_atomic_s32_t done;
 } wait_notify_one_data_t;
 
 s32 wait_notify_one_worker(void* userdata) {
@@ -72,8 +72,8 @@ typedef struct {
   sp_cv_t* cv;
   sp_mutex_t* mutex;
   bool signaled;
-  sp_atomic_s32 ready_count;
-  sp_atomic_s32 done_count;
+  sp_atomic_s32_t ready_count;
+  sp_atomic_s32_t done_count;
 } wait_notify_all_data_t;
 
 s32 wait_notify_all_worker(void* userdata) {
@@ -134,8 +134,8 @@ typedef struct {
   sp_cv_t* cv;
   sp_mutex_t* mutex;
   s32 tickets;
-  sp_atomic_s32 waiting_count;
-  sp_atomic_s32 woken_count;
+  sp_atomic_s32_t waiting_count;
+  sp_atomic_s32_t woken_count;
 } notify_one_wakes_single_data_t;
 
 s32 notify_one_wakes_single_worker(void* userdata) {
@@ -227,7 +227,7 @@ typedef struct {
   sp_cv_t* cv;
   sp_mutex_t* mutex;
   bool ready;
-  sp_atomic_s32 waiter_ready;
+  sp_atomic_s32_t waiter_ready;
 } wait_for_signaled_data_t;
 
 s32 wait_for_signaled_signaler(void* userdata) {
@@ -285,8 +285,8 @@ typedef struct {
   sp_mutex_t* mutex;
   sp_rb(s32)* buffer;
   bool done;
-  sp_atomic_s32 produced_count;
-  sp_atomic_s32 consumed_count;
+  sp_atomic_s32_t produced_count;
+  sp_atomic_s32_t consumed_count;
   s32 items_to_produce;
 } producer_consumer_data_t;
 
