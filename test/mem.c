@@ -420,13 +420,13 @@ UTEST_F(mem, alloc_preserves_u64_size) {
 }
 
 UTEST_F(mem, libc_metadata_stores_u64_size) {
-  sp_allocator_t libc = sp_mem_libc_new();
+  sp_allocator_t libc = sp_mem_os_new();
 
   u64 size = 64;
   void* ptr = sp_mem_allocator_alloc(libc, size);
   ASSERT_TRUE(ptr);
 
-  sp_mem_libc_metadata_t* meta = sp_mem_libc_get_metadata(ptr);
+  sp_mem_os_header_t* meta = sp_mem_os_get_header(ptr);
   EXPECT_EQ(meta->size, size);
 
   sp_mem_allocator_free(libc, ptr);

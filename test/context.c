@@ -83,7 +83,7 @@ UTEST_F(context, push_allocator_changes_allocator) {
   sp_context_t *ctx_before = sp_context_get();
   sp_allocator_t old_allocator = ctx_before->allocator;
 
-  sp_allocator_t new_allocator = sp_mem_libc_new();
+  sp_allocator_t new_allocator = sp_mem_os_new();
   sp_context_push_allocator(new_allocator);
 
   sp_context_t *ctx_after = sp_context_get();
@@ -97,7 +97,7 @@ UTEST_F(context, push_allocator_changes_allocator) {
 
 UTEST_F(context, set_modifies_current) {
   sp_context_t ctx = *sp_context_get();
-  sp_allocator_t new_allocator = sp_mem_libc_new();
+  sp_allocator_t new_allocator = sp_mem_os_new();
   ctx.allocator = new_allocator;
 
   sp_context_set(ctx);
@@ -271,7 +271,7 @@ UTEST_F(context, begin_scratch_push_unrelated_allocator_end_scratch) {
   u8* a = sp_alloc(64);
   sp_mem_fill_u8(a, 64, 0xAA);
 
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   u8* b = sp_alloc(64);
   sp_mem_fill_u8(b, 64, 0xBB);

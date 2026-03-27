@@ -1738,7 +1738,7 @@ typedef struct {
 typedef struct {
   u64 size;
   u8 padding [8];
-} sp_mem_libc_metadata_t;
+} sp_mem_os_header_t;
 
 typedef struct {
   sp_mem_arena_t* arena;
@@ -1751,41 +1751,41 @@ typedef struct {
   sp_allocator_t old_allocator;
 } sp_mem_scratch_t;
 
-SP_API void*                   sp_alloc(u64 size);
-SP_API void*                   sp_realloc(void* memory, u64 size);
-SP_API void                    sp_free(void* memory);
-SP_API void*                   sp_mem_os_alloc(u64 size);
-SP_API void*                   sp_mem_os_alloc_zero(u64 size);
-SP_API void*                   sp_mem_os_realloc(void* ptr, u64 size);
-SP_API void                    sp_mem_os_free(void* ptr);
-SP_API void                    sp_mem_copy(const void* source, void* dest, u64 num_bytes);
-SP_API void                    sp_mem_move(const void* source, void* dest, u64 num_bytes);
-SP_API bool                    sp_mem_is_equal(const void* a, const void* b, u64 len);
-SP_API void                    sp_mem_fill(void* buffer, u64 bsize, void* fill, u64 fsize);
-SP_API void                    sp_mem_fill_u8(void* buffer, u64 buffer_size, u8 fill);
-SP_API void                    sp_mem_zero(void* buffer, u64 buffer_size);
-SP_API void*                   sp_mem_allocator_alloc(sp_allocator_t arena, u64 size);
-SP_API void*                   sp_mem_allocator_realloc(sp_allocator_t arena, void* ptr, u64 size);
-SP_API void                    sp_mem_allocator_free(sp_allocator_t arena, void* buffer);
-SP_API sp_mem_arena_t*         sp_mem_arena_new(u64 default_block_size);
-SP_API sp_mem_arena_t*         sp_mem_arena_new_ex(u64 block_size, sp_mem_arena_mode_t mode, u8 alignment);
-SP_API sp_allocator_t          sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
-SP_API void                    sp_mem_arena_clear(sp_mem_arena_t* arena);
-SP_API void                    sp_mem_arena_destroy(sp_mem_arena_t* arena);
-SP_API void*                   sp_mem_arena_on_alloc(void* ptr, sp_mem_alloc_mode_t mode, u64 n, void* old);
-SP_API sp_mem_arena_marker_t   sp_mem_arena_mark(sp_mem_arena_t* a);
-SP_API void                    sp_mem_arena_pop(sp_mem_arena_marker_t marker);
-SP_API u64                     sp_mem_arena_capacity(sp_mem_arena_t* arena);
-SP_API u64                     sp_mem_arena_bytes_used(sp_mem_arena_t* arena);
-SP_API void*                   sp_mem_arena_alloc(sp_mem_arena_t* arena, u64 size);
-SP_API void*                   sp_mem_arena_realloc(sp_mem_arena_t* arena, void* ptr, u64 size);
-SP_API void                    sp_mem_arena_free(sp_mem_arena_t* arena, void* ptr);
-SP_API sp_allocator_t          sp_mem_libc_new();
-SP_API void*                   sp_mem_libc_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
-SP_API sp_mem_libc_metadata_t* sp_mem_libc_get_metadata(void* ptr);
-SP_API sp_mem_arena_t*         sp_mem_get_scratch_arena();
-SP_API sp_mem_scratch_t        sp_mem_begin_scratch();
-SP_API void                    sp_mem_end_scratch(sp_mem_scratch_t scratch);
+SP_API void*                 sp_alloc(u64 size);
+SP_API void*                 sp_realloc(void* memory, u64 size);
+SP_API void                  sp_free(void* memory);
+SP_API void*                 sp_mem_os_alloc(u64 size);
+SP_API void*                 sp_mem_os_alloc_zero(u64 size);
+SP_API void*                 sp_mem_os_realloc(void* ptr, u64 size);
+SP_API void                  sp_mem_os_free(void* ptr);
+SP_API void                  sp_mem_copy(const void* source, void* dest, u64 num_bytes);
+SP_API void                  sp_mem_move(const void* source, void* dest, u64 num_bytes);
+SP_API bool                  sp_mem_is_equal(const void* a, const void* b, u64 len);
+SP_API void                  sp_mem_fill(void* buffer, u64 bsize, void* fill, u64 fsize);
+SP_API void                  sp_mem_fill_u8(void* buffer, u64 buffer_size, u8 fill);
+SP_API void                  sp_mem_zero(void* buffer, u64 buffer_size);
+SP_API void*                 sp_mem_allocator_alloc(sp_allocator_t arena, u64 size);
+SP_API void*                 sp_mem_allocator_realloc(sp_allocator_t arena, void* ptr, u64 size);
+SP_API void                  sp_mem_allocator_free(sp_allocator_t arena, void* buffer);
+SP_API sp_mem_arena_t*       sp_mem_arena_new(u64 default_block_size);
+SP_API sp_mem_arena_t*       sp_mem_arena_new_ex(u64 block_size, sp_mem_arena_mode_t mode, u8 alignment);
+SP_API sp_allocator_t        sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
+SP_API void                  sp_mem_arena_clear(sp_mem_arena_t* arena);
+SP_API void                  sp_mem_arena_destroy(sp_mem_arena_t* arena);
+SP_API void*                 sp_mem_arena_on_alloc(void* ptr, sp_mem_alloc_mode_t mode, u64 n, void* old);
+SP_API sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* a);
+SP_API void                  sp_mem_arena_pop(sp_mem_arena_marker_t marker);
+SP_API u64                   sp_mem_arena_capacity(sp_mem_arena_t* arena);
+SP_API u64                   sp_mem_arena_bytes_used(sp_mem_arena_t* arena);
+SP_API void*                 sp_mem_arena_alloc(sp_mem_arena_t* arena, u64 size);
+SP_API void*                 sp_mem_arena_realloc(sp_mem_arena_t* arena, void* ptr, u64 size);
+SP_API void                  sp_mem_arena_free(sp_mem_arena_t* arena, void* ptr);
+SP_API sp_allocator_t        sp_mem_os_new();
+SP_API void*                 sp_mem_os_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
+SP_API sp_mem_os_header_t*   sp_mem_os_get_header(void* ptr);
+SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena();
+SP_API sp_mem_scratch_t      sp_mem_begin_scratch();
+SP_API void                  sp_mem_end_scratch(sp_mem_scratch_t scratch);
 
 #define SP_ALLOC(T) (T*)sp_alloc(sizeof(T))
 #define SP_ALLOC_N(T, n) (T*)sp_alloc((n) * sizeof(T))
@@ -6096,7 +6096,7 @@ sp_tls_rt_t* sp_tls_rt_get() {
   sp_tls_rt_t* state = (sp_tls_rt_t*)sp_tls_get(sp_rt.tls.key);
   if (!state) {
     state = sp_os_alloc_type(sp_tls_rt_t);
-    state->contexts[0].allocator = sp_mem_libc_new();
+    state->contexts[0].allocator = sp_mem_os_new();
     sp_tls_set(sp_rt.tls.key, state);
 
     state->scratch = sp_mem_arena_new(SP_MEM_ARENA_BLOCK_SIZE);
@@ -6421,36 +6421,36 @@ void sp_mem_end_scratch(sp_mem_scratch_t scratch) {
   sp_mem_arena_pop(scratch.marker);
 }
 
-sp_mem_libc_metadata_t* sp_mem_libc_get_metadata(void* ptr) {
-  return ((sp_mem_libc_metadata_t*)ptr) - 1;
+sp_mem_os_header_t* sp_mem_os_get_header(void* ptr) {
+  return ((sp_mem_os_header_t*)ptr) - 1;
 }
 
-void* sp_mem_libc_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
+void* sp_mem_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
-      u64 total_size = size + sizeof(sp_mem_libc_metadata_t);
-      sp_mem_libc_metadata_t* metadata = (sp_mem_libc_metadata_t*)sp_mem_os_alloc_zero(total_size);
+      u64 total_size = size + sizeof(sp_mem_os_header_t);
+      sp_mem_os_header_t* metadata = (sp_mem_os_header_t*)sp_mem_os_alloc_zero(total_size);
       metadata->size = size;
       return metadata + 1;
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
       if (!ptr) {
-        return sp_mem_libc_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+        return sp_mem_os_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       }
 
-      sp_mem_libc_metadata_t* metadata = sp_mem_libc_get_metadata(ptr);
+      sp_mem_os_header_t* metadata = sp_mem_os_get_header(ptr);
       if (metadata->size >= size) {
         return ptr;
       }
 
-      void* buffer = sp_mem_libc_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
+      void* buffer = sp_mem_os_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
       sp_mem_copy(ptr, buffer, metadata->size);
-      sp_mem_libc_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
+      sp_mem_os_on_alloc(user_data, SP_ALLOCATOR_MODE_FREE, 0, ptr);
 
       return buffer;
     }
     case SP_ALLOCATOR_MODE_FREE: {
-      sp_mem_libc_metadata_t* metadata = sp_mem_libc_get_metadata(ptr);
+      sp_mem_os_header_t* metadata = sp_mem_os_get_header(ptr);
       sp_mem_os_free(metadata);
       return NULL;
     }
@@ -6460,9 +6460,9 @@ void* sp_mem_libc_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, 
   }
 }
 
-sp_allocator_t sp_mem_libc_new() {
+sp_allocator_t sp_mem_os_new() {
   sp_allocator_t allocator;
-  allocator.on_alloc = sp_mem_libc_on_alloc;
+  allocator.on_alloc = sp_mem_os_on_alloc;
   allocator.user_data = NULL;
   return allocator;
 }

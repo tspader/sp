@@ -36,7 +36,7 @@ void sp_test_asset_complete(sp_asset_import_context_t* context) {
 
 // Test: Basic synchronous add and find
 UTEST(asset_registry, basic_add_and_find) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
@@ -70,7 +70,7 @@ UTEST(asset_registry, basic_add_and_find) {
 
 // Test: Multiple assets with same name but different types
 UTEST(asset_registry, same_name_different_types) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
@@ -100,7 +100,7 @@ UTEST(asset_registry, same_name_different_types) {
 
 // Test: String copying (verify names are copied, not referenced)
 UTEST(asset_registry, string_copying) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
@@ -130,7 +130,7 @@ UTEST(asset_registry, string_copying) {
 }
 
 UTEST(asset_registry, null_user_data) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
@@ -151,7 +151,7 @@ UTEST(asset_registry, null_user_data) {
 }
 
 UTEST(asset_registry, empty_names) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
@@ -172,7 +172,7 @@ UTEST(asset_registry, empty_names) {
 }
 
 UTEST(asset_registry, import_completion_pipeline) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -224,7 +224,7 @@ UTEST(asset_registry, import_completion_pipeline) {
 }
 
 UTEST(asset_registry, state_transitions) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -271,7 +271,7 @@ UTEST(asset_registry, state_transitions) {
 
 // Test: Concurrent find operations while importing
 UTEST(asset_registry, concurrent_find_during_import) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -338,7 +338,7 @@ UTEST(asset_registry, concurrent_find_during_import) {
 
 // Test: Many assets stress test
 UTEST(asset_registry, stress_many_assets) {
-  sp_context_push_allocator(sp_mem_libc_new());
+  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = SP_ZERO_STRUCT(sp_asset_registry_config_t);
