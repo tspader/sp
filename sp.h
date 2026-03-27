@@ -832,7 +832,9 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
   #define SP_SYSCALL_NUM_EXIT_GROUP        94
   #define SP_SYSCALL_NUM_NANOSLEEP         101
   #define SP_SYSCALL_NUM_CLOCK_GETTIME     113
+  #define SP_SYSCALL_NUM_CLOCK_NANOSLEEP   115
   #define SP_SYSCALL_NUM_KILL              129
+  #define SP_SYSCALL_NUM_SIGACTION         134
   #define SP_SYSCALL_NUM_IOCTL             29
   #define SP_SYSCALL_NUM_GETPID            172
   #define SP_SYSCALL_NUM_GETTID            178
@@ -1355,7 +1357,8 @@ void sp_sys_init();
 void sp_entry_init(s32 argc, const c8** argv, sp_entry_fn_t fn);
 
 #if defined(SP_FREESTANDING)
-  static const c8** sp_envp;
+  extern const c8** sp_envp;
+  extern s32 errno;
 
   #if defined(SP_AMD64)
     #define SP_ENTRY(fn) \
@@ -3657,6 +3660,8 @@ SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
 SP_BEGIN_EXTERN_C()
 
 sp_rt_t sp_rt;
+const c8** sp_envp;
+s32 errno;
 
 //////////////////////////
 // THREAD LOCAL STORAGE //
@@ -3685,7 +3690,11 @@ static sp_tls_block_t sp_tls_block;
 // @sys
 #if defined(SP_LINUX)
 sp_word_t __sp_syscall_ret(sp_uword_t r) {
-	return r > -4096UL ? -1 : r;
+	if (r > -4096UL) {
+		errno = -r;
+		return -1;
+	}
+	return r;
 }
 
 s64 sp_syscall0(s64 n) {
@@ -9161,11 +9170,19 @@ void sp_os_register_signal_handler(sp_os_signal_t sig, sp_os_signal_handler_t ha
 
 #elif defined(SP_FREESTANDING)
 __attribute__((naked)) SP_PRIVATE void sp__signal_restorer(void) {
+#if defined(SP_AMD64)
   __asm__ __volatile__ (
     "mov $15, %%rax\n"  /* __NR_rt_sigreturn */
     "syscall"
     ::: "rcx", "r11", "memory"
   );
+#elif defined(SP_ARM64)
+  __asm__ __volatile__ (
+    "mov x8, #139\n"  /* __NR_rt_sigreturn */
+    "svc #0"
+    ::: "memory"
+  );
+#endif
 }
 
 void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
