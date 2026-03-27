@@ -18,6 +18,9 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
+#define SP_GLOB_IMPLEMENTATION
+#include "sp/glob.h"
+
 #define SP_TEST_IMPLEMENTATION
 #include "test.h"
 
