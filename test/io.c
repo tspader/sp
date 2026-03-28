@@ -60,7 +60,7 @@ UTEST_F(io_rw, reader_mem_read_past_end) {
 }
 
 UTEST_F(io_rw, reader_mem_size) {
-  u8 buffer[128];
+  u8 buffer[128] = SP_ZERO_INITIALIZE();
   sp_io_reader_t r = sp_io_reader_from_mem(buffer, sizeof(buffer));
   EXPECT_EQ(sp_io_reader_size(&r), 128);
   sp_io_reader_close(&r);

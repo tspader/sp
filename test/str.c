@@ -5,18 +5,6 @@
 
 SP_TEST_MAIN()
 
-struct str {
-  sp_test_file_manager_t file_manager;
-};
-
-UTEST_F_SETUP(str) {
-  sp_test_file_manager_init(&ut.file_manager);
-}
-
-UTEST_F_TEARDOWN(str) {
-  sp_test_file_manager_cleanup(&ut.file_manager);
-}
-
 UTEST(str_builder, basic_operations) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   ASSERT_EQ(builder.writer, SP_NULLPTR);
@@ -1328,23 +1316,20 @@ UTEST(string_cpp, path_concatenation_operator) {
 #endif
 
 #ifdef SP_WIN32
-c8* sp_win32_utf16_to_utf8(const c16* str, u32 len);
+sp_str_t sp_win32_utf16_to_utf8(const c16* utf16, s32 len);
 
 UTEST(wstr, wide_string_conversion) {
   c16 wide_str[] = L"Hello";
-  c8* converted = sp_utf16_to_utf8(wide_str, 5);
-  ASSERT_TRUE(sp_cstr_equal(converted, "Hello"));
-  sp_free(converted);
+  sp_str_t converted = sp_win32_utf16_to_utf8(wide_str, 5);
+  ASSERT_TRUE(sp_str_equal_cstr(converted, "Hello"));
 
   c16 empty[] = L"";
-  c8* empty_converted = sp_utf16_to_utf8(empty, 0);
-  ASSERT_TRUE(sp_cstr_equal(empty_converted, ""));
-  sp_free(empty_converted);
+  sp_str_t empty_converted = sp_win32_utf16_to_utf8(empty, 0);
+  ASSERT_TRUE(sp_str_equal_cstr(empty_converted, ""));
 
   c16 special[] = L"Test 123!";
-  c8* special_converted = sp_utf16_to_utf8(special, 9);
-  ASSERT_TRUE(sp_cstr_equal(special_converted, "Test 123!"));
-  sp_free(special_converted);
+  sp_str_t special_converted = sp_win32_utf16_to_utf8(special, 9);
+  ASSERT_TRUE(sp_str_equal_cstr(special_converted, "Test 123!"));
 }
 #endif
 

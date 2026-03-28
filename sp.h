@@ -1360,6 +1360,7 @@ void sp_entry_init(s32 argc, const c8** argv, sp_entry_fn_t fn);
 #if defined(SP_FREESTANDING)
   extern const c8** sp_envp;
   extern s32 errno;
+  extern sp_tls_block_t sp_tls_block;
 
   #if defined(SP_AMD64)
     #define SP_ENTRY(fn) \
@@ -3664,6 +3665,7 @@ sp_rt_t sp_rt;
 #if defined(SP_FREESTANDING)
 const c8** sp_envp;
 s32 errno;
+sp_tls_block_t sp_tls_block;
 #endif
 
 //////////////////////////
@@ -3681,7 +3683,6 @@ SP_PRIVATE void  sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t fn);
 SP_PRIVATE void* sp_tls_get(sp_tls_key_t key);
 SP_PRIVATE void  sp_tls_set(sp_tls_key_t key, void* data);
 SP_PRIVATE void  sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t);
-static sp_tls_block_t sp_tls_block;
 
 
 // ███████╗██╗   ██╗███████╗
@@ -8865,14 +8866,14 @@ typedef struct {
 } sp_win32_peb_t;
 
 SP_PRIVATE sp_win32_peb_t sp_win32_get_peb() {
-  static const s32 tpidr_el0 = 0x5E82;
-  static const u32 peb_offset = 0x60;
-
   sp_win32_peb_t peb = SP_ZERO_INITIALIZE();
 
   #if defined(_MSC_VER)
+    static const s32 tpidr_el0 = 0x5E82;
+    static const u32 peb_offset = 0x60;
+
     #if defined(_M_X64)
-      peb.base = (u8*)__readgsqword(0x60);
+      peb.base = (u8*)__readgsqword(peb_offset);
     #elif defined(_M_ARM64)
       peb.base = *(u8**)(_ReadStatusReg(tpidr_el0) + peb_offset);
     #else
@@ -10106,6 +10107,14 @@ void sp_env_destroy(sp_env_t* env) {
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
 #if defined(SP_PS)
+#if defined(SP_POSIX)
+SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
+SP_PRIVATE bool sp_ps_create_pipes(s32 pipes [2]);
+SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config);
+SP_PRIVATE void sp_ps_free_posix_args(c8** argv);
+SP_PRIVATE void sp_ps_set_nonblocking(s32 fd);
+SP_PRIVATE void sp_ps_set_blocking(s32 fd);
+
 SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config) {
   sp_env_t env = SP_ZERO_INITIALIZE();
 
@@ -10129,14 +10138,6 @@ SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config) {
 
   return env;
 }
-
-#if defined(SP_POSIX)
-SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
-SP_PRIVATE bool sp_ps_create_pipes(s32 pipes [2]);
-SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config);
-SP_PRIVATE void sp_ps_free_posix_args(c8** argv);
-SP_PRIVATE void sp_ps_set_nonblocking(s32 fd);
-SP_PRIVATE void sp_ps_set_blocking(s32 fd);
 
 bool sp_ps_is_fd_valid(sp_os_file_handle_t fd) {
   return fd > 0;
@@ -11370,7 +11371,6 @@ SP_PRIVATE void sp_fmon_os_deinit(sp_fmon_t* monitor);
 SP_PRIVATE void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
 SP_PRIVATE void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
 SP_PRIVATE void sp_fmon_os_process_changes(sp_fmon_t* monitor);
-SP_PRIVATE sp_fmon_cache_t* sp_fmon_get_or_insert_cache(sp_fmon_t* monitor, sp_str_t file_path);
 
 void sp_fmon_init(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata) {
   sp_fmon_init_ex(monitor, callback, events, userdata, 0, sp_context_get()->allocator);
@@ -11408,31 +11408,6 @@ void sp_fmon_emit_changes(sp_fmon_t* monitor) {
   }
 
   sp_da_clear(monitor->changes);
-}
-
-sp_fmon_cache_t* sp_fmon_get_or_insert_cache(sp_fmon_t* monitor, sp_str_t file_path) {
-  sp_context_push_allocator(monitor->allocator);
-  c8* file_path_cstr = sp_str_to_cstr(file_path);
-  sp_hash_t file_hash = sp_hash_cstr(file_path_cstr);
-
-  sp_fmon_cache_t* found = NULL;
-  for (u32 i = 0; i < sp_da_size(monitor->cache); i++) {
-    sp_fmon_cache_t* entry = &monitor->cache[i];
-    if (entry->hash == file_hash) {
-      found = entry;
-      break;
-    }
-  }
-
-  if (!found) {
-    sp_da_push(monitor->cache, SP_ZERO_STRUCT(sp_fmon_cache_t));
-    found = &monitor->cache[sp_da_size(monitor->cache) - 1];
-    found->hash = file_hash;
-  }
-
-  sp_context_pop();
-
-  return found;
 }
 
 // PLATFORM
