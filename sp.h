@@ -9687,7 +9687,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32_t* value) {
 // @semaphore
 #if defined(SP_WIN32)
 void sp_semaphore_init(sp_semaphore_t* semaphore) {
-  *semaphore = CreateSemaphoreW(NULL, 0, 1, NULL);
+  *semaphore = CreateSemaphoreW(NULL, 0, 0x7FFFFFF, NULL);
 }
 
 void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
