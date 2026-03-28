@@ -1339,6 +1339,7 @@ f32   sp_sys_acosf(f32 x);
   #define sp_link(old, new)                 sp_sys_link(old, new)
   #define sp_chmod(path, mode)              sp_sys_chmod(path, mode)
   #define sp_open(p, f, m)                  sp_sys_open(p, f, m)
+  #define sp_openat(d, p, f, m)             sp_sys_openat(d, p, f, m);
   #define sp_clock_gettime(c, ts)           sp_sys_clock_gettime(c, ts)
   #define sp_poll(fds, n, t)                sp_sys_poll(fds, n, t)
   #define sp_wait4(p, s, o, r)              sp_sys_wait4(p, s, o, r)
@@ -1367,6 +1368,7 @@ f32   sp_sys_acosf(f32 x);
   #define sp_rmdir(path)                    rmdir(path)
   #define sp_poll(p, f, m)                  poll(p, f, m)
   #define sp_open(p, f, m)                  open(p, f, m)
+  #define sp_openat(d, p, f, m)             openat(d, p, f, m);
   #define sp_unlink(path)                   unlink(path)
   #define sp_rename(old, new)               rename(old, new)
   #define sp_readlink(p, b, s)              readlink(p, b, s)
@@ -1378,17 +1380,18 @@ f32   sp_sys_acosf(f32 x);
   #define sp_tcsetattr(fd, opt, tio)        tcsetattr(fd, opt, tio)
 #endif
 
-
-
+///////////
+// ENTRY //
+///////////
 typedef s32 (*sp_entry_fn_t)(s32, const c8**);
 
 void sp_sys_init();
 void sp_entry_init(s32 argc, const c8** argv, sp_entry_fn_t fn);
 
+
 #if defined(SP_FREESTANDING)
   extern const c8** sp_envp;
   extern s32 errno;
-  extern sp_tls_block_t sp_tls_block;
 
   #if defined(SP_AMD64)
     #define SP_ENTRY(fn) \
@@ -3081,6 +3084,21 @@ SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal
   typedef pthread_once_t sp_tls_once_t;
 #endif
 
+typedef struct sp_tls_block {
+  struct sp_tls_block* self;
+  void* data;
+} sp_tls_block_t;
+
+extern sp_tls_block_t sp_tls_block;
+
+sp_typedef_fn(void, sp_tls_once_fn_t);
+sp_typedef_fn(void, sp_tls_deinit_fn_t, void*);
+
+SP_PRIVATE void  sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t fn);
+SP_PRIVATE void* sp_tls_get(sp_tls_key_t key);
+SP_PRIVATE void  sp_tls_set(sp_tls_key_t key, void* data);
+SP_PRIVATE void  sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t);
+
 typedef struct {
   sp_allocator_t allocator;
   sp_err_ext_t err;
@@ -3655,23 +3673,6 @@ const c8** sp_envp;
 s32 errno;
 sp_tls_block_t sp_tls_block;
 #endif
-
-//////////////////////////
-// THREAD LOCAL STORAGE //
-//////////////////////////
-typedef struct sp_tls_block {
-  struct sp_tls_block* self;
-  void* data;
-} sp_tls_block_t;
-
-sp_typedef_fn(void, sp_tls_once_fn_t);
-sp_typedef_fn(void, sp_tls_deinit_fn_t, void*);
-
-SP_PRIVATE void  sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t fn);
-SP_PRIVATE void* sp_tls_get(sp_tls_key_t key);
-SP_PRIVATE void  sp_tls_set(sp_tls_key_t key, void* data);
-SP_PRIVATE void  sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t);
-
 
 // ███████╗██╗   ██╗███████╗
 // ██╔════╝╚██╗ ██╔╝██╔════╝
@@ -8064,66 +8065,93 @@ bool sp_fs_is_on_path(sp_str_t program) {
 //////////////////
 #if defined(SP_WIN32)
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  if (sp_str_empty(path)) return SP_ZERO_STRUCT(sp_str_t);
+
   c8* path_cstr = sp_str_to_cstr(path);
+
+  HANDLE h = CreateFileA(
+    path_cstr,
+    0,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    SP_NULLPTR,
+    OPEN_EXISTING,
+    FILE_FLAG_BACKUP_SEMANTICS,
+    SP_NULLPTR
+  );
+
+  if (h == INVALID_HANDLE_VALUE) {
+    return SP_ZERO_STRUCT(sp_str_t);
+  }
+
   c8 canonical_path[SP_MAX_PATH_LEN];
+  sp_win32_dword_t len = GetFinalPathNameByHandleA(h, canonical_path, SP_MAX_PATH_LEN, 0);
+  CloseHandle(h);
 
-  if (GetFullPathNameA(path_cstr, SP_MAX_PATH_LEN, canonical_path, NULL) == 0) {
-    return sp_str_copy(path);
+  if (len == 0 || len >= SP_MAX_PATH_LEN) {
+    return SP_ZERO_STRUCT(sp_str_t);
   }
 
-  sp_str_t result = sp_str_from_cstr(canonical_path);
+  // GetFinalPathNameByHandleA returns \\?\ prefix — strip it
+  sp_str_t result = (sp_str_t) { .data = canonical_path, .len = len };
+  if (sp_str_starts_with(result, SP_LIT("\\\\?\\"))) {
+    result = sp_str_suffix(result, result.len - 4);
+  }
+
   result = sp_fs_normalize_path(result);
-
-  if (result.len > 0 && result.data[result.len - 1] == '/') {
-    result.len--;
-  }
 
   return sp_str_copy(result);
 }
-#elif defined(SP_FREESTANDING)
+#elif defined(SP_LINUX)
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  sp_str_t result = sp_zero_struct(sp_str_t);
+  if (sp_str_empty(path)) return result;
+
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_str_t result = path;
-  c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-  if (sp_fs_exists(path)) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    s64 len = sp_readlink(path_cstr, canonical_path, SP_MAX_PATH_LEN - 1);
-    if (len > 0) {
-      canonical_path[len] = '\0';
-      result = SP_CSTR(canonical_path);
-    }
+
+  s64 fd = sp_openat(SP_AT_FDCWD, sp_str_to_cstr(path), SP_O_RDONLY | SP_O_CLOEXEC, 0);
+  if (fd < 0) {
+    goto cleanup;
   }
 
-  result = sp_fs_normalize_path(result);
+  // @spader I need an sprintf() equivalent, plus format-direct-to-cstr
+  const c8* proc = sp_str_to_cstr(sp_format("/proc/self/fd/{}", SP_FMT_S64(fd)));
 
-  if (result.len > 0 && result.data[result.len - 1] == '/') {
-    result.len--;
+  c8 buffer[SP_MAX_PATH_LEN];
+  s64 len = sp_readlink(proc, buffer, SP_MAX_PATH_LEN - 1);
+  sp_close(fd);
+
+  if (len <= 0) {
+    goto cleanup;
   }
+
+  sp_str_t canonical_path = {
+    .data = buffer,
+    .len = len
+  };
+  result = sp_fs_normalize_path(canonical_path);
 
   sp_context_push_allocator(scratch.old_allocator);
-  sp_str_t copy = sp_str_copy(result);
+  result = sp_str_copy(result);
   sp_context_pop();
 
+cleanup:
   sp_mem_end_scratch(scratch);
-  return copy;
+  return result;
 }
 #else
 sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
+  if (sp_str_empty(path)) return SP_ZERO_STRUCT(sp_str_t);
+
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_str_t result = path;
   c8 canonical_path[SP_MAX_PATH_LEN] = SP_ZERO_INITIALIZE();
-  if (sp_fs_exists(path)) {
-    c8* path_cstr = sp_str_to_cstr(path);
-    if (realpath(path_cstr, canonical_path)) {
-      result = SP_CSTR(canonical_path);
-    }
+  c8* path_cstr = sp_str_to_cstr(path);
+
+  if (!realpath(path_cstr, canonical_path)) {
+    sp_mem_end_scratch(scratch);
+    return SP_ZERO_STRUCT(sp_str_t);
   }
 
-  result = sp_fs_normalize_path(result);
-
-  if (result.len > 0 && result.data[result.len - 1] == '/') {
-    result.len--;
-  }
+  sp_str_t result = sp_fs_normalize_path(SP_CSTR(canonical_path));
 
   sp_context_push_allocator(scratch.old_allocator);
   sp_str_t copy = sp_str_copy(result);
@@ -8154,12 +8182,7 @@ extern char* program_invocation_name;
 sp_str_t sp_fs_get_exe_path() {
   c8 exe_path [SP_PATH_MAX] = SP_ZERO_INITIALIZE();
   if (realpath(program_invocation_name, exe_path)) {
-    sp_str_t path = {
-      .data = exe_path,
-      .len = sp_cstr_len(exe_path),
-    };
-
-    return sp_str_copy(path);
+    return sp_str_copy(sp_fs_normalize_path(SP_CSTR(exe_path)));
   }
   return sp_str_lit("");
 }
@@ -8173,12 +8196,8 @@ sp_str_t sp_fs_get_exe_path() {
     return sp_str_lit("");
   }
 
-  sp_str_t path = {
-    .data = exe_path,
-    .len = len,
-  };
-
-  return sp_str_copy(path);
+  exe_path[len] = '\0';
+  return sp_str_copy(sp_fs_normalize_path(SP_CSTR(exe_path)));
 }
 #endif
 
@@ -8191,12 +8210,12 @@ sp_str_t sp_fs_get_exe_path() {
     return sp_str_lit("");
   }
 
-  sp_str_t path = {
-    .data = exe_path,
-    .len = sp_cstr_len(exe_path),
-  };
+  c8 canonical[SP_PATH_MAX];
+  if (realpath(exe_path, canonical)) {
+    return sp_str_copy(sp_fs_normalize_path(SP_CSTR(canonical)));
+  }
 
-  return sp_str_copy(path);
+  return sp_str_copy(sp_fs_normalize_path(SP_CSTR(exe_path)));
 }
 #endif
 
@@ -8211,11 +8230,11 @@ sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
 }
 
 sp_str_t sp_fs_get_storage_path() {
-  return sp_os_env_get(SP_LIT("LOCALAPPDATA"));
+  return sp_fs_normalize_path(sp_os_env_get(SP_LIT("LOCALAPPDATA")));
 }
 
 sp_str_t sp_fs_get_config_path() {
-  return sp_os_env_get(SP_LIT("APPDATA"));
+  return sp_fs_normalize_path(sp_os_env_get(SP_LIT("APPDATA")));
 }
 #endif
 

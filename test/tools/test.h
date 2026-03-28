@@ -44,7 +44,6 @@
 #define SP_EXPECT_STR_EQ(a, b) SP_TEST_STREQ((a), (b), false)
 #define SP_EXPECT_ERR(err) EXPECT_EQ(sp_err_get(), err)
 
-
 typedef struct {
   u32 len;
   u8* data;
