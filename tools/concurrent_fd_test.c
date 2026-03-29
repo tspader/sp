@@ -83,8 +83,8 @@ void run_test(const c8* label, u32 write_size, u32 write_count) {
     }
   });
 
-  SP_ASSERT(ps_a.pid != 0);
-  SP_ASSERT(ps_b.pid != 0);
+  SP_ASSERT(ps_a.os);
+  SP_ASSERT(ps_b.os);
 
   close(pipes[1]);
 

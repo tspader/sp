@@ -3318,52 +3318,12 @@ typedef struct {
   sp_ps_status_t status;
 } sp_ps_output_t;
 
-#if defined(SP_WIN32)
-  typedef sp_win32_handle_t sp_ps_id_t;
-  typedef struct {
-    void* placeholder;
-  } sp_ps_platform_t;
-
-#elif defined(SP_POSIX)
-  #define SP_POSIX_WAITPID_BLOCK 0
-  #define SP_POSIX_WAITPID_NO_BLOCK SP_WNOHANG
-
-  typedef s32 sp_ps_id_t;
-
-  typedef struct {
-    posix_spawn_file_actions_t* fa;
-    sp_ps_io_file_number_t file_number;
-    s32 flag;
-    s32 mode;
-    struct {
-      s32 read;
-      s32 write;
-    } pipes;
-  } sp_ps_stdio_config_entry_t;
-
-  typedef struct {
-    sp_ps_stdio_config_entry_t in;
-    sp_ps_stdio_config_entry_t out;
-    sp_ps_stdio_config_entry_t err;
-  } sp_ps_stdio_config_t;
-
-  typedef struct {
-    s32 read;
-    s32 write;
-  } sp_ps_pipe_t;
-
-  typedef struct {
-    c8** argv;
-    c8** envp;
-    sp_ps_env_mode_t env_mode;
-  } sp_ps_platform_t;
-#endif
+typedef struct sp_ps_os sp_ps_os_t;
 
 typedef struct {
   sp_ps_io_t io;
-  sp_ps_platform_t platform;
+  sp_ps_os_t* os;
   sp_allocator_t allocator;
-  sp_ps_id_t pid;
 } sp_ps_t;
 
 SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
@@ -8210,7 +8170,7 @@ sp_str_t sp_fs_get_exe_path() {
 
   sp_str_t path = {
     .data = exe_path,
-    .len = len,
+    .len = sp_cstr_len(exe_path),
   };
 
   return sp_str_copy(path);
@@ -10113,6 +10073,30 @@ void sp_env_destroy(sp_env_t* env) {
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
 #if defined(SP_PS)
 #if defined(SP_POSIX)
+#define SP_POSIX_WAITPID_BLOCK 0
+#define SP_POSIX_WAITPID_NO_BLOCK SP_WNOHANG
+
+typedef struct {
+  posix_spawn_file_actions_t* fa;
+  sp_ps_io_file_number_t file_number;
+  s32 flag;
+  s32 mode;
+  struct {
+    s32 read;
+    s32 write;
+  } pipes;
+} sp_ps_stdio_config_entry_t;
+
+typedef struct {
+  sp_ps_stdio_config_entry_t in;
+  sp_ps_stdio_config_entry_t out;
+  sp_ps_stdio_config_entry_t err;
+} sp_ps_stdio_config_t;
+
+struct sp_ps_os {
+  s32 pid;
+};
+
 SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_PRIVATE bool sp_ps_create_pipes(s32 pipes [2]);
 SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config);
@@ -10390,7 +10374,8 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     return SP_ZERO_STRUCT(sp_ps_t);
   }
 
-  proc.pid = pid;
+  proc.os = sp_alloc_type(sp_ps_os_t);
+  proc.os->pid = pid;
 
   if (io.in.pipes.read >= 0) {
     sp_close(io.in.pipes.read);
@@ -10505,7 +10490,7 @@ sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
   s32 time_remaining = timeout_ms;
 
   do {
-    wait_result = sp_wait4(ps->pid, &wait_status, SP_POSIX_WAITPID_NO_BLOCK, SP_NULLPTR);
+    wait_result = sp_wait4(ps->os->pid, &wait_status, SP_POSIX_WAITPID_NO_BLOCK, SP_NULLPTR);
     if (wait_result == 0) {
       result.state = SP_PS_STATE_RUNNING;
     }
@@ -10550,7 +10535,7 @@ sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
   s32 wait_result = 0;
 
   do {
-    wait_result = sp_wait4(ps->pid, &wait_status, SP_POSIX_WAITPID_BLOCK, SP_NULLPTR);
+    wait_result = sp_wait4(ps->os->pid, &wait_status, SP_POSIX_WAITPID_BLOCK, SP_NULLPTR);
   } while (wait_result == -1 && errno == SP_EINTR);
 
   if (wait_result < 0) {
@@ -10640,7 +10625,18 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   result.status = sp_ps_wait(ps);
   return result;
 }
+
+bool sp_ps_kill(sp_ps_t* ps) {
+  if (!ps || !ps->os) return false;
+  if (kill(ps->os->pid, SIGKILL) != 0) return false;
+  sp_ps_wait(ps);
+  return true;
+}
 #elif defined(SP_WIN32)
+struct sp_ps_os {
+  sp_win32_handle_t pid;
+};
+
 bool sp_ps_is_fd_valid(sp_os_file_handle_t fd) {
   return fd >= 0;
 }
@@ -11057,7 +11053,8 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
 
   sp_ps_win32_close_child_handles(&io);
   CloseHandle(process_info.hThread);
-  proc.pid = process_info.hProcess;
+  proc.os = sp_alloc_type(sp_ps_os_t);
+  proc.os->pid = process_info.hProcess;
 
   if (io.in.parent_fd >= 0) {
     proc.io.in.fd = io.in.parent_fd;
@@ -11097,7 +11094,7 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
     .mode = SP_PS_IO_MODE_CREATE,
   };
   sp_ps_t ps = sp_ps_create(config);
-  if (ps.pid) return sp_ps_output(&ps);
+  if (ps.os) return sp_ps_output(&ps);
   return sp_zero_struct(sp_ps_output_t);
 }
 
@@ -11132,7 +11129,7 @@ sp_ps_status_t sp_ps_win32_finish_process(sp_ps_t* ps) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
 
   DWORD exit_code = 0;
-  if (!GetExitCodeProcess(ps->pid, &exit_code)) {
+  if (!GetExitCodeProcess(ps->os->pid, &exit_code)) {
     sp_err_set(SP_ERR_OS);
     result.state = SP_PS_STATE_DONE;
     result.exit_code = -1;
@@ -11142,7 +11139,7 @@ sp_ps_status_t sp_ps_win32_finish_process(sp_ps_t* ps) {
     result.exit_code = (s32)exit_code;
   }
 
-  CloseHandle(ps->pid);
+  CloseHandle(ps->os->pid);
   return result;
 
 }
@@ -11150,7 +11147,7 @@ sp_ps_status_t sp_ps_win32_finish_process(sp_ps_t* ps) {
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
 
-  DWORD wait = WaitForSingleObject(ps->pid, timeout_ms);
+  DWORD wait = WaitForSingleObject(ps->os->pid, timeout_ms);
   switch (wait) {
     case WAIT_TIMEOUT: {
       result.state = SP_PS_STATE_RUNNING;
@@ -11175,13 +11172,13 @@ sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
 sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
 
-  if (!ps || !ps->pid) {
+  if (!ps || !ps->os) {
     result.state = SP_PS_STATE_DONE;
     result.exit_code = -1;
     return result;
   }
 
-  DWORD wait = WaitForSingleObject(ps->pid, INFINITE);
+  DWORD wait = WaitForSingleObject(ps->os->pid, INFINITE);
   if (wait != WAIT_OBJECT_0) {
     sp_err_set(SP_ERR_OS);
     result.state = SP_PS_STATE_DONE;
@@ -11237,7 +11234,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   sp_str_builder_t err = SP_ZERO_INITIALIZE();
 
   DWORD exit_code = 0;
-  bool process_done = !ps->pid;
+  bool process_done = !ps->os;
 
   while (!process_done || out_open || err_open) {
     bool read_any = false;
@@ -11249,11 +11246,11 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
       read_any |= sp_ps_win32_read_available(ps->io.err.fd, &err, &err_open) > 0;
     }
 
-    if (!process_done && ps->pid) {
-      DWORD wait = WaitForSingleObject(ps->pid, read_any ? 0 : 10);
+    if (!process_done && ps->os->pid) {
+      DWORD wait = WaitForSingleObject(ps->os->pid, read_any ? 0 : 10);
       if (wait == WAIT_OBJECT_0) {
         process_done = true;
-        if (!GetExitCodeProcess(ps->pid, &exit_code)) {
+        if (!GetExitCodeProcess(ps->os->pid, &exit_code)) {
           exit_code = (DWORD)-1;
           sp_err_set(SP_ERR_OS);
         }
@@ -11269,9 +11266,9 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
     }
   }
 
-  if (ps->pid) {
-    CloseHandle(ps->pid);
-    ps->pid = SP_NULLPTR;
+  if (ps->os->pid) {
+    CloseHandle(ps->os->pid);
+    ps->os->pid = SP_NULLPTR;
   }
 
   result.out = sp_str_builder_as_str(&out);
@@ -11284,20 +11281,24 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
 }
 
 bool sp_ps_kill(sp_ps_t* ps) {
-  if (!ps || !ps->pid) {
+  if (!ps || !ps->os) {
     return false;
   }
 
-  if (!TerminateProcess(ps->pid, 1)) {
+  if (!TerminateProcess(ps->os->pid, 1)) {
     return false;
   }
 
-  WaitForSingleObject(ps->pid, INFINITE);
-  CloseHandle(ps->pid);
-  ps->pid = SP_NULLPTR;
+  WaitForSingleObject(ps->os->pid, INFINITE);
+  CloseHandle(ps->os->pid);
+  ps->os->pid = SP_NULLPTR;
   return true;
 }
 #else
+struct sp_ps_os {
+  s32 dummy;
+};
+
 sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
   return *src;
 }
