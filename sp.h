@@ -1322,8 +1322,8 @@ f32   sp_sys_acosf(f32 x);
   #define sp_inotify_init1(f)               sp_sys_inotify_init1(f)
   #define sp_inotify_rm_watch(f, w)         sp_sys_inotify_rm_watch(f, w)
   #define sp_inotify_add_watch(f, p, m)     sp_sys_inotify_add_watch(f, p, m)
-  #define sp_prompt_tcgetattr(fd, tio)      sp_sys_tcgetattr(fd, tio)
-  #define sp_prompt_tcsetattr(fd, opt, tio) sp_sys_tcsetattr(fd, opt, tio)
+  #define sp_tcgetattr(fd, tio)             sp_sys_tcgetattr(fd, tio)
+  #define sp_tcsetattr(fd, opt, tio)        sp_sys_tcsetattr(fd, opt, tio)
 #else
   typedef struct stat sp_stat_t;
   typedef struct timespec sp_timespec_t;
@@ -1332,6 +1332,7 @@ f32   sp_sys_acosf(f32 x);
   typedef struct termios sp_termios_t;
 
   #define sp_assert(condition)              assert((condition))
+  #define sp_chmod(path, mode)              chmod(path, mode)
   #define sp_stat(path, st)                 stat(path, st)
   #define sp_lstat(path, st)                lstat(path, st)
   #define sp_fstat(fd, st)                  fstat(fd, st)
@@ -1341,13 +1342,17 @@ f32   sp_sys_acosf(f32 x);
   #define sp_getcwd(buf, size)              (getcwd(buf, size) ? 0 : -1)
   #define sp_mkdir(path, mode)              mkdir(path, mode)
   #define sp_rmdir(path)                    rmdir(path)
+  #define sp_poll(p, f, m)                  poll(p, f, m)
   #define sp_open(p, f, m)                  open(p, f, m)
   #define sp_unlink(path)                   unlink(path)
   #define sp_rename(old, new)               rename(old, new)
   #define sp_readlink(p, b, s)              readlink(p, b, s)
   #define sp_symlink(t, l)                  symlink(t, l)
   #define sp_link(old, new)                 link(old, new)
+  #define sp_wait4(p, s, o, r)              wait4(p, s, o, r)
   #define sp_clock_gettime(c, ts)           clock_gettime(c, ts)
+  #define sp_tcgetattr(fd, tio)             tcgetattr(fd, tio)
+  #define sp_tcsetattr(fd, opt, tio)        tcsetattr(fd, opt, tio)
 #endif
 
 

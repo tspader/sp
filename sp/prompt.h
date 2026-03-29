@@ -235,7 +235,7 @@ static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
   //   return -1;
   // }
 
-  if (sp_prompt_tcgetattr(ctx->terminal.fds.in, &ctx->terminal.cache) == -1) {
+  if (sp_tcgetattr(ctx->terminal.fds.in, &ctx->terminal.cache) == -1) {
     return -1;
   }
 
@@ -247,7 +247,7 @@ static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
   raw.c_cc[SP_VMIN] = 1;
   raw.c_cc[SP_VTIME] = 0;
 
-  if (sp_prompt_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &raw) == -1) {
+  if (sp_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &raw) == -1) {
     return -1;
   }
 
@@ -298,7 +298,7 @@ s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
 
 void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   if (ctx->terminal.raw) {
-    sp_prompt_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &ctx->terminal.cache);
+    sp_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &ctx->terminal.cache);
     ctx->terminal.raw = false;
   }
 
