@@ -568,7 +568,6 @@ SP_BEGIN_EXTERN_C()
   #include <sys/ioctl.h>
   #include <sys/time.h> // gettimeofday
 
-
   #include <errno.h>  // errno
   #include <signal.h> // signal
   #include <unistd.h> // pipe
@@ -625,7 +624,31 @@ SP_BEGIN_EXTERN_C()
 
 #elif defined(SP_COSMO)
   #include "libc/dce.h"
+  #include <sys/resource.h>
+  #include <poll.h>
+  #include <pthread.h>
 
+  #include <assert.h>
+  #include <fcntl.h>
+  #include <poll.h>
+  #include <dirent.h>
+  #include <errno.h>
+  #include <limits.h>
+  #include <pthread.h>
+  #include <semaphore.h>
+  #include <signal.h>
+  #include <spawn.h>
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <termios.h>
+  #include <time.h>
+  #include <unistd.h>
+  #include <sys/stat.h>
+  #include <sys/time.h>
+  #include <sys/types.h>
+  #include <sys/wait.h>
+  #include <sys/mman.h>
 #endif
 
 
@@ -2770,7 +2793,7 @@ typedef struct {
   sp_win32_handle_t handle;
   sp_win32_find_data_t find_data;
   bool first;
-#elif defined(SP_MACOS)
+#elif defined(SP_MACOS) || defined(SP_COSMO)
   DIR* dir;
 #else
   s32 fd;
@@ -7958,7 +7981,7 @@ SP_PRIVATE sp_fs_attr_t sp_fs_it_dtype_to_attr(u8 d_type) {
   return SP_OS_FILE_ATTR_NONE;
 }
 
-#if defined(SP_MACOS)
+#if defined(SP_MACOS) || defined(SP_COSMO)
 
 bool sp_fs_it_os_open(sp_fs_it_frame_t* frame, sp_str_t path) {
   frame->dir = opendir(sp_str_to_cstr(path));
@@ -8254,6 +8277,22 @@ sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
       .ns = (u32)st.st_mtimespec.tv_nsec
     };
   }
+#elif defined(SP_COSMO)
+  sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
+    struct stat st;
+    c8* path_cstr = sp_str_to_cstr(file_path);
+    s32 result = stat(path_cstr, &st);
+
+    if (result != 0) {
+      return SP_ZERO_STRUCT(sp_tm_epoch_t);
+    }
+
+    return SP_RVAL(sp_tm_epoch_t) {
+      .s = (u64)st.st_mtime,
+      .ns = (u32)st.st_mtim.tv_nsec
+    };
+  }
+
 #else
 sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
   sp_tm_epoch_t result = sp_zero_struct(sp_tm_epoch_t);
@@ -8363,7 +8402,7 @@ void sp_os_sleep_ns(u64 ns) {
 }
 #endif
 
-#if defined(SP_MACOS)
+#if defined(SP_MACOS) || defined(SP_COSMO)
 void sp_os_sleep_ns(u64 ns) {
   struct timespec req = {
     .tv_sec = (time_t)(ns / 1000000000ULL),
