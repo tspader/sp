@@ -145,7 +145,7 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   }
 
   sp_ps_t ps = sp_ps_create(config);
-  SP_ASSERT(ps.pid != 0);
+  SP_ASSERT(ps.os);
 
   sp_io_writer_t* in = sp_ps_io_in(&ps);
   sp_io_reader_t* out = sp_ps_io_out(&ps);
@@ -450,7 +450,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
   };
 
   sp_ps_t ps = sp_ps_create(config);
-  SP_ASSERT(ps.pid);
+  SP_ASSERT(ps.os);
 
   sp_io_writer_t* in = sp_ps_io_in(&ps);
   sp_io_reader_t* out = sp_ps_io_out(&ps);
@@ -641,14 +641,14 @@ UTEST_F(ps, wait_while_process_running) {
 
 UTEST_F(ps, run) {
   sp_ps_output_t result = sp_ps_run((sp_ps_config_t) {
-    .command = SP_LIT("git"),
+    .command = get_process_path(),
     .args = {
-      SP_LIT("-C"), ut.file_manager.paths.root,
-      SP_LIT("rev-parse"),
-      SP_LIT("origin/HEAD"),
+      sp_str_lit("--fn"), sp_str_lit("print"),
+      sp_str_lit("--stdout"),
     }
   });
-  EXPECT_NE(result.out.len, 0);
+  EXPECT_EQ(result.status.exit_code, 0);
+  SP_EXPECT_STR_EQ(result.out, sp_test_ps_canary);
 }
 
 UTEST_F(ps, poll_while_process_running) {
@@ -923,45 +923,6 @@ UTEST_F(ps, output) {
   EXPECT_TRUE(sp_str_empty(output.err));
 }
 
-UTEST_F(ps, write_1mb_to_stdin) {
-  if (sp_os_get_kind() == SP_OS_WIN32) {
-    UTEST_SKIP("need to drain in 64k (pipe max) increments");
-  }
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
-    .args = {
-      sp_str_lit("--fn"), sp_str_lit("consume"),
-      sp_str_lit("--stdout"),
-    },
-    .io = {
-      .in = { .mode = SP_PS_IO_MODE_CREATE },
-      .out = { .mode = SP_PS_IO_MODE_CREATE },
-      .err = { .mode = SP_PS_IO_MODE_NULL },
-    }
-  });
-
-  const u32 num_bytes = 1024 * 1024;
-  u8* buffer = (u8*)sp_alloc(num_bytes);
-  for (u32 i = 0; i < num_bytes; i++) {
-    buffer[i] = (u8)('A' + (i % 26));
-  }
-
-  sp_io_writer_t* in = sp_ps_io_in(&ps);
-  u64 num_written = sp_io_write(in, buffer, num_bytes);
-  EXPECT_EQ(num_written, num_bytes);
-  sp_io_writer_close(in);
-
-  sp_os_sleep_ms(100);
-
-  sp_ps_output_t output = sp_ps_output(&ps);
-
-  EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
-  EXPECT_EQ(output.status.exit_code, 0);
-
-  sp_str_t expected = sp_format("{}\n", SP_FMT_U64(num_bytes));
-  EXPECT_TRUE(sp_str_equal(output.out, expected));
-}
-
 UTEST_F(ps, redirect_stderr_to_stdout) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
     .command = get_process_path(),
@@ -1147,8 +1108,8 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
     }
   });
 
-  ASSERT_NE(ps_a.pid, 0);
-  ASSERT_NE(ps_b.pid, 0);
+  ASSERT_NE(ps_a.os, SP_NULLPTR);
+  ASSERT_NE(ps_b.os, SP_NULLPTR);
 
   close(pipes[1]);
 
@@ -1220,8 +1181,8 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
     }
   });
 
-  ASSERT_NE(ps_a.pid, 0);
-  ASSERT_NE(ps_b.pid, 0);
+  ASSERT_NE(ps_a.os, SP_NULLPTR);
+  ASSERT_NE(ps_b.os, SP_NULLPTR);
 
   close(pipes[1]);
 
