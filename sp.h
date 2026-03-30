@@ -4742,8 +4742,8 @@ sp_hash_t sp_hash_bytes(const void *p, u64 len, u64 seed) {
     } while (0)
 
   for (i=0; i+sizeof(size_t) <= len; i += sizeof(size_t), d += sizeof(size_t)) {
-    data = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
-    data |= (size_t) (d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24)) << 16 << 16;
+    data = d[0] | ((size_t) d[1] << 8) | ((size_t) d[2] << 16) | ((size_t) d[3] << 24);
+    data |= ((size_t) d[4] | ((size_t) d[5] << 8) | ((size_t) d[6] << 16) | ((size_t) d[7] << 24)) << 16 << 16;
 
     v3 ^= data;
     for (j=0; j < SP_SIPHASH_C_ROUNDS; ++j)
@@ -4755,9 +4755,9 @@ sp_hash_t sp_hash_bytes(const void *p, u64 len, u64 seed) {
     case 7: data |= ((size_t) d[6] << 24) << 24; SP_FALLTHROUGH();
     case 6: data |= ((size_t) d[5] << 20) << 20; SP_FALLTHROUGH();
     case 5: data |= ((size_t) d[4] << 16) << 16; SP_FALLTHROUGH();
-    case 4: data |= (d[3] << 24); SP_FALLTHROUGH();
-    case 3: data |= (d[2] << 16); SP_FALLTHROUGH();
-    case 2: data |= (d[1] << 8); SP_FALLTHROUGH();
+    case 4: data |= ((size_t) d[3] << 24); SP_FALLTHROUGH();
+    case 3: data |= ((size_t) d[2] << 16); SP_FALLTHROUGH();
+    case 2: data |= ((size_t) d[1] << 8); SP_FALLTHROUGH();
     case 1: data |= d[0]; SP_FALLTHROUGH();
     case 0: break;
   }
@@ -7014,6 +7014,7 @@ sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
 }
 
 sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) {
+  if (!strings) return sp_str_lit("");
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   for (u32 index = 0; index < num_strings; index++) {
@@ -7055,6 +7056,7 @@ sp_str_t sp_str_sub_reverse(sp_str_t str, s32 index, s32 len) {
 }
 
 sp_str_t sp_str_from_cstr_sized(const c8* str, u32 length) {
+  if (!str) return sp_str_lit("");
   c8* buffer = (c8*)sp_alloc(length);
   u32 len = sp_cstr_len(str);
   len = SP_MIN(len, length);
@@ -7064,6 +7066,7 @@ sp_str_t sp_str_from_cstr_sized(const c8* str, u32 length) {
 }
 
 sp_str_t sp_str_from_cstr_null(const c8* str) {
+  if (!str) return sp_str_lit("");
   u32 len = sp_cstr_len(str);
   c8* buffer = sp_alloc_n(c8, len + 1);
   sp_mem_copy(str, buffer, len);
@@ -7073,6 +7076,7 @@ sp_str_t sp_str_from_cstr_null(const c8* str) {
 }
 
 sp_str_t sp_str_from_cstr(const c8* str) {
+  if (!str) return sp_str_lit("");
   u32 len = sp_cstr_len(str);
   c8* buffer = sp_alloc_n(c8, len + 1);
   sp_mem_copy(str, buffer, len);
@@ -7081,6 +7085,7 @@ sp_str_t sp_str_from_cstr(const c8* str) {
 }
 
 sp_str_t sp_str_copy(sp_str_t str) {
+  if (!str.data) return sp_str_lit("");
   c8* buffer = sp_alloc_n(c8, str.len);
   sp_mem_copy(str.data, buffer, str.len);
 
@@ -7088,10 +7093,12 @@ sp_str_t sp_str_copy(sp_str_t str) {
 }
 
 void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
+  if (!str.data) return;
   sp_mem_copy(str.data, buffer, SP_MIN(str.len, capacity));
 }
 
 sp_str_t sp_str_null_terminate(sp_str_t str) {
+  if (!str.data) return sp_str_lit("");
   c8* buffer = (c8*)sp_alloc(str.len + 1);
   sp_mem_copy(str.data, buffer, str.len);
   buffer[str.len] = 0;
