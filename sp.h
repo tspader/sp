@@ -2800,7 +2800,7 @@ typedef struct {
   DIR* dir;
 #else
   s32 fd;
-  u8 buf[SP_FS_IT_BUF_SIZE];
+  u8 buf[SP_FS_IT_BUF_SIZE] __attribute__((aligned(__alignof__(sp_sys_dirent64_t))));
   s32 buf_pos;
   s32 buf_end;
 #endif
@@ -5143,8 +5143,8 @@ bool sp_parse_s64_ex(sp_str_t str, s64* out) {
   if (!sp_parse_u64_ex(num_str, &abs_value)) return false;
 
   if (negative) {
-    if (abs_value > (u64)INT64_MAX + 1) return false; // overflow
-    *out = -(s64)abs_value;
+    if (abs_value > (u64)INT64_MAX + 1) return false;
+    *out = (s64)(~abs_value + 1);
   } else {
     if (abs_value > INT64_MAX) return false; // overflow
     *out = (s64)abs_value;
@@ -6461,14 +6461,21 @@ sp_allocator_t sp_mem_os_new() {
 }
 
 bool sp_mem_is_equal(const void* a, const void* b, u64 len) {
+  if (!a) return false;
+  if (!b) return  false;
   return !sp_memcmp(a, b, len);
 }
 
 void sp_mem_copy(const void* source, void* dest, u64 num_bytes) {
+  if (!source) return;
+  if (!dest) return;
+  if (!num_bytes) return;
   sp_memcpy(dest, source, num_bytes);
 }
 
 void sp_mem_move(const void* source, void* dest, u64 num_bytes) {
+  if (!source) return;
+  if (!dest) return;
   sp_memmove(dest, source, num_bytes);
 }
 
