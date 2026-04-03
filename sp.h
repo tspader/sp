@@ -10502,7 +10502,8 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
     .mode = SP_PS_IO_MODE_CREATE
   };
   sp_ps_t ps = sp_ps_create(config);
-  return sp_ps_output(&ps);
+  if (ps.os) return sp_ps_output(&ps);
+  return (sp_ps_output_t) { .status = { .state = SP_PS_STATE_DONE, .exit_code = -1 } };
 }
 
 void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
@@ -10557,6 +10558,12 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
 
+  if (!ps || !ps->os) {
+    result.state = SP_PS_STATE_DONE;
+    result.exit_code = -1;
+    return result;
+  }
+
   s32 wait_status = 0;
   s32 wait_result = 0;
   s32 time_remaining = timeout_ms;
@@ -10602,6 +10609,12 @@ sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
 
 sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
+
+  if (!ps || !ps->os) {
+    result.state = SP_PS_STATE_DONE;
+    result.exit_code = -1;
+    return result;
+  }
 
   s32 wait_status = 0;
   s32 wait_result = 0;
@@ -11167,7 +11180,7 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
   };
   sp_ps_t ps = sp_ps_create(config);
   if (ps.os) return sp_ps_output(&ps);
-  return sp_zero_struct(sp_ps_output_t);
+  return (sp_ps_output_t) { .status = { .state = SP_PS_STATE_DONE, .exit_code = -1 } };
 }
 
 sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {

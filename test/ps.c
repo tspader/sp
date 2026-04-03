@@ -1233,4 +1233,29 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
 }
 #endif // !_WIN32
 
+UTEST_F(ps, create_nonexistent_binary) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
+    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
+  });
+  EXPECT_EQ(ps.os, SP_NULLPTR);
+}
+
+UTEST_F(ps, wait_nonexistent_binary) {
+  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
+    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
+  });
+  EXPECT_EQ(ps.os, SP_NULLPTR);
+
+  sp_ps_status_t result = sp_ps_wait(&ps);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
+  EXPECT_EQ(result.exit_code, -1);
+}
+
+UTEST_F(ps, run_nonexistent_binary) {
+  sp_ps_output_t result = sp_ps_run((sp_ps_config_t) {
+    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
+  });
+  EXPECT_EQ(result.status.exit_code, -1);
+}
+
 SP_TEST_MAIN()
