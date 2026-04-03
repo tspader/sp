@@ -2877,6 +2877,12 @@ SP_API s32  sp_atomic_s32_set(sp_atomic_s32_t* value, s32 desired);
 SP_API s32  sp_atomic_s32_add(sp_atomic_s32_t* value, s32 add);
 SP_API s32  sp_atomic_s32_get(sp_atomic_s32_t* value);
 
+typedef void* sp_atomic_ptr_t;
+
+SP_API bool  sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* desired);
+SP_API void* sp_atomic_ptr_set(sp_atomic_ptr_t* value, void* desired);
+SP_API void* sp_atomic_ptr_get(sp_atomic_ptr_t* value);
+
 
 // ███╗   ███╗██╗   ██╗████████╗███████╗██╗  ██╗
 // ████╗ ████║██║   ██║╚══██╔══╝██╔════╝╚██╗██╔╝
@@ -9716,6 +9722,57 @@ s32 sp_atomic_s32_get(sp_atomic_s32_t* value) {
     return old;
   #endif
 }
+
+bool sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* desired) {
+  #if defined(SP_MSVC)
+    return _InterlockedCompareExchangePointer(value, desired, current) == current;
+  #elif defined(SP_GNUISH)
+    return __sync_bool_compare_and_swap(value, current, desired);
+  #else
+    bool result = false;
+    size_t index = ((((size_t)value) >> 3) & 0x1f);
+    sp_spin_lock(&sp_rt.locks[index]);
+    if (*value == current) {
+      *value = desired;
+      result = true;
+    }
+    sp_spin_unlock(&sp_rt.locks[index]);
+    return result;
+  #endif
+}
+
+void* sp_atomic_ptr_set(sp_atomic_ptr_t* value, void* desired) {
+  #if defined(SP_MSVC)
+    return _InterlockedExchangePointer(value, desired);
+  #elif defined(SP_GNUISH)
+    void* old;
+    do {
+      old = *value;
+    } while (!__sync_bool_compare_and_swap(value, old, desired));
+    return old;
+  #else
+    void* old;
+    do {
+      old = *value;
+    } while (!sp_atomic_ptr_cas(value, old, desired));
+    return old;
+  #endif
+}
+
+void* sp_atomic_ptr_get(sp_atomic_ptr_t* value) {
+  #if defined(SP_MSVC)
+    return _InterlockedCompareExchangePointer(value, SP_NULLPTR, SP_NULLPTR);
+  #elif defined(SP_GNUISH)
+    return __sync_val_compare_and_swap(value, SP_NULLPTR, SP_NULLPTR);
+  #else
+    void* old;
+    do {
+      old = *value;
+    } while (!sp_atomic_ptr_cas(value, old, old));
+    return old;
+  #endif
+}
+
 // ███████╗███████╗███╗   ███╗ █████╗ ██████╗ ██╗  ██╗ ██████╗ ██████╗ ███████╗
 // ██╔════╝██╔════╝████╗ ████║██╔══██╗██╔══██╗██║  ██║██╔═══██╗██╔══██╗██╔════╝
 // ███████╗█████╗  ██╔████╔██║███████║██████╔╝███████║██║   ██║██████╔╝█████╗
