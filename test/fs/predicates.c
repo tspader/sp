@@ -8,7 +8,7 @@ typedef struct {
   bool is_symlink;
   bool is_target_regular_file;
   bool is_target_dir;
-  sp_fs_attr_t attr;
+  sp_fs_kind_t attr;
 } fs_predicate_expected_t;
 
 typedef struct {
@@ -34,12 +34,12 @@ static void run_fs_predicate_test(s32* utest_result, sp_test_file_manager_t* fm,
     sp_str_t path = sp_fs_join_path(sandbox, sp_str_view(exp->path));
 
     fs_expect_bool(utest_result, path, "exists", sp_fs_exists(path), exp->exists);
-    fs_expect_bool(utest_result, path, "is_regular_file", sp_fs_is_regular_file(path), exp->is_regular_file);
+    fs_expect_bool(utest_result, path, "is_regular_file", sp_fs_is_file(path), exp->is_regular_file);
     fs_expect_bool(utest_result, path, "is_dir", sp_fs_is_dir(path), exp->is_dir);
     fs_expect_bool(utest_result, path, "is_symlink", sp_fs_is_symlink(path), exp->is_symlink);
-    fs_expect_bool(utest_result, path, "is_target_regular_file", sp_fs_is_target_regular_file(path), exp->is_target_regular_file);
+    fs_expect_bool(utest_result, path, "is_target_regular_file", sp_fs_is_target_file(path), exp->is_target_regular_file);
     fs_expect_bool(utest_result, path, "is_target_dir", sp_fs_is_target_dir(path), exp->is_target_dir);
-    fs_expect_attr(utest_result, path, sp_fs_get_file_attrs(path), exp->attr);
+    fs_expect_attr(utest_result, path, sp_fs_get_kind(path), exp->attr);
   }
 }
 
@@ -59,32 +59,32 @@ UTEST_F(fs, predicate_matrix) {
         .exists = FS_EXPECT_EXIST,
         .is_regular_file = true,
         .is_target_regular_file = true,
-        .attr = SP_OS_FILE_ATTR_REGULAR_FILE,
+        .attr = SP_FS_KIND_FILE,
       },
       {
         .path = "dir",
         .exists = FS_EXPECT_EXIST,
         .is_dir = true,
         .is_target_dir = true,
-        .attr = SP_OS_FILE_ATTR_DIRECTORY,
+        .attr = SP_FS_KIND_DIR,
       },
       {
         .path = "file.link",
         .exists = FS_EXPECT_EXIST,
         .is_symlink = true,
         .is_target_regular_file = true,
-        .attr = SP_OS_FILE_ATTR_SYMLINK,
+        .attr = SP_FS_KIND_SYMLINK,
       },
       {
         .path = "dir.link",
         .exists = FS_EXPECT_EXIST,
         .is_symlink = true,
         .is_target_dir = true,
-        .attr = SP_OS_FILE_ATTR_SYMLINK,
+        .attr = SP_FS_KIND_SYMLINK,
       },
       {
         .path = "missing",
-        .attr = SP_OS_FILE_ATTR_NONE,
+        .attr = SP_FS_KIND_NONE,
       },
     },
   });
@@ -103,18 +103,18 @@ UTEST_F(fs, unicode_predicate_matrix) {
         .exists = FS_EXPECT_EXIST,
         .is_regular_file = true,
         .is_target_regular_file = true,
-        .attr = SP_OS_FILE_ATTR_REGULAR_FILE,
+        .attr = SP_FS_KIND_FILE,
       },
       {
         .path = "\xc3\xb1\x61\x6d\x65",
         .exists = FS_EXPECT_EXIST,
         .is_dir = true,
         .is_target_dir = true,
-        .attr = SP_OS_FILE_ATTR_DIRECTORY,
+        .attr = SP_FS_KIND_DIR,
       },
       {
         .path = "missing\xc3\xa9",
-        .attr = SP_OS_FILE_ATTR_NONE,
+        .attr = SP_FS_KIND_NONE,
       },
     },
   });

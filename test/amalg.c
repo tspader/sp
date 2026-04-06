@@ -9,19 +9,21 @@
 #include "io.c"
 #include "leak.c"
 #include "linkage.c"
+#include "math.c"
 #include "ps.c"
 #include "rb.c"
 #include "time.c"
 
 #include "utest.h"
 
-#define SP_IMPLEMENTATION
+#ifndef SP_IMPLEMENTATION
+  #define SP_IMPLEMENTATION
+#endif
 #include "sp.h"
 
-#define SP_GLOB_IMPLEMENTATION
-#include "sp/glob.h"
-
-#define SP_TEST_IMPLEMENTATION
+#ifndef SP_TEST_IMPLEMENTATION
+  #define SP_TEST_IMPLEMENTATION
+#endif
 #include "test.h"
 
 UTEST_MAIN()

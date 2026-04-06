@@ -31,7 +31,7 @@ UTEST_F(fs, remove_file_basic) {
     },
     .remove_path = "file.txt",
     .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
+      { .path = "file.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
     },
   });
 }
@@ -48,10 +48,10 @@ UTEST_F(fs, remove_dir_recursive) {
     .remove_dir = true,
     .remove_path = "tree",
     .expected = {
-      { .path = "tree", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
-      { .path = "tree/file1.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
-      { .path = "tree/sub", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
-      { .path = "tree/sub/file2.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
+      { .path = "tree", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+      { .path = "tree/file1.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+      { .path = "tree/sub", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+      { .path = "tree/sub/file2.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
     },
   });
 }
@@ -69,10 +69,10 @@ UTEST_F(fs, remove_dir_does_not_follow_symlink) {
     .remove_dir = true,
     .remove_path = "tree",
     .expected = {
-      { .path = "tree", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
-      { .path = "tree/link", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
-      { .path = "tree/file.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
-      { .path = "outside.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
+      { .path = "tree", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+      { .path = "tree/link", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+      { .path = "tree/file.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+      { .path = "outside.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
     },
   });
 }
@@ -85,7 +85,7 @@ UTEST_F(fs, unicode_remove_file) {
     },
     .remove_path = "\xc3\xb6\x70\x65\x6e.txt",
     .expected = {
-      { .path = "\xc3\xb6\x70\x65\x6e.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
+      { .path = "\xc3\xb6\x70\x65\x6e.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
     },
   });
 }
@@ -100,8 +100,8 @@ UTEST_F(fs, unicode_remove_dir) {
     .remove_dir = true,
     .remove_path = "\xc3\xa4\x62\x63",
     .expected = {
-      { .path = "\xc3\xa4\x62\x63", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
-      { .path = "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
+      { .path = "\xc3\xa4\x62\x63", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+      { .path = "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
     },
   });
 }

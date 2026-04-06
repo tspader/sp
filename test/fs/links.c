@@ -36,8 +36,8 @@ UTEST_F(fs, create_hard_link_file) {
     .link_path = "file.hard",
     .expect_ok = true,
     .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
-      { .path = "file.hard", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
+      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+      { .path = "file.hard", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
     },
   });
 
@@ -62,8 +62,8 @@ UTEST_F(fs, create_hard_link_existing_destination_fails) {
     .link_path = "dest.txt",
     .expect_ok = false,
     .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
-      { .path = "dest.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
+      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+      { .path = "dest.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
     },
   });
 }
@@ -78,8 +78,8 @@ UTEST_F(fs, create_hard_link_directory_fails) {
     .link_path = "dir.hard",
     .expect_ok = false,
     .expected = {
-      { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_DIRECTORY },
-      { .path = "dir.hard", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
+      { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
+      { .path = "dir.hard", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
     },
   });
 }
@@ -96,8 +96,8 @@ UTEST_F(fs, create_symlink_file) {
     .link_path = "file.link",
     .expect_ok = true,
     .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
-      { .path = "file.link", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_SYMLINK },
+      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+      { .path = "file.link", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_SYMLINK },
     },
   });
 
@@ -118,8 +118,8 @@ UTEST_F(fs, create_symlink_directory) {
     .link_path = "dir.link",
     .expect_ok = true,
     .expected = {
-      { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_DIRECTORY },
-      { .path = "dir.link", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_SYMLINK },
+      { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
+      { .path = "dir.link", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_SYMLINK },
     },
   });
 }
@@ -137,8 +137,8 @@ UTEST_F(fs, create_symlink_existing_destination_fails) {
     .link_path = "dest.txt",
     .expect_ok = false,
     .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
-      { .path = "dest.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
+      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+      { .path = "dest.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
     },
   });
 }

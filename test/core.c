@@ -4,8 +4,6 @@
 
 #include "utest.h"
 
-#include <math.h>
-
 
 SP_TEST_MAIN()
 
@@ -354,10 +352,10 @@ UTEST_F(sp_os_create_directory_fixture, path_exists_as_file) {
 
   sp_fs_create_file(file);
   ASSERT_TRUE(sp_fs_exists(file));
-  ASSERT_TRUE(sp_fs_is_regular_file(file));
+  ASSERT_TRUE(sp_fs_is_file(file));
 
   sp_fs_create_dir(file);
-  ASSERT_TRUE(sp_fs_is_regular_file(file));
+  ASSERT_TRUE(sp_fs_is_file(file));
   ASSERT_FALSE(sp_fs_is_dir(file));
 
   sp_fs_remove_file(file);
@@ -1698,10 +1696,10 @@ UTEST(sp_fs_collect, basic_scan) {
 
   sp_dyn_array_for(entries, i) {
     sp_fs_entry_t* entry = &entries[i];
-    if (entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE) {
+    if (entry->kind == SP_FS_KIND_FILE) {
       file_count++;
     }
-    if (entry->attributes & SP_OS_FILE_ATTR_DIRECTORY) {
+    if (entry->kind == SP_FS_KIND_DIR) {
       dir_count++;
     }
   }
@@ -1771,14 +1769,14 @@ UTEST(sp_fs_collect, file_attributes) {
     sp_fs_entry_t* entry = &entries[i];
 
     if (sp_str_equal_cstr(entry->file_name, "test.txt")) {
-      ASSERT_TRUE(entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE);
-      ASSERT_FALSE(entry->attributes & SP_OS_FILE_ATTR_DIRECTORY);
+      ASSERT_TRUE(entry->kind == SP_FS_KIND_FILE);
+      ASSERT_FALSE(entry->kind == SP_FS_KIND_DIR);
       found_file = true;
     }
 
     if (sp_str_equal_cstr(entry->file_name, "testdir")) {
-      ASSERT_TRUE(entry->attributes & SP_OS_FILE_ATTR_DIRECTORY);
-      ASSERT_FALSE(entry->attributes & SP_OS_FILE_ATTR_REGULAR_FILE);
+      ASSERT_TRUE(entry->kind == SP_FS_KIND_DIR);
+      ASSERT_FALSE(entry->kind == SP_FS_KIND_FILE);
       found_dir = true;
     }
   }
@@ -1844,25 +1842,25 @@ UTEST(sp_fs_collect, file_path_correctness) {
   sp_test_build_scan_directory();
 }
 
-UTEST(sp_fs_get_file_attrs_ex, basic_functionality) {
+UTEST(sp_fs_get_kind_ex, basic_functionality) {
   sp_str_t base = sp_test_build_scan_directory();
 
   // test regular file - verify ONLY file flag is set
   sp_str_t file1 = sp_fs_join_path(base, SP_LIT("test_file.txt"));
   sp_fs_create_file(file1);
-  sp_fs_attr_t file_attr = sp_fs_get_file_attrs(file1);
-  ASSERT_EQ(file_attr, SP_OS_FILE_ATTR_REGULAR_FILE);
+  sp_fs_kind_t file_attr = sp_fs_get_kind(file1);
+  ASSERT_EQ(file_attr, SP_FS_KIND_FILE);
 
   // test directory - verify ONLY directory flag is set
   sp_str_t dir1 = sp_fs_join_path(base, SP_LIT("test_dir"));
   sp_fs_create_dir(dir1);
-  sp_fs_attr_t dir_attr = sp_fs_get_file_attrs(dir1);
-  ASSERT_EQ(dir_attr, SP_OS_FILE_ATTR_DIRECTORY);
+  sp_fs_kind_t dir_attr = sp_fs_get_kind(dir1);
+  ASSERT_EQ(dir_attr, SP_FS_KIND_DIR);
 
   // test non-existent path
   sp_str_t non_existent = sp_fs_join_path(base, SP_LIT("does_not_exist"));
-  sp_fs_attr_t none_attr = sp_fs_get_file_attrs(non_existent);
-  ASSERT_EQ(none_attr, SP_OS_FILE_ATTR_NONE);
+  sp_fs_kind_t none_attr = sp_fs_get_kind(non_existent);
+  ASSERT_EQ(none_attr, SP_FS_KIND_NONE);
 
   // verify consistency with sp_fs_collect
   sp_da(sp_fs_entry_t) entries = sp_fs_collect(base);
@@ -1870,35 +1868,35 @@ UTEST(sp_fs_get_file_attrs_ex, basic_functionality) {
 
   sp_dyn_array_for(entries, i) {
     sp_fs_entry_t* entry = &entries[i];
-    sp_fs_attr_t direct_attr = sp_fs_get_file_attrs(entry->file_path);
-    ASSERT_EQ(entry->attributes, direct_attr);
+    sp_fs_kind_t direct_attr = sp_fs_get_kind(entry->file_path);
+    ASSERT_EQ(entry->kind, direct_attr);
   }
 
   sp_test_build_scan_directory();
 }
 
-UTEST(sp_fs_get_file_attrs_ex, path_edge_cases) {
+UTEST(sp_fs_get_kind_ex, path_edge_cases) {
 
   sp_str_t base = sp_test_build_scan_directory();
 
   // empty path
-  sp_fs_attr_t empty_attr = sp_fs_get_file_attrs(SP_LIT(""));
-  ASSERT_EQ(empty_attr, SP_OS_FILE_ATTR_NONE);
+  sp_fs_kind_t empty_attr = sp_fs_get_kind(SP_LIT(""));
+  ASSERT_EQ(empty_attr, SP_FS_KIND_NONE);
 
   // null-like sp_str_t
   sp_str_t null_str = SP_ZERO_STRUCT(sp_str_t);
   null_str.data = SP_NULLPTR;
   null_str.len = 0;
-  sp_fs_attr_t null_attr = sp_fs_get_file_attrs(null_str);
-  ASSERT_EQ(null_attr, SP_OS_FILE_ATTR_NONE);
+  sp_fs_kind_t null_attr = sp_fs_get_kind(null_str);
+  ASSERT_EQ(null_attr, SP_FS_KIND_NONE);
 
   // current directory
-  sp_fs_attr_t dot_attr = sp_fs_get_file_attrs(SP_LIT("."));
-  ASSERT_EQ(dot_attr, SP_OS_FILE_ATTR_DIRECTORY);
+  sp_fs_kind_t dot_attr = sp_fs_get_kind(SP_LIT("."));
+  ASSERT_EQ(dot_attr, SP_FS_KIND_DIR);
 
   // parent directory
-  sp_fs_attr_t dotdot_attr = sp_fs_get_file_attrs(SP_LIT(".."));
-  ASSERT_EQ(dotdot_attr, SP_OS_FILE_ATTR_DIRECTORY);
+  sp_fs_kind_t dotdot_attr = sp_fs_get_kind(SP_LIT(".."));
+  ASSERT_EQ(dotdot_attr, SP_FS_KIND_DIR);
 
   // path with trailing slash (directory)
   sp_str_t dir_trail = sp_fs_join_path(base, SP_LIT("testdir"));
@@ -1907,16 +1905,16 @@ UTEST(sp_fs_get_file_attrs_ex, path_edge_cases) {
   sp_str_builder_append(&slash_builder, dir_trail);
   sp_str_builder_append(&slash_builder, SP_LIT("/"));
   sp_str_t dir_with_slash = sp_str_builder_to_str(&slash_builder);
-  sp_fs_attr_t trail_attr = sp_fs_get_file_attrs(dir_with_slash);
-  ASSERT_EQ(trail_attr, SP_OS_FILE_ATTR_DIRECTORY);
+  sp_fs_kind_t trail_attr = sp_fs_get_kind(dir_with_slash);
+  ASSERT_EQ(trail_attr, SP_FS_KIND_DIR);
 
   // path with double slashes
   sp_str_builder_t double_builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&double_builder, base);
   sp_str_builder_append(&double_builder, SP_LIT("//testdir"));
   sp_str_t double_slash = sp_str_builder_to_str(&double_builder);
-  sp_fs_attr_t double_attr = sp_fs_get_file_attrs(double_slash);
-  ASSERT_EQ(double_attr, SP_OS_FILE_ATTR_DIRECTORY);
+  sp_fs_kind_t double_attr = sp_fs_get_kind(double_slash);
+  ASSERT_EQ(double_attr, SP_FS_KIND_DIR);
 
   // test very long file name
   // sp_str_builder_t long_name = SP_ZERO_INITIALIZE();
@@ -1928,26 +1926,26 @@ UTEST(sp_fs_get_file_attrs_ex, path_edge_cases) {
   // sp_str_builder_append(&long_name, SP_LIT(".txt"));
   // sp_str_t long_path = sp_str_builder_to_str(&long_name);
   // sp_fs_create_file(long_path);
-  // sp_fs_attr_t long_attr = sp_fs_get_file_attrs(long_path);
-  // ASSERT_EQ(long_attr, SP_OS_FILE_ATTR_REGULAR_FILE);
+  // sp_fs_kind_t long_attr = sp_fs_get_kind(long_path);
+  // ASSERT_EQ(long_attr, SP_FS_KIND_FILE);
 
   sp_test_build_scan_directory();
 }
 
-UTEST(sp_fs_get_file_attrs_ex, special_names_and_nesting) {
+UTEST(sp_fs_get_kind_ex, special_names_and_nesting) {
 
   sp_str_t base = sp_test_build_scan_directory();
 
   // test with spaces in names
   sp_str_t space_file = sp_fs_join_path(base, SP_LIT("file with spaces.txt"));
   sp_fs_create_file(space_file);
-  sp_fs_attr_t space_attr = sp_fs_get_file_attrs(space_file);
-  ASSERT_EQ(space_attr, SP_OS_FILE_ATTR_REGULAR_FILE);
+  sp_fs_kind_t space_attr = sp_fs_get_kind(space_file);
+  ASSERT_EQ(space_attr, SP_FS_KIND_FILE);
 
   sp_str_t space_dir = sp_fs_join_path(base, SP_LIT("dir with spaces"));
   sp_fs_create_dir(space_dir);
-  sp_fs_attr_t space_dir_attr = sp_fs_get_file_attrs(space_dir);
-  ASSERT_EQ(space_dir_attr, SP_OS_FILE_ATTR_DIRECTORY);
+  sp_fs_kind_t space_dir_attr = sp_fs_get_kind(space_dir);
+  ASSERT_EQ(space_dir_attr, SP_FS_KIND_DIR);
 
   // test deeply nested paths
   sp_str_t level1 = sp_fs_join_path(base, SP_LIT("level1"));
@@ -1959,17 +1957,17 @@ UTEST(sp_fs_get_file_attrs_ex, special_names_and_nesting) {
   sp_str_t deep_file = sp_fs_join_path(level3, SP_LIT("deep.txt"));
   sp_fs_create_file(deep_file);
 
-  ASSERT_EQ(sp_fs_get_file_attrs(level1), SP_OS_FILE_ATTR_DIRECTORY);
-  ASSERT_EQ(sp_fs_get_file_attrs(level2), SP_OS_FILE_ATTR_DIRECTORY);
-  ASSERT_EQ(sp_fs_get_file_attrs(level3), SP_OS_FILE_ATTR_DIRECTORY);
-  ASSERT_EQ(sp_fs_get_file_attrs(deep_file), SP_OS_FILE_ATTR_REGULAR_FILE);
+  ASSERT_EQ(sp_fs_get_kind(level1), SP_FS_KIND_DIR);
+  ASSERT_EQ(sp_fs_get_kind(level2), SP_FS_KIND_DIR);
+  ASSERT_EQ(sp_fs_get_kind(level3), SP_FS_KIND_DIR);
+  ASSERT_EQ(sp_fs_get_kind(deep_file), SP_FS_KIND_FILE);
 
   // test file deleted after creation (race condition)
   sp_str_t temp_file = sp_fs_join_path(base, SP_LIT("temp.txt"));
   sp_fs_create_file(temp_file);
   sp_fs_remove_file(temp_file);
-  sp_fs_attr_t deleted_attr = sp_fs_get_file_attrs(temp_file);
-  ASSERT_EQ(deleted_attr, SP_OS_FILE_ATTR_NONE);
+  sp_fs_kind_t deleted_attr = sp_fs_get_kind(temp_file);
+  ASSERT_EQ(deleted_attr, SP_FS_KIND_NONE);
 
   sp_test_build_scan_directory();
 }
@@ -2380,88 +2378,6 @@ UTEST(sp_os_get_cwd, smoke_test) {
   sp_str_t cwd = sp_fs_get_cwd();
   ASSERT_TRUE(sp_str_valid(cwd));
   ASSERT_TRUE(sp_fs_is_dir(cwd));
-}
-
-UTEST(math, color_conversion) {
-  typedef struct {
-    sp_color_t rgb;
-    sp_color_t hsv;
-  } color_conversion_t;
-
-  f32 eps = 1e-3f;
-
-  color_conversion_t colors [] = {
-    { .rgb = SP_COLOR_RGB(255, 0, 0),     .hsv = SP_COLOR_HSV(0, 100, 100) },     // red
-    { .rgb = SP_COLOR_RGB(255, 187, 0),   .hsv = SP_COLOR_HSV(44, 100, 100) },    // orange
-    { .rgb = SP_COLOR_RGB(0, 255, 0),     .hsv = SP_COLOR_HSV(120, 100, 100) },   // green
-    { .rgb = SP_COLOR_RGB(0, 0, 255),     .hsv = SP_COLOR_HSV(240, 100, 100) },   // blue
-    { .rgb = SP_COLOR_RGB(0, 0, 0),       .hsv = SP_COLOR_HSV(0, 0, 0) },         // black
-    { .rgb = SP_COLOR_RGB(255, 255, 255), .hsv = SP_COLOR_HSV(0, 0, 100) },       // white
-    { .rgb = SP_COLOR_RGB(128, 128, 128), .hsv = SP_COLOR_HSV(0, 0, 50.196f) },   // gray
-    // saturation/hue adjustment test series (same V=83.1373%)
-    { .rgb = SP_COLOR_RGB(29, 19, 212),   .hsv = SP_COLOR_HSV(243.1088f, 91.0377f, 83.1373f) },  // saturated blue
-    { .rgb = SP_COLOR_RGB(190, 190, 212), .hsv = SP_COLOR_HSV(240.0f, 10.3774f, 83.1373f) },     // desaturated blue
-    { .rgb = SP_COLOR_RGB(141, 212, 106), .hsv = SP_COLOR_HSV(100.1887f, 50.0f, 83.1373f) },     // hue shift to green
-  };
-
-  // rgb -> hsv
-  sp_carr_for(colors, it) {
-    sp_color_t hsv = sp_color_rgb_to_hsv(colors[it].rgb);
-    // hue wrap-aware comparison
-    f32 h_diff = fabsf(hsv.h - colors[it].hsv.h);
-    h_diff = SP_MIN(h_diff, 360.0f - h_diff);
-    EXPECT_LT(h_diff, eps);
-    EXPECT_LT(fabsf(hsv.s - colors[it].hsv.s), eps);
-    EXPECT_LT(fabsf(hsv.v - colors[it].hsv.v), eps);
-  }
-
-  // hsv -> rgb
-  sp_carr_for(colors, it) {
-    sp_color_t rgb = sp_color_hsv_to_rgb(colors[it].hsv);
-    EXPECT_LT(fabsf(rgb.r - colors[it].rgb.r), eps);
-    EXPECT_LT(fabsf(rgb.g - colors[it].rgb.g), eps);
-    EXPECT_LT(fabsf(rgb.b - colors[it].rgb.b), eps);
-  }
-
-  // roundtrip: rgb -> hsv -> rgb
-  sp_carr_for(colors, it) {
-    sp_color_t hsv = sp_color_rgb_to_hsv(colors[it].rgb);
-    sp_color_t rgb = sp_color_hsv_to_rgb(hsv);
-    EXPECT_LT(fabsf(rgb.r - colors[it].rgb.r), eps);
-    EXPECT_LT(fabsf(rgb.g - colors[it].rgb.g), eps);
-    EXPECT_LT(fabsf(rgb.b - colors[it].rgb.b), eps);
-  }
-
-  // sector boundary tests (H = 0, 60, 120, 180, 240, 300)
-  color_conversion_t boundaries[] = {
-    { .rgb = { .r = 1.0f, .g = 0.5f, .b = 0.0f }, .hsv = SP_COLOR_HSV(30, 100, 100) },   // sector 0/1
-    { .rgb = { .r = 0.5f, .g = 1.0f, .b = 0.0f }, .hsv = SP_COLOR_HSV(90, 100, 100) },   // sector 1/2
-    { .rgb = { .r = 0.0f, .g = 1.0f, .b = 0.5f }, .hsv = SP_COLOR_HSV(150, 100, 100) },  // sector 2/3
-    { .rgb = { .r = 0.0f, .g = 0.5f, .b = 1.0f }, .hsv = SP_COLOR_HSV(210, 100, 100) },  // sector 3/4
-    { .rgb = { .r = 0.5f, .g = 0.0f, .b = 1.0f }, .hsv = SP_COLOR_HSV(270, 100, 100) },  // sector 4/5
-    { .rgb = { .r = 1.0f, .g = 0.0f, .b = 0.5f }, .hsv = SP_COLOR_HSV(330, 100, 100) },  // sector 5/0
-  };
-
-  sp_carr_for(boundaries, it) {
-    sp_color_t hsv = sp_color_rgb_to_hsv(boundaries[it].rgb);
-    f32 h_diff = fabsf(hsv.h - boundaries[it].hsv.h);
-    h_diff = SP_MIN(h_diff, 360.0f - h_diff);
-    EXPECT_LT(h_diff, eps);
-    EXPECT_LT(fabsf(hsv.s - boundaries[it].hsv.s), eps);
-    EXPECT_LT(fabsf(hsv.v - boundaries[it].hsv.v), eps);
-
-    sp_color_t rgb = sp_color_hsv_to_rgb(boundaries[it].hsv);
-    EXPECT_LT(fabsf(rgb.r - boundaries[it].rgb.r), eps);
-    EXPECT_LT(fabsf(rgb.g - boundaries[it].rgb.g), eps);
-    EXPECT_LT(fabsf(rgb.b - boundaries[it].rgb.b), eps);
-  }
-
-  // hsv with H=360 should equal H=0
-  sp_color_t rgb360 = sp_color_hsv_to_rgb((sp_color_t)SP_COLOR_HSV(360, 100, 100));
-  sp_color_t rgb0 = sp_color_hsv_to_rgb((sp_color_t)SP_COLOR_HSV(0, 100, 100));
-  EXPECT_LT(fabsf(rgb360.r - rgb0.r), eps);
-  EXPECT_LT(fabsf(rgb360.g - rgb0.g), eps);
-  EXPECT_LT(fabsf(rgb360.b - rgb0.b), eps);
 }
 
 

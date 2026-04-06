@@ -9,7 +9,7 @@ typedef enum {
 typedef struct {
   const c8* path;
   bool exists;
-  sp_fs_attr_t attr;
+  sp_fs_kind_t attr;
   const c8* content;
 } copy_expect_t;
 
@@ -45,7 +45,7 @@ static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_te
     fs_expect_bool(utest_result, path, "exists", exists, exp->exists);
 
     if (exp->exists && exists) {
-      fs_expect_attr(utest_result, path, sp_fs_get_file_attrs(path), exp->attr);
+      fs_expect_attr(utest_result, path, sp_fs_get_kind(path), exp->attr);
       if (exp->content) {
         SP_EXPECT_STR_EQ(sp_io_read_file(path), sp_str_view(exp->content));
       }
@@ -63,8 +63,8 @@ UTEST_F(fs, copy_file_basic) {
     .src = "source.txt",
     .dst = "dest.txt",
     .expect = {
-      { .path = "source.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "hello world" },
-      { .path = "dest.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "hello world" },
+      { .path = "source.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "hello world" },
+      { .path = "dest.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "hello world" },
     },
   });
 }
@@ -79,8 +79,8 @@ UTEST_F(fs, copy_file_via_link) {
     .src = "source.txt",
     .dst = "copy.txt",
     .expect = {
-      { .path = "source.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "test content" },
-      { .path = "copy.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "test content" },
+      { .path = "source.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "test content" },
+      { .path = "copy.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "test content" },
     },
   });
 }
@@ -98,9 +98,9 @@ UTEST_F(fs, copy_dir_basic) {
     .src = "src",
     .dst = "dst",
     .expect = {
-      { .path = "dst/src", .exists = true, .attr = SP_OS_FILE_ATTR_DIRECTORY },
-      { .path = "dst/src/a.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "aaa" },
-      { .path = "dst/src/b.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "bbb" },
+      { .path = "dst/src", .exists = true, .attr = SP_FS_KIND_DIR },
+      { .path = "dst/src/a.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "aaa" },
+      { .path = "dst/src/b.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "bbb" },
     },
   });
 }
@@ -119,10 +119,10 @@ UTEST_F(fs, copy_dir_nested) {
     .src = "src",
     .dst = "dst",
     .expect = {
-      { .path = "dst/src", .exists = true, .attr = SP_OS_FILE_ATTR_DIRECTORY },
-      { .path = "dst/src/a.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "top" },
-      { .path = "dst/src/sub", .exists = true, .attr = SP_OS_FILE_ATTR_DIRECTORY },
-      { .path = "dst/src/sub/b.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "deep" },
+      { .path = "dst/src", .exists = true, .attr = SP_FS_KIND_DIR },
+      { .path = "dst/src/a.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "top" },
+      { .path = "dst/src/sub", .exists = true, .attr = SP_FS_KIND_DIR },
+      { .path = "dst/src/sub/b.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "deep" },
     },
   });
 }
@@ -138,7 +138,7 @@ UTEST_F(fs, copy_dir_with_nonalphanumeric) {
     .src = "foo.bar",
     .dst = "baz",
     .expect = {
-      { .path = "baz/foo.bar", .exists = true, .attr = SP_OS_FILE_ATTR_DIRECTORY },
+      { .path = "baz/foo.bar", .exists = true, .attr = SP_FS_KIND_DIR },
     },
   });
 }
@@ -153,8 +153,8 @@ UTEST_F(fs, unicode_copy_file) {
     .src = "\xc3\xb6riginal.txt",
     .dst = "\xc3\xbc\x63opy.txt",
     .expect = {
-      { .path = "\xc3\xb6riginal.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "hello" },
-      { .path = "\xc3\xbc\x63opy.txt", .exists = true, .attr = SP_OS_FILE_ATTR_REGULAR_FILE, .content = "hello" },
+      { .path = "\xc3\xb6riginal.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "hello" },
+      { .path = "\xc3\xbc\x63opy.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "hello" },
     },
   });
 }
@@ -174,7 +174,7 @@ UTEST_F(fs, copy_preserves_file_attributes) {
 
   sp_str_t copy_file = sp_test_file_path(&ut.file_manager, SP_LIT("copy_attrs.txt"));
   ASSERT_EQ(sp_fs_copy(source_file, copy_file), SP_OK);
-  ASSERT_TRUE(sp_fs_is_regular_file(copy_file));
+  ASSERT_TRUE(sp_fs_is_file(copy_file));
 
   struct stat copy_stat = {0};
   ASSERT_EQ(stat(sp_str_to_cstr(copy_file), &copy_stat), 0);

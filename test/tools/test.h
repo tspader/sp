@@ -122,7 +122,7 @@ static sp_str_t sp_test_file_manager_top_level = SP_ZERO_INITIALIZE();
 
 static sp_str_t sp_test_file_manager_get_repo_root() {
   sp_str_t path = sp_fs_get_exe_path();
-  if (sp_fs_exists(path) && sp_fs_is_regular_file(path)) {
+  if (sp_fs_exists(path) && sp_fs_is_file(path)) {
     path = sp_fs_parent_path(path);
   }
 

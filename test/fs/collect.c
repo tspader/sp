@@ -16,7 +16,7 @@ typedef struct {
 
 typedef struct {
   const c8* name;
-  sp_fs_attr_t attr;
+  sp_fs_kind_t attr;
 } collect_expect_t;
 
 typedef struct {
@@ -97,7 +97,7 @@ static void run_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, col
     sp_da_for(results, n) {
       sp_fs_entry_t entry = results[n];
       if (sp_str_equal(entry.file_path, expected_path)) {
-        EXPECT_EQ(entry.attributes, exp.attr);
+        EXPECT_EQ(entry.kind, exp.attr);
         found = true;
         break;
       }
@@ -136,7 +136,7 @@ UTEST_F(fs_collect, single_file) {
       { "hello.txt", COLLECT_ENT_FILE },
     },
     .expect = {
-      { "hello.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "hello.txt", SP_FS_KIND_FILE },
     },
   });
 }
@@ -150,9 +150,9 @@ UTEST_F(fs_collect, multiple_files) {
       { "c.txt", COLLECT_ENT_FILE },
     },
     .expect = {
-      { "a.c", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "b.h", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "c.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "a.c", SP_FS_KIND_FILE },
+      { "b.h", SP_FS_KIND_FILE },
+      { "c.txt", SP_FS_KIND_FILE },
     },
   });
 }
@@ -164,7 +164,7 @@ UTEST_F(fs_collect, subdirectory) {
       { "child", COLLECT_ENT_DIR },
     },
     .expect = {
-      { "child", SP_OS_FILE_ATTR_DIRECTORY },
+      { "child", SP_FS_KIND_DIR },
     },
   });
 }
@@ -179,9 +179,9 @@ UTEST_F(fs_collect, mixed_types) {
       { "link", COLLECT_ENT_SYMLINK, "file.txt" },
     },
     .expect = {
-      { "file.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "subdir", SP_OS_FILE_ATTR_DIRECTORY },
-      { "link", SP_OS_FILE_ATTR_SYMLINK },
+      { "file.txt", SP_FS_KIND_FILE },
+      { "subdir", SP_FS_KIND_DIR },
+      { "link", SP_FS_KIND_SYMLINK },
     },
   });
 }
@@ -194,8 +194,8 @@ UTEST_F(fs_collect, hidden_file) {
       { "visible.txt", COLLECT_ENT_FILE },
     },
     .expect = {
-      { ".gitignore", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "visible.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { ".gitignore", SP_FS_KIND_FILE },
+      { "visible.txt", SP_FS_KIND_FILE },
     },
   });
 }
@@ -209,8 +209,8 @@ UTEST_F(fs_collect, does_not_recurse) {
       { "top.txt", COLLECT_ENT_FILE },
     },
     .expect = {
-      { "child", SP_OS_FILE_ATTR_DIRECTORY },
-      { "top.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "child", SP_FS_KIND_DIR },
+      { "top.txt", SP_FS_KIND_FILE },
     },
   });
 }
@@ -232,9 +232,9 @@ UTEST_F(fs_collect, recursive_flat_dir) {
       { "c.txt", COLLECT_ENT_FILE },
     },
     .expect = {
-      { "a.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "b.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "c.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "a.txt", SP_FS_KIND_FILE },
+      { "b.txt", SP_FS_KIND_FILE },
+      { "c.txt", SP_FS_KIND_FILE },
     },
   });
 }
@@ -251,11 +251,11 @@ UTEST_F(fs_collect, recursive_nested_dirs) {
       { "sub/deep/c.txt", COLLECT_ENT_FILE },
     },
     .expect = {
-      { "a.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "sub", SP_OS_FILE_ATTR_DIRECTORY },
-      { "sub/b.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "sub/deep", SP_OS_FILE_ATTR_DIRECTORY },
-      { "sub/deep/c.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
+      { "a.txt", SP_FS_KIND_FILE },
+      { "sub", SP_FS_KIND_DIR },
+      { "sub/b.txt", SP_FS_KIND_FILE },
+      { "sub/deep", SP_FS_KIND_DIR },
+      { "sub/deep/c.txt", SP_FS_KIND_FILE },
     },
   });
 }
@@ -271,9 +271,9 @@ UTEST_F(fs_collect, recursive_symlink_not_followed) {
       { "link", COLLECT_ENT_SYMLINK, "real_dir" },
     },
     .expect = {
-      { "real_dir", SP_OS_FILE_ATTR_DIRECTORY },
-      { "real_dir/file.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "link", SP_OS_FILE_ATTR_SYMLINK },
+      { "real_dir", SP_FS_KIND_DIR },
+      { "real_dir/file.txt", SP_FS_KIND_FILE },
+      { "link", SP_FS_KIND_SYMLINK },
     },
   });
 }
@@ -304,8 +304,8 @@ UTEST_F(fs_collect, unicode_entries) {
       { "\xc3\xbc\x6e\x69", COLLECT_ENT_DIR },
     },
     .expect = {
-      { "\xc3\xb1\x61\x6d\x65.txt", SP_OS_FILE_ATTR_REGULAR_FILE },
-      { "\xc3\xbc\x6e\x69", SP_OS_FILE_ATTR_DIRECTORY },
+      { "\xc3\xb1\x61\x6d\x65.txt", SP_FS_KIND_FILE },
+      { "\xc3\xbc\x6e\x69", SP_FS_KIND_DIR },
     },
   });
 }

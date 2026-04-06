@@ -1,3 +1,4 @@
+#define SP_GLOB_IMPLEMENTATION
 #include "sp/glob.h"
 #include "test.h"
 

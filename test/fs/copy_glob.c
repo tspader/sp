@@ -28,8 +28,8 @@ UTEST_F(fs, copy_glob_star) {
     },
     .glob = "*",
     .expect = {
-      { .path = "a.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
-      { .path = "b.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
+      { .path = "a.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+      { .path = "b.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
     },
   });
 }
@@ -43,7 +43,7 @@ UTEST_F(fs, copy_glob_exact_name) {
     },
     .glob = "a.txt",
     .expect = {
-      { .path = "a.txt", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
+      { .path = "a.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
       { .path = "b.txt", .exists = FS_EXPECT_NOT_EXIST },
     },
   });

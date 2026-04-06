@@ -18,7 +18,7 @@ typedef struct {
 typedef struct {
   const c8* path;
   bool exists;
-  sp_fs_attr_t attr;
+  sp_fs_kind_t attr;
 } create_dir_expected_ent_t;
 
 typedef struct {
@@ -102,7 +102,7 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
     }
 
     if (exp->exists) {
-      sp_fs_attr_t attr = sp_fs_get_file_attrs(expected_path);
+      sp_fs_kind_t attr = sp_fs_get_kind(expected_path);
       if (attr != exp->attr) {
         SP_TEST_REPORT(
           "{} had attr {} but expected {}",
@@ -124,7 +124,7 @@ UTEST_F(fs_create_dir, existing_directory) {
       { .path = "dir1", .kind = CREATE_DIR_ENT_DIR },
     },
     .expected = {
-      { .path = "dir1", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_DIRECTORY },
+      { .path = "dir1", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
     },
     .expect_ok = true,
   });
@@ -135,7 +135,7 @@ UTEST_F(fs_create_dir, create_one_level) {
     .label = "create_one_level",
     .target = "dir1",
     .expected = {
-      { .path = "dir1", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_DIRECTORY },
+      { .path = "dir1", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
     },
     .expect_ok = true,
   });
@@ -146,8 +146,8 @@ UTEST_F(fs_create_dir, create_multi_level) {
     .label = "create_multi_level",
     .target = "dir1/dir2",
     .expected = {
-      { .path = "dir1", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_DIRECTORY },
-      { .path = "dir1/dir2", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_DIRECTORY },
+      { .path = "dir1", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
+      { .path = "dir1/dir2", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
     },
     .expect_ok = true,
   });
@@ -161,7 +161,7 @@ UTEST_F(fs_create_dir, destination_is_file) {
       { .path = "file", .kind = CREATE_DIR_ENT_FILE },
     },
     .expected = {
-      { .path = "file", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
+      { .path = "file", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
     },
     .expect_ok = false,
   });
@@ -175,8 +175,8 @@ UTEST_F(fs_create_dir, destination_parent_is_file) {
       { .path = "file", .kind = CREATE_DIR_ENT_FILE },
     },
     .expected = {
-      { .path = "file", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
-      { .path = "file/dir1", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_OS_FILE_ATTR_NONE },
+      { .path = "file", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+      { .path = "file/dir1", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
     },
     .expect_ok = false,
   });
@@ -193,8 +193,8 @@ UTEST_F(fs_create_dir, destination_is_symlink_to_directory) {
       { .path = "sym_name", .kind = CREATE_DIR_ENT_SYMLINK, .symlink_target = "dir" },
     },
     .expected = {
-      { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_DIRECTORY },
-      { .path = "sym_name", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_SYMLINK },
+      { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
+      { .path = "sym_name", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_SYMLINK },
     },
     .expect_ok = false,
   });
@@ -210,8 +210,8 @@ UTEST_F(fs_create_dir, destination_is_symlink_to_file) {
       { .path = "sym_name", .kind = CREATE_DIR_ENT_SYMLINK, .symlink_target = "file" },
     },
     .expected = {
-      { .path = "file", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_REGULAR_FILE },
-      { .path = "sym_name", .exists = FS_EXPECT_EXIST, .attr = SP_OS_FILE_ATTR_SYMLINK },
+      { .path = "file", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+      { .path = "sym_name", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_SYMLINK },
     },
     .expect_ok = false,
   });

@@ -8,7 +8,7 @@ EXAMPLE_DIR = build/example
 TEST_DIR = build/test
 
 CFLAGS_TEST = -std=c99 -g -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -Werror=return-type
-INCLUDES_TEST = -I. -Itools -Itest/tools -Itest/tools/process -Isp
+INCLUDES_TEST = -I. -Itools -Itest/tools -Itest/tools/process
 LDFLAGS_TEST = -lm
 
 TEST_NAMES = app asset context core cv elf fmon fs glob ht io leak linkage ps rb str time mem amalg prompt
@@ -50,9 +50,6 @@ $(TEST_DIR)/%: test/%.c sp.h | $(TEST_DIR)
 
 $(TEST_DIR)/fs: test/fs.c sp.h | $(TEST_DIR)
 	$(CC) $(CFLAGS_TEST) $(INCLUDES_TEST) -Itest/fs $(LDFLAGS_TEST) -o $@ $<
-
-$(TEST_DIR)/glob: test/glob.c sp.h | $(TEST_DIR)
-	$(CC) $(CFLAGS_TEST) -DSP_GLOB_IMPLEMENTATION $(INCLUDES_TEST) $(LDFLAGS_TEST) -o $@ $<
 
 $(TEST_DIR)/ps: test/ps.c sp.h | $(TEST_DIR) $(TEST_DIR)/process
 

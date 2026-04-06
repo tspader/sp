@@ -69,7 +69,7 @@ typedef struct {
 typedef struct {
   const c8* path;
   bool exists;
-  sp_fs_attr_t attr;
+  sp_fs_kind_t attr;
 } fs_expected_path_t;
 
 static u32 fs_count_setup(fs_setup_t* setup) {
@@ -97,7 +97,7 @@ static void fs_expect_bool(s32* utest_result, sp_str_t path, const c8* label, bo
   SP_FAIL();
 }
 
-static void fs_expect_attr(s32* utest_result, sp_str_t path, sp_fs_attr_t actual, sp_fs_attr_t expected) {
+static void fs_expect_attr(s32* utest_result, sp_str_t path, sp_fs_kind_t actual, sp_fs_kind_t expected) {
   if (actual == expected) return;
 
   SP_TEST_REPORT(
@@ -125,7 +125,7 @@ static void fs_expect_paths(s32* utest_result, sp_str_t sandbox, fs_expected_pat
     }
 
     if (exp->exists) {
-      fs_expect_attr(utest_result, path, sp_fs_get_file_attrs(path), exp->attr);
+      fs_expect_attr(utest_result, path, sp_fs_get_kind(path), exp->attr);
     }
   }
 }
