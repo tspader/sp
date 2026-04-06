@@ -5802,8 +5802,8 @@ sp_allocator_t sp_mem_os_new() {
 }
 
 bool sp_mem_is_equal(const void* a, const void* b, u64 len) {
-  if (!a) return false;
-  if (!b) return  false;
+  if (!len) return true;
+  if (!a || !b) return false;
   return !sp_memcmp(a, b, len);
 }
 
@@ -7211,11 +7211,11 @@ bool sp_fs_is_dir(sp_str_t path) {
 }
 
 bool sp_fs_is_target_file(sp_str_t path) {
-  return sp_os_get_file_attrs(path) == SP_FS_KIND_FILE;
+  return sp_os_get_target_attrs(path) == SP_FS_KIND_FILE;
 }
 
 bool sp_fs_is_target_dir(sp_str_t path) {
-  return sp_os_get_file_attrs(path) == SP_FS_KIND_DIR;
+  return sp_os_get_target_attrs(path) == SP_FS_KIND_DIR;
 }
 
 bool sp_fs_is_root(sp_str_t path) {
