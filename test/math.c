@@ -1,5 +1,5 @@
 #define SP_MATH_IMPLEMENTATION
-#include "sp/math.h"
+#include "sp/sp_math.h"
 
 #include "test.h"
 #include "utest.h"

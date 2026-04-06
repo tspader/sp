@@ -1,10 +1,8 @@
-#include "sp/elf.h"
+#include "sp/sp_elf.h"
 #include "test.h"
 #include "utest.h"
 
 SP_TEST_MAIN()
-
-#if defined(SP_ELF)
 
 struct elf {
   sp_test_file_manager_t file_manager;
@@ -205,7 +203,7 @@ UTEST_F(elf, rela_shlink) {
 
 UTEST_F(elf, rela_shinfo) {
   sp_elf_t* elf = sp_elf_new_with_null_section();
-  sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
+  sp_elf_section_t* symtab = sp_elf_symtab_new(elf); SP_UNUSED(symtab);
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
 
@@ -214,7 +212,7 @@ UTEST_F(elf, rela_shinfo) {
 
 UTEST_F(elf, rela_info_encoding) {
   sp_elf_t* elf = sp_elf_new_with_null_section();
-  sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
+  sp_elf_section_t* symtab = sp_elf_symtab_new(elf); SP_UNUSED(symtab);
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
 
@@ -366,7 +364,7 @@ UTEST_F(elf, populated_readelf_validates) {
   bss->buffer.size = 16;
 
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
-  sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, 0, STB_GLOBAL, STT_FUNC, text->index);
+  sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, 0, STB_GLOBAL, STT_FUNC, (u16)text->index);
 
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("populated.o"));
   sp_elf_write_to_file(elf, path);
@@ -499,7 +497,7 @@ UTEST_F(elf, roundtrip_populated) {
   bss->buffer.size = 16;
 
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
-  sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, sizeof(code), STB_GLOBAL, STT_FUNC, text->index);
+  sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, sizeof(code), STB_GLOBAL, STT_FUNC, (u16)text->index);
 
   sp_io_writer_t writer = sp_io_writer_from_dyn_mem();
   sp_elf_write(elf, &writer);
@@ -608,7 +606,7 @@ UTEST_F(elf, integration_link_and_run) {
   sp_mem_copy(test_bytes, p, sizeof(test_bytes));
 
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
-  sp_elf_add_symbol(symtab, elf, sp_str_lit("test_data"), 0, sizeof(test_bytes), STB_GLOBAL, STT_OBJECT, data->index);
+  sp_elf_add_symbol(symtab, elf, sp_str_lit("test_data"), 0, sizeof(test_bytes), STB_GLOBAL, STT_OBJECT, (u16)data->index);
 
   sp_str_t obj_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration.o"));
   sp_err_t err = sp_elf_write_to_file(elf, obj_path);
@@ -645,4 +643,3 @@ UTEST_F(elf, integration_link_and_run) {
   });
   ASSERT_EQ(run.status.exit_code, 0);
 }
-#endif

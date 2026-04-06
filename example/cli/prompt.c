@@ -6,7 +6,7 @@
 #include "sp.h"
 
 #define SP_PROMPT_IMPLEMENTATION
-#include "sp/prompt.h"
+#include "sp/sp_prompt.h"
 
 typedef s32 (*sp_clack_demo_fn_t)(sp_prompt_ctx_t* ctx);
 

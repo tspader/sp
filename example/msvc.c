@@ -2,7 +2,7 @@
 #include "sp.h"
 
 #define SP_MSVC_IMPLEMENTATION
-#include "sp/msvc.h"
+#include "sp/sp_msvc.h"
 
 s32 msvc_main(s32 argc, const c8** argv);
 SP_ENTRY(msvc_main)

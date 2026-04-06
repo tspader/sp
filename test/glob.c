@@ -1,5 +1,5 @@
 #define SP_GLOB_IMPLEMENTATION
-#include "sp/glob.h"
+#include "sp/sp_glob.h"
 #include "test.h"
 
 #include "utest.h"

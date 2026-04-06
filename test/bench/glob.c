@@ -1,7 +1,7 @@
 #define SP_APP
 #include "sp.h"
 
-#include "glob.h"
+#include "sp/sp_glob.h"
 
 #define BENCH_ITERATIONS 1000000
 
