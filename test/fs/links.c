@@ -45,10 +45,13 @@ UTEST_F(fs, create_hard_link_file) {
   sp_str_t source = sp_fs_join_path(sandbox, SP_LIT("file.txt"));
   sp_str_t link = sp_fs_join_path(sandbox, SP_LIT("file.hard"));
 
-  sp_io_writer_t writer = sp_io_writer_from_file(source, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write_str(&writer, SP_LIT("updated"));
+  sp_io_writer_t writer = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&writer, source, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write_str(&writer, SP_LIT("updated"), SP_NULLPTR);
   sp_io_writer_close(&writer);
-  SP_EXPECT_STR_EQ(sp_io_read_file(link), SP_LIT("updated"));
+  sp_str_t link_content = SP_ZERO_INITIALIZE();
+  sp_io_read_file(link, &link_content);
+  SP_EXPECT_STR_EQ(link_content, SP_LIT("updated"));
 }
 
 UTEST_F(fs, create_hard_link_existing_destination_fails) {
@@ -103,7 +106,9 @@ UTEST_F(fs, create_symlink_file) {
 
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("create_symlink_file"));
   sp_str_t link = sp_fs_join_path(sandbox, SP_LIT("file.link"));
-  SP_EXPECT_STR_EQ(sp_io_read_file(link), SP_LIT("hello"));
+  sp_str_t symlink_content = SP_ZERO_INITIALIZE();
+  sp_io_read_file(link, &symlink_content);
+  SP_EXPECT_STR_EQ(symlink_content, SP_LIT("hello"));
 }
 
 UTEST_F(fs, create_symlink_directory) {

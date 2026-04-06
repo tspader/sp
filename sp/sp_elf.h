@@ -575,11 +575,15 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
   ehdr.e_ident[EI_OSABI] = ELFOSABI_NONE;
 
   u64 written = 0;
-  written += sp_io_write(out, &ehdr, sizeof(Elf64_Ehdr));
-  written += sp_io_pad(out, shoff - written);
+  u64 n = 0;
+  sp_try(sp_io_write(out, &ehdr, sizeof(Elf64_Ehdr), &n));
+  written += n;
+  sp_try(sp_io_pad(out, shoff - written, &n));
+  written += n;
 
   sp_da_for(headers, i) {
-    written += sp_io_write(out, &headers[i], sizeof(Elf64_Shdr));
+    sp_try(sp_io_write(out, &headers[i], sizeof(Elf64_Shdr), &n));
+    written += n;
   }
 
   sp_da_for(elf->sections, i) {
@@ -593,8 +597,10 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
       case SHT_SYMTAB:
       case SHT_STRTAB:
       case SHT_RELA: {
-        written += sp_io_pad(out, headers[i].sh_offset - written);
-        written += sp_io_write(out, sec->buffer.data, sec->buffer.size);
+        sp_try(sp_io_pad(out, headers[i].sh_offset - written, &n));
+        written += n;
+        sp_try(sp_io_write(out, sec->buffer.data, sec->buffer.size, &n));
+        written += n;
         break;
       }
     }
@@ -605,7 +611,8 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
 }
 
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {
-  sp_io_writer_t f = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t f = SP_ZERO_INITIALIZE();
+  sp_try(sp_io_writer_from_file(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
   sp_err_t err = sp_elf_write(elf, &f);
   sp_io_writer_close(&f);
   return err;
@@ -615,7 +622,8 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
   sp_require_as_null(in);
 
   Elf64_Ehdr ehdr = SP_ZERO_INITIALIZE();
-  u64 bytes_read = sp_io_read(in, &ehdr, sizeof(Elf64_Ehdr));
+  u64 bytes_read = 0;
+  sp_io_read(in, &ehdr, sizeof(Elf64_Ehdr), &bytes_read);
   if (bytes_read != sizeof(Elf64_Ehdr)) {
     return SP_NULLPTR;
   }
@@ -646,8 +654,8 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
   }
 
   Elf64_Shdr* section_headers = sp_alloc_n(Elf64_Shdr, num_sections);
-  sp_io_reader_seek(in, (s64)ehdr.e_shoff, SP_IO_SEEK_SET);
-  bytes_read = sp_io_read(in, section_headers, num_sections * sizeof(Elf64_Shdr));
+  sp_io_reader_seek(in, (s64)ehdr.e_shoff, SP_IO_SEEK_SET, SP_NULLPTR);
+  sp_io_read(in, section_headers, num_sections * sizeof(Elf64_Shdr), &bytes_read);
   if (bytes_read != num_sections * sizeof(Elf64_Shdr)) {
     return SP_NULLPTR;
   }
@@ -657,8 +665,8 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
   c8* string_table = SP_NULLPTR;
   if (string_header->sh_size) {
     string_table = sp_alloc_n(c8, string_header->sh_size);
-    sp_io_reader_seek(in, string_header->sh_offset, SP_IO_SEEK_SET);
-    sp_io_read(in, string_table, string_header->sh_size);
+    sp_io_reader_seek(in, string_header->sh_offset, SP_IO_SEEK_SET, SP_NULLPTR);
+    sp_io_read(in, string_table, string_header->sh_size, SP_NULLPTR);
   }
 
   sp_elf_t* elf = sp_elf_new();
@@ -696,9 +704,9 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
         case SHT_SYMTAB:
         case SHT_STRTAB:
         case SHT_RELA: {
-          sp_io_reader_seek(in, header->sh_offset, SP_IO_SEEK_SET);
+          sp_io_reader_seek(in, header->sh_offset, SP_IO_SEEK_SET, SP_NULLPTR);
           u8* ptr = sp_elf_section_reserve_bytes(section, header->sh_size);
-          sp_io_read(in, ptr, header->sh_size);
+          sp_io_read(in, ptr, header->sh_size, SP_NULLPTR);
           break;
         }
       }
@@ -709,9 +717,8 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
 }
 
 sp_elf_t* sp_elf_read_from_file(sp_str_t path) {
-  sp_io_reader_t f = sp_io_reader_from_file(path);
-  if (f.file.fd < 0) {
-    sp_err_set(SP_ERR_LAZY);
+  sp_io_reader_t f = SP_ZERO_INITIALIZE();
+  if (sp_io_reader_from_file(&f, path)) {
     return SP_NULLPTR;
   }
   sp_elf_t* elf = sp_elf_read(&f);

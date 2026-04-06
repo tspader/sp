@@ -24,8 +24,9 @@ UTEST_F(io_rw, reader_mem_read_full) {
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
   u8 dest[16] = SP_ZERO_INITIALIZE();
 
-  sp_io_reader_t r = sp_io_reader_from_mem(source, sizeof(source));
-  u64 bytes = sp_io_read(&r, dest, sizeof(dest));
+  sp_io_reader_t r; sp_io_reader_from_mem(&r,source, sizeof(source));
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_read(&r, dest, sizeof(dest), &bytes), SP_OK);
 
   EXPECT_EQ(bytes, 16);
   sp_for(i, 16) {
@@ -38,8 +39,9 @@ UTEST_F(io_rw, reader_mem_read_partial) {
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
   u8 dest[8] = SP_ZERO_INITIALIZE();
 
-  sp_io_reader_t r = sp_io_reader_from_mem(source, sizeof(source));
-  u64 bytes = sp_io_read(&r, dest, sizeof(dest));
+  sp_io_reader_t r; sp_io_reader_from_mem(&r,source, sizeof(source));
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_read(&r, dest, sizeof(dest), &bytes), SP_OK);
 
   EXPECT_EQ(bytes, 8);
   sp_for(i, 8) {
@@ -52,8 +54,9 @@ UTEST_F(io_rw, reader_mem_read_past_end) {
   u8 source[8] = {1,2,3,4,5,6,7,8};
   u8 dest[16] = SP_ZERO_INITIALIZE();
 
-  sp_io_reader_t r = sp_io_reader_from_mem(source, sizeof(source));
-  u64 bytes = sp_io_read(&r, dest, sizeof(dest));
+  sp_io_reader_t r; sp_io_reader_from_mem(&r,source, sizeof(source));
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_read(&r, dest, sizeof(dest), &bytes), SP_OK);
 
   EXPECT_EQ(bytes, 8);
   sp_io_reader_close(&r);
@@ -61,8 +64,10 @@ UTEST_F(io_rw, reader_mem_read_past_end) {
 
 UTEST_F(io_rw, reader_mem_size) {
   u8 buffer[128] = SP_ZERO_INITIALIZE();
-  sp_io_reader_t r = sp_io_reader_from_mem(buffer, sizeof(buffer));
-  EXPECT_EQ(sp_io_reader_size(&r), 128);
+  sp_io_reader_t r; sp_io_reader_from_mem(&r,buffer, sizeof(buffer));
+  u64 size = 0;
+  EXPECT_EQ(sp_io_reader_size(&r, &size), SP_OK);
+  EXPECT_EQ(size, 128);
   sp_io_reader_close(&r);
 }
 
@@ -70,16 +75,17 @@ UTEST_F(io_rw, reader_mem_seek) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_for(i, 64) buffer[i] = (u8)i;
 
-  sp_io_reader_t r = sp_io_reader_from_mem(buffer, sizeof(buffer));
+  sp_io_reader_t r; sp_io_reader_from_mem(&r,buffer, sizeof(buffer));
 
-  s64 pos = sp_io_reader_seek(&r, 32, SP_IO_SEEK_SET);
+  s64 pos = 0;
+  EXPECT_EQ(sp_io_reader_seek(&r, 32, SP_IO_SEEK_SET, &pos), SP_OK);
   EXPECT_EQ(pos, 32);
 
   u8 val;
-  sp_io_read(&r, &val, 1);
+  sp_io_read(&r, &val, 1, SP_NULLPTR);
   EXPECT_EQ(val, 32);
 
-  pos = sp_io_reader_seek(&r, 0, SP_IO_SEEK_END);
+  EXPECT_EQ(sp_io_reader_seek(&r, 0, SP_IO_SEEK_END, &pos), SP_OK);
   EXPECT_EQ(pos, 64);
 
   sp_io_reader_close(&r);
@@ -87,12 +93,13 @@ UTEST_F(io_rw, reader_mem_seek) {
 
 UTEST_F(io_rw, reader_mem_seek_invalid) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
-  sp_io_reader_t r = sp_io_reader_from_mem(buffer, sizeof(buffer));
+  sp_io_reader_t r; sp_io_reader_from_mem(&r,buffer, sizeof(buffer));
 
-  s64 pos = sp_io_reader_seek(&r, 100, SP_IO_SEEK_SET);
+  s64 pos = 0;
+  EXPECT_EQ(sp_io_reader_seek(&r, 100, SP_IO_SEEK_SET, &pos), SP_ERR_IO_SEEK_INVALID);
   EXPECT_EQ(pos, -1);
 
-  pos = sp_io_reader_seek(&r, -10, SP_IO_SEEK_SET);
+  EXPECT_EQ(sp_io_reader_seek(&r, -10, SP_IO_SEEK_SET, &pos), SP_ERR_IO_SEEK_INVALID);
   EXPECT_EQ(pos, -1);
 
   sp_io_reader_close(&r);
@@ -101,16 +108,18 @@ UTEST_F(io_rw, reader_mem_seek_invalid) {
 UTEST_F(io_rw, reader_file_read) {
   const char* content = "0123456789ABCDEF";
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, content, 16);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, content, 16, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
-  EXPECT_TRUE(r.file.fd >= 0);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  EXPECT_EQ(sp_io_reader_from_file(&r, ut.file_path), SP_OK);
 
   char buffer[16] = {0};
-  u64 bytes = sp_io_read(&r, buffer, 16);
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_read(&r, buffer, 16, &bytes), SP_OK);
   EXPECT_EQ(bytes, 16);
   sp_for(i, 16) {
     EXPECT_EQ(buffer[i], content[i]);
@@ -121,17 +130,20 @@ UTEST_F(io_rw, reader_file_read) {
 UTEST_F(io_rw, reader_file_seek) {
   const char* content = "0123456789";
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, content, 10);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, content, 10, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
-  s64 pos = sp_io_reader_seek(&r, 5, SP_IO_SEEK_SET);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
+  s64 pos = 0;
+  EXPECT_EQ(sp_io_reader_seek(&r, 5, SP_IO_SEEK_SET, &pos), SP_OK);
   EXPECT_EQ(pos, 5);
 
   char buffer[5] = {0};
-  sp_io_read(&r, buffer, 5);
+  sp_io_read(&r, buffer, 5, SP_NULLPTR);
   EXPECT_EQ(buffer[0], '5');
   sp_io_reader_close(&r);
 }
@@ -139,20 +151,24 @@ UTEST_F(io_rw, reader_file_seek) {
 UTEST_F(io_rw, reader_file_size) {
   const char* content = "0123456789ABCDEF";
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, content, 16);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, content, 16, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
-  EXPECT_EQ(sp_io_reader_size(&r), 16);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
+  u64 size = 0;
+  EXPECT_EQ(sp_io_reader_size(&r, &size), SP_OK);
+  EXPECT_EQ(size, 16);
   sp_io_reader_close(&r);
 }
 
 UTEST_F(io_rw, reader_file_nonexistent) {
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("nonexistent.file"));
-  sp_io_reader_t r = sp_io_reader_from_file(path);
-  EXPECT_EQ(sp_err_get(), SP_ERR_IO_OPEN_FAILED);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  EXPECT_EQ(sp_io_reader_from_file(&r, path), SP_ERR_IO_OPEN_FAILED);
   sp_io_reader_close(&r);
 }
 
@@ -160,8 +176,9 @@ UTEST_F(io_rw, writer_mem_write) {
   u8 buffer[16] = SP_ZERO_INITIALIZE();
   u8 source[8] = {1,2,3,4,5,6,7,8};
 
-  sp_io_writer_t w = sp_io_writer_from_mem(buffer, sizeof(buffer));
-  u64 bytes = sp_io_write(&w, source, sizeof(source));
+  sp_io_writer_t w; sp_io_writer_from_mem(&w,buffer, sizeof(buffer));
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_write(&w, source, sizeof(source), &bytes), SP_OK);
 
   EXPECT_EQ(bytes, 8);
   sp_for(i, 8) {
@@ -174,21 +191,23 @@ UTEST_F(io_rw, writer_mem_write_overflow) {
   u8 buffer[8] = SP_ZERO_INITIALIZE();
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
-  sp_io_writer_t w = sp_io_writer_from_mem(buffer, sizeof(buffer));
-  u64 bytes = sp_io_write(&w, source, sizeof(source));
+  sp_io_writer_t w; sp_io_writer_from_mem(&w,buffer, sizeof(buffer));
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_write(&w, source, sizeof(source), &bytes), SP_ERR_IO_NO_SPACE);
 
-  EXPECT_EQ(bytes, 8);
+  EXPECT_EQ(bytes, 0);
   sp_io_writer_close(&w);
 }
 
 UTEST_F(io_rw, writer_mem_seek) {
   u8 buffer[64] = SP_ZERO_INITIALIZE();
-  sp_io_writer_t w = sp_io_writer_from_mem(buffer, sizeof(buffer));
+  sp_io_writer_t w; sp_io_writer_from_mem(&w,buffer, sizeof(buffer));
 
-  s64 pos = sp_io_writer_seek(&w, 32, SP_IO_SEEK_SET);
+  s64 pos = 0;
+  EXPECT_EQ(sp_io_writer_seek(&w, 32, SP_IO_SEEK_SET, &pos), SP_OK);
   EXPECT_EQ(pos, 32);
 
-  pos = sp_io_writer_seek(&w, 0, SP_IO_SEEK_END);
+  EXPECT_EQ(sp_io_writer_seek(&w, 0, SP_IO_SEEK_END, &pos), SP_OK);
   EXPECT_EQ(pos, 64);
 
   sp_io_writer_close(&w);
@@ -196,21 +215,25 @@ UTEST_F(io_rw, writer_mem_seek) {
 
 UTEST_F(io_rw, writer_mem_size) {
   u8 buffer[128];
-  sp_io_writer_t w = sp_io_writer_from_mem(buffer, sizeof(buffer));
-  EXPECT_EQ(sp_io_writer_size(&w), 128);
+  sp_io_writer_t w; sp_io_writer_from_mem(&w,buffer, sizeof(buffer));
+  u64 size = 0;
+  EXPECT_EQ(sp_io_writer_size(&w, &size), SP_OK);
+  EXPECT_EQ(size, 128);
   sp_io_writer_close(&w);
 }
 
 UTEST_F(io_rw, writer_file_write) {
   const char* content = "test data";
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-  EXPECT_TRUE(w.file.fd >= 0);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  EXPECT_EQ(sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE), SP_OK);
 
-  u64 bytes = sp_io_write(&w, content, 9);
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_write(&w, content, 9, &bytes), SP_OK);
   EXPECT_EQ(bytes, 9);
   sp_io_writer_close(&w);
 
-  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  sp_str_t loaded = SP_ZERO_INITIALIZE();
+  sp_io_read_file(ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 9);
 }
 
@@ -219,18 +242,21 @@ UTEST_F(io_rw, writer_file_overwrite) {
   const char* second = "1234";
 
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, first, 8);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, first, 8, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, second, 4);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, second, 4, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
-  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  sp_str_t loaded = SP_ZERO_INITIALIZE();
+  sp_io_read_file(ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 4);
   EXPECT_EQ(loaded.data[0], '1');
   EXPECT_EQ(loaded.data[3], '4');
@@ -241,18 +267,21 @@ UTEST_F(io_rw, writer_file_append) {
   const char* second = "second";
 
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, first, 5);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, first, 5, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_APPEND);
-    sp_io_write(&w, second, 6);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_APPEND);
+    sp_io_write(&w, second, 6, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
-  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  sp_str_t loaded = SP_ZERO_INITIALIZE();
+  sp_io_read_file(ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 11);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("firstsecond")));
 }
@@ -260,39 +289,49 @@ UTEST_F(io_rw, writer_file_append) {
 UTEST_F(io_rw, writer_file_seek) {
   const char* content = "0123456789";
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, content, 10);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, content, 10, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
-  s64 pos = sp_io_reader_seek(&r, 5, SP_IO_SEEK_SET);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
+  s64 pos = 0;
+  EXPECT_EQ(sp_io_reader_seek(&r, 5, SP_IO_SEEK_SET, &pos), SP_OK);
   EXPECT_EQ(pos, 5);
 
   char buffer[5] = {0};
-  sp_io_read(&r, buffer, 5);
+  sp_io_read(&r, buffer, 5, SP_NULLPTR);
   EXPECT_EQ(buffer[0], '5');
   sp_io_reader_close(&r);
 }
 
 UTEST_F(io_rw, writer_file_size) {
   const char* content = "0123456789ABCDEF";
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write(&w, content, 16);
-  EXPECT_EQ(sp_io_writer_size(&w), 16);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write(&w, content, 16, SP_NULLPTR);
+  u64 size = 0;
+  EXPECT_EQ(sp_io_writer_size(&w, &size), SP_OK);
+  EXPECT_EQ(size, 16);
   sp_io_writer_close(&w);
 }
 
 UTEST_F(io_rw, writer_file_pad) {
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write(&w, "AA", 2);
-  sp_io_pad(&w, 3);
-  sp_io_write(&w, "BB", 2);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write(&w, "AA", 2, SP_NULLPTR);
+  sp_io_pad(&w, 3, SP_NULLPTR);
+  sp_io_write(&w, "BB", 2, SP_NULLPTR);
   sp_io_writer_close(&w);
 
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
   u8 result[7] = SP_ZERO_INITIALIZE();
-  EXPECT_EQ(sp_io_read(&r, result, 7), 7);
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_read(&r, result, 7, &bytes), SP_OK);
+  EXPECT_EQ(bytes, 7);
   EXPECT_EQ(result[0], 'A');
   EXPECT_EQ(result[1], 'A');
   EXPECT_EQ(result[2], 0);
@@ -304,33 +343,39 @@ UTEST_F(io_rw, writer_file_pad) {
 }
 
 UTEST_F(io_rw, writer_dyn_write) {
-  sp_io_writer_t w = sp_io_writer_from_dyn_mem();
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
   u8 data[] = {1, 2, 3, 4};
-  u64 written = sp_io_write(&w, data, 4);
+  u64 written = 0;
+  EXPECT_EQ(sp_io_write(&w, data, 4, &written), SP_OK);
 
   EXPECT_EQ(written, 4);
-  EXPECT_EQ(sp_io_writer_size(&w), 4);
+  u64 size = 0;
+  sp_io_writer_size(&w, &size);
+  EXPECT_EQ(size, 4);
   sp_io_writer_close(&w);
 }
 
 UTEST_F(io_rw, writer_dyn_grows) {
-  sp_io_writer_t w = sp_io_writer_from_dyn_mem();
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
 
   u8 data[256];
   sp_for(i, 256) data[i] = (u8)i;
 
-  u64 written = sp_io_write(&w, data, 256);
+  u64 written = 0;
+  EXPECT_EQ(sp_io_write(&w, data, 256, &written), SP_OK);
   EXPECT_EQ(written, 256);
-  EXPECT_EQ(sp_io_writer_size(&w), 256);
+  u64 size = 0;
+  sp_io_writer_size(&w, &size);
+  EXPECT_EQ(size, 256);
 
   sp_io_writer_close(&w);
 }
 
 UTEST_F(io_rw, writer_dyn_to_str) {
-  sp_io_writer_t w = sp_io_writer_from_dyn_mem();
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
 
   const char* text = "hello world";
-  sp_io_write(&w, text, 11);
+  sp_io_write(&w, text, 11, SP_NULLPTR);
 
   sp_str_t str = sp_mem_buffer_as_str(&w.dyn_mem.buffer);
   EXPECT_EQ(str.len, 11);
@@ -340,25 +385,28 @@ UTEST_F(io_rw, writer_dyn_to_str) {
 }
 
 UTEST_F(io_rw, writer_dyn_seek) {
-  sp_io_writer_t w = sp_io_writer_from_dyn_mem();
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
 
   u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
-  sp_io_write(&w, data, 8);
+  sp_io_write(&w, data, 8, SP_NULLPTR);
 
-  s64 pos = sp_io_writer_seek(&w, 4, SP_IO_SEEK_SET);
+  s64 pos = 0;
+  EXPECT_EQ(sp_io_writer_seek(&w, 4, SP_IO_SEEK_SET, &pos), SP_OK);
   EXPECT_EQ(pos, 4);
 
   sp_io_writer_close(&w);
 }
 
 UTEST_F(io_rw, writer_dyn_multiple_writes) {
-  sp_io_writer_t w = sp_io_writer_from_dyn_mem();
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
 
-  sp_io_write(&w, "abc", 3);
-  sp_io_write(&w, "def", 3);
-  sp_io_write(&w, "ghi", 3);
+  sp_io_write(&w, "abc", 3, SP_NULLPTR);
+  sp_io_write(&w, "def", 3, SP_NULLPTR);
+  sp_io_write(&w, "ghi", 3, SP_NULLPTR);
 
-  EXPECT_EQ(sp_io_writer_size(&w), 9);
+  u64 size = 0;
+  sp_io_writer_size(&w, &size);
+  EXPECT_EQ(size, 9);
 
   sp_str_t str = sp_mem_buffer_as_str(&w.dyn_mem.buffer);
   EXPECT_TRUE(sp_str_equal(str, sp_str_lit("abcdefghi")));
@@ -368,21 +416,29 @@ UTEST_F(io_rw, writer_dyn_multiple_writes) {
 
 UTEST_F(io_rw, writer_buffered_1000_bytes) {
   u8 write_buf[64];
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_writer_set_buffer(&w, write_buf, sizeof(write_buf));
 
   sp_for(i, 1000) {
     u8 byte = (u8)(i & 0xFF);
-    EXPECT_EQ(sp_io_write(&w, &byte, 1), 1);
+    u64 bytes = 0;
+    EXPECT_EQ(sp_io_write(&w, &byte, 1, &bytes), SP_OK);
+    EXPECT_EQ(bytes, 1);
   }
   sp_io_writer_close(&w);
 
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
-  EXPECT_EQ(sp_io_reader_size(&r), 1000);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
+  u64 size = 0;
+  sp_io_reader_size(&r, &size);
+  EXPECT_EQ(size, 1000);
 
   sp_for(i, 1000) {
     u8 byte;
-    EXPECT_EQ(sp_io_read(&r, &byte, 1), 1);
+    u64 bytes = 0;
+    EXPECT_EQ(sp_io_read(&r, &byte, 1, &bytes), SP_OK);
+    EXPECT_EQ(bytes, 1);
     EXPECT_EQ(byte, (u8)(i & 0xFF));
   }
   sp_io_reader_close(&r);
@@ -393,15 +449,21 @@ UTEST_F(io_rw, writer_buffered_larger_than_buffer) {
   u8 data[128];
   sp_for(i, 128) data[i] = (u8)i;
 
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_writer_set_buffer(&w, write_buf, sizeof(write_buf));
 
-  EXPECT_EQ(sp_io_write(&w, data, 128), 128);
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_write(&w, data, 128, &bytes), SP_OK);
+  EXPECT_EQ(bytes, 128);
   sp_io_writer_close(&w);
 
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
   u8 result[128] = SP_ZERO_INITIALIZE();
-  EXPECT_EQ(sp_io_read(&r, result, 128), 128);
+  u64 read_bytes = 0;
+  EXPECT_EQ(sp_io_read(&r, result, 128, &read_bytes), SP_OK);
+  EXPECT_EQ(read_bytes, 128);
   sp_for(i, 128) {
     EXPECT_EQ(result[i], data[i]);
   }
@@ -410,20 +472,23 @@ UTEST_F(io_rw, writer_buffered_larger_than_buffer) {
 
 UTEST_F(io_rw, writer_buffered_implicit_flush) {
   u8 write_buf[64];
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_writer_set_buffer(&w, write_buf, sizeof(write_buf));
 
-  sp_io_write(&w, "hello", 5);
+  sp_io_write(&w, "hello", 5, SP_NULLPTR);
   sp_io_writer_close(&w);
 
-  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  sp_str_t loaded = SP_ZERO_INITIALIZE();
+  sp_io_read_file(ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 5);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("hello")));
 }
 
 UTEST_F(io_rw, writer_buffered_flush_empty) {
   u8 write_buf[64];
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_writer_set_buffer(&w, write_buf, sizeof(write_buf));
 
   sp_err_t err = sp_io_flush(&w);
@@ -434,15 +499,17 @@ UTEST_F(io_rw, writer_buffered_flush_empty) {
 UTEST_F(io_rw, writer_buffered_set_twice) {
   u8 write_buf1[64];
   u8 write_buf2[64];
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_writer_set_buffer(&w, write_buf1, sizeof(write_buf1));
 
-  sp_io_write(&w, "first", 5);
+  sp_io_write(&w, "first", 5, SP_NULLPTR);
   sp_io_writer_set_buffer(&w, write_buf2, sizeof(write_buf2));
-  sp_io_write(&w, "second", 6);
+  sp_io_write(&w, "second", 6, SP_NULLPTR);
   sp_io_writer_close(&w);
 
-  sp_str_t loaded = sp_io_read_file(ut.file_path);
+  sp_str_t loaded = SP_ZERO_INITIALIZE();
+  sp_io_read_file(ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 11);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("firstsecond")));
 }
@@ -450,17 +517,20 @@ UTEST_F(io_rw, writer_buffered_set_twice) {
 UTEST_F(io_rw, reader_buffered_read) {
   const char* content = "0123456789ABCDEF";
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, content, 16);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, content, 16, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
   u8 read_buf[8];
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
   sp_io_reader_set_buffer(&r, read_buf, sizeof(read_buf));
 
   char result[16] = {0};
-  u64 bytes = sp_io_read(&r, result, 16);
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_read(&r, result, 16, &bytes), SP_OK);
   EXPECT_EQ(bytes, 16);
   sp_for(i, 16) {
     EXPECT_EQ(result[i], content[i]);
@@ -471,18 +541,22 @@ UTEST_F(io_rw, reader_buffered_read) {
 UTEST_F(io_rw, reader_buffered_small_reads) {
   const char* content = "0123456789ABCDEF";
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, content, 16);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, content, 16, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
   u8 read_buf[8];
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
   sp_io_reader_set_buffer(&r, read_buf, sizeof(read_buf));
 
   sp_for(i, 16) {
     char c;
-    EXPECT_EQ(sp_io_read(&r, &c, 1), 1);
+    u64 bytes = 0;
+    EXPECT_EQ(sp_io_read(&r, &c, 1, &bytes), SP_OK);
+    EXPECT_EQ(bytes, 1);
     EXPECT_EQ(c, content[i]);
   }
   sp_io_reader_close(&r);
@@ -491,21 +565,23 @@ UTEST_F(io_rw, reader_buffered_small_reads) {
 UTEST_F(io_rw, reader_buffered_seek_discards_buffer) {
   const char* content = "0123456789ABCDEF";
   {
-    sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write(&w, content, 16);
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&w, content, 16, SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 
   u8 read_buf[8];
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
   sp_io_reader_set_buffer(&r, read_buf, sizeof(read_buf));
 
   char c;
-  sp_io_read(&r, &c, 1);
+  sp_io_read(&r, &c, 1, SP_NULLPTR);
   EXPECT_EQ(c, '0');
 
-  sp_io_reader_seek(&r, 10, SP_IO_SEEK_SET);
-  sp_io_read(&r, &c, 1);
+  sp_io_reader_seek(&r, 10, SP_IO_SEEK_SET, SP_NULLPTR);
+  sp_io_read(&r, &c, 1, SP_NULLPTR);
   EXPECT_EQ(c, 'A');
 
   sp_io_reader_close(&r);
@@ -515,21 +591,27 @@ UTEST_F(io_rw, seek_beyond_4gb) {
   s64 offset = (s64)5 * 1024 * 1024 * 1024;
   u8 marker[4] = {0xDE, 0xAD, 0xBE, 0xEF};
 
-  sp_io_writer_t w = sp_io_writer_from_file(ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
-  s64 seek_pos = sp_io_writer_seek(&w, offset, SP_IO_SEEK_SET);
+  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  s64 seek_pos = 0;
+  EXPECT_EQ(sp_io_writer_seek(&w, offset, SP_IO_SEEK_SET, &seek_pos), SP_OK);
   EXPECT_EQ(seek_pos, offset);
-  sp_io_write(&w, marker, 4);
+  sp_io_write(&w, marker, 4, SP_NULLPTR);
   sp_io_writer_close(&w);
 
-  sp_io_reader_t r = sp_io_reader_from_file(ut.file_path);
-  u64 size = sp_io_reader_size(&r);
+  sp_io_reader_t r = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&r, ut.file_path);
+  u64 size = 0;
+  sp_io_reader_size(&r, &size);
   EXPECT_EQ(size, (u64)offset + 4);
 
-  s64 read_pos = sp_io_reader_seek(&r, offset, SP_IO_SEEK_SET);
+  s64 read_pos = 0;
+  EXPECT_EQ(sp_io_reader_seek(&r, offset, SP_IO_SEEK_SET, &read_pos), SP_OK);
   EXPECT_EQ(read_pos, offset);
 
   u8 result[4] = SP_ZERO_INITIALIZE();
-  u64 bytes = sp_io_read(&r, result, 4);
+  u64 bytes = 0;
+  EXPECT_EQ(sp_io_read(&r, result, 4, &bytes), SP_OK);
   EXPECT_EQ(bytes, 4);
   EXPECT_EQ(result[0], 0xDE);
   EXPECT_EQ(result[1], 0xAD);

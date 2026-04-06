@@ -80,7 +80,7 @@ void              sp_asset_registry_process_completions(sp_asset_registry_t* r);
 sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_asset_kind_t kind);
 s32               sp_asset_registry_thread_fn(void* user_data);
 
-#if defined(SP_IMPLEMENTATION)
+#if defined(SP_ASSET_IMPLEMENTATION)
 
 void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
   sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);

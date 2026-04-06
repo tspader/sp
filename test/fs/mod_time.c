@@ -20,8 +20,9 @@ UTEST_F(fs, mod_time_updates_after_write) {
   sp_tm_epoch_t before = sp_fs_get_mod_time(file);
   sp_os_sleep_ms(100);
 
-  sp_io_writer_t writer = sp_io_writer_from_file(file, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write_str(&writer, SP_LIT("b"));
+  sp_io_writer_t writer = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&writer, file, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write_str(&writer, SP_LIT("b"), SP_NULLPTR);
   sp_io_writer_close(&writer);
 
   sp_tm_epoch_t after = sp_fs_get_mod_time(file);

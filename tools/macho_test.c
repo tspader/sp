@@ -146,7 +146,7 @@ UTEST_F(macho_test, link_and_run) {
                "}\n");
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration.c"));
-  sp_io_writer_t f = sp_io_writer_from_file(c_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t f; sp_io_writer_from_file(&f, c_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write_str(&f, c_src);
   sp_io_writer_close(&f);
 
@@ -221,7 +221,7 @@ UTEST_F(macho_test, multi_symbol_roundtrip) {
                "}\n");
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("multi.c"));
-  sp_io_writer_t f2 = sp_io_writer_from_file(c_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t f2; sp_io_writer_from_file(&f2, c_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write_str(&f2, c_src);
   sp_io_writer_close(&f2);
 

@@ -9,16 +9,20 @@ UTEST(str_builder, basic_operations) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   ASSERT_EQ(builder.writer, SP_NULLPTR);
 
+  u64 writer_size = 0;
   sp_str_t test_str = SP_LIT("Hello");
   sp_str_builder_append(&builder, test_str);
   ASSERT_NE(builder.writer, SP_NULLPTR);
-  EXPECT_GE(sp_io_writer_size(builder.writer), 5);
+  sp_io_writer_size(builder.writer, &writer_size);
+  EXPECT_GE(writer_size, 5);
 
   sp_str_builder_append_cstr(&builder, " World");
-  EXPECT_GE(sp_io_writer_size(builder.writer), 11);
+  sp_io_writer_size(builder.writer, &writer_size);
+  EXPECT_GE(writer_size, 11);
 
   sp_str_builder_append_c8(&builder, '!');
-  EXPECT_GE(sp_io_writer_size(builder.writer), 12);
+  sp_io_writer_size(builder.writer, &writer_size);
+  EXPECT_GE(writer_size, 12);
 
   sp_str_t result = sp_str_builder_to_str(&builder);
   ASSERT_EQ(result.len, 12);
@@ -32,30 +36,37 @@ UTEST(str_builder, basic_operations) {
 
 UTEST(str_builder, growth_behavior) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  u64 writer_size = 0;
   sp_str_t long_str = SP_LIT("This is a much longer string that will trigger growth");
   sp_str_builder_append(&builder, long_str);
-  EXPECT_GE(sp_io_writer_size(builder.writer), long_str.len);
+  sp_io_writer_size(builder.writer, &writer_size);
+  EXPECT_GE(writer_size, long_str.len);
   sp_str_t result = sp_str_builder_to_str(&builder);
   SP_EXPECT_STR_EQ(result, long_str);
 }
 
 UTEST(str_builder, edge_cases) {
+  u64 writer_size = 0;
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_str_builder_append(&builder, SP_LIT(""));
-  EXPECT_GE(sp_io_writer_size(builder.writer), 0);
+  sp_io_writer_size(builder.writer, &writer_size);
+  EXPECT_GE(writer_size, 0);
 
   sp_str_builder_append_cstr(&builder, "");
-  EXPECT_GE(sp_io_writer_size(builder.writer), 0);
+  sp_io_writer_size(builder.writer, &writer_size);
+  EXPECT_GE(writer_size, 0);
 
   sp_str_t null_str = {.len = 0, .data = SP_NULLPTR};
   sp_str_builder_append(&builder, null_str);
-  EXPECT_GE(sp_io_writer_size(builder.writer), 0);
+  sp_io_writer_size(builder.writer, &writer_size);
+  EXPECT_GE(writer_size, 0);
 
   sp_str_builder_t builder2 = SP_ZERO_INITIALIZE();
   sp_for(i, 100) {
     sp_str_builder_append_cstr(&builder2, "test ");
   }
-  EXPECT_GE(sp_io_writer_size(builder2.writer), 500);
+  sp_io_writer_size(builder2.writer, &writer_size);
+  EXPECT_GE(writer_size, 500);
   sp_str_t result = sp_str_builder_to_str(&builder2);
   ASSERT_EQ(result.len, 500);
 }
@@ -97,7 +108,7 @@ UTEST(str_builder, format_append) {
 UTEST(str_builder, fixed_mem_backend) {
   {
     c8 buffer[64] = SP_ZERO_INITIALIZE();
-    sp_io_writer_t writer = sp_io_writer_from_mem(buffer, sizeof(buffer));
+    sp_io_writer_t writer; sp_io_writer_from_mem(&writer,buffer, sizeof(buffer));
     sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
 
     sp_str_builder_append_cstr(&builder, "Hello");
@@ -111,7 +122,7 @@ UTEST(str_builder, fixed_mem_backend) {
 
   {
     c8 buffer[10] = SP_ZERO_INITIALIZE();
-    sp_io_writer_t writer = sp_io_writer_from_mem(buffer, sizeof(buffer));
+    sp_io_writer_t writer; sp_io_writer_from_mem(&writer,buffer, sizeof(buffer));
     sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
 
     sp_str_builder_append_cstr(&builder, "Short");
@@ -121,7 +132,7 @@ UTEST(str_builder, fixed_mem_backend) {
 
   {
     c8 buffer[128] = SP_ZERO_INITIALIZE();
-    sp_io_writer_t writer = sp_io_writer_from_mem(buffer, sizeof(buffer));
+    sp_io_writer_t writer; sp_io_writer_from_mem(&writer,buffer, sizeof(buffer));
     sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
 
     sp_str_builder_append_fmt(&builder, "Count: {}", SP_FMT_U32(42));
@@ -131,7 +142,7 @@ UTEST(str_builder, fixed_mem_backend) {
 
   {
     c8 buffer[64] = SP_ZERO_INITIALIZE();
-    sp_io_writer_t writer = sp_io_writer_from_mem(buffer, sizeof(buffer));
+    sp_io_writer_t writer; sp_io_writer_from_mem(&writer,buffer, sizeof(buffer));
     sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
 
     sp_str_builder_append_cstr(&builder, "line1");

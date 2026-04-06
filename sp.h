@@ -429,7 +429,7 @@
   #define sp_try(expr) sp_assert(!expr)
   #define sp_try_as(expr, err) sp_assert(!expr)
   #define sp_try_as_void(expr) sp_assert(!expr)
-  #define sp_try_as_goto(expr, label) sp_assert(!expr)
+  #define sp_try_goto(expr, err, label) sp_assert(!expr)
 #else
   #define sp_try(expr) do { \
     s32 _sp_result = (expr); \
@@ -441,9 +441,9 @@
   #define sp_try_as_void(expr) do { \
     if (expr) return; \
   } while (0)
-  #define sp_try_goto(expr, label) do { \
-    s32 _sp_result = (expr); \
-    if (_sp_result) goto label; \
+  #define sp_try_goto(expr, err, label) do { \
+    err = (expr); \
+    if (err) goto label; \
   } while (0)
 #endif
 
@@ -977,17 +977,6 @@ typedef struct {
 //////////////////////
 // SYSCALL WRAPPERS //
 //////////////////////
-void  sp_sys_init();
-void* sp_sys_get_tp();
-int   sp_sys_set_tp(void* tp);
-void  sp_sys_exit(s32 code);
-void* sp_sys_mmap(void* addr, u64 len, s32 prot, s32 flags, s32 fd, s64 offset);
-s32   sp_sys_munmap(void* addr, u64 len);
-void* sp_sys_mremap(void* old_addr, u64 old_size, u64 new_size, s32 flags);
-void* sp_sys_alloc(u64 n);
-void* sp_sys_alloc_zero(u64 n);
-void  sp_sys_free(void* ptr);
-void* sp_sys_realloc(void* ptr, u64 new_size);
 s64   sp_sys_read(s32 fd, void* buf, u64 count);
 s64   sp_sys_write(s32 fd, const void* buf, u64 count);
 s32   sp_sys_open(const c8* path, s32 flags, s32 mode);
@@ -1023,10 +1012,12 @@ s32   sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
 s32   sp_sys_inotify_rm_watch(s32 fd, s32 wd);
 s32   sp_sys_poll(sp_sys_pollfd_t* fds, u64 nfds, s32 timeout);
 s32   sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage);
-s32   sp_sys_memcmp(const void* vl, const void* vr, u64 n);
-void* sp_sys_memset(void* dest, s32 c, u64 n);
-
-
+void* sp_sys_get_tp();
+int   sp_sys_set_tp(void* tp);
+void* sp_sys_mmap(void* addr, u64 len, s32 prot, s32 flags, s32 fd, s64 offset);
+s32   sp_sys_munmap(void* addr, u64 len);
+void* sp_sys_mremap(void* old_addr, u64 old_size, u64 new_size, s32 flags);
+void  sp_sys_exit(s32 code);
 #endif // SP_SYS
 
 //////////////
@@ -1039,6 +1030,13 @@ void* sp_sys_memset(void* dest, s32 c, u64 n);
   s32 memcmp(const void* a, const void* b, u64 n);
   u64 strlen(const char* s);
 #endif // SP_DEFINE_BUILTINS
+
+s32   sp_sys_memcmp(const void* vl, const void* vr, u64 n);
+void* sp_sys_memset(void* dest, s32 c, u64 n);
+void* sp_sys_alloc(u64 n);
+void* sp_sys_alloc_zero(u64 n);
+void  sp_sys_free(void* ptr);
+void* sp_sys_realloc(void* ptr, u64 new_size);
 
 ///////////////
 // CONSTANTS //
@@ -1166,6 +1164,7 @@ void* sp_sys_memset(void* dest, s32 c, u64 n);
   #define SP_SEEK_SET             SEEK_SET
   #define SP_SEEK_CUR             SEEK_CUR
   #define SP_SEEK_END             SEEK_END
+  #define SP_EINTR                EINTR
 
 #else
   #define SP_EINTR                EINTR
@@ -1374,14 +1373,13 @@ void* sp_sys_memset(void* dest, s32 c, u64 n);
   #define sp_tcsetattr(fd, opt, tio)        tcsetattr(fd, opt, tio)
 #endif
 
-///////////
-// ENTRY //
-///////////
+///////////////////
+// FREESTANDING //
+//////////////////
 typedef s32 (*sp_entry_fn_t)(s32, const c8**);
 
-void sp_sys_init();
-void sp_entry_init(s32 argc, const c8** argv, sp_entry_fn_t fn);
-
+void  sp_sys_init();
+void  sp_entry_init(s32 argc, const c8** argv, sp_entry_fn_t fn);
 
 #if defined(SP_FREESTANDING)
   extern const c8** sp_envp;
@@ -1434,6 +1432,7 @@ typedef enum {
   SP_ERR_IO_CLOSE_FAILED  = 6,
   SP_ERR_IO_READ_FAILED   = 7,
   SP_ERR_IO_READ_ONLY     = 8,
+  SP_ERR_IO_NO_SPACE      = 9,
   SP_ERR_LAZY,
   SP_ERR_OS,
 } sp_err_t;
@@ -2310,6 +2309,7 @@ SP_API void            sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c)
 SP_API void            sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...);
 SP_API void            sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...);
 SP_API void            sp_str_builder_new_line(sp_str_builder_t* builder);
+SP_API u64             sp_str_builder_len(sp_str_builder_t* builder);
 SP_API sp_str_t        sp_str_builder_as_str(sp_str_builder_t* builder);
 SP_API sp_str_t        sp_str_builder_to_str(sp_str_builder_t* builder);
 SP_API sp_mem_buffer_t sp_str_builder_into_buffer(sp_str_builder_t* builder);
@@ -2874,15 +2874,15 @@ typedef enum {
   SP_IO_WRITE_MODE_APPEND,
 } sp_io_write_mode_t;
 
-SP_TYPEDEF_FN(u64, sp_io_reader_read_cb, sp_io_reader_t* r, void* ptr, u64 size);
-SP_TYPEDEF_FN(s64, sp_io_reader_seek_cb, sp_io_reader_t* r, s64 offset, sp_io_whence_t whence);
-SP_TYPEDEF_FN(u64, sp_io_reader_size_cb, sp_io_reader_t* r);
-SP_TYPEDEF_FN(void, sp_io_reader_close_cb, sp_io_reader_t* r);
+SP_TYPEDEF_FN(sp_err_t, sp_io_reader_read_cb, sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
+SP_TYPEDEF_FN(sp_err_t, sp_io_reader_seek_cb, sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_TYPEDEF_FN(sp_err_t, sp_io_reader_size_cb, sp_io_reader_t* r, u64* size);
+SP_TYPEDEF_FN(sp_err_t, sp_io_reader_close_cb, sp_io_reader_t* r);
 
-SP_TYPEDEF_FN(u64, sp_io_writer_write_cb, sp_io_writer_t* w, const void* ptr, u64 size);
-SP_TYPEDEF_FN(s64, sp_io_writer_seek_cb, sp_io_writer_t* w, s64 offset, sp_io_whence_t whence);
-SP_TYPEDEF_FN(u64, sp_io_writer_size_cb, sp_io_writer_t* w);
-SP_TYPEDEF_FN(void, sp_io_writer_close_cb, sp_io_writer_t* w);
+SP_TYPEDEF_FN(sp_err_t, sp_io_writer_write_cb, sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written);
+SP_TYPEDEF_FN(sp_err_t, sp_io_writer_seek_cb, sp_io_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
+SP_TYPEDEF_FN(sp_err_t, sp_io_writer_size_cb, sp_io_writer_t* w, u64* size);
+SP_TYPEDEF_FN(sp_err_t, sp_io_writer_close_cb, sp_io_writer_t* w);
 
 typedef struct {
   const u8* ptr;
@@ -2936,29 +2936,29 @@ struct sp_io_writer {
   sp_mem_buffer_t buffer;
 };
 
-SP_API u64            sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size);
-SP_API sp_str_t       sp_io_read_file(sp_str_t path);
-SP_API s64            sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence);
-SP_API u64            sp_io_reader_size(sp_io_reader_t* r);
-SP_API void           sp_io_reader_close(sp_io_reader_t* r);
-SP_API sp_io_reader_t sp_io_reader_from_file(sp_str_t path);
-SP_API sp_io_reader_t sp_io_reader_from_fd(sp_os_file_handle_t fd, sp_io_close_mode_t mode);
-SP_API sp_io_reader_t sp_io_reader_from_mem(const void* ptr, u64 size);
+SP_API sp_err_t       sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
+SP_API sp_err_t       sp_io_read_file(sp_str_t path, sp_str_t* content);
+SP_API sp_err_t       sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_reader_size(sp_io_reader_t* r, u64* size);
+SP_API sp_err_t       sp_io_reader_close(sp_io_reader_t* r);
+SP_API sp_err_t       sp_io_reader_from_file(sp_io_reader_t* reader, sp_str_t path);
+SP_API void           sp_io_reader_from_fd(sp_io_reader_t* reader, sp_os_file_handle_t fd, sp_io_close_mode_t mode);
+SP_API void           sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size);
 SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
-SP_API u64            sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size);
-SP_API u64            sp_io_write_str(sp_io_writer_t* writer, sp_str_t str);
-SP_API u64            sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr);
-SP_API u64            sp_io_pad(sp_io_writer_t* writer, u64 size);
+SP_API sp_err_t       sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
+SP_API sp_err_t       sp_io_write_str(sp_io_writer_t* writer, sp_str_t str, u64* bytes_written);
+SP_API sp_err_t       sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr, u64* bytes_written);
+SP_API sp_err_t       sp_io_pad(sp_io_writer_t* writer, u64 size, u64* bytes_written);
 SP_API sp_err_t       sp_io_flush(sp_io_writer_t* w);
-SP_API s64            sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence);
-SP_API u64            sp_io_writer_size(sp_io_writer_t* w);
-SP_API void           sp_io_writer_close(sp_io_writer_t* w);
-SP_API sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode);
-SP_API sp_io_writer_t sp_io_writer_from_fd(s32 fd, sp_io_close_mode_t close_mode);
-SP_API sp_io_writer_t sp_io_writer_from_mem(void* ptr, u64 size);
-SP_API sp_io_writer_t sp_io_writer_from_dyn_mem();
-SP_API sp_io_writer_t sp_io_writer_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator);
-SP_API void           sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
+SP_API sp_err_t       sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_writer_size(sp_io_writer_t* w, u64* size);
+SP_API sp_err_t       sp_io_writer_close(sp_io_writer_t* w);
+SP_API sp_err_t       sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode);
+SP_API void           sp_io_writer_from_fd(sp_io_writer_t* writer, s32 fd, sp_io_close_mode_t close_mode);
+SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
+SP_API void           sp_io_writer_from_dyn_mem(sp_io_writer_t* writer);
+SP_API void           sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_allocator_t allocator);
+SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
 
 
 // ██████╗ ██████╗  ██████╗  ██████╗███████╗███████╗███████╗
@@ -3521,7 +3521,7 @@ void* sp_sys_get_tp(void) {
 
 s32 sp_sys_set_tp(void* tp) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_ARCH_PRCTL, SP_ARCH_SET_FS, (s64)tp);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_ARCH_PRCTL, SP_ARCH_SET_FS, tp);
 #elif defined(SP_ARM64)
   __asm__ __volatile__ ("msr tpidr_el0, %0" : : "r"(tp) : "memory");
   return 0;
@@ -3698,18 +3698,6 @@ u64 strlen(const char* s) {
 }
 #endif
 
-void* sp_sys_mmap(void* addr, u64 len, s32 prot, s32 flags, s32 fd, s64 offset) {
-  return (void*)sp_syscall6(SP_SYSCALL_NUM_MMAP, (s64)addr, (s64)len, prot, flags, fd, offset);
-}
-
-s32 sp_sys_munmap(void* addr, u64 len) {
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_MUNMAP, (s64)addr, (s64)len);
-}
-
-void* sp_sys_mremap(void* old_addr, u64 old_size, u64 new_size, s32 flags) {
-  return (void*)sp_syscall4(SP_SYSCALL_NUM_MREMAP, (s64)old_addr, (s64)old_size, (s64)new_size, flags);
-}
-
 #define SP_SYS_ALLOC_ALIGN    16
 #define SP_SYS_ALLOC_HEADER   16
 
@@ -3793,159 +3781,159 @@ void* sp_sys_memset(void* dest, s32 c, u64 n) {
 // SYSCALL WRAPPERS //
 //////////////////////
 s64 sp_sys_read(s32 fd, void* buf, u64 count) {
-  return sp_syscall3(SP_SYSCALL_NUM_READ, fd, (s64)buf, (s64)count);
+  return sp_syscall(SP_SYSCALL_NUM_READ, fd, buf, count);
 }
 
 s64 sp_sys_write(s32 fd, const void* buf, u64 count) {
-  return sp_syscall3(SP_SYSCALL_NUM_WRITE, fd, (s64)buf, (s64)count);
+  return sp_syscall(SP_SYSCALL_NUM_WRITE, fd, buf, count);
 }
 
 s32 sp_sys_open(const c8* path, s32 flags, s32 mode) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_OPEN, (s64)path, flags, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_OPEN, path, flags, mode);
 #else
-  return (s32)sp_syscall4(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, (s64)path, flags, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, path, flags, mode);
 #endif
 }
 
 s32 sp_sys_openat(s32 dirfd, const c8* path, s32 flags, s32 mode) {
-  return (s32)sp_syscall4(SP_SYSCALL_NUM_OPENAT, dirfd, (s64)path, flags, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_OPENAT, dirfd, path, flags, mode);
 }
 
 s32 sp_sys_close(s32 fd) {
-  return (s32)sp_syscall1(SP_SYSCALL_NUM_CLOSE, fd);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
 }
 
 s64 sp_sys_lseek(s32 fd, s64 offset, s32 whence) {
-  return sp_syscall3(SP_SYSCALL_NUM_LSEEK, fd, offset, whence);
+  return sp_syscall(SP_SYSCALL_NUM_LSEEK, fd, offset, whence);
 }
 
 s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_STAT, (s64)path, (s64)st);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_STAT, path, st);
 #else
-  return (s32)sp_syscall4(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, (s64)path, (s64)st, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, path, st, 0);
 #endif
 }
 
 s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_LSTAT, (s64)path, (s64)st);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_LSTAT, path, st);
 #else
-  return (s32)sp_syscall4(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, (s64)path, (s64)st, SP_AT_SYMLINK_NOFOLLOW);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, path, st, SP_AT_SYMLINK_NOFOLLOW);
 #endif
 }
 
 s32 sp_sys_fstat(s32 fd, sp_sys_stat_t* st) {
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_FSTAT, fd, (s64)st);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_FSTAT, fd, st);
 }
 
 s32 sp_sys_mkdir(const c8* path, s32 mode) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_MKDIR, (s64)path, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_MKDIR, path, mode);
 #else
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_MKDIRAT, SP_AT_FDCWD, (s64)path, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_MKDIRAT, SP_AT_FDCWD, path, mode);
 #endif
 }
 
 s32 sp_sys_rmdir(const c8* path) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall1(SP_SYSCALL_NUM_RMDIR, (s64)path);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_RMDIR, path);
 #else
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, (s64)path, SP_AT_REMOVEDIR);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, path, SP_AT_REMOVEDIR);
 #endif
 }
 
 s32 sp_sys_unlink(const c8* path) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall1(SP_SYSCALL_NUM_UNLINK, (s64)path);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINK, path);
 #else
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, (s64)path, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, path, 0);
 #endif
 }
 
 s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_RENAME, (s64)oldpath, (s64)newpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_RENAME, oldpath, newpath);
 #else
-  return (s32)sp_syscall4(SP_SYSCALL_NUM_RENAMEAT, SP_AT_FDCWD, (s64)oldpath, SP_AT_FDCWD, (s64)newpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_RENAMEAT, SP_AT_FDCWD, oldpath, SP_AT_FDCWD, newpath);
 #endif
 }
 
 s64 sp_sys_getcwd(char* buf, u64 size) {
-  return sp_syscall2(SP_SYSCALL_NUM_GETCWD, (s64)buf, (s64)size);
+  return sp_syscall(SP_SYSCALL_NUM_GETCWD, buf, size);
 }
 
 s32 sp_sys_chdir(const c8* path) {
-  return (s32)sp_syscall1(SP_SYSCALL_NUM_CHDIR, (s64)path);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_CHDIR, path);
 }
 
 s64 sp_sys_readlink(const c8* path, char* buf, u64 size) {
 #if defined(SP_AMD64)
-  return sp_syscall3(SP_SYSCALL_NUM_READLINK, (s64)path, (s64)buf, (s64)size);
+  return sp_syscall(SP_SYSCALL_NUM_READLINK, path, buf, size);
 #else
-  return sp_syscall4(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, (s64)path, (s64)buf, (s64)size);
+  return sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, path, buf, size);
 #endif
 }
 
 s64 sp_sys_getdents64(s32 fd, void* buf, u64 count) {
-  return sp_syscall3(SP_SYSCALL_NUM_GETDENTS64, fd, (s64)buf, (s64)count);
+  return sp_syscall(SP_SYSCALL_NUM_GETDENTS64, fd, buf, count);
 }
 
 s32 sp_sys_symlink(const c8* target, const c8* linkpath) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_SYMLINK, (s64)target, (s64)linkpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_SYMLINK, target, linkpath);
 #else
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_SYMLINKAT, (s64)target, SP_AT_FDCWD, (s64)linkpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_SYMLINKAT, target, SP_AT_FDCWD, linkpath);
 #endif
 }
 
 s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_LINK, (s64)oldpath, (s64)newpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_LINK, oldpath, newpath);
 #else
-  return (s32)sp_syscall5(SP_SYSCALL_NUM_LINKAT, SP_AT_FDCWD, (s64)oldpath, SP_AT_FDCWD, (s64)newpath, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_LINKAT, SP_AT_FDCWD, oldpath, SP_AT_FDCWD, newpath, 0);
 #endif
 }
 
 s32 sp_sys_chmod(const c8* path, s32 mode) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_CHMOD, (s64)path, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_CHMOD, path, mode);
 #else
-  return (s32)sp_syscall4(SP_SYSCALL_NUM_FCHMODAT, SP_AT_FDCWD, (s64)path, mode, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_FCHMODAT, SP_AT_FDCWD, path, mode, 0);
 #endif
 }
 
 s32 sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_CLOCK_GETTIME, clockid, (s64)ts);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_CLOCK_GETTIME, clockid, ts);
 }
 
 s32 sp_sys_clock_nanosleep(s32 clockid, s32 flags, sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
-  return (s32)sp_syscall4(SP_SYSCALL_NUM_CLOCK_NANOSLEEP, clockid, flags, (s64)req, (s64)rem);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_CLOCK_NANOSLEEP, clockid, flags, req, rem);
 }
 
 s32 sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_NANOSLEEP, (s64)req, (s64)rem);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, req, rem);
 }
 
 s32 sp_sys_pipe2(s32 pipefd[2], s32 flags) {
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_PIPE2, (s64)pipefd, flags);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_PIPE2, pipefd, flags);
 }
 
 s32 sp_sys_dup2(s32 oldfd, s32 newfd) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_DUP2, oldfd, newfd);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_DUP2, oldfd, newfd);
 #else
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_DUP3, oldfd, newfd, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_DUP3, oldfd, newfd, 0);
 #endif
 }
 
 s32 sp_sys_ioctl(s32 fd, u64 request, void* argp) {
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_IOCTL, fd, (s64)request, (s64)argp);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_IOCTL, fd, request, argp);
 }
 
 s32 sp_sys_fcntl(s32 fd, s32 cmd, s64 arg) {
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_FCNTL, fd, cmd, arg);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_FCNTL, fd, cmd, arg);
 }
 
 s32 sp_sys_tcgetattr(s32 fd, sp_sys_termios_t* termios) {
@@ -3959,37 +3947,50 @@ s32 sp_sys_tcsetattr(s32 fd, s32 opt, const sp_sys_termios_t* termios) {
 }
 
 s32 sp_sys_getpid(void) {
-  return (s32)sp_syscall0(SP_SYSCALL_NUM_GETPID);
+  return (s32)__sp_syscall_ret(sp_syscall0(SP_SYSCALL_NUM_GETPID));
 }
 
 s32 sp_sys_inotify_init1(s32 flags) {
-  return (s32)sp_syscall1(SP_SYSCALL_NUM_INOTIFY_INIT1, flags);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_INOTIFY_INIT1, flags);
 }
 
 s32 sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask) {
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_INOTIFY_ADD_WATCH, fd, (s64)pathname, mask);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_INOTIFY_ADD_WATCH, fd, pathname, mask);
 }
 
 s32 sp_sys_inotify_rm_watch(s32 fd, s32 wd) {
-  return (s32)sp_syscall2(SP_SYSCALL_NUM_INOTIFY_RM_WATCH, fd, wd);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_INOTIFY_RM_WATCH, fd, wd);
 }
 
 s32 sp_sys_poll(sp_sys_pollfd_t* fds, u64 nfds, s32 timeout) {
 #if defined(SP_AMD64)
-  return (s32)sp_syscall3(SP_SYSCALL_NUM_POLL, (s64)fds, (s64)nfds, timeout);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_POLL, fds, nfds, timeout);
 #elif defined(SP_ARM64)
   sp_sys_timespec_t ts = { .tv_sec = timeout / 1000, .tv_nsec = (timeout % 1000) * 1000000 };
   sp_sys_timespec_t* tsp = timeout < 0 ? SP_NULLPTR : &ts;
-  return (s32)sp_syscall5(SP_SYSCALL_NUM_PPOLL, (s64)fds, (s64)nfds, (s64)tsp, 0, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_PPOLL, fds, nfds, tsp, 0, 0);
 #endif
 }
 
 s32 sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage) {
-  return (s32)sp_syscall4(SP_SYSCALL_NUM_WAIT4, pid, (s64)status, options, (s64)rusage);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_WAIT4, pid, status, options, rusage);
 }
 
+void* sp_sys_mmap(void* addr, u64 len, s32 prot, s32 flags, s32 fd, s64 offset) {
+  return (void*)sp_syscall(SP_SYSCALL_NUM_MMAP, addr, len, prot, flags, fd, offset);
+}
+
+s32 sp_sys_munmap(void* addr, u64 len) {
+  return (s32)sp_syscall(SP_SYSCALL_NUM_MUNMAP, addr, len);
+}
+
+void* sp_sys_mremap(void* old_addr, u64 old_size, u64 new_size, s32 flags) {
+  return (void*)sp_syscall(SP_SYSCALL_NUM_MREMAP, old_addr, old_size, new_size, flags);
+}
+
+
 void sp_sys_exit(s32 code) {
-  sp_syscall1(SP_SYSCALL_NUM_EXIT_GROUP, code);
+  sp_syscall(SP_SYSCALL_NUM_EXIT_GROUP, code);
   __builtin_unreachable();
 }
 #endif
@@ -5080,7 +5081,8 @@ void sp_fmt_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) 
 
   sp_str_builder_append_cstr(builder, ", len: ");
 
-  u64 len = sb.writer ? sp_io_writer_size(sb.writer) : 0;
+  u64 len = 0;
+  if (sb.writer) sp_io_writer_size(sb.writer, &len);
   sp_fmt_format_unsigned(builder, len, 20);
 
   sp_str_builder_append_cstr(builder, " }");
@@ -5282,7 +5284,7 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
         sp_format_parser_eat_and_assert(&parser, '}');
 
         sp_format_arg_t arg = va_arg(args, sp_format_arg_t);
-        u64 formatted_value_start = sp_io_writer_size(builder.writer);
+        u64 formatted_value_start = sp_str_builder_len(&builder);
         SP_CARR_FOR(formatters, i) {
           if (arg.id == formatters[i].id) {
             sp_format_fn_t fn = formatters[i].fn;
@@ -5290,7 +5292,8 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
             break;
           }
         }
-        u64 formatted_value_len = sp_io_writer_size(builder.writer) - formatted_value_start;
+        u64 formatted_value_end = sp_str_builder_len(&builder);
+        u64 formatted_value_len = formatted_value_end - formatted_value_start;
 
         if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_PAD) {
           if (formatted_value_len < specifier.pad) {
@@ -6477,7 +6480,7 @@ sp_str_builder_t sp_str_builder_from_writer(sp_io_writer_t* writer) {
 void sp_str_builder_ensure_writer(sp_str_builder_t* builder) {
   if (!builder->writer) {
     builder->writer = sp_alloc_type(sp_io_writer_t);
-    *builder->writer = sp_io_writer_from_dyn_mem();
+    sp_io_writer_from_dyn_mem(builder->writer);
   }
 }
 
@@ -6493,7 +6496,7 @@ void sp_str_builder_dedent(sp_str_builder_t* builder) {
 
 void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
   sp_str_builder_ensure_writer(builder);
-  sp_io_write_str(builder->writer, str);
+  sp_io_write_str(builder->writer, str, SP_NULLPTR);
 }
 
 void sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str) {
@@ -6543,6 +6546,14 @@ void sp_str_builder_new_line(sp_str_builder_t* builder) {
   }
 }
 
+u64 sp_str_builder_len(sp_str_builder_t* builder) {
+  if (!builder->writer) return 0;
+
+  u64 size = 0;
+  sp_io_writer_size(builder->writer, &size);
+  return size;
+}
+
 sp_str_t sp_str_builder_as_str(sp_str_builder_t* builder) {
   sp_str_builder_ensure_writer(builder);
   return sp_mem_buffer_as_str(&builder->writer->dyn_mem.buffer);
@@ -6567,6 +6578,7 @@ void sp_str_builder_free(sp_str_builder_t* builder) {
     builder->writer = SP_NULLPTR;
   }
 }
+
 
 sp_str_t sp_str_reduce(sp_str_t* strings, u32 num_strings, void* user_data, sp_str_reduce_fn_t fn) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
@@ -7068,19 +7080,20 @@ sp_err_t sp_fs_create_file(sp_str_t path) {
 
 sp_err_t sp_fs_create_file_slice(sp_str_t path, sp_mem_slice_t slice) {
   sp_try(sp_os_create_file(path));
-  sp_io_writer_t io = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write(&io, slice.data, slice.len);
-  sp_io_writer_close(&io);
+  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_try(sp_io_writer_from_file(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_write(&io, slice.data, slice.len, SP_NULLPTR));
+  sp_try(sp_io_writer_close(&io));
   return SP_OK;
 }
 
 sp_err_t sp_fs_create_file_str(sp_str_t path, sp_str_t str) {
   sp_try(sp_os_create_file(path));
-  sp_io_writer_t io = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write_str(&io, str);
-  sp_io_writer_close(&io);
+  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_try(sp_io_writer_from_file(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_write_str(&io, str, SP_NULLPTR));
+  sp_try(sp_io_writer_close(&io));
   return SP_OK;
-
 }
 
 sp_err_t sp_fs_create_file_cstr(sp_str_t path, const c8* str) {
@@ -7148,18 +7161,19 @@ void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
   sp_os_attr_t attrs = sp_os_get_raw_target_attrs(from);
   if (!attrs) return;
 
-  sp_io_reader_t reader = sp_io_reader_from_file(from);
-  if (!reader.file.fd) return;
+  sp_io_reader_t reader = SP_ZERO_INITIALIZE();
+  if (sp_io_reader_from_file(&reader, from)) return;
 
-  sp_io_writer_t writer = sp_io_writer_from_file(to, SP_IO_WRITE_MODE_OVERWRITE);
-  if (sp_err_get()) {
+  sp_io_writer_t writer = SP_ZERO_INITIALIZE();
+  if (sp_io_writer_from_file(&writer, to, SP_IO_WRITE_MODE_OVERWRITE)) {
+    sp_io_reader_close(&reader);
     return;
   }
 
   u8 buffer[4096];
-  u64 bytes_read;
-  while ((bytes_read = sp_io_read(&reader, buffer, sizeof(buffer))) > 0) {
-    sp_io_write(&writer, buffer, bytes_read);
+  u64 bytes_read = 0;
+  while (sp_io_read(&reader, buffer, sizeof(buffer), &bytes_read) == SP_OK && bytes_read > 0) {
+    sp_io_write(&writer, buffer, bytes_read, SP_NULLPTR);
   }
 
   sp_io_reader_close(&reader);
@@ -7693,7 +7707,8 @@ sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
 
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   sp_stat_t st;
-  sp_try_goto(sp_stat(sp_str_to_cstr(file_path), &st), cleanup);
+  sp_err_t err;
+  sp_try_goto(sp_stat(sp_str_to_cstr(file_path), &st), err, cleanup);
 
   result.s = st.st_mtime_sec;
   result.ns = (u32)st.st_mtime_nsec;
@@ -8620,7 +8635,7 @@ void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t
   sa.handler  = sp__signal_trampoline_;
   sa.flags    = 0x04000000; /* SA_RESTORER */
   sa.restorer = sp__signal_restorer;
-  sp_syscall4(SP_SYSCALL_NUM_SIGACTION, sig, (s64)&sa, 0, 8);
+  sp_syscall(SP_SYSCALL_NUM_SIGACTION, sig, &sa, 0, 8);
 }
 
 #else
@@ -9972,7 +9987,7 @@ sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.in.fd)) return SP_NULLPTR;
 
   sp_io_writer_t* writer = sp_alloc_type(sp_io_writer_t);
-  *writer = sp_io_writer_from_fd(ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
+  sp_io_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
   return writer;
 }
 
@@ -9981,7 +9996,7 @@ sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
 
   sp_io_reader_t* reader = sp_alloc_type(sp_io_reader_t);
-  *reader = sp_io_reader_from_fd(ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
+  sp_io_reader_from_fd(reader, ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
   return reader;
 }
 
@@ -9990,7 +10005,7 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
 
   sp_io_reader_t* reader = sp_alloc_type(sp_io_reader_t);
-  *reader = sp_io_reader_from_fd(ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
+  sp_io_reader_from_fd(reader, ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
   return reader;
 }
 
@@ -10131,7 +10146,8 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
         continue;
       }
 
-      u64 n = sp_io_read(readers[i], buffer, sizeof(buffer));
+      u64 n = 0;
+      sp_io_read(readers[i], buffer, sizeof(buffer), &n);
       if (n > 0) {
         sp_str_builder_append(builders[i], sp_str((c8*)buffer, n));
       } else {
@@ -10543,17 +10559,18 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     .err = { .parent_fd = -1 },
   };
 
-  sp_try_goto(sp_ps_win32_configure_io_in(&proc.io.in, &io.in), error);
+  sp_err_t error = SP_OK;
+  sp_try_goto(sp_ps_win32_configure_io_in(&proc.io.in, &io.in), error, fail);
 
   if (proc.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
-    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.err, STD_ERROR_HANDLE, GENERIC_WRITE, &io.err), error);
+    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.err, STD_ERROR_HANDLE, GENERIC_WRITE, &io.err), error, fail);
     io.out.child = io.err.child;
   } else if (proc.io.err.mode == SP_PS_IO_MODE_REDIRECT) {
-    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.out, STD_OUTPUT_HANDLE, GENERIC_WRITE, &io.out), error);
+    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.out, STD_OUTPUT_HANDLE, GENERIC_WRITE, &io.out), error, fail);
     io.err.child = io.out.child;
   } else {
-    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.out, STD_OUTPUT_HANDLE, GENERIC_WRITE, &io.out), error);
-    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.err, STD_ERROR_HANDLE, GENERIC_WRITE, &io.err), error);
+    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.out, STD_OUTPUT_HANDLE, GENERIC_WRITE, &io.out), error, fail);
+    sp_try_goto(sp_ps_win32_configure_io_out(&proc.io.err, STD_ERROR_HANDLE, GENERIC_WRITE, &io.err), error, fail);
   }
 
   STARTUPINFOA startup = {
@@ -10596,13 +10613,13 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
 
   return proc;
 
-error:
+fail:
   sp_ps_win32_close_child_handles(&io);
   sp_ps_win32_close_parent_fds(&io);
   sp_free(cmdline);
   if (env) sp_free(env);
   if (cwd) sp_free(cwd);
-  sp_err_set(SP_ERR_OS);
+  sp_err_set(error);
   return SP_ZERO_STRUCT(sp_ps_t);
 }
 
@@ -10627,7 +10644,7 @@ sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.in.fd)) return SP_NULLPTR;
 
   sp_io_writer_t* writer = sp_alloc_type(sp_io_writer_t);
-  *writer = sp_io_writer_from_fd(ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
+  sp_io_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
   return writer;
 }
 
@@ -10636,7 +10653,7 @@ sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
 
   sp_io_reader_t* reader = sp_alloc_type(sp_io_reader_t);
-  *reader = sp_io_reader_from_fd(ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
+  sp_io_reader_from_fd(reader, ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
   return reader;
 }
 
@@ -10645,7 +10662,7 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
 
   sp_io_reader_t* reader = sp_alloc_type(sp_io_reader_t);
-  *reader = sp_io_reader_from_fd(ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
+  sp_io_reader_from_fd(reader, ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
   return reader;
 }
 
@@ -10923,8 +10940,8 @@ void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   sp_fmon_os_add_dir(monitor, path);
 }
 
-void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
-  sp_fmon_os_add_file(monitor, file_path);
+void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t path) {
+  sp_fmon_os_add_file(monitor, path);
 }
 
 void sp_fmon_process_changes(sp_fmon_t* monitor) {
@@ -11026,13 +11043,13 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   monitor->os = NULL;
 }
 
-void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
+void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   sp_fmon_os_t* os = monitor->os;
 
   sp_win32_handle_t event = CreateEventW(NULL, false, false, NULL);
   if (!event) return;
 
-  c8* directory_cstr = sp_str_to_cstr(directory_path);
+  c8* directory_cstr = sp_str_to_cstr(path);
   sp_win32_handle_t handle = CreateFileA(
     directory_cstr,
     FILE_LIST_DIRECTORY,
@@ -11051,7 +11068,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
   sp_fmon_dir_t dir = SP_ZERO_INITIALIZE();
   dir.overlapped.hEvent = event;
   dir.handle = handle;
-  dir.path = sp_str_copy(directory_path);
+  dir.path = sp_fs_canonicalize_path(path);
   dir.notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
   sp_mem_zero(dir.notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
 
@@ -11082,9 +11099,8 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
 
 SP_PRIVATE bool sp_win32_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path) {
   if (sp_da_size(os->watch_files) == 0) return true;
-  sp_str_t canonical = sp_fs_canonicalize_path(full_path);
   sp_da_for(os->watch_files, i) {
-    if (sp_str_equal(os->watch_files[i], canonical)) return true;
+    if (sp_str_equal(os->watch_files[i], full_path)) return true;
   }
   return false;
 }
@@ -11127,13 +11143,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
       if (events != SP_FILE_CHANGE_EVENT_NONE) {
         sp_str_t partial_path_str = sp_win32_utf16_to_utf8(&notify->FileName[0], (s32)(notify->FileNameLength / sizeof(WCHAR)));
 
-        sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-        sp_str_builder_append(&builder, info->path);
-        sp_str_builder_append(&builder, sp_str_lit("\\"));
-        sp_str_builder_append(&builder, partial_path_str);
-        sp_str_t full_path = sp_str_builder_to_str(&builder);
-
-        sp_fs_normalize_path(full_path);
+        sp_str_t full_path = sp_fs_join_path(info->path, partial_path_str);
 
         if (sp_win32_fmon_file_matches(os, full_path)) {
           sp_str_t file_name = sp_fs_get_name(full_path);
@@ -11755,38 +11765,59 @@ sp_err_ext_t sp_err_get_ext() {
 // ██║╚██████╔╝
 // ╚═╝ ╚═════╝
 // @io
-sp_str_t sp_io_read_file(sp_str_t path) {
-  sp_io_reader_t reader = sp_io_reader_from_file(path);
-  if (reader.file.fd <= 0) {
-    return SP_ZERO_STRUCT(sp_str_t);
+sp_err_t sp_io_read_file(sp_str_t path, sp_str_t* content) {
+  sp_assert(content);
+
+  sp_err_t err = SP_OK;
+  c8* buffer = SP_NULLPTR;
+  u64 size = 0;
+
+  sp_io_reader_t reader = SP_ZERO_INITIALIZE();
+  sp_try(sp_io_reader_from_file(&reader, path));
+
+  sp_try_goto(sp_io_reader_size(&reader, &size), err, cleanup);
+  if (!size) {
+    goto cleanup;
   }
 
-  u64 size = sp_io_reader_size(&reader);
-  if (size == 0) {
-    sp_io_reader_close(&reader);
-    return SP_ZERO_STRUCT(sp_str_t);
-  }
+  buffer = sp_alloc_n(c8, size);
+  u64 bytes_read = 0;
+  sp_try_goto(sp_io_read(&reader, buffer, size, &bytes_read), err, cleanup);
+  content->data = buffer;
+  content->len = (u32)bytes_read;
+  buffer = SP_NULLPTR;
 
-  c8* data = (c8*)sp_alloc((u32)size);
-  u64 bytes_read = sp_io_read(&reader, data, size);
+cleanup:
+  if (buffer) sp_free(buffer);
   sp_io_reader_close(&reader);
-
-  return (sp_str_t) {
-    .data = data,
-    .len = (u32)bytes_read
-  };
+  return err;
 }
 
-u64 sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size) {
-  s64 result = sp_read(reader->file.fd, ptr, size);
-  if (result < 0) {
-    sp_err_set(SP_ERR_IO_READ_FAILED);
-    return 0;
+sp_err_t sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_err_t result = SP_OK;
+  u64 num_bytes = 0;
+
+  while (true) {
+    s64 rc = sp_read(reader->file.fd, ptr, size);
+    if (rc >= 0) {
+      num_bytes = (u64)rc;
+      goto done;
+    }
+
+    if (errno == SP_EINTR) {
+      continue;
+    }
+
+    result = SP_ERR_IO_READ_FAILED;
+    goto done;
   }
-  return (u64)result;
+
+done:
+  if (bytes_read) *bytes_read = num_bytes;
+  return result;
 }
 
-s64 sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence) {
+sp_err_t sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
   s32 posix_whence = SP_SEEK_SET;
   switch (whence) {
     case SP_IO_SEEK_SET: {
@@ -11805,45 +11836,50 @@ s64 sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence)
 
   s64 pos = sp_lseek(r->file.fd, offset, posix_whence);
   if (pos < 0) {
-    sp_err_set(SP_ERR_IO_SEEK_FAILED);
+    if (position) *position = -1;
+    return SP_ERR_IO_SEEK_FAILED;
   }
-  return pos;
+  if (position) *position = pos;
+  return SP_OK;
 }
 
-u64 sp_io_reader_file_size(sp_io_reader_t* r) {
+sp_err_t sp_io_reader_file_size(sp_io_reader_t* r, u64* size) {
   s64 current = sp_lseek(r->file.fd, 0, SP_SEEK_CUR);
   if (current < 0) {
-    sp_err_set(SP_ERR_IO);
-    return 0;
+    if (size) *size = 0;
+    return SP_ERR_IO;
   }
 
-  s64 size = sp_lseek(r->file.fd, 0, SP_SEEK_END);
-  if (size < 0) {
-    sp_err_set(SP_ERR_IO_SEEK_FAILED);
-    return 0;
+  s64 end = sp_lseek(r->file.fd, 0, SP_SEEK_END);
+  if (end < 0) {
+    if (size) *size = 0;
+    return SP_ERR_IO_SEEK_FAILED;
   }
 
   sp_lseek(r->file.fd, current, SP_SEEK_SET);
-  return (u64)size;
+  if (size) *size = (u64)end;
+  return SP_OK;
 }
 
-void sp_io_reader_file_close(sp_io_reader_t* r) {
+sp_err_t sp_io_reader_file_close(sp_io_reader_t* r) {
   if (r->file.close_mode == SP_IO_CLOSE_MODE_AUTO) {
     if (sp_close(r->file.fd) < 0) {
-      sp_err_set(SP_ERR_IO_CLOSE_FAILED);
+      return SP_ERR_IO_CLOSE_FAILED;
     }
   }
+  return SP_OK;
 }
 
-u64 sp_io_reader_mem_read(sp_io_reader_t* r, void* ptr, u64 size) {
+sp_err_t sp_io_reader_mem_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read) {
   u64 available = r->mem.len - r->mem.pos;
   u64 n = SP_MIN(size, available);
   sp_mem_copy(r->mem.ptr + r->mem.pos, ptr, n);
   r->mem.pos += n;
-  return n;
+  if (bytes_read) *bytes_read = n;
+  return SP_OK;
 }
 
-s64 sp_io_reader_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence) {
+sp_err_t sp_io_reader_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
   s64 pos = 0;
 
   switch (whence) {
@@ -11862,26 +11898,35 @@ s64 sp_io_reader_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence) 
   }
 
   if (pos < 0 || (u64)pos > r->mem.len) {
-    sp_err_set(SP_ERR_IO_SEEK_INVALID);
-    return -1;
+    if (position) *position = -1;
+    return SP_ERR_IO_SEEK_INVALID;
   }
   r->mem.pos = (u64)pos;
-  return pos;
+  if (position) *position = pos;
+  return SP_OK;
 }
 
-u64 sp_io_reader_mem_size(sp_io_reader_t* r) {
-  return r->mem.len;
+sp_err_t sp_io_reader_mem_size(sp_io_reader_t* r, u64* size) {
+  if (size) *size = r->mem.len;
+  return SP_OK;
 }
 
-void sp_io_reader_mem_close(sp_io_reader_t* r) {
+sp_err_t sp_io_reader_mem_close(sp_io_reader_t* r) {
   (void)r;
+  return SP_OK;
 }
 
-sp_io_reader_t sp_io_reader_from_file(sp_str_t path) {
+sp_err_t sp_io_reader_from_file(sp_io_reader_t* reader, sp_str_t path) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   s32 fd = sp_open(sp_str_to_cstr(path), SP_O_RDONLY | SP_O_BINARY, 0);
   sp_mem_end_scratch(scratch);
-  sp_io_reader_t r = {
+
+  if (fd < 0) {
+    *reader = SP_ZERO_STRUCT(sp_io_reader_t);
+    return SP_ERR_IO_OPEN_FAILED;
+  }
+
+  *reader = (sp_io_reader_t) {
     .vtable = {
       .read = sp_io_reader_file_read,
       .seek = sp_io_reader_file_seek,
@@ -11893,16 +11938,11 @@ sp_io_reader_t sp_io_reader_from_file(sp_str_t path) {
       .close_mode = SP_IO_CLOSE_MODE_AUTO
     },
   };
-
-  if (r.file.fd < 0) {
-    sp_err_set(SP_ERR_IO_OPEN_FAILED);
-    return SP_ZERO_STRUCT(sp_io_reader_t);
-  }
-  return r;
+  return SP_OK;
 }
 
-sp_io_reader_t sp_io_reader_from_fd(sp_os_file_handle_t fd, sp_io_close_mode_t mode) {
-  return (sp_io_reader_t) {
+void sp_io_reader_from_fd(sp_io_reader_t* reader, sp_os_file_handle_t fd, sp_io_close_mode_t mode) {
+  *reader = (sp_io_reader_t) {
     .vtable = {
       .read = sp_io_reader_file_read,
       .seek = sp_io_reader_file_seek,
@@ -11916,8 +11956,8 @@ sp_io_reader_t sp_io_reader_from_fd(sp_os_file_handle_t fd, sp_io_close_mode_t m
   };
 }
 
-sp_io_reader_t sp_io_reader_from_mem(const void* ptr, u64 size) {
-  return (sp_io_reader_t) {
+void sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size) {
+  *reader = (sp_io_reader_t) {
     .vtable = {
       .read = sp_io_reader_mem_read,
       .seek = sp_io_reader_mem_seek,
@@ -11933,7 +11973,7 @@ sp_io_reader_t sp_io_reader_from_mem(const void* ptr, u64 size) {
 }
 
 void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
-  if (!reader) return;
+  sp_assert(reader);
 
   reader->buffer = (sp_mem_buffer_t) {
     .data = buf,
@@ -11943,13 +11983,11 @@ void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
   reader->seek = 0;
 }
 
-u64 sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size) {
-  if (!reader) return 0;
-  if (!reader->vtable.read) return 0;
-  sp_err_clear();
+sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_assert(reader);
 
   if (!reader->buffer.data) {
-    return reader->vtable.read(reader, ptr, size);
+    return reader->vtable.read(reader, ptr, size, bytes_read);
   }
 
   u8* buffer = (u8*)ptr;
@@ -11963,120 +12001,147 @@ u64 sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size) {
   buffer += n;
   total += n;
 
-  if (total == size) return size;
+  if (total == size) {
+    if (bytes_read) *bytes_read = size;
+    return SP_OK;
+  }
 
   u64 remaining = size - total;
   if (remaining >= reader->buffer.capacity) {
-    return total + reader->vtable.read(reader, buffer, remaining);
+    u64 direct_read = 0;
+    sp_err_t err = reader->vtable.read(reader, buffer, remaining, &direct_read);
+    if (bytes_read) *bytes_read = total + direct_read;
+    return err;
   }
 
   reader->seek = 0;
-  reader->buffer.len = reader->vtable.read(reader, reader->buffer.data, reader->buffer.capacity);
+  u64 fill_read = 0;
+  sp_err_t err = reader->vtable.read(reader, reader->buffer.data, reader->buffer.capacity, &fill_read);
+  reader->buffer.len = fill_read;
   n = SP_MIN(remaining, reader->buffer.len);
   sp_mem_copy(reader->buffer.data, buffer, n);
 
   reader->seek = n;
-  return total + n;
+  if (bytes_read) *bytes_read = total + n;
+  return err;
 }
 
-s64 sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence) {
-  if (!reader) return 0;
-  if (!reader->vtable.seek) return 0;
+sp_err_t sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position) {
+  sp_assert(reader);
 
   if (reader->buffer.data && reader->buffer.len > reader->seek) {
     s64 buffered = (s64)(reader->buffer.len - reader->seek);
-    reader->vtable.seek(reader, -buffered, SP_IO_SEEK_CUR);
+    reader->vtable.seek(reader, -buffered, SP_IO_SEEK_CUR, SP_NULLPTR);
     reader->seek = 0;
     reader->buffer.len = 0;
   }
 
-  sp_err_clear();
-  return reader->vtable.seek(reader, offset, whence);
+  return reader->vtable.seek(reader, offset, whence, position);
 }
 
-u64 sp_io_reader_size(sp_io_reader_t* reader) {
-  if (!reader) return 0;
-  if (!reader->vtable.size) return 0;
-  sp_err_clear();
-
-  return reader->vtable.size(reader);
+sp_err_t sp_io_reader_size(sp_io_reader_t* reader, u64* size) {
+  sp_assert(reader);
+  return reader->vtable.size(reader, size);
 }
 
-void sp_io_reader_close(sp_io_reader_t* reader) {
-  if (!reader) return;
-  if (!reader->vtable.close) return;
-  sp_err_clear();
-
-  reader->vtable.close(reader);
+sp_err_t sp_io_reader_close(sp_io_reader_t* reader) {
+  if (!reader->vtable.close) return SP_OK;
+  return reader->vtable.close(reader);
 }
 
-u64 sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
-  s64 result = sp_write(writer->file.fd, ptr, size);
-  if (result < 0) {
-    sp_err_set(SP_ERR_IO_WRITE_FAILED);
-    return 0;
+sp_err_t sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_err_t result = SP_OK;
+  u64 num_bytes = 0;
+
+  while (true) {
+    s64 rc = sp_write(writer->file.fd, ptr, size);
+    if (rc >= 0) {
+      num_bytes = (u64)rc;
+      goto done;
+    }
+
+    if (errno == SP_EINTR) {
+      continue;
+    }
+
+    result = SP_ERR_IO_WRITE_FAILED;
+    goto done;
   }
-  return (u64)result;
+
+done:
+  if (bytes_written) *bytes_written = num_bytes;
+  return result;
 }
 
-s64 sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
+sp_err_t sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
   int posix_whence = SP_SEEK_SET;
   switch (whence) {
-    case SP_IO_SEEK_SET: {
-      posix_whence = SP_SEEK_SET;
-      break;
-    }
-    case SP_IO_SEEK_CUR: {
-      posix_whence = SP_SEEK_CUR;
-      break;
-    }
-    case SP_IO_SEEK_END: {
-      posix_whence = SP_SEEK_END;
-      break;
-    }
+    case SP_IO_SEEK_SET: posix_whence = SP_SEEK_SET; break;
+    case SP_IO_SEEK_CUR: posix_whence = SP_SEEK_CUR; break;
+    case SP_IO_SEEK_END: posix_whence = SP_SEEK_END; break;
   }
-  s64 pos = sp_lseek(writer->file.fd, offset, posix_whence);
-  if (pos < 0) {
-    sp_err_set(SP_ERR_IO_SEEK_FAILED);
+
+  s64 p = 0;
+  position = position ? position : &p;
+
+  *position = sp_lseek(writer->file.fd, offset, posix_whence);
+  if (*position < 0) {
+    return SP_ERR_IO_SEEK_FAILED;
   }
-  return pos;
+  return SP_OK;
 }
 
-u64 sp_io_writer_file_size(sp_io_writer_t* writer) {
+sp_err_t sp_io_writer_file_size(sp_io_writer_t* writer, u64* size) {
+  u64 s = 0;
+  size = size ? size : &s;
+
   s64 current = sp_lseek(writer->file.fd, 0, SP_SEEK_CUR);
   if (current < 0) {
-    sp_err_set(SP_ERR_IO);
-    return 0;
+    return SP_ERR_IO;
   }
 
-  s64 size = sp_lseek(writer->file.fd, 0, SP_SEEK_END);
-  if (size < 0) {
-    sp_err_set(SP_ERR_IO_SEEK_FAILED);
-    return 0;
+  *size = sp_lseek(writer->file.fd, 0, SP_SEEK_END);
+  if (*size < 0) {
+    return SP_ERR_IO_SEEK_FAILED;
   }
 
   sp_lseek(writer->file.fd, current, SP_SEEK_SET);
-  return (u64)size;
+  return SP_OK;
 }
 
-void sp_io_writer_file_close(sp_io_writer_t* writer) {
-  if (writer->file.close_mode != SP_IO_CLOSE_MODE_AUTO) return;
+sp_err_t sp_io_writer_file_close(sp_io_writer_t* writer) {
+  if (writer->file.close_mode != SP_IO_CLOSE_MODE_AUTO) return SP_OK;
 
   if (sp_close(writer->file.fd) < 0) {
-    sp_err_set(SP_ERR_IO_CLOSE_FAILED);
+    return SP_ERR_IO_CLOSE_FAILED;
   }
+  return SP_OK;
 }
 
-u64 sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
+sp_err_t sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_err_t result = SP_OK;
+  u64 written = 0;
+
+  // If you try a write that would overflow, write nothing. We could write what we're able to
+  // and return an error, but the general principle is to stop as soon as you know you're in
+  // an error state. And "I want to write 16 bytes into an 8 byte buffer" is an error state. I
+  // would rather end up in the same state every time (nothing written, get an error).
   u64 available = writer->mem.len - writer->mem.pos;
-  u64 written = SP_MIN(size, available);
+  if (size > available) {
+    result = SP_ERR_IO_NO_SPACE;
+    goto done;
+  }
 
-  sp_mem_copy(ptr, writer->mem.ptr + writer->mem.pos, written);
-  writer->mem.pos += written;
-  return written;
+  sp_mem_copy(ptr, writer->mem.ptr + writer->mem.pos, size);
+  writer->mem.pos += size;
+  written = size;
+
+done:
+  if (bytes_written) *bytes_written = written;
+  return result;
 }
 
-s64 sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
+sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
   s64 pos = 0;
 
   switch (whence) {
@@ -12095,25 +12160,29 @@ s64 sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whe
   }
 
   if (pos < 0 || (u64)pos > writer->mem.len) {
-    sp_err_set(SP_ERR_IO_SEEK_INVALID);
-    return -1;
+    if (position) *position = -1;
+    return SP_ERR_IO_SEEK_INVALID;
   }
   writer->mem.pos = (u64)pos;
-  return pos;
+  if (position) *position = pos;
+  return SP_OK;
 }
 
-u64 sp_io_writer_mem_size(sp_io_writer_t* writer) {
-  return writer->mem.len;
+sp_err_t sp_io_writer_mem_size(sp_io_writer_t* writer, u64* size) {
+  if (size) *size = writer->mem.len;
+  return SP_OK;
 }
 
-void sp_io_writer_mem_close(sp_io_writer_t* writer) {
+sp_err_t sp_io_writer_mem_close(sp_io_writer_t* writer) {
   (void)writer;
+  return SP_OK;
 }
 
-u64 sp_io_writer_dyn_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
+sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
   sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
-  u64 required = io->seek + size;
 
+  // Keep doubling the underlying buffer if there's not enough space
+  u64 required = io->seek + size;
   if (required > io->buffer.capacity) {
     u64 new_capacity = io->buffer.capacity ? io->buffer.capacity : 64;
     while (new_capacity < required) {
@@ -12128,48 +12197,53 @@ u64 sp_io_writer_dyn_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
   if (io->seek > io->buffer.len) {
     io->buffer.len = io->seek;
   }
-  return size;
+  if (bytes_written) *bytes_written = size;
+  return SP_OK;
 }
 
-s64 sp_io_writer_dyn_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
+sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
   sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
+
   s64 pos = 0;
+  position = position ? position : &pos;
 
   switch (whence) {
     case SP_IO_SEEK_SET: {
-      pos = offset;
+      *position = offset;
       break;
     }
     case SP_IO_SEEK_CUR: {
-      pos = (s64)io->seek + offset;
+      *position = (s64)io->seek + offset;
       break;
     }
     case SP_IO_SEEK_END: {
-      pos = (s64)io->buffer.len + offset;
+      *position = (s64)io->buffer.len + offset;
       break;
     }
   }
 
-  if (pos < 0 || (u64)pos > io->buffer.len) {
-    sp_err_set(SP_ERR_IO_SEEK_INVALID);
-    return -1;
-  }
-  io->seek = (u64)pos;
-  return pos;
+  if (*position < 0) return SP_ERR_IO_SEEK_INVALID;
+  if (*position > (s64)io->buffer.len) return SP_ERR_IO_SEEK_INVALID;
+
+  io->seek = (u64)(*position);
+  return SP_OK;
 }
 
-u64 sp_io_writer_dyn_size(sp_io_writer_t* writer) {
-  return writer->dyn_mem.buffer.len;
+sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* writer, u64* size) {
+  sp_assert(size);
+  *size = writer->dyn_mem.buffer.len;
+  return SP_OK;
 }
 
-void sp_io_writer_dyn_close(sp_io_writer_t* writer) {
+sp_err_t sp_io_writer_dyn_close(sp_io_writer_t* writer) {
   if (writer->dyn_mem.buffer.data) {
     sp_mem_allocator_free(writer->dyn_mem.allocator, writer->dyn_mem.buffer.data);
     writer->dyn_mem.buffer = SP_ZERO_STRUCT(sp_mem_buffer_t);
   }
+  return SP_OK;
 }
 
-sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode) {
+sp_err_t sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode) {
   s32 flags = SP_O_WRONLY | SP_O_CREAT | SP_O_BINARY;
   switch (mode) {
     case SP_IO_WRITE_MODE_OVERWRITE: {
@@ -12187,11 +12261,11 @@ sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode) {
   sp_mem_end_scratch(scratch);
 
   if (fd < 0) {
-    sp_err_set(SP_ERR_IO_OPEN_FAILED);
-    return SP_ZERO_STRUCT(sp_io_writer_t);
+    *writer = SP_ZERO_STRUCT(sp_io_writer_t);
+    return SP_ERR_IO_OPEN_FAILED;
   }
 
-  sp_io_writer_t w = {
+  *writer = (sp_io_writer_t) {
     .vtable = {
       .write = sp_io_writer_file_write,
       .seek = sp_io_writer_file_seek,
@@ -12203,11 +12277,11 @@ sp_io_writer_t sp_io_writer_from_file(sp_str_t path, sp_io_write_mode_t mode) {
       .close_mode = SP_IO_CLOSE_MODE_AUTO,
     },
   };
-  return w;
+  return SP_OK;
 }
 
-sp_io_writer_t sp_io_writer_from_fd(s32 fd, sp_io_close_mode_t close_mode) {
-  sp_io_writer_t w = {
+void sp_io_writer_from_fd(sp_io_writer_t* writer, s32 fd, sp_io_close_mode_t close_mode) {
+  *writer = (sp_io_writer_t) {
     .vtable = {
       .write = sp_io_writer_file_write,
       .seek = sp_io_writer_file_seek,
@@ -12219,11 +12293,10 @@ sp_io_writer_t sp_io_writer_from_fd(s32 fd, sp_io_close_mode_t close_mode) {
       .close_mode = close_mode,
     },
   };
-  return w;
 }
 
-sp_io_writer_t sp_io_writer_from_mem(void* ptr, u64 size) {
-  sp_io_writer_t w = {
+void sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size) {
+  *writer = (sp_io_writer_t) {
     .vtable = {
       .write = sp_io_writer_mem_write,
       .seek = sp_io_writer_mem_seek,
@@ -12236,15 +12309,14 @@ sp_io_writer_t sp_io_writer_from_mem(void* ptr, u64 size) {
       .pos = 0,
     },
   };
-  return w;
 }
 
-sp_io_writer_t sp_io_writer_from_dyn_mem() {
-  return sp_io_writer_from_dyn_mem_ex(SP_NULLPTR, 0, sp_context_get()->allocator);
+void sp_io_writer_from_dyn_mem(sp_io_writer_t* writer) {
+  sp_io_writer_from_dyn_mem_ex(writer, SP_NULLPTR, 0, sp_context_get()->allocator);
 }
 
-sp_io_writer_t sp_io_writer_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t allocator) {
-  return (sp_io_writer_t) {
+void sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_allocator_t allocator) {
+  *writer = (sp_io_writer_t) {
     .vtable = {
       .write = sp_io_writer_dyn_write,
       .seek = sp_io_writer_dyn_seek,
@@ -12262,130 +12334,145 @@ sp_io_writer_t sp_io_writer_from_dyn_mem_ex(u8* buffer, u64 size, sp_allocator_t
   };
 }
 
-void sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* ptr, u64 size) {
-  if (!writer) return;
-  sp_io_flush(writer);
+sp_err_t sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* ptr, u64 size) {
+  sp_assert(writer);
+  sp_try(sp_io_flush(writer));
 
   writer->buffer = (sp_mem_buffer_t) {
     .data = ptr,
     .len = 0,
     .capacity = size
   };
-}
-
-sp_err_t sp_io_flush(sp_io_writer_t* writer) {
-  if (!writer) return SP_OK;
-  if (!writer->vtable.write) return SP_OK;
-  if (writer->buffer.len == 0) return SP_OK;
-  sp_err_clear();
-
-  u64 written = 0;
-  while (written < writer->buffer.len) {
-    u64 remaining = writer->buffer.len - written;
-    u64 result = writer->vtable.write(writer, writer->buffer.data + written, remaining);
-    if (result == 0) {
-      if (written > 0) {
-        sp_mem_move(writer->buffer.data + written, writer->buffer.data, writer->buffer.len - written);
-        writer->buffer.len -= written;
-      }
-      sp_err_t err = sp_err_get();
-      if (err == SP_OK) {
-        sp_err_set(SP_ERR_IO_WRITE_FAILED);
-        return SP_ERR_IO_WRITE_FAILED;
-      }
-      return err;
-    }
-    written += result;
-  }
-  writer->buffer.len = 0;
   return SP_OK;
 }
 
-u64 sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size) {
-  if (!writer) return 0;
-  if (!writer->vtable.write) return 0;
-  sp_err_clear();
+static sp_err_t sp_io_write_all(sp_io_writer_t* writer, const void* data, u64 size, u64* bytes_written) {
+  sp_err_t result = SP_OK;
+  u64 total = 0;
+  while (total < size) {
+    const u8* ptr = ((const u8*)data) + total;
+    u64 remaining = size - total;
+
+    // If write() returns 0 bytes written, but also does not report an error, we just
+    // keep looping. If this keeps happening, though, you're stuck. Defensively, it
+    // makes sense to just bail rather than risk *any* deadlock, but I think that doing
+    // that would just hide the real breaking of an invariant.
+    //
+    // In other words: You asked to write some number of bytes. The backend failed to
+    // write anything, but somehow did not encounter an error. That doesn't make sense,
+    // and indicates a backend bug.
+    u64 written = 0;
+    sp_try_goto(writer->vtable.write(writer, ptr, remaining, &written), result, done);
+    total += written;
+  }
+
+done:
+  if (bytes_written) *bytes_written = total;
+  return result;
+}
+
+sp_err_t sp_io_flush(sp_io_writer_t* writer) {
+  sp_assert(writer);
+  if (!writer->buffer.len) return SP_OK;
+
+  // Treat a flush failure as not recoverable. This is probably naive, but I haven't hit
+  // a case where I want to retry a failed flush. There's no big reason that I don't e.g.
+  // move what remains unwritten to the front of the buffer for later
+  sp_err_t err = sp_io_write_all(writer, writer->buffer.data, writer->buffer.len, SP_NULLPTR);
+  writer->buffer.len = 0;
+  return err;
+}
+
+sp_err_t sp_io_write(sp_io_writer_t* writer, const void* data, u64 size, u64* bytes_written) {
+  sp_assert(writer);
+
+  sp_err_t err = SP_OK;
+  u64 total = 0;
 
   if (!writer->buffer.data) {
-    return writer->vtable.write(writer, ptr, size);
+    err = sp_io_write_all(writer, data, size, &total);
+    goto done;
   }
 
-  const u8* p = (const u8*)ptr;
-  u64 remaining = size;
+  const u8* ptr = (const u8*)data;
 
   if (size > writer->buffer.capacity) {
-    if (sp_io_flush(writer) != SP_OK) return 0;
-    u64 written = 0;
-    while (written < size) {
-      u64 result = writer->vtable.write(writer, p + written, size - written);
-      if (result == 0) return written;
-      written += result;
+    // If the write is too big for the buffer, just flush whatever's currently
+    // buffered and loop direct writes.
+    sp_try_goto(sp_io_flush(writer), err, done);
+    sp_try_goto(sp_io_write_all(writer, ptr, size, &total), err, done);
+  }
+  else {
+    // If the write is bufferable in general, but the buffer is too full, flush it first.
+    // The correct way to do this (on POSIX) is with writev(), which lets you write whatever's
+    // buffered AND the new data in one syscall. But this requires a bit of platform code,
+    // and there is a larger task to stop using libc to implement sp_io on Windows.
+    //
+    // We could use _get_osfhandle() to do this without rewriting everything, but that's junk
+    // code that'll die as soon as we switch to using NT.
+    if (writer->buffer.capacity - writer->buffer.len < size) {
+      sp_try_goto(sp_io_flush(writer), err, done);
     }
-    return written;
+    sp_mem_copy(ptr, writer->buffer.data + writer->buffer.len, size);
+    writer->buffer.len += size;
+    total = size;
   }
 
-  while (remaining > 0) {
-    u64 space = writer->buffer.capacity - writer->buffer.len;
-    if (space == 0) {
-      sp_io_flush(writer);
-      if (sp_err_get()) return size - remaining;
-      space = writer->buffer.capacity;
-    }
-    u64 chunk = SP_MIN(remaining, space);
-    sp_mem_copy(p, writer->buffer.data + writer->buffer.len, chunk);
-    writer->buffer.len += chunk;
-    p += chunk;
-    remaining -= chunk;
+done:
+  if (bytes_written) *bytes_written = total;
+  return err;
+}
+
+sp_err_t sp_io_write_str(sp_io_writer_t* writer, sp_str_t str, u64* bytes_written) {
+  return sp_io_write(writer, str.data, str.len, bytes_written);
+}
+
+sp_err_t sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr, u64* bytes_written) {
+  return sp_io_write(writer, cstr, sp_cstr_len(cstr), bytes_written);
+}
+
+sp_err_t sp_io_pad(sp_io_writer_t* writer, u64 size, u64* bytes_written) {
+  static const u8 zeros [64] = SP_ZERO_INITIALIZE();
+
+  sp_assert(writer);
+
+  sp_err_t result = SP_OK;
+  u64 total = 0;
+
+  sp_try_goto(sp_io_flush(writer), result, done);
+
+  while (total < size) {
+    u64 chunk = SP_MIN(size - total, 64);
+    u64 chunk_written = 0;
+    sp_try_goto(sp_io_write(writer, zeros, chunk, &chunk_written), result, done);
+    total += chunk_written;
   }
 
-  return size;
+done:
+  if (bytes_written) *bytes_written = total;
+  return result;
 }
 
-u64 sp_io_write_str(sp_io_writer_t* writer, sp_str_t str) {
-  return sp_io_write(writer, str.data, str.len);
+sp_err_t sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
+  sp_assert(writer);
+  sp_try(sp_io_flush(writer));
+  return writer->vtable.seek(writer, offset, whence, position);
 }
 
-u64 sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr) {
-  return sp_io_write(writer, cstr, sp_cstr_len(cstr));
+sp_err_t sp_io_writer_size(sp_io_writer_t* writer, u64* size) {
+  sp_assert(writer);
+  sp_try(sp_io_flush(writer));
+  return writer->vtable.size(writer, size);
 }
 
-u64 sp_io_pad(sp_io_writer_t* writer, u64 size) {
-  if (!writer) return 0;
+sp_err_t sp_io_writer_close(sp_io_writer_t* writer) {
+  sp_assert(writer);
+
+  // We're trying to close it, so just eat the error if flush fails
   sp_io_flush(writer);
 
-  static const u8 zeros[64] = {0};
-  u64 written = 0;
-  while (written < size) {
-    u64 chunk = SP_MIN(size - written, 64);
-    u64 result = sp_io_write(writer, zeros, chunk);
-    if (result == 0) break;
-    written += result;
-  }
-  return written;
-}
-
-s64 sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence) {
-  if (!writer) return 0;
-  if (!writer->vtable.seek) return 0;
-  sp_io_flush(writer);
-  sp_err_clear();
-  return writer->vtable.seek(writer, offset, whence);
-}
-
-u64 sp_io_writer_size(sp_io_writer_t* writer) {
-  if (!writer) return 0;
-  if (!writer->vtable.size) return 0;
-  sp_io_flush(writer);
-  sp_err_clear();
-  return writer->vtable.size(writer);
-}
-
-void sp_io_writer_close(sp_io_writer_t* writer) {
-  if (!writer) return;
-  sp_io_flush(writer);
-  if (!writer->vtable.close) return;
-  sp_err_clear();
-  writer->vtable.close(writer);
+  if (!writer->vtable.close) return SP_OK;
+  return writer->vtable.close(writer);
 }
 
 SP_API sp_app_t* sp_app_new(sp_app_config_t config) {

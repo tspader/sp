@@ -188,7 +188,7 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
     .flags = MH_SUBSECTIONS_VIA_SYMBOLS,
     .reserved = 0,
   };
-  sp_io_write(out, &header, sizeof(header));
+  sp_try(sp_io_write(out, &header, sizeof(header), SP_NULLPTR));
 
   u64 total_vmsize = 0;
   u64 total_filesize = 0;
@@ -212,7 +212,7 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
     .flags = 0,
   };
   sp_mem_zero(seg.segname, 16);
-  sp_io_write(out, &seg, sizeof(seg));
+  sp_try(sp_io_write(out, &seg, sizeof(seg), SP_NULLPTR));
 
   u64 vmaddr = 0;
   sp_da_for(m->sections, i) {
@@ -242,7 +242,7 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
     sp_mem_copy(sectname.data, sect.sectname, (u32)sectname.len);
     sp_mem_copy(segname.data, sect.segname, (u32)segname.len);
 
-    sp_io_write(out, &sect, sizeof(sect));
+    sp_try(sp_io_write(out, &sect, sizeof(sect), SP_NULLPTR));
     vmaddr += section_sizes[i];
   }
 
@@ -255,7 +255,7 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
       .stroff = (u32)strtab_offset,
       .strsize = (u32)strtab_size,
     };
-    sp_io_write(out, &symtab, sizeof(symtab));
+    sp_try(sp_io_write(out, &symtab, sizeof(symtab), SP_NULLPTR));
 
     u32 nlocal = 0;
     u32 nextdef = 0;
@@ -282,7 +282,7 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
       .iundefsym = nlocal + nextdef,
       .nundefsym = 0,
     };
-    sp_io_write(out, &dysymtab, sizeof(dysymtab));
+    sp_try(sp_io_write(out, &dysymtab, sizeof(dysymtab), SP_NULLPTR));
   }
 
   struct build_version_command buildver = {
@@ -293,18 +293,18 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
     .sdk = 0x000E0000,
     .ntools = 0,
   };
-  sp_io_write(out, &buildver, sizeof(buildver));
+  sp_try(sp_io_write(out, &buildver, sizeof(buildver), SP_NULLPTR));
 
   u64 written = sizeof(struct mach_header_64) + sizeofcmds;
   sp_da_for(m->sections, i) {
     sp_macho_section_t* sec = &m->sections[i];
     while (written < section_offsets[i]) {
       u8 zero = 0;
-      sp_io_write(out, &zero, 1);
+      sp_try(sp_io_write(out, &zero, 1, SP_NULLPTR));
       written++;
     }
     if (sp_da_size(sec->data) > 0) {
-      sp_io_write(out, sec->data, sp_da_size(sec->data));
+      sp_try(sp_io_write(out, sec->data, sp_da_size(sec->data), SP_NULLPTR));
       written += sp_da_size(sec->data);
     }
   }
@@ -333,19 +333,19 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
     nl.n_desc = 0;
     nl.n_value = sym->value;
 
-    sp_io_write(out, &nl, sizeof(nl));
+    sp_try(sp_io_write(out, &nl, sizeof(nl), SP_NULLPTR));
   }
 
   c8 strtab_header[2] = {' ', '\0'};
-  sp_io_write(out, strtab_header, 2);
+  sp_try(sp_io_write(out, strtab_header, 2, SP_NULLPTR));
 
   sp_da_for(m->symbols, i) {
     sp_macho_symbol_t* sym = &m->symbols[i];
     c8 underscore = '_';
-    sp_io_write(out, &underscore, 1);
-    sp_io_write(out, sym->name.data, sym->name.len);
+    sp_try(sp_io_write(out, &underscore, 1, SP_NULLPTR));
+    sp_try(sp_io_write(out, sym->name.data, sym->name.len, SP_NULLPTR));
     c8 null = '\0';
-    sp_io_write(out, &null, 1);
+    sp_try(sp_io_write(out, &null, 1, SP_NULLPTR));
   }
 
   u64 strtab_written = 2;
@@ -354,7 +354,7 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
   }
   while (strtab_written < strtab_size) {
     u8 zero = 0;
-    sp_io_write(out, &zero, 1);
+    sp_try(sp_io_write(out, &zero, 1, SP_NULLPTR));
     strtab_written++;
   }
 
@@ -365,7 +365,8 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
 }
 
 sp_err_t sp_macho_write_to_file(sp_macho_t* m, sp_str_t path) {
-  sp_io_writer_t f = sp_io_writer_from_file(path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_t f = SP_ZERO_INITIALIZE();
+  sp_try(sp_io_writer_from_file(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
   sp_err_t err = sp_macho_write(m, &f);
   sp_io_writer_close(&f);
   return err;

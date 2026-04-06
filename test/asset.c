@@ -1,4 +1,4 @@
-#define SP_APP
+#define SP_ASSET_IMPLEMENTATION
 #include "sp/sp_asset.h"
 #include "test.h"
 

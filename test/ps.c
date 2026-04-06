@@ -87,7 +87,8 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
   while (total_read < target_len && attempts < 10) {
     u8* ptr = ctx->buffer.data + total_read;
     u64 bytes_remaining = ctx->buffer.len - total_read;
-    u64 bytes_read = sp_io_read(ctx->stream, ptr, bytes_remaining);
+    u64 bytes_read = 0;
+    sp_io_read(ctx->stream, ptr, bytes_remaining, &bytes_read);
     if (!bytes_read) {
       if (ctx->mode == SP_TEST_PROC_READ_UNTIL_DONE) {
         sp_os_sleep_ms(10);
@@ -152,7 +153,8 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   sp_io_reader_t* err = sp_ps_io_err(&ps);
 
   if (!sp_str_empty(test.input)) {
-    u64 bytes_written = sp_io_write(in, test.input.data, test.input.len);
+    u64 bytes_written = 0;
+    sp_io_write(in, test.input.data, test.input.len, &bytes_written);
     SP_ASSERT_FMT(
       bytes_written == test.input.len,
       "stdin: tried to write {} ({}), but {:fg yellow} returned {}",
@@ -788,7 +790,8 @@ UTEST_F(ps, wait_with_output) {
   EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 
-  u64 bytes_read = sp_io_read(sp_ps_io_out(&ps), ut.buffer.data, ut.buffer.len);
+  u64 bytes_read = 0;
+  sp_io_read(sp_ps_io_out(&ps), ut.buffer.data, ut.buffer.len, &bytes_read);
   EXPECT_EQ(bytes_read, sp_test_ps_canary.len);
   EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 }
@@ -840,11 +843,13 @@ UTEST_F(ps, interleaved_read_write) {
   for (u32 i = 0; i < 4; i++) {
     sp_str_t input = sp_format("line {}\n", SP_FMT_U32(i));
 
-    u64 written = sp_io_write_str(in, input);
+    u64 written = 0;
+    sp_io_write_str(in, input, &written);
     EXPECT_EQ(written, input.len);
 
     sp_os_sleep_ms(50);
-    u64 bytes_read = sp_io_read(out, ut.buffer.data, ut.buffer.len);
+    u64 bytes_read = 0;
+    sp_io_read(out, ut.buffer.data, ut.buffer.len, &bytes_read);
     sp_str_t expected = sp_format("echo: line {}\n", SP_FMT_U32(i));
     EXPECT_EQ(bytes_read, expected.len);
     EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, expected.data, expected.len));
@@ -879,7 +884,8 @@ UTEST_F(ps, incremental_nonblocking_read) {
   u64 total_read = 0;
 
   while (total_read < expected_size) {
-    u64 n = sp_io_read(out, accumulated + total_read, expected_size - total_read);
+    u64 n = 0;
+    sp_io_read(out, accumulated + total_read, expected_size - total_read, &n);
     if (n > 0) {
       total_read += n;
     } else {

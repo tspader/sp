@@ -1,6 +1,10 @@
+#ifndef SP_IMPLEMENTATION
 #define SP_IMPLEMENTATION
+#endif
+#if defined(BUILD_FREESTANDING_EXAMPLE)
 #define SP_FREESTANDING
 #define SP_DEFINE_BUILTINS
+#endif
 #include "sp.h"
 
 static void print(const char* s) {
@@ -26,7 +30,7 @@ static void print_fail(const char* name) {
   else { print_fail(name); failures++; } \
 } while(0)
 
-void _start(void) {
+s32 run(s32 n, const c8** args) {
   int failures = 0;
 
   print("=== sp.h nostdlib test ===\n");
@@ -247,6 +251,7 @@ void _start(void) {
     }
   }
 
+#if defined(SP_FREESTANDING)
   print("\n--- TLS ---\n");
   {
     sp_sys_init();
@@ -258,6 +263,7 @@ void _start(void) {
     void* data = sp_tls_get(69);
     TEST("tls_set/get", data == (void*)0xDEADBEEF);
   }
+#endif
 
   print("=== SP_DEFINE_BUILTINS test ===\n");
 
@@ -333,4 +339,7 @@ void _start(void) {
   }
 
   sp_sys_exit(failures);
+  return 0;
 }
+
+SP_ENTRY(run)

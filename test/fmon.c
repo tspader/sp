@@ -12,7 +12,7 @@
 #define sp_for_n(N) for (u32 _i = 0; _i < (N); _i++)
 
 static bool paths_equal(sp_str_t a, sp_str_t b) {
-  return sp_str_equal(sp_fs_canonicalize_path(a), sp_fs_canonicalize_path(b));
+  return sp_str_equal(sp_fs_normalize_path(a), sp_fs_normalize_path(b));
 }
 
 typedef struct sp_test_file_monitor {
@@ -122,8 +122,9 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
   ut.change_detected = false;
 
 #if defined(SP_MACOS)
-  sp_io_writer_t s = sp_io_writer_from_file(test_file, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write_str(&s, sp_str_lit("modified content"));
+  sp_io_writer_t s = SP_ZERO_INITIALIZE();
+  sp_io_writer_from_file(&s, test_file, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write_str(&s, sp_str_lit("modified content"), SP_NULLPTR);
   sp_io_writer_close(&s);
 
   bool timed_out = true;
@@ -264,8 +265,9 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
 
   // Modify the file — should NOT fire since we only watch REMOVED
   {
-    sp_io_writer_t w = sp_io_writer_from_file(test_file, SP_IO_WRITE_MODE_OVERWRITE);
-    sp_io_write_str(&w, sp_str_lit("modified"));
+    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_from_file(&w, test_file, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write_str(&w, sp_str_lit("modified"), SP_NULLPTR);
     sp_io_writer_close(&w);
   }
 

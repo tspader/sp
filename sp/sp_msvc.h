@@ -239,7 +239,8 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_arch_t arch, sp_da(sp_msvc_vs_t
     sp_str_t state_path = sp_fs_join_path(it.entry.file_path, SP_LIT("state.json"));
     if (!sp_fs_exists(state_path)) continue;
 
-    sp_str_t json = sp_io_read_file(state_path);
+    sp_str_t json = SP_ZERO_INITIALIZE();
+    sp_io_read_file(state_path, &json);
     if (sp_str_empty(json)) continue;
 
     sp_str_t install_path = sp_msvc_json_get_str(json, SP_LIT("installationPath"));
@@ -255,7 +256,8 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_arch_t arch, sp_da(sp_msvc_vs_t
     sp_str_t tools_file = sp_fs_join_path(
       install_path, SP_LIT("VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt")
     );
-    sp_str_t tools_version_str = sp_io_read_file(tools_file);
+    sp_str_t tools_version_str = SP_ZERO_INITIALIZE();
+    sp_io_read_file(tools_file, &tools_version_str);
     if (sp_str_empty(tools_version_str)) continue;
 
     tools_version_str = sp_str_trim(tools_version_str);

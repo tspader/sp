@@ -310,7 +310,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
   ctx->cols = cols;
   ctx->rows = rows;
   ctx->state = SP_PROMPT_STATE_ACTIVE;
-  ctx->writer_stdout = sp_io_writer_from_fd(sp_fd_stdout, SP_IO_CLOSE_MODE_NONE);
+  sp_io_writer_from_fd(&ctx->writer_stdout, sp_fd_stdout, SP_IO_CLOSE_MODE_NONE);
   ctx->writer = &ctx->writer_stdout;
   ctx->frames = SP_NULLPTR;
   sp_prompt_framebuffer_init(ctx);
@@ -386,7 +386,7 @@ static void sp_prompt_render_line(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt
 
 static void sp_prompt_emit_bytes(sp_prompt_ctx_t* ctx, const void* ptr, u64 size) {
   SP_ASSERT(ctx->writer);
-  sp_io_write(ctx->writer, ptr, size);
+  sp_io_write(ctx->writer, ptr, size, SP_NULLPTR);
 }
 
 static void sp_prompt_emit_str(sp_prompt_ctx_t* ctx, sp_str_t str) {

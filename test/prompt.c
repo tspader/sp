@@ -35,7 +35,7 @@ struct prompt {
 UTEST_F_SETUP(prompt) {
   utest_fixture->ctx = SP_ZERO_STRUCT(sp_prompt_ctx_t);
   sp_prompt_ctx_init(&utest_fixture->ctx, 80, 20);
-  utest_fixture->writer = sp_io_writer_from_dyn_mem();
+  sp_io_writer_from_dyn_mem(&utest_fixture->writer);
   utest_fixture->ctx.writer = &utest_fixture->writer;
 }
 

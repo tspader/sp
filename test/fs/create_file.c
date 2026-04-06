@@ -63,21 +63,21 @@ UTEST_F(fs, create_file_with_content) {
 
   path = sp_fs_join_path(sandbox, sp_str_lit("slice.file"));
   result = sp_fs_create_file_slice(path, (sp_mem_slice_t) { buffer, 4 });
-  content = sp_io_read_file(path);
+  sp_io_read_file(path, &content);
   EXPECT_EQ(result, SP_OK);
   EXPECT_TRUE(sp_fs_exists(path));
   SP_EXPECT_STR_EQ_CSTR(content, "spum");
 
   path = sp_fs_join_path(sandbox, sp_str_lit("str.file"));
   result = sp_fs_create_file_str(path, (sp_str_t) { (c8*)buffer, 4 });
-  content = sp_io_read_file(path);
+  sp_io_read_file(path, &content);
   EXPECT_EQ(result, SP_OK);
   EXPECT_TRUE(sp_fs_exists(path));
   SP_EXPECT_STR_EQ_CSTR(content, "spum");
 
   path = sp_fs_join_path(sandbox, sp_str_lit("cstr.file"));
   result = sp_fs_create_file_cstr(path, (const c8*)buffer);
-  content = sp_io_read_file(path);
+  sp_io_read_file(path, &content);
   EXPECT_EQ(result, SP_OK);
   EXPECT_TRUE(sp_fs_exists(path));
   SP_EXPECT_STR_EQ_CSTR(content, "spum");

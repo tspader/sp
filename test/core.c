@@ -2276,9 +2276,11 @@ UTEST_F(sp_os_copy_tests, copy_single_file) {
 
   ASSERT_TRUE(sp_fs_exists(dst));
 
-  sp_io_reader_t reader = sp_io_reader_from_file(dst);
+  sp_io_reader_t reader = SP_ZERO_INITIALIZE();
+  sp_io_reader_from_file(&reader, dst);
   u8 buffer[256];
-  u64 bytes_read = sp_io_read(&reader, buffer, sizeof(buffer));
+  u64 bytes_read = 0;
+  sp_io_read(&reader, buffer, sizeof(buffer), &bytes_read);
   sp_io_reader_close(&reader);
 
   sp_str_t read_content = sp_str_from_cstr_sized((c8*)buffer, (u32)bytes_read);
