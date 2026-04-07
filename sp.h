@@ -10974,8 +10974,9 @@ struct sp_fmon_os {
 
 #elif defined(SP_LINUX)
 struct sp_fmon_os {
-  sp_da(s32) watch_descs;
-  sp_da(sp_str_t) watch_paths;
+  sp_da(s32) fds;
+  sp_da(sp_str_t) paths;
+  sp_str_ht(u8) files;
   u8 buffer[4096] __attribute__((aligned(__alignof__(sp_inotify_event_t))));
   s32 fd;
 };
@@ -11217,9 +11218,9 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
 
 void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   if (!monitor->os) return;
-  sp_fmon_os_t* linux_monitor = (sp_fmon_os_t*)monitor->os;
+  sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
 
-  if (linux_monitor->fd <= 0) return;
+  if (os->fd <= 0) return;
 
   c8* path_cstr = sp_str_to_cstr(path);
 
@@ -11234,11 +11235,11 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
     mask |= SP_IN_DELETE | SP_IN_MOVED_FROM;
   }
 
-  s32 wd = sp_inotify_add_watch(linux_monitor->fd, path_cstr, mask);
+  s32 wd = sp_inotify_add_watch(os->fd, path_cstr, mask);
 
   if (wd != -1) {
-    sp_dyn_array_push(linux_monitor->watch_descs, wd);
-    sp_dyn_array_push(linux_monitor->watch_paths, sp_str_copy(path));
+    sp_dyn_array_push(os->fds, wd);
+    sp_dyn_array_push(os->paths, sp_str_copy(path));
   }
 
 }
@@ -11249,13 +11250,23 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   if (os->fd > 0) {
     sp_close(os->fd);
   }
+  sp_ht_free(os->files);
 }
 
 void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
-  sp_str_t dir_path = sp_fs_parent_path(file_path);
-  if (dir_path.len > 0) {
+  sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
+  sp_str_t canonical = sp_fs_canonicalize_path(file_path);
+  sp_str_ht_insert(os->files, canonical, 1);
+
+  sp_str_t dir_path = sp_fs_parent_path(canonical);
+  if (!sp_str_empty(dir_path)) {
     sp_fmon_os_add_dir(monitor, dir_path);
   }
+}
+
+SP_PRIVATE bool sp_linux_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path) {
+  if (!os->files) return true;
+  return sp_ht_key_exists(os->files, full_path);
 }
 
 void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
@@ -11267,33 +11278,30 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   s64 len = sp_read(os->fd, os->buffer, sizeof(os->buffer));
   if (len <= 0) return;
 
-  c8* ptr = (c8*)os->buffer;
-  while (ptr < (c8*)os->buffer + len) {
+  u8* buffer = (u8*)os->buffer;
+  u8* ptr = buffer;
+  while (ptr < buffer + len) {
     sp_inotify_event_t* event = (sp_inotify_event_t*)ptr;
 
     // Find which path this watch descriptor corresponds to
-    sp_dyn_array_for(os->watch_descs, it) {
-      s32 wd = os->watch_descs[it];
+    sp_da_for(os->fds, it) {
+      s32 wd = os->fds[it];
       if (wd == event->wd) {
-        sp_str_t dir_path = os->watch_paths[it];
+        sp_str_t dir_path = os->paths[it];
 
         // Build full path if there's a filename
         sp_str_t file_name = SP_ZERO_STRUCT(sp_str_t);
         sp_str_t file_path = SP_ZERO_STRUCT(sp_str_t);
 
         if (event->len > 0 && event->name[0] != '\0') {
-          file_name = sp_str(event->name, sp_cstr_len(event->name));
-
-          // Build full path
-          sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-          sp_str_builder_append(&builder, dir_path);
-          sp_str_builder_append(&builder, sp_str_lit("/"));
-          sp_str_builder_append(&builder, file_name);
-          file_path = sp_str_builder_to_str(&builder);
+          file_name = sp_str_from_cstr(event->name);
+          file_path = sp_fs_join_path(dir_path, file_name);
         } else {
           file_path = sp_str_copy(dir_path);
           file_name = sp_fs_get_name(file_path);
         }
+
+        if (!sp_linux_fmon_file_matches(os, file_path)) break;
 
         sp_fmon_event_kind_t events = SP_FILE_CHANGE_EVENT_NONE;
         if (event->mask & (SP_IN_MODIFY | SP_IN_ATTRIB | SP_IN_CLOSE_WRITE)) {
@@ -11306,7 +11314,6 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
           events = (sp_fmon_event_kind_t)(events | SP_FILE_CHANGE_EVENT_REMOVED);
         }
 
-        // Add change to monitor's change list
         if (events != SP_FILE_CHANGE_EVENT_NONE) {
           sp_fmon_event_t change = {
             .file_path = file_path,
@@ -11314,7 +11321,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
             .events = events,
             .time = 0  // TODO: get actual time
           };
-          sp_dyn_array_push(monitor->changes, change);
+          sp_da_push(monitor->changes, change);
         }
         break;
       }
