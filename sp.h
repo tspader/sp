@@ -322,7 +322,7 @@
 #define SP_FATAL(FMT, ...) \
   do { \
     sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
-    SP_LOG("{:color red}: {}", SP_FMT_CSTR("SP_FATAL()"), SP_FMT_STR(message)); \
+    sp_log("{:color red}: {}", SP_FMT_CSTR("SP_FATAL()"), SP_FMT_STR(message)); \
     SP_EXIT_FAILURE(); \
   } while (0)
 #define sp_fatal(FMT, ...) SP_FATAL(FMT, ##__VA_ARGS__)
@@ -341,7 +341,7 @@
     if (!(COND)) { \
       const c8* condition = SP_MACRO_STR(COND); \
       sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
-      SP_LOG("SP_ASSERT({:color red}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
+      sp_log("SP_ASSERT({:color red}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
       SP_EXIT_FAILURE(); \
     } \
   } while (0)
@@ -2195,8 +2195,8 @@ typedef struct {
 SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
 SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
-#define sp_str(STR, LEN) sp_rval(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(LEN) }
-#define sp_str_lit(STR)  sp_str((STR), sizeof(STR) - 1)
+#define sp_str(STR, LEN) (sp_rval(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(LEN) })
+#define sp_str_lit(STR)  (sp_rval(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(sizeof(STR) - 1) })
 #define sp_lit(STR)      SP_LIT(STR)
 
 #define SP_CSTR(STR)     sp_str((STR), sp_cstr_len(STR))
@@ -2358,11 +2358,9 @@ SP_API c8*               sp_mem_buffer_as_cstr(sp_mem_buffer_t* buffer);
 // ███████╗╚██████╔╝╚██████╔╝
 // ╚══════╝ ╚═════╝  ╚═════╝
 // @log
-#define SP_LOG(CSTR, ...)    sp_log(SP_CSTR((CSTR)), ##__VA_ARGS__)
-#define SP_LOG_STR(STR, ...) sp_log((STR),           ##__VA_ARGS__)
-#define sp_log_str(STR, ...) SP_LOG_STR(STR, ##__VA_ARGS__)
-SP_API void sp_log(sp_str_t fmt, ...);
-SP_API void sp_log_err(sp_str_t fmt, ...);
+SP_API void sp_log(const c8* fmt, ...);
+SP_API void sp_log_err(const c8* fmt, ...);
+SP_API void sp_log_str(sp_str_t fmt, ...);
 
 
 // ███████╗███╗   ██╗██╗   ██╗
@@ -5336,7 +5334,20 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
 // ███████╗╚██████╔╝╚██████╔
 // ╚══════╝ ╚═════╝  ╚═════╝
 // @log
-void sp_log(sp_str_t fmt, ...) {
+void sp_log(const c8* fmt, ...) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
+    va_list args;
+    va_start(args, fmt);
+    sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
+    va_end(args);
+
+    sp_os_print(formatted);
+    sp_os_print(sp_str_lit("\n"));
+    sp_mem_end_scratch(scratch);
+  }
+}
+
+void sp_log_str(sp_str_t fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
     va_start(args, fmt);
@@ -5350,11 +5361,11 @@ void sp_log(sp_str_t fmt, ...) {
 
 }
 
-void sp_log_err(sp_str_t fmt, ...) {
+void sp_log_err(const c8* fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
     va_start(args, fmt);
-    sp_str_t formatted = sp_format_v(fmt, args);
+    sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
     va_end(args);
 
     sp_os_print_err(formatted);

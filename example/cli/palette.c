@@ -154,7 +154,7 @@ void palette_render(palette_state_t* state) {
 void palette_print_results(palette_state_t* state) {
   sp_da_for(state->saved_colors, i) {
     sp_str_t hex = palette_color_to_hex(state->saved_colors[i]);
-    SP_LOG("{}", SP_FMT_STR(hex));
+    sp_log("{}", SP_FMT_STR(hex));
   }
 }
 

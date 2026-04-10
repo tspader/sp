@@ -250,10 +250,10 @@ static s32 sp_clack_demo_picker(sp_prompt_ctx_t* ctx) {
 }
 
 static void sp_clack_usage(void) {
-  SP_LOG("usage: demo-prompt [program]");
-  SP_LOG("programs:");
+  sp_log("usage: demo-prompt [program]");
+  sp_log("programs:");
   sp_carr_for(sp_clack_demos, it) {
-    SP_LOG("  {}", SP_FMT_STR(sp_clack_demos[it].name));
+    sp_log("  {}", SP_FMT_STR(sp_clack_demos[it].name));
   }
 }
 

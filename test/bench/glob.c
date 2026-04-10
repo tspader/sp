@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
 
   // Print space-separated pairs
   sp_dyn_array_for(results, i) {
-    SP_LOG("{} {}", SP_FMT_STR(results[i].name), SP_FMT_F64(results[i].ns_per_op));
+    sp_log("{} {}", SP_FMT_STR(results[i].name), SP_FMT_F64(results[i].ns_per_op));
   }
 
   return 0;

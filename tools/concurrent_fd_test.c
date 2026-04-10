@@ -105,7 +105,7 @@ void run_test(const c8* label, u32 write_size, u32 write_count) {
   analysis_t a = analyze(buffer, total, write_size);
 
   const c8* status = a.interleaved ? "INTERLEAVED" : "atomic";
-  SP_LOG("{}: {}B x {} => {} trans, {}", 
+  sp_log("{}: {}B x {} => {} trans, {}",
     SP_FMT_CSTR(label),
     SP_FMT_U32(write_size),
     SP_FMT_U32(write_count),
@@ -116,7 +116,7 @@ void run_test(const c8* label, u32 write_size, u32 write_count) {
     sp_for(i, total - 1) {
       if (buffer[i] != buffer[i+1]) {
         u32 boundary = (i + 1) % 4096;
-        SP_LOG("  first transition at byte {}, offset from 4096 boundary: {}", 
+        sp_log("  first transition at byte {}, offset from 4096 boundary: {}",
           SP_FMT_U32(i), SP_FMT_U32(boundary));
         break;
       }
@@ -125,18 +125,18 @@ void run_test(const c8* label, u32 write_size, u32 write_count) {
 }
 
 s32 main(void) {
-  SP_LOG("Two sp_ps subprocesses sharing stdout fd via SP_PS_IO_MODE_EXISTING");
-  SP_LOG("Each writes pattern of 'A' or 'B' repeatedly");
-  SP_LOG("Checking if writes interleave mid-syscall");
-  SP_LOG("");
+  sp_log("Two sp_ps subprocesses sharing stdout fd via SP_PS_IO_MODE_EXISTING");
+  sp_log("Each writes pattern of 'A' or 'B' repeatedly");
+  sp_log("Checking if writes interleave mid-syscall");
+  sp_log("");
 
   sp_for(i, 5) {
-    SP_LOG("--- run {} ---", SP_FMT_U32(i));
+    sp_log("--- run {} ---", SP_FMT_U32(i));
     run_test("< PIPE_BUF", 100, 100);
     run_test("= PIPE_BUF", 4096, 50);
     run_test("> PIPE_BUF", 8192, 50);
     run_test(">> PIPE_BUF", 65536, 20);
-    SP_LOG("");
+    sp_log("");
   }
 
   return 0;

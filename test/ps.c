@@ -1229,10 +1229,10 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
 
   sp_test_concurrent_analysis_t analysis = sp_test_analyze_concurrent_output(buffer, total_read, write_size);
 
-  SP_LOG("large writes ({}B x {} per process, > PIPE_BUF):", SP_FMT_S32(write_size), SP_FMT_S32(write_count));
-  SP_LOG("  total bytes: {} (A={}, B={})", SP_FMT_U32(total_read), SP_FMT_U32(analysis.a_bytes), SP_FMT_U32(analysis.b_bytes));
-  SP_LOG("  transitions: {}", SP_FMT_U32(analysis.transitions));
-  SP_LOG("  interleaved: {}", SP_FMT_CSTR(analysis.interleaved ? "true" : "false"));
+  sp_log("large writes ({}B x {} per process, > PIPE_BUF):", SP_FMT_S32(write_size), SP_FMT_S32(write_count));
+  sp_log("  total bytes: {} (A={}, B={})", SP_FMT_U32(total_read), SP_FMT_U32(analysis.a_bytes), SP_FMT_U32(analysis.b_bytes));
+  sp_log("  transitions: {}", SP_FMT_U32(analysis.transitions));
+  sp_log("  interleaved: {}", SP_FMT_CSTR(analysis.interleaved ? "true" : "false"));
 
   EXPECT_EQ(analysis.a_bytes, write_size * write_count);
   EXPECT_EQ(analysis.b_bytes, write_size * write_count);

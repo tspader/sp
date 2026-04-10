@@ -267,7 +267,7 @@ static bool codegen_expr(jit_ctx_t* ctx, expr_t* e) {
     case EXPR_VAR: {
       jit_var_t* v = find_var(ctx, e->var_name);
       if (!v) {
-        SP_LOG("error: undefined variable '{}'", SP_FMT_STR(e->var_name));
+        sp_log("error: undefined variable '{}'", SP_FMT_STR(e->var_name));
         return false;
       }
       emit_mov_stack_to_rax(ctx, v->stack_offset);
@@ -306,7 +306,7 @@ static bool parse_stmt(jit_ctx_t* ctx, sp_str_t* s) {
     sp_str_t name;
     rest = parse_ident(rest, &name);
     if (name.len == 0) {
-      SP_LOG("error: expected variable name after 'int'");
+      sp_log("error: expected variable name after 'int'");
       return false;
     }
 
@@ -318,7 +318,7 @@ static bool parse_stmt(jit_ctx_t* ctx, sp_str_t* s) {
       expr_t* e;
       rest = parse_expr(rest, &e);
       if (!e) {
-        SP_LOG("error: expected expression after '='");
+        sp_log("error: expected expression after '='");
         return false;
       }
       if (!codegen_expr(ctx, e)) return false;
@@ -329,7 +329,7 @@ static bool parse_stmt(jit_ctx_t* ctx, sp_str_t* s) {
     }
 
     if (!expect_char(&rest, ';')) {
-      SP_LOG("error: expected ';'");
+      sp_log("error: expected ';'");
       return false;
     }
     *s = rest;
@@ -340,21 +340,21 @@ static bool parse_stmt(jit_ctx_t* ctx, sp_str_t* s) {
   if (rest.len > 0 && rest.data[0] == '=') {
     jit_var_t* v = find_var(ctx, first);
     if (!v) {
-      SP_LOG("error: undefined variable '{}'", SP_FMT_STR(first));
+      sp_log("error: undefined variable '{}'", SP_FMT_STR(first));
       return false;
     }
     rest.data++; rest.len--;
     expr_t* e;
     rest = parse_expr(rest, &e);
     if (!e) {
-      SP_LOG("error: expected expression");
+      sp_log("error: expected expression");
       return false;
     }
     if (!codegen_expr(ctx, e)) return false;
     emit_mov_rax_to_stack(ctx, v->stack_offset);
 
     if (!expect_char(&rest, ';')) {
-      SP_LOG("error: expected ';'");
+      sp_log("error: expected ';'");
       return false;
     }
     *s = rest;
@@ -365,19 +365,19 @@ static bool parse_stmt(jit_ctx_t* ctx, sp_str_t* s) {
     expr_t* e;
     rest = parse_expr(rest, &e);
     if (!e) {
-      SP_LOG("error: expected expression after 'return'");
+      sp_log("error: expected expression after 'return'");
       return false;
     }
     if (!codegen_expr(ctx, e)) return false;
     if (!expect_char(&rest, ';')) {
-      SP_LOG("error: expected ';'");
+      sp_log("error: expected ';'");
       return false;
     }
     *s = rest;
     return true;
   }
 
-  SP_LOG("error: unexpected identifier '{}'", SP_FMT_STR(first));
+  sp_log("error: unexpected identifier '{}'", SP_FMT_STR(first));
   return false;
 }
 
@@ -421,13 +421,13 @@ static jit_fn_t compile(sp_str_t source) {
   );
 
   if (mem == SP_MAP_FAILED) {
-    SP_LOG("error: mmap failed");
+    sp_log("error: mmap failed");
     return SP_NULLPTR;
   }
 
   sp_sys_memcpy(mem, ctx.code, code_size);
 
-  SP_LOG("compiled {} bytes of machine code", SP_FMT_U32((u32)code_size));
+  sp_log("compiled {} bytes of machine code", SP_FMT_U32((u32)code_size));
 
   return (jit_fn_t)mem;
 }
@@ -442,13 +442,13 @@ static u32 run_test(sp_str_t src, s64 expected) {
     s64 result = fn();
     if (result == expected) {
       sp_str_builder_append_fmt(&b, "{} {:fg green}", SP_FMT_S64(result), SP_FMT_CSTR("[OK]"));
-      sp_log(sp_str_builder_as_str(&b));
+      sp_log_str(sp_str_builder_as_str(&b));
       return 0;
     } else {
       sp_str_builder_append_fmt(&b, "{} (expected {}) {:fg red}", SP_FMT_S64(result), SP_FMT_S64(expected), SP_FMT_CSTR("[FAIL]"));
     }
   }
-  sp_log(sp_str_builder_as_str(&b));
+  sp_log_str(sp_str_builder_as_str(&b));
   return 1;
 }
 
@@ -458,7 +458,7 @@ typedef struct {
 } test_t;
 
 s32 jit_main(s32 num_args, const c8** args) {
-  SP_LOG("{:fg brightcyan} jit-r-done (compile + execute machine code on the fly)", SP_FMT_CSTR("sp.h"));
+  sp_log("{:fg brightcyan} jit-r-done (compile + execute machine code on the fly)", SP_FMT_CSTR("sp.h"));
 
   test_t tests [] = {
     { sp_str_lit("int x = 10; int y = 32; return x + y;"), 42 },

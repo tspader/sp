@@ -56,7 +56,7 @@ s32 main(s32 num_args, const c8** args) {
 
   sp_da_for(functions, i) {
     sp_str_t padded_return_type = sp_str_pad(functions[i].return_type, max_return_type_len);
-    SP_LOG("{} {}", SP_FMT_STR(padded_return_type), SP_FMT_STR(functions[i].rest));
+    sp_log("{} {}", SP_FMT_STR(padded_return_type), SP_FMT_STR(functions[i].rest));
   }
 
   SP_EXIT_SUCCESS();

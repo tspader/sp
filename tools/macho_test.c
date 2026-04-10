@@ -157,7 +157,7 @@ UTEST_F(macho_test, link_and_run) {
   });
 
   if (compile.status.exit_code != 0) {
-    SP_LOG("Compile failed:\n{}", SP_FMT_STR(compile.err));
+    sp_log("Compile failed:\n{}", SP_FMT_STR(compile.err));
   }
   ASSERT_EQ(compile.status.exit_code, 0);
   EXPECT_TRUE(sp_fs_exists(bin_path));
@@ -232,7 +232,7 @@ UTEST_F(macho_test, multi_symbol_roundtrip) {
   });
 
   if (compile.status.exit_code != 0) {
-    SP_LOG("Compile failed:\n{}", SP_FMT_STR(compile.err));
+    sp_log("Compile failed:\n{}", SP_FMT_STR(compile.err));
   }
   ASSERT_EQ(compile.status.exit_code, 0);
 

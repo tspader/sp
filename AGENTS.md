@@ -71,7 +71,7 @@ spn build -t $target -p macos -f
 - Never check `str.len > 0`; always use `!sp_str_empty(str)`
 - Always use C99 designated initializers for struct literals when possible
 - Always use short literal types (`s32`, `u8`, `c8`, `const c8*`)
-- Never use `printf` family; always use `SP_LOG()`
+- Never use `printf` family; always use `sp_log()`
 - Always use `sp_carr_for()` when iterating a C array
 - Always explicitly handle all enum cases in a switch statement; do not use `default`
   - `default` is only acceptable when there are many cases, but only a few are handled differently
@@ -126,7 +126,7 @@ sp_da_push(numbers, 42);
 sp_da_push(numbers, 100);
 
 sp_da_for(numbers, i) {
-  SP_LOG("numbers[{}] = {}", SP_FMT_U32(i), SP_FMT_S32(numbers[i]));
+  sp_log("numbers[{}] = {}", SP_FMT_U32(i), SP_FMT_S32(numbers[i]));
 }
 
 u32 count = sp_da_size(numbers);
@@ -156,7 +156,7 @@ sp_ht_for(htb, it) {
 ### Formatting and Logging
 ```c
 // Type-safe formatting with color support
-SP_LOG(
+sp_log(
   "Processing {:fg cyan} with {} {}",
   SP_FMT_STR(name),
   SP_FMT_U32(count),
@@ -190,7 +190,7 @@ switch (state) {
 // Return an enum for recoverable errors (consumer app may have their own error type)
 sp_err_t load_config(sp_str_t path, config_t* config) {
   if (!sp_os_does_path_exist(path)) {
-    SP_LOG("Config not found: {}", SP_FMT_STR(path));
+    sp_log("Config not found: {}", SP_FMT_STR(path));
     return SP_ERR_WHATEVER;
   }
 

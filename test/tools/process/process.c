@@ -59,7 +59,7 @@ s32 main(s32 num_args, const c8** args) {
   test_proc_function_t function = test_proc_function_from_str(sp_str_view(function_str));
 
   if (function == TEST_PROC_FUNCTION_INVALID) {
-    SP_LOG("unknown function: {:fg brightred}", SP_FMT_CSTR(function_str));
+    sp_log("unknown function: {:fg brightred}", SP_FMT_CSTR(function_str));
     SP_EXIT_FAILURE();
   }
 
@@ -178,9 +178,9 @@ s32 main(s32 num_args, const c8** args) {
     case TEST_PROC_FUNCTION_WAIT: {
       sp_str_t arg = sp_str_view(args[0]);
       f64 ms = sp_parse_f64(arg);
-      SP_LOG("process.c ({:fg brightyellow}) is sleeping for {:fg cyan}ms", SP_FMT_S32(sp_getpid()), SP_FMT_F64(ms));
+      sp_log("process.c ({:fg brightyellow}) is sleeping for {:fg cyan}ms", SP_FMT_S32(sp_getpid()), SP_FMT_F64(ms));
       sp_os_sleep_ms(ms);
-      SP_LOG("process.c ({:fg brightyellow}) is done", SP_FMT_S32(sp_getpid()));
+      sp_log("process.c ({:fg brightyellow}) is done", SP_FMT_S32(sp_getpid()));
       return sp_test_ps_wait_exit_code;
     }
     case TEST_PROC_FUNCTION_EXIT_CODE: {
