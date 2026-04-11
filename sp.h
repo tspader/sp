@@ -112,15 +112,15 @@
   #endif
 
   #define SP_LINUX
-  #define SP_POSIX
+  #define SP_UNIX
 
 #elif defined(__APPLE__)
   #define SP_MACOS
-  #define SP_POSIX
+  #define SP_UNIX
 
 #elif __COSMOPOLITAN__
   #define SP_COSMO
-  #define SP_POSIX
+  #define SP_UNIX
 #endif
 
 
@@ -294,6 +294,7 @@
 #define sp_begin_extern_c() SP_BEGIN_EXTERN_C()
 #define sp_end_extern_c() SP_END_EXTERN_C()
 #define sp_zero_initialize() SP_ZERO_INITIALIZE()
+#define sp_zero() SP_ZERO_INITIALIZE()
 
 #if !defined(SP_MSVC)
   #define SP_HAS_ATTRIBUTE(attr) __has_attribute(attr)
@@ -334,7 +335,7 @@
 #define SP_UNREACHABLE_RETURN(v) SP_ASSERT(false); return (v)
 #define sp_unreachable_return(v) SP_UNREACHABLE_RETURN(v)
 //#define SP_BROKEN() SP_ASSERT(false)
-#define SP_BROKEN()
+#define SP_BROKEN() SP_ASSERT(false)
 #define sp_broken() SP_BROKEN()
 #define SP_ASSERT_FMT(COND, FMT, ...) \
   do { \
@@ -504,15 +505,30 @@
 // @include
 SP_BEGIN_EXTERN_C()
 
+#if defined(SP_UNIX)
+  #if defined(SP_MACOS)
+    #ifndef _DARWIN_C_SOURCE
+      #define _DARWIN_C_SOURCE
+    #endif
+    #define SP_POSIX
+  #elif defined(SP_COSMO)
+    #ifndef _COSMO_SOURCE
+      #define _COSMO_SOURCE
+    #endif
+    #define SP_POSIX
+  #elif defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
+    #define SP_POSIX
+  #elif !defined(_FEATURES_H)
+    #define _POSIX_C_SOURCE 200809L
+    #define SP_POSIX
+  #else
+    #warning "sp.h included after system headers under -std=c99 without _POSIX_C_SOURCE. Threading, semaphores, and process spawning will be unavailable."
+  #endif
+  #endif
+
 #if defined(SP_COSMO)
   #ifndef _COSMO_SOURCE
     #define _COSMO_SOURCE
-  #endif
-#endif
-
-#if defined(SP_LINUX)
-  #ifndef _DEFAULT_SOURCE
-    #define _DEFAULT_SOURCE
   #endif
 #endif
 
@@ -522,11 +538,14 @@ SP_BEGIN_EXTERN_C()
   #endif
 #endif
 
-#if defined(SP_POSIX)
-  #ifndef _POSIX_C_SOURCE
-    #define _POSIX_C_SOURCE 200809L
-  #endif
-#endif
+// #if defined(__STRICT_ANSI__) && defined(_FEATURES_H) && !defined(__USE_POSIX199309)
+//     #error "sp.h must be included before system headers under -std=c99, or use -std=gnu99"
+//   #endif
+// #if defined(SP_POSIX)
+//   #ifndef _POSIX_C_SOURCE
+//     #define _POSIX_C_SOURCE 200809L
+//   #endif
+// #endif
 
 #if defined(SP_WIN32)
   #if defined(UNICODE)
@@ -1018,6 +1037,7 @@ void* sp_sys_mmap(void* addr, u64 len, s32 prot, s32 flags, s32 fd, s64 offset);
 s32   sp_sys_munmap(void* addr, u64 len);
 void* sp_sys_mremap(void* old_addr, u64 old_size, u64 new_size, s32 flags);
 void  sp_sys_exit(s32 code);
+void  sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* expr, bool cond);
 #endif // SP_SYS
 
 //////////////
@@ -1314,7 +1334,7 @@ void* sp_sys_realloc(void* ptr, u64 new_size);
   typedef sp_sys_pollfd_t sp_pollfd_t;
   typedef sp_sys_termios_t sp_termios_t;
 
-  #define sp_assert(x)                      ((void)(x))
+  #define sp_assert(x)                      sp_sys_assert(__FILE__, SP_MACRO_STR(__LINE__), __func__, #x, (bool)(x))
   #define sp_stat(path, st)                 sp_sys_stat(path, st)
   #define sp_lstat(path, st)                sp_sys_lstat(path, st)
   #define sp_fstat(fd, st)                  sp_sys_fstat(fd, st)
@@ -1638,6 +1658,7 @@ SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u
 #define sp_da_back(__ARR)           sp_dyn_array_back(__ARR)
 #define sp_da_bounds_ok(arr, it)    sp_dyn_array_bounds_ok(arr, it)
 #define sp_da_new(__T)              sp_dyn_array_new(__T)
+#define sp_da_sort(_ARR, fn)        sp_dyn_array_sort(_ARR, fn)
 
 #define sp_dyn_array_for(__ARR, __IT)  for (u32 __IT = 0; __IT < sp_dyn_array_size((__ARR)); __IT++)
 #define sp_dyn_array_rfor(__ARR, __IT) for (u32 __IT = sp_dyn_array_size(__ARR); __IT-- > 0; )
@@ -2391,21 +2412,6 @@ SP_API void     sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
 SP_API void     sp_env_erase(sp_env_t* env, sp_str_t name);
 SP_API void     sp_env_destroy(sp_env_t* env);
 
-#if defined(SP_WIN32)
-typedef struct {
-  c16* block;
-  c16* cursor;
-  sp_str_t entry;
-} sp_win32_env_it_t;
-#endif
-
-#if defined(SP_LINUX) && defined(SP_FREESTANDING)
-typedef struct {
-  sp_env_t* env;
-  sp_ht_it_t it;
-} sp_linux_env_it_t;
-#endif
-
 typedef struct {
   sp_str_t key;
   sp_str_t value;
@@ -2517,8 +2523,8 @@ typedef enum {
 } sp_fs_kind_t;
 
 typedef struct {
-  sp_str_t file_path;
-  sp_str_t file_name;
+  sp_str_t path;
+  sp_str_t name;
   sp_fs_kind_t kind;
 } sp_fs_entry_t;
 
@@ -2580,13 +2586,13 @@ SP_API sp_str_t      sp_fs_get_storage_path();
 SP_API sp_str_t      sp_fs_get_config_path();
 SP_API sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t path);
 SP_API sp_fs_kind_t  sp_fs_get_kind(sp_str_t path);
+SP_API sp_fs_kind_t  sp_fs_get_target_kind(sp_str_t path);
 SP_API sp_fs_it_t    sp_fs_it_new_recursive(sp_str_t path);
 SP_API sp_fs_it_t    sp_fs_it_new(sp_str_t path);
 SP_API void          sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path);
 SP_API void          sp_fs_it_next(sp_fs_it_t* it);
 SP_API bool          sp_fs_it_valid(sp_fs_it_t* it);
 SP_API void          sp_fs_it_deinit(sp_fs_it_t* it);
-SP_API bool          sp_fs_is_on_path(sp_str_t program);
 SP_API sp_da(sp_fs_entry_t) sp_fs_collect(sp_str_t path);
 SP_API sp_da(sp_fs_entry_t) sp_fs_collect_recursive(sp_str_t path);
 
@@ -2627,8 +2633,10 @@ typedef enum {
   typedef CRITICAL_SECTION sp_mutex_t;
 #elif defined(SP_FREESTANDING)
   typedef s32 sp_mutex_t;
-#else
+#elif defined(SP_POSIX)
   typedef pthread_mutex_t sp_mutex_t;
+#else
+  typedef s32 sp_mutex_t;
 #endif
 
 SP_API void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind);
@@ -2642,8 +2650,10 @@ SP_API s32  sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
   typedef CONDITION_VARIABLE sp_cv_t;
 #elif defined(SP_FREESTANDING)
   typedef s32 sp_cv_t;
-#else
+#elif defined(SP_POSIX)
   typedef pthread_cond_t sp_cv_t;
+#else
+  typedef s32 sp_cv_t;
 #endif
 
 SP_API void sp_cv_init(sp_cv_t* cv);
@@ -2660,8 +2670,10 @@ SP_API void sp_cv_notify_all(sp_cv_t* cv);
   typedef s32 sp_semaphore_t;
 #elif defined(SP_MACOS)
   typedef dispatch_semaphore_t sp_semaphore_t;
-#else
+#elif defined(SP_POSIX)
   typedef sem_t sp_semaphore_t;
+#else
+  typedef s32 sp_semaphore_t;
 #endif
 
 SP_API void sp_semaphore_init(sp_semaphore_t* semaphore);
@@ -2681,12 +2693,12 @@ SP_API void sp_spin_unlock(sp_spin_lock_t* lock);
 // @thread
 #if defined(SP_WIN32)
   typedef sp_win32_handle_t sp_thread_t;
-#elif defined(SP_MACOS)
-  typedef pthread_t sp_thread_t;
 #elif defined(SP_FREESTANDING)
   typedef s32 sp_thread_t;
-#else
+#elif defined(SP_POSIX)
   typedef pthread_t sp_thread_t;
+#else
+  typedef s32 sp_thread_t;
 #endif
 
 SP_TYPEDEF_FN(s32, sp_thread_fn_t, void*);
@@ -2785,9 +2797,12 @@ SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal
 #elif defined(SP_FREESTANDING)
   typedef u8 sp_tls_key_t;
   typedef u8 sp_tls_once_t;
-#else
+#elif defined(SP_POSIX)
   typedef pthread_key_t  sp_tls_key_t;
   typedef pthread_once_t sp_tls_once_t;
+#else
+  typedef u8 sp_tls_key_t;
+  typedef u8 sp_tls_once_t;
 #endif
 
 typedef struct sp_tls_block {
@@ -3991,6 +4006,34 @@ void sp_sys_exit(s32 code) {
   sp_syscall(SP_SYSCALL_NUM_EXIT_GROUP, code);
   __builtin_unreachable();
 }
+
+void sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* expr, bool cond) {
+  if (cond) return;
+
+  sp_io_writer_t io = sp_zero_initialize();
+  sp_io_writer_from_fd(&io, 2, SP_IO_CLOSE_MODE_NONE);
+
+  // "file:line: func: assert: expr\n"
+  //
+  // We don't have a version of sp_format() that doesn't allocate, unfortunately, which means
+  // it goes through the context and opens us up to asserting again.
+  sp_io_write_cstr(&io, SP_ANSI_FG_RED, SP_NULLPTR);
+  sp_io_write_cstr(&io, "assert ", SP_NULLPTR);
+  sp_io_write_cstr(&io, SP_ANSI_RESET, SP_NULLPTR);
+  sp_io_write_cstr(&io, SP_ANSI_FG_BRIGHT_CYAN, SP_NULLPTR);
+  sp_io_write_cstr(&io, file, SP_NULLPTR);
+  sp_io_write_cstr(&io, SP_ANSI_RESET, SP_NULLPTR);
+  sp_io_write_cstr(&io, ":", SP_NULLPTR);
+  sp_io_write_cstr(&io, line, SP_NULLPTR);
+  sp_io_write_cstr(&io, ": ", SP_NULLPTR);
+  sp_io_write_cstr(&io, SP_ANSI_FG_BRIGHT_CYAN, SP_NULLPTR);
+  sp_io_write_cstr(&io, func, SP_NULLPTR);
+  sp_io_write_cstr(&io, "() ", SP_NULLPTR);
+  sp_io_write_cstr(&io, SP_ANSI_RESET, SP_NULLPTR);
+  sp_io_write_cstr(&io, expr, SP_NULLPTR);
+  sp_io_write_cstr(&io, "\n", SP_NULLPTR);
+  __builtin_trap();
+}
 #endif
 
 //////////////////
@@ -4395,8 +4438,6 @@ void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap) {
 // ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
 // @fixed_array
 void sp_fixed_array_init(sp_fixed_array_t* buffer, u32 max_vertices, u32 element_size) {
-  SP_ASSERT(buffer);
-
   buffer->size = 0;
   buffer->capacity = max_vertices;
   buffer->element_size = element_size;
@@ -4404,36 +4445,26 @@ void sp_fixed_array_init(sp_fixed_array_t* buffer, u32 max_vertices, u32 element
 }
 
 u8* sp_fixed_array_at(sp_fixed_array_t* buffer, u32 index) {
-  SP_ASSERT(buffer);
   return buffer->data + (index * buffer->element_size);
 }
 
 u8* sp_fixed_array_push(sp_fixed_array_t* buffer, void* data, u32 count) {
-  SP_ASSERT(buffer);
-  SP_ASSERT(buffer->size < buffer->capacity);
-
   u8* reserved = sp_fixed_array_reserve(buffer, count);
   if (data) sp_mem_copy(data, reserved, buffer->element_size * count);
   return reserved;
 }
 
 u8* sp_fixed_array_reserve(sp_fixed_array_t* buffer, u32 count) {
-  SP_ASSERT(buffer);
-
   u8* element = sp_fixed_array_at(buffer, buffer->size);
   buffer->size += count;
   return element;
 }
 
 void sp_fixed_array_clear(sp_fixed_array_t* buffer) {
-  SP_ASSERT(buffer);
-
   buffer->size = 0;
 }
 
 u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
-  SP_ASSERT(buffer);
-
   return buffer->size * buffer->element_size;
 }
 
@@ -5498,7 +5529,7 @@ void sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t fn) {
   InitOnceExecuteOnce(once, sp_tls_once_trampoline, &callback, SP_NULLPTR);
 }
 
-#else
+#elif defined(SP_POSIX)
 void sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t on_deinit) {
   pthread_key_create(key, on_deinit);
 }
@@ -5513,6 +5544,24 @@ void sp_tls_set(sp_tls_key_t key, void* data) {
 
 void sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t fn) {
   pthread_once(once, fn);
+}
+
+#else
+void sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t on_deinit) {
+  SP_BROKEN();
+}
+
+void* sp_tls_get(sp_tls_key_t key) {
+  SP_BROKEN();
+  return SP_NULLPTR;
+}
+
+void sp_tls_set(sp_tls_key_t key, void* data) {
+  SP_BROKEN();
+}
+
+void sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t fn) {
+  SP_BROKEN();
 }
 #endif
 
@@ -7141,7 +7190,7 @@ void sp_fs_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
 
   sp_da_for(entries, i) {
     sp_fs_entry_t* entry = &entries[i];
-    sp_str_t entry_name = entry->file_name;
+    sp_str_t entry_name = entry->name;
 
     bool matches = sp_str_equal(glob, sp_str_lit("*"));
     if (!matches) {
@@ -7199,12 +7248,12 @@ void sp_fs_remove_dir(sp_str_t path) {
   sp_da_for(entries, i) {
     sp_fs_entry_t* entry = &entries[i];
 
-    if (sp_fs_is_symlink(entry->file_path)) {
-      sp_fs_remove_file(entry->file_path);
-    } else if (sp_fs_is_dir(entry->file_path)) {
-      sp_fs_remove_dir(entry->file_path);
-    } else if (sp_fs_is_file(entry->file_path)) {
-      sp_fs_remove_file(entry->file_path);
+    if (sp_fs_is_symlink(entry->path)) {
+      sp_fs_remove_file(entry->path);
+    } else if (sp_fs_is_dir(entry->path)) {
+      sp_fs_remove_dir(entry->path);
+    } else if (sp_fs_is_file(entry->path)) {
+      sp_fs_remove_file(entry->path);
     }
   }
 
@@ -7221,6 +7270,10 @@ bool sp_fs_is_glob(sp_str_t path) {
 
 sp_fs_kind_t sp_fs_get_kind(sp_str_t path) {
   return sp_os_get_file_attrs(path);
+}
+
+sp_fs_kind_t sp_fs_get_target_kind(sp_str_t path) {
+  return sp_os_get_target_attrs(path);
 }
 
 bool sp_fs_is_file(sp_str_t path) {
@@ -7306,10 +7359,10 @@ void sp_fs_it_next(sp_fs_it_t* it) {
     sp_fs_it_frame_t* top = sp_da_back(it->stack);
 
     if (sp_fs_it_os_read(top, &it->entry)) {
-      it->entry.file_path = sp_fs_join_path(top->path, it->entry.file_name);
+      it->entry.path = sp_fs_join_path(top->path, it->entry.name);
 
       if (it->recursive && it->entry.kind == SP_FS_KIND_DIR) {
-        sp_fs_it_push(it, it->entry.file_path);
+        sp_fs_it_push(it, it->entry.path);
       }
       return;
     }
@@ -7371,7 +7424,7 @@ bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
   }
 }
 
-#elif defined(SP_POSIX)
+#elif defined(SP_UNIX)
 
 SP_PRIVATE sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type) {
   switch (d_type) {
@@ -7382,8 +7435,35 @@ SP_PRIVATE sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type) {
   return SP_FS_KIND_NONE;
 }
 
-#if defined(SP_MACOS) || defined(SP_COSMO)
+#if defined(SP_LINUX)
 
+bool sp_fs_it_os_open(sp_fs_it_frame_t* frame, sp_str_t path) {
+  frame->fd = sp_open(sp_str_to_cstr(path), SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  return frame->fd >= 0;
+}
+
+void sp_fs_it_os_close(sp_fs_it_frame_t* frame) {
+  sp_close(frame->fd);
+}
+
+bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
+  while (true) {
+    if (frame->buf_pos < frame->buf_end) {
+      sp_sys_dirent64_t* d = (sp_sys_dirent64_t*)(frame->buf + frame->buf_pos);
+      frame->buf_pos += d->d_reclen;
+      if (sp_fs_it_is_dot(d->d_name)) continue;
+      entry->name = sp_str_from_cstr(d->d_name);
+      entry->kind = sp_fs_it_dtype_to_attr(d->d_type);
+      return true;
+    }
+    s64 n = sp_sys_getdents64(frame->fd, frame->buf, SP_FS_IT_BUF_SIZE);
+    if (n <= 0) return false;
+    frame->buf_pos = 0;
+    frame->buf_end = (s32)n;
+  }
+}
+
+#else
 bool sp_fs_it_os_open(sp_fs_it_frame_t* frame, sp_str_t path) {
   frame->dir = opendir(sp_str_to_cstr(path));
   return frame->dir != SP_NULLPTR;
@@ -7404,61 +7484,9 @@ bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
   }
 }
 
-#else
-
-bool sp_fs_it_os_open(sp_fs_it_frame_t* frame, sp_str_t path) {
-  frame->fd = sp_open(sp_str_to_cstr(path), SP_O_RDONLY | SP_O_DIRECTORY, 0);
-  return frame->fd >= 0;
-}
-
-void sp_fs_it_os_close(sp_fs_it_frame_t* frame) {
-  sp_close(frame->fd);
-}
-
-bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
-  while (true) {
-    if (frame->buf_pos < frame->buf_end) {
-      sp_sys_dirent64_t* d = (sp_sys_dirent64_t*)(frame->buf + frame->buf_pos);
-      frame->buf_pos += d->d_reclen;
-      if (sp_fs_it_is_dot(d->d_name)) continue;
-      entry->file_name = sp_str_from_cstr(d->d_name);
-      entry->kind = sp_fs_it_dtype_to_attr(d->d_type);
-      return true;
-    }
-    s64 n = sp_sys_getdents64(frame->fd, frame->buf, SP_FS_IT_BUF_SIZE);
-    if (n <= 0) return false;
-    frame->buf_pos = 0;
-    frame->buf_end = (s32)n;
-  }
-}
-
 #endif
 #endif
 
-
-////////////////
-// IS_ON_PATH //
-////////////////
-#if defined(SP_WIN32)
-bool sp_fs_is_on_path(sp_str_t program) {
-  return SearchPathA(SP_NULLPTR, sp_str_to_cstr(program), SP_NULLPTR, 0, SP_NULLPTR, SP_NULLPTR) > 0;
-}
-#endif
-
-#if defined(SP_POSIX) && defined(SP_PS)
-bool sp_fs_is_on_path(sp_str_t program) {
-  SP_INCOMPLETE()
-  sp_ps_config_t config = SP_ZERO_INITIALIZE();
-  config.command = SP_LIT("which");
-  sp_ps_config_add_arg(&config, program);
-  config.io.out.mode = SP_PS_IO_MODE_NULL;
-  config.io.err.mode = SP_PS_IO_MODE_NULL;
-
-  sp_ps_output_t output = sp_ps_run(config);
-
-  return output.status.exit_code == 0;
-}
-#endif
 
 //////////////////
 // CANONICALIZE //
@@ -7636,9 +7664,8 @@ sp_str_t sp_fs_get_storage_path() {
 sp_str_t sp_fs_get_config_path() {
   return sp_fs_normalize_path(sp_os_env_get(SP_LIT("APPDATA")));
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_str_t sp_os_try_xdg_or_home(sp_str_t xdg, sp_str_t home_suffix) {
   sp_str_t path =  sp_os_env_get(xdg);
   if (sp_str_valid(path)) return path;
@@ -7882,16 +7909,6 @@ void sp_sleep_ms(f64 ms) {
 ///////////
 // WRITE //
 ///////////
-#if defined(SP_POSIX)
-void sp_os_print(sp_str_t message) {
-  sp_write(1, message.data, message.len);
-}
-
-void sp_os_print_err(sp_str_t message) {
-  sp_write(2, message.data, message.len);
-}
-#endif
-
 #if defined(SP_WIN32)
 SP_PRIVATE void sp_os_win32_write(DWORD handle_id, sp_str_t message) {
   HANDLE handle = GetStdHandle(handle_id);
@@ -7910,6 +7927,15 @@ void sp_os_print(sp_str_t message) {
 
 void sp_os_print_err(sp_str_t message) {
   sp_os_win32_write(STD_ERROR_HANDLE, message);
+}
+
+#else
+void sp_os_print(sp_str_t message) {
+  sp_write(1, message.data, message.len);
+}
+
+void sp_os_print_err(sp_str_t message) {
+  sp_write(2, message.data, message.len);
 }
 #endif
 
@@ -8055,9 +8081,8 @@ sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
 sp_err_t sp_os_create_dir(sp_str_t path) {
   return CreateDirectoryA(sp_str_to_cstr(path), SP_NULLPTR) ? SP_OK : SP_ERR_OS;
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_err_t sp_os_create_dir(sp_str_t path) {
   return sp_mkdir(sp_str_to_cstr(path), 0755) == 0 ? SP_OK : SP_ERR_OS;
 }
@@ -8086,9 +8111,8 @@ sp_fs_kind_t sp_os_get_target_attrs(sp_str_t path) {
   if (attrs & FILE_ATTRIBUTE_DIRECTORY) return SP_FS_KIND_DIR;
   return SP_FS_KIND_FILE;
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_fs_kind_t sp_os_attr_to_fs_attr(sp_os_attr_t attrs) {
   if (sp_S_ISLNK(attrs)) return SP_FS_KIND_SYMLINK;
   if (sp_S_ISDIR(attrs)) return SP_FS_KIND_DIR;
@@ -8121,9 +8145,8 @@ sp_os_attr_t sp_os_get_raw_file_attrs(sp_str_t path) {
 sp_os_attr_t sp_os_get_raw_target_attrs(sp_str_t path) {
   return sp_os_get_raw_file_attrs(path);
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_os_attr_t sp_os_get_raw_file_attrs(sp_str_t path) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
   c8* cstr = sp_str_to_cstr(path);
@@ -8160,9 +8183,8 @@ sp_err_t sp_os_set_raw_file_attrs(sp_str_t path, sp_os_attr_t attrs) {
   sp_free(path_cstr);
   return ok ? SP_OK : SP_ERR_OS;
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_err_t sp_os_set_raw_file_attrs(sp_str_t path, sp_os_attr_t attrs) {
   return sp_chmod(sp_str_to_cstr(path), attrs) == 0 ? SP_OK : SP_ERR_OS;
 }
@@ -8182,9 +8204,8 @@ sp_str_t sp_os_get_cwd() {
 
   return sp_str_from_cstr(path);
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_str_t sp_os_get_cwd() {
   c8 path[SP_PATH_MAX] = SP_ZERO_INITIALIZE();
   if (sp_getcwd(path, SP_PATH_MAX - 1) < 0) {
@@ -8211,9 +8232,8 @@ sp_err_t sp_os_create_file(sp_str_t path) {
   CloseHandle(handle);
   return SP_OK;
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_err_t sp_os_create_file(sp_str_t path) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
 
@@ -8238,9 +8258,8 @@ sp_err_t sp_os_remove_file(sp_str_t path) {
   sp_free(path_cstr);
   return ok ? SP_OK : SP_ERR_OS;
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_err_t sp_os_remove_file(sp_str_t path) {
   return sp_unlink(sp_str_to_cstr(path)) == 0 ? SP_OK : SP_ERR_OS;
 }
@@ -8257,9 +8276,8 @@ sp_err_t sp_os_remove_dir(sp_str_t path) {
   sp_free(path_cstr);
   return ok ? SP_OK : SP_ERR_OS;
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_err_t sp_os_remove_dir(sp_str_t path) {
   return sp_rmdir(sp_str_to_cstr(path)) == 0 ? SP_OK : SP_ERR_OS;
 }
@@ -8286,9 +8304,8 @@ sp_err_t sp_os_create_sym_link(sp_str_t target, sp_str_t link_path) {
   }
   return SP_OK;
 }
-#endif
 
-#if defined(SP_POSIX)
+#else
 sp_err_t sp_os_create_hard_link(sp_str_t target, sp_str_t link_path) {
   if (sp_link(sp_str_to_cstr(target), sp_str_to_cstr(link_path))) {
     return SP_ERR_OS;
@@ -8417,6 +8434,11 @@ SP_PRIVATE sp_env_var_t sp_os_env_parse_var(sp_str_t entry) {
   return result;
 }
 
+typedef struct {
+  c16* block;
+  c16* cursor;
+  sp_str_t entry;
+} sp_win32_env_it_t;
 
 SP_PRIVATE void sp_win32_env_it_set_current(sp_os_env_it_t* it) {
   sp_win32_env_it_t* state = (sp_win32_env_it_t*)it->os;
@@ -8457,6 +8479,11 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
 }
 
 #elif defined(SP_FREESTANDING)
+typedef struct {
+  sp_env_t* env;
+  sp_ht_it_t it;
+} sp_linux_env_it_t;
+
 SP_PRIVATE void sp_linux_env_it_set_current(sp_os_env_it_t* it) {
   sp_linux_env_it_t* state = (sp_linux_env_it_t*)it->os;
   it->key = *sp_str_ht_it_getkp(state->env->vars, state->it);
@@ -8649,7 +8676,7 @@ void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t
   sp_syscall(SP_SYSCALL_NUM_SIGACTION, sig, &sa, 0, 8);
 }
 
-#else
+#elif defined(SP_POSIX)
 void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
   sp_rt.signal_handlers[signal] = handler;
   struct sigaction sa;
@@ -8658,6 +8685,12 @@ void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t
   sa.sa_flags = 0;
   sigaction(sp__signal_to_os(signal), &sa, SP_NULLPTR);
 }
+
+#else
+void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
+  SP_BROKEN();
+}
+
 #endif
 
 
@@ -8732,7 +8765,7 @@ sp_tm_date_time_t sp_tm_get_date_time() {
   };
 }
 
-#elif defined(SP_POSIX)
+#else
 sp_tm_epoch_t sp_tm_now_epoch() {
   sp_timespec_t ts;
   sp_clock_gettime(SP_CLOCK_REALTIME, &ts);
@@ -9230,27 +9263,7 @@ bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
 void sp_semaphore_signal(sp_semaphore_t* semaphore) {
     dispatch_semaphore_signal(*semaphore);
 }
-#elif defined(SP_FREESTANDING)
-void sp_semaphore_init(sp_semaphore_t* semaphore) {
-
-}
-
-void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-
-}
-
-void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-
-}
-
-bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-  return true;
-}
-
-void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-
-}
-#else
+#elif defined(SP_POSIX)
 void sp_semaphore_init(sp_semaphore_t* semaphore) {
   sem_init(semaphore, 0, 0);
 }
@@ -9277,6 +9290,28 @@ bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
 
 void sp_semaphore_signal(sp_semaphore_t* semaphore) {
   sem_post(semaphore);
+}
+
+#else
+void sp_semaphore_init(sp_semaphore_t* semaphore) {
+  SP_BROKEN();
+}
+
+void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
+  SP_BROKEN();
+}
+
+void sp_semaphore_wait(sp_semaphore_t* semaphore) {
+  SP_BROKEN();
+}
+
+bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
+  SP_BROKEN();
+  return true;
+}
+
+void sp_semaphore_signal(sp_semaphore_t* semaphore) {
+  SP_BROKEN();
 }
 #endif
 
@@ -9324,7 +9359,7 @@ void sp_mutex_unlock(sp_mutex_t* mutex) {
 void sp_mutex_destroy(sp_mutex_t* mutex) {
 }
 
-#else
+#elif defined(SP_POSIX)
 void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
@@ -9348,6 +9383,24 @@ void sp_mutex_unlock(sp_mutex_t* mutex) {
 void sp_mutex_destroy(sp_mutex_t* mutex) {
   pthread_mutex_destroy(mutex);
 }
+
+#else
+void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
+  SP_BROKEN();
+}
+
+void sp_mutex_lock(sp_mutex_t* mutex) {
+  SP_BROKEN();
+}
+
+void sp_mutex_unlock(sp_mutex_t* mutex) {
+  SP_BROKEN();
+}
+
+void sp_mutex_destroy(sp_mutex_t* mutex) {
+  SP_BROKEN();
+}
+
 #endif
 
 #if defined(SP_WIN32)
@@ -9401,7 +9454,7 @@ void sp_cv_notify_all(sp_cv_t* cond) {
   SP_ASSERT(false);
 }
 
-#else
+#elif defined(SP_POSIX)
 void sp_cv_init(sp_cv_t* cond) {
   pthread_cond_init(cond, NULL);
 }
@@ -9437,6 +9490,33 @@ void sp_cv_notify_one(sp_cv_t* cond) {
 void sp_cv_notify_all(sp_cv_t* cond) {
   pthread_cond_broadcast(cond);
 }
+
+#else
+void sp_cv_init(sp_cv_t* cond) {
+  SP_BROKEN();
+}
+
+void sp_cv_destroy(sp_cv_t* cond) {
+  SP_BROKEN();
+}
+
+void sp_cv_wait(sp_cv_t* cond, sp_mutex_t* mutex) {
+  SP_BROKEN();
+}
+
+bool sp_cv_wait_for(sp_cv_t* cond, sp_mutex_t* mutex, u32 ms) {
+  SP_BROKEN();
+  return false;
+}
+
+void sp_cv_notify_one(sp_cv_t* cond) {
+  SP_BROKEN();
+}
+
+void sp_cv_notify_all(sp_cv_t* cond) {
+  SP_BROKEN();
+}
+
 #endif
 
 
@@ -9511,7 +9591,7 @@ void sp_thread_join(sp_thread_t* thread) {
 void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   SP_ASSERT(false);
 }
-#else
+#elif defined(SP_POSIX)
 void* sp_posix_thread_launch(void* args) {
   return (void*)(intptr_t)sp_thread_launch(args);
 }
@@ -9540,6 +9620,25 @@ void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   pthread_create(thread, NULL, sp_posix_thread_launch, &launch);
   sp_semaphore_wait(&launch.semaphore);
 }
+
+#else
+void* sp_posix_thread_launch(void* args) {
+  SP_BROKEN();
+}
+
+s32 sp_thread_launch(void* args) {
+  SP_BROKEN();
+  return 0;
+}
+
+void sp_thread_join(sp_thread_t* thread) {
+  SP_BROKEN();
+}
+
+void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
+  SP_BROKEN();
+}
+
 #endif
 
 
@@ -9610,8 +9709,6 @@ void sp_env_destroy(sp_env_t* env) {
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
 #if defined(SP_PS)
 #if defined(SP_POSIX)
-#define SP_POSIX_WAITPID_BLOCK 0
-#define SP_POSIX_WAITPID_NO_BLOCK SP_WNOHANG
 
 typedef struct {
   posix_spawn_file_actions_t* fa;
@@ -9971,6 +10068,8 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
   return (sp_ps_output_t) { .status = { .state = SP_PS_STATE_DONE, .exit_code = -1 } };
 }
 
+int posix_spawn_file_actions_addchdir_np(posix_spawn_file_actions_t*, const char*);
+
 void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd) {
   const c8* cwd_cstr = sp_str_to_cstr(cwd);
   SP_ASSERT(posix_spawn_file_actions_addchdir_np(fa, cwd_cstr) == 0);
@@ -10020,6 +10119,8 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   return reader;
 }
 
+#define SP_POSIX_WAITPID_NO_BLOCK SP_WNOHANG
+#define SP_POSIX_WAITPID_BLOCK 0
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
   sp_ps_status_t result = SP_ZERO_INITIALIZE();
 
@@ -10852,41 +10953,49 @@ struct sp_ps_os {
 };
 
 sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
+  SP_BROKEN();
   return *src;
 }
 
 void sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg) {
+  SP_BROKEN();
   if (!sp_str_empty(arg)) {
     sp_da_push(config->dyn_args, arg);
   }
 }
 
 sp_ps_t sp_ps_create(sp_ps_config_t config) {
+  SP_BROKEN();
   SP_UNUSED(config);
   return SP_ZERO_STRUCT(sp_ps_t);
 }
 
 sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
+  SP_BROKEN();
   sp_ps_t ps = sp_ps_create(config);
   return sp_ps_output(&ps);
 }
 
 sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {
+  SP_BROKEN();
   SP_UNUSED(ps);
   return SP_NULLPTR;
 }
 
 sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
+  SP_BROKEN();
   SP_UNUSED(ps);
   return SP_NULLPTR;
 }
 
 sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
+  SP_BROKEN();
   SP_UNUSED(ps);
   return SP_NULLPTR;
 }
 
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
+  SP_BROKEN();
   SP_UNUSED(ps);
   SP_UNUSED(timeout_ms);
   return SP_RVAL(sp_ps_status_t) {
@@ -10896,6 +11005,7 @@ sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
 }
 
 sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
+  SP_BROKEN();
   SP_UNUSED(ps);
   return SP_RVAL(sp_ps_status_t) {
     .state = SP_PS_STATE_DONE,
@@ -10904,12 +11014,14 @@ sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
 }
 
 sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
+  SP_BROKEN();
   return SP_RVAL(sp_ps_output_t) {
     .status = sp_ps_wait(ps),
   };
 }
 
 bool sp_ps_kill(sp_ps_t* ps) {
+  SP_BROKEN();
   SP_UNUSED(ps);
   return false;
 }

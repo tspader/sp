@@ -1734,7 +1734,7 @@ UTEST(sp_fs_collect, file_names_validation) {
 
   sp_dyn_array_for(entries, i) {
     for (u32 j = 0; j < 4; j++) {
-      if (sp_str_equal_cstr(entries[i].file_name, expected_names[j])) {
+      if (sp_str_equal_cstr(entries[i].name, expected_names[j])) {
         found[j] = true;
         break;
       }
@@ -1768,13 +1768,13 @@ UTEST(sp_fs_collect, file_attributes) {
   sp_dyn_array_for(entries, i) {
     sp_fs_entry_t* entry = &entries[i];
 
-    if (sp_str_equal_cstr(entry->file_name, "test.txt")) {
+    if (sp_str_equal_cstr(entry->name, "test.txt")) {
       ASSERT_TRUE(entry->kind == SP_FS_KIND_FILE);
       ASSERT_FALSE(entry->kind == SP_FS_KIND_DIR);
       found_file = true;
     }
 
-    if (sp_str_equal_cstr(entry->file_name, "testdir")) {
+    if (sp_str_equal_cstr(entry->name, "testdir")) {
       ASSERT_TRUE(entry->kind == SP_FS_KIND_DIR);
       ASSERT_FALSE(entry->kind == SP_FS_KIND_FILE);
       found_dir = true;
@@ -1827,15 +1827,15 @@ UTEST(sp_fs_collect, file_path_correctness) {
   sp_dyn_array_for(entries, i) {
     sp_fs_entry_t* entry = &entries[i];
 
-    ASSERT_TRUE(sp_str_starts_with(entry->file_path, base));
+    ASSERT_TRUE(sp_str_starts_with(entry->path, base));
 
-    ASSERT_TRUE(sp_fs_exists(entry->file_path));
+    ASSERT_TRUE(sp_fs_exists(entry->path));
 
-    if (sp_str_equal_cstr(entry->file_name, "test1.txt")) {
-      ASSERT_TRUE(sp_str_ends_with(entry->file_path, SP_LIT("test1.txt")));
+    if (sp_str_equal_cstr(entry->name, "test1.txt")) {
+      ASSERT_TRUE(sp_str_ends_with(entry->path, SP_LIT("test1.txt")));
     }
-    if (sp_str_equal_cstr(entry->file_name, "subdir")) {
-      ASSERT_TRUE(sp_str_ends_with(entry->file_path, SP_LIT("subdir")));
+    if (sp_str_equal_cstr(entry->name, "subdir")) {
+      ASSERT_TRUE(sp_str_ends_with(entry->path, SP_LIT("subdir")));
     }
   }
 
@@ -1868,7 +1868,7 @@ UTEST(sp_fs_get_kind_ex, basic_functionality) {
 
   sp_dyn_array_for(entries, i) {
     sp_fs_entry_t* entry = &entries[i];
-    sp_fs_kind_t direct_attr = sp_fs_get_kind(entry->file_path);
+    sp_fs_kind_t direct_attr = sp_fs_get_kind(entry->path);
     ASSERT_EQ(entry->kind, direct_attr);
   }
 

@@ -1327,7 +1327,7 @@ UTEST(string_cpp, path_concatenation_operator) {
 #endif
 
 #ifdef SP_WIN32
-sp_str_t sp_win32_utf16_to_utf8(const c16* utf16, s32 len);
+SP_PRIVATE sp_str_t sp_win32_utf16_to_utf8(const c16* utf16, s32 len);
 
 UTEST(wstr, wide_string_conversion) {
   c16 wide_str[] = L"Hello";

@@ -9,6 +9,16 @@ typedef struct linkage {
   sp_opt(bool) has_compiler;
 } linkage;
 
+#if defined(SP_WIN32)
+bool check_path(sp_str_t program) {
+  return SearchPathA(SP_NULLPTR, sp_str_to_cstr(program), SP_NULLPTR, 0, SP_NULLPTR, SP_NULLPTR) > 0;
+}
+#else
+bool check_path(sp_str_t program) {
+  return false;
+}
+#endif
+
 UTEST_F_SETUP(linkage) {
   sp_test_file_manager_init(&ut.files);
 
@@ -16,7 +26,7 @@ UTEST_F_SETUP(linkage) {
   ut.source = sp_fs_join_path(ut.root, sp_str_lit("test/tools/linkage"));
 
   if (!ut.has_compiler.some) {
-    sp_opt_set(ut.has_compiler, sp_fs_is_on_path(sp_str_lit("cl")));
+    sp_opt_set(ut.has_compiler, check_path(sp_str_lit("cl")));
   }
 
   if (!ut.has_compiler.value) {

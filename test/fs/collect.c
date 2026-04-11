@@ -96,7 +96,7 @@ static void run_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, col
     bool found = false;
     sp_da_for(results, n) {
       sp_fs_entry_t entry = results[n];
-      if (sp_str_equal(entry.file_path, expected_path)) {
+      if (sp_str_equal(entry.path, expected_path)) {
         EXPECT_EQ(entry.kind, exp.attr);
         found = true;
         break;

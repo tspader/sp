@@ -25,7 +25,6 @@
 #include "fs/remove.c"
 #include "fs/collect.c"
 #include "fs/mod_time.c"
-#include "fs/is_on_path.c"
 #include "fs/system_paths.c"
 
 #ifdef FS_TEST_OWNS_MAIN

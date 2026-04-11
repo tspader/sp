@@ -12,9 +12,12 @@ INCLUDES_TEST = -I. -Itools -Itest/tools -Itest/tools/process
 LDFLAGS_TEST = -lm
 
 TEST_NAMES = app asset context core cv elf fmon fs glob ht io leak linkage ps rb str time mem amalg prompt
-
 TESTS = $(addprefix $(TEST_DIR)/, $(TEST_NAMES))
 TEST_BINS = $(TEST_DIR)/process
+
+EXAMPLE_NAMES = array hash_table ls wc
+EXAMPLES = $(addprefix $(EXAMPLE_DIR)/, $(EXAMPLE_NAMES))
+CFLAGS_EXAMPLE = -std=c99 -g -Werror=return-type
 
 FREESTANDING =              \
 	$(BUILD_DIR)/freestanding \
@@ -27,8 +30,8 @@ FREESTANDING =              \
 all: freestanding
 
 freestanding: $(FREESTANDING)
-
 tests: $(TEST_BINS) $(TESTS)
+examples: $(EXAMPLES)
 
 $(BUILD_DIR)/freestanding: test/freestanding.c sp.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
@@ -41,6 +44,9 @@ $(EXAMPLE_DIR)/prompt: example/cli/prompt.c sp.h sp/prompt.h | $(EXAMPLE_DIR)
 
 $(EXAMPLE_DIR)/signal: example/freestanding/signal.c sp.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
+
+$(EXAMPLE_DIR)/%: example/%.c sp.h | $(EXAMPLE_DIR)
+	$(CC) $(CFLAGS_EXAMPLE) $(LDFLAGS_TEST) -I. -o $@ $<
 
 $(TEST_DIR)/process: test/tools/process/process.c sp.h | $(TEST_DIR)
 	$(CC) $(CFLAGS_TEST) $(INCLUDES_TEST) $(LDFLAGS_TEST) -o $@ $<
