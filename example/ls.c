@@ -7,7 +7,7 @@ s32 compare_entries(const void* pa, const void* pb) {
   return sp_str_compare_alphabetical(a->name, b->name);
 }
 
-s32 main(s32 num_args, const c8** args) {
+s32 run(s32 num_args, const c8** args) {
   sp_str_t cwd = sp_fs_get_cwd();
   sp_str_t dir = cwd;
   if (num_args == 2) dir = sp_fs_join_path(cwd, sp_str_view(args[1]));
@@ -28,4 +28,6 @@ s32 main(s32 num_args, const c8** args) {
       case SP_FS_KIND_NONE: break;
     }
   }
+  return 0;
 }
+SP_ENTRY(run)

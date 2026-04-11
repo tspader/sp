@@ -1,6 +1,6 @@
 CC := clang
 
-CFLAGS_FREESTANDING = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DBUILD_FREESTANDING_EXAMPLE
+CFLAGS_FREESTANDING = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DSP_FREESTANDING -DSP_DEFINE_BUILTINS
 CFLAGS_DEBUG = -O0 -g
 
 BUILD_DIR = build
@@ -15,17 +15,14 @@ TEST_NAMES = app asset context core cv elf fmon fs glob ht io leak linkage ps rb
 TESTS = $(addprefix $(TEST_DIR)/, $(TEST_NAMES))
 TEST_BINS = $(TEST_DIR)/process
 
-EXAMPLE_NAMES = array hash_table ls wc
+EXAMPLE_NAMES = array elf hash_table ls palette prompt signal wc
 EXAMPLES = $(addprefix $(EXAMPLE_DIR)/, $(EXAMPLE_NAMES))
 CFLAGS_EXAMPLE = -std=c99 -g -Werror=return-type
 
-FREESTANDING =              \
-	$(BUILD_DIR)/freestanding \
-	$(EXAMPLE_DIR)/jit        \
-	$(EXAMPLE_DIR)/signal     \
-	$(EXAMPLE_DIR)/prompt
+FREESTANDING_DIR = $(EXAMPLE_DIR)/freestanding
+FREESTANDING = $(addprefix $(FREESTANDING_DIR)/, $(EXAMPLE_NAMES))
 
-.PHONY: all clean tests freestanding
+.PHONY: all clean tests freestanding examples
 
 all: freestanding
 
@@ -33,25 +30,28 @@ freestanding: $(FREESTANDING)
 tests: $(TEST_BINS) $(TESTS)
 examples: $(EXAMPLES)
 
-$(BUILD_DIR)/freestanding: test/freestanding.c sp.h | $(BUILD_DIR)
+$(FREESTANDING_DIR)/prompt: example/prompt.c sp.h sp/sp_prompt.h | $(FREESTANDING_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
 
-$(EXAMPLE_DIR)/jit: example/freestanding/jit.c sp.h | $(EXAMPLE_DIR)
+$(FREESTANDING_DIR)/%: example/%.c sp.h | $(FREESTANDING_DIR)
 	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
 
-$(EXAMPLE_DIR)/prompt: example/cli/prompt.c sp.h sp/prompt.h | $(EXAMPLE_DIR)
-	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
-
-$(EXAMPLE_DIR)/signal: example/freestanding/signal.c sp.h | $(EXAMPLE_DIR)
-	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
+$(EXAMPLE_DIR)/prompt: example/prompt.c sp.h sp/sp_prompt.h | $(EXAMPLE_DIR)
+	$(CC) $(CFLAGS_EXAMPLE) $(LDFLAGS_TEST) -I. -o $@ $<
 
 $(EXAMPLE_DIR)/%: example/%.c sp.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS_EXAMPLE) $(LDFLAGS_TEST) -I. -o $@ $<
 
-$(TEST_DIR)/process: test/tools/process/process.c sp.h | $(TEST_DIR)
+#########
+# TESTS #
+#########
+$(TEST_DIR)/%: test/%.c sp.h | $(TEST_DIR)
 	$(CC) $(CFLAGS_TEST) $(INCLUDES_TEST) $(LDFLAGS_TEST) -o $@ $<
 
-$(TEST_DIR)/%: test/%.c sp.h | $(TEST_DIR)
+$(TEST_DIR)/freestanding: test/freestanding.c sp.h | $(TEST_DIR)
+	$(CC) $(CFLAGS_FREESTANDING) $(CFLAGS_DEBUG) -I. -o $@ $<
+
+$(TEST_DIR)/process: test/tools/process/process.c sp.h | $(TEST_DIR)
 	$(CC) $(CFLAGS_TEST) $(INCLUDES_TEST) $(LDFLAGS_TEST) -o $@ $<
 
 $(TEST_DIR)/fs: test/fs.c sp.h | $(TEST_DIR)
@@ -64,6 +64,9 @@ $(BUILD_DIR):
 
 $(EXAMPLE_DIR):
 	mkdir -p $(EXAMPLE_DIR)
+
+$(FREESTANDING_DIR):
+	mkdir -p $(FREESTANDING_DIR)
 
 $(TEST_DIR):
 	mkdir -p $(TEST_DIR)

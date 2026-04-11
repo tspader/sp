@@ -1,4 +1,6 @@
+#define SP_IMPLEMENTATION
 #include "sp.h"
+#include "sp/sp_elf.h"
 
 typedef struct {
   u32 name_offset;
@@ -90,7 +92,7 @@ static sp_str_t make_symbol_name(sp_str_t basename) {
   return (sp_str_t){ .data = buf, .len = len };
 }
 
-s32 embed_main(s32 argc, c8** argv) {
+s32 embed_main(s32 argc, const c8** argv) {
   if (argc < 3) {
     print("usage: embed <output.o> <file1> [file2 ...]\n");
     return 1;
@@ -168,7 +170,7 @@ s32 embed_main(s32 argc, c8** argv) {
   sp_memcpy(data_sec->buffer.data + header_base, headers, header_size);
 
   sp_err_t err = sp_elf_write_to_file(elf, output_path);
-  if (err != SP_ERR_OK) {
+  if (err != SP_OK) {
     print("error: failed to write output\n");
     return 1;
   }

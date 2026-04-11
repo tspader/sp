@@ -1,10 +1,7 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
-void wc_split(sp_str_t text) {
-}
-
-s32 main(s32 num_args, const c8** args) {
+s32 run(s32 num_args, const c8** args) {
   if (num_args < 2) {
     sp_log("usage: wc {:fg cyan}", SP_FMT_CSTR("$file"));
     return 1;
@@ -34,3 +31,4 @@ s32 main(s32 num_args, const c8** args) {
   }
   return 0;
 }
+SP_ENTRY(run)

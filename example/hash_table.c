@@ -11,7 +11,7 @@ void header(const c8* key, const c8* value) {
 
 }
 
-s32 main(s32 num_args, const c8** args) {
+s32 run(s32 num_args, const c8** args) {
   struct {
     sp_ht(s32, u32) integer;
     sp_cstr_ht(u8) cstr;
@@ -33,4 +33,6 @@ s32 main(s32 num_args, const c8** args) {
   sp_ht_for_kv(hts.key, it) {
     sp_log("[{}, {}] -> {} {:fg brightblack}", SP_FMT_S32(it.key->foo), SP_FMT_U32(it.key->bar), SP_FMT_CSTR(*it.val), SP_FMT_PTR(it.val));
   }
+  return 0;
 }
+SP_ENTRY(run)

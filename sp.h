@@ -506,6 +506,7 @@
 SP_BEGIN_EXTERN_C()
 
 #if defined(SP_UNIX)
+
   #if defined(SP_MACOS)
     #ifndef _DARWIN_C_SOURCE
       #define _DARWIN_C_SOURCE
@@ -516,6 +517,8 @@ SP_BEGIN_EXTERN_C()
       #define _COSMO_SOURCE
     #endif
     #define SP_POSIX
+  #elif defined(SP_FREESTANDING)
+
   #elif defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L
     #define SP_POSIX
   #elif !defined(_FEATURES_H)
@@ -1057,6 +1060,8 @@ void* sp_sys_alloc(u64 n);
 void* sp_sys_alloc_zero(u64 n);
 void  sp_sys_free(void* ptr);
 void* sp_sys_realloc(void* ptr, u64 new_size);
+sp_typedef_fn(int, sp_qsort_fn_t, const void *, const void *);
+void sp_sys_qsort(void* arr, u64 len, u64 stride, sp_qsort_fn_t);
 
 ///////////////
 // CONSTANTS //
@@ -1298,11 +1303,13 @@ void* sp_sys_realloc(void* ptr, u64 new_size);
   #define sp_memmove(d, s, n)               sp_sys_memmove(d, s, n)
   #define sp_memset(d, c, n)                sp_sys_memset(d, c, n)
   #define sp_memcmp(a, b, n)                sp_sys_memcmp(a, b, n)
+  #define sp_qsort(a, n, s, f)              sp_sys_qsort(a, n, s, f)
 #else
   #define sp_memcpy(d, s, n)                memcpy(d, s, n)
   #define sp_memmove(d, s, n)               memmove(d, s, n)
   #define sp_memset(d, c, n)                memset(d, c, n)
   #define sp_memcmp(a, b, n)                memcmp(a, b, n)
+  #define sp_qsort(a, n, s, f)              qsort(a, n, s, f)
 #endif
 
 // A few functions are deprecated on Windows
@@ -1730,7 +1737,7 @@ SP_API void                         sp_dyn_array_push_f(void** arr, void* val, u
 #define sp_dyn_array_new(__T)\
     ((__T*)sp_dyn_array_resize_impl(NULL, sizeof(__T), 0))
 
-#define sp_dyn_array_sort(arr, fn) qsort(arr, sp_dyn_array_size(arr), sizeof((arr)[0]), fn)
+#define sp_dyn_array_sort(arr, fn) sp_qsort(arr, sp_dyn_array_size(arr), sizeof((arr)[0]), fn)
 #define sp_dyn_array_bounds_ok(arr, it) ((it) < sp_dyn_array_size(arr))
 
 
@@ -3788,6 +3795,25 @@ void* sp_sys_memset(void* dest, s32 c, u64 n) {
 #endif
   while (n--) *d++ = v;
   return dest;
+}
+
+void sp_sys_qsort(void *arr, u64 len, u64 stride, sp_qsort_fn_t cmp) {
+  u8 *a = arr;
+  u64 gap, i, j;
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  u8* tmp = sp_alloc_n(u8, stride);
+
+  for (gap = len / 3; gap > 0; gap /= 3 + 1) {
+    for (i = gap; i < len; i++) {
+      sp_memcpy(tmp, a + i * stride, stride);
+      for (j = i; j >= gap && cmp(a + (j - gap) * stride, tmp) > 0; j -= gap) {
+        sp_memcpy(a + j * stride, a + (j - gap) * stride, stride);
+      }
+      sp_memcpy(a + j * stride, tmp, stride);
+    }
+  }
+
+  sp_mem_end_scratch(scratch);
 }
 
 //////////////////////
@@ -12608,6 +12634,7 @@ sp_err_t sp_io_writer_close(sp_io_writer_t* writer) {
 SP_API sp_app_t* sp_app_new(sp_app_config_t config) {
   sp_app_t* app = SP_ALLOC(sp_app_t);
   *app = (sp_app_t) {
+    .user_data = config.user_data,
     .on_init = config.on_init,
     .on_poll = config.on_poll,
     .on_update = config.on_update,
@@ -12668,9 +12695,11 @@ deinit:
 }
 
 #if defined(SP_MAIN)
-s32 main(s32 num_args, const c8** args) {
+
+s32 _sp_main(s32 num_args, const c8** args) {
   return sp_app_run(sp_main(num_args, args));
 }
+SP_ENTRY(_sp_main)
 #endif
 
 SP_END_EXTERN_C()

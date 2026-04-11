@@ -1,5 +1,3 @@
-#define SP_FREESTANDING
-#define SP_DEFINE_BUILTINS
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
@@ -10,7 +8,7 @@ void handle_interrupt(sp_os_signal_t signal) {
   sp_atomic_s32_set(&shutdown, 1);
 }
 
-s32 main(s32 num_args, const c8** args) {
+s32 run(s32 num_args, const c8** args) {
   sp_log("hello, {:fg brightcyan}", SP_FMT_CSTR("world"));
   sp_os_register_signal_handler(SP_OS_SIGNAL_INTERRUPT, handle_interrupt);
   sp_log("handler registered, send SIGINT to test");
@@ -26,4 +24,4 @@ s32 main(s32 num_args, const c8** args) {
   return 0;
 }
 
-SP_ENTRY(main)
+SP_ENTRY(run)
