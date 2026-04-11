@@ -152,17 +152,6 @@ UTEST(sp_fmt, hash_type) {
   SP_EXPECT_STR_EQ_CSTR(result, "zero hash: 0");
 }
 
-UTEST(sp_fmt, array_types) {
-  sp_fixed_array_t fixed_arr;
-  fixed_arr.size = 10;
-  fixed_arr.capacity = 20;
-  fixed_arr.element_size = 4;
-  fixed_arr.data = SP_NULLPTR;
-
-  sp_str_t result = sp_format("fixed: {}", SP_FMT_FIXED_ARRAY(fixed_arr));
-  SP_EXPECT_STR_EQ_CSTR(result, "fixed: { size: 10, capacity: 20 }");
-}
-
 UTEST(sp_fmt, multiple_args) {
   u32 count = 42;
   sp_str_t name = SP_LIT("test");
@@ -1552,61 +1541,6 @@ UTEST(sp_format_parser, peek_and_eat) {
 //   result = sp_format("{:italic}{}{:italic}", SP_FMT_CSTR("italic text"));
 //   ASSERT_GT(result.len, 0);
 // }
-
-
-
-////////////////////////////
-// RING BUFFER TESTS
-////////////////////////////
-UTEST(fixed_array, basic_operations) {
-
-
-  sp_fixed_array_t arr;
-  sp_fixed_array_init(&arr, 10, sizeof(s32));
-
-  ASSERT_EQ(arr.size, 0);
-  ASSERT_EQ(arr.capacity, 10);
-  ASSERT_EQ(arr.element_size, sizeof(s32));
-  ASSERT_NE(arr.data, SP_NULLPTR);
-
-  s32 values[] = {42, 100, 200};
-  u8* pushed = sp_fixed_array_push(&arr, values, 3);
-  ASSERT_NE(pushed, SP_NULLPTR);
-  ASSERT_EQ(arr.size, 3);
-
-  s32* elem0 = (s32*)sp_fixed_array_at(&arr, 0);
-  s32* elem1 = (s32*)sp_fixed_array_at(&arr, 1);
-  s32* elem2 = (s32*)sp_fixed_array_at(&arr, 2);
-  ASSERT_EQ(*elem0, 42);
-  ASSERT_EQ(*elem1, 100);
-  ASSERT_EQ(*elem2, 200);
-
-  ASSERT_EQ(sp_fixed_array_byte_size(&arr), 3 * sizeof(s32));
-}
-
-UTEST(fixed_array, capacity_limits) {
-
-
-  sp_fixed_array_t arr;
-  sp_fixed_array_init(&arr, 5, sizeof(u64));
-
-  u64 val = 123456;
-  sp_fixed_array_push(&arr, &val, 1);
-  sp_fixed_array_push(&arr, &val, 1);
-  sp_fixed_array_push(&arr, &val, 1);
-  sp_fixed_array_push(&arr, &val, 1);
-  sp_fixed_array_push(&arr, &val, 1);
-  ASSERT_EQ(arr.size, 5);
-
-  sp_fixed_array_clear(&arr);
-  ASSERT_EQ(arr.size, 0);
-  ASSERT_EQ(arr.capacity, 5);
-
-  u64* reserved = (u64*)sp_fixed_array_reserve(&arr, 3);
-  ASSERT_NE(reserved, SP_NULLPTR);
-  ASSERT_EQ(arr.size, 3);
-}
-
 
 
 // ██████╗  ██████╗ ███████╗██╗██╗  ██╗

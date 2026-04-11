@@ -38,7 +38,6 @@
     + sp_dyn_array     stb-style resizable array (intrusive T* + macros)
       sp_env           environment variables
       sp_err           thread-local errno style error system
-      sp_fixed_array   fixed size array, from stack or heap (void*)
     + sp_format        "a type-safe {:fg cyan} replacement", SP_FMT_CSTR("printf")
       sp_fmon          os native filesystem watching
     + sp_fs            path manipulation, filesystem, common system paths (e.g. appdata)
@@ -1605,32 +1604,6 @@ SP_API sp_hash_t sp_hash_combine(sp_hash_t* hashes, u32 num_hashes);
 SP_API sp_hash_t sp_hash_bytes(const void* p, u64 len, u64 seed);
 
 
-// ███████╗██╗██╗  ██╗███████╗██████╗      █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
-// ██╔════╝██║╚██╗██╔╝██╔════╝██╔══██╗    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
-// █████╗  ██║ ╚███╔╝ █████╗  ██║  ██║    ███████║██████╔╝██████╔╝███████║ ╚████╔╝
-// ██╔══╝  ██║ ██╔██╗ ██╔══╝  ██║  ██║    ██╔══██║██╔══██╗██╔══██╗██╔══██║  ╚██╔╝
-// ██║     ██║██╔╝ ██╗███████╗██████╔╝    ██║  ██║██║  ██║██║  ██║██║  ██║   ██║
-// ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
-// @fixed_array
-typedef struct {
-  u8* data;
-  u32 size;
-  u32 capacity;
-  u32 element_size;
-} sp_fixed_array_t;
-
-#define sp_fixed_array(t, n) sp_fixed_array_t
-#define sp_fixed_array_for(arr, it, t) for (t* it = (t*)arr.data; (it - (t*)arr.data) < arr.size; it++)
-#define SP_FIXED_ARRAY_RUNTIME_SIZE
-
-SP_API void sp_fixed_array_init(sp_fixed_array_t* fixed_array, u32 capacity, u32 element_size);
-SP_API u8*  sp_fixed_array_push(sp_fixed_array_t* fixed_array, void* data, u32 count);
-SP_API u8*  sp_fixed_array_reserve(sp_fixed_array_t* fixed_array, u32 count);
-SP_API void sp_fixed_array_clear(sp_fixed_array_t* fixed_array);
-SP_API u32  sp_fixed_array_byte_size(sp_fixed_array_t* fixed_array);
-SP_API u8*  sp_fixed_array_at(sp_fixed_array_t* fixed_array, u32 index);
-
-
 // ██████╗ ██╗   ██╗███╗   ██╗     █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
 // ██╔══██╗╚██╗ ██╔╝████╗  ██║    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
 // ██║  ██║ ╚████╔╝ ██╔██╗ ██║    ███████║██████╔╝██████╔╝███████║ ╚████╔╝
@@ -3135,7 +3108,6 @@ SP_API bool            sp_ps_kill(sp_ps_t* proc);
  SP_FMT_X(hash, sp_hash_t) \
  SP_FMT_X(hash_short, sp_hash_t) \
  SP_FMT_X(str_builder, sp_str_builder_t) \
- SP_FMT_X(fixed_array, sp_fixed_array_t) \
  SP_FMT_X(quoted_str, sp_str_t) \
  SP_FMT_X(color, const c8*) \
 
@@ -3192,7 +3164,6 @@ typedef struct sp_formatter {
 #define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
 #define SP_FMT_MUTEX(V)         SP_FMT_ARG(mutex, V)
 #define SP_FMT_SEMAPHORE(V)     SP_FMT_ARG(semaphore, V)
-#define SP_FMT_FIXED_ARRAY(V)   SP_FMT_ARG(fixed_array, V)
 #define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
 #define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
 #define SP_FMT_COLOR(V)         SP_FMT_ARG(color, V)
@@ -4456,45 +4427,6 @@ void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap) {
   return (u8*)new_data + sizeof(sp_ring_buffer_t);
 }
 
-// ███████╗██╗██╗  ██╗███████╗██████╗      █████╗ ██████╗ ██████╗  █████╗ ██╗   ██╗
-// ██╔════╝██║╚██╗██╔╝██╔════╝██╔══██╗    ██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
-// █████╗  ██║ ╚███╔╝ █████╗  ██║  ██║    ███████║██████╔╝██████╔╝███████║ ╚███╔╝
-// ██╔══╝  ██║ ██╔██╗ ██╔══╝  ██║  ██║    ██╔══██║██╔══██╗██╔══██╗██╔══██║  ╚██╔╝
-// ██║     ██║██╔╝ ██╗███████╗██████╔╝    ██║  ██║██║  ██║██║  ██║██║  ██║   ██║
-// ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
-// @fixed_array
-void sp_fixed_array_init(sp_fixed_array_t* buffer, u32 max_vertices, u32 element_size) {
-  buffer->size = 0;
-  buffer->capacity = max_vertices;
-  buffer->element_size = element_size;
-  buffer->data = (u8*)sp_alloc(max_vertices * element_size);
-}
-
-u8* sp_fixed_array_at(sp_fixed_array_t* buffer, u32 index) {
-  return buffer->data + (index * buffer->element_size);
-}
-
-u8* sp_fixed_array_push(sp_fixed_array_t* buffer, void* data, u32 count) {
-  u8* reserved = sp_fixed_array_reserve(buffer, count);
-  if (data) sp_mem_copy(data, reserved, buffer->element_size * count);
-  return reserved;
-}
-
-u8* sp_fixed_array_reserve(sp_fixed_array_t* buffer, u32 count) {
-  u8* element = sp_fixed_array_at(buffer, buffer->size);
-  buffer->size += count;
-  return element;
-}
-
-void sp_fixed_array_clear(sp_fixed_array_t* buffer) {
-  buffer->size = 0;
-}
-
-u32 sp_fixed_array_byte_size(sp_fixed_array_t* buffer) {
-  return buffer->size * buffer->element_size;
-}
-
-
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
 // ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
@@ -5140,16 +5072,6 @@ void sp_fmt_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) 
   if (sb.writer) sp_io_writer_size(sb.writer, &len);
   sp_fmt_format_unsigned(builder, len, 20);
 
-  sp_str_builder_append_cstr(builder, " }");
-}
-
-void sp_fmt_format_fixed_array(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_fixed_array_t arr = arg->fixed_array_value;
-
-  sp_str_builder_append_cstr(builder, "{ size: ");
-  sp_fmt_format_unsigned(builder, arr.size, 10);
-  sp_str_builder_append_cstr(builder, ", capacity: ");
-  sp_fmt_format_unsigned(builder, arr.capacity, 10);
   sp_str_builder_append_cstr(builder, " }");
 }
 
