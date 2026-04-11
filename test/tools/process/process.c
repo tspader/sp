@@ -1,3 +1,8 @@
+#ifdef SP_FREESTANDING
+#include "sp.h"
+int run(int n, const char** a) { return 0; }
+SP_ENTRY(run);
+#else
 // SP_IMPLEMENTATION is defined in the Makefile to make clangd happy
 #include "sp.h"
 
@@ -227,3 +232,4 @@ s32 main(s32 num_args, const c8** args) {
 
   return 0;
 }
+#endif

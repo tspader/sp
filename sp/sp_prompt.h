@@ -9,7 +9,7 @@
 
 #include "sp.h"
 
-#if !defined(SP_FREESTANDING)
+#if !defined(SP_FREESTANDING) && !defined(SP_WIN32)
 #include <termios.h>
 #endif
 
@@ -100,6 +100,7 @@ typedef struct {
   sp_prompt_event_t primed_events[8];
   u32 primed_count;
   u32 primed_index;
+  u8* write_buffer;
   sp_io_writer_t* writer;
   sp_io_writer_t writer_stdout;
   sp_prompt_cell_t* framebuffer;
@@ -231,10 +232,22 @@ sp_prompt_widget_t sp_prompt_multiselect_widget(sp_prompt_multiselect_t* prompt)
 sp_prompt_widget_t sp_prompt_password_widget(sp_prompt_password_t* prompt);
 
 static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
-  // if (!isatty(ctx->terminal.fds.in)) {
-  //   return -1;
-  // }
+#if defined(SP_WIN32)
+  HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+  HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (!GetConsoleMode(hin, &ctx->terminal.cache.input_mode)) return -1;
+  if (!GetConsoleMode(hout, &ctx->terminal.cache.output_mode)) return -1;
 
+  SetConsoleOutputCP(CP_UTF8);
+  _setmode(sp_fd_stdin, _O_BINARY);
+
+  DWORD raw_in = ENABLE_VIRTUAL_TERMINAL_INPUT;
+  DWORD raw_out = ctx->terminal.cache.output_mode
+    | ENABLE_PROCESSED_OUTPUT
+    | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+  if (!SetConsoleMode(hin, raw_in)) return -1;
+  if (!SetConsoleMode(hout, raw_out)) return -1;
+#else
   if (sp_tcgetattr(ctx->terminal.fds.in, &ctx->terminal.cache) == -1) {
     return -1;
   }
@@ -250,6 +263,7 @@ static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
   if (sp_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &raw) == -1) {
     return -1;
   }
+#endif
 
   ctx->terminal.raw = true;
   return 0;
@@ -298,7 +312,12 @@ s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
 
 void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   if (ctx->terminal.raw) {
+#if defined(SP_WIN32)
+    SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ctx->terminal.cache.input_mode);
+    SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), ctx->terminal.cache.output_mode);
+#else
     sp_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &ctx->terminal.cache);
+#endif
     ctx->terminal.raw = false;
   }
 
@@ -312,6 +331,8 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
   ctx->state = SP_PROMPT_STATE_ACTIVE;
   sp_io_writer_from_fd(&ctx->writer_stdout, sp_fd_stdout, SP_IO_CLOSE_MODE_NONE);
   ctx->writer = &ctx->writer_stdout;
+  ctx->write_buffer = sp_alloc_n(u8, 1024 * 64);
+  sp_io_writer_set_buffer(ctx->writer, ctx->write_buffer, 1024 * 64);
   ctx->frames = SP_NULLPTR;
   sp_prompt_framebuffer_init(ctx);
   sp_prompt_framebuffer_clear(ctx);
@@ -431,6 +452,16 @@ void sp_prompt_step(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget, sp_prompt_e
   }
 }
 
+static bool sp_prompt_stdin_ready(void) {
+#if defined(SP_WIN32)
+  return WaitForSingleObject(GetStdHandle(STD_INPUT_HANDLE), 0) == WAIT_OBJECT_0;
+#else
+  sp_pollfd_t pfd = { .fd = sp_fd_stdin, .events = SP_POLLIN, .revents = 0 };
+  s32 r = sp_poll(&pfd, 1, 0);
+  return r > 0 && (pfd.revents & SP_POLLIN);
+#endif
+}
+
 static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* out) {
   if (ctx->primed_index < ctx->primed_count) {
     *out = ctx->primed_events[ctx->primed_index++];
@@ -462,14 +493,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
     return true;
   }
   if (c == 27) {
-    sp_pollfd_t pfd = {
-      .fd = sp_fd_stdin,
-      .events = SP_POLLIN,
-      .revents = 0,
-    };
-
-    s32 poll_result = sp_poll(&pfd, 1, 0);
-    if (poll_result <= 0 || !(pfd.revents & SP_POLLIN)) {
+    if (!sp_prompt_stdin_ready()) {
       out->kind = SP_PROMPT_EVENT_ESCAPE;
       return true;
     }
@@ -480,8 +504,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
       return true;
     }
 
-    poll_result = sp_poll(&pfd, 1, 0);
-    if (poll_result > 0 && (pfd.revents & SP_POLLIN)) {
+    if (sp_prompt_stdin_ready()) {
       if (sp_read(sp_fd_stdin, &seq[1], 1) <= 0) {
         seq[1] = 0;
       }
@@ -645,6 +668,8 @@ static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
       ctx->prompt_height = 0; break;
     }
   }
+
+  sp_io_flush(ctx->writer);
 }
 
 bool sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {

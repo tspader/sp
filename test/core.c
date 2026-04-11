@@ -601,7 +601,12 @@ UTEST(dyn_array, struct_type) {
         test_struct s = SP_ZERO_INITIALIZE();
         s.id = i;
         s.value = (float)i * 1.5f;
-        snprintf(s.name, sizeof(s.name), "Item_%d", i);
+        sp_io_writer_t io = sp_zero();
+        sp_io_writer_from_mem(&io, s.name, sizeof(s.name));
+        sp_io_write_str(&io, sp_format("Item_{}", SP_FMT_S32(s.id)), SP_NULLPTR);
+        sp_io_pad(&io, 1, SP_NULLPTR);
+        //sp_io_write_cstr(&io, "\0", SP_NULLPTR);
+        //snprintf(s.name, sizeof(s.name), "Item_%d", i);
         sp_dyn_array_push(arr, s);
     }
 
@@ -612,7 +617,13 @@ UTEST(dyn_array, struct_type) {
         ASSERT_EQ(arr[i].value, (float)i * 1.5f);
 
         char expected[32];
-        snprintf(expected, sizeof(expected), "Item_%d", i);
+        sp_io_writer_t io = sp_zero();
+        sp_io_writer_from_mem(&io, expected, sizeof(expected));
+        sp_io_write_str(&io, sp_format("Item_{}", SP_FMT_S32(i)), SP_NULLPTR);
+        sp_io_pad(&io, 1, SP_NULLPTR);
+        //sp_io_write_cstr(&io, "\0", SP_NULLPTR);
+
+        //snprintf(expected, sizeof(expected), "Item_%d", i);
         ASSERT_STREQ(arr[i].name, expected);
     }
 
@@ -627,8 +638,9 @@ UTEST(dyn_array, pointer_type) {
     const char* strings[] = {"Hello", "World", "Dynamic", "Array", "Test"};
 
     for (s32 i = 0; i < 5; i++) {
-        c8* str = (c8*)sp_alloc(strlen(strings[i]) + 1);
-        strcpy(str, strings[i]);
+        // c8* str = (c8*)sp_alloc(strlen(strings[i]) + 1);
+        // strcpy(str, strings[i]);
+        c8* str = sp_cstr_copy(strings[i]);
         sp_dyn_array_push(arr, str);
     }
 
@@ -1993,6 +2005,9 @@ s32 sp_thread_context_test_fn(void* userdata) {
 }
 
 UTEST(threading, context_in_child_thread) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("threads not available in freestanding");
+#endif
   sp_thread_context_test_data_t data = SP_ZERO_INITIALIZE();
 
   sp_thread_t thread;
@@ -2071,6 +2086,9 @@ s32 sp_spin_lock_increment_thread(void* userdata) {
 }
 
 UTEST(sp_spin_lock, mutual_exclusion_two_threads) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("threads not available in freestanding");
+#endif
   sp_spin_lock_t lock = 0;
   s32 shared_counter = 0;
   const s32 iterations_per_thread = 10000;
@@ -2159,6 +2177,9 @@ s32 sp_atomic_s32_add_thread(void* userdata) {
 }
 
 UTEST(sp_atomic_s32, concurrent_adds) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("threads not available in freestanding");
+#endif
   sp_atomic_s32_t counter = 0;
   const s32 iterations = 5000;
 
@@ -2267,48 +2288,6 @@ UTEST_F(sp_os_copy_tests, copy_directory) {
   ASSERT_TRUE(sp_fs_exists(sp_fs_join_path(copied_dir, SP_LIT("file1.txt"))));
   ASSERT_TRUE(sp_fs_exists(sp_fs_join_path(copied_dir, SP_LIT("file2.txt"))));
 }
-
-#ifdef SP_LINUX
-typedef struct sp_fs {
-  sp_test_env_manager_t env;
-} sp_fs_fixture;
-
-UTEST_F_SETUP(sp_fs) {
-  sp_test_env_manager_init(&utest_fixture->env);
-}
-
-UTEST_F_TEARDOWN(sp_fs) {
-  sp_test_env_manager_cleanup(&utest_fixture->env);
-}
-
-// UTEST_F(sp_fs, sp_os_get_storage_path_with_xdg) {
-//   sp_test_env_manager_set(&ut.env, SP_LIT("XDG_DATA_HOME"), SP_LIT("/custom/data"));
-//   sp_str_t path = sp_fs_get_storage_path();
-//   SP_EXPECT_STR_EQ_CSTR(path, "/custom/data");
-// }
-//
-// UTEST_F(sp_fs, sp_os_get_storage_path_without_xdg) {
-//   sp_test_env_manager_unset(&ut.env, SP_LIT("XDG_DATA_HOME"));
-//   sp_str_t path = sp_fs_get_storage_path();
-//   sp_str_t home = sp_os_env_get(SP_LIT("HOME"));
-//   sp_str_t expected = sp_fs_join_path(home, SP_LIT(".local/share"));
-//   SP_EXPECT_STR_EQ(path, expected);
-// }
-//
-// UTEST_F(sp_fs, sp_os_get_config_path_with_xdg) {
-//   sp_test_env_manager_set(&ut.env, SP_LIT("XDG_CONFIG_HOME"), SP_LIT("/custom/config"));
-//   sp_str_t path = sp_fs_get_config_path();
-//   SP_EXPECT_STR_EQ_CSTR(path, "/custom/config");
-// }
-//
-// UTEST_F(sp_fs, sp_os_get_config_path_without_xdg) {
-//   sp_test_env_manager_unset(&ut.env, SP_LIT("XDG_CONFIG_HOME"));
-//   sp_str_t path = sp_fs_get_config_path();
-//   sp_str_t home = sp_os_env_get(SP_LIT("HOME"));
-//   sp_str_t expected = sp_fs_join_path(home, SP_LIT(".config"));
-//   SP_EXPECT_STR_EQ(path, expected);
-// }
-#endif
 
 UTEST(sp_os_get_cwd, smoke_test) {
   sp_str_t cwd = sp_fs_get_cwd();

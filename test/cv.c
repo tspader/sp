@@ -5,6 +5,7 @@
 SP_TEST_MAIN()
 
 UTEST(cv, init_destroy) {
+  SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
   sp_cv_destroy(&cv);
@@ -33,6 +34,7 @@ s32 wait_notify_one_worker(void* userdata) {
 }
 
 UTEST(cv, wait_notify_one) {
+  SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -91,6 +93,7 @@ s32 wait_notify_all_worker(void* userdata) {
 }
 
 UTEST(cv, wait_notify_all) {
+  SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -154,6 +157,7 @@ s32 notify_one_wakes_single_worker(void* userdata) {
 }
 
 UTEST(cv, notify_one_wakes_single) {
+  SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -205,6 +209,7 @@ UTEST(cv, notify_one_wakes_single) {
 }
 
 UTEST(cv, wait_for_timeout) {
+  SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -246,6 +251,7 @@ s32 wait_for_signaled_signaler(void* userdata) {
 }
 
 UTEST(cv, wait_for_signaled) {
+  SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -325,6 +331,7 @@ s32 consumer_fn(void* userdata) {
 }
 
 UTEST(cv, multithread_producer_consumer) {
+  SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_rb(s32) buffer = SP_NULLPTR;

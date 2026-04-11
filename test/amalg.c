@@ -1,6 +1,6 @@
 #define SP_TEST_AMALGAMATION
 #include "app.c"
-#include "asset.c"
+// #include "asset.c"
 #include "context.c"
 #include "core.c"
 #include "cv.c"

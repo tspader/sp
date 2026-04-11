@@ -271,6 +271,9 @@ UTEST_F(elf, minimal_elf_format) {
 }
 
 UTEST_F(elf, minimal_readelf_validates) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("requires process API");
+#else
   sp_elf_t* elf = sp_elf_new_with_null_section();
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
   sp_elf_write_to_file(elf, path);
@@ -280,6 +283,7 @@ UTEST_F(elf, minimal_readelf_validates) {
     .args = {sp_str_lit("-a"), path},
   });
   ASSERT_EQ(ps.status.exit_code, 0);
+#endif
 }
 
 UTEST_F(elf, err_write_null_elf) {
@@ -346,6 +350,9 @@ UTEST_F(elf, symtab_sort_updates_relocs) {
 }
 
 UTEST_F(elf, populated_readelf_validates) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("requires process API");
+#else
   sp_elf_t* elf = sp_elf_new_with_null_section();
 
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
@@ -374,6 +381,7 @@ UTEST_F(elf, populated_readelf_validates) {
     .args = {sp_str_lit("-a"), path},
   });
   ASSERT_EQ(ps.status.exit_code, 0);
+#endif
 }
 
 UTEST_F(elf, populated_section_alignment) {
@@ -564,6 +572,9 @@ UTEST_F(elf, err_read_invalid_class) {
 }
 
 UTEST_F(elf, read_external_object) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("requires process API");
+#else
   sp_str_t c_src =
     sp_str_lit("int minimal_symbol(void) {\n"
                "  return 42;\n"
@@ -595,9 +606,13 @@ UTEST_F(elf, read_external_object) {
   ASSERT_NE(symtab, SP_NULLPTR);
   ASSERT_EQ(symtab->type, (u32)SHT_SYMTAB);
   ASSERT_GT(sp_elf_section_num_entries(symtab), 0u);
+#endif
 }
 
 UTEST_F(elf, integration_link_and_run) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("requires process API");
+#else
   sp_elf_t* elf = sp_elf_new_with_null_section();
 
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
@@ -644,4 +659,5 @@ UTEST_F(elf, integration_link_and_run) {
     .command = bin_path,
   });
   ASSERT_EQ(run.status.exit_code, 0);
+#endif
 }

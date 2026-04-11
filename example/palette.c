@@ -5,6 +5,9 @@
 #define SP_MATH_IMPLEMENTATION
 #include "sp/sp_math.h"
 
+#ifdef SP_WIN32
+sp_app_config_t sp_main(s32 num_args, const c8** args) { return sp_zero_struct(sp_app_config_t); }
+#else
 #include <termios.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -277,3 +280,4 @@ sp_app_config_t sp_main(s32 num_args, const c8** args) {
     .fps = 15,
   };
 }
+#endif

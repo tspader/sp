@@ -3,6 +3,12 @@
 
 #include "sp.h"
 
+#if defined(SP_FREESTANDING)
+  #define SKIP_ON_FREESTANDING() UTEST_SKIP("unimplemented on freestanding");
+#else
+  #define SKIP_ON_FREESTANDING()
+#endif
+
 #define ut (*utest_fixture)
 #define ur (*utest_result)
 
@@ -73,22 +79,6 @@ sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name);
 void sp_test_file_create_ex(sp_test_file_config_t config);
 sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t path);
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager);
-
-
-typedef struct {
-  sp_str_t key;
-  sp_str_t before;
-  sp_str_t after;
-} sp_test_env_var_t;
-
-typedef struct {
-  sp_dyn_array(sp_test_env_var_t) vars;
-} sp_test_env_manager_t;
-
-void sp_test_env_manager_init(sp_test_env_manager_t* manager);
-void sp_test_env_manager_set(sp_test_env_manager_t* manager, sp_str_t key, sp_str_t value);
-void sp_test_env_manager_unset(sp_test_env_manager_t* manager, sp_str_t key);
-void sp_test_env_manager_cleanup(sp_test_env_manager_t* manager);
 
 
 typedef struct sp_test_memory_tracker {
@@ -266,64 +256,6 @@ u64 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
 
 void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker) {
   sp_mem_arena_clear(tracker->bump);
-}
-
-/////////////////
-// ENV MANAGER //
-/////////////////
-
-void sp_test_env_manager_init(sp_test_env_manager_t* manager) {
-  manager->vars = SP_NULLPTR;
-}
-
-SP_PRIVATE void sp_test_env_set_os(sp_str_t key, sp_str_t value) {
-  #if defined(SP_WIN32)
-    SetEnvironmentVariableA(sp_str_to_cstr(key), sp_str_to_cstr(value));
-  #else
-    setenv(sp_str_to_cstr(key), sp_str_to_cstr(value), 1);
-  #endif
-}
-
-SP_PRIVATE void sp_test_env_unset_os(sp_str_t key) {
-  #if defined(SP_WIN32)
-    SetEnvironmentVariableA(sp_str_to_cstr(key), SP_NULLPTR);
-  #else
-    unsetenv(sp_str_to_cstr(key));
-  #endif
-}
-
-void sp_test_env_manager_set(sp_test_env_manager_t* manager, sp_str_t key, sp_str_t value) {
-  sp_str_t before = sp_os_env_get(key);
-  sp_test_env_var_t var = {
-    .key = key,
-    .before = before,
-    .after = value,
-  };
-  sp_dyn_array_push(manager->vars, var);
-  sp_test_env_set_os(key, value);
-}
-
-void sp_test_env_manager_unset(sp_test_env_manager_t* manager, sp_str_t key) {
-  sp_str_t before = sp_os_env_get(key);
-  sp_test_env_var_t var = {
-    .key = key,
-    .before = before,
-    .after = SP_LIT(""),
-  };
-  sp_dyn_array_push(manager->vars, var);
-  sp_test_env_unset_os(key);
-}
-
-void sp_test_env_manager_cleanup(sp_test_env_manager_t* manager) {
-  sp_dyn_array_for(manager->vars, i) {
-    sp_test_env_var_t var = manager->vars[i];
-    if (!sp_str_empty(var.before)) {
-      sp_test_env_set_os(var.key, var.before);
-    } else {
-      sp_test_env_unset_os(var.key);
-    }
-  }
-  sp_dyn_array_free(manager->vars);
 }
 
 /////////////////

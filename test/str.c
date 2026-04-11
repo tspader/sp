@@ -337,7 +337,7 @@ UTEST(str, sorting_tests) {
     SP_LIT("zoo")
   };
 
-  qsort(strings, 5, sizeof(sp_str_t), sp_str_sort_kernel_alphabetical);
+  sp_qsort(strings, 5, sizeof(sp_str_t), sp_str_sort_kernel_alphabetical);
 
   SP_EXPECT_STR_EQ_CSTR(strings[0], "aardvark");
   SP_EXPECT_STR_EQ_CSTR(strings[1], "apple");

@@ -2,6 +2,10 @@
 #include "test.h"
 #include "utest.h"
 
+#if defined(SP_FREESTANDING)
+SP_TEST_MAIN()
+#else
+
 typedef struct linkage {
   sp_test_file_manager_t files;
   sp_str_t root;
@@ -393,3 +397,4 @@ UTEST_F(linkage, format_bare_args_should_fail) {
 }
 
 SP_TEST_MAIN()
+#endif /* !SP_FREESTANDING */

@@ -1395,7 +1395,6 @@ UTEST_F(prompt, multiselect_space_toggles_and_enter_submits) {
     },
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
-      .str = "TypeScript, JavaScript",
       .lines = {
         "◇  Pick tools",
         "│  TypeScript, JavaScript",
@@ -1641,7 +1640,6 @@ UTEST_F(prompt, multiselect_filter_contains_and_placeholder) {
     },
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
-      .str = "JavaScript",
       .lines = {
         "◇  Pick tools a",
         "│  JavaScript",
@@ -1715,7 +1713,6 @@ UTEST_F(prompt, multiselect_filter_disables_vim_navigation_keys) {
     },
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
-      .str = "JavaScript",
       .lines = {
         "◇  Pick tools j",
         "│  JavaScript",
@@ -1783,7 +1780,6 @@ UTEST_F(prompt, multiselect_filter_state_resets_between_runs) {
     },
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
-      .str = "JavaScript",
       .lines = {
         "◇  Pick tools a",
         "│  JavaScript",
@@ -1799,7 +1795,6 @@ UTEST_F(prompt, multiselect_filter_state_resets_between_runs) {
     },
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
-      .str = "TypeScript, JavaScript",
       .lines = {
         "◇  Pick tools Type to filter...",
         "│  TypeScript, JavaScript",

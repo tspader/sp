@@ -11,7 +11,9 @@ struct context {
 };
 
 UTEST_F_SETUP(context) {
-  #if defined(SP_WIN32)
+  #if defined(SP_FREESTANDING)
+    sp_tls_set(sp_rt.tls.key, SP_NULLPTR);
+  #elif defined(SP_WIN32)
     if (sp_rt.tls.key != TLS_OUT_OF_INDEXES) {
       TlsSetValue(sp_rt.tls.key, SP_NULLPTR);
     }
@@ -22,7 +24,9 @@ UTEST_F_SETUP(context) {
 }
 
 UTEST_F_TEARDOWN(context) {
-  #if defined(SP_WIN32)
+  #if defined(SP_FREESTANDING)
+    sp_tls_set(sp_rt.tls.key, SP_NULLPTR);
+  #elif defined(SP_WIN32)
     if (sp_rt.tls.key != TLS_OUT_OF_INDEXES) {
       TlsSetValue(sp_rt.tls.key, SP_NULLPTR);
     }
@@ -189,6 +193,9 @@ s32 context_thread_func(void *userdata) {
 #define NUM_THREADS 8
 
 UTEST_F(context, multithread_independent_contexts) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("threads not available in freestanding");
+#endif
   main_thread_context = sp_context_get();
 
   sp_atomic_s32_t done_count = 0;
@@ -344,6 +351,9 @@ s32 push_pop_thread_func(void *userdata) {
 }
 
 UTEST_F(context, multithread_push_pop) {
+#if defined(SP_FREESTANDING)
+  UTEST_SKIP("threads not available in freestanding");
+#endif
   sp_atomic_s32_t done_count = 0;
   push_pop_thread_data_t thread_data[NUM_THREADS];
   sp_thread_t threads[NUM_THREADS];

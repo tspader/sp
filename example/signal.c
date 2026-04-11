@@ -15,8 +15,7 @@ s32 run(s32 num_args, const c8** args) {
 
   /* spin so we can test ctrl+c */
   while (!sp_atomic_s32_get(&shutdown)) {
-    sp_sys_timespec_t ts = { .tv_sec = 0, .tv_nsec = 100000000 };
-    sp_sys_nanosleep(&ts, SP_NULLPTR);
+    sp_sleep_ns(100000000);
   }
 
   sp_log("shutting down");

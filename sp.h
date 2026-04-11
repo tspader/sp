@@ -140,6 +140,23 @@
   #define SP_GNUISH
 #endif
 
+//////////
+// LIBC //
+//////////
+#if defined(__GLIBC__)
+  #define SP_LIBC_GNU
+#elif defined(__MINGW64__)
+  #define SP_LIBC_GNU
+#elif defined(_MSC_VER)
+  #define SP_LIBC_MSVC
+#elif defined(SP_FREESTANDING)
+  #define SP_LIBC_NONE
+#elif defined(SP_MACOS)
+  #define SP_LIBC_APPLE
+#elif defined(SP_LINUX)
+  #define SP_LIBC_MUSL
+#endif
+
 //////////////////
 // ARCHITECTURE //
 //////////////////
@@ -642,6 +659,7 @@ SP_BEGIN_EXTERN_C()
   #include <shlobj.h>
   #include <commdlg.h>
   #include <shellapi.h>
+  #include <errno.h>
 
 #elif defined(SP_COSMO)
   #include "libc/dce.h"
@@ -1367,6 +1385,9 @@ void sp_sys_qsort(void* arr, u64 len, u64 stride, sp_qsort_fn_t);
   #define sp_inotify_add_watch(f, p, m)     sp_sys_inotify_add_watch(f, p, m)
   #define sp_tcgetattr(fd, tio)             sp_sys_tcgetattr(fd, tio)
   #define sp_tcsetattr(fd, opt, tio)        sp_sys_tcsetattr(fd, opt, tio)
+#elif defined(SP_WIN32)
+  typedef struct { DWORD input_mode; DWORD output_mode; } sp_termios_t;
+  #define sp_assert(condition)              assert((condition))
 #else
   typedef struct stat sp_stat_t;
   typedef struct timespec sp_timespec_t;
@@ -2362,6 +2383,9 @@ SP_API c8*               sp_mem_buffer_as_cstr(sp_mem_buffer_t* buffer);
 SP_API void sp_log(const c8* fmt, ...);
 SP_API void sp_log_err(const c8* fmt, ...);
 SP_API void sp_log_str(sp_str_t fmt, ...);
+SP_API void sp_print(const c8* fmt, ...);
+SP_API void sp_print_err(const c8* fmt, ...);
+SP_API void sp_print_str(sp_str_t fmt, ...);
 
 
 // ███████╗███╗   ██╗██╗   ██╗
@@ -2810,6 +2834,10 @@ typedef struct {
   u32 index;
   sp_mem_arena_t* scratch;
   sp_env_t env;
+  struct {
+    sp_io_writer_t* out;
+    sp_io_writer_t* err;
+  } std;
 } sp_tls_rt_t;
 
 typedef struct {
@@ -2961,7 +2989,6 @@ SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
 // @ps
-#if defined(SP_PS)
 #ifndef SP_PS_MAX_ARGS
   #define SP_PS_MAX_ARGS 16
 #endif
@@ -3078,7 +3105,6 @@ SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* proc);
 SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* proc, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
 SP_API bool            sp_ps_kill(sp_ps_t* proc);
-#endif
 
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
@@ -5313,6 +5339,47 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
 // ███████╗╚██████╔╝╚██████╔
 // ╚══════╝ ╚═════╝  ╚═════╝
 // @log
+
+void sp_print(const c8* fmt, ...) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
+    va_list args;
+    va_start(args, fmt);
+    sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
+    va_end(args);
+
+    sp_tls_rt_t* tls = sp_tls_rt_get();
+    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
+    sp_mem_end_scratch(scratch);
+  }
+}
+
+void sp_print_str(sp_str_t fmt, ...) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
+    va_list args;
+    va_start(args, fmt);
+    sp_str_t formatted = sp_format_v(fmt, args);
+    va_end(args);
+
+    sp_tls_rt_t* tls = sp_tls_rt_get();
+    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
+    sp_mem_end_scratch(scratch);
+  }
+
+}
+
+void sp_print_err(const c8* fmt, ...) {
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
+    va_list args;
+    va_start(args, fmt);
+    sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
+    va_end(args);
+
+    sp_tls_rt_t* tls = sp_tls_rt_get();
+    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
+    sp_mem_end_scratch(scratch);
+  }
+}
+
 void sp_log(const c8* fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
@@ -5320,8 +5387,9 @@ void sp_log(const c8* fmt, ...) {
     sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
     va_end(args);
 
-    sp_os_print(formatted);
-    sp_os_print(sp_str_lit("\n"));
+    sp_tls_rt_t* tls = sp_tls_rt_get();
+    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
+    sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
     sp_mem_end_scratch(scratch);
   }
 }
@@ -5333,11 +5401,11 @@ void sp_log_str(sp_str_t fmt, ...) {
     sp_str_t formatted = sp_format_v(fmt, args);
     va_end(args);
 
-    sp_os_print(formatted);
-    sp_os_print(sp_str_lit("\n"));
+    sp_tls_rt_t* tls = sp_tls_rt_get();
+    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
+    sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
     sp_mem_end_scratch(scratch);
   }
-
 }
 
 void sp_log_err(const c8* fmt, ...) {
@@ -5347,8 +5415,9 @@ void sp_log_err(const c8* fmt, ...) {
     sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
     va_end(args);
 
-    sp_os_print_err(formatted);
-    sp_os_print_err(sp_str_lit("\n"));
+    sp_tls_rt_t* tls = sp_tls_rt_get();
+    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
+    sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
     sp_mem_end_scratch(scratch);
   }
 }
@@ -5420,15 +5489,22 @@ void sp_rt_deinit(void* ptr) {
 sp_tls_rt_t* sp_tls_rt_get() {
   sp_tls_once(&sp_rt.tls.once, sp_rt_init);
 
-  sp_tls_rt_t* state = (sp_tls_rt_t*)sp_tls_get(sp_rt.tls.key);
-  if (!state) {
-    state = sp_os_alloc_type(sp_tls_rt_t);
-    state->contexts[0].allocator = sp_mem_os_new();
-    sp_tls_set(sp_rt.tls.key, state);
+  sp_tls_rt_t* tls = (sp_tls_rt_t*)sp_tls_get(sp_rt.tls.key);
+  if (!tls) {
+    // It's important that you bootstrap the allocator and set the TLS key
+    // before doing anything else so you can call functions that allocate
+    // while initializing the other TLS stuff.
+    tls = sp_os_alloc_type(sp_tls_rt_t);
+    tls->contexts[0].allocator = sp_mem_os_new();
+    sp_tls_set(sp_rt.tls.key, tls);
 
-    state->scratch = sp_mem_arena_new(SP_MEM_ARENA_BLOCK_SIZE);
+    tls->scratch = sp_mem_arena_new(SP_MEM_ARENA_BLOCK_SIZE);
+    tls->std.out = sp_alloc_type(sp_io_writer_t);
+    tls->std.err = sp_alloc_type(sp_io_writer_t);
+    sp_io_writer_from_fd(tls->std.out, 1, SP_IO_CLOSE_MODE_NONE);
+    sp_io_writer_from_fd(tls->std.err, 2, SP_IO_CLOSE_MODE_NONE);
   }
-  return state;
+  return tls;
 }
 
 #if defined(SP_FREESTANDING)
@@ -7366,7 +7442,7 @@ bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
       if (!FindNextFileA(frame->handle, &frame->find_data)) return false;
     }
     if (sp_fs_it_is_dot(frame->find_data.cFileName)) continue;
-    entry->file_name = sp_str_from_cstr(frame->find_data.cFileName);
+    entry->name = sp_str_from_cstr(frame->find_data.cFileName);
     entry->kind = sp_fs_it_win32_attrs(frame->find_data.dwFileAttributes);
     return true;
   }
@@ -7426,7 +7502,7 @@ bool sp_fs_it_os_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
     struct dirent* d = readdir(frame->dir);
     if (!d) return false;
     if (sp_fs_it_is_dot(d->d_name)) continue;
-    entry->file_name = sp_str_from_cstr(d->d_name);
+    entry->name = sp_str_from_cstr(d->d_name);
     entry->kind = sp_fs_it_dtype_to_attr(d->d_type);
     return true;
   }
@@ -9655,9 +9731,7 @@ void sp_env_destroy(sp_env_t* env) {
 // ██╔═══╝ ██╔══██╗██║   ██║██║     ██╔══╝  ╚════██║╚════██║
 // ██║     ██║  ██║╚██████╔╝╚██████╗███████╗███████║███████║
 // ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚══════╝
-#if defined(SP_PS)
 #if defined(SP_POSIX)
-
 typedef struct {
   posix_spawn_file_actions_t* fa;
   sp_ps_io_file_number_t file_number;
@@ -10232,6 +10306,7 @@ bool sp_ps_kill(sp_ps_t* ps) {
   sp_ps_wait(ps);
   return true;
 }
+
 #elif defined(SP_WIN32)
 struct sp_ps_os {
   sp_win32_handle_t pid;
@@ -10895,6 +10970,7 @@ bool sp_ps_kill(sp_ps_t* ps) {
   ps->os->pid = SP_NULLPTR;
   return true;
 }
+
 #else
 struct sp_ps_os {
   s32 dummy;
@@ -10973,7 +11049,6 @@ bool sp_ps_kill(sp_ps_t* ps) {
   SP_UNUSED(ps);
   return false;
 }
-#endif
 #endif
 
 

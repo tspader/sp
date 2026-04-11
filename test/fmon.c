@@ -17,7 +17,6 @@ static bool paths_equal(sp_str_t a, sp_str_t b) {
 
 typedef struct sp_test_file_monitor {
   sp_test_file_manager_t file_manager;
-  sp_test_env_manager_t env_manager;
   sp_fmon_t monitor;
   bool change_detected;
   sp_fmon_event_kind_t last_event;
@@ -26,7 +25,6 @@ typedef struct sp_test_file_monitor {
 
 UTEST_F_SETUP(sp_test_file_monitor) {
   sp_test_file_manager_init(&ut.file_manager);
-  sp_test_env_manager_init(&ut.env_manager);
 
   ut.change_detected = false;
   ut.last_event = SP_FILE_CHANGE_EVENT_NONE;
@@ -34,7 +32,6 @@ UTEST_F_SETUP(sp_test_file_monitor) {
 }
 
 UTEST_F_TEARDOWN(sp_test_file_monitor) {
-  sp_test_env_manager_cleanup(&ut.env_manager);
   sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
@@ -373,7 +370,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
   ut.change_detected = false;
   fmon_history.count = 0;
 
-  rename(sp_str_to_cstr(old_file), sp_str_to_cstr(new_file));
+  sp_rename(sp_str_to_cstr(old_file), sp_str_to_cstr(new_file));
 
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
