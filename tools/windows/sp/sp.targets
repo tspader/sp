@@ -6,7 +6,7 @@
     <ClInclude Include="$(SpHeaders)" />
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="sp.natvis" />
+    <Natvis Include="$(MSBuildThisFileDirectory)sp.natvis" />
   </ItemGroup>
   <ItemGroup Condition="'$(SpProjectReferences)' != ''">
     <ProjectReference Include="$(SpProjectReferences)" />

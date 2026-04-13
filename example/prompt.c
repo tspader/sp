@@ -197,66 +197,6 @@ static s32 sp_clack_demo_multiselect_filter(sp_prompt_ctx_t* ctx) {
   return 0;
 }
 
-static sp_clack_demo_t sp_clack_demos[] = {
-  { .name = SP_LIT("intro-note"), .run = sp_clack_demo_intro_note },
-  { .name = SP_LIT("messages"), .run = sp_clack_demo_messages },
-  { .name = SP_LIT("confirm"), .run = sp_clack_demo_confirm },
-  { .name = SP_LIT("password"), .run = sp_clack_demo_password },
-  { .name = SP_LIT("select"), .run = sp_clack_demo_select },
-  { .name = SP_LIT("select-filter"), .run = sp_clack_demo_select_filter },
-  { .name = SP_LIT("multiselect"), .run = sp_clack_demo_multiselect },
-  { .name = SP_LIT("multiselect-filter"), .run = sp_clack_demo_multiselect_filter },
-};
-
-static sp_clack_demo_fn_t sp_clack_demo_find(sp_str_t name) {
-  sp_carr_for(sp_clack_demos, it) {
-    if (sp_str_equal(name, sp_clack_demos[it].name)) {
-      return sp_clack_demos[it].run;
-    }
-  }
-
-  return SP_NULLPTR;
-}
-
-static s32 sp_clack_demo_picker(sp_prompt_ctx_t* ctx) {
-  sp_prompt_select_option_t options[sp_carr_len(sp_clack_demos)] = {0};
-
-  sp_carr_for(sp_clack_demos, it) {
-    options[it] = (sp_prompt_select_option_t) {
-      .label = sp_clack_demos[it].name.data,
-      .selected = it == 0,
-    };
-  }
-
-  sp_prompt_select(ctx, (sp_prompt_select_t) {
-    .prompt = "Pick demo",
-    .options = options,
-    .num_options = sp_carr_len(options),
-    .max_items = 8,
-  });
-
-  if (sp_prompt_cancelled(ctx)) {
-    sp_prompt_cancel(ctx, "cancelled");
-    return 1;
-  }
-
-  sp_clack_demo_fn_t run = sp_clack_demo_find(sp_str_view(sp_prompt_get_str(ctx)));
-  if (run == SP_NULLPTR) {
-    sp_prompt_error(ctx, "unknown demo");
-    return 1;
-  }
-
-  return run(ctx);
-}
-
-static void sp_clack_usage(void) {
-  sp_log("usage: demo-prompt [program]");
-  sp_log("programs:");
-  sp_carr_for(sp_clack_demos, it) {
-    sp_log("  {}", SP_FMT_STR(sp_clack_demos[it].name));
-  }
-}
-
 s32 prompt_main(s32 argc, const c8** argv);
 SP_ENTRY(prompt_main)
 
@@ -266,12 +206,29 @@ s32 prompt_main(s32 argc, const c8** argv) {
 #endif
   sp_clack_demo_fn_t run = SP_NULLPTR;
 
+  sp_cstr_ht(sp_clack_demo_fn_t) demos = sp_zero();
+
+  sp_cstr_ht_insert(demos, ("intro-note"), sp_clack_demo_intro_note);
+  sp_cstr_ht_insert(demos, ("messages"), sp_clack_demo_messages);
+  sp_cstr_ht_insert(demos, ("confirm"), sp_clack_demo_confirm);
+  sp_cstr_ht_insert(demos, ("password"), sp_clack_demo_password);
+  sp_cstr_ht_insert(demos, ("select"), sp_clack_demo_select);
+  sp_cstr_ht_insert(demos, ("select-filter"), sp_clack_demo_select_filter);
+  sp_cstr_ht_insert(demos, ("multiselect"), sp_clack_demo_multiselect);
+  sp_cstr_ht_insert(demos, ("multiselect-filter"), sp_clack_demo_multiselect_filter);
+
   if (argc >= 2) {
-    run = sp_clack_demo_find(sp_str_view(argv[1]));
-    if (run == SP_NULLPTR) {
-      sp_clack_usage();
+    sp_clack_demo_fn_t* fn = sp_cstr_ht_get(demos, argv[1]);
+    if (!fn) {
+      sp_log("usage: demo-prompt [program]");
+      sp_log("programs:");
+      sp_cstr_ht_for_kv(demos, it) {
+        sp_log("  {}", SP_FMT_CSTR(*it.key));
+      }
+
       return 1;
     }
+    run = *fn;
   }
 
   sp_prompt_ctx_t* ctx = sp_prompt_begin();
@@ -281,7 +238,36 @@ s32 prompt_main(s32 argc, const c8** argv) {
 
   s32 result = 0;
   if (run == SP_NULLPTR) {
-    result = sp_clack_demo_picker(ctx);
+    sp_da(sp_prompt_select_option_t) options = sp_zero();
+    sp_cstr_ht_for_kv(demos, it) {
+      sp_prompt_select_option_t option = {
+        .label = *it.key,
+        .selected = it.idx == 0
+      };
+      sp_da_push(options, option);
+    }
+
+    sp_prompt_select(ctx, (sp_prompt_select_t) {
+      .prompt = "Pick demo",
+      .options = options,
+      .num_options = sp_da_size(options),
+      .max_items = 8,
+    });
+
+    if (sp_prompt_cancelled(ctx)) {
+      sp_prompt_cancel(ctx, "cancelled");
+      return 1;
+    }
+
+    const c8* selection = sp_prompt_get_str(ctx);
+    sp_clack_demo_fn_t* fn = sp_cstr_ht_get(demos, selection);
+    if (!fn) {
+      sp_prompt_error(ctx, "unknown demo");
+      return 1;
+    }
+    run = *fn;
+
+    result = run(ctx);
   } else {
     result = run(ctx);
   }

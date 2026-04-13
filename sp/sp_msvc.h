@@ -180,16 +180,16 @@ sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_arch_t arch, sp_da(sp_msvc_sdk_t)* out) 
   sp_str_t arch_str = sp_msvc_arch_str(arch);
 
   for (sp_fs_it_t it = sp_fs_it_new(lib_dir); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
-    if (!(it.entry.attributes == SP_FS_KIND_DIR)) continue;
-    sp_str_t name = it.entry.file_name;
+    if (it.entry.kind != SP_FS_KIND_DIR) continue;
+    sp_str_t name = it.entry.name;
     if (!sp_str_starts_with(name, SP_LIT("10."))) continue;
 
     sp_str_t ucrt_lib = sp_fs_join_path(
-      sp_fs_join_path(it.entry.file_path, SP_LIT("ucrt")), arch_str
+      sp_fs_join_path(it.entry.path, SP_LIT("ucrt")), arch_str
     );
     if (!sp_fs_is_dir(ucrt_lib)) continue;
 
-    sp_str_t ver_root = it.entry.file_path;
+    sp_str_t ver_root = it.entry.path;
     sp_msvc_sdk_t sdk = {
       .version     = sp_msvc_parse_version(name),
       .root        = sp_str_copy(sdk_root),
@@ -234,9 +234,9 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_arch_t arch, sp_da(sp_msvc_vs_t
   sp_str_t arch_str = sp_msvc_arch_str(arch);
 
   for (sp_fs_it_t it = sp_fs_it_new(instances_dir); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
-    if (!(it.entry.attributes == SP_FS_KIND_DIR)) continue;
+    if (it.entry.kind != SP_FS_KIND_DIR) continue;
 
-    sp_str_t state_path = sp_fs_join_path(it.entry.file_path, SP_LIT("state.json"));
+    sp_str_t state_path = sp_fs_join_path(it.entry.path, SP_LIT("state.json"));
     if (!sp_fs_exists(state_path)) continue;
 
     sp_str_t json = SP_ZERO_INITIALIZE();

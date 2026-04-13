@@ -134,10 +134,10 @@
   #define SP_TCC
 #elif defined(__clang__)
   #define SP_CLANG
-  #define SP_GNUISH
+  #define SP_GNUC
 #elif defined(__GNUC__) && !defined(SP_CLANG)
   #define SP_GCC
-  #define SP_GNUISH
+  #define SP_GNUC
 #endif
 
 //////////
@@ -1334,18 +1334,21 @@ void sp_sys_qsort(void* arr, u64 len, u64 stride, sp_qsort_fn_t);
   #define sp_chdir(path)                _chdir(path)
   #define sp_close(fd)                  _close(fd)
   #define sp_lseek(fd, o, w)            _lseeki64(fd, o, w)
+  #define sp_open(p, f, m)              _open(p, f, m)
   #define sp_read(fd, b, n)             _read(fd, b, (unsigned int)(n))
   #define sp_write(fd, b, n)            _write(fd, b, (unsigned int)(n))
 #elif defined(SP_LINUX)
   #define sp_chdir(path)                sp_sys_chdir(path)
   #define sp_close(fd)                  sp_sys_close(fd)
+  #define sp_lseek(fd, o, w)            sp_sys_lseek(fd, o, w)
+  #define sp_open(p, f, m)              sp_sys_open(p, f, m)
   #define sp_read(fd, b, n)             sp_sys_read(fd, b, n)
   #define sp_write(fd, b, n)            sp_sys_write(fd, b, n)
-  #define sp_lseek(fd, o, w)            sp_sys_lseek(fd, o, w)
 #else
   #define sp_chdir(path)                chdir(path)
   #define sp_close(fd)                  close(fd)
   #define sp_lseek(fd, o, w)            lseek(fd, o, w)
+  #define sp_open(p, f, m)              open(p, f, m)
   #define sp_read(fd, b, n)             read(fd, b, n)
   #define sp_write(fd, b, n)            write(fd, b, n)
 #endif
@@ -1375,7 +1378,6 @@ void sp_sys_qsort(void* arr, u64 len, u64 stride, sp_qsort_fn_t);
   #define sp_symlink(t, l)                  sp_sys_symlink(t, l)
   #define sp_link(old, new)                 sp_sys_link(old, new)
   #define sp_chmod(path, mode)              sp_sys_chmod(path, mode)
-  #define sp_open(p, f, m)                  sp_sys_open(p, f, m)
   #define sp_openat(d, p, f, m)             sp_sys_openat(d, p, f, m);
   #define sp_clock_gettime(c, ts)           sp_sys_clock_gettime(c, ts)
   #define sp_poll(fds, n, t)                sp_sys_poll(fds, n, t)
@@ -1407,7 +1409,6 @@ void sp_sys_qsort(void* arr, u64 len, u64 stride, sp_qsort_fn_t);
   #define sp_mkdir(path, mode)              mkdir(path, mode)
   #define sp_rmdir(path)                    rmdir(path)
   #define sp_poll(p, f, m)                  poll(p, f, m)
-  #define sp_open(p, f, m)                  open(p, f, m)
   #define sp_openat(d, p, f, m)             openat(d, p, f, m);
   #define sp_unlink(path)                   unlink(path)
   #define sp_rename(old, new)               rename(old, new)
@@ -2779,6 +2780,185 @@ SP_API sp_os_attr_t   sp_os_get_raw_target_attrs(sp_str_t path);
 SP_API sp_err_t       sp_os_set_raw_file_attrs(sp_str_t path, sp_os_attr_t attrs);
 SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal_handler_t);
 
+// ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
+// ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
+// █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
+// ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
+// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║ ██║   ██║
+// ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
+// @format
+#define SP_FORMAT_TYPES \
+ SP_FMT_X(ptr, void*) \
+ SP_FMT_X(str, sp_str_t) \
+ SP_FMT_X(cstr, const c8*) \
+ SP_FMT_X(s8, s8) \
+ SP_FMT_X(s16, s16) \
+ SP_FMT_X(s32, s32) \
+ SP_FMT_X(s64, s64) \
+ SP_FMT_X(u8, u8) \
+ SP_FMT_X(u16, u16) \
+ SP_FMT_X(u32, u32) \
+ SP_FMT_X(u64, u64) \
+ SP_FMT_X(f32, f32) \
+ SP_FMT_X(f64, f64) \
+ SP_FMT_X(c8, c8) \
+ SP_FMT_X(c16, c16) \
+ SP_FMT_X(context, sp_context_t*) \
+ SP_FMT_X(hash, sp_hash_t) \
+ SP_FMT_X(hash_short, sp_hash_t) \
+ SP_FMT_X(str_builder, sp_str_builder_t) \
+ SP_FMT_X(quoted_str, sp_str_t) \
+ SP_FMT_X(color, const c8*) \
+
+#define SP_FMT_ID(id) SP_MACRO_CAT(sp_format_id_, id)
+#define SP_FMT_FN(id) SP_MACRO_CAT(sp_fmt_format_, id)
+#define SP_FMT_UNION(T) SP_MACRO_CAT(T, _value)
+
+typedef struct sp_format_arg sp_format_arg_t;
+
+SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
+
+typedef enum {
+  SP_FMT_SPEC_VALUE_FROM_ARG,
+  SP_FMT_SPEC_VALUE_FROM_STR,
+  SP_FMT_SPEC_VALUE_NONE,
+} sp_fmt_spec_value_kind_t;
+
+typedef struct {
+  struct {
+    sp_fmt_spec_value_kind_t kind;
+    union {
+      sp_str_t str;
+      sp_format_arg_t* arg;
+    };
+  } value;
+  void* user_data;
+  sp_str_builder_t* builder;
+} sp_fmt_spec_ctx_t;
+
+sp_typedef_fn(s32, sp_fmt_spec_fn_t, sp_fmt_spec_ctx_t*);
+typedef struct {
+  const c8* name;
+  struct {
+    sp_fmt_spec_fn_t parse;
+    sp_fmt_spec_fn_t before;
+    sp_fmt_spec_fn_t after;
+  } fn;
+} sp_fmt_specifier_t;
+
+typedef struct sp_formatter {
+  sp_format_fn_t fn;
+  s32 id;
+} sp_formatter_t;
+
+#define SP_FMT_ARG(T, V)        SP_RVAL(sp_format_arg_t) { .SP_FMT_UNION(T) = (V), .id = SP_FMT_ID(T) }
+#define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
+#define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
+#define SP_FMT_CSTR(V)          SP_FMT_ARG(cstr, V)
+#define SP_FMT_S8(V)            SP_FMT_ARG(s8, V)
+#define SP_FMT_S16(V)           SP_FMT_ARG(s16, V)
+#define SP_FMT_S32(V)           SP_FMT_ARG(s32, V)
+#define SP_FMT_S64(V)           SP_FMT_ARG(s64, V)
+#define SP_FMT_U8(V)            SP_FMT_ARG(u8, V)
+#define SP_FMT_U16(V)           SP_FMT_ARG(u16, V)
+#define SP_FMT_U32(V)           SP_FMT_ARG(u32, V)
+#define SP_FMT_U64(V)           SP_FMT_ARG(u64, V)
+#define SP_FMT_F32(V)           SP_FMT_ARG(f32, V)
+#define SP_FMT_F64(V)           SP_FMT_ARG(f64, V)
+#define SP_FMT_C8(V)            SP_FMT_ARG(c8, V)
+#define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
+#define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
+#define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
+#define SP_FMT_SHORT_HASH(V)    SP_FMT_ARG(hash_short, V)
+#define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
+#define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
+#define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
+#define SP_FMT_MUTEX(V)         SP_FMT_ARG(mutex, V)
+#define SP_FMT_SEMAPHORE(V)     SP_FMT_ARG(semaphore, V)
+#define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
+#define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
+#define SP_FMT_COLOR(V)         SP_FMT_ARG(color, V)
+#define SP_FMT_YELLOW()         SP_FMT_COLOR(SP_ANSI_FG_YELLOW)
+#define SP_FMT_CYAN()           SP_FMT_COLOR(SP_ANSI_FG_CYAN)
+#define SP_FMT_CLEAR()          SP_FMT_COLOR(SP_ANSI_FG_RESET)
+#define SP_FMT_CUSTOM(T, _fn, _value) (   \
+  (void)sizeof((T)sp_zero() = (_value)),  \
+  (sp_format_arg_t) {                     \
+    .id = sp_format_id_custom,            \
+    .custom = {                           \
+      .fn = (sp_format_fn_t)(_fn),        \
+      .ptr = (void*)&(_value)             \
+    }                                     \
+  })
+#define SP_FMT_CUSTOM_V(T, _fn, ...) (   \
+  (void)sizeof((T)sp_zero() = (__VA_ARGS__)),  \
+  (sp_format_arg_t) {                     \
+    .id = sp_format_id_custom,            \
+    .custom = {                           \
+      .fn = (sp_format_fn_t)(_fn),        \
+      .ptr = (void*)&(__VA_ARGS__)        \
+    }                                     \
+  })
+
+#undef SP_FMT_X
+#define SP_FMT_X(name, type) void sp_fmt_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
+SP_FORMAT_TYPES
+
+SP_API sp_str_t sp_format_str(sp_str_t fmt, ...);
+SP_API sp_str_t sp_format(const c8* fmt, ...);
+SP_API sp_str_t sp_format_v(sp_str_t fmt, va_list args);
+SP_API u8        sp_parse_u8(sp_str_t str);
+SP_API u16       sp_parse_u16(sp_str_t str);
+SP_API u32       sp_parse_u32(sp_str_t str);
+SP_API u64       sp_parse_u64(sp_str_t str);
+SP_API s8        sp_parse_s8(sp_str_t str);
+SP_API s16       sp_parse_s16(sp_str_t str);
+SP_API s32       sp_parse_s32(sp_str_t str);
+SP_API s64       sp_parse_s64(sp_str_t str);
+SP_API f32       sp_parse_f32(sp_str_t str);
+SP_API f64       sp_parse_f64(sp_str_t str);
+SP_API c8        sp_parse_c8(sp_str_t str);
+SP_API c16       sp_parse_c16(sp_str_t str);
+SP_API void*     sp_parse_ptr(sp_str_t str);
+SP_API bool      sp_parse_bool(sp_str_t str);
+SP_API sp_hash_t sp_parse_hash(sp_str_t str);
+SP_API u64       sp_parse_hex(sp_str_t str);
+SP_API bool      sp_parse_u8_ex(sp_str_t str, u8* out);
+SP_API bool      sp_parse_u16_ex(sp_str_t str, u16* out);
+SP_API bool      sp_parse_u32_ex(sp_str_t str, u32* out);
+SP_API bool      sp_parse_u64_ex(sp_str_t str, u64* out);
+SP_API bool      sp_parse_s8_ex(sp_str_t str, s8* out);
+SP_API bool      sp_parse_s16_ex(sp_str_t str, s16* out);
+SP_API bool      sp_parse_s32_ex(sp_str_t str, s32* out);
+SP_API bool      sp_parse_s64_ex(sp_str_t str, s64* out);
+SP_API bool      sp_parse_f32_ex(sp_str_t str, f32* out);
+SP_API bool      sp_parse_f64_ex(sp_str_t str, f64* out);
+SP_API bool      sp_parse_c8_ex(sp_str_t str, c8* out);
+SP_API bool      sp_parse_c16_ex(sp_str_t str, c16* out);
+SP_API bool      sp_parse_ptr_ex(sp_str_t str, void** out);
+SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
+SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
+SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
+SP_API bool      sp_parse_is_digit(c8 c);
+
+typedef enum {
+  SP_FORMAT_SPECIFIER_FLAG_NONE = 0,
+  SP_FORMAT_SPECIFIER_FLAG_FG_COLOR = 1 << 0,
+  SP_FORMAT_SPECIFIER_FLAG_BG_COLOR = 1 << 1,
+  SP_FORMAT_SPECIFIER_FLAG_PAD = 1 << 2,
+} sp_format_specifier_flag_t;
+
+typedef struct {
+  sp_str_t fmt;
+  u32 it;
+} sp_format_parser_t;
+
+typedef struct {
+  sp_str_t color;
+  u32 flags;
+  u32 pad;
+} sp_format_specifier_t;
+
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
 // ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝
@@ -2844,6 +3024,7 @@ typedef struct {
   sp_os_signal_handler_t signal_handlers[SP_OS_SIGNAL_COUNT_];
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
+  sp_str_ht(sp_fmt_specifier_t) formatters;
   struct {
     sp_tls_key_t key;
     sp_tls_once_t once;
@@ -3107,156 +3288,6 @@ SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* proc);
 SP_API bool            sp_ps_kill(sp_ps_t* proc);
 
 
-// ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
-// ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
-// █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║
-// ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
-// ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║ ██║   ██║
-// ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
-// @format
-#define SP_FORMAT_TYPES \
- SP_FMT_X(ptr, void*) \
- SP_FMT_X(str, sp_str_t) \
- SP_FMT_X(cstr, const c8*) \
- SP_FMT_X(s8, s8) \
- SP_FMT_X(s16, s16) \
- SP_FMT_X(s32, s32) \
- SP_FMT_X(s64, s64) \
- SP_FMT_X(u8, u8) \
- SP_FMT_X(u16, u16) \
- SP_FMT_X(u32, u32) \
- SP_FMT_X(u64, u64) \
- SP_FMT_X(f32, f32) \
- SP_FMT_X(f64, f64) \
- SP_FMT_X(c8, c8) \
- SP_FMT_X(c16, c16) \
- SP_FMT_X(context, sp_context_t*) \
- SP_FMT_X(hash, sp_hash_t) \
- SP_FMT_X(hash_short, sp_hash_t) \
- SP_FMT_X(str_builder, sp_str_builder_t) \
- SP_FMT_X(quoted_str, sp_str_t) \
- SP_FMT_X(color, const c8*) \
-
-#define SP_FMT_ID(id) SP_MACRO_CAT(sp_format_id_, id)
-#define SP_FMT_FN(id) SP_MACRO_CAT(sp_fmt_format_, id)
-#define SP_FMT_UNION(T) SP_MACRO_CAT(T, _value)
-
-typedef enum {
-  #undef SP_FMT_X
-  #define SP_FMT_X(id, type) SP_FMT_ID(id),
-  SP_FORMAT_TYPES
-} sp_format_id_t;
-
-typedef struct sp_format_arg_t {
-  union {
-    #undef SP_FMT_X
-    #define SP_FMT_X(name, type) type SP_FMT_UNION(name);
-    SP_FORMAT_TYPES
-  };
-
-  sp_format_id_t id;
-} sp_format_arg_t;
-
-SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
-
-typedef struct sp_formatter {
-  sp_format_fn_t fn;
-  sp_format_id_t id;
-} sp_formatter_t;
-
-
-#define SP_FMT_ARG(T, V) SP_RVAL(sp_format_arg_t) { .SP_FMT_UNION(T) = (V), .id = SP_FMT_ID(T) }
-
-#define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
-#define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
-#define SP_FMT_CSTR(V)          SP_FMT_ARG(cstr, V)
-#define SP_FMT_S8(V)            SP_FMT_ARG(s8, V)
-#define SP_FMT_S16(V)           SP_FMT_ARG(s16, V)
-#define SP_FMT_S32(V)           SP_FMT_ARG(s32, V)
-#define SP_FMT_S64(V)           SP_FMT_ARG(s64, V)
-#define SP_FMT_U8(V)            SP_FMT_ARG(u8, V)
-#define SP_FMT_U16(V)           SP_FMT_ARG(u16, V)
-#define SP_FMT_U32(V)           SP_FMT_ARG(u32, V)
-#define SP_FMT_U64(V)           SP_FMT_ARG(u64, V)
-#define SP_FMT_F32(V)           SP_FMT_ARG(f32, V)
-#define SP_FMT_F64(V)           SP_FMT_ARG(f64, V)
-#define SP_FMT_C8(V)            SP_FMT_ARG(c8, V)
-#define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
-#define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
-#define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
-#define SP_FMT_SHORT_HASH(V)    SP_FMT_ARG(hash_short, V)
-#define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
-#define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
-#define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
-#define SP_FMT_MUTEX(V)         SP_FMT_ARG(mutex, V)
-#define SP_FMT_SEMAPHORE(V)     SP_FMT_ARG(semaphore, V)
-#define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
-#define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
-#define SP_FMT_COLOR(V)         SP_FMT_ARG(color, V)
-#define SP_FMT_YELLOW()         SP_FMT_COLOR(SP_ANSI_FG_YELLOW)
-#define SP_FMT_CYAN()           SP_FMT_COLOR(SP_ANSI_FG_CYAN)
-#define SP_FMT_CLEAR()          SP_FMT_COLOR(SP_ANSI_FG_RESET)
-
-#undef SP_FMT_X
-#define SP_FMT_X(name, type) void sp_fmt_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-SP_FORMAT_TYPES
-
-SP_API sp_str_t sp_format_str(sp_str_t fmt, ...);
-SP_API sp_str_t sp_format(const c8* fmt, ...);
-SP_API sp_str_t sp_format_v(sp_str_t fmt, va_list args);
-SP_API u8        sp_parse_u8(sp_str_t str);
-SP_API u16       sp_parse_u16(sp_str_t str);
-SP_API u32       sp_parse_u32(sp_str_t str);
-SP_API u64       sp_parse_u64(sp_str_t str);
-SP_API s8        sp_parse_s8(sp_str_t str);
-SP_API s16       sp_parse_s16(sp_str_t str);
-SP_API s32       sp_parse_s32(sp_str_t str);
-SP_API s64       sp_parse_s64(sp_str_t str);
-SP_API f32       sp_parse_f32(sp_str_t str);
-SP_API f64       sp_parse_f64(sp_str_t str);
-SP_API c8        sp_parse_c8(sp_str_t str);
-SP_API c16       sp_parse_c16(sp_str_t str);
-SP_API void*     sp_parse_ptr(sp_str_t str);
-SP_API bool      sp_parse_bool(sp_str_t str);
-SP_API sp_hash_t sp_parse_hash(sp_str_t str);
-SP_API u64       sp_parse_hex(sp_str_t str);
-SP_API bool      sp_parse_u8_ex(sp_str_t str, u8* out);
-SP_API bool      sp_parse_u16_ex(sp_str_t str, u16* out);
-SP_API bool      sp_parse_u32_ex(sp_str_t str, u32* out);
-SP_API bool      sp_parse_u64_ex(sp_str_t str, u64* out);
-SP_API bool      sp_parse_s8_ex(sp_str_t str, s8* out);
-SP_API bool      sp_parse_s16_ex(sp_str_t str, s16* out);
-SP_API bool      sp_parse_s32_ex(sp_str_t str, s32* out);
-SP_API bool      sp_parse_s64_ex(sp_str_t str, s64* out);
-SP_API bool      sp_parse_f32_ex(sp_str_t str, f32* out);
-SP_API bool      sp_parse_f64_ex(sp_str_t str, f64* out);
-SP_API bool      sp_parse_c8_ex(sp_str_t str, c8* out);
-SP_API bool      sp_parse_c16_ex(sp_str_t str, c16* out);
-SP_API bool      sp_parse_ptr_ex(sp_str_t str, void** out);
-SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
-SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
-SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
-SP_API bool      sp_parse_is_digit(c8 c);
-
-typedef enum {
-  SP_FORMAT_SPECIFIER_FLAG_NONE = 0,
-  SP_FORMAT_SPECIFIER_FLAG_FG_COLOR = 1 << 0,
-  SP_FORMAT_SPECIFIER_FLAG_BG_COLOR = 1 << 1,
-  SP_FORMAT_SPECIFIER_FLAG_PAD = 1 << 2,
-} sp_format_specifier_flag_t;
-
-typedef struct {
-  sp_str_t fmt;
-  u32 it;
-} sp_format_parser_t;
-
-typedef struct {
-  sp_str_t color;
-  u32 flags;
-  u32 pad;
-} sp_format_specifier_t;
-
-
 //  █████╗ ██████╗ ██████╗
 // ██╔══██╗██╔══██╗██╔══██╗
 // ███████║██████╔╝██████╔╝
@@ -3318,7 +3349,7 @@ SP_API s32             sp_app_run(sp_app_config_t config);
 // ██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║   ██║   ██║██╔══██╗
 // ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██║   ██║   ╚██████╔╝██║  ██║
 // ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
-// @file_monitor
+// @fmon @file_monitor
 typedef enum sp_file_change_event_t {
 	SP_FILE_CHANGE_EVENT_NONE = 0,
 	SP_FILE_CHANGE_EVENT_ADDED = 1 << 0,
@@ -3364,6 +3395,24 @@ SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
 SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
 SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
 SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
+
+typedef enum {
+  #undef SP_FMT_X
+  #define SP_FMT_X(id, type) SP_FMT_ID(id),
+  SP_FORMAT_TYPES
+  sp_format_id_custom,
+} sp_format_id_t;
+
+struct sp_format_arg {
+  union {
+    #undef SP_FMT_X
+    #define SP_FMT_X(name, type) type SP_FMT_UNION(name);
+    SP_FORMAT_TYPES
+    struct { sp_format_fn_t fn; void* ptr; } custom;
+  };
+
+  sp_format_id_t id;
+};
 
 SP_END_EXTERN_C()
 
@@ -4055,7 +4104,16 @@ void sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* exp
   sp_io_write_cstr(&io, SP_ANSI_RESET, SP_NULLPTR);
   sp_io_write_cstr(&io, expr, SP_NULLPTR);
   sp_io_write_cstr(&io, "\n", SP_NULLPTR);
-  __builtin_trap();
+
+  #ifdef SP_GNUC
+    __builtin_trap();
+  #else
+    #if defined(SP_AMD64)
+      __asm__ volatile ("int3")
+    #elif defined(SP_ARM64)
+      __asm__ volatile ("brk #0")
+    #endif
+  #endif
 }
 #endif
 
@@ -4957,8 +5015,7 @@ void sp_fmt_format_u64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_fmt_format_unsigned(builder, value, 20);
 }
 
-void sp_fmt_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  f32 value = arg->f32_value;
+void sp_fmt_format_f32_v(sp_str_builder_t* builder, f32 value) {
   f32 num = value;
 
   // Handle negative
@@ -4998,6 +5055,10 @@ void sp_fmt_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
     sp_str_builder_append_c8(builder, '0' + digit);
     fractional_part -= digit;
   }
+}
+
+void sp_fmt_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
+  sp_fmt_format_f32_v(builder, arg->f32_value);
 }
 
 void sp_fmt_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
@@ -5287,14 +5348,17 @@ sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
         sp_format_parser_eat_and_assert(&parser, '}');
 
         sp_format_arg_t arg = va_arg(args, sp_format_arg_t);
-        u64 formatted_value_start = sp_str_builder_len(&builder);
-        SP_CARR_FOR(formatters, i) {
-          if (arg.id == formatters[i].id) {
-            sp_format_fn_t fn = formatters[i].fn;
-            fn(&builder, &arg);
-            break;
+        sp_format_fn_t fn = arg.custom.fn;
+        if (arg.id != sp_format_id_custom) {
+          SP_CARR_FOR(formatters, i) {
+            if (arg.id == formatters[i].id) {
+              fn = formatters[i].fn;
+              break;
+            }
           }
         }
+        u64 formatted_value_start = sp_str_builder_len(&builder);
+        fn(&builder, &arg);
         u64 formatted_value_end = sp_str_builder_len(&builder);
         u64 formatted_value_len = formatted_value_end - formatted_value_start;
 
@@ -9066,7 +9130,7 @@ void sp_spin_pause() {
       _mm_pause();
     #elif defined(SP_TCC)
       volatile int x = 0; (void)x;
-    #elif defined(SP_GNUISH)
+    #elif defined(SP_GNUC)
       __asm__ __volatile__("pause");
     #endif
 
@@ -9075,14 +9139,14 @@ void sp_spin_pause() {
       __yield();
     #elif defined(SP_TCC)
       volatile int x = 0; (void)x;
-    #elif defined(SP_GNUISH)
+    #elif defined(SP_GNUC)
       __asm__ __volatile__("yield");
     #endif
   #endif
 }
 
 bool sp_spin_try_lock(sp_spin_lock_t* lock) {
-  #if defined(SP_GNUISH)
+  #if defined(SP_GNUC)
     return __sync_lock_test_and_set(lock, 1) == 0;
   #elif defined(SP_MSVC)
     return _InterlockedExchange((LONG*)lock, 1) == 0;
@@ -9110,7 +9174,7 @@ void sp_spin_lock(sp_spin_lock_t* lock) {
 }
 
 void sp_spin_unlock(sp_spin_lock_t* lock) {
-  #if defined(SP_GNUISH)
+  #if defined(SP_GNUC)
     __sync_lock_release(lock);
   #elif defined(SP_MSVC)
     _InterlockedExchange((LONG*)lock, 0);
@@ -9131,7 +9195,7 @@ void sp_spin_unlock(sp_spin_lock_t* lock) {
 bool sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desired) {
   #if defined(SP_MSVC)
     return _InterlockedCompareExchange((long*)value, desired, current) == current;
-  #elif defined(SP_GNUISH)
+  #elif defined(SP_GNUC)
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
     bool result = false;
@@ -9149,7 +9213,7 @@ bool sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desired) {
 s32 sp_atomic_s32_set(sp_atomic_s32_t* value, s32 desired) {
   #if defined(SP_MSVC)
     return _InterlockedExchange((long*)value, desired);
-  #elif defined(SP_GNUISH)
+  #elif defined(SP_GNUC)
     return __sync_lock_test_and_set(value, desired);
   #else
     s32 old;
@@ -9163,7 +9227,7 @@ s32 sp_atomic_s32_set(sp_atomic_s32_t* value, s32 desired) {
 s32 sp_atomic_s32_add(sp_atomic_s32_t* value, s32 add) {
   #if defined(SP_MSVC)
     return _InterlockedExchangeAdd((long*)value, add);
-  #elif defined(SP_GNUISH)
+  #elif defined(SP_GNUC)
     return __sync_fetch_and_add(value, add);
   #else
     s32 old;
@@ -9177,7 +9241,7 @@ s32 sp_atomic_s32_add(sp_atomic_s32_t* value, s32 add) {
 s32 sp_atomic_s32_get(sp_atomic_s32_t* value) {
   #if defined(SP_MSVC)
     return _InterlockedOr((long*)value, 0);
-  #elif defined(SP_GNUISH)
+  #elif defined(SP_GNUC)
     return __sync_or_and_fetch(value, 0);
   #else
     s32 old;
@@ -9191,7 +9255,7 @@ s32 sp_atomic_s32_get(sp_atomic_s32_t* value) {
 bool sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* desired) {
   #if defined(SP_MSVC)
     return _InterlockedCompareExchangePointer(value, desired, current) == current;
-  #elif defined(SP_GNUISH)
+  #elif defined(SP_GNUC)
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
     bool result = false;
@@ -9209,7 +9273,7 @@ bool sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* desired) {
 void* sp_atomic_ptr_set(sp_atomic_ptr_t* value, void* desired) {
   #if defined(SP_MSVC)
     return _InterlockedExchangePointer(value, desired);
-  #elif defined(SP_GNUISH)
+  #elif defined(SP_GNUC)
     void* old;
     do {
       old = *value;
@@ -9227,7 +9291,7 @@ void* sp_atomic_ptr_set(sp_atomic_ptr_t* value, void* desired) {
 void* sp_atomic_ptr_get(sp_atomic_ptr_t* value) {
   #if defined(SP_MSVC)
     return _InterlockedCompareExchangePointer(value, SP_NULLPTR, SP_NULLPTR);
-  #elif defined(SP_GNUISH)
+  #elif defined(SP_GNUC)
     return __sync_val_compare_and_swap(value, SP_NULLPTR, SP_NULLPTR);
   #else
     void* old;

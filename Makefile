@@ -29,7 +29,7 @@ TEST_NAMES = amalg app asset context core cv elf fmon fs glob ht io leak linkage
 TESTS = $(addprefix $(TEST_DIR)/, $(TEST_NAMES))
 TEST_BINS = $(TEST_DIR)/process
 
-EXAMPLE_NAMES = array elf hash_table ls palette prompt signal wc
+EXAMPLE_NAMES = array elf format hash_table ls palette prompt signal wc
 EXAMPLES = $(addprefix $(EXAMPLE_DIR)/, $(EXAMPLE_NAMES))
 CFLAGS_EXAMPLE = -std=c99 -g -Werror=return-type $(CFLAGS_PLATFORM)
 
