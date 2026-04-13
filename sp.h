@@ -637,6 +637,7 @@ SP_BEGIN_EXTERN_C()
   #include <termios.h>
   #include <time.h>
   #include <unistd.h>
+  #include <sys/ioctl.h>
   #include <sys/stat.h>
   #include <sys/time.h>
   #include <sys/types.h>
@@ -967,6 +968,13 @@ typedef struct {
   u32 _c_ospeed;
 } sp_sys_termios_t;
 
+typedef struct {
+  u16 ws_row;
+  u16 ws_col;
+  u16 ws_xpixel;
+  u16 ws_ypixel;
+} sp_sys_winsize_t;
+
 #if defined(SP_AMD64)
   typedef struct {
     u64 st_dev;
@@ -1192,6 +1200,7 @@ void sp_sys_qsort(void* arr, u64 len, u64 stride, sp_qsort_fn_t);
   #define SP_TCSAFLUSH               2
   #define SP_TCGETS                  0x5401
   #define SP_TCSETS                  0x5402
+  #define SP_TIOCGWINSZ              0x5413
 
 #elif defined(SP_WIN32)
   #define SP_O_RDONLY             _O_RDONLY
@@ -2779,6 +2788,8 @@ SP_API sp_os_attr_t   sp_os_get_raw_file_attrs(sp_str_t path);
 SP_API sp_os_attr_t   sp_os_get_raw_target_attrs(sp_str_t path);
 SP_API sp_err_t       sp_os_set_raw_file_attrs(sp_str_t path, sp_os_attr_t attrs);
 SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal_handler_t);
+SP_API bool           sp_os_is_tty(sp_os_file_handle_t fd);
+SP_API void           sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* rows);
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
 // ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
@@ -8024,6 +8035,59 @@ void sp_os_print(sp_str_t message) {
 
 void sp_os_print_err(sp_str_t message) {
   sp_write(2, message.data, message.len);
+}
+#endif
+
+
+/////////
+// TTY //
+/////////
+#if defined(SP_WIN32)
+bool sp_os_is_tty(sp_os_file_handle_t fd) {
+  HANDLE handle = (HANDLE)_get_osfhandle(fd);
+  if (handle == INVALID_HANDLE_VALUE || handle == SP_NULLPTR) return false;
+  DWORD mode;
+  return GetConsoleMode(handle, &mode) != 0;
+}
+
+void sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* rows) {
+  if (cols) *cols = 0;
+  if (rows) *rows = 0;
+  HANDLE handle = (HANDLE)_get_osfhandle(fd);
+  if (handle == INVALID_HANDLE_VALUE || handle == SP_NULLPTR) return;
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  if (!GetConsoleScreenBufferInfo(handle, &csbi)) return;
+  if (cols) *cols = (s32)(csbi.srWindow.Right - csbi.srWindow.Left + 1);
+  if (rows) *rows = (s32)(csbi.srWindow.Bottom - csbi.srWindow.Top + 1);
+}
+
+#elif defined(SP_SYS)
+bool sp_os_is_tty(sp_os_file_handle_t fd) {
+  sp_sys_termios_t t = SP_ZERO_STRUCT(sp_sys_termios_t);
+  return sp_sys_tcgetattr(fd, &t) == 0;
+}
+
+void sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* rows) {
+  if (cols) *cols = 0;
+  if (rows) *rows = 0;
+  sp_sys_winsize_t ws = SP_ZERO_STRUCT(sp_sys_winsize_t);
+  if (sp_sys_ioctl(fd, SP_TIOCGWINSZ, &ws) < 0) return;
+  if (cols) *cols = (s32)ws.ws_col;
+  if (rows) *rows = (s32)ws.ws_row;
+}
+
+#else
+bool sp_os_is_tty(sp_os_file_handle_t fd) {
+  return isatty(fd) != 0;
+}
+
+void sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* rows) {
+  if (cols) *cols = 0;
+  if (rows) *rows = 0;
+  struct winsize ws = SP_ZERO_STRUCT(struct winsize);
+  if (ioctl(fd, TIOCGWINSZ, &ws) != 0) return;
+  if (cols) *cols = (s32)ws.ws_col;
+  if (rows) *rows = (s32)ws.ws_row;
 }
 #endif
 

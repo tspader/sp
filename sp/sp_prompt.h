@@ -1,5 +1,21 @@
-// prompt.h - beautiful, interactive prompts for native CLIs
-//
+/*
+  sp_prompt.h (beautiful, interactive prompts for native CLIs)
+
+  ///////////
+  // USAGE //
+  ///////////
+  Define either of the following before you include sp_prompt.h in exactly one C or C++ file:
+
+    #define SP_IMPLEMENTATION
+    #define SP_PROMPT_IMPLEMENTATION
+
+  - configure default buffering / buffer size?
+  -
+*/
+
+#if defined SP_IMPLEMENTATION && !defined(SP_PROMPT_IMPLEMENTATION)
+  #define SP_PROMPT_IMPLEMENTATION
+#endif
 
 #ifndef SP_PROMPT_H
 #define SP_PROMPT_H
@@ -290,7 +306,15 @@ static void sp_prompt_framebuffer_clear(sp_prompt_ctx_t* ctx) {
 
 sp_prompt_ctx_t* sp_prompt_new() {
   sp_prompt_ctx_t* ctx = sp_alloc_type(sp_prompt_ctx_t);
-  sp_prompt_ctx_init(ctx, 80, 20);
+  s32 cols = 0;
+  s32 rows = 0;
+  if (sp_os_is_tty(sp_fd_stdout)) {
+    sp_os_tty_size(sp_fd_stdout, &cols, &rows);
+  }
+  if (cols <= 0) cols = 80;
+  if (rows <= 0) rows = 20;
+  sp_log("is_tty: {}, cols: {}, rows: {}", SP_FMT_U8(sp_os_is_tty(sp_fd_stdout)), SP_FMT_U32(cols), SP_FMT_U32(rows));
+  sp_prompt_ctx_init(ctx, cols, rows);
   return ctx;
 }
 
@@ -331,8 +355,8 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
   ctx->state = SP_PROMPT_STATE_ACTIVE;
   sp_io_writer_from_fd(&ctx->writer_stdout, sp_fd_stdout, SP_IO_CLOSE_MODE_NONE);
   ctx->writer = &ctx->writer_stdout;
-  ctx->write_buffer = sp_alloc_n(u8, 1024 * 64);
-  sp_io_writer_set_buffer(ctx->writer, ctx->write_buffer, 1024 * 64);
+  ctx->write_buffer = sp_alloc_n(u8, 64);
+  sp_io_writer_set_buffer(ctx->writer, ctx->write_buffer, 64);
   ctx->frames = SP_NULLPTR;
   sp_prompt_framebuffer_init(ctx);
   sp_prompt_framebuffer_clear(ctx);
