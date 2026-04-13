@@ -277,7 +277,7 @@ UTEST_F(ps, io_stdout_stderr) {
 // SP_PS_IO_MODE_EXISTING
 UTEST_F(ps, io_create_file_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdout.file"));
-  s32 fd = sp_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  s32 fd = sp_sys_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
@@ -296,21 +296,21 @@ UTEST_F(ps, io_create_file_null) {
 
   sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
-  sp_lseek(fd, 0, SP_SEEK_SET);
+  sp_sys_lseek(fd, 0, SP_SEEK_SET);
 
-  u64 bytes_read = sp_read(fd, ut.buffer.data, ut.buffer.len);
+  u64 bytes_read = sp_sys_read(fd, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
   SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
-  sp_close(fd);
+  sp_sys_close(fd);
 }
 
 UTEST_F(ps, io_file_create_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
-  s32 fd = sp_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
-  sp_write(fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
-  sp_lseek(fd, 0, SP_SEEK_SET);
+  s32 fd = sp_sys_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_write(fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
+  sp_sys_lseek(fd, 0, SP_SEEK_SET);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
@@ -327,12 +327,12 @@ UTEST_F(ps, io_file_create_null) {
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
 
-  sp_close(fd);
+  sp_sys_close(fd);
 }
 
 UTEST_F(ps, io_create_null_file) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
-  s32 fd = sp_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  s32 fd = sp_sys_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
@@ -351,24 +351,24 @@ UTEST_F(ps, io_create_null_file) {
 
   sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
-  sp_lseek(fd, 0, SP_SEEK_SET);
+  sp_sys_lseek(fd, 0, SP_SEEK_SET);
 
-  u64 bytes_read = sp_read(fd, ut.buffer.data, ut.buffer.len);
+  u64 bytes_read = sp_sys_read(fd, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
   SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
-  sp_close(fd);
+  sp_sys_close(fd);
 }
 
 UTEST_F(ps, io_file_null_file) {
   sp_str_t in_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
-  s32 in_fd = sp_open(sp_str_to_cstr(in_path), SP_O_RDWR | SP_O_CREAT, 0644);
-  sp_write(in_fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
-  sp_lseek(in_fd, 0, SP_SEEK_SET);
+  s32 in_fd = sp_sys_open(sp_str_to_cstr(in_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_write(in_fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
+  sp_sys_lseek(in_fd, 0, SP_SEEK_SET);
 
   sp_str_t err_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
-  s32 err_fd = sp_open(sp_str_to_cstr(err_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  s32 err_fd = sp_sys_open(sp_str_to_cstr(err_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
   sp_test_proc_io((sp_test_proc_io_config_t) {
     .io = {
@@ -386,14 +386,14 @@ UTEST_F(ps, io_file_null_file) {
 
   sp_os_sleep_ms(100); // @spader @sp_ps_wait
 
-  sp_lseek(err_fd, 0, SP_SEEK_SET);
+  sp_sys_lseek(err_fd, 0, SP_SEEK_SET);
 
-  u64 bytes_read = sp_read(err_fd, ut.buffer.data, ut.buffer.len);
+  u64 bytes_read = sp_sys_read(err_fd, ut.buffer.data, ut.buffer.len);
   SP_ASSERT(bytes_read == sp_test_ps_canary.len);
   SP_ASSERT(sp_mem_is_equal(ut.buffer.data, sp_test_ps_canary.data, sp_test_ps_canary.len));
 
-  sp_close(in_fd);
-  sp_close(err_fd);
+  sp_sys_close(in_fd);
+  sp_sys_close(err_fd);
 }
 
 
@@ -1124,7 +1124,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   ASSERT_NE(ps_a.os, SP_NULLPTR);
   ASSERT_NE(ps_b.os, SP_NULLPTR);
 
-  sp_close(pipes[1]);
+  sp_sys_close(pipes[1]);
 
   sp_ps_wait(&ps_a);
   sp_ps_wait(&ps_b);
@@ -1139,7 +1139,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
     total_read += n;
   }
 
-  sp_close(pipes[0]);
+  sp_sys_close(pipes[0]);
 
   EXPECT_EQ(total_read, expected_total);
 
@@ -1197,7 +1197,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   ASSERT_NE(ps_a.os, SP_NULLPTR);
   ASSERT_NE(ps_b.os, SP_NULLPTR);
 
-  sp_close(pipes[1]);
+  sp_sys_close(pipes[1]);
 
   const u32 expected_total = write_size * write_count * 2;
   u8* buffer = (u8*)sp_alloc(expected_total + 1024);
@@ -1208,7 +1208,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   bool a_done = false;
   bool b_done = false;
   while (!a_done || !b_done) {
-    ssize_t n = sp_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read);
+    ssize_t n = sp_sys_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read);
     if (n > 0) {
       total_read += n;
     }
@@ -1226,11 +1226,11 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   }
 
   ssize_t n;
-  while ((n = sp_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read)) > 0) {
+  while ((n = sp_sys_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read)) > 0) {
     total_read += n;
   }
 
-  sp_close(pipes[0]);
+  sp_sys_close(pipes[0]);
 
   EXPECT_EQ(total_read, expected_total);
 

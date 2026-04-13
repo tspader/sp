@@ -370,7 +370,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
   ut.change_detected = false;
   fmon_history.count = 0;
 
-  sp_rename(sp_str_to_cstr(old_file), sp_str_to_cstr(new_file));
+  sp_sys_rename(sp_str_to_cstr(old_file), sp_str_to_cstr(new_file));
 
   sp_for_n(SP_TEST_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);

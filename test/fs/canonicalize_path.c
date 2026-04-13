@@ -287,11 +287,11 @@ UTEST_F(fs, canon_cwd_matches_dot) {
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("canon_cwd"));
   sp_fs_create_dir(sandbox);
 
-  ASSERT_EQ(sp_chdir(sp_str_to_cstr(sandbox)), 0);
+  ASSERT_EQ(sp_sys_chdir(sp_str_to_cstr(sandbox)), 0);
   sp_str_t cwd = sp_fs_get_cwd();
   sp_str_t canonical_dot = sp_fs_canonicalize_path(SP_LIT("."));
   SP_EXPECT_STR_EQ(cwd, canonical_dot);
-  ASSERT_EQ(sp_chdir(sp_str_to_cstr(old_cwd)), 0);
+  ASSERT_EQ(sp_sys_chdir(sp_str_to_cstr(old_cwd)), 0);
 }
 
 SP_TEST_MAIN()

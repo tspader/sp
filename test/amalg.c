@@ -14,7 +14,7 @@
 #include "linkage.c"
 #include "math.c"
 #include "mem.c"
-#include "ps.c"
+// #include "ps.c"
 #include "rb.c"
 #include "str.c"
 #include "time.c"

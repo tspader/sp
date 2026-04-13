@@ -20,9 +20,6 @@
 #ifndef SP_PROMPT_H
 #define SP_PROMPT_H
 
-#define sp_fd_stdin 0
-#define sp_fd_stdout 1
-
 #include "sp.h"
 
 #if !defined(SP_FREESTANDING) && !defined(SP_WIN32)
@@ -122,7 +119,7 @@ typedef struct {
   sp_prompt_cell_t* framebuffer;
   sp_da(sp_prompt_frame_t) frames;
   struct {
-    struct { s32 in; s32 out; } fds;
+    struct { sp_os_file_handle_t in; sp_os_file_handle_t out; } fds;
     sp_termios_t cache;
     bool raw;
   } terminal;
@@ -255,7 +252,7 @@ static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
   if (!GetConsoleMode(hout, &ctx->terminal.cache.output_mode)) return -1;
 
   SetConsoleOutputCP(CP_UTF8);
-  _setmode(sp_fd_stdin, _O_BINARY);
+  _setmode(0, _O_BINARY);
 
   DWORD raw_in = ENABLE_VIRTUAL_TERMINAL_INPUT;
   DWORD raw_out = ctx->terminal.cache.output_mode
@@ -308,12 +305,12 @@ sp_prompt_ctx_t* sp_prompt_new() {
   sp_prompt_ctx_t* ctx = sp_alloc_type(sp_prompt_ctx_t);
   s32 cols = 0;
   s32 rows = 0;
-  if (sp_os_is_tty(sp_fd_stdout)) {
-    sp_os_tty_size(sp_fd_stdout, &cols, &rows);
+  if (sp_os_is_tty(sp_sys_stdout)) {
+    sp_os_tty_size(sp_sys_stdout, &cols, &rows);
   }
   if (cols <= 0) cols = 80;
   if (rows <= 0) rows = 20;
-  sp_log("is_tty: {}, cols: {}, rows: {}", SP_FMT_U8(sp_os_is_tty(sp_fd_stdout)), SP_FMT_U32(cols), SP_FMT_U32(rows));
+  sp_log("is_tty: {}, cols: {}, rows: {}", SP_FMT_U8(sp_os_is_tty(sp_sys_stdout)), SP_FMT_U32(cols), SP_FMT_U32(rows));
   sp_prompt_ctx_init(ctx, cols, rows);
   return ctx;
 }
@@ -327,8 +324,8 @@ sp_prompt_ctx_t* sp_prompt_begin() {
 }
 
 s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
-  ctx->terminal.fds.in = sp_fd_stdin;
-  ctx->terminal.fds.out = sp_fd_stdout;
+  ctx->terminal.fds.in = sp_sys_stdin;
+  ctx->terminal.fds.out = sp_sys_stdout;
   ctx->terminal.raw = false;
 
   return sp_prompt_enable_raw_mode(ctx);
@@ -345,7 +342,7 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
     ctx->terminal.raw = false;
   }
 
-  sp_write(ctx->terminal.fds.out, "\n", 1);
+  sp_sys_write(ctx->terminal.fds.out, "\n", 1);
 }
 
 void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
@@ -353,7 +350,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
   ctx->cols = cols;
   ctx->rows = rows;
   ctx->state = SP_PROMPT_STATE_ACTIVE;
-  sp_io_writer_from_fd(&ctx->writer_stdout, sp_fd_stdout, SP_IO_CLOSE_MODE_NONE);
+  sp_io_writer_from_fd(&ctx->writer_stdout, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
   ctx->writer = &ctx->writer_stdout;
   ctx->write_buffer = sp_alloc_n(u8, 64);
   sp_io_writer_set_buffer(ctx->writer, ctx->write_buffer, 64);
@@ -480,7 +477,7 @@ static bool sp_prompt_stdin_ready(void) {
 #if defined(SP_WIN32)
   return WaitForSingleObject(GetStdHandle(STD_INPUT_HANDLE), 0) == WAIT_OBJECT_0;
 #else
-  sp_pollfd_t pfd = { .fd = sp_fd_stdin, .events = SP_POLLIN, .revents = 0 };
+  sp_pollfd_t pfd = { .fd = sp_sys_stdin, .events = SP_POLLIN, .revents = 0 };
   s32 r = sp_poll(&pfd, 1, 0);
   return r > 0 && (pfd.revents & SP_POLLIN);
 #endif
@@ -495,7 +492,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
   *out = (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_NONE };
 
   u8 c = 0;
-  s64 nread = sp_read(sp_fd_stdin, &c, 1);
+  s64 nread = sp_sys_read(sp_sys_stdin, &c, 1);
   if (nread <= 0) {
     return false;
   }
@@ -523,13 +520,13 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
     }
 
     u8 seq[2] = {0};
-    if (sp_read(sp_fd_stdin, &seq[0], 1) <= 0) {
+    if (sp_sys_read(sp_sys_stdin, &seq[0], 1) <= 0) {
       out->kind = SP_PROMPT_EVENT_ESCAPE;
       return true;
     }
 
     if (sp_prompt_stdin_ready()) {
-      if (sp_read(sp_fd_stdin, &seq[1], 1) <= 0) {
+      if (sp_sys_read(sp_sys_stdin, &seq[1], 1) <= 0) {
         seq[1] = 0;
       }
     }
@@ -578,7 +575,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
   }
 
   sp_for_range(i, 1, needed) {
-    if (sp_read(sp_fd_stdin, &utf8_bytes[i], 1) <= 0) {
+    if (sp_sys_read(sp_sys_stdin, &utf8_bytes[i], 1) <= 0) {
       needed = i;
       break;
     }

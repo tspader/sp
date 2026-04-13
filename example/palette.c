@@ -167,7 +167,7 @@ void palette_print_results(app_t* app) {
 
 s32 palette_read_key(void) {
   c8 c = 0;
-  u64 n = sp_read(0, &c, 1);
+  u64 n = sp_sys_read(0, &c, 1);
   if (n <= 0) return -1;
   return c;
 }
