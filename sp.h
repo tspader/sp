@@ -1459,6 +1459,13 @@ typedef enum {
   SP_ERR_IO_READ_FAILED   = 7,
   SP_ERR_IO_READ_ONLY     = 8,
   SP_ERR_IO_NO_SPACE      = 9,
+  SP_ERR_FMT_TOO_MANY_RENDERERS = 1100,
+  SP_ERR_FMT_WRONG_PARAM_KIND = 1101,
+  SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
+  SP_ERR_FMT_BAD_DIRECTIVE = 1103,
+  SP_ERR_FMT_TOO_MANY_DIRECTIVES = 1104,
+  SP_ERR_FMT_BAD_PRECISION = 1105,
+  SP_ERR_FMT_BAD_PLACEHOLDER = 1106,
   SP_ERR_LAZY,
   SP_ERR_OS,
 } sp_err_t;
@@ -2365,6 +2372,7 @@ SP_API void sp_log_str(sp_str_t fmt, ...);
 SP_API void sp_print(const c8* fmt, ...);
 SP_API void sp_print_err(const c8* fmt, ...);
 SP_API void sp_print_str(sp_str_t fmt, ...);
+SP_API void _sp_log(const c8* fmt, ...);
 
 
 // ███████╗███╗   ██╗██╗   ██╗
@@ -2940,6 +2948,102 @@ typedef struct {
 } sp_format_specifier_t;
 
 
+
+typedef enum {
+  SP_FMT_ALIGN_NONE,
+  SP_FMT_ALIGN_LEFT,
+  SP_FMT_ALIGN_CENTER,
+  SP_FMT_ALIGN_RIGHT,
+} _sp_fmt_align_t;
+
+#define _SP_FMT_MAX_DIRECTIVES 8
+#define _SP_FMT_WIDTH_MAX      4096
+
+typedef struct {
+  u32 width;
+  _sp_fmt_align_t align;
+  u8 fill;
+  sp_opt(u8) precision;
+  u8 fill_dynamic      : 1;
+  u8 width_dynamic     : 1;
+  u8 precision_dynamic : 1;
+  u8 directive_count;
+  sp_str_t directive_names[_SP_FMT_MAX_DIRECTIVES];
+} _sp_fmt_spec_t;
+
+typedef struct {
+  sp_str_t str;
+  u32 i;
+} _sp_fmt_parser_t;
+
+typedef enum {
+  _sp_fmt_id_u64    = 1 << 0,
+  _sp_fmt_id_s64    = 1 << 1,
+  _sp_fmt_id_f64    = 1 << 2,
+  _sp_fmt_id_str    = 1 << 3,
+  _sp_fmt_id_ptr    = 1 << 4,
+  _sp_fmt_id_custom = 1 << 5,
+} _sp_fmt_arg_kind_t;
+
+typedef struct _sp_fmt_arg _sp_fmt_arg_t;
+SP_TYPEDEF_FN(void, _sp_fmt_fn_t, sp_str_builder_t*, _sp_fmt_arg_t*);
+SP_TYPEDEF_FN(void, _sp_fmt_after_fn_t, sp_str_builder_t*, sp_mem_slice_t, _sp_fmt_arg_t*);
+
+struct _sp_fmt_arg {
+  _sp_fmt_arg_kind_t id;
+  _sp_fmt_spec_t spec;
+  union {
+    u64 u;
+    s64 i;
+    f64 f;
+    sp_str_t s;
+    void* p;
+    struct { _sp_fmt_fn_t fn; void* ptr; } custom;
+  };
+};
+
+typedef struct {
+  _sp_fmt_fn_t       before;
+  _sp_fmt_fn_t       render;
+  _sp_fmt_after_fn_t after;
+  _sp_fmt_arg_kind_t kinds;
+} _sp_fmt_directive_t;
+
+#define _sp_fmt_u64(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_u64, .u = (_value) }
+#define _sp_fmt_s64(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_s64, .i = (_value) }
+#define _sp_fmt_int(_value)      _sp_fmt_s64(_value)
+#define _sp_fmt_f64(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_f64, .f = (_value) }
+#define _sp_fmt_str(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_str, .s = (_value) }
+#define _sp_fmt_cstr(_value)     (_sp_fmt_arg_t) { .id = _sp_fmt_id_str, .s = sp_str_view(_value) }
+#define _sp_fmt_ptr(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_ptr, .p = (_value) }
+#define _sp_fmt_custom(T, _fn, _value) (   \
+  (void)sizeof((T)sp_zero() = (_value)),  \
+  (_sp_fmt_arg_t) {                     \
+    .id = _sp_fmt_id_custom,            \
+    .custom = {                           \
+      .fn = (_sp_fmt_fn_t)(_fn),        \
+      .ptr = (void*)&(_value)             \
+    }                                     \
+  })
+#define _sp_fmt_custom_v(T, _fn, ...) (   \
+  (void)sizeof((T)sp_zero() = (__VA_ARGS__)),  \
+  (_sp_fmt_arg_t) {                     \
+    .id = _sp_fmt_id_custom,            \
+    .custom = {                           \
+      .fn = (_sp_fmt_fn_t)(_fn),        \
+      .ptr = (void*)&(__VA_ARGS__)        \
+    }                                     \
+  })
+
+void sp_fmt_directive_register(sp_str_t name, _sp_fmt_directive_t directive);
+_sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name);
+void sp_fmt_directive_reset();
+sp_err_t sp_fmt_v(sp_str_t* str, sp_str_t fmt, va_list args);
+sp_str_t sp_fmt(const c8* fmt, ...);
+sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...);
+
+
+
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
 // ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝
 // ██║     ██║   ██║██╔██╗ ██║   ██║   █████╗   ╚███╔╝    ██║
@@ -2994,6 +3098,9 @@ typedef struct {
   u32 index;
   sp_mem_arena_t* scratch;
   sp_env_t env;
+  struct {
+    sp_str_ht(_sp_fmt_directive_t) directives;
+  } format;
   struct {
     sp_io_writer_t* out;
     sp_io_writer_t* err;
@@ -4894,6 +5001,588 @@ void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap) {
 // ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
 // ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═     ╚═╝╚═╝  ╚═╝   ╚═╝
+void sp_fmt_directive_register(sp_str_t name, _sp_fmt_directive_t directive) {
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_str_ht_insert(tls->format.directives, name, directive);
+}
+
+_sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name) {
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  return sp_str_ht_get(tls->format.directives, name);
+}
+
+void sp_fmt_directive_reset(void) {
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_str_ht_free(tls->format.directives);
+  tls->format.directives = SP_NULLPTR;
+}
+
+static s32 _sp_fmt_peek(_sp_fmt_parser_t* p, u32 offset) {
+  u32 idx = p->i + offset;
+  if (idx >= p->str.len) return -1;
+  return (u8)p->str.data[idx];
+}
+
+static s32 _sp_fmt_advance(_sp_fmt_parser_t* p) {
+  if (p->i >= p->str.len) return -1;
+  return (u8)p->str.data[p->i++];
+}
+
+static bool _sp_fmt_match(_sp_fmt_parser_t* p, c8 c) {
+  if (_sp_fmt_peek(p, 0) != (s32)c) return false;
+  p->i++;
+  return true;
+}
+
+static bool _sp_fmt_is_digit(s32 c) {
+  return c >= '0' && c <= '9';
+}
+
+static bool _sp_fmt_is_alpha(s32 c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+static bool _sp_fmt_is_directive_tail(s32 c) {
+  return _sp_fmt_is_alpha(c) || (c >= '0' && c <= '9') || c == '-' || c == '_';
+}
+
+static bool _sp_fmt_is_align(s32 c) {
+  return c == '<' || c == '^' || c == '>';
+}
+
+static _sp_fmt_align_t _sp_fmt_align_from_char(s32 c) {
+  if (c == '<') return SP_FMT_ALIGN_LEFT;
+  if (c == '^') return SP_FMT_ALIGN_CENTER;
+  if (c == '>') return SP_FMT_ALIGN_RIGHT;
+  return SP_FMT_ALIGN_NONE;
+}
+
+static bool _sp_fmt_parse_number(_sp_fmt_parser_t* p, u32* out) {
+  u32 acc = 0;
+  bool got = false;
+  while (_sp_fmt_is_digit(_sp_fmt_peek(p, 0))) {
+    acc = acc * 10 + (u32)(_sp_fmt_advance(p) - '0');
+    got = true;
+  }
+  if (got) *out = acc;
+  return got;
+}
+
+sp_err_t sp_fmt_parse_specifier(sp_str_t str, _sp_fmt_spec_t* specifier) {
+  _sp_fmt_parser_t p = { .str = str, .i = 0 };
+  _sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  spec.align = SP_FMT_ALIGN_NONE;
+
+  if (!_sp_fmt_match(&p, '{')) return SP_ERR_FMT_BAD_PLACEHOLDER;
+  bool had_colon = _sp_fmt_match(&p, ':');
+  u32 spec_start = p.i;
+
+  s32 c0 = _sp_fmt_peek(&p, 0);
+  s32 c1 = _sp_fmt_peek(&p, 1);
+  if (c0 >= 0 && !_sp_fmt_is_align(c0) && _sp_fmt_is_align(c1)) {
+    if (c0 == '$') {
+      spec.fill_dynamic = 1;
+      _sp_fmt_advance(&p);
+    } else {
+      spec.fill = (u8)_sp_fmt_advance(&p);
+    }
+    spec.align = _sp_fmt_align_from_char(_sp_fmt_advance(&p));
+  } else if (_sp_fmt_is_align(c0)) {
+    spec.align = _sp_fmt_align_from_char(_sp_fmt_advance(&p));
+  }
+
+  if (_sp_fmt_peek(&p, 0) == '$') {
+    _sp_fmt_advance(&p);
+    spec.width_dynamic = 1;
+  } else if (_sp_fmt_is_digit(_sp_fmt_peek(&p, 0))) {
+    _sp_fmt_parse_number(&p, &spec.width);
+  }
+
+  if (_sp_fmt_peek(&p, 0) == '.') {
+    _sp_fmt_advance(&p);
+    if (_sp_fmt_peek(&p, 0) == '$') {
+      _sp_fmt_advance(&p);
+      spec.precision_dynamic = 1;
+    } else {
+      u32 prec = 0;
+      if (!_sp_fmt_parse_number(&p, &prec)) return SP_ERR_FMT_BAD_PRECISION;
+      sp_opt_set(spec.precision, (u8)prec);
+    }
+  }
+
+  while (true) {
+    s32 peek = _sp_fmt_peek(&p, 0);
+    if (peek == ' ' && _sp_fmt_peek(&p, 1) == ':') {
+      _sp_fmt_advance(&p);
+      _sp_fmt_advance(&p);
+    }
+    else if (had_colon && p.i == spec_start && _sp_fmt_is_alpha(peek)) {
+      // The specifier starts with a directive instead of the default
+    }
+    else {
+      break;
+    }
+
+    sp_str_t name = sp_str_sub(p.str, p.i, 1);
+    u32 name_start = p.i;
+    if (!_sp_fmt_is_alpha(_sp_fmt_peek(&p, 0))) return SP_ERR_FMT_BAD_DIRECTIVE;
+    _sp_fmt_advance(&p);
+
+    while (_sp_fmt_is_directive_tail(_sp_fmt_peek(&p, 0))) {
+      _sp_fmt_advance(&p);
+      name.len++;
+    }
+
+    u32 name_len = p.i - name_start;
+    if (spec.directive_count >= _SP_FMT_MAX_DIRECTIVES) {
+      return SP_ERR_FMT_TOO_MANY_DIRECTIVES;
+    }
+
+    // spec.directive_names[spec.directive_count++] = name;
+    spec.directive_names[spec.directive_count++] = (sp_str_t){
+      .data = p.str.data + name_start,
+      .len = name_len,
+    };
+  }
+
+  if (!_sp_fmt_match(&p, '}')) return SP_ERR_FMT_BAD_PLACEHOLDER;
+  if (p.i != p.str.len)       return SP_ERR_LAZY;
+
+  *specifier = spec;
+  return SP_OK;
+}
+
+static const c8 _sp_fmt_digit_pairs[201] =
+  "00010203040506070809"
+  "10111213141516171819"
+  "20212223242526272829"
+  "30313233343536373839"
+  "40414243444546474849"
+  "50515253545556575859"
+  "60616263646566676869"
+  "70717273747576777879"
+  "80818283848586878889"
+  "90919293949596979899";
+
+static c8* _sp_fmt_u64_to_buf_dec(u64 value, c8* buf_end) {
+  c8* p = buf_end;
+  while (value >= 100) {
+    u32 rem = (u32)(value % 100);
+    value /= 100;
+    p -= 2;
+    p[0] = _sp_fmt_digit_pairs[rem * 2 + 0];
+    p[1] = _sp_fmt_digit_pairs[rem * 2 + 1];
+  }
+  if (value < 10) {
+    *--p = (c8)('0' + value);
+  } else {
+    p -= 2;
+    p[0] = _sp_fmt_digit_pairs[value * 2 + 0];
+    p[1] = _sp_fmt_digit_pairs[value * 2 + 1];
+  }
+  return p;
+}
+
+static c8* _sp_fmt_u64_to_buf_hex(u64 value, c8* buf_end) {
+  static const c8 digits[] = "0123456789abcdef";
+  c8* p = buf_end;
+  if (value == 0) {
+    *--p = '0';
+    return p;
+  }
+  while (value) {
+    *--p = digits[value & 0xf];
+    value >>= 4;
+  }
+  return p;
+}
+
+static void _sp_fmt_append_range(sp_str_builder_t* builder, const c8* start, const c8* end) {
+  sp_str_t s = { .data = start, .len = (u32)(end - start) };
+  sp_str_builder_append(builder, s);
+}
+
+static void _sp_fmt_write_u64(sp_str_builder_t* builder, u64 value) {
+  c8 buf[20];
+  c8* end = buf + sizeof(buf);
+  c8* start = _sp_fmt_u64_to_buf_dec(value, end);
+  _sp_fmt_append_range(builder, start, end);
+}
+
+static void _sp_fmt_write_s64(sp_str_builder_t* builder, s64 value) {
+  c8 buf[21];
+  c8* end = buf + sizeof(buf);
+  u64 abs = (value < 0) ? ((u64)(-(value + 1)) + 1) : (u64)value;
+  c8* start = _sp_fmt_u64_to_buf_dec(abs, end);
+  if (value < 0) *--start = '-';
+  _sp_fmt_append_range(builder, start, end);
+}
+
+static void _sp_fmt_write_ptr(sp_str_builder_t* builder, void* value) {
+  c8 buf[18];
+  c8* end = buf + sizeof(buf);
+  c8* start = _sp_fmt_u64_to_buf_hex((u64)(uintptr_t)value, end);
+  *--start = 'x';
+  *--start = '0';
+  _sp_fmt_append_range(builder, start, end);
+}
+
+static void _sp_fmt_write_f64(sp_str_builder_t* builder, f64 value, u32 precision) {
+  union { f64 f; u64 u; } bits;
+  bits.f = value;
+  u64  exponent = (bits.u >> 52) & 0x7ffULL;
+  u64  mantissa = bits.u & 0x000fffffffffffffULL;
+  bool is_neg   = (bits.u >> 63) != 0;
+
+  if (exponent == 0x7ff) {
+    if (mantissa == 0) {
+      sp_str_builder_append_cstr(builder, is_neg ? "-inf" : "inf");
+    } else {
+      sp_str_builder_append_cstr(builder, "nan");
+    }
+    return;
+  }
+
+  if (is_neg) {
+    sp_str_builder_append_c8(builder, '-');
+    value = -value;
+  }
+
+  if (precision > 18) precision = 18;
+
+  static const u64 pow10[] = {
+    1ULL, 10ULL, 100ULL, 1000ULL, 10000ULL, 100000ULL, 1000000ULL,
+    10000000ULL, 100000000ULL, 1000000000ULL, 10000000000ULL,
+    100000000000ULL, 1000000000000ULL, 10000000000000ULL,
+    100000000000000ULL, 1000000000000000ULL, 10000000000000000ULL,
+    100000000000000000ULL, 1000000000000000000ULL,
+  };
+  u64 scale = pow10[precision];
+
+  if (value >= 1.8446744073709552e19) {
+    sp_str_builder_append_cstr(builder, "inf");
+    return;
+  }
+
+  u64 int_part = (u64)value;
+  f64 frac     = value - (f64)int_part;
+  u64 frac_scaled = (u64)(frac * (f64)scale + 0.5);
+  if (frac_scaled >= scale) {
+    int_part += 1;
+    frac_scaled -= scale;
+  }
+
+  _sp_fmt_write_u64(builder, int_part);
+
+  if (precision > 0) {
+    sp_str_builder_append_c8(builder, '.');
+    c8 frac_buf[18];
+    u32 i = precision;
+    while (i--) {
+      frac_buf[i] = (c8)('0' + (frac_scaled % 10));
+      frac_scaled /= 10;
+    }
+    sp_str_t s = { .data = frac_buf, .len = precision };
+    sp_str_builder_append(builder, s);
+  }
+}
+
+void _sp_fmt_render_default(sp_str_builder_t* builder, _sp_fmt_arg_t* arg) {
+  switch (arg->id) {
+    case _sp_fmt_id_u64:
+      _sp_fmt_write_u64(builder, arg->u);
+      break;
+    case _sp_fmt_id_s64:
+      _sp_fmt_write_s64(builder, arg->i);
+      break;
+    case _sp_fmt_id_f64: {
+      u32 p = sp_opt_is_null(arg->spec.precision) ? 6 : sp_opt_get(arg->spec.precision);
+      _sp_fmt_write_f64(builder, arg->f, p);
+      break;
+    }
+    case _sp_fmt_id_str: {
+      sp_str_t s = arg->s;
+      if (!sp_opt_is_null(arg->spec.precision)) {
+        u32 max = sp_opt_get(arg->spec.precision);
+        if (max < s.len) s.len = max;
+      }
+      sp_str_builder_append(builder, s);
+      break;
+    }
+    case _sp_fmt_id_ptr:
+      _sp_fmt_write_ptr(builder, arg->p);
+      break;
+    case _sp_fmt_id_custom:
+      if (arg->custom.fn) arg->custom.fn(builder, arg);
+      break;
+  }
+}
+
+void _sp_fmt_apply_spec_wrapped(
+  sp_str_builder_t* out,
+  sp_str_t before,
+  sp_str_t content,
+  sp_str_t after,
+  _sp_fmt_spec_t spec
+) {
+  u32 content_len = (u32)content.len;
+  u32 width = spec.width > _SP_FMT_WIDTH_MAX ? _SP_FMT_WIDTH_MAX : spec.width;
+  u32 pad = (width > content_len) ? (width - content_len) : 0;
+  u8 fill = spec.fill ? spec.fill : ' ';
+  _sp_fmt_align_t align = spec.align;
+  if (align == SP_FMT_ALIGN_NONE) align = SP_FMT_ALIGN_RIGHT;
+
+  u32 left = 0;
+  u32 right = 0;
+  switch (align) {
+    case SP_FMT_ALIGN_LEFT:
+      right = pad;
+      break;
+    case SP_FMT_ALIGN_CENTER:
+      left = pad / 2;
+      right = pad - left;
+      break;
+    case SP_FMT_ALIGN_RIGHT:
+      left = pad;
+      break;
+    case SP_FMT_ALIGN_NONE:
+      left = pad;
+      break;
+  }
+
+  sp_for(k, left)  sp_str_builder_append_c8(out, fill);
+  sp_str_builder_append(out, before);
+  sp_str_builder_append(out, content);
+  sp_str_builder_append(out, after);
+  sp_for(k, right) sp_str_builder_append_c8(out, fill);
+}
+
+void _sp_fmt_apply_spec(sp_str_builder_t* out, sp_str_t content, _sp_fmt_spec_t spec) {
+  sp_str_t empty = sp_zero();
+  _sp_fmt_apply_spec_wrapped(out, empty, content, empty, spec);
+}
+
+static const c8* _sp_fmt_kind_name(_sp_fmt_arg_kind_t k) {
+  switch (k) {
+    case _sp_fmt_id_u64:    return "u64";
+    case _sp_fmt_id_s64:    return "s64";
+    case _sp_fmt_id_f64:    return "f64";
+    case _sp_fmt_id_str:    return "str";
+    case _sp_fmt_id_ptr:    return "ptr";
+    case _sp_fmt_id_custom: return "custom";
+  }
+  return "?";
+}
+
+static void _sp_fmt_append_kind_mask(sp_str_builder_t* b, _sp_fmt_arg_kind_t mask) {
+  static const _sp_fmt_arg_kind_t all[] = {
+    _sp_fmt_id_u64, _sp_fmt_id_s64, _sp_fmt_id_f64,
+    _sp_fmt_id_str, _sp_fmt_id_ptr, _sp_fmt_id_custom,
+  };
+  bool first = true;
+  sp_carr_for(all, i) {
+    if (mask & all[i]) {
+      if (!first) sp_str_builder_append_c8(b, '|');
+      sp_str_builder_append_cstr(b, _sp_fmt_kind_name(all[i]));
+      first = false;
+    }
+  }
+}
+
+static sp_err_t _sp_fmt_render(sp_str_builder_t* out, _sp_fmt_arg_t* arg) {
+  _sp_fmt_directive_t* dirs[_SP_FMT_MAX_DIRECTIVES];
+
+  u8 num_dirs = arg->spec.directive_count;
+  sp_for(i, num_dirs) {
+    sp_str_t name = arg->spec.directive_names[i];
+    dirs[i] = sp_fmt_directive_lookup(name);
+    if (!dirs[i]) {
+      return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
+    }
+  }
+
+  sp_for(it, num_dirs) {
+    _sp_fmt_arg_kind_t accepted = dirs[it]->kinds;
+    if (accepted && !(accepted & arg->id)) {
+      return SP_ERR_FMT_WRONG_PARAM_KIND;
+    }
+  }
+
+  u8 num_renderers = 0;
+  sp_for(it, num_dirs) {
+    if (dirs[it]->render) num_renderers++;
+  }
+
+  if (num_renderers > 1) {
+    sp_str_builder_t error = sp_zero();
+    sp_str_builder_append_cstr(&error, "(sp_fmt: multiple renders");
+
+    sp_for(it, num_dirs) {
+      if (dirs[it]->render) {
+        sp_str_builder_append_cstr(&error, " :");
+        sp_str_builder_append(&error, arg->spec.directive_names[it]);
+      }
+    }
+
+    sp_str_builder_append_c8(&error, ')');
+    return SP_ERR_FMT_TOO_MANY_RENDERERS;
+  }
+
+  sp_str_builder_t before_b = SP_ZERO_INITIALIZE();
+  sp_for_range(i, 0, num_dirs) {
+    if (dirs[i]->before) dirs[i]->before(&before_b, arg);
+  }
+
+  _sp_fmt_fn_t render_fn = SP_NULLPTR;
+  sp_for_range(i, 0, num_dirs) {
+    if (dirs[i]->render) { render_fn = dirs[i]->render; break; }
+  }
+  if (!render_fn && arg->id == _sp_fmt_id_custom && arg->custom.fn) {
+    render_fn = arg->custom.fn;
+  }
+
+  sp_str_builder_t content_b = SP_ZERO_INITIALIZE();
+  if (render_fn) {
+    render_fn(&content_b, arg);
+  } else {
+    _sp_fmt_render_default(&content_b, arg);
+  }
+
+  sp_str_t content_view = sp_str_builder_as_str(&content_b);
+  sp_mem_slice_t content_slice = { .data = (u8*)content_view.data, .len = content_view.len };
+
+  sp_str_builder_t after_b = SP_ZERO_INITIALIZE();
+  u8 j = num_dirs;
+  while (j--) {
+    if (dirs[j]->after) dirs[j]->after(&after_b, content_slice, arg);
+  }
+
+  sp_str_t before_str  = sp_str_builder_as_str(&before_b);
+  sp_str_t after_str   = sp_str_builder_as_str(&after_b);
+  sp_str_t content_str = { .data = (const c8*)content_slice.data, .len = (u32)content_slice.len };
+
+  _sp_fmt_apply_spec_wrapped(out, before_str, content_str, after_str, arg->spec);
+  return SP_OK;
+}
+
+sp_err_t sp_fmt_v(sp_str_t* str, sp_str_t fmt, va_list args) {
+  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  u32 i = 0;
+  sp_err_t result = SP_OK;
+
+  while (i < fmt.len) {
+    c8 c = fmt.data[i];
+
+    if (c == '{') {
+      if (i + 1 < fmt.len && fmt.data[i + 1] == '{') {
+        sp_str_builder_append_c8(&builder, '{');
+        i += 2;
+        continue;
+      }
+
+      u32 end = i + 1;
+      while (end < fmt.len && fmt.data[end] != '}') end++;
+      if (end >= fmt.len) {
+        sp_str_builder_append_cstr(&builder, "<!fmt: unterminated placeholder>");
+        break;
+      }
+
+      sp_str_t placeholder = { .data = fmt.data + i, .len = (end - i) + 1 };
+      _sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+      result = sp_fmt_parse_specifier(placeholder, &spec);
+      if (result) goto error;
+
+      if (spec.fill_dynamic) {
+        _sp_fmt_arg_t fa = va_arg(args, _sp_fmt_arg_t);
+        if (fa.id != _sp_fmt_id_u64 && fa.id != _sp_fmt_id_s64) {
+          sp_str_builder_append_cstr(&builder, "<!fmt: dynamic fill expects int>");
+          break;
+        }
+        spec.fill = (u8)((fa.id == _sp_fmt_id_s64) ? (u64)fa.i : fa.u);
+      }
+      if (spec.width_dynamic) {
+        _sp_fmt_arg_t wa = va_arg(args, _sp_fmt_arg_t);
+        if (wa.id != _sp_fmt_id_u64 && wa.id != _sp_fmt_id_s64) {
+          sp_str_builder_append_cstr(&builder, "<!fmt: dynamic width expects int>");
+          break;
+        }
+        if (wa.id == _sp_fmt_id_s64) {
+          spec.width = wa.i < 0 ? 0
+                     : (wa.i > _SP_FMT_WIDTH_MAX ? _SP_FMT_WIDTH_MAX : (u32)wa.i);
+        } else {
+          spec.width = wa.u > _SP_FMT_WIDTH_MAX ? _SP_FMT_WIDTH_MAX : (u32)wa.u;
+        }
+      }
+      if (spec.precision_dynamic) {
+        _sp_fmt_arg_t pa = va_arg(args, _sp_fmt_arg_t);
+        if (pa.id != _sp_fmt_id_u64 && pa.id != _sp_fmt_id_s64) {
+          sp_str_builder_append_cstr(&builder, "<!fmt: dynamic precision expects int>");
+          break;
+        }
+        s64 v = (pa.id == _sp_fmt_id_s64) ? pa.i : (s64)pa.u;
+        if (v < 0) v = 0;
+        if (v > 255) v = 255;
+        sp_opt_set(spec.precision, (u8)v);
+      }
+
+      _sp_fmt_arg_t arg = va_arg(args, _sp_fmt_arg_t);
+      arg.spec = spec;
+      result = _sp_fmt_render(&builder, &arg);
+      if (result) goto error;
+
+      i = end + 1;
+      continue;
+    }
+
+    if (c == '}') {
+      if (i + 1 < fmt.len && fmt.data[i + 1] == '}') {
+        sp_str_builder_append_c8(&builder, '}');
+        i += 2;
+        continue;
+      }
+      sp_str_builder_append_c8(&builder, '}');
+      i++;
+      continue;
+    }
+
+    sp_str_builder_append_c8(&builder, c);
+    i++;
+  }
+
+  *str = sp_str_builder_to_str(&builder);
+error:
+  return result;
+}
+
+sp_str_t sp_fmt(const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t str = sp_zero();
+  sp_fmt_v(&str, sp_str_view(fmt), args);
+  va_end(args);
+  return str;
+}
+
+sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_err_t error = sp_fmt_v(str, sp_str_view(fmt), args);
+  va_end(args);
+  return error;
+}
+
+static void sp_fmt_ansi_reset(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
+  sp_unused(arg); sp_unused(content);
+  sp_str_builder_append_cstr(b, SP_ANSI_RESET);
+}
+
+static void sp_fmt_cyan_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  sp_unused(arg);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_CYAN);
+}
+
+
+
 // @format @fmt
 bool sp_parse_u64_ex(sp_str_t str, u64* out) {
   if (str.len == 0) return false;
@@ -5548,15 +6237,6 @@ void sp_fmt_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
   sp_str_builder_append_c8(builder, '"');
 }
 
-sp_str_t sp_fmt(sp_str_t fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_str_t str = sp_format_v(fmt, args);
-  va_end(args);
-
-  return str;
-}
-
 sp_str_t sp_format_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -5862,6 +6542,17 @@ void sp_log_err(const c8* fmt, ...) {
   }
 }
 
+void _sp_log(const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_t str = sp_zero();
+  sp_fmt_v(&str, sp_str_view(fmt), args);
+  va_end(args);
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_io_write_str(tls->std.out, str, SP_NULLPTR);
+  sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
+}
+
 
 //  ██████╗ ██████╗ ███╗   ██╗████████╗███████╗██╗  ██╗████████╗
 // ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝
@@ -5943,6 +6634,8 @@ sp_tls_rt_t* sp_tls_rt_get() {
     tls->std.err = sp_alloc_type(sp_io_writer_t);
     sp_io_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
     sp_io_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+    sp_fmt_directive_register(sp_str_lit("cyan"), (_sp_fmt_directive_t){ .before = sp_fmt_cyan_before, .after = sp_fmt_ansi_reset });
+
   }
   return tls;
 }

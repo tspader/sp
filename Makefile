@@ -25,7 +25,7 @@ TEST_DIR = $(BUILD_DIR)/test
 CFLAGS_TEST = -std=c99 -g -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -Werror=return-type $(CFLAGS_PLATFORM)
 INCLUDES_TEST = -I. -Itools -Itest/tools -Itest/tools/process
 
-TEST_NAMES = amalg app asset context core cv elf fmon fs glob ht io leak linkage ps rb str time mem prompt
+TEST_NAMES = amalg app asset context core cv elf format fmon fs glob ht io leak linkage ps rb str time mem prompt
 TESTS = $(addprefix $(TEST_DIR)/, $(TEST_NAMES))
 TEST_BINS = $(TEST_DIR)/process
 
