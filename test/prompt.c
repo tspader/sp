@@ -573,6 +573,8 @@ UTEST_F(prompt, confirm_toggles_with_arrow_and_vim_keys) {
   });
 }
 
+void sp_prompt_step(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget, sp_prompt_event_t event);
+
 UTEST_F(prompt, confirm_active_rail_is_blue) {
   sp_prompt_confirm_t confirm = {
     .prompt = sp_str_view("Proceed?"),

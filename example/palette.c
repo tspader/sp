@@ -5,7 +5,7 @@
 #define SP_MATH_IMPLEMENTATION
 #include "sp/sp_math.h"
 
-#ifdef SP_WIN32
+#if defined(SP_WIN32) || defined(SP_FREESTANDING)
 sp_app_config_t sp_main(s32 num_args, const c8** args) { return sp_zero_struct(sp_app_config_t); }
 #else
 #include <termios.h>
@@ -46,8 +46,9 @@ void palette_restore_terminal(void) {
   sp_os_print(sp_str_lit("\033[?25h"));
 }
 
-void palette_signal_handler(sp_os_signal_t sig) {
+void palette_signal_handler(sp_os_signal_t sig, void* userdata) {
   (void)sig;
+  (void)userdata;
   palette_restore_terminal();
   sp_atomic_s32_set(&app->shutdown, 1);
 }
@@ -178,8 +179,8 @@ sp_app_result_t on_init(sp_app_t* app) {
   palette_save_terminal(state);
   palette_setup_raw_mode(state);
 
-  sp_os_register_signal_handler(SP_OS_SIGNAL_INTERRUPT, palette_signal_handler);
-  sp_os_register_signal_handler(SP_OS_SIGNAL_TERMINATE, palette_signal_handler);
+  sp_os_register_signal_handler(SP_OS_SIGNAL_INTERRUPT, palette_signal_handler, SP_NULLPTR);
+  sp_os_register_signal_handler(SP_OS_SIGNAL_TERMINATE, palette_signal_handler, SP_NULLPTR);
 
   sp_os_print(sp_str_lit("\033[?25l"));
 

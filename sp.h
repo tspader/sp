@@ -990,20 +990,18 @@ s64         sp_sys_write(sp_sys_fd_t fd, const void* buf, u64 count);
 sp_sys_fd_t sp_sys_open(const c8* path, s32 flags, s32 mode);
 s32         sp_sys_close(sp_sys_fd_t fd);
 s64         sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence);
-
-s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st);
-s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st);
-s32 sp_sys_fstat(sp_sys_fd_t fd, sp_sys_stat_t* st);
-
-s32 sp_sys_mkdir(const c8* path, s32 mode);
-s32 sp_sys_rmdir(const c8* path);
-s32 sp_sys_unlink(const c8* path);
-s32 sp_sys_rename(const c8* oldpath, const c8* newpath);
-s32 sp_sys_chdir(const c8* path);
-s64 sp_sys_getcwd(char* buf, u64 size);
-s32 sp_sys_link(const c8* oldpath, const c8* newpath);
-s32 sp_sys_symlink(const c8* target, const c8* linkpath);
-s32 sp_sys_chmod(const c8* path, s32 mode);
+s32         sp_sys_stat(const c8* path, sp_sys_stat_t* st);
+s32         sp_sys_lstat(const c8* path, sp_sys_stat_t* st);
+s32         sp_sys_fstat(sp_sys_fd_t fd, sp_sys_stat_t* st);
+s32         sp_sys_mkdir(const c8* path, s32 mode);
+s32         sp_sys_rmdir(const c8* path);
+s32         sp_sys_unlink(const c8* path);
+s32         sp_sys_rename(const c8* oldpath, const c8* newpath);
+s32         sp_sys_chdir(const c8* path);
+s64         sp_sys_getcwd(char* buf, u64 size);
+s32         sp_sys_link(const c8* oldpath, const c8* newpath);
+s32         sp_sys_symlink(const c8* target, const c8* linkpath);
+s32         sp_sys_chmod(const c8* path, s32 mode);
 
 ///////////
 // TYPES //
@@ -1068,7 +1066,7 @@ typedef struct {
     u64 st_ctime_sec;
     u64 st_ctime_nsec;
     s64 __unused[3];
-  } sp_sys_stat_linux_raw_t;
+  } sp_sys_linux_stat_t;
 
 #elif defined(SP_ARM64)
   typedef struct {
@@ -1091,7 +1089,7 @@ typedef struct {
     u64 st_ctime_sec;
     u64 st_ctime_nsec;
     u32 padding [2];
-  } sp_sys_stat_linux_raw_t;
+  } sp_sys_linux_stat_t;
 #endif
 
 //////////////////////
@@ -1120,7 +1118,7 @@ s32   sp_sys_munmap(void* addr, u64 len);
 void* sp_sys_mremap(void* old_addr, u64 old_size, u64 new_size, s32 flags);
 void  sp_sys_exit(s32 code);
 void  sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* expr, bool cond);
-#endif // SP_SYS
+#endif // SP_LINUX
 
 //////////////
 // BUILTINS //
@@ -1565,7 +1563,7 @@ SP_API void                  sp_mem_zero(void* buffer, u64 buffer_size);
 SP_API void*                 sp_mem_allocator_alloc(sp_allocator_t arena, u64 size);
 SP_API void*                 sp_mem_allocator_realloc(sp_allocator_t arena, void* ptr, u64 size);
 SP_API void                  sp_mem_allocator_free(sp_allocator_t arena, void* buffer);
-SP_API sp_mem_arena_t*       sp_mem_arena_new(u64 default_block_size);
+SP_API sp_mem_arena_t*       sp_mem_arena_new();
 SP_API sp_mem_arena_t*       sp_mem_arena_new_ex(u64 block_size, sp_mem_arena_mode_t mode, u8 alignment);
 SP_API sp_allocator_t        sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
 SP_API void                  sp_mem_arena_clear(sp_mem_arena_t* arena);
@@ -2730,7 +2728,7 @@ typedef enum {
   SP_OS_SIGNAL_COUNT_,
 } sp_os_signal_t;
 
-sp_typedef_fn(void, sp_os_signal_handler_t, sp_os_signal_t signal);
+sp_typedef_fn(void, sp_os_signal_handler_t, sp_os_signal_t signal, void* userdata);
 
 typedef u32 sp_os_attr_t;
 typedef sp_sys_fd_t sp_os_file_handle_t;
@@ -2764,7 +2762,7 @@ SP_API sp_fs_kind_t   sp_os_get_target_attrs(sp_str_t path);
 SP_API sp_os_attr_t   sp_os_get_raw_file_attrs(sp_str_t path);
 SP_API sp_os_attr_t   sp_os_get_raw_target_attrs(sp_str_t path);
 SP_API sp_err_t       sp_os_set_raw_file_attrs(sp_str_t path, sp_os_attr_t attrs);
-SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal_handler_t);
+SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal_handler_t, void* userdata);
 SP_API bool           sp_os_is_tty(sp_os_file_handle_t fd);
 SP_API void           sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* rows);
 
@@ -3035,12 +3033,23 @@ typedef struct {
     }                                     \
   })
 
-void sp_fmt_directive_register(sp_str_t name, _sp_fmt_directive_t directive);
+void sp_fmt_directive_register(const c8* name, _sp_fmt_directive_t directive);
 _sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name);
 void sp_fmt_directive_reset();
 sp_err_t sp_fmt_v(sp_str_t* str, sp_str_t fmt, va_list args);
 sp_str_t sp_fmt(const c8* fmt, ...);
 sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...);
+
+#define SP_FMT_REGISTER(_name, _on_before, _on_render, _on_after, _kinds) \
+  do { \
+    sp_fmt_directive_register(_name, (_sp_fmt_directive_t) {  \
+      .before = (_on_before), \
+      .render = (_on_render), \
+      .after = (_on_after), \
+      .kinds = (_kinds), \
+    }); \
+  } \
+  while (0)
 
 
 
@@ -3109,6 +3118,7 @@ typedef struct {
 
 typedef struct {
   sp_os_signal_handler_t signal_handlers[SP_OS_SIGNAL_COUNT_];
+  void*                  signal_userdata[SP_OS_SIGNAL_COUNT_];
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
   sp_str_ht(sp_fmt_specifier_t) formatters;
@@ -3247,6 +3257,8 @@ SP_API void           sp_io_writer_from_fd(sp_io_writer_t* writer, sp_os_file_ha
 SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
 SP_API void           sp_io_writer_from_dyn_mem(sp_io_writer_t* writer);
 SP_API void           sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_allocator_t allocator);
+SP_API void           sp_io_get_std_out(sp_io_writer_t* io);
+SP_API void           sp_io_get_std_err(sp_io_writer_t* io);
 SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
 
 
@@ -3303,13 +3315,13 @@ typedef enum {
 }
 
 typedef struct {
-  s32 fd;
+  sp_os_file_handle_t fd;
   sp_ps_io_mode_t mode;
   sp_ps_io_blocking_t block;
 } sp_ps_io_in_config_t;
 
 typedef struct {
-  s32 fd;
+  sp_os_file_handle_t fd;
   sp_ps_io_mode_t mode;
   sp_ps_io_blocking_t block;
 } sp_ps_io_out_config_t;
@@ -3980,7 +3992,7 @@ s64 sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence) {
   return sp_syscall(SP_SYSCALL_NUM_LSEEK, fd, offset, whence);
 }
 
-static void sp__stat_linux_raw_to_canonical(const sp_sys_stat_linux_raw_t* raw, sp_sys_stat_t* out) {
+static void sp_sys_stat_from_linux(const sp_sys_linux_stat_t* raw, sp_sys_stat_t* out) {
   out->st_dev            = raw->st_dev;
   out->st_ino            = raw->st_ino;
   out->st_nlink          = raw->st_nlink;
@@ -4005,33 +4017,33 @@ static void sp__stat_linux_raw_to_canonical(const sp_sys_stat_linux_raw_t* raw, 
 }
 
 s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
-  sp_sys_stat_linux_raw_t raw = SP_ZERO_INITIALIZE();
+  sp_sys_linux_stat_t raw = SP_ZERO_INITIALIZE();
   s32 rc;
 #if defined(SP_AMD64)
   rc = (s32)sp_syscall(SP_SYSCALL_NUM_STAT, path, &raw);
 #else
   rc = (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, path, &raw, 0);
 #endif
-  if (rc == 0) sp__stat_linux_raw_to_canonical(&raw, st);
+  if (rc == 0) sp_sys_stat_from_linux(&raw, st);
   return rc;
 }
 
 s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
-  sp_sys_stat_linux_raw_t raw = SP_ZERO_INITIALIZE();
+  sp_sys_linux_stat_t raw = SP_ZERO_INITIALIZE();
   s32 rc;
 #if defined(SP_AMD64)
   rc = (s32)sp_syscall(SP_SYSCALL_NUM_LSTAT, path, &raw);
 #else
   rc = (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, path, &raw, SP_AT_SYMLINK_NOFOLLOW);
 #endif
-  if (rc == 0) sp__stat_linux_raw_to_canonical(&raw, st);
+  if (rc == 0) sp_sys_stat_from_linux(&raw, st);
   return rc;
 }
 
 s32 sp_sys_fstat(sp_sys_fd_t fd, sp_sys_stat_t* st) {
-  sp_sys_stat_linux_raw_t raw = SP_ZERO_INITIALIZE();
+  sp_sys_linux_stat_t raw = SP_ZERO_INITIALIZE();
   s32 rc = (s32)sp_syscall(SP_SYSCALL_NUM_FSTAT, fd, &raw);
-  if (rc == 0) sp__stat_linux_raw_to_canonical(&raw, st);
+  if (rc == 0) sp_sys_stat_from_linux(&raw, st);
   return rc;
 }
 
@@ -4077,14 +4089,6 @@ s32 sp_sys_chdir(const c8* path) {
 
 s64 sp_sys_getdents64(s32 fd, void* buf, u64 count) {
   return sp_syscall(SP_SYSCALL_NUM_GETDENTS64, fd, buf, count);
-}
-
-static s64 sp__linux_read_proc_link(const c8* path, c8* buf, u64 size) {
-#if defined(SP_AMD64)
-  return sp_syscall(SP_SYSCALL_NUM_READLINK, path, buf, size);
-#else
-  return sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, path, buf, size);
-#endif
 }
 
 s32 sp_sys_symlink(const c8* target, const c8* linkpath) {
@@ -4233,6 +4237,16 @@ void sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* exp
     #endif
   #endif
 }
+
+static s64 sp_lx_readlink_at(const c8* path, c8* buf, u64 size) {
+#if defined(SP_AMD64)
+  return sp_syscall(SP_SYSCALL_NUM_READLINK, path, buf, size);
+#else
+  return sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, path, buf, size);
+#endif
+}
+
+
 #endif
 
 #if defined(SP_MACOS) || defined(SP_COSMO)
@@ -4316,7 +4330,7 @@ s32 sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
   return rc;
 }
 
-static void sp__stat_libc_to_canonical(const struct stat* src, sp_sys_stat_t* out) {
+static void sp_sys_stat_from_libc(const struct stat* src, sp_sys_stat_t* out) {
   out->st_dev            = (u64)src->st_dev;
   out->st_ino            = (u64)src->st_ino;
   out->st_nlink          = (u64)src->st_nlink;
@@ -4354,21 +4368,21 @@ static void sp__stat_libc_to_canonical(const struct stat* src, sp_sys_stat_t* ou
 s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
   struct stat native;
   s32 rc = stat(path, &native);
-  if (rc == 0) sp__stat_libc_to_canonical(&native, st);
+  if (rc == 0) sp_sys_stat_from_libc(&native, st);
   return rc;
 }
 
 s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
   struct stat native;
   s32 rc = lstat(path, &native);
-  if (rc == 0) sp__stat_libc_to_canonical(&native, st);
+  if (rc == 0) sp_sys_stat_from_libc(&native, st);
   return rc;
 }
 
 s32 sp_sys_fstat(sp_sys_fd_t fd, sp_sys_stat_t* st) {
   struct stat native;
   s32 rc = fstat(fd, &native);
-  if (rc == 0) sp__stat_libc_to_canonical(&native, st);
+  if (rc == 0) sp_sys_stat_from_libc(&native, st);
   return rc;
 }
 #elif defined(SP_WIN32)
@@ -4484,7 +4498,7 @@ s32 sp_sys_chmod(const c8* path, s32 mode) {
   return -1;
 }
 
-static void sp__filetime_to_timespec(FILETIME ft, sp_sys_timespec_t* out) {
+static void sp_sys_timespec_from_filetime(FILETIME ft, sp_sys_timespec_t* out) {
   u64 t = ((u64)ft.dwHighDateTime << 32) | (u64)ft.dwLowDateTime;
   if (t >= 116444736000000000ULL) {
     t -= 116444736000000000ULL;
@@ -4496,7 +4510,7 @@ static void sp__filetime_to_timespec(FILETIME ft, sp_sys_timespec_t* out) {
   }
 }
 
-static s32 sp__stat_nt_from_handle(HANDLE handle, sp_sys_stat_t* out) {
+static s32 sp_sys_stat_from_nt_handle(HANDLE handle, sp_sys_stat_t* out) {
   BY_HANDLE_FILE_INFORMATION info;
   if (!GetFileInformationByHandle(handle, &info)) return -1;
 
@@ -4528,9 +4542,9 @@ static s32 sp__stat_nt_from_handle(HANDLE handle, sp_sys_stat_t* out) {
   }
   st.st_mode = mode;
 
-  sp__filetime_to_timespec(info.ftLastAccessTime,   &st.st_atim);
-  sp__filetime_to_timespec(info.ftLastWriteTime,    &st.st_mtim);
-  sp__filetime_to_timespec(info.ftCreationTime,     &st.st_birthtim);
+  sp_sys_timespec_from_filetime(info.ftLastAccessTime,   &st.st_atim);
+  sp_sys_timespec_from_filetime(info.ftLastWriteTime,    &st.st_mtim);
+  sp_sys_timespec_from_filetime(info.ftCreationTime,     &st.st_birthtim);
   st.st_ctim = st.st_mtim;
 
   st.st_blocks = (st.st_size + 511) / 512;
@@ -4538,7 +4552,7 @@ static s32 sp__stat_nt_from_handle(HANDLE handle, sp_sys_stat_t* out) {
   return 0;
 }
 
-static s32 sp__stat_nt_from_path(const c8* path, sp_sys_stat_t* out, bool follow_symlinks) {
+static s32 sp_sys_stat_from_nt_path(const c8* path, sp_sys_stat_t* out, bool follow_symlinks) {
   DWORD flags = FILE_FLAG_BACKUP_SEMANTICS;
   if (!follow_symlinks) flags |= FILE_FLAG_OPEN_REPARSE_POINT;
   HANDLE h = CreateFileA(
@@ -4551,22 +4565,22 @@ static s32 sp__stat_nt_from_path(const c8* path, sp_sys_stat_t* out, bool follow
     SP_NULLPTR
   );
   if (h == INVALID_HANDLE_VALUE) return -1;
-  s32 rc = sp__stat_nt_from_handle(h, out);
+  s32 rc = sp_sys_stat_from_nt_handle(h, out);
   CloseHandle(h);
   return rc;
 }
 
 s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
-  return sp__stat_nt_from_path(path, st, true);
+  return sp_sys_stat_from_nt_path(path, st, true);
 }
 
 s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
-  return sp__stat_nt_from_path(path, st, false);
+  return sp_sys_stat_from_nt_path(path, st, false);
 }
 
 s32 sp_sys_fstat(sp_sys_fd_t fd, sp_sys_stat_t* st) {
   if (fd == SP_SYS_INVALID_FD) return -1;
-  return sp__stat_nt_from_handle((HANDLE)fd, st);
+  return sp_sys_stat_from_nt_handle((HANDLE)fd, st);
 }
 
 s32 sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
@@ -5001,9 +5015,10 @@ void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap) {
 // ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
 // ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═     ╚═╝╚═╝  ╚═╝   ╚═╝
-void sp_fmt_directive_register(sp_str_t name, _sp_fmt_directive_t directive) {
+void sp_fmt_directive_register(const c8* name, _sp_fmt_directive_t directive) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_str_ht_insert(tls->format.directives, name, directive);
+  sp_str_t id = sp_str_from_cstr(name);
+  sp_str_ht_insert(tls->format.directives, id, directive);
 }
 
 _sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name) {
@@ -5571,14 +5586,199 @@ sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...) {
   return error;
 }
 
-static void sp_fmt_ansi_reset(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
+static void sp_fmt_directive_bold_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  (void)arg;
+  sp_str_builder_append_cstr(b, "\033[1m");
+}
+
+static void sp_fmt_directive_bold_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
+  (void)content; (void)arg;
+  sp_str_builder_append_cstr(b, "\033[22m");
+}
+
+static void sp_fmt_directive_gray_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  sp_unused(arg);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_BLACK);
+}
+
+static void sp_fmt_directive_ansi_reset(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
   sp_unused(arg); sp_unused(content);
   sp_str_builder_append_cstr(b, SP_ANSI_RESET);
 }
 
-static void sp_fmt_cyan_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+static void sp_fmt_directive_cyan_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
   sp_unused(arg);
   sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_CYAN);
+}
+
+static void sp_fmt_directive_hyperlink_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  sp_str_builder_append_cstr(b, "\033]8;;");
+  if (arg->id == _sp_fmt_id_str) sp_str_builder_append(b, arg->s);
+  sp_str_builder_append_cstr(b, "\033\\");
+}
+
+static void sp_fmt_directive_hyperlink_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
+  (void)content; (void)arg;
+  sp_str_builder_append_cstr(b, "\033]8;;\033\\");
+}
+
+static void sp_fmt_directive_quote_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  (void)arg;
+  sp_str_builder_append_c8(b, '"');
+}
+
+static void sp_fmt_directive_quote_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
+  (void)content; (void)arg;
+  sp_str_builder_append_c8(b, '"');
+}
+
+static void sp_fmt_directive_upper_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
+  (void)b; (void)arg;
+  sp_mem_slice_for(content, i) {
+    u8 c = content.data[i];
+    if (c >= 'a' && c <= 'z') content.data[i] = c - 32;
+  }
+}
+
+static void sp_fmt_directive_redact_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
+  (void)b; (void)arg;
+  sp_mem_slice_for(content, i) content.data[i] = '*';
+}
+
+static void sp_fmt_directive_bytes_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  u64 bytes = arg->u;
+  static const c8* units[] = { "B", "KB", "MB", "GB", "TB", "PB" };
+  u32 unit_idx = 0;
+  u64 whole = bytes;
+  u64 rem = 0;
+  while (whole >= 1024 && unit_idx < 5) {
+    rem = whole & 1023;
+    whole >>= 10;
+    unit_idx++;
+  }
+  _sp_fmt_write_u64(b, whole);
+  if (unit_idx > 0) {
+    u32 tenths = (u32)((rem * 10) >> 10);
+    if (tenths > 0) {
+      sp_str_builder_append_c8(b, '.');
+      sp_str_builder_append_c8(b, (c8)('0' + tenths));
+    }
+  }
+  sp_str_builder_append_c8(b, ' ');
+  sp_str_builder_append_cstr(b, units[unit_idx]);
+}
+
+static void sp_fmt_directive_write_zpad2(sp_str_builder_t* b, u32 value) {
+  sp_str_builder_append_c8(b, (c8)('0' + (value / 10) % 10));
+  sp_str_builder_append_c8(b, (c8)('0' + value % 10));
+}
+
+static void sp_fmt_directive_write_zpad4(sp_str_builder_t* b, u32 value) {
+  sp_str_builder_append_c8(b, (c8)('0' + (value / 1000) % 10));
+  sp_str_builder_append_c8(b, (c8)('0' + (value / 100) % 10));
+  sp_str_builder_append_c8(b, (c8)('0' + (value / 10) % 10));
+  sp_str_builder_append_c8(b, (c8)('0' + value % 10));
+}
+
+static void sp_fmt_directive_iso_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  u64 epoch = arg->u;
+  u32 sec = (u32)(epoch % 60); epoch /= 60;
+  u32 min = (u32)(epoch % 60); epoch /= 60;
+  u32 hour = (u32)(epoch % 24); epoch /= 24;
+
+  s64 days = (s64)epoch + 719468;
+  s64 era = (days >= 0 ? days : days - 146096) / 146097;
+  u32 doe = (u32)(days - era * 146097);
+  u32 yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  s64 y = (s64)yoe + era * 400;
+  u32 doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  u32 mp = (5 * doy + 2) / 153;
+  u32 d = doy - (153 * mp + 2) / 5 + 1;
+  u32 m = mp < 10 ? mp + 3 : mp - 9;
+  if (m <= 2) y += 1;
+
+  sp_fmt_directive_write_zpad4(b, (u32)y);
+  sp_str_builder_append_c8(b, '-');
+  sp_fmt_directive_write_zpad2(b, m);
+  sp_str_builder_append_c8(b, '-');
+  sp_fmt_directive_write_zpad2(b, d);
+  sp_str_builder_append_c8(b, 'T');
+  sp_fmt_directive_write_zpad2(b, hour);
+  sp_str_builder_append_c8(b, ':');
+  sp_fmt_directive_write_zpad2(b, min);
+  sp_str_builder_append_c8(b, ':');
+  sp_fmt_directive_write_zpad2(b, sec);
+  sp_str_builder_append_c8(b, 'Z');
+}
+
+static void sp_fmt_directive_ordinal_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  s64 value = (arg->id == _sp_fmt_id_s64) ? arg->i : (s64)arg->u;
+  _sp_fmt_write_s64(b, value);
+  s64 abs = value < 0 ? -value : value;
+  u32 mod100 = (u32)(abs % 100);
+  u32 mod10 = (u32)(abs % 10);
+  const c8* suffix = "th";
+  if (mod100 < 11 || mod100 > 13) {
+    if (mod10 == 1) suffix = "st";
+    else if (mod10 == 2) suffix = "nd";
+    else if (mod10 == 3) suffix = "rd";
+  }
+  sp_str_builder_append_cstr(b, suffix);
+}
+
+
+static void sp_fmt_directive_errno_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  static const struct { s32 code; const c8* name; } _errno_table[] = {
+    {  1, "EPERM"  },
+    {  2, "ENOENT" },
+    {  5, "EIO"    },
+    {  9, "EBADF"  },
+    { 11, "EAGAIN" },
+    { 12, "ENOMEM" },
+    { 13, "EACCES" },
+    { 17, "EEXIST" },
+    { 22, "EINVAL" },
+    { 28, "ENOSPC" },
+    { 32, "EPIPE"  },
+  };
+  s64 value = (arg->id == _sp_fmt_id_s64) ? arg->i : (s64)arg->u;
+  s32 code = (s32)value;
+  const c8* name = SP_NULLPTR;
+  sp_carr_for(_errno_table, i) {
+    if (_errno_table[i].code == code) { name = _errno_table[i].name; break; }
+  }
+  if (name != SP_NULLPTR) {
+    sp_str_builder_append_cstr(b, name);
+  } else {
+    sp_str_builder_append_cstr(b, "errno(");
+    _sp_fmt_write_s64(b, value);
+    sp_str_builder_append_c8(b, ')');
+  }
+}
+
+static void sp_fmt_directive_duration_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+  u64 ns = arg->u;
+  if (ns < 1000) {
+    _sp_fmt_write_u64(b, ns);
+    sp_str_builder_append_cstr(b, " ns");
+    return;
+  }
+  static const c8* units[] = { "us", "ms", "s" };
+  u32 unit_idx = 0;
+  u64 whole = ns / 1000;
+  u64 rem = ns % 1000;
+  while (whole >= 1000 && unit_idx < 2) {
+    rem = whole % 1000;
+    whole /= 1000;
+    unit_idx++;
+  }
+  _sp_fmt_write_u64(b, whole);
+  if (rem >= 100) {
+    sp_str_builder_append_c8(b, '.');
+    sp_str_builder_append_c8(b, (c8)('0' + rem / 100));
+  }
+  sp_str_builder_append_c8(b, ' ');
+  sp_str_builder_append_cstr(b, units[unit_idx]);
 }
 
 
@@ -6629,13 +6829,23 @@ sp_tls_rt_t* sp_tls_rt_get() {
     tls->contexts[0].allocator = sp_mem_os_new();
     sp_tls_set(sp_rt.tls.key, tls);
 
-    tls->scratch = sp_mem_arena_new(SP_MEM_ARENA_BLOCK_SIZE);
+    tls->scratch = sp_mem_arena_new_ex(SP_MEM_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
     tls->std.out = sp_alloc_type(sp_io_writer_t);
     tls->std.err = sp_alloc_type(sp_io_writer_t);
     sp_io_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
     sp_io_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
-    sp_fmt_directive_register(sp_str_lit("cyan"), (_sp_fmt_directive_t){ .before = sp_fmt_cyan_before, .after = sp_fmt_ansi_reset });
-
+    SP_FMT_REGISTER("cyan", sp_fmt_directive_cyan_before, SP_NULLPTR, sp_fmt_directive_ansi_reset, 0);
+    SP_FMT_REGISTER("gray", sp_fmt_directive_gray_before, SP_NULLPTR, sp_fmt_directive_ansi_reset, 0);
+    SP_FMT_REGISTER("bold", sp_fmt_directive_bold_before, SP_NULLPTR, sp_fmt_directive_ansi_reset, 0);
+    SP_FMT_REGISTER("hyperlink", sp_fmt_directive_hyperlink_before, SP_NULLPTR, sp_fmt_directive_ansi_reset, 0);
+    SP_FMT_REGISTER("quote", sp_fmt_directive_quote_before, SP_NULLPTR, sp_fmt_directive_quote_after, 0);
+    SP_FMT_REGISTER("upper", SP_NULLPTR, SP_NULLPTR, sp_fmt_directive_upper_after, 0);
+    SP_FMT_REGISTER("redact", SP_NULLPTR, SP_NULLPTR, sp_fmt_directive_redact_after, 0);
+    SP_FMT_REGISTER("bytes", SP_NULLPTR, sp_fmt_directive_bytes_render, SP_NULLPTR, 0);
+    SP_FMT_REGISTER("iso", SP_NULLPTR, sp_fmt_directive_iso_render, SP_NULLPTR, 0);
+    SP_FMT_REGISTER("ordinal", SP_NULLPTR, sp_fmt_directive_ordinal_render, SP_NULLPTR, 0);
+    SP_FMT_REGISTER("errno", SP_NULLPTR, sp_fmt_directive_errno_render, SP_NULLPTR, 0);
+    SP_FMT_REGISTER("duration", SP_NULLPTR, sp_fmt_directive_duration_render, SP_NULLPTR, 0);
   }
   return tls;
 }
@@ -6771,8 +6981,8 @@ sp_mem_arena_block_t* sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 capacity
   return block;
 }
 
-sp_mem_arena_t* sp_mem_arena_new(u64 block_size) {
-  return sp_mem_arena_new_ex(block_size, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
+sp_mem_arena_t* sp_mem_arena_new() {
+  return sp_mem_arena_new_ex(SP_MEM_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
 }
 
 sp_mem_arena_t* sp_mem_arena_new_ex(u64 block_size, sp_mem_arena_mode_t mode, u8 alignment) {
@@ -8702,7 +8912,7 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
   const c8* proc = sp_str_to_cstr(sp_format("/proc/self/fd/{}", SP_FMT_S64(fd)));
 
   c8 buffer[SP_MAX_PATH_LEN];
-  s64 len = sp__linux_read_proc_link(proc, buffer, SP_MAX_PATH_LEN - 1);
+  s64 len = sp_lx_readlink_at(proc, buffer, SP_MAX_PATH_LEN - 1);
   sp_sys_close(fd);
 
   if (len <= 0) {
@@ -8776,7 +8986,7 @@ sp_str_t sp_fs_get_exe_path() {
 #if defined(SP_LINUX)
 sp_str_t sp_fs_get_exe_path() {
   c8 exe_path[SP_PATH_MAX];
-  s64 len = sp__linux_read_proc_link("/proc/self/exe", exe_path, SP_PATH_MAX - 1);
+  s64 len = sp_lx_readlink_at("/proc/self/exe", exe_path, SP_PATH_MAX - 1);
   if (len < 0) {
     return sp_str_lit("");
   }
@@ -9029,7 +9239,7 @@ bool sp_os_is_tty(sp_os_file_handle_t fd) {
 void sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* rows) {
   if (cols) *cols = 0;
   if (rows) *rows = 0;
-  HANDLE handle = (HANDLE)_get_osfhandle(fd);
+  HANDLE handle = (HANDLE)fd;
   if (handle == INVALID_HANDLE_VALUE || handle == SP_NULLPTR) return;
   CONSOLE_SCREEN_BUFFER_INFO csbi;
   if (!GetConsoleScreenBufferInfo(handle, &csbi)) return;
@@ -9671,66 +9881,60 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
 ////////////
 // SIGNAL //
 ////////////
-SP_PRIVATE void sp__signal_trampoline_
 #if defined(SP_WIN32)
-  (int sig)
-#elif defined(SP_FREESTANDING)
-  (int sig)
+  #define SP_SYS_SIGNAL_INTERRUPT 2
+  #define SP_SYS_SIGNAL_TERMINATE 15
+  #define SP_SYS_SIGNAL_ABORT 22
 #else
-  (int sig)
+  #define SP_SYS_SIGNAL_INTERRUPT 2
+  #define SP_SYS_SIGNAL_TERMINATE 15
+  #define SP_SYS_SIGNAL_ABORT 6
 #endif
-{
+
+SP_PRIVATE void sp_os_signal_from_native(s32 sig) {
   sp_os_signal_t s;
   switch (sig) {
-  #if defined(SP_WIN32)
-    case 2 /* SIGINT  */: s = SP_OS_SIGNAL_INTERRUPT; break;
-    case 15 /* SIGTERM */: s = SP_OS_SIGNAL_TERMINATE; break;
-    case 22 /* SIGABRT */: s = SP_OS_SIGNAL_ABORT;     break;
-  #else
-    case 2 /* SIGINT  */: s = SP_OS_SIGNAL_INTERRUPT; break;
-    case 15 /* SIGTERM */: s = SP_OS_SIGNAL_TERMINATE; break;
-    case 6 /* SIGABRT */: s = SP_OS_SIGNAL_ABORT;     break;
-  #endif
+    case SP_SYS_SIGNAL_INTERRUPT: s = SP_OS_SIGNAL_INTERRUPT; break;
+    case SP_SYS_SIGNAL_TERMINATE: s = SP_OS_SIGNAL_TERMINATE; break;
+    case SP_SYS_SIGNAL_ABORT:     s = SP_OS_SIGNAL_ABORT;     break;
     default: return;
   }
-  if (sp_rt.signal_handlers[s]) sp_rt.signal_handlers[s](s);
+  if (sp_rt.signal_handlers[s]) {
+    sp_rt.signal_handlers[s](s, sp_rt.signal_userdata[s]);
+  }
 }
 
-SP_PRIVATE s32 sp__signal_to_os(sp_os_signal_t signal) {
+SP_PRIVATE s32 sp_os_signal_to_native(sp_os_signal_t signal) {
   switch (signal) {
-  #if defined(SP_WIN32)
-    case SP_OS_SIGNAL_INTERRUPT:  return 2;  /* SIGINT  */
-    case SP_OS_SIGNAL_TERMINATE:  return 15; /* SIGTERM */
-    case SP_OS_SIGNAL_ABORT:      return 22; /* SIGABRT */
-  #else
-    case SP_OS_SIGNAL_INTERRUPT:  return 2;  /* SIGINT  */
-    case SP_OS_SIGNAL_TERMINATE:  return 15; /* SIGTERM */
-    case SP_OS_SIGNAL_ABORT:      return 6;  /* SIGABRT */
-  #endif
-    default: return -1;
+    case SP_OS_SIGNAL_INTERRUPT: return SP_SYS_SIGNAL_INTERRUPT;
+    case SP_OS_SIGNAL_TERMINATE: return SP_SYS_SIGNAL_TERMINATE;
+    case SP_OS_SIGNAL_ABORT:     return SP_SYS_SIGNAL_ABORT;
+    case SP_OS_SIGNAL_COUNT_:    return -1;
   }
+  return -1;
 }
 
 #if defined(SP_WIN32)
-SP_PRIVATE BOOL WINAPI sp__console_ctrl_handler(DWORD type) {
+SP_PRIVATE BOOL WINAPI sp_os_signal_console_ctrl(DWORD type) {
   switch (type) {
-    case CTRL_C_EVENT:     sp__signal_trampoline_(2);  return TRUE;
-    case CTRL_CLOSE_EVENT: sp__signal_trampoline_(15); return TRUE;
+    case CTRL_C_EVENT:     sp_os_signal_from_native(SP_SYS_SIGNAL_INTERRUPT); return TRUE;
+    case CTRL_CLOSE_EVENT: sp_os_signal_from_native(SP_SYS_SIGNAL_TERMINATE); return TRUE;
     default: return FALSE;
   }
 }
 
-void sp_os_register_signal_handler(sp_os_signal_t sig, sp_os_signal_handler_t handler) {
+void sp_os_register_signal_handler(sp_os_signal_t sig, sp_os_signal_handler_t handler, void* userdata) {
   sp_rt.signal_handlers[sig] = handler;
+  sp_rt.signal_userdata[sig] = userdata;
   if (sig == SP_OS_SIGNAL_ABORT) {
-    signal(sp__signal_to_os(sig), sp__signal_trampoline_);
+    signal(sp_os_signal_to_native(sig), sp_os_signal_from_native);
   } else {
-    SetConsoleCtrlHandler(sp__console_ctrl_handler, TRUE);
+    SetConsoleCtrlHandler(sp_os_signal_console_ctrl, TRUE);
   }
 }
 
 #elif defined(SP_FREESTANDING)
-__attribute__((naked)) SP_PRIVATE void sp__signal_restorer(void) {
+__attribute__((naked)) SP_PRIVATE void sp_os_signal_restorer(void) {
 #if defined(SP_AMD64)
   __asm__ __volatile__ (
     "mov $15, %%rax\n"  /* __NR_rt_sigreturn */
@@ -9746,9 +9950,10 @@ __attribute__((naked)) SP_PRIVATE void sp__signal_restorer(void) {
 #endif
 }
 
-void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
+void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler, void* userdata) {
   sp_rt.signal_handlers[signal] = handler;
-  s32 sig = sp__signal_to_os(signal);
+  sp_rt.signal_userdata[signal] = userdata;
+  s32 sig = sp_os_signal_to_native(signal);
   /* kernel_sigaction for x86_64 */
   struct {
     void (*handler)(int);
@@ -9757,24 +9962,28 @@ void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t
     u64   mask;
   } sa;
   sp_mem_zero(&sa, sizeof(sa));
-  sa.handler  = sp__signal_trampoline_;
+  sa.handler  = sp_os_signal_from_native;
   sa.flags    = 0x04000000; /* SA_RESTORER */
-  sa.restorer = sp__signal_restorer;
+  sa.restorer = sp_os_signal_restorer;
   sp_syscall(SP_SYSCALL_NUM_SIGACTION, sig, &sa, 0, 8);
 }
 
 #elif defined(SP_POSIX)
-void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
+void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler, void* userdata) {
   sp_rt.signal_handlers[signal] = handler;
+  sp_rt.signal_userdata[signal] = userdata;
   struct sigaction sa;
-  sa.sa_handler = sp__signal_trampoline_;
+  sa.sa_handler = sp_os_signal_from_native;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  sigaction(sp__signal_to_os(signal), &sa, SP_NULLPTR);
+  sigaction(sp_os_signal_to_native(signal), &sa, SP_NULLPTR);
 }
 
 #else
-void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler) {
+void sp_os_register_signal_handler(sp_os_signal_t signal, sp_os_signal_handler_t handler, void* userdata) {
+  (void)signal;
+  (void)handler;
+  (void)userdata;
   SP_BROKEN();
 }
 
@@ -11559,10 +11768,10 @@ void sp_ps_win32_close_child_handles(sp_ps_win32_stdio_t* io) {
 }
 
 void sp_ps_win32_close_parent_fds(sp_ps_win32_stdio_t* io) {
-  s32 fds[3] = { io->in.parent_fd, io->out.parent_fd, io->err.parent_fd };
+  sp_os_file_handle_t fds[3] = { io->in.parent_fd, io->out.parent_fd, io->err.parent_fd };
   sp_for(i, 3) {
-    if (fds[i] >= 0) {
-      _close(fds[i]);
+    if (fds[i] != SP_SYS_INVALID_FD) {
+      CloseHandle((HANDLE)fds[i]);
     }
   }
 }
@@ -13608,6 +13817,14 @@ sp_err_t sp_io_writer_close(sp_io_writer_t* writer) {
 
   if (!writer->vtable.close) return SP_OK;
   return writer->vtable.close(writer);
+}
+
+void sp_io_get_std_out(sp_io_writer_t* io) {
+  return sp_io_writer_from_fd(io, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+}
+
+void sp_io_get_std_err(sp_io_writer_t* io) {
+  return sp_io_writer_from_fd(io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
 }
 
 SP_API sp_app_t* sp_app_new(sp_app_config_t config) {

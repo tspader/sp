@@ -575,7 +575,7 @@ static void _test_render_y(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
 UTEST(sp_fmt_directive, register_and_lookup) {
   sp_fmt_directive_reset();
   _sp_fmt_directive_t dir = { .before = _test_before_lt, .after = _test_after_gt };
-  sp_fmt_directive_register(sp_str_view("wrap"), dir);
+  sp_fmt_directive_register(("wrap"), dir);
 
   _sp_fmt_directive_t* got = sp_fmt_directive_lookup(sp_str_view("wrap"));
   EXPECT_TRUE(got != SP_NULLPTR);
@@ -595,7 +595,7 @@ UTEST(sp_fmt_directive, lookup_unknown_returns_null) {
 
 UTEST(sp_fmt_directive, reset_clears) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("foo"),
+  sp_fmt_directive_register(("foo"),
     (_sp_fmt_directive_t){ .before = _test_before_lt });
   EXPECT_TRUE(sp_fmt_directive_lookup(sp_str_view("foo")) != SP_NULLPTR);
   sp_fmt_directive_reset();
@@ -604,7 +604,7 @@ UTEST(sp_fmt_directive, reset_clears) {
 
 UTEST(sp_fmt_directive, wraps_content) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("wrap"),
+  sp_fmt_directive_register(("wrap"),
     (_sp_fmt_directive_t){ .before = _test_before_lt, .after = _test_after_gt });
   sp_str_t got = sp_fmt("{:wrap}", _sp_fmt_cstr("hi"));
   EXPECT_TRUE(sp_str_equal_cstr(got, "<hi>"));
@@ -613,7 +613,7 @@ UTEST(sp_fmt_directive, wraps_content) {
 
 UTEST(sp_fmt_directive, render_replaces_value) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("x"),
+  sp_fmt_directive_register(("x"),
     (_sp_fmt_directive_t){ .render = _test_render_x });
   sp_str_t got = sp_fmt("{:x}", _sp_fmt_int(999));
   EXPECT_TRUE(sp_str_equal_cstr(got, "X"));
@@ -622,7 +622,7 @@ UTEST(sp_fmt_directive, render_replaces_value) {
 
 UTEST(sp_fmt_directive, after_mutates_uppercase) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("upper"),
+  sp_fmt_directive_register(("upper"),
     (_sp_fmt_directive_t){ .after = _test_after_upper });
   sp_str_t got = sp_fmt("{:upper}", _sp_fmt_cstr("hello"));
   EXPECT_TRUE(sp_str_equal_cstr(got, "HELLO"));
@@ -637,9 +637,9 @@ UTEST(sp_fmt_directive, err_unknown_directive) {
 
 UTEST(sp_fmt_directive, ordering_bracket_nested) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("a"),
+  sp_fmt_directive_register(("a"),
     (_sp_fmt_directive_t){ .before = _test_before_a, .after = _test_after_a });
-  sp_fmt_directive_register(sp_str_view("b"),
+  sp_fmt_directive_register(("b"),
     (_sp_fmt_directive_t){ .before = _test_before_b, .after = _test_after_b });
 
   _test_log = (sp_str_builder_t)SP_ZERO_INITIALIZE();
@@ -654,9 +654,9 @@ UTEST(sp_fmt_directive, ordering_bracket_nested) {
 UTEST(sp_fmt_directive, err_multiple_renders) {
   sp_fmt_directive_reset();
   _test_render_y_calls = 0;
-  sp_fmt_directive_register(sp_str_view("x"),
+  sp_fmt_directive_register(("x"),
     (_sp_fmt_directive_t){ .render = _test_render_x });
-  sp_fmt_directive_register(sp_str_view("y"),
+  sp_fmt_directive_register(("y"),
     (_sp_fmt_directive_t){ .render = _test_render_y });
   sp_str_t str = sp_zero();
   EXPECT_EQ(sp_fmt_e(&str, "{:x :y}", _sp_fmt_int(0)), SP_ERR_FMT_TOO_MANY_RENDERERS);
@@ -666,7 +666,7 @@ UTEST(sp_fmt_directive, err_multiple_renders) {
 
 UTEST(sp_fmt_directive, padding_outside_wrappers) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("wrap"),
+  sp_fmt_directive_register(("wrap"),
     (_sp_fmt_directive_t){ .before = _test_before_lt, .after = _test_after_gt });
   sp_str_t got = sp_fmt("{:6 :wrap}", _sp_fmt_int(42));
   EXPECT_TRUE(sp_str_equal_cstr(got, "    <42>"));
@@ -675,7 +675,7 @@ UTEST(sp_fmt_directive, padding_outside_wrappers) {
 
 UTEST(sp_fmt_directive, padding_with_center_and_wrapper) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("wrap"),
+  sp_fmt_directive_register(("wrap"),
     (_sp_fmt_directive_t){ .before = _test_before_lt, .after = _test_after_gt });
   sp_str_t got = sp_fmt("{:*^8 :wrap}", _sp_fmt_cstr("hi"));
   EXPECT_TRUE(sp_str_equal_cstr(got, "***<hi>***"));
@@ -730,7 +730,7 @@ UTEST(sp_fmt_v, str_with_padding) {
 
 UTEST(sp_fmt_directive, custom_fn_fallback) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("wrap"),
+  sp_fmt_directive_register(("wrap"),
     (_sp_fmt_directive_t){ .before = _test_before_lt, .after = _test_after_gt });
   u32 value = 0;
   _sp_fmt_arg_t arg = _sp_fmt_custom(u32, _test_render_x, value);
@@ -741,7 +741,7 @@ UTEST(sp_fmt_directive, custom_fn_fallback) {
 
 UTEST(sp_fmt_directive, default_render_with_wrappers_on_int) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("wrap"),
+  sp_fmt_directive_register(("wrap"),
     (_sp_fmt_directive_t){ .before = _test_before_lt, .after = _test_after_gt });
   sp_str_t got = sp_fmt("{:wrap}", _sp_fmt_int(42));
   EXPECT_TRUE(sp_str_equal_cstr(got, "<42>"));
@@ -750,7 +750,7 @@ UTEST(sp_fmt_directive, default_render_with_wrappers_on_int) {
 
 UTEST(sp_fmt_directive, content_wider_than_width_with_wrapper) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("wrap"),
+  sp_fmt_directive_register(("wrap"),
     (_sp_fmt_directive_t){ .before = _test_before_lt, .after = _test_after_gt });
   sp_str_t got = sp_fmt("{:3 :wrap}", _sp_fmt_cstr("hello"));
   EXPECT_TRUE(sp_str_equal_cstr(got, "<hello>"));
@@ -764,9 +764,9 @@ static void _test_render_prefixed(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
 
 UTEST(sp_fmt_directive, before_render_then_after) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("a"),
+  sp_fmt_directive_register(("a"),
     (_sp_fmt_directive_t){ .before = _test_before_lt, .render = _test_render_prefixed });
-  sp_fmt_directive_register(sp_str_view("b"),
+  sp_fmt_directive_register(("b"),
     (_sp_fmt_directive_t){ .after = _test_after_upper });
   sp_str_t got = sp_fmt("{:a :b}", _sp_fmt_int(0));
   EXPECT_TRUE(sp_str_equal_cstr(got, "<RENDERED"));
@@ -912,7 +912,7 @@ static void _test_render_u64_only(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
 
 UTEST(sp_fmt_directive, kinds_single_accepts_match) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("only_u64"),
+  sp_fmt_directive_register(("only_u64"),
     (_sp_fmt_directive_t){ .render = _test_render_u64_only, .kinds = _sp_fmt_id_u64 });
   sp_str_t got = sp_fmt("{:only_u64}", _sp_fmt_u64(42));
   EXPECT_TRUE(sp_str_equal_cstr(got, "42"));
@@ -921,7 +921,7 @@ UTEST(sp_fmt_directive, kinds_single_accepts_match) {
 
 UTEST(sp_fmt_directive, kinds_single_rejects_mismatch) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("only_u64"),
+  sp_fmt_directive_register(("only_u64"),
     (_sp_fmt_directive_t){ .render = _test_render_u64_only, .kinds = _sp_fmt_id_u64 });
   sp_str_t str = sp_zero();
   EXPECT_EQ(sp_fmt_e(&str, "{:only_u64}", _sp_fmt_f64(1.5)), SP_ERR_FMT_WRONG_PARAM_KIND);
@@ -930,7 +930,7 @@ UTEST(sp_fmt_directive, kinds_single_rejects_mismatch) {
 
 UTEST(sp_fmt_directive, kinds_multiple_accepts_either) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("num"),
+  sp_fmt_directive_register(("num"),
     (_sp_fmt_directive_t){ .kinds = _sp_fmt_id_u64 | _sp_fmt_id_s64 });
   sp_str_t a = sp_fmt("{:num}", _sp_fmt_u64(7));
   sp_str_t b = sp_fmt("{:num}", _sp_fmt_s64(-3));
@@ -941,7 +941,7 @@ UTEST(sp_fmt_directive, kinds_multiple_accepts_either) {
 
 UTEST(sp_fmt_directive, kinds_multiple_rejects_outsider) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("num"),
+  sp_fmt_directive_register(("num"),
     (_sp_fmt_directive_t){ .kinds = _sp_fmt_id_u64 | _sp_fmt_id_s64 });
   sp_str_t str = sp_zero();
   EXPECT_EQ(sp_fmt_e(&str, "{:num}", _sp_fmt_cstr("nope")), SP_ERR_FMT_WRONG_PARAM_KIND);
@@ -950,7 +950,7 @@ UTEST(sp_fmt_directive, kinds_multiple_rejects_outsider) {
 
 UTEST(sp_fmt_directive, kinds_unset_accepts_all) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_register(sp_str_view("any"),
+  sp_fmt_directive_register(("any"),
     (_sp_fmt_directive_t){ .before = _test_before_lt, .after = _test_after_gt });
   sp_str_t a = sp_fmt("{:any}", _sp_fmt_int(1));
   sp_str_t b = sp_fmt("{:any}", _sp_fmt_cstr("hi"));

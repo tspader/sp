@@ -1,16 +1,161 @@
 /*
-  sp_prompt.h (beautiful, interactive prompts for native CLIs)
+  sp_prompt.h
+  beautiful, interactive, utf-8 prompts for native CLIs
 
-  ///////////
-  // USAGE //
-  ///////////
+  ## TL;DR
+  If you don't want to read this documentation, grep for the following tags to jump to code:
+
+  types
+    @values      the values produced by prompts
+    @framebuffer the representation of a rendered output; styling + coloring
+    @event       events available to be handled by widgets
+    @context     the handle into the library; mostly opaque
+    @widgets     userdata types for builtin widgets
+
+  functions
+    @lifecycle   opening and closing a context
+    @widgets     public API for using builtin widgets
+    @values      the values produced by prompts
+    @custom      helpful functions for writing your own widgets
+    @advanced    what it says on the tin
+
+  widgets
+    intro
+    outro
+    note
+    cancel
+    info
+    warn
+    error
+    success
+    text
+    confirm
+    select
+    multiselect
+    password
+
+
+  ## USAGE
   Define either of the following before you include sp_prompt.h in exactly one C or C++ file:
 
     #define SP_IMPLEMENTATION
     #define SP_PROMPT_IMPLEMENTATION
 
-  - configure default buffering / buffer size?
-  -
+
+  ### INITALIZATION
+  To use the library, you need (a) a context, and (b) to set up the terminal for drawing. In the common
+  case, you can do both with one call:
+
+    sp_prompt_ctx_t* ctx = sp_prompt_begin();
+
+  This detects the size of the terminal, saves the current terminal state, and enters raw mode. If you
+  need more control over the order of these operations, or want a custom output size, do this:
+
+    sp_prompt_ctx_t ctx = sp_zero(); // or sp_prompt_new() to use the sp.h allocator + detect size
+    sp_prompt_init(&ctx, 69, 420);
+    sp_prompt_begin_ex(&ctx, 69, 420);
+
+
+  ### RUNNING A WIDGET
+  Now, call into widgets. The library ships with quite a few widgets out of the box (plus primitives for
+  creating your own). Widgets are synchronous, and have both a result and a state that can be queried:
+
+    // Each widget has its own specific options
+    sp_prompt_select_option_t options[] = {
+      { .label = "hey",   .hint = "recommended" },
+      { .label = "hello", .selected = true },
+      { .label = "howdy", .hint = "ropers only" },
+      { .label = "hi" },
+      { .label = "hullo", .hint = "questionable" },
+      { .label = "whatup" },
+    };
+
+    // This will block until the widget has resolved itself
+    sp_prompt_select(ctx, (sp_prompt_select_t) {
+      .prompt = "Pick a greeting",
+      .options = options,
+      .num_options = sp_carr_len(options),
+      .max_items = 4,
+    });
+
+    // Check whether the user cancelled
+    bool cancelled = sp_prompt_cancelled(ctx);
+
+    // Get the entered value
+    const c8* greeting = sp_prompt_get_str(ctx);
+
+  This renders something like this:
+
+    ┌  sp_prompt.h widget: select
+    │
+    ◆  Pick a greeting
+    │  ○ hey (recommended)
+    │  ● hello
+    │  ○ howdy (ropers only)
+    │  ○ hi
+    │  ...
+    └
+
+
+  ### RUNNING ANOTHER WIDGET
+  You can continue to run widgets in the exact same way. For example, you could print the
+  result of the previous widget in a box:
+
+    sp_prompt_note(ctx, sp_prompt_get_str(ctx), "Greeting");
+
+  Which renders the following; note that widget output is not strictly additive. That is, the selection
+  widget is smart enough to overwrite the options with a single line for the final selection:
+
+    ┌  sp_prompt.h widget: select
+    │
+    ◇  Pick a greeting
+    │  howdy
+    │
+    ◇  Greeting ─╮
+    │            │
+    │  howdy     │
+    │            │
+    ├────────────╯
+
+
+  ### CLEANUP
+  When you're done, just do this:
+
+    sp_prompt_end(ctx);
+
+  Unlike many libraries where freeing is more or less pointless if you're exiting anyway, you **must** call
+  this function before your program exits. Otherwise, the user's terminal will be left in raw mode, and it
+  will be unusable.
+
+
+  ## CUSTOM WIDGETS
+  At its core, sp_prompt.h isn't much more than a loop like this:
+
+  fn run(widget):
+    while (!widget.done)
+      event := poll()
+      widget.handle(event)
+      widget.render()
+
+  A widget is simple an instance of sp_prompt_widget_t, which has three members:
+    - An update function which handles an event
+    - A render function which writes lines of text to a buffer
+    - A userdata pointer, so your widget can have internal state
+
+  Widgets are run using sp_prompt_run(). All the builtin widgets are simply closures which wrap the arguments
+  of an ergonomic API into a struct and call sp_prompt_run()
+
+
+  ### RENDERING
+  sp_prompt.h is not sophisticated. It does not present anything resembling a rich immediate mode UI, with
+  buttons and input areas which can be composed. Instead, it provides more or less one API:
+
+    sp_prompt_render_line(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_style_t style);
+
+  This writes a line of text at the widget's cursor and fills each touched cell with the given style. There
+  are two auxiliary functions, too: One to calculate text width, and one to repeat a codepoint. Other than
+  that, it's just a little arithmetic and box drawing characters.
+
 */
 
 #if defined SP_IMPLEMENTATION && !defined(SP_PROMPT_IMPLEMENTATION)
@@ -22,9 +167,72 @@
 
 #include "sp.h"
 
-#if !defined(SP_FREESTANDING) && !defined(SP_WIN32)
-#include <termios.h>
-#endif
+#define SP_PROMPT_OK 0
+#define SP_PROMPT_ERROR 1
+
+////////////
+// VALUES //
+////////////
+// @values
+typedef enum {
+  SP_PROMPT_VALUE_NONE,
+  SP_PROMPT_VALUE_STR,
+  SP_PROMPT_VALUE_BOOL,
+} sp_prompt_value_kind_t;
+
+typedef struct {
+  sp_prompt_value_kind_t kind;
+  union {
+    sp_str_t str;
+    bool bool_value;
+  } as;
+} sp_prompt_value_t;
+
+
+/////////////////
+// FRAMEBUFFER //
+/////////////////
+// @framebuffer
+typedef enum {
+  SP_PROMPT_STYLE_NONE,
+  SP_PROMPT_STYLE_ANSI,
+  SP_PROMPT_STYLE_RGB,
+} sp_prompt_style_kind_t;
+
+typedef struct {
+  sp_prompt_style_kind_t tag;
+  union {
+    struct {
+      u8 r;
+      u8 g;
+      u8 b;
+    } rgb;
+    u8 ansi;
+  };
+} sp_prompt_style_t;
+
+typedef struct {
+  u32 codepoint;
+  sp_prompt_style_t style;
+} sp_prompt_cell_t;
+
+typedef struct {
+  s32 cols;
+  s32 rows;
+  sp_prompt_cell_t* cells;
+} sp_prompt_frame_t;
+
+
+////////////
+// EVENTS //
+////////////
+// @event
+typedef enum {
+  SP_PROMPT_STATE_ACTIVE,
+  SP_PROMPT_STATE_SUBMIT,
+  SP_PROMPT_STATE_CANCEL,
+  SP_PROMPT_STATE_ERROR,
+} sp_prompt_state_t;
 
 typedef enum {
   SP_PROMPT_EVENT_NONE,
@@ -50,56 +258,10 @@ typedef struct {
   };
 } sp_prompt_event_t;
 
-typedef enum {
-  SP_PROMPT_STATE_ACTIVE,
-  SP_PROMPT_STATE_SUBMIT,
-  SP_PROMPT_STATE_CANCEL,
-  SP_PROMPT_STATE_ERROR,
-} sp_prompt_state_t;
-
-typedef enum {
-  SP_PROMPT_VALUE_NONE,
-  SP_PROMPT_VALUE_STR,
-  SP_PROMPT_VALUE_BOOL,
-} sp_prompt_value_kind_t;
-
-typedef enum {
-  SP_PROMPT_STYLE_NONE,
-  SP_PROMPT_STYLE_ANSI,
-  SP_PROMPT_STYLE_RGB,
-} sp_prompt_style_kind_t;
-
-typedef struct {
-  sp_prompt_value_kind_t kind;
-  union {
-    sp_str_t str;
-    bool bool_value;
-  } as;
-} sp_prompt_value_t;
-
-typedef struct {
-  u8 tag;
-  union {
-    struct {
-      u8 r;
-      u8 g;
-      u8 b;
-    } rgb;
-    u8 ansi;
-  };
-} sp_prompt_style_t;
-
-typedef struct {
-  u32 codepoint;
-  sp_prompt_style_t style;
-} sp_prompt_cell_t;
-
-typedef struct {
-  s32 cols;
-  s32 rows;
-  sp_prompt_cell_t* cells;
-} sp_prompt_frame_t;
-
+/////////////
+// CONTEXT //
+/////////////
+// @context
 typedef struct {
   void* user_data;
   s32 cols;
@@ -110,12 +272,12 @@ typedef struct {
   sp_prompt_state_t state;
   sp_prompt_value_t value;
   sp_prompt_event_t event;
-  sp_prompt_event_t primed_events[8];
-  u32 primed_count;
-  u32 primed_index;
-  u8* write_buffer;
+  struct {
+    sp_prompt_event_t events[8];
+    u32 count;
+    u32 index;
+  } primed;
   sp_io_writer_t* writer;
-  sp_io_writer_t writer_stdout;
   sp_prompt_cell_t* framebuffer;
   sp_da(sp_prompt_frame_t) frames;
   struct {
@@ -123,8 +285,14 @@ typedef struct {
     sp_termios_t cache;
     bool raw;
   } terminal;
+  sp_mem_arena_t* arena;
 } sp_prompt_ctx_t;
 
+
+/////////////
+// WIDGETS //
+/////////////
+// @widgets
 typedef void (*sp_prompt_update_fn)(sp_prompt_ctx_t* ctx);
 typedef void (*sp_prompt_render_fn)(sp_prompt_ctx_t* ctx);
 
@@ -201,8 +369,14 @@ typedef struct {
   bool mask;
 } sp_prompt_password_t;
 
+/////////
+// API //
+/////////
+// @lifecycle
 sp_prompt_ctx_t* sp_prompt_begin();
 void             sp_prompt_end(sp_prompt_ctx_t* ctx);
+
+// @widgets
 void             sp_prompt_intro(sp_prompt_ctx_t* ctx, const c8* text);
 void             sp_prompt_outro(sp_prompt_ctx_t* ctx, const c8* text);
 void             sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* text, const c8* title);
@@ -213,25 +387,33 @@ void             sp_prompt_error(sp_prompt_ctx_t* ctx, const c8* text);
 void             sp_prompt_success(sp_prompt_ctx_t* ctx, const c8* text);
 const c8*        sp_prompt_text(sp_prompt_ctx_t* ctx, const c8* prompt, const c8* initial);
 bool             sp_prompt_confirm(sp_prompt_ctx_t* ctx, const c8* prompt, bool initial);
-void             sp_prompt_select(sp_prompt_ctx_t* ctx, sp_prompt_select_t prompt);
+bool             sp_prompt_select(sp_prompt_ctx_t* ctx, sp_prompt_select_t prompt);
 void             sp_prompt_multiselect(sp_prompt_ctx_t* ctx, sp_prompt_multiselect_t prompt);
 const c8*        sp_prompt_password(sp_prompt_ctx_t* ctx, const c8* prompt, const c8* prefill);
 bool             sp_prompt_submitted(sp_prompt_ctx_t* ctx);
 bool             sp_prompt_cancelled(sp_prompt_ctx_t* ctx);
+
+// @values
 const c8*        sp_prompt_get_str(sp_prompt_ctx_t* ctx);
 bool             sp_prompt_get_bool(sp_prompt_ctx_t* ctx);
 void             sp_prompt_set_str(sp_prompt_ctx_t* ctx, sp_str_t value);
 void             sp_prompt_set_bool(sp_prompt_ctx_t* ctx, bool value);
 void             sp_prompt_set_state(sp_prompt_ctx_t* ctx, sp_prompt_state_t state);
-void             sp_prompt_line(sp_prompt_ctx_t* ctx, sp_str_t text);
-bool             sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
 
+// @custom
+void             sp_prompt_line(sp_prompt_ctx_t* ctx, sp_str_t text);
+void             sp_prompt_render_line(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_style_t style);
+u32              sp_prompt_text_width(sp_str_t text);
+sp_str_t         sp_prompt_repeat(u32 codepoint, u32 count);
+
+// @advanced
 sp_prompt_ctx_t* sp_prompt_new();
-s32  sp_prompt_begin_ex(sp_prompt_ctx_t* ctx);
-void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows);
-void sp_prompt_prime_events(sp_prompt_ctx_t* ctx, sp_prompt_event_t events[8]);
-void sp_prompt_step(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget, sp_prompt_event_t event);
+s32              sp_prompt_begin_ex(sp_prompt_ctx_t* ctx);
+void             sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows);
+void             sp_prompt_prime_events(sp_prompt_ctx_t* ctx, sp_prompt_event_t events[8]);
+bool             sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
 #endif
+
 
 #if defined(SP_PROMPT_IMPLEMENTATION)
 sp_prompt_widget_t sp_prompt_intro_widget(sp_prompt_intro_t* prompt);
@@ -282,13 +464,6 @@ static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
   return 0;
 }
 
-static void sp_prompt_framebuffer_init(sp_prompt_ctx_t* ctx) {
-  u32 cell_count = (u32)(ctx->cols * ctx->rows);
-  if (ctx->framebuffer == SP_NULLPTR) {
-    ctx->framebuffer = sp_alloc(sizeof(sp_prompt_cell_t) * cell_count);
-  }
-}
-
 static void sp_prompt_framebuffer_clear(sp_prompt_ctx_t* ctx) {
   u32 cell_count = (u32)(ctx->cols * ctx->rows);
   sp_for(it, cell_count) {
@@ -310,7 +485,6 @@ sp_prompt_ctx_t* sp_prompt_new() {
   }
   if (cols <= 0) cols = 80;
   if (rows <= 0) rows = 20;
-  sp_log("is_tty: {}, cols: {}, rows: {}", SP_FMT_U8(sp_os_is_tty(sp_sys_stdout)), SP_FMT_U32(cols), SP_FMT_U32(rows));
   sp_prompt_ctx_init(ctx, cols, rows);
   return ctx;
 }
@@ -318,9 +492,7 @@ sp_prompt_ctx_t* sp_prompt_new() {
 sp_prompt_ctx_t* sp_prompt_begin() {
   sp_prompt_ctx_t* ctx = sp_prompt_new();
   sp_try_as_null(sp_prompt_begin_ex(ctx));
-
-  // Technically leaks on linenoise error, but who cares?
-  return ctx;
+  return ctx; // Leaks, but who cares?
 }
 
 s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
@@ -343,20 +515,43 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   }
 
   sp_sys_write(ctx->terminal.fds.out, "\n", 1);
+  sp_mem_arena_destroy(ctx->arena);
 }
 
 void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
-  *ctx = SP_ZERO_STRUCT(sp_prompt_ctx_t);
+  *ctx = sp_zero_struct(sp_prompt_ctx_t);
   ctx->cols = cols;
   ctx->rows = rows;
   ctx->state = SP_PROMPT_STATE_ACTIVE;
-  sp_io_writer_from_fd(&ctx->writer_stdout, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-  ctx->writer = &ctx->writer_stdout;
-  ctx->write_buffer = sp_alloc_n(u8, 64);
-  sp_io_writer_set_buffer(ctx->writer, ctx->write_buffer, 64);
-  ctx->frames = SP_NULLPTR;
-  sp_prompt_framebuffer_init(ctx);
+  ctx->arena = sp_mem_arena_new();
+  sp_context_push_arena(ctx->arena);
+
+  // Write buffering is really important, because our rendering algorithm is extremely
+  // naive. It's not much more than this:
+  //
+  // for row:
+  //   for column:
+  //     cell := cells[row][column]
+  //     emit ANSI style for cell if it changed
+  //     emit cell
+  //
+  // In other words, we call write(), one byte at a time. The simplicity of this approach
+  // is excellent, but you don't want the terminal emulator to try to re-render (M x N)
+  // times every single frame.
+  //
+  // Empirically, you get pretty bad tearing on Windows without buffering.
+  ctx->writer = sp_alloc_type(sp_io_writer_t);
+  sp_io_get_std_out(ctx->writer);
+
+  u8* buffer = sp_alloc_n(u8, 64);
+  sp_io_writer_set_buffer(ctx->writer, buffer, 64);
+
+  u32 cell_count = (u32)(ctx->cols * ctx->rows);
+  if (ctx->framebuffer == SP_NULLPTR) {
+    ctx->framebuffer = sp_alloc(sizeof(sp_prompt_cell_t) * cell_count);
+  }
   sp_prompt_framebuffer_clear(ctx);
+  sp_context_pop();
 }
 
 void sp_prompt_set_str(sp_prompt_ctx_t* ctx, sp_str_t value) {
@@ -396,20 +591,20 @@ bool sp_prompt_cancelled(sp_prompt_ctx_t* ctx) {
 }
 
 void sp_prompt_prime_events(sp_prompt_ctx_t* ctx, sp_prompt_event_t events[8]) {
-  ctx->primed_count = 0;
-  ctx->primed_index = 0;
+  ctx->primed.count = 0;
+  ctx->primed.index = 0;
 
   sp_for(it, 8) {
     if (events[it].kind == SP_PROMPT_EVENT_NONE) {
       break;
     }
 
-    ctx->primed_events[ctx->primed_count] = events[it];
-    ctx->primed_count++;
+    ctx->primed.events[ctx->primed.count] = events[it];
+    ctx->primed.count++;
   }
 }
 
-static void sp_prompt_render_line(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_style_t style) {
+void sp_prompt_render_line(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_style_t style) {
   if (ctx->cursor_row < 0 || ctx->cursor_row >= ctx->rows) {
     return;
   }
@@ -473,7 +668,7 @@ void sp_prompt_step(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget, sp_prompt_e
   }
 }
 
-static bool sp_prompt_stdin_ready(void) {
+static bool sp_prompt_poll_stdin() {
 #if defined(SP_WIN32)
   return WaitForSingleObject(GetStdHandle(STD_INPUT_HANDLE), 0) == WAIT_OBJECT_0;
 #else
@@ -484,8 +679,8 @@ static bool sp_prompt_stdin_ready(void) {
 }
 
 static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* out) {
-  if (ctx->primed_index < ctx->primed_count) {
-    *out = ctx->primed_events[ctx->primed_index++];
+  if (ctx->primed.index < ctx->primed.count) {
+    *out = ctx->primed.events[ctx->primed.index++];
     return true;
   }
 
@@ -514,7 +709,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
     return true;
   }
   if (c == 27) {
-    if (!sp_prompt_stdin_ready()) {
+    if (!sp_prompt_poll_stdin()) {
       out->kind = SP_PROMPT_EVENT_ESCAPE;
       return true;
     }
@@ -525,7 +720,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
       return true;
     }
 
-    if (sp_prompt_stdin_ready()) {
+    if (sp_prompt_poll_stdin()) {
       if (sp_sys_read(sp_sys_stdin, &seq[1], 1) <= 0) {
         seq[1] = 0;
       }
@@ -533,22 +728,10 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
 
     if (seq[0] == '[') {
       switch (seq[1]) {
-        case 'A': {
-          out->kind = SP_PROMPT_EVENT_UP;
-          return true;
-        }
-        case 'B': {
-          out->kind = SP_PROMPT_EVENT_DOWN;
-          return true;
-        }
-        case 'C': {
-          out->kind = SP_PROMPT_EVENT_RIGHT;
-          return true;
-        }
-        case 'D': {
-          out->kind = SP_PROMPT_EVENT_LEFT;
-          return true;
-        }
+        case 'A': out->kind = SP_PROMPT_EVENT_UP; return true;
+        case 'B': out->kind = SP_PROMPT_EVENT_DOWN; return true;
+        case 'C': out->kind = SP_PROMPT_EVENT_RIGHT; return true;
+        case 'D': out->kind = SP_PROMPT_EVENT_LEFT; return true;
       }
     }
 
@@ -586,7 +769,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
   return true;
 }
 
-static u32 sp_prompt_trimmed_cols(sp_prompt_cell_t* cells, u32 cols) {
+static u32 sp_prompt_num_trimmed_cols(sp_prompt_cell_t* cells, u32 cols) {
   u32 trim = cols;
   while (trim > 0 && cells[trim - 1].codepoint == ' ') {
     trim--;
@@ -600,15 +783,9 @@ static bool sp_prompt_style_equal(sp_prompt_style_t left, sp_prompt_style_t righ
   }
 
   switch (left.tag) {
-    case SP_PROMPT_STYLE_NONE: {
-      return true;
-    }
-    case SP_PROMPT_STYLE_ANSI: {
-      return left.ansi == right.ansi;
-    }
-    case SP_PROMPT_STYLE_RGB: {
-      return left.rgb.r == right.rgb.r && left.rgb.g == right.rgb.g && left.rgb.b == right.rgb.b;
-    }
+    case SP_PROMPT_STYLE_NONE: return true;
+    case SP_PROMPT_STYLE_ANSI: return left.ansi == right.ansi;
+    case SP_PROMPT_STYLE_RGB: return left.rgb.r == right.rgb.r && left.rgb.g == right.rgb.g && left.rgb.b == right.rgb.b;
   }
 
   return false;
@@ -634,7 +811,7 @@ static void sp_prompt_write_style(sp_prompt_ctx_t* ctx, sp_prompt_style_t style)
 }
 
 static void sp_prompt_write_row_cells(sp_prompt_ctx_t* ctx, sp_prompt_cell_t* cells, u32 cols) {
-  u32 trim = sp_prompt_trimmed_cols(cells, cols);
+  u32 trim = sp_prompt_num_trimmed_cols(cells, cols);
   sp_prompt_style_t current = SP_ZERO_STRUCT(sp_prompt_style_t);
 
   sp_for(col, trim) {
@@ -696,12 +873,13 @@ static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
 bool sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
   SP_ASSERT(widget.update);
   ctx->state = SP_PROMPT_STATE_ACTIVE;
-  ctx->value = SP_ZERO_STRUCT(sp_prompt_value_t);
+  ctx->value = sp_zero_struct(sp_prompt_value_t);
+  sp_context_push_arena(ctx->arena);
 
   sp_prompt_event_t event = { .kind = SP_PROMPT_EVENT_INIT };
 
   if (!sp_da_empty(ctx->frames)) {
-    sp_prompt_emit_bytes(ctx, "\r\n│\r\n", 7);
+    sp_prompt_emit(ctx, "\r\n│\r\n");
   }
 
   while (true) {
@@ -720,17 +898,18 @@ bool sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
     sp_prompt_frame_t frame = {
       .cols = ctx->cols,
       .rows = ctx->cursor_row,
-      .cells = sp_alloc(sizeof(sp_prompt_cell_t) * cell_count),
+      .cells = sp_alloc_n(sp_prompt_cell_t, cell_count),
     };
 
     sp_mem_copy(ctx->framebuffer, frame.cells, sizeof(sp_prompt_cell_t) * cell_count);
     sp_da_push(ctx->frames, frame);
   }
 
+  sp_context_pop();
   return ctx->state == SP_PROMPT_STATE_SUBMIT;
 }
 
-static u32 sp_prompt_text_width(sp_str_t text) {
+u32 sp_prompt_text_width(sp_str_t text) {
   u32 width = 0;
   sp_str_for_utf8(text, it) {
     SP_UNUSED(it);
@@ -739,7 +918,7 @@ static u32 sp_prompt_text_width(sp_str_t text) {
   return width;
 }
 
-static sp_str_t sp_prompt_repeat(u32 codepoint, u32 count) {
+sp_str_t sp_prompt_repeat(u32 codepoint, u32 count) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   sp_for(it, count) {
     sp_str_builder_append_utf8(&builder, codepoint);
@@ -1190,7 +1369,7 @@ static void sp_prompt_choice_state_reset(sp_prompt_choice_state_t* state, u32 cu
 
 static void sp_prompt_choice_state_sync_window(sp_prompt_choice_state_t* state, u32* max_items, u32 filtered_count) {
   if (*max_items == 0) {
-    *max_items = 1;
+    *max_items = 8;
   }
 
   if (filtered_count == 0) {
@@ -1918,8 +2097,8 @@ bool sp_prompt_confirm(sp_prompt_ctx_t* ctx, const c8* prompt, bool initial) {
   return sp_prompt_get_bool(ctx);
 }
 
-void sp_prompt_select(sp_prompt_ctx_t* ctx, sp_prompt_select_t prompt) {
-  sp_prompt_run(ctx, sp_prompt_select_widget(&prompt));
+bool sp_prompt_select(sp_prompt_ctx_t* ctx, sp_prompt_select_t prompt) {
+  return sp_prompt_run(ctx, sp_prompt_select_widget(&prompt));
 }
 
 void sp_prompt_multiselect(sp_prompt_ctx_t* ctx, sp_prompt_multiselect_t prompt) {

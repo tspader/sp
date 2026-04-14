@@ -233,7 +233,7 @@ void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
 void sp_test_use_mem_arena(u32 capacity) {
   static sp_mem_arena_t* mem_arena;
 
-  mem_arena = sp_mem_arena_new(capacity);
+  mem_arena = sp_mem_arena_new_ex(capacity, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
   sp_allocator_t allocator = sp_mem_arena_as_allocator(mem_arena);
   sp_context_push_allocator(allocator);
 }

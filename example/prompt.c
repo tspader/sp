@@ -1,22 +1,15 @@
-#if defined(BUILD_FREESTANDING_EXAMPLE)
-  #define SP_FREESTANDING
-  #define SP_DEFINE_BUILTINS
-#endif
 #define SP_IMPLEMENTATION
 #include "sp.h"
-
-#define SP_PROMPT_IMPLEMENTATION
 #include "sp/sp_prompt.h"
 
-typedef s32 (*sp_clack_demo_fn_t)(sp_prompt_ctx_t* ctx);
+typedef s32 (*sp_prompt_demo_fn_t)(sp_prompt_ctx_t* ctx);
 
 typedef struct {
   sp_str_t name;
-  sp_clack_demo_fn_t run;
-} sp_clack_demo_t;
+  sp_prompt_demo_fn_t run;
+} sp_prompt_demo_t;
 
-// @spader use sp_str_reduce with a custom kernel
-static sp_str_t sp_clack_selected_labels(sp_prompt_select_option_t* options, u32 option_count) {
+static sp_str_t concat_selected(sp_prompt_select_option_t* options, u32 option_count) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
   bool first = true;
   sp_for(it, option_count) {
@@ -34,7 +27,7 @@ static sp_str_t sp_clack_selected_labels(sp_prompt_select_option_t* options, u32
   return sp_str_builder_to_str(&builder);
 }
 
-static s32 sp_clack_demo_intro_note(sp_prompt_ctx_t* ctx) {
+static s32 sp_prompt_demo_note(sp_prompt_ctx_t* ctx) {
   sp_str_t value = SP_LIT("hey");
   sp_prompt_intro(ctx, "prompt harness");
   sp_prompt_note(ctx, sp_str_to_cstr(value), "Read file");
@@ -42,7 +35,7 @@ static s32 sp_clack_demo_intro_note(sp_prompt_ctx_t* ctx) {
   return 0;
 }
 
-static s32 sp_clack_demo_messages(sp_prompt_ctx_t* ctx) {
+static s32 sp_prompt_demo_indicators(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "message demo");
   sp_prompt_info(ctx, "blue info line");
   sp_prompt_success(ctx, "green success line");
@@ -53,7 +46,7 @@ static s32 sp_clack_demo_messages(sp_prompt_ctx_t* ctx) {
   return 0;
 }
 
-static s32 sp_clack_demo_confirm(sp_prompt_ctx_t* ctx) {
+static s32 sp_prompt_demo_confirm(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "confirm demo");
   bool confirmed = sp_prompt_confirm(ctx, "Install dependencies?", false);
 
@@ -67,7 +60,7 @@ static s32 sp_clack_demo_confirm(sp_prompt_ctx_t* ctx) {
   return 0;
 }
 
-static s32 sp_clack_demo_password(sp_prompt_ctx_t* ctx) {
+static s32 sp_prompt_demo_password(sp_prompt_ctx_t* ctx) {
   const c8* secret = sp_prompt_password(ctx, "Password", "sekret");
   if (sp_prompt_cancelled(ctx)) {
     sp_prompt_cancel(ctx, "cancelled");
@@ -79,36 +72,36 @@ static s32 sp_clack_demo_password(sp_prompt_ctx_t* ctx) {
   return 0;
 }
 
-static s32 sp_clack_demo_select(sp_prompt_ctx_t* ctx) {
-  sp_prompt_intro(ctx, "select demo");
+static s32 sp_prompt_demo_select(sp_prompt_ctx_t* ctx) {
+  sp_prompt_intro(ctx, "sp_prompt.h widget: select");
 
   sp_prompt_select_option_t options[] = {
-    { .label = "TypeScript", .hint = "recommended" },
-    { .label = "JavaScript", .selected = true },
-    { .label = "Rust", .hint = "fast" },
-    { .label = "Go" },
-    { .label = "Python" },
-    { .label = "C" },
+    { .label = "hey", .hint = "recommended" },
+    { .label = "hello", .selected = true },
+    { .label = "howdy", .hint = "ropers only" },
+    { .label = "hi" },
+    { .label = "hullo", .hint = "questionable" },
+    { .label = "whatup" },
   };
 
   sp_prompt_select(ctx, (sp_prompt_select_t) {
-    .prompt = "Pick language",
+    .prompt = "Pick a greeting",
     .options = options,
     .num_options = sp_carr_len(options),
     .max_items = 4,
   });
 
   if (sp_prompt_cancelled(ctx)) {
-    sp_prompt_cancel(ctx, "cancelled");
+    sp_prompt_cancel(ctx, "You say nothing at all");
     return 1;
   }
 
-  sp_prompt_note(ctx, sp_prompt_get_str(ctx), "Selected language");
+  sp_prompt_note(ctx, sp_prompt_get_str(ctx), "Greeting");
   sp_prompt_outro(ctx, "done");
   return 0;
 }
 
-static s32 sp_clack_demo_select_filter(sp_prompt_ctx_t* ctx) {
+static s32 sp_prompt_demo_select_filter(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "select filter demo");
 
   sp_prompt_select_option_t options[] = {
@@ -138,7 +131,7 @@ static s32 sp_clack_demo_select_filter(sp_prompt_ctx_t* ctx) {
   return 0;
 }
 
-static s32 sp_clack_demo_multiselect(sp_prompt_ctx_t* ctx) {
+static s32 sp_prompt_demo_multiselect(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "multiselect demo");
 
   sp_prompt_select_option_t options[] = {
@@ -161,13 +154,13 @@ static s32 sp_clack_demo_multiselect(sp_prompt_ctx_t* ctx) {
     return 1;
   }
 
-  sp_str_t selected = sp_clack_selected_labels(options, sp_carr_len(options));
+  sp_str_t selected = concat_selected(options, sp_carr_len(options));
   sp_prompt_note(ctx, sp_str_to_cstr(selected), "Selected tools");
   sp_prompt_outro(ctx, "done");
   return 0;
 }
 
-static s32 sp_clack_demo_multiselect_filter(sp_prompt_ctx_t* ctx) {
+static s32 sp_prompt_demo_multiselect_filter(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "multiselect filter demo");
 
   sp_prompt_select_option_t options[] = {
@@ -191,49 +184,42 @@ static s32 sp_clack_demo_multiselect_filter(sp_prompt_ctx_t* ctx) {
     return 1;
   }
 
-  sp_str_t selected = sp_clack_selected_labels(options, sp_carr_len(options));
+  sp_str_t selected = concat_selected(options, sp_carr_len(options));
   sp_prompt_note(ctx, sp_str_to_cstr(selected), "Selected tools");
   sp_prompt_outro(ctx, "done");
   return 0;
 }
 
-s32 prompt_main(s32 argc, const c8** argv);
-SP_ENTRY(prompt_main)
-
 s32 prompt_main(s32 argc, const c8** argv) {
-#ifdef SP_FREESTANDING
-  sp_sys_init(); // @spader need to fix SP_ENTRY to do this
-#endif
-  sp_clack_demo_fn_t run = SP_NULLPTR;
+  sp_prompt_demo_fn_t run = SP_NULLPTR;
 
-  sp_cstr_ht(sp_clack_demo_fn_t) demos = sp_zero();
-
-  sp_cstr_ht_insert(demos, ("intro-note"), sp_clack_demo_intro_note);
-  sp_cstr_ht_insert(demos, ("messages"), sp_clack_demo_messages);
-  sp_cstr_ht_insert(demos, ("confirm"), sp_clack_demo_confirm);
-  sp_cstr_ht_insert(demos, ("password"), sp_clack_demo_password);
-  sp_cstr_ht_insert(demos, ("select"), sp_clack_demo_select);
-  sp_cstr_ht_insert(demos, ("select-filter"), sp_clack_demo_select_filter);
-  sp_cstr_ht_insert(demos, ("multiselect"), sp_clack_demo_multiselect);
-  sp_cstr_ht_insert(demos, ("multiselect-filter"), sp_clack_demo_multiselect_filter);
+  sp_cstr_ht(sp_prompt_demo_fn_t) demos = sp_zero();
+  sp_cstr_ht_insert(demos, "intro-note", sp_prompt_demo_note);
+  sp_cstr_ht_insert(demos, "messages", sp_prompt_demo_indicators);
+  sp_cstr_ht_insert(demos, "confirm", sp_prompt_demo_confirm);
+  sp_cstr_ht_insert(demos, "password", sp_prompt_demo_password);
+  sp_cstr_ht_insert(demos, "select", sp_prompt_demo_select);
+  sp_cstr_ht_insert(demos, "select-filter", sp_prompt_demo_select_filter);
+  sp_cstr_ht_insert(demos, "multiselect", sp_prompt_demo_multiselect);
+  sp_cstr_ht_insert(demos, "multiselect-filter", sp_prompt_demo_multiselect_filter);
 
   if (argc >= 2) {
-    sp_clack_demo_fn_t* fn = sp_cstr_ht_get(demos, argv[1]);
+    sp_prompt_demo_fn_t* fn = sp_cstr_ht_get(demos, argv[1]);
     if (!fn) {
-      sp_log("usage: demo-prompt [program]");
+      sp_log("usage: prompt [program]");
       sp_log("programs:");
       sp_cstr_ht_for_kv(demos, it) {
         sp_log("  {}", SP_FMT_CSTR(*it.key));
       }
 
-      return 1;
+      return SP_PROMPT_ERROR;
     }
     run = *fn;
   }
 
   sp_prompt_ctx_t* ctx = sp_prompt_begin();
-  if (ctx == SP_NULLPTR) {
-    return 1;
+  if (!ctx) {
+    return SP_PROMPT_ERROR;
   }
 
   s32 result = 0;
@@ -247,31 +233,24 @@ s32 prompt_main(s32 argc, const c8** argv) {
       sp_da_push(options, option);
     }
 
-    sp_prompt_select(ctx, (sp_prompt_select_t) {
+    if (!sp_prompt_select(ctx, (sp_prompt_select_t) {
       .prompt = "Pick demo",
       .options = options,
       .num_options = sp_da_size(options),
-      .max_items = 8,
-    });
-
-    if (sp_prompt_cancelled(ctx)) {
+    })) {
       sp_prompt_cancel(ctx, "cancelled");
-      return 1;
+      sp_prompt_end(ctx);
+      return SP_PROMPT_ERROR;
     }
 
-    const c8* selection = sp_prompt_get_str(ctx);
-    sp_clack_demo_fn_t* fn = sp_cstr_ht_get(demos, selection);
-    if (!fn) {
-      sp_prompt_error(ctx, "unknown demo");
-      return 1;
-    }
-    run = *fn;
-
-    result = run(ctx);
+    sp_prompt_demo_fn_t* fn = sp_cstr_ht_get(demos, sp_prompt_get_str(ctx));
+    result = (*fn)(ctx);
   } else {
     result = run(ctx);
   }
 
+done:
   sp_prompt_end(ctx);
   return result;
 }
+SP_ENTRY(prompt_main)
