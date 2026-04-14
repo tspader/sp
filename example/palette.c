@@ -95,7 +95,7 @@ sp_str_t palette_color_to_ansi_bg(sp_color_t c) {
   u8 r = (u8)(c.r * 255.0f);
   u8 g = (u8)(c.g * 255.0f);
   u8 b = (u8)(c.b * 255.0f);
-  return sp_format("\033[48;2;{};{};{}m", SP_FMT_U32(r), SP_FMT_U32(g), SP_FMT_U32(b));
+  return sp_fmt("\033[48;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b));
 }
 
 sp_str_t palette_color_to_hex(sp_color_t c) {
@@ -104,9 +104,12 @@ sp_str_t palette_color_to_hex(sp_color_t c) {
   u8 b = (u8)(c.b * 255.0f);
   sp_str_builder_t b_out = SP_ZERO_INITIALIZE();
   sp_str_builder_append_c8(&b_out, '#');
-  sp_fmt_format_hex(&b_out, r, 2, SP_NULLPTR);
-  sp_fmt_format_hex(&b_out, g, 2, SP_NULLPTR);
-  sp_fmt_format_hex(&b_out, b, 2, SP_NULLPTR);
+  for (s32 i = 0; i < 3; i++) {
+    u8 v = (i == 0) ? r : (i == 1) ? g : b;
+    u8 hi = (v >> 4) & 0xf, lo = v & 0xf;
+    sp_str_builder_append_c8(&b_out, (c8)(hi < 10 ? '0' + hi : 'a' + hi - 10));
+    sp_str_builder_append_c8(&b_out, (c8)(lo < 10 ? '0' + lo : 'a' + lo - 10));
+  }
   return sp_str_builder_to_str(&b_out);
 }
 
@@ -162,7 +165,7 @@ void palette_render(app_t* app) {
 void palette_print_results(app_t* app) {
   sp_da_for(app->saved_colors, i) {
     sp_str_t hex = palette_color_to_hex(app->saved_colors[i]);
-    sp_log("{}", SP_FMT_STR(hex));
+    sp_log("{}", sp_fmt_str(hex));
   }
 }
 

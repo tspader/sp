@@ -798,12 +798,12 @@ static void sp_prompt_write_style(sp_prompt_ctx_t* ctx, sp_prompt_style_t style)
       break;
     }
     case SP_PROMPT_STYLE_ANSI: {
-      sp_str_t esc = sp_format("\x1b[{}m", SP_FMT_U8(style.ansi));
+      sp_str_t esc = sp_fmt("\x1b[{}m", sp_fmt_uint(style.ansi));
       sp_prompt_emit_str(ctx, esc);
       break;
     }
     case SP_PROMPT_STYLE_RGB: {
-      sp_str_t esc = sp_format("\x1b[38;2;{};{};{}m", SP_FMT_U8(style.rgb.r), SP_FMT_U8(style.rgb.g), SP_FMT_U8(style.rgb.b));
+      sp_str_t esc = sp_fmt("\x1b[38;2;{};{};{}m", sp_fmt_uint(style.rgb.r), sp_fmt_uint(style.rgb.g), sp_fmt_uint(style.rgb.b));
       sp_prompt_emit_str(ctx, esc);
       break;
     }
@@ -933,12 +933,12 @@ static void sp_prompt_static_update(sp_prompt_ctx_t* ctx) {
 
 static void sp_prompt_intro_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro_t* prompt = (sp_prompt_intro_t*)ctx->user_data;
-  sp_prompt_line(ctx, sp_format("┌  {}", SP_FMT_STR(prompt->text)));
+  sp_prompt_line(ctx, sp_fmt("┌  {}", sp_fmt_str(prompt->text)));
 }
 
 static void sp_prompt_outro_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_outro_t* prompt = (sp_prompt_outro_t*)ctx->user_data;
-  sp_prompt_line(ctx, sp_format("└  {}", SP_FMT_STR(prompt->text)));
+  sp_prompt_line(ctx, sp_fmt("└  {}", sp_fmt_str(prompt->text)));
 }
 
 static void sp_prompt_note_render(sp_prompt_ctx_t* ctx) {
@@ -970,18 +970,18 @@ static void sp_prompt_note_render(sp_prompt_ctx_t* ctx) {
   sp_str_t spacer = sp_prompt_repeat(' ', width);
   sp_str_t bottom = sp_prompt_repeat(0x2500, width + 2);
 
-  sp_prompt_line(ctx, sp_format("◇  {} {}╮", SP_FMT_STR(prompt->title), SP_FMT_STR(top_tail)));
-  sp_prompt_line(ctx, sp_format("│  {}│", SP_FMT_STR(spacer)));
+  sp_prompt_line(ctx, sp_fmt("◇  {} {}╮", sp_fmt_str(prompt->title), sp_fmt_str(top_tail)));
+  sp_prompt_line(ctx, sp_fmt("│  {}│", sp_fmt_str(spacer)));
 
   sp_da_for(message_lines, it) {
     sp_str_t line = message_lines[it];
     u32 line_width = sp_prompt_text_width(line);
     sp_str_t pad = sp_prompt_repeat(' ', width - line_width);
-    sp_prompt_line(ctx, sp_format("│  {}{}│", SP_FMT_STR(line), SP_FMT_STR(pad)));
+    sp_prompt_line(ctx, sp_fmt("│  {}{}│", sp_fmt_str(line), sp_fmt_str(pad)));
   }
 
-  sp_prompt_line(ctx, sp_format("│  {}│", SP_FMT_STR(spacer)));
-  sp_prompt_line(ctx, sp_format("├{}╯", SP_FMT_STR(bottom)));
+  sp_prompt_line(ctx, sp_fmt("│  {}│", sp_fmt_str(spacer)));
+  sp_prompt_line(ctx, sp_fmt("├{}╯", sp_fmt_str(bottom)));
 }
 
 sp_prompt_widget_t sp_prompt_intro_widget(sp_prompt_intro_t* prompt) {
@@ -1019,7 +1019,7 @@ static void sp_prompt_message_render(sp_prompt_ctx_t* ctx) {
     .tag = SP_PROMPT_STYLE_ANSI,
     .ansi = prompt->ansi,
   };
-  sp_prompt_render_line(ctx, sp_format("{}  ", SP_FMT_STR(sp_prompt_repeat(prompt->symbol, 1))), style);
+  sp_prompt_render_line(ctx, sp_fmt("{}  ", sp_fmt_str(sp_prompt_repeat(prompt->symbol, 1))), style);
   sp_prompt_render_line(ctx, prompt->text, SP_ZERO_STRUCT(sp_prompt_style_t));
   ctx->cursor_col = 0;
   ctx->cursor_row++;

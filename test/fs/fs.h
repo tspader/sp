@@ -89,10 +89,10 @@ static void fs_expect_bool(s32* utest_result, sp_str_t path, const c8* label, bo
 
   SP_TEST_REPORT(
     "{} {} was {} but expected {}",
-    SP_FMT_CSTR(label),
-    SP_FMT_STR(path),
-    SP_FMT_CSTR(actual ? "true" : "false"),
-    SP_FMT_CSTR(expected ? "true" : "false")
+    sp_fmt_cstr(label),
+    sp_fmt_str(path),
+    sp_fmt_cstr(actual ? "true" : "false"),
+    sp_fmt_cstr(expected ? "true" : "false")
   );
   SP_FAIL();
 }
@@ -102,9 +102,9 @@ static void fs_expect_attr(s32* utest_result, sp_str_t path, sp_fs_kind_t actual
 
   SP_TEST_REPORT(
     "{} had attr {} but expected {}",
-    SP_FMT_STR(path),
-    SP_FMT_S32(actual),
-    SP_FMT_S32(expected)
+    sp_fmt_str(path),
+    sp_fmt_int(actual),
+    sp_fmt_int(expected)
   );
   SP_FAIL();
 }
@@ -117,9 +117,9 @@ static void fs_expect_paths(s32* utest_result, sp_str_t sandbox, fs_expected_pat
     bool exists = sp_fs_exists(path);
     if (exists != exp->exists) {
       if (exp->exists) {
-        SP_TEST_REPORT("expected {} to exist", SP_FMT_STR(path));
+        SP_TEST_REPORT("expected {} to exist", sp_fmt_str(path));
       } else {
-        SP_TEST_REPORT("expected {} not to exist", SP_FMT_STR(path));
+        SP_TEST_REPORT("expected {} not to exist", sp_fmt_str(path));
       }
       SP_FAIL();
     }
@@ -157,7 +157,7 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
       case FS_SETUP_SYMLINK: {
         sp_str_t target = sp_fs_join_path(sandbox, sp_str_view(ent->target));
         if (sp_fs_create_sym_link(target, path) != SP_OK) {
-          SP_TEST_REPORT("failed to create symlink {} -> {}", SP_FMT_STR(path), SP_FMT_STR(target));
+          SP_TEST_REPORT("failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();
         }
         break;
@@ -165,7 +165,7 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
       case FS_SETUP_HARD_LINK: {
         sp_str_t target = sp_fs_join_path(sandbox, sp_str_view(ent->target));
         if (sp_fs_create_hard_link(target, path) != SP_OK) {
-          SP_TEST_REPORT("failed to create hard link {} -> {}", SP_FMT_STR(path), SP_FMT_STR(target));
+          SP_TEST_REPORT("failed to create hard link {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();
         }
         break;

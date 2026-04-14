@@ -3,13 +3,13 @@
 static void assert_normalized(s32* utest_result, sp_str_t path, const c8* label) {
   sp_for(i, path.len) {
     if (path.data[i] == '\\') {
-      SP_TEST_REPORT("{}: contains backslash", SP_FMT_CSTR(label));
+      SP_TEST_REPORT("{}: contains backslash", sp_fmt_cstr(label));
       SP_FAIL();
       return;
     }
   }
   if (path.len > 0 && path.data[path.len - 1] == '/') {
-    SP_TEST_REPORT("{}: trailing slash", SP_FMT_CSTR(label));
+    SP_TEST_REPORT("{}: trailing slash", sp_fmt_cstr(label));
     SP_FAIL();
   }
 }

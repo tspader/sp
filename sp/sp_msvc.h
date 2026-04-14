@@ -120,7 +120,7 @@ bool sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b) {
 
 sp_str_t sp_msvc_json_get_str(sp_str_t json, sp_str_t key) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_str_t needle = sp_format("\"{}\":\"", SP_FMT_STR(key));
+  sp_str_t needle = sp_fmt("\"{}\":\"", sp_fmt_str(key));
 
   s32 pos = sp_str_find(json, needle);
   if (pos == SP_STR_NO_MATCH) {

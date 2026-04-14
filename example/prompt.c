@@ -209,7 +209,7 @@ s32 prompt_main(s32 argc, const c8** argv) {
       sp_log("usage: prompt [program]");
       sp_log("programs:");
       sp_cstr_ht_for_kv(demos, it) {
-        sp_log("  {}", SP_FMT_CSTR(*it.key));
+        sp_log("  {}", sp_fmt_cstr(*it.key));
       }
 
       return SP_PROMPT_ERROR;

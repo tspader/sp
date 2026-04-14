@@ -44,7 +44,7 @@ UTEST_F_TEARDOWN(linkage) {
 
 sp_str_t linkage_exe(sp_str_t stem) {
   #if defined(SP_WIN32)
-    return sp_format("{}.exe", SP_FMT_STR(stem));
+    return sp_fmt("{}.exe", sp_fmt_str(stem));
   #else
     return stem;
   #endif
@@ -52,25 +52,25 @@ sp_str_t linkage_exe(sp_str_t stem) {
 
 sp_str_t linkage_obj(sp_str_t stem) {
   #if defined(SP_WIN32)
-    return sp_format("{}.obj", SP_FMT_STR(stem));
+    return sp_fmt("{}.obj", sp_fmt_str(stem));
   #else
-    return sp_format("{}.o", SP_FMT_STR(stem));
+    return sp_fmt("{}.o", sp_fmt_str(stem));
   #endif
 }
 
 sp_str_t linkage_shared(sp_str_t stem) {
   #if defined(SP_WIN32)
-    return sp_format("{}.dll", SP_FMT_STR(stem));
+    return sp_fmt("{}.dll", sp_fmt_str(stem));
   #else
-    return sp_format("{}.so", SP_FMT_STR(stem));
+    return sp_fmt("{}.so", sp_fmt_str(stem));
   #endif
 }
 
 sp_str_t linkage_static(sp_str_t stem) {
   #if defined(SP_WIN32)
-    return sp_format("{}.lib", SP_FMT_STR(stem));
+    return sp_fmt("{}.lib", sp_fmt_str(stem));
   #else
-    return sp_format("{}.a", SP_FMT_STR(stem));
+    return sp_fmt("{}.a", sp_fmt_str(stem));
   #endif
 }
 
@@ -90,9 +90,9 @@ bool compile_to_exe(linkage* ctx, const c8* file, sp_str_t output) {
       .args = {
         sp_str_lit("/nologo"),
         sp_str_lit("/TC"),
-        sp_format("/I{}", SP_FMT_STR(ctx->root)),
+        sp_fmt("/I{}", sp_fmt_str(ctx->root)),
         sp_fs_join_path(ctx->source, SP_CSTR(file)),
-        sp_format("/Fe:{}", SP_FMT_STR(output)),
+        sp_fmt("/Fe:{}", sp_fmt_str(output)),
       },
     };
 
@@ -105,7 +105,7 @@ bool compile_to_exe(linkage* ctx, const c8* file, sp_str_t output) {
     .command = sp_str_lit("cc"),
     .args = {
       sp_fs_join_path(ctx->source, SP_CSTR(file)),
-      sp_format("-I{}", SP_FMT_STR(ctx->root)),
+      sp_fmt("-I{}", sp_fmt_str(ctx->root)),
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),
       sp_str_lit("-lpthread"), sp_str_lit("-lm")
@@ -124,9 +124,9 @@ bool compile_to_object(linkage* ctx, const c8* file, sp_str_t output) {
         sp_str_lit("/nologo"),
         sp_str_lit("/TC"),
         sp_str_lit("/c"),
-        sp_format("/I{}", SP_FMT_STR(ctx->root)),
+        sp_fmt("/I{}", sp_fmt_str(ctx->root)),
         sp_fs_join_path(ctx->source, SP_CSTR(file)),
-        sp_format("/Fo:{}", SP_FMT_STR(output)),
+        sp_fmt("/Fo:{}", sp_fmt_str(output)),
       },
     });
 
@@ -137,7 +137,7 @@ bool compile_to_object(linkage* ctx, const c8* file, sp_str_t output) {
     .args = {
       sp_str_lit("-c"),
       sp_fs_join_path(ctx->source, SP_CSTR(file)),
-      sp_format("-I{}", SP_FMT_STR(ctx->root)),
+      sp_fmt("-I{}", sp_fmt_str(ctx->root)),
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),
       sp_str_lit("-lpthread"), sp_str_lit("-lm")
@@ -152,7 +152,7 @@ bool compile_objects_to_exe(sp_str_t output, sp_str_t* objs, u32 len) {
   #if defined(SP_WIN32)
     sp_ps_config_t cfg = {
       .command = sp_str_lit("cl"),
-      .args = { sp_str_lit("/nologo"), sp_format("/Fe:{}", SP_FMT_STR(output)) },
+      .args = { sp_str_lit("/nologo"), sp_fmt("/Fe:{}", sp_fmt_str(output)) },
     };
 
     sp_for(it, len) {
@@ -186,8 +186,8 @@ bool compile_to_linked_exe(linkage* ctx, const c8* file, sp_str_t output, sp_str
         sp_str_lit("/nologo"),
         sp_str_lit("/TC"),
         sp_fs_join_path(ctx->source, SP_CSTR(file)),
-        sp_format("/I{}", SP_FMT_STR(ctx->root)),
-        sp_format("/Fe:{}", SP_FMT_STR(output)),
+        sp_fmt("/I{}", sp_fmt_str(ctx->root)),
+        sp_fmt("/Fe:{}", sp_fmt_str(output)),
       },
     };
 
@@ -206,7 +206,7 @@ bool compile_to_linked_exe(linkage* ctx, const c8* file, sp_str_t output, sp_str
     .command = sp_str_lit("cc"),
     .args = {
       sp_fs_join_path(ctx->source, SP_CSTR(file)),
-      sp_format("-I{}", SP_FMT_STR(ctx->root)),
+      sp_fmt("-I{}", sp_fmt_str(ctx->root)),
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),
       sp_str_lit("-lpthread"), sp_str_lit("-lm")
@@ -229,7 +229,7 @@ bool create_archive(linkage* ctx, sp_str_t archive, sp_str_t* objs, u32 len) {
       .command = sp_str_lit("lib"),
       .args = {
         sp_str_lit("/nologo"),
-        sp_format("/OUT:{}", SP_FMT_STR(archive)),
+        sp_fmt("/OUT:{}", sp_fmt_str(archive)),
       },
     };
 
@@ -319,8 +319,8 @@ UTEST_F(linkage, shared_lib) {
         sp_str_lit("/TC"),
         sp_str_lit("/DSP_SHARED_LIB"),
         sp_fs_join_path(ut.source, sp_str_lit("lib-impl.c")),
-        sp_format("/I{}", SP_FMT_STR(ut.root)),
-        sp_format("/Fe:{}", SP_FMT_STR(so)),
+        sp_fmt("/I{}", sp_fmt_str(ut.root)),
+        sp_fmt("/Fe:{}", sp_fmt_str(so)),
         sp_str_lit("/link"),
         sp_str_lit("shell32.lib"),
       },
@@ -331,7 +331,7 @@ UTEST_F(linkage, shared_lib) {
       .args = {
         sp_str_lit("-shared"), sp_str_lit("-fPIC"),
         sp_fs_join_path(ut.source, sp_str_lit("lib-impl.c")),
-        sp_format("-I{}", SP_FMT_STR(ut.root)),
+        sp_fmt("-I{}", sp_fmt_str(ut.root)),
         sp_str_lit("-o"), so,
         sp_str_lit("-lpthread"), sp_str_lit("-lm")
       },
@@ -367,8 +367,8 @@ UTEST_F(linkage, cpp_compat) {
         sp_str_lit("/std:c++20"),
         sp_str_lit("/c"),
         sp_fs_join_path(ut.source, sp_str_lit("cpp-compat.c")),
-        sp_format("/I{}", SP_FMT_STR(ut.root)),
-        sp_format("/Fo:{}", SP_FMT_STR(obj)),
+        sp_fmt("/I{}", sp_fmt_str(ut.root)),
+        sp_fmt("/Fo:{}", sp_fmt_str(obj)),
         sp_str_lit("/WX"),
       },
     });
@@ -379,7 +379,7 @@ UTEST_F(linkage, cpp_compat) {
         sp_str_lit("-c"),
         sp_str_lit("-x"), sp_str_lit("c++"),
         sp_fs_join_path(ut.source, sp_str_lit("cpp-compat.c")),
-        sp_format("-I{}", SP_FMT_STR(ut.root)),
+        sp_fmt("-I{}", sp_fmt_str(ut.root)),
         sp_str_lit("-o"), obj,
         sp_str_lit("-g"),
         sp_str_lit("-Werror"),

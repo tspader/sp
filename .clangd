@@ -1,3 +1,4 @@
 CompileFlags:
   Add:
     - -DSP_IMPLEMENTATION
+    - -DSP_GLOB_IMPLEMENTATION

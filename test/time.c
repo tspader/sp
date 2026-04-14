@@ -41,9 +41,10 @@ UTEST(tm, timer_lap) {
 }
 
 UTEST(tm, epoch_to_iso) {
+  SKIP_ON_FREESTANDING();
   sp_tm_epoch_t epoch = sp_tm_now_epoch();
   sp_str_t iso = sp_tm_epoch_to_iso8601(epoch);
-  EXPECT_GE(iso.len, 20);
+  ASSERT_GE(iso.len, 20);
   EXPECT_EQ(iso.data[4], '-');
   EXPECT_EQ(iso.data[7], '-');
   EXPECT_EQ(iso.data[10], 'T');
@@ -221,6 +222,7 @@ typedef struct {
 } tm_iso8601_case_t;
 
 UTEST(tm, iso8601_known_values) {
+  SKIP_ON_FREESTANDING();
   tm_iso8601_case_t cases[] = {
     { { .s = 0,              .ns = 0 },         "1970-01-01T00:00:00.000Z" },
     { { .s = 946684800,      .ns = 0 },         "2000-01-01T00:00:00.000Z" },

@@ -78,10 +78,10 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
   sp_err_t result = sp_fs_create_dir(target);
 
   if (t->expect_ok && result) {
-    SP_TEST_REPORT("{} does not exist with code {}", SP_FMT_STR(target), SP_FMT_S32(result));
+    SP_TEST_REPORT("{} does not exist with code {}", sp_fmt_str(target), sp_fmt_int(result));
     SP_FAIL();
   } else if (!t->expect_ok && !result){
-    SP_TEST_REPORT("{} exists with code {}", SP_FMT_STR(target), SP_FMT_S32(result));
+    SP_TEST_REPORT("{} exists with code {}", sp_fmt_str(target), sp_fmt_int(result));
     SP_FAIL();
   }
 
@@ -94,9 +94,9 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
     bool exists = sp_fs_exists(expected_path);
     if (exists != exp->exists) {
       if (exp->exists) {
-        SP_TEST_REPORT("expected {} to exist", SP_FMT_STR(expected_path));
+        SP_TEST_REPORT("expected {} to exist", sp_fmt_str(expected_path));
       } else {
-        SP_TEST_REPORT("expected {} not to exist", SP_FMT_STR(expected_path));
+        SP_TEST_REPORT("expected {} not to exist", sp_fmt_str(expected_path));
       }
       SP_FAIL();
     }
@@ -106,9 +106,9 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
       if (attr != exp->attr) {
         SP_TEST_REPORT(
           "{} had attr {} but expected {}",
-          SP_FMT_STR(expected_path),
-          SP_FMT_S32(attr),
-          SP_FMT_S32(exp->attr)
+          sp_fmt_str(expected_path),
+          sp_fmt_int(attr),
+          sp_fmt_int(exp->attr)
         );
         SP_FAIL();
       }

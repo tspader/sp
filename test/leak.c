@@ -73,7 +73,7 @@ UTEST_F_SETUP(leak) {
 UTEST_F_TEARDOWN(leak) {
   #if defined(SP_LEAK_LOG_ONLY)
     sp_mem_arena_t* arena = sp_mem_get_scratch_arena();
-    sp_log("{} bytes", SP_FMT_U32(arena->bytes_used));
+    sp_log("{} bytes", sp_fmt_uint(arena->bytes_used));
     sp_mem_end_scratch(ut.marker);
   #endif
 }

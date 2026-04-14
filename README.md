@@ -39,11 +39,11 @@ s32 main(s32 num_args, const c8** args) {
   sp_da_for(entries, it) {
     sp_fs_entry_t* entry = &entries[it];
     switch (entry->kind) {
-      case SP_FS_KIND_DIR:  sp_log("{:fg blue}", SP_FMT_STR(entry->name)); break;
-      case SP_FS_KIND_FILE: sp_log("{}", SP_FMT_STR(entry->name)); break;
+      case SP_FS_KIND_DIR:  sp_log("{.fg blue}", sp_fmt_str(entry->name)); break;
+      case SP_FS_KIND_FILE: sp_log("{}", sp_fmt_str(entry->name)); break;
       case SP_FS_KIND_SYMLINK: {
         sp_str_t target = sp_fs_canonicalize_path(entry->path);
-        sp_log("{:fg cyan} -> {}", SP_FMT_STR(entry->name), SP_FMT_STR(target));
+        sp_log("{.fg cyan} -> {}", sp_fmt_str(entry->name), sp_fmt_str(target));
         break;
       }
       case SP_FS_KIND_NONE: break;
@@ -69,7 +69,7 @@ These are always available in the base `sp.h`, on every platform[^4]
 | `sp_cv`        | `*` Condition variables                                                         |                                                                                                                                                                                               |
 | `sp_da`        | STB-style resizable array implemented as a plain `T*` with intrusive header     | Just a pointer (e.g. `sp_da(u32)` -> `u32*`), and therefore work as plain C arrays                                                                                                            |
 | `sp_env`       | Environment variables                                                           | `PEB` parsing on Windows; grabbed from kernel on startup when freestanding; libc otherwise.                                                                                                   |
-| `sp_format`    | A type-safe `{:fg cyan}` replacement, `SP_FMT_CSTR("printf")`                   |                                                                                                                                                                                               |
+| `sp_fmt`       | A type-safe `{.fg cyan}` replacement, `sp_fmt_cstr("printf")`                   |                                                                                                                                                                                               |
 | `sp_fmon`      | Filesystem watching using low level backends                                    | inotify on Linux, kqueue or FSEvents on macOS, overlapped IO on Windows                                                                                                                       |
 | `sp_hash`      | A pseudorandom hash if you're in a pinch                                        |                                                                                                                                                                                               |
 | `sp_ht`        | STB-style hash tables with arbitrary keys, values, and hash + compare functions | No `_Generic`; poor man's monomorphization with just a few (hopefully sane) macros                                                                                                            |
@@ -113,8 +113,8 @@ These are available in `sp/*.h` as separate headers, for various reasons.[^3]
 
 | module       | problem                                                                                                                                                                                               | platform |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `sp_format`  | If your format strings contains `{` or `}`, they will be parsed as format placeholders. There's no concept of escaping.                                                                               |          |
-| `sp_format`  | The `:key value` modifier syntax is poorly specified, not extensible, and very inergonomic when you want a dynamic value (e.g. picking a color programmatically). It needs a rework.                  |          |
+| `sp_fmt`     | If your format strings contains `{` or `}`, they will be parsed as format placeholders. There's no concept of escaping.                                                                               |          |
+| `sp_fmt`     | The `.key value` modifier syntax is poorly specified, not extensible, and very inergonomic when you want a dynamic value (e.g. picking a color programmatically). It needs a rework.                  |          |
 | `sp_ps`      | Implemented with `pthread` instead of `fork` + `exec`                                                                                                                                                 | Linux    |
 | `sp_ht`      | Keys, by default, are simply `memcmp`'d for equality. If your key is a struct which the compiler pads, it is silently wrong.                                                                          |          |
 | `sp_sys`     | This is labeled as syscall wrappers, but is really "the platform backend". It ought to be treated as such and formalized. This will probably happen when WASI is implemented.                         |          |
@@ -136,7 +136,7 @@ Here's a minimal version of `wc`; it uses a few very handy and common functions:
 
 s32 main(s32 num_args, const c8** args) {
   if (num_args < 2) {
-    sp_log("usage: wc {:fg cyan}", SP_FMT_CSTR("$file"));
+    sp_log("usage: wc {.fg cyan}", sp_fmt_cstr("$file"));
     return 1;
   }
 
@@ -160,7 +160,7 @@ s32 main(s32 num_args, const c8** args) {
   }
 
   sp_str_ht_for_kv(counts, it) {
-    sp_log("{} {}", SP_FMT_U32(*it.val), SP_FMT_STR(*it.key));
+    sp_log("{} {}", sp_fmt_uint(*it.val), sp_fmt_str(*it.key));
   }
   return 0;
 }
@@ -186,7 +186,7 @@ sp_da_for(years, it) {
   sp_cstr_ht(s32) ht = sp_zero_initialize();
   sp_cstr_ht_insert(ht, "veneta", 72);
   s32* veneta = sp_cstr_ht_get(ht, "veneta");
-  SP_LOG("the best dead show was in 19{}", SP_FMT_S32(*veneta));
+  SP_LOG("the best dead show was in 19{}", sp_fmt_int(*veneta));
 ```
 
 ### filesystem

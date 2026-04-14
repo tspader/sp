@@ -43,7 +43,7 @@ UTEST(stress, hash_table) {
 
   sp_for(i, 100) {
     u64 key = rand() % count;
-    EXPECT_TRUE(sp_ht_exists(ht, key));
+    EXPECT_TRUE(sp_ht_getp(ht, key));
     EXPECT_EQ(*sp_ht_getp(ht, key), key * key);
   }
 
@@ -54,7 +54,7 @@ UTEST(stress, hash_table) {
   EXPECT_EQ(sp_ht_size(ht), count / 2);
 
   for (u64 i = 1; i < count; i += 2) {
-    EXPECT_TRUE(sp_ht_exists(ht, i));
+    EXPECT_TRUE(sp_ht_getp(ht, i));
     EXPECT_EQ(*sp_ht_getp(ht, i), i * i);
   }
 
@@ -390,7 +390,7 @@ void fmon_stress_create_dir_tree(sp_str_t base, s32 depth, sp_da(sp_str_t)* dirs
   if (depth <= 0) return;
 
   for (s32 i = 0; i < FMON_STRESS_DIRS_PER_LEVEL; i++) {
-    sp_str_t name = sp_format_str(SP_LIT("d{}"), SP_FMT_S32(i));
+    sp_str_t name = sp_fmt("d{}", sp_fmt_int(i));
     sp_str_t child = sp_fs_join_path(base, name);
     sp_fs_create_dir(child);
     fmon_stress_create_dir_tree(child, depth - 1, dirs);
@@ -437,7 +437,7 @@ UTEST(stress, fmon) {
 
     while (files_created < batch_end) {
       sp_str_t dir = dirs[dir_idx % num_dirs];
-      sp_str_t name = sp_format_str(SP_LIT("f{}.txt"), SP_FMT_U32(files_created));
+      sp_str_t name = sp_fmt("f{}.txt", sp_fmt_uint(files_created));
       sp_str_t path = sp_fs_join_path(dir, name);
 
       sp_io_writer_t writer = SP_ZERO_INITIALIZE();

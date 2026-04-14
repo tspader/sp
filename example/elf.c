@@ -22,7 +22,7 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_str_t output_path = sp_str_view(argv[1]);
   u32 num_files = argc - 2;
 
-  sp_log("embedding {:fg brightblack} files into {:fg cyan}", SP_FMT_U32(num_files), SP_FMT_STR(output_path));
+  sp_log("embedding {.fg brightblack} files into {.fg cyan}", sp_fmt_uint(num_files), sp_fmt_str(output_path));
 
   sp_elf_t* elf = sp_elf_new_with_null_section();
 
@@ -63,7 +63,7 @@ s32 embed_main(s32 argc, const c8** argv) {
       return 1;
     }
 
-    sp_log("{:fg brightcyan} ({} bytes)", SP_FMT_STR(basename), SP_FMT_U32(content.len));
+    sp_log("{.fg brightcyan} ({} bytes)", sp_fmt_str(basename), sp_fmt_uint(content.len));
 
     data_sec = sp_elf_find_section_by_index(elf, data_sec_idx);
     u32 data_offset = (u32)data_sec->buffer.size;

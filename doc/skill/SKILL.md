@@ -54,7 +54,7 @@ Use these when searching through `references/index.md`, `references/sp.h`, or `r
 - Platform: `sp_os`
 - Time: `sp_tm`
 - Concurrency: `sp_thread`, `sp_mutex`, `sp_semaphore`, `sp_atomic`, `sp_spin_lock`
-- Logging: `sp_format`, `sp_log`, `SP_FMT_*`
+- Logging: `sp_fmt`, `sp_log`, `sp_fmt_*`
 
 ## Common Patterns
 ### Initialization
@@ -80,7 +80,7 @@ sp_dyn_array_push(numbers, 42);
 sp_dyn_array_push(numbers, 100);
 
 sp_dyn_array_for(numbers, i) {
-  sp_log("numbers[{}] = {}", SP_FMT_U32(i), SP_FMT_S32(numbers[i]));
+  sp_log("numbers[{}] = {}", sp_fmt_uint(i), sp_fmt_int(numbers[i]));
 }
 
 u32 count = sp_dyn_array_size(numbers);
@@ -113,15 +113,15 @@ sp_ht_for(htb, it) {
 ```c
 // Type-safe formatting with color support
 sp_log(
-  "Processing {:fg cyan} with {} {}",
-  SP_FMT_STR(name),
-  SP_FMT_U32(count),
-  SP_FMT_CSTR("items")
+  "Processing {.fg cyan} with {} {}",
+  sp_fmt_str(name),
+  sp_fmt_uint(count),
+  sp_fmt_cstr("items")
 );
 
-sp_str_t msg = sp_format("Result: {}", SP_FMT_S32(42));
+sp_str_t msg = sp_fmt("Result: {}", sp_fmt_int(42));
 
-// Colors: :fg, :bg, :color
+// Colors: .fg, .bg
 // Colors: black, red, green, yellow, blue, magenta, cyan, white
 // Add 'bright' prefix for bright variants
 ```
@@ -147,7 +147,7 @@ switch (state) {
 // Return an enum for recoverable errors (consumer app may have their own error type)
 sp_err_t load_config(sp_str_t path, config_t* config) {
   if (!sp_os_does_path_exist(path)) {
-    sp_log("Config not found: {}", SP_FMT_STR(path));
+    sp_log("Config not found: {}", sp_fmt_str(path));
     return SP_ERR_WHATEVER;
   }
 
@@ -162,6 +162,6 @@ void process_array(int* arr, u32 size) {
 
 // SP_FATAL is sp_log + SP_ASSERT(false)
 if (critical_failure) {
-  SP_FATAL("Cannot continue: {:fg red}", SP_FMT_STR(reason));
+  SP_FATAL("Cannot continue: {.fg red}", sp_fmt_str(reason));
 }
 ```

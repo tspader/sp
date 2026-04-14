@@ -38,7 +38,7 @@
     + sp_dyn_array     stb-style resizable array (intrusive T* + macros)
       sp_env           environment variables
       sp_err           thread-local errno style error system
-    + sp_format        "a type-safe {:fg cyan} replacement", SP_FMT_CSTR("printf")
+    + sp_fmt           "a type-safe {.cyan .italic} replacement", sp_fmt_cstr("printf()")
       sp_fmon          os native filesystem watching
     + sp_fs            path manipulation, filesystem, common system paths (e.g. appdata)
       sp_hash          pseudorandom hashing, terrible and stolen
@@ -338,8 +338,8 @@
 #define SP_ASSERT(condition) sp_assert((condition))
 #define SP_FATAL(FMT, ...) \
   do { \
-    sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
-    sp_log("{:color red}: {}", SP_FMT_CSTR("SP_FATAL()"), SP_FMT_STR(message)); \
+    sp_str_t message = sp_fmt((FMT), ##__VA_ARGS__); \
+    sp_log("{.fg red}: {}", sp_fmt_cstr("SP_FATAL()"), sp_fmt_str(message)); \
     SP_EXIT_FAILURE(); \
   } while (0)
 #define sp_fatal(FMT, ...) SP_FATAL(FMT, ##__VA_ARGS__)
@@ -357,8 +357,8 @@
   do { \
     if (!(COND)) { \
       const c8* condition = SP_MACRO_STR(COND); \
-      sp_str_t message = sp_format((FMT), ##__VA_ARGS__); \
-      sp_log("SP_ASSERT({:color red}): {}", SP_FMT_CSTR(condition), SP_FMT_STR(message)); \
+      sp_str_t message = sp_fmt((FMT), ##__VA_ARGS__); \
+      sp_log("SP_ASSERT({.fg red}): {}", sp_fmt_cstr(condition), sp_fmt_str(message)); \
       SP_EXIT_FAILURE(); \
     } \
   } while (0)
@@ -1448,15 +1448,16 @@ void  sp_entry_init(s32 argc, const c8** argv, sp_entry_fn_t fn);
 // @error
 typedef enum {
   SP_OK                   = 0,
-  SP_ERR_IO               = 1,
-  SP_ERR_IO_OPEN_FAILED   = 2,
-  SP_ERR_IO_SEEK_INVALID  = 3,
-  SP_ERR_IO_SEEK_FAILED   = 4,
-  SP_ERR_IO_WRITE_FAILED  = 5,
-  SP_ERR_IO_CLOSE_FAILED  = 6,
-  SP_ERR_IO_READ_FAILED   = 7,
-  SP_ERR_IO_READ_ONLY     = 8,
-  SP_ERR_IO_NO_SPACE      = 9,
+  SP_ERR                = 1,
+  SP_ERR_IO               = 1001,
+  SP_ERR_IO_OPEN_FAILED   = 1002,
+  SP_ERR_IO_SEEK_INVALID  = 1003,
+  SP_ERR_IO_SEEK_FAILED   = 1004,
+  SP_ERR_IO_WRITE_FAILED  = 1005,
+  SP_ERR_IO_CLOSE_FAILED  = 1006,
+  SP_ERR_IO_READ_FAILED   = 1007,
+  SP_ERR_IO_READ_ONLY     = 1008,
+  SP_ERR_IO_NO_SPACE      = 1009,
   SP_ERR_FMT_TOO_MANY_RENDERERS = 1100,
   SP_ERR_FMT_WRONG_PARAM_KIND = 1101,
   SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
@@ -1464,6 +1465,11 @@ typedef enum {
   SP_ERR_FMT_TOO_MANY_DIRECTIVES = 1104,
   SP_ERR_FMT_BAD_PRECISION = 1105,
   SP_ERR_FMT_BAD_PLACEHOLDER = 1106,
+  SP_ERR_FMT_DIRECTIVE_ARG_MISSING = 1107,
+  SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED = 1108,
+  SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND = 1109,
+  SP_ERR_FMT_UNTERMINATED_PLACEHOLDER = 1111,
+  SP_ERR_FMT_CUSTOM_WITHOUT_FN = 1112,
   SP_ERR_LAZY,
   SP_ERR_OS,
 } sp_err_t;
@@ -1828,6 +1834,68 @@ SP_API void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap);
 // ██║  ██║██║  ██║███████║██║  ██║       ██║   ██║  ██║██████╔╝███████╗███████╗
 // ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝       ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚══════╝╚══════╝
 // @hash_table @ht
+//
+// sp_ht is a hash table in the spirit of Sean Barrett's stb_ds.h
+// - Keys and values may be of any type (primitive scalars, structs, strings, etc.)
+// - You can provide a custom hash() and compare() function
+//
+// # API
+// Like everything in sp.h, hash tables must be zero initialized. Once declared,
+// they can be used immediately, without further initialization.
+//
+//   sp_ht(s32, s32) ht = sp_zero()
+//   sp_ht_insert(ht, 69, 420);
+//   s32* value = sp_ht_get(ht, 69, 420);
+//   sp_ht_erase(ht, 69);
+//   sp_ht_free(ht);
+//
+// ## ITERATORS
+// Hash tables also come with two kinds of iterators. The first, more convenient
+// form provides an iterator struct with a typed key and value.
+//
+// sp_ht_for_kv(ht, it) {
+//   s32* key = it.key;
+//   s32* value = it.value;
+// }
+//
+// This, however, depends on a GNU extension, so a plain iterator which must be
+// resolved into a key and value is also provided:
+//
+// sp_ht_for(ht, it) {
+//   s32* key = sp_ht_it_get(ht, it);
+//   s32* value = sp_ht_it_getk(ht, it);
+// }
+//
+// ## KEY TYPES
+// Unlike stb_ds.h, sp_ht does not require a type with fields named "key" and "value". You
+// declare a hash table with a complex key type the same as anything else:
+//
+//   typedef struct { u32 x; u32 y; } cell_t;
+//   sp_ht(cell_t, f32) cells = sp_zero();
+//
+// For key types where memcmp() is not correct for hashing or comparison, you need to
+// initialize the hash table with a hash() and compare() function:
+//
+//   sp_ht_set_fns(ht, on_hash, on_compare)
+//
+// This can very much be a footgun. To combat this, sp.h provides specializations for string
+// (both sp_str_t and const c8*) keys which extend the lazy initialization to the hash and
+// compare functions, too. The only functions which need to be specialized are those which
+// actually perform the lazy initialization. See sp_str_ht and sp_cstr_ht.
+//
+// Practically, you'll only need these custom functions for two types of keys:
+// 1. Strings
+// 2. Structs into which the compiler inserts padding
+//
+// # TYPES
+// sp_ht(K, V) defines a strongly-typed struct. A hash table is a pointer to such
+// a struct which is lazily allocated on first use. Internally, a hash table is laid
+// out array-of-structs style:
+//
+//    [KEY VALUE STATE] [KEY VALUE STATE] [KEY VALUE STATE]
+//
+// In other words, sp_ht() is not designed for high performance linear iteration
+// over a tightly packed array of keys or values
 #define SP_HT_HASH_SEED         0x31415296
 #define SP_HT_INVALID_INDEX     UINT32_MAX
 
@@ -1873,8 +1941,6 @@ SP_BEGIN_EXTERN_C()
 #else
 #define sp_ht_alloc_type(key, size) sp_alloc(size)
 #endif
-
-
 
 #define __sp_ht_entry(__K, __V)                \
     struct                                     \
@@ -1923,9 +1989,9 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_free(ht)        \
   do {                        \
     if ((ht)) {               \
-      sp_free((ht)->data);    \
+      sp_mem_allocator_free((ht)->info.allocator, (ht)->data);    \
       (ht)->data = SP_NULLPTR;\
-      sp_free(ht);            \
+      sp_mem_allocator_free((ht)->info.allocator, (ht));            \
       (ht) = SP_NULLPTR;      \
     }                         \
   } while (0)
@@ -1966,9 +2032,9 @@ SP_BEGIN_EXTERN_C()
   } while (0)
 
 #define sp_ht_insert(ht, k, v)  \
-  do {                          \
-    sp_ht_ensure(ht);           \
-    sp_ht_insert_ex(ht, (k), v);  \
+  do { \
+    sp_ht_ensure(ht); \
+    sp_ht_insert_ex(ht, (k), v); \
   } while (0)
 
 #define sp_ht_get_key_n(ht, n) \
@@ -1981,27 +2047,34 @@ SP_BEGIN_EXTERN_C()
   sp_ht_get_n(ht, (ht)->info.tmp_idx)
 
 #define sp_ht_getp(ht, key) \
-  (!(ht) ? SP_NULLPTR : (   \
-    (ht)->tmp_key = (key),  \
+  (!(ht) ? SP_NULLPTR : ( \
+    (ht)->tmp_key = (key), \
     (ht)->info.tmp_idx = sp_ht_tmp_key_index(ht), \
-    (ht)->info.tmp_idx == SP_HT_INVALID_INDEX ? SP_NULLPTR : sp_ht_get_tmp_n(ht)))
+    (ht)->info.tmp_idx == SP_HT_INVALID_INDEX ? \
+      SP_NULLPTR : \
+      sp_ht_get_tmp_n(ht) \
+    ) \
+  )
 
-#define sp_ht_key_exists(ht, key) \
-  ((ht) && ((ht)->tmp_key = (key), sp_ht_tmp_key_index(ht) != SP_HT_INVALID_INDEX))
+#define sp_ht_get_ex(ht, key, idx) \
+  (!(ht) ? SP_NULLPTR : (   \
+    (idx) = sp_ht_key_index(ht, key), \
+    (idx) == SP_HT_INVALID_INDEX ?  \
+      SP_NULLPTR :  \
+      sp_ht_get_n(ht, idx) \
+    ) \
+  )
 
-#define sp_ht_exists(ht, key) \
-  sp_ht_key_exists((ht), (key))
-
-#define sp_ht_erase(ht, k)                          \
-  do {                                              \
-    if ((ht)) {                                     \
-      (ht)->tmp_key = (k);                          \
-      u64 idx = sp_ht_tmp_key_index(ht);            \
-      if (idx != SP_HT_INVALID_INDEX) {             \
-        (ht)->data[idx].state = SP_HT_ENTRY_DELETED;\
-        if ((ht)->size) (ht)->size--;               \
-      }                                             \
-    }                                               \
+#define sp_ht_erase(ht, k)                               \
+  do {                                                   \
+    if ((ht)) {                                          \
+      (ht)->tmp_key = (k);                               \
+      u64 _ht_idx = sp_ht_tmp_key_index(ht);             \
+      if (_ht_idx != SP_HT_INVALID_INDEX) {              \
+        (ht)->data[_ht_idx].state = SP_HT_ENTRY_DELETED; \
+        if ((ht)->size) (ht)->size--;                    \
+      }                                                  \
+    }                                                    \
   } while (0)
 
 #define sp_ht_it_valid(ht, it) \
@@ -2044,6 +2117,8 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_tmp_key_index(ht) \
   sp_ht_get_key_index_fn((void**)&(ht)->data, (void*)&(ht)->tmp_key, (ht)->capacity, (ht)->info)
 
+#define sp_ht_key_index(ht, key) \
+  sp_ht_get_key_index_fn((void**)&(ht)->data, (void*)&(key), (ht)->capacity, (ht)->info)
 
 // STR_HT
 #define sp_str_ht(t) sp_ht(sp_str_t, t)
@@ -2062,22 +2137,22 @@ SP_BEGIN_EXTERN_C()
     sp_ht_insert_ex(ht, key, value);      \
   } while (0)
 
-#define sp_str_ht_get(ht, key)      sp_ht_getp(ht, key)
-#define sp_str_ht_exists(ht, key)   sp_ht_exists(ht, key)
-#define sp_str_ht_erase(ht, key)    sp_ht_erase(ht, key)
-#define sp_str_ht_size(ht)          sp_ht_size(ht)
-#define sp_str_ht_capacity(ht)      sp_ht_capacity(ht)
-#define sp_str_ht_empty(ht)         sp_ht_empty(ht)
-#define sp_str_ht_clear(ht)         sp_ht_clear(ht)
-#define sp_str_ht_free(ht)          sp_ht_free(ht)
-#define sp_str_ht_front(ht)         sp_ht_front(ht)
-#define sp_str_ht_for(ht, it)       sp_ht_for(ht, it)
-#define sp_str_ht_for_kv(ht, it)    sp_ht_for_kv(ht, it)
-#define sp_str_ht_it_init(ht)       sp_ht_it_init(ht)
-#define sp_str_ht_it_valid(ht, it)  sp_ht_it_valid(ht, it)
+#define sp_str_ht_get(ht, key)       sp_ht_getp(ht, key)
+#define sp_str_ht_get_ex(ht, key, n) sp_ht_get_ex(ht, key, n)
+#define sp_str_ht_erase(ht, key)     sp_ht_erase(ht, key)
+#define sp_str_ht_size(ht)           sp_ht_size(ht)
+#define sp_str_ht_capacity(ht)       sp_ht_capacity(ht)
+#define sp_str_ht_empty(ht)          sp_ht_empty(ht)
+#define sp_str_ht_clear(ht)          sp_ht_clear(ht)
+#define sp_str_ht_free(ht)           sp_ht_free(ht)
+#define sp_str_ht_front(ht)          sp_ht_front(ht)
+#define sp_str_ht_for(ht, it)        sp_ht_for(ht, it)
+#define sp_str_ht_for_kv(ht, it)     sp_ht_for_kv(ht, it)
+#define sp_str_ht_it_init(ht)        sp_ht_it_init(ht)
+#define sp_str_ht_it_valid(ht, it)   sp_ht_it_valid(ht, it)
 #define sp_str_ht_it_advance(ht, it) sp_ht_it_advance(ht, it)
-#define sp_str_ht_it_getp(ht, it)   sp_ht_it_getp(ht, it)
-#define sp_str_ht_it_getkp(ht, it)  sp_ht_it_getkp(ht, it)
+#define sp_str_ht_it_getp(ht, it)    sp_ht_it_getp(ht, it)
+#define sp_str_ht_it_getkp(ht, it)   sp_ht_it_getkp(ht, it)
 
 // CSTR_HT
 #define sp_cstr_ht(t) sp_ht(const c8*, t)
@@ -2097,7 +2172,6 @@ SP_BEGIN_EXTERN_C()
   } while (0)
 
 #define sp_cstr_ht_get(ht, key)       sp_ht_getp(ht, key)
-#define sp_cstr_ht_exists(ht, key)    sp_ht_exists(ht, key)
 #define sp_cstr_ht_erase(ht, key)     sp_ht_erase(ht, key)
 #define sp_cstr_ht_size(ht)           sp_ht_size(ht)
 #define sp_cstr_ht_capacity(ht)       sp_ht_capacity(ht)
@@ -2370,7 +2444,6 @@ SP_API void sp_log_str(sp_str_t fmt, ...);
 SP_API void sp_print(const c8* fmt, ...);
 SP_API void sp_print_err(const c8* fmt, ...);
 SP_API void sp_print_str(sp_str_t fmt, ...);
-SP_API void _sp_log(const c8* fmt, ...);
 
 
 // ███████╗███╗   ██╗██╗   ██╗
@@ -2763,8 +2836,8 @@ SP_API sp_os_attr_t   sp_os_get_raw_file_attrs(sp_str_t path);
 SP_API sp_os_attr_t   sp_os_get_raw_target_attrs(sp_str_t path);
 SP_API sp_err_t       sp_os_set_raw_file_attrs(sp_str_t path, sp_os_attr_t attrs);
 SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal_handler_t, void* userdata);
-SP_API bool           sp_os_is_tty(sp_os_file_handle_t fd);
-SP_API void           sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* rows);
+SP_API bool           sp_os_is_tty(sp_sys_fd_t fd);
+SP_API void           sp_os_tty_size(sp_sys_fd_t fd, s32* cols, s32* rows);
 
 // ███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗
 // ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝
@@ -2773,126 +2846,163 @@ SP_API void           sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* row
 // ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║ ██║   ██║
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝
 // @format
-#define SP_FORMAT_TYPES \
- SP_FMT_X(ptr, void*) \
- SP_FMT_X(str, sp_str_t) \
- SP_FMT_X(cstr, const c8*) \
- SP_FMT_X(s8, s8) \
- SP_FMT_X(s16, s16) \
- SP_FMT_X(s32, s32) \
- SP_FMT_X(s64, s64) \
- SP_FMT_X(u8, u8) \
- SP_FMT_X(u16, u16) \
- SP_FMT_X(u32, u32) \
- SP_FMT_X(u64, u64) \
- SP_FMT_X(f32, f32) \
- SP_FMT_X(f64, f64) \
- SP_FMT_X(c8, c8) \
- SP_FMT_X(c16, c16) \
- SP_FMT_X(context, sp_context_t*) \
- SP_FMT_X(hash, sp_hash_t) \
- SP_FMT_X(hash_short, sp_hash_t) \
- SP_FMT_X(str_builder, sp_str_builder_t) \
- SP_FMT_X(quoted_str, sp_str_t) \
- SP_FMT_X(color, const c8*) \
-
-#define SP_FMT_ID(id) SP_MACRO_CAT(sp_format_id_, id)
-#define SP_FMT_FN(id) SP_MACRO_CAT(sp_fmt_format_, id)
-#define SP_FMT_UNION(T) SP_MACRO_CAT(T, _value)
-
-typedef struct sp_format_arg sp_format_arg_t;
-
-SP_TYPEDEF_FN(void, sp_format_fn_t, sp_str_builder_t*, sp_format_arg_t*);
+sp_str_t sp_fmt(const c8* fmt, ...);
+sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...);
+sp_err_t sp_fmt_v(sp_str_t* str, sp_str_t fmt, va_list args);
 
 typedef enum {
-  SP_FMT_SPEC_VALUE_FROM_ARG,
-  SP_FMT_SPEC_VALUE_FROM_STR,
-  SP_FMT_SPEC_VALUE_NONE,
-} sp_fmt_spec_value_kind_t;
+  SP_FMT_ALIGN_NONE,
+  SP_FMT_ALIGN_LEFT,
+  SP_FMT_ALIGN_CENTER,
+  SP_FMT_ALIGN_RIGHT,
+} sp_fmt_align_t;
+
+#define SP_FMT_MAX_DIRECTIVES 8
+#define SP_FMT_WIDTH_MAX      4096
+
+typedef enum {
+  sp_fmt_id_u64    = 1 << 0,
+  sp_fmt_id_s64    = 1 << 1,
+  sp_fmt_id_f64    = 1 << 2,
+  sp_fmt_id_str    = 1 << 3,
+  sp_fmt_id_ptr    = 1 << 4,
+  sp_fmt_id_custom = 1 << 5,
+} sp_fmt_arg_kind_t;
 
 typedef struct {
-  struct {
-    sp_fmt_spec_value_kind_t kind;
-    union {
-      sp_str_t str;
-      sp_format_arg_t* arg;
-    };
-  } value;
-  void* user_data;
-  sp_str_builder_t* builder;
-} sp_fmt_spec_ctx_t;
+  u32 width;
+  sp_fmt_align_t align;
+  u8 fill;
+  sp_opt(u8) precision;
+  u8 fill_dynamic;
+  u8 width_dynamic;
+  u8 precision_dynamic;
+  u8 directive_count;
+  u8 directive_arg_dynamic;
+  sp_str_t directive_names[SP_FMT_MAX_DIRECTIVES];
+  sp_str_t directive_args [SP_FMT_MAX_DIRECTIVES];
+} sp_fmt_spec_t;
 
-sp_typedef_fn(s32, sp_fmt_spec_fn_t, sp_fmt_spec_ctx_t*);
+typedef struct sp_fmt_arg sp_fmt_arg_t;
+SP_TYPEDEF_FN(void, sp_fmt_fn_t, sp_str_builder_t*, sp_fmt_arg_t*, sp_fmt_arg_t*);
+SP_TYPEDEF_FN(void, sp_fmt_transform_fn_t, sp_str_builder_t*, sp_str_t, sp_fmt_arg_t*, sp_fmt_arg_t*);
+
+struct sp_fmt_arg {
+  sp_fmt_arg_kind_t id;
+  sp_fmt_spec_t spec;
+  union {
+    u64 u;
+    s64 i;
+    f64 f;
+    sp_str_t s;
+    void* p;
+    struct { sp_fmt_fn_t fn; void* ptr; } custom;
+  };
+};
+
+typedef enum {
+  sp_fmt_directive_renderer,
+  sp_fmt_directive_transformer,
+  sp_fmt_directive_decorator,
+} sp_fmt_directive_kind_t;
+
 typedef struct {
-  const c8* name;
-  struct {
-    sp_fmt_spec_fn_t parse;
-    sp_fmt_spec_fn_t before;
-    sp_fmt_spec_fn_t after;
-  } fn;
-} sp_fmt_specifier_t;
+  sp_fmt_directive_kind_t kind;
+  sp_fmt_arg_kind_t       arg_kinds;
+  sp_fmt_arg_kind_t       param_kinds;
+  union {
+    sp_fmt_fn_t           renderer;
+    sp_fmt_transform_fn_t transformer;
+    struct {
+      sp_fmt_fn_t before;
+      sp_fmt_fn_t after;
+    } decorator;
+  };
+} sp_fmt_directive_t;
 
-typedef struct sp_formatter {
-  sp_format_fn_t fn;
-  s32 id;
-} sp_formatter_t;
+#define sp_fmt_uint(_value)  (sp_fmt_arg_t) { .id = sp_fmt_id_u64, .u = (_value) }
+#define sp_fmt_int(_value)   (sp_fmt_arg_t) { .id = sp_fmt_id_s64, .i = (_value) }
+#define sp_fmt_float(_value) (sp_fmt_arg_t) { .id = sp_fmt_id_f64, .f = (_value) }
+#define sp_fmt_char(_value)  (sp_fmt_arg_t) { .id = sp_fmt_id_str, .s = { .data = &(_value), .len = 1 } }
+#define sp_fmt_str(_value)   (sp_fmt_arg_t) { .id = sp_fmt_id_str, .s = (_value) }
+#define sp_fmt_cstr(_value)  (sp_fmt_arg_t) { .id = sp_fmt_id_str, .s = sp_str_view(_value) }
+#define sp_fmt_ptr(_value)   (sp_fmt_arg_t) { .id = sp_fmt_id_ptr, .p = (_value) }
 
-#define SP_FMT_ARG(T, V)        SP_RVAL(sp_format_arg_t) { .SP_FMT_UNION(T) = (V), .id = SP_FMT_ID(T) }
-#define SP_FMT_PTR(V)           SP_FMT_ARG(ptr, V)
-#define SP_FMT_STR(V)           SP_FMT_ARG(str, V)
-#define SP_FMT_CSTR(V)          SP_FMT_ARG(cstr, V)
-#define SP_FMT_S8(V)            SP_FMT_ARG(s8, V)
-#define SP_FMT_S16(V)           SP_FMT_ARG(s16, V)
-#define SP_FMT_S32(V)           SP_FMT_ARG(s32, V)
-#define SP_FMT_S64(V)           SP_FMT_ARG(s64, V)
-#define SP_FMT_U8(V)            SP_FMT_ARG(u8, V)
-#define SP_FMT_U16(V)           SP_FMT_ARG(u16, V)
-#define SP_FMT_U32(V)           SP_FMT_ARG(u32, V)
-#define SP_FMT_U64(V)           SP_FMT_ARG(u64, V)
-#define SP_FMT_F32(V)           SP_FMT_ARG(f32, V)
-#define SP_FMT_F64(V)           SP_FMT_ARG(f64, V)
-#define SP_FMT_C8(V)            SP_FMT_ARG(c8, V)
-#define SP_FMT_C16(V)           SP_FMT_ARG(c16, V)
-#define SP_FMT_CONTEXT(V)       SP_FMT_ARG(context, V)
-#define SP_FMT_HASH(V)          SP_FMT_ARG(hash, V)
-#define SP_FMT_SHORT_HASH(V)    SP_FMT_ARG(hash_short, V)
-#define SP_FMT_STR_BUILDER(V)   SP_FMT_ARG(str_builder, V)
-#define SP_FMT_DATE_TIME(V)     SP_FMT_ARG(date_time, V)
-#define SP_FMT_THREAD(V)        SP_FMT_ARG(thread, V)
-#define SP_FMT_MUTEX(V)         SP_FMT_ARG(mutex, V)
-#define SP_FMT_SEMAPHORE(V)     SP_FMT_ARG(semaphore, V)
-#define SP_FMT_DYNAMIC_ARRAY(V) SP_FMT_ARG(dynamic_array, V)
-#define SP_FMT_QUOTED_STR(V)    SP_FMT_ARG(quoted_str, V)
-#define SP_FMT_COLOR(V)         SP_FMT_ARG(color, V)
-#define SP_FMT_YELLOW()         SP_FMT_COLOR(SP_ANSI_FG_YELLOW)
-#define SP_FMT_CYAN()           SP_FMT_COLOR(SP_ANSI_FG_CYAN)
-#define SP_FMT_CLEAR()          SP_FMT_COLOR(SP_ANSI_FG_RESET)
-#define SP_FMT_CUSTOM(T, _fn, _value) (   \
+// Use a tiny, portable trick to get some damn good type safety for custom format string arguments:
+//
+//   sizeof((T){0} = $value)
+//
+// In other words, zero initialize a T and assign it to the value that was passed to us. But instead
+// of evaluating this in a way that emits instructions at runtime, we simply take the size of the
+// result.
+//
+// This has the effect of checking whether the value passed can be assigned to a variable of type T.
+// And since we're in C, that's functionally equivalent for structs to "is the value of type T". This
+// works cleanly on every compiler I've tried against, produces good error messages, and does not
+// require multi-level macro expansion.
+//
+// The downside is that it forces the call site to explicitly specify T; it'd be great if the caller
+// could simply have the format function (which they want to pass anyway) take a T* instead of an
+// sp_fmt_arg_t* and rely on that for the type checking machinery. But, alas, it's UB to store
+// a function pointer as a differently-typed function pointer, and this is the only other piece
+// of type information we have besides the type of T (what we are trying to validate)
+//
+// The upside is that this is how sp_fmt() works anyway! When you do:
+//
+//    sp_fmt("{}", sp_fmt_int(69));
+//
+// You're specifying the type at the call site anyway. It's not much different to do:
+//
+//    sp_fmt("{}", sp_fmt_foo(my_foo));
+//
+#define sp_fmt_custom(T, _fn, _value) (   \
   (void)sizeof((T)sp_zero() = (_value)),  \
-  (sp_format_arg_t) {                     \
-    .id = sp_format_id_custom,            \
+  (sp_fmt_arg_t) {                     \
+    .id = sp_fmt_id_custom,            \
     .custom = {                           \
-      .fn = (sp_format_fn_t)(_fn),        \
+      .fn = (sp_fmt_fn_t)(_fn),        \
       .ptr = (void*)&(_value)             \
     }                                     \
   })
-#define SP_FMT_CUSTOM_V(T, _fn, ...) (   \
+#define sp_fmt_custom_v(T, _fn, ...) (   \
   (void)sizeof((T)sp_zero() = (__VA_ARGS__)),  \
-  (sp_format_arg_t) {                     \
-    .id = sp_format_id_custom,            \
+  (sp_fmt_arg_t) {                     \
+    .id = sp_fmt_id_custom,            \
     .custom = {                           \
-      .fn = (sp_format_fn_t)(_fn),        \
+      .fn = (sp_fmt_fn_t)(_fn),        \
       .ptr = (void*)&(__VA_ARGS__)        \
     }                                     \
   })
 
-#undef SP_FMT_X
-#define SP_FMT_X(name, type) void sp_fmt_format_##name(sp_str_builder_t* builder, sp_format_arg_t* buffer);
-SP_FORMAT_TYPES
+#define sp_fmt_register_renderer(_name, _fn, _arg_kinds) \
+  sp_fmt_directive_register(_name, (sp_fmt_directive_t) { \
+    .kind = sp_fmt_directive_renderer, \
+    .arg_kinds = (_arg_kinds), \
+    .renderer = (_fn), \
+  })
 
-SP_API sp_str_t sp_format_str(sp_str_t fmt, ...);
-SP_API sp_str_t sp_format(const c8* fmt, ...);
-SP_API sp_str_t sp_format_v(sp_str_t fmt, va_list args);
+#define sp_fmt_register_transformer(_name, _fn) \
+  sp_fmt_directive_register(_name, (sp_fmt_directive_t) { \
+    .kind = sp_fmt_directive_transformer, \
+    .transformer = (_fn), \
+  })
+
+#define sp_fmt_register_decorator(_name, _before, _after) \
+  sp_fmt_directive_register(_name, (sp_fmt_directive_t) { \
+    .kind = sp_fmt_directive_decorator, \
+    .decorator = { .before = (_before), .after = (_after) }, \
+  })
+
+#define sp_fmt_register_decorator_p(_name, _before, _after, _param_kinds) \
+  sp_fmt_directive_register(_name, (sp_fmt_directive_t) { \
+    .kind = sp_fmt_directive_decorator, \
+    .param_kinds = (_param_kinds), \
+    .decorator = { .before = (_before), .after = (_after) }, \
+  })
+
+void sp_fmt_directive_register(const c8* name, sp_fmt_directive_t directive);
+SP_API void sp_fmt_render_default(sp_str_builder_t* builder, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
+
 SP_API u8        sp_parse_u8(sp_str_t str);
 SP_API u16       sp_parse_u16(sp_str_t str);
 SP_API u32       sp_parse_u32(sp_str_t str);
@@ -2926,130 +3036,6 @@ SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
 SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 SP_API bool      sp_parse_is_digit(c8 c);
-
-typedef enum {
-  SP_FORMAT_SPECIFIER_FLAG_NONE = 0,
-  SP_FORMAT_SPECIFIER_FLAG_FG_COLOR = 1 << 0,
-  SP_FORMAT_SPECIFIER_FLAG_BG_COLOR = 1 << 1,
-  SP_FORMAT_SPECIFIER_FLAG_PAD = 1 << 2,
-} sp_format_specifier_flag_t;
-
-typedef struct {
-  sp_str_t fmt;
-  u32 it;
-} sp_format_parser_t;
-
-typedef struct {
-  sp_str_t color;
-  u32 flags;
-  u32 pad;
-} sp_format_specifier_t;
-
-
-
-typedef enum {
-  SP_FMT_ALIGN_NONE,
-  SP_FMT_ALIGN_LEFT,
-  SP_FMT_ALIGN_CENTER,
-  SP_FMT_ALIGN_RIGHT,
-} _sp_fmt_align_t;
-
-#define _SP_FMT_MAX_DIRECTIVES 8
-#define _SP_FMT_WIDTH_MAX      4096
-
-typedef struct {
-  u32 width;
-  _sp_fmt_align_t align;
-  u8 fill;
-  sp_opt(u8) precision;
-  u8 fill_dynamic      : 1;
-  u8 width_dynamic     : 1;
-  u8 precision_dynamic : 1;
-  u8 directive_count;
-  sp_str_t directive_names[_SP_FMT_MAX_DIRECTIVES];
-} _sp_fmt_spec_t;
-
-typedef struct {
-  sp_str_t str;
-  u32 i;
-} _sp_fmt_parser_t;
-
-typedef enum {
-  _sp_fmt_id_u64    = 1 << 0,
-  _sp_fmt_id_s64    = 1 << 1,
-  _sp_fmt_id_f64    = 1 << 2,
-  _sp_fmt_id_str    = 1 << 3,
-  _sp_fmt_id_ptr    = 1 << 4,
-  _sp_fmt_id_custom = 1 << 5,
-} _sp_fmt_arg_kind_t;
-
-typedef struct _sp_fmt_arg _sp_fmt_arg_t;
-SP_TYPEDEF_FN(void, _sp_fmt_fn_t, sp_str_builder_t*, _sp_fmt_arg_t*);
-SP_TYPEDEF_FN(void, _sp_fmt_after_fn_t, sp_str_builder_t*, sp_mem_slice_t, _sp_fmt_arg_t*);
-
-struct _sp_fmt_arg {
-  _sp_fmt_arg_kind_t id;
-  _sp_fmt_spec_t spec;
-  union {
-    u64 u;
-    s64 i;
-    f64 f;
-    sp_str_t s;
-    void* p;
-    struct { _sp_fmt_fn_t fn; void* ptr; } custom;
-  };
-};
-
-typedef struct {
-  _sp_fmt_fn_t       before;
-  _sp_fmt_fn_t       render;
-  _sp_fmt_after_fn_t after;
-  _sp_fmt_arg_kind_t kinds;
-} _sp_fmt_directive_t;
-
-#define _sp_fmt_u64(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_u64, .u = (_value) }
-#define _sp_fmt_s64(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_s64, .i = (_value) }
-#define _sp_fmt_int(_value)      _sp_fmt_s64(_value)
-#define _sp_fmt_f64(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_f64, .f = (_value) }
-#define _sp_fmt_str(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_str, .s = (_value) }
-#define _sp_fmt_cstr(_value)     (_sp_fmt_arg_t) { .id = _sp_fmt_id_str, .s = sp_str_view(_value) }
-#define _sp_fmt_ptr(_value)      (_sp_fmt_arg_t) { .id = _sp_fmt_id_ptr, .p = (_value) }
-#define _sp_fmt_custom(T, _fn, _value) (   \
-  (void)sizeof((T)sp_zero() = (_value)),  \
-  (_sp_fmt_arg_t) {                     \
-    .id = _sp_fmt_id_custom,            \
-    .custom = {                           \
-      .fn = (_sp_fmt_fn_t)(_fn),        \
-      .ptr = (void*)&(_value)             \
-    }                                     \
-  })
-#define _sp_fmt_custom_v(T, _fn, ...) (   \
-  (void)sizeof((T)sp_zero() = (__VA_ARGS__)),  \
-  (_sp_fmt_arg_t) {                     \
-    .id = _sp_fmt_id_custom,            \
-    .custom = {                           \
-      .fn = (_sp_fmt_fn_t)(_fn),        \
-      .ptr = (void*)&(__VA_ARGS__)        \
-    }                                     \
-  })
-
-void sp_fmt_directive_register(const c8* name, _sp_fmt_directive_t directive);
-_sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name);
-void sp_fmt_directive_reset();
-sp_err_t sp_fmt_v(sp_str_t* str, sp_str_t fmt, va_list args);
-sp_str_t sp_fmt(const c8* fmt, ...);
-sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...);
-
-#define SP_FMT_REGISTER(_name, _on_before, _on_render, _on_after, _kinds) \
-  do { \
-    sp_fmt_directive_register(_name, (_sp_fmt_directive_t) {  \
-      .before = (_on_before), \
-      .render = (_on_render), \
-      .after = (_on_after), \
-      .kinds = (_kinds), \
-    }); \
-  } \
-  while (0)
 
 
 
@@ -3108,7 +3094,7 @@ typedef struct {
   sp_mem_arena_t* scratch;
   sp_env_t env;
   struct {
-    sp_str_ht(_sp_fmt_directive_t) directives;
+    sp_str_ht(sp_fmt_directive_t) directives;
   } format;
   struct {
     sp_io_writer_t* out;
@@ -3121,7 +3107,6 @@ typedef struct {
   void*                  signal_userdata[SP_OS_SIGNAL_COUNT_];
   sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
-  sp_str_ht(sp_fmt_specifier_t) formatters;
   struct {
     sp_tls_key_t key;
     sp_tls_once_t once;
@@ -3495,38 +3480,11 @@ SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
 SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
 SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
 
-typedef enum {
-  #undef SP_FMT_X
-  #define SP_FMT_X(id, type) SP_FMT_ID(id),
-  SP_FORMAT_TYPES
-  sp_format_id_custom,
-} sp_format_id_t;
-
-struct sp_format_arg {
-  union {
-    #undef SP_FMT_X
-    #define SP_FMT_X(name, type) type SP_FMT_UNION(name);
-    SP_FORMAT_TYPES
-    struct { sp_format_fn_t fn; void* ptr; } custom;
-  };
-
-  sp_format_id_t id;
-};
-
 SP_END_EXTERN_C()
 
 #ifdef SP_CPP
 SP_API sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
 SP_API sp_str_t operator/(const sp_str_t& a, const c8* b);
-
-template <typename T>
-SP_API sp_format_arg_t sp_make_format_arg(sp_format_id_t id, T&& data) {
-  sp_format_arg_t result = SP_ZERO_STRUCT(sp_format_arg_t);
-  result.id = id;
-  sp_mem_copy(&data, &result.u8_value, sizeof(data));
-
-  return result;
-}
 #endif // SP_CPP
 
 #endif // SP_SP_H
@@ -4209,7 +4167,7 @@ void sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* exp
 
   // "file:line: func: assert: expr\n"
   //
-  // We don't have a version of sp_format() that doesn't allocate, unfortunately, which means
+  // We don't have a version of sp_fmt() that doesn't allocate, unfortunately, which means
   // it goes through the context and opens us up to asserting again.
   sp_io_write_cstr(&io, SP_ANSI_FG_RED, SP_NULLPTR);
   sp_io_write_cstr(&io, "assert ", SP_NULLPTR);
@@ -5015,159 +4973,249 @@ void* sp_rb_grow_impl(void* arr, u32 elem_size, u32 new_cap) {
 // ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║
 // ██║     ╚██████╔╝██║  ██║██║ ╚═╝ ██║██║  ██║   ██║
 // ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═     ╚═╝╚═╝  ╚═╝   ╚═╝
-void sp_fmt_directive_register(const c8* name, _sp_fmt_directive_t directive) {
+static sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name);
+static void sp_fmt_directive_reset();
+static void sp_fmt_register_builtins();
+
+void sp_fmt_directive_register(const c8* name, sp_fmt_directive_t directive) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   sp_str_t id = sp_str_from_cstr(name);
   sp_str_ht_insert(tls->format.directives, id, directive);
 }
 
-_sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name) {
+sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  return sp_str_ht_get(tls->format.directives, name);
+  u64 index = 0;
+  return sp_str_ht_get_ex(tls->format.directives, name, index);
 }
 
 void sp_fmt_directive_reset(void) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   sp_str_ht_free(tls->format.directives);
   tls->format.directives = SP_NULLPTR;
+  sp_fmt_register_builtins();
 }
 
-static s32 _sp_fmt_peek(_sp_fmt_parser_t* p, u32 offset) {
+typedef struct {
+  sp_str_t str;
+  u32 i;
+} sp_fmt_parser_t;
+
+static u8 sp_fmt_peek(sp_fmt_parser_t* p, u32 offset) {
   u32 idx = p->i + offset;
-  if (idx >= p->str.len) return -1;
+  if (idx >= p->str.len) return 0;
   return (u8)p->str.data[idx];
 }
 
-static s32 _sp_fmt_advance(_sp_fmt_parser_t* p) {
-  if (p->i >= p->str.len) return -1;
+typedef struct {
+  u8 first;
+  u8 second;
+} sp_fmt_peek_t;
+
+static sp_fmt_peek_t sp_fmt_peek2(sp_fmt_parser_t* p) {
+  return (sp_fmt_peek_t){
+    .first  = sp_fmt_peek(p, 0),
+    .second = sp_fmt_peek(p, 1),
+  };
+}
+
+static u8 sp_fmt_advance(sp_fmt_parser_t* p) {
+  if (p->i >= p->str.len) return 0;
   return (u8)p->str.data[p->i++];
 }
 
-static bool _sp_fmt_match(_sp_fmt_parser_t* p, c8 c) {
-  if (_sp_fmt_peek(p, 0) != (s32)c) return false;
+static bool sp_fmt_match(sp_fmt_parser_t* p, c8 c) {
+  if (sp_fmt_peek(p, 0) != (u8)c) return false;
   p->i++;
   return true;
 }
 
-static bool _sp_fmt_is_digit(s32 c) {
+static bool sp_fmt_is_whitespace(u8 c) {
+  return c == ' ' || c == '\t';
+}
+
+static bool sp_fmt_is_digit(u8 c) {
   return c >= '0' && c <= '9';
 }
 
-static bool _sp_fmt_is_alpha(s32 c) {
+static bool sp_fmt_is_alpha(u8 c) {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
-static bool _sp_fmt_is_directive_tail(s32 c) {
-  return _sp_fmt_is_alpha(c) || (c >= '0' && c <= '9') || c == '-' || c == '_';
+static bool sp_fmt_is_directive_id(u8 c) {
+  return sp_fmt_is_alpha(c) || (c >= '0' && c <= '9') || c == '-' || c == '_';
 }
 
-static bool _sp_fmt_is_align(s32 c) {
+static bool sp_fmt_is_align(u8 c) {
   return c == '<' || c == '^' || c == '>';
 }
 
-static _sp_fmt_align_t _sp_fmt_align_from_char(s32 c) {
+static sp_str_t sp_fmt_sub(sp_fmt_parser_t* p) {
+  return (sp_str_t) {
+    .data = p->str.data + p->i,
+  };
+}
+
+static void sp_fmt_eat_whitespace(sp_fmt_parser_t* p) {
+  while (sp_fmt_is_whitespace(sp_fmt_peek(p, 0))) {
+    sp_fmt_advance(p);
+  }
+}
+
+static sp_str_t sp_fmt_directive_name(sp_fmt_parser_t* p) {
+  sp_str_t word = sp_fmt_sub(p);
+  if (!sp_fmt_is_alpha(sp_fmt_peek(p, 0))) return word;
+  while (sp_fmt_is_directive_id(sp_fmt_peek(p, 0))) {
+    sp_fmt_advance(p);
+    word.len++;
+  }
+  return word;
+}
+
+static sp_str_t sp_fmt_directive_arg(sp_fmt_parser_t* p) {
+  sp_str_t arg = sp_fmt_sub(p);
+  while (true) {
+    c8 c = sp_fmt_peek(p, 0);
+    if (!c || sp_fmt_is_whitespace(c) || c == '}' || c == '.' || c == '$') break;
+    sp_fmt_advance(p);
+    arg.len++;
+  }
+  return arg;
+}
+
+static bool sp_fmt_at_directive_boundary(sp_fmt_parser_t* p) {
+  c8 c = sp_fmt_peek(p, 0);
+  return c == 0 || c == '}' || sp_fmt_is_whitespace(c);
+}
+
+static sp_fmt_align_t sp_fmt_align_from_char(u8 c) {
   if (c == '<') return SP_FMT_ALIGN_LEFT;
   if (c == '^') return SP_FMT_ALIGN_CENTER;
   if (c == '>') return SP_FMT_ALIGN_RIGHT;
   return SP_FMT_ALIGN_NONE;
 }
 
-static bool _sp_fmt_parse_number(_sp_fmt_parser_t* p, u32* out) {
-  u32 acc = 0;
-  bool got = false;
-  while (_sp_fmt_is_digit(_sp_fmt_peek(p, 0))) {
-    acc = acc * 10 + (u32)(_sp_fmt_advance(p) - '0');
-    got = true;
+static c8 sp_fmt_align_to_char(sp_fmt_align_t align) {
+  switch (align) {
+    case SP_FMT_ALIGN_LEFT: return '<';
+    case SP_FMT_ALIGN_CENTER: return '^';
+    case SP_FMT_ALIGN_RIGHT: return '>';
+    case SP_FMT_ALIGN_NONE: return 0;
   }
-  if (got) *out = acc;
-  return got;
+  return 0;
 }
 
-sp_err_t sp_fmt_parse_specifier(sp_str_t str, _sp_fmt_spec_t* specifier) {
-  _sp_fmt_parser_t p = { .str = str, .i = 0 };
-  _sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
-  spec.align = SP_FMT_ALIGN_NONE;
+static sp_err_t sp_fmt_parse_number(sp_fmt_parser_t* p, u32* out) {
+  u32 acc = 0;
+  sp_err_t err = SP_ERR;
+  while (sp_fmt_is_digit(sp_fmt_peek(p, 0))) {
+    acc = acc * 10 + (u32)(sp_fmt_advance(p) - '0');
+    err = SP_OK;
+  }
+  if (!err) *out = acc;
+  return err;
+}
 
-  if (!_sp_fmt_match(&p, '{')) return SP_ERR_FMT_BAD_PLACEHOLDER;
-  bool had_colon = _sp_fmt_match(&p, ':');
-  u32 spec_start = p.i;
-
-  s32 c0 = _sp_fmt_peek(&p, 0);
-  s32 c1 = _sp_fmt_peek(&p, 1);
-  if (c0 >= 0 && !_sp_fmt_is_align(c0) && _sp_fmt_is_align(c1)) {
-    if (c0 == '$') {
-      spec.fill_dynamic = 1;
-      _sp_fmt_advance(&p);
-    } else {
-      spec.fill = (u8)_sp_fmt_advance(&p);
-    }
-    spec.align = _sp_fmt_align_from_char(_sp_fmt_advance(&p));
-  } else if (_sp_fmt_is_align(c0)) {
-    spec.align = _sp_fmt_align_from_char(_sp_fmt_advance(&p));
+// Parses the spec body that follows the `:` introducer:
+// [fill_align] [width] [.precision]
+static sp_err_t sp_fmt_parse_spec_body(sp_fmt_parser_t* p, sp_fmt_spec_t* spec) {
+  sp_fmt_peek_t peek = sp_fmt_peek2(p);
+  if (sp_fmt_is_align(peek.second)) {
+    if (peek.first == '$') spec->fill_dynamic = 1;
+    else                   spec->fill = peek.first;
+    spec->align = sp_fmt_align_from_char(peek.second);
+    sp_fmt_advance(p);
+    sp_fmt_advance(p);
+  }
+  else if (sp_fmt_is_align(peek.first)) {
+    spec->align = sp_fmt_align_from_char(peek.first);
+    sp_fmt_advance(p);
   }
 
-  if (_sp_fmt_peek(&p, 0) == '$') {
-    _sp_fmt_advance(&p);
-    spec.width_dynamic = 1;
-  } else if (_sp_fmt_is_digit(_sp_fmt_peek(&p, 0))) {
-    _sp_fmt_parse_number(&p, &spec.width);
+  c8 c = sp_fmt_peek(p, 0);
+  if (c == '$') {
+    sp_fmt_advance(p);
+    spec->width_dynamic = 1;
+  }
+  else if (sp_fmt_is_digit(c)) {
+    sp_fmt_parse_number(p, &spec->width);
   }
 
-  if (_sp_fmt_peek(&p, 0) == '.') {
-    _sp_fmt_advance(&p);
-    if (_sp_fmt_peek(&p, 0) == '$') {
-      _sp_fmt_advance(&p);
-      spec.precision_dynamic = 1;
-    } else {
-      u32 prec = 0;
-      if (!_sp_fmt_parse_number(&p, &prec)) return SP_ERR_FMT_BAD_PRECISION;
-      sp_opt_set(spec.precision, (u8)prec);
-    }
-  }
-
-  while (true) {
-    s32 peek = _sp_fmt_peek(&p, 0);
-    if (peek == ' ' && _sp_fmt_peek(&p, 1) == ':') {
-      _sp_fmt_advance(&p);
-      _sp_fmt_advance(&p);
-    }
-    else if (had_colon && p.i == spec_start && _sp_fmt_is_alpha(peek)) {
-      // The specifier starts with a directive instead of the default
+  if (sp_fmt_peek(p, 0) == '.') {
+    sp_fmt_advance(p);
+    if (sp_fmt_peek(p, 0) == '$') {
+      sp_fmt_advance(p);
+      spec->precision_dynamic = 1;
     }
     else {
-      break;
+      u32 prec = 0;
+      sp_try_as(sp_fmt_parse_number(p, &prec), SP_ERR_FMT_BAD_PRECISION);
+      sp_opt_set(spec->precision, (u8)prec);
     }
-
-    sp_str_t name = sp_str_sub(p.str, p.i, 1);
-    u32 name_start = p.i;
-    if (!_sp_fmt_is_alpha(_sp_fmt_peek(&p, 0))) return SP_ERR_FMT_BAD_DIRECTIVE;
-    _sp_fmt_advance(&p);
-
-    while (_sp_fmt_is_directive_tail(_sp_fmt_peek(&p, 0))) {
-      _sp_fmt_advance(&p);
-      name.len++;
-    }
-
-    u32 name_len = p.i - name_start;
-    if (spec.directive_count >= _SP_FMT_MAX_DIRECTIVES) {
-      return SP_ERR_FMT_TOO_MANY_DIRECTIVES;
-    }
-
-    // spec.directive_names[spec.directive_count++] = name;
-    spec.directive_names[spec.directive_count++] = (sp_str_t){
-      .data = p.str.data + name_start,
-      .len = name_len,
-    };
   }
-
-  if (!_sp_fmt_match(&p, '}')) return SP_ERR_FMT_BAD_PLACEHOLDER;
-  if (p.i != p.str.len)       return SP_ERR_LAZY;
-
-  *specifier = spec;
   return SP_OK;
 }
 
-static const c8 _sp_fmt_digit_pairs[201] =
+// Parses a single directive that follows the `.` introducer:
+// name [whitespace (dynamic | literal_arg)]
+// On success, leaves the cursor on a directive boundary (whitespace, `}`, or
+// EOF). The trailing whitespace — if any — is left for the top-level loop to
+// consume: it separates this directive from the next one.
+static sp_err_t sp_fmt_parse_directive(sp_fmt_parser_t* p, sp_fmt_spec_t* spec) {
+  if (spec->directive_count >= SP_FMT_MAX_DIRECTIVES) {
+    return SP_ERR_FMT_TOO_MANY_DIRECTIVES;
+  }
+
+  sp_str_t name = sp_fmt_directive_name(p);
+  if (!name.len) return SP_ERR_FMT_BAD_DIRECTIVE;
+
+  u32 index = spec->directive_count++;
+  spec->directive_names[index] = name;
+
+  // An arg must be preceded by whitespace. Peek past any whitespace to
+  // decide whether one follows — if not, leave the cursor on the whitespace
+  // (or wherever it is) for the boundary check and the top-level loop.
+  if (sp_fmt_is_whitespace(sp_fmt_peek(p, 0))) {
+    u32 off = 1;
+    while (sp_fmt_is_whitespace(sp_fmt_peek(p, off))) off++;
+    c8 c = sp_fmt_peek(p, off);
+    if (c == '$') {
+      sp_fmt_eat_whitespace(p);
+      sp_fmt_advance(p);
+      spec->directive_arg_dynamic |= (u8)(1u << index);
+    }
+    else if (c && c != '}' && c != '.') {
+      sp_fmt_eat_whitespace(p);
+      spec->directive_args[index] = sp_fmt_directive_arg(p);
+    }
+  }
+
+  if (!sp_fmt_at_directive_boundary(p)) return SP_ERR_FMT_BAD_PLACEHOLDER;
+  return SP_OK;
+}
+
+sp_err_t sp_fmt_parse_specifier(sp_fmt_parser_t* p, sp_fmt_spec_t* spec) {
+  if (!sp_fmt_match(p, '{')) return SP_ERR_FMT_BAD_PLACEHOLDER;
+
+  if (sp_fmt_match(p, ':')) {
+    sp_try(sp_fmt_parse_spec_body(p, spec));
+  }
+
+  sp_fmt_eat_whitespace(p);
+  while (sp_fmt_match(p, '.')) {
+    sp_try(sp_fmt_parse_directive(p, spec));
+    sp_fmt_eat_whitespace(p);
+  }
+
+  if (!sp_fmt_match(p, '}')) {
+    if (sp_fmt_peek(p, 0) == 0) return SP_ERR_FMT_UNTERMINATED_PLACEHOLDER;
+    return SP_ERR_FMT_BAD_PLACEHOLDER;
+  }
+  return SP_OK;
+}
+
+
+static const c8 sp_fmt_digit_pairs[201] =
   "00010203040506070809"
   "10111213141516171819"
   "20212223242526272829"
@@ -5179,26 +5227,26 @@ static const c8 _sp_fmt_digit_pairs[201] =
   "80818283848586878889"
   "90919293949596979899";
 
-static c8* _sp_fmt_u64_to_buf_dec(u64 value, c8* buf_end) {
+static c8* sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end) {
   c8* p = buf_end;
   while (value >= 100) {
     u32 rem = (u32)(value % 100);
     value /= 100;
     p -= 2;
-    p[0] = _sp_fmt_digit_pairs[rem * 2 + 0];
-    p[1] = _sp_fmt_digit_pairs[rem * 2 + 1];
+    p[0] = sp_fmt_digit_pairs[rem * 2 + 0];
+    p[1] = sp_fmt_digit_pairs[rem * 2 + 1];
   }
   if (value < 10) {
     *--p = (c8)('0' + value);
   } else {
     p -= 2;
-    p[0] = _sp_fmt_digit_pairs[value * 2 + 0];
-    p[1] = _sp_fmt_digit_pairs[value * 2 + 1];
+    p[0] = sp_fmt_digit_pairs[value * 2 + 0];
+    p[1] = sp_fmt_digit_pairs[value * 2 + 1];
   }
   return p;
 }
 
-static c8* _sp_fmt_u64_to_buf_hex(u64 value, c8* buf_end) {
+static c8* sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end) {
   static const c8 digits[] = "0123456789abcdef";
   c8* p = buf_end;
   if (value == 0) {
@@ -5212,37 +5260,37 @@ static c8* _sp_fmt_u64_to_buf_hex(u64 value, c8* buf_end) {
   return p;
 }
 
-static void _sp_fmt_append_range(sp_str_builder_t* builder, const c8* start, const c8* end) {
+static void sp_fmt_append_range(sp_str_builder_t* builder, const c8* start, const c8* end) {
   sp_str_t s = { .data = start, .len = (u32)(end - start) };
   sp_str_builder_append(builder, s);
 }
 
-static void _sp_fmt_write_u64(sp_str_builder_t* builder, u64 value) {
+static void sp_fmt_write_u64(sp_str_builder_t* builder, u64 value) {
   c8 buf[20];
   c8* end = buf + sizeof(buf);
-  c8* start = _sp_fmt_u64_to_buf_dec(value, end);
-  _sp_fmt_append_range(builder, start, end);
+  c8* start = sp_fmt_uint_to_buf_dec(value, end);
+  sp_fmt_append_range(builder, start, end);
 }
 
-static void _sp_fmt_write_s64(sp_str_builder_t* builder, s64 value) {
+static void sp_fmt_write_s64(sp_str_builder_t* builder, s64 value) {
   c8 buf[21];
   c8* end = buf + sizeof(buf);
   u64 abs = (value < 0) ? ((u64)(-(value + 1)) + 1) : (u64)value;
-  c8* start = _sp_fmt_u64_to_buf_dec(abs, end);
+  c8* start = sp_fmt_uint_to_buf_dec(abs, end);
   if (value < 0) *--start = '-';
-  _sp_fmt_append_range(builder, start, end);
+  sp_fmt_append_range(builder, start, end);
 }
 
-static void _sp_fmt_write_ptr(sp_str_builder_t* builder, void* value) {
+static void sp_fmt_write_ptr(sp_str_builder_t* builder, void* value) {
   c8 buf[18];
   c8* end = buf + sizeof(buf);
-  c8* start = _sp_fmt_u64_to_buf_hex((u64)(uintptr_t)value, end);
+  c8* start = sp_fmt_uint_to_buf_hex((u64)(uintptr_t)value, end);
   *--start = 'x';
   *--start = '0';
-  _sp_fmt_append_range(builder, start, end);
+  sp_fmt_append_range(builder, start, end);
 }
 
-static void _sp_fmt_write_f64(sp_str_builder_t* builder, f64 value, u32 precision) {
+static void sp_fmt_write_f64(sp_str_builder_t* builder, f64 value, u32 precision) {
   union { f64 f; u64 u; } bits;
   bits.f = value;
   u64  exponent = (bits.u >> 52) & 0x7ffULL;
@@ -5287,7 +5335,7 @@ static void _sp_fmt_write_f64(sp_str_builder_t* builder, f64 value, u32 precisio
     frac_scaled -= scale;
   }
 
-  _sp_fmt_write_u64(builder, int_part);
+  sp_fmt_write_u64(builder, int_part);
 
   if (precision > 0) {
     sp_str_builder_append_c8(builder, '.');
@@ -5302,20 +5350,21 @@ static void _sp_fmt_write_f64(sp_str_builder_t* builder, f64 value, u32 precisio
   }
 }
 
-void _sp_fmt_render_default(sp_str_builder_t* builder, _sp_fmt_arg_t* arg) {
+void sp_fmt_render_default(sp_str_builder_t* builder, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  sp_unused(param);
   switch (arg->id) {
-    case _sp_fmt_id_u64:
-      _sp_fmt_write_u64(builder, arg->u);
+    case sp_fmt_id_u64:
+      sp_fmt_write_u64(builder, arg->u);
       break;
-    case _sp_fmt_id_s64:
-      _sp_fmt_write_s64(builder, arg->i);
+    case sp_fmt_id_s64:
+      sp_fmt_write_s64(builder, arg->i);
       break;
-    case _sp_fmt_id_f64: {
+    case sp_fmt_id_f64: {
       u32 p = sp_opt_is_null(arg->spec.precision) ? 6 : sp_opt_get(arg->spec.precision);
-      _sp_fmt_write_f64(builder, arg->f, p);
+      sp_fmt_write_f64(builder, arg->f, p);
       break;
     }
-    case _sp_fmt_id_str: {
+    case sp_fmt_id_str: {
       sp_str_t s = arg->s;
       if (!sp_opt_is_null(arg->spec.precision)) {
         u32 max = sp_opt_get(arg->spec.precision);
@@ -5324,27 +5373,27 @@ void _sp_fmt_render_default(sp_str_builder_t* builder, _sp_fmt_arg_t* arg) {
       sp_str_builder_append(builder, s);
       break;
     }
-    case _sp_fmt_id_ptr:
-      _sp_fmt_write_ptr(builder, arg->p);
+    case sp_fmt_id_ptr:
+      sp_fmt_write_ptr(builder, arg->p);
       break;
-    case _sp_fmt_id_custom:
-      if (arg->custom.fn) arg->custom.fn(builder, arg);
+    case sp_fmt_id_custom:
+      if (arg->custom.fn) arg->custom.fn(builder, arg, SP_NULLPTR);
       break;
   }
 }
 
-void _sp_fmt_apply_spec_wrapped(
+void sp_fmt_apply_spec_wrapped(
   sp_str_builder_t* out,
   sp_str_t before,
   sp_str_t content,
   sp_str_t after,
-  _sp_fmt_spec_t spec
+  sp_fmt_spec_t spec
 ) {
   u32 content_len = (u32)content.len;
-  u32 width = spec.width > _SP_FMT_WIDTH_MAX ? _SP_FMT_WIDTH_MAX : spec.width;
+  u32 width = spec.width > SP_FMT_WIDTH_MAX ? SP_FMT_WIDTH_MAX : spec.width;
   u32 pad = (width > content_len) ? (width - content_len) : 0;
   u8 fill = spec.fill ? spec.fill : ' ';
-  _sp_fmt_align_t align = spec.align;
+  sp_fmt_align_t align = spec.align;
   if (align == SP_FMT_ALIGN_NONE) align = SP_FMT_ALIGN_RIGHT;
 
   u32 left = 0;
@@ -5372,199 +5421,227 @@ void _sp_fmt_apply_spec_wrapped(
   sp_for(k, right) sp_str_builder_append_c8(out, fill);
 }
 
-void _sp_fmt_apply_spec(sp_str_builder_t* out, sp_str_t content, _sp_fmt_spec_t spec) {
+void sp_fmt_apply_spec(sp_str_builder_t* out, sp_str_t content, sp_fmt_spec_t spec) {
   sp_str_t empty = sp_zero();
-  _sp_fmt_apply_spec_wrapped(out, empty, content, empty, spec);
+  sp_fmt_apply_spec_wrapped(out, empty, content, empty, spec);
 }
 
-static const c8* _sp_fmt_kind_name(_sp_fmt_arg_kind_t k) {
+static const c8* sp_fmt_kind_name(sp_fmt_arg_kind_t k) {
   switch (k) {
-    case _sp_fmt_id_u64:    return "u64";
-    case _sp_fmt_id_s64:    return "s64";
-    case _sp_fmt_id_f64:    return "f64";
-    case _sp_fmt_id_str:    return "str";
-    case _sp_fmt_id_ptr:    return "ptr";
-    case _sp_fmt_id_custom: return "custom";
+    case sp_fmt_id_u64:    return "u64";
+    case sp_fmt_id_s64:    return "s64";
+    case sp_fmt_id_f64:    return "f64";
+    case sp_fmt_id_str:    return "str";
+    case sp_fmt_id_ptr:    return "ptr";
+    case sp_fmt_id_custom: return "custom";
   }
   return "?";
 }
 
-static void _sp_fmt_append_kind_mask(sp_str_builder_t* b, _sp_fmt_arg_kind_t mask) {
-  static const _sp_fmt_arg_kind_t all[] = {
-    _sp_fmt_id_u64, _sp_fmt_id_s64, _sp_fmt_id_f64,
-    _sp_fmt_id_str, _sp_fmt_id_ptr, _sp_fmt_id_custom,
+static void sp_fmt_append_kind_mask(sp_str_builder_t* b, sp_fmt_arg_kind_t mask) {
+  static const sp_fmt_arg_kind_t all[] = {
+    sp_fmt_id_u64, sp_fmt_id_s64, sp_fmt_id_f64,
+    sp_fmt_id_str, sp_fmt_id_ptr, sp_fmt_id_custom,
   };
   bool first = true;
   sp_carr_for(all, i) {
     if (mask & all[i]) {
       if (!first) sp_str_builder_append_c8(b, '|');
-      sp_str_builder_append_cstr(b, _sp_fmt_kind_name(all[i]));
+      sp_str_builder_append_cstr(b, sp_fmt_kind_name(all[i]));
       first = false;
     }
   }
 }
 
-static sp_err_t _sp_fmt_render(sp_str_builder_t* out, _sp_fmt_arg_t* arg) {
-  _sp_fmt_directive_t* dirs[_SP_FMT_MAX_DIRECTIVES];
+static sp_err_t sp_fmt_render(sp_str_builder_t* out, sp_fmt_arg_t* arg, sp_fmt_arg_t* directive_params) {
+  sp_fmt_directive_t* directives[SP_FMT_MAX_DIRECTIVES];
 
   u8 num_dirs = arg->spec.directive_count;
   sp_for(i, num_dirs) {
     sp_str_t name = arg->spec.directive_names[i];
-    dirs[i] = sp_fmt_directive_lookup(name);
-    if (!dirs[i]) {
+    sp_fmt_directive_t* directive = sp_fmt_directive_lookup(name);
+    directives[i] = directive;
+    if (!directives[i]) {
       return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
     }
   }
 
   sp_for(it, num_dirs) {
-    _sp_fmt_arg_kind_t accepted = dirs[it]->kinds;
+    sp_fmt_arg_kind_t accepted = directives[it]->arg_kinds;
     if (accepted && !(accepted & arg->id)) {
       return SP_ERR_FMT_WRONG_PARAM_KIND;
     }
   }
 
-  u8 num_renderers = 0;
+  bool params[SP_FMT_MAX_DIRECTIVES] = sp_zero();
   sp_for(it, num_dirs) {
-    if (dirs[it]->render) num_renderers++;
-  }
-
-  if (num_renderers > 1) {
-    sp_str_builder_t error = sp_zero();
-    sp_str_builder_append_cstr(&error, "(sp_fmt: multiple renders");
-
-    sp_for(it, num_dirs) {
-      if (dirs[it]->render) {
-        sp_str_builder_append_cstr(&error, " :");
-        sp_str_builder_append(&error, arg->spec.directive_names[it]);
-      }
+    bool is_dynamic = (arg->spec.directive_arg_dynamic & (1u << it)) != 0;
+    bool is_literal = !sp_str_empty(arg->spec.directive_args[it]);
+    if (is_dynamic) {
+      params[it] = true;
+    }
+    else if (is_literal) {
+      directive_params[it] = (sp_fmt_arg_t){
+        .id = sp_fmt_id_str,
+        .s  = arg->spec.directive_args[it],
+      };
+      params[it] = true;
+    }
+    else {
+      params[it] = false;
     }
 
-    sp_str_builder_append_c8(&error, ')');
-    return SP_ERR_FMT_TOO_MANY_RENDERERS;
+    sp_fmt_arg_kind_t kind = directives[it]->param_kinds;
+    if (!kind) {
+      if (params[it]) return SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED;
+    }
+    else {
+      if (!params[it]) return SP_ERR_FMT_DIRECTIVE_ARG_MISSING;
+      if (!(kind & directive_params[it].id)) return SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND;
+    }
   }
 
-  sp_str_builder_t before_b = SP_ZERO_INITIALIZE();
-  sp_for_range(i, 0, num_dirs) {
-    if (dirs[i]->before) dirs[i]->before(&before_b, arg);
+  struct {
+    sp_str_builder_t before;
+    sp_str_builder_t content;
+    sp_str_builder_t after;
+  } b = sp_zero();
+
+  sp_for(it, num_dirs) {
+    if (directives[it]->kind != sp_fmt_directive_decorator) continue;
+    sp_fmt_fn_t before_fn = directives[it]->decorator.before;
+    if (!before_fn) continue;
+    sp_fmt_arg_t* p = params[it] ? &directive_params[it] : SP_NULLPTR;
+    before_fn(&b.before, arg, p);
   }
 
-  _sp_fmt_fn_t render_fn = SP_NULLPTR;
-  sp_for_range(i, 0, num_dirs) {
-    if (dirs[i]->render) { render_fn = dirs[i]->render; break; }
+  struct {
+    sp_fmt_fn_t fn;
+    sp_fmt_arg_t* param;
+  } render = sp_zero();
+  if (arg->id == sp_fmt_id_custom) {
+    if (!arg->custom.fn) return SP_ERR_FMT_CUSTOM_WITHOUT_FN;
+    render.fn = arg->custom.fn;
   }
-  if (!render_fn && arg->id == _sp_fmt_id_custom && arg->custom.fn) {
-    render_fn = arg->custom.fn;
+  else {
+    sp_for(it, num_dirs) {
+      if (directives[it]->kind != sp_fmt_directive_renderer) continue;
+      if (render.fn) return SP_ERR_FMT_TOO_MANY_RENDERERS;
+      render.fn = directives[it]->renderer;
+      render.param = params[it] ? &directive_params[it] : SP_NULLPTR;
+    }
   }
+  render.fn = render.fn ? render.fn : sp_fmt_render_default;
+  render.fn(&b.content, arg, render.param);
 
-  sp_str_builder_t content_b = SP_ZERO_INITIALIZE();
-  if (render_fn) {
-    render_fn(&content_b, arg);
-  } else {
-    _sp_fmt_render_default(&content_b, arg);
-  }
+  sp_str_t content = sp_str_builder_as_str(&b.content);
 
-  sp_str_t content_view = sp_str_builder_as_str(&content_b);
-  sp_mem_slice_t content_slice = { .data = (u8*)content_view.data, .len = content_view.len };
-
-  sp_str_builder_t after_b = SP_ZERO_INITIALIZE();
   u8 j = num_dirs;
   while (j--) {
-    if (dirs[j]->after) dirs[j]->after(&after_b, content_slice, arg);
+    if (directives[j]->kind != sp_fmt_directive_transformer) continue;
+    sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
+    sp_str_builder_t next = SP_ZERO_INITIALIZE();
+    directives[j]->transformer(&next, content, arg, p);
+    content = sp_str_builder_as_str(&next);
   }
 
-  sp_str_t before_str  = sp_str_builder_as_str(&before_b);
-  sp_str_t after_str   = sp_str_builder_as_str(&after_b);
-  sp_str_t content_str = { .data = (const c8*)content_slice.data, .len = (u32)content_slice.len };
+  j = num_dirs;
+  while (j--) {
+    if (directives[j]->kind != sp_fmt_directive_decorator) continue;
+    sp_fmt_fn_t after_fn = directives[j]->decorator.after;
+    if (!after_fn) continue;
+    sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
+    after_fn(&b.after, arg, p);
+  }
 
-  _sp_fmt_apply_spec_wrapped(out, before_str, content_str, after_str, arg->spec);
+  sp_str_t before = sp_str_builder_as_str(&b.before);
+  sp_str_t after  = sp_str_builder_as_str(&b.after);
+
+  sp_fmt_apply_spec_wrapped(out, before, content, after, arg->spec);
+  return SP_OK;
+}
+
+// Pulls one int-kinded dynamic arg out of `a` and returns it as a signed
+// value. Used for dynamic fill/width/precision, all of which require an int.
+static sp_err_t sp_fmt_pull_int_arg(sp_fmt_arg_t a, s64* out) {
+  if (a.id != sp_fmt_id_u64 && a.id != sp_fmt_id_s64) {
+    return SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND;
+  }
+  *out = (a.id == sp_fmt_id_s64) ? a.i : (s64)a.u;
   return SP_OK;
 }
 
 sp_err_t sp_fmt_v(sp_str_t* str, sp_str_t fmt, va_list args) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  u32 i = 0;
   sp_err_t result = SP_OK;
+  sp_fmt_parser_t p = { .str = fmt };
 
-  while (i < fmt.len) {
-    c8 c = fmt.data[i];
+  while (true) {
+    c8 c = sp_fmt_peek(&p, 0);
+    if (!c) break;
 
     if (c == '{') {
-      if (i + 1 < fmt.len && fmt.data[i + 1] == '{') {
+      if (sp_fmt_peek(&p, 1) == '{') {
+        sp_fmt_advance(&p);
+        sp_fmt_advance(&p);
         sp_str_builder_append_c8(&builder, '{');
-        i += 2;
         continue;
       }
 
-      u32 end = i + 1;
-      while (end < fmt.len && fmt.data[end] != '}') end++;
-      if (end >= fmt.len) {
-        sp_str_builder_append_cstr(&builder, "<!fmt: unterminated placeholder>");
-        break;
-      }
-
-      sp_str_t placeholder = { .data = fmt.data + i, .len = (end - i) + 1 };
-      _sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
-      result = sp_fmt_parse_specifier(placeholder, &spec);
-      if (result) goto error;
+      sp_fmt_spec_t spec = sp_zero();
+      sp_try_goto(sp_fmt_parse_specifier(&p, &spec), result, error);
 
       if (spec.fill_dynamic) {
-        _sp_fmt_arg_t fa = va_arg(args, _sp_fmt_arg_t);
-        if (fa.id != _sp_fmt_id_u64 && fa.id != _sp_fmt_id_s64) {
-          sp_str_builder_append_cstr(&builder, "<!fmt: dynamic fill expects int>");
-          break;
-        }
-        spec.fill = (u8)((fa.id == _sp_fmt_id_s64) ? (u64)fa.i : fa.u);
+        s64 v;
+        sp_try_goto(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
+        spec.fill = (u8)v;
       }
       if (spec.width_dynamic) {
-        _sp_fmt_arg_t wa = va_arg(args, _sp_fmt_arg_t);
-        if (wa.id != _sp_fmt_id_u64 && wa.id != _sp_fmt_id_s64) {
-          sp_str_builder_append_cstr(&builder, "<!fmt: dynamic width expects int>");
-          break;
-        }
-        if (wa.id == _sp_fmt_id_s64) {
-          spec.width = wa.i < 0 ? 0
-                     : (wa.i > _SP_FMT_WIDTH_MAX ? _SP_FMT_WIDTH_MAX : (u32)wa.i);
-        } else {
-          spec.width = wa.u > _SP_FMT_WIDTH_MAX ? _SP_FMT_WIDTH_MAX : (u32)wa.u;
-        }
+        s64 v;
+        sp_try_goto(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
+        if (v < 0) v = 0;
+        if (v > SP_FMT_WIDTH_MAX) v = SP_FMT_WIDTH_MAX;
+        spec.width = (u32)v;
       }
       if (spec.precision_dynamic) {
-        _sp_fmt_arg_t pa = va_arg(args, _sp_fmt_arg_t);
-        if (pa.id != _sp_fmt_id_u64 && pa.id != _sp_fmt_id_s64) {
-          sp_str_builder_append_cstr(&builder, "<!fmt: dynamic precision expects int>");
-          break;
-        }
-        s64 v = (pa.id == _sp_fmt_id_s64) ? pa.i : (s64)pa.u;
+        s64 v;
+        sp_try_goto(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
         if (v < 0) v = 0;
         if (v > 255) v = 255;
         sp_opt_set(spec.precision, (u8)v);
       }
 
-      _sp_fmt_arg_t arg = va_arg(args, _sp_fmt_arg_t);
-      arg.spec = spec;
-      result = _sp_fmt_render(&builder, &arg);
-      if (result) goto error;
+      sp_fmt_arg_t directive_params[SP_FMT_MAX_DIRECTIVES] = SP_ZERO_INITIALIZE();
+      for (u8 di = 0; di < spec.directive_count; di++) {
+        if (spec.directive_arg_dynamic & (1u << di)) {
+          directive_params[di] = va_arg(args, sp_fmt_arg_t);
+        }
+      }
 
-      i = end + 1;
+      sp_fmt_arg_t arg = va_arg(args, sp_fmt_arg_t);
+      arg.spec = spec;
+      sp_try_goto(sp_fmt_render(&builder, &arg, directive_params), result, error);
       continue;
     }
 
     if (c == '}') {
-      if (i + 1 < fmt.len && fmt.data[i + 1] == '}') {
+      if (sp_fmt_peek(&p, 1) == '}') {
+        sp_fmt_advance(&p);
+        sp_fmt_advance(&p);
         sp_str_builder_append_c8(&builder, '}');
-        i += 2;
         continue;
       }
-      sp_str_builder_append_c8(&builder, '}');
-      i++;
-      continue;
+      // Lone `}` — unbalanced close brace. Mirrors `{` error policy.
+      result = SP_ERR_FMT_BAD_PLACEHOLDER;
+      goto error;
     }
 
     sp_str_builder_append_c8(&builder, c);
-    i++;
+    sp_fmt_advance(&p);
   }
 
   *str = sp_str_builder_to_str(&builder);
+
 error:
   return result;
 }
@@ -5586,67 +5663,137 @@ sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...) {
   return error;
 }
 
-static void sp_fmt_directive_bold_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  (void)arg;
+static void sp_fmt_directive_bold(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  (void)arg; sp_unused(params);
   sp_str_builder_append_cstr(b, "\033[1m");
 }
 
-static void sp_fmt_directive_bold_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
-  (void)content; (void)arg;
-  sp_str_builder_append_cstr(b, "\033[22m");
+static void sp_fmt_directive_italic(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  (void)arg; sp_unused(params);
+  sp_str_builder_append_cstr(b, "\033[3m");
 }
 
-static void sp_fmt_directive_gray_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  sp_unused(arg);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_BLACK);
+static void sp_fmt_directive_red(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_RED);
 }
 
-static void sp_fmt_directive_ansi_reset(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
-  sp_unused(arg); sp_unused(content);
-  sp_str_builder_append_cstr(b, SP_ANSI_RESET);
+static void sp_fmt_directive_green(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_GREEN);
 }
 
-static void sp_fmt_directive_cyan_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  sp_unused(arg);
+static void sp_fmt_directive_yellow(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_YELLOW);
+}
+
+static void sp_fmt_directive_blue(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BLUE);
+}
+
+static void sp_fmt_directive_cyan(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_CYAN);
+}
+
+static void sp_fmt_directive_magenta(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_MAGENTA);
+}
+
+static void sp_fmt_directive_white(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_WHITE);
+}
+
+static void sp_fmt_directive_black(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BLACK);
+}
+
+static void sp_fmt_directive_bright_red(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_RED);
+}
+
+static void sp_fmt_directive_bright_green(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_GREEN);
+}
+
+static void sp_fmt_directive_bright_yellow(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_YELLOW);
+}
+
+static void sp_fmt_directive_bright_blue(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_BLUE);
+}
+
+static void sp_fmt_directive_bright_cyan(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
   sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_CYAN);
 }
 
-static void sp_fmt_directive_hyperlink_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  sp_str_builder_append_cstr(b, "\033]8;;");
-  if (arg->id == _sp_fmt_id_str) sp_str_builder_append(b, arg->s);
+static void sp_fmt_directive_bright_magenta(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_MAGENTA);
+}
+
+static void sp_fmt_directive_bright_white(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_WHITE);
+}
+
+static void sp_fmt_directive_gray(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(arg); sp_unused(params);
+  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_BLACK);
+}
+
+static void sp_fmt_directive_ansi_reset(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  sp_unused(arg); sp_unused(param);
+  sp_str_builder_append_cstr(b, SP_ANSI_RESET);
+}
+
+static void sp_fmt_directive_hyperlink(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_str_builder_append_cstr(b, "\033]8;;"); sp_unused(params);
+  if (arg->id == sp_fmt_id_str) sp_str_builder_append(b, arg->s);
   sp_str_builder_append_cstr(b, "\033\\");
 }
 
-static void sp_fmt_directive_hyperlink_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
-  (void)content; (void)arg;
+static void sp_fmt_directive_hyperlink_after(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  (void)arg; sp_unused(params);
   sp_str_builder_append_cstr(b, "\033]8;;\033\\");
 }
 
-static void sp_fmt_directive_quote_before(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  (void)arg;
+static void sp_fmt_directive_quote(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  (void)arg; sp_unused(params);
   sp_str_builder_append_c8(b, '"');
 }
 
-static void sp_fmt_directive_quote_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
-  (void)content; (void)arg;
+static void sp_fmt_directive_quote_after(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  (void)arg; sp_unused(params);
   sp_str_builder_append_c8(b, '"');
 }
 
-static void sp_fmt_directive_upper_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
-  (void)b; (void)arg;
-  sp_mem_slice_for(content, i) {
-    u8 c = content.data[i];
-    if (c >= 'a' && c <= 'z') content.data[i] = c - 32;
+static void sp_fmt_directive_upper_transform(sp_str_builder_t* out, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  (void)arg; sp_unused(params);
+  sp_for(i, content.len) {
+    c8 c = content.data[i];
+    sp_str_builder_append_c8(out, (c >= 'a' && c <= 'z') ? (c8)(c - 32) : c);
   }
 }
 
-static void sp_fmt_directive_redact_after(sp_str_builder_t* b, sp_mem_slice_t content, _sp_fmt_arg_t* arg) {
-  (void)b; (void)arg;
-  sp_mem_slice_for(content, i) content.data[i] = '*';
+static void sp_fmt_directive_redact_transform(sp_str_builder_t* out, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  (void)arg; sp_unused(params);
+  sp_for(i, content.len) sp_str_builder_append_c8(out, '*');
 }
 
-static void sp_fmt_directive_bytes_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  u64 bytes = arg->u;
+static void sp_fmt_directive_bytes_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  u64 bytes = arg->u; sp_unused(params);
   static const c8* units[] = { "B", "KB", "MB", "GB", "TB", "PB" };
   u32 unit_idx = 0;
   u64 whole = bytes;
@@ -5656,7 +5803,7 @@ static void sp_fmt_directive_bytes_render(sp_str_builder_t* b, _sp_fmt_arg_t* ar
     whole >>= 10;
     unit_idx++;
   }
-  _sp_fmt_write_u64(b, whole);
+  sp_fmt_write_u64(b, whole);
   if (unit_idx > 0) {
     u32 tenths = (u32)((rem * 10) >> 10);
     if (tenths > 0) {
@@ -5680,8 +5827,8 @@ static void sp_fmt_directive_write_zpad4(sp_str_builder_t* b, u32 value) {
   sp_str_builder_append_c8(b, (c8)('0' + value % 10));
 }
 
-static void sp_fmt_directive_iso_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  u64 epoch = arg->u;
+static void sp_fmt_directive_iso_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  u64 epoch = arg->u; sp_unused(params);
   u32 sec = (u32)(epoch % 60); epoch /= 60;
   u32 min = (u32)(epoch % 60); epoch /= 60;
   u32 hour = (u32)(epoch % 24); epoch /= 24;
@@ -5711,9 +5858,9 @@ static void sp_fmt_directive_iso_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg)
   sp_str_builder_append_c8(b, 'Z');
 }
 
-static void sp_fmt_directive_ordinal_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  s64 value = (arg->id == _sp_fmt_id_s64) ? arg->i : (s64)arg->u;
-  _sp_fmt_write_s64(b, value);
+static void sp_fmt_directive_ordinal_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  s64 value = (arg->id == sp_fmt_id_s64) ? arg->i : (s64)arg->u; sp_unused(params);
+  sp_fmt_write_s64(b, value);
   s64 abs = value < 0 ? -value : value;
   u32 mod100 = (u32)(abs % 100);
   u32 mod10 = (u32)(abs % 10);
@@ -5726,40 +5873,11 @@ static void sp_fmt_directive_ordinal_render(sp_str_builder_t* b, _sp_fmt_arg_t* 
   sp_str_builder_append_cstr(b, suffix);
 }
 
-
-static void sp_fmt_directive_errno_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
-  static const struct { s32 code; const c8* name; } _errno_table[] = {
-    {  1, "EPERM"  },
-    {  2, "ENOENT" },
-    {  5, "EIO"    },
-    {  9, "EBADF"  },
-    { 11, "EAGAIN" },
-    { 12, "ENOMEM" },
-    { 13, "EACCES" },
-    { 17, "EEXIST" },
-    { 22, "EINVAL" },
-    { 28, "ENOSPC" },
-    { 32, "EPIPE"  },
-  };
-  s64 value = (arg->id == _sp_fmt_id_s64) ? arg->i : (s64)arg->u;
-  s32 code = (s32)value;
-  const c8* name = SP_NULLPTR;
-  sp_carr_for(_errno_table, i) {
-    if (_errno_table[i].code == code) { name = _errno_table[i].name; break; }
-  }
-  if (name != SP_NULLPTR) {
-    sp_str_builder_append_cstr(b, name);
-  } else {
-    sp_str_builder_append_cstr(b, "errno(");
-    _sp_fmt_write_s64(b, value);
-    sp_str_builder_append_c8(b, ')');
-  }
-}
-
-static void sp_fmt_directive_duration_render(sp_str_builder_t* b, _sp_fmt_arg_t* arg) {
+static void sp_fmt_directive_duration_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(params);
   u64 ns = arg->u;
   if (ns < 1000) {
-    _sp_fmt_write_u64(b, ns);
+    sp_fmt_write_u64(b, ns);
     sp_str_builder_append_cstr(b, " ns");
     return;
   }
@@ -5772,7 +5890,7 @@ static void sp_fmt_directive_duration_render(sp_str_builder_t* b, _sp_fmt_arg_t*
     whole /= 1000;
     unit_idx++;
   }
-  _sp_fmt_write_u64(b, whole);
+  sp_fmt_write_u64(b, whole);
   if (rem >= 100) {
     sp_str_builder_append_c8(b, '.');
     sp_str_builder_append_c8(b, (c8)('0' + rem / 100));
@@ -5781,6 +5899,63 @@ static void sp_fmt_directive_duration_render(sp_str_builder_t* b, _sp_fmt_arg_t*
   sp_str_builder_append_cstr(b, units[unit_idx]);
 }
 
+sp_str_t sp_fmt_color_to_ansi_fg(sp_str_t id) {
+  if (sp_str_equal_cstr(id, "black")) return SP_CSTR(SP_ANSI_FG_BLACK);
+  if (sp_str_equal_cstr(id, "red")) return SP_CSTR(SP_ANSI_FG_RED);
+  if (sp_str_equal_cstr(id, "green")) return SP_CSTR(SP_ANSI_FG_GREEN);
+  if (sp_str_equal_cstr(id, "yellow")) return SP_CSTR(SP_ANSI_FG_YELLOW);
+  if (sp_str_equal_cstr(id, "blue")) return SP_CSTR(SP_ANSI_FG_BLUE);
+  if (sp_str_equal_cstr(id, "magenta")) return SP_CSTR(SP_ANSI_FG_MAGENTA);
+  if (sp_str_equal_cstr(id, "cyan")) return SP_CSTR(SP_ANSI_FG_CYAN);
+  if (sp_str_equal_cstr(id, "white")) return SP_CSTR(SP_ANSI_FG_WHITE);
+  if (sp_str_equal_cstr(id, "brightblack")) return SP_CSTR(SP_ANSI_FG_BRIGHT_BLACK);
+  if (sp_str_equal_cstr(id, "brightred")) return SP_CSTR(SP_ANSI_FG_BRIGHT_RED);
+  if (sp_str_equal_cstr(id, "brightgreen")) return SP_CSTR(SP_ANSI_FG_BRIGHT_GREEN);
+  if (sp_str_equal_cstr(id, "brightyellow")) return SP_CSTR(SP_ANSI_FG_BRIGHT_YELLOW);
+  if (sp_str_equal_cstr(id, "brightblue")) return SP_CSTR(SP_ANSI_FG_BRIGHT_BLUE);
+  if (sp_str_equal_cstr(id, "brightmagenta")) return SP_CSTR(SP_ANSI_FG_BRIGHT_MAGENTA);
+  if (sp_str_equal_cstr(id, "brightcyan")) return SP_CSTR(SP_ANSI_FG_BRIGHT_CYAN);
+  if (sp_str_equal_cstr(id, "brightwhite")) return SP_CSTR(SP_ANSI_FG_BRIGHT_WHITE);
+  return SP_CSTR(SP_ANSI_RESET);
+}
+
+static void sp_fmt_directive_fg(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  sp_unused(arg);
+  sp_str_t ansi = sp_fmt_color_to_ansi_fg(param->s);
+  sp_str_builder_append(b, ansi);
+}
+
+void sp_fmt_register_builtins() {
+  sp_fmt_register_decorator_p("fg", sp_fmt_directive_fg, sp_fmt_directive_ansi_reset, sp_fmt_id_str);
+  sp_fmt_register_decorator("red", sp_fmt_directive_red, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("green", sp_fmt_directive_green, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("yellow", sp_fmt_directive_yellow, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("blue", sp_fmt_directive_blue, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("cyan", sp_fmt_directive_cyan, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("magenta", sp_fmt_directive_magenta, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("white", sp_fmt_directive_white, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("black", sp_fmt_directive_black, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("br_red", sp_fmt_directive_bright_red, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("br_green", sp_fmt_directive_bright_green, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("br_yellow", sp_fmt_directive_bright_yellow, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("br_blue", sp_fmt_directive_bright_blue, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("br_cyan", sp_fmt_directive_bright_cyan, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("br_magenta", sp_fmt_directive_bright_magenta, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("br_white", sp_fmt_directive_bright_white, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("br_black", sp_fmt_directive_gray, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("gray", sp_fmt_directive_gray, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("bold", sp_fmt_directive_bold, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("italic", sp_fmt_directive_italic, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("hyperlink", sp_fmt_directive_hyperlink, sp_fmt_directive_ansi_reset);
+  sp_fmt_register_decorator("quote", sp_fmt_directive_quote, sp_fmt_directive_quote_after);
+  sp_fmt_register_transformer("upper", sp_fmt_directive_upper_transform);
+  sp_fmt_register_transformer("redact", sp_fmt_directive_redact_transform);
+  sp_fmt_register_renderer("bytes", sp_fmt_directive_bytes_render, 0);
+  sp_fmt_register_renderer("iso", sp_fmt_directive_iso_render, 0);
+  sp_fmt_register_renderer("ordinal", sp_fmt_directive_ordinal_render, 0);
+  sp_fmt_register_renderer("duration", sp_fmt_directive_duration_render, 0);
+
+}
 
 
 // @format @fmt
@@ -6142,529 +6317,14 @@ sp_hash_t sp_parse_hash(sp_str_t str) {
 }
 
 
-void sp_fmt_format_unsigned(sp_str_builder_t* builder, u64 num, u32 max_digits) {
-  SP_ASSERT(builder);
-
-  if (num == 0) {
-    sp_str_builder_append_c8(builder, '0');
-    return;
-  }
-
-  c8 digits[20];
-  s32 digit_count = 0;
-
-  while (num > 0) {
-    digits[digit_count++] = '0' + (num % 10);
-    num /= 10;
-  }
-
-  SP_ASSERT((u32)digit_count <= max_digits);
-
-  for (s32 i = digit_count - 1; i >= 0; i--) {
-    sp_str_builder_append_c8(builder, digits[i]);
-  }
-}
-
-void sp_fmt_format_signed(sp_str_builder_t* builder, s64 num, u32 max_digits) {
-  SP_ASSERT(builder);
-
-  bool negative = num < 0;
-  u64 abs_value;
-
-  if (negative) {
-    abs_value = (u64)(-(num + 1)) + 1;
-    sp_str_builder_append_c8(builder, '-');
-  } else {
-    abs_value = (u64)num;
-  }
-
-  sp_fmt_format_unsigned(builder, abs_value, max_digits);
-}
-
-void sp_fmt_format_hex(sp_str_builder_t* builder, u64 value, u32 min_width, const c8* prefix) {
-  SP_ASSERT(builder);
-
-  if (prefix) {
-    sp_str_builder_append_cstr(builder, prefix);
-  }
-
-  if (value == 0) {
-    u32 zero_count = min_width > 0 ? min_width : 1;
-    sp_for(i, zero_count) {
-      sp_str_builder_append_c8(builder, '0');
-    }
-    return;
-  }
-
-  c8 hex_digits[16];
-  s32 digit_count = 0;
-
-  while (value > 0) {
-    u8 digit = value & 0xF;
-    hex_digits[digit_count++] = digit < 10 ? '0' + digit : 'a' + (digit - 10);
-    value >>= 4;
-  }
-
-  while (digit_count < (s32)min_width) {
-    hex_digits[digit_count++] = '0';
-  }
-
-  for (s32 i = digit_count - 1; i >= 0; i--) {
-    sp_str_builder_append_c8(builder, hex_digits[i]);
-  }
-}
-
-void sp_fmt_format_color(sp_str_builder_t *builder, sp_format_arg_t *buffer) {
-  SP_ASSERT(builder);
-  sp_str_builder_append_cstr(builder, buffer->color_value);
-}
-
-void sp_fmt_format_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_str_t value = arg->str_value;
-  SP_ASSERT(builder);
-
-  sp_str_builder_append(builder, value);
-}
-
-void sp_fmt_format_cstr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  const c8* value = arg->cstr_value;
-  SP_ASSERT(builder);
-  SP_ASSERT(value);
-
-  sp_str_builder_append_cstr(builder, value);
-}
-
-void sp_fmt_format_ptr(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  void* value = arg->ptr_value;
-  u64 addr = (u64)value;
-  sp_fmt_format_hex(builder, addr, 8, "0x");
-}
-
-void sp_fmt_format_s8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  s8 value = arg->s8_value;
-  sp_fmt_format_signed(builder, value, 3);
-}
-
-void sp_fmt_format_s16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  s16 value = arg->s16_value;
-  sp_fmt_format_signed(builder, value, 5);
-}
-
-void sp_fmt_format_s32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  s32 value = arg->s32_value;
-  sp_fmt_format_signed(builder, value, 10);
-}
-
-void sp_fmt_format_s64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  s64 value = arg->s64_value;
-  sp_fmt_format_signed(builder, value, 20);
-}
-
-void sp_fmt_format_u8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  u8 value = arg->u8_value;
-  sp_fmt_format_unsigned(builder, value, 3);
-}
-
-void sp_fmt_format_u16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  u16 value = arg->u16_value;
-  sp_fmt_format_unsigned(builder, value, 5);
-}
-
-void sp_fmt_format_u32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  u32 value = arg->u32_value;
-  sp_fmt_format_unsigned(builder, value, 10);
-}
-
-void sp_fmt_format_u64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  u64 value = arg->u64_value;
-  sp_fmt_format_unsigned(builder, value, 20);
-}
-
-void sp_fmt_format_f32_v(sp_str_builder_t* builder, f32 value) {
-  f32 num = value;
-
-  // Handle negative
-  if (num < 0) {
-    sp_str_builder_append_c8(builder, '-');
-    num = -num;
-  }
-
-  // Extract integer part
-  s32 integer_part = (s32)num;
-  f32 fractional_part = num - integer_part;
-
-  // Format integer part
-  if (integer_part == 0) {
-    sp_str_builder_append_c8(builder, '0');
-  } else {
-    c8 digits[10];
-    s32 digit_count = 0;
-    s32 temp = integer_part;
-
-    while (temp > 0) {
-      digits[digit_count++] = '0' + (temp % 10);
-      temp /= 10;
-    }
-
-    for (s32 i = digit_count - 1; i >= 0; i--) {
-      sp_str_builder_append_c8(builder, digits[i]);
-    }
-  }
-
-  // Add decimal point and 3 decimal places
-  sp_str_builder_append_c8(builder, '.');
-
-  for (s32 i = 0; i < 3; i++) {
-    fractional_part *= 10;
-    c8 digit = (c8)fractional_part;
-    sp_str_builder_append_c8(builder, '0' + digit);
-    fractional_part -= digit;
-  }
-}
-
-void sp_fmt_format_f32(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_fmt_format_f32_v(builder, arg->f32_value);
-}
-
-void sp_fmt_format_f64(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  f64 value = arg->f64_value;
-  f64 num = value;
-
-  // Handle negative
-  if (num < 0) {
-    sp_str_builder_append_c8(builder, '-');
-    num = -num;
-  }
-
-  // Extract integer part
-  s64 integer_part = (s64)num;
-  f64 fractional_part = num - integer_part;
-
-  // Format integer part
-  if (integer_part == 0) {
-    sp_str_builder_append_c8(builder, '0');
-  } else {
-    c8 digits[20];
-    s32 digit_count = 0;
-    s64 temp = integer_part;
-
-    while (temp > 0) {
-      digits[digit_count++] = '0' + (temp % 10);
-      temp /= 10;
-    }
-
-    for (s32 i = digit_count - 1; i >= 0; i--) {
-      sp_str_builder_append_c8(builder, digits[i]);
-    }
-  }
-
-  // Add decimal point and 3 decimal places
-  sp_str_builder_append_c8(builder, '.');
-
-  for (s32 i = 0; i < 3; i++) {
-    fractional_part *= 10;
-    s32 digit = (s32)fractional_part;
-    sp_str_builder_append_c8(builder, (c8)('0' + digit));
-    fractional_part -= digit;
-  }
-}
-
-void sp_fmt_format_c8(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  SP_ASSERT(builder);
-  sp_str_builder_append_c8(builder, arg->c8_value);
-}
-
-void sp_fmt_format_c16(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  c16 value = arg->c16_value;
-  SP_ASSERT(builder);
-
-  if (value < 128) {
-    sp_str_builder_append_c8(builder, (c8)value);
-  }
-  else {
-    sp_str_builder_append_c8(builder, 'U');
-    sp_str_builder_append_c8(builder, '+');
-    sp_fmt_format_hex(builder, value, 4, SP_NULL);
-  }
-}
-
-void sp_fmt_format_context(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  SP_UNUSED(arg);
-  sp_tls_rt_t* state = sp_tls_rt_get();
-  if (state) {
-    sp_fmt_format_unsigned(builder, state->index, 10);
-  } else {
-    sp_str_builder_append_cstr(builder, "NULL");
-  }
-}
-
-void sp_fmt_format_hash(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_hash_t value = arg->hash_value;
-  u64 hash = (u64)value;
-  sp_fmt_format_hex(builder, hash, 0, NULL);
-}
-
-void sp_fmt_format_hash_short(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_hash_t value = arg->hash_short_value;
-  u64 hash = (u64)value;
-  sp_fmt_format_hex(builder, hash >> 32, 0, NULL);
-}
-
-void sp_fmt_format_str_builder(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_str_builder_t sb = arg->str_builder_value;
-
-  sp_str_builder_append_cstr(builder, "{ writer: ");
-
-  u64 addr = (u64)sb.writer;
-  sp_fmt_format_hex(builder, addr, 8, "0x");
-
-  sp_str_builder_append_cstr(builder, ", len: ");
-
-  u64 len = 0;
-  if (sb.writer) sp_io_writer_size(sb.writer, &len);
-  sp_fmt_format_unsigned(builder, len, 20);
-
-  sp_str_builder_append_cstr(builder, " }");
-}
-
-
-void sp_fmt_format_quoted_str(sp_str_builder_t* builder, sp_format_arg_t* arg) {
-  sp_str_t value = arg->quoted_str_value;
-  SP_ASSERT(builder);
-
-  sp_str_builder_append_c8(builder, '"');
-  sp_str_builder_append(builder, value);
-  sp_str_builder_append_c8(builder, '"');
-}
-
-sp_str_t sp_format_str(sp_str_t fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_str_t str = sp_format_v(fmt, args);
-  va_end(args);
-
-  return str;
-}
-
-sp_str_t sp_format(const c8* fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_str_t str = sp_format_v(SP_CSTR(fmt), args);
-  va_end(args);
-
-  return str;
-}
-
-c8 sp_format_parser_peek(sp_format_parser_t* parser) {
-  return sp_str_at(parser->fmt, parser->it);
-}
-
-void sp_format_parser_eat(sp_format_parser_t* parser) {
-  parser->it++;
-}
-
-void sp_format_parser_eat_and_assert(sp_format_parser_t* parser, c8 c) {
-  SP_ASSERT(sp_format_parser_peek(parser) == c);
-  sp_format_parser_eat(parser);
-}
-
-bool sp_format_parser_is_alpha(sp_format_parser_t* parser) {
-  c8 c = sp_format_parser_peek(parser);
-  if (c >= 'a' && c <= 'z') return true;
-  if (c >= 'A' && c <= 'Z') return true;
-  return false;
-}
-
-bool sp_format_parser_is_alphanumeric(sp_format_parser_t* parser) {
-  c8 c = sp_format_parser_peek(parser);
-  if (c >= 'a' && c <= 'z') return true;
-  if (c >= 'A' && c <= 'Z') return true;
-  if (c >= '0' && c <= '9') return true;
-  return false;
-}
-
-bool sp_format_parser_is_done(sp_format_parser_t* parser) {
-  return parser->it >= parser->fmt.len;
-}
-
-sp_str_t sp_format_parser_id(sp_format_parser_t* parser) {
-  sp_str_t id = sp_str_sub(parser->fmt, parser->it, 0);
-  while (sp_format_parser_is_alpha(parser)) {
-    sp_format_parser_eat(parser);
-    id.len++;
-  }
-  return id;
-}
-
-sp_str_t sp_format_parser_value(sp_format_parser_t* parser) {
-  sp_str_t value = sp_str_sub(parser->fmt, parser->it, 0);
-  while (sp_format_parser_is_alphanumeric(parser)) {
-    sp_format_parser_eat(parser);
-    value.len++;
-  }
-  return value;
-}
-
-sp_format_specifier_flag_t sp_format_specifier_flag_from_str(sp_str_t id) {
-  if (sp_str_equal_cstr(id, "color")) return SP_FORMAT_SPECIFIER_FLAG_FG_COLOR;
-  if (sp_str_equal_cstr(id, "fg")) return SP_FORMAT_SPECIFIER_FLAG_FG_COLOR;
-  if (sp_str_equal_cstr(id, "bg")) return SP_FORMAT_SPECIFIER_FLAG_BG_COLOR;
-  if (sp_str_equal_cstr(id, "pad")) return SP_FORMAT_SPECIFIER_FLAG_PAD;
-  return SP_FORMAT_SPECIFIER_FLAG_NONE;
-}
-
-sp_str_t sp_format_color_id_to_ansi_fg(sp_str_t id) {
-  if (sp_str_equal_cstr(id, "black")) return SP_CSTR(SP_ANSI_FG_BLACK);
-  if (sp_str_equal_cstr(id, "red")) return SP_CSTR(SP_ANSI_FG_RED);
-  if (sp_str_equal_cstr(id, "green")) return SP_CSTR(SP_ANSI_FG_GREEN);
-  if (sp_str_equal_cstr(id, "yellow")) return SP_CSTR(SP_ANSI_FG_YELLOW);
-  if (sp_str_equal_cstr(id, "blue")) return SP_CSTR(SP_ANSI_FG_BLUE);
-  if (sp_str_equal_cstr(id, "magenta")) return SP_CSTR(SP_ANSI_FG_MAGENTA);
-  if (sp_str_equal_cstr(id, "cyan")) return SP_CSTR(SP_ANSI_FG_CYAN);
-  if (sp_str_equal_cstr(id, "white")) return SP_CSTR(SP_ANSI_FG_WHITE);
-  if (sp_str_equal_cstr(id, "brightblack")) return SP_CSTR(SP_ANSI_FG_BRIGHT_BLACK);
-  if (sp_str_equal_cstr(id, "brightred")) return SP_CSTR(SP_ANSI_FG_BRIGHT_RED);
-  if (sp_str_equal_cstr(id, "brightgreen")) return SP_CSTR(SP_ANSI_FG_BRIGHT_GREEN);
-  if (sp_str_equal_cstr(id, "brightyellow")) return SP_CSTR(SP_ANSI_FG_BRIGHT_YELLOW);
-  if (sp_str_equal_cstr(id, "brightblue")) return SP_CSTR(SP_ANSI_FG_BRIGHT_BLUE);
-  if (sp_str_equal_cstr(id, "brightmagenta")) return SP_CSTR(SP_ANSI_FG_BRIGHT_MAGENTA);
-  if (sp_str_equal_cstr(id, "brightcyan")) return SP_CSTR(SP_ANSI_FG_BRIGHT_CYAN);
-  if (sp_str_equal_cstr(id, "brightwhite")) return SP_CSTR(SP_ANSI_FG_BRIGHT_WHITE);
-  return SP_CSTR(SP_ANSI_RESET);
-}
-
-sp_format_specifier_t sp_format_parser_specifier(sp_format_parser_t* parser) {
-  sp_format_specifier_t spec = SP_ZERO_INITIALIZE();
-
-  while (!sp_format_parser_is_done(parser)) {
-    c8 c = sp_format_parser_peek(parser);
-    if (c != ':') {
-      break;
-    }
-
-    sp_format_parser_eat_and_assert(parser, ':');
-    sp_str_t id = sp_format_parser_id(parser);
-    sp_format_parser_eat_and_assert(parser, ' ');
-    sp_str_t value = sp_format_parser_value(parser);
-
-    sp_format_specifier_flag_t flag = sp_format_specifier_flag_from_str(id);
-    switch (flag) {
-      case SP_FORMAT_SPECIFIER_FLAG_FG_COLOR: {
-        spec.color = sp_format_color_id_to_ansi_fg(value);
-        break;
-      }
-      case SP_FORMAT_SPECIFIER_FLAG_PAD: {
-        spec.pad = sp_parse_u32(value);
-        break;
-      }
-      default: {
-        SP_UNREACHABLE_CASE();
-      }
-    }
-
-    spec.flags |= flag;
-
-    if (!sp_format_parser_is_done(parser) && sp_format_parser_peek(parser) == ' ') {
-      sp_format_parser_eat(parser);
-    }
-  }
-
-  return spec;
-}
-
-sp_str_t sp_format_v(sp_str_t fmt, va_list args) {
-  #undef SP_FMT_X
-  #define SP_FMT_X(ID, t) (sp_formatter_t) { .fn = SP_FMT_FN(ID), .id = SP_FMT_ID(ID) },
-
-  sp_formatter_t formatters [] = {
-    SP_FORMAT_TYPES
-  };
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_format_parser_t parser = {
-    .fmt = fmt,
-    .it = 0
-  };
-
-  while (true) {
-    if (sp_format_parser_is_done(&parser)) {
-      break;
-    }
-
-    c8 c = sp_format_parser_peek(&parser);
-    switch (c) {
-      case '{': {
-        sp_format_parser_eat(&parser);
-        sp_format_specifier_t specifier = sp_format_parser_specifier(&parser);
-        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_FG_COLOR) {
-          sp_str_builder_append(&builder, specifier.color);
-        }
-        sp_format_parser_eat_and_assert(&parser, '}');
-
-        sp_format_arg_t arg = va_arg(args, sp_format_arg_t);
-        sp_format_fn_t fn = arg.custom.fn;
-        if (arg.id != sp_format_id_custom) {
-          SP_CARR_FOR(formatters, i) {
-            if (arg.id == formatters[i].id) {
-              fn = formatters[i].fn;
-              break;
-            }
-          }
-        }
-        u64 formatted_value_start = sp_str_builder_len(&builder);
-        fn(&builder, &arg);
-        u64 formatted_value_end = sp_str_builder_len(&builder);
-        u64 formatted_value_len = formatted_value_end - formatted_value_start;
-
-        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_PAD) {
-          if (formatted_value_len < specifier.pad) {
-            u32 spaces_needed = specifier.pad - (u32)formatted_value_len;
-            sp_for(i, spaces_needed) {
-              sp_str_builder_append_c8(&builder, ' ');
-            }
-          }
-        }
-
-        if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_FG_COLOR) {
-          sp_str_builder_append_cstr(&builder, SP_ANSI_RESET);
-        }
-        else if (specifier.flags & SP_FORMAT_SPECIFIER_FLAG_BG_COLOR) {
-          sp_str_builder_append_cstr(&builder, SP_ANSI_RESET);
-        }
-
-        break;
-      }
-      default: {
-        sp_str_builder_append_c8(&builder, c);
-        sp_format_parser_eat(&parser);
-        break;
-      }
-    }
-  }
-
-  sp_context_push_allocator(scratch.old_allocator);
-  sp_str_t result = sp_str_builder_to_str(&builder);
-  sp_context_pop();
-
-  sp_mem_end_scratch(scratch);
-  return result;
-}
-
-// ██╗      ██████╗  ██████╗
-// ██║     ██╔═══██╗██╔════╝
-// ██║     ██║   ██║██║  ███╗
-// ██║     ██║   ██║██║   ██║
-// ███████╗╚██████╔╝╚██████╔
-// ╚══════╝ ╚═════╝  ╚═════╝
 // @log
 
 void sp_print(const c8* fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
     va_start(args, fmt);
-    sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
+    sp_str_t formatted = sp_zero();
+    sp_fmt_v(&formatted, sp_str_view(fmt), args);
     va_end(args);
 
     sp_tls_rt_t* tls = sp_tls_rt_get();
@@ -6677,7 +6337,8 @@ void sp_print_str(sp_str_t fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
     va_start(args, fmt);
-    sp_str_t formatted = sp_format_v(fmt, args);
+    sp_str_t formatted = sp_zero();
+    sp_fmt_v(&formatted, fmt, args);
     va_end(args);
 
     sp_tls_rt_t* tls = sp_tls_rt_get();
@@ -6691,11 +6352,12 @@ void sp_print_err(const c8* fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
     va_start(args, fmt);
-    sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
+    sp_str_t formatted = sp_zero();
+    sp_fmt_v(&formatted, sp_str_view(fmt), args);
     va_end(args);
 
     sp_tls_rt_t* tls = sp_tls_rt_get();
-    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
+    sp_io_write_str(tls->std.err, formatted, SP_NULLPTR);
     sp_mem_end_scratch(scratch);
   }
 }
@@ -6704,7 +6366,8 @@ void sp_log(const c8* fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
     va_start(args, fmt);
-    sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
+    sp_str_t formatted = sp_zero();
+    sp_fmt_v(&formatted, sp_str_view(fmt), args);
     va_end(args);
 
     sp_tls_rt_t* tls = sp_tls_rt_get();
@@ -6718,7 +6381,8 @@ void sp_log_str(sp_str_t fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
     va_start(args, fmt);
-    sp_str_t formatted = sp_format_v(fmt, args);
+    sp_str_t formatted = sp_zero();
+    sp_fmt_v(&formatted, fmt, args);
     va_end(args);
 
     sp_tls_rt_t* tls = sp_tls_rt_get();
@@ -6732,7 +6396,8 @@ void sp_log_err(const c8* fmt, ...) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
     va_list args;
     va_start(args, fmt);
-    sp_str_t formatted = sp_format_v(sp_str_view(fmt), args);
+    sp_str_t formatted = sp_zero();
+    sp_fmt_v(&formatted, sp_str_view(fmt), args);
     va_end(args);
 
     sp_tls_rt_t* tls = sp_tls_rt_get();
@@ -6740,17 +6405,6 @@ void sp_log_err(const c8* fmt, ...) {
     sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
     sp_mem_end_scratch(scratch);
   }
-}
-
-void _sp_log(const c8* fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_str_t str = sp_zero();
-  sp_fmt_v(&str, sp_str_view(fmt), args);
-  va_end(args);
-  sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_io_write_str(tls->std.out, str, SP_NULLPTR);
-  sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
 }
 
 
@@ -6761,7 +6415,7 @@ void _sp_log(const c8* fmt, ...) {
 // ╚██████╗╚██████╔╝██║ ╚████║   ██║   ███████╗██╔╝ ██╗   ██║
 //  ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ═╝   ╚═╝
 //  @context
-SP_PRIVATE void sp_rt_deinit(void *data);
+SP_PRIVATE void sp_tls_rt_deinit(void *data);
 SP_PRIVATE void sp_rt_init();
 
 void sp_context_check_index() {
@@ -6807,14 +6461,18 @@ sp_context_t* sp_context_get() {
 
 void sp_rt_init() {
   sp_mutex_init(&sp_rt.mutex, SP_MUTEX_PLAIN);
-  sp_tls_new(&sp_rt.tls.key, sp_rt_deinit);
+  sp_tls_new(&sp_rt.tls.key, sp_tls_rt_deinit);
 }
 
-void sp_rt_deinit(void* ptr) {
+void sp_tls_rt_deinit(void* ptr) {
   if (!ptr) return;
   sp_tls_rt_t* tls = (sp_tls_rt_t*)ptr;
+  sp_mem_os_free(tls->std.out);
+  sp_mem_os_free(tls->std.err);
+  sp_str_ht_free(tls->format.directives);
   sp_mem_arena_destroy(tls->scratch);
   sp_mem_os_free(ptr);
+
 }
 
 sp_tls_rt_t* sp_tls_rt_get() {
@@ -6834,18 +6492,7 @@ sp_tls_rt_t* sp_tls_rt_get() {
     tls->std.err = sp_alloc_type(sp_io_writer_t);
     sp_io_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
     sp_io_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
-    SP_FMT_REGISTER("cyan", sp_fmt_directive_cyan_before, SP_NULLPTR, sp_fmt_directive_ansi_reset, 0);
-    SP_FMT_REGISTER("gray", sp_fmt_directive_gray_before, SP_NULLPTR, sp_fmt_directive_ansi_reset, 0);
-    SP_FMT_REGISTER("bold", sp_fmt_directive_bold_before, SP_NULLPTR, sp_fmt_directive_ansi_reset, 0);
-    SP_FMT_REGISTER("hyperlink", sp_fmt_directive_hyperlink_before, SP_NULLPTR, sp_fmt_directive_ansi_reset, 0);
-    SP_FMT_REGISTER("quote", sp_fmt_directive_quote_before, SP_NULLPTR, sp_fmt_directive_quote_after, 0);
-    SP_FMT_REGISTER("upper", SP_NULLPTR, SP_NULLPTR, sp_fmt_directive_upper_after, 0);
-    SP_FMT_REGISTER("redact", SP_NULLPTR, SP_NULLPTR, sp_fmt_directive_redact_after, 0);
-    SP_FMT_REGISTER("bytes", SP_NULLPTR, sp_fmt_directive_bytes_render, SP_NULLPTR, 0);
-    SP_FMT_REGISTER("iso", SP_NULLPTR, sp_fmt_directive_iso_render, SP_NULLPTR, 0);
-    SP_FMT_REGISTER("ordinal", SP_NULLPTR, sp_fmt_directive_ordinal_render, SP_NULLPTR, 0);
-    SP_FMT_REGISTER("errno", SP_NULLPTR, sp_fmt_directive_errno_render, SP_NULLPTR, 0);
-    SP_FMT_REGISTER("duration", SP_NULLPTR, sp_fmt_directive_duration_render, SP_NULLPTR, 0);
+    sp_fmt_register_builtins();
   }
   return tls;
 }
@@ -7784,11 +7431,11 @@ c8 sp_str_back(sp_str_t str) {
 }
 
 sp_str_t sp_str_concat(sp_str_t a, sp_str_t b) {
-  return sp_format("{}{}", SP_FMT_STR(a), SP_FMT_STR(b));
+  return sp_fmt("{}{}", sp_fmt_str(a), sp_fmt_str(b));
 }
 
 sp_str_t sp_str_join(sp_str_t a, sp_str_t b, sp_str_t join) {
-  return sp_format("{}{}{}", SP_FMT_STR(a), SP_FMT_STR(join), SP_FMT_STR(b));
+  return sp_fmt("{}{}{}", sp_fmt_str(a), sp_fmt_str(join), sp_fmt_str(b));
 }
 
 sp_str_t sp_str_join_cstr_n(const c8** strings, u32 num_strings, sp_str_t join) {
@@ -7946,7 +7593,8 @@ void sp_str_builder_append_utf8(sp_str_builder_t* builder, u32 codepoint) {
 void sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_str_t formatted = sp_format_v(fmt, args);
+  sp_str_t formatted = sp_zero();
+  sp_fmt_v(&formatted, fmt, args);
   va_end(args);
 
   sp_str_builder_append(builder, formatted);
@@ -7955,7 +7603,8 @@ void sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...)
 void sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_str_t formatted = sp_format_v(SP_CSTR(fmt), args);
+  sp_str_t formatted = sp_zero();
+  sp_fmt_v(&formatted, sp_str_view(fmt), args);
   va_end(args);
 
   sp_str_builder_append(builder, formatted);
@@ -8909,7 +8558,7 @@ sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
   }
 
   // @spader I need an sprintf() equivalent, plus format-direct-to-cstr
-  const c8* proc = sp_str_to_cstr(sp_format("/proc/self/fd/{}", SP_FMT_S64(fd)));
+  const c8* proc = sp_str_to_cstr(sp_fmt("/proc/self/fd/{}", sp_fmt_int(fd)));
 
   c8 buffer[SP_MAX_PATH_LEN];
   s64 len = sp_lx_readlink_at(proc, buffer, SP_MAX_PATH_LEN - 1);
@@ -9229,14 +8878,14 @@ void sp_os_print_err(sp_str_t message) {
 // TTY //
 /////////
 #if defined(SP_WIN32)
-bool sp_os_is_tty(sp_os_file_handle_t fd) {
-  HANDLE handle = (HANDLE)_get_osfhandle(fd);
+bool sp_os_is_tty(sp_sys_fd_t fd) {
+  HANDLE handle = (HANDLE)fd;
   if (handle == INVALID_HANDLE_VALUE || handle == SP_NULLPTR) return false;
   DWORD mode;
   return GetConsoleMode(handle, &mode) != 0;
 }
 
-void sp_os_tty_size(sp_os_file_handle_t fd, s32* cols, s32* rows) {
+void sp_os_tty_size(sp_sys_fd_t fd, s32* cols, s32* rows) {
   if (cols) *cols = 0;
   if (rows) *rows = 0;
   HANDLE handle = (HANDLE)fd;
@@ -9304,7 +8953,7 @@ sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
 }
 
 sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
-  return sp_format("{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+  return sp_fmt("{}.{}", sp_fmt_str(lib_name), sp_fmt_str(sp_os_lib_kind_to_extension(kind)));
 }
 #endif
 
@@ -9331,7 +8980,7 @@ sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
 }
 
 sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
-  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+  return sp_fmt("lib{}.{}", sp_fmt_str(lib_name), sp_fmt_str(sp_os_lib_kind_to_extension(kind)));
 }
 #endif
 
@@ -9358,7 +9007,7 @@ sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
 }
 
 sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
-  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+  return sp_fmt("lib{}.{}", sp_fmt_str(lib_name), sp_fmt_str(sp_os_lib_kind_to_extension(kind)));
 }
 #endif
 
@@ -9407,7 +9056,7 @@ sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
 }
 
 sp_str_t sp_os_lib_to_file_name(sp_str_t lib_name, sp_os_lib_kind_t kind) {
-  return sp_format("lib{}.{}", SP_FMT_STR(lib_name), SP_FMT_STR(sp_os_lib_kind_to_extension(kind)));
+  return sp_fmt("lib{}.{}", sp_fmt_str(lib_name), sp_fmt_str(sp_os_lib_kind_to_extension(kind)));
 }
 #endif
 
@@ -10085,7 +9734,7 @@ sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
   u32 ms = time.ns / 1000000;
   if (ms < 100) sp_str_builder_append_c8(&builder, '0');
   if (ms < 10) sp_str_builder_append_c8(&builder, '0');
-  sp_str_builder_append_fmt(&builder, "{}", SP_FMT_U32(ms));
+  sp_str_builder_append_fmt(&builder, "{}", sp_fmt_uint(ms));
   sp_str_builder_append_c8(&builder, 'Z');
 
   return sp_str_builder_to_str(&builder);
@@ -10135,7 +9784,7 @@ sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
   u32 ms = time.ns / 1000000;
   if (ms < 100) sp_str_builder_append_c8(&builder, '0');
   if (ms < 10) sp_str_builder_append_c8(&builder, '0');
-  sp_str_builder_append_fmt(&builder, "{}", SP_FMT_U32(ms));
+  sp_str_builder_append_fmt(&builder, "{}", sp_fmt_uint(ms));
   sp_str_builder_append_c8(&builder, 'Z');
 
   return sp_str_builder_to_str(&builder);
@@ -10921,7 +10570,7 @@ sp_str_t sp_env_get(sp_env_t* env, sp_str_t name) {
 }
 
 bool sp_env_contains(sp_env_t* env, sp_str_t name) {
-  return sp_str_ht_exists(env->vars, name);
+  return sp_str_ht_get(env->vars, name);
 }
 
 void sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value) {
@@ -11156,7 +10805,7 @@ c8** sp_env_to_posix_envp(sp_env_t* env) {
     sp_str_t val = *sp_str_ht_it_getp(env->vars, it);
 
     sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-    sp_str_builder_append_fmt(&builder, "{}={}", SP_FMT_STR(key), SP_FMT_STR(val));
+    sp_str_builder_append_fmt(&builder, "{}={}", sp_fmt_str(key), sp_fmt_str(val));
     sp_dyn_array_push(envp, sp_str_to_cstr(sp_str_builder_to_str(&builder)));
   }
 
@@ -11291,8 +10940,8 @@ sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
       "You called sp_ps_run() but your config redirected stdout. sp_ps_run() always creates a new "
       "file descriptor for stdout, since its purpose is to run a command and capture output without "
       "the command polluting the parent command's output. If you really wanted this, use sp_ps_create() "
-      "and sp_ps_output(). The failing command was {:fg brightyellow}",
-      SP_FMT_STR(config.command)
+      "and sp_ps_output(). The failing command was {.fg brightyellow}",
+      sp_fmt_str(config.command)
     );
   }
   config.io.out = (sp_ps_io_out_config_t) {
@@ -11654,7 +11303,7 @@ sp_err_t sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
       entry->child = sp_ps_win32_open_null(GENERIC_READ);
-      return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERROR;
+      return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERR;
     }
     case SP_PS_IO_MODE_CREATE: {
       SECURITY_ATTRIBUTES attrs = SP_ZERO_INITIALIZE();
@@ -11664,7 +11313,7 @@ sp_err_t sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio
       sp_win32_handle_t child_read = SP_NULLPTR;
       sp_win32_handle_t parent_write = SP_NULLPTR;
       if (!CreatePipe(&child_read, &parent_write, &attrs, 0)) {
-        return SP_ERROR;
+        return SP_ERR;
       }
 
       // When we CreateProcess, the child shouldn't inherit the handle the parent uses to write to its input
@@ -11677,23 +11326,23 @@ sp_err_t sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio
     case SP_PS_IO_MODE_EXISTING: {
       sp_win32_handle_t process = GetCurrentProcess();
       if (!DuplicateHandle(process, sp_ps_win32_fd_to_handle(io->fd), process, &entry->child, SP_NULL, SP_WIN32_INHERITABLE, DUPLICATE_SAME_ACCESS)) {
-        return SP_ERROR;
+        return SP_ERR;
       }
-      return entry->child == SP_NULLPTR ? SP_ERROR : SP_OK;
+      return entry->child == SP_NULLPTR ? SP_ERR : SP_OK;
     }
     case SP_PS_IO_MODE_INHERIT: {
       sp_win32_handle_t process = GetCurrentProcess();
       if (!DuplicateHandle(process, GetStdHandle(STD_INPUT_HANDLE), process, &entry->child, SP_NULL, SP_WIN32_INHERITABLE, DUPLICATE_SAME_ACCESS)) {
-        return SP_ERROR;
+        return SP_ERR;
       }
-      return entry->child == SP_NULLPTR ? SP_ERROR : SP_OK;
+      return entry->child == SP_NULLPTR ? SP_ERR : SP_OK;
     }
     case SP_PS_IO_MODE_REDIRECT: {
       return SP_OK;
     }
   }
 
-  SP_UNREACHABLE_RETURN(SP_ERROR);
+  SP_UNREACHABLE_RETURN(SP_ERR);
 }
 
 sp_err_t sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_t std_handle, sp_win32_dword_t null_access, sp_ps_win32_stdio_entry_t* entry) {
@@ -11703,7 +11352,7 @@ sp_err_t sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
       entry->child = sp_ps_win32_open_null(null_access);
-      return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERROR;
+      return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERR;
     }
     case SP_PS_IO_MODE_CREATE: {
       SECURITY_ATTRIBUTES attrs = SP_ZERO_INITIALIZE();
@@ -11713,7 +11362,7 @@ sp_err_t sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_
       sp_win32_handle_t parent_read = SP_NULLPTR;
       sp_win32_handle_t child_write = SP_NULLPTR;
       if (!CreatePipe(&parent_read, &child_write, &attrs, 0)) {
-        return SP_ERROR;
+        return SP_ERR;
       }
 
       SetHandleInformation(parent_read, HANDLE_FLAG_INHERIT, 0);
@@ -11725,18 +11374,18 @@ sp_err_t sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_
     case SP_PS_IO_MODE_EXISTING: {
       sp_win32_handle_t process = GetCurrentProcess();
       if (!DuplicateHandle(process, sp_ps_win32_fd_to_handle(io->fd), process, &entry->child, SP_NULL, SP_WIN32_INHERITABLE, DUPLICATE_SAME_ACCESS)) {
-        return SP_ERROR;
+        return SP_ERR;
       }
 
-      return entry->child == SP_NULLPTR ? SP_ERROR : SP_OK;
+      return entry->child == SP_NULLPTR ? SP_ERR : SP_OK;
     }
     case SP_PS_IO_MODE_INHERIT: {
       sp_win32_handle_t process = GetCurrentProcess();
       if (!DuplicateHandle(process, GetStdHandle(std_handle), process, &entry->child, SP_NULL, SP_WIN32_INHERITABLE, DUPLICATE_SAME_ACCESS)) {
-        return SP_ERROR;
+        return SP_ERR;
       }
 
-      return entry->child == SP_NULLPTR ? SP_ERROR : SP_OK;
+      return entry->child == SP_NULLPTR ? SP_ERR : SP_OK;
     }
     case SP_PS_IO_MODE_REDIRECT: {
       return SP_OK;
@@ -11854,7 +11503,7 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
         sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
         sp_str_t val = *sp_str_ht_it_getp(env->vars, it);
 
-        sp_str_builder_append_fmt(&b, "{}={}", SP_FMT_STR(key), SP_FMT_STR(val));
+        sp_str_builder_append_fmt(&b, "{}={}", sp_fmt_str(key), sp_fmt_str(val));
         sp_str_builder_append_c8(&b, '\0');
       }
 
@@ -11869,7 +11518,7 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
     sp_env_var_t e = config.env.extra[it];
     if (sp_str_empty(e.key)) continue;
 
-    sp_str_builder_append_fmt(&b, "{}={}", SP_FMT_STR(e.key), SP_FMT_STR(e.value));
+    sp_str_builder_append_fmt(&b, "{}={}", sp_fmt_str(e.key), sp_fmt_str(e.value));
     sp_str_builder_append_c8(&b, '\0');
   }
 
@@ -11952,13 +11601,6 @@ fail:
 }
 
 sp_ps_output_t sp_ps_run(sp_ps_config_t config) {
-  if (config.io.out.mode == SP_PS_IO_MODE_EXISTING || config.io.out.mode == SP_PS_IO_MODE_REDIRECT) {
-    SP_FATAL(
-      "You called sp_ps_run() but your config redirected stdout. sp_ps_run() always creates a new file descriptor for stdout, since its purpose is to run a command and capture output without the command polluting the parent command's output. If you really wanted this, use sp_ps_create() and sp_ps_output(). The failing command was {:fg brightyellow}",
-      SP_FMT_STR(config.command)
-    );
-  }
-
   config.io.out = (sp_ps_io_out_config_t) {
     .mode = SP_PS_IO_MODE_CREATE,
   };
@@ -12603,7 +12245,7 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
 
 SP_PRIVATE bool sp_linux_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path) {
   if (!os->files) return true;
-  return sp_ht_key_exists(os->files, full_path);
+  return sp_ht_getp(os->files, full_path);
 }
 
 void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
@@ -13820,11 +13462,11 @@ sp_err_t sp_io_writer_close(sp_io_writer_t* writer) {
 }
 
 void sp_io_get_std_out(sp_io_writer_t* io) {
-  return sp_io_writer_from_fd(io, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+  sp_io_writer_from_fd(io, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
 }
 
 void sp_io_get_std_err(sp_io_writer_t* io) {
-  return sp_io_writer_from_fd(io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+  sp_io_writer_from_fd(io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
 }
 
 SP_API sp_app_t* sp_app_new(sp_app_config_t config) {

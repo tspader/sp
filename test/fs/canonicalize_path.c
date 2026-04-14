@@ -27,21 +27,21 @@ static void run_canon_test(s32* utest_result, sp_test_file_manager_t* fm, canon_
   sp_str_t result = sp_fs_canonicalize_path(input);
 
   if (t->expect_nonempty && result.len == 0) {
-    SP_TEST_REPORT("{}: expected nonempty", SP_FMT_CSTR(t->label));
+    SP_TEST_REPORT("{}: expected nonempty", sp_fmt_cstr(t->label));
     SP_FAIL();
   }
   if (t->expect_empty && result.len != 0) {
-    SP_TEST_REPORT("{}: expected empty, got {}", SP_FMT_CSTR(t->label), SP_FMT_STR(result));
+    SP_TEST_REPORT("{}: expected empty, got {}", sp_fmt_cstr(t->label), sp_fmt_str(result));
     SP_FAIL();
   }
   if (t->expect_no_trailing_slash && result.len > 0 && result.data[result.len - 1] == '/') {
-    SP_TEST_REPORT("{}: trailing slash", SP_FMT_CSTR(t->label));
+    SP_TEST_REPORT("{}: trailing slash", sp_fmt_cstr(t->label));
     SP_FAIL();
   }
   if (t->expect_no_backslash && result.len > 0) {
     sp_for(i, result.len) {
       if (result.data[i] == '\\') {
-        SP_TEST_REPORT("{}: backslash in result", SP_FMT_CSTR(t->label));
+        SP_TEST_REPORT("{}: backslash in result", sp_fmt_cstr(t->label));
         SP_FAIL();
         break;
       }
@@ -50,12 +50,12 @@ static void run_canon_test(s32* utest_result, sp_test_file_manager_t* fm, canon_
   if (t->expect_name) {
     sp_str_t name = sp_fs_get_name(result);
     if (!sp_str_equal_cstr(name, t->expect_name)) {
-      SP_TEST_REPORT("{}: expected name {}", SP_FMT_CSTR(t->label), SP_FMT_CSTR(t->expect_name));
+      SP_TEST_REPORT("{}: expected name {}", sp_fmt_cstr(t->label), sp_fmt_cstr(t->expect_name));
       SP_FAIL();
     }
   }
   if (t->expect_exists && !sp_fs_exists(result)) {
-    SP_TEST_REPORT("{}: expected result to exist", SP_FMT_CSTR(t->label));
+    SP_TEST_REPORT("{}: expected result to exist", sp_fmt_cstr(t->label));
     SP_FAIL();
   }
 }

@@ -99,7 +99,7 @@ UTEST(str_builder, indent_operations) {
 
 UTEST(str_builder, format_append) {
   sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_str_builder_append_fmt(&builder, "Value: {}", SP_FMT_U32(123));
+  sp_str_builder_append_fmt(&builder, "Value: {}", sp_fmt_uint(123));
   sp_str_t result = sp_str_builder_to_str(&builder);
   ASSERT_GT(result.len, 0);
   ASSERT_NE(result.data, SP_NULLPTR);
@@ -135,7 +135,7 @@ UTEST(str_builder, fixed_mem_backend) {
     sp_io_writer_t writer; sp_io_writer_from_mem(&writer,buffer, sizeof(buffer));
     sp_str_builder_t builder = sp_str_builder_from_writer(&writer);
 
-    sp_str_builder_append_fmt(&builder, "Count: {}", SP_FMT_U32(42));
+    sp_str_builder_append_fmt(&builder, "Count: {}", sp_fmt_uint(42));
     sp_str_t result = sp_str(buffer, writer.mem.pos);
     SP_EXPECT_STR_EQ_CSTR(result, "Count: 42");
   }

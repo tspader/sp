@@ -126,7 +126,7 @@ sp_da_push(numbers, 42);
 sp_da_push(numbers, 100);
 
 sp_da_for(numbers, i) {
-  sp_log("numbers[{}] = {}", SP_FMT_U32(i), SP_FMT_S32(numbers[i]));
+  sp_log("numbers[{}] = {}", sp_fmt_uint(i), sp_fmt_int(numbers[i]));
 }
 
 u32 count = sp_da_size(numbers);
@@ -143,8 +143,6 @@ sp_ht_insert(htb, SP_LIT("answer"), 42);
 
 s32* value_ptr = sp_ht_getp(htb, SP_LIT("answer"));
 
-sp_ht_key_exists(htb, SP_LIT("answer"));
-
 sp_ht_for(htb, it) {
   sp_str_t* key = sp_ht_it_getkp(map, it);
   s32* val = sp_ht_it_getp(map, it);
@@ -157,15 +155,15 @@ sp_ht_for(htb, it) {
 ```c
 // Type-safe formatting with color support
 sp_log(
-  "Processing {:fg cyan} with {} {}",
-  SP_FMT_STR(name),
-  SP_FMT_U32(count),
-  SP_FMT_CSTR("items")
+  "Processing {.fg cyan} with {} {}",
+  sp_fmt_str(name),
+  sp_fmt_uint(count),
+  sp_fmt_cstr("items")
 );
 
-sp_str_t msg = sp_format("Result: {}", SP_FMT_S32(42));
+sp_str_t msg = sp_fmt("Result: {}", sp_fmt_int(42));
 
-// Colors: :fg, :bg, :color
+// Colors: .fg, .bg
 // Colors: black, red, green, yellow, blue, magenta, cyan, white
 // Add 'bright' prefix for bright variants
 ```
@@ -190,7 +188,7 @@ switch (state) {
 // Return an enum for recoverable errors (consumer app may have their own error type)
 sp_err_t load_config(sp_str_t path, config_t* config) {
   if (!sp_os_does_path_exist(path)) {
-    sp_log("Config not found: {}", SP_FMT_STR(path));
+    sp_log("Config not found: {}", sp_fmt_str(path));
     return SP_ERR_WHATEVER;
   }
 

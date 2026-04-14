@@ -261,7 +261,7 @@ sp_elf_section_t* sp_elf_find_section_by_index(sp_elf_t* elf, u32 index) {
 
 sp_elf_section_t* sp_elf_find_section_by_name(sp_elf_t* elf, sp_str_t name) {
   sp_require_as_null(elf);
-  sp_require_as_null(sp_str_ht_exists(elf->section_map, name));
+  sp_require_as_null(sp_str_ht_get(elf->section_map, name));
 
   u32 index = *sp_str_ht_get(elf->section_map, name);
   return &elf->sections[index];
@@ -409,7 +409,7 @@ sp_elf_section_t* sp_elf_rela_new(sp_elf_t* elf, sp_elf_section_t* target) {
   sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
   if (!symtab) return SP_NULLPTR;
 
-  sp_str_t name = sp_format(".rela{}", SP_FMT_STR(target->name));
+  sp_str_t name = sp_fmt(".rela{}", sp_fmt_str(target->name));
   sp_elf_section_t* rela = sp_elf_add_section(elf, name, SHT_RELA, 8);
   if (!rela) return SP_NULLPTR;
   rela->link = symtab->index;

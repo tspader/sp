@@ -48,8 +48,8 @@ void run_test(const c8* label, u32 write_size, u32 write_count) {
   s32 pipes[2];
   SP_ASSERT(pipe(pipes) == 0);
 
-  sp_str_t size_str = sp_format("{}", SP_FMT_U32(write_size));
-  sp_str_t count_str = sp_format("{}", SP_FMT_U32(write_count));
+  sp_str_t size_str = sp_fmt("{}", sp_fmt_uint(write_size));
+  sp_str_t count_str = sp_fmt("{}", sp_fmt_uint(write_count));
 
   sp_ps_t ps_a = sp_ps_create((sp_ps_config_t) {
     .command = get_process_path(),
@@ -106,18 +106,18 @@ void run_test(const c8* label, u32 write_size, u32 write_count) {
 
   const c8* status = a.interleaved ? "INTERLEAVED" : "atomic";
   sp_log("{}: {}B x {} => {} trans, {}",
-    SP_FMT_CSTR(label),
-    SP_FMT_U32(write_size),
-    SP_FMT_U32(write_count),
-    SP_FMT_U32(a.transitions),
-    SP_FMT_CSTR(status));
+    sp_fmt_cstr(label),
+    sp_fmt_uint(write_size),
+    sp_fmt_uint(write_count),
+    sp_fmt_uint(a.transitions),
+    sp_fmt_cstr(status));
 
   if (a.interleaved) {
     sp_for(i, total - 1) {
       if (buffer[i] != buffer[i+1]) {
         u32 boundary = (i + 1) % 4096;
         sp_log("  first transition at byte {}, offset from 4096 boundary: {}",
-          SP_FMT_U32(i), SP_FMT_U32(boundary));
+          sp_fmt_uint(i), sp_fmt_uint(boundary));
         break;
       }
     }
@@ -131,7 +131,7 @@ s32 main(void) {
   sp_log("");
 
   sp_for(i, 5) {
-    sp_log("--- run {} ---", SP_FMT_U32(i));
+    sp_log("--- run {} ---", sp_fmt_uint(i));
     run_test("< PIPE_BUF", 100, 100);
     run_test("= PIPE_BUF", 4096, 50);
     run_test("> PIPE_BUF", 8192, 50);

@@ -16,14 +16,13 @@
 
 #define SP_TEST_REPORT(fmt, ...) \
   do { \
-    sp_str_t formatted = sp_format(fmt, ##__VA_ARGS__); \
+    sp_str_t formatted = sp_fmt(fmt, ##__VA_ARGS__); \
     UTEST_PRINTF("%s\n", sp_str_to_cstr(formatted)); \
   } while (0)
 
-#define SP_TEST_REPORT_STR(fmt, ...) \
+#define SP_TEST_REPORT_STR(str) \
   do { \
-    sp_str_t formatted = sp_format_str(fmt, ##__VA_ARGS__); \
-    UTEST_PRINTF("%s\n", sp_str_to_cstr(formatted)); \
+    UTEST_PRINTF("%s\n", sp_str_to_cstr(str)); \
   } while (0)
 
 #define SP_TEST_STREQ(a, b, is_assert) \
@@ -32,10 +31,10 @@
       const c8* __sp_test_file_lval = __FILE__; \
       const u32 __sp_test_line_lval = __LINE__; \
       sp_str_builder_t __sp_test_builder = SP_ZERO_INITIALIZE(); \
-      sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("{}:{} Failure:"), SP_FMT_CSTR(__sp_test_file_lval), SP_FMT_U32(__sp_test_line_lval)); \
+      sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("{}:{} Failure:"), sp_fmt_cstr(__sp_test_file_lval), sp_fmt_uint(__sp_test_line_lval)); \
       sp_str_builder_new_line(&__sp_test_builder); \
       sp_str_builder_indent(&__sp_test_builder); \
-      sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("{} != {}"), SP_FMT_QUOTED_STR((a)), SP_FMT_QUOTED_STR((b))); \
+      sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("\"{}\" != \"{}\""), sp_fmt_str((a)), sp_fmt_str((b))); \
       SP_TEST_REPORT_STR(sp_str_builder_to_str(&__sp_test_builder)); \
       *utest_result = UTEST_TEST_FAILURE; \
  \

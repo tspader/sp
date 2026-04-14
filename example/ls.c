@@ -18,11 +18,11 @@ s32 run(s32 num_args, const c8** args) {
   sp_da_for(entries, it) {
     sp_fs_entry_t* entry = &entries[it];
     switch (entry->kind) {
-      case SP_FS_KIND_DIR:  sp_log("{:fg blue}", SP_FMT_STR(entry->name)); break;
-      case SP_FS_KIND_FILE: sp_log("{}", SP_FMT_STR(entry->name)); break;
+      case SP_FS_KIND_DIR:  sp_log("{.fg blue}", sp_fmt_str(entry->name)); break;
+      case SP_FS_KIND_FILE: sp_log("{}", sp_fmt_str(entry->name)); break;
       case SP_FS_KIND_SYMLINK: {
         sp_str_t target = sp_fs_canonicalize_path(entry->path);
-        sp_log("{:fg cyan} -> {}", SP_FMT_STR(entry->name), SP_FMT_STR(target));
+        sp_log("{.fg cyan} -> {}", sp_fmt_str(entry->name), sp_fmt_str(target));
         break;
       }
       case SP_FS_KIND_NONE: break;

@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
     sp_str_t path = sp_str_view(bench_cases[i].path);
     SP_ASSERT(sp_glob_match(globs[i], path));
     f64 ns = run_glob_bench(globs[i], path);
-    sp_str_t name = sp_format("{}_glob", SP_FMT_CSTR(case_names[i]));
+    sp_str_t name = sp_fmt("{}_glob", sp_fmt_cstr(case_names[i]));
     sp_dyn_array_push(results, ((bench_result_t){.name = name, .ns_per_op = ns}));
   }
 
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
     sp_str_t path = sp_str_view(bench_cases[i].path);
     SP_ASSERT(sp_glob_set_match(globsets[i], path));
     f64 ns = run_glob_set_bench(globsets[i], path);
-    sp_str_t name = sp_format("{}_globset", SP_FMT_CSTR(case_names[i]));
+    sp_str_t name = sp_fmt("{}_globset", sp_fmt_cstr(case_names[i]));
     sp_dyn_array_push(results, ((bench_result_t){.name = name, .ns_per_op = ns}));
   }
 
@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
 
   // Print space-separated pairs
   sp_dyn_array_for(results, i) {
-    sp_log("{} {}", SP_FMT_STR(results[i].name), SP_FMT_F64(results[i].ns_per_op));
+    sp_log("{} {}", sp_fmt_str(results[i].name), sp_fmt_float(results[i].ns_per_op));
   }
 
   return 0;

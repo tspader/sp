@@ -129,7 +129,7 @@ UTEST_EXTERN struct utest_state_s utest_state;
 #endif
 #define UTEST_PRINTF(...)                                                      \
   do {                                                                         \
-    sp_str_t _utest_fmtd = sp_format(__VA_ARGS__);                            \
+    sp_str_t _utest_fmtd = sp_fmt(__VA_ARGS__);                               \
     sp_os_print(_utest_fmtd);                                                 \
     if (utest_state.has_output) {                                              \
       sp_io_write_str(&utest_state.output, _utest_fmtd, SP_NULLPTR);         \
@@ -147,64 +147,64 @@ UTEST_EXTERN struct utest_state_s utest_state;
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(signed char c);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(signed char c) {
-  UTEST_PRINTF("{}", SP_FMT_S32(UTEST_CAST(s32, c)));
+  UTEST_PRINTF("{}", sp_fmt_int(UTEST_CAST(s32, c)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(unsigned char c);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(unsigned char c) {
-  UTEST_PRINTF("{}", SP_FMT_U32(UTEST_CAST(u32, c)));
+  UTEST_PRINTF("{}", sp_fmt_uint(UTEST_CAST(u32, c)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(float f);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(float f) {
-  UTEST_PRINTF("{}", SP_FMT_F32(f));
+  UTEST_PRINTF("{}", sp_fmt_float(f));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(double d);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(double d) {
-  UTEST_PRINTF("{}", SP_FMT_F64(d));
+  UTEST_PRINTF("{}", sp_fmt_float(d));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long double d);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long double d) {
-  UTEST_PRINTF("{}", SP_FMT_F64(UTEST_CAST(f64, d)));
+  UTEST_PRINTF("{}", sp_fmt_float(UTEST_CAST(f64, d)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(int i);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(int i) {
-  UTEST_PRINTF("{}", SP_FMT_S32(UTEST_CAST(s32, i)));
+  UTEST_PRINTF("{}", sp_fmt_int(UTEST_CAST(s32, i)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(unsigned int i);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(unsigned int i) {
-  UTEST_PRINTF("{}", SP_FMT_U32(UTEST_CAST(u32, i)));
+  UTEST_PRINTF("{}", sp_fmt_uint(UTEST_CAST(u32, i)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long int i);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long int i) {
-  UTEST_PRINTF("{}", SP_FMT_S64(UTEST_CAST(s64, i)));
+  UTEST_PRINTF("{}", sp_fmt_int(UTEST_CAST(s64, i)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long unsigned int i);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long unsigned int i) {
-  UTEST_PRINTF("{}", SP_FMT_U64(UTEST_CAST(u64, i)));
+  UTEST_PRINTF("{}", sp_fmt_uint(UTEST_CAST(u64, i)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(const void *p);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(const void *p) {
-  UTEST_PRINTF("{}", SP_FMT_PTR((void *)p));
+  UTEST_PRINTF("{}", sp_fmt_ptr((void *)p));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long long int i);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long long int i) {
-  UTEST_PRINTF("{}", SP_FMT_S64(UTEST_CAST(s64, i)));
+  UTEST_PRINTF("{}", sp_fmt_int(UTEST_CAST(s64, i)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void
 utest_type_printer(long long unsigned int i);
 UTEST_WEAK UTEST_OVERLOADABLE void
 utest_type_printer(long long unsigned int i) {
-  UTEST_PRINTF("{}", SP_FMT_U64(UTEST_CAST(u64, i)));
+  UTEST_PRINTF("{}", sp_fmt_uint(UTEST_CAST(u64, i)));
 }
 
 #else
@@ -254,17 +254,17 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       const c8 *const yAsString = #y;                                         \
       _Pragma("clang diagnostic pop")                                          \
           UTEST_PRINTF("{}:{}: Failure\n",                                     \
-                       SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));           \
+                       sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));           \
       UTEST_PRINTF("  Expected : ({}) {} ({})\n",                              \
-                   SP_FMT_CSTR(xAsString), SP_FMT_CSTR(#cond),                \
-                   SP_FMT_CSTR(yAsString));                                    \
+                   sp_fmt_cstr(xAsString), sp_fmt_cstr(#cond),                \
+                   sp_fmt_cstr(yAsString));                                    \
       UTEST_PRINTF("    Actual : ");                                           \
       utest_type_printer(xEval);                                               \
       UTEST_PRINTF(" vs ");                                                    \
       utest_type_printer(yEval);                                               \
       UTEST_PRINTF("\n");                                                      \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -283,17 +283,17 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       const c8 *const xAsString = #x;                                         \
       const c8 *const yAsString = #y;                                         \
       UTEST_PRINTF("{}:{}: Failure\n",                                         \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));               \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));               \
       UTEST_PRINTF("  Expected : ({}) {} ({})\n",                              \
-                   SP_FMT_CSTR(xAsString), SP_FMT_CSTR(#cond),                \
-                   SP_FMT_CSTR(yAsString));                                    \
+                   sp_fmt_cstr(xAsString), sp_fmt_cstr(#cond),                \
+                   sp_fmt_cstr(yAsString));                                    \
       UTEST_PRINTF("    Actual : ");                                           \
       utest_type_printer(xEval);                                               \
       UTEST_PRINTF(" vs ");                                                    \
       utest_type_printer(yEval);                                               \
       UTEST_PRINTF("\n");                                                      \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -308,10 +308,10 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
   UTEST_SURPRESS_WARNING_BEGIN do {                                            \
     if (!((x)cond(y))) {                                                       \
       UTEST_PRINTF("{}:{}: Failure (Expected {} Actual)\n",                    \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__),                \
-                   SP_FMT_CSTR(#cond));                                        \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__),                \
+                   sp_fmt_cstr(#cond));                                        \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -358,12 +358,12 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     const int xEval = !!(x);                                                   \
     if (!(xEval)) {                                                            \
       UTEST_PRINTF("{}:{}: Failure\n",                                         \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));               \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));               \
       UTEST_PRINTF("  Expected : true\n");                                     \
       UTEST_PRINTF("    Actual : {}\n",                                        \
-                   SP_FMT_CSTR((xEval) ? "true" : "false"));                  \
+                   sp_fmt_cstr((xEval) ? "true" : "false"));                  \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -384,12 +384,12 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     const int xEval = !!(x);                                                   \
     if (xEval) {                                                               \
       UTEST_PRINTF("{}:{}: Failure\n",                                         \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));               \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));               \
       UTEST_PRINTF("  Expected : false\n");                                    \
       UTEST_PRINTF("    Actual : {}\n",                                        \
-                   SP_FMT_CSTR((xEval) ? "true" : "false"));                  \
+                   sp_fmt_cstr((xEval) ? "true" : "false"));                  \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -412,13 +412,13 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     if (UTEST_NULL == xEval || UTEST_NULL == yEval ||                          \
         !sp_cstr_equal(xEval, yEval)) {                                       \
       UTEST_PRINTF("{}:{}: Failure\n",                                         \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));               \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));               \
       UTEST_PRINTF("  Expected : \"{}\"\n",                                    \
-                   SP_FMT_CSTR(xEval ? xEval : "(null)"));                    \
+                   sp_fmt_cstr(xEval ? xEval : "(null)"));                    \
       UTEST_PRINTF("    Actual : \"{}\"\n",                                    \
-                   SP_FMT_CSTR(yEval ? yEval : "(null)"));                    \
+                   sp_fmt_cstr(yEval ? yEval : "(null)"));                    \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -441,13 +441,13 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     if (UTEST_NULL == xEval || UTEST_NULL == yEval ||                          \
         sp_cstr_equal(xEval, yEval)) {                                        \
       UTEST_PRINTF("{}:{}: Failure\n",                                         \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));               \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));               \
       UTEST_PRINTF("  Expected : \"{}\"\n",                                    \
-                   SP_FMT_CSTR(xEval ? xEval : "(null)"));                    \
+                   sp_fmt_cstr(xEval ? xEval : "(null)"));                    \
       UTEST_PRINTF("    Actual : \"{}\"\n",                                    \
-                   SP_FMT_CSTR(yEval ? yEval : "(null)"));                    \
+                   sp_fmt_cstr(yEval ? yEval : "(null)"));                    \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -471,13 +471,13 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     if (UTEST_NULL == xEval || UTEST_NULL == yEval ||                          \
         0 != UTEST_STRNCMP(xEval, yEval, nEval)) {                             \
       UTEST_PRINTF("{}:{}: Failure\n",                                         \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));               \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));               \
       UTEST_PRINTF("  Expected : \"{}\"\n",                                    \
-                   SP_FMT_STR(sp_str(xEval, nEval)));                          \
+                   sp_fmt_str(sp_str(xEval, nEval)));                          \
       UTEST_PRINTF("    Actual : \"{}\"\n",                                    \
-                   SP_FMT_STR(sp_str(yEval, nEval)));                          \
+                   sp_fmt_str(sp_str(yEval, nEval)));                          \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -501,13 +501,13 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     if (UTEST_NULL == xEval || UTEST_NULL == yEval ||                          \
         0 == UTEST_STRNCMP(xEval, yEval, nEval)) {                             \
       UTEST_PRINTF("{}:{}: Failure\n",                                         \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));               \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));               \
       UTEST_PRINTF("  Expected : \"{}\"\n",                                    \
-                   SP_FMT_STR(sp_str(xEval, nEval)));                          \
+                   sp_fmt_str(sp_str(xEval, nEval)));                          \
       UTEST_PRINTF("    Actual : \"{}\"\n",                                    \
-                   SP_FMT_STR(sp_str(yEval, nEval)));                          \
+                   sp_fmt_str(sp_str(yEval, nEval)));                          \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -529,11 +529,11 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
         utest_fabs(UTEST_CAST(f64, x) - UTEST_CAST(f64, y));                  \
     if (diff > UTEST_CAST(f64, epsilon) || utest_isnan(diff)) {               \
       UTEST_PRINTF("{}:{}: Failure\n",                                         \
-                   SP_FMT_CSTR(__FILE__), SP_FMT_S32(__LINE__));               \
-      UTEST_PRINTF("  Expected : {}\n", SP_FMT_F64(UTEST_CAST(f64, x)));     \
-      UTEST_PRINTF("    Actual : {}\n", SP_FMT_F64(UTEST_CAST(f64, y)));     \
+                   sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));               \
+      UTEST_PRINTF("  Expected : {}\n", sp_fmt_float(UTEST_CAST(f64, x)));     \
+      UTEST_PRINTF("    Actual : {}\n", sp_fmt_float(UTEST_CAST(f64, y)));     \
       if ((msg)[0] != '\0') {                                                  \
-        UTEST_PRINTF("   Message : {}\n", SP_FMT_CSTR(msg));                  \
+        UTEST_PRINTF("   Message : {}\n", sp_fmt_cstr(msg));                  \
       }                                                                        \
       *utest_result = UTEST_TEST_FAILURE;                                      \
       if (is_assert) {                                                         \
@@ -708,8 +708,8 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     for (i = 0; i < (INDEX); i++) {                                            \
       const u64 index = utest_state.tests_length++;                            \
       const c8 name_part[] = #FIXTURE "." #NAME;                               \
-      sp_str_t fmtd = sp_format("{}/{}", SP_FMT_CSTR(name_part),              \
-                                         SP_FMT_U64(i));                       \
+      sp_str_t fmtd = sp_fmt("{}/{}", sp_fmt_cstr(name_part),                \
+                                       sp_fmt_uint(i));                         \
       u64 name_size = fmtd.len + 1;                                           \
       c8 *name = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(name_size));            \
       utest_state.tests = UTEST_PTR_CAST(                                      \
@@ -915,7 +915,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
     } else if (0 == UTEST_STRNCMP(argv[index], list_str,
                                   sizeof(list_str) - 1)) {
       for (index = 0; index < utest_state.tests_length; index++) {
-        sp_log("{}", SP_FMT_CSTR(utest_state.tests[index].name));
+        sp_log("{}", sp_fmt_cstr(utest_state.tests[index].name));
       }
       /* when printing the test list, don't actually run the tests */
       return 0;
@@ -992,9 +992,9 @@ s32 utest_main(s32 argc, const c8 **argv) {
   #endif
 
   sp_log(
-    "> running {:fg brightblack} test cases on {}-{}-{}",
-    SP_FMT_U64(ran_tests),
-    SP_FMT_STR(arch), SP_FMT_STR(os), SP_FMT_STR(abi)
+    "> running {.fg brightblack} test cases on {}-{}-{}",
+    sp_fmt_uint(ran_tests),
+    sp_fmt_str(arch), sp_fmt_str(os), sp_fmt_str(abi)
   );
 
   for (index = 0; index < utest_state.tests_length; index++) {
@@ -1005,7 +1005,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
       continue;
     }
 
-    sp_print("{}.{}...", SP_FMT_CSTR(utest_state.tests[index].set), SP_FMT_CSTR(utest_state.tests[index].test));
+    sp_print("{}.{}...", sp_fmt_cstr(utest_state.tests[index].set), sp_fmt_cstr(utest_state.tests[index].test));
 
     ns = utest_ns();
     sp_err_clear();
@@ -1047,42 +1047,42 @@ s32 utest_main(s32 argc, const c8 **argv) {
       }
 
       if (UTEST_TEST_FAILURE == result) {
-        sp_print("{:fg red} ", SP_FMT_CSTR("failed"));
+        sp_print("{.fg red} ", sp_fmt_cstr("failed"));
       } else if (UTEST_TEST_SKIPPED == result) {
-        sp_print("{:fg yellow} ", SP_FMT_CSTR("skipped"));
+        sp_print("{.fg yellow} ", sp_fmt_cstr("skipped"));
       } else {
-        sp_print("{:fg green} ", SP_FMT_CSTR("ok"));
+        sp_print("{.fg green} ", sp_fmt_cstr("ok"));
       }
-      sp_log("{:fg brightblack}{:fg brightblack}", SP_FMT_S64(time), SP_FMT_CSTR(units[unit_index]));
+      sp_log("{.fg brightblack}{.fg brightblack}", sp_fmt_int(time), sp_fmt_cstr(units[unit_index]));
     }
   }
 
-  sp_log("{:fg green} {} test cases ran.",
-         SP_FMT_CSTR("[==========]"),
-         SP_FMT_U64(ran_tests));
+  sp_log("{.fg green} {} test cases ran.",
+         sp_fmt_cstr("[==========]"),
+         sp_fmt_uint(ran_tests));
   sp_log("{}[  PASSED  ]{} {} tests.",
-         SP_FMT_COLOR(SP_ANSI_FG_GREEN), SP_FMT_COLOR(SP_ANSI_RESET),
-         SP_FMT_U64(ran_tests - failed - skipped));
+         sp_fmt_cstr(SP_ANSI_FG_GREEN), sp_fmt_cstr(SP_ANSI_RESET),
+         sp_fmt_uint(ran_tests - failed - skipped));
 
   if (0 != skipped) {
     sp_log("{}[  SKIPPED ]{} {} tests, listed below:",
-           SP_FMT_COLOR(SP_ANSI_FG_YELLOW), SP_FMT_COLOR(SP_ANSI_RESET),
-           SP_FMT_U64(skipped));
+           sp_fmt_cstr(SP_ANSI_FG_YELLOW), sp_fmt_cstr(SP_ANSI_RESET),
+           sp_fmt_uint(skipped));
     for (index = 0; index < skipped_testcases_length; index++) {
       sp_log("{}[  SKIPPED ]{} {}",
-             SP_FMT_COLOR(SP_ANSI_FG_YELLOW), SP_FMT_COLOR(SP_ANSI_RESET),
-             SP_FMT_CSTR(utest_state.tests[skipped_testcases[index]].name));
+             sp_fmt_cstr(SP_ANSI_FG_YELLOW), sp_fmt_cstr(SP_ANSI_RESET),
+             sp_fmt_cstr(utest_state.tests[skipped_testcases[index]].name));
     }
   }
 
   if (0 != failed) {
     sp_log("{}[  FAILED  ]{} {} tests, listed below:",
-           SP_FMT_COLOR(SP_ANSI_FG_RED), SP_FMT_COLOR(SP_ANSI_RESET),
-           SP_FMT_U64(failed));
+           sp_fmt_cstr(SP_ANSI_FG_RED), sp_fmt_cstr(SP_ANSI_RESET),
+           sp_fmt_uint(failed));
     for (index = 0; index < failed_testcases_length; index++) {
       sp_log("{}[  FAILED  ]{} {}",
-             SP_FMT_COLOR(SP_ANSI_FG_RED), SP_FMT_COLOR(SP_ANSI_RESET),
-             SP_FMT_CSTR(utest_state.tests[failed_testcases[index]].name));
+             sp_fmt_cstr(SP_ANSI_FG_RED), sp_fmt_cstr(SP_ANSI_RESET),
+             sp_fmt_cstr(utest_state.tests[failed_testcases[index]].name));
     }
   }
 

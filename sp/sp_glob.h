@@ -709,13 +709,13 @@ bool sp_glob_set_match(sp_glob_set_t* set, sp_str_t path) {
 
   sp_glob_candidate_t c = sp_glob_candidate_new(path);
 
-  if (sp_ht_key_exists(set->literal, c.path)) {
+  if (sp_ht_getp(set->literal, c.path)) {
     return true;
   }
-  if (sp_ht_key_exists(set->base_name, c.basename)) {
+  if (sp_ht_getp(set->base_name, c.basename)) {
     return true;
   }
-  if (!sp_str_empty(c.ext) && sp_ht_key_exists(set->extension, c.ext)) {
+  if (!sp_str_empty(c.ext) && sp_ht_getp(set->extension, c.ext)) {
     return true;
   }
 

@@ -90,7 +90,7 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
   registry->shutdown_requested = false;
   registry->import_queue = SP_NULLPTR;
   registry->completion_queue = SP_NULLPTR;
-  registry->arena = sp_mem_arena_new(4096);
+  registry->arena = sp_mem_arena_new();
 
   sp_context_push_allocator(sp_mem_arena_as_allocator(registry->arena));
 
@@ -169,7 +169,7 @@ sp_asset_t* sp_asset_registry_add(sp_asset_registry_t* r, sp_asset_kind_t k, sp_
 sp_asset_t* sp_asset_registry_find(sp_asset_registry_t* r, sp_asset_kind_t kind, sp_str_t name) {
   sp_mutex_lock(&r->mutex);
   sp_asset_importer_t* importer = sp_asset_registry_find_importer(r, kind);
-  if (!importer || sp_str_ht_empty(importer->assets) || !sp_str_ht_exists(importer->assets, name)) {
+  if (!importer || sp_str_ht_empty(importer->assets) || !sp_str_ht_get(importer->assets, name)) {
     sp_mutex_unlock(&r->mutex);
     return SP_NULLPTR;
   }
