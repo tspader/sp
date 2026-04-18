@@ -148,7 +148,6 @@ define = ["SP_GLOB_IMPLEMENTATION"]
 name = "palette"
 source = ["example/cli/palette.c"]
 include = ["example/palette"]
-define = ["SP_MAIN"]
 
 [[bin]]
 name = "demo-prompt"

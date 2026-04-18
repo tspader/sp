@@ -1,7 +1,7 @@
 #ifdef SP_FREESTANDING
 #include "sp.h"
 int run(int n, const char** a) { return 0; }
-SP_ENTRY(run);
+SP_MAIN(run);
 #else
 // SP_IMPLEMENTATION is defined in the Makefile to make clangd happy
 #include "sp.h"

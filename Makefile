@@ -11,6 +11,9 @@ endif
 # Detect freestanding from triple: *-none or *-none-*
 FREESTANDING := $(if $(findstring -none,$(TRIPLE)),1,)
 
+# Append .exe for Windows targets so the PE binaries run on Windows.
+EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
+
 ifdef FREESTANDING
 CFLAGS_PLATFORM = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DSP_FREESTANDING -DSP_DEFINE_BUILTINS
 LDFLAGS =
@@ -21,30 +24,31 @@ endif
 
 CFLAGS = -std=c99 -g -Werror=return-type $(CFLAGS_PLATFORM)
 
-TESTS = amalg app asset context core cv elf format fmon fs glob ht io leak linkage ps rb str thread time mem prompt
-EXAMPLES = array elf format hash_table ls palette prompt signal wc
+TESTS = amalg app asset context core cv format fmon fs glob ht io leak linkage ps rb str thread time mem prompt
+EXAMPLES = app array elf format hash_table io ls palette prompt signal wc
 
 TEST_DIR = $(BUILD_DIR)/test
-TEST_BINARIES = $(addprefix $(TEST_DIR)/, $(TESTS))
-TEST_BINS = $(TEST_DIR)/process
+TEST_BINARIES = $(addsuffix $(EXE), $(addprefix $(TEST_DIR)/, $(TESTS)))
+TEST_BINS = $(TEST_DIR)/process$(EXE)
 
 EXAMPLE_DIR = $(BUILD_DIR)/example
-EXAMPLE_BINARIES = $(addprefix $(EXAMPLE_DIR)/, $(EXAMPLES))
+EXAMPLE_BINARIES = $(addsuffix $(EXE), $(addprefix $(EXAMPLE_DIR)/, $(EXAMPLES)))
 
 .PHONY: all clean tests examples
 
-all: examples tests
+all: examples tests runner
 
 tests: $(TEST_BINARIES)
 examples: $(EXAMPLE_BINARIES)
+runner: build/sp
 
 ############
 # EXAMPLES #
 ############
-$(EXAMPLE_DIR)/prompt: example/prompt.c sp.h sp/sp_prompt.h | $(EXAMPLE_DIR)
+$(EXAMPLE_DIR)/prompt$(EXE): example/prompt.c sp.h sp/sp_prompt.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) -I. -o $@ $<
 
-$(EXAMPLE_DIR)/%: example/%.c sp.h | $(EXAMPLE_DIR)
+$(EXAMPLE_DIR)/%$(EXE): example/%.c sp.h | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) -I. -o $@ $<
 
 #########
@@ -52,13 +56,16 @@ $(EXAMPLE_DIR)/%: example/%.c sp.h | $(EXAMPLE_DIR)
 #########
 CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itools -Itest/tools -Itest/tools/process
 
-$(TEST_DIR)/%: test/%.c sp.h | $(TEST_DIR) $(TEST_DIR)/process
+build/sp: tools/sp.c sp.h | build/
+	cc -g -I. -o $@ $<
+
+$(TEST_DIR)/%$(EXE): test/%.c sp.h | $(TEST_DIR) $(TEST_DIR)/process$(EXE)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) $(LDFLAGS) -o $@ $<
 
-$(TEST_DIR)/process: test/tools/process/process.c sp.h | $(TEST_DIR)
+$(TEST_DIR)/process$(EXE): test/tools/process/process.c sp.h | $(TEST_DIR)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) $(LDFLAGS) -o $@ $<
 
-$(TEST_DIR)/fs: test/fs.c sp.h | $(TEST_DIR)
+$(TEST_DIR)/fs$(EXE): test/fs.c sp.h | $(TEST_DIR)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) -Itest/fs $(LDFLAGS) -o $@ $<
 
 $(BUILD_DIR):

@@ -121,6 +121,10 @@ void                sp_glob_set_ht_collect(sp_glob_set_index_table_t ht, sp_str_
 bool                sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* e, sp_str_t path);
 #endif // SP_GLOB_H
 
+#if defined(SP_IMPLEMENTATION) && !defined(SP_GLOB_IMPLEMENTATION)
+  #define SP_GLOB_IMPLEMENTATION
+#endif
+
 #ifdef SP_GLOB_IMPLEMENTATION
 void sp_glob_push_literal(sp_da(sp_glob_token_t)* tokens, c8 c) {
   sp_da_push(*tokens, ((sp_glob_token_t) { .type = SP_GLOB_TOK_LITERAL, .literal = c }));

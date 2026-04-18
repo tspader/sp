@@ -17,12 +17,12 @@
 #define SP_TEST_REPORT(fmt, ...) \
   do { \
     sp_str_t formatted = sp_fmt(fmt, ##__VA_ARGS__); \
-    UTEST_PRINTF("%s\n", sp_str_to_cstr(formatted)); \
+    UTEST_PRINTF("{}", sp_fmt_str(formatted)); \
   } while (0)
 
 #define SP_TEST_REPORT_STR(str) \
   do { \
-    UTEST_PRINTF("%s\n", sp_str_to_cstr(str)); \
+    UTEST_PRINTF("{}", sp_fmt_str(str)); \
   } while (0)
 
 #define SP_TEST_STREQ(a, b, is_assert) \

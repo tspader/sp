@@ -35,4 +35,4 @@ s32 run(s32 num_args, const c8** args) {
 
   return 0;
 }
-SP_ENTRY(run)
+SP_MAIN(run)

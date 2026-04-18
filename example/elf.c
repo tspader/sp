@@ -92,5 +92,5 @@ s32 embed_main(s32 argc, const c8** argv) {
   return 0;
 }
 
-SP_ENTRY(embed_main)
+SP_MAIN(embed_main)
 

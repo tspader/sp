@@ -1,17 +1,8 @@
 #define SP_IMPLEMENTATION
-#define SP_MAIN
 #include "sp.h"
 
 #define SP_MATH_IMPLEMENTATION
 #include "sp/sp_math.h"
-
-#if defined(SP_WIN32) || defined(SP_FREESTANDING)
-sp_app_config_t sp_main(s32 num_args, const c8** args) { return sp_zero_struct(sp_app_config_t); }
-#else
-#include <termios.h>
-#include <fcntl.h>
-#include <signal.h>
-
 
 typedef struct {
   f32 h;
@@ -23,8 +14,7 @@ typedef struct {
 } params_t;
 
 typedef struct {
-  sp_termios_t original_ios;
-  s32 original_fcntl_flags;
+  sp_tty_mode_t saved_mode;
   bool terminal_modified;
   sp_da(sp_color_t) saved_colors;
   sp_color_t current_color;
@@ -39,8 +29,7 @@ static app_t* app = SP_NULLPTR;
 
 void palette_restore_terminal(void) {
   if (app && app->terminal_modified) {
-    sp_tcsetattr(0, TCSANOW, &app->original_ios);
-    sp_sys_fcntl(0, F_SETFL, app->original_fcntl_flags);
+    sp_os_tty_restore(sp_sys_stdin, &app->saved_mode);
     app->terminal_modified = false;
   }
   sp_os_print(sp_str_lit("\033[?25h"));
@@ -53,19 +42,10 @@ void palette_signal_handler(sp_os_signal_t sig, void* userdata) {
   sp_atomic_s32_set(&app->shutdown, 1);
 }
 
-void palette_save_terminal(app_t* app) {
-  sp_tcgetattr(0, &app->original_ios);
-  app->terminal_modified = true;
-}
-
-void palette_setup_raw_mode(app_t* app) {
-  sp_termios_t ios = app->original_ios;
-  ios.c_lflag &= ~(ICANON | ECHO);
-  ios.c_cc[VMIN] = 0;
-  ios.c_cc[VTIME] = 0;
-  sp_tcsetattr(0, TCSANOW, &ios);
-  app->original_fcntl_flags = sp_sys_fcntl(0, F_GETFL, 0);
-  sp_sys_fcntl(0, F_SETFL, app->original_fcntl_flags | O_NONBLOCK);
+void palette_enter_raw_mode(app_t* app) {
+  if (sp_os_tty_enter_raw(sp_sys_stdin, &app->saved_mode) == 0) {
+    app->terminal_modified = true;
+  }
 }
 
 u64 palette_rand_next(app_t* app) {
@@ -136,13 +116,13 @@ void palette_render(app_t* app) {
         }
         sp_str_builder_append_cstr(&out, "\033[0m ");
       }
-      sp_str_builder_append_cstr(&out, "\n");
+      sp_str_builder_append_cstr(&out, "\r\n");
     }
-    sp_str_builder_append_cstr(&out, "\n");
+    sp_str_builder_append_cstr(&out, "\r\n");
   }
 
   sp_str_t current_bg = palette_color_to_ansi_bg(app->current_color);
-  sp_str_builder_append_cstr(&out, "Current:\n");
+  sp_str_builder_append_cstr(&out, "Current:\r\n");
   sp_for(row, strip_height) {
     (void)row;
     sp_str_builder_append(&out, current_bg);
@@ -150,14 +130,14 @@ void palette_render(app_t* app) {
       (void)col;
       sp_str_builder_append_cstr(&out, " ");
     }
-    sp_str_builder_append_cstr(&out, "\033[0m\n");
+    sp_str_builder_append_cstr(&out, "\033[0m\r\n");
   }
 
   sp_str_t hex = palette_color_to_hex(app->current_color);
   sp_str_builder_append(&out, hex);
-  sp_str_builder_append_cstr(&out, "\n\n");
+  sp_str_builder_append_cstr(&out, "\r\n\r\n");
 
-  sp_str_builder_append_cstr(&out, "[space] regenerate  [enter] save  [q/esc] quit\n");
+  sp_str_builder_append_cstr(&out, "[space] regenerate  [enter] save  [q/esc] quit\r\n");
 
   sp_os_print(sp_str_builder_to_str(&out));
 }
@@ -170,17 +150,16 @@ void palette_print_results(app_t* app) {
 }
 
 s32 palette_read_key(void) {
+  sp_sys_pollfd_t p = { .fd = sp_sys_stdin, .events = SP_POLLIN };
+  if (sp_sys_poll(&p, 1, 0) <= 0) return -1;
   c8 c = 0;
-  u64 n = sp_sys_read(0, &c, 1);
-  if (n <= 0) return -1;
-  return c;
+  return sp_sys_read(sp_sys_stdin, &c, 1) == 1 ? c : -1;
 }
 
 sp_app_result_t on_init(sp_app_t* app) {
   app_t* state = (app_t*)app->user_data;
 
-  palette_save_terminal(state);
-  palette_setup_raw_mode(state);
+  palette_enter_raw_mode(state);
 
   sp_os_register_signal_handler(SP_OS_SIGNAL_INTERRUPT, palette_signal_handler, SP_NULLPTR);
   sp_os_register_signal_handler(SP_OS_SIGNAL_TERMINATE, palette_signal_handler, SP_NULLPTR);
@@ -227,6 +206,7 @@ sp_app_result_t on_poll(sp_app_t* app) {
 
 sp_app_result_t on_update(sp_app_t* app) {
   app_t* state = (app_t*)app->user_data;
+
   if (sp_atomic_s32_get(&state->shutdown)) {
     return SP_APP_QUIT;
   }
@@ -244,7 +224,7 @@ void on_deinit(sp_app_t* app) {
   palette_print_results(state);
 }
 
-sp_app_config_t sp_main(s32 num_args, const c8** args) {
+sp_app_config_t app_main(s32 num_args, const c8** args) {
   s32 hue = -1;
   s32 saturation = -1;
   s32 value = -1;
@@ -284,4 +264,4 @@ sp_app_config_t sp_main(s32 num_args, const c8** args) {
     .fps = 15,
   };
 }
-#endif
+SP_APP_MAIN(app_main)

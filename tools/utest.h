@@ -1133,6 +1133,6 @@ cleanup:
   s32 _utest_entry(s32 argc, const c8 **argv) {                               \
     return utest_main(argc, argv);                                             \
   }                                                                            \
-  SP_ENTRY(_utest_entry)
+  SP_MAIN(_utest_entry)
 
 #endif /* SHEREDOM_UTEST_H_INCLUDED */

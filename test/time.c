@@ -54,6 +54,7 @@ UTEST(tm, epoch_to_iso) {
 }
 
 UTEST(tm, date_time) {
+  SKIP_ON_FREESTANDING();
   sp_tm_date_time_t dt = sp_tm_get_date_time();
   EXPECT_GE(dt.year, 2020);
   EXPECT_GE(dt.month, 1);
@@ -243,6 +244,7 @@ UTEST(tm, iso8601_known_values) {
 }
 
 UTEST(tm, iso8601_millisecond_padding) {
+  SKIP_ON_FREESTANDING();
   tm_iso8601_case_t cases[] = {
     { { .s = 0, .ns = 1000000 },    "1970-01-01T00:00:00.001Z" },
     { { .s = 0, .ns = 10000000 },   "1970-01-01T00:00:00.010Z" },

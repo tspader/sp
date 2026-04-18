@@ -87,13 +87,13 @@ UTEST_F(sp_rb, push_pop_fifo) {
 }
 
 UTEST_F(sp_rb, full_and_grow) {
-  sp_rb(int) q = SP_NULLPTR;
+  sp_rb(s32) q = SP_NULLPTR;
 
   sp_rb_push(q, 0);
   s32 initial_cap = sp_rb_capacity(q);
 
-  for (int i = 1; i < initial_cap; i++) {
-    sp_rb_push(q, i * 10);
+  for (u32 i = 1; i < initial_cap; i++) {
+    sp_rb_push(q, (s32)(i * 10));
   }
 
   EXPECT_EQ(initial_cap, sp_rb_size(q));
@@ -107,8 +107,8 @@ UTEST_F(sp_rb, full_and_grow) {
   EXPECT_EQ(0, *sp_rb_peek(q));
   EXPECT_EQ(initial_cap * 10, *sp_rb_back(q));
 
-  for (int i = 0; i <= initial_cap; i++) {
-    EXPECT_EQ(i * 10, sp_rb_at(q, i));
+  for (u32 i = 0; i <= initial_cap; i++) {
+    EXPECT_EQ((s32)(i * 10), sp_rb_at(q, i));
   }
 
   sp_rb_free(q);
@@ -287,15 +287,15 @@ UTEST_F(sp_rb, capacity_one) {
 }
 
 UTEST_F(sp_rb, overwrite_mode) {
-  sp_rb(int) q = SP_NULLPTR;
+  sp_rb(s32) q = SP_NULLPTR;
 
   sp_rb_push(q, 1);
   sp_rb_set_mode(q, SP_RQ_MODE_OVERWRITE);
   EXPECT_EQ(SP_RQ_MODE_OVERWRITE, sp_rb_mode(q));
 
-  s32 cap = sp_rb_capacity(q);
+  s32 cap = (s32)sp_rb_capacity(q);
 
-  for (int i = 2; i <= cap; i++) {
+  for (s32 i = 2; i <= cap; i++) {
     sp_rb_push(q, i);
   }
 
@@ -319,21 +319,21 @@ UTEST_F(sp_rb, overwrite_mode) {
 }
 
 UTEST_F(sp_rb, overwrite_preserves_order) {
-  sp_rb(int) q = SP_NULLPTR;
+  sp_rb(s32) q = SP_NULLPTR;
 
   sp_rb_push(q, 0);
   sp_rb_set_mode(q, SP_RQ_MODE_OVERWRITE);
-  s32 cap = sp_rb_capacity(q);
+  u32 cap = sp_rb_capacity(q);
 
-  for (int i = 1; i < cap * 2; i++) {
+  for (s32 i = 1; i < cap * 2; i++) {
     sp_rb_push(q, i);
   }
 
   EXPECT_EQ(cap, sp_rb_size(q));
 
-  int expected_start = cap * 2 - cap;
+  u32 expected_start = cap * 2 - cap;
   sp_rb_for(q, it) {
-    EXPECT_EQ(expected_start + it, sp_rb_at(q, it));
+    EXPECT_EQ((s32)(expected_start + it), sp_rb_at(q, it));
   }
 
   sp_rb_free(q);
@@ -344,7 +344,7 @@ UTEST_F(sp_rb, mode_preserved_on_grow) {
 
   sp_rb_push(q, 1);
   sp_rb_set_mode(q, SP_RQ_MODE_GROW);
-  s32 cap = sp_rb_capacity(q);
+  u32 cap = sp_rb_capacity(q);
 
   for (int i = 2; i <= cap + 1; i++) {
     sp_rb_push(q, i);

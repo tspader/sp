@@ -281,8 +281,8 @@ typedef struct {
   sp_prompt_cell_t* framebuffer;
   sp_da(sp_prompt_frame_t) frames;
   struct {
-    struct { sp_os_file_handle_t in; sp_os_file_handle_t out; } fds;
-    sp_termios_t cache;
+    struct { sp_sys_fd_t in; sp_sys_fd_t out; } fds;
+    sp_tty_mode_t cache;
     bool raw;
   } terminal;
   sp_mem_arena_t* arena;
@@ -427,39 +427,7 @@ sp_prompt_widget_t sp_prompt_multiselect_widget(sp_prompt_multiselect_t* prompt)
 sp_prompt_widget_t sp_prompt_password_widget(sp_prompt_password_t* prompt);
 
 static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
-#if defined(SP_WIN32)
-  HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
-  HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
-  if (!GetConsoleMode(hin, &ctx->terminal.cache.input_mode)) return -1;
-  if (!GetConsoleMode(hout, &ctx->terminal.cache.output_mode)) return -1;
-
-  SetConsoleOutputCP(CP_UTF8);
-  _setmode(0, _O_BINARY);
-
-  DWORD raw_in = ENABLE_VIRTUAL_TERMINAL_INPUT;
-  DWORD raw_out = ctx->terminal.cache.output_mode
-    | ENABLE_PROCESSED_OUTPUT
-    | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-  if (!SetConsoleMode(hin, raw_in)) return -1;
-  if (!SetConsoleMode(hout, raw_out)) return -1;
-#else
-  if (sp_tcgetattr(ctx->terminal.fds.in, &ctx->terminal.cache) == -1) {
-    return -1;
-  }
-
-  sp_termios_t raw = ctx->terminal.cache;
-  raw.c_iflag &= (u32)~(SP_BRKINT | SP_ICRNL | SP_INPCK | SP_ISTRIP | SP_IXON);
-  raw.c_oflag &= (u32)~(SP_OPOST);
-  raw.c_cflag |= (u32)SP_CS8;
-  raw.c_lflag &= (u32)~(SP_ECHO | SP_ICANON | SP_IEXTEN | SP_ISIG);
-  raw.c_cc[SP_VMIN] = 1;
-  raw.c_cc[SP_VTIME] = 0;
-
-  if (sp_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &raw) == -1) {
-    return -1;
-  }
-#endif
-
+  if (sp_os_tty_enter_raw(ctx->terminal.fds.in, &ctx->terminal.cache) == -1) return -1;
   ctx->terminal.raw = true;
   return 0;
 }
@@ -505,12 +473,7 @@ s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
 
 void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   if (ctx->terminal.raw) {
-#if defined(SP_WIN32)
-    SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ctx->terminal.cache.input_mode);
-    SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), ctx->terminal.cache.output_mode);
-#else
-    sp_tcsetattr(ctx->terminal.fds.in, SP_TCSAFLUSH, &ctx->terminal.cache);
-#endif
+    sp_os_tty_restore(ctx->terminal.fds.in, &ctx->terminal.cache);
     ctx->terminal.raw = false;
   }
 
@@ -669,13 +632,8 @@ void sp_prompt_step(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget, sp_prompt_e
 }
 
 static bool sp_prompt_poll_stdin() {
-#if defined(SP_WIN32)
-  return WaitForSingleObject(GetStdHandle(STD_INPUT_HANDLE), 0) == WAIT_OBJECT_0;
-#else
-  sp_pollfd_t pfd = { .fd = sp_sys_stdin, .events = SP_POLLIN, .revents = 0 };
-  s32 r = sp_poll(&pfd, 1, 0);
-  return r > 0 && (pfd.revents & SP_POLLIN);
-#endif
+  sp_sys_pollfd_t pfd = { .fd = sp_sys_stdin, .events = SP_POLLIN };
+  return sp_sys_poll(&pfd, 1, 0) > 0 && (pfd.revents & SP_POLLIN);
 }
 
 static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* out) {

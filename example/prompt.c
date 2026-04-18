@@ -253,4 +253,4 @@ done:
   sp_prompt_end(ctx);
   return result;
 }
-SP_ENTRY(prompt_main)
+SP_MAIN(prompt_main)

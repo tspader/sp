@@ -3,30 +3,40 @@
 
 # files
 - `sp.h` is all of the source code
-- `spn.toml` is the build manifest for our build tool, `spn`
+- `Makefile` is how we build
 - `test/`: tests for each module as a single C file
   - `test/bench`: benchmarks
   - `test/tools/test.h`: common unit test tools
   - `test/tools/*`: code for modules which test external processes
 - `tools/`: random, unstructured bullshit which is not part of the official build
 
-# Build
-We use Mutagen to synchronize between `aral` (our Linux box), `miles` (macOS), and `piotr` (Windows). No matter what machine you're on, you just edit files locally as you normally would and use SSH to build and run tests on the other platforms.
+# build + test
+## mutagen
+We use Mutagen to synchronize between `aral` (our Linux box), `miles` (macOS), and `piotr` (Windows).
+- All source files are synchronized (i.e. anything checked in)
+- Every `build/$triple` is synchronized. In other words, if you just run `make tests`, you get `build/test/*`; these files are local. But if you do `make tests TRIPLE=x86_64-windows-gnu`, you get `build/x86_64-windows-gnu/test/*.exe`; these files are synchronized
 
+## cross compiling
+On Linux (where we usually work), prefer to cross compile from the host. To run the cross compiled binary, I wrote a small helper which takes a triple and a glob for test binaries, and then invokes the correct command via SSH. For example:
+```sh
+make TRIPLE=aarch64-macos
+./build/sp aarch64-macos "fs"
+```
+
+Do not pass a list of tests. It is a glob, not a list. This test runner can also be used to run tests on the host, e.g.
+```sh
+make TRIPLE=x86_64-linux-none
+./build/sp x86_64-linux-none "fs"
+```
+
+## native compiling
 ## Linux
-Build a test target:
-
 ```sh
-spn build -t fs -p debug -f
+make build/test/fs
+./build/test/fs
 ```
 
-Run it:
-
-```sh
-./build/debug/store/bin/fs
-```
-
-Replace `fs` with any other test target, like `str`, or `amalg` for all tests in one TU
+Replace `fs` with any other test target, like `str`, or `amalg` for all tests in one TU, or `examples` or `tests`.
 
 ## Windows
 Start a `tmux` session and `ssh spader@piotr`. Then, from `C:/Users/spader/source/sp`, load the MSVC environment:
@@ -35,31 +45,36 @@ Start a `tmux` session and `ssh spader@piotr`. Then, from `C:/Users/spader/sourc
 . .\tools\windows\devenv.ps1
 ```
 
-To build and run fs tests:
-
+To build and run fs tests and the amalgamation:
 ```powershell
 msbuild .\tools\windows\sp\fs.vcxproj /t:Run
-```
-
-To build and run the test amalgamation:
-
-```powershell
 msbuild .\tools\windows\sp\sp.vcxproj /t:Run
 ```
 
 ## macOS
-Build over SSH on `spader@miles`; unlike Windows, no persistent session is needed. Build is the same as Linux, except:
-- The binary is just `spn`
-- Use the profile `macos`
-
-For example:
 ```sh
-spn build -t $target -p macos -f
-./build/macos/store/bin/$target
+make build/test/fs
+./build/test/fs
 ```
 
+## The Big One
+Compile everything; freestanding, GNU, MUSL, Windows, macOS. Do this before marking a task done. Do not do this between small tweaks or changes.
+```sh
+make
+make TRIPLE=x86_64-linux-gnu
+make TRIPLE=x86_64-linux-musl
+make TRIPLE=x86_64-linux-none
+make TRIPLE=x86_64-windows-gnu
+make TRIPLE=aarch64-macos
+./build/sp x86_64-linux-none"*"
+./build/sp x86_64-linux-musl "*"
+./build/sp x86_64-linux-gnu "*"
+./build/sp aarch64-macos "*"
+./build/sp x86_64-windows-gnu"*"
+```
 
 # rules
+- Always run The Big One before marking a task as done.
 - Never comment any code, under any circumstances. Code with comments will be rejected outright.
 - Never use `malloc`, `calloc`, or `realloc`; use `sp_alloc` (which zero initializes)
 - Unless explicitly interfacing with an existing C API, never use `const char*`; use `sp_str_t` (pointer + length)
@@ -82,7 +97,6 @@ spn build -t $target -p macos -f
     - Ensure that if any functions you call heap allocate persistent memory, you either use scratch or free it
 
 - Never use `NULL`; always use `SP_NULL` or `SP_NULLPTR` (identical, just semantic aliases)
-- Never use `make`; the included Makefile is strictly for debugging. Instead, use `spn`
 
 ## searching
 Always use the following pattern when searching for code in `sp.h`:
