@@ -24,7 +24,7 @@ endif
 
 CFLAGS = -std=c99 -g -Werror=return-type $(CFLAGS_PLATFORM)
 
-TESTS = amalg app asset context core cv format fmon fs glob ht io leak linkage ps rb str thread time mem prompt
+TESTS = amalg app asset core cv elf format fmon fs glob ht io leak linkage ps rb str thread time mem prompt
 EXAMPLES = app array elf format hash_table io ls palette prompt signal wc
 
 TEST_DIR = $(BUILD_DIR)/test
@@ -67,6 +67,9 @@ $(TEST_DIR)/process$(EXE): test/tools/process/process.c sp.h | $(TEST_DIR)
 
 $(TEST_DIR)/fs$(EXE): test/fs.c sp.h | $(TEST_DIR)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) -Itest/fs $(LDFLAGS) -o $@ $<
+
+$(TEST_DIR)/mem$(EXE): test/mem.c sp.h | $(TEST_DIR)
+	$(CC) $(CFLAGS) $(CFLAGS_TEST) -Itest/mem $(LDFLAGS) -o $@ $<
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)

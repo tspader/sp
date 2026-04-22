@@ -1,11 +1,11 @@
 #define SP_TEST_AMALGAMATION
 #include "app.c"
-// #include "asset.c"
-#include "context.c"
+#include "asset.c"
 #include "core.c"
 #include "cv.c"
-// #include "elf.c" // fails on windows because we use linux tools to roundtrip
-// #include "fmon.c" // fails on windows because we use linux tools to roundtrip
+#include "elf.c"
+#include "fmon.c"
+#include "format.c"
 #include "fs.c"
 #include "glob.c"
 #include "ht.c"
@@ -14,6 +14,7 @@
 #include "linkage.c"
 #include "math.c"
 #include "mem.c"
+#include "prompt.c"
 #include "ps.c"
 #include "rb.c"
 #include "str.c"

@@ -9,6 +9,18 @@
   #define SKIP_ON_FREESTANDING()
 #endif
 
+#if defined(SP_WIN32)
+  #define SKIP_ON_WIN32() UTEST_SKIP("");
+#else
+  #define SKIP_ON_WIN32()
+#endif
+
+#if defined(SP_MACOS)
+  #define SKIP_ON_MACOS() UTEST_SKIP("");
+#else
+  #define SKIP_ON_MACOS()
+#endif
+
 #define ut (*utest_fixture)
 #define ur (*utest_result)
 
@@ -47,7 +59,6 @@
 
 #define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), SP_CSTR(b), false)
 #define SP_EXPECT_STR_EQ(a, b) SP_TEST_STREQ((a), (b), false)
-#define SP_EXPECT_ERR(err) EXPECT_EQ(sp_err_get(), err)
 
 typedef struct {
   u32 len;

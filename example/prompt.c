@@ -208,8 +208,8 @@ s32 prompt_main(s32 argc, const c8** argv) {
     if (!fn) {
       sp_log("usage: prompt [program]");
       sp_log("programs:");
-      sp_cstr_ht_for_kv(demos, it) {
-        sp_log("  {}", sp_fmt_cstr(*it.key));
+      sp_cstr_ht_for(demos, it) {
+        sp_log("  {}", sp_fmt_cstr(*sp_cstr_ht_it_getkp(demos, it)));
       }
 
       return SP_PROMPT_ERROR;
@@ -225,10 +225,10 @@ s32 prompt_main(s32 argc, const c8** argv) {
   s32 result = 0;
   if (run == SP_NULLPTR) {
     sp_da(sp_prompt_select_option_t) options = sp_zero();
-    sp_cstr_ht_for_kv(demos, it) {
+    sp_cstr_ht_for(demos, it) {
       sp_prompt_select_option_t option = {
-        .label = *it.key,
-        .selected = it.idx == 0
+        .label = *sp_cstr_ht_it_getkp(demos, it),
+        .selected = it == 0
       };
       sp_da_push(options, option);
     }
@@ -244,12 +244,12 @@ s32 prompt_main(s32 argc, const c8** argv) {
     }
 
     sp_prompt_demo_fn_t* fn = sp_cstr_ht_get(demos, sp_prompt_get_str(ctx));
+    sp_assert(fn);
     result = (*fn)(ctx);
   } else {
     result = run(ctx);
   }
 
-done:
   sp_prompt_end(ctx);
   return result;
 }

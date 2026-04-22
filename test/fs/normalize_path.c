@@ -29,7 +29,6 @@ UTEST(fs_normalize_path, cases) {
   }
 }
 
-// normalize is purely syntactic — it does not touch .. or .
 UTEST(fs_normalize_path, preserves_dotdot) {
   SP_EXPECT_STR_EQ_CSTR(
     sp_fs_normalize_path(SP_LIT("a\\b\\..\\c")),
@@ -44,7 +43,6 @@ UTEST(fs_normalize_path, preserves_dot) {
   );
 }
 
-// normalize never hits the filesystem — nonexistent paths are fine
 UTEST(fs_normalize_path, nonexistent_path) {
   SP_EXPECT_STR_EQ_CSTR(
     sp_fs_normalize_path(SP_LIT("C:\\no\\such\\path\\file.txt")),

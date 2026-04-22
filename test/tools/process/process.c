@@ -113,18 +113,18 @@ s32 main(s32 num_args, const c8** args) {
         }
         if (len == 0 || line[0] == '\0') break;
 
-        const c8* value = getenv(line);
+        sp_str_t value = sp_os_env_get(sp_str_view(line));
         if (stdout_enabled) {
-          if (value) {
-            fprintf(stdout, "%s %s\n", line, value);
+          if (!sp_str_empty(value)) {
+            fprintf(stdout, "%s %s\n", line, sp_str_to_cstr(value));
           } else {
             fprintf(stdout, "%s\n", line);
           }
           fflush(stdout);
         }
         if (stderr_enabled) {
-          if (value) {
-            fprintf(stderr, "%s %s\n", line, value);
+          if (!sp_str_empty(value)) {
+            fprintf(stderr, "%s %s\n", line, sp_str_to_cstr(value));
           } else {
             fprintf(stderr, "%s\n", line);
           }

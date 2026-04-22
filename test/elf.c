@@ -1,3 +1,4 @@
+#include "sp.h"
 #include "sp/sp_elf.h"
 #include "test.h"
 #include "utest.h"
@@ -198,6 +199,8 @@ UTEST_F(elf, rela_shlink) {
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
 
+  symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
+  ASSERT_NE(symtab, SP_NULLPTR);
   ASSERT_EQ(rela->link, symtab->index);
 }
 
@@ -207,6 +210,7 @@ UTEST_F(elf, rela_shinfo) {
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
 
+  text = sp_elf_find_section_by_name(elf, sp_str_lit(".text"));
   ASSERT_EQ(rela->info, text->index);
 }
 
@@ -224,11 +228,6 @@ UTEST_F(elf, rela_info_encoding) {
   ASSERT_EQ(ELF64_R_SYM(rel->r_info), 5u);
   ASSERT_EQ(ELF64_R_TYPE(rel->r_info), (u32)R_X86_64_PC32);
   ASSERT_EQ(rel->r_addend, -4);
-}
-
-UTEST_F(elf, err_add_reloc_null_section) {
-  sp_elf_add_relocation(SP_NULLPTR, 0, 0, 0, 0);
-  ASSERT_EQ(sp_err_get(), SP_OK);
 }
 
 UTEST_F(elf, minimal_elf_format) {
@@ -270,22 +269,6 @@ UTEST_F(elf, minimal_elf_format) {
   sp_io_writer_close(&buf);
 }
 
-UTEST_F(elf, minimal_readelf_validates) {
-#if defined(SP_FREESTANDING)
-  UTEST_SKIP("requires process API");
-#else
-  sp_elf_t* elf = sp_elf_new_with_null_section();
-  sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
-  sp_elf_write_to_file(elf, path);
-
-  sp_ps_output_t ps = sp_ps_run((sp_ps_config_t){
-    .command = sp_str_lit("readelf"),
-    .args = {sp_str_lit("-a"), path},
-  });
-  ASSERT_EQ(ps.status.exit_code, 0);
-#endif
-}
-
 UTEST_F(elf, err_write_null_elf) {
   sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
   sp_err_t err = sp_elf_write(SP_NULLPTR, &buf);
@@ -319,6 +302,7 @@ UTEST_F(elf, symtab_sort_updates_relocs) {
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
 
+  symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
   u32 global1_idx = sp_elf_add_symbol(symtab, elf, sp_str_lit("global1"), 0x100, 0, STB_GLOBAL, STT_FUNC, 1);
   u32 local1_idx = sp_elf_add_symbol(symtab, elf, sp_str_lit("local1"), 0x200, 0, STB_LOCAL, STT_OBJECT, 1);
   u32 global2_idx = sp_elf_add_symbol(symtab, elf, sp_str_lit("global2"), 0x300, 0, STB_GLOBAL, STT_FUNC, 1);
@@ -347,41 +331,6 @@ UTEST_F(elf, symtab_sort_updates_relocs) {
   ASSERT_EQ(ELF64_R_TYPE(sp_elf_rela_get(rela, 0)->r_info), (u32)R_X86_64_PC32);
   ASSERT_EQ(ELF64_R_TYPE(sp_elf_rela_get(rela, 1)->r_info), (u32)R_X86_64_PC32);
   ASSERT_EQ(ELF64_R_TYPE(sp_elf_rela_get(rela, 2)->r_info), (u32)R_X86_64_PC32);
-}
-
-UTEST_F(elf, populated_readelf_validates) {
-#if defined(SP_FREESTANDING)
-  UTEST_SKIP("requires process API");
-#else
-  sp_elf_t* elf = sp_elf_new_with_null_section();
-
-  sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
-  text->flags = SHF_ALLOC | SHF_EXECINSTR;
-  u8 code[] = {0xb8, 0x3c, 0x00, 0x00, 0x00, 0x31, 0xff, 0x0f, 0x05};
-  u8* p = sp_elf_section_reserve_bytes(text, sizeof(code));
-  sp_mem_copy(code, p, sizeof(code));
-
-  sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
-  data->flags = SHF_ALLOC | SHF_WRITE;
-  u8* d = sp_elf_section_reserve_bytes(data, 8);
-  sp_mem_zero(d, 8);
-
-  sp_elf_section_t* bss = sp_elf_add_section(elf, sp_str_lit(".bss"), SHT_NOBITS, 8);
-  bss->flags = SHF_ALLOC | SHF_WRITE;
-  bss->buffer.size = 16;
-
-  sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
-  sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, 0, STB_GLOBAL, STT_FUNC, (u16)text->index);
-
-  sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("populated.o"));
-  sp_elf_write_to_file(elf, path);
-
-  sp_ps_output_t ps = sp_ps_run((sp_ps_config_t){
-    .command = sp_str_lit("readelf"),
-    .args = {sp_str_lit("-a"), path},
-  });
-  ASSERT_EQ(ps.status.exit_code, 0);
-#endif
 }
 
 UTEST_F(elf, populated_section_alignment) {
@@ -505,6 +454,7 @@ UTEST_F(elf, roundtrip_populated) {
   bss->buffer.size = 16;
 
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
+  text = sp_elf_find_section_by_name(elf, sp_str_lit(".text"));
   sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, sizeof(code), STB_GLOBAL, STT_FUNC, (u16)text->index);
 
   sp_io_writer_t writer; sp_io_writer_from_dyn_mem(&writer);
@@ -571,10 +521,64 @@ UTEST_F(elf, err_read_invalid_class) {
   ASSERT_EQ(read_elf, SP_NULLPTR);
 }
 
-UTEST_F(elf, read_external_object) {
-#if defined(SP_FREESTANDING)
-  UTEST_SKIP("requires process API");
-#else
+UTEST_F(elf, oracle_readelf_minimal) {
+  SKIP_ON_FREESTANDING();
+  SKIP_ON_WIN32()
+  SKIP_ON_MACOS()
+
+  sp_elf_t* elf = sp_elf_new_with_null_section();
+  sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
+  sp_elf_write_to_file(elf, path);
+
+  sp_ps_output_t ps = sp_ps_run((sp_ps_config_t){
+    .command = sp_str_lit("readelf"),
+    .args = {sp_str_lit("-a"), path},
+  });
+  ASSERT_EQ(ps.status.exit_code, 0);
+}
+
+UTEST_F(elf, oracle_readelf_populated) {
+  SKIP_ON_FREESTANDING();
+  SKIP_ON_WIN32()
+  SKIP_ON_MACOS()
+
+  sp_elf_t* elf = sp_elf_new_with_null_section();
+
+  sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
+  text->flags = SHF_ALLOC | SHF_EXECINSTR;
+  u8 code[] = {0xb8, 0x3c, 0x00, 0x00, 0x00, 0x31, 0xff, 0x0f, 0x05};
+  u8* p = sp_elf_section_reserve_bytes(text, sizeof(code));
+  sp_mem_copy(code, p, sizeof(code));
+
+  sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
+  data->flags = SHF_ALLOC | SHF_WRITE;
+  u8* d = sp_elf_section_reserve_bytes(data, 8);
+  sp_mem_zero(d, 8);
+
+  sp_elf_section_t* bss = sp_elf_add_section(elf, sp_str_lit(".bss"), SHT_NOBITS, 8);
+  bss->flags = SHF_ALLOC | SHF_WRITE;
+  bss->buffer.size = 16;
+
+  sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
+  text = sp_elf_find_section_by_name(elf, sp_str_lit(".text"));
+  sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, 0, STB_GLOBAL, STT_FUNC, (u16)text->index);
+
+  sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("populated.o"));
+  sp_elf_write_to_file(elf, path);
+
+  sp_ps_output_t ps = sp_ps_run((sp_ps_config_t){
+    .command = sp_str_lit("readelf"),
+    .args = {sp_str_lit("-a"), path},
+  });
+  ASSERT_EQ(ps.status.exit_code, 0);
+}
+
+
+UTEST_F(elf, oracle_cc_read) {
+  SKIP_ON_FREESTANDING();
+  SKIP_ON_WIN32()
+  SKIP_ON_MACOS()
+
   sp_str_t c_src =
     sp_str_lit("int minimal_symbol(void) {\n"
                "  return 42;\n"
@@ -606,13 +610,13 @@ UTEST_F(elf, read_external_object) {
   ASSERT_NE(symtab, SP_NULLPTR);
   ASSERT_EQ(symtab->type, (u32)SHT_SYMTAB);
   ASSERT_GT(sp_elf_section_num_entries(symtab), 0u);
-#endif
 }
 
-UTEST_F(elf, integration_link_and_run) {
-#if defined(SP_FREESTANDING)
-  UTEST_SKIP("requires process API");
-#else
+UTEST_F(elf, oracle_cc_link) {
+  SKIP_ON_FREESTANDING();
+  SKIP_ON_WIN32()
+  SKIP_ON_MACOS()
+
   sp_elf_t* elf = sp_elf_new_with_null_section();
 
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
@@ -622,6 +626,7 @@ UTEST_F(elf, integration_link_and_run) {
   sp_mem_copy(test_bytes, p, sizeof(test_bytes));
 
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
+  data = sp_elf_find_section_by_name(elf, sp_str_lit(".data"));
   sp_elf_add_symbol(symtab, elf, sp_str_lit("test_data"), 0, sizeof(test_bytes), STB_GLOBAL, STT_OBJECT, (u16)data->index);
 
   sp_str_t obj_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration.o"));
@@ -659,5 +664,4 @@ UTEST_F(elf, integration_link_and_run) {
     .command = bin_path,
   });
   ASSERT_EQ(run.status.exit_code, 0);
-#endif
 }

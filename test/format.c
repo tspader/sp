@@ -12,14 +12,14 @@ typedef struct {
   const c8* str;
   sp_fmt_spec_t expected;
   sp_err_t err;
-} test_t;
+} format_test_t;
 
 static sp_err_t parse_spec(const c8* str, sp_fmt_spec_t* spec) {
   sp_fmt_parser_t parser = { .str = sp_str_view(str), .i = 0 };
   return sp_fmt_parse_specifier(&parser, spec);
 }
 
-void run_case(s32* utest_result, test_t test) {
+void run_case(s32* utest_result, format_test_t test) {
   sp_fmt_spec_t specifier = SP_ZERO_INITIALIZE();
   sp_err_t err = parse_spec(test.str, &specifier);
   EXPECT_EQ(err, test.err);
@@ -36,7 +36,7 @@ void run_case(s32* utest_result, test_t test) {
 }
 
 UTEST(sp_fmt_parse, smoke) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:*^9}",
     .expected = {
       .width = 9,
@@ -47,63 +47,63 @@ UTEST(sp_fmt_parse, smoke) {
 }
 
 UTEST(sp_fmt_parse, empty) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{}",
     .expected = { .align = SP_FMT_ALIGN_NONE },
   });
 }
 
 UTEST(sp_fmt_parse, empty_with_colon) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:}",
     .expected = { .align = SP_FMT_ALIGN_NONE },
   });
 }
 
 UTEST(sp_fmt_parse, width_only) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:42}",
     .expected = { .width = 42 },
   });
 }
 
 UTEST(sp_fmt_parse, precision_only) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:.5}",
     .expected = { .precision = sp_opt_some(5) },
   });
 }
 
 UTEST(sp_fmt_parse, width_and_precision) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:10.3}",
     .expected = { .width = 10, .precision = sp_opt_some(3) },
   });
 }
 
 UTEST(sp_fmt_parse, bare_align_left) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:<7}",
     .expected = { .width = 7, .align = SP_FMT_ALIGN_LEFT },
   });
 }
 
 UTEST(sp_fmt_parse, bare_align_right) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:>4}",
     .expected = { .width = 4, .align = SP_FMT_ALIGN_RIGHT },
   });
 }
 
 UTEST(sp_fmt_parse, fill_with_left_align) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:-<8}",
     .expected = { .width = 8, .align = SP_FMT_ALIGN_LEFT, .fill = '-' },
   });
 }
 
 UTEST(sp_fmt_parse, everything) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:*^12.4}",
     .expected = {
       .width = 12,
@@ -115,28 +115,28 @@ UTEST(sp_fmt_parse, everything) {
 }
 
 UTEST(sp_fmt_parse, zero_leading_width) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:05}",
     .expected = { .width = 5 },
   });
 }
 
 UTEST(sp_fmt_parse, dynamic_width) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:$}",
     .expected = { .width_dynamic = 1 },
   });
 }
 
 UTEST(sp_fmt_parse, dynamic_precision) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:.$}",
     .expected = { .precision_dynamic = 1 },
   });
 }
 
 UTEST(sp_fmt_parse, dynamic_fill_center) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:$^9}",
     .expected = {
       .width = 9,
@@ -147,7 +147,7 @@ UTEST(sp_fmt_parse, dynamic_fill_center) {
 }
 
 UTEST(sp_fmt_parse, dynamic_fill_and_width) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:$^$}",
     .expected = {
       .align = SP_FMT_ALIGN_CENTER,
@@ -158,7 +158,7 @@ UTEST(sp_fmt_parse, dynamic_fill_and_width) {
 }
 
 UTEST(sp_fmt_parse, dynamic_everything) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:$<$.$}",
     .expected = {
       .align = SP_FMT_ALIGN_LEFT,
@@ -170,7 +170,7 @@ UTEST(sp_fmt_parse, dynamic_everything) {
 }
 
 UTEST(sp_fmt_parse, dynamic_width_with_literal_precision) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:$.4}",
     .expected = {
       .precision = sp_opt_some(4),
@@ -180,7 +180,7 @@ UTEST(sp_fmt_parse, dynamic_width_with_literal_precision) {
 }
 
 UTEST(sp_fmt_parse, err_dynamic_precision_without_dot) {
-  run_case(utest_result, (test_t) {
+  run_case(utest_result, (format_test_t) {
     .str = "{:5$}",
     .err = SP_ERR_FMT_BAD_PLACEHOLDER
   });

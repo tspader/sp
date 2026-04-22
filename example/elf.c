@@ -68,7 +68,7 @@ s32 embed_main(s32 argc, const c8** argv) {
     data_sec = sp_elf_find_section_by_index(elf, data_sec_idx);
     u32 data_offset = (u32)data_sec->buffer.size;
     u8* dest = sp_elf_section_reserve_bytes(data_sec, content.len);
-    sp_memcpy(dest, content.data, content.len);
+    sp_sys_memcpy(dest, content.data, content.len);
 
     sp_str_t sym_name = make_symbol_name(basename);
     symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
@@ -81,7 +81,7 @@ s32 embed_main(s32 argc, const c8** argv) {
   }
 
   data_sec = sp_elf_find_section_by_index(elf, data_sec_idx);
-  sp_memcpy(data_sec->buffer.data + header_base, headers, header_size);
+  sp_sys_memcpy(data_sec->buffer.data + header_base, headers, header_size);
 
   sp_err_t err = sp_elf_write_to_file(elf, output_path);
   if (err != SP_OK) {

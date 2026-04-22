@@ -1008,7 +1008,6 @@ s32 utest_main(s32 argc, const c8 **argv) {
     sp_print("{}.{}...", sp_fmt_cstr(utest_state.tests[index].set), sp_fmt_cstr(utest_state.tests[index].test));
 
     ns = utest_ns();
-    sp_err_clear();
     utest_state.tests[index].func(&result, utest_state.tests[index].index);
     ns = utest_ns() - ns;
 

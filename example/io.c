@@ -46,6 +46,26 @@ s32 run(s32 num_args, const c8** args) {
   sp_io_writer_from_fd(&io.w, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
   sp_fmt_io(&io.w, "hello, {.cyan}", sp_fmt_cstr("stdout"));
   sp_io_write(&io.w, "\n", 1, SP_NULLPTR);
+  sp_io_writer_close(&io.w);
+
+  // When a reader is drained, sp_io_read returns SP_ERR_IO_EOF with
+  // bytes_read == 0. Any successful call, even a short one, returns SP_OK;
+  // the next call after the stream is exhausted is the one that signals EOF.
+  sp_io_reader_from_file(&io.r, exe);
+  u64 total = 0;
+  while (true) {
+    u64 bytes_read = 0;
+    sp_err_t err = sp_io_read(&io.r, buffer.data, buffer.capacity, &bytes_read);
+    total += bytes_read;
+    if (err == SP_ERR_IO_EOF) break;
+    if (err != SP_OK) {
+      sp_log("sp_io_read failed: {}", sp_fmt_uint((u32)err));
+      break;
+    }
+  }
+  sp_log("sp_io EOF: drained {} bytes", sp_fmt_uint(total));
+  sp_io_reader_close(&io.r);
+
   return 0;
 }
 SP_MAIN(run)

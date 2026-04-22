@@ -90,7 +90,7 @@ UTEST_F(sp_rb, full_and_grow) {
   sp_rb(s32) q = SP_NULLPTR;
 
   sp_rb_push(q, 0);
-  s32 initial_cap = sp_rb_capacity(q);
+  u32 initial_cap = sp_rb_capacity(q);
 
   for (u32 i = 1; i < initial_cap; i++) {
     sp_rb_push(q, (s32)(i * 10));
@@ -99,13 +99,13 @@ UTEST_F(sp_rb, full_and_grow) {
   EXPECT_EQ(initial_cap, sp_rb_size(q));
   EXPECT_TRUE(sp_rb_full(q));
 
-  sp_rb_push(q, initial_cap * 10);
+  sp_rb_push(q, (s32)(initial_cap * 10));
   EXPECT_EQ(initial_cap + 1, sp_rb_size(q));
   EXPECT_TRUE(sp_rb_capacity(q) > initial_cap);
   EXPECT_FALSE(sp_rb_full(q));
 
   EXPECT_EQ(0, *sp_rb_peek(q));
-  EXPECT_EQ(initial_cap * 10, *sp_rb_back(q));
+  EXPECT_EQ((s32)(initial_cap * 10), *sp_rb_back(q));
 
   for (u32 i = 0; i <= initial_cap; i++) {
     EXPECT_EQ((s32)(i * 10), sp_rb_at(q, i));
@@ -293,27 +293,27 @@ UTEST_F(sp_rb, overwrite_mode) {
   sp_rb_set_mode(q, SP_RQ_MODE_OVERWRITE);
   EXPECT_EQ(SP_RQ_MODE_OVERWRITE, sp_rb_mode(q));
 
-  s32 cap = (s32)sp_rb_capacity(q);
+  u32 cap = sp_rb_capacity(q);
 
-  for (s32 i = 2; i <= cap; i++) {
-    sp_rb_push(q, i);
+  for (u32 i = 2; i <= cap; i++) {
+    sp_rb_push(q, (s32)i);
   }
 
   EXPECT_TRUE(sp_rb_full(q));
   EXPECT_EQ(cap, sp_rb_capacity(q));
 
-  sp_rb_push(q, cap + 1);
+  sp_rb_push(q, (s32)(cap + 1));
   EXPECT_EQ(cap, sp_rb_capacity(q));
   EXPECT_EQ(cap, sp_rb_size(q));
 
   EXPECT_EQ(2, *sp_rb_peek(q));
-  EXPECT_EQ(cap + 1, *sp_rb_back(q));
+  EXPECT_EQ((s32)(cap + 1), *sp_rb_back(q));
 
-  sp_rb_push(q, cap + 2);
-  sp_rb_push(q, cap + 3);
+  sp_rb_push(q, (s32)(cap + 2));
+  sp_rb_push(q, (s32)(cap + 3));
 
   EXPECT_EQ(4, *sp_rb_peek(q));
-  EXPECT_EQ(cap + 3, *sp_rb_back(q));
+  EXPECT_EQ((s32)(cap + 3), *sp_rb_back(q));
 
   sp_rb_free(q);
 }
@@ -325,8 +325,8 @@ UTEST_F(sp_rb, overwrite_preserves_order) {
   sp_rb_set_mode(q, SP_RQ_MODE_OVERWRITE);
   u32 cap = sp_rb_capacity(q);
 
-  for (s32 i = 1; i < cap * 2; i++) {
-    sp_rb_push(q, i);
+  for (u32 i = 1; i < cap * 2; i++) {
+    sp_rb_push(q, (s32)i);
   }
 
   EXPECT_EQ(cap, sp_rb_size(q));
@@ -346,8 +346,8 @@ UTEST_F(sp_rb, mode_preserved_on_grow) {
   sp_rb_set_mode(q, SP_RQ_MODE_GROW);
   u32 cap = sp_rb_capacity(q);
 
-  for (int i = 2; i <= cap + 1; i++) {
-    sp_rb_push(q, i);
+  for (u32 i = 2; i <= cap + 1; i++) {
+    sp_rb_push(q, (int)i);
   }
 
   EXPECT_TRUE(sp_rb_capacity(q) > cap);

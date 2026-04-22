@@ -26,6 +26,8 @@
 #include "fs/collect.c"
 #include "fs/mod_time.c"
 #include "fs/system_paths.c"
+#include "fs/windows/wtf8.c"
+#include "fs/windows/nt_path.c"
 
 #ifdef FS_TEST_OWNS_MAIN
 UTEST_MAIN()

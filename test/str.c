@@ -162,7 +162,7 @@ UTEST(cstr, all_variations) {
   ASSERT_NE(copy, original);
   sp_free(copy);
 
-  c8* partial = sp_cstr_copy_sized(original, 5);
+  c8* partial = sp_cstr_copy_n(original, 5);
   ASSERT_TRUE(sp_cstr_equal(partial, "Hello"));
   sp_free(partial);
 
@@ -195,7 +195,7 @@ UTEST(cstr, buffer_operations) {
 
   c8 partial_buffer[10];
   sp_mem_zero(partial_buffer, 10);
-  sp_cstr_copy_to_sized(source, 5, partial_buffer, 10);
+  sp_cstr_copy_to_n(source, 5, partial_buffer, 10);
   ASSERT_TRUE(sp_cstr_equal(partial_buffer, "Hello"));
 
   c8 null_buffer[10];
@@ -242,12 +242,6 @@ UTEST(str, conversion_functions) {
   ASSERT_TRUE(sp_cstr_equal(cstr, "Hello World"));
   sp_free(cstr);
 
-  sp_str_t path = SP_LIT("C:\\test");
-  c8* double_null = sp_str_to_cstr_double_nt(path);
-  ASSERT_EQ(double_null[7], '\0');
-  ASSERT_EQ(double_null[8], '\0');
-  sp_free(double_null);
-
   sp_str_t empty = SP_LIT("");
   c8* empty_cstr = sp_str_to_cstr(empty);
   ASSERT_TRUE(sp_cstr_equal(empty_cstr, ""));
@@ -265,7 +259,7 @@ UTEST(str, string_copy_operations) {
   ASSERT_EQ(from_cstr.len, 11);
   SP_EXPECT_STR_EQ_CSTR(from_cstr, "Test String");
 
-  sp_str_t partial = sp_str_from_cstr_sized("Hello World", 5);
+  sp_str_t partial = sp_str_from_cstr_n("Hello World", 5);
   ASSERT_EQ(partial.len, 5);
   SP_EXPECT_STR_EQ_CSTR(partial, "Hello");
 
@@ -337,7 +331,7 @@ UTEST(str, sorting_tests) {
     SP_LIT("zoo")
   };
 
-  sp_qsort(strings, 5, sizeof(sp_str_t), sp_str_sort_kernel_alphabetical);
+  sp_os_qsort(strings, 5, sizeof(sp_str_t), sp_str_sort_kernel_alphabetical);
 
   SP_EXPECT_STR_EQ_CSTR(strings[0], "aardvark");
   SP_EXPECT_STR_EQ_CSTR(strings[1], "apple");
@@ -912,8 +906,6 @@ UTEST(str, view_creation) {
 }
 
 UTEST(sp_str_from_cstr, string_from_cstr) {
-
-
   {
     const c8* cstr = "hello world";
     sp_str_t str = sp_str_from_cstr(cstr);
@@ -931,7 +923,7 @@ UTEST(sp_str_from_cstr, string_from_cstr) {
   {
     sp_str_t str = sp_str_from_cstr(SP_NULLPTR);
     ASSERT_EQ(str.len, 0);
-    ASSERT_NE(str.data, SP_NULLPTR);
+    ASSERT_EQ(str.data, SP_NULLPTR);
   }
 
   {
@@ -942,17 +934,7 @@ UTEST(sp_str_from_cstr, string_from_cstr) {
   }
 
   {
-    sp_str_t str = sp_str_from_cstr_sized("hello world", 5);
-    ASSERT_EQ(str.len, 5);
-    SP_EXPECT_STR_EQ(str, SP_LIT("hello"));
-  }
-
-  {
-    sp_str_t str = sp_str_from_cstr_null(SP_NULLPTR);
-    ASSERT_EQ(str.len, 0);
-    ASSERT_NE(str.data, SP_NULLPTR);
-
-    str = sp_str_from_cstr_null("hello");
+    sp_str_t str = sp_str_from_cstr_n("hello world", 5);
     ASSERT_EQ(str.len, 5);
     SP_EXPECT_STR_EQ(str, SP_LIT("hello"));
   }
@@ -1327,19 +1309,19 @@ UTEST(string_cpp, path_concatenation_operator) {
 #endif
 
 #ifdef SP_WIN32
-SP_PRIVATE sp_str_t sp_win32_utf16_to_utf8(const c16* utf16, s32 len);
+SP_PRIVATE sp_str_t sp_win32_utf16_to_utf8(const u16* utf16, s32 len);
 
 UTEST(wstr, wide_string_conversion) {
-  c16 wide_str[] = L"Hello";
-  sp_str_t converted = sp_win32_utf16_to_utf8(wide_str, 5);
+  wchar_t wide_str[] = L"Hello";
+  sp_str_t converted = sp_win32_utf16_to_utf8((const u16*)wide_str, 5);
   ASSERT_TRUE(sp_str_equal_cstr(converted, "Hello"));
 
-  c16 empty[] = L"";
-  sp_str_t empty_converted = sp_win32_utf16_to_utf8(empty, 0);
+  wchar_t empty[] = L"";
+  sp_str_t empty_converted = sp_win32_utf16_to_utf8((const u16*)empty, 0);
   ASSERT_TRUE(sp_str_equal_cstr(empty_converted, ""));
 
-  c16 special[] = L"Test 123!";
-  sp_str_t special_converted = sp_win32_utf16_to_utf8(special, 9);
+  wchar_t special[] = L"Test 123!";
+  sp_str_t special_converted = sp_win32_utf16_to_utf8((const u16*)special, 9);
   ASSERT_TRUE(sp_str_equal_cstr(special_converted, "Test 123!"));
 }
 #endif

@@ -4,8 +4,6 @@
 // sp_str_copy
 // sp_str_copy_to
 // sp_str_from_cstr
-// sp_str_from_cstr_null
-// sp_str_from_cstr_sized
 // sp_str_join
 // sp_str_join_cstr_n
 // sp_str_join_n
@@ -18,7 +16,6 @@
 // sp_str_map_kernel_to_lower
 // sp_str_map_kernel_to_upper
 // sp_str_map_kernel_trim
-// sp_str_null_terminate
 // sp_str_pad
 // sp_str_pad_to_longest
 // sp_str_reduce
@@ -31,7 +28,6 @@
 // sp_str_sub
 // sp_str_sub_reverse
 // sp_str_to_cstr
-// sp_str_to_cstr_double_nt
 // sp_str_to_lower
 // sp_str_to_upper
 // sp_str_trim
@@ -98,16 +94,6 @@ UTEST_F(leak, sp_str_from_cstr) {
   SP_LEAK_VERIFY();
 }
 
-UTEST_F(leak, sp_str_from_cstr_null) {
-  sp_str_from_cstr_null(SP_NULLPTR);
-  SP_LEAK_VERIFY();
-}
-
-UTEST_F(leak, sp_str_from_cstr_sized) {
-  sp_str_from_cstr_sized("test", 4);
-  SP_LEAK_VERIFY();
-}
-
 UTEST_F(leak, sp_str_concat) {
   sp_str_concat(ut.str, SP_LIT(" extra"));
   SP_LEAK_VERIFY();
@@ -130,16 +116,8 @@ UTEST_F(sp_test_leak, sp_str_join_n) {
   sp_str_t result = sp_str_join_n(strs, 3, SP_LIT(","));
 }
 
-UTEST_F(sp_test_leak, sp_str_null_terminate) {
-  sp_str_t result = sp_str_null_terminate(ut.str);
-}
-
 UTEST_F(sp_test_leak, sp_str_to_cstr) {
   c8* result = sp_str_to_cstr(ut.str);
-}
-
-UTEST_F(sp_test_leak, sp_str_to_cstr_double_nt) {
-  c8* result = sp_str_to_cstr_double_nt(ut.str);
 }
 
 UTEST_F(sp_test_leak, sp_str_replace_c8) {

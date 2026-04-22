@@ -19,7 +19,7 @@ bool check_path(sp_str_t program) {
 }
 #else
 bool check_path(sp_str_t program) {
-  return false;
+  return true;
 }
 #endif
 
@@ -108,7 +108,6 @@ bool compile_to_exe(linkage* ctx, const c8* file, sp_str_t output) {
       sp_fmt("-I{}", sp_fmt_str(ctx->root)),
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),
-      sp_str_lit("-lpthread"), sp_str_lit("-lm")
     },
   });
 
@@ -140,7 +139,6 @@ bool compile_to_object(linkage* ctx, const c8* file, sp_str_t output) {
       sp_fmt("-I{}", sp_fmt_str(ctx->root)),
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),
-      sp_str_lit("-lpthread"), sp_str_lit("-lm")
     },
   });
 
@@ -166,7 +164,7 @@ bool compile_objects_to_exe(sp_str_t output, sp_str_t* objs, u32 len) {
   #else
   sp_ps_config_t cfg = {
     .command = sp_str_lit("cc"),
-    .args = { sp_str_lit("-o"), output, sp_str_lit("-lpthread"), sp_str_lit("-lm") },
+    .args = { sp_str_lit("-o"), output }
   };
 
   for (u32 it = 0; it < len; it++) {

@@ -217,8 +217,8 @@ typedef struct {
 } sp_prompt_cell_t;
 
 typedef struct {
-  s32 cols;
-  s32 rows;
+  u32 cols;
+  u32 rows;
   sp_prompt_cell_t* cells;
 } sp_prompt_frame_t;
 
@@ -264,11 +264,11 @@ typedef struct {
 // @context
 typedef struct {
   void* user_data;
-  s32 cols;
-  s32 rows;
-  s32 cursor_row;
-  s32 cursor_col;
-  s32 prompt_height;
+  u32 cols;
+  u32 rows;
+  u32 cursor_row;
+  u32 cursor_col;
+  u32 prompt_height;
   sp_prompt_state_t state;
   sp_prompt_value_t value;
   sp_prompt_event_t event;
@@ -409,7 +409,7 @@ sp_str_t         sp_prompt_repeat(u32 codepoint, u32 count);
 // @advanced
 sp_prompt_ctx_t* sp_prompt_new();
 s32              sp_prompt_begin_ex(sp_prompt_ctx_t* ctx);
-void             sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows);
+void             sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, u32 cols, u32 rows);
 void             sp_prompt_prime_events(sp_prompt_ctx_t* ctx, sp_prompt_event_t events[8]);
 bool             sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
 #endif
@@ -433,7 +433,7 @@ static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
 }
 
 static void sp_prompt_framebuffer_clear(sp_prompt_ctx_t* ctx) {
-  u32 cell_count = (u32)(ctx->cols * ctx->rows);
+  u32 cell_count = ctx->cols * ctx->rows;
   sp_for(it, cell_count) {
     ctx->framebuffer[it] = (sp_prompt_cell_t) {
       .codepoint = ' ',
@@ -446,13 +446,13 @@ static void sp_prompt_framebuffer_clear(sp_prompt_ctx_t* ctx) {
 
 sp_prompt_ctx_t* sp_prompt_new() {
   sp_prompt_ctx_t* ctx = sp_alloc_type(sp_prompt_ctx_t);
-  s32 cols = 0;
-  s32 rows = 0;
+  u32 cols = 0;
+  u32 rows = 0;
   if (sp_os_is_tty(sp_sys_stdout)) {
     sp_os_tty_size(sp_sys_stdout, &cols, &rows);
   }
-  if (cols <= 0) cols = 80;
-  if (rows <= 0) rows = 20;
+  if (cols == 0) cols = 80;
+  if (rows == 0) rows = 20;
   sp_prompt_ctx_init(ctx, cols, rows);
   return ctx;
 }
@@ -481,7 +481,7 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   sp_mem_arena_destroy(ctx->arena);
 }
 
-void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
+void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, u32 cols, u32 rows) {
   *ctx = sp_zero_struct(sp_prompt_ctx_t);
   ctx->cols = cols;
   ctx->rows = rows;
@@ -509,7 +509,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, s32 cols, s32 rows) {
   u8* buffer = sp_alloc_n(u8, 64);
   sp_io_writer_set_buffer(ctx->writer, buffer, 64);
 
-  u32 cell_count = (u32)(ctx->cols * ctx->rows);
+  u32 cell_count = ctx->cols * ctx->rows;
   if (ctx->framebuffer == SP_NULLPTR) {
     ctx->framebuffer = sp_alloc(sizeof(sp_prompt_cell_t) * cell_count);
   }
@@ -568,7 +568,7 @@ void sp_prompt_prime_events(sp_prompt_ctx_t* ctx, sp_prompt_event_t events[8]) {
 }
 
 void sp_prompt_render_line(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_style_t style) {
-  if (ctx->cursor_row < 0 || ctx->cursor_row >= ctx->rows) {
+  if (ctx->cursor_row >= ctx->rows) {
     return;
   }
 
@@ -577,7 +577,7 @@ void sp_prompt_render_line(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_style_
       break;
     }
 
-    s32 index = (ctx->cursor_row * ctx->cols) + ctx->cursor_col;
+    u32 index = (ctx->cursor_row * ctx->cols) + ctx->cursor_col;
     ctx->framebuffer[index].codepoint = it.codepoint;
     ctx->framebuffer[index].style = style;
     ctx->cursor_col++;
@@ -706,7 +706,7 @@ static bool sp_prompt_read_raw_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t* ou
   u8 utf8_bytes[4] = {0};
   utf8_bytes[0] = c;
 
-  s32 needed = 1;
+  u32 needed = 1;
   if ((c & 0xE0) == 0xC0) {
     needed = 2;
   } else if ((c & 0xF0) == 0xE0) {
@@ -803,8 +803,8 @@ static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
   sp_for(line, ctx->cursor_row) {
     sp_prompt_write_row_cells(
       ctx,
-      ctx->framebuffer + line * (u32)ctx->cols,
-      (u32)ctx->cols
+      ctx->framebuffer + line * ctx->cols,
+      ctx->cols
     );
 
     if (line + 1 < ctx->cursor_row) {
@@ -850,8 +850,7 @@ bool sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
   }
 
   if (ctx->cursor_row > 0) {
-    u32 rows = (u32)ctx->cursor_row;
-    u32 cell_count = rows * (u32)ctx->cols;
+    u32 cell_count = ctx->cursor_row * ctx->cols;
 
     sp_prompt_frame_t frame = {
       .cols = ctx->cols,
@@ -1175,7 +1174,7 @@ static void sp_prompt_text_render(sp_prompt_ctx_t* ctx) {
   ctx->cursor_col = 0;
   ctx->cursor_row++;
 
-  if (ctx->cursor_row < 0 || ctx->cursor_row >= ctx->rows) {
+  if (ctx->cursor_row >= ctx->rows) {
     return;
   }
 

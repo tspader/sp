@@ -933,7 +933,8 @@ UTEST(ht, free) {
   EXPECT_EQ(arena->head, arena->current);
   EXPECT_EQ(arena->current->bytes_used, 0);
   u8* buffer = sp_alloc_n(u8, 64);
-  u32 bytes_used = arena->current->bytes_used;
+  (void)buffer;
+  u64 bytes_used = arena->current->bytes_used;
   EXPECT_GT(bytes_used, 0);
   sp_ht_free(ht);
   EXPECT_EQ(bytes_used, arena->current->bytes_used);

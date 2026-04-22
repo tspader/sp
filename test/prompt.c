@@ -69,7 +69,7 @@ static sp_prompt_frame_t sp_prompt_last_frame(sp_prompt_ctx_t* ctx) {
 }
 
 static sp_prompt_cell_t sp_prompt_frame_cell(sp_prompt_frame_t frame, u32 row, u32 col) {
-  return frame.cells[row * (u32)frame.cols + col];
+  return frame.cells[row * frame.cols + col];
 }
 
 typedef struct {
@@ -245,7 +245,7 @@ static void sp_prompt_run_case(s32* utest_result, struct prompt* fixture, sp_pro
     EXPECT_EQ(frame.rows, num_expected);
 
     sp_for(row, num_expected) {
-      sp_str_t actual = trim_framebuffer_row(frame.cells + row * (u32)frame.cols, (u32)frame.cols);
+      sp_str_t actual = trim_framebuffer_row(frame.cells + row * frame.cols, frame.cols);
       SP_EXPECT_STR_EQ_CSTR(actual, t.expect.lines[row]);
     }
   }

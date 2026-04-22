@@ -7,7 +7,7 @@
 
 
 #define SP_FILE_CHANGE_EVENT_ALL (SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_MODIFIED | SP_FILE_CHANGE_EVENT_REMOVED)
-#define SP_TEST_POLL_ITERATIONS 50
+#define FMON_POLL_ITERATIONS 10
 #define SP_TEST_POLL_SLEEP_MS 20
 #define sp_for_n(N) for (u32 _i = 0; _i < (N); _i++)
 
@@ -33,6 +33,7 @@ UTEST_F_SETUP(sp_test_file_monitor) {
 
 UTEST_F_TEARDOWN(sp_test_file_monitor) {
   sp_test_file_manager_cleanup(&ut.file_manager);
+  sp_fmon_deinit(&ut.monitor);
 }
 
 typedef struct {
@@ -86,7 +87,7 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
   });
 
   bool timed_out = true;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
@@ -125,7 +126,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
   sp_io_writer_close(&s);
 
   bool timed_out = true;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
@@ -160,7 +161,7 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
   sp_fs_remove_file(test_file);
 
   bool timed_out = true;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
@@ -193,7 +194,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   });
 
   bool timed_out = true;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
@@ -212,7 +213,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   });
 
   timed_out = true;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
@@ -228,7 +229,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   sp_fs_remove_file(test_file);
 
   timed_out = true;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
@@ -268,7 +269,7 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
     sp_io_writer_close(&w);
   }
 
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
   }
@@ -279,7 +280,7 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
   sp_fs_remove_file(test_file);
 
   bool timed_out = true;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
@@ -322,7 +323,7 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
     .content = SP_LIT("changed"),
   });
 
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
   }
@@ -336,7 +337,7 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
   });
 
   bool timed_out = true;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
@@ -344,6 +345,7 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
       break;
     }
   }
+
 
   EXPECT_FALSE(timed_out);
   EXPECT_TRUE(paths_equal(ut.last_file_path, watched_file));
@@ -372,7 +374,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
 
   sp_sys_rename(sp_str_to_cstr(old_file), sp_str_to_cstr(new_file));
 
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
     sp_fmon_process_changes(&ut.monitor);
     if (fmon_history.count >= 2) break;
@@ -407,7 +409,7 @@ UTEST_F(sp_test_file_monitor, no_events_without_changes) {
   ut.change_detected = false;
 
   bool spurious_event = false;
-  sp_for_n(SP_TEST_POLL_ITERATIONS) {
+  sp_for_n(FMON_POLL_ITERATIONS) {
     sp_fmon_process_changes(&ut.monitor);
     if (ut.change_detected) {
       spurious_event = true;

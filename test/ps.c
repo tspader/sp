@@ -112,12 +112,10 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
 
   if (total_read != ctx->expected_len) {
     if (ctx->mode == SP_TEST_PROC_READ_EXACT) {
-      SP_ASSERT_FMT(
-        total_read == ctx->expected_len,
-        "expected to read {} bytes but got {}",
-        sp_fmt_uint(ctx->expected_len),
-        sp_fmt_uint(total_read)
-      );
+      if (total_read != ctx->expected_len) {
+        sp_log("expected to read {}, but got {}", sp_fmt_uint(total_read), sp_fmt_uint(ctx->expected_len));
+        sp_assert(total_read == ctx->expected_len);
+      }
     }
   }
 }
@@ -162,14 +160,17 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   if (!sp_str_empty(test.input)) {
     u64 bytes_written = 0;
     sp_io_write(in, test.input.data, test.input.len, &bytes_written);
-    SP_ASSERT_FMT(
-      bytes_written == test.input.len,
-      "stdin: tried to write {} ({}), but {.fg yellow} returned {}",
-      sp_fmt_str(test.input),
-      sp_fmt_uint(test.input.len),
-      sp_fmt_cstr("sp_io_writer_write()"),
-      sp_fmt_uint(bytes_written)
-    );
+    if (!(bytes_written == test.input.len)) {
+      sp_log(
+        "stdin: tried to write {} ({}), but {.fg yellow} returned {}",
+        sp_fmt_str(test.input),
+        sp_fmt_uint(test.input.len),
+        sp_fmt_cstr("sp_io_writer_write()"),
+        sp_fmt_uint(bytes_written)
+      );
+      sp_assert(bytes_written == test.input.len);
+    }
+
     sp_io_writer_close(in);
   }
 
@@ -183,12 +184,10 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
     };
     sp_test_proc_check_stream(&check);
 
-    SP_ASSERT_FMT(
-      check.result == SP_TEST_PS_OUTPUT_MATCH,
-      "stdout: expected '{}' but got '{}'",
-      sp_fmt_str(check.expected),
-      sp_fmt_cstr((c8*)check.buffer.data)
-    );
+    if (check.result != SP_TEST_PS_OUTPUT_MATCH) {
+      sp_log("stdout: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
+      sp_assert(check.result == SP_TEST_PS_OUTPUT_MATCH);
+    }
   }
 
   if (!sp_str_empty(test.output.err.expected)) {
@@ -201,12 +200,10 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
     };
     sp_test_proc_check_stream(&check);
 
-    SP_ASSERT_FMT(
-      check.result == SP_TEST_PS_OUTPUT_MATCH,
-      "stderr: expected '{}' but got '{}'",
-      sp_fmt_str(check.expected),
-      sp_fmt_cstr((c8*)check.buffer.data)
-    );
+    if (check.result != SP_TEST_PS_OUTPUT_MATCH) {
+      sp_log("stderr: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
+      sp_assert(check.result == SP_TEST_PS_OUTPUT_MATCH);
+    }
   }
 }
 
@@ -1081,6 +1078,9 @@ sp_test_concurrent_analysis_t sp_test_analyze_concurrent_output(u8* data, u32 le
 }
 
 UTEST_F(ps, concurrent_existing_fd_small_writes) {
+#ifdef SP_COSMO
+  if (sp_os_get_kind() == SP_OS_WIN32) UTEST_SKIP("concurrent existing-fd pipe sharing not supported on Windows");
+#endif
   s32 pipes[2];
   ASSERT_EQ(pipe(pipes), 0);
   fcntl(pipes[0], SP_F_SETFD, fcntl(pipes[0], SP_F_GETFD) | SP_FD_CLOEXEC);
@@ -1151,6 +1151,9 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
 }
 
 UTEST_F(ps, concurrent_existing_fd_large_writes) {
+#ifdef SP_COSMO
+  if (sp_os_get_kind() == SP_OS_WIN32) UTEST_SKIP("concurrent existing-fd pipe sharing not supported on Windows");
+#endif
   s32 pipes[2];
   ASSERT_EQ(pipe(pipes), 0);
   fcntl(pipes[0], SP_F_SETFD, fcntl(pipes[0], SP_F_GETFD) | FD_CLOEXEC);

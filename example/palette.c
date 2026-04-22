@@ -25,9 +25,7 @@ typedef struct {
   sp_atomic_s32_t shutdown;
 } app_t;
 
-static app_t* app = SP_NULLPTR;
-
-void palette_restore_terminal(void) {
+void palette_restore_terminal(app_t* app) {
   if (app && app->terminal_modified) {
     sp_os_tty_restore(sp_sys_stdin, &app->saved_mode);
     app->terminal_modified = false;
@@ -37,8 +35,8 @@ void palette_restore_terminal(void) {
 
 void palette_signal_handler(sp_os_signal_t sig, void* userdata) {
   (void)sig;
-  (void)userdata;
-  palette_restore_terminal();
+  app_t* app = (app_t*)userdata;
+  palette_restore_terminal(app);
   sp_atomic_s32_set(&app->shutdown, 1);
 }
 
@@ -156,17 +154,17 @@ s32 palette_read_key(void) {
   return sp_sys_read(sp_sys_stdin, &c, 1) == 1 ? c : -1;
 }
 
-sp_app_result_t on_init(sp_app_t* app) {
-  app_t* state = (app_t*)app->user_data;
+sp_app_result_t on_init(sp_app_t* sp) {
+  app_t* app = (app_t*)sp->user_data;
 
-  palette_enter_raw_mode(state);
+  palette_enter_raw_mode(app);
 
-  sp_os_register_signal_handler(SP_OS_SIGNAL_INTERRUPT, palette_signal_handler, SP_NULLPTR);
-  sp_os_register_signal_handler(SP_OS_SIGNAL_TERMINATE, palette_signal_handler, SP_NULLPTR);
+  sp_os_register_signal_handler(SP_OS_SIGNAL_INTERRUPT, palette_signal_handler, app);
+  sp_os_register_signal_handler(SP_OS_SIGNAL_TERMINATE, palette_signal_handler, app);
 
   sp_os_print(sp_str_lit("\033[?25l"));
 
-  palette_generate_color(state);
+  palette_generate_color(app);
 
   return SP_APP_CONTINUE;
 }
@@ -214,14 +212,14 @@ sp_app_result_t on_update(sp_app_t* app) {
   return SP_APP_CONTINUE;
 }
 
-void on_deinit(sp_app_t* app) {
-  app_t* state = (app_t*)app->user_data;
+void on_deinit(sp_app_t* sp) {
+  app_t* app = (app_t*)sp->user_data;
 
-  palette_restore_terminal();
+  palette_restore_terminal(app);
 
   sp_os_print(sp_str_lit("\033[H\033[2J"));
 
-  palette_print_results(state);
+  palette_print_results(app);
 }
 
 sp_app_config_t app_main(s32 num_args, const c8** args) {
@@ -230,11 +228,11 @@ sp_app_config_t app_main(s32 num_args, const c8** args) {
   s32 value = -1;
 
   /* palette [hue] [saturation] [value] */
-  if (num_args > 1) hue        = sp_parse_s64(sp_str_from_cstr(args[1]));
-  if (num_args > 2) saturation = sp_parse_s64(sp_str_from_cstr(args[2]));
-  if (num_args > 3) value      = sp_parse_s64(sp_str_from_cstr(args[3]));
+  if (num_args > 1) hue        = sp_parse_s32(sp_str_from_cstr(args[1]));
+  if (num_args > 2) saturation = sp_parse_s32(sp_str_from_cstr(args[2]));
+  if (num_args > 3) value      = sp_parse_s32(sp_str_from_cstr(args[3]));
 
-  app = sp_alloc_type(app_t);
+  app_t* app = sp_alloc_type(app_t);
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   app->rand_state = now.ns ^ (now.s << 32) ^ (u64)&app;

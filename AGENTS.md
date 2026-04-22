@@ -75,7 +75,8 @@ make TRIPLE=aarch64-macos
 
 # rules
 - Always run The Big One before marking a task as done.
-- Never comment any code, under any circumstances. Code with comments will be rejected outright.
+- Never submit code with new comments. Code with new comments will be rejected outright.
+- Never delete pre-existing comments.
 - Never use `malloc`, `calloc`, or `realloc`; use `sp_alloc` (which zero initializes)
 - Unless explicitly interfacing with an existing C API, never use `const char*`; use `sp_str_t` (pointer + length)
 - Never use `strcmp`, `strlen`, or any `string.h` functions with `sp_str_t`; use `sp_str_*`

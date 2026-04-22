@@ -635,17 +635,14 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
       ehdr.e_ident[EI_MAG1] != ELFMAG1 ||
       ehdr.e_ident[EI_MAG2] != ELFMAG2 ||
       ehdr.e_ident[EI_MAG3] != ELFMAG3) {
-    sp_err_set(SP_ERR_LAZY);
     return SP_NULLPTR;
   }
 
   if (ehdr.e_ident[EI_CLASS] != ELFCLASS64) {
-    sp_err_set(SP_ERR_LAZY);
     return SP_NULLPTR;
   }
 
   if (ehdr.e_ident[EI_DATA] != ELFDATA2LSB) {
-    sp_err_set(SP_ERR_LAZY);
     return SP_NULLPTR;
   }
 
