@@ -5,10 +5,10 @@
 
 #include "utest.h"
 
-#ifdef SP_FREESTANDING
+#if defined(SP_FREESTANDING) || defined(SP_WASM)
 struct ps {};
 UTEST(ps, freestanding) {
-  UTEST_SKIP("Unimplemented");
+  UTEST_SKIP("unimplemented");
 }
 #else
 #include "process.h"

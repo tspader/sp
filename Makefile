@@ -1,21 +1,34 @@
 MAKEFLAGS += -j$(shell nproc)
 
 ifdef TRIPLE
-CC := zig cc --target=$(TRIPLE)
+CC := zcc --target=$(TRIPLE)
 BUILD_DIR = build/$(TRIPLE)
 else
 CC := cc
 BUILD_DIR = build
 endif
 
-# Detect freestanding from triple: *-none or *-none-*
-FREESTANDING := $(if $(findstring -none,$(TRIPLE)),1,)
+# Detect wasm targets (wasm32-freestanding, wasm32-wasi, ...)
+WASM := $(if $(findstring wasm,$(TRIPLE)),1,)
 
-# Append .exe for Windows targets so the PE binaries run on Windows.
+# Detect bare-wasm (no libc): wasm32-freestanding.
+WASM_BARE := $(if $(WASM),$(if $(findstring freestanding,$(TRIPLE)),1,),)
+
+# SP_FREESTANDING is the Linux-syscalls-direct path. Not for wasm.
+FREESTANDING := $(if $(WASM),,$(if $(findstring -none,$(TRIPLE)),1,))
+
+# Append .exe for Windows targets, .wasm for wasm targets.
 EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
+EXE := $(if $(WASM),.wasm,$(EXE))
 
 ifdef FREESTANDING
 CFLAGS_PLATFORM = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DSP_FREESTANDING -DSP_DEFINE_BUILTINS
+LDFLAGS =
+else ifdef WASM_BARE
+CFLAGS_PLATFORM = -nostdlib
+LDFLAGS =
+else ifdef WASM
+CFLAGS_PLATFORM =
 LDFLAGS =
 else
 CFLAGS_PLATFORM =
@@ -80,7 +93,7 @@ $(EXAMPLE_DIR):
 $(TEST_DIR):
 	mkdir -p $(TEST_DIR)
 
-TRIPLES = x86_64-linux-none aarch64-linux-none x86_64-windows-gnu x86_64-linux-musl x86_64-linux-gnu
+TRIPLES = x86_64-linux-none aarch64-linux-none x86_64-windows-gnu x86_64-linux-musl x86_64-linux-gnu wasm32-freestanding wasm32-wasi
 
 .PHONY: compile $(TRIPLES)
 

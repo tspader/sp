@@ -428,6 +428,7 @@ s32              sp_prompt_begin_ex(sp_prompt_ctx_t* ctx);
 void             sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, u32 cols, u32 rows);
 void             sp_prompt_prime_events(sp_prompt_ctx_t* ctx, sp_prompt_event_t events[8]);
 bool             sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
+sp_app_config_t  sp_prompt_app(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
 #endif
 
 
@@ -844,41 +845,78 @@ static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
   sp_io_flush(ctx->writer);
 }
 
-bool sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
-  SP_ASSERT(widget.update);
-  ctx->state = SP_PROMPT_STATE_ACTIVE;
-  ctx->value = sp_zero_struct(sp_prompt_value_t);
-  sp_context_push_arena(ctx->arena);
+typedef struct {
+  sp_prompt_ctx_t*   ctx;
+  sp_prompt_widget_t widget;
+} sp_prompt_app_state_t;
 
-  sp_prompt_event_t event = { .kind = SP_PROMPT_EVENT_INIT };
+sp_app_result_t sp_prompt_app_on_init(sp_app_t* app) {
+  sp_prompt_app_state_t* s = (sp_prompt_app_state_t*)app->user_data;
+  SP_ASSERT(s->widget.update);
 
-  if (!sp_da_empty(ctx->frames)) {
-    sp_prompt_emit(ctx, "\r\n│\r\n");
+  s->ctx->state = SP_PROMPT_STATE_ACTIVE;
+  s->ctx->value = sp_zero_struct(sp_prompt_value_t);
+  sp_context_push_arena(s->ctx->arena);
+
+  if (!sp_da_empty(s->ctx->frames)) {
+    sp_prompt_emit(s->ctx, "\r\n│\r\n");
   }
 
-  while (true) {
-    sp_prompt_step(ctx, widget, event);
-    sp_prompt_present(ctx);
+  sp_prompt_event_t init = { .kind = SP_PROMPT_EVENT_INIT };
+  sp_prompt_step(s->ctx, s->widget, init);
+  sp_prompt_present(s->ctx);
 
-    if (ctx->state != SP_PROMPT_STATE_ACTIVE) break;
+  return s->ctx->state == SP_PROMPT_STATE_ACTIVE ? SP_APP_CONTINUE : SP_APP_QUIT;
+}
 
-    sp_prompt_read_raw_event(ctx, &event);
+sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
+  sp_prompt_app_state_t* s = (sp_prompt_app_state_t*)app->user_data;
+
+  sp_prompt_event_t event;
+  if (sp_prompt_read_raw_event(s->ctx, &event)) {
+    sp_prompt_step(s->ctx, s->widget, event);
+    sp_prompt_present(s->ctx);
+    if (s->ctx->state != SP_PROMPT_STATE_ACTIVE) {
+      return SP_APP_QUIT;
+    }
   }
 
-  if (ctx->cursor_row > 0) {
-    u32 cell_count = ctx->cursor_row * ctx->cols;
+  return SP_APP_CONTINUE;
+}
+
+void sp_prompt_app_on_deinit(sp_app_t* app) {
+  sp_prompt_app_state_t* s = (sp_prompt_app_state_t*)app->user_data;
+
+  if (s->ctx->cursor_row > 0) {
+    u32 cell_count = s->ctx->cursor_row * s->ctx->cols;
 
     sp_prompt_frame_t frame = {
-      .cols = ctx->cols,
-      .rows = ctx->cursor_row,
+      .cols = s->ctx->cols,
+      .rows = s->ctx->cursor_row,
       .cells = sp_alloc_n(sp_prompt_cell_t, cell_count),
     };
 
-    sp_mem_copy(ctx->framebuffer, frame.cells, sizeof(sp_prompt_cell_t) * cell_count);
-    sp_da_push(ctx->frames, frame);
+    sp_mem_copy(s->ctx->framebuffer, frame.cells, sizeof(sp_prompt_cell_t) * cell_count);
+    sp_da_push(s->ctx->frames, frame);
   }
 
   sp_context_pop();
+}
+
+sp_app_config_t sp_prompt_app(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
+  sp_prompt_app_state_t* s = sp_alloc_type(sp_prompt_app_state_t);
+  s->ctx = ctx;
+  s->widget = widget;
+  return (sp_app_config_t) {
+    .user_data = s,
+    .on_init   = sp_prompt_app_on_init,
+    .on_poll   = sp_prompt_app_on_poll,
+    .on_deinit = sp_prompt_app_on_deinit,
+  };
+}
+
+bool sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
+  sp_app_run(sp_prompt_app(ctx, widget));
   return ctx->state == SP_PROMPT_STATE_SUBMIT;
 }
 

@@ -492,12 +492,12 @@ UTEST(siphash, consistency) {
   const char* data = "Hello, World!";
   u64 seed = 0x12345678;
 
-  u64 hash1 = sp_hash_bytes((void*)data, strlen(data), seed);
-  u64 hash2 = sp_hash_bytes((void*)data, strlen(data), seed);
+  u64 hash1 = sp_hash_bytes((void*)data, sp_cstr_len(data), seed);
+  u64 hash2 = sp_hash_bytes((void*)data, sp_cstr_len(data), seed);
 
   EXPECT_EQ(hash1, hash2);
 
-  u64 hash3 = sp_hash_bytes((void*)data, strlen(data), seed + 1);
+  u64 hash3 = sp_hash_bytes((void*)data, sp_cstr_len(data), seed + 1);
   EXPECT_NE(hash1, hash3);
 }
 

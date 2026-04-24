@@ -6,7 +6,7 @@
 
 SP_TEST_MAIN()
 
-#ifdef SP_FREESTANDING
+#if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
 float fabsf(float x)
 {
 	union {float f; uint32_t i;} u = {x};

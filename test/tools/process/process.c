@@ -1,13 +1,14 @@
-#ifdef SP_FREESTANDING
 #include "sp.h"
+
+#if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
 int run(int n, const char** a) { return 0; }
 SP_MAIN(run);
 #else
-// SP_IMPLEMENTATION is defined in the Makefile to make clangd happy
-#include "sp.h"
 
 #ifdef _WIN32
   #define sp_getpid() ((s32)GetCurrentProcessId())
+#elif defined(SP_WASM)
+  #define sp_getpid() 0
 #else
   #define sp_getpid() getpid()
 #endif
