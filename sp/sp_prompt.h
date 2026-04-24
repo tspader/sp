@@ -1,9 +1,23 @@
 /*
-  sp_prompt.h
-  beautiful, interactive, utf-8 prompts for native CLIs
+
+                                                                                        █████       █████
+                                                                                      ▒▒███       ▒▒███
+    █████  ████████            ████████  ████████   ██████  █████████████   ████████  ███████      ▒███████
+   ███▒▒  ▒▒███▒▒███          ▒▒███▒▒███▒▒███▒▒███ ███▒▒███▒▒███▒▒███▒▒███ ▒▒███▒▒███▒▒▒███▒       ▒███▒▒███
+  ▒▒█████  ▒███ ▒███           ▒███ ▒███ ▒███ ▒▒▒ ▒███ ▒███ ▒███ ▒███ ▒███  ▒███ ▒███  ▒███        ▒███ ▒███
+   ▒▒▒▒███ ▒███ ▒███           ▒███ ▒███ ▒███     ▒███ ▒███ ▒███ ▒███ ▒███  ▒███ ▒███  ▒███ ███    ▒███ ▒███
+   ██████  ▒███████  █████████ ▒███████  █████    ▒▒██████  █████▒███ █████ ▒███████   ▒▒█████  ██ ████ █████
+  ▒▒▒▒▒▒   ▒███▒▒▒  ▒▒▒▒▒▒▒▒▒  ▒███▒▒▒  ▒▒▒▒▒      ▒▒▒▒▒▒  ▒▒▒▒▒ ▒▒▒ ▒▒▒▒▒  ▒███▒▒▒     ▒▒▒▒▒  ▒▒ ▒▒▒▒ ▒▒▒▒▒
+           ▒███                ▒███                                         ▒███
+           █████               █████                                        █████
+          ▒▒▒▒▒               ▒▒▒▒▒                                        ▒▒▒▒▒
+
+  >> sp_prompt.h
+  beautiful, interactive, zero-dependency utf-8 prompts for native CLIs
 
   ## TL;DR
-  If you don't want to read this documentation, grep for the following tags to jump to code:
+  If you don't want to read this documentation, grep for the following tags to jump to code. If you prefer
+  examples, see example/prompt.c in the sp.h repo.
 
   types
     @values      the values produced by prompts
@@ -40,6 +54,8 @@
 
     #define SP_IMPLEMENTATION
     #define SP_PROMPT_IMPLEMENTATION
+
+  sp_prompt.h is an extension to sp.h. Make sure that sp.h is also on your include path.
 
 
   ### INITALIZATION
