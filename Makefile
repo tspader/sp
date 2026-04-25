@@ -3,6 +3,8 @@ MAKEFLAGS += -j$(shell nproc)
 ifdef TRIPLE
 CC := zcc --target=$(TRIPLE)
 BUILD_DIR = build/$(TRIPLE)
+else ifeq ($(origin CC),command line)
+BUILD_DIR = build/$(CC)
 else
 CC := cc
 BUILD_DIR = build
@@ -22,7 +24,7 @@ EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
 EXE := $(if $(WASM),.wasm,$(EXE))
 
 ifdef FREESTANDING
-CFLAGS_PLATFORM = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DSP_FREESTANDING -DSP_DEFINE_BUILTINS
+CFLAGS_PLATFORM = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DSP_FREESTANDING
 LDFLAGS =
 else ifdef WASM_BARE
 CFLAGS_PLATFORM = -nostdlib
