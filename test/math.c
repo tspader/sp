@@ -6,16 +6,12 @@
 
 SP_TEST_MAIN()
 
-#if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
-float fabsf(float x)
+float sp_fabsf(float x)
 {
 	union {float f; uint32_t i;} u = {x};
 	u.i &= 0x7fffffff;
 	return u.f;
 }
-#else
-#include <math.h>
-#endif
 
 
 UTEST(math, color_conversion) {
@@ -44,28 +40,28 @@ UTEST(math, color_conversion) {
   sp_carr_for(colors, it) {
     sp_color_t hsv = sp_color_rgb_to_hsv(colors[it].rgb);
     // hue wrap-aware comparison
-    f32 h_diff = fabsf(hsv.h - colors[it].hsv.h);
+    f32 h_diff = sp_fabsf(hsv.h - colors[it].hsv.h);
     h_diff = SP_MIN(h_diff, 360.0f - h_diff);
     EXPECT_LT(h_diff, eps);
-    EXPECT_LT(fabsf(hsv.s - colors[it].hsv.s), eps);
-    EXPECT_LT(fabsf(hsv.v - colors[it].hsv.v), eps);
+    EXPECT_LT(sp_fabsf(hsv.s - colors[it].hsv.s), eps);
+    EXPECT_LT(sp_fabsf(hsv.v - colors[it].hsv.v), eps);
   }
 
   // hsv -> rgb
   sp_carr_for(colors, it) {
     sp_color_t rgb = sp_color_hsv_to_rgb(colors[it].hsv);
-    EXPECT_LT(fabsf(rgb.r - colors[it].rgb.r), eps);
-    EXPECT_LT(fabsf(rgb.g - colors[it].rgb.g), eps);
-    EXPECT_LT(fabsf(rgb.b - colors[it].rgb.b), eps);
+    EXPECT_LT(sp_fabsf(rgb.r - colors[it].rgb.r), eps);
+    EXPECT_LT(sp_fabsf(rgb.g - colors[it].rgb.g), eps);
+    EXPECT_LT(sp_fabsf(rgb.b - colors[it].rgb.b), eps);
   }
 
   // roundtrip: rgb -> hsv -> rgb
   sp_carr_for(colors, it) {
     sp_color_t hsv = sp_color_rgb_to_hsv(colors[it].rgb);
     sp_color_t rgb = sp_color_hsv_to_rgb(hsv);
-    EXPECT_LT(fabsf(rgb.r - colors[it].rgb.r), eps);
-    EXPECT_LT(fabsf(rgb.g - colors[it].rgb.g), eps);
-    EXPECT_LT(fabsf(rgb.b - colors[it].rgb.b), eps);
+    EXPECT_LT(sp_fabsf(rgb.r - colors[it].rgb.r), eps);
+    EXPECT_LT(sp_fabsf(rgb.g - colors[it].rgb.g), eps);
+    EXPECT_LT(sp_fabsf(rgb.b - colors[it].rgb.b), eps);
   }
 
   // sector boundary tests (H = 0, 60, 120, 180, 240, 300)
@@ -80,22 +76,22 @@ UTEST(math, color_conversion) {
 
   sp_carr_for(boundaries, it) {
     sp_color_t hsv = sp_color_rgb_to_hsv(boundaries[it].rgb);
-    f32 h_diff = fabsf(hsv.h - boundaries[it].hsv.h);
+    f32 h_diff = sp_fabsf(hsv.h - boundaries[it].hsv.h);
     h_diff = SP_MIN(h_diff, 360.0f - h_diff);
     EXPECT_LT(h_diff, eps);
-    EXPECT_LT(fabsf(hsv.s - boundaries[it].hsv.s), eps);
-    EXPECT_LT(fabsf(hsv.v - boundaries[it].hsv.v), eps);
+    EXPECT_LT(sp_fabsf(hsv.s - boundaries[it].hsv.s), eps);
+    EXPECT_LT(sp_fabsf(hsv.v - boundaries[it].hsv.v), eps);
 
     sp_color_t rgb = sp_color_hsv_to_rgb(boundaries[it].hsv);
-    EXPECT_LT(fabsf(rgb.r - boundaries[it].rgb.r), eps);
-    EXPECT_LT(fabsf(rgb.g - boundaries[it].rgb.g), eps);
-    EXPECT_LT(fabsf(rgb.b - boundaries[it].rgb.b), eps);
+    EXPECT_LT(sp_fabsf(rgb.r - boundaries[it].rgb.r), eps);
+    EXPECT_LT(sp_fabsf(rgb.g - boundaries[it].rgb.g), eps);
+    EXPECT_LT(sp_fabsf(rgb.b - boundaries[it].rgb.b), eps);
   }
 
   // hsv with H=360 should equal H=0
   sp_color_t rgb360 = sp_color_hsv_to_rgb((sp_color_t)SP_COLOR_HSV(360, 100, 100));
   sp_color_t rgb0 = sp_color_hsv_to_rgb((sp_color_t)SP_COLOR_HSV(0, 100, 100));
-  EXPECT_LT(fabsf(rgb360.r - rgb0.r), eps);
-  EXPECT_LT(fabsf(rgb360.g - rgb0.g), eps);
-  EXPECT_LT(fabsf(rgb360.b - rgb0.b), eps);
+  EXPECT_LT(sp_fabsf(rgb360.r - rgb0.r), eps);
+  EXPECT_LT(sp_fabsf(rgb360.g - rgb0.g), eps);
+  EXPECT_LT(sp_fabsf(rgb360.b - rgb0.b), eps);
 }

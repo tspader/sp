@@ -1,40 +1,38 @@
+/*
+                                                                                        █████       █████
+                                                                                      ▒▒███       ▒▒███
+    █████  ████████            ████████  ████████   ██████  █████████████   ████████  ███████      ▒███████
+   ███▒▒  ▒▒███▒▒███          ▒▒███▒▒███▒▒███▒▒███ ███▒▒███▒▒███▒▒███▒▒███ ▒▒███▒▒███▒▒▒███▒       ▒███▒▒███
+  ▒▒█████  ▒███ ▒███           ▒███ ▒███ ▒███ ▒▒▒ ▒███ ▒███ ▒███ ▒███ ▒███  ▒███ ▒███  ▒███        ▒███ ▒███
+   ▒▒▒▒███ ▒███ ▒███           ▒███ ▒███ ▒███     ▒███ ▒███ ▒███ ▒███ ▒███  ▒███ ▒███  ▒███ ███    ▒███ ▒███
+   ██████  ▒███████  █████████ ▒███████  █████    ▒▒██████  █████▒███ █████ ▒███████   ▒▒█████  ██ ████ █████
+  ▒▒▒▒▒▒   ▒███▒▒▒  ▒▒▒▒▒▒▒▒▒  ▒███▒▒▒  ▒▒▒▒▒      ▒▒▒▒▒▒  ▒▒▒▒▒ ▒▒▒ ▒▒▒▒▒  ▒███▒▒▒     ▒▒▒▒▒  ▒▒ ▒▒▒▒ ▒▒▒▒▒
+           ▒███                ▒███                                         ▒███
+           █████               █████                                        █████
+          ▒▒▒▒▒               ▒▒▒▒▒                                        ▒▒▒▒▒
+
+  >> sp_prompt.h
+  beautiful, interactive, zero-dependency utf-8 prompts for native CLIs
+
+  In the interest of consolidation, explanations and documentation live at the top of sp_prompt.h. This file
+  is mostly code, not prose. If something confuses you, check the header.
+*/
+
+#define SP_UNIMPLEMENTED() ((void)0);
 #define SP_IMPLEMENTATION
 #include "sp.h"
 #include "sp/sp_prompt.h"
 
 typedef s32 (*sp_prompt_demo_fn_t)(sp_prompt_ctx_t* ctx);
 
-typedef struct {
-  sp_str_t name;
-  sp_prompt_demo_fn_t run;
-} sp_prompt_demo_t;
-
-static sp_str_t concat_selected(sp_prompt_select_option_t* options, u32 option_count) {
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  bool first = true;
-  sp_for(it, option_count) {
-    if (!options[it].selected) {
-      continue;
-    }
-
-    if (!first) {
-      sp_str_builder_append(&builder, SP_LIT(", "));
-    }
-    first = false;
-    sp_str_builder_append(&builder, sp_str_view(options[it].label));
-  }
-
-  return sp_str_builder_to_str(&builder);
-}
-
-static s32 sp_prompt_demo_note(sp_prompt_ctx_t* ctx) {
+s32 demo_note(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Demo: Note");
   sp_prompt_note(ctx, "Wow. We got someone with a nose for *exciting* widgets", "Congratulations");
-  sp_prompt_outro(ctx, "done");
+  sp_prompt_outro(ctx, "Bye!");
   return 0;
 }
 
-static s32 sp_prompt_demo_indicators(sp_prompt_ctx_t* ctx) {
+s32 demo_indicators(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Demo: Indicators");
   sp_prompt_info(ctx, "info");
   sp_prompt_success(ctx, "success");
@@ -45,21 +43,7 @@ static s32 sp_prompt_demo_indicators(sp_prompt_ctx_t* ctx) {
   return 0;
 }
 
-static s32 sp_prompt_demo_confirm(sp_prompt_ctx_t* ctx) {
-  sp_prompt_intro(ctx, "Demo: Confirm");
-  bool confirmed = sp_prompt_confirm(ctx, "spum?", false);
-
-  if (sp_prompt_cancelled(ctx)) {
-    sp_prompt_cancel(ctx, "cancelled");
-    return 1;
-  }
-
-  sp_prompt_note(ctx, confirmed ? "yes" : "no", "Selected");
-  sp_prompt_outro(ctx, "done");
-  return 0;
-}
-
-static s32 sp_prompt_demo_password(sp_prompt_ctx_t* ctx) {
+s32 demo_password(sp_prompt_ctx_t* ctx) {
   const c8* secret = sp_prompt_password(ctx, "Demo: Password", "sekret");
   if (sp_prompt_cancelled(ctx)) {
     sp_prompt_cancel(ctx, "cancelled");
@@ -67,11 +51,49 @@ static s32 sp_prompt_demo_password(sp_prompt_ctx_t* ctx) {
   }
 
   sp_prompt_note(ctx, secret, "Captured");
-  sp_prompt_outro(ctx, "done");
+  sp_prompt_outro(ctx, "Password successfully sent to Mossad liaison");
   return 0;
 }
 
-static s32 sp_prompt_demo_select(sp_prompt_ctx_t* ctx) {
+s32 demo_text(sp_prompt_ctx_t* ctx) {
+  sp_prompt_intro(ctx, "Demo: Text");
+  const c8* text = sp_prompt_text(ctx, "Type something", "");
+
+  if (sp_prompt_submitted(ctx)) {
+    sp_prompt_note(ctx, text, "Text");
+  }
+  else if (sp_prompt_cancelled(ctx)) {
+    sp_prompt_cancel(ctx, "Oh...");
+  }
+
+  sp_prompt_outro(ctx, "Tastefully done");
+  return 0;
+}
+
+/////////////
+// CONFIRM //
+/////////////
+s32 demo_confirm(sp_prompt_ctx_t* ctx) {
+  sp_prompt_intro(ctx, "Demo: Confirm");
+  bool confirmed = sp_prompt_confirm(ctx, "spum?", false);
+
+  if (sp_prompt_submitted(ctx)) {
+    sp_prompt_note(ctx, confirmed ? "yes" : "no", "Selected");
+  }
+  else if (sp_prompt_cancelled(ctx)) {
+    sp_prompt_cancel(ctx, "cancelled");
+  }
+
+  sp_prompt_outro(ctx, "Good job!");
+
+  return 0;
+}
+
+
+////////////
+// SELECT //
+////////////
+s32 demo_select(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Demo: Select");
 
   sp_prompt_select_option_t options[] = {
@@ -87,20 +109,22 @@ static s32 sp_prompt_demo_select(sp_prompt_ctx_t* ctx) {
     .prompt = "Pick a greeting",
     .options = options,
     .num_options = sp_carr_len(options),
-    .max_items = 4,
+    .max_visible = 4,
   });
 
-  if (sp_prompt_cancelled(ctx)) {
+  if (sp_prompt_submitted(ctx)) {
+    sp_prompt_note(ctx, sp_prompt_get_str(ctx), "Greeting");
+  }
+  else if (sp_prompt_cancelled(ctx)) {
     sp_prompt_cancel(ctx, "You say nothing at all");
-    return 1;
   }
 
-  sp_prompt_note(ctx, sp_prompt_get_str(ctx), "Greeting");
-  sp_prompt_outro(ctx, "done");
+  sp_prompt_outro(ctx, "Later");
+
   return 0;
 }
 
-static s32 sp_prompt_demo_select_filter(sp_prompt_ctx_t* ctx) {
+s32 demo_select_filter(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Demo: Select + Filter");
 
   sp_prompt_select_option_t options[] = {
@@ -118,21 +142,27 @@ static s32 sp_prompt_demo_select_filter(sp_prompt_ctx_t* ctx) {
     .prompt = "Pick one!",
     .options = options,
     .num_options = sp_carr_len(options),
-    .max_items = 4,
+    .max_visible = 4,
     .filter = true,
   });
 
-  if (sp_prompt_cancelled(ctx)) {
-    sp_prompt_cancel(ctx, "cancelled");
-    return 1;
+  if (sp_prompt_submitted(ctx)) {
+    const c8* selection = sp_prompt_get_str(ctx);
+    sp_str_t reaction = sp_fmt("{.quote}, eh? A childish response...", sp_fmt_cstr(selection));
+    sp_prompt_note(ctx, sp_str_to_cstr(reaction), "Selection");
+  }
+  else if (sp_prompt_cancelled(ctx)) {
+    sp_prompt_cancel(ctx, "You got cold feet...");
   }
 
-  sp_prompt_note(ctx, sp_prompt_get_str(ctx), "Selected language");
-  sp_prompt_outro(ctx, "done");
+  sp_prompt_outro(ctx, "Bye!");
   return 0;
 }
 
-static s32 sp_prompt_demo_multiselect(sp_prompt_ctx_t* ctx) {
+/////////////////
+// MULTISELECT //
+/////////////////
+s32 demo_multiselect(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Demo: Multiselect");
 
   sp_prompt_select_option_t options[] = {
@@ -148,21 +178,21 @@ static s32 sp_prompt_demo_multiselect(sp_prompt_ctx_t* ctx) {
     .prompt = "Pick your cats",
     .options = options,
     .num_options = sp_carr_len(options),
-    .max_items = 6,
+    .max_visible = 6,
   });
 
   if (sp_prompt_cancelled(ctx)) {
-    sp_prompt_cancel(ctx, "cancelled");
+    sp_prompt_cancel(ctx, "You picked no cats");
     return 1;
   }
 
-  sp_str_t selected = concat_selected(options, sp_carr_len(options));
-  sp_prompt_note(ctx, sp_str_to_cstr(selected), "Selected tools");
-  sp_prompt_outro(ctx, "done");
+  const c8* selected = sp_prompt_join_selection(options, sp_carr_len(options));
+  sp_prompt_note(ctx, selected, "Cats");
+  sp_prompt_outro(ctx, "Bye!");
   return 0;
 }
 
-static s32 sp_prompt_demo_multiselect_filter(sp_prompt_ctx_t* ctx) {
+s32 demo_multiselect_filter(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Multiselect + Filter");
 
   sp_prompt_select_option_t options[] = {
@@ -179,18 +209,147 @@ static s32 sp_prompt_demo_multiselect_filter(sp_prompt_ctx_t* ctx) {
     .prompt = "Name the orange cat",
     .options = options,
     .num_options = sp_carr_len(options),
-    .max_items = 6,
+    .max_visible = 6,
     .filter = true,
   });
 
   if (sp_prompt_cancelled(ctx)) {
-    sp_prompt_cancel(ctx, "cancelled");
+    sp_prompt_cancel(ctx, "The orange cat lies despondent, nameless...");
     return 1;
   }
 
-  sp_str_t selected = concat_selected(options, sp_carr_len(options));
-  sp_prompt_note(ctx, sp_str_to_cstr(selected), "Selected tools");
-  sp_prompt_outro(ctx, "done");
+  sp_prompt_note(ctx, sp_prompt_join_selection(options, sp_carr_len(options)), "Cat names");
+  sp_prompt_outro(ctx, "Bye!");
+  return 0;
+}
+
+
+/////////////
+// SPINNER //
+/////////////
+s32 spinner_thread(void* userdata) {
+  sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)userdata;
+  sp_sleep_ns(sp_tm_s_to_ns(2));
+  sp_prompt_complete(ctx);
+  return 0;
+}
+
+s32 demo_spinner(sp_prompt_ctx_t* ctx) {
+  sp_prompt_intro(ctx, "Demo: Spinner");
+
+  sp_thread_t worker = sp_zero();
+  sp_thread_init(&worker, spinner_thread, ctx);
+
+  sp_prompt_spinner(ctx, (sp_prompt_spinner_t) {
+    .prompt = "Spinning for 2 seconds...",
+    .fps = 12,
+    .frames = SP_PROMPT_SPINNER_PACMAN_MUNCHER,
+    .color.rgb = { .r = 0x55, .g = 0xAA, .b = 0xFF },
+  });
+
+  if (sp_prompt_submitted(ctx)) {
+    sp_prompt_success(ctx, "You did it!");
+  }
+  else if (sp_prompt_cancelled(ctx)) {
+    sp_prompt_cancel(ctx, "You got dizzy and decided against spinning");
+  }
+
+  return 0;
+}
+
+
+//////////////////
+// KNIGHT RIDER //
+//////////////////
+s32 demo_knight_rider(sp_prompt_ctx_t* ctx) {
+  sp_prompt_intro(ctx, "Demo: Knight Rider");
+
+  sp_prompt_knight_rider(ctx, (sp_prompt_knight_rider_t) {
+    .prompt = "Press Enter to stop",
+    .fps = 200,
+    .color = { .r = 0x55, .g = 0xAA, .b = 0xFF },
+  });
+
+  if (sp_prompt_cancelled(ctx)) {
+    sp_prompt_cancel(ctx, "Knight riding unsuccessful");
+    return 1;
+  }
+
+  sp_prompt_success(ctx, "Knight ridden!");
+  return 0;
+}
+
+
+//////////////
+// PROGRESS //
+//////////////
+f32 ease_in_out_3_f32(f32 t) {
+  if (t < 0.5) {
+    return 4.0 * t * t * t;
+  }
+  else {
+    f32 p = 2.0 * t - 2.0;
+    return 0.5 * p * p * p + 1.0;
+  }
+}
+
+const c8* progress_to_status(f32 progress) {
+  if (progress < 0.25f) return "Cramming";
+  else if (progress < 0.50f) return "Spraying";
+  else if (progress < 0.75f) return "Grunting";
+  else return "Screaming";
+}
+
+s32 demo_progress_worker(void* userdata) {
+  sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)userdata;
+
+  sp_for(it, 233) { // Arbitrary
+    f32 progress = ease_in_out_3_f32((f32)it / 233);
+    sp_prompt_send_progress_f32(ctx, progress);
+    sp_prompt_send_status(ctx, progress_to_status(progress));
+
+    // Sleep a little while so we can see the progress
+    sp_sleep_ms(10);
+
+    // If you want your prompt to be able to tell a worker to
+    // cancel, then the worker should poll like this at whatever
+    // its cancellation points are.
+    if (sp_prompt_is_aborted(ctx)) {
+      return 0;
+    }
+
+    // If it's the other way around, and you want the worker to
+    // tell the prompt to cancel, you can call this from any
+    // thread at any time:
+    //
+    //   sp_prompt_abort(ctx);
+  }
+
+  // Tell the prompt that it's done. This isn't hardcoded in the
+  // progress widget; it works for any widget.
+  sp_prompt_complete(ctx);
+  return 0;
+}
+
+s32 demo_progress(sp_prompt_ctx_t* ctx) {
+  sp_prompt_intro(ctx, "Demo: Progress");
+
+  sp_thread_t worker = SP_ZERO_INITIALIZE();
+  sp_thread_init(&worker, demo_progress_worker, ctx);
+
+  sp_prompt_progress(ctx, (sp_prompt_progress_t) {
+    .prompt = "Working...",
+    .color.rgb = { .r = 0x55, .g = 0xAA, .b = 0xFF },
+  });
+
+  sp_thread_join(&worker);
+
+  if (sp_prompt_submitted(ctx)) {
+    sp_prompt_success(ctx, "Installed!");
+  }
+  else {
+    sp_prompt_cancel(ctx, "Cancelled");
+  }
   return 0;
 }
 
@@ -203,14 +362,18 @@ s32 prompt_main(s32 argc, const c8** argv) {
   sp_prompt_demo_fn_t run = SP_NULLPTR;
 
   demo_t ordered [] = {
-    { "note", sp_prompt_demo_note },
-    { "indicators", sp_prompt_demo_indicators },
-    { "confirm", sp_prompt_demo_confirm },
-    { "password", sp_prompt_demo_password },
-    { "select", sp_prompt_demo_select },
-    { "select + filter", sp_prompt_demo_select_filter },
-    { "multiselect", sp_prompt_demo_multiselect },
-    { "multiselect + filter", sp_prompt_demo_multiselect_filter },
+    { "Spinner", demo_spinner },
+    { "Progress", demo_progress },
+    { "Text", demo_text },
+    { "Select", demo_select },
+    { "Select + Filter", demo_select_filter },
+    { "Multiselect", demo_multiselect },
+    { "Multiselect + Filter", demo_multiselect_filter },
+    { "Note", demo_note },
+    { "Indicators", demo_indicators },
+    { "Confirm", demo_confirm },
+    { "Password", demo_password },
+    { "Knight Rider", demo_knight_rider },
   };
 
   sp_cstr_ht(sp_prompt_demo_fn_t) demos = sp_zero();
@@ -253,7 +416,7 @@ s32 prompt_main(s32 argc, const c8** argv) {
       .options = options,
       .num_options = sp_da_size(options),
     })) {
-      sp_prompt_cancel(ctx, "cancelled");
+      sp_prompt_cancel(ctx, "The idea terrifies you. You back away slowly.");
       sp_prompt_end(ctx);
       return SP_PROMPT_ERROR;
     }

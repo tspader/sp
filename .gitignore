@@ -1,5 +1,6 @@
 build
 .cache
+.cache/*
 compile_commands.json
 
 .spackle/*
@@ -25,6 +26,7 @@ doc/*
 **/*.ilk
 **/*.obj
 **/*.pdb
+**/*.idx
 /mutagen.yml
 /tools/msys64
 /tools/w64devkit

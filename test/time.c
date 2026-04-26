@@ -223,7 +223,6 @@ typedef struct {
 } tm_iso8601_case_t;
 
 UTEST(tm, iso8601_known_values) {
-  SKIP_ON_FREESTANDING();
   tm_iso8601_case_t cases[] = {
     { { .s = 0,              .ns = 0 },         "1970-01-01T00:00:00.000Z" },
     { { .s = 946684800,      .ns = 0 },         "2000-01-01T00:00:00.000Z" },
@@ -235,6 +234,17 @@ UTEST(tm, iso8601_known_values) {
     { { .s = 1,              .ns = 0 },         "1970-01-01T00:00:01.000Z" },
     { { .s = 86400,          .ns = 0 },         "1970-01-02T00:00:00.000Z" },
     { { .s = 86399,          .ns = 0 },         "1970-01-01T23:59:59.000Z" },
+    { { .s = 951868799,      .ns = 0 },         "2000-02-29T23:59:59.000Z" },
+    { { .s = 951868800,      .ns = 0 },         "2000-03-01T00:00:00.000Z" },
+    { { .s = 4107542399ULL,  .ns = 0 },         "2100-02-28T23:59:59.000Z" },
+    { { .s = 4107542400ULL,  .ns = 0 },         "2100-03-01T00:00:00.000Z" },
+    { { .s = 13574649599ULL, .ns = 0 },         "2400-02-29T23:59:59.000Z" },
+    { { .s = 13574649600ULL, .ns = 0 },         "2400-03-01T00:00:00.000Z" },
+    { { .s = 1704067199,     .ns = 0 },         "2023-12-31T23:59:59.000Z" },
+    { { .s = 1704067200,     .ns = 0 },         "2024-01-01T00:00:00.000Z" },
+    { { .s = 1706745599,     .ns = 0 },         "2024-01-31T23:59:59.000Z" },
+    { { .s = 1706745600,     .ns = 0 },         "2024-02-01T00:00:00.000Z" },
+    { { .s = 253402300799ULL, .ns = 0 },        "9999-12-31T23:59:59.000Z" },
   };
 
   SP_CARR_FOR(cases, i) {
@@ -244,7 +254,6 @@ UTEST(tm, iso8601_known_values) {
 }
 
 UTEST(tm, iso8601_millisecond_padding) {
-  SKIP_ON_FREESTANDING();
   tm_iso8601_case_t cases[] = {
     { { .s = 0, .ns = 1000000 },    "1970-01-01T00:00:00.001Z" },
     { { .s = 0, .ns = 10000000 },   "1970-01-01T00:00:00.010Z" },
@@ -256,6 +265,17 @@ UTEST(tm, iso8601_millisecond_padding) {
     sp_str_t result = sp_tm_epoch_to_iso8601(cases[i].epoch);
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
+}
+
+UTEST(tm, epoch_to_date_time_known_values) {
+  sp_tm_date_time_t dt = sp_tm_epoch_to_date_time(SP_RVAL(sp_tm_epoch_t) { .s = 1709208000, .ns = 123000000 });
+  EXPECT_EQ(dt.year, 2024);
+  EXPECT_EQ(dt.month, 2);
+  EXPECT_EQ(dt.day, 29);
+  EXPECT_EQ(dt.hour, 12);
+  EXPECT_EQ(dt.minute, 0);
+  EXPECT_EQ(dt.second, 0);
+  EXPECT_EQ(dt.millisecond, 123);
 }
 
 UTEST(tm, fps_to_ns) {

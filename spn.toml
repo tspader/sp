@@ -46,10 +46,6 @@ name = "context"
 source = ["test/context.c"]
 
 [[test]]
-name = "core"
-source = ["test/core.c"]
-
-[[test]]
 name = "cv"
 source = ["test/cv.c"]
 

@@ -79,9 +79,16 @@ sp_asset_t*       sp_asset_registry_find(sp_asset_registry_t* r, sp_asset_kind_t
 void              sp_asset_registry_process_completions(sp_asset_registry_t* r);
 sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_asset_kind_t kind);
 s32               sp_asset_registry_thread_fn(void* user_data);
+#endif
+
+
+
+
+#if defined(SP_IMPLEMENTATION) && !defined(SP_ASSET_IMPLEMENTATION)
+  #define SP_ASSET_IMPLEMENTATION
+#endif
 
 #if defined(SP_ASSET_IMPLEMENTATION)
-
 void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_config_t config) {
   sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
   sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
@@ -106,7 +113,7 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
       .fallback = cfg->fallback,
       .assets = SP_NULLPTR,
     };
-    sp_dyn_array_push(registry->importers, importer);
+    sp_da_push(registry->importers, importer);
   }
 
   sp_context_pop();
@@ -131,7 +138,7 @@ void sp_asset_registry_shutdown(sp_asset_registry_t* registry) {
 }
 
 sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_asset_kind_t kind) {
-  sp_dyn_array_for(r->importers, index) {
+  sp_da_for(r->importers, index) {
     sp_asset_importer_t* importer = &r->importers[index];
     if (importer->kind == kind) {
       return importer;
@@ -257,4 +264,3 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
 }
 
 #endif // SP_IMPLEMENTATION
-#endif // SP_ASSET_H

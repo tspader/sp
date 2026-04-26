@@ -554,10 +554,10 @@ UTEST(combined, hash_table_with_dyn_array_values) {
     sp_ht(int, int_array) ht = SP_NULLPTR;
 
     for (s32 i = 0; i < 5; i++) {
-        sp_dyn_array(int) arr = SP_NULLPTR;
+        sp_da(int) arr = SP_NULLPTR;
 
         for (s32 j = 0; j < 10; j++) {
-            sp_dyn_array_push(arr, i * 100 + j);
+            sp_da_push(arr, i * 100 + j);
         }
 
         sp_ht_insert(ht, i, arr);
@@ -567,7 +567,7 @@ UTEST(combined, hash_table_with_dyn_array_values) {
         EXPECT_TRUE(sp_ht_getp(ht, i));
 
         int_array arr = *sp_ht_getp(ht, i);
-        EXPECT_EQ(sp_dyn_array_size(arr), 10u);
+        EXPECT_EQ(sp_da_size(arr), 10u);
 
         for (s32 j = 0; j < 10; j++) {
             EXPECT_EQ(arr[j], i * 100 + j);
@@ -576,7 +576,7 @@ UTEST(combined, hash_table_with_dyn_array_values) {
 
     for (s32 i = 0; i < 5; i++) {
         int_array arr = *sp_ht_getp(ht, i);
-        sp_dyn_array_free(arr);
+        sp_da_free(arr);
     }
 
     sp_ht_free(ht);
@@ -586,10 +586,10 @@ UTEST(combined, multiple_arrays_in_hash_table) {
   sp_ht(int, void*) ht = SP_NULLPTR;
 
   for (s32 key = 0; key < 5; key++) {
-    sp_dyn_array(int) arr = SP_NULLPTR;
+    sp_da(int) arr = SP_NULLPTR;
 
     for (s32 j = 0; j < 20; j++) {
-        sp_dyn_array_push(arr, key * 1000 + j);
+        sp_da_push(arr, key * 1000 + j);
     }
 
     sp_ht_insert(ht, key, (void*)arr);
@@ -599,7 +599,7 @@ UTEST(combined, multiple_arrays_in_hash_table) {
     EXPECT_TRUE(sp_ht_getp(ht, key));
 
     int* arr = (int*)*sp_ht_getp(ht, key);
-    EXPECT_EQ(sp_dyn_array_size(arr), 20u);
+    EXPECT_EQ(sp_da_size(arr), 20u);
 
     for (s32 j = 0; j < 20; j++) {
         EXPECT_EQ(arr[j], key * 1000 + j);
@@ -608,7 +608,7 @@ UTEST(combined, multiple_arrays_in_hash_table) {
 
   for (s32 key = 0; key < 5; key++) {
     int* arr = (int*)*sp_ht_getp(ht, key);
-    sp_dyn_array_free(arr);
+    sp_da_free(arr);
   }
 
   sp_ht_free(ht);

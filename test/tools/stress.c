@@ -5,29 +5,29 @@
 
 
 UTEST(stress, dyn_array) {
-  sp_dyn_array(u64) arr = SP_NULLPTR;
+  sp_da(u64) arr = SP_NULLPTR;
 
   const s32 count = 100000;
 
   sp_for(i, count) {
-    sp_dyn_array_push(arr, (u64)i * 12345);
+    sp_da_push(arr, (u64)i * 12345);
   }
 
-  EXPECT_EQ(sp_dyn_array_size(arr), count);
+  EXPECT_EQ(sp_da_size(arr), count);
 
   sp_for(i, count) {
     EXPECT_EQ(arr[i], (u64)i * 12345);
   }
 
-  sp_dyn_array_clear(arr);
-  EXPECT_EQ(sp_dyn_array_size(arr), 0);
+  sp_da_clear(arr);
+  EXPECT_EQ(sp_da_size(arr), 0);
 
   sp_for(i, 1000) {
-    sp_dyn_array_push(arr, (u64)i);
+    sp_da_push(arr, (u64)i);
   }
-  EXPECT_EQ(sp_dyn_array_size(arr), 1000);
+  EXPECT_EQ(sp_da_size(arr), 1000);
 
-  sp_dyn_array_free(arr);
+  sp_da_free(arr);
 }
 
 UTEST(stress, hash_table) {
@@ -115,7 +115,7 @@ UTEST(stress, ring_buffer_continuous_overwrite) {
   sp_rb_free(rq);
 }
 
-UTEST(stress, sp_dyn_array_push_f) {
+UTEST(stress, sp_da_push_ex) {
   typedef struct {
     u32 id;
     c8 data[256];
@@ -129,10 +129,10 @@ UTEST(stress, sp_dyn_array_push_f) {
     sp_for(j, 256) {
       item.data[j] = (c8)((i + j) % 256);
     }
-    sp_dyn_array_push_f((void**)&arr, &item, sizeof(large_struct_t));
+    sp_da_push_ex((void**)&arr, &item, sizeof(large_struct_t));
   }
 
-  EXPECT_EQ(sp_dyn_array_size(arr), 1000);
+  EXPECT_EQ(sp_da_size(arr), 1000);
 
   sp_for(i, 1000) {
     EXPECT_EQ(arr[i].id, (u32)i);
@@ -141,7 +141,7 @@ UTEST(stress, sp_dyn_array_push_f) {
     }
   }
 
-  sp_dyn_array_free(arr);
+  sp_da_free(arr);
 }
 
 typedef struct {

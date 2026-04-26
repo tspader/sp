@@ -148,8 +148,8 @@ void palette_print_results(app_t* app) {
 }
 
 s32 palette_read_key(void) {
-  sp_sys_pollfd_t p = { .fd = sp_sys_stdin, .events = SP_POLLIN };
-  if (sp_sys_poll(&p, 1, 0) <= 0) return -1;
+  u8 ready = 0;
+  if (sp_sys_fd_ready(sp_sys_stdin, &ready) != 0 || !ready) return -1;
   c8 c = 0;
   return sp_sys_read(sp_sys_stdin, &c, 1) == 1 ? c : -1;
 }

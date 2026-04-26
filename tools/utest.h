@@ -152,22 +152,22 @@ UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(signed char c) {
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(unsigned char c);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(unsigned char c) {
-  UTEST_PRINTF("{}", sp_fmt_uint(UTEST_CAST(u32, c)));
+  UTEST_PRINTF("{.hex}", sp_fmt_uint(c));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(float f);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(float f) {
-  UTEST_PRINTF("{}", sp_fmt_float(f));
+  UTEST_PRINTF("{:.3}", sp_fmt_float(f));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(double d);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(double d) {
-  UTEST_PRINTF("{}", sp_fmt_float(d));
+  UTEST_PRINTF("{:.3}", sp_fmt_float(d));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long double d);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long double d) {
-  UTEST_PRINTF("{}", sp_fmt_float(UTEST_CAST(f64, d)));
+  UTEST_PRINTF("{:.3}", sp_fmt_float(UTEST_CAST(f64, d)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(int i);
@@ -255,10 +255,10 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       _Pragma("clang diagnostic pop")                                          \
           UTEST_PRINTF("{}:{}: Failure\n",                                     \
                        sp_fmt_cstr(__FILE__), sp_fmt_int(__LINE__));           \
-      UTEST_PRINTF("  Expected : ({}) {} ({})\n",                              \
+      UTEST_PRINTF("  expected -> {.gray} {} {.gray}\n",                              \
                    sp_fmt_cstr(xAsString), sp_fmt_cstr(#cond),                \
                    sp_fmt_cstr(yAsString));                                    \
-      UTEST_PRINTF("    Actual : ");                                           \
+      UTEST_PRINTF("    actual -> ");                                           \
       utest_type_printer(xEval);                                               \
       UTEST_PRINTF(" vs ");                                                    \
       utest_type_printer(yEval);                                               \

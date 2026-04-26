@@ -1,7 +1,9 @@
+#define SP_UNIMPLEMENTED() ((void)0)
+
 #define SP_TEST_AMALGAMATION
 #include "app.c"
 #include "asset.c"
-#include "core.c"
+#include "array.c"
 #include "cv.c"
 #include "elf.c"
 #include "fmon.c"

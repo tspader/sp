@@ -27,6 +27,11 @@ void on_deinit(sp_app_t* app) {
 }
 
 sp_app_config_t app_main(s32 num_args, const c8** args) {
+  sp_da(u64) arr = sp_zero();
+  sp_da_push(arr, 69);
+  sp_da_for(arr, it) {
+    sp_log("arr[{.gray}] -> {}", sp_fmt_uint(it), sp_fmt_uint(arr[it]));
+  }
   return (sp_app_config_t) {
     .fps = 30,
     .on_init = on_init,

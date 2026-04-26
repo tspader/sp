@@ -355,7 +355,7 @@ UTEST(str, map_reduce) {
   sp_str_t band [] = {
     SP_LIT("jerry"), SP_LIT("bobby"), SP_LIT("phil")
   };
-  sp_dyn_array(sp_str_t) result = sp_str_map(&band[0], SP_CARR_LEN(band), SP_NULLPTR, sp_test_map_band_member);
+  sp_da(sp_str_t) result = sp_str_map(&band[0], SP_CARR_LEN(band), SP_NULLPTR, sp_test_map_band_member);
   SP_EXPECT_STR_EQ_CSTR(result[0], "jerry is in the band");
   SP_EXPECT_STR_EQ_CSTR(result[1], "bobby is in the band");
   SP_EXPECT_STR_EQ_CSTR(result[2], "phil is in the band");
@@ -364,7 +364,7 @@ UTEST(str, map_reduce) {
   SP_EXPECT_STR_EQ_CSTR(joined, "jerry and bobby and phil");
 
   u32 len = 3;
-  sp_dyn_array(sp_str_t) clipped = sp_str_map(&band[0], SP_CARR_LEN(band), &len, sp_str_map_kernel_prefix);
+  sp_da(sp_str_t) clipped = sp_str_map(&band[0], SP_CARR_LEN(band), &len, sp_str_map_kernel_prefix);
   SP_EXPECT_STR_EQ_CSTR(clipped[0], "jer");
   SP_EXPECT_STR_EQ_CSTR(clipped[1], "bob");
   SP_EXPECT_STR_EQ_CSTR(clipped[2], "phi");
@@ -476,9 +476,9 @@ UTEST(str_kernel, map_trim) {
     SP_LIT("no_trim"),
   };
 
-  sp_dyn_array(sp_str_t) results = sp_str_map(strings, 4, NULL, sp_str_map_kernel_trim);
+  sp_da(sp_str_t) results = sp_str_map(strings, 4, NULL, sp_str_map_kernel_trim);
 
-  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  ASSERT_EQ(sp_da_size(results), 4);
   SP_EXPECT_STR_EQ_CSTR(results[0], "hello");
   SP_EXPECT_STR_EQ_CSTR(results[1], "world");
   SP_EXPECT_STR_EQ_CSTR(results[2], "");
@@ -493,15 +493,15 @@ UTEST(str_kernel, map_case_transform) {
     SP_LIT("MiXeD cAsE"),
   };
 
-  sp_dyn_array(sp_str_t) results = sp_str_map(strings, 4, NULL, sp_str_map_kernel_to_upper);
-  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  sp_da(sp_str_t) results = sp_str_map(strings, 4, NULL, sp_str_map_kernel_to_upper);
+  ASSERT_EQ(sp_da_size(results), 4);
   SP_EXPECT_STR_EQ_CSTR(results[0], "HELLO WORLD");
   SP_EXPECT_STR_EQ_CSTR(results[1], "ALREADY UPPER");
   SP_EXPECT_STR_EQ_CSTR(results[2], "ALREADY LOWER");
   SP_EXPECT_STR_EQ_CSTR(results[3], "MIXED CASE");
 
   results = sp_str_map(strings, 4, NULL, sp_str_map_kernel_to_lower);
-  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  ASSERT_EQ(sp_da_size(results), 4);
   SP_EXPECT_STR_EQ_CSTR(results[0], "hello world");
   SP_EXPECT_STR_EQ_CSTR(results[1], "already upper");
   SP_EXPECT_STR_EQ_CSTR(results[2], "already lower");
@@ -515,7 +515,7 @@ UTEST(str_kernel, map_case_transform) {
   };
 
   results = sp_str_map(strings2, 4, NULL, sp_str_map_kernel_pascal_case);
-  ASSERT_EQ(sp_dyn_array_size(results), 4);
+  ASSERT_EQ(sp_da_size(results), 4);
   SP_EXPECT_STR_EQ_CSTR(results[0], "Hello World");
   SP_EXPECT_STR_EQ_CSTR(results[1], "The Quick Brown Fox");
   SP_EXPECT_STR_EQ_CSTR(results[2], "Shouting Text");
@@ -592,16 +592,16 @@ UTEST(str, strip) {
 
 UTEST(str, split_c8) {
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello,world,test"), ',');
-    ASSERT_EQ(sp_dyn_array_size(parts), 3);
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello,world,test"), ',');
+    ASSERT_EQ(sp_da_size(parts), 3);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "hello");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "world");
     SP_EXPECT_STR_EQ_CSTR(parts[2], "test");
   }
 
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("/home/user/file.txt"), '/');
-    ASSERT_EQ(sp_dyn_array_size(parts), 4);
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("/home/user/file.txt"), '/');
+    ASSERT_EQ(sp_da_size(parts), 4);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "home");
     SP_EXPECT_STR_EQ_CSTR(parts[2], "user");
@@ -609,16 +609,16 @@ UTEST(str, split_c8) {
   }
 
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,b"), ',');
-    ASSERT_EQ(sp_dyn_array_size(parts), 3);
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,b"), ',');
+    ASSERT_EQ(sp_da_size(parts), 3);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "a");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "");
     SP_EXPECT_STR_EQ_CSTR(parts[2], "b");
   }
 
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,,b"), ',');
-    ASSERT_EQ(sp_dyn_array_size(parts), 4);
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,,b"), ',');
+    ASSERT_EQ(sp_da_size(parts), 4);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "a");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "");
     SP_EXPECT_STR_EQ_CSTR(parts[2], "");
@@ -626,19 +626,19 @@ UTEST(str, split_c8) {
   }
 
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello"), ',');
-    ASSERT_EQ(sp_dyn_array_size(parts), 1);
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello"), ',');
+    ASSERT_EQ(sp_da_size(parts), 1);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "hello");
   }
 
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT(""), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT(""), ',');
     EXPECT_EQ(parts, SP_NULLPTR);
   }
 
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT(",hello,world,"), ',');
-    ASSERT_EQ(sp_dyn_array_size(parts), 4);
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT(",hello,world,"), ',');
+    ASSERT_EQ(sp_da_size(parts), 4);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "hello");
     SP_EXPECT_STR_EQ_CSTR(parts[2], "world");
@@ -646,15 +646,15 @@ UTEST(str, split_c8) {
   }
 
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT(","), ',');
-    ASSERT_EQ(sp_dyn_array_size(parts), 2);
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT(","), ',');
+    ASSERT_EQ(sp_da_size(parts), 2);
     SP_EXPECT_STR_EQ(parts[0], SP_LIT(""));
     SP_EXPECT_STR_EQ(parts[1], SP_LIT(""));
   }
 
   {
-    sp_dyn_array(sp_str_t) parts = sp_str_split_c8(SP_LIT("x"), ',');
-    ASSERT_EQ(sp_dyn_array_size(parts), 1);
+    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("x"), ',');
+    ASSERT_EQ(sp_da_size(parts), 1);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "x");
   }
 }
@@ -735,8 +735,8 @@ UTEST(str, pad_to_longest) {
       SP_LIT("hello"),
       SP_LIT("world!")
     };
-    sp_dyn_array(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
-    ASSERT_EQ(sp_dyn_array_size(padded), 3);
+    sp_da(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
+    ASSERT_EQ(sp_da_size(padded), 3);
     SP_EXPECT_STR_EQ(padded[0], SP_LIT("hi    "));
     SP_EXPECT_STR_EQ(padded[1], SP_LIT("hello "));
     SP_EXPECT_STR_EQ(padded[2], SP_LIT("world!"));
@@ -748,8 +748,8 @@ UTEST(str, pad_to_longest) {
       SP_LIT("bbb"),
       SP_LIT("ccc")
     };
-    sp_dyn_array(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
-    ASSERT_EQ(sp_dyn_array_size(padded), 3);
+    sp_da(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
+    ASSERT_EQ(sp_da_size(padded), 3);
     SP_EXPECT_STR_EQ(padded[0], SP_LIT("aaa"));
     SP_EXPECT_STR_EQ(padded[1], SP_LIT("bbb"));
     SP_EXPECT_STR_EQ(padded[2], SP_LIT("ccc"));
@@ -759,8 +759,8 @@ UTEST(str, pad_to_longest) {
     sp_str_t strings[] = {
       SP_LIT("hello")
     };
-    sp_dyn_array(sp_str_t) padded = sp_str_pad_to_longest(strings, 1);
-    ASSERT_EQ(sp_dyn_array_size(padded), 1);
+    sp_da(sp_str_t) padded = sp_str_pad_to_longest(strings, 1);
+    ASSERT_EQ(sp_da_size(padded), 1);
     SP_EXPECT_STR_EQ(padded[0], SP_LIT("hello"));
   }
 
@@ -770,8 +770,8 @@ UTEST(str, pad_to_longest) {
       SP_LIT("hello"),
       SP_LIT("")
     };
-    sp_dyn_array(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
-    ASSERT_EQ(sp_dyn_array_size(padded), 3);
+    sp_da(sp_str_t) padded = sp_str_pad_to_longest(strings, 3);
+    ASSERT_EQ(sp_da_size(padded), 3);
     SP_EXPECT_STR_EQ(padded[0], SP_LIT("     "));
     SP_EXPECT_STR_EQ(padded[1], SP_LIT("hello"));
     SP_EXPECT_STR_EQ(padded[2], SP_LIT("     "));

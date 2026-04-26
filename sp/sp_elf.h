@@ -178,8 +178,11 @@ sp_elf_t* sp_elf_read_from_file(sp_str_t path);
 
 
 
+#if defined(SP_IMPLEMENTATION) && !defined(SP_ELF_IMPLEMENTATION)
+  #define SP_ELF_IMPLEMENTATION
+#endif
 
-#if defined(SP_IMPLEMENTATION)
+#if defined(SP_ELF_IMPLEMENTATION)
 
 bool sp_elf_is_align_valid(u64 v) {
   return v == 0 || (v & (v - 1)) == 0;
@@ -723,4 +726,4 @@ sp_elf_t* sp_elf_read_from_file(sp_str_t path) {
   return elf;
 }
 
-#endif // SP_IMPLEMENTATION
+#endif // SP_ELF_IMPLEMENTATION

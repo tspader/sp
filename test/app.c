@@ -165,3 +165,56 @@ UTEST(app, full_lifecycle) {
   EXPECT_TRUE(g_update_called);
   EXPECT_TRUE(g_deinit_called);
 }
+
+UTEST(app, free_mode_full_lifecycle) {
+  reset_flags();
+  s32 rc = sp_app_run((sp_app_config_t){
+    .on_init = on_init_continue,
+    .on_poll = on_poll_continue,
+    .on_update = on_update_quit,
+    .on_deinit = on_deinit_continue,
+    .fps = 1000,
+    .mode = SP_APP_MODE_FREE,
+  });
+  EXPECT_EQ(rc, 0);
+  EXPECT_TRUE(g_init_called);
+  EXPECT_TRUE(g_poll_called);
+  EXPECT_TRUE(g_update_called);
+  EXPECT_TRUE(g_deinit_called);
+}
+
+// In free mode, on_poll runs on every tick; on_update is gated by fps.
+// Verify poll is called many more times than update over a fixed wall-clock budget.
+static u32 g_free_poll_count;
+static u32 g_free_update_count;
+static sp_tm_timer_t g_free_timer;
+
+static sp_app_result_t on_poll_count(sp_app_t* app) {
+  (void)app;
+  g_free_poll_count++;
+  if (sp_tm_read_timer(&g_free_timer) >= sp_tm_ms_to_ns(50)) {
+    return SP_APP_QUIT;
+  }
+  return SP_APP_CONTINUE;
+}
+
+static sp_app_result_t on_update_count(sp_app_t* app) {
+  (void)app;
+  g_free_update_count++;
+  return SP_APP_CONTINUE;
+}
+
+UTEST(app, free_mode_poll_runs_hot) {
+  g_free_poll_count = 0;
+  g_free_update_count = 0;
+  g_free_timer = sp_tm_start_timer();
+
+  sp_app_run((sp_app_config_t){
+    .on_poll = on_poll_count,
+    .on_update = on_update_count,
+    .fps = 60,
+    .mode = SP_APP_MODE_FREE,
+  });
+
+  EXPECT_GT(g_free_poll_count, g_free_update_count);
+}

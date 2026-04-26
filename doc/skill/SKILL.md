@@ -34,8 +34,8 @@ assistant: [Reads index.md, searches through sp.h and spn.c with Task tool, prov
 - Never use `strcmp`, `strlen`, or any `string.h` functions with `sp_str_t`; use `sp_str_*`
 - Never use `strcmp`, `strlen`, or any `string.h` functions with `const char*`; use `sp_cstr_*`
 - Always use `SP_ZERO_INITIALIZE()`. When you need a type, use `SP_ZERO_STRUCT(T)`
-- Always use `sp_da(T)` and `sp_ht(T)` for dynamic arrays and hash maps (`sp_dyn_array_*` and `sp_ht_*`)
-- Always use `sp_dyn_array_for(arr, it)` and `sp_ht_for(ht, it)` to iterate sp_da and sp_ht
+- Always use `sp_da(T)` and `sp_ht(T)` for dynamic arrays and hash maps (`sp_da_*` and `sp_ht_*`)
+- Always use `sp_da_for(arr, it)` and `sp_ht_for(ht, it)` to iterate sp_da and sp_ht
 - Never check `str.len > 0`; always use `!sp_str_empty(str)`
 - Always use C99 designated initializers for struct literals when possible
 - Always use short literal types (`s32`, `u8`, `c8`, `const c8*`)
@@ -47,7 +47,7 @@ assistant: [Reads index.md, searches through sp.h and spn.c with Task tool, prov
 Use these when searching through `references/index.md`, `references/sp.h`, or `references/spn.c`
 - Memory: `sp_alloc`, `sp_context`, `sp_allocator`, `sp_os`
 - Strings: `sp_str`, `sp_str_builder`, `sp_cstr`
-- Containers: `sp_dyn_array` / `sp_da`, `sp_ht`, `sp_rb`
+- Containers: `sp_da` / `sp_da`, `sp_ht`, `sp_rb`
 - IO: `sp_io`
 - Process: `sp_ps`
 - Filesystem: `sp_os`
@@ -75,16 +75,16 @@ const char* cstr = sp_str_to_cstr(str);
 
 ### Dynamic Arrays (stb-style)
 ```c
-sp_dyn_array(int) numbers = SP_NULLPTR;
-sp_dyn_array_push(numbers, 42);
-sp_dyn_array_push(numbers, 100);
+sp_da(int) numbers = SP_NULLPTR;
+sp_da_push(numbers, 42);
+sp_da_push(numbers, 100);
 
-sp_dyn_array_for(numbers, i) {
+sp_da_for(numbers, i) {
   sp_log("numbers[{}] = {}", sp_fmt_uint(i), sp_fmt_int(numbers[i]));
 }
 
-u32 count = sp_dyn_array_size(numbers);
-u32 capacity = sp_dyn_array_capacity(numbers);
+u32 count = sp_da_size(numbers);
+u32 capacity = sp_da_capacity(numbers);
 
 // Cleanup happens automatically via allocator
 ```

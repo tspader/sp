@@ -403,8 +403,8 @@ typedef struct {
   sp_env_var_t* foo;
 } sp_test_proc_env_config_t;
 
-sp_dyn_array(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
-  sp_dyn_array(sp_env_var_t) vars = SP_NULLPTR;
+sp_da(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
+  sp_da(sp_env_var_t) vars = SP_NULLPTR;
 
   u32 line_start = 0;
   for (u32 i = 0; i <= len; i++) {
@@ -431,7 +431,7 @@ sp_dyn_array(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
           var.value = sp_str_lit("");
         }
 
-        sp_dyn_array_push(vars, var);
+        sp_da_push(vars, var);
       }
       line_start = i + 1;
     }
@@ -483,7 +483,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
   };
   sp_test_proc_collect_stream(&ctx);
 
-  sp_dyn_array(sp_env_var_t) env = sp_test_parse_env_output(ctx.buffer.data, ctx.bytes_read);
+  sp_da(sp_env_var_t) env = sp_test_parse_env_output(ctx.buffer.data, ctx.bytes_read);
 
 
   for (u32 i = 0; i < 8; i++) {
@@ -492,7 +492,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
     sp_env_var_t expected = test.expected[i];
     bool found = false;
 
-    sp_dyn_array_for(env, j) {
+    sp_da_for(env, j) {
       if (sp_str_equal(env[j].key, expected.key)) {
         found = true;
         SP_EXPECT_STR_EQ(env[j].value, expected.value);

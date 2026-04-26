@@ -9,6 +9,12 @@
   #define SKIP_ON_FREESTANDING()
 #endif
 
+#if defined(SP_WASM)
+  #define SKIP_ON_WASM() UTEST_SKIP("unimplemented on wasm");
+#else
+  #define SKIP_ON_WASM()
+#endif
+
 #if defined(SP_WIN32)
   #define SKIP_ON_WIN32() UTEST_SKIP("");
 #else

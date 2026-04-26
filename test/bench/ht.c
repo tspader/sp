@@ -121,7 +121,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
       u64 sp_time = run_single_bench(bench, (bench_params_t){ .n = n, .lib = BENCH_LIB_SP }, &data);
       u64 stb_time = run_single_bench(bench, (bench_params_t){ .n = n, .lib = BENCH_LIB_STB }, &data);
 
-      sp_dyn_array_push(results, ((bench_result_pair_t){
+      sp_da_push(results, ((bench_result_pair_t){
         .name = bench->name,
         .n = n,
         .sp_time_ns = sp_time,
@@ -130,13 +130,13 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
     }
   }
 
-  qsort(results, sp_dyn_array_size(results), sizeof(bench_result_pair_t), compare_result_pairs);
+  qsort(results, sp_da_size(results), sizeof(bench_result_pair_t), compare_result_pairs);
 
   u32 max_name = 4;
   u32 max_n_width = 1;
   u32 time_width = 12;
   u32 ratio_width = 6;
-  sp_dyn_array_for(results, i) {
+  sp_da_for(results, i) {
     if (results[i].name.len > max_name) max_name = results[i].name.len;
     sp_str_t n_str = sp_fmt("{}", sp_fmt_uint(results[i].n));
     if (n_str.len > max_n_width) max_n_width = n_str.len;
@@ -152,7 +152,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
     sp_fmt_str(sp_str_pad(SP_LIT("ratio"), ratio_width)),
     sp_fmt_cstr(SP_ANSI_RESET));
 
-  sp_dyn_array_for(results, i) {
+  sp_da_for(results, i) {
     bench_result_pair_t* r = &results[i];
 
     sp_str_t n_str = sp_fmt("{}", sp_fmt_uint(r->n));

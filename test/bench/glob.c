@@ -95,12 +95,12 @@ int main(int argc, char** argv) {
   sp_carr_for(bench_cases, i) {
     sp_glob_t* g = sp_glob_new(bench_cases[i].pattern);
     SP_ASSERT(g != SP_NULLPTR);
-    sp_dyn_array_push(globs, g);
+    sp_da_push(globs, g);
 
     sp_glob_set_t* set = sp_glob_set_new();
     sp_glob_set_add(set, bench_cases[i].pattern);
     sp_glob_set_build(set);
-    sp_dyn_array_push(globsets, set);
+    sp_da_push(globsets, set);
   }
 
   // Pre-compile many_short globset
@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
     SP_ASSERT(sp_glob_match(globs[i], path));
     f64 ns = run_glob_bench(globs[i], path);
     sp_str_t name = sp_fmt("{}_glob", sp_fmt_cstr(case_names[i]));
-    sp_dyn_array_push(results, ((bench_result_t){.name = name, .ns_per_op = ns}));
+    sp_da_push(results, ((bench_result_t){.name = name, .ns_per_op = ns}));
   }
 
   // GlobSet single pattern benchmarks
@@ -125,18 +125,18 @@ int main(int argc, char** argv) {
     SP_ASSERT(sp_glob_set_match(globsets[i], path));
     f64 ns = run_glob_set_bench(globsets[i], path);
     sp_str_t name = sp_fmt("{}_globset", sp_fmt_cstr(case_names[i]));
-    sp_dyn_array_push(results, ((bench_result_t){.name = name, .ns_per_op = ns}));
+    sp_da_push(results, ((bench_result_t){.name = name, .ns_per_op = ns}));
   }
 
   // many_short benchmark (14 patterns, 2 matches expected)
   {
     sp_str_t path = sp_str_view(many_short_path);
     f64 ns = run_glob_set_bench(many_short_set, path);
-    sp_dyn_array_push(results, ((bench_result_t){.name = SP_LIT("many_short_globset"), .ns_per_op = ns}));
+    sp_da_push(results, ((bench_result_t){.name = SP_LIT("many_short_globset"), .ns_per_op = ns}));
   }
 
   // Print space-separated pairs
-  sp_dyn_array_for(results, i) {
+  sp_da_for(results, i) {
     sp_log("{} {}", sp_fmt_str(results[i].name), sp_fmt_float(results[i].ns_per_op));
   }
 
