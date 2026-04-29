@@ -1751,9 +1751,14 @@ template<typename T> static T* sp_ht_alloc_type(T* key, size_t size) {
   (void)key;
   return (T*)sp_alloc(size);
 }
+template<typename T> static T* sp_ht_alloc_type_a(sp_mem_t a, T* key, size_t size) {
+  (void)key;
+  return (T*)sp_mem_allocator_alloc(a, size);
+}
 SP_BEGIN_EXTERN_C()
 #else
 #define sp_ht_alloc_type(key, size) sp_alloc(size)
+#define sp_ht_alloc_type_a(a, key, size) sp_mem_allocator_alloc((a), (size))
 #endif
 
 #define __sp_ht_entry(__K, __V)                \
@@ -1836,6 +1841,24 @@ SP_BEGIN_EXTERN_C()
     (ht)->info.header.capacity = sp_ht_field_offset_u8(ht, capacity);                     \
     (ht)->info.fn.hash         = sp_ht_on_hash_key;                                       \
     (ht)->info.fn.compare      = sp_ht_on_compare_key;                                    \
+  } while (0)
+
+#define sp_ht_init_a(__a, ht)                                                                  \
+  do {                                                                                         \
+    (ht)                       = sp_ht_alloc_type_a((__a), ht, sizeof(*(ht)));                 \
+    (ht)->data                 = sp_ht_alloc_type_a((__a), (ht)->data, 2 * sizeof((ht)->data[0])); \
+    (ht)->info.allocator       = (__a);                                                        \
+    (ht)->size                 = 0;                                                            \
+    (ht)->capacity             = 2;                                                            \
+    (ht)->info.size.key        = sizeof((ht)->data[0].key);                                    \
+    (ht)->info.size.value      = sizeof((ht)->data[0].val);                                    \
+    (ht)->info.stride.entry    = sp_ht_data_u8_n(ht, 1) - sp_ht_data_u8_n(ht, 0);              \
+    (ht)->info.stride.value    = sp_ht_data_offset_u8(ht, val);                                \
+    (ht)->info.stride.kv       = sp_ht_data_offset_u8(ht, state);                              \
+    (ht)->info.header.size     = sp_ht_field_offset_u8(ht, size);                              \
+    (ht)->info.header.capacity = sp_ht_field_offset_u8(ht, capacity);                          \
+    (ht)->info.fn.hash         = sp_ht_on_hash_key;                                            \
+    (ht)->info.fn.compare      = sp_ht_on_compare_key;                                         \
   } while (0)
 
 #define sp_ht_insert_ex(ht, k, v)                                      \
@@ -1947,6 +1970,13 @@ SP_BEGIN_EXTERN_C()
   (ht)->info.fn.hash = sp_ht_on_hash_str_key;    \
   (ht)->info.fn.compare = sp_ht_on_compare_str_key
 
+#define sp_str_ht_init_a(__a, ht)                       \
+  do {                                                  \
+    sp_ht_init_a((__a), ht);                            \
+    (ht)->info.fn.hash    = sp_ht_on_hash_str_key;      \
+    (ht)->info.fn.compare = sp_ht_on_compare_str_key;   \
+  } while (0)
+
 #define sp_str_ht_insert(ht, key, value)  \
   do {                                    \
     sp_str_ht_ensure(ht);                 \
@@ -1982,6 +2012,13 @@ SP_BEGIN_EXTERN_C()
   sp_ht_init(ht);                                 \
   (ht)->info.fn.hash = sp_ht_on_hash_cstr_key;    \
   (ht)->info.fn.compare = sp_ht_on_compare_cstr_key
+
+#define sp_cstr_ht_init_a(__a, ht)                      \
+  do {                                                  \
+    sp_ht_init_a((__a), ht);                            \
+    (ht)->info.fn.hash    = sp_ht_on_hash_cstr_key;     \
+    (ht)->info.fn.compare = sp_ht_on_compare_cstr_key;  \
+  } while (0)
 
 #define sp_cstr_ht_insert(ht, key, value)  \
   do {                                     \
@@ -6448,7 +6485,7 @@ sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name) {
 void sp_fmt_directive_reset() {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   sp_str_ht_free(tls->format.directives);
-  tls->format.directives = SP_NULLPTR;
+  sp_str_ht_init_a(tls->contexts[0].allocator, tls->format.directives);
   sp_fmt_register_builtins();
 }
 
@@ -7958,6 +7995,7 @@ sp_tls_rt_t* sp_tls_rt_get() {
     tls->std.err = sp_alloc_type(sp_io_writer_t);
     sp_io_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
     sp_io_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+    sp_str_ht_init_a(tls->contexts[0].allocator, tls->format.directives);
     sp_fmt_register_builtins();
     sp_sys_tls_init(tls);
   }
