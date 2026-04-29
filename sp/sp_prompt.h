@@ -1008,7 +1008,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, u32 cols, u32 rows) {
   ctx->wake.write = SP_SYS_INVALID_FD;
   ctx->arena = sp_mem_arena_new();
   ctx->allocator = sp_mem_arena_as_allocator(ctx->arena);
-  sp_da_init(&ctx->allocator, ctx->frames);
+  sp_da_init(ctx->allocator, ctx->frames);
 
   sp_mutex_init(&ctx->channel.lock, SP_MUTEX_PLAIN);
   ctx->channel.arena = sp_mem_arena_new_with_allocator(sp_mem_os_new(), SP_MEM_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);

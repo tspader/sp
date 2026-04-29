@@ -3296,13 +3296,6 @@ struct sp_app {
   } frame;
 };
 
-SP_API sp_app_t*        sp_app_new(sp_app_config_t config);
-SP_API sp_app_result_t  sp_app_tick(sp_app_t* app);
-SP_API void             sp_app_destroy(sp_app_t* app);
-SP_API s32              sp_app_run_locked(sp_app_t* app);
-SP_API s32              sp_app_run_free(sp_app_t* app);
-SP_API s32              sp_app_run(sp_app_config_t config);
-
 
 //  ███████████ █████ █████       ██████████    ██████   ██████    ███████    ██████   █████ █████ ███████████    ███████    ███████████
 // ░░███░░░░░░█░░███ ░░███       ░░███░░░░░█   ░░██████ ██████   ███░░░░░███ ░░██████ ░░███ ░░███ ░█░░░███░░░█  ███░░░░░███ ░░███░░░░░███
@@ -3398,6 +3391,8 @@ static void sp_fmt_write_ptr(sp_str_builder_t* builder, void* value);
 
 
 // @header @top
+
+// @private
 SP_IMP c8*      sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
 SP_IMP c8*      sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
 SP_IMP c8*      sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end);
@@ -3431,7 +3426,14 @@ SP_IMP void         sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path);
 SP_IMP bool         sp_fs_it_valid_a(sp_fs_it_t* it);
 SP_IMP void         sp_fs_it_deinit_a(sp_fs_it_t* it);
 
-// public
+// @public
+SP_API sp_app_t*        sp_app_new(sp_mem_t mem, sp_app_config_t config);
+SP_API sp_app_result_t  sp_app_tick(sp_app_t* app);
+SP_API void             sp_app_destroy(sp_app_t* app);
+SP_API s32              sp_app_run_locked(sp_app_t* app);
+SP_API s32              sp_app_run_free(sp_app_t* app);
+SP_API s32              sp_app_run(sp_app_config_t config);
+
 SP_API sp_str_t      sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time);
 
 SP_API sp_str_t      sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
@@ -3504,15 +3506,15 @@ SP_API void          sp_fs_copy_glob_a(sp_str_t from, sp_str_t glob, sp_str_t to
 
 
 SP_API sp_mem_t              sp_mem_os_new();
-SP_API void*                 sp_alloc_a(sp_mem_t mem, u64 size);
-SP_API void*                 sp_realloc_a(sp_mem_t mem, void* memory, u64 size);
-SP_API void                  sp_free_a(sp_mem_t mem, void* memory);
 SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena_a(sp_mem_t mem);
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_a();
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_for_a(sp_mem_t mem);
 SP_API void                  sp_mem_end_scratch_a(sp_mem_arena_marker_t s);
 SP_API sp_mem_t              sp_mem_scratch_allocator_a();
 SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
+SP_API void*                 sp_alloc_a(sp_mem_t mem, u64 size);
+SP_API void*                 sp_realloc_a(sp_mem_t mem, void* memory, u64 size);
+SP_API void                  sp_free_a(sp_mem_t mem, void* memory);
 
 SP_API void sp_log_a(const c8* fmt, ...);
 SP_API void sp_log_a_a(sp_mem_t mem, const c8* fmt, ...);
@@ -13947,8 +13949,8 @@ void sp_io_get_std_err(sp_io_writer_t* io) {
 /////////
 // APP //
 /////////
-SP_API sp_app_t* sp_app_new(sp_app_config_t config) {
-  sp_app_t* app = sp_alloc_type(sp_app_t);
+SP_API sp_app_t* sp_app_new(sp_mem_t mem, sp_app_config_t config) {
+  sp_app_t* app = sp_alloc_type_a(mem, sp_app_t);
   *app = (sp_app_t) {
     .user_data = config.user_data,
     .on_init = config.on_init,
@@ -14046,10 +14048,13 @@ SP_API s32 sp_app_run_free(sp_app_t* app) {
 }
 
 SP_API s32 sp_app_run(sp_app_config_t config) {
-  sp_app_t* app = sp_app_new(config);
-  return (app->mode == SP_APP_MODE_FREE)
+  sp_mem_t mem = sp_mem_os_new();
+  sp_app_t* app = sp_app_new(mem, config);
+  s32 rc = (app->mode == SP_APP_MODE_FREE)
     ? sp_app_run_free(app)
     : sp_app_run_locked(app);
+  sp_mem_os_free(app);
+  return rc;
 }
 
 #define SP_APP_MAIN(fn) \
@@ -14063,7 +14068,9 @@ SP_API s32 sp_app_run(sp_app_config_t config) {
 
 
 
-// @refactor @top
+
+
+
 sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls) {
   return tls->scratch[0];
 }
@@ -15363,7 +15370,7 @@ sp_str_t sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time) {
   buf[23] = 'Z';
   return SP_STR(buf, 24);
 }
-// @refactor @bottom
+// @refactor
 
 SP_END_EXTERN_C()
 

@@ -1,3 +1,4 @@
+#include "sp.h"
 #define SP_UNIMPLEMENTED() ((void)0)
 #define LINENOISE_IMPLEMENTATION
 #define SP_PROMPT_IMPLEMENTATION
@@ -32,22 +33,27 @@ struct prompt {
   sp_prompt_ctx_t ctx;
   sp_io_writer_t writer;
   sp_app_t* app;
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
 };
 
 void sp_prompt_step(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget, sp_prompt_event_t event);
 void sp_prompt_tick(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
 
 UTEST_F_SETUP(prompt) {
-  utest_fixture->ctx = SP_ZERO_STRUCT(sp_prompt_ctx_t);
-  utest_fixture->app = SP_NULLPTR;
-  sp_prompt_ctx_init(&utest_fixture->ctx, 80, 20);
-  sp_io_writer_from_dyn_mem(&utest_fixture->writer);
-  utest_fixture->ctx.writer = &utest_fixture->writer;
+  ut.arena = sp_mem_arena_new();
+  ut.mem = sp_mem_arena_as_allocator(ut.arena);
+  ut.ctx = SP_ZERO_STRUCT(sp_prompt_ctx_t);
+  ut.app = SP_NULLPTR;
+  sp_prompt_ctx_init(&ut.ctx, 80, 20);
+  sp_io_writer_from_dyn_mem(&ut.writer);
+  ut.ctx.writer = &ut.writer;
 }
 
 UTEST_F_TEARDOWN(prompt) {
-  sp_app_destroy(utest_fixture->app);
-  sp_io_writer_close(&utest_fixture->writer);
+  sp_app_destroy(ut.app);
+  sp_io_writer_close(&ut.writer);
+  sp_mem_arena_destroy(ut.arena);
 }
 
 static u32 count_expected_lines(const c8* lines[32]) {
@@ -277,7 +283,7 @@ UTEST_F(prompt, intro_submits_without_update) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_intro_widget(&utest_fixture->ctx, intro),
+    .widget = sp_prompt_intro_widget(&ut.ctx, intro),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -293,7 +299,7 @@ UTEST_F(prompt, outro_submits_without_update) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_outro_widget(&utest_fixture->ctx, outro),
+    .widget = sp_prompt_outro_widget(&ut.ctx, outro),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -310,7 +316,7 @@ UTEST_F(prompt, note_renders_single_line_box) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_note_widget(&utest_fixture->ctx, note),
+    .widget = sp_prompt_note_widget(&ut.ctx, note),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -331,7 +337,7 @@ UTEST_F(prompt, note_uses_longest_line_for_width) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_note_widget(&utest_fixture->ctx, note),
+    .widget = sp_prompt_note_widget(&ut.ctx, note),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -352,7 +358,7 @@ UTEST_F(prompt, static_widget_ignores_provided_events) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_intro_widget(&utest_fixture->ctx, intro),
+    .widget = sp_prompt_intro_widget(&ut.ctx, intro),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'x' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -375,7 +381,7 @@ UTEST_F(prompt, message_info_renders_symbol_line) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_message_widget(&utest_fixture->ctx, message),
+    .widget = sp_prompt_message_widget(&ut.ctx, message),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -393,7 +399,7 @@ UTEST_F(prompt, message_error_renders_symbol_line) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_message_widget(&utest_fixture->ctx, message),
+    .widget = sp_prompt_message_widget(&ut.ctx, message),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -409,7 +415,7 @@ UTEST_F(prompt, text_cancels_without_submit_event) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_text_widget(&utest_fixture->ctx, text),
+    .widget = sp_prompt_text_widget(&ut.ctx, text),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'a' } },
       { .kind = SP_PROMPT_EVENT_CTRL_C },
@@ -431,7 +437,7 @@ UTEST_F(prompt, text_submits_on_enter_with_prefill_fallback) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_text_widget(&utest_fixture->ctx, text),
+    .widget = sp_prompt_text_widget(&ut.ctx, text),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -453,7 +459,7 @@ UTEST_F(prompt, confirm_submits_true_on_enter) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -475,7 +481,7 @@ UTEST_F(prompt, confirm_flips_with_left_and_submits) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm),
     .events = {
       { .kind = SP_PROMPT_EVENT_LEFT },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -498,7 +504,7 @@ UTEST_F(prompt, confirm_flips_with_vim_key_and_submits) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'l' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -521,7 +527,7 @@ UTEST_F(prompt, confirm_default_value_highlighted_and_escape_cancels) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm),
     .events = {
       { .kind = SP_PROMPT_EVENT_ESCAPE },
     },
@@ -543,7 +549,7 @@ UTEST_F(prompt, confirm_toggles_with_arrow_and_vim_keys) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm_arrow),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm_arrow),
     .events = {
       { .kind = SP_PROMPT_EVENT_RIGHT },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -564,7 +570,7 @@ UTEST_F(prompt, confirm_toggles_with_arrow_and_vim_keys) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm_vim),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm_vim),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'h' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -601,17 +607,17 @@ UTEST_F(prompt, confirm_active_rail_is_blue) {
   };
 
   sp_prompt_step(
-    &utest_fixture->ctx,
-    sp_prompt_confirm_widget(&utest_fixture->ctx, confirm),
+    &ut.ctx,
+    sp_prompt_confirm_widget(&ut.ctx, confirm),
     (sp_prompt_event_t) {
       .kind = SP_PROMPT_EVENT_INIT,
     }
   );
 
   sp_prompt_frame_t frame = {
-    .cols = utest_fixture->ctx.cols,
-    .rows = utest_fixture->ctx.cursor_row,
-    .cells = utest_fixture->ctx.framebuffer,
+    .cols = ut.ctx.cols,
+    .rows = ut.ctx.cursor_row,
+    .cells = ut.ctx.framebuffer,
   };
 
   EXPECT_EQ(frame.rows, 3);
@@ -640,7 +646,7 @@ UTEST_F(prompt, confirm_styles_true_active_false_inactive) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -654,8 +660,8 @@ UTEST_F(prompt, confirm_styles_true_active_false_inactive) {
     },
   });
 
-  ASSERT_TRUE(!sp_da_empty(utest_fixture->ctx.frames));
-  sp_prompt_frame_t frame = sp_prompt_last_frame(&utest_fixture->ctx);
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
 
   sp_prompt_cell_t active_symbol = sp_prompt_frame_cell(frame, 1, 3);
   sp_prompt_cell_t active_text = sp_prompt_frame_cell(frame, 1, 5);
@@ -685,7 +691,7 @@ UTEST_F(prompt, confirm_styles_false_active_true_inactive) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -699,8 +705,8 @@ UTEST_F(prompt, confirm_styles_false_active_true_inactive) {
     },
   });
 
-  ASSERT_TRUE(!sp_da_empty(utest_fixture->ctx.frames));
-  sp_prompt_frame_t frame = sp_prompt_last_frame(&utest_fixture->ctx);
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
 
   sp_prompt_cell_t inactive_symbol = sp_prompt_frame_cell(frame, 1, 3);
   sp_prompt_cell_t inactive_text = sp_prompt_frame_cell(frame, 1, 5);
@@ -738,7 +744,7 @@ UTEST_F(prompt, select_submits_initial_value_on_enter) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -752,8 +758,8 @@ UTEST_F(prompt, select_submits_initial_value_on_enter) {
     },
   });
 
-  ASSERT_TRUE(!sp_da_empty(utest_fixture->ctx.frames));
-  sp_prompt_frame_t frame = sp_prompt_last_frame(&utest_fixture->ctx);
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
   sp_prompt_cell_t selected_text = sp_prompt_frame_cell(frame, 1, 3);
 
   EXPECT_EQ(selected_text.codepoint, 'R');
@@ -776,7 +782,7 @@ UTEST_F(prompt, select_toggles_with_arrow_and_vim_keys) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'j' } },
@@ -809,7 +815,7 @@ UTEST_F(prompt, select_escape_cancels) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_ESCAPE },
     },
@@ -844,7 +850,7 @@ UTEST_F(prompt, select_limits_visible_options) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -882,7 +888,7 @@ UTEST_F(prompt, select_top_overflow_shows_ellipsis) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -924,7 +930,7 @@ UTEST_F(prompt, select_bidirectional_overflow_keeps_height) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -960,7 +966,7 @@ UTEST_F(prompt, select_styles_active_and_inactive_match_clack) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_ESCAPE },
     },
@@ -975,8 +981,8 @@ UTEST_F(prompt, select_styles_active_and_inactive_match_clack) {
     },
   });
 
-  ASSERT_TRUE(!sp_da_empty(utest_fixture->ctx.frames));
-  sp_prompt_frame_t frame = sp_prompt_last_frame(&utest_fixture->ctx);
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
 
   sp_prompt_cell_t active_symbol = sp_prompt_frame_cell(frame, 1, 3);
   sp_prompt_cell_t active_text = sp_prompt_frame_cell(frame, 1, 5);
@@ -1013,17 +1019,17 @@ UTEST_F(prompt, select_active_rail_is_blue) {
   };
 
   sp_prompt_step(
-    &utest_fixture->ctx,
-    sp_prompt_select_widget(&utest_fixture->ctx, select),
+    &ut.ctx,
+    sp_prompt_select_widget(&ut.ctx, select),
     (sp_prompt_event_t) {
       .kind = SP_PROMPT_EVENT_INIT,
     }
   );
 
   sp_prompt_frame_t frame = {
-    .cols = utest_fixture->ctx.cols,
-    .rows = utest_fixture->ctx.cursor_row,
-    .cells = utest_fixture->ctx.framebuffer,
+    .cols = ut.ctx.cols,
+    .rows = ut.ctx.cursor_row,
+    .cells = ut.ctx.framebuffer,
   };
 
   EXPECT_EQ(frame.rows, 4);
@@ -1064,7 +1070,7 @@ UTEST_F(prompt, select_hints_render_diminished) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_ESCAPE },
     },
@@ -1079,8 +1085,8 @@ UTEST_F(prompt, select_hints_render_diminished) {
     },
   });
 
-  ASSERT_TRUE(!sp_da_empty(utest_fixture->ctx.frames));
-  sp_prompt_frame_t frame = sp_prompt_last_frame(&utest_fixture->ctx);
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
   sp_prompt_cell_t hint_open = sp_prompt_frame_cell(frame, 1, 16);
 
   EXPECT_EQ(hint_open.codepoint, '(');
@@ -1104,7 +1110,7 @@ UTEST_F(prompt, select_filter_placeholder_and_contains_matching) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'a' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -1139,7 +1145,7 @@ UTEST_F(prompt, select_filter_shows_single_hidden_tail_item) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -1177,7 +1183,7 @@ UTEST_F(prompt, select_filter_is_case_insensitive) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 's' } },
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'c' } },
@@ -1213,7 +1219,7 @@ UTEST_F(prompt, select_filter_no_matches) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'z' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -1244,7 +1250,7 @@ UTEST_F(prompt, select_filter_disables_vim_navigation_keys) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'j' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -1274,7 +1280,7 @@ UTEST_F(prompt, select_filter_placeholder_is_diminished) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_ESCAPE },
     },
@@ -1288,8 +1294,8 @@ UTEST_F(prompt, select_filter_placeholder_is_diminished) {
     },
   });
 
-  ASSERT_TRUE(!sp_da_empty(utest_fixture->ctx.frames));
-  sp_prompt_frame_t frame = sp_prompt_last_frame(&utest_fixture->ctx);
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
   sp_prompt_cell_t placeholder_t = sp_prompt_frame_cell(frame, 0, 17);
   EXPECT_EQ(placeholder_t.codepoint, 'T');
   EXPECT_EQ(placeholder_t.style.tag, SP_PROMPT_STYLE_ANSI);
@@ -1312,7 +1318,7 @@ UTEST_F(prompt, select_filter_state_resets_between_runs) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'a' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -1328,7 +1334,7 @@ UTEST_F(prompt, select_filter_state_resets_between_runs) {
   });
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -1361,7 +1367,7 @@ UTEST_F(prompt, select_outro_flow_renders_separator) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_select_widget(&utest_fixture->ctx, select),
+    .widget = sp_prompt_select_widget(&ut.ctx, select),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -1376,7 +1382,7 @@ UTEST_F(prompt, select_outro_flow_renders_separator) {
   });
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_outro_widget(&utest_fixture->ctx, outro),
+    .widget = sp_prompt_outro_widget(&ut.ctx, outro),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -1407,7 +1413,7 @@ UTEST_F(prompt, multiselect_space_toggles_and_enter_submits) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = ' ' } },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -1438,7 +1444,7 @@ UTEST_F(prompt, multiselect_escape_cancels) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_ESCAPE },
     },
@@ -1472,7 +1478,7 @@ UTEST_F(prompt, multiselect_limits_visible_options) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -1510,7 +1516,7 @@ UTEST_F(prompt, multiselect_top_overflow_shows_ellipsis) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -1552,7 +1558,7 @@ UTEST_F(prompt, multiselect_bidirectional_overflow_keeps_height) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -1589,7 +1595,7 @@ UTEST_F(prompt, multiselect_styles_selected_hover_and_dim_rules) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_ESCAPE },
@@ -1606,8 +1612,8 @@ UTEST_F(prompt, multiselect_styles_selected_hover_and_dim_rules) {
     },
   });
 
-  ASSERT_TRUE(!sp_da_empty(utest_fixture->ctx.frames));
-  sp_prompt_frame_t frame = sp_prompt_last_frame(&utest_fixture->ctx);
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
 
   sp_prompt_cell_t selected_not_hover_symbol = sp_prompt_frame_cell(frame, 1, 3);
   sp_prompt_cell_t selected_not_hover_text = sp_prompt_frame_cell(frame, 1, 5);
@@ -1653,7 +1659,7 @@ UTEST_F(prompt, multiselect_filter_contains_and_placeholder) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'a' } },
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = ' ' } },
@@ -1688,7 +1694,7 @@ UTEST_F(prompt, multiselect_filter_shows_single_hidden_tail_item) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_DOWN },
       { .kind = SP_PROMPT_EVENT_DOWN },
@@ -1726,7 +1732,7 @@ UTEST_F(prompt, multiselect_filter_disables_vim_navigation_keys) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'j' } },
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = ' ' } },
@@ -1756,7 +1762,7 @@ UTEST_F(prompt, multiselect_filter_placeholder_is_diminished) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_ESCAPE },
     },
@@ -1770,8 +1776,8 @@ UTEST_F(prompt, multiselect_filter_placeholder_is_diminished) {
     },
   });
 
-  ASSERT_TRUE(!sp_da_empty(utest_fixture->ctx.frames));
-  sp_prompt_frame_t frame = sp_prompt_last_frame(&utest_fixture->ctx);
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
   sp_prompt_cell_t placeholder_t = sp_prompt_frame_cell(frame, 0, 14);
   EXPECT_EQ(placeholder_t.codepoint, 'T');
   EXPECT_EQ(placeholder_t.style.tag, SP_PROMPT_STYLE_ANSI);
@@ -1793,7 +1799,7 @@ UTEST_F(prompt, multiselect_filter_state_resets_between_runs) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'a' } },
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = ' ' } },
@@ -1809,7 +1815,7 @@ UTEST_F(prompt, multiselect_filter_state_resets_between_runs) {
   });
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_multiselect_widget(&utest_fixture->ctx, multiselect),
+    .widget = sp_prompt_multiselect_widget(&ut.ctx, multiselect),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = ' ' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -1832,7 +1838,7 @@ UTEST_F(prompt, password_submits_prefill_when_empty) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_password_widget(&utest_fixture->ctx, password),
+    .widget = sp_prompt_password_widget(&ut.ctx, password),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -1854,7 +1860,7 @@ UTEST_F(prompt, password_tab_reveals_value_before_submit) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_password_widget(&utest_fixture->ctx, password),
+    .widget = sp_prompt_password_widget(&ut.ctx, password),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'a' } },
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'b' } },
@@ -1884,7 +1890,7 @@ UTEST_F(prompt, intro_text_outro_flow_render_bug) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_intro_widget(&utest_fixture->ctx, intro),
+    .widget = sp_prompt_intro_widget(&ut.ctx, intro),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -1894,7 +1900,7 @@ UTEST_F(prompt, intro_text_outro_flow_render_bug) {
   });
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_text_widget(&utest_fixture->ctx, text),
+    .widget = sp_prompt_text_widget(&ut.ctx, text),
     .events = {
       { .kind = SP_PROMPT_EVENT_INPUT, .input = { .codepoint = 'x' } },
       { .kind = SP_PROMPT_EVENT_ENTER },
@@ -1910,7 +1916,7 @@ UTEST_F(prompt, intro_text_outro_flow_render_bug) {
   });
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_outro_widget(&utest_fixture->ctx, outro),
+    .widget = sp_prompt_outro_widget(&ut.ctx, outro),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -2034,7 +2040,7 @@ UTEST_F(prompt, spinner_color_fn_overrides_fixed) {
 
   render_spinner_at_frame(utest_fixture, spinner, 0);
 
-  sp_prompt_cell_t cell = utest_fixture->ctx.framebuffer[0];
+  sp_prompt_cell_t cell = ut.ctx.framebuffer[0];
   EXPECT_EQ(cell.codepoint, (u32)'A');
   EXPECT_EQ(cell.style.tag, SP_PROMPT_STYLE_ANSI);
   EXPECT_EQ(cell.style.ansi, 31);
@@ -2047,7 +2053,7 @@ UTEST_F(prompt, spinner_submits_on_enter) {
   };
 
   sp_prompt_run_tick_case(utest_result, utest_fixture, (sp_prompt_tick_case_t) {
-    .widget = sp_prompt_spinner_widget(&utest_fixture->ctx, spinner),
+    .widget = sp_prompt_spinner_widget(&ut.ctx, spinner),
     .terminal = { .kind = SP_PROMPT_EVENT_ENTER },
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
@@ -2062,7 +2068,7 @@ UTEST_F(prompt, spinner_cancels_on_ctrl_c) {
   };
 
   sp_prompt_run_tick_case(utest_result, utest_fixture, (sp_prompt_tick_case_t) {
-    .widget = sp_prompt_spinner_widget(&utest_fixture->ctx, spinner),
+    .widget = sp_prompt_spinner_widget(&ut.ctx, spinner),
     .terminal = { .kind = SP_PROMPT_EVENT_CTRL_C },
     .expect = {
       .state = SP_PROMPT_STATE_CANCEL,
@@ -2076,14 +2082,14 @@ UTEST_F(prompt, spinner_does_not_update_after_submit) {
     .frames = { 'A', 'B' },
   };
 
-  sp_prompt_widget_t widget = sp_prompt_spinner_widget(&utest_fixture->ctx, spinner);
+  sp_prompt_widget_t widget = sp_prompt_spinner_widget(&ut.ctx, spinner);
   sp_prompt_spinner_widget_t* w = (sp_prompt_spinner_widget_t*)widget.user_data;
-  sp_prompt_step(&utest_fixture->ctx, widget, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_INIT });
-  sp_prompt_step(&utest_fixture->ctx, widget, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_ENTER });
-  EXPECT_EQ(utest_fixture->ctx.state, SP_PROMPT_STATE_SUBMIT);
+  sp_prompt_step(&ut.ctx, widget, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_INIT });
+  sp_prompt_step(&ut.ctx, widget, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_ENTER });
+  EXPECT_EQ(ut.ctx.state, SP_PROMPT_STATE_SUBMIT);
 
   u32 frame_at_submit = w->frame_index;
-  sp_prompt_tick(&utest_fixture->ctx, widget);
+  sp_prompt_tick(&ut.ctx, widget);
   EXPECT_EQ(w->frame_index, frame_at_submit);
 }
 
@@ -2091,7 +2097,7 @@ UTEST_F(prompt, spinner_widget_assigns_default_fps) {
   sp_prompt_spinner_t spinner = {
     .prompt = "loading",
   };
-  sp_prompt_widget_t widget = sp_prompt_spinner_widget(&utest_fixture->ctx, spinner);
+  sp_prompt_widget_t widget = sp_prompt_spinner_widget(&ut.ctx, spinner);
 
   EXPECT_EQ(widget.fps, 12u);
 }
@@ -2111,7 +2117,7 @@ UTEST_F(prompt, knight_rider_renders_lead_at_origin) {
 
   render_kr_at_frame(utest_fixture, kr, 0);
 
-  sp_prompt_cell_t lead = utest_fixture->ctx.framebuffer[0];
+  sp_prompt_cell_t lead = ut.ctx.framebuffer[0];
   EXPECT_EQ(lead.codepoint, 0x2B25u);
   EXPECT_EQ(lead.style.tag, SP_PROMPT_STYLE_RGB);
   EXPECT_EQ(lead.style.rgb.r, 0xFFu);
@@ -2126,9 +2132,9 @@ UTEST_F(prompt, knight_rider_lead_position_advances_with_elapsed_time) {
 
   render_kr_at_frame(utest_fixture, kr, 3);
 
-  EXPECT_EQ(utest_fixture->ctx.framebuffer[3].codepoint, 0x2B25u);
-  EXPECT_EQ(utest_fixture->ctx.framebuffer[2].codepoint, 0x25C6u);
-  EXPECT_EQ(utest_fixture->ctx.framebuffer[1].codepoint, 0x2B29u);
+  EXPECT_EQ(ut.ctx.framebuffer[3].codepoint, 0x2B25u);
+  EXPECT_EQ(ut.ctx.framebuffer[2].codepoint, 0x25C6u);
+  EXPECT_EQ(ut.ctx.framebuffer[1].codepoint, 0x2B29u);
 }
 
 UTEST_F(prompt, knight_rider_holds_lead_at_right_edge) {
@@ -2138,7 +2144,7 @@ UTEST_F(prompt, knight_rider_holds_lead_at_right_edge) {
 
   render_kr_at_frame(utest_fixture, kr, 6);
 
-  EXPECT_EQ(utest_fixture->ctx.framebuffer[5].codepoint, 0x2B25u);
+  EXPECT_EQ(ut.ctx.framebuffer[5].codepoint, 0x2B25u);
 }
 
 UTEST_F(prompt, knight_rider_moves_backward_after_hold_end) {
@@ -2148,7 +2154,7 @@ UTEST_F(prompt, knight_rider_moves_backward_after_hold_end) {
 
   render_kr_at_frame(utest_fixture, kr, 17);
 
-  EXPECT_EQ(utest_fixture->ctx.framebuffer[2].codepoint, 0x2B25u);
+  EXPECT_EQ(ut.ctx.framebuffer[2].codepoint, 0x2B25u);
 }
 
 UTEST_F(prompt, knight_rider_wraps_after_total_elapsed) {
@@ -2156,12 +2162,12 @@ UTEST_F(prompt, knight_rider_wraps_after_total_elapsed) {
     .prompt = "scan",
   };
 
-  sp_prompt_widget_t widget = sp_prompt_knight_rider_widget(&utest_fixture->ctx, kr);
+  sp_prompt_widget_t widget = sp_prompt_knight_rider_widget(&ut.ctx, kr);
   sp_prompt_knight_rider_t resolved = ((sp_prompt_knight_rider_widget_t*)widget.user_data)->config;
   u32 num_frames = (resolved.width + resolved.ex.hold_end + (resolved.width - 1) + resolved.ex.hold_start);
   render_kr_at_frame(utest_fixture, kr, num_frames);
 
-  EXPECT_EQ(utest_fixture->ctx.framebuffer[0].codepoint, 0x2B25u);
+  EXPECT_EQ(ut.ctx.framebuffer[0].codepoint, 0x2B25u);
 }
 
 UTEST_F(prompt, knight_rider_holds_frame_within_an_interval) {
@@ -2169,12 +2175,12 @@ UTEST_F(prompt, knight_rider_holds_frame_within_an_interval) {
     .prompt = "scan",
   };
 
-  sp_prompt_widget_t widget = sp_prompt_knight_rider_widget(&utest_fixture->ctx, kr);
-  sp_prompt_step(&utest_fixture->ctx, widget, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_INIT });
+  sp_prompt_widget_t widget = sp_prompt_knight_rider_widget(&ut.ctx, kr);
+  sp_prompt_step(&ut.ctx, widget, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_INIT });
   ((sp_prompt_knight_rider_widget_t*)widget.user_data)->elapsed_ns = (u64)SP_PROMPT_KR_INTERVAL_MS * 1000000ULL - 1ULL;
-  sp_prompt_step(&utest_fixture->ctx, widget, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_NONE });
+  sp_prompt_step(&ut.ctx, widget, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_NONE });
 
-  EXPECT_EQ(utest_fixture->ctx.framebuffer[0].codepoint, 0x2B25u);
+  EXPECT_EQ(ut.ctx.framebuffer[0].codepoint, 0x2B25u);
 }
 
 UTEST_F(prompt, knight_rider_custom_color_overrides_default_palette) {
@@ -2185,7 +2191,7 @@ UTEST_F(prompt, knight_rider_custom_color_overrides_default_palette) {
 
   render_kr_at_frame(utest_fixture, kr, 0);
 
-  sp_prompt_cell_t lead = utest_fixture->ctx.framebuffer[0];
+  sp_prompt_cell_t lead = ut.ctx.framebuffer[0];
   EXPECT_EQ(lead.style.rgb.r, 100u);
   EXPECT_EQ(lead.style.rgb.g, 200u);
   EXPECT_EQ(lead.style.rgb.b, 50u);
@@ -2193,7 +2199,7 @@ UTEST_F(prompt, knight_rider_custom_color_overrides_default_palette) {
 
 UTEST_F(prompt, knight_rider_widget_defaults_fps_to_15) {
   sp_prompt_knight_rider_t kr = SP_ZERO_INITIALIZE();
-  sp_prompt_widget_t widget = sp_prompt_knight_rider_widget(&utest_fixture->ctx, kr);
+  sp_prompt_widget_t widget = sp_prompt_knight_rider_widget(&ut.ctx, kr);
   EXPECT_EQ(widget.fps, 15u);
 }
 
@@ -2207,7 +2213,7 @@ UTEST_F(prompt, confirm_outro_flow_renders_separator) {
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_confirm_widget(&utest_fixture->ctx, confirm),
+    .widget = sp_prompt_confirm_widget(&ut.ctx, confirm),
     .events = {
       { .kind = SP_PROMPT_EVENT_ENTER },
     },
@@ -2222,7 +2228,7 @@ UTEST_F(prompt, confirm_outro_flow_renders_separator) {
   });
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_outro_widget(&utest_fixture->ctx, outro),
+    .widget = sp_prompt_outro_widget(&ut.ctx, outro),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {
@@ -2302,8 +2308,8 @@ static u32 probe_count_kind(probe_state_t* s, sp_prompt_event_kind_t kind) {
   return count;
 }
 
-static void drive_until_quit(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
-  sp_app_t* app = sp_app_new(sp_prompt_app(ctx, widget));
+static void drive_until_quit(sp_mem_t mem, sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
+  sp_app_t* app = sp_app_new(mem, sp_prompt_app(ctx, widget));
   sp_for(it, 64) {
     SP_UNUSED(it);
     if (sp_app_tick(app) != SP_APP_CONTINUE) {
@@ -2314,42 +2320,42 @@ static void drive_until_quit(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
 }
 
 UTEST_F(prompt, state_initially_active) {
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_ACTIVE);
-  EXPECT_FALSE(sp_prompt_is_aborted(&utest_fixture->ctx));
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_ACTIVE);
+  EXPECT_FALSE(sp_prompt_is_aborted(&ut.ctx));
 }
 
 UTEST_F(prompt, complete_transitions_state_to_submit) {
-  sp_prompt_complete(&utest_fixture->ctx);
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_SUBMIT);
-  EXPECT_TRUE(sp_prompt_is_aborted(&utest_fixture->ctx));
+  sp_prompt_complete(&ut.ctx);
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_TRUE(sp_prompt_is_aborted(&ut.ctx));
 }
 
 UTEST_F(prompt, abort_transitions_state_to_cancel) {
-  sp_prompt_abort(&utest_fixture->ctx);
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_CANCEL);
-  EXPECT_TRUE(sp_prompt_is_aborted(&utest_fixture->ctx));
+  sp_prompt_abort(&ut.ctx);
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_CANCEL);
+  EXPECT_TRUE(sp_prompt_is_aborted(&ut.ctx));
 }
 
 UTEST_F(prompt, lifecycle_is_one_shot_first_writer_wins) {
   // CAS-from-ACTIVE: once the lifecycle has left ACTIVE, no later transition can override it.
-  sp_prompt_complete(&utest_fixture->ctx);
-  sp_prompt_abort(&utest_fixture->ctx);
-  sp_prompt_complete(&utest_fixture->ctx);
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_SUBMIT);
+  sp_prompt_complete(&ut.ctx);
+  sp_prompt_abort(&ut.ctx);
+  sp_prompt_complete(&ut.ctx);
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
 }
 
 UTEST_F(prompt, complete_drives_widget_to_submit) {
   probe_state_t state = { .fire_on_init = SP_PROMPT_STATE_SUBMIT };
-  drive_until_quit(&utest_fixture->ctx, probe_widget(&state));
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_SUBMIT);
-  EXPECT_TRUE(sp_prompt_submitted(&utest_fixture->ctx));
+  drive_until_quit(ut.mem, &ut.ctx, probe_widget(&state));
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_TRUE(sp_prompt_submitted(&ut.ctx));
 }
 
 UTEST_F(prompt, abort_drives_widget_to_cancel) {
   probe_state_t state = { .fire_on_init = SP_PROMPT_STATE_CANCEL };
-  drive_until_quit(&utest_fixture->ctx, probe_widget(&state));
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_CANCEL);
-  EXPECT_TRUE(sp_prompt_cancelled(&utest_fixture->ctx));
+  drive_until_quit(ut.mem, &ut.ctx, probe_widget(&state));
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_CANCEL);
+  EXPECT_TRUE(sp_prompt_cancelled(&ut.ctx));
 }
 
 UTEST_F(prompt, prompt_end_frees_channel) {
@@ -2380,66 +2386,66 @@ UTEST_F(prompt, complete_from_worker_thread_eventually_drives_submit) {
   SKIP_ON_WASM();
   // Worker waits for the widget to fire EVENT_INIT, then calls complete() to drive
   // the lifecycle to SUBMIT. The wake pipe unblocks the on_poll loop.
-  thread_signal_data_t d = { .ctx = &utest_fixture->ctx };
+  thread_signal_data_t d = { .ctx = &ut.ctx };
   probe_state_t state = { .signal_on_init = &d.ready };
 
   sp_thread_t worker = SP_ZERO_INITIALIZE();
   sp_thread_init(&worker, thread_signal_fn, &d);
 
-  drive_until_quit(&utest_fixture->ctx, probe_widget(&state));
+  drive_until_quit(ut.mem, &ut.ctx, probe_widget(&state));
   sp_thread_join(&worker);
 
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_SUBMIT);
-  EXPECT_TRUE(sp_prompt_submitted(&utest_fixture->ctx));
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_TRUE(sp_prompt_submitted(&ut.ctx));
 }
 
 UTEST_F(prompt, progress_initially_clean) {
-  EXPECT_FALSE(utest_fixture->ctx.progress.dirty);
+  EXPECT_FALSE(ut.ctx.progress.dirty);
 }
 
 UTEST_F(prompt, send_progress_f32_marks_dirty_and_stores_value) {
-  sp_prompt_send_progress_f32(&utest_fixture->ctx, 0.5f);
-  EXPECT_TRUE(utest_fixture->ctx.progress.dirty);
-  EXPECT_EQ(utest_fixture->ctx.progress.value.f, 0.5);
+  sp_prompt_send_progress_f32(&ut.ctx, 0.5f);
+  EXPECT_TRUE(ut.ctx.progress.dirty);
+  EXPECT_EQ(ut.ctx.progress.value.f, 0.5);
 }
 
 UTEST_F(prompt, send_progress_latest_wins) {
   sp_for(it, 100) {
-    sp_prompt_send_progress_f32(&utest_fixture->ctx, (f32)it / 100.f);
+    sp_prompt_send_progress_f32(&ut.ctx, (f32)it / 100.f);
   }
-  EXPECT_TRUE(utest_fixture->ctx.progress.dirty);
-  EXPECT_EQ(utest_fixture->ctx.progress.value.f, (f64)((f32)99 / 100.f));
+  EXPECT_TRUE(ut.ctx.progress.dirty);
+  EXPECT_EQ(ut.ctx.progress.value.f, (f64)((f32)99 / 100.f));
 }
 
 UTEST_F(prompt, send_progress_typed_helpers_round_trip) {
-  sp_prompt_send_progress_f64(&utest_fixture->ctx, 3.14159);
-  EXPECT_EQ(utest_fixture->ctx.progress.value.f, 3.14159);
+  sp_prompt_send_progress_f64(&ut.ctx, 3.14159);
+  EXPECT_EQ(ut.ctx.progress.value.f, 3.14159);
 
-  sp_prompt_send_progress_u32(&utest_fixture->ctx, 0xDEADBEEF);
-  EXPECT_EQ(utest_fixture->ctx.progress.value.u, 0xDEADBEEFu);
+  sp_prompt_send_progress_u32(&ut.ctx, 0xDEADBEEF);
+  EXPECT_EQ(ut.ctx.progress.value.u, 0xDEADBEEFu);
 
-  sp_prompt_send_progress_u64(&utest_fixture->ctx, 0x1122334455667788ull);
-  EXPECT_EQ(utest_fixture->ctx.progress.value.u, 0x1122334455667788ull);
+  sp_prompt_send_progress_u64(&ut.ctx, 0x1122334455667788ull);
+  EXPECT_EQ(ut.ctx.progress.value.u, 0x1122334455667788ull);
 
-  sp_prompt_send_progress_s32(&utest_fixture->ctx, -7);
-  EXPECT_EQ(utest_fixture->ctx.progress.value.i, -7);
+  sp_prompt_send_progress_s32(&ut.ctx, -7);
+  EXPECT_EQ(ut.ctx.progress.value.i, -7);
 
-  sp_prompt_send_progress_s64(&utest_fixture->ctx, -1234567890123ll);
-  EXPECT_EQ(utest_fixture->ctx.progress.value.i, -1234567890123ll);
+  sp_prompt_send_progress_s64(&ut.ctx, -1234567890123ll);
+  EXPECT_EQ(ut.ctx.progress.value.i, -1234567890123ll);
 
   s32 sentinel = 0;
-  sp_prompt_send_progress_ptr(&utest_fixture->ctx, &sentinel);
-  EXPECT_EQ(utest_fixture->ctx.progress.value.ptr, (void*)&sentinel);
+  sp_prompt_send_progress_ptr(&ut.ctx, &sentinel);
+  EXPECT_EQ(ut.ctx.progress.value.ptr, (void*)&sentinel);
 
-  sp_prompt_send_progress_bool(&utest_fixture->ctx, true);
-  EXPECT_TRUE(utest_fixture->ctx.progress.value.b);
+  sp_prompt_send_progress_bool(&ut.ctx, true);
+  EXPECT_TRUE(ut.ctx.progress.value.b);
 }
 
 UTEST_F(prompt, progress_event_delivered_with_data) {
   probe_state_t state = SP_ZERO_INITIALIZE();
-  sp_prompt_send_progress_f32(&utest_fixture->ctx, 0.42f);
+  sp_prompt_send_progress_f32(&ut.ctx, 0.42f);
 
-  sp_app_t* app = utest_fixture->app = sp_app_new(sp_prompt_app(&utest_fixture->ctx, probe_widget(&state)));
+  sp_app_t* app = ut.app = sp_app_new(ut.mem, sp_prompt_app(&ut.ctx, probe_widget(&state)));
   sp_app_tick(app);
   sp_app_tick(app);
 
@@ -2449,24 +2455,24 @@ UTEST_F(prompt, progress_event_delivered_with_data) {
 
 UTEST_F(prompt, progress_drains_clear_dirty_flag) {
   probe_state_t state = SP_ZERO_INITIALIZE();
-  sp_prompt_send_progress_f32(&utest_fixture->ctx, 0.25f);
+  sp_prompt_send_progress_f32(&ut.ctx, 0.25f);
 
-  sp_app_t* app = utest_fixture->app = sp_app_new(sp_prompt_app(&utest_fixture->ctx, probe_widget(&state)));
+  sp_app_t* app = ut.app = sp_app_new(ut.mem, sp_prompt_app(&ut.ctx, probe_widget(&state)));
   sp_app_tick(app);
   sp_app_tick(app);
   sp_app_tick(app);
 
   EXPECT_EQ(state.num_progress, 1u);
-  EXPECT_FALSE(utest_fixture->ctx.progress.dirty);
+  EXPECT_FALSE(ut.ctx.progress.dirty);
 }
 
 UTEST_F(prompt, progress_coalesces_between_drains) {
   probe_state_t state = SP_ZERO_INITIALIZE();
   sp_for(it, 50) {
-    sp_prompt_send_progress_f32(&utest_fixture->ctx, (f32)it / 50.f);
+    sp_prompt_send_progress_f32(&ut.ctx, (f32)it / 50.f);
   }
 
-  sp_app_t* app = utest_fixture->app = sp_app_new(sp_prompt_app(&utest_fixture->ctx, probe_widget(&state)));
+  sp_app_t* app = ut.app = sp_app_new(ut.mem, sp_prompt_app(&ut.ctx, probe_widget(&state)));
   sp_app_tick(app);
   sp_app_tick(app);
 
@@ -2476,14 +2482,14 @@ UTEST_F(prompt, progress_coalesces_between_drains) {
 
 UTEST_F(prompt, progress_redelivered_after_new_send) {
   probe_state_t state = SP_ZERO_INITIALIZE();
-  sp_prompt_send_progress_f32(&utest_fixture->ctx, 0.1f);
+  sp_prompt_send_progress_f32(&ut.ctx, 0.1f);
 
-  sp_app_t* app = utest_fixture->app = sp_app_new(sp_prompt_app(&utest_fixture->ctx, probe_widget(&state)));
+  sp_app_t* app = ut.app = sp_app_new(ut.mem, sp_prompt_app(&ut.ctx, probe_widget(&state)));
   sp_app_tick(app);
   sp_app_tick(app);
   EXPECT_EQ(state.num_progress, 1u);
 
-  sp_prompt_send_progress_f32(&utest_fixture->ctx, 0.9f);
+  sp_prompt_send_progress_f32(&ut.ctx, 0.9f);
   sp_app_tick(app);
 
   EXPECT_EQ(state.num_progress, 2u);
@@ -2495,16 +2501,16 @@ UTEST_F(prompt, progress_after_complete_is_dropped) {
   // delivered on the same poll tick, but lifecycle transitions wake the loop and exit before
   // any subsequent progress events are dispatched.
   probe_state_t state = { .fire_on_init = SP_PROMPT_STATE_SUBMIT };
-  sp_prompt_send_progress_f32(&utest_fixture->ctx, 0.5f);
+  sp_prompt_send_progress_f32(&ut.ctx, 0.5f);
 
-  drive_until_quit(&utest_fixture->ctx, probe_widget(&state));
+  drive_until_quit(ut.mem, &ut.ctx, probe_widget(&state));
 
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
 }
 
 UTEST_F(prompt, progress_widget_renders_active_two_rows_plus_rail) {
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_progress_widget(&utest_fixture->ctx, (sp_prompt_progress_t) {
+    .widget = sp_prompt_progress_widget(&ut.ctx, (sp_prompt_progress_t) {
       .prompt = "Downloading",
       .width = 8,
     }),
@@ -2561,49 +2567,49 @@ UTEST_F(prompt, progress_widget_clamps_out_of_range_inputs) {
   p->config.width = 4;
 
   sp_prompt_event_t e_neg = { .kind = SP_PROMPT_EVENT_PROGRESS, .progress = { .data = { .f = -0.5 } } };
-  utest_fixture->ctx.user_data = p;
-  sp_prompt_progress_event(&utest_fixture->ctx, e_neg);
+  ut.ctx.user_data = p;
+  sp_prompt_progress_event(&ut.ctx, e_neg);
   EXPECT_EQ(p->value, 0.f);
 
   sp_prompt_event_t e_big = { .kind = SP_PROMPT_EVENT_PROGRESS, .progress = { .data = { .f = 5.0 } } };
-  sp_prompt_progress_event(&utest_fixture->ctx, e_big);
+  sp_prompt_progress_event(&ut.ctx, e_big);
   EXPECT_EQ(p->value, 1.f);
 }
 
 UTEST_F(prompt, status_initially_clean) {
-  EXPECT_FALSE(utest_fixture->ctx.status.dirty);
+  EXPECT_FALSE(ut.ctx.status.dirty);
 }
 
 UTEST_F(prompt, send_status_marks_dirty_and_copies_into_arena) {
   c8 buf[] = "transient";
-  sp_prompt_send_status_str(&utest_fixture->ctx, sp_str(buf, 9));
+  sp_prompt_send_status_str(&ut.ctx, sp_str(buf, 9));
   // mutate the source after send to prove the channel owns its copy
   buf[0] = 'X';
-  EXPECT_TRUE(utest_fixture->ctx.status.dirty);
-  ASSERT_EQ(utest_fixture->ctx.status.value.len, 9u);
-  EXPECT_EQ(utest_fixture->ctx.status.value.data[0], 't');
+  EXPECT_TRUE(ut.ctx.status.dirty);
+  ASSERT_EQ(ut.ctx.status.value.len, 9u);
+  EXPECT_EQ(ut.ctx.status.value.data[0], 't');
 }
 
 UTEST_F(prompt, send_status_cstr_round_trip) {
-  sp_prompt_send_status(&utest_fixture->ctx, "hello world");
-  EXPECT_TRUE(utest_fixture->ctx.status.dirty);
-  ASSERT_EQ(utest_fixture->ctx.status.value.len, 11u);
-  SP_EXPECT_STR_EQ_CSTR(utest_fixture->ctx.status.value, "hello world");
+  sp_prompt_send_status(&ut.ctx, "hello world");
+  EXPECT_TRUE(ut.ctx.status.dirty);
+  ASSERT_EQ(ut.ctx.status.value.len, 11u);
+  SP_EXPECT_STR_EQ_CSTR(ut.ctx.status.value, "hello world");
 }
 
 UTEST_F(prompt, send_status_latest_wins) {
-  sp_prompt_send_status(&utest_fixture->ctx, "first");
-  sp_prompt_send_status(&utest_fixture->ctx, "second");
-  sp_prompt_send_status(&utest_fixture->ctx, "third");
-  EXPECT_TRUE(utest_fixture->ctx.status.dirty);
-  SP_EXPECT_STR_EQ_CSTR(utest_fixture->ctx.status.value, "third");
+  sp_prompt_send_status(&ut.ctx, "first");
+  sp_prompt_send_status(&ut.ctx, "second");
+  sp_prompt_send_status(&ut.ctx, "third");
+  EXPECT_TRUE(ut.ctx.status.dirty);
+  SP_EXPECT_STR_EQ_CSTR(ut.ctx.status.value, "third");
 }
 
 UTEST_F(prompt, status_event_delivered_with_value) {
   probe_state_t state = SP_ZERO_INITIALIZE();
-  sp_prompt_send_status(&utest_fixture->ctx, "loading");
+  sp_prompt_send_status(&ut.ctx, "loading");
 
-  sp_app_t* app = utest_fixture->app = sp_app_new(sp_prompt_app(&utest_fixture->ctx, probe_widget(&state)));
+  sp_app_t* app = ut.app = sp_app_new(ut.mem, sp_prompt_app(&ut.ctx, probe_widget(&state)));
   sp_app_tick(app);
   sp_app_tick(app);
 
@@ -2613,23 +2619,23 @@ UTEST_F(prompt, status_event_delivered_with_value) {
 
 UTEST_F(prompt, status_drains_clear_dirty_flag) {
   probe_state_t state = SP_ZERO_INITIALIZE();
-  sp_prompt_send_status(&utest_fixture->ctx, "x");
+  sp_prompt_send_status(&ut.ctx, "x");
 
-  sp_app_t* app = utest_fixture->app = sp_app_new(sp_prompt_app(&utest_fixture->ctx, probe_widget(&state)));
+  sp_app_t* app = ut.app = sp_app_new(ut.mem, sp_prompt_app(&ut.ctx, probe_widget(&state)));
   sp_app_tick(app);
   sp_app_tick(app);
   sp_app_tick(app);
 
   EXPECT_EQ(state.num_status, 1u);
-  EXPECT_FALSE(utest_fixture->ctx.status.dirty);
+  EXPECT_FALSE(ut.ctx.status.dirty);
 }
 
 UTEST_F(prompt, progress_and_status_both_delivered_in_same_tick) {
   probe_state_t state = SP_ZERO_INITIALIZE();
-  sp_prompt_send_progress_f32(&utest_fixture->ctx, 0.4f);
-  sp_prompt_send_status(&utest_fixture->ctx, "step 4 of 10");
+  sp_prompt_send_progress_f32(&ut.ctx, 0.4f);
+  sp_prompt_send_status(&ut.ctx, "step 4 of 10");
 
-  sp_app_t* app = utest_fixture->app = sp_app_new(sp_prompt_app(&utest_fixture->ctx, probe_widget(&state)));
+  sp_app_t* app = ut.app = sp_app_new(ut.mem, sp_prompt_app(&ut.ctx, probe_widget(&state)));
   sp_app_tick(app);
   sp_app_tick(app);
 
@@ -2641,11 +2647,11 @@ UTEST_F(prompt, progress_and_status_both_delivered_in_same_tick) {
 
 UTEST_F(prompt, status_after_complete_does_not_block_submit) {
   probe_state_t state = { .fire_on_init = SP_PROMPT_STATE_SUBMIT };
-  sp_prompt_send_status(&utest_fixture->ctx, "almost there");
+  sp_prompt_send_status(&ut.ctx, "almost there");
 
-  drive_until_quit(&utest_fixture->ctx, probe_widget(&state));
+  drive_until_quit(ut.mem, &ut.ctx, probe_widget(&state));
 
-  EXPECT_EQ(sp_atomic_s32_get(&utest_fixture->ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
 }
 
 UTEST_F(prompt, progress_widget_renders_status_below_bar) {
@@ -2726,7 +2732,7 @@ UTEST_F(prompt, send_status_from_thread_eventually_delivered) {
   SKIP_ON_FREESTANDING();
   SKIP_ON_WASM();
   probe_state_t state = SP_ZERO_INITIALIZE();
-  status_thread_data_t d = { .ctx = &utest_fixture->ctx };
+  status_thread_data_t d = { .ctx = &ut.ctx };
 
   sp_thread_t worker = SP_ZERO_INITIALIZE();
   sp_thread_init(&worker, status_thread_fn, &d);
@@ -2734,7 +2740,7 @@ UTEST_F(prompt, send_status_from_thread_eventually_delivered) {
   sp_atomic_s32_set(&d.ready, 1);
   sp_thread_join(&worker);
 
-  sp_app_t* app = utest_fixture->app = sp_app_new(sp_prompt_app(&utest_fixture->ctx, probe_widget(&state)));
+  sp_app_t* app = ut.app = sp_app_new(ut.mem, sp_prompt_app(&ut.ctx, probe_widget(&state)));
   sp_app_tick(app);
   sp_app_tick(app);
 
@@ -2748,20 +2754,20 @@ UTEST_F(prompt, idle_updates_do_not_grow_persistent_arena) {
     .frames = { 'A', 'B', 'C' },
   };
 
-  sp_prompt_widget_t widget = sp_prompt_spinner_widget(&utest_fixture->ctx, spinner);
-  utest_fixture->ctx.widget = widget;
-  utest_fixture->ctx.user_data = widget.user_data;
+  sp_prompt_widget_t widget = sp_prompt_spinner_widget(&ut.ctx, spinner);
+  ut.ctx.widget = widget;
+  ut.ctx.user_data = widget.user_data;
 
   sp_app_t app = SP_ZERO_INITIALIZE();
-  app.user_data = &utest_fixture->ctx;
+  app.user_data = &ut.ctx;
 
   sp_prompt_app_on_init(&app);
-  u64 baseline = sp_mem_arena_bytes_used(utest_fixture->ctx.arena);
+  u64 baseline = sp_mem_arena_bytes_used(ut.ctx.arena);
 
   sp_for(it, 1024) {
     SP_UNUSED(it);
     sp_prompt_app_on_update(&app);
   }
 
-  EXPECT_EQ(sp_mem_arena_bytes_used(utest_fixture->ctx.arena), baseline);
+  EXPECT_EQ(sp_mem_arena_bytes_used(ut.ctx.arena), baseline);
 }
