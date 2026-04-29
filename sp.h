@@ -1338,6 +1338,7 @@ typedef struct {
   sp_mem_arena_t* arena;
   sp_mem_arena_block_t* block;
   u64 mark;
+  sp_mem_t mem;
 } sp_mem_arena_marker_t;
 
 typedef struct {
@@ -1456,7 +1457,7 @@ SP_API sp_hash_t sp_hash_bytes(const void* p, u64 len, u64 seed);
 typedef struct sp_aligned() {
   u64 size;
   u64 capacity;
-  sp_mem_t* allocator;
+  sp_mem_t allocator;
 } sp_da_header_t;
 
 #define sp_da(T) T*
@@ -1474,7 +1475,7 @@ SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
   (__ARR ? sp_da_head((__ARR))->size : 0)
 
 #define sp_da_allocator(__arr) \
-  (__arr ? sp_da_head((__arr))->allocator : SP_NULLPTR)
+  (__arr ? sp_da_head((__arr))->allocator : sp_zero_struct(sp_mem_t))
 
 #define sp_da_stride(__ARR) \
   sizeof(*(__ARR))
@@ -2444,55 +2445,14 @@ typedef struct {
   bool recursive;
 } sp_fs_it_t;
 
-SP_API bool          sp_fs_is_file(sp_str_t path);
-SP_API bool          sp_fs_is_symlink(sp_str_t path);
-SP_API bool          sp_fs_is_dir(sp_str_t path);
-SP_API bool          sp_fs_is_target_file(sp_str_t path);
-SP_API bool          sp_fs_is_target_dir(sp_str_t path);
-SP_API bool          sp_fs_is_root(sp_str_t path);
-SP_API bool          sp_fs_is_glob(sp_str_t path);
-SP_API bool          sp_fs_exists(sp_str_t path);
-SP_API sp_err_t      sp_fs_create_dir(sp_str_t path);
-SP_API sp_err_t      sp_fs_create_file(sp_str_t path);
-SP_API sp_err_t      sp_fs_create_file_slice(sp_str_t path, sp_mem_slice_t slice);
-SP_API sp_err_t      sp_fs_create_file_str(sp_str_t path, sp_str_t str);
-SP_API sp_err_t      sp_fs_create_file_cstr(sp_str_t path, const c8* str);
-SP_API sp_err_t      sp_fs_remove_dir(sp_str_t path);
-SP_API sp_err_t      sp_fs_remove_file(sp_str_t path);
-SP_API sp_err_t      sp_fs_copy(sp_str_t from, sp_str_t to);
-SP_API void          sp_fs_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to);
-SP_API void          sp_fs_copy_file(sp_str_t from, sp_str_t to);
-SP_API void          sp_fs_copy_dir(sp_str_t from, sp_str_t to);
-SP_API sp_err_t      sp_fs_link(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind);
-SP_API sp_err_t      sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path);
-SP_API sp_err_t      sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path);
-SP_API sp_str_t      sp_fs_normalize_path(sp_str_t path);
-SP_API sp_str_t      sp_fs_canonicalize_path(sp_str_t path);
-SP_API sp_str_t      sp_fs_parent_path(sp_str_t path);
-SP_API sp_str_t      sp_fs_join_path(sp_str_t a, sp_str_t b);
-SP_API sp_str_t      sp_fs_trim_path(sp_str_t path);
-SP_API sp_str_t      sp_fs_replace_ext(sp_str_t path, sp_str_t ext);
-SP_API sp_str_t      sp_fs_get_ext(sp_str_t path);
-SP_API sp_str_t      sp_fs_get_stem(sp_str_t path);
-SP_API sp_str_t      sp_fs_get_name(sp_str_t path);
-SP_API sp_str_t      sp_fs_get_cwd();
-SP_API sp_str_t      sp_fs_get_exe_path();
-SP_API sp_str_t      sp_fs_get_storage_path();
-SP_API sp_str_t      sp_fs_get_config_path();
-SP_API sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t path);
-SP_API sp_fs_kind_t  sp_fs_get_kind(sp_str_t path);
-SP_API sp_fs_kind_t  sp_fs_get_target_kind(sp_str_t path);
-SP_API sp_fs_it_t    sp_fs_it_new_recursive(sp_str_t path);
-SP_API sp_fs_it_t    sp_fs_it_new(sp_str_t path);
-SP_API void          sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path);
-SP_API void          sp_fs_it_next(sp_fs_it_t* it);
-SP_API bool          sp_fs_it_valid(sp_fs_it_t* it);
-SP_API void          sp_fs_it_deinit(sp_fs_it_t* it);
-SP_API sp_da(sp_fs_entry_t) sp_fs_collect(sp_str_t path);
-SP_API sp_da(sp_fs_entry_t) sp_fs_collect_recursive(sp_str_t path);
-
-#define sp_fs_for(dir, it) for (sp_fs_it_t it = sp_fs_it_new(dir); sp_fs_it_valid(&it); sp_fs_it_next(&it))
-#define sp_fs_for_recursive(dir, it) for (sp_fs_it_t it = sp_fs_it_new_recursive(dir); sp_fs_it_valid(&it); sp_fs_it_next(&it))
+// SP_API sp_fs_it_t    sp_fs_it_new_recursive(sp_str_t path);
+// SP_API sp_fs_it_t    sp_fs_it_new(sp_str_t path);
+// SP_API void          sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path);
+// SP_API void          sp_fs_it_next(sp_fs_it_t* it);
+// SP_API bool          sp_fs_it_valid(sp_fs_it_t* it);
+// SP_API void          sp_fs_it_deinit(sp_fs_it_t* it);
+// SP_API sp_da(sp_fs_entry_t) sp_fs_collect(sp_str_t path);
+// SP_API sp_da(sp_fs_entry_t) sp_fs_collect_recursive(sp_str_t path);
 
 bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path);
 void sp_sys_diriter_close(sp_fs_it_frame_t* frame);
@@ -3461,9 +3421,25 @@ SP_IMP sp_err_t sp_io_writer_mem_size(sp_io_writer_t* io, u64* size);
 SP_IMP sp_err_t sp_io_writer_mem_close(sp_io_writer_t* io);
 
 // @public @unchanged
+SP_API sp_str_t       sp_fs_get_name(sp_str_t path);
+SP_API sp_str_t       sp_fs_parent_path(sp_str_t path);
+SP_API sp_str_t       sp_fs_trim_path(sp_str_t path);
+SP_API sp_str_t       sp_fs_get_ext(sp_str_t path);
+SP_API sp_str_t       sp_fs_get_stem(sp_str_t path);
+SP_API bool           sp_fs_is_root(sp_str_t path);
+SP_API bool           sp_fs_is_glob(sp_str_t path);
 SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
 
 // @private @changed
+SP_IMP sp_fs_kind_t sp_fs_lstat_kind_a(sp_str_t path);
+SP_IMP sp_fs_kind_t sp_fs_stat_kind_a(sp_str_t path);
+SP_IMP sp_fs_it_t   sp_fs_it_new_a(sp_mem_t mem, sp_str_t path);
+SP_IMP sp_fs_it_t   sp_fs_it_new_recursive_a(sp_mem_t mem, sp_str_t path);
+SP_IMP void         sp_fs_it_begin_a(sp_fs_it_t* it, sp_str_t path);
+SP_IMP void         sp_fs_it_next_a(sp_fs_it_t* it);
+SP_IMP void         sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path);
+SP_IMP bool         sp_fs_it_valid_a(sp_fs_it_t* it);
+SP_IMP void         sp_fs_it_deinit_a(sp_fs_it_t* it);
 SP_IMP void sp_fmt_write_u64_a(sp_io_writer_t* io, u64 value);
 SP_IMP void sp_fmt_write_s64_a(sp_io_writer_t* io, s64 value);
 SP_IMP void sp_fmt_write_f64_a(sp_io_writer_t* io, f64 value, u32 precision);
@@ -3476,6 +3452,57 @@ SP_IMP void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str
 SP_API void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
 // @public @changed
+SP_API sp_str_t      sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
+SP_API c8*           sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str);
+SP_API sp_str_t      sp_str_copy_a(sp_mem_t mem, sp_str_t str);
+SP_API sp_str_t      sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
+SP_API sp_str_t      sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join);
+
+SP_API sp_str_t      sp_fs_normalize_path_a(sp_mem_t mem, sp_str_t path);
+SP_API sp_str_t      sp_fs_join_path_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
+SP_API sp_str_t      sp_fs_replace_ext_a(sp_mem_t mem, sp_str_t path, sp_str_t ext);
+SP_API sp_str_t      sp_fs_canonicalize_path_a(sp_mem_t mem, sp_str_t path);
+SP_API sp_str_t      sp_fs_get_exe_path_a(sp_mem_t mem);
+SP_API sp_str_t      sp_fs_get_cwd_a(sp_mem_t mem);
+SP_API sp_str_t      sp_fs_get_storage_path_a(sp_mem_t mem);
+SP_API sp_str_t      sp_fs_get_config_path_a(sp_mem_t mem);
+SP_API sp_da(sp_fs_entry_t) sp_fs_collect_a(sp_mem_t mem, sp_str_t path);
+SP_API sp_da(sp_fs_entry_t) sp_fs_collect_recursive_a(sp_mem_t mem, sp_str_t path);
+
+SP_API bool          sp_fs_exists_a(sp_str_t path);
+SP_API bool          sp_fs_is_file_a(sp_str_t path);
+SP_API bool          sp_fs_is_dir_a(sp_str_t path);
+SP_API bool          sp_fs_is_symlink_a(sp_str_t path);
+SP_API bool          sp_fs_is_target_file_a(sp_str_t path);
+SP_API bool          sp_fs_is_target_dir_a(sp_str_t path);
+SP_API sp_fs_kind_t  sp_fs_get_kind_a(sp_str_t path);
+SP_API sp_fs_kind_t  sp_fs_get_target_kind_a(sp_str_t path);
+SP_API sp_tm_epoch_t sp_fs_get_mod_time_a(sp_str_t path);
+SP_API sp_err_t      sp_fs_create_dir_a(sp_str_t path);
+SP_API sp_err_t      sp_fs_create_file_a(sp_str_t path);
+SP_API sp_err_t      sp_fs_create_file_str_a(sp_str_t path, sp_str_t str);
+SP_API sp_err_t      sp_fs_create_file_slice_a(sp_str_t path, sp_mem_slice_t slice);
+SP_API sp_err_t      sp_fs_create_file_cstr_a(sp_str_t path, const c8* str);
+SP_API sp_err_t      sp_fs_remove_dir_a(sp_str_t path);
+SP_API sp_err_t      sp_fs_remove_file_a(sp_str_t path);
+SP_API sp_err_t      sp_fs_create_hard_link_a(sp_str_t target, sp_str_t link_path);
+SP_API sp_err_t      sp_fs_create_sym_link_a(sp_str_t target, sp_str_t link_path);
+SP_API sp_err_t      sp_fs_link_a(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind);
+SP_API sp_err_t      sp_fs_copy_a(sp_str_t from, sp_str_t to);
+SP_API void          sp_fs_copy_file_a(sp_str_t from, sp_str_t to);
+SP_API void          sp_fs_copy_dir_a(sp_str_t from, sp_str_t to);
+SP_API void          sp_fs_copy_glob_a(sp_str_t from, sp_str_t glob, sp_str_t to);
+#define sp_fs_for(mem, dir, it) \
+  for (sp_fs_it_t it = sp_fs_it_new_a(mem, dir); sp_fs_it_valid_a(&it); sp_fs_it_next_a(&it))
+
+#define sp_fs_for_recursive(mem, dir, it) \
+  for (sp_fs_it_t it = sp_fs_it_new_recursive_a(mem, dir); sp_fs_it_valid(&it); sp_fs_it_next(&it))
+
+
+SP_API sp_err_t      sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
+SP_API sp_err_t      sp_io_writer_from_file_a(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode);
+SP_API sp_err_t      sp_io_reader_from_file_a(sp_io_reader_t* reader, sp_str_t path);
+
 SP_API sp_str_t sp_io_writer_mem_as_str(sp_io_writer_mem_t* io);
 SP_API sp_str_t sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io);
 SP_API void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
@@ -3488,6 +3515,7 @@ SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena_a(sp_mem_t mem);
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_a();
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_for_a(sp_mem_t mem);
 SP_API void                  sp_mem_end_scratch_a(sp_mem_arena_marker_t s);
+SP_API sp_mem_t              sp_mem_scratch_allocator_a();
 SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
 
 SP_API void sp_log_a(const c8* fmt, ...);
@@ -6372,15 +6400,14 @@ void sp_ht_it_advance_fn(void** data, u64 capacity, u64* it, sp_ht_info_t info) 
 void* sp_da_resize(void* arr, u32 stride, u64 len) {
   len = sp_max(len, 4);
   sp_da_header_t* header = arr ? sp_da_head(arr) : SP_NULLPTR;
-  sp_mem_t a = header ? *header->allocator : sp_context_get_allocator();
+  sp_mem_t a = header ? header->allocator : sp_context_get_allocator();
   header = sp_mem_allocator_realloc(a, header, len * stride + sizeof(sp_da_header_t));
 
   if (!header) return SP_NULLPTR;
 
   if (!arr) {
     header->size = 0;
-    header->allocator = sp_mem_allocator_alloc_type(a, sp_mem_t);
-    *header->allocator = a;
+    header->allocator = a;
   }
   header->capacity = len;
   return header + 1;
@@ -6402,9 +6429,11 @@ void sp_da_push_ex(void** arr, void* val, u32 stride) {
   }
 }
 
-void sp_da_init_ex(sp_mem_t* a, void** arr, u32 stride) {
+void sp_da_init_ex(sp_mem_t a, void** arr, u32 stride) {
+  // Match sp_da_resize's lazy-init: copy the allocator into a heap slot so the
+  // array does not depend on the caller's `a` outliving the function frame.
   u32 cap = 4;
-  sp_da_header_t* head = sp_mem_allocator_alloc(*a, cap * stride + sizeof(sp_da_header_t));
+  sp_da_header_t* head = sp_mem_allocator_alloc(a, cap * stride + sizeof(sp_da_header_t));
   *head = (sp_da_header_t) {
     .allocator = a,
     .capacity = cap,
@@ -8334,7 +8363,8 @@ sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* arena) {
   return (sp_mem_arena_marker_t) {
     .arena = arena,
     .block = arena->current,
-    .mark = arena->current->bytes_used
+    .mark = arena->current->bytes_used,
+    .mem = sp_mem_arena_as_allocator(arena),
   };
 }
 
@@ -9488,450 +9518,6 @@ sp_da(sp_str_t) sp_str_pad_to_longest(sp_str_t* strs, u32 n) {
 //  █████       █████ ███████████ ██████████░░█████████     █████   ░░█████████     █████    ██████████ █████     █████
 // ░░░░░       ░░░░░ ░░░░░░░░░░░ ░░░░░░░░░░  ░░░░░░░░░     ░░░░░     ░░░░░░░░░     ░░░░░    ░░░░░░░░░░ ░░░░░     ░░░░░
 // @fs @filesystem
-sp_str_t sp_fs_normalize_path(sp_str_t path) {
-  if (sp_str_back(path) == '/' || sp_str_back(path) == '\\') {
-    path.len--;
-  }
-
-  sp_mem_buffer_t buffer = {
-    .data = sp_alloc_n(u8, path.len),
-    .capacity = path.len,
-    .len = path.len,
-  };
-
-  sp_for(i, path.len) {
-    c8 c = path.data[i];
-    buffer.data[i] = (u8)(c == '\\' ? '/' : c);
-  }
-
-  return sp_mem_buffer_as_str(&buffer);
-}
-
-sp_str_t sp_fs_get_name(sp_str_t path) {
-  // The only valid separator is '/'. If you're calling this function on a path
-  // that might contain a '\', normalize it first. Garbage in, garbage out.
-  s32 it = sp_str_find_c8_reverse(path, '/');
-  return sp_str_suffix(path, ((s32)path.len) - it - 1);
-}
-
-sp_str_t sp_fs_parent_path(sp_str_t path) {
-  if (sp_str_empty(path)) return path;
-  if (sp_fs_is_root(path)) return path;
-
-  path = sp_fs_trim_path(path);
-
-  s32 index = sp_str_find_c8_reverse(path, '/');
-  return index == SP_STR_NO_MATCH ? sp_str_lit("") : sp_str_prefix(path, index);
-}
-
-sp_str_t sp_fs_trim_path(sp_str_t path) {
-  if (sp_str_empty(path)) return path;
-
-  while (!sp_str_empty(path) && !sp_fs_is_root(path)) {
-    switch (sp_str_back(path)) {
-      case '/':
-      case '\\': {
-        path.len--;
-        break;
-      }
-      default: {
-        return path;
-      }
-    }
-  }
-
-  return path;
-}
-
-sp_str_t sp_fs_join_path(sp_str_t a, sp_str_t b) {
-  a = sp_fs_trim_path(a);
-  b = sp_fs_trim_path(b);
-  if (sp_str_empty(a)) return sp_str_copy(b);
-  if (sp_str_empty(b)) return sp_str_copy(a);
-  return sp_str_join(a, b, SP_LIT("/"));
-}
-
-sp_str_t sp_fs_replace_ext(sp_str_t path, sp_str_t ext) {
-  sp_str_t stripped = sp_str_strip_right(path, sp_fs_get_ext(path));
-  return sp_str_empty(ext) ?
-    stripped :
-    sp_str_join(path, ext, sp_str_lit("."));
-}
-
-sp_str_t sp_fs_get_ext(sp_str_t path) {
-  for (u32 index = 0; index < path.len; index++) {
-    c8 c = sp_str_at_reverse(path, index);
-
-    switch (c) {
-      case '.': return sp_str_sub_reverse(path, 0, index);
-      case '/': return sp_str_sub_reverse(path, 0, 0);
-      default:  break;
-    }
-  }
-
-  return sp_str_sub_reverse(path, 0, 0);
-}
-
-sp_str_t sp_fs_get_stem(sp_str_t path) {
-  sp_str_t file_name = sp_fs_get_name(path);
-  if (!file_name.len) return path;
-
-  sp_str_t extension = sp_fs_get_ext(path);
-
-  sp_str_t stem = {
-    .data = file_name.data,
-    .len = file_name.len - extension.len,
-  };
-
-  if (sp_str_back(stem) == '.') stem.len--;
-
-  return stem;
-}
-
-sp_err_t sp_fs_link(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind) {
-  switch (kind) {
-    case SP_FS_LINK_HARD:     return sp_fs_create_hard_link(from, to);
-    case SP_FS_LINK_SYMBOLIC: return sp_fs_create_sym_link(from, to);
-    case SP_FS_LINK_COPY:     return sp_fs_copy(from, to);
-  }
-
-  SP_UNREACHABLE_RETURN(SP_OK);
-}
-
-sp_da(sp_fs_entry_t) sp_fs_collect(sp_str_t path) {
-  sp_da(sp_fs_entry_t) entries = SP_NULLPTR;
-
-  for (sp_fs_it_t it = sp_fs_it_new(path); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
-    sp_da_push(entries, it.entry);
-  }
-  return entries;
-}
-
-sp_da(sp_fs_entry_t) sp_fs_collect_recursive(sp_str_t path) {
-  sp_da(sp_fs_entry_t) entries = SP_NULLPTR;
-
-  for (sp_fs_it_t it = sp_fs_it_new_recursive(path); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
-    sp_da_push(entries, it.entry);
-  }
-  return entries;
-}
-
-
-sp_err_t sp_fs_create_dir(sp_str_t path) {
-  // The return code answers whether the path:
-  // - Exists
-  // - Is a plain directory
-  if (sp_str_empty(path)) return SP_ERR_LAZY;
-  if (sp_fs_exists(path)) {
-    return sp_fs_is_dir(path) ? SP_OK : SP_ERR_LAZY;
-  }
-
-  sp_err_t result = SP_OK;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_da(sp_str_t) missing = SP_NULLPTR;
-
-  // Walk up, collecting intermediate paths that don't exist
-  path = sp_fs_trim_path(path);
-
-  while (!sp_fs_is_root(path) && !sp_fs_exists(path)) {
-    sp_da_push(missing, path);
-    path = sp_fs_parent_path(path);
-  }
-
-  // Walk back down and create each one
-  sp_da_rfor(missing, it) {
-    result = sp_os_create_dir(missing[it]);
-    if (result && !sp_fs_exists(missing[it])) {
-      goto cleanup;
-    }
-  }
-
-cleanup:
-  sp_mem_end_scratch(scratch);
-  return result;
-}
-
-sp_err_t sp_fs_create_file(sp_str_t path) {
-  return sp_os_create_file(path);
-}
-
-sp_err_t sp_fs_create_file_slice(sp_str_t path, sp_mem_slice_t slice) {
-  sp_try(sp_os_create_file(path));
-  sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_try(sp_io_writer_from_file(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
-  sp_try(sp_io_write(&io, slice.data, slice.len, SP_NULLPTR));
-  sp_try(sp_io_writer_close(&io));
-  return SP_OK;
-}
-
-sp_err_t sp_fs_create_file_str(sp_str_t path, sp_str_t str) {
-  sp_try(sp_os_create_file(path));
-  sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_try(sp_io_writer_from_file(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
-  sp_try(sp_io_write_str(&io, str, SP_NULLPTR));
-  sp_try(sp_io_writer_close(&io));
-  return SP_OK;
-}
-
-sp_err_t sp_fs_create_file_cstr(sp_str_t path, const c8* str) {
-  return sp_fs_create_file_str(path, sp_str_view(str));
-}
-
-sp_err_t sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path) {
-  return sp_os_create_hard_link(target, link_path);
-}
-
-sp_err_t sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path) {
-  return sp_os_create_sym_link(target, link_path);
-}
-
-sp_err_t sp_fs_copy(sp_str_t from, sp_str_t to) {
-  if (sp_fs_is_glob(from)) {
-    sp_fs_copy_glob(sp_fs_parent_path(from), sp_fs_get_name(from), to);
-  }
-  else if (sp_fs_is_target_dir(from)) {
-    SP_ASSERT(sp_fs_is_target_dir(to));
-    sp_fs_copy_glob(from, sp_str_lit("*"), sp_fs_join_path(to, sp_fs_get_name(from)));
-  }
-  else if (sp_fs_is_target_file(from)) {
-    sp_fs_copy_file(from, to);
-  }
-
-  return SP_OK;
-}
-
-void sp_fs_copy_glob(sp_str_t from, sp_str_t glob, sp_str_t to) {
-  sp_fs_create_dir(to);
-
-  sp_da(sp_fs_entry_t) entries = sp_fs_collect(from);
-
-  sp_da_for(entries, i) {
-    sp_fs_entry_t* entry = &entries[i];
-    sp_str_t entry_name = entry->name;
-
-    bool matches = sp_str_equal(glob, sp_str_lit("*"));
-    if (!matches) {
-      matches = sp_str_equal(entry_name, glob);
-    }
-
-    if (matches) {
-      sp_str_t entry_path = sp_fs_join_path(from, entry_name);
-      sp_fs_copy(entry_path, to);
-    }
-  }
-}
-
-void sp_fs_copy_dir(sp_str_t from, sp_str_t to) {
-  if (sp_fs_is_dir(to)) {
-    to = sp_fs_join_path(to, sp_fs_get_name(from));
-  }
-
-  sp_fs_copy_glob(from, sp_str_lit("*"), to);
-}
-
-void sp_fs_copy_file(sp_str_t from, sp_str_t to) {
-  if (sp_fs_is_dir(to)) {
-    sp_fs_create_dir(to);
-    to = sp_fs_join_path(to, sp_fs_get_name(from));
-  }
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_sys_stat_t st = SP_ZERO_INITIALIZE();
-  bool have_stat = sp_sys_stat(sp_str_to_cstr(from), &st) == 0;
-  sp_mem_end_scratch(scratch);
-  if (!have_stat) return;
-
-  sp_io_reader_t reader = SP_ZERO_INITIALIZE();
-  if (sp_io_reader_from_file(&reader, from)) return;
-
-  sp_io_writer_t writer = SP_ZERO_INITIALIZE();
-  if (sp_io_writer_from_file(&writer, to, SP_IO_WRITE_MODE_OVERWRITE)) {
-    sp_io_reader_close(&reader);
-    return;
-  }
-
-  u8 buffer[4096];
-  while (true) {
-    u64 bytes_read = 0;
-    sp_err_t err = sp_io_read(&reader, buffer, sizeof(buffer), &bytes_read);
-    if (bytes_read) sp_io_write(&writer, buffer, bytes_read, SP_NULLPTR);
-    if (err) break;
-  }
-
-  sp_io_reader_close(&reader);
-  sp_io_writer_close(&writer);
-
-  sp_mem_scratch_t s2 = sp_mem_begin_scratch();
-  sp_sys_chmod(sp_str_to_cstr(to), &st);
-  sp_mem_end_scratch(s2);
-}
-
-sp_err_t sp_fs_remove_dir(sp_str_t path) {
-  sp_err_t err = SP_OK;
-  sp_mem_scratch_t s = sp_mem_begin_scratch();
-
-  sp_da(sp_fs_entry_t) entries = sp_fs_collect(path);
-
-  sp_da_for(entries, i) {
-    sp_fs_entry_t* entry = &entries[i];
-    switch (entry->kind) {
-      case SP_FS_KIND_FILE:
-      case SP_FS_KIND_SYMLINK: err = sp_fs_remove_file(entry->path); break;
-      case SP_FS_KIND_DIR: err = sp_fs_remove_dir(entry->path); break;
-      case SP_FS_KIND_NONE: err = SP_ERR_OS; break;
-    }
-    if (err) goto done;
-  }
-
-  const c8* cstr = sp_str_to_cstr(path);
-  err = sp_sys_rmdir(cstr);
-
-done:
-  sp_mem_end_scratch(s);
-  return err;
-}
-
-SP_PRIVATE sp_fs_kind_t sp_fs_lstat_kind(sp_str_t path) {
-  if (sp_str_empty(path)) return SP_FS_KIND_NONE;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_sys_stat_t st = SP_ZERO_INITIALIZE();
-  s32 rc = sp_sys_lstat(sp_str_to_cstr(path), &st);
-  sp_mem_end_scratch(scratch);
-  return rc == 0 ? st.kind : SP_FS_KIND_NONE;
-}
-
-SP_PRIVATE sp_fs_kind_t sp_fs_stat_kind(sp_str_t path) {
-  if (sp_str_empty(path)) return SP_FS_KIND_NONE;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_sys_stat_t st = SP_ZERO_INITIALIZE();
-  s32 rc = sp_sys_stat(sp_str_to_cstr(path), &st);
-  sp_mem_end_scratch(scratch);
-  return rc == 0 ? st.kind : SP_FS_KIND_NONE;
-}
-
-bool sp_fs_exists(sp_str_t path) {
-  return sp_fs_stat_kind(path) != SP_FS_KIND_NONE;
-}
-
-bool sp_fs_is_glob(sp_str_t path) {
-  return sp_str_find_c8(path, '*') != SP_STR_NO_MATCH;
-}
-
-sp_fs_kind_t sp_fs_get_kind(sp_str_t path) {
-  return sp_fs_lstat_kind(path);
-}
-
-sp_fs_kind_t sp_fs_get_target_kind(sp_str_t path) {
-  return sp_fs_stat_kind(path);
-}
-
-bool sp_fs_is_file(sp_str_t path) {
-  return sp_fs_lstat_kind(path) == SP_FS_KIND_FILE;
-}
-
-bool sp_fs_is_symlink(sp_str_t path) {
-  return sp_fs_lstat_kind(path) == SP_FS_KIND_SYMLINK;
-}
-
-bool sp_fs_is_dir(sp_str_t path) {
-  return sp_fs_lstat_kind(path) == SP_FS_KIND_DIR;
-}
-
-bool sp_fs_is_target_file(sp_str_t path) {
-  return sp_fs_stat_kind(path) == SP_FS_KIND_FILE;
-}
-
-bool sp_fs_is_target_dir(sp_str_t path) {
-  return sp_fs_stat_kind(path) == SP_FS_KIND_DIR;
-}
-
-bool sp_fs_is_root(sp_str_t path) {
-  if (path.len == 0) return true;
-  if (path.len == 1 && path.data[0] == '/') return true;
-  if (path.len == 2 && path.data[1] == ':') return true;
-  if (path.len == 3 && path.data[1] == ':' && (path.data[2] == '/' || path.data[2] == '\\')) return true;
-  return false;
-}
-
-sp_str_t sp_fs_get_cwd() {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-
-  sp_str_t cwd = sp_os_get_cwd();
-
-  sp_context_push_allocator(scratch.old_allocator);
-  sp_str_t result = sp_fs_normalize_path(cwd);
-  sp_context_pop();
-
-  sp_mem_end_scratch(scratch);
-  return result;
-}
-
-sp_err_t sp_fs_remove_file(sp_str_t path) {
-  sp_mem_scratch_t s = sp_mem_begin_scratch();
-  const c8* cstr = sp_str_to_cstr(path);
-  sp_err_t err = sp_sys_unlink(cstr);
-  sp_mem_end_scratch(s);
-  return err;
-}
-
-sp_fs_it_t sp_fs_it_new(sp_str_t path) {
-  sp_fs_it_t it = SP_ZERO_INITIALIZE();
-  sp_fs_it_begin(&it, path);
-  return it;
-}
-
-sp_fs_it_t sp_fs_it_new_recursive(sp_str_t path) {
-  sp_fs_it_t it = { .recursive = true };
-  sp_fs_it_begin(&it, path);
-  return it;
-}
-
-void sp_fs_it_push(sp_fs_it_t* it, sp_str_t path) {
-  sp_fs_it_frame_t frame = SP_ZERO_INITIALIZE();
-  if (!sp_sys_diriter_open(&frame, path)) {
-    return;
-  }
-
-  frame.path = sp_str_copy(path);
-  sp_da_push(it->stack, frame);
-}
-
-
-void sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path) {
-  if (sp_str_empty(path) || !sp_fs_is_dir(path)) return;
-
-  sp_fs_it_push(it, path);
-  sp_fs_it_next(it);
-}
-
-void sp_fs_it_next(sp_fs_it_t* it) {
-  while (!sp_da_empty(it->stack)) {
-    sp_fs_it_frame_t* top = sp_da_back(it->stack);
-
-    if (sp_sys_diriter_read(top, &it->entry)) {
-      it->entry.path = sp_fs_join_path(top->path, it->entry.name);
-
-      if (it->recursive && it->entry.kind == SP_FS_KIND_DIR) {
-        sp_fs_it_push(it, it->entry.path);
-      }
-      return;
-    }
-
-    sp_sys_diriter_close(top);
-    sp_da_pop(it->stack);
-  }
-}
-
-bool sp_fs_it_valid(sp_fs_it_t* it) {
-  return !sp_da_empty(it->stack);
-}
-
-void sp_fs_it_deinit(sp_fs_it_t* it) {
-  sp_da_for(it->stack, i) {
-    sp_sys_diriter_close(&it->stack[i]);
-  }
-  sp_da_free(it->stack);
-}
 
 //////////////
 // ITERATOR //
@@ -10086,67 +9672,6 @@ bool sp_sys_diriter_read(sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
 #error "sp_sys_diriter_close"
 #error "sp_sys_diriter_read"
 #endif
-
-
-//////////////////
-// CANONICALIZE //
-//////////////////
-sp_str_t sp_fs_canonicalize_path(sp_str_t path) {
-  if (sp_str_empty(path)) return SP_ZERO_STRUCT(sp_str_t);
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  c8 buf[SP_PATH_MAX];
-  s64 len = sp_sys_canonicalize_path(sp_str_to_cstr(path), buf, SP_PATH_MAX);
-  sp_mem_end_scratch(scratch);
-
-  if (len <= 0) return SP_ZERO_STRUCT(sp_str_t);
-
-  sp_str_t canonical = { .data = buf, .len = (u32)len };
-  return sp_fs_normalize_path(canonical);
-}
-
-//////////////
-// EXE PATH //
-//////////////
-sp_str_t sp_fs_get_exe_path() {
-  c8 buf[SP_PATH_MAX];
-  s64 len = sp_sys_get_exe_path(buf, SP_PATH_MAX);
-  if (len <= 0) return sp_str_lit("");
-  return sp_fs_normalize_path((sp_str_t){ .data = buf, .len = (u32)len });
-}
-
-//////////////////
-// SYSTEM PATHS //
-//////////////////
-sp_str_t sp_fs_get_storage_path() {
-  c8 buf[SP_PATH_MAX];
-  s64 len = sp_sys_get_storage_path(buf, SP_PATH_MAX);
-  if (len <= 0) return SP_ZERO_STRUCT(sp_str_t);
-  return sp_fs_normalize_path((sp_str_t){ .data = buf, .len = (u32)len });
-}
-
-sp_str_t sp_fs_get_config_path() {
-  c8 buf[SP_PATH_MAX];
-  s64 len = sp_sys_get_config_path(buf, SP_PATH_MAX);
-  if (len <= 0) return SP_ZERO_STRUCT(sp_str_t);
-  return sp_fs_normalize_path((sp_str_t){ .data = buf, .len = (u32)len });
-}
-
-//////////////////
-// GET MOD TIME //
-//////////////////
-sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t file_path) {
-  sp_tm_epoch_t result = sp_zero_struct(sp_tm_epoch_t);
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_sys_stat_t st;
-  if (sp_sys_stat(sp_str_to_cstr(file_path), &st) == 0) {
-    result.s = (u64)st.mtime.tv_sec;
-    result.ns = (u32)st.mtime.tv_nsec;
-  }
-  sp_mem_end_scratch(scratch);
-  return result;
-}
 
 
 //     ███████     █████████
@@ -13408,7 +12933,7 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
 
 void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
-  sp_str_t canonical = sp_fs_canonicalize_path(file_path);
+  sp_str_t canonical = sp_fs_canonicalize_path_a(monitor->allocator, file_path);
   sp_str_ht_insert(os->files, canonical, 1);
 
   sp_str_t dir_path = sp_fs_parent_path(canonical);
@@ -13448,7 +12973,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 
         if (event->len > 0 && event->name[0] != '\0') {
           file_name = sp_str_from_cstr(event->name);
-          file_path = sp_fs_join_path(dir_path, file_name);
+          file_path = sp_fs_join_path_a(monitor->allocator, dir_path, file_name);
         } else {
           file_path = sp_str_copy(dir_path);
           file_name = sp_fs_get_name(file_path);
@@ -14637,6 +14162,10 @@ void sp_mem_end_scratch_a(sp_mem_arena_marker_t s) {
   sp_mem_arena_pop(s);
 }
 
+sp_mem_t sp_mem_scratch_allocator_a() {
+  return sp_mem_arena_as_allocator(sp_tls_rt_get_scratch_arena_a(sp_tls_rt_get()));
+}
+
 sp_err_t sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
   sp_err_t result = SP_OK;
   u64 written = 0;
@@ -15226,6 +14755,610 @@ void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t
       }
       break;
   }
+}
+sp_str_t sp_fs_get_name(sp_str_t path) {
+  // The only valid separator is '/'. If you're calling this function on a path
+  // that might contain a '\', normalize it first. Garbage in, garbage out.
+  s32 it = sp_str_find_c8_reverse(path, '/');
+  return sp_str_suffix(path, ((s32)path.len) - it - 1);
+}
+
+sp_str_t sp_fs_trim_path(sp_str_t path) {
+  if (sp_str_empty(path)) return path;
+
+  while (!sp_str_empty(path) && !sp_fs_is_root(path)) {
+    switch (sp_str_back(path)) {
+      case '/':
+      case '\\': {
+        path.len--;
+        break;
+      }
+      default: {
+        return path;
+      }
+    }
+  }
+
+  return path;
+}
+
+sp_str_t sp_fs_parent_path(sp_str_t path) {
+  if (sp_str_empty(path)) return path;
+  if (sp_fs_is_root(path)) return path;
+
+  path = sp_fs_trim_path(path);
+
+  s32 index = sp_str_find_c8_reverse(path, '/');
+  return index == SP_STR_NO_MATCH ? sp_str_lit("") : sp_str_prefix(path, index);
+}
+
+sp_str_t sp_fs_get_ext(sp_str_t path) {
+  for (u32 index = 0; index < path.len; index++) {
+    c8 c = sp_str_at_reverse(path, index);
+
+    switch (c) {
+      case '.': return sp_str_sub_reverse(path, 0, index);
+      case '/': return sp_str_sub_reverse(path, 0, 0);
+      default:  break;
+    }
+  }
+
+  return sp_str_sub_reverse(path, 0, 0);
+}
+
+sp_str_t sp_fs_get_stem(sp_str_t path) {
+  sp_str_t file_name = sp_fs_get_name(path);
+  if (!file_name.len) return path;
+
+  sp_str_t extension = sp_fs_get_ext(path);
+
+  sp_str_t stem = {
+    .data = file_name.data,
+    .len = file_name.len - extension.len,
+  };
+
+  if (sp_str_back(stem) == '.') stem.len--;
+
+  return stem;
+}
+
+bool sp_fs_is_root(sp_str_t path) {
+  if (path.len == 0) return true;
+  if (path.len == 1 && path.data[0] == '/') return true;
+  if (path.len == 2 && path.data[1] == ':') return true;
+  if (path.len == 3 && path.data[1] == ':' && (path.data[2] == '/' || path.data[2] == '\\')) return true;
+  return false;
+}
+
+bool sp_fs_is_glob(sp_str_t path) {
+  return sp_str_find_c8(path, '*') != SP_STR_NO_MATCH;
+}
+
+c8* sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str) {
+  c8* buffer = (c8*)sp_mem_allocator_alloc(mem, str.len + 1);
+  if (str.len) sp_mem_copy(str.data, buffer, str.len);
+  buffer[str.len] = '\0';
+  return buffer;
+}
+
+sp_str_t sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str) {
+  return (sp_str_t) {
+    .data = sp_cstr_from_str_a(mem, str),
+    .len = str.len,
+  };
+}
+
+sp_str_t sp_str_copy_a(sp_mem_t mem, sp_str_t str) {
+  if (!str.data || !str.len) return SP_ZERO_STRUCT(sp_str_t);
+  c8* buffer = (c8*)sp_mem_allocator_alloc(mem, str.len);
+  sp_mem_copy(str.data, buffer, str.len);
+  return SP_STR(buffer, str.len);
+}
+
+sp_str_t sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b) {
+  u32 len = a.len + b.len;
+  if (!len) return SP_ZERO_STRUCT(sp_str_t);
+  c8* buffer = (c8*)sp_mem_allocator_alloc(mem, len);
+  if (a.len) sp_mem_copy(a.data, buffer,         a.len);
+  if (b.len) sp_mem_copy(b.data, buffer + a.len, b.len);
+  return SP_STR(buffer, len);
+}
+
+sp_str_t sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join) {
+  u32 len = a.len + join.len + b.len;
+  if (!len) return SP_ZERO_STRUCT(sp_str_t);
+  c8* buffer = (c8*)sp_mem_allocator_alloc(mem, len);
+  c8* p = buffer;
+  if (a.len)    { sp_mem_copy(a.data,    p, a.len);    p += a.len; }
+  if (join.len) { sp_mem_copy(join.data, p, join.len); p += join.len; }
+  if (b.len)    { sp_mem_copy(b.data,    p, b.len); }
+  return SP_STR(buffer, len);
+}
+
+sp_str_t sp_fs_normalize_path_a(sp_mem_t mem, sp_str_t path) {
+  if (sp_str_back(path) == '/' || sp_str_back(path) == '\\') {
+    path.len--;
+  }
+
+  c8* buffer = (c8*)sp_mem_allocator_alloc(mem, path.len);
+  sp_for(i, path.len) {
+    c8 c = path.data[i];
+    buffer[i] = (c == '\\' ? '/' : c);
+  }
+  return (sp_str_t) { .data = buffer, .len = path.len };
+}
+
+sp_str_t sp_fs_join_path_a(sp_mem_t mem, sp_str_t a, sp_str_t b) {
+  a = sp_fs_trim_path(a);
+  b = sp_fs_trim_path(b);
+  if (sp_str_empty(a)) return sp_str_copy_a(mem, b);
+  if (sp_str_empty(b)) return sp_str_copy_a(mem, a);
+  return sp_str_join_a(mem, a, b, SP_LIT("/"));
+}
+
+sp_str_t sp_fs_replace_ext_a(sp_mem_t mem, sp_str_t path, sp_str_t ext) {
+  sp_str_t stripped = sp_str_strip_right(path, sp_fs_get_ext(path));
+  return sp_str_empty(ext) ?
+    sp_str_copy_a(mem, stripped) :
+    sp_str_join_a(mem, path, ext, sp_str_lit("."));
+}
+
+sp_fs_kind_t sp_fs_lstat_kind_a(sp_str_t path) {
+  if (sp_str_empty(path)) return SP_FS_KIND_NONE;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_sys_stat_t st = SP_ZERO_INITIALIZE();
+  s32 rc = sp_sys_lstat(sp_cstr_from_str_a(s.mem, path), &st);
+  sp_mem_end_scratch_a(s);
+  return rc == 0 ? st.kind : SP_FS_KIND_NONE;
+}
+
+sp_fs_kind_t sp_fs_stat_kind_a(sp_str_t path) {
+  if (sp_str_empty(path)) return SP_FS_KIND_NONE;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_sys_stat_t st = SP_ZERO_INITIALIZE();
+  s32 rc = sp_sys_stat(sp_cstr_from_str_a(s.mem, path), &st);
+  sp_mem_end_scratch_a(s);
+  return rc == 0 ? st.kind : SP_FS_KIND_NONE;
+}
+
+bool sp_fs_exists_a(sp_str_t path)         {
+  return sp_fs_stat_kind_a(path)  != SP_FS_KIND_NONE;
+}
+
+bool sp_fs_is_file_a(sp_str_t path)        {
+  return sp_fs_lstat_kind_a(path) == SP_FS_KIND_FILE;
+}
+
+bool sp_fs_is_symlink_a(sp_str_t path)     {
+  return sp_fs_lstat_kind_a(path) == SP_FS_KIND_SYMLINK;
+}
+
+bool sp_fs_is_dir_a(sp_str_t path)         {
+  return sp_fs_lstat_kind_a(path) == SP_FS_KIND_DIR;
+}
+
+bool sp_fs_is_target_file_a(sp_str_t path) {
+  return sp_fs_stat_kind_a(path)  == SP_FS_KIND_FILE;
+}
+
+bool sp_fs_is_target_dir_a(sp_str_t path)  {
+  return sp_fs_stat_kind_a(path)  == SP_FS_KIND_DIR;
+}
+
+sp_fs_kind_t sp_fs_get_kind_a(sp_str_t path)        {
+  return sp_fs_lstat_kind_a(path);
+}
+
+sp_fs_kind_t sp_fs_get_target_kind_a(sp_str_t path) {
+  return sp_fs_stat_kind_a(path);
+}
+
+sp_tm_epoch_t sp_fs_get_mod_time_a(sp_str_t path) {
+  sp_tm_epoch_t result = SP_ZERO_STRUCT(sp_tm_epoch_t);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_sys_stat_t st;
+  if (sp_sys_stat(sp_cstr_from_str_a(s.mem, path), &st) == 0) {
+    result.s = (u64)st.mtime.tv_sec;
+    result.ns = (u32)st.mtime.tv_nsec;
+  }
+  sp_mem_end_scratch_a(s);
+  return result;
+}
+
+sp_str_t sp_fs_canonicalize_path_a(sp_mem_t mem, sp_str_t path) {
+  if (sp_str_empty(path)) return SP_ZERO_STRUCT(sp_str_t);
+
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  c8 buf[SP_PATH_MAX];
+  s64 len = sp_sys_canonicalize_path(sp_cstr_from_str_a(s.mem, path), buf, SP_PATH_MAX);
+  sp_mem_end_scratch_a(s);
+
+  if (len <= 0) return SP_ZERO_STRUCT(sp_str_t);
+  sp_str_t canonical = { .data = buf, .len = (u32)len };
+  return sp_fs_normalize_path_a(mem, canonical);
+}
+
+sp_str_t sp_fs_get_exe_path_a(sp_mem_t mem) {
+  c8 buf[SP_PATH_MAX];
+  s64 len = sp_sys_get_exe_path(buf, SP_PATH_MAX);
+  if (len <= 0) return sp_str_lit("");
+  return sp_fs_normalize_path_a(mem, (sp_str_t){ .data = buf, .len = (u32)len });
+}
+
+sp_str_t sp_fs_get_cwd_a(sp_mem_t mem) {
+  sp_str_t cwd = sp_os_get_cwd();
+  return sp_fs_normalize_path_a(mem, cwd);
+}
+
+sp_str_t sp_fs_get_storage_path_a(sp_mem_t mem) {
+  c8 buf[SP_PATH_MAX];
+  s64 len = sp_sys_get_storage_path(buf, SP_PATH_MAX);
+  if (len <= 0) return SP_ZERO_STRUCT(sp_str_t);
+  return sp_fs_normalize_path_a(mem, (sp_str_t){ .data = buf, .len = (u32)len });
+}
+
+sp_str_t sp_fs_get_config_path_a(sp_mem_t mem) {
+  c8 buf[SP_PATH_MAX];
+  s64 len = sp_sys_get_config_path(buf, SP_PATH_MAX);
+  if (len <= 0) return SP_ZERO_STRUCT(sp_str_t);
+  return sp_fs_normalize_path_a(mem, (sp_str_t){ .data = buf, .len = (u32)len });
+}
+
+//
+// fs: io wrappers
+//
+sp_err_t sp_io_reader_from_file_a(sp_io_reader_t* reader, sp_str_t path) {
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_sys_fd_t fd = sp_sys_open(sp_cstr_from_str_a(s.mem, path), SP_O_RDONLY | SP_O_BINARY, 0);
+  sp_mem_end_scratch_a(s);
+
+  if (fd == SP_SYS_INVALID_FD) {
+    *reader = SP_ZERO_STRUCT(sp_io_reader_t);
+    return SP_ERR_IO_OPEN_FAILED;
+  }
+
+  *reader = (sp_io_reader_t) {
+    .vtable = {
+      .read = sp_io_reader_file_read,
+      .seek = sp_io_reader_file_seek,
+      .size = sp_io_reader_file_size,
+      .close = sp_io_reader_file_close,
+    },
+    .file = { .fd = fd, .close_mode = SP_IO_CLOSE_MODE_AUTO },
+  };
+  return SP_OK;
+}
+
+sp_err_t sp_io_writer_from_file_a(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode) {
+  s32 flags = SP_O_WRONLY | SP_O_CREAT | SP_O_BINARY;
+  switch (mode) {
+    case SP_IO_WRITE_MODE_OVERWRITE: flags |= SP_O_TRUNC;  break;
+    case SP_IO_WRITE_MODE_APPEND:    flags |= SP_O_APPEND; break;
+  }
+
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_sys_fd_t fd = sp_sys_open(sp_cstr_from_str_a(s.mem, path), flags, 0644);
+  sp_mem_end_scratch_a(s);
+
+  if (fd == SP_SYS_INVALID_FD) {
+    *writer = SP_ZERO_STRUCT(sp_io_writer_t);
+    return SP_ERR_IO_OPEN_FAILED;
+  }
+
+  *writer = (sp_io_writer_t) {
+    .vtable = {
+      .write = sp_io_writer_file_write,
+      .seek = sp_io_writer_file_seek,
+      .size = sp_io_writer_file_size,
+      .close = sp_io_writer_file_close,
+    },
+    .file = { .fd = fd, .close_mode = SP_IO_CLOSE_MODE_AUTO },
+  };
+  return SP_OK;
+}
+
+sp_err_t sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
+  sp_assert(content);
+  sp_err_t err = SP_OK;
+  c8* buffer = SP_NULLPTR;
+  u64 size = 0;
+
+  sp_io_reader_t reader = SP_ZERO_INITIALIZE();
+  sp_try(sp_io_reader_from_file_a(&reader, path));
+
+  sp_try_goto(sp_io_reader_size(&reader, &size), err, cleanup);
+  if (!size) goto cleanup;
+
+  buffer = (c8*)sp_mem_allocator_alloc(mem, size);
+  u64 bytes_read = 0;
+  sp_try_goto(sp_io_read(&reader, buffer, size, &bytes_read), err, cleanup);
+  content->data = buffer;
+  content->len = (u32)bytes_read;
+  buffer = SP_NULLPTR;
+
+cleanup:
+  if (buffer) sp_mem_allocator_free(mem, buffer);
+  sp_io_reader_close(&reader);
+  return err;
+}
+
+sp_err_t sp_fs_create_dir_a(sp_str_t path) {
+  if (sp_str_empty(path)) return SP_ERR_LAZY;
+  if (sp_fs_exists_a(path)) {
+    return sp_fs_is_dir_a(path) ? SP_OK : SP_ERR_LAZY;
+  }
+
+  sp_err_t result = SP_OK;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_da(sp_str_t) missing = SP_NULLPTR;
+  sp_da_init(s.mem, missing);
+
+  // Walk up, collecting intermediate paths that don't exist
+  path = sp_fs_trim_path(path);
+  while (!sp_fs_is_root(path) && !sp_fs_exists_a(path)) {
+    sp_da_push(missing, path);
+    path = sp_fs_parent_path(path);
+  }
+
+  // Walk back down and create each one
+  sp_da_rfor(missing, it) {
+    sp_str_t cstr = sp_str_to_cstr_a(s.mem, missing[it]);
+    result = sp_os_create_dir((sp_str_t){ .data = cstr.data, .len = cstr.len });
+    if (result && !sp_fs_exists_a(missing[it])) goto cleanup;
+  }
+
+cleanup:
+  sp_mem_end_scratch_a(s);
+  return result;
+}
+
+sp_err_t sp_fs_create_file_a(sp_str_t path) {
+  return sp_os_create_file(path);
+}
+
+sp_err_t sp_fs_create_file_slice_a(sp_str_t path, sp_mem_slice_t slice) {
+  sp_try(sp_os_create_file(path));
+  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_try(sp_io_writer_from_file_a(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_write(&io, slice.data, slice.len, SP_NULLPTR));
+  sp_try(sp_io_writer_close(&io));
+  return SP_OK;
+}
+
+sp_err_t sp_fs_create_file_str_a(sp_str_t path, sp_str_t str) {
+  sp_try(sp_os_create_file(path));
+  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_try(sp_io_writer_from_file_a(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_write_str(&io, str, SP_NULLPTR));
+  sp_try(sp_io_writer_close(&io));
+  return SP_OK;
+}
+
+sp_err_t sp_fs_create_file_cstr_a(sp_str_t path, const c8* str) {
+  return sp_fs_create_file_str_a(path, sp_str_view(str));
+}
+
+sp_err_t sp_fs_create_hard_link_a(sp_str_t target, sp_str_t link_path) {
+  return sp_os_create_hard_link(target, link_path);
+}
+
+sp_err_t sp_fs_create_sym_link_a(sp_str_t target, sp_str_t link_path) {
+  return sp_os_create_sym_link(target, link_path);
+}
+
+sp_err_t sp_fs_link_a(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind) {
+  switch (kind) {
+    case SP_FS_LINK_HARD:     return sp_fs_create_hard_link_a(from, to);
+    case SP_FS_LINK_SYMBOLIC: return sp_fs_create_sym_link_a(from, to);
+    case SP_FS_LINK_COPY:     return sp_fs_copy_a(from, to);
+  }
+  SP_UNREACHABLE_RETURN(SP_OK);
+}
+
+sp_err_t sp_fs_remove_file_a(sp_str_t path) {
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_err_t err = sp_sys_unlink(sp_cstr_from_str_a(s.mem, path));
+  sp_mem_end_scratch_a(s);
+  return err;
+}
+
+//
+// fs: iterator (uses scratch da internally)
+//
+void sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path) {
+  sp_fs_it_frame_t frame = SP_ZERO_INITIALIZE();
+  if (!sp_sys_diriter_open(&frame, path)) return;
+
+  sp_mem_t a = sp_da_allocator(it->stack);
+  frame.path = sp_str_copy_a(a, path);
+  sp_da_push(it->stack, frame);
+}
+
+void sp_fs_it_begin_a(sp_fs_it_t* it, sp_str_t path) {
+  if (sp_str_empty(path) || !sp_fs_is_dir_a(path)) return;
+  sp_fs_it_push_a(it, path);
+  sp_fs_it_next_a(it);
+}
+
+void sp_fs_it_next_a(sp_fs_it_t* it) {
+  while (!sp_da_empty(it->stack)) {
+    sp_fs_it_frame_t* top = sp_da_back(it->stack);
+
+    if (sp_sys_diriter_read(top, &it->entry)) {
+      sp_mem_t a = sp_da_allocator(it->stack);
+      it->entry.path = sp_fs_join_path_a(a, top->path, it->entry.name);
+
+      if (it->recursive && it->entry.kind == SP_FS_KIND_DIR) {
+        sp_fs_it_push_a(it, it->entry.path);
+      }
+      return;
+    }
+
+    sp_sys_diriter_close(top);
+    sp_da_pop(it->stack);
+  }
+}
+
+bool sp_fs_it_valid_a(sp_fs_it_t* it) {
+  return !sp_da_empty(it->stack);
+}
+
+void sp_fs_it_deinit_a(sp_fs_it_t* it) {
+  sp_da_for(it->stack, i) {
+    sp_sys_diriter_close(&it->stack[i]);
+  }
+  sp_da_free(it->stack);
+}
+
+sp_da(sp_fs_entry_t) sp_fs_collect_a(sp_mem_t mem, sp_str_t path) {
+  sp_da(sp_fs_entry_t) entries = SP_NULLPTR;
+  sp_da_init(mem, entries);
+
+  sp_fs_it_t it = SP_ZERO_INITIALIZE();
+  sp_da_init(mem, it.stack);
+  sp_fs_it_begin_a(&it, path);
+  while (sp_fs_it_valid_a(&it)) {
+    sp_da_push(entries, it.entry);
+    sp_fs_it_next_a(&it);
+  }
+  sp_fs_it_deinit_a(&it);
+  return entries;
+}
+
+sp_da(sp_fs_entry_t) sp_fs_collect_recursive_a(sp_mem_t mem, sp_str_t path) {
+  sp_da(sp_fs_entry_t) entries = SP_NULLPTR;
+  sp_da_init(mem, entries);
+
+  sp_fs_it_t it = { .recursive = true };
+  sp_da_init(mem, it.stack);
+  sp_fs_it_begin_a(&it, path);
+  while (sp_fs_it_valid_a(&it)) {
+    sp_da_push(entries, it.entry);
+    sp_fs_it_next_a(&it);
+  }
+  sp_fs_it_deinit_a(&it);
+  return entries;
+}
+
+sp_err_t sp_fs_remove_dir_a(sp_str_t path) {
+  sp_err_t err = SP_OK;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect_a(s.mem, path);
+  sp_da_for(entries, i) {
+    sp_fs_entry_t* entry = &entries[i];
+    switch (entry->kind) {
+      case SP_FS_KIND_FILE:
+      case SP_FS_KIND_SYMLINK: err = sp_fs_remove_file_a(entry->path); break;
+      case SP_FS_KIND_DIR:     err = sp_fs_remove_dir_a(entry->path);  break;
+      case SP_FS_KIND_NONE:    err = SP_ERR_OS;                        break;
+    }
+    if (err) goto done;
+  }
+
+  {
+    err = sp_sys_rmdir(sp_cstr_from_str_a(s.mem, path));
+  }
+
+done:
+  sp_mem_end_scratch_a(s);
+  return err;
+}
+
+void sp_fs_copy_file_a(sp_str_t from, sp_str_t to) {
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+
+  if (sp_fs_is_dir_a(to)) {
+    to = sp_fs_join_path_a(s.mem, to, sp_fs_get_name(from));
+  }
+
+  sp_sys_stat_t st = SP_ZERO_INITIALIZE();
+  if (sp_sys_stat(sp_cstr_from_str_a(s.mem, from), &st)) goto done;
+
+  sp_io_reader_t reader = SP_ZERO_INITIALIZE();
+  if (sp_io_reader_from_file_a(&reader, from)) goto done;
+
+  sp_io_writer_t writer = SP_ZERO_INITIALIZE();
+  if (sp_io_writer_from_file_a(&writer, to, SP_IO_WRITE_MODE_OVERWRITE)) {
+    sp_io_reader_close(&reader);
+    goto done;
+  }
+
+  u8 buffer[4096];
+  while (true) {
+    u64 bytes_read = 0;
+    sp_err_t err = sp_io_read(&reader, buffer, sizeof(buffer), &bytes_read);
+    if (bytes_read) sp_io_write(&writer, buffer, bytes_read, SP_NULLPTR);
+    if (err) break;
+  }
+  sp_io_reader_close(&reader);
+  sp_io_writer_close(&writer);
+  sp_sys_chmod(sp_cstr_from_str_a(s.mem, to), &st);
+
+done:
+  sp_mem_end_scratch_a(s);
+}
+
+void sp_fs_copy_glob_a(sp_str_t from, sp_str_t glob, sp_str_t to) {
+  sp_fs_create_dir_a(to);
+
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_da(sp_fs_entry_t) entries = sp_fs_collect_a(s.mem, from);
+
+  sp_da_for(entries, i) {
+    sp_fs_entry_t* entry = &entries[i];
+    sp_str_t entry_name = entry->name;
+
+    bool matches = sp_str_equal(glob, sp_str_lit("*"));
+    if (!matches) matches = sp_str_equal(entry_name, glob);
+
+    if (matches) {
+      sp_str_t entry_path = sp_fs_join_path_a(s.mem, from, entry_name);
+      sp_fs_copy_a(entry_path, to);
+    }
+  }
+  sp_mem_end_scratch_a(s);
+}
+
+void sp_fs_copy_dir_a(sp_str_t from, sp_str_t to) {
+  if (sp_fs_is_dir_a(to)) {
+    sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+    to = sp_fs_join_path_a(s.mem, to, sp_fs_get_name(from));
+    sp_fs_copy_glob_a(from, sp_str_lit("*"), to);
+    sp_mem_end_scratch_a(s);
+    return;
+  }
+  sp_fs_copy_glob_a(from, sp_str_lit("*"), to);
+}
+
+sp_err_t sp_fs_copy_a(sp_str_t from, sp_str_t to) {
+  if (sp_fs_is_glob(from)) {
+    sp_fs_copy_glob_a(sp_fs_parent_path(from), sp_fs_get_name(from), to);
+  }
+  else if (sp_fs_is_target_dir_a(from)) {
+    SP_ASSERT(sp_fs_is_target_dir_a(to));
+    sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+    sp_fs_copy_glob_a(from, sp_str_lit("*"), sp_fs_join_path_a(s.mem, to, sp_fs_get_name(from)));
+    sp_mem_end_scratch_a(s);
+  }
+  else if (sp_fs_is_target_file_a(from)) {
+    sp_fs_copy_file_a(from, to);
+  }
+  return SP_OK;
+}
+
+sp_fs_it_t sp_fs_it_new_a(sp_mem_t mem, sp_str_t path) {
+  sp_fs_it_t it = SP_ZERO_INITIALIZE();
+  sp_da_init(mem, it.stack);
+  sp_fs_it_begin_a(&it, path);
+  return it;
+}
+
+sp_fs_it_t sp_fs_it_new_recursive_a(sp_mem_t mem, sp_str_t path) {
+  sp_fs_it_t it = { .recursive = true };
+  sp_da_init(mem, it.stack);
+  sp_fs_it_begin_a(&it, path);
+  return it;
 }
 // @refactor @bottom
 

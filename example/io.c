@@ -2,6 +2,8 @@
 #include "sp.h"
 
 s32 run(s32 num_args, const c8** args) {
+  sp_mem_t mem = sp_mem_os_new();
+
   struct {
     sp_io_reader_t r;
     sp_io_writer_t w;
@@ -11,7 +13,7 @@ s32 run(s32 num_args, const c8** args) {
     .data = sp_alloc_n(u8, 64),
     .capacity = 64
   };
-  sp_str_t exe = sp_fs_get_exe_path();
+  sp_str_t exe = sp_fs_get_exe_path_a(mem);
 
   // sp_io provides utilities for opening a file from a path
   sp_io_reader_from_file(&io.r, exe);

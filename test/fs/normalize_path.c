@@ -6,6 +6,7 @@ typedef struct {
 } normalize_path_case_t;
 
 UTEST(fs_normalize_path, cases) {
+  sp_mem_t a = sp_mem_os_new();
   normalize_path_case_t cases[] = {
     { "",                              "" },
     { "foo",                           "foo" },
@@ -24,28 +25,31 @@ UTEST(fs_normalize_path, cases) {
   };
 
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_fs_normalize_path(sp_str_view(cases[i].input));
+    sp_str_t result = sp_fs_normalize_path_a(a, sp_str_view(cases[i].input));
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
 }
 
 UTEST(fs_normalize_path, preserves_dotdot) {
+  sp_mem_t a = sp_mem_os_new();
   SP_EXPECT_STR_EQ_CSTR(
-    sp_fs_normalize_path(SP_LIT("a\\b\\..\\c")),
+    sp_fs_normalize_path_a(a, SP_LIT("a\\b\\..\\c")),
     "a/b/../c"
   );
 }
 
 UTEST(fs_normalize_path, preserves_dot) {
+  sp_mem_t a = sp_mem_os_new();
   SP_EXPECT_STR_EQ_CSTR(
-    sp_fs_normalize_path(SP_LIT("a\\.\\b")),
+    sp_fs_normalize_path_a(a, SP_LIT("a\\.\\b")),
     "a/./b"
   );
 }
 
 UTEST(fs_normalize_path, nonexistent_path) {
+  sp_mem_t a = sp_mem_os_new();
   SP_EXPECT_STR_EQ_CSTR(
-    sp_fs_normalize_path(SP_LIT("C:\\no\\such\\path\\file.txt")),
+    sp_fs_normalize_path_a(a, SP_LIT("C:\\no\\such\\path\\file.txt")),
     "C:/no/such/path/file.txt"
   );
 }

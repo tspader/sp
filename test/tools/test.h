@@ -83,6 +83,8 @@ typedef struct {
 
 typedef struct {
   sp_test_file_paths_t paths;
+  sp_mem_arena_t* arena;
+  sp_mem_t allocator;
 } sp_test_file_manager_t;
 
 typedef struct {
@@ -126,17 +128,17 @@ void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker);
 
 static sp_str_t sp_test_file_manager_top_level = SP_ZERO_INITIALIZE();
 
-static sp_str_t sp_test_file_manager_get_repo_root() {
-  sp_str_t path = sp_fs_get_exe_path();
-  if (sp_fs_exists(path) && sp_fs_is_file(path)) {
+static sp_str_t sp_test_file_manager_get_repo_root(sp_mem_t a) {
+  sp_str_t path = sp_fs_get_exe_path_a(a);
+  if (sp_fs_exists_a(path) && sp_fs_is_file_a(path)) {
     path = sp_fs_parent_path(path);
   }
 
   while (!sp_str_empty(path)) {
     if (sp_str_equal(sp_fs_get_name(path), SP_LIT("sp"))) {
-      sp_str_t marker = sp_fs_join_path(path, SP_LIT("sp.h"));
-      if (sp_fs_exists(marker)) {
-        return sp_fs_canonicalize_path(path);
+      sp_str_t marker = sp_fs_join_path_a(a, path, SP_LIT("sp.h"));
+      if (sp_fs_exists_a(marker)) {
+        return sp_fs_canonicalize_path_a(a, path);
       }
     }
 
@@ -153,60 +155,64 @@ static sp_str_t sp_test_file_manager_get_repo_root() {
   }
 
   SP_ASSERT(false);
-  return sp_fs_canonicalize_path(sp_fs_get_cwd());
+  return sp_fs_canonicalize_path_a(a, sp_fs_get_cwd_a(a));
 }
 
-static sp_str_t sp_test_file_manager_get_top_level(sp_str_t repo_root) {
+static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_root) {
   if (!sp_str_empty(sp_test_file_manager_top_level)) {
-    if (!sp_fs_exists(sp_test_file_manager_top_level)) {
-      sp_fs_create_dir(sp_test_file_manager_top_level);
+    if (!sp_fs_exists_a(sp_test_file_manager_top_level)) {
+      sp_fs_create_dir_a(sp_test_file_manager_top_level);
     }
     return sp_test_file_manager_top_level;
   }
 
-  sp_str_t tmp = sp_fs_join_path(repo_root, SP_LIT(".tmp"));
-  if (!sp_fs_exists(tmp)) {
-    sp_fs_create_dir(tmp);
+  sp_str_t tmp = sp_fs_join_path_a(a, repo_root, SP_LIT(".tmp"));
+  if (!sp_fs_exists_a(tmp)) {
+    sp_fs_create_dir_a(tmp);
   }
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   sp_str_t iso = sp_tm_epoch_to_iso8601(now);
   sp_str_t sanitized = sp_str_replace_c8(iso, ':', '-');
-  sp_str_t root = sp_fs_join_path(tmp, sanitized);
+  sp_str_t root = sp_fs_join_path_a(a, tmp, sanitized);
 
-  if (!sp_fs_exists(root)) {
-    sp_fs_create_dir(root);
+  if (!sp_fs_exists_a(root)) {
+    sp_fs_create_dir_a(root);
   }
 
-  sp_test_file_manager_top_level = sp_fs_canonicalize_path(root);
+  // Cache in a long-lived allocator (os) so the result outlives `a`, which is
+  // typically a per-test arena that gets destroyed in cleanup.
+  sp_test_file_manager_top_level = sp_fs_canonicalize_path_a(sp_mem_os_new(), root);
   return sp_test_file_manager_top_level;
 }
 
 void sp_test_file_manager_init(sp_test_file_manager_t* manager) {
-  manager->paths.bin = sp_fs_get_exe_path();
-  manager->paths.root = sp_test_file_manager_get_repo_root();
+  manager->arena = sp_mem_arena_new();
+  manager->allocator = sp_mem_arena_as_allocator(manager->arena);
+  manager->paths.bin = sp_fs_get_exe_path_a(manager->allocator);
+  manager->paths.root = sp_test_file_manager_get_repo_root(manager->allocator);
   manager->paths.build = manager->paths.root;
-  manager->paths.test = sp_test_file_manager_get_top_level(manager->paths.root);
+  manager->paths.test = sp_test_file_manager_get_top_level(manager->allocator, manager->paths.root);
 
-  if (!sp_fs_exists(manager->paths.test)) {
-    sp_fs_create_dir(manager->paths.test);
+  if (!sp_fs_exists_a(manager->paths.test)) {
+    sp_fs_create_dir_a(manager->paths.test);
   }
 }
 
 sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name) {
-  return sp_fs_join_path(manager->paths.test, name);
+  return sp_fs_join_path_a(manager->allocator, manager->paths.test, name);
 }
 
 void sp_test_file_create_ex(sp_test_file_config_t config) {
   sp_str_t parent = sp_fs_parent_path(config.path);
-  if (!sp_str_empty(parent) && !sp_str_equal(parent, config.path) && !sp_fs_exists(parent)) {
-    sp_fs_create_dir(parent);
+  if (!sp_str_empty(parent) && !sp_str_equal(parent, config.path) && !sp_fs_exists_a(parent)) {
+    sp_fs_create_dir_a(parent);
   }
 
-  sp_fs_remove_file(config.path);
+  sp_fs_remove_file_a(config.path);
 
   sp_io_writer_t stream = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_file(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_from_file_a(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
   SP_ASSERT(stream.file.fd != 0);
 
   if (config.content.len > 0) {
@@ -238,8 +244,13 @@ void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
     return;
   }
 
-  if (sp_fs_exists(manager->paths.test)) {
-    sp_fs_remove_dir(manager->paths.test);
+  if (sp_fs_exists_a(manager->paths.test)) {
+    sp_fs_remove_dir_a(manager->paths.test);
+  }
+
+  if (manager->arena) {
+    sp_mem_arena_destroy(manager->arena);
+    manager->arena = SP_NULLPTR;
   }
 }
 

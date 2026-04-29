@@ -7,7 +7,10 @@ s32 run(s32 num_args, const c8** args) {
     return 1;
   }
 
-  sp_str_t path = sp_fs_join_path(sp_fs_get_cwd(), sp_str_view(args[1]));
+  sp_mem_t mem = sp_mem_os_new();
+
+  sp_str_t cwd = sp_fs_get_cwd_a(mem);
+  sp_str_t path = sp_fs_join_path_a(mem, cwd, sp_str_view(args[1]));
   sp_str_t content = sp_zero_initialize();
   sp_io_read_file(path, &content);
 

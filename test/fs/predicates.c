@@ -25,21 +25,21 @@ static u32 fs_count_predicates(fs_predicate_expected_t* expected) {
 
 static void run_fs_predicate_test(s32* utest_result, sp_test_file_manager_t* fm, fs_predicate_test_t* t) {
   sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
   u32 expected_count = fs_count_predicates(t->expected);
   sp_for(i, expected_count) {
     fs_predicate_expected_t* exp = &t->expected[i];
-    sp_str_t path = sp_fs_join_path(sandbox, sp_str_view(exp->path));
+    sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(exp->path));
 
-    fs_expect_bool(utest_result, path, "exists", sp_fs_exists(path), exp->exists);
-    fs_expect_bool(utest_result, path, "is_regular_file", sp_fs_is_file(path), exp->is_regular_file);
-    fs_expect_bool(utest_result, path, "is_dir", sp_fs_is_dir(path), exp->is_dir);
-    fs_expect_bool(utest_result, path, "is_symlink", sp_fs_is_symlink(path), exp->is_symlink);
-    fs_expect_bool(utest_result, path, "is_target_regular_file", sp_fs_is_target_file(path), exp->is_target_regular_file);
-    fs_expect_bool(utest_result, path, "is_target_dir", sp_fs_is_target_dir(path), exp->is_target_dir);
-    fs_expect_attr(utest_result, path, sp_fs_get_kind(path), exp->attr);
+    fs_expect_bool(utest_result, path, "exists", sp_fs_exists_a(path), exp->exists);
+    fs_expect_bool(utest_result, path, "is_regular_file", sp_fs_is_file_a(path), exp->is_regular_file);
+    fs_expect_bool(utest_result, path, "is_dir", sp_fs_is_dir_a(path), exp->is_dir);
+    fs_expect_bool(utest_result, path, "is_symlink", sp_fs_is_symlink_a(path), exp->is_symlink);
+    fs_expect_bool(utest_result, path, "is_target_regular_file", sp_fs_is_target_file_a(path), exp->is_target_regular_file);
+    fs_expect_bool(utest_result, path, "is_target_dir", sp_fs_is_target_dir_a(path), exp->is_target_dir);
+    fs_expect_attr(utest_result, path, sp_fs_get_kind_a(path), exp->attr);
   }
 }
 

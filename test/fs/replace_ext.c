@@ -7,6 +7,7 @@ typedef struct {
 } replace_ext_case_t;
 
 UTEST(fs_replace_ext, cases) {
+  sp_mem_t a = sp_mem_os_new();
   replace_ext_case_t cases[] = {
     { "foo.c",       "o",   "foo.c.o" },
     { "foo.c",       "",    "foo." },
@@ -17,7 +18,7 @@ UTEST(fs_replace_ext, cases) {
   };
 
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_fs_replace_ext(sp_str_view(cases[i].path), sp_str_view(cases[i].ext));
+    sp_str_t result = sp_fs_replace_ext_a(a, sp_str_view(cases[i].path), sp_str_view(cases[i].ext));
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
 }

@@ -52,20 +52,24 @@ typedef struct {
 //////////////
 // FIXTURES //
 //////////////
-sp_str_t get_process_path() {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path());
+sp_str_t get_process_path(sp_mem_t mem) {
+  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path_a(mem));
   sp_str_t process = sp_fs_join_path(exe, sp_str_lit("process"));
   process = sp_fs_replace_ext(process, sp_os_get_executable_ext());
   return process;
 }
 
 typedef struct ps {
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
   sp_test_file_manager_t file_manager;
   sp_byte_buffer_t buffer;
 } sp_ps;
 
 UTEST_F_SETUP(ps) {
-  sp_str_t process = get_process_path();
+  ut.arena = sp_mem_arena_new();
+  ut.mem = sp_mem_arena_as_allocator(ut.arena);
+  sp_str_t process = get_process_path(ut.mem);
   EXPECT_TRUE(sp_fs_exists(process));
 
   sp_test_file_manager_init(&ut.file_manager);
@@ -80,6 +84,7 @@ UTEST_F_TEARDOWN(ps) {
   fflush(stdout);
   fflush(stderr);
   sp_test_file_manager_cleanup(&ut.file_manager);
+  sp_mem_arena_destroy(ut.arena);
 }
 
 
@@ -134,9 +139,9 @@ void sp_test_proc_check_stream(sp_test_proc_stream_context_t* ctx) {
 ////////////////
 // SP_PS_IO //
 ////////////////
-void sp_test_proc_io(sp_test_proc_io_config_t test) {
+void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_config_t test) {
   sp_ps_config_t config = {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), SP_CSTR(test_proc_function_to_cstr(test.fn)),
     },
@@ -209,7 +214,7 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
 
 // SP_PS_IO_MODE_CREATE
 UTEST_F(ps, io_create_create_null) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
@@ -222,7 +227,7 @@ UTEST_F(ps, io_create_create_null) {
 }
 
 UTEST_F(ps, io_create_null_create) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_NULL },
@@ -235,7 +240,7 @@ UTEST_F(ps, io_create_null_create) {
 }
 
 UTEST_F(ps, io_null_create_null) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
@@ -247,7 +252,7 @@ UTEST_F(ps, io_null_create_null) {
 }
 
 UTEST_F(ps, io_null_null_create) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
       .out = { .mode = SP_PS_IO_MODE_NULL },
@@ -259,7 +264,7 @@ UTEST_F(ps, io_null_null_create) {
 }
 
 UTEST_F(ps, io_stdout_stderr) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
@@ -276,7 +281,7 @@ UTEST_F(ps, io_create_file_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdout.file"));
   sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_EXISTING, .fd = fd },
@@ -309,7 +314,7 @@ UTEST_F(ps, io_file_create_null) {
   sp_sys_write(fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
   sp_sys_lseek(fd, 0, SP_SEEK_SET);
 
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_EXISTING, .fd = fd },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
@@ -331,7 +336,7 @@ UTEST_F(ps, io_create_null_file) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
   sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_NULL },
@@ -367,7 +372,7 @@ UTEST_F(ps, io_file_null_file) {
   sp_str_t err_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
   sp_sys_fd_t err_fd = sp_sys_open(sp_str_to_cstr(err_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_EXISTING, .fd = in_fd },
       .out = { .mode = SP_PS_IO_MODE_NULL },
@@ -440,9 +445,9 @@ sp_da(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
   return vars;
 }
 
-void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) {
+void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_env_config_t test) {
   sp_ps_config_t config = {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), SP_CSTR(test_proc_function_to_cstr(TEST_PROC_FUNCTION_PRINT_ENV)),
       sp_str_lit("--stdout")
@@ -505,7 +510,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
 }
 
 UTEST_F(ps, env_clean) {
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
     },
@@ -514,7 +519,7 @@ UTEST_F(ps, env_clean) {
     }
   });
 
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
       .extra = {
@@ -528,7 +533,7 @@ UTEST_F(ps, env_clean) {
 }
 
 UTEST_F(ps, env_duplicate_var) {
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
       .extra = {
@@ -549,7 +554,7 @@ UTEST_F(ps, env_inherit) {
   setenv("jerry", "garcia", true);
 #endif
 
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_INHERIT,
     },
@@ -571,7 +576,7 @@ UTEST_F(ps, env_existing) {
   sp_env_insert(&env, sp_str_lit("phil"), sp_str_lit("lesh"));
   sp_env_insert(&env, sp_str_lit("bobby"), sp_str_lit("weir"));
 
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_EXISTING,
       .env = env
@@ -584,7 +589,7 @@ UTEST_F(ps, env_existing) {
   });
 
   // Anything extra on top of the base env is applied
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_EXISTING,
       .env = env,
@@ -599,7 +604,7 @@ UTEST_F(ps, env_existing) {
 }
 
 UTEST_F(ps, empty_env_var) {
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
       .extra = {
@@ -617,7 +622,7 @@ UTEST_F(ps, empty_env_var) {
 //////////////////
 UTEST_F(ps, wait_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("42")
@@ -633,7 +638,7 @@ UTEST_F(ps, wait_after_process_complete) {
 
 UTEST_F(ps, wait_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -647,7 +652,7 @@ UTEST_F(ps, wait_while_process_running) {
 
 UTEST_F(ps, run) {
   sp_ps_output_t result = sp_ps_run((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout"),
@@ -659,7 +664,7 @@ UTEST_F(ps, run) {
 
 UTEST_F(ps, poll_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -675,7 +680,7 @@ UTEST_F(ps, poll_while_process_running) {
 
 UTEST_F(ps, process_complete_during_poll) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -689,7 +694,7 @@ UTEST_F(ps, process_complete_during_poll) {
 
 UTEST_F(ps, poll_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -705,7 +710,7 @@ UTEST_F(ps, poll_after_process_complete) {
 
 UTEST_F(ps, poll_with_timeout_after_process_complete) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -721,7 +726,7 @@ UTEST_F(ps, poll_with_timeout_after_process_complete) {
 
 UTEST_F(ps, wait_twice_while_process_running) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -739,7 +744,7 @@ UTEST_F(ps, wait_twice_while_process_running) {
 
 UTEST_F(ps, poll_then_wait) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -756,7 +761,7 @@ UTEST_F(ps, poll_then_wait) {
 
 UTEST_F(ps, poll_multiple) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("300")
@@ -778,7 +783,7 @@ UTEST_F(ps, poll_multiple) {
 
 UTEST_F(ps, wait_with_output) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout")
@@ -802,7 +807,7 @@ UTEST_F(ps, wait_with_output) {
 
 UTEST_F(ps, poll_with_io) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -826,7 +831,7 @@ UTEST_F(ps, poll_with_io) {
 
 UTEST_F(ps, interleaved_read_write) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("echo_line"),
       sp_str_lit("--stdout")
@@ -868,7 +873,7 @@ UTEST_F(ps, interleaved_read_write) {
 
 UTEST_F(ps, incremental_nonblocking_read) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("slow_write"),
       sp_str_lit("--stdout")
@@ -913,7 +918,7 @@ UTEST_F(ps, incremental_nonblocking_read) {
 
 UTEST_F(ps, output) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout")
@@ -935,7 +940,7 @@ UTEST_F(ps, output) {
 
 UTEST_F(ps, redirect_stderr_to_stdout) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout"),
@@ -963,7 +968,7 @@ UTEST_F(ps, redirect_stderr_to_stdout) {
 
 UTEST_F(ps, redirect_stdout_to_stderr) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout"),
@@ -991,7 +996,7 @@ UTEST_F(ps, redirect_stdout_to_stderr) {
 
 UTEST_F(ps, output_large_stdout_stderr_deadlock) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("flood"),
       sp_str_lit("--stdout"),
@@ -1016,7 +1021,7 @@ UTEST_F(ps, output_large_stdout_stderr_deadlock) {
 
 UTEST_F(ps, output_large_stdout_deadlock) {
   sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("flood"),
       sp_str_lit("--stdout"),
@@ -1090,7 +1095,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   const s32 write_count = 50;
 
   sp_ps_t ps_a = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("pattern"),
       sp_str_lit("--stdout"),
@@ -1106,7 +1111,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   });
 
   sp_ps_t ps_b = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("pattern"),
       sp_str_lit("--stdout"),
@@ -1166,7 +1171,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   sp_str_t count_str = sp_fmt("{}", sp_fmt_int(write_count));
 
   sp_ps_t ps_a = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("pattern"),
       sp_str_lit("--stdout"),
@@ -1182,7 +1187,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   });
 
   sp_ps_t ps_b = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("pattern"),
       sp_str_lit("--stdout"),

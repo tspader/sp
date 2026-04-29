@@ -1,7 +1,8 @@
 #include "fs.h"
 
 UTEST(fs_get_exe_path, basic_properties) {
-  sp_str_t exe = sp_fs_get_exe_path();
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t exe = sp_fs_get_exe_path_a(a);
   ASSERT_GT(exe.len, 0);
 
   // normalized: no backslashes
@@ -18,26 +19,30 @@ UTEST(fs_get_exe_path, basic_properties) {
 }
 
 UTEST(fs_get_exe_path, is_absolute) {
-  sp_str_t exe = sp_fs_get_exe_path();
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t exe = sp_fs_get_exe_path_a(a);
   // absolute: starts with / on POSIX, or X: on Windows
   bool is_absolute = (exe.data[0] == '/') || (exe.len >= 2 && exe.data[1] == ':');
   ASSERT_TRUE(is_absolute);
 }
 
 UTEST(fs_get_exe_path, exists_on_disk) {
-  sp_str_t exe = sp_fs_get_exe_path();
-  ASSERT_TRUE(sp_fs_exists(exe));
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t exe = sp_fs_get_exe_path_a(a);
+  ASSERT_TRUE(sp_fs_exists_a(exe));
 }
 
 UTEST(fs_get_exe_path, is_canonical) {
   // canonicalizing the exe path should be a no-op
-  sp_str_t exe = sp_fs_get_exe_path();
-  sp_str_t canonical = sp_fs_canonicalize_path(exe);
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t exe = sp_fs_get_exe_path_a(a);
+  sp_str_t canonical = sp_fs_canonicalize_path_a(a, exe);
   SP_EXPECT_STR_EQ(canonical, exe);
 }
 
 UTEST(fs_get_exe_path, no_dotdot) {
-  sp_str_t exe = sp_fs_get_exe_path();
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t exe = sp_fs_get_exe_path_a(a);
   ASSERT_FALSE(sp_str_contains(exe, SP_LIT("..")));
 }
 

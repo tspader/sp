@@ -15,28 +15,33 @@ static void assert_normalized(s32* utest_result, sp_str_t path, const c8* label)
 }
 
 UTEST(fs_system_paths, nonempty) {
-  ASSERT_GT(sp_fs_get_storage_path().len, 0);
-  ASSERT_GT(sp_fs_get_config_path().len, 0);
+  sp_mem_t a = sp_mem_os_new();
+  ASSERT_GT(sp_fs_get_storage_path_a(a).len, 0);
+  ASSERT_GT(sp_fs_get_config_path_a(a).len, 0);
 }
 
 UTEST(fs_system_paths, storage_path_normalized) {
-  sp_str_t path = sp_fs_get_storage_path();
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t path = sp_fs_get_storage_path_a(a);
   assert_normalized(&ur, path, "storage_path");
 }
 
 UTEST(fs_system_paths, config_path_normalized) {
-  sp_str_t path = sp_fs_get_config_path();
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t path = sp_fs_get_config_path_a(a);
   assert_normalized(&ur, path, "config_path");
 }
 
 UTEST(fs_system_paths, storage_path_exists) {
-  sp_str_t path = sp_fs_get_storage_path();
-  ASSERT_TRUE(sp_fs_is_dir(path));
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t path = sp_fs_get_storage_path_a(a);
+  ASSERT_TRUE(sp_fs_is_dir_a(path));
 }
 
 UTEST(fs_system_paths, config_path_exists) {
-  sp_str_t path = sp_fs_get_config_path();
-  ASSERT_TRUE(sp_fs_is_dir(path));
+  sp_mem_t a = sp_mem_os_new();
+  sp_str_t path = sp_fs_get_config_path_a(a);
+  ASSERT_TRUE(sp_fs_is_dir_a(path));
 }
 
 SP_TEST_MAIN()

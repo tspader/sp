@@ -35,7 +35,7 @@ struct fs_create_dir {
 
 UTEST_F_SETUP(fs_create_dir) {
   sp_test_file_manager_init(&ut.file_manager);
-  probe_symlinks(ut.file_manager.paths.test);
+  probe_symlinks(ut.file_manager.allocator, ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_create_dir) {
@@ -44,17 +44,17 @@ UTEST_F_TEARDOWN(fs_create_dir) {
 
 static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, create_dir_test_t* t) {
   sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
 
   u32 setup_count = 0;
   while (setup_count < 16 && t->setup[setup_count].path) setup_count++;
 
   sp_for(i, setup_count) {
     create_dir_setup_ent_t* s = &t->setup[i];
-    sp_str_t full = sp_fs_join_path(sandbox, sp_str_view(s->path));
+    sp_str_t full = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(s->path));
     sp_str_t parent = sp_fs_parent_path(full);
-    if (!sp_str_empty(parent) && !sp_fs_exists(parent)) {
-      sp_fs_create_dir(parent);
+    if (!sp_str_empty(parent) && !sp_fs_exists_a(parent)) {
+      sp_fs_create_dir_a(parent);
     }
 
     switch (s->kind) {
@@ -63,19 +63,19 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
         break;
       }
       case CREATE_DIR_ENT_DIR: {
-        sp_fs_create_dir(full);
+        sp_fs_create_dir_a(full);
         break;
       }
       case CREATE_DIR_ENT_SYMLINK: {
-        sp_str_t target = sp_fs_join_path(sandbox, sp_str_view(s->symlink_target));
-        ASSERT_EQ(sp_fs_create_sym_link(target, full), SP_OK);
+        sp_str_t target = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(s->symlink_target));
+        ASSERT_EQ(sp_fs_create_sym_link_a(target, full), SP_OK);
         break;
       }
     }
   }
 
-  sp_str_t target = sp_fs_join_path(sandbox, sp_str_view(t->target));
-  sp_err_t result = sp_fs_create_dir(target);
+  sp_str_t target = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->target));
+  sp_err_t result = sp_fs_create_dir_a(target);
 
   if (t->expect_ok && result) {
     SP_TEST_REPORT("{} does not exist with code {}", sp_fmt_str(target), sp_fmt_int(result));
@@ -90,8 +90,8 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
 
   sp_for(i, expected_count) {
     create_dir_expected_ent_t* exp = &t->expected[i];
-    sp_str_t expected_path = sp_fs_join_path(sandbox, sp_str_view(exp->path));
-    bool exists = sp_fs_exists(expected_path);
+    sp_str_t expected_path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(exp->path));
+    bool exists = sp_fs_exists_a(expected_path);
     if (exists != exp->exists) {
       if (exp->exists) {
         SP_TEST_REPORT("expected {} to exist", sp_fmt_str(expected_path));
@@ -102,7 +102,7 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
     }
 
     if (exp->exists) {
-      sp_fs_kind_t attr = sp_fs_get_kind(expected_path);
+      sp_fs_kind_t attr = sp_fs_get_kind_a(expected_path);
       if (attr != exp->attr) {
         SP_TEST_REPORT(
           "{} had attr {} but expected {}",

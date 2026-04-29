@@ -10,17 +10,17 @@ typedef struct {
 
 static void run_remove_test(s32* utest_result, sp_test_file_manager_t* fm, remove_test_t* t) {
   sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t path = sp_fs_join_path(sandbox, sp_str_view(t->remove_path));
+  sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->remove_path));
   if (t->remove_dir) {
-    sp_fs_remove_dir(path);
+    sp_fs_remove_dir_a(path);
   } else {
-    sp_fs_remove_file(path);
+    sp_fs_remove_file_a(path);
   }
 
-  fs_expect_paths(utest_result, sandbox, t->expected);
+  fs_expect_paths(utest_result, fm, sandbox, t->expected);
 }
 
 UTEST_F(fs, remove_file_basic) {

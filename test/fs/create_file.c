@@ -10,13 +10,13 @@ typedef struct {
 
 static void run_create_file_test(s32* utest_result, sp_test_file_manager_t* fm, create_file_test_t* t) {
   sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t path = sp_fs_join_path(sandbox, sp_str_view(t->path));
-  sp_fs_create_file(path);
+  sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->path));
+  sp_fs_create_file_a(path);
 
-  fs_expect_paths(utest_result, sandbox, t->expect);
+  fs_expect_paths(utest_result, fm, sandbox, t->expect);
 }
 
 UTEST_F(fs, create_file_basic) {
@@ -53,33 +53,34 @@ UTEST_F(fs, create_file_unicode) {
 }
 
 UTEST_F(fs, create_file_with_content) {
+  sp_mem_t a = ut.file_manager.allocator;
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_view("create_file_with_content"));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
 
   u8 buffer [] = { 's', 'p', 'u', 'm', 0 };
   sp_str_t path = SP_ZERO_INITIALIZE();
   sp_str_t content = SP_ZERO_INITIALIZE();
   sp_err_t result = SP_OK;
 
-  path = sp_fs_join_path(sandbox, sp_str_lit("slice.file"));
-  result = sp_fs_create_file_slice(path, (sp_mem_slice_t) { buffer, 4 });
-  sp_io_read_file(path, &content);
+  path = sp_fs_join_path_a(a, sandbox, sp_str_lit("slice.file"));
+  result = sp_fs_create_file_slice_a(path, (sp_mem_slice_t) { buffer, 4 });
+  sp_io_read_file_a(a, path, &content);
   EXPECT_EQ(result, SP_OK);
-  EXPECT_TRUE(sp_fs_exists(path));
+  EXPECT_TRUE(sp_fs_exists_a(path));
   SP_EXPECT_STR_EQ_CSTR(content, "spum");
 
-  path = sp_fs_join_path(sandbox, sp_str_lit("str.file"));
-  result = sp_fs_create_file_str(path, (sp_str_t) { (c8*)buffer, 4 });
-  sp_io_read_file(path, &content);
+  path = sp_fs_join_path_a(a, sandbox, sp_str_lit("str.file"));
+  result = sp_fs_create_file_str_a(path, (sp_str_t) { (c8*)buffer, 4 });
+  sp_io_read_file_a(a, path, &content);
   EXPECT_EQ(result, SP_OK);
-  EXPECT_TRUE(sp_fs_exists(path));
+  EXPECT_TRUE(sp_fs_exists_a(path));
   SP_EXPECT_STR_EQ_CSTR(content, "spum");
 
-  path = sp_fs_join_path(sandbox, sp_str_lit("cstr.file"));
-  result = sp_fs_create_file_cstr(path, (const c8*)buffer);
-  sp_io_read_file(path, &content);
+  path = sp_fs_join_path_a(a, sandbox, sp_str_lit("cstr.file"));
+  result = sp_fs_create_file_cstr_a(path, (const c8*)buffer);
+  sp_io_read_file_a(a, path, &content);
   EXPECT_EQ(result, SP_OK);
-  EXPECT_TRUE(sp_fs_exists(path));
+  EXPECT_TRUE(sp_fs_exists_a(path));
   SP_EXPECT_STR_EQ_CSTR(content, "spum");
 
 }

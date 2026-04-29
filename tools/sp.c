@@ -5,7 +5,9 @@
 #define str(s) sp_str_lit(s)
 
 s32 main(s32 num_args, const c8** args) {
-  sp_str_t exe = sp_fs_get_name(sp_fs_get_exe_path());
+  sp_mem_t mem = sp_mem_os_new();
+
+  sp_str_t exe = sp_fs_get_name(sp_fs_get_exe_path_a(mem));
   sp_str_t usage = sp_fmt("usage: {} {.cyan} {.yellow}", sp_fmt_str(exe), sp_fmt_cstr("$triple"), sp_fmt_cstr("glob"));
   switch (num_args) {
     case 3: break;
@@ -14,11 +16,11 @@ s32 main(s32 num_args, const c8** args) {
 
   sp_str_t triple = sp_str_view(args[1]);
   sp_str_t pattern = sp_str_view(args[2]);
-  sp_str_t cwd = sp_fs_get_cwd();
-  sp_str_t build = sp_fs_join_path(cwd, str("build"));
-  build = sp_fs_join_path(build, triple);
-  build = sp_fs_join_path(build, str("test"));
-  if (!sp_fs_exists(build)) {
+  sp_str_t cwd = sp_fs_get_cwd_a(mem);
+  sp_str_t build = sp_fs_join_path_a(mem, cwd, str("build"));
+  build = sp_fs_join_path_a(mem, build, triple);
+  build = sp_fs_join_path_a(mem, build, str("test"));
+  if (!sp_fs_exists_a(build)) {
     sp_fatal("error: {.cyan} doesn't exist", sp_fmt_str(build));
   }
 
@@ -53,7 +55,7 @@ s32 main(s32 num_args, const c8** args) {
   } test_t;
   sp_da(test_t) tests = sp_zero();
 
-  sp_fs_for(build, it) {
+  sp_fs_for(mem, build, it) {
     if (sp_glob_set_match(blacklist, it.entry.name)) continue;
     if (sp_glob_set_match(glob, it.entry.name)) {
       sp_io_reader_t io = sp_zero();

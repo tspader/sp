@@ -7,6 +7,7 @@ typedef struct {
 } join_path_case_t;
 
 UTEST(fs_join_path, cases) {
+  sp_mem_t a = sp_mem_os_new();
   join_path_case_t cases[] = {
     { "foo",  "bar",     "foo/bar" },
     { "foo/", "bar",     "foo/bar" },
@@ -19,7 +20,7 @@ UTEST(fs_join_path, cases) {
   };
 
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_fs_join_path(sp_str_view(cases[i].a), sp_str_view(cases[i].b));
+    sp_str_t result = sp_fs_join_path_a(a, sp_str_view(cases[i].a), sp_str_view(cases[i].b));
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
 }

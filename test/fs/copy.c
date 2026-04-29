@@ -24,31 +24,31 @@ typedef struct {
 
 static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_test_t* t) {
   sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t src = sp_fs_join_path(sandbox, sp_str_view(t->src));
-  sp_str_t dst = sp_fs_join_path(sandbox, sp_str_view(t->dst));
+  sp_str_t src = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->src));
+  sp_str_t dst = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->dst));
 
   switch (t->action) {
-    case COPY_FILE: sp_fs_copy_file(src, dst); break;
-    case COPY_DIR:  sp_fs_copy(src, dst); break;
-    case COPY_LINK: sp_fs_link(src, dst, SP_FS_LINK_COPY); break;
+    case COPY_FILE: sp_fs_copy_file_a(src, dst); break;
+    case COPY_DIR:  sp_fs_copy_a(src, dst); break;
+    case COPY_LINK: sp_fs_link_a(src, dst, SP_FS_LINK_COPY); break;
   }
 
   sp_for(i, 16) {
     copy_expect_t* exp = &t->expect[i];
     if (!exp->path) break;
 
-    sp_str_t path = sp_fs_join_path(sandbox, sp_str_view(exp->path));
-    bool exists = sp_fs_exists(path);
+    sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(exp->path));
+    bool exists = sp_fs_exists_a(path);
     fs_expect_bool(utest_result, path, "exists", exists, exp->exists);
 
     if (exp->exists && exists) {
-      fs_expect_attr(utest_result, path, sp_fs_get_kind(path), exp->attr);
+      fs_expect_attr(utest_result, path, sp_fs_get_kind_a(path), exp->attr);
       if (exp->content) {
         sp_str_t file_content = SP_ZERO_INITIALIZE();
-        sp_io_read_file(path, &file_content);
+        sp_io_read_file_a(fm->allocator, path, &file_content);
         SP_EXPECT_STR_EQ(file_content, sp_str_view(exp->content));
       }
     }
@@ -163,28 +163,29 @@ UTEST_F(fs, unicode_copy_file) {
 
 #if defined(SP_POSIX)
 UTEST_F(fs, copy_preserves_file_attributes) {
+  sp_mem_t a = ut.file_manager.allocator;
   sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source_attrs.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = source_file,
     .content = SP_LIT("preserved content"),
   });
 
-  ASSERT_EQ(chmod(sp_str_to_cstr(source_file), 0755), 0);
+  ASSERT_EQ(chmod(sp_cstr_from_str_a(a, source_file), 0755), 0);
 
   struct stat original_stat = {0};
-  ASSERT_EQ(stat(sp_str_to_cstr(source_file), &original_stat), 0);
+  ASSERT_EQ(stat(sp_cstr_from_str_a(a, source_file), &original_stat), 0);
 
   sp_str_t copy_file = sp_test_file_path(&ut.file_manager, SP_LIT("copy_attrs.txt"));
-  ASSERT_EQ(sp_fs_copy(source_file, copy_file), SP_OK);
-  ASSERT_TRUE(sp_fs_is_file(copy_file));
+  ASSERT_EQ(sp_fs_copy_a(source_file, copy_file), SP_OK);
+  ASSERT_TRUE(sp_fs_is_file_a(copy_file));
 
   struct stat copy_stat = {0};
-  ASSERT_EQ(stat(sp_str_to_cstr(copy_file), &copy_stat), 0);
+  ASSERT_EQ(stat(sp_cstr_from_str_a(a, copy_file), &copy_stat), 0);
 
   ASSERT_EQ(original_stat.st_mode, copy_stat.st_mode);
   ASSERT_EQ(original_stat.st_size, copy_stat.st_size);
   sp_str_t preserved = SP_ZERO_INITIALIZE();
-  sp_io_read_file(copy_file, &preserved);
+  sp_io_read_file_a(a, copy_file, &preserved);
   SP_EXPECT_STR_EQ(preserved, SP_LIT("preserved content"));
 }
 #endif

@@ -12,21 +12,22 @@ typedef struct {
 
 static void run_link_test(s32* utest_result, sp_test_file_manager_t* fm, link_test_t* t) {
   sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t target = sp_fs_join_path(sandbox, sp_str_view(t->target));
-  sp_str_t link_path = sp_fs_join_path(sandbox, sp_str_view(t->link_path));
+  sp_str_t target = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->target));
+  sp_str_t link_path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->link_path));
 
   sp_err_t result = t->symlink
-    ? sp_fs_create_sym_link(target, link_path)
-    : sp_fs_create_hard_link(target, link_path);
+    ? sp_fs_create_sym_link_a(target, link_path)
+    : sp_fs_create_hard_link_a(target, link_path);
 
   fs_expect_bool(utest_result, link_path, "link_ok", result == SP_OK, t->expect_ok);
-  fs_expect_paths(utest_result, sandbox, t->expected);
+  fs_expect_paths(utest_result, fm, sandbox, t->expected);
 }
 
 UTEST_F(fs, create_hard_link_file) {
+  sp_mem_t a = ut.file_manager.allocator;
   run_link_test(&ur, &ut.file_manager, &(link_test_t) {
     .label = "create_hard_link_file",
     .setup = {
@@ -42,15 +43,15 @@ UTEST_F(fs, create_hard_link_file) {
   });
 
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("create_hard_link_file"));
-  sp_str_t source = sp_fs_join_path(sandbox, SP_LIT("file.txt"));
-  sp_str_t link = sp_fs_join_path(sandbox, SP_LIT("file.hard"));
+  sp_str_t source = sp_fs_join_path_a(a, sandbox, SP_LIT("file.txt"));
+  sp_str_t link = sp_fs_join_path_a(a, sandbox, SP_LIT("file.hard"));
 
   sp_io_writer_t writer = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_file(&writer, source, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_from_file_a(&writer, source, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write_str(&writer, SP_LIT("updated"), SP_NULLPTR);
   sp_io_writer_close(&writer);
   sp_str_t link_content = SP_ZERO_INITIALIZE();
-  sp_io_read_file(link, &link_content);
+  sp_io_read_file_a(a, link, &link_content);
   SP_EXPECT_STR_EQ(link_content, SP_LIT("updated"));
 }
 
@@ -89,6 +90,7 @@ UTEST_F(fs, create_hard_link_directory_fails) {
 
 UTEST_F(fs, create_symlink_file) {
   SKIP_IF_NO_SYMLINKS();
+  sp_mem_t a = ut.file_manager.allocator;
   run_link_test(&ur, &ut.file_manager, &(link_test_t) {
     .label = "create_symlink_file",
     .symlink = true,
@@ -105,9 +107,9 @@ UTEST_F(fs, create_symlink_file) {
   });
 
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("create_symlink_file"));
-  sp_str_t link = sp_fs_join_path(sandbox, SP_LIT("file.link"));
+  sp_str_t link = sp_fs_join_path_a(a, sandbox, SP_LIT("file.link"));
   sp_str_t symlink_content = SP_ZERO_INITIALIZE();
-  sp_io_read_file(link, &symlink_content);
+  sp_io_read_file_a(a, link, &symlink_content);
   SP_EXPECT_STR_EQ(symlink_content, SP_LIT("hello"));
 }
 
@@ -151,17 +153,18 @@ UTEST_F(fs, create_symlink_existing_destination_fails) {
 // canonicalize through a symlink should resolve to the real target
 UTEST_F(fs, canonicalize_through_symlink) {
   SKIP_IF_NO_SYMLINKS();
+  sp_mem_t a = ut.file_manager.allocator;
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("canon_through_symlink"));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
 
-  sp_str_t real = sp_fs_join_path(sandbox, SP_LIT("real.txt"));
-  sp_str_t link = sp_fs_join_path(sandbox, SP_LIT("link.txt"));
+  sp_str_t real = sp_fs_join_path_a(a, sandbox, SP_LIT("real.txt"));
+  sp_str_t link = sp_fs_join_path_a(a, sandbox, SP_LIT("link.txt"));
 
   sp_test_file_create_ex((sp_test_file_config_t) { .path = real, .content = SP_LIT("data") });
-  ASSERT_EQ(sp_fs_create_sym_link(real, link), SP_OK);
+  ASSERT_EQ(sp_fs_create_sym_link_a(real, link), SP_OK);
 
-  sp_str_t canon_link = sp_fs_canonicalize_path(link);
-  sp_str_t canon_real = sp_fs_canonicalize_path(real);
+  sp_str_t canon_link = sp_fs_canonicalize_path_a(a, link);
+  sp_str_t canon_real = sp_fs_canonicalize_path_a(a, real);
   SP_EXPECT_STR_EQ(canon_link, canon_real);
 }
 
