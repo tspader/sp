@@ -198,6 +198,7 @@
 /////////////
 #if !defined(SP_PRIVATE)
   #define SP_PRIVATE static
+  #define SP_IMP static
 #endif
 
 #if !defined(SP_IMPORT)
@@ -402,21 +403,36 @@
 #define sp_align_up(ptr, align) ((void*)(((uintptr_t)(ptr) + ((uintptr_t)(align) - 1)) & ~((uintptr_t)(align) - 1)))
 #define sp_align_offset(val, align) ((((val) + ((u64)(align) - 1)) & ~((u64)(align) - 1)))
 
-#define sp_try(expr) do { \
-  s32 _sp_result = (expr); \
-  if (_sp_result) return _sp_result; \
-} while (0)
-#define sp_try_as(expr, err) do { \
-  if (expr) return err; \
-} while (0)
-#define sp_try_as_void(expr) do { \
-  if (expr) return; \
-} while (0)
-#define sp_try_goto(expr, err, label) do { \
-  err = (expr); \
-  if (err) goto label; \
-} while (0)
-#define sp_try_as_null(expr) sp_try_as((expr), SP_NULLPTR)
+#define sp_try(expr) \
+  do { \
+    s32 _sp_result = (expr); \
+    if (_sp_result) return _sp_result; \
+  } while (0)
+
+#define sp_try_as(expr, err) \
+  do { \
+    if (expr) return err; \
+  } while (0)
+
+#define sp_try_as_void(expr) \
+  do { \
+    if (expr) return; \
+  } while (0)
+
+#define sp_try_goto(expr, err, label) \
+  do { \
+    err = (expr); \
+    if (err) goto label; \
+  } while (0)
+
+#define sp_try_goto_r(__expr, __result, __label) \
+  do { \
+    __result.err = (__expr); \
+    if (__result.err) goto __label; \
+  } while (0)
+
+#define sp_try_as_null(expr) \
+  sp_try_as((expr), SP_NULLPTR)
 
 #define sp_require(expr) sp_try_as_void(!(expr))
 #define sp_require_as(expr, err) sp_try_as(!(expr), err)
@@ -623,6 +639,35 @@ typedef struct {
 } sp_wide_str_t;
 
 typedef enum {
+  SP_OK                   = 0,
+  SP_ERR                = 1,
+  SP_ERR_IO               = 1001,
+  SP_ERR_IO_OPEN_FAILED   = 1002,
+  SP_ERR_IO_SEEK_INVALID  = 1003,
+  SP_ERR_IO_SEEK_FAILED   = 1004,
+  SP_ERR_IO_WRITE_FAILED  = 1005,
+  SP_ERR_IO_CLOSE_FAILED  = 1006,
+  SP_ERR_IO_READ_FAILED   = 1007,
+  SP_ERR_IO_READ_ONLY     = 1008,
+  SP_ERR_IO_NO_SPACE      = 1009,
+  SP_ERR_IO_EOF           = 1010,
+  SP_ERR_FMT_TOO_MANY_RENDERERS = 1100,
+  SP_ERR_FMT_WRONG_PARAM_KIND = 1101,
+  SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
+  SP_ERR_FMT_BAD_DIRECTIVE = 1103,
+  SP_ERR_FMT_TOO_MANY_DIRECTIVES = 1104,
+  SP_ERR_FMT_BAD_PRECISION = 1105,
+  SP_ERR_FMT_BAD_PLACEHOLDER = 1106,
+  SP_ERR_FMT_DIRECTIVE_ARG_MISSING = 1107,
+  SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED = 1108,
+  SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND = 1109,
+  SP_ERR_FMT_UNTERMINATED_PLACEHOLDER = 1111,
+  SP_ERR_FMT_CUSTOM_WITHOUT_FN = 1112,
+  SP_ERR_LAZY,
+  SP_ERR_OS,
+} sp_err_t;
+
+typedef enum {
   SP_OPT_NONE = 0,
   SP_OPT_SOME = 1,
 } sp_optional_t;
@@ -637,6 +682,15 @@ typedef enum {
 #define sp_opt_some(V)    { .value = V, .some = SP_OPT_SOME }
 #define sp_opt_none()    { .some = SP_OPT_NONE }
 #define sp_opt_is_null(V) ((V).some == SP_OPT_NONE)
+
+#define sp_result(T) struct { \
+  T value; \
+  sp_err_t err; \
+}
+
+#define sp_ok(__result, __value) ((__result).value = (__value), __result)
+
+typedef sp_result(sp_str_t) sp_str_r;
 
 typedef struct sp_io_reader sp_io_reader_t;
 typedef struct sp_io_writer sp_io_writer_t;
@@ -1222,34 +1276,6 @@ typedef s32 (*sp_entry_fn_t)(s32, const c8**);
 //  ██████████ █████   █████ █████   █████ ░░░███████░   █████   █████
 // ░░░░░░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░    ░░░░░░░    ░░░░░   ░░░░░
 // @error
-typedef enum {
-  SP_OK                   = 0,
-  SP_ERR                = 1,
-  SP_ERR_IO               = 1001,
-  SP_ERR_IO_OPEN_FAILED   = 1002,
-  SP_ERR_IO_SEEK_INVALID  = 1003,
-  SP_ERR_IO_SEEK_FAILED   = 1004,
-  SP_ERR_IO_WRITE_FAILED  = 1005,
-  SP_ERR_IO_CLOSE_FAILED  = 1006,
-  SP_ERR_IO_READ_FAILED   = 1007,
-  SP_ERR_IO_READ_ONLY     = 1008,
-  SP_ERR_IO_NO_SPACE      = 1009,
-  SP_ERR_IO_EOF           = 1010,
-  SP_ERR_FMT_TOO_MANY_RENDERERS = 1100,
-  SP_ERR_FMT_WRONG_PARAM_KIND = 1101,
-  SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
-  SP_ERR_FMT_BAD_DIRECTIVE = 1103,
-  SP_ERR_FMT_TOO_MANY_DIRECTIVES = 1104,
-  SP_ERR_FMT_BAD_PRECISION = 1105,
-  SP_ERR_FMT_BAD_PLACEHOLDER = 1106,
-  SP_ERR_FMT_DIRECTIVE_ARG_MISSING = 1107,
-  SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED = 1108,
-  SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND = 1109,
-  SP_ERR_FMT_UNTERMINATED_PLACEHOLDER = 1111,
-  SP_ERR_FMT_CUSTOM_WITHOUT_FN = 1112,
-  SP_ERR_LAZY,
-  SP_ERR_OS,
-} sp_err_t;
 
 
 //  ██████   ██████ ██████████ ██████   ██████    ███████    ███████████   █████ █████
@@ -3069,6 +3095,7 @@ SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u
 SP_API sp_err_t       sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
 SP_API sp_err_t       sp_io_write_str(sp_io_writer_t* writer, sp_str_t str, u64* bytes_written);
 SP_API sp_err_t       sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr, u64* bytes_written);
+SP_API sp_err_t       sp_io_write_c8(sp_io_writer_t* writer, c8 c);
 SP_API sp_err_t       sp_io_pad(sp_io_writer_t* writer, u64 size, u64* bytes_written);
 SP_API sp_err_t       sp_io_flush(sp_io_writer_t* w);
 SP_API sp_err_t       sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position);
@@ -3381,7 +3408,28 @@ static void sp_fmt_write_ptr(sp_str_builder_t* builder, void* value);
 
 
 // @allocator
-sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem);
+// public, unchanged
+SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
+
+// private, unchanged
+SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem);
+SP_IMP sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* io, const void* ptr, u64 size, u64* bytes_written);
+SP_IMP sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* io, s64 offset, sp_io_whence_t whence, s64* position);
+SP_IMP sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* io, u64* size);
+SP_IMP sp_err_t sp_io_writer_dyn_close(sp_io_writer_t* io);
+SP_IMP sp_err_t sp_io_writer_mem_write(sp_io_writer_t* io, const void* ptr, u64 size, u64* bytes_written);
+SP_IMP sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* io, s64 offset, sp_io_whence_t whence, s64* position);
+SP_IMP sp_err_t sp_io_writer_mem_size(sp_io_writer_t* io, u64* size);
+SP_IMP sp_err_t sp_io_writer_mem_close(sp_io_writer_t* io);
+
+// private, changed
+SP_IMP sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
+SP_IMP void sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t content, sp_fmt_spec_t spec);
+SP_IMP void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t s, sp_str_t post, sp_fmt_spec_t sp);
+SP_API void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
+
+// public, changed
+SP_API void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
 
 SP_API sp_mem_t              sp_mem_os_new();
 SP_API void*                 sp_alloc_a(sp_mem_t mem, u64 size);
@@ -3391,6 +3439,14 @@ SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena_a(sp_mem_t mem);
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_a(sp_mem_t mem);
 SP_API void                  sp_mem_end_scratch_a(sp_mem_scratch_t scratch);
 SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
+
+SP_API void _sp_log(const c8* fmt, ...);
+SP_API void sp_log_a(const c8* fmt, ...);
+
+SP_API sp_str_r sp_fmt_a(sp_mem_t mem, const c8* fmt, ...);
+SP_API sp_str_r sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args);
+
+
 
 #define sp_alloc_n_a(a, T, n) (T*)sp_alloc_a(a, (n) * sizeof(T))
 #define sp_alloc_type_a(a, T) sp_alloc_n_a(a, T, 1)
@@ -3422,69 +3478,6 @@ sp_tls_block_t sp_tls_block;
 c8** environ;
 s32 errno;
 #endif
-
-sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem) {
-  sp_carr_for(tls->scratch, it) {
-    sp_mem_t arena = sp_mem_arena_as_allocator(tls->scratch[it]);
-    if (arena.on_alloc != mem.on_alloc || arena.user_data != mem.user_data) {
-      return tls->scratch[it];
-    }
-  }
-
-  sp_unreachable_return(SP_NULLPTR);
-}
-
-sp_mem_os_header_t* sp_mem_os_get_header(void* ptr) {
-  return ((sp_mem_os_header_t*)ptr) - 1;
-}
-
-void* sp_mem_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
-  (void)user_data;
-  switch (mode) {
-    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_os_alloc_zero(size);
-    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_os_realloc(ptr, size);
-    case SP_ALLOCATOR_MODE_FREE:   sp_mem_os_free(ptr); return SP_NULLPTR;
-    default:                       return SP_NULLPTR;
-  }
-}
-
-sp_mem_t sp_mem_os_new() {
-  sp_mem_t allocator;
-  allocator.on_alloc = sp_mem_os_on_alloc;
-  allocator.user_data = NULL;
-  return allocator;
-}
-
-void* sp_alloc_a(sp_mem_t allocator, u64 size) {
-  sp_context_t* ctx = sp_context_get();
-  return sp_mem_allocator_alloc(ctx->allocator, size);
-}
-
-void* sp_realloc_a(sp_mem_t allocator, void* memory, u64 size) {
-  sp_context_t* ctx = sp_context_get();
-  return sp_mem_allocator_realloc(ctx->allocator, memory, size);
-}
-
-void sp_free_a(sp_mem_t allocator, void* memory) {
-  sp_context_t* ctx = sp_context_get();
-  sp_mem_allocator_free(ctx->allocator, memory);
-}
-
-sp_mem_arena_t* sp_mem_get_scratch_arena_a(sp_mem_t mem) {
-  sp_tls_rt_t* tls = sp_tls_rt_get();
-  return sp_tls_rt_get_scratch_arena_a(tls, mem);
-}
-
-sp_mem_arena_marker_t sp_mem_begin_scratch_a(sp_mem_t mem) {
-  sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_mem_arena_t* arena = sp_tls_rt_get_scratch_arena(tls);
-  return sp_mem_arena_mark(arena);
-}
-
-void sp_mem_end_scratch_a(sp_mem_scratch_t scratch) {
-  sp_mem_arena_pop(scratch.marker);
-}
-
 
 //   █████████  █████ █████  █████████
 //  ███░░░░░███░░███ ░░███  ███░░░░░███
@@ -14220,131 +14213,6 @@ sp_err_t sp_io_writer_file_close(sp_io_writer_t* writer) {
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
-  sp_err_t result = SP_OK;
-  u64 written = 0;
-
-  // If you try a write that would overflow, write nothing. We could write what we're able to
-  // and return an error, but the general principle is to stop as soon as you know you're in
-  // an error state. And "I want to write 16 bytes into an 8 byte buffer" is an error state. I
-  // would rather end up in the same state every time (nothing written, get an error).
-  u64 available = writer->mem.len - writer->mem.pos;
-  if (size > available) {
-    result = SP_ERR_IO_NO_SPACE;
-    goto done;
-  }
-
-  sp_mem_copy(ptr, writer->mem.ptr + writer->mem.pos, size);
-  writer->mem.pos += size;
-  written = size;
-
-done:
-  if (bytes_written) *bytes_written = written;
-  return result;
-}
-
-sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
-  s64 pos = 0;
-
-  switch (whence) {
-    case SP_IO_SEEK_SET: {
-      pos = offset;
-      break;
-    }
-    case SP_IO_SEEK_CUR: {
-      pos = (s64)writer->mem.pos + offset;
-      break;
-    }
-    case SP_IO_SEEK_END: {
-      pos = (s64)writer->mem.len + offset;
-      break;
-    }
-  }
-
-  if (pos < 0 || (u64)pos > writer->mem.len) {
-    if (position) *position = -1;
-    return SP_ERR_IO_SEEK_INVALID;
-  }
-  writer->mem.pos = (u64)pos;
-  if (position) *position = pos;
-  return SP_OK;
-}
-
-sp_err_t sp_io_writer_mem_size(sp_io_writer_t* writer, u64* size) {
-  if (size) *size = writer->mem.len;
-  return SP_OK;
-}
-
-sp_err_t sp_io_writer_mem_close(sp_io_writer_t* writer) {
-  (void)writer;
-  return SP_OK;
-}
-
-sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
-  sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
-
-  // Keep doubling the underlying buffer if there's not enough space
-  u64 required = io->seek + size;
-  if (required > io->buffer.capacity) {
-    u64 new_capacity = io->buffer.capacity ? io->buffer.capacity : 64;
-    while (new_capacity < required) {
-      new_capacity *= 2;
-    }
-    io->buffer.data = (u8*)sp_mem_allocator_realloc(io->allocator, io->buffer.data, new_capacity);
-    io->buffer.capacity = new_capacity;
-  }
-
-  sp_mem_copy(ptr, io->buffer.data + io->seek, size);
-  io->seek += size;
-  if (io->seek > io->buffer.len) {
-    io->buffer.len = io->seek;
-  }
-  if (bytes_written) *bytes_written = size;
-  return SP_OK;
-}
-
-sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
-  sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
-
-  s64 pos = 0;
-  position = position ? position : &pos;
-
-  switch (whence) {
-    case SP_IO_SEEK_SET: {
-      *position = offset;
-      break;
-    }
-    case SP_IO_SEEK_CUR: {
-      *position = (s64)io->seek + offset;
-      break;
-    }
-    case SP_IO_SEEK_END: {
-      *position = (s64)io->buffer.len + offset;
-      break;
-    }
-  }
-
-  if (*position < 0) return SP_ERR_IO_SEEK_INVALID;
-  if (*position > (s64)io->buffer.len) return SP_ERR_IO_SEEK_INVALID;
-
-  io->seek = (u64)(*position);
-  return SP_OK;
-}
-
-sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* writer, u64* size) {
-  sp_assert(size);
-  *size = writer->dyn_mem.buffer.len;
-  return SP_OK;
-}
-
-sp_err_t sp_io_writer_dyn_close(sp_io_writer_t* writer) {
-  if (writer->dyn_mem.buffer.data) {
-    sp_mem_allocator_free(writer->dyn_mem.allocator, writer->dyn_mem.buffer.data);
-    writer->dyn_mem.buffer = SP_ZERO_STRUCT(sp_mem_buffer_t);
-  }
-  return SP_OK;
-}
-
 sp_err_t sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode) {
   s32 flags = SP_O_WRONLY | SP_O_CREAT | SP_O_BINARY;
   switch (mode) {
@@ -14394,22 +14262,6 @@ void sp_io_writer_from_fd(sp_io_writer_t* writer, sp_sys_fd_t fd, sp_io_close_mo
     .file = {
       .fd = fd,
       .close_mode = close_mode,
-    },
-  };
-}
-
-void sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size) {
-  *writer = (sp_io_writer_t) {
-    .vtable = {
-      .write = sp_io_writer_mem_write,
-      .seek = sp_io_writer_mem_seek,
-      .size = sp_io_writer_mem_size,
-      .close = sp_io_writer_mem_close,
-    },
-    .mem = {
-      .ptr = (u8*)ptr,
-      .len = size,
-      .pos = 0,
     },
   };
 }
@@ -14532,6 +14384,10 @@ sp_err_t sp_io_write_str(sp_io_writer_t* writer, sp_str_t str, u64* bytes_writte
 
 sp_err_t sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr, u64* bytes_written) {
   return sp_io_write(writer, cstr, sp_cstr_len(cstr), bytes_written);
+}
+
+sp_err_t sp_io_write_c8(sp_io_writer_t* writer, c8 c) {
+  return sp_io_write(writer, &c, 1, SP_NULLPTR);
 }
 
 sp_err_t sp_io_pad(sp_io_writer_t* writer, u64 size, u64* bytes_written) {
@@ -14702,35 +14558,504 @@ SP_API s32 sp_app_run(sp_app_config_t config) {
   SP_MAIN(sp_app_main)
 
 
+sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem) {
+  sp_carr_for(tls->scratch, it) {
+    sp_mem_t arena = sp_mem_arena_as_allocator(tls->scratch[it]);
+    if (arena.on_alloc != mem.on_alloc || arena.user_data != mem.user_data) {
+      return tls->scratch[it];
+    }
+  }
+
+  sp_unreachable_return(SP_NULLPTR);
+}
+
+sp_mem_os_header_t* sp_mem_os_get_header(void* ptr) {
+  return ((sp_mem_os_header_t*)ptr) - 1;
+}
+
+void* sp_mem_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
+  (void)user_data;
+  switch (mode) {
+    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_os_alloc_zero(size);
+    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_os_realloc(ptr, size);
+    case SP_ALLOCATOR_MODE_FREE:   sp_mem_os_free(ptr); return SP_NULLPTR;
+    default:                       return SP_NULLPTR;
+  }
+}
+
+sp_mem_t sp_mem_os_new() {
+  sp_mem_t allocator;
+  allocator.on_alloc = sp_mem_os_on_alloc;
+  allocator.user_data = NULL;
+  return allocator;
+}
+
+void* sp_alloc_a(sp_mem_t allocator, u64 size) {
+  sp_context_t* ctx = sp_context_get();
+  return sp_mem_allocator_alloc(ctx->allocator, size);
+}
+
+void* sp_realloc_a(sp_mem_t allocator, void* memory, u64 size) {
+  sp_context_t* ctx = sp_context_get();
+  return sp_mem_allocator_realloc(ctx->allocator, memory, size);
+}
+
+void sp_free_a(sp_mem_t allocator, void* memory) {
+  sp_context_t* ctx = sp_context_get();
+  sp_mem_allocator_free(ctx->allocator, memory);
+}
+
+sp_mem_arena_t* sp_mem_get_scratch_arena_a(sp_mem_t mem) {
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  return sp_tls_rt_get_scratch_arena_a(tls, mem);
+}
+
+sp_mem_arena_marker_t sp_mem_begin_scratch_a(sp_mem_t mem) {
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_mem_arena_t* arena = sp_tls_rt_get_scratch_arena(tls);
+  return sp_mem_arena_mark(arena);
+}
+
+void sp_mem_end_scratch_a(sp_mem_scratch_t scratch) {
+  sp_mem_arena_pop(scratch.marker);
+}
+
+sp_err_t sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_err_t result = SP_OK;
+  u64 written = 0;
+
+  // If you try a write that would overflow, write nothing. We could write what we're able to
+  // and return an error, but the general principle is to stop as soon as you know you're in
+  // an error state. And "I want to write 16 bytes into an 8 byte buffer" is an error state. I
+  // would rather end up in the same state every time (nothing written, get an error).
+  u64 available = writer->mem.len - writer->mem.pos;
+  if (size > available) {
+    result = SP_ERR_IO_NO_SPACE;
+    goto done;
+  }
+
+  sp_mem_copy(ptr, writer->mem.ptr + writer->mem.pos, size);
+  writer->mem.pos += size;
+  written = size;
+
+done:
+  if (bytes_written) *bytes_written = written;
+  return result;
+}
+
+sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
+  s64 pos = 0;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      pos = offset;
+      break;
+    }
+    case SP_IO_SEEK_CUR: {
+      pos = (s64)writer->mem.pos + offset;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      pos = (s64)writer->mem.len + offset;
+      break;
+    }
+  }
+
+  if (pos < 0 || (u64)pos > writer->mem.len) {
+    if (position) *position = -1;
+    return SP_ERR_IO_SEEK_INVALID;
+  }
+  writer->mem.pos = (u64)pos;
+  if (position) *position = pos;
+  return SP_OK;
+}
+
+sp_err_t sp_io_writer_mem_size(sp_io_writer_t* writer, u64* size) {
+  if (size) *size = writer->mem.len;
+  return SP_OK;
+}
+
+sp_err_t sp_io_writer_mem_close(sp_io_writer_t* writer) {
+  (void)writer;
+  return SP_OK;
+}
+
+void sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size) {
+  *writer = (sp_io_writer_t) {
+    .vtable = {
+      .write = sp_io_writer_mem_write,
+      .seek = sp_io_writer_mem_seek,
+      .size = sp_io_writer_mem_size,
+      .close = sp_io_writer_mem_close,
+    },
+    .mem = {
+      .ptr = (u8*)ptr,
+      .len = size,
+      .pos = 0,
+    },
+  };
+}
+
+sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
+
+  // Keep doubling the underlying buffer if there's not enough space
+  u64 required = io->seek + size;
+  if (required > io->buffer.capacity) {
+    u64 new_capacity = io->buffer.capacity ? io->buffer.capacity : 64;
+    while (new_capacity < required) {
+      new_capacity *= 2;
+    }
+    io->buffer.data = (u8*)sp_mem_allocator_realloc(io->allocator, io->buffer.data, new_capacity);
+    io->buffer.capacity = new_capacity;
+  }
+
+  sp_mem_copy(ptr, io->buffer.data + io->seek, size);
+  io->seek += size;
+  if (io->seek > io->buffer.len) {
+    io->buffer.len = io->seek;
+  }
+  if (bytes_written) *bytes_written = size;
+  return SP_OK;
+}
+
+sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
+  sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
+
+  s64 pos = 0;
+  position = position ? position : &pos;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: {
+      *position = offset;
+      break;
+    }
+    case SP_IO_SEEK_CUR: {
+      *position = (s64)io->seek + offset;
+      break;
+    }
+    case SP_IO_SEEK_END: {
+      *position = (s64)io->buffer.len + offset;
+      break;
+    }
+  }
+
+  if (*position < 0) return SP_ERR_IO_SEEK_INVALID;
+  if (*position > (s64)io->buffer.len) return SP_ERR_IO_SEEK_INVALID;
+
+  io->seek = (u64)(*position);
+  return SP_OK;
+}
+
+sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* writer, u64* size) {
+  sp_assert(size);
+  *size = writer->dyn_mem.buffer.len;
+  return SP_OK;
+}
+
+sp_err_t sp_io_writer_dyn_close(sp_io_writer_t* writer) {
+  if (writer->dyn_mem.buffer.data) {
+    sp_mem_allocator_free(writer->dyn_mem.allocator, writer->dyn_mem.buffer.data);
+    writer->dyn_mem.buffer = SP_ZERO_STRUCT(sp_mem_buffer_t);
+  }
+  return SP_OK;
+}
+
+void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer) {
+  *writer = (sp_io_writer_t) {
+    .vtable = {
+      .write = sp_io_writer_dyn_write,
+      .seek = sp_io_writer_dyn_seek,
+      .size = sp_io_writer_dyn_size,
+      .close = sp_io_writer_dyn_close,
+    },
+    .dyn_mem = {
+      .allocator = mem,
+    }
+  };
+}
+
+sp_str_r sp_fmt_a(sp_mem_t mem, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_dyn_mem_a(mem, &io);
+  sp_str_r formatted = sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  va_end(args);
+  return formatted;
+}
+
+sp_str_r sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
+  sp_str_r result = sp_zero();
+  sp_fmt_parser_t p = { .str = fmt };
+
+  while (true) {
+    c8 c = sp_fmt_peek(&p, 0);
+    if (!c) break;
+
+    if (c == '{') {
+      if (sp_fmt_peek(&p, 1) == '{') {
+        sp_fmt_advance(&p);
+        sp_fmt_advance(&p);
+        sp_io_write_c8(io, '{');
+        continue;
+      }
+
+      sp_fmt_spec_t spec = sp_zero();
+      sp_try_goto_r(sp_fmt_parse_specifier(&p, &spec), result, error);
+
+      if (spec.fill_dynamic) {
+        s64 v;
+        sp_try_goto_r(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
+        spec.fill = (u8)v;
+      }
+      if (spec.width_dynamic) {
+        s64 v;
+        sp_try_goto_r(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
+        if (v < 0) v = 0;
+        if (v > SP_FMT_WIDTH_MAX) v = SP_FMT_WIDTH_MAX;
+        spec.width = (u32)v;
+      }
+      if (spec.precision_dynamic) {
+        s64 v;
+        sp_try_goto_r(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
+        if (v < 0) v = 0;
+        if (v > 255) v = 255;
+        sp_opt_set(spec.precision, (u8)v);
+      }
+
+      sp_fmt_arg_t directive_params[SP_FMT_MAX_DIRECTIVES] = SP_ZERO_INITIALIZE();
+      for (u8 di = 0; di < spec.directive_count; di++) {
+        if (spec.directive_arg_dynamic & (1u << di)) {
+          directive_params[di] = va_arg(args, sp_fmt_arg_t);
+        }
+      }
+
+      sp_fmt_arg_t arg = va_arg(args, sp_fmt_arg_t);
+      arg.spec = spec;
+      sp_try_goto_r(sp_fmt_render(builder, &arg, directive_params), result, error);
+      continue;
+    }
+
+    if (c == '}') {
+      if (sp_fmt_peek(&p, 1) == '}') {
+        sp_fmt_advance(&p);
+        sp_fmt_advance(&p);
+        sp_str_builder_append_c8(builder, '}');
+        continue;
+      }
+      // Lone `}` — unbalanced close brace. Mirrors `{` error policy.
+      result = SP_ERR_FMT_BAD_PLACEHOLDER;
+      goto error;
+    }
+
+    sp_str_builder_append_c8(builder, c);
+    sp_fmt_advance(&p);
+  }
+
+error:
+  return result;
+
+  return sp_ok(result, fmt);
+}
+
+void _sp_log(const c8* fmt, ...) {
+}
+void sp_log_a(const c8* fmt, ...) {
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
+    va_list args;
+    va_start(args, fmt);
+    sp_str_t formatted = sp_zero();
+    sp_fmt_v(&formatted, sp_str_view(fmt), args);
+    va_end(args);
+
+    sp_tls_rt_t* tls = sp_tls_rt_get();
+    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
+    sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
+    sp_mem_end_scratch(scratch);
+  }
+}
+
+sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* directive_params) {
+  sp_fmt_directive_t* directives[SP_FMT_MAX_DIRECTIVES];
+
+  u8 num_dirs = arg->spec.directive_count;
+  sp_for(i, num_dirs) {
+    sp_str_t name = arg->spec.directive_names[i];
+    sp_fmt_directive_t* directive = sp_fmt_directive_lookup(name);
+    directives[i] = directive;
+    if (!directives[i]) {
+      return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
+    }
+  }
+
+  sp_for(it, num_dirs) {
+    sp_fmt_arg_kind_t accepted = directives[it]->arg_kinds;
+    if (accepted && !(accepted & arg->id)) {
+      return SP_ERR_FMT_WRONG_PARAM_KIND;
+    }
+  }
+
+  bool params [SP_FMT_MAX_DIRECTIVES] = sp_zero();
+  sp_for(it, num_dirs) {
+    bool is_dynamic = (arg->spec.directive_arg_dynamic & (1u << it)) != 0;
+    bool is_literal = !sp_str_empty(arg->spec.directive_args[it]);
+    if (is_dynamic) {
+      params[it] = true;
+    }
+    else if (is_literal) {
+      directive_params[it] = (sp_fmt_arg_t){
+        .id = sp_fmt_id_str,
+        .s  = arg->spec.directive_args[it],
+      };
+      params[it] = true;
+    }
+    else {
+      params[it] = false;
+    }
+
+    sp_fmt_arg_kind_t kind = directives[it]->param_kinds;
+    if (!kind) {
+      if (params[it]) return SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED;
+    }
+    else {
+      if (!params[it]) return SP_ERR_FMT_DIRECTIVE_ARG_MISSING;
+      if (!(kind & directive_params[it].id)) return SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND;
+    }
+  }
+
+  struct {
+    sp_str_builder_t before;
+    sp_str_builder_t content;
+    sp_str_builder_t after;
+  } b = sp_zero();
+
+  sp_for(it, num_dirs) {
+    if (directives[it]->kind != sp_fmt_directive_decorator) continue;
+    sp_fmt_fn_t before_fn = directives[it]->decorator.before;
+    if (!before_fn) continue;
+    sp_fmt_arg_t* p = params[it] ? &directive_params[it] : SP_NULLPTR;
+    before_fn(&b.before, arg, p);
+  }
+
+  struct {
+    sp_fmt_fn_t fn;
+    sp_fmt_arg_t* param;
+  } render = sp_zero();
+  if (arg->id == sp_fmt_id_custom) {
+    if (!arg->custom.fn) return SP_ERR_FMT_CUSTOM_WITHOUT_FN;
+    render.fn = arg->custom.fn;
+  }
+  else {
+    sp_for(it, num_dirs) {
+      if (directives[it]->kind != sp_fmt_directive_renderer) continue;
+      if (render.fn) return SP_ERR_FMT_TOO_MANY_RENDERERS;
+      render.fn = directives[it]->renderer;
+      render.param = params[it] ? &directive_params[it] : SP_NULLPTR;
+    }
+  }
+  render.fn = render.fn ? render.fn : sp_fmt_render_default;
+  render.fn(&b.content, arg, render.param);
+
+  sp_str_t content = sp_str_builder_as_str(&b.content);
+
+  u8 j = num_dirs;
+  while (j--) {
+    if (directives[j]->kind != sp_fmt_directive_transformer) continue;
+    sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
+    sp_str_builder_t next = SP_ZERO_INITIALIZE();
+    directives[j]->transformer(&next, content, arg, p);
+    content = sp_str_builder_as_str(&next);
+  }
+
+  j = num_dirs;
+  while (j--) {
+    if (directives[j]->kind != sp_fmt_directive_decorator) continue;
+    sp_fmt_fn_t after_fn = directives[j]->decorator.after;
+    if (!after_fn) continue;
+    sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
+    after_fn(&b.after, arg, p);
+  }
+
+  sp_str_t before = sp_str_builder_as_str(&b.before);
+  sp_str_t after  = sp_str_builder_as_str(&b.after);
+
+  sp_fmt_apply_spec_wrapped_a(io, before, content, after, arg->spec);
+  return SP_OK;
+}
+
+void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec) {
+  u32 content_len = (u32)str.len;
+  u32 width = spec.width > SP_FMT_WIDTH_MAX ? SP_FMT_WIDTH_MAX : spec.width;
+  u32 pad = (width > content_len) ? (width - content_len) : 0;
+  u8 fill = spec.fill ? spec.fill : ' ';
+  sp_fmt_align_t align = spec.align;
+  if (align == SP_FMT_ALIGN_NONE) align = SP_FMT_ALIGN_RIGHT;
+
+  u32 left = 0;
+  u32 right = 0;
+  switch (align) {
+    case SP_FMT_ALIGN_LEFT:
+      right = pad;
+      break;
+    case SP_FMT_ALIGN_CENTER:
+      left = pad / 2;
+      right = pad - left;
+      break;
+    case SP_FMT_ALIGN_RIGHT:
+      left = pad;
+      break;
+    case SP_FMT_ALIGN_NONE:
+      left = pad;
+      break;
+  }
+
+  sp_for(it, left) sp_io_write_c8(io, fill);
+  sp_io_write_str(io, pre, SP_NULLPTR);
+  sp_io_write_str(io, str, SP_NULLPTR);
+  sp_io_write_str(io, post, SP_NULLPTR);
+  sp_for(it, right) sp_io_write_c8(io, fill);
+}
+
+void sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t content, sp_fmt_spec_t spec) {
+  sp_str_t empty = sp_zero();
+  sp_fmt_apply_spec_wrapped_a(io, empty, content, empty, spec);
+}
+
+void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  sp_unused(param);
+  switch (arg->id) {
+    case sp_fmt_id_u64:
+      sp_fmt_write_u64(builder, arg->u);
+      break;
+    case sp_fmt_id_s64:
+      sp_fmt_write_s64(builder, arg->i);
+      break;
+    case sp_fmt_id_f64: {
+      u32 p = sp_opt_is_null(arg->spec.precision) ? 6 : sp_opt_get(arg->spec.precision);
+      sp_fmt_write_f64(builder, arg->f, p);
+      break;
+    }
+    case sp_fmt_id_str: {
+      sp_str_t s = arg->s;
+      if (!sp_opt_is_null(arg->spec.precision)) {
+        u32 max = sp_opt_get(arg->spec.precision);
+        if (max < s.len) s.len = max;
+      }
+      sp_str_builder_append(builder, s);
+      break;
+    }
+    case sp_fmt_id_ptr:
+      sp_fmt_write_ptr(builder, arg->p);
+      break;
+    case sp_fmt_id_custom:
+      if (arg->custom.fn) arg->custom.fn(builder, arg, SP_NULLPTR);
+      break;
+  }
+}
+
 SP_END_EXTERN_C()
-
-//    █████████
-//   ███░░░░░███     ███         ███
-//  ███     ░░░     ░███        ░███
-// ░███          ███████████ ███████████
-// ░███         ░░░░░███░░░ ░░░░░███░░░
-// ░░███     ███    ░███        ░███
-//  ░░█████████     ░░░         ░░░
-//   ░░░░░░░░░
-#ifdef SP_CPP
-sp_str_t operator/(const sp_str_t& a, const sp_str_t& b) {
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_str_builder_append(&builder, a);
-  sp_str_builder_append_c8(&builder, '/');
-  sp_str_builder_append(&builder, b);
-  sp_str_t result = sp_str_builder_to_str(&builder);
-  return sp_fs_normalize_path(result);
-}
-
-sp_str_t operator/(const sp_str_t& a, const c8* b) {
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_str_builder_append(&builder, a);
-  sp_str_builder_append_c8(&builder, '/');
-  sp_str_builder_append_cstr(&builder, b);
-  sp_str_t result = sp_str_builder_to_str(&builder);
-  return sp_fs_normalize_path(result);
-}
-#endif
 
 #endif // SP_SP_C
 #endif // SP_IMPLEMENTATION
