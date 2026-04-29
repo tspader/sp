@@ -3407,12 +3407,9 @@ static void sp_fmt_write_ptr(sp_str_builder_t* builder, void* value);
 
 
 
-// @allocator
-// public, unchanged
-SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
+// @header @top
 
-// private, unchanged
-SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem);
+// @private @unchanged
 SP_IMP sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* io, const void* ptr, u64 size, u64* bytes_written);
 SP_IMP sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* io, s64 offset, sp_io_whence_t whence, s64* position);
 SP_IMP sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* io, u64* size);
@@ -3422,13 +3419,17 @@ SP_IMP sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* io, s64 offset, sp_io_when
 SP_IMP sp_err_t sp_io_writer_mem_size(sp_io_writer_t* io, u64* size);
 SP_IMP sp_err_t sp_io_writer_mem_close(sp_io_writer_t* io);
 
-// private, changed
+// @public @unchanged
+SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
+
+// @private @changed
+SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem);
 SP_IMP sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
 SP_IMP void sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t content, sp_fmt_spec_t spec);
-SP_IMP void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t s, sp_str_t post, sp_fmt_spec_t sp);
+SP_IMP void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec);
 SP_API void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
-// public, changed
+// @public @changed
 SP_API void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
 
 SP_API sp_mem_t              sp_mem_os_new();
@@ -3451,7 +3452,7 @@ SP_API sp_str_r sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args);
 #define sp_alloc_n_a(a, T, n) (T*)sp_alloc_a(a, (n) * sizeof(T))
 #define sp_alloc_type_a(a, T) sp_alloc_n_a(a, T, 1)
 sp_mem_arena_t* sp_tls_rt_get_scratch_arena(sp_tls_rt_t* tls);
-
+// `@header @bottom`
 
 #endif
 
@@ -14558,6 +14559,10 @@ SP_API s32 sp_app_run(sp_app_config_t config) {
   SP_MAIN(sp_app_main)
 
 
+
+
+
+// @refactor @top
 sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem) {
   sp_carr_for(tls->scratch, it) {
     sp_mem_t arena = sp_mem_arena_as_allocator(tls->scratch[it]);
@@ -15054,6 +15059,7 @@ void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t
       break;
   }
 }
+// @refactor @bottom
 
 SP_END_EXTERN_C()
 
