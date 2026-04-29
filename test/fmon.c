@@ -69,14 +69,14 @@ void fmon_callback(sp_fmon_t* monitor, sp_fmon_event_t* change, void* userdata) 
 }
 
 UTEST_F(sp_test_file_monitor, init_and_cleanup) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   EXPECT_NE(ut.monitor.os, SP_NULLPTR);
 }
 
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, detects_file_creation) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ADDED, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ADDED, &ut);
 
   sp_str_t dir = sp_test_file_path(&ut.file_manager, sp_str_lit("watched.dir"));
   sp_fs_create_dir_a(dir);
@@ -108,7 +108,7 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
 #endif
 
 UTEST_F(sp_test_file_monitor, detects_file_modification) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
   sp_fs_create_dir_a(test_dir);
@@ -147,7 +147,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 }
 
 UTEST_F(sp_test_file_monitor, detects_file_deletion) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
   sp_fs_create_dir_a(test_dir);
@@ -182,7 +182,7 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
 
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
   sp_fs_create_dir_a(test_dir);
@@ -250,7 +250,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, event_filtering) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("filter_test"));
   sp_fs_create_dir_a(test_dir);
@@ -300,7 +300,7 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
 #endif
 
 UTEST_F(sp_test_file_monitor, add_file_filtering) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("file_filter_test"));
   sp_fs_create_dir_a(test_dir);
@@ -358,7 +358,7 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
 
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, rename_file) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("rename_test"));
   sp_fs_create_dir_a(test_dir);
@@ -404,7 +404,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
 #endif
 
 UTEST_F(sp_test_file_monitor, no_events_without_changes) {
-  sp_fmon_init(&ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
   sp_fs_create_dir_a(test_dir);

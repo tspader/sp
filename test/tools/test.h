@@ -172,7 +172,7 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_roo
   }
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
-  sp_str_t iso = sp_tm_epoch_to_iso8601(now);
+  sp_str_t iso = sp_tm_epoch_to_iso8601_a(a, now);
   sp_str_t sanitized = sp_str_replace_c8(iso, ':', '-');
   sp_str_t root = sp_fs_join_path_a(a, tmp, sanitized);
 

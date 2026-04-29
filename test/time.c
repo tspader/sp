@@ -43,7 +43,8 @@ UTEST(tm, timer_lap) {
 UTEST(tm, epoch_to_iso) {
   SKIP_ON_FREESTANDING();
   sp_tm_epoch_t epoch = sp_tm_now_epoch();
-  sp_str_t iso = sp_tm_epoch_to_iso8601(epoch);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_str_t iso = sp_tm_epoch_to_iso8601_a(s.mem, epoch);
   ASSERT_GE(iso.len, 20);
   EXPECT_EQ(iso.data[4], '-');
   EXPECT_EQ(iso.data[7], '-');
@@ -51,6 +52,7 @@ UTEST(tm, epoch_to_iso) {
   EXPECT_EQ(iso.data[13], ':');
   EXPECT_EQ(iso.data[16], ':');
   EXPECT_EQ(iso.data[iso.len - 1], 'Z');
+  sp_mem_end_scratch_a(s);
 }
 
 UTEST(tm, date_time) {
@@ -247,10 +249,12 @@ UTEST(tm, iso8601_known_values) {
     { { .s = 253402300799ULL, .ns = 0 },        "9999-12-31T23:59:59.000Z" },
   };
 
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_tm_epoch_to_iso8601(cases[i].epoch);
+    sp_str_t result = sp_tm_epoch_to_iso8601_a(s.mem, cases[i].epoch);
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
+  sp_mem_end_scratch_a(s);
 }
 
 UTEST(tm, iso8601_millisecond_padding) {
@@ -261,10 +265,12 @@ UTEST(tm, iso8601_millisecond_padding) {
     { { .s = 0, .ns = 999000000 },  "1970-01-01T00:00:00.999Z" },
   };
 
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_tm_epoch_to_iso8601(cases[i].epoch);
+    sp_str_t result = sp_tm_epoch_to_iso8601_a(s.mem, cases[i].epoch);
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
+  sp_mem_end_scratch_a(s);
 }
 
 UTEST(tm, epoch_to_date_time_known_values) {

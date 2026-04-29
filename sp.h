@@ -2359,7 +2359,6 @@ typedef struct {
 
 SP_API sp_tm_epoch_t     sp_tm_now_epoch();
 SP_API sp_tm_date_time_t sp_tm_epoch_to_date_time(sp_tm_epoch_t time);
-SP_API sp_str_t          sp_tm_epoch_to_iso8601(sp_tm_epoch_t time);
 SP_API sp_tm_point_t     sp_tm_now_point();
 SP_API u64               sp_tm_point_diff(sp_tm_point_t newer, sp_tm_point_t older);
 SP_API sp_tm_timer_t     sp_tm_start_timer();
@@ -3352,13 +3351,6 @@ struct sp_fmon {
   sp_mem_t allocator;
 };
 
-SP_API void sp_fmon_init(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
-SP_API void sp_fmon_init_ex(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data, u32 debounce, sp_mem_t alloc);
-SP_API void sp_fmon_deinit(sp_fmon_t* monitor);
-SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
-SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
-SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
-SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
 
 SP_END_EXTERN_C()
 
@@ -3406,11 +3398,20 @@ static void sp_fmt_write_ptr(sp_str_builder_t* builder, void* value);
 
 
 // @header @top
+SP_IMP c8*      sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
+SP_IMP c8*      sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
+SP_IMP c8*      sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end);
+SP_IMP void     sp_fmt_write_u64_a(sp_io_writer_t* io, u64 value);
+SP_IMP void     sp_fmt_write_s64_a(sp_io_writer_t* io, s64 value);
+SP_IMP void     sp_fmt_write_f64_a(sp_io_writer_t* io, f64 value, u32 precision);
+SP_IMP void     sp_fmt_write_ptr_a(sp_io_writer_t* io, void* value);
+SP_IMP sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
+SP_IMP void     sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec);
+SP_API void     sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
-// @private @unchanged
-SP_IMP c8* sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
-SP_IMP c8* sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
-SP_IMP c8* sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end);
+SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls);
+SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena_for_a(sp_tls_rt_t* tls, sp_mem_t mem);
+
 SP_IMP sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* io, const void* ptr, u64 size, u64* bytes_written);
 SP_IMP sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* io, s64 offset, sp_io_whence_t whence, s64* position);
 SP_IMP sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* io, u64* size);
@@ -3420,17 +3421,6 @@ SP_IMP sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* io, s64 offset, sp_io_when
 SP_IMP sp_err_t sp_io_writer_mem_size(sp_io_writer_t* io, u64* size);
 SP_IMP sp_err_t sp_io_writer_mem_close(sp_io_writer_t* io);
 
-// @public @unchanged
-SP_API sp_str_t       sp_fs_get_name(sp_str_t path);
-SP_API sp_str_t       sp_fs_parent_path(sp_str_t path);
-SP_API sp_str_t       sp_fs_trim_path(sp_str_t path);
-SP_API sp_str_t       sp_fs_get_ext(sp_str_t path);
-SP_API sp_str_t       sp_fs_get_stem(sp_str_t path);
-SP_API bool           sp_fs_is_root(sp_str_t path);
-SP_API bool           sp_fs_is_glob(sp_str_t path);
-SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
-
-// @private @changed
 SP_IMP sp_fs_kind_t sp_fs_lstat_kind_a(sp_str_t path);
 SP_IMP sp_fs_kind_t sp_fs_stat_kind_a(sp_str_t path);
 SP_IMP sp_fs_it_t   sp_fs_it_new_a(sp_mem_t mem, sp_str_t path);
@@ -3440,24 +3430,39 @@ SP_IMP void         sp_fs_it_next_a(sp_fs_it_t* it);
 SP_IMP void         sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path);
 SP_IMP bool         sp_fs_it_valid_a(sp_fs_it_t* it);
 SP_IMP void         sp_fs_it_deinit_a(sp_fs_it_t* it);
-SP_IMP void sp_fmt_write_u64_a(sp_io_writer_t* io, u64 value);
-SP_IMP void sp_fmt_write_s64_a(sp_io_writer_t* io, s64 value);
-SP_IMP void sp_fmt_write_f64_a(sp_io_writer_t* io, f64 value, u32 precision);
-SP_IMP void sp_fmt_write_ptr_a(sp_io_writer_t* io, void* value);
-SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls);
-SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena_for_a(sp_tls_rt_t* tls, sp_mem_t mem);
-SP_IMP sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
-SP_IMP void sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t content, sp_fmt_spec_t spec);
-SP_IMP void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec);
-SP_API void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
-// @public @changed
+// public
+SP_API sp_str_t      sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time);
+
 SP_API sp_str_t      sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
-SP_API c8*           sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t      sp_str_copy_a(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t      sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
 SP_API sp_str_t      sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API c8*           sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str);
 
+SP_API void          sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
+SP_API sp_err_t      sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
+SP_API sp_err_t      sp_io_writer_from_file_a(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode);
+SP_API sp_err_t      sp_io_reader_from_file_a(sp_io_reader_t* reader, sp_str_t path);
+SP_API sp_str_t sp_io_writer_mem_as_str(sp_io_writer_mem_t* io);
+SP_API sp_str_t sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io);
+SP_API void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
+
+
+SP_API void sp_fmon_init_a(sp_mem_t mem, sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
+SP_API void sp_fmon_deinit(sp_fmon_t* monitor);
+SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
+SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
+
+SP_API sp_str_t       sp_fs_get_name(sp_str_t path);
+SP_API sp_str_t       sp_fs_parent_path(sp_str_t path);
+SP_API sp_str_t       sp_fs_trim_path(sp_str_t path);
+SP_API sp_str_t       sp_fs_get_ext(sp_str_t path);
+SP_API sp_str_t       sp_fs_get_stem(sp_str_t path);
+SP_API bool           sp_fs_is_root(sp_str_t path);
+SP_API bool           sp_fs_is_glob(sp_str_t path);
 SP_API sp_str_t      sp_fs_normalize_path_a(sp_mem_t mem, sp_str_t path);
 SP_API sp_str_t      sp_fs_join_path_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
 SP_API sp_str_t      sp_fs_replace_ext_a(sp_mem_t mem, sp_str_t path, sp_str_t ext);
@@ -3468,7 +3473,6 @@ SP_API sp_str_t      sp_fs_get_storage_path_a(sp_mem_t mem);
 SP_API sp_str_t      sp_fs_get_config_path_a(sp_mem_t mem);
 SP_API sp_da(sp_fs_entry_t) sp_fs_collect_a(sp_mem_t mem, sp_str_t path);
 SP_API sp_da(sp_fs_entry_t) sp_fs_collect_recursive_a(sp_mem_t mem, sp_str_t path);
-
 SP_API bool          sp_fs_exists_a(sp_str_t path);
 SP_API bool          sp_fs_is_file_a(sp_str_t path);
 SP_API bool          sp_fs_is_dir_a(sp_str_t path);
@@ -3492,20 +3496,12 @@ SP_API sp_err_t      sp_fs_copy_a(sp_str_t from, sp_str_t to);
 SP_API void          sp_fs_copy_file_a(sp_str_t from, sp_str_t to);
 SP_API void          sp_fs_copy_dir_a(sp_str_t from, sp_str_t to);
 SP_API void          sp_fs_copy_glob_a(sp_str_t from, sp_str_t glob, sp_str_t to);
+
 #define sp_fs_for(mem, dir, it) \
   for (sp_fs_it_t it = sp_fs_it_new_a(mem, dir); sp_fs_it_valid_a(&it); sp_fs_it_next_a(&it))
-
 #define sp_fs_for_recursive(mem, dir, it) \
   for (sp_fs_it_t it = sp_fs_it_new_recursive_a(mem, dir); sp_fs_it_valid(&it); sp_fs_it_next(&it))
 
-
-SP_API sp_err_t      sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
-SP_API sp_err_t      sp_io_writer_from_file_a(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode);
-SP_API sp_err_t      sp_io_reader_from_file_a(sp_io_reader_t* reader, sp_str_t path);
-
-SP_API sp_str_t sp_io_writer_mem_as_str(sp_io_writer_mem_t* io);
-SP_API sp_str_t sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io);
-SP_API void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
 
 SP_API sp_mem_t              sp_mem_os_new();
 SP_API void*                 sp_alloc_a(sp_mem_t mem, u64 size);
@@ -7335,7 +7331,9 @@ static void sp_fmt_directive_write_zpad4(sp_str_builder_t* b, u32 value) {
 static void sp_fmt_directive_iso_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   sp_tm_epoch_t epoch = SP_RVAL(sp_tm_epoch_t) { .s = arg->u, .ns = 0 };
-  sp_str_builder_append(b, sp_tm_epoch_to_iso8601(epoch));
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_str_builder_append(b, sp_tm_epoch_to_iso8601_a(s.mem, epoch));
+  sp_mem_end_scratch_a(s);
 }
 
 static void sp_fmt_directive_hex_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
@@ -10625,26 +10623,6 @@ sp_tm_date_time_t sp_tm_get_date_time() {
 }
 #endif
 
-sp_str_t sp_tm_epoch_to_iso8601(sp_tm_epoch_t time) {
-  sp_tm_date_time_t dt = sp_tm_epoch_to_date_time(time);
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_fmt_directive_write_zpad4(&builder, (u32)dt.year);
-  sp_str_builder_append_c8(&builder, '-');
-  sp_fmt_directive_write_zpad2(&builder, (u32)dt.month);
-  sp_str_builder_append_c8(&builder, '-');
-  sp_fmt_directive_write_zpad2(&builder, (u32)dt.day);
-  sp_str_builder_append_c8(&builder, 'T');
-  sp_fmt_directive_write_zpad2(&builder, (u32)dt.hour);
-  sp_str_builder_append_c8(&builder, ':');
-  sp_fmt_directive_write_zpad2(&builder, (u32)dt.minute);
-  sp_str_builder_append_c8(&builder, ':');
-  sp_fmt_directive_write_zpad2(&builder, (u32)dt.second);
-  sp_str_builder_append_c8(&builder, '.');
-  sp_fmt_directive_write_zpad3(&builder, (u32)dt.millisecond);
-  sp_str_builder_append_c8(&builder, 'Z');
-  return sp_str_builder_to_str(&builder);
-}
-
 u64 sp_tm_s_to_ms(u64 s) {
   SP_ASSERT(s <= SP_TM_S_TO_MS_MAX);
   return s * SP_TM_S_TO_MS;
@@ -12601,16 +12579,12 @@ SP_PRIVATE void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
 SP_PRIVATE void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
 SP_PRIVATE void sp_fmon_os_process_changes(sp_fmon_t* monitor);
 
-void sp_fmon_init(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata) {
-  sp_fmon_init_ex(monitor, callback, events, userdata, 0, sp_context_get()->allocator);
-}
-
-void sp_fmon_init_ex(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata, u32 debounce, sp_mem_t alloc) {
-  monitor->allocator = alloc;
-  monitor->callback = callback;
+void sp_fmon_init_a(sp_mem_t mem, sp_fmon_t* monitor, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* userdata) {
+  monitor->allocator = mem;
+  monitor->callback = fn;
   monitor->events_to_watch = events;
   monitor->userdata = userdata;
-  monitor->debounce_time_ms = debounce;
+  monitor->debounce_time_ms = 0;
   sp_fmon_os_init(monitor);
 }
 
@@ -14548,11 +14522,11 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
   sp_str_t before = sp_str_builder_as_str(&b.before);
   sp_str_t after  = sp_str_builder_as_str(&b.after);
 
-  sp_fmt_apply_spec_wrapped_a(io, before, content, after, arg->spec);
+  sp_fmt_apply_spec_a(io, before, content, after, arg->spec);
   return SP_OK;
 }
 
-void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec) {
+void sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec) {
   u32 content_len = (u32)str.len;
   u32 width = spec.width > SP_FMT_WIDTH_MAX ? SP_FMT_WIDTH_MAX : spec.width;
   u32 pad = (width > content_len) ? (width - content_len) : 0;
@@ -14583,11 +14557,6 @@ void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str,
   sp_io_write_str(io, str, SP_NULLPTR);
   sp_io_write_str(io, post, SP_NULLPTR);
   sp_for(it, right) sp_io_write_c8(io, fill);
-}
-
-void sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t content, sp_fmt_spec_t spec) {
-  sp_str_t empty = sp_zero();
-  sp_fmt_apply_spec_wrapped_a(io, empty, content, empty, spec);
 }
 
 static const c8 sp_fmt_digit_pairs[201] =
@@ -15359,6 +15328,40 @@ sp_fs_it_t sp_fs_it_new_recursive_a(sp_mem_t mem, sp_str_t path) {
   sp_da_init(mem, it.stack);
   sp_fs_it_begin_a(&it, path);
   return it;
+}
+
+//
+// time
+//
+sp_str_t sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time) {
+  sp_tm_date_time_t dt = sp_tm_epoch_to_date_time(time);
+  c8* buf = (c8*)sp_mem_allocator_alloc(mem, 24);
+  // YYYY-MM-DDTHH:MM:SS.mmmZ
+  buf[0]  = (c8)('0' + ((u32)dt.year / 1000) % 10);
+  buf[1]  = (c8)('0' + ((u32)dt.year / 100) % 10);
+  buf[2]  = (c8)('0' + ((u32)dt.year / 10) % 10);
+  buf[3]  = (c8)('0' + (u32)dt.year % 10);
+  buf[4]  = '-';
+  buf[5]  = (c8)('0' + ((u32)dt.month / 10) % 10);
+  buf[6]  = (c8)('0' + (u32)dt.month % 10);
+  buf[7]  = '-';
+  buf[8]  = (c8)('0' + ((u32)dt.day / 10) % 10);
+  buf[9]  = (c8)('0' + (u32)dt.day % 10);
+  buf[10] = 'T';
+  buf[11] = (c8)('0' + ((u32)dt.hour / 10) % 10);
+  buf[12] = (c8)('0' + (u32)dt.hour % 10);
+  buf[13] = ':';
+  buf[14] = (c8)('0' + ((u32)dt.minute / 10) % 10);
+  buf[15] = (c8)('0' + (u32)dt.minute % 10);
+  buf[16] = ':';
+  buf[17] = (c8)('0' + ((u32)dt.second / 10) % 10);
+  buf[18] = (c8)('0' + (u32)dt.second % 10);
+  buf[19] = '.';
+  buf[20] = (c8)('0' + ((u32)dt.millisecond / 100) % 10);
+  buf[21] = (c8)('0' + ((u32)dt.millisecond / 10) % 10);
+  buf[22] = (c8)('0' + (u32)dt.millisecond % 10);
+  buf[23] = 'Z';
+  return SP_STR(buf, 24);
 }
 // @refactor @bottom
 
