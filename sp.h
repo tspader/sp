@@ -3439,6 +3439,8 @@ SP_IMP void sp_fmt_apply_spec_wrapped_a(sp_io_writer_t* io, sp_str_t pre, sp_str
 SP_API void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
 // @public @changed
+SP_API sp_str_t sp_io_writer_mem_as_str(sp_io_writer_mem_t* io);
+SP_API sp_str_t sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io);
 SP_API void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
 
 SP_API sp_mem_t              sp_mem_os_new();
@@ -3455,7 +3457,7 @@ SP_API void sp_log_a(const c8* fmt, ...);
 SP_API void sp_log_a_a(sp_mem_t mem, const c8* fmt, ...);
 
 SP_API sp_str_r sp_fmt_a(sp_mem_t mem, const c8* fmt, ...);
-SP_API sp_str_r sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args);
+SP_API sp_err_t sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args);
 
 
 
@@ -14752,18 +14754,29 @@ void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer) {
   };
 }
 
+sp_str_t sp_io_writer_mem_as_str(sp_io_writer_mem_t* io) {
+  return (sp_str_t){ .data = (c8*)io->ptr, .len = (u32)io->pos };
+}
+
+sp_str_t sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io) {
+  return sp_mem_buffer_as_str(&io->buffer);
+}
+
 sp_str_r sp_fmt_a(sp_mem_t mem, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_io_writer_t io = sp_zero();
   sp_io_writer_from_dyn_mem_a(mem, &io);
-  sp_str_r formatted = sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  sp_err_t err = sp_fmt_v_a(&io, sp_str_view(fmt), args);
   va_end(args);
-  return formatted;
+
+  sp_str_r result = sp_zero();
+  result.err = err;
+  if (!err) result.value = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  return result;
 }
 
-sp_str_r sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
-  sp_str_r result = sp_zero();
+sp_err_t sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
   sp_fmt_parser_t p = { .str = fmt };
 
   while (true) {
@@ -14779,23 +14792,23 @@ sp_str_r sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
       }
 
       sp_fmt_spec_t spec = sp_zero();
-      sp_try_goto_r(sp_fmt_parse_specifier(&p, &spec), result, error);
+      sp_try(sp_fmt_parse_specifier(&p, &spec));
 
       if (spec.fill_dynamic) {
         s64 v;
-        sp_try_goto_r(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
+        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v));
         spec.fill = (u8)v;
       }
       if (spec.width_dynamic) {
         s64 v;
-        sp_try_goto_r(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
+        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v));
         if (v < 0) v = 0;
         if (v > SP_FMT_WIDTH_MAX) v = SP_FMT_WIDTH_MAX;
         spec.width = (u32)v;
       }
       if (spec.precision_dynamic) {
         s64 v;
-        sp_try_goto_r(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v), result, error);
+        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v));
         if (v < 0) v = 0;
         if (v > 255) v = 255;
         sp_opt_set(spec.precision, (u8)v);
@@ -14810,7 +14823,7 @@ sp_str_r sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
 
       sp_fmt_arg_t arg = va_arg(args, sp_fmt_arg_t);
       arg.spec = spec;
-      sp_try_goto_r(sp_fmt_render_a(io, &arg, params), result, error);
+      sp_try(sp_fmt_render_a(io, &arg, params));
       continue;
     }
 
@@ -14821,19 +14834,14 @@ sp_str_r sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
         sp_io_write_c8(io, '}');
         continue;
       }
-      // Lone `}` — unbalanced close brace. Mirrors `{` error policy.
-      result.err = SP_ERR_FMT_BAD_PLACEHOLDER;
-      goto error;
+      return SP_ERR_FMT_BAD_PLACEHOLDER;
     }
 
     sp_io_write_c8(io, c);
     sp_fmt_advance(&p);
   }
 
-error:
-  return result;
-
-  return sp_ok(result, fmt);
+  return SP_OK;
 }
 
 void sp_log_a(const c8* fmt, ...) {
@@ -14843,9 +14851,10 @@ void sp_log_a(const c8* fmt, ...) {
 
   va_list args;
   va_start(args, fmt);
-  sp_str_t str = sp_fmt_v_a(&io, sp_str_view(fmt), args).value;
+  sp_fmt_v_a(&io, sp_str_view(fmt), args);
   va_end(args);
 
+  sp_str_t str = sp_io_writer_mem_as_str(&io.mem);
   sp_tls_rt_t* tls = sp_tls_rt_get();
   sp_io_write_str(tls->std.out, str, SP_NULLPTR);
   sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
@@ -14858,9 +14867,10 @@ void sp_log_a_a(sp_mem_t mem, const c8* fmt, ...) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
   va_list args;
   va_start(args, fmt);
-  sp_str_t str = sp_fmt_v_a(&io, sp_str_view(fmt), args).value;
+  sp_fmt_v_a(&io, sp_str_view(fmt), args);
   va_end(args);
 
+  sp_str_t str = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
   sp_tls_rt_t* tls = sp_tls_rt_get();
   sp_io_write_str(tls->std.out, str, SP_NULLPTR);
   sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);

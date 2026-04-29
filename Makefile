@@ -34,7 +34,7 @@ EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
 EXE := $(if $(WASM),.wasm,$(EXE))
 
 TESTS = app
-EXAMPLES = app
+EXAMPLES = app format
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \
