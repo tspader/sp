@@ -350,7 +350,7 @@ static void* mock_alloc_record_size(void* user_data, sp_mem_alloc_mode_t mode, u
 
 UTEST_F(mem, alloc_preserves_u64_size) {
   u64 recorded_size = 0;
-  sp_allocator_t mock = {
+  sp_mem_t mock = {
     .on_alloc = mock_alloc_record_size,
     .user_data = &recorded_size,
   };
@@ -364,7 +364,7 @@ UTEST_F(mem, alloc_preserves_u64_size) {
 }
 
 UTEST_F(mem, libc_metadata_stores_u64_size) {
-  sp_allocator_t libc = sp_mem_os_new();
+  sp_mem_t libc = sp_mem_os_new();
 
   u64 size = 64;
   void* ptr = sp_mem_allocator_alloc(libc, size);

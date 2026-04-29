@@ -50,9 +50,9 @@ UTEST_F(mem, push_pop_multiple) {
 
 UTEST_F(mem, push_allocator_changes_allocator) {
   sp_context_t *ctx_before = sp_context_get();
-  sp_allocator_t old_allocator = ctx_before->allocator;
+  sp_mem_t old_allocator = ctx_before->allocator;
 
-  sp_allocator_t new_allocator = sp_mem_os_new();
+  sp_mem_t new_allocator = sp_mem_os_new();
   sp_context_push_allocator(new_allocator);
 
   sp_context_t *ctx_after = sp_context_get();
@@ -66,7 +66,7 @@ UTEST_F(mem, push_allocator_changes_allocator) {
 
 UTEST_F(mem, set_modifies_current) {
   sp_context_t ctx = *sp_context_get();
-  sp_allocator_t new_allocator = sp_mem_os_new();
+  sp_mem_t new_allocator = sp_mem_os_new();
   ctx.allocator = new_allocator;
 
   sp_context_set(ctx);

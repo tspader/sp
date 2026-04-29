@@ -1280,7 +1280,7 @@ SP_TYPEDEF_FN(
 typedef struct sp_allocator_t {
   sp_allocator_fn_t on_alloc;
   void* user_data;
-} sp_allocator_t;
+} sp_mem_t;
 
 typedef enum {
   SP_MEM_ARENA_MODE_DEFAULT,
@@ -1295,7 +1295,7 @@ typedef struct sp_mem_arena_block_t {
 } sp_mem_arena_block_t;
 
 typedef struct {
-  sp_allocator_t allocator;
+  sp_mem_t allocator;
   sp_mem_arena_block_t* head;
   sp_mem_arena_block_t* current;
   u64 block_size;
@@ -1315,29 +1315,30 @@ typedef struct {
 
 typedef struct {
   sp_mem_arena_marker_t marker;
-  sp_allocator_t old_allocator;
+  sp_mem_t old_allocator;
 } sp_mem_scratch_t;
 
 SP_API void*                 sp_alloc(u64 size);
 SP_API void*                 sp_realloc(void* memory, u64 size);
 SP_API void                  sp_free(void* memory);
-SP_API void*                 sp_mem_os_alloc(u64 size);
-SP_API void*                 sp_mem_os_alloc_zero(u64 size);
-SP_API void*                 sp_mem_os_realloc(void* ptr, u64 size);
-SP_API void                  sp_mem_os_free(void* ptr);
 SP_API void                  sp_mem_copy(const void* source, void* dest, u64 num_bytes);
 SP_API void                  sp_mem_move(const void* source, void* dest, u64 num_bytes);
 SP_API bool                  sp_mem_is_equal(const void* a, const void* b, u64 len);
 SP_API void                  sp_mem_fill(void* buffer, u64 bsize, void* fill, u64 fsize);
 SP_API void                  sp_mem_fill_u8(void* buffer, u64 buffer_size, u8 fill);
 SP_API void                  sp_mem_zero(void* buffer, u64 buffer_size);
-SP_API void*                 sp_mem_allocator_alloc(sp_allocator_t arena, u64 size);
-SP_API void*                 sp_mem_allocator_realloc(sp_allocator_t arena, void* ptr, u64 size);
-SP_API void                  sp_mem_allocator_free(sp_allocator_t arena, void* buffer);
+SP_API void*                 sp_mem_allocator_alloc(sp_mem_t arena, u64 size);
+SP_API void*                 sp_mem_allocator_realloc(sp_mem_t arena, void* ptr, u64 size);
+SP_API void                  sp_mem_allocator_free(sp_mem_t arena, void* buffer);
+SP_API void*                 sp_mem_os_alloc(u64 size);
+SP_API void*                 sp_mem_os_alloc_zero(u64 size);
+SP_API void*                 sp_mem_os_realloc(void* ptr, u64 size);
+SP_API void                  sp_mem_os_free(void* ptr);
+SP_API void*                 sp_mem_os_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
+SP_API sp_mem_os_header_t*   sp_mem_os_get_header(void* ptr);
 SP_API sp_mem_arena_t*       sp_mem_arena_new();
 SP_API sp_mem_arena_t*       sp_mem_arena_new_ex(u64 block_size, sp_mem_arena_mode_t mode, u8 alignment);
-SP_API sp_mem_arena_t*       sp_mem_arena_new_with_allocator(sp_allocator_t allocator, u64 block_size, sp_mem_arena_mode_t mode, u8 alignment);
-SP_API sp_allocator_t        sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
+SP_API sp_mem_arena_t*       sp_mem_arena_new_with_allocator(sp_mem_t allocator, u64 block_size, sp_mem_arena_mode_t mode, u8 alignment);
 SP_API void                  sp_mem_arena_clear(sp_mem_arena_t* arena);
 SP_API void                  sp_mem_arena_destroy(sp_mem_arena_t* arena);
 SP_API void*                 sp_mem_arena_on_alloc(void* ptr, sp_mem_alloc_mode_t mode, u64 n, void* old);
@@ -1348,9 +1349,6 @@ SP_API u64                   sp_mem_arena_bytes_used(sp_mem_arena_t* arena);
 SP_API void*                 sp_mem_arena_alloc(sp_mem_arena_t* arena, u64 size);
 SP_API void*                 sp_mem_arena_realloc(sp_mem_arena_t* arena, void* ptr, u64 size);
 SP_API void                  sp_mem_arena_free(sp_mem_arena_t* arena, void* ptr);
-SP_API sp_allocator_t        sp_mem_os_new();
-SP_API void*                 sp_mem_os_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
-SP_API sp_mem_os_header_t*   sp_mem_os_get_header(void* ptr);
 SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena();
 SP_API sp_mem_scratch_t      sp_mem_begin_scratch();
 SP_API void                  sp_mem_end_scratch(sp_mem_scratch_t scratch);
@@ -1365,6 +1363,7 @@ SP_API void                  sp_mem_end_scratch(sp_mem_scratch_t scratch);
 #define sp_mem_allocator_alloc_type(a, T) sp_mem_allocator_alloc_n(a, T, 1)
 #define sp_mem_arena_alloc_n(a, T, n) (T*)sp_mem_arena_alloc((a), (n) * sizeof(T))
 #define sp_mem_arena_alloc_type(a, T) sp_mem_arena_alloc_n(a, T, 1)
+
 
 typedef struct {
   u8* data;
@@ -1430,7 +1429,7 @@ SP_API sp_hash_t sp_hash_bytes(const void* p, u64 len, u64 seed);
 typedef struct sp_aligned() {
   u64 size;
   u64 capacity;
-  sp_allocator_t* allocator;
+  sp_mem_t* allocator;
 } sp_da_header_t;
 
 #define sp_da(T) T*
@@ -1715,7 +1714,7 @@ typedef struct {
     u64 size;
     u64 capacity;
   } header;
-  sp_allocator_t allocator;
+  sp_mem_t allocator;
   u64 tmp_idx;
 } sp_ht_info_t;
 
@@ -2858,7 +2857,7 @@ SP_PRIVATE void  sp_tls_set(sp_tls_key_t key, void* data);
 SP_PRIVATE void  sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t);
 
 typedef struct {
-  sp_allocator_t allocator;
+  sp_mem_t allocator;
 } sp_context_t;
 
 typedef struct {
@@ -2947,13 +2946,13 @@ typedef struct {
 
 sp_tls_rt_t*   sp_tls_rt_get();
 sp_context_t*  sp_tls_rt_get_context(sp_tls_rt_t* tls);
-sp_allocator_t sp_tls_rt_get_allocator(sp_tls_rt_t* tls);
+sp_mem_t sp_tls_rt_get_allocator(sp_tls_rt_t* tls);
 void           sp_sys_tls_init(sp_tls_rt_t* tls);
 sp_context_t*  sp_context_get();
 void           sp_context_set(sp_context_t context);
 void           sp_context_push(sp_context_t context);
-sp_allocator_t sp_context_get_allocator();
-void           sp_context_push_allocator(sp_allocator_t allocator);
+sp_mem_t sp_context_get_allocator();
+void           sp_context_push_allocator(sp_mem_t allocator);
 void           sp_context_push_arena(sp_mem_arena_t* arena);
 void           sp_context_pop();
 
@@ -3036,7 +3035,7 @@ typedef struct {
 } sp_io_writer_mem_t;
 
 typedef struct {
-  sp_allocator_t allocator;
+  sp_mem_t allocator;
   sp_mem_buffer_t buffer;
   u64 seek;
 } sp_io_writer_dyn_mem_t;
@@ -3079,7 +3078,7 @@ SP_API sp_err_t       sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t pa
 SP_API void           sp_io_writer_from_fd(sp_io_writer_t* writer, sp_sys_fd_t fd, sp_io_close_mode_t close_mode);
 SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
 SP_API void           sp_io_writer_from_dyn_mem(sp_io_writer_t* writer);
-SP_API void           sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_allocator_t allocator);
+SP_API void           sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_mem_t allocator);
 SP_API void           sp_io_get_std_out(sp_io_writer_t* io);
 SP_API void           sp_io_get_std_err(sp_io_writer_t* io);
 SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
@@ -3196,7 +3195,7 @@ typedef struct sp_ps_os sp_ps_os_t;
 typedef struct {
   sp_ps_io_t io;
   sp_ps_os_t* os;
-  sp_allocator_t allocator;
+  sp_mem_t allocator;
 } sp_ps_t;
 
 SP_API sp_ps_config_t  sp_ps_config_copy(const sp_ps_config_t* src);
@@ -3325,11 +3324,11 @@ struct sp_fmon {
 	sp_fmon_os_t* os;
 	sp_fmon_event_kind_t events_to_watch;
 	u32 debounce_time_ms;
-  sp_allocator_t allocator;
+  sp_mem_t allocator;
 };
 
 SP_API void sp_fmon_init(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
-SP_API void sp_fmon_init_ex(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data, u32 debounce, sp_allocator_t alloc);
+SP_API void sp_fmon_init_ex(sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data, u32 debounce, sp_mem_t alloc);
 SP_API void sp_fmon_deinit(sp_fmon_t* monitor);
 SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
 SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
@@ -3375,6 +3374,29 @@ static void sp_fmt_write_f64(sp_str_builder_t* builder, f64 value, u32 precision
 static void sp_fmt_write_ptr(sp_str_builder_t* builder, void* value);
 
 #endif // SP_PRIVATE_HEADER or SP_IMPLEMENTATION
+
+
+
+
+
+
+// @allocator
+sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem);
+
+SP_API sp_mem_t              sp_mem_os_new();
+SP_API void*                 sp_alloc_a(sp_mem_t mem, u64 size);
+SP_API void*                 sp_realloc_a(sp_mem_t mem, void* memory, u64 size);
+SP_API void                  sp_free_a(sp_mem_t mem, void* memory);
+SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena_a(sp_mem_t mem);
+SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_a(sp_mem_t mem);
+SP_API void                  sp_mem_end_scratch_a(sp_mem_scratch_t scratch);
+SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
+
+#define sp_alloc_n_a(a, T, n) (T*)sp_alloc_a(a, (n) * sizeof(T))
+#define sp_alloc_type_a(a, T) sp_alloc_n_a(a, T, 1)
+sp_mem_arena_t* sp_tls_rt_get_scratch_arena(sp_tls_rt_t* tls);
+
+
 #endif
 
 
@@ -3400,6 +3422,69 @@ sp_tls_block_t sp_tls_block;
 c8** environ;
 s32 errno;
 #endif
+
+sp_mem_arena_t* sp_tls_rt_get_scratch_arena_a(sp_tls_rt_t* tls, sp_mem_t mem) {
+  sp_carr_for(tls->scratch, it) {
+    sp_mem_t arena = sp_mem_arena_as_allocator(tls->scratch[it]);
+    if (arena.on_alloc != mem.on_alloc || arena.user_data != mem.user_data) {
+      return tls->scratch[it];
+    }
+  }
+
+  sp_unreachable_return(SP_NULLPTR);
+}
+
+sp_mem_os_header_t* sp_mem_os_get_header(void* ptr) {
+  return ((sp_mem_os_header_t*)ptr) - 1;
+}
+
+void* sp_mem_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
+  (void)user_data;
+  switch (mode) {
+    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_os_alloc_zero(size);
+    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_os_realloc(ptr, size);
+    case SP_ALLOCATOR_MODE_FREE:   sp_mem_os_free(ptr); return SP_NULLPTR;
+    default:                       return SP_NULLPTR;
+  }
+}
+
+sp_mem_t sp_mem_os_new() {
+  sp_mem_t allocator;
+  allocator.on_alloc = sp_mem_os_on_alloc;
+  allocator.user_data = NULL;
+  return allocator;
+}
+
+void* sp_alloc_a(sp_mem_t allocator, u64 size) {
+  sp_context_t* ctx = sp_context_get();
+  return sp_mem_allocator_alloc(ctx->allocator, size);
+}
+
+void* sp_realloc_a(sp_mem_t allocator, void* memory, u64 size) {
+  sp_context_t* ctx = sp_context_get();
+  return sp_mem_allocator_realloc(ctx->allocator, memory, size);
+}
+
+void sp_free_a(sp_mem_t allocator, void* memory) {
+  sp_context_t* ctx = sp_context_get();
+  sp_mem_allocator_free(ctx->allocator, memory);
+}
+
+sp_mem_arena_t* sp_mem_get_scratch_arena_a(sp_mem_t mem) {
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  return sp_tls_rt_get_scratch_arena_a(tls, mem);
+}
+
+sp_mem_arena_marker_t sp_mem_begin_scratch_a(sp_mem_t mem) {
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_mem_arena_t* arena = sp_tls_rt_get_scratch_arena(tls);
+  return sp_mem_arena_mark(arena);
+}
+
+void sp_mem_end_scratch_a(sp_mem_scratch_t scratch) {
+  sp_mem_arena_pop(scratch.marker);
+}
+
 
 //   █████████  █████ █████  █████████
 //  ███░░░░░███░░███ ░░███  ███░░░░░███
@@ -6244,14 +6329,14 @@ void sp_ht_it_advance_fn(void** data, u64 capacity, u64* it, sp_ht_info_t info) 
 void* sp_da_resize(void* arr, u32 stride, u64 len) {
   len = sp_max(len, 4);
   sp_da_header_t* header = arr ? sp_da_head(arr) : SP_NULLPTR;
-  sp_allocator_t a = header ? *header->allocator : sp_context_get_allocator();
+  sp_mem_t a = header ? *header->allocator : sp_context_get_allocator();
   header = sp_mem_allocator_realloc(a, header, len * stride + sizeof(sp_da_header_t));
 
   if (!header) return SP_NULLPTR;
 
   if (!arr) {
     header->size = 0;
-    header->allocator = sp_mem_allocator_alloc_type(a, sp_allocator_t);
+    header->allocator = sp_mem_allocator_alloc_type(a, sp_mem_t);
     *header->allocator = a;
   }
   header->capacity = len;
@@ -6274,7 +6359,7 @@ void sp_da_push_ex(void** arr, void* val, u32 stride) {
   }
 }
 
-void sp_da_init_ex(sp_allocator_t* a, void** arr, u32 stride) {
+void sp_da_init_ex(sp_mem_t* a, void** arr, u32 stride) {
   u32 cap = 4;
   sp_da_header_t* head = sp_mem_allocator_alloc(*a, cap * stride + sizeof(sp_da_header_t));
   *head = (sp_da_header_t) {
@@ -7815,15 +7900,15 @@ sp_context_t* sp_tls_rt_get_context(sp_tls_rt_t* tls) {
   return &tls->contexts[tls->index];
 }
 
-sp_allocator_t sp_tls_rt_get_allocator(sp_tls_rt_t* tls) {
+sp_mem_t sp_tls_rt_get_allocator(sp_tls_rt_t* tls) {
     return sp_tls_rt_get_context(tls)->allocator;
 }
 
 sp_mem_arena_t* sp_tls_rt_get_scratch_arena(sp_tls_rt_t* tls) {
-  sp_allocator_t allocator = sp_tls_rt_get_context(tls)->allocator;
+  sp_mem_t allocator = sp_tls_rt_get_context(tls)->allocator;
 
   sp_carr_for(tls->scratch, it) {
-    sp_allocator_t arena = sp_mem_arena_as_allocator(tls->scratch[it]);
+    sp_mem_t arena = sp_mem_arena_as_allocator(tls->scratch[it]);
     if (arena.on_alloc != allocator.on_alloc || arena.user_data != allocator.user_data) {
       return tls->scratch[it];
     }
@@ -7851,14 +7936,14 @@ void sp_context_push(sp_context_t context) {
   tls->contexts[tls->index] = context;
 }
 
-void sp_context_push_allocator(sp_allocator_t allocator) {
+void sp_context_push_allocator(sp_mem_t allocator) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   sp_context_t context = tls->contexts[tls->index];
   context.allocator = allocator;
   sp_context_push(context);
 }
 
-sp_allocator_t sp_context_get_allocator() {
+sp_mem_t sp_context_get_allocator() {
   return sp_context_get()->allocator;
 }
 
@@ -8034,6 +8119,7 @@ void sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t fn) {
 //  █████     █████ ██████████ █████     █████ ░░░███████░   █████   █████    █████
 // ░░░░░     ░░░░░ ░░░░░░░░░░ ░░░░░     ░░░░░    ░░░░░░░    ░░░░░   ░░░░░    ░░░░░
 // @memory
+
 void* sp_alloc(u64 size) {
   sp_context_t* ctx = sp_context_get();
   return sp_mem_allocator_alloc(ctx->allocator, size);
@@ -8049,15 +8135,15 @@ void sp_free(void* memory) {
   sp_mem_allocator_free(ctx->allocator, memory);
 }
 
-void* sp_mem_allocator_alloc(sp_allocator_t allocator, u64 size) {
+void* sp_mem_allocator_alloc(sp_mem_t allocator, u64 size) {
   return allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL);
 }
 
-void* sp_mem_allocator_realloc(sp_allocator_t allocator, void* memory, u64 size) {
+void* sp_mem_allocator_realloc(sp_mem_t allocator, void* memory, u64 size) {
   return allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_RESIZE, size, memory);
 }
 
-void sp_mem_allocator_free(sp_allocator_t allocator, void* buffer) {
+void sp_mem_allocator_free(sp_mem_t allocator, void* buffer) {
   allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_FREE, 0, buffer);
 }
 
@@ -8083,7 +8169,7 @@ sp_mem_arena_t* sp_mem_arena_new_ex(u64 block_size, sp_mem_arena_mode_t mode, u8
   return sp_mem_arena_new_with_allocator(sp_context_get()->allocator, block_size, mode, alignment);
 }
 
-sp_mem_arena_t* sp_mem_arena_new_with_allocator(sp_allocator_t allocator, u64 block_size, sp_mem_arena_mode_t mode, u8 alignment) {
+sp_mem_arena_t* sp_mem_arena_new_with_allocator(sp_mem_t allocator, u64 block_size, sp_mem_arena_mode_t mode, u8 alignment) {
   sp_mem_arena_t* arena = (sp_mem_arena_t*)sp_mem_allocator_alloc(allocator, sizeof(sp_mem_arena_t));
   arena->allocator = allocator;
   arena->mode = mode;
@@ -8096,8 +8182,8 @@ sp_mem_arena_t* sp_mem_arena_new_with_allocator(sp_allocator_t allocator, u64 bl
   return arena;
 }
 
-sp_allocator_t sp_mem_arena_as_allocator(sp_mem_arena_t* a) {
-  return (sp_allocator_t) {
+sp_mem_t sp_mem_arena_as_allocator(sp_mem_arena_t* a) {
+  return (sp_mem_t) {
     .on_alloc = sp_mem_arena_on_alloc,
     .user_data = a
   };
@@ -8282,27 +8368,6 @@ void sp_mem_end_scratch(sp_mem_scratch_t scratch) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   sp_tls_rt_pop_context(tls);
   sp_mem_arena_pop(scratch.marker);
-}
-
-sp_mem_os_header_t* sp_mem_os_get_header(void* ptr) {
-  return ((sp_mem_os_header_t*)ptr) - 1;
-}
-
-void* sp_mem_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
-  (void)user_data;
-  switch (mode) {
-    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_os_alloc_zero(size);
-    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_os_realloc(ptr, size);
-    case SP_ALLOCATOR_MODE_FREE:   sp_mem_os_free(ptr); return SP_NULLPTR;
-    default:                       return SP_NULLPTR;
-  }
-}
-
-sp_allocator_t sp_mem_os_new() {
-  sp_allocator_t allocator;
-  allocator.on_alloc = sp_mem_os_on_alloc;
-  allocator.user_data = NULL;
-  return allocator;
 }
 
 bool sp_mem_is_equal(const void* a, const void* b, u64 len) {
@@ -13019,7 +13084,7 @@ void sp_fmon_init(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_
   sp_fmon_init_ex(monitor, callback, events, userdata, 0, sp_context_get()->allocator);
 }
 
-void sp_fmon_init_ex(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata, u32 debounce, sp_allocator_t alloc) {
+void sp_fmon_init_ex(sp_fmon_t* monitor, sp_fmon_fn_t callback, sp_fmon_event_kind_t events, void* userdata, u32 debounce, sp_mem_t alloc) {
   monitor->allocator = alloc;
   monitor->callback = callback;
   monitor->events_to_watch = events;
@@ -14353,7 +14418,7 @@ void sp_io_writer_from_dyn_mem(sp_io_writer_t* writer) {
   sp_io_writer_from_dyn_mem_ex(writer, SP_NULLPTR, 0, sp_context_get()->allocator);
 }
 
-void sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_allocator_t allocator) {
+void sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_mem_t allocator) {
   *writer = (sp_io_writer_t) {
     .vtable = {
       .write = sp_io_writer_dyn_write,

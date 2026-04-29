@@ -144,11 +144,11 @@ typedef struct {
 typedef struct {
   sp_da(sp_elf_section_t) sections;
   sp_str_ht(u32) section_map;
-  sp_allocator_t allocator;
+  sp_mem_t allocator;
 } sp_elf_t;
 
 sp_elf_t* sp_elf_new();
-sp_elf_t* sp_elf_new_alloc(sp_allocator_t a);
+sp_elf_t* sp_elf_new_alloc(sp_mem_t a);
 sp_elf_t* sp_elf_new_with_null_section();
 void sp_elf_free(sp_elf_t* elf);
 sp_elf_section_t* sp_elf_add_section(sp_elf_t* elf, sp_str_t name, u32 type, u64 addralign);
@@ -192,7 +192,7 @@ sp_elf_t* sp_elf_new() {
   return sp_elf_new_alloc(sp_context_get()->allocator);
 }
 
-sp_elf_t* sp_elf_new_alloc(sp_allocator_t allocator) {
+sp_elf_t* sp_elf_new_alloc(sp_mem_t allocator) {
   sp_context_push_allocator(allocator);
   sp_elf_t* elf = sp_alloc_type(sp_elf_t);
   elf->allocator = allocator;
@@ -216,7 +216,7 @@ sp_elf_t* sp_elf_new_with_null_section() {
 
 void sp_elf_free(sp_elf_t* elf) {
   if (!elf) return;
-  sp_allocator_t alloc = elf->allocator;
+  sp_mem_t alloc = elf->allocator;
 
   sp_da_for(elf->sections, i) {
     sp_elf_section_t* sec = &elf->sections[i];

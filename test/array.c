@@ -434,7 +434,7 @@ UTEST(dyn_array, allocator_realloc_into_scratch_clobber) {
 
   sp_mem_arena_t* arena = sp_mem_arena_new();
   sp_context_push_arena(arena);
-  sp_allocator_t a = sp_mem_arena_as_allocator(arena);
+  sp_mem_t a = sp_mem_arena_as_allocator(arena);
 
   sp_da(u8) arr = sp_zero();
   sp_da_init(&a, arr);

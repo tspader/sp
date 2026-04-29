@@ -30,7 +30,7 @@ UTEST_F(mem, arena_padding_mixed_sizes) {
 
 UTEST_F(mem, arena_basic_alloc) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
   EXPECT_EQ(sp_mem_arena_capacity(arena), 256u);
@@ -44,7 +44,7 @@ UTEST_F(mem, arena_basic_alloc) {
 
 UTEST_F(mem, arena_allocations_are_zeroed) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* first = sp_mem_allocator_alloc(allocator, 64);
   EXPECT_EQ(first[0], 0x00);
@@ -55,7 +55,7 @@ UTEST_F(mem, arena_allocations_are_zeroed) {
 
 UTEST_F(mem, arena_pop_resets_bytes_used) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   sp_mem_arena_marker_t marker = sp_mem_arena_mark(arena);
 
@@ -71,7 +71,7 @@ UTEST_F(mem, arena_pop_resets_bytes_used) {
 
 UTEST_F(mem, arena_block_chaining) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(64, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* a = sp_mem_allocator_alloc(allocator, 32);
   u8* b = sp_mem_allocator_alloc(allocator, 32);
@@ -96,7 +96,7 @@ UTEST_F(mem, arena_block_chaining) {
 
 UTEST_F(mem, arena_pop_across_blocks) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(64, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   sp_mem_arena_marker_t marker = sp_mem_arena_mark(arena);
 
@@ -120,7 +120,7 @@ UTEST_F(mem, arena_pop_across_blocks) {
 
 UTEST_F(mem, arena_realloc_copies_data) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* first = sp_mem_allocator_alloc(allocator, 16);
   sp_mem_fill_u8(first, 16, 0xAA);
@@ -137,7 +137,7 @@ UTEST_F(mem, arena_realloc_copies_data) {
 
 UTEST_F(mem, arena_clear_resets_all_blocks) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(64, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   sp_mem_allocator_alloc(allocator, 32);
   sp_mem_allocator_alloc(allocator, 32);
@@ -154,7 +154,7 @@ UTEST_F(mem, arena_clear_resets_all_blocks) {
 
 UTEST_F(mem, arena_block_reuse_after_pop) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(64, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   sp_mem_arena_marker_t marker = sp_mem_arena_mark(arena);
 
@@ -177,7 +177,7 @@ UTEST_F(mem, arena_block_reuse_after_pop) {
 
 UTEST_F(mem, arena_reuse_logic_check) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(64, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   sp_mem_allocator_alloc(allocator, 40);
 
@@ -209,7 +209,7 @@ UTEST_F(mem, arena_wrappers) {
 
 UTEST_F(mem, arena_no_realloc_basic) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 0);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
@@ -242,7 +242,7 @@ UTEST_F(mem, arena_no_realloc_no_header_overhead) {
 
 UTEST_F(mem, arena_no_realloc_allocations_zeroed) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 0);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* buf = sp_mem_allocator_alloc(allocator, 64);
   EXPECT_EQ(buf[0], 0x00);
@@ -253,7 +253,7 @@ UTEST_F(mem, arena_no_realloc_allocations_zeroed) {
 
 UTEST_F(mem, arena_no_realloc_block_chaining) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(64, SP_MEM_ARENA_MODE_NO_REALLOC, 0);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* a = sp_mem_allocator_alloc(allocator, 32);
   u8* b = sp_mem_allocator_alloc(allocator, 32);
@@ -278,7 +278,7 @@ UTEST_F(mem, arena_no_realloc_block_chaining) {
 
 UTEST_F(mem, arena_no_realloc_mark_pop) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 0);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   sp_mem_arena_marker_t marker = sp_mem_arena_mark(arena);
 
@@ -293,7 +293,7 @@ UTEST_F(mem, arena_no_realloc_mark_pop) {
 
 UTEST_F(mem, arena_unaligned_basic) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 1);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 
@@ -309,7 +309,7 @@ UTEST_F(mem, arena_unaligned_basic) {
 
 UTEST_F(mem, arena_unaligned_no_padding) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 1);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* a = sp_mem_allocator_alloc(allocator, 3);
   u8* b = sp_mem_allocator_alloc(allocator, 5);
@@ -324,7 +324,7 @@ UTEST_F(mem, arena_unaligned_no_padding) {
 
 UTEST_F(mem, arena_unaligned_allocations_zeroed) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 1);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* buf = sp_mem_allocator_alloc(allocator, 64);
   EXPECT_EQ(buf[0], 0x00);
@@ -335,7 +335,7 @@ UTEST_F(mem, arena_unaligned_allocations_zeroed) {
 
 UTEST_F(mem, arena_unaligned_block_chaining) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(64, SP_MEM_ARENA_MODE_NO_REALLOC, 1);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* a = sp_mem_allocator_alloc(allocator, 60);
   u8* b = sp_mem_allocator_alloc(allocator, 60);
@@ -353,7 +353,7 @@ UTEST_F(mem, arena_unaligned_block_chaining) {
 
 UTEST_F(mem, arena_custom_alignment_4) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 4);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* a = sp_mem_allocator_alloc(allocator, 1);
   u8* b = sp_mem_allocator_alloc(allocator, 1);
@@ -371,7 +371,7 @@ UTEST_F(mem, arena_custom_alignment_4) {
 
 UTEST_F(mem, arena_custom_alignment_8) {
   sp_mem_arena_t* arena = sp_mem_arena_new_ex(256, SP_MEM_ARENA_MODE_NO_REALLOC, 8);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
 
   u8* a = sp_mem_allocator_alloc(allocator, 3);
   u8* b = sp_mem_allocator_alloc(allocator, 5);

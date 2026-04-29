@@ -869,7 +869,7 @@ struct sp_prompt_ctx_t {
     bool raw;
   } terminal;
   sp_mem_arena_t* arena;
-  sp_allocator_t allocator;
+  sp_mem_t allocator;
   struct {
     sp_prompt_event_data_t value;
     bool dirty;
