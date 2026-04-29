@@ -6,6 +6,27 @@
 
 SP_TEST_MAIN()
 
+struct asset_registry {
+  sp_mem_tracking_t tracker;
+  sp_mem_arena_t* arena;
+  struct { sp_mem_t tracking; sp_mem_t arena; } mem;
+};
+
+UTEST_F_SETUP(asset_registry) {
+  SKIP_ON_WASM()
+  sp_mem_tracking_init(&ut.tracker);
+  ut.mem.tracking = sp_mem_tracking_as_allocator(&ut.tracker);
+  ut.arena = sp_mem_arena_new(ut.mem.tracking);
+  ut.mem.arena = sp_mem_arena_as_allocator(ut.arena);
+}
+
+UTEST_F_TEARDOWN(asset_registry) {
+  SKIP_ON_WASM()
+  sp_mem_arena_destroy(ut.arena);
+  EXPECT_TRUE(sp_mem_tracking_ok(&ut.tracker));
+  sp_mem_tracking_deinit(&ut.tracker);
+}
+
 // Test asset type (user-defined, not in sp.h)
 typedef enum {
   SP_ASSET_KIND_TEST = 1000,
@@ -27,11 +48,20 @@ void sp_test_asset_noop_complete(sp_asset_import_context_t* context) { (void)con
 // Simple importer that just copies the data
 void sp_test_asset_import(sp_asset_import_context_t* context) {
   sp_test_asset_data_t* input = (sp_test_asset_data_t*)context->user_data;
-  sp_test_asset_data_t* data = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
-  data->content = sp_str_copy(input->content);
+  sp_test_asset_data_t* data = sp_alloc_type_a(context->registry->mem, sp_test_asset_data_t);
+  data->content = sp_str_copy_a(context->registry->mem, input->content);
   data->value = input->value;
 
   sp_atomic_ptr_set(&context->asset->data, data);
+}
+
+// Gated importer: waits on a semaphore before doing work. Lets tests observe
+// initial QUEUED state / fallback data without racing the worker thread.
+static sp_semaphore_t s_test_asset_gate;
+
+void sp_test_asset_import_gated(sp_asset_import_context_t* context) {
+  sp_semaphore_wait(&s_test_asset_gate);
+  sp_test_asset_import(context);
 }
 
 void sp_test_asset_complete(sp_asset_import_context_t* context) {
@@ -40,9 +70,9 @@ void sp_test_asset_complete(sp_asset_import_context_t* context) {
 }
 
 // Test: Basic synchronous add and find
-UTEST(asset_registry, basic_add_and_find) {
+UTEST_F(asset_registry, basic_add_and_find) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -50,10 +80,10 @@ UTEST(asset_registry, basic_add_and_find) {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Add an asset
-  sp_test_asset_data_t* data1 = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
+  sp_test_asset_data_t* data1 = sp_alloc_type_a(ut.mem.arena, sp_test_asset_data_t);
   data1->content = SP_LIT("test content");
   data1->value = 42;
 
@@ -75,13 +105,12 @@ UTEST(asset_registry, basic_add_and_find) {
   ASSERT_EQ(not_found, SP_NULLPTR);
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
 }
 
 // Test: Multiple assets with same name but different types
-UTEST(asset_registry, same_name_different_types) {
+UTEST_F(asset_registry, same_name_different_types) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -91,7 +120,7 @@ UTEST(asset_registry, same_name_different_types) {
       { .kind = 1003, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Add assets with same name but different types
   sp_asset_registry_add(&registry, 1001, SP_LIT("shared_name"), (void*)0x1);
@@ -112,13 +141,12 @@ UTEST(asset_registry, same_name_different_types) {
   ASSERT_EQ(sp_atomic_ptr_get(&asset3->data), (void*)0x3);
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
 }
 
 // Test: String copying (verify names are copied, not referenced)
-UTEST(asset_registry, string_copying) {
+UTEST_F(asset_registry, string_copying) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -126,12 +154,12 @@ UTEST(asset_registry, string_copying) {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Create a temporary string
   c8 temp_buffer[32];
   sp_cstr_copy_to("temp_asset", temp_buffer, sizeof(temp_buffer));
-  sp_str_t temp_name = sp_str_from_cstr(temp_buffer);
+  sp_str_t temp_name = sp_str_from_cstr_a(sp_mem_get_scratch(), temp_buffer);
 
   // Add asset with temporary name
   sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, temp_name, SP_NULLPTR);
@@ -141,19 +169,18 @@ UTEST(asset_registry, string_copying) {
 
   // The asset's name should still be intact
   ASSERT_TRUE(sp_str_equal(asset->name, SP_LIT("temp_asset")));
-  ASSERT_FALSE(sp_str_equal(asset->name, sp_str_from_cstr(temp_buffer)));
+  ASSERT_FALSE(sp_str_equal(asset->name, sp_str_from_cstr_a(sp_mem_get_scratch(), temp_buffer)));
 
   // Should still be findable with original name
   sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("temp_asset"));
   ASSERT_EQ(found, asset);
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
 }
 
-UTEST(asset_registry, null_user_data) {
+UTEST_F(asset_registry, null_user_data) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -161,7 +188,7 @@ UTEST(asset_registry, null_user_data) {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Add asset with NULL data
   sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT("null_asset"), SP_NULLPTR);
@@ -174,12 +201,11 @@ UTEST(asset_registry, null_user_data) {
   ASSERT_EQ(sp_atomic_ptr_get(&found->data), SP_NULLPTR);
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
 }
 
-UTEST(asset_registry, empty_names) {
+UTEST_F(asset_registry, empty_names) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -187,7 +213,7 @@ UTEST(asset_registry, empty_names) {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Add asset with empty name
   sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT(""), (void*)0xDEAD);
@@ -200,25 +226,25 @@ UTEST(asset_registry, empty_names) {
   ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)0xDEAD);
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
 }
 
-UTEST(asset_registry, import_completion_pipeline) {
+UTEST_F(asset_registry, import_completion_pipeline) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
+  sp_semaphore_init(&s_test_asset_gate);
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       {
         .kind = SP_ASSET_KIND_TEST,
-        .on_import = sp_test_asset_import,
+        .on_import = sp_test_asset_import_gated,
         .on_completion = sp_test_asset_complete,
         .fallback = &s_fallback,
       }
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Create test data
   sp_test_asset_data_t input_data = {
@@ -230,12 +256,13 @@ UTEST(asset_registry, import_completion_pipeline) {
   sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("async_asset"), &input_data);
   ASSERT_NE(asset, SP_NULLPTR);
 
-  // Should be immediately findable with default data
+  // Should be immediately findable with default data (worker is gated)
   sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("async_asset"));
   ASSERT_EQ(found, asset);
   ASSERT_EQ(sp_asset_data(found, sp_test_asset_data_t), &s_fallback);
 
-  // Wait for import to complete
+  // Release worker and wait for import to complete
+  sp_semaphore_signal(&s_test_asset_gate);
   sp_os_sleep_ms(50);
 
   // Process completions on main thread
@@ -250,37 +277,39 @@ UTEST(asset_registry, import_completion_pipeline) {
   ASSERT_EQ(result_data->value, 999);
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
+  sp_semaphore_destroy(&s_test_asset_gate);
 }
 
-UTEST(asset_registry, state_transitions) {
+UTEST_F(asset_registry, state_transitions) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
+  sp_semaphore_init(&s_test_asset_gate);
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       {
         .kind = SP_ASSET_KIND_TEST,
-        .on_import = sp_test_asset_import,
+        .on_import = sp_test_asset_import_gated,
         .on_completion = sp_test_asset_complete,
         .fallback = &s_fallback,
       }
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   sp_test_asset_data_t input = {
     .content = SP_LIT("state test"),
     .value = 777
   };
 
-  // Start import - should be QUEUED initially
+  // Start import - should be QUEUED initially (worker is gated)
   sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"), &input);
   ASSERT_NE(asset, SP_NULLPTR);
   ASSERT_EQ(asset->state, SP_ASSET_STATE_QUEUED);
 
-  // Wait for import
+  // Release worker and wait for import
+  sp_semaphore_signal(&s_test_asset_gate);
   sp_os_sleep_ms(50);
 
   // Process completions
@@ -290,13 +319,13 @@ UTEST(asset_registry, state_transitions) {
   ASSERT_EQ(asset->state, SP_ASSET_STATE_COMPLETED);
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
+  sp_semaphore_destroy(&s_test_asset_gate);
 }
 
 // Test: Concurrent find operations while importing
-UTEST(asset_registry, concurrent_find_during_import) {
+UTEST_F(asset_registry, concurrent_find_during_import) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -309,18 +338,18 @@ UTEST(asset_registry, concurrent_find_during_import) {
       }
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Add some assets first
   for (s32 i = 0; i < 10; i++) {
-    sp_str_t name = sp_fmt("asset_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(ut.mem.arena, "asset_{}", sp_fmt_int(i)).value;
     sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, name, (void*)(uintptr_t)i);
   }
 
   // Start importing more assets
   for (s32 i = 10; i < 20; i++) {
-    sp_str_t name = sp_fmt("asset_{}", sp_fmt_int(i));
-    sp_test_asset_data_t* data = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
+    sp_str_t name = sp_fmt_a(ut.mem.arena, "asset_{}", sp_fmt_int(i)).value;
+    sp_test_asset_data_t* data = sp_alloc_type_a(ut.mem.arena, sp_test_asset_data_t);
     data->content = name;
     data->value = i;
     sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, name, data);
@@ -328,7 +357,7 @@ UTEST(asset_registry, concurrent_find_during_import) {
 
   // All assets should be immediately findable (sync ones with real data, async with default)
   for (s32 i = 0; i < 20; i++) {
-    sp_str_t name = sp_fmt("asset_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(ut.mem.arena, "asset_{}", sp_fmt_int(i)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     if (i < 10) {
@@ -342,20 +371,19 @@ UTEST(asset_registry, concurrent_find_during_import) {
 
   // Now all should be completed
   for (s32 i = 0; i < 20; i++) {
-    sp_str_t name = sp_fmt("asset_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(ut.mem.arena, "asset_{}", sp_fmt_int(i)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     ASSERT_EQ(found->state, SP_ASSET_STATE_COMPLETED);
   }
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
 }
 
 // Test: Many assets stress test
-UTEST(asset_registry, stress_many_assets) {
+UTEST_F(asset_registry, stress_many_assets) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -363,19 +391,19 @@ UTEST(asset_registry, stress_many_assets) {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   const s32 ASSET_COUNT = 1000;
 
   // Add many assets
   for (s32 i = 0; i < ASSET_COUNT; i++) {
-    sp_str_t name = sp_fmt("stress_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(ut.mem.arena, "stress_{}", sp_fmt_int(i)).value;
     sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, name, (void*)(uintptr_t)i);
   }
 
   // Verify all can be found
   for (s32 i = 0; i < ASSET_COUNT; i++) {
-    sp_str_t name = sp_fmt("stress_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(ut.mem.arena, "stress_{}", sp_fmt_int(i)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)(uintptr_t)i);
@@ -384,20 +412,19 @@ UTEST(asset_registry, stress_many_assets) {
   // Random access pattern
   for (s32 iter = 0; iter < ASSET_COUNT * 2; iter++) {
     s32 id = (iter * 7919) % ASSET_COUNT;
-    sp_str_t name = sp_fmt("stress_{}", sp_fmt_int(id));
+    sp_str_t name = sp_fmt_a(ut.mem.arena, "stress_{}", sp_fmt_int(id)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)(uintptr_t)id);
   }
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
 }
 
 // Test: Stable pointers across many inserts
-UTEST(asset_registry, stable_pointers) {
+UTEST_F(asset_registry, stable_pointers) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
@@ -405,7 +432,7 @@ UTEST(asset_registry, stable_pointers) {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Get a pointer to the first asset
   sp_asset_t* first = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT("first"), (void*)0xAAAA);
@@ -413,7 +440,7 @@ UTEST(asset_registry, stable_pointers) {
 
   // Insert many more assets
   for (s32 i = 0; i < 500; i++) {
-    sp_str_t name = sp_fmt("filler_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(ut.mem.arena, "filler_{}", sp_fmt_int(i)).value;
     sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, name, (void*)(uintptr_t)i);
   }
 
@@ -426,26 +453,26 @@ UTEST(asset_registry, stable_pointers) {
   ASSERT_EQ(found, first);
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
 }
 
 // Test: Default data before completion
-UTEST(asset_registry, default_data_before_completion) {
+UTEST_F(asset_registry, default_data_before_completion) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  sp_context_push_allocator(sp_mem_os_new());
 
+  sp_semaphore_init(&s_test_asset_gate);
   sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       {
         .kind = SP_ASSET_KIND_TEST,
-        .on_import = sp_test_asset_import,
+        .on_import = sp_test_asset_import_gated,
         .on_completion = sp_test_asset_complete,
         .fallback = &s_fallback,
       }
     }
   };
-  sp_asset_registry_init(&registry, config);
+  sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   sp_test_asset_data_t input = {
     .content = SP_LIT("real content"),
@@ -455,12 +482,13 @@ UTEST(asset_registry, default_data_before_completion) {
   // Import returns immediately with stable pointer
   sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("my_asset"), &input);
 
-  // Data is default before completion
+  // Data is default before completion (worker is gated)
   sp_test_asset_data_t* data_before = sp_asset_data(asset, sp_test_asset_data_t);
   ASSERT_EQ(data_before, &s_fallback);
   ASSERT_EQ(data_before->value, -1);
 
-  // Wait and complete
+  // Release worker and wait for completion
+  sp_semaphore_signal(&s_test_asset_gate);
   sp_os_sleep_ms(50);
   sp_asset_registry_process_completions(&registry);
 
@@ -471,5 +499,5 @@ UTEST(asset_registry, default_data_before_completion) {
   ASSERT_TRUE(sp_str_equal(data_after->content, SP_LIT("real content")));
 
   sp_asset_registry_shutdown(&registry);
-  sp_context_pop();
+  sp_semaphore_destroy(&s_test_asset_gate);
 }

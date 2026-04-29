@@ -23,15 +23,33 @@ static const c8* const usage[] = {
   NULL,
 };
 
-s32 main(s32 num_args, const c8** args) {
-  // Some tests work by verifying specific output; make sure that we write in binary mode to avoid Windows tacking on
-  // carriage returns that we aren't expecting
-#ifdef _WIN32
-  _setmode(_fileno(stdin), _O_BINARY);
-  _setmode(_fileno(stdout), _O_BINARY);
-  _setmode(_fileno(stderr), _O_BINARY);
-#endif
+static void write_str(bool stdout_enabled, bool stderr_enabled, sp_str_t s) {
+  if (stdout_enabled) sp_sys_write(sp_sys_stdout, s.data, s.len);
+  if (stderr_enabled) sp_sys_write(sp_sys_stderr, s.data, s.len);
+}
 
+static void write_bytes(bool stdout_enabled, bool stderr_enabled, const void* p, u64 n) {
+  if (stdout_enabled) sp_sys_write(sp_sys_stdout, p, n);
+  if (stderr_enabled) sp_sys_write(sp_sys_stderr, p, n);
+}
+
+// Reads one byte at a time from stdin until '\n' or EOF. Returns the number of bytes
+// read (excluding any terminating null), with the trailing '\n' stripped. Returns 0
+// when stdin is at EOF before any byte is read.
+static u32 read_line(c8* buf, u32 cap) {
+  u32 len = 0;
+  while (len + 1 < cap) {
+    c8 c;
+    s64 n = sp_sys_read(sp_sys_stdin, &c, 1);
+    if (n <= 0) break;
+    if (c == '\n') break;
+    buf[len++] = c;
+  }
+  buf[len] = '\0';
+  return len;
+}
+
+s32 main(s32 num_args, const c8** args) {
   const c8* function_str = NULL;
   s32 exit_code = 0;
   s32 stdout_enabled = 0;
@@ -39,6 +57,8 @@ s32 main(s32 num_args, const c8** args) {
   const c8* pattern_char = "A";
   s32 pattern_size = 100;
   s32 pattern_count = 10;
+
+  sp_mem_t mem = sp_mem_os_new();
 
   struct argparse_option options[] = {
     OPT_HELP(),
@@ -65,72 +85,49 @@ s32 main(s32 num_args, const c8** args) {
   test_proc_function_t function = test_proc_function_from_str(sp_str_view(function_str));
 
   if (function == TEST_PROC_FUNCTION_INVALID) {
-    sp_log("unknown function: {.fg brightred}", sp_fmt_cstr(function_str));
+    sp_log_a("unknown function: {.fg brightred}", sp_fmt_cstr(function_str));
     SP_EXIT_FAILURE();
   }
 
+  bool out_on = stdout_enabled != 0;
+  bool err_on = stderr_enabled != 0;
+
   switch (function) {
     case TEST_PROC_FUNCTION_ECHO: {
-      c8 buffer[1024];
-      while (fgets(buffer, sizeof(buffer), stdin)) {
-        if (stdout_enabled) fprintf(stdout, "%s", buffer);
-        if (stderr_enabled) fprintf(stderr, "%s", buffer);
+      u8 buffer[1024];
+      while (true) {
+        s64 n = sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer));
+        if (n <= 0) break;
+        write_bytes(out_on, err_on, buffer, (u64)n);
       }
-      if (stdout_enabled) fflush(stdout);
-      if (stderr_enabled) fflush(stderr);
       break;
     }
     case TEST_PROC_FUNCTION_ECHO_LINE: {
-      c8 buffer[1024];
-      while (fgets(buffer, sizeof(buffer), stdin)) {
-        if (stdout_enabled) {
-          fprintf(stdout, "echo: %s", buffer);
-          fflush(stdout);
-        }
-        if (stderr_enabled) {
-          fprintf(stderr, "echo: %s", buffer);
-          fflush(stderr);
-        }
+      c8 line[1024];
+      while (true) {
+        u32 len = read_line(line, sizeof(line));
+        if (len == 0) break;
+        sp_str_t prefixed = sp_fmt_a(mem, "echo: {}\n", sp_fmt_str(sp_str(line, len))).value;
+        write_str(out_on, err_on, prefixed);
       }
       break;
     }
     case TEST_PROC_FUNCTION_PRINT: {
-      if (stdout_enabled) {
-        fprintf(stdout, "%.*s", sp_test_ps_canary.len, sp_test_ps_canary.data);
-        fflush(stdout);
-      }
-      if (stderr_enabled) {
-        fprintf(stderr, "%.*s", sp_test_ps_canary.len, sp_test_ps_canary.data);
-        fflush(stderr);
-      }
+      write_str(out_on, err_on, sp_test_ps_canary);
       break;
     }
     case TEST_PROC_FUNCTION_PRINT_ENV: {
       c8 line[256];
-      while (fgets(line, sizeof(line), stdin)) {
-        size_t len = strlen(line);
-        if (len > 0 && line[len - 1] == '\n') {
-          line[len - 1] = '\0';
-        }
-        if (len == 0 || line[0] == '\0') break;
+      while (true) {
+        u32 len = read_line(line, sizeof(line));
+        if (len == 0) break;
 
-        sp_str_t value = sp_os_env_get(sp_str_view(line));
-        if (stdout_enabled) {
-          if (!sp_str_empty(value)) {
-            fprintf(stdout, "%s %s\n", line, sp_str_to_cstr(value));
-          } else {
-            fprintf(stdout, "%s\n", line);
-          }
-          fflush(stdout);
-        }
-        if (stderr_enabled) {
-          if (!sp_str_empty(value)) {
-            fprintf(stderr, "%s %s\n", line, sp_str_to_cstr(value));
-          } else {
-            fprintf(stderr, "%s\n", line);
-          }
-          fflush(stderr);
-        }
+        sp_str_t key = sp_str(line, len);
+        sp_str_t value = sp_os_env_get(key);
+        sp_str_t out = !sp_str_empty(value)
+          ? sp_fmt_a(mem, "{} {}\n", sp_fmt_str(key), sp_fmt_str(value)).value
+          : sp_fmt_a(mem, "{}\n", sp_fmt_str(key)).value;
+        write_str(out_on, err_on, out);
       }
       break;
     }
@@ -146,19 +143,9 @@ s32 main(s32 num_args, const c8** args) {
 
       u32 written = 0;
       while (written < total_size) {
-        if (stdout_enabled) {
-          fwrite(buffer, 1, chunk_size, stdout);
-          fflush(stdout);
-        }
-        if (stderr_enabled) {
-          fwrite(buffer, 1, chunk_size, stderr);
-          fflush(stderr);
-        }
+        write_bytes(out_on, err_on, buffer, chunk_size);
         written += chunk_size;
-
-        if (written < total_size) {
-          sp_os_sleep_ms(delay_ms);
-        }
+        if (written < total_size) sp_os_sleep_ms(delay_ms);
       }
       break;
     }
@@ -166,27 +153,20 @@ s32 main(s32 num_args, const c8** args) {
       u8 buffer[4096];
       u64 total_read = 0;
       while (true) {
-        size_t n = fread(buffer, 1, sizeof(buffer), stdin);
-        if (n == 0) break;
-        total_read += n;
+        s64 n = sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer));
+        if (n <= 0) break;
+        total_read += (u64)n;
       }
-      sp_str_t str = sp_fmt("{}", sp_fmt_uint(total_read));
-      if (stdout_enabled) {
-        fprintf(stdout, "%s\n", sp_str_to_cstr(str));
-        fflush(stdout);
-      }
-      if (stderr_enabled) {
-        fprintf(stderr, "%s\n", sp_str_to_cstr(str));
-        fflush(stderr);
-      }
+      sp_str_t line = sp_fmt_a(mem, "{}\n", sp_fmt_uint(total_read)).value;
+      write_str(out_on, err_on, line);
       break;
     }
     case TEST_PROC_FUNCTION_WAIT: {
       sp_str_t arg = sp_str_view(args[0]);
       f64 ms = sp_parse_f64(arg);
-      sp_log("process.c ({.fg brightyellow}) is sleeping for {.fg cyan}ms", sp_fmt_int(sp_getpid()), sp_fmt_float(ms));
+      sp_log_a("process.c ({.fg brightyellow}) is sleeping for {.fg cyan}ms", sp_fmt_int(sp_getpid()), sp_fmt_float(ms));
       sp_os_sleep_ms(ms);
-      sp_log("process.c ({.fg brightyellow}) is done", sp_fmt_int(sp_getpid()));
+      sp_log_a("process.c ({.fg brightyellow}) is done", sp_fmt_int(sp_getpid()));
       return sp_test_ps_wait_exit_code;
     }
     case TEST_PROC_FUNCTION_EXIT_CODE: {
@@ -194,39 +174,25 @@ s32 main(s32 num_args, const c8** args) {
     }
     case TEST_PROC_FUNCTION_FLOOD: {
       const u32 flood_size = 512 * 1024;
-      u8* buffer = (u8*)sp_alloc(flood_size);
+      u8* buffer = sp_alloc_n_a(mem, u8, flood_size);
       for (u32 i = 0; i < flood_size; i++) {
         buffer[i] = (u8)('A' + (i % 26));
       }
-      if (stdout_enabled) {
-        fwrite(buffer, 1, flood_size, stdout);
-        fflush(stdout);
-      }
-      if (stderr_enabled) {
-        fwrite(buffer, 1, flood_size, stderr);
-        fflush(stderr);
-      }
+      write_bytes(out_on, err_on, buffer, flood_size);
       break;
     }
     case TEST_PROC_FUNCTION_PATTERN: {
-      u8* buffer = (u8*)sp_alloc(pattern_size);
+      u8* buffer = sp_alloc_n_a(mem, u8, pattern_size);
       for (s32 i = 0; i < pattern_size; i++) {
         buffer[i] = (u8)pattern_char[0];
       }
       for (s32 i = 0; i < pattern_count; i++) {
-        if (stdout_enabled) {
-          fwrite(buffer, 1, pattern_size, stdout);
-          fflush(stdout);
-        }
-        if (stderr_enabled) {
-          fwrite(buffer, 1, pattern_size, stderr);
-          fflush(stderr);
-        }
+        write_bytes(out_on, err_on, buffer, pattern_size);
       }
       break;
     }
     default: {
-      fprintf(stderr, "Unknown function: %s\n", function_str);
+      sp_log_err_a("Unknown function: {}", sp_fmt_cstr(function_str));
       return 1;
     }
   }

@@ -50,23 +50,26 @@ typedef struct {
 } sp_msvc_vs_t;
 
 typedef struct {
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
   sp_da(sp_msvc_sdk_t) sdks;
   sp_da(sp_msvc_vs_t) installations;
 } sp_msvc_t;
 
-SP_API sp_msvc_err_t sp_msvc_find(sp_msvc_arch_t arch, sp_msvc_t* out);
+SP_API sp_msvc_err_t sp_msvc_find(sp_mem_t mem, sp_msvc_arch_t arch, sp_msvc_t* out);
+SP_API void          sp_msvc_free(sp_msvc_t* msvc);
 #endif // SP_MSVC_H
 
 #if defined(SP_MSVC_IMPLEMENTATION)
 #include <windows.h>
 
-SP_PRIVATE sp_msvc_err_t      sp_msvc_find_sdks(sp_msvc_arch_t arch, sp_da(sp_msvc_sdk_t)* out);
-SP_PRIVATE sp_msvc_err_t      sp_msvc_find_installations(sp_msvc_arch_t arch, sp_da(sp_msvc_vs_t)* out);
+SP_PRIVATE sp_msvc_err_t      sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch);
+SP_PRIVATE sp_msvc_err_t      sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t arch);
 SP_PRIVATE sp_str_t           sp_msvc_arch_str(sp_msvc_arch_t arch);
 SP_PRIVATE sp_str_t           sp_msvc_bin_subdir(sp_msvc_arch_t arch);
-SP_PRIVATE sp_msvc_version_t  sp_msvc_parse_version(sp_str_t str);
+SP_PRIVATE sp_msvc_version_t  sp_msvc_parse_version(sp_mem_t mem, sp_str_t str);
 SP_PRIVATE bool               sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b);
-SP_PRIVATE sp_str_t           sp_msvc_json_get_str(sp_str_t json, sp_str_t key);
+SP_PRIVATE sp_str_t           sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key);
 
 sp_str_t sp_msvc_arch_str(sp_msvc_arch_t arch) {
   switch (arch) {
@@ -84,9 +87,9 @@ sp_str_t sp_msvc_bin_subdir(sp_msvc_arch_t arch) {
   SP_UNREACHABLE_RETURN(SP_LIT("Hostx64/x64"));
 }
 
-sp_msvc_version_t sp_msvc_parse_version(sp_str_t str) {
+sp_msvc_version_t sp_msvc_parse_version(sp_mem_t mem, sp_str_t str) {
   sp_msvc_version_t v = SP_ZERO_INITIALIZE();
-  v.str = sp_str_copy(str);
+  v.str = sp_str_copy_a(mem, str);
 
   u32 parts[4] = SP_ZERO_INITIALIZE();
   u32 part = 0;
@@ -118,9 +121,9 @@ bool sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b) {
   return a.revision > b.revision;
 }
 
-sp_str_t sp_msvc_json_get_str(sp_str_t json, sp_str_t key) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_str_t needle = sp_fmt("\"{}\":\"", sp_fmt_str(key));
+sp_str_t sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key) {
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_for(mem);
+  sp_str_t needle = sp_fmt_a(scratch.mem, "\"{}\":\"", sp_fmt_str(key)).value;
 
   s32 pos = sp_str_find(json, needle);
   if (pos == SP_STR_NO_MATCH) {
@@ -139,25 +142,26 @@ sp_str_t sp_msvc_json_get_str(sp_str_t json, sp_str_t key) {
 
   sp_str_t raw = sp_str_sub(json, (s32)value_start, (s32)(value_end - value_start));
 
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_from_dyn_mem_a(mem, &builder);
   sp_for(i, raw.len) {
     if (raw.data[i] == '\\' && i + 1 < raw.len && raw.data[i + 1] == '\\') {
-      sp_str_builder_append_c8(&builder, '\\');
+      sp_io_write_c8(&builder, '\\');
       i++;
     } else {
-      sp_str_builder_append_c8(&builder, raw.data[i]);
+      sp_io_write_c8(&builder, raw.data[i]);
     }
   }
 
-  sp_context_push_allocator(scratch.old_allocator);
-  sp_str_t result = sp_str_builder_to_str(&builder);
-  sp_context_pop();
+  sp_str_t result = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
 
   sp_mem_end_scratch(scratch);
   return result;
 }
 
-sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_arch_t arch, sp_da(sp_msvc_sdk_t)* out) {
+sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
+  sp_mem_t mem = msvc->mem;
+  sp_da(sp_msvc_sdk_t)* out = &msvc->sdks;
   HKEY roots_key;
   LSTATUS rc = RegOpenKeyExA(
     HKEY_LOCAL_MACHINE,
@@ -175,8 +179,8 @@ sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_arch_t arch, sp_da(sp_msvc_sdk_t)* out) 
 
   if (rc != ERROR_SUCCESS || type != REG_SZ) return SP_MSVC_ERR_SDK_NOT_FOUND;
 
-  sp_str_t sdk_root = sp_fs_normalize_path(sp_str_view(root_buf));
-  sp_str_t lib_dir = sp_fs_join_path(sdk_root, SP_LIT("Lib"));
+  sp_str_t sdk_root = sp_fs_normalize_path_a(mem, sp_str_view(root_buf));
+  sp_str_t lib_dir = sp_fs_join_path_a(mem, sdk_root, SP_LIT("Lib"));
   sp_str_t arch_str = sp_msvc_arch_str(arch);
 
   for (sp_fs_it_t it = sp_fs_it_new(lib_dir); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
@@ -184,25 +188,25 @@ sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_arch_t arch, sp_da(sp_msvc_sdk_t)* out) 
     sp_str_t name = it.entry.name;
     if (!sp_str_starts_with(name, SP_LIT("10."))) continue;
 
-    sp_str_t ucrt_lib = sp_fs_join_path(
-      sp_fs_join_path(it.entry.path, SP_LIT("ucrt")), arch_str
+    sp_str_t ucrt_lib = sp_fs_join_path_a(mem,
+      sp_fs_join_path_a(mem, it.entry.path, SP_LIT("ucrt")), arch_str
     );
     if (!sp_fs_is_dir(ucrt_lib)) continue;
 
     sp_str_t ver_root = it.entry.path;
     sp_msvc_sdk_t sdk = {
-      .version     = sp_msvc_parse_version(name),
-      .root        = sp_str_copy(sdk_root),
-      .lib_um      = sp_fs_join_path(sp_fs_join_path(ver_root, SP_LIT("um")), arch_str),
-      .lib_ucrt    = sp_str_copy(ucrt_lib),
-      .include_ucrt   = sp_fs_join_path(
-        sp_fs_join_path(sp_fs_join_path(sdk_root, SP_LIT("Include")), name), SP_LIT("ucrt")
+      .version     = sp_msvc_parse_version(mem, name),
+      .root        = sp_str_copy_a(mem, sdk_root),
+      .lib_um      = sp_fs_join_path_a(mem, sp_fs_join_path_a(mem, ver_root, SP_LIT("um")), arch_str),
+      .lib_ucrt    = sp_str_copy_a(mem, ucrt_lib),
+      .include_ucrt   = sp_fs_join_path_a(mem,
+        sp_fs_join_path_a(mem, sp_fs_join_path_a(mem, sdk_root, SP_LIT("Include")), name), SP_LIT("ucrt")
       ),
-      .include_um     = sp_fs_join_path(
-        sp_fs_join_path(sp_fs_join_path(sdk_root, SP_LIT("Include")), name), SP_LIT("um")
+      .include_um     = sp_fs_join_path_a(mem,
+        sp_fs_join_path_a(mem, sp_fs_join_path_a(mem, sdk_root, SP_LIT("Include")), name), SP_LIT("um")
       ),
-      .include_shared = sp_fs_join_path(
-        sp_fs_join_path(sp_fs_join_path(sdk_root, SP_LIT("Include")), name), SP_LIT("shared")
+      .include_shared = sp_fs_join_path_a(mem,
+        sp_fs_join_path_a(mem, sp_fs_join_path_a(mem, sdk_root, SP_LIT("Include")), name), SP_LIT("shared")
       ),
     };
     sp_da_push(*out, sdk);
@@ -222,11 +226,13 @@ sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_arch_t arch, sp_da(sp_msvc_sdk_t)* out) 
   return SP_MSVC_OK;
 }
 
-sp_msvc_err_t sp_msvc_find_installations(sp_msvc_arch_t arch, sp_da(sp_msvc_vs_t)* out) {
+sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
+  sp_mem_t mem = msvc->mem;
+  sp_da(sp_msvc_vs_t)* out = &msvc->installations;
   sp_str_t program_data = sp_os_env_get(SP_LIT("ProgramData"));
   if (!sp_str_valid(program_data)) return SP_MSVC_ERR_VS_NOT_FOUND;
 
-  sp_str_t instances_dir = sp_fs_join_path(
+  sp_str_t instances_dir = sp_fs_join_path_a(mem,
     program_data, SP_LIT("Microsoft/VisualStudio/Packages/_Instances")
   );
   if (!sp_fs_is_dir(instances_dir)) return SP_MSVC_ERR_VS_NOT_FOUND;
@@ -236,54 +242,54 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_arch_t arch, sp_da(sp_msvc_vs_t
   for (sp_fs_it_t it = sp_fs_it_new(instances_dir); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
     if (it.entry.kind != SP_FS_KIND_DIR) continue;
 
-    sp_str_t state_path = sp_fs_join_path(it.entry.path, SP_LIT("state.json"));
+    sp_str_t state_path = sp_fs_join_path_a(mem, it.entry.path, SP_LIT("state.json"));
     if (!sp_fs_exists(state_path)) continue;
 
     sp_str_t json = SP_ZERO_INITIALIZE();
-    sp_io_read_file(state_path, &json);
+    sp_io_read_file_a(mem, state_path, &json);
     if (sp_str_empty(json)) continue;
 
-    sp_str_t install_path = sp_msvc_json_get_str(json, SP_LIT("installationPath"));
+    sp_str_t install_path = sp_msvc_json_get_str(mem, json, SP_LIT("installationPath"));
     if (sp_str_empty(install_path)) continue;
 
-    install_path = sp_fs_normalize_path(install_path);
+    install_path = sp_fs_normalize_path_a(mem, install_path);
 
-    sp_str_t build_version_str = sp_msvc_json_get_str(json, SP_LIT("buildVersion"));
+    sp_str_t build_version_str = sp_msvc_json_get_str(mem, json, SP_LIT("buildVersion"));
     if (sp_str_empty(build_version_str)) continue;
 
-    sp_str_t product_line = sp_msvc_json_get_str(json, SP_LIT("productLineVersion"));
+    sp_str_t product_line = sp_msvc_json_get_str(mem, json, SP_LIT("productLineVersion"));
 
-    sp_str_t tools_file = sp_fs_join_path(
+    sp_str_t tools_file = sp_fs_join_path_a(mem,
       install_path, SP_LIT("VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt")
     );
     sp_str_t tools_version_str = SP_ZERO_INITIALIZE();
-    sp_io_read_file(tools_file, &tools_version_str);
+    sp_io_read_file_a(mem, tools_file, &tools_version_str);
     if (sp_str_empty(tools_version_str)) continue;
 
     tools_version_str = sp_str_trim(tools_version_str);
 
-    sp_str_t tools_base = sp_fs_join_path(
-      sp_fs_join_path(install_path, SP_LIT("VC/Tools/MSVC")), tools_version_str
+    sp_str_t tools_base = sp_fs_join_path_a(mem,
+      sp_fs_join_path_a(mem, install_path, SP_LIT("VC/Tools/MSVC")), tools_version_str
     );
 
-    sp_str_t lib_dir = sp_fs_join_path(
-      sp_fs_join_path(tools_base, SP_LIT("Lib")), arch_str
+    sp_str_t lib_dir = sp_fs_join_path_a(mem,
+      sp_fs_join_path_a(mem, tools_base, SP_LIT("Lib")), arch_str
     );
 
-    sp_str_t vcruntime = sp_fs_join_path(lib_dir, SP_LIT("vcruntime.lib"));
+    sp_str_t vcruntime = sp_fs_join_path_a(mem, lib_dir, SP_LIT("vcruntime.lib"));
     if (!sp_fs_exists(vcruntime)) continue;
 
     sp_msvc_vs_t vs = {
       .version = {
-        .product = sp_str_copy(product_line),
-        .build   = sp_msvc_parse_version(build_version_str),
-        .tools   = sp_msvc_parse_version(tools_version_str),
+        .product = sp_str_copy_a(mem, product_line),
+        .build   = sp_msvc_parse_version(mem, build_version_str),
+        .tools   = sp_msvc_parse_version(mem, tools_version_str),
       },
-      .install_path = sp_str_copy(install_path),
-      .lib          = sp_str_copy(lib_dir),
-      .include      = sp_fs_join_path(tools_base, SP_LIT("include")),
-      .bin          = sp_fs_join_path(
-        sp_fs_join_path(tools_base, SP_LIT("bin")), sp_msvc_bin_subdir(arch)
+      .install_path = sp_str_copy_a(mem, install_path),
+      .lib          = sp_str_copy_a(mem, lib_dir),
+      .include      = sp_fs_join_path_a(mem, tools_base, SP_LIT("include")),
+      .bin          = sp_fs_join_path_a(mem,
+        sp_fs_join_path_a(mem, tools_base, SP_LIT("bin")), sp_msvc_bin_subdir(arch)
       ),
     };
     sp_da_push(*out, vs);
@@ -303,15 +309,24 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_arch_t arch, sp_da(sp_msvc_vs_t
   return SP_MSVC_OK;
 }
 
-sp_msvc_err_t sp_msvc_find(sp_msvc_arch_t arch, sp_msvc_t* out) {
+sp_msvc_err_t sp_msvc_find(sp_mem_t mem, sp_msvc_arch_t arch, sp_msvc_t* out) {
   *out = SP_ZERO_STRUCT(sp_msvc_t);
+  out->arena = sp_mem_arena_new(mem);
+  out->mem = sp_mem_arena_as_allocator(out->arena);
+  sp_da_init(out->mem, out->sdks);
+  sp_da_init(out->mem, out->installations);
 
-  sp_msvc_err_t sdk_err = sp_msvc_find_sdks(arch, &out->sdks);
-  sp_msvc_err_t vs_err = sp_msvc_find_installations(arch, &out->installations);
+  sp_msvc_err_t sdk_err = sp_msvc_find_sdks(out, arch);
+  sp_msvc_err_t vs_err = sp_msvc_find_installations(out, arch);
 
   if (vs_err) return vs_err;
   if (sdk_err) return sdk_err;
   return SP_MSVC_OK;
+}
+
+void sp_msvc_free(sp_msvc_t* msvc) {
+  if (!msvc) return;
+  sp_mem_arena_destroy(msvc->arena);
 }
 
 #endif // SP_MSVC_IMPLEMENTATION

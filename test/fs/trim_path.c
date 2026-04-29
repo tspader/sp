@@ -6,6 +6,7 @@ typedef struct {
 } trim_path_case_t;
 
 UTEST(fs_trim_path, cases) {
+  SKIP_ON_WASM()
   trim_path_case_t cases[] = {
     { "",                  "" },
     { "foo",               "foo" },

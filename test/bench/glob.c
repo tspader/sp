@@ -82,29 +82,29 @@ int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
 
-  sp_mem_arena_t* arena = sp_mem_arena_new(4 * 1024 * 1024);
-  sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
-  sp_context_push_allocator(allocator);
+  sp_mem_arena_t* arena = sp_mem_arena_new_ex(sp_mem_os_new(), 4 * 1024 * 1024, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
+  sp_mem_t allocator = sp_mem_arena_as_allocator(arena);
+  (void)allocator;
 
   u32 num_cases = sizeof(bench_cases) / sizeof(bench_cases[0]);
-  sp_da(bench_result_t) results = SP_NULLPTR;
+  sp_da(bench_result_t) results = sp_da_new(allocator, bench_result_t);
 
   // Pre-compile all globs
-  sp_da(sp_glob_t*) globs = SP_NULLPTR;
-  sp_da(sp_glob_set_t*) globsets = SP_NULLPTR;
+  sp_da(sp_glob_t*) globs = sp_da_new(allocator, sp_glob_t*);
+  sp_da(sp_glob_set_t*) globsets = sp_da_new(allocator, sp_glob_set_t*);
   sp_carr_for(bench_cases, i) {
-    sp_glob_t* g = sp_glob_new(bench_cases[i].pattern);
+    sp_glob_t* g = sp_glob_new(allocator, bench_cases[i].pattern);
     SP_ASSERT(g != SP_NULLPTR);
     sp_da_push(globs, g);
 
-    sp_glob_set_t* set = sp_glob_set_new();
+    sp_glob_set_t* set = sp_glob_set_new(allocator);
     sp_glob_set_add(set, bench_cases[i].pattern);
     sp_glob_set_build(set);
     sp_da_push(globsets, set);
   }
 
   // Pre-compile many_short globset
-  sp_glob_set_t* many_short_set = sp_glob_set_new();
+  sp_glob_set_t* many_short_set = sp_glob_set_new(allocator);
   sp_carr_for(many_short_patterns, i) {
     sp_glob_set_add(many_short_set, many_short_patterns[i]);
   }
@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
     sp_str_t path = sp_str_view(bench_cases[i].path);
     SP_ASSERT(sp_glob_match(globs[i], path));
     f64 ns = run_glob_bench(globs[i], path);
-    sp_str_t name = sp_fmt("{}_glob", sp_fmt_cstr(case_names[i]));
+    sp_str_t name = sp_fmt_a(sp_mem_get_scratch(), "{}_glob", sp_fmt_cstr(case_names[i])).value;
     sp_da_push(results, ((bench_result_t){.name = name, .ns_per_op = ns}));
   }
 
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
     sp_str_t path = sp_str_view(bench_cases[i].path);
     SP_ASSERT(sp_glob_set_match(globsets[i], path));
     f64 ns = run_glob_set_bench(globsets[i], path);
-    sp_str_t name = sp_fmt("{}_globset", sp_fmt_cstr(case_names[i]));
+    sp_str_t name = sp_fmt_a(sp_mem_get_scratch(), "{}_globset", sp_fmt_cstr(case_names[i])).value;
     sp_da_push(results, ((bench_result_t){.name = name, .ns_per_op = ns}));
   }
 
@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
 
   // Print space-separated pairs
   sp_da_for(results, i) {
-    sp_log("{} {}", sp_fmt_str(results[i].name), sp_fmt_float(results[i].ns_per_op));
+    sp_log_a("{} {}", sp_fmt_str(results[i].name), sp_fmt_float(results[i].ns_per_op));
   }
 
   return 0;

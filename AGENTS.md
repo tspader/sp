@@ -60,4 +60,5 @@ make TRIPLE=aarch64-macos
     - `sp_carr_for()` instead of `for (int it = 0; it < sizeof(carr) / sizeof(carr[0]); it++)`
 - Always use `sp_mem_begin_scratch()` and `sp_mem_end_scratch()` when allocating non-persistent heap memory
     - Ensure that if any functions you call heap allocate persistent memory, you either use scratch or free it
+- For `sp_str_t` → cstr conversion before a syscall, use a stack `c8 buf[SP_PATH_MAX]` + `sp_cstr_copy_to_n`, not scratch
 - Never use `NULL`; use `SP_NULL` or `SP_NULLPTR`

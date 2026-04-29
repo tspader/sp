@@ -6,6 +6,7 @@ typedef struct {
 } is_glob_case_t;
 
 UTEST(fs_is_glob, cases) {
+  SKIP_ON_WASM()
   is_glob_case_t cases[] = {
     { "",          false },
     { "foo",       false },

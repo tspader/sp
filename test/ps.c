@@ -52,26 +52,30 @@ typedef struct {
 //////////////
 // FIXTURES //
 //////////////
-sp_str_t get_process_path() {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path());
-  sp_str_t process = sp_fs_join_path(exe, sp_str_lit("process"));
-  process = sp_fs_replace_ext(process, sp_os_get_executable_ext());
+sp_str_t get_process_path(sp_mem_t mem) {
+  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path_a(mem));
+  sp_str_t process = sp_fs_join_path_a(mem, exe, sp_str_lit("process"));
+  process = sp_fs_replace_ext_a(mem, process, sp_os_get_executable_ext());
   return process;
 }
 
 typedef struct ps {
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
   sp_test_file_manager_t file_manager;
   sp_byte_buffer_t buffer;
 } sp_ps;
 
 UTEST_F_SETUP(ps) {
-  sp_str_t process = get_process_path();
-  EXPECT_TRUE(sp_fs_exists(process));
+  ut.arena = sp_mem_arena_new(sp_mem_os_new());
+  ut.mem = sp_mem_arena_as_allocator(ut.arena);
+  sp_str_t process = get_process_path(ut.mem);
+  EXPECT_TRUE(sp_fs_exists_a(process));
 
   sp_test_file_manager_init(&ut.file_manager);
   ut.buffer = (sp_byte_buffer_t) {
     .len = 1024,
-    .data = (u8*)sp_alloc(1024)
+    .data = (u8*)sp_alloc_a(ut.mem, 1024)
   };
 }
 
@@ -80,6 +84,7 @@ UTEST_F_TEARDOWN(ps) {
   fflush(stdout);
   fflush(stderr);
   sp_test_file_manager_cleanup(&ut.file_manager);
+  sp_mem_arena_destroy(ut.arena);
 }
 
 
@@ -113,7 +118,7 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
   if (total_read != ctx->expected_len) {
     if (ctx->mode == SP_TEST_PROC_READ_EXACT) {
       if (total_read != ctx->expected_len) {
-        sp_log("expected to read {}, but got {}", sp_fmt_uint(total_read), sp_fmt_uint(ctx->expected_len));
+        sp_log_a("expected to read {}, but got {}", sp_fmt_uint(total_read), sp_fmt_uint(ctx->expected_len));
         sp_assert(total_read == ctx->expected_len);
       }
     }
@@ -134,9 +139,9 @@ void sp_test_proc_check_stream(sp_test_proc_stream_context_t* ctx) {
 ////////////////
 // SP_PS_IO //
 ////////////////
-void sp_test_proc_io(sp_test_proc_io_config_t test) {
+void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_config_t test) {
   sp_ps_config_t config = {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), SP_CSTR(test_proc_function_to_cstr(test.fn)),
     },
@@ -144,13 +149,13 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
   };
 
   if (test.output.out.enabled) {
-    sp_ps_config_add_arg(&config, sp_str_lit("--stdout"));
+    sp_ps_config_add_arg_a(ut.mem, &config, sp_str_lit("--stdout"));
   }
   if (test.output.err.enabled) {
-    sp_ps_config_add_arg(&config, sp_str_lit("--stderr"));
+    sp_ps_config_add_arg_a(ut.mem, &config, sp_str_lit("--stderr"));
   }
 
-  sp_ps_t ps = sp_ps_create(config);
+  sp_ps_t ps = sp_ps_create_a(ut.mem, config);
   SP_ASSERT(ps.os);
 
   sp_io_writer_t* in = sp_ps_io_in(&ps);
@@ -161,7 +166,7 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
     u64 bytes_written = 0;
     sp_io_write(in, test.input.data, test.input.len, &bytes_written);
     if (!(bytes_written == test.input.len)) {
-      sp_log(
+      sp_log_a(
         "stdin: tried to write {} ({}), but {.fg yellow} returned {}",
         sp_fmt_str(test.input),
         sp_fmt_uint(test.input.len),
@@ -178,14 +183,14 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
     sp_test_proc_stream_context_t check = {
       .stream = out,
       .expected = test.output.out.expected,
-      .buffer = { .len = 1024, .data = (u8*)sp_alloc(1024) },
+      .buffer = { .len = 1024, .data = (u8*)sp_alloc_a(ut.mem, 1024) },
       .mode = SP_TEST_PROC_READ_EXACT,
       .expected_len = test.output.out.expected.len,
     };
     sp_test_proc_check_stream(&check);
 
     if (check.result != SP_TEST_PS_OUTPUT_MATCH) {
-      sp_log("stdout: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
+      sp_log_a("stdout: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
       sp_assert(check.result == SP_TEST_PS_OUTPUT_MATCH);
     }
   }
@@ -194,14 +199,14 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
     sp_test_proc_stream_context_t check = {
       .stream = err,
       .expected = test.output.err.expected,
-      .buffer = { .len = 1024, .data = (u8*)sp_alloc(1024) },
+      .buffer = { .len = 1024, .data = (u8*)sp_alloc_a(ut.mem, 1024) },
       .mode = SP_TEST_PROC_READ_EXACT,
       .expected_len = test.output.err.expected.len,
     };
     sp_test_proc_check_stream(&check);
 
     if (check.result != SP_TEST_PS_OUTPUT_MATCH) {
-      sp_log("stderr: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
+      sp_log_a("stderr: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
       sp_assert(check.result == SP_TEST_PS_OUTPUT_MATCH);
     }
   }
@@ -209,7 +214,7 @@ void sp_test_proc_io(sp_test_proc_io_config_t test) {
 
 // SP_PS_IO_MODE_CREATE
 UTEST_F(ps, io_create_create_null) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
@@ -222,7 +227,7 @@ UTEST_F(ps, io_create_create_null) {
 }
 
 UTEST_F(ps, io_create_null_create) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_NULL },
@@ -235,7 +240,7 @@ UTEST_F(ps, io_create_null_create) {
 }
 
 UTEST_F(ps, io_null_create_null) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
@@ -247,7 +252,7 @@ UTEST_F(ps, io_null_create_null) {
 }
 
 UTEST_F(ps, io_null_null_create) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
       .out = { .mode = SP_PS_IO_MODE_NULL },
@@ -259,7 +264,7 @@ UTEST_F(ps, io_null_null_create) {
 }
 
 UTEST_F(ps, io_stdout_stderr) {
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
@@ -274,9 +279,9 @@ UTEST_F(ps, io_stdout_stderr) {
 // SP_PS_IO_MODE_EXISTING
 UTEST_F(ps, io_create_file_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdout.file"));
-  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr_a(sp_mem_get_scratch(), file_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_EXISTING, .fd = fd },
@@ -305,11 +310,11 @@ UTEST_F(ps, io_create_file_null) {
 UTEST_F(ps, io_file_create_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
-  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr_a(sp_mem_get_scratch(), file_path), SP_O_RDWR | SP_O_CREAT, 0644);
   sp_sys_write(fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
   sp_sys_lseek(fd, 0, SP_SEEK_SET);
 
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_EXISTING, .fd = fd },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
@@ -329,9 +334,9 @@ UTEST_F(ps, io_file_create_null) {
 
 UTEST_F(ps, io_create_null_file) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
-  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr(file_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr_a(sp_mem_get_scratch(), file_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_NULL },
@@ -360,14 +365,14 @@ UTEST_F(ps, io_create_null_file) {
 UTEST_F(ps, io_file_null_file) {
   sp_str_t in_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
-  sp_sys_fd_t in_fd = sp_sys_open(sp_str_to_cstr(in_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t in_fd = sp_sys_open(sp_str_to_cstr_a(sp_mem_get_scratch(), in_path), SP_O_RDWR | SP_O_CREAT, 0644);
   sp_sys_write(in_fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
   sp_sys_lseek(in_fd, 0, SP_SEEK_SET);
 
   sp_str_t err_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
-  sp_sys_fd_t err_fd = sp_sys_open(sp_str_to_cstr(err_path), SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t err_fd = sp_sys_open(sp_str_to_cstr_a(sp_mem_get_scratch(), err_path), SP_O_RDWR | SP_O_CREAT, 0644);
 
-  sp_test_proc_io((sp_test_proc_io_config_t) {
+  sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_EXISTING, .fd = in_fd },
       .out = { .mode = SP_PS_IO_MODE_NULL },
@@ -403,8 +408,8 @@ typedef struct {
   sp_env_var_t* foo;
 } sp_test_proc_env_config_t;
 
-sp_da(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
-  sp_da(sp_env_var_t) vars = SP_NULLPTR;
+sp_da(sp_env_var_t) sp_test_parse_env_output(sp_mem_t mem, u8* buffer, u64 len) {
+  sp_da(sp_env_var_t) vars = sp_da_new(mem, sp_env_var_t);
 
   u32 line_start = 0;
   for (u32 i = 0; i <= len; i++) {
@@ -440,9 +445,9 @@ sp_da(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
   return vars;
 }
 
-void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) {
+void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_env_config_t test) {
   sp_ps_config_t config = {
-    .command = get_process_path(),
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), SP_CSTR(test_proc_function_to_cstr(TEST_PROC_FUNCTION_PRINT_ENV)),
       sp_str_lit("--stdout")
@@ -455,20 +460,19 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
     .env = test.config
   };
 
-  sp_ps_t ps = sp_ps_create(config);
+  sp_ps_t ps = sp_ps_create_a(ut.mem, config);
   SP_ASSERT(ps.os);
 
   sp_io_writer_t* in = sp_ps_io_in(&ps);
   sp_io_reader_t* out = sp_ps_io_out(&ps);
 
-  sp_str_builder_t builder = sp_str_builder_from_writer(in);
   for (u32 i = 0; i < 8; i++) {
     if (sp_str_empty(test.expected[i].key)) {
       break;
     }
 
-    sp_str_builder_append(&builder, test.expected[i].key);
-    sp_str_builder_append_c8(&builder, '\n');
+    sp_io_write_str(in, test.expected[i].key, SP_NULLPTR);
+    sp_io_write_c8(in, '\n');
   }
 
   sp_io_writer_close(in);
@@ -476,14 +480,14 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
   sp_test_proc_stream_context_t ctx = {
     .stream = out,
     .buffer = {
-      .data = sp_alloc(1024),
+      .data = sp_alloc_a(ut.mem, 1024),
       .len = 1024
     },
     .mode = SP_TEST_PROC_READ_UNTIL_DONE,
   };
   sp_test_proc_collect_stream(&ctx);
 
-  sp_da(sp_env_var_t) env = sp_test_parse_env_output(ctx.buffer.data, ctx.bytes_read);
+  sp_da(sp_env_var_t) env = sp_test_parse_env_output(ut.mem, ctx.buffer.data, ctx.bytes_read);
 
 
   for (u32 i = 0; i < 8; i++) {
@@ -505,7 +509,7 @@ void sp_test_proc_env_verify(s32* utest_result, sp_test_proc_env_config_t test) 
 }
 
 UTEST_F(ps, env_clean) {
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
     },
@@ -514,7 +518,7 @@ UTEST_F(ps, env_clean) {
     }
   });
 
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
       .extra = {
@@ -528,7 +532,7 @@ UTEST_F(ps, env_clean) {
 }
 
 UTEST_F(ps, env_duplicate_var) {
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
       .extra = {
@@ -549,7 +553,7 @@ UTEST_F(ps, env_inherit) {
   setenv("jerry", "garcia", true);
 #endif
 
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_INHERIT,
     },
@@ -566,12 +570,13 @@ UTEST_F(ps, env_inherit) {
 }
 
 UTEST_F(ps, env_existing) {
-  sp_env_t env = SP_ZERO_INITIALIZE();
+  sp_env_t env = sp_zero();
+  sp_env_init(ut.mem, &env);
   sp_env_insert(&env, sp_str_lit("jerry"), sp_str_lit("garcia"));
   sp_env_insert(&env, sp_str_lit("phil"), sp_str_lit("lesh"));
   sp_env_insert(&env, sp_str_lit("bobby"), sp_str_lit("weir"));
 
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_EXISTING,
       .env = env
@@ -584,7 +589,7 @@ UTEST_F(ps, env_existing) {
   });
 
   // Anything extra on top of the base env is applied
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_EXISTING,
       .env = env,
@@ -599,7 +604,7 @@ UTEST_F(ps, env_existing) {
 }
 
 UTEST_F(ps, empty_env_var) {
-  sp_test_proc_env_verify(utest_result, (sp_test_proc_env_config_t) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
       .mode = SP_PS_ENV_CLEAN,
       .extra = {
@@ -616,8 +621,8 @@ UTEST_F(ps, empty_env_var) {
 // SP_PS_WAIT //
 //////////////////
 UTEST_F(ps, wait_after_process_complete) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("42")
@@ -632,8 +637,8 @@ UTEST_F(ps, wait_after_process_complete) {
 }
 
 UTEST_F(ps, wait_while_process_running) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -646,8 +651,8 @@ UTEST_F(ps, wait_while_process_running) {
 }
 
 UTEST_F(ps, run) {
-  sp_ps_output_t result = sp_ps_run((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_output_t result = sp_ps_run_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout"),
@@ -658,8 +663,8 @@ UTEST_F(ps, run) {
 }
 
 UTEST_F(ps, poll_while_process_running) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -674,8 +679,8 @@ UTEST_F(ps, poll_while_process_running) {
 }
 
 UTEST_F(ps, process_complete_during_poll) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -688,8 +693,8 @@ UTEST_F(ps, process_complete_during_poll) {
 }
 
 UTEST_F(ps, poll_after_process_complete) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -704,8 +709,8 @@ UTEST_F(ps, poll_after_process_complete) {
 }
 
 UTEST_F(ps, poll_with_timeout_after_process_complete) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -720,8 +725,8 @@ UTEST_F(ps, poll_with_timeout_after_process_complete) {
 }
 
 UTEST_F(ps, wait_twice_while_process_running) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
@@ -738,8 +743,8 @@ UTEST_F(ps, wait_twice_while_process_running) {
 }
 
 UTEST_F(ps, poll_then_wait) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -755,8 +760,8 @@ UTEST_F(ps, poll_then_wait) {
 }
 
 UTEST_F(ps, poll_multiple) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("300")
@@ -777,8 +782,8 @@ UTEST_F(ps, poll_multiple) {
 }
 
 UTEST_F(ps, wait_with_output) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout")
@@ -801,8 +806,8 @@ UTEST_F(ps, wait_with_output) {
 }
 
 UTEST_F(ps, poll_with_io) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
@@ -825,8 +830,8 @@ UTEST_F(ps, poll_with_io) {
 }
 
 UTEST_F(ps, interleaved_read_write) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("echo_line"),
       sp_str_lit("--stdout")
@@ -845,7 +850,7 @@ UTEST_F(ps, interleaved_read_write) {
   EXPECT_NE(out, SP_NULLPTR);
 
   for (u32 i = 0; i < 4; i++) {
-    sp_str_t input = sp_fmt("line {}\n", sp_fmt_uint(i));
+    sp_str_t input = sp_fmt_a(ut.mem, "line {}\n", sp_fmt_uint(i)).value;
 
     u64 written = 0;
     sp_io_write_str(in, input, &written);
@@ -854,7 +859,7 @@ UTEST_F(ps, interleaved_read_write) {
     sp_os_sleep_ms(50);
     u64 bytes_read = 0;
     sp_io_read(out, ut.buffer.data, ut.buffer.len, &bytes_read);
-    sp_str_t expected = sp_fmt("echo: line {}\n", sp_fmt_uint(i));
+    sp_str_t expected = sp_fmt_a(ut.mem, "echo: line {}\n", sp_fmt_uint(i)).value;
     EXPECT_EQ(bytes_read, expected.len);
     EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, expected.data, expected.len));
   }
@@ -867,8 +872,8 @@ UTEST_F(ps, interleaved_read_write) {
 }
 
 UTEST_F(ps, incremental_nonblocking_read) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("slow_write"),
       sp_str_lit("--stdout")
@@ -912,8 +917,8 @@ UTEST_F(ps, incremental_nonblocking_read) {
 }
 
 UTEST_F(ps, output) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout")
@@ -934,8 +939,8 @@ UTEST_F(ps, output) {
 }
 
 UTEST_F(ps, redirect_stderr_to_stdout) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout"),
@@ -953,7 +958,7 @@ UTEST_F(ps, redirect_stderr_to_stdout) {
   EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
 
-  sp_str_t expected = sp_fmt("{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary));
+  sp_str_t expected = sp_fmt_a(ut.mem, "{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary)).value;
   EXPECT_TRUE(sp_str_equal(output.out, expected));
   EXPECT_TRUE(sp_str_empty(output.err));
 
@@ -962,8 +967,8 @@ UTEST_F(ps, redirect_stderr_to_stdout) {
 }
 
 UTEST_F(ps, redirect_stdout_to_stderr) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("print"),
       sp_str_lit("--stdout"),
@@ -981,7 +986,7 @@ UTEST_F(ps, redirect_stdout_to_stderr) {
   EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
 
-  sp_str_t expected = sp_fmt("{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary));
+  sp_str_t expected = sp_fmt_a(ut.mem, "{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary)).value;
   EXPECT_TRUE(sp_str_empty(output.out));
   EXPECT_TRUE(sp_str_equal(output.err, expected));
 
@@ -990,8 +995,8 @@ UTEST_F(ps, redirect_stdout_to_stderr) {
 }
 
 UTEST_F(ps, output_large_stdout_stderr_deadlock) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("flood"),
       sp_str_lit("--stdout"),
@@ -1015,8 +1020,8 @@ UTEST_F(ps, output_large_stdout_stderr_deadlock) {
 }
 
 UTEST_F(ps, output_large_stdout_deadlock) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("flood"),
       sp_str_lit("--stdout"),
@@ -1089,8 +1094,8 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   const s32 write_size = 100;
   const s32 write_count = 50;
 
-  sp_ps_t ps_a = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps_a = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("pattern"),
       sp_str_lit("--stdout"),
@@ -1105,8 +1110,8 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
     }
   });
 
-  sp_ps_t ps_b = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps_b = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("pattern"),
       sp_str_lit("--stdout"),
@@ -1130,7 +1135,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   sp_ps_wait(&ps_b);
 
   const u32 expected_total = write_size * write_count * 2;
-  u8* buffer = (u8*)sp_alloc(expected_total + 1024);
+  u8* buffer = (u8*)sp_alloc_a(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
   while (total_read < expected_total) {
@@ -1162,11 +1167,11 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   const s32 write_size = 8192;
   const s32 write_count = 10;
 
-  sp_str_t size_str = sp_fmt("{}", sp_fmt_int(write_size));
-  sp_str_t count_str = sp_fmt("{}", sp_fmt_int(write_count));
+  sp_str_t size_str = sp_fmt_a(ut.mem, "{}", sp_fmt_int(write_size)).value;
+  sp_str_t count_str = sp_fmt_a(ut.mem, "{}", sp_fmt_int(write_count)).value;
 
-  sp_ps_t ps_a = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps_a = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("pattern"),
       sp_str_lit("--stdout"),
@@ -1181,8 +1186,8 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
     }
   });
 
-  sp_ps_t ps_b = sp_ps_create((sp_ps_config_t) {
-    .command = get_process_path(),
+  sp_ps_t ps_b = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
+    .command = get_process_path(ut.mem),
     .args = {
       sp_str_lit("--fn"), sp_str_lit("pattern"),
       sp_str_lit("--stdout"),
@@ -1203,7 +1208,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   sp_sys_close(pipes[1]);
 
   const u32 expected_total = write_size * write_count * 2;
-  u8* buffer = (u8*)sp_alloc(expected_total + 1024);
+  u8* buffer = (u8*)sp_alloc_a(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
   fcntl(pipes[0], SP_F_SETFL, fcntl(pipes[0], SP_F_GETFL) | SP_O_NONBLOCK);
@@ -1239,10 +1244,10 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
 
   sp_test_concurrent_analysis_t analysis = sp_test_analyze_concurrent_output(buffer, total_read, write_size);
 
-  sp_log("large writes ({}B x {} per process, > PIPE_BUF):", sp_fmt_int(write_size), sp_fmt_int(write_count));
-  sp_log("  total bytes: {} (A={}, B={})", sp_fmt_uint(total_read), sp_fmt_uint(analysis.a_bytes), sp_fmt_uint(analysis.b_bytes));
-  sp_log("  transitions: {}", sp_fmt_uint(analysis.transitions));
-  sp_log("  interleaved: {}", sp_fmt_cstr(analysis.interleaved ? "true" : "false"));
+  sp_log_a("large writes ({}B x {} per process, > PIPE_BUF):", sp_fmt_int(write_size), sp_fmt_int(write_count));
+  sp_log_a("  total bytes: {} (A={}, B={})", sp_fmt_uint(total_read), sp_fmt_uint(analysis.a_bytes), sp_fmt_uint(analysis.b_bytes));
+  sp_log_a("  transitions: {}", sp_fmt_uint(analysis.transitions));
+  sp_log_a("  interleaved: {}", sp_fmt_cstr(analysis.interleaved ? "true" : "false"));
 
   EXPECT_EQ(analysis.a_bytes, write_size * write_count);
   EXPECT_EQ(analysis.b_bytes, write_size * write_count);
@@ -1250,14 +1255,14 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
 #endif // !_WIN32
 
 UTEST_F(ps, create_nonexistent_binary) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
     .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
   });
   EXPECT_EQ(ps.os, SP_NULLPTR);
 }
 
 UTEST_F(ps, wait_nonexistent_binary) {
-  sp_ps_t ps = sp_ps_create((sp_ps_config_t) {
+  sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
     .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
   });
   EXPECT_EQ(ps.os, SP_NULLPTR);
@@ -1268,7 +1273,7 @@ UTEST_F(ps, wait_nonexistent_binary) {
 }
 
 UTEST_F(ps, run_nonexistent_binary) {
-  sp_ps_output_t result = sp_ps_run((sp_ps_config_t) {
+  sp_ps_output_t result = sp_ps_run_a(ut.mem, (sp_ps_config_t) {
     .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
   });
   EXPECT_EQ(result.status.exit_code, -1);

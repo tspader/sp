@@ -37,15 +37,6 @@
       <Item Name="alignment">alignment</Item>
     </Expand>
   </Type>
-  <Type Name="sp_context_t">
-    <DisplayString>context err={err.sp} os={err.os}</DisplayString>
-    <Expand>
-      <Item Name="allocator_fn">allocator.on_alloc</Item>
-      <Item Name="allocator_user_data">allocator.user_data</Item>
-      <Item Name="err_sp">err.sp</Item>
-      <Item Name="err_os">err.os</Item>
-    </Expand>
-  </Type>
   <Type Name="sp_mem_buffer_t">
     <DisplayString Condition="data == 0">buffer len={len} cap={capacity} null</DisplayString>
     <DisplayString Condition="data != 0">buffer len={len} cap={capacity} {data,[len]s8}</DisplayString>

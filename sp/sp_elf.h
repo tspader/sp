@@ -123,6 +123,7 @@ typedef struct {
 #define SP_ELF_NULL_INDEX 0
 
 typedef struct {
+  sp_mem_t mem;
   u8* data;
   u64 size;
   u64 capacity;
@@ -142,14 +143,14 @@ typedef struct {
 } sp_elf_section_t;
 
 typedef struct {
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
   sp_da(sp_elf_section_t) sections;
-  sp_str_ht(u32) section_map;
-  sp_allocator_t allocator;
+  sp_ht_a(sp_str_t, u32) section_map;
 } sp_elf_t;
 
-sp_elf_t* sp_elf_new();
-sp_elf_t* sp_elf_new_alloc(sp_allocator_t a);
-sp_elf_t* sp_elf_new_with_null_section();
+sp_elf_t* sp_elf_new(sp_mem_t mem);
+sp_elf_t* sp_elf_new_with_null_section(sp_mem_t mem);
 void sp_elf_free(sp_elf_t* elf);
 sp_elf_section_t* sp_elf_add_section(sp_elf_t* elf, sp_str_t name, u32 type, u64 addralign);
 sp_elf_section_t* sp_elf_find_section_by_index(sp_elf_t* elf, u32 index);
@@ -171,8 +172,8 @@ u32 sp_elf_strtab_size(sp_elf_section_t* strtab);
 sp_str_t sp_elf_strtab_get(sp_elf_section_t* strtab, u32 offset);
 sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out);
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path);
-sp_elf_t* sp_elf_read(sp_io_reader_t* in);
-sp_elf_t* sp_elf_read_from_file(sp_str_t path);
+sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in);
+sp_elf_t* sp_elf_read_from_file(sp_mem_t mem, sp_str_t path);
 
 #endif // SP_ELF_H
 
@@ -188,21 +189,19 @@ bool sp_elf_is_align_valid(u64 v) {
   return v == 0 || (v & (v - 1)) == 0;
 }
 
-sp_elf_t* sp_elf_new() {
-  return sp_elf_new_alloc(sp_context_get()->allocator);
-}
-
-sp_elf_t* sp_elf_new_alloc(sp_allocator_t allocator) {
-  sp_context_push_allocator(allocator);
-  sp_elf_t* elf = sp_alloc_type(sp_elf_t);
-  elf->allocator = allocator;
-  sp_context_pop();
-
+sp_elf_t* sp_elf_new(sp_mem_t mem) {
+  sp_mem_arena_t* arena = sp_mem_arena_new(mem);
+  sp_mem_t am = sp_mem_arena_as_allocator(arena);
+  sp_elf_t* elf = sp_mem_allocator_alloc_type(am, sp_elf_t);
+  elf->arena = arena;
+  elf->mem = am;
+  sp_da_init(am, elf->sections);
+  sp_str_ht_init_a(am, elf->section_map);
   return elf;
 }
 
-sp_elf_t* sp_elf_new_with_null_section() {
-  sp_elf_t* elf = sp_elf_new();
+sp_elf_t* sp_elf_new_with_null_section(sp_mem_t mem) {
+  sp_elf_t* elf = sp_elf_new(mem);
 
   sp_da_push(elf->sections, ((sp_elf_section_t){
     .name = sp_str_lit(""),
@@ -216,21 +215,7 @@ sp_elf_t* sp_elf_new_with_null_section() {
 
 void sp_elf_free(sp_elf_t* elf) {
   if (!elf) return;
-  sp_allocator_t alloc = elf->allocator;
-
-  sp_da_for(elf->sections, i) {
-    sp_elf_section_t* sec = &elf->sections[i];
-    if (!sp_str_empty(sec->name) && sec->name.data != SP_NULLPTR) {
-      sp_mem_allocator_free(alloc, (void*)sec->name.data);
-    }
-    if (sec->buffer.data) {
-      sp_mem_allocator_free(alloc, sec->buffer.data);
-    }
-  }
-
-  sp_da_free(elf->sections);
-  sp_str_ht_free(elf->section_map);
-  sp_mem_allocator_free(alloc, elf);
+  sp_mem_arena_destroy(elf->arena);
 }
 
 sp_elf_section_t* sp_elf_add_section(sp_elf_t* elf, sp_str_t name, u32 kind, u64 alignment) {
@@ -238,19 +223,16 @@ sp_elf_section_t* sp_elf_add_section(sp_elf_t* elf, sp_str_t name, u32 kind, u64
   sp_require_as_null(!sp_str_empty(name));
   sp_require_as_null(sp_elf_is_align_valid(alignment));
 
-  sp_context_push_allocator(elf->allocator);
-
   sp_elf_section_t section = {
-    .name = sp_str_copy(name),
+    .name = sp_str_copy_a(elf->mem, name),
     .index = sp_da_size(elf->sections),
     .type = kind,
     .alignment = alignment,
+    .buffer = { .mem = elf->mem },
   };
 
   sp_da_push(elf->sections, section);
   sp_str_ht_insert(elf->section_map, section.name, section.index);
-
-  sp_context_pop();
 
   return sp_da_back(elf->sections);
 }
@@ -285,7 +267,7 @@ void sp_elf_buffer_grow(sp_elf_buffer_t* buffer, u64 size) {
   }
 
   buffer->capacity = capacity;
-  buffer->data = (u8*)sp_realloc(buffer->data, capacity);
+  buffer->data = (u8*)sp_mem_allocator_realloc(buffer->mem, buffer->data, capacity);
 }
 
 void* sp_elf_section_reserve_aligned(sp_elf_section_t* section, u64 size, u64 align) {
@@ -412,7 +394,7 @@ sp_elf_section_t* sp_elf_rela_new(sp_elf_t* elf, sp_elf_section_t* target) {
   sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
   if (!symtab) return SP_NULLPTR;
 
-  sp_str_t name = sp_fmt(".rela{}", sp_fmt_str(target->name));
+  sp_str_t name = sp_fmt_a(elf->mem, ".rela{}", sp_fmt_str(target->name)).value;
   sp_elf_section_t* rela = sp_elf_add_section(elf, name, SHT_RELA, 8);
   if (!rela) return SP_NULLPTR;
   rela->link = symtab->index;
@@ -441,13 +423,13 @@ void sp_elf_symtab_sort(sp_elf_section_t* symtab, sp_elf_t* elf) {
     return;
   }
 
-  sp_da(u32) old_to_new = SP_NULLPTR;
+  sp_da(u32) old_to_new = sp_da_new(elf->mem, u32);
   sp_for(i, count) {
     sp_da_push(old_to_new, 0);
   }
 
   Elf64_Sym* syms = (Elf64_Sym*)symtab->buffer.data;
-  Elf64_Sym* new_syms = sp_alloc_n(Elf64_Sym, count);
+  Elf64_Sym* new_syms = sp_alloc_n_a(elf->mem, Elf64_Sym, count);
   u32 local_idx = 0;
   SP_UNUSED(count);
 
@@ -513,7 +495,7 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
   sp_elf_section_t* shstrtab = sp_elf_find_or_create_shstrtab(elf);
   u32 num_sections = sp_elf_num_sections(elf);
 
-  sp_da(Elf64_Shdr) headers = SP_NULLPTR;
+  sp_da(Elf64_Shdr) headers = sp_da_new(elf->mem, Elf64_Shdr);
   sp_da_for(elf->sections, i) {
     sp_elf_section_t* sec = &elf->sections[i];
     sp_da_push(headers, ((Elf64_Shdr) {
@@ -621,7 +603,7 @@ sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {
   return err;
 }
 
-sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
+sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in) {
   sp_require_as_null(in);
 
   Elf64_Ehdr ehdr = SP_ZERO_INITIALIZE();
@@ -650,13 +632,16 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
   }
 
   if (!num_sections) {
-    return sp_elf_new();
+    return sp_elf_new(mem);
   }
 
-  Elf64_Shdr* section_headers = sp_alloc_n(Elf64_Shdr, num_sections);
+  sp_elf_t* elf = sp_elf_new(mem);
+
+  Elf64_Shdr* section_headers = sp_alloc_n_a(elf->mem, Elf64_Shdr, num_sections);
   sp_io_reader_seek(in, (s64)ehdr.e_shoff, SP_IO_SEEK_SET, SP_NULLPTR);
   sp_io_read(in, section_headers, num_sections * sizeof(Elf64_Shdr), &bytes_read);
   if (bytes_read != num_sections * sizeof(Elf64_Shdr)) {
+    sp_elf_free(elf);
     return SP_NULLPTR;
   }
 
@@ -664,12 +649,10 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
 
   c8* string_table = SP_NULLPTR;
   if (string_header->sh_size) {
-    string_table = sp_alloc_n(c8, string_header->sh_size);
+    string_table = sp_alloc_n_a(elf->mem, c8, string_header->sh_size);
     sp_io_reader_seek(in, string_header->sh_offset, SP_IO_SEEK_SET, SP_NULLPTR);
     sp_io_read(in, string_table, string_header->sh_size, SP_NULLPTR);
   }
-
-  sp_elf_t* elf = sp_elf_new();
 
   sp_assert(section_headers[0].sh_type == SHT_NULL);
   sp_da_push(elf->sections, ((sp_elf_section_t) {
@@ -716,12 +699,12 @@ sp_elf_t* sp_elf_read(sp_io_reader_t* in) {
   return elf;
 }
 
-sp_elf_t* sp_elf_read_from_file(sp_str_t path) {
+sp_elf_t* sp_elf_read_from_file(sp_mem_t mem, sp_str_t path) {
   sp_io_reader_t f = SP_ZERO_INITIALIZE();
   if (sp_io_reader_from_file(&f, path)) {
     return SP_NULLPTR;
   }
-  sp_elf_t* elf = sp_elf_read(&f);
+  sp_elf_t* elf = sp_elf_read(mem, &f);
   sp_io_reader_close(&f);
   return elf;
 }

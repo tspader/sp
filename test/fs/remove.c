@@ -10,20 +10,21 @@ typedef struct {
 
 static void run_remove_test(s32* utest_result, sp_test_file_manager_t* fm, remove_test_t* t) {
   sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
-  sp_fs_create_dir(sandbox);
+  sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t path = sp_fs_join_path(sandbox, sp_str_view(t->remove_path));
+  sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->remove_path));
   if (t->remove_dir) {
-    sp_fs_remove_dir(path);
+    sp_fs_remove_dir_a(path);
   } else {
-    sp_fs_remove_file(path);
+    sp_fs_remove_file_a(path);
   }
 
-  fs_expect_paths(utest_result, sandbox, t->expected);
+  fs_expect_paths(utest_result, fm, sandbox, t->expected);
 }
 
 UTEST_F(fs, remove_file_basic) {
+  SKIP_ON_WASM()
   run_remove_test(&ur, &ut.file_manager, &(remove_test_t) {
     .label = "remove_file_basic",
     .setup = {
@@ -37,6 +38,7 @@ UTEST_F(fs, remove_file_basic) {
 }
 
 UTEST_F(fs, remove_dir_recursive) {
+  SKIP_ON_WASM()
   run_remove_test(&ur, &ut.file_manager, &(remove_test_t) {
     .label = "remove_dir_recursive",
     .setup = {
@@ -57,6 +59,7 @@ UTEST_F(fs, remove_dir_recursive) {
 }
 
 UTEST_F(fs, remove_dir_does_not_follow_symlink) {
+  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   run_remove_test(&ur, &ut.file_manager, &(remove_test_t) {
     .label = "remove_dir_does_not_follow_symlink",
@@ -78,6 +81,7 @@ UTEST_F(fs, remove_dir_does_not_follow_symlink) {
 }
 
 UTEST_F(fs, unicode_remove_file) {
+  SKIP_ON_WASM()
   run_remove_test(&ur, &ut.file_manager, &(remove_test_t) {
     .label = "unicode_remove_file",
     .setup = {
@@ -91,6 +95,7 @@ UTEST_F(fs, unicode_remove_file) {
 }
 
 UTEST_F(fs, unicode_remove_dir) {
+  SKIP_ON_WASM()
   run_remove_test(&ur, &ut.file_manager, &(remove_test_t) {
     .label = "unicode_remove_dir",
     .setup = {

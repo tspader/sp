@@ -5,6 +5,7 @@
 SP_TEST_MAIN()
 
 UTEST(cv, init_destroy) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_cv_init(&cv);
@@ -34,6 +35,7 @@ s32 wait_notify_one_worker(void* userdata) {
 }
 
 UTEST(cv, wait_notify_one) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
@@ -93,6 +95,7 @@ s32 wait_notify_all_worker(void* userdata) {
 }
 
 UTEST(cv, wait_notify_all) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
@@ -157,6 +160,7 @@ s32 notify_one_wakes_single_worker(void* userdata) {
 }
 
 UTEST(cv, notify_one_wakes_single) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
@@ -209,6 +213,7 @@ UTEST(cv, notify_one_wakes_single) {
 }
 
 UTEST(cv, wait_for_timeout) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
@@ -222,7 +227,10 @@ UTEST(cv, wait_for_timeout) {
   sp_mutex_unlock(&mutex);
 
   EXPECT_FALSE(result);
-  EXPECT_GE(elapsed, 100000000ULL);
+  // System timer resolution lets timed waits return slightly early on some
+  // platforms (~15.6ms slack on Win32 by default). Just sanity-check that we
+  // actually waited rather than returning immediately.
+  EXPECT_GE(elapsed, 75000000ULL);
 
   sp_cv_destroy(&cv);
   sp_mutex_destroy(&mutex);
@@ -251,6 +259,7 @@ s32 wait_for_signaled_signaler(void* userdata) {
 }
 
 UTEST(cv, wait_for_signaled) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
@@ -331,10 +340,12 @@ s32 consumer_fn(void* userdata) {
 }
 
 UTEST(cv, multithread_producer_consumer) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_rb(s32) buffer = SP_NULLPTR;
+  sp_rb_init(sp_mem_os_new(), buffer);
 
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);

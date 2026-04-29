@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project>
-  <ItemDefinitionGroup>
-    <ClCompile>
-      <DisableSpecificWarnings>4100;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
-  </ItemDefinitionGroup>
-</Project>

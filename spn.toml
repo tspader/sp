@@ -76,10 +76,6 @@ name = "io"
 source = ["test/io.c"]
 
 [[test]]
-name = "leak"
-source = ["test/leak.c"]
-
-[[test]]
 name = "linkage"
 source = ["test/linkage.c"]
 

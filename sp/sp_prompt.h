@@ -352,7 +352,7 @@
 //////////
 // ANSI //
 //////////
-// Static ANSI sequences. The _FMT variants are sp_fmt() templates ({} is the
+// Static ANSI sequences. The _FMT variants are sp_fmt_a(ctx->mem, ).value templates ({} is the
 // placeholder).
 #define SP_ANSI_CURSOR_HOME       "\r"
 #define SP_ANSI_CURSOR_UP         "\x1b[A"
@@ -702,7 +702,7 @@ typedef struct {
 // API //
 /////////
 // @lifecycle
-sp_prompt_ctx_t* sp_prompt_begin();
+sp_prompt_ctx_t* sp_prompt_begin(sp_mem_t mem);
 void             sp_prompt_end(sp_prompt_ctx_t* ctx);
 
 // @widgets
@@ -745,7 +745,7 @@ const c8*        sp_prompt_get_str(sp_prompt_ctx_t* ctx);
 bool             sp_prompt_get_bool(sp_prompt_ctx_t* ctx);
 void             sp_prompt_set_str(sp_prompt_ctx_t* ctx, sp_str_t value);
 void             sp_prompt_set_bool(sp_prompt_ctx_t* ctx, bool value);
-const c8*        sp_prompt_join_selection(sp_prompt_select_option_t* options, u32 num_options);
+const c8*        sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option_t* options, u32 num_options);
 void             sp_prompt_set_state(sp_prompt_ctx_t* ctx, sp_prompt_state_t state);
 
 
@@ -753,12 +753,12 @@ void             sp_prompt_set_state(sp_prompt_ctx_t* ctx, sp_prompt_state_t sta
 void             sp_prompt_line(sp_prompt_ctx_t* ctx, sp_str_t text);
 void             sp_prompt_render_line(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_style_t style);
 u32              sp_prompt_text_width(sp_str_t text);
-sp_str_t         sp_prompt_repeat(u32 codepoint, u32 count);
+sp_str_t         sp_prompt_repeat(sp_prompt_ctx_t* ctx, u32 codepoint, u32 count);
 
 // @advanced
-sp_prompt_ctx_t* sp_prompt_new();
+sp_prompt_ctx_t* sp_prompt_new(sp_mem_t mem);
 s32              sp_prompt_begin_ex(sp_prompt_ctx_t* ctx);
-void             sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, u32 cols, u32 rows);
+void             sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows);
 void             sp_prompt_prime_events(sp_prompt_ctx_t* ctx, sp_prompt_event_t events[SP_PROMPT_PRIMED_EVENT_CAP]);
 bool             sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
 sp_app_config_t  sp_prompt_app(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
@@ -869,7 +869,7 @@ struct sp_prompt_ctx_t {
     bool raw;
   } terminal;
   sp_mem_arena_t* arena;
-  sp_allocator_t allocator;
+  sp_mem_t mem;
   struct {
     sp_prompt_event_data_t value;
     bool dirty;
@@ -942,8 +942,8 @@ static void sp_prompt_framebuffer_clear(sp_prompt_ctx_t* ctx) {
   ctx->cursor_col = 0;
 }
 
-sp_prompt_ctx_t* sp_prompt_new() {
-  sp_prompt_ctx_t* ctx = sp_alloc_type(sp_prompt_ctx_t);
+sp_prompt_ctx_t* sp_prompt_new(sp_mem_t mem) {
+  sp_prompt_ctx_t* ctx = sp_alloc_type_a(mem, sp_prompt_ctx_t);
   u32 cols = 0;
   u32 rows = 0;
   if (sp_os_is_tty(sp_sys_stdout)) {
@@ -951,14 +951,14 @@ sp_prompt_ctx_t* sp_prompt_new() {
   }
   if (cols == 0) cols = SP_PROMPT_DEFAULT_COLS;
   if (rows == 0) rows = SP_PROMPT_DEFAULT_ROWS;
-  sp_prompt_ctx_init(ctx, cols, rows);
+  sp_prompt_ctx_init(ctx, mem, cols, rows);
   return ctx;
 }
 
-sp_prompt_ctx_t* sp_prompt_begin() {
-  sp_prompt_ctx_t* ctx = sp_prompt_new();
+sp_prompt_ctx_t* sp_prompt_begin(sp_mem_t mem) {
+  sp_prompt_ctx_t* ctx = sp_prompt_new(mem);
   if (sp_prompt_begin_ex(ctx)) {
-    sp_free(ctx);
+    sp_free_a(mem, ctx);
     return SP_NULLPTR;
   }
   return ctx;
@@ -993,25 +993,27 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
     ctx->wake.write = SP_SYS_INVALID_FD;
   }
 
-  sp_sys_write(ctx->terminal.fds.out, "\n", 1);
+  if (ctx->terminal.fds.out != SP_SYS_INVALID_FD && ctx->terminal.fds.out != 0) {
+    sp_sys_write(ctx->terminal.fds.out, "\n", 1);
+  }
   sp_mutex_destroy(&ctx->channel.lock);
   sp_mem_arena_destroy(ctx->channel.arena);
   sp_mem_arena_destroy(ctx->arena);
 }
 
-void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, u32 cols, u32 rows) {
+void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) {
   *ctx = sp_zero_struct(sp_prompt_ctx_t);
   ctx->cols = cols;
   ctx->rows = rows;
   ctx->state = SP_PROMPT_STATE_ACTIVE;
   ctx->wake.read = SP_SYS_INVALID_FD;
   ctx->wake.write = SP_SYS_INVALID_FD;
-  ctx->arena = sp_mem_arena_new();
-  ctx->allocator = sp_mem_arena_as_allocator(ctx->arena);
-  sp_da_init(&ctx->allocator, ctx->frames);
+  ctx->arena = sp_mem_arena_new(mem);
+  ctx->mem = sp_mem_arena_as_allocator(ctx->arena);
+  sp_da_init(ctx->mem, ctx->frames);
 
   sp_mutex_init(&ctx->channel.lock, SP_MUTEX_PLAIN);
-  ctx->channel.arena = sp_mem_arena_new_with_allocator(sp_mem_os_new(), SP_MEM_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
+  ctx->channel.arena = sp_mem_arena_new_ex(mem, SP_MEM_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
 
   // Write buffering is really important, because our rendering algorithm is extremely
   // naive. It's not much more than this:
@@ -1055,7 +1057,7 @@ const c8* sp_prompt_get_str(sp_prompt_ctx_t* ctx) {
   if (ctx->value.kind != SP_PROMPT_VALUE_STR) {
     return "";
   }
-  return sp_str_to_cstr(ctx->value.as.str);
+  return sp_str_to_cstr_a(ctx->mem, ctx->value.as.str);
 }
 
 bool sp_prompt_get_bool(sp_prompt_ctx_t* ctx) {
@@ -1065,8 +1067,9 @@ bool sp_prompt_get_bool(sp_prompt_ctx_t* ctx) {
   return ctx->value.as.bool_value;
 }
 
-const c8* sp_prompt_join_selection(sp_prompt_select_option_t* options, u32 num_options) {
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+const c8* sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option_t* options, u32 num_options) {
+  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_from_dyn_mem_a(ctx->mem, &builder);
   bool first = true;
   sp_for(it, num_options) {
     if (!options[it].selected) {
@@ -1074,13 +1077,13 @@ const c8* sp_prompt_join_selection(sp_prompt_select_option_t* options, u32 num_o
     }
 
     if (!first) {
-      sp_str_builder_append(&builder, SP_LIT(", "));
+      sp_io_write_str(&builder, SP_LIT(", "), SP_NULLPTR);
     }
     first = false;
-    sp_str_builder_append(&builder, sp_str_view(options[it].label));
+    sp_io_write_str(&builder, sp_str_view(options[it].label), SP_NULLPTR);
   }
 
-  return sp_str_builder_to_cstr(&builder);
+  return sp_str_to_cstr_a(ctx->mem, sp_io_writer_dyn_mem_as_str(&builder.dyn_mem));
 }
 
 // Instead of just writing to the file descriptor that the main loop waits on for events,
@@ -1159,9 +1162,7 @@ void sp_prompt_send_status_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
     return;
   }
 
-  sp_context_push_arena(ctx->channel.arena);
-  ctx->status.value = sp_str_copy(text);
-  sp_context_pop();
+  ctx->status.value = sp_str_copy_a(sp_mem_arena_as_allocator(ctx->channel.arena), text);
   ctx->status.dirty = true;
 
   sp_mutex_unlock(&ctx->channel.lock);
@@ -1329,15 +1330,20 @@ static void sp_prompt_write_style(sp_prompt_ctx_t* ctx, sp_prompt_style_t style)
       break;
     }
     case SP_PROMPT_STYLE_ANSI: {
-      sp_str_t esc = sp_fmt(SP_ANSI_SGR_ANSI_FMT, sp_fmt_uint(style.ansi));
+      sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+      sp_str_t esc = sp_fmt_a(s.mem, SP_ANSI_SGR_ANSI_FMT, sp_fmt_uint(style.ansi)).value;
       sp_prompt_emit_str(ctx, esc);
+      sp_mem_end_scratch(s);
       break;
     }
     case SP_PROMPT_STYLE_RGB: {
-      sp_str_t esc = sp_fmt(SP_ANSI_SGR_RGB_FMT, sp_fmt_uint(style.rgb.r), sp_fmt_uint(style.rgb.g), sp_fmt_uint(style.rgb.b));
+      sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+      sp_str_t esc = sp_fmt_a(s.mem, SP_ANSI_SGR_RGB_FMT, sp_fmt_uint(style.rgb.r), sp_fmt_uint(style.rgb.g), sp_fmt_uint(style.rgb.b)).value;
       sp_prompt_emit_str(ctx, esc);
+      sp_mem_end_scratch(s);
       break;
     }
+
   }
 }
 
@@ -1405,7 +1411,7 @@ static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
 
 sp_app_result_t sp_prompt_app_on_init(sp_app_t* app) {
   sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)app->user_data;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
   ctx->state = SP_PROMPT_STATE_ACTIVE;
   ctx->value = sp_zero_struct(sp_prompt_value_t);
@@ -1441,9 +1447,9 @@ void sp_prompt_app_on_deinit(sp_app_t* app) {
 
 sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
   sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)app->user_data;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
-  sp_da(sp_prompt_event_t) events = sp_zero();
+  sp_da(sp_prompt_event_t) events = sp_da_new(scratch.mem, sp_prompt_event_t);
 
   // Drain everything. Primed events come first by definition, but there's no specific order
   // between progress, status, and inputs.
@@ -1521,7 +1527,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
 
 sp_app_result_t sp_prompt_app_on_update(sp_app_t* app) {
   sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)app->user_data;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
   if (ctx->state == SP_PROMPT_STATE_ACTIVE && ctx->widget.on_update) {
     ctx->widget.on_update(ctx);
@@ -1562,12 +1568,16 @@ u32 sp_prompt_text_width(sp_str_t text) {
   return width;
 }
 
-sp_str_t sp_prompt_repeat(u32 codepoint, u32 count) {
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+sp_str_t sp_prompt_repeat(sp_prompt_ctx_t* ctx, u32 codepoint, u32 count) {
+  SP_UNUSED(ctx);
+  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_from_dyn_mem_a(sp_mem_begin_scratch().mem, &builder);
+  u8 buf[4] = SP_ZERO_INITIALIZE();
+  u8 len = sp_utf8_encode(codepoint, buf);
   sp_for(it, count) {
-    sp_str_builder_append_utf8(&builder, codepoint);
+    sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
   }
-  return sp_str_builder_to_str(&builder);
+  return sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
 }
 
 static void sp_prompt_static_update(sp_prompt_ctx_t* ctx, sp_prompt_event_t event) {
@@ -1577,18 +1587,23 @@ static void sp_prompt_static_update(sp_prompt_ctx_t* ctx, sp_prompt_event_t even
 
 static void sp_prompt_intro_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro_t* prompt = (sp_prompt_intro_t*)ctx->user_data;
-  sp_prompt_line(ctx, sp_fmt("┌  {}", sp_fmt_str(prompt->text)));
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_prompt_line(ctx, sp_fmt_a(s.mem, "┌  {}", sp_fmt_str(prompt->text)).value);
+  sp_mem_end_scratch(s);
 }
 
 static void sp_prompt_outro_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_outro_t* prompt = (sp_prompt_outro_t*)ctx->user_data;
-  sp_prompt_line(ctx, sp_fmt("└  {}", sp_fmt_str(prompt->text)));
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_prompt_line(ctx, sp_fmt_a(s.mem, "└  {}", sp_fmt_str(prompt->text)).value);
+  sp_mem_end_scratch(s);
 }
 
 static void sp_prompt_note_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_note_t* prompt = (sp_prompt_note_t*)ctx->user_data;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
-  sp_da(sp_str_t) message_lines = sp_str_split_c8(prompt->message, '\n');
+  sp_da(sp_str_t) message_lines = sp_str_split_c8_a(s.mem, prompt->message, '\n');
 
   u32 title_width = sp_prompt_text_width(prompt->title);
   u32 max_line_width = 0;
@@ -1610,22 +1625,23 @@ static void sp_prompt_note_render(sp_prompt_ctx_t* ctx) {
     top_tail_width = width - title_width - 1;
   }
 
-  sp_str_t top_tail = sp_prompt_repeat(0x2500, top_tail_width);
-  sp_str_t spacer = sp_prompt_repeat(' ', width);
-  sp_str_t bottom = sp_prompt_repeat(0x2500, width + 2);
+  sp_str_t top_tail = sp_prompt_repeat(ctx, 0x2500, top_tail_width);
+  sp_str_t spacer = sp_prompt_repeat(ctx, ' ', width);
+  sp_str_t bottom = sp_prompt_repeat(ctx, 0x2500, width + 2);
 
-  sp_prompt_line(ctx, sp_fmt("◇  {} {}╮", sp_fmt_str(prompt->title), sp_fmt_str(top_tail)));
-  sp_prompt_line(ctx, sp_fmt("│  {}│", sp_fmt_str(spacer)));
+  sp_prompt_line(ctx, sp_fmt_a(s.mem, "◇  {} {}╮", sp_fmt_str(prompt->title), sp_fmt_str(top_tail)).value);
+  sp_prompt_line(ctx, sp_fmt_a(s.mem, "│  {}│", sp_fmt_str(spacer)).value);
 
   sp_da_for(message_lines, it) {
     sp_str_t line = message_lines[it];
     u32 line_width = sp_prompt_text_width(line);
-    sp_str_t pad = sp_prompt_repeat(' ', width - line_width);
-    sp_prompt_line(ctx, sp_fmt("│  {}{}│", sp_fmt_str(line), sp_fmt_str(pad)));
+    sp_str_t pad = sp_prompt_repeat(ctx, ' ', width - line_width);
+    sp_prompt_line(ctx, sp_fmt_a(s.mem, "│  {}{}│", sp_fmt_str(line), sp_fmt_str(pad)).value);
   }
 
-  sp_prompt_line(ctx, sp_fmt("│  {}│", sp_fmt_str(spacer)));
-  sp_prompt_line(ctx, sp_fmt("├{}╯", sp_fmt_str(bottom)));
+  sp_prompt_line(ctx, sp_fmt_a(s.mem, "│  {}│", sp_fmt_str(spacer)).value);
+  sp_prompt_line(ctx, sp_fmt_a(s.mem, "├{}╯", sp_fmt_str(bottom)).value);
+  sp_mem_end_scratch(s);
 }
 
 sp_prompt_widget_t sp_prompt_intro_widget(sp_prompt_ctx_t* ctx, sp_prompt_intro_t config) {
@@ -1669,8 +1685,10 @@ static void sp_prompt_message_render(sp_prompt_ctx_t* ctx) {
     .tag = SP_PROMPT_STYLE_ANSI,
     .ansi = prompt->ansi,
   };
-  sp_prompt_render_line(ctx, sp_fmt("{}  ", sp_fmt_str(sp_prompt_repeat(prompt->symbol, 1))), style);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_prompt_render_line(ctx, sp_fmt_a(s.mem, "{}  ", sp_fmt_str(sp_prompt_repeat(ctx, prompt->symbol, 1))).value, style);
   sp_prompt_render_line(ctx, prompt->text, SP_ZERO_STRUCT(sp_prompt_style_t));
+  sp_mem_end_scratch(s);
   ctx->cursor_col = 0;
   ctx->cursor_row++;
 }
@@ -1745,12 +1763,13 @@ void sp_prompt_success(sp_prompt_ctx_t* ctx, const c8* message) {
 }
 
 static void sp_prompt_str_append_codepoint(sp_prompt_ctx_t* ctx, sp_str_t* value, u32 codepoint) {
-  sp_context_push_arena(ctx->arena);
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_str_builder_append(&builder, *value);
-  sp_str_builder_append_utf8(&builder, codepoint);
-  *value = sp_str_builder_to_str(&builder);
-  sp_context_pop();
+  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_from_dyn_mem_a(ctx->mem, &builder);
+  sp_io_write_str(&builder, *value, SP_NULLPTR);
+  u8 buf[4] = SP_ZERO_INITIALIZE();
+  u8 len = sp_utf8_encode(codepoint, buf);
+  sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
+  *value = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
 }
 
 static sp_str_t sp_prompt_str_pop_codepoint(sp_str_t value) {
@@ -2713,7 +2732,7 @@ static void sp_prompt_password_render(sp_prompt_ctx_t* ctx) {
     }
 
     if (password->mask) {
-      sp_str_t masked = sp_prompt_repeat('*', sp_prompt_text_width(password->config.prefill));
+      sp_str_t masked = sp_prompt_repeat(ctx, '*', sp_prompt_text_width(password->config.prefill));
       sp_prompt_style_t style = {
         .tag = SP_PROMPT_STYLE_ANSI,
         .ansi = SP_ANSI_FG_BRIGHT_BLACK_U8,
@@ -2733,7 +2752,7 @@ static void sp_prompt_password_render(sp_prompt_ctx_t* ctx) {
   }
 
   if (password->mask) {
-    sp_str_t masked = sp_prompt_repeat('*', sp_prompt_text_width(password->value));
+    sp_str_t masked = sp_prompt_repeat(ctx, '*', sp_prompt_text_width(password->value));
     sp_prompt_render_line(ctx, masked, SP_ZERO_STRUCT(sp_prompt_style_t));
   } else {
     sp_prompt_render_line(ctx, password->value, SP_ZERO_STRUCT(sp_prompt_style_t));
@@ -2862,7 +2881,7 @@ static void sp_prompt_spinner_render(sp_prompt_ctx_t* ctx) {
   }
 
   if (codepoint != 0) {
-    sp_prompt_render_line(ctx, sp_prompt_repeat(codepoint, 1), style);
+    sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, codepoint, 1), style);
     sp_prompt_render_line(ctx, SP_LIT("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
   }
   sp_prompt_render_line(ctx, sp_str_view(spinner->config.prompt), SP_ZERO_STRUCT(sp_prompt_style_t));
@@ -2972,11 +2991,13 @@ static void sp_prompt_progress_render(sp_prompt_ctx_t* ctx) {
       codepoint = 0x2590 - cell;
       style = fill;
     }
-    sp_prompt_render_line(ctx, sp_prompt_repeat(codepoint, 1), style);
+    sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, codepoint, 1), style);
   }
 
   u32 percent = (u32)(ratio * SP_PROMPT_PROGRESS_PERCENT_SCALE + 0.5f);
-  sp_prompt_render_line(ctx, sp_fmt(" {}%", sp_fmt_uint(percent)), SP_ZERO_STRUCT(sp_prompt_style_t));
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_prompt_render_line(ctx, sp_fmt_a(s.mem, " {}%", sp_fmt_uint(percent)).value, SP_ZERO_STRUCT(sp_prompt_style_t));
+  sp_mem_end_scratch(s);
   ctx->cursor_col = 0;
   ctx->cursor_row++;
 
@@ -3226,7 +3247,7 @@ static void sp_prompt_knight_rider_render(sp_prompt_ctx_t* ctx) {
       style.rgb.b = sp_prompt_kr_clamp_u8((f32)inactive[2] * fade);
     }
 
-    sp_prompt_render_line(ctx, sp_prompt_repeat(codepoint, 1), style);
+    sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, codepoint, 1), style);
   }
 
   sp_prompt_render_line(ctx, SP_LIT("  "), SP_ZERO_STRUCT(sp_prompt_style_t));

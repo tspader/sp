@@ -9,18 +9,26 @@ SP_TEST_MAIN()
 struct io_rw {
   sp_str_t file_path;
   sp_test_file_manager_t file_manager;
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
 };
 
 UTEST_F_SETUP(io_rw) {
+  SKIP_ON_WASM()
+  ut.arena = sp_mem_arena_new(sp_mem_os_new());
+  ut.mem = sp_mem_arena_as_allocator(ut.arena);
   sp_test_file_manager_init(&ut.file_manager);
   ut.file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("sp_io_rw.file"));
 }
 
 UTEST_F_TEARDOWN(io_rw) {
+  SKIP_ON_WASM()
   sp_test_file_manager_cleanup(&ut.file_manager);
+  sp_mem_arena_destroy(ut.arena);
 }
 
 UTEST_F(io_rw, reader_mem_read_full) {
+  SKIP_ON_WASM()
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
   u8 dest[16] = SP_ZERO_INITIALIZE();
 
@@ -36,6 +44,7 @@ UTEST_F(io_rw, reader_mem_read_full) {
 }
 
 UTEST_F(io_rw, reader_mem_read_partial) {
+  SKIP_ON_WASM()
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
   u8 dest[8] = SP_ZERO_INITIALIZE();
 
@@ -51,6 +60,7 @@ UTEST_F(io_rw, reader_mem_read_partial) {
 }
 
 UTEST_F(io_rw, reader_mem_read_past_end) {
+  SKIP_ON_WASM()
   u8 source[8] = {1,2,3,4,5,6,7,8};
   u8 dest[16] = SP_ZERO_INITIALIZE();
 
@@ -68,6 +78,7 @@ UTEST_F(io_rw, reader_mem_read_past_end) {
 }
 
 UTEST_F(io_rw, reader_mem_read_eof_exact) {
+  SKIP_ON_WASM()
   u8 source[8] = {1,2,3,4,5,6,7,8};
   u8 dest[8] = SP_ZERO_INITIALIZE();
 
@@ -83,6 +94,7 @@ UTEST_F(io_rw, reader_mem_read_eof_exact) {
 }
 
 UTEST_F(io_rw, reader_mem_read_eof_empty) {
+  SKIP_ON_WASM()
   u8 dest[4] = SP_ZERO_INITIALIZE();
 
   sp_io_reader_t r; sp_io_reader_from_mem(&r, SP_NULLPTR, 0);
@@ -94,6 +106,7 @@ UTEST_F(io_rw, reader_mem_read_eof_empty) {
 }
 
 UTEST_F(io_rw, reader_mem_size) {
+  SKIP_ON_WASM()
   u8 buffer[128] = SP_ZERO_INITIALIZE();
   sp_io_reader_t r; sp_io_reader_from_mem(&r,buffer, sizeof(buffer));
   u64 size = 0;
@@ -103,6 +116,7 @@ UTEST_F(io_rw, reader_mem_size) {
 }
 
 UTEST_F(io_rw, reader_mem_seek) {
+  SKIP_ON_WASM()
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_for(i, 64) buffer[i] = (u8)i;
 
@@ -123,6 +137,7 @@ UTEST_F(io_rw, reader_mem_seek) {
 }
 
 UTEST_F(io_rw, reader_mem_seek_invalid) {
+  SKIP_ON_WASM()
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_io_reader_t r; sp_io_reader_from_mem(&r,buffer, sizeof(buffer));
 
@@ -137,6 +152,7 @@ UTEST_F(io_rw, reader_mem_seek_invalid) {
 }
 
 UTEST_F(io_rw, reader_file_read) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -159,6 +175,7 @@ UTEST_F(io_rw, reader_file_read) {
 }
 
 UTEST_F(io_rw, reader_file_seek) {
+  SKIP_ON_WASM()
   const char* content = "0123456789";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -180,6 +197,7 @@ UTEST_F(io_rw, reader_file_seek) {
 }
 
 UTEST_F(io_rw, reader_file_size) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -197,6 +215,7 @@ UTEST_F(io_rw, reader_file_size) {
 }
 
 UTEST_F(io_rw, reader_file_nonexistent) {
+  SKIP_ON_WASM()
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("nonexistent.file"));
   sp_io_reader_t r = SP_ZERO_INITIALIZE();
   EXPECT_EQ(sp_io_reader_from_file(&r, path), SP_ERR_IO_OPEN_FAILED);
@@ -204,6 +223,7 @@ UTEST_F(io_rw, reader_file_nonexistent) {
 }
 
 UTEST_F(io_rw, reader_file_read_eof_after_drain) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -228,6 +248,7 @@ UTEST_F(io_rw, reader_file_read_eof_after_drain) {
 }
 
 UTEST_F(io_rw, reader_file_read_eof_short) {
+  SKIP_ON_WASM()
   const char* content = "short";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -252,6 +273,7 @@ UTEST_F(io_rw, reader_file_read_eof_short) {
 }
 
 UTEST_F(io_rw, reader_file_read_eof_empty) {
+  SKIP_ON_WASM()
   sp_io_reader_t r = SP_ZERO_INITIALIZE();
   sp_io_reader_from_file(&r, ut.file_path);
 
@@ -264,6 +286,7 @@ UTEST_F(io_rw, reader_file_read_eof_empty) {
 }
 
 UTEST_F(io_rw, writer_mem_write) {
+  SKIP_ON_WASM()
   u8 buffer[16] = SP_ZERO_INITIALIZE();
   u8 source[8] = {1,2,3,4,5,6,7,8};
 
@@ -279,6 +302,7 @@ UTEST_F(io_rw, writer_mem_write) {
 }
 
 UTEST_F(io_rw, writer_mem_write_overflow) {
+  SKIP_ON_WASM()
   u8 buffer[8] = SP_ZERO_INITIALIZE();
   u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
@@ -291,6 +315,7 @@ UTEST_F(io_rw, writer_mem_write_overflow) {
 }
 
 UTEST_F(io_rw, writer_mem_seek) {
+  SKIP_ON_WASM()
   u8 buffer[64] = SP_ZERO_INITIALIZE();
   sp_io_writer_t w; sp_io_writer_from_mem(&w,buffer, sizeof(buffer));
 
@@ -305,6 +330,7 @@ UTEST_F(io_rw, writer_mem_seek) {
 }
 
 UTEST_F(io_rw, writer_mem_size) {
+  SKIP_ON_WASM()
   u8 buffer[128];
   sp_io_writer_t w; sp_io_writer_from_mem(&w,buffer, sizeof(buffer));
   u64 size = 0;
@@ -314,6 +340,7 @@ UTEST_F(io_rw, writer_mem_size) {
 }
 
 UTEST_F(io_rw, writer_file_write) {
+  SKIP_ON_WASM()
   const char* content = "test data";
   sp_io_writer_t w = SP_ZERO_INITIALIZE();
   EXPECT_EQ(sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE), SP_OK);
@@ -324,11 +351,12 @@ UTEST_F(io_rw, writer_file_write) {
   sp_io_writer_close(&w);
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 9);
 }
 
 UTEST_F(io_rw, writer_file_overwrite) {
+  SKIP_ON_WASM()
   const char* first = "XXXXXXXX";
   const char* second = "1234";
 
@@ -347,13 +375,14 @@ UTEST_F(io_rw, writer_file_overwrite) {
   }
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 4);
   EXPECT_EQ(loaded.data[0], '1');
   EXPECT_EQ(loaded.data[3], '4');
 }
 
 UTEST_F(io_rw, writer_file_append) {
+  SKIP_ON_WASM()
   const char* first = "first";
   const char* second = "second";
 
@@ -372,12 +401,13 @@ UTEST_F(io_rw, writer_file_append) {
   }
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 11);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("firstsecond")));
 }
 
 UTEST_F(io_rw, writer_file_seek) {
+  SKIP_ON_WASM()
   const char* content = "0123456789";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -399,6 +429,7 @@ UTEST_F(io_rw, writer_file_seek) {
 }
 
 UTEST_F(io_rw, writer_file_size) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   sp_io_writer_t w = SP_ZERO_INITIALIZE();
   sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
@@ -410,6 +441,7 @@ UTEST_F(io_rw, writer_file_size) {
 }
 
 UTEST_F(io_rw, writer_file_pad) {
+  SKIP_ON_WASM()
   sp_io_writer_t w = SP_ZERO_INITIALIZE();
   sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write(&w, "AA", 2, SP_NULLPTR);
@@ -434,7 +466,8 @@ UTEST_F(io_rw, writer_file_pad) {
 }
 
 UTEST_F(io_rw, writer_dyn_write) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  SKIP_ON_WASM()
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
   u8 data[] = {1, 2, 3, 4};
   u64 written = 0;
   EXPECT_EQ(sp_io_write(&w, data, 4, &written), SP_OK);
@@ -447,7 +480,8 @@ UTEST_F(io_rw, writer_dyn_write) {
 }
 
 UTEST_F(io_rw, writer_dyn_grows) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  SKIP_ON_WASM()
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
 
   u8 data[256];
   sp_for(i, 256) data[i] = (u8)i;
@@ -463,7 +497,8 @@ UTEST_F(io_rw, writer_dyn_grows) {
 }
 
 UTEST_F(io_rw, writer_dyn_to_str) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  SKIP_ON_WASM()
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
 
   const char* text = "hello world";
   sp_io_write(&w, text, 11, SP_NULLPTR);
@@ -476,7 +511,8 @@ UTEST_F(io_rw, writer_dyn_to_str) {
 }
 
 UTEST_F(io_rw, writer_dyn_seek) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  SKIP_ON_WASM()
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
 
   u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
   sp_io_write(&w, data, 8, SP_NULLPTR);
@@ -489,7 +525,8 @@ UTEST_F(io_rw, writer_dyn_seek) {
 }
 
 UTEST_F(io_rw, writer_dyn_multiple_writes) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  SKIP_ON_WASM()
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
 
   sp_io_write(&w, "abc", 3, SP_NULLPTR);
   sp_io_write(&w, "def", 3, SP_NULLPTR);
@@ -506,6 +543,7 @@ UTEST_F(io_rw, writer_dyn_multiple_writes) {
 }
 
 UTEST_F(io_rw, writer_buffered_1000_bytes) {
+  SKIP_ON_WASM()
   u8 write_buf[64];
   sp_io_writer_t w = SP_ZERO_INITIALIZE();
   sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
@@ -536,6 +574,7 @@ UTEST_F(io_rw, writer_buffered_1000_bytes) {
 }
 
 UTEST_F(io_rw, writer_buffered_larger_than_buffer) {
+  SKIP_ON_WASM()
   u8 write_buf[32];
   u8 data[128];
   sp_for(i, 128) data[i] = (u8)i;
@@ -562,6 +601,7 @@ UTEST_F(io_rw, writer_buffered_larger_than_buffer) {
 }
 
 UTEST_F(io_rw, writer_buffered_implicit_flush) {
+  SKIP_ON_WASM()
   u8 write_buf[64];
   sp_io_writer_t w = SP_ZERO_INITIALIZE();
   sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
@@ -571,12 +611,13 @@ UTEST_F(io_rw, writer_buffered_implicit_flush) {
   sp_io_writer_close(&w);
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 5);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("hello")));
 }
 
 UTEST_F(io_rw, writer_buffered_flush_empty) {
+  SKIP_ON_WASM()
   u8 write_buf[64];
   sp_io_writer_t w = SP_ZERO_INITIALIZE();
   sp_io_writer_from_file(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
@@ -588,6 +629,7 @@ UTEST_F(io_rw, writer_buffered_flush_empty) {
 }
 
 UTEST_F(io_rw, writer_buffered_set_twice) {
+  SKIP_ON_WASM()
   u8 write_buf1[64];
   u8 write_buf2[64];
   sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -600,12 +642,13 @@ UTEST_F(io_rw, writer_buffered_set_twice) {
   sp_io_writer_close(&w);
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 11);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("firstsecond")));
 }
 
 UTEST_F(io_rw, reader_buffered_read) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -630,6 +673,7 @@ UTEST_F(io_rw, reader_buffered_read) {
 }
 
 UTEST_F(io_rw, reader_buffered_small_reads) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -654,6 +698,7 @@ UTEST_F(io_rw, reader_buffered_small_reads) {
 }
 
 UTEST_F(io_rw, reader_buffered_eof_exact) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -680,6 +725,7 @@ UTEST_F(io_rw, reader_buffered_eof_exact) {
 }
 
 UTEST_F(io_rw, reader_buffered_eof_partial) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -706,6 +752,7 @@ UTEST_F(io_rw, reader_buffered_eof_partial) {
 }
 
 UTEST_F(io_rw, reader_buffered_fill_preserves_drained) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -740,6 +787,7 @@ UTEST_F(io_rw, reader_buffered_fill_preserves_drained) {
 }
 
 UTEST_F(io_rw, reader_buffered_eof_direct_path) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -770,6 +818,7 @@ UTEST_F(io_rw, reader_buffered_eof_direct_path) {
 }
 
 UTEST_F(io_rw, reader_buffered_zero_size) {
+  SKIP_ON_WASM()
   u8 source[1] = {0};
   u8 read_buf[8];
   sp_io_reader_t r; sp_io_reader_from_mem(&r, source, sizeof(source));
@@ -783,6 +832,7 @@ UTEST_F(io_rw, reader_buffered_zero_size) {
 }
 
 UTEST_F(io_rw, reader_buffered_eof_byte_by_byte) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -813,6 +863,7 @@ UTEST_F(io_rw, reader_buffered_eof_byte_by_byte) {
 }
 
 UTEST_F(io_rw, reader_buffered_seek_discards_buffer) {
+  SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
   {
     sp_io_writer_t w = SP_ZERO_INITIALIZE();
@@ -838,6 +889,7 @@ UTEST_F(io_rw, reader_buffered_seek_discards_buffer) {
 }
 
 UTEST_F(io_rw, seek_beyond_4gb) {
+  SKIP_ON_WASM()
   s64 offset = (s64)5 * 1024 * 1024 * 1024;
   u8 marker[4] = {0xDE, 0xAD, 0xBE, 0xEF};
 

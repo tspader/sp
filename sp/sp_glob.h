@@ -52,6 +52,7 @@ typedef enum {
 } sp_glob_strategy_t;
 
 typedef struct sp_glob_t {
+  sp_mem_arena_t* arena;
   sp_da(sp_glob_token_t) tokens;
   sp_glob_strategy_t strategy;
   sp_str_t pattern;
@@ -80,9 +81,10 @@ typedef struct {
   u32 idx;
 } sp_glob_set_fallback_entry_t;
 
-typedef sp_ht(sp_str_t, sp_da(u32)) sp_glob_set_index_table_t;
+typedef sp_ht_a(sp_str_t, sp_da(u32)) sp_glob_set_index_table_t;
 
 typedef struct sp_glob_set_t {
+  sp_mem_arena_t* arena;
   sp_da(sp_glob_t*) globs;
 
   sp_glob_set_index_table_t literal;
@@ -93,32 +95,33 @@ typedef struct sp_glob_set_t {
   sp_da(sp_glob_set_fallback_entry_t) fallbacks;
 } sp_glob_set_t;
 
-sp_glob_t*          sp_glob_new(const c8* pattern);
-sp_glob_t*          sp_glob_new_str(sp_str_t pattern);
-bool                sp_glob_match(sp_glob_t* g, sp_str_t path);
-sp_glob_set_t*      sp_glob_set_new();
-void                sp_glob_set_add(sp_glob_set_t* set, const c8* pattern);
-void                sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern);
-void                sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* glob);
-void                sp_glob_set_build(sp_glob_set_t* set);
-bool                sp_glob_set_match(sp_glob_set_t* set, sp_str_t path);
-void                sp_glob_set_matches(sp_glob_set_t* set, sp_str_t path, sp_da(u32)* out);
-
-void                sp_glob_push_literal(sp_da(sp_glob_token_t)* tokens, c8 c);
-void                sp_glob_push_token(sp_da(sp_glob_token_t)* tokens, sp_glob_token_type_t type);
-sp_glob_err_t       sp_glob_parse_star(sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens);
-sp_glob_err_t       sp_glob_parse_class(sp_str_t pattern, u32* i, sp_da(sp_glob_token_t)* out);
-sp_glob_err_t       sp_glob_parse_alternates(sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens);
-sp_glob_err_t       sp_glob_parse(sp_str_t pattern, sp_da(sp_glob_token_t)* tokens);
-bool                sp_glob_match_impl(sp_da(sp_glob_token_t) tokens, u32 ti, sp_str_t path, u32 pi);
-bool                sp_glob_match_class(sp_glob_token_t* tok, c8 c);
-bool                sp_glob_match_alternates(sp_glob_token_t* tok, sp_da(sp_glob_token_t) tokens, u32 ti, sp_str_t path, u32 pi);
-bool                sp_glob_match_tokens(sp_da(sp_glob_token_t) tokens, sp_str_t path);
-sp_glob_strategy_t  sp_glob_detect_strategy(sp_glob_t* glob);
-sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path);
-void                sp_glob_set_ht_add(sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx);
-void                sp_glob_set_ht_collect(sp_glob_set_index_table_t ht, sp_str_t key, sp_da(u32)* out);
-bool                sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* e, sp_str_t path);
+SP_API sp_glob_t*          sp_glob_new(sp_mem_t mem, const c8* pattern);
+SP_API sp_glob_t*          sp_glob_new_str(sp_mem_t mem, sp_str_t pattern);
+SP_API void                sp_glob_free(sp_glob_t* g);
+SP_API bool                sp_glob_match(sp_glob_t* g, sp_str_t path);
+SP_API sp_glob_set_t*      sp_glob_set_new(sp_mem_t mem);
+SP_API void                sp_glob_set_free(sp_glob_set_t* set);
+SP_API void                sp_glob_set_add(sp_glob_set_t* set, const c8* pattern);
+SP_API void                sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern);
+SP_API void                sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* glob);
+SP_API void                sp_glob_set_build(sp_glob_set_t* set);
+SP_API bool                sp_glob_set_match(sp_glob_set_t* set, sp_str_t path);
+SP_API void                sp_glob_set_matches(sp_glob_set_t* set, sp_str_t path, sp_da(u32)* out);
+SP_IMP void                sp_glob_push_literal(sp_da(sp_glob_token_t)* tokens, c8 c);
+SP_IMP void                sp_glob_push_token(sp_da(sp_glob_token_t)* tokens, sp_glob_token_type_t type);
+SP_IMP sp_glob_err_t       sp_glob_parse_star(sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens);
+SP_IMP sp_glob_err_t       sp_glob_parse_class(sp_mem_t mem, sp_str_t pattern, u32* i, sp_da(sp_glob_token_t)* out);
+SP_IMP sp_glob_err_t       sp_glob_parse_alternates(sp_mem_t mem, sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens);
+SP_IMP sp_glob_err_t       sp_glob_parse(sp_mem_t mem, sp_str_t pattern, sp_da(sp_glob_token_t)* tokens);
+SP_IMP bool                sp_glob_match_impl(sp_da(sp_glob_token_t) tokens, u32 t, sp_str_t path, u32 p);
+SP_IMP bool                sp_glob_match_class(sp_glob_token_t* tok, c8 c);
+SP_IMP bool                sp_glob_match_alternates(sp_glob_token_t* tok, sp_da(sp_glob_token_t) tokens, u32 t, sp_str_t path, u32 p);
+SP_IMP bool                sp_glob_match_tokens(sp_da(sp_glob_token_t) tokens, sp_str_t path);
+SP_IMP sp_glob_strategy_t  sp_glob_detect_strategy(sp_glob_t* glob);
+SP_IMP sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path);
+SP_IMP void                sp_glob_set_ht_add(sp_mem_t mem, sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx);
+SP_IMP void                sp_glob_set_ht_collect(sp_glob_set_index_table_t ht, sp_str_t key, sp_da(u32)* out);
+SP_IMP bool                sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* e, sp_str_t path);
 #endif // SP_GLOB_H
 
 #if defined(SP_IMPLEMENTATION) && !defined(SP_GLOB_IMPLEMENTATION)
@@ -168,7 +171,7 @@ sp_glob_err_t sp_glob_parse_star(sp_str_t pattern, u32* it, sp_da(sp_glob_token_
   return SP_GLOB_ERR_OK;
 }
 
-sp_glob_err_t sp_glob_parse_class(sp_str_t pattern, u32* i, sp_da(sp_glob_token_t)* out) {
+sp_glob_err_t sp_glob_parse_class(sp_mem_t mem, sp_str_t pattern, u32* i, sp_da(sp_glob_token_t)* out) {
   u32 pos = *i + 1;
   u32 len = pattern.len;
 
@@ -183,7 +186,7 @@ sp_glob_err_t sp_glob_parse_class(sp_str_t pattern, u32* i, sp_da(sp_glob_token_
     pos++;
   }
 
-  sp_da(sp_glob_char_range_t) ranges = SP_NULLPTR;
+  sp_da(sp_glob_char_range_t) ranges = sp_da_new(mem, sp_glob_char_range_t);
   c8 last_char = 0;
   bool has_content = false;
 
@@ -226,12 +229,12 @@ sp_glob_err_t sp_glob_parse_class(sp_str_t pattern, u32* i, sp_da(sp_glob_token_
   return SP_GLOB_ERR_UNCLOSED_CLASS;
 }
 
-sp_glob_err_t sp_glob_parse_alternates(sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens) {
+sp_glob_err_t sp_glob_parse_alternates(sp_mem_t mem, sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens) {
   u32 pos = *it + 1;
   u32 len = pattern.len;
 
-  sp_da(sp_da(sp_glob_token_t)) alts = SP_NULLPTR;
-  sp_da(sp_glob_token_t) alt = SP_NULLPTR;
+  sp_da(sp_da(sp_glob_token_t)) alts = sp_da_new(mem, sp_da(sp_glob_token_t));
+  sp_da(sp_glob_token_t) alt = sp_da_new(mem, sp_glob_token_t);
 
   while (pos < len) {
     c8 c = sp_str_at(pattern, (s32)pos);
@@ -248,7 +251,7 @@ sp_glob_err_t sp_glob_parse_alternates(sp_str_t pattern, u32* it, sp_da(sp_glob_
 
     if (c == ',') {
       sp_da_push(alts, alt);
-      alt = SP_NULLPTR;
+      alt = sp_da_new(mem, sp_glob_token_t);
       pos++;
       continue;
     }
@@ -263,7 +266,7 @@ sp_glob_err_t sp_glob_parse_alternates(sp_str_t pattern, u32* it, sp_da(sp_glob_
         break;
       }
       case '[': {
-        sp_try(sp_glob_parse_class(pattern, &pos, &alt));
+        sp_try(sp_glob_parse_class(mem, pattern, &pos, &alt));
         break;
       }
       default: {
@@ -277,14 +280,14 @@ sp_glob_err_t sp_glob_parse_alternates(sp_str_t pattern, u32* it, sp_da(sp_glob_
   return SP_GLOB_ERR_UNCLOSED_ALTERNATES;
 }
 
-sp_glob_err_t sp_glob_parse(sp_str_t pattern, sp_da(sp_glob_token_t)* tokens) {
+sp_glob_err_t sp_glob_parse(sp_mem_t mem, sp_str_t pattern, sp_da(sp_glob_token_t)* tokens) {
   for (u32 it = 0; it < pattern.len;) {
     c8 c = pattern.data[it];
     switch (c) {
       case '?': { sp_glob_push_token(tokens, SP_GLOB_TOK_ANY); break; }
       case '*': { sp_try(sp_glob_parse_star(pattern, &it, tokens)); break; }
-      case '[': { sp_try(sp_glob_parse_class(pattern, &it, tokens)); break; }
-      case '{': { sp_try(sp_glob_parse_alternates(pattern, &it, tokens)); break; }
+      case '[': { sp_try(sp_glob_parse_class(mem, pattern, &it, tokens)); break; }
+      case '{': { sp_try(sp_glob_parse_alternates(mem, pattern, &it, tokens)); break; }
       default:  { sp_glob_push_literal(tokens, c); break; }
     }
     it++;
@@ -306,7 +309,8 @@ bool sp_glob_match_alternates(sp_glob_token_t* tok, sp_da(sp_glob_token_t) token
   sp_da_for(tok->alternates.alts, i) {
     sp_da(sp_glob_token_t) alt = tok->alternates.alts[i];
 
-    sp_da(sp_glob_token_t) combined = SP_NULLPTR;
+    sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
+    sp_da(sp_glob_token_t) combined = sp_da_new(scratch.mem, sp_glob_token_t);
     sp_da_for(alt, j) {
       sp_da_push(combined, alt[j]);
     }
@@ -315,7 +319,9 @@ bool sp_glob_match_alternates(sp_glob_token_t* tok, sp_da(sp_glob_token_t) token
       sp_da_push(combined, tokens[j]);
     }
 
-    if (sp_glob_match_impl(combined, 0, path, pi)) {
+    bool matched = sp_glob_match_impl(combined, 0, path, pi);
+    sp_mem_end_scratch(scratch);
+    if (matched) {
       return true;
     }
   }
@@ -485,15 +491,25 @@ sp_glob_strategy_t sp_glob_detect_strategy(sp_glob_t* glob) {
   return SP_GLOB_STRATEGY_FALLBACK;
 }
 
-sp_glob_t* sp_glob_new(const c8* pattern) {
-  return sp_glob_new_str(sp_str_view(pattern));
+void sp_glob_free(sp_glob_t* g) {
+  if (!g) return;
+  sp_mem_arena_destroy(g->arena);
 }
 
-sp_glob_t* sp_glob_new_str(sp_str_t pattern) {
-  sp_glob_t* g = SP_ALLOC(sp_glob_t);
-  g->pattern = pattern;
+sp_glob_t* sp_glob_new(sp_mem_t mem, const c8* pattern) {
+  return sp_glob_new_str(mem, sp_str_view(pattern));
+}
 
-  if (sp_glob_parse(pattern, &g->tokens)) {
+sp_glob_t* sp_glob_new_str(sp_mem_t mem, sp_str_t pattern) {
+  sp_mem_arena_t* arena = sp_mem_arena_new(mem);
+  sp_mem_t am = sp_mem_arena_as_allocator(arena);
+  sp_glob_t* g = sp_mem_allocator_alloc_type(am, sp_glob_t);
+  g->arena = arena;
+  g->pattern = pattern;
+  sp_da_init(am, g->tokens);
+
+  if (sp_glob_parse(am, pattern, &g->tokens)) {
+    sp_mem_arena_destroy(arena);
     return SP_NULLPTR;
   }
 
@@ -580,20 +596,35 @@ sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path) {
   };
 }
 
-sp_glob_set_t* sp_glob_set_new() {
-  sp_glob_set_t* set = SP_ALLOC(sp_glob_set_t);
-  sp_ht_set_fns(set->literal, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
-  sp_ht_set_fns(set->base_name, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
-  sp_ht_set_fns(set->extension, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
+sp_glob_set_t* sp_glob_set_new(sp_mem_t mem) {
+  sp_mem_arena_t* arena = sp_mem_arena_new(mem);
+  sp_mem_t am = sp_mem_arena_as_allocator(arena);
+  sp_glob_set_t* set = sp_mem_allocator_alloc_type(am, sp_glob_set_t);
+  set->arena = arena;
+  sp_da_init(am, set->globs);
+  sp_da_init(am, set->prefixes);
+  sp_da_init(am, set->suffixes);
+  sp_da_init(am, set->fallbacks);
+  sp_str_ht_init_a(am, set->literal);
+  sp_str_ht_init_a(am, set->base_name);
+  sp_str_ht_init_a(am, set->extension);
   return set;
 }
 
+void sp_glob_set_free(sp_glob_set_t* set) {
+  if (!set) return;
+  sp_da_for(set->globs, i) {
+    sp_glob_free(set->globs[i]);
+  }
+  sp_mem_arena_destroy(set->arena);
+}
+
 void sp_glob_set_add(sp_glob_set_t* set, const c8* pattern) {
-  sp_glob_set_add_ex(set, sp_glob_new(pattern));
+  sp_glob_set_add_ex(set, sp_glob_new(set->arena->allocator, pattern));
 }
 
 void sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern) {
-  sp_glob_set_add_ex(set, sp_glob_new_str(pattern));
+  sp_glob_set_add_ex(set, sp_glob_new_str(set->arena->allocator, pattern));
 }
 
 void sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* g) {
@@ -602,10 +633,11 @@ void sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* g) {
   sp_da_push(set->globs, g);
 }
 
-void sp_glob_set_ht_add(sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx) {
+void sp_glob_set_ht_add(sp_mem_t mem, sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx) {
   sp_da(u32)* indices = sp_ht_getp(*ht, key);
   if (!indices) {
-    sp_ht_insert(*ht, key, SP_NULLPTR);
+    sp_da(u32) fresh = sp_da_new(mem, u32);
+    sp_ht_insert(*ht, key, fresh);
     indices = sp_ht_getp(*ht, key);
   }
   sp_da_push(*indices, idx);
@@ -620,15 +652,15 @@ void sp_glob_set_build(sp_glob_set_t* set) {
 
     switch (g->strategy) {
       case SP_GLOB_STRATEGY_LITERAL: {
-        sp_glob_set_ht_add(&set->literal, g->literal, idx);
+        sp_glob_set_ht_add(sp_mem_arena_as_allocator(set->arena), &set->literal, g->literal, idx);
         break;
       }
       case SP_GLOB_STRATEGY_BASENAME_LITERAL: {
-        sp_glob_set_ht_add(&set->base_name, g->literal, idx);
+        sp_glob_set_ht_add(sp_mem_arena_as_allocator(set->arena), &set->base_name, g->literal, idx);
         break;
       }
       case SP_GLOB_STRATEGY_EXTENSION: {
-        sp_glob_set_ht_add(&set->extension, g->literal, idx);
+        sp_glob_set_ht_add(sp_mem_arena_as_allocator(set->arena), &set->extension, g->literal, idx);
         break;
       }
       case SP_GLOB_STRATEGY_PREFIX: {

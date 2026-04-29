@@ -41,17 +41,3 @@ UTEST_F(mem, slice_iterator) {
   }
   EXPECT_EQ(count, 3u);
 }
-
-UTEST_F(mem, slice_copy) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-
-  u8 data[] = { 0x01, 0x02, 0x03 };
-  sp_mem_slice_t slice = sp_mem_slice(data, 3);
-  sp_mem_slice_t copy = sp_mem_slice_copy(slice);
-
-  EXPECT_NE(copy.data, slice.data);
-  EXPECT_EQ(copy.len, slice.len);
-  EXPECT_TRUE(sp_mem_is_equal(copy.data, slice.data, copy.len));
-
-  sp_mem_end_scratch(scratch);
-}

@@ -148,8 +148,8 @@ s32 demo_select_filter(sp_prompt_ctx_t* ctx) {
 
   if (sp_prompt_submitted(ctx)) {
     const c8* selection = sp_prompt_get_str(ctx);
-    sp_str_t reaction = sp_fmt("{.quote}, eh? A childish response...", sp_fmt_cstr(selection));
-    sp_prompt_note(ctx, sp_str_to_cstr(reaction), "Selection");
+    sp_str_t reaction = sp_fmt_a(ctx->mem, "{.quote}, eh? A childish response...", sp_fmt_cstr(selection)).value;
+    sp_prompt_note(ctx, sp_str_to_cstr_a(ctx->mem, reaction), "Selection");
   }
   else if (sp_prompt_cancelled(ctx)) {
     sp_prompt_cancel(ctx, "You got cold feet...");
@@ -186,7 +186,7 @@ s32 demo_multiselect(sp_prompt_ctx_t* ctx) {
     return 1;
   }
 
-  const c8* selected = sp_prompt_join_selection(options, sp_carr_len(options));
+  const c8* selected = sp_prompt_join_selection(ctx, options, sp_carr_len(options));
   sp_prompt_note(ctx, selected, "Cats");
   sp_prompt_outro(ctx, "Bye!");
   return 0;
@@ -218,7 +218,7 @@ s32 demo_multiselect_filter(sp_prompt_ctx_t* ctx) {
     return 1;
   }
 
-  sp_prompt_note(ctx, sp_prompt_join_selection(options, sp_carr_len(options)), "Cat names");
+  sp_prompt_note(ctx, sp_prompt_join_selection(ctx, options, sp_carr_len(options)), "Cat names");
   sp_prompt_outro(ctx, "Bye!");
   return 0;
 }
@@ -376,7 +376,10 @@ s32 prompt_main(s32 argc, const c8** argv) {
     { "Knight Rider", demo_knight_rider },
   };
 
-  sp_cstr_ht(sp_prompt_demo_fn_t) demos = sp_zero();
+  sp_mem_t mem = sp_mem_os_new();
+
+  sp_ht_a(const c8*, sp_prompt_demo_fn_t) demos = sp_zero();
+  sp_cstr_ht_init_a(mem, demos);
   sp_carr_for(ordered, it) {
     sp_cstr_ht_insert(demos, ordered[it].name, ordered[it].fn);
   }
@@ -384,10 +387,10 @@ s32 prompt_main(s32 argc, const c8** argv) {
   if (argc >= 2) {
     sp_prompt_demo_fn_t* fn = sp_cstr_ht_get(demos, argv[1]);
     if (!fn) {
-      sp_log("usage: prompt [program]");
-      sp_log("programs:");
+      sp_log_a("usage: prompt [program]");
+      sp_log_a("programs:");
       sp_carr_for(ordered, it) {
-        sp_log("  {}", sp_fmt_cstr(ordered[it].name));
+        sp_log_a("  {}", sp_fmt_cstr(ordered[it].name));
       }
 
       return SP_PROMPT_ERROR;
@@ -395,14 +398,14 @@ s32 prompt_main(s32 argc, const c8** argv) {
     run = *fn;
   }
 
-  sp_prompt_ctx_t* ctx = sp_prompt_begin();
+  sp_prompt_ctx_t* ctx = sp_prompt_begin(sp_mem_os_new());
   if (!ctx) {
     return SP_PROMPT_ERROR;
   }
 
   s32 result = 0;
   if (run == SP_NULLPTR) {
-    sp_da(sp_prompt_select_option_t) options = sp_zero();
+    sp_da(sp_prompt_select_option_t) options = sp_da_new(mem, sp_prompt_select_option_t);
     sp_carr_for(ordered, it) {
       sp_prompt_select_option_t option = {
         .label = ordered[it].name,

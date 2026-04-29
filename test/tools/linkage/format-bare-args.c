@@ -3,8 +3,8 @@
 
 s32 main() {
   sp_str_t world = sp_str_lit("world");
-  sp_str_t message = sp_fmt("hello, {}!", world);
-  sp_log_str(message);
+  sp_str_t message = sp_fmt_a(sp_mem_os_new(), "hello, {}!", world).value;
+  sp_log_str_a(message);
 
   SP_EXIT_SUCCESS();
 }

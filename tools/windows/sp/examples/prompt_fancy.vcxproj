@@ -13,17 +13,15 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{21A5F3D1-2C70-4A11-9F8B-1A2B3C4D5E64}</ProjectGuid>
-    <RootNamespace>leak</RootNamespace>
-    <ProjectName>leak</ProjectName>
+    <ProjectGuid>{10000013-0013-4013-8013-000000000013}</ProjectGuid>
+    <RootNamespace>prompt_fancy</RootNamespace>
+    <ProjectName>prompt_fancy</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <SpTargetName>leak</SpTargetName>
-    <SpSource>..\..\..\test\leak.c</SpSource>
-    <SpHeaders>..\..\..\sp.h;..\..\..\test\tools\utest.h;..\..\..\test\tools\process\process.h</SpHeaders>
-    <SpProjectReferences>process.vcxproj</SpProjectReferences>
-    <SpPreprocessorDefinitions></SpPreprocessorDefinitions>
-    <SpAdditionalIncludeDirectories></SpAdditionalIncludeDirectories>
-    <SpAdditionalDependencies></SpAdditionalDependencies>
+    <SpTargetName>prompt_fancy</SpTargetName>
+    <SpSource>..\..\..\..\example\prompt_fancy.c</SpSource>
+    <SpHeaders>..\..\..\..\sp.h;..\..\..\..\sp\sp_prompt.h</SpHeaders>
+    <SpUseImplementationDefines>false</SpUseImplementationDefines>
+    <SpAdditionalIncludeDirectories>..\..\..\..;..\..\..\..\sp</SpAdditionalIncludeDirectories>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup>
@@ -53,8 +51,12 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <Import Project="sp.props" />
+  <Import Project="..\sp.props" />
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)build\vs\$(Configuration)\bin\examples\</OutDir>
+    <IntDir>$(SolutionDir)build\vs\$(Configuration)\obj\examples\$(MSBuildProjectName)\</IntDir>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Import Project="sp.targets" />
+  <Import Project="..\sp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

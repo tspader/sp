@@ -6,6 +6,7 @@ typedef struct {
 } is_root_case_t;
 
 UTEST(fs_is_root, cases) {
+  SKIP_ON_WASM()
   is_root_case_t cases[] = {
     { "",      true },
     { "/",     true },

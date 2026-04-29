@@ -14,6 +14,7 @@ typedef struct {
 } params_t;
 
 typedef struct {
+  sp_mem_t mem;
   sp_tty_mode_t saved_mode;
   bool terminal_modified;
   sp_da(sp_color_t) saved_colors;
@@ -69,35 +70,37 @@ void palette_generate_color(app_t* app) {
   app->needs_redraw = true;
 }
 
-sp_str_t palette_color_to_ansi_bg(sp_color_t c) {
+sp_str_t palette_color_to_ansi_bg(sp_mem_t mem, sp_color_t c) {
   u8 r = (u8)(c.r * 255.0f);
   u8 g = (u8)(c.g * 255.0f);
   u8 b = (u8)(c.b * 255.0f);
-  return sp_fmt("\033[48;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b));
+  return sp_fmt_a(mem, "\033[48;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b)).value;
 }
 
-sp_str_t palette_color_to_hex(sp_color_t c) {
+sp_str_t palette_color_to_hex(sp_mem_t mem, sp_color_t c) {
   u8 r = (u8)(c.r * 255.0f);
   u8 g = (u8)(c.g * 255.0f);
   u8 b = (u8)(c.b * 255.0f);
-  sp_str_builder_t b_out = SP_ZERO_INITIALIZE();
-  sp_str_builder_append_c8(&b_out, '#');
+  sp_io_writer_t b_out = sp_zero();
+  sp_io_writer_from_dyn_mem_a(mem, &b_out);
+  sp_io_write_c8(&b_out, '#');
   for (s32 i = 0; i < 3; i++) {
     u8 v = (i == 0) ? r : (i == 1) ? g : b;
     u8 hi = (v >> 4) & 0xf, lo = v & 0xf;
-    sp_str_builder_append_c8(&b_out, (c8)(hi < 10 ? '0' + hi : 'a' + hi - 10));
-    sp_str_builder_append_c8(&b_out, (c8)(lo < 10 ? '0' + lo : 'a' + lo - 10));
+    sp_io_write_c8(&b_out, (c8)(hi < 10 ? '0' + hi : 'a' + hi - 10));
+    sp_io_write_c8(&b_out, (c8)(lo < 10 ? '0' + lo : 'a' + lo - 10));
   }
-  return sp_str_builder_to_str(&b_out);
+  return sp_io_writer_dyn_mem_as_str(&b_out.dyn_mem);
 }
 
 void palette_render(app_t* app) {
   if (!app->needs_redraw) return;
   app->needs_redraw = false;
 
-  sp_str_builder_t out = SP_ZERO_INITIALIZE();
+  sp_io_writer_t out = sp_zero();
+  sp_io_writer_from_dyn_mem_a(app->mem, &out);
 
-  sp_str_builder_append_cstr(&out, "\033[H\033[2J");
+  sp_io_write_cstr(&out, "\033[H\033[2J", SP_NULLPTR);
 
   u32 num_saved = sp_da_size(app->saved_colors);
   u32 strip_width = 8;
@@ -106,44 +109,44 @@ void palette_render(app_t* app) {
   if (num_saved > 0) {
     sp_for(row, strip_height) {
       sp_da_for(app->saved_colors, i) {
-        sp_str_t bg = palette_color_to_ansi_bg(app->saved_colors[i]);
-        sp_str_builder_append(&out, bg);
+        sp_str_t bg = palette_color_to_ansi_bg(app->mem, app->saved_colors[i]);
+        sp_io_write_str(&out, bg, SP_NULLPTR);
         sp_for(col, strip_width) {
           (void)col;
-          sp_str_builder_append_cstr(&out, " ");
+          sp_io_write_cstr(&out, " ", SP_NULLPTR);
         }
-        sp_str_builder_append_cstr(&out, "\033[0m ");
+        sp_io_write_cstr(&out, "\033[0m ", SP_NULLPTR);
       }
-      sp_str_builder_append_cstr(&out, "\r\n");
+      sp_io_write_cstr(&out, "\r\n", SP_NULLPTR);
     }
-    sp_str_builder_append_cstr(&out, "\r\n");
+    sp_io_write_cstr(&out, "\r\n", SP_NULLPTR);
   }
 
-  sp_str_t current_bg = palette_color_to_ansi_bg(app->current_color);
-  sp_str_builder_append_cstr(&out, "Current:\r\n");
+  sp_str_t current_bg = palette_color_to_ansi_bg(app->mem, app->current_color);
+  sp_io_write_cstr(&out, "Current:\r\n", SP_NULLPTR);
   sp_for(row, strip_height) {
     (void)row;
-    sp_str_builder_append(&out, current_bg);
+    sp_io_write_str(&out, current_bg, SP_NULLPTR);
     sp_for(col, strip_width) {
       (void)col;
-      sp_str_builder_append_cstr(&out, " ");
+      sp_io_write_cstr(&out, " ", SP_NULLPTR);
     }
-    sp_str_builder_append_cstr(&out, "\033[0m\r\n");
+    sp_io_write_cstr(&out, "\033[0m\r\n", SP_NULLPTR);
   }
 
-  sp_str_t hex = palette_color_to_hex(app->current_color);
-  sp_str_builder_append(&out, hex);
-  sp_str_builder_append_cstr(&out, "\r\n\r\n");
+  sp_str_t hex = palette_color_to_hex(app->mem, app->current_color);
+  sp_io_write_str(&out, hex, SP_NULLPTR);
+  sp_io_write_cstr(&out, "\r\n\r\n", SP_NULLPTR);
 
-  sp_str_builder_append_cstr(&out, "[space] regenerate  [enter] save  [q/esc] quit\r\n");
+  sp_io_write_cstr(&out, "[space] regenerate  [enter] save  [q/esc] quit\r\n", SP_NULLPTR);
 
-  sp_os_print(sp_str_builder_to_str(&out));
+  sp_os_print(sp_io_writer_dyn_mem_as_str(&out.dyn_mem));
 }
 
 void palette_print_results(app_t* app) {
   sp_da_for(app->saved_colors, i) {
-    sp_str_t hex = palette_color_to_hex(app->saved_colors[i]);
-    sp_log("{}", sp_fmt_str(hex));
+    sp_str_t hex = palette_color_to_hex(app->mem, app->saved_colors[i]);
+    sp_log_a("{}", sp_fmt_str(hex));
   }
 }
 
@@ -228,11 +231,14 @@ sp_app_config_t app_main(s32 num_args, const c8** args) {
   s32 value = -1;
 
   /* palette [hue] [saturation] [value] */
-  if (num_args > 1) hue        = sp_parse_s32(sp_str_from_cstr(args[1]));
-  if (num_args > 2) saturation = sp_parse_s32(sp_str_from_cstr(args[2]));
-  if (num_args > 3) value      = sp_parse_s32(sp_str_from_cstr(args[3]));
+  if (num_args > 1) hue        = sp_parse_s32(sp_str_view(args[1]));
+  if (num_args > 2) saturation = sp_parse_s32(sp_str_view(args[2]));
+  if (num_args > 3) value      = sp_parse_s32(sp_str_view(args[3]));
 
-  app_t* app = sp_alloc_type(app_t);
+  sp_mem_t mem = sp_mem_os_new();
+  app_t* app = sp_alloc_type_a(mem, app_t);
+  app->mem = mem;
+  app->saved_colors = sp_da_new(app->mem, sp_color_t);
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   app->rand_state = now.ns ^ (now.s << 32) ^ (u64)&app;

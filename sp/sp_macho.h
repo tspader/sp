@@ -28,13 +28,13 @@ typedef struct {
 } sp_macho_symbol_t;
 
 typedef struct {
-  sp_allocator_t allocator;
   sp_mem_arena_t* arena;
+  sp_mem_t mem;
   sp_da(sp_macho_section_t) sections;
   sp_da(sp_macho_symbol_t) symbols;
 } sp_macho_t;
 
-sp_macho_t* sp_macho_new();
+sp_macho_t* sp_macho_new(sp_mem_t mem);
 void sp_macho_free(sp_macho_t* m);
 u32 sp_macho_add_section(sp_macho_t* m, sp_str_t name, u64 align);
 sp_macho_section_t* sp_macho_get_section(sp_macho_t* m, u32 index);
@@ -51,37 +51,35 @@ sp_err_t sp_macho_write_to_file(sp_macho_t* m, sp_str_t path);
 #include <mach-o/nlist.h>
 #include <mach/machine.h>
 
-sp_macho_t* sp_macho_new() {
-  sp_allocator_t allocator = sp_context_get()->allocator;
-  sp_macho_t* m = sp_alloc_type(sp_macho_t);
-  m->allocator = allocator;
-  m->arena = sp_mem_arena_new(SP_MACHO_ARENA_BLOCK_SIZE);
+sp_macho_t* sp_macho_new(sp_mem_t mem) {
+  sp_mem_arena_t* arena = sp_mem_arena_new(mem);
+  sp_mem_t am = sp_mem_arena_as_allocator(arena);
+  sp_macho_t* m = sp_mem_allocator_alloc_type(am, sp_macho_t);
+  m->arena = arena;
+  m->mem = am;
+  sp_da_init(am, m->sections);
+  sp_da_init(am, m->symbols);
   return m;
 }
 
 void sp_macho_free(sp_macho_t* m) {
   if (!m) return;
-  sp_allocator_t allocator = m->allocator;
   sp_mem_arena_destroy(m->arena);
-  sp_mem_allocator_free(allocator, m);
 }
 
 u32 sp_macho_add_section(sp_macho_t* m, sp_str_t name, u64 align) {
   if (!m) return 0;
   if (sp_str_empty(name)) return 0;
 
-  sp_context_push_allocator(sp_mem_arena_as_allocator(m->arena));
-
   u32 index = sp_da_size(m->sections) + 1;
   sp_macho_section_t section = {
-    .name = sp_str_copy(name),
+    .name = sp_str_copy_a(m->mem, name),
     .index = index,
     .align = align,
     .flags = 0,
   };
   sp_da_push(m->sections, section);
 
-  sp_context_pop();
   return index;
 }
 
@@ -96,7 +94,7 @@ u8* sp_macho_section_push(sp_macho_t* m, u32 sect, const void* data, u64 size) {
   if (!s) return SP_NULLPTR;
   if (!size) return SP_NULLPTR;
 
-  sp_context_push_allocator(sp_mem_arena_as_allocator(m->arena));
+  if (!s->data) sp_da_init(m->mem, s->data);
 
   u64 old_size = sp_da_size(s->data);
   u64 new_size = old_size + size;
@@ -107,25 +105,21 @@ u8* sp_macho_section_push(sp_macho_t* m, u32 sect, const void* data, u64 size) {
     sp_mem_copy(data, dest, (u32)size);
   }
 
-  sp_context_pop();
   return dest;
 }
 
 u32 sp_macho_add_symbol(sp_macho_t* m, sp_str_t name, u32 sect, u64 offset, sp_macho_sym_bind_t bind) {
   if (!m) return 0;
 
-  sp_context_push_allocator(sp_mem_arena_as_allocator(m->arena));
-
   u32 idx = sp_da_size(m->symbols);
   sp_macho_symbol_t sym = {
-    .name = sp_str_copy(name),
+    .name = sp_str_copy_a(m->mem, name),
     .value = offset,
     .sect = (u8)sect,
     .bind = bind,
   };
   sp_da_push(m->symbols, sym);
 
-  sp_context_pop();
   return idx;
 }
 
@@ -156,8 +150,8 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
   u64 header_size = sizeof(struct mach_header_64) + sizeofcmds;
 
   u64 file_offset = header_size;
-  sp_da(u64) section_offsets = SP_NULLPTR;
-  sp_da(u64) section_sizes = SP_NULLPTR;
+  sp_da(u64) section_offsets = sp_da_new(m->mem, u64);
+  sp_da(u64) section_sizes = sp_da_new(m->mem, u64);
 
   sp_da_for(m->sections, i) {
     sp_macho_section_t* sec = &m->sections[i];
@@ -357,9 +351,6 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
     sp_try(sp_io_write(out, &zero, 1, SP_NULLPTR));
     strtab_written++;
   }
-
-  sp_da_free(section_offsets);
-  sp_da_free(section_sizes);
 
   return SP_ERR_OK;
 }

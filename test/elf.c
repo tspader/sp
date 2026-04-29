@@ -7,18 +7,31 @@ SP_TEST_MAIN()
 
 struct elf {
   sp_test_file_manager_t file_manager;
+  sp_mem_tracking_t tracker;
+  sp_mem_arena_t* arena;
+  struct { sp_mem_t tracking; sp_mem_t arena; } mem;
 };
 
 UTEST_F_SETUP(elf) {
+  SKIP_ON_WASM()
+  sp_mem_tracking_init(&ut.tracker);
+  ut.mem.tracking = sp_mem_tracking_as_allocator(&ut.tracker);
+  ut.arena = sp_mem_arena_new(ut.mem.tracking);
+  ut.mem.arena = sp_mem_arena_as_allocator(ut.arena);
   sp_test_file_manager_init(&ut.file_manager);
 }
 
 UTEST_F_TEARDOWN(elf) {
+  SKIP_ON_WASM()
   sp_test_file_manager_cleanup(&ut.file_manager);
+  sp_mem_arena_destroy(ut.arena);
+  EXPECT_TRUE(sp_mem_tracking_ok(&ut.tracker));
+  sp_mem_tracking_deinit(&ut.tracker);
 }
 
 UTEST_F(elf, new_creates_section0) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   ASSERT_NE(elf, SP_NULLPTR);
 
   ASSERT_EQ(sp_elf_num_sections(elf), 1u);
@@ -29,10 +42,12 @@ UTEST_F(elf, new_creates_section0) {
   ASSERT_EQ(section0->type, (u32)SHT_NULL);
   ASSERT_EQ(section0->name.len, 0u);
   ASSERT_EQ(section0->alignment, 0u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, section_registered) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   ASSERT_NE(text, SP_NULLPTR);
@@ -43,30 +58,37 @@ UTEST_F(elf, section_registered) {
   ASSERT_EQ(found->index, text->index);
 
   ASSERT_EQ(sp_elf_num_sections(elf), 2u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, section_find_missing) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* found = sp_elf_find_section_by_name(elf, sp_str_lit(".nonexistent"));
   ASSERT_EQ(found, SP_NULLPTR);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, err_section_new_null_elf) {
+  SKIP_ON_WASM()
   sp_elf_section_t* s = sp_elf_add_section(SP_NULLPTR, sp_str_lit(".text"), SHT_PROGBITS, 16);
   ASSERT_EQ(s, SP_NULLPTR);
 }
 
 UTEST_F(elf, err_section_new_null_name) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_str_t empty = SP_ZERO_INITIALIZE();
   sp_elf_section_t* s = sp_elf_add_section(elf, empty, SHT_PROGBITS, 16);
   ASSERT_EQ(s, SP_NULLPTR);
   ASSERT_EQ(sp_elf_num_sections(elf), 1u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, section_invalid_alignment) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* s1 = sp_elf_add_section(elf, sp_str_lit(".bad1"), SHT_PROGBITS, 3);
   ASSERT_EQ(s1, SP_NULLPTR);
@@ -78,10 +100,12 @@ UTEST_F(elf, section_invalid_alignment) {
   ASSERT_EQ(s3, SP_NULLPTR);
 
   ASSERT_EQ(sp_elf_num_sections(elf), 1u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, section_valid_alignment) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* good0 = sp_elf_add_section(elf, sp_str_lit(".good0"), SHT_PROGBITS, 0);
   ASSERT_NE(good0, SP_NULLPTR);
@@ -99,20 +123,24 @@ UTEST_F(elf, section_valid_alignment) {
   ASSERT_NE(good16, SP_NULLPTR);
 
   ASSERT_EQ(sp_elf_num_sections(elf), 6u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, strtab_null_prefix) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* strtab = sp_elf_add_section(elf, sp_str_lit(".strtab"), SHT_STRTAB, 1);
 
   sp_elf_add_string(strtab, sp_str_lit("hello"));
 
   ASSERT_GE(sp_elf_strtab_size(strtab), 1u);
   ASSERT_EQ(strtab->buffer.data[0], 0);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, strtab_null_terminated) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* strtab = sp_elf_add_section(elf, sp_str_lit(".strtab"), SHT_STRTAB, 1);
 
   sp_elf_add_string(strtab, sp_str_lit("hello"));
@@ -121,10 +149,12 @@ UTEST_F(elf, strtab_null_terminated) {
   ASSERT_EQ(strtab->buffer.data[0], 0);
   ASSERT_EQ(strtab->buffer.data[6], 0);
   ASSERT_EQ(strtab->buffer.data[12], 0);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, strtab_index0_empty) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* strtab = sp_elf_add_section(elf, sp_str_lit(".strtab"), SHT_STRTAB, 1);
 
   u32 idx = sp_elf_add_string(strtab, sp_str_lit(""));
@@ -132,15 +162,18 @@ UTEST_F(elf, strtab_index0_empty) {
 
   ASSERT_GE(sp_elf_strtab_size(strtab), 1u);
   ASSERT_EQ(strtab->buffer.data[0], 0);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, err_add_string_null_section) {
+  SKIP_ON_WASM()
   u32 idx = sp_elf_add_string(SP_NULLPTR, sp_str_lit("test"));
   ASSERT_EQ(idx, 0u);
 }
 
 UTEST_F(elf, symtab_entry0_null) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
 
   ASSERT_EQ(sp_elf_section_num_entries(symtab), 1u);
@@ -152,26 +185,32 @@ UTEST_F(elf, symtab_entry0_null) {
   ASSERT_EQ(sym0->st_info, 0u);
   ASSERT_EQ(sym0->st_other, 0u);
   ASSERT_EQ(sym0->st_shndx, 0u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, symtab_shlink) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
 
   sp_elf_section_t* strtab = sp_elf_find_section_by_name(elf, sp_str_lit(".strtab"));
   ASSERT_NE(strtab, SP_NULLPTR);
   ASSERT_EQ(symtab->link, strtab->index);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, symtab_entsize) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
 
   ASSERT_EQ(symtab->entry_size, sizeof(Elf64_Sym));
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, symtab_add_symbol) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
 
   u32 idx = sp_elf_add_symbol(symtab, elf, sp_str_lit("main"), 0x1000, 64, STB_GLOBAL, STT_FUNC, 1);
@@ -185,17 +224,21 @@ UTEST_F(elf, symtab_add_symbol) {
   ASSERT_EQ(ELF64_ST_BIND(sym->st_info), (u32)STB_GLOBAL);
   ASSERT_EQ(ELF64_ST_TYPE(sym->st_info), (u32)STT_FUNC);
   ASSERT_EQ(sym->st_shndx, 1u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, err_add_symbol_null_symtab) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   u32 idx = sp_elf_add_symbol(SP_NULLPTR, elf, sp_str_lit("test"), 0, 0, STB_LOCAL, STT_NOTYPE, 0);
   ASSERT_EQ(idx, 0u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, rela_shlink) {
+  SKIP_ON_WASM()
   UTEST_SKIP();
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
@@ -203,21 +246,25 @@ UTEST_F(elf, rela_shlink) {
   symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
   ASSERT_NE(symtab, SP_NULLPTR);
   ASSERT_EQ(rela->link, symtab->index);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, rela_shinfo) {
+  SKIP_ON_WASM()
   UTEST_SKIP();
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf); SP_UNUSED(symtab);
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
 
   text = sp_elf_find_section_by_name(elf, sp_str_lit(".text"));
   ASSERT_EQ(rela->info, text->index);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, rela_info_encoding) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf); SP_UNUSED(symtab);
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
@@ -230,11 +277,13 @@ UTEST_F(elf, rela_info_encoding) {
   ASSERT_EQ(ELF64_R_SYM(rel->r_info), 5u);
   ASSERT_EQ(ELF64_R_TYPE(rel->r_info), (u32)R_X86_64_PC32);
   ASSERT_EQ(rel->r_addend, -4);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, minimal_elf_format) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
   sp_elf_write(elf, &buf);
   u8* data = buf.dyn_mem.buffer.data;
   u64 size = buf.dyn_mem.buffer.len;
@@ -269,17 +318,20 @@ UTEST_F(elf, minimal_elf_format) {
   ASSERT_EQ(shdrs[0].sh_entsize, 0u);
 
   sp_io_writer_close(&buf);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, err_write_null_elf) {
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  SKIP_ON_WASM()
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
   sp_err_t err = sp_elf_write(SP_NULLPTR, &buf);
   ASSERT_NE(err, SP_OK);
   sp_io_writer_close(&buf);
 }
 
 UTEST_F(elf, symtab_local_ordering) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
 
   sp_elf_add_symbol(symtab, elf, sp_str_lit("global1"), 0x100, 0, STB_GLOBAL, STT_FUNC, 1);
@@ -296,11 +348,13 @@ UTEST_F(elf, symtab_local_ordering) {
   ASSERT_EQ(ELF64_ST_BIND(sp_elf_symtab_get(symtab, 4)->st_info), (u32)STB_GLOBAL);
 
   ASSERT_EQ(symtab->info, 3u);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, symtab_sort_updates_relocs) {
+  SKIP_ON_WASM()
   UTEST_SKIP();
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_t* rela = sp_elf_rela_new(elf, text);
@@ -334,10 +388,12 @@ UTEST_F(elf, symtab_sort_updates_relocs) {
   ASSERT_EQ(ELF64_R_TYPE(sp_elf_rela_get(rela, 0)->r_info), (u32)R_X86_64_PC32);
   ASSERT_EQ(ELF64_R_TYPE(sp_elf_rela_get(rela, 1)->r_info), (u32)R_X86_64_PC32);
   ASSERT_EQ(ELF64_R_TYPE(sp_elf_rela_get(rela, 2)->r_info), (u32)R_X86_64_PC32);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, populated_section_alignment) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_reserve_bytes(text, 10);
@@ -345,7 +401,7 @@ UTEST_F(elf, populated_section_alignment) {
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   sp_elf_section_reserve_bytes(data, 5);
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.dyn_mem.buffer.data;
 
@@ -358,10 +414,12 @@ UTEST_F(elf, populated_section_alignment) {
     ASSERT_EQ(shdrs[i].sh_offset % align, 0u);
   }
   sp_io_writer_close(&buf);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, populated_sections_no_overlap) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   sp_elf_section_reserve_bytes(text, 100);
@@ -369,7 +427,7 @@ UTEST_F(elf, populated_sections_no_overlap) {
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   sp_elf_section_reserve_bytes(data, 50);
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.dyn_mem.buffer.data;
 
@@ -391,15 +449,17 @@ UTEST_F(elf, populated_sections_no_overlap) {
     }
   }
   sp_io_writer_close(&buf);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, populated_nobits_no_file_space) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* bss = sp_elf_add_section(elf, sp_str_lit(".bss"), SHT_NOBITS, 8);
   bss->buffer.size = 1024;
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.dyn_mem.buffer.data;
 
@@ -418,16 +478,18 @@ UTEST_F(elf, populated_nobits_no_file_space) {
   ASSERT_EQ(bss_shdr->sh_size, 1024u);
   ASSERT_EQ(bss_shdr->sh_offset, 0u);
   sp_io_writer_close(&buf);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, roundtrip_minimal) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
-  sp_io_writer_t writer; sp_io_writer_from_dyn_mem(&writer);
+  sp_io_writer_t writer; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &writer);
   sp_elf_write(elf, &writer);
 
   sp_io_reader_t reader; sp_io_reader_from_mem(&reader,writer.dyn_mem.buffer.data, writer.dyn_mem.buffer.len);
-  sp_elf_t* read_elf = sp_elf_read(&reader);
+  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, &reader);
 
   ASSERT_NE(read_elf, SP_NULLPTR);
   ASSERT_EQ(sp_elf_num_sections(read_elf), 1);
@@ -436,10 +498,13 @@ UTEST_F(elf, roundtrip_minimal) {
   ASSERT_EQ(sec0->type, (u32)SHT_NULL);
 
   sp_io_writer_close(&writer);
+  sp_elf_free(elf);
+  sp_elf_free(read_elf);
 }
 
 UTEST_F(elf, roundtrip_populated) {
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  SKIP_ON_WASM()
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   text->flags = SHF_ALLOC | SHF_EXECINSTR;
@@ -460,11 +525,11 @@ UTEST_F(elf, roundtrip_populated) {
   text = sp_elf_find_section_by_name(elf, sp_str_lit(".text"));
   sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, sizeof(code), STB_GLOBAL, STT_FUNC, (u16)text->index);
 
-  sp_io_writer_t writer; sp_io_writer_from_dyn_mem(&writer);
+  sp_io_writer_t writer; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &writer);
   sp_elf_write(elf, &writer);
 
   sp_io_reader_t reader; sp_io_reader_from_mem(&reader,writer.dyn_mem.buffer.data, writer.dyn_mem.buffer.len);
-  sp_elf_t* read_elf = sp_elf_read(&reader);
+  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, &reader);
 
   ASSERT_NE(read_elf, SP_NULLPTR);
 
@@ -494,9 +559,12 @@ UTEST_F(elf, roundtrip_populated) {
   ASSERT_NE(r_strtab, SP_NULLPTR);
 
   sp_io_writer_close(&writer);
+  sp_elf_free(elf);
+  sp_elf_free(read_elf);
 }
 
 UTEST_F(elf, err_read_invalid_magic) {
+  SKIP_ON_WASM()
   u8 bad_data[64] = {0};
   bad_data[0] = 'B';
   bad_data[1] = 'A';
@@ -504,12 +572,14 @@ UTEST_F(elf, err_read_invalid_magic) {
   bad_data[3] = '!';
 
   sp_io_reader_t reader; sp_io_reader_from_mem(&reader,bad_data, sizeof(bad_data));
-  sp_elf_t* read_elf = sp_elf_read(&reader);
+  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, &reader);
 
   ASSERT_EQ(read_elf, SP_NULLPTR);
+  sp_elf_free(read_elf);
 }
 
 UTEST_F(elf, err_read_invalid_class) {
+  SKIP_ON_WASM()
   u8 bad_data[64] = {0};
   bad_data[0] = 0x7f;
   bad_data[1] = 'E';
@@ -519,33 +589,37 @@ UTEST_F(elf, err_read_invalid_class) {
   bad_data[EI_DATA] = ELFDATA2LSB;
 
   sp_io_reader_t reader; sp_io_reader_from_mem(&reader,bad_data, sizeof(bad_data));
-  sp_elf_t* read_elf = sp_elf_read(&reader);
+  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, &reader);
 
   ASSERT_EQ(read_elf, SP_NULLPTR);
+  sp_elf_free(read_elf);
 }
 
 UTEST_F(elf, oracle_readelf_minimal) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
   SKIP_ON_WIN32()
   SKIP_ON_MACOS()
 
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
   sp_elf_write_to_file(elf, path);
 
-  sp_ps_output_t ps = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t ps = sp_ps_run_a(sp_mem_get_scratch(), (sp_ps_config_t){
     .command = sp_str_lit("readelf"),
     .args = {sp_str_lit("-a"), path},
   });
   ASSERT_EQ(ps.status.exit_code, 0);
+  sp_elf_free(elf);
 }
 
 UTEST_F(elf, oracle_readelf_populated) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
   SKIP_ON_WIN32()
   SKIP_ON_MACOS()
 
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* text = sp_elf_add_section(elf, sp_str_lit(".text"), SHT_PROGBITS, 16);
   text->flags = SHF_ALLOC | SHF_EXECINSTR;
@@ -569,15 +643,17 @@ UTEST_F(elf, oracle_readelf_populated) {
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("populated.o"));
   sp_elf_write_to_file(elf, path);
 
-  sp_ps_output_t ps = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t ps = sp_ps_run_a(sp_mem_get_scratch(), (sp_ps_config_t){
     .command = sp_str_lit("readelf"),
     .args = {sp_str_lit("-a"), path},
   });
   ASSERT_EQ(ps.status.exit_code, 0);
+  sp_elf_free(elf);
 }
 
 
 UTEST_F(elf, oracle_cc_read) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
   SKIP_ON_WIN32()
   SKIP_ON_MACOS()
@@ -594,14 +670,14 @@ UTEST_F(elf, oracle_cc_read) {
   sp_io_writer_close(&c_file);
 
   sp_str_t fixture_path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
-  sp_ps_output_t compile = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t compile = sp_ps_run_a(sp_mem_get_scratch(), (sp_ps_config_t){
     .command = sp_str_lit("cc"),
     .args = {sp_str_lit("-c"), c_path, sp_str_lit("-o"), fixture_path},
   });
   ASSERT_EQ(compile.status.exit_code, 0);
-  EXPECT_TRUE(sp_fs_exists(fixture_path));
+  EXPECT_TRUE(sp_fs_exists_a(fixture_path));
 
-  sp_elf_t* read_elf = sp_elf_read_from_file(fixture_path);
+  sp_elf_t* read_elf = sp_elf_read_from_file(ut.mem.tracking, fixture_path);
   ASSERT_NE(read_elf, SP_NULLPTR);
   ASSERT_GT(sp_elf_num_sections(read_elf), 1);
 
@@ -613,14 +689,16 @@ UTEST_F(elf, oracle_cc_read) {
   ASSERT_NE(symtab, SP_NULLPTR);
   ASSERT_EQ(symtab->type, (u32)SHT_SYMTAB);
   ASSERT_GT(sp_elf_section_num_entries(symtab), 0u);
+  sp_elf_free(read_elf);
 }
 
 UTEST_F(elf, oracle_cc_link) {
+  SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
   SKIP_ON_WIN32()
   SKIP_ON_MACOS()
 
-  sp_elf_t* elf = sp_elf_new_with_null_section();
+  sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   data->flags = SHF_ALLOC | SHF_WRITE;
@@ -656,15 +734,16 @@ UTEST_F(elf, oracle_cc_link) {
   sp_io_writer_close(&f);
 
   sp_str_t bin_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration"));
-  sp_ps_output_t compile = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t compile = sp_ps_run_a(sp_mem_get_scratch(), (sp_ps_config_t){
     .command = sp_str_lit("cc"),
     .args = {c_path, obj_path, sp_str_lit("-o"), bin_path},
   });
   ASSERT_EQ(compile.status.exit_code, 0);
-  EXPECT_TRUE(sp_fs_exists(bin_path));
+  EXPECT_TRUE(sp_fs_exists_a(bin_path));
 
-  sp_ps_output_t run = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t run = sp_ps_run_a(sp_mem_get_scratch(), (sp_ps_config_t){
     .command = bin_path,
   });
   ASSERT_EQ(run.status.exit_code, 0);
+  sp_elf_free(elf);
 }
