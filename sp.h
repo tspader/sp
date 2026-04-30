@@ -1825,24 +1825,6 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_as_u8(ht) ((u8*)(ht))
 #define sp_ht_field_offset_u8(ht, field) (sp_ht_field_as_u8(ht, field) - sp_ht_as_u8(ht))
 
-#define sp_ht_init(ht)                                                                    \
-  do {                                                                                    \
-    (ht)                       = sp_ht_alloc_type(ht, sizeof(*(ht)));                     \
-    (ht)->data                 = sp_ht_alloc_type((ht)->data, 2 * sizeof((ht)->data[0])); \
-    (ht)->info.allocator       = sp_context_get()->allocator;                             \
-    (ht)->size                 = 0;                                                       \
-    (ht)->capacity             = 2;                                                       \
-    (ht)->info.size.key        = sizeof((ht)->data[0].key);                               \
-    (ht)->info.size.value      = sizeof((ht)->data[0].val);                               \
-    (ht)->info.stride.entry    = sp_ht_data_u8_n(ht, 1) - sp_ht_data_u8_n(ht, 0);         \
-    (ht)->info.stride.value    = sp_ht_data_offset_u8(ht, val);                           \
-    (ht)->info.stride.kv       = sp_ht_data_offset_u8(ht, state);                         \
-    (ht)->info.header.size     = sp_ht_field_offset_u8(ht, size);                         \
-    (ht)->info.header.capacity = sp_ht_field_offset_u8(ht, capacity);                     \
-    (ht)->info.fn.hash         = sp_ht_on_hash_key;                                       \
-    (ht)->info.fn.compare      = sp_ht_on_compare_key;                                    \
-  } while (0)
-
 #define sp_ht_init_a(mem, ht)                                                                  \
   do {                                                                                         \
     (ht)                       = sp_ht_alloc_type_a((mem), ht, sizeof(*(ht)));                 \
@@ -1866,12 +1848,6 @@ SP_BEGIN_EXTERN_C()
     (ht)->tmp_key = (k);                                               \
     (ht)->tmp_val = (v);                                               \
     sp_ht_insert_impl(ht, &(ht)->tmp_key, &(ht)->tmp_val, (ht)->info); \
-  } while (0)
-
-#define sp_ht_insert(ht, k, v)  \
-  do { \
-    sp_ht_ensure(ht); \
-    sp_ht_insert_ex(ht, (k), v); \
   } while (0)
 
 #define sp_ht_get_key_n(ht, n) \
@@ -1965,11 +1941,6 @@ SP_BEGIN_EXTERN_C()
 #define sp_str_ht_ensure(ht) \
   if (!(ht)) sp_str_ht_init(ht)
 
-#define sp_str_ht_init(ht)                       \
-  sp_ht_init(ht);                                \
-  (ht)->info.fn.hash = sp_ht_on_hash_str_key;    \
-  (ht)->info.fn.compare = sp_ht_on_compare_str_key
-
 #define sp_str_ht_init_a(__a, ht)                       \
   do {                                                  \
     sp_ht_init_a((__a), ht);                            \
@@ -2007,11 +1978,6 @@ SP_BEGIN_EXTERN_C()
 
 #define sp_cstr_ht_ensure(ht) \
   if (!(ht)) sp_cstr_ht_init(ht)
-
-#define sp_cstr_ht_init(ht)                       \
-  sp_ht_init(ht);                                 \
-  (ht)->info.fn.hash = sp_ht_on_hash_cstr_key;    \
-  (ht)->info.fn.compare = sp_ht_on_compare_cstr_key
 
 #define sp_cstr_ht_init_a(__a, ht)                      \
   do {                                                  \
@@ -6240,10 +6206,8 @@ u64 sp_ht_get_key_index_fn(void** data, void* key, u64 capacity, sp_ht_info_t in
 void sp_ht_resize_impl(void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info) {
   if (!data || new_cap <= old_cap) return;
 
-  sp_context_push_allocator(info.allocator);
-
   void* old_data = *data;
-  void* new_data = sp_alloc(new_cap * info.stride.entry);
+  void* new_data = sp_alloc_a(info.allocator, new_cap * info.stride.entry);
 
   for (u64 i = 0; i < old_cap; ++i) {
     u64 offset = i * info.stride.entry;
@@ -6262,13 +6226,11 @@ void sp_ht_resize_impl(void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info)
     *(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride.entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
   }
 
-  sp_free(old_data);
+  sp_free_a(info.allocator, old_data);
   *data = new_data;
-  sp_context_pop();
 }
 
 void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
-  sp_context_push_allocator(info.allocator);
   u8* base = (u8*)ht;
   void** data = (void**)base;
   u64* size = (u64*)(base + info.header.size);
@@ -6303,7 +6265,6 @@ void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
     if (info.fn.compare(k, key, info.size.key)) {
       u8* entry = (u8*)(*data) + offset;
       sp_mem_copy(val, entry + info.stride.value, info.size.value);
-      sp_context_pop();
       return;
     }
   }
@@ -6314,7 +6275,6 @@ void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
   sp_mem_copy(val, entry + info.stride.value, info.size.value);
   *(sp_ht_entry_state*)(entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
   (*size)++;
-  sp_context_pop();
 }
 
 sp_ht_it_t sp_ht_it_init_fn(void** data, u64 capacity, sp_ht_info_t info) {
