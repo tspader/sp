@@ -571,8 +571,8 @@ UTEST_F(ps, env_inherit) {
 }
 
 UTEST_F(ps, env_existing) {
-  sp_env_t env = SP_ZERO_INITIALIZE();
-  sp_env_init(&env, sp_context_get()->allocator);
+  sp_env_t env = sp_zero();
+  sp_env_init(&env, ut.mem);
   sp_env_insert(&env, sp_str_lit("jerry"), sp_str_lit("garcia"));
   sp_env_insert(&env, sp_str_lit("phil"), sp_str_lit("lesh"));
   sp_env_insert(&env, sp_str_lit("bobby"), sp_str_lit("weir"));

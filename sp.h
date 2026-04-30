@@ -2206,6 +2206,8 @@ typedef struct {
 typedef sp_ht_a(sp_str_t, sp_str_t) sp_env_table_t;
 
 typedef struct {
+  sp_mem_t mem;
+  sp_mem_arena_t* arena;
   sp_env_table_t vars;
 } sp_env_t;
 
@@ -3258,7 +3260,7 @@ struct sp_fmon {
 	sp_fmon_os_t* os;
 	sp_fmon_event_kind_t events_to_watch;
 	u32 debounce_time_ms;
-  sp_mem_t allocator;
+  sp_mem_t mem;
 };
 
 
@@ -3417,7 +3419,7 @@ SP_API void          sp_fs_copy_glob_a(sp_str_t from, sp_str_t glob, sp_str_t to
 #define sp_fs_for(mem, dir, it) \
   for (sp_fs_it_t it = sp_fs_it_new_a(mem, dir); sp_fs_it_valid_a(&it); sp_fs_it_next_a(&it))
 #define sp_fs_for_recursive(mem, dir, it) \
-  for (sp_fs_it_t it = sp_fs_it_new_recursive_a(mem, dir); sp_fs_it_valid(&it); sp_fs_it_next(&it))
+  for (sp_fs_it_t it = sp_fs_it_new_recursive_a(mem, dir); sp_fs_it_valid_a(&it); sp_fs_it_next_a(&it))
 
 
 SP_API sp_mem_t              sp_mem_os_new();
@@ -8778,8 +8780,9 @@ SP_PRIVATE u32 sp_win32_find_name_len(const u16* name) {
 }
 
 bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
-  c8 cstr [SP_PATH_MAX]
-  sp_str_t pattern = sp_fs_join_path_a(path, sp_str_lit("*"));
+  c8 cstr [SP_PATH_MAX] = sp_zero();
+  sp_mem_t mem = sp_mem_os_new(); // @spader mem from stack buffer
+  sp_str_t pattern = sp_fs_join_path_a(mem, path, sp_str_lit("*"));
   sp_sys_nt_path_t nt = SP_ZERO_INITIALIZE();
   if (!SP_NT_SUCCESS(sp_sys_nt_path(pattern, &nt))) {
     return false;
@@ -9711,23 +9714,26 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
 #endif
 
 void sp_env_init(sp_env_t* env, sp_mem_t mem) {
-  *env = SP_ZERO_STRUCT(sp_env_t);
+  *env = sp_zero_struct(sp_env_t);
+  env->mem = mem;
+  env->arena = sp_mem_arena_new_with_allocator(mem, 4096, SP_MEM_ARENA_MODE_NO_REALLOC, SP_MEM_ALIGNMENT);
   sp_str_ht_init_a(mem, env->vars);
 }
 
 sp_env_t sp_env_capture(sp_mem_t mem) {
-  sp_env_t env = SP_ZERO_INITIALIZE();
-  sp_str_ht_init_a(mem, env.vars);
-  for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
-    sp_str_ht_insert(env.vars, sp_str_copy(it.key), sp_str_copy(it.value));
-  }
+  sp_env_t env = sp_zero();
+  sp_env_init(&env, mem);
+  sp_mem_t arena = sp_mem_arena_as_allocator(env.arena);
 
+  for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
+    sp_env_insert(&env, it.key, it.value);
+  }
   return env;
 }
 
 sp_env_t sp_env_copy(sp_env_t* env, sp_mem_t mem) {
   sp_env_t copy = SP_ZERO_INITIALIZE();
-  sp_str_ht_init_a(mem, copy.vars);
+  sp_env_init(&copy, mem);
 
   sp_str_ht_for(env->vars, it) {
     sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
@@ -9752,7 +9758,8 @@ bool sp_env_contains(sp_env_t* env, sp_str_t name) {
 }
 
 void sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value) {
-  sp_str_ht_insert(env->vars, name, value);
+  sp_mem_t arena = sp_mem_arena_as_allocator(env->arena);
+  sp_str_ht_insert(env->vars, sp_str_copy_a(arena, name), sp_str_copy_a(arena, value));
 }
 
 void sp_env_erase(sp_env_t* env, sp_str_t name) {
@@ -9761,7 +9768,7 @@ void sp_env_erase(sp_env_t* env, sp_str_t name) {
 
 void sp_env_destroy(sp_env_t* env) {
   sp_str_ht_free(env->vars);
-  env->vars = SP_NULLPTR;
+  *env = sp_zero_struct(sp_env_t);
 }
 
 
@@ -10547,6 +10554,7 @@ SP_PRIVATE void sp_ps_set_blocking(s32 fd);
 
 SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem) {
   sp_env_t env = SP_ZERO_INITIALIZE();
+  sp_env_init(&env, mem);
 
   switch (config->mode) {
     case SP_PS_ENV_INHERIT: {
@@ -11834,7 +11842,7 @@ SP_PRIVATE void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
 SP_PRIVATE void sp_fmon_os_process_changes(sp_fmon_t* monitor);
 
 void sp_fmon_init_a(sp_mem_t mem, sp_fmon_t* monitor, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* userdata) {
-  monitor->allocator = mem;
+  monitor->mem = mem;
   monitor->callback = fn;
   monitor->events_to_watch = events;
   monitor->userdata = userdata;
@@ -11908,6 +11916,7 @@ struct sp_fmon_os {
   sp_mutex_t mutex;
   sp_mem_arena_t* watch_arena;
   sp_mem_arena_t* event_arena;
+  struct { sp_mem_t watch; sp_mem_t event; } mem;
 };
 #else
 struct sp_fmon_os {
@@ -11929,8 +11938,8 @@ SP_PRIVATE void sp_win32_fmon_issue_read(sp_fmon_t* monitor, sp_fmon_dir_t* info
 
 void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* os = SP_ALLOC(sp_fmon_os_t);
-  sp_da_init(monitor->allocator, os->dirs);
-  sp_da_init(monitor->allocator, os->watch_files);
+  sp_da_init(monitor->mem, os->dirs);
+  sp_da_init(monitor->mem, os->watch_files);
   monitor->os = os;
 }
 
@@ -11979,7 +11988,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   sp_fmon_dir_t dir = SP_ZERO_INITIALIZE();
   dir.overlapped.hEvent = event;
   dir.handle = handle;
-  dir.path = sp_fs_canonicalize_path(path);
+  dir.path = sp_fs_canonicalize_path_a(monitor->mem, path);
   dir.notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
   sp_mem_zero(dir.notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
 
@@ -11990,14 +11999,15 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
 
 void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
   sp_fmon_os_t* os = monitor->os;
-  sp_str_t canonical = sp_fs_canonicalize_path(file_path);
+  sp_str_t canonical = sp_fs_canonicalize_path_a(monitor->mem, file_path);
   sp_da_push(os->watch_files, canonical);
 
   sp_str_t dir_path = sp_fs_parent_path(canonical);
   if (dir_path.len > 0) {
     bool found = false;
     sp_da_for(os->dirs, i) {
-      if (sp_str_equal(sp_fs_canonicalize_path(os->dirs[i].path), dir_path)) {
+      sp_str_t path = sp_fs_canonicalize_path_a(monitor->mem, os->dirs[i].path); // @spader
+      if (sp_str_equal(path, dir_path)) {
         found = true;
         break;
       }
@@ -12054,7 +12064,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
       if (events != SP_FILE_CHANGE_EVENT_NONE) {
         sp_str_t partial_path_str = sp_win32_utf16_to_utf8(&notify->FileName[0], (s32)(notify->FileNameLength / sizeof(WCHAR)));
 
-        sp_str_t full_path = sp_fs_join_path(info->path, partial_path_str);
+        sp_str_t full_path = sp_fs_join_path_a(monitor->mem, info->path, partial_path_str); // @spader
 
         if (sp_win32_fmon_file_matches(os, full_path)) {
           sp_str_t file_name = sp_fs_get_name(full_path);
@@ -12123,9 +12133,9 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
     linux_monitor->fd = 0;
   }
 
-  sp_da_init(monitor->allocator, linux_monitor->fds);
-  sp_da_init(monitor->allocator, linux_monitor->paths);
-  sp_str_ht_init_a(monitor->allocator, linux_monitor->files);
+  sp_da_init(monitor->mem, linux_monitor->fds);
+  sp_da_init(monitor->mem, linux_monitor->paths);
+  sp_str_ht_init_a(monitor->mem, linux_monitor->files);
 
   monitor->os = linux_monitor;
 }
@@ -12169,7 +12179,7 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
 
 void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
-  sp_str_t canonical = sp_fs_canonicalize_path_a(monitor->allocator, file_path);
+  sp_str_t canonical = sp_fs_canonicalize_path_a(monitor->mem, file_path);
   sp_str_ht_insert(os->files, canonical, 1);
 
   sp_str_t dir_path = sp_fs_parent_path(canonical);
@@ -12209,7 +12219,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 
         if (event->len > 0 && event->name[0] != '\0') {
           file_name = sp_str_from_cstr(event->name);
-          file_path = sp_fs_join_path_a(monitor->allocator, dir_path, file_name);
+          file_path = sp_fs_join_path_a(monitor->mem, dir_path, file_name);
         } else {
           file_path = sp_str_copy(dir_path);
           file_name = sp_fs_get_name(file_path);
@@ -12381,15 +12391,15 @@ SP_PRIVATE void sp_fmon_fsevents_recreate_stream(sp_fmon_t* monitor) {
 }
 
 void sp_fmon_os_init(sp_fmon_t* monitor) {
-  sp_context_push_allocator(monitor->allocator);
+  sp_context_push_allocator(monitor->mem);
   sp_fmon_os_t* os = sp_alloc_type(sp_fmon_os_t);
   os->queue = dispatch_queue_create("sp.fmon", DISPATCH_QUEUE_SERIAL);
   os->monitor = monitor;
   sp_mutex_init(&os->mutex, SP_MUTEX_PLAIN);
   os->watch_arena = sp_mem_arena_new(SP_FMON_ARENA_SIZE);
   os->event_arena = sp_mem_arena_new(SP_FMON_ARENA_SIZE);
-  sp_da_init(monitor->allocator, os->watch_paths);
-  sp_da_init(monitor->allocator, os->watch_files);
+  sp_da_init(monitor->mem, os->watch_paths);
+  sp_da_init(monitor->mem, os->watch_files);
   monitor->os = os;
   sp_context_pop();
 }
@@ -12397,7 +12407,7 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
 void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   sp_require(monitor);
   sp_require(monitor->os);
-  sp_context_push_allocator(monitor->allocator);
+  sp_context_push_allocator(monitor->mem);
 
   sp_fmon_os_t* os = monitor->os;
 
@@ -12420,17 +12430,14 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
 
 void sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir) {
   sp_mutex_lock(&os->mutex);
-  sp_context_push_allocator(sp_mem_arena_as_allocator(os->watch_arena));
-  sp_da_push(os->watch_paths, sp_str_copy(dir));
+  sp_da_push(os->watch_paths, sp_str_copy_a(os->mem.watch, dir));
   sp_context_pop();
   sp_mutex_unlock(&os->mutex);
 }
 
 void sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file) {
   sp_mutex_lock(&os->mutex);
-  sp_context_push_allocator(sp_mem_arena_as_allocator(os->watch_arena));
-  sp_da_push(os->watch_files, sp_fs_canonicalize_path(file));
-  sp_context_pop();
+  sp_da_push(os->watch_files, sp_fs_canonicalize_path_a(os->mem.watch, file));
   sp_mutex_unlock(&os->mutex);
 }
 
@@ -14479,32 +14486,22 @@ void sp_fs_it_deinit_a(sp_fs_it_t* it) {
 }
 
 sp_da(sp_fs_entry_t) sp_fs_collect_a(sp_mem_t mem, sp_str_t path) {
-  sp_da(sp_fs_entry_t) entries = SP_NULLPTR;
+  sp_da(sp_fs_entry_t) entries = sp_zero();
   sp_da_init(mem, entries);
 
-  sp_fs_it_t it = SP_ZERO_INITIALIZE();
-  sp_da_init(mem, it.stack);
-  sp_fs_it_begin_a(&it, path);
-  while (sp_fs_it_valid_a(&it)) {
+  sp_fs_for(mem, path, it) {
     sp_da_push(entries, it.entry);
-    sp_fs_it_next_a(&it);
   }
-  sp_fs_it_deinit_a(&it);
   return entries;
 }
 
 sp_da(sp_fs_entry_t) sp_fs_collect_recursive_a(sp_mem_t mem, sp_str_t path) {
-  sp_da(sp_fs_entry_t) entries = SP_NULLPTR;
+  sp_da(sp_fs_entry_t) entries = sp_zero();
   sp_da_init(mem, entries);
 
-  sp_fs_it_t it = { .recursive = true };
-  sp_da_init(mem, it.stack);
-  sp_fs_it_begin_a(&it, path);
-  while (sp_fs_it_valid_a(&it)) {
+  sp_fs_for_recursive(mem, path, it) {
     sp_da_push(entries, it.entry);
-    sp_fs_it_next_a(&it);
   }
-  sp_fs_it_deinit_a(&it);
   return entries;
 }
 
