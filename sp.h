@@ -2065,15 +2065,6 @@ SP_API bool        sp_ht_on_compare_cstr_key(void* ka, void* kb, u64 size);
 //  ░░░░░░░░░     ░░░░░    ░░░░░   ░░░░░ ░░░░░ ░░░░░    ░░░░░   ░░░░░░░░░
 // @string
 typedef struct {
-  sp_io_writer_t* writer;
-
-  struct {
-    sp_str_t word;
-    u32 level;
-  } indent;
-} sp_str_builder_t;
-
-typedef struct {
   void* user_data;
 
   sp_io_writer_t* writer;
@@ -2223,20 +2214,6 @@ SP_API sp_str_t        sp_str_map_kernel_to_upper(sp_str_map_context_t* context)
 SP_API sp_str_t        sp_str_map_kernel_to_lower(sp_str_map_context_t* context);
 SP_API sp_str_t        sp_str_map_kernel_pascal_case(sp_str_map_context_t* context);
 SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void* b);
-SP_API void            sp_str_builder_append_utf8(sp_str_builder_t* builder, u32 codepoint);
-SP_API void            sp_str_builder_indent(sp_str_builder_t* builder);
-SP_API void            sp_str_builder_dedent(sp_str_builder_t* builder);
-SP_API void            sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str);
-SP_API void            sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str);
-SP_API void            sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c);
-SP_API void            sp_str_builder_new_line(sp_str_builder_t* builder);
-SP_API u64             sp_str_builder_len(sp_str_builder_t* builder);
-SP_API sp_str_t        sp_str_builder_as_str(sp_str_builder_t* builder);
-SP_API sp_str_t        sp_str_builder_to_str(sp_str_builder_t* builder);
-SP_API const c8*       sp_str_builder_to_cstr(sp_str_builder_t* builder);
-SP_API sp_mem_buffer_t sp_str_builder_into_buffer(sp_str_builder_t* builder);
-SP_API void            sp_str_builder_free(sp_str_builder_t* builder);
-SP_API sp_str_builder_t sp_str_builder_from_writer(sp_io_writer_t* writer);
 
 
 
@@ -2661,8 +2638,8 @@ typedef struct {
 } sp_fmt_spec_t;
 
 typedef struct sp_fmt_arg sp_fmt_arg_t;
-SP_TYPEDEF_FN(void, sp_fmt_fn_t, sp_str_builder_t*, sp_fmt_arg_t*, sp_fmt_arg_t*);
-SP_TYPEDEF_FN(void, sp_fmt_transform_fn_t, sp_str_builder_t*, sp_str_t, sp_fmt_arg_t*, sp_fmt_arg_t*);
+SP_TYPEDEF_FN(void, sp_fmt_fn_t, sp_io_writer_t*, sp_fmt_arg_t*, sp_fmt_arg_t*);
+SP_TYPEDEF_FN(void, sp_fmt_transform_fn_t, sp_io_writer_t*, sp_str_t, sp_fmt_arg_t*, sp_fmt_arg_t*);
 
 struct sp_fmt_arg {
   sp_fmt_arg_kind_t id;
@@ -2778,7 +2755,6 @@ typedef struct {
   })
 
 void sp_fmt_directive_register(const c8* name, sp_fmt_directive_t directive);
-SP_API void sp_fmt_render_default(sp_str_builder_t* builder, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
 SP_API u8        sp_parse_u8(sp_str_t str);
 SP_API u16       sp_parse_u16(sp_str_t str);
@@ -3358,13 +3334,6 @@ typedef struct {
 static sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name);
 static void sp_fmt_directive_reset();
 static void sp_fmt_register_builtins();
-void sp_fmt_apply_spec(sp_str_builder_t* out, sp_str_t content, sp_fmt_spec_t spec);
-void sp_fmt_apply_spec_wrapped(sp_str_builder_t* out, sp_str_t before, sp_str_t content, sp_str_t after, sp_fmt_spec_t spec);
-static void sp_fmt_write_u64(sp_str_builder_t* builder, u64 value);
-static void sp_fmt_write_s64(sp_str_builder_t* builder, s64 value);
-static void sp_fmt_write_f64(sp_str_builder_t* builder, f64 value, u32 precision);
-static void sp_fmt_write_ptr(sp_str_builder_t* builder, void* value);
-
 #endif // SP_PRIVATE_HEADER or SP_IMPLEMENTATION
 
 
@@ -6720,307 +6689,6 @@ sp_err_t sp_fmt_parse_specifier(sp_fmt_parser_t* p, sp_fmt_spec_t* spec) {
 }
 
 
-static void sp_fmt_append_range(sp_str_builder_t* builder, const c8* start, const c8* end) {
-  sp_str_t s = { .data = start, .len = (u32)(end - start) };
-  sp_str_builder_append(builder, s);
-}
-
-static void sp_fmt_write_u64(sp_str_builder_t* builder, u64 value) {
-  c8 buf[20];
-  c8* end = buf + sizeof(buf);
-  c8* start = sp_fmt_uint_to_buf_dec(value, end);
-  sp_fmt_append_range(builder, start, end);
-}
-
-static void sp_fmt_write_s64(sp_str_builder_t* builder, s64 value) {
-  c8 buf[21];
-  c8* end = buf + sizeof(buf);
-  u64 abs = (value < 0) ? ((u64)(-(value + 1)) + 1) : (u64)value;
-  c8* start = sp_fmt_uint_to_buf_dec(abs, end);
-  if (value < 0) *--start = '-';
-  sp_fmt_append_range(builder, start, end);
-}
-
-static void sp_fmt_write_ptr(sp_str_builder_t* builder, void* value) {
-  c8 buf[18];
-  c8* end = buf + sizeof(buf);
-  c8* start = sp_fmt_uint_to_buf_hex((u64)(uintptr_t)value, end);
-  *--start = 'x';
-  *--start = '0';
-  sp_fmt_append_range(builder, start, end);
-}
-
-static void sp_fmt_write_f64(sp_str_builder_t* builder, f64 value, u32 precision) {
-  union { f64 f; u64 u; } bits;
-  bits.f = value;
-  u64  exponent = (bits.u >> 52) & 0x7ffULL;
-  u64  mantissa = bits.u & 0x000fffffffffffffULL;
-  bool is_neg   = (bits.u >> 63) != 0;
-
-  if (exponent == 0x7ff) {
-    if (mantissa == 0) {
-      sp_str_builder_append_cstr(builder, is_neg ? "-inf" : "inf");
-    } else {
-      sp_str_builder_append_cstr(builder, "nan");
-    }
-    return;
-  }
-
-  if (is_neg) {
-    sp_str_builder_append_c8(builder, '-');
-    value = -value;
-  }
-
-  if (precision > 18) precision = 18;
-
-  static const u64 pow10[] = {
-    1ULL, 10ULL, 100ULL, 1000ULL, 10000ULL, 100000ULL, 1000000ULL,
-    10000000ULL, 100000000ULL, 1000000000ULL, 10000000000ULL,
-    100000000000ULL, 1000000000000ULL, 10000000000000ULL,
-    100000000000000ULL, 1000000000000000ULL, 10000000000000000ULL,
-    100000000000000000ULL, 1000000000000000000ULL,
-  };
-  u64 scale = pow10[precision];
-
-  if (value >= 1.8446744073709552e19) {
-    sp_str_builder_append_cstr(builder, "inf");
-    return;
-  }
-
-  u64 int_part = (u64)value;
-  f64 frac     = value - (f64)int_part;
-  u64 frac_scaled = (u64)(frac * (f64)scale + 0.5);
-  if (frac_scaled >= scale) {
-    int_part += 1;
-    frac_scaled -= scale;
-  }
-
-  sp_fmt_write_u64(builder, int_part);
-
-  if (precision > 0) {
-    sp_str_builder_append_c8(builder, '.');
-    c8 frac_buf[18];
-    u32 i = precision;
-    while (i--) {
-      frac_buf[i] = (c8)('0' + (frac_scaled % 10));
-      frac_scaled /= 10;
-    }
-    sp_str_t s = { .data = frac_buf, .len = precision };
-    sp_str_builder_append(builder, s);
-  }
-}
-
-void sp_fmt_render_default(sp_str_builder_t* builder, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  sp_unused(param);
-  switch (arg->id) {
-    case sp_fmt_id_u64:
-      sp_fmt_write_u64(builder, arg->u);
-      break;
-    case sp_fmt_id_s64:
-      sp_fmt_write_s64(builder, arg->i);
-      break;
-    case sp_fmt_id_f64: {
-      u32 p = sp_opt_is_null(arg->spec.precision) ? 6 : sp_opt_get(arg->spec.precision);
-      sp_fmt_write_f64(builder, arg->f, p);
-      break;
-    }
-    case sp_fmt_id_str: {
-      sp_str_t s = arg->s;
-      if (!sp_opt_is_null(arg->spec.precision)) {
-        u32 max = sp_opt_get(arg->spec.precision);
-        if (max < s.len) s.len = max;
-      }
-      sp_str_builder_append(builder, s);
-      break;
-    }
-    case sp_fmt_id_ptr:
-      sp_fmt_write_ptr(builder, arg->p);
-      break;
-    case sp_fmt_id_custom:
-      if (arg->custom.fn) arg->custom.fn(builder, arg, SP_NULLPTR);
-      break;
-  }
-}
-
-void sp_fmt_apply_spec_wrapped(
-  sp_str_builder_t* out,
-  sp_str_t before,
-  sp_str_t content,
-  sp_str_t after,
-  sp_fmt_spec_t spec
-) {
-  u32 content_len = (u32)content.len;
-  u32 width = spec.width > SP_FMT_WIDTH_MAX ? SP_FMT_WIDTH_MAX : spec.width;
-  u32 pad = (width > content_len) ? (width - content_len) : 0;
-  u8 fill = spec.fill ? spec.fill : ' ';
-  sp_fmt_align_t align = spec.align;
-  if (align == SP_FMT_ALIGN_NONE) align = SP_FMT_ALIGN_RIGHT;
-
-  u32 left = 0;
-  u32 right = 0;
-  switch (align) {
-    case SP_FMT_ALIGN_LEFT:
-      right = pad;
-      break;
-    case SP_FMT_ALIGN_CENTER:
-      left = pad / 2;
-      right = pad - left;
-      break;
-    case SP_FMT_ALIGN_RIGHT:
-      left = pad;
-      break;
-    case SP_FMT_ALIGN_NONE:
-      left = pad;
-      break;
-  }
-
-  sp_for(k, left)  sp_str_builder_append_c8(out, fill);
-  sp_str_builder_append(out, before);
-  sp_str_builder_append(out, content);
-  sp_str_builder_append(out, after);
-  sp_for(k, right) sp_str_builder_append_c8(out, fill);
-}
-
-void sp_fmt_apply_spec(sp_str_builder_t* out, sp_str_t content, sp_fmt_spec_t spec) {
-  sp_str_t empty = sp_zero();
-  sp_fmt_apply_spec_wrapped(out, empty, content, empty, spec);
-}
-
-static const c8* sp_fmt_kind_name(sp_fmt_arg_kind_t k) {
-  switch (k) {
-    case sp_fmt_id_u64:    return "u64";
-    case sp_fmt_id_s64:    return "s64";
-    case sp_fmt_id_f64:    return "f64";
-    case sp_fmt_id_str:    return "str";
-    case sp_fmt_id_ptr:    return "ptr";
-    case sp_fmt_id_custom: return "custom";
-  }
-  return "?";
-}
-
-static void sp_fmt_append_kind_mask(sp_str_builder_t* b, sp_fmt_arg_kind_t mask) {
-  static const sp_fmt_arg_kind_t all[] = {
-    sp_fmt_id_u64, sp_fmt_id_s64, sp_fmt_id_f64,
-    sp_fmt_id_str, sp_fmt_id_ptr, sp_fmt_id_custom,
-  };
-  bool first = true;
-  sp_carr_for(all, i) {
-    if (mask & all[i]) {
-      if (!first) sp_str_builder_append_c8(b, '|');
-      sp_str_builder_append_cstr(b, sp_fmt_kind_name(all[i]));
-      first = false;
-    }
-  }
-}
-
-static sp_err_t sp_fmt_render(sp_str_builder_t* out, sp_fmt_arg_t* arg, sp_fmt_arg_t* directive_params) {
-  sp_fmt_directive_t* directives[SP_FMT_MAX_DIRECTIVES];
-
-  u8 num_dirs = arg->spec.directive_count;
-  sp_for(i, num_dirs) {
-    sp_str_t name = arg->spec.directive_names[i];
-    sp_fmt_directive_t* directive = sp_fmt_directive_lookup(name);
-    directives[i] = directive;
-    if (!directives[i]) {
-      return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
-    }
-  }
-
-  sp_for(it, num_dirs) {
-    sp_fmt_arg_kind_t accepted = directives[it]->arg_kinds;
-    if (accepted && !(accepted & arg->id)) {
-      return SP_ERR_FMT_WRONG_PARAM_KIND;
-    }
-  }
-
-  bool params[SP_FMT_MAX_DIRECTIVES] = sp_zero();
-  sp_for(it, num_dirs) {
-    bool is_dynamic = (arg->spec.directive_arg_dynamic & (1u << it)) != 0;
-    bool is_literal = !sp_str_empty(arg->spec.directive_args[it]);
-    if (is_dynamic) {
-      params[it] = true;
-    }
-    else if (is_literal) {
-      directive_params[it] = (sp_fmt_arg_t){
-        .id = sp_fmt_id_str,
-        .s  = arg->spec.directive_args[it],
-      };
-      params[it] = true;
-    }
-    else {
-      params[it] = false;
-    }
-
-    sp_fmt_arg_kind_t kind = directives[it]->param_kinds;
-    if (!kind) {
-      if (params[it]) return SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED;
-    }
-    else {
-      if (!params[it]) return SP_ERR_FMT_DIRECTIVE_ARG_MISSING;
-      if (!(kind & directive_params[it].id)) return SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND;
-    }
-  }
-
-  struct {
-    sp_str_builder_t before;
-    sp_str_builder_t content;
-    sp_str_builder_t after;
-  } b = sp_zero();
-
-  sp_for(it, num_dirs) {
-    if (directives[it]->kind != sp_fmt_directive_decorator) continue;
-    sp_fmt_fn_t before_fn = directives[it]->decorator.before;
-    if (!before_fn) continue;
-    sp_fmt_arg_t* p = params[it] ? &directive_params[it] : SP_NULLPTR;
-    before_fn(&b.before, arg, p);
-  }
-
-  struct {
-    sp_fmt_fn_t fn;
-    sp_fmt_arg_t* param;
-  } render = sp_zero();
-  if (arg->id == sp_fmt_id_custom) {
-    if (!arg->custom.fn) return SP_ERR_FMT_CUSTOM_WITHOUT_FN;
-    render.fn = arg->custom.fn;
-  }
-  else {
-    sp_for(it, num_dirs) {
-      if (directives[it]->kind != sp_fmt_directive_renderer) continue;
-      if (render.fn) return SP_ERR_FMT_TOO_MANY_RENDERERS;
-      render.fn = directives[it]->renderer;
-      render.param = params[it] ? &directive_params[it] : SP_NULLPTR;
-    }
-  }
-  render.fn = render.fn ? render.fn : sp_fmt_render_default;
-  render.fn(&b.content, arg, render.param);
-
-  sp_str_t content = sp_str_builder_as_str(&b.content);
-
-  u8 j = num_dirs;
-  while (j--) {
-    if (directives[j]->kind != sp_fmt_directive_transformer) continue;
-    sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
-    sp_str_builder_t next = SP_ZERO_INITIALIZE();
-    directives[j]->transformer(&next, content, arg, p);
-    content = sp_str_builder_as_str(&next);
-  }
-
-  j = num_dirs;
-  while (j--) {
-    if (directives[j]->kind != sp_fmt_directive_decorator) continue;
-    sp_fmt_fn_t after_fn = directives[j]->decorator.after;
-    if (!after_fn) continue;
-    sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
-    after_fn(&b.after, arg, p);
-  }
-
-  sp_str_t before = sp_str_builder_as_str(&b.before);
-  sp_str_t after  = sp_str_builder_as_str(&b.after);
-
-  sp_fmt_apply_spec_wrapped(out, before, content, after, arg->spec);
-  return SP_OK;
-}
-
 // Pulls one int-kinded dynamic arg out of `a` and returns it as a signed
 // value. Used for dynamic fill/width/precision, all of which require an int.
 static sp_err_t sp_fmt_pull_int_arg(sp_fmt_arg_t a, s64* out) {
@@ -7039,136 +6707,137 @@ sp_err_t sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...) {
   return result;
 }
 
-static void sp_fmt_directive_bold(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bold(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
-  sp_str_builder_append_cstr(b, "\033[1m");
+  sp_io_write_cstr(io, "\033[1m", SP_NULLPTR);
 }
 
-static void sp_fmt_directive_italic(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_italic(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
-  sp_str_builder_append_cstr(b, "\033[3m");
+  sp_io_write_cstr(io, "\033[3m", SP_NULLPTR);
 }
 
-static void sp_fmt_directive_red(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_red(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_RED);
+  sp_io_write_cstr(io, SP_ANSI_FG_RED, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_green(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_green(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_GREEN);
+  sp_io_write_cstr(io, SP_ANSI_FG_GREEN, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_yellow(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_yellow(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_YELLOW);
+  sp_io_write_cstr(io, SP_ANSI_FG_YELLOW, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_blue(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_blue(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BLUE);
+  sp_io_write_cstr(io, SP_ANSI_FG_BLUE, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_cyan(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_cyan(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_CYAN);
+  sp_io_write_cstr(io, SP_ANSI_FG_CYAN, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_magenta(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_magenta(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_MAGENTA);
+  sp_io_write_cstr(io, SP_ANSI_FG_MAGENTA, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_white(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_white(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_WHITE);
+  sp_io_write_cstr(io, SP_ANSI_FG_WHITE, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_black(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_black(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BLACK);
+  sp_io_write_cstr(io, SP_ANSI_FG_BLACK, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_red(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_red(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_RED);
+  sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_RED, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_green(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_green(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_GREEN);
+  sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_GREEN, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_yellow(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_yellow(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_YELLOW);
+  sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_YELLOW, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_blue(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_blue(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_BLUE);
+  sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_BLUE, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_cyan(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_cyan(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_CYAN);
+  sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_CYAN, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_magenta(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_magenta(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_MAGENTA);
+  sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_MAGENTA, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_white(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_white(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_WHITE);
+  sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_WHITE, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_gray(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_gray(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
-  sp_str_builder_append_cstr(b, SP_ANSI_FG_BRIGHT_BLACK);
+  sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_BLACK, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_ansi_reset(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+static void sp_fmt_directive_ansi_reset(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   sp_unused(arg); sp_unused(param);
-  sp_str_builder_append_cstr(b, SP_ANSI_RESET);
+  sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_hyperlink(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
-  sp_str_builder_append_cstr(b, "\033]8;;"); sp_unused(params);
-  if (arg->id == sp_fmt_id_str) sp_str_builder_append(b, arg->s);
-  sp_str_builder_append_cstr(b, "\033\\");
+static void sp_fmt_directive_hyperlink(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+  sp_unused(params);
+  sp_io_write_cstr(io, "\033]8;;", SP_NULLPTR);
+  if (arg->id == sp_fmt_id_str) sp_io_write_str(io, arg->s, SP_NULLPTR);
+  sp_io_write_cstr(io, "\033\\", SP_NULLPTR);
 }
 
-static void sp_fmt_directive_hyperlink_after(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_hyperlink_after(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
-  sp_str_builder_append_cstr(b, "\033]8;;\033\\");
+  sp_io_write_cstr(io, "\033]8;;\033\\", SP_NULLPTR);
 }
 
-static void sp_fmt_directive_quote(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_quote(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
-  sp_str_builder_append_c8(b, '"');
+  sp_io_write_c8(io, '"');
 }
 
-static void sp_fmt_directive_quote_after(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_quote_after(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
-  sp_str_builder_append_c8(b, '"');
+  sp_io_write_c8(io, '"');
 }
 
-static void sp_fmt_directive_upper_transform(sp_str_builder_t* out, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_upper_transform(sp_io_writer_t* io, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
   sp_for(i, content.len) {
     c8 c = content.data[i];
-    sp_str_builder_append_c8(out, (c >= 'a' && c <= 'z') ? (c8)(c - 32) : c);
+    sp_io_write_c8(io, (c >= 'a' && c <= 'z') ? (c8)(c - 32) : c);
   }
 }
 
-static void sp_fmt_directive_redact_transform(sp_str_builder_t* out, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_redact_transform(sp_io_writer_t* io, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
-  sp_for(i, content.len) sp_str_builder_append_c8(out, '*');
+  sp_for(i, content.len) sp_io_write_c8(io, '*');
 }
 
-static void sp_fmt_directive_bytes_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bytes_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   u64 bytes = arg->u; sp_unused(params);
   static const c8* units[] = { "B", "KB", "MB", "GB", "TB", "PB" };
   u32 unit_idx = 0;
@@ -7179,57 +6848,39 @@ static void sp_fmt_directive_bytes_render(sp_str_builder_t* b, sp_fmt_arg_t* arg
     whole >>= 10;
     unit_idx++;
   }
-  sp_fmt_write_u64(b, whole);
+  sp_fmt_write_u64_a(io, whole);
   if (unit_idx > 0) {
     u32 tenths = (u32)((rem * 10) >> 10);
     if (tenths > 0) {
-      sp_str_builder_append_c8(b, '.');
-      sp_str_builder_append_c8(b, (c8)('0' + tenths));
+      sp_io_write_c8(io, '.');
+      sp_io_write_c8(io, (c8)('0' + tenths));
     }
   }
-  sp_str_builder_append_c8(b, ' ');
-  sp_str_builder_append_cstr(b, units[unit_idx]);
+  sp_io_write_c8(io, ' ');
+  sp_io_write_cstr(io, units[unit_idx], SP_NULLPTR);
 }
 
-static void sp_fmt_directive_write_zpad2(sp_str_builder_t* b, u32 value) {
-  sp_str_builder_append_c8(b, (c8)('0' + (value / 10) % 10));
-  sp_str_builder_append_c8(b, (c8)('0' + value % 10));
-}
-
-static void sp_fmt_directive_write_zpad3(sp_str_builder_t* b, u32 value) {
-  sp_str_builder_append_c8(b, (c8)('0' + (value / 100) % 10));
-  sp_str_builder_append_c8(b, (c8)('0' + (value / 10) % 10));
-  sp_str_builder_append_c8(b, (c8)('0' + value % 10));
-}
-
-static void sp_fmt_directive_write_zpad4(sp_str_builder_t* b, u32 value) {
-  sp_str_builder_append_c8(b, (c8)('0' + (value / 1000) % 10));
-  sp_str_builder_append_c8(b, (c8)('0' + (value / 100) % 10));
-  sp_str_builder_append_c8(b, (c8)('0' + (value / 10) % 10));
-  sp_str_builder_append_c8(b, (c8)('0' + value % 10));
-}
-
-static void sp_fmt_directive_iso_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_iso_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   sp_tm_epoch_t epoch = SP_RVAL(sp_tm_epoch_t) { .s = arg->u, .ns = 0 };
   sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
-  sp_str_builder_append(b, sp_tm_epoch_to_iso8601_a(s.mem, epoch));
+  sp_io_write_str(io, sp_tm_epoch_to_iso8601_a(s.mem, epoch), SP_NULLPTR);
   sp_mem_end_scratch_a(s);
 }
 
-static void sp_fmt_directive_hex_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_hex_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   u64 value = (arg->id == sp_fmt_id_s64) ? (u64)arg->i : arg->u;
   c8 buf[16];
   c8* end = buf + sizeof(buf);
   c8* start = sp_fmt_uint_to_buf_hex_ex(value, end, "0123456789ABCDEF");
-  sp_str_builder_append_cstr(b, "0x");
-  sp_fmt_append_range(b, start, end);
+  sp_io_write_cstr(io, "0x", SP_NULLPTR);
+  sp_io_write(io, start, (u64)(end - start), SP_NULLPTR);
 }
 
-static void sp_fmt_directive_ordinal_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_ordinal_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   s64 value = (arg->id == sp_fmt_id_s64) ? arg->i : (s64)arg->u; sp_unused(params);
-  sp_fmt_write_s64(b, value);
+  sp_fmt_write_s64_a(io, value);
   s64 abs = value < 0 ? -value : value;
   u32 mod100 = (u32)(abs % 100);
   u32 mod10 = (u32)(abs % 10);
@@ -7239,15 +6890,15 @@ static void sp_fmt_directive_ordinal_render(sp_str_builder_t* b, sp_fmt_arg_t* a
     else if (mod10 == 2) suffix = "nd";
     else if (mod10 == 3) suffix = "rd";
   }
-  sp_str_builder_append_cstr(b, suffix);
+  sp_io_write_cstr(io, suffix, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_duration_render(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_duration_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   u64 ns = arg->u;
   if (ns < 1000) {
-    sp_fmt_write_u64(b, ns);
-    sp_str_builder_append_cstr(b, " ns");
+    sp_fmt_write_u64_a(io, ns);
+    sp_io_write_cstr(io, " ns", SP_NULLPTR);
     return;
   }
   static const c8* units[] = { "us", "ms", "s" };
@@ -7259,13 +6910,13 @@ static void sp_fmt_directive_duration_render(sp_str_builder_t* b, sp_fmt_arg_t* 
     whole /= 1000;
     unit_idx++;
   }
-  sp_fmt_write_u64(b, whole);
+  sp_fmt_write_u64_a(io, whole);
   if (rem >= 100) {
-    sp_str_builder_append_c8(b, '.');
-    sp_str_builder_append_c8(b, (c8)('0' + rem / 100));
+    sp_io_write_c8(io, '.');
+    sp_io_write_c8(io, (c8)('0' + rem / 100));
   }
-  sp_str_builder_append_c8(b, ' ');
-  sp_str_builder_append_cstr(b, units[unit_idx]);
+  sp_io_write_c8(io, ' ');
+  sp_io_write_cstr(io, units[unit_idx], SP_NULLPTR);
 }
 
 sp_str_t sp_fmt_color_to_ansi_fg(sp_str_t id) {
@@ -7288,10 +6939,10 @@ sp_str_t sp_fmt_color_to_ansi_fg(sp_str_t id) {
   return SP_CSTR(SP_ANSI_RESET);
 }
 
-static void sp_fmt_directive_fg(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+static void sp_fmt_directive_fg(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   sp_unused(arg);
   sp_str_t ansi = sp_fmt_color_to_ansi_fg(param->s);
-  sp_str_builder_append(b, ansi);
+  sp_io_write_str(io, ansi, SP_NULLPTR);
 }
 
 void sp_fmt_register_builtins() {
@@ -8861,98 +8512,6 @@ bool sp_str_it_valid(sp_str_it_t* it) {
 void sp_str_it_next(sp_str_it_t* it) {
   it->index++;
   it->c = sp_str_it_valid(it) ? it->str.data[it->index] : 0;
-}
-
-sp_str_builder_t sp_str_builder_from_writer(sp_io_writer_t* writer) {
-  return (sp_str_builder_t) { .writer = writer };
-}
-
-void sp_str_builder_ensure_writer(sp_str_builder_t* builder) {
-  if (!builder->writer) {
-    builder->writer = sp_alloc_type(sp_io_writer_t);
-    sp_io_writer_from_dyn_mem(builder->writer);
-  }
-}
-
-void sp_str_builder_indent(sp_str_builder_t* builder) {
-  builder->indent.level++;
-}
-
-void sp_str_builder_dedent(sp_str_builder_t* builder) {
-  if (builder->indent.level) {
-    builder->indent.level--;
-  }
-}
-
-void sp_str_builder_append(sp_str_builder_t* builder, sp_str_t str) {
-  sp_str_builder_ensure_writer(builder);
-  sp_io_write_str(builder->writer, str, SP_NULLPTR);
-}
-
-void sp_str_builder_append_cstr(sp_str_builder_t* builder, const c8* str) {
-  sp_str_builder_append(builder, sp_str_view(str));
-}
-
-void sp_str_builder_append_c8(sp_str_builder_t* builder, c8 c) {
-  sp_str_builder_append(builder, sp_str(&c, 1));
-}
-
-void sp_str_builder_append_utf8(sp_str_builder_t* builder, u32 codepoint) {
-  u8 buf[4] = SP_ZERO_INITIALIZE();
-  u8 len = sp_utf8_encode(codepoint, buf);
-  sp_assert(len);
-
-  sp_str_builder_append(builder, sp_str(buf, len));
-}
-
-
-void sp_str_builder_new_line(sp_str_builder_t* builder) {
-  sp_str_builder_append_c8(builder, '\n');
-
-  if (!sp_str_valid(builder->indent.word)) {
-    builder->indent.word = SP_LIT("  ");
-  }
-
-  sp_for(index, builder->indent.level) {
-    sp_str_builder_append(builder, builder->indent.word);
-  }
-}
-
-u64 sp_str_builder_len(sp_str_builder_t* builder) {
-  if (!builder->writer) return 0;
-
-  u64 size = 0;
-  sp_io_writer_size(builder->writer, &size);
-  return size;
-}
-
-sp_str_t sp_str_builder_as_str(sp_str_builder_t* builder) {
-  sp_str_builder_ensure_writer(builder);
-  return sp_mem_buffer_as_str(&builder->writer->dyn_mem.buffer);
-}
-
-sp_str_t sp_str_builder_to_str(sp_str_builder_t* builder) {
-  return sp_str_copy(sp_str_builder_as_str(builder));
-}
-
-const c8* sp_str_builder_to_cstr(sp_str_builder_t* builder) {
-  return sp_str_to_cstr(sp_str_builder_as_str(builder));
-}
-
-sp_mem_buffer_t sp_str_builder_into_buffer(sp_str_builder_t* builder) {
-  sp_str_builder_ensure_writer(builder);
-  sp_mem_buffer_t buffer = builder->writer->dyn_mem.buffer;
-  sp_free(builder->writer);
-  builder->writer = SP_NULLPTR;
-  return buffer;
-}
-
-void sp_str_builder_free(sp_str_builder_t* builder) {
-  if (builder->writer) {
-    sp_io_writer_close(builder->writer);
-    sp_free(builder->writer);
-    builder->writer = SP_NULLPTR;
-  }
 }
 
 sp_str_t sp_str_pad(sp_str_t str, u32 n) {
@@ -14254,18 +13813,21 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
     }
   }
 
-  struct {
-    sp_str_builder_t before;
-    sp_str_builder_t content;
-    sp_str_builder_t after;
-  } b = sp_zero();
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_a();
+
+  sp_io_writer_t before_io = sp_zero();
+  sp_io_writer_t content_io = sp_zero();
+  sp_io_writer_t after_io = sp_zero();
+  sp_io_writer_from_dyn_mem_a(scratch.mem, &before_io);
+  sp_io_writer_from_dyn_mem_a(scratch.mem, &content_io);
+  sp_io_writer_from_dyn_mem_a(scratch.mem, &after_io);
 
   sp_for(it, num_dirs) {
     if (directives[it]->kind != sp_fmt_directive_decorator) continue;
     sp_fmt_fn_t before_fn = directives[it]->decorator.before;
     if (!before_fn) continue;
     sp_fmt_arg_t* p = params[it] ? &directive_params[it] : SP_NULLPTR;
-    before_fn(&b.before, arg, p);
+    before_fn(&before_io, arg, p);
   }
 
   struct {
@@ -14273,29 +13835,36 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
     sp_fmt_arg_t* param;
   } render = sp_zero();
   if (arg->id == sp_fmt_id_custom) {
-    if (!arg->custom.fn) return SP_ERR_FMT_CUSTOM_WITHOUT_FN;
+    if (!arg->custom.fn) {
+      sp_mem_end_scratch_a(scratch);
+      return SP_ERR_FMT_CUSTOM_WITHOUT_FN;
+    }
     render.fn = arg->custom.fn;
   }
   else {
     sp_for(it, num_dirs) {
       if (directives[it]->kind != sp_fmt_directive_renderer) continue;
-      if (render.fn) return SP_ERR_FMT_TOO_MANY_RENDERERS;
+      if (render.fn) {
+        sp_mem_end_scratch_a(scratch);
+        return SP_ERR_FMT_TOO_MANY_RENDERERS;
+      }
       render.fn = directives[it]->renderer;
       render.param = params[it] ? &directive_params[it] : SP_NULLPTR;
     }
   }
-  render.fn = render.fn ? render.fn : sp_fmt_render_default;
-  render.fn(&b.content, arg, render.param);
+  render.fn = render.fn ? render.fn : sp_fmt_render_default_a;
+  render.fn(&content_io, arg, render.param);
 
-  sp_str_t content = sp_str_builder_as_str(&b.content);
+  sp_str_t content = sp_io_writer_dyn_mem_as_str(&content_io.dyn_mem);
 
   u8 j = num_dirs;
   while (j--) {
     if (directives[j]->kind != sp_fmt_directive_transformer) continue;
     sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
-    sp_str_builder_t next = SP_ZERO_INITIALIZE();
+    sp_io_writer_t next = sp_zero();
+    sp_io_writer_from_dyn_mem_a(scratch.mem, &next);
     directives[j]->transformer(&next, content, arg, p);
-    content = sp_str_builder_as_str(&next);
+    content = sp_io_writer_dyn_mem_as_str(&next.dyn_mem);
   }
 
   j = num_dirs;
@@ -14304,13 +13873,14 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
     sp_fmt_fn_t after_fn = directives[j]->decorator.after;
     if (!after_fn) continue;
     sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
-    after_fn(&b.after, arg, p);
+    after_fn(&after_io, arg, p);
   }
 
-  sp_str_t before = sp_str_builder_as_str(&b.before);
-  sp_str_t after  = sp_str_builder_as_str(&b.after);
+  sp_str_t before = sp_io_writer_dyn_mem_as_str(&before_io.dyn_mem);
+  sp_str_t after  = sp_io_writer_dyn_mem_as_str(&after_io.dyn_mem);
 
   sp_fmt_apply_spec_a(io, before, content, after, arg->spec);
+  sp_mem_end_scratch_a(scratch);
   return SP_OK;
 }
 
@@ -14507,8 +14077,7 @@ void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t
       break;
     case sp_fmt_id_custom:
       if (arg->custom.fn) {
-        sp_str_builder_t b = sp_str_builder_from_writer(io);
-        arg->custom.fn(&b, arg, SP_NULLPTR);
+        arg->custom.fn(io, arg, SP_NULLPTR);
       }
       break;
   }

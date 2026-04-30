@@ -12,14 +12,14 @@
 // callers will use as wrappers over sp_fmt_custom()
 typedef struct { f32 x; f32 y; } point_t;
 
-void format_point(sp_str_builder_t* b, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+void format_point(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   point_t* point = (point_t*)arg->custom.ptr;
   u32 precision = sp_opt_is_null(arg->spec.precision) ? 2 : sp_opt_get(arg->spec.precision);
-  sp_str_builder_append_c8(b, '(');
-  sp_fmt_write_f64(b, point->x, precision);
-  sp_str_builder_append_cstr(b, ", ");
-  sp_fmt_write_f64(b, point->y, precision);
-  sp_str_builder_append_c8(b, ')');
+  sp_io_write_c8(io, '(');
+  sp_fmt_write_f64_a(io, point->x, precision);
+  sp_io_write_cstr(io, ", ", SP_NULLPTR);
+  sp_fmt_write_f64_a(io, point->y, precision);
+  sp_io_write_c8(io, ')');
 }
 #define sp_fmt_point(p) sp_fmt_custom(point_t, format_point, (p))
 #define sp_fmt_point_v(...) sp_fmt_custom_v(point_t, format_point, (point_t){__VA_ARGS__})

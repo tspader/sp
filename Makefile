@@ -33,7 +33,7 @@ CFLAGS = -std=c99 -g -Werror=return-type -fsanitize=undefined,alignment -fno-san
 EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
 EXE := $(if $(WASM),.wasm,$(EXE))
 
-TESTS = app amalg str
+TESTS = app amalg str format
 EXAMPLES = app format hash_table
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
