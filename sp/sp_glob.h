@@ -184,6 +184,7 @@ sp_glob_err_t sp_glob_parse_class(sp_str_t pattern, u32* i, sp_da(sp_glob_token_
   }
 
   sp_da(sp_glob_char_range_t) ranges = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, ranges);
   c8 last_char = 0;
   bool has_content = false;
 
@@ -231,7 +232,9 @@ sp_glob_err_t sp_glob_parse_alternates(sp_str_t pattern, u32* it, sp_da(sp_glob_
   u32 len = pattern.len;
 
   sp_da(sp_da(sp_glob_token_t)) alts = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, alts);
   sp_da(sp_glob_token_t) alt = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, alt);
 
   while (pos < len) {
     c8 c = sp_str_at(pattern, (s32)pos);
@@ -249,6 +252,7 @@ sp_glob_err_t sp_glob_parse_alternates(sp_str_t pattern, u32* it, sp_da(sp_glob_
     if (c == ',') {
       sp_da_push(alts, alt);
       alt = SP_NULLPTR;
+      sp_da_init(sp_context_get()->allocator, alt);
       pos++;
       continue;
     }
@@ -307,6 +311,7 @@ bool sp_glob_match_alternates(sp_glob_token_t* tok, sp_da(sp_glob_token_t) token
     sp_da(sp_glob_token_t) alt = tok->alternates.alts[i];
 
     sp_da(sp_glob_token_t) combined = SP_NULLPTR;
+    sp_da_init(sp_context_get()->allocator, combined);
     sp_da_for(alt, j) {
       sp_da_push(combined, alt[j]);
     }
@@ -492,6 +497,7 @@ sp_glob_t* sp_glob_new(const c8* pattern) {
 sp_glob_t* sp_glob_new_str(sp_str_t pattern) {
   sp_glob_t* g = SP_ALLOC(sp_glob_t);
   g->pattern = pattern;
+  sp_da_init(sp_context_get()->allocator, g->tokens);
 
   if (sp_glob_parse(pattern, &g->tokens)) {
     return SP_NULLPTR;
@@ -583,6 +589,10 @@ sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path) {
 sp_glob_set_t* sp_glob_set_new() {
   sp_mem_t mem = sp_context_get()->allocator;
   sp_glob_set_t* set = SP_ALLOC(sp_glob_set_t);
+  sp_da_init(mem, set->globs);
+  sp_da_init(mem, set->prefixes);
+  sp_da_init(mem, set->suffixes);
+  sp_da_init(mem, set->fallbacks);
   sp_str_ht_init_a(mem, set->literal);
   sp_str_ht_init_a(mem, set->base_name);
   sp_str_ht_init_a(mem, set->extension);
@@ -606,7 +616,9 @@ void sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* g) {
 void sp_glob_set_ht_add(sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx) {
   sp_da(u32)* indices = sp_ht_getp(*ht, key);
   if (!indices) {
-    sp_ht_insert(*ht, key, SP_NULLPTR);
+    sp_da(u32) fresh = SP_NULLPTR;
+    sp_da_init(sp_context_get()->allocator, fresh);
+    sp_ht_insert(*ht, key, fresh);
     indices = sp_ht_getp(*ht, key);
   }
   sp_da_push(*indices, idx);

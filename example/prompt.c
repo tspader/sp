@@ -404,6 +404,7 @@ s32 prompt_main(s32 argc, const c8** argv) {
   s32 result = 0;
   if (run == SP_NULLPTR) {
     sp_da(sp_prompt_select_option_t) options = sp_zero();
+    sp_da_init(sp_context_get()->allocator, options);
     sp_carr_for(ordered, it) {
       sp_prompt_select_option_t option = {
         .label = ordered[it].name,

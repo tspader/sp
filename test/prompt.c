@@ -1,4 +1,3 @@
-#include "sp.h"
 #define SP_UNIMPLEMENTED() ((void)0)
 #define LINENOISE_IMPLEMENTATION
 #define SP_PROMPT_IMPLEMENTATION
@@ -219,6 +218,7 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_str_t bytes) {
   }
 
   sp_da(sp_str_t) lines = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, lines);
   sp_for_range(row, 0, vt.max_row + 1) {
     sp_io_writer_t builder = sp_zero();
     sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &builder);

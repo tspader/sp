@@ -410,6 +410,7 @@ typedef struct {
 
 sp_da(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
   sp_da(sp_env_var_t) vars = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, vars);
 
   u32 line_start = 0;
   for (u32 i = 0; i <= len; i++) {

@@ -1459,6 +1459,7 @@ typedef struct sp_aligned() {
   sp_mem_t allocator;
 } sp_da_header_t;
 
+#define sp_da_a(T) sp_mcat(stop_wasting_my_time___, T)
 #define sp_da(T) T*
 SP_API void* sp_da_resize(void* arr, u32 stride, u64 len);
 SP_API void* sp_da_grow_ex(void* arr, u32 stride, u64 addlen);
@@ -1471,16 +1472,16 @@ SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
   ((sp_da_header_t*)((u8*)(__ARR) - sizeof(sp_da_header_t)))
 
 #define sp_da_size(__ARR)\
-  (__ARR ? sp_da_head((__ARR))->size : 0)
+  (sp_da_head(__ARR)->size)
 
 #define sp_da_allocator(__arr) \
-  (__arr ? sp_da_head((__arr))->allocator : sp_zero_struct(sp_mem_t))
+  (sp_da_head(__arr)->allocator)
 
 #define sp_da_stride(__ARR) \
-  sizeof(*(__ARR))
+  (sizeof(*(__ARR)))
 
 #define sp_da_capacity(__ARR)\
-  (__ARR ? sp_da_head(__ARR)->capacity : 0)
+  (sp_da_head(__ARR)->capacity)
 
 #define sp_da_empty(__ARR)\
   (sp_da_size(__ARR) == 0)
@@ -1489,7 +1490,7 @@ SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
   ((sp_da_size(__ARR) == sp_da_capacity(__ARR)))
 
 #define sp_da_clear(__ARR) \
-  sp_unused((__ARR) ? sp_da_head(__ARR)->size = 0 : 0)
+  sp_da_head(__ARR)->size = 0
 
 #define sp_da_vp(__arr) \
   ((void**)&(__arr))
@@ -1497,29 +1498,24 @@ SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
 #define sp_da_init(__a, __arr) \
   sp_da_init_ex((__a), sp_da_vp(__arr), sp_da_stride(__arr))
 
-#define sp_da_free(__ARR)         \
-  do {                            \
-    if (__ARR) {                  \
-      sp_free(sp_da_head(__ARR)); \
-      (__ARR) = NULL;\
-    }\
-  } while (0)
+#define sp_da_free(__arr)         \
+  sp_mem_allocator_free(sp_da_allocator(__arr), sp_da_head(__arr))
 
 #define sp_da_grow(__ARR, __N)\
   sp_da_grow_ex((__ARR), sp_da_stride(__ARR), (__N))
 
 #define sp_da_push(__ARR, __VAL)\
     do {\
-        *((void **)&(__ARR)) = sp_da_grow(__ARR, 1);\
+        *sp_da_vp(__ARR) = sp_da_grow(__ARR, 1);\
         (__ARR)[sp_da_head(__ARR)->size++] = (__VAL);\
     } while(0)
 
-#define sp_da_reserve(__ARR, __AMOUNT)\
-    do {\
-        if ((u64)(__AMOUNT) > sp_da_capacity(__ARR)) {\
-            *((void **)&(__ARR)) = sp_da_resize(__ARR, sizeof(*(__ARR)), __AMOUNT);\
-        }\
-    } while(0)
+#define sp_da_reserve(__arr, __n)\
+  do {\
+    if ((u64)(__n) > sp_da_capacity(__arr)) {\
+      *sp_da_vp(__arr) = sp_da_resize(__arr, sp_da_stride(__arr), __n);\
+    }\
+  } while (0)
 
 #define sp_da_pop(__ARR)\
     do {\
@@ -2378,8 +2374,8 @@ typedef struct {
 // SP_API void          sp_fs_it_next(sp_fs_it_t* it);
 // SP_API bool          sp_fs_it_valid(sp_fs_it_t* it);
 // SP_API void          sp_fs_it_deinit(sp_fs_it_t* it);
-// SP_API sp_da(sp_fs_entry_t) sp_fs_collect(sp_str_t path);
-// SP_API sp_da(sp_fs_entry_t) sp_fs_collect_recursive(sp_str_t path);
+// SP_API sp_da_a(sp_fs_entry_t) sp_fs_collect(sp_str_t path);
+// SP_API sp_da_a(sp_fs_entry_t) sp_fs_collect_recursive(sp_str_t path);
 
 bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path);
 void sp_sys_diriter_close(sp_fs_it_frame_t* frame);
@@ -6310,23 +6306,23 @@ void sp_ht_it_advance_fn(void** data, u64 capacity, u64* it, sp_ht_info_t info) 
 //  ██████████      █████    █████  ░░█████    █████   █████ █████   █████ █████   █████ █████   █████    █████
 // ░░░░░░░░░░      ░░░░░    ░░░░░    ░░░░░    ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░    ░░░░░
 // @array @dyn_array @da
-void* sp_da_resize(void* arr, u32 stride, u64 len) {
-  len = sp_max(len, 4);
-  sp_da_header_t* header = arr ? sp_da_head(arr) : SP_NULLPTR;
-  sp_mem_t a = header ? header->allocator : sp_context_get_allocator();
-  header = sp_mem_allocator_realloc(a, header, len * stride + sizeof(sp_da_header_t));
+void* sp_da_resize(void* arr, u32 stride, u64 cap) {
+  sp_assert(arr);
+
+  cap = sp_max(cap, 4);
+  sp_da_header_t* header = sp_da_head(arr);
+  header = sp_realloc_a(header->allocator, header, cap * stride + sizeof(sp_da_header_t));
 
   if (!header) return SP_NULLPTR;
 
-  if (!arr) {
-    header->size = 0;
-    header->allocator = a;
-  }
-  header->capacity = len;
+  header->capacity = cap;
   return header + 1;
 }
-void* sp_da_grow_ex(void* arr, u32 stride, u64 addlen) {
-  u64 required = sp_da_size(arr) + addlen;
+
+void* sp_da_grow_ex(void* arr, u32 stride, u64 n) {
+  sp_assert(arr);
+
+  u64 required = sp_da_size(arr) + n;
   if (required <= sp_da_capacity(arr)) return arr;
 
   u64 cap = sp_da_capacity(arr) * 2;
@@ -6342,13 +6338,11 @@ void sp_da_push_ex(void** arr, void* val, u32 stride) {
   }
 }
 
-void sp_da_init_ex(sp_mem_t a, void** arr, u32 stride) {
-  // Match sp_da_resize's lazy-init: copy the allocator into a heap slot so the
-  // array does not depend on the caller's `a` outliving the function frame.
+void sp_da_init_ex(sp_mem_t mem, void** arr, u32 stride) {
   u32 cap = 4;
-  sp_da_header_t* head = sp_mem_allocator_alloc(a, cap * stride + sizeof(sp_da_header_t));
+  sp_da_header_t* head = sp_alloc_a(mem, cap * stride + sizeof(sp_da_header_t));
   *head = (sp_da_header_t) {
-    .allocator = a,
+    .allocator = mem,
     .capacity = cap,
     .size = 0,
   };
@@ -8505,6 +8499,7 @@ sp_da(sp_str_t) sp_str_split_c8(sp_str_t str, c8 delimiter) {
   if (sp_str_empty(str)) return SP_NULLPTR;
 
   sp_da(sp_str_t) result = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, result);
 
   u32 i = 0, j = 0;
   for (; j < str.len; j++) {
@@ -8669,6 +8664,7 @@ sp_str_t sp_str_truncate_a(sp_mem_t mem, sp_str_t str, u32 max_len, sp_str_t tra
 
 sp_da(sp_str_t) sp_str_map_a(sp_mem_t mem, sp_str_t* strs, u32 num_strs, void* user_data, sp_str_map_fn_t fn) {
   sp_da(sp_str_t) results = SP_NULLPTR;
+  sp_da_init(mem, results);
 
   sp_for(it, num_strs) {
     sp_str_map_context_t context = {
@@ -10583,6 +10579,7 @@ void sp_ps_set_blocking(s32 fd) {
 
 sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config) {
   sp_da(c8*) args = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, args);
 
   sp_da_push(args, sp_str_to_cstr(config->command));
 
@@ -10593,8 +10590,10 @@ sp_da(c8*) sp_ps_build_posix_args(sp_ps_config_t* config) {
     sp_da_push(args, sp_str_to_cstr(arg));
   }
 
-  sp_da_for(config->dyn_args, it) {
-    sp_da_push(args, sp_str_to_cstr(config->dyn_args[it]));
+  if (config->dyn_args) {
+    sp_da_for(config->dyn_args, it) {
+      sp_da_push(args, sp_str_to_cstr(config->dyn_args[it]));
+    }
   }
 
   sp_da_push(args, SP_NULLPTR);
@@ -10617,8 +10616,11 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
   }
 
   // Copy dynamic args
-  sp_da_for(src->dyn_args, i) {
-    sp_da_push(dst.dyn_args, sp_str_copy(src->dyn_args[i]));
+  if (src->dyn_args) {
+    sp_da_init(sp_context_get()->allocator, dst.dyn_args);
+    sp_da_for(src->dyn_args, i) {
+      sp_da_push(dst.dyn_args, sp_str_copy(src->dyn_args[i]));
+    }
   }
 
   dst.env.mode = src->env.mode;
@@ -10645,6 +10647,7 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
 void sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg) {
   SP_ASSERT(config);
 
+  if (!config->dyn_args) sp_da_init(sp_context_get()->allocator, config->dyn_args);
   if (!sp_str_empty(arg)) {
     sp_da_push(config->dyn_args, arg);
   }
@@ -10710,6 +10713,7 @@ void sp_ps_configure_io_out(sp_ps_io_out_config_t* io, sp_ps_stdio_config_entry_
 
 c8** sp_env_to_posix_envp(sp_env_t* env) {
   sp_da(c8*) envp = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, envp);
 
   sp_str_ht_for(env->vars, it) {
     sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
@@ -11378,6 +11382,7 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
 void sp_ps_config_add_arg(sp_ps_config_t* config, sp_str_t arg) {
   SP_ASSERT(config);
 
+  if (!config->dyn_args) sp_da_init(sp_context_get()->allocator, config->dyn_args);
   if (!sp_str_empty(arg)) {
     sp_da_push(config->dyn_args, arg);
   }
@@ -11816,6 +11821,8 @@ void sp_fmon_init_a(sp_mem_t mem, sp_fmon_t* monitor, sp_fmon_fn_t fn, sp_fmon_e
   monitor->events_to_watch = events;
   monitor->userdata = userdata;
   monitor->debounce_time_ms = 0;
+  sp_da_init(mem, monitor->changes);
+  sp_da_init(mem, monitor->cache);
   sp_fmon_os_init(monitor);
 }
 
@@ -11904,6 +11911,8 @@ SP_PRIVATE void sp_win32_fmon_issue_read(sp_fmon_t* monitor, sp_fmon_dir_t* info
 
 void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* os = SP_ALLOC(sp_fmon_os_t);
+  sp_da_init(monitor->allocator, os->dirs);
+  sp_da_init(monitor->allocator, os->watch_files);
   monitor->os = os;
 }
 
@@ -12046,7 +12055,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 }
 
 void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events) {
-  if (sp_fs_is_dir(file_path)) return;
+  if (sp_fs_is_dir_a(file_path)) return;
 
   if (file_name.data && file_name.len > 0) {
     if (file_name.data[0] == '.' && file_name.len > 1 && file_name.data[1] == '#') return;
@@ -12096,6 +12105,8 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
     linux_monitor->fd = 0;
   }
 
+  sp_da_init(monitor->allocator, linux_monitor->fds);
+  sp_da_init(monitor->allocator, linux_monitor->paths);
   sp_str_ht_init_a(monitor->allocator, linux_monitor->files);
 
   monitor->os = linux_monitor;
@@ -12359,6 +12370,8 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_mutex_init(&os->mutex, SP_MUTEX_PLAIN);
   os->watch_arena = sp_mem_arena_new(SP_FMON_ARENA_SIZE);
   os->event_arena = sp_mem_arena_new(SP_FMON_ARENA_SIZE);
+  sp_da_init(monitor->allocator, os->watch_paths);
+  sp_da_init(monitor->allocator, os->watch_files);
   monitor->os = os;
   sp_context_pop();
 }
@@ -12470,6 +12483,8 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
     os->kq = 0;
   }
 
+  sp_da_init(monitor->allocator, os->fds);
+  sp_da_init(monitor->allocator, os->watch_paths);
   monitor->os = os;
 }
 
@@ -13288,18 +13303,15 @@ sp_mem_t sp_mem_os_new() {
 }
 
 void* sp_alloc_a(sp_mem_t allocator, u64 size) {
-  sp_context_t* ctx = sp_context_get();
-  return sp_mem_allocator_alloc(ctx->allocator, size);
+  return sp_mem_allocator_alloc(allocator, size);
 }
 
 void* sp_realloc_a(sp_mem_t allocator, void* memory, u64 size) {
-  sp_context_t* ctx = sp_context_get();
-  return sp_mem_allocator_realloc(ctx->allocator, memory, size);
+  return sp_mem_allocator_realloc(allocator, memory, size);
 }
 
 void sp_free_a(sp_mem_t allocator, void* memory) {
-  sp_context_t* ctx = sp_context_get();
-  sp_mem_allocator_free(ctx->allocator, memory);
+  sp_mem_allocator_free(allocator, memory);
 }
 
 sp_mem_arena_t* sp_mem_get_scratch_arena_a(sp_mem_t mem) {

@@ -1445,6 +1445,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
 
   sp_da(sp_prompt_event_t) events = sp_zero();
+  sp_da_init(scratch.marker.mem, events);
 
   // Drain everything. Primed events come first by definition, but there's no specific order
   // between progress, status, and inputs.

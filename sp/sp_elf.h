@@ -196,6 +196,7 @@ sp_elf_t* sp_elf_new_alloc(sp_mem_t allocator) {
   sp_context_push_allocator(allocator);
   sp_elf_t* elf = sp_alloc_type(sp_elf_t);
   elf->allocator = allocator;
+  sp_da_init(allocator, elf->sections);
   sp_str_ht_init_a(allocator, elf->section_map);
   sp_context_pop();
 
@@ -443,6 +444,7 @@ void sp_elf_symtab_sort(sp_elf_section_t* symtab, sp_elf_t* elf) {
   }
 
   sp_da(u32) old_to_new = SP_NULLPTR;
+  sp_da_init(elf->allocator, old_to_new);
   sp_for(i, count) {
     sp_da_push(old_to_new, 0);
   }
@@ -515,6 +517,7 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
   u32 num_sections = sp_elf_num_sections(elf);
 
   sp_da(Elf64_Shdr) headers = SP_NULLPTR;
+  sp_da_init(elf->allocator, headers);
   sp_da_for(elf->sections, i) {
     sp_elf_section_t* sec = &elf->sections[i];
     sp_da_push(headers, ((Elf64_Shdr) {

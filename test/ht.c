@@ -579,6 +579,7 @@ UTEST(combined, hash_table_with_dyn_array_values) {
 
     for (s32 i = 0; i < 5; i++) {
         sp_da(int) arr = SP_NULLPTR;
+        sp_da_init(sp_context_get()->allocator, arr);
 
         for (s32 j = 0; j < 10; j++) {
             sp_da_push(arr, i * 100 + j);
@@ -612,6 +613,7 @@ UTEST(combined, multiple_arrays_in_hash_table) {
 
   for (s32 key = 0; key < 5; key++) {
     sp_da(int) arr = SP_NULLPTR;
+    sp_da_init(sp_context_get()->allocator, arr);
 
     for (s32 j = 0; j < 20; j++) {
         sp_da_push(arr, key * 1000 + j);

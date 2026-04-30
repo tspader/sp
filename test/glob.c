@@ -20,6 +20,7 @@ typedef struct {
 
 void run_parse_test(int* utest_result, parse_test_t* t) {
   sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, tokens);
   sp_glob_err_t err = sp_glob_parse(sp_str_view(t->pattern), &tokens);
 
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
@@ -89,6 +90,7 @@ typedef struct {
 
 void run_parse_error_test(int* utest_result, parse_error_test_t* t) {
   sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, tokens);
   sp_glob_err_t err = sp_glob_parse(sp_str_view(t->pattern), &tokens);
   EXPECT_EQ(err, t->expected_err);
 }
@@ -694,6 +696,7 @@ typedef struct {
 
 void run_strategy_test(int* utest_result, strategy_test_t* t) {
   sp_glob_t glob = SP_ZERO_INITIALIZE();
+  sp_da_init(sp_context_get()->allocator, glob.tokens);
   sp_glob_err_t err = sp_glob_parse(sp_str_view(t->pattern), &glob.tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
   if (err == SP_GLOB_ERR_OK) {
@@ -782,6 +785,7 @@ UTEST_F(glob, set_matches_indices) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
 
   sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
@@ -790,6 +794,7 @@ UTEST_F(glob, set_matches_indices) {
   }
 
   indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.h"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
@@ -797,6 +802,7 @@ UTEST_F(glob, set_matches_indices) {
   }
 
   indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("Makefile"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
@@ -804,6 +810,7 @@ UTEST_F(glob, set_matches_indices) {
   }
 
   indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.rs"), &indices);
   EXPECT_EQ(sp_da_size(indices), 0u);
 }
@@ -823,6 +830,7 @@ UTEST_F(glob, set_basename_literal) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
 
   sp_glob_set_matches(set, sp_str_lit("foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
@@ -831,6 +839,7 @@ UTEST_F(glob, set_basename_literal) {
   }
 
   indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("a/foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
@@ -838,6 +847,7 @@ UTEST_F(glob, set_basename_literal) {
   }
 
   indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("bar.foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
@@ -883,6 +893,7 @@ UTEST_F(glob, set_empty) {
   EXPECT_FALSE(sp_glob_set_match(set, sp_str_lit("")));
 
   sp_da(u32) indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 0u);
 }
@@ -895,6 +906,7 @@ UTEST_F(glob, set_multiple_matches) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
 
   // Should match all three
@@ -919,6 +931,7 @@ UTEST_F(glob, set_duplicate_extension) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
 
   // Both should match
@@ -960,6 +973,7 @@ UTEST_F(glob, parse_class_literal_dash_end) {
 
 UTEST_F(glob, parse_alternates_empty_branch) {
   sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, tokens);
   sp_glob_err_t err = sp_glob_parse(sp_str_lit("{,a}"), &tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
   EXPECT_EQ(sp_da_size(tokens), 1u);
@@ -1081,6 +1095,7 @@ UTEST_F(glob, set_multiple_prefixes) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
+  sp_da_init(sp_context_get()->allocator, indices);
   sp_glob_set_matches(set, sp_str_lit("src/foo/bar.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 2u);
 }

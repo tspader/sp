@@ -98,6 +98,7 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
   registry->import_queue = SP_NULLPTR;
   registry->completion_queue = SP_NULLPTR;
   registry->arena = sp_mem_arena_new();
+  sp_da_init(sp_mem_arena_as_allocator(registry->arena), registry->importers);
 
   sp_context_push_allocator(sp_mem_arena_as_allocator(registry->arena));
 
