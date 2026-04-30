@@ -12,8 +12,13 @@ typedef struct {
   s32 type;
 } compound_key_t;
 
+#define HT_INIT(ht) sp_ht_init_a(sp_context_get()->allocator, ht)
+#define STR_HT_INIT(ht) sp_str_ht_init_a(sp_context_get()->allocator, ht)
+#define CSTR_HT_INIT(ht) sp_cstr_ht_init_a(sp_context_get()->allocator, ht)
+
 UTEST(ht, basic_operations) {
-  sp_ht(int, float) ht = SP_NULLPTR;
+  sp_ht_a(int, float) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   EXPECT_EQ(sp_ht_size(ht), 0u);
   EXPECT_TRUE(sp_ht_empty(ht));
@@ -51,7 +56,8 @@ UTEST(ht, basic_operations) {
 }
 
 UTEST(ht, pointer_retrieval) {
-  sp_ht(u32, double) ht = SP_NULLPTR;
+  sp_ht_a(u32, double) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   sp_ht_insert(ht, 100, 123.456);
   sp_ht_insert(ht, 200, 789.012);
@@ -70,7 +76,8 @@ UTEST(ht, pointer_retrieval) {
 }
 
 UTEST(ht, struct_values) {
-  sp_ht(int, vec3_t) ht = SP_NULLPTR;
+  sp_ht_a(int, vec3_t) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   vec3_t v1 = {1.0f, 2.0f, 3.0f};
   vec3_t v2 = {4.0f, 5.0f, 6.0f};
@@ -89,7 +96,8 @@ UTEST(ht, struct_values) {
 }
 
 UTEST(ht, struct_keys) {
-  sp_ht(compound_key_t, const char*) ht = SP_NULLPTR;
+  sp_ht_a(compound_key_t, const char*) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   compound_key_t k1 = {100, 1};
   compound_key_t k2 = {200, 2};
@@ -113,7 +121,8 @@ UTEST(ht, struct_keys) {
 }
 
 UTEST(ht, string_keys) {
-  sp_ht(u64, int) ht = SP_NULLPTR;
+  sp_ht_a(u64, int) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   const char* s1 = "apple";
   const char* s2 = "banana";
@@ -138,7 +147,8 @@ UTEST(ht, string_keys) {
 }
 
 UTEST(ht, collision_handling) {
-  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_a(int, int) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   for (s32 i = 0; i < 100; i++) {
       sp_ht_insert(ht, i, i * 100);
@@ -168,7 +178,8 @@ UTEST(ht, collision_handling) {
 }
 
 UTEST(ht, iteration) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   for (s32 i = 0; i < 10; i++) {
     sp_ht_insert(ht, i * 10, i);
@@ -191,7 +202,8 @@ UTEST(ht, iteration) {
 }
 
 UTEST(ht, edge_cases) {
-  sp_ht(int, int) ht1 = SP_NULLPTR;
+  sp_ht_a(int, int) ht1 = SP_NULLPTR;
+  HT_INIT(ht1);
   EXPECT_EQ(sp_ht_size(ht1), 0u);
   EXPECT_TRUE(sp_ht_empty(ht1));
   EXPECT_FALSE(sp_ht_getp(ht1, 42));
@@ -199,13 +211,15 @@ UTEST(ht, edge_cases) {
   sp_ht_clear(ht1);
   sp_ht_free(ht1);
 
-  sp_ht(int, int) ht2 = SP_NULLPTR;
+  sp_ht_a(int, int) ht2 = SP_NULLPTR;
+  HT_INIT(ht2);
   sp_ht_insert(ht2, 1, 100);
   sp_ht_erase(ht2, 1);
   EXPECT_EQ(sp_ht_size(ht2), 0u);
   sp_ht_free(ht2);
 
-  sp_ht(int, int) ht3 = SP_NULLPTR;
+  sp_ht_a(int, int) ht3 = SP_NULLPTR;
+  HT_INIT(ht3);
   sp_ht_insert(ht3, 1, 100);
   sp_ht_erase(ht3, 999);
   EXPECT_EQ(sp_ht_size(ht3), 1u);
@@ -213,7 +227,8 @@ UTEST(ht, edge_cases) {
 }
 
 UTEST(ht, pathological_all_same_hash) {
-  sp_ht(u32, u32) ht = sp_ht_new(u32, u32);
+  sp_ht_a(u32, u32) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   u64 cap = sp_ht_capacity(ht);
   if (cap < 2) {
@@ -235,7 +250,8 @@ UTEST(ht, pathological_all_same_hash) {
 }
 
 UTEST(ht, duplicate_key_insert_size_bug) {
-  sp_ht(u32, u32) table = SP_NULLPTR;
+  sp_ht_a(u32, u32) table = SP_NULLPTR;
+  HT_INIT(table);
 
   sp_ht_insert(table, 42, 100);
   EXPECT_EQ(sp_ht_size(table), 1u);
@@ -254,7 +270,8 @@ UTEST(ht, duplicate_key_insert_size_bug) {
 }
 
 UTEST(ht, iterator_yields_inactive_entry_at_slot_zero) {
-  sp_ht(u64, u64) ht = sp_ht_new(u64, u64);
+  sp_ht_a(u64, u64) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   sp_ht_insert(ht, 0, 999);
   sp_ht_erase(ht, 0);
@@ -272,7 +289,8 @@ UTEST(ht, iterator_yields_inactive_entry_at_slot_zero) {
 }
 
 UTEST(ht, collision) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   for (u32 i = 0; i < 8; i++) {
     sp_ht_insert(ht, i, i);
@@ -343,7 +361,8 @@ UTEST(ht, collision) {
 }
 
 UTEST(ht, iterator_returns_zero_entries_for_populated_table) {
-  sp_ht(u64, u64) ht = sp_ht_new(u64, u64);
+  sp_ht_a(u64, u64) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   sp_ht_insert(ht, 1, 100);
   sp_ht_insert(ht, 2, 200);
@@ -359,7 +378,7 @@ UTEST(ht, iterator_returns_zero_entries_for_populated_table) {
 }
 
 UTEST(ht, null_safety) {
-  sp_ht(s32, s32) null_ht = NULL;
+  sp_ht_a(s32, s32) null_ht = NULL;
 
   EXPECT_EQ(sp_ht_size(null_ht), 0u);
   EXPECT_EQ(sp_ht_capacity(null_ht), 0u);
@@ -384,6 +403,7 @@ UTEST(ht, null_safety) {
   sp_ht_erase(null_ht, 42);
   sp_ht_free(null_ht);
 
+  HT_INIT(null_ht);
   sp_ht_insert(null_ht, 42, 100);
   EXPECT_NE(null_ht, SP_NULLPTR);
   EXPECT_EQ(sp_ht_size(null_ht), 1u);
@@ -393,7 +413,8 @@ UTEST(ht, null_safety) {
 }
 
 UTEST(ht, string_key_custom_hash) {
-  sp_ht(sp_str_t, int) ht = SP_NULLPTR;
+  sp_ht_a(sp_str_t, int) ht = SP_NULLPTR;
+  HT_INIT(ht);
   sp_ht_set_fns(ht, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
   sp_str_t ka = sp_str_copy(sp_str_lit("hello"));
@@ -429,7 +450,8 @@ UTEST(ht, string_key_custom_hash) {
 }
 
 UTEST(ht, str_key) {
-  sp_str_ht(s32) ht = SP_NULLPTR;
+  sp_ht_a(sp_str_t, s32) ht = SP_NULLPTR;
+  STR_HT_INIT(ht);
 
   sp_str_t ka = sp_str_copy(sp_str_lit("hello"));
   sp_str_t kb = sp_str_copy(sp_str_lit("world"));
@@ -464,7 +486,8 @@ UTEST(ht, str_key) {
 }
 
 UTEST(ht, cstr_key) {
-  sp_cstr_ht(s32) ht = SP_NULLPTR;
+  sp_ht_a(const c8*, s32) ht = SP_NULLPTR;
+  CSTR_HT_INIT(ht);
 
   sp_cstr_ht_insert(ht, "hello", 100);
   sp_cstr_ht_insert(ht, "world", 200);
@@ -551,7 +574,8 @@ UTEST(siphash, collision_resistance) {
 
 UTEST(combined, hash_table_with_dyn_array_values) {
     typedef int* int_array;
-    sp_ht(int, int_array) ht = SP_NULLPTR;
+    sp_ht_a(int, int_array) ht = SP_NULLPTR;
+    HT_INIT(ht);
 
     for (s32 i = 0; i < 5; i++) {
         sp_da(int) arr = SP_NULLPTR;
@@ -583,7 +607,8 @@ UTEST(combined, hash_table_with_dyn_array_values) {
 }
 
 UTEST(combined, multiple_arrays_in_hash_table) {
-  sp_ht(int, void*) ht = SP_NULLPTR;
+  sp_ht_a(int, void*) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   for (s32 key = 0; key < 5; key++) {
     sp_da(int) arr = SP_NULLPTR;
@@ -615,19 +640,20 @@ UTEST(combined, multiple_arrays_in_hash_table) {
 }
 
 UTEST(ht_front, null_table) {
-  sp_ht(int, int) ht = NULL;
+  sp_ht_a(int, int) ht = NULL;
   EXPECT_EQ(sp_ht_front(ht), SP_NULLPTR);
 }
 
 UTEST(ht_front, empty_table) {
-  sp_ht(int, int) ht = SP_NULLPTR;
-  sp_ht_init(ht);
+  sp_ht_a(int, int) ht = SP_NULLPTR;
+  HT_INIT(ht);
   EXPECT_EQ(sp_ht_front(ht), SP_NULLPTR);
   sp_ht_free(ht);
 }
 
 UTEST(ht_front, single_item) {
-  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_a(int, int) ht = SP_NULLPTR;
+  HT_INIT(ht);
   sp_ht_insert(ht, 42, 100);
 
   int* front = sp_ht_front(ht);
@@ -638,7 +664,8 @@ UTEST(ht_front, single_item) {
 }
 
 UTEST(ht_front, multiple_items) {
-  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_a(int, int) ht = SP_NULLPTR;
+  HT_INIT(ht);
   sp_ht_insert(ht, 1, 10);
   sp_ht_insert(ht, 2, 20);
   sp_ht_insert(ht, 3, 30);
@@ -659,7 +686,8 @@ UTEST(ht_front, multiple_items) {
 }
 
 UTEST(ht_front, after_erase) {
-  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_a(int, int) ht = SP_NULLPTR;
+  HT_INIT(ht);
   sp_ht_insert(ht, 1, 10);
   sp_ht_insert(ht, 2, 20);
 
@@ -684,8 +712,10 @@ UTEST(ht_front, after_erase) {
 }
 
 UTEST(ht, for_kv_iteration) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
-  sp_ht(s32, bool) visited = SP_NULLPTR;
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
+  sp_ht_a(s32, bool) visited = SP_NULLPTR;
+  HT_INIT(visited);
 
   sp_for(it, 10) {
     sp_ht_insert(ht, it * 10, it);
@@ -714,10 +744,12 @@ UTEST(ht, for_kv_iteration) {
 }
 
 UTEST(ht, for_kv_string_keys) {
-  sp_ht(sp_str_t, s32) ht = SP_NULLPTR;
+  sp_ht_a(sp_str_t, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
   sp_ht_set_fns(ht, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
-  sp_ht(sp_str_t, bool) visited = SP_NULLPTR;
+  sp_ht_a(sp_str_t, bool) visited = SP_NULLPTR;
+  HT_INIT(visited);
   sp_ht_set_fns(visited, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
   sp_ht_insert(ht, sp_str_lit("one"), 1);
@@ -744,8 +776,8 @@ UTEST(ht, for_kv_string_keys) {
 }
 
 UTEST(ht, for_kv_empty_table) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init(ht);
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   s32 count = 0;
   sp_ht_for_kv(ht, it) {
@@ -759,7 +791,7 @@ UTEST(ht, for_kv_empty_table) {
 }
 
 UTEST(ht, for_kv_null_table) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
 
   s32 count = 0;
   sp_ht_for_kv(ht, it) {
@@ -786,7 +818,8 @@ static bool cmp_s32(void* ka, void* kb, u64 size) {
 // Hash collision: insert uses hash equality instead of key equality for probing.
 // Constant hash forces all keys to same bucket; different keys overwrite each other.
 UTEST(ht_issue, hash_collision_overwrites_different_keys) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
   sp_ht_set_fns(ht, hash_constant, cmp_s32);
 
   sp_ht_insert(ht, 100, 1);
@@ -823,7 +856,8 @@ static sp_hash_t sp_test_identity_hash(void* key, u64 size) {
 // Rehash: resize extends array but doesn't rehash existing entries.
 // Insert a key whose slot changes after resize, verify it moves correctly.
 UTEST(ht_issue, rehash_breaks_lookups_after_resize) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
   sp_ht_set_fns(ht, sp_test_identity_hash, cmp_s32);
 
   sp_ht_insert(ht, 1, 0);
@@ -864,7 +898,8 @@ static bool sp_test_counting_compare(void* ka, void* kb, u64 size) {
 // Linear scan: lookup probes entire capacity instead of stopping at INACTIVE.
 // With 1 element in cap=64 table, missing key lookup should be O(1), not O(N).
 UTEST(ht_issue, linear_scan_calls_hash_too_many_times) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
   sp_ht_set_fns(ht, sp_test_counting_hash, sp_test_counting_compare);
 
   for (s32 i = 0; i < 32; i++) {
@@ -911,7 +946,8 @@ static s32 eval_val(void) {
 }
 
 UTEST(ht_issue, insert_evaluates_args_multiple_times) {
-  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  HT_INIT(ht);
 
   g_key_eval_count = 0;
   g_val_eval_count = 0;
@@ -925,7 +961,8 @@ UTEST(ht_issue, insert_evaluates_args_multiple_times) {
 }
 
 UTEST(ht, free) {
-  sp_ht(s32, s32) ht = sp_zero();
+  sp_ht_a(s32, s32) ht = sp_zero();
+  HT_INIT(ht);
   sp_ht_insert(ht, 69, 420);
 
   sp_mem_arena_t* arena = sp_mem_arena_new();

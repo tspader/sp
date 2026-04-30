@@ -32,9 +32,10 @@ CFLAGS = -std=c99 -g -Werror=return-type -fsanitize=undefined,alignment -fno-san
 
 EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
 EXE := $(if $(WASM),.wasm,$(EXE))
-
-TESTS = app amalg str format
-EXAMPLES = app format hash_table
+TESTS = amalg app array asset cv elf format fmon fs glob ht io leak linkage math ps rb str thread time mem prompt
+EXAMPLES = app array elf format hash_table io ls palette prompt prompt_fancy signal wc
+# TESTS = app amalg str format
+# EXAMPLES = app format hash_table
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \

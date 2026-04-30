@@ -143,7 +143,7 @@ typedef struct {
 
 typedef struct {
   sp_da(sp_elf_section_t) sections;
-  sp_str_ht(u32) section_map;
+  sp_ht_a(sp_str_t, u32) section_map;
   sp_mem_t allocator;
 } sp_elf_t;
 
@@ -196,6 +196,7 @@ sp_elf_t* sp_elf_new_alloc(sp_mem_t allocator) {
   sp_context_push_allocator(allocator);
   sp_elf_t* elf = sp_alloc_type(sp_elf_t);
   elf->allocator = allocator;
+  sp_str_ht_init_a(allocator, elf->section_map);
   sp_context_pop();
 
   return elf;

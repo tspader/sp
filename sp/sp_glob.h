@@ -80,7 +80,7 @@ typedef struct {
   u32 idx;
 } sp_glob_set_fallback_entry_t;
 
-typedef sp_ht(sp_str_t, sp_da(u32)) sp_glob_set_index_table_t;
+typedef sp_ht_a(sp_str_t, sp_da(u32)) sp_glob_set_index_table_t;
 
 typedef struct sp_glob_set_t {
   sp_da(sp_glob_t*) globs;
@@ -581,10 +581,11 @@ sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path) {
 }
 
 sp_glob_set_t* sp_glob_set_new() {
+  sp_mem_t mem = sp_context_get()->allocator;
   sp_glob_set_t* set = SP_ALLOC(sp_glob_set_t);
-  sp_ht_set_fns(set->literal, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
-  sp_ht_set_fns(set->base_name, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
-  sp_ht_set_fns(set->extension, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
+  sp_str_ht_init_a(mem, set->literal);
+  sp_str_ht_init_a(mem, set->base_name);
+  sp_str_ht_init_a(mem, set->extension);
   return set;
 }
 

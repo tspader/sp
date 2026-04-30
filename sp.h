@@ -1784,7 +1784,6 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_new(__K, __V) SP_NULLPTR
 
 #define sp_ht_set_fns(ht, hash_fn, cmp_fn) \
-  sp_ht_ensure(ht);                        \
   (ht)->info.fn.hash = (hash_fn);          \
   (ht)->info.fn.compare = (cmp_fn)
 
@@ -2207,15 +2206,15 @@ typedef struct {
   sp_str_t value;
 } sp_env_var_t;
 
-typedef sp_str_ht(sp_str_t) sp_env_table_t;
+typedef sp_ht_a(sp_str_t, sp_str_t) sp_env_table_t;
 
 typedef struct {
   sp_env_table_t vars;
 } sp_env_t;
 
-SP_API void     sp_env_init(sp_env_t* env);
-SP_API sp_env_t sp_env_capture();
-SP_API sp_env_t sp_env_copy(sp_env_t* env);
+SP_API void     sp_env_init(sp_env_t* env, sp_mem_t mem);
+SP_API sp_env_t sp_env_capture(sp_mem_t mem);
+SP_API sp_env_t sp_env_copy(sp_env_t* env, sp_mem_t mem);
 SP_API u32      sp_env_count(sp_env_t* env);
 SP_API sp_str_t sp_env_get(sp_env_t* env, sp_str_t name);
 SP_API bool     sp_env_contains(sp_env_t* env, sp_str_t name);
@@ -5472,7 +5471,7 @@ void sp_sys_exit(s32 code) {
 /////////////////////
 #if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
 void sp_sys_tls_init(sp_tls_rt_t* tls) {
-  sp_env_init(&tls->env);
+  sp_env_init(&tls->env, tls->contexts[0].allocator);
   if (!environ) return;
   for (c8** p = environ; *p; p++) {
     sp_str_pair_t pair = sp_str_cleave_c8(sp_str_view(*p), '=');
@@ -9697,12 +9696,14 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
 #error "sp_os_env_it_next"
 #endif
 
-void sp_env_init(sp_env_t* env) {
+void sp_env_init(sp_env_t* env, sp_mem_t mem) {
   *env = SP_ZERO_STRUCT(sp_env_t);
+  sp_str_ht_init_a(mem, env->vars);
 }
 
-sp_env_t sp_env_capture() {
+sp_env_t sp_env_capture(sp_mem_t mem) {
   sp_env_t env = SP_ZERO_INITIALIZE();
+  sp_str_ht_init_a(mem, env.vars);
   for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
     sp_str_ht_insert(env.vars, sp_str_copy(it.key), sp_str_copy(it.value));
   }
@@ -9710,8 +9711,9 @@ sp_env_t sp_env_capture() {
   return env;
 }
 
-sp_env_t sp_env_copy(sp_env_t* env) {
+sp_env_t sp_env_copy(sp_env_t* env, sp_mem_t mem) {
   sp_env_t copy = SP_ZERO_INITIALIZE();
+  sp_str_ht_init_a(mem, copy.vars);
 
   sp_str_ht_for(env->vars, it) {
     sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
@@ -10529,19 +10531,20 @@ SP_PRIVATE void sp_ps_free_posix_args(c8** argv);
 SP_PRIVATE void sp_ps_set_nonblocking(s32 fd);
 SP_PRIVATE void sp_ps_set_blocking(s32 fd);
 
-SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config) {
+SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem) {
   sp_env_t env = SP_ZERO_INITIALIZE();
 
   switch (config->mode) {
     case SP_PS_ENV_INHERIT: {
-      env = sp_env_capture();
+      env = sp_env_capture(mem);
       break;
     }
     case SP_PS_ENV_EXISTING: {
-      env = sp_env_copy(&config->env);
+      env = sp_env_copy(&config->env, mem);
       break;
     }
     case SP_PS_ENV_CLEAN: {
+      sp_env_init(&env, mem);
     }
   }
 
@@ -10619,6 +10622,7 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
   }
 
   dst.env.mode = src->env.mode;
+  sp_env_init(&dst.env.env, sp_context_get()->allocator);
 
   sp_env_table_t ht = src->env.env.vars;
   for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
@@ -10736,7 +10740,7 @@ sp_ps_t sp_ps_create(sp_ps_config_t config) {
   SP_ASSERT(!sp_str_empty(config.command));
 
   c8** argv = sp_ps_build_posix_args(&config);
-  sp_env_t env = sp_ps_build_env(&config.env);
+  sp_env_t env = sp_ps_build_env(&config.env, proc.allocator);
   c8** envp = sp_env_to_posix_envp(&env);
 
   posix_spawnattr_t attr;
@@ -11352,7 +11356,7 @@ sp_ps_config_t sp_ps_config_copy(const sp_ps_config_t* src) {
   }
 
   dst.env.mode = src->env.mode;
-  sp_env_init(&dst.env.env);
+  sp_env_init(&dst.env.env, sp_context_get()->allocator);
   sp_ht_for(src->env.env.vars, it) {
     sp_str_t key = *sp_ht_it_getkp(src->env.env.vars, it);
     sp_str_t value = *sp_ht_it_getp(src->env.env.vars, it);
@@ -11859,7 +11863,7 @@ struct sp_fmon_os {
 struct sp_fmon_os {
   sp_da(s32) fds;
   sp_da(sp_str_t) paths;
-  sp_str_ht(u8) files;
+  sp_ht_a(sp_str_t, u8) files;
   sp_aligned() u8 buffer[4096];
   s32 fd;
 };
@@ -12092,6 +12096,8 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
     linux_monitor->fd = 0;
   }
 
+  sp_str_ht_init_a(monitor->allocator, linux_monitor->files);
+
   monitor->os = linux_monitor;
 }
 
@@ -12144,7 +12150,7 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
 }
 
 SP_PRIVATE bool sp_linux_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path) {
-  if (!os->files) return true;
+  if (sp_ht_empty(os->files)) return true;
   return sp_ht_getp(os->files, full_path);
 }
 

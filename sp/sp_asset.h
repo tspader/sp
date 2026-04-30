@@ -43,7 +43,7 @@ typedef struct {
   sp_asset_registry_t* registry;
   sp_asset_kind_t kind;
   void* fallback;
-  sp_str_ht(sp_asset_t*) assets;
+  sp_ht_a(sp_str_t, sp_asset_t*) assets;
 } sp_asset_importer_t;
 
 struct sp_asset_import_context {
@@ -113,6 +113,7 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
       .fallback = cfg->fallback,
       .assets = SP_NULLPTR,
     };
+    sp_str_ht_init_a(sp_mem_arena_as_allocator(registry->arena), importer.assets);
     sp_da_push(registry->importers, importer);
   }
 
