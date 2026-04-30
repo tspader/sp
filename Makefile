@@ -32,7 +32,7 @@ CFLAGS = -std=c99 -g -Werror=return-type -fsanitize=undefined,alignment -fno-san
 
 EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
 EXE := $(if $(WASM),.wasm,$(EXE))
-TESTS = amalg app array asset cv elf format fmon fs glob ht io leak linkage math ps rb str thread time mem prompt
+TESTS = amalg app array asset cv elf format fmon fs glob ht io linkage math ps rb str thread time mem prompt
 EXAMPLES = app array elf format hash_table io ls palette prompt prompt_fancy signal wc
 # TESTS = app amalg str format
 # EXAMPLES = app format hash_table

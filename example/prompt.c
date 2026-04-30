@@ -376,7 +376,8 @@ s32 prompt_main(s32 argc, const c8** argv) {
     { "Knight Rider", demo_knight_rider },
   };
 
-  sp_cstr_ht(sp_prompt_demo_fn_t) demos = sp_zero();
+  sp_ht_a(const c8*, sp_prompt_demo_fn_t) demos = sp_zero();
+  sp_cstr_ht_init_a(sp_context_get()->allocator, demos);
   sp_carr_for(ordered, it) {
     sp_cstr_ht_insert(demos, ordered[it].name, ordered[it].fn);
   }
