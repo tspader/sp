@@ -1153,6 +1153,7 @@ void*       sp_sys_memset(void* dest, s32 c, u64 n);
 s32         sp_sys_memcmp(const void* a, const void* b, u64 n);
 void        sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* expr, bool cond);
 
+s32 sp_sys_rmdir_s(sp_str_t path);
 
 //  ██████   ██████   █████████   █████ ██████   █████
 // ░░██████ ██████   ███░░░░░███ ░░███ ░░██████ ░░███
@@ -1474,7 +1475,7 @@ SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
 #define sp_da_size(__ARR)\
   (sp_da_head(__ARR)->size)
 
-#define sp_da_allocator(__arr) \
+#define sp_da_mem(__arr) \
   (sp_da_head(__arr)->allocator)
 
 #define sp_da_stride(__ARR) \
@@ -1496,10 +1497,10 @@ SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
   ((void**)&(__arr))
 
 #define sp_da_init(__a, __arr) \
-  sp_da_init_ex((__a), sp_da_vp(__arr), sp_da_stride(__arr))
+  (sp_unused(sp_da_init_ex((__a), sp_da_vp(__arr), sp_da_stride(__arr))), __arr)
 
 #define sp_da_free(__arr)         \
-  sp_mem_allocator_free(sp_da_allocator(__arr), sp_da_head(__arr))
+  sp_mem_allocator_free(sp_da_mem(__arr), sp_da_head(__arr))
 
 #define sp_da_grow(__ARR, __N)\
   sp_da_grow_ex((__ARR), sp_da_stride(__ARR), (__N))
@@ -2363,6 +2364,7 @@ typedef struct {
 } sp_fs_it_frame_t;
 
 typedef struct {
+  sp_mem_t mem;
   sp_fs_entry_t entry;
   sp_da(sp_fs_it_frame_t) stack;
   bool recursive;
@@ -3347,6 +3349,7 @@ SP_API s32              sp_app_run(sp_app_config_t config);
 SP_API sp_str_t      sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time);
 
 SP_API sp_str_t      sp_str_copy_a(sp_mem_t mem, sp_str_t str);
+SP_API c8*           sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t      sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
 SP_API sp_str_t      sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join);
 SP_API sp_str_t      sp_str_join_n_a(sp_mem_t mem, sp_str_t* strs, u32 n, sp_str_t joiner);
@@ -5642,6 +5645,12 @@ s32 sp_sys_rmdir(const c8* path) {
 #else
 #error "sp_sys_rmdir"
 #endif
+
+s32 sp_sys_rmdir_s(sp_str_t path) {
+  c8 cstr [SP_PATH_MAX] = sp_zero();
+  sp_str_copy_to(path, cstr, SP_PATH_MAX);
+  return sp_sys_rmdir(cstr);
+}
 
 ///////////////////
 // SP_SYS_UNLINK //
@@ -7951,17 +7960,12 @@ void sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_length) {
   sp_cstr_copy_to_n(str, sp_cstr_len(str), buffer, buffer_length);
 }
 
-void sp_cstr_copy_to_n(const c8* str, u32 length, c8* buffer, u32 buffer_length) {
-  if (!str) return;
-  if (!buffer) return;
-  if (!buffer_length) return;
+void sp_cstr_copy_to_n(const c8* str, u32 len, c8* buffer, u32 capacity) {
+  if (!(str && buffer && capacity)) return;
 
-  // @bad
-  u32 copy_length = SP_MIN(length, buffer_length - 1);
-  for (u32 i = 0; i < copy_length; i++) {
-    buffer[i] = str[i];
-  }
-  buffer[copy_length] = '\0';
+  u32 n = sp_min(len, capacity - 1);
+  memcpy(buffer, str, n);
+  buffer[n] = 0;
 }
 
 bool sp_cstr_equal(const c8* a, const c8* b) {
@@ -8270,6 +8274,17 @@ sp_str_t sp_wtf16_to_wtf8(sp_wide_str_t wtf16) {
 
 c8* sp_str_to_cstr(sp_str_t str) {
   return sp_cstr_copy_n(str.data, str.len);
+}
+
+c8* sp_cstr_copy_n_a(sp_mem_t mem, const c8* str, u32 len) {
+  u32 capacity = len + 1;
+  c8* copy = sp_alloc_n_a(mem, c8, capacity);
+  sp_cstr_copy_to_n(str, len, copy, capacity);
+  return copy;
+}
+
+c8* sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str) {
+  return sp_cstr_copy_n_a(mem, str.data, str.len);
 }
 
 sp_str_t sp_str_alloc(u32 capacity) {
@@ -8763,7 +8778,8 @@ SP_PRIVATE u32 sp_win32_find_name_len(const u16* name) {
 }
 
 bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
-  sp_str_t pattern = sp_fs_join_path(path, sp_str_lit("*"));
+  c8 cstr [SP_PATH_MAX]
+  sp_str_t pattern = sp_fs_join_path_a(path, sp_str_lit("*"));
   sp_sys_nt_path_t nt = SP_ZERO_INITIALIZE();
   if (!SP_NT_SUCCESS(sp_sys_nt_path(pattern, &nt))) {
     return false;
@@ -8816,7 +8832,9 @@ SP_PRIVATE sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type) {
 }
 
 bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
-  frame->fd = sp_sys_open(sp_str_to_cstr(path), SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  c8 cstr [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
+  frame->fd = sp_sys_open(cstr, SP_O_RDONLY | SP_O_DIRECTORY, 0);
   return frame->fd >= 0;
 }
 
@@ -14413,21 +14431,15 @@ sp_err_t sp_fs_link_a(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind) {
 }
 
 sp_err_t sp_fs_remove_file_a(sp_str_t path) {
-  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
-  sp_err_t err = sp_sys_unlink(sp_cstr_from_str_a(s.mem, path));
-  sp_mem_end_scratch_a(s);
-  return err;
+  c8 cstr [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
+  return sp_sys_unlink(cstr);
 }
 
-//
-// fs: iterator (uses scratch da internally)
-//
 void sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path) {
-  sp_fs_it_frame_t frame = SP_ZERO_INITIALIZE();
+  sp_fs_it_frame_t frame = sp_zero();
   if (!sp_sys_diriter_open(&frame, path)) return;
-
-  sp_mem_t a = sp_da_allocator(it->stack);
-  frame.path = sp_str_copy_a(a, path);
+  frame.path = sp_str_copy_a(it->mem, path);
   sp_da_push(it->stack, frame);
 }
 
@@ -14442,8 +14454,7 @@ void sp_fs_it_next_a(sp_fs_it_t* it) {
     sp_fs_it_frame_t* top = sp_da_back(it->stack);
 
     if (sp_sys_diriter_read(top, &it->entry)) {
-      sp_mem_t a = sp_da_allocator(it->stack);
-      it->entry.path = sp_fs_join_path_a(a, top->path, it->entry.name);
+      it->entry.path = sp_fs_join_path_a(it->mem, top->path, it->entry.name);
 
       if (it->recursive && it->entry.kind == SP_FS_KIND_DIR) {
         sp_fs_it_push_a(it, it->entry.path);
@@ -14513,9 +14524,7 @@ sp_err_t sp_fs_remove_dir_a(sp_str_t path) {
     if (err) goto done;
   }
 
-  {
-    err = sp_sys_rmdir(sp_cstr_from_str_a(s.mem, path));
-  }
+  err = sp_sys_rmdir_s(path);
 
 done:
   sp_mem_end_scratch_a(s);
@@ -14605,14 +14614,14 @@ sp_err_t sp_fs_copy_a(sp_str_t from, sp_str_t to) {
 }
 
 sp_fs_it_t sp_fs_it_new_a(sp_mem_t mem, sp_str_t path) {
-  sp_fs_it_t it = SP_ZERO_INITIALIZE();
+  sp_fs_it_t it = { .mem = mem };
   sp_da_init(mem, it.stack);
   sp_fs_it_begin_a(&it, path);
   return it;
 }
 
 sp_fs_it_t sp_fs_it_new_recursive_a(sp_mem_t mem, sp_str_t path) {
-  sp_fs_it_t it = { .recursive = true };
+  sp_fs_it_t it = { .mem = mem, .recursive = true };
   sp_da_init(mem, it.stack);
   sp_fs_it_begin_a(&it, path);
   return it;
