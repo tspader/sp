@@ -1769,7 +1769,7 @@ SP_BEGIN_EXTERN_C()
         sp_ht_entry_state state;               \
     }
 
-#define sp_ht(__K, __V)                        \
+#define sp_ht_a(__K, __V)                        \
     struct {                                   \
         __sp_ht_entry(__K, __V)* data;         \
         __K tmp_key;                           \
@@ -1778,6 +1778,8 @@ SP_BEGIN_EXTERN_C()
         u64 capacity;                          \
         sp_ht_info_t info;                     \
     }*
+
+#define sp_ht(__K, __V) struct sp_mcat(refactor_me, sp_mcat(__, sp_mcat(__K, sp_mcat(_, __V)))) {}*
 
 #define sp_ht_new(__K, __V) SP_NULLPTR
 
@@ -1849,6 +1851,9 @@ SP_BEGIN_EXTERN_C()
     (ht)->tmp_val = (v);                                               \
     sp_ht_insert_impl(ht, &(ht)->tmp_key, &(ht)->tmp_val, (ht)->info); \
   } while (0)
+
+#define sp_ht_insert(ht, k, v)                                      \
+  sp_ht_insert_ex(ht, k, v)
 
 #define sp_ht_get_key_n(ht, n) \
   (&(ht)->data[(n)].key)
@@ -1949,10 +1954,7 @@ SP_BEGIN_EXTERN_C()
   } while (0)
 
 #define sp_str_ht_insert(ht, key, value)  \
-  do {                                    \
-    sp_str_ht_ensure(ht);                 \
-    sp_ht_insert_ex(ht, key, value);      \
-  } while (0)
+  sp_ht_insert_ex(ht, key, value);
 
 #define sp_str_ht_get(ht, key)       sp_ht_getp(ht, key)
 #define sp_str_ht_get_ex(ht, key, n) sp_ht_get_ex(ht, key, n)
@@ -1987,10 +1989,7 @@ SP_BEGIN_EXTERN_C()
   } while (0)
 
 #define sp_cstr_ht_insert(ht, key, value)  \
-  do {                                     \
-    sp_cstr_ht_ensure(ht);                 \
-    sp_ht_insert_ex(ht, key, value);       \
-  } while (0)
+  sp_ht_insert_ex(ht, key, value);
 
 #define sp_cstr_ht_get(ht, key)       sp_ht_getp(ht, key)
 #define sp_cstr_ht_erase(ht, key)     sp_ht_erase(ht, key)
@@ -2813,7 +2812,7 @@ typedef struct {
   sp_mem_arena_t* scratch [2];
   sp_env_t env;
   struct {
-    sp_str_ht(sp_fmt_directive_t) directives;
+    sp_ht_a(sp_str_t, sp_fmt_directive_t) directives;
   } format;
   struct {
     sp_io_writer_t* out;
