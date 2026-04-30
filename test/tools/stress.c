@@ -390,7 +390,7 @@ void fmon_stress_create_dir_tree(sp_str_t base, s32 depth, sp_da(sp_str_t)* dirs
   if (depth <= 0) return;
 
   for (s32 i = 0; i < FMON_STRESS_DIRS_PER_LEVEL; i++) {
-    sp_str_t name = sp_fmt("d{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "d{}", sp_fmt_int(i)).value;
     sp_str_t child = sp_fs_join_path(base, name);
     sp_fs_create_dir(child);
     fmon_stress_create_dir_tree(child, depth - 1, dirs);
@@ -437,7 +437,7 @@ UTEST(stress, fmon) {
 
     while (files_created < batch_end) {
       sp_str_t dir = dirs[dir_idx % num_dirs];
-      sp_str_t name = sp_fmt("f{}.txt", sp_fmt_uint(files_created));
+      sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "f{}.txt", sp_fmt_uint(files_created)).value;
       sp_str_t path = sp_fs_join_path(dir, name);
 
       sp_io_writer_t writer = SP_ZERO_INITIALIZE();

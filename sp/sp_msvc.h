@@ -120,7 +120,7 @@ bool sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b) {
 
 sp_str_t sp_msvc_json_get_str(sp_str_t json, sp_str_t key) {
   sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_str_t needle = sp_fmt("\"{}\":\"", sp_fmt_str(key));
+  sp_str_t needle = sp_fmt_a(sp_context_get_allocator(), "\"{}\":\"", sp_fmt_str(key)).value;
 
   s32 pos = sp_str_find(json, needle);
   if (pos == SP_STR_NO_MATCH) {
@@ -139,18 +139,19 @@ sp_str_t sp_msvc_json_get_str(sp_str_t json, sp_str_t key) {
 
   sp_str_t raw = sp_str_sub(json, (s32)value_start, (s32)(value_end - value_start));
 
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_context_push_allocator(scratch.old_allocator);
+  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &builder);
   sp_for(i, raw.len) {
     if (raw.data[i] == '\\' && i + 1 < raw.len && raw.data[i + 1] == '\\') {
-      sp_str_builder_append_c8(&builder, '\\');
+      sp_io_write_c8(&builder, '\\');
       i++;
     } else {
-      sp_str_builder_append_c8(&builder, raw.data[i]);
+      sp_io_write_c8(&builder, raw.data[i]);
     }
   }
 
-  sp_context_push_allocator(scratch.old_allocator);
-  sp_str_t result = sp_str_builder_to_str(&builder);
+  sp_str_t result = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
   sp_context_pop();
 
   sp_mem_end_scratch(scratch);

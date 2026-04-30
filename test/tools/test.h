@@ -34,7 +34,7 @@
 
 #define SP_TEST_REPORT(fmt, ...) \
   do { \
-    sp_str_t formatted = sp_fmt(fmt, ##__VA_ARGS__); \
+    sp_str_t formatted = sp_fmt_a(sp_context_get_allocator(), fmt, ##__VA_ARGS__).value; \
     UTEST_PRINTF("{}", sp_fmt_str(formatted)); \
   } while (0)
 
@@ -48,12 +48,10 @@
     if (!sp_str_equal((a), (b))) { \
       const c8* __sp_test_file_lval = __FILE__; \
       const u32 __sp_test_line_lval = __LINE__; \
-      sp_str_builder_t __sp_test_builder = SP_ZERO_INITIALIZE(); \
-      sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("{}:{} Failure:"), sp_fmt_cstr(__sp_test_file_lval), sp_fmt_uint(__sp_test_line_lval)); \
-      sp_str_builder_new_line(&__sp_test_builder); \
-      sp_str_builder_indent(&__sp_test_builder); \
-      sp_str_builder_append_fmt_str(&__sp_test_builder, SP_LIT("\"{}\" != \"{}\""), sp_fmt_str((a)), sp_fmt_str((b))); \
-      SP_TEST_REPORT_STR(sp_str_builder_to_str(&__sp_test_builder)); \
+      sp_io_writer_t __sp_test_io = sp_zero(); \
+      sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &__sp_test_io); \
+      sp_fmt_io(&__sp_test_io, "{}:{} Failure:\n  \"{}\" != \"{}\"", sp_fmt_cstr(__sp_test_file_lval), sp_fmt_uint(__sp_test_line_lval), sp_fmt_str((a)), sp_fmt_str((b))); \
+      SP_TEST_REPORT_STR(sp_io_writer_dyn_mem_as_str(&__sp_test_io.dyn_mem)); \
       *utest_result = UTEST_TEST_FAILURE; \
  \
       if (is_assert) { \

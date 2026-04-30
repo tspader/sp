@@ -54,8 +54,8 @@ typedef struct {
 //////////////
 sp_str_t get_process_path(sp_mem_t mem) {
   sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path_a(mem));
-  sp_str_t process = sp_fs_join_path(exe, sp_str_lit("process"));
-  process = sp_fs_replace_ext(process, sp_os_get_executable_ext());
+  sp_str_t process = sp_fs_join_path_a(mem, exe, sp_str_lit("process"));
+  process = sp_fs_replace_ext_a(mem, process, sp_os_get_executable_ext());
   return process;
 }
 
@@ -70,7 +70,7 @@ UTEST_F_SETUP(ps) {
   ut.arena = sp_mem_arena_new();
   ut.mem = sp_mem_arena_as_allocator(ut.arena);
   sp_str_t process = get_process_path(ut.mem);
-  EXPECT_TRUE(sp_fs_exists(process));
+  EXPECT_TRUE(sp_fs_exists_a(process));
 
   sp_test_file_manager_init(&ut.file_manager);
   ut.buffer = (sp_byte_buffer_t) {
@@ -118,7 +118,7 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
   if (total_read != ctx->expected_len) {
     if (ctx->mode == SP_TEST_PROC_READ_EXACT) {
       if (total_read != ctx->expected_len) {
-        sp_log("expected to read {}, but got {}", sp_fmt_uint(total_read), sp_fmt_uint(ctx->expected_len));
+        sp_log_a("expected to read {}, but got {}", sp_fmt_uint(total_read), sp_fmt_uint(ctx->expected_len));
         sp_assert(total_read == ctx->expected_len);
       }
     }
@@ -166,7 +166,7 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
     u64 bytes_written = 0;
     sp_io_write(in, test.input.data, test.input.len, &bytes_written);
     if (!(bytes_written == test.input.len)) {
-      sp_log(
+      sp_log_a(
         "stdin: tried to write {} ({}), but {.fg yellow} returned {}",
         sp_fmt_str(test.input),
         sp_fmt_uint(test.input.len),
@@ -190,7 +190,7 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
     sp_test_proc_check_stream(&check);
 
     if (check.result != SP_TEST_PS_OUTPUT_MATCH) {
-      sp_log("stdout: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
+      sp_log_a("stdout: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
       sp_assert(check.result == SP_TEST_PS_OUTPUT_MATCH);
     }
   }
@@ -206,7 +206,7 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
     sp_test_proc_check_stream(&check);
 
     if (check.result != SP_TEST_PS_OUTPUT_MATCH) {
-      sp_log("stderr: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
+      sp_log_a("stderr: expected {.quote}, but got {.quote}", sp_fmt_str(check.expected), sp_fmt_cstr((c8*)check.buffer.data));
       sp_assert(check.result == SP_TEST_PS_OUTPUT_MATCH);
     }
   }
@@ -466,14 +466,13 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
   sp_io_writer_t* in = sp_ps_io_in(&ps);
   sp_io_reader_t* out = sp_ps_io_out(&ps);
 
-  sp_str_builder_t builder = sp_str_builder_from_writer(in);
   for (u32 i = 0; i < 8; i++) {
     if (sp_str_empty(test.expected[i].key)) {
       break;
     }
 
-    sp_str_builder_append(&builder, test.expected[i].key);
-    sp_str_builder_append_c8(&builder, '\n');
+    sp_io_write_str(in, test.expected[i].key, SP_NULLPTR);
+    sp_io_write_c8(in, '\n');
   }
 
   sp_io_writer_close(in);
@@ -850,7 +849,7 @@ UTEST_F(ps, interleaved_read_write) {
   EXPECT_NE(out, SP_NULLPTR);
 
   for (u32 i = 0; i < 4; i++) {
-    sp_str_t input = sp_fmt("line {}\n", sp_fmt_uint(i));
+    sp_str_t input = sp_fmt_a(sp_context_get_allocator(), "line {}\n", sp_fmt_uint(i)).value;
 
     u64 written = 0;
     sp_io_write_str(in, input, &written);
@@ -859,7 +858,7 @@ UTEST_F(ps, interleaved_read_write) {
     sp_os_sleep_ms(50);
     u64 bytes_read = 0;
     sp_io_read(out, ut.buffer.data, ut.buffer.len, &bytes_read);
-    sp_str_t expected = sp_fmt("echo: line {}\n", sp_fmt_uint(i));
+    sp_str_t expected = sp_fmt_a(sp_context_get_allocator(), "echo: line {}\n", sp_fmt_uint(i)).value;
     EXPECT_EQ(bytes_read, expected.len);
     EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, expected.data, expected.len));
   }
@@ -958,7 +957,7 @@ UTEST_F(ps, redirect_stderr_to_stdout) {
   EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
 
-  sp_str_t expected = sp_fmt("{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary));
+  sp_str_t expected = sp_fmt_a(sp_context_get_allocator(), "{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary)).value;
   EXPECT_TRUE(sp_str_equal(output.out, expected));
   EXPECT_TRUE(sp_str_empty(output.err));
 
@@ -986,7 +985,7 @@ UTEST_F(ps, redirect_stdout_to_stderr) {
   EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
 
-  sp_str_t expected = sp_fmt("{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary));
+  sp_str_t expected = sp_fmt_a(sp_context_get_allocator(), "{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary)).value;
   EXPECT_TRUE(sp_str_empty(output.out));
   EXPECT_TRUE(sp_str_equal(output.err, expected));
 
@@ -1167,8 +1166,8 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   const s32 write_size = 8192;
   const s32 write_count = 10;
 
-  sp_str_t size_str = sp_fmt("{}", sp_fmt_int(write_size));
-  sp_str_t count_str = sp_fmt("{}", sp_fmt_int(write_count));
+  sp_str_t size_str = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_int(write_size)).value;
+  sp_str_t count_str = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_int(write_count)).value;
 
   sp_ps_t ps_a = sp_ps_create((sp_ps_config_t) {
     .command = get_process_path(ut.mem),
@@ -1244,10 +1243,10 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
 
   sp_test_concurrent_analysis_t analysis = sp_test_analyze_concurrent_output(buffer, total_read, write_size);
 
-  sp_log("large writes ({}B x {} per process, > PIPE_BUF):", sp_fmt_int(write_size), sp_fmt_int(write_count));
-  sp_log("  total bytes: {} (A={}, B={})", sp_fmt_uint(total_read), sp_fmt_uint(analysis.a_bytes), sp_fmt_uint(analysis.b_bytes));
-  sp_log("  transitions: {}", sp_fmt_uint(analysis.transitions));
-  sp_log("  interleaved: {}", sp_fmt_cstr(analysis.interleaved ? "true" : "false"));
+  sp_log_a("large writes ({}B x {} per process, > PIPE_BUF):", sp_fmt_int(write_size), sp_fmt_int(write_count));
+  sp_log_a("  total bytes: {} (A={}, B={})", sp_fmt_uint(total_read), sp_fmt_uint(analysis.a_bytes), sp_fmt_uint(analysis.b_bytes));
+  sp_log_a("  transitions: {}", sp_fmt_uint(analysis.transitions));
+  sp_log_a("  interleaved: {}", sp_fmt_cstr(analysis.interleaved ? "true" : "false"));
 
   EXPECT_EQ(analysis.a_bytes, write_size * write_count);
   EXPECT_EQ(analysis.b_bytes, write_size * write_count);

@@ -65,12 +65,15 @@ static u32 count_expected_lines(const c8* lines[32]) {
 }
 
 static sp_str_t trim_framebuffer_row(sp_prompt_cell_t* row, u32 cols) {
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &builder);
   sp_for(col, cols) {
-    sp_str_builder_append_utf8(&builder, row[col].codepoint);
+    u8 buf[4] = SP_ZERO_INITIALIZE();
+    u8 len = sp_utf8_encode(row[col].codepoint, buf);
+    sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
   }
 
-  sp_str_t str = sp_str_builder_to_str(&builder);
+  sp_str_t str = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
   while (!sp_str_empty(str) && str.data[str.len - 1] == ' ') {
     str.len--;
   }
@@ -217,12 +220,15 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_str_t bytes) {
 
   sp_da(sp_str_t) lines = SP_NULLPTR;
   sp_for_range(row, 0, vt.max_row + 1) {
-    sp_str_builder_t builder = SP_ZERO_INITIALIZE();
+    sp_io_writer_t builder = sp_zero();
+    sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &builder);
     sp_for(col, 256) {
-      sp_str_builder_append_utf8(&builder, vt.cells[row][col]);
+      u8 buf[4] = SP_ZERO_INITIALIZE();
+      u8 len = sp_utf8_encode(vt.cells[row][col], buf);
+      sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
     }
 
-    sp_str_t line = sp_str_builder_to_str(&builder);
+    sp_str_t line = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
     while (!sp_str_empty(line) && line.data[line.len - 1] == ' ') {
       line.len--;
     }

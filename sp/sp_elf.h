@@ -412,7 +412,7 @@ sp_elf_section_t* sp_elf_rela_new(sp_elf_t* elf, sp_elf_section_t* target) {
   sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
   if (!symtab) return SP_NULLPTR;
 
-  sp_str_t name = sp_fmt(".rela{}", sp_fmt_str(target->name));
+  sp_str_t name = sp_fmt_a(sp_context_get_allocator(), ".rela{}", sp_fmt_str(target->name)).value;
   sp_elf_section_t* rela = sp_elf_add_section(elf, name, SHT_RELA, 8);
   if (!rela) return SP_NULLPTR;
   rela->link = symtab->index;

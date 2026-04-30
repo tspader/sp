@@ -25,7 +25,7 @@ static u32 xorshift32(u32* state) {
 }
 
 static sp_str_t rgb_fg(u8 r, u8 g, u8 b) {
-  return sp_fmt("\x1b[38;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b));
+  return sp_fmt_a(sp_context_get_allocator(), "\x1b[38;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b)).value;
 }
 
 static sp_str_t color_for_ratio(f64 ratio) {
@@ -138,12 +138,13 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
   u32 ratio_width = 6;
   sp_da_for(results, i) {
     if (results[i].name.len > max_name) max_name = results[i].name.len;
-    sp_str_t n_str = sp_fmt("{}", sp_fmt_uint(results[i].n));
+    sp_str_t n_str = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_uint(results[i].n)).value;
     if (n_str.len > max_n_width) max_n_width = n_str.len;
   }
 
-  sp_str_builder_t sb = SP_ZERO_INITIALIZE();
-  sp_str_builder_append_fmt(&sb, "{}{} {} {} {} {}{}\n",
+  sp_io_writer_t sb = sp_zero();
+  sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &sb);
+  sp_fmt_io(&sb, "{}{} {} {} {} {}{}\n",
     sp_fmt_cstr(SP_ANSI_FG_BRIGHT_BLACK),
     sp_fmt_str(sp_str_pad(SP_LIT("test"), max_name)),
     sp_fmt_str(sp_str_pad(SP_LIT("n"), max_n_width)),
@@ -155,17 +156,17 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
   sp_da_for(results, i) {
     bench_result_pair_t* r = &results[i];
 
-    sp_str_t n_str = sp_fmt("{}", sp_fmt_uint(r->n));
+    sp_str_t n_str = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_uint(r->n)).value;
     f64 sp_ms = sp_tm_ns_to_ms_f((f64)r->sp_time_ns);
     f64 stb_ms = sp_tm_ns_to_ms_f((f64)r->stb_time_ns);
     f64 ratio = sp_ms / stb_ms;
 
-    sp_str_t sp_time_str = sp_str_pad(sp_fmt("{}ms", sp_fmt_float(sp_ms)), time_width);
-    sp_str_t stb_time_str = sp_str_pad(sp_fmt("{}ms", sp_fmt_float(stb_ms)), time_width);
+    sp_str_t sp_time_str = sp_str_pad(sp_fmt_a(sp_context_get_allocator(), "{}ms", sp_fmt_float(sp_ms)).value, time_width);
+    sp_str_t stb_time_str = sp_str_pad(sp_fmt_a(sp_context_get_allocator(), "{}ms", sp_fmt_float(stb_ms)).value, time_width);
     sp_str_t ratio_color = color_for_ratio(ratio);
-    sp_str_t ratio_str = sp_str_pad(sp_fmt("{}x", sp_fmt_float(ratio)), ratio_width);
+    sp_str_t ratio_str = sp_str_pad(sp_fmt_a(sp_context_get_allocator(), "{}x", sp_fmt_float(ratio)).value, ratio_width);
 
-    sp_str_builder_append_fmt(&sb, "{} {} {} {} {}{}{}\n",
+    sp_fmt_io(&sb, "{} {} {} {} {}{}{}\n",
       sp_fmt_str(sp_str_pad(r->name, max_name)),
       sp_fmt_str(sp_str_pad(n_str, max_n_width)),
       sp_fmt_str(sp_time_str),
@@ -175,7 +176,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
       sp_fmt_cstr(SP_ANSI_RESET));
   }
 
-  sp_str_t output = sp_str_builder_to_str(&sb);
+  sp_str_t output = sp_io_writer_dyn_mem_as_str(&sb.dyn_mem);
   sp_os_print(output);
 }
 

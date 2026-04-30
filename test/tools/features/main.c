@@ -16,7 +16,7 @@ s32 fn(void* user_data) {
 #define NUM_THREADS 4
 
 int main(void) {
-  sp_print("running {} threads...", sp_fmt_uint(NUM_THREADS));
+  sp_print_a("running {} threads...", sp_fmt_uint(NUM_THREADS));
 
   test_t threads [NUM_THREADS] = sp_zero();
 
@@ -31,7 +31,7 @@ int main(void) {
     sp_thread_join(&threads[it].thread);
   }
 
-  sp_log("{.green}", sp_fmt_cstr("ok"));
+  sp_log_a("{.green}", sp_fmt_cstr("ok"));
 
   return 0;
 }

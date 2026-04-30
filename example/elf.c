@@ -15,14 +15,14 @@ static sp_str_t make_symbol_name(sp_str_t basename) {
 
 s32 embed_main(s32 argc, const c8** argv) {
   if (argc < 3) {
-    sp_log("usage: embed <output.o> <file1> [file2 ...]");
+    sp_log_a("usage: embed <output.o> <file1> [file2 ...]");
     return 1;
   }
 
   sp_str_t output_path = sp_str_view(argv[1]);
   u32 num_files = argc - 2;
 
-  sp_log("embedding {.fg brightblack} files into {.fg cyan}", sp_fmt_uint(num_files), sp_fmt_str(output_path));
+  sp_log_a("embedding {.fg brightblack} files into {.fg cyan}", sp_fmt_uint(num_files), sp_fmt_str(output_path));
 
   sp_elf_t* elf = sp_elf_new_with_null_section();
 
@@ -63,7 +63,7 @@ s32 embed_main(s32 argc, const c8** argv) {
       return 1;
     }
 
-    sp_log("{.fg brightcyan} ({} bytes)", sp_fmt_str(basename), sp_fmt_uint(content.len));
+    sp_log_a("{.fg brightcyan} ({} bytes)", sp_fmt_str(basename), sp_fmt_uint(content.len));
 
     data_sec = sp_elf_find_section_by_index(elf, data_sec_idx);
     u32 data_offset = (u32)data_sec->buffer.size;
@@ -85,7 +85,7 @@ s32 embed_main(s32 argc, const c8** argv) {
 
   sp_err_t err = sp_elf_write_to_file(elf, output_path);
   if (err != SP_OK) {
-    sp_log("error: failed to write output");
+    sp_log_a("error: failed to write output");
     return 1;
   }
 

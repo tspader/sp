@@ -99,7 +99,7 @@ UTEST(dyn_array, struct_type) {
         s.value = (float)i * 1.5f;
         sp_io_writer_t io = sp_zero();
         sp_io_writer_from_mem(&io, s.name, sizeof(s.name));
-        sp_io_write_str(&io, sp_fmt("Item_{}", sp_fmt_int(s.id)), SP_NULLPTR);
+        sp_io_write_str(&io, sp_fmt_a(sp_context_get_allocator(), "Item_{}", sp_fmt_int(s.id)).value, SP_NULLPTR);
         sp_io_pad(&io, 1, SP_NULLPTR);
         //sp_io_write_cstr(&io, "\0", SP_NULLPTR);
         //snprintf(s.name, sizeof(s.name), "Item_%d", i);
@@ -115,7 +115,7 @@ UTEST(dyn_array, struct_type) {
         char expected[32];
         sp_io_writer_t io = sp_zero();
         sp_io_writer_from_mem(&io, expected, sizeof(expected));
-        sp_io_write_str(&io, sp_fmt("Item_{}", sp_fmt_int(i)), SP_NULLPTR);
+        sp_io_write_str(&io, sp_fmt_a(sp_context_get_allocator(), "Item_{}", sp_fmt_int(i)).value, SP_NULLPTR);
         sp_io_pad(&io, 1, SP_NULLPTR);
         //sp_io_write_cstr(&io, "\0", SP_NULLPTR);
 
@@ -437,7 +437,7 @@ UTEST(dyn_array, allocator_realloc_into_scratch_clobber) {
   sp_mem_t a = sp_mem_arena_as_allocator(arena);
 
   sp_da(u8) arr = sp_zero();
-  sp_da_init(&a, arr);
+  sp_da_init(a, arr);
 
   sp_da_reserve(arr, 4);
   sp_for(it, 4) {

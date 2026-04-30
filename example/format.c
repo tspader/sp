@@ -5,7 +5,7 @@
 // the value-typed members of the union in sp_fmt_arg_t, you cast the pointer member.
 //
 // From there, you can append arbitrary bytes to the string builder being used for this
-// call to sp_fmt(). You can (and are encouraged to) use sp.h's internal helpers for
+// call to sp_fmt_a(sp_context_get_allocator(), ).value. You can (and are encouraged to) use sp.h's internal helpers for
 // printing primitives, and you have access to the :specifier's width and precision.
 //
 // Then, to provide a convenient and type-safe call site, define the sp_fmt_*() macros that

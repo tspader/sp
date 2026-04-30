@@ -3,7 +3,7 @@
 
 s32 run(s32 num_args, const c8** args) {
   if (num_args < 2) {
-    sp_log("usage: wc {.fg cyan}", sp_fmt_cstr("$file"));
+    sp_log_a("usage: wc {.fg cyan}", sp_fmt_cstr("$file"));
     return 1;
   }
 
@@ -30,7 +30,7 @@ s32 run(s32 num_args, const c8** args) {
   }
 
   sp_str_ht_for_kv(counts, it) {
-    sp_log("{} {}", sp_fmt_uint(*it.val), sp_fmt_str(*it.key));
+    sp_log_a("{} {}", sp_fmt_uint(*it.val), sp_fmt_str(*it.key));
   }
   return 0;
 }

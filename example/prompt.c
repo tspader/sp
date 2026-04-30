@@ -148,7 +148,7 @@ s32 demo_select_filter(sp_prompt_ctx_t* ctx) {
 
   if (sp_prompt_submitted(ctx)) {
     const c8* selection = sp_prompt_get_str(ctx);
-    sp_str_t reaction = sp_fmt("{.quote}, eh? A childish response...", sp_fmt_cstr(selection));
+    sp_str_t reaction = sp_fmt_a(sp_context_get_allocator(), "{.quote}, eh? A childish response...", sp_fmt_cstr(selection)).value;
     sp_prompt_note(ctx, sp_str_to_cstr(reaction), "Selection");
   }
   else if (sp_prompt_cancelled(ctx)) {
@@ -384,10 +384,10 @@ s32 prompt_main(s32 argc, const c8** argv) {
   if (argc >= 2) {
     sp_prompt_demo_fn_t* fn = sp_cstr_ht_get(demos, argv[1]);
     if (!fn) {
-      sp_log("usage: prompt [program]");
-      sp_log("programs:");
+      sp_log_a("usage: prompt [program]");
+      sp_log_a("programs:");
       sp_carr_for(ordered, it) {
-        sp_log("  {}", sp_fmt_cstr(ordered[it].name));
+        sp_log_a("  {}", sp_fmt_cstr(ordered[it].name));
       }
 
       return SP_PROMPT_ERROR;

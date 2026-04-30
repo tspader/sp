@@ -313,13 +313,13 @@ UTEST(asset_registry, concurrent_find_during_import) {
 
   // Add some assets first
   for (s32 i = 0; i < 10; i++) {
-    sp_str_t name = sp_fmt("asset_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "asset_{}", sp_fmt_int(i)).value;
     sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, name, (void*)(uintptr_t)i);
   }
 
   // Start importing more assets
   for (s32 i = 10; i < 20; i++) {
-    sp_str_t name = sp_fmt("asset_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "asset_{}", sp_fmt_int(i)).value;
     sp_test_asset_data_t* data = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
     data->content = name;
     data->value = i;
@@ -328,7 +328,7 @@ UTEST(asset_registry, concurrent_find_during_import) {
 
   // All assets should be immediately findable (sync ones with real data, async with default)
   for (s32 i = 0; i < 20; i++) {
-    sp_str_t name = sp_fmt("asset_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "asset_{}", sp_fmt_int(i)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     if (i < 10) {
@@ -342,7 +342,7 @@ UTEST(asset_registry, concurrent_find_during_import) {
 
   // Now all should be completed
   for (s32 i = 0; i < 20; i++) {
-    sp_str_t name = sp_fmt("asset_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "asset_{}", sp_fmt_int(i)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     ASSERT_EQ(found->state, SP_ASSET_STATE_COMPLETED);
@@ -369,13 +369,13 @@ UTEST(asset_registry, stress_many_assets) {
 
   // Add many assets
   for (s32 i = 0; i < ASSET_COUNT; i++) {
-    sp_str_t name = sp_fmt("stress_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "stress_{}", sp_fmt_int(i)).value;
     sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, name, (void*)(uintptr_t)i);
   }
 
   // Verify all can be found
   for (s32 i = 0; i < ASSET_COUNT; i++) {
-    sp_str_t name = sp_fmt("stress_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "stress_{}", sp_fmt_int(i)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)(uintptr_t)i);
@@ -384,7 +384,7 @@ UTEST(asset_registry, stress_many_assets) {
   // Random access pattern
   for (s32 iter = 0; iter < ASSET_COUNT * 2; iter++) {
     s32 id = (iter * 7919) % ASSET_COUNT;
-    sp_str_t name = sp_fmt("stress_{}", sp_fmt_int(id));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "stress_{}", sp_fmt_int(id)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)(uintptr_t)id);
@@ -413,7 +413,7 @@ UTEST(asset_registry, stable_pointers) {
 
   // Insert many more assets
   for (s32 i = 0; i < 500; i++) {
-    sp_str_t name = sp_fmt("filler_{}", sp_fmt_int(i));
+    sp_str_t name = sp_fmt_a(sp_context_get_allocator(), "filler_{}", sp_fmt_int(i)).value;
     sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, name, (void*)(uintptr_t)i);
   }
 
