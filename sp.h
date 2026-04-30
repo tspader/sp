@@ -1757,7 +1757,7 @@ template<typename T> static T* sp_ht_alloc_type_a(sp_mem_t a, T* key, size_t siz
 }
 SP_BEGIN_EXTERN_C()
 #else
-#define sp_ht_alloc_type(key, size) sp_alloc(size)
+#define sp_ht_alloc_type(key, size) sp_ht_alloc(size)
 #define sp_ht_alloc_type_a(a, key, size) sp_mem_allocator_alloc((a), (size))
 #endif
 
@@ -1843,11 +1843,11 @@ SP_BEGIN_EXTERN_C()
     (ht)->info.fn.compare      = sp_ht_on_compare_key;                                    \
   } while (0)
 
-#define sp_ht_init_a(__a, ht)                                                                  \
+#define sp_ht_init_a(mem, ht)                                                                  \
   do {                                                                                         \
-    (ht)                       = sp_ht_alloc_type_a((__a), ht, sizeof(*(ht)));                 \
-    (ht)->data                 = sp_ht_alloc_type_a((__a), (ht)->data, 2 * sizeof((ht)->data[0])); \
-    (ht)->info.allocator       = (__a);                                                        \
+    (ht)                       = sp_ht_alloc_type_a((mem), ht, sizeof(*(ht)));                 \
+    (ht)->data                 = sp_ht_alloc_type_a((mem), (ht)->data, 2 * sizeof((ht)->data[0])); \
+    (ht)->info.allocator       = (mem);                                                        \
     (ht)->size                 = 0;                                                            \
     (ht)->capacity             = 2;                                                            \
     (ht)->info.size.key        = sizeof((ht)->data[0].key);                                    \
@@ -3039,7 +3039,6 @@ struct sp_io_writer {
 };
 
 SP_API sp_err_t       sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
-SP_API sp_err_t       sp_io_read_file(sp_str_t path, sp_str_t* content);
 SP_API sp_err_t       sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position);
 SP_API sp_err_t       sp_io_reader_size(sp_io_reader_t* r, u64* size);
 SP_API sp_err_t       sp_io_reader_close(sp_io_reader_t* r);
@@ -3059,8 +3058,6 @@ SP_API sp_err_t       sp_io_writer_close(sp_io_writer_t* w);
 SP_API sp_err_t       sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode);
 SP_API void           sp_io_writer_from_fd(sp_io_writer_t* writer, sp_sys_fd_t fd, sp_io_close_mode_t close_mode);
 SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
-SP_API void           sp_io_writer_from_dyn_mem(sp_io_writer_t* writer);
-SP_API void           sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_mem_t allocator);
 SP_API void           sp_io_get_std_out(sp_io_writer_t* io);
 SP_API void           sp_io_get_std_err(sp_io_writer_t* io);
 SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
@@ -3343,6 +3340,8 @@ static void sp_fmt_register_builtins();
 
 // @header @top
 
+void* sp_ht_alloc(u64 size);
+
 // @private
 SP_IMP c8*      sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
 SP_IMP c8*      sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
@@ -3387,7 +3386,6 @@ SP_API s32              sp_app_run(sp_app_config_t config);
 
 SP_API sp_str_t      sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time);
 
-SP_API sp_str_t      sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t      sp_str_copy_a(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t      sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
 SP_API sp_str_t      sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join);
@@ -12673,34 +12671,6 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 //  █████ ░░░███████░
 // ░░░░░    ░░░░░░░
 // @io
-sp_err_t sp_io_read_file(sp_str_t path, sp_str_t* content) {
-  sp_assert(content);
-
-  sp_err_t err = SP_OK;
-  c8* buffer = SP_NULLPTR;
-  u64 size = 0;
-
-  sp_io_reader_t reader = SP_ZERO_INITIALIZE();
-  sp_try(sp_io_reader_from_file(&reader, path));
-
-  sp_try_goto(sp_io_reader_size(&reader, &size), err, cleanup);
-  if (!size) {
-    goto cleanup;
-  }
-
-  buffer = sp_alloc_n(c8, size);
-  u64 bytes_read = 0;
-  sp_try_goto(sp_io_read(&reader, buffer, size, &bytes_read), err, cleanup);
-  content->data = buffer;
-  content->len = (u32)bytes_read;
-  buffer = SP_NULLPTR;
-
-cleanup:
-  if (buffer) sp_free(buffer);
-  sp_io_reader_close(&reader);
-  return err;
-}
-
 sp_err_t sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
   s64 rc = sp_sys_read(reader->file.fd, ptr, size);
   u64 num_bytes = rc < 0 ? 0 : (u64)rc;
@@ -12999,9 +12969,9 @@ sp_err_t sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_wri
   }
 
 
-  sp_mem_scratch_t s = sp_mem_begin_scratch();
-  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr(path), flags, 0644);
-  sp_mem_end_scratch(s);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_sys_fd_t fd = sp_sys_open(sp_cstr_from_str_a(s.mem, path), flags, 0644);
+  sp_mem_end_scratch_a(s);
 
   if (fd == SP_SYS_INVALID_FD) {
     *writer = SP_ZERO_STRUCT(sp_io_writer_t);
@@ -13035,29 +13005,6 @@ void sp_io_writer_from_fd(sp_io_writer_t* writer, sp_sys_fd_t fd, sp_io_close_mo
       .fd = fd,
       .close_mode = close_mode,
     },
-  };
-}
-
-void sp_io_writer_from_dyn_mem(sp_io_writer_t* writer) {
-  sp_io_writer_from_dyn_mem_ex(writer, SP_NULLPTR, 0, sp_context_get()->allocator);
-}
-
-void sp_io_writer_from_dyn_mem_ex(sp_io_writer_t* writer, u8* buffer, u64 size, sp_mem_t allocator) {
-  *writer = (sp_io_writer_t) {
-    .vtable = {
-      .write = sp_io_writer_dyn_write,
-      .seek = sp_io_writer_dyn_seek,
-      .size = sp_io_writer_dyn_size,
-      .close = sp_io_writer_dyn_close,
-    },
-    .dyn_mem = {
-      .allocator = allocator,
-      .buffer = {
-        .data = buffer,
-        .len = 0,
-        .capacity = size
-      }
-    }
   };
 }
 
@@ -14167,18 +14114,11 @@ c8* sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str) {
   return buffer;
 }
 
-sp_str_t sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str) {
-  return (sp_str_t) {
-    .data = sp_cstr_from_str_a(mem, str),
-    .len = str.len,
-  };
-}
-
 sp_str_t sp_str_copy_a(sp_mem_t mem, sp_str_t str) {
   if (!str.data || !str.len) return SP_ZERO_STRUCT(sp_str_t);
-  c8* buffer = (c8*)sp_mem_allocator_alloc(mem, str.len);
+  c8* buffer = sp_alloc_n_a(mem, c8, str.len);
   sp_mem_copy(str.data, buffer, str.len);
-  return SP_STR(buffer, str.len);
+  return sp_str(buffer, str.len);
 }
 
 sp_str_t sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b) {
@@ -14404,13 +14344,13 @@ sp_err_t sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   c8* buffer = SP_NULLPTR;
   u64 size = 0;
 
-  sp_io_reader_t reader = SP_ZERO_INITIALIZE();
+  sp_io_reader_t reader = sp_zero();
   sp_try(sp_io_reader_from_file_a(&reader, path));
 
   sp_try_goto(sp_io_reader_size(&reader, &size), err, cleanup);
   if (!size) goto cleanup;
 
-  buffer = (c8*)sp_mem_allocator_alloc(mem, size);
+  buffer = sp_alloc_n_a(mem, c8, size);
   u64 bytes_read = 0;
   sp_try_goto(sp_io_read(&reader, buffer, size, &bytes_read), err, cleanup);
   content->data = buffer;
@@ -14443,8 +14383,7 @@ sp_err_t sp_fs_create_dir_a(sp_str_t path) {
 
   // Walk back down and create each one
   sp_da_rfor(missing, it) {
-    sp_str_t cstr = sp_str_to_cstr_a(s.mem, missing[it]);
-    result = sp_os_create_dir((sp_str_t){ .data = cstr.data, .len = cstr.len });
+    result = sp_os_create_dir(missing[it]);
     if (result && !sp_fs_exists_a(missing[it])) goto cleanup;
   }
 
@@ -14772,6 +14711,11 @@ void sp_str_reduce_kernel_join_a(sp_str_reduce_context_t* context) {
 
 sp_str_t sp_str_join_n_a(sp_mem_t mem, sp_str_t* strings, u32 num_strings, sp_str_t joiner) {
   return sp_str_reduce_a(mem, strings, num_strings, &joiner, sp_str_reduce_kernel_join_a);
+}
+
+void* sp_ht_alloc(u64 size) {
+  sp_context_t* ctx = sp_context_get();
+  return sp_mem_allocator_alloc(ctx->allocator, size);
 }
 
 SP_END_EXTERN_C()

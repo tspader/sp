@@ -7,14 +7,19 @@ SP_TEST_MAIN()
 
 struct elf {
   sp_test_file_manager_t file_manager;
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
 };
 
 UTEST_F_SETUP(elf) {
+  ut.arena = sp_mem_arena_new();
+  ut.mem = sp_mem_arena_as_allocator(ut.arena);
   sp_test_file_manager_init(&ut.file_manager);
 }
 
 UTEST_F_TEARDOWN(elf) {
   sp_test_file_manager_cleanup(&ut.file_manager);
+  sp_mem_arena_destroy(ut.arena);
 }
 
 UTEST_F(elf, new_creates_section0) {
@@ -234,7 +239,7 @@ UTEST_F(elf, rela_info_encoding) {
 
 UTEST_F(elf, minimal_elf_format) {
   sp_elf_t* elf = sp_elf_new_with_null_section();
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem, &buf);
   sp_elf_write(elf, &buf);
   u8* data = buf.dyn_mem.buffer.data;
   u64 size = buf.dyn_mem.buffer.len;
@@ -272,7 +277,7 @@ UTEST_F(elf, minimal_elf_format) {
 }
 
 UTEST_F(elf, err_write_null_elf) {
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem, &buf);
   sp_err_t err = sp_elf_write(SP_NULLPTR, &buf);
   ASSERT_NE(err, SP_OK);
   sp_io_writer_close(&buf);
@@ -345,7 +350,7 @@ UTEST_F(elf, populated_section_alignment) {
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   sp_elf_section_reserve_bytes(data, 5);
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem, &buf);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.dyn_mem.buffer.data;
 
@@ -369,7 +374,7 @@ UTEST_F(elf, populated_sections_no_overlap) {
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   sp_elf_section_reserve_bytes(data, 50);
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem, &buf);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.dyn_mem.buffer.data;
 
@@ -399,7 +404,7 @@ UTEST_F(elf, populated_nobits_no_file_space) {
   sp_elf_section_t* bss = sp_elf_add_section(elf, sp_str_lit(".bss"), SHT_NOBITS, 8);
   bss->buffer.size = 1024;
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem(&buf);
+  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem, &buf);
   sp_elf_write(elf, &buf);
   u8* out_data = buf.dyn_mem.buffer.data;
 
@@ -423,7 +428,7 @@ UTEST_F(elf, populated_nobits_no_file_space) {
 UTEST_F(elf, roundtrip_minimal) {
   sp_elf_t* elf = sp_elf_new_with_null_section();
 
-  sp_io_writer_t writer; sp_io_writer_from_dyn_mem(&writer);
+  sp_io_writer_t writer; sp_io_writer_from_dyn_mem_a(ut.mem, &writer);
   sp_elf_write(elf, &writer);
 
   sp_io_reader_t reader; sp_io_reader_from_mem(&reader,writer.dyn_mem.buffer.data, writer.dyn_mem.buffer.len);
@@ -460,7 +465,7 @@ UTEST_F(elf, roundtrip_populated) {
   text = sp_elf_find_section_by_name(elf, sp_str_lit(".text"));
   sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, sizeof(code), STB_GLOBAL, STT_FUNC, (u16)text->index);
 
-  sp_io_writer_t writer; sp_io_writer_from_dyn_mem(&writer);
+  sp_io_writer_t writer; sp_io_writer_from_dyn_mem_a(ut.mem, &writer);
   sp_elf_write(elf, &writer);
 
   sp_io_reader_t reader; sp_io_reader_from_mem(&reader,writer.dyn_mem.buffer.data, writer.dyn_mem.buffer.len);

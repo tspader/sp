@@ -12,7 +12,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_str_t cwd = sp_fs_get_cwd_a(mem);
   sp_str_t path = sp_fs_join_path_a(mem, cwd, sp_str_view(args[1]));
   sp_str_t content = sp_zero_initialize();
-  sp_io_read_file(path, &content);
+  sp_io_read_file_a(mem, path, &content);
 
   sp_str_ht(u32) counts = sp_zero_initialize();
   sp_da(sp_str_t) lines = sp_str_split_c8(content, '\n');

@@ -46,7 +46,7 @@ UTEST_F_SETUP(prompt) {
   ut.ctx = SP_ZERO_STRUCT(sp_prompt_ctx_t);
   ut.app = SP_NULLPTR;
   sp_prompt_ctx_init(&ut.ctx, 80, 20);
-  sp_io_writer_from_dyn_mem(&ut.writer);
+  sp_io_writer_from_dyn_mem_a(ut.mem, &ut.writer);
   ut.ctx.writer = &ut.writer;
 }
 

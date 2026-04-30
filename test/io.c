@@ -9,15 +9,20 @@ SP_TEST_MAIN()
 struct io_rw {
   sp_str_t file_path;
   sp_test_file_manager_t file_manager;
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
 };
 
 UTEST_F_SETUP(io_rw) {
+  ut.arena = sp_mem_arena_new();
+  ut.mem = sp_mem_arena_as_allocator(ut.arena);
   sp_test_file_manager_init(&ut.file_manager);
   ut.file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("sp_io_rw.file"));
 }
 
 UTEST_F_TEARDOWN(io_rw) {
   sp_test_file_manager_cleanup(&ut.file_manager);
+  sp_mem_arena_destroy(ut.arena);
 }
 
 UTEST_F(io_rw, reader_mem_read_full) {
@@ -324,7 +329,7 @@ UTEST_F(io_rw, writer_file_write) {
   sp_io_writer_close(&w);
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 9);
 }
 
@@ -347,7 +352,7 @@ UTEST_F(io_rw, writer_file_overwrite) {
   }
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 4);
   EXPECT_EQ(loaded.data[0], '1');
   EXPECT_EQ(loaded.data[3], '4');
@@ -372,7 +377,7 @@ UTEST_F(io_rw, writer_file_append) {
   }
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 11);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("firstsecond")));
 }
@@ -434,7 +439,7 @@ UTEST_F(io_rw, writer_file_pad) {
 }
 
 UTEST_F(io_rw, writer_dyn_write) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
   u8 data[] = {1, 2, 3, 4};
   u64 written = 0;
   EXPECT_EQ(sp_io_write(&w, data, 4, &written), SP_OK);
@@ -447,7 +452,7 @@ UTEST_F(io_rw, writer_dyn_write) {
 }
 
 UTEST_F(io_rw, writer_dyn_grows) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
 
   u8 data[256];
   sp_for(i, 256) data[i] = (u8)i;
@@ -463,7 +468,7 @@ UTEST_F(io_rw, writer_dyn_grows) {
 }
 
 UTEST_F(io_rw, writer_dyn_to_str) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
 
   const char* text = "hello world";
   sp_io_write(&w, text, 11, SP_NULLPTR);
@@ -476,7 +481,7 @@ UTEST_F(io_rw, writer_dyn_to_str) {
 }
 
 UTEST_F(io_rw, writer_dyn_seek) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
 
   u8 data[] = {1, 2, 3, 4, 5, 6, 7, 8};
   sp_io_write(&w, data, 8, SP_NULLPTR);
@@ -489,7 +494,7 @@ UTEST_F(io_rw, writer_dyn_seek) {
 }
 
 UTEST_F(io_rw, writer_dyn_multiple_writes) {
-  sp_io_writer_t w; sp_io_writer_from_dyn_mem(&w);
+  sp_io_writer_t w; sp_io_writer_from_dyn_mem_a(ut.mem, &w);
 
   sp_io_write(&w, "abc", 3, SP_NULLPTR);
   sp_io_write(&w, "def", 3, SP_NULLPTR);
@@ -571,7 +576,7 @@ UTEST_F(io_rw, writer_buffered_implicit_flush) {
   sp_io_writer_close(&w);
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 5);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("hello")));
 }
@@ -600,7 +605,7 @@ UTEST_F(io_rw, writer_buffered_set_twice) {
   sp_io_writer_close(&w);
 
   sp_str_t loaded = SP_ZERO_INITIALIZE();
-  sp_io_read_file(ut.file_path, &loaded);
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, 11);
   EXPECT_TRUE(sp_str_equal(loaded, sp_str_lit("firstsecond")));
 }
