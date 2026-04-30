@@ -2640,7 +2640,6 @@ SP_API void           sp_os_qsort(void* arr, u64 len, u64 stride, sp_qsort_fn_t)
 // @format
 sp_str_t sp_fmt(const c8* fmt, ...);
 sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...);
-sp_err_t sp_fmt_v(sp_str_t* str, sp_str_t fmt, va_list args);
 sp_err_t sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...);
 sp_err_t sp_fmt_to(sp_str_builder_t* str, const c8* fmt, ...);
 sp_err_t sp_fmt_to_v(sp_str_builder_t* str, sp_str_t fmt, va_list args);
@@ -7041,19 +7040,6 @@ static sp_err_t sp_fmt_pull_int_arg(sp_fmt_arg_t a, s64* out) {
   return SP_OK;
 }
 
-sp_err_t sp_fmt_v(sp_str_t* str, sp_str_t fmt, va_list args) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-  sp_err_t result = SP_OK;
-  sp_try_goto(sp_fmt_to_v(&builder, fmt, args), result, error);
-  sp_context_push_allocator(scratch.old_allocator);
-  *str = sp_str_builder_to_str(&builder);
-  sp_context_pop();
-error:
-  sp_mem_end_scratch(scratch);
-  return result;
-}
-
 sp_err_t sp_fmt_to(sp_str_builder_t* str, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -7144,19 +7130,29 @@ error:
 }
 
 sp_str_t sp_fmt(const c8* fmt, ...) {
+  sp_mem_t mem = sp_context_get_allocator();
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_dyn_mem_a(mem, &io);
+
   va_list args;
   va_start(args, fmt);
-  sp_str_t str = sp_zero();
-  sp_fmt_v(&str, sp_str_view(fmt), args);
+  sp_fmt_v_a(&io, sp_str_view(fmt), args);
   va_end(args);
-  return str;
+
+  return sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
 }
 
 sp_err_t sp_fmt_e(sp_str_t* str, const c8* fmt, ...) {
+  sp_mem_t mem = sp_context_get_allocator();
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_dyn_mem_a(mem, &io);
+
   va_list args;
   va_start(args, fmt);
-  sp_err_t error = sp_fmt_v(str, sp_str_view(fmt), args);
+  sp_err_t error = sp_fmt_v_a(&io, sp_str_view(fmt), args);
   va_end(args);
+
+  if (!error) *str = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
   return error;
 }
 
@@ -7816,91 +7812,90 @@ sp_hash_t sp_parse_hash(sp_str_t str) {
 // ░░░░░░░░░░░    ░░░░░░░      ░░░░░░░░░
 // @log
 void sp_print(const c8* fmt, ...) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
-    va_list args;
-    va_start(args, fmt);
-    sp_str_t formatted = sp_zero();
-    sp_fmt_v(&formatted, sp_str_view(fmt), args);
-    va_end(args);
+  u8 buffer[4096] = sp_zero();
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
 
-    sp_tls_rt_t* tls = sp_tls_rt_get();
-    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
-    sp_mem_end_scratch(scratch);
-  }
+  va_list args;
+  va_start(args, fmt);
+  sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  va_end(args);
+
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
 }
 
 void sp_print_str(sp_str_t fmt, ...) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
-    va_list args;
-    va_start(args, fmt);
-    sp_str_t formatted = sp_zero();
-    sp_fmt_v(&formatted, fmt, args);
-    va_end(args);
+  u8 buffer[4096] = sp_zero();
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
 
-    sp_tls_rt_t* tls = sp_tls_rt_get();
-    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
-    sp_mem_end_scratch(scratch);
-  }
+  va_list args;
+  va_start(args, fmt);
+  sp_fmt_v_a(&io, fmt, args);
+  va_end(args);
 
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
 }
 
 void sp_print_err(const c8* fmt, ...) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
-    va_list args;
-    va_start(args, fmt);
-    sp_str_t formatted = sp_zero();
-    sp_fmt_v(&formatted, sp_str_view(fmt), args);
-    va_end(args);
+  u8 buffer[4096] = sp_zero();
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
 
-    sp_tls_rt_t* tls = sp_tls_rt_get();
-    sp_io_write_str(tls->std.err, formatted, SP_NULLPTR);
-    sp_mem_end_scratch(scratch);
-  }
+  va_list args;
+  va_start(args, fmt);
+  sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  va_end(args);
+
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_io_write_str(tls->std.err, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
 }
 
 void sp_log(const c8* fmt, ...) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
-    va_list args;
-    va_start(args, fmt);
-    sp_str_t formatted = sp_zero();
-    sp_fmt_v(&formatted, sp_str_view(fmt), args);
-    va_end(args);
+  u8 buffer[4096] = sp_zero();
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
 
-    sp_tls_rt_t* tls = sp_tls_rt_get();
-    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
-    sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
-    sp_mem_end_scratch(scratch);
-  }
+  va_list args;
+  va_start(args, fmt);
+  sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  va_end(args);
+
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
+  sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
 }
 
 void sp_log_str(sp_str_t fmt, ...) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
-    va_list args;
-    va_start(args, fmt);
-    sp_str_t formatted = sp_zero();
-    sp_fmt_v(&formatted, fmt, args);
-    va_end(args);
+  u8 buffer[4096] = sp_zero();
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
 
-    sp_tls_rt_t* tls = sp_tls_rt_get();
-    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
-    sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
-    sp_mem_end_scratch(scratch);
-  }
+  va_list args;
+  va_start(args, fmt);
+  sp_fmt_v_a(&io, fmt, args);
+  va_end(args);
+
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
+  sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
 }
 
 void sp_log_err(const c8* fmt, ...) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch(); {
-    va_list args;
-    va_start(args, fmt);
-    sp_str_t formatted = sp_zero();
-    sp_fmt_v(&formatted, sp_str_view(fmt), args);
-    va_end(args);
+  u8 buffer[4096] = sp_zero();
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
 
-    sp_tls_rt_t* tls = sp_tls_rt_get();
-    sp_io_write_str(tls->std.out, formatted, SP_NULLPTR);
-    sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
-    sp_mem_end_scratch(scratch);
-  }
+  va_list args;
+  va_start(args, fmt);
+  sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  va_end(args);
+
+  sp_tls_rt_t* tls = sp_tls_rt_get();
+  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
+  sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
 }
 
 
@@ -9142,23 +9137,19 @@ void sp_str_builder_append_utf8(sp_str_builder_t* builder, u32 codepoint) {
 }
 
 void sp_str_builder_append_fmt_str(sp_str_builder_t* builder, sp_str_t fmt, ...) {
+  sp_str_builder_ensure_writer(builder);
   va_list args;
   va_start(args, fmt);
-  sp_str_t formatted = sp_zero();
-  sp_fmt_v(&formatted, fmt, args);
+  sp_fmt_v_a(builder->writer, fmt, args);
   va_end(args);
-
-  sp_str_builder_append(builder, formatted);
 }
 
 void sp_str_builder_append_fmt(sp_str_builder_t* builder, const c8* fmt, ...) {
+  sp_str_builder_ensure_writer(builder);
   va_list args;
   va_start(args, fmt);
-  sp_str_t formatted = sp_zero();
-  sp_fmt_v(&formatted, sp_str_view(fmt), args);
+  sp_fmt_v_a(builder->writer, sp_str_view(fmt), args);
   va_end(args);
-
-  sp_str_builder_append(builder, formatted);
 }
 
 void sp_str_builder_new_line(sp_str_builder_t* builder) {
