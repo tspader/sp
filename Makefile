@@ -33,7 +33,7 @@ CFLAGS = -std=c99 -g -Werror=return-type -fsanitize=undefined,alignment -fno-san
 EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
 EXE := $(if $(WASM),.wasm,$(EXE))
 
-TESTS = app
+TESTS = app amalg str
 EXAMPLES = app format hash_table
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
@@ -71,7 +71,7 @@ $(EXAMPLE_DIR)/%$(EXE): example/%.c sp.h | $(EXAMPLE_DIR)
 #########
 CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itools -Itest/tools -Itest/tools/process
 
-build/sp: tools/sp.c sp.h | build/
+build/sp: tools/sp.c sp.h | $(BUILD_DIR)
 	cc -g -I. -o $@ $<
 
 $(TEST_DIR)/%$(EXE): test/%.c sp.h | $(TEST_DIR) $(TEST_DIR)/process$(EXE)

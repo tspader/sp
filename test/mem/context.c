@@ -102,31 +102,6 @@ UTEST_F(mem, end_scratch) {
   EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
 }
 
-static u8 *use_scratch_arena(u32 fill) {
-  const u32 num_bytes = 64;
-
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
-  u8 *buffer = sp_alloc(num_bytes);
-  sp_mem_fill_u8(buffer, num_bytes, (u8)fill);
-
-  sp_context_push_allocator(scratch.old_allocator);
-  u8 *result = sp_alloc(num_bytes);
-  sp_mem_copy(buffer, result, num_bytes);
-  sp_context_pop();
-
-  sp_mem_end_scratch(scratch);
-  return result;
-}
-
-UTEST_F(mem, use_scratch_allocator_but_return_from_user_allocator) {
-  sp_mem_arena_t *arena = sp_mem_get_scratch_arena();
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
-
-  u8 *buffer = use_scratch_arena(69);
-  EXPECT_EQ(buffer[0], 69);
-  EXPECT_EQ(sp_mem_arena_bytes_used(arena), 0u);
-}
-
 typedef struct {
   sp_atomic_s32_t *done_count;
   s32 thread_id;
@@ -298,40 +273,6 @@ UTEST_F(mem, nested_pop_from_scratch) {
   sp_mem_end_scratch(s.a);
 
   EXPECT_EQ(get_total_scratch_bytes_used(), 0u);
-}
-
-static u8* inner(void) {
-  sp_mem_scratch_t inner = sp_mem_begin_scratch();
-  u8* inner_work = sp_alloc(64);
-  sp_mem_fill_u8(inner_work, 64, 0xBB);
-
-  sp_context_push_allocator(inner.old_allocator);
-  u8* result = sp_alloc(64);
-  sp_mem_fill_u8(result, 64, 0xAA);
-  sp_context_pop();
-
-  sp_mem_end_scratch(inner);
-
-  return result;
-}
-
-UTEST_F(mem, nested_scratch_return_via_old_allocator2) {
-  sp_mem_scratch_t outer = sp_mem_begin_scratch();
-
-  u8* outer_work = sp_alloc(64);
-  sp_mem_fill_u8(outer_work, 64, 0x11);
-
-  u8* result = inner();
-
-  for (s32 i = 0; i < 4; i++) {
-    u8* clobber = sp_alloc(64);
-    sp_mem_fill_u8(clobber, 64, 0xCC);
-  }
-
-  EXPECT_EQ(result[0], 0xAA);
-  EXPECT_EQ(result[63], 0xAA);
-
-  sp_mem_end_scratch(outer);
 }
 
 static s32 push_pop_thread_func(void *userdata) {

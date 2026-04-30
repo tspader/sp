@@ -12,7 +12,6 @@
 #include "glob.c"
 #include "ht.c"
 #include "io.c"
-#include "leak.c"
 #include "linkage.c"
 #include "math.c"
 #include "mem.c"

@@ -10,7 +10,7 @@ typedef struct {
 } embed_header_t;
 
 static sp_str_t make_symbol_name(sp_str_t basename) {
-  return sp_str_concat(sp_str_lit("embed_"), basename);
+  return sp_str_concat_a(sp_mem_scratch_allocator_a(), sp_str_lit("embed_"), basename);
 }
 
 s32 embed_main(s32 argc, const c8** argv) {

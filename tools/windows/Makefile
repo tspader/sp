@@ -9,7 +9,7 @@ CFLAGS := -std=c17 -Wall
 INCLUDES := -I$(ROOT) -I$(ROOT)/include -I$(ROOT)/tools -I$(ROOT)/test/tools -iquote $(ROOT)/test/tools/process -I$(ROOT)/sp
 DEFINES := -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION
 
-TESTS := app asset context cv elf fmon fs glob ht io leak linkage mem ps rb str time
+TESTS := app asset context cv elf fmon fs glob ht io linkage mem ps rb str time
 ALL_TARGETS := smoke $(TESTS) amalg
 
 .PHONY: all w64 msys2 clean
