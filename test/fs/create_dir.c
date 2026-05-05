@@ -35,7 +35,7 @@ struct fs_create_dir {
 
 UTEST_F_SETUP(fs_create_dir) {
   sp_test_file_manager_init(&ut.file_manager);
-  probe_symlinks(ut.file_manager.allocator, ut.file_manager.paths.test);
+  probe_symlinks(ut.file_manager.mem, ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_create_dir) {
@@ -51,7 +51,7 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
 
   sp_for(i, setup_count) {
     create_dir_setup_ent_t* s = &t->setup[i];
-    sp_str_t full = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(s->path));
+    sp_str_t full = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(s->path));
     sp_str_t parent = sp_fs_parent_path(full);
     if (!sp_str_empty(parent) && !sp_fs_exists_a(parent)) {
       sp_fs_create_dir_a(parent);
@@ -67,14 +67,14 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
         break;
       }
       case CREATE_DIR_ENT_SYMLINK: {
-        sp_str_t target = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(s->symlink_target));
+        sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(s->symlink_target));
         ASSERT_EQ(sp_fs_create_sym_link_a(target, full), SP_OK);
         break;
       }
     }
   }
 
-  sp_str_t target = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->target));
+  sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->target));
   sp_err_t result = sp_fs_create_dir_a(target);
 
   if (t->expect_ok && result) {
@@ -90,7 +90,7 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
 
   sp_for(i, expected_count) {
     create_dir_expected_ent_t* exp = &t->expected[i];
-    sp_str_t expected_path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(exp->path));
+    sp_str_t expected_path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(exp->path));
     bool exists = sp_fs_exists_a(expected_path);
     if (exists != exp->exists) {
       if (exp->exists) {

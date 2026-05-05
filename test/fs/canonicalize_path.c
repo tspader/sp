@@ -19,12 +19,12 @@ static void run_canon_test(s32* utest_result, sp_test_file_manager_t* fm, canon_
     sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
     sp_fs_create_dir_a(sandbox);
     fs_apply_setup(utest_result, fm, sandbox, t->setup);
-    input = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->input));
+    input = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->input));
   } else {
     input = sp_str_view(t->input);
   }
 
-  sp_str_t result = sp_fs_canonicalize_path_a(fm->allocator, input);
+  sp_str_t result = sp_fs_canonicalize_path_a(fm->mem, input);
 
   if (t->expect_nonempty && result.len == 0) {
     SP_TEST_REPORT("{}: expected nonempty", sp_fmt_cstr(t->label));
@@ -256,7 +256,7 @@ UTEST_F(fs, canon_symlink_with_dotdot) {
 // ---- idempotency ----
 
 UTEST_F(fs, canon_idempotent) {
-  sp_mem_t a = ut.file_manager.allocator;
+  sp_mem_t a = ut.file_manager.mem;
   run_canon_test(&ur, &ut.file_manager, &(canon_test_t) {
     .label = "canon_idempotent",
     .setup = {
@@ -276,7 +276,7 @@ UTEST_F(fs, canon_idempotent) {
 }
 
 UTEST_F(fs, canon_exe_idempotent) {
-  sp_mem_t a = ut.file_manager.allocator;
+  sp_mem_t a = ut.file_manager.mem;
   sp_str_t exe = sp_fs_get_exe_path_a(a);
   sp_str_t canonical = sp_fs_canonicalize_path_a(a, exe);
   SP_EXPECT_STR_EQ(canonical, exe);
@@ -285,7 +285,7 @@ UTEST_F(fs, canon_exe_idempotent) {
 // ---- cwd interaction ----
 
 UTEST_F(fs, canon_cwd_matches_dot) {
-  sp_mem_t a = ut.file_manager.allocator;
+  sp_mem_t a = ut.file_manager.mem;
   sp_str_t old_cwd = sp_fs_get_cwd_a(a);
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("canon_cwd"));
   sp_fs_create_dir_a(sandbox);

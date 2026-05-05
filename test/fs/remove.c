@@ -13,7 +13,7 @@ static void run_remove_test(s32* utest_result, sp_test_file_manager_t* fm, remov
   sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->remove_path));
+  sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->remove_path));
   if (t->remove_dir) {
     sp_fs_remove_dir_a(path);
   } else {

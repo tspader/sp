@@ -65,6 +65,7 @@ struct sp_asset_registry {
   sp_semaphore_t semaphore;
   sp_thread_t thread;
   sp_mem_arena_t* arena;
+  sp_mem_t mem;
   sp_da(sp_asset_importer_t) importers;
   sp_rb(sp_asset_import_context_t) import_queue;
   sp_rb(sp_asset_import_context_t) completion_queue;
@@ -98,9 +99,10 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
   registry->import_queue = SP_NULLPTR;
   registry->completion_queue = SP_NULLPTR;
   registry->arena = sp_mem_arena_new();
-  sp_da_init(sp_mem_arena_as_allocator(registry->arena), registry->importers);
-
-  sp_context_push_allocator(sp_mem_arena_as_allocator(registry->arena));
+  registry->mem = sp_mem_arena_as_allocator(registry->arena);
+  sp_da_init(registry->mem, registry->importers);
+  sp_rb_init(registry->mem, registry->import_queue);
+  sp_rb_init(registry->mem, registry->completion_queue);
 
   sp_for(index, SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS) {
     sp_asset_importer_config_t* cfg = &config.importers[index];
@@ -114,7 +116,7 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
       .fallback = cfg->fallback,
       .assets = SP_NULLPTR,
     };
-    sp_str_ht_init_a(sp_mem_arena_as_allocator(registry->arena), importer.assets);
+    sp_str_ht_init_a(registry->mem, importer.assets);
     sp_da_push(registry->importers, importer);
   }
 
@@ -155,10 +157,10 @@ static sp_asset_t* sp_asset_registry_alloc(sp_asset_registry_t* r, sp_asset_impo
   sp_asset_t* asset = sp_alloc_type(sp_asset_t);
   asset->kind = importer->kind;
   asset->state = SP_ASSET_STATE_QUEUED;
-  asset->name = sp_str_copy(name);
+  asset->name = sp_str_copy_a(sp_mem_arena_as_allocator(r->arena), name);
   sp_atomic_ptr_set(&asset->data, data);
 
-  sp_str_ht_insert(importer->assets, sp_str_copy(name), asset);
+  sp_str_ht_insert(importer->assets, sp_str_copy_a(sp_mem_arena_as_allocator(r->arena), name), asset);
 
   sp_context_pop();
   return asset;

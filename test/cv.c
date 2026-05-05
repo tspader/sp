@@ -222,7 +222,10 @@ UTEST(cv, wait_for_timeout) {
   sp_mutex_unlock(&mutex);
 
   EXPECT_FALSE(result);
-  EXPECT_GE(elapsed, 100000000ULL);
+  // System timer resolution lets timed waits return slightly early on some
+  // platforms (~15.6ms slack on Win32 by default). Just sanity-check that we
+  // actually waited rather than returning immediately.
+  EXPECT_GE(elapsed, 75000000ULL);
 
   sp_cv_destroy(&cv);
   sp_mutex_destroy(&mutex);
@@ -335,6 +338,7 @@ UTEST(cv, multithread_producer_consumer) {
   sp_cv_t cv = SP_ZERO_INITIALIZE();
   sp_mutex_t mutex = SP_ZERO_INITIALIZE();
   sp_rb(s32) buffer = SP_NULLPTR;
+  sp_rb_init(sp_mem_os_new(), buffer);
 
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);

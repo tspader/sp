@@ -665,7 +665,7 @@ s32 fancy_main(s32 argc, const c8** argv) {
 
   const c8* selected_sections = sp_prompt_join_selection(sections, sp_carr_len(sections));
   sp_str_t plan = fancy_plan_note(release_kind, release_name, selected_sections);
-  sp_prompt_note(ctx, sp_str_to_cstr(plan), "Plan");
+  sp_prompt_note(ctx, sp_str_to_cstr_a(sp_context_get_allocator(), plan), "Plan");
 
   if (scripted) {
     fancy_prime_enter(ctx);
@@ -701,7 +701,7 @@ s32 fancy_main(s32 argc, const c8** argv) {
   }
 
   sp_str_t curated = fancy_selected_changelog(changelog_items, sp_carr_len(changelog_items));
-  sp_prompt_note(ctx, sp_str_to_cstr(curated), "Published v0.13.3");
+  sp_prompt_note(ctx, sp_str_to_cstr_a(sp_context_get_allocator(), curated), "Published v0.13.3");
   sp_prompt_success(ctx, "release published");
   sp_prompt_outro(ctx, "done");
   sp_prompt_end(ctx);

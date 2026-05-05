@@ -74,7 +74,7 @@ u32 sp_macho_add_section(sp_macho_t* m, sp_str_t name, u64 align) {
 
   u32 index = sp_da_size(m->sections) + 1;
   sp_macho_section_t section = {
-    .name = sp_str_copy(name),
+    .name = sp_str_copy_a(sp_mem_arena_as_allocator(m->arena), name),
     .index = index,
     .align = align,
     .flags = 0,
@@ -118,7 +118,7 @@ u32 sp_macho_add_symbol(sp_macho_t* m, sp_str_t name, u32 sect, u64 offset, sp_m
 
   u32 idx = sp_da_size(m->symbols);
   sp_macho_symbol_t sym = {
-    .name = sp_str_copy(name),
+    .name = sp_str_copy_a(sp_mem_arena_as_allocator(m->arena), name),
     .value = offset,
     .sect = (u8)sect,
     .bind = bind,

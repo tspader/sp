@@ -27,8 +27,8 @@ static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_te
   sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t src = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->src));
-  sp_str_t dst = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->dst));
+  sp_str_t src = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->src));
+  sp_str_t dst = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->dst));
 
   switch (t->action) {
     case COPY_FILE: sp_fs_copy_file_a(src, dst); break;
@@ -40,7 +40,7 @@ static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_te
     copy_expect_t* exp = &t->expect[i];
     if (!exp->path) break;
 
-    sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(exp->path));
+    sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(exp->path));
     bool exists = sp_fs_exists_a(path);
     fs_expect_bool(utest_result, path, "exists", exists, exp->exists);
 
@@ -48,7 +48,7 @@ static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_te
       fs_expect_attr(utest_result, path, sp_fs_get_kind_a(path), exp->attr);
       if (exp->content) {
         sp_str_t file_content = SP_ZERO_INITIALIZE();
-        sp_io_read_file_a(fm->allocator, path, &file_content);
+        sp_io_read_file_a(fm->mem, path, &file_content);
         SP_EXPECT_STR_EQ(file_content, sp_str_view(exp->content));
       }
     }
@@ -163,7 +163,7 @@ UTEST_F(fs, unicode_copy_file) {
 
 #if defined(SP_POSIX)
 UTEST_F(fs, copy_preserves_file_attributes) {
-  sp_mem_t a = ut.file_manager.allocator;
+  sp_mem_t a = ut.file_manager.mem;
   sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source_attrs.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = source_file,

@@ -63,6 +63,7 @@ UTEST(stress, hash_table) {
 
 UTEST(stress, ring_buffer) {
   sp_rb(u64) rq = SP_NULLPTR;
+  sp_rb_init(sp_mem_os_new(), rq);
 
   sp_for(i, 1000) {
     sp_rb_push(rq, (u64)i);
@@ -93,6 +94,7 @@ UTEST(stress, ring_buffer) {
 
 UTEST(stress, ring_buffer_continuous_overwrite) {
   sp_rb(s32) rq = SP_NULLPTR;
+  sp_rb_init(sp_mem_os_new(), rq);
 
   sp_rb_set_mode(rq, SP_RQ_MODE_OVERWRITE);
 
@@ -386,7 +388,7 @@ void fmon_stress_poll(sp_fmon_t* monitor) {
 }
 
 void fmon_stress_create_dir_tree(sp_str_t base, s32 depth, sp_da(sp_str_t)* dirs) {
-  sp_da_push(*dirs, sp_str_copy(base));
+  sp_da_push(*dirs, sp_str_copy_a(sp_mem_scratch_allocator_a(), base));
   if (depth <= 0) return;
 
   for (s32 i = 0; i < FMON_STRESS_DIRS_PER_LEVEL; i++) {

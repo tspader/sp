@@ -28,7 +28,7 @@ void sp_test_asset_noop_complete(sp_asset_import_context_t* context) { (void)con
 void sp_test_asset_import(sp_asset_import_context_t* context) {
   sp_test_asset_data_t* input = (sp_test_asset_data_t*)context->user_data;
   sp_test_asset_data_t* data = (sp_test_asset_data_t*)sp_alloc(sizeof(sp_test_asset_data_t));
-  data->content = sp_str_copy(input->content);
+  data->content = sp_str_copy_a(sp_mem_scratch_allocator_a(), input->content);
   data->value = input->value;
 
   sp_atomic_ptr_set(&context->asset->data, data);
@@ -131,7 +131,7 @@ UTEST(asset_registry, string_copying) {
   // Create a temporary string
   c8 temp_buffer[32];
   sp_cstr_copy_to("temp_asset", temp_buffer, sizeof(temp_buffer));
-  sp_str_t temp_name = sp_str_from_cstr(temp_buffer);
+  sp_str_t temp_name = sp_str_from_cstr_a(sp_mem_scratch_allocator_a(), temp_buffer);
 
   // Add asset with temporary name
   sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, temp_name, SP_NULLPTR);
@@ -141,7 +141,7 @@ UTEST(asset_registry, string_copying) {
 
   // The asset's name should still be intact
   ASSERT_TRUE(sp_str_equal(asset->name, SP_LIT("temp_asset")));
-  ASSERT_FALSE(sp_str_equal(asset->name, sp_str_from_cstr(temp_buffer)));
+  ASSERT_FALSE(sp_str_equal(asset->name, sp_str_from_cstr_a(sp_mem_scratch_allocator_a(), temp_buffer)));
 
   // Should still be findable with original name
   sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("temp_asset"));

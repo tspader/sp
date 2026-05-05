@@ -538,7 +538,7 @@ UTEST_F(elf, oracle_readelf_minimal) {
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
   sp_elf_write_to_file(elf, path);
 
-  sp_ps_output_t ps = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t ps = sp_ps_run_a(sp_mem_scratch_allocator_a(), (sp_ps_config_t){
     .command = sp_str_lit("readelf"),
     .args = {sp_str_lit("-a"), path},
   });
@@ -574,7 +574,7 @@ UTEST_F(elf, oracle_readelf_populated) {
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("populated.o"));
   sp_elf_write_to_file(elf, path);
 
-  sp_ps_output_t ps = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t ps = sp_ps_run_a(sp_mem_scratch_allocator_a(), (sp_ps_config_t){
     .command = sp_str_lit("readelf"),
     .args = {sp_str_lit("-a"), path},
   });
@@ -599,7 +599,7 @@ UTEST_F(elf, oracle_cc_read) {
   sp_io_writer_close(&c_file);
 
   sp_str_t fixture_path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
-  sp_ps_output_t compile = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t compile = sp_ps_run_a(sp_mem_scratch_allocator_a(), (sp_ps_config_t){
     .command = sp_str_lit("cc"),
     .args = {sp_str_lit("-c"), c_path, sp_str_lit("-o"), fixture_path},
   });
@@ -661,14 +661,14 @@ UTEST_F(elf, oracle_cc_link) {
   sp_io_writer_close(&f);
 
   sp_str_t bin_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration"));
-  sp_ps_output_t compile = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t compile = sp_ps_run_a(sp_mem_scratch_allocator_a(), (sp_ps_config_t){
     .command = sp_str_lit("cc"),
     .args = {c_path, obj_path, sp_str_lit("-o"), bin_path},
   });
   ASSERT_EQ(compile.status.exit_code, 0);
   EXPECT_TRUE(sp_fs_exists_a(bin_path));
 
-  sp_ps_output_t run = sp_ps_run((sp_ps_config_t){
+  sp_ps_output_t run = sp_ps_run_a(sp_mem_scratch_allocator_a(), (sp_ps_config_t){
     .command = bin_path,
   });
   ASSERT_EQ(run.status.exit_code, 0);

@@ -6,6 +6,7 @@
 #include "array.c"
 #include "cv.c"
 #include "elf.c"
+#include "env.c"
 #include "fmon.c"
 #include "format.c"
 #include "fs.c"

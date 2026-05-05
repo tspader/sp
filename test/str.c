@@ -7,23 +7,19 @@ SP_TEST_MAIN()
 
 UTEST(cstr, all_variations) {
   const c8* original = "Hello World";
-  c8* copy = sp_cstr_copy(original);
+  c8* copy = sp_cstr_copy_a(sp_mem_scratch_allocator_a(), original);
   ASSERT_TRUE(sp_cstr_equal(copy, original));
   ASSERT_NE(copy, original);
-  sp_free(copy);
 
-  c8* partial = sp_cstr_copy_n(original, 5);
+  c8* partial = sp_cstr_copy_n_a(sp_mem_scratch_allocator_a(), original, 5);
   ASSERT_TRUE(sp_cstr_equal(partial, "Hello"));
-  sp_free(partial);
 
   const c8* empty = "";
-  c8* empty_copy = sp_cstr_copy(empty);
+  c8* empty_copy = sp_cstr_copy_a(sp_mem_scratch_allocator_a(), empty);
   ASSERT_TRUE(sp_cstr_equal(empty_copy, ""));
-  sp_free(empty_copy);
 
-  c8* null_copy = sp_cstr_copy(SP_NULLPTR);
+  c8* null_copy = sp_cstr_copy_a(sp_mem_scratch_allocator_a(), SP_NULLPTR);
   ASSERT_EQ(null_copy[0], '\0');
-  sp_free(null_copy);
 }
 
 UTEST(cstr, buffer_operations) {
@@ -88,28 +84,26 @@ UTEST(cstr, length_tests) {
 
 UTEST(str, conversion_functions) {
   sp_str_t str = SP_LIT("Hello World");
-  c8* cstr = sp_str_to_cstr(str);
+  c8* cstr = sp_str_to_cstr_a(sp_mem_scratch_allocator_a(), str);
   ASSERT_TRUE(sp_cstr_equal(cstr, "Hello World"));
-  sp_free(cstr);
 
   sp_str_t empty = SP_LIT("");
-  c8* empty_cstr = sp_str_to_cstr(empty);
+  c8* empty_cstr = sp_str_to_cstr_a(sp_mem_scratch_allocator_a(), empty);
   ASSERT_TRUE(sp_cstr_equal(empty_cstr, ""));
-  sp_free(empty_cstr);
 }
 
 UTEST(str, string_copy_operations) {
   sp_str_t original = SP_LIT("Hello World");
-  sp_str_t copy = sp_str_copy(original);
+  sp_str_t copy = sp_str_copy_a(sp_mem_scratch_allocator_a(), original);
   ASSERT_EQ(copy.len, original.len);
   ASSERT_TRUE(sp_str_equal(copy, original));
   ASSERT_NE(copy.data, original.data);
 
-  sp_str_t from_cstr = sp_str_from_cstr("Test String");
+  sp_str_t from_cstr = sp_str_from_cstr_a(sp_mem_scratch_allocator_a(), "Test String");
   ASSERT_EQ(from_cstr.len, 11);
   SP_EXPECT_STR_EQ_CSTR(from_cstr, "Test String");
 
-  sp_str_t partial = sp_str_from_cstr_n("Hello World", 5);
+  sp_str_t partial = sp_str_from_cstr_n_a(sp_mem_scratch_allocator_a(), "Hello World", 5);
   ASSERT_EQ(partial.len, 5);
   SP_EXPECT_STR_EQ_CSTR(partial, "Hello");
 
@@ -138,7 +132,7 @@ UTEST(str, string_creation) {
   ASSERT_EQ(str3.len, 7);
   SP_EXPECT_STR_EQ_CSTR(str3, "Dynamic");
 
-  sp_str_t allocated = sp_str_alloc(100);
+  sp_str_t allocated = sp_str_alloc_a(sp_mem_scratch_allocator_a(), 100);
   ASSERT_EQ(allocated.len, 0);
   ASSERT_NE(allocated.data, SP_NULLPTR);
 }
@@ -253,45 +247,45 @@ UTEST(str, valid_and_at) {
 UTEST(str, to_upper_and_replace) {
   {
     sp_str_t lowercase = SP_LIT("hello world!");
-    sp_str_t uppercase = sp_str_to_upper(lowercase);
+    sp_str_t uppercase = sp_str_to_upper_a(sp_mem_scratch_allocator_a(), lowercase);
     SP_EXPECT_STR_EQ_CSTR(uppercase, "HELLO WORLD!");
   };
 
   {
     sp_str_t lower = sp_str_lit("caf\xC3\xA9 123 {[]}");
-    SP_EXPECT_STR_EQ_CSTR(sp_str_to_upper(lower), "CAF\xC3\xA9 123 {[]}");
+    SP_EXPECT_STR_EQ_CSTR(sp_str_to_upper_a(sp_mem_scratch_allocator_a(), lower), "CAF\xC3\xA9 123 {[]}");
   }
 
   {
     sp_str_t upper = sp_str_lit("CAF\xC3\xA9 123 {[]}");
-    SP_EXPECT_STR_EQ_CSTR(sp_str_to_lower(upper), "caf\xC3\xA9 123 {[]}");
+    SP_EXPECT_STR_EQ_CSTR(sp_str_to_lower_a(sp_mem_scratch_allocator_a(), upper), "caf\xC3\xA9 123 {[]}");
   }
 
   sp_str_t mixed = SP_LIT("HeLLo WoRLd!");
-  sp_str_t upper_mixed = sp_str_to_upper(mixed);
+  sp_str_t upper_mixed = sp_str_to_upper_a(sp_mem_scratch_allocator_a(), mixed);
   SP_EXPECT_STR_EQ_CSTR(upper_mixed, "HELLO WORLD!");
 
   sp_str_t original = SP_LIT("hello world");
-  sp_str_t replaced = sp_str_replace_c8(original, 'l', 'X');
+  sp_str_t replaced = sp_str_replace_c8_a(sp_mem_scratch_allocator_a(), original, 'l', 'X');
   SP_EXPECT_STR_EQ_CSTR(replaced, "heXXo worXd");
 
-  sp_str_t no_match = sp_str_replace_c8(original, 'z', 'X');
+  sp_str_t no_match = sp_str_replace_c8_a(sp_mem_scratch_allocator_a(), original, 'z', 'X');
   SP_EXPECT_STR_EQ_CSTR(no_match, "hello world");
 
   // all same char
-  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT("aaa"), 'a', 'b'), "bbb");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("aaa"), 'a', 'b'), "bbb");
 
   // empty string
-  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT(""), 'a', 'b'), "");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8_a(sp_mem_scratch_allocator_a(), SP_LIT(""), 'a', 'b'), "");
 
   // same from/to (no-op)
-  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT("abc"), 'a', 'a'), "abc");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("abc"), 'a', 'a'), "abc");
 
   // single char string
-  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT("x"), 'x', 'y'), "y");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("x"), 'x', 'y'), "y");
 
   // first and last positions
-  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8(SP_LIT("/path/to/file/"), '/', '\\'), "\\path\\to\\file\\");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_replace_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("/path/to/file/"), '/', '\\'), "\\path\\to\\file\\");
 }
 
 UTEST(str, ends_with) {
@@ -442,7 +436,7 @@ UTEST(str, strip) {
 
 UTEST(str, split_c8) {
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello,world,test"), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("hello,world,test"), ',');
     ASSERT_EQ(sp_da_size(parts), 3);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "hello");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "world");
@@ -450,7 +444,7 @@ UTEST(str, split_c8) {
   }
 
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("/home/user/file.txt"), '/');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("/home/user/file.txt"), '/');
     ASSERT_EQ(sp_da_size(parts), 4);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "home");
@@ -459,7 +453,7 @@ UTEST(str, split_c8) {
   }
 
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,b"), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("a,,b"), ',');
     ASSERT_EQ(sp_da_size(parts), 3);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "a");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "");
@@ -467,7 +461,7 @@ UTEST(str, split_c8) {
   }
 
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("a,,,b"), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("a,,,b"), ',');
     ASSERT_EQ(sp_da_size(parts), 4);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "a");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "");
@@ -476,18 +470,18 @@ UTEST(str, split_c8) {
   }
 
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("hello"), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("hello"), ',');
     ASSERT_EQ(sp_da_size(parts), 1);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "hello");
   }
 
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT(""), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT(""), ',');
     EXPECT_EQ(parts, SP_NULLPTR);
   }
 
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT(",hello,world,"), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT(",hello,world,"), ',');
     ASSERT_EQ(sp_da_size(parts), 4);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "");
     SP_EXPECT_STR_EQ_CSTR(parts[1], "hello");
@@ -496,14 +490,14 @@ UTEST(str, split_c8) {
   }
 
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT(","), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT(","), ',');
     ASSERT_EQ(sp_da_size(parts), 2);
     SP_EXPECT_STR_EQ(parts[0], SP_LIT(""));
     SP_EXPECT_STR_EQ(parts[1], SP_LIT(""));
   }
 
   {
-    sp_da(sp_str_t) parts = sp_str_split_c8(SP_LIT("x"), ',');
+    sp_da(sp_str_t) parts = sp_str_split_c8_a(sp_mem_scratch_allocator_a(), SP_LIT("x"), ',');
     ASSERT_EQ(sp_da_size(parts), 1);
     SP_EXPECT_STR_EQ_CSTR(parts[0], "x");
   }
@@ -566,16 +560,16 @@ UTEST(str, cleave_c8) {
 }
 
 UTEST(str, pad) {
-  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello"), 10), SP_LIT("hello     "));
-  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hi"), 5), SP_LIT("hi   "));
+  SP_EXPECT_STR_EQ(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("hello"), 10), SP_LIT("hello     "));
+  SP_EXPECT_STR_EQ(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("hi"), 5), SP_LIT("hi   "));
 
-  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello world"), 5), SP_LIT("hello world"));
+  SP_EXPECT_STR_EQ(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("hello world"), 5), SP_LIT("hello world"));
 
-  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello"), 5), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("hello"), 5), SP_LIT("hello"));
 
-  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT(""), 5), SP_LIT("     "));
+  SP_EXPECT_STR_EQ(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT(""), 5), SP_LIT("     "));
 
-  SP_EXPECT_STR_EQ(sp_str_pad(SP_LIT("hello"), 0), SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("hello"), 0), SP_LIT("hello"));
 }
 
 UTEST(str, pad_to_longest) {
@@ -758,33 +752,33 @@ UTEST(str, view_creation) {
 UTEST(sp_str_from_cstr, string_from_cstr) {
   {
     const c8* cstr = "hello world";
-    sp_str_t str = sp_str_from_cstr(cstr);
+    sp_str_t str = sp_str_from_cstr_a(sp_mem_scratch_allocator_a(), cstr);
     ASSERT_EQ(str.len, 11);
     SP_EXPECT_STR_EQ(str, sp_str_view(cstr));
     ASSERT_NE(str.data, cstr);
   }
 
   {
-    sp_str_t str = sp_str_from_cstr("");
+    sp_str_t str = sp_str_from_cstr_a(sp_mem_scratch_allocator_a(), "");
     ASSERT_EQ(str.len, 0);
     SP_EXPECT_STR_EQ(str, SP_LIT(""));
   }
 
   {
-    sp_str_t str = sp_str_from_cstr(SP_NULLPTR);
+    sp_str_t str = sp_str_from_cstr_a(sp_mem_scratch_allocator_a(), SP_NULLPTR);
     ASSERT_EQ(str.len, 0);
     ASSERT_EQ(str.data, SP_NULLPTR);
   }
 
   {
     c8 buffer[] = "mutable";
-    sp_str_t str = sp_str_from_cstr(buffer);
+    sp_str_t str = sp_str_from_cstr_a(sp_mem_scratch_allocator_a(), buffer);
     buffer[0] = 'M';
     ASSERT_EQ(str.data[0], 'm');
   }
 
   {
-    sp_str_t str = sp_str_from_cstr_n("hello world", 5);
+    sp_str_t str = sp_str_from_cstr_n_a(sp_mem_scratch_allocator_a(), "hello world", 5);
     ASSERT_EQ(str.len, 5);
     SP_EXPECT_STR_EQ(str, SP_LIT("hello"));
   }

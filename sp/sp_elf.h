@@ -243,7 +243,7 @@ sp_elf_section_t* sp_elf_add_section(sp_elf_t* elf, sp_str_t name, u32 kind, u64
   sp_context_push_allocator(elf->allocator);
 
   sp_elf_section_t section = {
-    .name = sp_str_copy(name),
+    .name = sp_str_copy_a(elf->allocator, name),
     .index = sp_da_size(elf->sections),
     .type = kind,
     .alignment = alignment,

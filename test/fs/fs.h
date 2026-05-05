@@ -40,7 +40,7 @@ struct fs {
 
 UTEST_F_SETUP(fs) {
   sp_test_file_manager_init(&ut.file_manager);
-  probe_symlinks(ut.file_manager.allocator, ut.file_manager.paths.test);
+  probe_symlinks(ut.file_manager.mem, ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs) {
@@ -113,7 +113,7 @@ static void fs_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_st
   u32 expected_count = fs_count_expected_paths(expected);
   sp_for(i, expected_count) {
     fs_expected_path_t* exp = &expected[i];
-    sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(exp->path));
+    sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(exp->path));
     bool exists = sp_fs_exists_a(path);
     if (exists != exp->exists) {
       if (exp->exists) {
@@ -134,7 +134,7 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
   u32 setup_count = fs_count_setup(setup);
   sp_for(i, setup_count) {
     fs_setup_t* ent = &setup[i];
-    sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(ent->path));
+    sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(ent->path));
     sp_str_t parent = sp_fs_parent_path(path);
 
     if (!sp_str_empty(parent) && !sp_str_equal(parent, path) && !sp_fs_exists_a(parent)) {
@@ -154,7 +154,7 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
         break;
       }
       case FS_SETUP_SYMLINK: {
-        sp_str_t target = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(ent->target));
+        sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(ent->target));
         if (sp_fs_create_sym_link_a(target, path) != SP_OK) {
           SP_TEST_REPORT("failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();
@@ -162,7 +162,7 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
         break;
       }
       case FS_SETUP_HARD_LINK: {
-        sp_str_t target = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(ent->target));
+        sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(ent->target));
         if (sp_fs_create_hard_link_a(target, path) != SP_OK) {
           SP_TEST_REPORT("failed to create hard link {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();

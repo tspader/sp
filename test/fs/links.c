@@ -15,8 +15,8 @@ static void run_link_test(s32* utest_result, sp_test_file_manager_t* fm, link_te
   sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t target = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->target));
-  sp_str_t link_path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->link_path));
+  sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->target));
+  sp_str_t link_path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->link_path));
 
   sp_err_t result = t->symlink
     ? sp_fs_create_sym_link_a(target, link_path)
@@ -27,7 +27,7 @@ static void run_link_test(s32* utest_result, sp_test_file_manager_t* fm, link_te
 }
 
 UTEST_F(fs, create_hard_link_file) {
-  sp_mem_t a = ut.file_manager.allocator;
+  sp_mem_t a = ut.file_manager.mem;
   run_link_test(&ur, &ut.file_manager, &(link_test_t) {
     .label = "create_hard_link_file",
     .setup = {
@@ -90,7 +90,7 @@ UTEST_F(fs, create_hard_link_directory_fails) {
 
 UTEST_F(fs, create_symlink_file) {
   SKIP_IF_NO_SYMLINKS();
-  sp_mem_t a = ut.file_manager.allocator;
+  sp_mem_t a = ut.file_manager.mem;
   run_link_test(&ur, &ut.file_manager, &(link_test_t) {
     .label = "create_symlink_file",
     .symlink = true,
@@ -153,7 +153,7 @@ UTEST_F(fs, create_symlink_existing_destination_fails) {
 // canonicalize through a symlink should resolve to the real target
 UTEST_F(fs, canonicalize_through_symlink) {
   SKIP_IF_NO_SYMLINKS();
-  sp_mem_t a = ut.file_manager.allocator;
+  sp_mem_t a = ut.file_manager.mem;
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("canon_through_symlink"));
   sp_fs_create_dir_a(sandbox);
 

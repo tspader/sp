@@ -3,6 +3,13 @@
 
 #include "sp.h"
 
+#if defined(SP_TEST_AMALGAMATION)
+  #define SP_TEST_MAIN()
+#else
+  #define SP_TEST_MAIN() UTEST_MAIN()
+#endif
+
+
 #if defined(SP_FREESTANDING)
   #define SKIP_ON_FREESTANDING() UTEST_SKIP("unimplemented on freestanding");
 #else
@@ -82,7 +89,7 @@ typedef struct {
 typedef struct {
   sp_test_file_paths_t paths;
   sp_mem_arena_t* arena;
-  sp_mem_t allocator;
+  sp_mem_t mem;
 } sp_test_file_manager_t;
 
 typedef struct {
@@ -97,22 +104,36 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t pat
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager);
 
 
-typedef struct sp_test_memory_tracker {
-  sp_mem_arena_t* bump;
-  sp_mem_t allocator;
-} sp_test_memory_tracker;
+typedef struct sp_mem_tracking_node_t {
+  struct sp_mem_tracking_node_t* prev;
+  struct sp_mem_tracking_node_t* next;
+  u64 size;
+  u32 id;
+  u32 magic;
+} sp_mem_tracking_node_t;
 
-void sp_test_use_mem_arena(u32 capacity);
-void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity);
-void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker);
-u64 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker);
-void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker);
+#define SP_MEM_TRACKING_LIVE_MAGIC  0xA110CA7Eu
+#define SP_MEM_TRACKING_FREED_MAGIC 0xDEADBEEFu
 
-#if defined(SP_TEST_AMALGAMATION)
-  #define SP_TEST_MAIN()
-#else
-  #define SP_TEST_MAIN() UTEST_MAIN()
-#endif
+typedef struct sp_mem_tracking_t {
+  sp_mem_t backing;
+  sp_mem_tracking_node_t* live;
+  sp_mem_tracking_node_t* freed;
+  u64 live_bytes;
+  u32 live_count;
+  u32 double_frees;
+  u32 wild_frees;
+  u32 next_id;
+} sp_mem_tracking_t;
+
+void     sp_mem_tracking_init(sp_mem_tracking_t* t);
+void     sp_mem_tracking_init_ex(sp_mem_tracking_t* t, sp_mem_t backing);
+sp_mem_t sp_mem_tracking_as_allocator(sp_mem_tracking_t* t);
+void     sp_mem_tracking_dump(sp_mem_tracking_t* t);
+void     sp_mem_tracking_deinit(sp_mem_tracking_t* t);
+void*    sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
+bool     sp_mem_tracking_ok(sp_mem_tracking_t* mem);
+
 #endif
 
 
@@ -171,7 +192,7 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_roo
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   sp_str_t iso = sp_tm_epoch_to_iso8601_a(a, now);
-  sp_str_t sanitized = sp_str_replace_c8(iso, ':', '-');
+  sp_str_t sanitized = sp_str_replace_c8_a(a, iso, ':', '-');
   sp_str_t root = sp_fs_join_path_a(a, tmp, sanitized);
 
   if (!sp_fs_exists_a(root)) {
@@ -184,21 +205,21 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_roo
   return sp_test_file_manager_top_level;
 }
 
-void sp_test_file_manager_init(sp_test_file_manager_t* manager) {
-  manager->arena = sp_mem_arena_new();
-  manager->allocator = sp_mem_arena_as_allocator(manager->arena);
-  manager->paths.bin = sp_fs_get_exe_path_a(manager->allocator);
-  manager->paths.root = sp_test_file_manager_get_repo_root(manager->allocator);
-  manager->paths.build = manager->paths.root;
-  manager->paths.test = sp_test_file_manager_get_top_level(manager->allocator, manager->paths.root);
+void sp_test_file_manager_init(sp_test_file_manager_t* fs) {
+  fs->arena = sp_mem_arena_new();
+  fs->mem = sp_mem_arena_as_allocator(fs->arena);
+  fs->paths.bin = sp_fs_get_exe_path_a(fs->mem);
+  fs->paths.root = sp_test_file_manager_get_repo_root(fs->mem);
+  fs->paths.build = fs->paths.root;
+  fs->paths.test = sp_test_file_manager_get_top_level(fs->mem, fs->paths.root);
 
-  if (!sp_fs_exists_a(manager->paths.test)) {
-    sp_fs_create_dir_a(manager->paths.test);
+  if (!sp_fs_exists_a(fs->paths.test)) {
+    sp_fs_create_dir_a(fs->paths.test);
   }
 }
 
 sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name) {
-  return sp_fs_join_path_a(manager->allocator, manager->paths.test, name);
+  return sp_fs_join_path_a(manager->mem, manager->paths.test, name);
 }
 
 void sp_test_file_create_ex(sp_test_file_config_t config) {
@@ -252,43 +273,159 @@ void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
   }
 }
 
-////////////////////
-// MEMORY TRACKER //
-////////////////////
-void sp_test_use_mem_arena(u32 capacity) {
-  static sp_mem_arena_t* mem_arena;
-
-  mem_arena = sp_mem_arena_new_ex(capacity, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
-  sp_mem_t allocator = sp_mem_arena_as_allocator(mem_arena);
-  sp_context_push_allocator(allocator);
-}
-
-void sp_test_memory_tracker_init(sp_test_memory_tracker* tracker, u32 capacity) {
-  sp_test_use_mem_arena(capacity);
-  sp_context_t* ctx = sp_context_get();
-  tracker->bump = (sp_mem_arena_t*)ctx->allocator.user_data;
-  tracker->allocator = ctx->allocator;
-}
-
-void sp_test_memory_tracker_deinit(sp_test_memory_tracker* tracker) {
-  sp_mem_arena_destroy(tracker->bump);
-  sp_context_pop();
-}
-
-u64 sp_test_memory_tracker_bytes_used(sp_test_memory_tracker* tracker) {
-  return sp_mem_arena_bytes_used(tracker->bump);
-}
-
-void sp_test_memory_tracker_clear(sp_test_memory_tracker* tracker) {
-  sp_mem_arena_clear(tracker->bump);
-}
-
 /////////////////
 // BYTE BUFFER //
 /////////////////
 
 void sp_byte_buffer_zero(sp_byte_buffer_t* buffer) {
   sp_mem_zero(buffer->data, buffer->len);
+}
+
+///////////////////////
+// TRACKING ALLOCATOR //
+///////////////////////
+static sp_mem_tracking_node_t* sp_mem_tracking_header(void* ptr) {
+  return (sp_mem_tracking_node_t*)((u8*)ptr - sizeof(sp_mem_tracking_node_t));
+}
+
+static void* sp_mem_tracking_user_ptr(sp_mem_tracking_node_t* node) {
+  return (u8*)node + sizeof(sp_mem_tracking_node_t);
+}
+
+static void sp_mem_tracking_link(sp_mem_tracking_node_t** list, sp_mem_tracking_node_t* node) {
+  node->prev = SP_NULLPTR;
+  node->next = *list;
+  if (*list) (*list)->prev = node;
+  *list = node;
+}
+
+static void sp_mem_tracking_unlink(sp_mem_tracking_node_t** list, sp_mem_tracking_node_t* node) {
+  if (node->prev) node->prev->next = node->next;
+  else            *list             = node->next;
+  if (node->next) node->next->prev = node->prev;
+  node->prev = SP_NULLPTR;
+  node->next = SP_NULLPTR;
+}
+
+static void* sp_mem_tracking_do_alloc(sp_mem_tracking_t* t, u64 size) {
+  if (!size) return SP_NULLPTR;
+  void* raw = sp_alloc_a(t->backing, size + sizeof(sp_mem_tracking_node_t));
+  if (!raw) return SP_NULLPTR;
+
+  sp_mem_tracking_node_t* node = (sp_mem_tracking_node_t*)raw;
+  node->size = size;
+  node->magic = SP_MEM_TRACKING_LIVE_MAGIC;
+  node->id = ++t->next_id;
+  sp_mem_tracking_link(&t->live, node);
+  t->live_count++;
+  t->live_bytes += size;
+  return sp_mem_tracking_user_ptr(node);
+}
+
+static void sp_mem_tracking_do_free(sp_mem_tracking_t* t, void* ptr) {
+  if (!ptr) return;
+  sp_mem_tracking_node_t* node = sp_mem_tracking_header(ptr);
+
+  if (node->magic == SP_MEM_TRACKING_LIVE_MAGIC) {
+    sp_mem_tracking_unlink(&t->live, node);
+    node->magic = SP_MEM_TRACKING_FREED_MAGIC;
+    t->live_count--;
+    t->live_bytes -= node->size;
+    // Retain the node on the freed list (don't actually return it to the
+    // backing) so that subsequent frees of the same pointer can be detected
+    // as double-frees. Released in deinit.
+    sp_mem_tracking_link(&t->freed, node);
+  }
+  else if (node->magic == SP_MEM_TRACKING_FREED_MAGIC) {
+    t->double_frees++;
+  }
+  else {
+    t->wild_frees++;
+  }
+}
+
+static void* sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 size) {
+  if (!old)  return sp_mem_tracking_do_alloc(t, size);
+  if (!size) { sp_mem_tracking_do_free(t, old); return SP_NULLPTR; }
+
+  sp_mem_tracking_node_t* node = sp_mem_tracking_header(old);
+  if (node->magic != SP_MEM_TRACKING_LIVE_MAGIC) {
+    if (node->magic == SP_MEM_TRACKING_FREED_MAGIC) t->double_frees++;
+    else                                            t->wild_frees++;
+    return SP_NULLPTR;
+  }
+  if (node->size >= size) return old;
+
+  void* fresh = sp_mem_tracking_do_alloc(t, size);
+  if (!fresh) return SP_NULLPTR;
+  sp_mem_copy(old, fresh, node->size);
+  sp_mem_tracking_do_free(t, old);
+  return fresh;
+}
+
+void* sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
+  sp_mem_tracking_t* t = (sp_mem_tracking_t*)ud;
+  switch (mode) {
+    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_tracking_do_alloc(t, size);
+    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_tracking_do_realloc(t, ptr, size);
+    case SP_ALLOCATOR_MODE_FREE:   sp_mem_tracking_do_free(t, ptr); return SP_NULLPTR;
+    default:                       return SP_NULLPTR;
+  }
+}
+
+void sp_mem_tracking_init_ex(sp_mem_tracking_t* t, sp_mem_t backing) {
+  sp_mem_zero(t, sizeof(*t));
+  t->backing = backing;
+}
+
+void sp_mem_tracking_init(sp_mem_tracking_t* t) {
+  sp_mem_tracking_init_ex(t, sp_mem_os_new());
+}
+
+sp_mem_t sp_mem_tracking_as_allocator(sp_mem_tracking_t* t) {
+  return (sp_mem_t) {
+    .on_alloc = sp_mem_tracking_on_alloc,
+    .user_data = t,
+  };
+}
+
+u32 sp_mem_tracking_live_count(sp_mem_tracking_t* t)   { return t->live_count; }
+u64 sp_mem_tracking_live_bytes(sp_mem_tracking_t* t)   { return t->live_bytes; }
+u32 sp_mem_tracking_double_frees(sp_mem_tracking_t* t) { return t->double_frees; }
+u32 sp_mem_tracking_wild_frees(sp_mem_tracking_t* t)   { return t->wild_frees; }
+
+void sp_mem_tracking_dump(sp_mem_tracking_t* t) {
+  sp_log_a("tracking: live={} bytes={} double_frees={} wild_frees={}",
+    sp_fmt_uint(t->live_count),
+    sp_fmt_uint(t->live_bytes),
+    sp_fmt_uint(t->double_frees),
+    sp_fmt_uint(t->wild_frees));
+  for (sp_mem_tracking_node_t* n = t->live; n; n = n->next) {
+    sp_log_a("  #{} size={}", sp_fmt_uint(n->id), sp_fmt_uint(n->size));
+  }
+}
+
+void sp_mem_tracking_deinit(sp_mem_tracking_t* t) {
+  sp_mem_tracking_node_t* n = t->live;
+  while (n) {
+    sp_mem_tracking_node_t* next = n->next;
+    sp_free_a(t->backing, n);
+    n = next;
+  }
+  n = t->freed;
+  while (n) {
+    sp_mem_tracking_node_t* next = n->next;
+    sp_free_a(t->backing, n);
+    n = next;
+  }
+  sp_mem_zero(t, sizeof(*t));
+}
+
+bool sp_mem_tracking_ok(sp_mem_tracking_t* mem) {
+  return
+    (mem->live_count == 0) &&
+    (mem->double_frees == 0) &&
+    (mem->wild_frees == 0);
 }
 #endif
 #endif

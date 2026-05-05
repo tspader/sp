@@ -6,13 +6,17 @@
 SP_TEST_MAIN()
 
 struct sp_rb {
-  u8 placeholder;
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
 };
 
 UTEST_F_SETUP(sp_rb) {
+  ut.arena = sp_mem_arena_new();
+  ut.mem = sp_mem_arena_as_allocator(ut.arena);
 }
 
 UTEST_F_TEARDOWN(sp_rb) {
+  sp_mem_arena_destroy(ut.arena);
 }
 
 UTEST_F(sp_rb, null_init) {
@@ -26,8 +30,8 @@ UTEST_F(sp_rb, null_init) {
 
 UTEST_F(sp_rb, clear) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init_cap(ut.mem, q, 8);
 
-  q = sp_rb_grow_impl(SP_NULLPTR, sizeof(int), 8);
   ASSERT_TRUE(q != SP_NULLPTR);
   EXPECT_EQ(0, sp_rb_size(q));
   EXPECT_EQ(8, sp_rb_capacity(q));
@@ -47,8 +51,8 @@ UTEST_F(sp_rb, clear) {
 
 UTEST_F(sp_rb, free_test) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init_cap(ut.mem, q, 8);
 
-  q = sp_rb_grow_impl(SP_NULLPTR, sizeof(int), 8);
   ASSERT_TRUE(q != SP_NULLPTR);
 
   sp_rb_free(q);
@@ -60,6 +64,7 @@ UTEST_F(sp_rb, free_test) {
 
 UTEST_F(sp_rb, push_pop_fifo) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_push(q, 10);
   sp_rb_push(q, 20);
@@ -88,6 +93,7 @@ UTEST_F(sp_rb, push_pop_fifo) {
 
 UTEST_F(sp_rb, full_and_grow) {
   sp_rb(s32) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_push(q, 0);
   u32 initial_cap = sp_rb_capacity(q);
@@ -116,6 +122,7 @@ UTEST_F(sp_rb, full_and_grow) {
 
 UTEST_F(sp_rb, wrap_access) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_push(q, 1);
   sp_rb_push(q, 2);
@@ -148,6 +155,7 @@ UTEST_F(sp_rb, wrap_access) {
 
 UTEST_F(sp_rb, empty_ops) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_pop(q);
   EXPECT_TRUE(sp_rb_empty(q));
@@ -169,6 +177,7 @@ UTEST_F(sp_rb, empty_ops) {
 
 UTEST_F(sp_rb, iterate_wrapped) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_push(q, 1);
   sp_rb_push(q, 2);
@@ -196,6 +205,7 @@ UTEST_F(sp_rb, iterate_wrapped) {
 
 UTEST_F(sp_rb, iterate_reverse) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_push(q, 10);
   sp_rb_push(q, 20);
@@ -224,6 +234,7 @@ typedef struct {
 
 UTEST_F(sp_rb, struct_type) {
   sp_rb(test_item_t) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   test_item_t a = {.id = 1, .x = 1.5f, .y = 2.5f, .flags = 0xDEADBEEF};
   test_item_t b = {.id = 2, .x = 3.5f, .y = 4.5f, .flags = 0xCAFEBABE};
@@ -257,7 +268,8 @@ UTEST_F(sp_rb, struct_type) {
 }
 
 UTEST_F(sp_rb, capacity_one) {
-  sp_rb(int) q = sp_rb_grow_impl(SP_NULLPTR, sizeof(int), 1);
+  sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init_cap(ut.mem, q, 1);
 
   EXPECT_EQ(0, sp_rb_size(q));
   EXPECT_EQ(1, sp_rb_capacity(q));
@@ -288,6 +300,7 @@ UTEST_F(sp_rb, capacity_one) {
 
 UTEST_F(sp_rb, overwrite_mode) {
   sp_rb(s32) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_push(q, 1);
   sp_rb_set_mode(q, SP_RQ_MODE_OVERWRITE);
@@ -320,6 +333,7 @@ UTEST_F(sp_rb, overwrite_mode) {
 
 UTEST_F(sp_rb, overwrite_preserves_order) {
   sp_rb(s32) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_push(q, 0);
   sp_rb_set_mode(q, SP_RQ_MODE_OVERWRITE);
@@ -341,6 +355,7 @@ UTEST_F(sp_rb, overwrite_preserves_order) {
 
 UTEST_F(sp_rb, mode_preserved_on_grow) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_push(q, 1);
   sp_rb_set_mode(q, SP_RQ_MODE_GROW);
@@ -356,8 +371,9 @@ UTEST_F(sp_rb, mode_preserved_on_grow) {
   sp_rb_free(q);
 }
 
-UTEST_F(sp_rb, set_mode_on_null) {
+UTEST_F(sp_rb, set_mode_after_init) {
   sp_rb(int) q = SP_NULLPTR;
+  sp_rb_init(ut.mem, q);
 
   sp_rb_set_mode(q, SP_RQ_MODE_OVERWRITE);
 

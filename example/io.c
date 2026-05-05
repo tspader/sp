@@ -27,7 +27,7 @@ s32 run(s32 num_args, const c8** args) {
   // appropriate type for a native file handle from the OS (s32, HANDLE)
   //
   // sp_io will close file descriptors for you automatically if you pass SP_IO_CLOSE_MODE_AUTO
-  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr(exe), SP_O_RDONLY | SP_O_BINARY, 0);
+  sp_sys_fd_t fd = sp_sys_open(sp_str_to_cstr_a(mem, exe), SP_O_RDONLY | SP_O_BINARY, 0);
   sp_io_reader_from_fd(&io.r, fd, SP_IO_CLOSE_MODE_AUTO);
   sp_io_read(&io.r, buffer.data, buffer.capacity, &buffer.len);
   sp_log_a("sp_io_reader_from_fd: {}", sp_fmt_str(sp_mem_buffer_as_str(&buffer)));

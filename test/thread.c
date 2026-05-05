@@ -51,7 +51,7 @@ s32 sp_thread_context_test_fn(void* userdata) {
   data->context_valid = (ctx != SP_NULLPTR);
   data->allocator_valid = (ctx != SP_NULLPTR && ctx->allocator.on_alloc != SP_NULLPTR);
 
-  sp_str_t test_str = sp_str_from_cstr("thread allocation test");
+  sp_str_t test_str = sp_str_from_cstr_a(sp_mem_os_new(), "thread allocation test");
   data->allocated_string = test_str;
   data->alloc_succeeded = test_str.data != SP_NULLPTR && test_str.len > 0;
 

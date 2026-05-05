@@ -1055,7 +1055,7 @@ const c8* sp_prompt_get_str(sp_prompt_ctx_t* ctx) {
   if (ctx->value.kind != SP_PROMPT_VALUE_STR) {
     return "";
   }
-  return sp_str_to_cstr(ctx->value.as.str);
+  return sp_str_to_cstr_a(sp_context_get_allocator(), ctx->value.as.str);
 }
 
 bool sp_prompt_get_bool(sp_prompt_ctx_t* ctx) {
@@ -1081,7 +1081,7 @@ const c8* sp_prompt_join_selection(sp_prompt_select_option_t* options, u32 num_o
     sp_io_write_str(&builder, sp_str_view(options[it].label), SP_NULLPTR);
   }
 
-  return sp_str_to_cstr(sp_io_writer_dyn_mem_as_str(&builder.dyn_mem));
+  return sp_str_to_cstr_a(sp_context_get_allocator(), sp_io_writer_dyn_mem_as_str(&builder.dyn_mem));
 }
 
 // Instead of just writing to the file descriptor that the main loop waits on for events,
@@ -1161,7 +1161,7 @@ void sp_prompt_send_status_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
   }
 
   sp_context_push_arena(ctx->channel.arena);
-  ctx->status.value = sp_str_copy(text);
+  ctx->status.value = sp_str_copy_a(sp_context_get_allocator(), text);
   sp_context_pop();
   ctx->status.dirty = true;
 
@@ -1593,7 +1593,7 @@ static void sp_prompt_outro_render(sp_prompt_ctx_t* ctx) {
 static void sp_prompt_note_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_note_t* prompt = (sp_prompt_note_t*)ctx->user_data;
 
-  sp_da(sp_str_t) message_lines = sp_str_split_c8(prompt->message, '\n');
+  sp_da(sp_str_t) message_lines = sp_str_split_c8_a(sp_context_get_allocator(), prompt->message, '\n');
 
   u32 title_width = sp_prompt_text_width(prompt->title);
   u32 max_line_width = 0;

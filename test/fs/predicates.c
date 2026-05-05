@@ -31,7 +31,7 @@ static void run_fs_predicate_test(s32* utest_result, sp_test_file_manager_t* fm,
   u32 expected_count = fs_count_predicates(t->expected);
   sp_for(i, expected_count) {
     fs_predicate_expected_t* exp = &t->expected[i];
-    sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(exp->path));
+    sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(exp->path));
 
     fs_expect_bool(utest_result, path, "exists", sp_fs_exists_a(path), exp->exists);
     fs_expect_bool(utest_result, path, "is_regular_file", sp_fs_is_file_a(path), exp->is_regular_file);

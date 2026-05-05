@@ -15,7 +15,7 @@ typedef struct linkage {
 
 #if defined(SP_WIN32)
 bool check_path(sp_str_t program) {
-  return SearchPathA(SP_NULLPTR, sp_str_to_cstr(program), SP_NULLPTR, 0, SP_NULLPTR, SP_NULLPTR) > 0;
+  return SearchPathA(SP_NULLPTR, sp_str_to_cstr_a(sp_context_get_allocator(), program), SP_NULLPTR, 0, SP_NULLPTR, SP_NULLPTR) > 0;
 }
 #else
 bool check_path(sp_str_t program) {
@@ -76,8 +76,8 @@ sp_str_t linkage_static(sp_str_t stem) {
 
 void linkage_add_win32_link_libs(sp_ps_config_t* cfg) {
   #if defined(SP_WIN32)
-    sp_ps_config_add_arg(cfg, sp_str_lit("/link"));
-    sp_ps_config_add_arg(cfg, sp_str_lit("shell32.lib"));
+    sp_ps_config_add_arg_a(sp_context_get_allocator(), cfg, sp_str_lit("/link"));
+    sp_ps_config_add_arg_a(sp_context_get_allocator(), cfg, sp_str_lit("shell32.lib"));
   #else
     SP_UNUSED(cfg);
   #endif
@@ -97,11 +97,11 @@ bool compile_to_exe(linkage* ctx, const c8* file, sp_str_t output) {
     };
 
     linkage_add_win32_link_libs(&cfg);
-    sp_ps_output_t out = sp_ps_run(cfg);
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), cfg);
 
     return !out.status.exit_code;
   #else
-  sp_ps_output_t out = sp_ps_run((sp_ps_config_t) {
+  sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t) {
     .command = sp_str_lit("cc"),
     .args = {
       sp_fs_join_path_a(sp_context_get_allocator(), ctx->source, SP_CSTR(file)),
@@ -117,7 +117,7 @@ bool compile_to_exe(linkage* ctx, const c8* file, sp_str_t output) {
 
 bool compile_to_object(linkage* ctx, const c8* file, sp_str_t output) {
   #if defined(SP_WIN32)
-    sp_ps_output_t out = sp_ps_run((sp_ps_config_t) {
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t) {
       .command = sp_str_lit("cl"),
       .args = {
         sp_str_lit("/nologo"),
@@ -131,7 +131,7 @@ bool compile_to_object(linkage* ctx, const c8* file, sp_str_t output) {
 
     return !out.status.exit_code;
   #else
-  sp_ps_output_t out = sp_ps_run((sp_ps_config_t) {
+  sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t) {
     .command = sp_str_lit("cc"),
     .args = {
       sp_str_lit("-c"),
@@ -154,12 +154,12 @@ bool compile_objects_to_exe(sp_str_t output, sp_str_t* objs, u32 len) {
     };
 
     sp_for(it, len) {
-      sp_ps_config_add_arg(&cfg, objs[it]);
+      sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, objs[it]);
     }
 
     linkage_add_win32_link_libs(&cfg);
 
-    sp_ps_output_t out = sp_ps_run(cfg);
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), cfg);
     return !out.status.exit_code;
   #else
   sp_ps_config_t cfg = {
@@ -168,10 +168,10 @@ bool compile_objects_to_exe(sp_str_t output, sp_str_t* objs, u32 len) {
   };
 
   for (u32 it = 0; it < len; it++) {
-    sp_ps_config_add_arg(&cfg, objs[it]);
+    sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, objs[it]);
   }
 
-  sp_ps_output_t out = sp_ps_run(cfg);
+  sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), cfg);
   return !out.status.exit_code;
   #endif
 }
@@ -189,15 +189,15 @@ bool compile_to_linked_exe(linkage* ctx, const c8* file, sp_str_t output, sp_str
       },
     };
 
-    sp_ps_config_add_arg(&cfg, sp_str_lit("/link"));
+    sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, sp_str_lit("/link"));
 
     sp_for(it, len) {
-      sp_ps_config_add_arg(&cfg, libs[it]);
+      sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, libs[it]);
     }
 
-    sp_ps_config_add_arg(&cfg, sp_str_lit("shell32.lib"));
+    sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, sp_str_lit("shell32.lib"));
 
-    sp_ps_output_t out = sp_ps_run(cfg);
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), cfg);
     return !out.status.exit_code;
   #else
   sp_ps_config_t cfg = {
@@ -212,10 +212,10 @@ bool compile_to_linked_exe(linkage* ctx, const c8* file, sp_str_t output, sp_str
   };
 
   for (u32 it = 0; it < len; it++) {
-    sp_ps_config_add_arg(&cfg, libs[it]);
+    sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, libs[it]);
   }
 
-  sp_ps_output_t out = sp_ps_run(cfg);
+  sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), cfg);
   return !out.status.exit_code;
   #endif
 }
@@ -232,10 +232,10 @@ bool create_archive(linkage* ctx, sp_str_t archive, sp_str_t* objs, u32 len) {
     };
 
     sp_for(it, len) {
-      sp_ps_config_add_arg(&cfg, objs[it]);
+      sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, objs[it]);
     }
 
-    sp_ps_output_t out = sp_ps_run(cfg);
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), cfg);
     return !out.status.exit_code;
   #else
   sp_ps_config_t cfg = {
@@ -245,28 +245,28 @@ bool create_archive(linkage* ctx, sp_str_t archive, sp_str_t* objs, u32 len) {
     },
   };
 
-  sp_ps_config_add_arg(&cfg, archive);
+  sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, archive);
   for (u32 it = 0; it < len; it++) {
-    sp_ps_config_add_arg(&cfg, objs[it]);
+    sp_ps_config_add_arg_a(sp_context_get_allocator(), &cfg, objs[it]);
   }
 
-  sp_ps_output_t out = sp_ps_run(cfg);
+  sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), cfg);
   return !out.status.exit_code;
   #endif
 }
 
 bool is_symbol_in_binary(sp_str_t binary, sp_str_t symbol) {
   #if defined(SP_WIN32)
-    HMODULE module = LoadLibraryA(sp_str_to_cstr(binary));
+    HMODULE module = LoadLibraryA(sp_str_to_cstr_a(sp_context_get_allocator(), binary));
     if (!module) {
       return false;
     }
 
-    bool found = GetProcAddress(module, sp_str_to_cstr(symbol)) != SP_NULLPTR;
+    bool found = GetProcAddress(module, sp_str_to_cstr_a(sp_context_get_allocator(), symbol)) != SP_NULLPTR;
     FreeLibrary(module);
     return found;
   #else
-    sp_ps_output_t nm = sp_ps_run((sp_ps_config_t){
+    sp_ps_output_t nm = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t){
       .command = sp_str_lit("nm"),
     .args = { sp_str_lit("-g"), binary },
   });
@@ -279,7 +279,7 @@ UTEST_F(linkage, single_tu) {
   sp_str_t bin = linkage_exe(sp_test_file_path(&ut.files, sp_str_lit("header-single")));
   EXPECT_TRUE(compile_to_exe(&ut, "main.c", bin));
 
-  sp_ps_output_t run = sp_ps_run((sp_ps_config_t){ .command = bin });
+  sp_ps_output_t run = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t){ .command = bin });
   ASSERT_EQ(run.status.exit_code, 0);
 }
 
@@ -301,7 +301,7 @@ UTEST_F(linkage, multi_tu) {
   sp_str_t bin = linkage_exe(sp_test_file_path(&ut.files, sp_str_lit("header-multi")));
   EXPECT_TRUE(compile_objects_to_exe(bin, objs, sp_carr_len(objs)));
 
-  sp_ps_output_t run = sp_ps_run((sp_ps_config_t){ .command = bin });
+  sp_ps_output_t run = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t){ .command = bin });
   EXPECT_EQ(run.status.exit_code, 0);
 }
 
@@ -309,7 +309,7 @@ UTEST_F(linkage, shared_lib) {
   sp_str_t so = linkage_shared(sp_test_file_path(&ut.files, sp_str_lit("shared")));
 
   #if defined(SP_WIN32)
-    sp_ps_output_t out = sp_ps_run((sp_ps_config_t){
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t){
       .command = sp_str_lit("cl"),
       .args = {
         sp_str_lit("/nologo"),
@@ -324,7 +324,7 @@ UTEST_F(linkage, shared_lib) {
       },
     });
   #else
-    sp_ps_output_t out = sp_ps_run((sp_ps_config_t){
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t){
       .command = sp_str_lit("cc"),
       .args = {
         sp_str_lit("-shared"), sp_str_lit("-fPIC"),
@@ -349,7 +349,7 @@ UTEST_F(linkage, static_lib) {
   sp_str_t bin = linkage_exe(sp_test_file_path(&ut.files, sp_str_lit("static-single")));
   EXPECT_TRUE(compile_to_linked_exe(&ut, "main-decl.c", bin, &archive, 1));
 
-  sp_ps_output_t run = sp_ps_run((sp_ps_config_t){ .command = bin });
+  sp_ps_output_t run = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t){ .command = bin });
   ASSERT_EQ(run.status.exit_code, 0);
 }
 
@@ -357,7 +357,7 @@ UTEST_F(linkage, cpp_compat) {
   sp_str_t obj = linkage_obj(sp_test_file_path(&ut.files, sp_str_lit("cpp-main")));
 
   #if defined(SP_WIN32)
-    sp_ps_output_t out = sp_ps_run((sp_ps_config_t){
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t){
       .command = sp_str_lit("cl"),
       .args = {
         sp_str_lit("/nologo"),
@@ -371,7 +371,7 @@ UTEST_F(linkage, cpp_compat) {
       },
     });
   #else
-    sp_ps_output_t out = sp_ps_run((sp_ps_config_t){
+    sp_ps_output_t out = sp_ps_run_a(sp_context_get_allocator(), (sp_ps_config_t){
       .command = sp_str_lit("c++"),
       .args = {
         sp_str_lit("-c"),

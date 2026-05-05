@@ -13,7 +13,7 @@ static void run_create_file_test(s32* utest_result, sp_test_file_manager_t* fm, 
   sp_fs_create_dir_a(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t->setup);
 
-  sp_str_t path = sp_fs_join_path_a(fm->allocator, sandbox, sp_str_view(t->path));
+  sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->path));
   sp_fs_create_file_a(path);
 
   fs_expect_paths(utest_result, fm, sandbox, t->expect);
@@ -53,7 +53,7 @@ UTEST_F(fs, create_file_unicode) {
 }
 
 UTEST_F(fs, create_file_with_content) {
-  sp_mem_t a = ut.file_manager.allocator;
+  sp_mem_t a = ut.file_manager.mem;
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_view("create_file_with_content"));
   sp_fs_create_dir_a(sandbox);
 

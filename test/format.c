@@ -7,7 +7,7 @@
 
 SP_TEST_MAIN()
 
-static sp_str_ht(sp_fmt_directive_t) sp_fmt_directives = SP_NULLPTR;
+static sp_ht_a(sp_str_t, sp_fmt_directive_t) sp_fmt_directives = SP_NULLPTR;
 
 typedef struct {
   const c8* str;

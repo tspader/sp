@@ -146,11 +146,11 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
   sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &sb);
   sp_fmt_io(&sb, "{}{} {} {} {} {}{}\n",
     sp_fmt_cstr(SP_ANSI_FG_BRIGHT_BLACK),
-    sp_fmt_str(sp_str_pad(SP_LIT("test"), max_name)),
-    sp_fmt_str(sp_str_pad(SP_LIT("n"), max_n_width)),
-    sp_fmt_str(sp_str_pad(SP_LIT("sp_ht"), time_width)),
-    sp_fmt_str(sp_str_pad(SP_LIT("stb_ds"), time_width)),
-    sp_fmt_str(sp_str_pad(SP_LIT("ratio"), ratio_width)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("test"), max_name)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("n"), max_n_width)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("sp_ht"), time_width)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("stb_ds"), time_width)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_scratch_allocator_a(), SP_LIT("ratio"), ratio_width)),
     sp_fmt_cstr(SP_ANSI_RESET));
 
   sp_da_for(results, i) {
@@ -161,14 +161,14 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
     f64 stb_ms = sp_tm_ns_to_ms_f((f64)r->stb_time_ns);
     f64 ratio = sp_ms / stb_ms;
 
-    sp_str_t sp_time_str = sp_str_pad(sp_fmt_a(sp_context_get_allocator(), "{}ms", sp_fmt_float(sp_ms)).value, time_width);
-    sp_str_t stb_time_str = sp_str_pad(sp_fmt_a(sp_context_get_allocator(), "{}ms", sp_fmt_float(stb_ms)).value, time_width);
+    sp_str_t sp_time_str = sp_str_pad_a(sp_mem_scratch_allocator_a(), sp_fmt_a(sp_context_get_allocator(), "{}ms", sp_fmt_float(sp_ms)).value, time_width);
+    sp_str_t stb_time_str = sp_str_pad_a(sp_mem_scratch_allocator_a(), sp_fmt_a(sp_context_get_allocator(), "{}ms", sp_fmt_float(stb_ms)).value, time_width);
     sp_str_t ratio_color = color_for_ratio(ratio);
-    sp_str_t ratio_str = sp_str_pad(sp_fmt_a(sp_context_get_allocator(), "{}x", sp_fmt_float(ratio)).value, ratio_width);
+    sp_str_t ratio_str = sp_str_pad_a(sp_mem_scratch_allocator_a(), sp_fmt_a(sp_context_get_allocator(), "{}x", sp_fmt_float(ratio)).value, ratio_width);
 
     sp_fmt_io(&sb, "{} {} {} {} {}{}{}\n",
-      sp_fmt_str(sp_str_pad(r->name, max_name)),
-      sp_fmt_str(sp_str_pad(n_str, max_n_width)),
+      sp_fmt_str(sp_str_pad_a(sp_mem_scratch_allocator_a(), r->name, max_name)),
+      sp_fmt_str(sp_str_pad_a(sp_mem_scratch_allocator_a(), n_str, max_n_width)),
       sp_fmt_str(sp_time_str),
       sp_fmt_str(stb_time_str),
       sp_fmt_str(ratio_color),

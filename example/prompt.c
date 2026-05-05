@@ -149,7 +149,7 @@ s32 demo_select_filter(sp_prompt_ctx_t* ctx) {
   if (sp_prompt_submitted(ctx)) {
     const c8* selection = sp_prompt_get_str(ctx);
     sp_str_t reaction = sp_fmt_a(sp_context_get_allocator(), "{.quote}, eh? A childish response...", sp_fmt_cstr(selection)).value;
-    sp_prompt_note(ctx, sp_str_to_cstr(reaction), "Selection");
+    sp_prompt_note(ctx, sp_str_to_cstr_a(sp_context_get_allocator(), reaction), "Selection");
   }
   else if (sp_prompt_cancelled(ctx)) {
     sp_prompt_cancel(ctx, "You got cold feet...");

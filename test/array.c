@@ -9,7 +9,7 @@ SP_TEST_MAIN()
 
 UTEST(dyn_array, basic_operations) {
     sp_da(int) arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(sp_mem_arena_as_allocator(sp_mem_get_scratch_arena()), arr);
 
     ASSERT_EQ(sp_da_size(arr), 0);
     ASSERT_GE(sp_da_capacity(arr), 0);
@@ -129,7 +129,7 @@ UTEST(dyn_array, pointer_type) {
     const char* strings[] = {"Hello", "World", "Dynamic", "Array", "Test"};
 
     for (s32 i = 0; i < 5; i++) {
-        c8* str = sp_cstr_copy(strings[i]);
+        c8* str = sp_cstr_copy_a(sp_context_get()->allocator, strings[i]);
         sp_da_push(arr, str);
     }
 

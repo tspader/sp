@@ -33,7 +33,7 @@ struct fs_collect {
 
 UTEST_F_SETUP(fs_collect) {
   sp_test_file_manager_init(&ut.tmp);
-  probe_symlinks(ut.tmp.allocator, ut.tmp.paths.test);
+  probe_symlinks(ut.tmp.mem, ut.tmp.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_collect) {
@@ -43,7 +43,7 @@ UTEST_F_TEARDOWN(fs_collect) {
 static void add_entry(sp_test_file_manager_t* tmp, const c8* label, collect_entry_t entry) {
   sp_str_t root = sp_test_file_path(tmp, sp_str_view(label));
 
-  sp_str_t path = sp_fs_join_path_a(tmp->allocator, root, sp_str_view(entry.path));
+  sp_str_t path = sp_fs_join_path_a(tmp->mem, root, sp_str_view(entry.path));
   switch (entry.kind) {
     case COLLECT_ENT_FILE: {
       sp_str_t parent = sp_fs_parent_path(path);
@@ -58,7 +58,7 @@ static void add_entry(sp_test_file_manager_t* tmp, const c8* label, collect_entr
       break;
     }
     case COLLECT_ENT_SYMLINK: {
-      sp_str_t target = sp_fs_join_path_a(tmp->allocator, root, sp_str_view(entry.target));
+      sp_str_t target = sp_fs_join_path_a(tmp->mem, root, sp_str_view(entry.target));
       sp_fs_create_sym_link_a(target, path);
       break;
     }
@@ -78,8 +78,8 @@ static void run_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, col
 
   sp_str_t root = sp_test_file_path(tmp, sp_str_view(test->label));
   sp_da(sp_fs_entry_t) results = test->recursive
-    ? sp_fs_collect_recursive_a(tmp->allocator, root)
-    : sp_fs_collect_a(tmp->allocator, root);
+    ? sp_fs_collect_recursive_a(tmp->mem, root)
+    : sp_fs_collect_a(tmp->mem, root);
 
   u32 num_expected = 0;
   sp_carr_for(test->expect, it) {
@@ -91,7 +91,7 @@ static void run_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, col
 
   sp_for(i, num_expected) {
     collect_expect_t exp = test->expect[i];
-    sp_str_t expected_path = sp_fs_join_path_a(tmp->allocator, root, sp_str_view(exp.name));
+    sp_str_t expected_path = sp_fs_join_path_a(tmp->mem, root, sp_str_view(exp.name));
 
     bool found = false;
     sp_da_for(results, n) {

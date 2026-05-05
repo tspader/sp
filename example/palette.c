@@ -230,9 +230,9 @@ sp_app_config_t app_main(s32 num_args, const c8** args) {
   s32 value = -1;
 
   /* palette [hue] [saturation] [value] */
-  if (num_args > 1) hue        = sp_parse_s32(sp_str_from_cstr(args[1]));
-  if (num_args > 2) saturation = sp_parse_s32(sp_str_from_cstr(args[2]));
-  if (num_args > 3) value      = sp_parse_s32(sp_str_from_cstr(args[3]));
+  if (num_args > 1) hue        = sp_parse_s32(sp_str_view(args[1]));
+  if (num_args > 2) saturation = sp_parse_s32(sp_str_view(args[2]));
+  if (num_args > 3) value      = sp_parse_s32(sp_str_view(args[3]));
 
   app_t* app = sp_alloc_type(app_t);
 
