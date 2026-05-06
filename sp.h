@@ -1338,6 +1338,13 @@ typedef struct {
   sp_mem_t mem;
 } sp_mem_arena_marker_t;
 
+typedef struct {
+  u8* buffer;
+  u64 capacity;
+  u64 bytes_used;
+  u8 alignment;
+} sp_mem_fixed_t;
+
 SP_API void*                 sp_alloc(u64 size);
 SP_API void*                 sp_realloc(void* memory, u64 size);
 SP_API void                  sp_free(void* memory);
@@ -1368,6 +1375,12 @@ SP_API u64                   sp_mem_arena_bytes_used(sp_mem_arena_t* arena);
 SP_API void*                 sp_mem_arena_alloc(sp_mem_arena_t* arena, u64 size);
 SP_API void*                 sp_mem_arena_realloc(sp_mem_arena_t* arena, void* ptr, u64 size);
 SP_API void                  sp_mem_arena_free(sp_mem_arena_t* arena, void* ptr);
+SP_API sp_mem_fixed_t        sp_mem_fixed(void* buffer, u64 capacity);
+SP_API sp_mem_fixed_t        sp_mem_fixed_ex(void* buffer, u64 capacity, u8 alignment);
+SP_API sp_mem_t              sp_mem_fixed_as_allocator(sp_mem_fixed_t* fixed);
+SP_API void                  sp_mem_fixed_clear(sp_mem_fixed_t* fixed);
+SP_API u64                   sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed);
+SP_API void*                 sp_mem_fixed_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old);
 SP_API sp_mem_t              sp_mem_get_scratch();
 SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena();
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch();
@@ -7768,6 +7781,59 @@ void* sp_mem_arena_realloc(sp_mem_arena_t* arena, void* ptr, u64 size) {
 
 void sp_mem_arena_free(sp_mem_arena_t* arena, void* ptr) {
   sp_mem_arena_on_alloc(arena, SP_ALLOCATOR_MODE_FREE, 0, ptr);
+}
+
+sp_mem_fixed_t sp_mem_fixed(void* buffer, u64 capacity) {
+  return sp_mem_fixed_ex(buffer, capacity, SP_MEM_ALIGNMENT);
+}
+
+sp_mem_fixed_t sp_mem_fixed_ex(void* buffer, u64 capacity, u8 alignment) {
+  return (sp_mem_fixed_t) {
+    .buffer = (u8*)buffer,
+    .capacity = capacity,
+    .bytes_used = 0,
+    .alignment = alignment == 0 ? SP_MEM_ALIGNMENT : alignment,
+  };
+}
+
+sp_mem_t sp_mem_fixed_as_allocator(sp_mem_fixed_t* fixed) {
+  return (sp_mem_t) {
+    .on_alloc = sp_mem_fixed_on_alloc,
+    .user_data = fixed,
+  };
+}
+
+void sp_mem_fixed_clear(sp_mem_fixed_t* fixed) {
+  fixed->bytes_used = 0;
+}
+
+u64 sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed) {
+  return fixed->bytes_used;
+}
+
+void* sp_mem_fixed_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory) {
+  (void)old_memory;
+  sp_mem_fixed_t* fixed = (sp_mem_fixed_t*)user_data;
+
+  switch (mode) {
+    case SP_ALLOCATOR_MODE_ALLOC: {
+      u8* ptr = (u8*)sp_align_up(fixed->buffer + fixed->bytes_used, fixed->alignment);
+      u64 offset = (u64)(ptr - fixed->buffer);
+      sp_require_as_null(offset + size <= fixed->capacity);
+      fixed->bytes_used = offset + size;
+      sp_mem_zero(ptr, size);
+      return ptr;
+    }
+    case SP_ALLOCATOR_MODE_RESIZE: {
+      sp_require_as_null(false);
+      return SP_NULLPTR;
+    }
+    case SP_ALLOCATOR_MODE_FREE: {
+      return SP_NULLPTR;
+    }
+  }
+
+  SP_UNREACHABLE_RETURN(SP_NULLPTR);
 }
 
 sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* arena) {

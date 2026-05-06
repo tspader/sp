@@ -70,22 +70,18 @@ $(EXAMPLE_DIR)/%$(EXE): example/%.c sp.h | $(EXAMPLE_DIR)
 #########
 # TESTS #
 #########
-CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itools -Itest/tools -Itest/tools/process
+CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itools -Itest/tools -Itest/tools/process -Itest/fs -Itest/mem
+
+TEST_SOURCES = $(wildcard test/*/*.c) $(wildcard test/*/*.h) $(wildcard test/*/*/*.c) $(wildcard test/*/*/*.h)
 
 build/sp: tools/sp.c sp.h | $(BUILD_DIR)
 	cc -g -I. -o $@ $<
 
-$(TEST_DIR)/%$(EXE): test/%.c sp.h | $(TEST_DIR) $(TEST_DIR)/process$(EXE)
+$(TEST_DIR)/%$(EXE): test/%.c sp.h $(TEST_SOURCES) | $(TEST_DIR) $(TEST_DIR)/process$(EXE)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) -o $@ $<
 
 $(TEST_DIR)/process$(EXE): test/tools/process/process.c sp.h | $(TEST_DIR)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) -o $@ $<
-
-$(TEST_DIR)/fs$(EXE): test/fs.c sp.h | $(TEST_DIR)
-	$(CC) $(CFLAGS) $(CFLAGS_TEST) -Itest/fs -o $@ $<
-
-$(TEST_DIR)/mem$(EXE): test/mem.c sp.h | $(TEST_DIR)
-	$(CC) $(CFLAGS) $(CFLAGS_TEST) -Itest/mem -o $@ $<
 
 #########
 # CROSS #
