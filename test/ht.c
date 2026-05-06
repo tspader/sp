@@ -441,7 +441,7 @@ UTEST_F(sp_ht, null_safety) {
 }
 
 UTEST_F(sp_ht, string_key_custom_hash) {
-  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
   sp_ht_a(sp_str_t, int) ht = SP_NULLPTR;
   sp_ht_init_a(ut.mem, ht);
@@ -477,11 +477,11 @@ UTEST_F(sp_ht, string_key_custom_hash) {
   EXPECT_EQ(sp_ht_getp(ht, kd), SP_NULLPTR);
 
   sp_ht_free(ht);
-  sp_mem_end_scratch_a(s);
+  sp_mem_end_scratch(s);
 }
 
 UTEST_F(sp_ht, str_key) {
-  sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
   sp_ht_a(sp_str_t, s32) ht = SP_NULLPTR;
   sp_str_ht_init_a(ut.mem, ht);
@@ -516,7 +516,7 @@ UTEST_F(sp_ht, str_key) {
   EXPECT_EQ(sp_str_ht_get(ht, kd), SP_NULLPTR);
 
   sp_ht_free(ht);
-  sp_mem_end_scratch_a(s);
+  sp_mem_end_scratch(s);
 }
 
 UTEST_F(sp_ht, cstr_key) {

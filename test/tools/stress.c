@@ -263,7 +263,7 @@ UTEST(stress, sp_context) {
 
     switch (scenario) {
       case CONTEXT_STRESS_FRAGMENTATION: {
-        sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+        sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
         s32 num_allocs = 10 + (rand() % 200);
         u8** ptrs = sp_alloc_n(u8*, num_allocs);
         u32* sizes = sp_alloc_n(u32, num_allocs);
@@ -288,15 +288,15 @@ UTEST(stress, sp_context) {
         break;
       }
       case CONTEXT_STRESS_NESTING: {
-        sp_mem_scratch_t s1 = sp_mem_begin_scratch();
+        sp_mem_arena_marker_t s1 = sp_mem_begin_scratch();
         u64* outer = sp_alloc(sizeof(u64));
         *outer = 0xCAFEBABE;
         {
-          sp_mem_scratch_t s2 = sp_mem_begin_scratch();
+          sp_mem_arena_marker_t s2 = sp_mem_begin_scratch();
           u64* inner = sp_alloc(sizeof(u64));
           *inner = 0xDEADBEEF;
           {
-             sp_mem_scratch_t s3 = sp_mem_begin_scratch();
+             sp_mem_arena_marker_t s3 = sp_mem_begin_scratch();
              u8* big = sp_alloc(5000);
              sp_mem_fill_u8(big, 5000, 0xAA);
 
@@ -315,7 +315,7 @@ UTEST(stress, sp_context) {
         break;
       }
       case CONTEXT_STRESS_REALLOC: {
-        sp_mem_scratch_t s = sp_mem_begin_scratch();
+        sp_mem_arena_marker_t s = sp_mem_begin_scratch();
         u8* ptr = sp_alloc(16);
 
         sp_mem_fill_u8(ptr, 16, 0x11);
@@ -333,7 +333,7 @@ UTEST(stress, sp_context) {
         break;
       }
       case CONTEXT_STRESS_ALIGNMENT: {
-        sp_mem_scratch_t s = sp_mem_begin_scratch();
+        sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
         sp_for(it, 50) {
           u8* b = sp_alloc_type(u8);
@@ -388,7 +388,7 @@ void fmon_stress_poll(sp_fmon_t* monitor) {
 }
 
 void fmon_stress_create_dir_tree(sp_str_t base, s32 depth, sp_da(sp_str_t)* dirs) {
-  sp_da_push(*dirs, sp_str_copy_a(sp_mem_scratch_allocator_a(), base));
+  sp_da_push(*dirs, sp_str_copy_a(sp_mem_get_scratch(), base));
   if (depth <= 0) return;
 
   for (s32 i = 0; i < FMON_STRESS_DIRS_PER_LEVEL; i++) {

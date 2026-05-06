@@ -11,7 +11,7 @@ struct sp_rb {
 };
 
 UTEST_F_SETUP(sp_rb) {
-  ut.arena = sp_mem_arena_new();
+  ut.arena = sp_mem_arena_new(sp_mem_os_new());
   ut.mem = sp_mem_arena_as_allocator(ut.arena);
 }
 

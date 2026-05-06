@@ -98,7 +98,7 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
   registry->shutdown_requested = false;
   registry->import_queue = SP_NULLPTR;
   registry->completion_queue = SP_NULLPTR;
-  registry->arena = sp_mem_arena_new();
+  registry->arena = sp_mem_arena_new(sp_mem_os_new());
   registry->mem = sp_mem_arena_as_allocator(registry->arena);
   sp_da_init(registry->mem, registry->importers);
   sp_rb_init(registry->mem, registry->import_queue);
@@ -119,8 +119,6 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_asset_registry_con
     sp_str_ht_init_a(registry->mem, importer.assets);
     sp_da_push(registry->importers, importer);
   }
-
-  sp_context_pop();
 
   sp_thread_init(&registry->thread, sp_asset_registry_thread_fn, registry);
 }
@@ -152,17 +150,14 @@ sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_
 }
 
 static sp_asset_t* sp_asset_registry_alloc(sp_asset_registry_t* r, sp_asset_importer_t* importer, sp_str_t name, void* data) {
-  sp_context_push_allocator(sp_mem_arena_as_allocator(r->arena));
-
-  sp_asset_t* asset = sp_alloc_type(sp_asset_t);
+  sp_asset_t* asset = sp_alloc_type_a(r->mem, sp_asset_t);
   asset->kind = importer->kind;
   asset->state = SP_ASSET_STATE_QUEUED;
-  asset->name = sp_str_copy_a(sp_mem_arena_as_allocator(r->arena), name);
+  asset->name = sp_str_copy_a(r->mem, name);
   sp_atomic_ptr_set(&asset->data, data);
 
-  sp_str_ht_insert(importer->assets, sp_str_copy_a(sp_mem_arena_as_allocator(r->arena), name), asset);
+  sp_str_ht_insert(importer->assets, sp_str_copy_a(r->mem, name), asset);
 
-  sp_context_pop();
   return asset;
 }
 

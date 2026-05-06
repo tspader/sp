@@ -82,9 +82,9 @@ int main(int argc, char** argv) {
   (void)argc;
   (void)argv;
 
-  sp_mem_arena_t* arena = sp_mem_arena_new(4 * 1024 * 1024);
+  sp_mem_arena_t* arena = sp_mem_arena_new_ex(sp_mem_os_new(), 4 * 1024 * 1024, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
   sp_allocator_t allocator = sp_mem_arena_as_allocator(arena);
-  sp_context_push_allocator(allocator);
+  (void)allocator;
 
   u32 num_cases = sizeof(bench_cases) / sizeof(bench_cases[0]);
   sp_da(bench_result_t) results = SP_NULLPTR;

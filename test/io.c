@@ -14,7 +14,7 @@ struct io_rw {
 };
 
 UTEST_F_SETUP(io_rw) {
-  ut.arena = sp_mem_arena_new();
+  ut.arena = sp_mem_arena_new(sp_mem_os_new());
   ut.mem = sp_mem_arena_as_allocator(ut.arena);
   sp_test_file_manager_init(&ut.file_manager);
   ut.file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("sp_io_rw.file"));

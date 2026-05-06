@@ -309,7 +309,7 @@ UTEST(sp_fmt_parse_directive, no_width_just_directive) {
 
 static sp_str_t render_value_to_str(sp_fmt_arg_t arg) {
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_dyn_mem_a(sp_mem_scratch_allocator_a(), &io);
+  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_render_default_a(&io, &arg, SP_NULLPTR);
   return sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
 }
@@ -421,7 +421,7 @@ UTEST(sp_fmt_render, f64_custom_precision_via_spec) {
   sp_fmt_arg_t arg = sp_fmt_float(3.14159);
   sp_opt_set(arg.spec.precision, 2);
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_dyn_mem_a(sp_mem_scratch_allocator_a(), &io);
+  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_render_default_a(&io, &arg, SP_NULLPTR);
   sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
   EXPECT_TRUE(sp_str_equal_cstr(got, "3.14"));
@@ -439,7 +439,7 @@ UTEST(sp_fmt_render, ptr_nonzero) {
 
 static sp_str_t apply_spec_to_str(const c8* content, sp_fmt_spec_t spec) {
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_dyn_mem_a(sp_mem_scratch_allocator_a(), &io);
+  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_str_t empty = sp_zero();
   sp_fmt_apply_spec_a(&io, empty, sp_str_view(content), empty, spec);
   return sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
@@ -483,7 +483,7 @@ UTEST(sp_fmt_pad, center_odd) {
 
 UTEST(sp_fmt_pad, wrapped_padding_outside) {
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_dyn_mem_a(sp_mem_scratch_allocator_a(), &io);
+  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
     sp_str_view("<"),
     sp_str_view("42"),
@@ -496,7 +496,7 @@ UTEST(sp_fmt_pad, wrapped_padding_outside) {
 
 UTEST(sp_fmt_pad, wrapped_center) {
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_dyn_mem_a(sp_mem_scratch_allocator_a(), &io);
+  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
     sp_str_view("["),
     sp_str_view("hi"),
@@ -629,7 +629,7 @@ UTEST(sp_fmt_directive, ordering_bracket_nested) {
   sp_fmt_register_decorator("b", _test_before_b, _test_after_b);
 
   _test_log = (sp_io_writer_t)SP_ZERO_INITIALIZE();
-  sp_io_writer_from_dyn_mem_a(sp_mem_scratch_allocator_a(), &_test_log);
+  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &_test_log);
   sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.a .b}", sp_fmt_cstr("x")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "[a[bxb]a]"));
 
@@ -769,7 +769,7 @@ UTEST(sp_fmt_parse_directive, err_alpha_after_digit) {
 
 UTEST(sp_fmt_pad, wrapped_content_overflow) {
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_dyn_mem_a(sp_mem_scratch_allocator_a(), &io);
+  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
     sp_str_view("<"),
     sp_str_view("hello"),

@@ -117,7 +117,7 @@ s32 main(s32 num_args, const c8** args) {
         sp_str_t value = sp_os_env_get(sp_str_view(line));
         if (stdout_enabled) {
           if (!sp_str_empty(value)) {
-            fprintf(stdout, "%s %s\n", line, sp_str_to_cstr_a(sp_mem_scratch_allocator_a(), value));
+            fprintf(stdout, "%s %s\n", line, sp_str_to_cstr_a(sp_mem_get_scratch(), value));
           } else {
             fprintf(stdout, "%s\n", line);
           }
@@ -125,7 +125,7 @@ s32 main(s32 num_args, const c8** args) {
         }
         if (stderr_enabled) {
           if (!sp_str_empty(value)) {
-            fprintf(stderr, "%s %s\n", line, sp_str_to_cstr_a(sp_mem_scratch_allocator_a(), value));
+            fprintf(stderr, "%s %s\n", line, sp_str_to_cstr_a(sp_mem_get_scratch(), value));
           } else {
             fprintf(stderr, "%s\n", line);
           }
@@ -172,11 +172,11 @@ s32 main(s32 num_args, const c8** args) {
       }
       sp_str_t str = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_uint(total_read)).value;
       if (stdout_enabled) {
-        fprintf(stdout, "%s\n", sp_str_to_cstr_a(sp_mem_scratch_allocator_a(), str));
+        fprintf(stdout, "%s\n", sp_str_to_cstr_a(sp_mem_get_scratch(), str));
         fflush(stdout);
       }
       if (stderr_enabled) {
-        fprintf(stderr, "%s\n", sp_str_to_cstr_a(sp_mem_scratch_allocator_a(), str));
+        fprintf(stderr, "%s\n", sp_str_to_cstr_a(sp_mem_get_scratch(), str));
         fflush(stderr);
       }
       break;

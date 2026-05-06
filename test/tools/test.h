@@ -206,7 +206,7 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_roo
 }
 
 void sp_test_file_manager_init(sp_test_file_manager_t* fs) {
-  fs->arena = sp_mem_arena_new();
+  fs->arena = sp_mem_arena_new(sp_mem_os_new());
   fs->mem = sp_mem_arena_as_allocator(fs->arena);
   fs->paths.bin = sp_fs_get_exe_path_a(fs->mem);
   fs->paths.root = sp_test_file_manager_get_repo_root(fs->mem);

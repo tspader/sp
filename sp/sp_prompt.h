@@ -1006,12 +1006,12 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, u32 cols, u32 rows) {
   ctx->state = SP_PROMPT_STATE_ACTIVE;
   ctx->wake.read = SP_SYS_INVALID_FD;
   ctx->wake.write = SP_SYS_INVALID_FD;
-  ctx->arena = sp_mem_arena_new();
+  ctx->arena = sp_mem_arena_new(sp_mem_os_new());
   ctx->allocator = sp_mem_arena_as_allocator(ctx->arena);
   sp_da_init(ctx->allocator, ctx->frames);
 
   sp_mutex_init(&ctx->channel.lock, SP_MUTEX_PLAIN);
-  ctx->channel.arena = sp_mem_arena_new_with_allocator(sp_mem_os_new(), SP_MEM_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
+  ctx->channel.arena = sp_mem_arena_new_ex(sp_mem_os_new(), SP_MEM_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
 
   // Write buffering is really important, because our rendering algorithm is extremely
   // naive. It's not much more than this:
@@ -1406,7 +1406,7 @@ static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
 
 sp_app_result_t sp_prompt_app_on_init(sp_app_t* app) {
   sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)app->user_data;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
   ctx->state = SP_PROMPT_STATE_ACTIVE;
   ctx->value = sp_zero_struct(sp_prompt_value_t);
@@ -1442,10 +1442,10 @@ void sp_prompt_app_on_deinit(sp_app_t* app) {
 
 sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
   sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)app->user_data;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
   sp_da(sp_prompt_event_t) events = sp_zero();
-  sp_da_init(scratch.marker.mem, events);
+  sp_da_init(scratch.mem, events);
 
   // Drain everything. Primed events come first by definition, but there's no specific order
   // between progress, status, and inputs.
@@ -1523,7 +1523,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
 
 sp_app_result_t sp_prompt_app_on_update(sp_app_t* app) {
   sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)app->user_data;
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
   if (ctx->state == SP_PROMPT_STATE_ACTIVE && ctx->widget.on_update) {
     ctx->widget.on_update(ctx);

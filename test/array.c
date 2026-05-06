@@ -427,7 +427,7 @@ UTEST(dyn_array, allocator_realloc_into_scratch_clobber) {
     .fill = 0xAA,
   };
 
-  sp_mem_arena_t* arena = sp_mem_arena_new();
+  sp_mem_arena_t* arena = sp_mem_arena_new(sp_mem_os_new());
   sp_mem_t mem = sp_mem_arena_as_allocator(arena);
 
   sp_da(u8) arr = sp_zero();
@@ -443,7 +443,7 @@ UTEST(dyn_array, allocator_realloc_into_scratch_clobber) {
   u32 len = 0;
 
   {
-    sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+    sp_mem_arena_marker_t s = sp_mem_begin_scratch();
     u8* ptr = arr;
     while (ptr == arr) {
       sp_da_push(arr, pattern.array);
@@ -456,11 +456,11 @@ UTEST(dyn_array, allocator_realloc_into_scratch_clobber) {
       ASSERT_EQ(arr[it], pattern.array);
     }
 
-    sp_mem_end_scratch_a(s);
+    sp_mem_end_scratch(s);
   }
 
   {
-    sp_mem_arena_marker_t s = sp_mem_begin_scratch_a();
+    sp_mem_arena_marker_t s = sp_mem_begin_scratch();
     u8* clobber = sp_alloc_n_a(s.mem, u8, num_bytes);
     sp_mem_fill_u8(clobber, num_bytes, pattern.fill);
 
@@ -468,7 +468,7 @@ UTEST(dyn_array, allocator_realloc_into_scratch_clobber) {
       ASSERT_EQ(arr[it], pattern.array);
     }
 
-    sp_mem_end_scratch_a(s);
+    sp_mem_end_scratch(s);
   }
 
 

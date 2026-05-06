@@ -6,7 +6,6 @@
 #include "mem/builtin.c"
 #include "mem/arena.c"
 #include "mem/slice.c"
-#include "mem/context.c"
 
 #ifdef MEM_TEST_OWNS_MAIN
 UTEST_MAIN()

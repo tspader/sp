@@ -55,7 +55,7 @@ sp_macho_t* sp_macho_new() {
   sp_allocator_t allocator = sp_context_get()->allocator;
   sp_macho_t* m = sp_alloc_type(sp_macho_t);
   m->allocator = allocator;
-  m->arena = sp_mem_arena_new(SP_MACHO_ARENA_BLOCK_SIZE);
+  m->arena = sp_mem_arena_new_ex(allocator, SP_MACHO_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
   return m;
 }
 

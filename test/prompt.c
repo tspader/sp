@@ -40,7 +40,7 @@ void sp_prompt_step(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget, sp_prompt_e
 void sp_prompt_tick(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
 
 UTEST_F_SETUP(prompt) {
-  ut.arena = sp_mem_arena_new();
+  ut.arena = sp_mem_arena_new(sp_mem_os_new());
   ut.mem = sp_mem_arena_as_allocator(ut.arena);
   ut.ctx = SP_ZERO_STRUCT(sp_prompt_ctx_t);
   ut.app = SP_NULLPTR;

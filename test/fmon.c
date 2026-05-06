@@ -26,7 +26,7 @@ typedef struct sp_test_file_monitor {
 } sp_test_file_monitor;
 
 UTEST_F_SETUP(sp_test_file_monitor) {
-  ut.arena = sp_mem_arena_new();
+  ut.arena = sp_mem_arena_new(sp_mem_os_new());
   ut.mem = sp_mem_arena_as_allocator(ut.arena);
   sp_test_file_manager_init(&ut.file_manager);
 
@@ -59,12 +59,12 @@ void fmon_callback(sp_fmon_t* monitor, sp_fmon_event_t* change, void* userdata) 
   sp_test_file_monitor* fixture = (sp_test_file_monitor*)userdata;
   fixture->change_detected = true;
   fixture->last_event = change->events;
-  fixture->last_file_path = sp_str_copy_a(sp_mem_scratch_allocator_a(), change->file_path);
+  fixture->last_file_path = sp_str_copy_a(sp_mem_get_scratch(), change->file_path);
 
   if (fmon_history.count < SP_TEST_FMON_MAX_RECORDS) {
     sp_test_fmon_record_t* r = &fmon_history.records[fmon_history.count++];
     r->events = change->events;
-    r->file_path = sp_str_copy_a(sp_mem_scratch_allocator_a(), change->file_path);
+    r->file_path = sp_str_copy_a(sp_mem_get_scratch(), change->file_path);
   }
 }
 
@@ -142,7 +142,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 
   EXPECT_FALSE(timed_out);
   EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
-  EXPECT_TRUE(paths_equal(ut.last_file_path, test_file));
+  EXPECT_TRUE(paths_equal(ut.mem, ut.last_file_path, test_file));
 #endif
 }
 
@@ -377,7 +377,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
   ut.change_detected = false;
   fmon_history.count = 0;
 
-  sp_sys_rename(sp_str_to_cstr_a(sp_mem_scratch_allocator_a(), old_file), sp_str_to_cstr_a(sp_mem_scratch_allocator_a(), new_file));
+  sp_sys_rename(sp_str_to_cstr_a(sp_mem_get_scratch(), old_file), sp_str_to_cstr_a(sp_mem_get_scratch(), new_file));
 
   sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);

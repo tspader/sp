@@ -119,7 +119,7 @@ bool sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b) {
 }
 
 sp_str_t sp_msvc_json_get_str(sp_str_t json, sp_str_t key) {
-  sp_mem_scratch_t scratch = sp_mem_begin_scratch();
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
   sp_str_t needle = sp_fmt_a(sp_context_get_allocator(), "\"{}\":\"", sp_fmt_str(key)).value;
 
   s32 pos = sp_str_find(json, needle);
