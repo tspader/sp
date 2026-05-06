@@ -355,10 +355,8 @@ UTEST_F(mem, alloc_preserves_u64_size) {
     .user_data = &recorded_size,
   };
 
-  sp_context_push_allocator(mock);
   u64 requested = (u64)5 * 1024 * 1024 * 1024;
-  sp_alloc(requested);
-  sp_context_pop();
+  sp_alloc_a(mock, requested);
 
   EXPECT_EQ(recorded_size, requested);
 }

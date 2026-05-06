@@ -148,8 +148,8 @@ s32 demo_select_filter(sp_prompt_ctx_t* ctx) {
 
   if (sp_prompt_submitted(ctx)) {
     const c8* selection = sp_prompt_get_str(ctx);
-    sp_str_t reaction = sp_fmt_a(sp_context_get_allocator(), "{.quote}, eh? A childish response...", sp_fmt_cstr(selection)).value;
-    sp_prompt_note(ctx, sp_str_to_cstr_a(sp_context_get_allocator(), reaction), "Selection");
+    sp_str_t reaction = sp_fmt_a(ctx->allocator, "{.quote}, eh? A childish response...", sp_fmt_cstr(selection)).value;
+    sp_prompt_note(ctx, sp_str_to_cstr_a(ctx->allocator, reaction), "Selection");
   }
   else if (sp_prompt_cancelled(ctx)) {
     sp_prompt_cancel(ctx, "You got cold feet...");
@@ -376,8 +376,10 @@ s32 prompt_main(s32 argc, const c8** argv) {
     { "Knight Rider", demo_knight_rider },
   };
 
+  sp_mem_t mem = sp_mem_os_new();
+
   sp_ht_a(const c8*, sp_prompt_demo_fn_t) demos = sp_zero();
-  sp_cstr_ht_init_a(sp_context_get()->allocator, demos);
+  sp_cstr_ht_init_a(mem, demos);
   sp_carr_for(ordered, it) {
     sp_cstr_ht_insert(demos, ordered[it].name, ordered[it].fn);
   }
@@ -404,7 +406,7 @@ s32 prompt_main(s32 argc, const c8** argv) {
   s32 result = 0;
   if (run == SP_NULLPTR) {
     sp_da(sp_prompt_select_option_t) options = sp_zero();
-    sp_da_init(sp_context_get()->allocator, options);
+    sp_da_init(mem, options);
     sp_carr_for(ordered, it) {
       sp_prompt_select_option_t option = {
         .label = ordered[it].name,

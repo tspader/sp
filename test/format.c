@@ -574,7 +574,7 @@ UTEST(sp_fmt_directive, register_and_lookup) {
   EXPECT_TRUE(got->decorator.before == _test_before_lt);
   EXPECT_TRUE(got->decorator.after == _test_after_gt);
 
-  sp_str_t rendered = sp_fmt_a(sp_context_get_allocator(), "{.wrap}", sp_fmt_cstr("ok")).value;
+  sp_str_t rendered = sp_fmt_a(sp_mem_get_scratch(), "{.wrap}", sp_fmt_cstr("ok")).value;
   EXPECT_TRUE(sp_str_equal_cstr(rendered, "<ok>"));
   sp_fmt_directive_reset();
 }
@@ -596,7 +596,7 @@ UTEST(sp_fmt_directive, reset_clears) {
 UTEST(sp_fmt_directive, wraps_content) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.wrap}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.wrap}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<hi>"));
   sp_fmt_directive_reset();
 }
@@ -604,7 +604,7 @@ UTEST(sp_fmt_directive, wraps_content) {
 UTEST(sp_fmt_directive, render_replaces_value) {
   sp_fmt_directive_reset();
   sp_fmt_register_renderer("x", _test_render_x, 0);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.x}", sp_fmt_int(999)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.x}", sp_fmt_int(999)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "X"));
   sp_fmt_directive_reset();
 }
@@ -612,7 +612,7 @@ UTEST(sp_fmt_directive, render_replaces_value) {
 UTEST(sp_fmt_directive, transform_uppercase) {
   sp_fmt_directive_reset();
   sp_fmt_register_transformer("upper", _test_transform_upper);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.upper}", sp_fmt_cstr("hello")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.upper}", sp_fmt_cstr("hello")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "HELLO"));
   sp_fmt_directive_reset();
 }
@@ -620,7 +620,7 @@ UTEST(sp_fmt_directive, transform_uppercase) {
 UTEST(sp_fmt_directive, err_unknown_directive) {
   sp_fmt_directive_reset();
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.missing}", sp_fmt_int(42)).err, SP_ERR_FMT_UNKNOWN_DIRECTIVE);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.missing}", sp_fmt_int(42)).err, SP_ERR_FMT_UNKNOWN_DIRECTIVE);
 }
 
 UTEST(sp_fmt_directive, ordering_bracket_nested) {
@@ -630,7 +630,7 @@ UTEST(sp_fmt_directive, ordering_bracket_nested) {
 
   _test_log = (sp_io_writer_t)SP_ZERO_INITIALIZE();
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &_test_log);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.a .b}", sp_fmt_cstr("x")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.a .b}", sp_fmt_cstr("x")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "[a[bxb]a]"));
 
   sp_str_t log_str = sp_io_writer_dyn_mem_as_str(&_test_log.dyn_mem);
@@ -644,7 +644,7 @@ UTEST(sp_fmt_directive, err_multiple_renders) {
   sp_fmt_register_renderer("x", _test_render_x, 0);
   sp_fmt_register_renderer("y", _test_render_y, 0);
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.x .y}", sp_fmt_int(0)).err, SP_ERR_FMT_TOO_MANY_RENDERERS);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.x .y}", sp_fmt_int(0)).err, SP_ERR_FMT_TOO_MANY_RENDERERS);
   EXPECT_EQ(_test_render_y_calls, 0);
   sp_fmt_directive_reset();
 }
@@ -652,7 +652,7 @@ UTEST(sp_fmt_directive, err_multiple_renders) {
 UTEST(sp_fmt_directive, padding_outside_wrappers) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:6 .wrap}", sp_fmt_int(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:6 .wrap}", sp_fmt_int(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "    <42>"));
   sp_fmt_directive_reset();
 }
@@ -660,64 +660,64 @@ UTEST(sp_fmt_directive, padding_outside_wrappers) {
 UTEST(sp_fmt_directive, padding_with_center_and_wrapper) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:*^8 .wrap}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:*^8 .wrap}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "***<hi>***"));
   sp_fmt_directive_reset();
 }
 
 UTEST(sp_fmt_v, literal_only) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "hello, world").value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "hello, world").value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "hello, world"));
 }
 
 UTEST(sp_fmt_v, empty_placeholder_int) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_int(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{}", sp_fmt_int(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "42"));
 }
 
 UTEST(sp_fmt_v, empty_placeholder_str) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_cstr("world")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{}", sp_fmt_cstr("world")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "world"));
 }
 
 UTEST(sp_fmt_v, multi_arg) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{} + {} = {}",
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{} + {} = {}",
     sp_fmt_int(2), sp_fmt_int(3), sp_fmt_int(5)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "2 + 3 = 5"));
 }
 
 UTEST(sp_fmt_v, literals_around_placeholder) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "hello, {}!", sp_fmt_cstr("thomas")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "hello, {}!", sp_fmt_cstr("thomas")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "hello, thomas!"));
 }
 
 UTEST(sp_fmt_v, width_right_align) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:6}", sp_fmt_int(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:6}", sp_fmt_int(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "    42"));
 }
 
 UTEST(sp_fmt_v, fill_center) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:*^9}", sp_fmt_int(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:*^9}", sp_fmt_int(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "***42****"));
 }
 
 UTEST(sp_fmt_v, brace_escapes) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{{{}}}", sp_fmt_int(7)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{{{}}}", sp_fmt_int(7)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "{7}"));
 }
 
 UTEST(sp_fmt_v, close_brace_escape) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "hello }} world").value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "hello }} world").value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "hello } world"));
 }
 
 UTEST(sp_fmt_v, err_lone_close_brace) {
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "oops } here").err, SP_ERR_FMT_BAD_PLACEHOLDER);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "oops } here").err, SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_v, str_with_padding) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "[{:->8}]", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "[{:->8}]", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "[------hi]"));
 }
 
@@ -726,7 +726,7 @@ UTEST(sp_fmt_directive, custom_fn_fallback) {
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
   u32 value = 0;
   sp_fmt_arg_t arg = sp_fmt_custom(u32, _test_render_x, value);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.wrap}", arg).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.wrap}", arg).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<X>"));
   sp_fmt_directive_reset();
 }
@@ -734,7 +734,7 @@ UTEST(sp_fmt_directive, custom_fn_fallback) {
 UTEST(sp_fmt_directive, default_render_with_wrappers_on_int) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.wrap}", sp_fmt_int(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.wrap}", sp_fmt_int(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<42>"));
   sp_fmt_directive_reset();
 }
@@ -742,7 +742,7 @@ UTEST(sp_fmt_directive, default_render_with_wrappers_on_int) {
 UTEST(sp_fmt_directive, content_wider_than_width_with_wrapper) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:3 .wrap}", sp_fmt_cstr("hello")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:3 .wrap}", sp_fmt_cstr("hello")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<hello>"));
   sp_fmt_directive_reset();
 }
@@ -757,7 +757,7 @@ UTEST(sp_fmt_directive, before_render_then_transform) {
   sp_fmt_register_decorator("wrap", _test_before_lt, SP_NULLPTR);
   sp_fmt_register_renderer("prefix", _test_render_prefixed, 0);
   sp_fmt_register_transformer("upper", _test_transform_upper);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.wrap .prefix .upper}", sp_fmt_int(0)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.wrap .prefix .upper}", sp_fmt_int(0)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<RENDERED"));
   sp_fmt_directive_reset();
 }
@@ -781,22 +781,22 @@ UTEST(sp_fmt_pad, wrapped_content_overflow) {
 }
 
 UTEST(sp_fmt_v, escaped_braces_around_placeholder) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{{{:5}}}", sp_fmt_int(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{{{:5}}}", sp_fmt_int(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "{   42}"));
 }
 
 UTEST(sp_fmt_v, dynamic_width) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:$}", sp_fmt_int(6), sp_fmt_int(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:$}", sp_fmt_int(6), sp_fmt_int(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "    42"));
 }
 
 UTEST(sp_fmt_v, dynamic_fill_center) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:$^9}", sp_fmt_int('*'), sp_fmt_int(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:$^9}", sp_fmt_int('*'), sp_fmt_int(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "***42****"));
 }
 
 UTEST(sp_fmt_v, dynamic_fill_and_width) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:$^$}",
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:$^$}",
     sp_fmt_int('-'),
     sp_fmt_int(8),
     sp_fmt_cstr("hi")).value;
@@ -804,94 +804,94 @@ UTEST(sp_fmt_v, dynamic_fill_and_width) {
 }
 
 UTEST(sp_fmt_v, dynamic_precision) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:.$}", sp_fmt_int(3), sp_fmt_float(3.14159)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:.$}", sp_fmt_int(3), sp_fmt_float(3.14159)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "3.142"));
 }
 
 UTEST(sp_fmt_v, dynamic_width_with_literal_precision) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:$.2}", sp_fmt_int(8), sp_fmt_float(1.5)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:$.2}", sp_fmt_int(8), sp_fmt_float(1.5)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "    1.50"));
 }
 
 UTEST(sp_fmt_v, err_parse_stops_formatting) {
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "a {:5.} b {}", sp_fmt_int(99)).err, SP_ERR_FMT_BAD_PRECISION);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "a {:5.} b {}", sp_fmt_int(99)).err, SP_ERR_FMT_BAD_PRECISION);
 }
 
 UTEST(sp_fmt_v, err_unterminated_placeholder) {
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "hi {nope", sp_fmt_int(1)).err, SP_ERR_FMT_BAD_PLACEHOLDER);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "hi {nope", sp_fmt_int(1)).err, SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_v, err_dynamic_fill_wrong_kind) {
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{:$^5}", sp_fmt_float(1.0), sp_fmt_int(42)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{:$^5}", sp_fmt_float(1.0), sp_fmt_int(42)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST(sp_fmt_v, err_dynamic_width_wrong_kind) {
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{:$}", sp_fmt_cstr("oops"), sp_fmt_int(42)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{:$}", sp_fmt_cstr("oops"), sp_fmt_int(42)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST(sp_fmt_v, err_dynamic_precision_wrong_kind) {
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{:.$}", sp_fmt_float(3.0), sp_fmt_float(3.14)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{:.$}", sp_fmt_float(3.0), sp_fmt_float(3.14)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST(sp_fmt_v, err_stops_subsequent_placeholders) {
   sp_fmt_directive_reset();
   sp_str_t str = sp_zero();
-  sp_err_t err = sp_fmt_a(sp_context_get_allocator(), "{} {.nope} {}", sp_fmt_int(1), sp_fmt_int(2), sp_fmt_int(3)).err;
+  sp_err_t err = sp_fmt_a(sp_mem_get_scratch(), "{} {.nope} {}", sp_fmt_int(1), sp_fmt_int(2), sp_fmt_int(3)).err;
   EXPECT_EQ(err, SP_ERR_FMT_UNKNOWN_DIRECTIVE);
 }
 
 UTEST(sp_fmt_v, str_precision_truncates) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:.3}", sp_fmt_cstr("hello")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:.3}", sp_fmt_cstr("hello")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "hel"));
 }
 
 UTEST(sp_fmt_v, str_precision_longer_than_string) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:.10}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:.10}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "hi"));
 }
 
 UTEST(sp_fmt_v, str_dynamic_precision_truncates) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:.$}", sp_fmt_int(2), sp_fmt_cstr("hello")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:.$}", sp_fmt_int(2), sp_fmt_cstr("hello")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "he"));
 }
 
 UTEST(sp_fmt_v, str_precision_with_width) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "[{:>6.3}]", sp_fmt_cstr("hello")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "[{:>6.3}]", sp_fmt_cstr("hello")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "[   hel]"));
 }
 
 UTEST(sp_fmt_v, f64_precision_zero_means_zero) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:.0}", sp_fmt_float(3.7)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:.0}", sp_fmt_float(3.7)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "4"));
 }
 
 UTEST(sp_fmt_v, f64_dynamic_precision_zero) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:.$}", sp_fmt_int(0), sp_fmt_float(3.7)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:.$}", sp_fmt_int(0), sp_fmt_float(3.7)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "4"));
 }
 
 UTEST(sp_fmt_v, f64_no_precision_defaults_to_six) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_float(1.5)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{}", sp_fmt_float(1.5)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "1.500000"));
 }
 
 UTEST(sp_fmt_v, width_clamped_literal) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:99999}", sp_fmt_cstr("x")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:99999}", sp_fmt_cstr("x")).value;
   EXPECT_EQ(got.len, SP_FMT_WIDTH_MAX);
 }
 
 UTEST(sp_fmt_v, width_clamped_dynamic_huge) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:$}", sp_fmt_uint(999999999ULL), sp_fmt_cstr("x")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:$}", sp_fmt_uint(999999999ULL), sp_fmt_cstr("x")).value;
   EXPECT_EQ(got.len, SP_FMT_WIDTH_MAX);
 }
 
 UTEST(sp_fmt_v, width_clamped_dynamic_negative) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:$}", sp_fmt_int(-5), sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:$}", sp_fmt_int(-5), sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "hi"));
 }
 
@@ -903,7 +903,7 @@ static void _test_render_u64_only(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_
 UTEST(sp_fmt_directive, kinds_single_accepts_match) {
   sp_fmt_directive_reset();
   sp_fmt_register_renderer("only_u64", _test_render_u64_only, sp_fmt_id_u64);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.only_u64}", sp_fmt_uint(42)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.only_u64}", sp_fmt_uint(42)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "42"));
   sp_fmt_directive_reset();
 }
@@ -912,7 +912,7 @@ UTEST(sp_fmt_directive, kinds_single_rejects_mismatch) {
   sp_fmt_directive_reset();
   sp_fmt_register_renderer("only_u64", _test_render_u64_only, sp_fmt_id_u64);
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.only_u64}", sp_fmt_float(1.5)).err, SP_ERR_FMT_WRONG_PARAM_KIND);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.only_u64}", sp_fmt_float(1.5)).err, SP_ERR_FMT_WRONG_PARAM_KIND);
   sp_fmt_directive_reset();
 }
 
@@ -922,8 +922,8 @@ UTEST(sp_fmt_directive, kinds_multiple_accepts_either) {
     .kind = sp_fmt_directive_decorator,
     .arg_kinds = sp_fmt_id_u64 | sp_fmt_id_s64,
   });
-  sp_str_t a = sp_fmt_a(sp_context_get_allocator(), "{.num}", sp_fmt_uint(7)).value;
-  sp_str_t b = sp_fmt_a(sp_context_get_allocator(), "{.num}", sp_fmt_int(-3)).value;
+  sp_str_t a = sp_fmt_a(sp_mem_get_scratch(), "{.num}", sp_fmt_uint(7)).value;
+  sp_str_t b = sp_fmt_a(sp_mem_get_scratch(), "{.num}", sp_fmt_int(-3)).value;
   EXPECT_TRUE(sp_str_equal_cstr(a, "7"));
   EXPECT_TRUE(sp_str_equal_cstr(b, "-3"));
   sp_fmt_directive_reset();
@@ -936,16 +936,16 @@ UTEST(sp_fmt_directive, kinds_multiple_rejects_outsider) {
     .arg_kinds = sp_fmt_id_u64 | sp_fmt_id_s64,
   });
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.num}", sp_fmt_cstr("nope")).err, SP_ERR_FMT_WRONG_PARAM_KIND);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.num}", sp_fmt_cstr("nope")).err, SP_ERR_FMT_WRONG_PARAM_KIND);
   sp_fmt_directive_reset();
 }
 
 UTEST(sp_fmt_directive, kinds_unset_accepts_all) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("any", _test_before_lt, _test_after_gt);
-  sp_str_t a = sp_fmt_a(sp_context_get_allocator(), "{.any}", sp_fmt_int(1)).value;
-  sp_str_t b = sp_fmt_a(sp_context_get_allocator(), "{.any}", sp_fmt_cstr("hi")).value;
-  sp_str_t c = sp_fmt_a(sp_context_get_allocator(), "{.any}", sp_fmt_float(2.0)).value;
+  sp_str_t a = sp_fmt_a(sp_mem_get_scratch(), "{.any}", sp_fmt_int(1)).value;
+  sp_str_t b = sp_fmt_a(sp_mem_get_scratch(), "{.any}", sp_fmt_cstr("hi")).value;
+  sp_str_t c = sp_fmt_a(sp_mem_get_scratch(), "{.any}", sp_fmt_float(2.0)).value;
   EXPECT_TRUE(sp_str_equal_cstr(a, "<1>"));
   EXPECT_TRUE(sp_str_equal_cstr(b, "<hi>"));
   EXPECT_TRUE(sp_str_equal_cstr(c, "<2.000000>"));
@@ -1066,7 +1066,7 @@ static void _test_fg_after(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* 
 UTEST(sp_fmt_directive_arg, literal_passed_as_str) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.fg red}", sp_fmt_cstr("hello")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.fg red}", sp_fmt_cstr("hello")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<fg=red>hello</fg>"));
   EXPECT_TRUE(_last_fg_had_param);
   EXPECT_TRUE(sp_str_equal_cstr(_last_fg_param, "red"));
@@ -1076,7 +1076,7 @@ UTEST(sp_fmt_directive_arg, literal_passed_as_str) {
 UTEST(sp_fmt_directive_arg, dynamic_passed_as_str) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.fg $}", sp_fmt_cstr("blue"), sp_fmt_cstr("hello")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.fg $}", sp_fmt_cstr("blue"), sp_fmt_cstr("hello")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<fg=blue>hello</fg>"));
   sp_fmt_directive_reset();
 }
@@ -1084,7 +1084,7 @@ UTEST(sp_fmt_directive_arg, dynamic_passed_as_str) {
 UTEST(sp_fmt_directive_arg, dynamic_accepts_u64_with_mask) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str | sp_fmt_id_u64);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.fg $}", sp_fmt_uint(31), sp_fmt_cstr("x")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.fg $}", sp_fmt_uint(31), sp_fmt_cstr("x")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<fg=?>x</fg>"));
   sp_fmt_directive_reset();
 }
@@ -1093,7 +1093,7 @@ UTEST(sp_fmt_directive_arg, err_missing_arg) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.fg}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_MISSING);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.fg}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_MISSING);
   sp_fmt_directive_reset();
 }
 
@@ -1101,7 +1101,7 @@ UTEST(sp_fmt_directive_arg, err_unexpected_arg) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("bold", _test_before_lt, _test_after_gt);
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.bold red}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.bold red}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED);
   sp_fmt_directive_reset();
 }
 
@@ -1109,7 +1109,7 @@ UTEST(sp_fmt_directive_arg, err_wrong_literal_kind) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("numpad", _test_before_lt, _test_after_gt, sp_fmt_id_u64);
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.numpad abc}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.numpad abc}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
   sp_fmt_directive_reset();
 }
 
@@ -1117,7 +1117,7 @@ UTEST(sp_fmt_directive_arg, err_wrong_dynamic_kind) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.fg $}", sp_fmt_uint(5), sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.fg $}", sp_fmt_uint(5), sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
   sp_fmt_directive_reset();
 }
 
@@ -1125,40 +1125,40 @@ UTEST(sp_fmt_directive_arg, chain_of_literal_and_dynamic) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
   sp_fmt_register_decorator("bold", _test_before_lt, _test_after_gt);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.fg $ .bold}", sp_fmt_cstr("cyan"), sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.fg $ .bold}", sp_fmt_cstr("cyan"), sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<fg=cyan><hi></fg>"));
   sp_fmt_directive_reset();
 }
 
 UTEST(sp_fmt_builtin_fg, literal_color) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.fg red}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.fg red}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "\033[31mhi\033[0m"));
 }
 
 UTEST(sp_fmt_builtin_fg, literal_bright_cyan) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.fg brightcyan}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.fg brightcyan}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "\033[96mhi\033[0m"));
 }
 
 UTEST(sp_fmt_builtin_fg, dynamic_color) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.fg $}", sp_fmt_cstr("green"), sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.fg $}", sp_fmt_cstr("green"), sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "\033[32mhi\033[0m"));
 }
 
 UTEST(sp_fmt_builtin_fg, composes_with_padding) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:*^6 .fg red}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:*^6 .fg red}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "**\033[31mhi\033[0m**"));
 }
 
 UTEST(sp_fmt_builtin_fg, err_missing_arg) {
   sp_str_t str = sp_zero();
-  EXPECT_EQ(sp_fmt_a(sp_context_get_allocator(), "{.fg}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_MISSING);
+  EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.fg}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_MISSING);
 }
 
 UTEST(sp_fmt_directive_arg, dynamic_param_interleaved_with_width) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:$ .fg $}", sp_fmt_int(4), sp_fmt_cstr("red"), sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:$ .fg $}", sp_fmt_int(4), sp_fmt_cstr("red"), sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "  <fg=red>hi</fg>"));
   sp_fmt_directive_reset();
 }
@@ -1172,7 +1172,7 @@ UTEST(sp_fmt_transform, composes_with_wrappers) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
   sp_fmt_register_transformer("upper", _test_transform_upper);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.wrap .upper}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.wrap .upper}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<HI>"));
   sp_fmt_directive_reset();
 }
@@ -1181,9 +1181,9 @@ UTEST(sp_fmt_transform, stacked_innermost_first) {
   sp_fmt_directive_reset();
   sp_fmt_register_transformer("upper", _test_transform_upper);
   sp_fmt_register_transformer("redact", _test_transform_redact);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.upper .redact}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.upper .redact}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "**"));
-  sp_str_t got2 = sp_fmt_a(sp_context_get_allocator(), "{.redact .upper}", sp_fmt_cstr("hi")).value;
+  sp_str_t got2 = sp_fmt_a(sp_mem_get_scratch(), "{.redact .upper}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got2, "**"));
   sp_fmt_directive_reset();
 }
@@ -1191,7 +1191,7 @@ UTEST(sp_fmt_transform, stacked_innermost_first) {
 UTEST(sp_fmt_transform, measures_post_transform_width) {
   sp_fmt_directive_reset();
   sp_fmt_register_transformer("redact", _test_transform_redact);
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{:10 .redact}", sp_fmt_cstr("hi")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{:10 .redact}", sp_fmt_cstr("hi")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "        **"));
   sp_fmt_directive_reset();
 }
@@ -1211,12 +1211,12 @@ UTEST(sp_fmt_transform, into_writer_backed_builder) {
 }
 
 UTEST(sp_fmt_builtin_transform, upper) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.upper}", sp_fmt_cstr("hello")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.upper}", sp_fmt_cstr("hello")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "HELLO"));
 }
 
 UTEST(sp_fmt_builtin_transform, redact) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.redact}", sp_fmt_cstr("secret")).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.redact}", sp_fmt_cstr("secret")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "******"));
 }
 
@@ -1509,37 +1509,37 @@ UTEST(fmt, parse_edge_cases) {
 }
 
 UTEST(fmt, hex_zero) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.hex}", sp_fmt_uint(0)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.hex}", sp_fmt_uint(0)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "0x0"));
 }
 
 UTEST(fmt, hex_small) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.hex}", sp_fmt_uint(0xa)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.hex}", sp_fmt_uint(0xa)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "0xA"));
 }
 
 UTEST(fmt, hex_no_pad) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.hex}", sp_fmt_uint(0xa5)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.hex}", sp_fmt_uint(0xa5)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "0xA5"));
 }
 
 UTEST(fmt, hex_word) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.hex}", sp_fmt_uint(0xdeadbeef)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.hex}", sp_fmt_uint(0xdeadbeef)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "0xDEADBEEF"));
 }
 
 UTEST(fmt, hex_u64_max) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.hex}", sp_fmt_uint(0xffffffffffffffffULL)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.hex}", sp_fmt_uint(0xffffffffffffffffULL)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "0xFFFFFFFFFFFFFFFF"));
 }
 
 UTEST(fmt, hex_signed_negative) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.hex}", sp_fmt_int(-1)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.hex}", sp_fmt_int(-1)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "0xFFFFFFFFFFFFFFFF"));
 }
 
 UTEST(fmt, hex_mixed_digits) {
-  sp_str_t got = sp_fmt_a(sp_context_get_allocator(), "{.hex}", sp_fmt_uint(0x1234abcd)).value;
+  sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.hex}", sp_fmt_uint(0x1234abcd)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "0x1234ABCD"));
 }
 

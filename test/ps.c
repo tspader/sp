@@ -75,7 +75,7 @@ UTEST_F_SETUP(ps) {
   sp_test_file_manager_init(&ut.file_manager);
   ut.buffer = (sp_byte_buffer_t) {
     .len = 1024,
-    .data = (u8*)sp_alloc(1024)
+    .data = (u8*)sp_alloc_a(ut.mem, 1024)
   };
 }
 
@@ -183,7 +183,7 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
     sp_test_proc_stream_context_t check = {
       .stream = out,
       .expected = test.output.out.expected,
-      .buffer = { .len = 1024, .data = (u8*)sp_alloc(1024) },
+      .buffer = { .len = 1024, .data = (u8*)sp_alloc_a(ut.mem, 1024) },
       .mode = SP_TEST_PROC_READ_EXACT,
       .expected_len = test.output.out.expected.len,
     };
@@ -199,7 +199,7 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
     sp_test_proc_stream_context_t check = {
       .stream = err,
       .expected = test.output.err.expected,
-      .buffer = { .len = 1024, .data = (u8*)sp_alloc(1024) },
+      .buffer = { .len = 1024, .data = (u8*)sp_alloc_a(ut.mem, 1024) },
       .mode = SP_TEST_PROC_READ_EXACT,
       .expected_len = test.output.err.expected.len,
     };
@@ -408,9 +408,9 @@ typedef struct {
   sp_env_var_t* foo;
 } sp_test_proc_env_config_t;
 
-sp_da(sp_env_var_t) sp_test_parse_env_output(u8* buffer, u64 len) {
+sp_da(sp_env_var_t) sp_test_parse_env_output(sp_mem_t mem, u8* buffer, u64 len) {
   sp_da(sp_env_var_t) vars = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, vars);
+  sp_da_init(mem, vars);
 
   u32 line_start = 0;
   for (u32 i = 0; i <= len; i++) {
@@ -481,14 +481,14 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
   sp_test_proc_stream_context_t ctx = {
     .stream = out,
     .buffer = {
-      .data = sp_alloc(1024),
+      .data = sp_alloc_a(ut.mem, 1024),
       .len = 1024
     },
     .mode = SP_TEST_PROC_READ_UNTIL_DONE,
   };
   sp_test_proc_collect_stream(&ctx);
 
-  sp_da(sp_env_var_t) env = sp_test_parse_env_output(ctx.buffer.data, ctx.bytes_read);
+  sp_da(sp_env_var_t) env = sp_test_parse_env_output(ut.mem, ctx.buffer.data, ctx.bytes_read);
 
 
   for (u32 i = 0; i < 8; i++) {
@@ -851,7 +851,7 @@ UTEST_F(ps, interleaved_read_write) {
   EXPECT_NE(out, SP_NULLPTR);
 
   for (u32 i = 0; i < 4; i++) {
-    sp_str_t input = sp_fmt_a(sp_context_get_allocator(), "line {}\n", sp_fmt_uint(i)).value;
+    sp_str_t input = sp_fmt_a(ut.mem, "line {}\n", sp_fmt_uint(i)).value;
 
     u64 written = 0;
     sp_io_write_str(in, input, &written);
@@ -860,7 +860,7 @@ UTEST_F(ps, interleaved_read_write) {
     sp_os_sleep_ms(50);
     u64 bytes_read = 0;
     sp_io_read(out, ut.buffer.data, ut.buffer.len, &bytes_read);
-    sp_str_t expected = sp_fmt_a(sp_context_get_allocator(), "echo: line {}\n", sp_fmt_uint(i)).value;
+    sp_str_t expected = sp_fmt_a(ut.mem, "echo: line {}\n", sp_fmt_uint(i)).value;
     EXPECT_EQ(bytes_read, expected.len);
     EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, expected.data, expected.len));
   }
@@ -959,7 +959,7 @@ UTEST_F(ps, redirect_stderr_to_stdout) {
   EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
 
-  sp_str_t expected = sp_fmt_a(sp_context_get_allocator(), "{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary)).value;
+  sp_str_t expected = sp_fmt_a(ut.mem, "{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary)).value;
   EXPECT_TRUE(sp_str_equal(output.out, expected));
   EXPECT_TRUE(sp_str_empty(output.err));
 
@@ -987,7 +987,7 @@ UTEST_F(ps, redirect_stdout_to_stderr) {
   EXPECT_EQ(output.status.state, SP_PS_STATE_DONE);
   EXPECT_EQ(output.status.exit_code, 0);
 
-  sp_str_t expected = sp_fmt_a(sp_context_get_allocator(), "{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary)).value;
+  sp_str_t expected = sp_fmt_a(ut.mem, "{}{}", sp_fmt_str(sp_test_ps_canary), sp_fmt_str(sp_test_ps_canary)).value;
   EXPECT_TRUE(sp_str_empty(output.out));
   EXPECT_TRUE(sp_str_equal(output.err, expected));
 
@@ -1136,7 +1136,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   sp_ps_wait(&ps_b);
 
   const u32 expected_total = write_size * write_count * 2;
-  u8* buffer = (u8*)sp_alloc(expected_total + 1024);
+  u8* buffer = (u8*)sp_alloc_a(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
   while (total_read < expected_total) {
@@ -1168,8 +1168,8 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   const s32 write_size = 8192;
   const s32 write_count = 10;
 
-  sp_str_t size_str = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_int(write_size)).value;
-  sp_str_t count_str = sp_fmt_a(sp_context_get_allocator(), "{}", sp_fmt_int(write_count)).value;
+  sp_str_t size_str = sp_fmt_a(ut.mem, "{}", sp_fmt_int(write_size)).value;
+  sp_str_t count_str = sp_fmt_a(ut.mem, "{}", sp_fmt_int(write_count)).value;
 
   sp_ps_t ps_a = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
     .command = get_process_path(ut.mem),
@@ -1209,7 +1209,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   sp_sys_close(pipes[1]);
 
   const u32 expected_total = write_size * write_count * 2;
-  u8* buffer = (u8*)sp_alloc(expected_total + 1024);
+  u8* buffer = (u8*)sp_alloc_a(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
   fcntl(pipes[0], SP_F_SETFL, fcntl(pipes[0], SP_F_GETFL) | SP_O_NONBLOCK);

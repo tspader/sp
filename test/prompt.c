@@ -63,9 +63,9 @@ static u32 count_expected_lines(const c8* lines[32]) {
   return count;
 }
 
-static sp_str_t trim_framebuffer_row(sp_prompt_cell_t* row, u32 cols) {
+static sp_str_t trim_framebuffer_row(sp_mem_t mem, sp_prompt_cell_t* row, u32 cols) {
   sp_io_writer_t builder = sp_zero();
-  sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &builder);
+  sp_io_writer_from_dyn_mem_a(mem, &builder);
   sp_for(col, cols) {
     u8 buf[4] = SP_ZERO_INITIALIZE();
     u8 len = sp_utf8_encode(row[col].codepoint, buf);
@@ -160,7 +160,7 @@ static void sp_prompt_vt_consume_escape(sp_prompt_vt_t* vt, sp_str_t bytes, u32*
   *i = bytes.len - 1;
 }
 
-static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_str_t bytes) {
+static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_mem_t mem, sp_str_t bytes) {
   sp_prompt_vt_t vt = SP_ZERO_INITIALIZE();
   sp_for(row, 128) {
     sp_for(col, 256) {
@@ -218,10 +218,10 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_str_t bytes) {
   }
 
   sp_da(sp_str_t) lines = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, lines);
+  sp_da_init(mem, lines);
   sp_for_range(row, 0, vt.max_row + 1) {
     sp_io_writer_t builder = sp_zero();
-    sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &builder);
+    sp_io_writer_from_dyn_mem_a(mem, &builder);
     sp_for(col, 256) {
       u8 buf[4] = SP_ZERO_INITIALIZE();
       u8 len = sp_utf8_encode(vt.cells[row][col], buf);
@@ -264,7 +264,7 @@ static void sp_prompt_run_case(s32* utest_result, struct prompt* fixture, sp_pro
     EXPECT_EQ(frame.rows, num_expected);
 
     sp_for(row, num_expected) {
-      sp_str_t actual = trim_framebuffer_row(frame.cells + row * frame.cols, frame.cols);
+      sp_str_t actual = trim_framebuffer_row(fixture->mem, frame.cells + row * frame.cols, frame.cols);
       SP_EXPECT_STR_EQ_CSTR(actual, t.expect.lines[row]);
     }
   }
@@ -274,7 +274,7 @@ static void sp_prompt_run_case(s32* utest_result, struct prompt* fixture, sp_pro
       .data = (c8*)fixture->writer.dyn_mem.buffer.data,
       .len = (u32)fixture->writer.dyn_mem.buffer.len,
     };
-    sp_da(sp_str_t) composited = sp_prompt_vt_render_lines(bytes);
+    sp_da(sp_str_t) composited = sp_prompt_vt_render_lines(fixture->mem, bytes);
     u32 num_expected = count_expected_lines(t.expect.composited);
     EXPECT_EQ(sp_da_size(composited), num_expected);
     sp_for(row, num_expected) {
@@ -1953,7 +1953,7 @@ static void expect_framebuffer_lines(s32* utest_result, struct prompt* fixture, 
   EXPECT_EQ(frame.rows, num_expected);
 
   sp_for(row, num_expected) {
-    sp_str_t actual = trim_framebuffer_row(frame.cells + row * frame.cols, frame.cols);
+    sp_str_t actual = trim_framebuffer_row(fixture->mem, frame.cells + row * frame.cols, frame.cols);
     SP_EXPECT_STR_EQ_CSTR(actual, expected[row]);
   }
 }

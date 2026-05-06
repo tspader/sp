@@ -380,7 +380,7 @@ static void fancy_publish_render(sp_prompt_ctx_t* ctx) {
   fancy_render_rail(ctx, SP_LIT("Build matrix"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
   fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_render_bar(ctx, copy.build_progress, 28, fancy_style_rgb(0x55, 0xaa, 0xff));
-  fancy_render_str(ctx, sp_fmt_a(sp_context_get_allocator(), "  {}%", sp_fmt_uint((u32)(copy.build_progress * 100.0f))).value, SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_str(ctx, sp_fmt_a(ctx->allocator, "  {}%", sp_fmt_uint((u32)(copy.build_progress * 100.0f))).value, SP_ZERO_STRUCT(sp_prompt_style_t));
   fancy_nl(ctx);
   fancy_render_rail(ctx, SP_LIT(""), SP_ZERO_STRUCT(sp_prompt_style_t));
 
@@ -403,11 +403,11 @@ static void fancy_publish_render(sp_prompt_ctx_t* ctx) {
   fancy_render_rail(ctx, SP_LIT("Uploads"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
   fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_render_bar(ctx, copy.upload_progress, 28, fancy_style_rgb(0x9b, 0xdb, 0x8d));
-  fancy_render_str(ctx, sp_fmt_a(sp_context_get_allocator(), "  {}%", sp_fmt_uint((u32)(copy.upload_progress * 100.0f))).value, SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_str(ctx, sp_fmt_a(ctx->allocator, "  {}%", sp_fmt_uint((u32)(copy.upload_progress * 100.0f))).value, SP_ZERO_STRUCT(sp_prompt_style_t));
   fancy_nl(ctx);
-  fancy_render_str(ctx, sp_fmt_a(sp_context_get_allocator(), "│  latest: {}", sp_fmt_cstr(copy.latest)).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
+  fancy_render_str(ctx, sp_fmt_a(ctx->allocator, "│  latest: {}", sp_fmt_cstr(copy.latest)).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_nl(ctx);
-  fancy_render_str(ctx, sp_fmt_a(sp_context_get_allocator(), "│  total: {}%", sp_fmt_uint((u32)(copy.overall_progress * 100.0f))).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
+  fancy_render_str(ctx, sp_fmt_a(ctx->allocator, "│  total: {}%", sp_fmt_uint((u32)(copy.overall_progress * 100.0f))).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_nl(ctx);
 }
 
@@ -502,9 +502,9 @@ static bool fancy_has_arg(s32 argc, const c8** argv, const c8* arg) {
   return false;
 }
 
-static sp_str_t fancy_selected_changelog(fancy_changelog_item_t* items, u32 num_items) {
+static sp_str_t fancy_selected_changelog(sp_mem_t mem, fancy_changelog_item_t* items, u32 num_items) {
   sp_io_writer_t builder = sp_zero();
-  sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &builder);
+  sp_io_writer_from_dyn_mem_a(mem, &builder);
   const c8* section = "";
   u64 written = 0;
   sp_for(it, num_items) {
@@ -528,9 +528,9 @@ static sp_str_t fancy_selected_changelog(fancy_changelog_item_t* items, u32 num_
   return sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
 }
 
-static sp_str_t fancy_plan_note(const c8* kind, const c8* name, const c8* sections) {
+static sp_str_t fancy_plan_note(sp_mem_t mem, const c8* kind, const c8* name, const c8* sections) {
   sp_io_writer_t builder = sp_zero();
-  sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &builder);
+  sp_io_writer_from_dyn_mem_a(mem, &builder);
   sp_fmt_io(&builder, "version      0.13.3 ({})", sp_fmt_cstr(kind));
   sp_io_write_c8(&builder, '\n');
   sp_fmt_io(&builder, "name         {}", sp_fmt_cstr(name));
@@ -664,8 +664,8 @@ s32 fancy_main(s32 argc, const c8** argv) {
   }
 
   const c8* selected_sections = sp_prompt_join_selection(sections, sp_carr_len(sections));
-  sp_str_t plan = fancy_plan_note(release_kind, release_name, selected_sections);
-  sp_prompt_note(ctx, sp_str_to_cstr_a(sp_context_get_allocator(), plan), "Plan");
+  sp_str_t plan = fancy_plan_note(ctx->allocator, release_kind, release_name, selected_sections);
+  sp_prompt_note(ctx, sp_str_to_cstr_a(ctx->allocator, plan), "Plan");
 
   if (scripted) {
     fancy_prime_enter(ctx);
@@ -700,8 +700,8 @@ s32 fancy_main(s32 argc, const c8** argv) {
     return 1;
   }
 
-  sp_str_t curated = fancy_selected_changelog(changelog_items, sp_carr_len(changelog_items));
-  sp_prompt_note(ctx, sp_str_to_cstr_a(sp_context_get_allocator(), curated), "Published v0.13.3");
+  sp_str_t curated = fancy_selected_changelog(ctx->allocator, changelog_items, sp_carr_len(changelog_items));
+  sp_prompt_note(ctx, sp_str_to_cstr_a(ctx->allocator, curated), "Published v0.13.3");
   sp_prompt_success(ctx, "release published");
   sp_prompt_outro(ctx, "done");
   sp_prompt_end(ctx);

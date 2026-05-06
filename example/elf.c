@@ -49,7 +49,7 @@ s32 embed_main(s32 argc, const c8** argv) {
   }
 
   u32 header_size = sizeof(embed_header_t) * num_files;
-  embed_header_t* headers = sp_alloc(header_size);
+  embed_header_t* headers = sp_alloc_a(mem, header_size);
   sp_elf_section_reserve_bytes(sp_elf_find_section_by_index(elf, data_sec_idx), header_size);
 
   symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));

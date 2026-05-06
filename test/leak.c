@@ -6,25 +6,20 @@
 SP_TEST_MAIN()
 
 struct leak {
-  sp_test_file_manager_t fs;
   sp_mem_tracking_t tracker;
   sp_mem_t mem;
 };
 
 UTEST_F_SETUP(leak) {
-  sp_test_file_manager_init(&ut.fs);
   sp_mem_tracking_init(&ut.tracker);
   ut.mem = sp_mem_tracking_as_allocator(&ut.tracker);
 }
 
 UTEST_F_TEARDOWN(leak) {
-  if (sp_mem_tracking_live_count(&ut.tracker) != 0) {
+  if (!sp_mem_tracking_ok(&ut.tracker)) {
     sp_mem_tracking_dump(&ut.tracker);
   }
-  EXPECT_EQ(sp_mem_tracking_live_count(&ut.tracker), 0u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&ut.tracker), 0u);
-
-  sp_test_file_manager_cleanup(&ut.fs);
+  EXPECT_TRUE(sp_mem_tracking_ok(&ut.tracker));
   sp_mem_tracking_deinit(&ut.tracker);
 }
 
@@ -43,14 +38,14 @@ UTEST(tracking, alloc_free_balance) {
 
   void* p = sp_alloc_a(mem, 64);
   EXPECT_NE(p, SP_NULLPTR);
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 1u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&t), 64u);
+  EXPECT_EQ(t.live_count, 1u);
+  EXPECT_EQ(t.live_bytes, 64u);
 
   sp_free_a(mem, p);
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 0u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&t), 0u);
-  EXPECT_EQ(sp_mem_tracking_double_frees(&t), 0u);
-  EXPECT_EQ(sp_mem_tracking_wild_frees(&t), 0u);
+  EXPECT_EQ(t.live_count, 0u);
+  EXPECT_EQ(t.live_bytes, 0u);
+  EXPECT_EQ(t.double_frees, 0u);
+  EXPECT_EQ(t.wild_frees, 0u);
 
   sp_mem_tracking_deinit(&t);
 }
@@ -65,8 +60,8 @@ UTEST(tracking, detects_leak) {
   void* freed = sp_alloc_a(mem, 8);
   sp_free_a(mem, freed);
 
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 2u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&t), 48u);
+  EXPECT_EQ(t.live_count, 2u);
+  EXPECT_EQ(t.live_bytes, 48u);
 
   sp_mem_tracking_deinit(&t);
 }
@@ -81,9 +76,9 @@ UTEST(tracking, detects_double_free) {
   sp_free_a(mem, p);
   sp_free_a(mem, p);
 
-  EXPECT_EQ(sp_mem_tracking_double_frees(&t), 2u);
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 0u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&t), 0u);
+  EXPECT_EQ(t.double_frees, 2u);
+  EXPECT_EQ(t.live_count, 0u);
+  EXPECT_EQ(t.live_bytes, 0u);
 
   sp_mem_tracking_deinit(&t);
 }
@@ -100,9 +95,9 @@ UTEST(tracking, detects_wild_free) {
   static u8 buf[256] = {0};
   sp_free_a(mem, &buf[200]);
 
-  EXPECT_EQ(sp_mem_tracking_wild_frees(&t), 1u);
-  EXPECT_EQ(sp_mem_tracking_double_frees(&t), 0u);
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 0u);
+  EXPECT_EQ(t.wild_frees, 1u);
+  EXPECT_EQ(t.double_frees, 0u);
+  EXPECT_EQ(t.live_count, 0u);
 
   sp_mem_tracking_deinit(&t);
 }
@@ -114,9 +109,9 @@ UTEST(tracking, free_null_is_noop) {
 
   sp_free_a(mem, SP_NULLPTR);
 
-  EXPECT_EQ(sp_mem_tracking_double_frees(&t), 0u);
-  EXPECT_EQ(sp_mem_tracking_wild_frees(&t), 0u);
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 0u);
+  EXPECT_EQ(t.double_frees, 0u);
+  EXPECT_EQ(t.wild_frees, 0u);
+  EXPECT_EQ(t.live_count, 0u);
 
   sp_mem_tracking_deinit(&t);
 }
@@ -133,11 +128,11 @@ UTEST(tracking, realloc_grows_and_preserves) {
   EXPECT_NE(g, SP_NULLPTR);
   sp_for(i, 4) EXPECT_EQ(g[i], (u8)(i + 1));
 
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 1u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&t), 64u);
+  EXPECT_EQ(t.live_count, 1u);
+  EXPECT_EQ(t.live_bytes, 64u);
 
   sp_free_a(mem, g);
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 0u);
+  EXPECT_EQ(t.live_count, 0u);
 
   sp_mem_tracking_deinit(&t);
 }
@@ -149,8 +144,8 @@ UTEST(tracking, realloc_null_is_alloc) {
 
   void* p = sp_realloc_a(mem, SP_NULLPTR, 32);
   EXPECT_NE(p, SP_NULLPTR);
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 1u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&t), 32u);
+  EXPECT_EQ(t.live_count, 1u);
+  EXPECT_EQ(t.live_bytes, 32u);
 
   sp_free_a(mem, p);
   sp_mem_tracking_deinit(&t);
@@ -164,8 +159,8 @@ UTEST(tracking, realloc_zero_is_free) {
   void* p = sp_alloc_a(mem, 32);
   void* r = sp_realloc_a(mem, p, 0);
   EXPECT_EQ(r, SP_NULLPTR);
-  EXPECT_EQ(sp_mem_tracking_live_count(&t), 0u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&t), 0u);
+  EXPECT_EQ(t.live_count, 0u);
+  EXPECT_EQ(t.live_bytes, 0u);
 
   sp_mem_tracking_deinit(&t);
 }
@@ -205,14 +200,14 @@ UTEST_F(leak, multiple_allocs_independent) {
   void* a = sp_alloc_a(ut.mem, 8);
   void* b = sp_alloc_a(ut.mem, 16);
   void* c = sp_alloc_a(ut.mem, 32);
-  EXPECT_EQ(sp_mem_tracking_live_count(&ut.tracker), 3u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&ut.tracker), 56u);
+  EXPECT_EQ(ut.tracker.live_count, 3u);
+  EXPECT_EQ(ut.tracker.live_bytes, 56u);
 
   sp_free_a(ut.mem, b);
-  EXPECT_EQ(sp_mem_tracking_live_count(&ut.tracker), 2u);
-  EXPECT_EQ(sp_mem_tracking_live_bytes(&ut.tracker), 40u);
+  EXPECT_EQ(ut.tracker.live_count, 2u);
+  EXPECT_EQ(ut.tracker.live_bytes, 40u);
 
   sp_free_a(ut.mem, a);
   sp_free_a(ut.mem, c);
-  EXPECT_EQ(sp_mem_tracking_live_count(&ut.tracker), 0u);
+  EXPECT_EQ(ut.tracker.live_count, 0u);
 }

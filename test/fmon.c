@@ -11,8 +11,11 @@
 #define SP_TEST_POLL_SLEEP_MS 20
 #define sp_for_n(N) for (u32 _i = 0; _i < (N); _i++)
 
-static bool paths_equal(sp_mem_t mem, sp_str_t a, sp_str_t b) {
-  return sp_str_equal(sp_fs_normalize_path_a(mem, a), sp_fs_normalize_path_a(mem, b));
+static bool paths_equal(sp_str_t a, sp_str_t b) {
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  bool eq = sp_str_equal(sp_fs_normalize_path_a(s.mem, a), sp_fs_normalize_path_a(s.mem, b));
+  sp_mem_end_scratch(s);
+  return eq;
 }
 
 typedef struct sp_test_file_monitor {
@@ -103,7 +106,7 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
 
   EXPECT_FALSE(timed_out);
   EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_ADDED);
-  EXPECT_TRUE(paths_equal(ut.mem, ut.last_file_path, file));
+  EXPECT_TRUE(paths_equal(ut.last_file_path, file));
 }
 #endif
 
@@ -142,7 +145,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 
   EXPECT_FALSE(timed_out);
   EXPECT_EQ(ut.last_event, SP_FILE_CHANGE_EVENT_MODIFIED);
-  EXPECT_TRUE(paths_equal(ut.mem, ut.last_file_path, test_file));
+  EXPECT_TRUE(paths_equal(ut.last_file_path, test_file));
 #endif
 }
 
@@ -177,7 +180,7 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
 
   EXPECT_FALSE(timed_out);
   EXPECT_TRUE((ut.last_event & SP_FILE_CHANGE_EVENT_REMOVED) != 0);
-  EXPECT_TRUE(paths_equal(ut.mem, ut.last_file_path, test_file));
+  EXPECT_TRUE(paths_equal(ut.last_file_path, test_file));
 }
 
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
@@ -353,7 +356,7 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
 
 
   EXPECT_FALSE(timed_out);
-  EXPECT_TRUE(paths_equal(ut.mem, ut.last_file_path, watched_file));
+  EXPECT_TRUE(paths_equal(ut.last_file_path, watched_file));
 }
 
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
@@ -390,10 +393,10 @@ UTEST_F(sp_test_file_monitor, rename_file) {
 
   for (u32 i = 0; i < fmon_history.count; i++) {
     sp_test_fmon_record_t* r = &fmon_history.records[i];
-    if ((r->events & SP_FILE_CHANGE_EVENT_REMOVED) && paths_equal(ut.mem, r->file_path, old_file)) {
+    if ((r->events & SP_FILE_CHANGE_EVENT_REMOVED) && paths_equal(r->file_path, old_file)) {
       got_removed = true;
     }
-    if ((r->events & SP_FILE_CHANGE_EVENT_ADDED) && paths_equal(ut.mem, r->file_path, new_file)) {
+    if ((r->events & SP_FILE_CHANGE_EVENT_ADDED) && paths_equal(r->file_path, new_file)) {
       got_added = true;
     }
   }

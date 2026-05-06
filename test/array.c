@@ -7,9 +7,24 @@
 
 SP_TEST_MAIN()
 
-UTEST(dyn_array, basic_operations) {
+struct dyn_array {
+  sp_mem_tracking_t tracking;
+  sp_mem_t mem;
+};
+
+UTEST_F_SETUP(dyn_array) {
+  sp_mem_tracking_init(&ut.tracking);
+  ut.mem = sp_mem_tracking_as_allocator(&ut.tracking);
+}
+
+UTEST_F_TEARDOWN(dyn_array) {
+  EXPECT_TRUE(sp_mem_tracking_ok(&ut.tracking));
+  sp_mem_tracking_deinit(&ut.tracking);
+}
+
+UTEST_F(dyn_array, basic_operations) {
     sp_da(int) arr = SP_NULLPTR;
-    sp_da_init(sp_mem_arena_as_allocator(sp_mem_get_scratch_arena()), arr);
+    sp_da_init(sp_mem_get_scratch(), arr);
 
     ASSERT_EQ(sp_da_size(arr), 0);
     ASSERT_GE(sp_da_capacity(arr), 0);
@@ -43,9 +58,9 @@ UTEST(dyn_array, basic_operations) {
     sp_da_free(arr);
 }
 
-UTEST(dyn_array, reserve_capacity) {
+UTEST_F(dyn_array, reserve_capacity) {
     sp_da(float) arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
 
     sp_da_reserve(arr, 100);
     ASSERT_GE(sp_da_capacity(arr), 100);
@@ -60,9 +75,9 @@ UTEST(dyn_array, reserve_capacity) {
     sp_da_free(arr);
 }
 
-UTEST(dyn_array, growth_pattern) {
+UTEST_F(dyn_array, growth_pattern) {
     sp_da(u32) arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
 
     u32 prev_capacity = 0;
 
@@ -89,9 +104,9 @@ typedef struct test_struct {
     char name[32];
 } test_struct;
 
-UTEST(dyn_array, struct_type) {
+UTEST_F(dyn_array, struct_type) {
     sp_da(test_struct) arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
 
     for (s32 i = 0; i < 10; i++) {
         test_struct s = SP_ZERO_INITIALIZE();
@@ -99,7 +114,7 @@ UTEST(dyn_array, struct_type) {
         s.value = (float)i * 1.5f;
         sp_io_writer_t io = sp_zero();
         sp_io_writer_from_mem(&io, s.name, sizeof(s.name));
-        sp_io_write_str(&io, sp_fmt_a(sp_context_get_allocator(), "Item_{}", sp_fmt_int(s.id)).value, SP_NULLPTR);
+        sp_io_write_str(&io, sp_fmt_a(sp_mem_get_scratch(), "Item_{}", sp_fmt_int(s.id)).value, SP_NULLPTR);
         sp_io_pad(&io, 1, SP_NULLPTR);
         sp_da_push(arr, s);
     }
@@ -113,7 +128,7 @@ UTEST(dyn_array, struct_type) {
         char expected[32];
         sp_io_writer_t io = sp_zero();
         sp_io_writer_from_mem(&io, expected, sizeof(expected));
-        sp_io_write_str(&io, sp_fmt_a(sp_context_get_allocator(), "Item_{}", sp_fmt_int(i)).value, SP_NULLPTR);
+        sp_io_write_str(&io, sp_fmt_a(sp_mem_get_scratch(), "Item_{}", sp_fmt_int(i)).value, SP_NULLPTR);
         sp_io_pad(&io, 1, SP_NULLPTR);
 
         ASSERT_STREQ(arr[i].name, expected);
@@ -122,14 +137,14 @@ UTEST(dyn_array, struct_type) {
     sp_da_free(arr);
 }
 
-UTEST(dyn_array, pointer_type) {
+UTEST_F(dyn_array, pointer_type) {
     sp_da(char*) arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
 
     const char* strings[] = {"Hello", "World", "Dynamic", "Array", "Test"};
 
     for (s32 i = 0; i < 5; i++) {
-        c8* str = sp_cstr_copy_a(sp_context_get()->allocator, strings[i]);
+        c8* str = sp_cstr_copy_a(ut.mem, strings[i]);
         sp_da_push(arr, str);
     }
 
@@ -140,15 +155,15 @@ UTEST(dyn_array, pointer_type) {
     }
 
     for (u64 i = 0; i < sp_da_size(arr); i++) {
-        sp_free(arr[i]);
+        sp_free_a(ut.mem, arr[i]);
     }
 
     sp_da_free(arr);
 }
 
-UTEST(dyn_array, edge_cases) {
+UTEST_F(dyn_array, edge_cases) {
     sp_da(int) arr2 = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr2);
+    sp_da_init(ut.mem, arr2);
     sp_da_pop(arr2);
     ASSERT_EQ(sp_da_size(arr2), 0);
 
@@ -158,15 +173,15 @@ UTEST(dyn_array, edge_cases) {
     sp_da_free(arr2);
 
     sp_da(int) arr3 = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr3);
+    sp_da_init(ut.mem, arr3);
     sp_da_reserve(arr3, 0);
     ASSERT_GE(sp_da_capacity(arr3), 0);
     sp_da_free(arr3);
 }
 
-UTEST(dyn_array, basic_int_push) {
+UTEST_F(dyn_array, basic_int_push) {
     int* arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
 
     ASSERT_EQ(sp_da_size(arr), 0);
     ASSERT_GE(sp_da_capacity(arr), 0);
@@ -196,10 +211,10 @@ UTEST(dyn_array, basic_int_push) {
     sp_da_free(arr);
 }
 
-UTEST(dyn_array, different_types) {
+UTEST_F(dyn_array, different_types) {
     {
         u8* arr = SP_NULLPTR;
-        sp_da_init(sp_context_get()->allocator, arr);
+        sp_da_init(ut.mem, arr);
         for (u8 i = 0; i < 10; i++) {
             sp_da_push_ex((void**)&arr, &i, sizeof(u8));
         }
@@ -212,7 +227,7 @@ UTEST(dyn_array, different_types) {
 
     {
         u16* arr = SP_NULLPTR;
-        sp_da_init(sp_context_get()->allocator, arr);
+        sp_da_init(ut.mem, arr);
         u16 vals[] = {100, 200, 300, 400, 500};
         for (int i = 0; i < 5; i++) {
             sp_da_push_ex((void**)&arr, &vals[i], sizeof(u16));
@@ -226,7 +241,7 @@ UTEST(dyn_array, different_types) {
 
     {
         u64* arr = SP_NULLPTR;
-        sp_da_init(sp_context_get()->allocator, arr);
+        sp_da_init(ut.mem, arr);
         u64 val = 0xDEADBEEFCAFEBABE;
         sp_da_push_ex((void**)&arr, &val, sizeof(u64));
         ASSERT_EQ(sp_da_size(arr), 1);
@@ -236,7 +251,7 @@ UTEST(dyn_array, different_types) {
 
     {
         float* arr = SP_NULLPTR;
-        sp_da_init(sp_context_get()->allocator, arr);
+        sp_da_init(ut.mem, arr);
         float vals[] = {3.14f, 2.71f, 1.41f};
         for (int i = 0; i < 3; i++) {
             sp_da_push_ex((void**)&arr, &vals[i], sizeof(float));
@@ -249,7 +264,7 @@ UTEST(dyn_array, different_types) {
     }
 }
 
-UTEST(dyn_array, push_struct) {
+UTEST_F(dyn_array, push_struct) {
     typedef struct {
         int id;
         float value;
@@ -257,7 +272,7 @@ UTEST(dyn_array, push_struct) {
     } test_struct_t;
 
     test_struct_t* arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
 
     test_struct_t item1 = {.id = 1, .value = 3.14f, .flags = 0xFF};
     sp_da_push_ex((void**)&arr, &item1, sizeof(test_struct_t));
@@ -285,9 +300,9 @@ UTEST(dyn_array, push_struct) {
     sp_da_free(arr);
 }
 
-UTEST(dyn_array, growth_behavior) {
+UTEST_F(dyn_array, growth_behavior) {
     int* arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
 
     for (int i = 0; i < 100; i++) {
         sp_da_push_ex((void**)&arr, &i, sizeof(int));
@@ -312,7 +327,7 @@ UTEST(dyn_array, growth_behavior) {
     sp_da_free(arr);
 }
 
-UTEST(dyn_array, alignment_test) {
+UTEST_F(dyn_array, alignment_test) {
   typedef struct {
     u8 a;
     u64 b;
@@ -320,7 +335,7 @@ UTEST(dyn_array, alignment_test) {
   } aligned_struct_t;
 
   aligned_struct_t* arr = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, arr);
+  sp_da_init(ut.mem, arr);
 
   for (int i = 0; i < 10; i++) {
     aligned_struct_t item = {.a = (u8)i, .b = (u64)(i * 1000), .c = (u8)(255 - i)};
@@ -338,13 +353,13 @@ UTEST(dyn_array, alignment_test) {
   sp_da_free(arr);
 }
 
-UTEST(dyn_array, zero_initialization) {
+UTEST_F(dyn_array, zero_initialization) {
   typedef struct {
     int values[10];
   } big_struct_t;
 
   big_struct_t* arr = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, arr);
+  sp_da_init(ut.mem, arr);
   big_struct_t zero_struct = {0};
 
   for (int i = 0; i < 5; i++) {
@@ -362,9 +377,9 @@ UTEST(dyn_array, zero_initialization) {
   sp_da_free(arr);
 }
 
-UTEST(dyn_array, mixed_with_macros) {
+UTEST_F(dyn_array, mixed_with_macros) {
   int* arr = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, arr);
+  sp_da_init(ut.mem, arr);
 
   int val1 = 10;
   sp_da_push_ex((void**)&arr, &val1, sizeof(int));
@@ -386,10 +401,10 @@ UTEST(dyn_array, mixed_with_macros) {
 }
 
 
-UTEST(dyn_array, push_edge_cases) {
+UTEST_F(dyn_array, push_edge_cases) {
   {
     u8* arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
     u8 single_byte = 0xFF;
     sp_da_push_ex((void**)&arr, &single_byte, sizeof(c8));
     ASSERT_EQ(sp_da_size(arr), 1);
@@ -399,7 +414,7 @@ UTEST(dyn_array, push_edge_cases) {
 
   {
     int* arr = SP_NULLPTR;
-    sp_da_init(sp_context_get()->allocator, arr);
+    sp_da_init(ut.mem, arr);
     sp_da_reserve(arr, 50);
 
     for (int i = 0; i < 25; i++) {
@@ -418,7 +433,7 @@ UTEST(dyn_array, push_edge_cases) {
 
 }
 
-UTEST(dyn_array, allocator_realloc_into_scratch_clobber) {
+UTEST_F(dyn_array, allocator_realloc_into_scratch_clobber) {
   struct {
     u8 array;
     u8 fill;

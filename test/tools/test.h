@@ -393,11 +393,6 @@ sp_mem_t sp_mem_tracking_as_allocator(sp_mem_tracking_t* t) {
   };
 }
 
-u32 sp_mem_tracking_live_count(sp_mem_tracking_t* t)   { return t->live_count; }
-u64 sp_mem_tracking_live_bytes(sp_mem_tracking_t* t)   { return t->live_bytes; }
-u32 sp_mem_tracking_double_frees(sp_mem_tracking_t* t) { return t->double_frees; }
-u32 sp_mem_tracking_wild_frees(sp_mem_tracking_t* t)   { return t->wild_frees; }
-
 void sp_mem_tracking_dump(sp_mem_tracking_t* t) {
   sp_log_a("tracking: live={} bytes={} double_frees={} wild_frees={}",
     sp_fmt_uint(t->live_count),

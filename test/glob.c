@@ -18,9 +18,9 @@ typedef struct {
 } parse_test_t;
 
 
-void run_parse_test(int* utest_result, parse_test_t* t) {
+void run_parse_test(int* utest_result, sp_mem_t mem, parse_test_t* t) {
   sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, tokens);
+  sp_da_init(mem, tokens);
   sp_glob_err_t err = sp_glob_parse(sp_str_view(t->pattern), &tokens);
 
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
@@ -88,9 +88,9 @@ typedef struct {
   sp_glob_err_t expected_err;
 } parse_error_test_t;
 
-void run_parse_error_test(int* utest_result, parse_error_test_t* t) {
+void run_parse_error_test(int* utest_result, sp_mem_t mem, parse_error_test_t* t) {
   sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, tokens);
+  sp_da_init(mem, tokens);
   sp_glob_err_t err = sp_glob_parse(sp_str_view(t->pattern), &tokens);
   EXPECT_EQ(err, t->expected_err);
 }
@@ -98,19 +98,21 @@ void run_parse_error_test(int* utest_result, parse_error_test_t* t) {
 SP_TEST_MAIN()
 
 struct glob {
-  u8 placeholder;
+  sp_mem_arena_t* arena;
+  sp_mem_t mem;
 };
 
 UTEST_F_SETUP(glob) {
-  (void)utest_fixture;
+  ut.arena = sp_mem_arena_new(sp_mem_os_new());
+  ut.mem = sp_mem_arena_as_allocator(ut.arena);
 }
 
 UTEST_F_TEARDOWN(glob) {
-  (void)utest_fixture;
+  sp_mem_arena_destroy(ut.arena);
 }
 
 UTEST_F(glob, parse_literal_single) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "a",
     .expected = {
       { .type = SP_GLOB_TOK_LITERAL, .literal = 'a' }
@@ -119,7 +121,7 @@ UTEST_F(glob, parse_literal_single) {
 }
 
 UTEST_F(glob, parse_literal_multi) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "foo",
     .expected = {
       { .type = SP_GLOB_TOK_LITERAL, .literal = 'f' },
@@ -130,7 +132,7 @@ UTEST_F(glob, parse_literal_multi) {
 }
 
 UTEST_F(glob, parse_any) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "?",
     .expected = {
       { .type = SP_GLOB_TOK_ANY }
@@ -139,7 +141,7 @@ UTEST_F(glob, parse_any) {
 }
 
 UTEST_F(glob, parse_star) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "*",
     .expected = {
       { .type = SP_GLOB_TOK_ZERO_OR_MORE }
@@ -148,7 +150,7 @@ UTEST_F(glob, parse_star) {
 }
 
 UTEST_F(glob, parse_recursive_prefix) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "**",
     .expected = {
       { .type = SP_GLOB_TOK_RECURSIVE_PREFIX }
@@ -157,7 +159,7 @@ UTEST_F(glob, parse_recursive_prefix) {
 }
 
 UTEST_F(glob, parse_recursive_prefix_with_slash) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "**/foo",
     .expected = {
       { .type = SP_GLOB_TOK_RECURSIVE_PREFIX },
@@ -169,7 +171,7 @@ UTEST_F(glob, parse_recursive_prefix_with_slash) {
 }
 
 UTEST_F(glob, parse_recursive_suffix) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "foo/**",
     .expected = {
       { .type = SP_GLOB_TOK_LITERAL, .literal = 'f' },
@@ -182,7 +184,7 @@ UTEST_F(glob, parse_recursive_suffix) {
 }
 
 UTEST_F(glob, parse_recursive_zero_or_more) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "a/**/b",
     .expected = {
       { .type = SP_GLOB_TOK_LITERAL, .literal = 'a' },
@@ -194,7 +196,7 @@ UTEST_F(glob, parse_recursive_zero_or_more) {
 }
 
 UTEST_F(glob, parse_class_range) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "[a-z]",
     .expected = {
       {
@@ -207,7 +209,7 @@ UTEST_F(glob, parse_class_range) {
 }
 
 UTEST_F(glob, parse_class_multi) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "[abc]",
     .expected = {
       {
@@ -220,7 +222,7 @@ UTEST_F(glob, parse_class_multi) {
 }
 
 UTEST_F(glob, parse_class_negated) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "[!a-z]",
     .expected = {
       {
@@ -233,7 +235,7 @@ UTEST_F(glob, parse_class_negated) {
 }
 
 UTEST_F(glob, parse_class_negated_caret) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "[^0-9]",
     .expected = {
       {
@@ -246,21 +248,21 @@ UTEST_F(glob, parse_class_negated_caret) {
 }
 
 UTEST_F(glob, parse_class_unclosed) {
-  run_parse_error_test(utest_result, &(parse_error_test_t) {
+  run_parse_error_test(utest_result, ut.mem, &(parse_error_test_t) {
     .pattern = "[",
     .expected_err = SP_GLOB_ERR_UNCLOSED_CLASS
   });
 }
 
 UTEST_F(glob, parse_class_invalid_range) {
-  run_parse_error_test(utest_result, &(parse_error_test_t) {
+  run_parse_error_test(utest_result, ut.mem, &(parse_error_test_t) {
     .pattern = "[z-a]",
     .expected_err = SP_GLOB_ERR_INVALID_RANGE
   });
 }
 
 UTEST_F(glob, parse_alternates_simple) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "{a,b}",
     .expected = {
       {
@@ -275,7 +277,7 @@ UTEST_F(glob, parse_alternates_simple) {
 }
 
 UTEST_F(glob, parse_alternates_wildcards) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "{*.c,*.h}",
     .expected = {
       {
@@ -290,14 +292,14 @@ UTEST_F(glob, parse_alternates_wildcards) {
 }
 
 UTEST_F(glob, parse_alternates_unclosed) {
-  run_parse_error_test(utest_result, &(parse_error_test_t) {
+  run_parse_error_test(utest_result, ut.mem, &(parse_error_test_t) {
     .pattern = "{a,b",
     .expected_err = SP_GLOB_ERR_UNCLOSED_ALTERNATES
   });
 }
 
 UTEST_F(glob, parse_star_txt) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "*.txt",
     .expected = {
       { .type = SP_GLOB_TOK_ZERO_OR_MORE },
@@ -694,9 +696,9 @@ typedef struct {
   sp_glob_strategy_t expected;
 } strategy_test_t;
 
-void run_strategy_test(int* utest_result, strategy_test_t* t) {
+void run_strategy_test(int* utest_result, sp_mem_t mem, strategy_test_t* t) {
   sp_glob_t glob = SP_ZERO_INITIALIZE();
-  sp_da_init(sp_context_get()->allocator, glob.tokens);
+  sp_da_init(mem, glob.tokens);
   sp_glob_err_t err = sp_glob_parse(sp_str_view(t->pattern), &glob.tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
   if (err == SP_GLOB_ERR_OK) {
@@ -706,56 +708,56 @@ void run_strategy_test(int* utest_result, strategy_test_t* t) {
 }
 
 UTEST_F(glob, strategy_literal) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "foo.txt",
     .expected = SP_GLOB_STRATEGY_LITERAL
   });
 }
 
 UTEST_F(glob, strategy_basename_literal) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "**/foo",
     .expected = SP_GLOB_STRATEGY_BASENAME_LITERAL
   });
 }
 
 UTEST_F(glob, strategy_extension_simple) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "*.txt",
     .expected = SP_GLOB_STRATEGY_EXTENSION
   });
 }
 
 UTEST_F(glob, strategy_extension_recursive) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "**/*.rs",
     .expected = SP_GLOB_STRATEGY_EXTENSION
   });
 }
 
 UTEST_F(glob, strategy_prefix) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "src/*",
     .expected = SP_GLOB_STRATEGY_PREFIX
   });
 }
 
 UTEST_F(glob, strategy_suffix) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "**/foo/bar",
     .expected = SP_GLOB_STRATEGY_SUFFIX
   });
 }
 
 UTEST_F(glob, strategy_suffix_single_star) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "*/foo",
     .expected = SP_GLOB_STRATEGY_SUFFIX
   });
 }
 
 UTEST_F(glob, strategy_recursive_only) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "**",
     .expected = SP_GLOB_STRATEGY_FALLBACK
   });
@@ -785,7 +787,7 @@ UTEST_F(glob, set_matches_indices) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
 
   sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
@@ -794,7 +796,7 @@ UTEST_F(glob, set_matches_indices) {
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.h"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
@@ -802,7 +804,7 @@ UTEST_F(glob, set_matches_indices) {
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("Makefile"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
@@ -810,7 +812,7 @@ UTEST_F(glob, set_matches_indices) {
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.rs"), &indices);
   EXPECT_EQ(sp_da_size(indices), 0u);
 }
@@ -830,7 +832,7 @@ UTEST_F(glob, set_basename_literal) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
 
   sp_glob_set_matches(set, sp_str_lit("foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
@@ -839,7 +841,7 @@ UTEST_F(glob, set_basename_literal) {
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("a/foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
@@ -847,7 +849,7 @@ UTEST_F(glob, set_basename_literal) {
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("bar.foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
@@ -893,7 +895,7 @@ UTEST_F(glob, set_empty) {
   EXPECT_FALSE(sp_glob_set_match(set, sp_str_lit("")));
 
   sp_da(u32) indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 0u);
 }
@@ -906,7 +908,7 @@ UTEST_F(glob, set_multiple_matches) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
 
   // Should match all three
@@ -931,7 +933,7 @@ UTEST_F(glob, set_duplicate_extension) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
 
   // Both should match
@@ -939,14 +941,14 @@ UTEST_F(glob, set_duplicate_extension) {
 }
 
 UTEST_F(glob, parse_empty) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "",
     .expected = { { .type = SP_GLOB_TOK_NONE } }
   });
 }
 
 UTEST_F(glob, parse_class_literal_bracket) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "[]]",
     .expected = {
       {
@@ -959,7 +961,7 @@ UTEST_F(glob, parse_class_literal_bracket) {
 }
 
 UTEST_F(glob, parse_class_literal_dash_end) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "[a-]",
     .expected = {
       {
@@ -973,7 +975,7 @@ UTEST_F(glob, parse_class_literal_dash_end) {
 
 UTEST_F(glob, parse_alternates_empty_branch) {
   sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, tokens);
+  sp_da_init(ut.mem, tokens);
   sp_glob_err_t err = sp_glob_parse(sp_str_lit("{,a}"), &tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
   EXPECT_EQ(sp_da_size(tokens), 1u);
@@ -988,7 +990,7 @@ UTEST_F(glob, parse_alternates_empty_branch) {
 }
 
 UTEST_F(glob, parse_alternates_class_inside) {
-  run_parse_test(utest_result, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem, &(parse_test_t) {
     .pattern = "{[a-z],b}",
     .expected = {
       {
@@ -1051,28 +1053,28 @@ UTEST_F(glob, match_recursive_suffix_no_trailing) {
 }
 
 UTEST_F(glob, strategy_empty) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "",
     .expected = SP_GLOB_STRATEGY_LITERAL
   });
 }
 
 UTEST_F(glob, strategy_single_star) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "*",
     .expected = SP_GLOB_STRATEGY_SUFFIX
   });
 }
 
 UTEST_F(glob, strategy_extension_with_wildcard) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "*.t?t",
     .expected = SP_GLOB_STRATEGY_FALLBACK
   });
 }
 
 UTEST_F(glob, strategy_star_in_middle) {
-  run_strategy_test(utest_result, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem, &(strategy_test_t) {
     .pattern = "foo*bar",
     .expected = SP_GLOB_STRATEGY_FALLBACK
   });
@@ -1095,7 +1097,7 @@ UTEST_F(glob, set_multiple_prefixes) {
   sp_glob_set_build(set);
 
   sp_da(u32) indices = SP_NULLPTR;
-  sp_da_init(sp_context_get()->allocator, indices);
+  sp_da_init(ut.mem, indices);
   sp_glob_set_matches(set, sp_str_lit("src/foo/bar.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 2u);
 }

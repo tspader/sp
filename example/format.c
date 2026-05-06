@@ -5,7 +5,7 @@
 // the value-typed members of the union in sp_fmt_arg_t, you cast the pointer member.
 //
 // From there, you can append arbitrary bytes to the string builder being used for this
-// call to sp_fmt_a(sp_context_get_allocator(), ).value. You can (and are encouraged to) use sp.h's internal helpers for
+// call to sp_fmt_a(mem, ...).value. You can (and are encouraged to) use sp.h's internal helpers for
 // printing primitives, and you have access to the :specifier's width and precision.
 //
 // Then, to provide a convenient and type-safe call site, define the sp_fmt_*() macros that
@@ -48,7 +48,7 @@ void specifier(s64 n, c8 fill, sp_fmt_align_t align, u8 width) {
 }
 
 s32 run(s32 num_args, const c8** args) {
-  sp_mem_t a = sp_mem_os_new();
+  sp_mem_t mem = sp_mem_os_new();
 
   sp_log_a("{.green} has Zig/Rust style format specifiers (fill, align, width), plus named directives which may:", sp_fmt_cstr("sp.h"));
   sp_log_a("- {} text from a format argument", sp_fmt_cstr("render"));
@@ -99,19 +99,19 @@ s32 run(s32 num_args, const c8** args) {
 
   section("composition");
   struct { const c8* name; sp_str_t str; } examples [] = {
-    { ".bold + .upper", sp_fmt_a(a, "i never {.bold .upper} the kenosha kid", sp_fmt_cstr("did")).value },
-    { ".italic + .bold", sp_fmt_a(a, "i never {.italic .bold} the kenosha kid", sp_fmt_cstr("did")).value },
-    { ".quote + .upper", sp_fmt_a(a, "i never {.quote .upper} the kenosha kid", sp_fmt_cstr("did")).value },
-    { ".redact + .bold", sp_fmt_a(a, "i never {.redact .bold} the kenosha kid", sp_fmt_cstr("did")).value },
-    { ".bold + .cyan", sp_fmt_a(a, "i never {.bold .cyan} the kenosha kid", sp_fmt_cstr("did")).value },
-    { "kitchen sink", sp_fmt_a(a, "i never {.quote .bold .italic .upper .green} the kenosha kid", sp_fmt_cstr("did")).value },
+    { ".bold + .upper", sp_fmt_a(mem, "i never {.bold .upper} the kenosha kid", sp_fmt_cstr("did")).value },
+    { ".italic + .bold", sp_fmt_a(mem, "i never {.italic .bold} the kenosha kid", sp_fmt_cstr("did")).value },
+    { ".quote + .upper", sp_fmt_a(mem, "i never {.quote .upper} the kenosha kid", sp_fmt_cstr("did")).value },
+    { ".redact + .bold", sp_fmt_a(mem, "i never {.redact .bold} the kenosha kid", sp_fmt_cstr("did")).value },
+    { ".bold + .cyan", sp_fmt_a(mem, "i never {.bold .cyan} the kenosha kid", sp_fmt_cstr("did")).value },
+    { "kitchen sink", sp_fmt_a(mem, "i never {.quote .bold .italic .upper .green} the kenosha kid", sp_fmt_cstr("did")).value },
     {
       ".bytes + :specifier",
-      sp_fmt_a(a, "{} bytes is [{:^$ .bytes}]", sp_fmt_uint(1536), sp_fmt_uint(12), sp_fmt_uint(1536)).value
+      sp_fmt_a(mem, "{} bytes is [{:^$ .bytes}]", sp_fmt_uint(1536), sp_fmt_uint(12), sp_fmt_uint(1536)).value
     },
     {
       ".duration + .bold",
-      sp_fmt_a(a, "{.bold .duration}", sp_fmt_uint(2500000)).value
+      sp_fmt_a(mem, "{.bold .duration}", sp_fmt_uint(2500000)).value
     }
 
   };
