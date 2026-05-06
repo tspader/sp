@@ -41,7 +41,7 @@
 
 #define SP_TEST_REPORT(fmt, ...) \
   do { \
-    sp_str_t formatted = sp_fmt_a(sp_context_get_allocator(), fmt, ##__VA_ARGS__).value; \
+    sp_str_t formatted = sp_fmt_a(utest_state.mem, fmt, ##__VA_ARGS__).value; \
     UTEST_PRINTF("{}", sp_fmt_str(formatted)); \
   } while (0)
 
@@ -53,14 +53,18 @@
 #define SP_TEST_STREQ(a, b, is_assert) \
   UTEST_SURPRESS_WARNING_BEGIN do { \
     if (!sp_str_equal((a), (b))) { \
-      const c8* __sp_test_file_lval = __FILE__; \
-      const u32 __sp_test_line_lval = __LINE__; \
-      sp_io_writer_t __sp_test_io = sp_zero(); \
-      sp_io_writer_from_dyn_mem_a(sp_context_get_allocator(), &__sp_test_io); \
-      sp_fmt_io(&__sp_test_io, "{}:{} Failure:\n  \"{}\" != \"{}\"", sp_fmt_cstr(__sp_test_file_lval), sp_fmt_uint(__sp_test_line_lval), sp_fmt_str((a)), sp_fmt_str((b))); \
-      SP_TEST_REPORT_STR(sp_io_writer_dyn_mem_as_str(&__sp_test_io.dyn_mem)); \
-      *utest_result = UTEST_TEST_FAILURE; \
- \
+      const c8* __file = __FILE__; \
+      const u32 __line = __LINE__; \
+      sp_str_t __msg = sp_fmt_a( \
+        utest_state.mem, \
+        "{}:{} Failure:\n  {.quote} != {.quote}",     \
+        sp_fmt_cstr(__file), sp_fmt_uint(__line), \
+        sp_fmt_str((a)),                          \
+        sp_fmt_str((b))                           \
+      ).value;                                    \
+      SP_TEST_REPORT_STR(__msg);                  \
+      *utest_result = UTEST_TEST_FAILURE;         \
+                                                  \
       if (is_assert) { \
         return; \
       } \

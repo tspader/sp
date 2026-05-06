@@ -6346,7 +6346,7 @@ void sp_da_push_ex(void** arr, void* val, u32 stride) {
 
 void sp_da_init_ex(sp_mem_t mem, void** arr, u32 stride) {
   u32 cap = 4;
-  sp_da_header_t* head = sp_alloc_a(mem, cap * stride + sizeof(sp_da_header_t));
+  sp_da_header_t* head = (sp_da_header_t*)sp_alloc_a(mem, cap * stride + sizeof(sp_da_header_t));
   *head = (sp_da_header_t) {
     .allocator = mem,
     .capacity = cap,

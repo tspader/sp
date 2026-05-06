@@ -118,6 +118,7 @@ struct utest_state_s {
   u64 tests_length;
   sp_io_writer_t output;
   int has_output;
+  sp_mem_t mem;
 };
 
 /* extern to the global state utest needs to execute */
@@ -129,7 +130,7 @@ UTEST_EXTERN struct utest_state_s utest_state;
 #endif
 #define UTEST_PRINTF(...)                                                      \
   do {                                                                         \
-    sp_str_t _utest_fmtd = sp_fmt_a(sp_context_get_allocator(), __VA_ARGS__).value;                               \
+    sp_str_t _utest_fmtd = sp_fmt_a(utest_state.mem, __VA_ARGS__).value;                               \
     sp_os_print(_utest_fmtd);                                                 \
     if (utest_state.has_output) {                                              \
       sp_io_write_str(&utest_state.output, _utest_fmtd, SP_NULLPTR);         \
@@ -872,6 +873,8 @@ s32 utest_main(s32 argc, const c8 **argv) {
   int enable_mixed_units = 1;
   int random_order = 0;
   u32 seed = 0;
+
+  utest_state.mem = sp_mem_os_new();
 
   /* loop through all arguments looking for our options */
   for (index = 1; index < UTEST_CAST(u64, argc); index++) {
