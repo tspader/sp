@@ -4321,7 +4321,8 @@ s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
 
   u32 name_bytes = nt.name.Length;
   u32 info_bytes = sizeof(sp_nt_file_rename_information_t) + name_bytes - sizeof(u16);
-  sp_nt_file_rename_information_t* info = (sp_nt_file_rename_information_t*)sp_alloc(info_bytes);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_nt_file_rename_information_t* info = (sp_nt_file_rename_information_t*)sp_alloc_a(s.mem, info_bytes);
   *info = SP_ZERO_STRUCT(sp_nt_file_rename_information_t);
   info->ReplaceIfExists = 1;
   info->FileNameLength = name_bytes;
@@ -4332,6 +4333,7 @@ s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
 
   sp_sys_nt_path_free(&nt);
   SP_NT(NtClose)(handle);
+  sp_mem_end_scratch(s);
 
   return SP_NT_SUCCESS(status) ? 0 : -1;
 }
@@ -5774,7 +5776,8 @@ s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
 
   u32 name_bytes = nt.name.Length;
   u32 info_bytes = sizeof(sp_nt_file_link_information_t) + name_bytes - sizeof(u16);
-  sp_nt_file_link_information_t* info = (sp_nt_file_link_information_t*)sp_alloc(info_bytes);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_nt_file_link_information_t* info = (sp_nt_file_link_information_t*)sp_alloc_a(s.mem, info_bytes);
   *info = SP_ZERO_STRUCT(sp_nt_file_link_information_t);
   info->ReplaceIfExists = 0;
   info->FileNameLength = name_bytes;
@@ -5785,6 +5788,7 @@ s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
 
   sp_sys_nt_path_free(&nt);
   SP_NT(NtClose)(handle);
+  sp_mem_end_scratch(s);
 
   return SP_NT_SUCCESS(status) ? 0 : -1;
 }
@@ -9512,7 +9516,7 @@ SP_PRIVATE sp_win32_peb_t sp_win32_get_peb() {
 
 SP_PRIVATE sp_str_t sp_win32_utf16_to_utf8(const u16* utf16, s32 len) {
   s32 num_bytes = WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)utf16, len, NULL, 0, NULL, NULL);
-  c8* utf8 = sp_alloc_n(c8, num_bytes + 1);
+  c8* utf8 = (c8*)sp_mem_os_alloc(((u64)num_bytes + 1) * sizeof(c8));
   WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)utf16, len, utf8, num_bytes, NULL, NULL);
   utf8[num_bytes] = '\0';
   return sp_rval(sp_str_t) {
@@ -9593,7 +9597,7 @@ SP_PRIVATE void sp_win32_env_it_set_current(sp_os_env_it_t* it) {
 
 sp_os_env_it_t sp_os_env_it_begin() {
   sp_os_env_it_t it = SP_ZERO_INITIALIZE();
-  sp_win32_env_it_t* state = sp_alloc_type(sp_win32_env_it_t);
+  sp_win32_env_it_t* state = (sp_win32_env_it_t*)sp_mem_os_alloc(sizeof(sp_win32_env_it_t));
   state->block = sp_win32_get_peb().params.env;
   state->cursor = state->block;
   it.os = state;
@@ -9615,7 +9619,7 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
   if (state->cursor[0] != L'\0') {
     sp_win32_env_it_set_current(it);
   } else {
-    sp_free(state);
+    sp_mem_os_free(state);
     *it = SP_ZERO_STRUCT(sp_os_env_it_t);
   }
 }
@@ -9645,13 +9649,13 @@ sp_os_env_it_t sp_os_env_it_begin() {
     return it;
   }
 
-  sp_linux_env_it_t* state = (sp_linux_env_it_t*)sp_alloc(sizeof(sp_linux_env_it_t));
+  sp_linux_env_it_t* state = (sp_linux_env_it_t*)sp_mem_os_alloc(sizeof(sp_linux_env_it_t));
   *state = SP_ZERO_STRUCT(sp_linux_env_it_t);
   state->env = &runtime->env;
   state->it = sp_str_ht_it_init(runtime->env.vars);
 
   if (!sp_str_ht_it_valid(runtime->env.vars, state->it)) {
-    sp_free(state);
+    sp_mem_os_free(state);
     return it;
   }
 
@@ -9674,7 +9678,7 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
   } else {
     it->key = SP_ZERO_STRUCT(sp_str_t);
     it->value = SP_ZERO_STRUCT(sp_str_t);
-    sp_free(state);
+    sp_mem_os_free(state);
     it->os = SP_NULLPTR;
   }
 }
@@ -10461,12 +10465,12 @@ void sp_cv_notify_all(sp_cv_t* cond) {
 #if defined(SP_WIN32)
 DWORD WINAPI sp_win32_thread_launch(LPVOID args) {
   s32 result = sp_thread_launch(args);
-  sp_free(args);
+  sp_mem_os_free(args);
   return (DWORD)result;
 }
 
 void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
-  sp_thread_launch_t* launch = sp_alloc_type(sp_thread_launch_t);
+  sp_thread_launch_t* launch = (sp_thread_launch_t*)sp_mem_os_alloc(sizeof(sp_thread_launch_t));
   *launch = SP_RVAL(sp_thread_launch_t) {
     .fn = fn,
     .userdata = userdata,
@@ -10477,7 +10481,7 @@ void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   *thread = CreateThread(SP_NULLPTR, 0, sp_win32_thread_launch, launch, 0, SP_NULLPTR);
   if (!*thread) {
     sp_semaphore_destroy(&launch->semaphore);
-    sp_free(launch);
+    sp_mem_os_free(launch);
     return;
   }
 
@@ -12009,7 +12013,7 @@ SP_PRIVATE void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path,
 SP_PRIVATE void sp_win32_fmon_issue_read(sp_fmon_t* monitor, sp_fmon_dir_t* info);
 
 void sp_fmon_os_init(sp_fmon_t* monitor) {
-  sp_fmon_os_t* os = SP_ALLOC(sp_fmon_os_t);
+  sp_fmon_os_t* os = sp_alloc_type_a(monitor->mem, sp_fmon_os_t);
   sp_da_init(monitor->mem, os->dirs);
   sp_da_init(monitor->mem, os->watch_files);
   monitor->os = os;
@@ -12028,12 +12032,12 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
       CloseHandle(info->overlapped.hEvent);
     }
     if (info->notify_information) {
-      sp_free(info->notify_information);
+      sp_free_a(monitor->mem, info->notify_information);
     }
   }
   sp_da_free(os->dirs);
   sp_da_free(os->watch_files);
-  sp_free(os);
+  sp_free_a(monitor->mem, os);
   monitor->os = NULL;
 }
 
@@ -12061,7 +12065,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   dir.overlapped.hEvent = event;
   dir.handle = handle;
   dir.path = sp_fs_canonicalize_path_a(monitor->mem, path);
-  dir.notify_information = sp_alloc(SP_FILE_MONITOR_BUFFER_SIZE);
+  dir.notify_information = sp_alloc_a(monitor->mem, SP_FILE_MONITOR_BUFFER_SIZE);
   sp_mem_zero(dir.notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
 
   sp_da_push(os->dirs, dir);
@@ -12349,7 +12353,6 @@ SP_PRIVATE void sp_fmon_fsevents_callback(
   c8** paths = (c8**)event_paths;
 
   sp_mutex_lock(&os->mutex);
-  sp_context_push_allocator(sp_mem_arena_as_allocator(os->event_arena));
 
   sp_for(it, num_events) {
     sp_str_t file_path = sp_str_view(paths[it]);
@@ -12383,7 +12386,7 @@ SP_PRIVATE void sp_fmon_fsevents_callback(
 
     if (kind != SP_FILE_CHANGE_EVENT_NONE) {
       sp_fmon_event_t change = {
-        .file_path = sp_str_copy_a(monitor->mem, file_path),
+        .file_path = sp_str_copy_a(os->mem.event, file_path),
         .file_name = sp_fs_get_name(file_path),
         .events = kind,
       };
@@ -12391,7 +12394,6 @@ SP_PRIVATE void sp_fmon_fsevents_callback(
     }
   }
 
-  sp_context_pop();
   sp_mutex_unlock(&os->mutex);
 }
 
@@ -12470,6 +12472,8 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_mutex_init(&os->mutex, SP_MUTEX_PLAIN);
   os->watch_arena = sp_mem_arena_new_ex(monitor->mem, SP_FMON_ARENA_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
   os->event_arena = sp_mem_arena_new_ex(monitor->mem, SP_FMON_ARENA_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
+  os->mem.watch = sp_mem_arena_as_allocator(os->watch_arena);
+  os->mem.event = sp_mem_arena_as_allocator(os->event_arena);
   sp_da_init(monitor->mem, os->watch_paths);
   sp_da_init(monitor->mem, os->watch_files);
   monitor->os = os;
@@ -12499,7 +12503,6 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
 void sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir) {
   sp_mutex_lock(&os->mutex);
   sp_da_push(os->watch_paths, sp_str_copy_a(os->mem.watch, dir));
-  sp_context_pop();
   sp_mutex_unlock(&os->mutex);
 }
 
