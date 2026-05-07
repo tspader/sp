@@ -41,7 +41,7 @@ UTEST(math, color_conversion) {
     sp_color_t hsv = sp_color_rgb_to_hsv(colors[it].rgb);
     // hue wrap-aware comparison
     f32 h_diff = sp_fabsf(hsv.h - colors[it].hsv.h);
-    h_diff = SP_MIN(h_diff, 360.0f - h_diff);
+    h_diff = sp_min(h_diff, 360.0f - h_diff);
     EXPECT_LT(h_diff, eps);
     EXPECT_LT(sp_fabsf(hsv.s - colors[it].hsv.s), eps);
     EXPECT_LT(sp_fabsf(hsv.v - colors[it].hsv.v), eps);
@@ -77,7 +77,7 @@ UTEST(math, color_conversion) {
   sp_carr_for(boundaries, it) {
     sp_color_t hsv = sp_color_rgb_to_hsv(boundaries[it].rgb);
     f32 h_diff = sp_fabsf(hsv.h - boundaries[it].hsv.h);
-    h_diff = SP_MIN(h_diff, 360.0f - h_diff);
+    h_diff = sp_min(h_diff, 360.0f - h_diff);
     EXPECT_LT(h_diff, eps);
     EXPECT_LT(sp_fabsf(hsv.s - boundaries[it].hsv.s), eps);
     EXPECT_LT(sp_fabsf(hsv.v - boundaries[it].hsv.v), eps);

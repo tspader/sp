@@ -58,7 +58,7 @@ UTEST_F(fs, create_file_unicode) {
 UTEST_F(fs, create_file_with_content) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_view("create_file_with_content"));
+  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_file_with_content"));
   sp_fs_create_dir_a(sandbox);
 
   u8 buffer [] = { 's', 'p', 'u', 'm', 0 };

@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
   {
     sp_str_t path = sp_str_view(many_short_path);
     f64 ns = run_glob_set_bench(many_short_set, path);
-    sp_da_push(results, ((bench_result_t){.name = SP_LIT("many_short_globset"), .ns_per_op = ns}));
+    sp_da_push(results, ((bench_result_t){.name = sp_str_lit("many_short_globset"), .ns_per_op = ns}));
   }
 
   // Print space-separated pairs

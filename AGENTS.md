@@ -59,6 +59,15 @@ make TRIPLE=aarch64-macos
     - `sp_da_for(da, it)` and `sp_ht_for(ht, it)`
     - `sp_carr_for()` instead of `for (int it = 0; it < sizeof(carr) / sizeof(carr[0]); it++)`
 - Always use `sp_mem_begin_scratch()` and `sp_mem_end_scratch()` when allocating non-persistent heap memory
-    - Ensure that if any functions you call heap allocate persistent memory, you either use scratch or free it
+    - Always use `sp_mem_begin_scratch_for(mem)` to avoid clobbering an argument-passed scratch allocator
 - For `sp_str_t` → cstr conversion before a syscall, use a stack `c8 buf[SP_PATH_MAX]` + `sp_cstr_copy_to_n`, not scratch
 - Never use `NULL`; use `SP_NULL` or `SP_NULLPTR`
+- Always use the following guide when casing macros:
+    - Lowercase:
+        - Function-likes (e.g. `sp_syscall`, `sp_sys_alloc_type`, `sp_max`)
+        - Keyword replacement sugar (e.g. `sp_for`)
+        - Value sugar (e.g. `sp_str_lit`, `sp_zero`)
+    - Uppercase:
+        - Metaprogramming or code generating sugar (e.g. `SP_TYPEDEF_FN`, `SP_X_ENUM_*`)
+        - Attributes (e.g. `SP_API`, `SP_ALIGNED`)
+        - Constants and enums (e.g. `SP_NULLPTR`, `SP_ANSI_RESET`)

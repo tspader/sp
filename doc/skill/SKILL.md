@@ -95,11 +95,11 @@ sp_ht(s32, s32) hta = SP_NULLPTR;
 sp_ht(sp_str_t, s32) htb = SP_NULLPTR;
 sp_ht_set_fns(hta, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
-sp_ht_insert(htb, SP_LIT("answer"), 42);
+sp_ht_insert(htb, sp_str_lit("answer"), 42);
 
-s32* value_ptr = sp_ht_getp(htb, SP_LIT("answer"));
+s32* value_ptr = sp_ht_getp(htb, sp_str_lit("answer"));
 
-sp_ht_key_exists(htb, SP_LIT("answer"));
+sp_ht_key_exists(htb, sp_str_lit("answer"));
 
 sp_ht_for(htb, it) {
   sp_str_t* key = sp_ht_it_getkp(map, it);

@@ -261,7 +261,7 @@ void sp_elf_buffer_grow(sp_elf_buffer_t* buffer, u64 size) {
     return;
   }
 
-  u64 capacity = SP_MAX(buffer->capacity, SP_ELF_DEFAULT_BUFFER_SIZE);
+  u64 capacity = sp_max(buffer->capacity, SP_ELF_DEFAULT_BUFFER_SIZE);
   while (capacity < size) {
     capacity *= 2;
   }

@@ -36,7 +36,7 @@ UTEST_F_SETUP(sp_test_file_monitor) {
 
   ut.change_detected = false;
   ut.last_event = SP_FILE_CHANGE_EVENT_NONE;
-  ut.last_file_path = SP_LIT("");
+  ut.last_file_path = sp_str_lit("");
 }
 
 UTEST_F_TEARDOWN(sp_test_file_monitor) {
@@ -95,7 +95,7 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
   sp_str_t file = sp_fs_join_path_a(ut.mem, dir, sp_str_lit("new.file"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = file,
-    .content = SP_LIT("spum"),
+    .content = sp_str_lit("spum"),
   });
 
   bool timed_out = true;
@@ -124,7 +124,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
   sp_str_t test_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("modify_file.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
-    .content = SP_LIT("initial content"),
+    .content = sp_str_lit("initial content"),
   });
 
   sp_fmon_add_file(&ut.monitor, test_file);
@@ -164,7 +164,7 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
   sp_str_t test_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("delete_file.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
-    .content = SP_LIT("to be deleted"),
+    .content = sp_str_lit("to be deleted"),
   });
 
   sp_fmon_add_file(&ut.monitor, test_file);
@@ -205,7 +205,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
-    .content = SP_LIT("created"),
+    .content = sp_str_lit("created"),
   });
 
   bool timed_out = true;
@@ -224,7 +224,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   ut.change_detected = false;
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
-    .content = SP_LIT("modified"),
+    .content = sp_str_lit("modified"),
   });
 
   timed_out = true;
@@ -269,7 +269,7 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
   sp_str_t test_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("filter.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
-    .content = SP_LIT("hello"),
+    .content = sp_str_lit("hello"),
   });
 
   sp_fmon_add_dir(&ut.monitor, test_dir);
@@ -322,11 +322,11 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
 
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = watched_file,
-    .content = SP_LIT("initial"),
+    .content = sp_str_lit("initial"),
   });
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = ignored_file,
-    .content = SP_LIT("initial"),
+    .content = sp_str_lit("initial"),
   });
 
   sp_fmon_add_file(&ut.monitor, watched_file);
@@ -337,7 +337,7 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
   // Modify the ignored file — should NOT fire
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = ignored_file,
-    .content = SP_LIT("changed"),
+    .content = sp_str_lit("changed"),
   });
 
   sp_for_n(FMON_POLL_ITERATIONS) {
@@ -350,7 +350,7 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
   // Modify the watched file — should fire
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = watched_file,
-    .content = SP_LIT("changed"),
+    .content = sp_str_lit("changed"),
   });
 
   bool timed_out = true;
@@ -381,7 +381,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
 
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = old_file,
-    .content = SP_LIT("rename me"),
+    .content = sp_str_lit("rename me"),
   });
 
   sp_fmon_add_dir(&ut.monitor, test_dir);
@@ -390,7 +390,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
   ut.change_detected = false;
   fmon_history.count = 0;
 
-  sp_sys_rename(sp_str_to_cstr_a(sp_mem_get_scratch(), old_file), sp_str_to_cstr_a(sp_mem_get_scratch(), new_file));
+  sp_sys_rename_s(old_file, new_file);
 
   sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);

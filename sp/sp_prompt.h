@@ -1077,7 +1077,7 @@ const c8* sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option
     }
 
     if (!first) {
-      sp_io_write_str(&builder, SP_LIT(", "), SP_NULLPTR);
+      sp_io_write_str(&builder, sp_str_lit(", "), SP_NULLPTR);
     }
     first = false;
     sp_io_write_str(&builder, sp_str_view(options[it].label), SP_NULLPTR);
@@ -1286,7 +1286,7 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
     }
   }
 
-  u8 utf8_bytes[4] = { c };
+  c8 utf8_bytes[4] = { c };
   u32 needed = 1;
   if      ((c & SP_PROMPT_UTF8_2_BYTE_MASK) == SP_PROMPT_UTF8_2_BYTE_PREFIX) needed = SP_PROMPT_UTF8_2_BYTE_LEN;
   else if ((c & SP_PROMPT_UTF8_3_BYTE_MASK) == SP_PROMPT_UTF8_3_BYTE_PREFIX) needed = SP_PROMPT_UTF8_3_BYTE_LEN;
@@ -1357,7 +1357,7 @@ static void sp_prompt_write_row_cells(sp_prompt_ctx_t* ctx, sp_prompt_cell_t* ce
       sp_prompt_write_style(ctx, current);
     }
 
-    u8 utf8[4] = {0};
+    c8 utf8[4] = {0};
     u8 len = sp_utf8_encode(cells[col].codepoint, utf8);
     sp_prompt_emit_bytes(ctx, utf8, len);
   }
@@ -1572,7 +1572,7 @@ sp_str_t sp_prompt_repeat(sp_prompt_ctx_t* ctx, u32 codepoint, u32 count) {
   SP_UNUSED(ctx);
   sp_io_writer_t builder = sp_zero();
   sp_io_writer_from_dyn_mem_a(sp_mem_begin_scratch().mem, &builder);
-  u8 buf[4] = SP_ZERO_INITIALIZE();
+  c8 buf[4] = SP_ZERO_INITIALIZE();
   u8 len = sp_utf8_encode(codepoint, buf);
   sp_for(it, count) {
     sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
@@ -1766,7 +1766,7 @@ static void sp_prompt_str_append_codepoint(sp_prompt_ctx_t* ctx, sp_str_t* value
   sp_io_writer_t builder = sp_zero();
   sp_io_writer_from_dyn_mem_a(ctx->mem, &builder);
   sp_io_write_str(&builder, *value, SP_NULLPTR);
-  u8 buf[4] = SP_ZERO_INITIALIZE();
+  c8 buf[4] = SP_ZERO_INITIALIZE();
   u8 len = sp_utf8_encode(codepoint, buf);
   sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
   *value = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
@@ -1779,7 +1779,7 @@ static sp_str_t sp_prompt_str_pop_codepoint(sp_str_t value) {
 
   sp_utf8_it_t it = sp_utf8_rit(value);
   if (!sp_utf8_it_valid(&it)) {
-    return SP_LIT("");
+    return sp_str_lit("");
   }
 
   return sp_str(value.data, (u32)it.index);
@@ -1827,16 +1827,16 @@ static void sp_prompt_text_update(sp_prompt_ctx_t* ctx, sp_prompt_event_t event)
 static sp_str_t sp_prompt_state_symbol(sp_prompt_state_t state) {
   switch (state) {
     case SP_PROMPT_STATE_ACTIVE: {
-      return SP_LIT("◆");
+      return sp_str_lit("◆");
     }
     case SP_PROMPT_STATE_SUBMIT: {
-      return SP_LIT("◇");
+      return sp_str_lit("◇");
     }
     case SP_PROMPT_STATE_CANCEL: {
-      return SP_LIT("■");
+      return sp_str_lit("■");
     }
     case SP_PROMPT_STATE_ERROR: {
-      return SP_LIT("▲");
+      return sp_str_lit("▲");
     }
   }
 
@@ -1864,16 +1864,16 @@ static sp_prompt_style_t sp_prompt_rail_style(sp_prompt_ctx_t* ctx) {
 
 static void sp_prompt_write_state_prefix(sp_prompt_ctx_t* ctx) {
   sp_prompt_render_line(ctx, sp_prompt_state_symbol(ctx->state), sp_prompt_rail_style(ctx));
-  sp_prompt_render_line(ctx, SP_LIT("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, sp_str_lit("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
 }
 
 static void sp_prompt_write_rail_prefix(sp_prompt_ctx_t* ctx) {
-  sp_prompt_render_line(ctx, SP_LIT("│"), sp_prompt_rail_style(ctx));
-  sp_prompt_render_line(ctx, SP_LIT("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, sp_str_lit("│"), sp_prompt_rail_style(ctx));
+  sp_prompt_render_line(ctx, sp_str_lit("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
 }
 
 static void sp_prompt_line_rail_end(sp_prompt_ctx_t* ctx) {
-  sp_prompt_render_line(ctx, SP_LIT("└"), sp_prompt_rail_style(ctx));
+  sp_prompt_render_line(ctx, sp_str_lit("└"), sp_prompt_rail_style(ctx));
   ctx->cursor_col = 0;
   ctx->cursor_row++;
 }
@@ -1914,7 +1914,7 @@ static void sp_prompt_text_render(sp_prompt_ctx_t* ctx) {
 sp_prompt_widget_t sp_prompt_text_widget(sp_prompt_ctx_t* ctx, sp_prompt_text_t config) {
   sp_prompt_text_widget_t* user_data = sp_mem_arena_alloc_type(ctx->arena, sp_prompt_text_widget_t);
   user_data->config = config;
-  user_data->value = SP_LIT("");
+  user_data->value = sp_str_lit("");
   return (sp_prompt_widget_t) {
     .user_data = user_data,
     .on_event = sp_prompt_text_update,
@@ -2000,15 +2000,15 @@ static void sp_prompt_confirm_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_write_rail_prefix(ctx);
 
   if (confirm->value) {
-    sp_prompt_render_line(ctx, SP_LIT("●"), active_symbol);
-    sp_prompt_render_line(ctx, SP_LIT(" Yes"), SP_ZERO_STRUCT(sp_prompt_style_t));
-    sp_prompt_render_line(ctx, SP_LIT(" / "), SP_ZERO_STRUCT(sp_prompt_style_t));
-    sp_prompt_render_line(ctx, SP_LIT("○ No"), inactive);
+    sp_prompt_render_line(ctx, sp_str_lit("●"), active_symbol);
+    sp_prompt_render_line(ctx, sp_str_lit(" Yes"), SP_ZERO_STRUCT(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_lit(" / "), SP_ZERO_STRUCT(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_lit("○ No"), inactive);
   } else {
-    sp_prompt_render_line(ctx, SP_LIT("○ Yes"), inactive);
-    sp_prompt_render_line(ctx, SP_LIT(" / "), SP_ZERO_STRUCT(sp_prompt_style_t));
-    sp_prompt_render_line(ctx, SP_LIT("●"), active_symbol);
-    sp_prompt_render_line(ctx, SP_LIT(" No"), SP_ZERO_STRUCT(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_lit("○ Yes"), inactive);
+    sp_prompt_render_line(ctx, sp_str_lit(" / "), SP_ZERO_STRUCT(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_lit("●"), active_symbol);
+    sp_prompt_render_line(ctx, sp_str_lit(" No"), SP_ZERO_STRUCT(sp_prompt_style_t));
   }
 
   ctx->cursor_col = 0;
@@ -2041,7 +2041,7 @@ sp_prompt_widget_t sp_prompt_confirm_widget(sp_prompt_ctx_t* ctx, sp_prompt_conf
 static void sp_prompt_choice_state_reset(sp_prompt_choice_state_t* state, u32 cursor) {
   state->cursor = cursor;
   state->visible_offset = 0;
-  state->filter_value = SP_LIT("");
+  state->filter_value = sp_str_lit("");
 }
 
 static void sp_prompt_choice_state_sync_window(sp_prompt_choice_state_t* state, u32* max_items, u32 filtered_count) {
@@ -2099,7 +2099,7 @@ static void sp_prompt_choice_state_move_cursor(sp_prompt_choice_state_t* state, 
 
 static sp_str_t sp_prompt_option_label(sp_prompt_select_option_t* option) {
   if (option->label == SP_NULLPTR) {
-    return SP_LIT("");
+    return sp_str_lit("");
   }
 
   return sp_str_view(option->label);
@@ -2107,7 +2107,7 @@ static sp_str_t sp_prompt_option_label(sp_prompt_select_option_t* option) {
 
 static sp_str_t sp_prompt_option_hint(sp_prompt_select_option_t* option) {
   if (option->hint == SP_NULLPTR) {
-    return SP_LIT("");
+    return sp_str_lit("");
   }
 
   return sp_str_view(option->hint);
@@ -2230,7 +2230,7 @@ static void sp_prompt_select_update(sp_prompt_ctx_t* ctx, sp_prompt_event_t even
         u32 selected_index = sp_prompt_select_filtered_to_option_index(select, select->state.cursor);
         sp_prompt_set_str(ctx, sp_prompt_option_label(&select->config.options[selected_index]));
       } else {
-        sp_prompt_set_str(ctx, SP_LIT(""));
+        sp_prompt_set_str(ctx, sp_str_lit(""));
       }
       sp_prompt_set_state(ctx, SP_PROMPT_STATE_SUBMIT);
       break;
@@ -2271,11 +2271,11 @@ static void sp_prompt_select_render(sp_prompt_ctx_t* ctx) {
   };
 
   sp_prompt_write_state_prefix(ctx);
-  sp_prompt_render_line(ctx, select->config.prompt == SP_NULLPTR ? SP_LIT("") : sp_str_view(select->config.prompt), SP_ZERO_STRUCT(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, select->config.prompt == SP_NULLPTR ? sp_str_lit("") : sp_str_view(select->config.prompt), SP_ZERO_STRUCT(sp_prompt_style_t));
   if (select->config.filter) {
-    sp_prompt_render_line(ctx, SP_LIT(" "), SP_ZERO_STRUCT(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_lit(" "), SP_ZERO_STRUCT(sp_prompt_style_t));
     if (sp_str_empty(select->state.filter_value)) {
-      sp_prompt_render_line(ctx, SP_LIT("Type to filter..."), inactive);
+      sp_prompt_render_line(ctx, sp_str_lit("Type to filter..."), inactive);
     } else {
       sp_prompt_render_line(ctx, select->state.filter_value, SP_ZERO_STRUCT(sp_prompt_style_t));
     }
@@ -2293,7 +2293,7 @@ static void sp_prompt_select_render(sp_prompt_ctx_t* ctx) {
     ctx->cursor_row++;
   } else if (filtered_count == 0) {
     sp_prompt_write_rail_prefix(ctx);
-    sp_prompt_render_line(ctx, SP_LIT("(no options)"), inactive);
+    sp_prompt_render_line(ctx, sp_str_lit("(no options)"), inactive);
     ctx->cursor_col = 0;
     ctx->cursor_row++;
   } else {
@@ -2326,7 +2326,7 @@ static void sp_prompt_select_render(sp_prompt_ctx_t* ctx) {
 
     if (has_top_overflow) {
       sp_prompt_write_rail_prefix(ctx);
-      sp_prompt_render_line(ctx, SP_LIT("..."), inactive);
+      sp_prompt_render_line(ctx, sp_str_lit("..."), inactive);
       ctx->cursor_col = 0;
       ctx->cursor_row++;
     }
@@ -2337,19 +2337,19 @@ static void sp_prompt_select_render(sp_prompt_ctx_t* ctx) {
       sp_prompt_write_rail_prefix(ctx);
 
       if (filtered_index == select->state.cursor) {
-        sp_prompt_render_line(ctx, SP_LIT("●"), active_symbol);
-        sp_prompt_render_line(ctx, SP_LIT(" "), SP_ZERO_STRUCT(sp_prompt_style_t));
+        sp_prompt_render_line(ctx, sp_str_lit("●"), active_symbol);
+        sp_prompt_render_line(ctx, sp_str_lit(" "), SP_ZERO_STRUCT(sp_prompt_style_t));
         sp_prompt_render_line(ctx, sp_prompt_option_label(&select->config.options[index]), SP_ZERO_STRUCT(sp_prompt_style_t));
       } else {
-        sp_prompt_render_line(ctx, SP_LIT("○ "), inactive);
+        sp_prompt_render_line(ctx, sp_str_lit("○ "), inactive);
         sp_prompt_render_line(ctx, sp_prompt_option_label(&select->config.options[index]), inactive);
       }
 
       sp_str_t hint = sp_prompt_option_hint(&select->config.options[index]);
       if (!sp_str_empty(hint)) {
-        sp_prompt_render_line(ctx, SP_LIT(" ("), inactive);
+        sp_prompt_render_line(ctx, sp_str_lit(" ("), inactive);
         sp_prompt_render_line(ctx, hint, inactive);
-        sp_prompt_render_line(ctx, SP_LIT(")"), inactive);
+        sp_prompt_render_line(ctx, sp_str_lit(")"), inactive);
       }
 
       ctx->cursor_col = 0;
@@ -2358,7 +2358,7 @@ static void sp_prompt_select_render(sp_prompt_ctx_t* ctx) {
 
     if (has_bottom_overflow) {
       sp_prompt_write_rail_prefix(ctx);
-      sp_prompt_render_line(ctx, SP_LIT("..."), inactive);
+      sp_prompt_render_line(ctx, sp_str_lit("..."), inactive);
       ctx->cursor_col = 0;
       ctx->cursor_row++;
     }
@@ -2538,11 +2538,11 @@ static void sp_prompt_multiselect_render(sp_prompt_ctx_t* ctx) {
   };
 
   sp_prompt_write_state_prefix(ctx);
-  sp_prompt_render_line(ctx, select->config.prompt == SP_NULLPTR ? SP_LIT("") : sp_str_view(select->config.prompt), SP_ZERO_STRUCT(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, select->config.prompt == SP_NULLPTR ? sp_str_lit("") : sp_str_view(select->config.prompt), SP_ZERO_STRUCT(sp_prompt_style_t));
   if (select->config.filter) {
-    sp_prompt_render_line(ctx, SP_LIT(" "), SP_ZERO_STRUCT(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_lit(" "), SP_ZERO_STRUCT(sp_prompt_style_t));
     if (sp_str_empty(select->state.filter_value)) {
-      sp_prompt_render_line(ctx, SP_LIT("Type to filter..."), inactive);
+      sp_prompt_render_line(ctx, sp_str_lit("Type to filter..."), inactive);
     } else {
       sp_prompt_render_line(ctx, select->state.filter_value, SP_ZERO_STRUCT(sp_prompt_style_t));
     }
@@ -2569,7 +2569,7 @@ static void sp_prompt_multiselect_render(sp_prompt_ctx_t* ctx) {
     ctx->cursor_row++;
   } else if (filtered_count == 0) {
     sp_prompt_write_rail_prefix(ctx);
-    sp_prompt_render_line(ctx, SP_LIT("(no options)"), inactive);
+    sp_prompt_render_line(ctx, sp_str_lit("(no options)"), inactive);
     ctx->cursor_col = 0;
     ctx->cursor_row++;
   } else {
@@ -2602,7 +2602,7 @@ static void sp_prompt_multiselect_render(sp_prompt_ctx_t* ctx) {
 
     if (has_top_overflow) {
       sp_prompt_write_rail_prefix(ctx);
-      sp_prompt_render_line(ctx, SP_LIT("..."), inactive);
+      sp_prompt_render_line(ctx, sp_str_lit("..."), inactive);
       ctx->cursor_col = 0;
       ctx->cursor_row++;
     }
@@ -2616,14 +2616,14 @@ static void sp_prompt_multiselect_render(sp_prompt_ctx_t* ctx) {
       sp_prompt_write_rail_prefix(ctx);
 
       if (selected) {
-        sp_prompt_render_line(ctx, SP_LIT("●"), active_symbol);
+        sp_prompt_render_line(ctx, sp_str_lit("●"), active_symbol);
       } else if (hovered) {
-        sp_prompt_render_line(ctx, SP_LIT("○"), SP_ZERO_STRUCT(sp_prompt_style_t));
+        sp_prompt_render_line(ctx, sp_str_lit("○"), SP_ZERO_STRUCT(sp_prompt_style_t));
       } else {
-        sp_prompt_render_line(ctx, SP_LIT("○"), inactive);
+        sp_prompt_render_line(ctx, sp_str_lit("○"), inactive);
       }
 
-      sp_prompt_render_line(ctx, SP_LIT(" "), SP_ZERO_STRUCT(sp_prompt_style_t));
+      sp_prompt_render_line(ctx, sp_str_lit(" "), SP_ZERO_STRUCT(sp_prompt_style_t));
 
       if (hovered) {
         sp_prompt_render_line(ctx, sp_prompt_option_label(&select->config.options[index]), SP_ZERO_STRUCT(sp_prompt_style_t));
@@ -2633,9 +2633,9 @@ static void sp_prompt_multiselect_render(sp_prompt_ctx_t* ctx) {
 
       sp_str_t hint = sp_prompt_option_hint(&select->config.options[index]);
       if (!sp_str_empty(hint)) {
-        sp_prompt_render_line(ctx, SP_LIT(" ("), inactive);
+        sp_prompt_render_line(ctx, sp_str_lit(" ("), inactive);
         sp_prompt_render_line(ctx, hint, inactive);
-        sp_prompt_render_line(ctx, SP_LIT(")"), inactive);
+        sp_prompt_render_line(ctx, sp_str_lit(")"), inactive);
       }
 
       ctx->cursor_col = 0;
@@ -2644,7 +2644,7 @@ static void sp_prompt_multiselect_render(sp_prompt_ctx_t* ctx) {
 
     if (has_bottom_overflow) {
       sp_prompt_write_rail_prefix(ctx);
-      sp_prompt_render_line(ctx, SP_LIT("..."), inactive);
+      sp_prompt_render_line(ctx, sp_str_lit("..."), inactive);
       ctx->cursor_col = 0;
       ctx->cursor_row++;
     }
@@ -2765,7 +2765,7 @@ static void sp_prompt_password_render(sp_prompt_ctx_t* ctx) {
 sp_prompt_widget_t sp_prompt_password_widget(sp_prompt_ctx_t* ctx, sp_prompt_password_t config) {
   sp_prompt_password_widget_t* user_data = sp_mem_arena_alloc_type(ctx->arena, sp_prompt_password_widget_t);
   user_data->config = config;
-  user_data->value = SP_LIT("");
+  user_data->value = sp_str_lit("");
   user_data->mask = config.mask;
   return (sp_prompt_widget_t) {
     .user_data = user_data,
@@ -2882,7 +2882,7 @@ static void sp_prompt_spinner_render(sp_prompt_ctx_t* ctx) {
 
   if (codepoint != 0) {
     sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, codepoint, 1), style);
-    sp_prompt_render_line(ctx, SP_LIT("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_lit("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
   }
   sp_prompt_render_line(ctx, sp_str_view(spinner->config.prompt), SP_ZERO_STRUCT(sp_prompt_style_t));
   ctx->cursor_col = 0;
@@ -3030,7 +3030,7 @@ sp_prompt_widget_t sp_prompt_progress_widget(sp_prompt_ctx_t* ctx, sp_prompt_pro
   sp_prompt_progress_widget_t* user_data = sp_mem_arena_alloc_type(ctx->arena, sp_prompt_progress_widget_t);
   user_data->config = config;
   user_data->value = 0.f;
-  user_data->status = SP_LIT("");
+  user_data->status = sp_str_lit("");
   return (sp_prompt_widget_t) {
     .user_data = user_data,
     .on_event = sp_prompt_progress_event,
@@ -3250,7 +3250,7 @@ static void sp_prompt_knight_rider_render(sp_prompt_ctx_t* ctx) {
     sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, codepoint, 1), style);
   }
 
-  sp_prompt_render_line(ctx, SP_LIT("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, sp_str_lit("  "), SP_ZERO_STRUCT(sp_prompt_style_t));
   sp_prompt_render_line(ctx, sp_str_view(c.prompt), SP_ZERO_STRUCT(sp_prompt_style_t));
   ctx->cursor_col = 0;
   ctx->cursor_row++;

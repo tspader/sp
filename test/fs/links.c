@@ -43,17 +43,17 @@ UTEST_F(fs, create_hard_link_file) {
     },
   });
 
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("create_hard_link_file"));
-  sp_str_t source = sp_fs_join_path_a(a, sandbox, SP_LIT("file.txt"));
-  sp_str_t link = sp_fs_join_path_a(a, sandbox, SP_LIT("file.hard"));
+  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_hard_link_file"));
+  sp_str_t source = sp_fs_join_path_a(a, sandbox, sp_str_lit("file.txt"));
+  sp_str_t link = sp_fs_join_path_a(a, sandbox, sp_str_lit("file.hard"));
 
   sp_io_writer_t writer = SP_ZERO_INITIALIZE();
   sp_io_writer_from_file_a(&writer, source, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write_str(&writer, SP_LIT("updated"), SP_NULLPTR);
+  sp_io_write_str(&writer, sp_str_lit("updated"), SP_NULLPTR);
   sp_io_writer_close(&writer);
   sp_str_t link_content = SP_ZERO_INITIALIZE();
   sp_io_read_file_a(a, link, &link_content);
-  SP_EXPECT_STR_EQ(link_content, SP_LIT("updated"));
+  SP_EXPECT_STR_EQ(link_content, sp_str_lit("updated"));
 }
 
 UTEST_F(fs, create_hard_link_existing_destination_fails) {
@@ -110,11 +110,11 @@ UTEST_F(fs, create_symlink_file) {
     },
   });
 
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("create_symlink_file"));
-  sp_str_t link = sp_fs_join_path_a(a, sandbox, SP_LIT("file.link"));
+  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_symlink_file"));
+  sp_str_t link = sp_fs_join_path_a(a, sandbox, sp_str_lit("file.link"));
   sp_str_t symlink_content = SP_ZERO_INITIALIZE();
   sp_io_read_file_a(a, link, &symlink_content);
-  SP_EXPECT_STR_EQ(symlink_content, SP_LIT("hello"));
+  SP_EXPECT_STR_EQ(symlink_content, sp_str_lit("hello"));
 }
 
 UTEST_F(fs, create_symlink_directory) {
@@ -161,13 +161,13 @@ UTEST_F(fs, canonicalize_through_symlink) {
   SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   sp_mem_t a = ut.file_manager.mem;
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("canon_through_symlink"));
+  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("canon_through_symlink"));
   sp_fs_create_dir_a(sandbox);
 
-  sp_str_t real = sp_fs_join_path_a(a, sandbox, SP_LIT("real.txt"));
-  sp_str_t link = sp_fs_join_path_a(a, sandbox, SP_LIT("link.txt"));
+  sp_str_t real = sp_fs_join_path_a(a, sandbox, sp_str_lit("real.txt"));
+  sp_str_t link = sp_fs_join_path_a(a, sandbox, sp_str_lit("link.txt"));
 
-  sp_test_file_create_ex((sp_test_file_config_t) { .path = real, .content = SP_LIT("data") });
+  sp_test_file_create_ex((sp_test_file_config_t) { .path = real, .content = sp_str_lit("data") });
   ASSERT_EQ(sp_fs_create_sym_link_a(real, link), SP_OK);
 
   sp_str_t canon_link = sp_fs_canonicalize_path_a(a, link);

@@ -2,8 +2,8 @@
 
 UTEST_F(fs, mod_time_nonzero) {
   SKIP_ON_WASM()
-  sp_str_t file = sp_test_file_path(&ut.file_manager, SP_LIT("mod_time.file"));
-  sp_str_t dir = sp_test_file_path(&ut.file_manager, SP_LIT("mod_time.dir"));
+  sp_str_t file = sp_test_file_path(&ut.file_manager, sp_str_lit("mod_time.file"));
+  sp_str_t dir = sp_test_file_path(&ut.file_manager, sp_str_lit("mod_time.dir"));
   sp_fs_create_file_a(file);
   sp_fs_create_dir_a(dir);
 
@@ -13,10 +13,10 @@ UTEST_F(fs, mod_time_nonzero) {
 
 UTEST_F(fs, mod_time_updates_after_write) {
   SKIP_ON_WASM()
-  sp_str_t file = sp_test_file_path(&ut.file_manager, SP_LIT("mod_time_write.txt"));
+  sp_str_t file = sp_test_file_path(&ut.file_manager, sp_str_lit("mod_time_write.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = file,
-    .content = SP_LIT("a"),
+    .content = sp_str_lit("a"),
   });
 
   sp_tm_epoch_t before = sp_fs_get_mod_time_a(file);
@@ -24,7 +24,7 @@ UTEST_F(fs, mod_time_updates_after_write) {
 
   sp_io_writer_t writer = SP_ZERO_INITIALIZE();
   sp_io_writer_from_file_a(&writer, file, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write_str(&writer, SP_LIT("b"), SP_NULLPTR);
+  sp_io_write_str(&writer, sp_str_lit("b"), SP_NULLPTR);
   sp_io_writer_close(&writer);
 
   sp_tm_epoch_t after = sp_fs_get_mod_time_a(file);

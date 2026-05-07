@@ -48,7 +48,7 @@ UTEST(fs_get_exe_path, no_dotdot) {
   SKIP_ON_WASM()
   sp_mem_t a = sp_mem_os_new();
   sp_str_t exe = sp_fs_get_exe_path_a(a);
-  ASSERT_FALSE(sp_str_contains(exe, SP_LIT("..")));
+  ASSERT_FALSE(sp_str_contains(exe, sp_str_lit("..")));
 }
 
 SP_TEST_MAIN()

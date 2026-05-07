@@ -889,7 +889,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
     const c8 random_order_with_seed_str[] = "--random-order=";
 
     if (0 == UTEST_STRNCMP(argv[index], help_str, sizeof(help_str) - 1)) {
-      sp_os_print(SP_LIT(
+      sp_os_print(sp_str_lit(
              "utest.h - the single file unit testing solution for C/C++!\n"
              "Command line Options:\n"
              "  --help                  Show this message and exit.\n"

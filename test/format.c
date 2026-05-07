@@ -485,9 +485,9 @@ UTEST(sp_fmt_pad, wrapped_padding_outside) {
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
-    sp_str_view("<"),
-    sp_str_view("42"),
-    sp_str_view(">"),
+    sp_str_lit("<"),
+    sp_str_lit("42"),
+    sp_str_lit(">"),
     (sp_fmt_spec_t){ .width = 6 }
   );
   sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
@@ -498,9 +498,9 @@ UTEST(sp_fmt_pad, wrapped_center) {
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
-    sp_str_view("["),
-    sp_str_view("hi"),
-    sp_str_view("]"),
+    sp_str_lit("["),
+    sp_str_lit("hi"),
+    sp_str_lit("]"),
     (sp_fmt_spec_t){ .width = 8, .align = SP_FMT_ALIGN_CENTER, .fill = '*' }
   );
   sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
@@ -568,7 +568,7 @@ UTEST(sp_fmt_directive, register_and_lookup) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
 
-  sp_fmt_directive_t* got = sp_fmt_directive_lookup(sp_str_view("wrap"));
+  sp_fmt_directive_t* got = sp_fmt_directive_lookup(sp_str_lit("wrap"));
   EXPECT_TRUE(got != SP_NULLPTR);
   EXPECT_EQ(got->kind, sp_fmt_directive_decorator);
   EXPECT_TRUE(got->decorator.before == _test_before_lt);
@@ -581,16 +581,16 @@ UTEST(sp_fmt_directive, register_and_lookup) {
 
 UTEST(sp_fmt_directive, lookup_unknown_returns_null) {
   sp_fmt_directive_reset();
-  sp_fmt_directive_t* got = sp_fmt_directive_lookup(sp_str_view("nope"));
+  sp_fmt_directive_t* got = sp_fmt_directive_lookup(sp_str_lit("nope"));
   EXPECT_EQ(got, SP_NULLPTR);
 }
 
 UTEST(sp_fmt_directive, reset_clears) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("foo", _test_before_lt, SP_NULLPTR);
-  EXPECT_TRUE(sp_fmt_directive_lookup(sp_str_view("foo")) != SP_NULLPTR);
+  EXPECT_TRUE(sp_fmt_directive_lookup(sp_str_lit("foo")) != SP_NULLPTR);
   sp_fmt_directive_reset();
-  EXPECT_EQ(sp_fmt_directive_lookup(sp_str_view("foo")), SP_NULLPTR);
+  EXPECT_EQ(sp_fmt_directive_lookup(sp_str_lit("foo")), SP_NULLPTR);
 }
 
 UTEST(sp_fmt_directive, wraps_content) {
@@ -771,9 +771,9 @@ UTEST(sp_fmt_pad, wrapped_content_overflow) {
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
-    sp_str_view("<"),
-    sp_str_view("hello"),
-    sp_str_view(">"),
+    sp_str_lit("<"),
+    sp_str_lit("hello"),
+    sp_str_lit(">"),
     (sp_fmt_spec_t){ .width = 3 }
   );
   sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
@@ -1222,290 +1222,290 @@ UTEST(sp_fmt_builtin_transform, redact) {
 
 UTEST(fmt, unsigned_integers) {
   // sp_parse_u8
-  ASSERT_EQ(sp_parse_u8(SP_LIT("0")), 0);
-  ASSERT_EQ(sp_parse_u8(SP_LIT("255")), 255);
-  ASSERT_EQ(sp_parse_u8(SP_LIT("128")), 128);
-  ASSERT_EQ(sp_parse_u8(SP_LIT("42")), 42);
+  ASSERT_EQ(sp_parse_u8(sp_str_lit("0")), 0);
+  ASSERT_EQ(sp_parse_u8(sp_str_lit("255")), 255);
+  ASSERT_EQ(sp_parse_u8(sp_str_lit("128")), 128);
+  ASSERT_EQ(sp_parse_u8(sp_str_lit("42")), 42);
   // Would assert: "256", "-1", "abc", ""
 
   // sp_parse_u16
-  ASSERT_EQ(sp_parse_u16(SP_LIT("0")), 0);
-  ASSERT_EQ(sp_parse_u16(SP_LIT("65535")), 65535);
-  ASSERT_EQ(sp_parse_u16(SP_LIT("32768")), 32768);
-  ASSERT_EQ(sp_parse_u16(SP_LIT("1234")), 1234);
+  ASSERT_EQ(sp_parse_u16(sp_str_lit("0")), 0);
+  ASSERT_EQ(sp_parse_u16(sp_str_lit("65535")), 65535);
+  ASSERT_EQ(sp_parse_u16(sp_str_lit("32768")), 32768);
+  ASSERT_EQ(sp_parse_u16(sp_str_lit("1234")), 1234);
   // Would assert: "65536", "-1", "text"
 
   // sp_parse_u32
-  ASSERT_EQ(sp_parse_u32(SP_LIT("0")), 0);
-  ASSERT_EQ(sp_parse_u32(SP_LIT("4294967295")), 4294967295U);
-  ASSERT_EQ(sp_parse_u32(SP_LIT("2147483648")), 2147483648U);
-  ASSERT_EQ(sp_parse_u32(SP_LIT("123456789")), 123456789U);
+  ASSERT_EQ(sp_parse_u32(sp_str_lit("0")), 0);
+  ASSERT_EQ(sp_parse_u32(sp_str_lit("4294967295")), 4294967295U);
+  ASSERT_EQ(sp_parse_u32(sp_str_lit("2147483648")), 2147483648U);
+  ASSERT_EQ(sp_parse_u32(sp_str_lit("123456789")), 123456789U);
   // Would assert: "4294967296", "-1", "not_a_number"
 
   // sp_parse_u64
-  ASSERT_EQ(sp_parse_u64(SP_LIT("0")), 0ULL);
-  ASSERT_EQ(sp_parse_u64(SP_LIT("18446744073709551615")), 18446744073709551615ULL);
-  ASSERT_EQ(sp_parse_u64(SP_LIT("9223372036854775808")), 9223372036854775808ULL);
-  ASSERT_EQ(sp_parse_u64(SP_LIT("1234567890123")), 1234567890123ULL);
+  ASSERT_EQ(sp_parse_u64(sp_str_lit("0")), 0ULL);
+  ASSERT_EQ(sp_parse_u64(sp_str_lit("18446744073709551615")), 18446744073709551615ULL);
+  ASSERT_EQ(sp_parse_u64(sp_str_lit("9223372036854775808")), 9223372036854775808ULL);
+  ASSERT_EQ(sp_parse_u64(sp_str_lit("1234567890123")), 1234567890123ULL);
   // Would assert: "18446744073709551616", "-1", "invalid"
 }
 
 UTEST(fmt, signed_integers) {
   // sp_parse_s8
-  ASSERT_EQ(sp_parse_s8(SP_LIT("0")), 0);
-  ASSERT_EQ(sp_parse_s8(SP_LIT("127")), 127);
-  ASSERT_EQ(sp_parse_s8(SP_LIT("-128")), -128);
-  ASSERT_EQ(sp_parse_s8(SP_LIT("-42")), -42);
-  ASSERT_EQ(sp_parse_s8(SP_LIT("42")), 42);
+  ASSERT_EQ(sp_parse_s8(sp_str_lit("0")), 0);
+  ASSERT_EQ(sp_parse_s8(sp_str_lit("127")), 127);
+  ASSERT_EQ(sp_parse_s8(sp_str_lit("-128")), -128);
+  ASSERT_EQ(sp_parse_s8(sp_str_lit("-42")), -42);
+  ASSERT_EQ(sp_parse_s8(sp_str_lit("42")), 42);
   // Would assert: "128", "-129", "text"
 
   // sp_parse_s16
-  ASSERT_EQ(sp_parse_s16(SP_LIT("0")), 0);
-  ASSERT_EQ(sp_parse_s16(SP_LIT("32767")), 32767);
-  ASSERT_EQ(sp_parse_s16(SP_LIT("-32768")), -32768);
-  ASSERT_EQ(sp_parse_s16(SP_LIT("-1234")), -1234);
-  ASSERT_EQ(sp_parse_s16(SP_LIT("1234")), 1234);
+  ASSERT_EQ(sp_parse_s16(sp_str_lit("0")), 0);
+  ASSERT_EQ(sp_parse_s16(sp_str_lit("32767")), 32767);
+  ASSERT_EQ(sp_parse_s16(sp_str_lit("-32768")), -32768);
+  ASSERT_EQ(sp_parse_s16(sp_str_lit("-1234")), -1234);
+  ASSERT_EQ(sp_parse_s16(sp_str_lit("1234")), 1234);
   // Would assert: "32768", "-32769", "invalid"
 
   // sp_parse_s32
-  ASSERT_EQ(sp_parse_s32(SP_LIT("0")), 0);
-  ASSERT_EQ(sp_parse_s32(SP_LIT("2147483647")), 2147483647);
-  ASSERT_EQ(sp_parse_s32(SP_LIT("-2147483648")), INT32_MIN);
-  ASSERT_EQ(sp_parse_s32(SP_LIT("-123456789")), -123456789);
-  ASSERT_EQ(sp_parse_s32(SP_LIT("123456789")), 123456789);
+  ASSERT_EQ(sp_parse_s32(sp_str_lit("0")), 0);
+  ASSERT_EQ(sp_parse_s32(sp_str_lit("2147483647")), 2147483647);
+  ASSERT_EQ(sp_parse_s32(sp_str_lit("-2147483648")), INT32_MIN);
+  ASSERT_EQ(sp_parse_s32(sp_str_lit("-123456789")), -123456789);
+  ASSERT_EQ(sp_parse_s32(sp_str_lit("123456789")), 123456789);
   // Would assert: "2147483648", "-2147483649", "not_number"
 
   // sp_parse_s64
-  ASSERT_EQ(sp_parse_s64(SP_LIT("0")), 0LL);
-  ASSERT_EQ(sp_parse_s64(SP_LIT("9223372036854775807")), 9223372036854775807LL);
-  ASSERT_EQ(sp_parse_s64(SP_LIT("-9223372036854775808")), INT64_MIN);
-  ASSERT_EQ(sp_parse_s64(SP_LIT("-1234567890123")), -1234567890123LL);
-  ASSERT_EQ(sp_parse_s64(SP_LIT("1234567890123")), 1234567890123LL);
+  ASSERT_EQ(sp_parse_s64(sp_str_lit("0")), 0LL);
+  ASSERT_EQ(sp_parse_s64(sp_str_lit("9223372036854775807")), 9223372036854775807LL);
+  ASSERT_EQ(sp_parse_s64(sp_str_lit("-9223372036854775808")), INT64_MIN);
+  ASSERT_EQ(sp_parse_s64(sp_str_lit("-1234567890123")), -1234567890123LL);
+  ASSERT_EQ(sp_parse_s64(sp_str_lit("1234567890123")), 1234567890123LL);
   // Would assert: "9223372036854775808", "-9223372036854775809", "abc"
 }
 
 UTEST(fmt, floating_point) {
   // sp_parse_f32
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("0")), 0.0f, 1e-5f);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("0.0")), 0.0f, 1e-5f);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("3.14159")), 3.14159f, 1e-5f);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("-3.14159")), -3.14159f, 1e-5f);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("1.23e2")), 123.0f, 1e-5f);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("1.23e-2")), 0.0123f, 1e-5f);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("-1.23e2")), -123.0f, 1e-5f);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("42")), 42.0f, 1e-5f);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("-42")), -42.0f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("0")), 0.0f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("0.0")), 0.0f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("3.14159")), 3.14159f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("-3.14159")), -3.14159f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("1.23e2")), 123.0f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("1.23e-2")), 0.0123f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("-1.23e2")), -123.0f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("42")), 42.0f, 1e-5f);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("-42")), -42.0f, 1e-5f);
   // Would assert: "nan", "inf", "text", ""
 
   // sp_parse_f64 - NOT IMPLEMENTED (SP_UNIMPLEMENTED)
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("0")), 0.0, 1e-10);
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("0.0")), 0.0, 1e-10);
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("3.141592653589793")), 3.141592653589793, 1e-10);
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("-3.141592653589793")), -3.141592653589793, 1e-10);
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("1.23e10")), 1.23e10, 1e-10);
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("1.23e-10")), 1.23e-10, 1e-20);
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("-1.23e10")), -1.23e10, 1e-10);
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("42.0")), 42.0, 1e-10);
-  // ASSERT_NEAR(sp_parse_f64(SP_LIT("-42.0")), -42.0, 1e-10);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("0")), 0.0, 1e-10);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("0.0")), 0.0, 1e-10);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("3.141592653589793")), 3.141592653589793, 1e-10);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("-3.141592653589793")), -3.141592653589793, 1e-10);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("1.23e10")), 1.23e10, 1e-10);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("1.23e-10")), 1.23e-10, 1e-20);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("-1.23e10")), -1.23e10, 1e-10);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("42.0")), 42.0, 1e-10);
+  // ASSERT_NEAR(sp_parse_f64(sp_str_lit("-42.0")), -42.0, 1e-10);
   // Would assert: "nan", "inf", "invalid", ""
 }
 
 UTEST(fmt, hex) {
-  ASSERT_EQ(sp_parse_hex(SP_LIT("0")), 0ULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("F")), 0xFULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("f")), 0xfULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("FF")), 0xFFULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("ff")), 0xffULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("DEADBEEF")), 0xDEADBEEFULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("deadbeef")), 0xdeadbeefULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("123ABC")), 0x123ABCULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("FFFFFFFFFFFFFFFF")), 0xFFFFFFFFFFFFFFFFULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("0")), 0ULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("F")), 0xFULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("f")), 0xfULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("FF")), 0xFFULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("ff")), 0xffULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("DEADBEEF")), 0xDEADBEEFULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("deadbeef")), 0xdeadbeefULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("123ABC")), 0x123ABCULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("FFFFFFFFFFFFFFFF")), 0xFFFFFFFFFFFFFFFFULL);
   // Would assert: "G", "xyz", "-F", "", "0x" prefix, "0123" octal notation
 }
 
 UTEST(fmt, hash) {
-  ASSERT_EQ(sp_parse_hash(SP_LIT("0")), 0U);
-  ASSERT_EQ(sp_parse_hash(SP_LIT("FFFFFFFF")), 0xFFFFFFFFU);
-  ASSERT_EQ(sp_parse_hash(SP_LIT("12345678")), 0x12345678U);
-  ASSERT_EQ(sp_parse_hash(SP_LIT("DEADBEEF")), 0xDEADBEEFU);
-  ASSERT_EQ(sp_parse_hash(SP_LIT("deadbeef")), 0xdeadbeefU);
-  ASSERT_EQ(sp_parse_hash(SP_LIT("ABCD")), 0xABCDU);
+  ASSERT_EQ(sp_parse_hash(sp_str_lit("0")), 0U);
+  ASSERT_EQ(sp_parse_hash(sp_str_lit("FFFFFFFF")), 0xFFFFFFFFU);
+  ASSERT_EQ(sp_parse_hash(sp_str_lit("12345678")), 0x12345678U);
+  ASSERT_EQ(sp_parse_hash(sp_str_lit("DEADBEEF")), 0xDEADBEEFU);
+  ASSERT_EQ(sp_parse_hash(sp_str_lit("deadbeef")), 0xdeadbeefU);
+  ASSERT_EQ(sp_parse_hash(sp_str_lit("ABCD")), 0xABCDU);
   // Would assert: "G", "12345678901", "-1", ""
 }
 
 UTEST(fmt, boolean) {
-  ASSERT_EQ(sp_parse_bool(SP_LIT("true")), true);
-  ASSERT_EQ(sp_parse_bool(SP_LIT("false")), false);
-  ASSERT_EQ(sp_parse_bool(SP_LIT("1")), true);
-  ASSERT_EQ(sp_parse_bool(SP_LIT("0")), false);
+  ASSERT_EQ(sp_parse_bool(sp_str_lit("true")), true);
+  ASSERT_EQ(sp_parse_bool(sp_str_lit("false")), false);
+  ASSERT_EQ(sp_parse_bool(sp_str_lit("1")), true);
+  ASSERT_EQ(sp_parse_bool(sp_str_lit("0")), false);
   // yes/no, on/off not supported - only true/false and 1/0
   // Would assert: "maybe", "2", "TRUE", "", "yes", "no", "on", "off"
 }
 
 UTEST(fmt, characters) {
   // sp_parse_c8 - expects single quoted chars like 'A'
-  ASSERT_EQ(sp_parse_c8(SP_LIT("'A'")), 'A');
-  ASSERT_EQ(sp_parse_c8(SP_LIT("'z'")), 'z');
-  ASSERT_EQ(sp_parse_c8(SP_LIT("'0'")), '0');
-  ASSERT_EQ(sp_parse_c8(SP_LIT("' '")), ' ');
-  ASSERT_EQ(sp_parse_c8(SP_LIT("'!'")), '!');
+  ASSERT_EQ(sp_parse_c8(sp_str_lit("'A'")), 'A');
+  ASSERT_EQ(sp_parse_c8(sp_str_lit("'z'")), 'z');
+  ASSERT_EQ(sp_parse_c8(sp_str_lit("'0'")), '0');
+  ASSERT_EQ(sp_parse_c8(sp_str_lit("' '")), ' ');
+  ASSERT_EQ(sp_parse_c8(sp_str_lit("'!'")), '!');
   // Would assert: "AB", "", "abc", "A" (no quotes)
 
   // sp_parse_c16 - expects single quoted chars like 'A'
-  ASSERT_EQ(sp_parse_c16(SP_LIT("'A'")), L'A');
-  ASSERT_EQ(sp_parse_c16(SP_LIT("'z'")), L'z');
-  ASSERT_EQ(sp_parse_c16(SP_LIT("'0'")), L'0');
-  ASSERT_EQ(sp_parse_c16(SP_LIT("' '")), L' ');
-  ASSERT_EQ(sp_parse_c16(SP_LIT("'!'")), L'!');
+  ASSERT_EQ(sp_parse_c16(sp_str_lit("'A'")), L'A');
+  ASSERT_EQ(sp_parse_c16(sp_str_lit("'z'")), L'z');
+  ASSERT_EQ(sp_parse_c16(sp_str_lit("'0'")), L'0');
+  ASSERT_EQ(sp_parse_c16(sp_str_lit("' '")), L' ');
+  ASSERT_EQ(sp_parse_c16(sp_str_lit("'!'")), L'!');
   // Would assert: "AB", "", "abc", "A" (no quotes)
 }
 
 UTEST(fmt, extended) {
   u32 u32_val;
-  ASSERT_TRUE(sp_parse_u32_ex(SP_LIT("42"), &u32_val));
+  ASSERT_TRUE(sp_parse_u32_ex(sp_str_lit("42"), &u32_val));
   ASSERT_EQ(u32_val, 42U);
-  ASSERT_TRUE(sp_parse_u32_ex(SP_LIT("0"), &u32_val));
+  ASSERT_TRUE(sp_parse_u32_ex(sp_str_lit("0"), &u32_val));
   ASSERT_EQ(u32_val, 0U);
-  ASSERT_TRUE(sp_parse_u32_ex(SP_LIT("4294967295"), &u32_val));
+  ASSERT_TRUE(sp_parse_u32_ex(sp_str_lit("4294967295"), &u32_val));
   ASSERT_EQ(u32_val, 4294967295U);
-  ASSERT_FALSE(sp_parse_u32_ex(SP_LIT("4294967296"), &u32_val));
-  ASSERT_FALSE(sp_parse_u32_ex(SP_LIT("-1"), &u32_val));
-  ASSERT_FALSE(sp_parse_u32_ex(SP_LIT("abc"), &u32_val));
-  ASSERT_FALSE(sp_parse_u32_ex(SP_LIT(""), &u32_val));
+  ASSERT_FALSE(sp_parse_u32_ex(sp_str_lit("4294967296"), &u32_val));
+  ASSERT_FALSE(sp_parse_u32_ex(sp_str_lit("-1"), &u32_val));
+  ASSERT_FALSE(sp_parse_u32_ex(sp_str_lit("abc"), &u32_val));
+  ASSERT_FALSE(sp_parse_u32_ex(sp_str_lit(""), &u32_val));
 
   // sp_parse_s32_ex
   s32 s32_val;
-  ASSERT_TRUE(sp_parse_s32_ex(SP_LIT("42"), &s32_val));
+  ASSERT_TRUE(sp_parse_s32_ex(sp_str_lit("42"), &s32_val));
   ASSERT_EQ(s32_val, 42);
-  ASSERT_TRUE(sp_parse_s32_ex(SP_LIT("-42"), &s32_val));
+  ASSERT_TRUE(sp_parse_s32_ex(sp_str_lit("-42"), &s32_val));
   ASSERT_EQ(s32_val, -42);
-  ASSERT_TRUE(sp_parse_s32_ex(SP_LIT("0"), &s32_val));
+  ASSERT_TRUE(sp_parse_s32_ex(sp_str_lit("0"), &s32_val));
   ASSERT_EQ(s32_val, 0);
-  ASSERT_TRUE(sp_parse_s32_ex(SP_LIT("2147483647"), &s32_val));
+  ASSERT_TRUE(sp_parse_s32_ex(sp_str_lit("2147483647"), &s32_val));
   ASSERT_EQ(s32_val, 2147483647);
-  ASSERT_TRUE(sp_parse_s32_ex(SP_LIT("-2147483648"), &s32_val));
+  ASSERT_TRUE(sp_parse_s32_ex(sp_str_lit("-2147483648"), &s32_val));
   ASSERT_EQ(s32_val, INT32_MIN);
-  ASSERT_FALSE(sp_parse_s32_ex(SP_LIT("2147483648"), &s32_val));
-  ASSERT_FALSE(sp_parse_s32_ex(SP_LIT("-2147483649"), &s32_val));
-  ASSERT_FALSE(sp_parse_s32_ex(SP_LIT("text"), &s32_val));
-  ASSERT_FALSE(sp_parse_s32_ex(SP_LIT(""), &s32_val));
+  ASSERT_FALSE(sp_parse_s32_ex(sp_str_lit("2147483648"), &s32_val));
+  ASSERT_FALSE(sp_parse_s32_ex(sp_str_lit("-2147483649"), &s32_val));
+  ASSERT_FALSE(sp_parse_s32_ex(sp_str_lit("text"), &s32_val));
+  ASSERT_FALSE(sp_parse_s32_ex(sp_str_lit(""), &s32_val));
 
   // sp_parse_f32_ex
   f32 f32_val;
-  ASSERT_TRUE(sp_parse_f32_ex(SP_LIT("3.14"), &f32_val));
+  ASSERT_TRUE(sp_parse_f32_ex(sp_str_lit("3.14"), &f32_val));
   ASSERT_NEAR(f32_val, 3.14f, 1e-5f);
-  ASSERT_TRUE(sp_parse_f32_ex(SP_LIT("-3.14"), &f32_val));
+  ASSERT_TRUE(sp_parse_f32_ex(sp_str_lit("-3.14"), &f32_val));
   ASSERT_NEAR(f32_val, -3.14f, 1e-5f);
-  ASSERT_TRUE(sp_parse_f32_ex(SP_LIT("0"), &f32_val));
+  ASSERT_TRUE(sp_parse_f32_ex(sp_str_lit("0"), &f32_val));
   ASSERT_NEAR(f32_val, 0.0f, 1e-5f);
-  ASSERT_TRUE(sp_parse_f32_ex(SP_LIT("1.23e2"), &f32_val));
+  ASSERT_TRUE(sp_parse_f32_ex(sp_str_lit("1.23e2"), &f32_val));
   ASSERT_NEAR(f32_val, 123.0f, 1e-5f);
-  ASSERT_FALSE(sp_parse_f32_ex(SP_LIT("abc"), &f32_val));
-  ASSERT_FALSE(sp_parse_f32_ex(SP_LIT(""), &f32_val));
+  ASSERT_FALSE(sp_parse_f32_ex(sp_str_lit("abc"), &f32_val));
+  ASSERT_FALSE(sp_parse_f32_ex(sp_str_lit(""), &f32_val));
 
   // sp_parse_f64_ex - NOT IMPLEMENTED (SP_UNIMPLEMENTED)
   // f64 f64_val;
-  // ASSERT_TRUE(sp_parse_f64_ex(SP_LIT("3.14"), &f64_val));
+  // ASSERT_TRUE(sp_parse_f64_ex(sp_str_lit("3.14"), &f64_val));
 
   // sp_parse_bool_ex
   bool bool_val;
-  ASSERT_TRUE(sp_parse_bool_ex(SP_LIT("true"), &bool_val));
+  ASSERT_TRUE(sp_parse_bool_ex(sp_str_lit("true"), &bool_val));
   ASSERT_EQ(bool_val, true);
-  ASSERT_TRUE(sp_parse_bool_ex(SP_LIT("false"), &bool_val));
+  ASSERT_TRUE(sp_parse_bool_ex(sp_str_lit("false"), &bool_val));
   ASSERT_EQ(bool_val, false);
-  ASSERT_TRUE(sp_parse_bool_ex(SP_LIT("1"), &bool_val));
+  ASSERT_TRUE(sp_parse_bool_ex(sp_str_lit("1"), &bool_val));
   ASSERT_EQ(bool_val, true);
-  ASSERT_TRUE(sp_parse_bool_ex(SP_LIT("0"), &bool_val));
+  ASSERT_TRUE(sp_parse_bool_ex(sp_str_lit("0"), &bool_val));
   ASSERT_EQ(bool_val, false);
-  ASSERT_FALSE(sp_parse_bool_ex(SP_LIT("maybe"), &bool_val));
-  ASSERT_FALSE(sp_parse_bool_ex(SP_LIT(""), &bool_val));
+  ASSERT_FALSE(sp_parse_bool_ex(sp_str_lit("maybe"), &bool_val));
+  ASSERT_FALSE(sp_parse_bool_ex(sp_str_lit(""), &bool_val));
 
   // sp_parse_hex_ex
   u64 hex_val;
-  ASSERT_TRUE(sp_parse_hex_ex(SP_LIT("DEADBEEF"), &hex_val));
+  ASSERT_TRUE(sp_parse_hex_ex(sp_str_lit("DEADBEEF"), &hex_val));
   ASSERT_EQ(hex_val, 0xDEADBEEFULL);
-  ASSERT_TRUE(sp_parse_hex_ex(SP_LIT("0"), &hex_val));
+  ASSERT_TRUE(sp_parse_hex_ex(sp_str_lit("0"), &hex_val));
   ASSERT_EQ(hex_val, 0ULL);
-  ASSERT_TRUE(sp_parse_hex_ex(SP_LIT("FF"), &hex_val));
+  ASSERT_TRUE(sp_parse_hex_ex(sp_str_lit("FF"), &hex_val));
   ASSERT_EQ(hex_val, 0xFFULL);
-  ASSERT_FALSE(sp_parse_hex_ex(SP_LIT("XYZ"), &hex_val));
-  ASSERT_FALSE(sp_parse_hex_ex(SP_LIT(""), &hex_val));
+  ASSERT_FALSE(sp_parse_hex_ex(sp_str_lit("XYZ"), &hex_val));
+  ASSERT_FALSE(sp_parse_hex_ex(sp_str_lit(""), &hex_val));
 
   // sp_parse_hash_ex
   sp_hash_t hash_val;
-  ASSERT_TRUE(sp_parse_hash_ex(SP_LIT("DEADBEEF"), &hash_val));
+  ASSERT_TRUE(sp_parse_hash_ex(sp_str_lit("DEADBEEF"), &hash_val));
   ASSERT_EQ(hash_val, 0xDEADBEEF);
-  ASSERT_TRUE(sp_parse_hash_ex(SP_LIT("0"), &hash_val));
+  ASSERT_TRUE(sp_parse_hash_ex(sp_str_lit("0"), &hash_val));
   ASSERT_EQ(hash_val, 0);
-  ASSERT_FALSE(sp_parse_hash_ex(SP_LIT("GHIJKLMN"), &hash_val));
-  ASSERT_FALSE(sp_parse_hash_ex(SP_LIT(""), &hash_val));
+  ASSERT_FALSE(sp_parse_hash_ex(sp_str_lit("GHIJKLMN"), &hash_val));
+  ASSERT_FALSE(sp_parse_hash_ex(sp_str_lit(""), &hash_val));
 
   // sp_parse_c8_ex
   c8 c8_val;
-  ASSERT_TRUE(sp_parse_c8_ex(SP_LIT("'A'"), &c8_val));
+  ASSERT_TRUE(sp_parse_c8_ex(sp_str_lit("'A'"), &c8_val));
   ASSERT_EQ(c8_val, 'A');
-  ASSERT_TRUE(sp_parse_c8_ex(SP_LIT("' '"), &c8_val));
+  ASSERT_TRUE(sp_parse_c8_ex(sp_str_lit("' '"), &c8_val));
   ASSERT_EQ(c8_val, ' ');
-  ASSERT_FALSE(sp_parse_c8_ex(SP_LIT("AB"), &c8_val));
-  ASSERT_FALSE(sp_parse_c8_ex(SP_LIT(""), &c8_val));
+  ASSERT_FALSE(sp_parse_c8_ex(sp_str_lit("AB"), &c8_val));
+  ASSERT_FALSE(sp_parse_c8_ex(sp_str_lit(""), &c8_val));
 
   // sp_parse_c16_ex
   u16 c16_val;
-  ASSERT_TRUE(sp_parse_c16_ex(SP_LIT("'Z'"), &c16_val));
+  ASSERT_TRUE(sp_parse_c16_ex(sp_str_lit("'Z'"), &c16_val));
   ASSERT_EQ(c16_val, L'Z');
-  ASSERT_TRUE(sp_parse_c16_ex(SP_LIT("'!'"), &c16_val));
+  ASSERT_TRUE(sp_parse_c16_ex(sp_str_lit("'!'"), &c16_val));
   ASSERT_EQ(c16_val, L'!');
-  ASSERT_FALSE(sp_parse_c16_ex(SP_LIT("XY"), &c16_val));
-  ASSERT_FALSE(sp_parse_c16_ex(SP_LIT(""), &c16_val));
+  ASSERT_FALSE(sp_parse_c16_ex(sp_str_lit("XY"), &c16_val));
+  ASSERT_FALSE(sp_parse_c16_ex(sp_str_lit(""), &c16_val));
 
   // Additional extended tests for completeness
   u8 u8_val;
-  ASSERT_TRUE(sp_parse_u8_ex(SP_LIT("255"), &u8_val));
+  ASSERT_TRUE(sp_parse_u8_ex(sp_str_lit("255"), &u8_val));
   ASSERT_EQ(u8_val, 255);
-  ASSERT_FALSE(sp_parse_u8_ex(SP_LIT("256"), &u8_val));
+  ASSERT_FALSE(sp_parse_u8_ex(sp_str_lit("256"), &u8_val));
 
   u16 u16_val;
-  ASSERT_TRUE(sp_parse_u16_ex(SP_LIT("65535"), &u16_val));
+  ASSERT_TRUE(sp_parse_u16_ex(sp_str_lit("65535"), &u16_val));
   ASSERT_EQ(u16_val, 65535);
-  ASSERT_FALSE(sp_parse_u16_ex(SP_LIT("65536"), &u16_val));
+  ASSERT_FALSE(sp_parse_u16_ex(sp_str_lit("65536"), &u16_val));
 
   u64 u64_val;
-  ASSERT_TRUE(sp_parse_u64_ex(SP_LIT("18446744073709551615"), &u64_val));
+  ASSERT_TRUE(sp_parse_u64_ex(sp_str_lit("18446744073709551615"), &u64_val));
   ASSERT_EQ(u64_val, 18446744073709551615ULL);
-  ASSERT_FALSE(sp_parse_u64_ex(SP_LIT("not_a_number"), &u64_val));
+  ASSERT_FALSE(sp_parse_u64_ex(sp_str_lit("not_a_number"), &u64_val));
 
   s8 s8_val;
-  ASSERT_TRUE(sp_parse_s8_ex(SP_LIT("-128"), &s8_val));
+  ASSERT_TRUE(sp_parse_s8_ex(sp_str_lit("-128"), &s8_val));
   ASSERT_EQ(s8_val, -128);
-  ASSERT_FALSE(sp_parse_s8_ex(SP_LIT("-129"), &s8_val));
+  ASSERT_FALSE(sp_parse_s8_ex(sp_str_lit("-129"), &s8_val));
 
   s16 s16_val;
-  ASSERT_TRUE(sp_parse_s16_ex(SP_LIT("32767"), &s16_val));
+  ASSERT_TRUE(sp_parse_s16_ex(sp_str_lit("32767"), &s16_val));
   ASSERT_EQ(s16_val, 32767);
-  ASSERT_FALSE(sp_parse_s16_ex(SP_LIT("32768"), &s16_val));
+  ASSERT_FALSE(sp_parse_s16_ex(sp_str_lit("32768"), &s16_val));
 
   s64 s64_val;
-  ASSERT_TRUE(sp_parse_s64_ex(SP_LIT("9223372036854775807"), &s64_val));
+  ASSERT_TRUE(sp_parse_s64_ex(sp_str_lit("9223372036854775807"), &s64_val));
   ASSERT_EQ(s64_val, 9223372036854775807LL);
-  ASSERT_FALSE(sp_parse_s64_ex(SP_LIT("invalid"), &s64_val));
+  ASSERT_FALSE(sp_parse_s64_ex(sp_str_lit("invalid"), &s64_val));
 }
 
 UTEST(fmt, parse_edge_cases) {
-  ASSERT_EQ(sp_parse_u32(SP_LIT("00042")), 42U);
-  ASSERT_EQ(sp_parse_s32(SP_LIT("-00042")), -42);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("003.14")), 3.14f, 1e-5f);
+  ASSERT_EQ(sp_parse_u32(sp_str_lit("00042")), 42U);
+  ASSERT_EQ(sp_parse_s32(sp_str_lit("-00042")), -42);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("003.14")), 3.14f, 1e-5f);
 
-  ASSERT_EQ(sp_parse_s32(SP_LIT("+42")), 42);
-  ASSERT_NEAR(sp_parse_f32(SP_LIT("+3.14")), 3.14f, 1e-5f);
+  ASSERT_EQ(sp_parse_s32(sp_str_lit("+42")), 42);
+  ASSERT_NEAR(sp_parse_f32(sp_str_lit("+3.14")), 3.14f, 1e-5f);
 
-  ASSERT_EQ(sp_parse_hex(SP_LIT("DeAdBeEf")), 0xdeadbeefULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("DEADBEEF")), 0xDEADBEEFULL);
-  ASSERT_EQ(sp_parse_hex(SP_LIT("deadbeef")), 0xdeadbeefULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("DeAdBeEf")), 0xdeadbeefULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("DEADBEEF")), 0xDEADBEEFULL);
+  ASSERT_EQ(sp_parse_hex(sp_str_lit("deadbeef")), 0xdeadbeefULL);
 
-  ASSERT_EQ(sp_parse_u8(SP_LIT("255")), 255);
-  ASSERT_EQ(sp_parse_u16(SP_LIT("65535")), 65535);
-  ASSERT_EQ(sp_parse_u32(SP_LIT("4294967295")), 4294967295U);
-  ASSERT_EQ(sp_parse_u64(SP_LIT("18446744073709551615")), 18446744073709551615ULL);
+  ASSERT_EQ(sp_parse_u8(sp_str_lit("255")), 255);
+  ASSERT_EQ(sp_parse_u16(sp_str_lit("65535")), 65535);
+  ASSERT_EQ(sp_parse_u32(sp_str_lit("4294967295")), 4294967295U);
+  ASSERT_EQ(sp_parse_u64(sp_str_lit("18446744073709551615")), 18446744073709551615ULL);
 }
 
 UTEST(fmt, hex_zero) {

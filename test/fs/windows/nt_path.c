@@ -32,7 +32,7 @@ static bool nt_path_ends_with(sp_nt_unicode_string_t s, const u16* suffix, u32 s
 UTEST(nt_path, drive_absolute_forward_slashes) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:/foo/bar"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:/foo/bar"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 prefix[] = {'\\','?','?','\\','C',':','\\'};
@@ -47,7 +47,7 @@ UTEST(nt_path, drive_absolute_forward_slashes) {
 UTEST(nt_path, drive_absolute_backslashes) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:\\foo\\bar"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\foo\\bar"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','f','o','o','\\','b','a','r'};
@@ -63,7 +63,7 @@ UTEST(nt_path, drive_absolute_backslashes) {
 UTEST(nt_path, unc_path) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("\\\\server\\share\\foo"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("\\\\server\\share\\foo"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 prefix[] = {'\\','?','?','\\','U','N','C','\\'};
@@ -78,7 +78,7 @@ UTEST(nt_path, unc_path) {
 UTEST(nt_path, verbatim_passthrough) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("\\\\?\\C:\\foo"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("\\\\?\\C:\\foo"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 prefix[] = {'\\','?','?','\\','C',':','\\'};
@@ -90,7 +90,7 @@ UTEST(nt_path, verbatim_passthrough) {
 UTEST(nt_path, dotdot_resolved) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:\\foo\\..\\bar"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\foo\\..\\bar"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','b','a','r'};
@@ -105,7 +105,7 @@ UTEST(nt_path, dotdot_resolved) {
 UTEST(nt_path, dot_resolved) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:\\foo\\.\\bar"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\foo\\.\\bar"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','f','o','o','\\','b','a','r'};
@@ -117,7 +117,7 @@ UTEST(nt_path, dot_resolved) {
 UTEST(nt_path, mixed_slashes) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:/foo\\bar/baz"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:/foo\\bar/baz"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','f','o','o','\\','b','a','r','\\','b','a','z'};
@@ -129,7 +129,7 @@ UTEST(nt_path, mixed_slashes) {
 UTEST(nt_path, trailing_dot_stripped) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:\\foo.txt."), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\foo.txt."), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','f','o','o','.','t','x','t'};
@@ -141,7 +141,7 @@ UTEST(nt_path, trailing_dot_stripped) {
 UTEST(nt_path, non_ascii) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:\\caf\xC3\xA9.txt"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\caf\xC3\xA9.txt"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
 
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','c','a','f', 0x00E9, '.','t','x','t'};
@@ -156,14 +156,14 @@ UTEST(nt_path, non_ascii) {
 UTEST(nt_path, empty_rejected) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT(""), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit(""), &path);
   EXPECT_FALSE(SP_NT_SUCCESS(st));
 }
 
 UTEST(nt_path, length_field_matches_buffer) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:\\abc"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\abc"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
   u32 count = 0;
   while (path.name.Buffer[count] && count < 256) count++;
@@ -196,7 +196,7 @@ UTEST(nt_path, long_verbatim_exceeds_max_path) {
 UTEST(nt_path, rtl_allocates_buffer) {
   SKIP_ON_WASM()
   sp_sys_nt_path_t path;
-  sp_nt_status_t st = sp_sys_nt_path(SP_LIT("C:\\x"), &path);
+  sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\x"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
   EXPECT_NE(path.heap_buffer, SP_NULLPTR);
   sp_sys_nt_path_free(&path);

@@ -146,11 +146,11 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &sb);
   sp_fmt_io(&sb, "{}{} {} {} {} {}{}\n",
     sp_fmt_cstr(SP_ANSI_FG_BRIGHT_BLACK),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), SP_LIT("test"), max_name)),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), SP_LIT("n"), max_n_width)),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), SP_LIT("sp_ht"), time_width)),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), SP_LIT("stb_ds"), time_width)),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), SP_LIT("ratio"), ratio_width)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("test"), max_name)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("n"), max_n_width)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("sp_ht"), time_width)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("stb_ds"), time_width)),
+    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("ratio"), ratio_width)),
     sp_fmt_cstr(SP_ANSI_RESET));
 
   sp_da_for(results, i) {
@@ -408,32 +408,32 @@ s32 main(s32 argc, const c8** argv) {
     {
       .kernels = { .deinit = kernel_deinit, .test = kernel_seq_insert },
       .iterations = { DEFAULT_ITERS },
-      .name = SP_LIT("seq_insert"),
+      .name = sp_str_lit("seq_insert"),
     },
     {
       .kernels = { .init = kernel_seq_lookup_init, .deinit = kernel_deinit, .test = kernel_seq_lookup },
       .iterations = { DEFAULT_ITERS },
-      .name = SP_LIT("seq_lookup"),
+      .name = sp_str_lit("seq_lookup"),
     },
     {
       .kernels = { .deinit = kernel_deinit, .test = kernel_rnd_insert },
       .iterations = { DEFAULT_ITERS },
-      .name = SP_LIT("rnd_insert"),
+      .name = sp_str_lit("rnd_insert"),
     },
     {
       .kernels = { .init = kernel_rnd_lookup_init, .deinit = kernel_deinit, .test = kernel_rnd_lookup },
       .iterations = { DEFAULT_ITERS },
-      .name = SP_LIT("rnd_lookup"),
+      .name = sp_str_lit("rnd_lookup"),
     },
     {
       .kernels = { .init = kernel_delete_init, .deinit = kernel_deinit, .test = kernel_delete },
       .iterations = { DEFAULT_ITERS },
-      .name = SP_LIT("delete"),
+      .name = sp_str_lit("delete"),
     },
     {
       .kernels = { .deinit = kernel_deinit, .test = kernel_mixed },
       .iterations = { DEFAULT_ITERS },
-      .name = SP_LIT("mixed"),
+      .name = sp_str_lit("mixed"),
     },
   };
   run_benchmarks(benches, sp_carr_len(benches));

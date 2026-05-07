@@ -84,24 +84,24 @@ UTEST_F(asset_registry, basic_add_and_find) {
 
   // Add an asset
   sp_test_asset_data_t* data1 = sp_alloc_type_a(ut.mem.arena, sp_test_asset_data_t);
-  data1->content = SP_LIT("test content");
+  data1->content = sp_str_lit("test content");
   data1->value = 42;
 
-  sp_asset_t* added = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT("test_asset"), data1);
+  sp_asset_t* added = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, sp_str_lit("test_asset"), data1);
   ASSERT_NE(added, SP_NULLPTR);
   ASSERT_EQ(added->kind, SP_ASSET_KIND_TEST);
-  ASSERT_TRUE(sp_str_equal(added->name, SP_LIT("test_asset")));
+  ASSERT_TRUE(sp_str_equal(added->name, sp_str_lit("test_asset")));
   ASSERT_EQ(added->state, SP_ASSET_STATE_COMPLETED);
   ASSERT_EQ(sp_asset_data(added, sp_test_asset_data_t), data1);
 
   // Find the asset
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("test_asset"));
+  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit("test_asset"));
   ASSERT_NE(found, SP_NULLPTR);
   ASSERT_EQ(found, added);
   ASSERT_EQ(sp_asset_data(found, sp_test_asset_data_t), data1);
 
   // Find non-existent asset
-  sp_asset_t* not_found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("nonexistent"));
+  sp_asset_t* not_found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit("nonexistent"));
   ASSERT_EQ(not_found, SP_NULLPTR);
 
   sp_asset_registry_shutdown(&registry);
@@ -123,14 +123,14 @@ UTEST_F(asset_registry, same_name_different_types) {
   sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Add assets with same name but different types
-  sp_asset_registry_add(&registry, 1001, SP_LIT("shared_name"), (void*)0x1);
-  sp_asset_registry_add(&registry, 1002, SP_LIT("shared_name"), (void*)0x2);
-  sp_asset_registry_add(&registry, 1003, SP_LIT("shared_name"), (void*)0x3);
+  sp_asset_registry_add(&registry, 1001, sp_str_lit("shared_name"), (void*)0x1);
+  sp_asset_registry_add(&registry, 1002, sp_str_lit("shared_name"), (void*)0x2);
+  sp_asset_registry_add(&registry, 1003, sp_str_lit("shared_name"), (void*)0x3);
 
   // Find each one
-  sp_asset_t* asset1 = sp_asset_registry_find(&registry, 1001, SP_LIT("shared_name"));
-  sp_asset_t* asset2 = sp_asset_registry_find(&registry, 1002, SP_LIT("shared_name"));
-  sp_asset_t* asset3 = sp_asset_registry_find(&registry, 1003, SP_LIT("shared_name"));
+  sp_asset_t* asset1 = sp_asset_registry_find(&registry, 1001, sp_str_lit("shared_name"));
+  sp_asset_t* asset2 = sp_asset_registry_find(&registry, 1002, sp_str_lit("shared_name"));
+  sp_asset_t* asset3 = sp_asset_registry_find(&registry, 1003, sp_str_lit("shared_name"));
 
   ASSERT_NE(asset1, SP_NULLPTR);
   ASSERT_NE(asset2, SP_NULLPTR);
@@ -168,11 +168,11 @@ UTEST_F(asset_registry, string_copying) {
   sp_cstr_copy_to("modified!", temp_buffer, sizeof(temp_buffer));
 
   // The asset's name should still be intact
-  ASSERT_TRUE(sp_str_equal(asset->name, SP_LIT("temp_asset")));
+  ASSERT_TRUE(sp_str_equal(asset->name, sp_str_lit("temp_asset")));
   ASSERT_FALSE(sp_str_equal(asset->name, sp_str_from_cstr_a(sp_mem_get_scratch(), temp_buffer)));
 
   // Should still be findable with original name
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("temp_asset"));
+  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit("temp_asset"));
   ASSERT_EQ(found, asset);
 
   sp_asset_registry_shutdown(&registry);
@@ -191,12 +191,12 @@ UTEST_F(asset_registry, null_user_data) {
   sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Add asset with NULL data
-  sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT("null_asset"), SP_NULLPTR);
+  sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, sp_str_lit("null_asset"), SP_NULLPTR);
   ASSERT_NE(asset, SP_NULLPTR);
   ASSERT_EQ(sp_atomic_ptr_get(&asset->data), SP_NULLPTR);
 
   // Should be findable
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("null_asset"));
+  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit("null_asset"));
   ASSERT_EQ(found, asset);
   ASSERT_EQ(sp_atomic_ptr_get(&found->data), SP_NULLPTR);
 
@@ -216,12 +216,12 @@ UTEST_F(asset_registry, empty_names) {
   sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Add asset with empty name
-  sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT(""), (void*)0xDEAD);
+  sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, sp_str_lit(""), (void*)0xDEAD);
   ASSERT_NE(asset, SP_NULLPTR);
   ASSERT_EQ(asset->name.len, 0);
 
   // Should be findable with empty name
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT(""));
+  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit(""));
   ASSERT_EQ(found, asset);
   ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)0xDEAD);
 
@@ -248,16 +248,16 @@ UTEST_F(asset_registry, import_completion_pipeline) {
 
   // Create test data
   sp_test_asset_data_t input_data = {
-    .content = SP_LIT("async content"),
+    .content = sp_str_lit("async content"),
     .value = 999
   };
 
   // Import an asset (goes through the async pipeline)
-  sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("async_asset"), &input_data);
+  sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, sp_str_lit("async_asset"), &input_data);
   ASSERT_NE(asset, SP_NULLPTR);
 
   // Should be immediately findable with default data (worker is gated)
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("async_asset"));
+  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit("async_asset"));
   ASSERT_EQ(found, asset);
   ASSERT_EQ(sp_asset_data(found, sp_test_asset_data_t), &s_fallback);
 
@@ -273,7 +273,7 @@ UTEST_F(asset_registry, import_completion_pipeline) {
   sp_test_asset_data_t* result_data = sp_asset_data(asset, sp_test_asset_data_t);
   ASSERT_NE(result_data, &s_fallback);
   ASSERT_NE(result_data, SP_NULLPTR);
-  ASSERT_TRUE(sp_str_equal(result_data->content, SP_LIT("async content")));
+  ASSERT_TRUE(sp_str_equal(result_data->content, sp_str_lit("async content")));
   ASSERT_EQ(result_data->value, 999);
 
   sp_asset_registry_shutdown(&registry);
@@ -299,12 +299,12 @@ UTEST_F(asset_registry, state_transitions) {
   sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   sp_test_asset_data_t input = {
-    .content = SP_LIT("state test"),
+    .content = sp_str_lit("state test"),
     .value = 777
   };
 
   // Start import - should be QUEUED initially (worker is gated)
-  sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("state_asset"), &input);
+  sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, sp_str_lit("state_asset"), &input);
   ASSERT_NE(asset, SP_NULLPTR);
   ASSERT_EQ(asset->state, SP_ASSET_STATE_QUEUED);
 
@@ -435,7 +435,7 @@ UTEST_F(asset_registry, stable_pointers) {
   sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   // Get a pointer to the first asset
-  sp_asset_t* first = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, SP_LIT("first"), (void*)0xAAAA);
+  sp_asset_t* first = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, sp_str_lit("first"), (void*)0xAAAA);
   ASSERT_NE(first, SP_NULLPTR);
 
   // Insert many more assets
@@ -446,10 +446,10 @@ UTEST_F(asset_registry, stable_pointers) {
 
   // The original pointer should still be valid
   ASSERT_EQ(sp_atomic_ptr_get(&first->data), (void*)0xAAAA);
-  ASSERT_TRUE(sp_str_equal(first->name, SP_LIT("first")));
+  ASSERT_TRUE(sp_str_equal(first->name, sp_str_lit("first")));
 
   // And findable
-  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, SP_LIT("first"));
+  sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit("first"));
   ASSERT_EQ(found, first);
 
   sp_asset_registry_shutdown(&registry);
@@ -475,12 +475,12 @@ UTEST_F(asset_registry, default_data_before_completion) {
   sp_asset_registry_init(&registry, ut.mem.tracking, config);
 
   sp_test_asset_data_t input = {
-    .content = SP_LIT("real content"),
+    .content = sp_str_lit("real content"),
     .value = 42
   };
 
   // Import returns immediately with stable pointer
-  sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, SP_LIT("my_asset"), &input);
+  sp_asset_t* asset = sp_asset_registry_import(&registry, SP_ASSET_KIND_TEST, sp_str_lit("my_asset"), &input);
 
   // Data is default before completion (worker is gated)
   sp_test_asset_data_t* data_before = sp_asset_data(asset, sp_test_asset_data_t);
@@ -496,7 +496,7 @@ UTEST_F(asset_registry, default_data_before_completion) {
   sp_test_asset_data_t* data_after = sp_asset_data(asset, sp_test_asset_data_t);
   ASSERT_NE(data_after, &s_fallback);
   ASSERT_EQ(data_after->value, 42);
-  ASSERT_TRUE(sp_str_equal(data_after->content, SP_LIT("real content")));
+  ASSERT_TRUE(sp_str_equal(data_after->content, sp_str_lit("real content")));
 
   sp_asset_registry_shutdown(&registry);
   sp_semaphore_destroy(&s_test_asset_gate);

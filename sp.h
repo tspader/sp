@@ -263,12 +263,12 @@
 // SP_ALIGN //
 //////////////
 #if defined(SP_MSVC)
-  #define sp_align(n) __declspec(align(n))
+  #define SP_ALIGN(n) __declspec(align(n))
 #elif defined(SP_GNUC) || defined(SP_TCC)
-  #define sp_align(n) __attribute__((aligned(n)))
+  #define SP_ALIGN(n) __attribute__((aligned(n)))
 #else
   // @spader Too lazy to actually think about this
-  #define sp_align(n) _Alignas(n)
+  #define SP_ALIGN(n) _Alignas(n)
 #endif
 
 #ifdef SP_CPP
@@ -316,7 +316,7 @@
 // sp_assert() is platform dependent, so it's defined with the other platform stuff. The macros
 // that just wrap it with some goodies are agnostic, though, so they're here
 #define SP_ASSERT(condition) sp_assert((condition))
-#define sp_assert(x) sp_sys_assert(__FILE__, SP_MACRO_STR(__LINE__), __func__, #x, (bool)(x))
+#define sp_assert(x) sp_assert_f(sp_str_lit(__FILE__), sp_str_lit(SP_MACRO_STR(__LINE__)), sp_cstr_as_str(__func__), sp_str_lit(#x), (bool)(x))
 
 #define sp_fatal(FMT, ...) do { sp_log_a((FMT), ##__VA_ARGS__); sp_assert(false); } while (0)
 
@@ -339,7 +339,6 @@
 #define sp_incomplete() SP_INCOMPLETE()
 
 #define SP_TYPEDEF_FN(return_type, name, ...) typedef return_type(*name)(__VA_ARGS__)
-#define sp_typedef_fn(return_type, name, ...) SP_TYPEDEF_FN(return_type, name, __VA_ARGS__)
 
 #define SP_UNUSED(x) ((void)(x))
 #define sp_unused(x) SP_UNUSED(x)
@@ -357,12 +356,9 @@
 #define SP_UNIQUE_ID() SP_MACRO_CAT(__sp_unique_name__, __LINE__)
 #define sp_unique_id() SP_UNIQUE_ID()
 
-#define SP_MAX(a, b) (a) > (b) ? (a) : (b)
-#define sp_max(a, b) SP_MAX(a, b)
-#define SP_MIN(a, b) (a) > (b) ? (b) : (a)
-#define sp_min(a, b) SP_MIN(a, b)
-#define SP_SWAP(t, a, b) { t SP_UNIQUE_ID() = (a); (a) = (b); (b) = SP_UNIQUE_ID(); }
-#define sp_swap(t, a, b) SP_SWAP(t, a, b)
+#define sp_max(a, b) (a) > (b) ? (a) : (b)
+#define sp_min(a, b) (a) > (b) ? (b) : (a)
+#define sp_swap(t, a, b) { t SP_UNIQUE_ID() = (a); (a) = (b); (b) = SP_UNIQUE_ID(); }
 
 #define SP_QSORT_A_FIRST -1
 #define SP_QSORT_B_FIRST 1
@@ -374,13 +370,13 @@
 #define sp_color_hsv_lit(H, S, V) SP_COLOR_HSV(H, S, V)
 
 #define SP_X_ENUM_CASE_TO_CSTR(ID)         case ID: { return SP_MACRO_STR(ID); }
-#define SP_X_ENUM_CASE_TO_STRING(ID)       case ID: { return SP_LIT(SP_MACRO_STR(ID)); }
+#define SP_X_ENUM_CASE_TO_STRING(ID)       case ID: { return sp_str_lit(SP_MACRO_STR(ID)); }
 #define SP_X_ENUM_DEFINE(ID) ID,
 
 #define SP_X_NAMED_ENUM_CASE_TO_CSTR(ID, NAME)         case ID: { return (NAME); }
 #define SP_X_NAMED_ENUM_CASE_TO_STRING(ID, NAME)       case ID: { return sp_str_lit(NAME); }
 #define SP_X_NAMED_ENUM_DEFINE(ID, NAME) ID,
-#define SP_X_NAMED_ENUM_STR_TO_ENUM(ID, NAME) if (sp_str_equal(str, SP_LIT(NAME))) return ID;
+#define SP_X_NAMED_ENUM_STR_TO_ENUM(ID, NAME) if (sp_str_equal(str, sp_str_lit(NAME))) return ID;
 
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
@@ -394,7 +390,7 @@
 #define sp_size_to_index(size) SP_SIZE_TO_INDEX(size)
 
 #define SP_MEM_ALIGNMENT 16
-#define sp_aligned() sp_align(SP_MEM_ALIGNMENT)
+#define SP_ALIGNED SP_ALIGN(SP_MEM_ALIGNMENT)
 #define sp_align_up(ptr, align) ((void*)(((uintptr_t)(ptr) + ((uintptr_t)(align) - 1)) & ~((uintptr_t)(align) - 1)))
 #define sp_align_offset(val, align) ((((val) + ((u64)(align) - 1)) & ~((u64)(align) - 1)))
 
@@ -1111,29 +1107,29 @@ typedef struct {
   u32               raw_attrs;
 } sp_sys_stat_t;
 
-sp_typedef_fn(int, sp_qsort_fn_t, const void *, const void *);
+SP_TYPEDEF_FN(int, sp_qsort_fn_t, const void *, const void *);
 
 s64         sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count);
 s64         sp_sys_write(sp_sys_fd_t fd, const void* buf, u64 count);
-sp_sys_fd_t sp_sys_open(const c8* path, s32 flags, s32 mode);
+sp_sys_fd_t sp_sys_open(const c8* path, u32 len, s32 flags, s32 mode);
 s32         sp_sys_close(sp_sys_fd_t fd);
 s32         sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
 s64         sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence);
-s32         sp_sys_stat(const c8* path, sp_sys_stat_t* st);
-s32         sp_sys_lstat(const c8* path, sp_sys_stat_t* st);
+s32         sp_sys_stat(const c8* path, u32 len, sp_sys_stat_t* st);
+s32         sp_sys_lstat(const c8* path, u32 len, sp_sys_stat_t* st);
 s32         sp_sys_fstat(sp_sys_fd_t fd, sp_sys_stat_t* st);
-s32         sp_sys_mkdir(const c8* path, s32 mode);
-s32         sp_sys_rmdir(const c8* path);
-s32         sp_sys_unlink(const c8* path);
-s32         sp_sys_rename(const c8* oldpath, const c8* newpath);
-s32         sp_sys_chdir(const c8* path);
+s32         sp_sys_mkdir(const c8* path, u32 len, s32 mode);
+s32         sp_sys_rmdir(const c8* path, u32 len);
+s32         sp_sys_unlink(const c8* path, u32 len);
+s32         sp_sys_rename(const c8* from, u32 from_len, const c8* to, u32 to_len);
+s32         sp_sys_chdir(const c8* path, u32 len);
 s64         sp_sys_getcwd(char* buf, u64 size);
-s32         sp_sys_link(const c8* oldpath, const c8* newpath);
-s32         sp_sys_symlink(const c8* target, const c8* linkpath);
-s32         sp_sys_chmod(const c8* path, const sp_sys_stat_t* st);
+s32         sp_sys_link(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len);
+s32         sp_sys_symlink(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len);
+s32         sp_sys_chmod(const c8* path, u32 len, const sp_sys_stat_t* st);
 s32         sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
 s32         sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
-s64         sp_sys_canonicalize_path(const c8* path, c8* buf, u64 size);
+s64         sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size);
 s64         sp_sys_get_exe_path(c8* buf, u64 size);
 s64         sp_sys_get_storage_path(c8* buf, u64 size);
 s64         sp_sys_get_config_path(c8* buf, u64 size);
@@ -1144,11 +1140,21 @@ void*       sp_sys_alloc(u64 size);
 void        sp_sys_free(void* ptr, u64 size);
 void*       sp_sys_memcpy(void* dest, const void* src, u64 n);
 void*       sp_sys_memmove(void* dest, const void* src, u64 n);
-void*       sp_sys_memset(void* dest, s32 c, u64 n);
+void*       sp_sys_memset(void* dest, u8 fill, u64 n);
 s32         sp_sys_memcmp(const void* a, const void* b, u64 n);
-void        sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* expr, bool cond);
-
-s32 sp_sys_rmdir_s(sp_str_t path);
+void        sp_sys_assert(bool cond);
+sp_sys_fd_t sp_sys_open_s(sp_str_t path, s32 flags, s32 mode);
+s32         sp_sys_stat_s(sp_str_t path, sp_sys_stat_t* st);
+s32         sp_sys_lstat_s(sp_str_t path, sp_sys_stat_t* st);
+s32         sp_sys_mkdir_s(sp_str_t path, s32 mode);
+s32         sp_sys_rmdir_s(sp_str_t path);
+s32         sp_sys_unlink_s(sp_str_t path);
+s32         sp_sys_rename_s(sp_str_t from, sp_str_t to);
+s32         sp_sys_chdir_s(sp_str_t path);
+s32         sp_sys_link_s(sp_str_t existing, sp_str_t alias);
+s32         sp_sys_symlink_s(sp_str_t existing, sp_str_t alias);
+s32         sp_sys_chmod_s(sp_str_t path, const sp_sys_stat_t* st);
+s64         sp_sys_canonicalize_path_s(sp_str_t path, c8* buf, u64 size);
 
 //  ██████   ██████   █████████   █████ ██████   █████
 // ░░██████ ██████   ███░░░░░███ ░░███ ░░██████ ░░███
@@ -1326,7 +1332,7 @@ typedef struct {
   u8 alignment;
 } sp_mem_arena_t;
 
-typedef struct sp_aligned() {
+typedef struct SP_ALIGNED {
   u64 size;
 } sp_mem_os_header_t;
 
@@ -1451,7 +1457,7 @@ SP_API sp_hash_t sp_hash_bytes(const void* p, u64 len, u64 seed);
 // ░░░░░░░░░░      ░░░░░    ░░░░░    ░░░░░    ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░    ░░░░░
 // @array @dyn_array @da
 
-typedef struct sp_aligned() {
+typedef struct SP_ALIGNED {
   u64 size;
   u64 capacity;
   sp_mem_t allocator;
@@ -2069,7 +2075,7 @@ typedef struct {
 #define SP_UTF8_ASCII_MAX     0x80
 
 typedef struct {
-  struct { const u8* data; u32 len; } str;
+  sp_str_t str;
   s32 index;
   u32 codepoint;
   u8 codepoint_len;
@@ -2078,15 +2084,7 @@ typedef struct {
 SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
 SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
-#define sp_str(STR, LEN) (sp_rval(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(LEN) })
 #define sp_str_lit(STR)  (sp_rval(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(sizeof(STR) - 1) })
-#define sp_lit(STR)      SP_LIT(STR)
-
-#define SP_CSTR(STR)     sp_str((STR), sp_cstr_len(STR))
-#define sp_cstr(STR)     SP_CSTR(STR)
-#define SP_STR(STR, LEN) sp_str(STR, LEN)
-#define SP_LIT(STR)      sp_str_lit(STR)
-
 #define sp_str_for(str, it) for (u32 it = 0; it < str.len; it++)
 #define sp_str_for_it(str, it) for (sp_str_it_t it = sp_str_it(str); sp_str_it_valid(&it); sp_str_it_next(&it))
 #define sp_str_for_utf8(str, it) for (sp_utf8_it_t it = sp_utf8_it(str); sp_utf8_it_valid(&it); sp_utf8_it_next(&it))
@@ -2094,6 +2092,14 @@ SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
 #define SP_STR_NO_MATCH -1
 
+SP_API sp_str_t        sp_str(const c8* str, u32 len);
+SP_API c8*             sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
+SP_API sp_str_t        sp_str_copy_a(sp_mem_t mem, sp_str_t str);
+SP_API void            sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
+SP_API sp_str_t        sp_str_from_cstr_a(sp_mem_t mem, const c8* str);
+SP_API sp_str_t        sp_str_from_cstr_n_a(sp_mem_t mem, const c8* str, u32 len);
+SP_API sp_str_t        sp_str_alloc_a(sp_mem_t mem, u32 capacity);
+SP_API sp_str_t        sp_str_view(const c8* cstr);
 SP_API bool            sp_str_empty(sp_str_t);
 SP_API bool            sp_str_equal(sp_str_t a, sp_str_t b);
 SP_API bool            sp_str_equal_cstr(sp_str_t a, const c8* b);
@@ -2128,13 +2134,6 @@ SP_API sp_str_t        sp_str_to_pascal_case_a(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_pair_t   sp_str_cleave_c8(sp_str_t str, c8 delimiter);
 SP_API sp_da(sp_str_t) sp_str_split_c8_a(sp_mem_t mem, sp_str_t str, c8 c);
 SP_API sp_da(sp_str_t) sp_str_pad_to_longest_a(sp_mem_t mem, sp_str_t* strs, u32 n);
-SP_API c8*             sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
-SP_API sp_str_t        sp_str_copy_a(sp_mem_t mem, sp_str_t str);
-SP_API void            sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
-SP_API sp_str_t        sp_str_from_cstr_a(sp_mem_t mem, const c8* str);
-SP_API sp_str_t        sp_str_from_cstr_n_a(sp_mem_t mem, const c8* str, u32 len);
-SP_API sp_str_t        sp_str_alloc_a(sp_mem_t mem, u32 capacity);
-SP_API sp_str_t        sp_str_view(const c8* cstr);
 SP_API c8*             sp_cstr_copy_a(sp_mem_t mem, const c8* cstr);
 SP_API c8*             sp_cstr_copy_n_a(sp_mem_t mem, const c8* str, u32 len);
 SP_API void            sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_len);
@@ -2143,12 +2142,11 @@ SP_API bool            sp_cstr_equal(const c8* a, const c8* b);
 SP_API u32             sp_cstr_len(const c8* str);
 SP_API u32             sp_cstr_len_n(const c8* str, u32 n);
 SP_API sp_str_t        sp_cstr_as_str(const c8* str);
-SP_API sp_str_t        sp_cstr_as_str_n(const c8* str, u32 n);
 sp_str_it_t            sp_str_it(sp_str_t str);
 bool                   sp_str_it_valid(sp_str_it_t* it);
 void                   sp_str_it_next(sp_str_it_t* it);
-SP_API u32             sp_utf8_decode(const u8* ptr);
-SP_API u8              sp_utf8_encode(u32 codepoint, u8* out);
+SP_API u32             sp_utf8_decode(const c8* ptr);
+SP_API u8              sp_utf8_encode(u32 codepoint, c8* out);
 SP_API u8              sp_utf8_num_bytes_from_codepoint(u32 codepoint);
 SP_API u8              sp_utf8_num_bytes_from_ptr(const u8* ptr);
 SP_API u8              sp_utf8_num_bytes_from_byte(u8 byte);
@@ -2361,7 +2359,7 @@ typedef struct {
   DIR* dir;
 #else
   s32 fd;
-  sp_aligned() u8 buf [SP_FS_IT_BUF_SIZE];
+  SP_ALIGNED u8 buf [SP_FS_IT_BUF_SIZE];
   s32 buf_pos;
   s32 buf_end;
 #endif
@@ -2529,7 +2527,7 @@ typedef enum {
   SP_OS_SIGNAL_ABORT,
 } sp_os_signal_t;
 
-sp_typedef_fn(void, sp_os_signal_handler_t, sp_os_signal_t signal, void* userdata);
+SP_TYPEDEF_FN(void, sp_os_signal_handler_t, sp_os_signal_t signal, void* userdata);
 
 SP_API void           sp_sleep_ns(u64 ns);
 SP_API void           sp_sleep_ms(f64 ms);
@@ -2558,6 +2556,7 @@ SP_API void           sp_os_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows);
 SP_API s32            sp_os_tty_enter_raw(sp_sys_fd_t fd, sp_tty_mode_t* saved);
 SP_API s32            sp_os_tty_restore(sp_sys_fd_t fd, const sp_tty_mode_t* saved);
 SP_API void           sp_os_qsort(void* arr, u64 len, u64 stride, sp_qsort_fn_t);
+SP_API void           sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, bool cond);
 
 
 //  ███████████    ███████    ███████████   ██████   ██████   █████████   ███████████
@@ -2792,8 +2791,8 @@ typedef struct sp_tls_block {
 
 extern sp_tls_block_t sp_tls_block;
 
-sp_typedef_fn(void, sp_tls_once_fn_t);
-sp_typedef_fn(void, sp_tls_deinit_fn_t, void*);
+SP_TYPEDEF_FN(void, sp_tls_once_fn_t);
+SP_TYPEDEF_FN(void, sp_tls_deinit_fn_t, void*);
 
 SP_PRIVATE void  sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t fn);
 SP_PRIVATE void* sp_tls_get(sp_tls_key_t key);
@@ -3163,10 +3162,10 @@ typedef enum {
 
 typedef struct sp_app sp_app_t;
 
-sp_typedef_fn(sp_app_result_t, sp_app_init_fn_t,   sp_app_t*);
-sp_typedef_fn(sp_app_result_t, sp_app_poll_fn_t,   sp_app_t*);
-sp_typedef_fn(sp_app_result_t, sp_app_update_fn_t, sp_app_t*);
-sp_typedef_fn(void,            sp_app_deinit_fn_t, sp_app_t*);
+SP_TYPEDEF_FN(sp_app_result_t, sp_app_init_fn_t,   sp_app_t*);
+SP_TYPEDEF_FN(sp_app_result_t, sp_app_poll_fn_t,   sp_app_t*);
+SP_TYPEDEF_FN(sp_app_result_t, sp_app_update_fn_t, sp_app_t*);
+SP_TYPEDEF_FN(void,            sp_app_deinit_fn_t, sp_app_t*);
 
 typedef struct {
   void* user_data;
@@ -4259,11 +4258,11 @@ static s32 sp_sys_stat_from_nt_handle(HANDLE handle, sp_sys_stat_t* out) {
   return 0;
 }
 
-static s32 sp_sys_stat_from_nt_path(const c8* path, sp_sys_stat_t* out, bool follow_symlinks) {
+static s32 sp_sys_stat_from_nt_path(sp_str_t path, sp_sys_stat_t* out, bool follow_symlinks) {
   u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT;
   if (!follow_symlinks) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
   void* h = sp_sys_nt_open(
-    sp_str_view(path),
+    path,
     FILE_READ_ATTRIBUTES | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN, options, 0
@@ -4292,9 +4291,9 @@ typedef struct {
 
 typedef sp_nt_file_rename_information_t sp_nt_file_link_information_t;
 
-s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
+s32 sp_sys_rename(const c8* from, u32 from_len, const c8* to, u32 to_len) {
   void* handle = sp_sys_nt_open(
-    sp_str_view(oldpath),
+    sp_str(from, from_len),
     DELETE | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN,
@@ -4304,7 +4303,7 @@ s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
   if (!handle) return -1;
 
   sp_sys_nt_path_t nt = SP_ZERO_INITIALIZE();
-  if (!SP_NT_SUCCESS(sp_sys_nt_path(sp_str_view(newpath), &nt))) {
+  if (!SP_NT_SUCCESS(sp_sys_nt_path(sp_str(to, to_len), &nt))) {
     SP_NT(NtClose)(handle);
     return -1;
   }
@@ -4329,26 +4328,43 @@ s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
 }
 
 #elif defined(SP_LINUX)
-s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
+s32 sp_sys_rename(const c8* from, u32 from_len, const c8* to, u32 to_len) {
+  struct {
+    c8 from [SP_PATH_MAX];
+    c8 to [SP_PATH_MAX];
+  } buffers = sp_zero();
+  sp_cstr_copy_to_n(from, from_len, buffers.from, SP_PATH_MAX);
+  sp_cstr_copy_to_n(to, to_len, buffers.to, SP_PATH_MAX);
 #if defined(SP_AMD64)
-  return (s32)sp_syscall(SP_SYSCALL_NUM_RENAME, oldpath, newpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_RENAME, buffers.from, buffers.to);
 #else
-  return (s32)sp_syscall(SP_SYSCALL_NUM_RENAMEAT, SP_AT_FDCWD, oldpath, SP_AT_FDCWD, newpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_RENAMEAT, SP_AT_FDCWD, buffers.from, SP_AT_FDCWD, buffers.to);
 #endif
 }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_rename(const c8* oldpath, const c8* newpath) {
-  return rename(oldpath, newpath);
+s32 sp_sys_rename(const c8* from, u32 from_len, const c8* to, u32 to_len) {
+  struct {
+    c8 from [SP_PATH_MAX];
+    c8 to [SP_PATH_MAX];
+  } buffers = sp_zero();
+  sp_cstr_copy_to_n(from, from_len, buffers.from, SP_PATH_MAX);
+  sp_cstr_copy_to_n(to, to_len, buffers.to, SP_PATH_MAX);
+  return rename(buffers.from, buffers.to);
 }
 
 #elif defined(SP_WASM)
-s32 sp_sys_rename(const c8* from, const c8* to) {
+s32 sp_sys_rename(const c8* from, u32 from_len, const c8* to, u32 to_len) {
+  (void)from; (void)from_len; (void)to; (void)to_len;
   return -1;
 }
 #else
 #error ""
 #endif
+
+s32 sp_sys_rename_s(sp_str_t from, sp_str_t to) {
+  return sp_sys_rename(from.data, from.len, to.data, to.len);
+}
 
 //////////////////
 // SP_SYS_CLOSE //
@@ -4654,14 +4670,14 @@ SP_PRIVATE u32 sp_sys_nt_access_from_flags(s32 flags) {
 }
 
 
-sp_sys_fd_t sp_sys_open(const c8* path, s32 flags, s32 mode) {
+sp_sys_fd_t sp_sys_open(const c8* path, u32 len, s32 flags, s32 mode) {
   (void)mode;
   u32 access = sp_sys_nt_access_from_flags(flags);
   u32 share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
   u32 disposition = sp_sys_nt_disposition_from_flags(flags);
   u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_NON_DIRECTORY_FILE | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT;
 
-  void* handle = sp_sys_nt_open(sp_str_view(path), access, share, disposition, options, FILE_ATTRIBUTE_NORMAL);
+  void* handle = sp_sys_nt_open(sp_str(path, len), access, share, disposition, options, FILE_ATTRIBUTE_NORMAL);
   if (!handle) return SP_SYS_INVALID_FD;
 
   if (flags & SP_O_APPEND) {
@@ -4672,13 +4688,17 @@ sp_sys_fd_t sp_sys_open(const c8* path, s32 flags, s32 mode) {
   return (sp_sys_fd_t)handle;
 }
 #elif defined(SP_LINUX)
-sp_sys_fd_t sp_sys_open(const c8* path, s32 flags, s32 mode) {
-  return (sp_sys_fd_t)sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, path, flags, mode);
+sp_sys_fd_t sp_sys_open(const c8* path, u32 len, s32 flags, s32 mode) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return (sp_sys_fd_t)sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, buf, flags, mode);
 }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-sp_sys_fd_t sp_sys_open(const c8* path, s32 flags, s32 mode) {
-  return (sp_sys_fd_t)open(path, flags, mode);
+sp_sys_fd_t sp_sys_open(const c8* path, u32 len, s32 flags, s32 mode) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return (sp_sys_fd_t)open(buf, flags, mode);
 }
 
 #elif defined(SP_WASM)
@@ -4689,12 +4709,17 @@ sp_sys_fd_t sp_sys_open(const c8* path, s32 flags, s32 mode) {
 #define SP_O_DIRECTORY 0
 #define SP_O_RDONLY 0
 #define SP_O_APPEND 0
-sp_sys_fd_t sp_sys_open(const c8* path, s32 flags, s32 mode) {
+sp_sys_fd_t sp_sys_open(const c8* path, u32 len, s32 flags, s32 mode) {
+  (void)path; (void)len; (void)flags; (void)mode;
   return -1;
 }
 #else
 #error "sp_sys_open"
 #endif
+
+sp_sys_fd_t sp_sys_open_s(sp_str_t path, s32 flags, s32 mode) {
+  return sp_sys_open(path.data, path.len, flags, mode);
+}
 
 //////////////////////
 // SP_SYS_NANOSLEEP //
@@ -4782,9 +4807,9 @@ static s64 sp_sys_xdg_or_home(sp_str_t xdg_var, sp_str_t home_suffix, c8* buf, u
 
   sp_str_t value = sp_os_env_get(xdg_var);
   if (sp_str_empty(value)) {
-    sp_str_t home = sp_os_env_get(SP_LIT("HOME"));
+    sp_str_t home = sp_os_env_get(sp_str_lit("HOME"));
     if (!sp_str_empty(home)) {
-      value = sp_str_join_a(sp_mem_get_scratch(), home, home_suffix, SP_LIT("/"));
+      value = sp_str_join_a(sp_mem_get_scratch(), home, home_suffix, sp_str_lit("/"));
     }
   }
 
@@ -4800,11 +4825,11 @@ static s64 sp_sys_xdg_or_home(sp_str_t xdg_var, sp_str_t home_suffix, c8* buf, u
 }
 
 s64 sp_sys_get_storage_path(c8* buf, u64 size) {
-  return sp_sys_xdg_or_home(SP_LIT("XDG_DATA_HOME"), SP_LIT(".local/share"), buf, size);
+  return sp_sys_xdg_or_home(sp_str_lit("XDG_DATA_HOME"), sp_str_lit(".local/share"), buf, size);
 }
 
 s64 sp_sys_get_config_path(c8* buf, u64 size) {
-  return sp_sys_xdg_or_home(SP_LIT("XDG_CONFIG_HOME"), SP_LIT(".config"), buf, size);
+  return sp_sys_xdg_or_home(sp_str_lit("XDG_CONFIG_HOME"), sp_str_lit(".config"), buf, size);
 }
 #endif
 
@@ -5276,8 +5301,8 @@ void* sp_sys_memmove(void* dest, const void* src, u64 n) {
   return memmove(dest, src, n);
 }
 
-void* sp_sys_memset(void* dest, s32 c, u64 n) {
-  return memset(dest, c, n);
+void* sp_sys_memset(void* dest, u8 fill, u64 n) {
+  return memset(dest, fill, n);
 }
 
 s32 sp_sys_memcmp(const void* a, const void* b, u64 n) {
@@ -5292,8 +5317,8 @@ void* sp_sys_memmove(void* dest, const void* src, u64 n) {
   return memmove(dest, src, (u32)n);
 }
 
-void* sp_sys_memset(void* dest, s32 c, u64 n) {
-  return memset(dest, c, (u32)n);
+void* sp_sys_memset(void* dest, u8 fill, u64 n) {
+  return memset(dest, fill, (u32)n);
 }
 
 s32 sp_sys_memcmp(const void* a, const void* b, u64 n) {
@@ -5374,22 +5399,8 @@ void sp_sys_free(void* ptr, u64 size) {
 ///////////////////
 // SP_SYS_ASSERT //
 ///////////////////
-void sp_sys_assert(const c8* file, const c8* line, const c8* func, const c8* expr, bool cond) {
+void sp_sys_assert(bool cond) {
   if (cond) return;
-
-  sp_io_writer_t io = sp_zero();
-  sp_io_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
-  sp_fmt_io(
-    &io,
-    "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
-    sp_fmt_cstr("assert"),
-    sp_fmt_cstr(file),
-    sp_fmt_cstr(line),
-    sp_fmt_cstr(func),
-    sp_fmt_cstr("()"),
-    sp_fmt_cstr(expr)
-  );
-  sp_io_write_cstr(&io, "\n", SP_NULLPTR);
 
   #if defined(SP_CLANG)
     __builtin_debugtrap();
@@ -5492,80 +5503,96 @@ void sp_sys_init() {
 // SP_SYS_STAT //
 /////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
-  return sp_sys_stat_from_nt_path(path, st, true);
+s32 sp_sys_stat(const c8* path, u32 len, sp_sys_stat_t* st) {
+  return sp_sys_stat_from_nt_path(sp_str(path, len), st, true);
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
+s32 sp_sys_stat(const c8* path, u32 len, sp_sys_stat_t* st) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   sp_sys_linux_stat_t raw = SP_ZERO_INITIALIZE();
   s32 rc;
 #if defined(SP_AMD64)
-  rc = (s32)sp_syscall(SP_SYSCALL_NUM_STAT, path, &raw);
+  rc = (s32)sp_syscall(SP_SYSCALL_NUM_STAT, buf, &raw);
 #else
-  rc = (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, path, &raw, 0);
+  rc = (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, buf, &raw, 0);
 #endif
   if (rc == 0) sp_sys_stat_from_linux(&raw, st);
   return rc;
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
+s32 sp_sys_stat(const c8* path, u32 len, sp_sys_stat_t* st) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   struct stat native;
-  s32 rc = stat(path, &native);
+  s32 rc = stat(buf, &native);
   if (rc == 0) sp_sys_stat_from_libc(&native, st);
   return rc;
 }
 #elif defined(SP_WASM)
-s32 sp_sys_stat(const c8* path, sp_sys_stat_t* st) {
-  (void)path; (void)st;
+s32 sp_sys_stat(const c8* path, u32 len, sp_sys_stat_t* st) {
+  (void)path; (void)len; (void)st;
   return -1;
 }
 #else
 #error "sp_sys_stat"
 #endif
 
+s32 sp_sys_stat_s(sp_str_t path, sp_sys_stat_t* st) {
+  return sp_sys_stat(path.data, path.len, st);
+}
+
 //////////////////
 // SP_SYS_LSTAT //
 //////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
-  return sp_sys_stat_from_nt_path(path, st, false);
+s32 sp_sys_lstat(const c8* path, u32 len, sp_sys_stat_t* st) {
+  return sp_sys_stat_from_nt_path(sp_str(path, len), st, false);
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
+s32 sp_sys_lstat(const c8* path, u32 len, sp_sys_stat_t* st) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   sp_sys_linux_stat_t raw = SP_ZERO_INITIALIZE();
   s32 rc;
 #if defined(SP_AMD64)
-  rc = (s32)sp_syscall(SP_SYSCALL_NUM_LSTAT, path, &raw);
+  rc = (s32)sp_syscall(SP_SYSCALL_NUM_LSTAT, buf, &raw);
 #else
-  rc = (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, path, &raw, SP_AT_SYMLINK_NOFOLLOW);
+  rc = (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, SP_AT_FDCWD, buf, &raw, SP_AT_SYMLINK_NOFOLLOW);
 #endif
   if (rc == 0) sp_sys_stat_from_linux(&raw, st);
   return rc;
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
+s32 sp_sys_lstat(const c8* path, u32 len, sp_sys_stat_t* st) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   struct stat native;
-  s32 rc = lstat(path, &native);
+  s32 rc = lstat(buf, &native);
   if (rc == 0) sp_sys_stat_from_libc(&native, st);
   return rc;
 }
 #elif defined(SP_WASM)
-s32 sp_sys_lstat(const c8* path, sp_sys_stat_t* st) {
-  (void)path; (void)st;
+s32 sp_sys_lstat(const c8* path, u32 len, sp_sys_stat_t* st) {
+  (void)path; (void)len; (void)st;
   return -1;
 }
 #else
 #error "sp_sys_lstat"
 #endif
 
+s32 sp_sys_lstat_s(sp_str_t path, sp_sys_stat_t* st) {
+  return sp_sys_lstat(path.data, path.len, st);
+}
+
 //////////////////
 // SP_SYS_MKDIR //
 //////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_mkdir(const c8* path, s32 mode) {
+s32 sp_sys_mkdir(const c8* path, u32 len, s32 mode) {
   (void)mode;
   void* handle = sp_sys_nt_open(
-    sp_str_view(path),
+    sp_str(path, len),
     FILE_LIST_DIRECTORY | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_CREATE,
@@ -5577,33 +5604,41 @@ s32 sp_sys_mkdir(const c8* path, s32 mode) {
   return 0;
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_mkdir(const c8* path, s32 mode) {
+s32 sp_sys_mkdir(const c8* path, u32 len, s32 mode) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
 #if defined(SP_AMD64)
-  return (s32)sp_syscall(SP_SYSCALL_NUM_MKDIR, path, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_MKDIR, buf, mode);
 #else
-  return (s32)sp_syscall(SP_SYSCALL_NUM_MKDIRAT, SP_AT_FDCWD, path, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_MKDIRAT, SP_AT_FDCWD, buf, mode);
 #endif
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_mkdir(const c8* path, s32 mode) {
-  return mkdir(path, (mode_t)mode);
+s32 sp_sys_mkdir(const c8* path, u32 len, s32 mode) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return mkdir(buf, (mode_t)mode);
 }
 #elif defined(SP_WASM)
-s32 sp_sys_mkdir(const c8* path, s32 mode) {
-  (void)path; (void)mode;
+s32 sp_sys_mkdir(const c8* path, u32 len, s32 mode) {
+  (void)path; (void)len; (void)mode;
   return -1;
 }
 #else
 #error "sp_sys_mkdir"
 #endif
 
+s32 sp_sys_mkdir_s(sp_str_t path, s32 mode) {
+  return sp_sys_mkdir(path.data, path.len, mode);
+}
+
 //////////////////
 // SP_SYS_RMDIR //
 //////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_rmdir(const c8* path) {
+s32 sp_sys_rmdir(const c8* path, u32 len) {
   void* handle = sp_sys_nt_open(
-    sp_str_view(path),
+    sp_str(path, len),
     DELETE | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN,
@@ -5615,20 +5650,24 @@ s32 sp_sys_rmdir(const c8* path) {
   return 0;
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_rmdir(const c8* path) {
+s32 sp_sys_rmdir(const c8* path, u32 len) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
 #if defined(SP_AMD64)
-  return (s32)sp_syscall(SP_SYSCALL_NUM_RMDIR, path);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_RMDIR, buf);
 #else
-  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, path, SP_AT_REMOVEDIR);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, buf, SP_AT_REMOVEDIR);
 #endif
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_rmdir(const c8* path) {
-  return rmdir(path);
+s32 sp_sys_rmdir(const c8* path, u32 len) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return rmdir(buf);
 }
 #elif defined(SP_WASM)
-s32 sp_sys_rmdir(const c8* path) {
-  (void)path;
+s32 sp_sys_rmdir(const c8* path, u32 len) {
+  (void)path; (void)len;
   return -1;
 }
 #else
@@ -5636,18 +5675,16 @@ s32 sp_sys_rmdir(const c8* path) {
 #endif
 
 s32 sp_sys_rmdir_s(sp_str_t path) {
-  c8 cstr [SP_PATH_MAX] = sp_zero();
-  sp_str_copy_to(path, cstr, SP_PATH_MAX);
-  return sp_sys_rmdir(cstr);
+  return sp_sys_rmdir(path.data, path.len);
 }
 
 ///////////////////
 // SP_SYS_UNLINK //
 ///////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_unlink(const c8* path) {
+s32 sp_sys_unlink(const c8* path, u32 len) {
   void* handle = sp_sys_nt_open(
-    sp_str_view(path),
+    sp_str(path, len),
     DELETE | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN,
@@ -5659,32 +5696,40 @@ s32 sp_sys_unlink(const c8* path) {
   return 0;
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_unlink(const c8* path) {
+s32 sp_sys_unlink(const c8* path, u32 len) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
 #if defined(SP_AMD64)
-  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINK, path);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINK, buf);
 #else
-  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, path, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINKAT, SP_AT_FDCWD, buf, 0);
 #endif
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_unlink(const c8* path) {
-  return unlink(path);
+s32 sp_sys_unlink(const c8* path, u32 len) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return unlink(buf);
 }
 #elif defined(SP_WASM)
-s32 sp_sys_unlink(const c8* path) {
-  (void)path;
+s32 sp_sys_unlink(const c8* path, u32 len) {
+  (void)path; (void)len;
   return -1;
 }
 #else
 #error "sp_sys_unlink"
 #endif
 
+s32 sp_sys_unlink_s(sp_str_t path) {
+  return sp_sys_unlink(path.data, path.len);
+}
+
 //////////////////
 // SP_SYS_CHDIR //
 //////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_chdir(const c8* path) {
-  sp_wide_str_t w = sp_wtf8_to_wtf16_a(sp_mem_get_scratch(), sp_str_view(path));
+s32 sp_sys_chdir(const c8* path, u32 len) {
+  sp_wide_str_t w = sp_wtf8_to_wtf16_a(sp_mem_get_scratch(), sp_str(path, len));
   if (!w.data) return -1;
   sp_nt_unicode_string_t us = {
     .Length = (u16)(w.len * sizeof(u16)),
@@ -5694,21 +5739,29 @@ s32 sp_sys_chdir(const c8* path) {
   return SP_NT_SUCCESS(SP_NT(RtlSetCurrentDirectory_U)(&us)) ? 0 : -1;
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_chdir(const c8* path) {
-  return (s32)sp_syscall(SP_SYSCALL_NUM_CHDIR, path);
+s32 sp_sys_chdir(const c8* path, u32 len) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_CHDIR, buf);
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_chdir(const c8* path) {
-  return chdir(path);
+s32 sp_sys_chdir(const c8* path, u32 len) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return chdir(buf);
 }
 #elif defined(SP_WASM)
-s32 sp_sys_chdir(const c8* path) {
-  (void)path;
+s32 sp_sys_chdir(const c8* path, u32 len) {
+  (void)path; (void)len;
   return -1;
 }
 #else
 #error "sp_sys_chdir"
 #endif
+
+s32 sp_sys_chdir_s(sp_str_t path) {
+  return sp_sys_chdir(path.data, path.len);
+}
 
 ///////////////////
 // SP_SYS_GETCWD //
@@ -5747,9 +5800,9 @@ s64 sp_sys_getcwd(char* buf, u64 size) {
 // SP_SYS_LINK //
 /////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
+s32 sp_sys_link(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len) {
   void* handle = sp_sys_nt_open(
-    sp_str_view(oldpath),
+    sp_str(existing, existing_len),
     FILE_READ_ATTRIBUTES | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN,
@@ -5759,7 +5812,7 @@ s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
   if (!handle) return -1;
 
   sp_sys_nt_path_t nt = SP_ZERO_INITIALIZE();
-  if (!SP_NT_SUCCESS(sp_sys_nt_path(sp_str_view(newpath), &nt))) {
+  if (!SP_NT_SUCCESS(sp_sys_nt_path(sp_str(alias, alias_len), &nt))) {
     SP_NT(NtClose)(handle);
     return -1;
   }
@@ -5783,33 +5836,49 @@ s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
   return SP_NT_SUCCESS(status) ? 0 : -1;
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
+s32 sp_sys_link(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len) {
+  struct {
+    c8 existing [SP_PATH_MAX];
+    c8 alias [SP_PATH_MAX];
+  } buffers = sp_zero();
+  sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
+  sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
 #if defined(SP_AMD64)
-  return (s32)sp_syscall(SP_SYSCALL_NUM_LINK, oldpath, newpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_LINK, buffers.existing, buffers.alias);
 #else
-  return (s32)sp_syscall(SP_SYSCALL_NUM_LINKAT, SP_AT_FDCWD, oldpath, SP_AT_FDCWD, newpath, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_LINKAT, SP_AT_FDCWD, buffers.existing, SP_AT_FDCWD, buffers.alias, 0);
 #endif
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
-  return link(oldpath, newpath);
+s32 sp_sys_link(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len) {
+  struct {
+    c8 existing [SP_PATH_MAX];
+    c8 alias [SP_PATH_MAX];
+  } buffers = sp_zero();
+  sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
+  sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
+  return link(buffers.existing, buffers.alias);
 }
 #elif defined(SP_WASM)
-s32 sp_sys_link(const c8* oldpath, const c8* newpath) {
-  (void)oldpath; (void)newpath;
+s32 sp_sys_link(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len) {
+  (void)existing; (void)existing_len; (void)alias; (void)alias_len;
   return -1;
 }
 #else
 #error "sp_sys_link"
 #endif
 
+s32 sp_sys_link_s(sp_str_t existing, sp_str_t alias) {
+  return sp_sys_link(existing.data, existing.len, alias.data, alias.len);
+}
+
 ////////////////////
 // SP_SYS_SYMLINK //
 ////////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_symlink(const c8* target, const c8* linkpath) {
-  sp_wide_str_t wtarget = sp_wtf8_to_wtf16_a(sp_mem_get_scratch(), sp_str_view(target));
-  sp_wide_str_t wlink = sp_wtf8_to_wtf16_a(sp_mem_get_scratch(), sp_str_view(linkpath));
+s32 sp_sys_symlink(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len) {
+  sp_wide_str_t wtarget = sp_wtf8_to_wtf16_a(sp_mem_get_scratch(), sp_str(existing, existing_len));
+  sp_wide_str_t wlink = sp_wtf8_to_wtf16_a(sp_mem_get_scratch(), sp_str(alias, alias_len));
   if (!wtarget.data || !wlink.data) return -1;
 
   DWORD flags = 0;
@@ -5823,33 +5892,49 @@ s32 sp_sys_symlink(const c8* target, const c8* linkpath) {
   return CreateSymbolicLinkW((LPCWSTR)wlink.data, (LPCWSTR)wtarget.data, flags) ? 0 : -1;
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_symlink(const c8* target, const c8* linkpath) {
+s32 sp_sys_symlink(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len) {
+  struct {
+    c8 existing [SP_PATH_MAX];
+    c8 alias [SP_PATH_MAX];
+  } buffers = sp_zero();
+  sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
+  sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
 #if defined(SP_AMD64)
-  return (s32)sp_syscall(SP_SYSCALL_NUM_SYMLINK, target, linkpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_SYMLINK, buffers.existing, buffers.alias);
 #else
-  return (s32)sp_syscall(SP_SYSCALL_NUM_SYMLINKAT, target, SP_AT_FDCWD, linkpath);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_SYMLINKAT, buffers.existing, SP_AT_FDCWD, buffers.alias);
 #endif
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_symlink(const c8* target, const c8* linkpath) {
-  return symlink(target, linkpath);
+s32 sp_sys_symlink(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len) {
+  struct {
+    c8 existing [SP_PATH_MAX];
+    c8 alias [SP_PATH_MAX];
+  } buffers = sp_zero();
+  sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
+  sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
+  return symlink(buffers.existing, buffers.alias);
 }
 #elif defined(SP_WASM)
-s32 sp_sys_symlink(const c8* target, const c8* linkpath) {
-  (void)target; (void)linkpath;
+s32 sp_sys_symlink(const c8* existing, u32 existing_len, const c8* alias, u32 alias_len) {
+  (void)existing; (void)existing_len; (void)alias; (void)alias_len;
   return -1;
 }
 #else
 #error "sp_sys_symlink"
 #endif
 
+s32 sp_sys_symlink_s(sp_str_t existing, sp_str_t alias) {
+  return sp_sys_symlink(existing.data, existing.len, alias.data, alias.len);
+}
+
 //////////////////
 // SP_SYS_CHMOD //
 //////////////////
 #if defined(SP_WIN32)
-s32 sp_sys_chmod(const c8* path, const sp_sys_stat_t* st) {
+s32 sp_sys_chmod(const c8* path, u32 len, const sp_sys_stat_t* st) {
   void* handle = sp_sys_nt_open(
-    sp_str_view(path),
+    sp_str(path, len),
     FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN,
@@ -5868,36 +5953,44 @@ s32 sp_sys_chmod(const c8* path, const sp_sys_stat_t* st) {
   return SP_NT_SUCCESS(status) ? 0 : -1;
 }
 #elif defined(SP_LINUX)
-s32 sp_sys_chmod(const c8* path, const sp_sys_stat_t* st) {
+s32 sp_sys_chmod(const c8* path, u32 len, const sp_sys_stat_t* st) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   s32 mode = (s32)(st->raw_attrs & 07777);
 #if defined(SP_AMD64)
-  return (s32)sp_syscall(SP_SYSCALL_NUM_CHMOD, path, mode);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_CHMOD, buf, mode);
 #else
-  return (s32)sp_syscall(SP_SYSCALL_NUM_FCHMODAT, SP_AT_FDCWD, path, mode, 0);
+  return (s32)sp_syscall(SP_SYSCALL_NUM_FCHMODAT, SP_AT_FDCWD, buf, mode, 0);
 #endif
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s32 sp_sys_chmod(const c8* path, const sp_sys_stat_t* st) {
-  return chmod(path, (mode_t)(st->raw_attrs & 07777));
+s32 sp_sys_chmod(const c8* path, u32 len, const sp_sys_stat_t* st) {
+  c8 buf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return chmod(buf, (mode_t)(st->raw_attrs & 07777));
 }
 #elif defined(SP_WASM)
-s32 sp_sys_chmod(const c8* path, const sp_sys_stat_t* st) {
-  (void)path; (void)st;
+s32 sp_sys_chmod(const c8* path, u32 len, const sp_sys_stat_t* st) {
+  (void)path; (void)len; (void)st;
   return -1;
 }
 #else
 #error "sp_sys_chmod"
 #endif
 
+s32 sp_sys_chmod_s(sp_str_t path, const sp_sys_stat_t* st) {
+  return sp_sys_chmod(path.data, path.len, st);
+}
+
 ///////////////////////////////
 // SP_SYS_CANONICALIZE_PATH //
 ///////////////////////////////
 #if defined(SP_WIN32)
-s64 sp_sys_canonicalize_path(const c8* path, c8* buf, u64 size) {
+s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   if (!buf) return -1;
 
   void* h = sp_sys_nt_open(
-    sp_str_view(path),
+    sp_str(path, len),
     FILE_READ_ATTRIBUTES | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN,
@@ -5920,8 +6013,10 @@ s64 sp_sys_canonicalize_path(const c8* path, c8* buf, u64 size) {
   return (s64)utf8.len;
 }
 #elif defined(SP_LINUX)
-s64 sp_sys_canonicalize_path(const c8* path, c8* buf, u64 size) {
-  s64 fd = sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, path, SP_O_RDONLY | SP_O_CLOEXEC, 0);
+s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
+  c8 pbuf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, pbuf, SP_PATH_MAX);
+  s64 fd = sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, pbuf, SP_O_RDONLY | SP_O_CLOEXEC, 0);
   if (fd < 0) return fd;
 
   c8 proc [64] = sp_zero();
@@ -5929,31 +6024,37 @@ s64 sp_sys_canonicalize_path(const c8* path, c8* buf, u64 size) {
   sp_io_writer_from_mem(&io, proc, 64);
   sp_fmt_io(&io, "/proc/self/fd/{}", sp_fmt_int(fd));
 
-  s64 len = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, buf, size);
+  s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, buf, size);
   sp_sys_close(fd);
-  return len;
+  return n;
 }
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-s64 sp_sys_canonicalize_path(const c8* path, c8* buf, u64 size) {
+s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   if (!path || !buf || size == 0) return -1;
+  c8 pbuf [SP_PATH_MAX] = sp_zero();
+  sp_cstr_copy_to_n(path, len, pbuf, SP_PATH_MAX);
   c8 resolved[4096];
-  if (!realpath(path, resolved)) return -1;
-  u64 len = 0;
-  while (resolved[len] && len < size - 1) { buf[len] = resolved[len]; len++; }
-  buf[len] = '\0';
-  return (s64)len;
+  if (!realpath(pbuf, resolved)) return -1;
+  u64 n = 0;
+  while (resolved[n] && n < size - 1) { buf[n] = resolved[n]; n++; }
+  buf[n] = '\0';
+  return (s64)n;
 }
 #elif defined(SP_WASM)
-s64 sp_sys_canonicalize_path(const c8* path, c8* buf, u64 size) {
+s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   if (!path || !buf || size == 0) return -1;
-  u64 len = 0;
-  while (path[len] && len < size - 1) { buf[len] = path[len]; len++; }
-  buf[len] = '\0';
-  return (s64)len;
+  u64 n = 0;
+  while (n < len && n < size - 1) { buf[n] = path[n]; n++; }
+  buf[n] = '\0';
+  return (s64)n;
 }
 #else
 #error "sp_sys_canonicalize_path"
 #endif
+
+s64 sp_sys_canonicalize_path_s(sp_str_t path, c8* buf, u64 size) {
+  return sp_sys_canonicalize_path(path.data, path.len, buf, size);
+}
 
 /////////////////////////
 // SP_SYS_GET_EXE_PATH //
@@ -5981,10 +6082,10 @@ s64 sp_sys_get_exe_path(c8* buf, u64 size) {
   c8 raw[4096];
   u32 raw_size = sizeof(raw);
   if (_NSGetExecutablePath(raw, &raw_size)) return -1;
-  return sp_sys_canonicalize_path(raw, buf, size);
+  return sp_sys_canonicalize_path(raw, sp_cstr_len(raw), buf, size);
 #elif defined(SP_COSMO)
   extern char* program_invocation_name;
-  return sp_sys_canonicalize_path(program_invocation_name, buf, size);
+  return sp_sys_canonicalize_path(program_invocation_name, sp_cstr_len(program_invocation_name), buf, size);
 #else
   (void)buf; (void)size;
   return -1;
@@ -6881,23 +6982,23 @@ static void sp_fmt_directive_duration_render(sp_io_writer_t* io, sp_fmt_arg_t* a
 }
 
 sp_str_t sp_fmt_color_to_ansi_fg(sp_str_t id) {
-  if (sp_str_equal_cstr(id, "black")) return SP_CSTR(SP_ANSI_FG_BLACK);
-  if (sp_str_equal_cstr(id, "red")) return SP_CSTR(SP_ANSI_FG_RED);
-  if (sp_str_equal_cstr(id, "green")) return SP_CSTR(SP_ANSI_FG_GREEN);
-  if (sp_str_equal_cstr(id, "yellow")) return SP_CSTR(SP_ANSI_FG_YELLOW);
-  if (sp_str_equal_cstr(id, "blue")) return SP_CSTR(SP_ANSI_FG_BLUE);
-  if (sp_str_equal_cstr(id, "magenta")) return SP_CSTR(SP_ANSI_FG_MAGENTA);
-  if (sp_str_equal_cstr(id, "cyan")) return SP_CSTR(SP_ANSI_FG_CYAN);
-  if (sp_str_equal_cstr(id, "white")) return SP_CSTR(SP_ANSI_FG_WHITE);
-  if (sp_str_equal_cstr(id, "brightblack")) return SP_CSTR(SP_ANSI_FG_BRIGHT_BLACK);
-  if (sp_str_equal_cstr(id, "brightred")) return SP_CSTR(SP_ANSI_FG_BRIGHT_RED);
-  if (sp_str_equal_cstr(id, "brightgreen")) return SP_CSTR(SP_ANSI_FG_BRIGHT_GREEN);
-  if (sp_str_equal_cstr(id, "brightyellow")) return SP_CSTR(SP_ANSI_FG_BRIGHT_YELLOW);
-  if (sp_str_equal_cstr(id, "brightblue")) return SP_CSTR(SP_ANSI_FG_BRIGHT_BLUE);
-  if (sp_str_equal_cstr(id, "brightmagenta")) return SP_CSTR(SP_ANSI_FG_BRIGHT_MAGENTA);
-  if (sp_str_equal_cstr(id, "brightcyan")) return SP_CSTR(SP_ANSI_FG_BRIGHT_CYAN);
-  if (sp_str_equal_cstr(id, "brightwhite")) return SP_CSTR(SP_ANSI_FG_BRIGHT_WHITE);
-  return SP_CSTR(SP_ANSI_RESET);
+  if (sp_str_equal_cstr(id, "black")) return sp_str_lit(SP_ANSI_FG_BLACK);
+  if (sp_str_equal_cstr(id, "red")) return sp_str_lit(SP_ANSI_FG_RED);
+  if (sp_str_equal_cstr(id, "green")) return sp_str_lit(SP_ANSI_FG_GREEN);
+  if (sp_str_equal_cstr(id, "yellow")) return sp_str_lit(SP_ANSI_FG_YELLOW);
+  if (sp_str_equal_cstr(id, "blue")) return sp_str_lit(SP_ANSI_FG_BLUE);
+  if (sp_str_equal_cstr(id, "magenta")) return sp_str_lit(SP_ANSI_FG_MAGENTA);
+  if (sp_str_equal_cstr(id, "cyan")) return sp_str_lit(SP_ANSI_FG_CYAN);
+  if (sp_str_equal_cstr(id, "white")) return sp_str_lit(SP_ANSI_FG_WHITE);
+  if (sp_str_equal_cstr(id, "brightblack")) return sp_str_lit(SP_ANSI_FG_BRIGHT_BLACK);
+  if (sp_str_equal_cstr(id, "brightred")) return sp_str_lit(SP_ANSI_FG_BRIGHT_RED);
+  if (sp_str_equal_cstr(id, "brightgreen")) return sp_str_lit(SP_ANSI_FG_BRIGHT_GREEN);
+  if (sp_str_equal_cstr(id, "brightyellow")) return sp_str_lit(SP_ANSI_FG_BRIGHT_YELLOW);
+  if (sp_str_equal_cstr(id, "brightblue")) return sp_str_lit(SP_ANSI_FG_BRIGHT_BLUE);
+  if (sp_str_equal_cstr(id, "brightmagenta")) return sp_str_lit(SP_ANSI_FG_BRIGHT_MAGENTA);
+  if (sp_str_equal_cstr(id, "brightcyan")) return sp_str_lit(SP_ANSI_FG_BRIGHT_CYAN);
+  if (sp_str_equal_cstr(id, "brightwhite")) return sp_str_lit(SP_ANSI_FG_BRIGHT_WHITE);
+  return sp_str_lit(SP_ANSI_RESET);
 }
 
 static void sp_fmt_directive_fg(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
@@ -7189,11 +7290,11 @@ bool sp_parse_hash_ex(sp_str_t str, sp_hash_t* out) {
 }
 
 bool sp_parse_bool_ex(sp_str_t str, bool* out) {
-  if (sp_str_equal(str, SP_LIT("true")) || sp_str_equal(str, SP_LIT("1"))) {
+  if (sp_str_equal(str, sp_str_lit("true")) || sp_str_equal(str, sp_str_lit("1"))) {
     *out = true;
     return true;
   }
-  if (sp_str_equal(str, SP_LIT("false")) || sp_str_equal(str, SP_LIT("0"))) {
+  if (sp_str_equal(str, sp_str_lit("false")) || sp_str_equal(str, sp_str_lit("0"))) {
     *out = false;
     return true;
   }
@@ -7660,7 +7761,7 @@ void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size,
       SP_UNREACHABLE_RETURN(SP_NULLPTR);
     }
     case SP_ALLOCATOR_MODE_RESIZE: {
-      sp_require_as_null(arena->mode == SP_MEM_ARENA_MODE_DEFAULT);
+      if (arena->mode == SP_MEM_ARENA_MODE_NO_REALLOC) return SP_NULLPTR;
 
       void* ptr = sp_mem_arena_alloc_with_header(arena, size);
       if (old_memory) {
@@ -7725,15 +7826,12 @@ void* sp_mem_fixed_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size,
     case SP_ALLOCATOR_MODE_ALLOC: {
       u8* ptr = (u8*)sp_align_up(fixed->buffer + fixed->bytes_used, fixed->alignment);
       u64 offset = (u64)(ptr - fixed->buffer);
-      sp_require_as_null(offset + size <= fixed->capacity);
+      if (offset + size > fixed->capacity) return SP_NULLPTR;
       fixed->bytes_used = offset + size;
       sp_mem_zero(ptr, size);
       return ptr;
     }
-    case SP_ALLOCATOR_MODE_RESIZE: {
-      sp_require_as_null(false);
-      return SP_NULLPTR;
-    }
+    case SP_ALLOCATOR_MODE_RESIZE:
     case SP_ALLOCATOR_MODE_FREE: {
       return SP_NULLPTR;
     }
@@ -7955,7 +8053,7 @@ bool sp_cstr_equal(const c8* a, const c8* b) {
 }
 
 u32 sp_cstr_len(const c8* str) {
-  sp_require_as(str, 0);
+  if (!str) return 0;
 
   u32 len = 0;
   while (str[len]) len++;
@@ -7963,7 +8061,7 @@ u32 sp_cstr_len(const c8* str) {
 }
 
 u32 sp_cstr_len_n(const c8* str, u32 n) {
-  sp_require_as(str, 0);
+  if (!str) return 0;
 
   u32 len = 0;
   while (len < n && str[len]) len++;
@@ -7974,13 +8072,6 @@ sp_str_t sp_cstr_as_str(const c8* str) {
   return (sp_str_t) {
     .data = str,
     .len = sp_cstr_len(str)
-  };
-}
-
-sp_str_t sp_cstr_as_str_n(const c8* str, u32 n) {
-  return (sp_str_t) {
-    .data = str,
-    .len = n
   };
 }
 
@@ -8055,9 +8146,9 @@ u32 sp_utf8_mask(u8 byte, u8 mask, u8 shift) {
   return (u32)((byte & mask) << shift);
 }
 
-u32 sp_utf8_decode(const u8* ptr) {
-  sp_require_as(ptr, SP_UTF8_REPLACEMENT);
-  sp_require_as(!sp_utf8_is_byte_ascii(ptr[0]), ptr[0]);
+u32 sp_utf8_decode(const c8* ptr) {
+  if (!ptr) return SP_UTF8_REPLACEMENT;
+  if (sp_utf8_is_byte_ascii(ptr[0])) return ptr[0];
 
   switch (sp_utf8_num_bytes_from_byte(ptr[0])) {
     case 2: return sp_utf8_mask(ptr[0], 0x1F, 6)  | sp_utf8_mask(ptr[1], 0x3F, 0);
@@ -8065,11 +8156,9 @@ u32 sp_utf8_decode(const u8* ptr) {
     case 4: return sp_utf8_mask(ptr[0], 0x07, 18) | sp_utf8_mask(ptr[1], 0x3F, 12) | sp_utf8_mask(ptr[2], 0x3F, 6) | sp_utf8_mask(ptr[3], 0x3f, 0);
     default: return SP_UTF8_REPLACEMENT;
   }
-
-  #undef sp_mask
 }
 
-u8 sp_utf8_encode(u32 cp, u8* out) {
+u8 sp_utf8_encode(u32 cp, c8* out) {
   if (!out) return 0;
 
   u8 len = sp_utf8_num_bytes_from_codepoint(cp);
@@ -8086,9 +8175,9 @@ sp_utf8_it_t sp_utf8_it(sp_str_t str) {
   if (sp_str_empty(str)) return sp_zero_struct(sp_utf8_it_t);
 
   return (sp_utf8_it_t) {
-    .str = { .data = (const u8*)str.data, .len = str.len },
+    .str = str,
     .index = 0,
-    .codepoint = sp_utf8_decode((const u8*)str.data),
+    .codepoint = sp_utf8_decode(str.data),
     .codepoint_len = sp_utf8_num_bytes_from_byte((u8)str.data[0]),
   };
 }
@@ -8100,7 +8189,7 @@ sp_utf8_it_t sp_utf8_rit(sp_str_t str) {
   // the cast is objectively wrong here. i just use s32 in the iterator to give me a sentinel when reverse
   // iterating. which in and of itself is stupid. double down.
   sp_utf8_it_t it = {
-    .str = { .data = (const u8*)str.data, .len = str.len },
+    .str = str,
     .index = (s32)str.len
   };
   sp_utf8_it_prev(&it);
@@ -8138,7 +8227,7 @@ void sp_utf8_it_prev(sp_utf8_it_t* it) {
 }
 
 bool sp_utf8_validate(sp_str_t str) {
-  const u8* ptr = (const u8*)str.data;
+  const c8* ptr = str.data;
   u32 it = 0;
 
   while (it < str.len) {
@@ -8170,7 +8259,7 @@ u32 sp_utf8_num_codepoints(sp_str_t str) {
 }
 
 bool sp_wtf8_validate(sp_str_t str) {
-  const u8* ptr = (const u8*)str.data;
+  const c8* ptr = str.data;
   u32 it = 0;
 
   while (it < str.len) {
@@ -8195,7 +8284,7 @@ sp_wide_str_t sp_wtf8_to_wtf16_a(sp_mem_t mem, sp_str_t wtf8) {
   if (sp_str_empty(wtf8)) return result;
 
   u16* buf = sp_alloc_n_a(mem, u16, wtf8.len + 1);
-  const u8* ptr = (const u8*)wtf8.data;
+  const c8* ptr = wtf8.data;
   u32 i = 0;
   u32 n = 0;
 
@@ -8243,11 +8332,18 @@ sp_str_t sp_wtf16_to_wtf8_a(sp_mem_t mem, sp_wide_str_t wtf16) {
     else {
       cp = u;
     }
-    offset += sp_utf8_encode(cp, (u8*)buf + offset);
+    offset += sp_utf8_encode(cp, buf + offset);
   }
   buf[offset] = 0;
 
   return (sp_str_t) { .data = buf, .len = offset };
+}
+
+sp_str_t sp_str(const c8* str, u32 len) {
+  return (sp_str_t) {
+    .data = str,
+    .len = len
+  };
 }
 
 sp_str_t sp_str_copy_a(sp_mem_t mem, sp_str_t str) {
@@ -8412,12 +8508,12 @@ c8* sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str) {
 
 sp_str_t sp_str_from_cstr_n_a(sp_mem_t mem, const c8* str, u32 length) {
   if (!str || !length) return SP_ZERO_STRUCT(sp_str_t);
-  u32 len = SP_MIN(sp_cstr_len(str), length);
+  u32 len = sp_min(sp_cstr_len(str), length);
   if (!len) return SP_ZERO_STRUCT(sp_str_t);
   c8* buffer = (c8*)sp_mem_allocator_alloc(mem, length);
   sp_mem_copy(str, buffer, len);
 
-  return SP_STR(buffer, len);
+  return sp_str(buffer, len);
 }
 
 sp_str_t sp_str_from_cstr_a(sp_mem_t mem, const c8* str) {
@@ -8432,7 +8528,7 @@ sp_str_t sp_str_from_cstr_a(sp_mem_t mem, const c8* str) {
 
 void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
   if (!str.data) return;
-  sp_mem_copy(str.data, buffer, SP_MIN(str.len, capacity));
+  sp_mem_copy(str.data, buffer, sp_min(str.len, capacity));
 }
 
 sp_str_it_t sp_str_it(sp_str_t str) {
@@ -8458,7 +8554,7 @@ sp_str_t sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b) {
   c8* buffer = (c8*)sp_mem_allocator_alloc(mem, len);
   if (a.len) sp_mem_copy(a.data, buffer,         a.len);
   if (b.len) sp_mem_copy(b.data, buffer + a.len, b.len);
-  return SP_STR(buffer, len);
+  return sp_str(buffer, len);
 }
 
 sp_str_t sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join) {
@@ -8469,7 +8565,7 @@ sp_str_t sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join) {
   if (a.len)    { sp_mem_copy(a.data,    p, a.len);    p += a.len; }
   if (join.len) { sp_mem_copy(join.data, p, join.len); p += join.len; }
   if (b.len)    { sp_mem_copy(b.data,    p, b.len); }
-  return SP_STR(buffer, len);
+  return sp_str(buffer, len);
 }
 
 sp_str_t sp_str_join_cstr_n_a(sp_mem_t mem, const c8** strings, u32 num_strings, sp_str_t join) {
@@ -8497,7 +8593,7 @@ sp_str_t sp_str_pad_a(sp_mem_t mem, sp_str_t str, u32 n) {
     .len = n,
   };
   sp_sys_memcpy(buffer.data, str.data, str.len);
-  sp_sys_memset(buffer.data + str.len, ' ', (u32)delta);
+  sp_sys_memset(buffer.data + str.len, ' ', (u8)delta);
 
   return sp_mem_buffer_as_str(&buffer);
 }
@@ -8625,7 +8721,7 @@ sp_str_t sp_str_to_upper_a(sp_mem_t mem, sp_str_t str) {
   };
 
   sp_str_for_utf8(str, it) {
-    buffer.len += sp_utf8_encode(sp_utf8_to_upper(it.codepoint), buffer.data + buffer.len);
+    buffer.len += sp_utf8_encode(sp_utf8_to_upper(it.codepoint), (c8*)buffer.data + buffer.len);
   }
 
   return sp_mem_buffer_as_str(&buffer);
@@ -8639,7 +8735,7 @@ sp_str_t sp_str_to_lower_a(sp_mem_t mem, sp_str_t str) {
   };
 
   sp_str_for_utf8(str, it) {
-    buffer.len += sp_utf8_encode(sp_utf8_to_lower(it.codepoint), buffer.data + buffer.len);
+    buffer.len += sp_utf8_encode(sp_utf8_to_lower(it.codepoint), (c8*)buffer.data + buffer.len);
   }
 
   return sp_mem_buffer_as_str(&buffer);
@@ -8670,16 +8766,16 @@ sp_str_t sp_str_to_pascal_case_a(sp_mem_t mem, sp_str_t str) {
         break;
       }
     }
-    buffer.len += sp_utf8_encode(cp, buffer.data + buffer.len);
+    buffer.len += sp_utf8_encode(cp, (c8*)buffer.data + buffer.len);
   }
 
   return sp_mem_buffer_as_str(&buffer);
 }
 
 sp_str_t sp_str_truncate_a(sp_mem_t mem, sp_str_t str, u32 max_len, sp_str_t trailer) {
-  sp_require_as(max_len, sp_str_copy_a(mem, str));
-  sp_require_as(str.len > max_len, sp_str_copy_a(mem, str));
-  sp_require_as(trailer.len <= max_len, sp_str_copy_a(mem, str));
+  if (!max_len) return sp_str_copy_a(mem, str);
+  if (str.len <= max_len) return sp_str_copy_a(mem, str);
+  if (trailer.len > max_len) return sp_str_copy_a(mem, str);
 
   return sp_str_concat_a(mem, sp_str_prefix(str, max_len - trailer.len), trailer);
 }
@@ -8784,7 +8880,7 @@ SP_PRIVATE u32 sp_win32_find_name_len(const u16* name) {
 }
 
 bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
-  sp_aligned() u8 pattern_storage [SP_PATH_MAX];
+  SP_ALIGNED u8 pattern_storage [SP_PATH_MAX];
   sp_mem_fixed_t pattern_fixed = sp_mem_fixed(pattern_storage, sizeof(pattern_storage));
   sp_mem_t pattern_mem = sp_mem_fixed_as_allocator(&pattern_fixed);
   sp_str_t pattern = sp_fs_join_path_a(pattern_mem, path, sp_str_lit("*"));
@@ -8841,9 +8937,7 @@ SP_PRIVATE sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type) {
 }
 
 bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
-  c8 cstr [SP_PATH_MAX] = sp_zero();
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-  frame->fd = sp_sys_open(cstr, SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  frame->fd = sp_sys_open_s(path, SP_O_RDONLY | SP_O_DIRECTORY, 0);
   return frame->fd >= 0;
 }
 
@@ -8929,6 +9023,29 @@ bool sp_sys_diriter_read(sp_mem_t mem, sp_fs_it_frame_t* frame, sp_fs_entry_t* e
 //  ░░░███████░  ░░█████████
 //    ░░░░░░░     ░░░░░░░░░
 // @os
+////////////
+// ASSERT //
+////////////
+void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, bool cond) {
+  if (cond) return;
+
+  sp_io_writer_t io = sp_zero();
+  sp_io_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+  sp_fmt_io(
+    &io,
+    "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
+    sp_fmt_cstr("assert"),
+    sp_fmt_str(file),
+    sp_fmt_str(line),
+    sp_fmt_str(func),
+    sp_fmt_cstr("()"),
+    sp_fmt_str(expr)
+  );
+  sp_io_write_cstr(&io, "\n", SP_NULLPTR);
+
+  sp_sys_assert(cond);
+}
+
 ///////////
 // SLEEP //
 ///////////
@@ -8960,7 +9077,7 @@ void sp_sleep_ns(u64 target) {
     u64 before = sp_tm_read_timer(&timer);
     sp_os_sleep_ns(coarse);
     elapsed = sp_tm_read_timer(&timer);
-    fine = SP_MAX(fine, elapsed - before);
+    fine = sp_max(fine, elapsed - before);
   }
 
   // fine sleep until we get really close
@@ -9150,11 +9267,11 @@ sp_str_t sp_os_get_executable_ext() {
 
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
   switch (kind) {
-    case SP_OS_LIB_SHARED: return SP_LIT("dll");
-    case SP_OS_LIB_STATIC: return SP_LIT("lib");
+    case SP_OS_LIB_SHARED: return sp_str_lit("dll");
+    case SP_OS_LIB_STATIC: return sp_str_lit("lib");
   }
 
-  SP_UNREACHABLE_RETURN(SP_LIT(""));
+  SP_UNREACHABLE_RETURN(sp_str_lit(""));
 }
 
 sp_str_t sp_os_lib_to_file_name(sp_mem_t mem, sp_str_t lib_name, sp_os_lib_kind_t kind) {
@@ -9173,8 +9290,8 @@ sp_str_t sp_os_get_executable_ext() {
 
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
   switch (kind) {
-    case SP_OS_LIB_SHARED: return SP_LIT("dylib");
-    case SP_OS_LIB_STATIC: return SP_LIT("a");
+    case SP_OS_LIB_SHARED: return sp_str_lit("dylib");
+    case SP_OS_LIB_STATIC: return sp_str_lit("a");
   }
 
   SP_UNREACHABLE();
@@ -9196,8 +9313,8 @@ sp_str_t sp_os_get_executable_ext() {
 
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
   switch (kind) {
-    case SP_OS_LIB_SHARED: return SP_LIT("so");
-    case SP_OS_LIB_STATIC: return SP_LIT("a");
+    case SP_OS_LIB_SHARED: return sp_str_lit("so");
+    case SP_OS_LIB_STATIC: return sp_str_lit("a");
   }
 
   SP_UNREACHABLE_RETURN(sp_str_lit(""));
@@ -9235,8 +9352,8 @@ sp_str_t sp_os_get_executable_ext() {
 
 sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
   switch (kind) {
-    case SP_OS_LIB_SHARED: return SP_LIT("so");
-    case SP_OS_LIB_STATIC: return SP_LIT("a");
+    case SP_OS_LIB_SHARED: return sp_str_lit("so");
+    case SP_OS_LIB_STATIC: return sp_str_lit("a");
   }
 
   SP_UNREACHABLE_RETURN(sp_str_lit(""));
@@ -9249,9 +9366,7 @@ sp_str_t sp_os_lib_to_file_name(sp_mem_t mem, sp_str_t lib_name, sp_os_lib_kind_
 
 
 sp_err_t sp_os_create_dir(sp_str_t path) {
-  c8 cstr[SP_PATH_MAX] = sp_zero();
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-  return sp_sys_mkdir(cstr, 0755) == 0 ? SP_OK : SP_ERR_OS;
+  return sp_sys_mkdir_s(path, 0755) == 0 ? SP_OK : SP_ERR_OS;
 }
 
 sp_str_t sp_os_get_cwd_a(sp_mem_t mem) {
@@ -9264,10 +9379,7 @@ sp_str_t sp_os_get_cwd_a(sp_mem_t mem) {
 }
 
 sp_err_t sp_os_create_file(sp_str_t path) {
-  c8 cstr[SP_PATH_MAX] = sp_zero();
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-
-  sp_sys_fd_t fd = sp_sys_open(cstr, SP_O_CREAT | SP_O_WRONLY | SP_O_TRUNC, 0644);
+  sp_sys_fd_t fd = sp_sys_open_s(path, SP_O_CREAT | SP_O_WRONLY | SP_O_TRUNC, 0644);
   if (fd != SP_SYS_INVALID_FD) {
     sp_sys_close(fd);
   }
@@ -9276,22 +9388,14 @@ sp_err_t sp_os_create_file(sp_str_t path) {
 }
 
 sp_err_t sp_os_create_hard_link(sp_str_t target, sp_str_t link_path) {
-  c8 ct[SP_PATH_MAX] = sp_zero();
-  c8 cl[SP_PATH_MAX] = sp_zero();
-  sp_cstr_copy_to_n(target.data, target.len, ct, SP_PATH_MAX);
-  sp_cstr_copy_to_n(link_path.data, link_path.len, cl, SP_PATH_MAX);
-  if (sp_sys_link(ct, cl)) {
+  if (sp_sys_link_s(target, link_path)) {
     return SP_ERR_OS;
   }
   return SP_OK;
 }
 
 sp_err_t sp_os_create_sym_link(sp_str_t target, sp_str_t link_path) {
-  c8 ct[SP_PATH_MAX] = sp_zero();
-  c8 cl[SP_PATH_MAX] = sp_zero();
-  sp_cstr_copy_to_n(target.data, target.len, ct, SP_PATH_MAX);
-  sp_cstr_copy_to_n(link_path.data, link_path.len, cl, SP_PATH_MAX);
-  if (sp_sys_symlink(ct, cl) != 0) {
+  if (sp_sys_symlink_s(target, link_path) != 0) {
     return SP_ERR_OS;
   }
   return SP_OK;
@@ -10997,7 +11101,7 @@ sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
       return result;
     }
 
-    s32 poll_wait = SP_MIN(time_remaining, 10);
+    s32 poll_wait = sp_min(time_remaining, 10);
     if (poll_wait > 0) {
       sp_os_sleep_ms(poll_wait);
       time_remaining -= poll_wait;
@@ -11678,7 +11782,7 @@ u64 sp_ps_win32_read_available(sp_sys_fd_t fd, sp_io_writer_t* builder, bool* op
       return total;
     }
 
-    u32 chunk = SP_MIN((u32)sizeof(buffer), (u32)available);
+    u32 chunk = sp_min((u32)sizeof(buffer), (u32)available);
     s64 num_read = sp_sys_read(fd, buffer, chunk);
     if (num_read <= 0) {
       *open = false;
@@ -11944,7 +12048,7 @@ struct sp_fmon_os {
   sp_da(s32) fds;
   sp_da(sp_str_t) paths;
   sp_ht_a(sp_str_t, u8) files;
-  sp_aligned() u8 buffer[4096];
+  SP_ALIGNED u8 buffer[4096];
   s32 fd;
 };
 
@@ -12451,9 +12555,6 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
 }
 
 void sp_fmon_os_deinit(sp_fmon_t* monitor) {
-  sp_require(monitor);
-  sp_require(monitor->os);
-
   sp_fmon_os_t* os = monitor->os;
 
   if (os->stream) {
@@ -12484,17 +12585,11 @@ void sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file) {
 }
 
 void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
-  sp_require(monitor);
-  sp_require(monitor->os);
-
   sp_fmon_os_push_dir(monitor->os, path);
   sp_fmon_fsevents_recreate_stream(monitor);
 }
 
 void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
-  sp_require(monitor);
-  sp_require(monitor->os);
-
   sp_fmon_os_t* os = monitor->os;
 
   sp_fmon_os_push_file(os, path);
@@ -12524,8 +12619,6 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
 }
 
 void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
-  sp_require(monitor);
-  sp_require(monitor->os);
   sp_fmon_os_t* os = monitor->os;
 
   dispatch_sync(os->queue, ^{});
@@ -12776,7 +12869,7 @@ sp_err_t sp_io_reader_file_close(sp_io_reader_t* r) {
 
 sp_err_t sp_io_reader_mem_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read) {
   u64 available = r->mem.len - r->mem.pos;
-  u64 n = SP_MIN(size, available);
+  u64 n = sp_min(size, available);
   sp_mem_copy(r->mem.ptr + r->mem.pos, ptr, n);
   r->mem.pos += n;
   if (bytes_read) *bytes_read = n;
@@ -12822,9 +12915,7 @@ sp_err_t sp_io_reader_mem_close(sp_io_reader_t* r) {
 }
 
 sp_err_t sp_io_reader_from_file(sp_io_reader_t* reader, sp_str_t path) {
-  c8 cstr[SP_PATH_MAX] = sp_zero();
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-  sp_sys_fd_t fd = sp_sys_open(cstr, SP_O_RDONLY | SP_O_BINARY, 0);
+  sp_sys_fd_t fd = sp_sys_open_s(path, SP_O_RDONLY | SP_O_BINARY, 0);
 
   if (fd == SP_SYS_INVALID_FD) {
     *reader = SP_ZERO_STRUCT(sp_io_reader_t);
@@ -12901,7 +12992,7 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
   u64 num_read = 0;
 
   // Drain what we can from what's already buffered
-  num_drained = SP_MIN(size, reader->buffer.len - reader->seek);
+  num_drained = sp_min(size, reader->buffer.len - reader->seek);
   sp_mem_copy(reader->buffer.data + reader->seek, buffer, num_drained);
   reader->seek += num_drained;
 
@@ -12917,7 +13008,7 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
     // just what the user asked for
     err = reader->vtable.read(reader, reader->buffer.data, reader->buffer.capacity, &reader->buffer.len);
 
-    num_read = SP_MIN(remaining, reader->buffer.len);
+    num_read = sp_min(remaining, reader->buffer.len);
     reader->seek = num_read;
     sp_mem_copy(reader->buffer.data, buffer + num_drained, num_read);
   }
@@ -13019,9 +13110,7 @@ sp_err_t sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_wri
   }
 
 
-  c8 cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-  sp_sys_fd_t fd = sp_sys_open(cstr, flags, 0644);
+  sp_sys_fd_t fd = sp_sys_open_s(path, flags, 0644);
 
   if (fd == SP_SYS_INVALID_FD) {
     *writer = SP_ZERO_STRUCT(sp_io_writer_t);
@@ -13170,7 +13259,7 @@ sp_err_t sp_io_pad(sp_io_writer_t* writer, u64 size, u64* bytes_written) {
   sp_try_goto(sp_io_flush(writer), result, done);
 
   while (total < size) {
-    u64 chunk = SP_MIN(size - total, 64);
+    u64 chunk = sp_min(size - total, 64);
     u64 chunk_written = 0;
     sp_try_goto(sp_io_write(writer, zeros, chunk, &chunk_written), result, done);
     total += chunk_written;
@@ -14117,7 +14206,7 @@ sp_str_t sp_fs_join_path_a(sp_mem_t mem, sp_str_t a, sp_str_t b) {
   b = sp_fs_trim_path(b);
   if (sp_str_empty(a)) return sp_str_copy_a(mem, b);
   if (sp_str_empty(b)) return sp_str_copy_a(mem, a);
-  return sp_str_join_a(mem, a, b, SP_LIT("/"));
+  return sp_str_join_a(mem, a, b, sp_str_lit("/"));
 }
 
 sp_str_t sp_fs_replace_ext_a(sp_mem_t mem, sp_str_t path, sp_str_t ext) {
@@ -14129,19 +14218,15 @@ sp_str_t sp_fs_replace_ext_a(sp_mem_t mem, sp_str_t path, sp_str_t ext) {
 
 sp_fs_kind_t sp_fs_lstat_kind_a(sp_str_t path) {
   if (sp_str_empty(path)) return SP_FS_KIND_NONE;
-  c8 cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
   sp_sys_stat_t st = SP_ZERO_INITIALIZE();
-  s32 rc = sp_sys_lstat(cstr, &st);
+  s32 rc = sp_sys_lstat_s(path, &st);
   return rc == 0 ? st.kind : SP_FS_KIND_NONE;
 }
 
 sp_fs_kind_t sp_fs_stat_kind_a(sp_str_t path) {
   if (sp_str_empty(path)) return SP_FS_KIND_NONE;
-  c8 cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
   sp_sys_stat_t st = SP_ZERO_INITIALIZE();
-  s32 rc = sp_sys_stat(cstr, &st);
+  s32 rc = sp_sys_stat_s(path, &st);
   return rc == 0 ? st.kind : SP_FS_KIND_NONE;
 }
 
@@ -14179,10 +14264,8 @@ sp_fs_kind_t sp_fs_get_target_kind_a(sp_str_t path) {
 
 sp_tm_epoch_t sp_fs_get_mod_time_a(sp_str_t path) {
   sp_tm_epoch_t result = SP_ZERO_STRUCT(sp_tm_epoch_t);
-  c8 cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
   sp_sys_stat_t st;
-  if (sp_sys_stat(cstr, &st) == 0) {
+  if (sp_sys_stat_s(path, &st) == 0) {
     result.s = (u64)st.mtime.tv_sec;
     result.ns = (u32)st.mtime.tv_nsec;
   }
@@ -14192,10 +14275,8 @@ sp_tm_epoch_t sp_fs_get_mod_time_a(sp_str_t path) {
 sp_str_t sp_fs_canonicalize_path_a(sp_mem_t mem, sp_str_t path) {
   if (sp_str_empty(path)) return SP_ZERO_STRUCT(sp_str_t);
 
-  c8 cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
   c8 buf[SP_PATH_MAX];
-  s64 len = sp_sys_canonicalize_path(cstr, buf, SP_PATH_MAX);
+  s64 len = sp_sys_canonicalize_path_s(path, buf, SP_PATH_MAX);
 
   if (len <= 0) return SP_ZERO_STRUCT(sp_str_t);
   sp_str_t canonical = { .data = buf, .len = (u32)len };
@@ -14232,9 +14313,7 @@ sp_str_t sp_fs_get_config_path_a(sp_mem_t mem) {
 // fs: io wrappers
 //
 sp_err_t sp_io_reader_from_file_a(sp_io_reader_t* reader, sp_str_t path) {
-  c8 cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-  sp_sys_fd_t fd = sp_sys_open(cstr, SP_O_RDONLY | SP_O_BINARY, 0);
+  sp_sys_fd_t fd = sp_sys_open_s(path, SP_O_RDONLY | SP_O_BINARY, 0);
 
   if (fd == SP_SYS_INVALID_FD) {
     *reader = SP_ZERO_STRUCT(sp_io_reader_t);
@@ -14260,9 +14339,7 @@ sp_err_t sp_io_writer_from_file_a(sp_io_writer_t* writer, sp_str_t path, sp_io_w
     case SP_IO_WRITE_MODE_APPEND:    flags |= SP_O_APPEND; break;
   }
 
-  c8 cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-  sp_sys_fd_t fd = sp_sys_open(cstr, flags, 0644);
+  sp_sys_fd_t fd = sp_sys_open_s(path, flags, 0644);
 
   if (fd == SP_SYS_INVALID_FD) {
     *writer = SP_ZERO_STRUCT(sp_io_writer_t);
@@ -14378,9 +14455,7 @@ sp_err_t sp_fs_link_a(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind) {
 }
 
 sp_err_t sp_fs_remove_file_a(sp_str_t path) {
-  c8 cstr [SP_PATH_MAX] = sp_zero();
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-  return sp_sys_unlink(cstr);
+  return sp_sys_unlink_s(path);
 }
 
 void sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path) {
@@ -14473,10 +14548,8 @@ void sp_fs_copy_file_a(sp_str_t from, sp_str_t to) {
     to = sp_fs_join_path_a(s.mem, to, sp_fs_get_name(from));
   }
 
-  c8 from_cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(from.data, from.len, from_cstr, SP_PATH_MAX);
   sp_sys_stat_t st = SP_ZERO_INITIALIZE();
-  if (sp_sys_stat(from_cstr, &st)) goto done;
+  if (sp_sys_stat_s(from, &st)) goto done;
 
   sp_io_reader_t reader = SP_ZERO_INITIALIZE();
   if (sp_io_reader_from_file_a(&reader, from)) goto done;
@@ -14496,9 +14569,7 @@ void sp_fs_copy_file_a(sp_str_t from, sp_str_t to) {
   }
   sp_io_reader_close(&reader);
   sp_io_writer_close(&writer);
-  c8 to_cstr[SP_PATH_MAX];
-  sp_cstr_copy_to_n(to.data, to.len, to_cstr, SP_PATH_MAX);
-  sp_sys_chmod(to_cstr, &st);
+  sp_sys_chmod_s(to, &st);
 
 done:
   sp_mem_end_scratch(s);
@@ -14597,7 +14668,7 @@ sp_str_t sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time) {
   buf[21] = (c8)('0' + ((u32)dt.millisecond / 10) % 10);
   buf[22] = (c8)('0' + (u32)dt.millisecond % 10);
   buf[23] = 'Z';
-  return SP_STR(buf, 24);
+  return sp_str(buf, 24);
 }
 // @refactor
 

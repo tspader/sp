@@ -72,7 +72,7 @@
   } while (0) \
   UTEST_SURPRESS_WARNING_END
 
-#define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), SP_CSTR(b), false)
+#define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), sp_str_view(b), false)
 #define SP_EXPECT_STR_EQ(a, b) SP_TEST_STREQ((a), (b), false)
 
 typedef struct {
@@ -108,7 +108,7 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t pat
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager);
 
 
-typedef struct sp_aligned() sp_mem_tracking_node_t {
+typedef struct SP_ALIGNED sp_mem_tracking_node_t {
   struct sp_mem_tracking_node_t* prev;
   struct sp_mem_tracking_node_t* next;
   u64 size;
@@ -158,8 +158,8 @@ static sp_str_t sp_test_file_manager_get_repo_root(sp_mem_t a) {
   }
 
   while (!sp_str_empty(path)) {
-    if (sp_str_equal(sp_fs_get_name(path), SP_LIT("sp"))) {
-      sp_str_t marker = sp_fs_join_path_a(a, path, SP_LIT("sp.h"));
+    if (sp_str_equal(sp_fs_get_name(path), sp_str_lit("sp"))) {
+      sp_str_t marker = sp_fs_join_path_a(a, path, sp_str_lit("sp.h"));
       if (sp_fs_exists_a(marker)) {
         return sp_fs_canonicalize_path_a(a, path);
       }
@@ -189,7 +189,7 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_roo
     return sp_test_file_manager_top_level;
   }
 
-  sp_str_t tmp = sp_fs_join_path_a(a, repo_root, SP_LIT(".tmp"));
+  sp_str_t tmp = sp_fs_join_path_a(a, repo_root, sp_str_lit(".tmp"));
   if (!sp_fs_exists_a(tmp)) {
     sp_fs_create_dir_a(tmp);
   }
@@ -251,7 +251,7 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t rel
   sp_str_t path = sp_test_file_path(manager, relative);
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = path,
-    .content = SP_LIT(""),
+    .content = sp_str_lit(""),
   });
 
   return path;

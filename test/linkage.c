@@ -98,7 +98,7 @@ bool compile_to_exe(linkage* ctx, const c8* file, sp_str_t output) {
         sp_str_lit("/nologo"),
         sp_str_lit("/TC"),
         sp_fmt_a(sp_mem_get_scratch(), "/I{}", sp_fmt_str(ctx->root)).value,
-        sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, SP_CSTR(file)),
+        sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, sp_str_view(file)),
         sp_fmt_a(sp_mem_get_scratch(), "/Fe:{}", sp_fmt_str(output)).value,
       },
     };
@@ -111,7 +111,7 @@ bool compile_to_exe(linkage* ctx, const c8* file, sp_str_t output) {
   sp_ps_output_t out = sp_ps_run_a(sp_mem_get_scratch(), (sp_ps_config_t) {
     .command = sp_str_lit("cc"),
     .args = {
-      sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, SP_CSTR(file)),
+      sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, sp_str_view(file)),
       sp_fmt_a(sp_mem_get_scratch(), "-I{}", sp_fmt_str(ctx->root)).value,
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),
@@ -131,7 +131,7 @@ bool compile_to_object(linkage* ctx, const c8* file, sp_str_t output) {
         sp_str_lit("/TC"),
         sp_str_lit("/c"),
         sp_fmt_a(sp_mem_get_scratch(), "/I{}", sp_fmt_str(ctx->root)).value,
-        sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, SP_CSTR(file)),
+        sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, sp_str_view(file)),
         sp_fmt_a(sp_mem_get_scratch(), "/Fo:{}", sp_fmt_str(output)).value,
       },
     });
@@ -142,7 +142,7 @@ bool compile_to_object(linkage* ctx, const c8* file, sp_str_t output) {
     .command = sp_str_lit("cc"),
     .args = {
       sp_str_lit("-c"),
-      sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, SP_CSTR(file)),
+      sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, sp_str_view(file)),
       sp_fmt_a(sp_mem_get_scratch(), "-I{}", sp_fmt_str(ctx->root)).value,
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),
@@ -190,7 +190,7 @@ bool compile_to_linked_exe(linkage* ctx, const c8* file, sp_str_t output, sp_str
       .args = {
         sp_str_lit("/nologo"),
         sp_str_lit("/TC"),
-        sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, SP_CSTR(file)),
+        sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, sp_str_view(file)),
         sp_fmt_a(sp_mem_get_scratch(), "/I{}", sp_fmt_str(ctx->root)).value,
         sp_fmt_a(sp_mem_get_scratch(), "/Fe:{}", sp_fmt_str(output)).value,
       },
@@ -210,7 +210,7 @@ bool compile_to_linked_exe(linkage* ctx, const c8* file, sp_str_t output, sp_str
   sp_ps_config_t cfg = {
     .command = sp_str_lit("cc"),
     .args = {
-      sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, SP_CSTR(file)),
+      sp_fs_join_path_a(sp_mem_get_scratch(), ctx->source, sp_str_view(file)),
       sp_fmt_a(sp_mem_get_scratch(), "-I{}", sp_fmt_str(ctx->root)).value,
       sp_str_lit("-o"), output,
       sp_str_lit("-g"),

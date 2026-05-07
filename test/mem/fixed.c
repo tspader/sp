@@ -1,7 +1,7 @@
 #include "mem.h"
 
 UTEST_F(mem, fixed_basic_alloc) {
-  sp_aligned() u8 storage [256];
+  SP_ALIGNED u8 storage [256];
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
@@ -14,7 +14,7 @@ UTEST_F(mem, fixed_basic_alloc) {
 }
 
 UTEST_F(mem, fixed_aligned_base_no_padding) {
-  sp_aligned() u8 storage [256];
+  SP_ALIGNED u8 storage [256];
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
@@ -32,7 +32,7 @@ UTEST_F(mem, fixed_aligned_base_no_padding) {
 }
 
 UTEST_F(mem, fixed_unaligned_base_pads_to_alignment) {
-  sp_aligned() u8 storage [256];
+  SP_ALIGNED u8 storage [256];
   u64 offsets [] = { 1, 3, 7 };
   u64 alloc_sizes [] = { 8, 16, 32 };
 
@@ -96,7 +96,7 @@ UTEST_F(mem, fixed_padding_mixed_sizes) {
 }
 
 UTEST_F(mem, fixed_clear_resets_bytes_used) {
-  sp_aligned() u8 storage [256];
+  SP_ALIGNED u8 storage [256];
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 

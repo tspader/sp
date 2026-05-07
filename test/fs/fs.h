@@ -16,8 +16,8 @@ static void probe_symlinks(sp_mem_t a, sp_str_t test_dir) {
   if (probed) return;
   probed = true;
 
-  sp_str_t target = sp_fs_join_path_a(a, test_dir, SP_LIT(".symlink_probe_target"));
-  sp_str_t link = sp_fs_join_path_a(a, test_dir, SP_LIT(".symlink_probe_link"));
+  sp_str_t target = sp_fs_join_path_a(a, test_dir, sp_str_lit(".symlink_probe_target"));
+  sp_str_t link = sp_fs_join_path_a(a, test_dir, sp_str_lit(".symlink_probe_link"));
   sp_fs_create_file_a(target);
   are_symlinks_available = sp_fs_create_sym_link_a(target, link) == SP_OK;
   if (are_symlinks_available) sp_fs_remove_file_a(link);
@@ -146,7 +146,7 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
       case FS_SETUP_FILE: {
         sp_test_file_create_ex((sp_test_file_config_t) {
           .path = path,
-          .content = ent->content ? sp_str_view(ent->content) : SP_LIT(""),
+          .content = ent->content ? sp_str_view(ent->content) : sp_str_lit(""),
         });
         break;
       }

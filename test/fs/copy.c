@@ -171,10 +171,10 @@ UTEST_F(fs, unicode_copy_file) {
 UTEST_F(fs, copy_preserves_file_attributes) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
-  sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, SP_LIT("source_attrs.txt"));
+  sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("source_attrs.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = source_file,
-    .content = SP_LIT("preserved content"),
+    .content = sp_str_lit("preserved content"),
   });
 
   ASSERT_EQ(chmod(sp_cstr_from_str_a(a, source_file), 0755), 0);
@@ -182,7 +182,7 @@ UTEST_F(fs, copy_preserves_file_attributes) {
   struct stat original_stat = {0};
   ASSERT_EQ(stat(sp_cstr_from_str_a(a, source_file), &original_stat), 0);
 
-  sp_str_t copy_file = sp_test_file_path(&ut.file_manager, SP_LIT("copy_attrs.txt"));
+  sp_str_t copy_file = sp_test_file_path(&ut.file_manager, sp_str_lit("copy_attrs.txt"));
   ASSERT_EQ(sp_fs_copy_a(source_file, copy_file), SP_OK);
   ASSERT_TRUE(sp_fs_is_file_a(copy_file));
 
@@ -193,7 +193,7 @@ UTEST_F(fs, copy_preserves_file_attributes) {
   ASSERT_EQ(original_stat.st_size, copy_stat.st_size);
   sp_str_t preserved = SP_ZERO_INITIALIZE();
   sp_io_read_file_a(a, copy_file, &preserved);
-  SP_EXPECT_STR_EQ(preserved, SP_LIT("preserved content"));
+  SP_EXPECT_STR_EQ(preserved, sp_str_lit("preserved content"));
 }
 #endif
 

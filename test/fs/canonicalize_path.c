@@ -283,8 +283,8 @@ UTEST_F(fs, canon_idempotent) {
   });
 
   // run a second pass: canonicalizing an already-canonical path should be the same
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("canon_idempotent"));
-  sp_str_t path = sp_fs_join_path_a(a, sandbox, SP_LIT("stable.txt"));
+  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("canon_idempotent"));
+  sp_str_t path = sp_fs_join_path_a(a, sandbox, sp_str_lit("stable.txt"));
   sp_str_t first = sp_fs_canonicalize_path_a(a, path);
   sp_str_t second = sp_fs_canonicalize_path_a(a, first);
   SP_EXPECT_STR_EQ(first, second);
@@ -304,14 +304,14 @@ UTEST_F(fs, canon_cwd_matches_dot) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
   sp_str_t old_cwd = sp_fs_get_cwd_a(a);
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, SP_LIT("canon_cwd"));
+  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("canon_cwd"));
   sp_fs_create_dir_a(sandbox);
 
-  ASSERT_EQ(sp_sys_chdir(sp_cstr_from_str_a(a, sandbox)), 0);
+  ASSERT_EQ(sp_sys_chdir_s(sandbox), 0);
   sp_str_t cwd = sp_fs_get_cwd_a(a);
-  sp_str_t canonical_dot = sp_fs_canonicalize_path_a(a, SP_LIT("."));
+  sp_str_t canonical_dot = sp_fs_canonicalize_path_a(a, sp_str_lit("."));
   SP_EXPECT_STR_EQ(cwd, canonical_dot);
-  ASSERT_EQ(sp_sys_chdir(sp_cstr_from_str_a(a, old_cwd)), 0);
+  ASSERT_EQ(sp_sys_chdir_s(old_cwd), 0);
 }
 
 SP_TEST_MAIN()

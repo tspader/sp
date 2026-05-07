@@ -463,8 +463,8 @@ UTEST_F(sp_ht, string_key_custom_hash) {
   EXPECT_EQ(*sp_ht_getp(ht, kb), 200);
   EXPECT_EQ(*sp_ht_getp(ht, kc), 300);
 
-  sp_str_t ka_copy = sp_str_copy_a(s.mem, SP_LIT("hello"));
-  sp_str_t kb_copy = sp_str_copy_a(s.mem, SP_LIT("world"));
+  sp_str_t ka_copy = sp_str_copy_a(s.mem, sp_str_lit("hello"));
+  sp_str_t kb_copy = sp_str_copy_a(s.mem, sp_str_lit("world"));
 
   EXPECT_TRUE(sp_ht_getp(ht, ka_copy));
   EXPECT_TRUE(sp_ht_getp(ht, kb_copy));
@@ -472,7 +472,7 @@ UTEST_F(sp_ht, string_key_custom_hash) {
   EXPECT_EQ(*sp_ht_getp(ht, ka_copy), 100);
   EXPECT_EQ(*sp_ht_getp(ht, kb_copy), 200);
 
-  sp_str_t kd = sp_str_copy_a(s.mem, SP_LIT("missing"));
+  sp_str_t kd = sp_str_copy_a(s.mem, sp_str_lit("missing"));
   EXPECT_FALSE(sp_ht_getp(ht, kd));
   EXPECT_EQ(sp_ht_getp(ht, kd), SP_NULLPTR);
 
@@ -502,8 +502,8 @@ UTEST_F(sp_ht, str_key) {
   EXPECT_EQ(*sp_str_ht_get(ht, kb), 200);
   EXPECT_EQ(*sp_str_ht_get(ht, kc), 300);
 
-  sp_str_t ka_copy = sp_str_copy_a(s.mem, SP_LIT("hello"));
-  sp_str_t kb_copy = sp_str_copy_a(s.mem, SP_LIT("world"));
+  sp_str_t ka_copy = sp_str_copy_a(s.mem, sp_str_lit("hello"));
+  sp_str_t kb_copy = sp_str_copy_a(s.mem, sp_str_lit("world"));
 
   EXPECT_TRUE(sp_str_ht_get(ht, ka_copy));
   EXPECT_TRUE(sp_str_ht_get(ht, kb_copy));
@@ -511,7 +511,7 @@ UTEST_F(sp_ht, str_key) {
   EXPECT_EQ(*sp_str_ht_get(ht, ka_copy), 100);
   EXPECT_EQ(*sp_str_ht_get(ht, kb_copy), 200);
 
-  sp_str_t kd = sp_str_copy_a(s.mem, SP_LIT("missing"));
+  sp_str_t kd = sp_str_copy_a(s.mem, sp_str_lit("missing"));
   EXPECT_FALSE(sp_str_ht_get(ht, kd));
   EXPECT_EQ(sp_str_ht_get(ht, kd), SP_NULLPTR);
 

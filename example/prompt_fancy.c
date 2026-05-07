@@ -137,8 +137,8 @@ static void fancy_scan_update(sp_prompt_ctx_t* ctx) {
 
 static void fancy_scan_render(sp_prompt_ctx_t* ctx) {
   fancy_scan_t* scan = (fancy_scan_t*)ctx->user_data;
-  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), SP_LIT("Inspecting workspace"), SP_ZERO_STRUCT(sp_prompt_style_t));
-  fancy_render_rail(ctx, SP_LIT(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Inspecting workspace"), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
 
   sp_for(it, scan->num_probes) {
     bool done = it < scan->done;
@@ -257,15 +257,15 @@ static void fancy_changelog_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t event)
 
 static void fancy_changelog_render(sp_prompt_ctx_t* ctx) {
   fancy_changelog_t* log = (fancy_changelog_t*)ctx->user_data;
-  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), SP_LIT("Review changelog"), SP_ZERO_STRUCT(sp_prompt_style_t));
-  //fancy_render_rail(ctx, SP_LIT(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Review changelog"), SP_ZERO_STRUCT(sp_prompt_style_t));
+  //fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
 
   const c8* section = "";
   sp_for(it, log->num_items) {
     fancy_changelog_item_t* item = &log->items[it];
     if (!sp_cstr_equal(section, item->section)) {
       section = item->section;
-      fancy_render_rail(ctx, SP_LIT(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+      fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
       fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
       fancy_render_cstr(ctx, "[", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
       fancy_render_cstr(ctx, section, fancy_style_rgb(0x9b, 0xdb, 0x8d));
@@ -280,8 +280,8 @@ static void fancy_changelog_render(sp_prompt_ctx_t* ctx) {
     fancy_nl(ctx);
   }
 
-  fancy_render_rail(ctx, SP_LIT(""), SP_ZERO_STRUCT(sp_prompt_style_t));
-  fancy_render_rail(ctx, SP_LIT("j/k move   space toggle   d drop   r restore   tab section   a accept"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
+  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit("j/k move   space toggle   d drop   r restore   tab section   a accept"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
 }
 
 static sp_prompt_widget_t fancy_changelog_widget(fancy_changelog_t* log) {
@@ -374,15 +374,15 @@ static void fancy_publish_render(sp_prompt_ctx_t* ctx) {
   fancy_publish_t copy = *publish;
   sp_mutex_unlock(&publish->lock);
 
-  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), SP_LIT("Publishing v0.13.3"), SP_ZERO_STRUCT(sp_prompt_style_t));
-  fancy_render_rail(ctx, SP_LIT(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Publishing v0.13.3"), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
 
-  fancy_render_rail(ctx, SP_LIT("Build matrix"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
+  fancy_render_rail(ctx, sp_str_lit("Build matrix"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
   fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_render_bar(ctx, copy.build_progress, 28, fancy_style_rgb(0x55, 0xaa, 0xff));
   fancy_render_str(ctx, sp_fmt_a(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.build_progress * 100.0f))).value, SP_ZERO_STRUCT(sp_prompt_style_t));
   fancy_nl(ctx);
-  fancy_render_rail(ctx, SP_LIT(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
 
   sp_for(it, copy.num_targets) {
     fancy_target_t* target = &copy.targets[it];
@@ -399,8 +399,8 @@ static void fancy_publish_render(sp_prompt_ctx_t* ctx) {
     fancy_nl(ctx);
   }
 
-  fancy_render_rail(ctx, SP_LIT(""), SP_ZERO_STRUCT(sp_prompt_style_t));
-  fancy_render_rail(ctx, SP_LIT("Uploads"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
+  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit("Uploads"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
   fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_render_bar(ctx, copy.upload_progress, 28, fancy_style_rgb(0x9b, 0xdb, 0x8d));
   fancy_render_str(ctx, sp_fmt_a(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.upload_progress * 100.0f))).value, SP_ZERO_STRUCT(sp_prompt_style_t));

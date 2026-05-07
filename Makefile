@@ -42,6 +42,12 @@ TRIPLES = \
   aarch64-macos \
   x86_64-windows-gnu \
   wasm32-freestanding wasm32-wasi
+SMOKE = \
+  x86_64-linux-none x86_64-linux-musl \
+  aarch64-linux-musl \
+  aarch64-macos \
+  x86_64-windows-gnu \
+  wasm32-freestanding wasm32-wasi
 
 .PHONY: all clean tests examples $(TRIPLES) big gcc tcc
 all: examples tests tools
@@ -89,6 +95,7 @@ $(TEST_DIR)/process$(EXE): test/tools/process/process.c sp.h | $(TEST_DIR)
 $(TRIPLES):
 	+$(MAKE) TRIPLE=$@ examples tests
 
+smoke: $(SMOKE)
 big: $(TRIPLES) gcc tcc examples tests
 
 gcc:

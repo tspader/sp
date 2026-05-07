@@ -73,7 +73,7 @@ static sp_str_t trim_framebuffer_row(sp_mem_t mem, sp_prompt_cell_t* row, u32 co
   sp_io_writer_t builder = sp_zero();
   sp_io_writer_from_dyn_mem_a(mem, &builder);
   sp_for(col, cols) {
-    u8 buf[4] = SP_ZERO_INITIALIZE();
+    c8 buf[4] = SP_ZERO_INITIALIZE();
     u8 len = sp_utf8_encode(row[col].codepoint, buf);
     sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
   }
@@ -202,7 +202,7 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_mem_t mem, sp_str_t bytes) {
       continue;
     }
 
-    u8 utf8[4] = {0};
+    c8 utf8[4] = {0};
     utf8[0] = b;
     u32 count = 1;
     if ((b & 0xE0) == 0xC0) {
@@ -215,7 +215,7 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_mem_t mem, sp_str_t bytes) {
 
     sp_for_range(j, 1, count) {
       if (i + j < bytes.len) {
-        utf8[j] = (u8)bytes.data[i + j];
+        utf8[j] = bytes.data[i + j];
       }
     }
 
@@ -228,7 +228,7 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_mem_t mem, sp_str_t bytes) {
     sp_io_writer_t builder = sp_zero();
     sp_io_writer_from_dyn_mem_a(mem, &builder);
     sp_for(col, 256) {
-      u8 buf[4] = SP_ZERO_INITIALIZE();
+      c8 buf[4] = SP_ZERO_INITIALIZE();
       u8 len = sp_utf8_encode(vt.cells[row][col], buf);
       sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
     }
@@ -290,7 +290,7 @@ static void sp_prompt_run_case(s32* utest_result, struct prompt* fixture, sp_pro
 
 UTEST_F(prompt, intro_submits_without_update) {
   sp_prompt_intro_t intro = {
-    .text = sp_str_view("hello"),
+    .text = sp_str_lit("hello"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -306,7 +306,7 @@ UTEST_F(prompt, intro_submits_without_update) {
 
 UTEST_F(prompt, outro_submits_without_update) {
   sp_prompt_outro_t outro = {
-    .text = sp_str_view("done"),
+    .text = sp_str_lit("done"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -322,8 +322,8 @@ UTEST_F(prompt, outro_submits_without_update) {
 
 UTEST_F(prompt, note_renders_single_line_box) {
   sp_prompt_note_t note = {
-    .message = sp_str_view("x"),
-    .title = sp_str_view("T"),
+    .message = sp_str_lit("x"),
+    .title = sp_str_lit("T"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -343,8 +343,8 @@ UTEST_F(prompt, note_renders_single_line_box) {
 
 UTEST_F(prompt, note_uses_longest_line_for_width) {
   sp_prompt_note_t note = {
-    .message = sp_str_view("a\nbbb"),
-    .title = sp_str_view("T"),
+    .message = sp_str_lit("a\nbbb"),
+    .title = sp_str_lit("T"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -365,7 +365,7 @@ UTEST_F(prompt, note_uses_longest_line_for_width) {
 
 UTEST_F(prompt, static_widget_ignores_provided_events) {
   sp_prompt_intro_t intro = {
-    .text = sp_str_view("eventless"),
+    .text = sp_str_lit("eventless"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -386,7 +386,7 @@ UTEST_F(prompt, static_widget_ignores_provided_events) {
 
 UTEST_F(prompt, message_info_renders_symbol_line) {
   sp_prompt_message_t message = {
-    .text = sp_str_view("heads up"),
+    .text = sp_str_lit("heads up"),
     .symbol = 0x25cf,
     .ansi = 36,
   };
@@ -404,7 +404,7 @@ UTEST_F(prompt, message_info_renders_symbol_line) {
 
 UTEST_F(prompt, message_error_renders_symbol_line) {
   sp_prompt_message_t message = {
-    .text = sp_str_view("boom"),
+    .text = sp_str_lit("boom"),
     .symbol = 0x25a0,
     .ansi = 31,
   };
@@ -422,7 +422,7 @@ UTEST_F(prompt, message_error_renders_symbol_line) {
 
 UTEST_F(prompt, text_cancels_without_submit_event) {
   sp_prompt_text_t text = {
-    .prompt = sp_str_view("Search:"),
+    .prompt = sp_str_lit("Search:"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -443,8 +443,8 @@ UTEST_F(prompt, text_cancels_without_submit_event) {
 
 UTEST_F(prompt, text_submits_on_enter_with_prefill_fallback) {
   sp_prompt_text_t text = {
-    .prompt = sp_str_view("Search:"),
-    .prefill = sp_str_view("/home/spader"),
+    .prompt = sp_str_lit("Search:"),
+    .prefill = sp_str_lit("/home/spader"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -1374,7 +1374,7 @@ UTEST_F(prompt, select_outro_flow_renders_separator) {
   };
 
   sp_prompt_outro_t outro = {
-    .text = sp_str_view("done"),
+    .text = sp_str_lit("done"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -1843,8 +1843,8 @@ UTEST_F(prompt, multiselect_filter_state_resets_between_runs) {
 
 UTEST_F(prompt, password_submits_prefill_when_empty) {
   sp_prompt_password_t password = {
-    .prompt = sp_str_view("Password"),
-    .prefill = sp_str_view("sekret"),
+    .prompt = sp_str_lit("Password"),
+    .prefill = sp_str_lit("sekret"),
     .mask = true,
   };
 
@@ -1866,7 +1866,7 @@ UTEST_F(prompt, password_submits_prefill_when_empty) {
 
 UTEST_F(prompt, password_tab_reveals_value_before_submit) {
   sp_prompt_password_t password = {
-    .prompt = sp_str_view("Password"),
+    .prompt = sp_str_lit("Password"),
     .mask = true,
   };
 
@@ -1891,13 +1891,13 @@ UTEST_F(prompt, password_tab_reveals_value_before_submit) {
 
 UTEST_F(prompt, intro_text_outro_flow_render_bug) {
   sp_prompt_intro_t intro = {
-    .text = sp_str_view("hello"),
+    .text = sp_str_lit("hello"),
   };
   sp_prompt_text_t text = {
-    .prompt = sp_str_view("Search:"),
+    .prompt = sp_str_lit("Search:"),
   };
   sp_prompt_outro_t outro = {
-    .text = sp_str_view("done"),
+    .text = sp_str_lit("done"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -2220,7 +2220,7 @@ UTEST_F(prompt, confirm_outro_flow_renders_separator) {
     .initial = false,
   };
   sp_prompt_outro_t outro = {
-    .text = sp_str_view("done"),
+    .text = sp_str_lit("done"),
   };
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
@@ -2672,7 +2672,7 @@ UTEST_F(prompt, progress_widget_renders_status_below_bar) {
   p->config.prompt = "Installing";
   p->config.width = 8;
   p->value = 0.5f;
-  p->status = sp_str_view("Linking");
+  p->status = sp_str_lit("Linking");
 
   sp_prompt_widget_t widget = {
     .user_data = p,

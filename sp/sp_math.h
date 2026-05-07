@@ -325,8 +325,8 @@ sp_color_t sp_color_rgb_to_hsv(sp_color_t color) {
   f32 g = color.g;
   f32 b = color.b;
 
-  f32 max = SP_MAX(r, SP_MAX(g, b));
-  f32 min = SP_MIN(r, SP_MIN(g, b));
+  f32 max = sp_max(r, sp_max(g, b));
+  f32 min = sp_min(r, sp_min(g, b));
   f32 delta = max - min;
 
   f32 h = 0.0f;

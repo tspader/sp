@@ -21,7 +21,7 @@ UTEST_F(sp_env, init_empty) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
   EXPECT_EQ(sp_env_count(&env), (u32)0);
-  EXPECT_FALSE(sp_env_contains(&env, SP_LIT("PATH")));
+  EXPECT_FALSE(sp_env_contains(&env, sp_str_lit("PATH")));
   sp_env_destroy(&env);
 }
 
@@ -29,8 +29,8 @@ UTEST_F(sp_env, insert_and_get) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  sp_env_insert(&env, SP_LIT("FOO"), SP_LIT("bar"));
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("FOO")), "bar");
+  sp_env_insert(&env, sp_str_lit("FOO"), sp_str_lit("bar"));
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, sp_str_lit("FOO")), "bar");
   EXPECT_EQ(sp_env_count(&env), (u32)1);
 
   sp_env_destroy(&env);
@@ -40,10 +40,10 @@ UTEST_F(sp_env, insert_overwrites) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  sp_env_insert(&env, SP_LIT("KEY"), SP_LIT("first"));
-  sp_env_insert(&env, SP_LIT("KEY"), SP_LIT("second"));
+  sp_env_insert(&env, sp_str_lit("KEY"), sp_str_lit("first"));
+  sp_env_insert(&env, sp_str_lit("KEY"), sp_str_lit("second"));
 
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("KEY")), "second");
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, sp_str_lit("KEY")), "second");
   EXPECT_EQ(sp_env_count(&env), (u32)1);
 
   sp_env_destroy(&env);
@@ -53,7 +53,7 @@ UTEST_F(sp_env, get_missing_returns_empty) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  sp_str_t val = sp_env_get(&env, SP_LIT("DOES_NOT_EXIST"));
+  sp_str_t val = sp_env_get(&env, sp_str_lit("DOES_NOT_EXIST"));
   EXPECT_TRUE(sp_str_empty(val));
 
   sp_env_destroy(&env);
@@ -63,9 +63,9 @@ UTEST_F(sp_env, contains) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  EXPECT_FALSE(sp_env_contains(&env, SP_LIT("X")));
-  sp_env_insert(&env, SP_LIT("X"), SP_LIT("y"));
-  EXPECT_TRUE(sp_env_contains(&env, SP_LIT("X")));
+  EXPECT_FALSE(sp_env_contains(&env, sp_str_lit("X")));
+  sp_env_insert(&env, sp_str_lit("X"), sp_str_lit("y"));
+  EXPECT_TRUE(sp_env_contains(&env, sp_str_lit("X")));
 
   sp_env_destroy(&env);
 }
@@ -74,14 +74,14 @@ UTEST_F(sp_env, erase) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  sp_env_insert(&env, SP_LIT("A"), SP_LIT("1"));
-  sp_env_insert(&env, SP_LIT("B"), SP_LIT("2"));
+  sp_env_insert(&env, sp_str_lit("A"), sp_str_lit("1"));
+  sp_env_insert(&env, sp_str_lit("B"), sp_str_lit("2"));
   EXPECT_EQ(sp_env_count(&env), (u32)2);
 
-  sp_env_erase(&env, SP_LIT("A"));
+  sp_env_erase(&env, sp_str_lit("A"));
   EXPECT_EQ(sp_env_count(&env), (u32)1);
-  EXPECT_FALSE(sp_env_contains(&env, SP_LIT("A")));
-  EXPECT_TRUE(sp_env_contains(&env, SP_LIT("B")));
+  EXPECT_FALSE(sp_env_contains(&env, sp_str_lit("A")));
+  EXPECT_TRUE(sp_env_contains(&env, sp_str_lit("B")));
 
   sp_env_destroy(&env);
 }
@@ -90,8 +90,8 @@ UTEST_F(sp_env, erase_nonexistent) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  sp_env_insert(&env, SP_LIT("A"), SP_LIT("1"));
-  sp_env_erase(&env, SP_LIT("NOPE"));
+  sp_env_insert(&env, sp_str_lit("A"), sp_str_lit("1"));
+  sp_env_erase(&env, sp_str_lit("NOPE"));
   EXPECT_EQ(sp_env_count(&env), (u32)1);
 
   sp_env_destroy(&env);
@@ -101,14 +101,14 @@ UTEST_F(sp_env, multiple_entries) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  sp_env_insert(&env, SP_LIT("A"), SP_LIT("1"));
-  sp_env_insert(&env, SP_LIT("B"), SP_LIT("2"));
-  sp_env_insert(&env, SP_LIT("C"), SP_LIT("3"));
+  sp_env_insert(&env, sp_str_lit("A"), sp_str_lit("1"));
+  sp_env_insert(&env, sp_str_lit("B"), sp_str_lit("2"));
+  sp_env_insert(&env, sp_str_lit("C"), sp_str_lit("3"));
 
   EXPECT_EQ(sp_env_count(&env), (u32)3);
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("A")), "1");
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("B")), "2");
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("C")), "3");
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, sp_str_lit("A")), "1");
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, sp_str_lit("B")), "2");
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, sp_str_lit("C")), "3");
 
   sp_env_destroy(&env);
 }
@@ -116,13 +116,13 @@ UTEST_F(sp_env, multiple_entries) {
 UTEST_F(sp_env, copy_is_independent) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
-  sp_env_insert(&env, SP_LIT("K"), SP_LIT("V"));
+  sp_env_insert(&env, sp_str_lit("K"), sp_str_lit("V"));
 
   sp_env_t copy = sp_env_copy(ut.mem, &env);
   EXPECT_EQ(sp_env_count(&copy), (u32)1);
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&copy, SP_LIT("K")), "V");
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&copy, sp_str_lit("K")), "V");
 
-  sp_env_insert(&copy, SP_LIT("NEW"), SP_LIT("val"));
+  sp_env_insert(&copy, sp_str_lit("NEW"), sp_str_lit("val"));
   EXPECT_EQ(sp_env_count(&copy), (u32)2);
   EXPECT_EQ(sp_env_count(&env), (u32)1);
 
@@ -134,9 +134,9 @@ UTEST_F(sp_env, empty_value) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  sp_env_insert(&env, SP_LIT("EMPTY"), SP_LIT(""));
-  EXPECT_TRUE(sp_env_contains(&env, SP_LIT("EMPTY")));
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("EMPTY")), "");
+  sp_env_insert(&env, sp_str_lit("EMPTY"), sp_str_lit(""));
+  EXPECT_TRUE(sp_env_contains(&env, sp_str_lit("EMPTY")));
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, sp_str_lit("EMPTY")), "");
 
   sp_env_destroy(&env);
 }
@@ -145,8 +145,8 @@ UTEST_F(sp_env, value_with_equals) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  sp_env_insert(&env, SP_LIT("DSN"), SP_LIT("host=localhost;port=5432"));
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("DSN")), "host=localhost;port=5432");
+  sp_env_insert(&env, sp_str_lit("DSN"), sp_str_lit("host=localhost;port=5432"));
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, sp_str_lit("DSN")), "host=localhost;port=5432");
 
   sp_env_destroy(&env);
 }
@@ -159,9 +159,9 @@ UTEST_F(sp_env, capture_has_path) {
   EXPECT_TRUE(sp_env_count(&env) > 0);
 
   #if defined(SP_WIN32)
-    sp_str_t path_key = SP_LIT("Path");
+    sp_str_t path_key = sp_str_lit("Path");
   #else
-    sp_str_t path_key = SP_LIT("PATH");
+    sp_str_t path_key = sp_str_lit("PATH");
   #endif
 
   EXPECT_TRUE(sp_env_contains(&env, path_key));
@@ -176,11 +176,11 @@ UTEST_F(sp_env, capture_is_snapshot) {
   sp_env_t env = sp_env_capture(ut.mem);
   u32 count = sp_env_count(&env);
 
-  sp_env_insert(&env, SP_LIT("SP_TEST_ONLY_VAR"), SP_LIT("hello"));
+  sp_env_insert(&env, sp_str_lit("SP_TEST_ONLY_VAR"), sp_str_lit("hello"));
   EXPECT_EQ(sp_env_count(&env), count + 1);
 
   sp_env_t env2 = sp_env_capture(ut.mem);
-  EXPECT_FALSE(sp_env_contains(&env2, SP_LIT("SP_TEST_ONLY_VAR")));
+  EXPECT_FALSE(sp_env_contains(&env2, sp_str_lit("SP_TEST_ONLY_VAR")));
 
   sp_env_destroy(&env);
   sp_env_destroy(&env2);
@@ -189,13 +189,13 @@ UTEST_F(sp_env, capture_is_snapshot) {
 UTEST_F(sp_env, destroy_then_reinit) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
-  sp_env_insert(&env, SP_LIT("A"), SP_LIT("1"));
+  sp_env_insert(&env, sp_str_lit("A"), sp_str_lit("1"));
   sp_env_destroy(&env);
 
   sp_env_init(ut.mem, &env);
   EXPECT_EQ(sp_env_count(&env), (u32)0);
-  sp_env_insert(&env, SP_LIT("B"), SP_LIT("2"));
-  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, SP_LIT("B")), "2");
+  sp_env_insert(&env, sp_str_lit("B"), sp_str_lit("2"));
+  SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, sp_str_lit("B")), "2");
   sp_env_destroy(&env);
 }
 
@@ -203,8 +203,8 @@ UTEST_F(sp_env, destroy_then_reinit) {
 UTEST_F(sp_env, to_posix_envp) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
-  sp_env_insert(&env, SP_LIT("AA"), SP_LIT("11"));
-  sp_env_insert(&env, SP_LIT("BB"), SP_LIT("22"));
+  sp_env_insert(&env, sp_str_lit("AA"), sp_str_lit("11"));
+  sp_env_insert(&env, sp_str_lit("BB"), sp_str_lit("22"));
 
   c8** envp = sp_env_to_posix_envp_a(ut.mem, &env);
 
@@ -216,8 +216,8 @@ UTEST_F(sp_env, to_posix_envp) {
   bool found_bb = false;
   for (u32 i = 0; i < count; i++) {
     sp_str_t entry = sp_str_view(envp[i]);
-    if (sp_str_equal(entry, SP_LIT("AA=11"))) found_aa = true;
-    if (sp_str_equal(entry, SP_LIT("BB=22"))) found_bb = true;
+    if (sp_str_equal(entry, sp_str_lit("AA=11"))) found_aa = true;
+    if (sp_str_equal(entry, sp_str_lit("BB=22"))) found_bb = true;
   }
   EXPECT_TRUE(found_aa);
   EXPECT_TRUE(found_bb);
@@ -239,14 +239,14 @@ UTEST_F(sp_env, to_posix_envp_empty) {
 UTEST(sp_os_env, get_path) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
-  sp_str_t path = sp_os_env_get(SP_LIT("PATH"));
+  sp_str_t path = sp_os_env_get(sp_str_lit("PATH"));
   EXPECT_TRUE(sp_str_valid(path));
   EXPECT_TRUE(path.len > 0);
 }
 
 UTEST(sp_os_env, get_missing) {
   SKIP_ON_FREESTANDING()
-  sp_str_t val = sp_os_env_get(SP_LIT("SP_DEFINITELY_NOT_SET_12345"));
+  sp_str_t val = sp_os_env_get(sp_str_lit("SP_DEFINITELY_NOT_SET_12345"));
   EXPECT_TRUE(sp_str_empty(val));
 }
 
@@ -256,9 +256,9 @@ UTEST(sp_os_env, iterate) {
   sp_os_env_it_t it = sp_os_env_it_begin();
 
   #if defined(SP_WIN32)
-    sp_str_t path_key = SP_LIT("Path");
+    sp_str_t path_key = sp_str_lit("Path");
   #else
-    sp_str_t path_key = SP_LIT("PATH");
+    sp_str_t path_key = sp_str_lit("PATH");
   #endif
 
   u32 count = 0;
