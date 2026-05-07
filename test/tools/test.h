@@ -235,7 +235,7 @@ void sp_test_file_create_ex(sp_test_file_config_t config) {
   sp_fs_remove_file_a(config.path);
 
   sp_io_writer_t stream = SP_ZERO_INITIALIZE();
-  sp_io_writer_from_file_a(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_writer_from_file(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
   SP_ASSERT(stream.file.fd != 0);
 
   if (config.content.len > 0) {

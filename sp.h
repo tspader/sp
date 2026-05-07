@@ -239,16 +239,8 @@
 //  █████     █████ █████   █████ ░░█████████  █████   █████ ░░░███████░  ░░█████████
 // ░░░░░     ░░░░░ ░░░░░   ░░░░░   ░░░░░░░░░  ░░░░░   ░░░░░    ░░░░░░░     ░░░░░░░░░
 // @macro
-///////////////
-// SP_LIKELY //
-///////////////
-#if defined(SP_GNUC)
-  #define SP_LIKELY(x)   __builtin_expect(!!(x), 1)
-  #define SP_UNLIKELY(x) __builtin_expect(!!(x), 0)
-#else
-  #define SP_LIKELY(x)   (x)
-  #define SP_UNLIKELY(x) (x)
-#endif
+
+#define SP_ATTRIBUTE(a) __attribute__((a))
 
 //////////////////////
 // SP_HAS_ATTRIBUTE //
@@ -265,43 +257,122 @@
 #if defined(SP_MSVC)
   #define SP_ALIGN(n) __declspec(align(n))
 #elif defined(SP_GNUC) || defined(SP_TCC)
-  #define SP_ALIGN(n) __attribute__((aligned(n)))
+  #define SP_ALIGN(n) SP_ATTRIBUTE(aligned(n))
 #else
   // @spader Too lazy to actually think about this
   #define SP_ALIGN(n) _Alignas(n)
 #endif
 
+///////////////
+// SP_LIKELY //
+///////////////
+#if defined(SP_GNUC)
+  #define SP_LIKELY(x)   __builtin_expect(!!(x), 1)
+  #define SP_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#else
+  #define SP_LIKELY(x)   (x)
+  #define SP_UNLIKELY(x) (x)
+#endif
+
+/////////////////
+// SP_NOEXCEPT //
+////////////////
+#if defined(SP_CPP) && (__cplusplus >= 201103L)
+  #define SP_NOEXCEPT noexcept
+#else
+  #define SP_NOEXCEPT
+#endif
+
+////////////////
+// SP_NOTHROW //
+////////////////
+#if defined(SP_CPP) && defined(SP_MSVC)
+  #define SP_NOTHROW __declspec(nothrow)
+#else
+  #define SP_NOTHROW
+#endif
+
+///////////////
+// SP_INLINE //
+///////////////
+#if defined(SP_CPP)
+  #define SP_INLINE inline
+#elif defined(SP_MSVC)
+  #define SP_INLINE __forceinline
+#else
+  #define SP_INLINE inline
+#endif
+
+/////////////////
+// SP_NOINLINE //
+/////////////////
+#if defined(SP_MSVC)
+  #define SP_NOINLINE __declspec(noinline)
+#else
+  #define SP_NOINLINE SP_ATTRIBUTE(noinline)
+#endif
+
+////////////////////
+// SP_FALLTHROUGH //
+////////////////////
+#if SP_HAS_ATTRIBUTE(fallthrough)
+  #define SP_FALLTHROUGH() SP_ATTRIBUTE(fallthrough)
+#else
+  #define SP_FALLTHROUGH() ((void)0)
+#endif
+
+
+/////////////
+// SP_RVAL //
+/////////////
 #ifdef SP_CPP
   #define SP_RVAL(T) T
-  #define SP_THREAD_LOCAL thread_local
-  #define SP_BEGIN_EXTERN_C() extern "C" {
-  #define SP_END_EXTERN_C() }
-  #define SP_ZERO_INITIALIZE() {}
-  #define SP_NULL 0
-  #define SP_NULLPTR nullptr
 #else
   #define SP_RVAL(T) (T)
+#endif
+
+/////////////////////
+// SP_THREAD_LOCAL //
+/////////////////////
+#ifdef SP_CPP
+  #define SP_THREAD_LOCAL thread_local
+#else
   #define SP_THREAD_LOCAL _Thread_local
+#endif
+
+/////////////////////
+// SP_*_EXTERN_C //
+/////////////////////
+#ifdef SP_CPP
+  #define SP_BEGIN_EXTERN_C() extern "C" {
+  #define SP_END_EXTERN_C() }
+#else
   #define SP_BEGIN_EXTERN_C()
   #define SP_END_EXTERN_C()
+#endif
+
+///////////////////////
+// SP_ZERO_INITIALIZE //
+///////////////////////
+#ifdef SP_CPP
+  #define SP_ZERO_INITIALIZE() {}
+#else
   #define SP_ZERO_INITIALIZE() {0}
-  #define SP_NULL 0
+#endif
+
+////////////////
+// SP_NULLPTR //
+////////////////
+#ifdef SP_CPP
+  #define SP_NULLPTR nullptr
+#else
   #define SP_NULLPTR ((void*)0)
 #endif
 
-#define sp_rval(T) SP_RVAL(T)
-#define sp_begin_extern_c() SP_BEGIN_EXTERN_C()
-#define sp_end_extern_c() SP_END_EXTERN_C()
+#define SP_NULL 0
+
 #define sp_zero_initialize() SP_ZERO_INITIALIZE()
 #define sp_zero() SP_ZERO_INITIALIZE()
-
-#if SP_HAS_ATTRIBUTE(fallthrough)
-  #define SP_FALLTHROUGH() __attribute__((fallthrough))
-  #define sp_fallthrough() SP_FALLTHROUGH()
-#else
-  #define SP_FALLTHROUGH() ((void)0)
-  #define sp_fallthrough() ((void)0)
-#endif
 
 #define SP_ZERO_STRUCT(t) SP_RVAL(t) SP_ZERO_INITIALIZE()
 #define sp_zero_struct(t) SP_ZERO_STRUCT(t)
@@ -309,9 +380,7 @@
 #define sp_zero_return(t) SP_ZERO_RETURN(t)
 
 #define SP_EXIT_SUCCESS() exit(0)
-#define sp_exit_success() SP_EXIT_SUCCESS()
 #define SP_EXIT_FAILURE() exit(1)
-#define sp_exit_failure() SP_EXIT_FAILURE()
 
 // sp_assert() is platform dependent, so it's defined with the other platform stuff. The macros
 // that just wrap it with some goodies are agnostic, though, so they're here
@@ -628,6 +697,17 @@ typedef struct {
   u16* data;
   u32 len;
 } sp_wide_str_t;
+
+typedef struct {
+  u8* data;
+  u64 len;
+  u64 capacity;
+} sp_mem_buffer_t;
+
+typedef struct {
+  u8* data;
+  u64 len;
+} sp_mem_slice_t;
 
 typedef enum {
   SP_OK                   = 0,
@@ -1365,6 +1445,11 @@ SP_API void*                 sp_mem_os_realloc(void* ptr, u64 size);
 SP_API void                  sp_mem_os_free(void* ptr);
 SP_API void*                 sp_mem_os_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
 SP_API sp_mem_os_header_t*   sp_mem_os_get_header(void* ptr);
+SP_API sp_mem_t              sp_mem_os_new();
+SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
+SP_API void*                 sp_alloc_a(sp_mem_t mem, u64 size);
+SP_API void*                 sp_realloc_a(sp_mem_t mem, void* memory, u64 size);
+SP_API void                  sp_free_a(sp_mem_t mem, void* memory);
 SP_API sp_mem_arena_t*       sp_mem_arena_new(sp_mem_t mem);
 SP_API sp_mem_arena_t*       sp_mem_arena_new_ex(sp_mem_t mem, u64 block_size, sp_mem_arena_mode_t mode, u8 alignment);
 SP_API void                  sp_mem_arena_clear(sp_mem_arena_t* arena);
@@ -1385,6 +1470,7 @@ SP_API u64                   sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed);
 SP_API void*                 sp_mem_fixed_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old);
 SP_API sp_mem_t              sp_mem_get_scratch();
 SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena();
+SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena_for(sp_mem_t mem);
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch();
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_for(sp_mem_t mem);
 SP_API void                  sp_mem_end_scratch(sp_mem_arena_marker_t marker);
@@ -1395,18 +1481,9 @@ SP_API void                  sp_mem_end_scratch(sp_mem_arena_marker_t marker);
 #define sp_mem_allocator_alloc_type(a, T) sp_mem_allocator_alloc_n(a, T, 1)
 #define sp_mem_arena_alloc_n(a, T, n) (T*)sp_mem_arena_alloc((a), (n) * sizeof(T))
 #define sp_mem_arena_alloc_type(a, T) sp_mem_arena_alloc_n(a, T, 1)
+#define sp_alloc_n_a(a, T, n) (T*)sp_alloc_a(a, (n) * sizeof(T))
+#define sp_alloc_type_a(a, T) sp_alloc_n_a(a, T, 1)
 
-
-typedef struct {
-  u8* data;
-  u64 len;
-  u64 capacity;
-} sp_mem_buffer_t;
-
-typedef struct {
-  u8* data;
-  u64 len;
-} sp_mem_slice_t;
 
 typedef struct {
   sp_mem_slice_t slice;
@@ -1465,6 +1542,7 @@ typedef struct SP_ALIGNED {
 
 #define sp_da_a(T) sp_mcat(stop_wasting_my_time___, T)
 #define sp_da(T) T*
+SP_API void* sp_da_init_ex(sp_mem_t mem, u32 stride);
 SP_API void* sp_da_resize(void* arr, u32 stride, u64 len);
 SP_API void* sp_da_grow_ex(void* arr, u32 stride, u64 addlen);
 SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
@@ -2084,7 +2162,7 @@ typedef struct {
 SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
 SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 
-#define sp_str_lit(STR)  (sp_rval(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(sizeof(STR) - 1) })
+#define sp_str_lit(STR)  (SP_RVAL(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(sizeof(STR) - 1) })
 #define sp_str_for(str, it) for (u32 it = 0; it < str.len; it++)
 #define sp_str_for_it(str, it) for (sp_str_it_t it = sp_str_it(str); sp_str_it_valid(&it); sp_str_it_next(&it))
 #define sp_str_for_utf8(str, it) for (sp_utf8_it_t it = sp_utf8_it(str); sp_utf8_it_valid(&it); sp_utf8_it_next(&it))
@@ -2095,6 +2173,12 @@ SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
 SP_API sp_str_t        sp_str(const c8* str, u32 len);
 SP_API c8*             sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t        sp_str_copy_a(sp_mem_t mem, sp_str_t str);
+SP_API sp_str_t        sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
+SP_API sp_str_t        sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join);
+SP_API sp_str_t        sp_str_join_n_a(sp_mem_t mem, sp_str_t* strs, u32 n, sp_str_t joiner);
+SP_API sp_str_t        sp_str_reduce_a(sp_mem_t mem, sp_str_t* strs, u32 n, void* ud, sp_str_reduce_fn_t fn);
+SP_API void            sp_str_reduce_kernel_join_a(sp_str_reduce_context_t* context);
+SP_API c8*             sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str);
 SP_API void            sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
 SP_API sp_str_t        sp_str_from_cstr_a(sp_mem_t mem, const c8* str);
 SP_API sp_str_t        sp_str_from_cstr_n_a(sp_mem_t mem, const c8* str, u32 len);
@@ -2188,6 +2272,12 @@ SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void
 //  ███████████ ░░░███████░   ░░█████████
 // ░░░░░░░░░░░    ░░░░░░░      ░░░░░░░░░
 // @log
+SP_API void sp_log_a(const c8* fmt, ...);
+SP_API void sp_log_str_a(sp_str_t fmt, ...);
+SP_API void sp_log_err_a(const c8* fmt, ...);
+SP_API void sp_print_a(const c8* fmt, ...);
+SP_API void sp_print_str_a(sp_str_t fmt, ...);
+SP_API void sp_print_err_a(const c8* fmt, ...);
 
 
 //  ██████████ ██████   █████ █████   █████
@@ -2319,6 +2409,7 @@ SP_API f64               sp_tm_us_to_ns_f(f64 us);
 SP_API f64               sp_tm_ns_to_s_f(f64 ns);
 SP_API f64               sp_tm_ns_to_ms_f(f64 ns);
 SP_API f64               sp_tm_ns_to_us_f(f64 ns);
+SP_API sp_str_t          sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time);
 
 
 // ███████████ █████ █████       ██████████  █████████  █████ █████  █████████  ███████████ ██████████ ██████   ██████
@@ -2373,14 +2464,58 @@ typedef struct {
   bool recursive;
 } sp_fs_it_t;
 
-// SP_API sp_fs_it_t    sp_fs_it_new_recursive(sp_str_t path);
-// SP_API sp_fs_it_t    sp_fs_it_new(sp_str_t path);
-// SP_API void          sp_fs_it_begin(sp_fs_it_t* it, sp_str_t path);
-// SP_API void          sp_fs_it_next(sp_fs_it_t* it);
-// SP_API bool          sp_fs_it_valid(sp_fs_it_t* it);
-// SP_API void          sp_fs_it_deinit(sp_fs_it_t* it);
-// SP_API sp_da_a(sp_fs_entry_t) sp_fs_collect(sp_str_t path);
-// SP_API sp_da_a(sp_fs_entry_t) sp_fs_collect_recursive(sp_str_t path);
+#define sp_fs_for(mem, dir, it) \
+  for (sp_fs_it_t it = sp_fs_it_new_a(mem, dir); sp_fs_it_valid_a(&it); sp_fs_it_next_a(&it))
+#define sp_fs_for_recursive(mem, dir, it) \
+  for (sp_fs_it_t it = sp_fs_it_new_recursive_a(mem, dir); sp_fs_it_valid_a(&it); sp_fs_it_next_a(&it))
+
+SP_API sp_str_t             sp_fs_get_name(sp_str_t path);
+SP_API sp_str_t             sp_fs_parent_path(sp_str_t path);
+SP_API sp_str_t             sp_fs_trim_path(sp_str_t path);
+SP_API sp_str_t             sp_fs_get_ext(sp_str_t path);
+SP_API sp_str_t             sp_fs_get_stem(sp_str_t path);
+SP_API bool                 sp_fs_is_root(sp_str_t path);
+SP_API bool                 sp_fs_is_glob(sp_str_t path);
+SP_API sp_str_t             sp_fs_normalize_path_a(sp_mem_t mem, sp_str_t path);
+SP_API sp_str_t             sp_fs_join_path_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
+SP_API sp_str_t             sp_fs_replace_ext_a(sp_mem_t mem, sp_str_t path, sp_str_t ext);
+SP_API sp_str_t             sp_fs_canonicalize_path_a(sp_mem_t mem, sp_str_t path);
+SP_API sp_str_t             sp_fs_get_exe_path_a(sp_mem_t mem);
+SP_API sp_str_t             sp_fs_get_cwd_a(sp_mem_t mem);
+SP_API sp_str_t             sp_fs_get_storage_path_a(sp_mem_t mem);
+SP_API sp_str_t             sp_fs_get_config_path_a(sp_mem_t mem);
+SP_API sp_da(sp_fs_entry_t) sp_fs_collect_a(sp_mem_t mem, sp_str_t path);
+SP_API sp_da(sp_fs_entry_t) sp_fs_collect_recursive_a(sp_mem_t mem, sp_str_t path);
+SP_API bool                 sp_fs_exists_a(sp_str_t path);
+SP_API bool                 sp_fs_is_file_a(sp_str_t path);
+SP_API bool                 sp_fs_is_dir_a(sp_str_t path);
+SP_API bool                 sp_fs_is_symlink_a(sp_str_t path);
+SP_API bool                 sp_fs_is_target_file_a(sp_str_t path);
+SP_API bool                 sp_fs_is_target_dir_a(sp_str_t path);
+SP_API sp_fs_kind_t         sp_fs_get_kind_a(sp_str_t path);
+SP_API sp_fs_kind_t         sp_fs_get_target_kind_a(sp_str_t path);
+SP_API sp_tm_epoch_t        sp_fs_get_mod_time_a(sp_str_t path);
+SP_API sp_err_t             sp_fs_create_dir_a(sp_str_t path);
+SP_API sp_err_t             sp_fs_create_file_a(sp_str_t path);
+SP_API sp_err_t             sp_fs_create_file_str_a(sp_str_t path, sp_str_t str);
+SP_API sp_err_t             sp_fs_create_file_slice_a(sp_str_t path, sp_mem_slice_t slice);
+SP_API sp_err_t             sp_fs_create_file_cstr_a(sp_str_t path, const c8* str);
+SP_API sp_err_t             sp_fs_remove_dir_a(sp_str_t path);
+SP_API sp_err_t             sp_fs_remove_file_a(sp_str_t path);
+SP_API sp_err_t             sp_fs_create_hard_link_a(sp_str_t target, sp_str_t link_path);
+SP_API sp_err_t             sp_fs_create_sym_link_a(sp_str_t target, sp_str_t link_path);
+SP_API sp_err_t             sp_fs_link_a(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind);
+SP_API sp_err_t             sp_fs_copy_a(sp_str_t from, sp_str_t to);
+SP_API void                 sp_fs_copy_file_a(sp_str_t from, sp_str_t to);
+SP_API void                 sp_fs_copy_dir_a(sp_str_t from, sp_str_t to);
+SP_API void                 sp_fs_copy_glob_a(sp_str_t from, sp_str_t glob, sp_str_t to);
+SP_IMP sp_fs_it_t           sp_fs_it_new_a(sp_mem_t mem, sp_str_t path);
+SP_IMP sp_fs_it_t           sp_fs_it_new_recursive_a(sp_mem_t mem, sp_str_t path);
+SP_IMP void                 sp_fs_it_begin_a(sp_fs_it_t* it, sp_str_t path);
+SP_IMP void                 sp_fs_it_next_a(sp_fs_it_t* it);
+SP_IMP void                 sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path);
+SP_IMP bool                 sp_fs_it_valid_a(sp_fs_it_t* it);
+SP_IMP void                 sp_fs_it_deinit_a(sp_fs_it_t* it);
 
 bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path);
 void sp_sys_diriter_close(sp_fs_it_frame_t* frame);
@@ -2548,7 +2683,6 @@ SP_API sp_err_t       sp_os_create_file(sp_str_t path);
 SP_API sp_err_t       sp_os_create_dir(sp_str_t path);
 SP_API sp_err_t       sp_os_create_hard_link(sp_str_t target, sp_str_t link_path);
 SP_API sp_err_t       sp_os_create_sym_link(sp_str_t target, sp_str_t link_path);
-SP_API sp_str_t       sp_os_canonicalize_path(sp_str_t path);
 SP_API sp_str_t       sp_os_get_cwd_a(sp_mem_t mem);
 SP_API void           sp_os_register_signal_handler(sp_os_signal_t, sp_os_signal_handler_t, void* userdata);
 SP_API bool           sp_os_is_tty(sp_sys_fd_t fd);
@@ -2721,6 +2855,10 @@ typedef struct {
   })
 
 void sp_fmt_directive_register(const c8* name, sp_fmt_directive_t directive);
+
+SP_API sp_str_r  sp_fmt_a(sp_mem_t mem, const c8* fmt, ...);
+SP_API sp_err_t  sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args);
+SP_API void      sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
 SP_API u8        sp_parse_u8(sp_str_t str);
 SP_API u16       sp_parse_u16(sp_str_t str);
@@ -3006,6 +3144,10 @@ SP_API sp_err_t       sp_io_writer_close(sp_io_writer_t* w);
 SP_API sp_err_t       sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode);
 SP_API void           sp_io_writer_from_fd(sp_io_writer_t* writer, sp_sys_fd_t fd, sp_io_close_mode_t close_mode);
 SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
+SP_API void           sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
+SP_API sp_str_t       sp_io_writer_mem_as_str(sp_io_writer_mem_t* io);
+SP_API sp_str_t       sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io);
+SP_API sp_err_t       sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
 SP_API void           sp_io_get_std_out(sp_io_writer_t* io);
 SP_API void           sp_io_get_std_err(sp_io_writer_t* io);
 SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
@@ -3201,6 +3343,13 @@ struct sp_app {
   } frame;
 };
 
+SP_API sp_app_t*       sp_app_new(sp_mem_t mem, sp_app_config_t config);
+SP_API sp_app_result_t sp_app_tick(sp_app_t* app);
+SP_API void            sp_app_destroy(sp_app_t* app);
+SP_API s32             sp_app_run_locked(sp_app_t* app);
+SP_API s32             sp_app_run_free(sp_app_t* app);
+SP_API s32             sp_app_run(sp_app_config_t config);
+
 
 //  ███████████ █████ █████       ██████████    ██████   ██████    ███████    ██████   █████ █████ ███████████    ███████    ███████████
 // ░░███░░░░░░█░░███ ░░███       ░░███░░░░░█   ░░██████ ██████   ███░░░░░███ ░░██████ ░░███ ░░███ ░█░░░███░░░█  ███░░░░░███ ░░███░░░░░███
@@ -3249,6 +3398,13 @@ struct sp_fmon {
   sp_mem_t mem;
 };
 
+SP_API void sp_fmon_init_a(sp_mem_t mem, sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
+SP_API void sp_fmon_deinit(sp_fmon_t* monitor);
+SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
+SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
+
 
 SP_END_EXTERN_C()
 
@@ -3273,6 +3429,8 @@ SP_API sp_str_t operator/(const sp_str_t& a, const c8* b);
 #ifndef SP_IMPL_H
 #if defined(SP_PRIVATE_HEADER) || defined(SP_IMPLEMENTATION)
 #define SP_IMPL_H
+
+// @format
 typedef struct {
   sp_str_t str;
   u32 i;
@@ -3281,17 +3439,7 @@ typedef struct {
 static sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name);
 static void sp_fmt_directive_reset();
 static void sp_fmt_register_builtins();
-#endif // SP_PRIVATE_HEADER or SP_IMPLEMENTATION
 
-
-
-
-
-
-// @header @top
-void* sp_da_init_ex(sp_mem_t mem, u32 stride);
-
-// @private
 SP_IMP c8*      sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
 SP_IMP c8*      sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
 SP_IMP c8*      sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end);
@@ -3301,11 +3449,60 @@ SP_IMP void     sp_fmt_write_f64_a(sp_io_writer_t* io, f64 value, u32 precision)
 SP_IMP void     sp_fmt_write_ptr_a(sp_io_writer_t* io, void* value);
 SP_IMP sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
 SP_IMP void     sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec);
-SP_API void     sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
+SP_IMP sp_err_t sp_fmt_parse_specifier(sp_fmt_parser_t* p, sp_fmt_spec_t* spec);
+SP_IMP sp_str_t sp_fmt_color_to_ansi_fg(sp_str_t id);
 
+// @hash
+SP_IMP sp_hash_t sp_hash_str(sp_str_t str);
+
+// @memory
+SP_IMP sp_mem_arena_block_t* sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 capacity);
+SP_IMP void*                 sp_mem_arena_align_block(sp_mem_arena_block_t* block, u8 alignment);
+SP_IMP sp_mem_arena_block_t* sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 alloc_size);
+SP_IMP void*                 sp_mem_arena_alloc_with_header(sp_mem_arena_t* arena, u64 size);
+SP_IMP void*                 sp_mem_arena_alloc_no_header(sp_mem_arena_t* arena, u64 size);
+
+// @string
+SP_IMP bool sp_utf8_is_cont(u8 b);
+SP_IMP bool sp_utf8_is_surrogate(u32 codepoint);
+SP_IMP bool sp_utf8_is_bounds_ok(u32 codepoint, u8 len);
+SP_IMP u32  sp_utf8_mask(u8 byte, u8 mask, u8 shift);
+
+// @env
+#if defined(SP_WIN32)
+SP_IMP sp_env_var_t sp_os_env_parse_var(sp_str_t entry);
+#endif
+#if defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_LINUX) || defined(SP_WASM)
+SP_IMP bool sp_os_env_key_equal(sp_str_t a, sp_str_t b);
+SP_IMP void sp_os_env_it_set(sp_os_env_it_t* it);
+#endif
+#if defined(SP_POSIX)
+SP_IMP c8** sp_env_to_posix_envp_a(sp_mem_t mem, sp_env_t* env);
+#endif
+
+// @context
 SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena(sp_tls_rt_t* tls);
 SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena_for(sp_tls_rt_t* tls, sp_mem_t mem);
+SP_IMP void            sp_rt_init();
+SP_IMP void            sp_tls_rt_deinit(void* ptr);
+#if defined(SP_WIN32)
+SP_IMP BOOL CALLBACK   sp_tls_once_trampoline(PINIT_ONCE once, PVOID param, PVOID* ctx);
+#endif
 
+// @fs
+SP_IMP sp_fs_kind_t sp_fs_lstat_kind_a(sp_str_t path);
+SP_IMP sp_fs_kind_t sp_fs_stat_kind_a(sp_str_t path);
+SP_IMP bool         sp_fs_it_is_dot(const c8* name);
+#if defined(SP_WIN32)
+SP_IMP sp_fs_kind_t sp_fs_it_win32_attrs(sp_win32_dword_t attrs);
+SP_IMP bool         sp_win32_find_is_dot(const u16* name);
+SP_IMP u32          sp_win32_find_name_len(const u16* name);
+#endif
+#if defined(SP_LINUX)
+SP_IMP sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type);
+#endif
+
+// @io
 SP_IMP sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* io, const void* ptr, u64 size, u64* bytes_written);
 SP_IMP sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* io, s64 offset, sp_io_whence_t whence, s64* position);
 SP_IMP sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* io, u64* size);
@@ -3314,128 +3511,141 @@ SP_IMP sp_err_t sp_io_writer_mem_write(sp_io_writer_t* io, const void* ptr, u64 
 SP_IMP sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* io, s64 offset, sp_io_whence_t whence, s64* position);
 SP_IMP sp_err_t sp_io_writer_mem_size(sp_io_writer_t* io, u64* size);
 SP_IMP sp_err_t sp_io_writer_mem_close(sp_io_writer_t* io);
+SP_IMP sp_err_t sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
+SP_IMP sp_err_t sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_IMP sp_err_t sp_io_reader_file_size(sp_io_reader_t* r, u64* size);
+SP_IMP sp_err_t sp_io_reader_file_close(sp_io_reader_t* r);
+SP_IMP sp_err_t sp_io_reader_mem_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
+SP_IMP sp_err_t sp_io_reader_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_IMP sp_err_t sp_io_reader_mem_size(sp_io_reader_t* r, u64* size);
+SP_IMP sp_err_t sp_io_reader_mem_close(sp_io_reader_t* r);
+SP_IMP sp_err_t sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
+SP_IMP sp_err_t sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position);
+SP_IMP sp_err_t sp_io_writer_file_size(sp_io_writer_t* writer, u64* size);
+SP_IMP sp_err_t sp_io_writer_file_close(sp_io_writer_t* writer);
 
-SP_IMP sp_fs_kind_t sp_fs_lstat_kind_a(sp_str_t path);
-SP_IMP sp_fs_kind_t sp_fs_stat_kind_a(sp_str_t path);
-SP_IMP sp_fs_it_t   sp_fs_it_new_a(sp_mem_t mem, sp_str_t path);
-SP_IMP sp_fs_it_t   sp_fs_it_new_recursive_a(sp_mem_t mem, sp_str_t path);
-SP_IMP void         sp_fs_it_begin_a(sp_fs_it_t* it, sp_str_t path);
-SP_IMP void         sp_fs_it_next_a(sp_fs_it_t* it);
-SP_IMP void         sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path);
-SP_IMP bool         sp_fs_it_valid_a(sp_fs_it_t* it);
-SP_IMP void         sp_fs_it_deinit_a(sp_fs_it_t* it);
+// @app
+SP_IMP s32 sp_app_finalize_rc(sp_app_t* app);
 
-// @public
-SP_API sp_app_t*        sp_app_new(sp_mem_t mem, sp_app_config_t config);
-SP_API sp_app_result_t  sp_app_tick(sp_app_t* app);
-SP_API void             sp_app_destroy(sp_app_t* app);
-SP_API s32              sp_app_run_locked(sp_app_t* app);
-SP_API s32              sp_app_run_free(sp_app_t* app);
-SP_API s32              sp_app_run(sp_app_config_t config);
-
-SP_API sp_str_t      sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time);
-
-SP_API sp_str_t      sp_str_copy_a(sp_mem_t mem, sp_str_t str);
-SP_API c8*           sp_str_to_cstr_a(sp_mem_t mem, sp_str_t str);
-SP_API sp_str_t      sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
-SP_API sp_str_t      sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join);
-SP_API sp_str_t      sp_str_join_n_a(sp_mem_t mem, sp_str_t* strs, u32 n, sp_str_t joiner);
-SP_API sp_str_t      sp_str_reduce_a(sp_mem_t mem, sp_str_t* strs, u32 n, void* ud, sp_str_reduce_fn_t fn);
-SP_API void          sp_str_reduce_kernel_join_a(sp_str_reduce_context_t* context);
-SP_API c8*           sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str);
-
-SP_API void          sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
-SP_API sp_err_t      sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
-SP_API sp_err_t      sp_io_writer_from_file_a(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode);
-SP_API sp_err_t      sp_io_reader_from_file_a(sp_io_reader_t* reader, sp_str_t path);
-SP_API sp_str_t sp_io_writer_mem_as_str(sp_io_writer_mem_t* io);
-SP_API sp_str_t sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io);
-SP_API void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
-
-
-SP_API void sp_fmon_init_a(sp_mem_t mem, sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
-SP_API void sp_fmon_deinit(sp_fmon_t* monitor);
-SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
-SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
-SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
-SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
-
-SP_API sp_str_t       sp_fs_get_name(sp_str_t path);
-SP_API sp_str_t       sp_fs_parent_path(sp_str_t path);
-SP_API sp_str_t       sp_fs_trim_path(sp_str_t path);
-SP_API sp_str_t       sp_fs_get_ext(sp_str_t path);
-SP_API sp_str_t       sp_fs_get_stem(sp_str_t path);
-SP_API bool           sp_fs_is_root(sp_str_t path);
-SP_API bool           sp_fs_is_glob(sp_str_t path);
-SP_API sp_str_t      sp_fs_normalize_path_a(sp_mem_t mem, sp_str_t path);
-SP_API sp_str_t      sp_fs_join_path_a(sp_mem_t mem, sp_str_t a, sp_str_t b);
-SP_API sp_str_t      sp_fs_replace_ext_a(sp_mem_t mem, sp_str_t path, sp_str_t ext);
-SP_API sp_str_t      sp_fs_canonicalize_path_a(sp_mem_t mem, sp_str_t path);
-SP_API sp_str_t      sp_fs_get_exe_path_a(sp_mem_t mem);
-SP_API sp_str_t      sp_fs_get_cwd_a(sp_mem_t mem);
-SP_API sp_str_t      sp_fs_get_storage_path_a(sp_mem_t mem);
-SP_API sp_str_t      sp_fs_get_config_path_a(sp_mem_t mem);
-SP_API sp_da(sp_fs_entry_t) sp_fs_collect_a(sp_mem_t mem, sp_str_t path);
-SP_API sp_da(sp_fs_entry_t) sp_fs_collect_recursive_a(sp_mem_t mem, sp_str_t path);
-SP_API bool          sp_fs_exists_a(sp_str_t path);
-SP_API bool          sp_fs_is_file_a(sp_str_t path);
-SP_API bool          sp_fs_is_dir_a(sp_str_t path);
-SP_API bool          sp_fs_is_symlink_a(sp_str_t path);
-SP_API bool          sp_fs_is_target_file_a(sp_str_t path);
-SP_API bool          sp_fs_is_target_dir_a(sp_str_t path);
-SP_API sp_fs_kind_t  sp_fs_get_kind_a(sp_str_t path);
-SP_API sp_fs_kind_t  sp_fs_get_target_kind_a(sp_str_t path);
-SP_API sp_tm_epoch_t sp_fs_get_mod_time_a(sp_str_t path);
-SP_API sp_err_t      sp_fs_create_dir_a(sp_str_t path);
-SP_API sp_err_t      sp_fs_create_file_a(sp_str_t path);
-SP_API sp_err_t      sp_fs_create_file_str_a(sp_str_t path, sp_str_t str);
-SP_API sp_err_t      sp_fs_create_file_slice_a(sp_str_t path, sp_mem_slice_t slice);
-SP_API sp_err_t      sp_fs_create_file_cstr_a(sp_str_t path, const c8* str);
-SP_API sp_err_t      sp_fs_remove_dir_a(sp_str_t path);
-SP_API sp_err_t      sp_fs_remove_file_a(sp_str_t path);
-SP_API sp_err_t      sp_fs_create_hard_link_a(sp_str_t target, sp_str_t link_path);
-SP_API sp_err_t      sp_fs_create_sym_link_a(sp_str_t target, sp_str_t link_path);
-SP_API sp_err_t      sp_fs_link_a(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind);
-SP_API sp_err_t      sp_fs_copy_a(sp_str_t from, sp_str_t to);
-SP_API void          sp_fs_copy_file_a(sp_str_t from, sp_str_t to);
-SP_API void          sp_fs_copy_dir_a(sp_str_t from, sp_str_t to);
-SP_API void          sp_fs_copy_glob_a(sp_str_t from, sp_str_t glob, sp_str_t to);
-
-#define sp_fs_for(mem, dir, it) \
-  for (sp_fs_it_t it = sp_fs_it_new_a(mem, dir); sp_fs_it_valid_a(&it); sp_fs_it_next_a(&it))
-#define sp_fs_for_recursive(mem, dir, it) \
-  for (sp_fs_it_t it = sp_fs_it_new_recursive_a(mem, dir); sp_fs_it_valid_a(&it); sp_fs_it_next_a(&it))
-
-
-SP_API sp_mem_t              sp_mem_os_new();
-SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena_for(sp_mem_t mem);
-SP_API sp_mem_arena_marker_t sp_mem_begin_scratch();
-SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_for(sp_mem_t mem);
-SP_API void                  sp_mem_end_scratch(sp_mem_arena_marker_t s);
-SP_API sp_mem_t              sp_mem_get_scratch();
-SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
-SP_API void*                 sp_alloc_a(sp_mem_t mem, u64 size);
-SP_API void*                 sp_realloc_a(sp_mem_t mem, void* memory, u64 size);
-SP_API void                  sp_free_a(sp_mem_t mem, void* memory);
-
-SP_API void sp_log_a(const c8* fmt, ...);
-SP_API void sp_log_str_a(sp_str_t fmt, ...);
-SP_API void sp_log_err_a(const c8* fmt, ...);
-SP_API void sp_print_a(const c8* fmt, ...);
-SP_API void sp_print_str_a(sp_str_t fmt, ...);
-SP_API void sp_print_err_a(const c8* fmt, ...);
-
-SP_API sp_str_r sp_fmt_a(sp_mem_t mem, const c8* fmt, ...);
-SP_API sp_err_t sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args);
-
-
-
-#define sp_alloc_n_a(a, T, n) (T*)sp_alloc_a(a, (n) * sizeof(T))
-#define sp_alloc_type_a(a, T) sp_alloc_n_a(a, T, 1)
-sp_mem_arena_t* sp_tls_rt_get_scratch_arena(sp_tls_rt_t* tls);
-// `@header @bottom`
-
+// @fmon
+#if defined(SP_WIN32)
+SP_IMP void sp_fmon_os_init(sp_fmon_t* monitor);
+SP_IMP void sp_fmon_os_deinit(sp_fmon_t* monitor);
+SP_IMP void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_IMP void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_IMP void sp_fmon_os_process_changes(sp_fmon_t* monitor);
+SP_IMP bool sp_win32_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path);
+SP_IMP void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events);
 #endif
+#if defined(SP_LINUX)
+SP_IMP bool sp_linux_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path);
+#endif
+#if defined(SP_MACOS)
+SP_IMP void sp_fmon_os_destroy_stream(sp_fmon_os_t* os);
+SP_IMP void sp_fmon_fsevents_recreate_stream(sp_fmon_t* monitor);
+SP_IMP void sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir);
+SP_IMP void sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file);
+#endif
+
+// @os
+SP_IMP void sp_os_signal_from_native(s32 sig);
+SP_IMP s32  sp_os_signal_to_native(sp_os_signal_t signal);
+#if defined(SP_WIN32)
+SP_IMP void        sp_os_win32_write(DWORD handle_id, sp_str_t message);
+SP_IMP BOOL WINAPI sp_os_signal_console_ctrl(DWORD type);
+#endif
+
+// @ps
+#if defined(SP_POSIX)
+SP_IMP sp_env_t           sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem);
+SP_IMP bool               sp_ps_is_fd_valid(sp_sys_fd_t fd);
+SP_IMP bool               sp_ps_create_pipes(s32 pipes [2]);
+SP_IMP void               sp_ps_set_nonblocking(s32 fd);
+SP_IMP void               sp_ps_set_blocking(s32 fd);
+SP_IMP void               sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
+SP_IMP sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode);
+SP_IMP void*              sp_posix_thread_launch(void* args);
+#endif
+#if defined(SP_WIN32)
+SP_IMP void              sp_ps_win32_append_quoted_arg(sp_io_writer_t* builder, sp_str_t arg);
+SP_IMP c8*               sp_ps_build_windows_cmdline_a(sp_mem_t mem, sp_ps_config_t* config);
+SP_IMP sp_win32_handle_t sp_ps_win32_open_null(sp_win32_dword_t access);
+SP_IMP sp_win32_handle_t sp_ps_win32_fd_to_handle(sp_sys_fd_t fd);
+SP_IMP sp_ps_status_t    sp_ps_win32_finish_process(sp_ps_t* ps);
+SP_IMP u64               sp_ps_win32_read_available(sp_sys_fd_t fd, sp_io_writer_t* builder, bool* open);
+SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
+#endif
+
+// @sys
+#if defined(SP_LINUX)
+// This is ripped directly from musl. The only things of note here are:
+// - We set errno the same way they do, even though we only use it for EINTR and I'm not totally sure whether
+//   we ought to be using it for that. Point being, though, we set errno on every syscall error
+// - The u64 cast in sp_syscall() is just for sign conversion warnings
+#define __scc(X) ((s64) (X))
+
+s64 __sp_syscall_ret(u64);
+s64 __sp_syscall_cp(s64, s64, s64, s64, s64, s64, s64);
+s64 sp_syscall0(s64 n);
+s64 sp_syscall1(s64 n, s64 a1);
+s64 sp_syscall2(s64 n, s64 a1, s64 a2);
+s64 sp_syscall3(s64 n, s64 a1, s64 a2, s64 a3);
+s64 sp_syscall4(s64 n, s64 a1, s64 a2, s64 a3, s64 a4);
+s64 sp_syscall5(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5);
+s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
+
+#define __sp_syscall1(n,a) sp_syscall1(n,__scc(a))
+#define __sp_syscall2(n,a,b) sp_syscall2(n,__scc(a),__scc(b))
+#define __sp_syscall3(n,a,b,c) sp_syscall3(n,__scc(a),__scc(b),__scc(c))
+#define __sp_syscall4(n,a,b,c,d) sp_syscall4(n,__scc(a),__scc(b),__scc(c),__scc(d))
+#define __sp_syscall5(n,a,b,c,d,e) sp_syscall5(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e))
+#define __sp_syscall6(n,a,b,c,d,e,f) sp_syscall6(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e),__scc(f))
+#define __sp_syscall7(n,a,b,c,d,e,f,g) sp_syscall7(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e),__scc(f),__scc(g))
+
+#define __SP_SYSCALL_NARGS_X(a,b,c,d,e,f,g,h,n,...) n
+#define __SP_SYSCALL_NARGS(...) __SP_SYSCALL_NARGS_X(__VA_ARGS__,7,6,5,4,3,2,1,0,)
+#define __SP_SYSCALL_CONCAT_X(a,b) a##b
+#define __SP_SYSCALL_CONCAT(a,b) __SP_SYSCALL_CONCAT_X(a,b)
+#define __SP_SYSCALL_DISP(b,...) __SP_SYSCALL_CONCAT(b,__SP_SYSCALL_NARGS(__VA_ARGS__))(__VA_ARGS__)
+
+#define __sp_syscall(...) __SP_SYSCALL_DISP(__sp_syscall,__VA_ARGS__)
+#define sp_syscall(...) __sp_syscall_ret((u64)__sp_syscall(__VA_ARGS__))
+
+// Typed wrappers for individual syscalls
+SP_IMP s32 sp_sys_inotify_init1(s32 flags);
+SP_IMP s32 sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
+SP_IMP s32 sp_sys_inotify_rm_watch(s32 fd, s32 wd);
+SP_IMP s32 sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage);
+SP_IMP s64 sp_sys_getdents64(s32 fd, void* buf, u64 count);
+#endif
+
+#if defined(SP_WIN32)
+SP_IMP void     sp_nt_load(void);
+SP_IMP u8*      sp_nt_peb_base(void);
+SP_IMP void*    sp_nt_process_heap(void);
+SP_IMP u8*      sp_nt_process_params(void);
+SP_IMP u32      sp_sys_nt_disposition_from_flags(s32 flags);
+SP_IMP void*    sp_sys_nt_open(sp_str_t utf8, u32 access, u32 share, u32 disposition, u32 options, u32 file_attr);
+SP_IMP u32      sp_sys_nt_access_from_flags(s32 flags);
+SP_IMP sp_str_t sp_win32_utf16_to_utf8(const u16* utf16, s32 len);
+SP_IMP u32      sp_win32_utf16_len(const u16* str);
+SP_IMP bool     sp_win32_utf16_equals_cstr(const u16* a, u32 a_len, const c8* b, u32 b_len);
+SP_IMP void     sp_win32_env_it_set_current(sp_os_env_it_t* it);
+#endif
+#if defined(SP_FREESTANDING)
+SP_IMP void* sp_sys_get_tp(void);
+SP_IMP s32   sp_sys_set_tp(void* tp);
+SP_IMP void  sp_sys_exit(s32 code);
+SP_IMP void  sp_linux_env_it_set_current(sp_os_env_it_t* it);
+#endif
+#if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
+SP_IMP void sp_sys_init();
+#endif
+
+#endif // SP_PRIVATE_HEADER or SP_IMPLEMENTATION
+#endif // SP_IMPL_H
+
+
 
 
 
@@ -3827,40 +4037,6 @@ typedef struct {
 /////////////////////
 // SYSCALL HELPERS //
 /////////////////////
-//
-// This is ripped directly from musl. The only things of note here are:
-// - We set errno the same way they do, even though we only use it for EINTR and I'm not totally sure whether
-//   we ought to be using it for that. Point being, though, we set errno on every syscall error
-// - The u64 cast in sp_syscall() is just for sign conversion warnings
-#define __scc(X) ((s64) (X))
-
-s64 __sp_syscall_ret(u64);
-s64 __sp_syscall_cp(s64, s64, s64, s64, s64, s64, s64);
-s64 sp_syscall0(s64 n);
-s64 sp_syscall1(s64 n, s64 a1);
-s64 sp_syscall2(s64 n, s64 a1, s64 a2);
-s64 sp_syscall3(s64 n, s64 a1, s64 a2, s64 a3);
-s64 sp_syscall4(s64 n, s64 a1, s64 a2, s64 a3, s64 a4);
-s64 sp_syscall5(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5);
-s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
-
-#define __sp_syscall1(n,a) sp_syscall1(n,__scc(a))
-#define __sp_syscall2(n,a,b) sp_syscall2(n,__scc(a),__scc(b))
-#define __sp_syscall3(n,a,b,c) sp_syscall3(n,__scc(a),__scc(b),__scc(c))
-#define __sp_syscall4(n,a,b,c,d) sp_syscall4(n,__scc(a),__scc(b),__scc(c),__scc(d))
-#define __sp_syscall5(n,a,b,c,d,e) sp_syscall5(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e))
-#define __sp_syscall6(n,a,b,c,d,e,f) sp_syscall6(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e),__scc(f))
-#define __sp_syscall7(n,a,b,c,d,e,f,g) sp_syscall7(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e),__scc(f),__scc(g))
-
-#define __SP_SYSCALL_NARGS_X(a,b,c,d,e,f,g,h,n,...) n
-#define __SP_SYSCALL_NARGS(...) __SP_SYSCALL_NARGS_X(__VA_ARGS__,7,6,5,4,3,2,1,0,)
-#define __SP_SYSCALL_CONCAT_X(a,b) a##b
-#define __SP_SYSCALL_CONCAT(a,b) __SP_SYSCALL_CONCAT_X(a,b)
-#define __SP_SYSCALL_DISP(b,...) __SP_SYSCALL_CONCAT(b,__SP_SYSCALL_NARGS(__VA_ARGS__))(__VA_ARGS__)
-
-#define __sp_syscall(...) __SP_SYSCALL_DISP(__sp_syscall,__VA_ARGS__)
-#define sp_syscall(...) __sp_syscall_ret((u64)__sp_syscall(__VA_ARGS__))
-
 s64 __sp_syscall_ret(u64 r) {
 	if (r > -4096UL) {
 		errno = (s32)-r;
@@ -12929,10 +13105,7 @@ sp_err_t sp_io_reader_from_file(sp_io_reader_t* reader, sp_str_t path) {
       .size = sp_io_reader_file_size,
       .close = sp_io_reader_file_close,
     },
-    .file = {
-      .fd = fd,
-      .close_mode = SP_IO_CLOSE_MODE_AUTO
-    },
+    .file = { .fd = fd, .close_mode = SP_IO_CLOSE_MODE_AUTO },
   };
   return SP_OK;
 }
@@ -13099,16 +13272,9 @@ sp_err_t sp_io_writer_file_close(sp_io_writer_t* writer) {
 sp_err_t sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode) {
   s32 flags = SP_O_WRONLY | SP_O_CREAT | SP_O_BINARY;
   switch (mode) {
-    case SP_IO_WRITE_MODE_OVERWRITE: {
-      flags |= SP_O_TRUNC;
-      break;
-    }
-    case SP_IO_WRITE_MODE_APPEND: {
-      flags |= SP_O_APPEND;
-      break;
-    }
+    case SP_IO_WRITE_MODE_OVERWRITE: flags |= SP_O_TRUNC;  break;
+    case SP_IO_WRITE_MODE_APPEND:    flags |= SP_O_APPEND; break;
   }
-
 
   sp_sys_fd_t fd = sp_sys_open_s(path, flags, 0644);
 
@@ -13124,10 +13290,7 @@ sp_err_t sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_wri
       .size = sp_io_writer_file_size,
       .close = sp_io_writer_file_close,
     },
-    .file = {
-      .fd = fd,
-      .close_mode = SP_IO_CLOSE_MODE_AUTO,
-    },
+    .file = { .fd = fd, .close_mode = SP_IO_CLOSE_MODE_AUTO },
   };
   return SP_OK;
 }
@@ -14312,51 +14475,6 @@ sp_str_t sp_fs_get_config_path_a(sp_mem_t mem) {
 //
 // fs: io wrappers
 //
-sp_err_t sp_io_reader_from_file_a(sp_io_reader_t* reader, sp_str_t path) {
-  sp_sys_fd_t fd = sp_sys_open_s(path, SP_O_RDONLY | SP_O_BINARY, 0);
-
-  if (fd == SP_SYS_INVALID_FD) {
-    *reader = SP_ZERO_STRUCT(sp_io_reader_t);
-    return SP_ERR_IO_OPEN_FAILED;
-  }
-
-  *reader = (sp_io_reader_t) {
-    .vtable = {
-      .read = sp_io_reader_file_read,
-      .seek = sp_io_reader_file_seek,
-      .size = sp_io_reader_file_size,
-      .close = sp_io_reader_file_close,
-    },
-    .file = { .fd = fd, .close_mode = SP_IO_CLOSE_MODE_AUTO },
-  };
-  return SP_OK;
-}
-
-sp_err_t sp_io_writer_from_file_a(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode) {
-  s32 flags = SP_O_WRONLY | SP_O_CREAT | SP_O_BINARY;
-  switch (mode) {
-    case SP_IO_WRITE_MODE_OVERWRITE: flags |= SP_O_TRUNC;  break;
-    case SP_IO_WRITE_MODE_APPEND:    flags |= SP_O_APPEND; break;
-  }
-
-  sp_sys_fd_t fd = sp_sys_open_s(path, flags, 0644);
-
-  if (fd == SP_SYS_INVALID_FD) {
-    *writer = SP_ZERO_STRUCT(sp_io_writer_t);
-    return SP_ERR_IO_OPEN_FAILED;
-  }
-
-  *writer = (sp_io_writer_t) {
-    .vtable = {
-      .write = sp_io_writer_file_write,
-      .seek = sp_io_writer_file_seek,
-      .size = sp_io_writer_file_size,
-      .close = sp_io_writer_file_close,
-    },
-    .file = { .fd = fd, .close_mode = SP_IO_CLOSE_MODE_AUTO },
-  };
-  return SP_OK;
-}
 
 sp_err_t sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   sp_assert(content);
@@ -14365,7 +14483,7 @@ sp_err_t sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   u64 size = 0;
 
   sp_io_reader_t reader = sp_zero();
-  sp_try(sp_io_reader_from_file_a(&reader, path));
+  sp_try(sp_io_reader_from_file(&reader, path));
 
   sp_try_goto(sp_io_reader_size(&reader, &size), err, cleanup);
   if (!size) goto cleanup;
@@ -14418,7 +14536,7 @@ sp_err_t sp_fs_create_file_a(sp_str_t path) {
 sp_err_t sp_fs_create_file_slice_a(sp_str_t path, sp_mem_slice_t slice) {
   sp_try(sp_os_create_file(path));
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_try(sp_io_writer_from_file_a(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_writer_from_file(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
   sp_try(sp_io_write(&io, slice.data, slice.len, SP_NULLPTR));
   sp_try(sp_io_writer_close(&io));
   return SP_OK;
@@ -14427,7 +14545,7 @@ sp_err_t sp_fs_create_file_slice_a(sp_str_t path, sp_mem_slice_t slice) {
 sp_err_t sp_fs_create_file_str_a(sp_str_t path, sp_str_t str) {
   sp_try(sp_os_create_file(path));
   sp_io_writer_t io = SP_ZERO_INITIALIZE();
-  sp_try(sp_io_writer_from_file_a(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_writer_from_file(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
   sp_try(sp_io_write_str(&io, str, SP_NULLPTR));
   sp_try(sp_io_writer_close(&io));
   return SP_OK;
@@ -14552,10 +14670,10 @@ void sp_fs_copy_file_a(sp_str_t from, sp_str_t to) {
   if (sp_sys_stat_s(from, &st)) goto done;
 
   sp_io_reader_t reader = SP_ZERO_INITIALIZE();
-  if (sp_io_reader_from_file_a(&reader, from)) goto done;
+  if (sp_io_reader_from_file(&reader, from)) goto done;
 
   sp_io_writer_t writer = SP_ZERO_INITIALIZE();
-  if (sp_io_writer_from_file_a(&writer, to, SP_IO_WRITE_MODE_OVERWRITE)) {
+  if (sp_io_writer_from_file(&writer, to, SP_IO_WRITE_MODE_OVERWRITE)) {
     sp_io_reader_close(&reader);
     goto done;
   }
