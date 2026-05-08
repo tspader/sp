@@ -142,18 +142,18 @@ sp_str_t sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key) {
 
   sp_str_t raw = sp_str_sub(json, (s32)value_start, (s32)(value_end - value_start));
 
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(mem, &builder);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &builder);
   sp_for(i, raw.len) {
     if (raw.data[i] == '\\' && i + 1 < raw.len && raw.data[i + 1] == '\\') {
-      sp_io_write_c8(&builder, '\\');
+      sp_io_write_c8(&builder.base, '\\');
       i++;
     } else {
-      sp_io_write_c8(&builder, raw.data[i]);
+      sp_io_write_c8(&builder.base, raw.data[i]);
     }
   }
 
-  sp_str_t result = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+  sp_str_t result = sp_io_dyn_mem_writer_as_str(&builder);
 
   sp_mem_end_scratch(scratch);
   return result;

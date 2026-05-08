@@ -234,17 +234,17 @@ void sp_test_file_create_ex(sp_test_file_config_t config) {
 
   sp_fs_remove_file_a(config.path);
 
-  sp_io_writer_t stream = sp_zero;
-  sp_io_writer_from_file(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
-  SP_ASSERT(stream.file.fd != 0);
+  sp_io_file_writer_t stream = sp_zero;
+  sp_io_file_writer_from_path(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
+  SP_ASSERT(stream.fd != 0);
 
   if (config.content.len > 0) {
     u64 bytes_written = 0;
-    sp_io_write(&stream, config.content.data, config.content.len, &bytes_written);
+    sp_io_write(&stream.base, config.content.data, config.content.len, &bytes_written);
     SP_ASSERT(bytes_written == config.content.len);
   }
 
-  sp_io_writer_close(&stream);
+  sp_io_file_writer_close(&stream);
 }
 
 sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t relative) {
@@ -329,8 +329,7 @@ static void* sp_mem_tracking_do_alloc(sp_mem_tracking_t* t, u64 size) {
 static u32 sp_mem_tracking_peek_magic(void* ptr) {
   u32 magic = 0;
   u8* base = (u8*)ptr - sizeof(sp_mem_tracking_node_t);
-  sp_mem_tracking_node_t* node = sp_ptr_cast(sp_mem_tracking_node_t*, base);
-  memcpy(&magic, &node->magic, sizeof(magic));
+  memcpy(&magic, base + offsetof(sp_mem_tracking_node_t, magic), sizeof(magic));
   return magic;
 }
 

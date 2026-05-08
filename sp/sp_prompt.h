@@ -1029,8 +1029,9 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   // times every single frame.
   //
   // Empirically, you get pretty bad tearing on Windows without buffering.
-  ctx->writer = sp_mem_arena_alloc_type(ctx->arena, sp_io_writer_t);
-  sp_io_get_std_out(ctx->writer);
+  sp_io_file_writer_t* fw = sp_mem_arena_alloc_type(ctx->arena, sp_io_file_writer_t);
+  sp_io_get_std_out(fw);
+  ctx->writer = &fw->base;
 
   u64 buffer_size = ctx->cols * ctx->rows * SP_PROMPT_CELL_BUFFER_BYTES + SP_PROMPT_BUFFER_EXTRA_BYTES;
   u8* buffer = sp_mem_arena_alloc_n(ctx->arena, u8, buffer_size);
@@ -1068,8 +1069,8 @@ bool sp_prompt_get_bool(sp_prompt_ctx_t* ctx) {
 }
 
 const c8* sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option_t* options, u32 num_options) {
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(ctx->mem, &builder);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(ctx->mem, &builder);
   bool first = true;
   sp_for(it, num_options) {
     if (!options[it].selected) {
@@ -1077,13 +1078,13 @@ const c8* sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option
     }
 
     if (!first) {
-      sp_io_write_str(&builder, sp_str_lit(", "), SP_NULLPTR);
+      sp_io_write_str(&builder.base, sp_str_lit(", "), SP_NULLPTR);
     }
     first = false;
-    sp_io_write_str(&builder, sp_str_view(options[it].label), SP_NULLPTR);
+    sp_io_write_str(&builder.base, sp_str_view(options[it].label), SP_NULLPTR);
   }
 
-  return sp_str_to_cstr_a(ctx->mem, sp_io_writer_dyn_mem_as_str(&builder.dyn_mem));
+  return sp_str_to_cstr_a(ctx->mem, sp_io_dyn_mem_writer_as_str(&builder));
 }
 
 // Instead of just writing to the file descriptor that the main loop waits on for events,
@@ -1570,14 +1571,14 @@ u32 sp_prompt_text_width(sp_str_t text) {
 
 sp_str_t sp_prompt_repeat(sp_prompt_ctx_t* ctx, u32 codepoint, u32 count) {
   SP_UNUSED(ctx);
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_begin_scratch().mem, &builder);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_begin_scratch().mem, &builder);
   c8 buf[4] = sp_zero;
   u8 len = sp_utf8_encode(codepoint, buf);
   sp_for(it, count) {
-    sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
+    sp_io_write_str(&builder.base, sp_str(buf, len), SP_NULLPTR);
   }
-  return sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+  return sp_io_dyn_mem_writer_as_str(&builder);
 }
 
 static void sp_prompt_static_update(sp_prompt_ctx_t* ctx, sp_prompt_event_t event) {
@@ -1763,13 +1764,13 @@ void sp_prompt_success(sp_prompt_ctx_t* ctx, const c8* message) {
 }
 
 static void sp_prompt_str_append_codepoint(sp_prompt_ctx_t* ctx, sp_str_t* value, u32 codepoint) {
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(ctx->mem, &builder);
-  sp_io_write_str(&builder, *value, SP_NULLPTR);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(ctx->mem, &builder);
+  sp_io_write_str(&builder.base, *value, SP_NULLPTR);
   c8 buf[4] = sp_zero;
   u8 len = sp_utf8_encode(codepoint, buf);
-  sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
-  *value = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+  sp_io_write_str(&builder.base, sp_str(buf, len), SP_NULLPTR);
+  *value = sp_io_dyn_mem_writer_as_str(&builder);
 }
 
 static sp_str_t sp_prompt_str_pop_codepoint(sp_str_t value) {

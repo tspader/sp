@@ -143,7 +143,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
   }
 
   sp_io_writer_t sb = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &sb);
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &sb);
   sp_fmt_io(&sb, "{}{} {} {} {} {}{}\n",
     sp_fmt_cstr(SP_ANSI_FG_BRIGHT_BLACK),
     sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("test"), max_name)),
@@ -176,7 +176,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
       sp_fmt_cstr(SP_ANSI_RESET));
   }
 
-  sp_str_t output = sp_io_writer_dyn_mem_as_str(&sb.dyn_mem);
+  sp_str_t output = sp_io_dyn_mem_writer_as_str(&sb);
   sp_os_print(output);
 }
 

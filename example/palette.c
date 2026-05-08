@@ -81,26 +81,26 @@ sp_str_t palette_color_to_hex(sp_mem_t mem, sp_color_t c) {
   u8 r = (u8)(c.r * 255.0f);
   u8 g = (u8)(c.g * 255.0f);
   u8 b = (u8)(c.b * 255.0f);
-  sp_io_writer_t b_out = sp_zero;
-  sp_io_writer_from_dyn_mem_a(mem, &b_out);
-  sp_io_write_c8(&b_out, '#');
+  sp_io_dyn_mem_writer_t b_out = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &b_out);
+  sp_io_write_c8(&b_out.base, '#');
   for (s32 i = 0; i < 3; i++) {
     u8 v = (i == 0) ? r : (i == 1) ? g : b;
     u8 hi = (v >> 4) & 0xf, lo = v & 0xf;
-    sp_io_write_c8(&b_out, (c8)(hi < 10 ? '0' + hi : 'a' + hi - 10));
-    sp_io_write_c8(&b_out, (c8)(lo < 10 ? '0' + lo : 'a' + lo - 10));
+    sp_io_write_c8(&b_out.base, (c8)(hi < 10 ? '0' + hi : 'a' + hi - 10));
+    sp_io_write_c8(&b_out.base, (c8)(lo < 10 ? '0' + lo : 'a' + lo - 10));
   }
-  return sp_io_writer_dyn_mem_as_str(&b_out.dyn_mem);
+  return sp_io_dyn_mem_writer_as_str(&b_out);
 }
 
 void palette_render(app_t* app) {
   if (!app->needs_redraw) return;
   app->needs_redraw = false;
 
-  sp_io_writer_t out = sp_zero;
-  sp_io_writer_from_dyn_mem_a(app->mem, &out);
+  sp_io_dyn_mem_writer_t out = sp_zero;
+  sp_io_dyn_mem_writer_init_a(app->mem, &out);
 
-  sp_io_write_cstr(&out, "\033[H\033[2J", SP_NULLPTR);
+  sp_io_write_cstr(&out.base, "\033[H\033[2J", SP_NULLPTR);
 
   u32 num_saved = sp_da_size(app->saved_colors);
   u32 strip_width = 8;
@@ -110,37 +110,37 @@ void palette_render(app_t* app) {
     sp_for(row, strip_height) {
       sp_da_for(app->saved_colors, i) {
         sp_str_t bg = palette_color_to_ansi_bg(app->mem, app->saved_colors[i]);
-        sp_io_write_str(&out, bg, SP_NULLPTR);
+        sp_io_write_str(&out.base, bg, SP_NULLPTR);
         sp_for(col, strip_width) {
           (void)col;
-          sp_io_write_cstr(&out, " ", SP_NULLPTR);
+          sp_io_write_cstr(&out.base, " ", SP_NULLPTR);
         }
-        sp_io_write_cstr(&out, "\033[0m ", SP_NULLPTR);
+        sp_io_write_cstr(&out.base, "\033[0m ", SP_NULLPTR);
       }
-      sp_io_write_cstr(&out, "\r\n", SP_NULLPTR);
+      sp_io_write_cstr(&out.base, "\r\n", SP_NULLPTR);
     }
-    sp_io_write_cstr(&out, "\r\n", SP_NULLPTR);
+    sp_io_write_cstr(&out.base, "\r\n", SP_NULLPTR);
   }
 
   sp_str_t current_bg = palette_color_to_ansi_bg(app->mem, app->current_color);
-  sp_io_write_cstr(&out, "Current:\r\n", SP_NULLPTR);
+  sp_io_write_cstr(&out.base, "Current:\r\n", SP_NULLPTR);
   sp_for(row, strip_height) {
     (void)row;
-    sp_io_write_str(&out, current_bg, SP_NULLPTR);
+    sp_io_write_str(&out.base, current_bg, SP_NULLPTR);
     sp_for(col, strip_width) {
       (void)col;
-      sp_io_write_cstr(&out, " ", SP_NULLPTR);
+      sp_io_write_cstr(&out.base, " ", SP_NULLPTR);
     }
-    sp_io_write_cstr(&out, "\033[0m\r\n", SP_NULLPTR);
+    sp_io_write_cstr(&out.base, "\033[0m\r\n", SP_NULLPTR);
   }
 
   sp_str_t hex = palette_color_to_hex(app->mem, app->current_color);
-  sp_io_write_str(&out, hex, SP_NULLPTR);
-  sp_io_write_cstr(&out, "\r\n\r\n", SP_NULLPTR);
+  sp_io_write_str(&out.base, hex, SP_NULLPTR);
+  sp_io_write_cstr(&out.base, "\r\n\r\n", SP_NULLPTR);
 
-  sp_io_write_cstr(&out, "[space] regenerate  [enter] save  [q/esc] quit\r\n", SP_NULLPTR);
+  sp_io_write_cstr(&out.base, "[space] regenerate  [enter] save  [q/esc] quit\r\n", SP_NULLPTR);
 
-  sp_os_print(sp_io_writer_dyn_mem_as_str(&out.dyn_mem));
+  sp_os_print(sp_io_dyn_mem_writer_as_str(&out));
 }
 
 void palette_print_results(app_t* app) {

@@ -172,7 +172,7 @@ u32 sp_elf_strtab_size(sp_elf_section_t* strtab);
 sp_str_t sp_elf_strtab_get(sp_elf_section_t* strtab, u32 offset);
 sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out);
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path);
-sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in);
+sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size);
 sp_elf_t* sp_elf_read_from_file(sp_mem_t mem, sp_str_t path);
 
 #endif // SP_ELF_H
@@ -596,22 +596,19 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
 }
 
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {
-  sp_io_writer_t f = sp_zero;
-  sp_try(sp_io_writer_from_file(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
-  sp_err_t err = sp_elf_write(elf, &f);
-  sp_io_writer_close(&f);
+  sp_io_file_writer_t f = sp_zero;
+  sp_try(sp_io_file_writer_from_path(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_err_t err = sp_elf_write(elf, &f.base);
+  sp_io_file_writer_close(&f);
   return err;
 }
 
-sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in) {
-  sp_require_as_null(in);
+sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
+  sp_require_as_null(data);
+  sp_require_as_null(size >= sizeof(Elf64_Ehdr));
 
-  Elf64_Ehdr ehdr = sp_zero;
-  u64 bytes_read = 0;
-  sp_io_read(in, &ehdr, sizeof(Elf64_Ehdr), &bytes_read);
-  if (bytes_read != sizeof(Elf64_Ehdr)) {
-    return SP_NULLPTR;
-  }
+  Elf64_Ehdr ehdr;
+  sp_mem_copy(data, &ehdr, sizeof(Elf64_Ehdr));
 
   u16 num_sections = ehdr.e_shnum;
   sp_require_as_null(ehdr.e_shstrndx < num_sections);
@@ -635,23 +632,25 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in) {
     return sp_elf_new(mem);
   }
 
+  u64 sh_table_bytes = (u64)num_sections * sizeof(Elf64_Shdr);
+  sp_require_as_null(ehdr.e_shoff <= size);
+  sp_require_as_null(sh_table_bytes <= size - ehdr.e_shoff);
+
   sp_elf_t* elf = sp_elf_new(mem);
 
   Elf64_Shdr* section_headers = sp_alloc_n_a(elf->mem, Elf64_Shdr, num_sections);
-  sp_io_reader_seek(in, (s64)ehdr.e_shoff, SP_IO_SEEK_SET, SP_NULLPTR);
-  sp_io_read(in, section_headers, num_sections * sizeof(Elf64_Shdr), &bytes_read);
-  if (bytes_read != num_sections * sizeof(Elf64_Shdr)) {
-    sp_elf_free(elf);
-    return SP_NULLPTR;
-  }
+  sp_mem_copy(data + ehdr.e_shoff, section_headers, sh_table_bytes);
 
   Elf64_Shdr* string_header = &section_headers[ehdr.e_shstrndx];
 
   c8* string_table = SP_NULLPTR;
   if (string_header->sh_size) {
+    if (string_header->sh_offset > size || string_header->sh_size > size - string_header->sh_offset) {
+      sp_elf_free(elf);
+      return SP_NULLPTR;
+    }
     string_table = sp_alloc_n_a(elf->mem, c8, string_header->sh_size);
-    sp_io_reader_seek(in, string_header->sh_offset, SP_IO_SEEK_SET, SP_NULLPTR);
-    sp_io_read(in, string_table, string_header->sh_size, SP_NULLPTR);
+    sp_mem_copy(data + string_header->sh_offset, string_table, string_header->sh_size);
   }
 
   sp_assert(section_headers[0].sh_type == SHT_NULL);
@@ -687,9 +686,12 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in) {
         case SHT_SYMTAB:
         case SHT_STRTAB:
         case SHT_RELA: {
-          sp_io_reader_seek(in, header->sh_offset, SP_IO_SEEK_SET, SP_NULLPTR);
+          if (header->sh_offset > size || header->sh_size > size - header->sh_offset) {
+            sp_elf_free(elf);
+            return SP_NULLPTR;
+          }
           u8* ptr = sp_elf_section_reserve_bytes(section, header->sh_size);
-          sp_io_read(in, ptr, header->sh_size, SP_NULLPTR);
+          sp_mem_copy(data + header->sh_offset, ptr, header->sh_size);
           break;
         }
       }
@@ -700,12 +702,12 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in) {
 }
 
 sp_elf_t* sp_elf_read_from_file(sp_mem_t mem, sp_str_t path) {
-  sp_io_reader_t f = sp_zero;
-  if (sp_io_reader_from_file(&f, path)) {
+  sp_str_t bytes = sp_zero;
+  if (sp_io_read_file_a(mem, path, &bytes)) {
     return SP_NULLPTR;
   }
-  sp_elf_t* elf = sp_elf_read(mem, &f);
-  sp_io_reader_close(&f);
+  sp_elf_t* elf = sp_elf_read(mem, (const u8*)bytes.data, bytes.len);
+  sp_free_a(mem, (void*)bytes.data);
   return elf;
 }
 

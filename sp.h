@@ -373,13 +373,17 @@
 
 #define SP_NULL 0
 
+/////////////
 // SP_CAST //
+/////////////
 #if defined(SP_CPP)
-#define sp_cast(type, x) static_cast<type>(x)
-#define sp_ptr_cast(type, x) reinterpret_cast<type>(x)
+  #define sp_cast(type, x) static_cast<type>(x)
+  #define sp_ptr_cast(type, x) reinterpret_cast<type>(x)
+  #define sp_void_cast(lhs, expr) static_cast<decltype(lhs)>(expr)
 #else
-#define sp_cast(type, x) ((type)(x))
-#define sp_ptr_cast(type, x) ((type)(x))
+  #define sp_cast(type, x) ((type)(x))
+  #define sp_ptr_cast(type, x) ((type)(x))
+  #define sp_void_cast(lhs, expr) (expr)
 #endif
 
 #define SP_EXIT_SUCCESS() exit(0)
@@ -769,6 +773,9 @@ typedef sp_result(sp_str_t) sp_str_r;
 
 typedef struct sp_io_reader sp_io_reader_t;
 typedef struct sp_io_writer sp_io_writer_t;
+typedef struct sp_io_file_writer sp_io_file_writer_t;
+typedef struct sp_io_mem_writer sp_io_mem_writer_t;
+typedef struct sp_io_dyn_mem_writer sp_io_dyn_mem_writer_t;
 
 #if defined(SP_WIN32)
 typedef HANDLE           sp_win32_handle_t;
@@ -2746,8 +2753,8 @@ typedef struct {
 } sp_fmt_spec_t;
 
 typedef struct sp_fmt_arg sp_fmt_arg_t;
-SP_TYPEDEF_FN(void, sp_fmt_fn_t, sp_io_writer_t*, sp_fmt_arg_t*, sp_fmt_arg_t*);
-SP_TYPEDEF_FN(void, sp_fmt_transform_fn_t, sp_io_writer_t*, sp_str_t, sp_fmt_arg_t*, sp_fmt_arg_t*);
+SP_TYPEDEF_FN(void, sp_fmt_fn_t, sp_io_writer_t*, sp_mem_t, sp_fmt_arg_t*, sp_fmt_arg_t*);
+SP_TYPEDEF_FN(void, sp_fmt_transform_fn_t, sp_io_writer_t*, sp_mem_t, sp_str_t, sp_fmt_arg_t*, sp_fmt_arg_t*);
 
 struct sp_fmt_arg {
   sp_fmt_arg_kind_t id;
@@ -2865,8 +2872,8 @@ typedef struct {
 void sp_fmt_directive_register(const c8* name, sp_fmt_directive_t directive);
 
 SP_API sp_str_r  sp_fmt_a(sp_mem_t mem, const c8* fmt, ...);
-SP_API sp_err_t  sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args);
-SP_API void      sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
+SP_API sp_err_t  sp_fmt_v_a(sp_io_writer_t* io, sp_mem_t mem, sp_str_t fmt, va_list args);
+SP_API void      sp_fmt_render_default_a(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
 SP_API u8        sp_parse_u8(sp_str_t str);
 SP_API u16       sp_parse_u16(sp_str_t str);
@@ -2953,8 +2960,8 @@ typedef struct {
     sp_ht_a(sp_str_t, sp_fmt_directive_t) directives;
   } format;
   struct {
-    sp_io_writer_t* out;
-    sp_io_writer_t* err;
+    sp_io_file_writer_t* out;
+    sp_io_file_writer_t* err;
   } std;
 } sp_tls_rt_t;
 
@@ -3060,10 +3067,8 @@ typedef enum {
   SP_IO_CLOSE_MODE_AUTO,
 } sp_io_close_mode_t;
 
-typedef struct {
-  sp_sys_fd_t fd;
-  sp_io_close_mode_t close_mode;
-} sp_io_file_data_t;
+typedef sp_sys_fd_t sp_io_file_t;
+typedef sp_sys_fd_t sp_io_pipe_t;
 
 typedef enum {
   SP_IO_WRITE_MODE_OVERWRITE,
@@ -3071,94 +3076,97 @@ typedef enum {
 } sp_io_write_mode_t;
 
 SP_TYPEDEF_FN(sp_err_t, sp_io_reader_read_cb, sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
-SP_TYPEDEF_FN(sp_err_t, sp_io_reader_seek_cb, sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
-SP_TYPEDEF_FN(sp_err_t, sp_io_reader_size_cb, sp_io_reader_t* r, u64* size);
-SP_TYPEDEF_FN(sp_err_t, sp_io_reader_close_cb, sp_io_reader_t* r);
+SP_TYPEDEF_FN(sp_err_t, sp_io_seek_cb, sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
 
 SP_TYPEDEF_FN(sp_err_t, sp_io_writer_write_cb, sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written);
-SP_TYPEDEF_FN(sp_err_t, sp_io_writer_seek_cb, sp_io_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
-SP_TYPEDEF_FN(sp_err_t, sp_io_writer_size_cb, sp_io_writer_t* w, u64* size);
-SP_TYPEDEF_FN(sp_err_t, sp_io_writer_close_cb, sp_io_writer_t* w);
-
-typedef struct {
-  const u8* ptr;
-  u64 len;
-  u64 pos;
-} sp_io_reader_mem_t;
 
 struct sp_io_reader {
-  struct {
-    sp_io_reader_read_cb  read;
-    sp_io_reader_seek_cb  seek;
-    sp_io_reader_size_cb  size;
-    sp_io_reader_close_cb close;
-  } vtable;
-
-  union {
-    sp_io_file_data_t file;
-    sp_io_reader_mem_t mem;
-  };
-
+  sp_io_reader_read_cb read;
   sp_mem_buffer_t buffer;
-  u64 seek;
+  u64 cursor;
 };
 
 typedef struct {
+  sp_io_reader_t* reader;
+  sp_io_seek_cb seek;
+} sp_io_seeking_reader_t;
+
+typedef struct {
+  sp_io_reader_t base;
+  sp_io_file_t file;
+  sp_io_close_mode_t close_mode;
+} sp_io_file_reader_t;
+
+typedef struct {
+  sp_io_reader_t base;
+  sp_io_pipe_t pipe;
+  sp_io_close_mode_t close_mode;
+} sp_io_pipe_reader_t;
+
+struct sp_io_writer {
+  sp_io_writer_write_cb write;
+  sp_mem_buffer_t buffer;
+};
+
+struct sp_io_file_writer {
+  sp_io_writer_t base;
+  sp_io_file_t fd;
+  sp_io_close_mode_t close_mode;
+};
+
+struct sp_io_mem_writer {
+  sp_io_writer_t base;
   u8* ptr;
   u64 len;
   u64 pos;
-} sp_io_writer_mem_t;
+};
 
-typedef struct {
+struct sp_io_dyn_mem_writer {
+  sp_io_writer_t base;
   sp_mem_t allocator;
-  sp_mem_buffer_t buffer;
-  u64 seek;
-} sp_io_writer_dyn_mem_t;
-
-struct sp_io_writer {
-  struct {
-    sp_io_writer_write_cb write;
-    sp_io_writer_seek_cb  seek;
-    sp_io_writer_size_cb  size;
-    sp_io_writer_close_cb close;
-  } vtable;
-
-  union {
-    sp_io_file_data_t file;
-    sp_io_writer_mem_t mem;
-    sp_io_writer_dyn_mem_t dyn_mem;
-  };
-
-  sp_mem_buffer_t buffer;
+  sp_mem_buffer_t storage;
+  u64 cursor;
 };
 
 SP_API sp_err_t       sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
-SP_API sp_err_t       sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position);
-SP_API sp_err_t       sp_io_reader_size(sp_io_reader_t* r, u64* size);
-SP_API sp_err_t       sp_io_reader_close(sp_io_reader_t* r);
-SP_API sp_err_t       sp_io_reader_from_file(sp_io_reader_t* reader, sp_str_t path);
-SP_API void           sp_io_reader_from_fd(sp_io_reader_t* reader, sp_sys_fd_t fd, sp_io_close_mode_t mode);
 SP_API void           sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size);
 SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
+SP_API sp_err_t       sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API void           sp_io_seeking_reader_from_reader(sp_io_seeking_reader_t* sr, sp_io_reader_t* r, sp_io_seek_cb seek);
+SP_API void           sp_io_seeking_reader_from_mem(sp_io_seeking_reader_t* sr, sp_io_reader_t* backing, const void* ptr, u64 size);
+SP_API void           sp_io_seeking_reader_from_file_reader(sp_io_seeking_reader_t* sr, sp_io_file_reader_t* fr);
+SP_API sp_err_t       sp_io_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path);
+SP_API void           sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_io_file_t file, sp_io_close_mode_t mode);
+SP_API sp_err_t       sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_file_reader_size(sp_io_file_reader_t* r, u64* size);
+SP_API sp_err_t       sp_io_file_reader_close(sp_io_file_reader_t* r);
+SP_API void           sp_io_pipe_reader_from_pipe(sp_io_pipe_reader_t* r, sp_io_pipe_t pipe, sp_io_close_mode_t mode);
+SP_API sp_err_t       sp_io_pipe_reader_close(sp_io_pipe_reader_t* r);
 SP_API sp_err_t       sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
 SP_API sp_err_t       sp_io_write_str(sp_io_writer_t* writer, sp_str_t str, u64* bytes_written);
 SP_API sp_err_t       sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr, u64* bytes_written);
 SP_API sp_err_t       sp_io_write_c8(sp_io_writer_t* writer, c8 c);
 SP_API sp_err_t       sp_io_pad(sp_io_writer_t* writer, u64 size, u64* bytes_written);
 SP_API sp_err_t       sp_io_flush(sp_io_writer_t* w);
-SP_API sp_err_t       sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position);
-SP_API sp_err_t       sp_io_writer_size(sp_io_writer_t* w, u64* size);
-SP_API sp_err_t       sp_io_writer_close(sp_io_writer_t* w);
-SP_API sp_err_t       sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode);
-SP_API void           sp_io_writer_from_fd(sp_io_writer_t* writer, sp_sys_fd_t fd, sp_io_close_mode_t close_mode);
-SP_API void           sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size);
-SP_API void           sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer);
-SP_API sp_str_t       sp_io_writer_mem_as_str(sp_io_writer_mem_t* io);
-SP_API sp_str_t       sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io);
-SP_API sp_err_t       sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
-SP_API void           sp_io_get_std_out(sp_io_writer_t* io);
-SP_API void           sp_io_get_std_err(sp_io_writer_t* io);
 SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
+SP_API sp_err_t       sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path, sp_io_write_mode_t mode);
+SP_API void           sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t close_mode);
+SP_API sp_err_t       sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_file_writer_size(sp_io_file_writer_t* w, u64* size);
+SP_API sp_err_t       sp_io_file_writer_close(sp_io_file_writer_t* w);
+SP_API void           sp_io_mem_writer_from_buffer(sp_io_mem_writer_t* w, void* ptr, u64 size);
+SP_API sp_err_t       sp_io_mem_writer_seek(sp_io_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_mem_writer_size(sp_io_mem_writer_t* w, u64* size);
+SP_API sp_str_t       sp_io_mem_writer_as_str(sp_io_mem_writer_t* w);
+SP_API void           sp_io_dyn_mem_writer_init_a(sp_mem_t mem, sp_io_dyn_mem_writer_t* w);
+SP_API sp_err_t       sp_io_dyn_mem_writer_seek(sp_io_dyn_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_dyn_mem_writer_size(sp_io_dyn_mem_writer_t* w, u64* size);
+SP_API sp_err_t       sp_io_dyn_mem_writer_close(sp_io_dyn_mem_writer_t* w);
+SP_API sp_str_t       sp_io_dyn_mem_writer_as_str(sp_io_dyn_mem_writer_t* w);
+SP_API sp_err_t       sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
+SP_API void           sp_io_get_std_out(sp_io_file_writer_t* io);
+SP_API void           sp_io_get_std_err(sp_io_file_writer_t* io);
 
 
 //  ███████████  ███████████      ███████      █████████  ██████████  █████████   █████████
@@ -3279,7 +3287,7 @@ SP_API sp_ps_config_t  sp_ps_config_copy_a(sp_mem_t mem, const sp_ps_config_t* s
 SP_API void            sp_ps_config_add_arg_a(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg);
 SP_API sp_ps_t         sp_ps_create_a(sp_mem_t mem, sp_ps_config_t config);
 SP_API sp_ps_output_t  sp_ps_run_a(sp_mem_t mem, sp_ps_config_t config);
-SP_API sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps);
+SP_API sp_io_file_writer_t* sp_ps_io_in(sp_ps_t* ps);
 SP_API sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps);
 SP_API sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps);
 SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* ps);
@@ -3413,23 +3421,7 @@ SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
 SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
 SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
 
-
 SP_END_EXTERN_C()
-
-//    █████████
-//   ███░░░░░███     ███         ███
-//  ███     ░░░     ░███        ░███
-// ░███          ███████████ ███████████
-// ░███         ░░░░░███░░░ ░░░░░███░░░
-// ░░███     ███    ░███        ░███
-//  ░░█████████     ░░░         ░░░
-//   ░░░░░░░░░
-// @cpp @c++
-#ifdef SP_CPP
-SP_API sp_str_t operator/(const sp_str_t& a, const sp_str_t& b);
-SP_API sp_str_t operator/(const sp_str_t& a, const c8* b);
-#endif // SP_CPP
-
 #endif // SP_SP_H
 
 
@@ -3437,6 +3429,8 @@ SP_API sp_str_t operator/(const sp_str_t& a, const c8* b);
 #ifndef SP_IMPL_H
 #if defined(SP_PRIVATE_HEADER) || defined(SP_IMPLEMENTATION)
 #define SP_IMPL_H
+
+SP_BEGIN_EXTERN_C()
 
 // @format
 typedef struct {
@@ -3454,7 +3448,7 @@ SP_IMP void                sp_fmt_write_u64_a(sp_io_writer_t* io, u64 value);
 SP_IMP void                sp_fmt_write_s64_a(sp_io_writer_t* io, s64 value);
 SP_IMP void                sp_fmt_write_f64_a(sp_io_writer_t* io, f64 value, u32 precision);
 SP_IMP void                sp_fmt_write_ptr_a(sp_io_writer_t* io, void* value);
-SP_IMP sp_err_t            sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
+SP_IMP sp_err_t            sp_fmt_render_a(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
 SP_IMP void                sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec);
 SP_IMP sp_err_t            sp_fmt_parse_specifier(sp_fmt_parser_t* p, sp_fmt_spec_t* spec);
 SP_IMP sp_str_t            sp_fmt_color_to_ansi_fg(sp_str_t id);
@@ -3495,26 +3489,13 @@ SP_IMP sp_fs_kind_t sp_fs_lstat_kind_a(sp_str_t path);
 SP_IMP sp_fs_kind_t sp_fs_stat_kind_a(sp_str_t path);
 
 // @io
-SP_IMP sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* io, const void* ptr, u64 size, u64* bytes_written);
-SP_IMP sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* io, s64 offset, sp_io_whence_t whence, s64* position);
-SP_IMP sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* io, u64* size);
-SP_IMP sp_err_t sp_io_writer_dyn_close(sp_io_writer_t* io);
-SP_IMP sp_err_t sp_io_writer_mem_write(sp_io_writer_t* io, const void* ptr, u64 size, u64* bytes_written);
-SP_IMP sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* io, s64 offset, sp_io_whence_t whence, s64* position);
-SP_IMP sp_err_t sp_io_writer_mem_size(sp_io_writer_t* io, u64* size);
-SP_IMP sp_err_t sp_io_writer_mem_close(sp_io_writer_t* io);
-SP_IMP sp_err_t sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
-SP_IMP sp_err_t sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
-SP_IMP sp_err_t sp_io_reader_file_size(sp_io_reader_t* r, u64* size);
-SP_IMP sp_err_t sp_io_reader_file_close(sp_io_reader_t* r);
-SP_IMP sp_err_t sp_io_reader_mem_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
-SP_IMP sp_err_t sp_io_reader_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
-SP_IMP sp_err_t sp_io_reader_mem_size(sp_io_reader_t* r, u64* size);
-SP_IMP sp_err_t sp_io_reader_mem_close(sp_io_reader_t* r);
-SP_IMP sp_err_t sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
-SP_IMP sp_err_t sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position);
-SP_IMP sp_err_t sp_io_writer_file_size(sp_io_writer_t* writer, u64* size);
-SP_IMP sp_err_t sp_io_writer_file_close(sp_io_writer_t* writer);
+SP_IMP sp_err_t sp_io_file_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
+SP_IMP sp_err_t sp_io_file_reader_seek_cb(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position);
+SP_IMP sp_err_t sp_io_pipe_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
+SP_IMP sp_err_t sp_io_eof_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
+SP_IMP sp_err_t sp_io_file_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
+SP_IMP sp_err_t sp_io_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
+SP_IMP sp_err_t sp_io_dyn_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
 
 // @app
 SP_IMP s32 sp_app_finalize_rc(sp_app_t* app);
@@ -3634,6 +3615,7 @@ SP_IMP void  sp_linux_env_it_set_current(sp_os_env_it_t* it);
 SP_IMP void sp_sys_init();
 #endif
 
+SP_END_EXTERN_C()
 #endif // SP_PRIVATE_HEADER or SP_IMPLEMENTATION
 #endif // SP_IMPL_H
 
@@ -5900,9 +5882,9 @@ s32 sp_sys_chdir(const c8* path, u32 len) {
   sp_wide_str_t w = sp_wtf8_to_wtf16_a(sp_mem_get_scratch(), sp_str(path, len));
   if (!w.data) return -1;
   sp_nt_unicode_string_t us = {
-    .Length = (u16)(w.len * sizeof(u16)),
-    .MaximumLength = (u16)((w.len + 1) * sizeof(u16)),
-    .Buffer = w.data,
+    .Length = sp_cast(u16, w.len * sizeof(u16)),
+    .MaximumLength = sp_cast(u16, (w.len + 1) * sizeof(u16)),
+    .Buffer = sp_ptr_cast(u16*, w.data),
   };
   return SP_NT_SUCCESS(SP_NT(RtlSetCurrentDirectory_U)(&us)) ? 0 : -1;
 }
@@ -6188,9 +6170,9 @@ s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   if (fd < 0) return fd;
 
   c8 proc [64] = sp_zero;
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_mem(&io, proc, 64);
-  sp_fmt_io(&io, "/proc/self/fd/{}", sp_fmt_int(fd));
+  sp_io_mem_writer_t io = sp_zero;
+  sp_io_mem_writer_from_buffer(&io, proc, 64);
+  sp_fmt_io(&io.base, "/proc/self/fd/{}", sp_fmt_int(fd));
 
   s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, buf, size);
   sp_sys_close(fd);
@@ -6930,129 +6912,131 @@ static sp_err_t sp_fmt_pull_int_arg(sp_fmt_arg_t a, s64* out) {
 sp_err_t sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_err_t result = sp_fmt_v_a(io, sp_str_view(fmt), args);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_err_t result = sp_fmt_v_a(io, s.mem, sp_str_view(fmt), args);
+  sp_mem_end_scratch(s);
   va_end(args);
   return result;
 }
 
-static void sp_fmt_directive_bold(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bold(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
   sp_io_write_cstr(io, "\033[1m", SP_NULLPTR);
 }
 
-static void sp_fmt_directive_italic(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_italic(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
   sp_io_write_cstr(io, "\033[3m", SP_NULLPTR);
 }
 
-static void sp_fmt_directive_red(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_red(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_RED, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_green(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_green(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_GREEN, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_yellow(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_yellow(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_YELLOW, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_blue(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_blue(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BLUE, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_cyan(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_cyan(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_CYAN, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_magenta(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_magenta(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_MAGENTA, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_white(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_white(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_WHITE, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_black(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_black(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BLACK, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_red(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_red(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_RED, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_green(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_green(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_GREEN, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_yellow(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_yellow(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_YELLOW, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_blue(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_blue(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_BLUE, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_cyan(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_cyan(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_CYAN, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_magenta(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_magenta(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_MAGENTA, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_bright_white(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bright_white(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_WHITE, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_gray(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_gray(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(arg); sp_unused(params);
   sp_io_write_cstr(io, SP_ANSI_FG_BRIGHT_BLACK, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_ansi_reset(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+static void sp_fmt_directive_ansi_reset(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   sp_unused(arg); sp_unused(param);
   sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_hyperlink(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_hyperlink(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   sp_io_write_cstr(io, "\033]8;;", SP_NULLPTR);
   if (arg->id == sp_fmt_id_str) sp_io_write_str(io, arg->s, SP_NULLPTR);
   sp_io_write_cstr(io, "\033\\", SP_NULLPTR);
 }
 
-static void sp_fmt_directive_hyperlink_after(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_hyperlink_after(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
   sp_io_write_cstr(io, "\033]8;;\033\\", SP_NULLPTR);
 }
 
-static void sp_fmt_directive_quote(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_quote(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
   sp_io_write_c8(io, '"');
 }
 
-static void sp_fmt_directive_quote_after(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_quote_after(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
   sp_io_write_c8(io, '"');
 }
 
-static void sp_fmt_directive_upper_transform(sp_io_writer_t* io, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_upper_transform(sp_io_writer_t* io, sp_mem_t mem, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
   sp_for(i, content.len) {
     c8 c = content.data[i];
@@ -7060,12 +7044,12 @@ static void sp_fmt_directive_upper_transform(sp_io_writer_t* io, sp_str_t conten
   }
 }
 
-static void sp_fmt_directive_redact_transform(sp_io_writer_t* io, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_redact_transform(sp_io_writer_t* io, sp_mem_t mem, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   (void)arg; sp_unused(params);
   sp_for(i, content.len) sp_io_write_c8(io, '*');
 }
 
-static void sp_fmt_directive_bytes_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_bytes_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   u64 bytes = arg->u; sp_unused(params);
   static const c8* units[] = { "B", "KB", "MB", "GB", "TB", "PB" };
   u32 unit_idx = 0;
@@ -7088,17 +7072,13 @@ static void sp_fmt_directive_bytes_render(sp_io_writer_t* io, sp_fmt_arg_t* arg,
   sp_io_write_cstr(io, units[unit_idx], SP_NULLPTR);
 }
 
-static void sp_fmt_directive_iso_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_iso_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   sp_tm_epoch_t epoch = SP_RVAL(sp_tm_epoch_t) { .s = arg->u, .ns = 0 };
-  sp_mem_arena_marker_t s = io->vtable.write == sp_io_writer_dyn_write
-    ? sp_mem_begin_scratch_for(io->dyn_mem.allocator)
-    : sp_mem_begin_scratch();
-  sp_io_write_str(io, sp_tm_epoch_to_iso8601_a(s.mem, epoch), SP_NULLPTR);
-  sp_mem_end_scratch(s);
+  sp_io_write_str(io, sp_tm_epoch_to_iso8601_a(mem, epoch), SP_NULLPTR);
 }
 
-static void sp_fmt_directive_hex_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_hex_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   u64 value = (arg->id == sp_fmt_id_s64) ? (u64)arg->i : arg->u;
   c8 buf[16];
@@ -7108,7 +7088,7 @@ static void sp_fmt_directive_hex_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, s
   sp_io_write(io, start, (u64)(end - start), SP_NULLPTR);
 }
 
-static void sp_fmt_directive_ordinal_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_ordinal_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   s64 value = (arg->id == sp_fmt_id_s64) ? arg->i : (s64)arg->u; sp_unused(params);
   sp_fmt_write_s64_a(io, value);
   s64 abs = value < 0 ? -value : value;
@@ -7123,7 +7103,7 @@ static void sp_fmt_directive_ordinal_render(sp_io_writer_t* io, sp_fmt_arg_t* ar
   sp_io_write_cstr(io, suffix, SP_NULLPTR);
 }
 
-static void sp_fmt_directive_duration_render(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
+static void sp_fmt_directive_duration_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   u64 ns = arg->u;
   if (ns < 1000) {
@@ -7169,7 +7149,7 @@ sp_str_t sp_fmt_color_to_ansi_fg(sp_str_t id) {
   return sp_str_lit(SP_ANSI_RESET);
 }
 
-static void sp_fmt_directive_fg(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+static void sp_fmt_directive_fg(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   sp_unused(arg);
   sp_str_t ansi = sp_fmt_color_to_ansi_fg(param->s);
   sp_io_write_str(io, ansi, SP_NULLPTR);
@@ -7638,10 +7618,10 @@ sp_tls_rt_t* sp_tls_rt_get() {
     sp_carr_for(tls->scratch, it) {
       tls->scratch[it] = sp_mem_arena_new(tls->mem);
     }
-    tls->std.out = sp_alloc_type_a(tls->mem, sp_io_writer_t);
-    tls->std.err = sp_alloc_type_a(tls->mem, sp_io_writer_t);
-    sp_io_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-    sp_io_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+    tls->std.out = sp_alloc_type_a(tls->mem, sp_io_file_writer_t);
+    tls->std.err = sp_alloc_type_a(tls->mem, sp_io_file_writer_t);
+    sp_io_file_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+    sp_io_file_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
     sp_str_ht_init_a(tls->mem, tls->format.directives);
     sp_fmt_register_builtins();
     sp_sys_tls_init(tls);
@@ -8745,17 +8725,17 @@ sp_str_t sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join) {
 
 sp_str_t sp_str_join_cstr_n_a(sp_mem_t mem, const c8** strings, u32 num_strings, sp_str_t join) {
   if (!strings) num_strings = 0;
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(mem, &builder);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &builder);
   for (u32 index = 0; index < num_strings; index++) {
-    sp_io_write_cstr(&builder, strings[index], SP_NULLPTR);
+    sp_io_write_cstr(&builder.base, strings[index], SP_NULLPTR);
 
     if (index != (num_strings - 1)) {
-      sp_io_write_str(&builder, join, SP_NULLPTR);
+      sp_io_write_str(&builder.base, join, SP_NULLPTR);
     }
   }
 
-  return sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+  return sp_io_dyn_mem_writer_as_str(&builder);
 }
 
 sp_str_t sp_str_pad_a(sp_mem_t mem, sp_str_t str, u32 n) {
@@ -9250,10 +9230,10 @@ s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
 void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, bool cond) {
   if (cond) return;
 
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+  sp_io_file_writer_t io = sp_zero;
+  sp_io_file_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
   sp_fmt_io(
-    &io,
+    &io.base,
     "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
     sp_fmt_cstr("assert"),
     sp_fmt_str(file),
@@ -9262,7 +9242,7 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
     sp_fmt_cstr("()"),
     sp_fmt_str(expr)
   );
-  sp_io_write_cstr(&io, "\n", SP_NULLPTR);
+  sp_io_write_cstr(&io.base, "\n", SP_NULLPTR);
 
   sp_sys_assert(cond);
 }
@@ -11243,12 +11223,12 @@ sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode) {
   SP_UNREACHABLE_RETURN(SP_IO_CLOSE_MODE_NONE);
 }
 
-sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {
+sp_io_file_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.in.fd)) return SP_NULLPTR;
 
-  sp_io_writer_t* writer = sp_alloc_type_a(ps->mem, sp_io_writer_t);
-  sp_io_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
+  sp_io_file_writer_t* writer = sp_alloc_type_a(ps->mem, sp_io_file_writer_t);
+  sp_io_file_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
   return writer;
 }
 
@@ -11256,18 +11236,18 @@ sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
 
-  sp_io_reader_t* reader = sp_alloc_type_a(ps->mem, sp_io_reader_t);
-  sp_io_reader_from_fd(reader, ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
-  return reader;
+  sp_io_pipe_reader_t* reader = sp_alloc_type_a(ps->mem, sp_io_pipe_reader_t);
+  sp_io_pipe_reader_from_pipe(reader, (sp_io_pipe_t)ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
+  return &reader->base;
 }
 
 sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
 
-  sp_io_reader_t* reader = sp_alloc_type_a(ps->mem, sp_io_reader_t);
-  sp_io_reader_from_fd(reader, ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
-  return reader;
+  sp_io_pipe_reader_t* reader = sp_alloc_type_a(ps->mem, sp_io_pipe_reader_t);
+  sp_io_pipe_reader_from_pipe(reader, (sp_io_pipe_t)ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
+  return &reader->base;
 }
 
 #define SP_POSIX_WAITPID_NO_BLOCK SP_WNOHANG
@@ -11382,11 +11362,11 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   };
 
   struct {
-    sp_io_writer_t out;
-    sp_io_writer_t err;
+    sp_io_dyn_mem_writer_t out;
+    sp_io_dyn_mem_writer_t err;
   } write = sp_zero;
-  sp_io_writer_from_dyn_mem_a(ps->mem, &write.out);
-  sp_io_writer_from_dyn_mem_a(ps->mem, &write.err);
+  sp_io_dyn_mem_writer_init_a(ps->mem, &write.out);
+  sp_io_dyn_mem_writer_init_a(ps->mem, &write.err);
 
   sp_sys_fd_t fds[2];
   u8 ready[2];
@@ -11395,15 +11375,15 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   s32 nfds = 0;
 
   if (read.out) {
-    fds[nfds] = read.out->file.fd;
+    fds[nfds] = ps->io.out.fd;
     readers[nfds] = read.out;
-    writers[nfds] = &write.out;
+    writers[nfds] = &write.out.base;
     nfds++;
   }
   if (read.err) {
-    fds[nfds] = read.err->file.fd;
+    fds[nfds] = ps->io.err.fd;
     readers[nfds] = read.err;
-    writers[nfds] = &write.err;
+    writers[nfds] = &write.err.base;
     nfds++;
   }
 
@@ -11431,8 +11411,8 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
     }
   }
 
-  result.out = sp_io_writer_dyn_mem_as_str(&write.out.dyn_mem);
-  result.err = sp_io_writer_dyn_mem_as_str(&write.err.dyn_mem);
+  result.out = sp_io_dyn_mem_writer_as_str(&write.out);
+  result.err = sp_io_dyn_mem_writer_as_str(&write.err);
   result.status = sp_ps_wait(ps);
   return result;
 }
@@ -11892,12 +11872,12 @@ sp_ps_output_t sp_ps_run_a(sp_mem_t mem, sp_ps_config_t config) {
   return (sp_ps_output_t) { .status = { .state = SP_PS_STATE_DONE, .exit_code = -1 } };
 }
 
-sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {
+sp_io_file_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.in.fd)) return SP_NULLPTR;
 
-  sp_io_writer_t* writer = sp_alloc_type_a(ps->mem, sp_io_writer_t);
-  sp_io_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
+  sp_io_file_writer_t* writer = sp_alloc_type_a(ps->mem, sp_io_file_writer_t);
+  sp_io_file_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
   return writer;
 }
 
@@ -11905,18 +11885,18 @@ sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
 
-  sp_io_reader_t* reader = sp_alloc_type_a(ps->mem, sp_io_reader_t);
-  sp_io_reader_from_fd(reader, ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
-  return reader;
+  sp_io_pipe_reader_t* reader = sp_alloc_type_a(ps->mem, sp_io_pipe_reader_t);
+  sp_io_pipe_reader_from_pipe(reader, (sp_io_pipe_t)ps->io.out.fd, sp_ps_io_close_mode(ps->io.out.mode));
+  return &reader->base;
 }
 
 sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
 
-  sp_io_reader_t* reader = sp_alloc_type_a(ps->mem, sp_io_reader_t);
-  sp_io_reader_from_fd(reader, ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
-  return reader;
+  sp_io_pipe_reader_t* reader = sp_alloc_type_a(ps->mem, sp_io_pipe_reader_t);
+  sp_io_pipe_reader_from_pipe(reader, (sp_io_pipe_t)ps->io.err.fd, sp_ps_io_close_mode(ps->io.err.mode));
+  return &reader->base;
 }
 
 sp_ps_status_t sp_ps_win32_finish_process(sp_ps_t* ps) {
@@ -12021,10 +12001,10 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   bool out_open = sp_ps_is_fd_valid(ps->io.out.fd);
   bool err_open = sp_ps_is_fd_valid(ps->io.err.fd);
 
-  sp_io_writer_t out = sp_zero;
-  sp_io_writer_t err = sp_zero;
-  sp_io_writer_from_dyn_mem_a(ps->mem, &out);
-  sp_io_writer_from_dyn_mem_a(ps->mem, &err);
+  sp_io_dyn_mem_writer_t out = sp_zero;
+  sp_io_dyn_mem_writer_t err = sp_zero;
+  sp_io_dyn_mem_writer_init_a(ps->mem, &out);
+  sp_io_dyn_mem_writer_init_a(ps->mem, &err);
 
   DWORD exit_code = 0;
   bool process_done = !ps->os;
@@ -12033,10 +12013,10 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
     bool read_any = false;
 
     if (out_open) {
-      read_any |= sp_ps_win32_read_available(ps->io.out.fd, &out, &out_open) > 0;
+      read_any |= sp_ps_win32_read_available(ps->io.out.fd, &out.base, &out_open) > 0;
     }
     if (err_open) {
-      read_any |= sp_ps_win32_read_available(ps->io.err.fd, &err, &err_open) > 0;
+      read_any |= sp_ps_win32_read_available(ps->io.err.fd, &err.base, &err_open) > 0;
     }
 
     if (!process_done && ps->os->pid) {
@@ -12062,8 +12042,8 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
     ps->os->pid = SP_NULLPTR;
   }
 
-  result.out = sp_io_writer_dyn_mem_as_str(&out.dyn_mem);
-  result.err = sp_io_writer_dyn_mem_as_str(&err.dyn_mem);
+  result.out = sp_io_dyn_mem_writer_as_str(&out);
+  result.err = sp_io_dyn_mem_writer_as_str(&err);
   result.status = (sp_ps_status_t) {
     .state = SP_PS_STATE_DONE,
     .exit_code = process_done ? (s32)exit_code : -1,
@@ -12135,7 +12115,7 @@ sp_ps_output_t sp_ps_run_a(sp_mem_t mem, sp_ps_config_t config) {
   return sp_ps_output(&ps);
 }
 
-sp_io_writer_t* sp_ps_io_in(sp_ps_t* ps) {
+sp_io_file_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   SP_UNIMPLEMENTED();
   SP_UNUSED(ps);
   return SP_NULLPTR;
@@ -13035,8 +13015,9 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 //  █████ ░░░███████░
 // ░░░░░    ░░░░░░░
 // @io
-sp_err_t sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
-  s64 rc = sp_sys_read(reader->file.fd, ptr, size);
+sp_err_t sp_io_file_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_io_file_reader_t* r = (sp_io_file_reader_t*)reader;
+  s64 rc = sp_sys_read(r->file, ptr, size);
   u64 num_bytes = rc < 0 ? 0 : (u64)rc;
 
   sp_err_t result = SP_OK;
@@ -13051,138 +13032,137 @@ sp_err_t sp_io_reader_file_read(sp_io_reader_t* reader, void* ptr, u64 size, u64
   return result;
 }
 
-sp_err_t sp_io_reader_file_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
-  s64 pos = sp_sys_lseek(r->file.fd, offset, (s32)whence);
+sp_err_t sp_io_pipe_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_io_pipe_reader_t* pr = (sp_io_pipe_reader_t*)reader;
+  s64 rc = sp_sys_read(pr->pipe, ptr, size);
+  u64 num_bytes = rc < 0 ? 0 : (u64)rc;
+
+  sp_err_t result = SP_OK;
+  if (rc < 0) {
+    result = SP_ERR_IO_READ_FAILED;
+  }
+  else if (size && !num_bytes) {
+    result = SP_ERR_IO_EOF;
+  }
+
+  if (bytes_read) *bytes_read = num_bytes;
+  return result;
+}
+
+sp_err_t sp_io_eof_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read) {
+  (void)r; (void)ptr; (void)size;
+  if (bytes_read) *bytes_read = 0;
+  return SP_ERR_IO_EOF;
+}
+
+void sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_io_file_t file, sp_io_close_mode_t mode) {
+  *r = (sp_io_file_reader_t) {
+    .file = file,
+    .close_mode = mode,
+    .base = { .read = sp_io_file_reader_read },
+  };
+}
+
+sp_err_t sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path) {
+  sp_sys_fd_t fd = sp_sys_open_s(path, SP_O_RDONLY | SP_O_BINARY, 0);
+  if (fd == SP_SYS_INVALID_FD) {
+    *r = sp_zero_s(sp_io_file_reader_t);
+    return SP_ERR_IO_OPEN_FAILED;
+  }
+  sp_io_file_reader_from_file(r, fd, SP_IO_CLOSE_MODE_AUTO);
+  return SP_OK;
+}
+
+sp_err_t sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
+  sp_err_t err = SP_OK;
+  s64 pos = 0;
+
+  sp_io_reader_t* base = &r->base;
+
+  // If anything is buffered, do the naive thing and simply throw it away. It's possible that
+  // what's in the buffer could still be OK after the seek (e.g. if we're seeking forward a
+  // little, we can just discard bytes). But we'd rather be simple and correct for now.
+  if (base->buffer.len > base->cursor) {
+    s64 buffered = (s64)(base->buffer.len - base->cursor);
+    sp_sys_lseek(r->file, -buffered, SP_IO_SEEK_CUR);
+    base->cursor = 0;
+    base->buffer.len = 0;
+  }
+
+  pos = sp_sys_lseek(r->file, offset, (s32)whence);
   if (pos < 0) {
-    if (position) *position = -1;
-    return SP_ERR_IO_SEEK_FAILED;
+    err = SP_ERR_IO_SEEK_FAILED;
+    goto done;
   }
+
+done:
   if (position) *position = pos;
-  return SP_OK;
+  return err;
 }
 
-sp_err_t sp_io_reader_file_size(sp_io_reader_t* r, u64* size) {
-  s64 current = sp_sys_lseek(r->file.fd, 0, SP_IO_SEEK_CUR);
+sp_err_t sp_io_file_reader_seek_cb(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position) {
+  return sp_io_file_reader_seek((sp_io_file_reader_t*)reader, offset, whence, position);
+}
+
+sp_err_t sp_io_file_reader_size(sp_io_file_reader_t* r, u64* size) {
+  sp_err_t err = SP_OK;
+  u64 result = 0;
+
+  s64 current = sp_sys_lseek(r->file, 0, SP_IO_SEEK_CUR);
   if (current < 0) {
-    if (size) *size = 0;
-    return SP_ERR_IO;
+    err = SP_ERR_IO_SEEK_FAILED;
+    goto done;
   }
 
-  s64 end = sp_sys_lseek(r->file.fd, 0, SP_IO_SEEK_END);
+  s64 end = sp_sys_lseek(r->file, 0, SP_IO_SEEK_END);
   if (end < 0) {
-    if (size) *size = 0;
-    return SP_ERR_IO_SEEK_FAILED;
+    err = SP_ERR_IO_SEEK_FAILED;
+    goto done;
   }
 
-  sp_sys_lseek(r->file.fd, current, SP_IO_SEEK_SET);
-  if (size) *size = (u64)end;
-  return SP_OK;
+  sp_sys_lseek(r->file, current, SP_IO_SEEK_SET);
+  result = (u64)end;
+
+done:
+  if (size) *size = result;
+  return err;
 }
 
-sp_err_t sp_io_reader_file_close(sp_io_reader_t* r) {
-  if (r->file.close_mode == SP_IO_CLOSE_MODE_AUTO) {
-    if (sp_sys_close(r->file.fd) < 0) {
+sp_err_t sp_io_file_reader_close(sp_io_file_reader_t* r) {
+  if (r->close_mode == SP_IO_CLOSE_MODE_AUTO) {
+    if (sp_sys_close(r->file) < 0) {
       return SP_ERR_IO_CLOSE_FAILED;
     }
   }
   return SP_OK;
 }
 
-sp_err_t sp_io_reader_mem_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read) {
-  u64 available = r->mem.len - r->mem.pos;
-  u64 n = sp_min(size, available);
-  sp_mem_copy(r->mem.ptr + r->mem.pos, ptr, n);
-  r->mem.pos += n;
-  if (bytes_read) *bytes_read = n;
-  if (size && !n) return SP_ERR_IO_EOF;
-  return SP_OK;
-}
-
-sp_err_t sp_io_reader_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
-  s64 pos = 0;
-
-  switch (whence) {
-    case SP_IO_SEEK_SET: {
-      pos = offset;
-      break;
-    }
-    case SP_IO_SEEK_CUR: {
-      pos = (s64)r->mem.pos + offset;
-      break;
-    }
-    case SP_IO_SEEK_END: {
-      pos = (s64)r->mem.len + offset;
-      break;
-    }
-  }
-
-  if (pos < 0 || (u64)pos > r->mem.len) {
-    if (position) *position = -1;
-    return SP_ERR_IO_SEEK_INVALID;
-  }
-  r->mem.pos = (u64)pos;
-  if (position) *position = pos;
-  return SP_OK;
-}
-
-sp_err_t sp_io_reader_mem_size(sp_io_reader_t* r, u64* size) {
-  if (size) *size = r->mem.len;
-  return SP_OK;
-}
-
-sp_err_t sp_io_reader_mem_close(sp_io_reader_t* r) {
-  (void)r;
-  return SP_OK;
-}
-
-sp_err_t sp_io_reader_from_file(sp_io_reader_t* reader, sp_str_t path) {
-  sp_sys_fd_t fd = sp_sys_open_s(path, SP_O_RDONLY | SP_O_BINARY, 0);
-
-  if (fd == SP_SYS_INVALID_FD) {
-    *reader = sp_zero_s(sp_io_reader_t);
-    return SP_ERR_IO_OPEN_FAILED;
-  }
-
-  *reader = (sp_io_reader_t) {
-    .vtable = {
-      .read = sp_io_reader_file_read,
-      .seek = sp_io_reader_file_seek,
-      .size = sp_io_reader_file_size,
-      .close = sp_io_reader_file_close,
-    },
-    .file = { .fd = fd, .close_mode = SP_IO_CLOSE_MODE_AUTO },
+void sp_io_pipe_reader_from_pipe(sp_io_pipe_reader_t* r, sp_io_pipe_t pipe, sp_io_close_mode_t mode) {
+  *r = (sp_io_pipe_reader_t) {
+    .pipe = pipe,
+    .close_mode = mode,
+    .base = { .read = sp_io_pipe_reader_read },
   };
-  return SP_OK;
 }
 
-void sp_io_reader_from_fd(sp_io_reader_t* reader, sp_sys_fd_t fd, sp_io_close_mode_t mode) {
-  *reader = (sp_io_reader_t) {
-    .vtable = {
-      .read = sp_io_reader_file_read,
-      .seek = sp_io_reader_file_seek,
-      .size = sp_io_reader_file_size,
-      .close = sp_io_reader_file_close,
-    },
-    .file = {
-      .fd = fd,
-      .close_mode = mode,
-    },
-  };
+sp_err_t sp_io_pipe_reader_close(sp_io_pipe_reader_t* r) {
+  if (r->close_mode == SP_IO_CLOSE_MODE_AUTO) {
+    if (sp_sys_close(r->pipe) < 0) {
+      return SP_ERR_IO_CLOSE_FAILED;
+    }
+  }
+  return SP_OK;
 }
 
 void sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size) {
   *reader = (sp_io_reader_t) {
-    .vtable = {
-      .read = sp_io_reader_mem_read,
-      .seek = sp_io_reader_mem_seek,
-      .size = sp_io_reader_mem_size,
-      .close = sp_io_reader_mem_close,
-    },
-    .mem = {
-      .ptr = (const u8*)ptr,
+    .read = sp_io_eof_read,
+    .buffer = {
+      .data = (u8*)(uintptr_t)ptr,
       .len = size,
-      .pos = 0,
+      .capacity = size,
     },
+    .cursor = 0,
   };
 }
 
@@ -13194,14 +13174,14 @@ void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
     .len = 0,
     .capacity = capacity,
   };
-  reader->seek = 0;
+  reader->cursor = 0;
 }
 
 sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
   sp_assert(reader);
 
   if (!reader->buffer.data) {
-    return reader->vtable.read(reader, ptr, size, bytes_read);
+    return reader->read(reader, ptr, size, bytes_read);
   }
 
   sp_err_t err = SP_OK;
@@ -13210,24 +13190,24 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
   u64 num_read = 0;
 
   // Drain what we can from what's already buffered
-  num_drained = sp_min(size, reader->buffer.len - reader->seek);
-  sp_mem_copy(reader->buffer.data + reader->seek, buffer, num_drained);
-  reader->seek += num_drained;
+  num_drained = sp_min(size, reader->buffer.len - reader->cursor);
+  sp_mem_copy(reader->buffer.data + reader->cursor, buffer, num_drained);
+  reader->cursor += num_drained;
 
   // Issue a call to the backend for the rest
   u64 remaining = size - num_drained;
 
   if (remaining >= reader->buffer.capacity) {
     // If the request is too large to buffer, just read it directly
-    err = reader->vtable.read(reader, buffer + num_drained, remaining, &num_read);
+    err = reader->read(reader, buffer + num_drained, remaining, &num_read);
   }
   else if (remaining) {
     // If the request is bufferable, do so by completely filling the buffer and then draining
     // just what the user asked for
-    err = reader->vtable.read(reader, reader->buffer.data, reader->buffer.capacity, &reader->buffer.len);
+    err = reader->read(reader, reader->buffer.data, reader->buffer.capacity, &reader->buffer.len);
 
     num_read = sp_min(remaining, reader->buffer.len);
-    reader->seek = num_read;
+    reader->cursor = num_read;
     sp_mem_copy(reader->buffer.data, buffer + num_drained, num_read);
   }
 
@@ -13237,31 +13217,48 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
   return err;
 }
 
-sp_err_t sp_io_reader_seek(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position) {
-  sp_assert(reader);
+sp_err_t sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
+  sp_assert(r);
+  return r->seek(r->reader, offset, whence, position);
+}
 
-  if (reader->buffer.data && reader->buffer.len > reader->seek) {
-    s64 buffered = (s64)(reader->buffer.len - reader->seek);
-    reader->vtable.seek(reader, -buffered, SP_IO_SEEK_CUR, SP_NULLPTR);
-    reader->seek = 0;
-    reader->buffer.len = 0;
+sp_err_t sp_io_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
+  s64 pos = 0;
+
+  switch (whence) {
+    case SP_IO_SEEK_SET: pos = offset; break;
+    case SP_IO_SEEK_CUR: pos = (s64)r->cursor + offset; break;
+    case SP_IO_SEEK_END: pos = (s64)r->buffer.len + offset; break;
   }
 
-  return reader->vtable.seek(reader, offset, whence, position);
+  if (pos < 0 || (u64)pos > r->buffer.len) {
+    if (position) *position = -1;
+    return SP_ERR_IO_SEEK_INVALID;
+  }
+  r->cursor = (u64)pos;
+  if (position) *position = pos;
+  return SP_OK;
 }
 
-sp_err_t sp_io_reader_size(sp_io_reader_t* reader, u64* size) {
-  sp_assert(reader);
-  return reader->vtable.size(reader, size);
+void sp_io_seeking_reader_from_reader(sp_io_seeking_reader_t* sr, sp_io_reader_t* r, sp_io_seek_cb seek) {
+  *sr = (sp_io_seeking_reader_t) {
+    .reader = r,
+    .seek = seek,
+  };
 }
 
-sp_err_t sp_io_reader_close(sp_io_reader_t* reader) {
-  if (!reader->vtable.close) return SP_OK;
-  return reader->vtable.close(reader);
+void sp_io_seeking_reader_from_mem(sp_io_seeking_reader_t* sr, sp_io_reader_t* backing, const void* ptr, u64 size) {
+  sp_io_reader_from_mem(backing, ptr, size);
+  sp_io_seeking_reader_from_reader(sr, backing, sp_io_mem_seek);
 }
 
-sp_err_t sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
-  s64 rc = sp_sys_write(writer->file.fd, ptr, size);
+void sp_io_seeking_reader_from_file_reader(sp_io_seeking_reader_t* sr, sp_io_file_reader_t* fr) {
+  sp_io_seeking_reader_from_reader(sr, &fr->base, sp_io_file_reader_seek_cb);
+}
+
+sp_err_t sp_io_file_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_io_file_writer_t* w = (sp_io_file_writer_t*)writer;
+  s64 rc = sp_sys_write(w->fd, ptr, size);
   u64 num_bytes = rc < 0 ? 0 : (u64)rc;
 
   sp_err_t result = SP_OK;
@@ -13276,45 +13273,56 @@ sp_err_t sp_io_writer_file_write(sp_io_writer_t* writer, const void* ptr, u64 si
   return result;
 }
 
-sp_err_t sp_io_writer_file_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position) {
+  sp_assert(w);
+  sp_try(sp_io_flush(&w->base));
+
   s64 p = 0;
   position = position ? position : &p;
 
-  *position = sp_sys_lseek(writer->file.fd, offset, (s32)whence);
+  *position = sp_sys_lseek(w->fd, offset, (s32)whence);
   if (*position < 0) {
     return SP_ERR_IO_SEEK_FAILED;
   }
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_file_size(sp_io_writer_t* writer, u64* size) {
+sp_err_t sp_io_file_writer_size(sp_io_file_writer_t* w, u64* size) {
+  sp_assert(w);
+  sp_try(sp_io_flush(&w->base));
+
   u64 s = 0;
   size = size ? size : &s;
 
-  s64 current = sp_sys_lseek(writer->file.fd, 0, SP_IO_SEEK_CUR);
+  s64 current = sp_sys_lseek(w->fd, 0, SP_IO_SEEK_CUR);
   if (current < 0) {
     return SP_ERR_IO;
   }
 
-  *size = sp_sys_lseek(writer->file.fd, 0, SP_IO_SEEK_END);
+  *size = sp_sys_lseek(w->fd, 0, SP_IO_SEEK_END);
   if (*size < 0) {
     return SP_ERR_IO_SEEK_FAILED;
   }
 
-  sp_sys_lseek(writer->file.fd, current, SP_IO_SEEK_SET);
+  sp_sys_lseek(w->fd, current, SP_IO_SEEK_SET);
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_file_close(sp_io_writer_t* writer) {
-  if (writer->file.close_mode != SP_IO_CLOSE_MODE_AUTO) return SP_OK;
+sp_err_t sp_io_file_writer_close(sp_io_file_writer_t* w) {
+  sp_assert(w);
 
-  if (sp_sys_close(writer->file.fd) < 0) {
+  // We're trying to close it, so just eat the error if flush fails
+  sp_io_flush(&w->base);
+
+  if (w->close_mode != SP_IO_CLOSE_MODE_AUTO) return SP_OK;
+
+  if (sp_sys_close(w->fd) < 0) {
     return SP_ERR_IO_CLOSE_FAILED;
   }
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_write_mode_t mode) {
+sp_err_t sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path, sp_io_write_mode_t mode) {
   s32 flags = SP_O_WRONLY | SP_O_CREAT | SP_O_BINARY;
   switch (mode) {
     case SP_IO_WRITE_MODE_OVERWRITE: flags |= SP_O_TRUNC;  break;
@@ -13324,34 +13332,23 @@ sp_err_t sp_io_writer_from_file(sp_io_writer_t* writer, sp_str_t path, sp_io_wri
   sp_sys_fd_t fd = sp_sys_open_s(path, flags, 0644);
 
   if (fd == SP_SYS_INVALID_FD) {
-    *writer = sp_zero_s(sp_io_writer_t);
+    *w = sp_zero_s(sp_io_file_writer_t);
     return SP_ERR_IO_OPEN_FAILED;
   }
 
-  *writer = (sp_io_writer_t) {
-    .vtable = {
-      .write = sp_io_writer_file_write,
-      .seek = sp_io_writer_file_seek,
-      .size = sp_io_writer_file_size,
-      .close = sp_io_writer_file_close,
-    },
-    .file = { .fd = fd, .close_mode = SP_IO_CLOSE_MODE_AUTO },
+  *w = (sp_io_file_writer_t) {
+    .base = { .write = sp_io_file_writer_write },
+    .fd = fd,
+    .close_mode = SP_IO_CLOSE_MODE_AUTO,
   };
   return SP_OK;
 }
 
-void sp_io_writer_from_fd(sp_io_writer_t* writer, sp_sys_fd_t fd, sp_io_close_mode_t close_mode) {
-  *writer = (sp_io_writer_t) {
-    .vtable = {
-      .write = sp_io_writer_file_write,
-      .seek = sp_io_writer_file_seek,
-      .size = sp_io_writer_file_size,
-      .close = sp_io_writer_file_close,
-    },
-    .file = {
-      .fd = fd,
-      .close_mode = close_mode,
-    },
+void sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t close_mode) {
+  *w = (sp_io_file_writer_t) {
+    .base = { .write = sp_io_file_writer_write },
+    .fd = fd,
+    .close_mode = close_mode,
   };
 }
 
@@ -13383,7 +13380,7 @@ static sp_err_t sp_io_write_all(sp_io_writer_t* writer, const void* data, u64 si
     // write anything, but somehow did not encounter an error. That doesn't make sense,
     // and indicates a backend bug.
     u64 written = 0;
-    sp_try_goto(writer->vtable.write(writer, ptr, remaining, &written), result, done);
+    sp_try_goto(writer->write(writer, ptr, remaining, &written), result, done);
     total += written;
   }
 
@@ -13478,34 +13475,12 @@ done:
   return result;
 }
 
-sp_err_t sp_io_writer_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
-  sp_assert(writer);
-  sp_try(sp_io_flush(writer));
-  return writer->vtable.seek(writer, offset, whence, position);
+void sp_io_get_std_out(sp_io_file_writer_t* io) {
+  sp_io_file_writer_from_fd(io, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
 }
 
-sp_err_t sp_io_writer_size(sp_io_writer_t* writer, u64* size) {
-  sp_assert(writer);
-  sp_try(sp_io_flush(writer));
-  return writer->vtable.size(writer, size);
-}
-
-sp_err_t sp_io_writer_close(sp_io_writer_t* writer) {
-  sp_assert(writer);
-
-  // We're trying to close it, so just eat the error if flush fails
-  sp_io_flush(writer);
-
-  if (!writer->vtable.close) return SP_OK;
-  return writer->vtable.close(writer);
-}
-
-void sp_io_get_std_out(sp_io_writer_t* io) {
-  sp_io_writer_from_fd(io, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-}
-
-void sp_io_get_std_err(sp_io_writer_t* io) {
-  sp_io_writer_from_fd(io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+void sp_io_get_std_err(sp_io_file_writer_t* io) {
+  sp_io_file_writer_from_fd(io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
 }
 
 /////////
@@ -13666,7 +13641,8 @@ void sp_free_a(sp_mem_t allocator, void* memory) {
   sp_mem_allocator_free(allocator, memory);
 }
 
-sp_err_t sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+sp_err_t sp_io_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_io_mem_writer_t* w = (sp_io_mem_writer_t*)writer;
   sp_err_t result = SP_OK;
   u64 written = 0;
 
@@ -13674,14 +13650,14 @@ sp_err_t sp_io_writer_mem_write(sp_io_writer_t* writer, const void* ptr, u64 siz
   // and return an error, but the general principle is to stop as soon as you know you're in
   // an error state. And "I want to write 16 bytes into an 8 byte buffer" is an error state. I
   // would rather end up in the same state every time (nothing written, get an error).
-  u64 available = writer->mem.len - writer->mem.pos;
+  u64 available = w->len - w->pos;
   if (size > available) {
     result = SP_ERR_IO_NO_SPACE;
     goto done;
   }
 
-  sp_mem_copy(ptr, writer->mem.ptr + writer->mem.pos, size);
-  writer->mem.pos += size;
+  sp_mem_copy(ptr, w->ptr + w->pos, size);
+  w->pos += size;
   written = size;
 
 done:
@@ -13689,7 +13665,10 @@ done:
   return result;
 }
 
-sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_mem_writer_seek(sp_io_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position) {
+  sp_assert(w);
+  sp_try(sp_io_flush(&w->base));
+
   s64 pos = 0;
 
   switch (whence) {
@@ -13698,75 +13677,67 @@ sp_err_t sp_io_writer_mem_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_
       break;
     }
     case SP_IO_SEEK_CUR: {
-      pos = (s64)writer->mem.pos + offset;
+      pos = (s64)w->pos + offset;
       break;
     }
     case SP_IO_SEEK_END: {
-      pos = (s64)writer->mem.len + offset;
+      pos = (s64)w->len + offset;
       break;
     }
   }
 
-  if (pos < 0 || (u64)pos > writer->mem.len) {
+  if (pos < 0 || (u64)pos > w->len) {
     if (position) *position = -1;
     return SP_ERR_IO_SEEK_INVALID;
   }
-  writer->mem.pos = (u64)pos;
+  w->pos = (u64)pos;
   if (position) *position = pos;
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_mem_size(sp_io_writer_t* writer, u64* size) {
-  if (size) *size = writer->mem.len;
+sp_err_t sp_io_mem_writer_size(sp_io_mem_writer_t* w, u64* size) {
+  sp_assert(w);
+  sp_try(sp_io_flush(&w->base));
+
+  if (size) *size = w->len;
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_mem_close(sp_io_writer_t* writer) {
-  (void)writer;
-  return SP_OK;
-}
-
-void sp_io_writer_from_mem(sp_io_writer_t* writer, void* ptr, u64 size) {
-  *writer = (sp_io_writer_t) {
-    .vtable = {
-      .write = sp_io_writer_mem_write,
-      .seek = sp_io_writer_mem_seek,
-      .size = sp_io_writer_mem_size,
-      .close = sp_io_writer_mem_close,
-    },
-    .mem = {
-      .ptr = (u8*)ptr,
-      .len = size,
-      .pos = 0,
-    },
+void sp_io_mem_writer_from_buffer(sp_io_mem_writer_t* w, void* ptr, u64 size) {
+  *w = (sp_io_mem_writer_t) {
+    .base = { .write = sp_io_mem_writer_write },
+    .ptr = (u8*)ptr,
+    .len = size,
+    .pos = 0,
   };
 }
 
-sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
-  sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
+sp_err_t sp_io_dyn_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_io_dyn_mem_writer_t* w = (sp_io_dyn_mem_writer_t*)writer;
 
   // Keep doubling the underlying buffer if there's not enough space
-  u64 required = io->seek + size;
-  if (required > io->buffer.capacity) {
-    u64 new_capacity = io->buffer.capacity ? io->buffer.capacity : 64;
+  u64 required = w->cursor + size;
+  if (required > w->storage.capacity) {
+    u64 new_capacity = w->storage.capacity ? w->storage.capacity : 64;
     while (new_capacity < required) {
       new_capacity *= 2;
     }
-    io->buffer.data = (u8*)sp_mem_allocator_realloc(io->allocator, io->buffer.data, new_capacity);
-    io->buffer.capacity = new_capacity;
+    w->storage.data = (u8*)sp_mem_allocator_realloc(w->allocator, w->storage.data, new_capacity);
+    w->storage.capacity = new_capacity;
   }
 
-  sp_mem_copy(ptr, io->buffer.data + io->seek, size);
-  io->seek += size;
-  if (io->seek > io->buffer.len) {
-    io->buffer.len = io->seek;
+  sp_mem_copy(ptr, w->storage.data + w->cursor, size);
+  w->cursor += size;
+  if (w->cursor > w->storage.len) {
+    w->storage.len = w->cursor;
   }
   if (bytes_written) *bytes_written = size;
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_t whence, s64* position) {
-  sp_io_writer_dyn_mem_t* io = &writer->dyn_mem;
+sp_err_t sp_io_dyn_mem_writer_seek(sp_io_dyn_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position) {
+  sp_assert(w);
+  sp_try(sp_io_flush(&w->base));
 
   s64 pos = 0;
   position = position ? position : &pos;
@@ -13777,73 +13748,77 @@ sp_err_t sp_io_writer_dyn_seek(sp_io_writer_t* writer, s64 offset, sp_io_whence_
       break;
     }
     case SP_IO_SEEK_CUR: {
-      *position = (s64)io->seek + offset;
+      *position = (s64)w->cursor + offset;
       break;
     }
     case SP_IO_SEEK_END: {
-      *position = (s64)io->buffer.len + offset;
+      *position = (s64)w->storage.len + offset;
       break;
     }
   }
 
   if (*position < 0) return SP_ERR_IO_SEEK_INVALID;
-  if (*position > (s64)io->buffer.len) return SP_ERR_IO_SEEK_INVALID;
+  if (*position > (s64)w->storage.len) return SP_ERR_IO_SEEK_INVALID;
 
-  io->seek = (u64)(*position);
+  w->cursor = (u64)(*position);
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_dyn_size(sp_io_writer_t* writer, u64* size) {
+sp_err_t sp_io_dyn_mem_writer_size(sp_io_dyn_mem_writer_t* w, u64* size) {
+  sp_assert(w);
   sp_assert(size);
-  *size = writer->dyn_mem.buffer.len;
+  sp_try(sp_io_flush(&w->base));
+
+  *size = w->storage.len;
   return SP_OK;
 }
 
-sp_err_t sp_io_writer_dyn_close(sp_io_writer_t* writer) {
-  if (writer->dyn_mem.buffer.data) {
-    sp_mem_allocator_free(writer->dyn_mem.allocator, writer->dyn_mem.buffer.data);
-    writer->dyn_mem.buffer = sp_zero_s(sp_mem_buffer_t);
+sp_err_t sp_io_dyn_mem_writer_close(sp_io_dyn_mem_writer_t* w) {
+  sp_assert(w);
+
+  // We're trying to close it, so just eat the error if flush fails
+  sp_io_flush(&w->base);
+
+  if (w->storage.data) {
+    sp_mem_allocator_free(w->allocator, w->storage.data);
+    w->storage = sp_zero_s(sp_mem_buffer_t);
   }
   return SP_OK;
 }
 
-void sp_io_writer_from_dyn_mem_a(sp_mem_t mem, sp_io_writer_t* writer) {
-  *writer = (sp_io_writer_t) {
-    .vtable = {
-      .write = sp_io_writer_dyn_write,
-      .seek = sp_io_writer_dyn_seek,
-      .size = sp_io_writer_dyn_size,
-      .close = sp_io_writer_dyn_close,
-    },
-    .dyn_mem = {
-      .allocator = mem,
-    }
+void sp_io_dyn_mem_writer_init_a(sp_mem_t mem, sp_io_dyn_mem_writer_t* w) {
+  *w = (sp_io_dyn_mem_writer_t) {
+    .base = { .write = sp_io_dyn_mem_writer_write },
+    .allocator = mem,
   };
 }
 
-sp_str_t sp_io_writer_mem_as_str(sp_io_writer_mem_t* io) {
-  return (sp_str_t){ .data = (c8*)io->ptr, .len = (u32)io->pos };
+sp_str_t sp_io_mem_writer_as_str(sp_io_mem_writer_t* w) {
+  return (sp_str_t){ .data = (c8*)w->ptr, .len = (u32)w->pos };
 }
 
-sp_str_t sp_io_writer_dyn_mem_as_str(sp_io_writer_dyn_mem_t* io) {
-  return sp_mem_buffer_as_str(&io->buffer);
+sp_str_t sp_io_dyn_mem_writer_as_str(sp_io_dyn_mem_writer_t* w) {
+  return sp_mem_buffer_as_str(&w->storage);
 }
 
 sp_str_r sp_fmt_a(sp_mem_t mem, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(mem, &io);
-  sp_err_t err = sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &io);
+
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(mem);
+  sp_err_t err = sp_fmt_v_a(&io.base, s.mem, sp_str_view(fmt), args);
+  sp_mem_end_scratch(s);
   va_end(args);
 
   sp_str_r result = sp_zero;
   result.err = err;
-  if (!err) result.value = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  if (!err) result.value = sp_io_dyn_mem_writer_as_str(&io);
   return result;
 }
 
-sp_err_t sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
+sp_err_t sp_fmt_v_a(sp_io_writer_t* io, sp_mem_t mem, sp_str_t fmt, va_list args) {
   sp_fmt_parser_t p = { .str = fmt };
 
   while (true) {
@@ -13890,7 +13865,7 @@ sp_err_t sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
 
       sp_fmt_arg_t arg = va_arg(args, sp_fmt_arg_t);
       arg.spec = spec;
-      sp_try(sp_fmt_render_a(io, &arg, params));
+      sp_try(sp_fmt_render_a(io, mem, &arg, params));
       continue;
     }
 
@@ -13913,93 +13888,105 @@ sp_err_t sp_fmt_v_a(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
 
 void sp_log_a(const c8* fmt, ...) {
   u8 buffer [4096] = sp_zero;
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
+  sp_io_mem_writer_t io = sp_zero;
+  sp_io_mem_writer_from_buffer(&io, buffer, sizeof(buffer));
 
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  sp_fmt_v_a(&io.base, s.mem, sp_str_view(fmt), args);
   va_end(args);
+  sp_mem_end_scratch(s);
 
-  sp_str_t str = sp_io_writer_mem_as_str(&io.mem);
+  sp_str_t str = sp_io_mem_writer_as_str(&io);
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_io_write_str(tls->std.out, str, SP_NULLPTR);
-  sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
+  sp_io_write_str(&tls->std.out->base, str, SP_NULLPTR);
+  sp_io_write_cstr(&tls->std.out->base, "\n", SP_NULLPTR);
 }
 
 void sp_log_str_a(sp_str_t fmt, ...) {
   u8 buffer[4096] = sp_zero;
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
+  sp_io_mem_writer_t io = sp_zero;
+  sp_io_mem_writer_from_buffer(&io, buffer, sizeof(buffer));
 
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_v_a(&io, fmt, args);
+  sp_fmt_v_a(&io.base, s.mem, fmt, args);
   va_end(args);
+  sp_mem_end_scratch(s);
 
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
-  sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
+  sp_io_write_str(&tls->std.out->base, sp_io_mem_writer_as_str(&io), SP_NULLPTR);
+  sp_io_write_cstr(&tls->std.out->base, "\n", SP_NULLPTR);
 }
 
 void sp_log_err_a(const c8* fmt, ...) {
   u8 buffer[4096] = sp_zero;
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
+  sp_io_mem_writer_t io = sp_zero;
+  sp_io_mem_writer_from_buffer(&io, buffer, sizeof(buffer));
 
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  sp_fmt_v_a(&io.base, s.mem, sp_str_view(fmt), args);
   va_end(args);
+  sp_mem_end_scratch(s);
 
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
-  sp_io_write_cstr(tls->std.out, "\n", SP_NULLPTR);
+  sp_io_write_str(&tls->std.out->base, sp_io_mem_writer_as_str(&io), SP_NULLPTR);
+  sp_io_write_cstr(&tls->std.out->base, "\n", SP_NULLPTR);
 }
 
 void sp_print_a(const c8* fmt, ...) {
   u8 buffer[4096] = sp_zero;
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
+  sp_io_mem_writer_t io = sp_zero;
+  sp_io_mem_writer_from_buffer(&io, buffer, sizeof(buffer));
 
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  sp_fmt_v_a(&io.base, s.mem, sp_str_view(fmt), args);
   va_end(args);
+  sp_mem_end_scratch(s);
 
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
+  sp_io_write_str(&tls->std.out->base, sp_io_mem_writer_as_str(&io), SP_NULLPTR);
 }
 
 void sp_print_str_a(sp_str_t fmt, ...) {
   u8 buffer[4096] = sp_zero;
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
+  sp_io_mem_writer_t io = sp_zero;
+  sp_io_mem_writer_from_buffer(&io, buffer, sizeof(buffer));
 
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_v_a(&io, fmt, args);
+  sp_fmt_v_a(&io.base, s.mem, fmt, args);
   va_end(args);
+  sp_mem_end_scratch(s);
 
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_io_write_str(tls->std.out, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
+  sp_io_write_str(&tls->std.out->base, sp_io_mem_writer_as_str(&io), SP_NULLPTR);
 }
 
 void sp_print_err_a(const c8* fmt, ...) {
   u8 buffer[4096] = sp_zero;
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_mem(&io, buffer, sizeof(buffer));
+  sp_io_mem_writer_t io = sp_zero;
+  sp_io_mem_writer_from_buffer(&io, buffer, sizeof(buffer));
 
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_v_a(&io, sp_str_view(fmt), args);
+  sp_fmt_v_a(&io.base, s.mem, sp_str_view(fmt), args);
   va_end(args);
+  sp_mem_end_scratch(s);
 
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_io_write_str(tls->std.err, sp_io_writer_mem_as_str(&io.mem), SP_NULLPTR);
+  sp_io_write_str(&tls->std.err->base, sp_io_mem_writer_as_str(&io), SP_NULLPTR);
 }
 
-sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* directive_params) {
+sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* directive_params) {
   sp_fmt_directive_t* directives[SP_FMT_MAX_DIRECTIVES];
 
   u8 num_dirs = arg->spec.directive_count;
@@ -14047,23 +14034,19 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
     }
   }
 
-  sp_mem_arena_marker_t s = io->vtable.write == sp_io_writer_dyn_write
-    ? sp_mem_begin_scratch_for(io->dyn_mem.allocator)
-    : sp_mem_begin_scratch();
-
-  sp_io_writer_t before_io = sp_zero;
-  sp_io_writer_t content_io = sp_zero;
-  sp_io_writer_t after_io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(s.mem, &before_io);
-  sp_io_writer_from_dyn_mem_a(s.mem, &content_io);
-  sp_io_writer_from_dyn_mem_a(s.mem, &after_io);
+  sp_io_dyn_mem_writer_t before_io = sp_zero;
+  sp_io_dyn_mem_writer_t content_io = sp_zero;
+  sp_io_dyn_mem_writer_t after_io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &before_io);
+  sp_io_dyn_mem_writer_init_a(mem, &content_io);
+  sp_io_dyn_mem_writer_init_a(mem, &after_io);
 
   sp_for(it, num_dirs) {
     if (directives[it]->kind != sp_fmt_directive_decorator) continue;
     sp_fmt_fn_t before_fn = directives[it]->decorator.before;
     if (!before_fn) continue;
     sp_fmt_arg_t* p = params[it] ? &directive_params[it] : SP_NULLPTR;
-    before_fn(&before_io, arg, p);
+    before_fn(&before_io.base, mem, arg, p);
   }
 
   struct {
@@ -14072,7 +14055,6 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
   } render = sp_zero;
   if (arg->id == sp_fmt_id_custom) {
     if (!arg->custom.fn) {
-      sp_mem_end_scratch(s);
       return SP_ERR_FMT_CUSTOM_WITHOUT_FN;
     }
     render.fn = arg->custom.fn;
@@ -14081,7 +14063,6 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
     sp_for(it, num_dirs) {
       if (directives[it]->kind != sp_fmt_directive_renderer) continue;
       if (render.fn) {
-        sp_mem_end_scratch(s);
         return SP_ERR_FMT_TOO_MANY_RENDERERS;
       }
       render.fn = directives[it]->renderer;
@@ -14089,18 +14070,18 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
     }
   }
   render.fn = render.fn ? render.fn : sp_fmt_render_default_a;
-  render.fn(&content_io, arg, render.param);
+  render.fn(&content_io.base, mem, arg, render.param);
 
-  sp_str_t content = sp_io_writer_dyn_mem_as_str(&content_io.dyn_mem);
+  sp_str_t content = sp_io_dyn_mem_writer_as_str(&content_io);
 
   u8 j = num_dirs;
   while (j--) {
     if (directives[j]->kind != sp_fmt_directive_transformer) continue;
     sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
-    sp_io_writer_t next = sp_zero;
-    sp_io_writer_from_dyn_mem_a(s.mem, &next);
-    directives[j]->transformer(&next, content, arg, p);
-    content = sp_io_writer_dyn_mem_as_str(&next.dyn_mem);
+    sp_io_dyn_mem_writer_t next = sp_zero;
+    sp_io_dyn_mem_writer_init_a(mem, &next);
+    directives[j]->transformer(&next.base, mem, content, arg, p);
+    content = sp_io_dyn_mem_writer_as_str(&next);
   }
 
   j = num_dirs;
@@ -14109,14 +14090,13 @@ sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* di
     sp_fmt_fn_t after_fn = directives[j]->decorator.after;
     if (!after_fn) continue;
     sp_fmt_arg_t* p = params[j] ? &directive_params[j] : SP_NULLPTR;
-    after_fn(&after_io, arg, p);
+    after_fn(&after_io.base, mem, arg, p);
   }
 
-  sp_str_t before = sp_io_writer_dyn_mem_as_str(&before_io.dyn_mem);
-  sp_str_t after  = sp_io_writer_dyn_mem_as_str(&after_io.dyn_mem);
+  sp_str_t before = sp_io_dyn_mem_writer_as_str(&before_io);
+  sp_str_t after  = sp_io_dyn_mem_writer_as_str(&after_io);
 
   sp_fmt_apply_spec_a(io, before, content, after, arg->spec);
-  sp_mem_end_scratch(s);
   return SP_OK;
 }
 
@@ -14285,7 +14265,7 @@ void sp_fmt_write_f64_a(sp_io_writer_t* io, f64 value, u32 precision) {
   }
 }
 
-void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+void sp_fmt_render_default_a(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   sp_unused(param);
   switch (arg->id) {
     case sp_fmt_id_u64:
@@ -14313,7 +14293,7 @@ void sp_fmt_render_default_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t
       break;
     case sp_fmt_id_custom:
       if (arg->custom.fn) {
-        arg->custom.fn(io, arg, SP_NULLPTR);
+        arg->custom.fn(io, mem, arg, SP_NULLPTR);
       }
       break;
   }
@@ -14525,24 +14505,24 @@ sp_err_t sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   sp_assert(content);
   sp_err_t err = SP_OK;
   c8* buffer = SP_NULLPTR;
+
+  sp_io_file_reader_t reader = sp_zero;
+  sp_try(sp_io_file_reader_from_path(&reader, path));
+
   u64 size = 0;
-
-  sp_io_reader_t reader = sp_zero;
-  sp_try(sp_io_reader_from_file(&reader, path));
-
-  sp_try_goto(sp_io_reader_size(&reader, &size), err, cleanup);
+  sp_try_goto(sp_io_file_reader_size(&reader, &size), err, cleanup);
   if (!size) goto cleanup;
 
   buffer = sp_alloc_n_a(mem, c8, size);
   u64 bytes_read = 0;
-  sp_try_goto(sp_io_read(&reader, buffer, size, &bytes_read), err, cleanup);
+  sp_try_goto(sp_io_read(&reader.base, buffer, size, &bytes_read), err, cleanup);
   content->data = buffer;
   content->len = (u32)bytes_read;
   buffer = SP_NULLPTR;
 
 cleanup:
   if (buffer) sp_mem_allocator_free(mem, buffer);
-  sp_io_reader_close(&reader);
+  sp_io_file_reader_close(&reader);
   return err;
 }
 
@@ -14580,19 +14560,19 @@ sp_err_t sp_fs_create_file_a(sp_str_t path) {
 
 sp_err_t sp_fs_create_file_slice_a(sp_str_t path, sp_mem_slice_t slice) {
   sp_try(sp_os_create_file(path));
-  sp_io_writer_t io = sp_zero;
-  sp_try(sp_io_writer_from_file(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
-  sp_try(sp_io_write(&io, slice.data, slice.len, SP_NULLPTR));
-  sp_try(sp_io_writer_close(&io));
+  sp_io_file_writer_t io = sp_zero;
+  sp_try(sp_io_file_writer_from_path(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_write(&io.base, slice.data, slice.len, SP_NULLPTR));
+  sp_try(sp_io_file_writer_close(&io));
   return SP_OK;
 }
 
 sp_err_t sp_fs_create_file_str_a(sp_str_t path, sp_str_t str) {
   sp_try(sp_os_create_file(path));
-  sp_io_writer_t io = sp_zero;
-  sp_try(sp_io_writer_from_file(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
-  sp_try(sp_io_write_str(&io, str, SP_NULLPTR));
-  sp_try(sp_io_writer_close(&io));
+  sp_io_file_writer_t io = sp_zero;
+  sp_try(sp_io_file_writer_from_path(&io, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_write_str(&io.base, str, SP_NULLPTR));
+  sp_try(sp_io_file_writer_close(&io));
   return SP_OK;
 }
 
@@ -14718,24 +14698,24 @@ void sp_fs_copy_file_a(sp_str_t from, sp_str_t to) {
   sp_sys_stat_t st = sp_zero;
   if (sp_sys_stat_s(from, &st)) goto done;
 
-  sp_io_reader_t reader = sp_zero;
-  if (sp_io_reader_from_file(&reader, from)) goto done;
+  sp_io_file_reader_t reader = sp_zero;
+  if (sp_io_file_reader_from_path(&reader, from)) goto done;
 
-  sp_io_writer_t writer = sp_zero;
-  if (sp_io_writer_from_file(&writer, to, SP_IO_WRITE_MODE_OVERWRITE)) {
-    sp_io_reader_close(&reader);
+  sp_io_file_writer_t writer = sp_zero;
+  if (sp_io_file_writer_from_path(&writer, to, SP_IO_WRITE_MODE_OVERWRITE)) {
+    sp_io_file_reader_close(&reader);
     goto done;
   }
 
   u8 buffer[4096];
   while (true) {
     u64 bytes_read = 0;
-    sp_err_t err = sp_io_read(&reader, buffer, sizeof(buffer), &bytes_read);
-    if (bytes_read) sp_io_write(&writer, buffer, bytes_read, SP_NULLPTR);
+    sp_err_t err = sp_io_read(&reader.base, buffer, sizeof(buffer), &bytes_read);
+    if (bytes_read) sp_io_write(&writer.base, buffer, bytes_read, SP_NULLPTR);
     if (err) break;
   }
-  sp_io_reader_close(&reader);
-  sp_io_writer_close(&writer);
+  sp_io_file_reader_close(&reader);
+  sp_io_file_writer_close(&writer);
   sp_sys_chmod_s(to, &st);
 
 done:
@@ -14840,12 +14820,12 @@ sp_str_t sp_tm_epoch_to_iso8601_a(sp_mem_t mem, sp_tm_epoch_t time) {
 // @refactor
 
 sp_str_t sp_str_reduce_a(sp_mem_t mem, sp_str_t* strings, u32 num_strings, void* user_data, sp_str_reduce_fn_t fn) {
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(mem, &io);
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &io);
 
   sp_str_reduce_context_t context = {
     .user_data = user_data,
-    .writer = &io,
+    .writer = &io.base,
     .elements = {
       .data = strings,
       .len = num_strings,
@@ -14858,7 +14838,7 @@ sp_str_t sp_str_reduce_a(sp_mem_t mem, sp_str_t* strings, u32 num_strings, void*
     fn(&context);
   }
 
-  return sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  return sp_io_dyn_mem_writer_as_str(&io);
 }
 
 void sp_str_reduce_kernel_join_a(sp_str_reduce_context_t* context) {

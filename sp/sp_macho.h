@@ -356,10 +356,10 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
 }
 
 sp_err_t sp_macho_write_to_file(sp_macho_t* m, sp_str_t path) {
-  sp_io_writer_t f = sp_zero;
-  sp_try(sp_io_writer_from_file(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
-  sp_err_t err = sp_macho_write(m, &f);
-  sp_io_writer_close(&f);
+  sp_io_file_writer_t f = sp_zero;
+  sp_try(sp_io_file_writer_from_path(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_err_t err = sp_macho_write(m, &f.base);
+  sp_io_file_writer_close(&f);
   return err;
 }
 

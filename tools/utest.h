@@ -116,7 +116,7 @@ struct utest_test_state_s {
 struct utest_state_s {
   struct utest_test_state_s *tests;
   u64 tests_length;
-  sp_io_writer_t output;
+  sp_io_file_writer_t output;
   int has_output;
   sp_mem_t mem;
 };
@@ -133,7 +133,7 @@ UTEST_EXTERN struct utest_state_s utest_state;
     sp_str_t _utest_fmtd = sp_fmt_a(utest_state.mem, __VA_ARGS__).value;                               \
     sp_os_print(_utest_fmtd);                                                 \
     if (utest_state.has_output) {                                              \
-      sp_io_write_str(&utest_state.output, _utest_fmtd, SP_NULLPTR);         \
+      sp_io_write_str(&utest_state.output.base, _utest_fmtd, SP_NULLPTR);    \
     }                                                                          \
   } while (0)
 #ifdef __clang__
@@ -912,8 +912,8 @@ s32 utest_main(s32 argc, const c8 **argv) {
     } else if (0 ==
                UTEST_STRNCMP(argv[index], output_str, sizeof(output_str) - 1)) {
       sp_str_t path = sp_str_view(argv[index] + sizeof(output_str) - 1);
-      sp_io_writer_from_file(&utest_state.output, path,
-                             SP_IO_WRITE_MODE_OVERWRITE);
+      sp_io_file_writer_from_path(&utest_state.output, path,
+                                  SP_IO_WRITE_MODE_OVERWRITE);
       utest_state.has_output = 1;
     } else if (0 == UTEST_STRNCMP(argv[index], list_str,
                                   sizeof(list_str) - 1)) {
@@ -1089,7 +1089,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
   }
 
   if (utest_state.has_output) {
-    sp_io_write_cstr(&utest_state.output, "</testsuite>\n</testsuites>\n",
+    sp_io_write_cstr(&utest_state.output.base, "</testsuite>\n</testsuites>\n",
                      SP_NULLPTR);
   }
 
@@ -1103,7 +1103,7 @@ cleanup:
   sp_mem_os_free(UTEST_PTR_CAST(void *, utest_state.tests));
 
   if (utest_state.has_output) {
-    sp_io_writer_close(&utest_state.output);
+    sp_io_file_writer_close(&utest_state.output);
   }
 
   return UTEST_CAST(int, failed);

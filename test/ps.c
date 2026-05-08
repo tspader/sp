@@ -158,13 +158,13 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
   sp_ps_t ps = sp_ps_create_a(ut.mem, config);
   SP_ASSERT(ps.os);
 
-  sp_io_writer_t* in = sp_ps_io_in(&ps);
+  sp_io_file_writer_t* in = sp_ps_io_in(&ps);
   sp_io_reader_t* out = sp_ps_io_out(&ps);
   sp_io_reader_t* err = sp_ps_io_err(&ps);
 
   if (!sp_str_empty(test.input)) {
     u64 bytes_written = 0;
-    sp_io_write(in, test.input.data, test.input.len, &bytes_written);
+    sp_io_write(&in->base, test.input.data, test.input.len, &bytes_written);
     if (!(bytes_written == test.input.len)) {
       sp_log_a(
         "stdin: tried to write {} ({}), but {.fg yellow} returned {}",
@@ -176,7 +176,7 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
       sp_assert(bytes_written == test.input.len);
     }
 
-    sp_io_writer_close(in);
+    sp_io_file_writer_close(in);
   }
 
   if (!sp_str_empty(test.output.out.expected)) {
@@ -463,7 +463,7 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
   sp_ps_t ps = sp_ps_create_a(ut.mem, config);
   SP_ASSERT(ps.os);
 
-  sp_io_writer_t* in = sp_ps_io_in(&ps);
+  sp_io_file_writer_t* in = sp_ps_io_in(&ps);
   sp_io_reader_t* out = sp_ps_io_out(&ps);
 
   for (u32 i = 0; i < 8; i++) {
@@ -471,11 +471,11 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
       break;
     }
 
-    sp_io_write_str(in, test.expected[i].key, SP_NULLPTR);
-    sp_io_write_c8(in, '\n');
+    sp_io_write_str(&in->base, test.expected[i].key, SP_NULLPTR);
+    sp_io_write_c8(&in->base, '\n');
   }
 
-  sp_io_writer_close(in);
+  sp_io_file_writer_close(in);
 
   sp_test_proc_stream_context_t ctx = {
     .stream = out,
@@ -822,7 +822,7 @@ UTEST_F(ps, poll_with_io) {
   sp_ps_status_t r1 = sp_ps_poll(&ps, 10);
   EXPECT_EQ(r1.state, SP_PS_STATE_RUNNING);
 
-  sp_io_writer_t* in = sp_ps_io_in(&ps);
+  sp_io_file_writer_t* in = sp_ps_io_in(&ps);
   EXPECT_NE(in, SP_NULLPTR);
 
   sp_ps_status_t r2 = sp_ps_wait(&ps);
@@ -843,7 +843,7 @@ UTEST_F(ps, interleaved_read_write) {
     }
   });
 
-  sp_io_writer_t* in = sp_ps_io_in(&ps);
+  sp_io_file_writer_t* in = sp_ps_io_in(&ps);
   sp_io_reader_t* out = sp_ps_io_out(&ps);
 
   EXPECT_NE(in, SP_NULLPTR);
@@ -853,7 +853,7 @@ UTEST_F(ps, interleaved_read_write) {
     sp_str_t input = sp_fmt_a(ut.mem, "line {}\n", sp_fmt_uint(i)).value;
 
     u64 written = 0;
-    sp_io_write_str(in, input, &written);
+    sp_io_write_str(&in->base, input, &written);
     EXPECT_EQ(written, input.len);
 
     sp_os_sleep_ms(50);
@@ -864,7 +864,7 @@ UTEST_F(ps, interleaved_read_write) {
     EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, expected.data, expected.len));
   }
 
-  sp_io_writer_close(in);
+  sp_io_file_writer_close(in);
 
   sp_ps_status_t result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PS_STATE_DONE);

@@ -283,10 +283,10 @@ UTEST_F(elf, rela_info_encoding) {
 UTEST_F(elf, minimal_elf_format) {
   SKIP_ON_WASM()
   sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
-  sp_elf_write(elf, &buf);
-  u8* data = buf.dyn_mem.buffer.data;
-  u64 size = buf.dyn_mem.buffer.len;
+  sp_io_dyn_mem_writer_t buf; sp_io_dyn_mem_writer_init_a(ut.mem.arena, &buf);
+  sp_elf_write(elf, &buf.base);
+  u8* data = buf.storage.data;
+  u64 size = buf.storage.len;
 
   ASSERT_GE(size, sizeof(Elf64_Ehdr));
   ASSERT_EQ(data[0], 0x7f);
@@ -317,16 +317,16 @@ UTEST_F(elf, minimal_elf_format) {
   ASSERT_EQ(shdrs[0].sh_addralign, 0u);
   ASSERT_EQ(shdrs[0].sh_entsize, 0u);
 
-  sp_io_writer_close(&buf);
+  sp_io_dyn_mem_writer_close(&buf);
   sp_elf_free(elf);
 }
 
 UTEST_F(elf, err_write_null_elf) {
   SKIP_ON_WASM()
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
-  sp_err_t err = sp_elf_write(SP_NULLPTR, &buf);
+  sp_io_dyn_mem_writer_t buf; sp_io_dyn_mem_writer_init_a(ut.mem.arena, &buf);
+  sp_err_t err = sp_elf_write(SP_NULLPTR, &buf.base);
   ASSERT_NE(err, SP_OK);
-  sp_io_writer_close(&buf);
+  sp_io_dyn_mem_writer_close(&buf);
 }
 
 UTEST_F(elf, symtab_local_ordering) {
@@ -401,9 +401,9 @@ UTEST_F(elf, populated_section_alignment) {
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   sp_elf_section_reserve_bytes(data, 5);
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
-  sp_elf_write(elf, &buf);
-  u8* out_data = buf.dyn_mem.buffer.data;
+  sp_io_dyn_mem_writer_t buf; sp_io_dyn_mem_writer_init_a(ut.mem.arena, &buf);
+  sp_elf_write(elf, &buf.base);
+  u8* out_data = buf.storage.data;
 
   Elf64_Ehdr* ehdr = (Elf64_Ehdr*)out_data;
   Elf64_Shdr* shdrs = (Elf64_Shdr*)(out_data + ehdr->e_shoff);
@@ -413,7 +413,7 @@ UTEST_F(elf, populated_section_alignment) {
     u64 align = shdrs[i].sh_addralign ? shdrs[i].sh_addralign : 1;
     ASSERT_EQ(shdrs[i].sh_offset % align, 0u);
   }
-  sp_io_writer_close(&buf);
+  sp_io_dyn_mem_writer_close(&buf);
   sp_elf_free(elf);
 }
 
@@ -427,9 +427,9 @@ UTEST_F(elf, populated_sections_no_overlap) {
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   sp_elf_section_reserve_bytes(data, 50);
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
-  sp_elf_write(elf, &buf);
-  u8* out_data = buf.dyn_mem.buffer.data;
+  sp_io_dyn_mem_writer_t buf; sp_io_dyn_mem_writer_init_a(ut.mem.arena, &buf);
+  sp_elf_write(elf, &buf.base);
+  u8* out_data = buf.storage.data;
 
   Elf64_Ehdr* ehdr = (Elf64_Ehdr*)out_data;
   Elf64_Shdr* shdrs = (Elf64_Shdr*)(out_data + ehdr->e_shoff);
@@ -448,7 +448,7 @@ UTEST_F(elf, populated_sections_no_overlap) {
       ASSERT_FALSE(overlap);
     }
   }
-  sp_io_writer_close(&buf);
+  sp_io_dyn_mem_writer_close(&buf);
   sp_elf_free(elf);
 }
 
@@ -459,9 +459,9 @@ UTEST_F(elf, populated_nobits_no_file_space) {
   sp_elf_section_t* bss = sp_elf_add_section(elf, sp_str_lit(".bss"), SHT_NOBITS, 8);
   bss->buffer.size = 1024;
 
-  sp_io_writer_t buf; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &buf);
-  sp_elf_write(elf, &buf);
-  u8* out_data = buf.dyn_mem.buffer.data;
+  sp_io_dyn_mem_writer_t buf; sp_io_dyn_mem_writer_init_a(ut.mem.arena, &buf);
+  sp_elf_write(elf, &buf.base);
+  u8* out_data = buf.storage.data;
 
   Elf64_Ehdr* ehdr = (Elf64_Ehdr*)out_data;
   Elf64_Shdr* shdrs = (Elf64_Shdr*)(out_data + ehdr->e_shoff);
@@ -477,7 +477,7 @@ UTEST_F(elf, populated_nobits_no_file_space) {
   ASSERT_NE(bss_shdr, SP_NULLPTR);
   ASSERT_EQ(bss_shdr->sh_size, 1024u);
   ASSERT_EQ(bss_shdr->sh_offset, 0u);
-  sp_io_writer_close(&buf);
+  sp_io_dyn_mem_writer_close(&buf);
   sp_elf_free(elf);
 }
 
@@ -485,11 +485,10 @@ UTEST_F(elf, roundtrip_minimal) {
   SKIP_ON_WASM()
   sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
 
-  sp_io_writer_t writer; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &writer);
-  sp_elf_write(elf, &writer);
+  sp_io_dyn_mem_writer_t writer; sp_io_dyn_mem_writer_init_a(ut.mem.arena, &writer);
+  sp_elf_write(elf, &writer.base);
 
-  sp_io_reader_t reader; sp_io_reader_from_mem(&reader,writer.dyn_mem.buffer.data, writer.dyn_mem.buffer.len);
-  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, &reader);
+  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, writer.storage.data, writer.storage.len);
 
   ASSERT_NE(read_elf, SP_NULLPTR);
   ASSERT_EQ(sp_elf_num_sections(read_elf), 1);
@@ -497,7 +496,7 @@ UTEST_F(elf, roundtrip_minimal) {
   sp_elf_section_t* sec0 = sp_elf_find_section_by_index(read_elf, 0);
   ASSERT_EQ(sec0->type, (u32)SHT_NULL);
 
-  sp_io_writer_close(&writer);
+  sp_io_dyn_mem_writer_close(&writer);
   sp_elf_free(elf);
   sp_elf_free(read_elf);
 }
@@ -525,11 +524,10 @@ UTEST_F(elf, roundtrip_populated) {
   text = sp_elf_find_section_by_name(elf, sp_str_lit(".text"));
   sp_elf_add_symbol(symtab, elf, sp_str_lit("_start"), 0, sizeof(code), STB_GLOBAL, STT_FUNC, (u16)text->index);
 
-  sp_io_writer_t writer; sp_io_writer_from_dyn_mem_a(ut.mem.arena, &writer);
-  sp_elf_write(elf, &writer);
+  sp_io_dyn_mem_writer_t writer; sp_io_dyn_mem_writer_init_a(ut.mem.arena, &writer);
+  sp_elf_write(elf, &writer.base);
 
-  sp_io_reader_t reader; sp_io_reader_from_mem(&reader,writer.dyn_mem.buffer.data, writer.dyn_mem.buffer.len);
-  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, &reader);
+  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, writer.storage.data, writer.storage.len);
 
   ASSERT_NE(read_elf, SP_NULLPTR);
 
@@ -558,7 +556,7 @@ UTEST_F(elf, roundtrip_populated) {
   sp_elf_section_t* r_strtab = sp_elf_find_section_by_name(read_elf, sp_str_lit(".strtab"));
   ASSERT_NE(r_strtab, SP_NULLPTR);
 
-  sp_io_writer_close(&writer);
+  sp_io_dyn_mem_writer_close(&writer);
   sp_elf_free(elf);
   sp_elf_free(read_elf);
 }
@@ -571,8 +569,7 @@ UTEST_F(elf, err_read_invalid_magic) {
   bad_data[2] = 'D';
   bad_data[3] = '!';
 
-  sp_io_reader_t reader; sp_io_reader_from_mem(&reader,bad_data, sizeof(bad_data));
-  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, &reader);
+  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, bad_data, sizeof(bad_data));
 
   ASSERT_EQ(read_elf, SP_NULLPTR);
   sp_elf_free(read_elf);
@@ -588,8 +585,7 @@ UTEST_F(elf, err_read_invalid_class) {
   bad_data[EI_CLASS] = ELFCLASS32;
   bad_data[EI_DATA] = ELFDATA2LSB;
 
-  sp_io_reader_t reader; sp_io_reader_from_mem(&reader,bad_data, sizeof(bad_data));
-  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, &reader);
+  sp_elf_t* read_elf = sp_elf_read(ut.mem.tracking, bad_data, sizeof(bad_data));
 
   ASSERT_EQ(read_elf, SP_NULLPTR);
   sp_elf_free(read_elf);
@@ -664,10 +660,10 @@ UTEST_F(elf, oracle_cc_read) {
                "}\n");
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.c"));
-  sp_io_writer_t c_file = sp_zero;
-  sp_io_writer_from_file(&c_file, c_path, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write_str(&c_file, c_src, SP_NULLPTR);
-  sp_io_writer_close(&c_file);
+  sp_io_file_writer_t c_file = sp_zero;
+  sp_io_file_writer_from_path(&c_file, c_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write_str(&c_file.base, c_src, SP_NULLPTR);
+  sp_io_file_writer_close(&c_file);
 
   sp_str_t fixture_path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.o"));
   sp_ps_output_t compile = sp_ps_run_a(sp_mem_get_scratch(), (sp_ps_config_t){
@@ -728,10 +724,10 @@ UTEST_F(elf, oracle_cc_link) {
                "}\n");
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration.c"));
-  sp_io_writer_t f = sp_zero;
-  sp_io_writer_from_file(&f, c_path, SP_IO_WRITE_MODE_OVERWRITE);
-  sp_io_write_str(&f, c_src, SP_NULLPTR);
-  sp_io_writer_close(&f);
+  sp_io_file_writer_t f = sp_zero;
+  sp_io_file_writer_from_path(&f, c_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write_str(&f.base, c_src, SP_NULLPTR);
+  sp_io_file_writer_close(&f);
 
   sp_str_t bin_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration"));
   sp_ps_output_t compile = sp_ps_run_a(sp_mem_get_scratch(), (sp_ps_config_t){

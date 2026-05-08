@@ -30,7 +30,7 @@ typedef struct {
 
 struct prompt {
   sp_prompt_ctx_t ctx;
-  sp_io_writer_t writer;
+  sp_io_dyn_mem_writer_t writer;
   sp_app_t* app;
   sp_mem_tracking_t tracker;
   sp_mem_arena_t* arena;
@@ -48,13 +48,13 @@ UTEST_F_SETUP(prompt) {
   ut.ctx = sp_zero_s(sp_prompt_ctx_t);
   ut.app = SP_NULLPTR;
   sp_prompt_ctx_init(&ut.ctx, ut.mem.tracking, 80, 20);
-  sp_io_writer_from_dyn_mem_a(ut.mem.arena, &ut.writer);
-  ut.ctx.writer = &ut.writer;
+  sp_io_dyn_mem_writer_init_a(ut.mem.arena, &ut.writer);
+  ut.ctx.writer = &ut.writer.base;
 }
 
 UTEST_F_TEARDOWN(prompt) {
   sp_app_destroy(ut.app);
-  sp_io_writer_close(&ut.writer);
+  sp_io_dyn_mem_writer_close(&ut.writer);
   sp_prompt_end(&ut.ctx);
   sp_mem_arena_destroy(ut.arena);
   EXPECT_TRUE(sp_mem_tracking_ok(&ut.tracker));
@@ -70,15 +70,15 @@ static u32 count_expected_lines(const c8* lines[32]) {
 }
 
 static sp_str_t trim_framebuffer_row(sp_mem_t mem, sp_prompt_cell_t* row, u32 cols) {
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(mem, &builder);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &builder);
   sp_for(col, cols) {
     c8 buf[4] = sp_zero;
     u8 len = sp_utf8_encode(row[col].codepoint, buf);
-    sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
+    sp_io_write_str(&builder.base, sp_str(buf, len), SP_NULLPTR);
   }
 
-  sp_str_t str = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+  sp_str_t str = sp_io_dyn_mem_writer_as_str(&builder);
   while (!sp_str_empty(str) && str.data[str.len - 1] == ' ') {
     str.len--;
   }
@@ -225,15 +225,15 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_mem_t mem, sp_str_t bytes) {
 
   sp_da(sp_str_t) lines = sp_da_new(mem, sp_str_t);
   sp_for_range(row, 0, vt.max_row + 1) {
-    sp_io_writer_t builder = sp_zero;
-    sp_io_writer_from_dyn_mem_a(mem, &builder);
+    sp_io_dyn_mem_writer_t builder = sp_zero;
+    sp_io_dyn_mem_writer_init_a(mem, &builder);
     sp_for(col, 256) {
       c8 buf[4] = sp_zero;
       u8 len = sp_utf8_encode(vt.cells[row][col], buf);
-      sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
+      sp_io_write_str(&builder.base, sp_str(buf, len), SP_NULLPTR);
     }
 
-    sp_str_t line = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+    sp_str_t line = sp_io_dyn_mem_writer_as_str(&builder);
     while (!sp_str_empty(line) && line.data[line.len - 1] == ' ') {
       line.len--;
     }
@@ -276,8 +276,8 @@ static void sp_prompt_run_case(s32* utest_result, struct prompt* fixture, sp_pro
 
   if (t.expect.composited[0]) {
     sp_str_t bytes = {
-      .data = (c8*)fixture->writer.dyn_mem.buffer.data,
-      .len = (u32)fixture->writer.dyn_mem.buffer.len,
+      .data = (c8*)fixture->writer.storage.data,
+      .len = (u32)fixture->writer.storage.len,
     };
     sp_da(sp_str_t) composited = sp_prompt_vt_render_lines(fixture->mem.arena, bytes);
     u32 num_expected = count_expected_lines(t.expect.composited);

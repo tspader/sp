@@ -1087,17 +1087,17 @@ UTEST(utf8, num_codepoints) {
 }
 
 UTEST(utf8, builder_append) {
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &builder);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &builder);
 
   u32 codepoints[] = { 'a', 0xA2, 0x20AC, 0x1F600, 'z' };
   for (u32 i = 0; i < 5; i++) {
     c8 buf[4] = sp_zero;
     u8 len = sp_utf8_encode(codepoints[i], buf);
-    sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
+    sp_io_write_str(&builder.base, sp_str(buf, len), SP_NULLPTR);
   }
 
-  sp_str_t result = sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+  sp_str_t result = sp_io_dyn_mem_writer_as_str(&builder);
   ASSERT_EQ(result.len, 11);
   ASSERT_EQ(sp_utf8_num_codepoints(result), 5);
 

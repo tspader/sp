@@ -503,8 +503,8 @@ static bool fancy_has_arg(s32 argc, const c8** argv, const c8* arg) {
 }
 
 static sp_str_t fancy_selected_changelog(sp_mem_t mem, fancy_changelog_item_t* items, u32 num_items) {
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(mem, &builder);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &builder);
   const c8* section = "";
   u64 written = 0;
   sp_for(it, num_items) {
@@ -514,33 +514,33 @@ static sp_str_t fancy_selected_changelog(sp_mem_t mem, fancy_changelog_item_t* i
 
     if (!sp_cstr_equal(section, items[it].section)) {
       section = items[it].section;
-      sp_io_writer_size(&builder, &written);
+      sp_io_dyn_mem_writer_size(&builder, &written);
       if (written) {
-        sp_io_write_c8(&builder, '\n');
+        sp_io_write_c8(&builder.base, '\n');
       }
-      sp_fmt_io(&builder, "[{}]", sp_fmt_cstr(section));
-      sp_io_write_c8(&builder, '\n');
+      sp_fmt_io(&builder.base, "[{}]", sp_fmt_cstr(section));
+      sp_io_write_c8(&builder.base, '\n');
     }
 
-    sp_fmt_io(&builder, "- {}", sp_fmt_cstr(items[it].text));
-    sp_io_write_c8(&builder, '\n');
+    sp_fmt_io(&builder.base, "- {}", sp_fmt_cstr(items[it].text));
+    sp_io_write_c8(&builder.base, '\n');
   }
-  return sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+  return sp_io_dyn_mem_writer_as_str(&builder);
 }
 
 static sp_str_t fancy_plan_note(sp_mem_t mem, const c8* kind, const c8* name, const c8* sections) {
-  sp_io_writer_t builder = sp_zero;
-  sp_io_writer_from_dyn_mem_a(mem, &builder);
-  sp_fmt_io(&builder, "version      0.13.3 ({})", sp_fmt_cstr(kind));
-  sp_io_write_c8(&builder, '\n');
-  sp_fmt_io(&builder, "name         {}", sp_fmt_cstr(name));
-  sp_io_write_c8(&builder, '\n');
-  sp_io_write_cstr(&builder, "tag          v0.13.3", SP_NULLPTR);
-  sp_io_write_c8(&builder, '\n');
-  sp_io_write_cstr(&builder, "artifacts    linux, musl, freestanding, macos, windows", SP_NULLPTR);
-  sp_io_write_c8(&builder, '\n');
-  sp_fmt_io(&builder, "changelog    {}", sp_fmt_cstr(sections));
-  return sp_io_writer_dyn_mem_as_str(&builder.dyn_mem);
+  sp_io_dyn_mem_writer_t builder = sp_zero;
+  sp_io_dyn_mem_writer_init_a(mem, &builder);
+  sp_fmt_io(&builder.base, "version      0.13.3 ({})", sp_fmt_cstr(kind));
+  sp_io_write_c8(&builder.base, '\n');
+  sp_fmt_io(&builder.base, "name         {}", sp_fmt_cstr(name));
+  sp_io_write_c8(&builder.base, '\n');
+  sp_io_write_cstr(&builder.base, "tag          v0.13.3", SP_NULLPTR);
+  sp_io_write_c8(&builder.base, '\n');
+  sp_io_write_cstr(&builder.base, "artifacts    linux, musl, freestanding, macos, windows", SP_NULLPTR);
+  sp_io_write_c8(&builder.base, '\n');
+  sp_fmt_io(&builder.base, "changelog    {}", sp_fmt_cstr(sections));
+  return sp_io_dyn_mem_writer_as_str(&builder);
 }
 
 s32 fancy_main(s32 argc, const c8** argv) {

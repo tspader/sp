@@ -12,7 +12,8 @@
 // callers will use as wrappers over sp_fmt_custom()
 typedef struct { f32 x; f32 y; } point_t;
 
-void format_point(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+void format_point(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  sp_unused(mem);
   point_t* point = (point_t*)arg->custom.ptr;
   u32 precision = sp_opt_is_null(arg->spec.precision) ? 2 : sp_opt_get(arg->spec.precision);
   sp_io_write_c8(io, '(');

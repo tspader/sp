@@ -58,14 +58,11 @@ s32 main(s32 num_args, const c8** args) {
   sp_fs_for(mem, build, it) {
     if (sp_glob_set_match(blacklist, it.entry.name)) continue;
     if (sp_glob_set_match(glob, it.entry.name)) {
-      sp_io_reader_t io = sp_zero;
-      sp_io_reader_from_file(&io, it.entry.path);
-
-      u64 size = sp_zero;
-      if (sp_io_reader_size(&io, &size)) sp_fatal("failed to open {.cyan}", it.entry.path);
+      sp_io_file_reader_t io = sp_zero;
+      if (sp_io_file_reader_from_path(&io, it.entry.path)) sp_fatal("failed to open {.cyan}", it.entry.path);
 
       u8 buffer [8] = sp_zero;
-      if (sp_io_read(&io, buffer, 8, SP_NULLPTR)) sp_fatal("failed to read magic for {.cyan}", it.entry.path);
+      if (sp_io_read(&io.base, buffer, 8, SP_NULLPTR)) sp_fatal("failed to read magic for {.cyan}", it.entry.path);
 
       static u8 elf   [] = { 0x7F, 'E', 'L', 'F' };
       static u8 pe    [] = { 'M', 'Z' };

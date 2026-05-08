@@ -308,10 +308,10 @@ UTEST(sp_fmt_parse_directive, no_width_just_directive) {
 }
 
 static sp_str_t render_value_to_str(sp_fmt_arg_t arg) {
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
-  sp_fmt_render_default_a(&io, &arg, SP_NULLPTR);
-  return sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &io);
+  sp_fmt_render_default_a(&io.base, sp_mem_get_scratch(), &arg, SP_NULLPTR);
+  return sp_io_dyn_mem_writer_as_str(&io);
 }
 
 UTEST(sp_fmt_render, u64_zero) {
@@ -420,10 +420,10 @@ UTEST(sp_fmt_render, f64_neg_inf) {
 UTEST(sp_fmt_render, f64_custom_precision_via_spec) {
   sp_fmt_arg_t arg = sp_fmt_float(3.14159);
   sp_opt_set(arg.spec.precision, 2);
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
-  sp_fmt_render_default_a(&io, &arg, SP_NULLPTR);
-  sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &io);
+  sp_fmt_render_default_a(&io.base, sp_mem_get_scratch(), &arg, SP_NULLPTR);
+  sp_str_t got = sp_io_dyn_mem_writer_as_str(&io);
   EXPECT_TRUE(sp_str_equal_cstr(got, "3.14"));
 }
 
@@ -438,11 +438,11 @@ UTEST(sp_fmt_render, ptr_nonzero) {
 }
 
 static sp_str_t apply_spec_to_str(const c8* content, sp_fmt_spec_t spec) {
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &io);
   sp_str_t empty = sp_zero;
-  sp_fmt_apply_spec_a(&io, empty, sp_str_view(content), empty, spec);
-  return sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  sp_fmt_apply_spec_a(&io.base, empty, sp_str_view(content), empty, spec);
+  return sp_io_dyn_mem_writer_as_str(&io);
 }
 
 UTEST(sp_fmt_pad, no_width) {
@@ -482,83 +482,83 @@ UTEST(sp_fmt_pad, center_odd) {
 }
 
 UTEST(sp_fmt_pad, wrapped_padding_outside) {
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
-  sp_fmt_apply_spec_a(&io,
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &io);
+  sp_fmt_apply_spec_a(&io.base,
     sp_str_lit("<"),
     sp_str_lit("42"),
     sp_str_lit(">"),
     (sp_fmt_spec_t){ .width = 6 }
   );
-  sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  sp_str_t got = sp_io_dyn_mem_writer_as_str(&io);
   EXPECT_TRUE(sp_str_equal_cstr(got, "    <42>"));
 }
 
 UTEST(sp_fmt_pad, wrapped_center) {
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
-  sp_fmt_apply_spec_a(&io,
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &io);
+  sp_fmt_apply_spec_a(&io.base,
     sp_str_lit("["),
     sp_str_lit("hi"),
     sp_str_lit("]"),
     (sp_fmt_spec_t){ .width = 8, .align = SP_FMT_ALIGN_CENTER, .fill = '*' }
   );
-  sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  sp_str_t got = sp_io_dyn_mem_writer_as_str(&io);
   EXPECT_TRUE(sp_str_equal_cstr(got, "***[hi]***"));
 }
 
-static void _test_before_lt(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_before_lt(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, "<", SP_NULLPTR);
 }
 
-static void _test_after_gt(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_after_gt(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, ">", SP_NULLPTR);
 }
 
-static void _test_render_x(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_render_x(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, "X", SP_NULLPTR);
 }
 
-static void _test_transform_upper(sp_io_writer_t* io, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_transform_upper(sp_io_writer_t* io, sp_mem_t mem, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_for(k, content.len) {
     c8 c = content.data[k];
     sp_io_write_c8(io, (c >= 'a' && c <= 'z') ? (c8)(c - 32) : c);
   }
 }
 
-static sp_io_writer_t _test_log;
+static sp_io_dyn_mem_writer_t _test_log;
 static u32 _test_render_y_calls;
 
-static void _test_before_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_before_a(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, "[a", SP_NULLPTR);
-  sp_io_write_cstr(&_test_log, "ba", SP_NULLPTR);
+  sp_io_write_cstr(&_test_log.base, "ba", SP_NULLPTR);
 }
 
-static void _test_after_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_after_a(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, "a]", SP_NULLPTR);
-  sp_io_write_cstr(&_test_log, "aa", SP_NULLPTR);
+  sp_io_write_cstr(&_test_log.base, "aa", SP_NULLPTR);
 }
 
-static void _test_before_b(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_before_b(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, "[b", SP_NULLPTR);
-  sp_io_write_cstr(&_test_log, "bb", SP_NULLPTR);
+  sp_io_write_cstr(&_test_log.base, "bb", SP_NULLPTR);
 }
 
-static void _test_after_b(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_after_b(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, "b]", SP_NULLPTR);
-  sp_io_write_cstr(&_test_log, "ab", SP_NULLPTR);
+  sp_io_write_cstr(&_test_log.base, "ab", SP_NULLPTR);
 }
 
-static void _test_render_y(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_render_y(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   _test_render_y_calls++;
   sp_io_write_cstr(io, "Y", SP_NULLPTR);
 }
@@ -628,12 +628,12 @@ UTEST(sp_fmt_directive, ordering_bracket_nested) {
   sp_fmt_register_decorator("a", _test_before_a, _test_after_a);
   sp_fmt_register_decorator("b", _test_before_b, _test_after_b);
 
-  _test_log = (sp_io_writer_t)sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &_test_log);
+  _test_log = (sp_io_dyn_mem_writer_t)sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &_test_log);
   sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.a .b}", sp_fmt_cstr("x")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "[a[bxb]a]"));
 
-  sp_str_t log_str = sp_io_writer_dyn_mem_as_str(&_test_log.dyn_mem);
+  sp_str_t log_str = sp_io_dyn_mem_writer_as_str(&_test_log);
   EXPECT_TRUE(sp_str_equal_cstr(log_str, "babbabaa"));
   sp_fmt_directive_reset();
 }
@@ -747,8 +747,8 @@ UTEST(sp_fmt_directive, content_wider_than_width_with_wrapper) {
   sp_fmt_directive_reset();
 }
 
-static void _test_render_prefixed(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_render_prefixed(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, "rendered", SP_NULLPTR);
 }
 
@@ -768,15 +768,15 @@ UTEST(sp_fmt_parse_directive, err_alpha_after_digit) {
 }
 
 UTEST(sp_fmt_pad, wrapped_content_overflow) {
-  sp_io_writer_t io = sp_zero;
-  sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
-  sp_fmt_apply_spec_a(&io,
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &io);
+  sp_fmt_apply_spec_a(&io.base,
     sp_str_lit("<"),
     sp_str_lit("hello"),
     sp_str_lit(">"),
     (sp_fmt_spec_t){ .width = 3 }
   );
-  sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
+  sp_str_t got = sp_io_dyn_mem_writer_as_str(&io);
   EXPECT_TRUE(sp_str_equal_cstr(got, "<hello>"));
 }
 
@@ -895,8 +895,8 @@ UTEST(sp_fmt_v, width_clamped_dynamic_negative) {
   EXPECT_TRUE(sp_str_equal_cstr(got, "hi"));
 }
 
-static void _test_render_u64_only(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)param;
+static void _test_render_u64_only(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)param; (void)mem;
   sp_fmt_write_u64_a(io, arg->u);
 }
 
@@ -1044,8 +1044,8 @@ UTEST(sp_fmt_parse_directive_arg, err_space_in_arg) {
 
 static sp_str_t _last_fg_param;
 static bool _last_fg_had_param;
-static void _test_fg_before(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg;
+static void _test_fg_before(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)mem;
   _last_fg_had_param = (param != SP_NULLPTR);
   if (param && param->id == sp_fmt_id_str) {
     _last_fg_param = param->s;
@@ -1058,8 +1058,8 @@ static void _test_fg_before(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t*
   }
 }
 
-static void _test_fg_after(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_fg_after(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_io_write_cstr(io, "</fg>", SP_NULLPTR);
 }
 
@@ -1163,8 +1163,8 @@ UTEST(sp_fmt_directive_arg, dynamic_param_interleaved_with_width) {
   sp_fmt_directive_reset();
 }
 
-static void _test_transform_redact(sp_io_writer_t* io, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  (void)arg; (void)param;
+static void _test_transform_redact(sp_io_writer_t* io, sp_mem_t mem, sp_str_t content, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
+  (void)arg; (void)param; (void)mem;
   sp_for(i, content.len) sp_io_write_c8(io, '*');
 }
 
@@ -1201,10 +1201,10 @@ UTEST(sp_fmt_transform, into_writer_backed_builder) {
   sp_fmt_register_transformer("upper", _test_transform_upper);
 
   c8 buf[64] = sp_zero;
-  sp_io_writer_t w = sp_zero;
-  sp_io_writer_from_mem(&w, buf, sizeof(buf));
+  sp_io_mem_writer_t w = sp_zero;
+  sp_io_mem_writer_from_buffer(&w, buf, sizeof(buf));
 
-  sp_fmt_io(&w, "{.upper}", sp_fmt_cstr("hello"));
+  sp_fmt_io(&w.base, "{.upper}", sp_fmt_cstr("hello"));
   sp_str_t got = { .data = buf, .len = 5 };
   EXPECT_TRUE(sp_str_equal_cstr(got, "HELLO"));
   sp_fmt_directive_reset();
