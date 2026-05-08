@@ -7,7 +7,7 @@ SP_TEST_MAIN()
 UTEST(cv, init_destroy) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
-  sp_cv_t cv = SP_ZERO_INITIALIZE();
+  sp_cv_t cv = sp_zero;
   sp_cv_init(&cv);
   sp_cv_destroy(&cv);
 }
@@ -37,8 +37,8 @@ s32 wait_notify_one_worker(void* userdata) {
 UTEST(cv, wait_notify_one) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
-  sp_cv_t cv = SP_ZERO_INITIALIZE();
-  sp_mutex_t mutex = SP_ZERO_INITIALIZE();
+  sp_cv_t cv = sp_zero;
+  sp_mutex_t mutex = sp_zero;
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
 
@@ -50,7 +50,7 @@ UTEST(cv, wait_notify_one) {
     .done = 0
   };
 
-  sp_thread_t worker = SP_ZERO_INITIALIZE();
+  sp_thread_t worker = sp_zero;
   sp_thread_init(&worker, wait_notify_one_worker, &data);
 
   while (sp_atomic_s32_get(&data.ready) < 1) {
@@ -97,8 +97,8 @@ s32 wait_notify_all_worker(void* userdata) {
 UTEST(cv, wait_notify_all) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
-  sp_cv_t cv = SP_ZERO_INITIALIZE();
-  sp_mutex_t mutex = SP_ZERO_INITIALIZE();
+  sp_cv_t cv = sp_zero;
+  sp_mutex_t mutex = sp_zero;
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
 
@@ -110,7 +110,7 @@ UTEST(cv, wait_notify_all) {
     .done_count = 0
   };
 
-  sp_thread_t workers[NOTIFY_ALL_NUM_WORKERS] = SP_ZERO_INITIALIZE();
+  sp_thread_t workers[NOTIFY_ALL_NUM_WORKERS] = sp_zero;
   for (s32 i = 0; i < NOTIFY_ALL_NUM_WORKERS; i++) {
     sp_thread_init(&workers[i], wait_notify_all_worker, &data);
   }
@@ -162,8 +162,8 @@ s32 notify_one_wakes_single_worker(void* userdata) {
 UTEST(cv, notify_one_wakes_single) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
-  sp_cv_t cv = SP_ZERO_INITIALIZE();
-  sp_mutex_t mutex = SP_ZERO_INITIALIZE();
+  sp_cv_t cv = sp_zero;
+  sp_mutex_t mutex = sp_zero;
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
 
@@ -175,7 +175,7 @@ UTEST(cv, notify_one_wakes_single) {
     .woken_count = 0
   };
 
-  sp_thread_t workers[NOTIFY_ONE_NUM_WORKERS] = SP_ZERO_INITIALIZE();
+  sp_thread_t workers[NOTIFY_ONE_NUM_WORKERS] = sp_zero;
   for (s32 i = 0; i < NOTIFY_ONE_NUM_WORKERS; i++) {
     sp_thread_init(&workers[i], notify_one_wakes_single_worker, &data);
   }
@@ -215,8 +215,8 @@ UTEST(cv, notify_one_wakes_single) {
 UTEST(cv, wait_for_timeout) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
-  sp_cv_t cv = SP_ZERO_INITIALIZE();
-  sp_mutex_t mutex = SP_ZERO_INITIALIZE();
+  sp_cv_t cv = sp_zero;
+  sp_mutex_t mutex = sp_zero;
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
 
@@ -261,8 +261,8 @@ s32 wait_for_signaled_signaler(void* userdata) {
 UTEST(cv, wait_for_signaled) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
-  sp_cv_t cv = SP_ZERO_INITIALIZE();
-  sp_mutex_t mutex = SP_ZERO_INITIALIZE();
+  sp_cv_t cv = sp_zero;
+  sp_mutex_t mutex = sp_zero;
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);
 
@@ -273,7 +273,7 @@ UTEST(cv, wait_for_signaled) {
     .waiter_ready = 0
   };
 
-  sp_thread_t signaler = SP_ZERO_INITIALIZE();
+  sp_thread_t signaler = sp_zero;
   sp_thread_init(&signaler, wait_for_signaled_signaler, &data);
 
   sp_mutex_lock(&mutex);
@@ -342,8 +342,8 @@ s32 consumer_fn(void* userdata) {
 UTEST(cv, multithread_producer_consumer) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
-  sp_cv_t cv = SP_ZERO_INITIALIZE();
-  sp_mutex_t mutex = SP_ZERO_INITIALIZE();
+  sp_cv_t cv = sp_zero;
+  sp_mutex_t mutex = sp_zero;
   sp_rb(s32) buffer = SP_NULLPTR;
   sp_rb_init(sp_mem_os_new(), buffer);
 
@@ -360,8 +360,8 @@ UTEST(cv, multithread_producer_consumer) {
     .items_to_produce = PC_ITEMS_PER_PRODUCER
   };
 
-  sp_thread_t producers[PC_NUM_PRODUCERS] = SP_ZERO_INITIALIZE();
-  sp_thread_t consumers[PC_NUM_CONSUMERS] = SP_ZERO_INITIALIZE();
+  sp_thread_t producers[PC_NUM_PRODUCERS] = sp_zero;
+  sp_thread_t consumers[PC_NUM_CONSUMERS] = sp_zero;
 
   sp_for(it, PC_NUM_CONSUMERS) {
     sp_thread_init(&consumers[it], consumer_fn, &data);

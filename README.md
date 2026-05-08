@@ -145,10 +145,10 @@ s32 main(s32 num_args, const c8** args) {
   }
 
   sp_str_t path = sp_fs_join_path(sp_fs_get_cwd(), sp_str_view(args[1]));
-  sp_str_t content = sp_zero_initialize();
+  sp_str_t content = sp_zero;
   sp_io_read_file(path, &content);
 
-  sp_str_ht(u32) counts = sp_zero_initialize();
+  sp_str_ht(u32) counts = sp_zero;
   sp_da(sp_str_t) lines = sp_str_split_c8(content, '\n');
   sp_da_for(lines, i) {
     sp_da(sp_str_t) words = sp_str_split_c8(lines[i], ' ');
@@ -172,7 +172,7 @@ s32 main(s32 num_args, const c8** args) {
 
 ## dynamic array
 ```c
-sp_da(u32) years = sp_zero_initialize();
+sp_da(u32) years = sp_zero;
 sp_da_push(years, 1969);
 sp_da_push(years, 1972);
 sp_da_for(years, it) {
@@ -182,7 +182,7 @@ sp_da_for(years, it) {
 
 ## hash table
 ```c
-  sp_cstr_ht(s32) ht = sp_zero_initialize();
+  sp_cstr_ht(s32) ht = sp_zero;
   sp_cstr_ht_insert(ht, "veneta", 72);
   s32* veneta = sp_cstr_ht_get(ht, "veneta");
   sp_log("the best dead show was in 19{}", sp_fmt_int(*veneta));

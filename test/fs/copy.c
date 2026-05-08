@@ -47,7 +47,7 @@ static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_te
     if (exp->exists && exists) {
       fs_expect_attr(utest_result, path, sp_fs_get_kind_a(path), exp->attr);
       if (exp->content) {
-        sp_str_t file_content = SP_ZERO_INITIALIZE();
+        sp_str_t file_content = sp_zero;
         sp_io_read_file_a(fm->mem, path, &file_content);
         SP_EXPECT_STR_EQ(file_content, sp_str_view(exp->content));
       }
@@ -191,7 +191,7 @@ UTEST_F(fs, copy_preserves_file_attributes) {
 
   ASSERT_EQ(original_stat.st_mode, copy_stat.st_mode);
   ASSERT_EQ(original_stat.st_size, copy_stat.st_size);
-  sp_str_t preserved = SP_ZERO_INITIALIZE();
+  sp_str_t preserved = sp_zero;
   sp_io_read_file_a(a, copy_file, &preserved);
   SP_EXPECT_STR_EQ(preserved, sp_str_lit("preserved content"));
 }

@@ -133,7 +133,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
   ut.change_detected = false;
 
 #if defined(SP_MACOS)
-  sp_io_writer_t s = SP_ZERO_INITIALIZE();
+  sp_io_writer_t s = sp_zero;
   sp_io_writer_from_file(&s, test_file, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write_str(&s, sp_str_lit("modified content"), SP_NULLPTR);
   sp_io_writer_close(&s);
@@ -279,7 +279,7 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
 
   // Modify the file — should NOT fire since we only watch REMOVED
   {
-    sp_io_writer_t w = SP_ZERO_INITIALIZE();
+    sp_io_writer_t w = sp_zero;
     sp_io_writer_from_file(&w, test_file, SP_IO_WRITE_MODE_OVERWRITE);
     sp_io_write_str(&w, sp_str_lit("modified"), SP_NULLPTR);
     sp_io_writer_close(&w);

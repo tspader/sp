@@ -18,9 +18,9 @@ s32 fn(void* user_data) {
 int main(void) {
   sp_print_a("running {} threads...", sp_fmt_uint(NUM_THREADS));
 
-  test_t threads [NUM_THREADS] = sp_zero();
+  test_t threads [NUM_THREADS] = sp_zero;
 
-  sp_atomic_s32_t accumulator = sp_zero();
+  sp_atomic_s32_t accumulator = sp_zero;
   sp_carr_for(threads, it) {
     threads[it].accumulator = &accumulator;
     threads[it].value = it;

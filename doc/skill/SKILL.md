@@ -33,7 +33,7 @@ assistant: [Reads index.md, searches through sp.h and spn.c with Task tool, prov
 - Unless explicitly interfacing with an existing C API, never use `const char*`; use `sp_str_t` (pointer + length)
 - Never use `strcmp`, `strlen`, or any `string.h` functions with `sp_str_t`; use `sp_str_*`
 - Never use `strcmp`, `strlen`, or any `string.h` functions with `const char*`; use `sp_cstr_*`
-- Always use `SP_ZERO_INITIALIZE()`. When you need a type, use `SP_ZERO_STRUCT(T)`
+- Always use `sp_zero`. When you need a type, use `sp_zero_s(T)`
 - Always use `sp_da(T)` and `sp_ht(T)` for dynamic arrays and hash maps (`sp_da_*` and `sp_ht_*`)
 - Always use `sp_da_for(arr, it)` and `sp_ht_for(ht, it)` to iterate sp_da and sp_ht
 - Never check `str.len > 0`; always use `!sp_str_empty(str)`
@@ -60,8 +60,8 @@ Use these when searching through `references/index.md`, `references/sp.h`, or `r
 ### Initialization
 ```c
 // Always zero-initialize structs
-sp_str_builder_t builder = SP_ZERO_INITIALIZE();
-sp_dynamic_array_t arr = SP_ZERO_INITIALIZE();
+sp_str_builder_t builder = sp_zero;
+sp_dynamic_array_t arr = sp_zero;
 ```
 
 ### String Handling

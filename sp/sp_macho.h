@@ -311,7 +311,7 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
 
   sp_da_for(m->symbols, i) {
     sp_macho_symbol_t* sym = &m->symbols[i];
-    struct nlist_64 nl = SP_ZERO_INITIALIZE();
+    struct nlist_64 nl = sp_zero;
 
     u32 strx = 2;
     sp_for(j, i) {
@@ -356,7 +356,7 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
 }
 
 sp_err_t sp_macho_write_to_file(sp_macho_t* m, sp_str_t path) {
-  sp_io_writer_t f = SP_ZERO_INITIALIZE();
+  sp_io_writer_t f = sp_zero;
   sp_try(sp_io_writer_from_file(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
   sp_err_t err = sp_macho_write(m, &f);
   sp_io_writer_close(&f);

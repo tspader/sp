@@ -443,7 +443,7 @@ UTEST(stress, fmon) {
       sp_str_t name = sp_fmt_a(sp_mem_get_scratch(), "f{}.txt", sp_fmt_uint(files_created)).value;
       sp_str_t path = sp_fs_join_path_a(sp_mem_get_scratch(), dir, name);
 
-      sp_io_writer_t writer = SP_ZERO_INITIALIZE();
+      sp_io_writer_t writer = sp_zero;
       sp_io_writer_from_file(&writer, path, SP_IO_WRITE_MODE_OVERWRITE);
       sp_io_write_str(&writer, sp_str_lit("initial"), SP_NULLPTR);
       sp_io_writer_close(&writer);
@@ -468,7 +468,7 @@ UTEST(stress, fmon) {
 
     while (files_modified < batch_end) {
       sp_str_t path = files[files_modified];
-      sp_io_writer_t writer = SP_ZERO_INITIALIZE();
+      sp_io_writer_t writer = sp_zero;
       sp_io_writer_from_file(&writer, path, SP_IO_WRITE_MODE_OVERWRITE);
       sp_io_write_str(&writer, sp_str_lit("modified"), SP_NULLPTR);
       sp_io_writer_close(&writer);

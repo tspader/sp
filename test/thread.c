@@ -22,9 +22,9 @@ s32 fn(void* user_data) {
 UTEST(thread, hello) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
-  thread_test_t threads [THREAD_C_NUM_THREADS] = sp_zero();
+  thread_test_t threads [THREAD_C_NUM_THREADS] = sp_zero;
 
-  sp_atomic_s32_t accumulator = sp_zero();
+  sp_atomic_s32_t accumulator = sp_zero;
   sp_carr_for(threads, it) {
     threads[it].accumulator = &accumulator;
     threads[it].value = it;
@@ -112,13 +112,13 @@ UTEST(sp_spin_lock, mutual_exclusion_two_threads) {
   s32 shared_counter = 0;
   const s32 iterations_per_thread = 10000;
 
-  sp_spin_lock_thread_data_t data1 = SP_ZERO_INITIALIZE();
+  sp_spin_lock_thread_data_t data1 = sp_zero;
   data1.lock = &lock;
   data1.shared_counter = &shared_counter;
   data1.iterations = iterations_per_thread;
   data1.thread_id = 1;
 
-  sp_spin_lock_thread_data_t data2 = SP_ZERO_INITIALIZE();
+  sp_spin_lock_thread_data_t data2 = sp_zero;
   data2.lock = &lock;
   data2.shared_counter = &shared_counter;
   data2.iterations = iterations_per_thread;

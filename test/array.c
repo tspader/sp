@@ -105,10 +105,10 @@ UTEST_F(dyn_array, struct_type) {
     sp_da(test_struct) arr = sp_da_new(ut.mem, test_struct);
 
     for (s32 i = 0; i < 10; i++) {
-        test_struct s = SP_ZERO_INITIALIZE();
+        test_struct s = sp_zero;
         s.id = i;
         s.value = (float)i * 1.5f;
-        sp_io_writer_t io = sp_zero();
+        sp_io_writer_t io = sp_zero;
         sp_io_writer_from_mem(&io, s.name, sizeof(s.name));
         sp_io_write_str(&io, sp_fmt_a(sp_mem_get_scratch(), "Item_{}", sp_fmt_int(s.id)).value, SP_NULLPTR);
         sp_io_pad(&io, 1, SP_NULLPTR);
@@ -122,7 +122,7 @@ UTEST_F(dyn_array, struct_type) {
         ASSERT_EQ(arr[i].value, (float)i * 1.5f);
 
         char expected[32];
-        sp_io_writer_t io = sp_zero();
+        sp_io_writer_t io = sp_zero;
         sp_io_writer_from_mem(&io, expected, sizeof(expected));
         sp_io_write_str(&io, sp_fmt_a(sp_mem_get_scratch(), "Item_{}", sp_fmt_int(i)).value, SP_NULLPTR);
         sp_io_pad(&io, 1, SP_NULLPTR);

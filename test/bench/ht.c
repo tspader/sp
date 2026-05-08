@@ -108,7 +108,7 @@ static u64 run_single_bench(bench_t* bench, bench_params_t params, bench_data_t*
 
 static void run_benchmarks(bench_t* benches, u32 num_benches) {
   sp_da(bench_result_pair_t) results = sp_da_new(sp_mem_os_new(), bench_result_pair_t);
-  bench_data_t data = SP_ZERO_INITIALIZE();
+  bench_data_t data = sp_zero;
 
   sp_for(bi, num_benches) {
     bench_t* bench = &benches[bi];
@@ -142,7 +142,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
     if (n_str.len > max_n_width) max_n_width = n_str.len;
   }
 
-  sp_io_writer_t sb = sp_zero();
+  sp_io_writer_t sb = sp_zero;
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &sb);
   sp_fmt_io(&sb, "{}{} {} {} {} {}{}\n",
     sp_fmt_cstr(SP_ANSI_FG_BRIGHT_BLACK),

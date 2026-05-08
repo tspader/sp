@@ -11,7 +11,7 @@ s32 msvc_main(s32 argc, const c8** argv) {
   (void)argc;
   (void)argv;
 
-  sp_msvc_t result = SP_ZERO_INITIALIZE();
+  sp_msvc_t result = sp_zero;
   sp_msvc_err_t err = sp_msvc_find(sp_mem_os_new(), SP_MSVC_ARCH_X64, &result);
 
   if (err) {

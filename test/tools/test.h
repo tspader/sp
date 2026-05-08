@@ -149,7 +149,7 @@ bool     sp_mem_tracking_ok(sp_mem_tracking_t* mem);
 #if defined(SP_TEST_IMPLEMENTATION)
 #define SP_TEST_C
 
-static sp_str_t sp_test_file_manager_top_level = SP_ZERO_INITIALIZE();
+static sp_str_t sp_test_file_manager_top_level = sp_zero;
 
 static sp_str_t sp_test_file_manager_get_repo_root(sp_mem_t a) {
   sp_str_t path = sp_fs_get_exe_path_a(a);
@@ -234,7 +234,7 @@ void sp_test_file_create_ex(sp_test_file_config_t config) {
 
   sp_fs_remove_file_a(config.path);
 
-  sp_io_writer_t stream = SP_ZERO_INITIALIZE();
+  sp_io_writer_t stream = sp_zero;
   sp_io_writer_from_file(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
   SP_ASSERT(stream.file.fd != 0);
 

@@ -80,7 +80,7 @@ static void fancy_render_str(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_styl
 
 static void fancy_render_row(sp_prompt_ctx_t* ctx, const c8* symbol, sp_prompt_style_t symbol_style, sp_str_t text, sp_prompt_style_t text_style) {
   fancy_render_cstr(ctx, symbol, symbol_style);
-  fancy_render_cstr(ctx, "  ", SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_cstr(ctx, "  ", sp_zero_s(sp_prompt_style_t));
   fancy_render_str(ctx, text, text_style);
   fancy_nl(ctx);
 }
@@ -137,8 +137,8 @@ static void fancy_scan_update(sp_prompt_ctx_t* ctx) {
 
 static void fancy_scan_render(sp_prompt_ctx_t* ctx) {
   fancy_scan_t* scan = (fancy_scan_t*)ctx->user_data;
-  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Inspecting workspace"), SP_ZERO_STRUCT(sp_prompt_style_t));
-  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Inspecting workspace"), sp_zero_s(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit(""), sp_zero_s(sp_prompt_style_t));
 
   sp_for(it, scan->num_probes) {
     bool done = it < scan->done;
@@ -147,12 +147,12 @@ static void fancy_scan_render(sp_prompt_ctx_t* ctx) {
     const c8* symbol = done ? "✓" : active ? fancy_scan_spinner(scan->frame) : "·";
     fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
     fancy_render_cstr(ctx, symbol, symbol_style);
-    fancy_render_cstr(ctx, "  ", SP_ZERO_STRUCT(sp_prompt_style_t));
-    fancy_render_cstr(ctx, scan->probes[it].label, SP_ZERO_STRUCT(sp_prompt_style_t));
+    fancy_render_cstr(ctx, "  ", sp_zero_s(sp_prompt_style_t));
+    fancy_render_cstr(ctx, scan->probes[it].label, sp_zero_s(sp_prompt_style_t));
     u32 width = sp_prompt_text_width(sp_str_view(scan->probes[it].label));
     sp_for_range(pad, width, 20) {
       SP_UNUSED(pad);
-      fancy_render_cstr(ctx, " ", SP_ZERO_STRUCT(sp_prompt_style_t));
+      fancy_render_cstr(ctx, " ", sp_zero_s(sp_prompt_style_t));
     }
     fancy_render_cstr(ctx, done ? scan->probes[it].detail : active ? "checking" : "queued", done ? fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8) : active ? fancy_style_ansi(SP_ANSI_FG_CYAN_U8) : fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
     fancy_nl(ctx);
@@ -257,15 +257,15 @@ static void fancy_changelog_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t event)
 
 static void fancy_changelog_render(sp_prompt_ctx_t* ctx) {
   fancy_changelog_t* log = (fancy_changelog_t*)ctx->user_data;
-  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Review changelog"), SP_ZERO_STRUCT(sp_prompt_style_t));
-  //fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Review changelog"), sp_zero_s(sp_prompt_style_t));
+  //fancy_render_rail(ctx, sp_str_lit(""), sp_zero_s(sp_prompt_style_t));
 
   const c8* section = "";
   sp_for(it, log->num_items) {
     fancy_changelog_item_t* item = &log->items[it];
     if (!sp_cstr_equal(section, item->section)) {
       section = item->section;
-      fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+      fancy_render_rail(ctx, sp_str_lit(""), sp_zero_s(sp_prompt_style_t));
       fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
       fancy_render_cstr(ctx, "[", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
       fancy_render_cstr(ctx, section, fancy_style_rgb(0x9b, 0xdb, 0x8d));
@@ -276,11 +276,11 @@ static void fancy_changelog_render(sp_prompt_ctx_t* ctx) {
     bool active = it == log->cursor;
     fancy_render_cstr(ctx, active ? "◆  " : "│  ", active ? fancy_style_rgb(0x55, 0xaa, 0xff) : fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
     fancy_render_cstr(ctx, item->selected ? "● " : "○ ", item->selected ? fancy_style_ansi(SP_ANSI_FG_GREEN_U8) : fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
-    fancy_render_cstr(ctx, item->text, active ? SP_ZERO_STRUCT(sp_prompt_style_t) : fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
+    fancy_render_cstr(ctx, item->text, active ? sp_zero_s(sp_prompt_style_t) : fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
     fancy_nl(ctx);
   }
 
-  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit(""), sp_zero_s(sp_prompt_style_t));
   fancy_render_rail(ctx, sp_str_lit("j/k move   space toggle   d drop   r restore   tab section   a accept"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
 }
 
@@ -374,36 +374,36 @@ static void fancy_publish_render(sp_prompt_ctx_t* ctx) {
   fancy_publish_t copy = *publish;
   sp_mutex_unlock(&publish->lock);
 
-  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Publishing v0.13.3"), SP_ZERO_STRUCT(sp_prompt_style_t));
-  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_row(ctx, "◆", fancy_style_rgb(0x55, 0xaa, 0xff), sp_str_lit("Publishing v0.13.3"), sp_zero_s(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit(""), sp_zero_s(sp_prompt_style_t));
 
   fancy_render_rail(ctx, sp_str_lit("Build matrix"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
   fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_render_bar(ctx, copy.build_progress, 28, fancy_style_rgb(0x55, 0xaa, 0xff));
-  fancy_render_str(ctx, sp_fmt_a(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.build_progress * 100.0f))).value, SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_str(ctx, sp_fmt_a(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.build_progress * 100.0f))).value, sp_zero_s(sp_prompt_style_t));
   fancy_nl(ctx);
-  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit(""), sp_zero_s(sp_prompt_style_t));
 
   sp_for(it, copy.num_targets) {
     fancy_target_t* target = &copy.targets[it];
     fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
     fancy_render_cstr(ctx, fancy_job_symbol(target->state, copy.frame), fancy_job_style(target->state));
-    fancy_render_cstr(ctx, "  ", SP_ZERO_STRUCT(sp_prompt_style_t));
-    fancy_render_cstr(ctx, target->label, SP_ZERO_STRUCT(sp_prompt_style_t));
+    fancy_render_cstr(ctx, "  ", sp_zero_s(sp_prompt_style_t));
+    fancy_render_cstr(ctx, target->label, sp_zero_s(sp_prompt_style_t));
     u32 width = sp_prompt_text_width(sp_str_view(target->label));
     sp_for_range(pad, width, 24) {
       SP_UNUSED(pad);
-      fancy_render_cstr(ctx, " ", SP_ZERO_STRUCT(sp_prompt_style_t));
+      fancy_render_cstr(ctx, " ", sp_zero_s(sp_prompt_style_t));
     }
     fancy_render_cstr(ctx, target->status, target->state == FANCY_JOB_ACTIVE ? fancy_style_ansi(SP_ANSI_FG_CYAN_U8) : fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
     fancy_nl(ctx);
   }
 
-  fancy_render_rail(ctx, sp_str_lit(""), SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_rail(ctx, sp_str_lit(""), sp_zero_s(sp_prompt_style_t));
   fancy_render_rail(ctx, sp_str_lit("Uploads"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
   fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_render_bar(ctx, copy.upload_progress, 28, fancy_style_rgb(0x9b, 0xdb, 0x8d));
-  fancy_render_str(ctx, sp_fmt_a(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.upload_progress * 100.0f))).value, SP_ZERO_STRUCT(sp_prompt_style_t));
+  fancy_render_str(ctx, sp_fmt_a(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.upload_progress * 100.0f))).value, sp_zero_s(sp_prompt_style_t));
   fancy_nl(ctx);
   fancy_render_str(ctx, sp_fmt_a(ctx->mem, "│  latest: {}", sp_fmt_cstr(copy.latest)).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_nl(ctx);
@@ -503,7 +503,7 @@ static bool fancy_has_arg(s32 argc, const c8** argv, const c8* arg) {
 }
 
 static sp_str_t fancy_selected_changelog(sp_mem_t mem, fancy_changelog_item_t* items, u32 num_items) {
-  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_t builder = sp_zero;
   sp_io_writer_from_dyn_mem_a(mem, &builder);
   const c8* section = "";
   u64 written = 0;
@@ -529,7 +529,7 @@ static sp_str_t fancy_selected_changelog(sp_mem_t mem, fancy_changelog_item_t* i
 }
 
 static sp_str_t fancy_plan_note(sp_mem_t mem, const c8* kind, const c8* name, const c8* sections) {
-  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_t builder = sp_zero;
   sp_io_writer_from_dyn_mem_a(mem, &builder);
   sp_fmt_io(&builder, "version      0.13.3 ({})", sp_fmt_cstr(kind));
   sp_io_write_c8(&builder, '\n');
@@ -677,7 +677,7 @@ s32 fancy_main(s32 argc, const c8** argv) {
     return 1;
   }
 
-  fancy_publish_t publish = SP_ZERO_INITIALIZE();
+  fancy_publish_t publish = sp_zero;
   publish.ctx = ctx;
   publish.num_targets = 5;
   publish.latest = "waiting for first artifact";

@@ -7,7 +7,7 @@ void handle_interrupt(sp_os_signal_t signal, void* userdata) {
 }
 
 s32 run(s32 num_args, const c8** args) {
-  sp_atomic_s32_t shutdown = SP_ZERO_INITIALIZE();
+  sp_atomic_s32_t shutdown = sp_zero;
 
   sp_log_a("hello, {.fg brightcyan}", sp_fmt_cstr("world"));
   sp_os_register_signal_handler(SP_OS_SIGNAL_INTERRUPT, handle_interrupt, &shutdown);

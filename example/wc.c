@@ -11,10 +11,10 @@ s32 run(s32 num_args, const c8** args) {
 
   sp_str_t cwd = sp_fs_get_cwd_a(mem);
   sp_str_t path = sp_fs_join_path_a(mem, cwd, sp_str_view(args[1]));
-  sp_str_t content = sp_zero_initialize();
+  sp_str_t content = sp_zero;
   sp_io_read_file_a(mem, path, &content);
 
-  sp_ht_a(sp_str_t, u32) counts = sp_zero_initialize();
+  sp_ht_a(sp_str_t, u32) counts = sp_zero;
   sp_str_ht_init_a(mem, counts);
   sp_da(sp_str_t) lines = sp_str_split_c8_a(mem, content, '\n');
   sp_da_for(lines, i) {

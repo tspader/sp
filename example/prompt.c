@@ -237,7 +237,7 @@ s32 spinner_thread(void* userdata) {
 s32 demo_spinner(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Demo: Spinner");
 
-  sp_thread_t worker = sp_zero();
+  sp_thread_t worker = sp_zero;
   sp_thread_init(&worker, spinner_thread, ctx);
 
   sp_prompt_spinner(ctx, (sp_prompt_spinner_t) {
@@ -334,7 +334,7 @@ s32 demo_progress_worker(void* userdata) {
 s32 demo_progress(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Demo: Progress");
 
-  sp_thread_t worker = SP_ZERO_INITIALIZE();
+  sp_thread_t worker = sp_zero;
   sp_thread_init(&worker, demo_progress_worker, ctx);
 
   sp_prompt_progress(ctx, (sp_prompt_progress_t) {
@@ -378,7 +378,7 @@ s32 prompt_main(s32 argc, const c8** argv) {
 
   sp_mem_t mem = sp_mem_os_new();
 
-  sp_ht_a(const c8*, sp_prompt_demo_fn_t) demos = sp_zero();
+  sp_ht_a(const c8*, sp_prompt_demo_fn_t) demos = sp_zero;
   sp_cstr_ht_init_a(mem, demos);
   sp_carr_for(ordered, it) {
     sp_cstr_ht_insert(demos, ordered[it].name, ordered[it].fn);

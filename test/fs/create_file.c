@@ -62,8 +62,8 @@ UTEST_F(fs, create_file_with_content) {
   sp_fs_create_dir_a(sandbox);
 
   u8 buffer [] = { 's', 'p', 'u', 'm', 0 };
-  sp_str_t path = SP_ZERO_INITIALIZE();
-  sp_str_t content = SP_ZERO_INITIALIZE();
+  sp_str_t path = sp_zero;
+  sp_str_t content = sp_zero;
   sp_err_t result = SP_OK;
 
   path = sp_fs_join_path_a(a, sandbox, sp_str_lit("slice.file"));

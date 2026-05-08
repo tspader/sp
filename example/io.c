@@ -7,7 +7,7 @@ s32 run(s32 num_args, const c8** args) {
   struct {
     sp_io_reader_t r;
     sp_io_writer_t w;
-  } io = sp_zero();
+  } io = sp_zero;
 
   sp_mem_buffer_t buffer = {
     .data = sp_alloc_n_a(mem, u8, 64),
@@ -36,7 +36,7 @@ s32 run(s32 num_args, const c8** args) {
 
   // sp_io_writer_t is the basis for the string builder, and therefore format strings. This
   // means that any byte buffer can be trivially formatted to
-  c8 str [256] = sp_zero();
+  c8 str [256] = sp_zero;
   sp_io_writer_from_mem(&io.w, str, 256);
   sp_fmt_io(&io.w, "hello, {}", sp_fmt_cstr("world"));
   sp_log_a("sp_io_writer_from_mem: {}", sp_fmt_cstr(str));

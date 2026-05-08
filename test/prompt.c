@@ -45,7 +45,7 @@ UTEST_F_SETUP(prompt) {
   ut.mem.tracking = sp_mem_tracking_as_allocator(&ut.tracker);
   ut.arena = sp_mem_arena_new(ut.mem.tracking);
   ut.mem.arena = sp_mem_arena_as_allocator(ut.arena);
-  ut.ctx = SP_ZERO_STRUCT(sp_prompt_ctx_t);
+  ut.ctx = sp_zero_s(sp_prompt_ctx_t);
   ut.app = SP_NULLPTR;
   sp_prompt_ctx_init(&ut.ctx, ut.mem.tracking, 80, 20);
   sp_io_writer_from_dyn_mem_a(ut.mem.arena, &ut.writer);
@@ -70,10 +70,10 @@ static u32 count_expected_lines(const c8* lines[32]) {
 }
 
 static sp_str_t trim_framebuffer_row(sp_mem_t mem, sp_prompt_cell_t* row, u32 cols) {
-  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_t builder = sp_zero;
   sp_io_writer_from_dyn_mem_a(mem, &builder);
   sp_for(col, cols) {
-    c8 buf[4] = SP_ZERO_INITIALIZE();
+    c8 buf[4] = sp_zero;
     u8 len = sp_utf8_encode(row[col].codepoint, buf);
     sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
   }
@@ -167,7 +167,7 @@ static void sp_prompt_vt_consume_escape(sp_prompt_vt_t* vt, sp_str_t bytes, u32*
 }
 
 static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_mem_t mem, sp_str_t bytes) {
-  sp_prompt_vt_t vt = SP_ZERO_INITIALIZE();
+  sp_prompt_vt_t vt = sp_zero;
   sp_for(row, 128) {
     sp_for(col, 256) {
       vt.cells[row][col] = ' ';
@@ -225,10 +225,10 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_mem_t mem, sp_str_t bytes) {
 
   sp_da(sp_str_t) lines = sp_da_new(mem, sp_str_t);
   sp_for_range(row, 0, vt.max_row + 1) {
-    sp_io_writer_t builder = sp_zero();
+    sp_io_writer_t builder = sp_zero;
     sp_io_writer_from_dyn_mem_a(mem, &builder);
     sp_for(col, 256) {
-      c8 buf[4] = SP_ZERO_INITIALIZE();
+      c8 buf[4] = sp_zero;
       u8 len = sp_utf8_encode(vt.cells[row][col], buf);
       sp_io_write_str(&builder, sp_str(buf, len), SP_NULLPTR);
     }
@@ -2209,7 +2209,7 @@ UTEST_F(prompt, knight_rider_custom_color_overrides_default_palette) {
 }
 
 UTEST_F(prompt, knight_rider_widget_defaults_fps_to_15) {
-  sp_prompt_knight_rider_t kr = SP_ZERO_INITIALIZE();
+  sp_prompt_knight_rider_t kr = sp_zero;
   sp_prompt_widget_t widget = sp_prompt_knight_rider_widget(&ut.ctx, kr);
   EXPECT_EQ(widget.fps, 15u);
 }
@@ -2401,7 +2401,7 @@ UTEST_F(prompt, complete_from_worker_thread_eventually_drives_submit) {
   thread_signal_data_t d = { .ctx = &ut.ctx };
   probe_state_t state = { .signal_on_init = &d.ready };
 
-  sp_thread_t worker = SP_ZERO_INITIALIZE();
+  sp_thread_t worker = sp_zero;
   sp_thread_init(&worker, thread_signal_fn, &d);
 
   drive_until_quit(ut.mem.arena, &ut.ctx, probe_widget(&state));
@@ -2454,7 +2454,7 @@ UTEST_F(prompt, send_progress_typed_helpers_round_trip) {
 }
 
 UTEST_F(prompt, progress_event_delivered_with_data) {
-  probe_state_t state = SP_ZERO_INITIALIZE();
+  probe_state_t state = sp_zero;
   sp_prompt_send_progress_f32(&ut.ctx, 0.42f);
 
   sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
@@ -2466,7 +2466,7 @@ UTEST_F(prompt, progress_event_delivered_with_data) {
 }
 
 UTEST_F(prompt, progress_drains_clear_dirty_flag) {
-  probe_state_t state = SP_ZERO_INITIALIZE();
+  probe_state_t state = sp_zero;
   sp_prompt_send_progress_f32(&ut.ctx, 0.25f);
 
   sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
@@ -2479,7 +2479,7 @@ UTEST_F(prompt, progress_drains_clear_dirty_flag) {
 }
 
 UTEST_F(prompt, progress_coalesces_between_drains) {
-  probe_state_t state = SP_ZERO_INITIALIZE();
+  probe_state_t state = sp_zero;
   sp_for(it, 50) {
     sp_prompt_send_progress_f32(&ut.ctx, (f32)it / 50.f);
   }
@@ -2493,7 +2493,7 @@ UTEST_F(prompt, progress_coalesces_between_drains) {
 }
 
 UTEST_F(prompt, progress_redelivered_after_new_send) {
-  probe_state_t state = SP_ZERO_INITIALIZE();
+  probe_state_t state = sp_zero;
   sp_prompt_send_progress_f32(&ut.ctx, 0.1f);
 
   sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
@@ -2542,7 +2542,7 @@ UTEST_F(prompt, progress_widget_renders_active_two_rows_plus_rail) {
 
 UTEST_F(prompt, progress_widget_quarter_full_uses_partial_blocks) {
   sp_prompt_progress_widget_t* p = sp_alloc_type_a(ut.mem.arena, sp_prompt_progress_widget_t);
-  *p = SP_ZERO_STRUCT(sp_prompt_progress_widget_t);
+  *p = sp_zero_s(sp_prompt_progress_widget_t);
   p->config.prompt = "Loading";
   p->config.width = 8;
   p->value = 0.25f;
@@ -2570,11 +2570,11 @@ UTEST_F(prompt, progress_widget_quarter_full_uses_partial_blocks) {
 }
 
 UTEST_F(prompt, progress_widget_clamps_out_of_range_inputs) {
-  probe_state_t observer = SP_ZERO_INITIALIZE();
+  probe_state_t observer = sp_zero;
   SP_UNUSED(observer);
 
   sp_prompt_progress_widget_t* p = sp_alloc_type_a(ut.mem.arena, sp_prompt_progress_widget_t);
-  *p = SP_ZERO_STRUCT(sp_prompt_progress_widget_t);
+  *p = sp_zero_s(sp_prompt_progress_widget_t);
   p->config.prompt = "clamp";
   p->config.width = 4;
 
@@ -2618,7 +2618,7 @@ UTEST_F(prompt, send_status_latest_wins) {
 }
 
 UTEST_F(prompt, status_event_delivered_with_value) {
-  probe_state_t state = SP_ZERO_INITIALIZE();
+  probe_state_t state = sp_zero;
   sp_prompt_send_status(&ut.ctx, "loading");
 
   sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
@@ -2630,7 +2630,7 @@ UTEST_F(prompt, status_event_delivered_with_value) {
 }
 
 UTEST_F(prompt, status_drains_clear_dirty_flag) {
-  probe_state_t state = SP_ZERO_INITIALIZE();
+  probe_state_t state = sp_zero;
   sp_prompt_send_status(&ut.ctx, "x");
 
   sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
@@ -2643,7 +2643,7 @@ UTEST_F(prompt, status_drains_clear_dirty_flag) {
 }
 
 UTEST_F(prompt, progress_and_status_both_delivered_in_same_tick) {
-  probe_state_t state = SP_ZERO_INITIALIZE();
+  probe_state_t state = sp_zero;
   sp_prompt_send_progress_f32(&ut.ctx, 0.4f);
   sp_prompt_send_status(&ut.ctx, "step 4 of 10");
 
@@ -2668,7 +2668,7 @@ UTEST_F(prompt, status_after_complete_does_not_block_submit) {
 
 UTEST_F(prompt, progress_widget_renders_status_below_bar) {
   sp_prompt_progress_widget_t* p = sp_alloc_type_a(ut.mem.arena, sp_prompt_progress_widget_t);
-  *p = SP_ZERO_STRUCT(sp_prompt_progress_widget_t);
+  *p = sp_zero_s(sp_prompt_progress_widget_t);
   p->config.prompt = "Installing";
   p->config.width = 8;
   p->value = 0.5f;
@@ -2699,7 +2699,7 @@ UTEST_F(prompt, progress_widget_renders_status_below_bar) {
 
 UTEST_F(prompt, progress_widget_omits_status_when_empty) {
   sp_prompt_progress_widget_t* p = sp_alloc_type_a(ut.mem.arena, sp_prompt_progress_widget_t);
-  *p = SP_ZERO_STRUCT(sp_prompt_progress_widget_t);
+  *p = sp_zero_s(sp_prompt_progress_widget_t);
   p->config.prompt = "Loading";
   p->config.width = 4;
   p->value = 0.5f;
@@ -2743,10 +2743,10 @@ static s32 status_thread_fn(void* userdata) {
 UTEST_F(prompt, send_status_from_thread_eventually_delivered) {
   SKIP_ON_FREESTANDING();
   SKIP_ON_WASM();
-  probe_state_t state = SP_ZERO_INITIALIZE();
+  probe_state_t state = sp_zero;
   status_thread_data_t d = { .ctx = &ut.ctx };
 
-  sp_thread_t worker = SP_ZERO_INITIALIZE();
+  sp_thread_t worker = sp_zero;
   sp_thread_init(&worker, status_thread_fn, &d);
 
   sp_atomic_s32_set(&d.ready, 1);
@@ -2770,7 +2770,7 @@ UTEST_F(prompt, idle_updates_do_not_grow_persistent_arena) {
   ut.ctx.widget = widget;
   ut.ctx.user_data = widget.user_data;
 
-  sp_app_t app = SP_ZERO_INITIALIZE();
+  sp_app_t app = sp_zero;
   app.user_data = &ut.ctx;
 
   sp_prompt_app_on_init(&app);

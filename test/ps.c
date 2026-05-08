@@ -427,7 +427,7 @@ sp_da(sp_env_var_t) sp_test_parse_env_output(sp_mem_t mem, u8* buffer, u64 len) 
           }
         }
 
-        sp_env_var_t var = SP_ZERO_INITIALIZE();
+        sp_env_var_t var = sp_zero;
         if (found_space) {
           var.key = sp_str(line.data, space_idx);
           var.value = sp_str(line.data + space_idx + 1, line.len - space_idx - 1);
@@ -570,7 +570,7 @@ UTEST_F(ps, env_inherit) {
 }
 
 UTEST_F(ps, env_existing) {
-  sp_env_t env = sp_zero();
+  sp_env_t env = sp_zero;
   sp_env_init(ut.mem, &env);
   sp_env_insert(&env, sp_str_lit("jerry"), sp_str_lit("garcia"));
   sp_env_insert(&env, sp_str_lit("phil"), sp_str_lit("lesh"));
@@ -768,7 +768,7 @@ UTEST_F(ps, poll_multiple) {
     },
   });
 
-  sp_ps_status_t result = SP_ZERO_INITIALIZE();
+  sp_ps_status_t result = sp_zero;
 
   result = sp_ps_poll(&ps, 50);
   EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
@@ -1052,7 +1052,7 @@ typedef struct {
 } sp_test_concurrent_analysis_t;
 
 sp_test_concurrent_analysis_t sp_test_analyze_concurrent_output(u8* data, u32 len, u32 write_size) {
-  sp_test_concurrent_analysis_t result = SP_ZERO_INITIALIZE();
+  sp_test_concurrent_analysis_t result = sp_zero;
   if (len == 0) return result;
 
   c8 prev = (c8)data[0];

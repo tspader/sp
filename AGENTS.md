@@ -45,7 +45,7 @@ make TRIPLE=aarch64-macos
   - `malloc` + `free` -> `sp_alloc` + `sp_free` (prefer `sp_alloc_type` and `sp_alloc_n` to avoid casts)
   - `strcmp`, `strlen`, etc. -> `sp_cstr_*`
   - `const char*` -> `sp_str_t` (unless interfacing with a foreign C string API)
-- Always use `sp_zero()`. When you need a type, use `sp_zero_struct(T)`
+- Always use `sp_zero`. When you need a type, use `sp_zero_s(T)`
 - Never check `str.len > 0`; always use `!sp_str_empty(str)`
 - Always use C99 designated initializers for struct literals when possible
 - Always use short literal types (`s32`, `u8`, `c8`, `const c8*`)

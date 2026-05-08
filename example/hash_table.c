@@ -17,7 +17,7 @@ s32 run(s32 num_args, const c8** args) {
     sp_ht_a(s32, u32)            integer;
     sp_ht_a(const c8*, u8)       cstr;
     sp_ht_a(ht_key_t, const c8*) key;
-  } hts = sp_zero_initialize();
+  } hts = sp_zero;
 
   sp_ht_init_a(a, hts.integer);
   sp_cstr_ht_init_a(a, hts.cstr);

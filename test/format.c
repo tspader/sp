@@ -21,7 +21,7 @@ static sp_err_t parse_spec(const c8* str, sp_fmt_spec_t* spec) {
 }
 
 void run_case(s32* utest_result, format_test_t test) {
-  sp_fmt_spec_t specifier = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t specifier = sp_zero;
   sp_err_t err = parse_spec(test.str, &specifier);
   EXPECT_EQ(err, test.err);
   if (err != SP_OK) return;
@@ -188,29 +188,29 @@ UTEST(sp_fmt_parse, err_dynamic_precision_without_dot) {
 }
 
 UTEST(sp_fmt_parse, err_missing_open_brace) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec(":5}", &spec), SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_parse, err_missing_close_brace) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:5", &spec), SP_ERR_FMT_UNTERMINATED_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_parse, err_dot_without_digits) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:5.}", &spec), SP_ERR_FMT_BAD_PRECISION);
 }
 
 UTEST(sp_fmt_parse_directive, single) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.red}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 1);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_names[0], "red"));
 }
 
 UTEST(sp_fmt_parse_directive, after_width) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:10 .red}", &spec), SP_OK);
   EXPECT_EQ(spec.width, 10);
   EXPECT_EQ(spec.directive_count, 1);
@@ -218,7 +218,7 @@ UTEST(sp_fmt_parse_directive, after_width) {
 }
 
 UTEST(sp_fmt_parse_directive, full_spec) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:*^9.2 .red}", &spec), SP_OK);
   EXPECT_EQ(spec.width, 9);
   EXPECT_EQ(spec.precision.value, 2);
@@ -230,7 +230,7 @@ UTEST(sp_fmt_parse_directive, full_spec) {
 }
 
 UTEST(sp_fmt_parse_directive, multiple) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.red .bold .upper}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 3);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_names[0], "red"));
@@ -239,76 +239,76 @@ UTEST(sp_fmt_parse_directive, multiple) {
 }
 
 UTEST(sp_fmt_parse_directive, max_count) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.a .b .c .d .e .f .g .h}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, SP_FMT_MAX_DIRECTIVES);
 }
 
 UTEST(sp_fmt_parse_directive, err_too_many) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.a .b .c .d .e .f .g .h .i}", &spec), SP_ERR_FMT_TOO_MANY_DIRECTIVES);
 }
 
 UTEST(sp_fmt_parse_directive, err_empty_name) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:10 .}", &spec), SP_ERR_FMT_BAD_DIRECTIVE);
 }
 
 UTEST(sp_fmt_parse_directive, err_bad_char) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:10 .red!}", &spec), SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_parse_directive, err_no_space_between_directives) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.red.bold}", &spec), SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_parse_directive, err_no_dot) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:10 red}", &spec), SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_parse_directive, digit_in_tail) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.base64}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 1);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_names[0], "base64"));
 }
 
 UTEST(sp_fmt_parse_directive, hyphen_in_name) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.utf-8}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 1);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_names[0], "utf-8"));
 }
 
 UTEST(sp_fmt_parse_directive, underscore_in_name) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.http_url}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 1);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_names[0], "http_url"));
 }
 
 UTEST(sp_fmt_parse_directive, err_leading_digit) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{: .4red}", &spec), SP_ERR_FMT_BAD_DIRECTIVE);
 }
 
 UTEST(sp_fmt_parse_directive, err_leading_hyphen) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.-red}", &spec), SP_ERR_FMT_BAD_DIRECTIVE);
 }
 
 UTEST(sp_fmt_parse_directive, no_width_just_directive) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{: .red}", &spec), SP_OK);
   EXPECT_EQ(spec.width, 0);
   EXPECT_EQ(spec.directive_count, 1);
 }
 
 static sp_str_t render_value_to_str(sp_fmt_arg_t arg) {
-  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_io_writer_t io = sp_zero;
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_render_default_a(&io, &arg, SP_NULLPTR);
   return sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
@@ -420,7 +420,7 @@ UTEST(sp_fmt_render, f64_neg_inf) {
 UTEST(sp_fmt_render, f64_custom_precision_via_spec) {
   sp_fmt_arg_t arg = sp_fmt_float(3.14159);
   sp_opt_set(arg.spec.precision, 2);
-  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_io_writer_t io = sp_zero;
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_render_default_a(&io, &arg, SP_NULLPTR);
   sp_str_t got = sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
@@ -438,15 +438,15 @@ UTEST(sp_fmt_render, ptr_nonzero) {
 }
 
 static sp_str_t apply_spec_to_str(const c8* content, sp_fmt_spec_t spec) {
-  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_io_writer_t io = sp_zero;
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
-  sp_str_t empty = sp_zero();
+  sp_str_t empty = sp_zero;
   sp_fmt_apply_spec_a(&io, empty, sp_str_view(content), empty, spec);
   return sp_io_writer_dyn_mem_as_str(&io.dyn_mem);
 }
 
 UTEST(sp_fmt_pad, no_width) {
-  sp_str_t got = apply_spec_to_str("hello", SP_ZERO_STRUCT(sp_fmt_spec_t));
+  sp_str_t got = apply_spec_to_str("hello", sp_zero_s(sp_fmt_spec_t));
   EXPECT_TRUE(sp_str_equal_cstr(got, "hello"));
 }
 
@@ -482,7 +482,7 @@ UTEST(sp_fmt_pad, center_odd) {
 }
 
 UTEST(sp_fmt_pad, wrapped_padding_outside) {
-  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_io_writer_t io = sp_zero;
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
     sp_str_lit("<"),
@@ -495,7 +495,7 @@ UTEST(sp_fmt_pad, wrapped_padding_outside) {
 }
 
 UTEST(sp_fmt_pad, wrapped_center) {
-  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_io_writer_t io = sp_zero;
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
     sp_str_lit("["),
@@ -619,7 +619,7 @@ UTEST(sp_fmt_directive, transform_uppercase) {
 
 UTEST(sp_fmt_directive, err_unknown_directive) {
   sp_fmt_directive_reset();
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.missing}", sp_fmt_int(42)).err, SP_ERR_FMT_UNKNOWN_DIRECTIVE);
 }
 
@@ -628,7 +628,7 @@ UTEST(sp_fmt_directive, ordering_bracket_nested) {
   sp_fmt_register_decorator("a", _test_before_a, _test_after_a);
   sp_fmt_register_decorator("b", _test_before_b, _test_after_b);
 
-  _test_log = (sp_io_writer_t)SP_ZERO_INITIALIZE();
+  _test_log = (sp_io_writer_t)sp_zero;
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &_test_log);
   sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.a .b}", sp_fmt_cstr("x")).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "[a[bxb]a]"));
@@ -643,7 +643,7 @@ UTEST(sp_fmt_directive, err_multiple_renders) {
   _test_render_y_calls = 0;
   sp_fmt_register_renderer("x", _test_render_x, 0);
   sp_fmt_register_renderer("y", _test_render_y, 0);
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.x .y}", sp_fmt_int(0)).err, SP_ERR_FMT_TOO_MANY_RENDERERS);
   EXPECT_EQ(_test_render_y_calls, 0);
   sp_fmt_directive_reset();
@@ -712,7 +712,7 @@ UTEST(sp_fmt_v, close_brace_escape) {
 }
 
 UTEST(sp_fmt_v, err_lone_close_brace) {
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "oops } here").err, SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
@@ -763,12 +763,12 @@ UTEST(sp_fmt_directive, before_render_then_transform) {
 }
 
 UTEST(sp_fmt_parse_directive, err_alpha_after_digit) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:5red}", &spec), SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_pad, wrapped_content_overflow) {
-  sp_io_writer_t io = SP_ZERO_INITIALIZE();
+  sp_io_writer_t io = sp_zero;
   sp_io_writer_from_dyn_mem_a(sp_mem_get_scratch(), &io);
   sp_fmt_apply_spec_a(&io,
     sp_str_lit("<"),
@@ -814,33 +814,33 @@ UTEST(sp_fmt_v, dynamic_width_with_literal_precision) {
 }
 
 UTEST(sp_fmt_v, err_parse_stops_formatting) {
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "a {:5.} b {}", sp_fmt_int(99)).err, SP_ERR_FMT_BAD_PRECISION);
 }
 
 UTEST(sp_fmt_v, err_unterminated_placeholder) {
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "hi {nope", sp_fmt_int(1)).err, SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_v, err_dynamic_fill_wrong_kind) {
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{:$^5}", sp_fmt_float(1.0), sp_fmt_int(42)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST(sp_fmt_v, err_dynamic_width_wrong_kind) {
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{:$}", sp_fmt_cstr("oops"), sp_fmt_int(42)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST(sp_fmt_v, err_dynamic_precision_wrong_kind) {
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{:.$}", sp_fmt_float(3.0), sp_fmt_float(3.14)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST(sp_fmt_v, err_stops_subsequent_placeholders) {
   sp_fmt_directive_reset();
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   sp_err_t err = sp_fmt_a(sp_mem_get_scratch(), "{} {.nope} {}", sp_fmt_int(1), sp_fmt_int(2), sp_fmt_int(3)).err;
   EXPECT_EQ(err, SP_ERR_FMT_UNKNOWN_DIRECTIVE);
 }
@@ -911,7 +911,7 @@ UTEST(sp_fmt_directive, kinds_single_accepts_match) {
 UTEST(sp_fmt_directive, kinds_single_rejects_mismatch) {
   sp_fmt_directive_reset();
   sp_fmt_register_renderer("only_u64", _test_render_u64_only, sp_fmt_id_u64);
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.only_u64}", sp_fmt_float(1.5)).err, SP_ERR_FMT_WRONG_PARAM_KIND);
   sp_fmt_directive_reset();
 }
@@ -935,7 +935,7 @@ UTEST(sp_fmt_directive, kinds_multiple_rejects_outsider) {
     .kind = sp_fmt_directive_decorator,
     .arg_kinds = sp_fmt_id_u64 | sp_fmt_id_s64,
   });
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.num}", sp_fmt_cstr("nope")).err, SP_ERR_FMT_WRONG_PARAM_KIND);
   sp_fmt_directive_reset();
 }
@@ -953,7 +953,7 @@ UTEST(sp_fmt_directive, kinds_unset_accepts_all) {
 }
 
 UTEST(sp_fmt_parse_directive_arg, literal) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg red}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 1);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_names[0], "fg"));
@@ -962,7 +962,7 @@ UTEST(sp_fmt_parse_directive_arg, literal) {
 }
 
 UTEST(sp_fmt_parse_directive_arg, dynamic) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg $}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 1);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_names[0], "fg"));
@@ -971,7 +971,7 @@ UTEST(sp_fmt_parse_directive_arg, dynamic) {
 }
 
 UTEST(sp_fmt_parse_directive_arg, literal_then_directive) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg red .bold}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 2);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_names[0], "fg"));
@@ -981,14 +981,14 @@ UTEST(sp_fmt_parse_directive_arg, literal_then_directive) {
 }
 
 UTEST(sp_fmt_parse_directive_arg, dynamic_then_directive) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg $ .bold}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 2);
   EXPECT_EQ(spec.directive_arg_dynamic, 1);
 }
 
 UTEST(sp_fmt_parse_directive_arg, two_literals) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg red .bg blue}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 2);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_args[0], "red"));
@@ -997,14 +997,14 @@ UTEST(sp_fmt_parse_directive_arg, two_literals) {
 }
 
 UTEST(sp_fmt_parse_directive_arg, two_dynamics) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg $ .bg $}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 2);
   EXPECT_EQ(spec.directive_arg_dynamic, 0x3);
 }
 
 UTEST(sp_fmt_parse_directive_arg, mixed) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg red .bg $ .bold}", &spec), SP_OK);
   EXPECT_EQ(spec.directive_count, 3);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_args[0], "red"));
@@ -1014,7 +1014,7 @@ UTEST(sp_fmt_parse_directive_arg, mixed) {
 }
 
 UTEST(sp_fmt_parse_directive_arg, with_full_spec) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{:*^9.2 .fg red}", &spec), SP_OK);
   EXPECT_EQ(spec.width, 9);
   EXPECT_EQ(spec.directive_count, 1);
@@ -1022,23 +1022,23 @@ UTEST(sp_fmt_parse_directive_arg, with_full_spec) {
 }
 
 UTEST(sp_fmt_parse_directive_arg, arg_with_digits_and_symbols) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.hex 0xff}", &spec), SP_OK);
   EXPECT_TRUE(sp_str_equal_cstr(spec.directive_args[0], "0xff"));
 }
 
 UTEST(sp_fmt_parse_directive_arg, err_dollar_inside_literal) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg r$d}", &spec), SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_parse_directive_arg, err_dollar_followed_by_literal) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg $red}", &spec), SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST(sp_fmt_parse_directive_arg, err_space_in_arg) {
-  sp_fmt_spec_t spec = SP_ZERO_INITIALIZE();
+  sp_fmt_spec_t spec = sp_zero;
   EXPECT_EQ(parse_spec("{.fg red blue}", &spec), SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
@@ -1092,7 +1092,7 @@ UTEST(sp_fmt_directive_arg, dynamic_accepts_u64_with_mask) {
 UTEST(sp_fmt_directive_arg, err_missing_arg) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.fg}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_MISSING);
   sp_fmt_directive_reset();
 }
@@ -1100,7 +1100,7 @@ UTEST(sp_fmt_directive_arg, err_missing_arg) {
 UTEST(sp_fmt_directive_arg, err_unexpected_arg) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("bold", _test_before_lt, _test_after_gt);
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.bold red}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED);
   sp_fmt_directive_reset();
 }
@@ -1108,7 +1108,7 @@ UTEST(sp_fmt_directive_arg, err_unexpected_arg) {
 UTEST(sp_fmt_directive_arg, err_wrong_literal_kind) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("numpad", _test_before_lt, _test_after_gt, sp_fmt_id_u64);
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.numpad abc}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
   sp_fmt_directive_reset();
 }
@@ -1116,7 +1116,7 @@ UTEST(sp_fmt_directive_arg, err_wrong_literal_kind) {
 UTEST(sp_fmt_directive_arg, err_wrong_dynamic_kind) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.fg $}", sp_fmt_uint(5), sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
   sp_fmt_directive_reset();
 }
@@ -1151,7 +1151,7 @@ UTEST(sp_fmt_builtin_fg, composes_with_padding) {
 }
 
 UTEST(sp_fmt_builtin_fg, err_missing_arg) {
-  sp_str_t str = sp_zero();
+  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.fg}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_MISSING);
 }
 
@@ -1200,8 +1200,8 @@ UTEST(sp_fmt_transform, into_writer_backed_builder) {
   sp_fmt_directive_reset();
   sp_fmt_register_transformer("upper", _test_transform_upper);
 
-  c8 buf[64] = SP_ZERO_INITIALIZE();
-  sp_io_writer_t w = SP_ZERO_INITIALIZE();
+  c8 buf[64] = sp_zero;
+  sp_io_writer_t w = sp_zero;
   sp_io_writer_from_mem(&w, buf, sizeof(buf));
 
   sp_fmt_io(&w, "{.upper}", sp_fmt_cstr("hello"));

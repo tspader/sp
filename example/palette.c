@@ -81,7 +81,7 @@ sp_str_t palette_color_to_hex(sp_mem_t mem, sp_color_t c) {
   u8 r = (u8)(c.r * 255.0f);
   u8 g = (u8)(c.g * 255.0f);
   u8 b = (u8)(c.b * 255.0f);
-  sp_io_writer_t b_out = sp_zero();
+  sp_io_writer_t b_out = sp_zero;
   sp_io_writer_from_dyn_mem_a(mem, &b_out);
   sp_io_write_c8(&b_out, '#');
   for (s32 i = 0; i < 3; i++) {
@@ -97,7 +97,7 @@ void palette_render(app_t* app) {
   if (!app->needs_redraw) return;
   app->needs_redraw = false;
 
-  sp_io_writer_t out = sp_zero();
+  sp_io_writer_t out = sp_zero;
   sp_io_writer_from_dyn_mem_a(app->mem, &out);
 
   sp_io_write_cstr(&out, "\033[H\033[2J", SP_NULLPTR);

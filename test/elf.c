@@ -79,7 +79,7 @@ UTEST_F(elf, err_section_new_null_elf) {
 UTEST_F(elf, err_section_new_null_name) {
   SKIP_ON_WASM()
   sp_elf_t* elf = sp_elf_new_with_null_section(ut.mem.tracking);
-  sp_str_t empty = SP_ZERO_INITIALIZE();
+  sp_str_t empty = sp_zero;
   sp_elf_section_t* s = sp_elf_add_section(elf, empty, SHT_PROGBITS, 16);
   ASSERT_EQ(s, SP_NULLPTR);
   ASSERT_EQ(sp_elf_num_sections(elf), 1u);
@@ -664,7 +664,7 @@ UTEST_F(elf, oracle_cc_read) {
                "}\n");
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.c"));
-  sp_io_writer_t c_file = SP_ZERO_INITIALIZE();
+  sp_io_writer_t c_file = sp_zero;
   sp_io_writer_from_file(&c_file, c_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write_str(&c_file, c_src, SP_NULLPTR);
   sp_io_writer_close(&c_file);
@@ -728,7 +728,7 @@ UTEST_F(elf, oracle_cc_link) {
                "}\n");
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration.c"));
-  sp_io_writer_t f = SP_ZERO_INITIALIZE();
+  sp_io_writer_t f = sp_zero;
   sp_io_writer_from_file(&f, c_path, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write_str(&f, c_src, SP_NULLPTR);
   sp_io_writer_close(&f);

@@ -25,7 +25,7 @@ s32 main(s32 num_args, const c8** args) {
   }
 
   sp_da(sp_str_t) parts = sp_str_split_c8_a(mem, triple, '-');
-  sp_os_kind_t os = sp_zero();
+  sp_os_kind_t os = sp_zero;
   if      (sp_str_equal(parts[1], str("linux"))) os = SP_OS_LINUX;
   else if (sp_str_equal(parts[1], str("windows"))) os = SP_OS_WIN32;
   else if (sp_str_equal(parts[1], str("macos"))) os = SP_OS_MACOS;
@@ -58,13 +58,13 @@ s32 main(s32 num_args, const c8** args) {
   sp_fs_for(mem, build, it) {
     if (sp_glob_set_match(blacklist, it.entry.name)) continue;
     if (sp_glob_set_match(glob, it.entry.name)) {
-      sp_io_reader_t io = sp_zero();
+      sp_io_reader_t io = sp_zero;
       sp_io_reader_from_file(&io, it.entry.path);
 
-      u64 size = sp_zero();
+      u64 size = sp_zero;
       if (sp_io_reader_size(&io, &size)) sp_fatal("failed to open {.cyan}", it.entry.path);
 
-      u8 buffer [8] = sp_zero();
+      u8 buffer [8] = sp_zero;
       if (sp_io_read(&io, buffer, 8, SP_NULLPTR)) sp_fatal("failed to read magic for {.cyan}", it.entry.path);
 
       static u8 elf   [] = { 0x7F, 'E', 'L', 'F' };
@@ -114,7 +114,7 @@ s32 main(s32 num_args, const c8** args) {
 
   sp_da_for(tests, it) {
     test_t test = tests[it];
-    command_t cmd = sp_zero();
+    command_t cmd = sp_zero;
     sp_ps_io_config_t io = {
       .out = { .mode = SP_PS_IO_MODE_CREATE },
       .err = { .mode = SP_PS_IO_MODE_CREATE },

@@ -74,7 +74,7 @@ UTEST_F(asset_registry, basic_add_and_find) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
 
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
@@ -112,7 +112,7 @@ UTEST_F(asset_registry, same_name_different_types) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
 
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       { .kind = 1001, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
@@ -148,7 +148,7 @@ UTEST_F(asset_registry, string_copying) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
 
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
@@ -182,7 +182,7 @@ UTEST_F(asset_registry, null_user_data) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
 
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
@@ -207,7 +207,7 @@ UTEST_F(asset_registry, empty_names) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
 
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
@@ -233,7 +233,7 @@ UTEST_F(asset_registry, import_completion_pipeline) {
   SKIP_ON_FREESTANDING();
 
   sp_semaphore_init(&s_test_asset_gate);
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       {
@@ -285,7 +285,7 @@ UTEST_F(asset_registry, state_transitions) {
   SKIP_ON_FREESTANDING();
 
   sp_semaphore_init(&s_test_asset_gate);
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       {
@@ -327,7 +327,7 @@ UTEST_F(asset_registry, concurrent_find_during_import) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
 
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       {
@@ -385,7 +385,7 @@ UTEST_F(asset_registry, stress_many_assets) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
 
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
@@ -426,7 +426,7 @@ UTEST_F(asset_registry, stable_pointers) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING();
 
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       { .kind = SP_ASSET_KIND_TEST, .on_import = sp_test_asset_noop_import, .on_completion = sp_test_asset_noop_complete },
@@ -461,7 +461,7 @@ UTEST_F(asset_registry, default_data_before_completion) {
   SKIP_ON_FREESTANDING();
 
   sp_semaphore_init(&s_test_asset_gate);
-  sp_asset_registry_t registry = SP_ZERO_STRUCT(sp_asset_registry_t);
+  sp_asset_registry_t registry = sp_zero_s(sp_asset_registry_t);
   sp_asset_registry_config_t config = {
     .importers = {
       {

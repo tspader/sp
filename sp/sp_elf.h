@@ -596,7 +596,7 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
 }
 
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {
-  sp_io_writer_t f = SP_ZERO_INITIALIZE();
+  sp_io_writer_t f = sp_zero;
   sp_try(sp_io_writer_from_file(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
   sp_err_t err = sp_elf_write(elf, &f);
   sp_io_writer_close(&f);
@@ -606,7 +606,7 @@ sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {
 sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in) {
   sp_require_as_null(in);
 
-  Elf64_Ehdr ehdr = SP_ZERO_INITIALIZE();
+  Elf64_Ehdr ehdr = sp_zero;
   u64 bytes_read = 0;
   sp_io_read(in, &ehdr, sizeof(Elf64_Ehdr), &bytes_read);
   if (bytes_read != sizeof(Elf64_Ehdr)) {
@@ -700,7 +700,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, sp_io_reader_t* in) {
 }
 
 sp_elf_t* sp_elf_read_from_file(sp_mem_t mem, sp_str_t path) {
-  sp_io_reader_t f = SP_ZERO_INITIALIZE();
+  sp_io_reader_t f = sp_zero;
   if (sp_io_reader_from_file(&f, path)) {
     return SP_NULLPTR;
   }

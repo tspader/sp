@@ -58,7 +58,7 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_for(i, num_files) {
     sp_str_t path = sp_str_view(argv[2 + i]);
     sp_str_t basename = sp_fs_get_name(path);
-    sp_str_t content = sp_zero();
+    sp_str_t content = sp_zero;
     sp_io_read_file_a(mem, path, &content);
 
     if (sp_str_empty(content)) {

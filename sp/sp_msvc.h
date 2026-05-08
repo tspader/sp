@@ -88,10 +88,10 @@ sp_str_t sp_msvc_bin_subdir(sp_msvc_arch_t arch) {
 }
 
 sp_msvc_version_t sp_msvc_parse_version(sp_mem_t mem, sp_str_t str) {
-  sp_msvc_version_t v = SP_ZERO_INITIALIZE();
+  sp_msvc_version_t v = sp_zero;
   v.str = sp_str_copy_a(mem, str);
 
-  u32 parts[4] = SP_ZERO_INITIALIZE();
+  u32 parts[4] = sp_zero;
   u32 part = 0;
   u32 accum = 0;
 
@@ -128,7 +128,7 @@ sp_str_t sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key) {
   s32 pos = sp_str_find(json, needle);
   if (pos == SP_STR_NO_MATCH) {
     sp_mem_end_scratch(scratch);
-    return SP_ZERO_STRUCT(sp_str_t);
+    return sp_zero_s(sp_str_t);
   }
 
   u32 value_start = (u32)pos + needle.len;
@@ -142,7 +142,7 @@ sp_str_t sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key) {
 
   sp_str_t raw = sp_str_sub(json, (s32)value_start, (s32)(value_end - value_start));
 
-  sp_io_writer_t builder = sp_zero();
+  sp_io_writer_t builder = sp_zero;
   sp_io_writer_from_dyn_mem_a(mem, &builder);
   sp_for(i, raw.len) {
     if (raw.data[i] == '\\' && i + 1 < raw.len && raw.data[i + 1] == '\\') {
@@ -171,7 +171,7 @@ sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
   );
   if (rc != ERROR_SUCCESS) return SP_MSVC_ERR_REGISTRY;
 
-  c8 root_buf[SP_PATH_MAX] = SP_ZERO_INITIALIZE();
+  c8 root_buf[SP_PATH_MAX] = sp_zero;
   DWORD root_len = SP_PATH_MAX;
   DWORD type;
   rc = RegQueryValueExA(roots_key, "KitsRoot10", SP_NULLPTR, &type, (LPBYTE)root_buf, &root_len);
@@ -245,7 +245,7 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
     sp_str_t state_path = sp_fs_join_path_a(mem, it.entry.path, sp_str_lit("state.json"));
     if (!sp_fs_exists(state_path)) continue;
 
-    sp_str_t json = SP_ZERO_INITIALIZE();
+    sp_str_t json = sp_zero;
     sp_io_read_file_a(mem, state_path, &json);
     if (sp_str_empty(json)) continue;
 
@@ -262,7 +262,7 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
     sp_str_t tools_file = sp_fs_join_path_a(mem,
       install_path, sp_str_lit("VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt")
     );
-    sp_str_t tools_version_str = SP_ZERO_INITIALIZE();
+    sp_str_t tools_version_str = sp_zero;
     sp_io_read_file_a(mem, tools_file, &tools_version_str);
     if (sp_str_empty(tools_version_str)) continue;
 
@@ -310,7 +310,7 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
 }
 
 sp_msvc_err_t sp_msvc_find(sp_mem_t mem, sp_msvc_arch_t arch, sp_msvc_t* out) {
-  *out = SP_ZERO_STRUCT(sp_msvc_t);
+  *out = sp_zero_s(sp_msvc_t);
   out->arena = sp_mem_arena_new(mem);
   out->mem = sp_mem_arena_as_allocator(out->arena);
   sp_da_init(out->mem, out->sdks);

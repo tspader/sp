@@ -702,7 +702,7 @@ typedef struct {
 } strategy_test_t;
 
 void run_strategy_test(int* utest_result, sp_mem_t mem, strategy_test_t* t) {
-  sp_glob_t glob = SP_ZERO_INITIALIZE();
+  sp_glob_t glob = sp_zero;
   sp_da_init(mem, glob.tokens);
   sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t->pattern), &glob.tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);

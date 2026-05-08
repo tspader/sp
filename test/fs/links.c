@@ -47,11 +47,11 @@ UTEST_F(fs, create_hard_link_file) {
   sp_str_t source = sp_fs_join_path_a(a, sandbox, sp_str_lit("file.txt"));
   sp_str_t link = sp_fs_join_path_a(a, sandbox, sp_str_lit("file.hard"));
 
-  sp_io_writer_t writer = SP_ZERO_INITIALIZE();
+  sp_io_writer_t writer = sp_zero;
   sp_io_writer_from_file(&writer, source, SP_IO_WRITE_MODE_OVERWRITE);
   sp_io_write_str(&writer, sp_str_lit("updated"), SP_NULLPTR);
   sp_io_writer_close(&writer);
-  sp_str_t link_content = SP_ZERO_INITIALIZE();
+  sp_str_t link_content = sp_zero;
   sp_io_read_file_a(a, link, &link_content);
   SP_EXPECT_STR_EQ(link_content, sp_str_lit("updated"));
 }
@@ -112,7 +112,7 @@ UTEST_F(fs, create_symlink_file) {
 
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_symlink_file"));
   sp_str_t link = sp_fs_join_path_a(a, sandbox, sp_str_lit("file.link"));
-  sp_str_t symlink_content = SP_ZERO_INITIALIZE();
+  sp_str_t symlink_content = sp_zero;
   sp_io_read_file_a(a, link, &symlink_content);
   SP_EXPECT_STR_EQ(symlink_content, sp_str_lit("hello"));
 }
