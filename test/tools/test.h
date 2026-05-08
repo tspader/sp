@@ -329,7 +329,8 @@ static void* sp_mem_tracking_do_alloc(sp_mem_tracking_t* t, u64 size) {
 static u32 sp_mem_tracking_peek_magic(void* ptr) {
   u32 magic = 0;
   u8* base = (u8*)ptr - sizeof(sp_mem_tracking_node_t);
-  __builtin_memcpy(&magic, base + __builtin_offsetof(sp_mem_tracking_node_t, magic), sizeof(magic));
+  sp_mem_tracking_node_t* node = sp_ptr_cast(sp_mem_tracking_node_t*, base);
+  memcpy(&magic, &node->magic, sizeof(magic));
   return magic;
 }
 

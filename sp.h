@@ -371,6 +371,15 @@
 
 #define SP_NULL 0
 
+// SP_CAST //
+#if defined(SP_CPP)
+#define sp_cast(type, x) static_cast<type>(x)
+#define sp_ptr_cast(type, x) reinterpret_cast<type>(x)
+#else
+#define sp_cast(type, x) ((type)(x))
+#define sp_ptr_cast(type, x) ((type)(x))
+#endif
+
 #define sp_zero_initialize() SP_ZERO_INITIALIZE()
 #define sp_zero() SP_ZERO_INITIALIZE()
 
@@ -694,7 +703,7 @@ typedef struct {
 } sp_str_t;
 
 typedef struct {
-  u16* data;
+  const u16* data;
   u32 len;
 } sp_wide_str_t;
 
@@ -1187,6 +1196,20 @@ typedef struct {
   u32               raw_attrs;
 } sp_sys_stat_t;
 
+#define SP_FS_NAME_MAX 1024
+
+typedef struct {
+  s64             handle;
+  sp_mem_buffer_t buf;
+  u64             cursor;
+} sp_sys_fs_it_t;
+
+typedef struct {
+  c8           name [SP_FS_NAME_MAX];
+  u32          len;
+  sp_fs_kind_t kind;
+} sp_sys_fs_entry_t;
+
 SP_TYPEDEF_FN(int, sp_qsort_fn_t, const void *, const void *);
 
 s64         sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count);
@@ -1235,6 +1258,10 @@ s32         sp_sys_link_s(sp_str_t existing, sp_str_t alias);
 s32         sp_sys_symlink_s(sp_str_t existing, sp_str_t alias);
 s32         sp_sys_chmod_s(sp_str_t path, const sp_sys_stat_t* st);
 s64         sp_sys_canonicalize_path_s(sp_str_t path, c8* buf, u64 size);
+s32         sp_sys_fs_it_open(sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap);
+s32         sp_sys_fs_it_open_s(sp_sys_fs_it_t* it, sp_str_t path, sp_mem_slice_t buf);
+s32         sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out);
+void        sp_sys_fs_it_close(sp_sys_fs_it_t* it);
 
 //  ██████   ██████   █████████   █████ ██████   █████
 // ░░██████ ██████   ███░░░░░███ ░░███ ░░██████ ░░███
@@ -2245,6 +2272,7 @@ SP_API bool            sp_utf8_is_codepoint_ascii(u32 codepoint);
 SP_API u32             sp_utf8_to_upper(u32 codepoint);
 SP_API u32             sp_utf8_to_lower(u32 codepoint);
 SP_API u32             sp_utf8_num_codepoints(sp_str_t str);
+SP_API sp_wide_str_t   sp_wide_str(const u16* str, u32 len);
 SP_API bool            sp_wtf8_validate(sp_str_t str);
 SP_API sp_wide_str_t   sp_wtf8_to_wtf16_a(sp_mem_t mem, sp_str_t wtf8);
 SP_API sp_str_t        sp_wtf16_to_wtf8_a(sp_mem_t mem, sp_wide_str_t wtf16);
@@ -2442,19 +2470,9 @@ typedef struct {
 } sp_fs_entry_t;
 
 typedef struct {
-#if defined(SP_WIN32)
-  sp_win32_handle_t handle;
-  sp_win32_find_data_t find_data;
-  bool first;
-#elif defined(SP_MACOS) || defined(SP_COSMO)
-  DIR* dir;
-#else
-  s32 fd;
-  SP_ALIGNED u8 buf [SP_FS_IT_BUF_SIZE];
-  s32 buf_pos;
-  s32 buf_end;
-#endif
-  sp_str_t path;
+  sp_sys_fs_it_t sys;
+  SP_ALIGNED u8    buf [SP_FS_IT_BUF_SIZE];
+  sp_str_t         path;
 } sp_fs_it_frame_t;
 
 typedef struct {
@@ -2516,10 +2534,6 @@ SP_IMP void                 sp_fs_it_next_a(sp_fs_it_t* it);
 SP_IMP void                 sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path);
 SP_IMP bool                 sp_fs_it_valid_a(sp_fs_it_t* it);
 SP_IMP void                 sp_fs_it_deinit_a(sp_fs_it_t* it);
-
-bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path);
-void sp_sys_diriter_close(sp_fs_it_frame_t* frame);
-bool sp_sys_diriter_read(sp_mem_t mem, sp_fs_it_frame_t* frame, sp_fs_entry_t* entry);
 
 
 //  ███████████ █████   █████ ███████████   ██████████   █████████   ██████████   █████ ██████   █████   █████████
@@ -3436,21 +3450,20 @@ typedef struct {
   u32 i;
 } sp_fmt_parser_t;
 
-static sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name);
-static void sp_fmt_directive_reset();
-static void sp_fmt_register_builtins();
-
-SP_IMP c8*      sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
-SP_IMP c8*      sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
-SP_IMP c8*      sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end);
-SP_IMP void     sp_fmt_write_u64_a(sp_io_writer_t* io, u64 value);
-SP_IMP void     sp_fmt_write_s64_a(sp_io_writer_t* io, s64 value);
-SP_IMP void     sp_fmt_write_f64_a(sp_io_writer_t* io, f64 value, u32 precision);
-SP_IMP void     sp_fmt_write_ptr_a(sp_io_writer_t* io, void* value);
-SP_IMP sp_err_t sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
-SP_IMP void     sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec);
-SP_IMP sp_err_t sp_fmt_parse_specifier(sp_fmt_parser_t* p, sp_fmt_spec_t* spec);
-SP_IMP sp_str_t sp_fmt_color_to_ansi_fg(sp_str_t id);
+SP_IMP sp_fmt_directive_t* sp_fmt_directive_lookup(sp_str_t name);
+SP_IMP void                sp_fmt_directive_reset();
+SP_IMP void                sp_fmt_register_builtins();
+SP_IMP c8*                 sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
+SP_IMP c8*                 sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
+SP_IMP c8*                 sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end);
+SP_IMP void                sp_fmt_write_u64_a(sp_io_writer_t* io, u64 value);
+SP_IMP void                sp_fmt_write_s64_a(sp_io_writer_t* io, s64 value);
+SP_IMP void                sp_fmt_write_f64_a(sp_io_writer_t* io, f64 value, u32 precision);
+SP_IMP void                sp_fmt_write_ptr_a(sp_io_writer_t* io, void* value);
+SP_IMP sp_err_t            sp_fmt_render_a(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* params);
+SP_IMP void                sp_fmt_apply_spec_a(sp_io_writer_t* io, sp_str_t pre, sp_str_t str, sp_str_t post, sp_fmt_spec_t spec);
+SP_IMP sp_err_t            sp_fmt_parse_specifier(sp_fmt_parser_t* p, sp_fmt_spec_t* spec);
+SP_IMP sp_str_t            sp_fmt_color_to_ansi_fg(sp_str_t id);
 
 // @hash
 SP_IMP sp_hash_t sp_hash_str(sp_str_t str);
@@ -3469,16 +3482,10 @@ SP_IMP bool sp_utf8_is_bounds_ok(u32 codepoint, u8 len);
 SP_IMP u32  sp_utf8_mask(u8 byte, u8 mask, u8 shift);
 
 // @env
-#if defined(SP_WIN32)
 SP_IMP sp_env_var_t sp_os_env_parse_var(sp_str_t entry);
-#endif
-#if defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_LINUX) || defined(SP_WASM)
-SP_IMP bool sp_os_env_key_equal(sp_str_t a, sp_str_t b);
-SP_IMP void sp_os_env_it_set(sp_os_env_it_t* it);
-#endif
-#if defined(SP_POSIX)
-SP_IMP c8** sp_env_to_posix_envp_a(sp_mem_t mem, sp_env_t* env);
-#endif
+SP_IMP bool         sp_os_env_key_equal(sp_str_t a, sp_str_t b);
+SP_IMP void         sp_os_env_it_set(sp_os_env_it_t* it);
+SP_IMP c8**         sp_env_to_posix_envp_a(sp_mem_t mem, sp_env_t* env);
 
 // @context
 SP_IMP sp_mem_arena_t* sp_tls_rt_get_scratch_arena(sp_tls_rt_t* tls);
@@ -3492,15 +3499,6 @@ SP_IMP BOOL CALLBACK   sp_tls_once_trampoline(PINIT_ONCE once, PVOID param, PVOI
 // @fs
 SP_IMP sp_fs_kind_t sp_fs_lstat_kind_a(sp_str_t path);
 SP_IMP sp_fs_kind_t sp_fs_stat_kind_a(sp_str_t path);
-SP_IMP bool         sp_fs_it_is_dot(const c8* name);
-#if defined(SP_WIN32)
-SP_IMP sp_fs_kind_t sp_fs_it_win32_attrs(sp_win32_dword_t attrs);
-SP_IMP bool         sp_win32_find_is_dot(const u16* name);
-SP_IMP u32          sp_win32_find_name_len(const u16* name);
-#endif
-#if defined(SP_LINUX)
-SP_IMP sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type);
-#endif
 
 // @io
 SP_IMP sp_err_t sp_io_writer_dyn_write(sp_io_writer_t* io, const void* ptr, u64 size, u64* bytes_written);
@@ -3612,11 +3610,11 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
 #define sp_syscall(...) __sp_syscall_ret((u64)__sp_syscall(__VA_ARGS__))
 
 // Typed wrappers for individual syscalls
-SP_IMP s32 sp_sys_inotify_init1(s32 flags);
-SP_IMP s32 sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
-SP_IMP s32 sp_sys_inotify_rm_watch(s32 fd, s32 wd);
-SP_IMP s32 sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage);
-SP_IMP s64 sp_sys_getdents64(s32 fd, void* buf, u64 count);
+SP_IMP s32 sp_lx_inotify_init1(s32 flags);
+SP_IMP s32 sp_lx_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
+SP_IMP s32 sp_lx_inotify_rm_watch(s32 fd, s32 wd);
+SP_IMP s32 sp_lx_wait4(s32 pid, s32* status, s32 options, void* rusage);
+SP_IMP s64 sp_lx_getdents64(s32 fd, void* buf, u64 count);
 #endif
 
 #if defined(SP_WIN32)
@@ -4160,26 +4158,26 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6) {
 //////////////////////
 // SYSCALL WRAPPERS //
 //////////////////////
-s64   sp_sys_getdents64(s32 fd, void* buf, u64 count);
-s32   sp_sys_inotify_init1(s32 flags);
-s32   sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
-s32   sp_sys_inotify_rm_watch(s32 fd, s32 wd);
-s32   sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage);
+s64   sp_lx_getdents64(s32 fd, void* buf, u64 count);
+s32   sp_lx_inotify_init1(s32 flags);
+s32   sp_lx_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
+s32   sp_lx_inotify_rm_watch(s32 fd, s32 wd);
+s32   sp_lx_wait4(s32 pid, s32* status, s32 options, void* rusage);
 void  sp_sys_exit(s32 code);
 
-s32 sp_sys_inotify_init1(s32 flags) {
+s32 sp_lx_inotify_init1(s32 flags) {
   return (s32)sp_syscall(SP_SYSCALL_NUM_INOTIFY_INIT1, flags);
 }
 
-s32 sp_sys_inotify_add_watch(s32 fd, const c8* pathname, u32 mask) {
+s32 sp_lx_inotify_add_watch(s32 fd, const c8* pathname, u32 mask) {
   return (s32)sp_syscall(SP_SYSCALL_NUM_INOTIFY_ADD_WATCH, fd, pathname, mask);
 }
 
-s32 sp_sys_inotify_rm_watch(s32 fd, s32 wd) {
+s32 sp_lx_inotify_rm_watch(s32 fd, s32 wd) {
   return (s32)sp_syscall(SP_SYSCALL_NUM_INOTIFY_RM_WATCH, fd, wd);
 }
 
-s32 sp_sys_wait4(s32 pid, s32* status, s32 options, void* rusage) {
+s32 sp_lx_wait4(s32 pid, s32* status, s32 options, void* rusage) {
   return (s32)sp_syscall(SP_SYSCALL_NUM_WAIT4, pid, status, options, rusage);
 }
 
@@ -4212,7 +4210,7 @@ s32 sp_sys_fstat(sp_sys_fd_t fd, sp_sys_stat_t* st) {
   return rc;
 }
 
-s64 sp_sys_getdents64(s32 fd, void* buf, u64 count) {
+s64 sp_lx_getdents64(s32 fd, void* buf, u64 count) {
   return sp_syscall(SP_SYSCALL_NUM_GETDENTS64, fd, buf, count);
 }
 
@@ -8434,6 +8432,13 @@ u32 sp_utf8_num_codepoints(sp_str_t str) {
   return count;
 }
 
+sp_wide_str_t sp_wide_str(const u16* str, u32 len) {
+  return (sp_wide_str_t) {
+    .data = str,
+    .len = len,
+  };
+}
+
 bool sp_wtf8_validate(sp_str_t str) {
   const c8* ptr = str.data;
   u32 it = 0;
@@ -9032,38 +9037,45 @@ sp_da(sp_str_t) sp_str_pad_to_longest_a(sp_mem_t mem, sp_str_t* strs, u32 n) {
 //////////////
 // ITERATOR //
 //////////////
-SP_PRIVATE bool sp_fs_it_is_dot(const c8* name) {
+SP_PRIVATE bool sp_sys_diriter_is_dot(const c8* name) {
   return name[0] == '.' && (name[1] == 0 || (name[1] == '.' && name[2] == 0));
 }
 
+s32 sp_sys_fs_it_open_s(sp_sys_fs_it_t* it, sp_str_t path, sp_mem_slice_t buf) {
+  return sp_sys_fs_it_open(it, path.data, path.len, buf.data, buf.len);
+}
+
 #if defined(SP_WIN32)
-SP_PRIVATE sp_fs_kind_t sp_fs_it_win32_attrs(sp_win32_dword_t attrs) {
+SP_PRIVATE sp_fs_kind_t sp_sys_diriter_win32_attrs(sp_win32_dword_t attrs) {
   if (attrs & FILE_ATTRIBUTE_REPARSE_POINT) return SP_FS_KIND_SYMLINK;
   if (attrs & FILE_ATTRIBUTE_DIRECTORY) return SP_FS_KIND_DIR;
   return SP_FS_KIND_FILE;
 }
 
-SP_PRIVATE bool sp_win32_find_is_dot(const u16* name) {
+SP_PRIVATE bool sp_sys_diriter_win32_is_dot(const u16* name) {
   if (name[0] == '.' && name[1] == 0) return true;
   if (name[0] == '.' && name[1] == '.' && name[2] == 0) return true;
   return false;
 }
 
-SP_PRIVATE u32 sp_win32_find_name_len(const u16* name) {
+SP_PRIVATE u32 sp_sys_diriter_win32_name_len(const u16* name) {
   u32 n = 0;
   while (name[n]) n++;
   return n;
 }
 
-bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
+s32 sp_sys_fs_it_open(sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {
+  *it = sp_zero_struct(sp_sys_fs_it_t);
+  if (cap < sizeof(sp_win32_find_data_t)) return -1;
+
   SP_ALIGNED u8 pattern_storage [SP_PATH_MAX];
   sp_mem_fixed_t pattern_fixed = sp_mem_fixed(pattern_storage, sizeof(pattern_storage));
   sp_mem_t pattern_mem = sp_mem_fixed_as_allocator(&pattern_fixed);
-  sp_str_t pattern = sp_fs_join_path_a(pattern_mem, path, sp_str_lit("*"));
+  sp_str_t pattern = sp_fs_join_path_a(pattern_mem, sp_str(path, path_len), sp_str_lit("*"));
 
   sp_sys_nt_path_t nt = SP_ZERO_INITIALIZE();
   if (!SP_NT_SUCCESS(sp_sys_nt_path(pattern, &nt))) {
-    return false;
+    return -1;
   }
 
   u32 w_off = 0;
@@ -9077,33 +9089,49 @@ bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
   wpat[prefixed_len] = 0;
   sp_sys_nt_path_free(&nt);
 
-  frame->handle = FindFirstFileW((LPCWSTR)wpat, &frame->find_data);
-  if (frame->handle == INVALID_HANDLE_VALUE) return false;
-  frame->first = true;
-  return true;
+  sp_win32_find_data_t* fd = (sp_win32_find_data_t*)buf;
+  HANDLE h = FindFirstFileW((LPCWSTR)wpat, fd);
+  if (h == INVALID_HANDLE_VALUE) return -1;
+
+  it->handle = (s64)(intptr_t)h;
+  it->buf.data = (u8*)buf;
+  it->buf.capacity = cap;
+  it->buf.len = sizeof(sp_win32_find_data_t);
+  it->cursor = 0;
+  return 0;
 }
 
-void sp_sys_diriter_close(sp_fs_it_frame_t* frame) {
-  FindClose(frame->handle);
+void sp_sys_fs_it_close(sp_sys_fs_it_t* it) {
+  FindClose((HANDLE)(intptr_t)it->handle);
 }
 
-bool sp_sys_diriter_read(sp_mem_t mem, sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
+s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
+  sp_win32_find_data_t* fd = (sp_win32_find_data_t*)it->buf.data;
   while (true) {
-    if (frame->first) {
-      frame->first = false;
-    } else {
-      if (!FindNextFileW(frame->handle, &frame->find_data)) return false;
+    if (it->buf.len == 0) {
+      if (!FindNextFileW((HANDLE)(intptr_t)it->handle, fd)) {
+        return -1;
+      }
     }
-    u16* name = (u16*)frame->find_data.cFileName;
-    if (sp_win32_find_is_dot(name)) continue;
-    entry->name = sp_wtf16_to_wtf8_a(mem, (sp_wide_str_t) { .data = name, .len = sp_win32_find_name_len(name) });
-    entry->kind = sp_fs_it_win32_attrs(frame->find_data.dwFileAttributes);
-    return true;
+    it->buf.len = 0;
+
+    u16* name = (u16*)fd->cFileName;
+    if (sp_sys_diriter_win32_is_dot(name)) {
+      continue;
+    }
+
+    sp_mem_fixed_t allocator = sp_mem_fixed(out->name, SP_FS_NAME_MAX);
+    sp_mem_t mem = sp_mem_fixed_as_allocator(&allocator);
+
+    out->kind = sp_sys_diriter_win32_attrs(fd->dwFileAttributes);
+    out->len = sp_sys_diriter_win32_name_len(name);
+    sp_wtf16_to_wtf8_a(mem, sp_wide_str(name, out->len));
+    return SP_OK;
   }
 }
 
 #elif defined(SP_LINUX)
-SP_PRIVATE sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type) {
+SP_PRIVATE sp_fs_kind_t sp_sys_diriter_dtype_to_kind(u8 d_type) {
   switch (d_type) {
     case SP_DT_REG: { return SP_FS_KIND_FILE; }
     case SP_DT_DIR: { return SP_FS_KIND_DIR; }
@@ -9112,34 +9140,47 @@ SP_PRIVATE sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type) {
   return SP_FS_KIND_NONE;
 }
 
-bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
-  frame->fd = sp_sys_open_s(path, SP_O_RDONLY | SP_O_DIRECTORY, 0);
-  return frame->fd >= 0;
+s32 sp_sys_fs_it_open(sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {
+  *it = sp_zero_struct(sp_sys_fs_it_t);
+  sp_sys_fd_t fd = sp_sys_open(path, path_len, SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  if (fd < 0) return -1;
+  it->handle = (s64)fd;
+  it->buf.data = (u8*)buf;
+  it->buf.capacity = cap;
+  it->buf.len = 0;
+  it->cursor = 0;
+  return 0;
 }
 
-void sp_sys_diriter_close(sp_fs_it_frame_t* frame) {
-  sp_sys_close(frame->fd);
+void sp_sys_fs_it_close(sp_sys_fs_it_t* it) {
+  sp_sys_close((sp_sys_fd_t)it->handle);
 }
 
-bool sp_sys_diriter_read(sp_mem_t mem, sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
+s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
   while (true) {
-    if (frame->buf_pos < frame->buf_end) {
-      sp_sys_dirent64_t* d = (sp_sys_dirent64_t*)(frame->buf + frame->buf_pos);
-      frame->buf_pos += d->d_reclen;
-      if (sp_fs_it_is_dot(d->d_name)) continue;
-      entry->name = sp_str_from_cstr_a(mem, d->d_name);
-      entry->kind = sp_fs_it_dtype_to_attr(d->d_type);
-      return true;
+    // Pull another chunk from the kernel and advance the cursor
+    if (it->cursor >= it->buf.len) {
+      s64 n = sp_lx_getdents64((sp_sys_fd_t)it->handle, it->buf.data, it->buf.capacity);
+      if (n <= 0) return -1;
+      it->cursor = 0;
+      it->buf.len = (u64)n;
     }
-    s64 n = sp_sys_getdents64(frame->fd, frame->buf, SP_FS_IT_BUF_SIZE);
-    if (n <= 0) return false;
-    frame->buf_pos = 0;
-    frame->buf_end = (s32)n;
+
+    sp_sys_dirent64_t* d = sp_ptr_cast(sp_sys_dirent64_t*, it->buf.data + it->cursor);
+    it->cursor += d->d_reclen;
+
+    // If it's an absolute path, that's the one
+    if (!sp_sys_diriter_is_dot(d->d_name)) {
+      out->kind = sp_sys_diriter_dtype_to_kind(d->d_type);
+      out->len = sp_min(sp_cstr_len(d->d_name), SP_FS_NAME_MAX - 1);
+      sp_cstr_copy_to_n(d->d_name, out->len, out->name, SP_FS_NAME_MAX);
+      return SP_OK;
+    }
   }
 }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-SP_PRIVATE sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type) {
+SP_PRIVATE sp_fs_kind_t sp_sys_diriter_dtype_to_kind(u8 d_type) {
   switch (d_type) {
     case SP_DT_REG: { return SP_FS_KIND_FILE; }
     case SP_DT_DIR: { return SP_FS_KIND_DIR; }
@@ -9148,45 +9189,55 @@ SP_PRIVATE sp_fs_kind_t sp_fs_it_dtype_to_attr(u8 d_type) {
   return SP_FS_KIND_NONE;
 }
 
-bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
+s32 sp_sys_fs_it_open(sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {
+  *it = sp_zero_struct(sp_sys_fs_it_t);
   c8 cstr [SP_PATH_MAX] = sp_zero();
-  sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
-  frame->dir = opendir(cstr);
-  return frame->dir != SP_NULLPTR;
+  sp_cstr_copy_to_n(path, path_len, cstr, SP_PATH_MAX);
+  DIR* dir = opendir(cstr);
+  if (!dir) return -1;
+  it->handle = (s64)(intptr_t)dir;
+  it->buf.data = (u8*)buf;
+  it->buf.capacity = cap;
+  it->buf.len = 0;
+  it->cursor = 0;
+  return 0;
 }
 
-void sp_sys_diriter_close(sp_fs_it_frame_t* frame) {
-  closedir(frame->dir);
+void sp_sys_fs_it_close(sp_sys_fs_it_t* it) {
+  closedir((DIR*)(intptr_t)it->handle);
 }
 
-bool sp_sys_diriter_read(sp_mem_t mem, sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
+s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
   while (true) {
-    struct dirent* d = readdir(frame->dir);
-    if (!d) return false;
-    if (sp_fs_it_is_dot(d->d_name)) continue;
-    entry->name = sp_str_from_cstr_a(mem, d->d_name);
-    entry->kind = sp_fs_it_dtype_to_attr(d->d_type);
-    return true;
+    struct dirent* d = readdir((DIR*)(intptr_t)it->handle);
+    if (!d) return -1;
+    if (sp_sys_diriter_is_dot(d->d_name)) continue;
+    u32 nlen = sp_cstr_len(d->d_name);
+    if (nlen >= SP_FS_NAME_MAX) nlen = SP_FS_NAME_MAX - 1;
+    sp_cstr_copy_to_n(d->d_name, nlen, out->name, SP_FS_NAME_MAX);
+    out->len = nlen;
+    out->kind = sp_sys_diriter_dtype_to_kind(d->d_type);
+    return 0;
   }
 }
 
 #elif defined(SP_WASM)
-bool sp_sys_diriter_open(sp_fs_it_frame_t* frame, sp_str_t path) {
-  sp_unreachable_return(false);
+s32 sp_sys_fs_it_open(sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {
+  sp_unreachable_return(-1);
 }
 
-void sp_sys_diriter_close(sp_fs_it_frame_t* frame) {
+void sp_sys_fs_it_close(sp_sys_fs_it_t* it) {
   sp_unreachable();
 }
 
-bool sp_sys_diriter_read(sp_mem_t mem, sp_fs_it_frame_t* frame, sp_fs_entry_t* entry) {
-  sp_unreachable_return(false);
+s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
+  sp_unreachable_return(-1);
 }
 
 #else
-#error "sp_sys_diriter_open"
-#error "sp_sys_diriter_close"
-#error "sp_sys_diriter_read"
+#error "sp_sys_fs_it_open"
+#error "sp_sys_fs_it_close"
+#error "sp_sys_fs_it_next"
 #endif
 
 
@@ -9771,7 +9822,7 @@ SP_PRIVATE sp_str_t sp_win32_utf16_to_utf8(const u16* utf16, s32 len) {
   c8* utf8 = (c8*)sp_mem_os_alloc(((u64)num_bytes + 1) * sizeof(c8));
   WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)utf16, len, utf8, num_bytes, NULL, NULL);
   utf8[num_bytes] = '\0';
-  return sp_rval(sp_str_t) {
+  return SP_RVAL(sp_str_t) {
     .data = utf8,
     .len = num_bytes
   };
@@ -11229,7 +11280,7 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
 #define SP_POSIX_WAITPID_BLOCK 0
 
 #if defined(SP_LINUX)
-  #define sp_wait4(p, s, o, r)              sp_sys_wait4(p, s, o, r)
+  #define sp_wait4(p, s, o, r)              sp_lx_wait4(p, s, o, r)
 #else
   #define sp_wait4(p, s, o, r)              wait4(p, s, o, r)
 #endif
@@ -12454,7 +12505,7 @@ void sp_win32_fmon_issue_read(sp_fmon_t* monitor, sp_fmon_dir_t* info) {
 void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* linux_monitor = sp_alloc_type_a(monitor->mem, sp_fmon_os_t);
 
-  linux_monitor->fd = sp_sys_inotify_init1(SP_IN_NONBLOCK | SP_IN_CLOEXEC);
+  linux_monitor->fd = sp_lx_inotify_init1(SP_IN_NONBLOCK | SP_IN_CLOEXEC);
   if (linux_monitor->fd == -1) {
     // Handle error but don't crash
     linux_monitor->fd = 0;
@@ -12487,7 +12538,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
     mask |= SP_IN_DELETE | SP_IN_MOVED_FROM;
   }
 
-  s32 wd = sp_sys_inotify_add_watch(os->fd, path_cstr, mask);
+  s32 wd = sp_lx_inotify_add_watch(os->fd, path_cstr, mask);
 
   if (wd != -1) {
     sp_da_push(os->fds, wd);
@@ -14578,7 +14629,7 @@ sp_err_t sp_fs_remove_file_a(sp_str_t path) {
 
 void sp_fs_it_push_a(sp_fs_it_t* it, sp_str_t path) {
   sp_fs_it_frame_t frame = sp_zero();
-  if (!sp_sys_diriter_open(&frame, path)) return;
+  if (sp_sys_fs_it_open_s(&frame.sys, path, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)) < 0) return;
   frame.path = sp_str_copy_a(it->mem, path);
   sp_da_push(it->stack, frame);
 }
@@ -14592,8 +14643,12 @@ void sp_fs_it_begin_a(sp_fs_it_t* it, sp_str_t path) {
 void sp_fs_it_next_a(sp_fs_it_t* it) {
   while (!sp_da_empty(it->stack)) {
     sp_fs_it_frame_t* top = sp_da_back(it->stack);
+    top->sys.buf.data = top->buf;
 
-    if (sp_sys_diriter_read(it->mem, top, &it->entry)) {
+    sp_sys_fs_entry_t d;
+    if (sp_sys_fs_it_next(&top->sys, &d) == 0) {
+      it->entry.name = sp_str_from_cstr_n_a(it->mem, d.name, d.len);
+      it->entry.kind = d.kind;
       it->entry.path = sp_fs_join_path_a(it->mem, top->path, it->entry.name);
 
       if (it->recursive && it->entry.kind == SP_FS_KIND_DIR) {
@@ -14602,7 +14657,7 @@ void sp_fs_it_next_a(sp_fs_it_t* it) {
       return;
     }
 
-    sp_sys_diriter_close(top);
+    sp_sys_fs_it_close(&top->sys);
     sp_da_pop(it->stack);
   }
 }
@@ -14613,7 +14668,7 @@ bool sp_fs_it_valid_a(sp_fs_it_t* it) {
 
 void sp_fs_it_deinit_a(sp_fs_it_t* it) {
   sp_da_for(it->stack, i) {
-    sp_sys_diriter_close(&it->stack[i]);
+    sp_sys_fs_it_close(&it->stack[i].sys);
   }
   sp_da_free(it->stack);
 }
