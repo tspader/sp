@@ -1287,7 +1287,7 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
     }
   }
 
-  c8 utf8_bytes[4] = { c };
+  c8 utf8_bytes[4] = { sp_cast(c8, c) };
   u32 needed = 1;
   if      ((c & SP_PROMPT_UTF8_2_BYTE_MASK) == SP_PROMPT_UTF8_2_BYTE_PREFIX) needed = SP_PROMPT_UTF8_2_BYTE_LEN;
   else if ((c & SP_PROMPT_UTF8_3_BYTE_MASK) == SP_PROMPT_UTF8_3_BYTE_PREFIX) needed = SP_PROMPT_UTF8_3_BYTE_LEN;
@@ -1462,7 +1462,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
   if (ctx->progress.dirty) {
     sp_prompt_event_t event = {
       .kind = SP_PROMPT_EVENT_PROGRESS,
-      .progress.data = ctx->progress.value
+      .progress = { .data = ctx->progress.value },
     };
     sp_da_push(events, event);
     ctx->progress.dirty = false;
@@ -1470,7 +1470,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
   if (ctx->status.dirty) {
     sp_prompt_event_t event = {
       .kind = SP_PROMPT_EVENT_STATUS,
-      .status.value = ctx->status.value
+      .status = { .value = ctx->status.value },
     };
     sp_da_push(events, event);
     ctx->status.dirty = false;
@@ -1864,7 +1864,8 @@ static sp_prompt_style_t sp_prompt_rail_style(sp_prompt_ctx_t* ctx) {
 }
 
 static void sp_prompt_write_state_prefix(sp_prompt_ctx_t* ctx) {
-  sp_prompt_render_line(ctx, sp_prompt_state_symbol(ctx->state), sp_prompt_rail_style(ctx));
+  sp_prompt_state_t state = sp_cast(sp_prompt_state_t, ctx->state);
+  sp_prompt_render_line(ctx, sp_prompt_state_symbol(state), sp_prompt_rail_style(ctx));
   sp_prompt_render_line(ctx, sp_str_lit("  "), sp_zero_s(sp_prompt_style_t));
 }
 

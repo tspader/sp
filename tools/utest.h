@@ -215,7 +215,9 @@ utest_type_printer(long long unsigned int i) {
 #define UTEST_SURPRESS_WARNING_BEGIN
 #define UTEST_SURPRESS_WARNING_END
 
-#if defined(__clang__)
+#if defined(__cplusplus)
+#define UTEST_AUTO(x) auto
+#elif defined(__clang__)
 /* clang-format off */
 #define UTEST_AUTO(x)                                                          \
   _Pragma("clang diagnostic push")                                             \
@@ -970,16 +972,17 @@ s32 utest_main(s32 argc, const c8 **argv) {
     ran_tests++;
   }
 
-  sp_str_t arch = sp_str_lit("unknown");
+  sp_str_t arch, os, abi;
+  arch = sp_str_lit("unknown");
   #if defined(SP_AMD64)
   arch = sp_str_lit("x86_64");
   #elif defined(SP_ARM64)
   arch = sp_str_lit("aarch64");
   #endif
 
-  sp_str_t os = sp_os_get_name();
+  os = sp_os_get_name();
 
-  sp_str_t abi = sp_str_lit("unknown");
+  abi = sp_str_lit("unknown");
 
 
   #if defined(SP_LIBC_MSVC)

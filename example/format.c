@@ -127,8 +127,13 @@ s32 run(s32 num_args, const c8** args) {
 
   section("custom");
   point_t point = { 69, 420 };
+
+  // In C, you can use the &(foo_t) { 69 } syntax to take the address of a temporary and omit
+  // the variable, which is pretty nice. But it's not possible in C++.
+  #if !defined(SP_CPP)
   sp_log_a("{}", sp_fmt_point(((point_t) { 69, 420 })));
   sp_log_a("{}", sp_fmt_point_v(69, 420));
+  #endif
   sp_log_a("{.cyan .bold}", sp_fmt_point(point));
 
   return 0;

@@ -121,7 +121,7 @@ UTEST(tracking, realloc_grows_and_preserves) {
   u8* p = sp_alloc_n_a(mem, u8, 4);
   sp_for(i, 4) p[i] = (u8)(i + 1);
 
-  u8* g = sp_realloc_a(mem, p, 64);
+  u8* g = sp_void_cast(g, sp_realloc_a(mem, p, 64));
   EXPECT_NE(g, SP_NULLPTR);
   sp_for(i, 4) EXPECT_EQ(g[i], (u8)(i + 1));
 

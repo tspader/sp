@@ -10,26 +10,26 @@ typedef struct {
   fs_expected_path_t expected[16];
 } link_test_t;
 
-static void run_link_test(s32* utest_result, sp_test_file_manager_t* fm, link_test_t* t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
+static void run_link_test(s32* utest_result, sp_test_file_manager_t* fm, link_test_t t) {
+  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
   sp_fs_create_dir_a(sandbox);
-  fs_apply_setup(utest_result, fm, sandbox, t->setup);
+  fs_apply_setup(utest_result, fm, sandbox, t.setup);
 
-  sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->target));
-  sp_str_t link_path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->link_path));
+  sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t.target));
+  sp_str_t link_path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t.link_path));
 
-  sp_err_t result = t->symlink
+  sp_err_t result = t.symlink
     ? sp_fs_create_sym_link_a(target, link_path)
     : sp_fs_create_hard_link_a(target, link_path);
 
-  fs_expect_bool(utest_result, link_path, "link_ok", result == SP_OK, t->expect_ok);
-  fs_expect_paths(utest_result, fm, sandbox, t->expected);
+  fs_expect_bool(utest_result, link_path, "link_ok", result == SP_OK, t.expect_ok);
+  fs_expect_paths(utest_result, fm, sandbox, t.expected);
 }
 
 UTEST_F(fs, create_hard_link_file) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
-  run_link_test(&ur, &ut.file_manager, &(link_test_t) {
+  run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_hard_link_file",
     .setup = {
       { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
@@ -40,7 +40,7 @@ UTEST_F(fs, create_hard_link_file) {
     .expected = {
       { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
       { .path = "file.hard", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-    },
+    }
   });
 
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_hard_link_file"));
@@ -58,7 +58,7 @@ UTEST_F(fs, create_hard_link_file) {
 
 UTEST_F(fs, create_hard_link_existing_destination_fails) {
   SKIP_ON_WASM()
-  run_link_test(&ur, &ut.file_manager, &(link_test_t) {
+  run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_hard_link_existing_destination_fails",
     .setup = {
       { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
@@ -70,13 +70,13 @@ UTEST_F(fs, create_hard_link_existing_destination_fails) {
     .expected = {
       { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
       { .path = "dest.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-    },
+    }
   });
 }
 
 UTEST_F(fs, create_hard_link_directory_fails) {
   SKIP_ON_WASM()
-  run_link_test(&ur, &ut.file_manager, &(link_test_t) {
+  run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_hard_link_directory_fails",
     .setup = {
       { .path = "dir", .kind = FS_SETUP_DIR },
@@ -87,7 +87,7 @@ UTEST_F(fs, create_hard_link_directory_fails) {
     .expected = {
       { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
       { .path = "dir.hard", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-    },
+    }
   });
 }
 
@@ -95,19 +95,19 @@ UTEST_F(fs, create_symlink_file) {
   SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   sp_mem_t a = ut.file_manager.mem;
-  run_link_test(&ur, &ut.file_manager, &(link_test_t) {
+  run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_symlink_file",
-    .symlink = true,
     .setup = {
       { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
     },
+    .symlink = true,
     .target = "file.txt",
     .link_path = "file.link",
     .expect_ok = true,
     .expected = {
       { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
       { .path = "file.link", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_SYMLINK },
-    },
+    }
   });
 
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_symlink_file"));
@@ -120,39 +120,39 @@ UTEST_F(fs, create_symlink_file) {
 UTEST_F(fs, create_symlink_directory) {
   SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
-  run_link_test(&ur, &ut.file_manager, &(link_test_t) {
+  run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_symlink_directory",
-    .symlink = true,
     .setup = {
       { .path = "dir", .kind = FS_SETUP_DIR },
     },
+    .symlink = true,
     .target = "dir",
     .link_path = "dir.link",
     .expect_ok = true,
     .expected = {
       { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
       { .path = "dir.link", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_SYMLINK },
-    },
+    }
   });
 }
 
 UTEST_F(fs, create_symlink_existing_destination_fails) {
   SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
-  run_link_test(&ur, &ut.file_manager, &(link_test_t) {
+  run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_symlink_existing_destination_fails",
-    .symlink = true,
     .setup = {
       { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
       { .path = "dest.txt", .kind = FS_SETUP_FILE, .content = "bye" },
     },
+    .symlink = true,
     .target = "file.txt",
     .link_path = "dest.txt",
     .expect_ok = false,
     .expected = {
       { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
       { .path = "dest.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-    },
+    }
   });
 }
 

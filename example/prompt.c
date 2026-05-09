@@ -244,7 +244,7 @@ s32 demo_spinner(sp_prompt_ctx_t* ctx) {
     .prompt = "Spinning for 2 seconds...",
     .fps = 12,
     .frames = SP_PROMPT_SPINNER_PACMAN_MUNCHER,
-    .color.rgb = { .r = 0x55, .g = 0xAA, .b = 0xFF },
+    .color = { .rgb = { .r = 0x55, .g = 0xAA, .b = 0xFF } },
   });
 
   if (sp_prompt_submitted(ctx)) {
@@ -339,7 +339,7 @@ s32 demo_progress(sp_prompt_ctx_t* ctx) {
 
   sp_prompt_progress(ctx, (sp_prompt_progress_t) {
     .prompt = "Working...",
-    .color.rgb = { .r = 0x55, .g = 0xAA, .b = 0xFF },
+    .color = { .rgb = { .r = 0x55, .g = 0xAA, .b = 0xFF } },
   });
 
   sp_thread_join(&worker);
@@ -417,7 +417,7 @@ s32 prompt_main(s32 argc, const c8** argv) {
     if (!sp_prompt_select(ctx, (sp_prompt_select_t) {
       .prompt = "Pick demo",
       .options = options,
-      .num_options = sp_da_size(options),
+      .num_options = sp_cast(u32, sp_da_size(options)),
     })) {
       sp_prompt_cancel(ctx, "The idea terrifies you. You back away slowly.");
       sp_prompt_end(ctx);

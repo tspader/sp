@@ -31,9 +31,9 @@ SP_TYPEDEF_FN(void, sp_asset_import_fn_t, sp_asset_import_context_t* context);
 SP_TYPEDEF_FN(void, sp_asset_completion_fn_t, sp_asset_import_context_t* context);
 
 typedef struct {
+  sp_asset_kind_t kind;
   sp_asset_import_fn_t on_import;
   sp_asset_completion_fn_t on_completion;
-  sp_asset_kind_t kind;
   void* fallback;
 } sp_asset_importer_config_t;
 

@@ -81,7 +81,7 @@ typedef struct {
   u32 idx;
 } sp_glob_set_fallback_entry_t;
 
-typedef sp_ht_a(sp_str_t, sp_da(u32)) sp_glob_set_index_table_t;
+typedef sp_ht_ex(sp_str_t, sp_da(u32), sp_glob_set_index_table) sp_glob_set_index_table_t;
 
 typedef struct sp_glob_set_t {
   sp_mem_arena_t* arena;
@@ -129,6 +129,12 @@ SP_IMP bool                sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* 
 #endif
 
 #ifdef SP_GLOB_IMPLEMENTATION
+#define sp_glob_try(expr) \
+  do { \
+    sp_glob_err_t _sp_glob_result = (expr); \
+    if (_sp_glob_result) return _sp_glob_result; \
+  } while (0)
+
 void sp_glob_push_literal(sp_da(sp_glob_token_t)* tokens, c8 c) {
   sp_da_push(*tokens, ((sp_glob_token_t) { .type = SP_GLOB_TOK_LITERAL, .literal = c }));
 }
@@ -262,11 +268,11 @@ sp_glob_err_t sp_glob_parse_alternates(sp_mem_t mem, sp_str_t pattern, u32* it, 
         break;
       }
       case '*': {
-        sp_try(sp_glob_parse_star(pattern, &pos, &alt));
+        sp_glob_try(sp_glob_parse_star(pattern, &pos, &alt));
         break;
       }
       case '[': {
-        sp_try(sp_glob_parse_class(mem, pattern, &pos, &alt));
+        sp_glob_try(sp_glob_parse_class(mem, pattern, &pos, &alt));
         break;
       }
       default: {
@@ -285,9 +291,9 @@ sp_glob_err_t sp_glob_parse(sp_mem_t mem, sp_str_t pattern, sp_da(sp_glob_token_
     c8 c = pattern.data[it];
     switch (c) {
       case '?': { sp_glob_push_token(tokens, SP_GLOB_TOK_ANY); break; }
-      case '*': { sp_try(sp_glob_parse_star(pattern, &it, tokens)); break; }
-      case '[': { sp_try(sp_glob_parse_class(mem, pattern, &it, tokens)); break; }
-      case '{': { sp_try(sp_glob_parse_alternates(mem, pattern, &it, tokens)); break; }
+      case '*': { sp_glob_try(sp_glob_parse_star(pattern, &it, tokens)); break; }
+      case '[': { sp_glob_try(sp_glob_parse_class(mem, pattern, &it, tokens)); break; }
+      case '{': { sp_glob_try(sp_glob_parse_alternates(mem, pattern, &it, tokens)); break; }
       default:  { sp_glob_push_literal(tokens, c); break; }
     }
     it++;

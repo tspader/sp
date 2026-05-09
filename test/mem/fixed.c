@@ -7,7 +7,7 @@ UTEST_F(mem, fixed_basic_alloc) {
 
   EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), 0u);
 
-  u8* first = sp_mem_allocator_alloc(allocator, 16);
+  u8* first = sp_void_cast(first, sp_mem_allocator_alloc(allocator, 16));
   EXPECT_ALIGNED(first);
   EXPECT_EQ(first, storage);
   EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), 16u);
@@ -18,15 +18,15 @@ UTEST_F(mem, fixed_aligned_base_no_padding) {
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* a = sp_mem_allocator_alloc(allocator, 16);
+  u8* a = sp_void_cast(a, sp_mem_allocator_alloc(allocator, 16));
   EXPECT_EQ(a, storage);
   EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), 16u);
 
-  u8* b = sp_mem_allocator_alloc(allocator, 32);
+  u8* b = sp_void_cast(b, sp_mem_allocator_alloc(allocator, 32));
   EXPECT_EQ(b, storage + 16);
   EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), 48u);
 
-  u8* c = sp_mem_allocator_alloc(allocator, 64);
+  u8* c = sp_void_cast(c, sp_mem_allocator_alloc(allocator, 64));
   EXPECT_EQ(c, storage + 48);
   EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), 112u);
 }
@@ -46,7 +46,7 @@ UTEST_F(mem, fixed_unaligned_base_pads_to_alignment) {
       sp_mem_fixed_t fixed = sp_mem_fixed(base, capacity);
       sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-      u8* a = sp_mem_allocator_alloc(allocator, size);
+      u8* a = sp_void_cast(a, sp_mem_allocator_alloc(allocator, size));
       EXPECT_ALIGNED(a);
 
       u64 expected_padding = SP_MEM_ALIGNMENT - off;
@@ -63,7 +63,7 @@ UTEST_F(mem, fixed_allocations_are_zeroed) {
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* buf = sp_mem_allocator_alloc(allocator, 64);
+  u8* buf = sp_void_cast(buf, sp_mem_allocator_alloc(allocator, 64));
   EXPECT_EQ(buf[0], 0x00);
   EXPECT_EQ(buf[63], 0x00);
 }
@@ -73,8 +73,8 @@ UTEST_F(mem, fixed_padding_after_byte) {
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* byte = sp_mem_allocator_alloc(allocator, 1);
-  u8* word = sp_mem_allocator_alloc(allocator, 8);
+  u8* byte = sp_void_cast(byte, sp_mem_allocator_alloc(allocator, 1));
+  u8* word = sp_void_cast(word, sp_mem_allocator_alloc(allocator, 8));
 
   EXPECT_ALIGNED(byte);
   EXPECT_ALIGNED(word);
@@ -86,9 +86,9 @@ UTEST_F(mem, fixed_padding_mixed_sizes) {
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* p1 = sp_mem_allocator_alloc(allocator, 3);
-  u8* p2 = sp_mem_allocator_alloc(allocator, 13);
-  u8* p3 = sp_mem_allocator_alloc(allocator, 8);
+  u8* p1 = sp_void_cast(p1, sp_mem_allocator_alloc(allocator, 3));
+  u8* p2 = sp_void_cast(p2, sp_mem_allocator_alloc(allocator, 13));
+  u8* p3 = sp_void_cast(p3, sp_mem_allocator_alloc(allocator, 8));
 
   EXPECT_ALIGNED(p1);
   EXPECT_ALIGNED(p2);
@@ -107,7 +107,7 @@ UTEST_F(mem, fixed_clear_resets_bytes_used) {
   sp_mem_fixed_clear(&fixed);
   EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), 0u);
 
-  u8* reused = sp_mem_allocator_alloc(allocator, 16);
+  u8* reused = sp_void_cast(reused, sp_mem_allocator_alloc(allocator, 16));
   EXPECT_EQ(reused, storage);
 }
 
@@ -116,10 +116,10 @@ UTEST_F(mem, fixed_overflow_returns_null) {
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* first = sp_mem_allocator_alloc(allocator, 48);
+  u8* first = sp_void_cast(first, sp_mem_allocator_alloc(allocator, 48));
   EXPECT_NE(first, SP_NULLPTR);
 
-  u8* overflow = sp_mem_allocator_alloc(allocator, 64);
+  u8* overflow = sp_void_cast(overflow, sp_mem_allocator_alloc(allocator, 64));
   EXPECT_EQ(overflow, SP_NULLPTR);
 }
 
@@ -128,7 +128,7 @@ UTEST_F(mem, fixed_free_is_noop) {
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* first = sp_mem_allocator_alloc(allocator, 32);
+  u8* first = sp_void_cast(first, sp_mem_allocator_alloc(allocator, 32));
   u64 used_before = sp_mem_fixed_bytes_used(&fixed);
 
   sp_mem_allocator_free(allocator, first);
@@ -141,8 +141,8 @@ UTEST_F(mem, fixed_unaligned_basic) {
   sp_mem_fixed_t fixed = sp_mem_fixed_ex(storage, sizeof(storage), 1);
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* a = sp_mem_allocator_alloc(allocator, 1);
-  u8* b = sp_mem_allocator_alloc(allocator, 1);
+  u8* a = sp_void_cast(a, sp_mem_allocator_alloc(allocator, 1));
+  u8* b = sp_void_cast(b, sp_mem_allocator_alloc(allocator, 1));
   EXPECT_EQ(b, a + 1);
   EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), 2u);
 }
@@ -152,9 +152,9 @@ UTEST_F(mem, fixed_unaligned_no_padding) {
   sp_mem_fixed_t fixed = sp_mem_fixed_ex(storage, sizeof(storage), 1);
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* a = sp_mem_allocator_alloc(allocator, 3);
-  u8* b = sp_mem_allocator_alloc(allocator, 5);
-  u8* c = sp_mem_allocator_alloc(allocator, 7);
+  u8* a = sp_void_cast(a, sp_mem_allocator_alloc(allocator, 3));
+  u8* b = sp_void_cast(b, sp_mem_allocator_alloc(allocator, 5));
+  u8* c = sp_void_cast(c, sp_mem_allocator_alloc(allocator, 7));
 
   EXPECT_EQ(b, a + 3);
   EXPECT_EQ(c, b + 5);
@@ -166,9 +166,9 @@ UTEST_F(mem, fixed_custom_alignment_4) {
   sp_mem_fixed_t fixed = sp_mem_fixed_ex(storage, sizeof(storage), 4);
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* a = sp_mem_allocator_alloc(allocator, 1);
-  u8* b = sp_mem_allocator_alloc(allocator, 1);
-  u8* c = sp_mem_allocator_alloc(allocator, 1);
+  u8* a = sp_void_cast(a, sp_mem_allocator_alloc(allocator, 1));
+  u8* b = sp_void_cast(b, sp_mem_allocator_alloc(allocator, 1));
+  u8* c = sp_void_cast(c, sp_mem_allocator_alloc(allocator, 1));
 
   EXPECT_EQ((uintptr_t)a % 4, 0u);
   EXPECT_EQ((uintptr_t)b % 4, 0u);
@@ -182,8 +182,8 @@ UTEST_F(mem, fixed_custom_alignment_8) {
   sp_mem_fixed_t fixed = sp_mem_fixed_ex(storage, sizeof(storage), 8);
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* a = sp_mem_allocator_alloc(allocator, 3);
-  u8* b = sp_mem_allocator_alloc(allocator, 5);
+  u8* a = sp_void_cast(a, sp_mem_allocator_alloc(allocator, 3));
+  u8* b = sp_void_cast(b, sp_mem_allocator_alloc(allocator, 5));
 
   EXPECT_EQ((uintptr_t)a % 8, 0u);
   EXPECT_EQ((uintptr_t)b % 8, 0u);
@@ -198,8 +198,8 @@ UTEST_F(mem, fixed_unaligned_base_returns_aligned_ptrs) {
   sp_mem_fixed_t fixed = sp_mem_fixed(base, capacity);
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* a = sp_mem_allocator_alloc(allocator, 8);
-  u8* b = sp_mem_allocator_alloc(allocator, 24);
+  u8* a = sp_void_cast(a, sp_mem_allocator_alloc(allocator, 8));
+  u8* b = sp_void_cast(b, sp_mem_allocator_alloc(allocator, 24));
 
   EXPECT_ALIGNED(a);
   EXPECT_ALIGNED(b);
@@ -212,7 +212,7 @@ UTEST_F(mem, fixed_resize_returns_null) {
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
-  u8* first = sp_mem_allocator_alloc(allocator, 16);
+  u8* first = sp_void_cast(first, sp_mem_allocator_alloc(allocator, 16));
   void* resized = sp_mem_allocator_realloc(allocator, first, 32);
   EXPECT_EQ(resized, SP_NULLPTR);
 }

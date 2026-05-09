@@ -2,8 +2,8 @@
 #include "sp.h"
 
 s32 compare_entries(const void* pa, const void* pb) {
-  const sp_fs_entry_t* a = pa;
-  const sp_fs_entry_t* b = pb;
+  const sp_fs_entry_t* a = (const sp_fs_entry_t*)pa;
+  const sp_fs_entry_t* b = (const sp_fs_entry_t*)pb;
   return sp_str_compare_alphabetical(a->name, b->name);
 }
 

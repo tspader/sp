@@ -44,15 +44,15 @@ UTEST_F_TEARDOWN(fs_create_dir) {
   sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
-static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, create_dir_test_t* t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
+static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, create_dir_test_t t) {
+  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
   sp_fs_create_dir_a(sandbox);
 
   u32 setup_count = 0;
-  while (setup_count < 16 && t->setup[setup_count].path) setup_count++;
+  while (setup_count < 16 && t.setup[setup_count].path) setup_count++;
 
   sp_for(i, setup_count) {
-    create_dir_setup_ent_t* s = &t->setup[i];
+    create_dir_setup_ent_t* s = &t.setup[i];
     sp_str_t full = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(s->path));
     sp_str_t parent = sp_fs_parent_path(full);
     if (!sp_str_empty(parent) && !sp_fs_exists_a(parent)) {
@@ -76,22 +76,22 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
     }
   }
 
-  sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->target));
+  sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t.target));
   sp_err_t result = sp_fs_create_dir_a(target);
 
-  if (t->expect_ok && result) {
+  if (t.expect_ok && result) {
     SP_TEST_REPORT("{} does not exist with code {}", sp_fmt_str(target), sp_fmt_int(result));
     SP_FAIL();
-  } else if (!t->expect_ok && !result){
+  } else if (!t.expect_ok && !result){
     SP_TEST_REPORT("{} exists with code {}", sp_fmt_str(target), sp_fmt_int(result));
     SP_FAIL();
   }
 
   u32 expected_count = 0;
-  while (expected_count < 16 && t->expected[expected_count].path) expected_count++;
+  while (expected_count < 16 && t.expected[expected_count].path) expected_count++;
 
   sp_for(i, expected_count) {
-    create_dir_expected_ent_t* exp = &t->expected[i];
+    create_dir_expected_ent_t* exp = &t.expected[i];
     sp_str_t expected_path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(exp->path));
     bool exists = sp_fs_exists_a(expected_path);
     if (exists != exp->exists) {
@@ -120,7 +120,7 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
 
 UTEST_F(fs_create_dir, existing_directory) {
   SKIP_ON_WASM()
-  run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
+  run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "existing_directory",
     .target = "dir1",
     .setup = {
@@ -135,7 +135,7 @@ UTEST_F(fs_create_dir, existing_directory) {
 
 UTEST_F(fs_create_dir, create_one_level) {
   SKIP_ON_WASM()
-  run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
+  run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "create_one_level",
     .target = "dir1",
     .expected = {
@@ -147,7 +147,7 @@ UTEST_F(fs_create_dir, create_one_level) {
 
 UTEST_F(fs_create_dir, create_multi_level) {
   SKIP_ON_WASM()
-  run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
+  run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "create_multi_level",
     .target = "dir1/dir2",
     .expected = {
@@ -160,7 +160,7 @@ UTEST_F(fs_create_dir, create_multi_level) {
 
 UTEST_F(fs_create_dir, destination_is_file) {
   SKIP_ON_WASM()
-  run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
+  run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "destination_is_file",
     .target = "file",
     .setup = {
@@ -175,7 +175,7 @@ UTEST_F(fs_create_dir, destination_is_file) {
 
 UTEST_F(fs_create_dir, destination_parent_is_file) {
   SKIP_ON_WASM()
-  run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
+  run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "destination_parent_is_file",
     .target = "file/dir1",
     .setup = {
@@ -193,7 +193,7 @@ UTEST_F(fs_create_dir, destination_parent_is_file) {
 UTEST_F(fs_create_dir, destination_is_symlink_to_directory) {
   SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
-  run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
+  run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "destination_is_symlink_to_directory",
     .target = "sym_name",
     .setup = {
@@ -211,7 +211,7 @@ UTEST_F(fs_create_dir, destination_is_symlink_to_directory) {
 UTEST_F(fs_create_dir, destination_is_symlink_to_file) {
   SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
-  run_create_dir_test(&ur, &ut.file_manager, &(create_dir_test_t) {
+  run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "destination_is_symlink_to_file",
     .target = "sym_name",
     .setup = {

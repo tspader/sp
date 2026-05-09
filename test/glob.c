@@ -18,54 +18,54 @@ typedef struct {
 } parse_test_t;
 
 
-void run_parse_test(int* utest_result, sp_mem_t mem, parse_test_t* t) {
+void run_parse_test(int* utest_result, sp_mem_t mem, parse_test_t t) {
   sp_da(sp_glob_token_t) tokens = sp_da_new(mem, sp_glob_token_t);
-  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t->pattern), &tokens);
+  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t.pattern), &tokens);
 
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
 
   u32 expected_count = 0;
-  while (expected_count < 16 && t->expected[expected_count].type != SP_GLOB_TOK_NONE) {
+  while (expected_count < 16 && t.expected[expected_count].type != SP_GLOB_TOK_NONE) {
     expected_count++;
   }
 
   EXPECT_EQ(sp_da_size(tokens), expected_count);
 
   for (u32 i = 0; i < expected_count && i < sp_da_size(tokens); i++) {
-    EXPECT_EQ(tokens[i].type, t->expected[i].type);
+    EXPECT_EQ(tokens[i].type, t.expected[i].type);
     switch (tokens[i].type) {
       case SP_GLOB_TOK_LITERAL: {
-        EXPECT_EQ(tokens[i].literal, t->expected[i].literal);
+        EXPECT_EQ(tokens[i].literal, t.expected[i].literal);
         break;
       }
       case SP_GLOB_TOK_RANGES: {
-        EXPECT_EQ(tokens[i].ranges.negated, t->expected[i].negated);
+        EXPECT_EQ(tokens[i].ranges.negated, t.expected[i].negated);
         u32 range_count = 0;
-        while (range_count < 8 && (t->expected[i].ranges[range_count].start || t->expected[i].ranges[range_count].end)) {
+        while (range_count < 8 && (t.expected[i].ranges[range_count].start || t.expected[i].ranges[range_count].end)) {
           range_count++;
         }
         EXPECT_EQ(sp_da_size(tokens[i].ranges.ranges), range_count);
         for (u32 j = 0; j < range_count; j++) {
-          EXPECT_EQ(tokens[i].ranges.ranges[j].start, t->expected[i].ranges[j].start);
-          EXPECT_EQ(tokens[i].ranges.ranges[j].end, t->expected[i].ranges[j].end);
+          EXPECT_EQ(tokens[i].ranges.ranges[j].start, t.expected[i].ranges[j].start);
+          EXPECT_EQ(tokens[i].ranges.ranges[j].end, t.expected[i].ranges[j].end);
         }
         break;
       }
       case SP_GLOB_TOK_ALTERNATES: {
         u32 alt_count = 0;
-        while (alt_count < 8 && t->expected[i].alts[alt_count][0] != SP_GLOB_TOK_NONE) {
+        while (alt_count < 8 && t.expected[i].alts[alt_count][0] != SP_GLOB_TOK_NONE) {
           alt_count++;
         }
         EXPECT_EQ(sp_da_size(tokens[i].alternates.alts), alt_count);
         for (u32 j = 0; j < alt_count; j++) {
           sp_da(sp_glob_token_t) alt = tokens[i].alternates.alts[j];
           u32 alt_len = 0;
-          while (alt_len < 8 && t->expected[i].alts[j][alt_len] != SP_GLOB_TOK_NONE) {
+          while (alt_len < 8 && t.expected[i].alts[j][alt_len] != SP_GLOB_TOK_NONE) {
             alt_len++;
           }
           EXPECT_EQ(sp_da_size(alt), alt_len);
           for (u32 k = 0; k < alt_len; k++) {
-            EXPECT_EQ(alt[k].type, t->expected[i].alts[j][k]);
+            EXPECT_EQ(alt[k].type, t.expected[i].alts[j][k]);
           }
         }
         break;
@@ -88,10 +88,10 @@ typedef struct {
   sp_glob_err_t expected_err;
 } parse_error_test_t;
 
-void run_parse_error_test(int* utest_result, sp_mem_t mem, parse_error_test_t* t) {
+void run_parse_error_test(int* utest_result, sp_mem_t mem, parse_error_test_t t) {
   sp_da(sp_glob_token_t) tokens = sp_da_new(mem, sp_glob_token_t);
-  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t->pattern), &tokens);
-  EXPECT_EQ(err, t->expected_err);
+  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t.pattern), &tokens);
+  EXPECT_EQ(err, t.expected_err);
 }
 
 SP_TEST_MAIN()
@@ -116,7 +116,7 @@ UTEST_F_TEARDOWN(glob) {
 }
 
 UTEST_F(glob, parse_literal_single) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "a",
     .expected = {
       { .type = SP_GLOB_TOK_LITERAL, .literal = 'a' }
@@ -125,7 +125,7 @@ UTEST_F(glob, parse_literal_single) {
 }
 
 UTEST_F(glob, parse_literal_multi) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "foo",
     .expected = {
       { .type = SP_GLOB_TOK_LITERAL, .literal = 'f' },
@@ -136,7 +136,7 @@ UTEST_F(glob, parse_literal_multi) {
 }
 
 UTEST_F(glob, parse_any) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "?",
     .expected = {
       { .type = SP_GLOB_TOK_ANY }
@@ -145,7 +145,7 @@ UTEST_F(glob, parse_any) {
 }
 
 UTEST_F(glob, parse_star) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "*",
     .expected = {
       { .type = SP_GLOB_TOK_ZERO_OR_MORE }
@@ -154,7 +154,7 @@ UTEST_F(glob, parse_star) {
 }
 
 UTEST_F(glob, parse_recursive_prefix) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "**",
     .expected = {
       { .type = SP_GLOB_TOK_RECURSIVE_PREFIX }
@@ -163,7 +163,7 @@ UTEST_F(glob, parse_recursive_prefix) {
 }
 
 UTEST_F(glob, parse_recursive_prefix_with_slash) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "**/foo",
     .expected = {
       { .type = SP_GLOB_TOK_RECURSIVE_PREFIX },
@@ -175,7 +175,7 @@ UTEST_F(glob, parse_recursive_prefix_with_slash) {
 }
 
 UTEST_F(glob, parse_recursive_suffix) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "foo/**",
     .expected = {
       { .type = SP_GLOB_TOK_LITERAL, .literal = 'f' },
@@ -188,7 +188,7 @@ UTEST_F(glob, parse_recursive_suffix) {
 }
 
 UTEST_F(glob, parse_recursive_zero_or_more) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "a/**/b",
     .expected = {
       { .type = SP_GLOB_TOK_LITERAL, .literal = 'a' },
@@ -200,7 +200,7 @@ UTEST_F(glob, parse_recursive_zero_or_more) {
 }
 
 UTEST_F(glob, parse_class_range) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "[a-z]",
     .expected = {
       {
@@ -213,7 +213,7 @@ UTEST_F(glob, parse_class_range) {
 }
 
 UTEST_F(glob, parse_class_multi) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "[abc]",
     .expected = {
       {
@@ -226,7 +226,7 @@ UTEST_F(glob, parse_class_multi) {
 }
 
 UTEST_F(glob, parse_class_negated) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "[!a-z]",
     .expected = {
       {
@@ -239,7 +239,7 @@ UTEST_F(glob, parse_class_negated) {
 }
 
 UTEST_F(glob, parse_class_negated_caret) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "[^0-9]",
     .expected = {
       {
@@ -252,21 +252,21 @@ UTEST_F(glob, parse_class_negated_caret) {
 }
 
 UTEST_F(glob, parse_class_unclosed) {
-  run_parse_error_test(utest_result, ut.mem.arena, &(parse_error_test_t) {
+  run_parse_error_test(utest_result, ut.mem.arena, (parse_error_test_t){
     .pattern = "[",
     .expected_err = SP_GLOB_ERR_UNCLOSED_CLASS
   });
 }
 
 UTEST_F(glob, parse_class_invalid_range) {
-  run_parse_error_test(utest_result, ut.mem.arena, &(parse_error_test_t) {
+  run_parse_error_test(utest_result, ut.mem.arena, (parse_error_test_t){
     .pattern = "[z-a]",
     .expected_err = SP_GLOB_ERR_INVALID_RANGE
   });
 }
 
 UTEST_F(glob, parse_alternates_simple) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "{a,b}",
     .expected = {
       {
@@ -281,7 +281,7 @@ UTEST_F(glob, parse_alternates_simple) {
 }
 
 UTEST_F(glob, parse_alternates_wildcards) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "{*.c,*.h}",
     .expected = {
       {
@@ -296,14 +296,14 @@ UTEST_F(glob, parse_alternates_wildcards) {
 }
 
 UTEST_F(glob, parse_alternates_unclosed) {
-  run_parse_error_test(utest_result, ut.mem.arena, &(parse_error_test_t) {
+  run_parse_error_test(utest_result, ut.mem.arena, (parse_error_test_t){
     .pattern = "{a,b",
     .expected_err = SP_GLOB_ERR_UNCLOSED_ALTERNATES
   });
 }
 
 UTEST_F(glob, parse_star_txt) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "*.txt",
     .expected = {
       { .type = SP_GLOB_TOK_ZERO_OR_MORE },
@@ -324,19 +324,19 @@ typedef struct {
   bool expected;
 } match_test_t;
 
-void run_match_test(int* utest_result, sp_mem_t mem, match_test_t* t) {
-  sp_glob_t* g = sp_glob_new(mem, t->pattern);
+void run_match_test(int* utest_result, sp_mem_t mem, match_test_t t) {
+  sp_glob_t* g = sp_glob_new(mem, t.pattern);
   EXPECT_TRUE(g != SP_NULLPTR);
   if (g) {
-    bool result = sp_glob_match(g, t->path);
-    EXPECT_EQ(result, t->expected);
+    bool result = sp_glob_match(g, t.path);
+    EXPECT_EQ(result, t.expected);
     sp_glob_free(g);
   }
 }
 
 // Literal matching
 UTEST_F(glob, match_literal_exact) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a",
     .path = sp_str_lit("a"),
     .expected = true
@@ -344,7 +344,7 @@ UTEST_F(glob, match_literal_exact) {
 }
 
 UTEST_F(glob, match_literal_multi) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "foo.txt",
     .path = sp_str_lit("foo.txt"),
     .expected = true
@@ -352,7 +352,7 @@ UTEST_F(glob, match_literal_multi) {
 }
 
 UTEST_F(glob, match_literal_mismatch) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a",
     .path = sp_str_lit("b"),
     .expected = false
@@ -360,7 +360,7 @@ UTEST_F(glob, match_literal_mismatch) {
 }
 
 UTEST_F(glob, match_literal_path_mismatch) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a",
     .path = sp_str_lit("foo/a"),
     .expected = false
@@ -369,7 +369,7 @@ UTEST_F(glob, match_literal_path_mismatch) {
 
 // Single char wildcard (?)
 UTEST_F(glob, match_any_single) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a?b",
     .path = sp_str_lit("aXb"),
     .expected = true
@@ -377,7 +377,7 @@ UTEST_F(glob, match_any_single) {
 }
 
 UTEST_F(glob, match_any_missing) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a?b",
     .path = sp_str_lit("ab"),
     .expected = false
@@ -385,7 +385,7 @@ UTEST_F(glob, match_any_missing) {
 }
 
 UTEST_F(glob, match_any_triple) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "???",
     .path = sp_str_lit("abc"),
     .expected = true
@@ -394,7 +394,7 @@ UTEST_F(glob, match_any_triple) {
 
 // Zero-or-more wildcard (*)
 UTEST_F(glob, match_star_anything) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "*",
     .path = sp_str_lit("anything"),
     .expected = true
@@ -402,7 +402,7 @@ UTEST_F(glob, match_star_anything) {
 }
 
 UTEST_F(glob, match_star_extension) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "*.txt",
     .path = sp_str_lit("foo.txt"),
     .expected = true
@@ -410,7 +410,7 @@ UTEST_F(glob, match_star_extension) {
 }
 
 UTEST_F(glob, match_star_dot_only) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "*.txt",
     .path = sp_str_lit(".txt"),
     .expected = true
@@ -418,7 +418,7 @@ UTEST_F(glob, match_star_dot_only) {
 }
 
 UTEST_F(glob, match_star_empty) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a*b",
     .path = sp_str_lit("ab"),
     .expected = true
@@ -426,7 +426,7 @@ UTEST_F(glob, match_star_empty) {
 }
 
 UTEST_F(glob, match_star_multi) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a*b",
     .path = sp_str_lit("aXXXb"),
     .expected = true
@@ -434,7 +434,7 @@ UTEST_F(glob, match_star_multi) {
 }
 
 UTEST_F(glob, match_star_double) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a*b*c",
     .path = sp_str_lit("abc"),
     .expected = true
@@ -442,7 +442,7 @@ UTEST_F(glob, match_star_double) {
 }
 
 UTEST_F(glob, match_star_double_content) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a*b*c",
     .path = sp_str_lit("aXbYc"),
     .expected = true
@@ -450,7 +450,7 @@ UTEST_F(glob, match_star_double_content) {
 }
 
 UTEST_F(glob, match_star_double_fail) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a*b*c",
     .path = sp_str_lit("abcd"),
     .expected = false
@@ -458,7 +458,7 @@ UTEST_F(glob, match_star_double_fail) {
 }
 
 UTEST_F(glob, match_star_empty_string) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "*",
     .path = sp_str_lit(""),
     .expected = true
@@ -467,7 +467,7 @@ UTEST_F(glob, match_star_empty_string) {
 
 // Recursive wildcard (**)
 UTEST_F(glob, match_recursive_prefix_direct) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "**/foo",
     .path = sp_str_lit("foo"),
     .expected = true
@@ -475,7 +475,7 @@ UTEST_F(glob, match_recursive_prefix_direct) {
 }
 
 UTEST_F(glob, match_recursive_prefix_one_dir) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "**/foo",
     .path = sp_str_lit("a/foo"),
     .expected = true
@@ -483,7 +483,7 @@ UTEST_F(glob, match_recursive_prefix_one_dir) {
 }
 
 UTEST_F(glob, match_recursive_prefix_deep) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "**/foo",
     .path = sp_str_lit("a/b/c/foo"),
     .expected = true
@@ -491,7 +491,7 @@ UTEST_F(glob, match_recursive_prefix_deep) {
 }
 
 UTEST_F(glob, match_recursive_prefix_no_boundary) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "**/foo",
     .path = sp_str_lit("foofoo"),
     .expected = false
@@ -499,7 +499,7 @@ UTEST_F(glob, match_recursive_prefix_no_boundary) {
 }
 
 UTEST_F(glob, match_recursive_suffix_direct) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "foo/**",
     .path = sp_str_lit("foo/"),
     .expected = true
@@ -507,7 +507,7 @@ UTEST_F(glob, match_recursive_suffix_direct) {
 }
 
 UTEST_F(glob, match_recursive_suffix_one) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "foo/**",
     .path = sp_str_lit("foo/bar"),
     .expected = true
@@ -515,7 +515,7 @@ UTEST_F(glob, match_recursive_suffix_one) {
 }
 
 UTEST_F(glob, match_recursive_suffix_deep) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "foo/**",
     .path = sp_str_lit("foo/bar/baz"),
     .expected = true
@@ -523,7 +523,7 @@ UTEST_F(glob, match_recursive_suffix_deep) {
 }
 
 UTEST_F(glob, match_recursive_middle_direct) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a/**/b",
     .path = sp_str_lit("a/b"),
     .expected = true
@@ -531,7 +531,7 @@ UTEST_F(glob, match_recursive_middle_direct) {
 }
 
 UTEST_F(glob, match_recursive_middle_one) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a/**/b",
     .path = sp_str_lit("a/x/b"),
     .expected = true
@@ -539,7 +539,7 @@ UTEST_F(glob, match_recursive_middle_one) {
 }
 
 UTEST_F(glob, match_recursive_middle_deep) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a/**/b",
     .path = sp_str_lit("a/x/y/z/b"),
     .expected = true
@@ -547,7 +547,7 @@ UTEST_F(glob, match_recursive_middle_deep) {
 }
 
 UTEST_F(glob, match_recursive_all_empty) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "**",
     .path = sp_str_lit(""),
     .expected = true
@@ -555,7 +555,7 @@ UTEST_F(glob, match_recursive_all_empty) {
 }
 
 UTEST_F(glob, match_recursive_all_anything) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "**",
     .path = sp_str_lit("anything"),
     .expected = true
@@ -564,7 +564,7 @@ UTEST_F(glob, match_recursive_all_anything) {
 
 // Character classes
 UTEST_F(glob, match_class_single) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "[abc]",
     .path = sp_str_lit("a"),
     .expected = true
@@ -572,7 +572,7 @@ UTEST_F(glob, match_class_single) {
 }
 
 UTEST_F(glob, match_class_single_fail) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "[abc]",
     .path = sp_str_lit("d"),
     .expected = false
@@ -580,7 +580,7 @@ UTEST_F(glob, match_class_single_fail) {
 }
 
 UTEST_F(glob, match_class_range) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "[a-z]",
     .path = sp_str_lit("m"),
     .expected = true
@@ -588,7 +588,7 @@ UTEST_F(glob, match_class_range) {
 }
 
 UTEST_F(glob, match_class_range_fail) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "[a-z]",
     .path = sp_str_lit("5"),
     .expected = false
@@ -596,7 +596,7 @@ UTEST_F(glob, match_class_range_fail) {
 }
 
 UTEST_F(glob, match_class_multi_range) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "[0-9a-z]",
     .path = sp_str_lit("5"),
     .expected = true
@@ -604,7 +604,7 @@ UTEST_F(glob, match_class_multi_range) {
 }
 
 UTEST_F(glob, match_class_negated) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "[!a-z]",
     .path = sp_str_lit("5"),
     .expected = true
@@ -612,7 +612,7 @@ UTEST_F(glob, match_class_negated) {
 }
 
 UTEST_F(glob, match_class_negated_fail) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "[!a-z]",
     .path = sp_str_lit("m"),
     .expected = false
@@ -621,7 +621,7 @@ UTEST_F(glob, match_class_negated_fail) {
 
 // Alternates
 UTEST_F(glob, match_alt_first) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "{a,b}",
     .path = sp_str_lit("a"),
     .expected = true
@@ -629,7 +629,7 @@ UTEST_F(glob, match_alt_first) {
 }
 
 UTEST_F(glob, match_alt_second) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "{a,b}",
     .path = sp_str_lit("b"),
     .expected = true
@@ -637,7 +637,7 @@ UTEST_F(glob, match_alt_second) {
 }
 
 UTEST_F(glob, match_alt_fail) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "{a,b}",
     .path = sp_str_lit("c"),
     .expected = false
@@ -645,7 +645,7 @@ UTEST_F(glob, match_alt_fail) {
 }
 
 UTEST_F(glob, match_alt_extension_c) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "{*.c,*.h}",
     .path = sp_str_lit("foo.c"),
     .expected = true
@@ -653,7 +653,7 @@ UTEST_F(glob, match_alt_extension_c) {
 }
 
 UTEST_F(glob, match_alt_extension_h) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "{*.c,*.h}",
     .path = sp_str_lit("foo.h"),
     .expected = true
@@ -661,7 +661,7 @@ UTEST_F(glob, match_alt_extension_h) {
 }
 
 UTEST_F(glob, match_alt_empty) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "{}",
     .path = sp_str_lit(""),
     .expected = true
@@ -670,7 +670,7 @@ UTEST_F(glob, match_alt_empty) {
 
 // Edge cases
 UTEST_F(glob, match_hidden_file) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "**/.*",
     .path = sp_str_lit(".hidden"),
     .expected = true
@@ -678,7 +678,7 @@ UTEST_F(glob, match_hidden_file) {
 }
 
 UTEST_F(glob, match_hidden_file_dir) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "**/.*",
     .path = sp_str_lit("dir/.hidden"),
     .expected = true
@@ -686,7 +686,7 @@ UTEST_F(glob, match_hidden_file_dir) {
 }
 
 UTEST_F(glob, match_path_exact) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a/b",
     .path = sp_str_lit("a/b"),
     .expected = true
@@ -701,68 +701,68 @@ typedef struct {
   sp_glob_strategy_t expected;
 } strategy_test_t;
 
-void run_strategy_test(int* utest_result, sp_mem_t mem, strategy_test_t* t) {
+void run_strategy_test(int* utest_result, sp_mem_t mem, strategy_test_t t) {
   sp_glob_t glob = sp_zero;
   sp_da_init(mem, glob.tokens);
-  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t->pattern), &glob.tokens);
+  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t.pattern), &glob.tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
   if (err == SP_GLOB_ERR_OK) {
     sp_glob_strategy_t strategy = sp_glob_detect_strategy(&glob);
-    EXPECT_EQ(strategy, t->expected);
+    EXPECT_EQ(strategy, t.expected);
   }
 }
 
 UTEST_F(glob, strategy_literal) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "foo.txt",
     .expected = SP_GLOB_STRATEGY_LITERAL
   });
 }
 
 UTEST_F(glob, strategy_basename_literal) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "**/foo",
     .expected = SP_GLOB_STRATEGY_BASENAME_LITERAL
   });
 }
 
 UTEST_F(glob, strategy_extension_simple) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "*.txt",
     .expected = SP_GLOB_STRATEGY_EXTENSION
   });
 }
 
 UTEST_F(glob, strategy_extension_recursive) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "**/*.rs",
     .expected = SP_GLOB_STRATEGY_EXTENSION
   });
 }
 
 UTEST_F(glob, strategy_prefix) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "src/*",
     .expected = SP_GLOB_STRATEGY_PREFIX
   });
 }
 
 UTEST_F(glob, strategy_suffix) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "**/foo/bar",
     .expected = SP_GLOB_STRATEGY_SUFFIX
   });
 }
 
 UTEST_F(glob, strategy_suffix_single_star) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "*/foo",
     .expected = SP_GLOB_STRATEGY_SUFFIX
   });
 }
 
 UTEST_F(glob, strategy_recursive_only) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "**",
     .expected = SP_GLOB_STRATEGY_FALLBACK
   });
@@ -963,14 +963,14 @@ UTEST_F(glob, set_duplicate_extension) {
 }
 
 UTEST_F(glob, parse_empty) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "",
     .expected = { { .type = SP_GLOB_TOK_NONE } }
   });
 }
 
 UTEST_F(glob, parse_class_literal_bracket) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "[]]",
     .expected = {
       {
@@ -983,7 +983,7 @@ UTEST_F(glob, parse_class_literal_bracket) {
 }
 
 UTEST_F(glob, parse_class_literal_dash_end) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "[a-]",
     .expected = {
       {
@@ -1011,7 +1011,7 @@ UTEST_F(glob, parse_alternates_empty_branch) {
 }
 
 UTEST_F(glob, parse_alternates_class_inside) {
-  run_parse_test(utest_result, ut.mem.arena, &(parse_test_t) {
+  run_parse_test(utest_result, ut.mem.arena, (parse_test_t){
     .pattern = "{[a-z],b}",
     .expected = {
       {
@@ -1026,7 +1026,7 @@ UTEST_F(glob, parse_alternates_class_inside) {
 }
 
 UTEST_F(glob, match_any_no_slash) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a?b",
     .path = sp_str_lit("a/b"),
     .expected = false
@@ -1034,7 +1034,7 @@ UTEST_F(glob, match_any_no_slash) {
 }
 
 // UTEST_F(glob, match_star_no_cross_slash) {
-//   run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+//   run_match_test(utest_result, ut.mem.tracking, (match_test_t){
 //     .pattern = "foo*",
 //     .path = sp_str_lit("foo/bar"),
 //     .expected = false
@@ -1042,7 +1042,7 @@ UTEST_F(glob, match_any_no_slash) {
 // }
 
 UTEST_F(glob, match_class_exhausted_path) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "foo[a-z]",
     .path = sp_str_lit("foo"),
     .expected = false
@@ -1050,7 +1050,7 @@ UTEST_F(glob, match_class_exhausted_path) {
 }
 
 UTEST_F(glob, match_alternate_with_remaining) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "{a,b}c",
     .path = sp_str_lit("ac"),
     .expected = true
@@ -1058,7 +1058,7 @@ UTEST_F(glob, match_alternate_with_remaining) {
 }
 
 UTEST_F(glob, match_extension_multiple_dots) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "*.txt",
     .path = sp_str_lit("foo.bar.txt"),
     .expected = true
@@ -1066,7 +1066,7 @@ UTEST_F(glob, match_extension_multiple_dots) {
 }
 
 UTEST_F(glob, match_recursive_suffix_no_trailing) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a/**",
     .path = sp_str_lit("a"),
     .expected = false
@@ -1074,28 +1074,28 @@ UTEST_F(glob, match_recursive_suffix_no_trailing) {
 }
 
 UTEST_F(glob, strategy_empty) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "",
     .expected = SP_GLOB_STRATEGY_LITERAL
   });
 }
 
 UTEST_F(glob, strategy_single_star) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "*",
     .expected = SP_GLOB_STRATEGY_SUFFIX
   });
 }
 
 UTEST_F(glob, strategy_extension_with_wildcard) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "*.t?t",
     .expected = SP_GLOB_STRATEGY_FALLBACK
   });
 }
 
 UTEST_F(glob, strategy_star_in_middle) {
-  run_strategy_test(utest_result, ut.mem.arena, &(strategy_test_t) {
+  run_strategy_test(utest_result, ut.mem.arena, (strategy_test_t){
     .pattern = "foo*bar",
     .expected = SP_GLOB_STRATEGY_FALLBACK
   });
@@ -1150,7 +1150,7 @@ UTEST_F(glob, set_single_component_suffix) {
 // Test ** not at component boundary (should be treated as two *)
 UTEST_F(glob, match_double_star_not_boundary) {
   // a**b should match like a*b (two * in sequence)
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a**b",
     .path = sp_str_lit("ab"),
     .expected = true
@@ -1158,7 +1158,7 @@ UTEST_F(glob, match_double_star_not_boundary) {
 }
 
 UTEST_F(glob, match_double_star_not_boundary_content) {
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a**b",
     .path = sp_str_lit("aXXXb"),
     .expected = true
@@ -1167,7 +1167,7 @@ UTEST_F(glob, match_double_star_not_boundary_content) {
 
 UTEST_F(glob, match_double_star_not_boundary_no_slash) {
   // * doesn't cross /, so a**b should not match a/b
-  run_match_test(utest_result, ut.mem.tracking, &(match_test_t) {
+  run_match_test(utest_result, ut.mem.tracking, (match_test_t){
     .pattern = "a**b",
     .path = sp_str_lit("a/b"),
     .expected = false

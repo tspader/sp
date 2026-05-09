@@ -22,22 +22,22 @@ typedef struct {
   copy_expect_t expect[16];
 } copy_test_t;
 
-static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_test_t* t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
+static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_test_t t) {
+  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
   sp_fs_create_dir_a(sandbox);
-  fs_apply_setup(utest_result, fm, sandbox, t->setup);
+  fs_apply_setup(utest_result, fm, sandbox, t.setup);
 
-  sp_str_t src = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->src));
-  sp_str_t dst = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t->dst));
+  sp_str_t src = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t.src));
+  sp_str_t dst = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t.dst));
 
-  switch (t->action) {
+  switch (t.action) {
     case COPY_FILE: sp_fs_copy_file_a(src, dst); break;
     case COPY_DIR:  sp_fs_copy_a(src, dst); break;
     case COPY_LINK: sp_fs_link_a(src, dst, SP_FS_LINK_COPY); break;
   }
 
   sp_for(i, 16) {
-    copy_expect_t* exp = &t->expect[i];
+    copy_expect_t* exp = &t.expect[i];
     if (!exp->path) break;
 
     sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(exp->path));
@@ -57,7 +57,7 @@ static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_te
 
 UTEST_F(fs, copy_file_basic) {
   SKIP_ON_WASM()
-  run_copy_test(&ur, &ut.file_manager, &(copy_test_t) {
+  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_file_basic",
     .setup = {
       { .path = "source.txt", .kind = FS_SETUP_FILE, .content = "hello world" },
@@ -74,7 +74,7 @@ UTEST_F(fs, copy_file_basic) {
 
 UTEST_F(fs, copy_file_via_link) {
   SKIP_ON_WASM()
-  run_copy_test(&ur, &ut.file_manager, &(copy_test_t) {
+  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_file_via_link",
     .setup = {
       { .path = "source.txt", .kind = FS_SETUP_FILE, .content = "test content" },
@@ -91,7 +91,7 @@ UTEST_F(fs, copy_file_via_link) {
 
 UTEST_F(fs, copy_dir_basic) {
   SKIP_ON_WASM()
-  run_copy_test(&ur, &ut.file_manager, &(copy_test_t) {
+  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_dir_basic",
     .setup = {
       { .path = "src", .kind = FS_SETUP_DIR },
@@ -112,7 +112,7 @@ UTEST_F(fs, copy_dir_basic) {
 
 UTEST_F(fs, copy_dir_nested) {
   SKIP_ON_WASM()
-  run_copy_test(&ur, &ut.file_manager, &(copy_test_t) {
+  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_dir_nested",
     .setup = {
       { .path = "src", .kind = FS_SETUP_DIR },
@@ -135,7 +135,7 @@ UTEST_F(fs, copy_dir_nested) {
 
 UTEST_F(fs, copy_dir_with_nonalphanumeric) {
   SKIP_ON_WASM()
-  run_copy_test(&ur, &ut.file_manager, &(copy_test_t) {
+  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_dir_with_nonalphanumeric",
     .setup = {
       { .path = "foo.bar", .kind = FS_SETUP_DIR },
@@ -152,7 +152,7 @@ UTEST_F(fs, copy_dir_with_nonalphanumeric) {
 
 UTEST_F(fs, unicode_copy_file) {
   SKIP_ON_WASM()
-  run_copy_test(&ur, &ut.file_manager, &(copy_test_t) {
+  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "unicode_copy_file",
     .setup = {
       { .path = "\xc3\xb6riginal.txt", .kind = FS_SETUP_FILE, .content = "hello" },

@@ -108,9 +108,9 @@ UTEST(sp_fmt_parse, everything) {
     .str = "{:*^12.4}",
     .expected = {
       .width = 12,
-      .precision = sp_opt_some(4),
       .align = SP_FMT_ALIGN_CENTER,
       .fill = '*',
+      .precision = sp_opt_some(4),
     },
   });
 }
@@ -462,21 +462,21 @@ UTEST(sp_fmt_pad, right_align_default) {
 
 UTEST(sp_fmt_pad, left_align_fill) {
   sp_str_t got = apply_spec_to_str("42", (sp_fmt_spec_t){
-    .width = 6, .align = SP_FMT_ALIGN_LEFT, .fill = '-',
+    .width = 6, .align = SP_FMT_ALIGN_LEFT, .fill = '-'
   });
   EXPECT_TRUE(sp_str_equal_cstr(got, "42----"));
 }
 
 UTEST(sp_fmt_pad, center_even) {
   sp_str_t got = apply_spec_to_str("hi", (sp_fmt_spec_t){
-    .width = 8, .align = SP_FMT_ALIGN_CENTER, .fill = '*',
+    .width = 8, .align = SP_FMT_ALIGN_CENTER, .fill = '*'
   });
   EXPECT_TRUE(sp_str_equal_cstr(got, "***hi***"));
 }
 
 UTEST(sp_fmt_pad, center_odd) {
   sp_str_t got = apply_spec_to_str("hi", (sp_fmt_spec_t){
-    .width = 9, .align = SP_FMT_ALIGN_CENTER, .fill = '*',
+    .width = 9, .align = SP_FMT_ALIGN_CENTER, .fill = '*'
   });
   EXPECT_TRUE(sp_str_equal_cstr(got, "***hi****"));
 }
@@ -603,7 +603,7 @@ UTEST(sp_fmt_directive, wraps_content) {
 
 UTEST(sp_fmt_directive, render_replaces_value) {
   sp_fmt_directive_reset();
-  sp_fmt_register_renderer("x", _test_render_x, 0);
+  sp_fmt_register_renderer("x", _test_render_x, sp_fmt_id_none);
   sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.x}", sp_fmt_int(999)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "X"));
   sp_fmt_directive_reset();
@@ -641,8 +641,8 @@ UTEST(sp_fmt_directive, ordering_bracket_nested) {
 UTEST(sp_fmt_directive, err_multiple_renders) {
   sp_fmt_directive_reset();
   _test_render_y_calls = 0;
-  sp_fmt_register_renderer("x", _test_render_x, 0);
-  sp_fmt_register_renderer("y", _test_render_y, 0);
+  sp_fmt_register_renderer("x", _test_render_x, sp_fmt_id_none);
+  sp_fmt_register_renderer("y", _test_render_y, sp_fmt_id_none);
   sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.x .y}", sp_fmt_int(0)).err, SP_ERR_FMT_TOO_MANY_RENDERERS);
   EXPECT_EQ(_test_render_y_calls, 0);
@@ -755,7 +755,7 @@ static void _test_render_prefixed(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t
 UTEST(sp_fmt_directive, before_render_then_transform) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, SP_NULLPTR);
-  sp_fmt_register_renderer("prefix", _test_render_prefixed, 0);
+  sp_fmt_register_renderer("prefix", _test_render_prefixed, sp_fmt_id_none);
   sp_fmt_register_transformer("upper", _test_transform_upper);
   sp_str_t got = sp_fmt_a(sp_mem_get_scratch(), "{.wrap .prefix .upper}", sp_fmt_int(0)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<RENDERED"));
@@ -920,7 +920,7 @@ UTEST(sp_fmt_directive, kinds_multiple_accepts_either) {
   sp_fmt_directive_reset();
   sp_fmt_directive_register("num", (sp_fmt_directive_t){
     .kind = sp_fmt_directive_decorator,
-    .arg_kinds = sp_fmt_id_u64 | sp_fmt_id_s64,
+    .arg_kinds = sp_cast(sp_fmt_arg_kind_t, sp_fmt_id_u64 | sp_fmt_id_s64),
   });
   sp_str_t a = sp_fmt_a(sp_mem_get_scratch(), "{.num}", sp_fmt_uint(7)).value;
   sp_str_t b = sp_fmt_a(sp_mem_get_scratch(), "{.num}", sp_fmt_int(-3)).value;
@@ -933,7 +933,7 @@ UTEST(sp_fmt_directive, kinds_multiple_rejects_outsider) {
   sp_fmt_directive_reset();
   sp_fmt_directive_register("num", (sp_fmt_directive_t){
     .kind = sp_fmt_directive_decorator,
-    .arg_kinds = sp_fmt_id_u64 | sp_fmt_id_s64,
+    .arg_kinds = sp_cast(sp_fmt_arg_kind_t, sp_fmt_id_u64 | sp_fmt_id_s64),
   });
   sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt_a(sp_mem_get_scratch(), "{.num}", sp_fmt_cstr("nope")).err, SP_ERR_FMT_WRONG_PARAM_KIND);

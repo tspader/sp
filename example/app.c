@@ -33,11 +33,11 @@ sp_app_config_t app_main(s32 num_args, const c8** args) {
   state->allocator = a;
 
   return (sp_app_config_t) {
-    .fps = 30,
+    .user_data = state,
     .on_init = on_init,
     .on_update = on_update,
     .on_deinit = on_deinit,
-    .user_data = state,
+    .fps = 30,
   };
 }
 SP_APP_MAIN(app_main)

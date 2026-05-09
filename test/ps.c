@@ -182,8 +182,8 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
   if (!sp_str_empty(test.output.out.expected)) {
     sp_test_proc_stream_context_t check = {
       .stream = out,
-      .expected = test.output.out.expected,
       .buffer = { .len = 1024, .data = (u8*)sp_alloc_a(ut.mem, 1024) },
+      .expected = test.output.out.expected,
       .mode = SP_TEST_PROC_READ_EXACT,
       .expected_len = test.output.out.expected.len,
     };
@@ -198,8 +198,8 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
   if (!sp_str_empty(test.output.err.expected)) {
     sp_test_proc_stream_context_t check = {
       .stream = err,
-      .expected = test.output.err.expected,
       .buffer = { .len = 1024, .data = (u8*)sp_alloc_a(ut.mem, 1024) },
+      .expected = test.output.err.expected,
       .mode = SP_TEST_PROC_READ_EXACT,
       .expected_len = test.output.err.expected.len,
     };
@@ -221,7 +221,7 @@ UTEST_F(ps, io_create_create_null) {
       .err = { .mode = SP_PS_IO_MODE_NULL },
     },
     .input = sp_test_ps_canary,
-    .output.out = { .expected = sp_test_ps_canary, .enabled = true },
+    .output = { .out = { .expected = sp_test_ps_canary, .enabled = true } },
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
 }
@@ -234,7 +234,7 @@ UTEST_F(ps, io_create_null_create) {
       .err = { .mode = SP_PS_IO_MODE_CREATE },
     },
     .input = sp_test_ps_canary,
-    .output.err = { .expected = sp_test_ps_canary, .enabled = true },
+    .output = { .err = { .expected = sp_test_ps_canary, .enabled = true } },
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
 }
@@ -246,7 +246,7 @@ UTEST_F(ps, io_null_create_null) {
       .out = { .mode = SP_PS_IO_MODE_CREATE },
       .err = { .mode = SP_PS_IO_MODE_NULL },
     },
-    .output.out = { .expected = sp_test_ps_canary, .enabled = true },
+    .output = { .out = { .expected = sp_test_ps_canary, .enabled = true } },
     .fn = TEST_PROC_FUNCTION_PRINT,
   });
 }
@@ -258,7 +258,7 @@ UTEST_F(ps, io_null_null_create) {
       .out = { .mode = SP_PS_IO_MODE_NULL },
       .err = { .mode = SP_PS_IO_MODE_CREATE },
     },
-    .output.err = { .expected = sp_test_ps_canary, .enabled = true },
+    .output = { .err = { .expected = sp_test_ps_canary, .enabled = true } },
     .fn = TEST_PROC_FUNCTION_PRINT,
   });
 }
@@ -270,8 +270,7 @@ UTEST_F(ps, io_stdout_stderr) {
       .out = { .mode = SP_PS_IO_MODE_CREATE },
       .err = { .mode = SP_PS_IO_MODE_CREATE },
     },
-    .output.out = { .expected = sp_test_ps_canary, .enabled = true },
-    .output.err = { .expected = sp_test_ps_canary, .enabled = true },
+    .output = { .out = { .expected = sp_test_ps_canary, .enabled = true }, .err = { .expected = sp_test_ps_canary, .enabled = true } },
     .fn = TEST_PROC_FUNCTION_PRINT,
   });
 }
@@ -284,7 +283,7 @@ UTEST_F(ps, io_create_file_null) {
   sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
-      .out = { .mode = SP_PS_IO_MODE_EXISTING, .fd = fd },
+      .out = { .fd = fd, .mode = SP_PS_IO_MODE_EXISTING },
       .err = { .mode = SP_PS_IO_MODE_NULL },
     },
     .input = sp_test_ps_canary,
@@ -316,7 +315,7 @@ UTEST_F(ps, io_file_create_null) {
 
   sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PS_IO_MODE_EXISTING, .fd = fd },
+      .in = { .fd = fd, .mode = SP_PS_IO_MODE_EXISTING },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
       .err = { .mode = SP_PS_IO_MODE_NULL },
     },
@@ -340,7 +339,7 @@ UTEST_F(ps, io_create_null_file) {
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_NULL },
-      .err = { .mode = SP_PS_IO_MODE_EXISTING, .fd = fd },
+      .err = { .fd = fd, .mode = SP_PS_IO_MODE_EXISTING },
     },
     .input = sp_test_ps_canary,
     .output = {
@@ -374,9 +373,9 @@ UTEST_F(ps, io_file_null_file) {
 
   sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
-      .in = { .mode = SP_PS_IO_MODE_EXISTING, .fd = in_fd },
+      .in = { .fd = in_fd, .mode = SP_PS_IO_MODE_EXISTING },
       .out = { .mode = SP_PS_IO_MODE_NULL },
-      .err = { .mode = SP_PS_IO_MODE_EXISTING, .fd = err_fd },
+      .err = { .fd = err_fd, .mode = SP_PS_IO_MODE_EXISTING },
     },
     .output = {
       .err = {
@@ -452,12 +451,12 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
       sp_str_lit("--fn"), sp_str_view(test_proc_function_to_cstr(TEST_PROC_FUNCTION_PRINT_ENV)),
       sp_str_lit("--stdout")
     },
+    .env = test.config,
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
       .out = { .mode = SP_PS_IO_MODE_CREATE },
       .err = { .mode = SP_PS_IO_MODE_NULL },
     },
-    .env = test.config
   };
 
   sp_ps_t ps = sp_ps_create_a(ut.mem, config);
@@ -480,8 +479,8 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
   sp_test_proc_stream_context_t ctx = {
     .stream = out,
     .buffer = {
-      .data = sp_alloc_a(ut.mem, 1024),
-      .len = 1024
+      .len = 1024,
+      .data = sp_alloc_n_a(ut.mem, u8, 1024),
     },
     .mode = SP_TEST_PROC_READ_UNTIL_DONE,
   };
@@ -511,8 +510,7 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
 UTEST_F(ps, env_clean) {
   sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PS_ENV_CLEAN,
-    },
+      .mode = SP_PS_ENV_CLEAN},
     .expected = {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("") },
     }
@@ -520,11 +518,11 @@ UTEST_F(ps, env_clean) {
 
   sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PS_ENV_CLEAN,
       .extra = {
         { .key = sp_str_lit("jerry"), .value = sp_str_lit("garcia") },
       }
-    },
+    ,
+      .mode = SP_PS_ENV_CLEAN},
     .expected = {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("garcia") },
     }
@@ -534,12 +532,12 @@ UTEST_F(ps, env_clean) {
 UTEST_F(ps, env_duplicate_var) {
   sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PS_ENV_CLEAN,
       .extra = {
         {.key = sp_str_lit("garcia"), .value = sp_str_lit("john") },
         {.key = sp_str_lit("garcia"), .value = sp_str_lit("jerome") },
       }
-    },
+    ,
+      .mode = SP_PS_ENV_CLEAN},
       .expected = {
         {.key = sp_str_lit("garcia"), .value = sp_str_lit("jerome") },
     }
@@ -555,8 +553,7 @@ UTEST_F(ps, env_inherit) {
 
   sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PS_ENV_INHERIT,
-    },
+      .mode = SP_PS_ENV_INHERIT},
     .expected = {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("garcia") },
     }
@@ -578,9 +575,9 @@ UTEST_F(ps, env_existing) {
 
   sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PS_ENV_EXISTING,
       .env = env
-    },
+    ,
+      .mode = SP_PS_ENV_EXISTING},
     .expected = {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("garcia") },
       { .key = sp_str_lit("phil"), .value = sp_str_lit("lesh") },
@@ -591,12 +588,12 @@ UTEST_F(ps, env_existing) {
   // Anything extra on top of the base env is applied
   sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PS_ENV_EXISTING,
       .env = env,
       .extra = {
         { .key = sp_str_lit("billy"), .value = sp_str_lit("kreutzmann") },
       }
-    },
+    ,
+      .mode = SP_PS_ENV_EXISTING},
     .expected = {
       { .key = sp_str_lit("billy"), .value = sp_str_lit("kreutzmann") },
     }
@@ -606,11 +603,11 @@ UTEST_F(ps, env_existing) {
 UTEST_F(ps, empty_env_var) {
   sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
-      .mode = SP_PS_ENV_CLEAN,
       .extra = {
         { .key = sp_str_lit("jerry"), .value = sp_str_lit("") }
       }
-    },
+    ,
+      .mode = SP_PS_ENV_CLEAN},
     .expected = {
       { .key = sp_str_lit("jerry"), .value = sp_str_lit("") },
     }
@@ -626,7 +623,7 @@ UTEST_F(ps, wait_after_process_complete) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("42")
-    },
+    }
   });
 
   sp_os_sleep_ms(100);
@@ -642,7 +639,7 @@ UTEST_F(ps, wait_while_process_running) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
-    },
+    }
   });
 
   sp_ps_status_t result = sp_ps_wait(&ps);
@@ -668,7 +665,7 @@ UTEST_F(ps, poll_while_process_running) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
-    },
+    }
   });
 
   sp_ps_status_t result = sp_ps_poll(&ps, 0);
@@ -684,7 +681,7 @@ UTEST_F(ps, process_complete_during_poll) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
-    },
+    }
   });
 
   sp_ps_status_t result = sp_ps_poll(&ps, 200);
@@ -698,7 +695,7 @@ UTEST_F(ps, poll_after_process_complete) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
-    },
+    }
   });
 
   sp_os_sleep_ms(100);
@@ -714,7 +711,7 @@ UTEST_F(ps, poll_with_timeout_after_process_complete) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
-    },
+    }
   });
 
   sp_os_sleep_ms(100);
@@ -730,7 +727,7 @@ UTEST_F(ps, wait_twice_while_process_running) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("exit_code"),
       sp_str_lit("--exit-code"), sp_str_lit("72")
-    },
+    }
   });
 
   sp_ps_status_t result = sp_ps_wait(&ps);
@@ -748,7 +745,7 @@ UTEST_F(ps, poll_then_wait) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("100")
-    },
+    }
   });
 
   sp_ps_status_t result = sp_ps_poll(&ps, 0);
@@ -765,7 +762,7 @@ UTEST_F(ps, poll_multiple) {
     .args = {
       sp_str_lit("--fn"), sp_str_lit("wait"),
       sp_str_lit("300")
-    },
+    }
   });
 
   sp_ps_status_t result = sp_zero;
@@ -1105,7 +1102,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
-      .out = { .mode = SP_PS_IO_MODE_EXISTING, .fd = pipes[1] },
+      .out = { .fd = pipes[1], .mode = SP_PS_IO_MODE_EXISTING },
       .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
@@ -1121,7 +1118,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
-      .out = { .mode = SP_PS_IO_MODE_EXISTING, .fd = pipes[1] },
+      .out = { .fd = pipes[1], .mode = SP_PS_IO_MODE_EXISTING },
       .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
@@ -1181,7 +1178,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
-      .out = { .mode = SP_PS_IO_MODE_EXISTING, .fd = pipes[1] },
+      .out = { .fd = pipes[1], .mode = SP_PS_IO_MODE_EXISTING },
       .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
@@ -1197,7 +1194,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
-      .out = { .mode = SP_PS_IO_MODE_EXISTING, .fd = pipes[1] },
+      .out = { .fd = pipes[1], .mode = SP_PS_IO_MODE_EXISTING },
       .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
@@ -1256,14 +1253,14 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
 
 UTEST_F(ps, create_nonexistent_binary) {
   sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
-    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
+    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all")
   });
   EXPECT_EQ(ps.os, SP_NULLPTR);
 }
 
 UTEST_F(ps, wait_nonexistent_binary) {
   sp_ps_t ps = sp_ps_create_a(ut.mem, (sp_ps_config_t) {
-    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
+    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all")
   });
   EXPECT_EQ(ps.os, SP_NULLPTR);
 
@@ -1274,7 +1271,7 @@ UTEST_F(ps, wait_nonexistent_binary) {
 
 UTEST_F(ps, run_nonexistent_binary) {
   sp_ps_output_t result = sp_ps_run_a(ut.mem, (sp_ps_config_t) {
-    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all"),
+    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all")
   });
   EXPECT_EQ(result.status.exit_code, -1);
 }

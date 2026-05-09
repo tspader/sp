@@ -23,14 +23,14 @@ static u32 fs_count_predicates(fs_predicate_expected_t* expected) {
   return n;
 }
 
-static void run_fs_predicate_test(s32* utest_result, sp_test_file_manager_t* fm, fs_predicate_test_t* t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t->label));
+static void run_fs_predicate_test(s32* utest_result, sp_test_file_manager_t* fm, fs_predicate_test_t t) {
+  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
   sp_fs_create_dir_a(sandbox);
-  fs_apply_setup(utest_result, fm, sandbox, t->setup);
+  fs_apply_setup(utest_result, fm, sandbox, t.setup);
 
-  u32 expected_count = fs_count_predicates(t->expected);
+  u32 expected_count = fs_count_predicates(t.expected);
   sp_for(i, expected_count) {
-    fs_predicate_expected_t* exp = &t->expected[i];
+    fs_predicate_expected_t* exp = &t.expected[i];
     sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(exp->path));
 
     fs_expect_bool(utest_result, path, "exists", sp_fs_exists_a(path), exp->exists);
@@ -46,7 +46,7 @@ static void run_fs_predicate_test(s32* utest_result, sp_test_file_manager_t* fm,
 UTEST_F(fs, predicate_matrix) {
   SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
-  run_fs_predicate_test(&ur, &ut.file_manager, &(fs_predicate_test_t) {
+  run_fs_predicate_test(&ur, &ut.file_manager, (fs_predicate_test_t){
     .label = "predicate_matrix",
     .setup = {
       { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
@@ -93,7 +93,7 @@ UTEST_F(fs, predicate_matrix) {
 
 UTEST_F(fs, unicode_predicate_matrix) {
   SKIP_ON_WASM()
-  run_fs_predicate_test(&ur, &ut.file_manager, &(fs_predicate_test_t) {
+  run_fs_predicate_test(&ur, &ut.file_manager, (fs_predicate_test_t){
     .label = "unicode_predicate_matrix",
     .setup = {
       { .path = "\xc3\xa9t\xc3\xa9.txt", .kind = FS_SETUP_FILE, .content = "data" },

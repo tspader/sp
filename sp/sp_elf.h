@@ -225,7 +225,7 @@ sp_elf_section_t* sp_elf_add_section(sp_elf_t* elf, sp_str_t name, u32 kind, u64
 
   sp_elf_section_t section = {
     .name = sp_str_copy_a(elf->mem, name),
-    .index = sp_da_size(elf->sections),
+    .index = sp_cast(u32, sp_da_size(elf->sections)),
     .type = kind,
     .alignment = alignment,
     .buffer = { .mem = elf->mem },

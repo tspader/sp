@@ -4,14 +4,27 @@ ifeq (,$(findstring jobserver,$(MAKEFLAGS)))
 MAKEFLAGS += -j$(shell nproc)
 endif
 
-ifdef TRIPLE
-CC := zcc --target=$(TRIPLE)
-BUILD_DIR = build/$(TRIPLE)
-else ifeq ($(origin CC),command line)
-BUILD_DIR = build/$(CC)
+LANG ?= c
+ifeq ($(LANG),cpp)
+  CFLAGS_LANG = -std=c++11 -x c++
+  BUILD_ROOT = build/cpp
+  DEFAULT_CC = c++
+  ZIG_CC = zig c++
 else
-CC := cc
-BUILD_DIR = build
+  CFLAGS_LANG = -std=c99
+  BUILD_ROOT = build
+  DEFAULT_CC = cc
+  ZIG_CC = zcc
+endif
+
+ifdef TRIPLE
+CC := $(ZIG_CC) --target=$(TRIPLE)
+BUILD_DIR = $(BUILD_ROOT)/$(TRIPLE)
+else ifeq ($(origin CC),command line)
+BUILD_DIR = $(BUILD_ROOT)/$(CC)
+else
+CC := $(DEFAULT_CC)
+BUILD_DIR = $(BUILD_ROOT)
 endif
 
 WASM := $(if $(findstring wasm,$(TRIPLE)),1,)
@@ -28,7 +41,7 @@ else
 CFLAGS_PLATFORM =
 endif
 
-CFLAGS = -std=c99 -g -Werror=return-type -fsanitize=undefined,alignment -fno-sanitize-recover=all $(CFLAGS_PLATFORM)
+CFLAGS = $(CFLAGS_LANG) -g -Werror=return-type -fsanitize=undefined,alignment -fno-sanitize-recover=all $(CFLAGS_PLATFORM)
 
 EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
 EXE := $(if $(WASM),.wasm,$(EXE))

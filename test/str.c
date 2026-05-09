@@ -216,7 +216,7 @@ UTEST(str, map_reduce) {
 
 UTEST(str, valid_and_at) {
   sp_str_t valid = sp_str_lit("Hello");
-  sp_str_t invalid = {.len = 5, .data = SP_NULLPTR};
+  sp_str_t invalid = {.data = SP_NULLPTR, .len = 5};
   sp_str_t empty = sp_str_lit("");
 
   ASSERT_TRUE(sp_str_valid(valid));
@@ -858,26 +858,26 @@ UTEST(utf8, decode_ascii) {
 }
 
 UTEST(utf8, decode_2byte) {
-  c8 cent[] = {0xC2, 0xA2};
+  c8 cent[] = {(c8)0xC2, (c8)0xA2};
   ASSERT_EQ(sp_utf8_decode(cent), 0xA2);
 
-  c8 edge[] = {0xDF, 0xBF};
+  c8 edge[] = {(c8)0xDF, (c8)0xBF};
   ASSERT_EQ(sp_utf8_decode(edge), 0x7FF);
 }
 
 UTEST(utf8, decode_3byte) {
-  c8 euro[] = {0xE2, 0x82, 0xAC};
+  c8 euro[] = {(c8)0xE2, (c8)0x82, (c8)0xAC};
   ASSERT_EQ(sp_utf8_decode(euro), 0x20AC);
 
-  c8 cjk[] = {0xE4, 0xB8, 0xAD};
+  c8 cjk[] = {(c8)0xE4, (c8)0xB8, (c8)0xAD};
   ASSERT_EQ(sp_utf8_decode(cjk), 0x4E2D);
 }
 
 UTEST(utf8, decode_4byte) {
-  c8 emoji[] = {0xF0, 0x9F, 0x98, 0x80};
+  c8 emoji[] = {(c8)0xF0, (c8)0x9F, (c8)0x98, (c8)0x80};
   ASSERT_EQ(sp_utf8_decode(emoji), 0x1F600);
 
-  c8 max[] = {0xF4, 0x8F, 0xBF, 0xBF};
+  c8 max[] = {(c8)0xF4, (c8)0x8F, (c8)0xBF, (c8)0xBF};
   ASSERT_EQ(sp_utf8_decode(max), 0x10FFFF);
 }
 
@@ -1112,47 +1112,6 @@ UTEST(utf8, builder_append) {
   sp_utf8_it_next(&it);
   ASSERT_EQ(it.codepoint, 'z');
 }
-
-#ifdef SP_CPP
-UTEST(string_cpp, path_concatenation_operator) {
-
-
-  sp_str_t path1 = sp_str_lit("home");
-  sp_str_t path2 = sp_str_lit("user");
-  sp_str_t result = path1 / path2;
-
-  ASSERT_EQ(result.len, 9);
-  SP_EXPECT_STR_EQ_CSTR(result, "home/user");
-
-  sp_str_t win_path1 = sp_str_lit("C:\\Windows");
-  sp_str_t win_path2 = sp_str_lit("System32");
-  sp_str_t win_result = win_path1 / win_path2;
-
-  SP_EXPECT_STR_EQ_CSTR(win_result, "C:/Windows/System32");
-
-  sp_str_t empty = sp_str_lit("");
-  sp_str_t filename = sp_str_lit("file.txt");
-  sp_str_t empty_result = empty / filename;
-
-  SP_EXPECT_STR_EQ_CSTR(empty_result, "/file.txt");
-
-  sp_str_t base = sp_str_lit("root");
-  sp_str_t dir = sp_str_lit("subdir");
-  sp_str_t file = sp_str_lit("file.txt");
-  sp_str_t chained = base / dir / file;
-
-  SP_EXPECT_STR_EQ_CSTR(chained, "root/subdir/file.txt");
-
-  sp_str_t path = sp_str_lit("home");
-  sp_str_t result_cstr = path / "documents";
-
-  ASSERT_EQ(result_cstr.len, 14);
-  SP_EXPECT_STR_EQ_CSTR(result_cstr, "home/documents");
-
-  sp_str_t chained_cstr = base / "data" / "files";
-  SP_EXPECT_STR_EQ_CSTR(chained_cstr, "root/data/files");
-}
-#endif
 
 #ifdef SP_WIN32
 SP_PRIVATE sp_str_t sp_win32_utf16_to_utf8(const u16* utf16, s32 len);
