@@ -206,7 +206,7 @@ UTEST_F(sp_env, to_posix_envp) {
   sp_env_insert(&env, sp_str_lit("AA"), sp_str_lit("11"));
   sp_env_insert(&env, sp_str_lit("BB"), sp_str_lit("22"));
 
-  c8** envp = sp_env_to_posix_envp_a(ut.mem, &env);
+  c8** envp = sp_env_to_posix_envp(ut.mem, &env);
 
   u32 count = 0;
   while (envp[count] != SP_NULLPTR) count++;
@@ -229,7 +229,7 @@ UTEST_F(sp_env, to_posix_envp_empty) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  c8** envp = sp_env_to_posix_envp_a(ut.mem, &env);
+  c8** envp = sp_env_to_posix_envp(ut.mem, &env);
   EXPECT_EQ(envp[0], (c8*)SP_NULLPTR);
 
   sp_env_destroy(&env);

@@ -28,4 +28,4 @@ UTEST(fs_get_ext, cases) {
   }
 }
 
-SP_TEST_MAIN()
+

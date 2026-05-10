@@ -25,4 +25,4 @@ UTEST(fs_get_name, cases) {
   }
 }
 
-SP_TEST_MAIN()
+

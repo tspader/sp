@@ -12,7 +12,7 @@ static void run_mem_copy_test(int* utest_result, mem_copy_test_t t) {
 
   for (u32 i = 0; i < sizeof(dest); i++) dest[i] = sentinel;
 
-  sp_mem_copy(t.src, dest, t.copy_len);
+  sp_mem_copy(dest, t.src, t.copy_len);
 
   for (u32 i = 0; i < t.copy_len; i++) {
     EXPECT_EQ(dest[i], t.src[i]);
@@ -48,7 +48,7 @@ static void run_mem_move_test(int* utest_result, mem_move_test_t t) {
     expected[t.dst_offset + i] = tmp[i];
   }
 
-  sp_mem_move(buf + t.src_offset, buf + t.dst_offset, t.move_len);
+  sp_mem_move(buf + t.dst_offset, buf + t.src_offset, t.move_len);
 
   for (u32 i = 0; i < t.buf_size; i++) {
     EXPECT_EQ(buf[i], expected[i]);
@@ -356,7 +356,7 @@ UTEST_F(mem, alloc_preserves_u64_size) {
   };
 
   u64 requested = (u64)5 * 1024 * 1024 * 1024;
-  sp_alloc_a(mock, requested);
+  sp_alloc(mock, requested);
 
   EXPECT_EQ(recorded_size, requested);
 }

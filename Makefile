@@ -46,7 +46,7 @@ CFLAGS = $(CFLAGS_LANG) -g -Werror=return-type -fsanitize=undefined,alignment -f
 EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
 EXE := $(if $(WASM),.wasm,$(EXE))
 TESTS = amalg app array asset cv elf env format fmon fs glob ht io linkage math ps rb str thread time mem prompt leak
-EXAMPLES = app array elf format hash_table io ls palette prompt prompt_fancy signal wc
+EXAMPLES = app array elf embed format hash_table io io_copy_perf ls palette prompt prompt_fancy signal wc
 # TESTS = app amalg str format
 # EXAMPLES = app format hash_table
 TRIPLES = \
@@ -89,7 +89,7 @@ $(EXAMPLE_DIR)/%$(EXE): example/%.c sp.h | $(EXAMPLE_DIR)
 #########
 # TESTS #
 #########
-CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itools -Itest/tools -Itest/tools/process -Itest/fs -Itest/mem
+CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itools -Itest/tools -Itest/tools/process -Itest
 
 TEST_SOURCES = $(wildcard test/*/*.c) $(wildcard test/*/*.h) $(wildcard test/*/*/*.c) $(wildcard test/*/*/*.h)
 

@@ -33,12 +33,12 @@ UTEST(tracking, alloc_free_balance) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  void* p = sp_alloc_a(mem, 64);
+  void* p = sp_alloc(mem, 64);
   EXPECT_NE(p, SP_NULLPTR);
   EXPECT_EQ(t.live_count, 1u);
   EXPECT_EQ(t.live_bytes, 64u);
 
-  sp_free_a(mem, p);
+  sp_free(mem, p);
   EXPECT_EQ(t.live_count, 0u);
   EXPECT_EQ(t.live_bytes, 0u);
   EXPECT_EQ(t.double_frees, 0u);
@@ -52,10 +52,10 @@ UTEST(tracking, detects_leak) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  sp_alloc_a(mem, 16);
-  sp_alloc_a(mem, 32);
-  void* freed = sp_alloc_a(mem, 8);
-  sp_free_a(mem, freed);
+  sp_alloc(mem, 16);
+  sp_alloc(mem, 32);
+  void* freed = sp_alloc(mem, 8);
+  sp_free(mem, freed);
 
   EXPECT_EQ(t.live_count, 2u);
   EXPECT_EQ(t.live_bytes, 48u);
@@ -68,10 +68,10 @@ UTEST(tracking, detects_double_free) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  void* p = sp_alloc_a(mem, 64);
-  sp_free_a(mem, p);
-  sp_free_a(mem, p);
-  sp_free_a(mem, p);
+  void* p = sp_alloc(mem, 64);
+  sp_free(mem, p);
+  sp_free(mem, p);
+  sp_free(mem, p);
 
   EXPECT_EQ(t.double_frees, 2u);
   EXPECT_EQ(t.live_count, 0u);
@@ -90,7 +90,7 @@ UTEST(tracking, detects_wild_free) {
   // large enough for the back-step, and the bytes there won't match either
   // sentinel (we zero-init the buffer).
   static u8 buf[256] = {0};
-  sp_free_a(mem, &buf[200]);
+  sp_free(mem, &buf[200]);
 
   EXPECT_EQ(t.wild_frees, 1u);
   EXPECT_EQ(t.double_frees, 0u);
@@ -104,7 +104,7 @@ UTEST(tracking, free_null_is_noop) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  sp_free_a(mem, SP_NULLPTR);
+  sp_free(mem, SP_NULLPTR);
 
   EXPECT_EQ(t.double_frees, 0u);
   EXPECT_EQ(t.wild_frees, 0u);
@@ -118,17 +118,17 @@ UTEST(tracking, realloc_grows_and_preserves) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  u8* p = sp_alloc_n_a(mem, u8, 4);
+  u8* p = sp_alloc_n(mem, u8, 4);
   sp_for(i, 4) p[i] = (u8)(i + 1);
 
-  u8* g = sp_void_cast(g, sp_realloc_a(mem, p, 64));
+  u8* g = sp_void_cast(g, sp_realloc(mem, p, 64));
   EXPECT_NE(g, SP_NULLPTR);
   sp_for(i, 4) EXPECT_EQ(g[i], (u8)(i + 1));
 
   EXPECT_EQ(t.live_count, 1u);
   EXPECT_EQ(t.live_bytes, 64u);
 
-  sp_free_a(mem, g);
+  sp_free(mem, g);
   EXPECT_EQ(t.live_count, 0u);
 
   sp_mem_tracking_deinit(&t);
@@ -139,12 +139,12 @@ UTEST(tracking, realloc_null_is_alloc) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  void* p = sp_realloc_a(mem, SP_NULLPTR, 32);
+  void* p = sp_realloc(mem, SP_NULLPTR, 32);
   EXPECT_NE(p, SP_NULLPTR);
   EXPECT_EQ(t.live_count, 1u);
   EXPECT_EQ(t.live_bytes, 32u);
 
-  sp_free_a(mem, p);
+  sp_free(mem, p);
   sp_mem_tracking_deinit(&t);
 }
 
@@ -153,8 +153,8 @@ UTEST(tracking, realloc_zero_is_free) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  void* p = sp_alloc_a(mem, 32);
-  void* r = sp_realloc_a(mem, p, 0);
+  void* p = sp_alloc(mem, 32);
+  void* r = sp_realloc(mem, p, 0);
   EXPECT_EQ(r, SP_NULLPTR);
   EXPECT_EQ(t.live_count, 0u);
   EXPECT_EQ(t.live_bytes, 0u);
@@ -166,9 +166,9 @@ UTEST(tracking, realloc_zero_is_free) {
 // SP_PS LEAK //
 //////////////
 static sp_str_t leak_ps_get_process_path(sp_mem_t mem) {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path_a(mem));
-  sp_str_t process = sp_fs_join_path_a(mem, exe, sp_str_lit("process"));
-  return sp_fs_replace_ext_a(mem, process, sp_os_get_executable_ext());
+  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path(mem));
+  sp_str_t process = sp_fs_join_path(mem, exe, sp_str_lit("process"));
+  return sp_fs_replace_ext(mem, process, sp_os_get_executable_ext());
 }
 
 UTEST_F(leak, ps_create_wait_free_balances) {
@@ -184,7 +184,7 @@ UTEST_F(leak, ps_create_wait_free_balances) {
     },
   };
 
-  sp_ps_t ps = sp_ps_create_a(ut.mem, config);
+  sp_ps_t ps = sp_ps_create(ut.mem, config);
   EXPECT_NE(ps.os, SP_NULLPTR);
 
   sp_ps_status_t status = sp_ps_wait(&ps);
@@ -194,17 +194,17 @@ UTEST_F(leak, ps_create_wait_free_balances) {
 }
 
 UTEST_F(leak, multiple_allocs_independent) {
-  void* a = sp_alloc_a(ut.mem, 8);
-  void* b = sp_alloc_a(ut.mem, 16);
-  void* c = sp_alloc_a(ut.mem, 32);
+  void* a = sp_alloc(ut.mem, 8);
+  void* b = sp_alloc(ut.mem, 16);
+  void* c = sp_alloc(ut.mem, 32);
   EXPECT_EQ(ut.tracker.live_count, 3u);
   EXPECT_EQ(ut.tracker.live_bytes, 56u);
 
-  sp_free_a(ut.mem, b);
+  sp_free(ut.mem, b);
   EXPECT_EQ(ut.tracker.live_count, 2u);
   EXPECT_EQ(ut.tracker.live_bytes, 40u);
 
-  sp_free_a(ut.mem, a);
-  sp_free_a(ut.mem, c);
+  sp_free(ut.mem, a);
+  sp_free(ut.mem, c);
   EXPECT_EQ(ut.tracker.live_count, 0u);
 }

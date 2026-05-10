@@ -16,12 +16,12 @@ static void probe_symlinks(sp_mem_t a, sp_str_t test_dir) {
   if (probed) return;
   probed = true;
 
-  sp_str_t target = sp_fs_join_path_a(a, test_dir, sp_str_lit(".symlink_probe_target"));
-  sp_str_t link = sp_fs_join_path_a(a, test_dir, sp_str_lit(".symlink_probe_link"));
-  sp_fs_create_file_a(target);
-  are_symlinks_available = sp_fs_create_sym_link_a(target, link) == SP_OK;
-  if (are_symlinks_available) sp_fs_remove_file_a(link);
-  sp_fs_remove_file_a(target);
+  sp_str_t target = sp_fs_join_path(a, test_dir, sp_str_lit(".symlink_probe_target"));
+  sp_str_t link = sp_fs_join_path(a, test_dir, sp_str_lit(".symlink_probe_link"));
+  sp_fs_create_file(target);
+  are_symlinks_available = sp_fs_create_sym_link(target, link) == SP_OK;
+  if (are_symlinks_available) sp_fs_remove_file(link);
+  sp_fs_remove_file(target);
 }
 
 #define FS_EXPECT_EXIST true
@@ -114,8 +114,8 @@ static void fs_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_st
   u32 expected_count = fs_count_expected_paths(expected);
   sp_for(i, expected_count) {
     fs_expected_path_t* exp = &expected[i];
-    sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(exp->path));
-    bool exists = sp_fs_exists_a(path);
+    sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_str_view(exp->path));
+    bool exists = sp_fs_exists(path);
     if (exists != exp->exists) {
       if (exp->exists) {
         SP_TEST_REPORT("expected {} to exist", sp_fmt_str(path));
@@ -126,7 +126,7 @@ static void fs_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_st
     }
 
     if (exp->exists) {
-      fs_expect_attr(utest_result, path, sp_fs_get_kind_a(path), exp->attr);
+      fs_expect_attr(utest_result, path, sp_fs_get_kind(path), exp->attr);
     }
   }
 }
@@ -135,11 +135,11 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
   u32 setup_count = fs_count_setup(setup);
   sp_for(i, setup_count) {
     fs_setup_t* ent = &setup[i];
-    sp_str_t path = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(ent->path));
+    sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_str_view(ent->path));
     sp_str_t parent = sp_fs_parent_path(path);
 
-    if (!sp_str_empty(parent) && !sp_str_equal(parent, path) && !sp_fs_exists_a(parent)) {
-      sp_fs_create_dir_a(parent);
+    if (!sp_str_empty(parent) && !sp_str_equal(parent, path) && !sp_fs_exists(parent)) {
+      sp_fs_create_dir(parent);
     }
 
     switch (ent->kind) {
@@ -151,20 +151,20 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
         break;
       }
       case FS_SETUP_DIR: {
-        sp_fs_create_dir_a(path);
+        sp_fs_create_dir(path);
         break;
       }
       case FS_SETUP_SYMLINK: {
-        sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(ent->target));
-        if (sp_fs_create_sym_link_a(target, path) != SP_OK) {
+        sp_str_t target = sp_fs_join_path(fm->mem, sandbox, sp_str_view(ent->target));
+        if (sp_fs_create_sym_link(target, path) != SP_OK) {
           SP_TEST_REPORT("failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();
         }
         break;
       }
       case FS_SETUP_HARD_LINK: {
-        sp_str_t target = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(ent->target));
-        if (sp_fs_create_hard_link_a(target, path) != SP_OK) {
+        sp_str_t target = sp_fs_join_path(fm->mem, sandbox, sp_str_view(ent->target));
+        if (sp_fs_create_hard_link(target, path) != SP_OK) {
           SP_TEST_REPORT("failed to create hard link {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();
         }

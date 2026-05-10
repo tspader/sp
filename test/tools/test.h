@@ -41,7 +41,7 @@
 
 #define SP_TEST_REPORT(fmt, ...) \
   do { \
-    sp_str_t formatted = sp_fmt_a(utest_state.mem, fmt, ##__VA_ARGS__).value; \
+    sp_str_t formatted = sp_fmt(utest_state.mem, fmt, ##__VA_ARGS__).value; \
     UTEST_PRINTF("{}", sp_fmt_str(formatted)); \
   } while (0)
 
@@ -55,7 +55,7 @@
     if (!sp_str_equal((a), (b))) { \
       const c8* __file = __FILE__; \
       const u32 __line = __LINE__; \
-      sp_str_t __msg = sp_fmt_a( \
+      sp_str_t __msg = sp_fmt( \
         utest_state.mem, \
         "{}:{} Failure:\n  {.quote} != {.quote}",     \
         sp_fmt_cstr(__file), sp_fmt_uint(__line), \
@@ -152,16 +152,16 @@ bool     sp_mem_tracking_ok(sp_mem_tracking_t* mem);
 static sp_str_t sp_test_file_manager_top_level = sp_zero;
 
 static sp_str_t sp_test_file_manager_get_repo_root(sp_mem_t a) {
-  sp_str_t path = sp_fs_get_exe_path_a(a);
-  if (sp_fs_exists_a(path) && sp_fs_is_file_a(path)) {
+  sp_str_t path = sp_fs_get_exe_path(a);
+  if (sp_fs_exists(path) && sp_fs_is_file(path)) {
     path = sp_fs_parent_path(path);
   }
 
   while (!sp_str_empty(path)) {
     if (sp_str_equal(sp_fs_get_name(path), sp_str_lit("sp"))) {
-      sp_str_t marker = sp_fs_join_path_a(a, path, sp_str_lit("sp.h"));
-      if (sp_fs_exists_a(marker)) {
-        return sp_fs_canonicalize_path_a(a, path);
+      sp_str_t marker = sp_fs_join_path(a, path, sp_str_lit("sp.h"));
+      if (sp_fs_exists(marker)) {
+        return sp_fs_canonicalize_path(a, path);
       }
     }
 
@@ -178,61 +178,61 @@ static sp_str_t sp_test_file_manager_get_repo_root(sp_mem_t a) {
   }
 
   SP_ASSERT(false);
-  return sp_fs_canonicalize_path_a(a, sp_fs_get_cwd_a(a));
+  return sp_fs_canonicalize_path(a, sp_fs_get_cwd(a));
 }
 
 static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_root) {
   if (!sp_str_empty(sp_test_file_manager_top_level)) {
-    if (!sp_fs_exists_a(sp_test_file_manager_top_level)) {
-      sp_fs_create_dir_a(sp_test_file_manager_top_level);
+    if (!sp_fs_exists(sp_test_file_manager_top_level)) {
+      sp_fs_create_dir(sp_test_file_manager_top_level);
     }
     return sp_test_file_manager_top_level;
   }
 
-  sp_str_t tmp = sp_fs_join_path_a(a, repo_root, sp_str_lit(".tmp"));
-  if (!sp_fs_exists_a(tmp)) {
-    sp_fs_create_dir_a(tmp);
+  sp_str_t tmp = sp_fs_join_path(a, repo_root, sp_str_lit(".tmp"));
+  if (!sp_fs_exists(tmp)) {
+    sp_fs_create_dir(tmp);
   }
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
-  sp_str_t iso = sp_tm_epoch_to_iso8601_a(a, now);
-  sp_str_t sanitized = sp_str_replace_c8_a(a, iso, ':', '-');
-  sp_str_t root = sp_fs_join_path_a(a, tmp, sanitized);
+  sp_str_t iso = sp_tm_epoch_to_iso8601(a, now);
+  sp_str_t sanitized = sp_str_replace_c8(a, iso, ':', '-');
+  sp_str_t root = sp_fs_join_path(a, tmp, sanitized);
 
-  if (!sp_fs_exists_a(root)) {
-    sp_fs_create_dir_a(root);
+  if (!sp_fs_exists(root)) {
+    sp_fs_create_dir(root);
   }
 
   // Cache in a long-lived allocator (os) so the result outlives `a`, which is
   // typically a per-test arena that gets destroyed in cleanup.
-  sp_test_file_manager_top_level = sp_fs_canonicalize_path_a(sp_mem_os_new(), root);
+  sp_test_file_manager_top_level = sp_fs_canonicalize_path(sp_mem_os_new(), root);
   return sp_test_file_manager_top_level;
 }
 
 void sp_test_file_manager_init(sp_test_file_manager_t* fs) {
   fs->arena = sp_mem_arena_new(sp_mem_os_new());
   fs->mem = sp_mem_arena_as_allocator(fs->arena);
-  fs->paths.bin = sp_fs_get_exe_path_a(fs->mem);
+  fs->paths.bin = sp_fs_get_exe_path(fs->mem);
   fs->paths.root = sp_test_file_manager_get_repo_root(fs->mem);
   fs->paths.build = fs->paths.root;
   fs->paths.test = sp_test_file_manager_get_top_level(fs->mem, fs->paths.root);
 
-  if (!sp_fs_exists_a(fs->paths.test)) {
-    sp_fs_create_dir_a(fs->paths.test);
+  if (!sp_fs_exists(fs->paths.test)) {
+    sp_fs_create_dir(fs->paths.test);
   }
 }
 
 sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name) {
-  return sp_fs_join_path_a(manager->mem, manager->paths.test, name);
+  return sp_fs_join_path(manager->mem, manager->paths.test, name);
 }
 
 void sp_test_file_create_ex(sp_test_file_config_t config) {
   sp_str_t parent = sp_fs_parent_path(config.path);
-  if (!sp_str_empty(parent) && !sp_str_equal(parent, config.path) && !sp_fs_exists_a(parent)) {
-    sp_fs_create_dir_a(parent);
+  if (!sp_str_empty(parent) && !sp_str_equal(parent, config.path) && !sp_fs_exists(parent)) {
+    sp_fs_create_dir(parent);
   }
 
-  sp_fs_remove_file_a(config.path);
+  sp_fs_remove_file(config.path);
 
   sp_io_file_writer_t stream = sp_zero;
   sp_io_file_writer_from_path(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
@@ -267,8 +267,8 @@ void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
     return;
   }
 
-  if (sp_fs_exists_a(manager->paths.test)) {
-    sp_fs_remove_dir_a(manager->paths.test);
+  if (sp_fs_exists(manager->paths.test)) {
+    sp_fs_remove_dir(manager->paths.test);
   }
 
   if (manager->arena) {
@@ -313,7 +313,7 @@ static void sp_mem_tracking_unlink(sp_mem_tracking_node_t** list, sp_mem_trackin
 
 static void* sp_mem_tracking_do_alloc(sp_mem_tracking_t* t, u64 size) {
   if (!size) return SP_NULLPTR;
-  void* raw = sp_alloc_a(t->backing, size + sizeof(sp_mem_tracking_node_t));
+  void* raw = sp_alloc(t->backing, size + sizeof(sp_mem_tracking_node_t));
   if (!raw) return SP_NULLPTR;
 
   sp_mem_tracking_node_t* node = (sp_mem_tracking_node_t*)raw;
@@ -371,7 +371,7 @@ static void* sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 siz
 
   void* fresh = sp_mem_tracking_do_alloc(t, size);
   if (!fresh) return SP_NULLPTR;
-  sp_mem_copy(old, fresh, node->size);
+  sp_mem_copy(fresh, old, node->size);
   sp_mem_tracking_do_free(t, old);
   return fresh;
 }
@@ -403,13 +403,13 @@ sp_mem_t sp_mem_tracking_as_allocator(sp_mem_tracking_t* t) {
 }
 
 void sp_mem_tracking_dump(sp_mem_tracking_t* t) {
-  sp_log_a("tracking: live={} bytes={} double_frees={} wild_frees={}",
+  sp_log("tracking: live={} bytes={} double_frees={} wild_frees={}",
     sp_fmt_uint(t->live_count),
     sp_fmt_uint(t->live_bytes),
     sp_fmt_uint(t->double_frees),
     sp_fmt_uint(t->wild_frees));
   for (sp_mem_tracking_node_t* n = t->live; n; n = n->next) {
-    sp_log_a("  #{} size={}", sp_fmt_uint(n->id), sp_fmt_uint(n->size));
+    sp_log("  #{} size={}", sp_fmt_uint(n->id), sp_fmt_uint(n->size));
   }
 }
 
@@ -417,13 +417,13 @@ void sp_mem_tracking_deinit(sp_mem_tracking_t* t) {
   sp_mem_tracking_node_t* n = t->live;
   while (n) {
     sp_mem_tracking_node_t* next = n->next;
-    sp_free_a(t->backing, n);
+    sp_free(t->backing, n);
     n = next;
   }
   n = t->freed;
   while (n) {
     sp_mem_tracking_node_t* next = n->next;
-    sp_free_a(t->backing, n);
+    sp_free(t->backing, n);
     n = next;
   }
   sp_mem_zero(t, sizeof(*t));

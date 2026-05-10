@@ -4,11 +4,11 @@ UTEST_F(fs, mod_time_nonzero) {
   SKIP_ON_WASM()
   sp_str_t file = sp_test_file_path(&ut.file_manager, sp_str_lit("mod_time.file"));
   sp_str_t dir = sp_test_file_path(&ut.file_manager, sp_str_lit("mod_time.dir"));
-  sp_fs_create_file_a(file);
-  sp_fs_create_dir_a(dir);
+  sp_fs_create_file(file);
+  sp_fs_create_dir(dir);
 
-  EXPECT_TRUE(sp_fs_get_mod_time_a(file).s > 0);
-  EXPECT_TRUE(sp_fs_get_mod_time_a(dir).s > 0);
+  EXPECT_TRUE(sp_fs_get_mod_time(file).s > 0);
+  EXPECT_TRUE(sp_fs_get_mod_time(dir).s > 0);
 }
 
 UTEST_F(fs, mod_time_updates_after_write) {
@@ -19,7 +19,7 @@ UTEST_F(fs, mod_time_updates_after_write) {
     .content = sp_str_lit("a"),
   });
 
-  sp_tm_epoch_t before = sp_fs_get_mod_time_a(file);
+  sp_tm_epoch_t before = sp_fs_get_mod_time(file);
   sp_os_sleep_ms(100);
 
   sp_io_file_writer_t writer = sp_zero;
@@ -27,8 +27,8 @@ UTEST_F(fs, mod_time_updates_after_write) {
   sp_io_write_str(&writer.base, sp_str_lit("b"), SP_NULLPTR);
   sp_io_file_writer_close(&writer);
 
-  sp_tm_epoch_t after = sp_fs_get_mod_time_a(file);
+  sp_tm_epoch_t after = sp_fs_get_mod_time(file);
   ASSERT_TRUE(after.s > before.s || (after.s == before.s && after.ns > before.ns));
 }
 
-SP_TEST_MAIN()
+

@@ -45,8 +45,8 @@ typedef struct {
 } compound_key_t;
 
 UTEST_F(sp_ht, basic_operations) {
-  sp_ht_a(int, float) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(int, float) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   EXPECT_EQ(sp_ht_size(ht), 0u);
   EXPECT_TRUE(sp_ht_empty(ht));
@@ -84,8 +84,8 @@ UTEST_F(sp_ht, basic_operations) {
 }
 
 UTEST_F(sp_ht, pointer_retrieval) {
-  sp_ht_a(u32, double) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(u32, double) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   sp_ht_insert(ht, 100, 123.456);
   sp_ht_insert(ht, 200, 789.012);
@@ -104,8 +104,8 @@ UTEST_F(sp_ht, pointer_retrieval) {
 }
 
 UTEST_F(sp_ht, struct_values) {
-  sp_ht_a(int, vec3_t) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(int, vec3_t) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   vec3_t v1 = {1.0f, 2.0f, 3.0f};
   vec3_t v2 = {4.0f, 5.0f, 6.0f};
@@ -124,8 +124,8 @@ UTEST_F(sp_ht, struct_values) {
 }
 
 UTEST_F(sp_ht, struct_keys) {
-  sp_ht_a(compound_key_t, const char*) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(compound_key_t, const char*) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   compound_key_t k1 = {100, 1};
   compound_key_t k2 = {200, 2};
@@ -149,8 +149,8 @@ UTEST_F(sp_ht, struct_keys) {
 }
 
 UTEST_F(sp_ht, string_keys) {
-  sp_ht_a(u64, int) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(u64, int) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   const char* s1 = "apple";
   const char* s2 = "banana";
@@ -175,8 +175,8 @@ UTEST_F(sp_ht, string_keys) {
 }
 
 UTEST_F(sp_ht, collision_handling) {
-  sp_ht_a(int, int) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   for (s32 i = 0; i < 100; i++) {
       sp_ht_insert(ht, i, i * 100);
@@ -206,8 +206,8 @@ UTEST_F(sp_ht, collision_handling) {
 }
 
 UTEST_F(sp_ht, iteration) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   for (s32 i = 0; i < 10; i++) {
     sp_ht_insert(ht, i * 10, i);
@@ -230,8 +230,8 @@ UTEST_F(sp_ht, iteration) {
 }
 
 UTEST_F(sp_ht, edge_cases) {
-  sp_ht_a(int, int) ht1 = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht1);
+  sp_ht(int, int) ht1 = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht1);
   EXPECT_EQ(sp_ht_size(ht1), 0u);
   EXPECT_TRUE(sp_ht_empty(ht1));
   EXPECT_FALSE(sp_ht_getp(ht1, 42));
@@ -239,15 +239,15 @@ UTEST_F(sp_ht, edge_cases) {
   sp_ht_clear(ht1);
   sp_ht_free(ht1);
 
-  sp_ht_a(int, int) ht2 = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht2);
+  sp_ht(int, int) ht2 = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht2);
   sp_ht_insert(ht2, 1, 100);
   sp_ht_erase(ht2, 1);
   EXPECT_EQ(sp_ht_size(ht2), 0u);
   sp_ht_free(ht2);
 
-  sp_ht_a(int, int) ht3 = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht3);
+  sp_ht(int, int) ht3 = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht3);
   sp_ht_insert(ht3, 1, 100);
   sp_ht_erase(ht3, 999);
   EXPECT_EQ(sp_ht_size(ht3), 1u);
@@ -255,8 +255,8 @@ UTEST_F(sp_ht, edge_cases) {
 }
 
 UTEST_F(sp_ht, pathological_all_same_hash) {
-  sp_ht_a(u32, u32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(u32, u32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   u64 cap = sp_ht_capacity(ht);
   if (cap < 2) {
@@ -278,8 +278,8 @@ UTEST_F(sp_ht, pathological_all_same_hash) {
 }
 
 UTEST_F(sp_ht, duplicate_key_insert_size_bug) {
-  sp_ht_a(u32, u32) table = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, table);
+  sp_ht(u32, u32) table = SP_NULLPTR;
+  sp_ht_init(ut.mem, table);
 
   sp_ht_insert(table, 42, 100);
   EXPECT_EQ(sp_ht_size(table), 1u);
@@ -298,8 +298,8 @@ UTEST_F(sp_ht, duplicate_key_insert_size_bug) {
 }
 
 UTEST_F(sp_ht, iterator_yields_inactive_entry_at_slot_zero) {
-  sp_ht_a(u64, u64) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(u64, u64) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   sp_ht_insert(ht, 0, 999);
   sp_ht_erase(ht, 0);
@@ -317,8 +317,8 @@ UTEST_F(sp_ht, iterator_yields_inactive_entry_at_slot_zero) {
 }
 
 UTEST_F(sp_ht, collision) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   for (u32 i = 0; i < 8; i++) {
     sp_ht_insert(ht, i, i);
@@ -389,8 +389,8 @@ UTEST_F(sp_ht, collision) {
 }
 
 UTEST_F(sp_ht, iterator_returns_zero_entries_for_populated_table) {
-  sp_ht_a(u64, u64) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(u64, u64) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   sp_ht_insert(ht, 1, 100);
   sp_ht_insert(ht, 2, 200);
@@ -406,7 +406,7 @@ UTEST_F(sp_ht, iterator_returns_zero_entries_for_populated_table) {
 }
 
 UTEST_F(sp_ht, null_safety) {
-  sp_ht_a(s32, s32) null_ht = NULL;
+  sp_ht(s32, s32) null_ht = NULL;
 
   EXPECT_EQ(sp_ht_size(null_ht), 0u);
   EXPECT_EQ(sp_ht_capacity(null_ht), 0u);
@@ -431,7 +431,7 @@ UTEST_F(sp_ht, null_safety) {
   sp_ht_erase(null_ht, 42);
   sp_ht_free(null_ht);
 
-  sp_ht_init_a(ut.mem, null_ht);
+  sp_ht_init(ut.mem, null_ht);
   sp_ht_insert(null_ht, 42, 100);
   EXPECT_NE(null_ht, SP_NULLPTR);
   EXPECT_EQ(sp_ht_size(null_ht), 1u);
@@ -443,13 +443,13 @@ UTEST_F(sp_ht, null_safety) {
 UTEST_F(sp_ht, string_key_custom_hash) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
-  sp_ht_a(sp_str_t, int) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(sp_str_t, int) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   sp_ht_set_fns(ht, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
-  sp_str_t ka = sp_str_copy_a(s.mem, sp_str_lit("hello"));
-  sp_str_t kb = sp_str_copy_a(s.mem, sp_str_lit("world"));
-  sp_str_t kc = sp_str_copy_a(s.mem, sp_str_lit("test"));
+  sp_str_t ka = sp_str_copy(s.mem, sp_str_lit("hello"));
+  sp_str_t kb = sp_str_copy(s.mem, sp_str_lit("world"));
+  sp_str_t kc = sp_str_copy(s.mem, sp_str_lit("test"));
 
   sp_ht_insert(ht, ka, 100);
   sp_ht_insert(ht, kb, 200);
@@ -463,8 +463,8 @@ UTEST_F(sp_ht, string_key_custom_hash) {
   EXPECT_EQ(*sp_ht_getp(ht, kb), 200);
   EXPECT_EQ(*sp_ht_getp(ht, kc), 300);
 
-  sp_str_t ka_copy = sp_str_copy_a(s.mem, sp_str_lit("hello"));
-  sp_str_t kb_copy = sp_str_copy_a(s.mem, sp_str_lit("world"));
+  sp_str_t ka_copy = sp_str_copy(s.mem, sp_str_lit("hello"));
+  sp_str_t kb_copy = sp_str_copy(s.mem, sp_str_lit("world"));
 
   EXPECT_TRUE(sp_ht_getp(ht, ka_copy));
   EXPECT_TRUE(sp_ht_getp(ht, kb_copy));
@@ -472,7 +472,7 @@ UTEST_F(sp_ht, string_key_custom_hash) {
   EXPECT_EQ(*sp_ht_getp(ht, ka_copy), 100);
   EXPECT_EQ(*sp_ht_getp(ht, kb_copy), 200);
 
-  sp_str_t kd = sp_str_copy_a(s.mem, sp_str_lit("missing"));
+  sp_str_t kd = sp_str_copy(s.mem, sp_str_lit("missing"));
   EXPECT_FALSE(sp_ht_getp(ht, kd));
   EXPECT_EQ(sp_ht_getp(ht, kd), SP_NULLPTR);
 
@@ -483,12 +483,12 @@ UTEST_F(sp_ht, string_key_custom_hash) {
 UTEST_F(sp_ht, str_key) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
-  sp_ht_a(sp_str_t, s32) ht = SP_NULLPTR;
-  sp_str_ht_init_a(ut.mem, ht);
+  sp_ht(sp_str_t, s32) ht = SP_NULLPTR;
+  sp_str_ht_init(ut.mem, ht);
 
-  sp_str_t ka = sp_str_copy_a(s.mem, sp_str_lit("hello"));
-  sp_str_t kb = sp_str_copy_a(s.mem, sp_str_lit("world"));
-  sp_str_t kc = sp_str_copy_a(s.mem, sp_str_lit("test"));
+  sp_str_t ka = sp_str_copy(s.mem, sp_str_lit("hello"));
+  sp_str_t kb = sp_str_copy(s.mem, sp_str_lit("world"));
+  sp_str_t kc = sp_str_copy(s.mem, sp_str_lit("test"));
 
   sp_str_ht_insert(ht, ka, 100);
   sp_str_ht_insert(ht, kb, 200);
@@ -502,8 +502,8 @@ UTEST_F(sp_ht, str_key) {
   EXPECT_EQ(*sp_str_ht_get(ht, kb), 200);
   EXPECT_EQ(*sp_str_ht_get(ht, kc), 300);
 
-  sp_str_t ka_copy = sp_str_copy_a(s.mem, sp_str_lit("hello"));
-  sp_str_t kb_copy = sp_str_copy_a(s.mem, sp_str_lit("world"));
+  sp_str_t ka_copy = sp_str_copy(s.mem, sp_str_lit("hello"));
+  sp_str_t kb_copy = sp_str_copy(s.mem, sp_str_lit("world"));
 
   EXPECT_TRUE(sp_str_ht_get(ht, ka_copy));
   EXPECT_TRUE(sp_str_ht_get(ht, kb_copy));
@@ -511,7 +511,7 @@ UTEST_F(sp_ht, str_key) {
   EXPECT_EQ(*sp_str_ht_get(ht, ka_copy), 100);
   EXPECT_EQ(*sp_str_ht_get(ht, kb_copy), 200);
 
-  sp_str_t kd = sp_str_copy_a(s.mem, sp_str_lit("missing"));
+  sp_str_t kd = sp_str_copy(s.mem, sp_str_lit("missing"));
   EXPECT_FALSE(sp_str_ht_get(ht, kd));
   EXPECT_EQ(sp_str_ht_get(ht, kd), SP_NULLPTR);
 
@@ -520,8 +520,8 @@ UTEST_F(sp_ht, str_key) {
 }
 
 UTEST_F(sp_ht, cstr_key) {
-  sp_ht_a(const c8*, s32) ht = SP_NULLPTR;
-  sp_cstr_ht_init_a(ut.mem, ht);
+  sp_ht(const c8*, s32) ht = SP_NULLPTR;
+  sp_cstr_ht_init(ut.mem, ht);
 
   sp_cstr_ht_insert(ht, "hello", 100);
   sp_cstr_ht_insert(ht, "world", 200);
@@ -586,7 +586,7 @@ UTEST_F(siphash, collision_resistance) {
   u64 seed = 0x31415926;
 
   const s32 count = 1000;
-  u64* hashes = sp_alloc_n_a(ut.mem, u64, count);
+  u64* hashes = sp_alloc_n(ut.mem, u64, count);
 
   for (s32 i = 0; i < count; i++) {
       hashes[i] = sp_hash_bytes(&i, sizeof(i), seed);
@@ -603,13 +603,13 @@ UTEST_F(siphash, collision_resistance) {
 
   EXPECT_EQ(collisions, 0);
 
-  sp_free_a(ut.mem, hashes);
+  sp_free(ut.mem, hashes);
 }
 
 UTEST_F(sp_ht, hash_table_with_dyn_array_values) {
     typedef int* int_array;
-    sp_ht_a(int, int_array) ht = SP_NULLPTR;
-    sp_ht_init_a(ut.mem, ht);
+    sp_ht(int, int_array) ht = SP_NULLPTR;
+    sp_ht_init(ut.mem, ht);
 
     for (s32 i = 0; i < 5; i++) {
         sp_da(int) arr = sp_da_new(ut.mem, int);
@@ -641,8 +641,8 @@ UTEST_F(sp_ht, hash_table_with_dyn_array_values) {
 }
 
 UTEST_F(sp_ht, multiple_arrays_in_hash_table) {
-  sp_ht_a(int, void*) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(int, void*) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   for (s32 key = 0; key < 5; key++) {
     sp_da(int) arr = sp_da_new(ut.mem, int);
@@ -674,20 +674,20 @@ UTEST_F(sp_ht, multiple_arrays_in_hash_table) {
 }
 
 UTEST_F(sp_ht, front_null_table) {
-  sp_ht_a(int, int) ht = NULL;
+  sp_ht(int, int) ht = NULL;
   EXPECT_EQ(sp_ht_front(ht), SP_NULLPTR);
 }
 
 UTEST_F(sp_ht, front_empty_table) {
-  sp_ht_a(int, int) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   EXPECT_EQ(sp_ht_front(ht), SP_NULLPTR);
   sp_ht_free(ht);
 }
 
 UTEST_F(sp_ht, front_single_item) {
-  sp_ht_a(int, int) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   sp_ht_insert(ht, 42, 100);
 
   int* front = sp_ht_front(ht);
@@ -698,8 +698,8 @@ UTEST_F(sp_ht, front_single_item) {
 }
 
 UTEST_F(sp_ht, front_multiple_items) {
-  sp_ht_a(int, int) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   sp_ht_insert(ht, 1, 10);
   sp_ht_insert(ht, 2, 20);
   sp_ht_insert(ht, 3, 30);
@@ -720,8 +720,8 @@ UTEST_F(sp_ht, front_multiple_items) {
 }
 
 UTEST_F(sp_ht, front_after_erase) {
-  sp_ht_a(int, int) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(int, int) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   sp_ht_insert(ht, 1, 10);
   sp_ht_insert(ht, 2, 20);
 
@@ -746,10 +746,10 @@ UTEST_F(sp_ht, front_after_erase) {
 }
 
 UTEST_F(sp_ht, for_kv_iteration) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
-  sp_ht_a(s32, bool) visited = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, visited);
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
+  sp_ht(s32, bool) visited = SP_NULLPTR;
+  sp_ht_init(ut.mem, visited);
 
   sp_for(it, 10) {
     sp_ht_insert(ht, it * 10, it);
@@ -779,12 +779,12 @@ UTEST_F(sp_ht, for_kv_iteration) {
 }
 
 UTEST_F(sp_ht, for_kv_string_keys) {
-  sp_ht_a(sp_str_t, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(sp_str_t, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   sp_ht_set_fns(ht, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
-  sp_ht_a(sp_str_t, bool) visited = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, visited);
+  sp_ht(sp_str_t, bool) visited = SP_NULLPTR;
+  sp_ht_init(ut.mem, visited);
   sp_ht_set_fns(visited, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key);
 
   sp_ht_insert(ht, sp_str_lit("one"), 1);
@@ -812,8 +812,8 @@ UTEST_F(sp_ht, for_kv_string_keys) {
 }
 
 UTEST_F(sp_ht, for_kv_empty_table) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   s32 count = 0;
   sp_ht_for_kv(ht, it) {
@@ -827,7 +827,7 @@ UTEST_F(sp_ht, for_kv_empty_table) {
 }
 
 UTEST_F(sp_ht, for_kv_null_table) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
+  sp_ht(s32, s32) ht = SP_NULLPTR;
 
   s32 count = 0;
   sp_ht_for_kv(ht, it) {
@@ -854,8 +854,8 @@ static bool cmp_s32(void* ka, void* kb, u64 size) {
 // Hash collision: insert uses hash equality instead of key equality for probing.
 // Constant hash forces all keys to same bucket; different keys overwrite each other.
 UTEST_F(sp_ht, issue_hash_collision_overwrites_different_keys) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   sp_ht_set_fns(ht, hash_constant, cmp_s32);
 
   sp_ht_insert(ht, 100, 1);
@@ -892,8 +892,8 @@ static sp_hash_t sp_test_identity_hash(void* key, u64 size) {
 // Rehash: resize extends array but doesn't rehash existing entries.
 // Insert a key whose slot changes after resize, verify it moves correctly.
 UTEST_F(sp_ht, issue_rehash_breaks_lookups_after_resize) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   sp_ht_set_fns(ht, sp_test_identity_hash, cmp_s32);
 
   sp_ht_insert(ht, 1, 0);
@@ -934,8 +934,8 @@ static bool sp_test_counting_compare(void* ka, void* kb, u64 size) {
 // Linear scan: lookup probes entire capacity instead of stopping at INACTIVE.
 // With 1 element in cap=64 table, missing key lookup should be O(1), not O(N).
 UTEST_F(sp_ht, issue_linear_scan_calls_hash_too_many_times) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
   sp_ht_set_fns(ht, sp_test_counting_hash, sp_test_counting_compare);
 
   for (s32 i = 0; i < 32; i++) {
@@ -982,8 +982,8 @@ static s32 eval_val(void) {
 }
 
 UTEST_F(sp_ht, issue_insert_evaluates_args_multiple_times) {
-  sp_ht_a(s32, s32) ht = SP_NULLPTR;
-  sp_ht_init_a(ut.mem, ht);
+  sp_ht(s32, s32) ht = SP_NULLPTR;
+  sp_ht_init(ut.mem, ht);
 
   g_key_eval_count = 0;
   g_val_eval_count = 0;

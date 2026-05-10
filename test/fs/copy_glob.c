@@ -9,13 +9,13 @@ typedef struct {
 
 static void run_copy_glob_test(s32* utest_result, sp_test_file_manager_t* fm, copy_glob_test_t t) {
   sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
-  sp_str_t src = sp_fs_join_path_a(fm->mem, sandbox, sp_str_lit("src"));
-  sp_str_t dst = sp_fs_join_path_a(fm->mem, sandbox, sp_str_lit("dst"));
-  sp_fs_create_dir_a(src);
-  sp_fs_create_dir_a(dst);
+  sp_str_t src = sp_fs_join_path(fm->mem, sandbox, sp_str_lit("src"));
+  sp_str_t dst = sp_fs_join_path(fm->mem, sandbox, sp_str_lit("dst"));
+  sp_fs_create_dir(src);
+  sp_fs_create_dir(dst);
 
   fs_apply_setup(utest_result, fm, src, t.src);
-  sp_fs_copy_glob_a(src, sp_str_view(t.glob), dst);
+  sp_fs_copy_glob(src, sp_str_view(t.glob), dst);
   fs_expect_paths(utest_result, fm, dst, t.expect);
 }
 
@@ -75,4 +75,4 @@ UTEST_F(fs, copy_glob_empty_src) {
   });
 }
 
-SP_TEST_MAIN()
+

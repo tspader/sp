@@ -391,3 +391,4 @@ UTEST(cv, multithread_producer_consumer) {
   sp_cv_destroy(&cv);
   sp_mutex_destroy(&mutex);
 }
+

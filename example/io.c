@@ -7,15 +7,15 @@ s32 run(s32 num_args, const c8** args) {
   sp_io_file_reader_t r = sp_zero;
 
   sp_mem_buffer_t buffer = {
-    .data = sp_alloc_n_a(mem, u8, 64),
+    .data = sp_alloc_n(mem, u8, 64),
     .capacity = 64
   };
-  sp_str_t exe = sp_fs_get_exe_path_a(mem);
+  sp_str_t exe = sp_fs_get_exe_path(mem);
 
   // sp_io provides utilities for opening a file from a path
   sp_io_file_reader_from_path(&r, exe);
   sp_io_read(&r.base, buffer.data, buffer.capacity, &buffer.len);
-  sp_log_a("sp_io_file_reader_from_path: {}", sp_fmt_str(sp_mem_buffer_as_str(&buffer)));
+  sp_log("sp_io_file_reader_from_path: {}", sp_fmt_str(sp_mem_buffer_as_str(&buffer)));
 
   sp_io_file_reader_close(&r);
   sp_mem_zero(buffer.data, buffer.capacity);
@@ -27,7 +27,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_sys_fd_t fd = sp_sys_open_s(exe, SP_O_RDONLY | SP_O_BINARY, 0);
   sp_io_file_reader_from_file(&r, (sp_io_file_t)fd, SP_IO_CLOSE_MODE_AUTO);
   sp_io_read(&r.base, buffer.data, buffer.capacity, &buffer.len);
-  sp_log_a("sp_io_file_reader_from_file: {}", sp_fmt_str(sp_mem_buffer_as_str(&buffer)));
+  sp_log("sp_io_file_reader_from_file: {}", sp_fmt_str(sp_mem_buffer_as_str(&buffer)));
 
   sp_io_file_reader_close(&r);
 
@@ -36,15 +36,23 @@ s32 run(s32 num_args, const c8** args) {
   c8 str [256] = sp_zero;
   sp_io_mem_writer_t mw = sp_zero;
   sp_io_mem_writer_from_buffer(&mw, str, 256);
-  sp_fmt_io(&mw.base, "hello, {}", sp_fmt_cstr("world"));
-  sp_log_a("sp_io_writer_from_mem: {}", sp_fmt_cstr(str));
+  {
+    sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+    sp_fmt_io_a(&mw.base, s.mem, "hello, {}", sp_fmt_cstr("world"));
+    sp_mem_end_scratch(s);
+  }
+  sp_log("sp_io_writer_from_mem: {}", sp_fmt_cstr(str));
 
   sp_mem_zero(str, 256);
 
   // You can also format directly to stdout
   sp_io_file_writer_t fw = sp_zero;
   sp_io_file_writer_from_fd(&fw, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-  sp_fmt_io(&fw.base, "hello, {.cyan}", sp_fmt_cstr("stdout"));
+  {
+    sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+    sp_fmt_io_a(&fw.base, s.mem, "hello, {.cyan}", sp_fmt_cstr("stdout"));
+    sp_mem_end_scratch(s);
+  }
   sp_io_write(&fw.base, "\n", 1, SP_NULLPTR);
   sp_io_file_writer_close(&fw);
 
@@ -59,11 +67,11 @@ s32 run(s32 num_args, const c8** args) {
     total += bytes_read;
     if (err == SP_ERR_IO_EOF) break;
     if (err != SP_OK) {
-      sp_log_a("sp_io_read failed: {}", sp_fmt_uint((u32)err));
+      sp_log("sp_io_read failed: {}", sp_fmt_uint((u32)err));
       break;
     }
   }
-  sp_log_a("sp_io EOF: drained {} bytes", sp_fmt_uint(total));
+  sp_log("sp_io EOF: drained {} bytes", sp_fmt_uint(total));
   sp_io_file_reader_close(&r);
 
   return 0;

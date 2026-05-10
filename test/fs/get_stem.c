@@ -32,4 +32,4 @@ UTEST(fs_get_stem, cases) {
   }
 }
 
-SP_TEST_MAIN()
+
