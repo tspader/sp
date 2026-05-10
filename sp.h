@@ -729,6 +729,7 @@ typedef enum {
   SP_ERR_IO_READ_ONLY     = 1008,
   SP_ERR_IO_NO_SPACE      = 1009,
   SP_ERR_IO_EOF           = 1010,
+  SP_ERR_IO_INVALID_WRITE = 1011,
   SP_ERR_FMT_TOO_MANY_RENDERERS = 1100,
   SP_ERR_FMT_WRONG_PARAM_KIND = 1101,
   SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
@@ -3132,6 +3133,8 @@ struct sp_io_dyn_mem_writer {
   u64 cursor;
 };
 
+SP_API sp_err_t       sp_io_copy(sp_io_writer_t* dst, sp_io_reader_t* src, u64* bytes_copied);
+SP_API sp_err_t       sp_io_copy_b(sp_io_writer_t* dst, sp_io_reader_t* src, u8* buffer, u64 n, u64* bytes_copied);
 SP_API sp_err_t       sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
 SP_API void           sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size);
 SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
@@ -13192,6 +13195,67 @@ void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
     .capacity = capacity,
   };
   reader->cursor = 0;
+}
+
+sp_err_t sp_io_copy(sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_copied) {
+  u8 buffer[4096];
+  return sp_io_copy_b(w, r, buffer, sizeof(buffer), bytes_copied);
+}
+
+sp_err_t sp_io_copy_b(sp_io_writer_t* w, sp_io_reader_t* r, u8* buffer, u64 n, u64* bytes_copied) {
+  sp_err_t err = SP_OK;
+  u64 total = 0;
+  u64 chunk = 0;
+
+  while (true) {
+    sp_try_goto(sp_io_read(r, buffer, n, &chunk), err, done);
+    sp_try_goto(sp_io_write(w, buffer, chunk, SP_NULLPTR), err, done);
+    total += chunk;
+  }
+
+done:
+  if (err == SP_ERR_IO_EOF) err = SP_OK;
+  if (bytes_copied) *bytes_copied = total;
+  return err;
+}
+
+sp_err_t sp_io_copy_b2(sp_io_writer_t* w, sp_io_reader_t* r, u8* buffer, u64 n, u64* bytes_copied) {
+  u64 total = 0;
+  struct {
+    u64 r;
+    u64 w;
+  } chunk = sp_zero;
+  struct {
+    u64 r;
+    u64 w;
+    u64 e;
+  } err = sp_zero;
+
+  while (true) {
+    err.w = sp_io_read(r, buffer, n, &chunk.r);
+    if (chunk.r) {
+      err.r = sp_io_write(w, buffer, chunk.r, &chunk.w);
+      if (chunk.w != chunk.r) {
+        err.w = SP_ERR_IO_INVALID_WRITE;
+      }
+      total += chunk.w;
+      if (err.w) {
+        err.e = err.w;
+        break;
+      }
+    }
+
+    if (err.r) {
+      if (err.r != SP_ERR_IO_EOF) {
+        err.e = err.r;
+        break;
+      }
+    }
+  }
+
+done:
+  if (bytes_copied) *bytes_copied = total;
+  return err.e;
 }
 
 sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
