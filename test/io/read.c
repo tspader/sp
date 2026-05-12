@@ -288,6 +288,31 @@ UTEST_F(io_read, buffered_short_fill) {
   });
 }
 
+// After a hard error, a subsequent successful read recovers. Pins that the
+// wrapper does NOT latch the error: state lives in the backend.
+UTEST_F(io_read, error_then_recovery) {
+  run_io_mock_read_test(utest_result, (io_mock_read_test_t){
+    .results = {
+      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 3, .data = "abc", .err = SP_OK },
+    },
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_OK, "abc" } },
+    },
+  });
+}
+
+// Unbuffered zero-byte request must not call the backend.
+UTEST_F(io_read, zero_request) {
+  run_io_mock_read_test(utest_result, (io_mock_read_test_t){
+    .results = {0},
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 0, SP_OK } },
+    },
+  });
+}
+
 // Zero-byte request must not call the backend.
 UTEST_F(io_read, buffered_zero_request) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){

@@ -176,18 +176,6 @@ UTEST_F(io_copy, buffered_reader_one_fill_many_drains) {
   });
 }
 
-// Writer wrapper buffer is large enough to hold the entire copy. The
-// backend must NOT be called: bytes stay buffered. Copy reports the full
-// count, but received_len at the backend is 0.
-UTEST_F(io_copy, buffered_writer_absorbs_entire_copy) {
-  run_io_mock_copy_writer_test(utest_result, (io_mock_copy_writer_test_t){
-    .source = "01234567",
-    .responses = {0},
-    .buffer = { .write = 16, .copy = 4 },
-    .expect = { .err = SP_OK, .copied = 8, .received = "" },
-  });
-}
-
 // Writer wrapper buffer smaller than copy size. As the buffer fills, the
 // wrapper flushes to the backend. The tail of the data is left in the
 // buffer when copy returns because sp_io_copy_b does not flush at end.

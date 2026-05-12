@@ -291,6 +291,27 @@ UTEST_F(io_write, buffered_flush_backend_error) {
   });
 }
 
+// When flush hits a backend that accepts a partial prefix then errors, the
+// bytes that didn't make it are dropped: the wrapper buffer is cleared
+// regardless of flush outcome. A subsequent write does NOT include the lost
+// suffix. Pins "flush failure is non-recoverable; tail is lost" as deliberate.
+UTEST_F(io_write, buffered_flush_partial_drops_tail) {
+  run_io_mock_write_test(utest_result, (io_mock_write_test_t){
+    .results = {
+      { .bytes = 2, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 2, .err = SP_OK },
+    },
+    .buffer = 8,
+    .steps = {
+      { .kind = IO_STEP_WRITE, .write = { "abcd", SP_OK, 4 } },
+      { .kind = IO_STEP_FLUSH, .flush = { SP_ERR_IO_WRITE_FAILED } },
+      { .kind = IO_STEP_WRITE, .write = { "xy", SP_OK, 2 } },
+      { .kind = IO_STEP_FLUSH, .flush = { SP_OK } },
+    },
+    .expect.received = "abxy",
+  });
+}
+
 // Zero-length write is a no-op: no buffer change, no backend call.
 UTEST_F(io_write, buffered_zero_write) {
   run_io_mock_write_test(utest_result, (io_mock_write_test_t){

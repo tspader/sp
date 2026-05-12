@@ -20,7 +20,13 @@ u64 io_get_num_results(const io_result_t* responses, u64 max) {
 
 sp_err_t io_mock_reader_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read) {
   io_mock_reader_t* m = (io_mock_reader_t*)r;
-  sp_assert(m->cursor < m->num_results);
+  if (m->cursor >= m->num_results) {
+    // The wrapper called the backend more times than the test scripted. Report
+    // a distinctive failure rather than asserting, so the test framework can
+    // continue running other cases.
+    if (bytes_read) *bytes_read = 0;
+    return SP_ERR_IO_READ_FAILED;
+  }
   io_result_t* resp = &m->results[m->cursor++];
   u64 n = sp_min(size, resp->bytes);
   if (n && resp->data) {
@@ -32,7 +38,10 @@ sp_err_t io_mock_reader_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_
 
 sp_err_t io_mock_writer_write(sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written) {
   io_mock_writer_t* m = (io_mock_writer_t*)w;
-  sp_assert(m->cursor < m->num_results);
+  if (m->cursor >= m->num_results) {
+    if (bytes_written) *bytes_written = 0;
+    return SP_ERR_IO_WRITE_FAILED;
+  }
   io_result_t* resp = &m->results[m->cursor++];
   u64 n = sp_min(size, resp->bytes);
   if (n) {
