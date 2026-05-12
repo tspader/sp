@@ -371,7 +371,7 @@ static void* sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 siz
 
   void* fresh = sp_mem_tracking_do_alloc(t, size);
   if (!fresh) return SP_NULLPTR;
-  sp_mem_copy(old, fresh, node->size);
+  sp_mem_copy(fresh, old, node->size);
   sp_mem_tracking_do_free(t, old);
   return fresh;
 }

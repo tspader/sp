@@ -316,7 +316,7 @@ u32 sp_elf_add_string(sp_elf_section_t* strtab, sp_str_t str) {
 
   u32 index = (u32)strtab->buffer.size;
   u8* p = sp_elf_section_reserve_bytes(strtab, str.len + 1);
-  sp_mem_copy(str.data, p, str.len);
+  sp_mem_copy(p, str.data, str.len);
   p[str.len] = 0;
 
   return index;
@@ -449,7 +449,7 @@ void sp_elf_symtab_sort(sp_elf_section_t* symtab, sp_elf_t* elf) {
     }
   }
 
-  sp_mem_copy(new_syms, syms, count * sizeof(Elf64_Sym));
+  sp_mem_copy(syms, new_syms, count * sizeof(Elf64_Sym));
   symtab->info = first_nonlocal;
 
   if (elf) {
@@ -608,7 +608,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
   sp_require_as_null(size >= sizeof(Elf64_Ehdr));
 
   Elf64_Ehdr ehdr;
-  sp_mem_copy(data, &ehdr, sizeof(Elf64_Ehdr));
+  sp_mem_copy(&ehdr, data, sizeof(Elf64_Ehdr));
 
   u16 num_sections = ehdr.e_shnum;
   sp_require_as_null(ehdr.e_shstrndx < num_sections);
@@ -639,7 +639,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
   sp_elf_t* elf = sp_elf_new(mem);
 
   Elf64_Shdr* section_headers = sp_alloc_n_a(elf->mem, Elf64_Shdr, num_sections);
-  sp_mem_copy(data + ehdr.e_shoff, section_headers, sh_table_bytes);
+  sp_mem_copy(section_headers, data + ehdr.e_shoff, sh_table_bytes);
 
   Elf64_Shdr* string_header = &section_headers[ehdr.e_shstrndx];
 
@@ -650,7 +650,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
       return SP_NULLPTR;
     }
     string_table = sp_alloc_n_a(elf->mem, c8, string_header->sh_size);
-    sp_mem_copy(data + string_header->sh_offset, string_table, string_header->sh_size);
+    sp_mem_copy(string_table, data + string_header->sh_offset, string_header->sh_size);
   }
 
   sp_assert(section_headers[0].sh_type == SHT_NULL);
@@ -691,7 +691,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
             return SP_NULLPTR;
           }
           u8* ptr = sp_elf_section_reserve_bytes(section, header->sh_size);
-          sp_mem_copy(data + header->sh_offset, ptr, header->sh_size);
+          sp_mem_copy(ptr, data + header->sh_offset, header->sh_size);
           break;
         }
       }

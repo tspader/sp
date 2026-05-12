@@ -509,7 +509,7 @@ UTEST_F(elf, roundtrip_populated) {
   text->flags = SHF_ALLOC | SHF_EXECINSTR;
   u8 code [] = {0xb8, 0x3c, 0x00, 0x00, 0x00, 0x31, 0xff, 0x0f, 0x05};
   u8* p = sp_elf_section_reserve_bytes(text, sizeof(code));
-  sp_mem_copy(code, p, sizeof(code));
+  sp_mem_copy(p, code, sizeof(code));
 
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   data->flags = SHF_ALLOC | SHF_WRITE;
@@ -621,7 +621,7 @@ UTEST_F(elf, oracle_readelf_populated) {
   text->flags = SHF_ALLOC | SHF_EXECINSTR;
   u8 code[] = {0xb8, 0x3c, 0x00, 0x00, 0x00, 0x31, 0xff, 0x0f, 0x05};
   u8* p = sp_elf_section_reserve_bytes(text, sizeof(code));
-  sp_mem_copy(code, p, sizeof(code));
+  sp_mem_copy(p, code, sizeof(code));
 
   sp_elf_section_t* data = sp_elf_add_section(elf, sp_str_lit(".data"), SHT_PROGBITS, 8);
   data->flags = SHF_ALLOC | SHF_WRITE;
@@ -700,7 +700,7 @@ UTEST_F(elf, oracle_cc_link) {
   data->flags = SHF_ALLOC | SHF_WRITE;
   u8 test_bytes[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE};
   u8* p = sp_elf_section_reserve_bytes(data, sizeof(test_bytes));
-  sp_mem_copy(test_bytes, p, sizeof(test_bytes));
+  sp_mem_copy(p, test_bytes, sizeof(test_bytes));
 
   sp_elf_section_t* symtab = sp_elf_symtab_new(elf);
   data = sp_elf_find_section_by_name(elf, sp_str_lit(".data"));

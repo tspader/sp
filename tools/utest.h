@@ -597,9 +597,9 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       utest_state.tests[index].set = set;                                    \
       utest_state.tests[index].test = test;                                    \
       utest_state.tests[index].index = 0;                                      \
-      sp_mem_copy(name_part, name, name_size);                                 \
-      sp_mem_copy(set_part, set, set_size);                                 \
-      sp_mem_copy(test_part, test, test_size);                                 \
+      sp_mem_copy(name, name_part, name_size);                                 \
+      sp_mem_copy(set, set_part, set_size);                                 \
+      sp_mem_copy(test, test_part, test_size);                                 \
     } else {                                                                   \
       if (utest_state.tests) {                                                 \
         sp_mem_os_free(utest_state.tests);                                     \
@@ -669,9 +669,9 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       utest_state.tests[index].set = set;                                    \
       utest_state.tests[index].test = test;                                    \
       utest_state.tests[index].index = 0;                                      \
-      sp_mem_copy(name_part, name, name_size);                                 \
-      sp_mem_copy(set_part, set, set_size);                                    \
-      sp_mem_copy(test_part, test, test_size);                                 \
+      sp_mem_copy(name, name_part, name_size);                                 \
+      sp_mem_copy(set, set_part, set_size);                                    \
+      sp_mem_copy(test, test_part, test_size);                                 \
     } else {                                                                   \
       if (utest_state.tests) {                                                 \
         sp_mem_os_free(utest_state.tests);                                     \
@@ -729,7 +729,7 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
         utest_state.tests[index].func = &utest_i_##FIXTURE##_##NAME##_##INDEX; \
         utest_state.tests[index].index = i;                                    \
         utest_state.tests[index].name = name;                                  \
-        sp_mem_copy(fmtd.data, name, fmtd.len);                               \
+        sp_mem_copy(name, fmtd.data, fmtd.len);                               \
         name[fmtd.len] = '\0';                                                \
       } else {                                                                 \
         if (utest_state.tests) {                                               \

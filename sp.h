@@ -1459,8 +1459,8 @@ typedef struct {
   u8 alignment;
 } sp_mem_fixed_t;
 
-SP_API void                  sp_mem_copy(const void* source, void* dest, u64 num_bytes);
-SP_API void                  sp_mem_move(const void* source, void* dest, u64 num_bytes);
+SP_API void                  sp_mem_copy(void* dest, const void* source, u64 num_bytes);
+SP_API void                  sp_mem_move(void* dest, const void* source, u64 num_bytes);
 SP_API bool                  sp_mem_is_equal(const void* a, const void* b, u64 len);
 SP_API void                  sp_mem_fill(void* buffer, u64 bsize, void* fill, u64 fsize);
 SP_API void                  sp_mem_fill_u8(void* buffer, u64 buffer_size, u8 fill);
@@ -4475,7 +4475,7 @@ s32 sp_sys_rename(const c8* from, u32 from_len, const c8* to, u32 to_len) {
   *info = sp_zero_s(sp_nt_file_rename_information_t);
   info->ReplaceIfExists = 1;
   info->FileNameLength = name_bytes;
-  sp_mem_copy(nt.name.Buffer, info->FileName, name_bytes);
+  sp_mem_copy(info->FileName, nt.name.Buffer, name_bytes);
 
   sp_nt_io_status_block_t iosb = sp_zero;
   sp_nt_status_t status = SP_NT(NtSetInformationFile)(handle, &iosb, info, info_bytes, SP_NT_FILE_RENAME_INFORMATION);
@@ -5933,7 +5933,7 @@ s64 sp_sys_getcwd(char* buf, u64 size) {
   if (wlen && cwd->Buffer[wlen - 1] == '\\') wlen--;
   sp_str_t utf8 = sp_wtf16_to_wtf8_a(sp_mem_get_scratch(), (sp_wide_str_t) { .data = cwd->Buffer, .len = wlen });
   if (utf8.len >= size) return -1;
-  sp_mem_copy(utf8.data, buf, utf8.len);
+  sp_mem_copy(buf, utf8.data, utf8.len);
   buf[utf8.len] = 0;
   return (s64)utf8.len;
 }
@@ -5984,7 +5984,7 @@ s32 sp_sys_link(const c8* existing, u32 existing_len, const c8* alias, u32 alias
   *info = sp_zero_s(sp_nt_file_link_information_t);
   info->ReplaceIfExists = 0;
   info->FileNameLength = name_bytes;
-  sp_mem_copy(nt.name.Buffer, info->FileName, name_bytes);
+  sp_mem_copy(info->FileName, nt.name.Buffer, name_bytes);
 
   sp_nt_io_status_block_t iosb = sp_zero;
   sp_nt_status_t status = SP_NT(NtSetInformationFile)(handle, &iosb, info, info_bytes, SP_NT_FILE_LINK_INFORMATION);
@@ -6168,7 +6168,7 @@ s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   if (wlen >= 4 && wbuf[0] == '\\' && wbuf[1] == '\\' && wbuf[2] == '?' && wbuf[3] == '\\') skip = 4;
   sp_str_t utf8 = sp_wtf16_to_wtf8_a(sp_mem_get_scratch(), (sp_wide_str_t) { .data = wbuf + skip, .len = wlen - skip });
   if (utf8.len >= size) return -1;
-  sp_mem_copy(utf8.data, buf, utf8.len);
+  sp_mem_copy(buf, utf8.data, utf8.len);
   buf[utf8.len] = 0;
   return (s64)utf8.len;
 }
@@ -6227,7 +6227,7 @@ s64 sp_sys_get_exe_path(c8* buf, u64 size) {
   u32 wlen = image->Length / (u32)sizeof(u16);
   sp_str_t utf8 = sp_wtf16_to_wtf8_a(sp_mem_get_scratch(), (sp_wide_str_t) { .data = image->Buffer, .len = wlen });
   if (utf8.len >= size) return -1;
-  sp_mem_copy(utf8.data, buf, utf8.len);
+  sp_mem_copy(buf, utf8.data, utf8.len);
   buf[utf8.len] = 0;
   return (s64)utf8.len;
 }
@@ -6477,7 +6477,7 @@ void sp_ht_resize_impl(void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info)
       new_idx = (new_idx + 1) % new_cap;
     }
 
-    sp_mem_copy((c8*)old_data + offset, (c8*)new_data + new_idx * info.stride.entry, info.stride.kv);
+    sp_mem_copy((c8*)new_data + new_idx * info.stride.entry, (c8*)old_data + offset, info.stride.kv);
     *(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride.entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
   }
 
@@ -6519,15 +6519,15 @@ void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
     void* k = (u8*)(*data) + offset;
     if (info.fn.compare(k, key, info.size.key)) {
       u8* entry = (u8*)(*data) + offset;
-      sp_mem_copy(val, entry + info.stride.value, info.size.value);
+      sp_mem_copy(entry + info.stride.value, val, info.size.value);
       return;
     }
   }
 
   u64 idx = first_free != SP_HT_INVALID_INDEX ? first_free : hash_idx;
   u8* entry = (u8*)(*data) + idx * info.stride.entry;
-  sp_mem_copy(key, entry, info.size.key);
-  sp_mem_copy(val, entry + info.stride.value, info.size.value);
+  sp_mem_copy(entry, key, info.size.key);
+  sp_mem_copy(entry + info.stride.value, val, info.size.value);
   *(sp_ht_entry_state*)(entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
   (*size)++;
 }
@@ -6594,7 +6594,7 @@ void* sp_da_grow_ex(void* arr, u32 stride, u64 n) {
 void sp_da_push_ex(void** arr, void* val, u32 stride) {
   *arr = sp_da_grow_ex(*arr, stride, 1);
   if (*arr) {
-    sp_mem_copy(val, ((u8*)(*arr)) + sp_da_size(*arr) * stride, stride);
+    sp_mem_copy(((u8*)(*arr)) + sp_da_size(*arr) * stride, val, stride);
     sp_da_head(*arr)->size++;
   }
 }
@@ -6654,11 +6654,11 @@ void* sp_rb_grow_ex(void* arr, u32 stride, u32 capacity) {
 
   u32 first_chunk = old_cap - old_head;
   if (first_chunk > old_size) first_chunk = old_size;
-  sp_mem_copy(old_arr + old_head * stride, new_arr, first_chunk * stride);
+  sp_mem_copy(new_arr, old_arr + old_head * stride, first_chunk * stride);
 
   u32 second_chunk = old_size - first_chunk;
   if (second_chunk > 0) {
-    sp_mem_copy(old_arr, new_arr + first_chunk * stride, second_chunk * stride);
+    sp_mem_copy(new_arr + first_chunk * stride, old_arr, second_chunk * stride);
   }
 
   sp_mem_allocator_free(mem, old);
@@ -7932,7 +7932,7 @@ void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size,
       void* ptr = sp_mem_arena_alloc_with_header(arena, size);
       if (old_memory) {
         sp_mem_arena_header_t* header = sp_mem_arena_get_header(old_memory);
-        sp_mem_move(old_memory, ptr, sp_min(header->size, size));
+        sp_mem_move(ptr, old_memory, sp_min(header->size, size));
       }
       return ptr;
     }
@@ -8050,14 +8050,14 @@ bool sp_mem_is_equal(const void* a, const void* b, u64 len) {
   return !sp_sys_memcmp(a, b, len);
 }
 
-void sp_mem_copy(const void* source, void* dest, u64 num_bytes) {
+void sp_mem_copy(void* dest, const void* source, u64 num_bytes) {
   if (!source) return;
   if (!dest) return;
   if (!num_bytes) return;
   sp_sys_memcpy(dest, source, num_bytes);
 }
 
-void sp_mem_move(const void* source, void* dest, u64 num_bytes) {
+void sp_mem_move(void* dest, const void* source, u64 num_bytes) {
   if (!source) return;
   if (!dest) return;
   sp_sys_memmove(dest, source, num_bytes);
@@ -8069,7 +8069,7 @@ void sp_mem_fill(void* buffer, u64 buffer_size, void* fill, u64 fill_size) {
   u64 i = 0;
   while (true) {
     if (i + fill_size > buffer_size) return;
-    sp_mem_copy((u8*)fill, current_byte + i, fill_size);
+    sp_mem_copy(current_byte + i, (u8*)fill, fill_size);
     i += fill_size;
   }
 }
@@ -8113,7 +8113,7 @@ void* sp_mem_os_realloc(void* ptr, u64 size) {
 
   void* mem = sp_mem_os_alloc(size);
   if (!mem) return SP_NULLPTR;
-  sp_mem_copy(ptr, mem, header->size);
+  sp_mem_copy(mem, ptr, header->size);
   sp_mem_os_free(ptr);
   return mem;
 }
@@ -8522,7 +8522,7 @@ sp_str_t sp_str(const c8* str, u32 len) {
 sp_str_t sp_str_copy_a(sp_mem_t mem, sp_str_t str) {
   if (!str.data || !str.len) return sp_zero_s(sp_str_t);
   c8* buffer = sp_alloc_n_a(mem, c8, str.len);
-  sp_mem_copy(str.data, buffer, str.len);
+  sp_mem_copy(buffer, str.data, str.len);
   return sp_str(buffer, str.len);
 }
 
@@ -8674,7 +8674,7 @@ sp_str_t sp_str_sub_reverse(sp_str_t str, s32 index, s32 len) {
 
 c8* sp_cstr_from_str_a(sp_mem_t mem, sp_str_t str) {
   c8* buffer = (c8*)sp_mem_allocator_alloc(mem, str.len + 1);
-  if (str.len) sp_mem_copy(str.data, buffer, str.len);
+  if (str.len) sp_mem_copy(buffer, str.data, str.len);
   buffer[str.len] = '\0';
   return buffer;
 }
@@ -8684,7 +8684,7 @@ sp_str_t sp_str_from_cstr_n_a(sp_mem_t mem, const c8* str, u32 length) {
   u32 len = sp_min(sp_cstr_len(str), length);
   if (!len) return sp_zero_s(sp_str_t);
   c8* buffer = (c8*)sp_mem_allocator_alloc(mem, length);
-  sp_mem_copy(str, buffer, len);
+  sp_mem_copy(buffer, str, len);
 
   return sp_str(buffer, len);
 }
@@ -8694,14 +8694,14 @@ sp_str_t sp_str_from_cstr_a(sp_mem_t mem, const c8* str) {
   u32 len = sp_cstr_len(str);
   if (!len) return sp_zero_s(sp_str_t);
   c8* buffer = sp_alloc_n_a(mem, c8, len + 1);
-  sp_mem_copy(str, buffer, len);
+  sp_mem_copy(buffer, str, len);
 
   return sp_str(buffer, len);
 }
 
 void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
   if (!str.data) return;
-  sp_mem_copy(str.data, buffer, sp_min(str.len, capacity));
+  sp_mem_copy(buffer, str.data, sp_min(str.len, capacity));
 }
 
 sp_str_it_t sp_str_it(sp_str_t str) {
@@ -8725,8 +8725,8 @@ sp_str_t sp_str_concat_a(sp_mem_t mem, sp_str_t a, sp_str_t b) {
   u32 len = a.len + b.len;
   if (!len) return sp_zero_s(sp_str_t);
   c8* buffer = (c8*)sp_mem_allocator_alloc(mem, len);
-  if (a.len) sp_mem_copy(a.data, buffer,         a.len);
-  if (b.len) sp_mem_copy(b.data, buffer + a.len, b.len);
+  if (a.len) sp_mem_copy(buffer, a.data,         a.len);
+  if (b.len) sp_mem_copy(buffer + a.len, b.data, b.len);
   return sp_str(buffer, len);
 }
 
@@ -8735,9 +8735,9 @@ sp_str_t sp_str_join_a(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join) {
   if (!len) return sp_zero_s(sp_str_t);
   c8* buffer = (c8*)sp_mem_allocator_alloc(mem, len);
   c8* p = buffer;
-  if (a.len)    { sp_mem_copy(a.data,    p, a.len);    p += a.len; }
-  if (join.len) { sp_mem_copy(join.data, p, join.len); p += join.len; }
-  if (b.len)    { sp_mem_copy(b.data,    p, b.len); }
+  if (a.len)    { sp_mem_copy(p,    a.data, a.len);    p += a.len; }
+  if (join.len) { sp_mem_copy(p, join.data, join.len); p += join.len; }
+  if (b.len)    { sp_mem_copy(p,    b.data, b.len); }
   return sp_str(buffer, len);
 }
 
@@ -8981,13 +8981,13 @@ sp_str_t sp_str_map_kernel_append(sp_str_map_context_t* context) {
 
 sp_str_t sp_str_map_kernel_prefix(sp_str_map_context_t* context) {
   u32 len;
-  sp_mem_copy(context->user_data, &len, sizeof(len));
+  sp_mem_copy(&len, context->user_data, sizeof(len));
   return sp_str_sub(context->str, 0, len);
 }
 
 sp_str_t sp_str_map_kernel_pad(sp_str_map_context_t* context) {
   u32 len;
-  sp_mem_copy(context->user_data, &len, sizeof(len));
+  sp_mem_copy(&len, context->user_data, sizeof(len));
   return sp_str_pad_a(context->mem, context->str, len);
 }
 
@@ -9077,7 +9077,7 @@ s32 sp_sys_fs_it_open(sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* bu
   u32 prefixed_len = 4 + (nt.name.Length / sizeof(u16)) - w_off;
   u16 wpat [SP_PATH_MAX + 8];
   wpat[0] = '\\'; wpat[1] = '\\'; wpat[2] = '?'; wpat[3] = '\\';
-  sp_mem_copy(nt.name.Buffer + w_off, wpat + 4, nt.name.Length - w_off * sizeof(u16));
+  sp_mem_copy(wpat + 4, nt.name.Buffer + w_off, nt.name.Length - w_off * sizeof(u16));
   wpat[prefixed_len] = 0;
   sp_sys_nt_path_free(&nt);
 
@@ -11082,9 +11082,9 @@ c8** sp_env_to_posix_envp_a(sp_mem_t mem, sp_env_t* env) {
 
     u32 size = key.len + 1 + val.len + 1;
     c8* entry = sp_alloc_n_a(mem, c8, size);
-    sp_mem_copy(key.data, entry, key.len);
+    sp_mem_copy(entry, key.data, key.len);
     entry[key.len] = '=';
-    sp_mem_copy(val.data, entry + key.len + 1, val.len);
+    sp_mem_copy(entry + key.len + 1, val.data, val.len);
     entry[size - 1] = 0;
     sp_da_push(envp, entry);
   }
@@ -13272,7 +13272,7 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
 
   // Drain what we can from what's already buffered
   num_drained = sp_min(size, reader->buffer.len - reader->cursor);
-  sp_mem_copy(reader->buffer.data + reader->cursor, buffer, num_drained);
+  sp_mem_copy(buffer, reader->buffer.data + reader->cursor, num_drained);
   reader->cursor += num_drained;
 
   // Issue a call to the backend for the rest
@@ -13289,7 +13289,7 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
 
     num_read = sp_min(remaining, reader->buffer.len);
     reader->cursor = num_read;
-    sp_mem_copy(reader->buffer.data, buffer + num_drained, num_read);
+    sp_mem_copy(buffer + num_drained, reader->buffer.data, num_read);
   }
 
   u64 num_total = num_drained + num_read;
@@ -13511,7 +13511,7 @@ sp_err_t sp_io_write(sp_io_writer_t* writer, const void* data, u64 size, u64* by
     if (writer->buffer.capacity - writer->buffer.len < size) {
       sp_try_goto(sp_io_flush(writer), err, done);
     }
-    sp_mem_copy(ptr, writer->buffer.data + writer->buffer.len, size);
+    sp_mem_copy(writer->buffer.data + writer->buffer.len, ptr, size);
     writer->buffer.len += size;
     total = size;
   }
@@ -13737,7 +13737,7 @@ sp_err_t sp_io_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64 siz
     goto done;
   }
 
-  sp_mem_copy(ptr, w->ptr + w->pos, size);
+  sp_mem_copy(w->ptr + w->pos, ptr, size);
   w->pos += size;
   written = size;
 
@@ -13807,7 +13807,7 @@ sp_err_t sp_io_dyn_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64
     w->storage.capacity = new_capacity;
   }
 
-  sp_mem_copy(ptr, w->storage.data + w->cursor, size);
+  sp_mem_copy(w->storage.data + w->cursor, ptr, size);
   w->cursor += size;
   if (w->cursor > w->storage.len) {
     w->storage.len = w->cursor;

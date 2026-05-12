@@ -102,7 +102,7 @@ u8* sp_macho_section_push(sp_macho_t* m, u32 sect, const void* data, u64 size) {
   sp_da_head(s->data)->size = (u32)new_size;
   u8* dest = s->data + old_size;
   if (data) {
-    sp_mem_copy(data, dest, (u32)size);
+    sp_mem_copy(dest, data, (u32)size);
   }
 
   return dest;
@@ -233,8 +233,8 @@ sp_err_t sp_macho_write(sp_macho_t* m, sp_io_writer_t* out) {
     sp_str_t sectname = sec->name;
     sp_str_t segname = sp_str_lit("__DATA");
     if (sectname.len > 16) sectname.len = 16;
-    sp_mem_copy(sectname.data, sect.sectname, (u32)sectname.len);
-    sp_mem_copy(segname.data, sect.segname, (u32)segname.len);
+    sp_mem_copy(sect.sectname, sectname.data, (u32)sectname.len);
+    sp_mem_copy(sect.segname, segname.data, (u32)segname.len);
 
     sp_try(sp_io_write(out, &sect, sizeof(sect), SP_NULLPTR));
     vmaddr += section_sizes[i];

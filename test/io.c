@@ -1,9 +1,9 @@
 #include "io/io.h"
 SP_TEST_MAIN()
 
-#include "io/read.c"
-#include "io/write.c"
-#include "io/copy.c"
+// #include "io/read.c"
+// #include "io/write.c"
+// #include "io/copy.c"
 #include "io/loose.c"
 
 u64 io_mock_response_count(const io_mock_response_t* responses, u64 max) {
@@ -21,7 +21,7 @@ sp_err_t io_mock_reader_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_
   io_mock_response_t* resp = &m->responses[m->cursor++];
   u64 n = sp_min(size, resp->bytes);
   if (n && resp->data) {
-    sp_mem_copy(resp->data, ptr, n);
+    sp_mem_copy(ptr, resp->data, n);
   }
   if (bytes_read) *bytes_read = n;
   return resp->err;
@@ -34,7 +34,7 @@ sp_err_t io_mock_writer_write(sp_io_writer_t* w, const void* ptr, u64 size, u64*
   u64 n = sp_min(size, resp->bytes);
   if (n) {
     sp_assert(m->received_len + n <= sizeof(m->received));
-    sp_mem_copy(ptr, m->received + m->received_len, n);
+    sp_mem_copy(m->received + m->received_len, ptr, n);
     m->received_len += n;
   }
   if (bytes_written) *bytes_written = n;

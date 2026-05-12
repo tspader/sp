@@ -1441,7 +1441,7 @@ void sp_prompt_app_on_deinit(sp_app_t* app) {
       .cells = sp_mem_arena_alloc_n(ctx->arena, sp_prompt_cell_t, cell_count),
     };
 
-    sp_mem_copy(ctx->framebuffer, frame.cells, sizeof(sp_prompt_cell_t) * cell_count);
+    sp_mem_copy(frame.cells, ctx->framebuffer, sizeof(sp_prompt_cell_t) * cell_count);
     sp_da_push(ctx->frames, frame);
   }
 }
@@ -2894,7 +2894,7 @@ static void sp_prompt_spinner_render(sp_prompt_ctx_t* ctx) {
 sp_prompt_widget_t sp_prompt_spinner_widget(sp_prompt_ctx_t* ctx, sp_prompt_spinner_t config) {
   if (!config.frames[0]) {
     u32 frames [] = SP_PROMPT_SPINNER_FALLING_SAND;
-    sp_mem_copy(frames, config.frames, sizeof(frames));
+    sp_mem_copy(config.frames, frames, sizeof(frames));
   }
   sp_prompt_spinner_widget_t* user_data = sp_mem_arena_alloc_type(ctx->arena, sp_prompt_spinner_widget_t);
   user_data->config = config;
