@@ -13,6 +13,9 @@ typedef struct {
   } expect;
 } io_mock_copy_reader_test_t;
 
+////////////
+// RUNNER //
+////////////
 void run_io_mock_copy_reader_test(int* utest_result, io_mock_copy_reader_test_t t) {
   u64 num_responses = io_mock_response_count(t.responses, IO_MAX_RESPONSES);
   io_mock_reader_t r = sp_zero;
@@ -67,11 +70,6 @@ void run_io_mock_copy_writer_test(int* utest_result, io_mock_copy_writer_test_t 
 }
 
 
-//////////////////////////
-// SMOKE TESTS
-//////////////////////////
-
-
 // Source fails AFTER returning some bytes in a prior call. Copy should
 // preserve the bytes that did transfer.
 UTEST_F(io_copy, reader_fails_after_success) {
@@ -122,70 +120,3 @@ UTEST_F(io_copy, writer_fails_immediately) {
     .expect = { .err = SP_ERR_IO_WRITE_FAILED, .copied = 0, .received = "" },
   });
 }
-
-
-////////////
-// ERRORS //
-////////////
-typedef struct {
-  const c8* source;
-  u64 capacity;
-  u64 buffer;
-  struct {
-    sp_err_t err;
-    const c8* final;
-  } expect;
-} io_copy_test_t;
-
-void run_io_copy_test(int* utest_result, io_copy_test_t t) {
-  sp_io_reader_t r = sp_zero;
-  sp_io_reader_from_mem(&r, t.source, sp_cstr_len(t.source));
-
-  u8 backing [64] = sp_zero;
-  sp_io_mem_writer_t w = sp_zero;
-  sp_io_mem_writer_from_buffer(&w, backing, t.capacity);
-
-  u8 copy_buf [64] = sp_zero;
-  u64 copied = 0;
-  sp_err_t err = sp_io_copy_b(&w.base, &r, copy_buf, t.buffer, &copied);
-
-  EXPECT_EQ(err, t.expect.err);
-  u64 n = sp_cstr_len(t.expect.final);
-  EXPECT_EQ(copied, n);
-  sp_for(it, n) {
-    EXPECT_EQ((c8)backing[it], t.expect.final[it]);
-  }
-}
-
-UTEST_F(io_copy, copy_full) {
-  run_io_copy_test(utest_result, (io_copy_test_t){
-    .source = "0123456789",
-    .capacity = 32, .buffer = 8,
-    .expect = { .err = SP_OK, .final = "0123456789" },
-  });
-}
-
-UTEST_F(io_copy, copy_loops) {
-  run_io_copy_test(utest_result, (io_copy_test_t){
-    .source = "ABCDEFGHIJKLMNOP",
-    .capacity = 32, .buffer = 4,
-    .expect = { .err = SP_OK, .final = "ABCDEFGHIJKLMNOP" },
-  });
-}
-
-UTEST_F(io_copy, copy_empty) {
-  run_io_copy_test(utest_result, (io_copy_test_t){
-    .source = "",
-    .capacity = 8, .buffer = 8,
-    .expect = { .err = SP_OK },
-  });
-}
-
-UTEST_F(io_copy, copy_writer_no_space) {
-  run_io_copy_test(utest_result, (io_copy_test_t){
-    .source = "0123456789",
-    .capacity = 4, .buffer = 8,
-    .expect = { .err = SP_ERR_IO_NO_SPACE, .final = "0123" },
-  });
-}
-

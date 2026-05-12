@@ -1,9 +1,10 @@
 #include "io/io.h"
 SP_TEST_MAIN()
 
-// #include "io/read.c"
-// #include "io/write.c"
-// #include "io/copy.c"
+#include "io/read.c"
+#include "io/write.c"
+#include "io/copy.c"
+#include "io/mem.c"
 #include "io/loose.c"
 
 u64 io_mock_response_count(const io_mock_response_t* responses, u64 max) {

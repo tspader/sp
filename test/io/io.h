@@ -72,13 +72,6 @@ typedef struct {
   u64 received_len;
 } io_mock_writer_t;
 
-typedef struct {
-  sp_io_file_reader_t file;
-  sp_io_pipe_reader_t pipe;
-  sp_io_reader_t mem;
-  io_mock_reader_t mock;
-} io_readers_t;
-
 u64      io_mock_response_count(const io_mock_response_t* responses, u64 max);
 sp_err_t io_mock_reader_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
 sp_err_t io_mock_writer_write(sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written);
