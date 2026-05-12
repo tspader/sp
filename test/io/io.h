@@ -6,9 +6,6 @@
 #include "utest.h"
 
 
-//////////////////
-// io FIXTURE   //
-//////////////////
 struct io {
   sp_str_t file_path;
   sp_test_file_manager_t file_manager;
@@ -35,6 +32,7 @@ UTEST_F_TEARDOWN(io) {
 // SHARED MATRIX    //
 //////////////////////
 #define IO_MAX_STEPS 8
+#define IO_MAX_RESPONSES 8
 
 typedef enum {
   IO_STEP_NONE,
@@ -51,5 +49,41 @@ typedef struct {
     struct { sp_err_t err; } flush;
   };
 } io_step_t;
+
+typedef struct {
+  u64 bytes;
+  sp_err_t err;
+  const c8* data;
+} io_mock_response_t;
+
+typedef struct {
+  sp_io_reader_t base;
+  io_mock_response_t responses[IO_MAX_RESPONSES];
+  u64 num_responses;
+  u64 cursor;
+} io_mock_reader_t;
+
+typedef struct {
+  sp_io_writer_t base;
+  io_mock_response_t responses[IO_MAX_RESPONSES];
+  u64 num_responses;
+  u64 cursor;
+  u8 received [256];
+  u64 received_len;
+} io_mock_writer_t;
+
+typedef struct {
+  sp_io_file_reader_t file;
+  sp_io_pipe_reader_t pipe;
+  sp_io_reader_t mem;
+  io_mock_reader_t mock;
+} io_readers_t;
+
+u64      io_mock_response_count(const io_mock_response_t* responses, u64 max);
+sp_err_t io_mock_reader_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
+sp_err_t io_mock_writer_write(sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written);
+void     io_mock_reader_init(io_mock_reader_t* m, const io_mock_response_t* responses, u64 n);
+void     io_mock_writer_init(io_mock_writer_t* m, const io_mock_response_t* responses, u64 n);
+
 
 #endif // IO_TEST_H

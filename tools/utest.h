@@ -623,6 +623,11 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
   static void utest_f_teardown_##FIXTURE(int *utest_result,                    \
                                          struct FIXTURE *utest_fixture)
 
+#define UTEST_EMPTY_FIXTURE(FIXTURE) \
+  struct FIXTURE { u32 placeholder; }; \
+  UTEST_F_SETUP(FIXTURE) {} \
+  UTEST_F_TEARDOWN(FIXTURE) {}
+
 #define UTEST_F(FIXTURE, NAME)                                                 \
   UTEST_SURPRESS_WARNINGS_BEGIN                                                \
   UTEST_EXTERN struct utest_state_s utest_state;                               \
