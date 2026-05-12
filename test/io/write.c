@@ -68,6 +68,28 @@ UTEST_F(io, write_overflow) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcdefgh", SP_ERR_IO_NO_SPACE, 4 } },
     },
+    .expect.content = "abcd",
+  });
+}
+
+UTEST_F(io, write_barely_overflows) {
+  run_io_write_test(utest_result, (io_write_test_t){
+    .capacity = 4,
+    .steps = {
+      { .kind = IO_STEP_WRITE, .write = { "abcde", SP_ERR_IO_NO_SPACE, 4 } },
+    },
+    .expect.content = "abcd",
+  });
+}
+
+UTEST_F(io, write_smaller_after_overflow) {
+  run_io_write_test(utest_result, (io_write_test_t){
+    .capacity = 4,
+    .steps = {
+      { .kind = IO_STEP_WRITE, .write = { "abcd", SP_OK, 4 } },
+      { .kind = IO_STEP_WRITE, .write = { "x", SP_ERR_IO_NO_SPACE, 0 } },
+    },
+    .expect.content = "abcd",
   });
 }
 
