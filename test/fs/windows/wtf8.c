@@ -132,4 +132,4 @@ UTEST(wtf8, validate) {
   EXPECT_FALSE(sp_wtf8_validate(sp_str_lit("\xC3\x28")));
 }
 
-SP_TEST_MAIN()
+

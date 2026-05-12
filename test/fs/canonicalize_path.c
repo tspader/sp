@@ -313,5 +313,3 @@ UTEST_F(fs, canon_cwd_matches_dot) {
   SP_EXPECT_STR_EQ(cwd, canonical_dot);
   ASSERT_EQ(sp_sys_chdir_s(old_cwd), 0);
 }
-
-SP_TEST_MAIN()

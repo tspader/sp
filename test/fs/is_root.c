@@ -26,4 +26,4 @@ UTEST(fs_is_root, cases) {
   }
 }
 
-SP_TEST_MAIN()
+

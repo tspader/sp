@@ -51,4 +51,4 @@ UTEST(fs_get_exe_path, no_dotdot) {
   ASSERT_FALSE(sp_str_contains(exe, sp_str_lit("..")));
 }
 
-SP_TEST_MAIN()
+

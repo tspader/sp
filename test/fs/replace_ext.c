@@ -24,4 +24,4 @@ UTEST(fs_replace_ext, cases) {
   }
 }
 
-SP_TEST_MAIN()
+

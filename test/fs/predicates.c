@@ -122,4 +122,4 @@ UTEST_F(fs, unicode_predicate_matrix) {
   });
 }
 
-SP_TEST_MAIN()
+

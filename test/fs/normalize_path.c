@@ -57,5 +57,3 @@ UTEST(fs_normalize_path, nonexistent_path) {
     "C:/no/such/path/file.txt"
   );
 }
-
-SP_TEST_MAIN()

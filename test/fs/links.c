@@ -175,4 +175,4 @@ UTEST_F(fs, canonicalize_through_symlink) {
   SP_EXPECT_STR_EQ(canon_link, canon_real);
 }
 
-SP_TEST_MAIN()
+

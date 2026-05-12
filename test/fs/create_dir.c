@@ -227,4 +227,4 @@ UTEST_F(fs_create_dir, destination_is_symlink_to_file) {
 }
 #endif
 
-SP_TEST_MAIN()
+

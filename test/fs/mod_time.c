@@ -31,4 +31,4 @@ UTEST_F(fs, mod_time_updates_after_write) {
   ASSERT_TRUE(after.s > before.s || (after.s == before.s && after.ns > before.ns));
 }
 
-SP_TEST_MAIN()
+

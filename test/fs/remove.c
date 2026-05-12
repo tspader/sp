@@ -111,4 +111,4 @@ UTEST_F(fs, unicode_remove_dir) {
   });
 }
 
-SP_TEST_MAIN()
+

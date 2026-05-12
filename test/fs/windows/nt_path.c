@@ -212,4 +212,4 @@ UTEST(nt_path, skipped_non_windows) {
 
 #endif
 
-SP_TEST_MAIN()
+

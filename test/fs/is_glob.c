@@ -24,4 +24,4 @@ UTEST(fs_is_glob, cases) {
   }
 }
 
-SP_TEST_MAIN()
+

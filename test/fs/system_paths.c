@@ -49,4 +49,4 @@ UTEST(fs_system_paths, config_path_exists) {
   ASSERT_TRUE(sp_fs_is_dir_a(path));
 }
 
-SP_TEST_MAIN()
+

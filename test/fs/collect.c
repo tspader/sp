@@ -327,5 +327,3 @@ UTEST_F(fs_collect, unicode_entries) {
     }
   });
 }
-
-SP_TEST_MAIN()

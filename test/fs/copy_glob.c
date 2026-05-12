@@ -75,4 +75,4 @@ UTEST_F(fs, copy_glob_empty_src) {
   });
 }
 
-SP_TEST_MAIN()
+

@@ -27,4 +27,4 @@ UTEST(fs_get_cwd, is_absolute) {
   ASSERT_TRUE(is_absolute);
 }
 
-SP_TEST_MAIN()
+
