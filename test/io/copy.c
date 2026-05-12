@@ -156,7 +156,7 @@ UTEST_F(io_copy, buffered_reader_drains_through_buffer) {
       { .bytes = 4, .data = "4567", .err = SP_OK },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
     },
-    .buffer = { .r = 2, .copy = 2 },
+    .buffer = { .r = 4, .copy = 2 },
     .capacity.writer = 32,
     .expect = { .err = SP_OK, .copied = 8, .final = "01234567" },
   });

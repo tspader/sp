@@ -6,7 +6,8 @@ SP_TEST_MAIN()
 #include "io/copy.c"
 #include "io/mem.c"
 #include "io/seeking_reader.c"
-#include "io/loose.c"
+#include "io/file.c"
+#include "io/dyn.c"
 
 u64 io_get_num_results(const io_result_t* responses, u64 max) {
   u64 n = 0;

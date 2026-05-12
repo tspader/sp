@@ -247,13 +247,14 @@ UTEST_F(io_read, buffered_eof_immediate) {
 UTEST_F(io_read, buffered_eof_after_partial_drain) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 3, .data = "abc", .err = SP_OK },
+      { .bytes = 4, .data = "abcd", .err = SP_OK },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
     },
     .buffer = 4,
     .steps = {
-      { .kind = IO_STEP_READ, .read = { 8, SP_OK, "abc" } },
+      { .kind = IO_STEP_READ, .read = { 2, SP_OK, "ab" } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_OK, "cd" } },
       { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_EOF } },
     },
   });

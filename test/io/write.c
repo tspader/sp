@@ -45,7 +45,8 @@ void run_io_mock_write_test(int* utest_result, io_mock_write_test_t t) {
       case IO_STEP_READ:
       case IO_STEP_SEEK:
       case IO_STEP_SIZE:
-      case IO_STEP_COPY: {
+      case IO_STEP_COPY:
+      case IO_STEP_PAD: {
         sp_unreachable_case();
       }
     }

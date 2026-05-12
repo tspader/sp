@@ -78,7 +78,8 @@ void run_io_mem_test(int* utest_result, io_mem_test_t t) {
         EXPECT_EQ(copied, step->copy.copied);
         break;
       }
-      case IO_STEP_NONE: {
+      case IO_STEP_NONE:
+      case IO_STEP_PAD: {
         sp_unreachable_case();
       }
     }

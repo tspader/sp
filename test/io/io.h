@@ -42,6 +42,7 @@ typedef enum {
   IO_STEP_SEEK,
   IO_STEP_SIZE,
   IO_STEP_COPY,
+  IO_STEP_PAD,
 } io_step_kind_t;
 
 typedef struct {
@@ -53,6 +54,7 @@ typedef struct {
     struct { s64 offset; sp_io_whence_t whence; sp_err_t err; s64 pos; } seek;
     struct { sp_err_t err; u64 size; } size;
     struct { u64 buffer; sp_err_t err; u64 copied; } copy;
+    struct { u64 size; sp_err_t err; u64 bytes; } pad;
   };
 } io_step_t;
 
