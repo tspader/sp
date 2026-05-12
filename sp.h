@@ -13205,12 +13205,25 @@ sp_err_t sp_io_copy(sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_copied) {
 sp_err_t sp_io_copy_b(sp_io_writer_t* w, sp_io_reader_t* r, u8* buffer, u64 n, u64* bytes_copied) {
   sp_err_t err = SP_OK;
   u64 total = 0;
-  u64 chunk = 0;
 
   while (true) {
-    sp_try_goto(sp_io_read(r, buffer, n, &chunk), err, done);
-    sp_try_goto(sp_io_write(w, buffer, chunk, SP_NULLPTR), err, done);
-    total += chunk;
+    // (bytes, error) is orthogonal on both sides. A read that produces bytes
+    // alongside an error must still have those bytes committed to the
+    // destination before we surface the error. A write that accepts a prefix
+    // before failing must have that prefix counted toward bytes_copied. The
+    // first error encountered wins; bytes_copied accurately reports what
+    // actually moved through.
+    u64 chunk = 0;
+    sp_err_t rerr = sp_io_read(r, buffer, n, &chunk);
+
+    if (chunk) {
+      u64 wrote = 0;
+      sp_err_t werr = sp_io_write(w, buffer, chunk, &wrote);
+      total += wrote;
+      if (werr) { err = werr; goto done; }
+    }
+
+    if (rerr) { err = rerr; goto done; }
   }
 
 done:
@@ -13260,6 +13273,11 @@ done:
 
 sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
   sp_assert(reader);
+
+  if (!size) {
+    if (bytes_read) *bytes_read = 0;
+    return SP_OK;
+  }
 
   if (!reader->buffer.data) {
     return reader->read(reader, ptr, size, bytes_read);
@@ -13452,17 +13470,18 @@ static sp_err_t sp_io_write_all(sp_io_writer_t* writer, const void* data, u64 si
     const u8* ptr = ((const u8*)data) + total;
     u64 remaining = size - total;
 
+    // Account for any partial progress BEFORE inspecting the error. The (bytes,
+    // error) pair is orthogonal: a backend that returns SP_ERR_IO_NO_SPACE with
+    // written=4 has committed those 4 bytes, and the caller deserves to know.
+    //
     // If write() returns 0 bytes written, but also does not report an error, we just
     // keep looping. If this keeps happening, though, you're stuck. Defensively, it
     // makes sense to just bail rather than risk *any* deadlock, but I think that doing
     // that would just hide the real breaking of an invariant.
-    //
-    // In other words: You asked to write some number of bytes. The backend failed to
-    // write anything, but somehow did not encounter an error. That doesn't make sense,
-    // and indicates a backend bug.
     u64 written = 0;
-    sp_try_goto(writer->write(writer, ptr, remaining, &written), result, done);
+    result = writer->write(writer, ptr, remaining, &written);
     total += written;
+    if (result) goto done;
   }
 
 done:
@@ -13725,23 +13744,18 @@ void sp_free_a(sp_mem_t allocator, void* memory) {
 sp_err_t sp_io_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
   sp_io_mem_writer_t* w = (sp_io_mem_writer_t*)writer;
   sp_err_t result = SP_OK;
-  u64 written = 0;
 
-  // If you try a write that would overflow, write nothing. We could write what we're able to
-  // and return an error, but the general principle is to stop as soon as you know you're in
-  // an error state. And "I want to write 16 bytes into an 8 byte buffer" is an error state. I
-  // would rather end up in the same state every time (nothing written, get an error).
+  // Partial writes are part of the contract: write what fits, advance, and
+  // surface SP_ERR_IO_NO_SPACE alongside the partial count. Refusing the
+  // whole request would force callers to discover the boundary themselves.
   u64 available = w->len - w->pos;
-  if (size > available) {
-    result = SP_ERR_IO_NO_SPACE;
-    goto done;
+  u64 written = sp_min(size, available);
+  if (written) {
+    sp_mem_copy(w->ptr + w->pos, ptr, written);
+    w->pos += written;
   }
+  if (size > available) result = SP_ERR_IO_NO_SPACE;
 
-  sp_mem_copy(w->ptr + w->pos, ptr, size);
-  w->pos += size;
-  written = size;
-
-done:
   if (bytes_written) *bytes_written = written;
   return result;
 }
