@@ -1,109 +1,5 @@
 #include "io.h"
 
-UTEST_F(io, reader_mem_read_full) {
-  SKIP_ON_WASM()
-  u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
-  u8 dest[16] = sp_zero;
-
-  sp_io_reader_t io = sp_zero;
-  sp_io_reader_from_mem(&io, source, sizeof(source));
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_read(&io, dest, sizeof(dest), &bytes), SP_OK);
-
-  EXPECT_EQ(bytes, 16);
-  sp_for(i, 16) {
-    EXPECT_EQ(dest[i], source[i]);
-  }
-}
-UTEST_F(io, reader_mem_read_partial) {
-  SKIP_ON_WASM()
-  u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
-  u8 dest[8] = sp_zero;
-
-  sp_io_reader_t io = sp_zero;
-  sp_io_reader_from_mem(&io, source, sizeof(source));
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_read(&io, dest, sizeof(dest), &bytes), SP_OK);
-
-  EXPECT_EQ(bytes, 8);
-  sp_for(i, 8) {
-    EXPECT_EQ(dest[i], source[i]);
-  }
-}
-UTEST_F(io, reader_mem_read_past_end) {
-  SKIP_ON_WASM()
-  u8 source[8] = {1,2,3,4,5,6,7,8};
-  u8 dest[16] = sp_zero;
-
-  sp_io_reader_t io = sp_zero;
-  sp_io_reader_from_mem(&io, source, sizeof(source));
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_read(&io, dest, sizeof(dest), &bytes), SP_OK);
-
-  EXPECT_EQ(bytes, 8);
-
-  bytes = 0;
-  EXPECT_EQ(sp_io_read(&io, dest, sizeof(dest), &bytes), SP_ERR_IO_EOF);
-  EXPECT_EQ(bytes, 0);
-}
-UTEST_F(io, reader_mem_read_eof_exact) {
-  SKIP_ON_WASM()
-  u8 source[8] = {1,2,3,4,5,6,7,8};
-  u8 dest[8] = sp_zero;
-
-  sp_io_reader_t io = sp_zero;
-  sp_io_reader_from_mem(&io, source, sizeof(source));
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_read(&io, dest, sizeof(dest), &bytes), SP_OK);
-  EXPECT_EQ(bytes, 8);
-
-  EXPECT_EQ(sp_io_read(&io, dest, sizeof(dest), &bytes), SP_ERR_IO_EOF);
-  EXPECT_EQ(bytes, 0);
-}
-UTEST_F(io, reader_mem_read_eof_empty) {
-  SKIP_ON_WASM()
-  u8 dest[4] = sp_zero;
-
-  sp_io_reader_t io = sp_zero;
-  sp_io_reader_from_mem(&io, SP_NULLPTR, 0);
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_read(&io, dest, sizeof(dest), &bytes), SP_ERR_IO_EOF);
-  EXPECT_EQ(bytes, 0);
-}
-UTEST_F(io, reader_mem_seek) {
-  SKIP_ON_WASM()
-  u8 buffer[64] = sp_zero;
-  sp_for(i, 64) buffer[i] = (u8)i;
-
-  sp_io_reader_t backing = sp_zero;
-  sp_io_seeking_reader_t io = sp_zero;
-  sp_io_seeking_reader_from_mem(&io, &backing, buffer, sizeof(buffer));
-
-  s64 pos = 0;
-  EXPECT_EQ(sp_io_seeking_reader_seek(&io, 32, SP_IO_SEEK_SET, &pos), SP_OK);
-  EXPECT_EQ(pos, 32);
-
-  u8 val;
-  sp_io_read(io.reader, &val, 1, SP_NULLPTR);
-  EXPECT_EQ(val, 32);
-
-  EXPECT_EQ(sp_io_seeking_reader_seek(&io, 0, SP_IO_SEEK_END, &pos), SP_OK);
-  EXPECT_EQ(pos, 64);
-}
-UTEST_F(io, reader_mem_seek_invalid) {
-  SKIP_ON_WASM()
-  u8 buffer[64] = sp_zero;
-  sp_io_reader_t backing = sp_zero;
-  sp_io_seeking_reader_t io = sp_zero;
-  sp_io_seeking_reader_from_mem(&io, &backing, buffer, sizeof(buffer));
-
-  s64 pos = 0;
-  EXPECT_EQ(sp_io_seeking_reader_seek(&io, 100, SP_IO_SEEK_SET, &pos), SP_ERR_IO_SEEK_INVALID);
-  EXPECT_EQ(pos, -1);
-
-  EXPECT_EQ(sp_io_seeking_reader_seek(&io, -10, SP_IO_SEEK_SET, &pos), SP_ERR_IO_SEEK_INVALID);
-  EXPECT_EQ(pos, -1);
-}
 UTEST_F(io, seeking_reader_file_seek) {
   SKIP_ON_WASM()
   const char* content = "0123456789ABCDEF";
@@ -331,56 +227,6 @@ UTEST_F(io, reader_file_read_eof_empty) {
   EXPECT_EQ(bytes, 0);
 
   sp_io_file_reader_close(&r);
-}
-UTEST_F(io, writer_mem_write) {
-  SKIP_ON_WASM()
-  u8 buffer[16] = sp_zero;
-  u8 source[8] = {1,2,3,4,5,6,7,8};
-
-  sp_io_mem_writer_t w; sp_io_mem_writer_from_buffer(&w,buffer, sizeof(buffer));
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_write(&w.base, source, sizeof(source), &bytes), SP_OK);
-
-  EXPECT_EQ(bytes, 8);
-  sp_for(i, 8) {
-    EXPECT_EQ(buffer[i], source[i]);
-  }
-  /* mem writer has no close */;
-}
-UTEST_F(io, writer_mem_write_overflow) {
-  SKIP_ON_WASM()
-  u8 buffer[8] = sp_zero;
-  u8 source[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
-
-  sp_io_mem_writer_t w; sp_io_mem_writer_from_buffer(&w,buffer, sizeof(buffer));
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_write(&w.base, source, sizeof(source), &bytes), SP_ERR_IO_NO_SPACE);
-
-  EXPECT_EQ(bytes, 0);
-  /* mem writer has no close */;
-}
-UTEST_F(io, writer_mem_seek) {
-  SKIP_ON_WASM()
-  u8 buffer[64] = sp_zero;
-  sp_io_mem_writer_t w; sp_io_mem_writer_from_buffer(&w,buffer, sizeof(buffer));
-
-  s64 pos = 0;
-  EXPECT_EQ(sp_io_mem_writer_seek(&w, 32, SP_IO_SEEK_SET, &pos), SP_OK);
-  EXPECT_EQ(pos, 32);
-
-  EXPECT_EQ(sp_io_mem_writer_seek(&w, 0, SP_IO_SEEK_END, &pos), SP_OK);
-  EXPECT_EQ(pos, 64);
-
-  /* mem writer has no close */;
-}
-UTEST_F(io, writer_mem_size) {
-  SKIP_ON_WASM()
-  u8 buffer[128];
-  sp_io_mem_writer_t w; sp_io_mem_writer_from_buffer(&w,buffer, sizeof(buffer));
-  u64 size = 0;
-  EXPECT_EQ(sp_io_mem_writer_size(&w, &size), SP_OK);
-  EXPECT_EQ(size, 128);
-  /* mem writer has no close */;
 }
 UTEST_F(io, writer_file_write) {
   SKIP_ON_WASM()
@@ -837,18 +683,6 @@ UTEST_F(io, reader_buffered_eof_direct_path) {
   EXPECT_EQ(bytes, 0);
 
   sp_io_file_reader_close(&r);
-}
-UTEST_F(io, reader_buffered_zero_size) {
-  SKIP_ON_WASM()
-  u8 source[1] = {0};
-  u8 read_buf[8];
-  sp_io_reader_t io = sp_zero;
-  sp_io_reader_from_mem(&io, source, sizeof(source));
-  sp_io_reader_set_buffer(&io, read_buf, sizeof(read_buf));
-
-  u64 bytes = 1;
-  EXPECT_EQ(sp_io_read(&io, source, 0, &bytes), SP_OK);
-  EXPECT_EQ(bytes, 0);
 }
 UTEST_F(io, reader_buffered_eof_byte_by_byte) {
   SKIP_ON_WASM()

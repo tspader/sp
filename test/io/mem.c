@@ -4,117 +4,47 @@ UTEST_EMPTY_FIXTURE(io_mem)
 
 typedef struct {
   const c8* source;
-  io_step_t steps [IO_MAX_STEPS];
-} io_read_test_t;
-
-void run_io_read_test(int* utest_result, io_read_test_t t) {
-  sp_io_reader_t r = sp_zero;
-  sp_io_reader_from_mem(&r, t.source, sp_cstr_len(t.source));
-
-  sp_carr_for(t.steps, j) {
-    const io_step_t* step = &t.steps[j];
-    if (step->kind == IO_STEP_NONE) break;
-
-    u8 dest [64] = sp_zero;
-    u64 bytes = 0;
-    sp_err_t err = sp_io_read(&r, dest, step->read.request, &bytes);
-    EXPECT_EQ(err, step->read.err);
-
-    u64 expect_bytes = sp_cstr_len(step->read.content);
-    EXPECT_EQ(bytes, expect_bytes);
-    sp_for(it, expect_bytes) {
-      EXPECT_EQ((c8)dest[it], step->read.content[it]);
-    }
-  }
-}
-
-UTEST_F(io_mem, read_exact_then_eof) {
-  run_io_read_test(utest_result, (io_read_test_t){
-    .source = "0123",
-    .steps = {
-      { .kind = IO_STEP_READ, .read = { 4, SP_OK, "0123" } },
-      { .kind = IO_STEP_READ, .read = { 4, SP_ERR_IO_EOF } },
-    },
-  });
-}
-
-UTEST_F(io_mem, read_chunked) {
-  run_io_read_test(utest_result, (io_read_test_t){
-    .source = "01234567",
-    .steps = {
-      { .kind = IO_STEP_READ, .read = { 3, SP_OK, "012" } },
-      { .kind = IO_STEP_READ, .read = { 3, SP_OK, "345" } },
-      { .kind = IO_STEP_READ, .read = { 3, SP_OK, "67" } },
-      { .kind = IO_STEP_READ, .read = { 3, SP_ERR_IO_EOF } },
-    },
-  });
-}
-
-UTEST_F(io_mem, read_oversized_request) {
-  run_io_read_test(utest_result, (io_read_test_t){
-    .source = "abc",
-    .steps = {
-      { .kind = IO_STEP_READ, .read = { 16, SP_OK, "abc" } },
-      { .kind = IO_STEP_READ, .read = { 16, SP_ERR_IO_EOF } },
-    },
-  });
-}
-
-UTEST_F(io_mem, read_empty_source) {
-  run_io_read_test(utest_result, (io_read_test_t){
-    .source = "",
-    .steps = {
-      { .kind = IO_STEP_READ, .read = { 4, SP_ERR_IO_EOF } },
-    },
-  });
-}
-
-UTEST_F(io_mem, read_eof_idempotent) {
-  run_io_read_test(utest_result, (io_read_test_t){
-    .source = "x",
-    .steps = {
-      { .kind = IO_STEP_READ, .read = { 4, SP_OK, "x" } },
-      { .kind = IO_STEP_READ, .read = { 4, SP_ERR_IO_EOF } },
-      { .kind = IO_STEP_READ, .read = { 4, SP_ERR_IO_EOF } },
-    },
-  });
-}
-
-UTEST_F(io_mem, read_zero_request) {
-  run_io_read_test(utest_result, (io_read_test_t){
-    .source = "abc",
-    .steps = {
-      { .kind = IO_STEP_READ, .read = { 0, SP_OK } },
-      { .kind = IO_STEP_READ, .read = { 3, SP_OK, "abc" } },
-    },
-  });
-}
-
-
-
-
-
-///////////
-// WRITE //
-///////////
-typedef struct {
-  u64 capacity;
+  u64 writer_capacity;
   io_step_t steps [IO_MAX_STEPS];
   struct {
     const c8* content;
   } expect;
-} io_write_test_t;
+} io_mem_test_t;
 
-void run_io_write_test(int* utest_result, io_write_test_t t) {
+////////////
+// RUNNER //
+////////////
+void run_io_mem_test(int* utest_result, io_mem_test_t t) {
+  sp_io_reader_t r = sp_zero;
+  if (t.source) {
+    sp_io_reader_from_mem(&r, t.source, sp_cstr_len(t.source));
+  }
+
   u8 backing [64] = sp_zero;
   sp_io_mem_writer_t w = sp_zero;
-  sp_io_mem_writer_from_buffer(&w, backing, t.capacity);
+  if (t.writer_capacity) {
+    sp_io_mem_writer_from_buffer(&w, backing, t.writer_capacity);
+  }
+
+  u8 copy_buf [64] = sp_zero;
 
   sp_carr_for(t.steps, j) {
     const io_step_t* step = &t.steps[j];
     if (step->kind == IO_STEP_NONE) break;
 
     switch (step->kind) {
+      case IO_STEP_READ: {
+        u8 dest [64] = sp_zero;
+        u64 bytes = 0;
+        sp_err_t err = sp_io_read(&r, dest, step->read.request, &bytes);
+        EXPECT_EQ(err, step->read.err);
+        u64 expect_bytes = sp_cstr_len(step->read.content);
+        EXPECT_EQ(bytes, expect_bytes);
+        sp_for(it, expect_bytes) {
+          EXPECT_EQ((c8)dest[it], step->read.content[it]);
+        }
+        break;
+      }
       case IO_STEP_WRITE: {
         u64 bytes = 0;
         sp_err_t err = sp_io_write(&w.base, step->write.data, sp_cstr_len(step->write.data), &bytes);
@@ -127,7 +57,28 @@ void run_io_write_test(int* utest_result, io_write_test_t t) {
         EXPECT_EQ(err, step->flush.err);
         break;
       }
-      default: {
+      case IO_STEP_SEEK: {
+        s64 pos = 0;
+        sp_err_t err = sp_io_mem_writer_seek(&w, step->seek.offset, step->seek.whence, &pos);
+        EXPECT_EQ(err, step->seek.err);
+        EXPECT_EQ(pos, step->seek.pos);
+        break;
+      }
+      case IO_STEP_SIZE: {
+        u64 size = 0;
+        sp_err_t err = sp_io_mem_writer_size(&w, &size);
+        EXPECT_EQ(err, step->size.err);
+        EXPECT_EQ(size, step->size.size);
+        break;
+      }
+      case IO_STEP_COPY: {
+        u64 copied = 0;
+        sp_err_t err = sp_io_copy_b(&w.base, &r, copy_buf, step->copy.buffer, &copied);
+        EXPECT_EQ(err, step->copy.err);
+        EXPECT_EQ(copied, step->copy.copied);
+        break;
+      }
+      case IO_STEP_NONE: {
         sp_unreachable_case();
       }
     }
@@ -139,9 +90,79 @@ void run_io_write_test(int* utest_result, io_write_test_t t) {
   }
 }
 
+
+//////////
+// READ //
+//////////
+UTEST_F(io_mem, read_exact_then_eof) {
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .source = "0123",
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 4, SP_OK, "0123" } },
+      { .kind = IO_STEP_READ, .read = { 4, SP_ERR_IO_EOF } },
+    },
+  });
+}
+
+UTEST_F(io_mem, read_chunked) {
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .source = "01234567",
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 3, SP_OK, "012" } },
+      { .kind = IO_STEP_READ, .read = { 3, SP_OK, "345" } },
+      { .kind = IO_STEP_READ, .read = { 3, SP_OK, "67" } },
+      { .kind = IO_STEP_READ, .read = { 3, SP_ERR_IO_EOF } },
+    },
+  });
+}
+
+UTEST_F(io_mem, read_oversized_request) {
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .source = "abc",
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 16, SP_OK, "abc" } },
+      { .kind = IO_STEP_READ, .read = { 16, SP_ERR_IO_EOF } },
+    },
+  });
+}
+
+UTEST_F(io_mem, read_empty_source) {
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .source = "",
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 4, SP_ERR_IO_EOF } },
+    },
+  });
+}
+
+UTEST_F(io_mem, read_eof_idempotent) {
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .source = "x",
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 4, SP_OK, "x" } },
+      { .kind = IO_STEP_READ, .read = { 4, SP_ERR_IO_EOF } },
+      { .kind = IO_STEP_READ, .read = { 4, SP_ERR_IO_EOF } },
+    },
+  });
+}
+
+UTEST_F(io_mem, read_zero_request) {
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .source = "abc",
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 0, SP_OK } },
+      { .kind = IO_STEP_READ, .read = { 3, SP_OK, "abc" } },
+    },
+  });
+}
+
+
+///////////
+// WRITE //
+///////////
 UTEST_F(io_mem, write_fits) {
-  run_io_write_test(utest_result, (io_write_test_t){
-    .capacity = 16,
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 16,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "hello", SP_OK, 5 } },
     },
@@ -150,8 +171,8 @@ UTEST_F(io_mem, write_fits) {
 }
 
 UTEST_F(io_mem, write_exact_fit) {
-  run_io_write_test(utest_result, (io_write_test_t){
-    .capacity = 4,
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 4,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcd", SP_OK, 4 } },
     },
@@ -160,8 +181,8 @@ UTEST_F(io_mem, write_exact_fit) {
 }
 
 UTEST_F(io_mem, write_overflow) {
-  run_io_write_test(utest_result, (io_write_test_t){
-    .capacity = 4,
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 4,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcdefgh", SP_ERR_IO_NO_SPACE, 4 } },
     },
@@ -170,8 +191,8 @@ UTEST_F(io_mem, write_overflow) {
 }
 
 UTEST_F(io_mem, write_barely_overflows) {
-  run_io_write_test(utest_result, (io_write_test_t){
-    .capacity = 4,
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 4,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcde", SP_ERR_IO_NO_SPACE, 4 } },
     },
@@ -180,8 +201,8 @@ UTEST_F(io_mem, write_barely_overflows) {
 }
 
 UTEST_F(io_mem, write_smaller_after_overflow) {
-  run_io_write_test(utest_result, (io_write_test_t){
-    .capacity = 4,
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 4,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcd", SP_OK, 4 } },
       { .kind = IO_STEP_WRITE, .write = { "x", SP_ERR_IO_NO_SPACE, 0 } },
@@ -191,8 +212,8 @@ UTEST_F(io_mem, write_smaller_after_overflow) {
 }
 
 UTEST_F(io_mem, write_appends) {
-  run_io_write_test(utest_result, (io_write_test_t){
-    .capacity = 16,
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 16,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
       { .kind = IO_STEP_WRITE, .write = { "def", SP_OK, 3 } },
@@ -203,8 +224,8 @@ UTEST_F(io_mem, write_appends) {
 }
 
 UTEST_F(io_mem, write_zero) {
-  run_io_write_test(utest_result, (io_write_test_t){
-    .capacity = 8,
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 8,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "", SP_OK, 0 } },
     },
@@ -212,8 +233,8 @@ UTEST_F(io_mem, write_zero) {
 }
 
 UTEST_F(io_mem, write_flush_empty) {
-  run_io_write_test(utest_result, (io_write_test_t){
-    .capacity = 8,
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 8,
     .steps = {
       { .kind = IO_STEP_FLUSH, .flush = { SP_OK } },
     },
@@ -224,66 +245,68 @@ UTEST_F(io_mem, write_flush_empty) {
 //////////
 // COPY //
 //////////
-typedef struct {
-  const c8* source;
-  u64 capacity;
-  u64 buffer;
-  struct {
-    sp_err_t err;
-    const c8* final;
-  } expect;
-} io_copy_test_t;
-
-void run_io_copy_test(int* utest_result, io_copy_test_t t) {
-  sp_io_reader_t r = sp_zero;
-  sp_io_reader_from_mem(&r, t.source, sp_cstr_len(t.source));
-
-  u8 backing [64] = sp_zero;
-  sp_io_mem_writer_t w = sp_zero;
-  sp_io_mem_writer_from_buffer(&w, backing, t.capacity);
-
-  u8 copy_buf [64] = sp_zero;
-  u64 copied = 0;
-  sp_err_t err = sp_io_copy_b(&w.base, &r, copy_buf, t.buffer, &copied);
-
-  EXPECT_EQ(err, t.expect.err);
-  u64 n = sp_cstr_len(t.expect.final);
-  EXPECT_EQ(copied, n);
-  sp_for(it, n) {
-    EXPECT_EQ((c8)backing[it], t.expect.final[it]);
-  }
-}
-
 UTEST_F(io_mem, copy_full) {
-  run_io_copy_test(utest_result, (io_copy_test_t){
+  run_io_mem_test(utest_result, (io_mem_test_t){
     .source = "0123456789",
-    .capacity = 32, .buffer = 8,
-    .expect = { .err = SP_OK, .final = "0123456789" },
+    .writer_capacity = 32,
+    .steps = {
+      { .kind = IO_STEP_COPY, .copy = { 8, SP_OK, 10 } },
+    },
+    .expect.content = "0123456789",
   });
 }
 
 UTEST_F(io_mem, copy_loops) {
-  run_io_copy_test(utest_result, (io_copy_test_t){
+  run_io_mem_test(utest_result, (io_mem_test_t){
     .source = "ABCDEFGHIJKLMNOP",
-    .capacity = 32, .buffer = 4,
-    .expect = { .err = SP_OK, .final = "ABCDEFGHIJKLMNOP" },
+    .writer_capacity = 32,
+    .steps = {
+      { .kind = IO_STEP_COPY, .copy = { 4, SP_OK, 16 } },
+    },
+    .expect.content = "ABCDEFGHIJKLMNOP",
   });
 }
 
 UTEST_F(io_mem, copy_empty) {
-  run_io_copy_test(utest_result, (io_copy_test_t){
+  run_io_mem_test(utest_result, (io_mem_test_t){
     .source = "",
-    .capacity = 8, .buffer = 8,
-    .expect = { .err = SP_OK },
+    .writer_capacity = 8,
+    .steps = {
+      { .kind = IO_STEP_COPY, .copy = { 8, SP_OK, 0 } },
+    },
   });
 }
 
 UTEST_F(io_mem, copy_writer_no_space) {
-  run_io_copy_test(utest_result, (io_copy_test_t){
+  run_io_mem_test(utest_result, (io_mem_test_t){
     .source = "0123456789",
-    .capacity = 4, .buffer = 8,
-    .expect = { .err = SP_ERR_IO_NO_SPACE, .final = "0123" },
+    .writer_capacity = 4,
+    .steps = {
+      { .kind = IO_STEP_COPY, .copy = { 8, SP_ERR_IO_NO_SPACE, 4 } },
+    },
+    .expect.content = "0123",
   });
 }
 
 
+///////////////
+// SEEK/SIZE //
+///////////////
+UTEST_F(io_mem, writer_seek) {
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 64,
+    .steps = {
+      { .kind = IO_STEP_SEEK, .seek = { 32, SP_IO_SEEK_SET, SP_OK, 32 } },
+      { .kind = IO_STEP_SEEK, .seek = { 0,  SP_IO_SEEK_END, SP_OK, 64 } },
+    },
+  });
+}
+
+UTEST_F(io_mem, writer_size) {
+  run_io_mem_test(utest_result, (io_mem_test_t){
+    .writer_capacity = 128,
+    .steps = {
+      { .kind = IO_STEP_SIZE, .size = { SP_OK, 128 } },
+    },
+  });
+}
