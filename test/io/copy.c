@@ -54,14 +54,10 @@ UTEST_F(io, copy_empty) {
   });
 }
 
-// TODO: this case exposes the sp_io_copy_b bug: today it returns bytes_copied=0
-// because the write fails before `total += chunk` runs, and the mem writer's
-// all-or-nothing semantics drop the partial. Uncomment after fixing.
-//
-// UTEST_F(io, copy_writer_no_space) {
-//   run_io_copy_test(utest_result, (io_copy_test_t){
-//     .source = "0123456789",
-//     .capacity = 4, .buffer = 8,
-//     .expect = { .err = SP_ERR_IO_NO_SPACE, .final = "0123" },
-//   });
-// }
+UTEST_F(io, copy_writer_no_space) {
+  run_io_copy_test(utest_result, (io_copy_test_t){
+    .source = "0123456789",
+    .capacity = 4, .buffer = 8,
+    .expect = { .err = SP_ERR_IO_NO_SPACE, .final = "0123" },
+  });
+}

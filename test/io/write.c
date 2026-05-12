@@ -66,7 +66,7 @@ UTEST_F(io, write_overflow) {
   run_io_write_test(utest_result, (io_write_test_t){
     .capacity = 4,
     .steps = {
-      { .kind = IO_STEP_WRITE, .write = { "abcdefgh", SP_ERR_IO_NO_SPACE, 0 } },
+      { .kind = IO_STEP_WRITE, .write = { "abcdefgh", SP_ERR_IO_NO_SPACE, 4 } },
     },
   });
 }
