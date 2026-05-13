@@ -314,7 +314,8 @@ UTEST(sp_fmt_parse_directive, no_width_just_directive) {
   EXPECT_EQ(spec.directive_count, 1);
 }
 
-static sp_str_t render_value_to_str(sp_fmt_arg_t arg) {
+static sp_str_t render_value_to_str(sp_fmt_argv_t argv) {
+  sp_fmt_arg_t arg = sp_fmt_arg_from_argv(argv);
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(sp_mem_get_scratch(), &io);
   sp_fmt_render_default(&io.base, sp_mem_get_scratch(), &arg, SP_NULLPTR);
@@ -425,7 +426,7 @@ UTEST(sp_fmt_render, f64_neg_inf) {
 }
 
 UTEST(sp_fmt_render, f64_custom_precision_via_spec) {
-  sp_fmt_arg_t arg = sp_fmt_float(3.14159);
+  sp_fmt_arg_t arg = sp_fmt_arg_from_argv(sp_fmt_float(3.14159));
   sp_opt_set(arg.spec.precision, 2);
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(sp_mem_get_scratch(), &io);
@@ -732,7 +733,7 @@ UTEST(sp_fmt_directive, custom_fn_fallback) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("wrap", _test_before_lt, _test_after_gt);
   u32 value = 0;
-  sp_fmt_arg_t arg = sp_fmt_custom(u32, _test_render_x, value);
+  sp_fmt_argv_t arg = sp_fmt_custom(u32, _test_render_x, value);
   sp_str_t got = sp_fmt(sp_mem_get_scratch(), "{.wrap}", arg).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "<X>"));
   sp_fmt_directive_reset();
@@ -904,7 +905,7 @@ UTEST(sp_fmt_v, width_clamped_dynamic_negative) {
 
 static void _test_render_u64_only(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   (void)param; (void)mem;
-  sp_fmt_write_u64(io, arg->u);
+  sp_fmt_write_u64(io, arg->value.u);
 }
 
 UTEST(sp_fmt_directive, kinds_single_accepts_match) {
@@ -1055,9 +1056,9 @@ static void _test_fg_before(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg,
   (void)arg; (void)mem;
   _last_fg_had_param = (param != SP_NULLPTR);
   if (param && param->id == sp_fmt_id_str) {
-    _last_fg_param = param->s;
+    _last_fg_param = param->value.s;
     sp_io_write_cstr(io, "<fg=", SP_NULLPTR);
-    sp_io_write_str(io, param->s, SP_NULLPTR);
+    sp_io_write_str(io, param->value.s, SP_NULLPTR);
     sp_io_write_cstr(io, ">", SP_NULLPTR);
   }
   else {

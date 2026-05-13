@@ -62,6 +62,7 @@ make TRIPLE=aarch64-macos
     - Always use `sp_mem_begin_scratch_for(mem)` to avoid clobbering an argument-passed scratch allocator
 - For `sp_str_t` → cstr conversion before a syscall, use a stack `c8 buf[SP_PATH_MAX]` + `sp_cstr_copy_to_n`, not scratch
 - Never use `NULL`; use `SP_NULL` or `SP_NULLPTR`
+- Never hand-align format strings; prefer to use the `:*^N` specifier and pass the content as an argument
 - Always use the following guide when casing macros:
     - Lowercase:
         - Function-likes (e.g. `sp_syscall`, `sp_sys_alloc_type`, `sp_max`)
