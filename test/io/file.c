@@ -211,7 +211,7 @@ void run_io_file_writer_test(int* utest_result, sp_mem_t mem, sp_str_t path, io_
 
   if (t.expect.content) {
     sp_str_t loaded = sp_zero;
-    sp_io_read_file_a(mem, path, &loaded);
+    sp_io_read_file(mem, path, &loaded);
     u64 n = sp_cstr_len(t.expect.content);
     EXPECT_EQ(loaded.len, n);
     sp_for(it, n) {
@@ -378,7 +378,7 @@ UTEST_F(io, file_to_file_copy) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  sp_io_read_file_a(ut.mem, dst_path, &loaded);
+  sp_io_read_file(ut.mem, dst_path, &loaded);
   EXPECT_EQ(loaded.len, sizeof(source));
   sp_for(i, sizeof(source)) EXPECT_EQ((u8)loaded.data[i], source[i]);
 }
@@ -404,7 +404,7 @@ UTEST_F(io, file_copy_fast_path_falls_back_for_mem_source) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
+  sp_io_read_file(ut.mem, ut.file_path, &loaded);
   EXPECT_EQ(loaded.len, n);
   sp_for(i, n) EXPECT_EQ(loaded.data[i], content[i]);
 }

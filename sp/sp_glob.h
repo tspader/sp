@@ -611,9 +611,9 @@ sp_glob_set_t* sp_glob_set_new(sp_mem_t mem) {
   sp_da_init(am, set->prefixes);
   sp_da_init(am, set->suffixes);
   sp_da_init(am, set->fallbacks);
-  sp_str_ht_init_a(am, set->literal);
-  sp_str_ht_init_a(am, set->base_name);
-  sp_str_ht_init_a(am, set->extension);
+  sp_str_ht_init(am, set->literal);
+  sp_str_ht_init(am, set->base_name);
+  sp_str_ht_init(am, set->extension);
   return set;
 }
 

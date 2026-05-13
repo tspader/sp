@@ -25,7 +25,7 @@ static u32 xorshift32(u32* state) {
 }
 
 static sp_str_t rgb_fg(u8 r, u8 g, u8 b) {
-  return sp_fmt_a(sp_mem_get_scratch(), "\x1b[38;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b)).value;
+  return sp_fmt(sp_mem_get_scratch(), "\x1b[38;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b)).value;
 }
 
 static sp_str_t color_for_ratio(f64 ratio) {
@@ -48,7 +48,7 @@ typedef struct {
 } bench_params_t;
 
 typedef struct {
-  sp_ht_a(s32, u64) sp;
+  sp_ht(s32, u64) sp;
   kvp_t* stb;
   s32* random_keys;
   u32 random_keys_n;
@@ -138,37 +138,38 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
   u32 ratio_width = 6;
   sp_da_for(results, i) {
     if (results[i].name.len > max_name) max_name = results[i].name.len;
-    sp_str_t n_str = sp_fmt_a(sp_mem_get_scratch(), "{}", sp_fmt_uint(results[i].n)).value;
+    sp_str_t n_str = sp_fmt(sp_mem_get_scratch(), "{}", sp_fmt_uint(results[i].n)).value;
     if (n_str.len > max_n_width) max_n_width = n_str.len;
   }
 
   sp_io_writer_t sb = sp_zero;
-  sp_io_dyn_mem_writer_init_a(sp_mem_get_scratch(), &sb);
-  sp_fmt_io(&sb, "{}{} {} {} {} {}{}\n",
+  sp_io_dyn_mem_writer_init(sp_mem_get_scratch(), &sb);
+  sp_mem_arena_marker_t fmt_s = sp_mem_begin_scratch_for(sp_mem_get_scratch());
+  sp_fmt_io_a(&sb, fmt_s.mem, "{}{} {} {} {} {}{}\n",
     sp_fmt_cstr(SP_ANSI_FG_BRIGHT_BLACK),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("test"), max_name)),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("n"), max_n_width)),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("sp_ht"), time_width)),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("stb_ds"), time_width)),
-    sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), sp_str_lit("ratio"), ratio_width)),
+    sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), sp_str_lit("test"), max_name)),
+    sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), sp_str_lit("n"), max_n_width)),
+    sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), sp_str_lit("sp_ht"), time_width)),
+    sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), sp_str_lit("stb_ds"), time_width)),
+    sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), sp_str_lit("ratio"), ratio_width)),
     sp_fmt_cstr(SP_ANSI_RESET));
 
   sp_da_for(results, i) {
     bench_result_pair_t* r = &results[i];
 
-    sp_str_t n_str = sp_fmt_a(sp_mem_get_scratch(), "{}", sp_fmt_uint(r->n)).value;
+    sp_str_t n_str = sp_fmt(sp_mem_get_scratch(), "{}", sp_fmt_uint(r->n)).value;
     f64 sp_ms = sp_tm_ns_to_ms_f((f64)r->sp_time_ns);
     f64 stb_ms = sp_tm_ns_to_ms_f((f64)r->stb_time_ns);
     f64 ratio = sp_ms / stb_ms;
 
-    sp_str_t sp_time_str = sp_str_pad_a(sp_mem_get_scratch(), sp_fmt_a(sp_mem_get_scratch(), "{}ms", sp_fmt_float(sp_ms)).value, time_width);
-    sp_str_t stb_time_str = sp_str_pad_a(sp_mem_get_scratch(), sp_fmt_a(sp_mem_get_scratch(), "{}ms", sp_fmt_float(stb_ms)).value, time_width);
+    sp_str_t sp_time_str = sp_str_pad(sp_mem_get_scratch(), sp_fmt(sp_mem_get_scratch(), "{}ms", sp_fmt_float(sp_ms)).value, time_width);
+    sp_str_t stb_time_str = sp_str_pad(sp_mem_get_scratch(), sp_fmt(sp_mem_get_scratch(), "{}ms", sp_fmt_float(stb_ms)).value, time_width);
     sp_str_t ratio_color = color_for_ratio(ratio);
-    sp_str_t ratio_str = sp_str_pad_a(sp_mem_get_scratch(), sp_fmt_a(sp_mem_get_scratch(), "{}x", sp_fmt_float(ratio)).value, ratio_width);
+    sp_str_t ratio_str = sp_str_pad(sp_mem_get_scratch(), sp_fmt(sp_mem_get_scratch(), "{}x", sp_fmt_float(ratio)).value, ratio_width);
 
-    sp_fmt_io(&sb, "{} {} {} {} {}{}{}\n",
-      sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), r->name, max_name)),
-      sp_fmt_str(sp_str_pad_a(sp_mem_get_scratch(), n_str, max_n_width)),
+    sp_fmt_io_a(&sb, fmt_s.mem, "{} {} {} {} {}{}{}\n",
+      sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), r->name, max_name)),
+      sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), n_str, max_n_width)),
       sp_fmt_str(sp_time_str),
       sp_fmt_str(stb_time_str),
       sp_fmt_str(ratio_color),
@@ -178,6 +179,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
 
   sp_str_t output = sp_io_dyn_mem_writer_as_str(&sb);
   sp_os_print(output);
+  sp_mem_end_scratch(fmt_s);
 }
 
 static void kernel_deinit(bench_params_t p, bench_data_t* data) {
@@ -199,7 +201,7 @@ static void kernel_deinit(bench_params_t p, bench_data_t* data) {
 static void kernel_seq_insert(bench_params_t p, bench_data_t* data) {
   switch (p.lib) {
     case BENCH_LIB_SP: {
-      sp_ht_init_a(sp_mem_os_new(), data->sp);
+      sp_ht_init(sp_mem_os_new(), data->sp);
       sp_for(i, p.n) {
         sp_ht_insert(data->sp, i, i);
         SP_COMPILER_BARRIER();
@@ -219,7 +221,7 @@ static void kernel_seq_insert(bench_params_t p, bench_data_t* data) {
 static void kernel_seq_lookup_init(bench_params_t p, bench_data_t* data) {
   switch (p.lib) {
     case BENCH_LIB_SP: {
-      sp_ht_init_a(sp_mem_os_new(), data->sp);
+      sp_ht_init(sp_mem_os_new(), data->sp);
       sp_for(i, p.n) {
         sp_ht_insert(data->sp, (s32)i, (u64)i);
       }
@@ -259,7 +261,7 @@ static void kernel_seq_lookup(bench_params_t p, bench_data_t* data) {
 
 static void kernel_rnd_init(bench_params_t p, bench_data_t* data) {
   if (data->random_keys_n >= p.n) return;
-  data->random_keys = sp_alloc_a(sp_mem_os_new(), sizeof(s32) * p.n);
+  data->random_keys = sp_alloc(sp_mem_os_new(), sizeof(s32) * p.n);
   u32 state = 12345;
   sp_for(i, p.n) {
     data->random_keys[i] = (s32)xorshift32(&state);
@@ -271,7 +273,7 @@ static void kernel_rnd_insert(bench_params_t p, bench_data_t* data) {
   kernel_rnd_init(p, data);
   switch (p.lib) {
     case BENCH_LIB_SP: {
-      sp_ht_init_a(sp_mem_os_new(), data->sp);
+      sp_ht_init(sp_mem_os_new(), data->sp);
       sp_for(i, p.n) {
         sp_ht_insert(data->sp, data->random_keys[i], (u64)i);
         SP_COMPILER_BARRIER();
@@ -292,7 +294,7 @@ static void kernel_rnd_lookup_init(bench_params_t p, bench_data_t* data) {
   kernel_rnd_init(p, data);
   switch (p.lib) {
     case BENCH_LIB_SP: {
-      sp_ht_init_a(sp_mem_os_new(), data->sp);
+      sp_ht_init(sp_mem_os_new(), data->sp);
       sp_for(i, p.n) {
         sp_ht_insert(data->sp, data->random_keys[i], (u64)i);
       }
@@ -333,7 +335,7 @@ static void kernel_rnd_lookup(bench_params_t p, bench_data_t* data) {
 static void kernel_delete_init(bench_params_t p, bench_data_t* data) {
   switch (p.lib) {
     case BENCH_LIB_SP: {
-      sp_ht_init_a(sp_mem_os_new(), data->sp);
+      sp_ht_init(sp_mem_os_new(), data->sp);
       sp_for(i, p.n) {
         sp_ht_insert(data->sp, (s32)i, (u64)i);
       }
@@ -371,7 +373,7 @@ static void kernel_mixed(bench_params_t p, bench_data_t* data) {
   u64 sum = 0;
   switch (p.lib) {
     case BENCH_LIB_SP: {
-      sp_ht_init_a(sp_mem_os_new(), data->sp);
+      sp_ht_init(sp_mem_os_new(), data->sp);
       sp_for(i, p.n) {
         sp_ht_insert(data->sp, (s32)i, (u64)i);
         if (i > 0) {

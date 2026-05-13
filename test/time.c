@@ -44,7 +44,7 @@ UTEST(tm, epoch_to_iso) {
   SKIP_ON_FREESTANDING();
   sp_tm_epoch_t epoch = sp_tm_now_epoch();
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_str_t iso = sp_tm_epoch_to_iso8601_a(s.mem, epoch);
+  sp_str_t iso = sp_tm_epoch_to_iso8601(s.mem, epoch);
   ASSERT_GE(iso.len, 20);
   EXPECT_EQ(iso.data[4], '-');
   EXPECT_EQ(iso.data[7], '-');
@@ -251,7 +251,7 @@ UTEST(tm, iso8601_known_values) {
 
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_tm_epoch_to_iso8601_a(s.mem, cases[i].epoch);
+    sp_str_t result = sp_tm_epoch_to_iso8601(s.mem, cases[i].epoch);
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
   sp_mem_end_scratch(s);
@@ -267,7 +267,7 @@ UTEST(tm, iso8601_millisecond_padding) {
 
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_tm_epoch_to_iso8601_a(s.mem, cases[i].epoch);
+    sp_str_t result = sp_tm_epoch_to_iso8601(s.mem, cases[i].epoch);
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
   sp_mem_end_scratch(s);

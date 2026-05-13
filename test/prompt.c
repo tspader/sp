@@ -48,7 +48,7 @@ UTEST_F_SETUP(prompt) {
   ut.ctx = sp_zero_s(sp_prompt_ctx_t);
   ut.app = SP_NULLPTR;
   sp_prompt_ctx_init(&ut.ctx, ut.mem.tracking, 80, 20);
-  sp_io_dyn_mem_writer_init_a(ut.mem.arena, &ut.writer);
+  sp_io_dyn_mem_writer_init(ut.mem.arena, &ut.writer);
   ut.ctx.writer = &ut.writer.base;
 }
 
@@ -71,7 +71,7 @@ static u32 count_expected_lines(const c8* lines[32]) {
 
 static sp_str_t trim_framebuffer_row(sp_mem_t mem, sp_prompt_cell_t* row, u32 cols) {
   sp_io_dyn_mem_writer_t builder = sp_zero;
-  sp_io_dyn_mem_writer_init_a(mem, &builder);
+  sp_io_dyn_mem_writer_init(mem, &builder);
   sp_for(col, cols) {
     c8 buf[4] = sp_zero;
     u8 len = sp_utf8_encode(row[col].codepoint, buf);
@@ -226,7 +226,7 @@ static sp_da(sp_str_t) sp_prompt_vt_render_lines(sp_mem_t mem, sp_str_t bytes) {
   sp_da(sp_str_t) lines = sp_da_new(mem, sp_str_t);
   sp_for_range(row, 0, vt.max_row + 1) {
     sp_io_dyn_mem_writer_t builder = sp_zero;
-    sp_io_dyn_mem_writer_init_a(mem, &builder);
+    sp_io_dyn_mem_writer_init(mem, &builder);
     sp_for(col, 256) {
       c8 buf[4] = sp_zero;
       u8 len = sp_utf8_encode(vt.cells[row][col], buf);
@@ -2370,13 +2370,13 @@ UTEST_F(prompt, abort_drives_widget_to_cancel) {
 }
 
 UTEST_F(prompt, prompt_end_frees_channel) {
-  sp_prompt_ctx_t* ctx = sp_alloc_type_a(ut.mem.tracking, sp_prompt_ctx_t);
+  sp_prompt_ctx_t* ctx = sp_alloc_type(ut.mem.tracking, sp_prompt_ctx_t);
   sp_prompt_ctx_init(ctx, ut.mem.tracking, 80, 20);
   sp_prompt_send_progress_f32(ctx, 0.5f);
   sp_prompt_send_status(ctx, "halfway");
   sp_prompt_complete(ctx);
   sp_prompt_end(ctx);
-  sp_free_a(ut.mem.tracking, ctx);
+  sp_free(ut.mem.tracking, ctx);
 }
 
 typedef struct {
@@ -2541,7 +2541,7 @@ UTEST_F(prompt, progress_widget_renders_active_two_rows_plus_rail) {
 }
 
 UTEST_F(prompt, progress_widget_quarter_full_uses_partial_blocks) {
-  sp_prompt_progress_widget_t* p = sp_alloc_type_a(ut.mem.arena, sp_prompt_progress_widget_t);
+  sp_prompt_progress_widget_t* p = sp_alloc_type(ut.mem.arena, sp_prompt_progress_widget_t);
   *p = sp_zero_s(sp_prompt_progress_widget_t);
   p->config.prompt = "Loading";
   p->config.width = 8;
@@ -2573,7 +2573,7 @@ UTEST_F(prompt, progress_widget_clamps_out_of_range_inputs) {
   probe_state_t observer = sp_zero;
   SP_UNUSED(observer);
 
-  sp_prompt_progress_widget_t* p = sp_alloc_type_a(ut.mem.arena, sp_prompt_progress_widget_t);
+  sp_prompt_progress_widget_t* p = sp_alloc_type(ut.mem.arena, sp_prompt_progress_widget_t);
   *p = sp_zero_s(sp_prompt_progress_widget_t);
   p->config.prompt = "clamp";
   p->config.width = 4;
@@ -2667,7 +2667,7 @@ UTEST_F(prompt, status_after_complete_does_not_block_submit) {
 }
 
 UTEST_F(prompt, progress_widget_renders_status_below_bar) {
-  sp_prompt_progress_widget_t* p = sp_alloc_type_a(ut.mem.arena, sp_prompt_progress_widget_t);
+  sp_prompt_progress_widget_t* p = sp_alloc_type(ut.mem.arena, sp_prompt_progress_widget_t);
   *p = sp_zero_s(sp_prompt_progress_widget_t);
   p->config.prompt = "Installing";
   p->config.width = 8;
@@ -2698,7 +2698,7 @@ UTEST_F(prompt, progress_widget_renders_status_below_bar) {
 }
 
 UTEST_F(prompt, progress_widget_omits_status_when_empty) {
-  sp_prompt_progress_widget_t* p = sp_alloc_type_a(ut.mem.arena, sp_prompt_progress_widget_t);
+  sp_prompt_progress_widget_t* p = sp_alloc_type(ut.mem.arena, sp_prompt_progress_widget_t);
   *p = sp_zero_s(sp_prompt_progress_widget_t);
   p->config.prompt = "Loading";
   p->config.width = 4;

@@ -7,24 +7,24 @@
 s32 main(s32 num_args, const c8** args) {
   sp_mem_t mem = sp_mem_os_new();
 
-  sp_str_t exe = sp_fs_get_name(sp_fs_get_exe_path_a(mem));
-  sp_str_t usage = sp_fmt_a(mem, "usage: {} {.cyan} {.yellow}", sp_fmt_str(exe), sp_fmt_cstr("$triple"), sp_fmt_cstr("glob")).value;
+  sp_str_t exe = sp_fs_get_name(sp_fs_get_exe_path(mem));
+  sp_str_t usage = sp_fmt(mem, "usage: {} {.cyan} {.yellow}", sp_fmt_str(exe), sp_fmt_cstr("$triple"), sp_fmt_cstr("glob")).value;
   switch (num_args) {
     case 3: break;
-    default: sp_log_str_a(usage); return 1;
+    default: sp_log_str(usage); return 1;
   }
 
   sp_str_t triple = sp_str_view(args[1]);
   sp_str_t pattern = sp_str_view(args[2]);
-  sp_str_t cwd = sp_fs_get_cwd_a(mem);
-  sp_str_t build = sp_fs_join_path_a(mem, cwd, str("build"));
-  build = sp_fs_join_path_a(mem, build, triple);
-  build = sp_fs_join_path_a(mem, build, str("test"));
-  if (!sp_fs_exists_a(build)) {
+  sp_str_t cwd = sp_fs_get_cwd(mem);
+  sp_str_t build = sp_fs_join_path(mem, cwd, str("build"));
+  build = sp_fs_join_path(mem, build, triple);
+  build = sp_fs_join_path(mem, build, str("test"));
+  if (!sp_fs_exists(build)) {
     sp_fatal("error: {.cyan} doesn't exist", sp_fmt_str(build));
   }
 
-  sp_da(sp_str_t) parts = sp_str_split_c8_a(mem, triple, '-');
+  sp_da(sp_str_t) parts = sp_str_split_c8(mem, triple, '-');
   sp_os_kind_t os = sp_zero;
   if      (sp_str_equal(parts[1], str("linux"))) os = SP_OS_LINUX;
   else if (sp_str_equal(parts[1], str("windows"))) os = SP_OS_WIN32;
@@ -37,7 +37,7 @@ s32 main(s32 num_args, const c8** args) {
   sp_glob_set_t* glob = sp_glob_set_new(mem);
   sp_glob_set_add_str(glob, pattern);
   if (sp_str_at(pattern, -1) != '*') {
-    sp_glob_set_add_str(glob, sp_fmt_a(mem, "{}*", sp_fmt_str(pattern)).value);
+    sp_glob_set_add_str(glob, sp_fmt(mem, "{}*", sp_fmt_str(pattern)).value);
   }
   sp_glob_set_build(glob);
 
@@ -96,8 +96,8 @@ s32 main(s32 num_args, const c8** args) {
       if (!match) continue;
 
       test_t test = {
-        .name = sp_str_copy_a(mem, it.entry.name),
-        .path = sp_str_copy_a(mem, it.entry.path)
+        .name = sp_str_copy(mem, it.entry.name),
+        .path = sp_str_copy(mem, it.entry.path)
       };
       sp_da_push(tests, test);
     }
@@ -123,9 +123,9 @@ s32 main(s32 num_args, const c8** args) {
         break;
       }
       case SP_OS_WIN32: {
-        sp_str_t inner = sp_fmt_a(mem, "cd C:/Users/spader/source/sp; ./build/{}/test/{}", sp_fmt_str(triple), sp_fmt_str(test.name)).value;
-        sp_str_t powershell = sp_fmt_a(mem, "powershell -Command {.quote}", sp_fmt_str(inner)).value;
-        cmd.display = sp_fmt_a(mem, "ssh -q spader@piotr {}", sp_fmt_str(powershell)).value;
+        sp_str_t inner = sp_fmt(mem, "cd C:/Users/spader/source/sp; ./build/{}/test/{}", sp_fmt_str(triple), sp_fmt_str(test.name)).value;
+        sp_str_t powershell = sp_fmt(mem, "powershell -Command {.quote}", sp_fmt_str(inner)).value;
+        cmd.display = sp_fmt(mem, "ssh -q spader@piotr {}", sp_fmt_str(powershell)).value;
         cmd.config = (sp_ps_config_t) {
           .command = str("ssh"),
           .args = { str("-q"), str("spader@piotr"), powershell },
@@ -134,8 +134,8 @@ s32 main(s32 num_args, const c8** args) {
         break;
       }
       case SP_OS_MACOS: {
-        sp_str_t inner = sp_fmt_a(mem, "cd ~/source/sp && ./build/{}/test/{}", sp_fmt_str(triple), sp_fmt_str(test.name)).value;
-        cmd.display = sp_fmt_a(mem, "ssh -q spader@miles {.quote}", sp_fmt_str(inner)).value;
+        sp_str_t inner = sp_fmt(mem, "cd ~/source/sp && ./build/{}/test/{}", sp_fmt_str(triple), sp_fmt_str(test.name)).value;
+        cmd.display = sp_fmt(mem, "ssh -q spader@miles {.quote}", sp_fmt_str(inner)).value;
         cmd.config = (sp_ps_config_t) {
           .command = str("ssh"),
           .args = { str("-q"), str("spader@miles"), inner },
@@ -152,34 +152,34 @@ s32 main(s32 num_args, const c8** args) {
     if (tests[it].name.len > width) width = tests[it].name.len;
   }
 
-  sp_log_a("{:<$ .gray} {.gray}", sp_fmt_uint(width), sp_fmt_cstr("name"), sp_fmt_cstr("command"));
+  sp_log("{:<$ .gray} {.gray}", sp_fmt_uint(width), sp_fmt_cstr("name"), sp_fmt_cstr("command"));
   sp_da_for(commands, it) {
-    sp_log_a("{:>$ .cyan} {}", sp_fmt_uint(width), sp_fmt_str(tests[it].name), sp_fmt_str(commands[it].display));
+    sp_log("{:>$ .cyan} {}", sp_fmt_uint(width), sp_fmt_str(tests[it].name), sp_fmt_str(commands[it].display));
   }
-  sp_log_a("");
+  sp_log("");
 
   sp_da(sp_ps_output_t) results = sp_da_new(mem, sp_ps_output_t);
   s32 status = 0;
   sp_da_for(commands, it) {
-    sp_print_a("{:>$}...", sp_fmt_uint(width), sp_fmt_str(tests[it].name));
-    sp_ps_output_t result = sp_ps_run_a(mem, commands[it].config);
+    sp_print("{:>$}...", sp_fmt_uint(width), sp_fmt_str(tests[it].name));
+    sp_ps_output_t result = sp_ps_run(mem, commands[it].config);
     sp_da_push(results, result);
     if (result.status.exit_code) {
       status = 1;
-      sp_log_a("{.fg red}", sp_fmt_cstr("fail"));
+      sp_log("{.fg red}", sp_fmt_cstr("fail"));
     }
     else {
-      sp_log_a("{.fg green}", sp_fmt_cstr("ok"));
+      sp_log("{.fg green}", sp_fmt_cstr("ok"));
     }
   }
 
   sp_da_for(results, it) {
     if (!results[it].status.exit_code) continue;
-    sp_log_a("");
-    sp_log_a("{.fg red}: {}", sp_fmt_cstr("FAIL"), sp_fmt_str(tests[it].name));
-    sp_log_str_a(commands[it].display);
-    sp_log_str_a(results[it].out);
-    sp_log_str_a(results[it].err);
+    sp_log("");
+    sp_log("{.fg red}: {}", sp_fmt_cstr("FAIL"), sp_fmt_str(tests[it].name));
+    sp_log_str(commands[it].display);
+    sp_log_str(results[it].out);
+    sp_log_str(results[it].err);
   }
 
   return status;

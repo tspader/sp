@@ -23,7 +23,7 @@ static void fill_random(u8* p, u64 n, u64 seed) {
 }
 
 static sp_err_t make_source(sp_str_t path, u64 size_bytes, sp_mem_t mem) {
-  u8* chunk = sp_alloc_n_a(mem, u8, 1u << 20);
+  u8* chunk = sp_alloc_n(mem, u8, 1u << 20);
   fill_random(chunk, 1u << 20, 0xdeadbeefcafebabeull);
 
   sp_io_file_writer_t w = sp_zero;
@@ -49,7 +49,7 @@ static run_t copy_naive(sp_str_t src, sp_str_t dst, sp_mem_t mem) {
   sp_io_file_reader_from_path(&r, src);
   sp_io_file_writer_from_path(&w, dst, SP_IO_WRITE_MODE_OVERWRITE);
 
-  u8* buf = sp_alloc_n_a(mem, u8, PERF_NAIVE_BUFFER);
+  u8* buf = sp_alloc_n(mem, u8, PERF_NAIVE_BUFFER);
   u64 copied = 0;
 
   sp_tm_timer_t t = sp_tm_start_timer();
@@ -86,7 +86,7 @@ static run_t copy_fast(sp_str_t src, sp_str_t dst) {
 static void report(const c8* label, run_t run) {
   // MB/s = bytes / 1e6 / (ns / 1e9) = bytes * 1000 / ns.
   u64 mb_per_s = run.ns ? (run.bytes * 1000u) / run.ns : 0;
-  sp_log_a(
+  sp_log(
     "  {}: {} bytes in {} us ({} MB/s)",
     sp_fmt_cstr(label),
     sp_fmt_uint(run.bytes),
@@ -99,15 +99,15 @@ s32 run(s32 num_args, const c8** args) {
   (void)num_args; (void)args;
   sp_mem_t mem = sp_mem_arena_as_allocator(sp_mem_arena_new(sp_mem_os_new()));
 
-  sp_str_t cwd = sp_fs_get_cwd_a(mem);
-  sp_str_t src = sp_str_concat_a(mem, cwd, sp_str_lit("/io_copy_perf.src"));
-  sp_str_t dst = sp_str_concat_a(mem, cwd, sp_str_lit("/io_copy_perf.dst"));
+  sp_str_t cwd = sp_fs_get_cwd(mem);
+  sp_str_t src = sp_str_concat(mem, cwd, sp_str_lit("/io_copy_perf.src"));
+  sp_str_t dst = sp_str_concat(mem, cwd, sp_str_lit("/io_copy_perf.dst"));
 
   u64 size_bytes = (u64)PERF_FILE_SIZE_MB * 1024u * 1024u;
-  sp_log_a("preparing {} MiB source at {}", sp_fmt_uint(PERF_FILE_SIZE_MB), sp_fmt_str(src));
+  sp_log("preparing {} MiB source at {}", sp_fmt_uint(PERF_FILE_SIZE_MB), sp_fmt_str(src));
   sp_err_t err = make_source(src, size_bytes, mem);
   if (err) {
-    sp_log_a("failed to prepare source: err={}", sp_fmt_uint((u32)err));
+    sp_log("failed to prepare source: err={}", sp_fmt_uint((u32)err));
     return 1;
   }
 
@@ -115,7 +115,7 @@ s32 run(s32 num_args, const c8** args) {
   // naive run typically pays for cold reads of the source; the second runs
   // against a warm page cache. The fast-path run benefits from a warm cache
   // too, but the dominant cost it skips is the userspace copy itself.
-  sp_log_a("running benchmark (two trials each)");
+  sp_log("running benchmark (two trials each)");
   run_t n1 = copy_naive(src, dst, mem); report("naive #1", n1);
   run_t f1 = copy_fast (src, dst);      report("fast  #1", f1);
   run_t n2 = copy_naive(src, dst, mem); report("naive #2", n2);
@@ -123,15 +123,15 @@ s32 run(s32 num_args, const c8** args) {
 
   if (f2.ns) {
     u64 speedup_x100 = (n2.ns * 100u) / f2.ns;
-    sp_log_a(
+    sp_log(
       "warm-cache speedup: {}.{}x  (naive #2 / fast #2)",
       sp_fmt_uint(speedup_x100 / 100u),
       sp_fmt_uint(speedup_x100 % 100u)
     );
   }
 
-  sp_fs_remove_file_a(src);
-  sp_fs_remove_file_a(dst);
+  sp_fs_remove_file(src);
+  sp_fs_remove_file(dst);
   return 0;
 }
 SP_MAIN(run)

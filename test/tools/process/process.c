@@ -85,7 +85,7 @@ s32 main(s32 num_args, const c8** args) {
   test_proc_function_t function = test_proc_function_from_str(sp_str_view(function_str));
 
   if (function == TEST_PROC_FUNCTION_INVALID) {
-    sp_log_a("unknown function: {.fg brightred}", sp_fmt_cstr(function_str));
+    sp_log("unknown function: {.fg brightred}", sp_fmt_cstr(function_str));
     SP_EXIT_FAILURE();
   }
 
@@ -107,7 +107,7 @@ s32 main(s32 num_args, const c8** args) {
       while (true) {
         u32 len = read_line(line, sizeof(line));
         if (len == 0) break;
-        sp_str_t prefixed = sp_fmt_a(mem, "echo: {}\n", sp_fmt_str(sp_str(line, len))).value;
+        sp_str_t prefixed = sp_fmt(mem, "echo: {}\n", sp_fmt_str(sp_str(line, len))).value;
         write_str(out_on, err_on, prefixed);
       }
       break;
@@ -125,8 +125,8 @@ s32 main(s32 num_args, const c8** args) {
         sp_str_t key = sp_str(line, len);
         sp_str_t value = sp_os_env_get(key);
         sp_str_t out = !sp_str_empty(value)
-          ? sp_fmt_a(mem, "{} {}\n", sp_fmt_str(key), sp_fmt_str(value)).value
-          : sp_fmt_a(mem, "{}\n", sp_fmt_str(key)).value;
+          ? sp_fmt(mem, "{} {}\n", sp_fmt_str(key), sp_fmt_str(value)).value
+          : sp_fmt(mem, "{}\n", sp_fmt_str(key)).value;
         write_str(out_on, err_on, out);
       }
       break;
@@ -157,16 +157,16 @@ s32 main(s32 num_args, const c8** args) {
         if (n <= 0) break;
         total_read += (u64)n;
       }
-      sp_str_t line = sp_fmt_a(mem, "{}\n", sp_fmt_uint(total_read)).value;
+      sp_str_t line = sp_fmt(mem, "{}\n", sp_fmt_uint(total_read)).value;
       write_str(out_on, err_on, line);
       break;
     }
     case TEST_PROC_FUNCTION_WAIT: {
       sp_str_t arg = sp_str_view(args[0]);
       f64 ms = sp_parse_f64(arg);
-      sp_log_a("process.c ({.fg brightyellow}) is sleeping for {.fg cyan}ms", sp_fmt_int(sp_getpid()), sp_fmt_float(ms));
+      sp_log("process.c ({.fg brightyellow}) is sleeping for {.fg cyan}ms", sp_fmt_int(sp_getpid()), sp_fmt_float(ms));
       sp_os_sleep_ms(ms);
-      sp_log_a("process.c ({.fg brightyellow}) is done", sp_fmt_int(sp_getpid()));
+      sp_log("process.c ({.fg brightyellow}) is done", sp_fmt_int(sp_getpid()));
       return sp_test_ps_wait_exit_code;
     }
     case TEST_PROC_FUNCTION_EXIT_CODE: {
@@ -174,7 +174,7 @@ s32 main(s32 num_args, const c8** args) {
     }
     case TEST_PROC_FUNCTION_FLOOD: {
       const u32 flood_size = 512 * 1024;
-      u8* buffer = sp_alloc_n_a(mem, u8, flood_size);
+      u8* buffer = sp_alloc_n(mem, u8, flood_size);
       for (u32 i = 0; i < flood_size; i++) {
         buffer[i] = (u8)('A' + (i % 26));
       }
@@ -182,7 +182,7 @@ s32 main(s32 num_args, const c8** args) {
       break;
     }
     case TEST_PROC_FUNCTION_PATTERN: {
-      u8* buffer = sp_alloc_n_a(mem, u8, pattern_size);
+      u8* buffer = sp_alloc_n(mem, u8, pattern_size);
       for (s32 i = 0; i < pattern_size; i++) {
         buffer[i] = (u8)pattern_char[0];
       }
@@ -192,7 +192,7 @@ s32 main(s32 num_args, const c8** args) {
       break;
     }
     default: {
-      sp_log_err_a("Unknown function: {}", sp_fmt_cstr(function_str));
+      sp_log_err("Unknown function: {}", sp_fmt_cstr(function_str));
       return 1;
     }
   }

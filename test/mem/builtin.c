@@ -356,7 +356,7 @@ UTEST_F(mem, alloc_preserves_u64_size) {
   };
 
   u64 requested = (u64)5 * 1024 * 1024 * 1024;
-  sp_alloc_a(mock, requested);
+  sp_alloc(mock, requested);
 
   EXPECT_EQ(recorded_size, requested);
 }

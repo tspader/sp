@@ -9,11 +9,11 @@ typedef struct {
 } embed_entry_t;
 
 sp_str_t symbol_from_path(sp_mem_t mem, sp_str_t path) {
-  sp_str_t symbol = sp_str_copy_a(mem, path);
-  symbol = sp_str_replace_c8_a(mem, symbol, '/', '_');
-  symbol = sp_str_replace_c8_a(mem, symbol, '\\', '_');
-  symbol = sp_str_replace_c8_a(mem, symbol, '.', '_');
-  symbol = sp_str_replace_c8_a(mem, symbol, '-', '_');
+  sp_str_t symbol = sp_str_copy(mem, path);
+  symbol = sp_str_replace_c8(mem, symbol, '/', '_');
+  symbol = sp_str_replace_c8(mem, symbol, '\\', '_');
+  symbol = sp_str_replace_c8(mem, symbol, '.', '_');
+  symbol = sp_str_replace_c8(mem, symbol, '-', '_');
   return symbol;
 }
 
@@ -22,7 +22,7 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_mem_t mem = sp_mem_os_new();
 
   if (argc < 4) {
-    sp_log_a("usage: embed <src_dir> <output.o> <output.h> [extra_files...]");
+    sp_log("usage: embed <src_dir> <output.o> <output.h> [extra_files...]");
     rc = 1;
     goto cleanup;
   }
@@ -30,11 +30,11 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_str_t src_dir = sp_str_view(argv[1]);
   sp_str_t out_obj = sp_str_view(argv[2]);
   sp_str_t out_hdr = sp_str_view(argv[3]);
-  sp_log_a("scanning {}", sp_fmt_str(src_dir));
+  sp_log("scanning {}", sp_fmt_str(src_dir));
 
-  sp_da(sp_fs_entry_t) files = sp_fs_collect_recursive_a(mem, src_dir);
+  sp_da(sp_fs_entry_t) files = sp_fs_collect_recursive(mem, src_dir);
   if (sp_da_empty(files)) {
-    sp_log_a("no files found in {}", sp_fmt_str(src_dir));
+    sp_log("no files found in {}", sp_fmt_str(src_dir));
     rc = 1;
     goto cleanup;
   }
@@ -58,7 +58,7 @@ s32 embed_main(s32 argc, const c8** argv) {
     sp_str_t symbol = symbol_from_path(mem, rel_path);
 
     sp_str_t content = sp_zero;
-    sp_io_read_file_a(mem, ent.path, &content);
+    sp_io_read_file(mem, ent.path, &content);
     u64 size = content.len;
 
     sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
@@ -88,7 +88,7 @@ s32 embed_main(s32 argc, const c8** argv) {
 
       sp_elf_add_symbol(
         symtab, elf,
-        sp_fmt_a(mem, "{}_size", sp_fmt_str(symbol)).value,
+        sp_fmt(mem, "{}_size", sp_fmt_str(symbol)).value,
         offset, sizeof(u64),
         STB_GLOBAL, STT_OBJECT,
         section->index
@@ -108,7 +108,7 @@ s32 embed_main(s32 argc, const c8** argv) {
     sp_str_t path = sp_str_lit("include/spn.h");
 
     sp_str_t content = sp_zero;
-    sp_io_read_file_a(mem, file_path, &content);
+    sp_io_read_file(mem, file_path, &content);
     u64 size = content.len;
 
     sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
@@ -138,7 +138,7 @@ s32 embed_main(s32 argc, const c8** argv) {
 
       sp_elf_add_symbol(
         symtab, elf,
-        sp_fmt_a(mem, "{}_size", sp_fmt_str(symbol)).value,
+        sp_fmt(mem, "{}_size", sp_fmt_str(symbol)).value,
         offset, sizeof(u64),
         STB_GLOBAL, STT_OBJECT,
         section->index
@@ -154,7 +154,7 @@ s32 embed_main(s32 argc, const c8** argv) {
 
   sp_err_t err = sp_elf_write_to_file(elf, out_obj);
   if (err != SP_OK) {
-    sp_log_a("failed to write {}", sp_fmt_str(out_obj));
+    sp_log("failed to write {}", sp_fmt_str(out_obj));
     rc = 1;
     goto cleanup;
   }
@@ -185,7 +185,7 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_io_write_str(&hdr.base, sp_str_lit("};\n"), SP_NULLPTR);
   sp_io_file_writer_close(&hdr);
 
-  sp_log_a("embedded {} files -> {} + {}", sp_fmt_uint(sp_da_size(entries)), sp_fmt_str(out_obj), sp_fmt_str(out_hdr));
+  sp_log("embedded {} files -> {} + {}", sp_fmt_uint(sp_da_size(entries)), sp_fmt_str(out_obj), sp_fmt_str(out_hdr));
 
 cleanup:
   return rc;

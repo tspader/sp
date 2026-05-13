@@ -146,7 +146,7 @@ typedef struct {
   sp_mem_arena_t* arena;
   sp_mem_t mem;
   sp_da(sp_elf_section_t) sections;
-  sp_ht_a(sp_str_t, u32) section_map;
+  sp_ht(sp_str_t, u32) section_map;
 } sp_elf_t;
 
 sp_elf_t* sp_elf_new(sp_mem_t mem);
@@ -196,7 +196,7 @@ sp_elf_t* sp_elf_new(sp_mem_t mem) {
   elf->arena = arena;
   elf->mem = am;
   sp_da_init(am, elf->sections);
-  sp_str_ht_init_a(am, elf->section_map);
+  sp_str_ht_init(am, elf->section_map);
   return elf;
 }
 
@@ -224,7 +224,7 @@ sp_elf_section_t* sp_elf_add_section(sp_elf_t* elf, sp_str_t name, u32 kind, u64
   sp_require_as_null(sp_elf_is_align_valid(alignment));
 
   sp_elf_section_t section = {
-    .name = sp_str_copy_a(elf->mem, name),
+    .name = sp_str_copy(elf->mem, name),
     .index = sp_cast(u32, sp_da_size(elf->sections)),
     .type = kind,
     .alignment = alignment,
@@ -394,7 +394,7 @@ sp_elf_section_t* sp_elf_rela_new(sp_elf_t* elf, sp_elf_section_t* target) {
   sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
   if (!symtab) return SP_NULLPTR;
 
-  sp_str_t name = sp_fmt_a(elf->mem, ".rela{}", sp_fmt_str(target->name)).value;
+  sp_str_t name = sp_fmt(elf->mem, ".rela{}", sp_fmt_str(target->name)).value;
   sp_elf_section_t* rela = sp_elf_add_section(elf, name, SHT_RELA, 8);
   if (!rela) return SP_NULLPTR;
   rela->link = symtab->index;
@@ -429,7 +429,7 @@ void sp_elf_symtab_sort(sp_elf_section_t* symtab, sp_elf_t* elf) {
   }
 
   Elf64_Sym* syms = (Elf64_Sym*)symtab->buffer.data;
-  Elf64_Sym* new_syms = sp_alloc_n_a(elf->mem, Elf64_Sym, count);
+  Elf64_Sym* new_syms = sp_alloc_n(elf->mem, Elf64_Sym, count);
   u32 local_idx = 0;
   SP_UNUSED(count);
 
@@ -638,7 +638,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
 
   sp_elf_t* elf = sp_elf_new(mem);
 
-  Elf64_Shdr* section_headers = sp_alloc_n_a(elf->mem, Elf64_Shdr, num_sections);
+  Elf64_Shdr* section_headers = sp_alloc_n(elf->mem, Elf64_Shdr, num_sections);
   sp_mem_copy(section_headers, data + ehdr.e_shoff, sh_table_bytes);
 
   Elf64_Shdr* string_header = &section_headers[ehdr.e_shstrndx];
@@ -649,7 +649,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
       sp_elf_free(elf);
       return SP_NULLPTR;
     }
-    string_table = sp_alloc_n_a(elf->mem, c8, string_header->sh_size);
+    string_table = sp_alloc_n(elf->mem, c8, string_header->sh_size);
     sp_mem_copy(string_table, data + string_header->sh_offset, string_header->sh_size);
   }
 
@@ -703,11 +703,11 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
 
 sp_elf_t* sp_elf_read_from_file(sp_mem_t mem, sp_str_t path) {
   sp_str_t bytes = sp_zero;
-  if (sp_io_read_file_a(mem, path, &bytes)) {
+  if (sp_io_read_file(mem, path, &bytes)) {
     return SP_NULLPTR;
   }
   sp_elf_t* elf = sp_elf_read(mem, (const u8*)bytes.data, bytes.len);
-  sp_free_a(mem, (void*)bytes.data);
+  sp_free(mem, (void*)bytes.data);
   return elf;
 }
 

@@ -12,7 +12,7 @@ typedef struct {
 ////////////
 void run_io_dyn_test(int* utest_result, sp_mem_t mem, io_dyn_test_t t) {
   sp_io_dyn_mem_writer_t w;
-  sp_io_dyn_mem_writer_init_a(mem, &w);
+  sp_io_dyn_mem_writer_init(mem, &w);
 
   sp_carr_for(t.steps, j) {
     const io_step_t* step = &t.steps[j];
@@ -98,7 +98,7 @@ UTEST_F(io, dyn_seek) {
 UTEST_F(io, dyn_grows) {
   SKIP_ON_WASM()
   sp_io_dyn_mem_writer_t w;
-  sp_io_dyn_mem_writer_init_a(ut.mem, &w);
+  sp_io_dyn_mem_writer_init(ut.mem, &w);
 
   u8 data [256];
   sp_for(i, 256) data[i] = (u8)i;

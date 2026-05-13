@@ -43,7 +43,7 @@ typedef struct {
   sp_asset_registry_t* registry;
   sp_asset_kind_t kind;
   void* fallback;
-  sp_ht_a(sp_str_t, sp_asset_t*) assets;
+  sp_ht(sp_str_t, sp_asset_t*) assets;
 } sp_asset_importer_t;
 
 struct sp_asset_import_context {
@@ -127,7 +127,7 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_mem_t mem, sp_asse
       .fallback = cfg->fallback,
       .assets = SP_NULLPTR,
     };
-    sp_str_ht_init_a(registry->mem, importer.assets);
+    sp_str_ht_init(registry->mem, importer.assets);
     sp_da_push(registry->importers, importer);
   }
 
@@ -162,13 +162,13 @@ sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_
 }
 
 static sp_asset_t* sp_asset_registry_alloc(sp_asset_registry_t* r, sp_asset_importer_t* importer, sp_str_t name, void* data) {
-  sp_asset_t* asset = sp_alloc_type_a(r->mem, sp_asset_t);
+  sp_asset_t* asset = sp_alloc_type(r->mem, sp_asset_t);
   asset->kind = importer->kind;
   asset->state = SP_ASSET_STATE_QUEUED;
-  asset->name = sp_str_copy_a(r->mem, name);
+  asset->name = sp_str_copy(r->mem, name);
   sp_atomic_ptr_set(&asset->data, data);
 
-  sp_str_ht_insert(importer->assets, sp_str_copy_a(r->mem, name), asset);
+  sp_str_ht_insert(importer->assets, sp_str_copy(r->mem, name), asset);
 
   return asset;
 }

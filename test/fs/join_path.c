@@ -21,7 +21,7 @@ UTEST(fs_join_path, cases) {
   };
 
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_fs_join_path_a(a, sp_str_view(cases[i].a), sp_str_view(cases[i].b));
+    sp_str_t result = sp_fs_join_path(a, sp_str_view(cases[i].a), sp_str_view(cases[i].b));
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
 }

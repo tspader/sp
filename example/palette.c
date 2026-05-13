@@ -74,7 +74,7 @@ sp_str_t palette_color_to_ansi_bg(sp_mem_t mem, sp_color_t c) {
   u8 r = (u8)(c.r * 255.0f);
   u8 g = (u8)(c.g * 255.0f);
   u8 b = (u8)(c.b * 255.0f);
-  return sp_fmt_a(mem, "\033[48;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b)).value;
+  return sp_fmt(mem, "\033[48;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b)).value;
 }
 
 sp_str_t palette_color_to_hex(sp_mem_t mem, sp_color_t c) {
@@ -82,7 +82,7 @@ sp_str_t palette_color_to_hex(sp_mem_t mem, sp_color_t c) {
   u8 g = (u8)(c.g * 255.0f);
   u8 b = (u8)(c.b * 255.0f);
   sp_io_dyn_mem_writer_t b_out = sp_zero;
-  sp_io_dyn_mem_writer_init_a(mem, &b_out);
+  sp_io_dyn_mem_writer_init(mem, &b_out);
   sp_io_write_c8(&b_out.base, '#');
   for (s32 i = 0; i < 3; i++) {
     u8 v = (i == 0) ? r : (i == 1) ? g : b;
@@ -98,7 +98,7 @@ void palette_render(app_t* app) {
   app->needs_redraw = false;
 
   sp_io_dyn_mem_writer_t out = sp_zero;
-  sp_io_dyn_mem_writer_init_a(app->mem, &out);
+  sp_io_dyn_mem_writer_init(app->mem, &out);
 
   sp_io_write_cstr(&out.base, "\033[H\033[2J", SP_NULLPTR);
 
@@ -146,7 +146,7 @@ void palette_render(app_t* app) {
 void palette_print_results(app_t* app) {
   sp_da_for(app->saved_colors, i) {
     sp_str_t hex = palette_color_to_hex(app->mem, app->saved_colors[i]);
-    sp_log_a("{}", sp_fmt_str(hex));
+    sp_log("{}", sp_fmt_str(hex));
   }
 }
 
@@ -236,7 +236,7 @@ sp_app_config_t app_main(s32 num_args, const c8** args) {
   if (num_args > 3) value      = sp_parse_s32(sp_str_view(args[3]));
 
   sp_mem_t mem = sp_mem_os_new();
-  app_t* app = sp_alloc_type_a(mem, app_t);
+  app_t* app = sp_alloc_type(mem, app_t);
   app->mem = mem;
   app->saved_colors = sp_da_new(app->mem, sp_color_t);
 

@@ -380,7 +380,7 @@ static void fancy_publish_render(sp_prompt_ctx_t* ctx) {
   fancy_render_rail(ctx, sp_str_lit("Build matrix"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
   fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_render_bar(ctx, copy.build_progress, 28, fancy_style_rgb(0x55, 0xaa, 0xff));
-  fancy_render_str(ctx, sp_fmt_a(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.build_progress * 100.0f))).value, sp_zero_s(sp_prompt_style_t));
+  fancy_render_str(ctx, sp_fmt(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.build_progress * 100.0f))).value, sp_zero_s(sp_prompt_style_t));
   fancy_nl(ctx);
   fancy_render_rail(ctx, sp_str_lit(""), sp_zero_s(sp_prompt_style_t));
 
@@ -403,11 +403,11 @@ static void fancy_publish_render(sp_prompt_ctx_t* ctx) {
   fancy_render_rail(ctx, sp_str_lit("Uploads"), fancy_style_ansi(SP_ANSI_FG_BRIGHT_WHITE_U8));
   fancy_render_cstr(ctx, "│  ", fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_render_bar(ctx, copy.upload_progress, 28, fancy_style_rgb(0x9b, 0xdb, 0x8d));
-  fancy_render_str(ctx, sp_fmt_a(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.upload_progress * 100.0f))).value, sp_zero_s(sp_prompt_style_t));
+  fancy_render_str(ctx, sp_fmt(ctx->mem, "  {}%", sp_fmt_uint((u32)(copy.upload_progress * 100.0f))).value, sp_zero_s(sp_prompt_style_t));
   fancy_nl(ctx);
-  fancy_render_str(ctx, sp_fmt_a(ctx->mem, "│  latest: {}", sp_fmt_cstr(copy.latest)).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
+  fancy_render_str(ctx, sp_fmt(ctx->mem, "│  latest: {}", sp_fmt_cstr(copy.latest)).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_nl(ctx);
-  fancy_render_str(ctx, sp_fmt_a(ctx->mem, "│  total: {}%", sp_fmt_uint((u32)(copy.overall_progress * 100.0f))).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
+  fancy_render_str(ctx, sp_fmt(ctx->mem, "│  total: {}%", sp_fmt_uint((u32)(copy.overall_progress * 100.0f))).value, fancy_style_ansi(SP_ANSI_FG_BRIGHT_BLACK_U8));
   fancy_nl(ctx);
 }
 
@@ -504,7 +504,8 @@ static bool fancy_has_arg(s32 argc, const c8** argv, const c8* arg) {
 
 static sp_str_t fancy_selected_changelog(sp_mem_t mem, fancy_changelog_item_t* items, u32 num_items) {
   sp_io_dyn_mem_writer_t builder = sp_zero;
-  sp_io_dyn_mem_writer_init_a(mem, &builder);
+  sp_io_dyn_mem_writer_init(mem, &builder);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(mem);
   const c8* section = "";
   u64 written = 0;
   sp_for(it, num_items) {
@@ -518,28 +519,31 @@ static sp_str_t fancy_selected_changelog(sp_mem_t mem, fancy_changelog_item_t* i
       if (written) {
         sp_io_write_c8(&builder.base, '\n');
       }
-      sp_fmt_io(&builder.base, "[{}]", sp_fmt_cstr(section));
+      sp_fmt_io_a(&builder.base, s.mem, "[{}]", sp_fmt_cstr(section));
       sp_io_write_c8(&builder.base, '\n');
     }
 
-    sp_fmt_io(&builder.base, "- {}", sp_fmt_cstr(items[it].text));
+    sp_fmt_io_a(&builder.base, s.mem, "- {}", sp_fmt_cstr(items[it].text));
     sp_io_write_c8(&builder.base, '\n');
   }
+  sp_mem_end_scratch(s);
   return sp_io_dyn_mem_writer_as_str(&builder);
 }
 
 static sp_str_t fancy_plan_note(sp_mem_t mem, const c8* kind, const c8* name, const c8* sections) {
   sp_io_dyn_mem_writer_t builder = sp_zero;
-  sp_io_dyn_mem_writer_init_a(mem, &builder);
-  sp_fmt_io(&builder.base, "version      0.13.3 ({})", sp_fmt_cstr(kind));
+  sp_io_dyn_mem_writer_init(mem, &builder);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(mem);
+  sp_fmt_io_a(&builder.base, s.mem, "version      0.13.3 ({})", sp_fmt_cstr(kind));
   sp_io_write_c8(&builder.base, '\n');
-  sp_fmt_io(&builder.base, "name         {}", sp_fmt_cstr(name));
+  sp_fmt_io_a(&builder.base, s.mem, "name         {}", sp_fmt_cstr(name));
   sp_io_write_c8(&builder.base, '\n');
   sp_io_write_cstr(&builder.base, "tag          v0.13.3", SP_NULLPTR);
   sp_io_write_c8(&builder.base, '\n');
   sp_io_write_cstr(&builder.base, "artifacts    linux, musl, freestanding, macos, windows", SP_NULLPTR);
   sp_io_write_c8(&builder.base, '\n');
-  sp_fmt_io(&builder.base, "changelog    {}", sp_fmt_cstr(sections));
+  sp_fmt_io_a(&builder.base, s.mem, "changelog    {}", sp_fmt_cstr(sections));
+  sp_mem_end_scratch(s);
   return sp_io_dyn_mem_writer_as_str(&builder);
 }
 
@@ -547,7 +551,7 @@ s32 fancy_main(s32 argc, const c8** argv) {
   bool scripted = fancy_has_arg(argc, argv, "--scripted");
   sp_prompt_ctx_t* ctx = sp_prompt_begin(sp_mem_os_new());
   if (ctx == SP_NULLPTR) {
-    sp_log_a("failed to initialize prompt");
+    sp_log("failed to initialize prompt");
     return 1;
   }
 
@@ -665,7 +669,7 @@ s32 fancy_main(s32 argc, const c8** argv) {
 
   const c8* selected_sections = sp_prompt_join_selection(ctx, sections, sp_carr_len(sections));
   sp_str_t plan = fancy_plan_note(ctx->mem, release_kind, release_name, selected_sections);
-  sp_prompt_note(ctx, sp_str_to_cstr_a(ctx->mem, plan), "Plan");
+  sp_prompt_note(ctx, sp_str_to_cstr(ctx->mem, plan), "Plan");
 
   if (scripted) {
     fancy_prime_enter(ctx);
@@ -701,7 +705,7 @@ s32 fancy_main(s32 argc, const c8** argv) {
   }
 
   sp_str_t curated = fancy_selected_changelog(ctx->mem, changelog_items, sp_carr_len(changelog_items));
-  sp_prompt_note(ctx, sp_str_to_cstr_a(ctx->mem, curated), "Published v0.13.3");
+  sp_prompt_note(ctx, sp_str_to_cstr(ctx->mem, curated), "Published v0.13.3");
   sp_prompt_success(ctx, "release published");
   sp_prompt_outro(ctx, "done");
   sp_prompt_end(ctx);
