@@ -59,6 +59,13 @@ sp_str_t get_process_path(sp_mem_t mem) {
   return process;
 }
 
+const c8* get_process_path_c(sp_mem_t mem) {
+  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path(mem));
+  sp_str_t process = sp_fs_join_path(mem, exe, sp_str_lit("process"));
+  process = sp_fs_replace_ext(mem, process, sp_os_get_executable_ext());
+  return sp_str_to_cstr(mem, process);
+}
+
 typedef struct ps {
   sp_mem_arena_t* arena;
   sp_mem_t mem;
@@ -618,11 +625,11 @@ UTEST_F(ps, empty_env_var) {
 // SP_PS_WAIT //
 //////////////////
 UTEST_F(ps, wait_after_process_complete) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("exit_code"),
-      sp_str_lit("--exit-code"), sp_str_lit("42")
+      "--fn", "exit_code",
+      "--exit-code", "42"
     }
   });
 
@@ -634,11 +641,11 @@ UTEST_F(ps, wait_after_process_complete) {
 }
 
 UTEST_F(ps, wait_while_process_running) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("100")
+      "--fn", "wait",
+      "100"
     }
   });
 
@@ -676,11 +683,11 @@ UTEST_F(ps, poll_while_process_running) {
 }
 
 UTEST_F(ps, process_complete_during_poll) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("100")
+      "--fn", "wait",
+      "100"
     }
   });
 
@@ -690,11 +697,11 @@ UTEST_F(ps, process_complete_during_poll) {
 }
 
 UTEST_F(ps, poll_after_process_complete) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("exit_code"),
-      sp_str_lit("--exit-code"), sp_str_lit("72")
+      "--fn", "exit_code",
+      "--exit-code", "72"
     }
   });
 
@@ -706,11 +713,11 @@ UTEST_F(ps, poll_after_process_complete) {
 }
 
 UTEST_F(ps, poll_with_timeout_after_process_complete) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("exit_code"),
-      sp_str_lit("--exit-code"), sp_str_lit("72")
+      "--fn", "exit_code",
+      "--exit-code", "72"
     }
   });
 
@@ -722,11 +729,11 @@ UTEST_F(ps, poll_with_timeout_after_process_complete) {
 }
 
 UTEST_F(ps, wait_twice_while_process_running) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("exit_code"),
-      sp_str_lit("--exit-code"), sp_str_lit("72")
+      "--fn", "exit_code",
+      "--exit-code", "72"
     }
   });
 
@@ -740,11 +747,11 @@ UTEST_F(ps, wait_twice_while_process_running) {
 }
 
 UTEST_F(ps, poll_then_wait) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("100")
+      "--fn", "wait",
+      "100"
     }
   });
 
@@ -757,11 +764,11 @@ UTEST_F(ps, poll_then_wait) {
 }
 
 UTEST_F(ps, poll_multiple) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("300")
+      "--fn", "wait",
+      "300"
     }
   });
 
@@ -779,11 +786,11 @@ UTEST_F(ps, poll_multiple) {
 }
 
 UTEST_F(ps, wait_with_output) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("print"),
-      sp_str_lit("--stdout")
+      "--fn", "print",
+      "--stdout"
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -803,11 +810,11 @@ UTEST_F(ps, wait_with_output) {
 }
 
 UTEST_F(ps, poll_with_io) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("100")
+      "--fn", "wait",
+      "100"
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
@@ -827,11 +834,11 @@ UTEST_F(ps, poll_with_io) {
 }
 
 UTEST_F(ps, interleaved_read_write) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("echo_line"),
-      sp_str_lit("--stdout")
+      "--fn", "echo_line",
+      "--stdout"
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
@@ -869,11 +876,11 @@ UTEST_F(ps, interleaved_read_write) {
 }
 
 UTEST_F(ps, incremental_nonblocking_read) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("slow_write"),
-      sp_str_lit("--stdout")
+      "--fn", "slow_write",
+      "--stdout"
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -914,11 +921,11 @@ UTEST_F(ps, incremental_nonblocking_read) {
 }
 
 UTEST_F(ps, output) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("print"),
-      sp_str_lit("--stdout")
+      "--fn", "print",
+      "--stdout"
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -936,12 +943,12 @@ UTEST_F(ps, output) {
 }
 
 UTEST_F(ps, redirect_stderr_to_stdout) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("print"),
-      sp_str_lit("--stdout"),
-      sp_str_lit("--stderr")
+      "--fn", "print",
+      "--stdout",
+      "--stderr"
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -964,12 +971,12 @@ UTEST_F(ps, redirect_stderr_to_stdout) {
 }
 
 UTEST_F(ps, redirect_stdout_to_stderr) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("print"),
-      sp_str_lit("--stdout"),
-      sp_str_lit("--stderr")
+      "--fn", "print",
+      "--stdout",
+      "--stderr"
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -992,12 +999,12 @@ UTEST_F(ps, redirect_stdout_to_stderr) {
 }
 
 UTEST_F(ps, output_large_stdout_stderr_deadlock) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("flood"),
-      sp_str_lit("--stdout"),
-      sp_str_lit("--stderr")
+      "--fn", "flood",
+      "--stdout",
+      "--stderr"
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -1017,11 +1024,11 @@ UTEST_F(ps, output_large_stdout_stderr_deadlock) {
 }
 
 UTEST_F(ps, output_large_stdout_deadlock) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("flood"),
-      sp_str_lit("--stdout"),
+      "--fn", "flood",
+      "--stdout",
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -1091,14 +1098,14 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   const s32 write_size = 100;
   const s32 write_count = 50;
 
-  sp_ps_t ps_a = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps_a = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("pattern"),
-      sp_str_lit("--stdout"),
-      sp_str_lit("-c"), sp_str_lit("A"),
-      sp_str_lit("-s"), sp_str_lit("100"),
-      sp_str_lit("-n"), sp_str_lit("50"),
+      "--fn", "pattern",
+      "--stdout",
+      "-c", "A",
+      "-s", "100",
+      "-n", "50",
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -1107,14 +1114,14 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
     }
   });
 
-  sp_ps_t ps_b = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps_b = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("pattern"),
-      sp_str_lit("--stdout"),
-      sp_str_lit("-c"), sp_str_lit("B"),
-      sp_str_lit("-s"), sp_str_lit("100"),
-      sp_str_lit("-n"), sp_str_lit("50"),
+      "--fn", "pattern",
+      "--stdout",
+      "-c", "B",
+      "-s", "100",
+      "-n", "50",
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_NULL },
@@ -1252,15 +1259,15 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
 #endif // !_WIN32
 
 UTEST_F(ps, create_nonexistent_binary) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all")
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = "/usr/bin/this_binary_does_not_exist_at_all"
   });
   EXPECT_EQ(ps.os, SP_NULLPTR);
 }
 
 UTEST_F(ps, wait_nonexistent_binary) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all")
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = "/usr/bin/this_binary_does_not_exist_at_all"
   });
   EXPECT_EQ(ps.os, SP_NULLPTR);
 
@@ -1270,8 +1277,8 @@ UTEST_F(ps, wait_nonexistent_binary) {
 }
 
 UTEST_F(ps, run_nonexistent_binary) {
-  sp_ps_output_t result = sp_ps_run(ut.mem, (sp_ps_config_t) {
-    .command = sp_str_lit("/usr/bin/this_binary_does_not_exist_at_all")
+  sp_ps_output_t result = sp_ps_run_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = "/usr/bin/this_binary_does_not_exist_at_all"
   });
   EXPECT_EQ(result.status.exit_code, -1);
 }

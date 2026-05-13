@@ -2761,18 +2761,32 @@ typedef struct sp_fmt_arg sp_fmt_arg_t;
 SP_TYPEDEF_FN(void, sp_fmt_fn_t, sp_io_writer_t*, sp_mem_t, sp_fmt_arg_t*, sp_fmt_arg_t*);
 SP_TYPEDEF_FN(void, sp_fmt_transform_fn_t, sp_io_writer_t*, sp_mem_t, sp_str_t, sp_fmt_arg_t*, sp_fmt_arg_t*);
 
-struct sp_fmt_arg {
-  sp_fmt_arg_kind_t id;
-  sp_fmt_spec_t spec;
-  union {
+typedef union {
     u64 u;
     s64 i;
     f64 f;
     sp_str_t s;
     void* p;
     struct { sp_fmt_fn_t fn; void* ptr; } custom;
-  };
+} sp_fmt_value_t;
+
+typedef struct {
+  sp_fmt_arg_kind_t id;
+  sp_fmt_value_t value;
+} sp_fmt_argv_t;
+
+struct sp_fmt_arg {
+  sp_fmt_arg_kind_t id;
+  sp_fmt_spec_t spec;
+  sp_fmt_value_t value;
 };
+
+static inline sp_fmt_arg_t sp_fmt_arg_from_argv(sp_fmt_argv_t v) {
+  sp_fmt_arg_t arg = sp_zero;
+  arg.id = v.id;
+  arg.value = v.value;
+  return arg;
+}
 
 typedef enum {
   sp_fmt_directive_renderer,
@@ -2794,13 +2808,13 @@ typedef struct {
   };
 } sp_fmt_directive_t;
 
-#define sp_fmt_uint(_value)  (sp_fmt_arg_t) { .id = sp_fmt_id_u64, .u = (_value) }
-#define sp_fmt_int(_value)   (sp_fmt_arg_t) { .id = sp_fmt_id_s64, .i = (_value) }
-#define sp_fmt_float(_value) (sp_fmt_arg_t) { .id = sp_fmt_id_f64, .f = (_value) }
-#define sp_fmt_char(_value)  (sp_fmt_arg_t) { .id = sp_fmt_id_str, .s = { .data = &(_value), .len = 1 } }
-#define sp_fmt_str(_value)   (sp_fmt_arg_t) { .id = sp_fmt_id_str, .s = (_value) }
-#define sp_fmt_cstr(_value)  (sp_fmt_arg_t) { .id = sp_fmt_id_str, .s = sp_str_view(_value) }
-#define sp_fmt_ptr(_value)   (sp_fmt_arg_t) { .id = sp_fmt_id_ptr, .p = (_value) }
+#define sp_fmt_uint(_value)  (sp_fmt_argv_t) { .id = sp_fmt_id_u64, .value.u = (_value) }
+#define sp_fmt_int(_value)   (sp_fmt_argv_t) { .id = sp_fmt_id_s64, .value.i = (_value) }
+#define sp_fmt_float(_value) (sp_fmt_argv_t) { .id = sp_fmt_id_f64, .value.f = (_value) }
+#define sp_fmt_char(_value)  (sp_fmt_argv_t) { .id = sp_fmt_id_str, .value.s = { .data = &(_value), .len = 1 } }
+#define sp_fmt_str(_value)   (sp_fmt_argv_t) { .id = sp_fmt_id_str, .value.s = (_value) }
+#define sp_fmt_cstr(_value)  (sp_fmt_argv_t) { .id = sp_fmt_id_str, .value.s = sp_str_view(_value) }
+#define sp_fmt_ptr(_value)   (sp_fmt_argv_t) { .id = sp_fmt_id_ptr, .value.p = (_value) }
 
 // Use a tiny, portable trick to get some damn good type safety for custom format string arguments:
 //
@@ -2831,18 +2845,18 @@ typedef struct {
 //
 #define sp_fmt_custom(T, _fn, _value) (   \
   (void)sizeof(*(T*)0 = (_value)),  \
-  (sp_fmt_arg_t) {                     \
+  (sp_fmt_argv_t) {                     \
     .id = sp_fmt_id_custom,            \
-    .custom = {                           \
+    .value.custom = {                           \
       .fn = (_fn),        \
       .ptr = (void*)&(_value)             \
     }                                     \
   })
 #define sp_fmt_custom_v(T, _fn, ...) (   \
   (void)sizeof(*(T*)0 = (__VA_ARGS__)),  \
-  (sp_fmt_arg_t) {                     \
+  (sp_fmt_argv_t) {                     \
     .id = sp_fmt_id_custom,            \
-    .custom = {                           \
+    .value.custom = {                           \
       .fn = (_fn),        \
       .ptr = (void*)&(__VA_ARGS__)        \
     }                                     \
@@ -2878,6 +2892,7 @@ void sp_fmt_directive_register(const c8* name, sp_fmt_directive_t directive);
 
 sp_err_t sp_fmt_io_a(sp_io_writer_t* io, sp_mem_t mem, const c8* fmt, ...);
 SP_API sp_str_r  sp_fmt(sp_mem_t mem, const c8* fmt, ...);
+SP_API const c8* sp_fmt_to_cstr(sp_mem_t mem, const c8* fmt, ...);
 SP_API sp_err_t  sp_fmt_v(sp_io_writer_t* io, sp_mem_t mem, sp_str_t fmt, va_list args);
 SP_API void      sp_fmt_render_default(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param);
 
@@ -3288,6 +3303,25 @@ typedef struct {
 } sp_ps_config_t;
 
 typedef struct {
+  const c8* key;
+  const c8* value;
+} sp_ps_env_var_cstr_t;
+
+typedef struct {
+  sp_env_t env;
+  sp_ps_env_var_cstr_t extra [SP_PS_MAX_ENV];
+  sp_ps_env_mode_t mode;
+} sp_ps_env_config_cstr_t;
+
+typedef struct {
+  const c8* command;
+  const c8* args [SP_PS_MAX_ARGS];
+  const c8* cwd;
+  sp_ps_env_config_cstr_t env;
+  sp_ps_io_config_t io;
+} sp_ps_config_cstr_t;
+
+typedef struct {
   sp_str_t data;
   u64 size;
   s32 exit_code;
@@ -3312,19 +3346,21 @@ typedef struct {
   sp_mem_t mem;
 } sp_ps_t;
 
-SP_API sp_ps_config_t  sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src);
-SP_API void            sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg);
 SP_API sp_ps_t         sp_ps_create(sp_mem_t mem, sp_ps_config_t config);
 SP_API sp_ps_output_t  sp_ps_run(sp_mem_t mem, sp_ps_config_t config);
-SP_API sp_io_file_writer_t* sp_ps_io_in(sp_ps_t* ps);
-SP_API sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps);
-SP_API sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps);
+SP_API sp_ps_t         sp_ps_create_c(sp_mem_t mem, sp_ps_config_cstr_t config);
+SP_API sp_ps_output_t  sp_ps_run_c(sp_mem_t mem, sp_ps_config_cstr_t config);
+SP_API sp_ps_config_t  sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src);
+SP_API void            sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg);
 SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* ps);
 SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* ps, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* ps);
 SP_API bool            sp_ps_kill(sp_ps_t* ps);
 SP_API void            sp_ps_free(sp_ps_t* ps);
 SP_API void            sp_ps_output_free(sp_mem_t mem, sp_ps_output_t* output);
+SP_API sp_io_file_writer_t* sp_ps_io_in(sp_ps_t* ps);
+SP_API sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps);
+SP_API sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps);
 
 
 //    █████████   ███████████  ███████████
@@ -6924,11 +6960,11 @@ sp_err_t sp_fmt_parse_specifier(sp_fmt_parser_t* p, sp_fmt_spec_t* spec) {
 
 // Pulls one int-kinded dynamic arg out of `a` and returns it as a signed
 // value. Used for dynamic fill/width/precision, all of which require an int.
-static sp_err_t sp_fmt_pull_int_arg(sp_fmt_arg_t a, s64* out) {
+static sp_err_t sp_fmt_pull_int_arg(sp_fmt_argv_t a, s64* out) {
   if (a.id != sp_fmt_id_u64 && a.id != sp_fmt_id_s64) {
     return SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND;
   }
-  *out = (a.id == sp_fmt_id_s64) ? a.i : (s64)a.u;
+  *out = (a.id == sp_fmt_id_s64) ? a.value.i : (s64)a.value.u;
   return SP_OK;
 }
 
@@ -7038,7 +7074,7 @@ static void sp_fmt_directive_ansi_reset(sp_io_writer_t* io, sp_mem_t mem, sp_fmt
 static void sp_fmt_directive_hyperlink(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
   sp_io_write_cstr(io, "\033]8;;", SP_NULLPTR);
-  if (arg->id == sp_fmt_id_str) sp_io_write_str(io, arg->s, SP_NULLPTR);
+  if (arg->id == sp_fmt_id_str) sp_io_write_str(io, arg->value.s, SP_NULLPTR);
   sp_io_write_cstr(io, "\033\\", SP_NULLPTR);
 }
 
@@ -7066,7 +7102,7 @@ static void sp_fmt_directive_redact_transform(sp_io_writer_t* io, sp_mem_t mem, 
 }
 
 static void sp_fmt_directive_bytes_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
-  u64 bytes = arg->u; sp_unused(params);
+  u64 bytes = arg->value.u; sp_unused(params);
   static const c8* units[] = { "B", "KB", "MB", "GB", "TB", "PB" };
   u32 unit_idx = 0;
   u64 whole = bytes;
@@ -7090,13 +7126,13 @@ static void sp_fmt_directive_bytes_render(sp_io_writer_t* io, sp_mem_t mem, sp_f
 
 static void sp_fmt_directive_iso_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
-  sp_tm_epoch_t epoch = SP_RVAL(sp_tm_epoch_t) { .s = arg->u, .ns = 0 };
+  sp_tm_epoch_t epoch = SP_RVAL(sp_tm_epoch_t) { .s = arg->value.u, .ns = 0 };
   sp_io_write_str(io, sp_tm_epoch_to_iso8601(mem, epoch), SP_NULLPTR);
 }
 
 static void sp_fmt_directive_hex_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
-  u64 value = (arg->id == sp_fmt_id_s64) ? (u64)arg->i : arg->u;
+  u64 value = (arg->id == sp_fmt_id_s64) ? (u64)arg->value.i : arg->value.u;
   c8 buf[16];
   c8* end = buf + sizeof(buf);
   c8* start = sp_fmt_uint_to_buf_hex_ex(value, end, "0123456789ABCDEF");
@@ -7105,7 +7141,7 @@ static void sp_fmt_directive_hex_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt
 }
 
 static void sp_fmt_directive_ordinal_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
-  s64 value = (arg->id == sp_fmt_id_s64) ? arg->i : (s64)arg->u; sp_unused(params);
+  s64 value = (arg->id == sp_fmt_id_s64) ? arg->value.i : (s64)arg->value.u; sp_unused(params);
   sp_fmt_write_s64(io, value);
   s64 abs = value < 0 ? -value : value;
   u32 mod100 = (u32)(abs % 100);
@@ -7121,7 +7157,7 @@ static void sp_fmt_directive_ordinal_render(sp_io_writer_t* io, sp_mem_t mem, sp
 
 static void sp_fmt_directive_duration_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* params) {
   sp_unused(params);
-  u64 ns = arg->u;
+  u64 ns = arg->value.u;
   if (ns < 1000) {
     sp_fmt_write_u64(io, ns);
     sp_io_write_cstr(io, " ns", SP_NULLPTR);
@@ -7167,7 +7203,7 @@ sp_str_t sp_fmt_color_to_ansi_fg(sp_str_t id) {
 
 static void sp_fmt_directive_fg(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   sp_unused(arg);
-  sp_str_t ansi = sp_fmt_color_to_ansi_fg(param->s);
+  sp_str_t ansi = sp_fmt_color_to_ansi_fg(param->value.s);
   sp_io_write_str(io, ansi, SP_NULLPTR);
 }
 
@@ -12194,6 +12230,40 @@ void sp_ps_output_free(sp_mem_t mem, sp_ps_output_t* output) {
 }
 #endif
 
+// Non-owning view conversion: every field aliases storage owned by `src`,
+// so the result is only valid for the duration of the immediate consumer call.
+static sp_ps_config_t sp_ps_config_view_from_cstr(const sp_ps_config_cstr_t* src) {
+  sp_ps_config_t dst = sp_zero;
+
+  dst.command = sp_str_view(src->command);
+  dst.cwd = sp_str_view(src->cwd);
+
+  sp_for(i, SP_PS_MAX_ARGS) {
+    if (!src->args[i] || !*src->args[i]) break;
+    dst.args[i] = sp_str_view(src->args[i]);
+  }
+
+  dst.env.env = src->env.env;
+  dst.env.mode = src->env.mode;
+  sp_for(i, SP_PS_MAX_ENV) {
+    if (!src->env.extra[i].key) break;
+    dst.env.extra[i].key = sp_str_view(src->env.extra[i].key);
+    dst.env.extra[i].value = sp_str_view(src->env.extra[i].value);
+  }
+
+  dst.io = src->io;
+
+  return dst;
+}
+
+sp_ps_t sp_ps_create_c(sp_mem_t mem, sp_ps_config_cstr_t config) {
+  return sp_ps_create(mem, sp_ps_config_view_from_cstr(&config));
+}
+
+sp_ps_output_t sp_ps_run_c(sp_mem_t mem, sp_ps_config_cstr_t config) {
+  return sp_ps_run(mem, sp_ps_config_view_from_cstr(&config));
+}
+
 
 //  ███████████ █████ █████       ██████████    ██████   ██████    ███████    ██████   █████ █████ ███████████    ███████    ███████████
 // ░░███░░░░░░█░░███ ░░███       ░░███░░░░░█   ░░██████ ██████   ███░░░░░███ ░░██████ ░░███ ░░███ ░█░░░███░░░█  ███░░░░░███ ░░███░░░░░███
@@ -14029,6 +14099,22 @@ sp_str_r sp_fmt(sp_mem_t mem, const c8* fmt, ...) {
   return result;
 }
 
+const c8* sp_fmt_to_cstr(sp_mem_t mem, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init(mem, &io);
+
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(mem);
+  sp_err_t err = sp_fmt_v(&io.base, s.mem, sp_str_view(fmt), args);
+  sp_mem_end_scratch(s);
+  va_end(args);
+
+  if (err) return SP_NULLPTR;
+  sp_io_write_c8(&io.base, 0);
+  return sp_mem_buffer_as_cstr(&io.storage);
+}
+
 sp_err_t sp_fmt_v(sp_io_writer_t* io, sp_mem_t mem, sp_str_t fmt, va_list args) {
   sp_fmt_parser_t p = { .str = fmt };
 
@@ -14049,19 +14135,19 @@ sp_err_t sp_fmt_v(sp_io_writer_t* io, sp_mem_t mem, sp_str_t fmt, va_list args) 
 
       if (spec.fill_dynamic) {
         s64 v;
-        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v));
+        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_argv_t), &v));
         spec.fill = (u8)v;
       }
       if (spec.width_dynamic) {
         s64 v;
-        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v));
+        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_argv_t), &v));
         if (v < 0) v = 0;
         if (v > SP_FMT_WIDTH_MAX) v = SP_FMT_WIDTH_MAX;
         spec.width = (u32)v;
       }
       if (spec.precision_dynamic) {
         s64 v;
-        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_arg_t), &v));
+        sp_try(sp_fmt_pull_int_arg(va_arg(args, sp_fmt_argv_t), &v));
         if (v < 0) v = 0;
         if (v > 255) v = 255;
         sp_opt_set(spec.precision, (u8)v);
@@ -14070,11 +14156,11 @@ sp_err_t sp_fmt_v(sp_io_writer_t* io, sp_mem_t mem, sp_str_t fmt, va_list args) 
       sp_fmt_arg_t params[SP_FMT_MAX_DIRECTIVES] = sp_zero;
       for (u8 di = 0; di < spec.directive_count; di++) {
         if (spec.directive_arg_dynamic & (1u << di)) {
-          params[di] = va_arg(args, sp_fmt_arg_t);
+          params[di] = sp_fmt_arg_from_argv(va_arg(args, sp_fmt_argv_t));
         }
       }
 
-      sp_fmt_arg_t arg = va_arg(args, sp_fmt_arg_t);
+      sp_fmt_arg_t arg = sp_fmt_arg_from_argv(va_arg(args, sp_fmt_argv_t));
       arg.spec = spec;
       sp_try(sp_fmt_render(io, mem, &arg, params));
       continue;
@@ -14227,7 +14313,7 @@ sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_f
     else if (is_literal) {
       directive_params[it] = (sp_fmt_arg_t){
         .id = sp_fmt_id_str,
-        .s  = arg->spec.directive_args[it],
+        .value.s  = arg->spec.directive_args[it],
       };
       params[it] = true;
     }
@@ -14265,10 +14351,10 @@ sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_f
     sp_fmt_arg_t* param;
   } render = sp_zero;
   if (arg->id == sp_fmt_id_custom) {
-    if (!arg->custom.fn) {
+    if (!arg->value.custom.fn) {
       return SP_ERR_FMT_CUSTOM_WITHOUT_FN;
     }
-    render.fn = arg->custom.fn;
+    render.fn = arg->value.custom.fn;
   }
   else {
     sp_for(it, num_dirs) {
@@ -14480,18 +14566,18 @@ void sp_fmt_render_default(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, 
   sp_unused(param);
   switch (arg->id) {
     case sp_fmt_id_u64:
-      sp_fmt_write_u64(io, arg->u);
+      sp_fmt_write_u64(io, arg->value.u);
       break;
     case sp_fmt_id_s64:
-      sp_fmt_write_s64(io, arg->i);
+      sp_fmt_write_s64(io, arg->value.i);
       break;
     case sp_fmt_id_f64: {
       u32 p = sp_opt_is_null(arg->spec.precision) ? 6 : sp_opt_get(arg->spec.precision);
-      sp_fmt_write_f64(io, arg->f, p);
+      sp_fmt_write_f64(io, arg->value.f, p);
       break;
     }
     case sp_fmt_id_str: {
-      sp_str_t s = arg->s;
+      sp_str_t s = arg->value.s;
       if (!sp_opt_is_null(arg->spec.precision)) {
         u32 max = sp_opt_get(arg->spec.precision);
         if (max < s.len) s.len = max;
@@ -14500,12 +14586,12 @@ void sp_fmt_render_default(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, 
       break;
     }
     case sp_fmt_id_ptr: {
-      sp_fmt_write_ptr(io, arg->p);
+      sp_fmt_write_ptr(io, arg->value.p);
       break;
     }
     case sp_fmt_id_custom: {
-      if (arg->custom.fn) {
-        arg->custom.fn(io, mem, arg, SP_NULLPTR);
+      if (arg->value.custom.fn) {
+        arg->value.custom.fn(io, mem, arg, SP_NULLPTR);
       }
       break;
     }
