@@ -318,6 +318,97 @@ UTEST_F(io, file_writer_pad) {
   sp_io_file_reader_close(&r);
 }
 
+// File reader's as_fd callback returns the underlying fd. This is what the
+// writer-side fast path keys off of.
+UTEST_F(io, file_reader_as_fd) {
+  SKIP_ON_WASM()
+  sp_io_file_writer_t fw = sp_zero;
+  sp_io_file_writer_from_path(&fw, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_write(&fw.base, "x", 1, SP_NULLPTR);
+  sp_io_file_writer_close(&fw);
+
+  sp_io_file_reader_t r = sp_zero;
+  sp_io_file_reader_from_path(&r, ut.file_path);
+
+  EXPECT_TRUE(r.base.as_fd != SP_NULLPTR);
+  sp_io_file_t fd = SP_SYS_INVALID_FD;
+  EXPECT_EQ(r.base.as_fd(&r.base, &fd), SP_OK);
+  EXPECT_EQ((s64)fd, (s64)r.file);
+
+  sp_io_file_reader_close(&r);
+}
+
+// File writer's read_from callback is set at construction.
+UTEST_F(io, file_writer_read_from_set) {
+  SKIP_ON_WASM()
+  sp_io_file_writer_t w = sp_zero;
+  sp_io_file_writer_from_path(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  EXPECT_TRUE(w.base.read_from != SP_NULLPTR);
+  sp_io_file_writer_close(&w);
+}
+
+// End-to-end: copy a non-trivial file via sp_io_copy and verify the
+// destination matches. On Linux this exercises copy_file_range; elsewhere it
+// falls back to the generic loop. Either way, the contents should be
+// identical.
+UTEST_F(io, file_to_file_copy) {
+  SKIP_ON_WASM()
+  // Produce 4 KiB of pseudo-random content so the kernel can't represent
+  // the source sparsely.
+  u8 source [4096];
+  sp_for(i, sizeof(source)) source[i] = (u8)((i * 1103515245u + 12345u) >> 8);
+
+  sp_io_file_writer_t sw = sp_zero;
+  sp_io_file_writer_from_path(&sw, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+  EXPECT_EQ(sp_io_write(&sw.base, source, sizeof(source), SP_NULLPTR), SP_OK);
+  sp_io_file_writer_close(&sw);
+
+  sp_str_t dst_path = sp_test_file_path(&ut.file_manager, sp_str_lit("file_to_file_copy.dst"));
+
+  sp_io_file_reader_t r = sp_zero;
+  sp_io_file_reader_from_path(&r, ut.file_path);
+  sp_io_file_writer_t w = sp_zero;
+  sp_io_file_writer_from_path(&w, dst_path, SP_IO_WRITE_MODE_OVERWRITE);
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_OK);
+  EXPECT_EQ(copied, sizeof(source));
+
+  sp_io_file_reader_close(&r);
+  sp_io_file_writer_close(&w);
+
+  sp_str_t loaded = sp_zero;
+  sp_io_read_file_a(ut.mem, dst_path, &loaded);
+  EXPECT_EQ(loaded.len, sizeof(source));
+  sp_for(i, sizeof(source)) EXPECT_EQ((u8)loaded.data[i], source[i]);
+}
+
+// When the source has no fd (e.g. an in-memory reader), the fast path
+// declines and the generic loop produces the same result.
+UTEST_F(io, file_copy_fast_path_falls_back_for_mem_source) {
+  SKIP_ON_WASM()
+  const c8* content = "abcdefghijklmnopqrstuvwxyz0123456789";
+  u64 n = sp_cstr_len(content);
+
+  sp_io_reader_t r = sp_zero;
+  sp_io_reader_from_mem(&r, content, n);
+  EXPECT_TRUE(r.as_fd == SP_NULLPTR);  // Mem reader has no fd to hand out.
+
+  sp_io_file_writer_t w = sp_zero;
+  sp_io_file_writer_from_path(&w, ut.file_path, SP_IO_WRITE_MODE_OVERWRITE);
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r, &copied), SP_OK);
+  EXPECT_EQ(copied, n);
+
+  sp_io_file_writer_close(&w);
+
+  sp_str_t loaded = sp_zero;
+  sp_io_read_file_a(ut.mem, ut.file_path, &loaded);
+  EXPECT_EQ(loaded.len, n);
+  sp_for(i, n) EXPECT_EQ(loaded.data[i], content[i]);
+}
+
 // Two file handles (writer then reader) operating on the same large offset;
 // doesn't fit the single-subject runner pattern.
 UTEST_F(io, file_seek_beyond_4gb) {

@@ -730,6 +730,7 @@ typedef enum {
   SP_ERR_IO_NO_SPACE      = 1009,
   SP_ERR_IO_EOF           = 1010,
   SP_ERR_IO_INVALID_WRITE = 1011,
+  SP_ERR_IO_UNIMPLEMENTED = 1012,
   SP_ERR_FMT_TOO_MANY_RENDERERS = 1100,
   SP_ERR_FMT_WRONG_PARAM_KIND = 1101,
   SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
@@ -3082,11 +3083,22 @@ typedef enum {
 
 SP_TYPEDEF_FN(sp_err_t, sp_io_reader_read_cb, sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
 SP_TYPEDEF_FN(sp_err_t, sp_io_seek_cb, sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+// Optional. Returns the underlying OS handle if this reader has one. Used as
+// the universal currency for kernel-to-kernel fast paths (sendfile, splice,
+// copy_file_range). A reader that has no fd leaves this NULL and the fast
+// path is unavailable.
+SP_TYPEDEF_FN(sp_err_t, sp_io_reader_as_fd_cb, sp_io_reader_t* r, sp_io_file_t* fd);
 
 SP_TYPEDEF_FN(sp_err_t, sp_io_writer_write_cb, sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written);
+// Optional. The writer-side fast path. Implementations consume bytes from `r`
+// however they like; in practice this means asking `r->as_fd` for an OS handle
+// and routing through a kernel-side syscall. Return SP_ERR_IO_UNIMPLEMENTED to
+// tell sp_io_copy that it should fall back to the generic loop.
+SP_TYPEDEF_FN(sp_err_t, sp_io_writer_read_from_cb, sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_moved);
 
 struct sp_io_reader {
   sp_io_reader_read_cb read;
+  sp_io_reader_as_fd_cb as_fd;
   sp_mem_buffer_t buffer;
   u64 cursor;
 };
@@ -3110,6 +3122,7 @@ typedef struct {
 
 struct sp_io_writer {
   sp_io_writer_write_cb write;
+  sp_io_writer_read_from_cb read_from;
   sp_mem_buffer_t buffer;
 };
 
@@ -3133,23 +3146,15 @@ struct sp_io_dyn_mem_writer {
   u64 cursor;
 };
 
+
 SP_API sp_err_t       sp_io_copy(sp_io_writer_t* dst, sp_io_reader_t* src, u64* bytes_copied);
 SP_API sp_err_t       sp_io_copy_b(sp_io_writer_t* dst, sp_io_reader_t* src, u8* buffer, u64 n, u64* bytes_copied);
+
 SP_API sp_err_t       sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
+SP_API sp_err_t       sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
 SP_API void           sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size);
 SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
-SP_API sp_err_t       sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
-SP_API void           sp_io_seeking_reader_from_reader(sp_io_seeking_reader_t* sr, sp_io_reader_t* r, sp_io_seek_cb seek);
-SP_API void           sp_io_seeking_reader_from_mem(sp_io_seeking_reader_t* sr, sp_io_reader_t* backing, const void* ptr, u64 size);
-SP_API void           sp_io_seeking_reader_from_file_reader(sp_io_seeking_reader_t* sr, sp_io_file_reader_t* fr);
-SP_API sp_err_t       sp_io_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
-SP_API sp_err_t       sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path);
-SP_API void           sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_io_file_t file, sp_io_close_mode_t mode);
-SP_API sp_err_t       sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
-SP_API sp_err_t       sp_io_file_reader_size(sp_io_file_reader_t* r, u64* size);
-SP_API sp_err_t       sp_io_file_reader_close(sp_io_file_reader_t* r);
-SP_API void           sp_io_pipe_reader_from_pipe(sp_io_pipe_reader_t* r, sp_io_pipe_t pipe, sp_io_close_mode_t mode);
-SP_API sp_err_t       sp_io_pipe_reader_close(sp_io_pipe_reader_t* r);
+
 SP_API sp_err_t       sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
 SP_API sp_err_t       sp_io_write_str(sp_io_writer_t* writer, sp_str_t str, u64* bytes_written);
 SP_API sp_err_t       sp_io_write_cstr(sp_io_writer_t* writer, const c8* cstr, u64* bytes_written);
@@ -3157,21 +3162,38 @@ SP_API sp_err_t       sp_io_write_c8(sp_io_writer_t* writer, c8 c);
 SP_API sp_err_t       sp_io_pad(sp_io_writer_t* writer, u64 size, u64* bytes_written);
 SP_API sp_err_t       sp_io_flush(sp_io_writer_t* w);
 SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
+
+SP_API sp_err_t       sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API void           sp_io_seeking_reader_from_reader(sp_io_seeking_reader_t* sr, sp_io_reader_t* r, sp_io_seek_cb seek);
+SP_API void           sp_io_seeking_reader_from_mem(sp_io_seeking_reader_t* sr, sp_io_reader_t* backing, const void* ptr, u64 size);
+SP_API void           sp_io_seeking_reader_from_file_reader(sp_io_seeking_reader_t* sr, sp_io_file_reader_t* fr);
+
+SP_API sp_err_t       sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path);
+SP_API void           sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_io_file_t file, sp_io_close_mode_t mode);
+SP_API sp_err_t       sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_file_reader_size(sp_io_file_reader_t* r, u64* size);
+SP_API sp_err_t       sp_io_file_reader_close(sp_io_file_reader_t* r);
 SP_API sp_err_t       sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path, sp_io_write_mode_t mode);
 SP_API void           sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t close_mode);
 SP_API sp_err_t       sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
 SP_API sp_err_t       sp_io_file_writer_size(sp_io_file_writer_t* w, u64* size);
 SP_API sp_err_t       sp_io_file_writer_close(sp_io_file_writer_t* w);
+
+SP_API void           sp_io_pipe_reader_from_pipe(sp_io_pipe_reader_t* r, sp_io_pipe_t pipe, sp_io_close_mode_t mode);
+SP_API sp_err_t       sp_io_pipe_reader_close(sp_io_pipe_reader_t* r);
+
+SP_API sp_err_t       sp_io_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
 SP_API void           sp_io_mem_writer_from_buffer(sp_io_mem_writer_t* w, void* ptr, u64 size);
 SP_API sp_err_t       sp_io_mem_writer_seek(sp_io_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
 SP_API sp_err_t       sp_io_mem_writer_size(sp_io_mem_writer_t* w, u64* size);
 SP_API sp_str_t       sp_io_mem_writer_as_str(sp_io_mem_writer_t* w);
+
 SP_API void           sp_io_dyn_mem_writer_init_a(sp_mem_t mem, sp_io_dyn_mem_writer_t* w);
 SP_API sp_err_t       sp_io_dyn_mem_writer_seek(sp_io_dyn_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
 SP_API sp_err_t       sp_io_dyn_mem_writer_size(sp_io_dyn_mem_writer_t* w, u64* size);
 SP_API sp_err_t       sp_io_dyn_mem_writer_close(sp_io_dyn_mem_writer_t* w);
 SP_API sp_str_t       sp_io_dyn_mem_writer_as_str(sp_io_dyn_mem_writer_t* w);
-SP_API sp_err_t       sp_io_read_file_a(sp_mem_t mem, sp_str_t path, sp_str_t* content);
+
 SP_API void           sp_io_get_std_out(sp_io_file_writer_t* io);
 SP_API void           sp_io_get_std_err(sp_io_file_writer_t* io);
 
@@ -3849,6 +3871,8 @@ s32 errno;
   #define SP_SYSCALL_NUM_DUP2              33
   #define SP_SYSCALL_NUM_NANOSLEEP         35
   #define SP_SYSCALL_NUM_GETPID            39
+  #define SP_SYSCALL_NUM_SENDFILE          40
+  #define SP_SYSCALL_NUM_COPY_FILE_RANGE   326
   #define SP_SYSCALL_NUM_CLONE             56
   #define SP_SYSCALL_NUM_FORK              57
   #define SP_SYSCALL_NUM_EXECVE            59
@@ -3931,6 +3955,8 @@ s32 errno;
   #define SP_SYSCALL_NUM_EXECVE            221
   #define SP_SYSCALL_NUM_MMAP              222
   #define SP_SYSCALL_NUM_WAIT4             260
+  #define SP_SYSCALL_NUM_SENDFILE          71
+  #define SP_SYSCALL_NUM_COPY_FILE_RANGE   285
   #define SP_SYSCALL_NUM_OPEN              SP_SYSCALL_NUM_OPENAT
   #define SP_SYSCALL_NUM_STAT              SP_SYSCALL_NUM_NEWFSTATAT
   #define SP_SYSCALL_NUM_LSTAT             SP_SYSCALL_NUM_NEWFSTATAT
@@ -4149,6 +4175,7 @@ s32   sp_lx_inotify_init1(s32 flags);
 s32   sp_lx_inotify_add_watch(s32 fd, const c8* pathname, u32 mask);
 s32   sp_lx_inotify_rm_watch(s32 fd, s32 wd);
 s32   sp_lx_wait4(s32 pid, s32* status, s32 options, void* rusage);
+s64   sp_lx_copy_file_range(s32 in_fd, s32 out_fd, u64 count);
 void  sp_sys_exit(s32 code);
 
 s32 sp_lx_inotify_init1(s32 flags) {
@@ -4165,6 +4192,16 @@ s32 sp_lx_inotify_rm_watch(s32 fd, s32 wd) {
 
 s32 sp_lx_wait4(s32 pid, s32* status, s32 options, void* rusage) {
   return (s32)sp_syscall(SP_SYSCALL_NUM_WAIT4, pid, status, options, rusage);
+}
+
+// Kernel-to-kernel copy. NULL offset pointers means "use and advance the fd's
+// own seek position", which is what we want for stream-style copies.
+s64 sp_lx_copy_file_range(s32 in_fd, s32 out_fd, u64 count) {
+  s64 rc;
+  do {
+    rc = sp_syscall(SP_SYSCALL_NUM_COPY_FILE_RANGE, in_fd, 0, out_fd, 0, count, 0);
+  } while (rc == -1 && errno == SP_EINTR);
+  return rc;
 }
 
 //////////////
@@ -13073,9 +13110,19 @@ sp_err_t sp_io_eof_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read)
   return SP_ERR_IO_EOF;
 }
 
+sp_err_t sp_io_file_reader_as_fd(sp_io_reader_t* r, sp_io_file_t* fd) {
+  sp_io_file_reader_t* fr = (sp_io_file_reader_t*)r;
+  if (fr->file == SP_SYS_INVALID_FD) return SP_ERR_IO;
+  *fd = fr->file;
+  return SP_OK;
+}
+
 void sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_io_file_t file, sp_io_close_mode_t mode) {
   *r = (sp_io_file_reader_t) {
-    .base = { .read = sp_io_file_reader_read },
+    .base = {
+      .read  = sp_io_file_reader_read,
+      .as_fd = sp_io_file_reader_as_fd,
+    },
     .file = file,
     .close_mode = mode,
   };
@@ -13157,9 +13204,19 @@ sp_err_t sp_io_file_reader_close(sp_io_file_reader_t* r) {
   return SP_OK;
 }
 
+sp_err_t sp_io_pipe_reader_as_fd(sp_io_reader_t* r, sp_io_file_t* fd) {
+  sp_io_pipe_reader_t* pr = (sp_io_pipe_reader_t*)r;
+  if (pr->pipe == SP_SYS_INVALID_FD) return SP_ERR_IO;
+  *fd = pr->pipe;
+  return SP_OK;
+}
+
 void sp_io_pipe_reader_from_pipe(sp_io_pipe_reader_t* r, sp_io_pipe_t pipe, sp_io_close_mode_t mode) {
   *r = (sp_io_pipe_reader_t) {
-    .base = { .read = sp_io_pipe_reader_read },
+    .base = {
+      .read  = sp_io_pipe_reader_read,
+      .as_fd = sp_io_pipe_reader_as_fd,
+    },
     .pipe = pipe,
     .close_mode = mode,
   };
@@ -13198,8 +13255,48 @@ void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
 }
 
 sp_err_t sp_io_copy(sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_copied) {
-  u8 buffer[4096];
-  return sp_io_copy_b(w, r, buffer, sizeof(buffer), bytes_copied);
+  u64 total = 0;
+
+  // Fast path: writer supports a kernel-side bulk transfer and reader can
+  // expose its fd. If the reader has userspace-buffered bytes, drain them
+  // through the normal write path first — the kernel doesn't know about
+  // them. If the writer has its own buffer, flush it for the same reason.
+  if (w->read_from && r->as_fd) {
+    u64 buffered = r->buffer.len - r->cursor;
+    if (buffered) {
+      u64 wrote = 0;
+      sp_err_t err = sp_io_write(w, r->buffer.data + r->cursor, buffered, &wrote);
+      total += wrote;
+      r->cursor += wrote;
+      if (err) {
+        if (bytes_copied) *bytes_copied = total;
+        return err;
+      }
+    }
+    if (w->buffer.data && w->buffer.len) {
+      sp_err_t err = sp_io_flush(w);
+      if (err) {
+        if (bytes_copied) *bytes_copied = total;
+        return err;
+      }
+    }
+
+    u64 moved = 0;
+    sp_err_t err = w->read_from(w, r, &moved);
+    total += moved;
+    if (err != SP_ERR_IO_UNIMPLEMENTED) {
+      if (bytes_copied) *bytes_copied = total;
+      return err;
+    }
+    // The fast path declined this pair. Fall through to the generic loop.
+  }
+
+  u8 buf[4096];
+  u64 slow_total = 0;
+  sp_err_t err = sp_io_copy_b(w, r, buf, sizeof(buf), &slow_total);
+  total += slow_total;
+  if (bytes_copied) *bytes_copied = total;
+  return err;
 }
 
 sp_err_t sp_io_copy_b(sp_io_writer_t* w, sp_io_reader_t* r, u8* buffer, u64 n, u64* bytes_copied) {
@@ -13372,6 +13469,54 @@ sp_err_t sp_io_file_writer_write(sp_io_writer_t* writer, const void* ptr, u64 si
   return result;
 }
 
+// Kernel-to-kernel fast path. Linux-only; on other platforms the read_from
+// callback isn't wired up and sp_io_copy falls through to the generic loop.
+// Asks the reader for an fd; if it has one, uses copy_file_range to move
+// bytes without bouncing through userspace. On first-call failure returns
+// SP_ERR_IO_UNIMPLEMENTED so the caller falls back. Partial progress + error
+// is reported faithfully.
+#if defined(SP_LINUX)
+sp_err_t sp_io_file_writer_read_from(sp_io_writer_t* writer, sp_io_reader_t* r, u64* bytes_moved) {
+  sp_io_file_writer_t* w = (sp_io_file_writer_t*)writer;
+  u64 total = 0;
+
+  if (!r->as_fd) { if (bytes_moved) *bytes_moved = 0; return SP_ERR_IO_UNIMPLEMENTED; }
+
+  sp_io_file_t in_fd = SP_SYS_INVALID_FD;
+  if (r->as_fd(r, &in_fd) != SP_OK) {
+    if (bytes_moved) *bytes_moved = 0;
+    return SP_ERR_IO_UNIMPLEMENTED;
+  }
+
+  // Cap each syscall at 1 GiB; Linux's copy_file_range historically caps at
+  // 0x7ffff000 internally anyway, and we want to bound the unit of progress
+  // we report.
+  const u64 chunk = (u64)1 << 30;
+
+  while (true) {
+    s64 rc = sp_lx_copy_file_range(in_fd, w->fd, chunk);
+    if (rc < 0) {
+      if (total == 0) {
+        // First syscall failed. Source might not be a regular file
+        // (EINVAL), kernel might be too old (ENOSYS), or the pair might
+        // cross filesystems on a pre-5.3 kernel (EXDEV). Tell the caller
+        // to fall back to read+write.
+        if (bytes_moved) *bytes_moved = 0;
+        return SP_ERR_IO_UNIMPLEMENTED;
+      }
+      // We already made progress; surface as a write failure.
+      if (bytes_moved) *bytes_moved = total;
+      return SP_ERR_IO_WRITE_FAILED;
+    }
+    if (rc == 0) break;  // EOF on source
+    total += (u64)rc;
+  }
+
+  if (bytes_moved) *bytes_moved = total;
+  return SP_OK;
+}
+#endif
+
 sp_err_t sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position) {
   sp_assert(w);
   sp_try(sp_io_flush(&w->base));
@@ -13436,7 +13581,12 @@ sp_err_t sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path, sp_i
   }
 
   *w = (sp_io_file_writer_t) {
-    .base = { .write = sp_io_file_writer_write },
+    .base = {
+      .write     = sp_io_file_writer_write,
+#if defined(SP_LINUX)
+      .read_from = sp_io_file_writer_read_from,
+#endif
+    },
     .fd = fd,
     .close_mode = SP_IO_CLOSE_MODE_AUTO,
   };
@@ -13445,7 +13595,12 @@ sp_err_t sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path, sp_i
 
 void sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t close_mode) {
   *w = (sp_io_file_writer_t) {
-    .base = { .write = sp_io_file_writer_write },
+    .base = {
+      .write     = sp_io_file_writer_write,
+#if defined(SP_LINUX)
+      .read_from = sp_io_file_writer_read_from,
+#endif
+    },
     .fd = fd,
     .close_mode = close_mode,
   };

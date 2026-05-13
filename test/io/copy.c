@@ -191,6 +191,140 @@ UTEST_F(io_copy, buffered_writer_overflow_flushes_partial) {
   });
 }
 
+///////////////////
+// FAST PATH     //
+///////////////////
+// Pin the read_from-on-writer negotiation contract. A tracking writer
+// records whether read_from was invoked and how many bytes flowed through
+// each path. We pair it with an exposes-fd reader (a file reader) or a
+// no-fd reader (a mem reader) to exercise the dispatch table.
+
+typedef struct {
+  sp_io_writer_t base;
+  bool          read_from_returns_unimpl;
+  u64           bytes_via_write;
+  u64           bytes_via_read_from;
+} io_tracking_writer_t;
+
+static sp_err_t io_tracking_writer_write(sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written) {
+  io_tracking_writer_t* t = (io_tracking_writer_t*)w;
+  (void)ptr;
+  t->bytes_via_write += size;
+  if (bytes_written) *bytes_written = size;
+  return SP_OK;
+}
+
+static sp_err_t io_tracking_writer_read_from(sp_io_writer_t* w, sp_io_reader_t* r, u64* moved) {
+  io_tracking_writer_t* t = (io_tracking_writer_t*)w;
+  if (t->read_from_returns_unimpl) {
+    if (moved) *moved = 0;
+    return SP_ERR_IO_UNIMPLEMENTED;
+  }
+  // Drain the reader via .read so the test can observe a real byte count.
+  u8 buf [4096];
+  u64 total = 0;
+  while (true) {
+    u64 chunk = 0;
+    sp_err_t err = sp_io_read(r, buf, sizeof(buf), &chunk);
+    total += chunk;
+    if (err == SP_ERR_IO_EOF) break;
+    if (err) { if (moved) *moved = total; return err; }
+  }
+  t->bytes_via_read_from = total;
+  if (moved) *moved = total;
+  return SP_OK;
+}
+
+// Source has an fd (file reader) and writer advertises read_from. The fast
+// path is taken; the byte-loop path is not touched.
+UTEST_F(io_copy, fast_path_taken_when_both_sides_support) {
+  SKIP_ON_WASM()
+  sp_test_file_manager_t fm = sp_zero;
+  sp_test_file_manager_init(&fm);
+  sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_src.bin"));
+
+  const c8* content = "0123456789abcdef";
+  u64 n = sp_cstr_len(content);
+  {
+    sp_io_file_writer_t fw = sp_zero;
+    sp_io_file_writer_from_path(&fw, path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&fw.base, content, n, SP_NULLPTR);
+    sp_io_file_writer_close(&fw);
+  }
+
+  sp_io_file_reader_t r = sp_zero;
+  sp_io_file_reader_from_path(&r, path);
+
+  io_tracking_writer_t w = sp_zero;
+  w.base.write     = io_tracking_writer_write;
+  w.base.read_from = io_tracking_writer_read_from;
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_OK);
+  EXPECT_EQ(copied, n);
+  EXPECT_EQ(w.bytes_via_read_from, n);
+  EXPECT_EQ(w.bytes_via_write, 0);
+
+  sp_io_file_reader_close(&r);
+  sp_test_file_manager_cleanup(&fm);
+}
+
+// Source has no fd (mem reader). Fast path declines; we fall through to the
+// byte-loop path. The tracking writer's read_from is never called.
+UTEST_F(io_copy, fast_path_skipped_when_source_has_no_fd) {
+  const c8* content = "the-quick-brown-fox-jumps-over";
+  u64 n = sp_cstr_len(content);
+
+  sp_io_reader_t r = sp_zero;
+  sp_io_reader_from_mem(&r, content, n);
+
+  io_tracking_writer_t w = sp_zero;
+  w.base.write     = io_tracking_writer_write;
+  w.base.read_from = io_tracking_writer_read_from;
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r, &copied), SP_OK);
+  EXPECT_EQ(copied, n);
+  EXPECT_EQ(w.bytes_via_read_from, 0);
+  EXPECT_EQ(w.bytes_via_write, n);
+}
+
+// Writer declines the fast path with SP_ERR_IO_UNIMPLEMENTED. Copy falls
+// through to the byte loop without surfacing the unimplemented error to the
+// caller. The end-to-end byte count is intact.
+UTEST_F(io_copy, fast_path_unimplemented_falls_through) {
+  SKIP_ON_WASM()
+  sp_test_file_manager_t fm = sp_zero;
+  sp_test_file_manager_init(&fm);
+  sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_unimpl.bin"));
+
+  const c8* content = "fallback-content-xyz";
+  u64 n = sp_cstr_len(content);
+  {
+    sp_io_file_writer_t fw = sp_zero;
+    sp_io_file_writer_from_path(&fw, path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_write(&fw.base, content, n, SP_NULLPTR);
+    sp_io_file_writer_close(&fw);
+  }
+
+  sp_io_file_reader_t r = sp_zero;
+  sp_io_file_reader_from_path(&r, path);
+
+  io_tracking_writer_t w = sp_zero;
+  w.base.write     = io_tracking_writer_write;
+  w.base.read_from = io_tracking_writer_read_from;
+  w.read_from_returns_unimpl = true;
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_OK);
+  EXPECT_EQ(copied, n);
+  EXPECT_EQ(w.bytes_via_read_from, 0);
+  EXPECT_EQ(w.bytes_via_write, n);
+
+  sp_io_file_reader_close(&r);
+  sp_test_file_manager_cleanup(&fm);
+}
+
 // Writer buffer attached; backend errors on the flush that the wrapper
 // triggers when the buffer overflows. Copy surfaces the error.
 UTEST_F(io_copy, buffered_writer_flush_error) {
