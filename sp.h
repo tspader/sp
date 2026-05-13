@@ -3637,7 +3637,6 @@ SP_IMP void     sp_win32_env_it_set_current(sp_os_env_it_t* it);
 #if defined(SP_FREESTANDING)
 SP_IMP void* sp_sys_get_tp(void);
 SP_IMP s32   sp_sys_set_tp(void* tp);
-SP_IMP void  sp_sys_exit(s32 code);
 SP_IMP void  sp_linux_env_it_set_current(sp_os_env_it_t* it);
 #endif
 #if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
