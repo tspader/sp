@@ -163,23 +163,23 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_io_file_writer_from_path(&hdr, out_hdr, SP_IO_WRITE_MODE_OVERWRITE);
   sp_da_for(entries, it) {
     embed_entry_t entry = entries[it];
-    sp_fmt_io_a(&hdr.base, mem,
+    sp_fmt_io(&hdr.base, mem,
       "extern const u8 {} [{}];\n",
       sp_fmt_str(entry.symbol),
       sp_fmt_uint(entry.size)
     );
-    sp_fmt_io_a(&hdr.base, mem,
+    sp_fmt_io(&hdr.base, mem,
       "extern const u64 {}_size;\n\n",
       sp_fmt_str(entry.symbol)
     );
   }
   sp_io_write_str(&hdr.base, sp_str_lit("typedef struct {\n  const char* path;\n  const void* data;\n  unsigned long long size;\n} spn_embed_entry_t;\n"), SP_NULLPTR);
-  sp_fmt_io_a(&hdr.base, mem, "static const unsigned int spn_embed_count = {};\n", sp_fmt_uint(sp_da_size(entries)));
+  sp_fmt_io(&hdr.base, mem, "static const unsigned int spn_embed_count = {};\n", sp_fmt_uint(sp_da_size(entries)));
   sp_io_write_str(&hdr.base, sp_str_lit("static const spn_embed_entry_t spn_embed_manifest[] = {\n"), SP_NULLPTR);
   sp_da_for(entries, it) {
     embed_entry_t entry = entries[it];
     sp_io_write_cstr(&hdr.base, "  { ", SP_NULLPTR);
-    sp_fmt_io_a(&hdr.base, mem, "\"{}\", {}, {}", sp_fmt_str(entry.path), sp_fmt_str(entry.symbol), sp_fmt_uint(entry.size));
+    sp_fmt_io(&hdr.base, mem, "\"{}\", {}, {}", sp_fmt_str(entry.path), sp_fmt_str(entry.symbol), sp_fmt_uint(entry.size));
     sp_io_write_cstr(&hdr.base, " },\n", SP_NULLPTR);
   }
   sp_io_write_str(&hdr.base, sp_str_lit("};\n"), SP_NULLPTR);
