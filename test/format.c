@@ -1213,7 +1213,7 @@ UTEST(sp_fmt_transform, into_writer_backed_builder) {
   sp_io_mem_writer_from_buffer(&w, buf, sizeof(buf));
 
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_fmt_io_a(&w.base, s.mem, "{.upper}", sp_fmt_cstr("hello"));
+  sp_fmt_io(&w.base, s.mem, "{.upper}", sp_fmt_cstr("hello"));
   sp_mem_end_scratch(s);
   sp_str_t got = { .data = buf, .len = 5 };
   EXPECT_TRUE(sp_str_equal_cstr(got, "HELLO"));
@@ -1552,4 +1552,3 @@ UTEST(fmt, hex_mixed_digits) {
   sp_str_t got = sp_fmt(sp_mem_get_scratch(), "{.hex}", sp_fmt_uint(0x1234abcd)).value;
   EXPECT_TRUE(sp_str_equal_cstr(got, "0x1234ABCD"));
 }
-

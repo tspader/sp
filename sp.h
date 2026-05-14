@@ -1199,8 +1199,6 @@ typedef struct {
   u32               raw_attrs;
 } sp_sys_stat_t;
 
-#define SP_FS_NAME_MAX 1024
-
 typedef struct {
   s64             handle;
   sp_mem_buffer_t buf;
@@ -1208,7 +1206,7 @@ typedef struct {
 } sp_sys_fs_it_t;
 
 typedef struct {
-  c8           name [SP_FS_NAME_MAX];
+  const c8*    name;
   u32          len;
   sp_fs_kind_t kind;
 } sp_sys_fs_entry_t;
@@ -2890,7 +2888,7 @@ typedef struct {
 
 void sp_fmt_directive_register(const c8* name, sp_fmt_directive_t directive);
 
-sp_err_t sp_fmt_io_a(sp_io_writer_t* io, sp_mem_t mem, const c8* fmt, ...);
+SP_API sp_err_t  sp_fmt_io(sp_io_writer_t* io, sp_mem_t mem, const c8* fmt, ...);
 SP_API sp_str_r  sp_fmt(sp_mem_t mem, const c8* fmt, ...);
 SP_API const c8* sp_fmt_to_cstr(sp_mem_t mem, const c8* fmt, ...);
 SP_API sp_err_t  sp_fmt_v(sp_io_writer_t* io, sp_mem_t mem, sp_str_t fmt, va_list args);
@@ -6247,7 +6245,7 @@ s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   sp_io_mem_writer_t io = sp_zero;
   sp_io_mem_writer_from_buffer(&io, proc, 64);
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_fmt_io_a(&io.base, s.mem, "/proc/self/fd/{}", sp_fmt_int(fd));
+  sp_fmt_io(&io.base, s.mem, "/proc/self/fd/{}", sp_fmt_int(fd));
   sp_mem_end_scratch(s);
 
   s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, buf, size);
@@ -6968,7 +6966,7 @@ static sp_err_t sp_fmt_pull_int_arg(sp_fmt_argv_t a, s64* out) {
   return SP_OK;
 }
 
-sp_err_t sp_fmt_io_a(sp_io_writer_t* io, sp_mem_t mem, const c8* fmt, ...) {
+sp_err_t sp_fmt_io(sp_io_writer_t* io, sp_mem_t mem, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_err_t result = sp_fmt_v(io, mem, sp_str_view(fmt), args);
@@ -9092,7 +9090,7 @@ SP_PRIVATE u32 sp_sys_diriter_win32_name_len(const u16* name) {
 
 s32 sp_sys_fs_it_open(sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {
   *it = sp_zero_s(sp_sys_fs_it_t);
-  if (cap < sizeof(sp_win32_find_data_t)) return -1;
+  if (cap < sizeof(sp_win32_find_data_t) + (MAX_PATH * 3 + 1)) return -1;
 
   SP_ALIGNED u8 pattern_storage [SP_PATH_MAX];
   sp_mem_fixed_t pattern_fixed = sp_mem_fixed(pattern_storage, sizeof(pattern_storage));
@@ -9146,12 +9144,16 @@ s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
       continue;
     }
 
-    sp_mem_fixed_t allocator = sp_mem_fixed(out->name, SP_FS_NAME_MAX);
+    u8* scratch_data = it->buf.data + sizeof(sp_win32_find_data_t);
+    u64 scratch_cap = it->buf.capacity - sizeof(sp_win32_find_data_t);
+    sp_mem_fixed_t allocator = sp_mem_fixed(scratch_data, scratch_cap);
     sp_mem_t mem = sp_mem_fixed_as_allocator(&allocator);
 
+    u32 wlen = sp_sys_diriter_win32_name_len(name);
+    sp_str_t utf8 = sp_wtf16_to_wtf8(mem, sp_wide_str(name, wlen));
     out->kind = sp_sys_diriter_win32_attrs(fd->dwFileAttributes);
-    out->len = sp_sys_diriter_win32_name_len(name);
-    sp_wtf16_to_wtf8(mem, sp_wide_str(name, out->len));
+    out->name = utf8.data;
+    out->len = utf8.len;
     return SP_OK;
   }
 }
@@ -9198,8 +9200,8 @@ s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
     // If it's an absolute path, that's the one
     if (!sp_sys_diriter_is_dot(d->d_name)) {
       out->kind = sp_sys_diriter_dtype_to_kind(d->d_type);
-      out->len = sp_min(sp_cstr_len(d->d_name), SP_FS_NAME_MAX - 1);
-      sp_cstr_copy_to_n(d->d_name, out->len, out->name, SP_FS_NAME_MAX);
+      out->name = d->d_name;
+      out->len = sp_cstr_len(d->d_name);
       return SP_OK;
     }
   }
@@ -9238,10 +9240,8 @@ s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
     struct dirent* d = readdir((DIR*)(intptr_t)it->handle);
     if (!d) return -1;
     if (sp_sys_diriter_is_dot(d->d_name)) continue;
-    u32 nlen = sp_cstr_len(d->d_name);
-    if (nlen >= SP_FS_NAME_MAX) nlen = SP_FS_NAME_MAX - 1;
-    sp_cstr_copy_to_n(d->d_name, nlen, out->name, SP_FS_NAME_MAX);
-    out->len = nlen;
+    out->name = d->d_name;
+    out->len = sp_cstr_len(d->d_name);
     out->kind = sp_sys_diriter_dtype_to_kind(d->d_type);
     return 0;
   }
@@ -9285,7 +9285,7 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
   sp_io_file_writer_t io = sp_zero;
   sp_io_file_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_fmt_io_a(
+  sp_fmt_io(
     &io.base,
     s.mem,
     "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
@@ -11828,7 +11828,7 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
         sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
         sp_str_t val = *sp_str_ht_it_getp(env->vars, it);
 
-        sp_fmt_io_a(&b.base, scratch.mem, "{}={}", sp_fmt_str(key), sp_fmt_str(val));
+        sp_fmt_io(&b.base, scratch.mem, "{}={}", sp_fmt_str(key), sp_fmt_str(val));
         sp_io_write_c8(&b.base, '\0');
       }
 
@@ -11843,7 +11843,7 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
     sp_env_var_t e = config.env.extra[it];
     if (sp_str_empty(e.key)) continue;
 
-    sp_fmt_io_a(&b.base, scratch.mem, "{}={}", sp_fmt_str(e.key), sp_fmt_str(e.value));
+    sp_fmt_io(&b.base, scratch.mem, "{}={}", sp_fmt_str(e.key), sp_fmt_str(e.value));
     sp_io_write_c8(&b.base, '\0');
   }
 
@@ -14923,9 +14923,9 @@ void sp_fs_it_next(sp_fs_it_t* it) {
 
     sp_sys_fs_entry_t d;
     if (sp_sys_fs_it_next(&top->sys, &d) == 0) {
-      it->entry.name = sp_str_from_cstr_n(it->mem, d.name, d.len);
+      it->entry.path = sp_fs_join_path(it->mem, top->path, sp_str(d.name, d.len));
+      it->entry.name = sp_str_sub(it->entry.path, it->entry.path.len - d.len, d.len);
       it->entry.kind = d.kind;
-      it->entry.path = sp_fs_join_path(it->mem, top->path, it->entry.name);
 
       if (it->recursive && it->entry.kind == SP_FS_KIND_DIR) {
         sp_fs_it_push(it, it->entry.path);

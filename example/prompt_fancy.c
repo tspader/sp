@@ -519,11 +519,11 @@ static sp_str_t fancy_selected_changelog(sp_mem_t mem, fancy_changelog_item_t* i
       if (written) {
         sp_io_write_c8(&builder.base, '\n');
       }
-      sp_fmt_io_a(&builder.base, s.mem, "[{}]", sp_fmt_cstr(section));
+      sp_fmt_io(&builder.base, s.mem, "[{}]", sp_fmt_cstr(section));
       sp_io_write_c8(&builder.base, '\n');
     }
 
-    sp_fmt_io_a(&builder.base, s.mem, "- {}", sp_fmt_cstr(items[it].text));
+    sp_fmt_io(&builder.base, s.mem, "- {}", sp_fmt_cstr(items[it].text));
     sp_io_write_c8(&builder.base, '\n');
   }
   sp_mem_end_scratch(s);
@@ -534,15 +534,15 @@ static sp_str_t fancy_plan_note(sp_mem_t mem, const c8* kind, const c8* name, co
   sp_io_dyn_mem_writer_t builder = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &builder);
   sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(mem);
-  sp_fmt_io_a(&builder.base, s.mem, "version      0.13.3 ({})", sp_fmt_cstr(kind));
+  sp_fmt_io(&builder.base, s.mem, "version      0.13.3 ({})", sp_fmt_cstr(kind));
   sp_io_write_c8(&builder.base, '\n');
-  sp_fmt_io_a(&builder.base, s.mem, "name         {}", sp_fmt_cstr(name));
+  sp_fmt_io(&builder.base, s.mem, "name         {}", sp_fmt_cstr(name));
   sp_io_write_c8(&builder.base, '\n');
   sp_io_write_cstr(&builder.base, "tag          v0.13.3", SP_NULLPTR);
   sp_io_write_c8(&builder.base, '\n');
   sp_io_write_cstr(&builder.base, "artifacts    linux, musl, freestanding, macos, windows", SP_NULLPTR);
   sp_io_write_c8(&builder.base, '\n');
-  sp_fmt_io_a(&builder.base, s.mem, "changelog    {}", sp_fmt_cstr(sections));
+  sp_fmt_io(&builder.base, s.mem, "changelog    {}", sp_fmt_cstr(sections));
   sp_mem_end_scratch(s);
   return sp_io_dyn_mem_writer_as_str(&builder);
 }

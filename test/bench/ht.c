@@ -145,7 +145,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
   sp_io_writer_t sb = sp_zero;
   sp_io_dyn_mem_writer_init(sp_mem_get_scratch(), &sb);
   sp_mem_arena_marker_t fmt_s = sp_mem_begin_scratch_for(sp_mem_get_scratch());
-  sp_fmt_io_a(&sb, fmt_s.mem, "{}{} {} {} {} {}{}\n",
+  sp_fmt_io(&sb, fmt_s.mem, "{}{} {} {} {} {}{}\n",
     sp_fmt_cstr(SP_ANSI_FG_BRIGHT_BLACK),
     sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), sp_str_lit("test"), max_name)),
     sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), sp_str_lit("n"), max_n_width)),
@@ -167,7 +167,7 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
     sp_str_t ratio_color = color_for_ratio(ratio);
     sp_str_t ratio_str = sp_str_pad(sp_mem_get_scratch(), sp_fmt(sp_mem_get_scratch(), "{}x", sp_fmt_float(ratio)).value, ratio_width);
 
-    sp_fmt_io_a(&sb, fmt_s.mem, "{} {} {} {} {}{}{}\n",
+    sp_fmt_io(&sb, fmt_s.mem, "{} {} {} {} {}{}{}\n",
       sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), r->name, max_name)),
       sp_fmt_str(sp_str_pad(sp_mem_get_scratch(), n_str, max_n_width)),
       sp_fmt_str(sp_time_str),

@@ -38,7 +38,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_io_mem_writer_from_buffer(&mw, str, 256);
   {
     sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-    sp_fmt_io_a(&mw.base, s.mem, "hello, {}", sp_fmt_cstr("world"));
+    sp_fmt_io(&mw.base, s.mem, "hello, {}", sp_fmt_cstr("world"));
     sp_mem_end_scratch(s);
   }
   sp_log("sp_io_writer_from_mem: {}", sp_fmt_cstr(str));
@@ -50,7 +50,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_io_file_writer_from_fd(&fw, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
   {
     sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-    sp_fmt_io_a(&fw.base, s.mem, "hello, {.cyan}", sp_fmt_cstr("stdout"));
+    sp_fmt_io(&fw.base, s.mem, "hello, {.cyan}", sp_fmt_cstr("stdout"));
     sp_mem_end_scratch(s);
   }
   sp_io_write(&fw.base, "\n", 1, SP_NULLPTR);
