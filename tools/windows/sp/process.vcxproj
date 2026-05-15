@@ -18,8 +18,8 @@
     <ProjectName>process</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <SpTargetName>process</SpTargetName>
-    <SpSource>..\..\..\test\tools\process\process.c</SpSource>
-    <SpHeaders>..\..\..\sp.h;..\..\..\test\tools\process\process.h</SpHeaders>
+    <SpSource>..\..\..\test\process.c</SpSource>
+    <SpHeaders>..\..\..\sp.h;..\..\..\test\process.h</SpHeaders>
     <SpProjectReferences></SpProjectReferences>
     <SpPreprocessorDefinitions></SpPreprocessorDefinitions>
     <SpAdditionalIncludeDirectories></SpAdditionalIncludeDirectories>

@@ -166,11 +166,6 @@ UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(double d) {
   UTEST_PRINTF("{:.3}", sp_fmt_float(d));
 }
 
-UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long double d);
-UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long double d) {
-  UTEST_PRINTF("{:.3}", sp_fmt_float(UTEST_CAST(f64, d)));
-}
-
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(int i);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(int i) {
   UTEST_PRINTF("{}", sp_fmt_int(UTEST_CAST(s32, i)));
@@ -919,8 +914,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
     } else if (0 ==
                UTEST_STRNCMP(argv[index], output_str, sizeof(output_str) - 1)) {
       sp_str_t path = sp_str_view(argv[index] + sizeof(output_str) - 1);
-      sp_io_file_writer_from_path(&utest_state.output, path,
-                                  SP_IO_WRITE_MODE_OVERWRITE);
+      sp_io_file_writer_from_path(&utest_state.output, path);
       utest_state.has_output = 1;
     } else if (0 == UTEST_STRNCMP(argv[index], list_str,
                                   sizeof(list_str) - 1)) {

@@ -71,7 +71,7 @@ UTEST_F(io_write, smoke) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
     },
-    .expect.received = "abc",
+    .expect = { .received = "abc" },
   });
 }
 
@@ -85,7 +85,7 @@ UTEST_F(io_write, partial_no_space) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcdefgh", SP_ERR_IO_NO_SPACE, 4 } },
     },
-    .expect.received = "abcd",
+    .expect = { .received = "abcd" },
   });
 }
 
@@ -112,7 +112,7 @@ UTEST_F(io_write, error_after_success) {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
       { .kind = IO_STEP_WRITE, .write = { "xyz", SP_ERR_IO_WRITE_FAILED, 0 } },
     },
-    .expect.received = "abc",
+    .expect = { .received = "abc" },
   });
 }
 
@@ -125,7 +125,7 @@ UTEST_F(io_write, bytes_and_error) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_ERR_IO_WRITE_FAILED, 2 } },
     },
-    .expect.received = "ab",
+    .expect = { .received = "ab" },
   });
 }
 
@@ -141,7 +141,7 @@ UTEST_F(io_write, smaller_after_overflow) {
       { .kind = IO_STEP_WRITE, .write = { "abcd", SP_ERR_IO_NO_SPACE, 0 } },
       { .kind = IO_STEP_WRITE, .write = { "xy", SP_OK, 2 } },
     },
-    .expect.received = "xy",
+    .expect = { .received = "xy" },
   });
 }
 
@@ -195,7 +195,7 @@ UTEST_F(io_write, buffered_flush_drains_buffer) {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
       { .kind = IO_STEP_FLUSH, .flush = { SP_OK } },
     },
-    .expect.received = "abc",
+    .expect = { .received = "abc" },
   });
 }
 
@@ -212,7 +212,7 @@ UTEST_F(io_write, buffered_multiple_writes_one_flush) {
       { .kind = IO_STEP_WRITE, .write = { "def", SP_OK, 3 } },
       { .kind = IO_STEP_FLUSH, .flush = { SP_OK } },
     },
-    .expect.received = "abcdef",
+    .expect = { .received = "abcdef" },
   });
 }
 
@@ -240,7 +240,7 @@ UTEST_F(io_write, buffered_overflow_flushes_then_buffers) {
       { .kind = IO_STEP_WRITE, .write = { "abcde", SP_OK, 5 } },
       { .kind = IO_STEP_WRITE, .write = { "fghij", SP_OK, 5 } },
     },
-    .expect.received = "abcde",
+    .expect = { .received = "abcde" },
   });
 }
 
@@ -255,7 +255,7 @@ UTEST_F(io_write, buffered_large_write_bypasses) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "0123456789ABCDEF", SP_OK, 16 } },
     },
-    .expect.received = "0123456789ABCDEF",
+    .expect = { .received = "0123456789ABCDEF" },
   });
 }
 
@@ -273,7 +273,7 @@ UTEST_F(io_write, buffered_drain_then_bypass) {
       { .kind = IO_STEP_WRITE, .write = { "abc",              SP_OK, 3  } },
       { .kind = IO_STEP_WRITE, .write = { "0123456789ABCDEF", SP_OK, 16 } },
     },
-    .expect.received = "abc0123456789ABCDEF",
+    .expect = { .received = "abc0123456789ABCDEF" },
   });
 }
 
@@ -308,7 +308,7 @@ UTEST_F(io_write, buffered_flush_partial_drops_tail) {
       { .kind = IO_STEP_WRITE, .write = { "xy", SP_OK, 2 } },
       { .kind = IO_STEP_FLUSH, .flush = { SP_OK } },
     },
-    .expect.received = "abxy",
+    .expect = { .received = "abxy" },
   });
 }
 

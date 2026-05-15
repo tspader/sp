@@ -597,7 +597,7 @@ sp_err_t sp_elf_write(sp_elf_t* elf, sp_io_writer_t* out) {
 
 sp_err_t sp_elf_write_to_file(sp_elf_t* elf, sp_str_t path) {
   sp_io_file_writer_t f = sp_zero;
-  sp_try(sp_io_file_writer_from_path(&f, path, SP_IO_WRITE_MODE_OVERWRITE));
+  sp_try(sp_io_file_writer_from_path(&f, path));
   sp_err_t err = sp_elf_write(elf, &f.base);
   sp_io_file_writer_close(&f);
   return err;

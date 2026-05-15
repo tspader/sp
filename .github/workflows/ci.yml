@@ -1,0 +1,128 @@
+name: ci
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    tags: ['v*']
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.set.outputs.include }}
+    steps:
+      - id: set
+        shell: bash
+        run: |
+          {
+            echo 'include<<EOF'
+            cat <<'JSON'
+          [
+            {"triple": "x86_64-linux-none",   "runs-on": "ubuntu-latest",     "ext": ""},
+            {"triple": "x86_64-linux-gnu",    "runs-on": "ubuntu-latest",     "ext": ""},
+            {"triple": "x86_64-linux-musl",   "runs-on": "ubuntu-latest",     "ext": ""},
+            {"triple": "aarch64-linux-none",  "runs-on": "ubuntu-24.04-arm",  "ext": ""},
+            {"triple": "aarch64-linux-gnu",   "runs-on": "ubuntu-24.04-arm",  "ext": ""},
+            {"triple": "aarch64-linux-musl",  "runs-on": "ubuntu-24.04-arm",  "ext": ""},
+            {"triple": "x86_64-windows-gnu",  "runs-on": "windows-latest",    "ext": ".exe"},
+            {"triple": "aarch64-macos",       "runs-on": "macos-14",          "ext": ""}
+          ]
+          JSON
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+  build-zig:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: master
+      - run: make big
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-all
+          path: build/
+
+  build-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - run: msbuild tools\windows\sp\sp.sln /p:Configuration=Release /p:Platform=x64 /m
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-msvc
+          path: tools/windows/sp/build/**
+
+  test:
+    needs: [matrix, build-zig]
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-all
+          path: build
+      - shell: bash
+        run: |
+          for dir in build/${{ matrix.triple }}/test build/cpp/${{ matrix.triple }}/test; do
+            chmod +x "$dir"/*${{ matrix.ext }}
+            for t in "$dir"/*${{ matrix.ext }}; do
+              echo "=== $t ==="
+              "$t" || exit 1
+            done
+          done
+
+  test-wasm:
+    needs: build-zig
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-all
+          path: build
+      - uses: bytecodealliance/actions/wasmtime/setup@v1
+      - shell: bash
+        run: |
+          for dir in build/wasm32-wasi/test build/cpp/wasm32-wasi/test; do
+            for t in "$dir"/*.wasm; do
+              echo "=== $t ==="
+              wasmtime run "$t" || exit 1
+            done
+          done
+
+  test-msvc:
+    needs: build-msvc
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-msvc
+          path: bin
+      - shell: bash
+        run: for t in bin/**/test/*.exe; do echo "=== $t ==="; "$t" || exit 1; done
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, test-wasm, test-msvc]
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, pattern: build-* }
+      - run: |
+          mkdir release
+          for d in dist/build-all/*/; do
+            t=$(basename "$d")
+            [ -d "$d/test" ] || continue
+            tar -czf release/sp-$t.tar.gz -C dist/build-all "$t"
+          done
+          [ -d dist/build-msvc ] && tar -czf release/sp-msvc.tar.gz -C dist build-msvc || true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.tar.gz
+          generate_release_notes: true

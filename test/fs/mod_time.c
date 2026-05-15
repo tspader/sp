@@ -23,7 +23,7 @@ UTEST_F(fs, mod_time_updates_after_write) {
   sp_os_sleep_ms(100);
 
   sp_io_file_writer_t writer = sp_zero;
-  sp_io_file_writer_from_path(&writer, file, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_file_writer_from_path(&writer, file);
   sp_io_write_str(&writer.base, sp_str_lit("b"), SP_NULLPTR);
   sp_io_file_writer_close(&writer);
 

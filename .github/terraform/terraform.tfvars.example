@@ -1,0 +1,10 @@
+vouch_app_id              = 1234567
+vouch_app_installation_id = 89012345
+
+# Paste the full .pem contents between the EOT markers, including the
+# BEGIN/END lines. Indentation is stripped by <<-.
+vouch_app_private_key = <<-EOT
+-----BEGIN RSA PRIVATE KEY-----
+...
+-----END RSA PRIVATE KEY-----
+EOT

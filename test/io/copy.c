@@ -94,10 +94,10 @@ void run_io_mock_copy_writer_test(int* utest_result, io_mock_copy_writer_test_t 
 UTEST_F(io_copy, reader_fails_after_success) {
   run_io_mock_copy_reader_test(utest_result, (io_mock_copy_reader_test_t){
     .results = {
-      { .bytes = 3, .data = "abc", .err = SP_OK },
+      { .bytes = 3, .err = SP_OK, .data = "abc" },
       { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
     },
-    .capacity.writer = 32, .buffer.copy = 8,
+    .buffer = { .copy = 8 }, .capacity = { .writer = 32 },
     .expect = { .err = SP_ERR_IO_READ_FAILED, .copied = 3, .final = "abc" },
   });
 }
@@ -107,9 +107,9 @@ UTEST_F(io_copy, reader_fails_after_success) {
 UTEST_F(io_copy, reader_bytes_and_error) {
   run_io_mock_copy_reader_test(utest_result, (io_mock_copy_reader_test_t){
     .results = {
-      { .bytes = 3, .data = "abc", .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 3, .err = SP_ERR_IO_READ_FAILED, .data = "abc" },
     },
-    .capacity.writer = 32, .buffer.copy = 8,
+    .buffer = { .copy = 8 }, .capacity = { .writer = 32 },
     .expect = { .err = SP_ERR_IO_READ_FAILED, .copied = 3, .final = "abc" },
   });
 }
@@ -122,7 +122,7 @@ UTEST_F(io_copy, writer_partial_in_call) {
     .responses = {
       { .bytes = 4, .err = SP_ERR_IO_NO_SPACE },
     },
-    .buffer.copy = 8,
+    .buffer = { .copy = 8 },
     .expect = { .err = SP_ERR_IO_NO_SPACE, .copied = 4, .received = "0123" },
   });
 }
@@ -135,7 +135,7 @@ UTEST_F(io_copy, writer_fails_immediately) {
     .responses = {
       { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
     },
-    .buffer.copy = 8,
+    .buffer = { .copy = 8 },
     .expect = { .err = SP_ERR_IO_WRITE_FAILED, .copied = 0, .received = "" },
   });
 }
@@ -152,12 +152,12 @@ UTEST_F(io_copy, writer_fails_immediately) {
 UTEST_F(io_copy, buffered_reader_drains_through_buffer) {
   run_io_mock_copy_reader_test(utest_result, (io_mock_copy_reader_test_t){
     .results = {
-      { .bytes = 4, .data = "0123", .err = SP_OK },
-      { .bytes = 4, .data = "4567", .err = SP_OK },
+      { .bytes = 4, .err = SP_OK, .data = "0123" },
+      { .bytes = 4, .err = SP_OK, .data = "4567" },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
     },
-    .buffer = { .r = 4, .copy = 2 },
-    .capacity.writer = 32,
+    .buffer = { .copy = 2, .r = 4 },
+    .capacity = { .writer = 32 },
     .expect = { .err = SP_OK, .copied = 8, .final = "01234567" },
   });
 }
@@ -167,11 +167,11 @@ UTEST_F(io_copy, buffered_reader_drains_through_buffer) {
 UTEST_F(io_copy, buffered_reader_one_fill_many_drains) {
   run_io_mock_copy_reader_test(utest_result, (io_mock_copy_reader_test_t){
     .results = {
-      { .bytes = 8, .data = "ABCDEFGH", .err = SP_OK },
+      { .bytes = 8, .err = SP_OK, .data = "ABCDEFGH" },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
     },
-    .buffer = { .r = 8, .copy = 2 },
-    .capacity.writer = 32,
+    .buffer = { .copy = 2, .r = 8 },
+    .capacity = { .writer = 32 },
     .expect = { .err = SP_OK, .copied = 8, .final = "ABCDEFGH" },
   });
 }
@@ -186,7 +186,7 @@ UTEST_F(io_copy, buffered_writer_overflow_flushes_partial) {
     .responses = {
       { .bytes = 4, .err = SP_OK },
     },
-    .buffer = { .write = 4, .copy = 2 },
+    .buffer = { .copy = 2, .write = 4 },
     .expect = { .err = SP_OK, .copied = 8, .received = "0123" },
   });
 }
@@ -247,7 +247,7 @@ UTEST_F(io_copy, fast_path_taken_when_both_sides_support) {
   u64 n = sp_cstr_len(content);
   {
     sp_io_file_writer_t fw = sp_zero;
-    sp_io_file_writer_from_path(&fw, path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_file_writer_from_path(&fw, path);
     sp_io_write(&fw.base, content, n, SP_NULLPTR);
     sp_io_file_writer_close(&fw);
   }
@@ -302,7 +302,7 @@ UTEST_F(io_copy, fast_path_unimplemented_falls_through) {
   u64 n = sp_cstr_len(content);
   {
     sp_io_file_writer_t fw = sp_zero;
-    sp_io_file_writer_from_path(&fw, path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_file_writer_from_path(&fw, path);
     sp_io_write(&fw.base, content, n, SP_NULLPTR);
     sp_io_file_writer_close(&fw);
   }
@@ -325,6 +325,60 @@ UTEST_F(io_copy, fast_path_unimplemented_falls_through) {
   sp_test_file_manager_cleanup(&fm);
 }
 
+// End-to-end: regular file -> pipe via stream_writer. On Linux this exercises
+// the sendfile fast path; elsewhere it falls back to the generic loop. The
+// bytes that emerge on the pipe's read end must match the source content.
+UTEST_F(io_copy, file_to_pipe_sendfile) {
+  SKIP_ON_WASM()
+  sp_test_file_manager_t fm = sp_zero;
+  sp_test_file_manager_init(&fm);
+  sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("sendfile_src.bin"));
+
+  u8 source [4096];
+  sp_for(i, sizeof(source)) source[i] = (u8)((i * 2654435761u + 7) >> 8);
+  {
+    sp_io_file_writer_t fw = sp_zero;
+    sp_io_file_writer_from_path(&fw, path);
+    EXPECT_EQ(sp_io_write(&fw.base, source, sizeof(source), SP_NULLPTR), SP_OK);
+    sp_io_file_writer_close(&fw);
+  }
+
+  sp_sys_fd_t pipe_r = SP_SYS_INVALID_FD;
+  sp_sys_fd_t pipe_w = SP_SYS_INVALID_FD;
+  EXPECT_EQ(sp_sys_pipe(&pipe_r, &pipe_w), 0);
+
+  sp_io_file_reader_t r = sp_zero;
+  sp_io_file_reader_from_path(&r, path);
+
+  sp_io_stream_writer_t w = sp_zero;
+  sp_io_stream_writer_from_fd(&w, pipe_w, SP_IO_CLOSE_MODE_AUTO);
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_OK);
+  EXPECT_EQ(copied, sizeof(source));
+
+  sp_io_file_reader_close(&r);
+  sp_io_stream_writer_close(&w);
+
+  sp_io_stream_reader_t sr = sp_zero;
+  sp_io_stream_reader_from_fd(&sr, pipe_r, SP_IO_CLOSE_MODE_AUTO);
+
+  u8 received [sizeof(source)] = sp_zero;
+  u64 got = 0;
+  while (got < sizeof(received)) {
+    u64 chunk = 0;
+    sp_err_t err = sp_io_read(&sr.base, received + got, sizeof(received) - got, &chunk);
+    got += chunk;
+    if (err == SP_ERR_IO_EOF) break;
+    EXPECT_EQ(err, SP_OK);
+  }
+  EXPECT_EQ(got, sizeof(source));
+  sp_for(i, sizeof(source)) EXPECT_EQ(received[i], source[i]);
+
+  sp_io_stream_reader_close(&sr);
+  sp_test_file_manager_cleanup(&fm);
+}
+
 // Writer buffer attached; backend errors on the flush that the wrapper
 // triggers when the buffer overflows. Copy surfaces the error.
 UTEST_F(io_copy, buffered_writer_flush_error) {
@@ -333,7 +387,7 @@ UTEST_F(io_copy, buffered_writer_flush_error) {
     .responses = {
       { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
     },
-    .buffer = { .write = 4, .copy = 2 },
+    .buffer = { .copy = 2, .write = 4 },
     .expect = { .err = SP_ERR_IO_WRITE_FAILED, .copied = 4, .received = "" },
   });
 }

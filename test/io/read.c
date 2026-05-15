@@ -44,7 +44,7 @@ void run_io_mock_read_test(int* utest_result, io_mock_read_test_t t) {
 UTEST_F(io_read, smoke) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 3, .data = "abc", .err = SP_OK },
+      { .bytes = 3, .err = SP_OK, .data = "abc" },
     },
     .steps = {
       { .kind = IO_STEP_READ, .read = { 8, SP_OK, "abc" } },
@@ -56,7 +56,7 @@ UTEST_F(io_read, smoke) {
 UTEST_F(io_read, short_then_eof) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 3, .data = "abc", .err = SP_OK },
+      { .bytes = 3, .err = SP_OK, .data = "abc" },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
     },
     .steps = {
@@ -110,7 +110,7 @@ UTEST_F(io_read, error_zero_bytes) {
 UTEST_F(io_read, error_after_success) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 4, .data = "abcd", .err = SP_OK },
+      { .bytes = 4, .err = SP_OK, .data = "abcd" },
       { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
     },
     .steps = {
@@ -125,7 +125,7 @@ UTEST_F(io_read, error_after_success) {
 UTEST_F(io_read, bytes_and_error) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 3, .data = "abc", .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 3, .err = SP_ERR_IO_READ_FAILED, .data = "abc" },
     },
     .steps = {
       { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED, "abc" } },
@@ -159,7 +159,7 @@ UTEST_F(io_read, error_then_error) {
 UTEST_F(io_read, buffered_first_read_fills) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 8, .data = "01234567", .err = SP_OK },
+      { .bytes = 8, .err = SP_OK, .data = "01234567" },
     },
     .buffer = 8,
     .steps = {
@@ -173,7 +173,7 @@ UTEST_F(io_read, buffered_first_read_fills) {
 UTEST_F(io_read, buffered_drains_without_backend_call) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 8, .data = "01234567", .err = SP_OK },
+      { .bytes = 8, .err = SP_OK, .data = "01234567" },
     },
     .buffer = 8,
     .steps = {
@@ -188,8 +188,8 @@ UTEST_F(io_read, buffered_drains_without_backend_call) {
 UTEST_F(io_read, buffered_refill_after_exhaustion) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 4, .data = "abcd", .err = SP_OK },
-      { .bytes = 4, .data = "efgh", .err = SP_OK },
+      { .bytes = 4, .err = SP_OK, .data = "abcd" },
+      { .bytes = 4, .err = SP_OK, .data = "efgh" },
     },
     .buffer = 4,
     .steps = {
@@ -204,7 +204,7 @@ UTEST_F(io_read, buffered_refill_after_exhaustion) {
 UTEST_F(io_read, buffered_large_request_bypasses) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 16, .data = "0123456789ABCDEF", .err = SP_OK },
+      { .bytes = 16, .err = SP_OK, .data = "0123456789ABCDEF" },
     },
     .buffer = 4,
     .steps = {
@@ -218,8 +218,8 @@ UTEST_F(io_read, buffered_large_request_bypasses) {
 UTEST_F(io_read, buffered_drain_then_bypass) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 4, .data = "abcd", .err = SP_OK },
-      { .bytes = 12, .data = "EFGHIJKLMNOP", .err = SP_OK },
+      { .bytes = 4, .err = SP_OK, .data = "abcd" },
+      { .bytes = 12, .err = SP_OK, .data = "EFGHIJKLMNOP" },
     },
     .buffer = 4,
     .steps = {
@@ -247,7 +247,7 @@ UTEST_F(io_read, buffered_eof_immediate) {
 UTEST_F(io_read, buffered_eof_after_partial_drain) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 4, .data = "abcd", .err = SP_OK },
+      { .bytes = 4, .err = SP_OK, .data = "abcd" },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
     },
@@ -279,7 +279,7 @@ UTEST_F(io_read, buffered_error_immediate) {
 UTEST_F(io_read, buffered_short_fill) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 2, .data = "ab", .err = SP_OK },
+      { .bytes = 2, .err = SP_OK, .data = "ab" },
     },
     .buffer = 8,
     .steps = {
@@ -294,7 +294,7 @@ UTEST_F(io_read, error_then_recovery) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
       { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
-      { .bytes = 3, .data = "abc", .err = SP_OK },
+      { .bytes = 3, .err = SP_OK, .data = "abc" },
     },
     .steps = {
       { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED } },

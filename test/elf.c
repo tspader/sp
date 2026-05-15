@@ -661,7 +661,7 @@ UTEST_F(elf, oracle_cc_read) {
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("minimal.c"));
   sp_io_file_writer_t c_file = sp_zero;
-  sp_io_file_writer_from_path(&c_file, c_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_file_writer_from_path(&c_file, c_path);
   sp_io_write_str(&c_file.base, c_src, SP_NULLPTR);
   sp_io_file_writer_close(&c_file);
 
@@ -725,7 +725,7 @@ UTEST_F(elf, oracle_cc_link) {
 
   sp_str_t c_path = sp_test_file_path(&ut.file_manager, sp_str_lit("integration.c"));
   sp_io_file_writer_t f = sp_zero;
-  sp_io_file_writer_from_path(&f, c_path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_file_writer_from_path(&f, c_path);
   sp_io_write_str(&f.base, c_src, SP_NULLPTR);
   sp_io_file_writer_close(&f);
 

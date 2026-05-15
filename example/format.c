@@ -12,8 +12,7 @@
 // callers will use as wrappers over sp_fmt_custom()
 typedef struct { f32 x; f32 y; } point_t;
 
-void format_point(sp_io_writer_t* io, sp_mem_t mem, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
-  sp_unused(mem);
+void format_point(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_arg_t* param) {
   point_t* point = (point_t*)arg->value.custom.ptr;
   u32 precision = sp_opt_is_null(arg->spec.precision) ? 2 : sp_opt_get(arg->spec.precision);
   sp_io_write_c8(io, '(');
@@ -61,16 +60,11 @@ s32 run(s32 num_args, const c8** args) {
   sp_log("{.green} has Zig/Rust style format specifiers (fill, align, width), plus named directives which may:", sp_fmt_cstr("sp.h"));
   sp_log("- {} text from a format argument", sp_fmt_cstr("render"));
   sp_log("- {.bold .cyan} the rendered text", sp_fmt_cstr("decorate"));
-  sp_log("- {.upper} the rendered text", sp_fmt_cstr("transform"));
 
   section("decorators");
   sp_log("{:<14 .italic} -> hello, {.bold}", sp_fmt_cstr("hello, {.bold}"), sp_fmt_cstr("world"));
   sp_log("{:<14 .italic} -> {.hyperlink}", sp_fmt_cstr("{.hyperlink}"), sp_fmt_cstr("https://spader.zone"));
   sp_log("{:<14 .italic} -> {.quote}", sp_fmt_cstr("{.quote}"), sp_fmt_cstr("supposedly"));
-
-  section("transformers");
-  sp_log(".upper     -> {.upper}",  sp_fmt_cstr("hello world"));
-  sp_log(".redact    -> {.redact}", sp_fmt_cstr("hunter2"));
 
   section(".bytes");
   u64 byte_samples[] = { 0ULL, 512ULL, 1536ULL, 10485760ULL, 5368709120ULL };
@@ -107,12 +101,9 @@ s32 run(s32 num_args, const c8** args) {
 
   section("composition");
   struct { const c8* name; sp_str_t str; } examples [] = {
-    { ".bold + .upper", sp_fmt(mem, "i never {.bold .upper} the kenosha kid", sp_fmt_cstr("did")).value },
     { ".italic + .bold", sp_fmt(mem, "i never {.italic .bold} the kenosha kid", sp_fmt_cstr("did")).value },
-    { ".quote + .upper", sp_fmt(mem, "i never {.quote .upper} the kenosha kid", sp_fmt_cstr("did")).value },
-    { ".redact + .bold", sp_fmt(mem, "i never {.redact .bold} the kenosha kid", sp_fmt_cstr("did")).value },
     { ".bold + .cyan", sp_fmt(mem, "i never {.bold .cyan} the kenosha kid", sp_fmt_cstr("did")).value },
-    { "kitchen sink", sp_fmt(mem, "i never {.quote .bold .italic .upper .green} the kenosha kid", sp_fmt_cstr("did")).value },
+    { "kitchen sink", sp_fmt(mem, "i never {.quote .bold .italic .green} the kenosha kid", sp_fmt_cstr("did")).value },
     {
       ".bytes + :specifier",
       sp_fmt(mem, "{} bytes is [{:^$ .bytes}]", sp_fmt_uint(1536), sp_fmt_uint(12), sp_fmt_uint(1536)).value

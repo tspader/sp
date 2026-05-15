@@ -267,8 +267,6 @@ UTEST_F(fs, canon_symlink_with_dotdot) {
   });
 }
 
-// ---- idempotency ----
-
 UTEST_F(fs, canon_idempotent) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
@@ -297,8 +295,6 @@ UTEST_F(fs, canon_exe_idempotent) {
   sp_str_t canonical = sp_fs_canonicalize_path(a, exe);
   SP_EXPECT_STR_EQ(canonical, exe);
 }
-
-// ---- cwd interaction ----
 
 UTEST_F(fs, canon_cwd_matches_dot) {
   SKIP_ON_WASM()

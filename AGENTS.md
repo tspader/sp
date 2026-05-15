@@ -10,22 +10,6 @@ sp.h is a single-header C standard library replacement which focuses on building
   - `test/tools/*`: code for modules which test external processes
 - `tools/`: random, unstructured bullshit which is not part of the official build
 
-## The Big One
-Compile everything; freestanding, GNU, MUSL, Windows, macOS. Do this before marking a task done. Do not do this between small tweaks or changes.
-```sh
-make
-make TRIPLE=x86_64-linux-gnu
-make TRIPLE=x86_64-linux-musl
-make TRIPLE=x86_64-linux-none
-make TRIPLE=x86_64-windows-gnu
-make TRIPLE=aarch64-macos
-./build/sp x86_64-linux-none"*"
-./build/sp x86_64-linux-musl "*"
-./build/sp x86_64-linux-gnu "*"
-./build/sp aarch64-macos "*"
-./build/sp x86_64-windows-gnu"*"
-```
-
 # quick reference
 - `sp_da`: stb-style dynamic array
 - `sp_ht`: hash table, arbitrary keys and values
@@ -38,9 +22,8 @@ make TRIPLE=aarch64-macos
 - `sp_os`: platform polyfills
 
 # rules
-- Always run The Big One before marking a task as done.
 - Never submit code with new comments. Code with new comments will be rejected outright.
-- Never delete pre-existing comments.
+- Never delete pre-existing comments unless they have become wrong
 - Never use libc unless *explicitly* implementing `sp_sys` on a libc platform
   - `malloc` + `free` -> `sp_alloc` + `sp_free` (prefer `sp_alloc_type` and `sp_alloc_n` to avoid casts)
   - `strcmp`, `strlen`, etc. -> `sp_cstr_*`

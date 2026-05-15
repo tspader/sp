@@ -1,0 +1,81 @@
+labels: ["needs-confirmation"]
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      description: What's the problem?
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Minimal Reproduction
+      description: The smallest C program which shows the issue. This must be runnable. A link to a gist is OK too.
+      render: c
+      value: |
+        #define SP_IMPLEMENTATION
+        #include "sp.h"
+
+        s32 main(s32 num_args, const c8** args) {
+          // ...reproduction
+          return 0;
+        }
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: sp.h commit
+      description: Commit SHA or release tag you're building against.
+      placeholder: e.g. 87aa835 or v0.3.1
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: OS
+      placeholder: e.g. Arch Linux, macOS 15.2, Windows 11
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Architecture
+      options:
+        - x86_64
+        - aarch64
+        - wasm32
+        - other
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: Compiler
+      options:
+        - gcc
+        - clang
+        - MSVC
+        - mingw
+        - zig cc
+        - tcc
+        - cosmocc
+        - other
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: libc
+      options:
+        - glibc
+        - musl
+        - MSVCRT
+        - UCRT
+        - apple
+        - cosmopolitan
+        - WASI
+        - freestanding
+        - other
+    validations:
+      required: true
