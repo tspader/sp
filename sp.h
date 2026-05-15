@@ -14696,6 +14696,9 @@ sp_str_t sp_fs_join_path(sp_mem_t mem, sp_str_t a, sp_str_t b) {
   b = sp_fs_trim_path(b);
   if (sp_str_empty(a)) return sp_str_copy(mem, b);
   if (sp_str_empty(b)) return sp_str_copy(mem, a);
+  if (sp_str_back(a) == '/' || sp_str_back(a) == '\\') {
+    return sp_str_concat(mem, a, b);
+  }
   return sp_str_join(mem, a, b, sp_str_lit("/"));
 }
 
