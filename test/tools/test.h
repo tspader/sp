@@ -84,10 +84,8 @@ void sp_byte_buffer_zero(sp_byte_buffer_t* buffer);
 
 
 typedef struct {
-  sp_str_t root;
-  sp_str_t   build;
-  sp_str_t     bin;
-  sp_str_t     test;
+  sp_str_t bin;
+  sp_str_t test;
 } sp_test_file_paths_t;
 
 typedef struct {
@@ -151,37 +149,7 @@ bool     sp_mem_tracking_ok(sp_mem_tracking_t* mem);
 
 static sp_str_t sp_test_file_manager_top_level = sp_zero;
 
-static sp_str_t sp_test_file_manager_get_repo_root(sp_mem_t a) {
-  sp_str_t path = sp_fs_get_exe_path(a);
-  if (sp_fs_exists(path) && sp_fs_is_file(path)) {
-    path = sp_fs_parent_path(path);
-  }
-
-  while (!sp_str_empty(path)) {
-    if (sp_str_equal(sp_fs_get_name(path), sp_str_lit("sp"))) {
-      sp_str_t marker = sp_fs_join_path(a, path, sp_str_lit("sp.h"));
-      if (sp_fs_exists(marker)) {
-        return sp_fs_canonicalize_path(a, path);
-      }
-    }
-
-    if (sp_fs_is_root(path)) {
-      break;
-    }
-
-    sp_str_t parent = sp_fs_parent_path(path);
-    if (sp_str_equal(parent, path)) {
-      break;
-    }
-
-    path = parent;
-  }
-
-  SP_ASSERT(false);
-  return sp_fs_canonicalize_path(a, sp_fs_get_cwd(a));
-}
-
-static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_root) {
+static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a) {
   if (!sp_str_empty(sp_test_file_manager_top_level)) {
     if (!sp_fs_exists(sp_test_file_manager_top_level)) {
       sp_fs_create_dir(sp_test_file_manager_top_level);
@@ -189,7 +157,7 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a, sp_str_t repo_roo
     return sp_test_file_manager_top_level;
   }
 
-  sp_str_t tmp = sp_fs_join_path(a, repo_root, sp_str_lit(".tmp"));
+  sp_str_t tmp = sp_fs_join_path(a, sp_fs_get_cwd(a), sp_str_lit(".tmp"));
   if (!sp_fs_exists(tmp)) {
     sp_fs_create_dir(tmp);
   }
@@ -213,9 +181,7 @@ void sp_test_file_manager_init(sp_test_file_manager_t* fs) {
   fs->arena = sp_mem_arena_new(sp_mem_os_new());
   fs->mem = sp_mem_arena_as_allocator(fs->arena);
   fs->paths.bin = sp_fs_get_exe_path(fs->mem);
-  fs->paths.root = sp_test_file_manager_get_repo_root(fs->mem);
-  fs->paths.build = fs->paths.root;
-  fs->paths.test = sp_test_file_manager_get_top_level(fs->mem, fs->paths.root);
+  fs->paths.test = sp_test_file_manager_get_top_level(fs->mem);
 
   if (!sp_fs_exists(fs->paths.test)) {
     sp_fs_create_dir(fs->paths.test);
@@ -235,7 +201,7 @@ void sp_test_file_create_ex(sp_test_file_config_t config) {
   sp_fs_remove_file(config.path);
 
   sp_io_file_writer_t stream = sp_zero;
-  sp_io_file_writer_from_path(&stream, config.path, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_file_writer_from_path(&stream, config.path);
   SP_ASSERT(stream.fd != 0);
 
   if (config.content.len > 0) {
@@ -259,11 +225,6 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t rel
 
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
   if (sp_str_empty(manager->paths.test)) {
-    return;
-  }
-
-  if (sp_str_equal(manager->paths.test, manager->paths.root)) {
-    SP_ASSERT(false);
     return;
   }
 

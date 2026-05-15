@@ -63,34 +63,36 @@ void run_io_dyn_test(int* utest_result, sp_mem_t mem, io_dyn_test_t t) {
 }
 
 UTEST_F(io, dyn_write) {
-  run_io_dyn_test(utest_result, ut.mem, (io_dyn_test_t){
+  run_io_dyn_test(utest_result, ut.mem, SP_RVAL(io_dyn_test_t){
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcd", SP_OK, 4 } },
       { .kind = IO_STEP_SIZE,  .size  = { SP_OK, 4 } },
     },
-    .expect.content = "abcd",
+    .expect = {
+      .content = "abcd",
+    }
   });
 }
 
 UTEST_F(io, dyn_multiple_writes) {
-  run_io_dyn_test(utest_result, ut.mem, (io_dyn_test_t){
+  run_io_dyn_test(utest_result, ut.mem, SP_RVAL(io_dyn_test_t){
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
       { .kind = IO_STEP_WRITE, .write = { "def", SP_OK, 3 } },
       { .kind = IO_STEP_WRITE, .write = { "ghi", SP_OK, 3 } },
       { .kind = IO_STEP_SIZE,  .size  = { SP_OK, 9 } },
     },
-    .expect.content = "abcdefghi",
+    .expect = { .content = "abcdefghi" },
   });
 }
 
 UTEST_F(io, dyn_seek) {
-  run_io_dyn_test(utest_result, ut.mem, (io_dyn_test_t){
+  run_io_dyn_test(utest_result, ut.mem, SP_RVAL(io_dyn_test_t){
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "12345678", SP_OK, 8 } },
       { .kind = IO_STEP_SEEK,  .seek  = { 4, SP_IO_SEEK_SET, SP_OK, 4 } },
     },
-    .expect.content = "12345678",
+    .expect = { .content = "12345678" },
   });
 }
 

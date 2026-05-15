@@ -217,7 +217,6 @@ SP_API sp_color_t   sp_color_rgb_to_hsv(sp_color_t color);
 SP_API sp_color_t   sp_color_hsv_to_rgb(sp_color_t color);
 SP_API f32          sp_inv_sqrtf(f32 value);
 SP_API f32          sp_lerp(f32 a, f32 t, f32 b);
-SP_API f32          sp_clamp(f32 low, f32 value, f32 high);
 SP_API sp_vec2_t    sp_vec2(f32 x, f32 y);
 SP_API sp_vec3_t    sp_vec3(f32 x, f32 y, f32 z);
 SP_API sp_vec4_t    sp_vec4(f32 x, f32 y, f32 z, f32 w);
@@ -403,17 +402,6 @@ f32 sp_inv_sqrtf(f32 value) {
 
 f32 sp_lerp(f32 a, f32 t, f32 b) {
   return (1.0f - t) * a + t * b;
-}
-
-f32 sp_clamp(f32 low, f32 value, f32 high) {
-  f32 result = value;
-  if (result < low) {
-    result = low;
-  }
-  if (result > high) {
-    result = high;
-  }
-  return result;
 }
 
 sp_vec2_t sp_vec2(f32 x, f32 y) {

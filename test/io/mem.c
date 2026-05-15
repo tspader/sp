@@ -167,7 +167,7 @@ UTEST_F(io_mem, write_fits) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "hello", SP_OK, 5 } },
     },
-    .expect.content = "hello",
+    .expect = { .content = "hello" },
   });
 }
 
@@ -177,7 +177,7 @@ UTEST_F(io_mem, write_exact_fit) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcd", SP_OK, 4 } },
     },
-    .expect.content = "abcd",
+    .expect = { .content = "abcd" },
   });
 }
 
@@ -187,7 +187,7 @@ UTEST_F(io_mem, write_overflow) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcdefgh", SP_ERR_IO_NO_SPACE, 4 } },
     },
-    .expect.content = "abcd",
+    .expect = { .content = "abcd" },
   });
 }
 
@@ -197,7 +197,7 @@ UTEST_F(io_mem, write_barely_overflows) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcde", SP_ERR_IO_NO_SPACE, 4 } },
     },
-    .expect.content = "abcd",
+    .expect = { .content = "abcd" },
   });
 }
 
@@ -208,7 +208,7 @@ UTEST_F(io_mem, write_smaller_after_overflow) {
       { .kind = IO_STEP_WRITE, .write = { "abcd", SP_OK, 4 } },
       { .kind = IO_STEP_WRITE, .write = { "x", SP_ERR_IO_NO_SPACE, 0 } },
     },
-    .expect.content = "abcd",
+    .expect = { .content = "abcd" },
   });
 }
 
@@ -220,7 +220,7 @@ UTEST_F(io_mem, write_appends) {
       { .kind = IO_STEP_WRITE, .write = { "def", SP_OK, 3 } },
       { .kind = IO_STEP_WRITE, .write = { "ghi", SP_OK, 3 } },
     },
-    .expect.content = "abcdefghi",
+    .expect = { .content = "abcdefghi" },
   });
 }
 
@@ -253,7 +253,7 @@ UTEST_F(io_mem, copy_full) {
     .steps = {
       { .kind = IO_STEP_COPY, .copy = { 8, SP_OK, 10 } },
     },
-    .expect.content = "0123456789",
+    .expect = { .content = "0123456789" },
   });
 }
 
@@ -264,7 +264,7 @@ UTEST_F(io_mem, copy_loops) {
     .steps = {
       { .kind = IO_STEP_COPY, .copy = { 4, SP_OK, 16 } },
     },
-    .expect.content = "ABCDEFGHIJKLMNOP",
+    .expect = { .content = "ABCDEFGHIJKLMNOP" },
   });
 }
 
@@ -285,7 +285,7 @@ UTEST_F(io_mem, copy_writer_no_space) {
     .steps = {
       { .kind = IO_STEP_COPY, .copy = { 8, SP_ERR_IO_NO_SPACE, 4 } },
     },
-    .expect.content = "0123",
+    .expect = { .content = "0123" },
   });
 }
 

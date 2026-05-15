@@ -134,7 +134,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 
 #if defined(SP_MACOS)
   sp_io_file_writer_t s = sp_zero;
-  sp_io_file_writer_from_path(&s, test_file, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_file_writer_from_path(&s, test_file);
   sp_io_write_str(&s.base, sp_str_lit("modified content"), SP_NULLPTR);
   sp_io_file_writer_close(&s);
 
@@ -280,7 +280,7 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
   // Modify the file — should NOT fire since we only watch REMOVED
   {
     sp_io_file_writer_t w = sp_zero;
-    sp_io_file_writer_from_path(&w, test_file, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_file_writer_from_path(&w, test_file);
     sp_io_write_str(&w.base, sp_str_lit("modified"), SP_NULLPTR);
     sp_io_file_writer_close(&w);
   }
@@ -390,7 +390,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
   ut.change_detected = false;
   fmon_history.count = 0;
 
-  sp_sys_rename_s(old_file, new_file);
+  sp_sys_rename_s(sp_fs_open_cwd(), old_file, sp_fs_open_cwd(), new_file);
 
   sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);

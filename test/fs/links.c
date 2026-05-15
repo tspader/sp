@@ -48,7 +48,7 @@ UTEST_F(fs, create_hard_link_file) {
   sp_str_t link = sp_fs_join_path(a, sandbox, sp_str_lit("file.hard"));
 
   sp_io_file_writer_t writer = sp_zero;
-  sp_io_file_writer_from_path(&writer, source, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_file_writer_from_path(&writer, source);
   sp_io_write_str(&writer.base, sp_str_lit("updated"), SP_NULLPTR);
   sp_io_file_writer_close(&writer);
   sp_str_t link_content = sp_zero;

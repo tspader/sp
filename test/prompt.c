@@ -1,5 +1,4 @@
 #define SP_UNIMPLEMENTED() ((void)0)
-#define LINENOISE_IMPLEMENTATION
 #define SP_PROMPT_IMPLEMENTATION
 #include "sp/sp_prompt.h"
 #include "test.h"

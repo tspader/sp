@@ -78,8 +78,7 @@ s32 main(s32 num_args, const c8** args) {
   num_args = argparse_parse(&argparse, num_args, args);
 
   if (!function_str) {
-    argparse_usage(&argparse);
-    SP_EXIT_FAILURE();
+    return 0;
   }
 
   test_proc_function_t function = test_proc_function_from_str(sp_str_view(function_str));

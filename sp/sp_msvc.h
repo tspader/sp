@@ -183,7 +183,7 @@ sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
   sp_str_t lib_dir = sp_fs_join_path(mem, sdk_root, sp_str_lit("Lib"));
   sp_str_t arch_str = sp_msvc_arch_str(arch);
 
-  for (sp_fs_it_t it = sp_fs_it_new(lib_dir); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
+  for (sp_fs_it_t it = sp_fs_it_new(mem, lib_dir); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
     if (it.entry.kind != SP_FS_KIND_DIR) continue;
     sp_str_t name = it.entry.name;
     if (!sp_str_starts_with(name, sp_str_lit("10."))) continue;
@@ -239,7 +239,7 @@ sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
 
   sp_str_t arch_str = sp_msvc_arch_str(arch);
 
-  for (sp_fs_it_t it = sp_fs_it_new(instances_dir); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
+  for (sp_fs_it_t it = sp_fs_it_new(mem, instances_dir); sp_fs_it_valid(&it); sp_fs_it_next(&it)) {
     if (it.entry.kind != SP_FS_KIND_DIR) continue;
 
     sp_str_t state_path = sp_fs_join_path(mem, it.entry.path, sp_str_lit("state.json"));

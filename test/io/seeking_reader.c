@@ -86,7 +86,7 @@ typedef struct {
 void run_io_seeking_reader_file_test(int* utest_result, sp_str_t path, io_seeking_reader_file_test_t t) {
   {
     sp_io_file_writer_t w = sp_zero;
-    sp_io_file_writer_from_path(&w, path, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_file_writer_from_path(&w, path);
     if (t.content) sp_io_write(&w.base, t.content, sp_cstr_len(t.content), SP_NULLPTR);
     sp_io_file_writer_close(&w);
   }
@@ -166,7 +166,7 @@ UTEST_F(io, seeking_reader_file_seek_invalid) {
   run_io_seeking_reader_file_test(utest_result, ut.file_path, (io_seeking_reader_file_test_t){
     .content = "0123456789",
     .steps = {
-      { .kind = IO_STEP_SEEK, .seek = { -10, SP_IO_SEEK_SET, SP_ERR_IO_SEEK_FAILED, -1 } },
+      { .kind = IO_STEP_SEEK, .seek = { -10, SP_IO_SEEK_SET, SP_ERR_IO_SEEK_INVALID, -1 } },
     },
   });
 }

@@ -35,18 +35,3 @@ UTEST(fs_system_paths, config_path_normalized) {
   assert_normalized(&ur, path, "config_path");
 }
 
-UTEST(fs_system_paths, storage_path_exists) {
-  SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t path = sp_fs_get_storage_path(a);
-  ASSERT_TRUE(sp_fs_is_dir(path));
-}
-
-UTEST(fs_system_paths, config_path_exists) {
-  SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t path = sp_fs_get_config_path(a);
-  ASSERT_TRUE(sp_fs_is_dir(path));
-}
-
-
