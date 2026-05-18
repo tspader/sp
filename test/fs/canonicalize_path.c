@@ -17,14 +17,14 @@ static void run_canon_test(s32* utest_result, sp_test_file_manager_t* fm, canon_
 
   if (t.setup[0].path) {
     sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
-    sp_fs_create_dir_a(sandbox);
+    sp_fs_create_dir(sandbox);
     fs_apply_setup(utest_result, fm, sandbox, t.setup);
-    input = sp_fs_join_path_a(fm->mem, sandbox, sp_str_view(t.input));
+    input = sp_fs_join_path(fm->mem, sandbox, sp_str_view(t.input));
   } else {
     input = sp_str_view(t.input);
   }
 
-  sp_str_t result = sp_fs_canonicalize_path_a(fm->mem, input);
+  sp_str_t result = sp_fs_canonicalize_path(fm->mem, input);
 
   if (t.expect_nonempty && result.len == 0) {
     SP_TEST_REPORT("{}: expected nonempty", sp_fmt_cstr(t.label));
@@ -54,7 +54,7 @@ static void run_canon_test(s32* utest_result, sp_test_file_manager_t* fm, canon_
       SP_FAIL();
     }
   }
-  if (t.expect_exists && !sp_fs_exists_a(result)) {
+  if (t.expect_exists && !sp_fs_exists(result)) {
     SP_TEST_REPORT("{}: expected result to exist", sp_fmt_cstr(t.label));
     SP_FAIL();
   }
@@ -267,8 +267,6 @@ UTEST_F(fs, canon_symlink_with_dotdot) {
   });
 }
 
-// ---- idempotency ----
-
 UTEST_F(fs, canon_idempotent) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
@@ -284,34 +282,30 @@ UTEST_F(fs, canon_idempotent) {
 
   // run a second pass: canonicalizing an already-canonical path should be the same
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("canon_idempotent"));
-  sp_str_t path = sp_fs_join_path_a(a, sandbox, sp_str_lit("stable.txt"));
-  sp_str_t first = sp_fs_canonicalize_path_a(a, path);
-  sp_str_t second = sp_fs_canonicalize_path_a(a, first);
+  sp_str_t path = sp_fs_join_path(a, sandbox, sp_str_lit("stable.txt"));
+  sp_str_t first = sp_fs_canonicalize_path(a, path);
+  sp_str_t second = sp_fs_canonicalize_path(a, first);
   SP_EXPECT_STR_EQ(first, second);
 }
 
 UTEST_F(fs, canon_exe_idempotent) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
-  sp_str_t exe = sp_fs_get_exe_path_a(a);
-  sp_str_t canonical = sp_fs_canonicalize_path_a(a, exe);
+  sp_str_t exe = sp_fs_get_exe_path(a);
+  sp_str_t canonical = sp_fs_canonicalize_path(a, exe);
   SP_EXPECT_STR_EQ(canonical, exe);
 }
-
-// ---- cwd interaction ----
 
 UTEST_F(fs, canon_cwd_matches_dot) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
-  sp_str_t old_cwd = sp_fs_get_cwd_a(a);
+  sp_str_t old_cwd = sp_fs_get_cwd(a);
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("canon_cwd"));
-  sp_fs_create_dir_a(sandbox);
+  sp_fs_create_dir(sandbox);
 
   ASSERT_EQ(sp_sys_chdir_s(sandbox), 0);
-  sp_str_t cwd = sp_fs_get_cwd_a(a);
-  sp_str_t canonical_dot = sp_fs_canonicalize_path_a(a, sp_str_lit("."));
+  sp_str_t cwd = sp_fs_get_cwd(a);
+  sp_str_t canonical_dot = sp_fs_canonicalize_path(a, sp_str_lit("."));
   SP_EXPECT_STR_EQ(cwd, canonical_dot);
   ASSERT_EQ(sp_sys_chdir_s(old_cwd), 0);
 }
-
-SP_TEST_MAIN()

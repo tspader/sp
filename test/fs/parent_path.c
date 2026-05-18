@@ -30,4 +30,4 @@ UTEST(fs_parent_path, cases) {
   }
 }
 
-SP_TEST_MAIN()
+

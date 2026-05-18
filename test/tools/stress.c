@@ -31,8 +31,8 @@ UTEST(stress, dyn_array) {
 }
 
 UTEST(stress, hash_table) {
-  sp_ht_a(u64, u64) ht = SP_NULLPTR;
-  sp_ht_init_a(sp_mem_os_new(), ht);
+  sp_ht(u64, u64) ht = SP_NULLPTR;
+  sp_ht_init(sp_mem_os_new(), ht);
 
   const s32 count = 10000;
 
@@ -266,12 +266,12 @@ UTEST(stress, sp_context) {
       case CONTEXT_STRESS_FRAGMENTATION: {
         sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
         s32 num_allocs = 10 + (rand() % 200);
-        u8** ptrs = sp_alloc_n_a(scratch.mem, u8*, num_allocs);
-        u32* sizes = sp_alloc_n_a(scratch.mem, u32, num_allocs);
+        u8** ptrs = sp_alloc_n(scratch.mem, u8*, num_allocs);
+        u32* sizes = sp_alloc_n(scratch.mem, u32, num_allocs);
 
         sp_for(it, num_allocs) {
           sizes[it] = 1 + (rand() % 1024);
-          ptrs[it] = sp_alloc_a(scratch.mem, sizes[it]);
+          ptrs[it] = sp_alloc(scratch.mem, sizes[it]);
           u8 pattern = (u8)((it + op) & 0xFF);
           sp_mem_fill_u8(ptrs[it], sizes[it], pattern);
         }
@@ -290,15 +290,15 @@ UTEST(stress, sp_context) {
       }
       case CONTEXT_STRESS_NESTING: {
         sp_mem_arena_marker_t s1 = sp_mem_begin_scratch();
-        u64* outer = sp_alloc_a(s1.mem, sizeof(u64));
+        u64* outer = sp_alloc(s1.mem, sizeof(u64));
         *outer = 0xCAFEBABE;
         {
           sp_mem_arena_marker_t s2 = sp_mem_begin_scratch();
-          u64* inner = sp_alloc_a(s2.mem, sizeof(u64));
+          u64* inner = sp_alloc(s2.mem, sizeof(u64));
           *inner = 0xDEADBEEF;
           {
              sp_mem_arena_marker_t s3 = sp_mem_begin_scratch();
-             u8* big = sp_alloc_a(s3.mem, 5000);
+             u8* big = sp_alloc(s3.mem, 5000);
              sp_mem_fill_u8(big, 5000, 0xAA);
 
              ASSERT_EQ(*outer, 0xCAFEBABE);
@@ -317,7 +317,7 @@ UTEST(stress, sp_context) {
       }
       case CONTEXT_STRESS_REALLOC: {
         sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-        u8* ptr = sp_alloc_a(s.mem, 16);
+        u8* ptr = sp_alloc(s.mem, 16);
 
         sp_mem_fill_u8(ptr, 16, 0x11);
         ptr = sp_mem_allocator_realloc(s.mem, ptr, 32);
@@ -337,10 +337,10 @@ UTEST(stress, sp_context) {
         sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
         sp_for(it, 50) {
-          u8* b = sp_alloc_type_a(s.mem, u8);
+          u8* b = sp_alloc_type(s.mem, u8);
           *b = 0xFF;
 
-          u64* aligned = sp_alloc_type_a(s.mem, u64);
+          u64* aligned = sp_alloc_type(s.mem, u64);
           uintptr_t address = (uintptr_t)aligned;
           EXPECT_EQ(address % SP_MEM_ALIGNMENT, 0);
           *aligned = (u64)it;
@@ -389,12 +389,12 @@ void fmon_stress_poll(sp_fmon_t* monitor) {
 }
 
 void fmon_stress_create_dir_tree(sp_str_t base, s32 depth, sp_da(sp_str_t)* dirs) {
-  sp_da_push(*dirs, sp_str_copy_a(sp_mem_get_scratch(), base));
+  sp_da_push(*dirs, sp_str_copy(sp_mem_get_scratch(), base));
   if (depth <= 0) return;
 
   for (s32 i = 0; i < FMON_STRESS_DIRS_PER_LEVEL; i++) {
-    sp_str_t name = sp_fmt_a(sp_mem_get_scratch(), "d{}", sp_fmt_int(i)).value;
-    sp_str_t child = sp_fs_join_path_a(sp_mem_get_scratch(), base, name);
+    sp_str_t name = sp_fmt(sp_mem_get_scratch(), "d{}", sp_fmt_int(i)).value;
+    sp_str_t child = sp_fs_join_path(sp_mem_get_scratch(), base, name);
     sp_fs_create_dir(child);
     fmon_stress_create_dir_tree(child, depth - 1, dirs);
   }
@@ -406,7 +406,7 @@ UTEST(stress, fmon) {
   sp_test_file_manager_init(&file_manager);
 
   fmon_stress_counters_t counters = {0};
-  sp_fmon_t* monitor = sp_alloc_type_a(sp_mem_os_new(), sp_fmon_t);
+  sp_fmon_t* monitor = sp_alloc_type(sp_mem_os_new(), sp_fmon_t);
   sp_fmon_init(monitor, fmon_stress_callback,
                SP_FILE_CHANGE_EVENT_ADDED | SP_FILE_CHANGE_EVENT_MODIFIED | SP_FILE_CHANGE_EVENT_REMOVED,
                &counters);
@@ -440,11 +440,11 @@ UTEST(stress, fmon) {
 
     while (files_created < batch_end) {
       sp_str_t dir = dirs[dir_idx % num_dirs];
-      sp_str_t name = sp_fmt_a(sp_mem_get_scratch(), "f{}.txt", sp_fmt_uint(files_created)).value;
-      sp_str_t path = sp_fs_join_path_a(sp_mem_get_scratch(), dir, name);
+      sp_str_t name = sp_fmt(sp_mem_get_scratch(), "f{}.txt", sp_fmt_uint(files_created)).value;
+      sp_str_t path = sp_fs_join_path(sp_mem_get_scratch(), dir, name);
 
       sp_io_writer_t writer = sp_zero;
-      sp_io_file_writer_from_path(&writer, path, SP_IO_WRITE_MODE_OVERWRITE);
+      sp_io_file_writer_from_path(&writer, path);
       sp_io_write_str(&writer, sp_str_lit("initial"), SP_NULLPTR);
       sp_io_writer_close(&writer);
 
@@ -469,7 +469,7 @@ UTEST(stress, fmon) {
     while (files_modified < batch_end) {
       sp_str_t path = files[files_modified];
       sp_io_writer_t writer = sp_zero;
-      sp_io_file_writer_from_path(&writer, path, SP_IO_WRITE_MODE_OVERWRITE);
+      sp_io_file_writer_from_path(&writer, path);
       sp_io_write_str(&writer, sp_str_lit("modified"), SP_NULLPTR);
       sp_io_writer_close(&writer);
       files_modified++;
@@ -508,7 +508,7 @@ UTEST(stress, fmon) {
 
   // Cleanup
   sp_fmon_deinit(monitor);
-  sp_free_a(sp_mem_os_new(), monitor);
+  sp_free(sp_mem_os_new(), monitor);
   sp_da_free(files);
   sp_da_free(dirs);
   sp_test_file_manager_cleanup(&file_manager);

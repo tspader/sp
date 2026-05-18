@@ -130,7 +130,7 @@ UTEST_EXTERN struct utest_state_s utest_state;
 #endif
 #define UTEST_PRINTF(...)                                                      \
   do {                                                                         \
-    sp_str_t _utest_fmtd = sp_fmt_a(utest_state.mem, __VA_ARGS__).value;                               \
+    sp_str_t _utest_fmtd = sp_fmt(utest_state.mem, __VA_ARGS__).value;                               \
     sp_os_print(_utest_fmtd);                                                 \
     if (utest_state.has_output) {                                              \
       sp_io_write_str(&utest_state.output.base, _utest_fmtd, SP_NULLPTR);    \
@@ -164,11 +164,6 @@ UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(float f) {
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(double d);
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(double d) {
   UTEST_PRINTF("{:.3}", sp_fmt_float(d));
-}
-
-UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long double d);
-UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(long double d) {
-  UTEST_PRINTF("{:.3}", sp_fmt_float(UTEST_CAST(f64, d)));
 }
 
 UTEST_WEAK UTEST_OVERLOADABLE void utest_type_printer(int i);
@@ -597,9 +592,9 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       utest_state.tests[index].set = set;                                    \
       utest_state.tests[index].test = test;                                    \
       utest_state.tests[index].index = 0;                                      \
-      sp_mem_copy(name_part, name, name_size);                                 \
-      sp_mem_copy(set_part, set, set_size);                                 \
-      sp_mem_copy(test_part, test, test_size);                                 \
+      sp_mem_copy(name, name_part, name_size);                                 \
+      sp_mem_copy(set, set_part, set_size);                                 \
+      sp_mem_copy(test, test_part, test_size);                                 \
     } else {                                                                   \
       if (utest_state.tests) {                                                 \
         sp_mem_os_free(utest_state.tests);                                     \
@@ -622,6 +617,11 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
 #define UTEST_F_TEARDOWN(FIXTURE)                                              \
   static void utest_f_teardown_##FIXTURE(int *utest_result,                    \
                                          struct FIXTURE *utest_fixture)
+
+#define UTEST_EMPTY_FIXTURE(FIXTURE) \
+  struct FIXTURE { u32 placeholder; }; \
+  UTEST_F_SETUP(FIXTURE) {} \
+  UTEST_F_TEARDOWN(FIXTURE) {}
 
 #define UTEST_F(FIXTURE, NAME)                                                 \
   UTEST_SURPRESS_WARNINGS_BEGIN                                                \
@@ -664,9 +664,9 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       utest_state.tests[index].set = set;                                    \
       utest_state.tests[index].test = test;                                    \
       utest_state.tests[index].index = 0;                                      \
-      sp_mem_copy(name_part, name, name_size);                                 \
-      sp_mem_copy(set_part, set, set_size);                                    \
-      sp_mem_copy(test_part, test, test_size);                                 \
+      sp_mem_copy(name, name_part, name_size);                                 \
+      sp_mem_copy(set, set_part, set_size);                                    \
+      sp_mem_copy(test, test_part, test_size);                                 \
     } else {                                                                   \
       if (utest_state.tests) {                                                 \
         sp_mem_os_free(utest_state.tests);                                     \
@@ -711,7 +711,7 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     for (i = 0; i < (INDEX); i++) {                                            \
       const u64 index = utest_state.tests_length++;                            \
       const c8 name_part[] = #FIXTURE "." #NAME;                               \
-      sp_str_t fmtd = sp_fmt_a(sp_mem_get_scratch(), "{}/{}", sp_fmt_cstr(name_part),                \
+      sp_str_t fmtd = sp_fmt(sp_mem_get_scratch(), "{}/{}", sp_fmt_cstr(name_part),                \
                                        sp_fmt_uint(i)).value;                         \
       u64 name_size = fmtd.len + 1;                                           \
       c8 *name = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(name_size));            \
@@ -724,7 +724,7 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
         utest_state.tests[index].func = &utest_i_##FIXTURE##_##NAME##_##INDEX; \
         utest_state.tests[index].index = i;                                    \
         utest_state.tests[index].name = name;                                  \
-        sp_mem_copy(fmtd.data, name, fmtd.len);                               \
+        sp_mem_copy(name, fmtd.data, fmtd.len);                               \
         name[fmtd.len] = '\0';                                                \
       } else {                                                                 \
         if (utest_state.tests) {                                               \
@@ -914,13 +914,12 @@ s32 utest_main(s32 argc, const c8 **argv) {
     } else if (0 ==
                UTEST_STRNCMP(argv[index], output_str, sizeof(output_str) - 1)) {
       sp_str_t path = sp_str_view(argv[index] + sizeof(output_str) - 1);
-      sp_io_file_writer_from_path(&utest_state.output, path,
-                                  SP_IO_WRITE_MODE_OVERWRITE);
+      sp_io_file_writer_from_path(&utest_state.output, path);
       utest_state.has_output = 1;
     } else if (0 == UTEST_STRNCMP(argv[index], list_str,
                                   sizeof(list_str) - 1)) {
       for (index = 0; index < utest_state.tests_length; index++) {
-        sp_log_a("{}", sp_fmt_cstr(utest_state.tests[index].name));
+        sp_log("{}", sp_fmt_cstr(utest_state.tests[index].name));
       }
       /* when printing the test list, don't actually run the tests */
       return 0;
@@ -997,7 +996,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
     abi = sp_str_lit("musl");
   #endif
 
-  sp_log_a(
+  sp_log(
     "> running {.fg brightblack} test cases on {}-{}-{}",
     sp_fmt_uint(ran_tests),
     sp_fmt_str(arch), sp_fmt_str(os), sp_fmt_str(abi)
@@ -1011,7 +1010,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
       continue;
     }
 
-    sp_print_a("{}.{}...", sp_fmt_cstr(utest_state.tests[index].set), sp_fmt_cstr(utest_state.tests[index].test));
+    sp_print("{}.{}...", sp_fmt_cstr(utest_state.tests[index].set), sp_fmt_cstr(utest_state.tests[index].test));
 
     ns = utest_ns();
     utest_state.tests[index].func(&result, utest_state.tests[index].index);
@@ -1052,40 +1051,40 @@ s32 utest_main(s32 argc, const c8 **argv) {
       }
 
       if (UTEST_TEST_FAILURE == result) {
-        sp_print_a("{.fg red} ", sp_fmt_cstr("failed"));
+        sp_print("{.fg red} ", sp_fmt_cstr("failed"));
       } else if (UTEST_TEST_SKIPPED == result) {
-        sp_print_a("{.fg yellow} ", sp_fmt_cstr("skipped"));
+        sp_print("{.fg yellow} ", sp_fmt_cstr("skipped"));
       } else {
-        sp_print_a("{.fg green} ", sp_fmt_cstr("ok"));
+        sp_print("{.fg green} ", sp_fmt_cstr("ok"));
       }
-      sp_log_a("{.fg brightblack}{.fg brightblack}", sp_fmt_int(time), sp_fmt_cstr(units[unit_index]));
+      sp_log("{.fg brightblack}{.fg brightblack}", sp_fmt_int(time), sp_fmt_cstr(units[unit_index]));
     }
   }
 
-  sp_log_a("{.fg green} {} test cases ran.",
+  sp_log("{.fg green} {} test cases ran.",
          sp_fmt_cstr("[==========]"),
          sp_fmt_uint(ran_tests));
-  sp_log_a("{}[  PASSED  ]{} {} tests.",
+  sp_log("{}[  PASSED  ]{} {} tests.",
          sp_fmt_cstr(SP_ANSI_FG_GREEN), sp_fmt_cstr(SP_ANSI_RESET),
          sp_fmt_uint(ran_tests - failed - skipped));
 
   if (0 != skipped) {
-    sp_log_a("{}[  SKIPPED ]{} {} tests, listed below:",
+    sp_log("{}[  SKIPPED ]{} {} tests, listed below:",
            sp_fmt_cstr(SP_ANSI_FG_YELLOW), sp_fmt_cstr(SP_ANSI_RESET),
            sp_fmt_uint(skipped));
     for (index = 0; index < skipped_testcases_length; index++) {
-      sp_log_a("{}[  SKIPPED ]{} {}",
+      sp_log("{}[  SKIPPED ]{} {}",
              sp_fmt_cstr(SP_ANSI_FG_YELLOW), sp_fmt_cstr(SP_ANSI_RESET),
              sp_fmt_cstr(utest_state.tests[skipped_testcases[index]].name));
     }
   }
 
   if (0 != failed) {
-    sp_log_a("{}[  FAILED  ]{} {} tests, listed below:",
+    sp_log("{}[  FAILED  ]{} {} tests, listed below:",
            sp_fmt_cstr(SP_ANSI_FG_RED), sp_fmt_cstr(SP_ANSI_RESET),
            sp_fmt_uint(failed));
     for (index = 0; index < failed_testcases_length; index++) {
-      sp_log_a("{}[  FAILED  ]{} {}",
+      sp_log("{}[  FAILED  ]{} {}",
              sp_fmt_cstr(SP_ANSI_FG_RED), sp_fmt_cstr(SP_ANSI_RESET),
              sp_fmt_cstr(utest_state.tests[failed_testcases[index]].name));
     }

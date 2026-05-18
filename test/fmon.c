@@ -13,7 +13,7 @@
 
 static bool paths_equal(sp_str_t a, sp_str_t b) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  bool eq = sp_str_equal(sp_fs_normalize_path_a(s.mem, a), sp_fs_normalize_path_a(s.mem, b));
+  bool eq = sp_str_equal(sp_fs_normalize_path(s.mem, a), sp_fs_normalize_path(s.mem, b));
   sp_mem_end_scratch(s);
   return eq;
 }
@@ -64,18 +64,18 @@ void fmon_callback(sp_fmon_t* monitor, sp_fmon_event_t* change, void* userdata) 
   sp_test_file_monitor* fixture = (sp_test_file_monitor*)userdata;
   fixture->change_detected = true;
   fixture->last_event = change->events;
-  fixture->last_file_path = sp_str_copy_a(sp_mem_get_scratch(), change->file_path);
+  fixture->last_file_path = sp_str_copy(sp_mem_get_scratch(), change->file_path);
 
   if (fmon_history.count < SP_TEST_FMON_MAX_RECORDS) {
     sp_test_fmon_record_t* r = &fmon_history.records[fmon_history.count++];
     r->events = change->events;
-    r->file_path = sp_str_copy_a(sp_mem_get_scratch(), change->file_path);
+    r->file_path = sp_str_copy(sp_mem_get_scratch(), change->file_path);
   }
 }
 
 UTEST_F(sp_test_file_monitor, init_and_cleanup) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   EXPECT_NE(ut.monitor.os, SP_NULLPTR);
 }
@@ -83,16 +83,16 @@ UTEST_F(sp_test_file_monitor, init_and_cleanup) {
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, detects_file_creation) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ADDED, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ADDED, &ut);
 
   sp_str_t dir = sp_test_file_path(&ut.file_manager, sp_str_lit("watched.dir"));
-  sp_fs_create_dir_a(dir);
+  sp_fs_create_dir(dir);
   sp_fmon_add_dir(&ut.monitor, dir);
 
   sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
-  sp_str_t file = sp_fs_join_path_a(ut.mem, dir, sp_str_lit("new.file"));
+  sp_str_t file = sp_fs_join_path(ut.mem, dir, sp_str_lit("new.file"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = file,
     .content = sp_str_lit("spum"),
@@ -116,12 +116,12 @@ UTEST_F(sp_test_file_monitor, detects_file_creation) {
 
 UTEST_F(sp_test_file_monitor, detects_file_modification) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_MODIFIED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_fs_create_dir_a(test_dir);
+  sp_fs_create_dir(test_dir);
 
-  sp_str_t test_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("modify_file.txt"));
+  sp_str_t test_file = sp_fs_join_path(ut.mem, test_dir, sp_str_lit("modify_file.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
     .content = sp_str_lit("initial content"),
@@ -134,7 +134,7 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 
 #if defined(SP_MACOS)
   sp_io_file_writer_t s = sp_zero;
-  sp_io_file_writer_from_path(&s, test_file, SP_IO_WRITE_MODE_OVERWRITE);
+  sp_io_file_writer_from_path(&s, test_file);
   sp_io_write_str(&s.base, sp_str_lit("modified content"), SP_NULLPTR);
   sp_io_file_writer_close(&s);
 
@@ -156,12 +156,12 @@ UTEST_F(sp_test_file_monitor, detects_file_modification) {
 
 UTEST_F(sp_test_file_monitor, detects_file_deletion) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_fs_create_dir_a(test_dir);
+  sp_fs_create_dir(test_dir);
 
-  sp_str_t test_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("delete_file.txt"));
+  sp_str_t test_file = sp_fs_join_path(ut.mem, test_dir, sp_str_lit("delete_file.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
     .content = sp_str_lit("to be deleted"),
@@ -172,7 +172,7 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
   sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
 
-  sp_fs_remove_file_a(test_file);
+  sp_fs_remove_file(test_file);
 
   bool timed_out = true;
   sp_for_n(FMON_POLL_ITERATIONS) {
@@ -192,13 +192,13 @@ UTEST_F(sp_test_file_monitor, detects_file_deletion) {
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_fs_create_dir_a(test_dir);
+  sp_fs_create_dir(test_dir);
   sp_fmon_add_dir(&ut.monitor, test_dir);
 
-  sp_str_t test_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("lifecycle.txt"));
+  sp_str_t test_file = sp_fs_join_path(ut.mem, test_dir, sp_str_lit("lifecycle.txt"));
 
   sp_fmon_process_changes(&ut.monitor);
   ut.change_detected = false;
@@ -241,7 +241,7 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
   EXPECT_TRUE((ut.last_event & SP_FILE_CHANGE_EVENT_MODIFIED) != 0);
 
   ut.change_detected = false;
-  sp_fs_remove_file_a(test_file);
+  sp_fs_remove_file(test_file);
 
   timed_out = true;
   sp_for_n(FMON_POLL_ITERATIONS) {
@@ -261,12 +261,12 @@ UTEST_F(sp_test_file_monitor, multiple_events_same_file) {
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, event_filtering) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_REMOVED, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("filter_test"));
-  sp_fs_create_dir_a(test_dir);
+  sp_fs_create_dir(test_dir);
 
-  sp_str_t test_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("filter.txt"));
+  sp_str_t test_file = sp_fs_join_path(ut.mem, test_dir, sp_str_lit("filter.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = test_file,
     .content = sp_str_lit("hello"),
@@ -280,7 +280,7 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
   // Modify the file — should NOT fire since we only watch REMOVED
   {
     sp_io_file_writer_t w = sp_zero;
-    sp_io_file_writer_from_path(&w, test_file, SP_IO_WRITE_MODE_OVERWRITE);
+    sp_io_file_writer_from_path(&w, test_file);
     sp_io_write_str(&w.base, sp_str_lit("modified"), SP_NULLPTR);
     sp_io_file_writer_close(&w);
   }
@@ -293,7 +293,7 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
   EXPECT_FALSE(ut.change_detected);
 
   // Delete it — should fire
-  sp_fs_remove_file_a(test_file);
+  sp_fs_remove_file(test_file);
 
   bool timed_out = true;
   sp_for_n(FMON_POLL_ITERATIONS) {
@@ -312,13 +312,13 @@ UTEST_F(sp_test_file_monitor, event_filtering) {
 
 UTEST_F(sp_test_file_monitor, add_file_filtering) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("file_filter_test"));
-  sp_fs_create_dir_a(test_dir);
+  sp_fs_create_dir(test_dir);
 
-  sp_str_t watched_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("watched.txt"));
-  sp_str_t ignored_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("ignored.txt"));
+  sp_str_t watched_file = sp_fs_join_path(ut.mem, test_dir, sp_str_lit("watched.txt"));
+  sp_str_t ignored_file = sp_fs_join_path(ut.mem, test_dir, sp_str_lit("ignored.txt"));
 
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = watched_file,
@@ -371,13 +371,13 @@ UTEST_F(sp_test_file_monitor, add_file_filtering) {
 #if !defined(SP_MACOS) || defined(SP_FMON_MACOS_USE_FSEVENTS)
 UTEST_F(sp_test_file_monitor, rename_file) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("rename_test"));
-  sp_fs_create_dir_a(test_dir);
+  sp_fs_create_dir(test_dir);
 
-  sp_str_t old_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("before.txt"));
-  sp_str_t new_file = sp_fs_join_path_a(ut.mem, test_dir, sp_str_lit("after.txt"));
+  sp_str_t old_file = sp_fs_join_path(ut.mem, test_dir, sp_str_lit("before.txt"));
+  sp_str_t new_file = sp_fs_join_path(ut.mem, test_dir, sp_str_lit("after.txt"));
 
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = old_file,
@@ -390,7 +390,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
   ut.change_detected = false;
   fmon_history.count = 0;
 
-  sp_sys_rename_s(old_file, new_file);
+  sp_sys_rename_s(sp_fs_open_cwd(), old_file, sp_fs_open_cwd(), new_file);
 
   sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);
@@ -418,10 +418,10 @@ UTEST_F(sp_test_file_monitor, rename_file) {
 
 UTEST_F(sp_test_file_monitor, no_events_without_changes) {
   SKIP_ON_WASM()
-  sp_fmon_init_a(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
+  sp_fmon_init(ut.mem, &ut.monitor, fmon_callback, SP_FILE_CHANGE_EVENT_ALL, &ut);
 
   sp_str_t test_dir = sp_test_file_path(&ut.file_manager, sp_str_lit("monitor_test"));
-  sp_fs_create_dir_a(test_dir);
+  sp_fs_create_dir(test_dir);
   sp_fmon_add_dir(&ut.monitor, test_dir);
 
   sp_fmon_process_changes(&ut.monitor);

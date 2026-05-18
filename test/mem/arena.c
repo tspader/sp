@@ -3,9 +3,9 @@
 UTEST_F(mem, arena_padding_after_byte) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
-  u8* byte = sp_void_cast(byte, sp_alloc_a(scratch.mem, 1));
+  u8* byte = sp_void_cast(byte, sp_alloc(scratch.mem, 1));
 
-  u8* word = sp_void_cast(word, sp_alloc_a(scratch.mem, 8));
+  u8* word = sp_void_cast(word, sp_alloc(scratch.mem, 8));
 
   EXPECT_ALIGNED(byte);
   EXPECT_ALIGNED(word);
@@ -17,9 +17,9 @@ UTEST_F(mem, arena_padding_after_byte) {
 UTEST_F(mem, arena_padding_mixed_sizes) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
-  u8* p1 = sp_void_cast(p1, sp_alloc_a(scratch.mem, 3));
-  u8* p2 = sp_void_cast(p2, sp_alloc_a(scratch.mem, 13));
-  u8* p3 = sp_void_cast(p3, sp_alloc_a(scratch.mem, 8));
+  u8* p1 = sp_void_cast(p1, sp_alloc(scratch.mem, 3));
+  u8* p2 = sp_void_cast(p2, sp_alloc(scratch.mem, 13));
+  u8* p3 = sp_void_cast(p3, sp_alloc(scratch.mem, 8));
 
   EXPECT_ALIGNED(p1);
   EXPECT_ALIGNED(p2);

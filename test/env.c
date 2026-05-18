@@ -6,18 +6,18 @@
 
 SP_TEST_MAIN()
 
-struct sp_env {
+struct env {
   sp_mem_t mem;
 };
 
-UTEST_F_SETUP(sp_env) {
+UTEST_F_SETUP(env) {
   ut.mem = sp_mem_os_new();
 }
 
-UTEST_F_TEARDOWN(sp_env) {
+UTEST_F_TEARDOWN(env) {
 }
 
-UTEST_F(sp_env, init_empty) {
+UTEST_F(env, init_empty) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
   EXPECT_EQ(sp_env_count(&env), (u32)0);
@@ -25,7 +25,7 @@ UTEST_F(sp_env, init_empty) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, insert_and_get) {
+UTEST_F(env, insert_and_get) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -36,7 +36,7 @@ UTEST_F(sp_env, insert_and_get) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, insert_overwrites) {
+UTEST_F(env, insert_overwrites) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -49,7 +49,7 @@ UTEST_F(sp_env, insert_overwrites) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, get_missing_returns_empty) {
+UTEST_F(env, get_missing_returns_empty) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -59,7 +59,7 @@ UTEST_F(sp_env, get_missing_returns_empty) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, contains) {
+UTEST_F(env, contains) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -70,7 +70,7 @@ UTEST_F(sp_env, contains) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, erase) {
+UTEST_F(env, erase) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -86,7 +86,7 @@ UTEST_F(sp_env, erase) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, erase_nonexistent) {
+UTEST_F(env, erase_nonexistent) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -97,7 +97,7 @@ UTEST_F(sp_env, erase_nonexistent) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, multiple_entries) {
+UTEST_F(env, multiple_entries) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -113,7 +113,7 @@ UTEST_F(sp_env, multiple_entries) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, copy_is_independent) {
+UTEST_F(env, copy_is_independent) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
   sp_env_insert(&env, sp_str_lit("K"), sp_str_lit("V"));
@@ -130,7 +130,7 @@ UTEST_F(sp_env, copy_is_independent) {
   sp_env_destroy(&copy);
 }
 
-UTEST_F(sp_env, empty_value) {
+UTEST_F(env, empty_value) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -141,7 +141,7 @@ UTEST_F(sp_env, empty_value) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, value_with_equals) {
+UTEST_F(env, value_with_equals) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
@@ -151,9 +151,8 @@ UTEST_F(sp_env, value_with_equals) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, capture_has_path) {
+UTEST_F(env, capture_has_path) {
   SKIP_ON_WASM()
-  SKIP_ON_FREESTANDING()
   sp_env_t env = sp_env_capture(ut.mem);
 
   EXPECT_TRUE(sp_env_count(&env) > 0);
@@ -171,8 +170,7 @@ UTEST_F(sp_env, capture_has_path) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, capture_is_snapshot) {
-  SKIP_ON_FREESTANDING()
+UTEST_F(env, capture_is_snapshot) {
   sp_env_t env = sp_env_capture(ut.mem);
   u32 count = sp_env_count(&env);
 
@@ -186,7 +184,7 @@ UTEST_F(sp_env, capture_is_snapshot) {
   sp_env_destroy(&env2);
 }
 
-UTEST_F(sp_env, destroy_then_reinit) {
+UTEST_F(env, destroy_then_reinit) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
   sp_env_insert(&env, sp_str_lit("A"), sp_str_lit("1"));
@@ -200,13 +198,13 @@ UTEST_F(sp_env, destroy_then_reinit) {
 }
 
 #if defined(SP_POSIX)
-UTEST_F(sp_env, to_posix_envp) {
+UTEST_F(env, to_posix_envp) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
   sp_env_insert(&env, sp_str_lit("AA"), sp_str_lit("11"));
   sp_env_insert(&env, sp_str_lit("BB"), sp_str_lit("22"));
 
-  c8** envp = sp_env_to_posix_envp_a(ut.mem, &env);
+  c8** envp = sp_env_to_posix_envp(ut.mem, &env);
 
   u32 count = 0;
   while (envp[count] != SP_NULLPTR) count++;
@@ -225,34 +223,31 @@ UTEST_F(sp_env, to_posix_envp) {
   sp_env_destroy(&env);
 }
 
-UTEST_F(sp_env, to_posix_envp_empty) {
+UTEST_F(env, to_posix_envp_empty) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  c8** envp = sp_env_to_posix_envp_a(ut.mem, &env);
+  c8** envp = sp_env_to_posix_envp(ut.mem, &env);
   EXPECT_EQ(envp[0], (c8*)SP_NULLPTR);
 
   sp_env_destroy(&env);
 }
 #endif
 
-UTEST(sp_os_env, get_path) {
+UTEST_F(env, get_path) {
   SKIP_ON_WASM()
-  SKIP_ON_FREESTANDING()
   sp_str_t path = sp_os_env_get(sp_str_lit("PATH"));
   EXPECT_TRUE(sp_str_valid(path));
   EXPECT_TRUE(path.len > 0);
 }
 
-UTEST(sp_os_env, get_missing) {
-  SKIP_ON_FREESTANDING()
+UTEST_F(env, get_missing) {
   sp_str_t val = sp_os_env_get(sp_str_lit("SP_DEFINITELY_NOT_SET_12345"));
   EXPECT_TRUE(sp_str_empty(val));
 }
 
-UTEST(sp_os_env, iterate) {
+UTEST_F(env, iterate) {
   SKIP_ON_WASM()
-  SKIP_ON_FREESTANDING()
   sp_os_env_it_t it = sp_os_env_it_begin();
 
   #if defined(SP_WIN32)
@@ -276,8 +271,7 @@ UTEST(sp_os_env, iterate) {
   EXPECT_TRUE(found_path);
 }
 
-UTEST(sp_os_env, iterate_matches_capture) {
-  SKIP_ON_FREESTANDING()
+UTEST_F(env, iterate_matches_capture) {
   sp_env_t captured = sp_env_capture(sp_mem_os_new());
 
   sp_os_env_it_t it = sp_os_env_it_begin();

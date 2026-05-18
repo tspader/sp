@@ -110,7 +110,7 @@ UTEST_F(dyn_array, struct_type) {
         s.value = (float)i * 1.5f;
         sp_io_mem_writer_t io = sp_zero;
         sp_io_mem_writer_from_buffer(&io, s.name, sizeof(s.name));
-        sp_io_write_str(&io.base, sp_fmt_a(sp_mem_get_scratch(), "Item_{}", sp_fmt_int(s.id)).value, SP_NULLPTR);
+        sp_io_write_str(&io.base, sp_fmt(sp_mem_get_scratch(), "Item_{}", sp_fmt_int(s.id)).value, SP_NULLPTR);
         sp_io_pad(&io.base, 1, SP_NULLPTR);
         sp_da_push(arr, s);
     }
@@ -124,7 +124,7 @@ UTEST_F(dyn_array, struct_type) {
         char expected[32];
         sp_io_mem_writer_t io = sp_zero;
         sp_io_mem_writer_from_buffer(&io, expected, sizeof(expected));
-        sp_io_write_str(&io.base, sp_fmt_a(sp_mem_get_scratch(), "Item_{}", sp_fmt_int(i)).value, SP_NULLPTR);
+        sp_io_write_str(&io.base, sp_fmt(sp_mem_get_scratch(), "Item_{}", sp_fmt_int(i)).value, SP_NULLPTR);
         sp_io_pad(&io.base, 1, SP_NULLPTR);
 
         ASSERT_STREQ(arr[i].name, expected);
@@ -139,7 +139,7 @@ UTEST_F(dyn_array, pointer_type) {
     const char* strings[] = {"Hello", "World", "Dynamic", "Array", "Test"};
 
     for (s32 i = 0; i < 5; i++) {
-        c8* str = sp_cstr_copy_a(ut.mem, strings[i]);
+        c8* str = sp_cstr_copy(ut.mem, strings[i]);
         sp_da_push(arr, str);
     }
 
@@ -150,7 +150,7 @@ UTEST_F(dyn_array, pointer_type) {
     }
 
     for (u64 i = 0; i < sp_da_size(arr); i++) {
-        sp_free_a(ut.mem, arr[i]);
+        sp_free(ut.mem, arr[i]);
     }
 
     sp_da_free(arr);
@@ -456,7 +456,7 @@ UTEST_F(dyn_array, allocator_realloc_into_scratch_clobber) {
 
   {
     sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-    u8* clobber = sp_alloc_n_a(s.mem, u8, num_bytes);
+    u8* clobber = sp_alloc_n(s.mem, u8, num_bytes);
     sp_mem_fill_u8(clobber, num_bytes, pattern.fill);
 
     sp_for(it, len) {

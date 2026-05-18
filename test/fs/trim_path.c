@@ -29,4 +29,4 @@ UTEST(fs_trim_path, cases) {
   }
 }
 
-SP_TEST_MAIN()
+

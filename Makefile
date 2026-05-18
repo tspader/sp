@@ -1,11 +1,8 @@
-# Default to parallel when invoked directly. Skipped under a parent jobserver
-# (e.g. the `big` target's sub-makes) to avoid oversubscription.
 ifeq (,$(findstring jobserver,$(MAKEFLAGS)))
-MAKEFLAGS += -j$(shell nproc)
+  MAKEFLAGS += -j$(shell nproc)
 endif
 
-LANG ?= c
-ifeq ($(LANG),cpp)
+ifeq ($(MODE), cpp)
   CFLAGS_LANG = -std=c++11 -x c++
   BUILD_ROOT = build/cpp
   DEFAULT_CC = c++
@@ -14,121 +11,80 @@ else
   CFLAGS_LANG = -std=c99
   BUILD_ROOT = build
   DEFAULT_CC = cc
-  ZIG_CC = zcc
+  ZIG_CC = zig cc
 endif
 
 ifdef TRIPLE
-CC := $(ZIG_CC) --target=$(TRIPLE)
-BUILD_DIR = $(BUILD_ROOT)/$(TRIPLE)
+  CC := $(ZIG_CC) --target=$(TRIPLE)
+  BUILD_DIR = $(BUILD_ROOT)/$(TRIPLE)
 else ifeq ($(origin CC),command line)
-BUILD_DIR = $(BUILD_ROOT)/$(CC)
+  BUILD_DIR = $(BUILD_ROOT)/$(CC)
 else
-CC := $(DEFAULT_CC)
-BUILD_DIR = $(BUILD_ROOT)
+  CC := $(DEFAULT_CC)
+  BUILD_DIR = $(BUILD_ROOT)
 endif
 
-WASM := $(if $(findstring wasm,$(TRIPLE)),1,)
-WASM_FREESTANDING := $(if $(WASM),$(if $(findstring freestanding,$(TRIPLE)),1,),)
-LINUX_FREESTANDING := $(if $(WASM),,$(if $(findstring linux-none,$(TRIPLE)),1,))
+CFLAGS_PLATFORM =
+ifneq (,$(findstring linux-none,$(TRIPLE)))
+  CFLAGS_PLATFORM = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DSP_FREESTANDING
+endif
+ifneq (,$(findstring wasm32-freestanding,$(TRIPLE)))
+  CFLAGS_PLATFORM = -nostdlib -fno-sanitize=undefined
+endif
 
-ifdef LINUX_FREESTANDING
-CFLAGS_PLATFORM = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DSP_FREESTANDING
-else ifdef WASM_FREESTANDING
-CFLAGS_PLATFORM = -nostdlib -fno-sanitize=undefined
-else ifdef WASM
-CFLAGS_PLATFORM =
+ifneq (,$(findstring windows,$(TRIPLE)))
+  EXE := .exe
+else ifneq (,$(findstring wasm,$(TRIPLE)))
+  EXE := .wasm
 else
-CFLAGS_PLATFORM =
+  EXE :=
 endif
 
 CFLAGS = $(CFLAGS_LANG) -g -Werror=return-type -fsanitize=undefined,alignment -fno-sanitize-recover=all $(CFLAGS_PLATFORM)
+CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itest/tools -Itest
 
-EXE := $(if $(findstring windows,$(TRIPLE)),.exe,)
-EXE := $(if $(WASM),.wasm,$(EXE))
-TESTS = amalg app array asset cv elf env format fmon fs glob ht io linkage math ps rb str thread time mem prompt leak
-EXAMPLES = app array elf format hash_table io ls palette prompt prompt_fancy signal wc
-# TESTS = app amalg str format
-# EXAMPLES = app format hash_table
+TESTS = amalg app array asset etc cv env format fmon fs glob ht io math process ps rb str thread time mem prompt leak
+EXAMPLES = app array format hash_table io io_copy_perf ls palette prompt prompt_fancy signal wc
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \
   aarch64-macos \
   x86_64-windows-gnu \
   wasm32-freestanding wasm32-wasi
-SMOKE = \
-  x86_64-linux-none x86_64-linux-musl \
-  aarch64-linux-musl \
-  aarch64-macos \
-  x86_64-windows-gnu \
-  wasm32-freestanding wasm32-wasi
-
-.PHONY: all clean tests examples $(TRIPLES) big gcc tcc
-all: examples tests tools
-
 
 TEST_DIR = $(BUILD_DIR)/test
-TEST_BINARIES = $(addsuffix $(EXE), $(addprefix $(TEST_DIR)/, $(TESTS)))
-TEST_BINS = $(TEST_DIR)/process$(EXE)
-
 EXAMPLE_DIR = $(BUILD_DIR)/example
-EXAMPLE_BINARIES = $(addsuffix $(EXE), $(addprefix $(EXAMPLE_DIR)/, $(EXAMPLES)))
+TEST_BINARIES = $(addsuffix $(EXE),$(addprefix $(TEST_DIR)/,$(TESTS)))
+EXAMPLE_BINARIES = $(addsuffix $(EXE),$(addprefix $(EXAMPLE_DIR)/,$(EXAMPLES)))
 
-tests: $(TEST_BINARIES)
-examples: $(EXAMPLE_BINARIES)
-tools: build/sp
-
-############
-# EXAMPLES #
-############
-$(EXAMPLE_DIR)/prompt$(EXE): example/prompt.c sp.h sp/sp_prompt.h | $(EXAMPLE_DIR)
-	$(CC) $(CFLAGS) -I. -o $@ $<
-
-$(EXAMPLE_DIR)/%$(EXE): example/%.c sp.h | $(EXAMPLE_DIR)
-	$(CC) $(CFLAGS) -I. -o $@ $<
-
-#########
-# TESTS #
-#########
-CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itools -Itest/tools -Itest/tools/process -Itest/fs -Itest/mem
-
+SP_HEADERS = sp.h $(wildcard sp/*.h)
 TEST_SOURCES = $(wildcard test/*/*.c) $(wildcard test/*/*.h) $(wildcard test/*/*/*.c) $(wildcard test/*/*/*.h)
 
-build/sp: tools/sp.c sp.h | $(BUILD_DIR)
-	cc -g -I. -o $@ $<
+.PHONY: all clean tests examples smoke big c cpp gcc tcc $(TRIPLES)
+all: examples tests
+tests: $(TEST_BINARIES)
+examples: $(EXAMPLE_BINARIES)
 
-$(TEST_DIR)/%$(EXE): test/%.c sp.h $(TEST_SOURCES) | $(TEST_DIR) $(TEST_DIR)/process$(EXE)
+$(EXAMPLE_DIR)/%$(EXE): example/%.c $(SP_HEADERS) | $(EXAMPLE_DIR)
+	$(CC) $(CFLAGS) -I. -o $@ $<
+
+$(TEST_DIR)/%$(EXE): test/%.c $(SP_HEADERS) $(TEST_SOURCES) | $(TEST_DIR)
 	$(CC) $(CFLAGS) $(CFLAGS_TEST) -o $@ $<
 
-$(TEST_DIR)/process$(EXE): test/tools/process/process.c sp.h | $(TEST_DIR)
-	$(CC) $(CFLAGS) $(CFLAGS_TEST) -o $@ $<
-
-#########
-# CROSS #
-#########
 $(TRIPLES):
 	+$(MAKE) TRIPLE=$@ examples tests
 
-smoke: $(SMOKE)
-big: $(TRIPLES) gcc tcc examples tests
+big: c cpp
+c:; +$(MAKE) $(TRIPLES) examples tests gcc
+cpp:; +$(MAKE) MODE=cpp $(TRIPLES) examples tests
+gcc:; +$(MAKE) CC=gcc examples tests
+tcc:; +$(MAKE) CC=tcc examples tests
+wasm:
+	+$(MAKE) wasm32-wasi wasm32-freestanding
+	+$(MAKE) MODE=cpp wasm32-wasi wasm32-freestanding
 
-gcc:
-	+$(MAKE) CC=gcc examples tests
-
-tcc:
-	+$(MAKE) CC=tcc examples tests
+$(BUILD_DIR) $(EXAMPLE_DIR) $(TEST_DIR):
+	mkdir -p $@
 
 clean:
 	rm -rf $(BUILD_DIR)
-
-#########
-# UTILS #
-#########
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-$(EXAMPLE_DIR):
-	mkdir -p $(EXAMPLE_DIR)
-
-$(TEST_DIR):
-	mkdir -p $(TEST_DIR)
-

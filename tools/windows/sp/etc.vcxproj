@@ -13,12 +13,12 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{06F3F75F-659D-43B7-876E-831D95B910CC}</ProjectGuid>
-    <RootNamespace>elf</RootNamespace>
-    <ProjectName>elf</ProjectName>
+    <ProjectGuid>{21A5F3D1-2C70-4A11-9F8B-1A2B3C4D5E67}</ProjectGuid>
+    <RootNamespace>etc</RootNamespace>
+    <ProjectName>etc</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <SpTargetName>elf</SpTargetName>
-    <SpSource>..\..\..\test\elf.c</SpSource>
+    <SpTargetName>etc</SpTargetName>
+    <SpSource>..\..\..\test\etc.c</SpSource>
     <SpHeaders>..\..\..\sp.h;..\..\..\test\tools\utest.h</SpHeaders>
     <SpProjectReferences></SpProjectReferences>
     <SpPreprocessorDefinitions></SpPreprocessorDefinitions>

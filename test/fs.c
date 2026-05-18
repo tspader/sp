@@ -1,7 +1,5 @@
-#ifndef SP_TEST_AMALGAMATION
-  #define SP_TEST_AMALGAMATION
-  #define FS_TEST_OWNS_MAIN
-#endif
+#include "fs/fs.h"
+SP_TEST_MAIN()
 
 #include "fs/normalize_path.c"
 #include "fs/trim_path.c"
@@ -24,11 +22,8 @@
 #include "fs/copy_glob.c"
 #include "fs/remove.c"
 #include "fs/collect.c"
+#include "fs/iter_root.c"
 #include "fs/mod_time.c"
 #include "fs/system_paths.c"
 #include "fs/windows/wtf8.c"
 #include "fs/windows/nt_path.c"
-
-#ifdef FS_TEST_OWNS_MAIN
-UTEST_MAIN()
-#endif
