@@ -18,6 +18,7 @@ SP_TEST_MAIN()
 #include "fs/create_dir.c"
 #include "fs/create_file.c"
 #include "fs/links.c"
+#include "fs/fd_relative.c"
 #include "fs/copy.c"
 #include "fs/copy_glob.c"
 #include "fs/remove.c"

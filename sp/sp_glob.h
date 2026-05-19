@@ -320,7 +320,7 @@ bool sp_glob_match_alternates(sp_glob_token_t* tok, sp_da(sp_glob_token_t) token
     sp_da_for(alt, j) {
       sp_da_push(combined, alt[j]);
     }
-    u32 remaining = sp_da_size(tokens);
+    u64 remaining = sp_da_size(tokens);
     for (u32 j = ti; j < remaining; j++) {
       sp_da_push(combined, tokens[j]);
     }

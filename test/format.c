@@ -541,7 +541,6 @@ UTEST_F(format, render_replaces_value) {
 
 UTEST_F(format, err_unknown_directive) {
   sp_fmt_directive_reset();
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{.missing}", sp_fmt_int(42)).err, SP_ERR_FMT_UNKNOWN_DIRECTIVE);
 }
 
@@ -565,7 +564,6 @@ UTEST_F(format, err_multiple_renders) {
   _test_render_y_calls = 0;
   sp_fmt_register_renderer("x", _test_render_x, sp_fmt_id_none);
   sp_fmt_register_renderer("y", _test_render_y, sp_fmt_id_none);
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{.x .y}", sp_fmt_int(0)).err, SP_ERR_FMT_TOO_MANY_RENDERERS);
   EXPECT_EQ(_test_render_y_calls, 0);
   sp_fmt_directive_reset();
@@ -634,7 +632,6 @@ UTEST_F(format, close_brace_escape) {
 }
 
 UTEST_F(format, err_lone_close_brace) {
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "oops } here").err, SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
@@ -713,33 +710,27 @@ UTEST_F(format, dynamic_width_with_literal_precision) {
 }
 
 UTEST_F(format, err_parse_stops_formatting) {
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "a {:5.} b {}", sp_fmt_int(99)).err, SP_ERR_FMT_BAD_PRECISION);
 }
 
 UTEST_F(format, err_unterminated_placeholder) {
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "hi {nope", sp_fmt_int(1)).err, SP_ERR_FMT_BAD_PLACEHOLDER);
 }
 
 UTEST_F(format, err_dynamic_fill_wrong_kind) {
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{:$^5}", sp_fmt_float(1.0), sp_fmt_int(42)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST_F(format, err_dynamic_width_wrong_kind) {
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{:$}", sp_fmt_cstr("oops"), sp_fmt_int(42)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST_F(format, err_dynamic_precision_wrong_kind) {
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{:.$}", sp_fmt_float(3.0), sp_fmt_float(3.14)).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
 }
 
 UTEST_F(format, err_stops_subsequent_placeholders) {
   sp_fmt_directive_reset();
-  sp_str_t str = sp_zero;
   sp_err_t err = sp_fmt(sp_mem_get_scratch(), "{} {.nope} {}", sp_fmt_int(1), sp_fmt_int(2), sp_fmt_int(3)).err;
   EXPECT_EQ(err, SP_ERR_FMT_UNKNOWN_DIRECTIVE);
 }
@@ -810,7 +801,6 @@ UTEST_F(format, kinds_single_accepts_match) {
 UTEST_F(format, kinds_single_rejects_mismatch) {
   sp_fmt_directive_reset();
   sp_fmt_register_renderer("only_u64", _test_render_u64_only, sp_fmt_id_u64);
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{.only_u64}", sp_fmt_float(1.5)).err, SP_ERR_FMT_WRONG_PARAM_KIND);
   sp_fmt_directive_reset();
 }
@@ -834,7 +824,6 @@ UTEST_F(format, kinds_multiple_rejects_outsider) {
     .kind = sp_fmt_directive_decorator,
     .args = sp_cast(sp_fmt_arg_kind_t, sp_fmt_id_u64 | sp_fmt_id_s64),
   });
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{.num}", sp_fmt_cstr("nope")).err, SP_ERR_FMT_WRONG_PARAM_KIND);
   sp_fmt_directive_reset();
 }
@@ -991,7 +980,6 @@ UTEST_F(format, dynamic_accepts_u64_with_mask) {
 UTEST_F(format, err_missing_arg) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{.fg}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_MISSING);
   sp_fmt_directive_reset();
 }
@@ -999,7 +987,6 @@ UTEST_F(format, err_missing_arg) {
 UTEST_F(format, err_unexpected_arg) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator("bold", _test_before_lt, _test_after_gt);
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{.bold red}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_UNEXPECTED);
   sp_fmt_directive_reset();
 }
@@ -1007,7 +994,6 @@ UTEST_F(format, err_unexpected_arg) {
 UTEST_F(format, err_wrong_literal_kind) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("numpad", _test_before_lt, _test_after_gt, sp_fmt_id_u64);
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{.numpad abc}", sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
   sp_fmt_directive_reset();
 }
@@ -1015,7 +1001,6 @@ UTEST_F(format, err_wrong_literal_kind) {
 UTEST_F(format, err_wrong_dynamic_kind) {
   sp_fmt_directive_reset();
   sp_fmt_register_decorator_p("fg", _test_fg_before, _test_fg_after, sp_fmt_id_str);
-  sp_str_t str = sp_zero;
   EXPECT_EQ(sp_fmt(sp_mem_get_scratch(), "{.fg $}", sp_fmt_uint(5), sp_fmt_cstr("hi")).err, SP_ERR_FMT_DIRECTIVE_ARG_WRONG_KIND);
   sp_fmt_directive_reset();
 }

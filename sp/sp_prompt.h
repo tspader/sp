@@ -1228,7 +1228,7 @@ void sp_prompt_line_fmt(sp_prompt_ctx_t* ctx, const c8* fmt, ...) {
   va_start(args, fmt);
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(s.mem, &io);
-  sp_err_t err = sp_fmt_io_v(&io.base, sp_cstr_as_str(fmt), args);
+  sp_fmt_io_v(&io.base, sp_cstr_as_str(fmt), args);
   va_end(args);
 
   sp_prompt_line(ctx, sp_io_dyn_mem_writer_as_str(&io));

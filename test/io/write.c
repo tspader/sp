@@ -145,6 +145,35 @@ UTEST_F(io_write, smaller_after_overflow) {
   });
 }
 
+// One backend call returns fewer bytes than requested with no error.
+// sp_io_write surfaces that short count and does NOT loop to finish it.
+UTEST_F(io_write, single_attempt_short_unbuffered) {
+  run_io_mock_write_test(utest_result, (io_mock_write_test_t){
+    .results = {
+      { .bytes = 4, .err = SP_OK },
+    },
+    .steps = {
+      { .kind = IO_STEP_WRITE, .write = { "abcdefgh", SP_OK, 4 } },
+    },
+    .expect = { .received = "abcd" },
+  });
+}
+
+// A write larger than the buffer bypasses it and issues a single backend
+// write. A short backend write surfaces directly; no looping to completion.
+UTEST_F(io_write, single_attempt_short_bypass) {
+  run_io_mock_write_test(utest_result, (io_mock_write_test_t){
+    .results = {
+      { .bytes = 5, .err = SP_OK },
+    },
+    .buffer = 4,
+    .steps = {
+      { .kind = IO_STEP_WRITE, .write = { "abcdefgh", SP_OK, 5 } },
+    },
+    .expect = { .received = "abcde" },
+  });
+}
+
 
 //////////////
 // BUFFERED //
@@ -320,5 +349,100 @@ UTEST_F(io_write, buffered_zero_write) {
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "", SP_OK, 0 } },
     },
+  });
+}
+
+
+///////////////
+// WRITE_ALL  //
+///////////////
+
+UTEST_EMPTY_FIXTURE(io_write_all)
+
+typedef struct {
+  io_result_t results [IO_MAX_RESPONSES];
+  u64 buffer;
+  struct {
+    const c8* data;
+    sp_err_t err;
+    u64 bytes;
+  } call;
+  struct {
+    const c8* received;
+  } expect;
+} io_mock_write_all_test_t;
+
+void run_io_mock_write_all_test(int* utest_result, io_mock_write_all_test_t t) {
+  u64 num_responses = io_get_num_results(t.results, IO_MAX_RESPONSES);
+  io_mock_writer_t w = sp_zero;
+  io_mock_writer_init(&w, t.results, num_responses);
+
+  u8 wrapper_buf[64] = sp_zero;
+  if (t.buffer) {
+    sp_io_writer_set_buffer(&w.base, wrapper_buf, t.buffer);
+  }
+
+  u64 bytes = 0;
+  sp_err_t err = sp_io_write_all(&w.base, t.call.data, sp_cstr_len(t.call.data), &bytes);
+  EXPECT_EQ(err, t.call.err);
+  EXPECT_EQ(bytes, t.call.bytes);
+
+  EXPECT_EQ(w.cursor, w.num_results);
+
+  u64 n = sp_cstr_len(t.expect.received);
+  EXPECT_EQ(w.received_len, n);
+  sp_for(it, n) {
+    EXPECT_EQ((c8)w.received[it], t.expect.received[it]);
+  }
+}
+
+// write_all keeps calling the backend until every byte is written, even when
+// each call accepts only part of what remains.
+UTEST_F(io_write_all, loops_until_complete) {
+  run_io_mock_write_all_test(utest_result, (io_mock_write_all_test_t){
+    .results = {
+      { .bytes = 4, .err = SP_OK },
+      { .bytes = 4, .err = SP_OK },
+    },
+    .call = { "abcdefgh", SP_OK, 8 },
+    .expect = { .received = "abcdefgh" },
+  });
+}
+
+// A short first write is retried until the payload is fully accepted. This is
+// the contrast with sp_io_write, which would stop after the short call.
+UTEST_F(io_write_all, completes_after_short) {
+  run_io_mock_write_all_test(utest_result, (io_mock_write_all_test_t){
+    .results = {
+      { .bytes = 3, .err = SP_OK },
+      { .bytes = 5, .err = SP_OK },
+    },
+    .call = { "abcdefgh", SP_OK, 8 },
+    .expect = { .received = "abcdefgh" },
+  });
+}
+
+// A hard error mid-loop stops write_all; bytes already accepted are reported.
+UTEST_F(io_write_all, stops_on_error) {
+  run_io_mock_write_all_test(utest_result, (io_mock_write_all_test_t){
+    .results = {
+      { .bytes = 4, .err = SP_OK },
+      { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
+    },
+    .call = { "abcdefgh", SP_ERR_IO_WRITE_FAILED, 4 },
+    .expect = { .received = "abcd" },
+  });
+}
+
+// Orthogonal contract: a call that accepts bytes AND errors contributes those
+// bytes to the total before write_all surfaces the error.
+UTEST_F(io_write_all, bytes_and_error) {
+  run_io_mock_write_all_test(utest_result, (io_mock_write_all_test_t){
+    .results = {
+      { .bytes = 4, .err = SP_OK },
+      { .bytes = 2, .err = SP_ERR_IO_WRITE_FAILED },
+    },
+    .call = { "abcdefgh", SP_ERR_IO_WRITE_FAILED, 6 },
+    .expect = { .received = "abcdef" },
   });
 }

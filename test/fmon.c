@@ -390,7 +390,7 @@ UTEST_F(sp_test_file_monitor, rename_file) {
   ut.change_detected = false;
   fmon_history.count = 0;
 
-  sp_sys_rename_s(sp_fs_open_cwd(), old_file, sp_fs_open_cwd(), new_file);
+  sp_sys_rename_s(sp_sys_get_root(0), old_file, sp_sys_get_root(0), new_file);
 
   sp_for_n(FMON_POLL_ITERATIONS) {
     sp_os_sleep_ms(SP_TEST_POLL_SLEEP_MS);

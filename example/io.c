@@ -22,7 +22,7 @@ s32 run(s32 num_args, const c8** args) {
 
   // Or, if you already have a file descriptor, wrap it. sp_io will close file descriptors
   // for you automatically if you pass SP_IO_CLOSE_MODE_AUTO
-  sp_sys_fd_t fd = sp_sys_open_s(sp_fs_open_cwd(), exe, SP_O_RDONLY | SP_O_BINARY, 0);
+  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), exe, SP_O_RDONLY | SP_O_BINARY, 0);
   sp_io_file_reader_from_file(&r, (sp_sys_fd_t)fd, SP_IO_CLOSE_MODE_AUTO);
   sp_io_read(&r.base, buffer.data, buffer.capacity, &buffer.len);
   sp_log("sp_io_file_reader_from_file: {}", sp_fmt_str(sp_mem_buffer_as_str(&buffer)));

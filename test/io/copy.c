@@ -127,6 +127,22 @@ UTEST_F(io_copy, writer_partial_in_call) {
   });
 }
 
+// Writer accepts a partial prefix with no error, then takes the rest on a
+// later call. Copy must not drop the unaccepted suffix: all source bytes
+// reach the destination across the short writes.
+UTEST_F(io_copy, writer_short_write_completes) {
+  run_io_mock_copy_writer_test(utest_result, (io_mock_copy_writer_test_t){
+    .source = "0123456789",
+    .responses = {
+      { .bytes = 4, .err = SP_OK },
+      { .bytes = 4, .err = SP_OK },
+      { .bytes = 2, .err = SP_OK },
+    },
+    .buffer = { .copy = 8 },
+    .expect = { .err = SP_OK, .copied = 10, .received = "0123456789" },
+  });
+}
+
 // Writer rejects everything on the first call with zero bytes accepted.
 // Copy should report copied=0 and the destination should be untouched.
 UTEST_F(io_copy, writer_fails_immediately) {

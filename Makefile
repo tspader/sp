@@ -44,7 +44,7 @@ CFLAGS = $(CFLAGS_LANG) -g -Werror=return-type -fsanitize=undefined,alignment -f
 CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itest/tools -Itest
 
 TESTS = amalg app array asset etc cv env format fmon fs glob ht io math process ps rb str thread time mem prompt leak
-EXAMPLES = app array format hash_table io io_copy_perf ls palette prompt prompt_fancy signal wc
+EXAMPLES = app array format hash_table io zero_copy ls palette prompt prompt_fancy signal wc
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \

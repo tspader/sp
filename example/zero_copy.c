@@ -1,11 +1,3 @@
-// Compare the userspace copy loop against the kernel-side fast path
-// (copy_file_range on Linux) when copying a large file.
-//
-// sp_io_copy_b is the explicit-buffer form: it always loops read+write
-// through the provided userspace buffer. sp_io_copy detects whether the
-// (reader, writer) pair supports a kernel-to-kernel route and uses it if
-// so, otherwise falling through to the generic loop.
-
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
@@ -13,8 +5,6 @@
 #define PERF_NAIVE_BUFFER 4096u
 
 static void fill_random(u8* p, u64 n, u64 seed) {
-  // Cheap LCG. We just need bytes that vary enough that filesystems can't
-  // collapse the file with sparse / dedup heuristics.
   u64 s = seed ? seed : 1;
   for (u64 i = 0; i < n; i++) {
     s = s * 6364136223846793005ull + 1442695040888963407ull;
@@ -24,7 +14,7 @@ static void fill_random(u8* p, u64 n, u64 seed) {
 
 static sp_err_t make_source(sp_str_t path, u64 size_bytes, sp_mem_t mem) {
   u8* chunk = sp_alloc_n(mem, u8, 1u << 20);
-  fill_random(chunk, 1u << 20, 0xdeadbeefcafebabeull);
+  fill_random(chunk, 1u << 20, 0xdeadbeef69420694ull);
 
   sp_io_file_writer_t w = sp_zero;
   sp_try(sp_io_file_writer_from_path(&w, path));
@@ -53,9 +43,6 @@ static run_t copy_naive(sp_str_t src, sp_str_t dst, sp_mem_t mem) {
   u64 copied = 0;
 
   sp_tm_timer_t t = sp_tm_start_timer();
-  // sp_io_copy_b never tries the kernel-side fast path — it is the explicit
-  // userspace-buffer form. Each PERF_NAIVE_BUFFER-sized chunk crosses the
-  // user/kernel boundary twice (read + write).
   sp_io_copy_b(&w.base, &r.base, buf, PERF_NAIVE_BUFFER, &copied);
   u64 ns = sp_tm_read_timer(&t);
 
@@ -72,9 +59,6 @@ static run_t copy_fast(sp_str_t src, sp_str_t dst) {
 
   u64 copied = 0;
   sp_tm_timer_t t = sp_tm_start_timer();
-  // sp_io_copy checks for the fast path. With a file reader (exposes its fd
-  // via .as_fd) and a file writer (consumes via .read_from -> copy_file_range
-  // on Linux), bytes never enter userspace.
   sp_io_copy(&w.base, &r.base, &copied);
   u64 ns = sp_tm_read_timer(&t);
 
@@ -84,10 +68,6 @@ static run_t copy_fast(sp_str_t src, sp_str_t dst) {
 }
 
 #if defined(SP_LINUX)
-// Drain a pipe's read end into the void as fast as possible. The sendfile
-// benchmark needs a consumer; without one, the pipe's 64 KiB buffer fills
-// and the producing call blocks (or, with a non-blocking pipe, returns
-// EAGAIN). We discard everything we read.
 static s32 drain_pipe(void* userdata) {
   sp_sys_fd_t fd = (sp_sys_fd_t)(uintptr_t)userdata;
   u8 buf [1u << 16];
@@ -99,9 +79,6 @@ static s32 drain_pipe(void* userdata) {
   return 0;
 }
 
-// Open a blocking pipe. sp_sys_pipe sets O_NONBLOCK, which is wrong for this
-// benchmark: with the consumer on another thread, we want producing calls to
-// block when the pipe buffer is full, not bail with EAGAIN.
 static s32 open_blocking_pipe(sp_sys_fd_t* out_r, sp_sys_fd_t* out_w) {
   sp_sys_fd_t fds [2];
   s64 rc = sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_O_CLOEXEC, 0, 0, 0);
@@ -152,9 +129,6 @@ static run_t copy_fast_pipe(sp_str_t src) {
 
   u64 copied = 0;
   sp_tm_timer_t t = sp_tm_start_timer();
-  // sp_io_copy negotiates the fast path. Source is a regular file (positional,
-  // exposes &pos via as_fd), destination is a pipe-backed stream writer that
-  // wires .read_from -> sendfile on Linux.
   sp_io_copy(&w.base, &r.base, &copied);
   u64 ns = sp_tm_read_timer(&t);
 
@@ -182,22 +156,20 @@ s32 run(s32 num_args, const c8** args) {
   sp_mem_t mem = sp_mem_arena_as_allocator(sp_mem_arena_new(sp_mem_os_new()));
 
   sp_str_t cwd = sp_fs_get_cwd(mem);
-  sp_str_t src = sp_str_concat(mem, cwd, sp_str_lit("/io_copy_perf.src"));
-  sp_str_t dst = sp_str_concat(mem, cwd, sp_str_lit("/io_copy_perf.dst"));
+  sp_str_t src = sp_str_concat(mem, cwd, sp_str_lit("/io.src"));
+  sp_str_t dst = sp_str_concat(mem, cwd, sp_str_lit("/io.dst"));
 
   u64 size_bytes = (u64)PERF_FILE_SIZE_MB * 1024u * 1024u;
   sp_log("preparing {} MiB source at {}", sp_fmt_uint(PERF_FILE_SIZE_MB), sp_fmt_str(src));
   sp_err_t err = make_source(src, size_bytes, mem);
   if (err) {
-    sp_log("failed to prepare source: err={}", sp_fmt_uint((u32)err));
+    sp_log("failed to prepare source: {}", sp_fmt_uint((u32)err));
     return 1;
   }
 
-  // Two trials of each so we can see cold-vs-warm cache effects. The first
-  // naive run typically pays for cold reads of the source; the second runs
-  // against a warm page cache. The fast-path run benefits from a warm cache
-  // too, but the dominant cost it skips is the userspace copy itself.
-  sp_log("file -> file (copy_file_range when available; two trials each)");
+  // Run it twice to at least pretend to warm up the IO, but the amount that
+  // going kernel -> kernel saves us overshadows any caching
+  sp_log("file -> file (copy_file_range)");
   run_t n1 = copy_naive(src, dst, mem); report("naive #1", n1);
   run_t f1 = copy_fast (src, dst);      report("fast  #1", f1);
   run_t n2 = copy_naive(src, dst, mem); report("naive #2", n2);
@@ -213,11 +185,11 @@ s32 run(s32 num_args, const c8** args) {
   }
 
 #if defined(SP_LINUX)
-  sp_log("file -> pipe (sendfile when available; two trials each)");
+  sp_log("file -> pipe (sendfile)");
   run_t pn1 = copy_naive_pipe(src, mem); report("naive #1", pn1);
-  run_t pf1 = copy_fast_pipe (src);      report("fast  #1", pf1);
+  run_t pf1 = copy_fast_pipe(src); report("fast  #1", pf1);
   run_t pn2 = copy_naive_pipe(src, mem); report("naive #2", pn2);
-  run_t pf2 = copy_fast_pipe (src);      report("fast  #2", pf2);
+  run_t pf2 = copy_fast_pipe(src); report("fast  #2", pf2);
 
   if (pf2.ns) {
     u64 speedup_x100 = (pn2.ns * 100u) / pf2.ns;

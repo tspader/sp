@@ -400,7 +400,7 @@ UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
   sp_io_write(&w.base, "0123456789ABCDEF", 16, SP_NULLPTR);
   sp_io_file_writer_close(&w);
 
-  sp_sys_fd_t fd = sp_sys_open_s(sp_fs_open_cwd(), ut.file_path, SP_O_RDONLY | SP_O_BINARY, 0);
+  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), ut.file_path, SP_O_RDONLY | SP_O_BINARY, 0);
   const s64 parked = 7;
   sp_sys_lseek(fd, parked, SP_IO_SEEK_SET);
 

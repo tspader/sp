@@ -24,8 +24,10 @@
 
 #if defined(SP_WIN32)
   #define SKIP_ON_WIN32() UTEST_SKIP("");
+  #define SKIP_UNLESS_WIN32()
 #else
   #define SKIP_ON_WIN32()
+  #define SKIP_UNLESS_WIN32() UTEST_SKIP("");
 #endif
 
 #if defined(SP_MACOS)

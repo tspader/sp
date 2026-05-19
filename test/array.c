@@ -76,12 +76,12 @@ UTEST_F(dyn_array, reserve_capacity) {
 UTEST_F(dyn_array, growth_pattern) {
     sp_da(u32) arr = sp_da_new(ut.mem, u32);
 
-    u32 prev_capacity = 0;
+    u64 prev_capacity = 0;
 
     for (u32 i = 0; i < 100; i++) {
         sp_da_push(arr, i);
 
-        u32 current_capacity = sp_da_capacity(arr);
+        u64 current_capacity = sp_da_capacity(arr);
         if (current_capacity != prev_capacity) {
             if (prev_capacity > 0) {
                 ASSERT_EQ(current_capacity, prev_capacity * 2);
@@ -435,7 +435,7 @@ UTEST_F(dyn_array, allocator_realloc_into_scratch_clobber) {
   ASSERT_EQ(sp_da_size(arr), 4);
 
   u64 num_bytes = 0;
-  u32 len = 0;
+  u64 len = 0;
 
   {
     sp_mem_arena_marker_t s = sp_mem_begin_scratch();
