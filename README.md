@@ -188,26 +188,6 @@ sp_da_for(years, it) {
   sp_log("the best dead show was in 19{}", sp_fmt_int(*veneta));
 ```
 
-## filesystem
-```c
-```
-
-## strings
-```c
-```
-
-## io
-```c
-```
-
-## allocators
-```c
-```
-
-## concurrency
-```c
-```
-
 # development
 Install any C compiler, and then:
 ```bash
