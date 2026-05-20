@@ -52,7 +52,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{FF
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "array", "examples\array.vcxproj", "{10000001-0001-4001-8001-000000000001}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "io_copy_perf", "examples\io_copy_perf.vcxproj", "{10000015-0015-4015-8015-000000000015}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zero_copy", "examples\zero_copy.vcxproj", "{10000015-0015-4015-8015-000000000015}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "format", "examples\format.vcxproj", "{10000003-0003-4003-8003-000000000003}"
 EndProject

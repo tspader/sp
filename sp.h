@@ -1224,6 +1224,8 @@ SP_TYPEDEF_FN(int, sp_qsort_fn_t, const void *, const void *);
 SP_API void        sp_sys_init();
 SP_API s64         sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count);
 SP_API s64         sp_sys_write(sp_sys_fd_t fd, const void* buf, u64 count);
+SP_API s64         sp_sys_pread(sp_sys_fd_t fd, void* buf, u64 count, u64 offset);
+SP_API s64         sp_sys_pwrite(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset);
 SP_API sp_sys_fd_t sp_sys_get_root(s32 it);
 SP_API s64         sp_sys_get_exe_path(c8* buf, u64 size);
 SP_API s64         sp_sys_get_cwd_path(c8* buf, u64 size);
@@ -1238,6 +1240,10 @@ SP_API s32         sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API s32         sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
 SP_API s32         sp_sys_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
 SP_API s32         sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+SP_API s32         sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
+SP_API s32         sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
+SP_API s32         sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
+SP_API s32         sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
 SP_API s32         sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
 SP_API s32         sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
 SP_API s64         sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size);
@@ -1252,26 +1258,10 @@ SP_API void*       sp_sys_memset(void* dest, u8 fill, u64 n);
 SP_API s32         sp_sys_memcmp(const void* a, const void* b, u64 n);
 SP_API void        sp_sys_assert(bool cond);
 SP_API void        sp_sys_exit(s32 code);
+SP_API void        sp_sys_env(const c8** env, u32* len);
 
-// unposix, probably just set_file_metadata?
-SP_API s32         sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
-
-// rename to _pos
-SP_API s64         sp_sys_pread(sp_sys_fd_t fd, void* buf, u64 count, u64 offset);
-SP_API s64         sp_sys_pwrite(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset);
-
-// nuke this
 SP_API s64         sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence);
-
-// rename to path_metadata, link_metadata, file_metadata
-SP_API s32         sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
-SP_API s32         sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
-SP_API s32         sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
-
-// nuke this
 SP_API s32         sp_sys_chdir(const c8* path, u32 len);
-
-SP_API void sp_sys_env(const c8** env, u32* len);
 
 
 SP_API sp_sys_fd_t sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, s32 flags, s32 mode);
