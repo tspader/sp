@@ -288,24 +288,10 @@ UTEST_F(fs, canon_idempotent) {
   SP_EXPECT_STR_EQ(first, second);
 }
 
-UTEST_F(fs, canon_exe_idempotent) {
+UTEST_F(fs, canon_dot_resolves_to_cwd) {
   SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
-  sp_str_t exe = sp_fs_get_exe_path(a);
-  sp_str_t canonical = sp_fs_canonicalize_path(a, exe);
-  SP_EXPECT_STR_EQ(canonical, exe);
-}
-
-UTEST_F(fs, canon_cwd_matches_dot) {
-  SKIP_ON_WASM()
-  sp_mem_t a = ut.file_manager.mem;
-  sp_str_t old_cwd = sp_fs_get_cwd(a);
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("canon_cwd"));
-  sp_fs_create_dir(sandbox);
-
-  ASSERT_EQ(sp_sys_chdir_s(sandbox), 0);
   sp_str_t cwd = sp_fs_get_cwd(a);
-  sp_str_t canonical_dot = sp_fs_canonicalize_path(a, sp_str_lit("."));
-  SP_EXPECT_STR_EQ(cwd, canonical_dot);
-  ASSERT_EQ(sp_sys_chdir_s(old_cwd), 0);
+  sp_str_t dot = sp_fs_canonicalize_path(a, sp_str_lit("."));
+  SP_EXPECT_STR_EQ(cwd, dot);
 }

@@ -2514,6 +2514,11 @@ typedef enum {
   SP_OS_FOLLOW_SYMLINK,
 } sp_os_follow_symlink_t;
 
+typedef enum {
+  SP_FS_PATH_POSIX,
+  SP_FS_PATH_WINDOWS,
+} sp_fs_path_kind_t;
+
 typedef struct {
   sp_str_t path;
   sp_str_t name;
@@ -2544,7 +2549,11 @@ SP_API sp_str_t             sp_fs_trim_path(sp_str_t path);
 SP_API sp_str_t             sp_fs_normalize_path(sp_mem_t mem, sp_str_t path);
 SP_API sp_str_t             sp_fs_get_ext(sp_str_t path);
 SP_API sp_str_t             sp_fs_get_stem(sp_str_t path);
+SP_API bool                 sp_fs_is_sep(c8 c);
 SP_API bool                 sp_fs_is_root(sp_str_t path);
+SP_API bool                 sp_fs_is_absolute(sp_str_t path);
+SP_API bool                 sp_fs_is_absolute_for(sp_str_t path, sp_fs_path_kind_t kind);
+SP_API bool                 sp_fs_is_absolute_w(sp_wide_str_t path);
 SP_API bool                 sp_fs_is_glob(sp_str_t path);
 SP_API sp_str_t             sp_fs_join_path(sp_mem_t mem, sp_str_t a, sp_str_t b);
 SP_API sp_str_t             sp_fs_replace_ext(sp_mem_t mem, sp_str_t path, sp_str_t ext);
@@ -2739,7 +2748,8 @@ SP_TYPEDEF_FN(void, sp_os_signal_handler_t, sp_os_signal_t signal, void* userdat
 
 SP_API void           sp_sleep_ns(u64 ns);
 SP_API void           sp_sleep_ms(f64 ms);
-SP_API sp_os_kind_t   sp_os_get_kind();
+SP_API sp_os_kind_t       sp_os_get_kind();
+SP_API sp_fs_path_kind_t  sp_os_get_path_kind();
 SP_API sp_str_t       sp_os_get_name();
 SP_API sp_str_t       sp_os_get_executable_ext();
 SP_API sp_str_t       sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind);
@@ -4399,14 +4409,6 @@ SP_PRIVATE u8* sp_nt_process_params(void) {
 
 #define SP_NT_OBJECT_NAME_INFORMATION 1
 
-SP_PRIVATE bool sp_sys_is_absolute_wtf16(const u16* p, u32 len) {
-  if (len < 1) return false;
-  if (p[0] == '\\' || p[0] == '/') return true;
-  if (len < 2 || p[1] != ':') return false;
-  if (len < 3) return false;
-  return p[2] == '\\' || p[2] == '/';
-}
-
 SP_PRIVATE u32 sp_sys_normalize_relative_wtf16(u16* p, u32 len, bool* saw_dotdot) {
   u32 w = 0;
   u32 r = 0;
@@ -4473,7 +4475,7 @@ SP_PRIVATE sp_nt_status_t sp_sys_nt_target(sp_sys_fd_t root_fd, sp_str_t utf8, u
   sp_wide_str_t wpath = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), utf8);
   if (!wpath.data) return SP_NT_STATUS_OBJECT_NAME_INVALID;
 
-  if (sp_sys_is_absolute_wtf16(wpath.data, wpath.len)) {
+  if (sp_fs_is_absolute_w(wpath)) {
     sp_nt_unicode_string_t nt = sp_zero;
     u16* file_part = SP_NULLPTR;
     sp_nt_status_t status = SP_NT(RtlDosPathNameToNtPathName_U_WithStatus)(wpath.data, &nt, &file_part, SP_NULLPTR);
@@ -9717,6 +9719,10 @@ sp_os_kind_t sp_os_get_kind() {
   return SP_OS_WIN32;
 }
 
+sp_fs_path_kind_t sp_os_get_path_kind() {
+  return SP_FS_PATH_WINDOWS;
+}
+
 sp_str_t sp_os_get_executable_ext() {
   return sp_str_lit("exe");
 }
@@ -9740,6 +9746,10 @@ sp_os_kind_t sp_os_get_kind() {
   return SP_OS_MACOS;
 }
 
+sp_fs_path_kind_t sp_os_get_path_kind() {
+  return SP_FS_PATH_POSIX;
+}
+
 sp_str_t sp_os_get_executable_ext() {
   return sp_str_lit("");
 }
@@ -9761,6 +9771,10 @@ sp_str_t sp_os_lib_to_file_name(sp_mem_t mem, sp_str_t lib_name, sp_os_lib_kind_
 #if defined(SP_LINUX)
 sp_os_kind_t sp_os_get_kind() {
   return SP_OS_LINUX;
+}
+
+sp_fs_path_kind_t sp_os_get_path_kind() {
+  return SP_FS_PATH_POSIX;
 }
 
 sp_str_t sp_os_get_executable_ext() {
@@ -9796,6 +9810,16 @@ sp_os_kind_t sp_os_get_kind() {
   SP_UNREACHABLE_RETURN(SP_OS_LINUX);
 }
 
+sp_fs_path_kind_t sp_os_get_path_kind() {
+  switch (sp_os_get_kind()) {
+  case SP_OS_LINUX: return SP_FS_PATH_POSIX;
+  case SP_OS_MACOS: return SP_FS_PATH_POSIX;
+  case SP_OS_WIN32: return SP_FS_PATH_WINDOWS;
+  }
+
+  SP_UNREACHABLE_RETURN(SP_FS_PATH_POSIX);
+}
+
 sp_str_t sp_os_get_executable_ext() {
   switch (sp_os_get_kind()) {
   case SP_OS_LINUX: return sp_str_lit("");
@@ -9817,6 +9841,12 @@ sp_str_t sp_os_lib_kind_to_extension(sp_os_lib_kind_t kind) {
 
 sp_str_t sp_os_lib_to_file_name(sp_mem_t mem, sp_str_t lib_name, sp_os_lib_kind_t kind) {
   return sp_fmt(mem, "lib{}.{}", sp_fmt_str(lib_name), sp_fmt_str(sp_os_lib_kind_to_extension(kind))).value;
+}
+#endif
+
+#if defined(SP_WASM)
+sp_fs_path_kind_t sp_os_get_path_kind() {
+  return SP_FS_PATH_POSIX;
 }
 #endif
 
@@ -14926,11 +14956,37 @@ sp_str_t sp_fs_get_stem(sp_str_t path) {
   return stem;
 }
 
+bool sp_fs_is_sep(c8 c) {
+  return c == '/' || c == '\\';
+}
+
+bool sp_fs_is_absolute_for(sp_str_t path, sp_fs_path_kind_t kind) {
+  if (path.len == 0) return false;
+
+  if (sp_fs_is_sep(path.data[0])) {
+    return true;
+  }
+
+  if (kind != SP_FS_PATH_WINDOWS) return false;
+
+  return (path.len >= 3 && path.data[1] == ':' && sp_fs_is_sep(path.data[2]));
+}
+
+bool sp_fs_is_absolute(sp_str_t path) {
+  return sp_fs_is_absolute_for(path, sp_os_get_path_kind());
+}
+
 bool sp_fs_is_root(sp_str_t path) {
-  if (path.len == 0) return true;
-  if (path.len == 1 && path.data[0] == '/') return true;
-  if (path.len == 2 && path.data[1] == ':') return true;
-  if (path.len == 3 && path.data[1] == ':' && (path.data[2] == '/' || path.data[2] == '\\')) return true;
+  if (path.len == 1 && sp_fs_is_sep(path.data[0])) return true;
+  if (path.len == 3 && path.data[1] == ':' && sp_fs_is_sep(path.data[2])) return true;
+  return false;
+}
+
+bool sp_fs_is_absolute_w(sp_wide_str_t path) {
+  if (path.len == 0) return false;
+  if (path.data[0] == '/' || path.data[0] == '\\') return true;
+  if (path.len >= 3 && path.data[1] == ':' &&
+      (path.data[2] == '/' || path.data[2] == '\\')) return true;
   return false;
 }
 

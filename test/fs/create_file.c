@@ -1,20 +1,49 @@
 #include "fs.h"
 #include "test.h"
 
+typedef enum {
+  CREATE_FILE_EMPTY,
+  CREATE_FILE_SLICE,
+  CREATE_FILE_STR,
+  CREATE_FILE_CSTR,
+} create_file_variant_t;
+
 typedef struct {
   const c8* label;
   fs_setup_t setup[16];
   const c8* path;
+  create_file_variant_t variant;
+  c8 content [32];
   fs_expected_path_t expect[16];
 } create_file_test_t;
 
 static void run_create_file_test(s32* utest_result, sp_test_file_manager_t* fm, create_file_test_t t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
+  sp_str_t sandbox = sp_test_file_path(fm, sp_cstr_as_str(t.label));
   sp_fs_create_dir(sandbox);
   fs_apply_setup(utest_result, fm, sandbox, t.setup);
 
-  sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_str_view(t.path));
-  sp_fs_create_file(path);
+  sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_cstr_as_str(t.path));
+  sp_err_t result = SP_OK;
+  switch (t.variant) {
+    case CREATE_FILE_EMPTY: {
+      result = sp_fs_create_file(path);
+      break;
+    }
+    case CREATE_FILE_SLICE: {
+      sp_mem_slice_t slice = { (u8*)t.content, sp_cstr_len(t.content) };
+      result = sp_fs_create_file_slice(path, slice);
+      break;
+    }
+    case CREATE_FILE_STR: {
+      result = sp_fs_create_file_str(path, sp_cstr_as_str(t.content));
+      break;
+    }
+    case CREATE_FILE_CSTR: {
+      result = sp_fs_create_file_cstr(path, t.content);
+      break;
+    }
+  }
+  EXPECT_EQ(result, SP_OK);
 
   fs_expect_paths(utest_result, fm, sandbox, t.expect);
 }
@@ -55,38 +84,41 @@ UTEST_F(fs, create_file_unicode) {
   });
 }
 
-UTEST_F(fs, create_file_with_content) {
+UTEST_F(fs, create_file_slice) {
   SKIP_ON_WASM()
-  sp_mem_t a = ut.file_manager.mem;
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_file_with_content"));
-  sp_fs_create_dir(sandbox);
-
-  u8 buffer [] = { 's', 'p', 'u', 'm', 0 };
-  sp_str_t path = sp_zero;
-  sp_str_t content = sp_zero;
-  sp_err_t result = SP_OK;
-
-  path = sp_fs_join_path(a, sandbox, sp_str_lit("slice.file"));
-  result = sp_fs_create_file_slice(path, (sp_mem_slice_t) { buffer, 4 });
-  sp_io_read_file(a, path, &content);
-  EXPECT_EQ(result, SP_OK);
-  EXPECT_TRUE(sp_fs_exists(path));
-  SP_EXPECT_STR_EQ_CSTR(content, "spum");
-
-  path = sp_fs_join_path(a, sandbox, sp_str_lit("str.file"));
-  result = sp_fs_create_file_str(path, (sp_str_t) { (c8*)buffer, 4 });
-  sp_io_read_file(a, path, &content);
-  EXPECT_EQ(result, SP_OK);
-  EXPECT_TRUE(sp_fs_exists(path));
-  SP_EXPECT_STR_EQ_CSTR(content, "spum");
-
-  path = sp_fs_join_path(a, sandbox, sp_str_lit("cstr.file"));
-  result = sp_fs_create_file_cstr(path, (const c8*)buffer);
-  sp_io_read_file(a, path, &content);
-  EXPECT_EQ(result, SP_OK);
-  EXPECT_TRUE(sp_fs_exists(path));
-  SP_EXPECT_STR_EQ_CSTR(content, "spum");
-
+  run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
+    .label = "create_file_slice",
+    .path = "slice.file",
+    .variant = CREATE_FILE_SLICE,
+    .content = "spum",
+    .expect = {
+      { .path = "slice.file", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE, .content = "spum" },
+    },
+  });
 }
 
+UTEST_F(fs, create_file_str) {
+  SKIP_ON_WASM()
+  run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
+    .label = "create_file_str",
+    .path = "str.file",
+    .variant = CREATE_FILE_STR,
+    .content = "spum",
+    .expect = {
+      { .path = "str.file", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE, .content = "spum" },
+    },
+  });
+}
 
+UTEST_F(fs, create_file_cstr) {
+  SKIP_ON_WASM()
+  run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
+    .label = "create_file_cstr",
+    .path = "cstr.file",
+    .variant = CREATE_FILE_CSTR,
+    .content = "spum",
+    .expect = {
+      { .path = "cstr.file", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE, .content = "spum" },
+    },
+  });
+}

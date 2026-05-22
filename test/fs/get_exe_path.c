@@ -1,6 +1,6 @@
 #include "fs.h"
 
-UTEST(fs_get_exe_path, basic_properties) {
+UTEST_F(fs, basic_properties) {
   SKIP_ON_WASM()
   sp_mem_t a = sp_mem_os_new();
   sp_str_t exe = sp_fs_get_exe_path(a);
@@ -19,7 +19,7 @@ UTEST(fs_get_exe_path, basic_properties) {
   ASSERT_GT(name.len, 0);
 }
 
-UTEST(fs_get_exe_path, is_absolute) {
+UTEST_F(fs, is_absolute) {
   SKIP_ON_WASM()
   sp_mem_t a = sp_mem_os_new();
   sp_str_t exe = sp_fs_get_exe_path(a);
@@ -28,23 +28,22 @@ UTEST(fs_get_exe_path, is_absolute) {
   ASSERT_TRUE(is_absolute);
 }
 
-UTEST(fs_get_exe_path, exists_on_disk) {
+UTEST_F(fs, exists_on_disk) {
   SKIP_ON_WASM()
   sp_mem_t a = sp_mem_os_new();
   sp_str_t exe = sp_fs_get_exe_path(a);
   ASSERT_TRUE(sp_fs_exists(exe));
 }
 
-UTEST(fs_get_exe_path, is_canonical) {
+UTEST_F(fs, is_canonical) {
   SKIP_ON_WASM()
-  // canonicalizing the exe path should be a no-op
   sp_mem_t a = sp_mem_os_new();
   sp_str_t exe = sp_fs_get_exe_path(a);
   sp_str_t canonical = sp_fs_canonicalize_path(a, exe);
   SP_EXPECT_STR_EQ(canonical, exe);
 }
 
-UTEST(fs_get_exe_path, no_dotdot) {
+UTEST_F(fs, no_dotdot) {
   SKIP_ON_WASM()
   sp_mem_t a = sp_mem_os_new();
   sp_str_t exe = sp_fs_get_exe_path(a);

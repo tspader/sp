@@ -321,6 +321,8 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
   UTEST_SURPRESS_WARNING_END
 #endif
 
+#define EXPECT_OK(x) EXPECT_EQ(x, SP_OK)
+
 #define EXPECT_EQ(x, y) UTEST_COND(x, y, ==, "", 0)
 #define EXPECT_EQ_MSG(x, y, msg) UTEST_COND(x, y, ==, msg, 0)
 #define ASSERT_EQ(x, y) UTEST_COND(x, y, ==, "", 1)
