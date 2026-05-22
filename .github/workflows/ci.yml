@@ -38,7 +38,7 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: master
-      - run: make big
+      - run: make big -j$(nproc)
       - uses: actions/upload-artifact@v4
         with:
           name: build-all
@@ -116,17 +116,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
-      - uses: actions/download-artifact@v4
-        with: { path: dist, pattern: build-* }
+      - uses: actions/checkout@v4
       - run: |
-          mkdir release
-          for d in dist/build-all/*/; do
-            t=$(basename "$d")
-            [ -d "$d/test" ] || continue
-            tar -czf release/sp-$t.tar.gz -C dist/build-all "$t"
-          done
-          [ -d dist/build-msvc ] && tar -czf release/sp-msvc.tar.gz -C dist build-msvc || true
+          tag=${GITHUB_REF_NAME}
+          mkdir -p release "$tag/sp"
+          cp sp.h LICENSE "$tag/"
+          cp sp/*.h "$tag/sp/"
+          tar -czf "release/sp-$tag.tar.gz" "$tag"
+          cp sp.h release/sp.h
       - uses: softprops/action-gh-release@v2
         with:
-          files: release/*.tar.gz
+          files: |
+            release/sp.h
+            release/sp-*.tar.gz
           generate_release_notes: true
