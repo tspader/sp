@@ -6,10 +6,10 @@
 - `sp_da`, a dynamic array
 - `sp_ht`, hash tables with arbitrary keys and values (including strings)
 - `sp_ps`, subprocesses
-- `sp_io`, synchronous IO on top of files and buffers
-- File monitors, [beautiful, interactive CLI prompts](https://spader.zone/prompt), ELF parsing, memory allocators, concurrency, UTF-8, globbing, and a whole lot more!
+- `sp_io`, synchronous, bufferable, zero-copy IO
+- File monitors, [beautiful, interactive CLIs](https://spader.zone/prompt), ELF parsing, memory allocators, concurrency, UTF-8, screaming fast globbing, and a whole lot more!
 
-It's written in ~15,000 lines of plain C99[^1] and has zero dependencies. It can be used with virtually any 64-bit environment and toolchain:
+It's written in ~15,000 lines of plain C99[^1] and has zero dependencies. It does not depend on libc. It can be used with virtually any environment and toolchain:
 - Linux, macOS, Windows
 - x86, ARM, or WASM
 - gcc, clang, MSVC, mingw, zig cc, tcc, cosmocc
@@ -22,7 +22,7 @@ It's written in ~15,000 lines of plain C99[^1] and has zero dependencies. It can
 #include "sp.h"
 ```
 
-`sp.h` can be also be compiled as a traditional shared or static library.
+`sp.h` can be also be compiled as a traditional shared or static library. `sp.h` makes no assumptions about its place in your code. You can use any small piece of it as a standalone utility, or you can use it as the foundation for almost any program. Give it a try!
 
 ## example: `ls`
 Here's a minimal `ls` in 30 lines of code.
@@ -58,9 +58,10 @@ s32 main(s32 num_args, const c8** args) {
 }
 ```
 A few modules showcased in this example:
+- `sp_mem_t` is an allocator; everything that allocates takes one. In the example, we use the default heap allocator.
 - `sp_str_t` is a non-null-terminated string which trivially gives us views, substrings, and many path operations
 - `sp_fs` is more or less equivalent to `std::fs` in C++, but in plain C and implemented against the lowest level APIs
-- `sp_da` is a `std::vector` equivalent which can hold arbitrary types, does not need initialization, and is stored as `T*`
+- `sp_da` is a `std::vector` equivalent which can hold arbitrary types and is stored as and usable as a plain `T*`
 - `sp_fmt` implements modern format strings (like Zig, or Rust) whose arguments are type-safe
 
 # modules
@@ -107,6 +108,7 @@ These are available in `sp/*.h` as separate headers, for various reasons.[^3]
 | `sp_prompt` | Very beautiful [`clack`](https://github.com/bombshell-dev/clack)-inspired interactive prompts for CLIs                                                                                                 |       |
 
 # principles
+I wrote about some of the core design [here](https://spader.zone/sp/). The short version:
 - Prefer the lowest level interface to the OS by default
 - Ergonomics are the most important thing and by a lot
 - Errors are propagated up the call stack
@@ -114,77 +116,9 @@ These are available in `sp/*.h` as separate headers, for various reasons.[^3]
 - Null terminated strings are the devil's work and are to be shunned
 - A little Assembly never hurt anyone
 
-# known issues
-`sp.h` is a library that grows with my understanding of systems programming. That means that some of the code is naive, underspecified, or just bad. Everything that exists is tested extremely thoroughly.
+Please note that `sp.h` is in alpha. I [use](https://github.com/tspader/spn) [it](https://github.com/tspader/space), [a](https://github.com/tspader/mbench) [lot](https://github.com/tspader/tomlc17), and there are about a thousand tests, but...it's still in alpha. The core API shape is done, but there will likely be breakage around the edges. There are also several POSIX-isms which have clung around, and `sp_io` was recently finished.
 
-| module       | problem                                                                                                                                                                                               | platform |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `sp_ps`      | Implemented with `pthread` instead of `fork` + `exec`                                                                                                                                                 | Linux    |
-| `sp_ht`      | Keys, by default, are simply `memcmp`'d for equality. If your key is a struct which the compiler pads, it is silently wrong.                                                                          |          |
-| `sp_io`      | Writes are objectively worse than libc, because we don't use `writev` to batch when we know we want to do more than one write (e.g. "flush the buffer and then immediately write the requested data") |          |
-
-# more examples
-[Source code is often the best documentation](https://github.com/tspader/sp/tree/main/example), but here are a few more.
-
-## wc
-Here's a minimal version of a word frequency counter. It uses a few very handy and common functions:
-- We use `sp_fs_join_path()` to find the target's absolute path
-- Then, read it in one go with `sp_io_read_file()` (a thin wrapper over `sp_io_reader_t`)
-- Split the content into lines, and then words. This is all zero copy; `lines` and `words` contain *views* into the content.
-- A `sp_str_ht(u32)` (`str` -> `u32`) keeps the counts. `sp_str_ht_for_kv()` lets us iterate with a strongly typed (!) iterator
-```c
-#define SP_IMPLEMENTATION
-#include "sp.h"
-
-s32 main(s32 num_args, const c8** args) {
-  if (num_args < 2) {
-    sp_log("usage: wc {.fg cyan}", sp_fmt_cstr("$file"));
-    return 1;
-  }
-
-  sp_str_t path = sp_fs_join_path(sp_fs_get_cwd(), sp_str_view(args[1]));
-  sp_str_t content = sp_zero;
-  sp_io_read_file(path, &content);
-
-  sp_str_ht(u32) counts = sp_zero;
-  sp_da(sp_str_t) lines = sp_str_split_c8(content, '\n');
-  sp_da_for(lines, i) {
-    sp_da(sp_str_t) words = sp_str_split_c8(lines[i], ' ');
-
-    sp_da_for(words, j) {
-      u32* count = sp_str_ht_get(counts, words[j]);
-      if (count) {
-        *count = *count + 1;
-      } else {
-        sp_str_ht_insert(counts, words[j], 1);
-      }
-    }
-  }
-
-  sp_str_ht_for_kv(counts, it) {
-    sp_log("{} {}", sp_fmt_uint(*it.val), sp_fmt_str(*it.key));
-  }
-  return 0;
-}
-```
-
-## dynamic array
-```c
-sp_da(u32) years = sp_zero;
-sp_da_push(years, 1969);
-sp_da_push(years, 1972);
-sp_da_for(years, it) {
-  sp_log("{}", sp_fmt_uint(years[it]));
-}
-```
-
-## hash table
-```c
-  sp_cstr_ht(s32) ht = sp_zero;
-  sp_cstr_ht_insert(ht, "veneta", 72);
-  s32* veneta = sp_cstr_ht_get(ht, "veneta");
-  sp_log("the best dead show was in 19{}", sp_fmt_int(*veneta));
-```
+Thankfully, since the library is a single file, it's very easy for you or an LLM to diff two copies of the library and make any changes needed. More, since the library is *not* build on decades of cruft, there are very few layers between your code and the syscalls it boils down to. Nevertheless, you should feel comfortable reading the library's source code if you plan to use it seriously.
 
 # development
 Install any C compiler, and then:

@@ -103,6 +103,8 @@ typedef struct {
 
 void sp_test_file_manager_init(sp_test_file_manager_t* manager);
 sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name);
+sp_str_t sp_test_file_path_c(sp_test_file_manager_t* manager, const c8* name);
+sp_str_t sp_test_file_create_dir(sp_test_file_manager_t* fs, const c8* relative);
 void sp_test_file_create_ex(sp_test_file_config_t config);
 sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t path);
 void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager);
@@ -190,6 +192,10 @@ void sp_test_file_manager_init(sp_test_file_manager_t* fs) {
   }
 }
 
+sp_str_t sp_test_file_path_c(sp_test_file_manager_t* manager, const c8* name) {
+  return sp_test_file_path(manager, sp_cstr_as_str(name));
+}
+
 sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name) {
   return sp_fs_join_path(manager->mem, manager->paths.test, name);
 }
@@ -222,6 +228,12 @@ sp_str_t sp_test_file_create_empty(sp_test_file_manager_t* manager, sp_str_t rel
     .content = sp_str_lit(""),
   });
 
+  return path;
+}
+
+sp_str_t sp_test_file_create_dir(sp_test_file_manager_t* fs, const c8* relative) {
+  sp_str_t path = sp_test_file_path_c(fs, relative);
+  sp_fs_create_dir(path);
   return path;
 }
 

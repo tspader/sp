@@ -9,6 +9,7 @@ SP_TEST_MAIN()
 #include "fs/get_stem.c"
 #include "fs/join_path.c"
 #include "fs/replace_ext.c"
+#include "fs/is_absolute.c"
 #include "fs/is_root.c"
 #include "fs/is_glob.c"
 #include "fs/canonicalize_path.c"

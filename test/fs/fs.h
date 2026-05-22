@@ -71,6 +71,7 @@ typedef struct {
   const c8* path;
   bool exists;
   sp_fs_kind_t attr;
+  const c8* content;
 } fs_expected_path_t;
 
 static u32 fs_count_setup(fs_setup_t* setup) {
@@ -110,14 +111,15 @@ static void fs_expect_attr(s32* utest_result, sp_str_t path, sp_fs_kind_t actual
   SP_FAIL();
 }
 
-static void fs_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_str_t sandbox, fs_expected_path_t* expected) {
+static void fs_expect_paths(s32* utest_result, sp_test_file_manager_t* fs, sp_str_t sandbox, fs_expected_path_t* expected) {
   u32 expected_count = fs_count_expected_paths(expected);
   sp_for(i, expected_count) {
-    fs_expected_path_t* exp = &expected[i];
-    sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_str_view(exp->path));
+    fs_expected_path_t* info = &expected[i];
+    sp_str_t path = sp_fs_join_path(fs->mem, sandbox, sp_str_view(info->path));
+
     bool exists = sp_fs_exists(path);
-    if (exists != exp->exists) {
-      if (exp->exists) {
+    if (exists != info->exists) {
+      if (info->exists) {
         SP_TEST_REPORT("expected {} to exist", sp_fmt_str(path));
       } else {
         SP_TEST_REPORT("expected {} not to exist", sp_fmt_str(path));
@@ -125,17 +127,27 @@ static void fs_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_st
       SP_FAIL();
     }
 
-    if (exp->exists) {
-      fs_expect_attr(utest_result, path, sp_fs_get_kind(path), exp->attr);
+    if (info->exists) {
+      fs_expect_attr(utest_result, path, sp_fs_get_kind(path), info->attr);
+    }
+
+    if (info->content) {
+      sp_str_t actual = sp_zero;
+      sp_io_read_file(fs->mem, path, &actual);
+      sp_str_t expected_content = sp_str_view(info->content);
+      if (!sp_str_equal(actual, expected_content)) {
+        SP_TEST_REPORT("{} content was {} but expected {}", sp_fmt_str(path), sp_fmt_str(actual), sp_fmt_str(expected_content));
+        SP_FAIL();
+      }
     }
   }
 }
 
-static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str_t sandbox, fs_setup_t* setup) {
+static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fs, sp_str_t sandbox, fs_setup_t* setup) {
   u32 setup_count = fs_count_setup(setup);
   sp_for(i, setup_count) {
     fs_setup_t* ent = &setup[i];
-    sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_str_view(ent->path));
+    sp_str_t path = sp_fs_join_path(fs->mem, sandbox, sp_str_view(ent->path));
     sp_str_t parent = sp_fs_parent_path(path);
 
     if (!sp_str_empty(parent) && !sp_str_equal(parent, path) && !sp_fs_exists(parent)) {
@@ -155,7 +167,7 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
         break;
       }
       case FS_SETUP_SYMLINK: {
-        sp_str_t target = sp_fs_join_path(fm->mem, sandbox, sp_str_view(ent->target));
+        sp_str_t target = sp_fs_join_path(fs->mem, sandbox, sp_str_view(ent->target));
         if (sp_fs_create_sym_link(target, path) != SP_OK) {
           SP_TEST_REPORT("failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();
@@ -163,7 +175,7 @@ static void fs_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str
         break;
       }
       case FS_SETUP_HARD_LINK: {
-        sp_str_t target = sp_fs_join_path(fm->mem, sandbox, sp_str_view(ent->target));
+        sp_str_t target = sp_fs_join_path(fs->mem, sandbox, sp_str_view(ent->target));
         if (sp_fs_create_hard_link(target, path) != SP_OK) {
           SP_TEST_REPORT("failed to create hard link {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();

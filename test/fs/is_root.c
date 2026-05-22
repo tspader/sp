@@ -8,16 +8,17 @@ typedef struct {
 UTEST(fs_is_root, cases) {
   SKIP_ON_WASM()
   is_root_case_t cases[] = {
-    { "",      true },
-    { "/",     true },
-    { "C:",    true },
-    { "a:",    true },
-    { "C:/",   true },
-    { "C:\\",  true },
-    { "foo",   false },
-    { "/foo",  false },
-    { "C:/foo",false },
-    { "//",    false },
+    { "",       false },
+    { "/",      true },
+    { "\\",     true },
+    { "C:",     false },
+    { "a:",     false },
+    { "C:/",    true },
+    { "C:\\",   true },
+    { "foo",    false },
+    { "/foo",   false },
+    { "C:/foo", false },
+    { "//",     false },
   };
 
   SP_CARR_FOR(cases, i) {
