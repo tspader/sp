@@ -15203,7 +15203,7 @@ sp_err_t sp_fs_link(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind) {
 }
 
 sp_err_t sp_fs_remove_file(sp_str_t path) {
-  return sp_cast(sp_err_t, sp_sys_unlink_s(sp_sys_get_root(0), path));
+  return sp_sys_unlink_s(sp_sys_get_root(0), path) ? SP_ERR_OS : SP_OK;
 }
 
 void sp_fs_it_push(sp_fs_it_t* it, sp_str_t path) {
@@ -15286,7 +15286,7 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
     if (err) goto done;
   }
 
-  err = sp_cast(sp_err_t, sp_sys_rmdir_s(sp_sys_get_root(0), path));
+  err = sp_sys_rmdir_s(sp_sys_get_root(0), path) ? SP_ERR_OS : SP_OK;
 
 done:
   sp_mem_end_scratch(s);
