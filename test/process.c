@@ -190,6 +190,25 @@ s32 main(s32 num_args, const c8** args) {
       }
       break;
     }
+    case TEST_PROC_FUNCTION_BLOCK_UNTIL_EOF: {
+      u8 buffer[256];
+      while (true) {
+        s64 n = sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer));
+        if (n == 0) break;
+        if (n < 0) return 1;
+      }
+      return exit_code;
+    }
+    case TEST_PROC_FUNCTION_DELAY_AFTER_EOF: {
+      u8 buffer[256];
+      while (true) {
+        s64 n = sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer));
+        if (n == 0) break;
+        if (n < 0) return 1;
+      }
+      sp_os_sleep_ms(200);
+      return exit_code;
+    }
     default: {
       sp_log_err("Unknown function: {}", sp_fmt_cstr(function_str));
       return 1;
