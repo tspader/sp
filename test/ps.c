@@ -667,19 +667,28 @@ UTEST_F(ps, run) {
 }
 
 UTEST_F(ps, poll_while_process_running) {
-  sp_ps_t ps = sp_ps_create(ut.mem, (sp_ps_config_t) {
-    .command = get_process_path(ut.mem),
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_lit("wait"),
-      sp_str_lit("100")
+      "--fn", "block_until_eof",
+      "--exit-code", "69",
+    },
+    .io = {
+      .in  = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_NULL },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
+  ASSERT_NE(ps.os, SP_NULLPTR);
 
   sp_ps_status_t result = sp_ps_poll(&ps, 0);
   EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
 
+  EXPECT_EQ(sp_io_stream_writer_close(sp_ps_io_in(&ps)), SP_OK);
+
   result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PS_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 69);
 }
 
 UTEST_F(ps, process_complete_during_poll) {
@@ -746,43 +755,86 @@ UTEST_F(ps, wait_twice_while_process_running) {
   EXPECT_EQ(result.exit_code, -1);
 }
 
-UTEST_F(ps, poll_then_wait) {
+UTEST_F(ps, poll_zero_idempotent) {
   sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
     .command = get_process_path_c(ut.mem),
     .args = {
-      "--fn", "wait",
-      "100"
+      "--fn", "block_until_eof",
+      "--exit-code", "69",
+    },
+    .io = {
+      .in  = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_NULL },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
-
-  sp_ps_status_t result = sp_ps_poll(&ps, 0);
-  EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
-
-  result = sp_ps_wait(&ps);
-  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
-  EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
-}
-
-UTEST_F(ps, poll_multiple) {
-  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
-    .command = get_process_path_c(ut.mem),
-    .args = {
-      "--fn", "wait",
-      "300"
-    }
-  });
+  ASSERT_NE(ps.os, SP_NULLPTR);
 
   sp_ps_status_t result = sp_zero;
 
-  result = sp_ps_poll(&ps, 50);
-  EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
+  sp_for(i, 3) {
+    result = sp_ps_poll(&ps, 0);
+    EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
+  }
 
-  result = sp_ps_poll(&ps, 50);
-  EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
+  EXPECT_EQ(sp_io_stream_writer_close(sp_ps_io_in(&ps)), SP_OK);
 
-  result = sp_ps_poll(&ps, 300);
+  result = sp_ps_poll(&ps, 10000);
   EXPECT_EQ(result.state, SP_PS_STATE_DONE);
-  EXPECT_EQ(result.exit_code, sp_test_ps_wait_exit_code);
+  EXPECT_EQ(result.exit_code, 69);
+}
+
+UTEST_F(ps, poll_timeout_with_running_process) {
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
+    .args = {
+      "--fn", "block_until_eof",
+      "--exit-code", "69",
+    },
+    .io = {
+      .in  = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_NULL },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
+    }
+  });
+  ASSERT_NE(ps.os, SP_NULLPTR);
+
+  sp_tm_timer_t timer = sp_tm_start_timer();
+  sp_ps_status_t result = sp_ps_poll(&ps, 100);
+  u64 elapsed_ms = (u64)sp_tm_ns_to_ms_f((f64)sp_tm_read_timer(&timer));
+
+  EXPECT_EQ(result.state, SP_PS_STATE_RUNNING);
+  EXPECT_GE(elapsed_ms, (u64)80);
+
+  EXPECT_EQ(sp_io_stream_writer_close(sp_ps_io_in(&ps)), SP_OK);
+  result = sp_ps_wait(&ps);
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
+}
+
+UTEST_F(ps, poll_returns_on_completion) {
+  sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
+    .command = get_process_path_c(ut.mem),
+    .args = {
+      "--fn", "delay_after_eof",
+      "--exit-code", "69",
+    },
+    .io = {
+      .in  = { .mode = SP_PS_IO_MODE_CREATE },
+      .out = { .mode = SP_PS_IO_MODE_NULL },
+      .err = { .mode = SP_PS_IO_MODE_NULL },
+    }
+  });
+  ASSERT_NE(ps.os, SP_NULLPTR);
+
+  sp_tm_timer_t timer = sp_tm_start_timer();
+  EXPECT_EQ(sp_io_stream_writer_close(sp_ps_io_in(&ps)), SP_OK);
+  sp_ps_status_t result = sp_ps_poll(&ps, 10000);
+  u64 elapsed_ms = (u64)sp_tm_ns_to_ms_f((f64)sp_tm_read_timer(&timer));
+
+  EXPECT_EQ(result.state, SP_PS_STATE_DONE);
+  EXPECT_EQ(result.exit_code, 69);
+  EXPECT_GE(elapsed_ms, (u64)150);
+  EXPECT_LE(elapsed_ms, (u64)5000);
 }
 
 UTEST_F(ps, wait_with_output) {
@@ -813,8 +865,8 @@ UTEST_F(ps, poll_with_io) {
   sp_ps_t ps = sp_ps_create_c(ut.mem, (sp_ps_config_cstr_t) {
     .command = get_process_path_c(ut.mem),
     .args = {
-      "--fn", "wait",
-      "100"
+      "--fn", "block_until_eof",
+      "--exit-code", "69",
     },
     .io = {
       .in = { .mode = SP_PS_IO_MODE_CREATE },
@@ -822,15 +874,19 @@ UTEST_F(ps, poll_with_io) {
       .err = { .mode = SP_PS_IO_MODE_NULL },
     }
   });
+  ASSERT_NE(ps.os, SP_NULLPTR);
 
-  sp_ps_status_t r1 = sp_ps_poll(&ps, 10);
+  sp_ps_status_t r1 = sp_ps_poll(&ps, 0);
   EXPECT_EQ(r1.state, SP_PS_STATE_RUNNING);
 
   sp_io_stream_writer_t* in = sp_ps_io_in(&ps);
-  EXPECT_NE(in, SP_NULLPTR);
+  ASSERT_NE(in, SP_NULLPTR);
+
+  EXPECT_EQ(sp_io_stream_writer_close(in), SP_OK);
 
   sp_ps_status_t r2 = sp_ps_wait(&ps);
   EXPECT_EQ(r2.state, SP_PS_STATE_DONE);
+  EXPECT_EQ(r2.exit_code, 69);
 }
 
 UTEST_F(ps, interleaved_read_write) {
