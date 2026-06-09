@@ -9,7 +9,7 @@
   #define SP_MEM_ALIGNMENT 16
 #endif
 
-#define EXPECT_ALIGNED(ptr) EXPECT_EQ(sp_align_up(ptr, SP_MEM_ALIGNMENT), ptr)
+#define EXPECT_ALIGNED(ptr) EXPECT_EQ(sp_align_up(ptr, SP_MEM_ALIGNMENT), sp_uptr(ptr))
 
 struct mem {
   u8 placeholder;

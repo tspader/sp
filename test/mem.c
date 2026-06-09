@@ -6,6 +6,7 @@
 #include "mem/builtin.c"
 #include "mem/arena.c"
 #include "mem/fixed.c"
+#include "mem/heap.c"
 #include "mem/slice.c"
 
 #ifdef MEM_TEST_OWNS_MAIN

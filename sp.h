@@ -67,7 +67,6 @@
       sp_utf8          encode, decode, validation, iteration
 
     SP_RT_NUM_SPIN_LOCK
-    SP_MEM_ARENA_BLOCK_SIZE
     SP_PS_MAX_ARGS
     SP_PS_MAX_ENV
 
@@ -498,8 +497,12 @@
 
 #define SP_MEM_ALIGNMENT 16
 #define SP_ALIGNED SP_ALIGN(SP_MEM_ALIGNMENT)
-#define sp_align_up(ptr, align) ((void*)(((uintptr_t)(ptr) + ((uintptr_t)(align) - 1)) & ~((uintptr_t)(align) - 1)))
 #define sp_align_offset(val, align) ((((val) + ((u64)(align) - 1)) & ~((u64)(align) - 1)))
+
+#define sp_uptr(ptr) ((uintptr_t)(ptr))
+#define sp_align_mask(align) (sp_uptr(align) - 1)
+#define sp_align_down(ptr, align) (sp_uptr(ptr) & ~sp_align_mask(align))
+#define sp_align_up(ptr, align) sp_align_down(sp_uptr(ptr) + sp_align_mask(align), align)
 
 #define sp_try(expr) \
   do { \
@@ -1427,17 +1430,6 @@ typedef s32 (*sp_entry_fn_t)(s32, const c8**);
 #endif
 
 
-//  ██████████ ███████████   ███████████      ███████    ███████████
-// ░░███░░░░░█░░███░░░░░███ ░░███░░░░░███   ███░░░░░███ ░░███░░░░░███
-//  ░███  █ ░  ░███    ░███  ░███    ░███  ███     ░░███ ░███    ░███
-//  ░██████    ░██████████   ░██████████  ░███      ░███ ░██████████
-//  ░███░░█    ░███░░░░░███  ░███░░░░░███ ░███      ░███ ░███░░░░░███
-//  ░███ ░   █ ░███    ░███  ░███    ░███ ░░███     ███  ░███    ░███
-//  ██████████ █████   █████ █████   █████ ░░░███████░   █████   █████
-// ░░░░░░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░    ░░░░░░░    ░░░░░   ░░░░░
-// @error
-
-
 //  ██████   ██████ ██████████ ██████   ██████    ███████    ███████████   █████ █████
 // ░░██████ ██████ ░░███░░░░░█░░██████ ██████   ███░░░░░███ ░░███░░░░░███ ░░███ ░░███
 //  ░███░█████░███  ░███  █ ░  ░███░█████░███  ███     ░░███ ░███    ░███  ░░███ ███
@@ -1447,10 +1439,10 @@ typedef s32 (*sp_entry_fn_t)(s32, const c8**);
 //  █████     █████ ██████████ █████     █████ ░░░███████░   █████   █████    █████
 // ░░░░░     ░░░░░ ░░░░░░░░░░ ░░░░░     ░░░░░    ░░░░░░░    ░░░░░   ░░░░░    ░░░░░
 // @memory
-#ifndef SP_MEM_ARENA_BLOCK_SIZE
-  #define SP_MEM_ARENA_BLOCK_SIZE 4096
-#endif
 
+///////////////
+// ALLOCATOR //
+///////////////
 typedef enum {
   SP_ALLOCATOR_MODE_ALLOC,
   SP_ALLOCATOR_MODE_FREE,
@@ -1468,6 +1460,66 @@ typedef struct sp_allocator_t {
   void* user_data;
 } sp_mem_t;
 
+SP_API void*    sp_mem_allocator_alloc(sp_mem_t arena, u64 size);
+SP_API void*    sp_mem_allocator_realloc(sp_mem_t arena, void* ptr, u64 size);
+SP_API void     sp_mem_allocator_free(sp_mem_t arena, void* buffer);
+SP_API void*    sp_alloc(sp_mem_t mem, u64 size);
+SP_API void*    sp_realloc(sp_mem_t mem, void* memory, u64 size);
+SP_API void     sp_free(sp_mem_t mem, void* memory);
+SP_API sp_mem_t sp_mem_get_scratch();
+
+//////////
+// CORE //
+//////////
+SP_API void sp_mem_copy(void* dest, const void* source, u64 num_bytes);
+SP_API void sp_mem_move(void* dest, const void* source, u64 num_bytes);
+SP_API bool sp_mem_is_equal(const void* a, const void* b, u64 len);
+SP_API void sp_mem_fill(void* buffer, u64 bsize, void* fill, u64 fsize);
+SP_API void sp_mem_fill_u8(void* buffer, u64 buffer_size, u8 fill);
+SP_API void sp_mem_zero(void* buffer, u64 buffer_size);
+#define sp_sys_alloc_n(T, n) (T*)sp_sys_alloc((n) * sizeof(T))
+#define sp_sys_alloc_type(T) sp_sys_alloc_n(T, 1)
+#define sp_mem_allocator_alloc_n(a, T, n) (T*)sp_mem_allocator_alloc(a, (n) * sizeof(T))
+#define sp_mem_allocator_alloc_type(a, T) sp_mem_allocator_alloc_n(a, T, 1)
+#define sp_mem_arena_alloc_n(a, T, n) (T*)sp_mem_arena_alloc((a), (n) * sizeof(T))
+#define sp_mem_arena_alloc_type(a, T) sp_mem_arena_alloc_n(a, T, 1)
+#define sp_alloc_n(a, T, n) (T*)sp_alloc(a, (n) * sizeof(T))
+#define sp_alloc_type(a, T) sp_alloc_n(a, T, 1)
+
+/////////////////////
+// FIXED ALLOCATOR //
+/////////////////////
+typedef struct {
+  u8* buffer;
+  u64 capacity;
+  u64 bytes_used;
+  u8 alignment;
+} sp_mem_fixed_t;
+
+SP_API sp_mem_fixed_t sp_mem_fixed(void* buffer, u64 capacity);
+SP_API sp_mem_fixed_t sp_mem_fixed_ex(void* buffer, u64 capacity, u8 alignment);
+SP_API sp_mem_t       sp_mem_fixed_as_allocator(sp_mem_fixed_t* fixed);
+SP_API void           sp_mem_fixed_clear(sp_mem_fixed_t* fixed);
+SP_API u64            sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed);
+SP_API void*          sp_mem_fixed_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old);
+
+////////////////////
+// PAGE ALLOCATOR //
+////////////////////
+typedef struct SP_ALIGNED {
+  u64 size;
+} sp_mem_os_header_t;
+
+SP_API void*                 sp_mem_os_alloc(u64 size);
+SP_API void*                 sp_mem_os_realloc(void* ptr, u64 size);
+SP_API void                  sp_mem_os_free(void* ptr);
+SP_API void*                 sp_mem_os_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
+SP_API sp_mem_os_header_t* sp_mem_os_get_header(void* ptr);
+SP_API sp_mem_t              sp_mem_os_new();
+
+/////////////////////
+// ARENA ALLOCATOR //
+/////////////////////
 typedef enum {
   SP_MEM_ARENA_MODE_DEFAULT,
   SP_MEM_ARENA_MODE_NO_REALLOC,
@@ -1489,10 +1541,6 @@ typedef struct {
   u8 alignment;
 } sp_mem_arena_t;
 
-typedef struct SP_ALIGNED {
-  u64 size;
-} sp_mem_os_header_t;
-
 typedef struct {
   sp_mem_arena_t* arena;
   sp_mem_arena_block_t* block;
@@ -1500,35 +1548,9 @@ typedef struct {
   sp_mem_t mem;
 } sp_mem_arena_marker_t;
 
-typedef struct {
-  u8* buffer;
-  u64 capacity;
-  u64 bytes_used;
-  u8 alignment;
-} sp_mem_fixed_t;
-
-SP_API void                  sp_mem_copy(void* dest, const void* source, u64 num_bytes);
-SP_API void                  sp_mem_move(void* dest, const void* source, u64 num_bytes);
-SP_API bool                  sp_mem_is_equal(const void* a, const void* b, u64 len);
-SP_API void                  sp_mem_fill(void* buffer, u64 bsize, void* fill, u64 fsize);
-SP_API void                  sp_mem_fill_u8(void* buffer, u64 buffer_size, u8 fill);
-SP_API void                  sp_mem_zero(void* buffer, u64 buffer_size);
-SP_API void*                 sp_mem_allocator_alloc(sp_mem_t arena, u64 size);
-SP_API void*                 sp_mem_allocator_realloc(sp_mem_t arena, void* ptr, u64 size);
-SP_API void                  sp_mem_allocator_free(sp_mem_t arena, void* buffer);
-SP_API void*                 sp_mem_os_alloc(u64 size);
-SP_API void*                 sp_mem_os_alloc_zero(u64 size);
-SP_API void*                 sp_mem_os_realloc(void* ptr, u64 size);
-SP_API void                  sp_mem_os_free(void* ptr);
-SP_API void*                 sp_mem_os_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
-SP_API sp_mem_os_header_t*   sp_mem_os_get_header(void* ptr);
-SP_API sp_mem_t              sp_mem_os_new();
-SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
-SP_API void*                 sp_alloc(sp_mem_t mem, u64 size);
-SP_API void*                 sp_realloc(sp_mem_t mem, void* memory, u64 size);
-SP_API void                  sp_free(sp_mem_t mem, void* memory);
 SP_API sp_mem_arena_t*       sp_mem_arena_new(sp_mem_t mem);
 SP_API sp_mem_arena_t*       sp_mem_arena_new_ex(sp_mem_t mem, u64 block_size, sp_mem_arena_mode_t mode, u8 alignment);
+SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
 SP_API void                  sp_mem_arena_clear(sp_mem_arena_t* arena);
 SP_API void                  sp_mem_arena_destroy(sp_mem_arena_t* arena);
 SP_API void*                 sp_mem_arena_on_alloc(void* ptr, sp_mem_alloc_mode_t mode, u64 n, void* old);
@@ -1539,29 +1561,129 @@ SP_API u64                   sp_mem_arena_bytes_used(sp_mem_arena_t* arena);
 SP_API void*                 sp_mem_arena_alloc(sp_mem_arena_t* arena, u64 size);
 SP_API void*                 sp_mem_arena_realloc(sp_mem_arena_t* arena, void* ptr, u64 size);
 SP_API void                  sp_mem_arena_free(sp_mem_arena_t* arena, void* ptr);
-SP_API sp_mem_fixed_t        sp_mem_fixed(void* buffer, u64 capacity);
-SP_API sp_mem_fixed_t        sp_mem_fixed_ex(void* buffer, u64 capacity, u8 alignment);
-SP_API sp_mem_t              sp_mem_fixed_as_allocator(sp_mem_fixed_t* fixed);
-SP_API void                  sp_mem_fixed_clear(sp_mem_fixed_t* fixed);
-SP_API u64                   sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed);
-SP_API void*                 sp_mem_fixed_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old);
-SP_API sp_mem_t              sp_mem_get_scratch();
 SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena();
 SP_API sp_mem_arena_t*       sp_mem_get_scratch_arena_for(sp_mem_t mem);
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch();
 SP_API sp_mem_arena_marker_t sp_mem_begin_scratch_for(sp_mem_t mem);
 SP_API void                  sp_mem_end_scratch(sp_mem_arena_marker_t marker);
 
-#define sp_sys_alloc_n(T, n) (T*)sp_sys_alloc((n) * sizeof(T))
-#define sp_sys_alloc_type(T) sp_sys_alloc_n(T, 1)
-#define sp_mem_allocator_alloc_n(a, T, n) (T*)sp_mem_allocator_alloc(a, (n) * sizeof(T))
-#define sp_mem_allocator_alloc_type(a, T) sp_mem_allocator_alloc_n(a, T, 1)
-#define sp_mem_arena_alloc_n(a, T, n) (T*)sp_mem_arena_alloc((a), (n) * sizeof(T))
-#define sp_mem_arena_alloc_type(a, T) sp_mem_arena_alloc_n(a, T, 1)
-#define sp_alloc_n(a, T, n) (T*)sp_alloc(a, (n) * sizeof(T))
-#define sp_alloc_type(a, T) sp_alloc_n(a, T, 1)
+/*
+  HEAP ALLOCATOR
 
+  sp_mem_heap_t is a general purpose heap allocator, like malloc(). This means
+  that it's suitable for most allocations that programs want to do, but not
+  necessarily optimal or ergonomic.
 
+  Small allocations are rounded up to a bucket size and handed out from
+  bucket-sized chunks carved out of 4KB pages, called spans. Spans are in
+  turn carved out of 64KB segments, which are what the heap actually
+  requests from the OS; empty spans go onto a free list for reuse by any
+  bucket, and segments are only returned to the OS when the heap is
+  destroyed. Large allocations aren't carved out from anything; each large
+  allocation makes a syscall.
+
+  ## Design
+
+  The diagram below is a simplified visual of how that 4KB is laid out. First,
+  there's a header. Then, the remaining memory is split into bucket sized
+  chunks. The span keeps a free list of chunks by using the first 8 bytes
+  of each chunk as the pointer in a linked list
+
+  │    48B    │        512B       │       512B        │        512B       │
+  │  header   │     chunks[0]     │    chunks[1]      │     chunks[2]     │
+  ┌───────────┬────────┬──────────┬────────┬──────────┬───────────────────┐
+  │ free_head │  next  │   junk   │  NULL  │   junk   │     user bytes    │
+  └─────┬─────┴─┬───┬──┴──────────┴─┬──────┴──────────┴───────────────────┘
+        │      ▲    │               ▲
+        └───────┘   └───────────────┘
+
+  Allocation simply calculates the bucket for the request, finds the span that
+  holds the chunks for that bucket size, and returns the first such chunk from
+  the page's free list.
+
+  │  header   │     chunks[0]     │    chunks[1]      │     chunks[2]     │
+  ┌───────────┬───────────────────┬────────┬──────────┬───────────────────┐
+  │ free_head │    user bytes     │  NULL  │   junk   │     user bytes    │
+  └─────┬─────┴───────────────────┴─┬──────┴──────────┴───────────────────┘
+        │                           ▲
+        └───────────────────────────┘
+
+  Deallocation is identical, but in reverse; it sets the span's free list head
+  to the newly freed chunk and links it to the rest of the free list.
+
+  # Performance Characteristics
+
+  Allocations are always rounded up to the nearest bucket. If you ask
+  for, say, 50 bytes, the allocator will use a 64 byte chunk. This is,
+  obviously, inefficient in overhead. Buckets are spaced 1.25x to 1.5x
+  apart and sized so that a whole number of chunks packs a span almost
+  exactly; the worst rounding waste is bounded by the gap to the next
+  bucket, and the worst packing waste by the span's leftover tail.
+
+  In exchange for this inefficiency, you get better utilization. A freed
+  chunk is immediately reusable, always. malloc() can fragment across a
+  program's lifetime no matter what. This heap allocator does not; overhead
+  is purely a function of your size distribution, not how long the program
+  has been running.
+ */
+#define SP_MEM_HEAP_NUM_BUCKETS 16
+#define SP_MEM_HEAP_SEGMENT_SIZE 65536
+#define SP_MEM_HEAP_SPAN_SIZE 4096
+#define SP_MEM_HEAP_MAX_SMALL 2016
+#define SP_MEM_HEAP_SPAN_MAGIC 0x53504D48u
+#define SP_MEM_HEAP_LARGE_MAGIC 0x53504C47u
+
+typedef struct SP_ALIGNED sp_mem_heap_span_t {
+  u32 magic;
+  u32 bucket;
+  u32 in_use;
+  void* free_head;
+  struct sp_mem_heap_span_t* prev;
+  struct sp_mem_heap_span_t* next;
+  struct sp_mem_heap_t* heap;
+} sp_mem_heap_span_t;
+
+typedef struct sp_mem_heap_segment_t {
+  struct sp_mem_heap_segment_t* next;
+} sp_mem_heap_segment_t;
+
+typedef struct SP_ALIGNED sp_mem_heap_large_t {
+  u32 magic;
+  u32 pad;
+  u64 size;
+  u64 capacity;
+  struct sp_mem_heap_large_t* prev;
+  struct sp_mem_heap_large_t* next;
+  struct sp_mem_heap_t* heap;
+} sp_mem_heap_large_t;
+
+typedef struct {
+  sp_mem_heap_span_t* partial;
+  sp_mem_heap_span_t* full;
+} sp_mem_heap_bucket_t;
+
+typedef struct sp_mem_heap_t {
+  sp_mem_heap_bucket_t buckets [SP_MEM_HEAP_NUM_BUCKETS];
+  sp_mem_heap_large_t* larges;
+  sp_mem_heap_segment_t* segments;
+  sp_mem_heap_span_t* recycled;
+  u64 bytes_used;
+  u64 bytes_reserved;
+  u64 peak_reserved;
+} sp_mem_heap_t;
+
+SP_API sp_mem_heap_t*       sp_mem_heap_new();
+SP_API void                 sp_mem_heap_destroy(sp_mem_heap_t* heap);
+SP_API sp_mem_t             sp_mem_heap_as_allocator(sp_mem_heap_t* heap);
+SP_API void*                sp_mem_heap_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
+SP_API void*                sp_mem_heap_alloc(sp_mem_heap_t* heap, u64 size);
+SP_API void*                sp_mem_heap_realloc(sp_mem_heap_t* heap, void* ptr, u64 size);
+SP_API void                 sp_mem_heap_free(sp_mem_heap_t* heap, void* ptr);
+SP_API sp_mem_heap_span_t*  sp_mem_heap_find_span(sp_mem_heap_t* heap, void* ptr);
+
+///////////
+// SLICE //
+///////////
 typedef struct {
   sp_mem_slice_t slice;
   u64 index;
@@ -3624,10 +3746,14 @@ SP_IMP sp_hash_t sp_hash_str(sp_str_t str);
 
 // @memory
 SP_IMP sp_mem_arena_block_t* sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 capacity);
-SP_IMP void*                 sp_mem_arena_align_block(sp_mem_arena_block_t* block, u8 alignment);
+SP_IMP void* sp_mem_arena_align_block(sp_mem_arena_block_t* block, u8 alignment);
 SP_IMP sp_mem_arena_block_t* sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 alloc_size);
-SP_IMP void*                 sp_mem_arena_alloc_with_header(sp_mem_arena_t* arena, u64 size);
-SP_IMP void*                 sp_mem_arena_alloc_no_header(sp_mem_arena_t* arena, u64 size);
+SP_IMP void* sp_mem_arena_alloc_with_header(sp_mem_arena_t* arena, u64 size);
+SP_IMP void* sp_mem_arena_alloc_no_header(sp_mem_arena_t* arena, u64 size);
+SP_IMP u32 sp_mem_heap_bucket_of(u64 size);
+SP_IMP u64 sp_mem_heap_bucket_size(u32 bucket);
+SP_IMP void sp_mem_heap_track_reserve(sp_mem_heap_t* heap, u64 bytes);
+SP_IMP void sp_mem_heap_span_release(sp_mem_heap_t* heap, sp_mem_heap_span_t* span);
 
 // @string
 SP_IMP bool sp_utf8_is_cont(u8 b);
@@ -4055,6 +4181,7 @@ s32 errno;
   #define SP_SYSCALL_NUM_DUP3              292
   #define SP_SYSCALL_NUM_PIPE2             293
   #define SP_SYSCALL_NUM_INOTIFY_INIT1     294
+  #define SP_SYSCALL_NUM_PERF_EVENT_OPEN   298
 
 #elif defined(SP_ARM64)
   #define SP_SYSCALL_NUM_GETCWD            17
@@ -4100,6 +4227,7 @@ s32 errno;
   #define SP_SYSCALL_NUM_CLONE             220
   #define SP_SYSCALL_NUM_EXECVE            221
   #define SP_SYSCALL_NUM_MMAP              222
+  #define SP_SYSCALL_NUM_PERF_EVENT_OPEN   241
   #define SP_SYSCALL_NUM_WAIT4             260
   #define SP_SYSCALL_NUM_SENDFILE          71
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   285
@@ -8064,7 +8192,7 @@ sp_mem_arena_block_t* sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 capacity
 }
 
 sp_mem_arena_t* sp_mem_arena_new(sp_mem_t mem) {
-  return sp_mem_arena_new_ex(mem, SP_MEM_ARENA_BLOCK_SIZE, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
+  return sp_mem_arena_new_ex(mem, 4096, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
 }
 
 sp_mem_arena_t* sp_mem_arena_new_ex(sp_mem_t mem, u64 block_size, sp_mem_arena_mode_t mode, u8 alignment) {
@@ -8363,10 +8491,6 @@ void* sp_mem_os_alloc(u64 size) {
   if (!h) return SP_NULLPTR;
   h->size = size;
   return h + 1;
-}
-
-void* sp_mem_os_alloc_zero(u64 size) {
-  return sp_mem_os_alloc(size);
 }
 
 void sp_mem_os_free(void* ptr) {
@@ -14246,7 +14370,7 @@ sp_mem_os_header_t* sp_mem_os_get_header(void* ptr) {
 void* sp_mem_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
   (void)user_data;
   switch (mode) {
-    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_os_alloc_zero(size);
+    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_os_alloc(size);
     case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_os_realloc(ptr, size);
     case SP_ALLOCATOR_MODE_FREE:   sp_mem_os_free(ptr); return SP_NULLPTR;
     default:                       return SP_NULLPTR;
@@ -14258,6 +14382,252 @@ sp_mem_t sp_mem_os_new() {
   allocator.on_alloc = sp_mem_os_on_alloc;
   allocator.user_data = NULL;
   return allocator;
+}
+
+////////////////////
+// HEAP ALLOCATOR //
+////////////////////
+u32 sp_mem_heap_bucket_of(u64 size) {
+  sp_for(it, SP_MEM_HEAP_NUM_BUCKETS) {
+    if (size <= sp_mem_heap_bucket_size(it)) return it;
+  }
+  return SP_MEM_HEAP_NUM_BUCKETS;
+}
+
+u64 sp_mem_heap_bucket_size(u32 bucket) {
+  static const u16 sizes [SP_MEM_HEAP_NUM_BUCKETS] = {
+    16, 32, 48, 64, 96, 128, 192, 256, 336, 448, 576, 672, 800, 1008, 1344, SP_MEM_HEAP_MAX_SMALL
+  };
+  return sizes[bucket];
+}
+
+#define sp_mem_heap_list_push(head, node) do { \
+    (node)->prev = SP_NULLPTR; \
+    (node)->next = *(head); \
+    if (*(head)) (*(head))->prev = (node); \
+    *(head) = (node); \
+  } while (0)
+
+#define sp_mem_heap_list_unlink(head, node) do { \
+    if ((node)->prev) (node)->prev->next = (node)->next; \
+    else *(head) = (node)->next; \
+    if ((node)->next) (node)->next->prev = (node)->prev; \
+    (node)->prev = SP_NULLPTR; \
+    (node)->next = SP_NULLPTR; \
+  } while (0)
+
+void sp_mem_heap_track_reserve(sp_mem_heap_t* heap, u64 bytes) {
+  heap->bytes_reserved += bytes;
+  heap->peak_reserved = sp_max(heap->peak_reserved, heap->bytes_reserved);
+}
+
+sp_mem_heap_t* sp_mem_heap_new() {
+  sp_mem_heap_t* heap = sp_sys_alloc_type(sp_mem_heap_t);
+  if (!heap) return SP_NULLPTR;
+  sp_mem_heap_track_reserve(heap, sp_align_offset(sizeof(sp_mem_heap_t), SP_MEM_HEAP_SPAN_SIZE));
+  return heap;
+}
+
+void sp_mem_heap_destroy(sp_mem_heap_t* heap) {
+  if (!heap) return;
+
+  sp_mem_heap_large_t* large = heap->larges;
+  while (large) {
+    sp_mem_heap_large_t* next = large->next;
+    sp_sys_free(large, large->capacity);
+    large = next;
+  }
+
+  sp_mem_heap_segment_t* segment = heap->segments;
+  while (segment) {
+    sp_mem_heap_segment_t* next = segment->next;
+    sp_sys_free(segment, SP_MEM_HEAP_SEGMENT_SIZE);
+    segment = next;
+  }
+
+  sp_sys_free(heap, sizeof(*heap));
+}
+
+sp_mem_heap_span_t* sp_mem_heap_find_span(sp_mem_heap_t* heap, void* ptr) {
+  if (!heap || !ptr) return SP_NULLPTR;
+
+  sp_mem_heap_span_t* span = sp_ptr_cast(sp_mem_heap_span_t*, sp_align_down(ptr, SP_MEM_HEAP_SPAN_SIZE));
+  if (span->magic != SP_MEM_HEAP_SPAN_MAGIC) return SP_NULLPTR;
+  if (span->heap != heap) return SP_NULLPTR;
+  return span;
+}
+
+static sp_mem_heap_span_t* sp_mem_heap_span_new(sp_mem_heap_t* heap, u32 bucket) {
+  sp_mem_heap_span_t* span = heap->recycled;
+  if (span) {
+    sp_mem_heap_list_unlink(&heap->recycled, span);
+  }
+  else {
+    sp_mem_heap_segment_t* segment = sp_ptr_cast(sp_mem_heap_segment_t*, sp_sys_alloc(SP_MEM_HEAP_SEGMENT_SIZE));
+    if (!segment) return SP_NULLPTR;
+    sp_assert(sp_align_down(segment, SP_MEM_HEAP_SPAN_SIZE) == sp_uptr(segment));
+    segment->next = heap->segments;
+    heap->segments = segment;
+    sp_mem_heap_track_reserve(heap, SP_MEM_HEAP_SEGMENT_SIZE);
+
+    span = sp_ptr_cast(sp_mem_heap_span_t*, (u8*)segment + SP_MEM_HEAP_SPAN_SIZE);
+    sp_for_range(it, 2, SP_MEM_HEAP_SEGMENT_SIZE / SP_MEM_HEAP_SPAN_SIZE) {
+      sp_mem_heap_span_t* slot = sp_ptr_cast(sp_mem_heap_span_t*, (u8*)segment + (it * SP_MEM_HEAP_SPAN_SIZE));
+      sp_mem_heap_list_push(&heap->recycled, slot);
+    }
+  }
+
+  u64 bucket_size = sp_mem_heap_bucket_size(bucket);
+  u8* base = (u8*)span + sizeof(sp_mem_heap_span_t);
+  u8* end = (u8*)span + SP_MEM_HEAP_SPAN_SIZE;
+  u32 num_chunks = (u32)((u64)(end - base) / bucket_size);
+  sp_assert(num_chunks);
+
+  span->magic = SP_MEM_HEAP_SPAN_MAGIC;
+  span->bucket = bucket;
+  span->in_use = 0;
+  span->heap = heap;
+
+  void* head = SP_NULLPTR;
+  sp_for(it, num_chunks) {
+    u8* chunk = base + ((num_chunks - 1 - it) * bucket_size);
+    *(void**)chunk = head;
+    head = chunk;
+  }
+  span->free_head = head;
+
+  sp_mem_heap_list_push(&heap->buckets[bucket].partial, span);
+  return span;
+}
+
+void sp_mem_heap_span_release(sp_mem_heap_t* heap, sp_mem_heap_span_t* span) {
+  sp_mem_heap_list_unlink(&heap->buckets[span->bucket].partial, span);
+  span->magic = 0;
+  sp_mem_heap_list_push(&heap->recycled, span);
+}
+
+void* sp_mem_heap_alloc(sp_mem_heap_t* heap, u64 size) {
+  if (!heap) return SP_NULLPTR;
+
+  u32 bucket = sp_mem_heap_bucket_of(size);
+  if (bucket < SP_MEM_HEAP_NUM_BUCKETS) {
+    sp_mem_heap_span_t* span = heap->buckets[bucket].partial;
+    if (!span) span = sp_mem_heap_span_new(heap, bucket);
+    if (!span) return SP_NULLPTR;
+
+    void* chunk = span->free_head;
+    span->free_head = *(void**)chunk;
+    span->in_use++;
+    if (!span->free_head) {
+      sp_mem_heap_list_unlink(&heap->buckets[bucket].partial, span);
+      sp_mem_heap_list_push(&heap->buckets[bucket].full, span);
+    }
+
+    u64 bucket_size = sp_mem_heap_bucket_size(bucket);
+    heap->bytes_used += bucket_size;
+    sp_mem_zero(chunk, bucket_size);
+    return chunk;
+  }
+
+  u64 capacity = sp_align_offset(size + sizeof(sp_mem_heap_large_t), SP_MEM_HEAP_SPAN_SIZE);
+  if (capacity <= size) return SP_NULLPTR;
+  sp_mem_heap_large_t* large = (sp_mem_heap_large_t*)sp_sys_alloc(capacity);
+  if (!large) return SP_NULLPTR;
+  large->magic = SP_MEM_HEAP_LARGE_MAGIC;
+  large->size = size;
+  large->capacity = capacity;
+  large->heap = heap;
+  sp_mem_heap_list_push(&heap->larges, large);
+  sp_mem_heap_track_reserve(heap, capacity);
+  heap->bytes_used += size;
+  return large + 1;
+}
+
+void sp_mem_heap_free(sp_mem_heap_t* heap, void* ptr) {
+  if (!heap || !ptr) return;
+
+  sp_mem_heap_span_t* span = sp_mem_heap_find_span(heap, ptr);
+  if (span) {
+    sp_assert(span->in_use);
+    bool was_full = !span->free_head;
+    *(void**)ptr = span->free_head;
+    span->free_head = ptr;
+    span->in_use--;
+    heap->bytes_used -= sp_mem_heap_bucket_size(span->bucket);
+
+    if (was_full) {
+      sp_mem_heap_list_unlink(&heap->buckets[span->bucket].full, span);
+      sp_mem_heap_list_push(&heap->buckets[span->bucket].partial, span);
+    }
+    if (!span->in_use) {
+      sp_mem_heap_span_release(heap, span);
+    }
+    return;
+  }
+
+  sp_mem_heap_large_t* large = ((sp_mem_heap_large_t*)ptr) - 1;
+  sp_assert(large->magic == SP_MEM_HEAP_LARGE_MAGIC);
+  sp_assert(large->heap == heap);
+  sp_mem_heap_list_unlink(&heap->larges, large);
+  heap->bytes_used -= large->size;
+  heap->bytes_reserved -= large->capacity;
+  sp_sys_free(large, large->capacity);
+}
+
+void* sp_mem_heap_realloc(sp_mem_heap_t* heap, void* ptr, u64 size) {
+  if (!heap) return SP_NULLPTR;
+  if (!ptr) return sp_mem_heap_alloc(heap, size);
+  if (!size) {
+    sp_mem_heap_free(heap, ptr);
+    return SP_NULLPTR;
+  }
+
+  u64 old_size = 0;
+  sp_mem_heap_span_t* span = sp_mem_heap_find_span(heap, ptr);
+  if (span) {
+    u64 bucket_size = sp_mem_heap_bucket_size(span->bucket);
+    if (sp_mem_heap_bucket_of(size) == span->bucket) {
+      sp_mem_zero((u8*)ptr + size, bucket_size - size);
+      return ptr;
+    }
+    old_size = bucket_size;
+  }
+  else {
+    sp_mem_heap_large_t* large = ((sp_mem_heap_large_t*)ptr) - 1;
+    sp_assert(large->magic == SP_MEM_HEAP_LARGE_MAGIC);
+    sp_assert(large->heap == heap);
+    if (size > SP_MEM_HEAP_MAX_SMALL && size <= large->capacity - sizeof(sp_mem_heap_large_t)) {
+      if (size < large->size) sp_mem_zero((u8*)ptr + size, large->size - size);
+      heap->bytes_used -= large->size;
+      heap->bytes_used += size;
+      large->size = size;
+      return ptr;
+    }
+    old_size = large->size;
+  }
+
+  void* fresh = sp_mem_heap_alloc(heap, size);
+  if (!fresh) return SP_NULLPTR;
+  sp_mem_copy(fresh, ptr, sp_min(old_size, size));
+  sp_mem_heap_free(heap, ptr);
+  return fresh;
+}
+
+void* sp_mem_heap_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
+  sp_mem_heap_t* heap = (sp_mem_heap_t*)user_data;
+  switch (mode) {
+    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_heap_alloc(heap, size);
+    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_heap_realloc(heap, ptr, size);
+    case SP_ALLOCATOR_MODE_FREE:   sp_mem_heap_free(heap, ptr); return SP_NULLPTR;
+  }
+  return SP_NULLPTR;
+}
+
+sp_mem_t sp_mem_heap_as_allocator(sp_mem_heap_t* heap) {
+  return (sp_mem_t) {
+    .on_alloc = sp_mem_heap_on_alloc,
+    .user_data = heap
+  };
 }
 
 void* sp_alloc(sp_mem_t allocator, u64 size) {
