@@ -43,6 +43,10 @@
 #define SP_SQUARE(x) ((x) * (x))
 #define sp_square(x) SP_SQUARE(x)
 
+#define SP_MATH_PI           3.14159265358979324
+#define SP_MATH_HALF_PI      1.57079632679489662
+#define SP_MATH_TWO_OVER_PI  0.636619772367581343
+
 #if defined (SP_USE_LIBM)
   #define sp_sqrtf sqrtf
   #define sp_expf expf
@@ -269,6 +273,10 @@ SP_API f32          sp_interp_exponential(sp_interp_t* interp);
 SP_API f32          sp_interp_parabolic(sp_interp_t* interp);
 #endif // SP_MATH_H
 
+#if defined(SP_IMPLEMENTATION) && !defined(SP_MATH_IMPLEMENTATION)
+  #define SP_MATH_IMPLEMENTATION
+#endif
+
 #ifdef SP_MATH_IMPLEMENTATION
 f32 sp_sys_sqrtf(f32 x) {
   if (x < 0) return 0;
@@ -290,18 +298,53 @@ f32 sp_sys_expf(f32 x) {
   return result;
 }
 
+static f32 sp_math_poly_sin(f32 r) {
+  const f32 c1 = -0.16666667f;
+  const f32 c2 =  0.0083333333f;
+  const f32 c3 = -0.00019841270f;
+  const f32 c4 =  0.0000027557319f;
+  f32 r2 = r * r;
+  return r * (1.0f + r2 * (c1 + r2 * (c2 + r2 * (c3 + r2 * c4))));
+}
+
+static f32 sp_math_poly_cos(f32 r) {
+  const f32 c1 = -0.5f;
+  const f32 c2 =  0.041666667f;
+  const f32 c3 = -0.0013888889f;
+  const f32 c4 =  0.000024801587f;
+  f32 r2 = r * r;
+  return 1.0f + r2 * (c1 + r2 * (c2 + r2 * (c3 + r2 * c4)));
+}
+
+static f32 sp_math_map_to_quadrant(f32 x, s64* quadrant) {
+  f64 q = (f64)x * SP_MATH_TWO_OVER_PI;
+  s64 k = (s64)(q >= 0.0 ? q + 0.5 : q - 0.5);
+  *quadrant = k;
+  return (f32)((f64)x - (f64)k * SP_MATH_HALF_PI);
+}
+
 f32 sp_sys_sinf(f32 x) {
-  while (x > 3.14159265f) x -= 6.28318530f;
-  while (x < -3.14159265f) x += 6.28318530f;
-  f32 x2 = x * x;
-  return x * (1.0f - x2/6.0f * (1.0f - x2/20.0f * (1.0f - x2/42.0f)));
+  s64 k;
+  f32 r = sp_math_map_to_quadrant(x, &k);
+  switch (k & 3) {
+    case 0: return  sp_math_poly_sin(r);
+    case 1: return  sp_math_poly_cos(r);
+    case 2: return -sp_math_poly_sin(r);
+    case 3: return -sp_math_poly_cos(r);
+  }
+  return 0.0f;
 }
 
 f32 sp_sys_cosf(f32 x) {
-  while (x > 3.14159265f) x -= 6.28318530f;
-  while (x < -3.14159265f) x += 6.28318530f;
-  f32 x2 = x * x;
-  return 1.0f - x2/2.0f * (1.0f - x2/12.0f * (1.0f - x2/30.0f));
+  s64 k;
+  f32 r = sp_math_map_to_quadrant(x, &k);
+  switch (k & 3) {
+    case 0: return  sp_math_poly_cos(r);
+    case 1: return -sp_math_poly_sin(r);
+    case 2: return -sp_math_poly_cos(r);
+    case 3: return  sp_math_poly_sin(r);
+  }
+  return 0.0f;
 }
 
 f32 sp_sys_tanf(f32 x) {
@@ -311,9 +354,15 @@ f32 sp_sys_tanf(f32 x) {
 }
 
 f32 sp_sys_acosf(f32 x) {
+  const f32 c0 =  1.5707288f;
+  const f32 c1 = -0.2121144f;
+  const f32 c2 =  0.0742610f;
+  const f32 c3 = -0.0187293f;
   if (x < -1.0f) x = -1.0f;
-  if (x > 1.0f) x = 1.0f;
-  return 1.5707963f - x - x*x*x/6.0f - 3.0f*x*x*x*x*x/40.0f;
+  if (x >  1.0f) x =  1.0f;
+  f32 a = sp_abs(x);
+  f32 r = sp_sqrtf(1.0f - a) * (c0 + a * (c1 + a * (c2 + a * c3)));
+  return x < 0.0f ? SP_MATH_PI - r : r;
 }
 sp_color_t sp_color_rgb_255(u8 r, u8 g, u8 b) {
   return (sp_color_t) SP_COLOR_RGB(r, g, b);
