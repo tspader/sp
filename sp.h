@@ -192,6 +192,17 @@
   #define SP_CPP
 #endif
 
+
+//    █████████     ███████    ██████   █████ ███████████ █████   █████████
+//   ███░░░░░███  ███░░░░░███ ░░██████ ░░███ ░░███░░░░░░█░░███   ███░░░░░███
+//  ███     ░░░  ███     ░░███ ░███░███ ░███  ░███   █ ░  ░███  ███     ░░░
+// ░███         ░███      ░███ ░███░░███░███  ░███████    ░███ ░███
+// ░███         ░███      ░███ ░███ ░░██████  ░███░░░█    ░███ ░███    █████
+// ░░███     ███░░███     ███  ░███  ░░█████  ░███  ░     ░███ ░░███  ░░███
+//  ░░█████████  ░░░███████░   █████  ░░█████ █████       █████ ░░█████████
+//   ░░░░░░░░░     ░░░░░░░    ░░░░░    ░░░░░ ░░░░░       ░░░░░   ░░░░░░░░░
+// @config
+
 /////////////
 // LINKAGE //
 /////////////
@@ -227,6 +238,20 @@
   #else
     #define SP_API extern
   #endif
+#endif
+
+////////////
+// ASSERT //
+////////////
+
+#define SP_ASSERT_NONE 0
+#define SP_ASSERT_TRAP 1
+#define SP_ASSERT_LOG 2
+
+#define SP_ASSERT_ENABLED(cap) (SP_ASSERT_LEVEL >= (cap))
+
+#if !defined(SP_ASSERT_LEVEL)
+  #define SP_ASSERT_LEVEL SP_ASSERT_LOG
 #endif
 
 
@@ -323,7 +348,6 @@
   #define SP_FALLTHROUGH() ((void)0)
 #endif
 
-
 /////////////
 // SP_RVAL //
 /////////////
@@ -342,9 +366,9 @@
   #define SP_THREAD_LOCAL _Thread_local
 #endif
 
-/////////////////////
+///////////////////
 // SP_*_EXTERN_C //
-/////////////////////
+///////////////////
 #ifdef SP_CPP
   #define SP_EXTERN_C extern "C"
   #define SP_BEGIN_EXTERN_C() extern "C" {
@@ -356,7 +380,7 @@
 #endif
 
 /////////////
-// sp_zero //
+// SP_ZERO //
 /////////////
 #ifdef SP_CPP
   #define sp_zero {}
@@ -584,7 +608,7 @@ SP_BEGIN_EXTERN_C()
 
 #if defined(SP_FREESTANDING)
 
-#elif defined(SP_LINUX) // @preprocessor
+#elif defined(SP_LINUX)
   #include <assert.h>
   #include <fcntl.h>
   #include <poll.h>
@@ -3629,6 +3653,8 @@ SP_PRIVATE void  sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t fn);
 SP_PRIVATE void* sp_tls_get(sp_tls_key_t key);
 SP_PRIVATE void  sp_tls_set(sp_tls_key_t key, void* data);
 SP_PRIVATE void  sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t);
+SP_PRIVATE sp_io_writer_t* sp_tls_std_out(sp_tls_rt_t* tls);
+SP_PRIVATE sp_io_writer_t* sp_tls_std_err(sp_tls_rt_t* tls);
 
 // @io
 SP_IMP sp_err_t sp_io_file_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
@@ -7847,8 +7873,8 @@ void sp_rt_init() {
 void sp_tls_rt_deinit(void* ptr) {
   if (!ptr) return;
   sp_tls_rt_t* tls = (sp_tls_rt_t*)ptr;
-  sp_mem_allocator_free(tls->mem, tls->std.out);
-  sp_mem_allocator_free(tls->mem, tls->std.err);
+  if (tls->std.out) sp_mem_allocator_free(tls->mem, tls->std.out);
+  if (tls->std.err) sp_mem_allocator_free(tls->mem, tls->std.err);
   sp_str_ht_free(tls->format.directives);
   sp_carr_for(tls->scratch, it) {
     sp_mem_arena_destroy(tls->scratch[it]);
@@ -7871,15 +7897,30 @@ sp_tls_rt_t* sp_tls_rt_get() {
     sp_carr_for(tls->scratch, it) {
       tls->scratch[it] = sp_mem_arena_new(tls->mem);
     }
-    tls->std.out = sp_alloc_type(tls->mem, sp_io_stream_writer_t);
-    tls->std.err = sp_alloc_type(tls->mem, sp_io_stream_writer_t);
-    sp_io_stream_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-    sp_io_stream_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+    // std.out/std.err are wired lazily (see sp_tls_std_out/_err). Wiring them here
+    // would take the address of sp_io_stream_writer_write in code that sp_main always
+    // reaches, which on WASM forces a fd_write import even for programs that never write.
     sp_str_ht_init(tls->mem, tls->format.directives);
     sp_fmt_register_builtins();
     sp_sys_tls_init(tls);
   }
   return tls;
+}
+
+sp_io_writer_t* sp_tls_std_out(sp_tls_rt_t* tls) {
+  if (!tls->std.out) {
+    tls->std.out = sp_alloc_type(tls->mem, sp_io_stream_writer_t);
+    sp_io_stream_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+  }
+  return &tls->std.out->base;
+}
+
+sp_io_writer_t* sp_tls_std_err(sp_tls_rt_t* tls) {
+  if (!tls->std.err) {
+    tls->std.err = sp_alloc_type(tls->mem, sp_io_stream_writer_t);
+    sp_io_stream_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+  }
+  return &tls->std.err->base;
 }
 
 #if defined(SP_FREESTANDING)
@@ -9487,6 +9528,7 @@ s32 sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
 void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, bool cond) {
   if (cond) return;
 
+#if SP_ASSERT_ENABLED(SP_ASSERT_LOG)
   sp_io_stream_writer_t io = sp_zero;
   sp_io_stream_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
   sp_fmt_io(
@@ -9500,8 +9542,11 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
     sp_fmt_str(expr)
   );
   sp_io_write_cstr(&io.base, "\n", SP_NULLPTR);
+#endif
 
+#if SP_ASSERT_ENABLED(SP_ASSERT_TRAP)
   sp_sys_assert(cond);
+#endif
 }
 
 ///////////
@@ -14538,34 +14583,34 @@ void sp_log(const c8* fmt, ...) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(&tls->std.out->base, sp_str_view(fmt), args);
+  sp_fmt_io_v(sp_tls_std_out(tls), sp_str_view(fmt), args);
   va_end(args);
-  sp_io_write_cstr(&tls->std.out->base, "\n", SP_NULLPTR);
+  sp_io_write_cstr(sp_tls_std_out(tls), "\n", SP_NULLPTR);
 }
 
 void sp_log_str(sp_str_t fmt, ...) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(&tls->std.out->base, fmt, args);
+  sp_fmt_io_v(sp_tls_std_out(tls), fmt, args);
   va_end(args);
-  sp_io_write_cstr(&tls->std.out->base, "\n", SP_NULLPTR);
+  sp_io_write_cstr(sp_tls_std_out(tls), "\n", SP_NULLPTR);
 }
 
 void sp_log_err(const c8* fmt, ...) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(&tls->std.out->base, sp_str_view(fmt), args);
+  sp_fmt_io_v(sp_tls_std_out(tls), sp_str_view(fmt), args);
   va_end(args);
-  sp_io_write_cstr(&tls->std.out->base, "\n", SP_NULLPTR);
+  sp_io_write_cstr(sp_tls_std_out(tls), "\n", SP_NULLPTR);
 }
 
 void sp_print(const c8* fmt, ...) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(&tls->std.out->base, sp_str_view(fmt), args);
+  sp_fmt_io_v(sp_tls_std_out(tls), sp_str_view(fmt), args);
   va_end(args);
 }
 
@@ -14573,7 +14618,7 @@ void sp_print_str(sp_str_t fmt, ...) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(&tls->std.out->base, fmt, args);
+  sp_fmt_io_v(sp_tls_std_out(tls), fmt, args);
   va_end(args);
 }
 
@@ -14581,7 +14626,7 @@ void sp_print_err(const c8* fmt, ...) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(&tls->std.err->base, sp_str_view(fmt), args);
+  sp_fmt_io_v(sp_tls_std_err(tls), sp_str_view(fmt), args);
   va_end(args);
 }
 
