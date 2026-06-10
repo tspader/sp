@@ -129,6 +129,7 @@ typedef struct sp_mem_tracking_t {
   u32 live_count;
   u32 double_frees;
   u32 wild_frees;
+  u32 bad_sizes;
   u32 next_id;
 } sp_mem_tracking_t;
 
@@ -137,7 +138,7 @@ void     sp_mem_tracking_init_ex(sp_mem_tracking_t* t, sp_mem_t backing);
 sp_mem_t sp_mem_tracking_as_allocator(sp_mem_tracking_t* t);
 void     sp_mem_tracking_dump(sp_mem_tracking_t* t);
 void     sp_mem_tracking_deinit(sp_mem_tracking_t* t);
-void*    sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr);
+void*    sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size);
 bool     sp_mem_tracking_ok(sp_mem_tracking_t* mem);
 
 #endif
@@ -308,12 +309,13 @@ static u32 sp_mem_tracking_peek_magic(void* ptr) {
   return magic;
 }
 
-static void sp_mem_tracking_do_free(sp_mem_tracking_t* t, void* ptr) {
+static void sp_mem_tracking_do_free(sp_mem_tracking_t* t, void* ptr, u64 size) {
   if (!ptr) return;
   u32 magic = sp_mem_tracking_peek_magic(ptr);
 
   if (magic == SP_MEM_TRACKING_LIVE_MAGIC) {
     sp_mem_tracking_node_t* node = sp_mem_tracking_header(ptr);
+    if (node->size != size) t->bad_sizes++;
     sp_mem_tracking_unlink(&t->live, node);
     node->magic = SP_MEM_TRACKING_FREED_MAGIC;
     t->live_count--;
@@ -331,9 +333,9 @@ static void sp_mem_tracking_do_free(sp_mem_tracking_t* t, void* ptr) {
   }
 }
 
-static void* sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 size) {
+static void* sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 size, u64 old_size) {
   if (!old)  return sp_mem_tracking_do_alloc(t, size);
-  if (!size) { sp_mem_tracking_do_free(t, old); return SP_NULLPTR; }
+  if (!size) { sp_mem_tracking_do_free(t, old, old_size); return SP_NULLPTR; }
 
   u32 magic = sp_mem_tracking_peek_magic(old);
   if (magic != SP_MEM_TRACKING_LIVE_MAGIC) {
@@ -342,21 +344,22 @@ static void* sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 siz
     return SP_NULLPTR;
   }
   sp_mem_tracking_node_t* node = sp_mem_tracking_header(old);
-  if (node->size >= size) return old;
+  if (node->size != old_size) t->bad_sizes++;
+  if (node->size == size) return old;
 
   void* fresh = sp_mem_tracking_do_alloc(t, size);
   if (!fresh) return SP_NULLPTR;
-  sp_mem_copy(fresh, old, node->size);
-  sp_mem_tracking_do_free(t, old);
+  sp_mem_copy(fresh, old, sp_min(node->size, size));
+  sp_mem_tracking_do_free(t, old, node->size);
   return fresh;
 }
 
-void* sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
+void* sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
   sp_mem_tracking_t* t = (sp_mem_tracking_t*)ud;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_tracking_do_alloc(t, size);
-    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_tracking_do_realloc(t, ptr, size);
-    case SP_ALLOCATOR_MODE_FREE:   sp_mem_tracking_do_free(t, ptr); return SP_NULLPTR;
+    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_tracking_do_realloc(t, ptr, size, old_size);
+    case SP_ALLOCATOR_MODE_FREE:   sp_mem_tracking_do_free(t, ptr, old_size); return SP_NULLPTR;
     default:                       return SP_NULLPTR;
   }
 }
@@ -378,11 +381,12 @@ sp_mem_t sp_mem_tracking_as_allocator(sp_mem_tracking_t* t) {
 }
 
 void sp_mem_tracking_dump(sp_mem_tracking_t* t) {
-  sp_log("tracking: live={} bytes={} double_frees={} wild_frees={}",
+  sp_log("tracking: live={} bytes={} double_frees={} wild_frees={} bad_sizes={}",
     sp_fmt_uint(t->live_count),
     sp_fmt_uint(t->live_bytes),
     sp_fmt_uint(t->double_frees),
-    sp_fmt_uint(t->wild_frees));
+    sp_fmt_uint(t->wild_frees),
+    sp_fmt_uint(t->bad_sizes));
   for (sp_mem_tracking_node_t* n = t->live; n; n = n->next) {
     sp_log("  #{} size={}", sp_fmt_uint(n->id), sp_fmt_uint(n->size));
   }
@@ -392,13 +396,13 @@ void sp_mem_tracking_deinit(sp_mem_tracking_t* t) {
   sp_mem_tracking_node_t* n = t->live;
   while (n) {
     sp_mem_tracking_node_t* next = n->next;
-    sp_free(t->backing, n);
+    sp_free(t->backing, n, n->size + sizeof(sp_mem_tracking_node_t));
     n = next;
   }
   n = t->freed;
   while (n) {
     sp_mem_tracking_node_t* next = n->next;
-    sp_free(t->backing, n);
+    sp_free(t->backing, n, n->size + sizeof(sp_mem_tracking_node_t));
     n = next;
   }
   sp_mem_zero(t, sizeof(*t));
@@ -408,7 +412,8 @@ bool sp_mem_tracking_ok(sp_mem_tracking_t* mem) {
   bool ok =
     (mem->live_count == 0) &&
     (mem->double_frees == 0) &&
-    (mem->wild_frees == 0);
+    (mem->wild_frees == 0) &&
+    (mem->bad_sizes == 0);
   if (!ok) sp_mem_tracking_dump(mem);
   return ok;
 }

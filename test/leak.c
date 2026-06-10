@@ -38,7 +38,7 @@ UTEST(tracking, alloc_free_balance) {
   EXPECT_EQ(t.live_count, 1u);
   EXPECT_EQ(t.live_bytes, 64u);
 
-  sp_free(mem, p);
+  sp_free(mem, p, 64);
   EXPECT_EQ(t.live_count, 0u);
   EXPECT_EQ(t.live_bytes, 0u);
   EXPECT_EQ(t.double_frees, 0u);
@@ -55,7 +55,7 @@ UTEST(tracking, detects_leak) {
   sp_alloc(mem, 16);
   sp_alloc(mem, 32);
   void* freed = sp_alloc(mem, 8);
-  sp_free(mem, freed);
+  sp_free(mem, freed, 8);
 
   EXPECT_EQ(t.live_count, 2u);
   EXPECT_EQ(t.live_bytes, 48u);
@@ -69,9 +69,9 @@ UTEST(tracking, detects_double_free) {
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
   void* p = sp_alloc(mem, 64);
-  sp_free(mem, p);
-  sp_free(mem, p);
-  sp_free(mem, p);
+  sp_free(mem, p, 64);
+  sp_free(mem, p, 64);
+  sp_free(mem, p, 64);
 
   EXPECT_EQ(t.double_frees, 2u);
   EXPECT_EQ(t.live_count, 0u);
@@ -90,7 +90,7 @@ UTEST(tracking, detects_wild_free) {
   // large enough for the back-step, and the bytes there won't match either
   // sentinel (we zero-init the buffer).
   static u8 buf[256] = {0};
-  sp_free(mem, &buf[200]);
+  sp_free(mem, &buf[200], 8);
 
   EXPECT_EQ(t.wild_frees, 1u);
   EXPECT_EQ(t.double_frees, 0u);
@@ -104,7 +104,7 @@ UTEST(tracking, free_null_is_noop) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  sp_free(mem, SP_NULLPTR);
+  sp_free(mem, SP_NULLPTR, 0);
 
   EXPECT_EQ(t.double_frees, 0u);
   EXPECT_EQ(t.wild_frees, 0u);
@@ -121,14 +121,14 @@ UTEST(tracking, realloc_grows_and_preserves) {
   u8* p = sp_alloc_n(mem, u8, 4);
   sp_for(i, 4) p[i] = (u8)(i + 1);
 
-  u8* g = sp_void_cast(g, sp_realloc(mem, p, 64));
+  u8* g = sp_void_cast(g, sp_realloc(mem, p, 4, 64));
   EXPECT_NE(g, SP_NULLPTR);
   sp_for(i, 4) EXPECT_EQ(g[i], (u8)(i + 1));
 
   EXPECT_EQ(t.live_count, 1u);
   EXPECT_EQ(t.live_bytes, 64u);
 
-  sp_free(mem, g);
+  sp_free(mem, g, 64);
   EXPECT_EQ(t.live_count, 0u);
 
   sp_mem_tracking_deinit(&t);
@@ -139,12 +139,12 @@ UTEST(tracking, realloc_null_is_alloc) {
   sp_mem_tracking_init(&t);
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
-  void* p = sp_realloc(mem, SP_NULLPTR, 32);
+  void* p = sp_realloc(mem, SP_NULLPTR, 0, 32);
   EXPECT_NE(p, SP_NULLPTR);
   EXPECT_EQ(t.live_count, 1u);
   EXPECT_EQ(t.live_bytes, 32u);
 
-  sp_free(mem, p);
+  sp_free(mem, p, 32);
   sp_mem_tracking_deinit(&t);
 }
 
@@ -154,7 +154,7 @@ UTEST(tracking, realloc_zero_is_free) {
   sp_mem_t mem = sp_mem_tracking_as_allocator(&t);
 
   void* p = sp_alloc(mem, 32);
-  void* r = sp_realloc(mem, p, 0);
+  void* r = sp_realloc(mem, p, 32, 0);
   EXPECT_EQ(r, SP_NULLPTR);
   EXPECT_EQ(t.live_count, 0u);
   EXPECT_EQ(t.live_bytes, 0u);
@@ -200,11 +200,11 @@ UTEST_F(leak, multiple_allocs_independent) {
   EXPECT_EQ(ut.tracker.live_count, 3u);
   EXPECT_EQ(ut.tracker.live_bytes, 56u);
 
-  sp_free(ut.mem, b);
+  sp_free(ut.mem, b, 16);
   EXPECT_EQ(ut.tracker.live_count, 2u);
   EXPECT_EQ(ut.tracker.live_bytes, 40u);
 
-  sp_free(ut.mem, a);
-  sp_free(ut.mem, c);
+  sp_free(ut.mem, a, 8);
+  sp_free(ut.mem, c, 32);
   EXPECT_EQ(ut.tracker.live_count, 0u);
 }

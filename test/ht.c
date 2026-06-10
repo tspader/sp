@@ -603,7 +603,7 @@ UTEST_F(siphash, collision_resistance) {
 
   EXPECT_EQ(collisions, 0);
 
-  sp_free(ut.mem, hashes);
+  sp_free(ut.mem, hashes, count * sizeof(u64));
 }
 
 UTEST_F(sp_ht, hash_table_with_dyn_array_values) {

@@ -341,9 +341,10 @@ UTEST_F(mem, zero_large) {
   run_mem_zero_test(utest_result, (mem_zero_test_t){ .buffer_size = 400 });
 }
 
-static void* mock_alloc_record_size(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr) {
+static void* mock_alloc_record_size(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
   (void)mode;
   (void)ptr;
+  (void)old_size;
   *(u64*)user_data = size;
   return SP_NULLPTR;
 }
@@ -361,15 +362,14 @@ UTEST_F(mem, alloc_preserves_u64_size) {
   EXPECT_EQ(recorded_size, requested);
 }
 
-UTEST_F(mem, libc_metadata_stores_u64_size) {
-  sp_mem_t libc = sp_mem_os_new();
+UTEST_F(mem, os_alloc_roundtrip) {
+  sp_mem_t os = sp_mem_os_new();
 
   u64 size = 64;
-  void* ptr = sp_mem_allocator_alloc(libc, size);
+  u8* ptr = sp_void_cast(ptr, sp_mem_allocator_alloc(os, size));
   ASSERT_TRUE(ptr);
+  EXPECT_EQ(ptr[0], 0x00);
+  EXPECT_EQ(ptr[63], 0x00);
 
-  sp_mem_os_header_t* meta = sp_mem_os_get_header(ptr);
-  EXPECT_EQ(meta->size, size);
-
-  sp_mem_allocator_free(libc, ptr);
+  sp_mem_allocator_free(os, ptr, size);
 }
