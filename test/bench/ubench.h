@@ -551,7 +551,7 @@ void ubench_register_benchmark(sp_str_t name, ubench_body_t body, const ubench_f
   const ubench_size_t i = ubench_state.benchmarks_length++;
   ubench_state.benchmarks = sp_ptr_cast(
     ubench_benchmark_state_t*,
-    sp_realloc(ubench_state.mem, ubench_state.benchmarks, sizeof(ubench_benchmark_state_t) * ubench_state.benchmarks_length)
+    sp_realloc(ubench_state.mem, ubench_state.benchmarks, sizeof(ubench_benchmark_state_t) * i, sizeof(ubench_benchmark_state_t) * ubench_state.benchmarks_length)
   );
 
   ubench_state.benchmarks[i].name = name;
@@ -1190,7 +1190,7 @@ bench_store* bench_store_open(const c8 *path) {
   return s;
 
 error:
-  if (s) sp_mem_allocator_free(mem, s);
+  if (s) sp_mem_allocator_free(mem, s, sizeof(bench_store));
   return SP_NULLPTR;
 }
 
@@ -1200,7 +1200,7 @@ void bench_store_close(bench_store* s) {
   if (s->db)          sqlite3_close(s->db);
 
   sp_mem_t mem = sp_mem_os_new();
-  sp_mem_allocator_free(mem, s);
+  sp_mem_allocator_free(mem, s, sizeof(bench_store));
 }
 
 s64 bench_store_begin_run(bench_store* s, const bench_machine_info* mi, const bench_run_info* ri) {
@@ -1777,6 +1777,7 @@ s32 ubench_main(s32 argc, const c8 *const argv[]) {
               ubench_size_t *,
               sp_realloc(ubench_state.mem,
                            sp_ptr_cast(void *, failed_benchmarks),
+                           sizeof(ubench_size_t) * failed_benchmark_index,
                            sizeof(ubench_size_t) * failed_benchmarks_length));
           failed_benchmarks[failed_benchmark_index] = index;
           failed++;
@@ -1857,8 +1858,8 @@ s32 ubench_main(s32 argc, const c8 *const argv[]) {
   }
 
 cleanup:
-  sp_free(ubench_state.mem, sp_ptr_cast(void *, failed_benchmarks));
-  sp_free(ubench_state.mem, sp_ptr_cast(void *, ubench_state.benchmarks));
+  sp_free(ubench_state.mem, sp_ptr_cast(void *, failed_benchmarks), sizeof(ubench_size_t) * failed_benchmarks_length);
+  sp_free(ubench_state.mem, sp_ptr_cast(void *, ubench_state.benchmarks), sizeof(ubench_benchmark_state_t) * ubench_state.benchmarks_length);
 
 #if defined(UBENCH_ENABLE_PERF_COUNTERS) && defined(SP_LINUX)
   ubench_perf_close(&perf);

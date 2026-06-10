@@ -320,14 +320,14 @@ UTEST(stress, sp_context) {
         u8* ptr = sp_alloc(s.mem, 16);
 
         sp_mem_fill_u8(ptr, 16, 0x11);
-        ptr = sp_mem_allocator_realloc(s.mem, ptr, 32);
+        ptr = sp_mem_allocator_realloc(s.mem, ptr, 16, 32);
         sp_for(it, 16) EXPECT_EQ(ptr[it], 0x11);
 
         sp_mem_fill_u8(ptr + 16, 16, 0x22);
-        ptr = sp_mem_allocator_realloc(s.mem, ptr, 8);
+        ptr = sp_mem_allocator_realloc(s.mem, ptr, 32, 8);
         sp_for(it, 8) ASSERT_EQ(ptr[it], 0x11);
 
-        ptr = sp_mem_allocator_realloc(s.mem, ptr, 8000);
+        ptr = sp_mem_allocator_realloc(s.mem, ptr, 8, 8000);
         sp_for(it, 8) ASSERT_EQ(ptr[it], 0x11);
 
         sp_mem_end_scratch(s);
@@ -508,7 +508,7 @@ UTEST(stress, fmon) {
 
   // Cleanup
   sp_fmon_deinit(monitor);
-  sp_free(sp_mem_os_new(), monitor);
+  sp_free(sp_mem_os_new(), monitor, sizeof(sp_fmon_t));
   sp_da_free(files);
   sp_da_free(dirs);
   sp_test_file_manager_cleanup(&file_manager);

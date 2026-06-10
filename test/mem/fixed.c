@@ -123,17 +123,20 @@ UTEST_F(mem, fixed_overflow_returns_null) {
   EXPECT_EQ(overflow, SP_NULLPTR);
 }
 
-UTEST_F(mem, fixed_free_is_noop) {
+UTEST_F(mem, fixed_free_reclaims_top) {
   u8 storage [256];
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
   u8* first = sp_void_cast(first, sp_mem_allocator_alloc(allocator, 32));
+  u8* second = sp_void_cast(second, sp_mem_allocator_alloc(allocator, 32));
   u64 used_before = sp_mem_fixed_bytes_used(&fixed);
 
-  sp_mem_allocator_free(allocator, first);
-
+  sp_mem_allocator_free(allocator, first, 32);
   EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), used_before);
+
+  sp_mem_allocator_free(allocator, second, 32);
+  EXPECT_LT(sp_mem_fixed_bytes_used(&fixed), used_before);
 }
 
 UTEST_F(mem, fixed_unaligned_basic) {
@@ -207,12 +210,42 @@ UTEST_F(mem, fixed_unaligned_base_returns_aligned_ptrs) {
   EXPECT_GE((uintptr_t)b, (uintptr_t)(a + 8));
 }
 
-UTEST_F(mem, fixed_resize_returns_null) {
+UTEST_F(mem, fixed_resize_extends_top_in_place) {
+  SP_ALIGNED u8 storage [256];
+  sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
+  sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
+
+  u8* first = sp_void_cast(first, sp_mem_allocator_alloc(allocator, 16));
+  sp_mem_fill_u8(first, 16, 0xAA);
+  u8* resized = sp_void_cast(resized, sp_mem_allocator_realloc(allocator, first, 16, 32));
+  EXPECT_EQ(resized, first);
+  EXPECT_EQ(resized[15], 0xAA);
+  EXPECT_EQ(resized[16], 0x00);
+  EXPECT_EQ(sp_mem_fixed_bytes_used(&fixed), 32u);
+}
+
+UTEST_F(mem, fixed_resize_copies_when_not_top) {
   u8 storage [256];
   sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
   sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
 
   u8* first = sp_void_cast(first, sp_mem_allocator_alloc(allocator, 16));
-  void* resized = sp_mem_allocator_realloc(allocator, first, 32);
+  sp_mem_fill_u8(first, 16, 0xAA);
+  sp_mem_allocator_alloc(allocator, 16);
+
+  u8* resized = sp_void_cast(resized, sp_mem_allocator_realloc(allocator, first, 16, 32));
+  EXPECT_NE(resized, first);
+  EXPECT_EQ(resized[0], 0xAA);
+  EXPECT_EQ(resized[15], 0xAA);
+  EXPECT_EQ(resized[16], 0x00);
+}
+
+UTEST_F(mem, fixed_resize_fails_when_full) {
+  u8 storage [32];
+  sp_mem_fixed_t fixed = sp_mem_fixed(storage, sizeof(storage));
+  sp_mem_t allocator = sp_mem_fixed_as_allocator(&fixed);
+
+  u8* first = sp_void_cast(first, sp_mem_allocator_alloc(allocator, 16));
+  void* resized = sp_mem_allocator_realloc(allocator, first, 16, 256);
   EXPECT_EQ(resized, SP_NULLPTR);
 }

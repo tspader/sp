@@ -266,8 +266,8 @@ void sp_elf_buffer_grow(sp_elf_buffer_t* buffer, u64 size) {
     capacity *= 2;
   }
 
+  buffer->data = (u8*)sp_mem_allocator_realloc(buffer->mem, buffer->data, buffer->capacity, capacity);
   buffer->capacity = capacity;
-  buffer->data = (u8*)sp_mem_allocator_realloc(buffer->mem, buffer->data, capacity);
 }
 
 void* sp_elf_section_reserve_aligned(sp_elf_section_t* section, u64 size, u64 align) {
@@ -707,7 +707,7 @@ sp_elf_t* sp_elf_read_from_file(sp_mem_t mem, sp_str_t path) {
     return SP_NULLPTR;
   }
   sp_elf_t* elf = sp_elf_read(mem, (const u8*)bytes.data, bytes.len);
-  sp_free(mem, (void*)bytes.data);
+  sp_free(mem, (void*)bytes.data, bytes.len);
   return elf;
 }
 

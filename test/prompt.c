@@ -2375,7 +2375,7 @@ UTEST_F(prompt, prompt_end_frees_channel) {
   sp_prompt_send_status(ctx, "halfway");
   sp_prompt_complete(ctx);
   sp_prompt_end(ctx);
-  sp_free(ut.mem.tracking, ctx);
+  sp_free(ut.mem.tracking, ctx, sizeof(sp_prompt_ctx_t));
 }
 
 typedef struct {

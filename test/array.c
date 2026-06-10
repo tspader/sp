@@ -150,7 +150,7 @@ UTEST_F(dyn_array, pointer_type) {
     }
 
     for (u64 i = 0; i < sp_da_size(arr); i++) {
-        sp_free(ut.mem, arr[i]);
+        sp_free(ut.mem, arr[i], sp_cstr_len(arr[i]) + 1);
     }
 
     sp_da_free(arr);

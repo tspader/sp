@@ -74,7 +74,7 @@ struct sp_asset_registry {
 };
 
 void              sp_asset_registry_init(sp_asset_registry_t* r, sp_mem_t mem, sp_asset_registry_config_t config);
-void*             sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old);
+void*             sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size);
 void              sp_asset_registry_shutdown(sp_asset_registry_t* r);
 sp_asset_t*       sp_asset_registry_import(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* user_data);
 sp_asset_t*       sp_asset_registry_add(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* data);
@@ -92,10 +92,10 @@ s32               sp_asset_registry_thread_fn(void* user_data);
 #endif
 
 #if defined(SP_ASSET_IMPLEMENTATION)
-void* sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old) {
+void* sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size) {
   sp_asset_registry_t* r = (sp_asset_registry_t*)ud;
   sp_mutex_lock(&r->alloc_mutex);
-  void* result = sp_mem_arena_on_alloc(r->arena, mode, size, old);
+  void* result = sp_mem_arena_on_alloc(r->arena, mode, size, old, old_size);
   sp_mutex_unlock(&r->alloc_mutex);
   return result;
 }

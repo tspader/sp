@@ -91,10 +91,38 @@
 
 #endif
 
+typedef struct SP_ALIGNED utest_alloc_header_s {
+  u64 size;
+} utest_alloc_header_t;
+
+static UTEST_INLINE void *utest_malloc(u64 size) {
+  utest_alloc_header_t *header = UTEST_PTR_CAST(
+      utest_alloc_header_t *, sp_mem_os_alloc(size + sizeof(utest_alloc_header_t)));
+  if (UTEST_NULL == header) {
+    return UTEST_NULL;
+  }
+  header->size = size;
+  return header + 1;
+}
+
+static UTEST_INLINE void utest_free(void *const pointer) {
+  if (UTEST_NULL == pointer) {
+    return;
+  }
+  utest_alloc_header_t *header = UTEST_PTR_CAST(utest_alloc_header_t *, pointer) - 1;
+  sp_mem_os_free(header, header->size + sizeof(utest_alloc_header_t));
+}
+
 static UTEST_INLINE void *utest_realloc(void *const pointer, u64 new_size) {
-  void *const new_pointer = sp_mem_os_realloc(pointer, new_size);
+  void *const new_pointer = utest_malloc(new_size);
   if (UTEST_NULL == new_pointer) {
-    sp_mem_os_free(pointer);
+    utest_free(pointer);
+    return UTEST_NULL;
+  }
+  if (UTEST_NULL != pointer) {
+    utest_alloc_header_t *header = UTEST_PTR_CAST(utest_alloc_header_t *, pointer) - 1;
+    sp_mem_copy(new_pointer, pointer, sp_min(header->size, new_size));
+    utest_free(pointer);
   }
   return new_pointer;
 }
@@ -580,9 +608,9 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     const u64 set_size = sizeof(set_part);                                   \
     const c8 test_part[] = #NAME;                                     \
     const u64 test_size = sizeof(test_part);                                   \
-    c8 *name = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(name_size));              \
-    c8 *set = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(set_size));              \
-    c8 *test = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(test_size));              \
+    c8 *name = UTEST_PTR_CAST(c8 *, utest_malloc(name_size));              \
+    c8 *set = UTEST_PTR_CAST(c8 *, utest_malloc(set_size));              \
+    c8 *test = UTEST_PTR_CAST(c8 *, utest_malloc(test_size));              \
     utest_state.tests = UTEST_PTR_CAST(                                        \
         struct utest_test_state_s *,                                           \
         utest_realloc(UTEST_PTR_CAST(void *, utest_state.tests),               \
@@ -599,13 +627,13 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       sp_mem_copy(test, test_part, test_size);                                 \
     } else {                                                                   \
       if (utest_state.tests) {                                                 \
-        sp_mem_os_free(utest_state.tests);                                     \
+        utest_free(utest_state.tests);                                     \
         utest_state.tests = UTEST_NULL;                                        \
       }                                                                        \
       if (name) {                                                              \
-        sp_mem_os_free(name);                                                   \
-        sp_mem_os_free(set);                                                   \
-        sp_mem_os_free(test);                                                   \
+        utest_free(name);                                                   \
+        utest_free(set);                                                   \
+        utest_free(test);                                                   \
       }                                                                        \
     }                                                                          \
   }                                                                            \
@@ -651,9 +679,9 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
     const u64 set_size = sizeof(set_part);                                   \
     const c8 test_part[] = #NAME;                                     \
     const u64 test_size = sizeof(test_part);                                   \
-    c8 *name = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(name_size));              \
-    c8 *set = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(set_size));              \
-    c8 *test = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(test_size));              \
+    c8 *name = UTEST_PTR_CAST(c8 *, utest_malloc(name_size));              \
+    c8 *set = UTEST_PTR_CAST(c8 *, utest_malloc(set_size));              \
+    c8 *test = UTEST_PTR_CAST(c8 *, utest_malloc(test_size));              \
                                                                                \
     utest_state.tests = UTEST_PTR_CAST(                                        \
         struct utest_test_state_s *,                                           \
@@ -671,13 +699,13 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       sp_mem_copy(test, test_part, test_size);                                 \
     } else {                                                                   \
       if (utest_state.tests) {                                                 \
-        sp_mem_os_free(utest_state.tests);                                     \
+        utest_free(utest_state.tests);                                     \
         utest_state.tests = UTEST_NULL;                                        \
       }                                                                        \
       if (name) {                                                              \
-        sp_mem_os_free(name);                                                   \
-        sp_mem_os_free(set);                                                   \
-        sp_mem_os_free(test);                                                   \
+        utest_free(name);                                                   \
+        utest_free(set);                                                   \
+        utest_free(test);                                                   \
       }                                                                        \
     }                                                                          \
   }                                                                            \
@@ -716,7 +744,7 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
       sp_str_t fmtd = sp_fmt(sp_mem_get_scratch(), "{}/{}", sp_fmt_cstr(name_part),                \
                                        sp_fmt_uint(i)).value;                         \
       u64 name_size = fmtd.len + 1;                                           \
-      c8 *name = UTEST_PTR_CAST(c8 *, sp_mem_os_alloc(name_size));            \
+      c8 *name = UTEST_PTR_CAST(c8 *, utest_malloc(name_size));            \
       utest_state.tests = UTEST_PTR_CAST(                                      \
           struct utest_test_state_s *,                                         \
           utest_realloc(UTEST_PTR_CAST(void *, utest_state.tests),             \
@@ -730,11 +758,11 @@ static UTEST_INLINE int utest_strncmp(const c8 *a, const c8 *b, u32 n) {
         name[fmtd.len] = '\0';                                                \
       } else {                                                                 \
         if (utest_state.tests) {                                               \
-          sp_mem_os_free(utest_state.tests);                                    \
+          utest_free(utest_state.tests);                                    \
           utest_state.tests = UTEST_NULL;                                      \
         }                                                                      \
         if (name) {                                                            \
-          sp_mem_os_free(name);                                                 \
+          utest_free(name);                                                 \
         }                                                                      \
       }                                                                        \
     }                                                                          \
@@ -1099,12 +1127,12 @@ s32 utest_main(s32 argc, const c8 **argv) {
 
 cleanup:
   for (index = 0; index < utest_state.tests_length; index++) {
-    sp_mem_os_free(UTEST_PTR_CAST(void *, utest_state.tests[index].name));
+    utest_free(UTEST_PTR_CAST(void *, utest_state.tests[index].name));
   }
 
-  sp_mem_os_free(UTEST_PTR_CAST(void *, skipped_testcases));
-  sp_mem_os_free(UTEST_PTR_CAST(void *, failed_testcases));
-  sp_mem_os_free(UTEST_PTR_CAST(void *, utest_state.tests));
+  utest_free(UTEST_PTR_CAST(void *, skipped_testcases));
+  utest_free(UTEST_PTR_CAST(void *, failed_testcases));
+  utest_free(UTEST_PTR_CAST(void *, utest_state.tests));
 
   if (utest_state.has_output) {
     sp_io_file_writer_close(&utest_state.output);

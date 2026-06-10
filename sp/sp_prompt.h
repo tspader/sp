@@ -959,7 +959,7 @@ sp_prompt_ctx_t* sp_prompt_new(sp_mem_t mem) {
 sp_prompt_ctx_t* sp_prompt_begin(sp_mem_t mem) {
   sp_prompt_ctx_t* ctx = sp_prompt_new(mem);
   if (sp_prompt_begin_ex(ctx)) {
-    sp_free(mem, ctx);
+    sp_free(mem, ctx, sizeof(sp_prompt_ctx_t));
     return SP_NULLPTR;
   }
   return ctx;
@@ -1014,7 +1014,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   sp_da_init(ctx->mem, ctx->frames);
 
   sp_mutex_init(&ctx->channel.lock, SP_MUTEX_PLAIN);
-  ctx->channel.arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ARENA_MODE_DEFAULT, SP_MEM_ALIGNMENT);
+  ctx->channel.arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
 
   // Write buffering is really important, because our rendering algorithm is extremely
   // naive. It's not much more than this:

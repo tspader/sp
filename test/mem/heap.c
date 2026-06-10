@@ -688,9 +688,9 @@ UTEST_F(mem, heap_as_allocator_routes_through_sp_alloc) {
   EXPECT_NE(p, SP_NULLPTR);
   EXPECT_EQ((uintptr_t)p & (SP_MEM_ALIGNMENT - 1), 0u);
 
-  u8* q = sp_ptr_cast(u8*, sp_realloc(mem, p, 128));
+  u8* q = sp_ptr_cast(u8*, sp_realloc(mem, p, 64, 128));
   EXPECT_NE(q, SP_NULLPTR);
 
-  sp_free(mem, q);
+  sp_free(mem, q, 128);
   sp_mem_heap_destroy(heap);
 }
