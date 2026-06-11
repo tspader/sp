@@ -1031,7 +1031,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   //
   // Empirically, you get pretty bad tearing on Windows without buffering.
   sp_io_stream_writer_t* fw = sp_mem_arena_alloc_type(ctx->arena, sp_io_stream_writer_t);
-  sp_io_get_std_out(fw);
+  *fw = sp_io_get_std_out();
   ctx->writer = &fw->base;
 
   u64 buffer_size = ctx->cols * ctx->rows * SP_PROMPT_CELL_BUFFER_BYTES + SP_PROMPT_BUFFER_EXTRA_BYTES;

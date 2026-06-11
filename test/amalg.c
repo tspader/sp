@@ -4,6 +4,7 @@
 #include "app.c"
 #include "asset.c"
 #include "array.c"
+#include "cli.c"
 #include "etc.c"
 #include "cv.c"
 #include "env.c"
