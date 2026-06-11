@@ -30,8 +30,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_io_file_reader_close(&r);
 
   // You can also format directly to stdout
-  sp_io_stream_writer_t fw = sp_zero;
-  sp_io_stream_writer_from_fd(&fw, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+  sp_io_stream_writer_t fw = sp_io_get_std_out();
   sp_fmt_io(&fw.base, "hello, {.cyan}", sp_fmt_cstr("stdout"));
   sp_io_write(&fw.base, "\n", 1, SP_NULLPTR);
   sp_io_stream_writer_close(&fw);

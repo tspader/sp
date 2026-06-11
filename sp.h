@@ -2933,6 +2933,8 @@ SP_API sp_str_r  sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...);
 SP_API sp_str_r  sp_fmt_buf_v(c8* buffer, u64 len, sp_str_t fmt, va_list args);
 SP_API sp_err_t  sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...);
 SP_API sp_err_t  sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args);
+SP_API sp_err_t  sp_fmt_std_out(const c8* fmt, ...);
+SP_API sp_err_t  sp_fmt_std_err(const c8* fmt, ...);
 
 typedef enum {
   SP_FMT_ALIGN_NONE,
@@ -3432,8 +3434,8 @@ SP_API sp_err_t       sp_io_dyn_mem_writer_close(sp_io_dyn_mem_writer_t* w);
 SP_API sp_str_t       sp_io_dyn_mem_writer_as_str(sp_io_dyn_mem_writer_t* w);
 SP_API const c8*      sp_io_dyn_mem_writer_as_cstr(sp_io_dyn_mem_writer_t* w);
 
-SP_API void           sp_io_get_std_out(sp_io_stream_writer_t* io);
-SP_API void           sp_io_get_std_err(sp_io_stream_writer_t* io);
+SP_API sp_io_stream_writer_t sp_io_get_std_out();
+SP_API sp_io_stream_writer_t sp_io_get_std_err();
 
 
 //  ███████████  ███████████      ███████      █████████  ██████████  █████████   █████████
@@ -9653,8 +9655,7 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
   if (cond) return;
 
 #if SP_ASSERT_ENABLED(SP_ASSERT_LOG)
-  sp_io_stream_writer_t io = sp_zero;
-  sp_io_stream_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+  sp_io_stream_writer_t io = sp_io_get_std_err();
   sp_fmt_io(
     &io.base,
     "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
@@ -14229,12 +14230,16 @@ done:
   return result;
 }
 
-void sp_io_get_std_out(sp_io_stream_writer_t* io) {
-  sp_io_stream_writer_from_fd(io, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+sp_io_stream_writer_t sp_io_get_std_out() {
+  sp_io_stream_writer_t io = sp_zero;
+  sp_io_stream_writer_from_fd(&io, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+  return io;
 }
 
-void sp_io_get_std_err(sp_io_stream_writer_t* io) {
-  sp_io_stream_writer_from_fd(io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+sp_io_stream_writer_t sp_io_get_std_err() {
+  sp_io_stream_writer_t io = sp_zero;
+  sp_io_stream_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+  return io;
 }
 
 /////////
@@ -14837,6 +14842,24 @@ sp_err_t sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_err_t result = sp_fmt_io_v(io, sp_cstr_as_str(fmt), args);
+  va_end(args);
+  return result;
+}
+
+sp_err_t sp_fmt_std_out(const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_io_stream_writer_t io = sp_io_get_std_out();
+  sp_err_t result = sp_fmt_io_v(&io.base, sp_cstr_as_str(fmt), args);
+  va_end(args);
+  return result;
+}
+
+sp_err_t sp_fmt_std_err(const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_io_stream_writer_t io = sp_io_get_std_err();
+  sp_err_t result = sp_fmt_io_v(&io.base, sp_cstr_as_str(fmt), args);
   va_end(args);
   return result;
 }
