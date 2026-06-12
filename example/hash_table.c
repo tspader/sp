@@ -11,7 +11,8 @@ void header(const c8* key, const c8* value) {
 }
 
 s32 run(s32 num_args, const c8** args) {
-  sp_mem_t a = sp_mem_os_new();
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t a = sp_mem_heap_as_allocator(heap);
 
   struct {
     sp_ht(s32, u32)            integer;

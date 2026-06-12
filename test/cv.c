@@ -4,6 +4,20 @@
 #include "utest.h"
 SP_TEST_MAIN()
 
+struct cv {
+  sp_mem_heap_t* heap;
+  sp_mem_t mem;
+};
+
+UTEST_F_SETUP(cv) {
+  ut.heap = sp_mem_heap_new();
+  ut.mem = sp_mem_heap_as_allocator(ut.heap);
+}
+
+UTEST_F_TEARDOWN(cv) {
+  sp_mem_heap_destroy(ut.heap);
+}
+
 UTEST(cv, init_destroy) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
@@ -339,13 +353,13 @@ s32 consumer_fn(void* userdata) {
   return 0;
 }
 
-UTEST(cv, multithread_producer_consumer) {
+UTEST_F(cv, multithread_producer_consumer) {
   SKIP_ON_WASM()
   SKIP_ON_FREESTANDING()
   sp_cv_t cv = sp_zero;
   sp_mutex_t mutex = sp_zero;
   sp_rb(s32) buffer = SP_NULLPTR;
-  sp_rb_init(sp_mem_os_new(), buffer);
+  sp_rb_init(ut.mem, buffer);
 
   sp_cv_init(&cv);
   sp_mutex_init(&mutex, SP_MUTEX_PLAIN);

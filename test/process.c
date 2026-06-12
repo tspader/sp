@@ -58,7 +58,7 @@ s32 main(s32 num_args, const c8** args) {
   s32 pattern_size = 100;
   s32 pattern_count = 10;
 
-  sp_mem_t mem = sp_mem_os_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(sp_mem_heap_new());
 
   struct argparse_option options[] = {
     OPT_HELP(),

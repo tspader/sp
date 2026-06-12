@@ -12,7 +12,9 @@ s32 msvc_main(s32 argc, const c8** argv) {
   (void)argv;
 
   sp_msvc_t result = sp_zero;
-  sp_msvc_err_t err = sp_msvc_find(sp_mem_os_new(), SP_MSVC_ARCH_X64, &result);
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
+  sp_msvc_err_t err = sp_msvc_find(mem, SP_MSVC_ARCH_X64, &result);
 
   if (err) {
     sp_log("sp_msvc_find failed: {}", sp_fmt_int(err));

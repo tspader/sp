@@ -7,7 +7,8 @@ s32 run(s32 num_args, const c8** args) {
     return 1;
   }
 
-  sp_mem_t mem = sp_mem_os_new();
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
   sp_str_t cwd = sp_fs_get_cwd(mem);
   sp_str_t path = sp_fs_join_path(mem, cwd, sp_str_view(args[1]));

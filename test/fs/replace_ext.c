@@ -6,9 +6,22 @@ typedef struct {
   const c8* expected;
 } replace_ext_case_t;
 
-UTEST(fs_replace_ext, cases) {
+struct fs_replace_ext {
+  sp_mem_heap_t* heap;
+  sp_mem_t mem;
+};
+
+UTEST_F_SETUP(fs_replace_ext) {
+  ut.heap = sp_mem_heap_new();
+  ut.mem = sp_mem_heap_as_allocator(ut.heap);
+}
+
+UTEST_F_TEARDOWN(fs_replace_ext) {
+  sp_mem_heap_destroy(ut.heap);
+}
+
+UTEST_F(fs_replace_ext, cases) {
   SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
   replace_ext_case_t cases[] = {
     { "foo.c",       "o",   "foo.c.o" },
     { "foo.c",       "",    "foo." },
@@ -19,9 +32,7 @@ UTEST(fs_replace_ext, cases) {
   };
 
   SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_fs_replace_ext(a, sp_str_view(cases[i].path), sp_str_view(cases[i].ext));
+    sp_str_t result = sp_fs_replace_ext(ut.mem, sp_str_view(cases[i].path), sp_str_view(cases[i].ext));
     SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
   }
 }
-
-
