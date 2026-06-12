@@ -40,6 +40,10 @@ else
   EXE :=
 endif
 
+ifneq (,$(findstring wasm32,$(TRIPLE)))
+  RUNNER = wasmtime run
+endif
+
 CFLAGS = $(CFLAGS_LANG) -g -Werror=return-type -fsanitize=undefined,alignment -fno-sanitize-recover=all $(CFLAGS_PLATFORM)
 CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -I. -Itest/tools -Itest
 CFLAGS_BENCH = $(CFLAGS_LANG) -g -Werror=return-type -O2 -DSP_IMPLEMENTATION -DUBENCH_ENABLE_PERF_COUNTERS -I. -Itest/bench -Itest/tools
@@ -64,7 +68,7 @@ BENCH_BINARIES = $(addsuffix $(EXE),$(addprefix $(BENCH_DIR)/,$(BENCHES)))
 SP_HEADERS = sp.h $(wildcard sp/*.h)
 TEST_SOURCES = $(wildcard test/*/*.c) $(wildcard test/*/*.h) $(wildcard test/*/*/*.c) $(wildcard test/*/*/*.h)
 
-.PHONY: all clean tests examples bench smoke big c cpp gcc tcc $(TRIPLES)
+.PHONY: all clean tests examples bench smoke big c cpp gcc tcc check ci $(TRIPLES)
 all: examples tests
 tests: $(TEST_BINARIES)
 examples: $(EXAMPLE_BINARIES)
@@ -87,6 +91,15 @@ c:; +$(MAKE) $(TRIPLES) examples tests gcc
 cpp:; +$(MAKE) MODE=cpp $(TRIPLES) examples tests
 gcc:; +$(MAKE) CC=gcc examples tests
 tcc:; +$(MAKE) CC=tcc examples tests
+ci:
+	+$(MAKE) check
+	+$(MAKE) MODE=cpp check
+check: all
+	@for t in $(TEST_BINARIES); do \
+		echo "> $$t"; \
+		$(RUNNER) $$t || exit 1; \
+		echo ""; \
+	done
 wasm:
 	+$(MAKE) wasm32-wasi wasm32-freestanding
 	+$(MAKE) MODE=cpp wasm32-wasi wasm32-freestanding
