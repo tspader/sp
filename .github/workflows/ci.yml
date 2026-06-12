@@ -1,118 +1,67 @@
 name: ci
+
 on:
   workflow_dispatch:
   pull_request:
   push:
     tags: ['v*']
 
-jobs:
-  matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      include: ${{ steps.set.outputs.include }}
-    steps:
-      - id: set
-        shell: bash
-        run: |
-          {
-            echo 'include<<EOF'
-            cat <<'JSON'
-          [
-            {"triple": "x86_64-linux-none",   "runs-on": "ubuntu-latest",     "ext": ""},
-            {"triple": "x86_64-linux-gnu",    "runs-on": "ubuntu-latest",     "ext": ""},
-            {"triple": "x86_64-linux-musl",   "runs-on": "ubuntu-latest",     "ext": ""},
-            {"triple": "aarch64-linux-none",  "runs-on": "ubuntu-24.04-arm",  "ext": ""},
-            {"triple": "aarch64-linux-gnu",   "runs-on": "ubuntu-24.04-arm",  "ext": ""},
-            {"triple": "aarch64-linux-musl",  "runs-on": "ubuntu-24.04-arm",  "ext": ""},
-            {"triple": "x86_64-windows-gnu",  "runs-on": "windows-latest",    "ext": ".exe"},
-            {"triple": "aarch64-macos",       "runs-on": "macos-14",          "ext": ""}
-          ]
-          JSON
-            echo EOF
-          } >> $GITHUB_OUTPUT
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
-  build-zig:
-    runs-on: ubuntu-latest
+permissions: {}
+
+jobs:
+  zig:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: x86_64-linux,  os: ubuntu-latest,    triples: x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl }
+          - { id: aarch64-linux, os: ubuntu-24.04-arm, triples: aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl }
+          - { id: macos,         os: macos-14,         triples: aarch64-macos }
+          - { id: windows,       os: windows-latest,   triples: x86_64-windows-gnu }
+          - { id: wasm,          os: ubuntu-latest,    triples: wasm32-wasi wasm32-freestanding }
+    name: ${{ matrix.id }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
           version: master
-      - run: make big -j$(nproc)
-      - uses: actions/upload-artifact@v4
-        with:
-          name: build-all
-          path: build/
+      - if: runner.os == 'Windows'
+        run: choco install make --no-progress
+      - if: contains(matrix.triples, 'wasm32')
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+      - shell: bash
+        run: |
+          for triple in ${{ matrix.triples }}; do
+            make ci TRIPLE=$triple
+          done
 
-  build-msvc:
+  gcc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make ci CC=gcc
+
+  msvc:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
       - run: msbuild tools\windows\sp\sp.sln /p:Configuration=Release /p:Platform=x64 /m
-      - uses: actions/upload-artifact@v4
-        with:
-          name: build-msvc
-          path: tools/windows/sp/build/**
-
-  test:
-    needs: [matrix, build-zig]
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.matrix.outputs.include) }}
-    runs-on: ${{ matrix.runs-on }}
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-all
-          path: build
       - shell: bash
         run: |
-          for dir in build/${{ matrix.triple }}/test build/cpp/${{ matrix.triple }}/test; do
-            chmod +x "$dir"/*${{ matrix.ext }}
-            for t in "$dir"/*${{ matrix.ext }}; do
-              echo "=== $t ==="
-              "$t" || exit 1
-            done
-          done
-
-  test-wasm:
-    needs: build-zig
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-all
-          path: build
-      - uses: bytecodealliance/actions/wasmtime/setup@v1
-      - shell: bash
-        run: |
-          for dir in build/wasm32-wasi/test build/cpp/wasm32-wasi/test; do
-            for t in "$dir"/*.wasm; do
-              echo "=== $t ==="
-              wasmtime run "$t" || exit 1
-            done
-          done
-
-  test-msvc:
-    needs: build-msvc
-    runs-on: windows-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-msvc
-          path: bin
-      - shell: bash
-        run: |
-          for t in bin/vs/Release/bin/*.exe; do
+          for t in tools/windows/sp/build/vs/Release/bin/*.exe; do
             echo "=== $t ==="
             "$t" || exit 1
           done
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, test-wasm, test-msvc]
+    needs: [zig, gcc, msvc]
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
