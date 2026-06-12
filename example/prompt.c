@@ -376,7 +376,8 @@ s32 prompt_main(s32 argc, const c8** argv) {
     { "Knight Rider", demo_knight_rider },
   };
 
-  sp_mem_t mem = sp_mem_os_new();
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
   sp_ht(const c8*, sp_prompt_demo_fn_t) demos = sp_zero;
   sp_cstr_ht_init(mem, demos);
@@ -398,7 +399,7 @@ s32 prompt_main(s32 argc, const c8** argv) {
     run = *fn;
   }
 
-  sp_prompt_ctx_t* ctx = sp_prompt_begin(sp_mem_os_new());
+  sp_prompt_ctx_t* ctx = sp_prompt_begin(mem);
   if (!ctx) {
     return SP_PROMPT_ERROR;
   }

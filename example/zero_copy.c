@@ -152,8 +152,8 @@ static void report(const c8* label, run_t run) {
 }
 
 s32 run(s32 num_args, const c8** args) {
-  (void)num_args; (void)args;
-  sp_mem_t mem = sp_mem_arena_as_allocator(sp_mem_arena_new(sp_mem_os_new()));
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
   sp_str_t cwd = sp_fs_get_cwd(mem);
   sp_str_t src = sp_str_concat(mem, cwd, sp_str_lit("/io.src"));

@@ -15,7 +15,7 @@ static sp_ht(sp_str_t, sp_fmt_directive_t) sp_fmt_directives = SP_NULLPTR;
 void sp_fmt_directive_reset() {
   sp_tls_rt_t* tls = sp_tls_rt_get();
   sp_str_ht_free(tls->format.directives);
-  sp_str_ht_init(tls->mem, tls->format.directives);
+  sp_str_ht_init(tls->mem.heap, tls->format.directives);
   sp_fmt_register_builtins();
 }
 

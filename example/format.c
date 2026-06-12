@@ -55,7 +55,8 @@ void specifier(s64 n, c8 fill, sp_fmt_align_t align, u8 width) {
 }
 
 s32 run(s32 num_args, const c8** args) {
-  sp_mem_t mem = sp_mem_os_new();
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
   sp_log("{.green} has Zig/Rust style format specifiers (fill, align, width), plus named directives which may:", sp_fmt_cstr("sp.h"));
   sp_log("- {} text from a format argument", sp_fmt_cstr("render"));

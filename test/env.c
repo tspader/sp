@@ -16,14 +16,17 @@ SP_TEST_MAIN()
 #endif
 
 struct env {
+  sp_mem_heap_t* heap;
   sp_mem_t mem;
 };
 
 UTEST_F_SETUP(env) {
-  ut.mem = sp_mem_os_new();
+  ut.heap = sp_mem_heap_new();
+  ut.mem = sp_mem_heap_as_allocator(ut.heap);
 }
 
 UTEST_F_TEARDOWN(env) {
+  sp_mem_heap_destroy(ut.heap);
 }
 
 UTEST_F(env, init_empty) {
@@ -265,7 +268,7 @@ UTEST_F(env, iterate) {
 }
 
 UTEST_F(env, iterate_matches_capture) {
-  sp_env_t captured = sp_env_capture(sp_mem_os_new());
+  sp_env_t captured = sp_env_capture(ut.mem);
 
   sp_os_env_it_t it = sp_os_env_it_begin();
   u32 it_count = 0;

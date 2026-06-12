@@ -1,9 +1,22 @@
 #include "fs.h"
 
-UTEST_F(fs, basic_properties) {
+struct fs_get_exe_path {
+  sp_mem_heap_t* heap;
+  sp_mem_t mem;
+};
+
+UTEST_F_SETUP(fs_get_exe_path) {
+  ut.heap = sp_mem_heap_new();
+  ut.mem = sp_mem_heap_as_allocator(ut.heap);
+}
+
+UTEST_F_TEARDOWN(fs_get_exe_path) {
+  sp_mem_heap_destroy(ut.heap);
+}
+
+UTEST_F(fs_get_exe_path, basic_properties) {
   SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t exe = sp_fs_get_exe_path(a);
+  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
   ASSERT_GT(exe.len, 0);
 
   // normalized: no backslashes
@@ -19,35 +32,29 @@ UTEST_F(fs, basic_properties) {
   ASSERT_GT(name.len, 0);
 }
 
-UTEST_F(fs, is_absolute) {
+UTEST_F(fs_get_exe_path, is_absolute) {
   SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t exe = sp_fs_get_exe_path(a);
+  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
   // absolute: starts with / on POSIX, or X: on Windows
   bool is_absolute = (exe.data[0] == '/') || (exe.len >= 2 && exe.data[1] == ':');
   ASSERT_TRUE(is_absolute);
 }
 
-UTEST_F(fs, exists_on_disk) {
+UTEST_F(fs_get_exe_path, exists_on_disk) {
   SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t exe = sp_fs_get_exe_path(a);
+  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
   ASSERT_TRUE(sp_fs_exists(exe));
 }
 
-UTEST_F(fs, is_canonical) {
+UTEST_F(fs_get_exe_path, is_canonical) {
   SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t exe = sp_fs_get_exe_path(a);
-  sp_str_t canonical = sp_fs_canonicalize_path(a, exe);
+  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
+  sp_str_t canonical = sp_fs_canonicalize_path(ut.mem, exe);
   SP_EXPECT_STR_EQ(canonical, exe);
 }
 
-UTEST_F(fs, no_dotdot) {
+UTEST_F(fs_get_exe_path, no_dotdot) {
   SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t exe = sp_fs_get_exe_path(a);
+  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
   ASSERT_FALSE(sp_str_contains(exe, sp_str_lit("..")));
 }
-
-

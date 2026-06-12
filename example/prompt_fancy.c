@@ -545,7 +545,9 @@ static sp_str_t fancy_plan_note(sp_mem_t mem, const c8* kind, const c8* name, co
 
 s32 fancy_main(s32 argc, const c8** argv) {
   bool scripted = fancy_has_arg(argc, argv, "--scripted");
-  sp_prompt_ctx_t* ctx = sp_prompt_begin(sp_mem_os_new());
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
+  sp_prompt_ctx_t* ctx = sp_prompt_begin(mem);
   if (ctx == SP_NULLPTR) {
     sp_log("failed to initialize prompt");
     return 1;

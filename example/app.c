@@ -28,7 +28,8 @@ void on_deinit(sp_app_t* app) {
 }
 
 sp_app_config_t app_main(s32 num_args, const c8** args) {
-  sp_mem_t a = sp_mem_os_new();
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t a = sp_mem_heap_as_allocator(heap);
   state_t* state = sp_alloc_type(a, state_t);
   state->allocator = a;
 

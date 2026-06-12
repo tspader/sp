@@ -14,24 +14,34 @@ static void assert_normalized(s32* utest_result, sp_str_t path, const c8* label)
   }
 }
 
-UTEST(fs_system_paths, nonempty) {
-  SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  ASSERT_GT(sp_fs_get_storage_path(a).len, 0);
-  ASSERT_GT(sp_fs_get_config_path(a).len, 0);
+struct fs_system_paths {
+  sp_mem_heap_t* heap;
+  sp_mem_t mem;
+};
+
+UTEST_F_SETUP(fs_system_paths) {
+  ut.heap = sp_mem_heap_new();
+  ut.mem = sp_mem_heap_as_allocator(ut.heap);
 }
 
-UTEST(fs_system_paths, storage_path_normalized) {
+UTEST_F_TEARDOWN(fs_system_paths) {
+  sp_mem_heap_destroy(ut.heap);
+}
+
+UTEST_F(fs_system_paths, nonempty) {
   SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t path = sp_fs_get_storage_path(a);
+  ASSERT_GT(sp_fs_get_storage_path(ut.mem).len, 0);
+  ASSERT_GT(sp_fs_get_config_path(ut.mem).len, 0);
+}
+
+UTEST_F(fs_system_paths, storage_path_normalized) {
+  SKIP_ON_WASM()
+  sp_str_t path = sp_fs_get_storage_path(ut.mem);
   assert_normalized(&ur, path, "storage_path");
 }
 
-UTEST(fs_system_paths, config_path_normalized) {
+UTEST_F(fs_system_paths, config_path_normalized) {
   SKIP_ON_WASM()
-  sp_mem_t a = sp_mem_os_new();
-  sp_str_t path = sp_fs_get_config_path(a);
+  sp_str_t path = sp_fs_get_config_path(ut.mem);
   assert_normalized(&ur, path, "config_path");
 }
-

@@ -2,7 +2,8 @@
 #include "sp.h"
 
 s32 run(s32 num_args, const c8** args) {
-  sp_mem_t mem = sp_mem_os_new();
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
   sp_io_file_reader_t r = sp_zero;
 

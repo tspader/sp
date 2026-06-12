@@ -3158,7 +3158,13 @@ SP_TYPEDEF_FN(void, sp_tls_once_fn_t);
 SP_TYPEDEF_FN(void, sp_tls_deinit_fn_t, void*);
 
 typedef struct {
-  sp_mem_t mem;
+  struct {
+    sp_mem_heap_t* heap;
+  } allocators;
+  struct {
+    sp_mem_t heap;
+    sp_mem_t page;
+  } mem;
   sp_mem_arena_t* scratch [2];
   sp_env_t env;
   struct {
@@ -7117,7 +7123,7 @@ void* sp_rb_grow_ex(void* arr, u32 stride, u32 capacity) {
 // @format
 void sp_fmt_directive_register(const c8* name, sp_fmt_directive_t directive) {
   sp_tls_rt_t* tls = sp_tls_rt_get();
-  sp_str_t id = sp_str_from_cstr(tls->mem, name);
+  sp_str_t id = sp_str_from_cstr(tls->mem.heap, name);
   sp_str_ht_insert(tls->format.directives, id, directive);
 }
 
@@ -7993,12 +7999,13 @@ void sp_rt_init() {
 void sp_tls_rt_deinit(void* ptr) {
   if (!ptr) return;
   sp_tls_rt_t* tls = (sp_tls_rt_t*)ptr;
-  if (tls->std.out) sp_mem_allocator_free(tls->mem, tls->std.out, sizeof(sp_io_stream_writer_t));
-  if (tls->std.err) sp_mem_allocator_free(tls->mem, tls->std.err, sizeof(sp_io_stream_writer_t));
+  if (tls->std.out) sp_mem_allocator_free(tls->mem.heap, tls->std.out, sizeof(sp_io_stream_writer_t));
+  if (tls->std.err) sp_mem_allocator_free(tls->mem.heap, tls->std.err, sizeof(sp_io_stream_writer_t));
   sp_str_ht_free(tls->format.directives);
   sp_carr_for(tls->scratch, it) {
     sp_mem_arena_destroy(tls->scratch[it]);
   }
+  sp_mem_heap_destroy(tls->allocators.heap);
   sp_sys_free(tls, sizeof(sp_tls_rt_t));
 }
 
@@ -8011,16 +8018,18 @@ sp_tls_rt_t* sp_tls_rt_get() {
     // before doing anything else so you can call functions that allocate
     // while initializing the other TLS stuff.
     tls = sp_sys_alloc_type(sp_tls_rt_t);
-    tls->mem = sp_mem_os_new();
+    tls->allocators.heap = sp_mem_heap_new();
+    tls->mem.heap = sp_mem_heap_as_allocator(tls->allocators.heap);
+    tls->mem.page = sp_mem_os_new();
     sp_tls_set(sp_rt.tls.key, tls);
 
     sp_carr_for(tls->scratch, it) {
-      tls->scratch[it] = sp_mem_arena_new(tls->mem);
+      tls->scratch[it] = sp_mem_arena_new(tls->mem.page);
     }
     // std.out/std.err are wired lazily (see sp_tls_std_out/_err). Wiring them here
     // would take the address of sp_io_stream_writer_write in code that sp_main always
     // reaches, which on WASM forces a fd_write import even for programs that never write.
-    sp_str_ht_init(tls->mem, tls->format.directives);
+    sp_str_ht_init(tls->mem.heap, tls->format.directives);
     sp_fmt_register_builtins();
     sp_sys_tls_init(tls);
   }
@@ -8029,7 +8038,7 @@ sp_tls_rt_t* sp_tls_rt_get() {
 
 sp_io_writer_t* sp_tls_std_out(sp_tls_rt_t* tls) {
   if (!tls->std.out) {
-    tls->std.out = sp_alloc_type(tls->mem, sp_io_stream_writer_t);
+    tls->std.out = sp_alloc_type(tls->mem.heap, sp_io_stream_writer_t);
     sp_io_stream_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
   }
   return &tls->std.out->base;
@@ -8037,7 +8046,7 @@ sp_io_writer_t* sp_tls_std_out(sp_tls_rt_t* tls) {
 
 sp_io_writer_t* sp_tls_std_err(sp_tls_rt_t* tls) {
   if (!tls->std.err) {
-    tls->std.err = sp_alloc_type(tls->mem, sp_io_stream_writer_t);
+    tls->std.err = sp_alloc_type(tls->mem.heap, sp_io_stream_writer_t);
     sp_io_stream_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
   }
   return &tls->std.err->base;
@@ -14356,7 +14365,8 @@ SP_API s32 sp_app_run_free(sp_app_t* app) {
 }
 
 SP_API s32 sp_app_run(sp_app_config_t config) {
-  sp_mem_t mem = sp_mem_os_new();
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
   sp_app_t* app = sp_app_new(mem, config);
   s32 rc = (app->mode == SP_APP_MODE_FREE)
     ? sp_app_run_free(app)
