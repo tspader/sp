@@ -158,6 +158,22 @@ UTEST_F(fs_create_dir, create_multi_level) {
   });
 }
 
+UTEST_F(fs_create_dir, create_multi_level_relative) {
+  SKIP_ON_WASM()
+  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_multi_level_relative"));
+  sp_fs_create_dir(sandbox);
+
+  sp_str_t cwd = sp_fs_get_cwd(ut.file_manager.mem);
+  ASSERT_EQ(sp_sys_chdir_s(sandbox), 0);
+  sp_err_t result = sp_fs_create_dir(sp_str_lit("rel1/rel2"));
+  ASSERT_EQ(sp_sys_chdir_s(cwd), 0);
+
+  EXPECT_EQ(result, SP_OK);
+  sp_str_t created = sp_fs_join_path(ut.file_manager.mem, sandbox, sp_str_lit("rel1/rel2"));
+  EXPECT_TRUE(sp_fs_exists(created));
+  EXPECT_EQ(sp_fs_get_kind(created), SP_FS_KIND_DIR);
+}
+
 UTEST_F(fs_create_dir, destination_is_file) {
   SKIP_ON_WASM()
   run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){

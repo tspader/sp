@@ -15656,7 +15656,7 @@ sp_err_t sp_fs_create_dir(sp_str_t path) {
 
   // Walk up, collecting intermediate paths that don't exist
   path = sp_fs_trim_path(path);
-  while (!sp_fs_is_root(path) && !sp_fs_exists(path)) {
+  while (!sp_str_empty(path) && !sp_fs_is_root(path) && !sp_fs_exists(path)) {
     sp_da_push(missing, path);
     path = sp_fs_parent_path(path);
   }
