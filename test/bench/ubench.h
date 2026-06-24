@@ -1382,9 +1382,6 @@ s32 ubench_main(s32 argc, const c8 *const argv[]) {
   const c8 *filter = SP_NULLPTR;
   u64 ran_benchmarks = 0;
 
-  sp_fmt_register_decorator("green", ubench_fmt_tty_green, ubench_fmt_tty_reset);
-  sp_fmt_register_decorator("red", ubench_fmt_tty_red, ubench_fmt_tty_reset);
-
 #if defined(UBENCH_ENABLE_PERF_COUNTERS) && defined(SP_LINUX)
   struct ubench_perf_s perf;
   ubench_perf_init(&perf);
