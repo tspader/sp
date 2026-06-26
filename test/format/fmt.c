@@ -97,6 +97,32 @@ UTEST(format_fmt, dynamic) {
   SP_CARR_FOR(cases, i) run_format_fmt(utest_result, cases[i]);
 }
 
+UTEST(format_fmt, dynamic_style) {
+  format_fmt_test_t cases[] = {
+    {
+      "{.$}",
+      { sp_fmt_style(sp_fmt_style_red), sp_fmt_cstr("x") },
+      "\033[31mx\033[0m"
+    },
+    {
+      "{.$}",
+      { sp_fmt_style(sp_fmt_style_none), sp_fmt_cstr("x") },
+      "x"
+    },
+    {
+      "{.$ .$}",
+      { sp_fmt_style(sp_fmt_style_red), sp_fmt_style(sp_fmt_style_none), sp_fmt_cstr("x") },
+      "\033[31mx\033[0m"
+    },
+    {
+      "{.$}",
+      { sp_fmt_style(9999), sp_fmt_cstr("x") },
+      .err = SP_ERR_FMT_UNKNOWN_DIRECTIVE
+    },
+  };
+  SP_CARR_FOR(cases, i) run_format_fmt(utest_result, cases[i]);
+}
+
 UTEST(format_fmt, precision) {
   format_fmt_test_t cases[] = {
     {
