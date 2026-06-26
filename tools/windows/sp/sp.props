@@ -5,6 +5,7 @@
     <SpUseImplementationDefines Condition="'$(SpUseImplementationDefines)' == ''">true</SpUseImplementationDefines>
     <SpImplementationDefines Condition="'$(SpUseImplementationDefines)' == 'true'">SP_IMPLEMENTATION;SP_TEST_IMPLEMENTATION</SpImplementationDefines>
     <SpImplementationDefines Condition="'$(SpUseImplementationDefines)' != 'true'"></SpImplementationDefines>
+    <SpCliTestDir>$([System.IO.Path]::GetFullPath('$(SpRoot)\test\cli').Replace('\','/'))</SpCliTestDir>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -25,7 +26,7 @@
       <UseFullPaths>true</UseFullPaths>
       <DisableSpecificWarnings>4100</DisableSpecificWarnings>
       <TreatSpecificWarningsAsErrors>4715</TreatSpecificWarningsAsErrors>
-      <PreprocessorDefinitions>$(SpImplementationDefines);$(SpPreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SP_CLI_TEST_DIR="$(SpCliTestDir)";$(SpImplementationDefines);$(SpPreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SpRoot);$(SpRoot)\include;$(SpRoot)\tools;$(SpRoot)\test\tools;$(SpRoot)\test\tools\process;$(SpRoot)\sp;$(SpAdditionalIncludeDirectories);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Condition="'$(Configuration)' == 'Debug'">

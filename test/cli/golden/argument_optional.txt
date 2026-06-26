@@ -1,0 +1,6 @@
+
+usage
+  test [file]
+
+arguments
+  [file] optional The file to read

@@ -488,6 +488,7 @@
 #define SP_CARR_LEN(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 #define SP_CARR_FOR(CARR, IT) for (u32 IT = 0; IT < SP_CARR_LEN(CARR); IT++)
 #define sp_carr_for(CARR, IT) SP_CARR_FOR(CARR, IT)
+#define sp_carr_for_until(_carr, _it, _expr) for (u32 _it = 0; ((_it < sp_carr_len(_carr) && (_expr))); _it++)
 #define sp_carr_len(CARR) (sizeof((CARR)) / sizeof((CARR)[0]))
 
 #define sp_for(it, n) for (u32 it = 0; it < n; it++)
@@ -3012,7 +3013,15 @@ typedef enum {
   sp_fmt_style_italic,
   sp_fmt_style_hyperlink,
   sp_fmt_style_quote,
+  sp_fmt_style_unset,
 } sp_fmt_style_t;
+
+typedef enum {
+  SP_FMT_STYLE_ATTR_NONE = 0,
+  SP_FMT_STYLE_ATTR_BOLD = 1,
+  SP_FMT_STYLE_ATTR_ITALIC = 2,
+  SP_FMT_STYLE_ATTR_HYPERLINK = 4,
+} sp_fmt_style_attr_t;
 
 typedef struct {
   c8 renderer;
@@ -3758,6 +3767,7 @@ typedef struct {
 } sp_fmt_parser_t;
 
 SP_IMP sp_err_t            sp_fmt_style_from_name(sp_str_t name, sp_fmt_style_t* out);
+SP_IMP sp_fmt_style_t      sp_fmt_style_from_attr(sp_fmt_style_attr_t attr);
 SP_IMP c8*                 sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
 SP_IMP c8*                 sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
 SP_IMP c8*                 sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end);
@@ -7371,6 +7381,16 @@ sp_err_t sp_fmt_style_from_name(sp_str_t name, sp_fmt_style_t* out) {
   return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
 }
 
+sp_fmt_style_t sp_fmt_style_from_attr(sp_fmt_style_attr_t attr) {
+  switch (attr) {
+    case SP_FMT_STYLE_ATTR_NONE:      return sp_fmt_style_none;
+    case SP_FMT_STYLE_ATTR_BOLD:      return sp_fmt_style_bold;
+    case SP_FMT_STYLE_ATTR_ITALIC:    return sp_fmt_style_italic;
+    case SP_FMT_STYLE_ATTR_HYPERLINK: return sp_fmt_style_hyperlink;
+  }
+  SP_UNREACHABLE_RETURN(sp_fmt_style_none);
+}
+
 static const c8* sp_fmt_style_ansi(sp_fmt_style_t style) {
   switch (style) {
     case sp_fmt_style_black:      return SP_ANSI_FG_BLACK;
@@ -7392,6 +7412,7 @@ static const c8* sp_fmt_style_ansi(sp_fmt_style_t style) {
     case sp_fmt_style_bold:       return "\033[1m";
     case sp_fmt_style_italic:     return "\033[3m";
     case sp_fmt_style_none:
+    case sp_fmt_style_unset:
     case sp_fmt_style_hyperlink:
     case sp_fmt_style_quote:      return SP_NULLPTR;
   }
@@ -7417,7 +7438,7 @@ static void sp_fmt_style_close(sp_io_writer_t* io, sp_fmt_style_t style) {
   if (style == sp_fmt_style_quote) {
     sp_io_write_c8(io, '"');
   }
-  else if (style != sp_fmt_style_none) {
+  else if (style != sp_fmt_style_none && style != sp_fmt_style_unset) {
     sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
   }
 }
@@ -14783,7 +14804,7 @@ sp_err_t sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
         if (spec.dynamic & sp_fmt_dynamic_directive(i)) {
           s64 v;
           sp_try_as(sp_fmt_pull_specifier_arg(va_arg(args, sp_fmt_argv_t), &v), SP_ERR_FMT_WRONG_STYLE_KIND);
-          if (v < sp_fmt_style_none || v > sp_fmt_style_quote) return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
+          if (v < sp_fmt_style_none || v > sp_fmt_style_unset) return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
           spec.directive.styles[i] = sp_cast(sp_fmt_style_t, v);
         }
       }
@@ -14886,7 +14907,7 @@ sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
     sp_fmt_style_t style;
     if (arg->spec.dynamic & sp_fmt_dynamic_directive(i)) {
       style = arg->spec.directive.styles[i];
-      if (style < sp_fmt_style_none || style > sp_fmt_style_quote) return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
+      if (style < sp_fmt_style_none || style > sp_fmt_style_unset) return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
     }
     else {
       sp_try(sp_fmt_style_from_name(arg->spec.directive.names[i], &style));
