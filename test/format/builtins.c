@@ -226,11 +226,6 @@ UTEST(format_builtin, unknown_tag) {
       .args = { sp_fmt_style(-1), sp_fmt_cstr("hi") },
       .err = SP_ERR_FMT_UNKNOWN_DIRECTIVE
     },
-    {
-      .fmt = "{.$}",
-      .args = { sp_fmt_style(sp_fmt_style_unknown), sp_fmt_cstr("hi") },
-      .err = SP_ERR_FMT_UNKNOWN_DIRECTIVE
-    },
   };
   SP_CARR_FOR(cases, i) run_format_fmt(utest_result, cases[i]);
 }

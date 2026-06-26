@@ -2992,7 +2992,6 @@ typedef enum {
 
 typedef enum {
   sp_fmt_style_none = 0,
-  sp_fmt_style_unknown,
   sp_fmt_style_black,
   sp_fmt_style_red,
   sp_fmt_style_green,
@@ -3758,7 +3757,7 @@ typedef struct {
   u32 i;
 } sp_fmt_parser_t;
 
-SP_IMP sp_fmt_style_t      sp_fmt_style_from_name(sp_str_t name);
+SP_IMP sp_err_t            sp_fmt_style_from_name(sp_str_t name, sp_fmt_style_t* out);
 SP_IMP c8*                 sp_fmt_uint_to_buf_dec(u64 value, c8* buf_end);
 SP_IMP c8*                 sp_fmt_uint_to_buf_hex_ex(u64 value, c8* buf_end, const c8* digits);
 SP_IMP c8*                 sp_fmt_uint_to_buf_hex(u64 value, c8* buf_end);
@@ -7347,29 +7346,29 @@ static sp_err_t sp_fmt_pull_specifier_arg(sp_fmt_argv_t a, s64* out) {
   return SP_OK;
 }
 
-sp_fmt_style_t sp_fmt_style_from_name(sp_str_t name) {
-  if (sp_str_equal_cstr(name, "black")) return sp_fmt_style_black;
-  if (sp_str_equal_cstr(name, "red")) return sp_fmt_style_red;
-  if (sp_str_equal_cstr(name, "green")) return sp_fmt_style_green;
-  if (sp_str_equal_cstr(name, "yellow")) return sp_fmt_style_yellow;
-  if (sp_str_equal_cstr(name, "blue")) return sp_fmt_style_blue;
-  if (sp_str_equal_cstr(name, "magenta")) return sp_fmt_style_magenta;
-  if (sp_str_equal_cstr(name, "cyan")) return sp_fmt_style_cyan;
-  if (sp_str_equal_cstr(name, "white")) return sp_fmt_style_white;
-  if (sp_str_equal_cstr(name, "gray")) return sp_fmt_style_gray;
-  if (sp_str_equal_cstr(name, "br_black")) return sp_fmt_style_gray;
-  if (sp_str_equal_cstr(name, "br_red")) return sp_fmt_style_br_red;
-  if (sp_str_equal_cstr(name, "br_green")) return sp_fmt_style_br_green;
-  if (sp_str_equal_cstr(name, "br_yellow")) return sp_fmt_style_br_yellow;
-  if (sp_str_equal_cstr(name, "br_blue")) return sp_fmt_style_br_blue;
-  if (sp_str_equal_cstr(name, "br_magenta")) return sp_fmt_style_br_magenta;
-  if (sp_str_equal_cstr(name, "br_cyan")) return sp_fmt_style_br_cyan;
-  if (sp_str_equal_cstr(name, "br_white")) return sp_fmt_style_br_white;
-  if (sp_str_equal_cstr(name, "bold")) return sp_fmt_style_bold;
-  if (sp_str_equal_cstr(name, "italic")) return sp_fmt_style_italic;
-  if (sp_str_equal_cstr(name, "hyperlink")) return sp_fmt_style_hyperlink;
-  if (sp_str_equal_cstr(name, "quote")) return sp_fmt_style_quote;
-  return sp_fmt_style_unknown;
+sp_err_t sp_fmt_style_from_name(sp_str_t name, sp_fmt_style_t* out) {
+  if (sp_str_equal_cstr(name, "black")) { *out = sp_fmt_style_black; return SP_OK; }
+  if (sp_str_equal_cstr(name, "red")) { *out = sp_fmt_style_red; return SP_OK; }
+  if (sp_str_equal_cstr(name, "green")) { *out = sp_fmt_style_green; return SP_OK; }
+  if (sp_str_equal_cstr(name, "yellow")) { *out = sp_fmt_style_yellow; return SP_OK; }
+  if (sp_str_equal_cstr(name, "blue")) { *out = sp_fmt_style_blue; return SP_OK; }
+  if (sp_str_equal_cstr(name, "magenta")) { *out = sp_fmt_style_magenta; return SP_OK; }
+  if (sp_str_equal_cstr(name, "cyan")) { *out = sp_fmt_style_cyan; return SP_OK; }
+  if (sp_str_equal_cstr(name, "white")) { *out = sp_fmt_style_white; return SP_OK; }
+  if (sp_str_equal_cstr(name, "gray")) { *out = sp_fmt_style_gray; return SP_OK; }
+  if (sp_str_equal_cstr(name, "br_black")) { *out = sp_fmt_style_gray; return SP_OK; }
+  if (sp_str_equal_cstr(name, "br_red")) { *out = sp_fmt_style_br_red; return SP_OK; }
+  if (sp_str_equal_cstr(name, "br_green")) { *out = sp_fmt_style_br_green; return SP_OK; }
+  if (sp_str_equal_cstr(name, "br_yellow")) { *out = sp_fmt_style_br_yellow; return SP_OK; }
+  if (sp_str_equal_cstr(name, "br_blue")) { *out = sp_fmt_style_br_blue; return SP_OK; }
+  if (sp_str_equal_cstr(name, "br_magenta")) { *out = sp_fmt_style_br_magenta; return SP_OK; }
+  if (sp_str_equal_cstr(name, "br_cyan")) { *out = sp_fmt_style_br_cyan; return SP_OK; }
+  if (sp_str_equal_cstr(name, "br_white")) { *out = sp_fmt_style_br_white; return SP_OK; }
+  if (sp_str_equal_cstr(name, "bold")) { *out = sp_fmt_style_bold; return SP_OK; }
+  if (sp_str_equal_cstr(name, "italic")) { *out = sp_fmt_style_italic; return SP_OK; }
+  if (sp_str_equal_cstr(name, "hyperlink")) { *out = sp_fmt_style_hyperlink; return SP_OK; }
+  if (sp_str_equal_cstr(name, "quote")) { *out = sp_fmt_style_quote; return SP_OK; }
+  return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
 }
 
 static const c8* sp_fmt_style_ansi(sp_fmt_style_t style) {
@@ -7393,7 +7392,6 @@ static const c8* sp_fmt_style_ansi(sp_fmt_style_t style) {
     case sp_fmt_style_bold:       return "\033[1m";
     case sp_fmt_style_italic:     return "\033[3m";
     case sp_fmt_style_none:
-    case sp_fmt_style_unknown:
     case sp_fmt_style_hyperlink:
     case sp_fmt_style_quote:      return SP_NULLPTR;
   }
@@ -7419,7 +7417,7 @@ static void sp_fmt_style_close(sp_io_writer_t* io, sp_fmt_style_t style) {
   if (style == sp_fmt_style_quote) {
     sp_io_write_c8(io, '"');
   }
-  else if (style != sp_fmt_style_none && style != sp_fmt_style_unknown) {
+  else if (style != sp_fmt_style_none) {
     sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
   }
 }
@@ -14785,7 +14783,7 @@ sp_err_t sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
         if (spec.dynamic & sp_fmt_dynamic_directive(i)) {
           s64 v;
           sp_try_as(sp_fmt_pull_specifier_arg(va_arg(args, sp_fmt_argv_t), &v), SP_ERR_FMT_WRONG_STYLE_KIND);
-          if (v <= sp_fmt_style_unknown || v > sp_fmt_style_quote) return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
+          if (v < sp_fmt_style_none || v > sp_fmt_style_quote) return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
           spec.directive.styles[i] = sp_cast(sp_fmt_style_t, v);
         }
       }
@@ -14885,10 +14883,14 @@ sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
   u8 num_dirs = arg->spec.directive.num;
 
   sp_for(i, num_dirs) {
-    sp_fmt_style_t style = (arg->spec.dynamic & sp_fmt_dynamic_directive(i))
-      ? arg->spec.directive.styles[i]
-      : sp_fmt_style_from_name(arg->spec.directive.names[i]);
-    if (style <= sp_fmt_style_unknown || style > sp_fmt_style_quote) return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
+    sp_fmt_style_t style;
+    if (arg->spec.dynamic & sp_fmt_dynamic_directive(i)) {
+      style = arg->spec.directive.styles[i];
+      if (style < sp_fmt_style_none || style > sp_fmt_style_quote) return SP_ERR_FMT_UNKNOWN_DIRECTIVE;
+    }
+    else {
+      sp_try(sp_fmt_style_from_name(arg->spec.directive.names[i], &style));
+    }
     arg->spec.directive.styles[i] = style;
   }
 
