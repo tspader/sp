@@ -48,6 +48,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "math", "math.vcxproj", "{21
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "thread", "thread.vcxproj", "{21A5F3D1-2C70-4A11-9F8B-1A2B3C4D5E66}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cli", "cli.vcxproj", "{CB96468E-6F42-4AD6-BD41-CBD668979062}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{FFFFFFFF-EEEE-DDDD-CCCC-BBBBBBBBBBBB}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "array", "examples\array.vcxproj", "{10000001-0001-4001-8001-000000000001}"
@@ -232,6 +234,10 @@ Global
 		{21A5F3D1-2C70-4A11-9F8B-1A2B3C4D5E66}.Debug|x64.Build.0 = Debug|x64
 		{21A5F3D1-2C70-4A11-9F8B-1A2B3C4D5E66}.Release|x64.ActiveCfg = Release|x64
 		{21A5F3D1-2C70-4A11-9F8B-1A2B3C4D5E66}.Release|x64.Build.0 = Release|x64
+		{CB96468E-6F42-4AD6-BD41-CBD668979062}.Debug|x64.ActiveCfg = Debug|x64
+		{CB96468E-6F42-4AD6-BD41-CBD668979062}.Debug|x64.Build.0 = Debug|x64
+		{CB96468E-6F42-4AD6-BD41-CBD668979062}.Release|x64.ActiveCfg = Release|x64
+		{CB96468E-6F42-4AD6-BD41-CBD668979062}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

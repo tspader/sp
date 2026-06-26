@@ -1,0 +1,7 @@
+
+usage
+  test <COMMAND>
+
+commands
+  add    Add a package
+  remove Remove a package

@@ -29,6 +29,8 @@ sp.h is a single-header C standard library replacement which focuses on building
   - `strcmp`, `strlen`, etc. -> `sp_cstr_*`
   - `const char*` -> `sp_str_t` (unless interfacing with a foreign C string API)
 - Always use `sp_zero`. When you need a type, use `sp_zero_s(T)`
+- Always use `sp_cstr_as_str` when making a unowned view into a named C string
+- Always use `sp_str_lit` when making an unowned view into a C string literal
 - Never check `str.len > 0`; always use `!sp_str_empty(str)`
 - Always use C99 designated initializers for struct literals when possible
 - Always use short literal types (`s32`, `u8`, `c8`, `const c8*`)

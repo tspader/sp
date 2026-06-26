@@ -1,0 +1,7 @@
+Install a tool
+
+usage
+  uv tool install package
+
+arguments
+  package required The package to install

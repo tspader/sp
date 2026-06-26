@@ -1,0 +1,8 @@
+
+usage
+  test [OPTIONS]
+
+options
+  -f, --force       Short label
+      --dry-run     No brief, wider
+  -o, --output PATH Brief and placeholder
