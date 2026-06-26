@@ -1,0 +1,18 @@
+A package manager
+
+usage
+  pkg [OPTIONS] target [extra...] <COMMAND>
+
+options
+  -v, --verbose     Verbose output
+      --config=PATH Config file
+
+arguments
+  target     required The target
+  [extra...] optional Passed through
+
+commands
+  add Add a package
+
+environment
+  PKG_HOME required Install root
