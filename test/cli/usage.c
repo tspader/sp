@@ -16,6 +16,8 @@ static void cli_print_usage_file(sp_str_t path, sp_str_t content) {
 }
 
 static void run_cli_usage_test(s32* utest_result, sp_mem_t mem, cli_usage_test_t t) {
+  SKIP_ON_WASM();
+
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &io);
   sp_cli_t cli = { .cmd = &t.cmd, .theme = { .mode = SP_CLI_THEME_REPLACE } };
