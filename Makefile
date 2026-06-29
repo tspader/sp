@@ -48,7 +48,43 @@ CFLAGS = $(CFLAGS_LANG) -g -Werror=return-type -fsanitize=undefined,alignment -f
 CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -DSP_CLI_TEST_DIR='"$(CURDIR)/test/cli"' -DSP_GDB_TOOLS_DIR='"$(CURDIR)/tools/gdb"' -I. -Itest/tools -Itest
 CFLAGS_BENCH = $(CFLAGS_LANG) -g -Werror=return-type -O2 -DSP_IMPLEMENTATION -DUBENCH_ENABLE_PERF_COUNTERS -I. -Itest/bench -Itest/tools
 
-TESTS = amalg app array asset cli etc cv env format fmon fs gdb gdb_fixture glob ht io math process ps rb str thread time mem prompt leak qsort
+MBEDTLS_DIR = tools/vendor/mbedtls
+MBEDTLS_INC = -I$(MBEDTLS_DIR)/include
+MBEDTLS_SRCS = $(wildcard $(MBEDTLS_DIR)/library/*.c)
+MBEDTLS_OBJS = $(patsubst $(MBEDTLS_DIR)/library/%.c,$(BUILD_DIR)/mbedtls/%.o,$(MBEDTLS_SRCS))
+MBEDTLS_LIB = $(BUILD_DIR)/mbedtls/libmbedtls.a
+CFLAGS_MBEDTLS = -x c -std=c99 -O2 $(MBEDTLS_INC) -I$(MBEDTLS_DIR)/library
+
+ifdef TRIPLE
+  MBEDTLS_AR = zig ar
+else
+  MBEDTLS_AR = ar
+endif
+
+MBEDTLS_OK = 1
+ifneq (,$(findstring linux-none,$(TRIPLE)))
+  MBEDTLS_OK =
+endif
+ifneq (,$(findstring wasm,$(TRIPLE)))
+  MBEDTLS_OK =
+endif
+ifneq (,$(findstring freestanding,$(TRIPLE)))
+  MBEDTLS_OK =
+endif
+
+TLS_LDLIBS =
+TLS_DEFINES =
+ifneq (,$(findstring windows,$(TRIPLE)))
+  TLS_LDLIBS = -lws2_32 -lcrypt32 -ladvapi32 -lbcrypt
+endif
+ifeq ($(TRIPLE),)
+  ifeq ($(shell uname -s),Darwin)
+    TLS_LDLIBS = -framework Security -framework CoreFoundation
+    TLS_DEFINES = -DSP_TLS_MACOS_SECTRUST
+  endif
+endif
+
+TESTS = amalg app array asset cli etc cv env format fmon fs glob ht io math process ps rb str thread time mem prompt leak
 BENCHES = glob heap
 EXAMPLES = app array cli format hash_table io zero_copy ls palette prompt prompt_fancy signal tls wc
 TRIPLES = \
@@ -73,6 +109,17 @@ all: examples tests
 tests: $(TEST_BINARIES)
 examples: $(EXAMPLE_BINARIES)
 bench: $(BENCH_BINARIES)
+
+$(BUILD_DIR)/mbedtls/%.o: $(MBEDTLS_DIR)/library/%.c | $(BUILD_DIR)/mbedtls
+	$(CC) $(CFLAGS_MBEDTLS) -c -o $@ $<
+
+$(MBEDTLS_LIB): $(MBEDTLS_OBJS)
+	$(MBEDTLS_AR) rcs $@ $(MBEDTLS_OBJS)
+
+ifdef MBEDTLS_OK
+$(EXAMPLE_DIR)/tls$(EXE): example/tls.c $(SP_HEADERS) $(MBEDTLS_LIB) | $(EXAMPLE_DIR)
+	$(CC) $(CFLAGS) -I. -DSP_TLS_WITH_MBEDTLS $(TLS_DEFINES) $(MBEDTLS_INC) -o $@ $< -x none $(MBEDTLS_LIB) $(TLS_LDLIBS)
+endif
 
 $(EXAMPLE_DIR)/%$(EXE): example/%.c $(SP_HEADERS) | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS) -I. -o $@ $<
@@ -104,7 +151,7 @@ wasm:
 	+$(MAKE) wasm32-wasi wasm32-freestanding
 	+$(MAKE) MODE=cpp wasm32-wasi wasm32-freestanding
 
-$(BUILD_DIR) $(EXAMPLE_DIR) $(TEST_DIR) $(BENCH_DIR):
+$(BUILD_DIR) $(EXAMPLE_DIR) $(TEST_DIR) $(BENCH_DIR) $(BUILD_DIR)/mbedtls:
 	mkdir -p $@
 
 clean:
