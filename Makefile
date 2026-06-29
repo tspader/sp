@@ -50,7 +50,7 @@ CFLAGS_BENCH = $(CFLAGS_LANG) -g -Werror=return-type -O2 -DSP_IMPLEMENTATION -DU
 
 TESTS = amalg app array asset cli etc cv env format fmon fs gdb gdb_fixture glob ht io math process ps rb str thread time mem prompt leak qsort
 BENCHES = glob heap
-EXAMPLES = app array cli format hash_table io zero_copy ls palette prompt prompt_fancy signal wc
+EXAMPLES = app array cli format hash_table io zero_copy ls palette prompt prompt_fancy signal tls wc
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \
