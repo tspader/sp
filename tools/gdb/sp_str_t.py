@@ -1,5 +1,10 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gdb
-import gdb.printing
+import sp_gdb
+
 
 class SpStrPrinter:
     def __init__(self, val):
@@ -7,31 +12,18 @@ class SpStrPrinter:
 
     def to_string(self):
         try:
-            length = int(self.val['len'])
-            data_ptr = self.val['data']
-
+            length = int(self.val["len"])
+            data = self.val["data"]
+            if int(data) == 0:
+                return "<null>" if length else ""
             if length == 0:
-                return ''
-
-            if data_ptr == 0:
-                return '<null>'
-
-            string_data = data_ptr.string(length=length, encoding='utf-8', errors='replace')
-            return string_data
-
-        except Exception as e:
-            return f'<sp_str_t: error reading string: {e}>'
+                return ""
+            return data.string(length=length, encoding="utf-8", errors="replace")
+        except gdb.error as e:
+            return "<sp_str_t: %s>" % e
 
     def display_hint(self):
-        return 'string'
+        return "string"
 
-def build_pretty_printer():
-    pp = gdb.printing.RegexpCollectionPrettyPrinter("sp_str")
-    pp.add_printer('sp_str_t', '^sp_str_t$', SpStrPrinter)
-    return pp
 
-gdb.printing.register_pretty_printer(
-    gdb.current_objfile(),
-    build_pretty_printer(),
-    replace=True
-)
+sp_gdb.register_named("sp_str", {"sp_str_t": SpStrPrinter})

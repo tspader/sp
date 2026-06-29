@@ -42,7 +42,7 @@ sp.h is a single-header C standard library replacement which focuses on building
     - `sp_for(it, n)` instead of `for (int it = 0; it < n; it++)`
     - `sp_for_range(it, low, high)` instead of `for (int it = low; it < high; it++)`
     - `sp_da_for(da, it)` and `sp_ht_for(ht, it)`
-    - `sp_carr_for()` instead of `for (int it = 0; it < sizeof(carr) / sizeof(carr[0]); it++)`
+    - `sp_carr_for(carr, it)` instead of `for (int it = 0; it < sizeof(carr) / sizeof(carr[0]); it++)`
 - Always use `sp_mem_begin_scratch()` and `sp_mem_end_scratch()` when allocating non-persistent heap memory
     - Always use `sp_mem_begin_scratch_for(mem)` to avoid clobbering an argument-passed scratch allocator
 - For `sp_str_t` → cstr conversion before a syscall, use a stack `c8 buf[SP_PATH_MAX]` + `sp_cstr_copy_to_n`, not scratch
@@ -88,19 +88,19 @@ typedef struct {
 
 typedef struct {
   u32 bar;
-  const c8* baz [FOO_TEST_MAX_BAZ]
+  const c8* baz [FOO_TEST_MAX_BAZ];
   foo_expect_t expect;
 } foo_test_t;
 
 UTEST_EMPTY_FIXTURE(foo)
 
 void run_foo_test(s32* utest_result, foo_test_t t) {
-  sp_carr_for(it, t.baz) {
+  sp_carr_for(t.baz, it) {
     if (!t.baz[it]) break;
     // ...do something with baz[it]
   }
 
-  EXPECT_TRUE(t.spum);
+  EXPECT_TRUE(t.expect.spum);
   // ...verify expectations
 }
 
@@ -109,8 +109,8 @@ UTEST_F(foo, large_bar_ok) {
     .bar = 69,
     .baz = { "skam", "grum", "qux" },
     .expect = {
-      .spum = 69
-    }
+      .spum = true,
+    },
   });
 }
 ```
