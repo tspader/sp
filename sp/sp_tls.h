@@ -140,8 +140,55 @@ SP_PRIVATE sp_str_t sp_http_str_tail(sp_str_t str, s32 from) {
   return sp_str_sub(str, from, (s32)str.len - from);
 }
 
+SP_PRIVATE sp_str_t sp_http_host_bare(sp_str_t host) {
+  if (host.len >= 2 && host.data[0] == '[' && host.data[host.len - 1] == ']') {
+    return sp_str_sub(host, 1, (s32)host.len - 2);
+  }
+  return host;
+}
+
+SP_PRIVATE bool sp_http_url_host_ok(sp_str_t host) {
+  if (sp_str_empty(host)) return false;
+  if (host.data[0] == '[') {
+    if (host.len < 4 || host.data[host.len - 1] != ']') return false;
+    sp_for_range(it, 1, (s32)host.len - 1) {
+      c8 c = host.data[it];
+      bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+      if (!hex && c != ':' && c != '.') return false;
+    }
+    return true;
+  }
+  sp_for(it, host.len) {
+    c8 c = host.data[it];
+    bool alnum = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    if (!alnum && c != '-' && c != '.' && c != '_') return false;
+  }
+  return true;
+}
+
+SP_PRIVATE bool sp_http_url_port_ok(sp_str_t port) {
+  if (sp_str_empty(port) || port.len > 5) return false;
+  sp_for(it, port.len) {
+    if (port.data[it] < '0' || port.data[it] > '9') return false;
+  }
+  u32 value = 0;
+  if (!sp_parse_u32_ex(port, &value)) return false;
+  return value >= 1 && value <= 65535;
+}
+
+SP_PRIVATE bool sp_http_url_path_ok(sp_str_t path) {
+  sp_for(it, path.len) {
+    u8 c = (u8)path.data[it];
+    if (c <= 0x20 || c == 0x7f) return false;
+  }
+  return true;
+}
+
 bool sp_http_url_parse(sp_str_t url, sp_http_url_t* out) {
   *out = sp_zero_s(sp_http_url_t);
+
+  s32 hash = sp_str_find_c8(url, '#');
+  if (hash != SP_STR_NO_MATCH) url = sp_str_sub(url, 0, hash);
 
   sp_str_t rest = url;
   s32 sep = sp_str_find(url, sp_str_lit("://"));
@@ -169,17 +216,106 @@ bool sp_http_url_parse(sp_str_t url, sp_http_url_t* out) {
     out->path = sp_http_str_tail(rest, slash);
   }
 
-  s32 colon = sp_str_find_c8(authority, ':');
-  if (colon == SP_STR_NO_MATCH) {
-    out->host = authority;
-    out->port = out->tls ? sp_str_lit("443") : sp_str_lit("80");
+  if (sp_str_find_c8(authority, '@') != SP_STR_NO_MATCH) return false;
+
+  if (!sp_str_empty(authority) && authority.data[0] == '[') {
+    s32 close = sp_str_find_c8(authority, ']');
+    if (close == SP_STR_NO_MATCH) return false;
+    out->host = sp_str_sub(authority, 0, close + 1);
+    sp_str_t after = sp_http_str_tail(authority, close + 1);
+    if (sp_str_empty(after)) {
+      out->port = out->tls ? sp_str_lit("443") : sp_str_lit("80");
+    }
+    else {
+      if (after.data[0] != ':') return false;
+      out->port = sp_http_str_tail(after, 1);
+    }
   }
   else {
-    out->host = sp_str_sub(authority, 0, colon);
-    out->port = sp_http_str_tail(authority, colon + 1);
+    s32 colon = sp_str_find_c8(authority, ':');
+    if (colon == SP_STR_NO_MATCH) {
+      out->host = authority;
+      out->port = out->tls ? sp_str_lit("443") : sp_str_lit("80");
+    }
+    else {
+      out->host = sp_str_sub(authority, 0, colon);
+      out->port = sp_http_str_tail(authority, colon + 1);
+    }
   }
 
-  return !sp_str_empty(out->host) && !sp_str_empty(out->port);
+  return sp_http_url_host_ok(out->host) && sp_http_url_port_ok(out->port) && sp_http_url_path_ok(out->path);
+}
+
+typedef struct {
+  s32      status;
+  sp_str_t location;
+  bool     chunked;
+  bool     has_length;
+  u64      length;
+} sp_http_head_t;
+
+SP_PRIVATE sp_tls_error_t sp_http_parse_head(sp_str_t head, sp_http_head_t* out) {
+  *out = sp_zero_s(sp_http_head_t);
+
+  sp_str_t rest = head;
+  bool first = true;
+  for (;;) {
+    s32 nl = sp_str_find(rest, sp_str_lit("\r\n"));
+    sp_str_t line = nl == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, nl);
+
+    if (first) {
+      if (!sp_str_starts_with(line, sp_str_lit("HTTP/"))) return SP_TLS_ERR_PROTOCOL;
+      s32 sp1 = sp_str_find_c8(line, ' ');
+      if (sp1 == SP_STR_NO_MATCH) return SP_TLS_ERR_PROTOCOL;
+      sp_str_t after = sp_str_trim_left(sp_http_str_tail(line, sp1 + 1));
+      s32 sp2 = sp_str_find_c8(after, ' ');
+      sp_str_t code = sp2 == SP_STR_NO_MATCH ? after : sp_str_sub(after, 0, sp2);
+      u32 status = 0;
+      if (!sp_parse_u32_ex(code, &status)) return SP_TLS_ERR_PROTOCOL;
+      out->status = (s32)status;
+      first = false;
+    }
+    else if (!sp_str_empty(line)) {
+      s32 colon = sp_str_find_c8(line, ':');
+      if (colon != SP_STR_NO_MATCH) {
+        sp_str_t name = sp_str_sub(line, 0, colon);
+        sp_str_t value = sp_str_trim(sp_http_str_tail(line, colon + 1));
+        if (sp_http_ci_equal(name, sp_str_lit("location"))) {
+          out->location = value;
+        }
+        else if (sp_http_ci_equal(name, sp_str_lit("content-length"))) {
+          u64 length = 0;
+          if (!sp_parse_u64_ex(value, &length)) return SP_TLS_ERR_PROTOCOL;
+          if (out->has_length && out->length != length) return SP_TLS_ERR_PROTOCOL;
+          out->has_length = true;
+          out->length = length;
+        }
+        else if (sp_http_ci_equal(name, sp_str_lit("transfer-encoding"))) {
+          out->chunked = sp_http_ci_contains(value, sp_str_lit("chunked"));
+          if (!out->chunked) return SP_TLS_ERR_PROTOCOL;
+        }
+      }
+    }
+
+    if (nl == SP_STR_NO_MATCH) break;
+    rest = sp_http_str_tail(rest, nl + 2);
+  }
+  return SP_TLS_OK;
+}
+
+SP_PRIVATE sp_str_t sp_http_resolve_url(sp_mem_t mem, sp_http_url_t base, sp_str_t location) {
+  if (sp_str_find(location, sp_str_lit("://")) != SP_STR_NO_MATCH) {
+    return sp_str_copy(mem, location);
+  }
+  sp_str_t scheme = base.tls ? sp_str_lit("https") : sp_str_lit("http");
+  if (!sp_str_empty(location) && location.data[0] == '/') {
+    return sp_fmt(mem, "{}://{}:{}{}",
+      sp_fmt_str(scheme), sp_fmt_str(base.host), sp_fmt_str(base.port), sp_fmt_str(location)).value;
+  }
+  s32 slash = sp_str_find_c8_reverse(base.path, '/');
+  sp_str_t dir = slash == SP_STR_NO_MATCH ? sp_str_lit("/") : sp_str_sub(base.path, 0, slash + 1);
+  return sp_fmt(mem, "{}://{}:{}{}{}",
+    sp_fmt_str(scheme), sp_fmt_str(base.host), sp_fmt_str(base.port), sp_fmt_str(dir), sp_fmt_str(location)).value;
 }
 
 #if defined(SP_TLS_WITH_MBEDTLS)
@@ -267,6 +403,10 @@ sp_tls_error_t sp_tls_load_pem(struct mbedtls_x509_crt* chain, sp_str_t path, u3
 
 sp_tls_error_t sp_tls_load_unix(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped) {
   (void)mem;
+  sp_str_t env = sp_os_env_get(sp_str_lit("SSL_CERT_FILE"));
+  if (!sp_str_empty(env)) {
+    return sp_tls_load_pem(chain, env, loaded, skipped);
+  }
   const c8* candidates[] = {
     "/etc/ssl/certs/ca-certificates.crt",
     "/etc/pki/tls/certs/ca-bundle.crt",
@@ -284,22 +424,45 @@ sp_tls_error_t sp_tls_load_unix(struct mbedtls_x509_crt* chain, sp_mem_t mem, u3
 }
 
 #if defined(SP_WIN32)
+SP_PRIVATE bool sp_tls_win32_server_auth(PCCERT_CONTEXT ctx) {
+  DWORD size = 0;
+  if (!CertGetEnhancedKeyUsage(ctx, 0, SP_NULLPTR, &size)) return false;
+  bool result = false;
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
+  PCERT_ENHKEY_USAGE usage = (PCERT_ENHKEY_USAGE)sp_alloc(scratch.mem, size);
+  if (CertGetEnhancedKeyUsage(ctx, 0, usage, &size)) {
+    if (usage->cUsageIdentifier == 0) {
+      result = GetLastError() == CRYPT_E_NOT_FOUND;
+    }
+    else {
+      sp_for(it, usage->cUsageIdentifier) {
+        if (sp_cstr_equal(usage->rgpszUsageIdentifier[it], "1.3.6.1.5.5.7.3.1")) {
+          result = true;
+          break;
+        }
+      }
+    }
+  }
+  sp_mem_end_scratch(scratch);
+  return result;
+}
+
 sp_tls_error_t sp_tls_load_windows(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped) {
   (void)mem;
   mbedtls_x509_crt* certs = (mbedtls_x509_crt*)chain;
-  const c8* stores[] = { "ROOT", "CA" };
   u32 skip = 0;
-  sp_carr_for(stores, si) {
-    HCERTSTORE store = CertOpenSystemStoreA(0, stores[si]);
-    if (!store) continue;
-    PCCERT_CONTEXT ctx = SP_NULLPTR;
-    while ((ctx = CertEnumCertificatesInStore(store, ctx)) != SP_NULLPTR) {
-      if (ctx->dwCertEncodingType & X509_ASN_ENCODING) {
-        if (mbedtls_x509_crt_parse_der(certs, ctx->pbCertEncoded, ctx->cbCertEncoded) != 0) skip++;
-      }
+  HCERTSTORE store = CertOpenSystemStoreA(0, "ROOT");
+  if (!store) return SP_TLS_ERR_NO_STORE;
+  PCCERT_CONTEXT ctx = SP_NULLPTR;
+  while ((ctx = CertEnumCertificatesInStore(store, ctx)) != SP_NULLPTR) {
+    if (!(ctx->dwCertEncodingType & X509_ASN_ENCODING)) continue;
+    if (!sp_tls_win32_server_auth(ctx)) {
+      skip++;
+      continue;
     }
-    CertCloseStore(store, 0);
+    if (mbedtls_x509_crt_parse_der(certs, ctx->pbCertEncoded, ctx->cbCertEncoded) != 0) skip++;
   }
+  CertCloseStore(store, 0);
   if (loaded)  *loaded = sp_tls_chain_count(certs);
   if (skipped) *skipped = skip;
   return sp_tls_chain_count(certs) ? SP_TLS_OK : SP_TLS_ERR_NO_STORE;
@@ -332,6 +495,7 @@ sp_tls_error_t sp_tls_conf_apply(const sp_tls_trust_t* trust, struct mbedtls_ssl
 
 sp_tls_error_t sp_tls_ssl_attach(const sp_tls_trust_t* trust, struct mbedtls_ssl_context* ssl, sp_tls_verify_t* verify, sp_str_t hostname) {
   mbedtls_ssl_context* context = (mbedtls_ssl_context*)ssl;
+  if (sp_str_empty(hostname) || hostname.len >= SP_PATH_MAX) return SP_TLS_ERR_URL;
   c8 host[SP_PATH_MAX];
   sp_cstr_copy_to_n(hostname.data, hostname.len, host, sizeof(host));
   if (mbedtls_ssl_set_hostname(context, host) != 0) return SP_TLS_ERR_OS;
@@ -359,30 +523,39 @@ s32 sp_tls_verify_cb(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u
 
 sp_tls_error_t sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname) {
 #if defined(SP_MACOS) && defined(SP_TLS_MACOS_SECTRUST)
+  if (sp_str_empty(hostname) || hostname.len >= SP_PATH_MAX) return SP_TLS_ERR_UNTRUSTED;
+
   CFMutableArrayRef certs = CFArrayCreateMutable(SP_NULLPTR, 0, &kCFTypeArrayCallBacks);
+  if (!certs) return SP_TLS_ERR_OS;
+
+  bool converted = true;
   const mbedtls_x509_crt* it = (const mbedtls_x509_crt*)chain;
   while (it) {
     CFDataRef der = CFDataCreate(SP_NULLPTR, it->raw.p, (CFIndex)it->raw.len);
-    SecCertificateRef cert = SecCertificateCreateWithData(SP_NULLPTR, der);
-    CFRelease(der);
-    if (cert) {
-      CFArrayAppendValue(certs, cert);
-      CFRelease(cert);
+    SecCertificateRef cert = der ? SecCertificateCreateWithData(SP_NULLPTR, der) : SP_NULLPTR;
+    if (der) CFRelease(der);
+    if (!cert) {
+      converted = false;
+      break;
     }
+    CFArrayAppendValue(certs, cert);
+    CFRelease(cert);
     it = it->next;
   }
 
   c8 host[SP_PATH_MAX];
   sp_cstr_copy_to_n(hostname.data, hostname.len, host, sizeof(host));
   CFStringRef cfhost = CFStringCreateWithCString(SP_NULLPTR, host, kCFStringEncodingUTF8);
-  SecPolicyRef policy = SecPolicyCreateSSL(true, cfhost);
+  SecPolicyRef policy = cfhost ? SecPolicyCreateSSL(true, cfhost) : SP_NULLPTR;
 
   SecTrustRef trust = SP_NULLPTR;
   sp_tls_error_t result = SP_TLS_ERR_UNTRUSTED;
-  if (SecTrustCreateWithCertificates(certs, policy, &trust) == errSecSuccess) {
-    CFErrorRef error = SP_NULLPTR;
-    if (SecTrustEvaluateWithError(trust, &error)) result = SP_TLS_OK;
-    if (error) CFRelease(error);
+  if (converted && CFArrayGetCount(certs) > 0 && policy) {
+    if (SecTrustCreateWithCertificates(certs, policy, &trust) == errSecSuccess) {
+      CFErrorRef error = SP_NULLPTR;
+      if (SecTrustEvaluateWithError(trust, &error)) result = SP_TLS_OK;
+      if (error) CFRelease(error);
+    }
   }
 
   if (trust) CFRelease(trust);
@@ -414,6 +587,8 @@ sp_tls_error_t sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t m
 
 #define SP_HTTP_BUFFER_SIZE 16384
 #define SP_HTTP_LINE_MAX    128
+#define SP_HTTP_HEAD_MAX    (64 * 1024)
+#define SP_HTTP_MAX_INTERIM 8
 
 typedef struct {
   mbedtls_net_context     net;
@@ -432,14 +607,6 @@ typedef struct {
   u32  pos;
   bool eof;
 } sp_http_reader_t;
-
-typedef struct {
-  s32      status;
-  sp_str_t location;
-  bool     chunked;
-  bool     has_length;
-  u64      length;
-} sp_http_head_t;
 
 SP_PRIVATE s32 sp_http_conn_read(sp_http_conn_t* conn, u8* buf, u32 len) {
   for (;;) {
@@ -474,20 +641,23 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_t
   conn->verify = sp_zero_s(sp_tls_verify_t);
   conn->tls = url.tls;
 
+  sp_str_t bare = sp_http_host_bare(url.host);
   c8 host[SP_PATH_MAX];
   c8 port[16];
-  sp_cstr_copy_to_n(url.host.data, url.host.len, host, sizeof(host));
+  if (bare.len >= sizeof(host) || url.port.len >= sizeof(port)) return SP_TLS_ERR_URL;
+  sp_cstr_copy_to_n(bare.data, bare.len, host, sizeof(host));
   sp_cstr_copy_to_n(url.port.data, url.port.len, port, sizeof(port));
 
   if (mbedtls_net_connect(&conn->net, host, port, MBEDTLS_NET_PROTO_TCP) != 0) return SP_TLS_ERR_CONNECT;
   if (!conn->tls) return SP_TLS_OK;
 
   if (mbedtls_ctr_drbg_seed(&conn->drbg, mbedtls_entropy_func, &conn->entropy, SP_NULLPTR, 0) != 0) return SP_TLS_ERR_OS;
-  mbedtls_ssl_config_defaults(&conn->conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
+  if (mbedtls_ssl_config_defaults(&conn->conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) != 0) return SP_TLS_ERR_OS;
+  mbedtls_ssl_conf_min_tls_version(&conn->conf, MBEDTLS_SSL_VERSION_TLS1_2);
   mbedtls_ssl_conf_rng(&conn->conf, mbedtls_ctr_drbg_random, &conn->drbg);
   if (sp_tls_conf_apply(trust, &conn->conf) != SP_TLS_OK) return SP_TLS_ERR_BAD_CONFIG;
   if (mbedtls_ssl_setup(&conn->ssl, &conn->conf) != 0) return SP_TLS_ERR_OS;
-  if (sp_tls_ssl_attach(trust, &conn->ssl, &conn->verify, url.host) != SP_TLS_OK) return SP_TLS_ERR_BAD_CONFIG;
+  if (sp_tls_ssl_attach(trust, &conn->ssl, &conn->verify, bare) != SP_TLS_OK) return SP_TLS_ERR_BAD_CONFIG;
   mbedtls_ssl_set_bio(&conn->ssl, &conn->net, mbedtls_net_send, mbedtls_net_recv, SP_NULLPTR);
 
   s32 rc;
@@ -537,7 +707,7 @@ SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_http_reader_t* reader, sp_io_writer_
     if (!sp_http_reader_fill(reader)) return SP_TLS_ERR_PROTOCOL;
     u32 avail = reader->len - reader->pos;
     u32 take = (u64)avail < n ? avail : (u32)n;
-    sp_io_write(body, reader->buf + reader->pos, take, SP_NULLPTR);
+    if (sp_io_write(body, reader->buf + reader->pos, take, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
     reader->pos += take;
     n -= take;
     if (written) *written += take;
@@ -561,50 +731,8 @@ SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_http_reader_t* reader, sp_mem_t m
       *leftover = sp_http_str_tail(acc, term + 4);
       return SP_TLS_OK;
     }
+    if (acc.len > SP_HTTP_HEAD_MAX) return SP_TLS_ERR_PROTOCOL;
   }
-}
-
-SP_PRIVATE sp_tls_error_t sp_http_parse_head(sp_str_t head, sp_http_head_t* out) {
-  *out = sp_zero_s(sp_http_head_t);
-
-  sp_str_t rest = head;
-  bool first = true;
-  for (;;) {
-    s32 nl = sp_str_find(rest, sp_str_lit("\r\n"));
-    sp_str_t line = nl == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, nl);
-
-    if (first) {
-      s32 sp1 = sp_str_find_c8(line, ' ');
-      if (sp1 == SP_STR_NO_MATCH) return SP_TLS_ERR_PROTOCOL;
-      sp_str_t after = sp_str_trim_left(sp_http_str_tail(line, sp1 + 1));
-      s32 sp2 = sp_str_find_c8(after, ' ');
-      sp_str_t code = sp2 == SP_STR_NO_MATCH ? after : sp_str_sub(after, 0, sp2);
-      u32 status = 0;
-      if (!sp_parse_u32_ex(code, &status)) return SP_TLS_ERR_PROTOCOL;
-      out->status = (s32)status;
-      first = false;
-    }
-    else if (!sp_str_empty(line)) {
-      s32 colon = sp_str_find_c8(line, ':');
-      if (colon != SP_STR_NO_MATCH) {
-        sp_str_t name = sp_str_sub(line, 0, colon);
-        sp_str_t value = sp_str_trim(sp_http_str_tail(line, colon + 1));
-        if (sp_http_ci_equal(name, sp_str_lit("location"))) {
-          out->location = value;
-        }
-        else if (sp_http_ci_equal(name, sp_str_lit("content-length"))) {
-          out->has_length = sp_parse_u64_ex(value, &out->length);
-        }
-        else if (sp_http_ci_equal(name, sp_str_lit("transfer-encoding"))) {
-          out->chunked = sp_http_ci_contains(value, sp_str_lit("chunked"));
-        }
-      }
-    }
-
-    if (nl == SP_STR_NO_MATCH) break;
-    rest = sp_http_str_tail(rest, nl + 2);
-  }
-  return SP_TLS_OK;
 }
 
 SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_head_t head, sp_io_writer_t* body, u64* written) {
@@ -616,6 +744,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_he
       c8 line[SP_HTTP_LINE_MAX];
       u32 line_len = 0;
       if (!sp_http_read_line(reader, line, sizeof(line), &line_len)) return SP_TLS_ERR_PROTOCOL;
+      if (line_len >= sizeof(line)) return SP_TLS_ERR_PROTOCOL;
       sp_str_t size_str = sp_str(line, line_len);
       s32 semi = sp_str_find_c8(size_str, ';');
       if (semi != SP_STR_NO_MATCH) size_str = sp_str_sub(size_str, 0, semi);
@@ -631,6 +760,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_he
       c8 crlf[SP_HTTP_LINE_MAX];
       u32 crlf_len = 0;
       if (!sp_http_read_line(reader, crlf, sizeof(crlf), &crlf_len)) return SP_TLS_ERR_PROTOCOL;
+      if (crlf_len != 0) return SP_TLS_ERR_PROTOCOL;
     }
     return SP_TLS_OK;
   }
@@ -639,7 +769,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_he
   }
   while (sp_http_reader_fill(reader)) {
     u32 avail = reader->len - reader->pos;
-    sp_io_write(body, reader->buf + reader->pos, avail, SP_NULLPTR);
+    if (sp_io_write(body, reader->buf + reader->pos, avail, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
     reader->pos = reader->len;
     if (written) *written += avail;
   }
@@ -661,21 +791,6 @@ SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_url_t url) {
     "Connection: close\r\n"
     "\r\n",
     sp_fmt_str(url.path), sp_fmt_str(host_header)).value;
-}
-
-SP_PRIVATE sp_str_t sp_http_resolve_url(sp_mem_t mem, sp_http_url_t base, sp_str_t location) {
-  if (sp_str_find(location, sp_str_lit("://")) != SP_STR_NO_MATCH) {
-    return sp_str_copy(mem, location);
-  }
-  sp_str_t scheme = base.tls ? sp_str_lit("https") : sp_str_lit("http");
-  if (!sp_str_empty(location) && location.data[0] == '/') {
-    return sp_fmt(mem, "{}://{}:{}{}",
-      sp_fmt_str(scheme), sp_fmt_str(base.host), sp_fmt_str(base.port), sp_fmt_str(location)).value;
-  }
-  s32 slash = sp_str_find_c8_reverse(base.path, '/');
-  sp_str_t dir = slash == SP_STR_NO_MATCH ? sp_str_lit("/") : sp_str_sub(base.path, 0, slash + 1);
-  return sp_fmt(mem, "{}://{}:{}{}{}",
-    sp_fmt_str(scheme), sp_fmt_str(base.host), sp_fmt_str(base.port), sp_fmt_str(dir), sp_fmt_str(location)).value;
 }
 
 sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_response_t* response) {
@@ -713,16 +828,34 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
     *reader = sp_zero_s(sp_http_reader_t);
     reader->conn = &conn;
 
-    sp_str_t head = sp_zero;
-    sp_str_t leftover = sp_zero;
-    result = sp_http_read_head(reader, mem, &head, &leftover);
-    if (result != SP_TLS_OK) {
-      sp_http_conn_close(&conn);
+    sp_http_head_t parsed = sp_zero;
+    u32 interim = 0;
+    for (;;) {
+      sp_str_t head = sp_zero;
+      sp_str_t leftover = sp_zero;
+      result = sp_http_read_head(reader, mem, &head, &leftover);
+      if (result != SP_TLS_OK) break;
+
+      result = sp_http_parse_head(head, &parsed);
+      if (result != SP_TLS_OK) break;
+
+      if (leftover.len > sizeof(reader->buf)) {
+        result = SP_TLS_ERR_PROTOCOL;
+        break;
+      }
+      sp_mem_copy(reader->buf, leftover.data, leftover.len);
+      reader->len = leftover.len;
+      reader->pos = 0;
+
+      if (parsed.status >= 100 && parsed.status <= 199) {
+        if (parsed.status == 101 || ++interim >= SP_HTTP_MAX_INTERIM) {
+          result = SP_TLS_ERR_PROTOCOL;
+          break;
+        }
+        continue;
+      }
       break;
     }
-
-    sp_http_head_t parsed = sp_zero;
-    result = sp_http_parse_head(head, &parsed);
     if (result != SP_TLS_OK) {
       sp_http_conn_close(&conn);
       break;
@@ -744,10 +877,6 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
       sp_http_conn_close(&conn);
       continue;
     }
-
-    sp_mem_copy(reader->buf, leftover.data, leftover.len);
-    reader->len = leftover.len;
-    reader->pos = 0;
 
     u64 written = 0;
     result = sp_http_read_body(reader, parsed, request.body, &written);

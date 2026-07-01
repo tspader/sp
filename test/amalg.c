@@ -22,6 +22,7 @@
 #include "str.c"
 #include "thread.c"
 #include "time.c"
+#include "tls.c"
 
 #include "utest.h"
 
