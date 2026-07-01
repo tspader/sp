@@ -1,52 +1,36 @@
-import gdb
+import os
+import sys
 
-class SpHtCommand(gdb.Command):
-    """Display sp_ht hash table contents.
-    Usage: sp_ht <variable>
-    """
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sp_gdb
 
-    def __init__(self):
-        super(SpHtCommand, self).__init__("ht", gdb.COMMAND_DATA)
+_HT_FIELDS = {"data", "size", "capacity", "info", "tmp_key", "tmp_val"}
 
-    def invoke(self, argument, from_tty):
-        args = gdb.string_to_argv(argument)
-        if len(args) != 1:
-            print("Usage: sp_ht <variable>")
-            return
 
-        try:
-            ht_ptr = gdb.parse_and_eval(args[0])
-        except gdb.error as e:
-            print(f"Error: {e}")
-            return
+class SpHtPrinter:
+    def __init__(self, val):
+        self.val = val
 
-        if int(ht_ptr) == 0:
-            print("(null)")
-            return
+    def to_string(self):
+        if int(self.val) == 0:
+            return "(null) sp_ht"
+        ht = self.val.dereference()
+        return "sp_ht of length %d" % int(ht["size"])
 
-        try:
-            ht = ht_ptr.dereference()
-            size = int(ht['size'])
-            capacity = int(ht['capacity'])
-            data = ht['data']
+    def children(self):
+        for i, (key, val) in enumerate(sp_gdb.ht_entries(self.val)):
+            yield ("key%d" % i, key)
+            yield ("val%d" % i, val)
 
-            print(f"size = {size}, capacity = {capacity}")
+    def display_hint(self):
+        return "map"
 
-            if size == 0:
-                print("(empty)")
-                return
 
-            count = 0
-            for i in range(capacity):
-                entry = data[i]
-                state = int(entry['state'])
-                if state == 1:
-                    key = entry['key']
-                    val = entry['val']
-                    print(f"[{count}] {key} => {val}")
-                    count += 1
+def _match(val):
+    fields = sp_gdb.struct_pointer_fields(val)
+    if fields is not None and _HT_FIELDS <= fields:
+        return SpHtPrinter(val)
+    return None
 
-        except gdb.error as e:
-            print(f"Error reading hash table: {e}")
 
-SpHtCommand()
+sp_gdb.register_lookup("sp_ht", _match)
