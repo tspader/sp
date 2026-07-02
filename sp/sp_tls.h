@@ -68,6 +68,7 @@ SP_API sp_tls_error_t   sp_tls_ssl_attach(const sp_tls_trust_t* trust, struct mb
 
 SP_API s32              sp_tls_verify_cb(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u32* flags);
 SP_API sp_tls_error_t   sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname);
+SP_API sp_tls_error_t   sp_tls_windows_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname);
 
 
 SP_API sp_tls_error_t   sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t mem, sp_mem_slice_t** ders, u32* count);
@@ -114,7 +115,7 @@ SP_API sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_
 
 sp_tls_backend_t sp_tls_native_backend(void) {
 #if defined(SP_WIN32)
-  return SP_TLS_BACKEND_ANCHORS;
+  return SP_TLS_BACKEND_OS_VERIFY;
 #elif defined(SP_MACOS) && defined(SP_TLS_MACOS_SECTRUST)
   return SP_TLS_BACKEND_OS_VERIFY;
 #elif defined(SP_MACOS)
@@ -603,7 +604,12 @@ s32 sp_tls_verify_cb(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u
   if (depth != 0) return 0;
   sp_tls_verify_t* verify = (sp_tls_verify_t*)user_data;
   sp_str_t hostname = verify ? verify->hostname : sp_zero_s(sp_str_t);
-  if (sp_tls_macos_eval(crt, hostname) != SP_TLS_OK) {
+#if defined(SP_WIN32)
+  sp_tls_error_t err = sp_tls_windows_eval(crt, hostname);
+#else
+  sp_tls_error_t err = sp_tls_macos_eval(crt, hostname);
+#endif
+  if (err != SP_TLS_OK) {
     *flags = MBEDTLS_X509_BADCERT_NOT_TRUSTED;
   }
   return 0;
@@ -650,6 +656,64 @@ sp_tls_error_t sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t 
   if (policy) CFRelease(policy);
   if (cfhost) CFRelease(cfhost);
   CFRelease(certs);
+  return result;
+#else
+  (void)chain; (void)hostname;
+  return SP_TLS_ERR_UNSUPPORTED;
+#endif
+}
+
+sp_tls_error_t sp_tls_windows_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname) {
+#if defined(SP_WIN32)
+  const mbedtls_x509_crt* leaf = (const mbedtls_x509_crt*)chain;
+  if (!leaf) return SP_TLS_ERR_UNTRUSTED;
+  if (sp_str_empty(hostname) || hostname.len >= SP_PATH_MAX) return SP_TLS_ERR_UNTRUSTED;
+
+  WCHAR wide[SP_PATH_MAX];
+  s32 wide_len = MultiByteToWideChar(CP_UTF8, 0, hostname.data, (int)hostname.len, wide, SP_PATH_MAX - 1);
+  if (wide_len <= 0) return SP_TLS_ERR_UNTRUSTED;
+  wide[wide_len] = 0;
+
+  HCERTSTORE extra = CertOpenStore(CERT_STORE_PROV_MEMORY, 0, 0, 0, SP_NULLPTR);
+  if (!extra) return SP_TLS_ERR_OS;
+
+  sp_tls_error_t result = SP_TLS_ERR_OS;
+  PCCERT_CHAIN_CONTEXT verdict = SP_NULLPTR;
+  PCCERT_CONTEXT ctx = CertCreateCertificateContext(X509_ASN_ENCODING, leaf->raw.p, (DWORD)leaf->raw.len);
+
+  bool converted = ctx != SP_NULLPTR;
+  const mbedtls_x509_crt* it = leaf->next;
+  while (converted && it) {
+    converted = CertAddEncodedCertificateToStore(extra, X509_ASN_ENCODING, it->raw.p, (DWORD)it->raw.len, CERT_STORE_ADD_REPLACE_EXISTING, SP_NULLPTR) != 0;
+    it = it->next;
+  }
+
+  LPSTR usages[] = { (LPSTR)szOID_PKIX_KP_SERVER_AUTH };
+  CERT_CHAIN_PARA para = sp_zero;
+  para.cbSize = sizeof(para);
+  para.RequestedUsage.dwType = USAGE_MATCH_TYPE_OR;
+  para.RequestedUsage.Usage.cUsageIdentifier = 1;
+  para.RequestedUsage.Usage.rgpszUsageIdentifier = usages;
+
+  if (converted && CertGetCertificateChain(SP_NULLPTR, ctx, SP_NULLPTR, extra, &para, CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT, SP_NULLPTR, &verdict)) {
+    SSL_EXTRA_CERT_CHAIN_POLICY_PARA ssl = sp_zero;
+    ssl.cbSize = sizeof(ssl);
+    ssl.dwAuthType = AUTHTYPE_SERVER;
+    ssl.pwszServerName = wide;
+    CERT_CHAIN_POLICY_PARA policy = sp_zero;
+    policy.cbSize = sizeof(policy);
+    policy.dwFlags = CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS;
+    policy.pvExtraPolicyPara = &ssl;
+    CERT_CHAIN_POLICY_STATUS status = sp_zero;
+    status.cbSize = sizeof(status);
+    if (CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_SSL, verdict, &policy, &status)) {
+      result = status.dwError == 0 ? SP_TLS_OK : SP_TLS_ERR_UNTRUSTED;
+    }
+  }
+
+  if (verdict) CertFreeCertificateChain(verdict);
+  if (ctx) CertFreeCertificateContext(ctx);
+  CertCloseStore(extra, 0);
   return result;
 #else
   (void)chain; (void)hostname;
@@ -1201,6 +1265,11 @@ s32 sp_tls_verify_cb(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u
 }
 
 sp_tls_error_t sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname) {
+  (void)chain; (void)hostname;
+  return SP_TLS_ERR_UNSUPPORTED;
+}
+
+sp_tls_error_t sp_tls_windows_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname) {
   (void)chain; (void)hostname;
   return SP_TLS_ERR_UNSUPPORTED;
 }
