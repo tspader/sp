@@ -3447,9 +3447,14 @@ SP_API sp_err_t       sp_io_copy(sp_io_writer_t* dst, sp_io_reader_t* src, u64* 
 SP_API sp_err_t       sp_io_copy_b(sp_io_writer_t* dst, sp_io_reader_t* src, u8* buffer, u64 n, u64* bytes_copied);
 
 SP_API sp_err_t       sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
+SP_API sp_err_t       sp_io_read_all(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
 SP_API sp_err_t       sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content);
 SP_API void           sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size);
 SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
+
+SP_API sp_err_t       sp_io_peek(sp_io_reader_t* reader, sp_str_t* out);
+SP_API sp_err_t       sp_io_fill(sp_io_reader_t* reader);
+SP_API void           sp_io_consume(sp_io_reader_t* reader, u64 n);
 
 SP_API void           sp_io_socket_reader_init(sp_io_socket_reader_t* r, sp_sys_fd_t socket, u32 timeout_ms);
 SP_API void           sp_io_socket_writer_init(sp_io_socket_writer_t* w, sp_sys_fd_t socket, u32 timeout_ms);
@@ -13853,15 +13858,66 @@ void sp_io_limit_reader_init(sp_io_limit_reader_t* r, sp_io_reader_t* inner, u64
   r->remaining = limit;
 }
 
-sp_err_t sp_io_read_until(sp_io_reader_t* reader, sp_str_t delim, sp_io_writer_t* out, u64 max, u64* bytes_read) {
-  sp_assert(delim.len > 0 && delim.len <= SP_IO_READ_UNTIL_MAX_DELIM);
+sp_err_t sp_io_fill(sp_io_reader_t* reader) {
+  sp_assert(reader && reader->buffer.data);
+  sp_assert(reader->cursor >= reader->buffer.len);
+  sp_err_t err = reader->read(reader, reader->buffer.data, reader->buffer.capacity, &reader->buffer.len);
+  reader->cursor = 0;
+  return err;
+}
+
+sp_err_t sp_io_peek(sp_io_reader_t* reader, sp_str_t* out) {
+  sp_assert(reader && out && reader->buffer.data);
+
+  sp_err_t err = SP_OK;
+  if (reader->cursor >= reader->buffer.len) {
+    err = sp_io_fill(reader);
+    if (err == SP_ERR_IO_EOF && reader->buffer.len) err = SP_OK;
+  }
+
+  *out = sp_str((const c8*)reader->buffer.data + reader->cursor, (u32)(reader->buffer.len - reader->cursor));
+  return err;
+}
+
+void sp_io_consume(sp_io_reader_t* reader, u64 n) {
+  sp_assert(reader);
+  sp_assert(reader->cursor + n <= reader->buffer.len);
+  reader->cursor += n;
+}
+
+SP_PRIVATE u64 sp_io_read_until_scan(const c8* tail, u64 tail_len, const c8* avail, u64 avail_len, sp_str_t delim, bool* found) {
+  *found = false;
+  u64 consume_len = avail_len;
+
+  if (tail_len) {
+    c8 boundary[2 * SP_IO_READ_UNTIL_MAX_DELIM];
+    u64 head_len = sp_min(avail_len, delim.len - 1);
+    sp_mem_copy(boundary, tail, tail_len);
+    sp_mem_copy(boundary + tail_len, avail, head_len);
+    s32 p = sp_str_find(sp_str(boundary, (u32)(tail_len + head_len)), delim);
+    if (p != SP_STR_NO_MATCH && (u64)p < tail_len) {
+      *found = true;
+      consume_len = (u64)p + delim.len - tail_len;
+    }
+  }
+
+  s32 p = sp_str_find(sp_str(avail, (u32)avail_len), delim);
+  if (p != SP_STR_NO_MATCH) {
+    u64 c = (u64)p + delim.len;
+    if (!*found || c < consume_len) {
+      *found = true;
+      consume_len = c;
+    }
+  }
+
+  return consume_len;
+}
+
+SP_PRIVATE sp_err_t sp_io_read_until_unbuffered(sp_io_reader_t* reader, sp_str_t delim, sp_io_writer_t* out, u64 max, u64* bytes_read) {
   c8 window[SP_IO_READ_UNTIL_MAX_DELIM] = sp_zero;
   u64 total = 0;
   sp_err_t err = SP_OK;
 
-  // @spader I think a vtable entry is missing a piece of data...?
-  // One byte at a time: against the reader's buffer this is a memcpy, and
-  // against a raw backend it's the only way to not consume past the delimiter.
   while (total < max) {
     c8 c = 0;
     u64 n = 0;
@@ -13880,6 +13936,62 @@ sp_err_t sp_io_read_until(sp_io_reader_t* reader, sp_str_t delim, sp_io_writer_t
         return SP_OK;
       }
     }
+    if (err != SP_OK) break;
+  }
+
+  if (bytes_read) *bytes_read = total;
+  return err == SP_OK ? SP_ERR_IO_NO_SPACE : err;
+}
+
+sp_err_t sp_io_read_until(sp_io_reader_t* reader, sp_str_t delim, sp_io_writer_t* out, u64 max, u64* bytes_read) {
+  sp_assert(delim.len > 0 && delim.len <= SP_IO_READ_UNTIL_MAX_DELIM);
+
+  if (!reader->buffer.data) {
+    return sp_io_read_until_unbuffered(reader, delim, out, max, bytes_read);
+  }
+
+  c8 tail[SP_IO_READ_UNTIL_MAX_DELIM] = sp_zero;
+  u64 tail_len = 0;
+  u64 total = 0;
+  sp_err_t err = SP_OK;
+
+  while (total < max) {
+    sp_str_t avail = sp_zero;
+    err = sp_io_peek(reader, &avail);
+
+    u64 n = sp_min((u64)avail.len, max - total);
+    if (n) {
+      bool found = false;
+      u64 consume_len = sp_io_read_until_scan(tail, tail_len, avail.data, n, delim, &found);
+
+      sp_io_consume(reader, consume_len);
+      total += consume_len;
+
+      sp_err_t werr = sp_io_write(out, avail.data, consume_len, SP_NULLPTR);
+      if (werr != SP_OK) {
+        err = werr;
+        break;
+      }
+
+      if (found) {
+        if (bytes_read) *bytes_read = total;
+        return SP_OK;
+      }
+
+      u64 carry_len = sp_min((u64)(delim.len - 1), tail_len + consume_len);
+      c8 carried[SP_IO_READ_UNTIL_MAX_DELIM];
+      if (consume_len >= carry_len) {
+        sp_mem_copy(carried, avail.data + (consume_len - carry_len), carry_len);
+      }
+      else {
+        u64 from_tail = carry_len - consume_len;
+        sp_mem_copy(carried, tail + (tail_len - from_tail), from_tail);
+        sp_mem_copy(carried + from_tail, avail.data, consume_len);
+      }
+      sp_mem_copy(tail, carried, carry_len);
+      tail_len = carry_len;
+    }
+
     if (err != SP_OK) break;
   }
 
@@ -13994,7 +14106,7 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
   else if (remaining) {
     // If the request is bufferable, do so by completely filling the buffer and then draining
     // just what the user asked for
-    err = reader->read(reader, reader->buffer.data, reader->buffer.capacity, &reader->buffer.len);
+    err = sp_io_fill(reader);
 
     num_read = sp_min(remaining, reader->buffer.len);
     reader->cursor = num_read;
@@ -14005,6 +14117,21 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
   if (bytes_read) *bytes_read = num_total;
   if (err == SP_ERR_IO_EOF && num_total) return SP_OK;
   return err;
+}
+
+sp_err_t sp_io_read_all(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_err_t result = SP_OK;
+  u64 total = 0;
+  while (total < size) {
+    u64 n = 0;
+    result = sp_io_read(reader, (u8*)ptr + total, size - total, &n);
+    total += n;
+    if (result) goto done;
+  }
+
+done:
+  if (bytes_read) *bytes_read = total;
+  return result;
 }
 
 sp_err_t sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
