@@ -637,6 +637,7 @@ SP_BEGIN_EXTERN_C()
   #include <mach-o/dyld.h>
   #include <sys/event.h>
   #include <sys/socket.h>
+  #include <netinet/in.h>
   #include <poll.h>
   #if defined(SP_FMON_MACOS_USE_FSEVENTS)
     #include <CoreServices/CoreServices.h>
@@ -709,6 +710,8 @@ SP_BEGIN_EXTERN_C()
   #include <sys/types.h>
   #include <sys/wait.h>
   #include <sys/mman.h>
+  #include <sys/socket.h>
+  #include <netinet/in.h>
 #endif
 
 
@@ -865,6 +868,9 @@ typedef WIN32_FIND_DATAW sp_win32_find_data_t;
 
 #if defined(SP_LINUX)
   #define SP_EINTR                4
+  #define SP_EAGAIN               11
+  #define SP_EINPROGRESS          115
+  #define SP_ECONNREFUSED         111
 
   #define SP_AT_FDCWD             (-100)
   #define SP_AT_SYMLINK_NOFOLLOW  0x100
@@ -1189,6 +1195,18 @@ typedef WIN32_FIND_DATAW sp_win32_find_data_t;
 #endif
 
 #if defined(SP_WIN32)
+  typedef intptr_t sp_sys_socket_t;
+#else
+  typedef s32 sp_sys_socket_t;
+#endif
+#define SP_SYS_INVALID_SOCKET ((sp_sys_socket_t)-1)
+
+typedef struct {
+  u8  octets [4];
+  u16 port;
+} sp_sys_ipv4_t;
+
+#if defined(SP_WIN32)
   typedef struct {
     DWORD input_mode;
     DWORD output_mode;
@@ -1280,6 +1298,15 @@ SP_API s64         sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u6
 SP_API s32         sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready);
 SP_API s32         sp_sys_fd_wait(sp_sys_fd_t fd);
 SP_API s32         sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
+
+SP_API s32            sp_sys_socket_connect(sp_sys_ipv4_t addr, u32 timeout_ms, sp_sys_socket_t* out);
+SP_API s32            sp_sys_socket_listen(sp_sys_ipv4_t addr, u32 backlog, sp_sys_socket_t* out);
+SP_API s32            sp_sys_socket_accept(sp_sys_socket_t listener, u32 timeout_ms, sp_sys_socket_t* out);
+SP_API s32            sp_sys_socket_close(sp_sys_socket_t socket);
+SP_API s64            sp_sys_socket_recv(sp_sys_socket_t socket, void* buf, u64 count);
+SP_API s64            sp_sys_socket_send(sp_sys_socket_t socket, const void* buf, u64 count);
+SP_API s32            sp_sys_socket_wait(sp_sys_socket_t socket, bool readable, u32 timeout_ms);
+SP_API s32            sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out);
 SP_API void*       sp_sys_alloc(u64 size);
 SP_API void        sp_sys_free(void* ptr, u64 size);
 SP_API void*       sp_sys_memcpy(void* dest, const void* src, u64 n);
@@ -3438,13 +3465,13 @@ struct sp_io_dyn_mem_writer {
 // timeout_ms applies per operation; zero blocks forever, expiry is SP_ERR_IO_TIMEOUT.
 typedef struct {
   sp_io_reader_t base;
-  sp_sys_fd_t socket;
+  sp_sys_socket_t socket;
   u32 timeout_ms;
 } sp_io_socket_reader_t;
 
 typedef struct {
   sp_io_writer_t base;
-  sp_sys_fd_t socket;
+  sp_sys_socket_t socket;
   u32 timeout_ms;
 } sp_io_socket_writer_t;
 
@@ -3472,8 +3499,8 @@ SP_API sp_err_t       sp_io_peek(sp_io_reader_t* reader, sp_str_t* out);
 SP_API sp_err_t       sp_io_fill(sp_io_reader_t* reader);
 SP_API void           sp_io_consume(sp_io_reader_t* reader, u64 n);
 
-SP_API void           sp_io_socket_reader_init(sp_io_socket_reader_t* r, sp_sys_fd_t socket, u32 timeout_ms);
-SP_API void           sp_io_socket_writer_init(sp_io_socket_writer_t* w, sp_sys_fd_t socket, u32 timeout_ms);
+SP_API void           sp_io_socket_reader_init(sp_io_socket_reader_t* r, sp_sys_socket_t socket, u32 timeout_ms);
+SP_API void           sp_io_socket_writer_init(sp_io_socket_writer_t* w, sp_sys_socket_t socket, u32 timeout_ms);
 SP_API void           sp_io_limit_reader_init(sp_io_limit_reader_t* r, sp_io_reader_t* inner, u64 limit);
 SP_API sp_err_t       sp_io_read_until(sp_io_reader_t* reader, sp_str_t delim, sp_io_writer_t* out, u64 max, u64* bytes_read);
 
@@ -4229,9 +4256,17 @@ s32 errno;
   #define SP_SYSCALL_NUM_NANOSLEEP         35
   #define SP_SYSCALL_NUM_GETPID            39
   #define SP_SYSCALL_NUM_SENDFILE          40
+  #define SP_SYSCALL_NUM_SOCKET            41
+  #define SP_SYSCALL_NUM_CONNECT           42
   #define SP_SYSCALL_NUM_SENDTO            44
   #define SP_SYSCALL_NUM_RECVFROM          45
+  #define SP_SYSCALL_NUM_BIND              49
+  #define SP_SYSCALL_NUM_LISTEN            50
+  #define SP_SYSCALL_NUM_GETSOCKNAME       51
   #define SP_SYSCALL_NUM_SOCKETPAIR        53
+  #define SP_SYSCALL_NUM_SETSOCKOPT        54
+  #define SP_SYSCALL_NUM_GETSOCKOPT        55
+  #define SP_SYSCALL_NUM_ACCEPT4           288
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   326
   #define SP_SYSCALL_NUM_CLONE             56
   #define SP_SYSCALL_NUM_FORK              57
@@ -4322,9 +4357,17 @@ s32 errno;
   #define SP_SYSCALL_NUM_PERF_EVENT_OPEN   241
   #define SP_SYSCALL_NUM_WAIT4             260
   #define SP_SYSCALL_NUM_SENDFILE          71
+  #define SP_SYSCALL_NUM_SOCKET            198
+  #define SP_SYSCALL_NUM_SOCKETPAIR        199
+  #define SP_SYSCALL_NUM_BIND              200
+  #define SP_SYSCALL_NUM_LISTEN            201
+  #define SP_SYSCALL_NUM_CONNECT           203
+  #define SP_SYSCALL_NUM_GETSOCKNAME       204
   #define SP_SYSCALL_NUM_SENDTO            206
   #define SP_SYSCALL_NUM_RECVFROM          207
-  #define SP_SYSCALL_NUM_SOCKETPAIR        199
+  #define SP_SYSCALL_NUM_SETSOCKOPT        208
+  #define SP_SYSCALL_NUM_GETSOCKOPT        209
+  #define SP_SYSCALL_NUM_ACCEPT4           242
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   285
   #define SP_SYSCALL_NUM_OPEN              SP_SYSCALL_NUM_OPENAT
   #define SP_SYSCALL_NUM_STAT              SP_SYSCALL_NUM_NEWFSTATAT
@@ -4412,6 +4455,19 @@ typedef struct {
     u32 padding [2];
   } sp_sys_linux_stat_t;
 #endif
+
+typedef struct {
+  u16 family;
+  u8  port [2];
+  u8  addr [4];
+  u8  zero [8];
+} sp_sys_linux_sockaddr_in_t;
+
+#define SP_SYS_LINUX_AF_INET      2
+#define SP_SYS_LINUX_SOCK_STREAM  1
+#define SP_SYS_LINUX_SOL_SOCKET   1
+#define SP_SYS_LINUX_SO_REUSEADDR 2
+#define SP_SYS_LINUX_SO_ERROR     4
 
 /////////////////////
 // SYSCALL HELPERS //
@@ -5819,6 +5875,423 @@ s32 sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
 }
 
 #endif
+
+///////////////////////
+// SP_SYS_SOCKET_WIN32 //
+///////////////////////
+#if defined(SP_WIN32)
+SP_PRIVATE void sp_sys_win32_wsa_ensure(void) {
+  static bool wsa_init = false;
+  if (wsa_init) return;
+  WSADATA wsa = sp_zero;
+  WSAStartup(MAKEWORD(2, 2), &wsa);
+  wsa_init = true;
+}
+#endif
+
+//////////////////////
+// SP_SYS_SOCKET_WAIT //
+//////////////////////
+s32 sp_sys_socket_wait(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
+#if defined(SP_WIN32)
+  WSAPOLLFD pfd = sp_zero;
+  pfd.fd = (SOCKET)socket;
+  pfd.events = readable ? POLLRDNORM : POLLWRNORM;
+  s32 rc = WSAPoll(&pfd, 1, timeout_ms ? (INT)timeout_ms : -1);
+  if (rc < 0) return -1;
+  if (rc == 0) return 1;
+  return 0;
+
+#elif defined(SP_LINUX)
+  sp_sys_linux_pollfd_t pfd = {
+    .fd = socket,
+    .events = (s16)(readable ? SP_SYS_LINUX_POLLIN : SP_SYS_LINUX_POLLOUT),
+  };
+  sp_sys_timespec_t ts = { (s64)(timeout_ms / 1000), (s64)(timeout_ms % 1000) * 1000000 };
+  s64 rc;
+  do {
+    rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, timeout_ms ? &ts : SP_NULLPTR, 0, 0);
+  } while (rc == -1 && errno == SP_EINTR);
+  if (rc < 0) return -1;
+  if (rc == 0) return 1;
+  return 0;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  struct pollfd pfd = { .fd = socket, .events = (s16)(readable ? POLLIN : POLLOUT) };
+  s32 rc;
+  do {
+    rc = poll(&pfd, 1, timeout_ms ? (s32)timeout_ms : -1);
+  } while (rc < 0 && errno == EINTR);
+  if (rc < 0) return -1;
+  if (rc == 0) return 1;
+  return 0;
+
+#else
+  (void)socket; (void)readable; (void)timeout_ms;
+  return -1;
+#endif
+}
+
+/////////////////////////
+// SP_SYS_SOCKET_CONNECT //
+/////////////////////////
+s32 sp_sys_socket_connect(sp_sys_ipv4_t addr, u32 timeout_ms, sp_sys_socket_t* out) {
+  *out = SP_SYS_INVALID_SOCKET;
+
+#if defined(SP_WIN32)
+  sp_sys_win32_wsa_ensure();
+  SOCKET fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd == INVALID_SOCKET) return -1;
+
+  u_long nonblock = 1;
+  ioctlsocket(fd, FIONBIO, &nonblock);
+
+  struct sockaddr_in sa = sp_zero;
+  sa.sin_family = AF_INET;
+  ((u8*)&sa.sin_port)[0] = (u8)(addr.port >> 8);
+  ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
+  sp_mem_copy(&sa.sin_addr, addr.octets, 4);
+
+  if (connect(fd, (struct sockaddr*)&sa, sizeof(sa)) != 0) {
+    if (WSAGetLastError() != WSAEWOULDBLOCK) {
+      closesocket(fd);
+      return -1;
+    }
+    fd_set write_set = sp_zero;
+    fd_set err_set = sp_zero;
+    FD_SET(fd, &write_set);
+    FD_SET(fd, &err_set);
+    struct timeval tv = sp_zero;
+    tv.tv_sec = (long)(timeout_ms / 1000);
+    tv.tv_usec = (long)((timeout_ms % 1000) * 1000);
+    s32 rc = select(0, SP_NULLPTR, &write_set, &err_set, timeout_ms ? &tv : SP_NULLPTR);
+    if (rc == 0) {
+      closesocket(fd);
+      return 1;
+    }
+    if (rc == SOCKET_ERROR || FD_ISSET(fd, &err_set)) {
+      closesocket(fd);
+      return -1;
+    }
+    int err = 0;
+    int err_len = sizeof(err);
+    getsockopt(fd, SOL_SOCKET, SO_ERROR, (char*)&err, &err_len);
+    if (err != 0) {
+      closesocket(fd);
+      return -1;
+    }
+  }
+
+  u_long block = 0;
+  ioctlsocket(fd, FIONBIO, &block);
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#elif defined(SP_LINUX)
+  s64 fd = sp_syscall(SP_SYSCALL_NUM_SOCKET, SP_SYS_LINUX_AF_INET, SP_SYS_LINUX_SOCK_STREAM, 0);
+  if (fd < 0) return -1;
+
+  s64 flags = sp_syscall(SP_SYSCALL_NUM_FCNTL, fd, SP_F_GETFL, 0);
+  sp_syscall(SP_SYSCALL_NUM_FCNTL, fd, SP_F_SETFL, flags | SP_O_NONBLOCK);
+
+  sp_sys_linux_sockaddr_in_t sa = sp_zero;
+  sa.family = SP_SYS_LINUX_AF_INET;
+  sa.port[0] = (u8)(addr.port >> 8);
+  sa.port[1] = (u8)(addr.port & 0xFF);
+  sp_mem_copy(sa.addr, addr.octets, 4);
+
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_CONNECT, fd, &sa, sizeof(sa));
+  if (rc != 0) {
+    if (errno != SP_EINPROGRESS) {
+      sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
+      return -1;
+    }
+    s32 wait = sp_sys_socket_wait((sp_sys_socket_t)fd, false, timeout_ms);
+    if (wait != 0) {
+      sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
+      return wait;
+    }
+    s32 err = 0;
+    u32 err_len = sizeof(err);
+    sp_syscall(SP_SYSCALL_NUM_GETSOCKOPT, fd, SP_SYS_LINUX_SOL_SOCKET, SP_SYS_LINUX_SO_ERROR, &err, &err_len);
+    if (err != 0) {
+      sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
+      return -1;
+    }
+  }
+
+  sp_syscall(SP_SYSCALL_NUM_FCNTL, fd, SP_F_SETFL, flags);
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) return -1;
+
+#if defined(SP_MACOS)
+  int nosigpipe = 1;
+  setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
+#endif
+
+  int flags = fcntl(fd, F_GETFL, 0);
+  fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+  struct sockaddr_in sa = sp_zero;
+  sa.sin_family = AF_INET;
+  ((u8*)&sa.sin_port)[0] = (u8)(addr.port >> 8);
+  ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
+  sp_mem_copy(&sa.sin_addr, addr.octets, 4);
+
+  if (connect(fd, (struct sockaddr*)&sa, sizeof(sa)) != 0) {
+    if (errno != EINPROGRESS) {
+      close(fd);
+      return -1;
+    }
+    s32 wait = sp_sys_socket_wait((sp_sys_socket_t)fd, false, timeout_ms);
+    if (wait != 0) {
+      close(fd);
+      return wait;
+    }
+    int err = 0;
+    socklen_t err_len = sizeof(err);
+    getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &err_len);
+    if (err != 0) {
+      close(fd);
+      return -1;
+    }
+  }
+
+  fcntl(fd, F_SETFL, flags);
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#else
+  (void)addr; (void)timeout_ms;
+  return -1;
+#endif
+}
+
+////////////////////////
+// SP_SYS_SOCKET_LISTEN //
+////////////////////////
+s32 sp_sys_socket_listen(sp_sys_ipv4_t addr, u32 backlog, sp_sys_socket_t* out) {
+  *out = SP_SYS_INVALID_SOCKET;
+
+#if defined(SP_WIN32)
+  sp_sys_win32_wsa_ensure();
+  SOCKET fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd == INVALID_SOCKET) return -1;
+
+  BOOL reuse = TRUE;
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse));
+
+  struct sockaddr_in sa = sp_zero;
+  sa.sin_family = AF_INET;
+  ((u8*)&sa.sin_port)[0] = (u8)(addr.port >> 8);
+  ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
+  sp_mem_copy(&sa.sin_addr, addr.octets, 4);
+
+  if (bind(fd, (struct sockaddr*)&sa, sizeof(sa)) != 0 || listen(fd, (int)backlog) != 0) {
+    closesocket(fd);
+    return -1;
+  }
+
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#elif defined(SP_LINUX)
+  s64 fd = sp_syscall(SP_SYSCALL_NUM_SOCKET, SP_SYS_LINUX_AF_INET, SP_SYS_LINUX_SOCK_STREAM, 0);
+  if (fd < 0) return -1;
+
+  s32 reuse = 1;
+  sp_syscall(SP_SYSCALL_NUM_SETSOCKOPT, fd, SP_SYS_LINUX_SOL_SOCKET, SP_SYS_LINUX_SO_REUSEADDR, &reuse, sizeof(reuse));
+
+  sp_sys_linux_sockaddr_in_t sa = sp_zero;
+  sa.family = SP_SYS_LINUX_AF_INET;
+  sa.port[0] = (u8)(addr.port >> 8);
+  sa.port[1] = (u8)(addr.port & 0xFF);
+  sp_mem_copy(sa.addr, addr.octets, 4);
+
+  if (sp_syscall(SP_SYSCALL_NUM_BIND, fd, &sa, sizeof(sa)) != 0 ||
+      sp_syscall(SP_SYSCALL_NUM_LISTEN, fd, backlog) != 0) {
+    sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
+    return -1;
+  }
+
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) return -1;
+
+  int reuse = 1;
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+  struct sockaddr_in sa = sp_zero;
+  sa.sin_family = AF_INET;
+  ((u8*)&sa.sin_port)[0] = (u8)(addr.port >> 8);
+  ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
+  sp_mem_copy(&sa.sin_addr, addr.octets, 4);
+
+  if (bind(fd, (struct sockaddr*)&sa, sizeof(sa)) != 0 || listen(fd, (int)backlog) != 0) {
+    close(fd);
+    return -1;
+  }
+
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#else
+  (void)addr; (void)backlog;
+  return -1;
+#endif
+}
+
+////////////////////////
+// SP_SYS_SOCKET_ACCEPT //
+////////////////////////
+s32 sp_sys_socket_accept(sp_sys_socket_t listener, u32 timeout_ms, sp_sys_socket_t* out) {
+  *out = SP_SYS_INVALID_SOCKET;
+
+  s32 wait = sp_sys_socket_wait(listener, true, timeout_ms);
+  if (wait != 0) return wait;
+
+#if defined(SP_WIN32)
+  SOCKET fd = accept((SOCKET)listener, SP_NULLPTR, SP_NULLPTR);
+  if (fd == INVALID_SOCKET) return -1;
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#elif defined(SP_LINUX)
+  s64 fd = sp_syscall(SP_SYSCALL_NUM_ACCEPT4, listener, 0, 0, 0);
+  if (fd < 0) return -1;
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  int fd = accept(listener, SP_NULLPTR, SP_NULLPTR);
+  if (fd < 0) return -1;
+
+#if defined(SP_MACOS)
+  int nosigpipe = 1;
+  setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
+#endif
+
+  *out = (sp_sys_socket_t)fd;
+  return 0;
+
+#else
+  (void)listener;
+  return -1;
+#endif
+}
+
+///////////////////////
+// SP_SYS_SOCKET_CLOSE //
+///////////////////////
+s32 sp_sys_socket_close(sp_sys_socket_t socket) {
+#if defined(SP_WIN32)
+  return closesocket((SOCKET)socket) == 0 ? 0 : -1;
+
+#elif defined(SP_LINUX)
+  return (s32)sp_syscall(SP_SYSCALL_NUM_CLOSE, socket);
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  return close(socket);
+
+#else
+  (void)socket;
+  return -1;
+#endif
+}
+
+//////////////////////
+// SP_SYS_SOCKET_RECV //
+//////////////////////
+s64 sp_sys_socket_recv(sp_sys_socket_t socket, void* ptr, u64 size) {
+#if defined(SP_WIN32)
+  return recv((SOCKET)socket, (char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
+
+#elif defined(SP_LINUX)
+  s64 rc;
+  do {
+    rc = sp_syscall(SP_SYSCALL_NUM_RECVFROM, socket, ptr, size, 0, 0, 0);
+  } while (rc == -1 && errno == SP_EINTR);
+  return rc;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  s64 rc;
+  do {
+    rc = (s64)recv(socket, ptr, (size_t)size, 0);
+  } while (rc < 0 && errno == EINTR);
+  return rc;
+
+#else
+  (void)socket; (void)ptr; (void)size;
+  return -1;
+#endif
+}
+
+//////////////////////
+// SP_SYS_SOCKET_SEND //
+//////////////////////
+s64 sp_sys_socket_send(sp_sys_socket_t socket, const void* ptr, u64 size) {
+#if defined(SP_WIN32)
+  return send((SOCKET)socket, (const char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
+
+#elif defined(SP_LINUX)
+  s64 rc;
+  do {
+    rc = sp_syscall(SP_SYSCALL_NUM_SENDTO, socket, ptr, size, SP_SYS_LINUX_MSG_NOSIGNAL, 0, 0);
+  } while (rc == -1 && errno == SP_EINTR);
+  return rc;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  s64 rc;
+  do {
+    rc = (s64)send(socket, ptr, (size_t)size, 0);
+  } while (rc < 0 && errno == EINTR);
+  return rc;
+
+#else
+  (void)socket; (void)ptr; (void)size;
+  return -1;
+#endif
+}
+
+/////////////////////////////
+// SP_SYS_SOCKET_LOCAL_PORT //
+/////////////////////////////
+s32 sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out) {
+  *out = 0;
+
+#if defined(SP_WIN32)
+  struct sockaddr_in sa = sp_zero;
+  int len = sizeof(sa);
+  if (getsockname((SOCKET)socket, (struct sockaddr*)&sa, &len) != 0) return -1;
+  *out = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
+  return 0;
+
+#elif defined(SP_LINUX)
+  sp_sys_linux_sockaddr_in_t sa = sp_zero;
+  u32 len = sizeof(sa);
+  if (sp_syscall(SP_SYSCALL_NUM_GETSOCKNAME, socket, &sa, &len) != 0) return -1;
+  *out = (u16)((sa.port[0] << 8) | sa.port[1]);
+  return 0;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  struct sockaddr_in sa = sp_zero;
+  socklen_t len = sizeof(sa);
+  if (getsockname(socket, (struct sockaddr*)&sa, &len) != 0) return -1;
+  *out = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
+  return 0;
+
+#else
+  (void)socket;
+  return -1;
+#endif
+}
 
 ////////////////
 // SP_SYS_MEM //
@@ -13785,153 +14258,43 @@ void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
 ////////////////
 // IO: SOCKET //
 ////////////////
-#if defined(SP_WIN32)
-SP_PRIVATE sp_err_t sp_io_socket_wait(sp_sys_fd_t socket, bool readable, u32 timeout_ms, sp_err_t fail) {
-  if (!timeout_ms) return SP_OK;
-  WSAPOLLFD pfd = sp_zero;
-  pfd.fd = (SOCKET)socket;
-  pfd.events = readable ? POLLRDNORM : POLLWRNORM;
-  s32 rc = WSAPoll(&pfd, 1, (INT)timeout_ms);
-  if (rc < 0) return fail;
-  if (rc == 0) return SP_ERR_IO_TIMEOUT;
-  return SP_OK;
-}
-
-SP_PRIVATE s64 sp_io_socket_recv(sp_sys_fd_t socket, void* ptr, u64 size) {
-  return recv((SOCKET)socket, (char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
-}
-
-SP_PRIVATE s64 sp_io_socket_send(sp_sys_fd_t socket, const void* ptr, u64 size) {
-  return send((SOCKET)socket, (const char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
-}
-#elif defined(SP_LINUX)
-SP_PRIVATE sp_err_t sp_io_socket_wait(sp_sys_fd_t socket, bool readable, u32 timeout_ms, sp_err_t fail) {
-  if (!timeout_ms) return SP_OK;
-  sp_sys_linux_pollfd_t pfd = {
-    .fd = (s32)socket,
-    .events = (s16)(readable ? SP_SYS_LINUX_POLLIN : SP_SYS_LINUX_POLLOUT),
-  };
-  sp_sys_timespec_t ts = { (s64)(timeout_ms / 1000), (s64)(timeout_ms % 1000) * 1000000 };
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
-  } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return fail;
-  if (rc == 0) return SP_ERR_IO_TIMEOUT;
-  return SP_OK;
-}
-
-SP_PRIVATE s64 sp_io_socket_recv(sp_sys_fd_t socket, void* ptr, u64 size) {
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_RECVFROM, socket, ptr, size, 0, 0, 0);
-  } while (rc == -1 && errno == SP_EINTR);
-  return rc;
-}
-
-SP_PRIVATE s64 sp_io_socket_send(sp_sys_fd_t socket, const void* ptr, u64 size) {
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_SENDTO, socket, ptr, size, SP_SYS_LINUX_MSG_NOSIGNAL, 0, 0);
-  } while (rc == -1 && errno == SP_EINTR);
-  return rc;
-}
-#elif defined(SP_MACOS)
-SP_PRIVATE sp_err_t sp_io_socket_wait(sp_sys_fd_t socket, bool readable, u32 timeout_ms, sp_err_t fail) {
-  if (!timeout_ms) return SP_OK;
-  struct pollfd pfd = {
-    .fd = (int)socket,
-    .events = (s16)(readable ? POLLIN : POLLOUT),
-  };
-  int rc;
-  do {
-    rc = poll(&pfd, 1, (int)timeout_ms);
-  } while (rc < 0 && errno == EINTR);
-  if (rc < 0) return fail;
-  if (rc == 0) return SP_ERR_IO_TIMEOUT;
-  return SP_OK;
-}
-
-SP_PRIVATE s64 sp_io_socket_recv(sp_sys_fd_t socket, void* ptr, u64 size) {
-  s64 rc;
-  do {
-    rc = (s64)recv((int)socket, ptr, (size_t)size, 0);
-  } while (rc < 0 && errno == EINTR);
-  return rc;
-}
-
-SP_PRIVATE s64 sp_io_socket_send(sp_sys_fd_t socket, const void* ptr, u64 size) {
-  s64 rc;
-  do {
-    rc = (s64)send((int)socket, ptr, (size_t)size, 0);
-  } while (rc < 0 && errno == EINTR);
-  return rc;
-}
-#else
-SP_PRIVATE sp_err_t sp_io_socket_wait(sp_sys_fd_t socket, bool readable, u32 timeout_ms, sp_err_t fail) {
-  (void)socket; (void)readable; (void)timeout_ms; (void)fail;
-  return SP_ERR_IO_UNIMPLEMENTED;
-}
-
-SP_PRIVATE s64 sp_io_socket_recv(sp_sys_fd_t socket, void* ptr, u64 size) {
-  (void)socket; (void)ptr; (void)size;
-  return -1;
-}
-
-SP_PRIVATE s64 sp_io_socket_send(sp_sys_fd_t socket, const void* ptr, u64 size) {
-  (void)socket; (void)ptr; (void)size;
-  return -1;
-}
-#endif
-
 SP_PRIVATE sp_err_t sp_io_socket_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
   sp_io_socket_reader_t* r = (sp_io_socket_reader_t*)reader;
   if (bytes_read) *bytes_read = 0;
-  sp_err_t err = sp_io_socket_wait(r->socket, true, r->timeout_ms, SP_ERR_IO_READ_FAILED);
-  if (err != SP_OK) return err;
-  s64 n = sp_io_socket_recv(r->socket, ptr, size);
+  s32 wait = sp_sys_socket_wait(r->socket, true, r->timeout_ms);
+  if (wait == 1) return SP_ERR_IO_TIMEOUT;
+  if (wait < 0) return SP_ERR_IO_READ_FAILED;
+  s64 n = sp_sys_socket_recv(r->socket, ptr, size);
   if (n == 0) return SP_ERR_IO_EOF;
   if (n < 0) return SP_ERR_IO_READ_FAILED;
   if (bytes_read) *bytes_read = (u64)n;
   return SP_OK;
 }
 
-SP_PRIVATE sp_err_t sp_io_socket_reader_as_fd(sp_io_reader_t* reader, sp_sys_fd_t* fd, u64** pos) {
-  sp_io_socket_reader_t* r = (sp_io_socket_reader_t*)reader;
-  if (fd) *fd = r->socket;
-  if (pos) *pos = SP_NULLPTR; // streaming source; the cursor lives in the kernel
-  return SP_OK;
-}
-
 SP_PRIVATE sp_err_t sp_io_socket_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
   sp_io_socket_writer_t* w = (sp_io_socket_writer_t*)writer;
   if (bytes_written) *bytes_written = 0;
-  sp_err_t err = sp_io_socket_wait(w->socket, false, w->timeout_ms, SP_ERR_IO_WRITE_FAILED);
-  if (err != SP_OK) return err;
-  s64 n = sp_io_socket_send(w->socket, ptr, size);
+  s32 wait = sp_sys_socket_wait(w->socket, false, w->timeout_ms);
+  if (wait == 1) return SP_ERR_IO_TIMEOUT;
+  if (wait < 0) return SP_ERR_IO_WRITE_FAILED;
+  s64 n = sp_sys_socket_send(w->socket, ptr, size);
   if (n <= 0) return SP_ERR_IO_WRITE_FAILED;
   if (bytes_written) *bytes_written = (u64)n;
   return SP_OK;
 }
 
-void sp_io_socket_reader_init(sp_io_socket_reader_t* r, sp_sys_fd_t socket, u32 timeout_ms) {
+void sp_io_socket_reader_init(sp_io_socket_reader_t* r, sp_sys_socket_t socket, u32 timeout_ms) {
   *r = sp_zero_s(sp_io_socket_reader_t);
   r->base.read = sp_io_socket_reader_read;
-  r->base.as_fd = sp_io_socket_reader_as_fd;
   r->socket = socket;
   r->timeout_ms = timeout_ms;
 }
 
-void sp_io_socket_writer_init(sp_io_socket_writer_t* w, sp_sys_fd_t socket, u32 timeout_ms) {
+void sp_io_socket_writer_init(sp_io_socket_writer_t* w, sp_sys_socket_t socket, u32 timeout_ms) {
   *w = sp_zero_s(sp_io_socket_writer_t);
   w->base.write = sp_io_socket_writer_write;
   w->socket = socket;
   w->timeout_ms = timeout_ms;
-#if defined(SP_MACOS)
-  // no MSG_NOSIGNAL on macOS; opt the socket out of SIGPIPE instead
-  int set = 1;
-  setsockopt((int)socket, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
-#endif
 }
 
 ///////////////

@@ -954,8 +954,8 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_t
   sp_tls_error_t err = sp_http_net_connect(&conn->net, host, port, connect_timeout_ms);
   if (err != SP_TLS_OK) return err;
 
-  sp_io_socket_reader_init(&conn->sock_reader, conn->net.fd, io_timeout_ms);
-  sp_io_socket_writer_init(&conn->sock_writer, conn->net.fd, io_timeout_ms);
+  sp_io_socket_reader_init(&conn->sock_reader, (sp_sys_socket_t)conn->net.fd, io_timeout_ms);
+  sp_io_socket_writer_init(&conn->sock_writer, (sp_sys_socket_t)conn->net.fd, io_timeout_ms);
   conn->tls_reader.base.read = sp_http_tls_read;
   conn->tls_reader.conn = conn;
   conn->tls_writer.base.write = sp_http_tls_write;

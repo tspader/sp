@@ -4,169 +4,175 @@
 
 UTEST_EMPTY_FIXTURE(io_socket)
 
-static bool io_socket_pair(sp_sys_fd_t out[2]) {
-#if defined(SP_WIN32)
-  static bool wsa_init = false;
-  if (!wsa_init) {
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return false;
-    wsa_init = true;
-  }
+static bool io_socket_pair(sp_sys_socket_t* client, sp_sys_socket_t* server) {
+  sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 } };
+  sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
+  if (sp_sys_socket_listen(addr, 1, &listener) != 0) return false;
 
-  SOCKET listener = socket(AF_INET, SOCK_STREAM, 0);
-  if (listener == INVALID_SOCKET) return false;
-
-  struct sockaddr_in addr = sp_zero;
-  addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  addr.sin_port = 0;
-  int addr_len = sizeof(addr);
-  if (bind(listener, (struct sockaddr*)&addr, sizeof(addr)) != 0 ||
-      getsockname(listener, (struct sockaddr*)&addr, &addr_len) != 0 ||
-      listen(listener, 1) != 0) {
-    closesocket(listener);
+  u16 port = 0;
+  if (sp_sys_socket_local_port(listener, &port) != 0) {
+    sp_sys_socket_close(listener);
     return false;
   }
 
-  SOCKET a = socket(AF_INET, SOCK_STREAM, 0);
-  if (a == INVALID_SOCKET || connect(a, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
-    if (a != INVALID_SOCKET) closesocket(a);
-    closesocket(listener);
+  sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
+  if (sp_sys_socket_connect(dial, 1000, client) != 0) {
+    sp_sys_socket_close(listener);
     return false;
   }
-  SOCKET b = accept(listener, SP_NULLPTR, SP_NULLPTR);
-  closesocket(listener);
-  if (b == INVALID_SOCKET) {
-    closesocket(a);
+  if (sp_sys_socket_accept(listener, 1000, server) != 0) {
+    sp_sys_socket_close(listener);
+    sp_sys_socket_close(*client);
     return false;
   }
-  out[0] = (sp_sys_fd_t)a;
-  out[1] = (sp_sys_fd_t)b;
+
+  sp_sys_socket_close(listener);
   return true;
-#elif defined(SP_LINUX)
-  s32 fds[2] = sp_zero;
-  if (sp_syscall(SP_SYSCALL_NUM_SOCKETPAIR, 1 /*AF_UNIX*/, 1 /*SOCK_STREAM*/, 0, fds, 0, 0) != 0) return false;
-  out[0] = fds[0];
-  out[1] = fds[1];
-  return true;
-#elif defined(SP_MACOS)
-  int fds[2] = sp_zero;
-  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) return false;
-  out[0] = fds[0];
-  out[1] = fds[1];
-  return true;
-#else
-  (void)out;
-  return false;
-#endif
 }
 
-static void io_socket_close(sp_sys_fd_t socket) {
-#if defined(SP_WIN32)
-  closesocket((SOCKET)socket);
-#else
-  sp_sys_close(socket);
-#endif
+typedef enum {
+  IO_SOCKET_STEP_NONE,
+  IO_SOCKET_STEP_WRITE,
+  IO_SOCKET_STEP_READ,
+  IO_SOCKET_STEP_CLOSE_WRITER,
+  IO_SOCKET_STEP_READ_UNTIL,
+  IO_SOCKET_STEP_LIMIT_COPY,
+} io_socket_step_kind_t;
+
+typedef struct {
+  io_socket_step_kind_t kind;
+  union {
+    struct { const c8* data; } write;
+    struct { u64 request; sp_err_t err; const c8* content; } read;
+    struct { const c8* delim; u64 max; sp_err_t err; const c8* content; } read_until;
+    struct { u64 limit; sp_err_t err; const c8* content; } limit_copy;
+  };
+} io_socket_step_t;
+
+typedef struct {
+  u32 timeout_ms;
+  u64 reader_buffer;
+  io_socket_step_t steps [8];
+} io_socket_test_t;
+
+void run_io_socket_test(int* utest_result, io_socket_test_t t) {
+  sp_sys_socket_t client = SP_SYS_INVALID_SOCKET;
+  sp_sys_socket_t server = SP_SYS_INVALID_SOCKET;
+  ASSERT_TRUE(io_socket_pair(&client, &server));
+
+  sp_io_socket_writer_t writer = sp_zero;
+  sp_io_socket_reader_t reader = sp_zero;
+  sp_io_socket_writer_init(&writer, client, t.timeout_ms ? t.timeout_ms : 1000);
+  sp_io_socket_reader_init(&reader, server, t.timeout_ms ? t.timeout_ms : 1000);
+
+  u8 reader_buf[64] = sp_zero;
+  if (t.reader_buffer) {
+    sp_io_reader_set_buffer(&reader.base, reader_buf, t.reader_buffer);
+  }
+
+  sp_carr_for(t.steps, it) {
+    const io_socket_step_t* step = &t.steps[it];
+    if (step->kind == IO_SOCKET_STEP_NONE) break;
+
+    switch (step->kind) {
+      case IO_SOCKET_STEP_NONE: break;
+
+      case IO_SOCKET_STEP_WRITE: {
+        u64 len = sp_cstr_len(step->write.data);
+        EXPECT_EQ(sp_io_write_all(&writer.base, step->write.data, len, SP_NULLPTR), SP_OK);
+        break;
+      }
+
+      case IO_SOCKET_STEP_READ: {
+        u8 dest[64] = sp_zero;
+        u64 bytes = 0;
+        EXPECT_EQ(sp_io_read(&reader.base, dest, step->read.request, &bytes), step->read.err);
+        u64 expect_bytes = sp_cstr_len(step->read.content);
+        EXPECT_EQ(bytes, expect_bytes);
+        sp_for(jt, expect_bytes) EXPECT_EQ((c8)dest[jt], step->read.content[jt]);
+        break;
+      }
+
+      case IO_SOCKET_STEP_CLOSE_WRITER: {
+        sp_sys_socket_close(client);
+        client = SP_SYS_INVALID_SOCKET;
+        break;
+      }
+
+      case IO_SOCKET_STEP_READ_UNTIL: {
+        u8 head_buf[64] = sp_zero;
+        sp_io_mem_writer_t head = sp_zero;
+        sp_io_mem_writer_from_buffer(&head, head_buf, sizeof(head_buf));
+        u64 bytes = 0;
+        sp_err_t err = sp_io_read_until(&reader.base, sp_cstr_as_str(step->read_until.delim), &head.base, step->read_until.max, &bytes);
+        EXPECT_EQ(err, step->read_until.err);
+        u64 expect_bytes = sp_cstr_len(step->read_until.content);
+        EXPECT_EQ(bytes, expect_bytes);
+        EXPECT_TRUE(sp_str_equal(sp_str((c8*)head_buf, bytes), sp_cstr_as_str(step->read_until.content)));
+        break;
+      }
+
+      case IO_SOCKET_STEP_LIMIT_COPY: {
+        sp_io_limit_reader_t limit = sp_zero;
+        sp_io_limit_reader_init(&limit, &reader.base, step->limit_copy.limit);
+        u8 body_buf[64] = sp_zero;
+        sp_io_mem_writer_t body = sp_zero;
+        sp_io_mem_writer_from_buffer(&body, body_buf, sizeof(body_buf));
+        u64 bytes = 0;
+        EXPECT_EQ(sp_io_copy(&body.base, &limit.base, &bytes), step->limit_copy.err);
+        u64 expect_bytes = sp_cstr_len(step->limit_copy.content);
+        EXPECT_EQ(bytes, expect_bytes);
+        EXPECT_TRUE(sp_str_equal(sp_str((c8*)body_buf, bytes), sp_cstr_as_str(step->limit_copy.content)));
+        break;
+      }
+    }
+  }
+
+  if (client != SP_SYS_INVALID_SOCKET) sp_sys_socket_close(client);
+  sp_sys_socket_close(server);
 }
 
 UTEST_F(io_socket, roundtrip) {
-  sp_sys_fd_t pair[2];
-  ASSERT_TRUE(io_socket_pair(pair));
-
-  sp_io_socket_writer_t writer = sp_zero;
-  sp_io_socket_reader_t reader = sp_zero;
-  sp_io_socket_writer_init(&writer, pair[0], 1000);
-  sp_io_socket_reader_init(&reader, pair[1], 1000);
-
-  EXPECT_EQ(sp_io_write_all(&writer.base, "hello world", 11, SP_NULLPTR), SP_OK);
-
-  u8 dest[32] = sp_zero;
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_read(&reader.base, dest, sizeof(dest), &bytes), SP_OK);
-  EXPECT_EQ(bytes, (u64)11);
-  EXPECT_TRUE(sp_str_equal(sp_str((c8*)dest, bytes), sp_str_lit("hello world")));
-
-  io_socket_close(pair[0]);
-  io_socket_close(pair[1]);
+  run_io_socket_test(utest_result, (io_socket_test_t){
+    .steps = {
+      { .kind = IO_SOCKET_STEP_WRITE, .write = { "hello world" } },
+      { .kind = IO_SOCKET_STEP_READ, .read = { 32, SP_OK, "hello world" } },
+    },
+  });
 }
 
 UTEST_F(io_socket, eof_on_peer_close) {
-  sp_sys_fd_t pair[2];
-  ASSERT_TRUE(io_socket_pair(pair));
-
-  sp_io_socket_writer_t writer = sp_zero;
-  sp_io_socket_reader_t reader = sp_zero;
-  sp_io_socket_writer_init(&writer, pair[0], 1000);
-  sp_io_socket_reader_init(&reader, pair[1], 1000);
-
-  EXPECT_EQ(sp_io_write_all(&writer.base, "x", 1, SP_NULLPTR), SP_OK);
-  io_socket_close(pair[0]);
-
-  u8 dest[8] = sp_zero;
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_read(&reader.base, dest, sizeof(dest), &bytes), SP_OK);
-  EXPECT_EQ(bytes, (u64)1);
-  EXPECT_EQ(sp_io_read(&reader.base, dest, sizeof(dest), &bytes), SP_ERR_IO_EOF);
-
-  io_socket_close(pair[1]);
+  run_io_socket_test(utest_result, (io_socket_test_t){
+    .steps = {
+      { .kind = IO_SOCKET_STEP_WRITE, .write = { "x" } },
+      { .kind = IO_SOCKET_STEP_CLOSE_WRITER },
+      { .kind = IO_SOCKET_STEP_READ, .read = { 8, SP_OK, "x" } },
+      { .kind = IO_SOCKET_STEP_READ, .read = { 8, SP_ERR_IO_EOF } },
+    },
+  });
 }
 
 UTEST_F(io_socket, read_timeout) {
-  sp_sys_fd_t pair[2];
-  ASSERT_TRUE(io_socket_pair(pair));
-
-  sp_io_socket_reader_t reader = sp_zero;
-  sp_io_socket_reader_init(&reader, pair[1], 50);
-
-  u8 dest[8] = sp_zero;
-  u64 bytes = 0;
-  EXPECT_EQ(sp_io_read(&reader.base, dest, sizeof(dest), &bytes), SP_ERR_IO_TIMEOUT);
-  EXPECT_EQ(bytes, (u64)0);
-
-  io_socket_close(pair[0]);
-  io_socket_close(pair[1]);
+  run_io_socket_test(utest_result, (io_socket_test_t){
+    .timeout_ms = 50,
+    .steps = {
+      { .kind = IO_SOCKET_STEP_READ, .read = { 8, SP_ERR_IO_TIMEOUT } },
+    },
+  });
 }
 
 // The HTTP shape: scan a buffered socket reader up to the header terminator,
 // then drain a fixed-length body through a limit reader. Bytes past the
 // terminator must survive in the reader's buffer.
 UTEST_F(io_socket, read_until_then_limit) {
-  sp_sys_fd_t pair[2];
-  ASSERT_TRUE(io_socket_pair(pair));
-
-  sp_io_socket_writer_t writer = sp_zero;
-  sp_io_socket_reader_t reader = sp_zero;
-  sp_io_socket_writer_init(&writer, pair[0], 1000);
-  sp_io_socket_reader_init(&reader, pair[1], 1000);
-
-  const c8* message = "HTTP/1.1 200 OK\r\n\r\nhello";
-  EXPECT_EQ(sp_io_write_all(&writer.base, message, sp_cstr_len(message), SP_NULLPTR), SP_OK);
-
-  u8 reader_buf[64] = sp_zero;
-  sp_io_reader_set_buffer(&reader.base, reader_buf, sizeof(reader_buf));
-
-  u8 head_buf[64] = sp_zero;
-  sp_io_mem_writer_t head = sp_zero;
-  sp_io_mem_writer_from_buffer(&head, head_buf, sizeof(head_buf));
-
-  u64 head_bytes = 0;
-  EXPECT_EQ(sp_io_read_until(&reader.base, sp_str_lit("\r\n\r\n"), &head.base, sizeof(head_buf), &head_bytes), SP_OK);
-  EXPECT_TRUE(sp_str_equal(sp_str((c8*)head_buf, head_bytes), sp_str_lit("HTTP/1.1 200 OK\r\n\r\n")));
-
-  sp_io_limit_reader_t body = sp_zero;
-  sp_io_limit_reader_init(&body, &reader.base, 5);
-
-  u8 body_buf[16] = sp_zero;
-  sp_io_mem_writer_t body_out = sp_zero;
-  sp_io_mem_writer_from_buffer(&body_out, body_buf, sizeof(body_buf));
-
-  u64 copied = 0;
-  EXPECT_EQ(sp_io_copy(&body_out.base, &body.base, &copied), SP_OK);
-  EXPECT_EQ(copied, (u64)5);
-  EXPECT_TRUE(sp_str_equal(sp_str((c8*)body_buf, 5), sp_str_lit("hello")));
-
-  io_socket_close(pair[0]);
-  io_socket_close(pair[1]);
+  run_io_socket_test(utest_result, (io_socket_test_t){
+    .reader_buffer = 64,
+    .steps = {
+      { .kind = IO_SOCKET_STEP_WRITE, .write = { "HTTP/1.1 200 OK\r\n\r\nhello" } },
+      { .kind = IO_SOCKET_STEP_READ_UNTIL, .read_until = { "\r\n\r\n", 64, SP_OK, "HTTP/1.1 200 OK\r\n\r\n" } },
+      { .kind = IO_SOCKET_STEP_LIMIT_COPY, .limit_copy = { 5, SP_OK, "hello" } },
+    },
+  });
 }
 
 #endif
