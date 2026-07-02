@@ -213,8 +213,9 @@ UTEST_F(io_read, buffered_large_request_bypasses) {
   });
 }
 
-// Buffer has some bytes, request is larger than capacity: drain what's
-// buffered, then bypass for the remainder.
+// Buffer has some bytes, request is larger than capacity: buffered bytes
+// satisfy the read as a short read (no backend call while bytes are in
+// hand); the next read finds the buffer empty and bypasses it.
 UTEST_F(io_read, buffered_drain_then_bypass) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
@@ -224,7 +225,8 @@ UTEST_F(io_read, buffered_drain_then_bypass) {
     .buffer = 4,
     .steps = {
       { .kind = IO_STEP_READ, .read = { 2, SP_OK, "ab" } },
-      { .kind = IO_STEP_READ, .read = { 14, SP_OK, "cdEFGHIJKLMNOP" } },
+      { .kind = IO_STEP_READ, .read = { 14, SP_OK, "cd" } },
+      { .kind = IO_STEP_READ, .read = { 12, SP_OK, "EFGHIJKLMNOP" } },
     },
   });
 }
@@ -242,13 +244,12 @@ UTEST_F(io_read, buffered_eof_immediate) {
   });
 }
 
-// Buffer has some bytes. Request exceeds them. Backend EOFs on the refill.
-// Wrapper normalizes "EOF + bytes" to OK; the next call sees the EOF.
+// Buffer has some bytes. Request exceeds them. The buffered bytes satisfy
+// the read without touching the backend; the EOF surfaces on the next read.
 UTEST_F(io_read, buffered_eof_after_partial_drain) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
       { .bytes = 4, .err = SP_OK, .data = "abcd" },
-      { .bytes = 0, .err = SP_ERR_IO_EOF },
       { .bytes = 0, .err = SP_ERR_IO_EOF },
     },
     .buffer = 4,
