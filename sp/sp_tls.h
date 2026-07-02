@@ -745,7 +745,20 @@ sp_tls_error_t sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t m
 #define SP_HTTP_HEAD_MAX    (64 * 1024)
 #define SP_HTTP_MAX_INTERIM 8
 
+typedef struct sp_http_conn sp_http_conn_t;
+
 typedef struct {
+  sp_io_reader_t base;
+  sp_http_conn_t* conn;
+  bool eof;
+} sp_http_tls_reader_t;
+
+typedef struct {
+  sp_io_writer_t base;
+  sp_http_conn_t* conn;
+} sp_http_tls_writer_t;
+
+struct sp_http_conn {
   mbedtls_net_context     net;
   mbedtls_ssl_context     ssl;
   mbedtls_ssl_config      conf;
@@ -754,16 +767,24 @@ typedef struct {
   sp_tls_verify_t         verify;
   bool                    tls;
   u32                     io_timeout_ms;
-} sp_http_conn_t;
+  sp_io_socket_reader_t   sock_reader;
+  sp_io_socket_writer_t   sock_writer;
+  sp_http_tls_reader_t    tls_reader;
+  sp_http_tls_writer_t    tls_writer;
+  sp_io_reader_t*         reader;
+  sp_io_writer_t*         writer;
+  u8                      buffer[SP_HTTP_BUFFER_SIZE];
+};
 
-typedef struct {
-  sp_http_conn_t* conn;
-  u8   buf[SP_HTTP_BUFFER_SIZE];
-  u32  len;
-  u32  pos;
-  bool eof;
-  sp_tls_error_t fail;
-} sp_http_reader_t;
+SP_PRIVATE sp_tls_error_t sp_http_map_io(sp_err_t err, sp_tls_error_t fallback) {
+  return err == SP_ERR_IO_TIMEOUT ? SP_TLS_ERR_TIMEOUT : fallback;
+}
+
+SP_PRIVATE sp_err_t sp_http_sink_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  (void)writer; (void)ptr;
+  if (bytes_written) *bytes_written = size;
+  return SP_OK;
+}
 
 // resolved timeouts: 0 means block forever, matching mbedtls_net_recv_timeout
 SP_PRIVATE u32 sp_http_timeout_ms(u32 requested, u32 fallback) {
@@ -849,53 +870,64 @@ SP_PRIVATE sp_tls_error_t sp_http_net_connect(mbedtls_net_context* net, const c8
   return result;
 }
 
-SP_PRIVATE s32 sp_http_conn_read(sp_http_conn_t* conn, u8* buf, u32 len) {
+SP_PRIVATE sp_err_t sp_http_tls_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_http_tls_reader_t* tls = (sp_http_tls_reader_t*)reader;
+  sp_http_conn_t* conn = tls->conn;
+  if (bytes_read) *bytes_read = 0;
+  if (tls->eof) return SP_ERR_IO_EOF;
   for (;;) {
-    s32 n = conn->tls
-      ? mbedtls_ssl_read(&conn->ssl, buf, len)
-      : mbedtls_net_recv_timeout(&conn->net, buf, len, conn->io_timeout_ms);
+    s32 n = mbedtls_ssl_read(&conn->ssl, (unsigned char*)ptr, (size_t)sp_min(size, (u64)INT32_MAX));
     if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
-    if (n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) return 0;
-    if (n == 0 && conn->tls) return MBEDTLS_ERR_SSL_CONN_EOF;
-    return n;
+    if (n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+      // latched: mbedtls reports close_notify only once, then raw EOF
+      tls->eof = true;
+      return SP_ERR_IO_EOF;
+    }
+    if (n == MBEDTLS_ERR_SSL_TIMEOUT) return SP_ERR_IO_TIMEOUT;
+    // a raw EOF without close_notify could be a truncation attack, so it is
+    // an error, not end-of-stream
+    if (n <= 0) return SP_ERR_IO_READ_FAILED;
+    if (bytes_read) *bytes_read = (u64)n;
+    return SP_OK;
+  }
+}
+
+SP_PRIVATE sp_err_t sp_http_tls_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_http_conn_t* conn = ((sp_http_tls_writer_t*)writer)->conn;
+  if (bytes_written) *bytes_written = 0;
+  for (;;) {
+    s32 n = mbedtls_ssl_write(&conn->ssl, (const unsigned char*)ptr, (size_t)sp_min(size, (u64)INT32_MAX));
+    if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
+    if (n <= 0) return SP_ERR_IO_WRITE_FAILED;
+    if (bytes_written) *bytes_written = (u64)n;
+    return SP_OK;
   }
 }
 
 SP_PRIVATE sp_tls_error_t sp_http_conn_write(sp_http_conn_t* conn, sp_str_t data) {
-  u32 sent = 0;
-  while (sent < data.len) {
-    s32 n = conn->tls
-      ? mbedtls_ssl_write(&conn->ssl, (const unsigned char*)data.data + sent, data.len - sent)
-      : mbedtls_net_send(&conn->net, (const unsigned char*)data.data + sent, data.len - sent);
-    if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
-    if (n <= 0) return SP_TLS_ERR_OS;
-    sent += (u32)n;
-  }
-  return SP_TLS_OK;
+  sp_err_t err = sp_io_write_all(conn->writer, data.data, data.len, SP_NULLPTR);
+  return err == SP_OK ? SP_TLS_OK : sp_http_map_io(err, SP_TLS_ERR_OS);
 }
 
-// reads the proxy's reply to CONNECT; byte-at-a-time so no tunnel bytes are buffered past the head
+// reads the proxy's reply to CONNECT; the reader is unbuffered here, so nothing
+// past the head is consumed and the TLS handshake sees a clean stream
 SP_PRIVATE sp_tls_error_t sp_http_connect_reply(sp_http_conn_t* conn) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-  c8* head = (c8*)sp_alloc(scratch.mem, SP_HTTP_HEAD_MAX);
-  u32 len = 0;
+  sp_io_dyn_mem_writer_t head = sp_zero;
+  sp_io_dyn_mem_writer_init(scratch.mem, &head);
+
   sp_tls_error_t result = SP_TLS_ERR_PROXY;
-  while (len < SP_HTTP_HEAD_MAX) {
-    s32 n = mbedtls_net_recv_timeout(&conn->net, (u8*)head + len, 1, conn->io_timeout_ms);
-    if (n == MBEDTLS_ERR_SSL_TIMEOUT) {
-      result = SP_TLS_ERR_TIMEOUT;
-      break;
+  sp_err_t err = sp_io_read_until(conn->reader, sp_str_lit("\r\n\r\n"), &head.base, SP_HTTP_HEAD_MAX, SP_NULLPTR);
+  if (err == SP_OK) {
+    sp_str_t acc = sp_io_dyn_mem_writer_as_str(&head);
+    sp_http_head_t parsed = sp_zero;
+    if (sp_http_parse_head(sp_str_sub(acc, 0, (s32)acc.len - 4), &parsed) == SP_TLS_OK &&
+        parsed.status >= 200 && parsed.status <= 299) {
+      result = SP_TLS_OK;
     }
-    if (n <= 0) break;
-    len++;
-    if (len >= 4 && sp_str_ends_with(sp_str(head, len), sp_str_lit("\r\n\r\n"))) {
-      sp_http_head_t parsed = sp_zero;
-      if (sp_http_parse_head(sp_str(head, len - 4), &parsed) == SP_TLS_OK &&
-          parsed.status >= 200 && parsed.status <= 299) {
-        result = SP_TLS_OK;
-      }
-      break;
-    }
+  }
+  else {
+    result = sp_http_map_io(err, SP_TLS_ERR_PROXY);
   }
   sp_mem_end_scratch(scratch);
   return result;
@@ -921,6 +953,15 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_t
 
   sp_tls_error_t err = sp_http_net_connect(&conn->net, host, port, connect_timeout_ms);
   if (err != SP_TLS_OK) return err;
+
+  sp_io_socket_reader_init(&conn->sock_reader, conn->net.fd, io_timeout_ms);
+  sp_io_socket_writer_init(&conn->sock_writer, conn->net.fd, io_timeout_ms);
+  conn->tls_reader.base.read = sp_http_tls_read;
+  conn->tls_reader.conn = conn;
+  conn->tls_writer.base.write = sp_http_tls_write;
+  conn->tls_writer.conn = conn;
+  conn->reader = &conn->sock_reader.base;
+  conn->writer = &conn->sock_writer.base;
 
   if (proxy && url.tls) {
     sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
@@ -956,6 +997,9 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_t
     if (rc == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) return SP_TLS_ERR_UNTRUSTED;
     if (rc != MBEDTLS_ERR_SSL_WANT_READ && rc != MBEDTLS_ERR_SSL_WANT_WRITE) return SP_TLS_ERR_HANDSHAKE;
   }
+
+  conn->reader = &conn->tls_reader.base;
+  conn->writer = &conn->tls_writer.base;
   return SP_TLS_OK;
 }
 
@@ -968,81 +1012,53 @@ SP_PRIVATE void sp_http_conn_close(sp_http_conn_t* conn) {
   mbedtls_net_free(&conn->net);
 }
 
-SP_PRIVATE bool sp_http_reader_fill(sp_http_reader_t* reader) {
-  if (reader->pos < reader->len) return true;
-  if (reader->eof) return false;
-  s32 n = sp_http_conn_read(reader->conn, reader->buf, sizeof(reader->buf));
-  if (n <= 0) {
-    if (n < 0) reader->fail = n == MBEDTLS_ERR_SSL_TIMEOUT ? SP_TLS_ERR_TIMEOUT : SP_TLS_ERR_PROTOCOL;
-    reader->eof = true;
-    return false;
-  }
-  reader->len = (u32)n;
-  reader->pos = 0;
-  return true;
-}
-
-SP_PRIVATE sp_tls_error_t sp_http_reader_fail(const sp_http_reader_t* reader, sp_tls_error_t fallback) {
-  return reader->fail != SP_TLS_OK ? reader->fail : fallback;
-}
-
-SP_PRIVATE bool sp_http_read_line(sp_http_reader_t* reader, c8* buf, u32 cap, u32* out_len) {
-  u32 n = 0;
-  for (;;) {
-    if (!sp_http_reader_fill(reader)) return false;
-    c8 c = (c8)reader->buf[reader->pos++];
-    if (c == '\n') break;
-    if (c == '\r') continue;
-    if (n < cap) buf[n++] = c;
-  }
-  *out_len = n;
-  return true;
-}
-
-SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_http_reader_t* reader, sp_io_writer_t* body, u64 n, u64* written) {
-  while (n > 0) {
-    if (!sp_http_reader_fill(reader)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
-    u32 avail = reader->len - reader->pos;
-    u32 take = (u64)avail < n ? avail : (u32)n;
-    if (body && sp_io_write(body, reader->buf + reader->pos, take, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
-    reader->pos += take;
-    n -= take;
-    if (written) *written += take;
-  }
+SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_io_reader_t* reader, sp_mem_t mem, sp_str_t* head) {
+  sp_io_dyn_mem_writer_t writer = sp_zero;
+  sp_io_dyn_mem_writer_init(mem, &writer);
+  sp_err_t err = sp_io_read_until(reader, sp_str_lit("\r\n\r\n"), &writer.base, SP_HTTP_HEAD_MAX, SP_NULLPTR);
+  if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
+  sp_str_t acc = sp_io_dyn_mem_writer_as_str(&writer);
+  *head = sp_str_sub(acc, 0, (s32)acc.len - 4);
   return SP_TLS_OK;
 }
 
-SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_http_reader_t* reader, sp_mem_t mem, sp_str_t* head, sp_str_t* leftover) {
-  sp_io_dyn_mem_writer_t writer = sp_zero;
-  sp_io_dyn_mem_writer_init(mem, &writer);
-  for (;;) {
-    if (!sp_http_reader_fill(reader)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
-    u32 avail = reader->len - reader->pos;
-    sp_io_write(&writer.base, reader->buf + reader->pos, avail, SP_NULLPTR);
-    reader->pos = reader->len;
-
-    sp_str_t acc = sp_io_dyn_mem_writer_as_str(&writer);
-    s32 term = sp_str_find(acc, sp_str_lit("\r\n\r\n"));
-    if (term != SP_STR_NO_MATCH) {
-      *head = sp_str_sub(acc, 0, term);
-      *leftover = sp_http_str_tail(acc, term + 4);
-      return SP_TLS_OK;
-    }
-    if (acc.len > SP_HTTP_HEAD_MAX) return SP_TLS_ERR_PROTOCOL;
-  }
+SP_PRIVATE sp_tls_error_t sp_http_read_line(sp_io_reader_t* reader, c8* buf, u32 cap, sp_str_t* line) {
+  sp_io_mem_writer_t writer = sp_zero;
+  sp_io_mem_writer_from_buffer(&writer, buf, cap);
+  u64 n = 0;
+  sp_err_t err = sp_io_read_until(reader, sp_str_lit("\r\n"), &writer.base, cap, &n);
+  if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
+  *line = sp_str(buf, (u32)n - 2);
+  return SP_TLS_OK;
 }
 
-SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_head_t head, sp_io_writer_t* body, u64* written) {
+SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_io_reader_t* reader, sp_io_writer_t* body, u64 n, u64* written) {
+  sp_io_limit_reader_t limit = sp_zero;
+  sp_io_limit_reader_init(&limit, reader, n);
+  u64 copied = 0;
+  sp_err_t err = sp_io_copy(body, &limit.base, &copied);
+  if (written) *written += copied;
+  if (err == SP_ERR_IO_WRITE_FAILED) return SP_TLS_ERR_OS;
+  if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
+  if (limit.remaining) return SP_TLS_ERR_PROTOCOL;
+  return SP_TLS_OK;
+}
+
+SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_io_reader_t* reader, sp_http_head_t head, sp_io_writer_t* body, u64* written) {
+  sp_io_writer_t sink = sp_zero;
+  sink.write = sp_http_sink_write;
+  if (!body) body = &sink;
+
   if (head.status < 200 || head.status == 204 || head.status == 304) {
     return SP_TLS_OK;
   }
   if (head.chunked) {
     for (;;) {
-      c8 line[SP_HTTP_LINE_MAX];
-      u32 line_len = 0;
-      if (!sp_http_read_line(reader, line, sizeof(line), &line_len)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
-      if (line_len >= sizeof(line)) return SP_TLS_ERR_PROTOCOL;
-      sp_str_t size_str = sp_str(line, line_len);
+      c8 buf[SP_HTTP_LINE_MAX];
+      sp_str_t line = sp_zero;
+      sp_tls_error_t err = sp_http_read_line(reader, buf, sizeof(buf), &line);
+      if (err != SP_TLS_OK) return err;
+      sp_str_t size_str = line;
       s32 semi = sp_str_find_c8(size_str, ';');
       if (semi != SP_STR_NO_MATCH) size_str = sp_str_sub(size_str, 0, semi);
       size_str = sp_str_trim(size_str);
@@ -1051,26 +1067,25 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_he
       if (!sp_parse_hex_ex(size_str, &size)) return SP_TLS_ERR_PROTOCOL;
       if (size == 0) break;
 
-      sp_tls_error_t err = sp_http_copy_n(reader, body, size, written);
-      if (err != SP_TLS_OK) return err;
+      sp_tls_error_t copy_err = sp_http_copy_n(reader, body, size, written);
+      if (copy_err != SP_TLS_OK) return copy_err;
 
-      c8 crlf[SP_HTTP_LINE_MAX];
-      u32 crlf_len = 0;
-      if (!sp_http_read_line(reader, crlf, sizeof(crlf), &crlf_len)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
-      if (crlf_len != 0) return SP_TLS_ERR_PROTOCOL;
+      sp_str_t crlf = sp_zero;
+      copy_err = sp_http_read_line(reader, buf, sizeof(buf), &crlf);
+      if (copy_err != SP_TLS_OK) return copy_err;
+      if (!sp_str_empty(crlf)) return SP_TLS_ERR_PROTOCOL;
     }
     return SP_TLS_OK;
   }
   if (head.has_length) {
     return sp_http_copy_n(reader, body, head.length, written);
   }
-  while (sp_http_reader_fill(reader)) {
-    u32 avail = reader->len - reader->pos;
-    if (body && sp_io_write(body, reader->buf + reader->pos, avail, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
-    reader->pos = reader->len;
-    if (written) *written += avail;
-  }
-  return sp_http_reader_fail(reader, SP_TLS_OK);
+  u64 copied = 0;
+  sp_err_t err = sp_io_copy(body, reader, &copied);
+  if (written) *written += copied;
+  if (err == SP_ERR_IO_WRITE_FAILED) return SP_TLS_ERR_OS;
+  if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
+  return SP_TLS_OK;
 }
 
 SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_url_t url, bool absolute_form) {
@@ -1148,28 +1163,17 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
       break;
     }
 
-    sp_http_reader_t* reader = sp_alloc_type(mem, sp_http_reader_t);
-    *reader = sp_zero_s(sp_http_reader_t);
-    reader->conn = &conn;
+    sp_io_reader_set_buffer(conn.reader, conn.buffer, sizeof(conn.buffer));
 
     sp_http_head_t parsed = sp_zero;
     u32 interim = 0;
     for (;;) {
       sp_str_t head = sp_zero;
-      sp_str_t leftover = sp_zero;
-      result = sp_http_read_head(reader, mem, &head, &leftover);
+      result = sp_http_read_head(conn.reader, mem, &head);
       if (result != SP_TLS_OK) break;
 
       result = sp_http_parse_head(head, &parsed);
       if (result != SP_TLS_OK) break;
-
-      if (leftover.len > sizeof(reader->buf)) {
-        result = SP_TLS_ERR_PROTOCOL;
-        break;
-      }
-      sp_mem_copy(reader->buf, leftover.data, leftover.len);
-      reader->len = leftover.len;
-      reader->pos = 0;
 
       if (parsed.status >= 100 && parsed.status <= 199) {
         if (parsed.status == 101 || ++interim >= SP_HTTP_MAX_INTERIM) {
@@ -1204,7 +1208,7 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
 
     sp_io_writer_t* sink = parsed.status >= 200 && parsed.status < 300 ? request.body : SP_NULLPTR;
     u64 written = 0;
-    result = sp_http_read_body(reader, parsed, sink, sink ? &written : SP_NULLPTR);
+    result = sp_http_read_body(conn.reader, parsed, sink, sink ? &written : SP_NULLPTR);
     resp.body_len = written;
     sp_http_conn_close(&conn);
 

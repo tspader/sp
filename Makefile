@@ -44,6 +44,11 @@ ifneq (,$(findstring wasm32,$(TRIPLE)))
   RUNNER = wasmtime run
 endif
 
+LDLIBS_PLATFORM =
+ifneq (,$(findstring windows,$(TRIPLE)))
+  LDLIBS_PLATFORM = -lws2_32
+endif
+
 CFLAGS = $(CFLAGS_LANG) -g -Werror=return-type -fsanitize=undefined,alignment -fno-sanitize-recover=all $(CFLAGS_PLATFORM)
 CFLAGS_TEST = -DSP_IMPLEMENTATION -DSP_TEST_IMPLEMENTATION -DSP_CLI_TEST_DIR='"$(CURDIR)/test/cli"' -DSP_GDB_TOOLS_DIR='"$(CURDIR)/tools/gdb"' -I. -Itest/tools -Itest
 CFLAGS_BENCH = $(CFLAGS_LANG) -g -Werror=return-type -O2 -DSP_IMPLEMENTATION -DUBENCH_ENABLE_PERF_COUNTERS -I. -Itest/bench -Itest/tools
@@ -125,13 +130,13 @@ $(TEST_DIR)/tls$(EXE): test/tls.c $(SP_HEADERS) $(TEST_SOURCES) $(MBEDTLS_LIB) |
 endif
 
 $(EXAMPLE_DIR)/%$(EXE): example/%.c $(SP_HEADERS) | $(EXAMPLE_DIR)
-	$(CC) $(CFLAGS) -I. -o $@ $<
+	$(CC) $(CFLAGS) -I. -o $@ $< $(LDLIBS_PLATFORM)
 
 $(TEST_DIR)/%$(EXE): test/%.c $(SP_HEADERS) $(TEST_SOURCES) | $(TEST_DIR)
-	$(CC) $(CFLAGS) $(CFLAGS_TEST) -o $@ $<
+	$(CC) $(CFLAGS) $(CFLAGS_TEST) -o $@ $< $(LDLIBS_PLATFORM)
 
 $(BENCH_DIR)/%$(EXE): test/bench/%.c $(SP_HEADERS) test/bench/ubench.h test/tools/table.h | $(BENCH_DIR)
-	$(CC) $(CFLAGS_BENCH) -o $@ $<
+	$(CC) $(CFLAGS_BENCH) -o $@ $< $(LDLIBS_PLATFORM)
 
 $(TRIPLES):
 	+$(MAKE) TRIPLE=$@ examples tests
