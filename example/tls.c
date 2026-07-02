@@ -5,7 +5,7 @@
 static const c8* backend_name(sp_tls_backend_t backend) {
   switch (backend) {
     case SP_TLS_BACKEND_ANCHORS:   return "anchors (mbedTLS verifies extracted roots)";
-    case SP_TLS_BACKEND_OS_VERIFY: return "os-verify (SecTrust renders the verdict)";
+    case SP_TLS_BACKEND_OS_VERIFY: return "os-verify (the OS renders the verdict)";
     case SP_TLS_BACKEND_NONE:      return "none (no native store on this platform)";
   }
   return "unknown";
