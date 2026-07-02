@@ -25,6 +25,8 @@ typedef enum {
   SP_TLS_ERR_PROTOCOL,
   SP_TLS_ERR_STATUS,
   SP_TLS_ERR_REDIRECTS,
+  SP_TLS_ERR_TIMEOUT,
+  SP_TLS_ERR_PROXY,
 } sp_tls_error_t;
 
 typedef enum {
@@ -72,7 +74,10 @@ SP_API sp_tls_error_t   sp_tls_chain_der(const struct mbedtls_x509_crt* chain, s
 
 
 // @http
-#define SP_HTTP_DEFAULT_REDIRECTS 16
+#define SP_HTTP_DEFAULT_REDIRECTS          16
+#define SP_HTTP_DEFAULT_CONNECT_TIMEOUT_MS 30000
+#define SP_HTTP_DEFAULT_IO_TIMEOUT_MS      60000
+#define SP_HTTP_TIMEOUT_INFINITE           0xffffffffu
 
 typedef struct {
   sp_str_t scheme;
@@ -87,6 +92,10 @@ typedef struct {
   sp_tls_trust_t* trust;
   sp_io_writer_t* body;
   u32             max_redirects;
+  sp_str_t        proxy;              // http proxy url; empty consults http(s)_proxy/all_proxy env
+  bool            no_proxy;           // never use a proxy, even if the environment sets one
+  u32             connect_timeout_ms; // 0 is the default; SP_HTTP_TIMEOUT_INFINITE disables
+  u32             io_timeout_ms;      // per read, not total; 0 is the default; SP_HTTP_TIMEOUT_INFINITE disables
 } sp_http_request_t;
 
 typedef struct {
@@ -106,8 +115,12 @@ SP_API sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_
 sp_tls_backend_t sp_tls_native_backend(void) {
 #if defined(SP_WIN32)
   return SP_TLS_BACKEND_ANCHORS;
-#elif defined(SP_MACOS)
+#elif defined(SP_MACOS) && defined(SP_TLS_MACOS_SECTRUST)
   return SP_TLS_BACKEND_OS_VERIFY;
+#elif defined(SP_MACOS)
+  // SecTrust wasn't compiled in; report no backend so trust loading fails loudly
+  // instead of every handshake dying with an opaque NOT_TRUSTED
+  return SP_TLS_BACKEND_NONE;
 #elif defined(SP_LINUX)
   return SP_TLS_BACKEND_ANCHORS;
 #else
@@ -129,7 +142,7 @@ SP_PRIVATE bool sp_http_ci_equal(sp_str_t a, sp_str_t b) {
 
 SP_PRIVATE bool sp_http_ci_contains(sp_str_t haystack, sp_str_t needle) {
   if (needle.len > haystack.len) return false;
-  sp_for_range(it, 0, (s32)(haystack.len - needle.len) + 1) {
+  sp_for_range(it, 0, haystack.len - needle.len + 1) {
     if (sp_http_ci_equal(sp_str_sub(haystack, it, (s32)needle.len), needle)) return true;
   }
   return false;
@@ -150,7 +163,7 @@ SP_PRIVATE bool sp_http_url_host_ok(sp_str_t host) {
   if (sp_str_empty(host)) return false;
   if (host.data[0] == '[') {
     if (host.len < 4 || host.data[host.len - 1] != ']') return false;
-    sp_for_range(it, 1, (s32)host.len - 1) {
+    sp_for_range(it, 1, host.len - 1) {
       c8 c = host.data[it];
       bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
       if (!hex && c != ':' && c != '.') return false;
@@ -302,11 +315,27 @@ SP_PRIVATE sp_tls_error_t sp_http_parse_head(sp_str_t head, sp_http_head_t* out)
   return SP_TLS_OK;
 }
 
+SP_PRIVATE bool sp_http_location_is_absolute(sp_str_t location) {
+  s32 sep = sp_str_find(location, sp_str_lit("://"));
+  if (sep == SP_STR_NO_MATCH || sep == 0) return false;
+  sp_for(it, (u32)sep) {
+    c8 c = location.data[it];
+    bool alpha = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    bool digit = (c >= '0' && c <= '9');
+    if (it == 0 && !alpha) return false;
+    if (!alpha && !digit && c != '+' && c != '-' && c != '.') return false;
+  }
+  return true;
+}
+
 SP_PRIVATE sp_str_t sp_http_resolve_url(sp_mem_t mem, sp_http_url_t base, sp_str_t location) {
-  if (sp_str_find(location, sp_str_lit("://")) != SP_STR_NO_MATCH) {
+  if (sp_http_location_is_absolute(location)) {
     return sp_str_copy(mem, location);
   }
   sp_str_t scheme = base.tls ? sp_str_lit("https") : sp_str_lit("http");
+  if (location.len >= 2 && location.data[0] == '/' && location.data[1] == '/') {
+    return sp_fmt(mem, "{}:{}", sp_fmt_str(scheme), sp_fmt_str(location)).value;
+  }
   if (!sp_str_empty(location) && location.data[0] == '/') {
     return sp_fmt(mem, "{}://{}:{}{}",
       sp_fmt_str(scheme), sp_fmt_str(base.host), sp_fmt_str(base.port), sp_fmt_str(location)).value;
@@ -317,7 +346,57 @@ SP_PRIVATE sp_str_t sp_http_resolve_url(sp_mem_t mem, sp_http_url_t base, sp_str
     sp_fmt_str(scheme), sp_fmt_str(base.host), sp_fmt_str(base.port), sp_fmt_str(dir), sp_fmt_str(location)).value;
 }
 
+SP_PRIVATE bool sp_http_no_proxy_match(sp_str_t host, sp_str_t no_proxy) {
+  sp_str_t rest = no_proxy;
+  while (!sp_str_empty(rest)) {
+    s32 comma = sp_str_find_c8(rest, ',');
+    sp_str_t entry = comma == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, comma);
+    rest = comma == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_http_str_tail(rest, comma + 1);
+
+    entry = sp_str_trim(entry);
+    if (sp_str_empty(entry)) continue;
+    if (sp_str_equal_cstr(entry, "*")) return true;
+    if (entry.data[0] == '.') entry = sp_http_str_tail(entry, 1);
+    if (sp_str_empty(entry)) continue;
+    if (sp_http_ci_equal(host, entry)) return true;
+    if (host.len > entry.len &&
+        host.data[host.len - entry.len - 1] == '.' &&
+        sp_http_ci_equal(sp_http_str_tail(host, (s32)(host.len - entry.len)), entry)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+SP_PRIVATE sp_str_t sp_http_proxy_pick(sp_http_url_t url, sp_str_t http_proxy, sp_str_t https_proxy, sp_str_t all_proxy, sp_str_t no_proxy) {
+  if (sp_http_no_proxy_match(sp_http_host_bare(url.host), no_proxy)) return sp_zero_s(sp_str_t);
+  sp_str_t proxy = url.tls ? https_proxy : http_proxy;
+  if (sp_str_empty(proxy)) proxy = all_proxy;
+  return proxy;
+}
+
+SP_PRIVATE sp_str_t sp_http_env_either(const c8* lower, const c8* upper) {
+  sp_str_t value = sp_os_env_get(sp_cstr_as_str(lower));
+  if (sp_str_empty(value) && upper) value = sp_os_env_get(sp_cstr_as_str(upper));
+  return value;
+}
+
+SP_PRIVATE sp_str_t sp_http_proxy_from_env(sp_http_url_t url) {
+  return sp_http_proxy_pick(url,
+    // uppercase HTTP_PROXY is deliberately ignored (CGI can set it from a request header)
+    sp_http_env_either("http_proxy", SP_NULLPTR),
+    sp_http_env_either("https_proxy", "HTTPS_PROXY"),
+    sp_http_env_either("all_proxy", "ALL_PROXY"),
+    sp_http_env_either("no_proxy", "NO_PROXY"));
+}
+
 #if defined(SP_TLS_WITH_MBEDTLS)
+
+#if defined(SP_MACOS) && !defined(SP_TLS_MACOS_SECTRUST) && defined(__has_include)
+  #if __has_include(<Security/Security.h>)
+    #error "sp_tls on macOS requires SecTrust: define SP_TLS_MACOS_SECTRUST and link -framework Security -framework CoreFoundation"
+  #endif
+#endif
 
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/ssl.h>
@@ -327,9 +406,21 @@ SP_PRIVATE sp_str_t sp_http_resolve_url(sp_mem_t mem, sp_http_url_t base, sp_str
 #include <mbedtls/error.h>
 
 #if defined(SP_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <wincrypt.h>
-#elif defined(SP_MACOS) && defined(SP_TLS_MACOS_SECTRUST)
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <unistd.h>
+#include <errno.h>
+#endif
+
+#if defined(SP_MACOS) && defined(SP_TLS_MACOS_SECTRUST)
 #include <Security/Security.h>
 #include <CoreFoundation/CoreFoundation.h>
 #endif
@@ -348,10 +439,8 @@ sp_tls_error_t sp_tls_trust_init(sp_tls_trust_t* trust, sp_mem_t mem) {
   *trust = sp_zero_s(sp_tls_trust_t);
   trust->mem = mem;
   trust->backend = sp_tls_native_backend();
-  if (trust->backend != SP_TLS_BACKEND_NONE) {
-    trust->anchors = sp_alloc_type(mem, mbedtls_x509_crt);
-    mbedtls_x509_crt_init(trust->anchors);
-  }
+  trust->anchors = sp_alloc_type(mem, mbedtls_x509_crt);
+  mbedtls_x509_crt_init(trust->anchors);
   return SP_TLS_OK;
 }
 
@@ -597,6 +686,7 @@ typedef struct {
   mbedtls_ctr_drbg_context drbg;
   sp_tls_verify_t         verify;
   bool                    tls;
+  u32                     io_timeout_ms;
 } sp_http_conn_t;
 
 typedef struct {
@@ -605,13 +695,98 @@ typedef struct {
   u32  len;
   u32  pos;
   bool eof;
+  sp_tls_error_t fail;
 } sp_http_reader_t;
+
+// resolved timeouts: 0 means block forever, matching mbedtls_net_recv_timeout
+SP_PRIVATE u32 sp_http_timeout_ms(u32 requested, u32 fallback) {
+  if (requested == SP_HTTP_TIMEOUT_INFINITE) return 0;
+  return requested ? requested : fallback;
+}
+
+SP_PRIVATE sp_tls_error_t sp_http_net_connect(mbedtls_net_context* net, const c8* host, const c8* port, u32 timeout_ms) {
+#if defined(SP_WIN32)
+  static bool wsa_init = false;
+  if (!wsa_init) {
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return SP_TLS_ERR_OS;
+    wsa_init = true;
+  }
+#endif
+
+  struct addrinfo hints = sp_zero;
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+  struct addrinfo* list = SP_NULLPTR;
+  if (getaddrinfo(host, port, &hints, &list) != 0) return SP_TLS_ERR_CONNECT;
+
+  sp_tls_error_t result = SP_TLS_ERR_CONNECT;
+  for (struct addrinfo* it = list; it; it = it->ai_next) {
+#if defined(SP_WIN32)
+    SOCKET fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
+    if (fd == INVALID_SOCKET) continue;
+    u_long nonblock = 1;
+    ioctlsocket(fd, FIONBIO, &nonblock);
+    bool connected = connect(fd, it->ai_addr, (int)it->ai_addrlen) == 0;
+    bool pending = !connected && WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+    int fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
+    if (fd < 0) continue;
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+    bool connected = connect(fd, it->ai_addr, it->ai_addrlen) == 0;
+    bool pending = !connected && errno == EINPROGRESS;
+#endif
+
+    if (pending) {
+#if defined(SP_WIN32)
+      WSAPOLLFD pfd = sp_zero;
+      pfd.fd = fd;
+      pfd.events = POLLWRNORM;
+      s32 rc = WSAPoll(&pfd, 1, timeout_ms ? (INT)timeout_ms : -1);
+#else
+      struct pollfd pfd = sp_zero;
+      pfd.fd = fd;
+      pfd.events = POLLOUT;
+      s32 rc = poll(&pfd, 1, timeout_ms ? (s32)timeout_ms : -1);
+#endif
+      if (rc == 0) result = SP_TLS_ERR_TIMEOUT;
+      if (rc > 0) {
+        int err = 0;
+        socklen_t err_len = sizeof(err);
+        getsockopt(fd, SOL_SOCKET, SO_ERROR, (char*)&err, &err_len);
+        connected = err == 0;
+      }
+    }
+
+    if (connected) {
+#if defined(SP_WIN32)
+      u_long block = 0;
+      ioctlsocket(fd, FIONBIO, &block);
+#else
+      fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK);
+#endif
+      net->fd = (int)fd;
+      result = SP_TLS_OK;
+      break;
+    }
+
+#if defined(SP_WIN32)
+    closesocket(fd);
+#else
+    close(fd);
+#endif
+  }
+
+  freeaddrinfo(list);
+  return result;
+}
 
 SP_PRIVATE s32 sp_http_conn_read(sp_http_conn_t* conn, u8* buf, u32 len) {
   for (;;) {
     s32 n = conn->tls
       ? mbedtls_ssl_read(&conn->ssl, buf, len)
-      : mbedtls_net_recv(&conn->net, buf, len);
+      : mbedtls_net_recv_timeout(&conn->net, buf, len, conn->io_timeout_ms);
     if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
     if (n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) return 0;
     return n;
@@ -631,36 +806,85 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_write(sp_http_conn_t* conn, sp_str_t data
   return SP_TLS_OK;
 }
 
-SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_trust_t* trust, sp_http_url_t url) {
+// reads the proxy's reply to CONNECT; byte-at-a-time so no tunnel bytes are buffered past the head
+SP_PRIVATE sp_tls_error_t sp_http_connect_reply(sp_http_conn_t* conn) {
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
+  c8* head = (c8*)sp_alloc(scratch.mem, SP_HTTP_HEAD_MAX);
+  u32 len = 0;
+  sp_tls_error_t result = SP_TLS_ERR_PROXY;
+  while (len < SP_HTTP_HEAD_MAX) {
+    s32 n = mbedtls_net_recv_timeout(&conn->net, (u8*)head + len, 1, conn->io_timeout_ms);
+    if (n == MBEDTLS_ERR_SSL_TIMEOUT) {
+      result = SP_TLS_ERR_TIMEOUT;
+      break;
+    }
+    if (n <= 0) break;
+    len++;
+    if (len >= 4 && sp_str_ends_with(sp_str(head, len), sp_str_lit("\r\n\r\n"))) {
+      sp_http_head_t parsed = sp_zero;
+      if (sp_http_parse_head(sp_str(head, len - 4), &parsed) == SP_TLS_OK &&
+          parsed.status >= 200 && parsed.status <= 299) {
+        result = SP_TLS_OK;
+      }
+      break;
+    }
+  }
+  sp_mem_end_scratch(scratch);
+  return result;
+}
+
+SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_trust_t* trust, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms) {
   mbedtls_net_init(&conn->net);
   mbedtls_ssl_init(&conn->ssl);
   mbedtls_ssl_config_init(&conn->conf);
   mbedtls_entropy_init(&conn->entropy);
   mbedtls_ctr_drbg_init(&conn->drbg);
   conn->verify = sp_zero_s(sp_tls_verify_t);
-  conn->tls = url.tls;
+  conn->tls = false;
+  conn->io_timeout_ms = io_timeout_ms;
 
-  sp_str_t bare = sp_http_host_bare(url.host);
+  sp_http_url_t target = proxy ? *proxy : url;
+  sp_str_t bare = sp_http_host_bare(target.host);
   c8 host[SP_PATH_MAX];
   c8 port[16];
-  if (bare.len >= sizeof(host) || url.port.len >= sizeof(port)) return SP_TLS_ERR_URL;
+  if (bare.len >= sizeof(host) || target.port.len >= sizeof(port)) return SP_TLS_ERR_URL;
   sp_cstr_copy_to_n(bare.data, bare.len, host, sizeof(host));
-  sp_cstr_copy_to_n(url.port.data, url.port.len, port, sizeof(port));
+  sp_cstr_copy_to_n(target.port.data, target.port.len, port, sizeof(port));
 
-  if (mbedtls_net_connect(&conn->net, host, port, MBEDTLS_NET_PROTO_TCP) != 0) return SP_TLS_ERR_CONNECT;
-  if (!conn->tls) return SP_TLS_OK;
+  sp_tls_error_t err = sp_http_net_connect(&conn->net, host, port, connect_timeout_ms);
+  if (err != SP_TLS_OK) return err;
 
+  if (proxy && url.tls) {
+    sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
+    sp_str_t connect_req = sp_fmt(scratch.mem,
+      "CONNECT {}:{} HTTP/1.1\r\n"
+      "Host: {}:{}\r\n"
+      "\r\n",
+      sp_fmt_str(url.host), sp_fmt_str(url.port), sp_fmt_str(url.host), sp_fmt_str(url.port)).value;
+    err = sp_http_conn_write(conn, connect_req);
+    sp_mem_end_scratch(scratch);
+    if (err != SP_TLS_OK) return SP_TLS_ERR_PROXY;
+    err = sp_http_connect_reply(conn);
+    if (err != SP_TLS_OK) return err;
+  }
+
+  if (!url.tls) return SP_TLS_OK;
+  conn->tls = true;
+
+  sp_str_t tls_host = sp_http_host_bare(url.host);
   if (mbedtls_ctr_drbg_seed(&conn->drbg, mbedtls_entropy_func, &conn->entropy, SP_NULLPTR, 0) != 0) return SP_TLS_ERR_OS;
   if (mbedtls_ssl_config_defaults(&conn->conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) != 0) return SP_TLS_ERR_OS;
   mbedtls_ssl_conf_min_tls_version(&conn->conf, MBEDTLS_SSL_VERSION_TLS1_2);
   mbedtls_ssl_conf_rng(&conn->conf, mbedtls_ctr_drbg_random, &conn->drbg);
+  mbedtls_ssl_conf_read_timeout(&conn->conf, io_timeout_ms);
   if (sp_tls_conf_apply(trust, &conn->conf) != SP_TLS_OK) return SP_TLS_ERR_BAD_CONFIG;
   if (mbedtls_ssl_setup(&conn->ssl, &conn->conf) != 0) return SP_TLS_ERR_OS;
-  if (sp_tls_ssl_attach(trust, &conn->ssl, &conn->verify, bare) != SP_TLS_OK) return SP_TLS_ERR_BAD_CONFIG;
-  mbedtls_ssl_set_bio(&conn->ssl, &conn->net, mbedtls_net_send, mbedtls_net_recv, SP_NULLPTR);
+  if (sp_tls_ssl_attach(trust, &conn->ssl, &conn->verify, tls_host) != SP_TLS_OK) return SP_TLS_ERR_BAD_CONFIG;
+  mbedtls_ssl_set_bio(&conn->ssl, &conn->net, mbedtls_net_send, mbedtls_net_recv, mbedtls_net_recv_timeout);
 
   s32 rc;
   while ((rc = mbedtls_ssl_handshake(&conn->ssl)) != 0) {
+    if (rc == MBEDTLS_ERR_SSL_TIMEOUT) return SP_TLS_ERR_TIMEOUT;
     if (rc != MBEDTLS_ERR_SSL_WANT_READ && rc != MBEDTLS_ERR_SSL_WANT_WRITE) return SP_TLS_ERR_HANDSHAKE;
   }
   return SP_TLS_OK;
@@ -680,12 +904,17 @@ SP_PRIVATE bool sp_http_reader_fill(sp_http_reader_t* reader) {
   if (reader->eof) return false;
   s32 n = sp_http_conn_read(reader->conn, reader->buf, sizeof(reader->buf));
   if (n <= 0) {
+    if (n == MBEDTLS_ERR_SSL_TIMEOUT) reader->fail = SP_TLS_ERR_TIMEOUT;
     reader->eof = true;
     return false;
   }
   reader->len = (u32)n;
   reader->pos = 0;
   return true;
+}
+
+SP_PRIVATE sp_tls_error_t sp_http_reader_fail(const sp_http_reader_t* reader, sp_tls_error_t fallback) {
+  return reader->fail != SP_TLS_OK ? reader->fail : fallback;
 }
 
 SP_PRIVATE bool sp_http_read_line(sp_http_reader_t* reader, c8* buf, u32 cap, u32* out_len) {
@@ -703,7 +932,7 @@ SP_PRIVATE bool sp_http_read_line(sp_http_reader_t* reader, c8* buf, u32 cap, u3
 
 SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_http_reader_t* reader, sp_io_writer_t* body, u64 n, u64* written) {
   while (n > 0) {
-    if (!sp_http_reader_fill(reader)) return SP_TLS_ERR_PROTOCOL;
+    if (!sp_http_reader_fill(reader)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
     u32 avail = reader->len - reader->pos;
     u32 take = (u64)avail < n ? avail : (u32)n;
     if (sp_io_write(body, reader->buf + reader->pos, take, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
@@ -718,7 +947,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_http_reader_t* reader, sp_mem_t m
   sp_io_dyn_mem_writer_t writer = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &writer);
   for (;;) {
-    if (!sp_http_reader_fill(reader)) return SP_TLS_ERR_PROTOCOL;
+    if (!sp_http_reader_fill(reader)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
     u32 avail = reader->len - reader->pos;
     sp_io_write(&writer.base, reader->buf + reader->pos, avail, SP_NULLPTR);
     reader->pos = reader->len;
@@ -742,7 +971,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_he
     for (;;) {
       c8 line[SP_HTTP_LINE_MAX];
       u32 line_len = 0;
-      if (!sp_http_read_line(reader, line, sizeof(line), &line_len)) return SP_TLS_ERR_PROTOCOL;
+      if (!sp_http_read_line(reader, line, sizeof(line), &line_len)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
       if (line_len >= sizeof(line)) return SP_TLS_ERR_PROTOCOL;
       sp_str_t size_str = sp_str(line, line_len);
       s32 semi = sp_str_find_c8(size_str, ';');
@@ -758,7 +987,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_he
 
       c8 crlf[SP_HTTP_LINE_MAX];
       u32 crlf_len = 0;
-      if (!sp_http_read_line(reader, crlf, sizeof(crlf), &crlf_len)) return SP_TLS_ERR_PROTOCOL;
+      if (!sp_http_read_line(reader, crlf, sizeof(crlf), &crlf_len)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
       if (crlf_len != 0) return SP_TLS_ERR_PROTOCOL;
     }
     return SP_TLS_OK;
@@ -772,16 +1001,19 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_he
     reader->pos = reader->len;
     if (written) *written += avail;
   }
-  return SP_TLS_OK;
+  return sp_http_reader_fail(reader, SP_TLS_OK);
 }
 
-SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_url_t url) {
+SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_url_t url, bool absolute_form) {
   bool default_port =
     (url.tls && sp_str_equal_cstr(url.port, "443")) ||
     (!url.tls && sp_str_equal_cstr(url.port, "80"));
   sp_str_t host_header = default_port
     ? url.host
     : sp_fmt(mem, "{}:{}", sp_fmt_str(url.host), sp_fmt_str(url.port)).value;
+  sp_str_t target = absolute_form
+    ? sp_fmt(mem, "http://{}{}", sp_fmt_str(host_header), sp_fmt_str(url.path)).value
+    : url.path;
   return sp_fmt(mem,
     "GET {} HTTP/1.1\r\n"
     "Host: {}\r\n"
@@ -789,12 +1021,23 @@ SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_url_t url) {
     "Accept: */*\r\n"
     "Connection: close\r\n"
     "\r\n",
-    sp_fmt_str(url.path), sp_fmt_str(host_header)).value;
+    sp_fmt_str(target), sp_fmt_str(host_header)).value;
+}
+
+// a proxy url; scheme defaults to http, and only plain-http proxies are supported
+SP_PRIVATE bool sp_http_proxy_url_parse(sp_mem_t mem, sp_str_t proxy, sp_http_url_t* out) {
+  if (sp_str_find(proxy, sp_str_lit("://")) == SP_STR_NO_MATCH) {
+    proxy = sp_fmt(mem, "http://{}", sp_fmt_str(proxy)).value;
+  }
+  if (!sp_http_url_parse(proxy, out)) return false;
+  return !out->tls;
 }
 
 sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_response_t* response) {
   sp_http_response_t resp = sp_zero_s(sp_http_response_t);
   u32 max = request.max_redirects ? request.max_redirects : SP_HTTP_DEFAULT_REDIRECTS;
+  u32 connect_timeout = sp_http_timeout_ms(request.connect_timeout_ms, SP_HTTP_DEFAULT_CONNECT_TIMEOUT_MS);
+  u32 io_timeout = sp_http_timeout_ms(request.io_timeout_ms, SP_HTTP_DEFAULT_IO_TIMEOUT_MS);
   sp_str_t current = request.url;
   sp_tls_error_t result = SP_TLS_ERR_PROTOCOL;
   u32 redirects = 0;
@@ -810,14 +1053,23 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
       break;
     }
 
+    sp_str_t proxy_str = request.proxy;
+    if (sp_str_empty(proxy_str) && !request.no_proxy) proxy_str = sp_http_proxy_from_env(url);
+    sp_http_url_t proxy_url = sp_zero_s(sp_http_url_t);
+    bool use_proxy = !sp_str_empty(proxy_str);
+    if (use_proxy && !sp_http_proxy_url_parse(mem, proxy_str, &proxy_url)) {
+      result = SP_TLS_ERR_PROXY;
+      break;
+    }
+
     sp_http_conn_t conn = sp_zero_s(sp_http_conn_t);
-    result = sp_http_conn_open(&conn, request.trust, url);
+    result = sp_http_conn_open(&conn, request.trust, url, use_proxy ? &proxy_url : SP_NULLPTR, connect_timeout, io_timeout);
     if (result != SP_TLS_OK) {
       sp_http_conn_close(&conn);
       break;
     }
 
-    result = sp_http_conn_write(&conn, sp_http_build_request(mem, url));
+    result = sp_http_conn_write(&conn, sp_http_build_request(mem, url, use_proxy && !url.tls));
     if (result != SP_TLS_OK) {
       sp_http_conn_close(&conn);
       break;
