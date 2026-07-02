@@ -5871,6 +5871,42 @@ SP_PRIVATE void sp_sys_win32_wsa_ensure(void) {
   WSAStartup(MAKEWORD(2, 2), &wsa);
   wsa_init = true;
 }
+
+#define SP_SYS_WIN32_SIO_TCP_INITIAL_RTO                          0x98000011
+#define SP_SYS_WIN32_TCP_INITIAL_RTO_UNSPECIFIED_RTT              0xFFFF
+#define SP_SYS_WIN32_TCP_INITIAL_RTO_NO_SYN_RETRANSMISSIONS       0xFE
+#define SP_SYS_WIN32_BUILD_TCP_INITIAL_RTO_NO_SYN_RETRANSMISSIONS 16299
+
+SP_PRIVATE bool sp_sys_win32_supports_tcp_fail_fast(void) {
+  static bool cached = false;
+  static bool supported = false;
+  if (cached) return supported;
+  cached = true;
+
+  HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  if (!ntdll) return supported;
+  SP_TYPEDEF_FN(LONG, sp_rtl_get_version_fn, OSVERSIONINFOW*);
+  sp_rtl_get_version_fn rtl_get_version = (sp_rtl_get_version_fn)(void*)GetProcAddress(ntdll, "RtlGetVersion");
+  if (!rtl_get_version) return supported;
+  OSVERSIONINFOW info = sp_zero;
+  info.dwOSVersionInfoSize = sizeof(info);
+  if (rtl_get_version(&info) != 0) return supported;
+  supported = info.dwMajorVersion > 10 || (info.dwMajorVersion == 10 && info.dwBuildNumber >= SP_SYS_WIN32_BUILD_TCP_INITIAL_RTO_NO_SYN_RETRANSMISSIONS);
+  return supported;
+}
+
+typedef struct {
+  u16 rtt;
+  u8  max_syn_retransmissions;
+} sp_sys_win32_tcp_initial_rto_params_t;
+
+SP_PRIVATE void sp_sys_win32_speed_up_loopback_connect(SOCKET fd) {
+  sp_sys_win32_tcp_initial_rto_params_t params = sp_zero;
+  params.rtt = SP_SYS_WIN32_TCP_INITIAL_RTO_UNSPECIFIED_RTT;
+  params.max_syn_retransmissions = sp_sys_win32_supports_tcp_fail_fast() ? SP_SYS_WIN32_TCP_INITIAL_RTO_NO_SYN_RETRANSMISSIONS : 1;
+  DWORD bytes = 0;
+  WSAIoctl(fd, SP_SYS_WIN32_SIO_TCP_INITIAL_RTO, &params, sizeof(params), SP_NULLPTR, 0, &bytes, SP_NULLPTR, SP_NULLPTR);
+}
 #endif
 
 //////////////////////
@@ -5927,6 +5963,8 @@ s32 sp_sys_socket_connect(sp_sys_ipv4_t addr, u32 timeout_ms, sp_sys_socket_t* o
   SOCKET fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd == INVALID_SOCKET) return -1;
 
+  if (addr.octets[0] == 127) sp_sys_win32_speed_up_loopback_connect(fd);
+
   u_long nonblock = 1;
   ioctlsocket(fd, FIONBIO, &nonblock);
 
@@ -5949,13 +5987,9 @@ s32 sp_sys_socket_connect(sp_sys_ipv4_t addr, u32 timeout_ms, sp_sys_socket_t* o
     tv.tv_sec = (long)(timeout_ms / 1000);
     tv.tv_usec = (long)((timeout_ms % 1000) * 1000);
     s32 rc = select(0, SP_NULLPTR, &write_set, &err_set, timeout_ms ? &tv : SP_NULLPTR);
-    if (rc == 0) {
+    if (rc <= 0) {
       closesocket(fd);
-      return 1;
-    }
-    if (rc == SOCKET_ERROR || FD_ISSET(fd, &err_set)) {
-      closesocket(fd);
-      return -1;
+      return rc == 0 ? 1 : -1;
     }
     int err = 0;
     int err_len = sizeof(err);
