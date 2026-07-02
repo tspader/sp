@@ -284,6 +284,7 @@ typedef struct {
 typedef struct {
   bool              tls;
   bool              untrusted;
+  bool              no_close_notify; // slam the connection shut after playing the script
   bool              proxy;         // send the request through the mock server as a proxy
   bool              proxy_connect; // the mock server expects a plaintext CONNECT preamble
   const c8*         connect_reply; // reply to CONNECT; defaults to 200
@@ -299,6 +300,7 @@ typedef struct {
   mbedtls_net_context      listen;
   sp_atomic_s32_t          stop;
   bool                     tls;
+  bool                     no_close_notify;
   bool                     proxy_connect;
   const c8*                connect_reply;
   const tls_mock_script_t* scripts;
@@ -414,7 +416,7 @@ static s32 tls_mock_server_thread(void* userdata) {
       u32 which = index < server->script_count ? index : server->script_count - 1;
       tls_mock_play(sslp, &client, &server->scripts[which]);
     }
-    if (server->tls && ok) mbedtls_ssl_close_notify(&ssl);
+    if (server->tls && ok && !server->no_close_notify) mbedtls_ssl_close_notify(&ssl);
     mbedtls_ssl_free(&ssl);
     mbedtls_net_free(&client);
     index++;
@@ -430,6 +432,7 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
   tls_mock_server_t server = sp_zero;
   mbedtls_net_init(&server.listen);
   server.tls = t.tls;
+  server.no_close_notify = t.no_close_notify;
   server.proxy_connect = t.proxy_connect;
   server.connect_reply = t.connect_reply;
   server.scripts = t.scripts;
@@ -648,6 +651,23 @@ UTEST_F(tls, fetch_split_head) {
 UTEST_F(tls, fetch_truncated_body) {
   run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
     .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nhello" } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_eof_body) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .tls = true,
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello" } }}},
+    .expect = { .status = 200, .body = "hello" },
+  });
+}
+
+UTEST_F(tls, fetch_eof_body_no_close_notify) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .tls = true,
+    .no_close_notify = true,
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello" } }}},
     .expect = { .err = SP_TLS_ERR_PROTOCOL },
   });
 }
