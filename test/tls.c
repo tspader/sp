@@ -3,6 +3,10 @@
 
 #include "utest.h"
 
+#if defined(SP_TLS_WITH_MBEDTLS) && !defined(SP_WIN32)
+#include <signal.h>
+#endif
+
 typedef struct {
   bool      ok;
   const c8* scheme;
@@ -200,3 +204,393 @@ UTEST_F(tls, host_bare) {
   EXPECT_TRUE(sp_str_equal_cstr(sp_http_host_bare(sp_str_lit("[::1]")), "::1"));
   EXPECT_TRUE(sp_str_equal_cstr(sp_http_host_bare(sp_str_lit("example.com")), "example.com"));
 }
+
+#if defined(SP_TLS_WITH_MBEDTLS)
+
+static const c8* tls_test_cert =
+  "-----BEGIN CERTIFICATE-----\n"
+  "MIIBfjCCASWgAwIBAgIUDPglN4zQDNG5UTi2PtR5HoWKNbkwCgYIKoZIzj0EAwIw\n"
+  "FDESMBAGA1UEAwwJMTI3LjAuMC4xMCAXDTI2MDcwMTIyNTA1NloYDzIxMjYwNjA3\n"
+  "MjI1MDU2WjAUMRIwEAYDVQQDDAkxMjcuMC4wLjEwWTATBgcqhkjOPQIBBggqhkjO\n"
+  "PQMBBwNCAAQ2Hl0cVbbPLuko5otFB3zmPXuP0Lpx11IBhV1NM8Zw6kl46p9Qzc/r\n"
+  "ljXgguMNSYS3HV1wGDqZ+PON+S5OO/tUo1MwUTAdBgNVHQ4EFgQUZs7KCxZ9MnDz\n"
+  "rNhwgCN4rZrqHjgwHwYDVR0jBBgwFoAUZs7KCxZ9MnDzrNhwgCN4rZrqHjgwDwYD\n"
+  "VR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBEAiA2wjJs70BXB/E2UgJFteWi\n"
+  "KHJg0TfhR8GmnwycFLKQxwIgfuDjz1eFI6NFseCI92HdSOohKe9uTWjgfYyOw/lH\n"
+  "7uk=\n"
+  "-----END CERTIFICATE-----\n";
+
+static const c8* tls_test_key =
+  "-----BEGIN PRIVATE KEY-----\n"
+  "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgkOe51G2MRpZ8kyVN\n"
+  "tWv2/RKrkE9WfLCS4zbMvdlNAUOhRANCAAQ2Hl0cVbbPLuko5otFB3zmPXuP0Lpx\n"
+  "11IBhV1NM8Zw6kl46p9Qzc/rljXgguMNSYS3HV1wGDqZ+PON+S5OO/tU\n"
+  "-----END PRIVATE KEY-----\n";
+
+#define TLS_MOCK_STEPS 4
+#define TLS_MOCK_SCRIPTS 2
+
+typedef struct {
+  const c8* send;
+  u32       repeat;
+  u32       pad;
+  u32       delay_ms;
+} tls_mock_step_t;
+
+typedef struct {
+  tls_mock_step_t steps[TLS_MOCK_STEPS];
+} tls_mock_script_t;
+
+typedef struct {
+  sp_tls_error_t err;
+  s32            status;
+  const c8*      body;
+} fetch_expect_t;
+
+typedef struct {
+  bool              tls;
+  bool              untrusted;
+  tls_mock_script_t scripts[TLS_MOCK_SCRIPTS];
+  fetch_expect_t    expect;
+} fetch_test_t;
+
+typedef struct {
+  mbedtls_net_context      listen;
+  sp_atomic_s32_t          stop;
+  bool                     tls;
+  const tls_mock_script_t* scripts;
+  u32                      script_count;
+  mbedtls_ssl_config       conf;
+  mbedtls_x509_crt         crt;
+  mbedtls_pk_context       pk;
+  mbedtls_entropy_context  entropy;
+  mbedtls_ctr_drbg_context drbg;
+} tls_mock_server_t;
+
+static bool tls_mock_send(tls_mock_server_t* server, mbedtls_ssl_context* ssl, mbedtls_net_context* net, const u8* data, u32 len) {
+  u32 sent = 0;
+  while (sent < len) {
+    s32 n = server->tls
+      ? mbedtls_ssl_write(ssl, data + sent, len - sent)
+      : mbedtls_net_send(net, data + sent, len - sent);
+    if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
+    if (n <= 0) return false;
+    sent += (u32)n;
+  }
+  return true;
+}
+
+static bool tls_mock_read_request(tls_mock_server_t* server, mbedtls_ssl_context* ssl, mbedtls_net_context* net) {
+  c8 buf[8192];
+  u32 len = 0;
+  for (;;) {
+    if (sp_str_find(sp_str(buf, len), sp_str_lit("\r\n\r\n")) != SP_STR_NO_MATCH) return true;
+    if (len == sizeof(buf)) return false;
+    s32 n = server->tls
+      ? mbedtls_ssl_read(ssl, (u8*)buf + len, sizeof(buf) - len)
+      : mbedtls_net_recv(net, (u8*)buf + len, sizeof(buf) - len);
+    if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
+    if (n <= 0) return false;
+    len += (u32)n;
+  }
+}
+
+static void tls_mock_play(tls_mock_server_t* server, mbedtls_ssl_context* ssl, mbedtls_net_context* net, const tls_mock_script_t* script) {
+  sp_carr_for(script->steps, it) {
+    tls_mock_step_t step = script->steps[it];
+    if (!step.send && !step.pad) break;
+    u32 repeat = step.repeat ? step.repeat : 1;
+    sp_for(r, repeat) {
+      if (step.delay_ms) sp_sleep_ms((f64)step.delay_ms);
+      if (step.send) {
+        if (!tls_mock_send(server, ssl, net, (const u8*)step.send, sp_cstr_len(step.send))) return;
+      }
+      u8 chunk[512];
+      sp_mem_fill_u8(chunk, sizeof(chunk), 'a');
+      u32 pad = step.pad;
+      while (pad > 0) {
+        u32 take = pad < sizeof(chunk) ? pad : (u32)sizeof(chunk);
+        if (!tls_mock_send(server, ssl, net, chunk, take)) return;
+        pad -= take;
+      }
+    }
+  }
+}
+
+static s32 tls_mock_server_thread(void* userdata) {
+  tls_mock_server_t* server = (tls_mock_server_t*)userdata;
+  u32 index = 0;
+  for (;;) {
+    mbedtls_net_context client;
+    mbedtls_net_init(&client);
+    if (mbedtls_net_accept(&server->listen, &client, SP_NULLPTR, 0, SP_NULLPTR) != 0) break;
+    if (sp_atomic_s32_get(&server->stop)) {
+      mbedtls_net_free(&client);
+      break;
+    }
+
+    mbedtls_ssl_context ssl;
+    mbedtls_ssl_init(&ssl);
+    bool ok = true;
+    if (server->tls) {
+      ok = mbedtls_ssl_setup(&ssl, &server->conf) == 0;
+      if (ok) {
+        mbedtls_ssl_set_bio(&ssl, &client, mbedtls_net_send, mbedtls_net_recv, SP_NULLPTR);
+        s32 rc;
+        while ((rc = mbedtls_ssl_handshake(&ssl)) != 0) {
+          if (rc != MBEDTLS_ERR_SSL_WANT_READ && rc != MBEDTLS_ERR_SSL_WANT_WRITE) {
+            ok = false;
+            break;
+          }
+        }
+      }
+    }
+
+    if (ok) ok = tls_mock_read_request(server, &ssl, &client);
+    if (ok) {
+      u32 which = index < server->script_count ? index : server->script_count - 1;
+      tls_mock_play(server, &ssl, &client, &server->scripts[which]);
+    }
+    if (server->tls && ok) mbedtls_ssl_close_notify(&ssl);
+    mbedtls_ssl_free(&ssl);
+    mbedtls_net_free(&client);
+    index++;
+  }
+  return 0;
+}
+
+void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
+#if !defined(SP_WIN32)
+  signal(SIGPIPE, SIG_IGN);
+#endif
+
+  tls_mock_server_t server = sp_zero;
+  mbedtls_net_init(&server.listen);
+  server.tls = t.tls;
+  server.scripts = t.scripts;
+  server.script_count = 0;
+  sp_carr_for(t.scripts, it) {
+    if (t.scripts[it].steps[0].send || t.scripts[it].steps[0].pad) server.script_count++;
+  }
+  if (!server.script_count) server.script_count = 1;
+
+  c8 port[8] = sp_zero;
+  bool bound = false;
+  sp_for(attempt, 64) {
+    sp_str_t formatted = sp_fmt(mem, "{}", sp_fmt_uint(42600 + attempt)).value;
+    sp_cstr_copy_to_n(formatted.data, formatted.len, port, sizeof(port));
+    if (mbedtls_net_bind(&server.listen, "127.0.0.1", port, MBEDTLS_NET_PROTO_TCP) == 0) {
+      bound = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(bound);
+  if (!bound) return;
+
+  if (t.tls) {
+    mbedtls_x509_crt_init(&server.crt);
+    mbedtls_pk_init(&server.pk);
+    mbedtls_entropy_init(&server.entropy);
+    mbedtls_ctr_drbg_init(&server.drbg);
+    mbedtls_ssl_config_init(&server.conf);
+    EXPECT_EQ(mbedtls_x509_crt_parse(&server.crt, (const unsigned char*)tls_test_cert, sp_cstr_len(tls_test_cert) + 1), 0);
+    EXPECT_EQ(mbedtls_ctr_drbg_seed(&server.drbg, mbedtls_entropy_func, &server.entropy, SP_NULLPTR, 0), 0);
+    EXPECT_EQ(mbedtls_pk_parse_key(&server.pk, (const unsigned char*)tls_test_key, sp_cstr_len(tls_test_key) + 1, SP_NULLPTR, 0, mbedtls_ctr_drbg_random, &server.drbg), 0);
+    EXPECT_EQ(mbedtls_ssl_config_defaults(&server.conf, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT), 0);
+    mbedtls_ssl_conf_rng(&server.conf, mbedtls_ctr_drbg_random, &server.drbg);
+    EXPECT_EQ(mbedtls_ssl_conf_own_cert(&server.conf, &server.crt, &server.pk), 0);
+  }
+
+  sp_thread_t thread = sp_zero;
+  sp_thread_init(&thread, tls_mock_server_thread, &server);
+
+  sp_tls_trust_t trust = sp_zero;
+  sp_tls_trust_init(&trust, mem);
+  trust.backend = SP_TLS_BACKEND_ANCHORS;
+  if (t.tls && !t.untrusted) {
+    EXPECT_EQ(mbedtls_x509_crt_parse((mbedtls_x509_crt*)trust.anchors, (const unsigned char*)tls_test_cert, sp_cstr_len(tls_test_cert) + 1), 0);
+  }
+
+  sp_io_dyn_mem_writer_t body = sp_zero;
+  sp_io_dyn_mem_writer_init(mem, &body);
+
+  sp_str_t url = sp_fmt(mem, "{}://127.0.0.1:{}/", sp_fmt_cstr(t.tls ? "https" : "http"), sp_fmt_cstr(port)).value;
+  sp_http_response_t response = sp_zero;
+  sp_tls_error_t err = sp_http_fetch(mem, (sp_http_request_t) {
+    .url   = url,
+    .trust = &trust,
+    .body  = &body.base,
+  }, &response);
+
+  EXPECT_EQ(err, t.expect.err);
+  if (t.expect.status) EXPECT_EQ(response.status, t.expect.status);
+  if (t.expect.body) EXPECT_TRUE(sp_str_equal_cstr(sp_io_dyn_mem_writer_as_str(&body), t.expect.body));
+
+  sp_atomic_s32_set(&server.stop, 1);
+  mbedtls_net_context poke;
+  mbedtls_net_init(&poke);
+  mbedtls_net_connect(&poke, "127.0.0.1", port, MBEDTLS_NET_PROTO_TCP);
+  mbedtls_net_free(&poke);
+  sp_thread_join(&thread);
+
+  mbedtls_net_free(&server.listen);
+  if (t.tls) {
+    mbedtls_ssl_config_free(&server.conf);
+    mbedtls_pk_free(&server.pk);
+    mbedtls_x509_crt_free(&server.crt);
+    mbedtls_ctr_drbg_free(&server.drbg);
+    mbedtls_entropy_free(&server.entropy);
+  }
+  sp_tls_trust_free(&trust);
+}
+
+UTEST_F(tls, fetch_content_length) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello" } }}},
+    .expect = { .status = 200, .body = "hello" },
+  });
+}
+
+UTEST_F(tls, fetch_status_404) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found" } }}},
+    .expect = { .err = SP_TLS_ERR_STATUS, .status = 404, .body = "not found" },
+  });
+}
+
+UTEST_F(tls, fetch_204_no_body) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 204 No Content\r\n\r\n" } }}},
+    .expect = { .status = 204, .body = "" },
+  });
+}
+
+UTEST_F(tls, fetch_early_hints) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 103 Early Hints\r\nLink: </s.css>; rel=preload\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }}},
+    .expect = { .status = 200, .body = "hello" },
+  });
+}
+
+UTEST_F(tls, fetch_interim_flood) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 100 Continue\r\n\r\n", .repeat = 20 } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_upgrade_101) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n" } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_bad_status_line) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "ICY 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_conflicting_length) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 9999\r\n\r\nhello" } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_te_gzip) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\nblob" } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_chunked) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n" } }}},
+    .expect = { .status = 200, .body = "hello world" },
+  });
+}
+
+UTEST_F(tls, fetch_chunked_bad_separator) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloXX\r\n0\r\n\r\n" } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_huge_head) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nX-Pad: ", .pad = 96 * 1024 } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_crlf_location) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 302 Found\r\nLocation: /a\rSet-Cookie: pwn=1\r\n\r\n" } }}},
+    .expect = { .err = SP_TLS_ERR_URL },
+  });
+}
+
+UTEST_F(tls, fetch_redirect_userinfo) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 302 Found\r\nLocation: http://evil@127.0.0.1/x\r\n\r\n" } }}},
+    .expect = { .err = SP_TLS_ERR_URL },
+  });
+}
+
+UTEST_F(tls, fetch_redirect_loop) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 302 Found\r\nLocation: /loop\r\n\r\n" } }}},
+    .expect = { .err = SP_TLS_ERR_REDIRECTS },
+  });
+}
+
+UTEST_F(tls, fetch_redirect_follow) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {
+      {{ { .send = "HTTP/1.1 302 Found\r\nLocation: /next\r\n\r\n" } }},
+      {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }},
+    },
+    .expect = { .status = 200, .body = "ok" },
+  });
+}
+
+UTEST_F(tls, fetch_split_head) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{
+      { .send = "HTTP/1.1 200 OK\r\nContent-Le" },
+      { .send = "ngth: 5\r\n\r\nhello", .delay_ms = 30 },
+    }}},
+    .expect = { .status = 200, .body = "hello" },
+  });
+}
+
+UTEST_F(tls, fetch_truncated_body) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nhello" } }}},
+    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+  });
+}
+
+UTEST_F(tls, fetch_tls_trusted) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .tls = true,
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }}},
+    .expect = { .status = 200, .body = "hello" },
+  });
+}
+
+UTEST_F(tls, fetch_tls_untrusted) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .tls = true,
+    .untrusted = true,
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }}},
+    .expect = { .err = SP_TLS_ERR_HANDSHAKE },
+  });
+}
+
+#endif
