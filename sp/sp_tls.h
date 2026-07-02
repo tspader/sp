@@ -219,14 +219,17 @@ bool sp_http_url_parse(sp_str_t url, sp_http_url_t* out) {
   out->tls = https;
 
   s32 slash = sp_str_find_c8(rest, '/');
+  s32 qmark = sp_str_find_c8(rest, '?');
+  s32 cut = slash;
+  if (qmark != SP_STR_NO_MATCH && (slash == SP_STR_NO_MATCH || qmark < slash)) cut = qmark;
   sp_str_t authority;
-  if (slash == SP_STR_NO_MATCH) {
+  if (cut == SP_STR_NO_MATCH) {
     authority = rest;
     out->path = sp_str_lit("/");
   }
   else {
-    authority = sp_str_sub(rest, 0, slash);
-    out->path = sp_http_str_tail(rest, slash);
+    authority = sp_str_sub(rest, 0, cut);
+    out->path = sp_http_str_tail(rest, cut);
   }
 
   if (sp_str_find_c8(authority, '@') != SP_STR_NO_MATCH) return false;
@@ -950,6 +953,7 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_t
   s32 rc;
   while ((rc = mbedtls_ssl_handshake(&conn->ssl)) != 0) {
     if (rc == MBEDTLS_ERR_SSL_TIMEOUT) return SP_TLS_ERR_TIMEOUT;
+    if (rc == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) return SP_TLS_ERR_UNTRUSTED;
     if (rc != MBEDTLS_ERR_SSL_WANT_READ && rc != MBEDTLS_ERR_SSL_WANT_WRITE) return SP_TLS_ERR_HANDSHAKE;
   }
   return SP_TLS_OK;
@@ -1000,7 +1004,7 @@ SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_http_reader_t* reader, sp_io_writer_
     if (!sp_http_reader_fill(reader)) return sp_http_reader_fail(reader, SP_TLS_ERR_PROTOCOL);
     u32 avail = reader->len - reader->pos;
     u32 take = (u64)avail < n ? avail : (u32)n;
-    if (sp_io_write(body, reader->buf + reader->pos, take, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
+    if (body && sp_io_write(body, reader->buf + reader->pos, take, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
     reader->pos += take;
     n -= take;
     if (written) *written += take;
@@ -1062,7 +1066,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_http_reader_t* reader, sp_http_he
   }
   while (sp_http_reader_fill(reader)) {
     u32 avail = reader->len - reader->pos;
-    if (sp_io_write(body, reader->buf + reader->pos, avail, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
+    if (body && sp_io_write(body, reader->buf + reader->pos, avail, SP_NULLPTR) != SP_OK) return SP_TLS_ERR_OS;
     reader->pos = reader->len;
     if (written) *written += avail;
   }
@@ -1076,9 +1080,13 @@ SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_url_t url, bool 
   sp_str_t host_header = default_port
     ? url.host
     : sp_fmt(mem, "{}:{}", sp_fmt_str(url.host), sp_fmt_str(url.port)).value;
+  sp_str_t path = url.path;
+  if (!sp_str_empty(path) && path.data[0] == '?') {
+    path = sp_fmt(mem, "/{}", sp_fmt_str(path)).value;
+  }
   sp_str_t target = absolute_form
-    ? sp_fmt(mem, "http://{}{}", sp_fmt_str(host_header), sp_fmt_str(url.path)).value
-    : url.path;
+    ? sp_fmt(mem, "http://{}{}", sp_fmt_str(host_header), sp_fmt_str(path)).value
+    : path;
   return sp_fmt(mem,
     "GET {} HTTP/1.1\r\n"
     "Host: {}\r\n"
@@ -1194,8 +1202,9 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
       continue;
     }
 
+    sp_io_writer_t* sink = parsed.status >= 200 && parsed.status < 300 ? request.body : SP_NULLPTR;
     u64 written = 0;
-    result = sp_http_read_body(reader, parsed, request.body, &written);
+    result = sp_http_read_body(reader, parsed, sink, sink ? &written : SP_NULLPTR);
     resp.body_len = written;
     sp_http_conn_close(&conn);
 
