@@ -76,6 +76,8 @@ s32 tls_main(s32 argc, const c8** argv) {
     case SP_TLS_ERR_HANDSHAKE:  sp_log("tls handshake rejected");               status = 1; break;
     case SP_TLS_ERR_REDIRECTS:  sp_log("too many redirects");                   status = 1; break;
     case SP_TLS_ERR_PROTOCOL:   sp_log("malformed or truncated http response"); status = 1; break;
+    case SP_TLS_ERR_TIMEOUT:    sp_log("timed out");                            status = 1; break;
+    case SP_TLS_ERR_PROXY:      sp_log("proxy refused or misbehaved");          status = 1; break;
     case SP_TLS_ERR_NO_STORE:
     case SP_TLS_ERR_PARSE:
     case SP_TLS_ERR_OS:
