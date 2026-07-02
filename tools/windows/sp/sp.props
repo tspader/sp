@@ -46,7 +46,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>shell32.lib;$(SpAdditionalDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>shell32.lib;ws2_32.lib;$(SpAdditionalDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Link Condition="'$(Configuration)' == 'Release'">
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
