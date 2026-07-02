@@ -1,4 +1,3 @@
-
 #if defined SP_IMPLEMENTATION && !defined(SP_TLS_IMPLEMENTATION)
   #define SP_TLS_IMPLEMENTATION
 #endif
