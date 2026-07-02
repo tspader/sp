@@ -14485,34 +14485,36 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
 
   sp_err_t err = SP_OK;
   u8* buffer = (u8*)ptr;
-  u64 num_drained = 0;
   u64 num_read = 0;
 
-  // Drain what we can from what's already buffered
-  num_drained = sp_min(size, reader->buffer.len - reader->cursor);
-  sp_mem_copy(buffer, reader->buffer.data + reader->cursor, num_drained);
-  reader->cursor += num_drained;
-
-  // Issue a call to the backend for the rest
-  u64 remaining = size - num_drained;
-
-  if (remaining >= reader->buffer.capacity) {
-    // If the request is too large to buffer, just read it directly
-    err = reader->read(reader, buffer + num_drained, remaining, &num_read);
+  // Buffered bytes satisfy the read; we only touch the backend when we'd
+  // otherwise return zero bytes. A short read is always allowed, and a
+  // backend that can block (a socket) must not block while deliverable
+  // bytes are in hand.
+  u64 num_drained = sp_min(size, reader->buffer.len - reader->cursor);
+  if (num_drained) {
+    sp_mem_copy(buffer, reader->buffer.data + reader->cursor, num_drained);
+    reader->cursor += num_drained;
+    if (bytes_read) *bytes_read = num_drained;
+    return SP_OK;
   }
-  else if (remaining) {
+
+  if (size >= reader->buffer.capacity) {
+    // If the request is too large to buffer, just read it directly
+    err = reader->read(reader, buffer, size, &num_read);
+  }
+  else {
     // If the request is bufferable, do so by completely filling the buffer and then draining
     // just what the user asked for
     err = sp_io_fill(reader);
 
-    num_read = sp_min(remaining, reader->buffer.len);
+    num_read = sp_min(size, reader->buffer.len);
     reader->cursor = num_read;
-    sp_mem_copy(buffer + num_drained, reader->buffer.data, num_read);
+    sp_mem_copy(buffer, reader->buffer.data, num_read);
   }
 
-  u64 num_total = num_drained + num_read;
-  if (bytes_read) *bytes_read = num_total;
-  if (err == SP_ERR_IO_EOF && num_total) return SP_OK;
+  if (bytes_read) *bytes_read = num_read;
+  if (err == SP_ERR_IO_EOF && num_read) return SP_OK;
   return err;
 }
 
