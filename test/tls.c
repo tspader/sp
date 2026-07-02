@@ -196,8 +196,42 @@ UTEST_F(tls, resolve_url) {
     { "https://example.com",     "x",                   "https://example.com:443/x" },
     { "http://example.com:8080/a/", "b",                "http://example.com:8080/a/b" },
     { "https://[::1]:8443/a",    "/b",                  "https://[::1]:8443/b" },
+    { "https://example.com/a/b", "/login?next=https://other.com/x", "https://example.com:443/login?next=https://other.com/x" },
+    { "https://example.com/a/b", "x?u=https://y.com/",  "https://example.com:443/a/x?u=https://y.com/" },
+    { "https://example.com/a/b", "//cdn.example.com/x", "https://cdn.example.com/x" },
+    { "http://example.com/a/b",  "//cdn.example.com/x", "http://cdn.example.com/x" },
   };
   run_resolve_tests(utest_result, ut.mem.arena, tests, sp_carr_len(tests));
+}
+
+UTEST_F(tls, no_proxy_match) {
+  EXPECT_TRUE(sp_http_no_proxy_match(sp_str_lit("api.example.com"), sp_str_lit("example.com")));
+  EXPECT_TRUE(sp_http_no_proxy_match(sp_str_lit("api.example.com"), sp_str_lit(".example.com")));
+  EXPECT_TRUE(sp_http_no_proxy_match(sp_str_lit("api.example.com"), sp_str_lit("API.EXAMPLE.COM")));
+  EXPECT_TRUE(sp_http_no_proxy_match(sp_str_lit("api.example.com"), sp_str_lit("other.com, example.com")));
+  EXPECT_TRUE(sp_http_no_proxy_match(sp_str_lit("api.example.com"), sp_str_lit("*")));
+  EXPECT_FALSE(sp_http_no_proxy_match(sp_str_lit("api.example.com"), sp_str_lit("")));
+  EXPECT_FALSE(sp_http_no_proxy_match(sp_str_lit("api.example.com"), sp_str_lit("notexample.com")));
+  EXPECT_FALSE(sp_http_no_proxy_match(sp_str_lit("api.example.com"), sp_str_lit("ample.com")));
+  EXPECT_FALSE(sp_http_no_proxy_match(sp_str_lit("example.com"), sp_str_lit("api.example.com")));
+}
+
+UTEST_F(tls, proxy_pick) {
+  sp_http_url_t https_url = sp_zero;
+  sp_http_url_t http_url = sp_zero;
+  EXPECT_TRUE(sp_http_url_parse(sp_str_lit("https://api.example.com/x"), &https_url));
+  EXPECT_TRUE(sp_http_url_parse(sp_str_lit("http://api.example.com/x"), &http_url));
+
+  sp_str_t http_p  = sp_str_lit("http://proxy:3128");
+  sp_str_t https_p = sp_str_lit("http://sproxy:3128");
+  sp_str_t all_p   = sp_str_lit("http://aproxy:1080");
+  sp_str_t none    = sp_str_lit("");
+
+  EXPECT_TRUE(sp_str_equal(sp_http_proxy_pick(https_url, http_p, https_p, all_p, none), https_p));
+  EXPECT_TRUE(sp_str_equal(sp_http_proxy_pick(http_url, http_p, https_p, all_p, none), http_p));
+  EXPECT_TRUE(sp_str_equal(sp_http_proxy_pick(https_url, http_p, none, all_p, none), all_p));
+  EXPECT_TRUE(sp_str_empty(sp_http_proxy_pick(https_url, none, none, none, none)));
+  EXPECT_TRUE(sp_str_empty(sp_http_proxy_pick(https_url, http_p, https_p, all_p, sp_str_lit("example.com"))));
 }
 
 UTEST_F(tls, host_bare) {
@@ -250,16 +284,27 @@ typedef struct {
 typedef struct {
   bool              tls;
   bool              untrusted;
+  bool              proxy;         // send the request through the mock server as a proxy
+  bool              proxy_connect; // the mock server expects a plaintext CONNECT preamble
+  const c8*         connect_reply; // reply to CONNECT; defaults to 200
+  const c8*         url;           // fetch url; defaults to the mock server
+  u32               connect_timeout_ms;
+  u32               io_timeout_ms;
   tls_mock_script_t scripts[TLS_MOCK_SCRIPTS];
   fetch_expect_t    expect;
+  const c8*         captured[2];   // substrings that must appear in requests the server received
 } fetch_test_t;
 
 typedef struct {
   mbedtls_net_context      listen;
   sp_atomic_s32_t          stop;
   bool                     tls;
+  bool                     proxy_connect;
+  const c8*                connect_reply;
   const tls_mock_script_t* scripts;
   u32                      script_count;
+  c8                       captured[8192];
+  u32                      captured_len;
   mbedtls_ssl_config       conf;
   mbedtls_x509_crt         crt;
   mbedtls_pk_context       pk;
@@ -267,10 +312,10 @@ typedef struct {
   mbedtls_ctr_drbg_context drbg;
 } tls_mock_server_t;
 
-static bool tls_mock_send(tls_mock_server_t* server, mbedtls_ssl_context* ssl, mbedtls_net_context* net, const u8* data, u32 len) {
+static bool tls_mock_send(mbedtls_ssl_context* ssl, mbedtls_net_context* net, const u8* data, u32 len) {
   u32 sent = 0;
   while (sent < len) {
-    s32 n = server->tls
+    s32 n = ssl
       ? mbedtls_ssl_write(ssl, data + sent, len - sent)
       : mbedtls_net_send(net, data + sent, len - sent);
     if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
@@ -283,19 +328,28 @@ static bool tls_mock_send(tls_mock_server_t* server, mbedtls_ssl_context* ssl, m
 static bool tls_mock_read_request(tls_mock_server_t* server, mbedtls_ssl_context* ssl, mbedtls_net_context* net) {
   c8 buf[8192];
   u32 len = 0;
+  bool ok = false;
   for (;;) {
-    if (sp_str_find(sp_str(buf, len), sp_str_lit("\r\n\r\n")) != SP_STR_NO_MATCH) return true;
-    if (len == sizeof(buf)) return false;
-    s32 n = server->tls
+    if (sp_str_find(sp_str(buf, len), sp_str_lit("\r\n\r\n")) != SP_STR_NO_MATCH) {
+      ok = true;
+      break;
+    }
+    if (len == sizeof(buf)) break;
+    s32 n = ssl
       ? mbedtls_ssl_read(ssl, (u8*)buf + len, sizeof(buf) - len)
       : mbedtls_net_recv(net, (u8*)buf + len, sizeof(buf) - len);
     if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
-    if (n <= 0) return false;
+    if (n <= 0) break;
     len += (u32)n;
   }
+  u32 space = (u32)sizeof(server->captured) - server->captured_len;
+  u32 take = len < space ? len : space;
+  sp_mem_copy(server->captured + server->captured_len, buf, take);
+  server->captured_len += take;
+  return ok;
 }
 
-static void tls_mock_play(tls_mock_server_t* server, mbedtls_ssl_context* ssl, mbedtls_net_context* net, const tls_mock_script_t* script) {
+static void tls_mock_play(mbedtls_ssl_context* ssl, mbedtls_net_context* net, const tls_mock_script_t* script) {
   sp_carr_for(script->steps, it) {
     tls_mock_step_t step = script->steps[it];
     if (!step.send && !step.pad) break;
@@ -303,14 +357,14 @@ static void tls_mock_play(tls_mock_server_t* server, mbedtls_ssl_context* ssl, m
     sp_for(r, repeat) {
       if (step.delay_ms) sp_sleep_ms((f64)step.delay_ms);
       if (step.send) {
-        if (!tls_mock_send(server, ssl, net, (const u8*)step.send, sp_cstr_len(step.send))) return;
+        if (!tls_mock_send(ssl, net, (const u8*)step.send, sp_cstr_len(step.send))) return;
       }
       u8 chunk[512];
       sp_mem_fill_u8(chunk, sizeof(chunk), 'a');
       u32 pad = step.pad;
       while (pad > 0) {
         u32 take = pad < sizeof(chunk) ? pad : (u32)sizeof(chunk);
-        if (!tls_mock_send(server, ssl, net, chunk, take)) return;
+        if (!tls_mock_send(ssl, net, chunk, take)) return;
         pad -= take;
       }
     }
@@ -329,10 +383,19 @@ static s32 tls_mock_server_thread(void* userdata) {
       break;
     }
 
+    bool ok = true;
+    if (server->proxy_connect) {
+      ok = tls_mock_read_request(server, SP_NULLPTR, &client);
+      if (ok) {
+        const c8* reply = server->connect_reply ? server->connect_reply : "HTTP/1.1 200 Connection established\r\n\r\n";
+        ok = tls_mock_send(SP_NULLPTR, &client, (const u8*)reply, sp_cstr_len(reply));
+      }
+    }
+
     mbedtls_ssl_context ssl;
     mbedtls_ssl_init(&ssl);
-    bool ok = true;
-    if (server->tls) {
+    mbedtls_ssl_context* sslp = server->tls ? &ssl : SP_NULLPTR;
+    if (ok && server->tls) {
       ok = mbedtls_ssl_setup(&ssl, &server->conf) == 0;
       if (ok) {
         mbedtls_ssl_set_bio(&ssl, &client, mbedtls_net_send, mbedtls_net_recv, SP_NULLPTR);
@@ -346,10 +409,10 @@ static s32 tls_mock_server_thread(void* userdata) {
       }
     }
 
-    if (ok) ok = tls_mock_read_request(server, &ssl, &client);
+    if (ok) ok = tls_mock_read_request(server, sslp, &client);
     if (ok) {
       u32 which = index < server->script_count ? index : server->script_count - 1;
-      tls_mock_play(server, &ssl, &client, &server->scripts[which]);
+      tls_mock_play(sslp, &client, &server->scripts[which]);
     }
     if (server->tls && ok) mbedtls_ssl_close_notify(&ssl);
     mbedtls_ssl_free(&ssl);
@@ -367,6 +430,8 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
   tls_mock_server_t server = sp_zero;
   mbedtls_net_init(&server.listen);
   server.tls = t.tls;
+  server.proxy_connect = t.proxy_connect;
+  server.connect_reply = t.connect_reply;
   server.scripts = t.scripts;
   server.script_count = 0;
   sp_carr_for(t.scripts, it) {
@@ -414,12 +479,18 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
   sp_io_dyn_mem_writer_t body = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &body);
 
-  sp_str_t url = sp_fmt(mem, "{}://127.0.0.1:{}/", sp_fmt_cstr(t.tls ? "https" : "http"), sp_fmt_cstr(port)).value;
+  sp_str_t url = t.url
+    ? sp_cstr_as_str(t.url)
+    : sp_fmt(mem, "{}://127.0.0.1:{}/", sp_fmt_cstr(t.tls ? "https" : "http"), sp_fmt_cstr(port)).value;
   sp_http_response_t response = sp_zero;
   sp_tls_error_t err = sp_http_fetch(mem, (sp_http_request_t) {
     .url   = url,
     .trust = &trust,
     .body  = &body.base,
+    .proxy = t.proxy ? sp_fmt(mem, "127.0.0.1:{}", sp_fmt_cstr(port)).value : sp_str_lit(""),
+    .no_proxy = !t.proxy, // isolate the suite from proxies in the developer's environment
+    .connect_timeout_ms = t.connect_timeout_ms,
+    .io_timeout_ms = t.io_timeout_ms,
   }, &response);
 
   EXPECT_EQ(err, t.expect.err);
@@ -432,6 +503,11 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
   mbedtls_net_connect(&poke, "127.0.0.1", port, MBEDTLS_NET_PROTO_TCP);
   mbedtls_net_free(&poke);
   sp_thread_join(&thread);
+
+  sp_carr_for(t.captured, it) {
+    if (!t.captured[it]) continue;
+    EXPECT_TRUE_MSG(sp_str_contains(sp_str(server.captured, server.captured_len), sp_cstr_as_str(t.captured[it])), t.captured[it]);
+  }
 
   mbedtls_net_free(&server.listen);
   if (t.tls) {
@@ -590,6 +666,76 @@ UTEST_F(tls, fetch_tls_untrusted) {
     .untrusted = true,
     .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }}},
     .expect = { .err = SP_TLS_ERR_HANDSHAKE },
+  });
+}
+
+UTEST_F(tls, fetch_redirect_query_url) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .scripts = {
+      {{ { .send = "HTTP/1.1 302 Found\r\nLocation: /next?u=https://example.com/\r\n\r\n" } }},
+      {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }},
+    },
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "GET /next?u=https://example.com/ HTTP/1.1" },
+  });
+}
+
+UTEST_F(tls, fetch_timeout_head) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .io_timeout_ms = 120,
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", .delay_ms = 1000 } }}},
+    .expect = { .err = SP_TLS_ERR_TIMEOUT },
+  });
+}
+
+UTEST_F(tls, fetch_timeout_body) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .io_timeout_ms = 120,
+    .scripts = {{{
+      { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhe" },
+      { .send = "llo", .delay_ms = 1000 },
+    }}},
+    .expect = { .err = SP_TLS_ERR_TIMEOUT },
+  });
+}
+
+UTEST_F(tls, fetch_timeout_tls) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .tls = true,
+    .io_timeout_ms = 120,
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", .delay_ms = 1000 } }}},
+    .expect = { .err = SP_TLS_ERR_TIMEOUT },
+  });
+}
+
+UTEST_F(tls, fetch_proxy_absolute_form) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .proxy = true,
+    .url = "http://example.test:8080/x",
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "GET http://example.test:8080/x HTTP/1.1", "Host: example.test:8080" },
+  });
+}
+
+UTEST_F(tls, fetch_proxy_connect) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .tls = true,
+    .proxy = true,
+    .proxy_connect = true,
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }}},
+    .expect = { .status = 200, .body = "hello" },
+    .captured = { "CONNECT 127.0.0.1:", "GET / HTTP/1.1" },
+  });
+}
+
+UTEST_F(tls, fetch_proxy_connect_refused) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .tls = true,
+    .proxy = true,
+    .proxy_connect = true,
+    .connect_reply = "HTTP/1.1 403 Forbidden\r\n\r\n",
+    .expect = { .err = SP_TLS_ERR_PROXY },
   });
 }
 
