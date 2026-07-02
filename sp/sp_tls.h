@@ -853,6 +853,7 @@ SP_PRIVATE s32 sp_http_conn_read(sp_http_conn_t* conn, u8* buf, u32 len) {
       : mbedtls_net_recv_timeout(&conn->net, buf, len, conn->io_timeout_ms);
     if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
     if (n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) return 0;
+    if (n == 0 && conn->tls) return MBEDTLS_ERR_SSL_CONN_EOF;
     return n;
   }
 }
@@ -968,7 +969,7 @@ SP_PRIVATE bool sp_http_reader_fill(sp_http_reader_t* reader) {
   if (reader->eof) return false;
   s32 n = sp_http_conn_read(reader->conn, reader->buf, sizeof(reader->buf));
   if (n <= 0) {
-    if (n == MBEDTLS_ERR_SSL_TIMEOUT) reader->fail = SP_TLS_ERR_TIMEOUT;
+    if (n < 0) reader->fail = n == MBEDTLS_ERR_SSL_TIMEOUT ? SP_TLS_ERR_TIMEOUT : SP_TLS_ERR_PROTOCOL;
     reader->eof = true;
     return false;
   }
