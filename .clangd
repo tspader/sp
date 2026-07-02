@@ -1,5 +1,7 @@
 CompileFlags:
   Add:
     - -DSP_IMPLEMENTATION
+    - -DSP_IMPLEMENTATION
+    - -DSP_TLS_WITH_MBEDTLS
     - -DSP_GLOB_IMPLEMENTATION
     - -Wno-macro-redefined
