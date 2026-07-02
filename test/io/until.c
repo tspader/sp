@@ -58,6 +58,23 @@ UTEST_F(io_until, delim_in_one_read) {
   });
 }
 
+// A tiny wrapper buffer forces the delimiter to straddle three separate
+// fills, so the carried tail from one chunk must combine with only part of
+// the next chunk to find the match.
+UTEST_F(io_until, delim_split_across_many_reads) {
+  run_io_until_test(utest_result, (io_until_test_t){
+    .results = {
+      { .bytes = 2, .err = SP_OK, .data = "hi" },
+      { .bytes = 2, .err = SP_OK, .data = "\r\n" },
+      { .bytes = 2, .err = SP_OK, .data = "\r\n" },
+    },
+    .buffer = 2,
+    .delim = "\r\n\r\n",
+    .err = SP_OK,
+    .expect = "hi\r\n\r\n",
+  });
+}
+
 UTEST_F(io_until, delim_split_across_reads) {
   run_io_until_test(utest_result, (io_until_test_t){
     .results = {

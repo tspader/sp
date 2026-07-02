@@ -324,3 +324,131 @@ UTEST_F(io_read, buffered_zero_request) {
   });
 }
 
+
+/////////
+// ALL //
+/////////
+
+typedef struct {
+  io_result_t results [IO_MAX_RESPONSES];
+  u64 buffer;
+  u64 request;
+  sp_err_t err;
+  const c8* content;
+} io_mock_read_all_test_t;
+
+void run_io_mock_read_all_test(int* utest_result, io_mock_read_all_test_t t) {
+  u64 num_responses = io_get_num_results(t.results, IO_MAX_RESPONSES);
+  io_mock_reader_t r = sp_zero;
+  io_mock_reader_init(&r, t.results, num_responses);
+
+  u8 wrapper_buf[64] = sp_zero;
+  if (t.buffer) {
+    sp_io_reader_set_buffer(&r.base, wrapper_buf, t.buffer);
+  }
+
+  u8 dest[64] = sp_zero;
+  u64 bytes = 0;
+  sp_err_t err = sp_io_read_all(&r.base, dest, t.request, &bytes);
+  EXPECT_EQ(err, t.err);
+
+  u64 expect_bytes = sp_cstr_len(t.content);
+  EXPECT_EQ(bytes, expect_bytes);
+  sp_for(it, expect_bytes) {
+    EXPECT_EQ((c8)dest[it], t.content[it]);
+  }
+
+  EXPECT_EQ(r.cursor, r.num_results);
+}
+
+// Single backend call already satisfies the request.
+UTEST_F(io_read, all_smoke) {
+  run_io_mock_read_all_test(utest_result, (io_mock_read_all_test_t){
+    .results = {
+      { .bytes = 8, .err = SP_OK, .data = "abcdefgh" },
+    },
+    .request = 8,
+    .err = SP_OK,
+    .content = "abcdefgh",
+  });
+}
+
+// Backend short-reads repeatedly; sp_io_read_all keeps calling sp_io_read until
+// the full request is satisfied.
+UTEST_F(io_read, all_accumulates_short_reads) {
+  run_io_mock_read_all_test(utest_result, (io_mock_read_all_test_t){
+    .results = {
+      { .bytes = 3, .err = SP_OK, .data = "abc" },
+      { .bytes = 2, .err = SP_OK, .data = "de" },
+      { .bytes = 3, .err = SP_OK, .data = "fgh" },
+    },
+    .request = 8,
+    .err = SP_OK,
+    .content = "abcdefgh",
+  });
+}
+
+// EOF before the request is satisfied: bytes accumulated so far are still
+// reported, alongside SP_ERR_IO_EOF.
+UTEST_F(io_read, all_eof_partial) {
+  run_io_mock_read_all_test(utest_result, (io_mock_read_all_test_t){
+    .results = {
+      { .bytes = 3, .err = SP_OK, .data = "abc" },
+      { .bytes = 0, .err = SP_ERR_IO_EOF },
+    },
+    .request = 8,
+    .err = SP_ERR_IO_EOF,
+    .content = "abc",
+  });
+}
+
+// EOF on an empty stream.
+UTEST_F(io_read, all_eof_empty) {
+  run_io_mock_read_all_test(utest_result, (io_mock_read_all_test_t){
+    .results = {
+      { .bytes = 0, .err = SP_ERR_IO_EOF },
+    },
+    .request = 8,
+    .err = SP_ERR_IO_EOF,
+    .content = "",
+  });
+}
+
+// A hard error partway through still reports the bytes committed before it hit.
+UTEST_F(io_read, all_error_partial) {
+  run_io_mock_read_all_test(utest_result, (io_mock_read_all_test_t){
+    .results = {
+      { .bytes = 4, .err = SP_OK, .data = "abcd" },
+      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+    },
+    .request = 8,
+    .err = SP_ERR_IO_READ_FAILED,
+    .content = "abcd",
+  });
+}
+
+// Zero-byte request is a no-op and never touches the backend.
+UTEST_F(io_read, all_zero_request) {
+  run_io_mock_read_all_test(utest_result, (io_mock_read_all_test_t){
+    .results = {0},
+    .request = 0,
+    .err = SP_OK,
+    .content = "",
+  });
+}
+
+// Buffered reader: the request outlives one fill, so sp_io_read_all must drive
+// the wrapper through a drain-then-refill to collect the rest.
+UTEST_F(io_read, all_buffered_spans_refill) {
+  run_io_mock_read_all_test(utest_result, (io_mock_read_all_test_t){
+    .results = {
+      { .bytes = 6, .err = SP_OK, .data = "abcdef" },
+      { .bytes = 2, .err = SP_OK, .data = "gh" },
+    },
+    .buffer = 6,
+    .request = 8,
+    .err = SP_OK,
+    .content = "abcdefgh",
+  });
+}
+

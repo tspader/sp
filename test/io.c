@@ -9,6 +9,7 @@ SP_TEST_MAIN()
 #include "io/file.c"
 #include "io/dyn.c"
 #include "io/limit.c"
+#include "io/peek.c"
 #include "io/until.c"
 #include "io/socket.c"
 
