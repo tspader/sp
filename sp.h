@@ -14355,7 +14355,11 @@ void sp_io_limit_reader_init(sp_io_limit_reader_t* r, sp_io_reader_t* inner, u64
 sp_err_t sp_io_fill(sp_io_reader_t* reader) {
   sp_assert(reader && reader->buffer.data);
   sp_assert(reader->cursor >= reader->buffer.len);
-  sp_err_t err = reader->read(reader, reader->buffer.data, reader->buffer.capacity, &reader->buffer.len);
+
+  u64 num_read = 0;
+  sp_err_t err = reader->read(reader, reader->buffer.data, reader->buffer.capacity, &num_read);
+  if (!num_read) return err;
+  reader->buffer.len = num_read;
   reader->cursor = 0;
   return err;
 }
@@ -14366,7 +14370,7 @@ sp_err_t sp_io_peek(sp_io_reader_t* reader, sp_str_t* out) {
   sp_err_t err = SP_OK;
   if (reader->cursor >= reader->buffer.len) {
     err = sp_io_fill(reader);
-    if (err == SP_ERR_IO_EOF && reader->buffer.len) err = SP_OK;
+    if (err == SP_ERR_IO_EOF && reader->buffer.len > reader->cursor) err = SP_OK;
   }
 
   *out = sp_str((const c8*)reader->buffer.data + reader->cursor, (u32)(reader->buffer.len - reader->cursor));
@@ -14588,26 +14592,21 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
   // otherwise return zero bytes. A short read is always allowed, and a
   // backend that can block (a socket) must not block while deliverable
   // bytes are in hand.
-  u64 num_drained = sp_min(size, reader->buffer.len - reader->cursor);
-  if (num_drained) {
-    sp_mem_copy(buffer, reader->buffer.data + reader->cursor, num_drained);
-    reader->cursor += num_drained;
-    if (bytes_read) *bytes_read = num_drained;
-    return SP_OK;
-  }
+  bool drained = reader->cursor >= reader->buffer.len;
 
-  if (size >= reader->buffer.capacity) {
+  if (drained && size >= reader->buffer.capacity) {
     // If the request is too large to buffer, just read it directly
     err = reader->read(reader, buffer, size, &num_read);
   }
   else {
     // If the request is bufferable, do so by completely filling the buffer and then draining
-    // just what the user asked for
-    err = sp_io_fill(reader);
+    // just what the user asked for. Drain relative to the cursor: a fill
+    // that produced nothing leaves the buffer state untouched.
+    if (drained) err = sp_io_fill(reader);
 
-    num_read = sp_min(size, reader->buffer.len);
-    reader->cursor = num_read;
-    sp_mem_copy(buffer, reader->buffer.data, num_read);
+    num_read = sp_min(size, reader->buffer.len - reader->cursor);
+    sp_mem_copy(buffer, reader->buffer.data + reader->cursor, num_read);
+    reader->cursor += num_read;
   }
 
   if (bytes_read) *bytes_read = num_read;
@@ -16626,7 +16625,14 @@ sp_err_t sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   if (!size) goto cleanup;
 
   buffer = sp_alloc_n(mem, c8, size);
-  sp_try_goto(sp_io_read(&reader.base, buffer, size, &bytes_read), err, cleanup);
+  // A single read caps below the request for large files (e.g. Linux caps
+  // any read at MAX_RW_COUNT), so loop until the stat size is read. EOF
+  // short of that means the file shrank underneath us; return what exists.
+  sp_err_t read_err = sp_io_read_all(&reader.base, buffer, size, &bytes_read);
+  if (read_err != SP_OK && read_err != SP_ERR_IO_EOF) {
+    err = read_err;
+    goto cleanup;
+  }
   if (bytes_read < size) {
     buffer = (c8*)sp_realloc(mem, buffer, size, bytes_read);
   }

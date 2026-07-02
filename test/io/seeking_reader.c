@@ -73,6 +73,22 @@ UTEST_F(io_seeking_reader, seek_invalid) {
   });
 }
 
+// A mem reader's buffer IS the backing store, so a read at EOF (which
+// routes through the refill path) must leave it intact; seeking back into
+// the data has to replay it. The 2-byte request is deliberate: requests
+// smaller than capacity take the fill path rather than the direct read.
+UTEST_F(io_seeking_reader, seek_back_after_eof) {
+  run_io_seeking_reader_test(utest_result, (io_seeking_reader_test_t){
+    .source = "hello",
+    .steps = {
+      { .kind = IO_STEP_READ, .read = { 5, SP_OK, "hello" } },
+      { .kind = IO_STEP_READ, .read = { 2, SP_ERR_IO_EOF } },
+      { .kind = IO_STEP_SEEK, .seek = { 0, SP_IO_SEEK_SET, SP_OK, 0 } },
+      { .kind = IO_STEP_READ, .read = { 5, SP_OK, "hello" } },
+    },
+  });
+}
+
 
 //////////////////
 // FILE BACKING //
