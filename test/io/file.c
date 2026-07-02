@@ -385,6 +385,28 @@ UTEST_F(io, file_copy_fast_path_falls_back_for_mem_source) {
   sp_for(i, n) EXPECT_EQ(loaded.data[i], content[i]);
 }
 
+// A single backend read caps below the request on large files (Linux caps
+// any read at MAX_RW_COUNT = 0x7ffff000), so read_file must loop; a short
+// read does not mean the file was smaller. The file is sparse, so it costs
+// no disk — but the read materializes ~2GB in memory.
+UTEST_F(io, read_file_larger_than_single_read) {
+  SKIP_ON_WASM()
+  const u64 size = (u64)0x7ffff000 + 1;
+
+  sp_io_file_writer_t w = sp_zero;
+  ASSERT_EQ(sp_io_file_writer_from_path(&w, ut.file_path), SP_OK);
+  ASSERT_EQ(sp_io_file_writer_seek(&w, (s64)(size - 1), SP_IO_SEEK_SET, SP_NULLPTR), SP_OK);
+  ASSERT_EQ(sp_io_write(&w.base, "!", 1, SP_NULLPTR), SP_OK);
+  sp_io_file_writer_close(&w);
+
+  sp_str_t loaded = sp_zero;
+  EXPECT_EQ(sp_io_read_file(ut.mem, ut.file_path, &loaded), SP_OK);
+  EXPECT_EQ(loaded.len, (u32)size);
+  if (loaded.len == (u32)size) {
+    EXPECT_EQ(loaded.data[size - 1], '!');
+  }
+}
+
 // This legitimately fails on Windows, but it's just because Windows doesn't give us the
 // same guarantee as POSIX when it comes to the state of the kernel's cursor when you
 // do positional IO. It's not a bug. If you're using the file reader, you're ignoring
