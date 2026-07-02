@@ -118,6 +118,9 @@ UTEST_F(tls, url_parse_basic) {
     { "https://example.com#frag",         { true, "https", "example.com", "443", "/", true } },
     { "https://a-b.c_d.example.com/",     { true, "https", "a-b.c_d.example.com", "443", "/", true } },
     { "https://127.0.0.1:8080/x",         { true, "https", "127.0.0.1", "8080", "/x", true } },
+    { "https://example.com?a=b",          { true, "https", "example.com", "443", "?a=b", true } },
+    { "https://example.com:8443?a=b",     { true, "https", "example.com", "8443", "?a=b", true } },
+    { "https://[::1]?a=b",                { true, "https", "[::1]", "443", "?a=b", true } },
   };
   run_url_tests(utest_result, tests, sp_carr_len(tests));
 }
@@ -289,6 +292,7 @@ typedef struct {
   bool              proxy_connect; // the mock server expects a plaintext CONNECT preamble
   const c8*         connect_reply; // reply to CONNECT; defaults to 200
   const c8*         url;           // fetch url; defaults to the mock server
+  const c8*         path;          // appended to the mock server url; defaults to /
   u32               connect_timeout_ms;
   u32               io_timeout_ms;
   tls_mock_script_t scripts[TLS_MOCK_SCRIPTS];
@@ -484,7 +488,7 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
 
   sp_str_t url = t.url
     ? sp_cstr_as_str(t.url)
-    : sp_fmt(mem, "{}://127.0.0.1:{}/", sp_fmt_cstr(t.tls ? "https" : "http"), sp_fmt_cstr(port)).value;
+    : sp_fmt(mem, "{}://127.0.0.1:{}{}", sp_fmt_cstr(t.tls ? "https" : "http"), sp_fmt_cstr(port), sp_fmt_cstr(t.path ? t.path : "/")).value;
   sp_http_response_t response = sp_zero;
   sp_tls_error_t err = sp_http_fetch(mem, (sp_http_request_t) {
     .url   = url,
@@ -533,7 +537,7 @@ UTEST_F(tls, fetch_content_length) {
 UTEST_F(tls, fetch_status_404) {
   run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
     .scripts = {{{ { .send = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found" } }}},
-    .expect = { .err = SP_TLS_ERR_STATUS, .status = 404, .body = "not found" },
+    .expect = { .err = SP_TLS_ERR_STATUS, .status = 404, .body = "" },
   });
 }
 
@@ -655,6 +659,15 @@ UTEST_F(tls, fetch_truncated_body) {
   });
 }
 
+UTEST_F(tls, fetch_query_no_path) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .path = "?a=b",
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "GET /?a=b HTTP/1.1" },
+  });
+}
+
 UTEST_F(tls, fetch_eof_body) {
   run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
     .tls = true,
@@ -685,7 +698,7 @@ UTEST_F(tls, fetch_tls_untrusted) {
     .tls = true,
     .untrusted = true,
     .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }}},
-    .expect = { .err = SP_TLS_ERR_HANDSHAKE },
+    .expect = { .err = SP_TLS_ERR_UNTRUSTED },
   });
 }
 

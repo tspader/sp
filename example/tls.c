@@ -73,6 +73,7 @@ s32 tls_main(s32 argc, const c8** argv) {
       break;
     case SP_TLS_ERR_URL:        sp_log("could not parse url");                  status = 1; break;
     case SP_TLS_ERR_CONNECT:    sp_log("could not connect to host");            status = 1; break;
+    case SP_TLS_ERR_UNTRUSTED:  sp_log("server certificate is not trusted");    status = 1; break;
     case SP_TLS_ERR_HANDSHAKE:  sp_log("tls handshake rejected");               status = 1; break;
     case SP_TLS_ERR_REDIRECTS:  sp_log("too many redirects");                   status = 1; break;
     case SP_TLS_ERR_PROTOCOL:   sp_log("malformed or truncated http response"); status = 1; break;
@@ -81,7 +82,6 @@ s32 tls_main(s32 argc, const c8** argv) {
     case SP_TLS_ERR_NO_STORE:
     case SP_TLS_ERR_PARSE:
     case SP_TLS_ERR_OS:
-    case SP_TLS_ERR_UNTRUSTED:
     case SP_TLS_ERR_BAD_CONFIG:
     case SP_TLS_ERR_UNSUPPORTED:
       sp_log("fetch failed (error {})", sp_fmt_int(err));
