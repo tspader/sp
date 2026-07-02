@@ -8,6 +8,9 @@ SP_TEST_MAIN()
 #include "io/seeking_reader.c"
 #include "io/file.c"
 #include "io/dyn.c"
+#include "io/limit.c"
+#include "io/until.c"
+#include "io/socket.c"
 
 u64 io_get_num_results(const io_result_t* responses, u64 max) {
   u64 n = 0;
