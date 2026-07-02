@@ -636,6 +636,7 @@ SP_BEGIN_EXTERN_C()
   #include <dispatch/dispatch.h>
   #include <mach-o/dyld.h>
   #include <sys/event.h>
+  #include <sys/socket.h>
   #include <poll.h>
   #if defined(SP_FMON_MACOS_USE_FSEVENTS)
     #include <CoreServices/CoreServices.h>
@@ -665,6 +666,7 @@ SP_BEGIN_EXTERN_C()
   #include <sys/mman.h>
 
 #elif defined(SP_WIN32)
+  #include <winsock2.h>
   #include <windows.h>
   #include <assert.h>
   #include <direct.h>
@@ -767,6 +769,7 @@ typedef enum {
   SP_ERR_IO_EOF           = 1010,
   SP_ERR_IO_INVALID_WRITE = 1011,
   SP_ERR_IO_UNIMPLEMENTED = 1012,
+  SP_ERR_IO_TIMEOUT      = 1013,
   SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
   SP_ERR_FMT_BAD_DIRECTIVE = 1103,
   SP_ERR_FMT_TOO_MANY_DIRECTIVES = 1104,
@@ -3415,6 +3418,30 @@ struct sp_io_dyn_mem_writer {
   u64 cursor;
 };
 
+// A reader/writer over a connected socket. The socket is borrowed, never closed.
+// timeout_ms applies per operation; zero blocks forever, expiry is SP_ERR_IO_TIMEOUT.
+typedef struct {
+  sp_io_reader_t base;
+  sp_sys_fd_t socket;
+  u32 timeout_ms;
+} sp_io_socket_reader_t;
+
+typedef struct {
+  sp_io_writer_t base;
+  sp_sys_fd_t socket;
+  u32 timeout_ms;
+} sp_io_socket_writer_t;
+
+// Serves at most `remaining` bytes from `inner`, then reports EOF. If `inner`
+// hits EOF first, that EOF passes through and `remaining` stays nonzero.
+typedef struct {
+  sp_io_reader_t base;
+  sp_io_reader_t* inner;
+  u64 remaining;
+} sp_io_limit_reader_t;
+
+#define SP_IO_READ_UNTIL_MAX_DELIM 16
+
 
 SP_API sp_err_t       sp_io_copy(sp_io_writer_t* dst, sp_io_reader_t* src, u64* bytes_copied);
 SP_API sp_err_t       sp_io_copy_b(sp_io_writer_t* dst, sp_io_reader_t* src, u8* buffer, u64 n, u64* bytes_copied);
@@ -3423,6 +3450,11 @@ SP_API sp_err_t       sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u6
 SP_API sp_err_t       sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content);
 SP_API void           sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size);
 SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
+
+SP_API void           sp_io_socket_reader_init(sp_io_socket_reader_t* r, sp_sys_fd_t socket, u32 timeout_ms);
+SP_API void           sp_io_socket_writer_init(sp_io_socket_writer_t* w, sp_sys_fd_t socket, u32 timeout_ms);
+SP_API void           sp_io_limit_reader_init(sp_io_limit_reader_t* r, sp_io_reader_t* inner, u64 limit);
+SP_API sp_err_t       sp_io_read_until(sp_io_reader_t* reader, sp_str_t delim, sp_io_writer_t* out, u64 max, u64* bytes_read);
 
 SP_API sp_err_t       sp_io_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
 SP_API sp_err_t       sp_io_write_str(sp_io_writer_t* writer, sp_str_t str, u64* bytes_written);
@@ -4176,6 +4208,9 @@ s32 errno;
   #define SP_SYSCALL_NUM_NANOSLEEP         35
   #define SP_SYSCALL_NUM_GETPID            39
   #define SP_SYSCALL_NUM_SENDFILE          40
+  #define SP_SYSCALL_NUM_SENDTO            44
+  #define SP_SYSCALL_NUM_RECVFROM          45
+  #define SP_SYSCALL_NUM_SOCKETPAIR        53
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   326
   #define SP_SYSCALL_NUM_CLONE             56
   #define SP_SYSCALL_NUM_FORK              57
@@ -4266,6 +4301,9 @@ s32 errno;
   #define SP_SYSCALL_NUM_PERF_EVENT_OPEN   241
   #define SP_SYSCALL_NUM_WAIT4             260
   #define SP_SYSCALL_NUM_SENDFILE          71
+  #define SP_SYSCALL_NUM_SENDTO            206
+  #define SP_SYSCALL_NUM_RECVFROM          207
+  #define SP_SYSCALL_NUM_SOCKETPAIR        199
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   285
   #define SP_SYSCALL_NUM_OPEN              SP_SYSCALL_NUM_OPENAT
   #define SP_SYSCALL_NUM_STAT              SP_SYSCALL_NUM_NEWFSTATAT
@@ -5604,8 +5642,11 @@ typedef struct {
 } sp_sys_linux_pollfd_t;
 
 #define SP_SYS_LINUX_POLLIN  0x0001
+#define SP_SYS_LINUX_POLLOUT 0x0004
 #define SP_SYS_LINUX_POLLERR 0x0008
 #define SP_SYS_LINUX_POLLHUP 0x0010
+
+#define SP_SYS_LINUX_MSG_NOSIGNAL 0x4000
 
 s32 sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready) {
   *ready = 0;
@@ -13637,6 +13678,213 @@ void sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity) {
     .capacity = capacity,
   };
   reader->cursor = 0;
+}
+
+////////////////
+// IO: SOCKET //
+////////////////
+#if defined(SP_WIN32)
+SP_PRIVATE sp_err_t sp_io_socket_wait(sp_sys_fd_t socket, bool readable, u32 timeout_ms, sp_err_t fail) {
+  if (!timeout_ms) return SP_OK;
+  WSAPOLLFD pfd = sp_zero;
+  pfd.fd = (SOCKET)socket;
+  pfd.events = readable ? POLLRDNORM : POLLWRNORM;
+  s32 rc = WSAPoll(&pfd, 1, (INT)timeout_ms);
+  if (rc < 0) return fail;
+  if (rc == 0) return SP_ERR_IO_TIMEOUT;
+  return SP_OK;
+}
+
+SP_PRIVATE s64 sp_io_socket_recv(sp_sys_fd_t socket, void* ptr, u64 size) {
+  return recv((SOCKET)socket, (char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
+}
+
+SP_PRIVATE s64 sp_io_socket_send(sp_sys_fd_t socket, const void* ptr, u64 size) {
+  return send((SOCKET)socket, (const char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
+}
+#elif defined(SP_LINUX)
+SP_PRIVATE sp_err_t sp_io_socket_wait(sp_sys_fd_t socket, bool readable, u32 timeout_ms, sp_err_t fail) {
+  if (!timeout_ms) return SP_OK;
+  sp_sys_linux_pollfd_t pfd = {
+    .fd = (s32)socket,
+    .events = (s16)(readable ? SP_SYS_LINUX_POLLIN : SP_SYS_LINUX_POLLOUT),
+  };
+  sp_sys_timespec_t ts = { (s64)(timeout_ms / 1000), (s64)(timeout_ms % 1000) * 1000000 };
+  s64 rc;
+  do {
+    rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
+  } while (rc == -1 && errno == SP_EINTR);
+  if (rc < 0) return fail;
+  if (rc == 0) return SP_ERR_IO_TIMEOUT;
+  return SP_OK;
+}
+
+SP_PRIVATE s64 sp_io_socket_recv(sp_sys_fd_t socket, void* ptr, u64 size) {
+  s64 rc;
+  do {
+    rc = sp_syscall(SP_SYSCALL_NUM_RECVFROM, socket, ptr, size, 0, 0, 0);
+  } while (rc == -1 && errno == SP_EINTR);
+  return rc;
+}
+
+SP_PRIVATE s64 sp_io_socket_send(sp_sys_fd_t socket, const void* ptr, u64 size) {
+  s64 rc;
+  do {
+    rc = sp_syscall(SP_SYSCALL_NUM_SENDTO, socket, ptr, size, SP_SYS_LINUX_MSG_NOSIGNAL, 0, 0);
+  } while (rc == -1 && errno == SP_EINTR);
+  return rc;
+}
+#elif defined(SP_MACOS)
+SP_PRIVATE sp_err_t sp_io_socket_wait(sp_sys_fd_t socket, bool readable, u32 timeout_ms, sp_err_t fail) {
+  if (!timeout_ms) return SP_OK;
+  struct pollfd pfd = {
+    .fd = (int)socket,
+    .events = (s16)(readable ? POLLIN : POLLOUT),
+  };
+  int rc;
+  do {
+    rc = poll(&pfd, 1, (int)timeout_ms);
+  } while (rc < 0 && errno == EINTR);
+  if (rc < 0) return fail;
+  if (rc == 0) return SP_ERR_IO_TIMEOUT;
+  return SP_OK;
+}
+
+SP_PRIVATE s64 sp_io_socket_recv(sp_sys_fd_t socket, void* ptr, u64 size) {
+  s64 rc;
+  do {
+    rc = (s64)recv((int)socket, ptr, (size_t)size, 0);
+  } while (rc < 0 && errno == EINTR);
+  return rc;
+}
+
+SP_PRIVATE s64 sp_io_socket_send(sp_sys_fd_t socket, const void* ptr, u64 size) {
+  s64 rc;
+  do {
+    rc = (s64)send((int)socket, ptr, (size_t)size, 0);
+  } while (rc < 0 && errno == EINTR);
+  return rc;
+}
+#else
+SP_PRIVATE sp_err_t sp_io_socket_wait(sp_sys_fd_t socket, bool readable, u32 timeout_ms, sp_err_t fail) {
+  (void)socket; (void)readable; (void)timeout_ms; (void)fail;
+  return SP_ERR_IO_UNIMPLEMENTED;
+}
+
+SP_PRIVATE s64 sp_io_socket_recv(sp_sys_fd_t socket, void* ptr, u64 size) {
+  (void)socket; (void)ptr; (void)size;
+  return -1;
+}
+
+SP_PRIVATE s64 sp_io_socket_send(sp_sys_fd_t socket, const void* ptr, u64 size) {
+  (void)socket; (void)ptr; (void)size;
+  return -1;
+}
+#endif
+
+SP_PRIVATE sp_err_t sp_io_socket_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_io_socket_reader_t* r = (sp_io_socket_reader_t*)reader;
+  if (bytes_read) *bytes_read = 0;
+  sp_err_t err = sp_io_socket_wait(r->socket, true, r->timeout_ms, SP_ERR_IO_READ_FAILED);
+  if (err != SP_OK) return err;
+  s64 n = sp_io_socket_recv(r->socket, ptr, size);
+  if (n == 0) return SP_ERR_IO_EOF;
+  if (n < 0) return SP_ERR_IO_READ_FAILED;
+  if (bytes_read) *bytes_read = (u64)n;
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_socket_reader_as_fd(sp_io_reader_t* reader, sp_sys_fd_t* fd, u64** pos) {
+  sp_io_socket_reader_t* r = (sp_io_socket_reader_t*)reader;
+  if (fd) *fd = r->socket;
+  if (pos) *pos = SP_NULLPTR; // streaming source; the cursor lives in the kernel
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_socket_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_io_socket_writer_t* w = (sp_io_socket_writer_t*)writer;
+  if (bytes_written) *bytes_written = 0;
+  sp_err_t err = sp_io_socket_wait(w->socket, false, w->timeout_ms, SP_ERR_IO_WRITE_FAILED);
+  if (err != SP_OK) return err;
+  s64 n = sp_io_socket_send(w->socket, ptr, size);
+  if (n <= 0) return SP_ERR_IO_WRITE_FAILED;
+  if (bytes_written) *bytes_written = (u64)n;
+  return SP_OK;
+}
+
+void sp_io_socket_reader_init(sp_io_socket_reader_t* r, sp_sys_fd_t socket, u32 timeout_ms) {
+  *r = sp_zero_s(sp_io_socket_reader_t);
+  r->base.read = sp_io_socket_reader_read;
+  r->base.as_fd = sp_io_socket_reader_as_fd;
+  r->socket = socket;
+  r->timeout_ms = timeout_ms;
+}
+
+void sp_io_socket_writer_init(sp_io_socket_writer_t* w, sp_sys_fd_t socket, u32 timeout_ms) {
+  *w = sp_zero_s(sp_io_socket_writer_t);
+  w->base.write = sp_io_socket_writer_write;
+  w->socket = socket;
+  w->timeout_ms = timeout_ms;
+#if defined(SP_MACOS)
+  // no MSG_NOSIGNAL on macOS; opt the socket out of SIGPIPE instead
+  int set = 1;
+  setsockopt((int)socket, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+#endif
+}
+
+///////////////
+// IO: LIMIT //
+///////////////
+SP_PRIVATE sp_err_t sp_io_limit_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_io_limit_reader_t* limit = (sp_io_limit_reader_t*)reader;
+  if (bytes_read) *bytes_read = 0;
+  if (!limit->remaining) return SP_ERR_IO_EOF;
+  u64 n = 0;
+  sp_err_t err = sp_io_read(limit->inner, ptr, sp_min(size, limit->remaining), &n);
+  limit->remaining -= n;
+  if (bytes_read) *bytes_read = n;
+  return err;
+}
+
+void sp_io_limit_reader_init(sp_io_limit_reader_t* r, sp_io_reader_t* inner, u64 limit) {
+  *r = sp_zero_s(sp_io_limit_reader_t);
+  r->base.read = sp_io_limit_reader_read;
+  r->inner = inner;
+  r->remaining = limit;
+}
+
+sp_err_t sp_io_read_until(sp_io_reader_t* reader, sp_str_t delim, sp_io_writer_t* out, u64 max, u64* bytes_read) {
+  sp_assert(delim.len > 0 && delim.len <= SP_IO_READ_UNTIL_MAX_DELIM);
+  c8 window[SP_IO_READ_UNTIL_MAX_DELIM] = sp_zero;
+  u64 total = 0;
+  sp_err_t err = SP_OK;
+
+  // @spader I think a vtable entry is missing a piece of data...?
+  // One byte at a time: against the reader's buffer this is a memcpy, and
+  // against a raw backend it's the only way to not consume past the delimiter.
+  while (total < max) {
+    c8 c = 0;
+    u64 n = 0;
+    err = sp_io_read(reader, &c, 1, &n);
+    if (n) {
+      total++;
+      sp_err_t werr = sp_io_write(out, &c, 1, SP_NULLPTR);
+      if (werr != SP_OK) {
+        err = werr;
+        break;
+      }
+      sp_for(it, delim.len - 1) window[it] = window[it + 1];
+      window[delim.len - 1] = c;
+      if (total >= delim.len && sp_str_equal(sp_str(window, delim.len), delim)) {
+        if (bytes_read) *bytes_read = total;
+        return SP_OK;
+      }
+    }
+    if (err != SP_OK) break;
+  }
+
+  if (bytes_read) *bytes_read = total;
+  return err == SP_OK ? SP_ERR_IO_NO_SPACE : err;
 }
 
 sp_err_t sp_io_copy(sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_copied) {
