@@ -848,12 +848,8 @@ SP_PRIVATE sp_tls_error_t sp_http_net_connect(mbedtls_net_context* net, const c8
     }
 
     if (connected) {
-#if defined(SP_WIN32)
-      u_long block = 0;
-      ioctlsocket(fd, FIONBIO, &block);
-#else
-      fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK);
-#endif
+      // Stays nonblocking: sp_io socket timeouts and the WANT_READ/WANT_WRITE
+      // pumps depend on it.
       net->fd = (int)fd;
       result = SP_TLS_OK;
       break;
@@ -870,6 +866,16 @@ SP_PRIVATE sp_tls_error_t sp_http_net_connect(mbedtls_net_context* net, const c8
   return result;
 }
 
+// mbedtls returns WANT_READ/WANT_WRITE when the nonblocking socket has no
+// data/space; park on the socket until it's ready or the io timeout expires.
+SP_PRIVATE sp_err_t sp_http_pump_wait(sp_http_conn_t* conn, s32 rc) {
+  bool readable = rc == MBEDTLS_ERR_SSL_WANT_READ;
+  s32 wait = sp_sys_socket_wait((sp_sys_socket_t)conn->net.fd, readable, conn->io_timeout_ms);
+  if (wait == 1) return SP_ERR_IO_TIMEOUT;
+  if (wait != 0) return SP_ERR_IO;
+  return SP_OK;
+}
+
 SP_PRIVATE sp_err_t sp_http_tls_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
   sp_http_tls_reader_t* tls = (sp_http_tls_reader_t*)reader;
   sp_http_conn_t* conn = tls->conn;
@@ -877,7 +883,12 @@ SP_PRIVATE sp_err_t sp_http_tls_read(sp_io_reader_t* reader, void* ptr, u64 size
   if (tls->eof) return SP_ERR_IO_EOF;
   for (;;) {
     s32 n = mbedtls_ssl_read(&conn->ssl, (unsigned char*)ptr, (size_t)sp_min(size, (u64)INT32_MAX));
-    if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
+    if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
+      sp_err_t err = sp_http_pump_wait(conn, n);
+      if (err == SP_ERR_IO_TIMEOUT) return SP_ERR_IO_TIMEOUT;
+      if (err != SP_OK) return SP_ERR_IO_READ_FAILED;
+      continue;
+    }
     if (n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
       // latched: mbedtls reports close_notify only once, then raw EOF
       tls->eof = true;
@@ -897,7 +908,12 @@ SP_PRIVATE sp_err_t sp_http_tls_write(sp_io_writer_t* writer, const void* ptr, u
   if (bytes_written) *bytes_written = 0;
   for (;;) {
     s32 n = mbedtls_ssl_write(&conn->ssl, (const unsigned char*)ptr, (size_t)sp_min(size, (u64)INT32_MAX));
-    if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
+    if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
+      sp_err_t err = sp_http_pump_wait(conn, n);
+      if (err == SP_ERR_IO_TIMEOUT) return SP_ERR_IO_TIMEOUT;
+      if (err != SP_OK) return SP_ERR_IO_WRITE_FAILED;
+      continue;
+    }
     if (n <= 0) return SP_ERR_IO_WRITE_FAILED;
     if (bytes_written) *bytes_written = (u64)n;
     return SP_OK;
@@ -996,6 +1012,9 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_t
     if (rc == MBEDTLS_ERR_SSL_TIMEOUT) return SP_TLS_ERR_TIMEOUT;
     if (rc == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) return SP_TLS_ERR_UNTRUSTED;
     if (rc != MBEDTLS_ERR_SSL_WANT_READ && rc != MBEDTLS_ERR_SSL_WANT_WRITE) return SP_TLS_ERR_HANDSHAKE;
+    sp_err_t err = sp_http_pump_wait(conn, rc);
+    if (err == SP_ERR_IO_TIMEOUT) return SP_TLS_ERR_TIMEOUT;
+    if (err != SP_OK) return SP_TLS_ERR_OS;
   }
 
   conn->reader = &conn->tls_reader.base;
