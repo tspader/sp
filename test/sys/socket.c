@@ -30,7 +30,7 @@ typedef struct {
   sys_socket_step_kind_t kind;
   union {
     struct { const c8* data; } send;
-    struct { u64 request; s64 expect; const c8* content; } recv;
+    struct { u64 request; s64 expect; const c8* content; u32 timeout_ms; } recv;
     struct { u32 timeout_ms; s32 expect; } wait;
   };
 } sys_socket_step_t;
@@ -54,13 +54,13 @@ void run_sys_socket_test(int* utest_result, sys_socket_test_t t) {
 
       case SYS_SOCKET_STEP_SEND: {
         u64 len = sp_cstr_len(step->send.data);
-        EXPECT_EQ(sp_sys_socket_send(client, step->send.data, len), (s64)len);
+        EXPECT_EQ(sp_sys_socket_send(client, step->send.data, len, 1000), (s64)len);
         break;
       }
 
       case SYS_SOCKET_STEP_RECV: {
         u8 buf[64] = sp_zero;
-        s64 n = sp_sys_socket_recv(server, buf, step->recv.request);
+        s64 n = sp_sys_socket_recv(server, buf, step->recv.request, step->recv.timeout_ms);
         EXPECT_EQ(n, step->recv.expect);
         u64 expect_bytes = sp_cstr_len(step->recv.content);
         sp_for(jt, expect_bytes) EXPECT_EQ((c8)buf[jt], step->recv.content[jt]);
@@ -118,6 +118,14 @@ UTEST_F(sys_socket, wait_readable_times_out_when_idle) {
   run_sys_socket_test(utest_result, (sys_socket_test_t){
     .steps = {
       { .kind = SYS_SOCKET_STEP_WAIT_READABLE, .wait = { 50, 1 } },
+    },
+  });
+}
+
+UTEST_F(sys_socket, recv_times_out_when_idle) {
+  run_sys_socket_test(utest_result, (sys_socket_test_t){
+    .steps = {
+      { .kind = SYS_SOCKET_STEP_RECV, .recv = { 8, SP_SYS_SOCKET_TIMEOUT, SP_NULLPTR, 50 } },
     },
   });
 }
