@@ -5952,62 +5952,52 @@ SP_PRIVATE bool sp_sys_socket_remaining(u64 deadline, u32* remaining) {
 //////////////////////
 // SP_SYS_SOCKET_WAIT //
 //////////////////////
-SP_PRIVATE s32 sp_sys_socket_wait_deadline(sp_sys_socket_t socket, bool readable, u64 deadline) {
-#if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
-  while (true) {
-    u32 remaining = 0;
-    if (!sp_sys_socket_remaining(deadline, &remaining)) return 1;
-
+s32 sp_sys_socket_wait(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
 #if defined(SP_WIN32)
-    WSAPOLLFD pfd = sp_zero;
-    pfd.fd = (SOCKET)socket;
-    pfd.events = readable ? POLLRDNORM : POLLWRNORM;
-    s32 rc = WSAPoll(&pfd, 1, remaining ? (INT)remaining : -1);
-    if (rc < 0) return -1;
+  WSAPOLLFD pfd = sp_zero;
+  pfd.fd = (SOCKET)socket;
+  pfd.events = readable ? POLLRDNORM : POLLWRNORM;
+  s32 rc = WSAPoll(&pfd, 1, timeout_ms ? (INT)sp_min(timeout_ms, (u32)SP_LIMIT_S32_MAX) : -1);
+  if (rc < 0) return -1;
+  return rc > 0 ? 0 : 1;
 
 #elif defined(SP_LINUX)
+  while (true) {
     sp_sys_linux_pollfd_t pfd = {
       .fd = socket,
       .events = (s16)(readable ? SP_SYS_LINUX_POLLIN : SP_SYS_LINUX_POLLOUT),
     };
-    sp_sys_timespec_t ts = { (s64)(remaining / 1000), (s64)(remaining % 1000) * 1000000 };
-    s64 rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, remaining ? &ts : SP_NULLPTR, 0, 0);
+    sp_sys_timespec_t ts = { (s64)(timeout_ms / 1000), (s64)(timeout_ms % 1000) * 1000000 };
+    s64 rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, timeout_ms ? &ts : SP_NULLPTR, 0, 0);
     if (rc == -1 && errno == SP_EINTR) continue;
     if (rc < 0) return -1;
+    return rc > 0 ? 0 : 1;
+  }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
+  while (true) {
     struct pollfd pfd = { .fd = socket, .events = (s16)(readable ? POLLIN : POLLOUT) };
-    s32 rc = poll(&pfd, 1, remaining ? (s32)remaining : -1);
+    s32 rc = poll(&pfd, 1, timeout_ms ? (s32)sp_min(timeout_ms, (u32)SP_LIMIT_S32_MAX) : -1);
     if (rc < 0 && errno == EINTR) continue;
     if (rc < 0) return -1;
-#endif
-
-    if (rc > 0) return 0;
-    // Poll expired without the socket turning ready; the deadline check at
-    // the top of the loop decides whether that's a timeout or just a clamped
-    // slice of a longer wait.
+    return rc > 0 ? 0 : 1;
   }
 
 #else
-  (void)socket; (void)readable; (void)deadline;
+  (void)socket; (void)readable; (void)timeout_ms;
   return -1;
 #endif
 }
 
-s32 sp_sys_socket_wait(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
-  return sp_sys_socket_wait_deadline(socket, readable, sp_sys_socket_deadline(timeout_ms));
-}
-
-SP_PRIVATE bool sp_sys_socket_would_block(void) {
-#if defined(SP_WIN32)
-  return WSAGetLastError() == WSAEWOULDBLOCK;
-#elif defined(SP_LINUX)
-  return errno == SP_EAGAIN;
-#elif defined(SP_MACOS) || defined(SP_COSMO)
-  return errno == EAGAIN || errno == EWOULDBLOCK;
-#else
-  return false;
-#endif
+// Poll slices are clamped to S32_MAX ms; the loop re-checks the deadline so
+// an expired slice of a longer wait is not reported as a timeout.
+SP_PRIVATE s32 sp_sys_socket_wait_deadline(sp_sys_socket_t socket, bool readable, u64 deadline) {
+  while (true) {
+    u32 remaining = 0;
+    if (!sp_sys_socket_remaining(deadline, &remaining)) return 1;
+    s32 rc = sp_sys_socket_wait(socket, readable, remaining);
+    if (rc != 1) return rc;
+  }
 }
 
 /////////////////////////////////
@@ -6098,11 +6088,13 @@ s32 sp_sys_socket_connect(sp_sys_ipv4_t addr, u32 timeout_ms, sp_sys_socket_t* o
 
   s64 rc = sp_syscall(SP_SYSCALL_NUM_CONNECT, fd, &sa, sizeof(sa));
   if (rc != 0) {
-    if (errno != SP_EINPROGRESS) {
+    // EINTR: the attempt proceeds asynchronously; poll for completion as if
+    // EINPROGRESS
+    if (errno != SP_EINPROGRESS && errno != SP_EINTR) {
       sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
       return -1;
     }
-    s32 wait = sp_sys_socket_wait((sp_sys_socket_t)fd, false, timeout_ms);
+    s32 wait = sp_sys_socket_wait_deadline((sp_sys_socket_t)fd, false, sp_sys_socket_deadline(timeout_ms));
     if (wait != 0) {
       sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
       return wait;
@@ -6137,11 +6129,11 @@ s32 sp_sys_socket_connect(sp_sys_ipv4_t addr, u32 timeout_ms, sp_sys_socket_t* o
   sp_mem_copy(&sa.sin_addr, addr.octets, 4);
 
   if (connect(fd, (struct sockaddr*)&sa, sizeof(sa)) != 0) {
-    if (errno != EINPROGRESS) {
+    if (errno != EINPROGRESS && errno != EINTR) {
       close(fd);
       return -1;
     }
-    s32 wait = sp_sys_socket_wait((sp_sys_socket_t)fd, false, timeout_ms);
+    s32 wait = sp_sys_socket_wait_deadline((sp_sys_socket_t)fd, false, sp_sys_socket_deadline(timeout_ms));
     if (wait != 0) {
       close(fd);
       return wait;
@@ -6266,6 +6258,7 @@ s32 sp_sys_socket_accept(sp_sys_socket_t listener, u32 timeout_ms, sp_sys_socket
       *out = (sp_sys_socket_t)fd;
       return 0;
     }
+    if (WSAGetLastError() != WSAEWOULDBLOCK) return -1;
 
 #elif defined(SP_LINUX)
     s64 fd = sp_syscall(SP_SYSCALL_NUM_ACCEPT4, listener, 0, 0, SP_SYS_LINUX_SOCK_NONBLOCK);
@@ -6274,6 +6267,7 @@ s32 sp_sys_socket_accept(sp_sys_socket_t listener, u32 timeout_ms, sp_sys_socket
       return 0;
     }
     if (errno == SP_EINTR) continue;
+    if (errno != SP_EAGAIN) return -1;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
     int fd = accept(listener, SP_NULLPTR, SP_NULLPTR);
@@ -6287,9 +6281,8 @@ s32 sp_sys_socket_accept(sp_sys_socket_t listener, u32 timeout_ms, sp_sys_socket
       return 0;
     }
     if (errno == EINTR) continue;
+    if (errno != EAGAIN && errno != EWOULDBLOCK) return -1;
 #endif
-
-    if (!sp_sys_socket_would_block()) return -1;
 
     s32 wait = sp_sys_socket_wait_deadline(listener, true, deadline);
     if (wait != 0) return wait;
@@ -6330,22 +6323,24 @@ s64 sp_sys_socket_recv(sp_sys_socket_t socket, void* ptr, u64 size, u32 timeout_
   while (true) {
 #if defined(SP_WIN32)
     s64 rc = recv((SOCKET)socket, (char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
+    if (rc < 0 && WSAGetLastError() != WSAEWOULDBLOCK) return -1;
 
 #elif defined(SP_LINUX)
     s64 rc;
     do {
       rc = sp_syscall(SP_SYSCALL_NUM_RECVFROM, socket, ptr, size, 0, 0, 0);
     } while (rc == -1 && errno == SP_EINTR);
+    if (rc < 0 && errno != SP_EAGAIN) return -1;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
     s64 rc;
     do {
       rc = (s64)recv(socket, ptr, (size_t)size, 0);
     } while (rc < 0 && errno == EINTR);
+    if (rc < 0 && errno != EAGAIN && errno != EWOULDBLOCK) return -1;
 #endif
 
     if (rc >= 0) return rc;
-    if (!sp_sys_socket_would_block()) return -1;
 
     s32 wait = sp_sys_socket_wait_deadline(socket, true, deadline);
     if (wait == 1) return SP_SYS_SOCKET_TIMEOUT;
@@ -6370,22 +6365,24 @@ s64 sp_sys_socket_send(sp_sys_socket_t socket, const void* ptr, u64 size, u32 ti
   while (true) {
 #if defined(SP_WIN32)
     s64 rc = send((SOCKET)socket, (const char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
+    if (rc < 0 && WSAGetLastError() != WSAEWOULDBLOCK) return -1;
 
 #elif defined(SP_LINUX)
     s64 rc;
     do {
       rc = sp_syscall(SP_SYSCALL_NUM_SENDTO, socket, ptr, size, SP_SYS_LINUX_MSG_NOSIGNAL, 0, 0);
     } while (rc == -1 && errno == SP_EINTR);
+    if (rc < 0 && errno != SP_EAGAIN) return -1;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
     s64 rc;
     do {
       rc = (s64)send(socket, ptr, (size_t)size, 0);
     } while (rc < 0 && errno == EINTR);
+    if (rc < 0 && errno != EAGAIN && errno != EWOULDBLOCK) return -1;
 #endif
 
     if (rc >= 0) return rc;
-    if (!sp_sys_socket_would_block()) return -1;
 
     s32 wait = sp_sys_socket_wait_deadline(socket, false, deadline);
     if (wait == 1) return SP_SYS_SOCKET_TIMEOUT;
