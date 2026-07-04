@@ -35,7 +35,7 @@ typedef enum {
   IO_SOCKET_STEP_WRITE,
   IO_SOCKET_STEP_READ,
   IO_SOCKET_STEP_CLOSE_WRITER,
-  IO_SOCKET_STEP_READ_UNTIL,
+  IO_SOCKET_STEP_PEEK_UNTIL,
   IO_SOCKET_STEP_LIMIT_COPY,
 } io_socket_step_kind_t;
 
@@ -44,7 +44,7 @@ typedef struct {
   union {
     struct { const c8* data; } write;
     struct { u64 request; sp_err_t err; const c8* content; } read;
-    struct { const c8* delim; u64 max; sp_err_t err; const c8* content; } read_until;
+    struct { const c8* delim; sp_err_t err; const c8* content; } peek_until;
     struct { u64 limit; sp_err_t err; const c8* content; } limit_copy;
   };
 } io_socket_step_t;
@@ -99,16 +99,12 @@ void run_io_socket_test(int* utest_result, io_socket_test_t t) {
         break;
       }
 
-      case IO_SOCKET_STEP_READ_UNTIL: {
-        u8 head_buf[64] = sp_zero;
-        sp_io_mem_writer_t head = sp_zero;
-        sp_io_mem_writer_from_buffer(&head, head_buf, sizeof(head_buf));
-        u64 bytes = 0;
-        sp_err_t err = sp_io_read_until(&reader.base, sp_cstr_as_str(step->read_until.delim), &head.base, step->read_until.max, &bytes);
-        EXPECT_EQ(err, step->read_until.err);
-        u64 expect_bytes = sp_cstr_len(step->read_until.content);
-        EXPECT_EQ(bytes, expect_bytes);
-        EXPECT_TRUE(sp_str_equal(sp_str((c8*)head_buf, bytes), sp_cstr_as_str(step->read_until.content)));
+      case IO_SOCKET_STEP_PEEK_UNTIL: {
+        sp_str_t out = sp_zero;
+        sp_err_t err = sp_io_peek_until(&reader.base, sp_cstr_as_str(step->peek_until.delim), &out);
+        EXPECT_EQ(err, step->peek_until.err);
+        EXPECT_TRUE(sp_str_equal(out, sp_cstr_as_str(step->peek_until.content)));
+        if (err == SP_OK) sp_io_consume(&reader.base, out.len);
         break;
       }
 
@@ -161,15 +157,15 @@ UTEST_F(io_socket, read_timeout) {
   });
 }
 
-// The HTTP shape: scan a buffered socket reader up to the header terminator,
-// then drain a fixed-length body through a limit reader. Bytes past the
-// terminator must survive in the reader's buffer.
-UTEST_F(io_socket, read_until_then_limit) {
+// The HTTP shape: peek a buffered socket reader up to the header terminator,
+// consume it, then drain a fixed-length body through a limit reader. Bytes
+// past the terminator must survive in the reader's buffer.
+UTEST_F(io_socket, peek_until_then_limit) {
   run_io_socket_test(utest_result, (io_socket_test_t){
     .reader_buffer = 64,
     .steps = {
       { .kind = IO_SOCKET_STEP_WRITE, .write = { "HTTP/1.1 200 OK\r\n\r\nhello" } },
-      { .kind = IO_SOCKET_STEP_READ_UNTIL, .read_until = { "\r\n\r\n", 64, SP_OK, "HTTP/1.1 200 OK\r\n\r\n" } },
+      { .kind = IO_SOCKET_STEP_PEEK_UNTIL, .peek_until = { "\r\n\r\n", SP_OK, "HTTP/1.1 200 OK\r\n\r\n" } },
       { .kind = IO_SOCKET_STEP_LIMIT_COPY, .limit_copy = { 5, SP_OK, "hello" } },
     },
   });

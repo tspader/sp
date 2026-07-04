@@ -741,8 +741,7 @@ sp_tls_error_t sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t m
 }
 
 #define SP_HTTP_BUFFER_SIZE 16384
-#define SP_HTTP_LINE_MAX    128
-#define SP_HTTP_HEAD_MAX    (64 * 1024)
+#define SP_HTTP_HEAD_MAX    SP_HTTP_BUFFER_SIZE
 #define SP_HTTP_MAX_INTERIM 8
 
 typedef struct sp_http_conn sp_http_conn_t;
@@ -778,12 +777,6 @@ struct sp_http_conn {
 
 SP_PRIVATE sp_tls_error_t sp_http_map_io(sp_err_t err, sp_tls_error_t fallback) {
   return err == SP_ERR_IO_TIMEOUT ? SP_TLS_ERR_TIMEOUT : fallback;
-}
-
-SP_PRIVATE sp_err_t sp_http_sink_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
-  (void)writer; (void)ptr;
-  if (bytes_written) *bytes_written = size;
-  return SP_OK;
 }
 
 // resolved timeouts: 0 means block forever, matching mbedtls_net_recv_timeout
@@ -925,25 +918,32 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_write(sp_http_conn_t* conn, sp_str_t data
   return err == SP_OK ? SP_TLS_OK : sp_http_map_io(err, SP_TLS_ERR_OS);
 }
 
-// reads the proxy's reply to CONNECT; the reader is unbuffered here, so nothing
-// past the head is consumed and the TLS handshake sees a clean stream
+// reads the proxy's reply to CONNECT one byte at a time; the reader is
+// unbuffered here, so nothing past the head is consumed and the TLS handshake
+// sees a clean stream
 SP_PRIVATE sp_tls_error_t sp_http_connect_reply(sp_http_conn_t* conn) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-  sp_io_dyn_mem_writer_t head = sp_zero;
-  sp_io_dyn_mem_writer_init(scratch.mem, &head);
+  c8* head = sp_alloc_n(scratch.mem, c8, SP_HTTP_HEAD_MAX);
+  u64 len = 0;
 
   sp_tls_error_t result = SP_TLS_ERR_PROXY;
-  sp_err_t err = sp_io_read_until(conn->reader, sp_str_lit("\r\n\r\n"), &head.base, SP_HTTP_HEAD_MAX, SP_NULLPTR);
-  if (err == SP_OK) {
-    sp_str_t acc = sp_io_dyn_mem_writer_as_str(&head);
-    sp_http_head_t parsed = sp_zero;
-    if (sp_http_parse_head(sp_str_sub(acc, 0, (s32)acc.len - 4), &parsed) == SP_TLS_OK &&
-        parsed.status >= 200 && parsed.status <= 299) {
-      result = SP_TLS_OK;
+  while (len < SP_HTTP_HEAD_MAX) {
+    u64 n = 0;
+    sp_err_t err = sp_io_read(conn->reader, head + len, 1, &n);
+    if (err != SP_OK) {
+      result = sp_http_map_io(err, SP_TLS_ERR_PROXY);
+      break;
     }
-  }
-  else {
-    result = sp_http_map_io(err, SP_TLS_ERR_PROXY);
+    len += n;
+
+    if (sp_str_ends_with(sp_str(head, (u32)len), sp_str_lit("\r\n\r\n"))) {
+      sp_http_head_t parsed = sp_zero;
+      if (sp_http_parse_head(sp_str(head, (u32)len - 4), &parsed) == SP_TLS_OK &&
+          parsed.status >= 200 && parsed.status <= 299) {
+        result = SP_TLS_OK;
+      }
+      break;
+    }
   }
   sp_mem_end_scratch(scratch);
   return result;
@@ -1031,27 +1031,31 @@ SP_PRIVATE void sp_http_conn_close(sp_http_conn_t* conn) {
   mbedtls_net_free(&conn->net);
 }
 
-SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_io_reader_t* reader, sp_mem_t mem, sp_str_t* head) {
-  sp_io_dyn_mem_writer_t writer = sp_zero;
-  sp_io_dyn_mem_writer_init(mem, &writer);
-  sp_err_t err = sp_io_read_until(reader, sp_str_lit("\r\n\r\n"), &writer.base, SP_HTTP_HEAD_MAX, SP_NULLPTR);
+SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_io_reader_t* reader, sp_str_t* head) {
+  sp_str_t acc = sp_zero;
+  sp_err_t err = sp_io_peek_until(reader, sp_str_lit("\r\n\r\n"), &acc);
   if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
-  sp_str_t acc = sp_io_dyn_mem_writer_as_str(&writer);
+  sp_io_consume(reader, acc.len);
   *head = sp_str_sub(acc, 0, (s32)acc.len - 4);
   return SP_TLS_OK;
 }
 
-SP_PRIVATE sp_tls_error_t sp_http_read_line(sp_io_reader_t* reader, c8* buf, u32 cap, sp_str_t* line) {
-  sp_io_mem_writer_t writer = sp_zero;
-  sp_io_mem_writer_from_buffer(&writer, buf, cap);
-  u64 n = 0;
-  sp_err_t err = sp_io_read_until(reader, sp_str_lit("\r\n"), &writer.base, cap, &n);
+SP_PRIVATE sp_tls_error_t sp_http_read_line(sp_io_reader_t* reader, sp_str_t* line) {
+  sp_str_t acc = sp_zero;
+  sp_err_t err = sp_io_peek_until(reader, sp_str_lit("\r\n"), &acc);
   if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
-  *line = sp_str(buf, (u32)n - 2);
+  sp_io_consume(reader, acc.len);
+  *line = sp_str_sub(acc, 0, (s32)acc.len - 2);
   return SP_TLS_OK;
 }
 
 SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_io_reader_t* reader, sp_io_writer_t* body, u64 n, u64* written) {
+  if (!body) {
+    sp_err_t err = sp_io_discard(reader, n, SP_NULLPTR);
+    if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
+    return SP_TLS_OK;
+  }
+
   sp_io_limit_reader_t limit = sp_zero;
   sp_io_limit_reader_init(&limit, reader, n);
   u64 copied = 0;
@@ -1064,18 +1068,13 @@ SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_io_reader_t* reader, sp_io_writer_t*
 }
 
 SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_io_reader_t* reader, sp_http_head_t head, sp_io_writer_t* body, u64* written) {
-  sp_io_writer_t sink = sp_zero;
-  sink.write = sp_http_sink_write;
-  if (!body) body = &sink;
-
   if (head.status < 200 || head.status == 204 || head.status == 304) {
     return SP_TLS_OK;
   }
   if (head.chunked) {
     for (;;) {
-      c8 buf[SP_HTTP_LINE_MAX];
       sp_str_t line = sp_zero;
-      sp_tls_error_t err = sp_http_read_line(reader, buf, sizeof(buf), &line);
+      sp_tls_error_t err = sp_http_read_line(reader, &line);
       if (err != SP_TLS_OK) return err;
       sp_str_t size_str = line;
       s32 semi = sp_str_find_c8(size_str, ';');
@@ -1090,7 +1089,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_io_reader_t* reader, sp_http_head
       if (copy_err != SP_TLS_OK) return copy_err;
 
       sp_str_t crlf = sp_zero;
-      copy_err = sp_http_read_line(reader, buf, sizeof(buf), &crlf);
+      copy_err = sp_http_read_line(reader, &crlf);
       if (copy_err != SP_TLS_OK) return copy_err;
       if (!sp_str_empty(crlf)) return SP_TLS_ERR_PROTOCOL;
     }
@@ -1098,6 +1097,11 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_io_reader_t* reader, sp_http_head
   }
   if (head.has_length) {
     return sp_http_copy_n(reader, body, head.length, written);
+  }
+  if (!body) {
+    sp_err_t err = sp_io_discard(reader, SP_LIMIT_U64_MAX, SP_NULLPTR);
+    if (err != SP_OK && err != SP_ERR_IO_EOF) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
+    return SP_TLS_OK;
   }
   u64 copied = 0;
   sp_err_t err = sp_io_copy(body, reader, &copied);
@@ -1188,7 +1192,7 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
     u32 interim = 0;
     for (;;) {
       sp_str_t head = sp_zero;
-      result = sp_http_read_head(conn.reader, mem, &head);
+      result = sp_http_read_head(conn.reader, &head);
       if (result != SP_TLS_OK) break;
 
       result = sp_http_parse_head(head, &parsed);
