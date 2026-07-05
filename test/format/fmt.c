@@ -115,8 +115,8 @@ UTEST(format_fmt, dynamic_style) {
       "\033[31mx\033[0m"
     },
     {
-      "{.$}",
-      { sp_fmt_style(9999), sp_fmt_cstr("x") },
+      .fmt = "{.$}",
+      .args = { sp_fmt_style(9999), sp_fmt_cstr("x") },
       .err = SP_ERR_FMT_UNKNOWN_DIRECTIVE
     },
   };

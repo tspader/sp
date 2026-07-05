@@ -91,7 +91,7 @@ endif
 
 TESTS = amalg app array asset cli etc cv env format fmon fs glob ht io math process ps rb str sys thread time mem prompt leak tls
 BENCHES = glob heap
-EXAMPLES = app array cli format hash_table io zero_copy ls palette prompt prompt_fancy signal tls wc
+EXAMPLES = app array cli format hash_table io zero_copy ls palette post prompt prompt_fancy signal tls wc
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \
@@ -123,6 +123,9 @@ $(MBEDTLS_LIB): $(MBEDTLS_OBJS)
 
 ifdef MBEDTLS_OK
 $(EXAMPLE_DIR)/tls$(EXE): example/tls.c $(SP_HEADERS) $(MBEDTLS_LIB) | $(EXAMPLE_DIR)
+	$(CC) $(CFLAGS) -I. -DSP_TLS_WITH_MBEDTLS $(TLS_DEFINES) $(MBEDTLS_INC) -o $@ $< -x none $(MBEDTLS_LIB) $(TLS_LDLIBS)
+
+$(EXAMPLE_DIR)/post$(EXE): example/post.c $(SP_HEADERS) $(MBEDTLS_LIB) | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS) -I. -DSP_TLS_WITH_MBEDTLS $(TLS_DEFINES) $(MBEDTLS_INC) -o $@ $< -x none $(MBEDTLS_LIB) $(TLS_LDLIBS)
 
 $(TEST_DIR)/tls$(EXE): test/tls.c $(SP_HEADERS) $(TEST_SOURCES) $(MBEDTLS_LIB) | $(TEST_DIR)
