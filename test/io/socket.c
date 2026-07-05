@@ -4,10 +4,23 @@
 
 UTEST_EMPTY_FIXTURE(io_socket)
 
+static bool io_socket_dial(sp_sys_socket_t socket, u16 port) {
+  sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
+  s32 rc = sp_sys_socket_connect(socket, dial);
+  if (rc == 0) return true;
+  if (rc != 1) return false;
+  if (sp_sys_socket_wait(socket, false, 1000) != 0) return false;
+  return sp_sys_socket_error(socket) == 0;
+}
+
 static bool io_socket_pair(sp_sys_socket_t* client, sp_sys_socket_t* server) {
   sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 } };
   sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  if (sp_sys_socket_listen(addr, 1, &listener) != 0) return false;
+  if (sp_sys_socket_open(&listener) != 0) return false;
+  if (sp_sys_socket_bind(listener, addr) != 0 || sp_sys_socket_listen(listener, 1) != 0) {
+    sp_sys_socket_close(listener);
+    return false;
+  }
 
   u16 port = 0;
   if (sp_sys_socket_local_port(listener, &port) != 0) {
@@ -15,15 +28,24 @@ static bool io_socket_pair(sp_sys_socket_t* client, sp_sys_socket_t* server) {
     return false;
   }
 
-  sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
-  if (sp_sys_socket_connect(dial, 1000, client) != 0) {
+  if (sp_sys_socket_open(client) != 0) {
     sp_sys_socket_close(listener);
     return false;
   }
-  if (sp_sys_socket_accept(listener, 1000, server) != 0) {
+  if (!io_socket_dial(*client, port)) {
     sp_sys_socket_close(listener);
     sp_sys_socket_close(*client);
     return false;
+  }
+
+  while (true) {
+    s32 rc = sp_sys_socket_accept(listener, server);
+    if (rc == 0) break;
+    if (rc != 1 || sp_sys_socket_wait(listener, true, 1000) != 0) {
+      sp_sys_socket_close(listener);
+      sp_sys_socket_close(*client);
+      return false;
+    }
   }
 
   sp_sys_socket_close(listener);
