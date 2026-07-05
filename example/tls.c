@@ -1,6 +1,13 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
+#include "sp/sp_cli.h"
 #include "sp/sp_tls.h"
+
+typedef struct {
+  const c8* url;
+  const c8* output;
+  s32       exit;
+} tls_t;
 
 static const c8* backend_name(sp_tls_backend_t backend) {
   switch (backend) {
@@ -19,83 +26,85 @@ static sp_str_t output_name(sp_mem_t mem, sp_http_url_t url, const c8* override)
 }
 
 #if defined(SP_TLS_WITH_MBEDTLS)
-s32 tls_main(s32 argc, const c8** argv) {
-  if (argc < 2) {
-    sp_log("usage: {} <url> [output]", sp_fmt_cstr(argv[0]));
-    return 2;
-  }
-
-  sp_str_t url = sp_cstr_as_str(argv[1]);
-  const c8* override = argc >= 3 ? argv[2] : SP_NULLPTR;
+sp_cli_result_t tls_run(sp_cli_t* cli) {
+  tls_t* tls = sp_cast(tls_t*, cli->user_data);
 
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
+  sp_http_response_t res = sp_zero;
+  sp_tls_error_t err = sp_zero;
+  sp_str_t out_path = sp_zero;
+  sp_io_file_writer_t out = sp_zero;
 
+  sp_str_t url = sp_cstr_as_str(tls->url);
   sp_http_url_t parsed = sp_zero;
   if (!sp_http_url_parse(url, &parsed)) {
     sp_log("not a valid http(s) url: {}", sp_fmt_str(url));
-    return 1;
+    tls->exit = 1;
+    return SP_CLI_OK;
   }
 
   sp_tls_trust_t trust = sp_zero;
   sp_tls_trust_init(&trust, mem);
   if (sp_tls_trust_load(&trust) != SP_TLS_OK && trust.backend == SP_TLS_BACKEND_ANCHORS) {
     sp_log("failed to load native trust store");
-    return 1;
+    tls->exit = 1;
+    goto done;
   }
   sp_log("backend: {}", sp_fmt_cstr(backend_name(trust.backend)));
   sp_log("anchors: {} loaded, {} skipped", sp_fmt_uint(trust.loaded), sp_fmt_uint(trust.skipped));
 
-  sp_str_t out_path = output_name(mem, parsed, override);
-  sp_io_file_writer_t out = sp_zero;
+  out_path = output_name(mem, parsed, tls->output);
   if (sp_io_file_writer_from_path(&out, out_path) != SP_OK) {
     sp_log("failed to open {} for writing", sp_fmt_str(out_path));
-    return 1;
+    tls->exit = 1;
+    goto done;
   }
 
   sp_log("fetching {}", sp_fmt_str(url));
-  sp_http_response_t res = sp_zero;
-  sp_tls_error_t err = sp_http_fetch(mem, (sp_http_request_t) {
+  err = sp_http_fetch(mem, (sp_http_request_t) {
     .url   = url,
     .trust = &trust,
-    .body  = &out.base,
+    .sink  = &out.base,
   }, &res);
   sp_io_file_writer_close(&out);
 
-  s32 status = 0;
   switch (err) {
     case SP_TLS_OK:
       sp_log("wrote {} bytes to {} (status {})", sp_fmt_uint(res.body_len), sp_fmt_str(out_path), sp_fmt_int(res.status));
       break;
     case SP_TLS_ERR_STATUS:
       sp_log("server returned status {}", sp_fmt_int(res.status));
-      status = 1;
+      tls->exit = 1;
       break;
-    case SP_TLS_ERR_URL:        sp_log("could not parse url");                  status = 1; break;
-    case SP_TLS_ERR_CONNECT:    sp_log("could not connect to host");            status = 1; break;
-    case SP_TLS_ERR_UNTRUSTED:  sp_log("server certificate is not trusted");    status = 1; break;
-    case SP_TLS_ERR_HANDSHAKE:  sp_log("tls handshake rejected");               status = 1; break;
-    case SP_TLS_ERR_REDIRECTS:  sp_log("too many redirects");                   status = 1; break;
-    case SP_TLS_ERR_PROTOCOL:   sp_log("malformed or truncated http response"); status = 1; break;
-    case SP_TLS_ERR_TIMEOUT:    sp_log("timed out");                            status = 1; break;
-    case SP_TLS_ERR_PROXY:      sp_log("proxy refused or misbehaved");          status = 1; break;
+    case SP_TLS_ERR_URL:        sp_log("could not parse url");                  tls->exit = 1; break;
+    case SP_TLS_ERR_CONNECT:    sp_log("could not connect to host");            tls->exit = 1; break;
+    case SP_TLS_ERR_UNTRUSTED:  sp_log("server certificate is not trusted");    tls->exit = 1; break;
+    case SP_TLS_ERR_HANDSHAKE:  sp_log("tls handshake rejected");               tls->exit = 1; break;
+    case SP_TLS_ERR_REDIRECTS:  sp_log("too many redirects");                   tls->exit = 1; break;
+    case SP_TLS_ERR_PROTOCOL:   sp_log("malformed or truncated http response"); tls->exit = 1; break;
+    case SP_TLS_ERR_TIMEOUT:    sp_log("timed out");                            tls->exit = 1; break;
+    case SP_TLS_ERR_PROXY:      sp_log("proxy refused or misbehaved");          tls->exit = 1; break;
     case SP_TLS_ERR_NO_STORE:
     case SP_TLS_ERR_PARSE:
     case SP_TLS_ERR_OS:
     case SP_TLS_ERR_BAD_CONFIG:
     case SP_TLS_ERR_UNSUPPORTED:
       sp_log("fetch failed (error {})", sp_fmt_int(err));
-      status = 1;
+      tls->exit = 1;
       break;
   }
 
-  if (status) sp_fs_remove_file(out_path);
+  if (tls->exit) sp_fs_remove_file(out_path);
+
+done:
   sp_tls_trust_free(&trust);
-  return status;
+  sp_mem_heap_destroy(heap);
+  return SP_CLI_OK;
 }
 #else
-s32 tls_main(s32 argc, const c8** argv) {
-  const c8* url = argc >= 2 ? argv[1] : "https://example.com";
+sp_cli_result_t tls_run(sp_cli_t* cli) {
+  tls_t* tls = sp_cast(tls_t*, cli->user_data);
 
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
@@ -105,10 +114,48 @@ s32 tls_main(s32 argc, const c8** argv) {
   sp_tls_trust_load(&trust);
 
   sp_log("backend: {}", sp_fmt_cstr(backend_name(trust.backend)));
-  sp_log("mbedTLS not compiled in for this target; cannot fetch {}", sp_fmt_cstr(url));
+  sp_log("mbedTLS not compiled in for this target; cannot fetch {}", sp_fmt_cstr(tls->url));
 
   sp_tls_trust_free(&trust);
-  return 0;
+  sp_mem_heap_destroy(heap);
+  return SP_CLI_OK;
 }
 #endif
-SP_MAIN(tls_main)
+
+s32 run(s32 num_args, const c8** args) {
+  tls_t tls = sp_zero;
+
+  sp_cli_cmd_t root = {
+    .name = "tls",
+    .summary = "Fetch a url over https and save the response body to a file",
+    .opts = {
+      {
+        .brief = "o",
+        .name = "output",
+        .kind = SP_CLI_OPT_STRING,
+        .summary = "Write the response body to this file instead of inferring one from the url",
+        .placeholder = "FILE",
+        .ptr = &tls.output,
+      },
+    },
+    .args = {
+      {
+        .name = "url",
+        .summary = "The url to fetch",
+        .ptr = &tls.url,
+      },
+    },
+    .handler = tls_run,
+  };
+
+  sp_cli_desc_t cli = {
+    .root = &root,
+    .args = args,
+    .num_args = num_args,
+    .user_data = &tls,
+  };
+
+  s32 code = sp_cli_main(cli);
+  return code ? code : tls.exit;
+}
+SP_MAIN(run)

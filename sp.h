@@ -16662,6 +16662,7 @@ sp_str_t sp_fs_get_config_path(sp_mem_t mem) {
 sp_err_t sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   sp_assert(content);
   sp_err_t err = SP_OK;
+  sp_err_t read_err = SP_OK;
   c8* buffer = SP_NULLPTR;
   u64 size = 0;
   u64 bytes_read = 0;
@@ -16673,10 +16674,7 @@ sp_err_t sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   if (!size) goto cleanup;
 
   buffer = sp_alloc_n(mem, c8, size);
-  // A single read caps below the request for large files (e.g. Linux caps
-  // any read at MAX_RW_COUNT), so loop until the stat size is read. EOF
-  // short of that means the file shrank underneath us; return what exists.
-  sp_err_t read_err = sp_io_read_all(&reader.base, buffer, size, &bytes_read);
+  read_err = sp_io_read_all(&reader.base, buffer, size, &bytes_read);
   if (read_err != SP_OK && read_err != SP_ERR_IO_EOF) {
     err = read_err;
     goto cleanup;
