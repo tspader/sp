@@ -40,6 +40,7 @@ typedef struct {
   sp_tls_error_t err;
   s32            status;
   const c8*      location;
+  const c8*      content_type;
   bool           chunked;
   bool           has_length;
   u64            length;
@@ -66,6 +67,12 @@ void run_head_tests(s32* utest_result, const head_test_t* tests, u32 count) {
     }
     else {
       EXPECT_TRUE_MSG(sp_str_empty(head.location), t.head);
+    }
+    if (t.expect.content_type) {
+      EXPECT_TRUE_MSG(sp_str_equal_cstr(head.content_type, t.expect.content_type), t.head);
+    }
+    else {
+      EXPECT_TRUE_MSG(sp_str_empty(head.content_type), t.head);
     }
   }
 }
@@ -162,15 +169,17 @@ UTEST_F(tls, url_parse_rejects) {
 UTEST_F(tls, head_parse) {
   head_test_t tests[] = {
     { "HTTP/1.1 200 OK\r\nContent-Length: 12",
-      { SP_TLS_OK, 200, SP_NULLPTR, false, true, 12 } },
+      { SP_TLS_OK, 200, SP_NULLPTR, SP_NULLPTR, false, true, 12 } },
     { "HTTP/1.1 200 OK\r\ncontent-length: 12\r\ncontent-length: 12",
-      { SP_TLS_OK, 200, SP_NULLPTR, false, true, 12 } },
+      { SP_TLS_OK, 200, SP_NULLPTR, SP_NULLPTR, false, true, 12 } },
     { "HTTP/1.1 301 Moved Permanently\r\nLocation: https://example.com/new",
       { SP_TLS_OK, 301, "https://example.com/new" } },
     { "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked",
-      { SP_TLS_OK, 200, SP_NULLPTR, true } },
+      { SP_TLS_OK, 200, SP_NULLPTR, SP_NULLPTR, true } },
     { "HTTP/1.1 200 OK\r\nTransfer-Encoding: GZIP, Chunked",
-      { SP_TLS_OK, 200, SP_NULLPTR, true } },
+      { SP_TLS_OK, 200, SP_NULLPTR, SP_NULLPTR, true } },
+    { "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 2",
+      { SP_TLS_OK, 200, SP_NULLPTR, "application/json; charset=utf-8", false, true, 2 } },
     { "HTTP/1.1 204 No Content",
       { SP_TLS_OK, 204 } },
     { "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 9",
@@ -282,7 +291,19 @@ typedef struct {
   sp_tls_error_t err;
   s32            status;
   const c8*      body;
+  const c8*      content_type;
+  const c8*      location;
 } fetch_expect_t;
+
+typedef struct {
+  const c8* text;
+  u32       n;
+} fetch_counted_t;
+
+typedef struct {
+  const c8* name;
+  const c8* value;
+} fetch_header_t;
 
 typedef struct {
   bool              tls;
@@ -293,11 +314,16 @@ typedef struct {
   const c8*         connect_reply; // reply to CONNECT; defaults to 200
   const c8*         url;           // fetch url; defaults to the mock server
   const c8*         path;          // appended to the mock server url; defaults to /
+  sp_http_method_t  method;
+  const c8*         payload;
+  const c8*         content_type;
+  fetch_header_t    headers[4];
   u32               connect_timeout_ms;
   u32               io_timeout_ms;
   tls_mock_script_t scripts[TLS_MOCK_SCRIPTS];
   fetch_expect_t    expect;
   const c8*         captured[2];   // substrings that must appear in requests the server received
+  fetch_counted_t   counted[4];    // substrings that must appear exactly n times
 } fetch_test_t;
 
 typedef struct {
@@ -336,9 +362,21 @@ static bool tls_mock_read_request(tls_mock_server_t* server, mbedtls_ssl_context
   u32 len = 0;
   bool ok = false;
   for (;;) {
-    if (sp_str_find(sp_str(buf, len), sp_str_lit("\r\n\r\n")) != SP_STR_NO_MATCH) {
-      ok = true;
-      break;
+    s32 head_end = sp_str_find(sp_str(buf, len), sp_str_lit("\r\n\r\n"));
+    if (head_end != SP_STR_NO_MATCH) {
+      u64 need = 0;
+      sp_str_t head = sp_str_sub(sp_str(buf, len), 0, head_end);
+      s32 at = sp_str_find(head, sp_str_lit("Content-Length: "));
+      if (at != SP_STR_NO_MATCH) {
+        sp_str_t rest = sp_str_sub(head, at + (s32)(sizeof("Content-Length: ") - 1), (s32)head.len - at - (s32)(sizeof("Content-Length: ") - 1));
+        s32 nl = sp_str_find(rest, sp_str_lit("\r\n"));
+        sp_str_t num = nl == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, nl);
+        sp_parse_u64_ex(num, &need);
+      }
+      if ((u64)len >= (u64)head_end + 4 + need) {
+        ok = true;
+        break;
+      }
     }
     if (len == sizeof(buf)) break;
     s32 n = ssl
@@ -428,6 +466,26 @@ static s32 tls_mock_server_thread(void* userdata) {
   return 0;
 }
 
+static const c8* tls_subst_port(sp_mem_t mem, const c8* send, const c8* port) {
+  sp_str_t str = sp_cstr_as_str(send);
+  s32 at = sp_str_find(str, sp_str_lit("@PORT@"));
+  if (at == SP_STR_NO_MATCH) return send;
+  sp_str_t result = sp_fmt(mem, "{}{}{}",
+    sp_fmt_str(sp_str_sub(str, 0, at)),
+    sp_fmt_cstr(port),
+    sp_fmt_str(sp_str_sub(str, at + 6, (s32)str.len - at - 6))).value;
+  return sp_str_to_cstr(mem, result);
+}
+
+static u32 tls_count_matches(sp_str_t haystack, sp_str_t needle) {
+  if (sp_str_empty(needle) || needle.len > haystack.len) return 0;
+  u32 count = 0;
+  sp_for_range(it, 0, haystack.len - needle.len + 1) {
+    if (sp_str_equal(sp_str_sub(haystack, it, (s32)needle.len), needle)) count++;
+  }
+  return count;
+}
+
 void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
 #if !defined(SP_WIN32)
   signal(SIGPIPE, SIG_IGN);
@@ -459,6 +517,14 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
   EXPECT_TRUE(bound);
   if (!bound) return;
 
+  sp_carr_for(t.scripts, s) {
+    sp_carr_for(t.scripts[s].steps, step) {
+      if (t.scripts[s].steps[step].send) {
+        t.scripts[s].steps[step].send = tls_subst_port(mem, t.scripts[s].steps[step].send, port);
+      }
+    }
+  }
+
   if (t.tls) {
     mbedtls_x509_crt_init(&server.crt);
     mbedtls_pk_init(&server.pk);
@@ -489,20 +555,32 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
   sp_str_t url = t.url
     ? sp_cstr_as_str(t.url)
     : sp_fmt(mem, "{}://127.0.0.1:{}{}", sp_fmt_cstr(t.tls ? "https" : "http"), sp_fmt_cstr(port), sp_fmt_cstr(t.path ? t.path : "/")).value;
-  sp_http_response_t response = sp_zero;
-  sp_tls_error_t err = sp_http_fetch(mem, (sp_http_request_t) {
-    .url   = url,
-    .trust = &trust,
-    .body  = &body.base,
-    .proxy = t.proxy ? sp_fmt(mem, "127.0.0.1:{}", sp_fmt_cstr(port)).value : sp_str_lit(""),
+  sp_http_request_t request = {
+    .url    = url,
+    .trust  = &trust,
+    .sink   = &body.base,
+    .method = t.method,
+    .proxy  = t.proxy ? sp_fmt(mem, "127.0.0.1:{}", sp_fmt_cstr(port)).value : sp_str_lit(""),
     .no_proxy = !t.proxy, // isolate the suite from proxies in the developer's environment
     .connect_timeout_ms = t.connect_timeout_ms,
     .io_timeout_ms = t.io_timeout_ms,
-  }, &response);
+  };
+  if (t.payload)      request.payload = sp_cstr_as_str(t.payload);
+  if (t.content_type) request.content_type = sp_cstr_as_str(t.content_type);
+  sp_carr_for(t.headers, it) {
+    if (!t.headers[it].name) break;
+    request.headers[it].name = sp_cstr_as_str(t.headers[it].name);
+    if (t.headers[it].value) request.headers[it].value = sp_cstr_as_str(t.headers[it].value);
+  }
+
+  sp_http_response_t response = sp_zero;
+  sp_tls_error_t err = sp_http_fetch(mem, request, &response);
 
   EXPECT_EQ(err, t.expect.err);
   if (t.expect.status) EXPECT_EQ(response.status, t.expect.status);
   if (t.expect.body) EXPECT_TRUE(sp_str_equal_cstr(sp_io_dyn_mem_writer_as_str(&body), t.expect.body));
+  if (t.expect.content_type) EXPECT_TRUE_MSG(sp_str_equal_cstr(response.content_type, t.expect.content_type), t.expect.content_type);
+  if (t.expect.location) EXPECT_TRUE_MSG(sp_str_equal_cstr(response.location, t.expect.location), t.expect.location);
 
   sp_atomic_s32_set(&server.stop, 1);
   mbedtls_net_context poke;
@@ -514,6 +592,10 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
   sp_carr_for(t.captured, it) {
     if (!t.captured[it]) continue;
     EXPECT_TRUE_MSG(sp_str_contains(sp_str(server.captured, server.captured_len), sp_cstr_as_str(t.captured[it])), t.captured[it]);
+  }
+  sp_carr_for(t.counted, it) {
+    if (!t.counted[it].text) continue;
+    EXPECT_EQ_MSG(tls_count_matches(sp_str(server.captured, server.captured_len), sp_cstr_as_str(t.counted[it].text)), t.counted[it].n, t.counted[it].text);
   }
 
   mbedtls_net_free(&server.listen);
@@ -537,7 +619,7 @@ UTEST_F(tls, fetch_content_length) {
 UTEST_F(tls, fetch_status_404) {
   run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
     .scripts = {{{ { .send = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found" } }}},
-    .expect = { .err = SP_TLS_ERR_STATUS, .status = 404, .body = "" },
+    .expect = { .err = SP_TLS_ERR_STATUS, .status = 404, .body = "not found" },
   });
 }
 
@@ -759,6 +841,221 @@ UTEST_F(tls, fetch_proxy_connect) {
     .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }}},
     .expect = { .status = 200, .body = "hello" },
     .captured = { "CONNECT 127.0.0.1:", "GET / HTTP/1.1" },
+  });
+}
+
+UTEST_F(tls, post_payload) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_POST,
+    .payload = "{\"a\":1}",
+    .content_type = "application/json",
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "POST / HTTP/1.1", "Content-Type: application/json" },
+    .counted = { { "{\"a\":1}", 1 }, { "Content-Length: 7", 1 } },
+  });
+}
+
+UTEST_F(tls, post_empty_payload) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_POST,
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "POST / HTTP/1.1" },
+    .counted = { { "Content-Length: 0", 1 }, { "Content-Type:", 0 } },
+  });
+}
+
+UTEST_F(tls, put_payload) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_PUT,
+    .payload = "data",
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "PUT / HTTP/1.1", "Content-Length: 4" },
+  });
+}
+
+UTEST_F(tls, delete_no_payload) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_DELETE,
+    .scripts = {{{ { .send = "HTTP/1.1 204 No Content\r\n\r\n" } }}},
+    .expect = { .status = 204, .body = "" },
+    .captured = { "DELETE / HTTP/1.1" },
+    .counted = { { "Content-Length", 0 } },
+  });
+}
+
+UTEST_F(tls, post_303_rewrites_to_get) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_POST,
+    .payload = "ping",
+    .content_type = "text/plain",
+    .scripts = {
+      {{ { .send = "HTTP/1.1 303 See Other\r\nLocation: /next\r\n\r\n" } }},
+      {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }},
+    },
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "POST / HTTP/1.1", "GET /next HTTP/1.1" },
+    .counted = { { "ping", 1 }, { "Content-Type:", 1 }, { "Content-Length:", 1 } },
+  });
+}
+
+UTEST_F(tls, post_301_rewrites_to_get) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_POST,
+    .payload = "ping",
+    .scripts = {
+      {{ { .send = "HTTP/1.1 301 Moved Permanently\r\nLocation: /next\r\n\r\n" } }},
+      {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }},
+    },
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "GET /next HTTP/1.1" },
+    .counted = { { "ping", 1 } },
+  });
+}
+
+UTEST_F(tls, post_307_preserves_method) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_POST,
+    .payload = "ping",
+    .content_type = "text/plain",
+    .scripts = {
+      {{ { .send = "HTTP/1.1 307 Temporary Redirect\r\nLocation: /next\r\n\r\n" } }},
+      {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }},
+    },
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "POST /next HTTP/1.1" },
+    .counted = { { "ping", 2 }, { "Content-Type: text/plain", 2 } },
+  });
+}
+
+UTEST_F(tls, post_308_preserves_method) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_POST,
+    .payload = "ping",
+    .scripts = {
+      {{ { .send = "HTTP/1.1 308 Permanent Redirect\r\nLocation: /next\r\n\r\n" } }},
+      {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }},
+    },
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "POST /next HTTP/1.1" },
+    .counted = { { "ping", 2 } },
+  });
+}
+
+UTEST_F(tls, delete_with_payload) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_DELETE,
+    .payload = "why",
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "DELETE / HTTP/1.1", "Content-Length: 3" },
+    .counted = { { "why", 1 } },
+  });
+}
+
+UTEST_F(tls, custom_headers) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = {
+      { "X-Custom", "abc" },
+      { "Authorization", "Bearer tok" },
+    },
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "X-Custom: abc", "Authorization: Bearer tok" },
+  });
+}
+
+UTEST_F(tls, header_host_override) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = { { "Host", "override.test" } },
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "Host: override.test" },
+    .counted = { { "Host:", 1 } },
+  });
+}
+
+UTEST_F(tls, header_content_type_override) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_POST,
+    .payload = "x",
+    .content_type = "text/plain",
+    .headers = { { "Content-Type", "application/json" } },
+    .scripts = {{{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }}},
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "Content-Type: application/json" },
+    .counted = { { "Content-Type:", 1 } },
+  });
+}
+
+UTEST_F(tls, header_crlf_rejected) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = { { "X-Bad", "a\r\nEvil: 1" } },
+    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+  });
+}
+
+UTEST_F(tls, header_name_crlf_rejected) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = { { "X-Bad\r\nEvil", "1" } },
+    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+  });
+}
+
+UTEST_F(tls, header_lone_newline_rejected) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = { { "X-Bad", "a\nb" } },
+    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+  });
+}
+
+UTEST_F(tls, header_reserved_rejected) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = { { "Content-Length", "5" } },
+    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+  });
+}
+
+UTEST_F(tls, header_connection_rejected) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = { { "Connection", "keep-alive" } },
+    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+  });
+}
+
+UTEST_F(tls, redirect_cross_host_strips_auth) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = { { "Authorization", "Bearer tok" }, { "Cookie", "a=1" }, { "X-Keep", "yes" } },
+    .scripts = {
+      {{ { .send = "HTTP/1.1 302 Found\r\nLocation: http://localhost:@PORT@/next\r\n\r\n" } }},
+      {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }},
+    },
+    .expect = { .status = 200, .body = "ok" },
+    .captured = { "GET /next HTTP/1.1" },
+    .counted = { { "Bearer tok", 1 }, { "Cookie:", 1 }, { "X-Keep: yes", 2 } },
+  });
+}
+
+UTEST_F(tls, redirect_same_host_keeps_auth) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .headers = { { "Authorization", "Bearer tok" } },
+    .scripts = {
+      {{ { .send = "HTTP/1.1 302 Found\r\nLocation: /next\r\n\r\n" } }},
+      {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" } }},
+    },
+    .expect = { .status = 200, .body = "ok" },
+    .counted = { { "Bearer tok", 2 } },
+  });
+}
+
+UTEST_F(tls, response_metadata) {
+  run_fetch_test(utest_result, ut.mem.arena, (fetch_test_t) {
+    .method = SP_HTTP_POST,
+    .payload = "x",
+    .scripts = {{{ { .send = "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nLocation: /created/1\r\nContent-Length: 4\r\n\r\ndone" } }}},
+    .expect = { .status = 201, .body = "done", .content_type = "application/json", .location = "/created/1" },
   });
 }
 
