@@ -27,7 +27,22 @@ typedef s32 (*sp_prompt_demo_fn_t)(sp_prompt_ctx_t* ctx);
 
 s32 demo_note(sp_prompt_ctx_t* ctx) {
   sp_prompt_intro(ctx, "Demo: Note");
-  sp_prompt_note(ctx, "Wow. We got someone with a nose for *exciting* widgets", "Congratulations");
+  sp_prompt_note(ctx, "Let's say you're scaffolding a project. You could render the written files like this.", "Congratulations");
+
+  const c8* files[] = {
+    ".gitignore",
+    "kram.txt",
+    "horse.conf",
+  };
+
+  sp_prompt_note_t note = sp_prompt_note_new(ctx->mem, "Created");
+  sp_carr_for(files, it) {
+    sp_prompt_note_line_fmt(&note, "{.green} {}", sp_fmt_cstr("+"), sp_fmt_cstr(files[it]));
+  }
+  sp_prompt_note_line(&note, "");
+  sp_prompt_note_line_fmt(&note, "To ride your big beautiful mare, edit {.cyan}", sp_fmt_cstr("horse.conf"));
+  sp_prompt_note_ex(ctx, note);
+
   sp_prompt_outro(ctx, "Bye!");
   return 0;
 }

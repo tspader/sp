@@ -169,6 +169,16 @@
     void sp_prompt_error(sp_prompt_ctx_t* ctx, const c8* text);
     void sp_prompt_success(sp_prompt_ctx_t* ctx, const c8* text);
 
+  If you're after multiline text, notes can be built per-line. This also lets you
+  add ANSI colors to the text inside a note. Each call adds exactly one line; the
+  text must not contain newlines.
+
+    sp_prompt_note_t note = sp_prompt_note_new(mem, "Title");
+    sp_prompt_note_line(&note, "Animals");
+    sp_prompt_note_line_fmt(&note, "{.cyan}", sp_fmt_cstr("mountain rat"));
+    sp_prompt_note_line_fmt(&note, "{.cyan}", sp_fmt_cstr("walrus"));
+    sp_prompt_note_ex(ctx, note);
+
 
   ### TEXT INPUT
   Also very basic. Blocks waiting for input with poll().
@@ -398,11 +408,6 @@ typedef struct {
 // TEXT //
 //////////
 typedef struct {
-  sp_str_t message;
-  sp_str_t title;
-} sp_prompt_note_t;
-
-typedef struct {
   sp_str_t text;
   u32 symbol;
   u8 ansi;
@@ -480,6 +485,28 @@ struct sp_prompt_style_t {
   };
 };
 
+typedef struct sp_prompt_style_t sp_prompt_style_t;
+
+//////////
+// NOTE //
+//////////
+typedef struct {
+  u32 start;
+  u32 len;
+  sp_prompt_style_t style;
+} sp_prompt_span_t;
+
+typedef struct {
+  sp_str_t text;
+  sp_da(sp_prompt_span_t) spans;
+} sp_prompt_note_line_t;
+
+typedef struct {
+  sp_str_t title;
+  sp_mem_t mem;
+  sp_da(sp_prompt_note_line_t) lines;
+} sp_prompt_note_t;
+
 //////////////
 // SPINNERS //
 //////////////
@@ -487,7 +514,6 @@ struct sp_prompt_style_t {
 #define SP_PROMPT_SPINNER_MAX_FRAMES 64
 #define SP_PROMPT_SPINNER_DEFAULT_FPS 12
 
-typedef struct sp_prompt_style_t sp_prompt_style_t;
 typedef void (*sp_prompt_spinner_symbol_fn) (sp_prompt_ctx_t* ctx, u32 frame_index, u32* codepoint);
 typedef void (*sp_prompt_spinner_color_fn)  (sp_prompt_ctx_t* ctx, u32 frame_index, sp_prompt_style_t* style);
 
@@ -708,7 +734,6 @@ void             sp_prompt_end(sp_prompt_ctx_t* ctx);
 // @widgets
 void             sp_prompt_intro(sp_prompt_ctx_t* ctx, const c8* text);
 void             sp_prompt_outro(sp_prompt_ctx_t* ctx, const c8* text);
-void             sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* text, const c8* title);
 void             sp_prompt_cancel(sp_prompt_ctx_t* ctx, const c8* text);
 void             sp_prompt_info(sp_prompt_ctx_t* ctx, const c8* text);
 void             sp_prompt_warn(sp_prompt_ctx_t* ctx, const c8* text);
@@ -722,6 +747,11 @@ void             sp_prompt_multiselect(sp_prompt_ctx_t* ctx, sp_prompt_multisele
 void             sp_prompt_spinner(sp_prompt_ctx_t* ctx, sp_prompt_spinner_t config);
 void             sp_prompt_progress(sp_prompt_ctx_t* ctx, sp_prompt_progress_t config);
 void             sp_prompt_knight_rider(sp_prompt_ctx_t* ctx, sp_prompt_knight_rider_t config);
+void             sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* text, const c8* title);
+sp_prompt_note_t sp_prompt_note_new(sp_mem_t mem, const c8* title);
+void             sp_prompt_note_line(sp_prompt_note_t* note, const c8* text);
+void             sp_prompt_note_line_fmt(sp_prompt_note_t* note, const c8* fmt, ...);
+void             sp_prompt_note_ex(sp_prompt_ctx_t* ctx, sp_prompt_note_t note);
 bool             sp_prompt_submitted(sp_prompt_ctx_t* ctx);
 bool             sp_prompt_cancelled(sp_prompt_ctx_t* ctx);
 
@@ -1616,12 +1646,10 @@ static void sp_prompt_note_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_note_t* prompt = (sp_prompt_note_t*)ctx->user_data;
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
-  sp_da(sp_str_t) message_lines = sp_str_split_c8(s.mem, prompt->message, '\n');
-
   u32 title_width = sp_prompt_text_width(prompt->title);
   u32 max_line_width = 0;
-  sp_da_for(message_lines, it) {
-    u32 line_width = sp_prompt_text_width(message_lines[it]);
+  sp_da_for(prompt->lines, it) {
+    u32 line_width = sp_prompt_text_width(prompt->lines[it].text);
     if (line_width > max_line_width) {
       max_line_width = line_width;
     }
@@ -1645,11 +1673,24 @@ static void sp_prompt_note_render(sp_prompt_ctx_t* ctx) {
   sp_prompt_line_fmt(ctx, "◇  {} {}╮", sp_fmt_str(prompt->title), sp_fmt_str(top_tail));
   sp_prompt_line_fmt(ctx, "│  {}│", sp_fmt_str(spacer));
 
-  sp_da_for(message_lines, it) {
-    sp_str_t line = message_lines[it];
-    u32 line_width = sp_prompt_text_width(line);
-    sp_str_t pad = sp_prompt_repeat(ctx, ' ', width - line_width);
-    sp_prompt_line_fmt(ctx, "│  {}{}│", sp_fmt_str(line), sp_fmt_str(pad));
+  sp_da_for(prompt->lines, it) {
+    sp_prompt_note_line_t* line = &prompt->lines[it];
+    u32 line_width = sp_prompt_text_width(line->text);
+    sp_prompt_render_line(ctx, sp_str_lit("│  "), sp_zero_s(sp_prompt_style_t));
+
+    u32 cursor = 0;
+    sp_da_for(line->spans, span_it) {
+      sp_prompt_span_t span = line->spans[span_it];
+      sp_prompt_render_line(ctx, sp_str(line->text.data + cursor, span.start - cursor), sp_zero_s(sp_prompt_style_t));
+      sp_prompt_render_line(ctx, sp_str(line->text.data + span.start, span.len), span.style);
+      cursor = span.start + span.len;
+    }
+    sp_prompt_render_line(ctx, sp_str(line->text.data + cursor, line->text.len - cursor), sp_zero_s(sp_prompt_style_t));
+
+    sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, ' ', width - line_width), sp_zero_s(sp_prompt_style_t));
+    sp_prompt_render_line(ctx, sp_str_lit("│"), sp_zero_s(sp_prompt_style_t));
+    ctx->cursor_col = 0;
+    ctx->cursor_row++;
   }
 
   sp_prompt_line_fmt(ctx, "│  {}│", sp_fmt_str(spacer));
@@ -1728,11 +1769,92 @@ void sp_prompt_outro(sp_prompt_ctx_t* ctx, const c8* message) {
   }));
 }
 
+static sp_prompt_style_t sp_prompt_style_from_fmt(sp_fmt_style_t style) {
+  return (sp_prompt_style_t) {
+    .tag = SP_PROMPT_STYLE_ANSI,
+    .ansi = sp_fmt_style_to_ansi_u8(style),
+  };
+}
+
+static void sp_prompt_note_append(sp_prompt_note_t* note, sp_str_t text, sp_da(sp_fmt_span_t) spans) {
+  sp_prompt_note_line_t line = {
+    .text = text,
+  };
+
+  sp_da_for(spans, span_it) {
+    sp_fmt_span_t span = spans[span_it];
+    sp_prompt_style_t style = sp_prompt_style_from_fmt(span.style);
+    if (!style.ansi) {
+      continue;
+    }
+
+    sp_prompt_span_t prompt_span = {
+      .start = span.start,
+      .len = span.len,
+      .style = style,
+    };
+
+    if (!sp_da_empty(line.spans)) {
+      sp_prompt_span_t* last = sp_da_back(line.spans);
+      if (prompt_span.start == last->start && prompt_span.len == last->len) {
+        last->style = prompt_span.style;
+        continue;
+      }
+      if (prompt_span.start < last->start + last->len) {
+        continue;
+      }
+    }
+
+    if (!line.spans) {
+      line.spans = sp_da_new(note->mem, sp_prompt_span_t);
+    }
+    sp_da_push(line.spans, prompt_span);
+  }
+
+  sp_da_push(note->lines, line);
+}
+
+sp_prompt_note_t sp_prompt_note_new(sp_mem_t mem, const c8* title) {
+  return (sp_prompt_note_t) {
+    .title = sp_str_copy(mem, sp_str_view(title)),
+    .mem = mem,
+    .lines = sp_da_new(mem, sp_prompt_note_line_t),
+  };
+}
+
+void sp_prompt_note_line(sp_prompt_note_t* note, const c8* text) {
+  sp_prompt_note_append(note, sp_str_copy(note->mem, sp_str_view(text)), SP_NULLPTR);
+}
+
+void sp_prompt_note_line_fmt(sp_prompt_note_t* note, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_fmt_styled_r styled = sp_fmt_styled_v(note->mem, sp_cstr_as_str(fmt), args);
+  va_end(args);
+
+  if (styled.err) {
+    sp_prompt_note_append(note, sp_str_copy(note->mem, sp_cstr_as_str(fmt)), SP_NULLPTR);
+    return;
+  }
+  sp_prompt_note_append(note, styled.text, styled.spans);
+}
+
+void sp_prompt_note_ex(sp_prompt_ctx_t* ctx, sp_prompt_note_t note) {
+  sp_prompt_run(ctx, sp_prompt_note_widget(ctx, note));
+}
+
 void sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* message, const c8* title) {
-  sp_prompt_run(ctx, sp_prompt_note_widget(ctx, (sp_prompt_note_t) {
-    .message = sp_str_view(message),
-    .title = sp_str_view(title),
-  }));
+  sp_prompt_note_t note = sp_prompt_note_new(sp_mem_arena_as_allocator(ctx->arena), title);
+  sp_str_t text = sp_str_view(message);
+  if (!sp_str_empty(text)) {
+    sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(note.mem);
+    sp_da(sp_str_t) split = sp_str_split_c8(s.mem, text, '\n');
+    sp_da_for(split, it) {
+      sp_prompt_note_append(&note, sp_str_copy(note.mem, split[it]), SP_NULLPTR);
+    }
+    sp_mem_end_scratch(s);
+  }
+  sp_prompt_note_ex(ctx, note);
 }
 
 void sp_prompt_cancel(sp_prompt_ctx_t* ctx, const c8* message) {

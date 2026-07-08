@@ -320,10 +320,8 @@ UTEST_F(prompt, outro_submits_without_update) {
 }
 
 UTEST_F(prompt, note_renders_single_line_box) {
-  sp_prompt_note_t note = {
-    .message = sp_str_lit("x"),
-    .title = sp_str_lit("T"),
-  };
+  sp_prompt_note_t note = sp_prompt_note_new(ut.mem.arena, "T");
+  sp_prompt_note_line(&note, "x");
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
     .widget = sp_prompt_note_widget(&ut.ctx, note),
@@ -341,10 +339,9 @@ UTEST_F(prompt, note_renders_single_line_box) {
 }
 
 UTEST_F(prompt, note_uses_longest_line_for_width) {
-  sp_prompt_note_t note = {
-    .message = sp_str_lit("a\nbbb"),
-    .title = sp_str_lit("T"),
-  };
+  sp_prompt_note_t note = sp_prompt_note_new(ut.mem.arena, "T");
+  sp_prompt_note_line(&note, "a");
+  sp_prompt_note_line(&note, "bbb");
 
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
     .widget = sp_prompt_note_widget(&ut.ctx, note),
@@ -357,6 +354,151 @@ UTEST_F(prompt, note_uses_longest_line_for_width) {
         "│  bbb  │",
         "│       │",
         "├───────╯",
+      },
+    },
+  });
+}
+
+UTEST_F(prompt, note_line_fmt_styles_cells) {
+  sp_prompt_note_t note = sp_prompt_note_new(ut.mem.arena, "T");
+  sp_prompt_note_line_fmt(&note, "{.green} {}", sp_fmt_cstr("+"), sp_fmt_cstr("file.c"));
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_note_widget(&ut.ctx, note),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .lines = {
+        "◇  T ────────╮",
+        "│            │",
+        "│  + file.c  │",
+        "│            │",
+        "├────────────╯",
+      },
+    },
+  });
+
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
+
+  sp_prompt_cell_t symbol = sp_prompt_frame_cell(frame, 2, 3);
+  sp_prompt_cell_t space = sp_prompt_frame_cell(frame, 2, 4);
+  sp_prompt_cell_t text = sp_prompt_frame_cell(frame, 2, 5);
+
+  EXPECT_EQ(symbol.codepoint, '+');
+  EXPECT_EQ(symbol.style.tag, SP_PROMPT_STYLE_ANSI);
+  EXPECT_EQ(symbol.style.ansi, 32);
+
+  EXPECT_EQ(space.codepoint, ' ');
+  EXPECT_EQ(space.style.tag, SP_PROMPT_STYLE_NONE);
+
+  EXPECT_EQ(text.codepoint, 'f');
+  EXPECT_EQ(text.style.tag, SP_PROMPT_STYLE_NONE);
+}
+
+UTEST_F(prompt, note_line_fmt_skips_styles_without_ansi_colors) {
+  sp_prompt_note_t note = sp_prompt_note_new(ut.mem.arena, "T");
+  sp_prompt_note_line_fmt(&note, "{.cyan .bold}", sp_fmt_cstr("x"));
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_note_widget(&ut.ctx, note),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .lines = {
+        "◇  T ─╮",
+        "│     │",
+        "│  x  │",
+        "│     │",
+        "├─────╯",
+      },
+    },
+  });
+
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
+
+  sp_prompt_cell_t cell = sp_prompt_frame_cell(frame, 2, 3);
+  EXPECT_EQ(cell.codepoint, 'x');
+  EXPECT_EQ(cell.style.tag, SP_PROMPT_STYLE_ANSI);
+  EXPECT_EQ(cell.style.ansi, 36);
+}
+
+UTEST_F(prompt, note_message_splits_newlines) {
+  sp_prompt_note(&ut.ctx, "a\nbbb", "T");
+
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
+
+  const c8* expected[] = {
+    "◇  T ───╮",
+    "│       │",
+    "│  a    │",
+    "│  bbb  │",
+    "│       │",
+    "├───────╯",
+  };
+
+  EXPECT_EQ(frame.rows, sp_carr_len(expected));
+  sp_carr_for(expected, row) {
+    sp_str_t actual = trim_framebuffer_row(ut.mem.arena, frame.cells + row * frame.cols, frame.cols);
+    SP_EXPECT_STR_EQ_CSTR(actual, expected[row]);
+  }
+}
+
+UTEST_F(prompt, note_without_lines_renders_empty_box) {
+  sp_prompt_note_t note = sp_prompt_note_new(ut.mem.arena, "T");
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_note_widget(&ut.ctx, note),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .lines = {
+        "◇  T ─╮",
+        "│     │",
+        "│     │",
+        "├─────╯",
+      },
+    },
+  });
+}
+
+UTEST_F(prompt, note_empty_message_renders_empty_box) {
+  sp_prompt_note(&ut.ctx, "", "T");
+
+  ASSERT_TRUE(!sp_da_empty(ut.ctx.frames));
+  sp_prompt_frame_t frame = sp_prompt_last_frame(&ut.ctx);
+
+  const c8* expected[] = {
+    "◇  T ─╮",
+    "│     │",
+    "│     │",
+    "├─────╯",
+  };
+
+  EXPECT_EQ(frame.rows, sp_carr_len(expected));
+  sp_carr_for(expected, row) {
+    sp_str_t actual = trim_framebuffer_row(ut.mem.arena, frame.cells + row * frame.cols, frame.cols);
+    SP_EXPECT_STR_EQ_CSTR(actual, expected[row]);
+  }
+}
+
+UTEST_F(prompt, note_blank_lines_render_empty_rows) {
+  sp_prompt_note_t note = sp_prompt_note_new(ut.mem.arena, "T");
+  sp_prompt_note_line(&note, "a");
+  sp_prompt_note_line(&note, "");
+  sp_prompt_note_line(&note, "b");
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_note_widget(&ut.ctx, note),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .lines = {
+        "◇  T ─╮",
+        "│     │",
+        "│  a  │",
+        "│     │",
+        "│  b  │",
+        "│     │",
+        "├─────╯",
       },
     },
   });
@@ -402,14 +544,12 @@ UTEST_F(prompt, message_info_renders_symbol_line) {
 }
 
 UTEST_F(prompt, message_error_renders_symbol_line) {
-  sp_prompt_message_t message = {
-    .text = sp_str_lit("boom"),
-    .symbol = 0x25a0,
-    .ansi = 31,
-  };
-
   sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
-    .widget = sp_prompt_message_widget(&ut.ctx, message),
+    .widget = sp_prompt_message_widget(&ut.ctx, (sp_prompt_message_t) {
+      .text = sp_str_lit("boom"),
+      .symbol = 0x25a0,
+      .ansi = 31,
+    }),
     .expect = {
       .state = SP_PROMPT_STATE_SUBMIT,
       .lines = {

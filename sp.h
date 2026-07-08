@@ -3061,6 +3061,22 @@ struct sp_fmt_arg {
   sp_fmt_fn_t fn;
 };
 
+typedef struct {
+  u32 start;
+  u32 len;
+  sp_fmt_style_t style;
+} sp_fmt_span_t;
+
+typedef struct {
+  sp_str_t text;
+  sp_da(sp_fmt_span_t) spans;
+  sp_err_t err;
+} sp_fmt_styled_r;
+
+SP_API sp_fmt_styled_r sp_fmt_styled(sp_mem_t mem, const c8* fmt, ...);
+SP_API sp_fmt_styled_r sp_fmt_styled_v(sp_mem_t mem, sp_str_t fmt, va_list args);
+SP_API const c8*       sp_fmt_style_to_ansi(sp_fmt_style_t style);
+SP_API u8              sp_fmt_style_to_ansi_u8(sp_fmt_style_t style);
 
 #define sp_fmt_uint(_value)  (sp_fmt_argv_t) { .id = sp_fmt_id_u64, .value = { .u = (_value) } }
 #define sp_fmt_int(_value)   (sp_fmt_argv_t) { .id = sp_fmt_id_s64, .value = { .i = (_value) } }
@@ -7391,7 +7407,7 @@ sp_fmt_style_t sp_fmt_style_from_attr(sp_fmt_style_attr_t attr) {
   SP_UNREACHABLE_RETURN(sp_fmt_style_none);
 }
 
-static const c8* sp_fmt_style_ansi(sp_fmt_style_t style) {
+const c8* sp_fmt_style_to_ansi(sp_fmt_style_t style) {
   switch (style) {
     case sp_fmt_style_black:      return SP_ANSI_FG_BLACK;
     case sp_fmt_style_red:        return SP_ANSI_FG_RED;
@@ -7419,8 +7435,36 @@ static const c8* sp_fmt_style_ansi(sp_fmt_style_t style) {
   return SP_NULLPTR;
 }
 
+u8 sp_fmt_style_to_ansi_u8(sp_fmt_style_t style) {
+  switch (style) {
+    case sp_fmt_style_black:      return SP_ANSI_FG_BLACK_U8;
+    case sp_fmt_style_red:        return SP_ANSI_FG_RED_U8;
+    case sp_fmt_style_green:      return SP_ANSI_FG_GREEN_U8;
+    case sp_fmt_style_yellow:     return SP_ANSI_FG_YELLOW_U8;
+    case sp_fmt_style_blue:       return SP_ANSI_FG_BLUE_U8;
+    case sp_fmt_style_magenta:    return SP_ANSI_FG_MAGENTA_U8;
+    case sp_fmt_style_cyan:       return SP_ANSI_FG_CYAN_U8;
+    case sp_fmt_style_white:      return SP_ANSI_FG_WHITE_U8;
+    case sp_fmt_style_gray:       return SP_ANSI_FG_BRIGHT_BLACK_U8;
+    case sp_fmt_style_br_red:     return SP_ANSI_FG_BRIGHT_RED_U8;
+    case sp_fmt_style_br_green:   return SP_ANSI_FG_BRIGHT_GREEN_U8;
+    case sp_fmt_style_br_yellow:  return SP_ANSI_FG_BRIGHT_YELLOW_U8;
+    case sp_fmt_style_br_blue:    return SP_ANSI_FG_BRIGHT_BLUE_U8;
+    case sp_fmt_style_br_magenta: return SP_ANSI_FG_BRIGHT_MAGENTA_U8;
+    case sp_fmt_style_br_cyan:    return SP_ANSI_FG_BRIGHT_CYAN_U8;
+    case sp_fmt_style_br_white:   return SP_ANSI_FG_BRIGHT_WHITE_U8;
+    case sp_fmt_style_bold:
+    case sp_fmt_style_italic:
+    case sp_fmt_style_none:
+    case sp_fmt_style_unset:
+    case sp_fmt_style_hyperlink:
+    case sp_fmt_style_quote:      return 0;
+  }
+  return 0;
+}
+
 static void sp_fmt_style_open(sp_io_writer_t* io, sp_fmt_style_t style, sp_fmt_arg_t* arg) {
-  const c8* ansi = sp_fmt_style_ansi(style);
+  const c8* ansi = sp_fmt_style_to_ansi(style);
   if (ansi) {
     sp_io_write_cstr(io, ansi, SP_NULLPTR);
   }
@@ -14767,7 +14811,14 @@ sp_str_r sp_fmt_buf_v(c8* buffer, u64 len, sp_str_t fmt, va_list args) {
   return str;
 }
 
-sp_err_t sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
+typedef struct {
+  sp_io_dyn_mem_writer_t* io;
+  sp_da(sp_fmt_span_t) spans;
+} sp_fmt_span_sink_t;
+
+static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_span_sink_t* sink);
+
+static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, sp_fmt_span_sink_t* sink) {
   sp_fmt_parser_t p = { .str = fmt };
 
   while (true) {
@@ -14811,7 +14862,7 @@ sp_err_t sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
 
       sp_fmt_arg_t arg = sp_fmt_arg_from_argv(va_arg(args, sp_fmt_argv_t));
       arg.spec = spec;
-      sp_try(sp_fmt_render(io, &arg));
+      sp_try(sp_fmt_render_ex(io, &arg, sink));
       continue;
     }
 
@@ -14830,6 +14881,36 @@ sp_err_t sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
   }
 
   return SP_OK;
+}
+
+sp_err_t sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
+  return sp_fmt_io_v_ex(io, fmt, args, SP_NULLPTR);
+}
+
+sp_fmt_styled_r sp_fmt_styled_v(sp_mem_t mem, sp_str_t fmt, va_list args) {
+  sp_fmt_styled_r result = sp_zero;
+
+  sp_io_dyn_mem_writer_t io = sp_zero;
+  sp_io_dyn_mem_writer_init(mem, &io);
+  sp_fmt_span_sink_t sink = {
+    .io = &io,
+    .spans = sp_da_new(mem, sp_fmt_span_t),
+  };
+
+  result.err = sp_fmt_io_v_ex(&io.base, fmt, args, &sink);
+  if (!result.err) {
+    result.text = sp_io_dyn_mem_writer_as_str(&io);
+    result.spans = sink.spans;
+  }
+  return result;
+}
+
+sp_fmt_styled_r sp_fmt_styled(sp_mem_t mem, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_fmt_styled_r result = sp_fmt_styled_v(mem, sp_cstr_as_str(fmt), args);
+  va_end(args);
+  return result;
 }
 
 void sp_log(const c8* fmt, ...) {
@@ -14900,7 +14981,7 @@ sp_err_t sp_fmt_render_bytes(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
   return sp_fmt_write_size(io, n);
 }
 
-sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
+static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_span_sink_t* sink) {
   u8 num_dirs = arg->spec.directive.num;
 
   sp_for(i, num_dirs) {
@@ -14996,12 +15077,44 @@ sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
   }
 
   sp_for(it, left_pad) sp_io_write_c8(io, fill);
-  sp_for(it, num_dirs) sp_fmt_style_open(io, arg->spec.directive.styles[it], arg);
-  sp_io_write_str(io, content, SP_NULLPTR);
-  u8 j = num_dirs;
-  while (j--) sp_fmt_style_close(io, arg->spec.directive.styles[j]);
+  if (sink) {
+    sp_assert(io == &sink->io->base);
+    u64 opens [SP_FMT_MAX_DIRECTIVES] = sp_zero;
+    u64 closes [SP_FMT_MAX_DIRECTIVES] = sp_zero;
+    sp_for(it, num_dirs) {
+      sp_io_dyn_mem_writer_size(sink->io, &opens[it]);
+      if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+    }
+    sp_io_write_str(io, content, SP_NULLPTR);
+    u8 j = num_dirs;
+    while (j--) {
+      if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+      sp_io_dyn_mem_writer_size(sink->io, &closes[j]);
+    }
+    sp_for(it, num_dirs) {
+      sp_fmt_style_t style = arg->spec.directive.styles[it];
+      if (closes[it] > opens[it] && sp_fmt_style_to_ansi(style)) {
+        sp_fmt_span_t span = {
+          .start = sp_cast(u32, opens[it]),
+          .len = sp_cast(u32, closes[it] - opens[it]),
+          .style = style,
+        };
+        sp_da_push(sink->spans, span);
+      }
+    }
+  }
+  else {
+    sp_for(it, num_dirs) sp_fmt_style_open(io, arg->spec.directive.styles[it], arg);
+    sp_io_write_str(io, content, SP_NULLPTR);
+    u8 j = num_dirs;
+    while (j--) sp_fmt_style_close(io, arg->spec.directive.styles[j]);
+  }
   sp_for(it, right_pad) sp_io_write_c8(io, fill);
   return SP_OK;
+}
+
+sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
+  return sp_fmt_render_ex(io, arg, SP_NULLPTR);
 }
 
 static const c8 sp_fmt_digit_pairs[201] =
