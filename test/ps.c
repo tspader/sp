@@ -79,6 +79,18 @@ UTEST_F_SETUP(ps) {
   sp_str_t process = get_process_path(ut.mem);
   EXPECT_TRUE(sp_fs_exists(process));
 
+  static bool warmed = false;
+  if (!warmed) {
+    sp_ps_run(ut.mem, (sp_ps_config_t) {
+      .command = process,
+      .args = {
+        sp_str_lit("--fn"), sp_str_lit("exit_code"),
+        sp_str_lit("--exit-code"), sp_str_lit("0"),
+      },
+    });
+    warmed = true;
+  }
+
   sp_test_file_manager_init(&ut.file_manager);
   ut.buffer = (sp_byte_buffer_t) {
     .len = 1024,
@@ -103,17 +115,15 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
 
   u32 target_len = (ctx->mode == SP_TEST_PROC_READ_EXACT) ? ctx->expected_len : ctx->buffer.len;
 
-  while (total_read < target_len && attempts < 10) {
+  u32 max_attempts = (ctx->mode == SP_TEST_PROC_READ_EXACT) ? 300 : 10;
+
+  while (total_read < target_len && attempts < max_attempts) {
     u8* ptr = ctx->buffer.data + total_read;
     u64 bytes_remaining = ctx->buffer.len - total_read;
     u64 bytes_read = 0;
     sp_io_read(ctx->stream, ptr, bytes_remaining, &bytes_read);
     if (!bytes_read) {
-      if (ctx->mode == SP_TEST_PROC_READ_UNTIL_DONE) {
-        sp_os_sleep_ms(10);
-      } else {
-        sp_os_sleep_ms(10);
-      }
+      sp_os_sleep_ms(10);
       attempts++;
       continue;
     }
@@ -122,13 +132,9 @@ void sp_test_proc_collect_stream(sp_test_proc_stream_context_t* ctx) {
 
   ctx->bytes_read = total_read;
 
-  if (total_read != ctx->expected_len) {
-    if (ctx->mode == SP_TEST_PROC_READ_EXACT) {
-      if (total_read != ctx->expected_len) {
-        sp_log("expected to read {}, but got {}", sp_fmt_uint(total_read), sp_fmt_uint(ctx->expected_len));
-        sp_assert(total_read == ctx->expected_len);
-      }
-    }
+  if (ctx->mode == SP_TEST_PROC_READ_EXACT && total_read != ctx->expected_len) {
+    sp_log("expected to read {}, but got {}", sp_fmt_uint(ctx->expected_len), sp_fmt_uint(total_read));
+    sp_assert(total_read == ctx->expected_len);
   }
 }
 
@@ -217,6 +223,9 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
       sp_assert(check.result == SP_TEST_PS_OUTPUT_MATCH);
     }
   }
+
+  sp_ps_status_t status = sp_ps_wait(&ps);
+  sp_assert(status.state == SP_PS_STATE_DONE);
 }
 
 // SP_PS_IO_MODE_CREATE
@@ -301,9 +310,6 @@ UTEST_F(ps, io_create_file_null) {
     },
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
-
-  sp_os_sleep_ms(100); // @spader @sp_ps_wait
-
   sp_sys_lseek(fd, 0, SP_SEEK_SET);
 
   u64 bytes_read = sp_sys_read(fd, ut.buffer.data, ut.buffer.len);
@@ -356,9 +362,6 @@ UTEST_F(ps, io_create_null_file) {
     },
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
-
-  sp_os_sleep_ms(100); // @spader @sp_ps_wait
-
   sp_sys_lseek(fd, 0, SP_SEEK_SET);
 
   u64 bytes_read = sp_sys_read(fd, ut.buffer.data, ut.buffer.len);
@@ -391,9 +394,6 @@ UTEST_F(ps, io_file_null_file) {
     },
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
-
-  sp_os_sleep_ms(100); // @spader @sp_ps_wait
-
   sp_sys_lseek(err_fd, 0, SP_SEEK_SET);
 
   u64 bytes_read = sp_sys_read(err_fd, ut.buffer.data, ut.buffer.len);
@@ -482,6 +482,9 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
   }
 
   sp_io_stream_writer_close(in);
+
+  sp_ps_status_t status = sp_ps_wait(&ps);
+  sp_assert(status.state == SP_PS_STATE_DONE);
 
   sp_test_proc_stream_context_t ctx = {
     .stream = out,
@@ -916,12 +919,16 @@ UTEST_F(ps, interleaved_read_write) {
     sp_io_write_str(&in->base, input, &written);
     EXPECT_EQ(written, input.len);
 
-    sp_os_sleep_ms(50);
-    u64 bytes_read = 0;
-    sp_io_read(out, ut.buffer.data, ut.buffer.len, &bytes_read);
     sp_str_t expected = sp_fmt(ut.mem, "echo: line {}\n", sp_fmt_uint(i)).value;
-    EXPECT_EQ(bytes_read, expected.len);
-    EXPECT_TRUE(sp_mem_is_equal(ut.buffer.data, expected.data, expected.len));
+    sp_test_proc_stream_context_t check = {
+      .stream = out,
+      .buffer = ut.buffer,
+      .expected = expected,
+      .mode = SP_TEST_PROC_READ_EXACT,
+      .expected_len = expected.len,
+    };
+    sp_test_proc_check_stream(&check);
+    EXPECT_EQ(check.result, SP_TEST_PS_OUTPUT_MATCH);
   }
 
   sp_io_stream_writer_close(in);
@@ -1191,16 +1198,34 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
 
   sp_sys_close(pipes[1]);
 
-  sp_ps_wait(&ps_a);
-  sp_ps_wait(&ps_b);
-
   const u32 expected_total = write_size * write_count * 2;
   u8* buffer = (u8*)sp_alloc(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
-  while (total_read < expected_total) {
-    ssize_t n = read(pipes[0], buffer + total_read, expected_total - total_read);
-    if (n <= 0) break;
+  fcntl(pipes[0], SP_F_SETFL, fcntl(pipes[0], SP_F_GETFL) | SP_O_NONBLOCK);
+
+  bool a_done = false;
+  bool b_done = false;
+  while (!a_done || !b_done) {
+    s64 n = sp_sys_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read);
+    if (n > 0) {
+      total_read += n;
+    }
+    if (!a_done) {
+      sp_ps_status_t s = sp_ps_poll(&ps_a, 0);
+      if (s.state == SP_PS_STATE_DONE) a_done = true;
+    }
+    if (!b_done) {
+      sp_ps_status_t s = sp_ps_poll(&ps_b, 0);
+      if (s.state == SP_PS_STATE_DONE) b_done = true;
+    }
+    if (!a_done || !b_done) {
+      sp_os_sleep_ms(1);
+    }
+  }
+
+  s64 n;
+  while ((n = sp_sys_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read)) > 0) {
     total_read += n;
   }
 
@@ -1276,7 +1301,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   bool a_done = false;
   bool b_done = false;
   while (!a_done || !b_done) {
-    ssize_t n = sp_sys_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read);
+    s64 n = sp_sys_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read);
     if (n > 0) {
       total_read += n;
     }
@@ -1293,7 +1318,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
     }
   }
 
-  ssize_t n;
+  s64 n;
   while ((n = sp_sys_read(pipes[0], buffer + total_read, expected_total + 1024 - total_read)) > 0) {
     total_read += n;
   }
