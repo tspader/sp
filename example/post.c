@@ -162,13 +162,13 @@ s32 run(s32 num_args, const c8** args) {
     .summary = "Make an HTTP request",
     .opts = {
       {
-        .brief = "X", .name = "method", .kind = SP_CLI_OPT_STRING,
+        .brief = "X", .name = "method", .kind = SP_CLI_OPT_CSTR,
         .summary = "Request method; defaults to POST when --data is given, GET otherwise", .placeholder = "METHOD", .ptr = &post.method,
       },
       {
         .brief = "d",
         .name = "data",
-        .kind = SP_CLI_OPT_STRING,
+        .kind = SP_CLI_OPT_CSTR,
         .summary = "Request body; @path reads the body from a file",
         .placeholder = "DATA",
         .ptr = &post.data,
@@ -176,7 +176,7 @@ s32 run(s32 num_args, const c8** args) {
       {
         .brief = "t",
         .name = "type",
-        .kind = SP_CLI_OPT_STRING,
+        .kind = SP_CLI_OPT_CSTR,
         .summary = "Content-Type of the request body",
         .placeholder = "TYPE",
         .ptr = &post.type,
@@ -184,7 +184,7 @@ s32 run(s32 num_args, const c8** args) {
       {
         .brief = "o",
         .name = "output",
-        .kind = SP_CLI_OPT_STRING,
+        .kind = SP_CLI_OPT_CSTR,
         .summary = "Write the response body to a file instead of stdout",
         .placeholder = "FILE",
         .ptr = &post.output,
@@ -204,7 +204,7 @@ s32 run(s32 num_args, const c8** args) {
       },
       {
         .name = "headers",
-        .kind = SP_CLI_ARG_REST,
+        .arity = SP_CLI_ARG_REST,
         .summary = "Extra request headers, each as 'Name: Value'",
       },
     },

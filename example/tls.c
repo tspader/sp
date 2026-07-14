@@ -132,7 +132,7 @@ s32 run(s32 num_args, const c8** args) {
       {
         .brief = "o",
         .name = "output",
-        .kind = SP_CLI_OPT_STRING,
+        .kind = SP_CLI_OPT_CSTR,
         .summary = "Write the response body to this file instead of inferring one from the url",
         .placeholder = "FILE",
         .ptr = &tls.output,
