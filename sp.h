@@ -5297,6 +5297,9 @@ void sp_sys_nt_path_free(sp_sys_nt_path_t* path) {
 #define SP_NT_STATUS_OBJECT_NAME_NOT_FOUND ((sp_nt_status_t)0xC0000034)
 #define SP_NT_STATUS_OBJECT_PATH_NOT_FOUND ((sp_nt_status_t)0xC000003A)
 #define SP_NT_STATUS_ACCESS_DENIED         ((sp_nt_status_t)0xC0000022)
+#define SP_NT_STATUS_INVALID_INFO_CLASS    ((sp_nt_status_t)0xC0000003)
+#define SP_NT_STATUS_INVALID_PARAMETER     ((sp_nt_status_t)0xC000000D)
+#define SP_NT_STATUS_NOT_SUPPORTED         ((sp_nt_status_t)0xC00000BB)
 
 SP_PRIVATE u32 sp_sys_nt_disposition_from_flags(s32 flags) {
   if ((flags & SP_O_CREAT) && (flags & SP_O_EXCL))  return SP_NT_FILE_CREATE;
@@ -5335,6 +5338,11 @@ SP_PRIVATE void* sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32
 #define SP_NT_FILE_RENAME_INFORMATION    10
 #define SP_NT_FILE_DISPOSITION_INFORMATION 13
 #define SP_NT_FILE_LINK_INFORMATION      11
+#define SP_NT_FILE_DISPOSITION_INFORMATION_EX 64
+
+#define SP_NT_FILE_DISPOSITION_DELETE                    0x00000001
+#define SP_NT_FILE_DISPOSITION_POSIX_SEMANTICS           0x00000002
+#define SP_NT_FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE 0x00000010
 
 typedef struct {
   s64 CreationTime;
@@ -5346,8 +5354,56 @@ typedef struct {
 } sp_nt_file_basic_information_t;
 
 typedef struct {
-  u8 ReplaceIfExists;
+  u8 DeleteFile;
 } sp_nt_file_disposition_information_t;
+
+typedef struct {
+  u32 Flags;
+} sp_nt_file_disposition_information_ex_t;
+
+SP_PRIVATE s32 sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
+  void* handle = sp_sys_nt_open(fd, path,
+    DELETE | SYNCHRONIZE,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    SP_NT_FILE_OPEN,
+    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT | options,
+    0
+  );
+  if (!handle) return -1;
+
+  // IGNORE_READONLY_ATTRIBUTE is needed because NT refuses to set the delete
+  // disposition on a read-only file; this comes from DOS? Either way, this
+  // flag is what makes the unlink atomic rather than check-then-unlink
+  //
+  // POSIX_SEMANTICS says "remove the name immediately rather than when the
+  // last handle closes".
+  sp_nt_file_disposition_information_ex_t ex = {
+    .Flags =
+      SP_NT_FILE_DISPOSITION_DELETE |
+      SP_NT_FILE_DISPOSITION_POSIX_SEMANTICS |
+      SP_NT_FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE,
+  };
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtSetInformationFile)(handle, &iosb, &ex, sizeof(ex), SP_NT_FILE_DISPOSITION_INFORMATION_EX);
+
+  // If the disposition fails, we can retry with a simpler call that's
+  // supported everywhere but won't delete through a read-only bit:
+  //
+  // INVALID_PARAMETER means that the filesystem doesn't support information
+  // class 64 (i.e. the flags word that we just filled in), or more simply it
+  // doesn't support FileDispositionInformationEx. So like FAT32.
+  //
+  // INFO_CLASS means that the OS itself doesn't support it (too old)
+  //
+  // NOT_SUPPORTED means that the IGNORE_READONLY flag isn't supported
+  if (status == SP_NT_STATUS_INVALID_INFO_CLASS || status == SP_NT_STATUS_INVALID_PARAMETER || status == SP_NT_STATUS_NOT_SUPPORTED) {
+    sp_nt_file_disposition_information_t info = { .DeleteFile = 1 };
+    status = SP_NT(NtSetInformationFile)(handle, &iosb, &info, sizeof(info), SP_NT_FILE_DISPOSITION_INFORMATION);
+  }
+
+  SP_NT(NtClose)(handle);
+  return SP_NT_SUCCESS(status) ? 0 : -1;
+}
 
 static void sp_sys_timespec_from_filetime(FILETIME ft, sp_sys_timespec_t* out) {
   u64 t = ((u64)ft.dwHighDateTime << 32) | (u64)ft.dwLowDateTime;
@@ -7301,18 +7357,7 @@ s32 sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode) {
 //////////////////
 s32 sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #if defined(SP_WIN32)
-  void* handle = sp_sys_nt_open(
-    fd,
-    sp_str(path, len),
-    DELETE | SYNCHRONIZE,
-    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-    SP_NT_FILE_OPEN,
-    SP_NT_FILE_DIRECTORY_FILE | SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_DELETE_ON_CLOSE | SP_NT_FILE_OPEN_REPARSE_POINT,
-    0
-  );
-  if (!handle) return -1;
-  SP_NT(NtClose)(handle);
-  return 0;
+  return sp_sys_nt_delete(fd, sp_str(path, len), SP_NT_FILE_DIRECTORY_FILE);
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX] = sp_zero;
@@ -7342,18 +7387,7 @@ s32 sp_sys_rmdir_s(sp_sys_fd_t fd, sp_str_t path) {
 ///////////////////
 s32 sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #if defined(SP_WIN32)
-  void* handle = sp_sys_nt_open(
-    fd,
-    sp_str(path, len),
-    DELETE | SYNCHRONIZE,
-    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-    SP_NT_FILE_OPEN,
-    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_DELETE_ON_CLOSE | SP_NT_FILE_NON_DIRECTORY_FILE | SP_NT_FILE_OPEN_REPARSE_POINT,
-    0
-  );
-  if (!handle) return -1;
-  SP_NT(NtClose)(handle);
-  return 0;
+  return sp_sys_nt_delete(fd, sp_str(path, len), SP_NT_FILE_NON_DIRECTORY_FILE);
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX] = sp_zero;
