@@ -5930,6 +5930,8 @@ SP_PRIVATE u32 sp_sys_nt_access_from_flags(s32 flags) {
 #define SP_O_BINARY 0
 #define SP_O_DIRECTORY 0
 #define SP_O_RDONLY 0
+#define SP_O_RDWR 0
+#define SP_O_EXCL 0
 #define SP_O_APPEND 0
 #endif
 
