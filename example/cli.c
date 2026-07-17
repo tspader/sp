@@ -67,6 +67,34 @@ sp_cli_result_t pkg_tool_run(sp_cli_t* cli) {
   return SP_CLI_OK;
 }
 
+void complete_packages(sp_cli_complete_t* ctx) {
+  static const struct { const c8* name; const c8* summary; } packages [] = {
+    { "libpng",  "PNG image codec" },
+    { "zlib",    "Compression library" },
+    { "sqlite3", "Embedded SQL database" },
+    { "openssl", "TLS and crypto" },
+    { "curl",    "URL transfer library" },
+    { "ncurses", "Terminal UI library" },
+  };
+  sp_carr_for(packages, it) {
+    sp_cli_candidate(ctx, sp_cstr_as_str(packages[it].name), sp_cstr_as_str(packages[it].summary));
+  }
+}
+
+void complete_targets(sp_cli_complete_t* ctx) {
+  static const c8* targets [] = { "all", "core", "cli", "tests", "docs" };
+  sp_carr_for(targets, it) {
+    sp_cli_candidate(ctx, sp_cstr_as_str(targets[it]), sp_zero_s(sp_str_t));
+  }
+}
+
+void complete_tools(sp_cli_complete_t* ctx) {
+  static const c8* tools [] = { "fmt", "lint", "repl", "bench" };
+  sp_carr_for(tools, it) {
+    sp_cli_candidate(ctx, sp_cstr_as_str(tools[it]), sp_zero_s(sp_str_t));
+  }
+}
+
 s32 run(s32 num_args, const c8** args) {
   pkg_t pkg = {
     .build = { .jobs = 1 },
@@ -108,6 +136,7 @@ s32 run(s32 num_args, const c8** args) {
           .name = "name",
           .summary = "The binary to run",
           .ptr = &pkg.tool,
+          .complete = complete_tools,
         },
         {
           .name = "args",
@@ -141,6 +170,7 @@ s32 run(s32 num_args, const c8** args) {
           .name = "package",
           .summary = "The package to add",
           .ptr = &pkg.add.package,
+          .complete = complete_packages,
         },
         {
           .name = "version",
@@ -169,6 +199,7 @@ s32 run(s32 num_args, const c8** args) {
           .summary = "Build only the named target",
           .placeholder = "NAME",
           .ptr = &pkg.build.target,
+          .complete = complete_targets,
         },
       },
       .handler = pkg_build,
@@ -206,6 +237,7 @@ s32 run(s32 num_args, const c8** args) {
     .args = args,
     .num_args = num_args,
     .user_data = &pkg,
+    .complete_var = "PKG_COMPLETE",
   };
 
   // Unless you have a reason not to, invoke the CLI like this. main() parses,
@@ -233,7 +265,7 @@ s32 run(s32 num_args, const c8** args) {
         return 0;
       }
     }
-    sp_unreachable_return(1);
+    SP_UNREACHABLE_RETURN(1);
   */
 
   /*
@@ -246,18 +278,16 @@ s32 run(s32 num_args, const c8** args) {
     // parsing succeeded, so you can inspect or mutate anything in between.
     //
     // Parse errors are structured data (cli.err); render them with
-    // sp_cli_err_write(), or switch on cli.err.kind and do something else
+    // sp_cli_err_print(), or switch on cli.err.kind and do something else
     // entirely. Handler errors never pass through the cli: handlers print
     // their own and return SP_CLI_ERR.
     //
-    // sp_cli_report() is the print policy run() uses (help to stdout, errors
-    // to stderr); call it to get the same output for free, or skip it and
-    // render by hand.
+    // run() has no monopoly on output: sp_cli_write_help() renders the same
+    // help it prints, so you can send it anywhere or skip it entirely.
 
     sp_cli_t parsed = sp_cli_parse(cli);
     // ... inspect parsed.status / parsed.cmd / pkg here ...
     sp_cli_result_t result = sp_cli_dispatch(&parsed);
-    sp_cli_report(&parsed);
     return result == SP_CLI_ERR ? 1 : 0;
   */
 

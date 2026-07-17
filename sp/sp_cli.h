@@ -70,8 +70,10 @@ typedef enum {
   SP_CLI_ERR_INVALID_ARG,
   SP_CLI_ERR_UNEXPECTED_ARG,
   SP_CLI_ERR_UNKNOWN_COMMAND,
+  SP_CLI_ERR_MAX_DEPTH,
   SP_CLI_ERR_MISSING_ENV,
   SP_CLI_ERR_INVALID_ENV,
+  SP_CLI_ERR_UNKNOWN_SHELL,
 } sp_cli_err_kind_t;
 
 typedef struct {
@@ -85,12 +87,31 @@ typedef struct sp_cli_cmd sp_cli_cmd_t;
 
 SP_TYPEDEF_FN(sp_cli_result_t, sp_cli_handler_t, sp_cli_t*);
 
+typedef enum {
+  SP_CLI_SHELL_BASH,
+  SP_CLI_SHELL_ZSH,
+  SP_CLI_SHELL_FISH,
+  SP_CLI_SHELL_POWERSHELL,
+} sp_cli_shell_t;
+
+typedef struct {
+  sp_cli_shell_t shell;
+  sp_str_t prefix;
+  sp_str_t emit_prefix;
+  sp_io_writer_t* out;
+  void* user_data;
+  u32 count;
+} sp_cli_complete_t;
+
+SP_TYPEDEF_FN(void, sp_cli_completer_t, sp_cli_complete_t*);
+
 typedef struct {
   const c8* name;
   sp_cli_arg_arity_t arity;
   sp_cli_value_kind_t kind;
   const c8* summary;
   void* ptr;
+  sp_cli_completer_t complete;
 } sp_cli_arg_t;
 
 typedef struct {
@@ -100,6 +121,7 @@ typedef struct {
   const c8* summary;
   const c8* placeholder;
   void* ptr;
+  sp_cli_completer_t complete;
 } sp_cli_opt_t;
 
 typedef struct {
@@ -145,6 +167,7 @@ typedef struct {
   s32 num_args;
   void* user_data;
   sp_cli_theme_t theme;
+  const c8* complete_var;
 } sp_cli_desc_t;
 
 struct sp_cli {
@@ -156,14 +179,6 @@ struct sp_cli {
   u32 depth;
   const c8** rest;
   u32 num_rest;
-  struct {
-    sp_io_stream_writer_t out;
-    sp_io_stream_writer_t err;
-  } stdio;
-  struct {
-    sp_io_writer_t* out;
-    sp_io_writer_t* err;
-  } io;
   sp_cli_theme_t theme;
 };
 
@@ -176,6 +191,8 @@ SP_API sp_cli_result_t sp_cli_dispatch(sp_cli_t* cli);
 SP_API sp_cli_result_t sp_cli_run(sp_cli_desc_t desc);
 SP_API s32             sp_cli_main(sp_cli_desc_t desc);
 SP_API void            sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli);
+SP_API void            sp_cli_candidate(sp_cli_complete_t* ctx, sp_str_t name, sp_str_t summary);
+SP_API void            sp_cli_write_completions(sp_io_writer_t* io, sp_cli_desc_t desc, sp_cli_shell_t shell);
 SP_API sp_cli_result_t sp_cli_set_error(sp_cli_t* cli, sp_str_t error);
 SP_API sp_cli_result_t sp_cli_set_error_c(sp_cli_t* cli, const c8* error);
 
@@ -188,18 +205,106 @@ SP_API sp_cli_result_t sp_cli_set_error_c(sp_cli_t* cli, const c8* error);
 #if defined(SP_CLI_IMPLEMENTATION) && !defined(SP_CLI_IMPLEMENTED)
 #define SP_CLI_IMPLEMENTED
 
-typedef struct sp_cli_scope {
-  sp_cli_cmd_t* cmd;
-  struct sp_cli_scope* parent;
-} sp_cli_scope_t;
+typedef struct {
+  sp_str_t raw;
+} sp_cli_token_t;
+
+SP_PRIVATE sp_cli_token_t sp_cli_token(sp_str_t raw) {
+  return (sp_cli_token_t) { .raw = raw };
+}
+
+SP_PRIVATE bool sp_cli_token_is_escape(sp_cli_token_t tok) {
+  return sp_str_equal(tok.raw, sp_str_lit("--"));
+}
+
+SP_PRIVATE bool sp_cli_token_is_long(sp_cli_token_t tok) {
+  return sp_str_starts_with(tok.raw, sp_str_lit("--")) && !sp_cli_token_is_escape(tok);
+}
+
+SP_PRIVATE bool sp_cli_token_is_short(sp_cli_token_t tok) {
+  return tok.raw.len > 1 && sp_str_at(tok.raw, 0) == '-' && sp_str_at(tok.raw, 1) != '-';
+}
+
+SP_PRIVATE bool sp_cli_token_is_flag(sp_cli_token_t tok) {
+  return tok.raw.len > 1 && sp_str_at(tok.raw, 0) == '-';
+}
+
+SP_PRIVATE sp_str_t sp_cli_token_to_long(sp_cli_token_t tok, sp_str_t* value, bool* has_value) {
+  sp_str_t body = sp_str_strip_left(tok.raw, sp_str_lit("--"));
+  s32 eq = sp_str_find_c8(body, '=');
+  if (eq == SP_STR_NO_MATCH) {
+    *value = sp_zero_s(sp_str_t);
+    *has_value = false;
+    return body;
+  }
+  *value = sp_str_suffix(body, body.len - (eq + 1));
+  *has_value = true;
+  return sp_str_prefix(body, eq);
+}
 
 typedef struct {
-  sp_cli_t* cli;
+  sp_str_t cluster;
+  u32 it;
+} sp_cli_shorts_t;
+
+SP_PRIVATE sp_cli_shorts_t sp_cli_token_to_short(sp_cli_token_t tok) {
+  return (sp_cli_shorts_t) { .cluster = sp_str_strip_left(tok.raw, sp_str_lit("-")) };
+}
+
+SP_PRIVATE bool sp_cli_shorts_done(sp_cli_shorts_t* shorts) {
+  return shorts->it >= shorts->cluster.len;
+}
+
+SP_PRIVATE c8 sp_cli_shorts_next_flag(sp_cli_shorts_t* shorts) {
+  if (sp_cli_shorts_done(shorts)) return 0;
+  return sp_str_at(shorts->cluster, shorts->it++);
+}
+
+SP_PRIVATE sp_str_t sp_cli_shorts_flag_str(sp_cli_shorts_t* shorts) {
+  return sp_str_sub(shorts->cluster, sp_cast(s32, shorts->it) - 1, 1);
+}
+
+SP_PRIVATE sp_str_t sp_cli_shorts_next_value(sp_cli_shorts_t* shorts) {
+  if (sp_cli_shorts_done(shorts)) return sp_zero_s(sp_str_t);
+  sp_str_t value = sp_str_suffix(shorts->cluster, shorts->cluster.len - shorts->it);
+  shorts->it = shorts->cluster.len;
+  return value;
+}
+
+typedef struct {
   const c8** args;
   u32 num_args;
   u32 it;
+} sp_cli_lexer_t;
+
+SP_PRIVATE bool sp_cli_lexer_done(sp_cli_lexer_t* lex) {
+  return lex->it >= lex->num_args;
+}
+
+SP_PRIVATE sp_cli_token_t sp_cli_lexer_peek(sp_cli_lexer_t* lex) {
+  if (sp_cli_lexer_done(lex)) return sp_cli_token(sp_zero_s(sp_str_t));
+  return sp_cli_token(sp_cstr_as_str(lex->args[lex->it]));
+}
+
+SP_PRIVATE sp_cli_token_t sp_cli_lexer_next(sp_cli_lexer_t* lex) {
+  sp_cli_token_t tok = sp_cli_lexer_peek(lex);
+  lex->it++;
+  return tok;
+}
+
+typedef enum {
+  SP_CLI_PARSE_STRICT,
+  SP_CLI_PARSE_COMPLETE,
+} sp_cli_parse_mode_t;
+
+typedef struct {
+  sp_cli_t* cli;
+  sp_cli_lexer_t lex;
+  sp_cli_shorts_t shorts;
+  sp_cli_parse_mode_t mode;
   bool raw;
   bool help;
+  sp_cli_opt_t* pending;
   const c8* positionals [SP_CLI_MAX_ARGS];
   u32 num_positionals;
 } sp_cli_parser_t;
@@ -207,6 +312,22 @@ typedef struct {
 SP_PRIVATE sp_err_t sp_cli_fail(sp_cli_t* cli, sp_cli_err_t err) {
   cli->err = err;
   return SP_ERR;
+}
+
+SP_PRIVATE sp_err_t sp_cli_fail_ex(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* name, const c8* value) {
+  return sp_cli_fail(cli, (sp_cli_err_t) {
+    .kind = kind,
+    .name = sp_cstr_as_str(name),
+    .value = sp_cstr_as_str(value),
+  });
+}
+
+SP_PRIVATE sp_err_t sp_cli_fail_named(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* name) {
+  return sp_cli_fail_ex(cli, kind, name, SP_NULLPTR);
+}
+
+SP_PRIVATE sp_err_t sp_cli_fail_valued(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* value) {
+  return sp_cli_fail_ex(cli, kind, SP_NULLPTR, value);
 }
 
 SP_PRIVATE u32 sp_cli_num_fixed_args(sp_cli_cmd_t* cmd) {
@@ -223,36 +344,37 @@ SP_PRIVATE bool sp_cli_has_commands(sp_cli_cmd_t* cmd) {
   return cmd->commands[0] != SP_NULLPTR;
 }
 
-SP_PRIVATE bool sp_cli_has_rest(sp_cli_cmd_t* cmd) {
+SP_PRIVATE sp_cli_arg_t* sp_cli_rest_arg(sp_cli_cmd_t* cmd) {
   sp_carr_for(cmd->args, it) {
     if (!cmd->args[it].name) break;
-    if (cmd->args[it].arity == SP_CLI_ARG_REST) return true;
+    if (cmd->args[it].arity == SP_CLI_ARG_REST) return &cmd->args[it];
   }
-  return false;
+  return SP_NULLPTR;
+}
+
+SP_PRIVATE void sp_cli_push_cmd(sp_cli_t* cli, sp_cli_cmd_t* cmd) {
+  sp_assert(cli->depth < SP_CLI_MAX_DEPTH);
+  cli->cmd = cmd;
+  cli->path[cli->depth++] = cmd;
 }
 
 SP_PRIVATE bool sp_cli_done(sp_cli_parser_t* parser) {
-  return parser->it >= parser->num_args;
+  return sp_cli_lexer_done(&parser->lex);
 }
 
-SP_PRIVATE sp_str_t sp_cli_peek(sp_cli_parser_t* parser) {
-  if (sp_cli_done(parser)) return sp_zero_s(sp_str_t);
-  return sp_cstr_as_str(parser->args[parser->it]);
+SP_PRIVATE sp_cli_token_t sp_cli_peek(sp_cli_parser_t* parser) {
+  return sp_cli_lexer_peek(&parser->lex);
 }
 
-SP_PRIVATE void sp_cli_eat(sp_cli_parser_t* parser) {
-  parser->it++;
+SP_PRIVATE sp_cli_token_t sp_cli_next(sp_cli_parser_t* parser) {
+  return sp_cli_lexer_next(&parser->lex);
 }
 
-SP_PRIVATE bool sp_cli_at_opt(sp_cli_parser_t* parser) {
-  sp_str_t arg = sp_cli_peek(parser);
-  return arg.len > 1 && sp_str_at(arg, 0) == '-';
-}
-
-SP_PRIVATE sp_cli_opt_t* sp_cli_find_opt(sp_cli_scope_t* scope, sp_str_t name) {
-  for (sp_cli_scope_t* it = scope; it; it = it->parent) {
-    sp_carr_for(it->cmd->opts, i) {
-      sp_cli_opt_t* opt = &it->cmd->opts[i];
+SP_PRIVATE sp_cli_opt_t* sp_cli_find_opt(sp_cli_t* cli, sp_str_t name) {
+  for (u32 it = cli->depth; it > 0; it--) {
+    sp_cli_cmd_t* cmd = cli->path[it - 1];
+    sp_carr_for(cmd->opts, i) {
+      sp_cli_opt_t* opt = &cmd->opts[i];
       if (!opt->name) break;
       if (sp_str_equal_cstr(name, opt->name)) return opt;
     }
@@ -260,10 +382,11 @@ SP_PRIVATE sp_cli_opt_t* sp_cli_find_opt(sp_cli_scope_t* scope, sp_str_t name) {
   return SP_NULLPTR;
 }
 
-SP_PRIVATE sp_cli_opt_t* sp_cli_find_brief(sp_cli_scope_t* scope, c8 brief) {
-  for (sp_cli_scope_t* it = scope; it; it = it->parent) {
-    sp_carr_for(it->cmd->opts, i) {
-      sp_cli_opt_t* opt = &it->cmd->opts[i];
+SP_PRIVATE sp_cli_opt_t* sp_cli_find_brief(sp_cli_t* cli, c8 brief) {
+  for (u32 it = cli->depth; it > 0; it--) {
+    sp_cli_cmd_t* cmd = cli->path[it - 1];
+    sp_carr_for(cmd->opts, i) {
+      sp_cli_opt_t* opt = &cmd->opts[i];
       if (!opt->name) break;
       if (opt->brief && opt->brief[0] == brief) return opt;
     }
@@ -317,10 +440,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
 
 SP_PRIVATE sp_err_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt_t* opt, sp_str_t value) {
   if (opt->kind != SP_CLI_OPT_BOOLEAN && sp_str_empty(value)) {
-    return sp_cli_fail(parser->cli, (sp_cli_err_t) {
-      .kind = SP_CLI_ERR_MISSING_VALUE,
-      .name = sp_cstr_as_str(opt->name),
-    });
+    return sp_cli_fail_named(parser->cli, SP_CLI_ERR_MISSING_VALUE, opt->name);
   }
 
   sp_cli_err_t err = sp_cli_assign(opt->kind, opt->ptr, value);
@@ -331,135 +451,197 @@ SP_PRIVATE sp_err_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt_t* opt
   return SP_OK;
 }
 
-SP_PRIVATE sp_err_t sp_cli_value(sp_cli_parser_t* parser, sp_cli_opt_t* opt, sp_str_t* value) {
-  sp_str_t next = sp_cli_peek(parser);
-  if (sp_cli_done(parser) || sp_str_starts_with(next, sp_str_lit("--"))) {
-    return sp_cli_fail(parser->cli, (sp_cli_err_t) {
-      .kind = SP_CLI_ERR_MISSING_VALUE,
-      .name = sp_cstr_as_str(opt->name),
-    });
-  }
-  *value = next;
-  sp_cli_eat(parser);
-  return SP_OK;
+SP_PRIVATE bool sp_cli_take_value(sp_cli_parser_t* parser, sp_str_t* value) {
+  sp_cli_token_t next = sp_cli_peek(parser);
+  if (sp_cli_done(parser)) return false;
+  if (sp_cli_token_is_flag(next)) return false;
+  *value = next.raw;
+  sp_cli_next(parser);
+  return true;
 }
 
-SP_PRIVATE sp_err_t sp_cli_parse_long(sp_cli_parser_t* parser, sp_cli_scope_t* scope) {
-  sp_str_t body = sp_str_strip_left(sp_cli_peek(parser), sp_str_lit("--"));
-  sp_cli_eat(parser);
+typedef enum {
+  SP_CLI_STEP_ESCAPE,
+  SP_CLI_STEP_HELP,
+  SP_CLI_STEP_OPT,
+  SP_CLI_STEP_OPT_PENDING,
+  SP_CLI_STEP_COMMAND,
+  SP_CLI_STEP_ARG,
+  SP_CLI_STEP_ERR,
+} sp_cli_step_kind_t;
 
-  sp_str_t name = body;
+typedef struct {
+  sp_cli_step_kind_t kind;
+  sp_cli_opt_t* opt;
+  sp_str_t value;
+  sp_cli_cmd_t* cmd;
+  const c8* arg;
+  sp_cli_err_t err;
+} sp_cli_step_t;
+
+SP_PRIVATE sp_cli_step_t sp_cli_read_long(sp_cli_parser_t* parser) {
   sp_str_t value = sp_zero_s(sp_str_t);
   bool has_value = false;
-  sp_str_for(body, it) {
-    if (sp_str_at(body, it) == '=') {
-      name = sp_str_prefix(body, it);
-      value = sp_str_suffix(body, body.len - (it + 1));
-      has_value = true;
-      break;
-    }
-  }
+  sp_str_t name = sp_cli_token_to_long(sp_cli_next(parser), &value, &has_value);
 
-  sp_cli_opt_t* opt = sp_cli_find_opt(scope, name);
+  sp_cli_opt_t* opt = sp_cli_find_opt(parser->cli, name);
   if (!opt) {
     if (sp_str_equal(name, sp_str_lit("help"))) {
-      parser->help = true;
-      return SP_OK;
+      return (sp_cli_step_t) { .kind = SP_CLI_STEP_HELP };
     }
-    return sp_cli_fail(parser->cli, (sp_cli_err_t) {
-      .kind = SP_CLI_ERR_UNKNOWN_OPT,
-      .name = name,
-    });
+    return (sp_cli_step_t) {
+      .kind = SP_CLI_STEP_ERR,
+      .err = { .kind = SP_CLI_ERR_UNKNOWN_OPT, .name = name },
+    };
   }
 
   if (!has_value && opt->kind != SP_CLI_OPT_BOOLEAN) {
-    sp_try(sp_cli_value(parser, opt, &value));
+    if (!sp_cli_take_value(parser, &value)) {
+      return (sp_cli_step_t) { .kind = SP_CLI_STEP_OPT_PENDING, .opt = opt };
+    }
   }
-
-  return sp_cli_assign_opt(parser, opt, value);
+  return (sp_cli_step_t) { .kind = SP_CLI_STEP_OPT, .opt = opt, .value = value };
 }
 
-SP_PRIVATE sp_err_t sp_cli_parse_briefs(sp_cli_parser_t* parser, sp_cli_scope_t* scope) {
-  sp_str_t cluster = sp_str_strip_left(sp_cli_peek(parser), sp_str_lit("-"));
-  sp_cli_eat(parser);
+SP_PRIVATE sp_cli_step_t sp_cli_read_brief(sp_cli_parser_t* parser) {
+  c8 brief = sp_cli_shorts_next_flag(&parser->shorts);
 
-  sp_str_for(cluster, it) {
-    c8 brief = sp_str_at(cluster, it);
-    sp_cli_opt_t* opt = sp_cli_find_brief(scope, brief);
-    if (!opt) {
-      if (brief == 'h') {
-        parser->help = true;
-        return SP_OK;
-      }
-      return sp_cli_fail(parser->cli, (sp_cli_err_t) {
-        .kind = SP_CLI_ERR_UNKNOWN_BRIEF,
-        .name = sp_str_sub(cluster, it, 1),
-      });
+  sp_cli_opt_t* opt = sp_cli_find_brief(parser->cli, brief);
+  if (!opt) {
+    if (brief == 'h') {
+      return (sp_cli_step_t) { .kind = SP_CLI_STEP_HELP };
     }
-
-    sp_str_t value = sp_zero_s(sp_str_t);
-    if (opt->kind != SP_CLI_OPT_BOOLEAN) {
-      if (it + 1 < cluster.len) {
-        value = sp_str_suffix(cluster, cluster.len - (it + 1));
-      }
-      else {
-        sp_try(sp_cli_value(parser, opt, &value));
-      }
-      return sp_cli_assign_opt(parser, opt, value);
-    }
-
-    sp_try(sp_cli_assign_opt(parser, opt, value));
+    return (sp_cli_step_t) {
+      .kind = SP_CLI_STEP_ERR,
+      .err = { .kind = SP_CLI_ERR_UNKNOWN_BRIEF, .name = sp_cli_shorts_flag_str(&parser->shorts) },
+    };
   }
 
+  if (opt->kind == SP_CLI_OPT_BOOLEAN) {
+    return (sp_cli_step_t) { .kind = SP_CLI_STEP_OPT, .opt = opt };
+  }
+
+  sp_str_t value = sp_cli_shorts_next_value(&parser->shorts);
+  if (sp_str_empty(value)) {
+    if (!sp_cli_take_value(parser, &value)) {
+      return (sp_cli_step_t) { .kind = SP_CLI_STEP_OPT_PENDING, .opt = opt };
+    }
+  }
+  return (sp_cli_step_t) { .kind = SP_CLI_STEP_OPT, .opt = opt, .value = value };
+}
+
+SP_PRIVATE sp_cli_step_t sp_cli_read_command(sp_cli_parser_t* parser) {
+  sp_cli_token_t tok = sp_cli_next(parser);
+
+  sp_carr_for(parser->cli->cmd->commands, it) {
+    sp_cli_cmd_t* sub = parser->cli->cmd->commands[it];
+    if (!sub) break;
+    if (sp_str_equal_cstr(tok.raw, sub->name)) {
+      return (sp_cli_step_t) { .kind = SP_CLI_STEP_COMMAND, .cmd = sub };
+    }
+  }
+  return (sp_cli_step_t) {
+    .kind = SP_CLI_STEP_ERR,
+    .err = { .kind = SP_CLI_ERR_UNKNOWN_COMMAND, .name = tok.raw },
+  };
+}
+
+SP_PRIVATE sp_cli_step_t sp_cli_read_arg(sp_cli_parser_t* parser) {
+  const c8* arg = parser->lex.args[parser->lex.it];
+  sp_cli_next(parser);
+  return (sp_cli_step_t) { .kind = SP_CLI_STEP_ARG, .arg = arg };
+}
+
+SP_PRIVATE sp_cli_step_t sp_cli_read_step(sp_cli_parser_t* parser) {
+  if (!sp_cli_shorts_done(&parser->shorts)) return sp_cli_read_brief(parser);
+  if (parser->raw) return sp_cli_read_arg(parser);
+
+  sp_cli_token_t tok = sp_cli_peek(parser);
+  if (sp_cli_token_is_escape(tok)) {
+    sp_cli_next(parser);
+    return (sp_cli_step_t) { .kind = SP_CLI_STEP_ESCAPE };
+  }
+  if (sp_cli_token_is_long(tok)) return sp_cli_read_long(parser);
+  if (sp_cli_token_is_short(tok)) {
+    parser->shorts = sp_cli_token_to_short(sp_cli_next(parser));
+    return sp_cli_read_brief(parser);
+  }
+  if (sp_cli_has_commands(parser->cli->cmd)) return sp_cli_read_command(parser);
+  return sp_cli_read_arg(parser);
+}
+
+SP_PRIVATE sp_err_t sp_cli_parse_tokens(sp_cli_parser_t* parser) {
+  sp_cli_t* cli = parser->cli;
+  bool strict = parser->mode == SP_CLI_PARSE_STRICT;
+
+  while (!sp_cli_done(parser) || !sp_cli_shorts_done(&parser->shorts)) {
+    parser->pending = SP_NULLPTR;
+    sp_cli_step_t step = sp_cli_read_step(parser);
+
+    switch (step.kind) {
+      case SP_CLI_STEP_ESCAPE: {
+        parser->raw = true;
+        break;
+      }
+      case SP_CLI_STEP_HELP: {
+        if (strict) {
+          parser->help = true;
+          return SP_OK;
+        }
+        break;
+      }
+      case SP_CLI_STEP_OPT: {
+        if (strict) {
+          sp_try(sp_cli_assign_opt(parser, step.opt, step.value));
+        }
+        break;
+      }
+      case SP_CLI_STEP_OPT_PENDING: {
+        if (!strict) {
+          parser->pending = step.opt;
+          break;
+        }
+        return sp_cli_fail_named(cli, SP_CLI_ERR_MISSING_VALUE, step.opt->name);
+      }
+      case SP_CLI_STEP_COMMAND: {
+        if (cli->depth < SP_CLI_MAX_DEPTH) {
+          sp_cli_push_cmd(cli, step.cmd);
+          break;
+        }
+        if (!strict) break;
+        return sp_cli_fail_named(cli, SP_CLI_ERR_MAX_DEPTH, step.cmd->name);
+      }
+      case SP_CLI_STEP_ARG: {
+        if (parser->num_positionals < sp_cli_num_fixed_args(cli->cmd)) {
+          parser->positionals[parser->num_positionals++] = step.arg;
+          break;
+        }
+        if (sp_cli_rest_arg(cli->cmd)) {
+          cli->rest = parser->lex.args + parser->lex.it - 1;
+          cli->num_rest = parser->lex.num_args - parser->lex.it + 1;
+          parser->lex.it = parser->lex.num_args;
+          break;
+        }
+        if (!strict) {
+          parser->num_positionals++;
+          break;
+        }
+        return sp_cli_fail_valued(cli, SP_CLI_ERR_UNEXPECTED_ARG, step.arg);
+      }
+      case SP_CLI_STEP_ERR: {
+        if (strict) return sp_cli_fail(cli, step.err);
+        break;
+      }
+    }
+  }
   return SP_OK;
 }
 
-SP_PRIVATE sp_err_t sp_cli_parse_cmd(sp_cli_parser_t* parser, sp_cli_scope_t scope) {
+SP_PRIVATE sp_err_t sp_cli_check_args(sp_cli_parser_t* parser) {
   sp_cli_t* cli = parser->cli;
-  sp_cli_cmd_t* cmd = scope.cmd;
-  cli->cmd = cmd;
-  if (cli->depth < SP_CLI_MAX_DEPTH) {
-    cli->path[cli->depth++] = cmd;
-  }
 
-  u32 num_fixed = sp_cli_num_fixed_args(cmd);
-
-  while (!sp_cli_done(parser)) {
-    sp_str_t arg = sp_cli_peek(parser);
-
-    if (!parser->raw && sp_str_equal(arg, sp_str_lit("--"))) {
-      sp_cli_eat(parser);
-      parser->raw = true;
-    }
-    else if (!parser->raw && sp_str_starts_with(arg, sp_str_lit("--"))) {
-      sp_try(sp_cli_parse_long(parser, &scope));
-      if (parser->help) return SP_OK;
-    }
-    else if (!parser->raw && sp_cli_at_opt(parser)) {
-      sp_try(sp_cli_parse_briefs(parser, &scope));
-      if (parser->help) return SP_OK;
-    }
-    else {
-      if (sp_cli_has_commands(cmd)) break;
-      if (parser->num_positionals >= num_fixed && sp_cli_has_rest(cmd)) {
-        cli->num_rest = parser->num_args - parser->it;
-        cli->rest = parser->args + parser->it;
-        parser->it = parser->num_args;
-        break;
-      }
-      if (parser->num_positionals >= SP_CLI_MAX_ARGS || parser->num_positionals >= num_fixed) {
-        return sp_cli_fail(cli, (sp_cli_err_t) {
-          .kind = SP_CLI_ERR_UNEXPECTED_ARG,
-          .value = arg,
-        });
-      }
-      parser->positionals[parser->num_positionals++] = parser->args[parser->it];
-      sp_cli_eat(parser);
-    }
-  }
-
-  sp_carr_for(cmd->args, it) {
-    sp_cli_arg_t* arg = &cmd->args[it];
+  sp_carr_for(cli->cmd->args, it) {
+    sp_cli_arg_t* arg = &cli->cmd->args[it];
     if (!arg->name) break;
 
     if (it < parser->num_positionals) {
@@ -471,39 +653,23 @@ SP_PRIVATE sp_err_t sp_cli_parse_cmd(sp_cli_parser_t* parser, sp_cli_scope_t sco
       }
     }
     else if (arg->arity == SP_CLI_ARG_REQUIRED) {
-      return sp_cli_fail(cli, (sp_cli_err_t) {
-        .kind = SP_CLI_ERR_MISSING_ARG,
-        .name = sp_cstr_as_str(arg->name),
-      });
+      return sp_cli_fail_named(cli, SP_CLI_ERR_MISSING_ARG, arg->name);
     }
   }
-
-  if (sp_cli_has_commands(cmd) && !sp_cli_done(parser)) {
-    sp_str_t name = sp_cli_peek(parser);
-    sp_carr_for(cmd->commands, it) {
-      sp_cli_cmd_t* sub = cmd->commands[it];
-      if (!sub) break;
-      if (sp_str_equal_cstr(name, sub->name)) {
-        sp_cli_eat(parser);
-        sp_cli_scope_t child = { .cmd = sub, .parent = &scope };
-        return sp_cli_parse_cmd(parser, child);
-      }
-    }
-    return sp_cli_fail(cli, (sp_cli_err_t) {
-      .kind = SP_CLI_ERR_UNKNOWN_COMMAND,
-      .name = name,
-    });
-  }
-
-  if (!cmd->handler) parser->help = true;
   return SP_OK;
 }
 
-SP_PRIVATE sp_str_t sp_cli_opt_label(c8* buf, u32 len, sp_cli_opt_t* opt) {
+typedef struct {
+  sp_cli_opt_t* opt;
+  bool brief;
+} sp_cli_view_opt_t;
+
+SP_PRIVATE sp_str_t sp_cli_opt_label(c8* buf, u32 len, sp_cli_view_opt_t entry) {
+  sp_cli_opt_t* opt = entry.opt;
   sp_io_mem_writer_t label = sp_zero;
   sp_io_mem_writer_from_buffer(&label, buf, len);
 
-  if (opt->brief) {
+  if (entry.brief) {
     sp_fmt_io(&label.base, "-{}, ", sp_fmt_cstr(opt->brief));
   }
   else {
@@ -587,8 +753,10 @@ sp_str_t sp_cli_err_kind_to_str(sp_cli_err_kind_t kind) {
     case SP_CLI_ERR_INVALID_ARG:     { return sp_str_lit("invalid_arg"); }
     case SP_CLI_ERR_UNEXPECTED_ARG:  { return sp_str_lit("unexpected_arg"); }
     case SP_CLI_ERR_UNKNOWN_COMMAND: { return sp_str_lit("unknown_command"); }
+    case SP_CLI_ERR_MAX_DEPTH:       { return sp_str_lit("max_depth"); }
     case SP_CLI_ERR_MISSING_ENV:     { return sp_str_lit("missing_env"); }
     case SP_CLI_ERR_INVALID_ENV:     { return sp_str_lit("invalid_env"); }
+    case SP_CLI_ERR_UNKNOWN_SHELL:   { return sp_str_lit("unknown_shell"); }
   }
   SP_UNREACHABLE_RETURN(sp_str_lit(""));
 }
@@ -605,10 +773,7 @@ SP_PRIVATE sp_err_t sp_cli_resolve_env(sp_cli_t* cli) {
       sp_str_t value = sp_os_env_get(sp_cstr_as_str(var->name));
       if (sp_str_empty(value)) {
         if (var->required) {
-          return sp_cli_fail(cli, (sp_cli_err_t) {
-            .kind = SP_CLI_ERR_MISSING_ENV,
-            .name = sp_cstr_as_str(var->name),
-          });
+          return sp_cli_fail_named(cli, SP_CLI_ERR_MISSING_ENV, var->name);
         }
         continue;
       }
@@ -628,19 +793,23 @@ sp_cli_t sp_cli_parse(sp_cli_desc_t desc) {
   sp_cli_t cli = sp_zero_s(sp_cli_t);
   cli.user_data = desc.user_data;
   cli.theme = sp_cli_theme_resolve(desc.theme);
+  sp_cli_push_cmd(&cli, desc.root);
 
   sp_cli_parser_t parser = sp_zero_s(sp_cli_parser_t);
   parser.cli = &cli;
-  parser.args = desc.num_args > 1 ? desc.args + 1 : SP_NULLPTR;
-  parser.num_args = desc.num_args > 1 ? sp_cast(u32, desc.num_args - 1) : 0;
+  parser.lex.args = desc.num_args > 1 ? desc.args + 1 : SP_NULLPTR;
+  parser.lex.num_args = desc.num_args > 1 ? sp_cast(u32, desc.num_args - 1) : 0;
 
-  sp_cli_scope_t scope = { .cmd = desc.root, .parent = SP_NULLPTR };
-  sp_err_t parsed = sp_cli_parse_cmd(&parser, scope);
-
-  if (parsed) {
+  if (sp_cli_parse_tokens(&parser)) {
     cli.status = SP_CLI_ERR;
   }
   else if (parser.help) {
+    cli.status = SP_CLI_HELP;
+  }
+  else if (sp_cli_check_args(&parser)) {
+    cli.status = SP_CLI_ERR;
+  }
+  else if (!cli.cmd->handler) {
     cli.status = SP_CLI_HELP;
   }
   else if (sp_cli_resolve_env(&cli)) {
@@ -741,12 +910,20 @@ void sp_cli_err_print(sp_io_writer_t* io, sp_cli_err_t err) {
       sp_fmt_io(io, "unknown command: {}", sp_fmt_str(err.name));
       break;
     }
+    case SP_CLI_ERR_MAX_DEPTH: {
+      sp_fmt_io(io, "command {} exceeds SP_CLI_MAX_DEPTH ({})", sp_fmt_str(err.name), sp_fmt_uint(SP_CLI_MAX_DEPTH));
+      break;
+    }
     case SP_CLI_ERR_MISSING_ENV: {
       sp_fmt_io(io, "missing required environment variable: {}", sp_fmt_str(err.name));
       break;
     }
     case SP_CLI_ERR_INVALID_ENV: {
       sp_fmt_io(io, "invalid value for environment variable {}: {.quote}", sp_fmt_str(err.name), sp_fmt_str(err.value));
+      break;
+    }
+    case SP_CLI_ERR_UNKNOWN_SHELL: {
+      sp_fmt_io(io, "unknown completion shell: {.quote}", sp_fmt_str(err.name));
       break;
     }
   }
@@ -782,7 +959,7 @@ SP_PRIVATE void sp_cli_write_label_opt(sp_io_writer_t* io, sp_cli_theme_entry_t 
 }
 
 typedef struct {
-  sp_cli_opt_t* opts [SP_CLI_MAX_OPTS * SP_CLI_MAX_DEPTH];
+  sp_cli_view_opt_t opts [SP_CLI_MAX_OPTS * SP_CLI_MAX_DEPTH];
   sp_cli_env_t* env  [SP_CLI_MAX_ENV * SP_CLI_MAX_DEPTH];
   sp_cli_arg_t* args [SP_CLI_MAX_ARGS];
   sp_cli_cmd_t* commands [SP_CLI_MAX_COMMANDS];
@@ -793,21 +970,18 @@ typedef struct {
 } sp_cli_view_t;
 
 SP_PRIVATE void sp_cli_view_put_opt(sp_cli_view_t* view, sp_cli_opt_t* opt) {
+  bool brief = opt->brief != SP_NULLPTR;
   sp_for(it, view->num_opts) {
-    if (sp_str_equal_cstr(sp_cstr_as_str(opt->name), view->opts[it]->name)) {
-      view->opts[it] = opt;
-      return;
-    }
+    sp_cli_opt_t* seen = view->opts[it].opt;
+    if (sp_cstr_equal(opt->name, seen->name)) return;
+    if (brief && seen->brief && seen->brief[0] == opt->brief[0]) brief = false;
   }
-  view->opts[view->num_opts++] = opt;
+  view->opts[view->num_opts++] = (sp_cli_view_opt_t) { .opt = opt, .brief = brief };
 }
 
 SP_PRIVATE void sp_cli_view_put_env(sp_cli_view_t* view, sp_cli_env_t* var) {
   sp_for(it, view->num_env) {
-    if (sp_str_equal_cstr(sp_cstr_as_str(var->name), view->env[it]->name)) {
-      view->env[it] = var;
-      return;
-    }
+    if (sp_cstr_equal(var->name, view->env[it]->name)) return;
   }
   view->env[view->num_env++] = var;
 }
@@ -815,8 +989,8 @@ SP_PRIVATE void sp_cli_view_put_env(sp_cli_view_t* view, sp_cli_env_t* var) {
 SP_PRIVATE sp_cli_view_t sp_cli_view(sp_cli_t* cli) {
   sp_cli_view_t view = sp_zero;
 
-  sp_for(i, cli->depth) {
-    sp_cli_cmd_t* scope = cli->path[i];
+  for (u32 i = cli->depth; i > 0; i--) {
+    sp_cli_cmd_t* scope = cli->path[i - 1];
     sp_carr_for_until(scope->opts, it, scope->opts[it].name) {
       sp_cli_view_put_opt(&view, &scope->opts[it]);
     }
@@ -890,8 +1064,8 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
     sp_cli_write_heading(io, theme.heading, "options");
     sp_for(it, view.num_opts) {
       c8 buffer [SP_CLI_MAX_LABEL];
-      sp_cli_opt_t* opt = view.opts[it];
-      sp_str_t label = sp_cli_opt_label(buffer, SP_CLI_MAX_LABEL, opt);
+      sp_cli_opt_t* opt = view.opts[it].opt;
+      sp_str_t label = sp_cli_opt_label(buffer, SP_CLI_MAX_LABEL, view.opts[it]);
       sp_cli_write_label(io, theme.label, label, sp_cstr_as_str(opt->summary ? opt->summary : ""), width);
     }
   }
@@ -934,6 +1108,329 @@ sp_cli_result_t sp_cli_set_error_c(sp_cli_t* cli, const c8* error) {
   return sp_cli_set_error(cli, sp_cstr_as_str(error));
 }
 
+SP_PRIVATE void sp_cli_write_zsh_escaped(sp_io_writer_t* io, sp_str_t str, bool escape_colon) {
+  sp_str_for(str, it) {
+    c8 c = sp_str_at(str, it);
+    if (c == '\\' || (escape_colon && c == ':')) sp_io_write_c8(io, '\\');
+    sp_io_write_c8(io, c);
+  }
+}
+
+SP_PRIVATE bool sp_cli_bash_is_safe(c8 c) {
+  if (c >= 'a' && c <= 'z') return true;
+  if (c >= 'A' && c <= 'Z') return true;
+  if (c >= '0' && c <= '9') return true;
+  return sp_str_find_c8(sp_str_lit("-_+=/.:,@%^"), c) != SP_STR_NO_MATCH;
+}
+
+SP_PRIVATE void sp_cli_write_bash_escaped(sp_io_writer_t* io, sp_str_t str) {
+  sp_str_for(str, it) {
+    c8 c = sp_str_at(str, it);
+    if (!sp_cli_bash_is_safe(c)) sp_io_write_c8(io, '\\');
+    sp_io_write_c8(io, c);
+  }
+}
+
+void sp_cli_candidate(sp_cli_complete_t* ctx, sp_str_t name, sp_str_t summary) {
+  if (!sp_str_starts_with(name, ctx->prefix)) return;
+
+  switch (ctx->shell) {
+    case SP_CLI_SHELL_BASH: {
+      sp_cli_write_bash_escaped(ctx->out, ctx->emit_prefix);
+      sp_cli_write_bash_escaped(ctx->out, name);
+      sp_io_write_c8(ctx->out, '\n');
+      break;
+    }
+    case SP_CLI_SHELL_ZSH: {
+      sp_cli_write_zsh_escaped(ctx->out, ctx->emit_prefix, true);
+      sp_cli_write_zsh_escaped(ctx->out, name, true);
+      if (!sp_str_empty(summary)) {
+        sp_io_write_c8(ctx->out, ':');
+        sp_cli_write_zsh_escaped(ctx->out, summary, false);
+      }
+      sp_io_write_c8(ctx->out, '\n');
+      break;
+    }
+    case SP_CLI_SHELL_FISH:
+    case SP_CLI_SHELL_POWERSHELL: {
+      sp_fmt_io(ctx->out, "{}{}", sp_fmt_str(ctx->emit_prefix), sp_fmt_str(name));
+      if (!sp_str_empty(summary)) sp_fmt_io(ctx->out, "\t{}", sp_fmt_str(summary));
+      sp_io_write_c8(ctx->out, '\n');
+      break;
+    }
+  }
+
+  ctx->count++;
+}
+
+SP_PRIVATE sp_str_t sp_cli_cmd_summary(sp_cli_cmd_t* cmd) {
+  return sp_cstr_as_str(cmd->summary ? cmd->summary : "");
+}
+
+SP_PRIVATE sp_str_t sp_cli_opt_summary(sp_cli_opt_t* opt) {
+  return sp_cstr_as_str(opt->summary ? opt->summary : "");
+}
+
+#ifndef SP_CLI_COMPLETE_EMPTY
+  #define SP_CLI_COMPLETE_EMPTY "__sp_complete_empty__"
+#endif
+
+SP_PRIVATE void sp_cli_complete_arg(sp_cli_complete_t* ctx, sp_cli_parser_t* parser) {
+  sp_cli_cmd_t* cmd = parser->cli->cmd;
+  sp_cli_arg_t* arg = sp_cli_rest_arg(cmd);
+  if (parser->num_positionals < sp_cli_num_fixed_args(cmd)) {
+    arg = &cmd->args[parser->num_positionals];
+  }
+  if (arg && arg->complete) arg->complete(ctx);
+}
+
+SP_PRIVATE void sp_cli_complete_opt_value(sp_cli_complete_t* ctx, sp_cli_opt_t* opt, sp_str_t emit_prefix, sp_str_t value) {
+  if (!opt->complete) return;
+  ctx->emit_prefix = emit_prefix;
+  ctx->prefix = value;
+  opt->complete(ctx);
+}
+
+SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_shell_t shell, const c8** words, u32 num_words) {
+  sp_str_t prefix = num_words ? sp_cstr_as_str(words[num_words - 1]) : sp_zero_s(sp_str_t);
+
+  if (shell == SP_CLI_SHELL_POWERSHELL && sp_str_equal_cstr(prefix, SP_CLI_COMPLETE_EMPTY)) {
+    prefix = sp_zero_s(sp_str_t);
+  }
+
+  sp_cli_t cli = sp_zero_s(sp_cli_t);
+  cli.user_data = desc.user_data;
+  sp_cli_push_cmd(&cli, desc.root);
+
+  sp_cli_parser_t parser = sp_zero_s(sp_cli_parser_t);
+  parser.cli = &cli;
+  parser.mode = SP_CLI_PARSE_COMPLETE;
+  parser.lex.args = num_words > 1 ? words + 1 : SP_NULLPTR;
+  parser.lex.num_args = num_words > 1 ? num_words - 2 : 0;
+
+  sp_err_t parsed = sp_cli_parse_tokens(&parser);
+  sp_assert(parsed == SP_OK);
+
+  sp_cli_complete_t ctx = {
+    .shell = shell,
+    .prefix = prefix,
+    .out = out,
+    .user_data = desc.user_data,
+  };
+
+  if (parser.pending) {
+    if (parser.pending->complete) parser.pending->complete(&ctx);
+    return;
+  }
+
+  if (parser.raw) {
+    sp_cli_complete_arg(&ctx, &parser);
+    return;
+  }
+
+  sp_cli_token_t cursor = sp_cli_token(prefix);
+
+  if (sp_cli_token_is_long(cursor)) {
+    sp_str_t value = sp_zero_s(sp_str_t);
+    bool has_value = false;
+    sp_str_t name = sp_cli_token_to_long(cursor, &value, &has_value);
+    if (has_value) {
+      sp_cli_opt_t* opt = sp_cli_find_opt(&cli, name);
+      if (opt) {
+        c8 buffer [SP_CLI_MAX_LABEL];
+        sp_io_mem_writer_t emit = sp_zero;
+        sp_io_mem_writer_from_buffer(&emit, buffer, SP_CLI_MAX_LABEL);
+        sp_fmt_io(&emit.base, "--{}=", sp_fmt_cstr(opt->name));
+        sp_cli_complete_opt_value(&ctx, opt, sp_io_mem_writer_as_str(&emit), value);
+      }
+      return;
+    }
+  }
+
+  if (sp_cli_token_is_short(cursor)) {
+    sp_cli_shorts_t shorts = sp_cli_token_to_short(cursor);
+    c8 brief;
+    while ((brief = sp_cli_shorts_next_flag(&shorts))) {
+      sp_cli_opt_t* opt = sp_cli_find_brief(&cli, brief);
+      if (!opt) break;
+      if (opt->kind != SP_CLI_OPT_BOOLEAN) {
+        u32 lead = shorts.it;
+        sp_str_t value = sp_cli_shorts_next_value(&shorts);
+        c8 buffer [SP_CLI_MAX_LABEL];
+        sp_io_mem_writer_t emit = sp_zero;
+        sp_io_mem_writer_from_buffer(&emit, buffer, SP_CLI_MAX_LABEL);
+        sp_fmt_io(&emit.base, "-{}", sp_fmt_str(sp_str_prefix(shorts.cluster, sp_cast(s32, lead))));
+        sp_cli_complete_opt_value(&ctx, opt, sp_io_mem_writer_as_str(&emit), value);
+        return;
+      }
+    }
+  }
+
+  if (sp_str_starts_with(prefix, sp_str_lit("-"))) {
+    sp_cli_view_t view = sp_cli_view(&cli);
+    sp_for(it, view.num_opts) {
+      sp_cli_opt_t* opt = view.opts[it].opt;
+      c8 buffer [SP_CLI_MAX_LABEL];
+      sp_io_mem_writer_t label = sp_zero;
+      sp_io_mem_writer_from_buffer(&label, buffer, SP_CLI_MAX_LABEL);
+      sp_fmt_io(&label.base, "--{}", sp_fmt_cstr(opt->name));
+      sp_cli_candidate(&ctx, sp_io_mem_writer_as_str(&label), sp_cli_opt_summary(opt));
+    }
+    return;
+  }
+
+  if (sp_cli_has_commands(cli.cmd)) {
+    sp_carr_for(cli.cmd->commands, it) {
+      sp_cli_cmd_t* sub = cli.cmd->commands[it];
+      if (!sub) break;
+      sp_cli_candidate(&ctx, sp_cstr_as_str(sub->name), sp_cli_cmd_summary(sub));
+    }
+    return;
+  }
+
+  sp_cli_complete_arg(&ctx, &parser);
+}
+
+SP_PRIVATE sp_str_t sp_cli_complete_var(sp_cli_desc_t desc) {
+  return sp_cstr_as_str(desc.complete_var ? desc.complete_var : "COMPLETE");
+}
+
+SP_PRIVATE bool sp_cli_path_has_sep(sp_str_t path) {
+  sp_str_for(path, it) {
+    if (sp_fs_is_sep(sp_str_at(path, it))) return true;
+  }
+  return false;
+}
+
+SP_PRIVATE sp_str_t sp_cli_completer_path(sp_cli_desc_t desc, c8* buffer, u32 len) {
+  sp_str_t arg0 = desc.num_args > 0 ? sp_cstr_as_str(desc.args[0]) : sp_cstr_as_str(desc.root->name);
+  if (!sp_cli_path_has_sep(arg0)) return arg0;
+  if (sp_fs_is_absolute(arg0)) return arg0;
+
+  c8 cwd [SP_PATH_MAX];
+  s64 cwd_len = sp_sys_get_cwd_path(cwd, sizeof(cwd));
+  if (cwd_len <= 0) return arg0;
+  if (sp_cast(u32, cwd_len) + 1 + arg0.len > len) return arg0;
+
+  sp_io_mem_writer_t path = sp_zero;
+  sp_io_mem_writer_from_buffer(&path, buffer, len);
+  sp_fmt_io(&path.base, "{}/{}", sp_fmt_str(sp_str(cwd, sp_cast(u32, cwd_len))), sp_fmt_str(arg0));
+  return sp_io_mem_writer_as_str(&path);
+}
+
+void sp_cli_write_completions(sp_io_writer_t* io, sp_cli_desc_t desc, sp_cli_shell_t shell) {
+  c8 buffer [SP_PATH_MAX];
+  sp_str_t bin = sp_cstr_as_str(desc.root->name);
+  sp_str_t var = sp_cli_complete_var(desc);
+  sp_str_t completer = sp_cli_completer_path(desc, buffer, sizeof(buffer));
+
+  switch (shell) {
+    case SP_CLI_SHELL_BASH: {
+      sp_fmt_io(io,
+        "_{}_complete() {{\n"
+        "  local IFS=$'\\n'\n"
+        "  COMPREPLY=($({}=bash \"{}\" -- \"${{COMP_WORDS[@]:0:COMP_CWORD+1}}\"))\n"
+        "  [ $? -ne 0 ] && unset COMPREPLY\n"
+        "}}\n"
+        "complete -o default -F _{}_complete {}\n",
+        sp_fmt_str(bin), sp_fmt_str(var), sp_fmt_str(completer),
+        sp_fmt_str(bin), sp_fmt_str(bin));
+      break;
+    }
+    case SP_CLI_SHELL_ZSH: {
+      sp_fmt_io(io,
+        "#compdef {}\n"
+        "_{}() {{\n"
+        "  local -a lines\n"
+        "  lines=(${{(f)\"$({}=zsh \"{}\" -- \"${{words[@]:0:$CURRENT}}\")\"}})\n"
+        "  _describe '{}' lines\n"
+        "}}\n"
+        "compdef _{} {}\n",
+        sp_fmt_str(bin), sp_fmt_str(bin), sp_fmt_str(var), sp_fmt_str(completer),
+        sp_fmt_str(bin), sp_fmt_str(bin), sp_fmt_str(bin));
+      break;
+    }
+    case SP_CLI_SHELL_FISH: {
+      sp_fmt_io(io,
+        "function __{}_complete\n"
+        "  set -l cur (commandline -ct)\n"
+        "  {}=fish \"{}\" -- (commandline -opc) \"$cur\"\n"
+        "end\n"
+        "complete -c {} -f -a '(__{}_complete)'\n",
+        sp_fmt_str(bin), sp_fmt_str(var), sp_fmt_str(completer),
+        sp_fmt_str(bin), sp_fmt_str(bin));
+      break;
+    }
+    case SP_CLI_SHELL_POWERSHELL: {
+      sp_fmt_io(io,
+        "Register-ArgumentCompleter -Native -CommandName {} -ScriptBlock {{\n"
+        "    param($wordToComplete, $commandAst, $cursorPosition)\n"
+        "    $prev = $env:{}\n"
+        "    $env:{} = 'powershell'\n"
+        "    $spElements = @($commandAst.CommandElements |"
+        " Where-Object {{ $_.Extent.EndOffset -le $cursorPosition }})\n"
+        "    $spWords = @($spElements | ForEach-Object {{ $_.Extent.Text }})\n"
+        "    $spEnd = 0\n"
+        "    if ($spElements.Count -gt 0) {{ $spEnd = $spElements[-1].Extent.EndOffset }}\n"
+        "    if ($cursorPosition -gt $spEnd) {{ $spWords += '{}' }}\n"
+        "    $spResults = & \"{}\" -- @spWords\n"
+        "    if ($null -eq $prev) {{ Remove-Item Env:\\{} }} else {{ $env:{} = $prev }}\n"
+        "    $spResults | ForEach-Object {{\n"
+        "        $spParts = $_.Split(\"`t\")\n"
+        "        $spValue = $spParts[0]\n"
+        "        if ($spParts.Length -ge 2) {{ $spHelp = $spParts[1] }}"
+        " else {{ $spHelp = $spParts[0] }}\n"
+        "        $spInsert = $spValue\n"
+        "        if ($spValue -match '\\s|[\"'']')"
+        " {{ $spInsert = \"'\" + ($spValue -replace \"'\", \"''\") + \"'\" }}\n"
+        "        [System.Management.Automation.CompletionResult]::new($spInsert, $spValue,"
+        " 'ParameterValue', $spHelp)\n"
+        "    }}\n"
+        "}}\n",
+        sp_fmt_str(bin), sp_fmt_str(var), sp_fmt_str(var), sp_fmt_cstr(SP_CLI_COMPLETE_EMPTY),
+        sp_fmt_str(completer), sp_fmt_str(var), sp_fmt_str(var));
+      break;
+    }
+  }
+}
+
+SP_PRIVATE bool sp_cli_shell_from_str(sp_str_t name, sp_cli_shell_t* shell) {
+  if (sp_str_equal_cstr(name, "bash")) { *shell = SP_CLI_SHELL_BASH; return true; }
+  if (sp_str_equal_cstr(name, "zsh"))  { *shell = SP_CLI_SHELL_ZSH;  return true; }
+  if (sp_str_equal_cstr(name, "fish")) { *shell = SP_CLI_SHELL_FISH; return true; }
+  if (sp_str_equal_cstr(name, "powershell")) { *shell = SP_CLI_SHELL_POWERSHELL; return true; }
+  if (sp_str_equal_cstr(name, "pwsh"))       { *shell = SP_CLI_SHELL_POWERSHELL; return true; }
+  return false;
+}
+
+SP_PRIVATE sp_cli_result_t sp_cli_complete_request(sp_io_writer_t* out, sp_io_writer_t* err, sp_cli_desc_t desc, sp_str_t request) {
+  sp_cli_shell_t shell;
+  if (!sp_cli_shell_from_str(sp_fs_get_stem(request), &shell)) {
+    sp_cli_theme_t theme = sp_cli_theme_resolve(desc.theme);
+    sp_cli_write_diagnostic(err, (sp_cli_err_t) {
+      .kind = SP_CLI_ERR_UNKNOWN_SHELL,
+      .name = request,
+    }, "error", theme.error);
+    return SP_CLI_ERR;
+  }
+
+  u32 words = sp_cast(u32, desc.num_args);
+  sp_for(it, desc.num_args) {
+    if (sp_cstr_equal(desc.args[it], "--")) {
+      words = sp_cast(u32, it) + 1;
+      break;
+    }
+  }
+
+  if (words >= sp_cast(u32, desc.num_args)) {
+    sp_cli_write_completions(out, desc, shell);
+  }
+  else {
+    sp_cli_complete(out, desc, shell, desc.args + words, sp_cast(u32, desc.num_args) - words);
+  }
+  return SP_CLI_OK;
+}
+
 sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
   struct { sp_io_stream_writer_t out; sp_io_stream_writer_t err; } ios = {
     sp_io_get_std_out(), sp_io_get_std_err()
@@ -941,6 +1438,11 @@ sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
   struct { sp_io_writer_t* out; sp_io_writer_t* err; } io = {
     &ios.out.base, &ios.err.base
   };
+
+  sp_str_t request = sp_os_env_get(sp_cli_complete_var(desc));
+  if (!sp_str_empty(request) && !sp_str_equal_cstr(request, "0")) {
+    return sp_cli_complete_request(io.out, io.err, desc, request);
+  }
 
   sp_cli_t cli = sp_cli_parse(desc);
   if (!cli.status) {
