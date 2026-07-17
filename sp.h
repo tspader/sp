@@ -3433,7 +3433,8 @@ typedef struct {
   X(sp_nt_status_t, NtClose,                                 (void*))                         \
   X(sp_nt_status_t, NtSetInformationFile,                    (void*, sp_nt_io_status_block_t*, void*, u32, u32)) \
   X(sp_nt_status_t, NtCreateFile,                            (void**, u32, sp_nt_object_attributes_t*, sp_nt_io_status_block_t*, s64*, u32, u32, u32, u32, void*, u32)) \
-  X(sp_nt_status_t, NtQueryObject,                           (void*, u32, void*, u32, u32*))
+  X(sp_nt_status_t, NtQueryObject,                           (void*, u32, void*, u32, u32*))      \
+  X(sp_nt_status_t, NtFsControlFile,                         (void*, void*, void*, void*, sp_nt_io_status_block_t*, u32, void*, u32, void*, u32))
 
 
 #define SP_NT_DECL(ret, name, args) ret (__stdcall *name) args;
@@ -5081,8 +5082,11 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT(fn) ((SP_UNLIKELY(!sp_rt.nt.fn) ? sp_tls_once(&sp_rt.tls.once, sp_rt_init) : (void)0), sp_rt.nt.fn)
 
 typedef struct {
-  u8 ReplaceIfExists;
-  u8 _pad[7];
+  union {
+    u8 ReplaceIfExists;
+    u32 Flags;
+  };
+  u8 _pad[4];
   void* RootDirectory;
   u32 FileNameLength;
   u16 FileName[1];
@@ -5339,10 +5343,20 @@ SP_PRIVATE void* sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32
 #define SP_NT_FILE_DISPOSITION_INFORMATION 13
 #define SP_NT_FILE_LINK_INFORMATION      11
 #define SP_NT_FILE_DISPOSITION_INFORMATION_EX 64
+#define SP_NT_FILE_RENAME_INFORMATION_EX      65
 
 #define SP_NT_FILE_DISPOSITION_DELETE                    0x00000001
 #define SP_NT_FILE_DISPOSITION_POSIX_SEMANTICS           0x00000002
 #define SP_NT_FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE 0x00000010
+
+#define SP_NT_FILE_RENAME_REPLACE_IF_EXISTS         0x00000001
+#define SP_NT_FILE_RENAME_POSIX_SEMANTICS           0x00000002
+#define SP_NT_FILE_RENAME_IGNORE_READONLY_ATTRIBUTE 0x00000040
+
+#define SP_NT_FSCTL_SET_REPARSE_POINT 0x000900A4
+#define SP_NT_IO_REPARSE_TAG_SYMLINK  0xA000000C
+#define SP_NT_SYMLINK_FLAG_RELATIVE   0x00000001
+#define SP_NT_MAX_REPARSE_DATA        16384
 
 typedef struct {
   s64 CreationTime;
@@ -5361,14 +5375,36 @@ typedef struct {
   u32 Flags;
 } sp_nt_file_disposition_information_ex_t;
 
-SP_PRIVATE s32 sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
-  void* handle = sp_sys_nt_open(fd, path,
+typedef struct {
+  u32 ReparseTag;
+  u16 ReparseDataLength;
+  u16 Reserved;
+  u16 SubstituteNameOffset;
+  u16 SubstituteNameLength;
+  u16 PrintNameOffset;
+  u16 PrintNameLength;
+  u32 Flags;
+} sp_nt_symlink_reparse_buffer_t;
+
+SP_PRIVATE void* sp_sys_nt_open_delete_access(sp_sys_fd_t fd, sp_str_t path, u32 options) {
+  return sp_sys_nt_open(fd, path,
     DELETE | SYNCHRONIZE,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN,
     SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT | options,
     0
   );
+}
+
+SP_PRIVATE bool sp_sys_nt_needs_legacy_info(sp_nt_status_t status) {
+  return
+    status == SP_NT_STATUS_INVALID_INFO_CLASS ||
+    status == SP_NT_STATUS_INVALID_PARAMETER ||
+    status == SP_NT_STATUS_NOT_SUPPORTED;
+}
+
+SP_PRIVATE s32 sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
+  void* handle = sp_sys_nt_open_delete_access(fd, path, options);
   if (!handle) return -1;
 
   // IGNORE_READONLY_ATTRIBUTE is needed because NT refuses to set the delete
@@ -5396,7 +5432,7 @@ SP_PRIVATE s32 sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
   // INFO_CLASS means that the OS itself doesn't support it (too old)
   //
   // NOT_SUPPORTED means that the IGNORE_READONLY flag isn't supported
-  if (status == SP_NT_STATUS_INVALID_INFO_CLASS || status == SP_NT_STATUS_INVALID_PARAMETER || status == SP_NT_STATUS_NOT_SUPPORTED) {
+  if (sp_sys_nt_needs_legacy_info(status)) {
     sp_nt_file_disposition_information_t info = { .DeleteFile = 1 };
     status = SP_NT(NtSetInformationFile)(handle, &iosb, &info, sizeof(info), SP_NT_FILE_DISPOSITION_INFORMATION);
   }
@@ -5460,6 +5496,12 @@ static s32 sp_sys_file_meta_from_nt_path(sp_sys_fd_t root, sp_str_t path, sp_sys
   SP_NT(NtClose)(h);
   return rc;
 }
+
+#define SP_SYS_WIN32_IO_MAX 0x7ffff000u
+
+SP_PRIVATE DWORD sp_sys_win32_io_count(u64 count) {
+  return count > SP_SYS_WIN32_IO_MAX ? SP_SYS_WIN32_IO_MAX : (DWORD)count;
+}
 #endif
 
 
@@ -5498,15 +5540,7 @@ s32 sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
 ///////////////////
 s32 sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
 #if defined(SP_WIN32)
-  void* handle = sp_sys_nt_open(
-    from_fd,
-    sp_str(from, from_len),
-    DELETE | SYNCHRONIZE,
-    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-    SP_NT_FILE_OPEN,
-    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT,
-    0
-  );
+  void* handle = sp_sys_nt_open_delete_access(from_fd, sp_str(from, from_len), 0);
   if (!handle) return -1;
 
   SP_ALIGNED u16 path_buf[SP_PATH_MAX + 1];
@@ -5526,13 +5560,22 @@ s32 sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd
   }
   sp_nt_file_rename_information_t* info = (sp_nt_file_rename_information_t*)info_buf;
   *info = sp_zero_s(sp_nt_file_rename_information_t);
-  info->ReplaceIfExists = 1;
+  info->Flags =
+    SP_NT_FILE_RENAME_REPLACE_IF_EXISTS |
+    SP_NT_FILE_RENAME_POSIX_SEMANTICS |
+    SP_NT_FILE_RENAME_IGNORE_READONLY_ATTRIBUTE;
   info->RootDirectory = t.root;
   info->FileNameLength = name_bytes;
   sp_mem_copy(info->FileName, t.name.Buffer, name_bytes);
 
   sp_nt_io_status_block_t iosb = sp_zero;
-  sp_nt_status_t status = SP_NT(NtSetInformationFile)(handle, &iosb, info, info_bytes, SP_NT_FILE_RENAME_INFORMATION);
+  sp_nt_status_t status = SP_NT(NtSetInformationFile)(handle, &iosb, info, info_bytes, SP_NT_FILE_RENAME_INFORMATION_EX);
+
+  if (sp_sys_nt_needs_legacy_info(status)) {
+    info->Flags = 0;
+    info->ReplaceIfExists = 1;
+    status = SP_NT(NtSetInformationFile)(handle, &iosb, info, info_bytes, SP_NT_FILE_RENAME_INFORMATION);
+  }
 
   sp_sys_nt_target_free(&t);
   SP_NT(NtClose)(handle);
@@ -5645,7 +5688,7 @@ s32 sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
 s64 sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count) {
 #if defined(SP_WIN32)
   DWORD n = 0;
-  if (!ReadFile((HANDLE)fd, buf, (DWORD)count, &n, SP_NULLPTR)) {
+  if (!ReadFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) {
     if (GetLastError() == ERROR_BROKEN_PIPE) return 0;
     return -1;
   }
@@ -5682,7 +5725,7 @@ s64 sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count) {
 s64 sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count) {
 #if defined(SP_WIN32)
   DWORD n = 0;
-  if (!WriteFile((HANDLE)fd, buf, (DWORD)count, &n, SP_NULLPTR)) return -1;
+  if (!WriteFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) return -1;
   return (s64)n;
 
 #elif defined(SP_LINUX)
@@ -5718,10 +5761,19 @@ s64 sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset) {
   OVERLAPPED ov = sp_zero;
   ov.Offset = (DWORD)(offset & 0xFFFFFFFFu);
   ov.OffsetHigh = (DWORD)(offset >> 32);
+
+  LARGE_INTEGER zero = { .QuadPart = 0 };
+  LARGE_INTEGER saved = sp_zero;
+  bool restore = SetFilePointerEx((HANDLE)fd, zero, &saved, FILE_CURRENT);
+
   DWORD n = 0;
-  if (!ReadFile((HANDLE)fd, buf, (DWORD)count, &n, &ov)) {
-    DWORD e = GetLastError();
-    if (e == ERROR_BROKEN_PIPE || e == ERROR_HANDLE_EOF) return 0;
+  BOOL ok = ReadFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, &ov);
+  DWORD err = ok ? 0 : GetLastError();
+
+  if (restore) SetFilePointerEx((HANDLE)fd, saved, SP_NULLPTR, FILE_BEGIN);
+
+  if (!ok) {
+    if (err == ERROR_BROKEN_PIPE || err == ERROR_HANDLE_EOF) return 0;
     return -1;
   }
   return (s64)n;
@@ -5759,8 +5811,17 @@ s64 sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset) {
   OVERLAPPED ov = sp_zero;
   ov.Offset = (DWORD)(offset & 0xFFFFFFFFu);
   ov.OffsetHigh = (DWORD)(offset >> 32);
+
+  LARGE_INTEGER zero = { .QuadPart = 0 };
+  LARGE_INTEGER saved = sp_zero;
+  bool restore = SetFilePointerEx((HANDLE)fd, zero, &saved, FILE_CURRENT);
+
   DWORD n = 0;
-  if (!WriteFile((HANDLE)fd, buf, (DWORD)count, &n, &ov)) return -1;
+  BOOL ok = WriteFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, &ov);
+
+  if (restore) SetFilePointerEx((HANDLE)fd, saved, SP_NULLPTR, FILE_BEGIN);
+
+  if (!ok) return -1;
   return (s64)n;
 
 #elif defined(SP_LINUX)
@@ -5916,7 +5977,10 @@ SP_PRIVATE u32 sp_sys_nt_access_from_flags(s32 flags) {
   else {
     access |= FILE_READ_DATA | FILE_READ_EA;
   }
-  if (flags & SP_O_APPEND) access |= FILE_APPEND_DATA;
+  if (flags & SP_O_APPEND) {
+    access |= FILE_APPEND_DATA;
+    if (!(flags & SP_O_TRUNC)) access &= ~(u32)FILE_WRITE_DATA;
+  }
   return access;
 }
 
@@ -5943,14 +6007,10 @@ sp_sys_fd_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s3
   u32 disposition = sp_sys_nt_disposition_from_flags(flags);
   u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT;
   options |= (flags & SP_O_DIRECTORY) ? SP_NT_FILE_DIRECTORY_FILE : SP_NT_FILE_NON_DIRECTORY_FILE;
+  if ((flags & SP_O_CREAT) && (flags & SP_O_EXCL)) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
 
   void* handle = sp_sys_nt_open(fd, sp_str(path, len), access, share, disposition, options, FILE_ATTRIBUTE_NORMAL);
   if (!handle) return SP_SYS_INVALID_FD;
-
-  if (flags & SP_O_APPEND) {
-    LARGE_INTEGER zero = { .QuadPart = 0 };
-    SetFilePointerEx((HANDLE)handle, zero, SP_NULLPTR, FILE_END);
-  }
 
   return (sp_sys_fd_t)handle;
 
@@ -7535,26 +7595,96 @@ s32 sp_sys_link_s(sp_sys_fd_t from_fd, sp_str_t existing, sp_sys_fd_t to_fd, sp_
 ////////////////////
 s32 sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
 #if defined(SP_WIN32)
-  (void)to_fd;
-  SP_ALIGNED struct {
-    u16 target [SP_PATH_MAX + 1];
-    u16 link [SP_PATH_MAX + 1];
-  } bufs;
-  sp_mem_fixed_t target_fixed = sp_mem_fixed(bufs.target, sizeof(bufs.target));
-  sp_mem_fixed_t link_fixed = sp_mem_fixed(bufs.link, sizeof(bufs.link));
-  sp_wide_str_t wtarget = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&target_fixed), sp_str(existing, existing_len));
-  sp_wide_str_t wlink = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&link_fixed), sp_str(alias, alias_len));
-  if (!wtarget.data || !wlink.data) return -1;
+  sp_str_t target = sp_str(existing, existing_len);
+  sp_str_t link = sp_str(alias, alias_len);
 
-  DWORD flags = 0;
-  DWORD target_attrs = GetFileAttributesW((LPCWSTR)wtarget.data);
-  if (target_attrs != INVALID_FILE_ATTRIBUTES && (target_attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-    flags |= SYMBOLIC_LINK_FLAG_DIRECTORY;
+  SP_ALIGNED u16 wtarget_buf [SP_PATH_MAX + 1];
+  sp_mem_fixed_t target_fixed = sp_mem_fixed(wtarget_buf, sizeof(wtarget_buf));
+  sp_wide_str_t wtarget = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&target_fixed), target);
+  if (!wtarget.data) return -1;
+
+  u16* wt = (u16*)wtarget.data;
+  sp_for(it, wtarget.len) {
+    if (wt[it] == '/') wt[it] = '\\';
   }
-  #ifdef SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE
-    flags |= SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
-  #endif
-  return CreateSymbolicLinkW((LPCWSTR)wlink.data, (LPCWSTR)wtarget.data, flags) ? 0 : -1;
+
+  bool absolute =
+    (wtarget.len >= 3 && wt[1] == ':' && wt[2] == '\\') ||
+    (wtarget.len >= 2 && wt[0] == '\\' && wt[1] == '\\');
+
+  u32 dir_option = SP_NT_FILE_NON_DIRECTORY_FILE;
+  {
+    c8 probe_buf [SP_PATH_MAX];
+    sp_str_t probe = target;
+    if (!absolute) {
+      u32 parent_len = 0;
+      sp_for(it, link.len) {
+        if (link.data[it] == '/' || link.data[it] == '\\') parent_len = (u32)it + 1;
+      }
+      if ((u64)parent_len + target.len <= sizeof(probe_buf)) {
+        sp_mem_copy(probe_buf, link.data, parent_len);
+        sp_mem_copy(probe_buf + parent_len, target.data, target.len);
+        probe = sp_str(probe_buf, parent_len + target.len);
+      }
+    }
+    sp_sys_file_meta_t meta = sp_zero;
+    if (!sp_sys_file_meta_from_nt_path(to_fd, probe, &meta, true) && meta.kind == SP_FS_KIND_DIR) {
+      dir_option = SP_NT_FILE_DIRECTORY_FILE;
+    }
+  }
+
+  sp_wide_str_t stored = wtarget;
+  sp_sys_nt_path_t nt_path = sp_zero;
+  if (absolute) {
+    if (!SP_NT_SUCCESS(sp_sys_nt_path(target, &nt_path))) return -1;
+    stored.data = nt_path.name.Buffer;
+    stored.len = nt_path.name.Length / (u32)sizeof(u16);
+  }
+
+  u32 name_bytes = stored.len * (u32)sizeof(u16);
+  u32 rdb_len = (u32)sizeof(sp_nt_symlink_reparse_buffer_t) + name_bytes * 2;
+  SP_ALIGNED u8 rdb_buf [SP_NT_MAX_REPARSE_DATA];
+  if (rdb_len > sizeof(rdb_buf)) {
+    sp_sys_nt_path_free(&nt_path);
+    return -1;
+  }
+
+  sp_nt_symlink_reparse_buffer_t* rdb = (sp_nt_symlink_reparse_buffer_t*)rdb_buf;
+  *rdb = sp_zero_s(sp_nt_symlink_reparse_buffer_t);
+  rdb->ReparseTag = SP_NT_IO_REPARSE_TAG_SYMLINK;
+  rdb->ReparseDataLength = (u16)(rdb_len - 8);
+  rdb->SubstituteNameOffset = (u16)name_bytes;
+  rdb->SubstituteNameLength = (u16)name_bytes;
+  rdb->PrintNameOffset = 0;
+  rdb->PrintNameLength = (u16)name_bytes;
+  rdb->Flags = absolute ? 0 : SP_NT_SYMLINK_FLAG_RELATIVE;
+  sp_mem_copy(rdb_buf + sizeof(sp_nt_symlink_reparse_buffer_t), stored.data, name_bytes);
+  sp_mem_copy(rdb_buf + sizeof(sp_nt_symlink_reparse_buffer_t) + name_bytes, stored.data, name_bytes);
+  sp_sys_nt_path_free(&nt_path);
+
+  void* handle = sp_sys_nt_open(to_fd, link,
+    DELETE | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+    0,
+    SP_NT_FILE_CREATE,
+    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT | dir_option,
+    FILE_ATTRIBUTE_NORMAL
+  );
+  if (!handle) return -1;
+
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtFsControlFile)(
+    handle, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb,
+    SP_NT_FSCTL_SET_REPARSE_POINT, rdb_buf, rdb_len, SP_NULLPTR, 0
+  );
+
+  if (!SP_NT_SUCCESS(status)) {
+    sp_nt_file_disposition_information_t info = { .DeleteFile = 1 };
+    sp_nt_io_status_block_t diosb = sp_zero;
+    SP_NT(NtSetInformationFile)(handle, &diosb, &info, sizeof(info), SP_NT_FILE_DISPOSITION_INFORMATION);
+  }
+
+  SP_NT(NtClose)(handle);
+  return SP_NT_SUCCESS(status) ? 0 : -1;
 
 #elif defined(SP_LINUX)
   struct {

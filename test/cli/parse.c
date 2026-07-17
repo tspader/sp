@@ -352,6 +352,23 @@ UTEST_F(cli_parse, string_opt_missing_value_before_opt) {
   });
 }
 
+UTEST_F(cli_parse, string_opt_missing_value_before_brief) {
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "--output", "-v" },
+    .cmd = {
+      .name = "test",
+      .opts = {
+        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[0] },
+        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+      },
+    },
+    .expect = {
+      .err = SP_CLI_ERR_MISSING_VALUE,
+      .err_name = "output",
+    },
+  });
+}
+
 UTEST_F(cli_parse, int_opt) {
   run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
     .args = { "--jobs", "4" },
@@ -639,6 +656,35 @@ UTEST_F(cli_parse, child_opt_shadows_parent) {
   });
 }
 
+UTEST_F(cli_parse, command_at_max_depth) {
+  sp_cli_cmd_t c = { .name = "c", .handler = cli_handler_ok };
+  sp_cli_cmd_t b = { .name = "b", .commands = { &c } };
+  sp_cli_cmd_t a = { .name = "a", .commands = { &b } };
+
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "a", "b", "c" },
+    .cmd = { .name = "root", .commands = { &a } },
+    .expect = { .cmd = "c" },
+  });
+}
+
+UTEST_F(cli_parse, command_beyond_max_depth) {
+  sp_cli_cmd_t d = { .name = "d", .handler = cli_handler_ok };
+  sp_cli_cmd_t c = { .name = "c", .commands = { &d } };
+  sp_cli_cmd_t b = { .name = "b", .commands = { &c } };
+  sp_cli_cmd_t a = { .name = "a", .commands = { &b } };
+
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "a", "b", "c", "d" },
+    .cmd = { .name = "root", .commands = { &a } },
+    .expect = {
+      .err = SP_CLI_ERR_MAX_DEPTH,
+      .err_name = "d",
+      .cmd = "c",
+    },
+  });
+}
+
 UTEST_F(cli_parse, unknown_opt_misses_all_scopes) {
   sp_cli_cmd_t build = { .name = "build", .handler = cli_handler_ok };
 
@@ -738,6 +784,26 @@ UTEST_F(cli_parse, double_dash_ends_options) {
     },
     .expect = {
       .strs = { "--verbose" },
+    },
+  });
+}
+
+UTEST_F(cli_parse, double_dash_ends_commands) {
+  sp_cli_cmd_t build = { .name = "build", .handler = cli_handler_ok };
+
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "--", "build" },
+    .cmd = {
+      .name = "root",
+      .args = {
+        { .name = "args", .arity = SP_CLI_ARG_REST },
+      },
+      .commands = { &build },
+      .handler = cli_handler_ok,
+    },
+    .expect = {
+      .cmd = "root",
+      .rest = { "build" },
     },
   });
 }
