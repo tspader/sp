@@ -15,6 +15,21 @@ static void cli_print_usage_file(sp_str_t path, sp_str_t content) {
   sp_io_file_writer_close(&w);
 }
 
+static sp_str_t cli_usage_golden_dir(sp_mem_t mem) {
+  sp_str_t baked = sp_str_lit(SP_CLI_TEST_DIR);
+  if (sp_fs_exists(baked)) return sp_fs_join_path(mem, baked, sp_str_lit("golden"));
+
+  sp_str_t dir = sp_fs_parent_path(sp_fs_get_exe_path(mem));
+  while (!sp_str_empty(dir)) {
+    sp_str_t candidate = sp_fs_join_path(mem, dir, sp_str_lit("test/cli/golden"));
+    if (sp_fs_exists(candidate)) return candidate;
+    sp_str_t parent = sp_fs_parent_path(dir);
+    if (sp_str_equal(parent, dir)) break;
+    dir = parent;
+  }
+  return sp_zero_s(sp_str_t);
+}
+
 static void run_cli_usage_test(s32* utest_result, sp_mem_t mem, cli_usage_test_t t) {
   SKIP_ON_WASM();
 
@@ -30,7 +45,12 @@ static void run_cli_usage_test(s32* utest_result, sp_mem_t mem, cli_usage_test_t
   sp_cli_write_help(&io.base, &cli);
   sp_str_t actual = sp_io_dyn_mem_writer_as_str(&io);
 
-  sp_str_t dir = sp_fmt(mem, "{}/golden", sp_fmt_cstr(SP_CLI_TEST_DIR)).value;
+  sp_str_t dir = cli_usage_golden_dir(mem);
+  if (sp_str_empty(dir)) {
+    SP_TEST_REPORT("could not locate the golden directory from {}\n", sp_fmt_str(sp_fs_get_exe_path(mem)));
+    SP_FAIL();
+    return;
+  }
   sp_str_t path = sp_fmt(mem, "{}/{}.txt", sp_fmt_str(dir), sp_fmt_cstr(t.name)).value;
 
   if (!sp_str_empty(sp_os_env_get(sp_str_lit("SP_CLI_TEST_UPDATE")))) {
@@ -234,6 +254,26 @@ UTEST_F(cli_usage, command_path) {
       .summary = "Install a tool",
       .args = {
         { .name = "package", .summary = "The package to install" },
+      },
+    },
+  });
+}
+
+UTEST_F(cli_usage, option_brief_shadowed) {
+  static sp_cli_cmd_t root = {
+    .name = "test",
+    .opts = {
+      { .brief = "v", .name = "verbose", .summary = "Verbose output" },
+    },
+  };
+
+  run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
+    .name = "option_brief_shadowed",
+    .path = { &root },
+    .cmd = {
+      .name = "sub",
+      .opts = {
+        { .brief = "v", .name = "voltage", .summary = "Peak voltage" },
       },
     },
   });
