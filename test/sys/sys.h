@@ -45,6 +45,7 @@ typedef struct {
 typedef enum {
   SYS_STEP_NONE,
   SYS_STEP_OPEN,
+  SYS_STEP_OPEN_DIR,
   SYS_STEP_CLOSE,
   SYS_STEP_READ,
   SYS_STEP_PREAD,
@@ -58,11 +59,12 @@ typedef enum {
 typedef struct {
   sys_step_kind_t kind;
   union {
-    struct { u32 slot; const c8* path; s32 flags; s32 mode; bool fail; } open;
+    struct { u32 slot; const c8* path; sp_sys_open_mode_t mode; u32 flags; bool fail; } open;
+    struct { u32 slot; const c8* path; bool fail; } open_dir;
     struct { u32 slot; } close;
-    struct { u32 slot; u64 count; const c8* expect; } read;
+    struct { u32 slot; u64 count; const c8* expect; bool fail; } read;
     struct { u32 slot; u64 count; u64 offset; const c8* expect; } pread;
-    struct { u32 slot; const c8* data; } write;
+    struct { u32 slot; const c8* data; bool fail; } write;
     struct { u32 slot; const c8* data; u64 offset; } pwrite;
     struct { const c8* target; const c8* alias; } symlink;
     struct { const c8* from; const c8* to; } rename;
@@ -211,7 +213,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
   }
 
   sp_str_t sandbox = sp_test_file_create_dir(&fm, t.label);
-  sandbox_fd = sp_sys_open_s(sp_sys_get_root(0), sandbox, SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  sandbox_fd = sp_sys_open_dir_s(sp_sys_get_root(0), sandbox);
   if (sandbox_fd == SP_SYS_INVALID_FD) {
     SP_TEST_REPORT("failed to open sandbox {}", sp_fmt_str(sandbox));
     SP_FAIL();
@@ -228,7 +230,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
       case SYS_STEP_NONE: break;
 
       case SYS_STEP_OPEN: {
-        sp_sys_fd_t fd = sp_sys_open_s(sandbox_fd, sp_cstr_as_str(step->open.path), step->open.flags, step->open.mode);
+        sp_sys_fd_t fd = sp_sys_open_s(sandbox_fd, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags);
         if (step->open.fail) {
           if (fd != SP_SYS_INVALID_FD) {
             SP_TEST_REPORT("open of {} succeeded but expected failure", sp_fmt_cstr(step->open.path));
@@ -242,6 +244,24 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
             SP_FAIL();
           }
           fds[step->open.slot] = fd;
+        }
+        break;
+      }
+      case SYS_STEP_OPEN_DIR: {
+        sp_sys_fd_t fd = sp_sys_open_dir_s(sandbox_fd, sp_cstr_as_str(step->open_dir.path));
+        if (step->open_dir.fail) {
+          if (fd != SP_SYS_INVALID_FD) {
+            SP_TEST_REPORT("open_dir of {} succeeded but expected failure", sp_fmt_cstr(step->open_dir.path));
+            SP_FAIL();
+            sp_sys_close(fd);
+          }
+        }
+        else {
+          if (fd == SP_SYS_INVALID_FD) {
+            SP_TEST_REPORT("failed to open_dir {}", sp_fmt_cstr(step->open_dir.path));
+            SP_FAIL();
+          }
+          fds[step->open_dir.slot] = fd;
         }
         break;
       }
@@ -262,7 +282,15 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
           }
         }
         s64 n = sp_sys_read(fds[step->read.slot], buf, step->read.count);
-        sys_expect_bytes(utest_result, "read", buf, n, step->read.expect);
+        if (step->read.fail) {
+          if (n >= 0) {
+            SP_TEST_REPORT("read returned {} but expected failure", sp_fmt_int(n));
+            SP_FAIL();
+          }
+        }
+        else {
+          sys_expect_bytes(utest_result, "read", buf, n, step->read.expect);
+        }
         if (buf != stack_buf) sp_sys_free(buf, step->read.count);
         break;
       }
@@ -275,7 +303,13 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
       case SYS_STEP_WRITE: {
         s64 len = (s64)sp_cstr_len(step->write.data);
         s64 n = sp_sys_write(fds[step->write.slot], step->write.data, (u64)len);
-        if (n != len) {
+        if (step->write.fail) {
+          if (n >= 0) {
+            SP_TEST_REPORT("write returned {} but expected failure", sp_fmt_int(n));
+            SP_FAIL();
+          }
+        }
+        else if (n != len) {
           SP_TEST_REPORT("write returned {} but expected {}", sp_fmt_int(n), sp_fmt_int(len));
           SP_FAIL();
         }

@@ -901,7 +901,7 @@ void bench__make_fingerprint(const bench_machine_info* m, c8* dst, u32 dst_size)
 
 static sp_str_t ubench_cpu_read_file_a(sp_mem_t mem, const c8 *path) {
   sp_sys_fd_t fd = (sp_sys_fd_t)sp_syscall(
-      SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, path, SP_O_RDONLY, 0);
+      SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, path, SP_SYS_LINUX_O_RDONLY, 0);
   if (fd < 0) return sp_zero_s(sp_str_t);
 
   u64 cap = 4096;

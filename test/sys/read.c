@@ -10,7 +10,7 @@ UTEST_F(sys_read, reads_sequentially) {
       { .path = "file.bin", .content = "0123456789ABCDEF" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .flags = SP_O_RDONLY | SP_O_BINARY } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin" } },
       { .kind = SYS_STEP_READ, .read = { .count = 8, .expect = "01234567" } },
       { .kind = SYS_STEP_READ, .read = { .count = 8, .expect = "89ABCDEF" } },
       { .kind = SYS_STEP_READ, .read = { .count = 8, .expect = "" } },
@@ -26,7 +26,7 @@ UTEST_F(sys_read, clamps_count_beyond_4gib) {
       { .path = "file.bin", .content = "0123456789ABCDEF" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .flags = SP_O_RDONLY | SP_O_BINARY } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin" } },
       { .kind = SYS_STEP_READ, .read = { .count = 0x100000000ULL, .expect = "0123456789ABCDEF" } },
     },
   });

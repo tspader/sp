@@ -10,7 +10,7 @@ UTEST_F(sys_pwrite, writes_at_offset) {
       { .path = "file.bin", .content = "0123456789ABCDEF" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .flags = SP_O_WRONLY | SP_O_BINARY } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO } },
       { .kind = SYS_STEP_PWRITE, .pwrite = { .data = "xxxx", .offset = 8 } },
     },
     .expect = {
@@ -27,7 +27,7 @@ UTEST_F(sys_pwrite, preserves_file_position) {
       { .path = "file.bin", .content = "0123456789ABCDEF" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .flags = SP_O_RDWR | SP_O_BINARY } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_RW } },
       { .kind = SYS_STEP_READ, .read = { .count = 4, .expect = "0123" } },
       { .kind = SYS_STEP_PWRITE, .pwrite = { .data = "xx", .offset = 8 } },
       { .kind = SYS_STEP_READ, .read = { .count = 4, .expect = "4567" } },

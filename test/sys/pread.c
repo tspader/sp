@@ -10,7 +10,7 @@ UTEST_F(sys_pread, reads_at_offset) {
       { .path = "file.bin", .content = "0123456789ABCDEF" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .flags = SP_O_RDONLY | SP_O_BINARY } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin" } },
       { .kind = SYS_STEP_PREAD, .pread = { .count = 4, .offset = 12, .expect = "CDEF" } },
     },
   });
@@ -24,7 +24,7 @@ UTEST_F(sys_pread, preserves_file_position) {
       { .path = "file.bin", .content = "0123456789ABCDEF" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .flags = SP_O_RDONLY | SP_O_BINARY } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin" } },
       { .kind = SYS_STEP_READ, .read = { .count = 4, .expect = "0123" } },
       { .kind = SYS_STEP_PREAD, .pread = { .count = 4, .offset = 8, .expect = "89AB" } },
       { .kind = SYS_STEP_READ, .read = { .count = 4, .expect = "4567" } },
