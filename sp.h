@@ -5504,6 +5504,15 @@ SP_PRIVATE DWORD sp_sys_win32_io_count(u64 count) {
 }
 #endif
 
+#if defined(SP_MACOS) || defined(SP_COSMO)
+// Linux clamps automatically, but macOS just errors with EINVAL if we pass more than INT_MAX
+#define SP_SYS_POSIX_IO_MAX 0x7ffff000u
+
+SP_PRIVATE size_t sp_sys_posix_io_count(u64 count) {
+  return count > SP_SYS_POSIX_IO_MAX ? SP_SYS_POSIX_IO_MAX : (size_t)count;
+}
+#endif
+
 
 //////////////////////////////
 // SP_SYS_GET_FILE_METADATA //
@@ -5704,7 +5713,7 @@ s64 sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s64 rc;
   do {
-    rc = read(fd, buf, count);
+    rc = read(fd, buf, sp_sys_posix_io_count(count));
   } while (rc == -1 && errno == SP_EINTR);
   return rc;
 
@@ -5738,7 +5747,7 @@ s64 sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s64 rc;
   do {
-    rc = write(fd, buf, count);
+    rc = write(fd, buf, sp_sys_posix_io_count(count));
   } while (rc == -1 && errno == SP_EINTR);
   return rc;
 
@@ -5788,7 +5797,7 @@ s64 sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s64 rc;
   do {
-    rc = pread(fd, buf, count, (off_t)offset);
+    rc = pread(fd, buf, sp_sys_posix_io_count(count), (off_t)offset);
   } while (rc == -1 && errno == SP_EINTR);
   return rc;
 
@@ -5834,7 +5843,7 @@ s64 sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s64 rc;
   do {
-    rc = pwrite(fd, buf, count, (off_t)offset);
+    rc = pwrite(fd, buf, sp_sys_posix_io_count(count), (off_t)offset);
   } while (rc == -1 && errno == SP_EINTR);
   return rc;
 
