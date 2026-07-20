@@ -294,7 +294,7 @@ UTEST_F(ps, io_stdout_stderr) {
 // SP_PS_IO_MODE_EXISTING
 UTEST_F(ps, io_create_file_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdout.file"));
-  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), file_path, SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), file_path, SP_SYS_OPEN_MODE_RW, SP_SYS_OPEN_CREATE);
 
   sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
@@ -322,7 +322,7 @@ UTEST_F(ps, io_create_file_null) {
 UTEST_F(ps, io_file_create_null) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
-  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), file_path, SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), file_path, SP_SYS_OPEN_MODE_RW, SP_SYS_OPEN_CREATE);
   sp_sys_write(fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
   sp_sys_lseek(fd, 0, SP_SEEK_SET);
 
@@ -346,7 +346,7 @@ UTEST_F(ps, io_file_create_null) {
 
 UTEST_F(ps, io_create_null_file) {
   sp_str_t file_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
-  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), file_path, SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), file_path, SP_SYS_OPEN_MODE_RW, SP_SYS_OPEN_CREATE);
 
   sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
@@ -374,12 +374,12 @@ UTEST_F(ps, io_create_null_file) {
 UTEST_F(ps, io_file_null_file) {
   sp_str_t in_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stdin.file"));
 
-  sp_sys_fd_t in_fd = sp_sys_open_s(sp_sys_get_root(0), in_path, SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t in_fd = sp_sys_open_s(sp_sys_get_root(0), in_path, SP_SYS_OPEN_MODE_RW, SP_SYS_OPEN_CREATE);
   sp_sys_write(in_fd, sp_test_ps_canary.data, sp_test_ps_canary.len);
   sp_sys_lseek(in_fd, 0, SP_SEEK_SET);
 
   sp_str_t err_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
-  sp_sys_fd_t err_fd = sp_sys_open_s(sp_sys_get_root(0), err_path, SP_O_RDWR | SP_O_CREAT, 0644);
+  sp_sys_fd_t err_fd = sp_sys_open_s(sp_sys_get_root(0), err_path, SP_SYS_OPEN_MODE_RW, SP_SYS_OPEN_CREATE);
 
   sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
@@ -1202,7 +1202,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   u8* buffer = (u8*)sp_alloc(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
-  fcntl(pipes[0], SP_F_SETFL, fcntl(pipes[0], SP_F_GETFL) | SP_O_NONBLOCK);
+  sp_ps_set_nonblocking(pipes[0]);
 
   bool a_done = false;
   bool b_done = false;
@@ -1296,7 +1296,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   u8* buffer = (u8*)sp_alloc(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
-  fcntl(pipes[0], SP_F_SETFL, fcntl(pipes[0], SP_F_GETFL) | SP_O_NONBLOCK);
+  sp_ps_set_nonblocking(pipes[0]);
 
   bool a_done = false;
   bool b_done = false;

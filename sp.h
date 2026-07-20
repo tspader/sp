@@ -861,9 +861,6 @@ typedef WIN32_FIND_DATAW sp_win32_find_data_t;
 
 #if defined(SP_AMD64)
   #define SP_ARCH_SET_FS 0x1002
-  #define SP_O_DIRECTORY 0200000
-#elif defined(SP_ARM64)
-  #define SP_O_DIRECTORY          040000
 #endif
 
 #if defined(SP_LINUX)
@@ -878,17 +875,6 @@ typedef WIN32_FIND_DATAW sp_win32_find_data_t;
   #define SP_AT_SYMLINK_FOLLOW    0x400
   #define SP_AT_EACCESS           0x200
   #define SP_AT_EMPTY_PATH        0x1000
-
-  #define SP_O_RDONLY             0
-  #define SP_O_WRONLY             1
-  #define SP_O_RDWR               2
-  #define SP_O_CREAT              0100
-  #define SP_O_EXCL               0200
-  #define SP_O_TRUNC              01000
-  #define SP_O_APPEND             02000
-  #define SP_O_NONBLOCK           04000
-  #define SP_O_CLOEXEC            02000000
-  #define SP_O_BINARY             0
 
   #define SP_SEEK_SET             0
   #define SP_SEEK_CUR             1
@@ -961,15 +947,6 @@ typedef WIN32_FIND_DATAW sp_win32_find_data_t;
   #define SP_TIOCGWINSZ              0x5413
 
 #elif defined(SP_WIN32)
-  #define SP_O_RDONLY             _O_RDONLY
-  #define SP_O_WRONLY             _O_WRONLY
-  #define SP_O_RDWR               _O_RDWR
-  #define SP_O_CREAT              _O_CREAT
-  #define SP_O_EXCL               _O_EXCL
-  #define SP_O_TRUNC              _O_TRUNC
-  #define SP_O_APPEND             _O_APPEND
-  #define SP_O_BINARY             _O_BINARY
-
   #define SP_SEEK_SET             SEEK_SET
   #define SP_SEEK_CUR             SEEK_CUR
   #define SP_SEEK_END             SEEK_END
@@ -986,17 +963,6 @@ typedef WIN32_FIND_DATAW sp_win32_find_data_t;
   #define SP_AT_REMOVEDIR         AT_REMOVEDIR
   #define SP_AT_SYMLINK_FOLLOW    AT_SYMLINK_FOLLOW
   #define SP_AT_EACCESS           AT_EACCESS
-
-  #define SP_O_RDONLY             O_RDONLY
-  #define SP_O_WRONLY             O_WRONLY
-  #define SP_O_RDWR               O_RDWR
-  #define SP_O_CREAT              O_CREAT
-  #define SP_O_EXCL               O_EXCL
-  #define SP_O_TRUNC              O_TRUNC
-  #define SP_O_APPEND             O_APPEND
-  #define SP_O_NONBLOCK           O_NONBLOCK
-  #define SP_O_CLOEXEC            O_CLOEXEC
-  #define SP_O_BINARY             0
 
   #define SP_SEEK_SET             SEEK_SET
   #define SP_SEEK_CUR             SEEK_CUR
@@ -1269,6 +1235,19 @@ typedef struct {
   sp_fs_kind_t kind;
 } sp_sys_fs_entry_t;
 
+typedef enum {
+  SP_SYS_OPEN_MODE_RO,
+  SP_SYS_OPEN_MODE_WO,
+  SP_SYS_OPEN_MODE_RW,
+} sp_sys_open_mode_t;
+
+typedef enum {
+  SP_SYS_OPEN_CREATE    = 1 << 0,
+  SP_SYS_OPEN_EXCLUSIVE = 1 << 1,
+  SP_SYS_OPEN_TRUNCATE  = 1 << 2,
+  SP_SYS_OPEN_APPEND    = 1 << 3,
+} sp_sys_open_flags_t;
+
 SP_TYPEDEF_FN(int, sp_qsort_fn_t, const void *, const void *);
 SP_API void        sp_sys_init();
 SP_API s64         sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count);
@@ -1280,7 +1259,8 @@ SP_API s64         sp_sys_get_exe_path(c8* buf, u64 size);
 SP_API s64         sp_sys_get_cwd_path(c8* buf, u64 size);
 SP_API s64         sp_sys_get_storage_path(c8* buf, u64 size);
 SP_API s64         sp_sys_get_config_path(c8* buf, u64 size);
-SP_API sp_sys_fd_t sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s32 mode);
+SP_API sp_sys_fd_t sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags);
+SP_API sp_sys_fd_t sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API s32         sp_sys_close(sp_sys_fd_t fd);
 SP_API s32         sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
 SP_API s32         sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
@@ -1326,7 +1306,8 @@ SP_API s64         sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence);
 SP_API s32         sp_sys_chdir(const c8* path, u32 len);
 
 
-SP_API sp_sys_fd_t sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, s32 flags, s32 mode);
+SP_API sp_sys_fd_t sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_open_mode_t mode, u32 flags);
+SP_API sp_sys_fd_t sp_sys_open_dir_s(sp_sys_fd_t fd, sp_str_t path);
 SP_API s32         sp_sys_get_path_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
 SP_API s32         sp_sys_get_link_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
 SP_API s32         sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode);
@@ -1354,7 +1335,8 @@ typedef struct {
   s64         (*get_cwd_path)(c8* buf, u64 size);
   s64         (*get_storage_path)(c8* buf, u64 size);
   s64         (*get_config_path)(c8* buf, u64 size);
-  sp_sys_fd_t (*open)(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s32 mode);
+  sp_sys_fd_t (*open)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags);
+  sp_sys_fd_t (*open_dir)(sp_sys_fd_t fd, const c8* path, u32 len);
   s32         (*close)(sp_sys_fd_t fd);
   s32         (*pipe)(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
   s32         (*mkdir)(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
@@ -1412,7 +1394,8 @@ SP_API s64         sp_sys_get_exe_path_p(c8* buf, u64 size);
 SP_API s64         sp_sys_get_cwd_path_p(c8* buf, u64 size);
 SP_API s64         sp_sys_get_storage_path_p(c8* buf, u64 size);
 SP_API s64         sp_sys_get_config_path_p(c8* buf, u64 size);
-SP_API sp_sys_fd_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s32 mode);
+SP_API sp_sys_fd_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags);
+SP_API sp_sys_fd_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API s32         sp_sys_close_p(sp_sys_fd_t fd);
 SP_API s32         sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
 SP_API s32         sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
@@ -3509,12 +3492,6 @@ typedef enum {
 } sp_io_whence_t;
 
 typedef enum {
-  SP_IO_MODE_READ   = 1 << 0,
-  SP_IO_MODE_WRITE  = 1 << 1,
-  SP_IO_MODE_APPEND = 1 << 2,
-} sp_io_mode_t;
-
-typedef enum {
   SP_IO_CLOSE_MODE_NONE,
   SP_IO_CLOSE_MODE_AUTO,
 } sp_io_close_mode_t;
@@ -4136,9 +4113,7 @@ SP_IMP void     sp_nt_load(void);
 SP_IMP u8*      sp_nt_peb_base(void);
 SP_IMP void*    sp_nt_process_heap(void);
 SP_IMP u8*      sp_nt_process_params(void);
-SP_IMP u32      sp_sys_nt_disposition_from_flags(s32 flags);
 SP_IMP void*    sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32 share, u32 disposition, u32 options, u32 file_attr);
-SP_IMP u32      sp_sys_nt_access_from_flags(s32 flags);
 SP_IMP sp_str_t sp_win32_utf16_to_utf8(const u16* utf16, s32 len);
 SP_IMP u32      sp_win32_utf16_len(const u16* str);
 SP_IMP bool     sp_win32_utf16_equals_cstr(const u16* a, u32 a_len, const c8* b, u32 b_len);
@@ -4185,6 +4160,7 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .get_storage_path       = sp_sys_get_storage_path_p,
   .get_config_path        = sp_sys_get_config_path_p,
   .open                   = sp_sys_open_p,
+  .open_dir               = sp_sys_open_dir_p,
   .close                  = sp_sys_close_p,
   .pipe                   = sp_sys_pipe_p,
   .mkdir                  = sp_sys_mkdir_p,
@@ -4277,8 +4253,12 @@ s64 sp_sys_get_config_path(c8* buf, u64 size) {
   return (sp_rt.vt->get_config_path)(buf, size);
 }
 
-sp_sys_fd_t sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s32 mode) {
-  return (sp_rt.vt->open)(fd, path, len, flags, mode);
+sp_sys_fd_t sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags) {
+  return (sp_rt.vt->open)(fd, path, len, mode, flags);
+}
+
+sp_sys_fd_t sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len) {
+  return (sp_rt.vt->open_dir)(fd, path, len);
 }
 
 s32 sp_sys_close(sp_sys_fd_t fd) {
@@ -4801,6 +4781,21 @@ s32 errno;
   #define SP_SYSCALL_NUM_LINK              SP_SYSCALL_NUM_LINKAT
 #endif
 
+#define SP_SYS_LINUX_O_RDONLY   0
+#define SP_SYS_LINUX_O_WRONLY   1
+#define SP_SYS_LINUX_O_RDWR     2
+#define SP_SYS_LINUX_O_CREAT    0100
+#define SP_SYS_LINUX_O_EXCL     0200
+#define SP_SYS_LINUX_O_TRUNC    01000
+#define SP_SYS_LINUX_O_APPEND   02000
+#define SP_SYS_LINUX_O_NONBLOCK 04000
+#define SP_SYS_LINUX_O_CLOEXEC  02000000
+#if defined(SP_AMD64)
+  #define SP_SYS_LINUX_O_DIRECTORY 0200000
+#elif defined(SP_ARM64)
+  #define SP_SYS_LINUX_O_DIRECTORY 040000
+#endif
+
 ///////////
 // TYPES //
 ///////////
@@ -5305,14 +5300,6 @@ void sp_sys_nt_path_free(sp_sys_nt_path_t* path) {
 #define SP_NT_STATUS_INVALID_PARAMETER     ((sp_nt_status_t)0xC000000D)
 #define SP_NT_STATUS_NOT_SUPPORTED         ((sp_nt_status_t)0xC00000BB)
 
-SP_PRIVATE u32 sp_sys_nt_disposition_from_flags(s32 flags) {
-  if ((flags & SP_O_CREAT) && (flags & SP_O_EXCL))  return SP_NT_FILE_CREATE;
-  if ((flags & SP_O_CREAT) && (flags & SP_O_TRUNC)) return SP_NT_FILE_OVERWRITE_IF;
-  if (flags & SP_O_CREAT)                            return SP_NT_FILE_OPEN_IF;
-  if (flags & SP_O_TRUNC)                            return SP_NT_FILE_OVERWRITE;
-  return SP_NT_FILE_OPEN;
-}
-
 SP_PRIVATE void* sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32 share, u32 disposition, u32 options, u32 file_attr) {
   SP_ALIGNED u16 path_buf[SP_PATH_MAX + 1];
   sp_sys_nt_target_t t;
@@ -5665,7 +5652,7 @@ s32 sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
 
 #elif defined(SP_LINUX)
   s32 fds[2];
-  s32 r = (s32)sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_O_NONBLOCK | SP_O_CLOEXEC, 0, 0, 0);
+  s32 r = (s32)sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_SYS_LINUX_O_NONBLOCK | SP_SYS_LINUX_O_CLOEXEC, 0, 0, 0);
   if (r < 0) return -1;
   *read_end = fds[0];
   *write_end = fds[1];
@@ -5974,49 +5961,67 @@ s32 sp_sys_clock_gettime_p(s32 clockid, sp_sys_timespec_t* ts) {
 // SP_SYS_OPEN //
 /////////////////
 #if defined(SP_WIN32)
-SP_PRIVATE u32 sp_sys_nt_access_from_flags(s32 flags) {
+SP_PRIVATE u32 sp_sys_nt_access_from_mode(sp_sys_open_mode_t mode, u32 flags) {
+  u32 read = FILE_READ_DATA | FILE_READ_EA;
+  u32 write = FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | FILE_APPEND_DATA;
+  if ((flags & SP_SYS_OPEN_APPEND) && !(flags & SP_SYS_OPEN_TRUNCATE)) write &= ~(u32)FILE_WRITE_DATA;
+
   u32 access = SYNCHRONIZE | FILE_READ_ATTRIBUTES;
-  s32 rw = flags & (SP_O_RDONLY | SP_O_WRONLY | SP_O_RDWR);
-  if (rw == SP_O_WRONLY) {
-    access |= FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | FILE_APPEND_DATA;
-  }
-  else if (rw == SP_O_RDWR) {
-    access |= FILE_READ_DATA | FILE_READ_EA | FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | FILE_APPEND_DATA;
-  }
-  else {
-    access |= FILE_READ_DATA | FILE_READ_EA;
-  }
-  if (flags & SP_O_APPEND) {
-    access |= FILE_APPEND_DATA;
-    if (!(flags & SP_O_TRUNC)) access &= ~(u32)FILE_WRITE_DATA;
+  switch (mode) {
+    case SP_SYS_OPEN_MODE_RO: { access |= read; break; }
+    case SP_SYS_OPEN_MODE_WO: { access |= write; break; }
+    case SP_SYS_OPEN_MODE_RW: { access |= read | write; break; }
   }
   return access;
 }
 
+SP_PRIVATE u32 sp_sys_nt_disposition_from_flags(u32 flags) {
+  if (flags & SP_SYS_OPEN_EXCLUSIVE)                                  return SP_NT_FILE_CREATE;
+  if ((flags & SP_SYS_OPEN_CREATE) && (flags & SP_SYS_OPEN_TRUNCATE)) return SP_NT_FILE_OVERWRITE_IF;
+  if (flags & SP_SYS_OPEN_CREATE)                                     return SP_NT_FILE_OPEN_IF;
+  if (flags & SP_SYS_OPEN_TRUNCATE)                                   return SP_NT_FILE_OVERWRITE;
+  return SP_NT_FILE_OPEN;
+}
+
+#elif defined(SP_LINUX)
+SP_PRIVATE u32 sp_sys_linux_open_flags(sp_sys_open_mode_t mode, u32 flags) {
+  u32 o = SP_SYS_LINUX_O_CLOEXEC;
+  switch (mode) {
+    case SP_SYS_OPEN_MODE_RO: { o |= SP_SYS_LINUX_O_RDONLY; break; }
+    case SP_SYS_OPEN_MODE_WO: { o |= SP_SYS_LINUX_O_WRONLY; break; }
+    case SP_SYS_OPEN_MODE_RW: { o |= SP_SYS_LINUX_O_RDWR; break; }
+  }
+  if (flags & (SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE)) o |= SP_SYS_LINUX_O_CREAT;
+  if (flags & SP_SYS_OPEN_EXCLUSIVE) o |= SP_SYS_LINUX_O_EXCL;
+  if (flags & SP_SYS_OPEN_TRUNCATE)  o |= SP_SYS_LINUX_O_TRUNC;
+  if (flags & SP_SYS_OPEN_APPEND)    o |= SP_SYS_LINUX_O_APPEND;
+  return o;
+}
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+SP_PRIVATE s32 sp_sys_posix_open_flags(sp_sys_open_mode_t mode, u32 flags) {
+  s32 o = O_CLOEXEC;
+  switch (mode) {
+    case SP_SYS_OPEN_MODE_RO: { o |= O_RDONLY; break; }
+    case SP_SYS_OPEN_MODE_WO: { o |= O_WRONLY; break; }
+    case SP_SYS_OPEN_MODE_RW: { o |= O_RDWR; break; }
+  }
+  if (flags & (SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE)) o |= O_CREAT;
+  if (flags & SP_SYS_OPEN_EXCLUSIVE) o |= O_EXCL;
+  if (flags & SP_SYS_OPEN_TRUNCATE)  o |= O_TRUNC;
+  if (flags & SP_SYS_OPEN_APPEND)    o |= O_APPEND;
+  return o;
+}
 
 #endif
 
-#if defined(SP_WASM)
-#define SP_O_CREAT 0
-#define SP_O_WRONLY 0
-#define SP_O_TRUNC 0
-#define SP_O_BINARY 0
-#define SP_O_DIRECTORY 0
-#define SP_O_RDONLY 0
-#define SP_O_RDWR 0
-#define SP_O_EXCL 0
-#define SP_O_APPEND 0
-#endif
-
-sp_sys_fd_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s32 mode) {
+sp_sys_fd_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags) {
 #if defined(SP_WIN32)
-  (void)mode;
-  u32 access = sp_sys_nt_access_from_flags(flags);
+  u32 access = sp_sys_nt_access_from_mode(mode, flags);
   u32 share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
   u32 disposition = sp_sys_nt_disposition_from_flags(flags);
-  u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT;
-  options |= (flags & SP_O_DIRECTORY) ? SP_NT_FILE_DIRECTORY_FILE : SP_NT_FILE_NON_DIRECTORY_FILE;
-  if ((flags & SP_O_CREAT) && (flags & SP_O_EXCL)) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
+  u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT | SP_NT_FILE_NON_DIRECTORY_FILE;
+  if (flags & SP_SYS_OPEN_EXCLUSIVE) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
 
   void* handle = sp_sys_nt_open(fd, sp_str(path, len), access, share, disposition, options, FILE_ATTRIBUTE_NORMAL);
   if (!handle) return SP_SYS_INVALID_FD;
@@ -6026,15 +6031,15 @@ sp_sys_fd_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s3
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return (sp_sys_fd_t)sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, flags, mode);
+  return (sp_sys_fd_t)sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, sp_sys_linux_open_flags(mode, flags), 0644);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return (sp_sys_fd_t)openat((int)fd, buf, flags, mode);
+  return (sp_sys_fd_t)openat((int)fd, buf, sp_sys_posix_open_flags(mode, flags), 0644);
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)flags; (void)mode;
+  (void)fd; (void)path; (void)len; (void)mode; (void)flags;
   return -1;
 
 #else
@@ -6042,8 +6047,42 @@ sp_sys_fd_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s3
 #endif
 }
 
-sp_sys_fd_t sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, s32 flags, s32 mode) {
-  return sp_sys_open(fd, path.data, path.len, flags, mode);
+sp_sys_fd_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
+#if defined(SP_WIN32)
+  u32 access = SYNCHRONIZE | FILE_READ_ATTRIBUTES | FILE_READ_DATA | FILE_READ_EA;
+  u32 share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+  u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT | SP_NT_FILE_DIRECTORY_FILE;
+
+  void* handle = sp_sys_nt_open(fd, sp_str(path, len), access, share, SP_NT_FILE_OPEN, options, FILE_ATTRIBUTE_NORMAL);
+  if (!handle) return SP_SYS_INVALID_FD;
+
+  return (sp_sys_fd_t)handle;
+
+#elif defined(SP_LINUX)
+  c8 buf [SP_PATH_MAX] = sp_zero;
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return (sp_sys_fd_t)sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_DIRECTORY | SP_SYS_LINUX_O_CLOEXEC, 0);
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  c8 buf [SP_PATH_MAX] = sp_zero;
+  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  return (sp_sys_fd_t)openat((int)fd, buf, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+
+#elif defined(SP_WASM)
+  (void)fd; (void)path; (void)len;
+  return -1;
+
+#else
+  #error "sp_sys_open_dir"
+#endif
+}
+
+sp_sys_fd_t sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_open_mode_t mode, u32 flags) {
+  return sp_sys_open(fd, path.data, path.len, mode, flags);
+}
+
+sp_sys_fd_t sp_sys_open_dir_s(sp_sys_fd_t fd, sp_str_t path) {
+  return sp_sys_open_dir(fd, path.data, path.len);
 }
 
 /////////////////////
@@ -6520,7 +6559,7 @@ s32 sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket) {
 #elif defined(SP_LINUX)
   s64 flags = sp_syscall(SP_SYSCALL_NUM_FCNTL, socket, SP_F_GETFL, 0);
   if (flags < 0) return -1;
-  return sp_syscall(SP_SYSCALL_NUM_FCNTL, socket, SP_F_SETFL, flags | SP_O_NONBLOCK) < 0 ? -1 : 0;
+  return sp_syscall(SP_SYSCALL_NUM_FCNTL, socket, SP_F_SETFL, flags | SP_SYS_LINUX_O_NONBLOCK) < 0 ? -1 : 0;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   int flags = fcntl(socket, F_GETFL, 0);
@@ -7811,7 +7850,7 @@ s64 sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size) {
 #elif defined(SP_LINUX)
   c8 pbuf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, pbuf, SP_PATH_MAX);
-  s64 fd = sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, pbuf, SP_O_RDONLY | SP_O_CLOEXEC, 0);
+  s64 fd = sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, pbuf, SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_CLOEXEC, 0);
   if (fd < 0) return fd;
 
   c8 proc [64] = sp_zero;
@@ -10620,7 +10659,7 @@ SP_PRIVATE sp_fs_kind_t sp_sys_diriter_dtype_to_kind(u8 d_type) {
 
 s32 sp_sys_fs_it_open_p(sp_sys_fd_t root, sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {
   *it = sp_zero_s(sp_sys_fs_it_t);
-  sp_sys_fd_t fd = sp_sys_open(root, path, path_len, SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  sp_sys_fd_t fd = sp_sys_open_dir(root, path, path_len);
   if (fd < 0) return -1;
   it->handle = (s64)fd;
   it->buf.data = (u8*)buf;
@@ -14716,7 +14755,7 @@ sp_err_t sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_sys_fd_t file, s
 }
 
 sp_err_t sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path) {
-  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), path, SP_O_RDONLY | SP_O_BINARY, 0);
+  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_RO, 0);
   if (fd == SP_SYS_INVALID_FD) {
     *r = sp_zero_s(sp_io_file_reader_t);
     return SP_ERR_IO_OPEN_FAILED;
@@ -15450,8 +15489,8 @@ sp_err_t sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io
 }
 
 sp_err_t sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path) {
-  s32 flags = SP_O_WRONLY | SP_O_CREAT | SP_O_TRUNC | SP_O_BINARY;
-  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), path, flags, 0644);
+  u32 flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE;
+  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_WO, flags);
 
   if (fd == SP_SYS_INVALID_FD) {
     *w = sp_zero_s(sp_io_file_writer_t);
@@ -17307,7 +17346,7 @@ cleanup:
 }
 
 sp_err_t sp_fs_create_file(sp_str_t path) {
-  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), path, SP_O_CREAT | SP_O_WRONLY | SP_O_TRUNC, 0644);
+  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE);
   if (fd != SP_SYS_INVALID_FD) {
     sp_sys_close(fd);
   }

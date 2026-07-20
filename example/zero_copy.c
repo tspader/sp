@@ -81,7 +81,7 @@ static s32 drain_pipe(void* userdata) {
 
 static s32 open_blocking_pipe(sp_sys_fd_t* out_r, sp_sys_fd_t* out_w) {
   sp_sys_fd_t fds [2];
-  s64 rc = sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_O_CLOEXEC, 0, 0, 0);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_SYS_LINUX_O_CLOEXEC, 0, 0, 0);
   if (rc < 0) return -1;
   *out_r = fds[0];
   *out_w = fds[1];
