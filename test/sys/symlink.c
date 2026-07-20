@@ -22,7 +22,7 @@ UTEST_F(sys_symlink, resolves_target_relative_to_link) {
     },
     .steps = {
       { .kind = SYS_STEP_SYMLINK, .symlink = { .target = "target.bin", .alias = "lnk" } },
-      { .kind = SYS_STEP_OPEN, .open = { .path = "lnk", .flags = SP_O_RDONLY | SP_O_BINARY } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "lnk" } },
       { .kind = SYS_STEP_READ, .read = { .count = 8, .expect = "hello" } },
     },
   });

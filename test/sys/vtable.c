@@ -15,6 +15,7 @@ typedef struct {
   s64         get_storage_path;
   s64         get_config_path;
   sp_sys_fd_t open;
+  sp_sys_fd_t open_dir;
   s32         close;
   s32         pipe;
   s32         mkdir;
@@ -104,7 +105,11 @@ static s64 sys_vtable_mock_get_config_path(c8* buf, u64 size) {
   return 69;
 }
 
-static sp_sys_fd_t sys_vtable_mock_open(sp_sys_fd_t fd, const c8* path, u32 len, s32 flags, s32 mode) {
+static sp_sys_fd_t sys_vtable_mock_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags) {
+  return 69;
+}
+
+static sp_sys_fd_t sys_vtable_mock_open_dir(sp_sys_fd_t fd, const c8* path, u32 len) {
   return 69;
 }
 
@@ -300,6 +305,7 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .get_storage_path       = sys_vtable_mock_get_storage_path,
   .get_config_path        = sys_vtable_mock_get_config_path,
   .open                   = sys_vtable_mock_open,
+  .open_dir               = sys_vtable_mock_open_dir,
   .close                  = sys_vtable_mock_close,
   .pipe                   = sys_vtable_mock_pipe,
   .mkdir                  = sys_vtable_mock_mkdir,
@@ -366,7 +372,8 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   r->get_cwd_path = sp_sys_get_cwd_path(SP_NULLPTR, 0);
   r->get_storage_path = sp_sys_get_storage_path(SP_NULLPTR, 0);
   r->get_config_path = sp_sys_get_config_path(SP_NULLPTR, 0);
-  r->open = sp_sys_open(0, SP_NULLPTR, 0, 0, 0);
+  r->open = sp_sys_open(0, SP_NULLPTR, 0, SP_SYS_OPEN_MODE_RO, 0);
+  r->open_dir = sp_sys_open_dir(0, SP_NULLPTR, 0);
   r->close = sp_sys_close(0);
   r->pipe = sp_sys_pipe(SP_NULLPTR, SP_NULLPTR);
   r->mkdir = sp_sys_mkdir(0, SP_NULLPTR, 0, 0);
@@ -428,6 +435,7 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->get_storage_path, 69);
   EXPECT_EQ(r->get_config_path, 69);
   EXPECT_EQ(r->open, 69);
+  EXPECT_EQ(r->open_dir, 69);
   EXPECT_EQ(r->close, 69);
   EXPECT_EQ(r->pipe, 69);
   EXPECT_EQ(r->mkdir, 69);

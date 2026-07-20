@@ -35,7 +35,7 @@ static void run_fd_rel_test(s32* utest_result, sp_test_file_manager_t* fs, fd_re
     sp_sys_fd_t fd;
   } cwd = sp_zero;
   cwd.path = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(t.op.cwd));
-  cwd.fd = sp_sys_open_s(sp_sys_get_root(0), cwd.path, SP_O_RDONLY | SP_O_DIRECTORY, 0);
+  cwd.fd = sp_sys_open_dir_s(sp_sys_get_root(0), cwd.path);
   ASSERT_NE(cwd.fd, SP_SYS_INVALID_FD);
 
   switch (t.op.kind) {
@@ -50,7 +50,7 @@ static void run_fd_rel_test(s32* utest_result, sp_test_file_manager_t* fs, fd_re
       sp_str_t path = t.op.kind == FD_REL_OPEN_FROM_ABSOLUTE_PATH
         ? sp_fs_join_path(mem, sandbox, sp_cstr_as_str(t.op.open.path))
         : sp_cstr_as_str(t.op.open.path);
-      sp_sys_fd_t fd = sp_sys_open_s(cwd.fd, path, SP_O_RDONLY | SP_O_BINARY, 0);
+      sp_sys_fd_t fd = sp_sys_open_s(cwd.fd, path, SP_SYS_OPEN_MODE_RO, 0);
       EXPECT_NE(fd, SP_SYS_INVALID_FD);
 
       if (fd != SP_SYS_INVALID_FD) {
