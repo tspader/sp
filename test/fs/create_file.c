@@ -49,7 +49,6 @@ static void run_create_file_test(s32* utest_result, sp_test_file_manager_t* fm, 
 }
 
 UTEST_F(fs, create_file_basic) {
-  SKIP_ON_WASM()
   run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
     .label = "create_file_basic",
     .path = "file.txt",
@@ -60,7 +59,6 @@ UTEST_F(fs, create_file_basic) {
 }
 
 UTEST_F(fs, create_file_idempotent) {
-  SKIP_ON_WASM()
   run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
     .label = "create_file_idempotent",
     .setup = {
@@ -74,7 +72,6 @@ UTEST_F(fs, create_file_idempotent) {
 }
 
 UTEST_F(fs, create_file_unicode) {
-  SKIP_ON_WASM()
   run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
     .label = "create_file_unicode",
     .path = "\xc3\xb1\x61\x6d\x65.txt",
@@ -85,7 +82,6 @@ UTEST_F(fs, create_file_unicode) {
 }
 
 UTEST_F(fs, create_file_slice) {
-  SKIP_ON_WASM()
   run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
     .label = "create_file_slice",
     .path = "slice.file",
@@ -98,7 +94,6 @@ UTEST_F(fs, create_file_slice) {
 }
 
 UTEST_F(fs, create_file_str) {
-  SKIP_ON_WASM()
   run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
     .label = "create_file_str",
     .path = "str.file",
@@ -111,7 +106,6 @@ UTEST_F(fs, create_file_str) {
 }
 
 UTEST_F(fs, create_file_cstr) {
-  SKIP_ON_WASM()
   run_create_file_test(&ur, &ut.file_manager, (create_file_test_t){
     .label = "create_file_cstr",
     .path = "cstr.file",

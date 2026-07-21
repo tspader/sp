@@ -132,7 +132,6 @@ UTEST_F(io, file_reader_buffered_seek_discards_buffer) {
 }
 
 UTEST_F(io, file_reader_nonexistent) {
-  SKIP_ON_WASM()
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("nonexistent.file"));
   sp_io_file_reader_t r = sp_zero;
   EXPECT_EQ(sp_io_file_reader_from_path(&r, path), SP_ERR_IO_OPEN_FAILED);
@@ -277,7 +276,6 @@ UTEST_F(io, file_writer_buffered_larger_than_buffer) {
 // express the resulting content (c-string verification stops at the first
 // nul). Kept imperative.
 UTEST_F(io, file_writer_pad) {
-  SKIP_ON_WASM()
   sp_io_file_writer_t w = sp_zero;
   sp_io_file_writer_from_path(&w, ut.file_path);
   sp_io_write(&w.base, "AA", 2, SP_NULLPTR);
@@ -304,7 +302,6 @@ UTEST_F(io, file_writer_pad) {
 // File reader's as_fd callback returns the underlying fd. This is what the
 // writer-side fast path keys off of.
 UTEST_F(io, file_reader_as_fd) {
-  SKIP_ON_WASM()
   sp_io_file_writer_t fw = sp_zero;
   sp_io_file_writer_from_path(&fw, ut.file_path);
   sp_io_write(&fw.base, "x", 1, SP_NULLPTR);
@@ -328,7 +325,6 @@ UTEST_F(io, file_reader_as_fd) {
 // falls back to the generic loop. Either way, the contents should be
 // identical.
 UTEST_F(io, file_to_file_copy) {
-  SKIP_ON_WASM()
   // Produce 4 KiB of pseudo-random content so the kernel can't represent
   // the source sparsely.
   u8 source [4096];
@@ -362,7 +358,6 @@ UTEST_F(io, file_to_file_copy) {
 // When the source has no fd (e.g. an in-memory reader), the fast path
 // declines and the generic loop produces the same result.
 UTEST_F(io, file_copy_fast_path_falls_back_for_mem_source) {
-  SKIP_ON_WASM()
   const c8* content = "abcdefghijklmnopqrstuvwxyz0123456789";
   u64 n = sp_cstr_len(content);
 
@@ -390,7 +385,6 @@ UTEST_F(io, file_copy_fast_path_falls_back_for_mem_source) {
 // read does not mean the file was smaller. The file is sparse, so it costs
 // no disk — but the read materializes ~2GB in memory.
 UTEST_F(io, read_file_larger_than_single_read) {
-  SKIP_ON_WASM()
   const u64 size = (u64)0x7ffff000 + 1;
 
   sp_io_file_writer_t w = sp_zero;
@@ -415,7 +409,6 @@ UTEST_F(io, read_file_larger_than_single_read) {
 // The only way this surfaces is if you mix positional and streaming IO on the same kernel
 // handle, which is definitely a user error.
 UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
-  SKIP_ON_WASM()
   SKIP_ON_WIN32()
   sp_io_file_writer_t w = sp_zero;
   sp_io_file_writer_from_path(&w, ut.file_path);
@@ -440,7 +433,6 @@ UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
 // Two file handles (writer then reader) operating on the same large offset;
 // doesn't fit the single-subject runner pattern.
 UTEST_F(io, file_seek_beyond_4gb) {
-  SKIP_ON_WASM()
   s64 offset = (s64)5 * 1024 * 1024 * 1024;
   u8 marker [4] = {0xDE, 0xAD, 0xBE, 0xEF};
 

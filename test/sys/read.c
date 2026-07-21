@@ -3,7 +3,6 @@
 UTEST_EMPTY_FIXTURE(sys_read)
 
 UTEST_F(sys_read, reads_sequentially) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_read_reads_sequentially",
     .setup = {
@@ -19,7 +18,6 @@ UTEST_F(sys_read, reads_sequentially) {
 }
 
 UTEST_F(sys_read, clamps_count_beyond_4gib) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_read_clamps_count_beyond_4gib",
     .setup = {

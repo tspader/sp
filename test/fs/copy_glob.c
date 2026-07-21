@@ -20,7 +20,6 @@ static void run_copy_glob_test(s32* utest_result, sp_test_file_manager_t* fm, co
 }
 
 UTEST_F(fs, copy_glob_star) {
-  SKIP_ON_WASM()
   run_copy_glob_test(&ur, &ut.file_manager, (copy_glob_test_t){
     .label = "copy_glob_star",
     .src = {
@@ -36,7 +35,6 @@ UTEST_F(fs, copy_glob_star) {
 }
 
 UTEST_F(fs, copy_glob_exact_name) {
-  SKIP_ON_WASM()
   run_copy_glob_test(&ur, &ut.file_manager, (copy_glob_test_t){
     .label = "copy_glob_exact_name",
     .src = {
@@ -52,7 +50,6 @@ UTEST_F(fs, copy_glob_exact_name) {
 }
 
 UTEST_F(fs, copy_glob_no_match) {
-  SKIP_ON_WASM()
   run_copy_glob_test(&ur, &ut.file_manager, (copy_glob_test_t){
     .label = "copy_glob_no_match",
     .src = {
@@ -68,7 +65,6 @@ UTEST_F(fs, copy_glob_no_match) {
 }
 
 UTEST_F(fs, copy_glob_empty_src) {
-  SKIP_ON_WASM()
   run_copy_glob_test(&ur, &ut.file_manager, (copy_glob_test_t){
     .label = "copy_glob_empty_src",
     .glob = "*",

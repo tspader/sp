@@ -20,7 +20,6 @@ UTEST_F_TEARDOWN(fs_normalize_path) {
 }
 
 UTEST_F(fs_normalize_path, cases) {
-  SKIP_ON_WASM()
   normalize_path_case_t cases[] = {
     { "",                              "" },
     { "foo",                           "foo" },
@@ -45,7 +44,6 @@ UTEST_F(fs_normalize_path, cases) {
 }
 
 UTEST_F(fs_normalize_path, preserves_dotdot) {
-  SKIP_ON_WASM()
   SP_EXPECT_STR_EQ_CSTR(
     sp_fs_normalize_path(ut.mem, sp_str_lit("a\\b\\..\\c")),
     "a/b/../c"
@@ -53,7 +51,6 @@ UTEST_F(fs_normalize_path, preserves_dotdot) {
 }
 
 UTEST_F(fs_normalize_path, preserves_dot) {
-  SKIP_ON_WASM()
   SP_EXPECT_STR_EQ_CSTR(
     sp_fs_normalize_path(ut.mem, sp_str_lit("a\\.\\b")),
     "a/./b"
@@ -61,7 +58,6 @@ UTEST_F(fs_normalize_path, preserves_dot) {
 }
 
 UTEST_F(fs_normalize_path, nonexistent_path) {
-  SKIP_ON_WASM()
   SP_EXPECT_STR_EQ_CSTR(
     sp_fs_normalize_path(ut.mem, sp_str_lit("C:\\no\\such\\path\\file.txt")),
     "C:/no/such/path/file.txt"

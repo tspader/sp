@@ -1,7 +1,6 @@
 #include "fs.h"
 
 UTEST_F(fs, mod_time_nonzero) {
-  SKIP_ON_WASM()
   sp_str_t file = sp_test_file_path(&ut.file_manager, sp_str_lit("mod_time.file"));
   sp_str_t dir = sp_test_file_path(&ut.file_manager, sp_str_lit("mod_time.dir"));
   sp_fs_create_file(file);
@@ -12,7 +11,6 @@ UTEST_F(fs, mod_time_nonzero) {
 }
 
 UTEST_F(fs, mod_time_updates_after_write) {
-  SKIP_ON_WASM()
   sp_str_t file = sp_test_file_path(&ut.file_manager, sp_str_lit("mod_time_write.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = file,

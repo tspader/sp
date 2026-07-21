@@ -56,7 +56,6 @@ static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_te
 }
 
 UTEST_F(fs, copy_file_basic) {
-  SKIP_ON_WASM()
   run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_file_basic",
     .setup = {
@@ -73,7 +72,6 @@ UTEST_F(fs, copy_file_basic) {
 }
 
 UTEST_F(fs, copy_file_via_link) {
-  SKIP_ON_WASM()
   run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_file_via_link",
     .setup = {
@@ -90,7 +88,6 @@ UTEST_F(fs, copy_file_via_link) {
 }
 
 UTEST_F(fs, copy_dir_basic) {
-  SKIP_ON_WASM()
   run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_dir_basic",
     .setup = {
@@ -111,7 +108,6 @@ UTEST_F(fs, copy_dir_basic) {
 }
 
 UTEST_F(fs, copy_dir_nested) {
-  SKIP_ON_WASM()
   run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_dir_nested",
     .setup = {
@@ -134,7 +130,6 @@ UTEST_F(fs, copy_dir_nested) {
 }
 
 UTEST_F(fs, copy_dir_with_nonalphanumeric) {
-  SKIP_ON_WASM()
   run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "copy_dir_with_nonalphanumeric",
     .setup = {
@@ -151,7 +146,6 @@ UTEST_F(fs, copy_dir_with_nonalphanumeric) {
 }
 
 UTEST_F(fs, unicode_copy_file) {
-  SKIP_ON_WASM()
   run_copy_test(&ur, &ut.file_manager, (copy_test_t){
     .label = "unicode_copy_file",
     .setup = {
@@ -169,7 +163,6 @@ UTEST_F(fs, unicode_copy_file) {
 
 #if defined(SP_POSIX)
 UTEST_F(fs, copy_preserves_file_attributes) {
-  SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
   sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("source_attrs.txt"));
   sp_test_file_create_ex((sp_test_file_config_t) {

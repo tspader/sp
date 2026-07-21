@@ -27,7 +27,6 @@ static void run_link_test(s32* utest_result, sp_test_file_manager_t* fm, link_te
 }
 
 UTEST_F(fs, create_hard_link_file) {
-  SKIP_ON_WASM()
   sp_mem_t a = ut.file_manager.mem;
   run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_hard_link_file",
@@ -57,7 +56,6 @@ UTEST_F(fs, create_hard_link_file) {
 }
 
 UTEST_F(fs, create_hard_link_existing_destination_fails) {
-  SKIP_ON_WASM()
   run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_hard_link_existing_destination_fails",
     .setup = {
@@ -75,7 +73,6 @@ UTEST_F(fs, create_hard_link_existing_destination_fails) {
 }
 
 UTEST_F(fs, create_hard_link_directory_fails) {
-  SKIP_ON_WASM()
   run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_hard_link_directory_fails",
     .setup = {
@@ -92,7 +89,6 @@ UTEST_F(fs, create_hard_link_directory_fails) {
 }
 
 UTEST_F(fs, create_symlink_file) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   sp_mem_t a = ut.file_manager.mem;
   run_link_test(&ur, &ut.file_manager, (link_test_t){
@@ -118,7 +114,6 @@ UTEST_F(fs, create_symlink_file) {
 }
 
 UTEST_F(fs, create_symlink_directory) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_symlink_directory",
@@ -137,7 +132,6 @@ UTEST_F(fs, create_symlink_directory) {
 }
 
 UTEST_F(fs, create_symlink_existing_destination_fails) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   run_link_test(&ur, &ut.file_manager, (link_test_t){
     .label = "create_symlink_existing_destination_fails",
@@ -158,7 +152,6 @@ UTEST_F(fs, create_symlink_existing_destination_fails) {
 
 // canonicalize through a symlink should resolve to the real target
 UTEST_F(fs, canonicalize_through_symlink) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   sp_mem_t a = ut.file_manager.mem;
   sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("canon_through_symlink"));

@@ -254,7 +254,6 @@ static sp_err_t io_tracking_writer_read_from(sp_io_writer_t* w, sp_io_reader_t* 
 // Source has an fd (file reader) and writer advertises read_from. The fast
 // path is taken; the byte-loop path is not touched.
 UTEST_F(io_copy, fast_path_taken_when_both_sides_support) {
-  SKIP_ON_WASM()
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_src.bin"));
@@ -309,7 +308,6 @@ UTEST_F(io_copy, fast_path_skipped_when_source_has_no_fd) {
 // through to the byte loop without surfacing the unimplemented error to the
 // caller. The end-to-end byte count is intact.
 UTEST_F(io_copy, fast_path_unimplemented_falls_through) {
-  SKIP_ON_WASM()
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_unimpl.bin"));

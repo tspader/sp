@@ -32,13 +32,11 @@ struct fs_collect {
 };
 
 UTEST_F_SETUP(fs_collect) {
-  SKIP_ON_WASM()
   sp_test_file_manager_init(&ut.tmp);
   probe_symlinks(ut.tmp.mem, ut.tmp.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_collect) {
-  SKIP_ON_WASM()
   sp_test_file_manager_cleanup(&ut.tmp);
 }
 
@@ -110,14 +108,12 @@ static void run_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, col
 }
 
 UTEST_F(fs_collect, empty_dir) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "empty_dir"
   });
 }
 
 UTEST_F(fs_collect, nonexistent) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "nonexistent",
     .root = COLLECT_ENT_MISSING,
@@ -126,7 +122,6 @@ UTEST_F(fs_collect, nonexistent) {
 }
 
 UTEST_F(fs_collect, file_not_dir) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "file_not_dir",
     .root = COLLECT_ENT_FILE,
@@ -135,7 +130,6 @@ UTEST_F(fs_collect, file_not_dir) {
 }
 
 UTEST_F(fs_collect, single_file) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "single_file",
     .files = {
@@ -148,7 +142,6 @@ UTEST_F(fs_collect, single_file) {
 }
 
 UTEST_F(fs_collect, multiple_files) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "multiple_files",
     .files = {
@@ -165,7 +158,6 @@ UTEST_F(fs_collect, multiple_files) {
 }
 
 UTEST_F(fs_collect, subdirectory) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "subdirectory",
     .files = {
@@ -178,7 +170,6 @@ UTEST_F(fs_collect, subdirectory) {
 }
 
 UTEST_F(fs_collect, mixed_types) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "mixed_types",
@@ -196,7 +187,6 @@ UTEST_F(fs_collect, mixed_types) {
 }
 
 UTEST_F(fs_collect, hidden_file) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "hidden_file",
     .files = {
@@ -211,7 +201,6 @@ UTEST_F(fs_collect, hidden_file) {
 }
 
 UTEST_F(fs_collect, does_not_recurse) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "does_not_recurse",
     .files = {
@@ -227,7 +216,6 @@ UTEST_F(fs_collect, does_not_recurse) {
 }
 
 UTEST_F(fs_collect, recursive_empty_dir) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "recursive_empty_dir",
     .recursive = true
@@ -235,7 +223,6 @@ UTEST_F(fs_collect, recursive_empty_dir) {
 }
 
 UTEST_F(fs_collect, recursive_flat_dir) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "recursive_flat_dir",
     .files = {
@@ -253,7 +240,6 @@ UTEST_F(fs_collect, recursive_flat_dir) {
 }
 
 UTEST_F(fs_collect, recursive_nested_dirs) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "recursive_nested_dirs",
     .files = {
@@ -275,7 +261,6 @@ UTEST_F(fs_collect, recursive_nested_dirs) {
 }
 
 UTEST_F(fs_collect, recursive_symlink_not_followed) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "recursive_symlink_not_followed",
@@ -294,7 +279,6 @@ UTEST_F(fs_collect, recursive_symlink_not_followed) {
 }
 
 UTEST_F(fs_collect, recursive_nonexistent) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "recursive_nonexistent",
     .root = COLLECT_ENT_MISSING,
@@ -304,7 +288,6 @@ UTEST_F(fs_collect, recursive_nonexistent) {
 }
 
 UTEST_F(fs_collect, recursive_file_not_dir) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "recursive_file_not_dir",
     .root = COLLECT_ENT_FILE,
@@ -314,7 +297,6 @@ UTEST_F(fs_collect, recursive_file_not_dir) {
 }
 
 UTEST_F(fs_collect, unicode_entries) {
-  SKIP_ON_WASM()
   run_collect_test(&ur, &ut.tmp, (collect_test_t){
     .label = "unicode_entries",
     .files = {

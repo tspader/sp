@@ -7,7 +7,6 @@ typedef struct {
 } is_absolute_case_t;
 
 UTEST(fs_is_absolute, cases) {
-  SKIP_ON_WASM()
   is_absolute_case_t cases[] = {
     { "",        false, false },
     { "/",       true,  true  },
