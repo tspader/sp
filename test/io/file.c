@@ -415,7 +415,8 @@ UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
   sp_io_write(&w.base, "0123456789ABCDEF", 16, SP_NULLPTR);
   sp_io_file_writer_close(&w);
 
-  sp_sys_fd_t fd = sp_sys_open_s(sp_sys_get_root(0), ut.file_path, SP_SYS_OPEN_MODE_RO, 0);
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  sp_sys_open_s(sp_sys_get_root(0), ut.file_path, SP_SYS_OPEN_MODE_RO, 0, &fd);
   const s64 parked = 7;
   sp_sys_lseek(fd, parked, SP_IO_SEEK_SET);
 

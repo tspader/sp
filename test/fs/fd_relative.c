@@ -50,15 +50,15 @@ static void run_fd_rel_test(s32* utest_result, sp_test_file_manager_t* fs, fd_re
       sp_str_t path = t.op.kind == FD_REL_OPEN_FROM_ABSOLUTE_PATH
         ? sp_fs_join_path(mem, sandbox, sp_cstr_as_str(t.op.open.path))
         : sp_cstr_as_str(t.op.open.path);
-      sp_sys_fd_t fd = sp_sys_open_s(cwd.fd, path, SP_SYS_OPEN_MODE_RO, 0);
-      EXPECT_NE(fd, SP_SYS_INVALID_FD);
+      sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+      EXPECT_OK(sp_sys_open_s(cwd.fd, path, SP_SYS_OPEN_MODE_RO, 0, &fd));
 
       if (fd != SP_SYS_INVALID_FD) {
         if (t.op.open.content) {
           c8 buf[64] = sp_zero;
-          s64 n = sp_sys_read(fd, buf, sizeof(buf));
-          EXPECT_GE(n, 0);
-          EXPECT_TRUE(sp_mem_is_equal(buf, t.op.open.content, sp_max(n, 0)));
+          u64 n = 0;
+          EXPECT_OK(sp_sys_read(fd, buf, sizeof(buf), &n));
+          EXPECT_TRUE(sp_mem_is_equal(buf, t.op.open.content, n));
         }
         sp_sys_close(fd);
       }
