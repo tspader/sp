@@ -54,7 +54,21 @@ typedef enum {
   SYS_STEP_SYMLINK,
   SYS_STEP_RENAME,
   SYS_STEP_LSTAT,
+  SYS_STEP_STAT,
+  SYS_STEP_FSTAT,
+  SYS_STEP_MKDIR,
+  SYS_STEP_RMDIR,
+  SYS_STEP_UNLINK,
+  SYS_STEP_LINK,
 } sys_step_kind_t;
+
+typedef enum {
+  SYS_DIR_SANDBOX,
+  SYS_DIR_SLOT_0,
+  SYS_DIR_SLOT_1,
+  SYS_DIR_SLOT_2,
+  SYS_DIR_SLOT_3,
+} sys_dir_t;
 
 typedef struct {
   sys_step_kind_t kind;
@@ -67,8 +81,14 @@ typedef struct {
     struct { u32 slot; const c8* data; bool fail; } write;
     struct { u32 slot; const c8* data; u64 offset; } pwrite;
     struct { const c8* target; const c8* alias; } symlink;
-    struct { const c8* from; const c8* to; } rename;
-    struct { const c8* path; bool fail; } lstat;
+    struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; bool fail; } rename;
+    struct { const c8* path; sp_fs_kind_t kind; bool fail; } lstat;
+    struct { const c8* path; sp_fs_kind_t kind; s64 size; bool fail; } stat;
+    struct { u32 slot; sp_fs_kind_t kind; s64 size; } fstat;
+    struct { const c8* path; bool fail; } mkdir;
+    struct { const c8* path; bool fail; } rmdir;
+    struct { const c8* path; bool fail; } unlink;
+    struct { const c8* existing; sys_dir_t existing_dir; const c8* alias; sys_dir_t alias_dir; bool fail; } link;
   };
 } sys_step_t;
 
@@ -119,6 +139,24 @@ static void sys_expect_rc(s32* utest_result, const c8* label, s32 rc, bool fail)
     SP_TEST_REPORT("{} returned 0 but expected failure", sp_fmt_cstr(label));
     SP_FAIL();
   }
+}
+
+static void sys_expect_meta(s32* utest_result, const c8* label, s32 rc, bool fail, const sp_sys_file_meta_t* meta, sp_fs_kind_t kind, s64 size) {
+  sys_expect_rc(utest_result, label, rc, fail);
+  if (fail || rc != 0) return;
+  if (kind == SP_FS_KIND_NONE) return;
+  if (meta->kind != kind) {
+    SP_TEST_REPORT("{} reported kind {} but expected {}", sp_fmt_cstr(label), sp_fmt_int((s64)meta->kind), sp_fmt_int((s64)kind));
+    SP_FAIL();
+  }
+  if (kind == SP_FS_KIND_FILE && meta->size != size) {
+    SP_TEST_REPORT("{} reported size {} but expected {}", sp_fmt_cstr(label), sp_fmt_int(meta->size), sp_fmt_int(size));
+    SP_FAIL();
+  }
+}
+
+static sp_sys_fd_t sys_dir_fd(sp_sys_fd_t sandbox, const sp_sys_fd_t* fds, sys_dir_t dir) {
+  return dir == SYS_DIR_SANDBOX ? sandbox : fds[dir - SYS_DIR_SLOT_0];
 }
 
 static bool sys_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str_t sandbox, sys_setup_t* setup) {
@@ -330,14 +368,50 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
         break;
       }
       case SYS_STEP_RENAME: {
-        s32 rc = sp_sys_rename_s(sandbox_fd, sp_cstr_as_str(step->rename.from), sandbox_fd, sp_cstr_as_str(step->rename.to));
-        sys_expect_rc(utest_result, "rename", rc, false);
+        s32 rc = sp_sys_rename_s(
+          sys_dir_fd(sandbox_fd, fds, step->rename.from_dir), sp_cstr_as_str(step->rename.from),
+          sys_dir_fd(sandbox_fd, fds, step->rename.to_dir), sp_cstr_as_str(step->rename.to));
+        sys_expect_rc(utest_result, "rename", rc, step->rename.fail);
         break;
       }
       case SYS_STEP_LSTAT: {
         sp_sys_file_meta_t meta = sp_zero;
         s32 rc = sp_sys_get_link_metadata_s(sandbox_fd, sp_cstr_as_str(step->lstat.path), &meta);
-        sys_expect_rc(utest_result, "lstat", rc, step->lstat.fail);
+        sys_expect_meta(utest_result, "lstat", rc, step->lstat.fail, &meta, step->lstat.kind, 0);
+        break;
+      }
+      case SYS_STEP_STAT: {
+        sp_sys_file_meta_t meta = sp_zero;
+        s32 rc = sp_sys_get_path_metadata_s(sandbox_fd, sp_cstr_as_str(step->stat.path), &meta);
+        sys_expect_meta(utest_result, "stat", rc, step->stat.fail, &meta, step->stat.kind, step->stat.size);
+        break;
+      }
+      case SYS_STEP_FSTAT: {
+        sp_sys_file_meta_t meta = sp_zero;
+        s32 rc = sp_sys_get_file_metadata(fds[step->fstat.slot], &meta);
+        sys_expect_meta(utest_result, "fstat", rc, false, &meta, step->fstat.kind, step->fstat.size);
+        break;
+      }
+      case SYS_STEP_MKDIR: {
+        s32 rc = sp_sys_mkdir_s(sandbox_fd, sp_cstr_as_str(step->mkdir.path), 0755);
+        sys_expect_rc(utest_result, "mkdir", rc, step->mkdir.fail);
+        break;
+      }
+      case SYS_STEP_RMDIR: {
+        s32 rc = sp_sys_rmdir_s(sandbox_fd, sp_cstr_as_str(step->rmdir.path));
+        sys_expect_rc(utest_result, "rmdir", rc, step->rmdir.fail);
+        break;
+      }
+      case SYS_STEP_UNLINK: {
+        s32 rc = sp_sys_unlink_s(sandbox_fd, sp_cstr_as_str(step->unlink.path));
+        sys_expect_rc(utest_result, "unlink", rc, step->unlink.fail);
+        break;
+      }
+      case SYS_STEP_LINK: {
+        s32 rc = sp_sys_link_s(
+          sys_dir_fd(sandbox_fd, fds, step->link.existing_dir), sp_cstr_as_str(step->link.existing),
+          sys_dir_fd(sandbox_fd, fds, step->link.alias_dir), sp_cstr_as_str(step->link.alias));
+        sys_expect_rc(utest_result, "link", rc, step->link.fail);
         break;
       }
     }
