@@ -1025,7 +1025,7 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   }
 
   if (ctx->terminal.fds.out != SP_SYS_INVALID_FD && ctx->terminal.fds.out != 0) {
-    sp_sys_write(ctx->terminal.fds.out, "\n", 1);
+    sp_sys_write(ctx->terminal.fds.out, "\n", 1, SP_NULLPTR);
   }
   sp_mutex_destroy(&ctx->channel.lock);
   sp_mem_arena_destroy(ctx->channel.arena);
@@ -1125,7 +1125,7 @@ const c8* sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option
 void sp_prompt_wake(sp_prompt_ctx_t* ctx) {
   if (sp_atomic_s32_cas(&ctx->wake.pending, SP_PROMPT_WAKE_NOT_PENDING, SP_PROMPT_WAKE_PENDING)) {
     u8 byte = 0;
-    sp_sys_write(ctx->wake.write, &byte, 1);
+    sp_sys_write(ctx->wake.write, &byte, 1, SP_NULLPTR);
   }
 }
 
@@ -1281,6 +1281,11 @@ static bool sp_prompt_poll_stdin(sp_prompt_ctx_t* ctx) {
   return sp_sys_fd_ready(ctx->terminal.fds.in, &ready) == 0 && ready;
 }
 
+SP_PRIVATE bool sp_prompt_read_byte(void* out) {
+  u64 nread = 0;
+  return sp_sys_read(sp_sys_stdin, out, 1, &nread) == SP_OK && nread == 1;
+}
+
 sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
   sp_prompt_event_t event = { .kind = SP_PROMPT_EVENT_NONE };
 
@@ -1289,8 +1294,7 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
   }
 
   u8 c = 0;
-  s64 nread = sp_sys_read(sp_sys_stdin, &c, 1);
-  if (nread <= 0) {
+  if (!sp_prompt_read_byte(&c)) {
     return event;
   }
 
@@ -1308,13 +1312,13 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
       }
 
       u8 seq[2] = {0};
-      if (sp_sys_read(sp_sys_stdin, &seq[0], 1) <= 0) {
+      if (!sp_prompt_read_byte(&seq[0])) {
         event.kind = SP_PROMPT_EVENT_ESCAPE;
         return event;
       }
 
       if (sp_prompt_poll_stdin(ctx)) {
-        if (sp_sys_read(sp_sys_stdin, &seq[1], 1) <= 0) {
+        if (!sp_prompt_read_byte(&seq[1])) {
           seq[1] = 0;
         }
       }
@@ -1340,7 +1344,7 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
   else if ((c & SP_PROMPT_UTF8_4_BYTE_MASK) == SP_PROMPT_UTF8_4_BYTE_PREFIX) needed = SP_PROMPT_UTF8_4_BYTE_LEN;
 
   sp_for_range(i, 1, needed) {
-    if (sp_sys_read(sp_sys_stdin, &utf8_bytes[i], 1) <= 0) break;
+    if (!sp_prompt_read_byte(&utf8_bytes[i])) break;
   }
 
   event.kind = SP_PROMPT_EVENT_INPUT;
@@ -1549,7 +1553,8 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
 
       if (ready[1]) {
         u8 drain[SP_PROMPT_WAKE_DRAIN_SIZE];
-        while (sp_sys_read(ctx->wake.read, drain, sizeof(drain)) > 0) {}
+        u64 drained = 0;
+        while (sp_sys_read(ctx->wake.read, drain, sizeof(drain), &drained) == SP_OK && drained) {}
         sp_atomic_s32_set(&ctx->wake.pending, SP_PROMPT_WAKE_NOT_PENDING);
       }
     }

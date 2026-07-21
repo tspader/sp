@@ -73,12 +73,12 @@ typedef enum {
 typedef struct {
   sys_step_kind_t kind;
   union {
-    struct { u32 slot; const c8* path; sp_sys_open_mode_t mode; u32 flags; bool fail; } open;
+    struct { u32 slot; const c8* path; sp_sys_open_mode_t mode; u32 flags; bool fail; sp_err_t err; } open;
     struct { u32 slot; const c8* path; bool fail; } open_dir;
     struct { u32 slot; } close;
-    struct { u32 slot; u64 count; const c8* expect; bool fail; } read;
+    struct { u32 slot; u64 count; const c8* expect; bool fail; sp_err_t err; } read;
     struct { u32 slot; u64 count; u64 offset; const c8* expect; } pread;
-    struct { u32 slot; const c8* data; bool fail; } write;
+    struct { u32 slot; const c8* data; bool fail; sp_err_t err; } write;
     struct { u32 slot; const c8* data; u64 offset; } pwrite;
     struct { const c8* target; const c8* alias; } symlink;
     struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; bool fail; } rename;
@@ -126,6 +126,24 @@ static void sys_expect_bytes(s32* utest_result, const c8* label, const c8* buf, 
   }
   if (n > 0 && !sp_mem_is_equal(buf, expect, (u64)len)) {
     SP_TEST_REPORT("{} produced {} but expected {}", sp_fmt_cstr(label), sp_fmt_str(sp_str((c8*)buf, (u32)n)), sp_fmt_cstr(expect));
+    SP_FAIL();
+  }
+}
+
+static void sys_expect_err(s32* utest_result, const c8* label, sp_err_t err, sp_err_t expect, bool fail) {
+  if (expect != SP_OK) {
+    if (err != expect) {
+      SP_TEST_REPORT("{} returned {} but expected {}", sp_fmt_cstr(label), sp_fmt_int((s64)err), sp_fmt_int((s64)expect));
+      SP_FAIL();
+    }
+    return;
+  }
+  if (!fail && err != SP_OK) {
+    SP_TEST_REPORT("{} returned {} but expected SP_OK", sp_fmt_cstr(label), sp_fmt_int((s64)err));
+    SP_FAIL();
+  }
+  if (fail && err == SP_OK) {
+    SP_TEST_REPORT("{} returned SP_OK but expected failure", sp_fmt_cstr(label));
     SP_FAIL();
   }
 }
@@ -268,20 +286,16 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
       case SYS_STEP_NONE: break;
 
       case SYS_STEP_OPEN: {
-        sp_sys_fd_t fd = sp_sys_open_s(sandbox_fd, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags);
-        if (step->open.fail) {
-          if (fd != SP_SYS_INVALID_FD) {
-            SP_TEST_REPORT("open of {} succeeded but expected failure", sp_fmt_cstr(step->open.path));
-            SP_FAIL();
+        sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+        sp_err_t err = sp_sys_open_s(sandbox_fd, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, &fd);
+        sys_expect_err(utest_result, "open", err, step->open.err, step->open.fail);
+        if (err == SP_OK) {
+          if (step->open.err || step->open.fail) {
             sp_sys_close(fd);
           }
-        }
-        else {
-          if (fd == SP_SYS_INVALID_FD) {
-            SP_TEST_REPORT("failed to open {}", sp_fmt_cstr(step->open.path));
-            SP_FAIL();
+          else {
+            fds[step->open.slot] = fd;
           }
-          fds[step->open.slot] = fd;
         }
         break;
       }
@@ -319,45 +333,43 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
             break;
           }
         }
-        s64 n = sp_sys_read(fds[step->read.slot], buf, step->read.count);
-        if (step->read.fail) {
-          if (n >= 0) {
-            SP_TEST_REPORT("read returned {} but expected failure", sp_fmt_int(n));
-            SP_FAIL();
-          }
-        }
-        else {
-          sys_expect_bytes(utest_result, "read", buf, n, step->read.expect);
+        u64 n = 0;
+        sp_err_t err = sp_sys_read(fds[step->read.slot], buf, step->read.count, &n);
+        sys_expect_err(utest_result, "read", err, step->read.err, step->read.fail);
+        if (err == SP_OK && !step->read.err && !step->read.fail) {
+          sys_expect_bytes(utest_result, "read", buf, (s64)n, step->read.expect);
         }
         if (buf != stack_buf) sp_sys_free(buf, step->read.count);
         break;
       }
       case SYS_STEP_PREAD: {
         c8 buf [SYS_TEST_BUF_SIZE] = sp_zero;
-        s64 n = sp_sys_pread(fds[step->pread.slot], buf, step->pread.count, step->pread.offset);
-        sys_expect_bytes(utest_result, "pread", buf, n, step->pread.expect);
+        u64 n = 0;
+        sp_err_t err = sp_sys_pread(fds[step->pread.slot], buf, step->pread.count, step->pread.offset, &n);
+        sys_expect_err(utest_result, "pread", err, SP_OK, false);
+        if (err == SP_OK) {
+          sys_expect_bytes(utest_result, "pread", buf, (s64)n, step->pread.expect);
+        }
         break;
       }
       case SYS_STEP_WRITE: {
-        s64 len = (s64)sp_cstr_len(step->write.data);
-        s64 n = sp_sys_write(fds[step->write.slot], step->write.data, (u64)len);
-        if (step->write.fail) {
-          if (n >= 0) {
-            SP_TEST_REPORT("write returned {} but expected failure", sp_fmt_int(n));
-            SP_FAIL();
-          }
-        }
-        else if (n != len) {
-          SP_TEST_REPORT("write returned {} but expected {}", sp_fmt_int(n), sp_fmt_int(len));
+        u64 len = sp_cstr_len(step->write.data);
+        u64 n = 0;
+        sp_err_t err = sp_sys_write(fds[step->write.slot], step->write.data, len, &n);
+        sys_expect_err(utest_result, "write", err, step->write.err, step->write.fail);
+        if (err == SP_OK && !step->write.err && !step->write.fail && n != len) {
+          SP_TEST_REPORT("write returned {} but expected {}", sp_fmt_uint(n), sp_fmt_uint(len));
           SP_FAIL();
         }
         break;
       }
       case SYS_STEP_PWRITE: {
-        s64 len = (s64)sp_cstr_len(step->pwrite.data);
-        s64 n = sp_sys_pwrite(fds[step->pwrite.slot], step->pwrite.data, (u64)len, step->pwrite.offset);
-        if (n != len) {
-          SP_TEST_REPORT("pwrite returned {} but expected {}", sp_fmt_int(n), sp_fmt_int(len));
+        u64 len = sp_cstr_len(step->pwrite.data);
+        u64 n = 0;
+        sp_err_t err = sp_sys_pwrite(fds[step->pwrite.slot], step->pwrite.data, len, step->pwrite.offset, &n);
+        sys_expect_err(utest_result, "pwrite", err, SP_OK, false);
+        if (err == SP_OK && n != len) {
+          SP_TEST_REPORT("pwrite returned {} but expected {}", sp_fmt_uint(n), sp_fmt_uint(len));
           SP_FAIL();
         }
         break;
@@ -388,8 +400,8 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
       }
       case SYS_STEP_FSTAT: {
         sp_sys_file_meta_t meta = sp_zero;
-        s32 rc = sp_sys_get_file_metadata(fds[step->fstat.slot], &meta);
-        sys_expect_meta(utest_result, "fstat", rc, false, &meta, step->fstat.kind, step->fstat.size);
+        sp_err_t rc = sp_sys_get_file_metadata(fds[step->fstat.slot], &meta);
+        sys_expect_meta(utest_result, "fstat", rc == SP_OK ? 0 : -1, false, &meta, step->fstat.kind, step->fstat.size);
         break;
       }
       case SYS_STEP_MKDIR: {

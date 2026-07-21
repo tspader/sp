@@ -24,13 +24,13 @@ static const c8* const usage[] = {
 };
 
 static void write_str(bool stdout_enabled, bool stderr_enabled, sp_str_t s) {
-  if (stdout_enabled) sp_sys_write(sp_sys_stdout, s.data, s.len);
-  if (stderr_enabled) sp_sys_write(sp_sys_stderr, s.data, s.len);
+  if (stdout_enabled) sp_sys_write(sp_sys_stdout, s.data, s.len, SP_NULLPTR);
+  if (stderr_enabled) sp_sys_write(sp_sys_stderr, s.data, s.len, SP_NULLPTR);
 }
 
 static void write_bytes(bool stdout_enabled, bool stderr_enabled, const void* p, u64 n) {
-  if (stdout_enabled) sp_sys_write(sp_sys_stdout, p, n);
-  if (stderr_enabled) sp_sys_write(sp_sys_stderr, p, n);
+  if (stdout_enabled) sp_sys_write(sp_sys_stdout, p, n, SP_NULLPTR);
+  if (stderr_enabled) sp_sys_write(sp_sys_stderr, p, n, SP_NULLPTR);
 }
 
 // Reads one byte at a time from stdin until '\n' or EOF. Returns the number of bytes
@@ -40,8 +40,8 @@ static u32 read_line(c8* buf, u32 cap) {
   u32 len = 0;
   while (len + 1 < cap) {
     c8 c;
-    s64 n = sp_sys_read(sp_sys_stdin, &c, 1);
-    if (n <= 0) break;
+    u64 n = 0;
+    if (sp_sys_read(sp_sys_stdin, &c, 1, &n) != SP_OK || !n) break;
     if (c == '\n') break;
     buf[len++] = c;
   }
@@ -95,9 +95,9 @@ s32 main(s32 num_args, const c8** args) {
     case TEST_PROC_FUNCTION_ECHO: {
       u8 buffer[1024];
       while (true) {
-        s64 n = sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer));
-        if (n <= 0) break;
-        write_bytes(out_on, err_on, buffer, (u64)n);
+        u64 n = 0;
+        if (sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer), &n) != SP_OK || !n) break;
+        write_bytes(out_on, err_on, buffer, n);
       }
       break;
     }
@@ -152,9 +152,9 @@ s32 main(s32 num_args, const c8** args) {
       u8 buffer[4096];
       u64 total_read = 0;
       while (true) {
-        s64 n = sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer));
-        if (n <= 0) break;
-        total_read += (u64)n;
+        u64 n = 0;
+        if (sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer), &n) != SP_OK || !n) break;
+        total_read += n;
       }
       sp_str_t line = sp_fmt(mem, "{}\n", sp_fmt_uint(total_read)).value;
       write_str(out_on, err_on, line);
@@ -193,18 +193,18 @@ s32 main(s32 num_args, const c8** args) {
     case TEST_PROC_FUNCTION_BLOCK_UNTIL_EOF: {
       u8 buffer[256];
       while (true) {
-        s64 n = sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer));
-        if (n == 0) break;
-        if (n < 0) return 1;
+        u64 n = 0;
+        if (sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer), &n) != SP_OK) return 1;
+        if (!n) break;
       }
       return exit_code;
     }
     case TEST_PROC_FUNCTION_DELAY_AFTER_EOF: {
       u8 buffer[256];
       while (true) {
-        s64 n = sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer));
-        if (n == 0) break;
-        if (n < 0) return 1;
+        u64 n = 0;
+        if (sp_sys_read(sp_sys_stdin, buffer, sizeof(buffer), &n) != SP_OK) return 1;
+        if (!n) break;
       }
       sp_os_sleep_ms(200);
       return exit_code;

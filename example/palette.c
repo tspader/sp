@@ -154,7 +154,9 @@ s32 palette_read_key(void) {
   u8 ready = 0;
   if (sp_sys_fd_ready(sp_sys_stdin, &ready) != 0 || !ready) return -1;
   c8 c = 0;
-  return sp_sys_read(sp_sys_stdin, &c, 1) == 1 ? c : -1;
+  u64 n = 0;
+  if (sp_sys_read(sp_sys_stdin, &c, 1, &n) != SP_OK || n != 1) return -1;
+  return c;
 }
 
 sp_app_result_t on_init(sp_app_t* sp) {

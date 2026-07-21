@@ -72,8 +72,8 @@ static s32 drain_pipe(void* userdata) {
   sp_sys_fd_t fd = (sp_sys_fd_t)(uintptr_t)userdata;
   u8 buf [1u << 16];
   while (true) {
-    s64 rc = sp_sys_read(fd, buf, sizeof(buf));
-    if (rc <= 0) break;
+    u64 n = 0;
+    if (sp_sys_read(fd, buf, sizeof(buf), &n) != SP_OK || !n) break;
   }
   sp_sys_close(fd);
   return 0;

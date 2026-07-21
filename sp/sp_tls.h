@@ -889,9 +889,9 @@ SP_PRIVATE sp_tls_error_t sp_http_net_connect(mbedtls_net_context* net, const c8
 // data/space; park on the socket until it's ready or the io timeout expires.
 SP_PRIVATE sp_err_t sp_http_pump_wait(sp_http_conn_t* conn, s32 rc) {
   bool readable = rc == MBEDTLS_ERR_SSL_WANT_READ;
-  s32 wait = sp_sys_socket_wait((sp_sys_socket_t)conn->net.fd, readable, conn->io_timeout_ms);
-  if (wait == 1) return SP_ERR_IO_TIMEOUT;
-  if (wait != 0) return SP_ERR_IO;
+  sp_err_t wait = sp_sys_socket_wait((sp_sys_socket_t)conn->net.fd, readable, conn->io_timeout_ms);
+  if (wait == SP_ERR_SYS_TIMED_OUT) return SP_ERR_IO_TIMEOUT;
+  if (wait != SP_OK) return SP_ERR_IO;
   return SP_OK;
 }
 
