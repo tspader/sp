@@ -825,7 +825,6 @@ typedef struct sp_io_stream_writer sp_io_stream_writer_t;
 typedef HANDLE           sp_win32_handle_t;
 typedef DWORD            sp_win32_dword_t;
 typedef OVERLAPPED       sp_win32_overlapped_t;
-typedef WIN32_FIND_DATAW sp_win32_find_data_t;
 #endif
 
 
@@ -1212,26 +1211,26 @@ typedef enum {
 } sp_fs_kind_t;
 
 typedef struct {
-  sp_fs_kind_t      kind;
-  s64               size;
+  sp_fs_kind_t kind;
+  s64 size;
   sp_sys_timespec_t atime;
   sp_sys_timespec_t mtime;
   sp_sys_timespec_t btime;
-  u64               id;
-  u64               device;
-  u64               nlink;
-  u32               raw_attrs;
+  u64 id;
+  u64 device;
+  u64 nlink;
+  u32 raw_attrs;
 } sp_sys_file_meta_t;
 
 typedef struct {
-  s64             handle;
+  s64 handle;
   sp_mem_buffer_t buf;
-  u64             cursor;
+  u64 cursor;
 } sp_sys_fs_it_t;
 
 typedef struct {
-  const c8*    name;
-  u32          len;
+  const c8* name;
+  u32 len;
   sp_fs_kind_t kind;
 } sp_sys_fs_entry_t;
 
@@ -2800,8 +2799,8 @@ typedef struct {
 
 typedef struct {
   sp_sys_fs_it_t sys;
-  SP_ALIGNED u8    buf [SP_FS_IT_BUF_SIZE];
-  sp_str_t         path;
+  SP_ALIGNED u8 buf [SP_FS_IT_BUF_SIZE];
+  sp_str_t path;
 } sp_fs_it_frame_t;
 
 typedef struct {
@@ -3417,6 +3416,7 @@ typedef struct {
   X(sp_nt_status_t, NtSetInformationFile,                    (void*, sp_nt_io_status_block_t*, void*, u32, u32)) \
   X(sp_nt_status_t, NtCreateFile,                            (void**, u32, sp_nt_object_attributes_t*, sp_nt_io_status_block_t*, s64*, u32, u32, u32, u32, void*, u32)) \
   X(sp_nt_status_t, NtQueryObject,                           (void*, u32, void*, u32, u32*))      \
+  X(sp_nt_status_t, NtQueryDirectoryFile,                    (void*, void*, void*, void*, sp_nt_io_status_block_t*, void*, u32, u32, u8, sp_nt_unicode_string_t*, u8)) \
   X(sp_nt_status_t, NtFsControlFile,                         (void*, void*, void*, void*, sp_nt_io_status_block_t*, u32, void*, u32, void*, u32))
 
 
@@ -5325,6 +5325,7 @@ SP_PRIVATE void* sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32
   return handle;
 }
 
+#define SP_NT_FILE_DIRECTORY_INFORMATION  1
 #define SP_NT_FILE_BASIC_INFORMATION      4
 #define SP_NT_FILE_RENAME_INFORMATION    10
 #define SP_NT_FILE_DISPOSITION_INFORMATION 13
@@ -5353,6 +5354,20 @@ typedef struct {
   u32 FileAttributes;
   u32 Reserved;
 } sp_nt_file_basic_information_t;
+
+typedef struct {
+  u32 NextEntryOffset;
+  u32 FileIndex;
+  s64 CreationTime;
+  s64 LastAccessTime;
+  s64 LastWriteTime;
+  s64 ChangeTime;
+  s64 EndOfFile;
+  s64 AllocationSize;
+  u32 FileAttributes;
+  u32 FileNameLength;
+  u16 FileName [1];
+} sp_nt_file_directory_information_t;
 
 typedef struct {
   u8 DeleteFile;
@@ -10558,89 +10573,68 @@ s32 sp_sys_fs_it_open_s(sp_sys_fd_t fd, sp_sys_fs_it_t* it, sp_str_t path, sp_me
 }
 
 #if defined(SP_WIN32)
+#define SP_SYS_DIRITER_WIN32_SCRATCH (MAX_PATH * 3 + 1)
+
 SP_PRIVATE sp_fs_kind_t sp_sys_diriter_win32_attrs(sp_win32_dword_t attrs) {
   if (attrs & FILE_ATTRIBUTE_REPARSE_POINT) return SP_FS_KIND_SYMLINK;
   if (attrs & FILE_ATTRIBUTE_DIRECTORY) return SP_FS_KIND_DIR;
   return SP_FS_KIND_FILE;
 }
 
-SP_PRIVATE bool sp_sys_diriter_win32_is_dot(const u16* name) {
-  if (name[0] == '.' && name[1] == 0) return true;
-  if (name[0] == '.' && name[1] == '.' && name[2] == 0) return true;
+SP_PRIVATE bool sp_sys_diriter_win32_is_dot(const u16* name, u32 len) {
+  if (len == 1 && name[0] == '.') return true;
+  if (len == 2 && name[0] == '.' && name[1] == '.') return true;
   return false;
 }
 
-SP_PRIVATE u32 sp_sys_diriter_win32_name_len(const u16* name) {
-  u32 n = 0;
-  while (name[n]) n++;
-  return n;
-}
-
 s32 sp_sys_fs_it_open_p(sp_sys_fd_t fd, sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {
-  (void)fd;
   *it = sp_zero_s(sp_sys_fs_it_t);
-  if (cap < sizeof(sp_win32_find_data_t) + (MAX_PATH * 3 + 1)) return -1;
+  if (cap < sizeof(sp_nt_file_directory_information_t) + (MAX_PATH * 2) + SP_SYS_DIRITER_WIN32_SCRATCH) return -1;
 
-  SP_ALIGNED u8 pattern_storage [SP_PATH_MAX];
-  sp_mem_fixed_t pattern_fixed = sp_mem_fixed(pattern_storage, sizeof(pattern_storage));
-  sp_mem_t pattern_mem = sp_mem_fixed_as_allocator(&pattern_fixed);
-  sp_str_t pattern = sp_fs_join_path(pattern_mem, sp_str(path, path_len), sp_str_lit("*"));
+  sp_sys_fd_t dir = sp_sys_open_dir(fd, path, path_len);
+  if (dir == SP_SYS_INVALID_FD) return -1;
 
-  sp_sys_nt_path_t nt = sp_zero;
-  if (!SP_NT_SUCCESS(sp_sys_nt_path(pattern, &nt))) {
-    return -1;
-  }
-
-  u32 w_off = 0;
-  if (nt.name.Length >= 8 && nt.name.Buffer[0] == '\\' && nt.name.Buffer[1] == '?' && nt.name.Buffer[2] == '?' && nt.name.Buffer[3] == '\\') {
-    w_off = 4;
-  }
-  u32 prefixed_len = 4 + (nt.name.Length / sizeof(u16)) - w_off;
-  u16 wpat [SP_PATH_MAX + 8];
-  wpat[0] = '\\'; wpat[1] = '\\'; wpat[2] = '?'; wpat[3] = '\\';
-  sp_mem_copy(wpat + 4, nt.name.Buffer + w_off, nt.name.Length - w_off * sizeof(u16));
-  wpat[prefixed_len] = 0;
-  sp_sys_nt_path_free(&nt);
-
-  sp_win32_find_data_t* find = (sp_win32_find_data_t*)buf;
-  HANDLE h = FindFirstFileW((LPCWSTR)wpat, find);
-  if (h == INVALID_HANDLE_VALUE) return -1;
-
-  it->handle = (s64)(intptr_t)h;
+  it->handle = (s64)dir;
   it->buf.data = (u8*)buf;
-  it->buf.capacity = cap;
-  it->buf.len = sizeof(sp_win32_find_data_t);
+  it->buf.capacity = cap - SP_SYS_DIRITER_WIN32_SCRATCH;
+  it->buf.len = 0;
   it->cursor = 0;
   return 0;
 }
 
 void sp_sys_fs_it_close_p(sp_sys_fs_it_t* it) {
-  FindClose((HANDLE)(intptr_t)it->handle);
+  sp_sys_close((sp_sys_fd_t)it->handle);
 }
 
 s32 sp_sys_fs_it_next_p(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out) {
-  sp_win32_find_data_t* fd = (sp_win32_find_data_t*)it->buf.data;
   while (true) {
-    if (it->buf.len == 0) {
-      if (!FindNextFileW((HANDLE)(intptr_t)it->handle, fd)) {
-        return -1;
-      }
+    if (it->cursor >= it->buf.len) {
+      sp_nt_io_status_block_t iosb = sp_zero;
+      sp_nt_status_t status = SP_NT(NtQueryDirectoryFile)(
+        (void*)(intptr_t)it->handle,
+        SP_NULLPTR, SP_NULLPTR, SP_NULLPTR,
+        &iosb,
+        it->buf.data, (u32)it->buf.capacity,
+        SP_NT_FILE_DIRECTORY_INFORMATION,
+        0, SP_NULLPTR, 0);
+      if (!SP_NT_SUCCESS(status) || iosb.Information == 0) return -1;
+      it->cursor = 0;
+      it->buf.len = (u64)iosb.Information;
     }
-    it->buf.len = 0;
 
-    u16* name = (u16*)fd->cFileName;
-    if (sp_sys_diriter_win32_is_dot(name)) {
+    sp_nt_file_directory_information_t* d = sp_ptr_cast(sp_nt_file_directory_information_t*, it->buf.data + it->cursor);
+    it->cursor = d->NextEntryOffset ? it->cursor + d->NextEntryOffset : it->buf.len;
+
+    u32 wlen = d->FileNameLength / sizeof(u16);
+    if (sp_sys_diriter_win32_is_dot(d->FileName, wlen)) {
       continue;
     }
 
-    u8* scratch_data = it->buf.data + sizeof(sp_win32_find_data_t);
-    u64 scratch_cap = it->buf.capacity - sizeof(sp_win32_find_data_t);
-    sp_mem_fixed_t allocator = sp_mem_fixed(scratch_data, scratch_cap);
+    sp_mem_fixed_t allocator = sp_mem_fixed(it->buf.data + it->buf.capacity, SP_SYS_DIRITER_WIN32_SCRATCH);
     sp_mem_t mem = sp_mem_fixed_as_allocator(&allocator);
 
-    u32 wlen = sp_sys_diriter_win32_name_len(name);
-    sp_str_t utf8 = sp_wtf16_to_wtf8(mem, sp_wide_str(name, wlen));
-    out->kind = sp_sys_diriter_win32_attrs(fd->dwFileAttributes);
+    sp_str_t utf8 = sp_wtf16_to_wtf8(mem, sp_wide_str(d->FileName, wlen));
+    out->kind = sp_sys_diriter_win32_attrs(d->FileAttributes);
     out->name = utf8.data;
     out->len = utf8.len;
     return SP_OK;
@@ -10707,12 +10701,14 @@ SP_PRIVATE sp_fs_kind_t sp_sys_diriter_dtype_to_kind(u8 d_type) {
 }
 
 s32 sp_sys_fs_it_open_p(sp_sys_fd_t fd, sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {
-  (void)fd;
   *it = sp_zero_s(sp_sys_fs_it_t);
-  c8 cstr [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, path_len, cstr, SP_PATH_MAX);
-  DIR* dir = opendir(cstr);
-  if (!dir) return -1;
+  sp_sys_fd_t dir_fd = sp_sys_open_dir(fd, path, path_len);
+  if (dir_fd < 0) return -1;
+  DIR* dir = fdopendir((int)dir_fd);
+  if (!dir) {
+    sp_sys_close(dir_fd);
+    return -1;
+  }
   it->handle = (s64)(intptr_t)dir;
   it->buf.data = (u8*)buf;
   it->buf.capacity = cap;
