@@ -44,7 +44,6 @@ static void run_fs_predicate_test(s32* utest_result, sp_test_file_manager_t* fm,
 }
 
 UTEST_F(fs, predicate_matrix) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   run_fs_predicate_test(&ur, &ut.file_manager, (fs_predicate_test_t){
     .label = "predicate_matrix",
@@ -92,7 +91,6 @@ UTEST_F(fs, predicate_matrix) {
 }
 
 UTEST_F(fs, unicode_predicate_matrix) {
-  SKIP_ON_WASM()
   run_fs_predicate_test(&ur, &ut.file_manager, (fs_predicate_test_t){
     .label = "unicode_predicate_matrix",
     .setup = {

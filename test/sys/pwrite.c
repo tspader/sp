@@ -3,7 +3,6 @@
 UTEST_EMPTY_FIXTURE(sys_pwrite)
 
 UTEST_F(sys_pwrite, writes_at_offset) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_pwrite_writes_at_offset",
     .setup = {
@@ -20,7 +19,6 @@ UTEST_F(sys_pwrite, writes_at_offset) {
 }
 
 UTEST_F(sys_pwrite, preserves_file_position) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_pwrite_preserves_file_position",
     .setup = {

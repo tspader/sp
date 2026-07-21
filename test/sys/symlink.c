@@ -3,7 +3,6 @@
 UTEST_EMPTY_FIXTURE(sys_symlink)
 
 UTEST_F(sys_symlink, honors_dirfd) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_symlink_honors_dirfd",
     .steps = {
@@ -14,7 +13,6 @@ UTEST_F(sys_symlink, honors_dirfd) {
 }
 
 UTEST_F(sys_symlink, resolves_target_relative_to_link) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_symlink_resolves_target_relative_to_link",
     .setup = {

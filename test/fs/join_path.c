@@ -21,7 +21,6 @@ UTEST_F_TEARDOWN(fs_join_path) {
 }
 
 UTEST_F(fs_join_path, cases) {
-  SKIP_ON_WASM()
   join_path_case_t cases[] = {
     { "foo",  "bar",     "foo/bar" },
     { "foo/", "bar",     "foo/bar" },

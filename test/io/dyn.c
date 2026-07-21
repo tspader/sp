@@ -98,7 +98,6 @@ UTEST_F(io, dyn_seek) {
 
 // Growth past any reasonable initial capacity.
 UTEST_F(io, dyn_grows) {
-  SKIP_ON_WASM()
   sp_io_dyn_mem_writer_t w;
   sp_io_dyn_mem_writer_init(ut.mem, &w);
 

@@ -3,7 +3,6 @@
 UTEST_EMPTY_FIXTURE(sys_write)
 
 UTEST_F(sys_write, advances_file_position) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_write_advances_file_position",
     .setup = {
@@ -21,7 +20,6 @@ UTEST_F(sys_write, advances_file_position) {
 }
 
 UTEST_F(sys_write, append_writes_at_current_eof) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_write_append_writes_at_current_eof",
     .setup = {

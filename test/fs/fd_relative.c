@@ -79,7 +79,6 @@ static void run_fd_rel_test(s32* utest_result, sp_test_file_manager_t* fs, fd_re
 }
 
 UTEST_F(fs, fd_relative_stat_dotdot) {
-  SKIP_ON_WASM()
   run_fd_rel_test(&ur, &ut.file_manager, (fd_rel_test_t) {
     .label = "fd_relative_stat_dotdot",
     .setup = {
@@ -96,7 +95,6 @@ UTEST_F(fs, fd_relative_stat_dotdot) {
 }
 
 UTEST_F(fs, fd_relative_open_dotdot) {
-  SKIP_ON_WASM()
   run_fd_rel_test(&ur, &ut.file_manager, (fd_rel_test_t) {
     .label = "fd_relative_open_dotdot",
     .setup = {
@@ -114,7 +112,6 @@ UTEST_F(fs, fd_relative_open_dotdot) {
 }
 
 UTEST_F(fs, fd_relative_rename_dotdot) {
-  SKIP_ON_WASM()
   run_fd_rel_test(&ur, &ut.file_manager, (fd_rel_test_t) {
     .label = "fd_relative_rename_dotdot",
     .setup = {
@@ -136,7 +133,6 @@ UTEST_F(fs, fd_relative_rename_dotdot) {
 }
 
 UTEST_F(fs, fd_relative_link_dotdot) {
-  SKIP_ON_WASM()
   run_fd_rel_test(&ur, &ut.file_manager, (fd_rel_test_t) {
     .label = "fd_relative_link_dotdot",
     .setup = {
@@ -174,7 +170,6 @@ UTEST_F(fs, fd_relative_open_mixed_separators) {
 }
 
 UTEST_F(fs, fd_relative_open_dot_segments) {
-  SKIP_ON_WASM()
   run_fd_rel_test(&ur, &ut.file_manager, (fd_rel_test_t) {
     .label = "fd_relative_open_dot_segments",
     .setup = {
@@ -191,7 +186,6 @@ UTEST_F(fs, fd_relative_open_dot_segments) {
 }
 
 UTEST_F(fs, fd_relative_open_absolute_ignores_fd) {
-  SKIP_ON_WASM()
   run_fd_rel_test(&ur, &ut.file_manager, (fd_rel_test_t) {
     .label = "fd_relative_open_absolute_ignores_fd",
     .setup = {
@@ -210,7 +204,6 @@ UTEST_F(fs, fd_relative_open_absolute_ignores_fd) {
 }
 
 UTEST_F(fs, fd_relative_open_deep_dotdot) {
-  SKIP_ON_WASM()
   run_fd_rel_test(&ur, &ut.file_manager, (fd_rel_test_t) {
     .label = "fd_relative_open_deep_dotdot",
     .setup = {

@@ -21,7 +21,6 @@ UTEST_F_TEARDOWN(fs_replace_ext) {
 }
 
 UTEST_F(fs_replace_ext, cases) {
-  SKIP_ON_WASM()
   replace_ext_case_t cases[] = {
     { "foo.c",       "o",   "foo.c.o" },
     { "foo.c",       "",    "foo." },

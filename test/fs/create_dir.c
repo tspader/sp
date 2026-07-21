@@ -34,13 +34,11 @@ struct fs_create_dir {
 };
 
 UTEST_F_SETUP(fs_create_dir) {
-  SKIP_ON_WASM()
   sp_test_file_manager_init(&ut.file_manager);
   probe_symlinks(ut.file_manager.mem, ut.file_manager.paths.test);
 }
 
 UTEST_F_TEARDOWN(fs_create_dir) {
-  SKIP_ON_WASM()
   sp_test_file_manager_cleanup(&ut.file_manager);
 }
 
@@ -119,7 +117,6 @@ static void run_create_dir_test(s32* utest_result, sp_test_file_manager_t* fm, c
 }
 
 UTEST_F(fs_create_dir, existing_directory) {
-  SKIP_ON_WASM()
   run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "existing_directory",
     .target = "dir1",
@@ -134,7 +131,6 @@ UTEST_F(fs_create_dir, existing_directory) {
 }
 
 UTEST_F(fs_create_dir, create_one_level) {
-  SKIP_ON_WASM()
   run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "create_one_level",
     .target = "dir1",
@@ -146,7 +142,6 @@ UTEST_F(fs_create_dir, create_one_level) {
 }
 
 UTEST_F(fs_create_dir, create_multi_level) {
-  SKIP_ON_WASM()
   run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "create_multi_level",
     .target = "dir1/dir2",
@@ -175,7 +170,6 @@ UTEST_F(fs_create_dir, create_multi_level_relative) {
 }
 
 UTEST_F(fs_create_dir, destination_is_file) {
-  SKIP_ON_WASM()
   run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "destination_is_file",
     .target = "file",
@@ -190,7 +184,6 @@ UTEST_F(fs_create_dir, destination_is_file) {
 }
 
 UTEST_F(fs_create_dir, destination_parent_is_file) {
-  SKIP_ON_WASM()
   run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "destination_parent_is_file",
     .target = "file/dir1",
@@ -207,7 +200,6 @@ UTEST_F(fs_create_dir, destination_parent_is_file) {
 
 #if defined(SP_POSIX)
 UTEST_F(fs_create_dir, destination_is_symlink_to_directory) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "destination_is_symlink_to_directory",
@@ -225,7 +217,6 @@ UTEST_F(fs_create_dir, destination_is_symlink_to_directory) {
 }
 
 UTEST_F(fs_create_dir, destination_is_symlink_to_file) {
-  SKIP_ON_WASM()
   SKIP_IF_NO_SYMLINKS();
   run_create_dir_test(&ur, &ut.file_manager, (create_dir_test_t){
     .label = "destination_is_symlink_to_file",
