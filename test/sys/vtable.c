@@ -9,6 +9,7 @@ typedef struct {
   s64         write;
   s64         pread;
   s64         pwrite;
+  s64         transfer;
   sp_sys_fd_t get_root;
   s64         get_exe_path;
   s64         get_cwd_path;
@@ -69,20 +70,24 @@ static void sys_vtable_mock_init(void) {
   sys_vtable_results.init = 69;
 }
 
-static s64 sys_vtable_mock_read(sp_sys_fd_t fd, void* buf, u64 count) {
-  return 69;
+static sp_err_t sys_vtable_mock_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
+  return (sp_err_t)69;
 }
 
-static s64 sys_vtable_mock_write(sp_sys_fd_t fd, const void* buf, u64 count) {
-  return 69;
+static sp_err_t sys_vtable_mock_write(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written) {
+  return (sp_err_t)69;
 }
 
-static s64 sys_vtable_mock_pread(sp_sys_fd_t fd, void* buf, u64 count, u64 offset) {
-  return 69;
+static sp_err_t sys_vtable_mock_pread(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* bytes_read) {
+  return (sp_err_t)69;
 }
 
-static s64 sys_vtable_mock_pwrite(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset) {
-  return 69;
+static sp_err_t sys_vtable_mock_pwrite(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset, u64* bytes_written) {
+  return (sp_err_t)69;
+}
+
+static sp_err_t sys_vtable_mock_transfer(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* out_pos, u64 count, u64* bytes_moved) {
+  return (sp_err_t)69;
 }
 
 static sp_sys_fd_t sys_vtable_mock_get_root(s32 it) {
@@ -105,16 +110,17 @@ static s64 sys_vtable_mock_get_config_path(c8* buf, u64 size) {
   return 69;
 }
 
-static sp_sys_fd_t sys_vtable_mock_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags) {
-  return 69;
+static sp_err_t sys_vtable_mock_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
+  *out = 69;
+  return (sp_err_t)69;
 }
 
 static sp_sys_fd_t sys_vtable_mock_open_dir(sp_sys_fd_t fd, const c8* path, u32 len) {
   return 69;
 }
 
-static s32 sys_vtable_mock_close(sp_sys_fd_t fd) {
-  return 69;
+static sp_err_t sys_vtable_mock_close(sp_sys_fd_t fd) {
+  return (sp_err_t)69;
 }
 
 static s32 sys_vtable_mock_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
@@ -153,16 +159,16 @@ static s32 sys_vtable_mock_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32
   return 69;
 }
 
-static s32 sys_vtable_mock_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
-  return 69;
+static sp_err_t sys_vtable_mock_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
+  return (sp_err_t)69;
 }
 
 static s32 sys_vtable_mock_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
   return 69;
 }
 
-static s32 sys_vtable_mock_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
-  return 69;
+static sp_err_t sys_vtable_mock_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
+  return (sp_err_t)69;
 }
 
 static s32 sys_vtable_mock_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
@@ -213,20 +219,20 @@ static s32 sys_vtable_mock_socket_close(sp_sys_socket_t socket) {
   return 69;
 }
 
-static s64 sys_vtable_mock_socket_recv(sp_sys_socket_t socket, void* buf, u64 count) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_recv(sp_sys_socket_t socket, void* buf, u64 count, u64* bytes_read) {
+  return (sp_err_t)69;
 }
 
-static s64 sys_vtable_mock_socket_send(sp_sys_socket_t socket, const void* buf, u64 count) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_send(sp_sys_socket_t socket, const void* buf, u64 count, u64* bytes_written) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_wait(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_wait(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_set_nonblocking(sp_sys_socket_t socket) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_set_nonblocking(sp_sys_socket_t socket) {
+  return (sp_err_t)69;
 }
 
 static s32 sys_vtable_mock_socket_reuse_addr(sp_sys_socket_t socket) {
@@ -299,6 +305,7 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .write                  = sys_vtable_mock_write,
   .pread                  = sys_vtable_mock_pread,
   .pwrite                 = sys_vtable_mock_pwrite,
+  .transfer               = sys_vtable_mock_transfer,
   .get_root               = sys_vtable_mock_get_root,
   .get_exe_path           = sys_vtable_mock_get_exe_path,
   .get_cwd_path           = sys_vtable_mock_get_cwd_path,
@@ -363,16 +370,21 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   const sp_sys_vtable_t* old = sp_sys_set_vtable(&sys_vtable_mock);
 
   sp_sys_init();
-  r->read = sp_sys_read(0, SP_NULLPTR, 0);
-  r->write = sp_sys_write(0, SP_NULLPTR, 0);
-  r->pread = sp_sys_pread(0, SP_NULLPTR, 0, 0);
-  r->pwrite = sp_sys_pwrite(0, SP_NULLPTR, 0, 0);
+  r->read = sp_sys_read(0, SP_NULLPTR, 0, SP_NULLPTR);
+  r->write = sp_sys_write(0, SP_NULLPTR, 0, SP_NULLPTR);
+  r->pread = sp_sys_pread(0, SP_NULLPTR, 0, 0, SP_NULLPTR);
+  r->pwrite = sp_sys_pwrite(0, SP_NULLPTR, 0, 0, SP_NULLPTR);
+  r->transfer = sp_sys_transfer(0, SP_NULLPTR, 0, SP_NULLPTR, 0, SP_NULLPTR);
   r->get_root = sp_sys_get_root(0);
   r->get_exe_path = sp_sys_get_exe_path(SP_NULLPTR, 0);
   r->get_cwd_path = sp_sys_get_cwd_path(SP_NULLPTR, 0);
   r->get_storage_path = sp_sys_get_storage_path(SP_NULLPTR, 0);
   r->get_config_path = sp_sys_get_config_path(SP_NULLPTR, 0);
-  r->open = sp_sys_open(0, SP_NULLPTR, 0, SP_SYS_OPEN_MODE_RO, 0);
+  {
+    sp_sys_fd_t opened = SP_SYS_INVALID_FD;
+    sp_sys_open(0, SP_NULLPTR, 0, SP_SYS_OPEN_MODE_RO, 0, &opened);
+    r->open = opened;
+  }
   r->open_dir = sp_sys_open_dir(0, SP_NULLPTR, 0);
   r->close = sp_sys_close(0);
   r->pipe = sp_sys_pipe(SP_NULLPTR, SP_NULLPTR);
@@ -399,8 +411,8 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   r->socket_error = sp_sys_socket_error(0);
   r->socket_accept = sp_sys_socket_accept(0, SP_NULLPTR);
   r->socket_close = sp_sys_socket_close(0);
-  r->socket_recv = sp_sys_socket_recv(0, SP_NULLPTR, 0);
-  r->socket_send = sp_sys_socket_send(0, SP_NULLPTR, 0);
+  r->socket_recv = sp_sys_socket_recv(0, SP_NULLPTR, 0, SP_NULLPTR);
+  r->socket_send = sp_sys_socket_send(0, SP_NULLPTR, 0, SP_NULLPTR);
   r->socket_wait = sp_sys_socket_wait(0, false, 0);
   r->socket_set_nonblocking = sp_sys_socket_set_nonblocking(0);
   r->socket_reuse_addr = sp_sys_socket_reuse_addr(0);
@@ -429,6 +441,7 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->write, 69);
   EXPECT_EQ(r->pread, 69);
   EXPECT_EQ(r->pwrite, 69);
+  EXPECT_EQ(r->transfer, 69);
   EXPECT_EQ(r->get_root, 69);
   EXPECT_EQ(r->get_exe_path, 69);
   EXPECT_EQ(r->get_cwd_path, 69);

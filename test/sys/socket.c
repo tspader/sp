@@ -49,8 +49,8 @@ typedef struct {
   sys_socket_step_kind_t kind;
   union {
     struct { const c8* data; } send;
-    struct { u64 request; s64 expect; const c8* content; } recv;
-    struct { u32 timeout_ms; s32 expect; } wait;
+    struct { u64 request; u64 expect; const c8* content; sp_err_t err; } recv;
+    struct { u32 timeout_ms; sp_err_t expect; } wait;
   };
 } sys_socket_step_t;
 
@@ -75,29 +75,37 @@ void run_sys_socket_test(int* utest_result, sys_socket_test_t t) {
         u64 len = sp_cstr_len(step->send.data);
         u64 sent = 0;
         while (sent < len) {
-          s64 n = sp_sys_socket_send(client, step->send.data + sent, len - sent);
-          if (n == SP_SYS_SOCKET_WOULD_BLOCK) {
-            ASSERT_EQ(sp_sys_socket_wait(client, false, 1000), 0);
+          u64 n = 0;
+          sp_err_t err = sp_sys_socket_send(client, step->send.data + sent, len - sent, &n);
+          if (err == SP_ERR_SYS_WOULD_BLOCK) {
+            ASSERT_EQ(sp_sys_socket_wait(client, false, 1000), SP_OK);
             continue;
           }
+          ASSERT_EQ(err, SP_OK);
           ASSERT_TRUE(n > 0);
-          sent += (u64)n;
+          sent += n;
         }
         break;
       }
 
       case SYS_SOCKET_STEP_RECV: {
         u8 buf[64] = sp_zero;
-        s64 n = 0;
+        u64 n = 0;
+        sp_err_t err = SP_OK;
         while (true) {
-          n = sp_sys_socket_recv(server, buf, step->recv.request);
-          if (n != SP_SYS_SOCKET_WOULD_BLOCK) break;
-          if (step->recv.expect == SP_SYS_SOCKET_WOULD_BLOCK) break;
-          ASSERT_EQ(sp_sys_socket_wait(server, true, 1000), 0);
+          err = sp_sys_socket_recv(server, buf, step->recv.request, &n);
+          if (err != SP_ERR_SYS_WOULD_BLOCK) break;
+          if (step->recv.err == SP_ERR_SYS_WOULD_BLOCK) break;
+          ASSERT_EQ(sp_sys_socket_wait(server, true, 1000), SP_OK);
         }
-        EXPECT_EQ(n, step->recv.expect);
-        u64 expect_bytes = sp_cstr_len(step->recv.content);
-        sp_for(jt, expect_bytes) EXPECT_EQ((c8)buf[jt], step->recv.content[jt]);
+        EXPECT_EQ(err, step->recv.err);
+        if (err == SP_OK) {
+          EXPECT_EQ(n, step->recv.expect);
+          if (step->recv.content) {
+            u64 expect_bytes = sp_cstr_len(step->recv.content);
+            sp_for(jt, expect_bytes) EXPECT_EQ((c8)buf[jt], step->recv.content[jt]);
+          }
+        }
         break;
       }
 
@@ -123,7 +131,7 @@ UTEST_F(sys_socket, send_recv_roundtrip) {
   run_sys_socket_test(utest_result, (sys_socket_test_t){
     .steps = {
       { .kind = SYS_SOCKET_STEP_SEND, .send = { "hello world" } },
-      { .kind = SYS_SOCKET_STEP_RECV, .recv = { 32, 11, "hello world" } },
+      { .kind = SYS_SOCKET_STEP_RECV, .recv = { .request = 32, .expect = 11, .content = "hello world" } },
     },
   });
 }
@@ -133,8 +141,8 @@ UTEST_F(sys_socket, recv_returns_zero_after_peer_close) {
     .steps = {
       { .kind = SYS_SOCKET_STEP_SEND, .send = { "x" } },
       { .kind = SYS_SOCKET_STEP_CLOSE_CLIENT },
-      { .kind = SYS_SOCKET_STEP_RECV, .recv = { 8, 1, "x" } },
-      { .kind = SYS_SOCKET_STEP_RECV, .recv = { 8, 0 } },
+      { .kind = SYS_SOCKET_STEP_RECV, .recv = { .request = 8, .expect = 1, .content = "x" } },
+      { .kind = SYS_SOCKET_STEP_RECV, .recv = { .request = 8 } },
     },
   });
 }
@@ -143,7 +151,7 @@ UTEST_F(sys_socket, wait_readable_ready_after_send) {
   run_sys_socket_test(utest_result, (sys_socket_test_t){
     .steps = {
       { .kind = SYS_SOCKET_STEP_SEND, .send = { "x" } },
-      { .kind = SYS_SOCKET_STEP_WAIT_READABLE, .wait = { 1000, 0 } },
+      { .kind = SYS_SOCKET_STEP_WAIT_READABLE, .wait = { .timeout_ms = 1000 } },
     },
   });
 }
@@ -151,7 +159,7 @@ UTEST_F(sys_socket, wait_readable_ready_after_send) {
 UTEST_F(sys_socket, wait_readable_times_out_when_idle) {
   run_sys_socket_test(utest_result, (sys_socket_test_t){
     .steps = {
-      { .kind = SYS_SOCKET_STEP_WAIT_READABLE, .wait = { 50, 1 } },
+      { .kind = SYS_SOCKET_STEP_WAIT_READABLE, .wait = { .timeout_ms = 50, .expect = SP_ERR_SYS_TIMED_OUT } },
     },
   });
 }
@@ -159,7 +167,7 @@ UTEST_F(sys_socket, wait_readable_times_out_when_idle) {
 UTEST_F(sys_socket, recv_would_block_when_idle) {
   run_sys_socket_test(utest_result, (sys_socket_test_t){
     .steps = {
-      { .kind = SYS_SOCKET_STEP_RECV, .recv = { 8, SP_SYS_SOCKET_WOULD_BLOCK } },
+      { .kind = SYS_SOCKET_STEP_RECV, .recv = { .request = 8, .err = SP_ERR_SYS_WOULD_BLOCK } },
     },
   });
 }
