@@ -39,7 +39,6 @@ struct fs {
 };
 
 UTEST_F_SETUP(fs) {
-  SKIP_ON_WASM()
   sp_test_file_manager_init(&ut.file_manager);
   probe_symlinks(ut.file_manager.mem, ut.file_manager.paths.test);
 }

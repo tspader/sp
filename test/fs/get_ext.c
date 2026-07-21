@@ -6,7 +6,6 @@ typedef struct {
 } get_ext_case_t;
 
 UTEST(fs_get_ext, cases) {
-  SKIP_ON_WASM()
   get_ext_case_t cases[] = {
     { "",                    "" },
     { "foo",                 "" },

@@ -1,7 +1,6 @@
 #include "fs.h"
 
 UTEST_F(fs, iterate_trailing_slash_no_double_separator) {
-  SKIP_ON_WASM()
   sp_str_t sandbox = ut.file_manager.paths.test;
 
   fs_setup_t setup [] = {
@@ -24,7 +23,6 @@ UTEST_F(fs, iterate_trailing_slash_no_double_separator) {
 }
 
 UTEST_F(fs, iterate_name_matches_path_tail) {
-  SKIP_ON_WASM()
   sp_str_t sandbox = ut.file_manager.paths.test;
 
   fs_setup_t setup [] = {

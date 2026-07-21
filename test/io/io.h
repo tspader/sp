@@ -14,7 +14,6 @@ struct io {
 };
 
 UTEST_F_SETUP(io) {
-  SKIP_ON_WASM()
   ut.arena = sp_mem_arena_new(sp_mem_os_new());
   ut.mem = sp_mem_arena_as_allocator(ut.arena);
   sp_test_file_manager_init(&ut.file_manager);
@@ -22,7 +21,6 @@ UTEST_F_SETUP(io) {
 }
 
 UTEST_F_TEARDOWN(io) {
-  SKIP_ON_WASM()
   sp_test_file_manager_cleanup(&ut.file_manager);
   sp_mem_arena_destroy(ut.arena);
 }

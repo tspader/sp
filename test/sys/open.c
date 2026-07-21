@@ -3,7 +3,6 @@
 UTEST_EMPTY_FIXTURE(sys_open)
 
 UTEST_F(sys_open, read_refuses_missing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_read_refuses_missing_file",
     .steps = {
@@ -16,7 +15,6 @@ UTEST_F(sys_open, read_refuses_missing_file) {
 }
 
 UTEST_F(sys_open, write_refuses_missing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_write_refuses_missing_file",
     .steps = {
@@ -29,7 +27,6 @@ UTEST_F(sys_open, write_refuses_missing_file) {
 }
 
 UTEST_F(sys_open, read_forbids_write) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_read_forbids_write",
     .setup = {
@@ -46,7 +43,6 @@ UTEST_F(sys_open, read_forbids_write) {
 }
 
 UTEST_F(sys_open, write_forbids_read) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_write_forbids_read",
     .setup = {
@@ -60,7 +56,6 @@ UTEST_F(sys_open, write_forbids_read) {
 }
 
 UTEST_F(sys_open, read_write_allows_both) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_read_write_allows_both",
     .setup = {
@@ -78,7 +73,6 @@ UTEST_F(sys_open, read_write_allows_both) {
 }
 
 UTEST_F(sys_open, write_preserves_content) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_write_preserves_content",
     .setup = {
@@ -94,7 +88,6 @@ UTEST_F(sys_open, write_preserves_content) {
 }
 
 UTEST_F(sys_open, write_refuses_directory) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_write_refuses_directory",
     .setup = {
@@ -107,7 +100,6 @@ UTEST_F(sys_open, write_refuses_directory) {
 }
 
 UTEST_F(sys_open, create_creates_missing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_create_creates_missing_file",
     .steps = {
@@ -120,7 +112,6 @@ UTEST_F(sys_open, create_creates_missing_file) {
 }
 
 UTEST_F(sys_open, create_opens_existing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_create_opens_existing_file",
     .setup = {
@@ -136,7 +127,6 @@ UTEST_F(sys_open, create_opens_existing_file) {
 }
 
 UTEST_F(sys_open, excl_refuses_existing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_excl_refuses_existing_file",
     .setup = {
@@ -152,7 +142,6 @@ UTEST_F(sys_open, excl_refuses_existing_file) {
 }
 
 UTEST_F(sys_open, excl_refuses_symlink) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_excl_refuses_symlink",
     .setup = {
@@ -168,7 +157,6 @@ UTEST_F(sys_open, excl_refuses_symlink) {
 }
 
 UTEST_F(sys_open, excl_implies_create) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_excl_implies_create",
     .steps = {
@@ -181,7 +169,6 @@ UTEST_F(sys_open, excl_implies_create) {
 }
 
 UTEST_F(sys_open, truncate_empties_existing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_truncate_empties_existing_file",
     .setup = {
@@ -197,7 +184,6 @@ UTEST_F(sys_open, truncate_empties_existing_file) {
 }
 
 UTEST_F(sys_open, truncate_refuses_missing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_truncate_refuses_missing_file",
     .steps = {
@@ -210,7 +196,6 @@ UTEST_F(sys_open, truncate_refuses_missing_file) {
 }
 
 UTEST_F(sys_open, create_truncate_creates_missing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_create_truncate_creates_missing_file",
     .steps = {
@@ -223,7 +208,6 @@ UTEST_F(sys_open, create_truncate_creates_missing_file) {
 }
 
 UTEST_F(sys_open, create_truncate_empties_existing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_create_truncate_empties_existing_file",
     .setup = {
@@ -239,7 +223,6 @@ UTEST_F(sys_open, create_truncate_empties_existing_file) {
 }
 
 UTEST_F(sys_open, append_preserves_content) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_append_preserves_content",
     .setup = {
@@ -256,7 +239,6 @@ UTEST_F(sys_open, append_preserves_content) {
 }
 
 UTEST_F(sys_open, create_append_creates_missing_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_create_append_creates_missing_file",
     .steps = {
@@ -272,7 +254,6 @@ UTEST_F(sys_open, create_append_creates_missing_file) {
 UTEST_EMPTY_FIXTURE(sys_open_dir)
 
 UTEST_F(sys_open_dir, refuses_file) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_dir_refuses_file",
     .setup = {
@@ -285,7 +266,6 @@ UTEST_F(sys_open_dir, refuses_file) {
 }
 
 UTEST_F(sys_open_dir, refuses_missing_path) {
-  SKIP_ON_WASM()
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_open_dir_refuses_missing_path",
     .steps = {

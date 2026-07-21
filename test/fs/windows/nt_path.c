@@ -30,7 +30,6 @@ static bool nt_path_ends_with(sp_nt_unicode_string_t s, const u16* suffix, u32 s
 }
 
 UTEST(nt_path, drive_absolute_forward_slashes) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:/foo/bar"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -45,7 +44,6 @@ UTEST(nt_path, drive_absolute_forward_slashes) {
 }
 
 UTEST(nt_path, drive_absolute_backslashes) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\foo\\bar"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -61,7 +59,6 @@ UTEST(nt_path, drive_absolute_backslashes) {
 }
 
 UTEST(nt_path, unc_path) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("\\\\server\\share\\foo"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -76,7 +73,6 @@ UTEST(nt_path, unc_path) {
 }
 
 UTEST(nt_path, verbatim_passthrough) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("\\\\?\\C:\\foo"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -88,7 +84,6 @@ UTEST(nt_path, verbatim_passthrough) {
 }
 
 UTEST(nt_path, dotdot_resolved) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\foo\\..\\bar"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -103,7 +98,6 @@ UTEST(nt_path, dotdot_resolved) {
 }
 
 UTEST(nt_path, dot_resolved) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\foo\\.\\bar"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -115,7 +109,6 @@ UTEST(nt_path, dot_resolved) {
 }
 
 UTEST(nt_path, mixed_slashes) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:/foo\\bar/baz"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -127,7 +120,6 @@ UTEST(nt_path, mixed_slashes) {
 }
 
 UTEST(nt_path, trailing_dot_stripped) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\foo.txt."), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -139,7 +131,6 @@ UTEST(nt_path, trailing_dot_stripped) {
 }
 
 UTEST(nt_path, non_ascii) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\caf\xC3\xA9.txt"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -154,14 +145,12 @@ UTEST(nt_path, non_ascii) {
 }
 
 UTEST(nt_path, empty_rejected) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit(""), &path);
   EXPECT_FALSE(SP_NT_SUCCESS(st));
 }
 
 UTEST(nt_path, length_field_matches_buffer) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\abc"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -172,7 +161,6 @@ UTEST(nt_path, length_field_matches_buffer) {
 }
 
 UTEST(nt_path, long_verbatim_exceeds_max_path) {
-  SKIP_ON_WASM()
   c8 long_path[512];
   u32 n = 0;
   const c8* prefix = "\\\\?\\C:\\";
@@ -194,7 +182,6 @@ UTEST(nt_path, long_verbatim_exceeds_max_path) {
 }
 
 UTEST(nt_path, rtl_allocates_buffer) {
-  SKIP_ON_WASM()
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\x"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
@@ -206,7 +193,6 @@ UTEST(nt_path, rtl_allocates_buffer) {
 #else
 
 UTEST(nt_path, skipped_non_windows) {
-  SKIP_ON_WASM()
   UTEST_SKIP("nt path tests require Windows");
 }
 
