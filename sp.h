@@ -5770,6 +5770,58 @@ SP_PRIVATE s32 sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
   return sp_sys_err_from_nt(status);
 }
 
+SP_PRIVATE s32 sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to, u32 access, u32 flags, u32 info_class, u32 legacy_info_class) {
+  SP_ALIGNED u16 path_buf [SP_PATH_MAX + 1];
+  SP_ALIGNED u8 info_buf [sizeof(sp_nt_file_rename_information_t) + SP_PATH_MAX * sizeof(u16)];
+
+  sp_sys_fd_t handle = SP_SYS_INVALID_FD;
+  sp_nt_status_t status = sp_sys_nt_open(from_fd, from,
+    access,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    SP_NT_FILE_OPEN,
+    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT,
+    SP_NT_NO_OPTIONS,
+    &handle
+  );
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  sp_sys_nt_target_t t;
+  status = sp_sys_nt_target(to_fd, to, path_buf, SP_PATH_MAX + 1, &t);
+  if (!SP_NT_SUCCESS(status)) {
+    sp_sys_nt_close(handle);
+    return sp_sys_err_from_nt(status);
+  }
+
+  u32 name_bytes = t.name.Length;
+  u32 info_bytes = sizeof(sp_nt_file_rename_information_t) + name_bytes - sizeof(u16);
+  if (info_bytes > sizeof(info_buf)) {
+    sp_sys_nt_target_free(&t);
+    sp_sys_nt_close(handle);
+    return SP_ERR_SYS_NAME_TOO_LONG;
+  }
+
+  sp_nt_file_rename_information_t* info = (sp_nt_file_rename_information_t*)info_buf;
+  *info = sp_zero_s(sp_nt_file_rename_information_t);
+  info->Flags = flags;
+  info->RootDirectory = t.root;
+  info->FileNameLength = name_bytes;
+  sp_mem_copy(info->FileName, t.name.Buffer, name_bytes);
+
+  sp_nt_io_status_block_t iosb = sp_zero;
+  status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, info_class);
+
+  if (legacy_info_class && sp_sys_nt_needs_legacy_info(status)) {
+    info->Flags = 0;
+    info->ReplaceIfExists = 1;
+    status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, legacy_info_class);
+  }
+
+  sp_sys_nt_target_free(&t);
+  sp_sys_nt_close(handle);
+
+  return sp_sys_err_from_nt(status);
+}
+
 static void sp_sys_timespec_from_filetime(FILETIME ft, sp_sys_timespec_t* out) {
   u64 t = ((u64)ft.dwHighDateTime << 32) | (u64)ft.dwLowDateTime;
   if (t >= 116444736000000000ULL) {
@@ -5907,58 +5959,15 @@ sp_err_t sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
 ///////////////////
 s32 sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
 #if defined(SP_WIN32)
-  SP_ALIGNED u16 path_buf [SP_PATH_MAX + 1];
-  SP_ALIGNED u8 info_buf [sizeof(sp_nt_file_rename_information_t) + SP_PATH_MAX * sizeof(u16)];
-
-  sp_sys_fd_t handle = SP_SYS_INVALID_FD;
-  sp_nt_status_t status = sp_sys_nt_open(from_fd, sp_str(from, from_len),
+  return sp_sys_nt_set_name_info(
+    from_fd, sp_str(from, from_len),
+    to_fd, sp_str(to, to_len),
     DELETE | SYNCHRONIZE,
-    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-    SP_NT_FILE_OPEN,
-    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT,
-    SP_NT_NO_OPTIONS,
-    &handle
+    SP_NT_FILE_RENAME_REPLACE_IF_EXISTS | SP_NT_FILE_RENAME_POSIX_SEMANTICS |
+    SP_NT_FILE_RENAME_IGNORE_READONLY_ATTRIBUTE,
+    SP_NT_FILE_RENAME_INFORMATION_EX,
+    SP_NT_FILE_RENAME_INFORMATION
   );
-  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
-
-  sp_sys_nt_target_t t;
-  status = sp_sys_nt_target(to_fd, sp_str(to, to_len), path_buf, SP_PATH_MAX + 1, &t);
-  if (!SP_NT_SUCCESS(status)) {
-    sp_sys_nt_close(handle);
-    return sp_sys_err_from_nt(status);
-  }
-
-  u32 name_bytes = t.name.Length;
-  u32 info_bytes = sizeof(sp_nt_file_rename_information_t) + name_bytes - sizeof(u16);
-  if (info_bytes > sizeof(info_buf)) {
-    sp_sys_nt_target_free(&t);
-    sp_sys_nt_close(handle);
-    return SP_ERR_SYS_NAME_TOO_LONG;
-  }
-
-  sp_nt_file_rename_information_t* info = (sp_nt_file_rename_information_t*)info_buf;
-  *info = sp_zero_s(sp_nt_file_rename_information_t);
-  info->Flags =
-    SP_NT_FILE_RENAME_REPLACE_IF_EXISTS |
-    SP_NT_FILE_RENAME_POSIX_SEMANTICS |
-    SP_NT_FILE_RENAME_IGNORE_READONLY_ATTRIBUTE;
-  info->RootDirectory = t.root;
-  info->FileNameLength = name_bytes;
-  sp_mem_copy(info->FileName, t.name.Buffer, name_bytes);
-
-  sp_nt_io_status_block_t iosb = sp_zero;
-  status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, SP_NT_FILE_RENAME_INFORMATION_EX);
-
-  if (sp_sys_nt_needs_legacy_info(status)) {
-    info->Flags = 0;
-    info->ReplaceIfExists = 1;
-    status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, SP_NT_FILE_RENAME_INFORMATION);
-  }
-
-  sp_sys_nt_target_free(&t);
-  sp_sys_nt_close(handle);
-
-  return sp_sys_err_from_nt(status);
 
 #elif defined(SP_LINUX)
   struct {
@@ -8055,49 +8064,14 @@ s32 sp_sys_chdir_s(sp_str_t path) {
 /////////////////
 s32 sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
 #if defined(SP_WIN32)
-  sp_sys_fd_t handle = SP_SYS_INVALID_FD;
-  sp_nt_status_t status = sp_sys_nt_open(
-    from_fd,
-    sp_str(existing, existing_len),
+  return sp_sys_nt_set_name_info(
+    from_fd, sp_str(existing, existing_len),
+    to_fd, sp_str(alias, alias_len),
     FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-    SP_NT_FILE_OPEN,
-    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT,
     0,
-    &handle
+    SP_NT_FILE_LINK_INFORMATION,
+    0
   );
-  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
-
-  SP_ALIGNED u16 path_buf[SP_PATH_MAX + 1];
-  sp_sys_nt_target_t t;
-  sp_nt_status_t tstatus = sp_sys_nt_target(to_fd, sp_str(alias, alias_len), path_buf, SP_PATH_MAX + 1, &t);
-  if (!SP_NT_SUCCESS(tstatus)) {
-    sp_sys_nt_close(handle);
-    return sp_sys_err_from_nt(tstatus);
-  }
-
-  u32 name_bytes = t.name.Length;
-  u32 info_bytes = sizeof(sp_nt_file_link_information_t) + name_bytes - sizeof(u16);
-  SP_ALIGNED u8 info_buf[sizeof(sp_nt_file_link_information_t) + SP_PATH_MAX * sizeof(u16)];
-  if (info_bytes > sizeof(info_buf)) {
-    sp_sys_nt_target_free(&t);
-    sp_sys_nt_close(handle);
-    return SP_ERR_SYS_NAME_TOO_LONG;
-  }
-  sp_nt_file_link_information_t* info = (sp_nt_file_link_information_t*)info_buf;
-  *info = sp_zero_s(sp_nt_file_link_information_t);
-  info->ReplaceIfExists = 0;
-  info->RootDirectory = t.root;
-  info->FileNameLength = name_bytes;
-  sp_mem_copy(info->FileName, t.name.Buffer, name_bytes);
-
-  sp_nt_io_status_block_t iosb = sp_zero;
-  status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, SP_NT_FILE_LINK_INFORMATION);
-
-  sp_sys_nt_target_free(&t);
-  sp_sys_nt_close(handle);
-
-  return sp_sys_err_from_nt(status);
 
 #elif defined(SP_LINUX)
   struct {
@@ -8337,7 +8311,7 @@ s64 sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size) {
   }
 
   u16 wbuf[SP_PATH_MAX];
-  DWORD wlen = GetFinalPathNameByHandleW((HANDLE)h, (LPWSTR)wbuf, SP_PATH_MAX, 0);
+  DWORD wlen = GetFinalPathNameByHandleW((HANDLE)handle, (LPWSTR)wbuf, SP_PATH_MAX, 0);
   sp_sys_nt_close(handle);
   if (wlen == 0 || wlen >= SP_PATH_MAX) return -1;
 
