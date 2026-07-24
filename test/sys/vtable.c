@@ -127,44 +127,44 @@ static s32 sys_vtable_mock_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
   return 69;
 }
 
-static s32 sys_vtable_mock_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
-  return 69;
+static sp_err_t sys_vtable_mock_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_rmdir(sp_sys_fd_t fd, const c8* path, u32 len) {
-  return 69;
+static sp_err_t sys_vtable_mock_rmdir(sp_sys_fd_t fd, const c8* path, u32 len) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_unlink(sp_sys_fd_t fd, const c8* path, u32 len) {
-  return 69;
+static sp_err_t sys_vtable_mock_unlink(sp_sys_fd_t fd, const c8* path, u32 len) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
-  return 69;
+static sp_err_t sys_vtable_mock_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
-  return 69;
+static sp_err_t sys_vtable_mock_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
-  return 69;
+static sp_err_t sys_vtable_mock_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  return 69;
+static sp_err_t sys_vtable_mock_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  return 69;
+static sp_err_t sys_vtable_mock_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
+  return (sp_err_t)69;
 }
 
 static sp_err_t sys_vtable_mock_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
   return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
-  return 69;
+static sp_err_t sys_vtable_mock_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
+  return (sp_err_t)69;
 }
 
 static sp_err_t sys_vtable_mock_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
@@ -283,8 +283,8 @@ static s64 sys_vtable_mock_lseek(sp_sys_fd_t fd, s64 offset, s32 whence) {
   return 69;
 }
 
-static s32 sys_vtable_mock_chdir(const c8* path, u32 len) {
-  return 69;
+static sp_err_t sys_vtable_mock_chdir(const c8* path, u32 len) {
+  return (sp_err_t)69;
 }
 
 static s32 sys_vtable_mock_fs_it_open(sp_sys_fd_t fd, sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap) {

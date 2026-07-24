@@ -1024,7 +1024,41 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_CLOCK_MONOTONIC      1
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
+  #define SP_EOK                  0
+  #define SP_EPERM                EPERM
+  #define SP_ENOENT               ENOENT
   #define SP_EINTR                EINTR
+  #define SP_EIO                  EIO
+  #define SP_EBADF                EBADF
+  #define SP_EAGAIN               EAGAIN
+  #define SP_ENOMEM               ENOMEM
+  #define SP_EACCES               EACCES
+  #define SP_EFAULT               EFAULT
+  #define SP_EBUSY                EBUSY
+  #define SP_EEXIST               EEXIST
+  #define SP_EXDEV                EXDEV
+  #define SP_ENOTDIR              ENOTDIR
+  #define SP_EISDIR               EISDIR
+  #define SP_EINVAL               EINVAL
+  #define SP_ENFILE               ENFILE
+  #define SP_EMFILE               EMFILE
+  #define SP_ETXTBSY              ETXTBSY
+  #define SP_EFBIG                EFBIG
+  #define SP_ENOSPC               ENOSPC
+  #define SP_EROFS                EROFS
+  #define SP_EPIPE                EPIPE
+  #define SP_ENAMETOOLONG         ENAMETOOLONG
+  #define SP_ENOSYS               ENOSYS
+  #define SP_ENOTEMPTY            ENOTEMPTY
+  #define SP_ELOOP                ELOOP
+  #define SP_EOPNOTSUPP           EOPNOTSUPP
+  #define SP_ENOTSUP              ENOTSUP
+  #define SP_ECONNRESET           ECONNRESET
+  #define SP_ENOTCONN             ENOTCONN
+  #define SP_ETIMEDOUT            ETIMEDOUT
+  #define SP_ECONNREFUSED         ECONNREFUSED
+  #define SP_EINPROGRESS          EINPROGRESS
+  #define SP_EDQUOT               EDQUOT
 
   #define SP_AT_FDCWD             AT_FDCWD
   #define SP_AT_SYMLINK_NOFOLLOW  AT_SYMLINK_NOFOLLOW
@@ -1331,16 +1365,16 @@ SP_API sp_err_t    sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_o
 SP_API sp_sys_fd_t sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_close(sp_sys_fd_t fd);
 SP_API s32         sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
-SP_API s32         sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
-SP_API s32         sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len);
-SP_API s32         sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
-SP_API s32         sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
-SP_API s32         sp_sys_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-SP_API s32         sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-SP_API s32         sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
-SP_API s32         sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
+SP_API sp_err_t    sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len);
+SP_API sp_err_t    sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
+SP_API sp_err_t    sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
+SP_API sp_err_t    sp_sys_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+SP_API sp_err_t    sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+SP_API sp_err_t    sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
-SP_API s32         sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
 SP_API s32         sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
 SP_API s64         sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size);
@@ -1371,21 +1405,21 @@ SP_API void        sp_sys_exit(s32 code);
 SP_API void        sp_sys_env(const c8** env, u32* len);
 
 SP_API s64         sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence);
-SP_API s32         sp_sys_chdir(const c8* path, u32 len);
+SP_API sp_err_t    sp_sys_chdir(const c8* path, u32 len);
 
 
 SP_API sp_err_t    sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
 SP_API sp_sys_fd_t sp_sys_open_dir_s(sp_sys_fd_t fd, sp_str_t path);
-SP_API s32         sp_sys_get_path_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
-SP_API s32         sp_sys_get_link_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
-SP_API s32         sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode);
-SP_API s32         sp_sys_rmdir_s(sp_sys_fd_t fd, sp_str_t path);
-SP_API s32         sp_sys_unlink_s(sp_sys_fd_t fd, sp_str_t path);
-SP_API s32         sp_sys_rename_s(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to);
-SP_API s32         sp_sys_chdir_s(sp_str_t path);
-SP_API s32         sp_sys_link_s(sp_sys_fd_t from_fd, sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias);
-SP_API s32         sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias);
-SP_API s32         sp_sys_chmod_s(sp_sys_fd_t fd, sp_str_t path, const sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_get_path_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_get_link_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode);
+SP_API sp_err_t    sp_sys_rmdir_s(sp_sys_fd_t fd, sp_str_t path);
+SP_API sp_err_t    sp_sys_unlink_s(sp_sys_fd_t fd, sp_str_t path);
+SP_API sp_err_t    sp_sys_rename_s(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to);
+SP_API sp_err_t    sp_sys_chdir_s(sp_str_t path);
+SP_API sp_err_t    sp_sys_link_s(sp_sys_fd_t from_fd, sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias);
+SP_API sp_err_t    sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias);
+SP_API sp_err_t    sp_sys_chmod_s(sp_sys_fd_t fd, sp_str_t path, const sp_sys_file_meta_t* st);
 SP_API s64         sp_sys_canonicalize_path_s(sp_str_t path, c8* buf, u64 size);
 SP_API s32         sp_sys_fs_it_open(sp_sys_fd_t fd, sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap);
 SP_API s32         sp_sys_fs_it_open_s(sp_sys_fd_t fd, sp_sys_fs_it_t* it, sp_str_t path, sp_mem_slice_t buf);
@@ -1408,16 +1442,16 @@ typedef struct {
   sp_sys_fd_t (*open_dir)(sp_sys_fd_t fd, const c8* path, u32 len);
   sp_err_t    (*close)(sp_sys_fd_t fd);
   s32         (*pipe)(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
-  s32         (*mkdir)(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
-  s32         (*rmdir)(sp_sys_fd_t fd, const c8* path, u32 len);
-  s32         (*unlink)(sp_sys_fd_t fd, const c8* path, u32 len);
-  s32         (*rename)(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
-  s32         (*link)(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-  s32         (*symlink)(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-  s32         (*get_path_metadata)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
-  s32         (*get_link_metadata)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
+  sp_err_t    (*mkdir)(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
+  sp_err_t    (*rmdir)(sp_sys_fd_t fd, const c8* path, u32 len);
+  sp_err_t    (*unlink)(sp_sys_fd_t fd, const c8* path, u32 len);
+  sp_err_t    (*rename)(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
+  sp_err_t    (*link)(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+  sp_err_t    (*symlink)(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+  sp_err_t    (*get_path_metadata)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
+  sp_err_t    (*get_link_metadata)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
   sp_err_t    (*get_file_metadata)(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
-  s32         (*chmod)(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
+  sp_err_t    (*chmod)(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
   sp_err_t    (*clock_gettime)(s32 clockid, sp_sys_timespec_t* ts);
   s32         (*nanosleep)(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
   s64         (*canonicalize_path)(const c8* path, u32 len, c8* buf, u64 size);
@@ -1447,7 +1481,7 @@ typedef struct {
   void        (*exit)(s32 code);
   void        (*env)(const c8** env, u32* len);
   s64         (*lseek)(sp_sys_fd_t fd, s64 offset, s32 whence);
-  s32         (*chdir)(const c8* path, u32 len);
+  sp_err_t    (*chdir)(const c8* path, u32 len);
   s32         (*fs_it_open)(sp_sys_fd_t fd, sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap);
   s32         (*fs_it_next)(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out);
   void        (*fs_it_close)(sp_sys_fs_it_t* it);
@@ -1468,16 +1502,16 @@ SP_API sp_err_t    sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys
 SP_API sp_sys_fd_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_close_p(sp_sys_fd_t fd);
 SP_API s32         sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
-SP_API s32         sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
-SP_API s32         sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len);
-SP_API s32         sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len);
-SP_API s32         sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
-SP_API s32         sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-SP_API s32         sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-SP_API s32         sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
-SP_API s32         sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
+SP_API sp_err_t    sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len);
+SP_API sp_err_t    sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len);
+SP_API sp_err_t    sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
+SP_API sp_err_t    sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+SP_API sp_err_t    sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+SP_API sp_err_t    sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
-SP_API s32         sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_clock_gettime_p(s32 clockid, sp_sys_timespec_t* ts);
 SP_API s32         sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
 SP_API s64         sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size);
@@ -1507,7 +1541,7 @@ SP_API void        sp_sys_assert_p(bool cond);
 SP_API void        sp_sys_exit_p(s32 code);
 SP_API void        sp_sys_env_p(const c8** env, u32* len);
 SP_API s64         sp_sys_lseek_p(sp_sys_fd_t fd, s64 offset, s32 whence);
-SP_API s32         sp_sys_chdir_p(const c8* path, u32 len);
+SP_API sp_err_t    sp_sys_chdir_p(const c8* path, u32 len);
 SP_API s32         sp_sys_fs_it_open_p(sp_sys_fd_t fd, sp_sys_fs_it_t* it, const c8* path, u32 path_len, void* buf, u64 cap);
 SP_API s32         sp_sys_fs_it_next_p(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out);
 SP_API void        sp_sys_fs_it_close_p(sp_sys_fs_it_t* it);
@@ -4145,6 +4179,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 
 s64 __sp_syscall_ret(u64);
 s64 __sp_syscall_ret_r(u64);
+sp_err_t __sp_syscall_ret_e(u64);
 s64 __sp_syscall_cp(s64, s64, s64, s64, s64, s64, s64);
 s64 sp_syscall0(s64 n);
 s64 sp_syscall1(s64 n, s64 a1);
@@ -4171,6 +4206,7 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
 #define __sp_syscall(...) __SP_SYSCALL_DISP(__sp_syscall,__VA_ARGS__)
 #define sp_syscall(...) __sp_syscall_ret((u64)__sp_syscall(__VA_ARGS__))
 #define sp_syscall_r(...) __sp_syscall_ret_r((u64)__sp_syscall(__VA_ARGS__))
+#define sp_syscall_e(...) __sp_syscall_ret_e((u64)__sp_syscall(__VA_ARGS__))
 
 // Typed wrappers for individual syscalls
 SP_IMP s32 sp_syscall_notify_init1(s32 flags);
@@ -4347,35 +4383,35 @@ s32 sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
   return (sp_rt.vt->pipe)(read_end, write_end);
 }
 
-s32 sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
+sp_err_t sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
   return (sp_rt.vt->mkdir)(fd, path, len, mode);
 }
 
-s32 sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len) {
+sp_err_t sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len) {
   return (sp_rt.vt->rmdir)(fd, path, len);
 }
 
-s32 sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len) {
+sp_err_t sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len) {
   return (sp_rt.vt->unlink)(fd, path, len);
 }
 
-s32 sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
+sp_err_t sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
   return (sp_rt.vt->rename)(from_fd, from, from_len, to_fd, to, to_len);
 }
 
-s32 sp_sys_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
+sp_err_t sp_sys_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
   return (sp_rt.vt->link)(from_fd, existing, existing_len, to_fd, alias, alias_len);
 }
 
-s32 sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
+sp_err_t sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
   return (sp_rt.vt->symlink)(existing, existing_len, to_fd, alias, alias_len);
 }
 
-s32 sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
   return (sp_rt.vt->get_path_metadata)(fd, path, len, st);
 }
 
-s32 sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
   return (sp_rt.vt->get_link_metadata)(fd, path, len, st);
 }
 
@@ -4383,7 +4419,7 @@ sp_err_t sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
   return (sp_rt.vt->get_file_metadata)(fd, st);
 }
 
-s32 sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
   return (sp_rt.vt->chmod)(fd, path, len, st);
 }
 
@@ -4503,7 +4539,7 @@ s64 sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence) {
   return (sp_rt.vt->lseek)(fd, offset, whence);
 }
 
-s32 sp_sys_chdir(const c8* path, u32 len) {
+sp_err_t sp_sys_chdir(const c8* path, u32 len) {
   return (sp_rt.vt->chdir)(path, len);
 }
 
@@ -4683,6 +4719,7 @@ s32 errno;
 #endif
 
 #if defined(SP_WASM)
+#define SP_WASI_ESUCCESS      0
 #define SP_WASI_EACCES        2
 #define SP_WASI_EAGAIN        6
 #define SP_WASI_EBADF         8
@@ -4717,6 +4754,7 @@ s32 errno;
 
 SP_PRIVATE sp_err_t sp_sys_err_from_wasi(__wasi_errno_t e) {
   switch (e) {
+    case SP_WASI_ESUCCESS:     return SP_OK;
     case SP_WASI_ENOENT:       return SP_ERR_SYS_NOT_FOUND;
     case SP_WASI_EPERM:
     case SP_WASI_EACCES:
@@ -5050,6 +5088,12 @@ s64 __sp_syscall_ret_r(u64 r) {
 	return (s64)r;
 }
 
+SP_PRIVATE sp_err_t sp_sys_err_from_errno(s64 e);
+
+sp_err_t __sp_syscall_ret_e(u64 r) {
+  return sp_sys_err_from_errno(__sp_syscall_ret_r(r));
+}
+
 s64 sp_syscall0(s64 n) {
   s64 ret;
 #if defined(SP_AMD64)
@@ -5197,41 +5241,6 @@ s64 sp_lx_getdents64(s32 fd, void* buf, u64 count) {
   return sp_syscall(SP_SYSCALL_NUM_GETDENTS64, fd, buf, count);
 }
 
-SP_PRIVATE sp_err_t sp_sys_err_from_errno(s32 e) {
-  switch (e) {
-    case SP_ENOENT:       return SP_ERR_SYS_NOT_FOUND;
-    case SP_EPERM:
-    case SP_EACCES:       return SP_ERR_SYS_ACCESS_DENIED;
-    case SP_EEXIST:       return SP_ERR_SYS_EXISTS;
-    case SP_EISDIR:       return SP_ERR_SYS_IS_DIR;
-    case SP_ENOTDIR:      return SP_ERR_SYS_NOT_DIR;
-    case SP_EBADF:        return SP_ERR_SYS_BAD_FD;
-    case SP_EBUSY:
-    case SP_ETXTBSY:      return SP_ERR_SYS_BUSY;
-    case SP_EINVAL:       return SP_ERR_SYS_INVALID;
-    case SP_ENOSPC:
-    case SP_EDQUOT:       return SP_ERR_SYS_NO_SPACE;
-    case SP_ENOMEM:       return SP_ERR_SYS_NO_MEMORY;
-    case SP_EMFILE:
-    case SP_ENFILE:       return SP_ERR_SYS_TOO_MANY_FILES;
-    case SP_ENAMETOOLONG: return SP_ERR_SYS_NAME_TOO_LONG;
-    case SP_EROFS:        return SP_ERR_SYS_READ_ONLY_FS;
-    case SP_EAGAIN:       return SP_ERR_SYS_WOULD_BLOCK;
-    case SP_EPIPE:        return SP_ERR_SYS_BROKEN_PIPE;
-    case SP_ENOSYS:
-    case SP_EOPNOTSUPP:   return SP_ERR_SYS_UNSUPPORTED;
-    case SP_ETIMEDOUT:    return SP_ERR_SYS_TIMED_OUT;
-    case SP_ECONNRESET:   return SP_ERR_SYS_CONN_RESET;
-    case SP_ECONNREFUSED: return SP_ERR_SYS_CONN_REFUSED;
-    case SP_ENOTCONN:     return SP_ERR_SYS_NOT_CONNECTED;
-    case SP_EXDEV:        return SP_ERR_SYS_CROSS_DEVICE;
-    case SP_ELOOP:        return SP_ERR_SYS_LOOP;
-    case SP_EFBIG:        return SP_ERR_SYS_FILE_TOO_BIG;
-    case SP_EINTR:        return SP_ERR_SYS_INTERRUPTED;
-    case SP_ENOTEMPTY:    return SP_ERR_SYS_NOT_EMPTY;
-    default:              return SP_ERR_SYS;
-  }
-}
 #endif
 
 #if defined(SP_MACOS) || defined(SP_COSMO)
@@ -5262,43 +5271,53 @@ static void sp_sys_file_meta_from_libc(const struct stat* src, sp_sys_file_meta_
 #endif
 }
 
-SP_PRIVATE sp_err_t sp_sys_err_from_errno(s32 e) {
-  switch (e) {
-    case ENOENT:       return SP_ERR_SYS_NOT_FOUND;
-    case EPERM:
-    case EACCES:       return SP_ERR_SYS_ACCESS_DENIED;
-    case EEXIST:       return SP_ERR_SYS_EXISTS;
-    case EISDIR:       return SP_ERR_SYS_IS_DIR;
-    case ENOTDIR:      return SP_ERR_SYS_NOT_DIR;
-    case EBADF:        return SP_ERR_SYS_BAD_FD;
-    case EBUSY:
-    case ETXTBSY:      return SP_ERR_SYS_BUSY;
-    case EINVAL:       return SP_ERR_SYS_INVALID;
-    case ENOSPC:
-    case EDQUOT:       return SP_ERR_SYS_NO_SPACE;
-    case ENOMEM:       return SP_ERR_SYS_NO_MEMORY;
-    case EMFILE:
-    case ENFILE:       return SP_ERR_SYS_TOO_MANY_FILES;
-    case ENAMETOOLONG: return SP_ERR_SYS_NAME_TOO_LONG;
-    case EROFS:        return SP_ERR_SYS_READ_ONLY_FS;
-    case EAGAIN:       return SP_ERR_SYS_WOULD_BLOCK;
-    case EPIPE:        return SP_ERR_SYS_BROKEN_PIPE;
-    case ENOSYS:
-    case EOPNOTSUPP:   return SP_ERR_SYS_UNSUPPORTED;
-#if defined(ENOTSUP) && ENOTSUP != EOPNOTSUPP
-    case ENOTSUP:      return SP_ERR_SYS_UNSUPPORTED;
 #endif
-    case ETIMEDOUT:    return SP_ERR_SYS_TIMED_OUT;
-    case ECONNRESET:   return SP_ERR_SYS_CONN_RESET;
-    case ECONNREFUSED: return SP_ERR_SYS_CONN_REFUSED;
-    case ENOTCONN:     return SP_ERR_SYS_NOT_CONNECTED;
-    case EXDEV:        return SP_ERR_SYS_CROSS_DEVICE;
-    case ELOOP:        return SP_ERR_SYS_LOOP;
-    case EFBIG:        return SP_ERR_SYS_FILE_TOO_BIG;
-    case EINTR:        return SP_ERR_SYS_INTERRUPTED;
-    case ENOTEMPTY:    return SP_ERR_SYS_NOT_EMPTY;
-    default:           return SP_ERR_SYS;
+
+#if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+SP_PRIVATE sp_err_t sp_sys_err_from_errno(s64 e) {
+  switch (e) {
+    case SP_EOK:          return SP_OK;
+    case SP_ENOENT:       return SP_ERR_SYS_NOT_FOUND;
+    case SP_EPERM:
+    case SP_EACCES:       return SP_ERR_SYS_ACCESS_DENIED;
+    case SP_EEXIST:       return SP_ERR_SYS_EXISTS;
+    case SP_EISDIR:       return SP_ERR_SYS_IS_DIR;
+    case SP_ENOTDIR:      return SP_ERR_SYS_NOT_DIR;
+    case SP_EBADF:        return SP_ERR_SYS_BAD_FD;
+    case SP_EBUSY:
+    case SP_ETXTBSY:      return SP_ERR_SYS_BUSY;
+    case SP_EINVAL:       return SP_ERR_SYS_INVALID;
+    case SP_ENOSPC:
+    case SP_EDQUOT:       return SP_ERR_SYS_NO_SPACE;
+    case SP_ENOMEM:       return SP_ERR_SYS_NO_MEMORY;
+    case SP_EMFILE:
+    case SP_ENFILE:       return SP_ERR_SYS_TOO_MANY_FILES;
+    case SP_ENAMETOOLONG: return SP_ERR_SYS_NAME_TOO_LONG;
+    case SP_EROFS:        return SP_ERR_SYS_READ_ONLY_FS;
+    case SP_EAGAIN:       return SP_ERR_SYS_WOULD_BLOCK;
+    case SP_EPIPE:        return SP_ERR_SYS_BROKEN_PIPE;
+    case SP_ENOSYS:
+    case SP_EOPNOTSUPP:   return SP_ERR_SYS_UNSUPPORTED;
+#if defined(SP_ENOTSUP) && SP_ENOTSUP != SP_EOPNOTSUPP
+    case SP_ENOTSUP:      return SP_ERR_SYS_UNSUPPORTED;
+#endif
+    case SP_ETIMEDOUT:    return SP_ERR_SYS_TIMED_OUT;
+    case SP_ECONNRESET:   return SP_ERR_SYS_CONN_RESET;
+    case SP_ECONNREFUSED: return SP_ERR_SYS_CONN_REFUSED;
+    case SP_ENOTCONN:     return SP_ERR_SYS_NOT_CONNECTED;
+    case SP_EXDEV:        return SP_ERR_SYS_CROSS_DEVICE;
+    case SP_ELOOP:        return SP_ERR_SYS_LOOP;
+    case SP_EFBIG:        return SP_ERR_SYS_FILE_TOO_BIG;
+    case SP_EINTR:        return SP_ERR_SYS_INTERRUPTED;
+    case SP_ENOTEMPTY:    return SP_ERR_SYS_NOT_EMPTY;
+    default:              return SP_ERR_SYS;
   }
+}
+#endif
+
+#if defined(SP_MACOS) || defined(SP_COSMO)
+SP_PRIVATE sp_err_t sp_sys_err_from_libc(s32 rc) {
+  return rc ? sp_sys_err_from_errno(errno) : SP_OK;
 }
 #endif
 
@@ -5724,7 +5743,7 @@ SP_PRIVATE bool sp_sys_nt_needs_legacy_info(sp_nt_status_t status) {
     status == SP_NT_STATUS_NOT_SUPPORTED;
 }
 
-SP_PRIVATE s32 sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
+SP_PRIVATE sp_err_t sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(fd, path,
     DELETE | SYNCHRONIZE,
@@ -5770,7 +5789,7 @@ SP_PRIVATE s32 sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
   return sp_sys_err_from_nt(status);
 }
 
-SP_PRIVATE s32 sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to, u32 access, u32 flags, u32 info_class, u32 legacy_info_class) {
+SP_PRIVATE sp_err_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to, u32 access, u32 flags, u32 info_class, u32 legacy_info_class) {
   SP_ALIGNED u16 path_buf [SP_PATH_MAX + 1];
   SP_ALIGNED u8 info_buf [sizeof(sp_nt_file_rename_information_t) + SP_PATH_MAX * sizeof(u16)];
 
@@ -5957,7 +5976,7 @@ sp_err_t sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
 ///////////////////
 // SP_SYS_RENAME //
 ///////////////////
-s32 sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
+sp_err_t sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
 #if defined(SP_WIN32)
   return sp_sys_nt_set_name_info(
     from_fd, sp_str(from, from_len),
@@ -5976,7 +5995,7 @@ s32 sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd
   } buffers = sp_zero;
   sp_cstr_copy_to_n(from, from_len, buffers.from, SP_PATH_MAX);
   sp_cstr_copy_to_n(to, to_len, buffers.to, SP_PATH_MAX);
-  return (s32)sp_syscall(SP_SYSCALL_NUM_RENAMEAT, from_fd, buffers.from, to_fd, buffers.to);
+  return sp_syscall_e(SP_SYSCALL_NUM_RENAMEAT, from_fd, buffers.from, to_fd, buffers.to);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct {
@@ -5985,18 +6004,18 @@ s32 sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd
   } buffers = sp_zero;
   sp_cstr_copy_to_n(from, from_len, buffers.from, SP_PATH_MAX);
   sp_cstr_copy_to_n(to, to_len, buffers.to, SP_PATH_MAX);
-  return renameat((int)from_fd, buffers.from, (int)to_fd, buffers.to);
+  return sp_sys_err_from_libc(renameat(from_fd, buffers.from, to_fd, buffers.to));
 
 #elif defined(SP_WASM)
   (void)from_fd; (void)from; (void)from_len; (void)to_fd; (void)to; (void)to_len;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_rename"
 #endif
 }
 
-s32 sp_sys_rename_s(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to) {
+sp_err_t sp_sys_rename_s(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to) {
   return sp_sys_rename(from_fd, from.data, from.len, to_fd, to.data, to.len);
 }
 
@@ -6010,16 +6029,25 @@ sp_err_t sp_sys_close_p(sp_sys_fd_t fd) {
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  if (close(fd) != 0) return sp_sys_err_from_errno(errno);
+  if (close(fd)) {
+    switch (errno) {
+      case SP_EINTR:
+      case SP_EINPROGRESS: return SP_OK;
+      default:             return sp_sys_err_from_errno(errno);
+    }
+  }
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  if (sp_syscall(SP_SYSCALL_NUM_CLOSE, fd) != 0) return sp_sys_err_from_errno(errno);
-  return SP_OK;
+  s64 rc = sp_syscall_r(SP_SYSCALL_NUM_CLOSE, fd);
+  switch (rc) {
+    case SP_EINTR:
+    case SP_EINPROGRESS: return SP_OK;
+    default:             return sp_sys_err_from_errno(rc);
+  }
 
 #elif defined(SP_WASM)
-  __wasi_errno_t err = __wasi_fd_close(fd);
-  return err ? sp_sys_err_from_wasi(err) : SP_OK;
+  return sp_sys_err_from_wasi(__wasi_fd_close(fd));
 
 #else
   #error "sp_sys_close"
@@ -6395,16 +6423,12 @@ sp_err_t sp_sys_clock_gettime_p(s32 clockid, sp_sys_timespec_t* ts) {
   return SP_ERR_SYS_INVALID;
 
 #elif defined(SP_LINUX)
-  if (sp_syscall(SP_SYSCALL_NUM_CLOCK_GETTIME, clockid, ts) != 0) {
-    return sp_sys_err_from_errno(errno);
-  }
-  return SP_OK;
+  return sp_syscall_e(SP_SYSCALL_NUM_CLOCK_GETTIME, clockid, ts);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct timespec native;
-  if (clock_gettime((clockid_t)clockid, &native) != 0) {
-    return sp_sys_err_from_errno(errno);
-  }
+  sp_err_t err = sp_sys_err_from_libc(clock_gettime((clockid_t)clockid, &native));
+  if (err != SP_OK) return err;
   ts->tv_sec  = (s64)native.tv_sec;
   ts->tv_nsec = (s64)native.tv_nsec;
   return SP_OK;
@@ -7847,7 +7871,7 @@ void sp_sys_init_p() {
 /////////////////
 // SP_SYS_STAT //
 /////////////////
-s32 sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
 #if defined(SP_WIN32)
   return sp_sys_file_meta_from_nt_path(fd, sp_str(path, len), st, true);
 
@@ -7855,35 +7879,37 @@ s32 sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_f
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   sp_sys_linux_stat_t raw = sp_zero;
-  s32 rc = (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, 0);
-  if (rc == 0) sp_sys_file_meta_from_linux(&raw, st);
-  return rc;
+  sp_err_t err = sp_syscall_e(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, 0);
+  if (err != SP_OK) return err;
+  sp_sys_file_meta_from_linux(&raw, st);
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   struct stat native;
-  s32 rc = fstatat((int)fd, buf, &native, 0);
-  if (rc == 0) sp_sys_file_meta_from_libc(&native, st);
-  return rc;
+  sp_err_t err = sp_sys_err_from_libc(fstatat(fd, buf, &native, 0));
+  if (err != SP_OK) return err;
+  sp_sys_file_meta_from_libc(&native, st);
+  return SP_OK;
 
 #elif defined(SP_WASM)
   (void)fd; (void)path; (void)len; (void)st;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_get_path_metadata"
 #endif
 }
 
-s32 sp_sys_get_path_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_get_path_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st) {
   return sp_sys_get_path_metadata(fd, path.data, path.len, st);
 }
 
 //////////////////
 // SP_SYS_LSTAT //
 //////////////////
-s32 sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
 #if defined(SP_WIN32)
   return sp_sys_file_meta_from_nt_path(fd, sp_str(path, len), st, false);
 
@@ -7891,35 +7917,37 @@ s32 sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_f
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   sp_sys_linux_stat_t raw = sp_zero;
-  s32 rc = (s32)sp_syscall(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, SP_AT_SYMLINK_NOFOLLOW);
-  if (rc == 0) sp_sys_file_meta_from_linux(&raw, st);
-  return rc;
+  sp_err_t err = sp_syscall_e(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, SP_AT_SYMLINK_NOFOLLOW);
+  if (err != SP_OK) return err;
+  sp_sys_file_meta_from_linux(&raw, st);
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   struct stat native;
-  s32 rc = fstatat((int)fd, buf, &native, AT_SYMLINK_NOFOLLOW);
-  if (rc == 0) sp_sys_file_meta_from_libc(&native, st);
-  return rc;
+  sp_err_t err = sp_sys_err_from_libc(fstatat(fd, buf, &native, AT_SYMLINK_NOFOLLOW));
+  if (err != SP_OK) return err;
+  sp_sys_file_meta_from_libc(&native, st);
+  return SP_OK;
 
 #elif defined(SP_WASM)
   (void)fd; (void)path; (void)len; (void)st;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_get_link_metadata"
 #endif
 }
 
-s32 sp_sys_get_link_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_get_link_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st) {
   return sp_sys_get_link_metadata(fd, path.data, path.len, st);
 }
 
 //////////////////
 // SP_SYS_MKDIR //
 //////////////////
-s32 sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
+sp_err_t sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
 #if defined(SP_WIN32)
   (void)mode;
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
@@ -7935,134 +7963,134 @@ s32 sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
   );
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
   sp_sys_nt_close(handle);
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return (s32)sp_syscall(SP_SYSCALL_NUM_MKDIRAT, fd, buf, mode);
+  return sp_syscall_e(SP_SYSCALL_NUM_MKDIRAT, fd, buf, mode);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return mkdirat((int)fd, buf, (mode_t)mode);
+  return sp_sys_err_from_libc(mkdirat(fd, buf, (mode_t)mode));
 
 #elif defined(SP_WASM)
   (void)fd; (void)path; (void)len; (void)mode;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_mkdir"
 #endif
 }
 
-s32 sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode) {
+sp_err_t sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode) {
   return sp_sys_mkdir(fd, path.data, path.len, mode);
 }
 
 //////////////////
 // SP_SYS_RMDIR //
 //////////////////
-s32 sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
+sp_err_t sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #if defined(SP_WIN32)
   return sp_sys_nt_delete(fd, sp_str(path, len), SP_NT_FILE_DIRECTORY_FILE);
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINKAT, fd, buf, SP_AT_REMOVEDIR);
+  return sp_syscall_e(SP_SYSCALL_NUM_UNLINKAT, fd, buf, SP_AT_REMOVEDIR);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return unlinkat((int)fd, buf, AT_REMOVEDIR);
+  return sp_sys_err_from_libc(unlinkat(fd, buf, AT_REMOVEDIR));
 
 #elif defined(SP_WASM)
   (void)fd; (void)path; (void)len;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_rmdir"
 #endif
 }
 
-s32 sp_sys_rmdir_s(sp_sys_fd_t fd, sp_str_t path) {
+sp_err_t sp_sys_rmdir_s(sp_sys_fd_t fd, sp_str_t path) {
   return sp_sys_rmdir(fd, path.data, path.len);
 }
 
 ///////////////////
 // SP_SYS_UNLINK //
 ///////////////////
-s32 sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
+sp_err_t sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #if defined(SP_WIN32)
   return sp_sys_nt_delete(fd, sp_str(path, len), SP_NT_FILE_NON_DIRECTORY_FILE);
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return (s32)sp_syscall(SP_SYSCALL_NUM_UNLINKAT, fd, buf, 0);
+  return sp_syscall_e(SP_SYSCALL_NUM_UNLINKAT, fd, buf, 0);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return unlinkat((int)fd, buf, 0);
+  return sp_sys_err_from_libc(unlinkat(fd, buf, 0));
 
 #elif defined(SP_WASM)
   (void)fd; (void)path; (void)len;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_unlink"
 #endif
 }
 
-s32 sp_sys_unlink_s(sp_sys_fd_t fd, sp_str_t path) {
+sp_err_t sp_sys_unlink_s(sp_sys_fd_t fd, sp_str_t path) {
   return sp_sys_unlink(fd, path.data, path.len);
 }
 
 //////////////////
 // SP_SYS_CHDIR //
 //////////////////
-s32 sp_sys_chdir_p(const c8* path, u32 len) {
+sp_err_t sp_sys_chdir_p(const c8* path, u32 len) {
 #if defined(SP_WIN32)
   SP_ALIGNED u16 wbuf[SP_PATH_MAX + 1];
   sp_mem_fixed_t fixed = sp_mem_fixed(wbuf, sizeof(wbuf));
   sp_wide_str_t w = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), sp_str(path, len));
-  if (!w.data) return -1;
+  if (!w.data) return SP_ERR_SYS_INVALID;
   sp_nt_unicode_string_t us = {
     .Length = sp_cast(u16, w.len * sizeof(u16)),
     .MaximumLength = sp_cast(u16, (w.len + 1) * sizeof(u16)),
     .Buffer = sp_ptr_cast(u16*, sp_const_cast(u16*, w.data)),
   };
-  return SP_NT_SUCCESS(SP_NT(RtlSetCurrentDirectory_U)(&us)) ? 0 : -1;
+  return sp_sys_err_from_nt(SP_NT(RtlSetCurrentDirectory_U)(&us));
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return (s32)sp_syscall(SP_SYSCALL_NUM_CHDIR, buf);
+  return sp_syscall_e(SP_SYSCALL_NUM_CHDIR, buf);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return chdir(buf);
+  return sp_sys_err_from_libc(chdir(buf));
 
 #elif defined(SP_WASM)
   (void)path; (void)len;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_chdir"
 #endif
 }
 
-s32 sp_sys_chdir_s(sp_str_t path) {
+sp_err_t sp_sys_chdir_s(sp_str_t path) {
   return sp_sys_chdir(path.data, path.len);
 }
 
 /////////////////
 // SP_SYS_LINK //
 /////////////////
-s32 sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
+sp_err_t sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
 #if defined(SP_WIN32)
   return sp_sys_nt_set_name_info(
     from_fd, sp_str(existing, existing_len),
@@ -8080,7 +8108,7 @@ s32 sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_
   } buffers = sp_zero;
   sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
   sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
-  return (s32)sp_syscall(SP_SYSCALL_NUM_LINKAT, from_fd, buffers.existing, to_fd, buffers.alias, 0);
+  return sp_syscall_e(SP_SYSCALL_NUM_LINKAT, from_fd, buffers.existing, to_fd, buffers.alias, 0);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct {
@@ -8089,25 +8117,25 @@ s32 sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_
   } buffers = sp_zero;
   sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
   sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
-  return linkat((int)from_fd, buffers.existing, (int)to_fd, buffers.alias, 0);
+  return sp_sys_err_from_libc(linkat(from_fd, buffers.existing, to_fd, buffers.alias, 0));
 
 #elif defined(SP_WASM)
   (void)from_fd; (void)existing; (void)existing_len; (void)to_fd; (void)alias; (void)alias_len;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_link"
 #endif
 }
 
-s32 sp_sys_link_s(sp_sys_fd_t from_fd, sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias) {
+sp_err_t sp_sys_link_s(sp_sys_fd_t from_fd, sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias) {
   return sp_sys_link(from_fd, existing.data, existing.len, to_fd, alias.data, alias.len);
 }
 
 ////////////////////
 // SP_SYS_SYMLINK //
 ////////////////////
-s32 sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
+sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
 #if defined(SP_WIN32)
   sp_str_t target = sp_str(existing, existing_len);
   sp_str_t link = sp_str(alias, alias_len);
@@ -8214,7 +8242,7 @@ s32 sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, co
   } buffers = sp_zero;
   sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
   sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
-  return (s32)sp_syscall(SP_SYSCALL_NUM_SYMLINKAT, buffers.existing, to_fd, buffers.alias);
+  return sp_syscall_e(SP_SYSCALL_NUM_SYMLINKAT, buffers.existing, to_fd, buffers.alias);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct {
@@ -8223,25 +8251,25 @@ s32 sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, co
   } buffers = sp_zero;
   sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
   sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
-  return symlinkat(buffers.existing, (int)to_fd, buffers.alias);
+  return sp_sys_err_from_libc(symlinkat(buffers.existing, to_fd, buffers.alias));
 
 #elif defined(SP_WASM)
   (void)existing; (void)existing_len; (void)to_fd; (void)alias; (void)alias_len;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_symlink"
 #endif
 }
 
-s32 sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias) {
+sp_err_t sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias) {
   return sp_sys_symlink(existing.data, existing.len, to_fd, alias.data, alias.len);
 }
 
 //////////////////
 // SP_SYS_CHMOD //
 //////////////////
-s32 sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
 #if defined(SP_WIN32)
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(
@@ -8269,23 +8297,23 @@ s32 sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_me
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   s32 mode = (s32)(st->raw_attrs & 07777);
-  return (s32)sp_syscall(SP_SYSCALL_NUM_FCHMODAT, fd, buf, mode, 0);
+  return sp_syscall_e(SP_SYSCALL_NUM_FCHMODAT, fd, buf, mode, 0);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return fchmodat((int)fd, buf, (mode_t)(st->raw_attrs & 07777), 0);
+  return sp_sys_err_from_libc(fchmodat(fd, buf, (mode_t)(st->raw_attrs & 07777), 0));
 
 #elif defined(SP_WASM)
   (void)fd; (void)path; (void)len; (void)st;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_chmod"
 #endif
 }
 
-s32 sp_sys_chmod_s(sp_sys_fd_t fd, sp_str_t path, const sp_sys_file_meta_t* st) {
+sp_err_t sp_sys_chmod_s(sp_sys_fd_t fd, sp_str_t path, const sp_sys_file_meta_t* st) {
   return sp_sys_chmod(fd, path.data, path.len, st);
 }
 
