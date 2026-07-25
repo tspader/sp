@@ -461,6 +461,33 @@
 #define SP_UNIQUE_ID() SP_MACRO_CAT(__sp_unique_name__, __LINE__)
 #define sp_unique_id() SP_UNIQUE_ID()
 
+//////////////////////
+// SP_STATIC_ASSERT //
+//////////////////////
+#if defined(SP_CPP) && (__cplusplus >= 201103L)
+  #define SP_STATIC_ASSERT(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
+#elif !defined(SP_CPP) && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)
+  #define SP_STATIC_ASSERT(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
+#elif !defined(SP_CPP) && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+  #define SP_STATIC_ASSERT(CONDITION, MESSAGE) _Static_assert(CONDITION, #MESSAGE)
+#else
+  #ifdef __COUNTER__
+    #define SP_STATIC_ASSERT_ID __COUNTER__
+  #else
+    #define SP_STATIC_ASSERT_ID __LINE__
+  #endif
+
+  #if SP_HAS_ATTRIBUTE(unused)
+    #define SP_STATIC_ASSERT_UNUSED SP_ATTRIBUTE(unused)
+  #else
+    #define SP_STATIC_ASSERT_UNUSED
+  #endif
+
+  #define sp_static_assert(CONDITION, MESSAGE) \
+    typedef char sp_mcat(sp_mcat(sp_static_assert_, MESSAGE), sp_mcat(_, SP_STATIC_ASSERT_ID)) \
+      [(CONDITION) ? 1 : -1] SP_STATIC_ASSERT_UNUSED
+#endif
+
 #define sp_max(a, b) (((a) > (b)) ? (a) : (b))
 #define sp_min(a, b) (((a) > (b)) ? (b) : (a))
 #define sp_clamp(v, lo, hi) (((v) < (lo)) ? (lo) : ((v) > (hi)) ? (hi) : (v))
