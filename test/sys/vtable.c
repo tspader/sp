@@ -123,8 +123,8 @@ static sp_err_t sys_vtable_mock_close(sp_sys_fd_t fd) {
   return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
-  return 69;
+static sp_err_t sys_vtable_mock_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
+  return (sp_err_t)69;
 }
 
 static sp_err_t sys_vtable_mock_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
@@ -171,52 +171,52 @@ static sp_err_t sys_vtable_mock_clock_gettime(s32 clockid, sp_sys_timespec_t* ts
   return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
-  return 69;
+static sp_err_t sys_vtable_mock_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
+  return (sp_err_t)69;
 }
 
 static s64 sys_vtable_mock_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   return 69;
 }
 
-static s32 sys_vtable_mock_fd_ready(sp_sys_fd_t fd, u8* ready) {
-  return 69;
+static sp_err_t sys_vtable_mock_fd_ready(sp_sys_fd_t fd, u8* ready) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_fd_wait(sp_sys_fd_t fd) {
-  return 69;
+static sp_err_t sys_vtable_mock_fd_wait(sp_sys_fd_t fd) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  return 69;
+static sp_err_t sys_vtable_mock_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_open(sp_sys_socket_t* out) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_open(sp_sys_socket_t* out) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_listen(sp_sys_socket_t socket, u32 backlog) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_listen(sp_sys_socket_t socket, u32 backlog) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_connect(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_connect(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_error(sp_sys_socket_t socket) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_error(sp_sys_socket_t socket) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_close(sp_sys_socket_t socket) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_close(sp_sys_socket_t socket) {
+  return (sp_err_t)69;
 }
 
 static sp_err_t sys_vtable_mock_socket_recv(sp_sys_socket_t socket, void* buf, u64 count, u64* bytes_read) {
@@ -235,12 +235,12 @@ static sp_err_t sys_vtable_mock_socket_set_nonblocking(sp_sys_socket_t socket) {
   return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_reuse_addr(sp_sys_socket_t socket) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_reuse_addr(sp_sys_socket_t socket) {
+  return (sp_err_t)69;
 }
 
-static s32 sys_vtable_mock_socket_local_port(sp_sys_socket_t socket, u16* out) {
-  return 69;
+static sp_err_t sys_vtable_mock_socket_local_port(sp_sys_socket_t socket, u16* out) {
+  return (sp_err_t)69;
 }
 
 static void* sys_vtable_mock_alloc(u64 size) {
