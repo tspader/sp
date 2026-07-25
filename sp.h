@@ -1381,7 +1381,6 @@ typedef enum {
 } sp_sys_open_flags_t;
 
 SP_TYPEDEF_FN(int, sp_qsort_fn_t, const void *, const void *);
-SP_API void        sp_sys_init();
 SP_API sp_err_t    sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read);
 SP_API sp_err_t    sp_sys_write(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written);
 SP_API sp_err_t    sp_sys_pread(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* bytes_read);
@@ -1518,7 +1517,6 @@ typedef struct {
   void        (*fs_it_close)(sp_sys_fs_it_t* it);
 } sp_sys_vtable_t;
 
-SP_API void        sp_sys_init_p(void);
 SP_API sp_err_t    sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read);
 SP_API sp_err_t    sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written);
 SP_API sp_err_t    sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* bytes_read);
@@ -4298,7 +4296,6 @@ SP_END_EXTERN_C()
 SP_BEGIN_EXTERN_C()
 
 const sp_sys_vtable_t sp_sys_vtable_platform = {
-  .init                   = sp_sys_init_p,
   .read                   = sp_sys_read_p,
   .write                  = sp_sys_write_p,
   .pread                  = sp_sys_pread_p,
@@ -4362,10 +4359,6 @@ sp_rt_t sp_rt = {
   .vt = &sp_sys_vtable_platform,
 };
 sp_tls_block_t sp_tls_block;
-
-void sp_sys_init() {
-  (sp_rt.vt->init)();
-}
 
 sp_err_t sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   return (sp_rt.vt->read)(fd, buf, count, bytes_read);
@@ -8069,16 +8062,6 @@ void sp_sys_tls_init(sp_tls_rt_t* tls) {
   sp_unused(tls);
 }
 #endif
-
-/////////////////
-// SP_SYS_INIT //
-/////////////////
-void sp_sys_init_p() {
-#if defined(SP_WASM)
-
-#else
-#endif
-}
 
 /////////////////
 // SP_SYS_STAT //
