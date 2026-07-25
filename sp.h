@@ -3579,6 +3579,10 @@ SP_API sp_nt_status_t sp_sys_nt_path(sp_str_t utf8, sp_sys_nt_path_t* out);
 SP_API void           sp_sys_nt_path_free(sp_sys_nt_path_t* path);
 #endif
 
+
+#define SP_SYS_SUPPORT_COPY_FILE_RANGE 0
+#define SP_SYS_SUPPORT_SENDFILE 1
+
 typedef struct {
   const sp_sys_vtable_t* vt;
   sp_os_signal_handler_t signal_handlers[3];
@@ -3589,6 +3593,7 @@ typedef struct {
     sp_tls_key_t key;
     sp_tls_once_t once;
   } tls;
+  sp_atomic_s32_t unsupported [8];
 #if defined(SP_WIN32)
   sp_nt_dispatch_t nt;
 #endif
@@ -4093,6 +4098,10 @@ SP_END_EXTERN_C()
 
 SP_BEGIN_EXTERN_C()
 
+SP_API sp_err_t sp_sys_is_supported(u32 what);
+SP_API void     sp_sys_mark_supported(u32 what);
+SP_API sp_err_t sp_sys_mark_unsupported(u32 what);
+
 // @format
 typedef struct {
   sp_str_t str;
@@ -4380,6 +4389,19 @@ sp_rt_t sp_rt = {
   .vt = &sp_sys_vtable_platform,
 };
 sp_tls_block_t sp_tls_block;
+
+sp_err_t sp_sys_is_supported(u32 what) {
+  return sp_rt.unsupported[what] ? SP_ERR_SYS_UNSUPPORTED : SP_OK;
+}
+
+void sp_sys_mark_supported(u32 what) {
+  sp_atomic_s32_set(&sp_rt.unsupported[what], 0);
+}
+
+sp_err_t sp_sys_mark_unsupported(u32 what) {
+  sp_atomic_s32_set(&sp_rt.unsupported[what], 1);
+  return SP_ERR_SYS_UNSUPPORTED;
+}
 
 sp_err_t sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   return (sp_rt.vt->read)(fd, buf, count, bytes_read);
@@ -5808,7 +5830,6 @@ SP_PRIVATE sp_err_t sp_sys_err_from_win32(DWORD e) {
     case ERROR_TOO_MANY_OPEN_FILES: return SP_ERR_SYS_TOO_MANY_FILES;
     case ERROR_BUFFER_OVERFLOW:
     case ERROR_FILENAME_EXCED_RANGE: return SP_ERR_SYS_NAME_TOO_LONG;
-    case ERROR_NO_DATA:             return SP_ERR_SYS_WOULD_BLOCK;
     case ERROR_BROKEN_PIPE:         return SP_ERR_SYS_BROKEN_PIPE;
     case ERROR_IO_DEVICE:
     case ERROR_SEEK:                return SP_ERR_SYS_IO;
@@ -6291,6 +6312,7 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   if (!ReadFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) {
     DWORD err = GetLastError();
     if (err == ERROR_BROKEN_PIPE) return SP_OK;
+    if (err == ERROR_NO_DATA) return SP_ERR_SYS_WOULD_BLOCK;
     return sp_sys_err_from_win32(err);
   }
   if (bytes_read) *bytes_read = (u64)n;
@@ -6333,7 +6355,9 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
 #if defined(SP_WIN32)
   DWORD n = 0;
   if (!WriteFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) {
-    return sp_sys_err_from_win32(GetLastError());
+    DWORD err = GetLastError();
+    if (err == ERROR_NO_DATA) return SP_ERR_SYS_BROKEN_PIPE;
+    return sp_sys_err_from_win32(err);
   }
   if (bytes_written) *bytes_written = (u64)n;
   return SP_OK;
@@ -6481,14 +6505,52 @@ sp_err_t sp_sys_transfer_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* ou
 #if defined(SP_LINUX)
   s64 rc;
   if (out_pos) {
+    sp_try(sp_sys_is_supported(SP_SYS_SUPPORT_COPY_FILE_RANGE));
     rc = sp_syscall_retry(SP_SYSCALL_NUM_COPY_FILE_RANGE, in, in_pos, out, out_pos, count, 0);
+    if (rc < 0) {
+      switch (-rc) {
+        // If the OS literally does not have the fast path syscall, stop
+        // wasting time trying to call it, ever. Different runtime handle this
+        // differently:
+        // - Go used to cache ENOSYS, but then tried to get rid of this per-call
+        // checking in favor of just gating on the kernel version. But they
+        // found that that's not really possible, because ENOSYS can arise
+        // even on supported kernels thanks to seccomp / containers.
+        // - Rust caches ENOSYS but also EPERM (kind of). When they get EPERM,
+        // they probe by calling copy_file_range with a deliberately invalid
+        // handle. And the ordering of the kernel's checks tells them whether
+        // that EPERM was from seccomp (cache it) or not (don't)
+        // - Zig is weird. ENOSYS, EINVAL, and EOPNOTSUPP all globally kill
+        // the syscall.
+        case SP_ENOSYS: return sp_sys_mark_unsupported(SP_SYS_SUPPORT_COPY_FILE_RANGE);
+        // Otherwise, it just means that the fast path is unsupported *for
+        // this set of handles*, so we return UNSUPPORTED but do not globally
+        // flag this syscall as unsupported
+        case SP_EINVAL:
+        case SP_EXDEV:
+        case SP_EOPNOTSUPP:
+        case SP_EPERM:
+        case SP_EIO:
+        case SP_EBADF: return SP_ERR_SYS_UNSUPPORTED;
+        default: return sp_sys_err_from_errno(-rc);
+      }
+    }
   }
   else {
+    sp_try(sp_sys_is_supported(SP_SYS_SUPPORT_SENDFILE));
     s64 off = in_pos ? (s64)*in_pos : 0;
     rc = sp_syscall_retry(SP_SYSCALL_NUM_SENDFILE, out, in, in_pos ? &off : SP_NULLPTR, count);
-    if (rc >= 0 && in_pos) *in_pos = (u64)off;
+    if (rc < 0) {
+      switch (-rc) {
+        case SP_ENOSYS: return sp_sys_mark_unsupported(SP_SYS_SUPPORT_SENDFILE);
+        case SP_EINVAL:
+        case SP_EOPNOTSUPP:
+        case SP_EPERM: return SP_ERR_SYS_UNSUPPORTED;
+        default: return sp_sys_err_from_errno(-rc);
+      }
+    }
+    if (in_pos) *in_pos = (u64)off;
   }
-  if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_moved) *bytes_moved = (u64)rc;
   return SP_OK;
 
