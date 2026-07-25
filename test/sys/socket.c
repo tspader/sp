@@ -192,6 +192,20 @@ UTEST_F(sys_socket, accept_would_block_when_nobody_connects) {
   sp_sys_socket_close(listener);
 }
 
+UTEST_F(sys_socket, bind_reports_addr_in_use) {
+  sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
+  u16 port = 0;
+  ASSERT_TRUE(sys_socket_open_listener(&listener, &port));
+
+  sp_sys_socket_t other = SP_SYS_INVALID_SOCKET;
+  ASSERT_EQ(sp_sys_socket_open(&other), SP_OK);
+  sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 }, .port = port };
+  EXPECT_EQ(sp_sys_socket_bind(other, addr), SP_ERR_SYS_ADDR_IN_USE);
+
+  sp_sys_socket_close(other);
+  sp_sys_socket_close(listener);
+}
+
 UTEST_F(sys_socket, connect_refused_when_nothing_listens) {
   sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
   u16 port = 0;
