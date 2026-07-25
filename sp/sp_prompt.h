@@ -1278,7 +1278,7 @@ static void sp_prompt_render_frame(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widg
 
 static bool sp_prompt_poll_stdin(sp_prompt_ctx_t* ctx) {
   u8 ready = 0;
-  return sp_sys_fd_ready(ctx->terminal.fds.in, &ready) == 0 && ready;
+  return sp_sys_fd_ready(ctx->terminal.fds.in, &ready) == SP_OK && ready;
 }
 
 SP_PRIVATE bool sp_prompt_read_byte(void* out) {
