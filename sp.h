@@ -822,6 +822,12 @@ typedef enum {
   SP_ERR_SYS_INTERRUPTED    = 1224,
   SP_ERR_SYS_NOT_EMPTY      = 1225,
   SP_ERR_SYS_BUG            = 1226,
+  SP_ERR_SYS_ADDR_IN_USE    = 1227,
+  SP_ERR_SYS_ADDR_UNAVAILABLE = 1228,
+  SP_ERR_SYS_UNREACHABLE    = 1229,
+  SP_ERR_SYS_IO             = 1230,
+  SP_ERR_SYS_UNSEEKABLE     = 1231,
+  SP_ERR_SYS_TOO_MANY_LINKS = 1232,
   SP_ERR_LAZY,
   SP_ERR_OS,
 } sp_err_t;
@@ -922,17 +928,32 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_ETXTBSY              26
   #define SP_EFBIG                27
   #define SP_ENOSPC               28
+  #define SP_ESPIPE               29
   #define SP_EROFS                30
+  #define SP_EMLINK               31
   #define SP_EPIPE                32
   #define SP_ENAMETOOLONG         36
   #define SP_ENOSYS               38
   #define SP_ENOTEMPTY            39
   #define SP_ELOOP                40
+  #define SP_ENONET               64
+  #define SP_EPROTO               71
+  #define SP_ENOPROTOOPT          92
+  #define SP_EPROTONOSUPPORT      93
   #define SP_EOPNOTSUPP           95
+  #define SP_EAFNOSUPPORT         97
+  #define SP_EADDRINUSE           98
+  #define SP_EADDRNOTAVAIL        99
+  #define SP_ENETDOWN             100
+  #define SP_ENETUNREACH          101
+  #define SP_ECONNABORTED         103
   #define SP_ECONNRESET           104
+  #define SP_ENOBUFS              105
   #define SP_ENOTCONN             107
   #define SP_ETIMEDOUT            110
   #define SP_ECONNREFUSED         111
+  #define SP_EHOSTDOWN            112
+  #define SP_EHOSTUNREACH         113
   #define SP_EINPROGRESS          115
   #define SP_EDQUOT               122
 
@@ -1044,18 +1065,29 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_ETXTBSY              ETXTBSY
   #define SP_EFBIG                EFBIG
   #define SP_ENOSPC               ENOSPC
+  #define SP_ESPIPE               ESPIPE
   #define SP_EROFS                EROFS
+  #define SP_EMLINK               EMLINK
   #define SP_EPIPE                EPIPE
   #define SP_ENAMETOOLONG         ENAMETOOLONG
   #define SP_ENOSYS               ENOSYS
   #define SP_ENOTEMPTY            ENOTEMPTY
   #define SP_ELOOP                ELOOP
+  #define SP_EPROTONOSUPPORT      EPROTONOSUPPORT
   #define SP_EOPNOTSUPP           EOPNOTSUPP
   #define SP_ENOTSUP              ENOTSUP
+  #define SP_EAFNOSUPPORT         EAFNOSUPPORT
+  #define SP_EADDRINUSE           EADDRINUSE
+  #define SP_EADDRNOTAVAIL        EADDRNOTAVAIL
+  #define SP_ENETDOWN             ENETDOWN
+  #define SP_ENETUNREACH          ENETUNREACH
+  #define SP_ECONNABORTED         ECONNABORTED
   #define SP_ECONNRESET           ECONNRESET
+  #define SP_ENOBUFS              ENOBUFS
   #define SP_ENOTCONN             ENOTCONN
   #define SP_ETIMEDOUT            ETIMEDOUT
   #define SP_ECONNREFUSED         ECONNREFUSED
+  #define SP_EHOSTUNREACH         EHOSTUNREACH
   #define SP_EINPROGRESS          EINPROGRESS
   #define SP_EDQUOT               EDQUOT
 
@@ -4738,9 +4770,11 @@ c8** environ;
 #define SP_WASI_EFBIG         22
 #define SP_WASI_EINTR         27
 #define SP_WASI_EINVAL        28
+#define SP_WASI_EIO           29
 #define SP_WASI_EISDIR        31
 #define SP_WASI_ELOOP         32
 #define SP_WASI_EMFILE        33
+#define SP_WASI_EMLINK        34
 #define SP_WASI_ENAMETOOLONG  37
 #define SP_WASI_ENFILE        41
 #define SP_WASI_ENOENT        44
@@ -4754,6 +4788,7 @@ c8** environ;
 #define SP_WASI_EPERM         63
 #define SP_WASI_EPIPE         64
 #define SP_WASI_EROFS         69
+#define SP_WASI_ESPIPE        70
 #define SP_WASI_ETIMEDOUT     73
 #define SP_WASI_ETXTBSY       74
 #define SP_WASI_EXDEV         75
@@ -4793,6 +4828,9 @@ SP_PRIVATE sp_err_t sp_sys_err_from_wasi(__wasi_errno_t e) {
     case SP_WASI_EFBIG:        return SP_ERR_SYS_FILE_TOO_BIG;
     case SP_WASI_EINTR:        return SP_ERR_SYS_INTERRUPTED;
     case SP_WASI_ENOTEMPTY:    return SP_ERR_SYS_NOT_EMPTY;
+    case SP_WASI_EIO:          return SP_ERR_SYS_IO;
+    case SP_WASI_ESPIPE:       return SP_ERR_SYS_UNSEEKABLE;
+    case SP_WASI_EMLINK:       return SP_ERR_SYS_TOO_MANY_LINKS;
     default:                   return SP_ERR_SYS;
   }
 }
@@ -5333,7 +5371,8 @@ SP_PRIVATE sp_err_t sp_sys_err_from_errno(s64 e) {
     case SP_EINVAL:       return SP_ERR_SYS_INVALID;
     case SP_ENOSPC:
     case SP_EDQUOT:       return SP_ERR_SYS_NO_SPACE;
-    case SP_ENOMEM:       return SP_ERR_SYS_NO_MEMORY;
+    case SP_ENOMEM:
+    case SP_ENOBUFS:      return SP_ERR_SYS_NO_MEMORY;
     case SP_EMFILE:
     case SP_ENFILE:       return SP_ERR_SYS_TOO_MANY_FILES;
     case SP_ENAMETOOLONG: return SP_ERR_SYS_NAME_TOO_LONG;
@@ -5341,19 +5380,30 @@ SP_PRIVATE sp_err_t sp_sys_err_from_errno(s64 e) {
     case SP_EAGAIN:       return SP_ERR_SYS_WOULD_BLOCK;
     case SP_EPIPE:        return SP_ERR_SYS_BROKEN_PIPE;
     case SP_ENOSYS:
-    case SP_EOPNOTSUPP:   return SP_ERR_SYS_UNSUPPORTED;
+    case SP_EOPNOTSUPP:
+    case SP_EAFNOSUPPORT:
+    case SP_EPROTONOSUPPORT: return SP_ERR_SYS_UNSUPPORTED;
 #if defined(SP_ENOTSUP) && SP_ENOTSUP != SP_EOPNOTSUPP
     case SP_ENOTSUP:      return SP_ERR_SYS_UNSUPPORTED;
 #endif
     case SP_ETIMEDOUT:    return SP_ERR_SYS_TIMED_OUT;
-    case SP_ECONNRESET:   return SP_ERR_SYS_CONN_RESET;
+    case SP_ECONNRESET:
+    case SP_ECONNABORTED: return SP_ERR_SYS_CONN_RESET;
     case SP_ECONNREFUSED: return SP_ERR_SYS_CONN_REFUSED;
     case SP_ENOTCONN:     return SP_ERR_SYS_NOT_CONNECTED;
+    case SP_EADDRINUSE:   return SP_ERR_SYS_ADDR_IN_USE;
+    case SP_EADDRNOTAVAIL: return SP_ERR_SYS_ADDR_UNAVAILABLE;
+    case SP_ENETDOWN:
+    case SP_ENETUNREACH:
+    case SP_EHOSTUNREACH: return SP_ERR_SYS_UNREACHABLE;
     case SP_EXDEV:        return SP_ERR_SYS_CROSS_DEVICE;
     case SP_ELOOP:        return SP_ERR_SYS_LOOP;
     case SP_EFBIG:        return SP_ERR_SYS_FILE_TOO_BIG;
     case SP_EINTR:        return SP_ERR_SYS_INTERRUPTED;
     case SP_ENOTEMPTY:    return SP_ERR_SYS_NOT_EMPTY;
+    case SP_EIO:          return SP_ERR_SYS_IO;
+    case SP_ESPIPE:       return SP_ERR_SYS_UNSEEKABLE;
+    case SP_EMLINK:       return SP_ERR_SYS_TOO_MANY_LINKS;
     default:              return SP_ERR_SYS;
   }
 }
@@ -5690,6 +5740,8 @@ SP_PRIVATE sp_err_t sp_sys_err_from_win32(DWORD e) {
     case ERROR_FILENAME_EXCED_RANGE: return SP_ERR_SYS_NAME_TOO_LONG;
     case ERROR_NO_DATA:             return SP_ERR_SYS_WOULD_BLOCK;
     case ERROR_BROKEN_PIPE:         return SP_ERR_SYS_BROKEN_PIPE;
+    case ERROR_IO_DEVICE:
+    case ERROR_SEEK:                return SP_ERR_SYS_IO;
     case ERROR_NOT_SUPPORTED:
     case ERROR_CALL_NOT_IMPLEMENTED: return SP_ERR_SYS_UNSUPPORTED;
     case ERROR_DIR_NOT_EMPTY:       return SP_ERR_SYS_NOT_EMPTY;
@@ -5708,6 +5760,11 @@ SP_PRIVATE sp_err_t sp_sys_err_from_wsa(s32 e) {
     case WSAECONNREFUSED: return SP_ERR_SYS_CONN_REFUSED;
     case WSAETIMEDOUT:    return SP_ERR_SYS_TIMED_OUT;
     case WSAENOTCONN:     return SP_ERR_SYS_NOT_CONNECTED;
+    case WSAEADDRINUSE:   return SP_ERR_SYS_ADDR_IN_USE;
+    case WSAEADDRNOTAVAIL: return SP_ERR_SYS_ADDR_UNAVAILABLE;
+    case WSAENETDOWN:
+    case WSAENETUNREACH:
+    case WSAEHOSTUNREACH: return SP_ERR_SYS_UNREACHABLE;
     case WSAESHUTDOWN:    return SP_ERR_SYS_BROKEN_PIPE;
     case WSAENOTSOCK:
     case WSAEBADF:        return SP_ERR_SYS_BAD_FD;
@@ -5715,7 +5772,8 @@ SP_PRIVATE sp_err_t sp_sys_err_from_wsa(s32 e) {
     case WSAEINVAL:       return SP_ERR_SYS_INVALID;
     case WSAEMFILE:       return SP_ERR_SYS_TOO_MANY_FILES;
     case WSAENOBUFS:      return SP_ERR_SYS_NO_MEMORY;
-    case WSAEOPNOTSUPP:   return SP_ERR_SYS_UNSUPPORTED;
+    case WSAEOPNOTSUPP:
+    case WSAEAFNOSUPPORT: return SP_ERR_SYS_UNSUPPORTED;
     default:              return SP_ERR_SYS;
   }
 }
@@ -7393,17 +7451,21 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) 
   *out = SP_SYS_INVALID_SOCKET;
 
 #if defined(SP_WIN32)
-  SOCKET fd = accept((SOCKET)listener, SP_NULLPTR, SP_NULLPTR);
-  if (fd == INVALID_SOCKET) {
-    return sp_sys_err_from_wsa(WSAGetLastError());
+  while (true) {
+    SOCKET fd = accept((SOCKET)listener, SP_NULLPTR, SP_NULLPTR);
+    if (fd == INVALID_SOCKET) {
+      s32 e = WSAGetLastError();
+      if (e == WSAECONNRESET) continue;
+      return sp_sys_err_from_wsa(e);
+    }
+    sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
+    if (err != SP_OK) {
+      closesocket(fd);
+      return err;
+    }
+    *out = (sp_sys_socket_t)fd;
+    return SP_OK;
   }
-  sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
-  if (err != SP_OK) {
-    closesocket(fd);
-    return err;
-  }
-  *out = (sp_sys_socket_t)fd;
-  return SP_OK;
 
 #elif defined(SP_LINUX)
   while (true) {
@@ -7412,8 +7474,33 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) 
       *out = (sp_sys_socket_t)fd;
       return SP_OK;
     }
-    if (fd == -SP_EINTR) continue;
-    return sp_sys_err_from_errno(-fd);
+    switch (-fd) {
+      case SP_EINTR:
+      // We got RST while parked in the accept queue, so the only things to do
+      // are (a) retry or (b) return ABORTED to the caller and let them retry.
+      // We don't want to force every caller to encode "ABORTED? Retry", so
+      // we do it.
+      //
+      // I don't think there's a valid response besides retry, caller or callee,
+      // so all you lose is tracking aborted connections. But if you're digging
+      // around in here, this is the only reason sp.h absorbs this error.
+      case SP_ECONNABORTED:
+      // If your socket already has a pending error, Linux just returns it as
+      // accept()'s own. If that happens, you should treat it like EAGAIN,
+      // because it's not the result of the syscall you just tried.
+      //
+      // The set of errors which this case yields on the protocol, but the
+      // following is what the man page says for TCP/IP.
+      case SP_EPROTO:
+      case SP_ENOPROTOOPT:
+      case SP_ENONET:
+      case SP_ENETDOWN:
+      case SP_ENETUNREACH:
+      case SP_EHOSTDOWN:
+      case SP_EHOSTUNREACH:
+      case SP_EOPNOTSUPP: continue;
+      default: return sp_sys_err_from_errno(-fd);
+    }
   }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -7432,7 +7519,7 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) 
       *out = (sp_sys_socket_t)fd;
       return SP_OK;
     }
-    if (errno == EINTR) continue;
+    if (errno == EINTR || errno == ECONNABORTED) continue;
     return sp_sys_err_from_errno(errno);
   }
 
