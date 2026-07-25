@@ -948,7 +948,7 @@ static sp_cli_result_t cmd_run(sp_cli_t* cli) {
     }
   }
   else {
-    machine = !sp_os_is_tty(sp_sys_stdout);
+    machine = !sp_sys_is_tty(sp_sys_stdout);
   }
 
   tool->globs = cli->rest;

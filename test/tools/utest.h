@@ -159,7 +159,8 @@ UTEST_EXTERN struct utest_state_s utest_state;
 #define UTEST_PRINTF(...)                                                      \
   do {                                                                         \
     sp_str_t _utest_fmtd = sp_fmt(utest_state.mem, __VA_ARGS__).value;                               \
-    sp_os_print(_utest_fmtd);                                                 \
+    sp_io_stream_writer_t _utest_stdout = sp_io_get_std_out();                 \
+    sp_io_write_str(&_utest_stdout.base, _utest_fmtd, SP_NULLPTR);             \
     if (utest_state.has_output) {                                              \
       sp_io_write_str(&utest_state.output.base, _utest_fmtd, SP_NULLPTR);    \
     }                                                                          \
@@ -921,7 +922,8 @@ s32 utest_main(s32 argc, const c8 **argv) {
     const c8 random_order_with_seed_str[] = "--random-order=";
 
     if (0 == UTEST_STRNCMP(argv[index], help_str, sizeof(help_str) - 1)) {
-      sp_os_print(sp_str_lit(
+      sp_io_stream_writer_t help_stdout = sp_io_get_std_out();
+      sp_io_write_str(&help_stdout.base, sp_str_lit(
              "utest.h - the single file unit testing solution for C/C++!\n"
              "Command line Options:\n"
              "  --help                  Show this message and exit.\n"
@@ -935,7 +937,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
              "mixed units (s/ms/us/ns).\n"
              "  --random-order[=<seed>] Randomize the order that the tests are "
              "ran in. If the optional <seed> argument is not provided, then a "
-             "random starting seed is used.\n"));
+             "random starting seed is used.\n"), SP_NULLPTR);
       goto cleanup;
     } else if (0 ==
                UTEST_STRNCMP(argv[index], filter_str, sizeof(filter_str) - 1)) {
