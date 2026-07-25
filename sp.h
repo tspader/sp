@@ -1398,9 +1398,9 @@ SP_API sp_err_t    sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
 SP_API sp_err_t    sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
 SP_API sp_err_t    sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
-SP_API sp_err_t    sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
-SP_API sp_err_t    sp_sys_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-SP_API sp_err_t    sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+SP_API sp_err_t    sp_sys_rename(sp_sys_fd_t from, const c8* pfrom, u32 lf, sp_sys_fd_t to, const c8* pto, u32 lt);
+SP_API sp_err_t    sp_sys_link(sp_sys_fd_t from, const c8* pfrom, u32 lf, sp_sys_fd_t to, const c8* pto, u32 lt);
+SP_API sp_err_t    sp_sys_symlink(const c8* from, u32 lf, sp_sys_fd_t to, const c8* pto, u32 lt);
 SP_API sp_err_t    sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
@@ -4428,12 +4428,12 @@ sp_err_t sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len) {
   return (sp_rt.vt->unlink)(fd, path, len);
 }
 
-sp_err_t sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len) {
-  return (sp_rt.vt->rename)(from_fd, from, from_len, to_fd, to, to_len);
+sp_err_t sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
+  return (sp_rt.vt->rename)(from_fd, from, from_len, to_fd, alias, alias_len);
 }
 
-sp_err_t sp_sys_link(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
-  return (sp_rt.vt->link)(from_fd, existing, existing_len, to_fd, alias, alias_len);
+sp_err_t sp_sys_link(sp_sys_fd_t from, const c8* existing, u32 existing_len, sp_sys_fd_t to, const c8* alias, u32 alias_len) {
+  return (sp_rt.vt->link)(from, existing, existing_len, to, alias, alias_len);
 }
 
 sp_err_t sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
