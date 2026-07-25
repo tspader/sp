@@ -465,11 +465,11 @@
 // SP_STATIC_ASSERT //
 //////////////////////
 #if defined(SP_CPP) && (__cplusplus >= 201103L)
-  #define SP_STATIC_ASSERT(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
+  #define sp_static_assert(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
 #elif !defined(SP_CPP) && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)
-  #define SP_STATIC_ASSERT(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
+  #define sp_static_assert(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
 #elif !defined(SP_CPP) && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
-  #define SP_STATIC_ASSERT(CONDITION, MESSAGE) _Static_assert(CONDITION, #MESSAGE)
+  #define sp_static_assert(CONDITION, MESSAGE) _Static_assert(CONDITION, #MESSAGE)
 #else
   #ifdef __COUNTER__
     #define SP_STATIC_ASSERT_ID __COUNTER__
@@ -1335,37 +1335,22 @@ typedef struct {
   u16 port;
 } sp_sys_ipv4_t;
 
-#if defined(SP_WIN32)
-  typedef struct {
-    u32 mode;
-    u32 codepage;
-  } sp_sys_tty_attr_t;
-#elif defined(SP_LINUX)
-  typedef struct {
-    u32 c_iflag;
-    u32 c_oflag;
-    u32 c_cflag;
-    u32 c_lflag;
-    u8  c_cc[20];
-    u32 _c_ispeed;
-    u32 _c_ospeed;
-  } sp_sys_termios_t;
+#define SP_SYS_TTY_ATTR_SIZE 128
 
-  typedef sp_sys_termios_t sp_sys_tty_attr_t;
-#elif defined(SP_MACOS) || defined(SP_COSMO)
-  typedef struct termios sp_sys_tty_attr_t;
-#elif defined(SP_WASM)
-  typedef struct {
-    u32 dummy;
-  } sp_sys_tty_attr_t;
-
-#endif
+typedef struct {
+  SP_ALIGNED u8 opaque [SP_SYS_TTY_ATTR_SIZE];
+  bool present;
+} sp_sys_tty_attr_t;
 
 typedef struct {
   sp_sys_tty_attr_t in;
   sp_sys_tty_attr_t out;
-  bool in_dirty;
-  bool out_dirty;
+} sp_sys_tty_state_t;
+
+typedef enum {
+  SP_SYS_TTY_MODE_COOKED,
+  SP_SYS_TTY_MODE_RAW,
+  SP_SYS_TTY_MODE_NO_ECHO,
 } sp_sys_tty_mode_t;
 
 typedef struct {
@@ -1451,6 +1436,9 @@ SP_API sp_err_t    sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
 SP_API sp_err_t    sp_sys_tty_get(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr);
 SP_API sp_err_t    sp_sys_tty_set(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr);
 SP_API sp_err_t    sp_sys_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows);
+SP_API bool        sp_sys_is_tty(sp_sys_fd_t fd);
+SP_API sp_err_t    sp_sys_tty_mode_apply(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
+SP_API sp_err_t    sp_sys_tty_use_vt(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_socket_open(sp_sys_socket_t* out);
 SP_API sp_err_t    sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
 SP_API sp_err_t    sp_sys_socket_listen(sp_sys_socket_t socket, u32 backlog);
@@ -1496,11 +1484,8 @@ SP_API s32         sp_sys_fs_it_open_s(sp_sys_fd_t fd, sp_sys_fs_it_t* it, sp_st
 SP_API s32         sp_sys_fs_it_next(sp_sys_fs_it_t* it, sp_sys_fs_entry_t* out);
 SP_API void        sp_sys_fs_it_close(sp_sys_fs_it_t* it);
 
-SP_API bool        sp_sys_is_tty(sp_sys_fd_t fd);
-SP_API bool        sp_sys_tty_raw_in(sp_sys_tty_attr_t* attr);
-SP_API bool        sp_sys_tty_raw_out(sp_sys_tty_attr_t* attr);
-SP_API sp_err_t    sp_sys_tty_enter_raw(sp_sys_fd_t in, sp_sys_fd_t out, sp_sys_tty_mode_t* saved);
-SP_API sp_err_t    sp_sys_tty_restore(sp_sys_fd_t in, sp_sys_fd_t out, const sp_sys_tty_mode_t* saved);
+SP_API sp_err_t    sp_tty_set_mode(sp_sys_fd_t in, sp_sys_fd_t out, sp_sys_tty_mode_t mode, sp_sys_tty_state_t* saved);
+SP_API sp_err_t    sp_tty_restore(sp_sys_fd_t in, sp_sys_fd_t out, const sp_sys_tty_state_t* saved);
 
 typedef struct {
   void        (*init)(void);
@@ -1537,6 +1522,9 @@ typedef struct {
   sp_err_t    (*tty_get)(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr);
   sp_err_t    (*tty_set)(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr);
   sp_err_t    (*tty_size)(sp_sys_fd_t fd, u32* cols, u32* rows);
+  bool        (*is_tty)(sp_sys_fd_t fd);
+  sp_err_t    (*tty_mode_apply)(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
+  sp_err_t    (*tty_use_vt)(sp_sys_fd_t fd);
   sp_err_t    (*socket_open)(sp_sys_socket_t* out);
   sp_err_t    (*socket_bind)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
   sp_err_t    (*socket_listen)(sp_sys_socket_t socket, u32 backlog);
@@ -1599,6 +1587,9 @@ SP_API sp_err_t    sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds
 SP_API sp_err_t    sp_sys_tty_get_p(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr);
 SP_API sp_err_t    sp_sys_tty_set_p(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr);
 SP_API sp_err_t    sp_sys_tty_size_p(sp_sys_fd_t fd, u32* cols, u32* rows);
+SP_API bool        sp_sys_is_tty_p(sp_sys_fd_t fd);
+SP_API sp_err_t    sp_sys_tty_mode_apply_p(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
+SP_API sp_err_t    sp_sys_tty_use_vt_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_socket_open_p(sp_sys_socket_t* out);
 SP_API sp_err_t    sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
 SP_API sp_err_t    sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog);
@@ -3542,10 +3533,6 @@ typedef struct {
   } mem;
   sp_mem_arena_t* scratch [2];
   sp_env_t env;
-  struct {
-    sp_io_stream_writer_t* out;
-    sp_io_stream_writer_t* err;
-  } std;
 } sp_tls_rt_t;
 
 #if defined(SP_WIN32)
@@ -3610,26 +3597,8 @@ SP_API void           sp_sys_nt_path_free(sp_sys_nt_path_t* path);
 #define SP_SYS_SUPPORT_COPY_FILE_RANGE 0
 #define SP_SYS_SUPPORT_SENDFILE 1
 
-typedef struct {
-  const sp_sys_vtable_t* vt;
-  sp_os_signal_handler_t signal_handlers[3];
-  void* signal_userdata[3];
-  sp_mutex_t mutex;
-  sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
-  struct {
-    sp_tls_key_t key;
-    sp_tls_once_t once;
-  } tls;
-  sp_atomic_s32_t unsupported [8];
-#if defined(SP_WIN32)
-  sp_nt_dispatch_t nt;
-#endif
-} sp_rt_t;
-
 sp_tls_rt_t*   sp_tls_rt_get();
 void           sp_sys_tls_init(sp_tls_rt_t* tls);
-
-SP_API sp_rt_t sp_rt;
 
 
 /*
@@ -3769,6 +3738,28 @@ typedef struct {
   u64 remaining;
 } sp_io_limit_reader_t;
 
+typedef struct {
+  const sp_sys_vtable_t* vt;
+  sp_os_signal_handler_t signal_handlers[3];
+  void* signal_userdata[3];
+  sp_mutex_t mutex;
+  sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
+  struct {
+    sp_tls_key_t key;
+    sp_tls_once_t once;
+  } tls;
+  struct {
+    sp_io_stream_writer_t out;
+    sp_io_stream_writer_t err;
+  } std;
+  sp_atomic_s32_t unsupported [8];
+#if defined(SP_WIN32)
+  sp_nt_dispatch_t nt;
+#endif
+} sp_rt_t;
+
+SP_API sp_rt_t sp_rt;
+
 SP_API sp_err_t       sp_io_copy(sp_io_writer_t* dst, sp_io_reader_t* src, u64* bytes_copied);
 SP_API sp_err_t       sp_io_copy_b(sp_io_writer_t* dst, sp_io_reader_t* src, u8* buffer, u64 n, u64* bytes_copied);
 
@@ -3837,8 +3828,8 @@ SP_API sp_str_t       sp_io_dyn_mem_writer_as_str(sp_io_dyn_mem_writer_t* w);
 SP_API sp_str_t       sp_io_dyn_mem_writer_take_str(sp_io_dyn_mem_writer_t* w);
 SP_API const c8*      sp_io_dyn_mem_writer_as_cstr(sp_io_dyn_mem_writer_t* w);
 
-SP_API sp_io_stream_writer_t sp_io_get_std_out();
-SP_API sp_io_stream_writer_t sp_io_get_std_err();
+SP_API sp_io_writer_t* sp_io_get_std_out();
+SP_API sp_io_writer_t* sp_io_get_std_err();
 
 
 //  ███████████  ███████████      ███████      █████████  ██████████  █████████   █████████
@@ -4184,8 +4175,6 @@ SP_PRIVATE void  sp_tls_new(sp_tls_key_t* key, sp_tls_deinit_fn_t fn);
 SP_PRIVATE void* sp_tls_get(sp_tls_key_t key);
 SP_PRIVATE void  sp_tls_set(sp_tls_key_t key, void* data);
 SP_PRIVATE void  sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t);
-SP_PRIVATE sp_io_writer_t* sp_tls_std_out(sp_tls_rt_t* tls);
-SP_PRIVATE sp_io_writer_t* sp_tls_std_err(sp_tls_rt_t* tls);
 
 // @io
 SP_IMP sp_err_t sp_io_file_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
@@ -4383,6 +4372,9 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .tty_get                = sp_sys_tty_get_p,
   .tty_set                = sp_sys_tty_set_p,
   .tty_size               = sp_sys_tty_size_p,
+  .is_tty                 = sp_sys_is_tty_p,
+  .tty_mode_apply         = sp_sys_tty_mode_apply_p,
+  .tty_use_vt             = sp_sys_tty_use_vt_p,
   .socket_open            = sp_sys_socket_open_p,
   .socket_bind            = sp_sys_socket_bind_p,
   .socket_listen          = sp_sys_socket_listen_p,
@@ -4563,44 +4555,41 @@ sp_err_t sp_sys_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows) {
 }
 
 bool sp_sys_is_tty(sp_sys_fd_t fd) {
-  sp_sys_tty_attr_t attr = sp_zero;
-  return sp_sys_tty_get(fd, &attr) == SP_OK;
+  return (sp_rt.vt->is_tty)(fd);
 }
 
-sp_err_t sp_sys_tty_enter_raw(sp_sys_fd_t in, sp_sys_fd_t out, sp_sys_tty_mode_t* saved) {
-  *saved = sp_zero_s(sp_sys_tty_mode_t);
+sp_err_t sp_sys_tty_mode_apply(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode) {
+  return (sp_rt.vt->tty_mode_apply)(in, out, mode);
+}
 
-  sp_err_t err = sp_sys_tty_get(in, &saved->in);
+sp_err_t sp_sys_tty_use_vt(sp_sys_fd_t fd) {
+  return (sp_rt.vt->tty_use_vt)(fd);
+}
+
+sp_err_t sp_tty_set_mode(sp_sys_fd_t in, sp_sys_fd_t out, sp_sys_tty_mode_t mode, sp_sys_tty_state_t* saved) {
+  sp_sys_tty_state_t state = sp_zero;
+
+  sp_err_t err = sp_sys_tty_get(in, &state.in);
+  if (err) return err;
+  sp_sys_tty_get(out, &state.out);
+
+  sp_sys_tty_state_t next = state;
+  err = sp_sys_tty_mode_apply(&next.in, &next.out, mode);
   if (err) return err;
 
-  sp_sys_tty_attr_t raw = saved->in;
-  if (sp_sys_tty_raw_in(&raw)) {
-    err = sp_sys_tty_set(in, &raw);
-    if (err) return err;
-    saved->in_dirty = true;
-  }
+  err = sp_sys_tty_set(in, &next.in);
+  if (err) return err;
+  sp_sys_tty_set(out, &next.out);
 
-  if (sp_sys_tty_get(out, &saved->out) == SP_OK) {
-    raw = saved->out;
-    if (sp_sys_tty_raw_out(&raw)) {
-      saved->out_dirty = sp_sys_tty_set(out, &raw) == SP_OK;
-    }
-  }
-
+  if (saved) *saved = state;
   return SP_OK;
 }
 
-sp_err_t sp_sys_tty_restore(sp_sys_fd_t in, sp_sys_fd_t out, const sp_sys_tty_mode_t* saved) {
-  sp_err_t err = SP_OK;
+sp_err_t sp_tty_restore(sp_sys_fd_t in, sp_sys_fd_t out, const sp_sys_tty_state_t* saved) {
+  sp_err_t err = sp_sys_tty_set(out, &saved->out);
 
-  if (saved->out_dirty) {
-    err = sp_sys_tty_set(out, &saved->out);
-  }
-
-  if (saved->in_dirty) {
-    sp_err_t in_err = sp_sys_tty_set(in, &saved->in);
-    if (!err) err = in_err;
-  }
+  sp_err_t in_err = sp_sys_tty_set(in, &saved->in);
+  if (!err) err = in_err;
 
   return err;
 }
@@ -5171,6 +5160,16 @@ typedef struct {
   u16 ws_xpixel;
   u16 ws_ypixel;
 } sp_sys_winsize_t;
+
+typedef struct {
+  u32 c_iflag;
+  u32 c_oflag;
+  u32 c_cflag;
+  u32 c_lflag;
+  u8  c_cc[20];
+  u32 _c_ispeed;
+  u32 _c_ospeed;
+} sp_sys_termios_t;
 
 #if defined(SP_AMD64)
   typedef struct {
@@ -7222,6 +7221,27 @@ sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
 
 #endif
 
+////////////
+// SP_TTY //
+////////////
+#if defined(SP_WIN32)
+  typedef struct {
+    u32 mode;
+    u32 input_cp;
+    u32 output_cp;
+  } sp_console_t;
+
+  sp_static_assert(sizeof(sp_console_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
+#elif defined(SP_LINUX)
+  typedef sp_sys_termios_t sp_termios_t;
+
+  sp_static_assert(sizeof(sp_termios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  typedef struct termios sp_termios_t;
+
+  sp_static_assert(sizeof(sp_termios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
+#endif
+
 ////////////////////
 // SP_SYS_TTY_GET //
 ////////////////////
@@ -7233,21 +7253,31 @@ sp_err_t sp_sys_tty_get_p(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr) {
   if (handle == INVALID_HANDLE_VALUE || handle == SP_NULLPTR) return SP_ERR_SYS_BAD_FD;
   DWORD mode = 0;
   if (!GetConsoleMode(handle, &mode)) return sp_sys_tty_err_from_win32(GetLastError());
-  attr->mode = (u32)mode;
-  attr->codepage = (u32)GetConsoleOutputCP();
+  UINT input_cp = GetConsoleCP();
+  if (!input_cp) return sp_sys_tty_err_from_win32(GetLastError());
+  UINT output_cp = GetConsoleOutputCP();
+  if (!output_cp) return sp_sys_tty_err_from_win32(GetLastError());
+
+  sp_console_t* console = (sp_console_t*)(void*)attr->opaque;
+  console->mode = (u32)mode;
+  console->input_cp = (u32)input_cp;
+  console->output_cp = (u32)output_cp;
+  attr->present = true;
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_IOCTL, fd, SP_TCGETS, attr);
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_IOCTL, fd, SP_TCGETS, attr->opaque);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
+  attr->present = true;
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 rc;
   do {
-    rc = tcgetattr(fd, attr);
+    rc = tcgetattr(fd, (sp_termios_t*)(void*)attr->opaque);
   } while (rc == -1 && errno == SP_EINTR);
   if (rc < 0) return sp_sys_err_from_errno(errno);
+  attr->present = true;
   return SP_OK;
 
 #elif defined(SP_WASM)
@@ -7262,24 +7292,26 @@ sp_err_t sp_sys_tty_get_p(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr) {
 // SP_SYS_TTY_SET //
 ////////////////////
 sp_err_t sp_sys_tty_set_p(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr) {
+  if (!attr->present) return SP_OK;
+
 #if defined(SP_WIN32)
   HANDLE handle = (HANDLE)fd;
   if (handle == INVALID_HANDLE_VALUE || handle == SP_NULLPTR) return SP_ERR_SYS_BAD_FD;
-  if (!SetConsoleMode(handle, (DWORD)attr->mode)) return sp_sys_tty_err_from_win32(GetLastError());
-  if (attr->codepage && !SetConsoleOutputCP((UINT)attr->codepage)) {
-    return sp_sys_tty_err_from_win32(GetLastError());
-  }
+  const sp_console_t* console = (const sp_console_t*)(const void*)attr->opaque;
+  if (!SetConsoleMode(handle, (DWORD)console->mode)) return sp_sys_tty_err_from_win32(GetLastError());
+  if (!SetConsoleCP((UINT)console->input_cp)) return sp_sys_tty_err_from_win32(GetLastError());
+  if (!SetConsoleOutputCP((UINT)console->output_cp)) return sp_sys_tty_err_from_win32(GetLastError());
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_IOCTL, fd, SP_TCSETS + (u64)SP_TCSAFLUSH, attr);
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_IOCTL, fd, SP_TCSETS + (u64)SP_TCSAFLUSH, attr->opaque);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 rc;
   do {
-    rc = tcsetattr(fd, SP_TCSAFLUSH, attr);
+    rc = tcsetattr(fd, SP_TCSAFLUSH, (const sp_termios_t*)(const void*)attr->opaque);
   } while (rc == -1 && errno == SP_EINTR);
   if (rc < 0) return sp_sys_err_from_errno(errno);
   return SP_OK;
@@ -7335,45 +7367,166 @@ sp_err_t sp_sys_tty_size_p(sp_sys_fd_t fd, u32* cols, u32* rows) {
 #endif
 }
 
-///////////////////////
-// SP_SYS_TTY_RAW_IN //
-///////////////////////
-bool sp_sys_tty_raw_in(sp_sys_tty_attr_t* attr) {
+///////////////////
+// SP_SYS_IS_TTY //
+///////////////////
 #if defined(SP_WIN32)
-  attr->mode = ENABLE_VIRTUAL_TERMINAL_INPUT;
-  return true;
+SP_PRIVATE bool sp_sys_tty_win32_is_pty(HANDLE handle) {
+  if (GetFileType(handle) != FILE_TYPE_PIPE) return false;
 
-#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
-  attr->c_iflag &= (u32)~(SP_BRKINT | SP_ICRNL | SP_INPCK | SP_ISTRIP | SP_IXON);
-  attr->c_oflag &= (u32)~(SP_OPOST);
-  attr->c_cflag |= (u32)SP_CS8;
-  attr->c_lflag &= (u32)~(SP_ECHO | SP_ICANON | SP_IEXTEN | SP_ISIG);
-  attr->c_cc[SP_VMIN] = 1;
-  attr->c_cc[SP_VTIME] = 0;
-  return true;
+  struct {
+    FILE_NAME_INFO info;
+    WCHAR tail [SP_PATH_MAX];
+  } raw = sp_zero;
+  if (!GetFileInformationByHandleEx(handle, FileNameInfo, &raw, sizeof(raw))) return false;
+
+  const u16* wide = (const u16*)(const void*)raw.info.FileName;
+  u32 wide_len = (u32)(raw.info.FileNameLength / sizeof(WCHAR));
+  if (wide_len > SP_PATH_MAX) wide_len = SP_PATH_MAX;
+
+  c8 buf [SP_PATH_MAX];
+  sp_for(it, wide_len) {
+    buf[it] = wide[it] < 128 ? (c8)wide[it] : '?';
+  }
+
+  sp_str_t name = (sp_str_t) { .data = buf, .len = wide_len };
+  sp_for(it, wide_len) {
+    u32 index = wide_len - 1 - it;
+    if (buf[index] == '\\' || buf[index] == '/') {
+      name = sp_str_sub(name, (s32)index + 1, (s32)(wide_len - index - 1));
+      break;
+    }
+  }
+
+  bool named = sp_str_starts_with(name, sp_str_lit("msys-")) || sp_str_starts_with(name, sp_str_lit("cygwin-"));
+  return named && sp_str_contains(name, sp_str_lit("-pty"));
+}
+#endif
+
+bool sp_sys_is_tty_p(sp_sys_fd_t fd) {
+#if defined(SP_WIN32)
+  HANDLE handle = (HANDLE)fd;
+  if (handle == INVALID_HANDLE_VALUE || handle == SP_NULLPTR) return false;
+
+  DWORD mode = 0;
+  if (GetConsoleMode(handle, &mode)) return true;
+  return sp_sys_tty_win32_is_pty(handle);
+
+#elif defined(SP_LINUX)
+  sp_termios_t t = sp_zero;
+  return sp_syscall_retry(SP_SYSCALL_NUM_IOCTL, fd, SP_TCGETS, &t) >= 0;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  sp_termios_t t = sp_zero;
+  s32 rc;
+  do {
+    rc = tcgetattr(fd, &t);
+  } while (rc == -1 && errno == SP_EINTR);
+  return rc == 0;
 
 #elif defined(SP_WASM)
   return false;
 
 #else
-  #error "sp_sys_tty_raw_in"
+  #error "sp_sys_is_tty"
 #endif
 }
 
-////////////////////////
-// SP_SYS_TTY_RAW_OUT //
-////////////////////////
-bool sp_sys_tty_raw_out(sp_sys_tty_attr_t* attr) {
-#if defined(SP_WIN32)
-  attr->mode |= ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-  attr->codepage = CP_UTF8;
-  return true;
+///////////////////////////
+// SP_SYS_TTY_MODE_APPLY //
+///////////////////////////
+#if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+SP_PRIVATE void sp_sys_tty_mode_apply_termios(sp_termios_t* t, sp_sys_tty_mode_t mode) {
+  switch (mode) {
+    case SP_SYS_TTY_MODE_COOKED: {
+      t->c_iflag |= (u32)(SP_BRKINT | SP_ICRNL | SP_IXON);
+      t->c_oflag |= (u32)SP_OPOST;
+      t->c_lflag |= (u32)(SP_ECHO | SP_ICANON | SP_IEXTEN | SP_ISIG);
+      break;
+    }
+    case SP_SYS_TTY_MODE_RAW: {
+      t->c_iflag &= (u32)~(SP_BRKINT | SP_ICRNL | SP_INPCK | SP_ISTRIP | SP_IXON);
+      t->c_oflag &= (u32)~(SP_OPOST);
+      t->c_cflag |= (u32)SP_CS8;
+      t->c_lflag &= (u32)~(SP_ECHO | SP_ICANON | SP_IEXTEN | SP_ISIG);
+      t->c_cc[SP_VMIN] = 1;
+      t->c_cc[SP_VTIME] = 0;
+      break;
+    }
+    case SP_SYS_TTY_MODE_NO_ECHO: {
+      t->c_lflag &= (u32)~(SP_ECHO);
+      t->c_lflag |= (u32)(SP_ICANON | SP_ISIG);
+      break;
+    }
+  }
+}
+#endif
 
-#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_WASM)
-  return false;
+sp_err_t sp_sys_tty_mode_apply_p(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode) {
+  if (!in->present) return SP_ERR_SYS_NOT_TTY;
+
+#if defined(SP_WIN32)
+  sp_console_t* console_in = (sp_console_t*)(void*)in->opaque;
+  sp_console_t* console_out = (sp_console_t*)(void*)out->opaque;
+
+  switch (mode) {
+    case SP_SYS_TTY_MODE_COOKED: {
+      console_in->mode |= (u32)(ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+      break;
+    }
+    case SP_SYS_TTY_MODE_RAW: {
+      console_in->mode = (u32)ENABLE_VIRTUAL_TERMINAL_INPUT;
+      console_in->input_cp = (u32)CP_UTF8;
+      console_in->output_cp = (u32)CP_UTF8;
+      if (out->present) {
+        console_out->mode |= (u32)(ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+        console_out->input_cp = (u32)CP_UTF8;
+        console_out->output_cp = (u32)CP_UTF8;
+      }
+      break;
+    }
+    case SP_SYS_TTY_MODE_NO_ECHO: {
+      console_in->mode &= (u32)~(ENABLE_ECHO_INPUT);
+      console_in->mode |= (u32)(ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT);
+      break;
+    }
+  }
+  return SP_OK;
+
+#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+  sp_sys_tty_mode_apply_termios((sp_termios_t*)(void*)in->opaque, mode);
+  if (out->present) sp_sys_tty_mode_apply_termios((sp_termios_t*)(void*)out->opaque, mode);
+  return SP_OK;
+
+#elif defined(SP_WASM)
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
-  #error "sp_sys_tty_raw_out"
+  #error "sp_sys_tty_mode_apply"
+#endif
+}
+
+///////////////////////
+// SP_SYS_TTY_USE_VT //
+///////////////////////
+sp_err_t sp_sys_tty_use_vt_p(sp_sys_fd_t fd) {
+#if defined(SP_WIN32)
+  HANDLE handle = (HANDLE)fd;
+  if (handle == INVALID_HANDLE_VALUE || handle == SP_NULLPTR) return SP_ERR_SYS_BAD_FD;
+  DWORD mode = 0;
+  if (!GetConsoleMode(handle, &mode)) return sp_sys_tty_err_from_win32(GetLastError());
+  if (mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) return SP_OK;
+  if (!SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)) {
+    return sp_sys_tty_err_from_win32(GetLastError());
+  }
+  return SP_OK;
+
+#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_WASM)
+  (void)fd;
+  return SP_OK;
+
+#else
+  #error "sp_sys_tty_use_vt"
 #endif
 }
 
@@ -10128,8 +10281,6 @@ void sp_rt_init() {
 void sp_tls_rt_deinit(void* ptr) {
   if (!ptr) return;
   sp_tls_rt_t* tls = (sp_tls_rt_t*)ptr;
-  if (tls->std.out) sp_mem_allocator_free(tls->mem.heap, tls->std.out, sizeof(sp_io_stream_writer_t));
-  if (tls->std.err) sp_mem_allocator_free(tls->mem.heap, tls->std.err, sizeof(sp_io_stream_writer_t));
   sp_carr_for(tls->scratch, it) {
     sp_mem_arena_destroy(tls->scratch[it]);
   }
@@ -10154,28 +10305,9 @@ sp_tls_rt_t* sp_tls_rt_get() {
     sp_carr_for(tls->scratch, it) {
       tls->scratch[it] = sp_mem_arena_new(tls->mem.page);
     }
-    // std.out/std.err are wired lazily (see sp_tls_std_out/_err). Wiring them here
-    // would take the address of sp_io_stream_writer_write in code that sp_main always
-    // reaches, which on WASM forces a fd_write import even for programs that never write.
     sp_sys_tls_init(tls);
   }
   return tls;
-}
-
-sp_io_writer_t* sp_tls_std_out(sp_tls_rt_t* tls) {
-  if (!tls->std.out) {
-    tls->std.out = sp_alloc_type(tls->mem.heap, sp_io_stream_writer_t);
-    sp_io_stream_writer_from_fd(tls->std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-  }
-  return &tls->std.out->base;
-}
-
-sp_io_writer_t* sp_tls_std_err(sp_tls_rt_t* tls) {
-  if (!tls->std.err) {
-    tls->std.err = sp_alloc_type(tls->mem.heap, sp_io_stream_writer_t);
-    sp_io_stream_writer_from_fd(tls->std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
-  }
-  return &tls->std.err->base;
 }
 
 #if defined(SP_FREESTANDING)
@@ -11782,9 +11914,9 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
   if (cond) return;
 
 #if SP_ASSERT_ENABLED(SP_ASSERT_LOG)
-  sp_io_stream_writer_t io = sp_io_get_std_err();
+  sp_io_writer_t* io = sp_io_get_std_err();
   sp_fmt_io(
-    &io.base,
+    io,
     "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
     sp_fmt_cstr("assert"),
     sp_fmt_str(file),
@@ -11793,7 +11925,7 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
     sp_fmt_cstr("()"),
     sp_fmt_str(expr)
   );
-  sp_io_write_cstr(&io.base, "\n", SP_NULLPTR);
+  sp_io_write_cstr(io, "\n", SP_NULLPTR);
 #endif
 
 #if SP_ASSERT_ENABLED(SP_ASSERT_TRAP)
@@ -16494,16 +16626,23 @@ done:
   return result;
 }
 
-sp_io_stream_writer_t sp_io_get_std_out() {
-  sp_io_stream_writer_t io = sp_zero;
-  sp_io_stream_writer_from_fd(&io, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-  return io;
+// sp_rt.std.out/.err are wired lazily, on first use. Wiring them in sp_main would take
+// the address of sp_io_stream_writer_write in code that sp_main always reaches, which on
+// WASM forces a fd_write import even for programs that never write.
+sp_io_writer_t* sp_io_get_std_out() {
+  if (!sp_rt.std.out.base.write) {
+    sp_io_stream_writer_from_fd(&sp_rt.std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+    if (sp_sys_is_tty(sp_sys_stdout)) sp_sys_tty_use_vt(sp_sys_stdout);
+  }
+  return &sp_rt.std.out.base;
 }
 
-sp_io_stream_writer_t sp_io_get_std_err() {
-  sp_io_stream_writer_t io = sp_zero;
-  sp_io_stream_writer_from_fd(&io, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
-  return io;
+sp_io_writer_t* sp_io_get_std_err() {
+  if (!sp_rt.std.err.base.write) {
+    sp_io_stream_writer_from_fd(&sp_rt.std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
+    if (sp_sys_is_tty(sp_sys_stderr)) sp_sys_tty_use_vt(sp_sys_stderr);
+  }
+  return &sp_rt.std.err.base;
 }
 
 /////////
@@ -17105,8 +17244,7 @@ sp_err_t sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...) {
 sp_err_t sp_fmt_std_out(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_io_stream_writer_t io = sp_io_get_std_out();
-  sp_err_t result = sp_fmt_io_v(&io.base, sp_cstr_as_str(fmt), args);
+  sp_err_t result = sp_fmt_io_v(sp_io_get_std_out(), sp_cstr_as_str(fmt), args);
   va_end(args);
   return result;
 }
@@ -17114,8 +17252,7 @@ sp_err_t sp_fmt_std_out(const c8* fmt, ...) {
 sp_err_t sp_fmt_std_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_io_stream_writer_t io = sp_io_get_std_err();
-  sp_err_t result = sp_fmt_io_v(&io.base, sp_cstr_as_str(fmt), args);
+  sp_err_t result = sp_fmt_io_v(sp_io_get_std_err(), sp_cstr_as_str(fmt), args);
   va_end(args);
   return result;
 }
@@ -17267,53 +17404,47 @@ sp_fmt_styled_r sp_fmt_styled(sp_mem_t mem, const c8* fmt, ...) {
 }
 
 void sp_log(const c8* fmt, ...) {
-  sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_tls_std_out(tls), sp_str_view(fmt), args);
+  sp_fmt_io_v(sp_io_get_std_out(), sp_str_view(fmt), args);
   va_end(args);
-  sp_io_write_cstr(sp_tls_std_out(tls), "\n", SP_NULLPTR);
+  sp_io_write_cstr(sp_io_get_std_out(), "\n", SP_NULLPTR);
 }
 
 void sp_log_str(sp_str_t fmt, ...) {
-  sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_tls_std_out(tls), fmt, args);
+  sp_fmt_io_v(sp_io_get_std_out(), fmt, args);
   va_end(args);
-  sp_io_write_cstr(sp_tls_std_out(tls), "\n", SP_NULLPTR);
+  sp_io_write_cstr(sp_io_get_std_out(), "\n", SP_NULLPTR);
 }
 
 void sp_log_err(const c8* fmt, ...) {
-  sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_tls_std_out(tls), sp_str_view(fmt), args);
+  sp_fmt_io_v(sp_io_get_std_err(), sp_str_view(fmt), args);
   va_end(args);
-  sp_io_write_cstr(sp_tls_std_out(tls), "\n", SP_NULLPTR);
+  sp_io_write_cstr(sp_io_get_std_err(), "\n", SP_NULLPTR);
 }
 
 void sp_print(const c8* fmt, ...) {
-  sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_tls_std_out(tls), sp_str_view(fmt), args);
+  sp_fmt_io_v(sp_io_get_std_out(), sp_str_view(fmt), args);
   va_end(args);
 }
 
 void sp_print_str(sp_str_t fmt, ...) {
-  sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_tls_std_out(tls), fmt, args);
+  sp_fmt_io_v(sp_io_get_std_out(), fmt, args);
   va_end(args);
 }
 
 void sp_print_err(const c8* fmt, ...) {
-  sp_tls_rt_t* tls = sp_tls_rt_get();
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_tls_std_err(tls), sp_str_view(fmt), args);
+  sp_fmt_io_v(sp_io_get_std_err(), sp_str_view(fmt), args);
   va_end(args);
 }
 
