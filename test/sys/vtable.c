@@ -369,7 +369,6 @@ UTEST_F(sys_vtable, every_function_dispatches) {
 
   const sp_sys_vtable_t* old = sp_sys_set_vtable(&sys_vtable_mock);
 
-  sp_sys_init();
   r->read = sp_sys_read(0, SP_NULLPTR, 0, SP_NULLPTR);
   r->write = sp_sys_write(0, SP_NULLPTR, 0, SP_NULLPTR);
   r->pread = sp_sys_pread(0, SP_NULLPTR, 0, 0, SP_NULLPTR);
