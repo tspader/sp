@@ -628,7 +628,6 @@ SP_BEGIN_EXTERN_C()
   #include <sys/ioctl.h>
   #include <sys/time.h> // gettimeofday
 
-  #include <errno.h>  // errno
   #include <signal.h> // signal
   #include <unistd.h> // pipe
 
@@ -1665,7 +1664,6 @@ typedef s32 (*sp_entry_fn_t)(s32, const c8**);
 
 #if defined(SP_FREESTANDING)
   extern c8** environ;
-  extern s32 errno;
 #elif defined(SP_WASM)
   extern c8** environ;
 #endif
@@ -4171,13 +4169,9 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 
 // @sys
 #if defined(SP_LINUX)
-// This is ripped directly from musl. The only things of note here are:
-// - We set errno the same way they do, even though we only use it for EINTR and I'm not totally sure whether
-//   we ought to be using it for that. Point being, though, we set errno on every syscall error
-// - The u64 cast in sp_syscall() is just for sign conversion warnings
+// The guts of these syscall wrappers are ripped from musl
 #define __scc(X) ((s64) (X))
 
-s64 __sp_syscall_ret(u64);
 s64 __sp_syscall_ret_r(u64);
 sp_err_t __sp_syscall_ret_e(u64);
 s64 __sp_syscall_cp(s64, s64, s64, s64, s64, s64, s64);
@@ -4204,7 +4198,7 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
 #define __SP_SYSCALL_DISP(b,...) __SP_SYSCALL_CONCAT(b,__SP_SYSCALL_NARGS(__VA_ARGS__))(__VA_ARGS__)
 
 #define __sp_syscall(...) __SP_SYSCALL_DISP(__sp_syscall,__VA_ARGS__)
-#define sp_syscall(...) __sp_syscall_ret((u64)__sp_syscall(__VA_ARGS__))
+#define sp_syscall(...) __sp_syscall(__VA_ARGS__)
 #define sp_syscall_r(...) __sp_syscall_ret_r((u64)__sp_syscall(__VA_ARGS__))
 #define sp_syscall_e(...) __sp_syscall_ret_e((u64)__sp_syscall(__VA_ARGS__))
 
@@ -4562,7 +4556,6 @@ const sp_sys_vtable_t* sp_sys_set_vtable(const sp_sys_vtable_t* vt) {
 }
 #if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
 c8** environ;
-s32 errno;
 #endif
 
 //   █████████  █████ █████  █████████
@@ -5072,19 +5065,8 @@ typedef struct {
 /////////////////////
 // SYSCALL HELPERS //
 /////////////////////
-s64 __sp_syscall_ret(u64 r) {
-	if (r > -4096UL) {
-		errno = (s32)-r;
-		return -1;
-	}
-	return (s64)r;
-}
-
 s64 __sp_syscall_ret_r(u64 r) {
-	if (r > -4096UL) {
-		errno = (s32)-r;
-		return (s64)-r;
-	}
+	if (r > -4096UL) return (s64)-r;
 	return (s64)r;
 }
 
@@ -6121,8 +6103,8 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   s64 rc;
   do {
     rc = sp_syscall(SP_SYSCALL_NUM_READ, fd, buf, count);
-  } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  } while (rc == -SP_EINTR);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -6166,8 +6148,8 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
   s64 rc;
   do {
     rc = sp_syscall(SP_SYSCALL_NUM_WRITE, fd, buf, count);
-  } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  } while (rc == -SP_EINTR);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -6225,8 +6207,8 @@ sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* b
   s64 rc;
   do {
     rc = sp_syscall(SP_SYSCALL_NUM_PREAD64, fd, buf, count, offset);
-  } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  } while (rc == -SP_EINTR);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -6281,8 +6263,8 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
   s64 rc;
   do {
     rc = sp_syscall(SP_SYSCALL_NUM_PWRITE64, fd, buf, count, offset);
-  } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  } while (rc == -SP_EINTR);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -6316,16 +6298,16 @@ sp_err_t sp_sys_transfer_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* ou
   if (out_pos) {
     do {
       rc = sp_syscall(SP_SYSCALL_NUM_COPY_FILE_RANGE, in, in_pos, out, out_pos, count, 0);
-    } while (rc == -1 && errno == SP_EINTR);
+    } while (rc == -SP_EINTR);
   }
   else {
     s64 off = in_pos ? (s64)*in_pos : 0;
     do {
       rc = sp_syscall(SP_SYSCALL_NUM_SENDFILE, out, in, in_pos ? &off : SP_NULLPTR, count);
-    } while (rc == -1 && errno == SP_EINTR);
+    } while (rc == -SP_EINTR);
     if (rc >= 0 && in_pos) *in_pos = (u64)off;
   }
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_moved) *bytes_moved = (u64)rc;
   return SP_OK;
 
@@ -6360,7 +6342,8 @@ s64 sp_sys_lseek_p(sp_sys_fd_t fd, s64 offset, s32 whence) {
     case SP_IO_SEEK_END: native = 2; break;
     default: return -1;
   }
-  return sp_syscall(SP_SYSCALL_NUM_LSEEK, fd, offset, native);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_LSEEK, fd, offset, native);
+  return rc < 0 ? -1 : rc;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 native;
@@ -6525,7 +6508,7 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, sp_sys_linux_open_flags(mode, flags), 0644);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
 
@@ -6562,7 +6545,8 @@ sp_sys_fd_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
-  return (sp_sys_fd_t)sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_DIRECTORY | SP_SYS_LINUX_O_CLOEXEC, 0);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_DIRECTORY | SP_SYS_LINUX_O_CLOEXEC, 0);
+  return rc < 0 ? SP_SYS_INVALID_FD : (sp_sys_fd_t)rc;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX] = sp_zero;
@@ -6619,11 +6603,11 @@ s32 sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
   return 0;
 
 #elif defined(SP_LINUX)
-  s32 rc = (s32)sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, req, rem);
-  while (rc == -1 && errno == SP_EINTR) {
-    rc = (s32)sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, rem, rem);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, req, rem);
+  while (rc == -SP_EINTR) {
+    rc = sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, rem, rem);
   }
-  return rc;
+  return rc < 0 ? -1 : 0;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct timespec r_native   = { .tv_sec = (time_t)req->tv_sec, .tv_nsec = (long)req->tv_nsec };
@@ -7029,8 +7013,8 @@ sp_err_t sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout
     };
     sp_sys_timespec_t ts = { (s64)(timeout_ms / 1000), (s64)(timeout_ms % 1000) * 1000000 };
     s64 rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, timeout_ms ? &ts : SP_NULLPTR, 0, 0);
-    if (rc == -1 && errno == SP_EINTR) continue;
-    if (rc < 0) return sp_sys_err_from_errno(errno);
+    if (rc == -SP_EINTR) continue;
+    if (rc < 0) return sp_sys_err_from_errno(-rc);
     return rc > 0 ? SP_OK : SP_ERR_SYS_TIMED_OUT;
   }
 
@@ -7062,10 +7046,9 @@ sp_err_t sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket) {
 
 #elif defined(SP_LINUX)
   s64 flags = sp_syscall(SP_SYSCALL_NUM_FCNTL, socket, SP_F_GETFL, 0);
-  if (flags < 0) return sp_sys_err_from_errno(errno);
-  if (sp_syscall(SP_SYSCALL_NUM_FCNTL, socket, SP_F_SETFL, flags | SP_SYS_LINUX_O_NONBLOCK) < 0) {
-    return sp_sys_err_from_errno(errno);
-  }
+  if (flags < 0) return sp_sys_err_from_errno(-flags);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_FCNTL, socket, SP_F_SETFL, flags | SP_SYS_LINUX_O_NONBLOCK);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -7226,10 +7209,11 @@ s32 sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   sa.port[1] = (u8)(addr.port & 0xFF);
   sp_mem_copy(sa.addr, addr.octets, 4);
 
-  if (sp_syscall(SP_SYSCALL_NUM_CONNECT, socket, &sa, sizeof(sa)) == 0) return 0;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_CONNECT, socket, &sa, sizeof(sa));
+  if (rc == 0) return 0;
   // EINTR: the attempt proceeds asynchronously; poll for completion as if
   // EINPROGRESS
-  return (errno == SP_EINPROGRESS || errno == SP_EINTR) ? 1 : -1;
+  return (rc == -SP_EINPROGRESS || rc == -SP_EINTR) ? 1 : -1;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct sockaddr_in sa = sp_zero;
@@ -7300,8 +7284,8 @@ s32 sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) {
       *out = (sp_sys_socket_t)fd;
       return 0;
     }
-    if (errno == SP_EINTR) continue;
-    return errno == SP_EAGAIN ? 1 : -1;
+    if (fd == -SP_EINTR) continue;
+    return fd == -SP_EAGAIN ? 1 : -1;
   }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -7337,7 +7321,7 @@ s32 sp_sys_socket_close_p(sp_sys_socket_t socket) {
   return closesocket((SOCKET)socket) == 0 ? 0 : -1;
 
 #elif defined(SP_LINUX)
-  return (s32)sp_syscall(SP_SYSCALL_NUM_CLOSE, socket);
+  return sp_syscall(SP_SYSCALL_NUM_CLOSE, socket) < 0 ? -1 : 0;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   return close(socket);
@@ -7364,8 +7348,8 @@ sp_err_t sp_sys_socket_recv_p(sp_sys_socket_t socket, void* ptr, u64 size, u64* 
   s64 rc;
   do {
     rc = sp_syscall(SP_SYSCALL_NUM_RECVFROM, socket, ptr, size, 0, 0, 0);
-  } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  } while (rc == -SP_EINTR);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -7400,8 +7384,8 @@ sp_err_t sp_sys_socket_send_p(sp_sys_socket_t socket, const void* ptr, u64 size,
   s64 rc;
   do {
     rc = sp_syscall(SP_SYSCALL_NUM_SENDTO, socket, ptr, size, SP_SYS_LINUX_MSG_NOSIGNAL, 0, 0);
-  } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  } while (rc == -SP_EINTR);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -7736,8 +7720,8 @@ void sp_sys_free_p(void* ptr, u64 size) {
 
 #elif defined(SP_LINUX)
 void* sp_sys_alloc_p(u64 size) {
-  void* p = (void*)sp_syscall(SP_SYSCALL_NUM_MMAP, 0, size, SP_PROT_READ | SP_PROT_WRITE, SP_MAP_PRIVATE | SP_MAP_ANONYMOUS, -1, 0);
-  return p == SP_MAP_FAILED ? 0 : p;
+  s64 p = sp_syscall(SP_SYSCALL_NUM_MMAP, 0, size, SP_PROT_READ | SP_PROT_WRITE, SP_MAP_PRIVATE | SP_MAP_ANONYMOUS, -1, 0);
+  return (u64)p > -4096UL ? SP_NULLPTR : (void*)p;
 }
 
 void sp_sys_free_p(void* ptr, u64 size) {
@@ -8357,14 +8341,14 @@ s64 sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size) {
   c8 pbuf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, pbuf, SP_PATH_MAX);
   s64 fd = sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, pbuf, SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_CLOEXEC, 0);
-  if (fd < 0) return fd;
+  if (fd < 0) return -1;
 
   c8 proc [64] = sp_zero;
   __sp_fmt_buf(proc, 64, "/proc/self/fd/{}", sp_fmt_int(fd));
 
   s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, buf, size);
   sp_sys_close(fd);
-  return n;
+  return n < 0 ? -1 : n;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   if (!path || !buf || size == 0) return -1;
@@ -8411,7 +8395,8 @@ s64 sp_sys_get_exe_path_p(c8* buf, u64 size) {
   return (s64)utf8.len;
 
 #elif defined(SP_LINUX)
-  return sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, "/proc/self/exe", buf, size);
+  s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, "/proc/self/exe", buf, size);
+  return n < 0 ? -1 : n;
 
 #elif defined(SP_MACOS)
   if (!buf || size == 0) return -1;
@@ -11289,9 +11274,6 @@ void sp_os_sleep_ns(u64 ns) {
   };
   sp_sys_timespec_t rem = sp_zero;
   sp_sys_nanosleep(&req, &rem);
-  // while (sp_sys_nanosleep(&req, &rem) == -1 && errno == SP_EINTR) {
-  //   req = rem;
-  // }
 }
 
 void sp_os_sleep_ms(f64 ms) {
@@ -13328,7 +13310,11 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
 #if defined(SP_LINUX)
   #define sp_wait4(p, s, o, r)              sp_syscall_wait4(p, s, o, r)
 #else
-  #define sp_wait4(p, s, o, r)              wait4(p, s, o, r)
+SP_PRIVATE s32 sp_ps_wait4(s32 pid, s32* status, s32 options, void* rusage) {
+  s32 rc = (s32)wait4(pid, status, options, (struct rusage*)rusage);
+  return rc < 0 ? -errno : rc;
+}
+  #define sp_wait4(p, s, o, r)              sp_ps_wait4(p, s, o, r)
 #endif
 
 sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
@@ -13364,7 +13350,7 @@ sp_ps_status_t sp_ps_poll(sp_ps_t* ps, u32 timeout_ms) {
 
       return result;
     }
-    else if (wait_result < 0 && errno == SP_EINTR) {
+    else if (wait_result == -SP_EINTR) {
       continue;
     }
     else if (wait_result < 0) {
@@ -13398,7 +13384,7 @@ sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
 
   do {
     wait_result = sp_wait4(ps->os->pid, &wait_status, SP_POSIX_WAITPID_BLOCK, SP_NULLPTR);
-  } while (wait_result == -1 && errno == SP_EINTR);
+  } while (wait_result == -SP_EINTR);
 
   if (wait_result < 0) {
     result.state = SP_PS_STATE_DONE;
@@ -14627,7 +14613,7 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* linux_monitor = sp_alloc_type(monitor->mem, sp_fmon_os_t);
 
   linux_monitor->fd = sp_syscall_notify_init1(SP_IN_NONBLOCK | SP_IN_CLOEXEC);
-  if (linux_monitor->fd == -1) {
+  if (linux_monitor->fd < 0) {
     // Handle error but don't crash
     linux_monitor->fd = 0;
   }
@@ -14661,7 +14647,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
 
   s32 wd = sp_syscall_inotify_add_watch(os->fd, path_cstr, mask);
 
-  if (wd != -1) {
+  if (wd >= 0) {
     sp_da_push(os->fds, wd);
     sp_da_push(os->paths, sp_str_copy(monitor->mem, path));
   }
@@ -15377,7 +15363,7 @@ sp_err_t sp_io_stream_writer_read_from(sp_io_writer_t* writer, sp_io_reader_t* r
     s64 rc;
     do {
       rc = sp_syscall(SP_SYSCALL_NUM_SENDFILE, w->fd, in_fd, &off, chunk);
-    } while (rc == -1 && errno == SP_EINTR);
+    } while (rc == -SP_EINTR);
 
     if (rc < 0) {
       if (total == 0) {
@@ -15881,7 +15867,7 @@ sp_err_t sp_io_file_writer_read_from(sp_io_writer_t* writer, sp_io_reader_t* r, 
     s64 rc;
     do {
       rc = sp_syscall(SP_SYSCALL_NUM_COPY_FILE_RANGE, in_fd, in_pos, w->fd, &w->pos, chunk, 0);
-    } while (rc == -1 && errno == SP_EINTR);
+    } while (rc == -SP_EINTR);
 
     if (rc < 0) {
       if (total == 0) {
