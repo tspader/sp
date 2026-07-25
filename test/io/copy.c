@@ -359,7 +359,7 @@ UTEST_F(io_copy, file_to_pipe_sendfile) {
 
   sp_sys_fd_t pipe_r = SP_SYS_INVALID_FD;
   sp_sys_fd_t pipe_w = SP_SYS_INVALID_FD;
-  EXPECT_EQ(sp_sys_pipe(&pipe_r, &pipe_w), 0);
+  EXPECT_EQ(sp_sys_pipe(&pipe_r, &pipe_w), SP_OK);
 
   sp_io_file_reader_t r = sp_zero;
   sp_io_file_reader_from_path(&r, path);

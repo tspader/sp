@@ -1363,7 +1363,7 @@ SP_API s64         sp_sys_get_config_path(c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
 SP_API sp_sys_fd_t sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_close(sp_sys_fd_t fd);
-SP_API s32         sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
+SP_API sp_err_t    sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
 SP_API sp_err_t    sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
 SP_API sp_err_t    sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1375,24 +1375,24 @@ SP_API sp_err_t    sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 
 SP_API sp_err_t    sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
-SP_API s32         sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
+SP_API sp_err_t    sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
 SP_API s64         sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size);
-SP_API s32         sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready);
-SP_API s32         sp_sys_fd_wait(sp_sys_fd_t fd);
-SP_API s32         sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
-SP_API s32         sp_sys_socket_open(sp_sys_socket_t* out);
-SP_API s32         sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
-SP_API s32         sp_sys_socket_listen(sp_sys_socket_t socket, u32 backlog);
-SP_API s32         sp_sys_socket_connect(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
-SP_API s32         sp_sys_socket_error(sp_sys_socket_t socket);
-SP_API s32         sp_sys_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out);
-SP_API s32         sp_sys_socket_close(sp_sys_socket_t socket);
+SP_API sp_err_t    sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready);
+SP_API sp_err_t    sp_sys_fd_wait(sp_sys_fd_t fd);
+SP_API sp_err_t    sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
+SP_API sp_err_t    sp_sys_socket_open(sp_sys_socket_t* out);
+SP_API sp_err_t    sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
+SP_API sp_err_t    sp_sys_socket_listen(sp_sys_socket_t socket, u32 backlog);
+SP_API sp_err_t    sp_sys_socket_connect(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
+SP_API sp_err_t    sp_sys_socket_error(sp_sys_socket_t socket);
+SP_API sp_err_t    sp_sys_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out);
+SP_API sp_err_t    sp_sys_socket_close(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_recv(sp_sys_socket_t socket, void* buf, u64 count, u64* bytes_read);
 SP_API sp_err_t    sp_sys_socket_send(sp_sys_socket_t socket, const void* buf, u64 count, u64* bytes_written);
 SP_API sp_err_t    sp_sys_socket_wait(sp_sys_socket_t socket, bool readable, u32 timeout_ms);
 SP_API sp_err_t    sp_sys_socket_set_nonblocking(sp_sys_socket_t socket);
-SP_API s32         sp_sys_socket_reuse_addr(sp_sys_socket_t socket);
-SP_API s32         sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out);
+SP_API sp_err_t    sp_sys_socket_reuse_addr(sp_sys_socket_t socket);
+SP_API sp_err_t    sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out);
 SP_API void*       sp_sys_alloc(u64 size);
 SP_API void        sp_sys_free(void* ptr, u64 size);
 SP_API void*       sp_sys_memcpy(void* dest, const void* src, u64 n);
@@ -1440,7 +1440,7 @@ typedef struct {
   sp_err_t    (*open)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
   sp_sys_fd_t (*open_dir)(sp_sys_fd_t fd, const c8* path, u32 len);
   sp_err_t    (*close)(sp_sys_fd_t fd);
-  s32         (*pipe)(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
+  sp_err_t    (*pipe)(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
   sp_err_t    (*mkdir)(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
   sp_err_t    (*rmdir)(sp_sys_fd_t fd, const c8* path, u32 len);
   sp_err_t    (*unlink)(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1452,24 +1452,24 @@ typedef struct {
   sp_err_t    (*get_file_metadata)(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
   sp_err_t    (*chmod)(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
   sp_err_t    (*clock_gettime)(s32 clockid, sp_sys_timespec_t* ts);
-  s32         (*nanosleep)(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
+  sp_err_t    (*nanosleep)(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
   s64         (*canonicalize_path)(const c8* path, u32 len, c8* buf, u64 size);
-  s32         (*fd_ready)(sp_sys_fd_t fd, u8* ready);
-  s32         (*fd_wait)(sp_sys_fd_t fd);
-  s32         (*fds_wait)(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
-  s32         (*socket_open)(sp_sys_socket_t* out);
-  s32         (*socket_bind)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
-  s32         (*socket_listen)(sp_sys_socket_t socket, u32 backlog);
-  s32         (*socket_connect)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
-  s32         (*socket_error)(sp_sys_socket_t socket);
-  s32         (*socket_accept)(sp_sys_socket_t listener, sp_sys_socket_t* out);
-  s32         (*socket_close)(sp_sys_socket_t socket);
+  sp_err_t    (*fd_ready)(sp_sys_fd_t fd, u8* ready);
+  sp_err_t    (*fd_wait)(sp_sys_fd_t fd);
+  sp_err_t    (*fds_wait)(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
+  sp_err_t    (*socket_open)(sp_sys_socket_t* out);
+  sp_err_t    (*socket_bind)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
+  sp_err_t    (*socket_listen)(sp_sys_socket_t socket, u32 backlog);
+  sp_err_t    (*socket_connect)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
+  sp_err_t    (*socket_error)(sp_sys_socket_t socket);
+  sp_err_t    (*socket_accept)(sp_sys_socket_t listener, sp_sys_socket_t* out);
+  sp_err_t    (*socket_close)(sp_sys_socket_t socket);
   sp_err_t    (*socket_recv)(sp_sys_socket_t socket, void* buf, u64 count, u64* bytes_read);
   sp_err_t    (*socket_send)(sp_sys_socket_t socket, const void* buf, u64 count, u64* bytes_written);
   sp_err_t    (*socket_wait)(sp_sys_socket_t socket, bool readable, u32 timeout_ms);
   sp_err_t    (*socket_set_nonblocking)(sp_sys_socket_t socket);
-  s32         (*socket_reuse_addr)(sp_sys_socket_t socket);
-  s32         (*socket_local_port)(sp_sys_socket_t socket, u16* out);
+  sp_err_t    (*socket_reuse_addr)(sp_sys_socket_t socket);
+  sp_err_t    (*socket_local_port)(sp_sys_socket_t socket, u16* out);
   void*       (*alloc)(u64 size);
   void        (*free)(void* ptr, u64 size);
   void*       (*memcpy)(void* dest, const void* src, u64 n);
@@ -1500,7 +1500,7 @@ SP_API s64         sp_sys_get_config_path_p(c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
 SP_API sp_sys_fd_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_close_p(sp_sys_fd_t fd);
-SP_API s32         sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
+SP_API sp_err_t    sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
 SP_API sp_err_t    sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
 SP_API sp_err_t    sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1512,24 +1512,24 @@ SP_API sp_err_t    sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u3
 SP_API sp_err_t    sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_clock_gettime_p(s32 clockid, sp_sys_timespec_t* ts);
-SP_API s32         sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
+SP_API sp_err_t    sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
 SP_API s64         sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size);
-SP_API s32         sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready);
-SP_API s32         sp_sys_fd_wait_p(sp_sys_fd_t fd);
-SP_API s32         sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
-SP_API s32         sp_sys_socket_open_p(sp_sys_socket_t* out);
-SP_API s32         sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
-SP_API s32         sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog);
-SP_API s32         sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
-SP_API s32         sp_sys_socket_error_p(sp_sys_socket_t socket);
-SP_API s32         sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out);
-SP_API s32         sp_sys_socket_close_p(sp_sys_socket_t socket);
+SP_API sp_err_t    sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready);
+SP_API sp_err_t    sp_sys_fd_wait_p(sp_sys_fd_t fd);
+SP_API sp_err_t    sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
+SP_API sp_err_t    sp_sys_socket_open_p(sp_sys_socket_t* out);
+SP_API sp_err_t    sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
+SP_API sp_err_t    sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog);
+SP_API sp_err_t    sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
+SP_API sp_err_t    sp_sys_socket_error_p(sp_sys_socket_t socket);
+SP_API sp_err_t    sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out);
+SP_API sp_err_t    sp_sys_socket_close_p(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_recv_p(sp_sys_socket_t socket, void* buf, u64 count, u64* bytes_read);
 SP_API sp_err_t    sp_sys_socket_send_p(sp_sys_socket_t socket, const void* buf, u64 count, u64* bytes_written);
 SP_API sp_err_t    sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout_ms);
 SP_API sp_err_t    sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket);
-SP_API s32         sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket);
-SP_API s32         sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out);
+SP_API sp_err_t    sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket);
+SP_API sp_err_t    sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out);
 SP_API void*       sp_sys_alloc_p(u64 size);
 SP_API void        sp_sys_free_p(void* ptr, u64 size);
 SP_API void*       sp_sys_memcpy_p(void* dest, const void* src, u64 n);
@@ -4387,7 +4387,7 @@ sp_err_t sp_sys_close(sp_sys_fd_t fd) {
   return (sp_rt.vt->close)(fd);
 }
 
-s32 sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
+sp_err_t sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
   return (sp_rt.vt->pipe)(read_end, write_end);
 }
 
@@ -4435,7 +4435,7 @@ sp_err_t sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
   return (sp_rt.vt->clock_gettime)(clockid, ts);
 }
 
-s32 sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
+sp_err_t sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
   return (sp_rt.vt->nanosleep)(req, rem);
 }
 
@@ -4443,43 +4443,43 @@ s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   return (sp_rt.vt->canonicalize_path)(path, len, buf, size);
 }
 
-s32 sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready) {
+sp_err_t sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready) {
   return (sp_rt.vt->fd_ready)(fd, ready);
 }
 
-s32 sp_sys_fd_wait(sp_sys_fd_t fd) {
+sp_err_t sp_sys_fd_wait(sp_sys_fd_t fd) {
   return (sp_rt.vt->fd_wait)(fd);
 }
 
-s32 sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
+sp_err_t sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
   return (sp_rt.vt->fds_wait)(fds, ready, nfds);
 }
 
-s32 sp_sys_socket_open(sp_sys_socket_t* out) {
+sp_err_t sp_sys_socket_open(sp_sys_socket_t* out) {
   return (sp_rt.vt->socket_open)(out);
 }
 
-s32 sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
+sp_err_t sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   return (sp_rt.vt->socket_bind)(socket, addr);
 }
 
-s32 sp_sys_socket_listen(sp_sys_socket_t socket, u32 backlog) {
+sp_err_t sp_sys_socket_listen(sp_sys_socket_t socket, u32 backlog) {
   return (sp_rt.vt->socket_listen)(socket, backlog);
 }
 
-s32 sp_sys_socket_connect(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
+sp_err_t sp_sys_socket_connect(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   return (sp_rt.vt->socket_connect)(socket, addr);
 }
 
-s32 sp_sys_socket_error(sp_sys_socket_t socket) {
+sp_err_t sp_sys_socket_error(sp_sys_socket_t socket) {
   return (sp_rt.vt->socket_error)(socket);
 }
 
-s32 sp_sys_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out) {
+sp_err_t sp_sys_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out) {
   return (sp_rt.vt->socket_accept)(listener, out);
 }
 
-s32 sp_sys_socket_close(sp_sys_socket_t socket) {
+sp_err_t sp_sys_socket_close(sp_sys_socket_t socket) {
   return (sp_rt.vt->socket_close)(socket);
 }
 
@@ -4499,11 +4499,11 @@ sp_err_t sp_sys_socket_set_nonblocking(sp_sys_socket_t socket) {
   return (sp_rt.vt->socket_set_nonblocking)(socket);
 }
 
-s32 sp_sys_socket_reuse_addr(sp_sys_socket_t socket) {
+sp_err_t sp_sys_socket_reuse_addr(sp_sys_socket_t socket) {
   return (sp_rt.vt->socket_reuse_addr)(socket);
 }
 
-s32 sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out) {
+sp_err_t sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out) {
   return (sp_rt.vt->socket_local_port)(socket, out);
 }
 
@@ -5701,6 +5701,7 @@ SP_PRIVATE sp_err_t sp_sys_err_from_win32(DWORD e) {
 
 SP_PRIVATE sp_err_t sp_sys_err_from_wsa(s32 e) {
   switch (e) {
+    case 0:               return SP_OK;
     case WSAEWOULDBLOCK:  return SP_ERR_SYS_WOULD_BLOCK;
     case WSAECONNRESET:
     case WSAECONNABORTED: return SP_ERR_SYS_CONN_RESET;
@@ -6101,44 +6102,45 @@ sp_err_t sp_sys_close_p(sp_sys_fd_t fd) {
 /////////////////
 // SP_SYS_PIPE //
 /////////////////
-s32 sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
+sp_err_t sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
 #if defined(SP_WIN32)
   HANDLE r = SP_NULLPTR;
   HANDLE w = SP_NULLPTR;
   SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), SP_NULLPTR, FALSE };
-  if (!CreatePipe(&r, &w, &sa, 0)) return -1;
+  if (!CreatePipe(&r, &w, &sa, 0)) return sp_sys_err_from_win32(GetLastError());
   DWORD mode = PIPE_NOWAIT;
   if (!SetNamedPipeHandleState(r, &mode, SP_NULLPTR, SP_NULLPTR)) {
+    sp_err_t err = sp_sys_err_from_win32(GetLastError());
     CloseHandle(r);
     CloseHandle(w);
-    return -1;
+    return err;
   }
   *read_end = (sp_sys_fd_t)r;
   *write_end = (sp_sys_fd_t)w;
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_LINUX)
   s32 fds[2];
-  s32 r = (s32)sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_SYS_LINUX_O_NONBLOCK | SP_SYS_LINUX_O_CLOEXEC, 0, 0, 0);
-  if (r < 0) return -1;
+  s64 r = sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_SYS_LINUX_O_NONBLOCK | SP_SYS_LINUX_O_CLOEXEC, 0, 0, 0);
+  if (r < 0) return sp_sys_err_from_errno(-r);
   *read_end = fds[0];
   *write_end = fds[1];
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 fds[2];
-  if (pipe(fds) < 0) return -1;
+  if (pipe(fds) < 0) return sp_sys_err_from_errno(errno);
   fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
   fcntl(fds[0], F_SETFD, fcntl(fds[0], F_GETFD) | FD_CLOEXEC);
   fcntl(fds[1], F_SETFD, fcntl(fds[1], F_GETFD) | FD_CLOEXEC);
   *read_end = fds[0];
   *write_end = fds[1];
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_WASM)
   *read_end = SP_SYS_INVALID_FD;
   *write_end = SP_SYS_INVALID_FD;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_pipe"
@@ -6641,19 +6643,20 @@ sp_sys_fd_t sp_sys_get_root_p(s32 it) {
 //////////////////////
 // SP_SYS_NANOSLEEP //
 //////////////////////
-s32 sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
+sp_err_t sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
 #if defined(SP_WIN32)
   (void)rem;
-  u64 ns = (u64)req->tv_sec * 1000000000ULL + (u64)req->tv_nsec;
-  Sleep((DWORD)(ns / 1000000ULL));
-  return 0;
+  u64 ns = (u64)req->tv_sec * SP_TM_S_TO_NS + (u64)req->tv_nsec;
+  Sleep((DWORD)(ns / SP_TM_MS_TO_NS));
+  return SP_OK;
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, req, rem);
   while (rc == -SP_EINTR) {
     rc = sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, rem, rem);
   }
-  return rc < 0 ? -1 : 0;
+  if (rc < 0) { sp_unreachable_return(SP_ERR_SYS_BUG); }
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct timespec r_native   = { .tv_sec = (time_t)req->tv_sec, .tv_nsec = (long)req->tv_nsec };
@@ -6667,7 +6670,8 @@ s32 sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
     rem->tv_sec  = (s64)rem_native.tv_sec;
     rem->tv_nsec = (s64)rem_native.tv_nsec;
   }
-  return rc;
+  if (rc != 0) { sp_unreachable_return(SP_ERR_SYS_BUG); }
+  return SP_OK;
 
 #elif defined(SP_WASM)
   __wasi_timestamp_t ns = (__wasi_timestamp_t)(req->tv_sec * SP_TM_S_TO_NS + req->tv_nsec);
@@ -6691,7 +6695,7 @@ s32 sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
     rem->tv_sec = 0;
     rem->tv_nsec = 0;
   }
-  return 0;
+  return SP_OK;
 
 #else
   #error "sp_sys_nanosleep"
@@ -6750,77 +6754,77 @@ s64 sp_sys_get_config_path_p(c8* buf, u64 size) {
 #define SP_SYS_FDS_WAIT_CAP 64
 
 #if defined(SP_WIN32)
-static s32 sp_sys_fd_ready_handle(HANDLE h, u8* out_ready) {
+static void sp_sys_fd_ready_handle(HANDLE h, u8* out_ready) {
   *out_ready = 0;
-  if (h == SP_NULLPTR || h == INVALID_HANDLE_VALUE) return 0;
+  if (h == SP_NULLPTR || h == INVALID_HANDLE_VALUE) return;
 
   DWORD type = GetFileType(h);
   if (type == FILE_TYPE_PIPE) {
     DWORD avail = 0;
     if (!PeekNamedPipe(h, SP_NULLPTR, 0, SP_NULLPTR, &avail, SP_NULLPTR)) {
       *out_ready = 1;
-      return 0;
+      return;
     }
     *out_ready = avail > 0 ? 1 : 0;
-    return 0;
+    return;
   }
   if (type == FILE_TYPE_CHAR) {
     DWORD console_mode = 0;
     if (GetConsoleMode(h, &console_mode)) {
       for (;;) {
         DWORD num_events = 0;
-        if (!GetNumberOfConsoleInputEvents(h, &num_events) || num_events == 0) return 0;
+        if (!GetNumberOfConsoleInputEvents(h, &num_events) || num_events == 0) return;
 
         INPUT_RECORD rec;
         DWORD peeked = 0;
-        if (!PeekConsoleInputW(h, &rec, 1, &peeked) || peeked == 0) return 0;
+        if (!PeekConsoleInputW(h, &rec, 1, &peeked) || peeked == 0) return;
         if (rec.EventType == KEY_EVENT && rec.Event.KeyEvent.bKeyDown) {
           *out_ready = 1;
-          return 0;
+          return;
         }
 
         DWORD consumed = 0;
-        if (!ReadConsoleInputW(h, &rec, 1, &consumed) || consumed == 0) return 0;
+        if (!ReadConsoleInputW(h, &rec, 1, &consumed) || consumed == 0) return;
       }
     }
     *out_ready = (WaitForSingleObject(h, 0) == WAIT_OBJECT_0) ? 1 : 0;
-    return 0;
+    return;
   }
   if (type == FILE_TYPE_DISK) {
     *out_ready = 1;
-    return 0;
+    return;
   }
   if (type == FILE_TYPE_UNKNOWN) {
-    return 0;
+    return;
   }
   *out_ready = (WaitForSingleObject(h, 0) == WAIT_OBJECT_0) ? 1 : 0;
-  return 0;
 }
 
-s32 sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
-  return sp_sys_fd_ready_handle((HANDLE)fd, ready);
+sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
+  sp_sys_fd_ready_handle((HANDLE)fd, ready);
+  return SP_OK;
 }
 
-s32 sp_sys_fd_wait_p(sp_sys_fd_t fd) {
+sp_err_t sp_sys_fd_wait_p(sp_sys_fd_t fd) {
   for (;;) {
     u8 ready = 0;
-    if (sp_sys_fd_ready_handle((HANDLE)fd, &ready) != 0) return -1;
-    if (ready) return 0;
+    sp_sys_fd_ready_handle((HANDLE)fd, &ready);
+    if (ready) return SP_OK;
     Sleep(1);
   }
 }
 
-s32 sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  if (nfds == 0) return 0;
-  if (nfds > SP_SYS_FDS_WAIT_CAP) return -1;
+sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
+  if (nfds == 0) return SP_OK;
+  if (nfds > SP_SYS_FDS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
   for (;;) {
-    s32 count = 0;
+    u32 n = 0;
     for (u64 i = 0; i < nfds; i++) {
       ready[i] = 0;
-      if (sp_sys_fd_ready_handle((HANDLE)fds[i], &ready[i]) != 0) return -1;
-      if (ready[i]) count++;
+      sp_sys_fd_ready_handle((HANDLE)fds[i], &ready[i]);
+      if (ready[i]) n++;
     }
-    if (count > 0) return count;
+    if (n > 0) return SP_OK;
     Sleep(1);
   }
 }
@@ -6839,44 +6843,43 @@ typedef struct {
 
 #define SP_SYS_LINUX_MSG_NOSIGNAL 0x4000
 
-s32 sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
+sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
   *ready = 0;
   sp_sys_linux_pollfd_t pfd = { .fd = fd, .events = SP_SYS_LINUX_POLLIN };
   sp_sys_timespec_t ts = { 0, 0 };
-  s32 r = (s32)sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
-  if (r < 0) return -1;
+  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
+  if (r < 0) return sp_sys_err_from_errno(-r);
   if (r > 0 && (pfd.revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR))) *ready = 1;
-  return 0;
+  return SP_OK;
 }
 
-s32 sp_sys_fd_wait_p(sp_sys_fd_t fd) {
+sp_err_t sp_sys_fd_wait_p(sp_sys_fd_t fd) {
   sp_sys_linux_pollfd_t pfd = { .fd = fd, .events = SP_SYS_LINUX_POLLIN };
-  s32 r = (s32)sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, SP_NULLPTR, 0, 0);
-  return r < 0 ? -1 : 0;
+  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, &pfd, 1, SP_NULLPTR, 0, 0);
+  if (r < 0) return sp_sys_err_from_errno(-r);
+  return SP_OK;
 }
 
-s32 sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  if (nfds == 0) return 0;
-  if (nfds > SP_SYS_FDS_WAIT_CAP) return -1;
+sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
+  if (nfds == 0) return SP_OK;
+  if (nfds > SP_SYS_FDS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
   sp_sys_linux_pollfd_t pfds[SP_SYS_FDS_WAIT_CAP];
   for (u64 i = 0; i < nfds; i++) {
     pfds[i] = (sp_sys_linux_pollfd_t){ .fd = fds[i], .events = SP_SYS_LINUX_POLLIN };
     ready[i] = 0;
   }
-  s32 r = (s32)sp_syscall(SP_SYSCALL_NUM_PPOLL, pfds, nfds, SP_NULLPTR, 0, 0);
-  if (r < 0) return -1;
-  s32 count = 0;
+  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, pfds, nfds, SP_NULLPTR, 0, 0);
+  if (r < 0) return sp_sys_err_from_errno(-r);
   for (u64 i = 0; i < nfds; i++) {
     if (pfds[i].revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR)) {
       ready[i] = 1;
-      count++;
     }
   }
-  return count;
+  return SP_OK;
 }
 
 #elif defined(SP_WASM)
-static s32 sp_sys_fd_wasi_ready(sp_sys_fd_t fd, u8* out_ready) {
+static sp_err_t sp_sys_fd_wasi_ready(sp_sys_fd_t fd, u8* out_ready) {
   *out_ready = 0;
   __wasi_subscription_t subs[2] = {
     {
@@ -6896,21 +6899,22 @@ static s32 sp_sys_fd_wasi_ready(sp_sys_fd_t fd, u8* out_ready) {
   };
   __wasi_event_t events[2];
   __wasi_size_t nev = 0;
-  if (__wasi_poll_oneoff(subs, events, 2, &nev)) return -1;
+  __wasi_errno_t err = __wasi_poll_oneoff(subs, events, 2, &nev);
+  if (err) return sp_sys_err_from_wasi(err);
   for (__wasi_size_t i = 0; i < nev; i++) {
     if (events[i].userdata == 0) {
       *out_ready = 1;
-      return 0;
+      return SP_OK;
     }
   }
-  return 0;
+  return SP_OK;
 }
 
-s32 sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
+sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
   return sp_sys_fd_wasi_ready(fd, ready);
 }
 
-s32 sp_sys_fd_wait_p(sp_sys_fd_t fd) {
+sp_err_t sp_sys_fd_wait_p(sp_sys_fd_t fd) {
   __wasi_subscription_t sub = {
     .userdata = 0,
     .u = {
@@ -6920,13 +6924,14 @@ s32 sp_sys_fd_wait_p(sp_sys_fd_t fd) {
   };
   __wasi_event_t event;
   __wasi_size_t nev = 0;
-  if (__wasi_poll_oneoff(&sub, &event, 1, &nev)) return -1;
-  return 0;
+  __wasi_errno_t err = __wasi_poll_oneoff(&sub, &event, 1, &nev);
+  if (err) return sp_sys_err_from_wasi(err);
+  return SP_OK;
 }
 
-s32 sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  if (nfds == 0) return 0;
-  if (nfds > SP_SYS_FDS_WAIT_CAP) return -1;
+sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
+  if (nfds == 0) return SP_OK;
+  if (nfds > SP_SYS_FDS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
   __wasi_subscription_t subs[SP_SYS_FDS_WAIT_CAP];
   __wasi_event_t        events[SP_SYS_FDS_WAIT_CAP];
   for (u64 i = 0; i < nfds; i++) {
@@ -6940,52 +6945,57 @@ s32 sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
     ready[i] = 0;
   }
   __wasi_size_t nev = 0;
-  if (__wasi_poll_oneoff(subs, events, (__wasi_size_t)nfds, &nev)) return -1;
-  s32 count = 0;
+  __wasi_errno_t err = __wasi_poll_oneoff(subs, events, (__wasi_size_t)nfds, &nev);
+  if (err) return sp_sys_err_from_wasi(err);
   for (__wasi_size_t i = 0; i < nev; i++) {
     u64 idx = (u64)events[i].userdata;
-    if (idx < nfds && !ready[idx]) {
-      ready[idx] = 1;
-      count++;
-    }
+    if (idx < nfds) ready[idx] = 1;
   }
-  return count;
+  return SP_OK;
 }
 
 #else
-s32 sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
+sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
   *ready = 0;
   struct pollfd pfd = { .fd = fd, .events = POLLIN };
-  s32 r = (s32)poll(&pfd, 1, 0);
-  if (r < 0) return -1;
+  s32 r;
+  do {
+    r = (s32)poll(&pfd, 1, 0);
+  } while (r < 0 && errno == EINTR);
+  if (r < 0) return sp_sys_err_from_errno(errno);
   if (r > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR))) *ready = 1;
-  return 0;
+  return SP_OK;
 }
 
-s32 sp_sys_fd_wait_p(sp_sys_fd_t fd) {
+sp_err_t sp_sys_fd_wait_p(sp_sys_fd_t fd) {
   struct pollfd pfd = { .fd = fd, .events = POLLIN };
-  s32 r = (s32)poll(&pfd, 1, -1);
-  return r < 0 ? -1 : 0;
+  s32 r;
+  do {
+    r = (s32)poll(&pfd, 1, -1);
+  } while (r < 0 && errno == EINTR);
+  if (r < 0) return sp_sys_err_from_errno(errno);
+  return SP_OK;
 }
 
-s32 sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  if (nfds == 0) return 0;
-  if (nfds > SP_SYS_FDS_WAIT_CAP) return -1;
+sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
+  if (nfds == 0) return SP_OK;
+  if (nfds > SP_SYS_FDS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
   struct pollfd pfds[SP_SYS_FDS_WAIT_CAP];
   for (u64 i = 0; i < nfds; i++) {
     pfds[i] = (struct pollfd){ .fd = fds[i], .events = POLLIN };
     ready[i] = 0;
   }
-  s32 r = (s32)poll(pfds, (nfds_t)nfds, -1);
-  if (r < 0) return -1;
-  s32 count = 0;
+  s32 r;
+  do {
+    r = (s32)poll(pfds, (nfds_t)nfds, -1);
+  } while (r < 0 && errno == EINTR);
+  if (r < 0) return sp_sys_err_from_errno(errno);
   for (u64 i = 0; i < nfds; i++) {
     if (pfds[i].revents & (POLLIN | POLLHUP | POLLERR)) {
       ready[i] = 1;
-      count++;
     }
   }
-  return count;
+  return SP_OK;
 }
 
 #endif
@@ -7042,6 +7052,12 @@ SP_PRIVATE void sp_sys_win32_speed_up_loopback_connect(SOCKET fd) {
 //////////////////////
 // SP_SYS_SOCKET_WAIT //
 //////////////////////
+#if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+SP_PRIVATE u64 sp_sys_ns_from_timespec(s64 sec, s64 nsec) {
+  return (u64)sec * SP_TM_S_TO_NS + (u64)nsec;
+}
+#endif
+
 sp_err_t sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
 #if defined(SP_WIN32)
   WSAPOLLFD pfd = sp_zero;
@@ -7052,23 +7068,58 @@ sp_err_t sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout
   return rc > 0 ? SP_OK : SP_ERR_SYS_TIMED_OUT;
 
 #elif defined(SP_LINUX)
+  u64 deadline_ns = 0;
+  u64 remaining_ns = (u64)timeout_ms * SP_TM_MS_TO_NS;
+  if (timeout_ms) {
+    sp_sys_timespec_t now = sp_zero;
+    sp_syscall(SP_SYSCALL_NUM_CLOCK_GETTIME, SP_CLOCK_MONOTONIC, &now);
+    deadline_ns = sp_sys_ns_from_timespec(now.tv_sec, now.tv_nsec) + remaining_ns;
+  }
   while (true) {
     sp_sys_linux_pollfd_t pfd = {
       .fd = socket,
       .events = (s16)(readable ? SP_SYS_LINUX_POLLIN : SP_SYS_LINUX_POLLOUT),
     };
-    sp_sys_timespec_t ts = { (s64)(timeout_ms / 1000), (s64)(timeout_ms % 1000) * 1000000 };
+    sp_sys_timespec_t ts = {
+      .tv_sec = (s64)(remaining_ns / SP_TM_S_TO_NS),
+      .tv_nsec = (s64)(remaining_ns % SP_TM_S_TO_NS),
+    };
     s64 rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, timeout_ms ? &ts : SP_NULLPTR, 0, 0);
-    if (rc == -SP_EINTR) continue;
+    if (rc == -SP_EINTR) {
+      if (timeout_ms) {
+        sp_sys_timespec_t now = sp_zero;
+        sp_syscall(SP_SYSCALL_NUM_CLOCK_GETTIME, SP_CLOCK_MONOTONIC, &now);
+        u64 now_ns = sp_sys_ns_from_timespec(now.tv_sec, now.tv_nsec);
+        if (now_ns >= deadline_ns) return SP_ERR_SYS_TIMED_OUT;
+        remaining_ns = deadline_ns - now_ns;
+      }
+      continue;
+    }
     if (rc < 0) return sp_sys_err_from_errno(-rc);
     return rc > 0 ? SP_OK : SP_ERR_SYS_TIMED_OUT;
   }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
+  u64 deadline_ns = 0;
+  s32 remaining_ms = timeout_ms ? (s32)sp_min(timeout_ms, (u32)SP_LIMIT_S32_MAX) : -1;
+  if (timeout_ms) {
+    struct timespec now = sp_zero;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    deadline_ns = sp_sys_ns_from_timespec((s64)now.tv_sec, (s64)now.tv_nsec) + (u64)timeout_ms * SP_TM_MS_TO_NS;
+  }
   while (true) {
     struct pollfd pfd = { .fd = socket, .events = (s16)(readable ? POLLIN : POLLOUT) };
-    s32 rc = poll(&pfd, 1, timeout_ms ? (s32)sp_min(timeout_ms, (u32)SP_LIMIT_S32_MAX) : -1);
-    if (rc < 0 && errno == EINTR) continue;
+    s32 rc = poll(&pfd, 1, remaining_ms);
+    if (rc < 0 && errno == EINTR) {
+      if (timeout_ms) {
+        struct timespec now = sp_zero;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        u64 now_ns = sp_sys_ns_from_timespec((s64)now.tv_sec, (s64)now.tv_nsec);
+        if (now_ns >= deadline_ns) return SP_ERR_SYS_TIMED_OUT;
+        remaining_ms = (s32)sp_min((deadline_ns - now_ns) / SP_TM_MS_TO_NS + 1, (u64)SP_LIMIT_S32_MAX);
+      }
+      continue;
+    }
     if (rc < 0) return sp_sys_err_from_errno(errno);
     return rc > 0 ? SP_OK : SP_ERR_SYS_TIMED_OUT;
   }
@@ -7114,82 +7165,96 @@ sp_err_t sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket) {
 //////////////////////////////
 // SP_SYS_SOCKET_REUSE_ADDR //
 //////////////////////////////
-s32 sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket) {
+sp_err_t sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket) {
 #if defined(SP_WIN32)
   BOOL reuse = TRUE;
-  return setsockopt((SOCKET)socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) == 0 ? 0 : -1;
+  if (setsockopt((SOCKET)socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) != 0) {
+    return sp_sys_err_from_wsa(WSAGetLastError());
+  }
+  return SP_OK;
 
 #elif defined(SP_LINUX)
   s32 reuse = 1;
-  return sp_syscall(SP_SYSCALL_NUM_SETSOCKOPT, socket, SP_SYS_LINUX_SOL_SOCKET, SP_SYS_LINUX_SO_REUSEADDR, &reuse, sizeof(reuse)) == 0 ? 0 : -1;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_SETSOCKOPT, socket, SP_SYS_LINUX_SOL_SOCKET, SP_SYS_LINUX_SO_REUSEADDR, &reuse, sizeof(reuse));
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   int reuse = 1;
-  return setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == 0 ? 0 : -1;
+  if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) != 0) {
+    return sp_sys_err_from_errno(errno);
+  }
+  return SP_OK;
 
 #else
   (void)socket;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
 //////////////////////
 // SP_SYS_SOCKET_OPEN //
 //////////////////////
-s32 sp_sys_socket_open_p(sp_sys_socket_t* out) {
+sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out) {
   *out = SP_SYS_INVALID_SOCKET;
 
 #if defined(SP_WIN32)
   sp_sys_win32_wsa_ensure();
   SOCKET fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (fd == INVALID_SOCKET) return -1;
-  if (sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd) != 0) {
+  if (fd == INVALID_SOCKET) return sp_sys_err_from_wsa(WSAGetLastError());
+  sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
+  if (err != SP_OK) {
     closesocket(fd);
-    return -1;
+    return err;
   }
   *out = (sp_sys_socket_t)fd;
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_LINUX)
   s64 fd = sp_syscall(SP_SYSCALL_NUM_SOCKET, SP_SYS_LINUX_AF_INET, SP_SYS_LINUX_SOCK_STREAM, 0);
-  if (fd < 0) return -1;
-  if (sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd) != 0) {
+  if (fd < 0) return sp_sys_err_from_errno(-fd);
+  sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
+  if (err != SP_OK) {
     sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
-    return -1;
+    return err;
   }
   *out = (sp_sys_socket_t)fd;
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   int fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (fd < 0) return -1;
+  if (fd < 0) return sp_sys_err_from_errno(errno);
 #if defined(SP_MACOS)
   int nosigpipe = 1;
   setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
 #endif
-  if (sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd) != 0) {
+  sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
+  if (err != SP_OK) {
     close(fd);
-    return -1;
+    return err;
   }
   *out = (sp_sys_socket_t)fd;
-  return 0;
+  return SP_OK;
 
 #else
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
 //////////////////////
 // SP_SYS_SOCKET_BIND //
 //////////////////////
-s32 sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
+sp_err_t sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
 #if defined(SP_WIN32)
   struct sockaddr_in sa = sp_zero;
   sa.sin_family = AF_INET;
   ((u8*)&sa.sin_port)[0] = (u8)(addr.port >> 8);
   ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
   sp_mem_copy(&sa.sin_addr, addr.octets, 4);
-  return bind((SOCKET)socket, (struct sockaddr*)&sa, sizeof(sa)) == 0 ? 0 : -1;
+  if (bind((SOCKET)socket, (struct sockaddr*)&sa, sizeof(sa)) != 0) {
+    return sp_sys_err_from_wsa(WSAGetLastError());
+  }
+  return SP_OK;
 
 #elif defined(SP_LINUX)
   sp_sys_linux_sockaddr_in_t sa = sp_zero;
@@ -7197,7 +7262,9 @@ s32 sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   sa.port[0] = (u8)(addr.port >> 8);
   sa.port[1] = (u8)(addr.port & 0xFF);
   sp_mem_copy(sa.addr, addr.octets, 4);
-  return sp_syscall(SP_SYSCALL_NUM_BIND, socket, &sa, sizeof(sa)) == 0 ? 0 : -1;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_BIND, socket, &sa, sizeof(sa));
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct sockaddr_in sa = sp_zero;
@@ -7205,37 +7272,44 @@ s32 sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   ((u8*)&sa.sin_port)[0] = (u8)(addr.port >> 8);
   ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
   sp_mem_copy(&sa.sin_addr, addr.octets, 4);
-  return bind(socket, (struct sockaddr*)&sa, sizeof(sa)) == 0 ? 0 : -1;
+  if (bind(socket, (struct sockaddr*)&sa, sizeof(sa)) != 0) {
+    return sp_sys_err_from_errno(errno);
+  }
+  return SP_OK;
 
 #else
   (void)socket; (void)addr;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
 ////////////////////////
 // SP_SYS_SOCKET_LISTEN //
 ////////////////////////
-s32 sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog) {
+sp_err_t sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog) {
 #if defined(SP_WIN32)
-  return listen((SOCKET)socket, (int)backlog) == 0 ? 0 : -1;
+  if (listen((SOCKET)socket, (int)backlog) != 0) return sp_sys_err_from_wsa(WSAGetLastError());
+  return SP_OK;
 
 #elif defined(SP_LINUX)
-  return sp_syscall(SP_SYSCALL_NUM_LISTEN, socket, backlog) == 0 ? 0 : -1;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_LISTEN, socket, backlog);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  return listen(socket, (int)backlog) == 0 ? 0 : -1;
+  if (listen(socket, (int)backlog) != 0) return sp_sys_err_from_errno(errno);
+  return SP_OK;
 
 #else
   (void)socket; (void)backlog;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
 /////////////////////////
 // SP_SYS_SOCKET_CONNECT //
 /////////////////////////
-s32 sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
+sp_err_t sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
 #if defined(SP_WIN32)
   if (addr.octets[0] == 127) sp_sys_win32_speed_up_loopback_connect((SOCKET)socket);
 
@@ -7245,8 +7319,8 @@ s32 sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
   sp_mem_copy(&sa.sin_addr, addr.octets, 4);
 
-  if (connect((SOCKET)socket, (struct sockaddr*)&sa, sizeof(sa)) == 0) return 0;
-  return WSAGetLastError() == WSAEWOULDBLOCK ? 1 : -1;
+  if (connect((SOCKET)socket, (struct sockaddr*)&sa, sizeof(sa)) == 0) return SP_OK;
+  return sp_sys_err_from_wsa(WSAGetLastError());
 
 #elif defined(SP_LINUX)
   sp_sys_linux_sockaddr_in_t sa = sp_zero;
@@ -7256,10 +7330,11 @@ s32 sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   sp_mem_copy(sa.addr, addr.octets, 4);
 
   s64 rc = sp_syscall(SP_SYSCALL_NUM_CONNECT, socket, &sa, sizeof(sa));
-  if (rc == 0) return 0;
+  if (rc == 0) return SP_OK;
   // EINTR: the attempt proceeds asynchronously; poll for completion as if
   // EINPROGRESS
-  return (rc == -SP_EINPROGRESS || rc == -SP_EINTR) ? 1 : -1;
+  if (rc == -SP_EINPROGRESS || rc == -SP_EINTR) return SP_ERR_SYS_WOULD_BLOCK;
+  return sp_sys_err_from_errno(-rc);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct sockaddr_in sa = sp_zero;
@@ -7268,70 +7343,77 @@ s32 sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
   sp_mem_copy(&sa.sin_addr, addr.octets, 4);
 
-  if (connect(socket, (struct sockaddr*)&sa, sizeof(sa)) == 0) return 0;
-  return (errno == EINPROGRESS || errno == EINTR) ? 1 : -1;
+  if (connect(socket, (struct sockaddr*)&sa, sizeof(sa)) == 0) return SP_OK;
+  if (errno == EINPROGRESS || errno == EINTR) return SP_ERR_SYS_WOULD_BLOCK;
+  return sp_sys_err_from_errno(errno);
 
 #else
   (void)socket; (void)addr;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
 ///////////////////////
 // SP_SYS_SOCKET_ERROR //
 ///////////////////////
-s32 sp_sys_socket_error_p(sp_sys_socket_t socket) {
+sp_err_t sp_sys_socket_error_p(sp_sys_socket_t socket) {
 #if defined(SP_WIN32)
   int err = 0;
   int err_len = sizeof(err);
-  if (getsockopt((SOCKET)socket, SOL_SOCKET, SO_ERROR, (char*)&err, &err_len) != 0) return -1;
-  return err == 0 ? 0 : -1;
+  if (getsockopt((SOCKET)socket, SOL_SOCKET, SO_ERROR, (char*)&err, &err_len) != 0) {
+    return sp_sys_err_from_wsa(WSAGetLastError());
+  }
+  return sp_sys_err_from_wsa(err);
 
 #elif defined(SP_LINUX)
   s32 err = 0;
   u32 err_len = sizeof(err);
-  if (sp_syscall(SP_SYSCALL_NUM_GETSOCKOPT, socket, SP_SYS_LINUX_SOL_SOCKET, SP_SYS_LINUX_SO_ERROR, &err, &err_len) != 0) return -1;
-  return err == 0 ? 0 : -1;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_GETSOCKOPT, socket, SP_SYS_LINUX_SOL_SOCKET, SP_SYS_LINUX_SO_ERROR, &err, &err_len);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  return sp_sys_err_from_errno(err);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   int err = 0;
   socklen_t err_len = sizeof(err);
-  if (getsockopt(socket, SOL_SOCKET, SO_ERROR, &err, &err_len) != 0) return -1;
-  return err == 0 ? 0 : -1;
+  if (getsockopt(socket, SOL_SOCKET, SO_ERROR, &err, &err_len) != 0) {
+    return sp_sys_err_from_errno(errno);
+  }
+  return sp_sys_err_from_errno(err);
 
 #else
   (void)socket;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
 ////////////////////////
 // SP_SYS_SOCKET_ACCEPT //
 ////////////////////////
-s32 sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) {
+sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) {
   *out = SP_SYS_INVALID_SOCKET;
 
 #if defined(SP_WIN32)
   SOCKET fd = accept((SOCKET)listener, SP_NULLPTR, SP_NULLPTR);
   if (fd == INVALID_SOCKET) {
-    return WSAGetLastError() == WSAEWOULDBLOCK ? 1 : -1;
+    return sp_sys_err_from_wsa(WSAGetLastError());
   }
-  if (sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd) != 0) {
+  sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
+  if (err != SP_OK) {
     closesocket(fd);
-    return -1;
+    return err;
   }
   *out = (sp_sys_socket_t)fd;
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_LINUX)
   while (true) {
     s64 fd = sp_syscall(SP_SYSCALL_NUM_ACCEPT4, listener, 0, 0, SP_SYS_LINUX_SOCK_NONBLOCK);
     if (fd >= 0) {
       *out = (sp_sys_socket_t)fd;
-      return 0;
+      return SP_OK;
     }
     if (fd == -SP_EINTR) continue;
-    return fd == -SP_EAGAIN ? 1 : -1;
+    return sp_sys_err_from_errno(-fd);
   }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -7342,39 +7424,53 @@ s32 sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) {
       int nosigpipe = 1;
       setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
 #endif
-      if (sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd) != 0) {
+      sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
+      if (err != SP_OK) {
         close(fd);
-        return -1;
+        return err;
       }
       *out = (sp_sys_socket_t)fd;
-      return 0;
+      return SP_OK;
     }
     if (errno == EINTR) continue;
-    return (errno == EAGAIN || errno == EWOULDBLOCK) ? 1 : -1;
+    return sp_sys_err_from_errno(errno);
   }
 
 #else
   (void)listener;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
 ///////////////////////
 // SP_SYS_SOCKET_CLOSE //
 ///////////////////////
-s32 sp_sys_socket_close_p(sp_sys_socket_t socket) {
+sp_err_t sp_sys_socket_close_p(sp_sys_socket_t socket) {
 #if defined(SP_WIN32)
-  return closesocket((SOCKET)socket) == 0 ? 0 : -1;
+  if (closesocket((SOCKET)socket) != 0) return sp_sys_err_from_wsa(WSAGetLastError());
+  return SP_OK;
 
 #elif defined(SP_LINUX)
-  return sp_syscall(SP_SYSCALL_NUM_CLOSE, socket) < 0 ? -1 : 0;
+  s64 rc = sp_syscall_r(SP_SYSCALL_NUM_CLOSE, socket);
+  switch (rc) {
+    case SP_EINTR:
+    case SP_EINPROGRESS: return SP_OK;
+    default:             return sp_sys_err_from_errno(rc);
+  }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  return close(socket);
+  if (close(socket)) {
+    switch (errno) {
+      case SP_EINTR:
+      case SP_EINPROGRESS: return SP_OK;
+      default:             return sp_sys_err_from_errno(errno);
+    }
+  }
+  return SP_OK;
 
 #else
   (void)socket;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
@@ -7447,33 +7543,38 @@ sp_err_t sp_sys_socket_send_p(sp_sys_socket_t socket, const void* ptr, u64 size,
 /////////////////////////////
 // SP_SYS_SOCKET_LOCAL_PORT //
 /////////////////////////////
-s32 sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out) {
+sp_err_t sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out) {
   *out = 0;
 
 #if defined(SP_WIN32)
   struct sockaddr_in sa = sp_zero;
   int len = sizeof(sa);
-  if (getsockname((SOCKET)socket, (struct sockaddr*)&sa, &len) != 0) return -1;
+  if (getsockname((SOCKET)socket, (struct sockaddr*)&sa, &len) != 0) {
+    return sp_sys_err_from_wsa(WSAGetLastError());
+  }
   *out = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_LINUX)
   sp_sys_linux_sockaddr_in_t sa = sp_zero;
   u32 len = sizeof(sa);
-  if (sp_syscall(SP_SYSCALL_NUM_GETSOCKNAME, socket, &sa, &len) != 0) return -1;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_GETSOCKNAME, socket, &sa, &len);
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
   *out = (u16)((sa.port[0] << 8) | sa.port[1]);
-  return 0;
+  return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct sockaddr_in sa = sp_zero;
   socklen_t len = sizeof(sa);
-  if (getsockname(socket, (struct sockaddr*)&sa, &len) != 0) return -1;
+  if (getsockname(socket, (struct sockaddr*)&sa, &len) != 0) {
+    return sp_sys_err_from_errno(errno);
+  }
   *out = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
-  return 0;
+  return SP_OK;
 
 #else
   (void)socket;
-  return -1;
+  return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
 
@@ -13488,8 +13589,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   }
 
   while (nfds > 0) {
-    s32 ret = sp_sys_fds_wait(fds, ready, (u64)nfds);
-    if (ret < 0) break;
+    if (sp_sys_fds_wait(fds, ready, (u64)nfds) != SP_OK) break;
 
     sp_for(i, (u32)nfds) {
       if (!ready[i]) {

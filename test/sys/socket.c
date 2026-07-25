@@ -7,33 +7,33 @@ UTEST_EMPTY_FIXTURE(sys_socket)
 
 static bool sys_socket_open_listener(sp_sys_socket_t* listener, u16* port) {
   sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 } };
-  if (sp_sys_socket_open(listener) != 0) return false;
-  if (sp_sys_socket_bind(*listener, addr) != 0) return false;
-  if (sp_sys_socket_listen(*listener, 1) != 0) return false;
-  if (sp_sys_socket_local_port(*listener, port) != 0) return false;
+  if (sp_sys_socket_open(listener) != SP_OK) return false;
+  if (sp_sys_socket_bind(*listener, addr) != SP_OK) return false;
+  if (sp_sys_socket_listen(*listener, 1) != SP_OK) return false;
+  if (sp_sys_socket_local_port(*listener, port) != SP_OK) return false;
   return true;
 }
 
 static bool sys_socket_dial(sp_sys_socket_t socket, u16 port) {
   sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
-  s32 rc = sp_sys_socket_connect(socket, dial);
-  if (rc == 0) return true;
-  if (rc != 1) return false;
-  if (sp_sys_socket_wait(socket, false, 1000) != 0) return false;
-  return sp_sys_socket_error(socket) == 0;
+  sp_err_t err = sp_sys_socket_connect(socket, dial);
+  if (err == SP_OK) return true;
+  if (err != SP_ERR_SYS_WOULD_BLOCK) return false;
+  if (sp_sys_socket_wait(socket, false, 1000) != SP_OK) return false;
+  return sp_sys_socket_error(socket) == SP_OK;
 }
 
 static bool sys_socket_pair(sp_sys_socket_t* listener, sp_sys_socket_t* client, sp_sys_socket_t* server) {
   u16 port = 0;
   if (!sys_socket_open_listener(listener, &port)) return false;
-  if (sp_sys_socket_open(client) != 0) return false;
+  if (sp_sys_socket_open(client) != SP_OK) return false;
   if (!sys_socket_dial(*client, port)) return false;
 
   while (true) {
-    s32 rc = sp_sys_socket_accept(*listener, server);
-    if (rc == 0) return true;
-    if (rc != 1) return false;
-    if (sp_sys_socket_wait(*listener, true, 1000) != 0) return false;
+    sp_err_t err = sp_sys_socket_accept(*listener, server);
+    if (err == SP_OK) return true;
+    if (err != SP_ERR_SYS_WOULD_BLOCK) return false;
+    if (sp_sys_socket_wait(*listener, true, 1000) != SP_OK) return false;
   }
 }
 
@@ -186,7 +186,7 @@ UTEST_F(sys_socket, accept_would_block_when_nobody_connects) {
   ASSERT_TRUE(sys_socket_open_listener(&listener, &port));
 
   sp_sys_socket_t accepted = SP_SYS_INVALID_SOCKET;
-  EXPECT_EQ(sp_sys_socket_accept(listener, &accepted), 1);
+  EXPECT_EQ(sp_sys_socket_accept(listener, &accepted), SP_ERR_SYS_WOULD_BLOCK);
   EXPECT_EQ(accepted, SP_SYS_INVALID_SOCKET);
 
   sp_sys_socket_close(listener);
@@ -200,15 +200,15 @@ UTEST_F(sys_socket, connect_refused_when_nothing_listens) {
 
   sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
   sp_sys_socket_t client = SP_SYS_INVALID_SOCKET;
-  ASSERT_EQ(sp_sys_socket_open(&client), 0);
+  ASSERT_EQ(sp_sys_socket_open(&client), SP_OK);
 
-  s32 rc = sp_sys_socket_connect(client, dial);
-  if (rc == 1) {
-    EXPECT_EQ(sp_sys_socket_wait(client, false, 2000), 0);
-    EXPECT_EQ(sp_sys_socket_error(client), -1);
+  sp_err_t err = sp_sys_socket_connect(client, dial);
+  if (err == SP_ERR_SYS_WOULD_BLOCK) {
+    EXPECT_EQ(sp_sys_socket_wait(client, false, 2000), SP_OK);
+    EXPECT_EQ(sp_sys_socket_error(client), SP_ERR_SYS_CONN_REFUSED);
   }
   else {
-    EXPECT_EQ(rc, -1);
+    EXPECT_EQ(err, SP_ERR_SYS_CONN_REFUSED);
   }
 
   sp_sys_socket_close(client);
