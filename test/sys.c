@@ -8,6 +8,8 @@ SP_TEST_MAIN()
 #include "sys/pread.c"
 #include "sys/write.c"
 #include "sys/pwrite.c"
+#include "sys/pipe.c"
+#include "sys/transfer.c"
 #include "sys/mkdir.c"
 #include "sys/rmdir.c"
 #include "sys/unlink.c"
