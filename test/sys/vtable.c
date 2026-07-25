@@ -37,6 +37,9 @@ typedef struct {
   s32         tty_get;
   s32         tty_set;
   s32         tty_size;
+  bool        is_tty;
+  s32         tty_mode_apply;
+  s32         tty_use_vt;
   s32         socket_open;
   s32         socket_bind;
   s32         socket_listen;
@@ -201,6 +204,18 @@ static sp_err_t sys_vtable_mock_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows) {
   return (sp_err_t)69;
 }
 
+static bool sys_vtable_mock_is_tty(sp_sys_fd_t fd) {
+  return true;
+}
+
+static sp_err_t sys_vtable_mock_tty_mode_apply(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode) {
+  return (sp_err_t)69;
+}
+
+static sp_err_t sys_vtable_mock_tty_use_vt(sp_sys_fd_t fd) {
+  return (sp_err_t)69;
+}
+
 static sp_err_t sys_vtable_mock_socket_open(sp_sys_socket_t* out) {
   return (sp_err_t)69;
 }
@@ -343,6 +358,9 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .tty_get                = sys_vtable_mock_tty_get,
   .tty_set                = sys_vtable_mock_tty_set,
   .tty_size               = sys_vtable_mock_tty_size,
+  .is_tty                 = sys_vtable_mock_is_tty,
+  .tty_mode_apply         = sys_vtable_mock_tty_mode_apply,
+  .tty_use_vt             = sys_vtable_mock_tty_use_vt,
   .socket_open            = sys_vtable_mock_socket_open,
   .socket_bind            = sys_vtable_mock_socket_bind,
   .socket_listen          = sys_vtable_mock_socket_listen,
@@ -418,6 +436,9 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   r->tty_get = sp_sys_tty_get(0, SP_NULLPTR);
   r->tty_set = sp_sys_tty_set(0, SP_NULLPTR);
   r->tty_size = sp_sys_tty_size(0, SP_NULLPTR, SP_NULLPTR);
+  r->is_tty = sp_sys_is_tty(0);
+  r->tty_mode_apply = sp_sys_tty_mode_apply(SP_NULLPTR, SP_NULLPTR, SP_SYS_TTY_MODE_RAW);
+  r->tty_use_vt = sp_sys_tty_use_vt(0);
   r->socket_open = sp_sys_socket_open(SP_NULLPTR);
   r->socket_bind = sp_sys_socket_bind(0, addr);
   r->socket_listen = sp_sys_socket_listen(0, 0);
@@ -483,6 +504,9 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->tty_get, 69);
   EXPECT_EQ(r->tty_set, 69);
   EXPECT_EQ(r->tty_size, 69);
+  EXPECT_TRUE(r->is_tty);
+  EXPECT_EQ(r->tty_mode_apply, 69);
+  EXPECT_EQ(r->tty_use_vt, 69);
   EXPECT_EQ(r->socket_open, 69);
   EXPECT_EQ(r->socket_bind, 69);
   EXPECT_EQ(r->socket_listen, 69);

@@ -15,8 +15,7 @@ typedef struct {
 
 typedef struct {
   sp_mem_t mem;
-  sp_sys_tty_mode_t saved_mode;
-  bool terminal_modified;
+  sp_sys_tty_state_t saved_mode;
   sp_da(sp_color_t) saved_colors;
   sp_color_t current_color;
   params_t params;
@@ -27,14 +26,12 @@ typedef struct {
 } app_t;
 
 void palette_emit(sp_str_t str) {
-  sp_io_stream_writer_t io = sp_io_get_std_out();
-  sp_io_write_str(&io.base, str, SP_NULLPTR);
+  sp_io_write_str(sp_io_get_std_out(), str, SP_NULLPTR);
 }
 
 void palette_restore_terminal(app_t* app) {
-  if (app && app->terminal_modified) {
-    sp_sys_tty_restore(sp_sys_stdin, sp_sys_stdout, &app->saved_mode);
-    app->terminal_modified = false;
+  if (app) {
+    sp_tty_restore(sp_sys_stdin, sp_sys_stdout, &app->saved_mode);
   }
   palette_emit(sp_str_lit("\033[?25h"));
 }
@@ -47,9 +44,7 @@ void palette_signal_handler(sp_os_signal_t sig, void* userdata) {
 }
 
 void palette_enter_raw_mode(app_t* app) {
-  if (!sp_sys_tty_enter_raw(sp_sys_stdin, sp_sys_stdout, &app->saved_mode)) {
-    app->terminal_modified = true;
-  }
+  sp_tty_set_mode(sp_sys_stdin, sp_sys_stdout, SP_SYS_TTY_MODE_RAW, &app->saved_mode);
 }
 
 u64 palette_rand_next(app_t* app) {

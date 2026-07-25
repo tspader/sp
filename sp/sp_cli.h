@@ -1432,11 +1432,8 @@ SP_PRIVATE sp_cli_result_t sp_cli_complete_request(sp_io_writer_t* out, sp_io_wr
 }
 
 sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
-  struct { sp_io_stream_writer_t out; sp_io_stream_writer_t err; } ios = {
-    sp_io_get_std_out(), sp_io_get_std_err()
-  };
   struct { sp_io_writer_t* out; sp_io_writer_t* err; } io = {
-    &ios.out.base, &ios.err.base
+    sp_io_get_std_out(), sp_io_get_std_err()
   };
 
   sp_str_t request = sp_os_env_get(sp_cli_complete_var(desc));
