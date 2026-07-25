@@ -15,7 +15,7 @@ typedef struct {
 
 typedef struct {
   sp_mem_t mem;
-  sp_tty_mode_t saved_mode;
+  sp_sys_tty_mode_t saved_mode;
   bool terminal_modified;
   sp_da(sp_color_t) saved_colors;
   sp_color_t current_color;
@@ -26,12 +26,17 @@ typedef struct {
   sp_atomic_s32_t shutdown;
 } app_t;
 
+void palette_emit(sp_str_t str) {
+  sp_io_stream_writer_t io = sp_io_get_std_out();
+  sp_io_write_str(&io.base, str, SP_NULLPTR);
+}
+
 void palette_restore_terminal(app_t* app) {
   if (app && app->terminal_modified) {
-    sp_os_tty_restore(sp_sys_stdin, &app->saved_mode);
+    sp_sys_tty_restore(sp_sys_stdin, sp_sys_stdout, &app->saved_mode);
     app->terminal_modified = false;
   }
-  sp_os_print(sp_str_lit("\033[?25h"));
+  palette_emit(sp_str_lit("\033[?25h"));
 }
 
 void palette_signal_handler(sp_os_signal_t sig, void* userdata) {
@@ -42,7 +47,7 @@ void palette_signal_handler(sp_os_signal_t sig, void* userdata) {
 }
 
 void palette_enter_raw_mode(app_t* app) {
-  if (sp_os_tty_enter_raw(sp_sys_stdin, &app->saved_mode) == 0) {
+  if (!sp_sys_tty_enter_raw(sp_sys_stdin, sp_sys_stdout, &app->saved_mode)) {
     app->terminal_modified = true;
   }
 }
@@ -140,7 +145,7 @@ void palette_render(app_t* app) {
 
   sp_io_write_cstr(&out.base, "[space] regenerate  [enter] save  [q/esc] quit\r\n", SP_NULLPTR);
 
-  sp_os_print(sp_io_dyn_mem_writer_as_str(&out));
+  palette_emit(sp_io_dyn_mem_writer_as_str(&out));
 }
 
 void palette_print_results(app_t* app) {
@@ -167,7 +172,7 @@ sp_app_result_t on_init(sp_app_t* sp) {
   sp_os_register_signal_handler(SP_OS_SIGNAL_INTERRUPT, palette_signal_handler, app);
   sp_os_register_signal_handler(SP_OS_SIGNAL_TERMINATE, palette_signal_handler, app);
 
-  sp_os_print(sp_str_lit("\033[?25l"));
+  palette_emit(sp_str_lit("\033[?25l"));
 
   palette_generate_color(app);
 
@@ -222,7 +227,7 @@ void on_deinit(sp_app_t* sp) {
 
   palette_restore_terminal(app);
 
-  sp_os_print(sp_str_lit("\033[H\033[2J"));
+  palette_emit(sp_str_lit("\033[H\033[2J"));
 
   palette_print_results(app);
 }
