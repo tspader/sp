@@ -4182,6 +4182,12 @@ s64 sp_syscall3(s64 n, s64 a1, s64 a2, s64 a3);
 s64 sp_syscall4(s64 n, s64 a1, s64 a2, s64 a3, s64 a4);
 s64 sp_syscall5(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5);
 s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
+s64 sp_syscall_retry1(s64 n, s64 a1);
+s64 sp_syscall_retry2(s64 n, s64 a1, s64 a2);
+s64 sp_syscall_retry3(s64 n, s64 a1, s64 a2, s64 a3);
+s64 sp_syscall_retry4(s64 n, s64 a1, s64 a2, s64 a3, s64 a4);
+s64 sp_syscall_retry5(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5);
+s64 sp_syscall_retry6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
 
 #define __sp_syscall1(n,a) sp_syscall1(n,__scc(a))
 #define __sp_syscall2(n,a,b) sp_syscall2(n,__scc(a),__scc(b))
@@ -4190,6 +4196,13 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
 #define __sp_syscall5(n,a,b,c,d,e) sp_syscall5(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e))
 #define __sp_syscall6(n,a,b,c,d,e,f) sp_syscall6(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e),__scc(f))
 #define __sp_syscall7(n,a,b,c,d,e,f,g) sp_syscall7(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e),__scc(f),__scc(g))
+
+#define __sp_syscall_retry1(n,a) sp_syscall_retry1(n,__scc(a))
+#define __sp_syscall_retry2(n,a,b) sp_syscall_retry2(n,__scc(a),__scc(b))
+#define __sp_syscall_retry3(n,a,b,c) sp_syscall_retry3(n,__scc(a),__scc(b),__scc(c))
+#define __sp_syscall_retry4(n,a,b,c,d) sp_syscall_retry4(n,__scc(a),__scc(b),__scc(c),__scc(d))
+#define __sp_syscall_retry5(n,a,b,c,d,e) sp_syscall_retry5(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e))
+#define __sp_syscall_retry6(n,a,b,c,d,e,f) sp_syscall_retry6(n,__scc(a),__scc(b),__scc(c),__scc(d),__scc(e),__scc(f))
 
 #define __SP_SYSCALL_NARGS_X(a,b,c,d,e,f,g,h,n,...) n
 #define __SP_SYSCALL_NARGS(...) __SP_SYSCALL_NARGS_X(__VA_ARGS__,7,6,5,4,3,2,1,0,)
@@ -4201,6 +4214,7 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6);
 #define sp_syscall(...) __sp_syscall(__VA_ARGS__)
 #define sp_syscall_r(...) __sp_syscall_ret_r((u64)__sp_syscall(__VA_ARGS__))
 #define sp_syscall_e(...) __sp_syscall_ret_e((u64)__sp_syscall(__VA_ARGS__))
+#define sp_syscall_retry(...) __SP_SYSCALL_DISP(__sp_syscall_retry,__VA_ARGS__)
 
 // Typed wrappers for individual syscalls
 SP_IMP s32 sp_syscall_notify_init1(s32 flags);
@@ -5188,6 +5202,54 @@ s64 sp_syscall6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6) {
   return ret;
 }
 
+s64 sp_syscall_retry1(s64 n, s64 a1) {
+  s64 rc;
+  do {
+    rc = sp_syscall1(n, a1);
+  } while (rc == -SP_EINTR);
+  return rc;
+}
+
+s64 sp_syscall_retry2(s64 n, s64 a1, s64 a2) {
+  s64 rc;
+  do {
+    rc = sp_syscall2(n, a1, a2);
+  } while (rc == -SP_EINTR);
+  return rc;
+}
+
+s64 sp_syscall_retry3(s64 n, s64 a1, s64 a2, s64 a3) {
+  s64 rc;
+  do {
+    rc = sp_syscall3(n, a1, a2, a3);
+  } while (rc == -SP_EINTR);
+  return rc;
+}
+
+s64 sp_syscall_retry4(s64 n, s64 a1, s64 a2, s64 a3, s64 a4) {
+  s64 rc;
+  do {
+    rc = sp_syscall4(n, a1, a2, a3, a4);
+  } while (rc == -SP_EINTR);
+  return rc;
+}
+
+s64 sp_syscall_retry5(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5) {
+  s64 rc;
+  do {
+    rc = sp_syscall5(n, a1, a2, a3, a4, a5);
+  } while (rc == -SP_EINTR);
+  return rc;
+}
+
+s64 sp_syscall_retry6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6) {
+  s64 rc;
+  do {
+    rc = sp_syscall6(n, a1, a2, a3, a4, a5, a6);
+  } while (rc == -SP_EINTR);
+  return rc;
+}
+
 s32 sp_syscall_notify_init1(s32 flags) {
   return (s32)sp_syscall(SP_SYSCALL_NUM_INOTIFY_INIT1, flags);
 }
@@ -6100,10 +6162,7 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_READ, fd, buf, count);
-  } while (rc == -SP_EINTR);
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_READ, fd, buf, count);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
@@ -6145,10 +6204,7 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_WRITE, fd, buf, count);
-  } while (rc == -SP_EINTR);
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_WRITE, fd, buf, count);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
@@ -6204,10 +6260,7 @@ sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* b
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_PREAD64, fd, buf, count, offset);
-  } while (rc == -SP_EINTR);
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_PREAD64, fd, buf, count, offset);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
@@ -6260,10 +6313,7 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_PWRITE64, fd, buf, count, offset);
-  } while (rc == -SP_EINTR);
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_PWRITE64, fd, buf, count, offset);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
@@ -6296,15 +6346,11 @@ sp_err_t sp_sys_transfer_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* ou
 #if defined(SP_LINUX)
   s64 rc;
   if (out_pos) {
-    do {
-      rc = sp_syscall(SP_SYSCALL_NUM_COPY_FILE_RANGE, in, in_pos, out, out_pos, count, 0);
-    } while (rc == -SP_EINTR);
+    rc = sp_syscall_retry(SP_SYSCALL_NUM_COPY_FILE_RANGE, in, in_pos, out, out_pos, count, 0);
   }
   else {
     s64 off = in_pos ? (s64)*in_pos : 0;
-    do {
-      rc = sp_syscall(SP_SYSCALL_NUM_SENDFILE, out, in, in_pos ? &off : SP_NULLPTR, count);
-    } while (rc == -SP_EINTR);
+    rc = sp_syscall_retry(SP_SYSCALL_NUM_SENDFILE, out, in, in_pos ? &off : SP_NULLPTR, count);
     if (rc >= 0 && in_pos) *in_pos = (u64)off;
   }
   if (rc < 0) return sp_sys_err_from_errno(-rc);
@@ -7345,10 +7391,7 @@ sp_err_t sp_sys_socket_recv_p(sp_sys_socket_t socket, void* ptr, u64 size, u64* 
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_RECVFROM, socket, ptr, size, 0, 0, 0);
-  } while (rc == -SP_EINTR);
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_RECVFROM, socket, ptr, size, 0, 0, 0);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
@@ -7381,10 +7424,7 @@ sp_err_t sp_sys_socket_send_p(sp_sys_socket_t socket, const void* ptr, u64 size,
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc;
-  do {
-    rc = sp_syscall(SP_SYSCALL_NUM_SENDTO, socket, ptr, size, SP_SYS_LINUX_MSG_NOSIGNAL, 0, 0);
-  } while (rc == -SP_EINTR);
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_SENDTO, socket, ptr, size, SP_SYS_LINUX_MSG_NOSIGNAL, 0, 0);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
@@ -15360,10 +15400,7 @@ sp_err_t sp_io_stream_writer_read_from(sp_io_writer_t* writer, sp_io_reader_t* r
 
   while (true) {
     s64 off = (s64)*in_pos;
-    s64 rc;
-    do {
-      rc = sp_syscall(SP_SYSCALL_NUM_SENDFILE, w->fd, in_fd, &off, chunk);
-    } while (rc == -SP_EINTR);
+    s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_SENDFILE, w->fd, in_fd, &off, chunk);
 
     if (rc < 0) {
       if (total == 0) {
@@ -15864,10 +15901,7 @@ sp_err_t sp_io_file_writer_read_from(sp_io_writer_t* writer, sp_io_reader_t* r, 
   const u64 chunk = (u64)1 << 30;
 
   while (true) {
-    s64 rc;
-    do {
-      rc = sp_syscall(SP_SYSCALL_NUM_COPY_FILE_RANGE, in_fd, in_pos, w->fd, &w->pos, chunk, 0);
-    } while (rc == -SP_EINTR);
+    s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_COPY_FILE_RANGE, in_fd, in_pos, w->fd, &w->pos, chunk, 0);
 
     if (rc < 0) {
       if (total == 0) {
