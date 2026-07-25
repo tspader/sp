@@ -32,10 +32,10 @@ s32 run(s32 num_args, const c8** args) {
   sp_io_file_reader_close(&r);
 
   // You can also format directly to stdout
-  sp_io_stream_writer_t fw = sp_io_get_std_out();
-  sp_fmt_io(&fw.base, "hello, {.cyan}", sp_fmt_cstr("stdout"));
-  sp_io_write(&fw.base, "\n", 1, SP_NULLPTR);
-  sp_io_stream_writer_close(&fw);
+  sp_io_writer_t* fw = sp_io_get_std_out();
+  sp_fmt_io(fw, "hello, {.cyan}", sp_fmt_cstr("stdout"));
+  sp_io_write(fw, "\n", 1, SP_NULLPTR);
+  sp_io_flush(fw);
 
   // When a reader is drained, sp_io_read returns SP_ERR_IO_EOF with
   // bytes_read == 0. Any successful call, even a short one, returns SP_OK;

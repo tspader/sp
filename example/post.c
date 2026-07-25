@@ -35,7 +35,6 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
   sp_cli_result_t result = SP_CLI_OK;
   sp_tls_trust_t trust = sp_zero;
   sp_io_file_writer_t file = sp_zero;
-  sp_io_stream_writer_t stream = sp_zero;
   sp_http_response_t response = sp_zero;
   sp_tls_error_t err = sp_zero;
 
@@ -98,8 +97,7 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
     request.sink = &file.base;
   }
   else {
-    stream = sp_io_get_std_out();
-    request.sink = &stream.base;
+    request.sink = sp_io_get_std_out();
   }
 
   if (post->verbose) {

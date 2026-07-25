@@ -896,7 +896,7 @@ struct sp_prompt_ctx_t {
   sp_da(sp_prompt_frame_t) frames;
   struct {
     struct { sp_sys_fd_t in; sp_sys_fd_t out; } fds;
-    sp_sys_tty_mode_t cache;
+    sp_sys_tty_state_t cache;
     bool raw;
   } terminal;
   sp_mem_arena_t* arena;
@@ -929,7 +929,7 @@ SP_PRIVATE void sp_prompt_dispatch_event(sp_prompt_ctx_t* ctx, sp_prompt_widget_
 
 
 static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
-  if (sp_sys_tty_enter_raw(ctx->terminal.fds.in, ctx->terminal.fds.out, &ctx->terminal.cache)) return -1;
+  if (sp_tty_set_mode(ctx->terminal.fds.in, ctx->terminal.fds.out, SP_SYS_TTY_MODE_RAW, &ctx->terminal.cache)) return -1;
   ctx->terminal.raw = true;
   return 0;
 }
@@ -1009,7 +1009,7 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   if (ctx->terminal.raw) {
     sp_prompt_emit(ctx, SP_ANSI_SHOW_CURSOR);
     sp_io_flush(ctx->writer);
-    sp_sys_tty_restore(ctx->terminal.fds.in, ctx->terminal.fds.out, &ctx->terminal.cache);
+    sp_tty_restore(ctx->terminal.fds.in, ctx->terminal.fds.out, &ctx->terminal.cache);
     ctx->terminal.raw = false;
   }
 
@@ -1059,7 +1059,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   //
   // Empirically, you get pretty bad tearing on Windows without buffering.
   sp_io_stream_writer_t* fw = sp_mem_arena_alloc_type(ctx->arena, sp_io_stream_writer_t);
-  *fw = sp_io_get_std_out();
+  sp_io_stream_writer_from_fd(fw, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
   ctx->writer = &fw->base;
 
   u64 buffer_size = ctx->cols * ctx->rows * SP_PROMPT_CELL_BUFFER_BYTES + SP_PROMPT_BUFFER_EXTRA_BYTES;
