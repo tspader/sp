@@ -685,21 +685,21 @@ f32 sp_sys_sqrtf(f32 x) {
 
 void ubench_fmt_tty_green(sp_io_writer_t *io, sp_fmt_arg_t *arg, sp_fmt_arg_t *params) {
   sp_unused(arg); sp_unused(params);
-  if (sp_os_is_tty(sp_sys_stdout)) {
+  if (sp_sys_is_tty(sp_sys_stdout)) {
     sp_io_write_cstr(io, SP_ANSI_FG_GREEN, SP_NULLPTR);
   }
 }
 
 void ubench_fmt_tty_red(sp_io_writer_t *io, sp_fmt_arg_t *arg, sp_fmt_arg_t *params) {
   sp_unused(arg); sp_unused(params);
-  if (sp_os_is_tty(sp_sys_stdout)) {
+  if (sp_sys_is_tty(sp_sys_stdout)) {
     sp_io_write_cstr(io, SP_ANSI_FG_RED, SP_NULLPTR);
   }
 }
 
 void ubench_fmt_tty_reset(sp_io_writer_t *io, sp_fmt_arg_t *arg, sp_fmt_arg_t *params) {
   sp_unused(arg); sp_unused(params);
-  if (sp_os_is_tty(sp_sys_stdout)) {
+  if (sp_sys_is_tty(sp_sys_stdout)) {
     sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
   }
 }

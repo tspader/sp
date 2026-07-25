@@ -177,7 +177,8 @@ static void run_benchmarks(bench_t* benches, u32 num_benches) {
   }
 
   sp_str_t output = sp_io_dyn_mem_writer_as_str(&sb);
-  sp_os_print(output);
+  sp_io_stream_writer_t io = sp_io_get_std_out();
+  sp_io_write_str(&io.base, output, SP_NULLPTR);
 }
 
 static void kernel_deinit(bench_params_t p, bench_data_t* data) {

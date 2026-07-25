@@ -896,7 +896,7 @@ struct sp_prompt_ctx_t {
   sp_da(sp_prompt_frame_t) frames;
   struct {
     struct { sp_sys_fd_t in; sp_sys_fd_t out; } fds;
-    sp_tty_mode_t cache;
+    sp_sys_tty_mode_t cache;
     bool raw;
   } terminal;
   sp_mem_arena_t* arena;
@@ -929,7 +929,7 @@ SP_PRIVATE void sp_prompt_dispatch_event(sp_prompt_ctx_t* ctx, sp_prompt_widget_
 
 
 static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
-  if (sp_os_tty_enter_raw(ctx->terminal.fds.in, &ctx->terminal.cache) == -1) return -1;
+  if (sp_sys_tty_enter_raw(ctx->terminal.fds.in, ctx->terminal.fds.out, &ctx->terminal.cache)) return -1;
   ctx->terminal.raw = true;
   return 0;
 }
@@ -977,9 +977,7 @@ sp_prompt_ctx_t* sp_prompt_new(sp_mem_t mem) {
   sp_prompt_ctx_t* ctx = sp_alloc_type(mem, sp_prompt_ctx_t);
   u32 cols = 0;
   u32 rows = 0;
-  if (sp_os_is_tty(sp_sys_stdout)) {
-    sp_os_tty_size(sp_sys_stdout, &cols, &rows);
-  }
+  sp_sys_tty_size(sp_sys_stdout, &cols, &rows);
   if (cols == 0) cols = SP_PROMPT_DEFAULT_COLS;
   if (rows == 0) rows = SP_PROMPT_DEFAULT_ROWS;
   sp_prompt_ctx_init(ctx, mem, cols, rows);
@@ -1011,7 +1009,7 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   if (ctx->terminal.raw) {
     sp_prompt_emit(ctx, SP_ANSI_SHOW_CURSOR);
     sp_io_flush(ctx->writer);
-    sp_os_tty_restore(ctx->terminal.fds.in, &ctx->terminal.cache);
+    sp_sys_tty_restore(ctx->terminal.fds.in, ctx->terminal.fds.out, &ctx->terminal.cache);
     ctx->terminal.raw = false;
   }
 

@@ -4,7 +4,6 @@
 UTEST_EMPTY_FIXTURE(sys_vtable)
 
 typedef struct {
-  s32         init;
   s64         read;
   s64         write;
   s64         pread;
@@ -35,6 +34,9 @@ typedef struct {
   s32         fd_ready;
   s32         fd_wait;
   s32         fds_wait;
+  s32         tty_get;
+  s32         tty_set;
+  s32         tty_size;
   s32         socket_open;
   s32         socket_bind;
   s32         socket_listen;
@@ -65,10 +67,6 @@ typedef struct {
 } sys_vtable_results_t;
 
 static sys_vtable_results_t sys_vtable_results;
-
-static void sys_vtable_mock_init(void) {
-  sys_vtable_results.init = 69;
-}
 
 static sp_err_t sys_vtable_mock_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   return (sp_err_t)69;
@@ -191,6 +189,18 @@ static sp_err_t sys_vtable_mock_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 
   return (sp_err_t)69;
 }
 
+static sp_err_t sys_vtable_mock_tty_get(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr) {
+  return (sp_err_t)69;
+}
+
+static sp_err_t sys_vtable_mock_tty_set(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr) {
+  return (sp_err_t)69;
+}
+
+static sp_err_t sys_vtable_mock_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows) {
+  return (sp_err_t)69;
+}
+
 static sp_err_t sys_vtable_mock_socket_open(sp_sys_socket_t* out) {
   return (sp_err_t)69;
 }
@@ -300,7 +310,6 @@ static void sys_vtable_mock_fs_it_close(sp_sys_fs_it_t* it) {
 }
 
 static const sp_sys_vtable_t sys_vtable_mock = {
-  .init                   = sys_vtable_mock_init,
   .read                   = sys_vtable_mock_read,
   .write                  = sys_vtable_mock_write,
   .pread                  = sys_vtable_mock_pread,
@@ -331,6 +340,9 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .fd_ready               = sys_vtable_mock_fd_ready,
   .fd_wait                = sys_vtable_mock_fd_wait,
   .fds_wait               = sys_vtable_mock_fds_wait,
+  .tty_get                = sys_vtable_mock_tty_get,
+  .tty_set                = sys_vtable_mock_tty_set,
+  .tty_size               = sys_vtable_mock_tty_size,
   .socket_open            = sys_vtable_mock_socket_open,
   .socket_bind            = sys_vtable_mock_socket_bind,
   .socket_listen          = sys_vtable_mock_socket_listen,
@@ -403,6 +415,9 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   r->fd_ready = sp_sys_fd_ready(0, &ready);
   r->fd_wait = sp_sys_fd_wait(0);
   r->fds_wait = sp_sys_fds_wait(fds, &ready, 0);
+  r->tty_get = sp_sys_tty_get(0, SP_NULLPTR);
+  r->tty_set = sp_sys_tty_set(0, SP_NULLPTR);
+  r->tty_size = sp_sys_tty_size(0, SP_NULLPTR, SP_NULLPTR);
   r->socket_open = sp_sys_socket_open(SP_NULLPTR);
   r->socket_bind = sp_sys_socket_bind(0, addr);
   r->socket_listen = sp_sys_socket_listen(0, 0);
@@ -435,7 +450,6 @@ UTEST_F(sys_vtable, every_function_dispatches) {
 
   EXPECT_TRUE(old == &sp_sys_vtable_platform);
   EXPECT_TRUE(swapped == &sys_vtable_mock);
-  EXPECT_EQ(r->init, 69);
   EXPECT_EQ(r->read, 69);
   EXPECT_EQ(r->write, 69);
   EXPECT_EQ(r->pread, 69);
@@ -466,6 +480,9 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->fd_ready, 69);
   EXPECT_EQ(r->fd_wait, 69);
   EXPECT_EQ(r->fds_wait, 69);
+  EXPECT_EQ(r->tty_get, 69);
+  EXPECT_EQ(r->tty_set, 69);
+  EXPECT_EQ(r->tty_size, 69);
   EXPECT_EQ(r->socket_open, 69);
   EXPECT_EQ(r->socket_bind, 69);
   EXPECT_EQ(r->socket_listen, 69);

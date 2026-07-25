@@ -18,4 +18,5 @@ SP_TEST_MAIN()
 #include "sys/iter.c"
 #include "sys/root.c"
 #include "sys/socket.c"
+#include "sys/tty.c"
 #include "sys/vtable.c"
