@@ -30,6 +30,7 @@
   #define SP_IMPLEMENTATION
 #endif
 #include "sp.h"
+#include "sp/sp_tls.h"
 
 #ifndef SP_TEST_IMPLEMENTATION
   #define SP_TEST_IMPLEMENTATION

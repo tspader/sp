@@ -14,11 +14,16 @@ else
   ZIG_CC = zig cc
 endif
 
+HAVE_ZIG := $(shell command -v zig >/dev/null 2>&1 && echo 1)
+
 ifdef TRIPLE
   CC := $(ZIG_CC) --target=$(TRIPLE)
   BUILD_DIR = $(BUILD_ROOT)/$(TRIPLE)
-else ifeq ($(origin CC),command line)
+else ifeq (,$(filter default undefined,$(origin CC)))
   BUILD_DIR = $(BUILD_ROOT)/$(CC)
+else ifdef HAVE_ZIG
+  CC := $(ZIG_CC)
+  BUILD_DIR = $(BUILD_ROOT)
 else
   CC := $(DEFAULT_CC)
   BUILD_DIR = $(BUILD_ROOT)

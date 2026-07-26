@@ -3573,7 +3573,10 @@ typedef struct {
   uintptr_t Information;
 } sp_nt_io_status_block_t;
 
-#define SP_NT_FUNCS(X)                                                                                      \
+////////
+// NT //
+////////
+#define SP_NT_FUNCTIONS(X)                                                                                      \
   X(sp_nt_status_t, RtlDosPathNameToNtPathName_U_WithStatus, (const u16*, sp_nt_unicode_string_t*, u16**, void*)) \
   X(s32,            RtlFreeHeap,                             (void*, u32, void*)) \
   X(sp_nt_status_t, RtlSetCurrentDirectory_U,                (sp_nt_unicode_string_t*))  \
@@ -3584,28 +3587,39 @@ typedef struct {
   X(sp_nt_status_t, NtQueryDirectoryFile,                    (void*, void*, void*, void*, sp_nt_io_status_block_t*, void*, u32, u32, u8, sp_nt_unicode_string_t*, u8)) \
   X(sp_nt_status_t, NtFsControlFile,                         (void*, void*, void*, void*, sp_nt_io_status_block_t*, u32, void*, u32, void*, u32))
 
+#define SP_NT_DECLARE_FUNCTION(ret, name, args) \
+  ret (__stdcall *name) args;
 
-#define SP_NT_DECL(ret, name, args) ret (__stdcall *name) args;
-typedef struct { SP_NT_FUNCS(SP_NT_DECL) } sp_nt_dispatch_t;
-#undef SP_NT_DECL
+typedef struct { 
+  SP_NT_FUNCTIONS(SP_NT_DECLARE_FUNCTION) 
+} sp_nt_dispatch_t;
 
-typedef struct {
-  int    (__stdcall *WSAStartup)(WORD version, WSADATA* data);
-  int    (__stdcall *WSAGetLastError)(void);
-  int    (__stdcall *WSAIoctl)(SOCKET s, DWORD code, void* in, DWORD in_size, void* out, DWORD out_size, DWORD* bytes, WSAOVERLAPPED* overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE on_complete);
-  int    (__stdcall *WSAPoll)(WSAPOLLFD* fds, ULONG nfds, INT timeout_ms);
-  SOCKET (__stdcall *socket)(int af, int type, int protocol);
-  int    (__stdcall *bind)(SOCKET s, const struct sockaddr* addr, int len);
-  int    (__stdcall *listen)(SOCKET s, int backlog);
-  int    (__stdcall *connect)(SOCKET s, const struct sockaddr* addr, int len);
-  SOCKET (__stdcall *accept)(SOCKET s, struct sockaddr* addr, int* len);
-  int    (__stdcall *closesocket)(SOCKET s);
-  int    (__stdcall *recv)(SOCKET s, char* buf, int len, int flags);
-  int    (__stdcall *send)(SOCKET s, const char* buf, int len, int flags);
-  int    (__stdcall *ioctlsocket)(SOCKET s, long cmd, u_long* arg);
-  int    (__stdcall *setsockopt)(SOCKET s, int level, int name, const char* value, int len);
-  int    (__stdcall *getsockopt)(SOCKET s, int level, int name, char* value, int* len);
-  int    (__stdcall *getsockname)(SOCKET s, struct sockaddr* addr, int* len);
+/////////
+// WS2 //
+/////////
+#define SP_WS2_FUNCTIONS(X) \
+  X(int,    WSAStartup,      (WORD, WSADATA*)) \
+  X(int,    WSAGetLastError, (void)) \
+  X(int,    WSAIoctl,        (SOCKET, DWORD, void*, DWORD, void*, DWORD, DWORD*, WSAOVERLAPPED*, LPWSAOVERLAPPED_COMPLETION_ROUTINE)) \
+  X(int,    WSAPoll,         (WSAPOLLFD*, ULONG, INT)) \
+  X(SOCKET, socket,          (int, int, int)) \
+  X(int,    bind,            (SOCKET, const struct sockaddr*, int)) \
+  X(int,    listen,          (SOCKET, int)) \
+  X(int,    connect,         (SOCKET, const struct sockaddr*, int)) \
+  X(SOCKET, accept,          (SOCKET, struct sockaddr*, int*)) \
+  X(int,    closesocket,     (SOCKET)) \
+  X(int,    recv,            (SOCKET, char*, int, int)) \
+  X(int,    send,            (SOCKET, const char*, int, int)) \
+  X(int,    ioctlsocket,     (SOCKET, long, u_long*)) \
+  X(int,    setsockopt,      (SOCKET, int, int, const char*, int)) \
+  X(int,    getsockopt,      (SOCKET, int, int, char*, int*)) \
+  X(int,    getsockname,     (SOCKET, struct sockaddr*, int*))
+
+#define SP_WS2_DECLARE_FUNCTION_POINTER(ret, name, args) \
+  ret (__stdcall *name) args;
+
+typedef struct { 
+  SP_WS2_FUNCTIONS(SP_WS2_DECLARE_FUNCTION_POINTER)
 } sp_ws2_dispatch_t;
 
 SP_API sp_nt_status_t sp_sys_nt_path(sp_str_t utf8, sp_sys_nt_path_t* out);
@@ -5680,7 +5694,7 @@ SP_PRIVATE void sp_nt_load(void) {
   if (!h) return;
   #define SP_NT_RESOLVE(ret, name, args) \
     sp_rt.nt.name = (ret (__stdcall*) args)(void(*)(void))GetProcAddress(h, #name);
-  SP_NT_FUNCS(SP_NT_RESOLVE)
+  SP_NT_FUNCTIONS(SP_NT_RESOLVE)
   #undef SP_NT_RESOLVE
 }
 
@@ -7554,6 +7568,9 @@ sp_err_t sp_sys_tty_use_vt_p(sp_sys_fd_t fd) {
 // SP_SYS_SOCKET_WIN32 //
 ///////////////////////
 #if defined(SP_WIN32)
+#define SP_WS2_LOAD_FUNCTION(ret, name, args) \
+    ws2->name = (ret (__stdcall*) args)(void(*)(void))GetProcAddress(h, #name);
+
 SP_PRIVATE bool sp_sys_win32_ws2_ensure(void) {
   static bool ready = false;
   if (ready) return true;
@@ -7562,22 +7579,7 @@ SP_PRIVATE bool sp_sys_win32_ws2_ensure(void) {
   if (!h) return false;
 
   sp_ws2_dispatch_t* ws2 = &sp_rt.ws2;
-  ws2->WSAStartup      = (int (__stdcall*)(WORD, WSADATA*))(void(*)(void))GetProcAddress(h, "WSAStartup");
-  ws2->WSAGetLastError = (int (__stdcall*)(void))(void(*)(void))GetProcAddress(h, "WSAGetLastError");
-  ws2->WSAIoctl        = (int (__stdcall*)(SOCKET, DWORD, void*, DWORD, void*, DWORD, DWORD*, WSAOVERLAPPED*, LPWSAOVERLAPPED_COMPLETION_ROUTINE))(void(*)(void))GetProcAddress(h, "WSAIoctl");
-  ws2->WSAPoll         = (int (__stdcall*)(WSAPOLLFD*, ULONG, INT))(void(*)(void))GetProcAddress(h, "WSAPoll");
-  ws2->socket          = (SOCKET (__stdcall*)(int, int, int))(void(*)(void))GetProcAddress(h, "socket");
-  ws2->bind            = (int (__stdcall*)(SOCKET, const struct sockaddr*, int))(void(*)(void))GetProcAddress(h, "bind");
-  ws2->listen          = (int (__stdcall*)(SOCKET, int))(void(*)(void))GetProcAddress(h, "listen");
-  ws2->connect         = (int (__stdcall*)(SOCKET, const struct sockaddr*, int))(void(*)(void))GetProcAddress(h, "connect");
-  ws2->accept          = (SOCKET (__stdcall*)(SOCKET, struct sockaddr*, int*))(void(*)(void))GetProcAddress(h, "accept");
-  ws2->closesocket     = (int (__stdcall*)(SOCKET))(void(*)(void))GetProcAddress(h, "closesocket");
-  ws2->recv            = (int (__stdcall*)(SOCKET, char*, int, int))(void(*)(void))GetProcAddress(h, "recv");
-  ws2->send            = (int (__stdcall*)(SOCKET, const char*, int, int))(void(*)(void))GetProcAddress(h, "send");
-  ws2->ioctlsocket     = (int (__stdcall*)(SOCKET, long, u_long*))(void(*)(void))GetProcAddress(h, "ioctlsocket");
-  ws2->setsockopt      = (int (__stdcall*)(SOCKET, int, int, const char*, int))(void(*)(void))GetProcAddress(h, "setsockopt");
-  ws2->getsockopt      = (int (__stdcall*)(SOCKET, int, int, char*, int*))(void(*)(void))GetProcAddress(h, "getsockopt");
-  ws2->getsockname     = (int (__stdcall*)(SOCKET, struct sockaddr*, int*))(void(*)(void))GetProcAddress(h, "getsockname");
+  SP_WS2_FUNCTIONS(SP_WS2_LOAD_FUNCTION)
 
   WSADATA wsa = sp_zero;
   ws2->WSAStartup(MAKEWORD(2, 2), &wsa);
