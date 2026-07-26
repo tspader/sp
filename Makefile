@@ -107,7 +107,7 @@ ifeq ($(TRIPLE),)
   endif
 endif
 
-TESTS = amalg app array asset cli etc cv env format fmon fs glob ht io math process ps rb str sys thread time mem prompt leak tls qsort
+TESTS = amalg app array asset cli etc cv env format fmon fs glob ht io math process ps rb str sys thread time mem prompt leak tls qsort sp_test
 BENCHES = glob heap
 EXAMPLES = app array cli format hash_table io zero_copy ls palette post prompt prompt_fancy signal tls wc
 TRIPLES = \

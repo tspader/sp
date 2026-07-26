@@ -40,7 +40,7 @@ s32 main(s32 num_args, const c8** args) {
   sp_mem_t mem = sp_mem_os_new();
   sp_str_t cwd = sp_fs_get_cwd(mem);
   sp_str_t dir = cwd;
-  if (num_args == 2) dir = sp_fs_join_path(mem, cwd, sp_str_view(args[1]));
+  if (num_args == 2) dir = sp_fs_join_path(mem, cwd, sp_cstr_as_str(args[1]));
 
   sp_da(sp_fs_entry_t) entries = sp_fs_collect(mem, dir);
   sp_da_sort(entries, compare_entries);

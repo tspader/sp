@@ -1,5 +1,5 @@
-#ifndef SP_TEST_H
-#define SP_TEST_H
+#ifndef SP_TEST_TOOLS_H
+#define SP_TEST_TOOLS_H
 
 #include "sp.h"
 
