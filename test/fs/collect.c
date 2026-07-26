@@ -68,29 +68,29 @@ static void add_entry(sp_test_file_manager_t* tmp, const c8* label, collect_entr
   }
 }
 
-static void run_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, collect_test_t test) {
-  add_entry(tmp, "", (collect_entry_t) { .path = test.label , .kind = test.root});
-
-  sp_carr_for(test.files, it) {
-    if (!test.files[it].path) break;
-    add_entry(tmp, test.label, test.files[it]);
-  }
-
-  sp_str_t root = sp_test_file_path(tmp, sp_str_view(test.label));
-  sp_da(sp_fs_entry_t) results = test.recursive
-    ? sp_fs_collect_recursive(tmp->mem, root)
-    : sp_fs_collect(tmp->mem, root);
+static void check_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, collect_test_t* test, sp_str_t base) {
+  sp_str_t root = sp_test_file_path(tmp, sp_str_view(test->label));
+  sp_da(sp_fs_entry_t) results = test->recursive
+    ? sp_fs_collect_recursive(tmp->mem, base)
+    : sp_fs_collect(tmp->mem, base);
 
   u32 num_expected = 0;
-  sp_carr_for(test.expect, it) {
-    if (!test.expect[it].name) break;
+  sp_carr_for(test->expect, it) {
+    if (!test->expect[it].name) break;
     num_expected++;
   }
 
   EXPECT_EQ(sp_da_size(results), num_expected);
 
+  sp_da_for(results, n) {
+    sp_fs_entry_t entry = results[n];
+    EXPECT_FALSE(sp_str_contains(entry.path, sp_str_lit("//")));
+    sp_str_t tail = sp_str_sub(entry.path, entry.path.len - entry.name.len, entry.name.len);
+    EXPECT_TRUE(sp_str_equal(tail, entry.name));
+  }
+
   sp_for(i, num_expected) {
-    collect_expect_t exp = test.expect[i];
+    collect_expect_t exp = test->expect[i];
     sp_str_t expected_path = sp_fs_join_path(tmp->mem, root, sp_str_view(exp.name));
 
     bool found = false;
@@ -105,6 +105,19 @@ static void run_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, col
 
     EXPECT_TRUE(found);
   }
+}
+
+static void run_collect_test(s32* utest_result, sp_test_file_manager_t* tmp, collect_test_t test) {
+  add_entry(tmp, "", (collect_entry_t) { .path = test.label , .kind = test.root});
+
+  sp_carr_for(test.files, it) {
+    if (!test.files[it].path) break;
+    add_entry(tmp, test.label, test.files[it]);
+  }
+
+  sp_str_t root = sp_test_file_path(tmp, sp_str_view(test.label));
+  check_collect_test(utest_result, tmp, &test, root);
+  check_collect_test(utest_result, tmp, &test, sp_str_concat(tmp->mem, root, sp_str_lit("/")));
 }
 
 UTEST_F(fs_collect, empty_dir) {
