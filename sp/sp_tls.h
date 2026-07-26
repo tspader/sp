@@ -1,7 +1,3 @@
-#if defined SP_IMPLEMENTATION && !defined(SP_TLS_IMPLEMENTATION)
-  #define SP_TLS_IMPLEMENTATION
-#endif
-
 #ifndef SP_TLS_H
 #define SP_TLS_H
 
@@ -133,8 +129,89 @@ SP_API sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_
 
 #endif
 
+#if defined SP_IMPLEMENTATION && !defined(SP_TLS_IMPLEMENTATION)
+  #define SP_TLS_IMPLEMENTATION
+#endif
 
+#if !defined(SP_TLS_IMPL_H)
+#if defined(SP_TLS_EVERYTHING_PUBLIC) || defined(SP_TLS_IMPLEMENTATION)
+#define SP_TLS_IMPL_H
+
+typedef struct {
+  s32      status;
+  sp_str_t location;
+  sp_str_t content_type;
+  bool     chunked;
+  bool     has_length;
+  u64      length;
+} sp_http_head_t;
+
+typedef struct {
+  sp_http_url_t           url;
+  bool                    absolute_form;
+  sp_http_method_t        method;
+  sp_str_t                payload;
+  sp_str_t                content_type;
+  const sp_http_header_t* headers;
+  bool                    strip_auth;
+} sp_http_wire_t;
+
+typedef struct sp_http_conn sp_http_conn_t;
+
+// @http
+SP_PRIVATE bool           sp_http_ci_equal(sp_str_t a, sp_str_t b);
+SP_PRIVATE bool           sp_http_ci_contains(sp_str_t haystack, sp_str_t needle);
+SP_PRIVATE sp_str_t       sp_http_str_tail(sp_str_t str, s32 from);
+SP_PRIVATE sp_str_t       sp_http_host_bare(sp_str_t host);
+SP_PRIVATE bool           sp_http_url_host_ok(sp_str_t host);
+SP_PRIVATE bool           sp_http_url_port_ok(sp_str_t port);
+SP_PRIVATE bool           sp_http_url_path_ok(sp_str_t path);
+SP_PRIVATE sp_tls_error_t sp_http_parse_head(sp_str_t head, sp_http_head_t* out);
+SP_PRIVATE bool           sp_http_location_is_absolute(sp_str_t location);
+SP_PRIVATE sp_str_t       sp_http_resolve_url(sp_mem_t mem, sp_http_url_t base, sp_str_t location);
+SP_PRIVATE bool           sp_http_no_proxy_match(sp_str_t host, sp_str_t no_proxy);
+SP_PRIVATE sp_str_t       sp_http_proxy_pick(sp_http_url_t url, sp_str_t http_proxy, sp_str_t https_proxy, sp_str_t all_proxy, sp_str_t no_proxy);
+SP_PRIVATE sp_str_t       sp_http_env_either(const c8* lower, const c8* upper);
+SP_PRIVATE sp_str_t       sp_http_proxy_from_env(sp_http_url_t url);
+
+#if defined(SP_TLS_WITH_MBEDTLS)
+struct mbedtls_net_context;
+
+// @tls
+SP_PRIVATE u32            sp_tls_chain_count(const struct mbedtls_x509_crt* chain);
+#if defined(SP_WIN32)
+// PCCERT_CONTEXT spelled out; wincrypt.h isn't in scope until the implementation
+SP_PRIVATE bool           sp_tls_win32_server_auth(const struct _CERT_CONTEXT* ctx);
+#endif
+
+// @http
+SP_PRIVATE sp_tls_error_t sp_http_map_io(sp_err_t err, sp_tls_error_t fallback);
+SP_PRIVATE u32            sp_http_timeout_ms(u32 requested, u32 fallback);
+SP_PRIVATE sp_tls_error_t sp_http_net_connect(struct mbedtls_net_context* net, const c8* host, const c8* port, u32 timeout_ms);
+SP_PRIVATE sp_err_t       sp_http_pump_wait(sp_http_conn_t* conn, s32 rc);
+SP_PRIVATE sp_err_t       sp_http_tls_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
+SP_PRIVATE sp_err_t       sp_http_tls_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
+SP_PRIVATE sp_tls_error_t sp_http_conn_write(sp_http_conn_t* conn, sp_str_t data);
+SP_PRIVATE sp_tls_error_t sp_http_connect_reply(sp_http_conn_t* conn);
+SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_trust_t* trust, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms);
+SP_PRIVATE void           sp_http_conn_close(sp_http_conn_t* conn);
+SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_io_reader_t* reader, sp_str_t* head);
+SP_PRIVATE sp_tls_error_t sp_http_read_line(sp_io_reader_t* reader, sp_str_t* line);
+SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_io_reader_t* reader, sp_io_writer_t* body, u64 n, u64* written);
+SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_io_reader_t* reader, sp_http_head_t head, sp_io_writer_t* body, u64* written);
+SP_PRIVATE sp_str_t       sp_http_method_name(sp_http_method_t method);
+SP_PRIVATE bool           sp_http_headers_have(const sp_http_header_t* headers, sp_str_t name);
+SP_PRIVATE sp_tls_error_t sp_http_headers_check(const sp_http_header_t* headers);
+SP_PRIVATE sp_str_t       sp_http_build_request(sp_mem_t mem, sp_http_wire_t wire);
+SP_PRIVATE bool           sp_http_proxy_url_parse(sp_mem_t mem, sp_str_t proxy, sp_http_url_t* out);
+#endif
+
+#endif // SP_TLS_EVERYTHING_PUBLIC or SP_TLS_IMPLEMENTATION
+#endif // SP_TLS_IMPL_H
+
+#ifndef SP_TLS_C
 #if defined(SP_TLS_IMPLEMENTATION)
+#define SP_TLS_C
 
 sp_tls_backend_t sp_tls_native_backend(void) {
 #if defined(SP_WIN32)
@@ -284,14 +361,6 @@ bool sp_http_url_parse(sp_str_t url, sp_http_url_t* out) {
   return sp_http_url_host_ok(out->host) && sp_http_url_port_ok(out->port) && sp_http_url_path_ok(out->path);
 }
 
-typedef struct {
-  s32      status;
-  sp_str_t location;
-  sp_str_t content_type;
-  bool     chunked;
-  bool     has_length;
-  u64      length;
-} sp_http_head_t;
 
 SP_PRIVATE sp_tls_error_t sp_http_parse_head(sp_str_t head, sp_http_head_t* out) {
   *out = sp_zero_s(sp_http_head_t);
@@ -770,8 +839,6 @@ sp_tls_error_t sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t m
 #define SP_HTTP_HEAD_MAX    SP_HTTP_BUFFER_SIZE
 #define SP_HTTP_MAX_INTERIM 8
 
-typedef struct sp_http_conn sp_http_conn_t;
-
 typedef struct {
   sp_io_reader_t base;
   sp_http_conn_t* conn;
@@ -1178,16 +1245,6 @@ SP_PRIVATE sp_tls_error_t sp_http_headers_check(const sp_http_header_t* headers)
   return SP_TLS_OK;
 }
 
-typedef struct {
-  sp_http_url_t           url;
-  bool                    absolute_form;
-  sp_http_method_t        method;
-  sp_str_t                payload;
-  sp_str_t                content_type;
-  const sp_http_header_t* headers;
-  bool                    strip_auth;
-} sp_http_wire_t;
-
 SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_wire_t wire) {
   sp_http_url_t url = wire.url;
   bool default_port =
@@ -1469,6 +1526,7 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
   return SP_TLS_ERR_UNSUPPORTED;
 }
 
-#endif
+#endif // SP_TLS_WITH_MBEDTLS
 
-#endif
+#endif // SP_TLS_IMPLEMENTATION
+#endif // SP_TLS_C

@@ -1,3 +1,4 @@
+#define SP_TLS_EVERYTHING_PUBLIC
 #include "sp/sp_tls.h"
 #include "test.h"
 
