@@ -24,6 +24,10 @@ else
   BUILD_DIR = $(BUILD_ROOT)
 endif
 
+ifdef TLS
+  BUILD_DIR := $(BUILD_DIR)/tls
+endif
+
 CFLAGS_PLATFORM =
 ifneq (,$(findstring linux-none,$(TRIPLE)))
   CFLAGS_PLATFORM = -nostdlib -static -fno-stack-protector -fno-sanitize=undefined -DSP_FREESTANDING
@@ -66,15 +70,24 @@ else
   MBEDTLS_AR = ar
 endif
 
-MBEDTLS_OK = 1
-ifneq (,$(findstring linux-none,$(TRIPLE)))
-  MBEDTLS_OK =
-endif
-ifneq (,$(findstring wasm,$(TRIPLE)))
-  MBEDTLS_OK =
-endif
-ifneq (,$(findstring freestanding,$(TRIPLE)))
-  MBEDTLS_OK =
+MBEDTLS_OK =
+ifdef TLS
+  MBEDTLS_OK = 1
+  ifeq (,$(MBEDTLS_SRCS))
+    $(error TLS=1 but no mbedtls sources under $(MBEDTLS_DIR)/library)
+  endif
+  ifneq (,$(findstring linux-none,$(TRIPLE)))
+    MBEDTLS_OK =
+  endif
+  ifneq (,$(findstring wasm,$(TRIPLE)))
+    MBEDTLS_OK =
+  endif
+  ifneq (,$(findstring freestanding,$(TRIPLE)))
+    MBEDTLS_OK =
+  endif
+  ifeq (,$(MBEDTLS_OK))
+    $(warning TLS=1 ignored: no mbedtls support for target $(TRIPLE))
+  endif
 endif
 
 TLS_LDLIBS =
