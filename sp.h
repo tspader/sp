@@ -3589,6 +3589,25 @@ typedef struct {
 typedef struct { SP_NT_FUNCS(SP_NT_DECL) } sp_nt_dispatch_t;
 #undef SP_NT_DECL
 
+typedef struct {
+  int    (__stdcall *WSAStartup)(WORD version, WSADATA* data);
+  int    (__stdcall *WSAGetLastError)(void);
+  int    (__stdcall *WSAIoctl)(SOCKET s, DWORD code, void* in, DWORD in_size, void* out, DWORD out_size, DWORD* bytes, WSAOVERLAPPED* overlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE on_complete);
+  int    (__stdcall *WSAPoll)(WSAPOLLFD* fds, ULONG nfds, INT timeout_ms);
+  SOCKET (__stdcall *socket)(int af, int type, int protocol);
+  int    (__stdcall *bind)(SOCKET s, const struct sockaddr* addr, int len);
+  int    (__stdcall *listen)(SOCKET s, int backlog);
+  int    (__stdcall *connect)(SOCKET s, const struct sockaddr* addr, int len);
+  SOCKET (__stdcall *accept)(SOCKET s, struct sockaddr* addr, int* len);
+  int    (__stdcall *closesocket)(SOCKET s);
+  int    (__stdcall *recv)(SOCKET s, char* buf, int len, int flags);
+  int    (__stdcall *send)(SOCKET s, const char* buf, int len, int flags);
+  int    (__stdcall *ioctlsocket)(SOCKET s, long cmd, u_long* arg);
+  int    (__stdcall *setsockopt)(SOCKET s, int level, int name, const char* value, int len);
+  int    (__stdcall *getsockopt)(SOCKET s, int level, int name, char* value, int* len);
+  int    (__stdcall *getsockname)(SOCKET s, struct sockaddr* addr, int* len);
+} sp_ws2_dispatch_t;
+
 SP_API sp_nt_status_t sp_sys_nt_path(sp_str_t utf8, sp_sys_nt_path_t* out);
 SP_API void           sp_sys_nt_path_free(sp_sys_nt_path_t* path);
 #endif
@@ -3755,6 +3774,7 @@ typedef struct {
   sp_atomic_s32_t unsupported [8];
 #if defined(SP_WIN32)
   sp_nt_dispatch_t nt;
+  sp_ws2_dispatch_t ws2;
 #endif
 } sp_rt_t;
 
@@ -7534,12 +7554,35 @@ sp_err_t sp_sys_tty_use_vt_p(sp_sys_fd_t fd) {
 // SP_SYS_SOCKET_WIN32 //
 ///////////////////////
 #if defined(SP_WIN32)
-SP_PRIVATE void sp_sys_win32_wsa_ensure(void) {
-  static bool wsa_init = false;
-  if (wsa_init) return;
+SP_PRIVATE bool sp_sys_win32_ws2_ensure(void) {
+  static bool ready = false;
+  if (ready) return true;
+
+  HMODULE h = LoadLibraryW(L"ws2_32.dll");
+  if (!h) return false;
+
+  sp_ws2_dispatch_t* ws2 = &sp_rt.ws2;
+  ws2->WSAStartup      = (int (__stdcall*)(WORD, WSADATA*))(void(*)(void))GetProcAddress(h, "WSAStartup");
+  ws2->WSAGetLastError = (int (__stdcall*)(void))(void(*)(void))GetProcAddress(h, "WSAGetLastError");
+  ws2->WSAIoctl        = (int (__stdcall*)(SOCKET, DWORD, void*, DWORD, void*, DWORD, DWORD*, WSAOVERLAPPED*, LPWSAOVERLAPPED_COMPLETION_ROUTINE))(void(*)(void))GetProcAddress(h, "WSAIoctl");
+  ws2->WSAPoll         = (int (__stdcall*)(WSAPOLLFD*, ULONG, INT))(void(*)(void))GetProcAddress(h, "WSAPoll");
+  ws2->socket          = (SOCKET (__stdcall*)(int, int, int))(void(*)(void))GetProcAddress(h, "socket");
+  ws2->bind            = (int (__stdcall*)(SOCKET, const struct sockaddr*, int))(void(*)(void))GetProcAddress(h, "bind");
+  ws2->listen          = (int (__stdcall*)(SOCKET, int))(void(*)(void))GetProcAddress(h, "listen");
+  ws2->connect         = (int (__stdcall*)(SOCKET, const struct sockaddr*, int))(void(*)(void))GetProcAddress(h, "connect");
+  ws2->accept          = (SOCKET (__stdcall*)(SOCKET, struct sockaddr*, int*))(void(*)(void))GetProcAddress(h, "accept");
+  ws2->closesocket     = (int (__stdcall*)(SOCKET))(void(*)(void))GetProcAddress(h, "closesocket");
+  ws2->recv            = (int (__stdcall*)(SOCKET, char*, int, int))(void(*)(void))GetProcAddress(h, "recv");
+  ws2->send            = (int (__stdcall*)(SOCKET, const char*, int, int))(void(*)(void))GetProcAddress(h, "send");
+  ws2->ioctlsocket     = (int (__stdcall*)(SOCKET, long, u_long*))(void(*)(void))GetProcAddress(h, "ioctlsocket");
+  ws2->setsockopt      = (int (__stdcall*)(SOCKET, int, int, const char*, int))(void(*)(void))GetProcAddress(h, "setsockopt");
+  ws2->getsockopt      = (int (__stdcall*)(SOCKET, int, int, char*, int*))(void(*)(void))GetProcAddress(h, "getsockopt");
+  ws2->getsockname     = (int (__stdcall*)(SOCKET, struct sockaddr*, int*))(void(*)(void))GetProcAddress(h, "getsockname");
+
   WSADATA wsa = sp_zero;
-  WSAStartup(MAKEWORD(2, 2), &wsa);
-  wsa_init = true;
+  ws2->WSAStartup(MAKEWORD(2, 2), &wsa);
+  ready = true;
+  return true;
 }
 
 #define SP_SYS_WIN32_SIO_TCP_INITIAL_RTO                          0x98000011
@@ -7575,7 +7618,7 @@ SP_PRIVATE void sp_sys_win32_speed_up_loopback_connect(SOCKET fd) {
   params.rtt = SP_SYS_WIN32_TCP_INITIAL_RTO_UNSPECIFIED_RTT;
   params.max_syn_retransmissions = sp_sys_win32_supports_tcp_fail_fast() ? SP_SYS_WIN32_TCP_INITIAL_RTO_NO_SYN_RETRANSMISSIONS : 1;
   DWORD bytes = 0;
-  WSAIoctl(fd, SP_SYS_WIN32_SIO_TCP_INITIAL_RTO, &params, sizeof(params), SP_NULLPTR, 0, &bytes, SP_NULLPTR, SP_NULLPTR);
+  sp_rt.ws2.WSAIoctl(fd, SP_SYS_WIN32_SIO_TCP_INITIAL_RTO, &params, sizeof(params), SP_NULLPTR, 0, &bytes, SP_NULLPTR, SP_NULLPTR);
 }
 #endif
 
@@ -7590,11 +7633,12 @@ SP_PRIVATE u64 sp_sys_ns_from_timespec(s64 sec, s64 nsec) {
 
 sp_err_t sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
 #if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
   WSAPOLLFD pfd = sp_zero;
   pfd.fd = (SOCKET)socket;
   pfd.events = readable ? POLLRDNORM : POLLWRNORM;
-  s32 rc = WSAPoll(&pfd, 1, timeout_ms ? (INT)sp_min(timeout_ms, (u32)SP_LIMIT_S32_MAX) : -1);
-  if (rc < 0) return sp_sys_err_from_wsa(WSAGetLastError());
+  s32 rc = sp_rt.ws2.WSAPoll(&pfd, 1, timeout_ms ? (INT)sp_min(timeout_ms, (u32)SP_LIMIT_S32_MAX) : -1);
+  if (rc < 0) return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   return rc > 0 ? SP_OK : SP_ERR_SYS_TIMED_OUT;
 
 #elif defined(SP_LINUX)
@@ -7665,9 +7709,10 @@ sp_err_t sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout
 /////////////////////////////////
 sp_err_t sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket) {
 #if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
   u_long nonblock = 1;
-  if (ioctlsocket((SOCKET)socket, FIONBIO, &nonblock) != 0) {
-    return sp_sys_err_from_wsa(WSAGetLastError());
+  if (sp_rt.ws2.ioctlsocket((SOCKET)socket, FIONBIO, &nonblock) != 0) {
+    return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   }
   return SP_OK;
 
@@ -7697,9 +7742,10 @@ sp_err_t sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket) {
 //////////////////////////////
 sp_err_t sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket) {
 #if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
   BOOL reuse = TRUE;
-  if (setsockopt((SOCKET)socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) != 0) {
-    return sp_sys_err_from_wsa(WSAGetLastError());
+  if (sp_rt.ws2.setsockopt((SOCKET)socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) != 0) {
+    return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   }
   return SP_OK;
 
@@ -7729,12 +7775,12 @@ sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out) {
   *out = SP_SYS_INVALID_SOCKET;
 
 #if defined(SP_WIN32)
-  sp_sys_win32_wsa_ensure();
-  SOCKET fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (fd == INVALID_SOCKET) return sp_sys_err_from_wsa(WSAGetLastError());
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
+  SOCKET fd = sp_rt.ws2.socket(AF_INET, SOCK_STREAM, 0);
+  if (fd == INVALID_SOCKET) return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
   if (err != SP_OK) {
-    closesocket(fd);
+    sp_rt.ws2.closesocket(fd);
     return err;
   }
   *out = (sp_sys_socket_t)fd;
@@ -7776,13 +7822,14 @@ sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out) {
 //////////////////////
 sp_err_t sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
 #if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
   struct sockaddr_in sa = sp_zero;
   sa.sin_family = AF_INET;
   ((u8*)&sa.sin_port)[0] = (u8)(addr.port >> 8);
   ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
   sp_mem_copy(&sa.sin_addr, addr.octets, 4);
-  if (bind((SOCKET)socket, (struct sockaddr*)&sa, sizeof(sa)) != 0) {
-    return sp_sys_err_from_wsa(WSAGetLastError());
+  if (sp_rt.ws2.bind((SOCKET)socket, (struct sockaddr*)&sa, sizeof(sa)) != 0) {
+    return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   }
   return SP_OK;
 
@@ -7818,7 +7865,8 @@ sp_err_t sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
 ////////////////////////
 sp_err_t sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog) {
 #if defined(SP_WIN32)
-  if (listen((SOCKET)socket, (int)backlog) != 0) return sp_sys_err_from_wsa(WSAGetLastError());
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
+  if (sp_rt.ws2.listen((SOCKET)socket, (int)backlog) != 0) return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   return SP_OK;
 
 #elif defined(SP_LINUX)
@@ -7841,6 +7889,7 @@ sp_err_t sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog) {
 /////////////////////////
 sp_err_t sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
 #if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
   if (addr.octets[0] == 127) sp_sys_win32_speed_up_loopback_connect((SOCKET)socket);
 
   struct sockaddr_in sa = sp_zero;
@@ -7849,8 +7898,8 @@ sp_err_t sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
   ((u8*)&sa.sin_port)[1] = (u8)(addr.port & 0xFF);
   sp_mem_copy(&sa.sin_addr, addr.octets, 4);
 
-  if (connect((SOCKET)socket, (struct sockaddr*)&sa, sizeof(sa)) == 0) return SP_OK;
-  return sp_sys_err_from_wsa(WSAGetLastError());
+  if (sp_rt.ws2.connect((SOCKET)socket, (struct sockaddr*)&sa, sizeof(sa)) == 0) return SP_OK;
+  return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
 
 #elif defined(SP_LINUX)
   sp_sys_linux_sockaddr_in_t sa = sp_zero;
@@ -7888,10 +7937,11 @@ sp_err_t sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
 ///////////////////////
 sp_err_t sp_sys_socket_error_p(sp_sys_socket_t socket) {
 #if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
   int err = 0;
   int err_len = sizeof(err);
-  if (getsockopt((SOCKET)socket, SOL_SOCKET, SO_ERROR, (char*)&err, &err_len) != 0) {
-    return sp_sys_err_from_wsa(WSAGetLastError());
+  if (sp_rt.ws2.getsockopt((SOCKET)socket, SOL_SOCKET, SO_ERROR, (char*)&err, &err_len) != 0) {
+    return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   }
   return sp_sys_err_from_wsa(err);
 
@@ -7923,16 +7973,17 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) 
   *out = SP_SYS_INVALID_SOCKET;
 
 #if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
   while (true) {
-    SOCKET fd = accept((SOCKET)listener, SP_NULLPTR, SP_NULLPTR);
+    SOCKET fd = sp_rt.ws2.accept((SOCKET)listener, SP_NULLPTR, SP_NULLPTR);
     if (fd == INVALID_SOCKET) {
-      s32 e = WSAGetLastError();
+      s32 e = sp_rt.ws2.WSAGetLastError();
       if (e == WSAECONNRESET) continue;
       return sp_sys_err_from_wsa(e);
     }
     sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
     if (err != SP_OK) {
-      closesocket(fd);
+      sp_rt.ws2.closesocket(fd);
       return err;
     }
     *out = (sp_sys_socket_t)fd;
@@ -8006,7 +8057,8 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) 
 ///////////////////////
 sp_err_t sp_sys_socket_close_p(sp_sys_socket_t socket) {
 #if defined(SP_WIN32)
-  if (closesocket((SOCKET)socket) != 0) return sp_sys_err_from_wsa(WSAGetLastError());
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
+  if (sp_rt.ws2.closesocket((SOCKET)socket) != 0) return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   return SP_OK;
 
 #elif defined(SP_LINUX)
@@ -8040,8 +8092,9 @@ sp_err_t sp_sys_socket_recv_p(sp_sys_socket_t socket, void* ptr, u64 size, u64* 
   if (bytes_read) *bytes_read = 0;
 
 #if defined(SP_WIN32)
-  s64 rc = recv((SOCKET)socket, (char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
-  if (rc < 0) return sp_sys_err_from_wsa(WSAGetLastError());
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
+  s64 rc = sp_rt.ws2.recv((SOCKET)socket, (char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
+  if (rc < 0) return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -8073,8 +8126,9 @@ sp_err_t sp_sys_socket_send_p(sp_sys_socket_t socket, const void* ptr, u64 size,
   if (bytes_written) *bytes_written = 0;
 
 #if defined(SP_WIN32)
-  s64 rc = send((SOCKET)socket, (const char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
-  if (rc < 0) return sp_sys_err_from_wsa(WSAGetLastError());
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
+  s64 rc = sp_rt.ws2.send((SOCKET)socket, (const char*)ptr, (int)sp_min(size, (u64)INT32_MAX), 0);
+  if (rc < 0) return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -8106,10 +8160,11 @@ sp_err_t sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out) {
   *out = 0;
 
 #if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
   struct sockaddr_in sa = sp_zero;
   int len = sizeof(sa);
-  if (getsockname((SOCKET)socket, (struct sockaddr*)&sa, &len) != 0) {
-    return sp_sys_err_from_wsa(WSAGetLastError());
+  if (sp_rt.ws2.getsockname((SOCKET)socket, (struct sockaddr*)&sa, &len) != 0) {
+    return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   }
   *out = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
   return SP_OK;
