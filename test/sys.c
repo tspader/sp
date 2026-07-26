@@ -3,7 +3,6 @@
 
 SP_TEST_MAIN()
 
-#include "sys/open.c"
 #include "sys/read.c"
 #include "sys/pread.c"
 #include "sys/write.c"
@@ -17,7 +16,6 @@ SP_TEST_MAIN()
 #include "sys/link.c"
 #include "sys/symlink.c"
 #include "sys/stat.c"
-#include "sys/iter.c"
 #include "sys/root.c"
 #include "sys/socket.c"
 #include "sys/tty.c"

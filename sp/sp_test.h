@@ -1,0 +1,1834 @@
+#ifndef SP_TEST_H
+#define SP_TEST_H
+
+#include "sp.h"
+#include "sp_glob.h"
+
+//////////////
+// REGISTRY //
+//////////////
+typedef struct sp_test_t sp_test_t;
+
+SP_TYPEDEF_FN(sp_err_t, sp_test_fn_t, sp_test_t* t);
+SP_TYPEDEF_FN(sp_err_t, sp_test_each_fn_t, sp_test_t* t, const void* it);
+SP_TYPEDEF_FN(sp_err_t, sp_test_setup_fn_t, sp_test_t* t);
+SP_TYPEDEF_FN(void, sp_test_teardown_fn_t, sp_test_t* t);
+
+typedef struct {
+  const c8* name;
+  sp_test_fn_t fn;
+  sp_test_each_fn_t each;
+  const void* cases;
+  u32 stride;
+  u32 count;
+  const c8* const* case_name;
+  sp_test_setup_fn_t setup;
+  sp_test_teardown_fn_t teardown;
+  const void* user;
+  bool serial;
+} sp_test_decl_t;
+
+typedef struct {
+  const c8* name;
+  const sp_test_decl_t* tests;
+  bool serial;
+} sp_test_suite_t;
+
+typedef struct {
+  const c8* suite;
+  sp_test_decl_t decl;
+} sp_test_reg_t;
+
+typedef struct {
+  const c8* suite;
+  bool serial;
+} sp_test_suite_attr_t;
+
+#define __sp_test_fn(SUITE, NAME)    sp_mcat(sp_mcat(sp_test_fn_, SUITE), sp_mcat(_, NAME))
+#define __sp_test_thunk(SUITE, NAME) sp_mcat(__sp_test_fn(SUITE, NAME), _thunk)
+
+#if defined(__ELF__) || defined(SP_WASM) || (defined(SP_TCC) && defined(SP_LINUX))
+  #define SP_TEST_AUTOREG 1
+
+  #if defined(__ELF__) && defined(__has_attribute)
+    #if __has_attribute(retain)
+      #define SP_TEST_RETAIN __attribute__((retain))
+    #endif
+  #endif
+  #if !defined(SP_TEST_RETAIN)
+    #define SP_TEST_RETAIN
+  #endif
+
+  #define __sp_test_reg_section   __attribute__((used, section("sp_test"))) SP_TEST_RETAIN
+  #define __sp_test_suite_section __attribute__((used, section("sp_test_suite"))) SP_TEST_RETAIN
+#elif defined(SP_MACOS)
+  #define SP_TEST_AUTOREG 1
+
+  #define __sp_test_reg_section   __attribute__((used, section("__DATA,sp_test")))
+  #define __sp_test_suite_section __attribute__((used, section("__DATA,sp_test_suite")))
+#elif defined(SP_WIN32) && defined(SP_GNUC)
+  #define SP_TEST_AUTOREG 1
+
+  #define __sp_test_reg_section   __attribute__((used, section("sp_test")))
+  #define __sp_test_suite_section __attribute__((used, section("sp_suite")))
+#elif defined(SP_WIN32) && defined(SP_MSVC)
+  #define SP_TEST_AUTOREG 1
+
+  #pragma section("sp_test", read)
+  #pragma section("sp_suite", read)
+  #define __sp_test_reg_section   __declspec(allocate("sp_test"))
+  #define __sp_test_suite_section __declspec(allocate("sp_suite"))
+#else
+  #define SP_TEST_AUTOREG 0
+#endif
+
+#if SP_TEST_AUTOREG
+  #define __sp_test_reg(ID, SUITE, ...)                                       \
+    static const sp_test_reg_t sp_mcat(ID, _v) = {                            \
+      .suite = #SUITE,                                                        \
+      .decl = __VA_ARGS__                                                     \
+    };                                                                        \
+    static __sp_test_reg_section const sp_test_reg_t* ID = &sp_mcat(ID, _v)
+
+  #define sp_test_reg(SUITE, ...) __sp_test_reg(sp_mcat(sp_test_reg_, __COUNTER__), SUITE, __VA_ARGS__)
+
+  #define __sp_test_reg_suite(ID, SUITE, ...)                                 \
+    static const sp_test_suite_attr_t sp_mcat(ID, _v) = {                     \
+      .suite = #SUITE,                                                        \
+      __VA_ARGS__                                                             \
+    };                                                                        \
+    static __sp_test_suite_section const sp_test_suite_attr_t* ID = &sp_mcat(ID, _v)
+
+  #define sp_test_suite(SUITE, ...) __sp_test_reg_suite(sp_mcat(sp_test_suite_reg_, __COUNTER__), SUITE, __VA_ARGS__)
+
+  // sp_test(demo, eq) { ... } both defines the test function and registers it;
+  // the macro ends with the signature, so the brace block completes the
+  // definition. The body sees two implicit names: t (sp_test_t*) and, in the
+  // each variants, it (typed pointer to the current case row).
+  #define sp_test(SUITE, NAME)                                              \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t);                \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .fn = __sp_test_fn(SUITE, NAME)                                       \
+    });                                                                     \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t)
+
+  #define sp_test_ex(SUITE, NAME, SETUP, TEARDOWN)                          \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t);                \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .fn = __sp_test_fn(SUITE, NAME),                                      \
+      .setup = (SETUP),                                                     \
+      .teardown = (TEARDOWN)                                                \
+    });                                                                     \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t)
+
+  #define __sp_test_each_thunk_def(SUITE, NAME, TYPE, TARGET)                              \
+    static sp_err_t __sp_test_thunk(SUITE, NAME)(sp_test_t* t, const void* sp_test_arg) {  \
+      TYPE sp_test_row = *(const TYPE*)sp_test_arg;                                        \
+      return TARGET(t, &sp_test_row);                                                      \
+    }
+
+  #define __sp_test_each_def(SUITE, NAME, TYPE, ARR)                                       \
+    sp_static_assert(sizeof(TYPE) == sizeof((ARR)[0]), sp_test_each_row_type_mismatch);    \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it);                     \
+    __sp_test_each_thunk_def(SUITE, NAME, TYPE, __sp_test_fn(SUITE, NAME))
+
+  #define sp_test_each_named(SUITE, NAME, TYPE, ARR, MEMBER)                \
+    __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .each = __sp_test_thunk(SUITE, NAME),                                 \
+      .cases = (ARR),                                                       \
+      .stride = (u32)sizeof((ARR)[0]),                                      \
+      .count = (u32)sp_carr_len(ARR),                                       \
+      .case_name = &(ARR)[0].MEMBER                                         \
+    });                                                                     \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
+
+  #define sp_test_each(SUITE, NAME, TYPE, ARR) sp_test_each_named(SUITE, NAME, TYPE, ARR, name)
+
+  #define sp_test_each_ex(SUITE, NAME, TYPE, ARR, SETUP, TEARDOWN)          \
+    __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .each = __sp_test_thunk(SUITE, NAME),                                 \
+      .cases = (ARR),                                                       \
+      .stride = (u32)sizeof((ARR)[0]),                                      \
+      .count = (u32)sp_carr_len(ARR),                                       \
+      .case_name = &(ARR)[0].name,                                          \
+      .setup = (SETUP),                                                     \
+      .teardown = (TEARDOWN)                                                \
+    });                                                                     \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
+
+  #define sp_test_each_anon(SUITE, NAME, TYPE, ARR)                         \
+    __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .each = __sp_test_thunk(SUITE, NAME),                                 \
+      .cases = (ARR),                                                       \
+      .stride = (u32)sizeof((ARR)[0]),                                      \
+      .count = (u32)sp_carr_len(ARR)                                        \
+    });                                                                     \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
+
+  #define sp_test_args(SUITE, NAME, T)                                      \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T);                \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .fn = __sp_test_fn(SUITE, NAME)                                       \
+    });                                                                     \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T)
+
+  #define sp_test_each_args(SUITE, NAME, TYPE, ARR, T, IT)                  \
+    sp_static_assert(sizeof(TYPE) == sizeof((ARR)[0]), sp_test_each_row_type_mismatch); \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T, TYPE* IT);      \
+    __sp_test_each_thunk_def(SUITE, NAME, TYPE, __sp_test_fn(SUITE, NAME))  \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .each = __sp_test_thunk(SUITE, NAME),                                 \
+      .cases = (ARR),                                                       \
+      .stride = (u32)sizeof((ARR)[0]),                                      \
+      .count = (u32)sp_carr_len(ARR),                                       \
+      .case_name = &(ARR)[0].name                                           \
+    });                                                                     \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T, TYPE* IT)
+
+  #define sp_test_fn(SUITE, NAME, FN)                                       \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .fn = (FN)                                                            \
+    })
+
+  #define sp_test_each_fn(SUITE, NAME, TYPE, ARR, FN)                       \
+    sp_static_assert(sizeof(TYPE) == sizeof((ARR)[0]), sp_test_each_row_type_mismatch); \
+    __sp_test_each_thunk_def(SUITE, NAME, TYPE, FN)                         \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .each = __sp_test_thunk(SUITE, NAME),                                 \
+      .cases = (ARR),                                                       \
+      .stride = (u32)sizeof((ARR)[0]),                                      \
+      .count = (u32)sp_carr_len(ARR),                                       \
+      .case_name = &(ARR)[0].name                                           \
+    })
+#else
+  #define __sp_test_unsupported() \
+    sp_static_assert(false, no_sp_test_autoreg_for_this_object_format__pass_suites_to_sp_test_main)
+
+  #define sp_test_reg(SUITE, ...)                            __sp_test_unsupported()
+  #define sp_test_suite(SUITE, ...)                          __sp_test_unsupported()
+  #define sp_test(SUITE, NAME)                               __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t)
+  #define sp_test_ex(SUITE, NAME, SETUP, TEARDOWN)           sp_test(SUITE, NAME)
+  #define sp_test_each(SUITE, NAME, TYPE, ARR)                     __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
+  #define sp_test_each_named(SUITE, NAME, TYPE, ARR, MEMBER)       sp_test_each(SUITE, NAME, TYPE, ARR)
+  #define sp_test_each_ex(SUITE, NAME, TYPE, ARR, SETUP, TEARDOWN) sp_test_each(SUITE, NAME, TYPE, ARR)
+  #define sp_test_each_anon(SUITE, NAME, TYPE, ARR)                sp_test_each(SUITE, NAME, TYPE, ARR)
+  #define sp_test_args(SUITE, NAME, T)                             __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T)
+  #define sp_test_each_args(SUITE, NAME, TYPE, ARR, T, IT)         __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T, TYPE* IT)
+  #define sp_test_fn(SUITE, NAME, FN)                              __sp_test_unsupported()
+  #define sp_test_each_fn(SUITE, NAME, TYPE, ARR, FN)              __sp_test_unsupported()
+#endif
+
+SP_API s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites);
+
+SP_API bool sp_test_filtered(sp_glob_t* filter, const c8* name);
+
+
+/////////////
+// CONTEXT //
+/////////////
+typedef struct {
+  sp_str_t key;
+  sp_str_t value;
+} sp_test_kv_t;
+
+typedef struct {
+  sp_str_t file;
+  u32 line;
+  sp_str_t message;
+  sp_str_t expected;
+  sp_str_t actual;
+  sp_da(sp_test_kv_t) kvs;
+} sp_test_failure_t;
+
+SP_API sp_err_t    sp_test_skip(sp_test_t* t, const c8* fmt, ...);
+SP_API void        sp_test_fail(sp_test_t* t, const c8* fmt, ...);
+SP_API sp_str_t    sp_test_get_name(sp_test_t* t);
+
+SP_API void        sp_test_kv(sp_test_t* t, const c8* key, sp_str_t value);
+SP_API void        sp_test_kv_c(sp_test_t* t, const c8* key, const c8* value);
+SP_API void        sp_test_kv_clear(sp_test_t* t, const c8* key);
+
+SP_API void        sp_test_set_state(sp_test_t* t, void* state);
+SP_API void*       sp_test_state(sp_test_t* t);
+
+SP_API void        sp_test_log(sp_test_t* t, const c8* fmt, ...);
+SP_API void        sp_test_note(sp_test_t* t, const c8* fmt, ...);
+
+SP_API sp_mem_t    sp_test_mem(sp_test_t* t);
+SP_API sp_mem_t    sp_test_arena(sp_test_t* t);
+SP_API sp_str_t    sp_test_dir(sp_test_t* t);
+SP_API const void* sp_test_user(sp_test_t* t);
+
+SP_API void        sp_test_record(sp_test_t* t, sp_test_failure_t failure);
+SP_API sp_str_t    sp_test_format(sp_test_t* t, const c8* fmt, ...);
+
+// relative paths are resolved against the directory of the source file
+// containing the call; absolute paths are rejected (use the _abs variant).
+// resolution: sp_test_resolve_candidates enumerates where the calling file
+// may live at runtime and the first existing candidate wins, so goldens
+// stay addressable when the tree is relocated (cross-compile, synced trees).
+SP_API void            sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
+SP_API void            sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
+
+// pure; candidates for locating a compile-time path at runtime, backslashes
+// normalized to forward slashes. probe order: the path itself when rooted,
+// then each suffix of the path holding a directory component (longest first,
+// root or drive stripped) joined to each ancestor of anchor (nearest first),
+// then the path itself when relative, as a cwd-dependent last resort.
+SP_API sp_da(sp_str_t) sp_test_resolve_candidates(sp_mem_t mem, sp_str_t file, sp_str_t anchor);
+
+SP_API bool        sp_test_mem_eq(sp_test_t* t, const void* lhs, const void* rhs, u64 len, const c8* sl, const c8* sr, sp_str_t file, u32 line);
+SP_API bool        sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 count, const c8* const* expect, const c8* sa, const c8* se, sp_str_t file, u32 line);
+
+typedef struct {
+  sp_atomic_s32_t state;
+  sp_err_t err;
+} sp_test_once_t;
+
+SP_TYPEDEF_FN(sp_err_t, sp_test_once_fn_t, void* user);
+SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user);
+
+
+/////////////////////
+// VALUE FORMATTING //
+/////////////////////
+#if defined(__clang__)
+  #define SP_TEST_VALUE_FN SP_API __attribute__((overloadable)) sp_str_t sp_test_value
+
+  SP_TEST_VALUE_FN(sp_test_t* t, bool value);
+  SP_TEST_VALUE_FN(sp_test_t* t, c8 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, s8 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, u8 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, s16 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, u16 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, s32 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, u32 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, s64 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, u64 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, f32 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, f64 value);
+  SP_TEST_VALUE_FN(sp_test_t* t, const c8* value);
+  SP_TEST_VALUE_FN(sp_test_t* t, void* value);
+  SP_TEST_VALUE_FN(sp_test_t* t, sp_str_t value);
+#elif defined(__GNUC__) || defined(__TINYC__)
+  SP_API sp_str_t sp_test_value_bool(sp_test_t* t, bool value);
+  SP_API sp_str_t sp_test_value_c8(sp_test_t* t, c8 value);
+  SP_API sp_str_t sp_test_value_s8(sp_test_t* t, s8 value);
+  SP_API sp_str_t sp_test_value_u8(sp_test_t* t, u8 value);
+  SP_API sp_str_t sp_test_value_s16(sp_test_t* t, s16 value);
+  SP_API sp_str_t sp_test_value_u16(sp_test_t* t, u16 value);
+  SP_API sp_str_t sp_test_value_s32(sp_test_t* t, s32 value);
+  SP_API sp_str_t sp_test_value_u32(sp_test_t* t, u32 value);
+  SP_API sp_str_t sp_test_value_s64(sp_test_t* t, s64 value);
+  SP_API sp_str_t sp_test_value_u64(sp_test_t* t, u64 value);
+  SP_API sp_str_t sp_test_value_f32(sp_test_t* t, f32 value);
+  SP_API sp_str_t sp_test_value_f64(sp_test_t* t, f64 value);
+  SP_API sp_str_t sp_test_value_cstr(sp_test_t* t, const c8* value);
+  SP_API sp_str_t sp_test_value_ptr(sp_test_t* t, void* value);
+  SP_API sp_str_t sp_test_value_str(sp_test_t* t, sp_str_t value);
+  SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
+
+  #define sp_test_value(T, V) _Generic((V), \
+    bool:        sp_test_value_bool,        \
+    c8:          sp_test_value_c8,          \
+    s8:          sp_test_value_s8,          \
+    u8:          sp_test_value_u8,          \
+    s16:         sp_test_value_s16,         \
+    u16:         sp_test_value_u16,         \
+    s32:         sp_test_value_s32,         \
+    u32:         sp_test_value_u32,         \
+    s64:         sp_test_value_s64,         \
+    u64:         sp_test_value_u64,         \
+    f32:         sp_test_value_f32,         \
+    f64:         sp_test_value_f64,         \
+    const c8*:   sp_test_value_cstr,        \
+    c8*:         sp_test_value_cstr,        \
+    void*:       sp_test_value_ptr,         \
+    sp_str_t:    sp_test_value_str,         \
+    default:     sp_test_value_opaque       \
+  )(T, V)
+#else
+  #define sp_test_value(T, V) (SP_UNUSED(T), SP_UNUSED(V), sp_str_lit("?"))
+#endif
+
+
+////////////////
+// ASSERTIONS //
+////////////////
+#if (defined(__clang__) || defined(__GNUC__)) && !defined(__TINYC__)
+  #define sp_test_auto(X) __auto_type
+#else
+  #define sp_test_auto(X) __typeof__((X) + 0)
+#endif
+
+#define sp_test_cmp(T, A, B, SA, SB, OP, FAIL)                                     \
+  do {                                                                             \
+    sp_test_t* sp_test_it = (T);                                                    \
+    sp_test_auto(A) sp_test_lhs = (A);                                              \
+    sp_test_auto(B) sp_test_rhs = (B);                                              \
+    if (!(sp_test_lhs OP sp_test_rhs)) {                                            \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
+        .file = sp_cstr_as_str(__FILE__),                                            \
+        .line = (u32)__LINE__,                                                       \
+        .expected = sp_test_format(sp_test_it, "{} {} {}",                           \
+          sp_fmt_cstr(SA), sp_fmt_cstr(#OP), sp_fmt_cstr(SB)),                       \
+        .actual = sp_test_format(sp_test_it, "{} vs {}",                             \
+          sp_fmt_str(sp_test_value(sp_test_it, sp_test_lhs)),                         \
+          sp_fmt_str(sp_test_value(sp_test_it, sp_test_rhs))),                        \
+      });                                                                            \
+      FAIL;                                                                          \
+    }                                                                                \
+  } while (0)
+
+#define sp_test_bool(T, X, SX, WANT, FAIL)                                         \
+  do {                                                                             \
+    sp_test_t* sp_test_it = (T);                                                    \
+    bool sp_test_got = !!(X);                                                       \
+    if (sp_test_got != (WANT)) {                                                    \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
+        .file = sp_cstr_as_str(__FILE__),                                            \
+        .line = (u32)__LINE__,                                                       \
+        .expected = sp_test_format(sp_test_it, "{} is {}",                           \
+          sp_fmt_cstr(SX), sp_fmt_cstr((WANT) ? "true" : "false")),                  \
+        .actual = sp_cstr_as_str(sp_test_got ? "true" : "false"),                    \
+      });                                                                            \
+      FAIL;                                                                          \
+    }                                                                                \
+  } while (0)
+
+#define sp_test_near(T, A, B, EPS, SA, SB, FAIL)                                   \
+  do {                                                                             \
+    sp_test_t* sp_test_it = (T);                                                    \
+    f64 sp_test_lhs = (f64)(A);                                                     \
+    f64 sp_test_rhs = (f64)(B);                                                     \
+    f64 sp_test_eps = (f64)(EPS);                                                   \
+    f64 sp_test_delta = sp_test_lhs - sp_test_rhs;                                  \
+    if (sp_test_delta < 0.0) sp_test_delta = -sp_test_delta;                         \
+    if (!(sp_test_delta <= sp_test_eps)) {                                          \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
+        .file = sp_cstr_as_str(__FILE__),                                            \
+        .line = (u32)__LINE__,                                                       \
+        .expected = sp_test_format(sp_test_it, "{} within {} of {}",                 \
+          sp_fmt_cstr(SA), sp_fmt_float(sp_test_eps), sp_fmt_cstr(SB)),              \
+        .actual = sp_test_format(sp_test_it, "{:.6} vs {:.6}, delta {:.6}",          \
+          sp_fmt_float(sp_test_lhs), sp_fmt_float(sp_test_rhs),                       \
+          sp_fmt_float(sp_test_delta)),                                              \
+      });                                                                            \
+      FAIL;                                                                          \
+    }                                                                                \
+  } while (0)
+
+#define sp_test_streq(T, A, B, FAIL)                                               \
+  do {                                                                             \
+    sp_test_t* sp_test_it = (T);                                                    \
+    sp_str_t sp_test_lhs = (A);                                                     \
+    sp_str_t sp_test_rhs = (B);                                                     \
+    if (!sp_str_equal(sp_test_lhs, sp_test_rhs)) {                                  \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
+        .file = sp_cstr_as_str(__FILE__),                                            \
+        .line = (u32)__LINE__,                                                       \
+        .expected = sp_test_format(sp_test_it, "{.quote}", sp_fmt_str(sp_test_rhs)), \
+        .actual = sp_test_format(sp_test_it, "{.quote}", sp_fmt_str(sp_test_lhs)),   \
+      });                                                                            \
+      FAIL;                                                                          \
+    }                                                                                \
+  } while (0)
+
+// elementwise == over two arrays/pointers of the same scalar element type;
+// strings want sp_expect_strs_eq (cstr elements here compare by pointer)
+#define sp_test_arr_cmp(T, A, B, COUNT, SA, SB, FAIL)                              \
+  do {                                                                             \
+    sp_test_t* sp_test_it = (T);                                                    \
+    sp_test_auto((A) + 0) sp_test_lhs = (A) + 0;                                    \
+    sp_test_auto((B) + 0) sp_test_rhs = (B) + 0;                                    \
+    u64 sp_test_count = (u64)(COUNT);                                               \
+    u64 sp_test_head = sp_test_count;                                               \
+    u64 sp_test_diffs = 0;                                                          \
+    for (u64 sp_test_index = 0; sp_test_index < sp_test_count; sp_test_index++) {   \
+      if (sp_test_lhs[sp_test_index] == sp_test_rhs[sp_test_index]) continue;       \
+      if (sp_test_head == sp_test_count) sp_test_head = sp_test_index;              \
+      sp_test_diffs++;                                                              \
+    }                                                                               \
+    if (sp_test_diffs) {                                                            \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
+        .file = sp_cstr_as_str(__FILE__),                                            \
+        .line = (u32)__LINE__,                                                       \
+        .message = sp_test_format(sp_test_it, "{} and {} differ at [{}], {} of {} elements",     \
+          sp_fmt_cstr(SA), sp_fmt_cstr(SB), sp_fmt_uint(sp_test_head),               \
+          sp_fmt_uint(sp_test_diffs), sp_fmt_uint(sp_test_count)),                   \
+        .actual = sp_test_format(sp_test_it, "{} vs {}",                             \
+          sp_fmt_str(sp_test_value(sp_test_it, sp_test_lhs[sp_test_head])),           \
+          sp_fmt_str(sp_test_value(sp_test_it, sp_test_rhs[sp_test_head]))),          \
+      });                                                                            \
+      FAIL;                                                                          \
+    }                                                                                \
+  } while (0)
+
+#define sp_test_err_ok(T, ERR, SERR, FAIL)                                         \
+  do {                                                                             \
+    sp_test_t* sp_test_it = (T);                                                    \
+    sp_err_t sp_test_err = (ERR);                                                   \
+    if (sp_test_err != SP_OK) {                                                     \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
+        .file = sp_cstr_as_str(__FILE__),                                            \
+        .line = (u32)__LINE__,                                                       \
+        .expected = sp_test_format(sp_test_it, "{} is SP_OK", sp_fmt_cstr(SERR)),    \
+        .actual = sp_test_format(sp_test_it, "err {}", sp_fmt_int(sp_test_err)),      \
+      });                                                                            \
+      FAIL;                                                                          \
+    }                                                                                \
+  } while (0)
+
+#define sp_test_soft                ((void)0)
+#define sp_test_stop                return SP_ERR
+
+#define sp_expect(T, COND)          sp_test_bool(T, COND, #COND, true, sp_test_soft)
+#define sp_must(T, COND)            sp_test_bool(T, COND, #COND, true, sp_test_stop)
+
+#define sp_expect_eq(T, A, B)       sp_test_cmp(T, A, B, #A, #B, ==, sp_test_soft)
+#define sp_must_eq(T, A, B)         sp_test_cmp(T, A, B, #A, #B, ==, sp_test_stop)
+#define sp_expect_ne(T, A, B)       sp_test_cmp(T, A, B, #A, #B, !=, sp_test_soft)
+#define sp_must_ne(T, A, B)         sp_test_cmp(T, A, B, #A, #B, !=, sp_test_stop)
+#define sp_expect_lt(T, A, B)       sp_test_cmp(T, A, B, #A, #B, <,  sp_test_soft)
+#define sp_must_lt(T, A, B)         sp_test_cmp(T, A, B, #A, #B, <,  sp_test_stop)
+#define sp_expect_le(T, A, B)       sp_test_cmp(T, A, B, #A, #B, <=, sp_test_soft)
+#define sp_must_le(T, A, B)         sp_test_cmp(T, A, B, #A, #B, <=, sp_test_stop)
+#define sp_expect_gt(T, A, B)       sp_test_cmp(T, A, B, #A, #B, >,  sp_test_soft)
+#define sp_must_gt(T, A, B)         sp_test_cmp(T, A, B, #A, #B, >,  sp_test_stop)
+#define sp_expect_ge(T, A, B)       sp_test_cmp(T, A, B, #A, #B, >=, sp_test_soft)
+#define sp_must_ge(T, A, B)         sp_test_cmp(T, A, B, #A, #B, >=, sp_test_stop)
+
+#define sp_expect_near(T, A, B, E)  sp_test_near(T, A, B, E, #A, #B, sp_test_soft)
+#define sp_must_near(T, A, B, E)    sp_test_near(T, A, B, E, #A, #B, sp_test_stop)
+
+#define sp_expect_str_eq(T, A, B)   sp_test_streq(T, A, B, sp_test_soft)
+#define sp_must_str_eq(T, A, B)     sp_test_streq(T, A, B, sp_test_stop)
+#define sp_expect_str_eq_c(T, A, B) sp_test_streq(T, A, sp_cstr_as_str(B), sp_test_soft)
+#define sp_must_str_eq_c(T, A, B)   sp_test_streq(T, A, sp_cstr_as_str(B), sp_test_stop)
+
+#define sp_expect_arr_eq(T, A, B, COUNT) sp_test_arr_cmp(T, A, B, COUNT, #A, #B, sp_test_soft)
+#define sp_must_arr_eq(T, A, B, COUNT)   sp_test_arr_cmp(T, A, B, COUNT, #A, #B, sp_test_stop)
+
+#define sp_expect_mem_eq(T, A, B, LEN)   ((void)sp_test_mem_eq(T, A, B, LEN, #A, #B, sp_cstr_as_str(__FILE__), (u32)__LINE__))
+#define sp_must_mem_eq(T, A, B, LEN)     do { if (!sp_test_mem_eq(T, A, B, LEN, #A, #B, sp_cstr_as_str(__FILE__), (u32)__LINE__)) sp_test_stop; } while (0)
+
+#define sp_expect_strs_eq(T, A, COUNT, B) ((void)sp_test_strs_eq(T, A, COUNT, B, #A, #B, sp_cstr_as_str(__FILE__), (u32)__LINE__))
+#define sp_must_strs_eq(T, A, COUNT, B)   do { if (!sp_test_strs_eq(T, A, COUNT, B, #A, #B, sp_cstr_as_str(__FILE__), (u32)__LINE__)) sp_test_stop; } while (0)
+
+#define sp_expect_ok(T, ERR)        sp_test_err_ok(T, ERR, #ERR, sp_test_soft)
+#define sp_must_ok(T, ERR)          sp_test_err_ok(T, ERR, #ERR, return sp_test_err)
+
+#define sp_expect_golden(T, PATH, ACTUAL)     sp_test_golden(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
+#define sp_expect_golden_abs(T, PATH, ACTUAL) sp_test_golden_abs(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
+
+#endif
+
+////////////////////
+// IMPLEMENTATION //
+////////////////////
+#if defined(SP_IMPLEMENTATION) && !defined(SP_TEST_IMPLEMENTATION)
+  #define SP_TEST_IMPLEMENTATION
+#endif
+
+#if defined(SP_TEST_IMPLEMENTATION) && !defined(SP_TEST_H_IMPL)
+#define SP_TEST_H_IMPL
+
+#include "sp_cli.h"
+
+#define SP_TEST_LIVE_MAGIC  0xA110CA7Eu
+#define SP_TEST_FREED_MAGIC 0xDEADBEEFu
+
+typedef struct SP_ALIGNED sp_test_tracking_node_t {
+  struct sp_test_tracking_node_t* prev;
+  struct sp_test_tracking_node_t* next;
+  u64 size;
+  u32 id;
+  u32 magic;
+} sp_test_tracking_node_t;
+
+typedef struct {
+  sp_mem_t backing;
+  sp_test_tracking_node_t* live;
+  sp_test_tracking_node_t* freed;
+  u64 live_bytes;
+  u32 live_count;
+  u32 double_frees;
+  u32 wild_frees;
+  u32 bad_sizes;
+  u32 next_id;
+} sp_test_tracking_t;
+
+struct sp_test_t {
+  const c8* name;
+  const sp_test_decl_t* decl;
+  const void* arg;
+  const void* user;
+  void* state;
+
+  sp_mem_arena_t* bookkeeping;
+  sp_mem_t mem;
+
+  sp_da(sp_test_failure_t) failures;
+  sp_da(sp_test_kv_t) kvs;
+  sp_da(sp_str_t) logs;
+  sp_da(sp_str_t) notes;
+
+  sp_str_t skip_reason;
+  bool skipped;
+
+  bool update;
+  u32 updated;
+
+  sp_mem_arena_t* scratch;
+  sp_mem_t scratch_mem;
+
+  sp_test_tracking_t tracking;
+  sp_mem_t tracked_mem;
+  bool tracking_live;
+
+  sp_str_t dir_root;
+  sp_str_t dir;
+};
+
+typedef struct {
+  const c8* name;
+  const sp_test_decl_t* decl;
+  const void* arg;
+  bool serial;
+} sp_test_instance_t;
+
+typedef struct {
+  sp_mem_t mem;
+  sp_io_stream_writer_t out;
+  u8 out_buffer [8192];
+  sp_mutex_t mutex;
+  sp_da(sp_test_instance_t) queue;
+  sp_atomic_s32_t cursor;
+  sp_da(const c8*) failed;
+  sp_da(const c8*) skipped;
+  sp_da(const c8*) updated;
+  sp_str_t dir_root;
+  bool update;
+} sp_test_runner_t;
+
+
+////////////////////////
+// TRACKING ALLOCATOR //
+////////////////////////
+static sp_test_tracking_node_t* sp_test_tracking_header(void* ptr) {
+  return (sp_test_tracking_node_t*)((u8*)ptr - sizeof(sp_test_tracking_node_t));
+}
+
+static void* sp_test_tracking_user_ptr(sp_test_tracking_node_t* node) {
+  return (u8*)node + sizeof(sp_test_tracking_node_t);
+}
+
+static void sp_test_tracking_link(sp_test_tracking_node_t** list, sp_test_tracking_node_t* node) {
+  node->prev = SP_NULLPTR;
+  node->next = *list;
+  if (*list) (*list)->prev = node;
+  *list = node;
+}
+
+static void sp_test_tracking_unlink(sp_test_tracking_node_t** list, sp_test_tracking_node_t* node) {
+  if (node->prev) node->prev->next = node->next;
+  else            *list            = node->next;
+  if (node->next) node->next->prev = node->prev;
+  node->prev = SP_NULLPTR;
+  node->next = SP_NULLPTR;
+}
+
+static u32 sp_test_tracking_peek_magic(void* ptr) {
+  u32 magic = 0;
+  u8* base = (u8*)ptr - sizeof(sp_test_tracking_node_t);
+  sp_mem_copy(&magic, base + offsetof(sp_test_tracking_node_t, magic), sizeof(magic));
+  return magic;
+}
+
+static void* sp_test_tracking_do_alloc(sp_test_tracking_t* k, u64 size) {
+  if (!size) return SP_NULLPTR;
+
+  void* raw = sp_alloc(k->backing, size + sizeof(sp_test_tracking_node_t));
+  if (!raw) return SP_NULLPTR;
+
+  sp_test_tracking_node_t* node = (sp_test_tracking_node_t*)raw;
+  node->size = size;
+  node->magic = SP_TEST_LIVE_MAGIC;
+  node->id = ++k->next_id;
+  sp_test_tracking_link(&k->live, node);
+  k->live_count++;
+  k->live_bytes += size;
+  return sp_test_tracking_user_ptr(node);
+}
+
+static void sp_test_tracking_do_free(sp_test_tracking_t* k, void* ptr, u64 size) {
+  if (!ptr) return;
+
+  u32 magic = sp_test_tracking_peek_magic(ptr);
+  if (magic == SP_TEST_LIVE_MAGIC) {
+    sp_test_tracking_node_t* node = sp_test_tracking_header(ptr);
+    if (node->size != size) k->bad_sizes++;
+    sp_test_tracking_unlink(&k->live, node);
+    node->magic = SP_TEST_FREED_MAGIC;
+    k->live_count--;
+    k->live_bytes -= node->size;
+    sp_test_tracking_link(&k->freed, node);
+  }
+  else if (magic == SP_TEST_FREED_MAGIC) {
+    k->double_frees++;
+  }
+  else {
+    k->wild_frees++;
+  }
+}
+
+static void* sp_test_tracking_do_realloc(sp_test_tracking_t* k, void* old, u64 size, u64 old_size) {
+  if (!old)  return sp_test_tracking_do_alloc(k, size);
+  if (!size) {
+    sp_test_tracking_do_free(k, old, old_size);
+    return SP_NULLPTR;
+  }
+
+  u32 magic = sp_test_tracking_peek_magic(old);
+  if (magic != SP_TEST_LIVE_MAGIC) {
+    if (magic == SP_TEST_FREED_MAGIC) k->double_frees++;
+    else                              k->wild_frees++;
+    return SP_NULLPTR;
+  }
+
+  sp_test_tracking_node_t* node = sp_test_tracking_header(old);
+  if (node->size != old_size) k->bad_sizes++;
+  if (node->size == size) return old;
+
+  void* fresh = sp_test_tracking_do_alloc(k, size);
+  if (!fresh) return SP_NULLPTR;
+  sp_mem_copy(fresh, old, sp_min(node->size, size));
+  sp_test_tracking_do_free(k, old, node->size);
+  return fresh;
+}
+
+static void* sp_test_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
+  sp_test_tracking_t* k = (sp_test_tracking_t*)ud;
+  switch (mode) {
+    case SP_ALLOCATOR_MODE_ALLOC:  return sp_test_tracking_do_alloc(k, size);
+    case SP_ALLOCATOR_MODE_RESIZE: return sp_test_tracking_do_realloc(k, ptr, size, old_size);
+    case SP_ALLOCATOR_MODE_FREE:   sp_test_tracking_do_free(k, ptr, old_size); return SP_NULLPTR;
+  }
+  return SP_NULLPTR;
+}
+
+static void sp_test_tracking_deinit(sp_test_tracking_t* k) {
+  sp_test_tracking_node_t* node = k->live;
+  while (node) {
+    sp_test_tracking_node_t* next = node->next;
+    sp_free(k->backing, node, node->size + sizeof(sp_test_tracking_node_t));
+    node = next;
+  }
+
+  node = k->freed;
+  while (node) {
+    sp_test_tracking_node_t* next = node->next;
+    sp_free(k->backing, node, node->size + sizeof(sp_test_tracking_node_t));
+    node = next;
+  }
+
+  sp_mem_zero(k, sizeof(*k));
+}
+
+
+///////////////
+// FORMATTING //
+///////////////
+sp_str_t sp_test_format(sp_test_t* t, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_r result = sp_fmt_mem_v(t->mem, sp_cstr_as_str(fmt), args);
+  va_end(args);
+  return result.value;
+}
+
+#if defined(__clang__)
+  SP_TEST_VALUE_FN(sp_test_t* t, bool value) { return sp_test_format(t, "{}", sp_fmt_cstr(value ? "true" : "false")); }
+  SP_TEST_VALUE_FN(sp_test_t* t, c8 value) { return sp_test_format(t, "{}", sp_fmt_char(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, s8 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, u8 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, s16 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, u16 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, s32 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, u32 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, s64 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, u64 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, f32 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, f64 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, const c8* value) { return value ? sp_test_format(t, "{.quote}", sp_fmt_cstr(value)) : sp_str_lit("(null)"); }
+  SP_TEST_VALUE_FN(sp_test_t* t, void* value) { return sp_test_format(t, "{}", sp_fmt_ptr(value)); }
+  SP_TEST_VALUE_FN(sp_test_t* t, sp_str_t value) { return sp_test_format(t, "{.quote}", sp_fmt_str(value)); }
+#elif defined(__GNUC__) || defined(__TINYC__)
+  sp_str_t sp_test_value_bool(sp_test_t* t, bool value) { return sp_test_format(t, "{}", sp_fmt_cstr(value ? "true" : "false")); }
+  sp_str_t sp_test_value_c8(sp_test_t* t, c8 value) { return sp_test_format(t, "{}", sp_fmt_char(value)); }
+  sp_str_t sp_test_value_s8(sp_test_t* t, s8 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+  sp_str_t sp_test_value_u8(sp_test_t* t, u8 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+  sp_str_t sp_test_value_s16(sp_test_t* t, s16 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+  sp_str_t sp_test_value_u16(sp_test_t* t, u16 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+  sp_str_t sp_test_value_s32(sp_test_t* t, s32 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+  sp_str_t sp_test_value_u32(sp_test_t* t, u32 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+  sp_str_t sp_test_value_s64(sp_test_t* t, s64 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+  sp_str_t sp_test_value_u64(sp_test_t* t, u64 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+  sp_str_t sp_test_value_f32(sp_test_t* t, f32 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
+  sp_str_t sp_test_value_f64(sp_test_t* t, f64 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
+  sp_str_t sp_test_value_cstr(sp_test_t* t, const c8* value) { return value ? sp_test_format(t, "{.quote}", sp_fmt_cstr(value)) : sp_str_lit("(null)"); }
+  sp_str_t sp_test_value_ptr(sp_test_t* t, void* value) { return sp_test_format(t, "{}", sp_fmt_ptr(value)); }
+  sp_str_t sp_test_value_str(sp_test_t* t, sp_str_t value) { return sp_test_format(t, "{.quote}", sp_fmt_str(value)); }
+
+  sp_str_t sp_test_value_opaque(sp_test_t* t, ...) {
+    SP_UNUSED(t);
+    return sp_str_lit("?");
+  }
+#endif
+
+
+//////////////////
+// CONTEXT CORE //
+//////////////////
+sp_str_t sp_test_get_name(sp_test_t* t) {
+  return sp_cstr_as_str(t->name);
+}
+
+const void* sp_test_user(sp_test_t* t) {
+  return t->user;
+}
+
+static sp_da(sp_test_kv_t) sp_test_kv_snapshot(sp_test_t* t) {
+  sp_da(sp_test_kv_t) copy = sp_da_new(t->mem, sp_test_kv_t);
+  sp_da_for(t->kvs, it) {
+    sp_da_push(copy, t->kvs[it]);
+  }
+  return copy;
+}
+
+void sp_test_record(sp_test_t* t, sp_test_failure_t failure) {
+  sp_str_t here = sp_str_lit("./");
+  if (sp_str_starts_with(failure.file, here)) {
+    failure.file = sp_str_sub(failure.file, (s32)here.len, (s32)(failure.file.len - here.len));
+  }
+
+  failure.message = sp_str_copy(t->mem, failure.message);
+  failure.expected = sp_str_copy(t->mem, failure.expected);
+  failure.actual = sp_str_copy(t->mem, failure.actual);
+  failure.kvs = sp_test_kv_snapshot(t);
+  sp_da_push(t->failures, failure);
+}
+
+void sp_test_fail(sp_test_t* t, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_r message = sp_fmt_mem_v(t->mem, sp_cstr_as_str(fmt), args);
+  va_end(args);
+
+  sp_test_record(t, (sp_test_failure_t) { .message = message.value });
+}
+
+sp_err_t sp_test_skip(sp_test_t* t, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_r reason = sp_fmt_mem_v(t->mem, sp_cstr_as_str(fmt), args);
+  va_end(args);
+
+  t->skip_reason = reason.value;
+  t->skipped = true;
+  return SP_ERR;
+}
+
+void sp_test_kv(sp_test_t* t, const c8* key, sp_str_t value) {
+  sp_str_t owned_key = sp_str_copy(t->mem, sp_cstr_as_str(key));
+  sp_str_t owned_value = sp_str_copy(t->mem, value);
+
+  sp_da_for(t->kvs, it) {
+    if (sp_str_equal(t->kvs[it].key, owned_key)) {
+      t->kvs[it].value = owned_value;
+      return;
+    }
+  }
+
+  sp_da_push(t->kvs, ((sp_test_kv_t) {
+    .key = owned_key,
+    .value = owned_value,
+  }));
+}
+
+void sp_test_kv_c(sp_test_t* t, const c8* key, const c8* value) {
+  sp_test_kv(t, key, sp_cstr_as_str(value));
+}
+
+void sp_test_kv_clear(sp_test_t* t, const c8* key) {
+  if (!key) {
+    sp_da_clear(t->kvs);
+    return;
+  }
+
+  sp_str_t target = sp_cstr_as_str(key);
+  sp_da(sp_test_kv_t) kept = sp_da_new(t->mem, sp_test_kv_t);
+  sp_da_for(t->kvs, it) {
+    if (sp_str_equal(t->kvs[it].key, target)) continue;
+    sp_da_push(kept, t->kvs[it]);
+  }
+  t->kvs = kept;
+}
+
+void sp_test_set_state(sp_test_t* t, void* state) {
+  t->state = state;
+}
+
+void* sp_test_state(sp_test_t* t) {
+  return t->state;
+}
+
+void sp_test_log(sp_test_t* t, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_r line = sp_fmt_mem_v(t->mem, sp_cstr_as_str(fmt), args);
+  va_end(args);
+  sp_da_push(t->logs, line.value);
+}
+
+void sp_test_note(sp_test_t* t, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_str_r line = sp_fmt_mem_v(t->mem, sp_cstr_as_str(fmt), args);
+  va_end(args);
+  sp_da_push(t->notes, line.value);
+}
+
+
+//////////////
+// SERVICES //
+//////////////
+sp_mem_t sp_test_arena(sp_test_t* t) {
+  if (!t->scratch) {
+    t->scratch = sp_mem_arena_new(sp_mem_os_new());
+    t->scratch_mem = sp_mem_arena_as_allocator(t->scratch);
+  }
+  return t->scratch_mem;
+}
+
+sp_mem_t sp_test_mem(sp_test_t* t) {
+  if (!t->tracking_live) {
+    t->tracking.backing = sp_mem_os_new();
+    t->tracked_mem = (sp_mem_t) {
+      .on_alloc = sp_test_tracking_on_alloc,
+      .user_data = &t->tracking,
+    };
+    t->tracking_live = true;
+  }
+  return t->tracked_mem;
+}
+
+sp_str_t sp_test_dir(sp_test_t* t) {
+  if (sp_str_empty(t->dir)) {
+    sp_str_t leaf = sp_str_replace_c8(t->mem, sp_cstr_as_str(t->name), '/', '_');
+    t->dir = sp_fs_join_path(t->mem, t->dir_root, leaf);
+    if (sp_fs_exists(t->dir)) sp_fs_remove_dir(t->dir);
+    sp_fs_create_dir(t->dir);
+  }
+  return t->dir;
+}
+
+sp_err_t sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user) {
+  if (sp_atomic_s32_cas(&once->state, 0, 1)) {
+    once->err = fn(user);
+    sp_atomic_s32_set(&once->state, 2);
+  }
+  else {
+    while (sp_atomic_s32_get(&once->state) != 2) {
+      sp_os_sleep_ms(1);
+    }
+  }
+  return once->err;
+}
+
+
+////////////
+// GOLDEN //
+////////////
+// SP_FS_PATH_WINDOWS recognizes both path styles, so a windows registration
+// path resolves identically everywhere (sp_fs_is_absolute answers for the
+// host only)
+sp_da(sp_str_t) sp_test_resolve_candidates(sp_mem_t mem, sp_str_t file, sp_str_t anchor) {
+  sp_da(sp_str_t) candidates = sp_da_new(mem, sp_str_t);
+
+  file = sp_fs_normalize_path(mem, file);
+  anchor = sp_fs_normalize_path(mem, anchor);
+
+  bool rooted = sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS);
+  if (rooted) sp_da_push(candidates, file);
+
+  sp_da(sp_str_t) ancestors = sp_da_new(mem, sp_str_t);
+  sp_str_t dir = anchor;
+  while (!sp_str_empty(dir)) {
+    sp_da_push(ancestors, dir);
+    sp_str_t parent = sp_fs_parent_path(dir);
+    if (sp_str_equal(parent, dir)) break;
+    dir = parent;
+  }
+
+  // a suffix without a directory component would let a bare file name match
+  // anywhere on the ancestor chain, and --update would then write goldens
+  // next to the impostor
+  for (u32 index = 0; index < file.len; index++) {
+    bool head = (index == 0) && !rooted;
+    bool after_slash = index > 0 && file.data[index - 1] == '/';
+    if (!head && !after_slash) continue;
+
+    sp_str_t suffix = sp_str_sub(file, (s32)index, (s32)(file.len - index));
+    if (sp_str_find_c8(suffix, '/') == SP_STR_NO_MATCH) continue;
+
+    sp_da_for(ancestors, it) {
+      sp_da_push(candidates, sp_fs_join_path(mem, ancestors[it], suffix));
+    }
+  }
+
+  if (!rooted) sp_da_push(candidates, file);
+
+  return candidates;
+}
+
+static sp_str_t sp_test_resolve_file(sp_test_t* t, sp_str_t file, sp_str_t anchor) {
+  sp_da(sp_str_t) candidates = sp_test_resolve_candidates(t->mem, file, anchor);
+  sp_da_for(candidates, it) {
+    if (sp_fs_is_target_file(candidates[it])) return candidates[it];
+  }
+  return sp_zero_s(sp_str_t);
+}
+
+static void sp_test_golden_at(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
+  sp_str_t actual_path = sp_test_format(t, "{}.actual", sp_fmt_str(path));
+
+  if (t->update) {
+    sp_str_t parent = sp_fs_parent_path(path);
+    if (!sp_str_empty(parent) && !sp_fs_exists(parent)) {
+      sp_fs_create_dir(parent);
+    }
+
+    sp_err_t err = sp_fs_create_file_str(path, actual);
+    if (err) {
+      sp_test_record(t, (sp_test_failure_t) {
+        .file = file,
+        .line = line,
+        .message = sp_test_format(t, "failed to update golden {}: err {}",
+          sp_fmt_str(path), sp_fmt_int(err)),
+      });
+      return;
+    }
+
+    if (sp_fs_exists(actual_path)) sp_fs_remove_file(actual_path);
+    t->updated++;
+    return;
+  }
+
+  if (!sp_fs_exists(path)) {
+    sp_test_record(t, (sp_test_failure_t) {
+      .file = file,
+      .line = line,
+      .message = sp_test_format(t, "golden {} does not exist; run with --update to create it",
+        sp_fmt_str(path)),
+    });
+    return;
+  }
+
+  sp_str_t want = sp_zero;
+  sp_err_t err = sp_io_read_file(t->mem, path, &want);
+  if (err) {
+    sp_test_record(t, (sp_test_failure_t) {
+      .file = file,
+      .line = line,
+      .message = sp_test_format(t, "failed to read golden {}: err {}",
+        sp_fmt_str(path), sp_fmt_int(err)),
+    });
+    return;
+  }
+
+  if (sp_str_equal(want, actual)) {
+    if (sp_fs_exists(actual_path)) sp_fs_remove_file(actual_path);
+    return;
+  }
+
+  sp_fs_create_file_str(actual_path, actual);
+
+  sp_da(sp_str_t) want_lines = sp_str_split_c8(t->mem, want, '\n');
+  sp_da(sp_str_t) got_lines = sp_str_split_c8(t->mem, actual, '\n');
+  u64 shared = sp_min(sp_da_size(want_lines), sp_da_size(got_lines));
+
+  u64 diff = 0;
+  while (diff < shared && sp_str_equal(want_lines[diff], got_lines[diff])) {
+    diff++;
+  }
+
+  sp_str_t want_line = diff < sp_da_size(want_lines) ? want_lines[diff] : sp_str_lit("<end of file>");
+  sp_str_t got_line  = diff < sp_da_size(got_lines)  ? got_lines[diff]  : sp_str_lit("<end of file>");
+
+  sp_test_record(t, (sp_test_failure_t) {
+    .file = file,
+    .line = line,
+    .message = sp_test_format(t, "golden mismatch at {}:{}; wrote {}",
+      sp_fmt_str(path), sp_fmt_uint(diff + 1), sp_fmt_str(actual_path)),
+    .expected = sp_test_format(t, "{.quote}", sp_fmt_str(want_line)),
+    .actual = sp_test_format(t, "{.quote}", sp_fmt_str(got_line)),
+  });
+}
+
+void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
+  if (sp_fs_is_absolute_for(path, SP_FS_PATH_WINDOWS)) {
+    sp_test_record(t, (sp_test_failure_t) {
+      .file = file,
+      .line = line,
+      .message = sp_test_format(t, "golden path {} is absolute; paths resolve against the calling source dir (use sp_expect_golden_abs)",
+        sp_fmt_str(path)),
+    });
+    return;
+  }
+
+  sp_str_t anchor = sp_fs_parent_path(sp_fs_get_exe_path(t->mem));
+  sp_str_t src = sp_test_resolve_file(t, file, anchor);
+  if (sp_str_empty(src)) {
+    sp_test_record(t, (sp_test_failure_t) {
+      .file = file,
+      .line = line,
+      .message = sp_test_format(t, "cannot locate {} near {}; goldens are unreachable from this binary",
+        sp_fmt_str(file), sp_fmt_str(anchor)),
+    });
+    return;
+  }
+
+  sp_test_golden_at(t, sp_fs_join_path(t->mem, sp_fs_parent_path(src), path), actual, file, line);
+}
+
+void sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
+  sp_test_golden_at(t, path, actual, file, line);
+}
+
+
+/////////////
+// BUFFERS //
+/////////////
+static sp_str_t sp_test_mem_eq_window(sp_test_t* t, const u8* bytes, u64 len, u64 mark) {
+  const c8* digits = "0123456789abcdef";
+  u64 begin = mark >= 8 ? mark - 8 : 0;
+  u64 end = sp_min(len, mark + 8);
+
+  c8 buf [96];
+  u32 at = 0;
+  if (begin > 0) { buf[at++] = '.'; buf[at++] = '.'; buf[at++] = ' '; }
+  for (u64 it = begin; it < end; it++) {
+    if (it > begin) buf[at++] = ' ';
+    if (it == mark) buf[at++] = '[';
+    buf[at++] = digits[bytes[it] >> 4];
+    buf[at++] = digits[bytes[it] & 15];
+    if (it == mark) buf[at++] = ']';
+  }
+  if (end < len) { buf[at++] = ' '; buf[at++] = '.'; buf[at++] = '.'; }
+  return sp_str_copy(t->mem, sp_str(buf, at));
+}
+
+bool sp_test_mem_eq(sp_test_t* t, const void* lhs, const void* rhs, u64 len, const c8* sl, const c8* sr, sp_str_t file, u32 line) {
+  const u8* a = (const u8*)lhs;
+  const u8* b = (const u8*)rhs;
+
+  if (len && (!a || !b)) {
+    sp_test_record(t, (sp_test_failure_t) {
+      .file = file,
+      .line = line,
+      .message = sp_test_format(t, "{} is null", sp_fmt_cstr(a ? sr : sl)),
+    });
+    return false;
+  }
+
+  u64 first = len;
+  u64 diffs = 0;
+  for (u64 it = 0; it < len; it++) {
+    if (a[it] == b[it]) continue;
+    if (first == len) first = it;
+    diffs++;
+  }
+  if (!diffs) return true;
+
+  sp_str_t message = sp_test_format(t, "{} and {} differ at byte {} of {}",
+    sp_fmt_cstr(sl), sp_fmt_cstr(sr), sp_fmt_uint(first), sp_fmt_uint(len));
+  if (diffs > 1) {
+    message = sp_test_format(t, "{}, {} bytes differ", sp_fmt_str(message), sp_fmt_uint(diffs));
+  }
+
+  sp_test_record(t, (sp_test_failure_t) {
+    .file = file,
+    .line = line,
+    .message = message,
+    .expected = sp_test_mem_eq_window(t, b, len, first),
+    .actual = sp_test_mem_eq_window(t, a, len, first),
+  });
+  return false;
+}
+
+bool sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 count, const c8* const* expect, const c8* sa, const c8* se, sp_str_t file, u32 line) {
+  if (count && !actual) {
+    sp_test_record(t, (sp_test_failure_t) {
+      .file = file,
+      .line = line,
+      .message = sp_test_format(t, "{} is null", sp_fmt_cstr(sa)),
+    });
+    return false;
+  }
+
+  u64 want = 0;
+  while (expect[want]) want++;
+
+  if (count != want) {
+    sp_str_t message = sp_test_format(t, "{} has {} strings, {} has {}",
+      sp_fmt_cstr(sa), sp_fmt_uint(count), sp_fmt_cstr(se), sp_fmt_uint(want));
+    if (count > want) {
+      message = sp_test_format(t, "{}\nfirst extra: {.quote}", sp_fmt_str(message), sp_fmt_str(actual[want]));
+    }
+    else {
+      message = sp_test_format(t, "{}\nfirst missing: {.quote}", sp_fmt_str(message), sp_fmt_cstr(expect[count]));
+    }
+    sp_test_record(t, (sp_test_failure_t) {
+      .file = file,
+      .line = line,
+      .message = message,
+    });
+    return false;
+  }
+
+  for (u64 it = 0; it < want; it++) {
+    sp_str_t rhs = sp_cstr_as_str(expect[it]);
+    if (sp_str_equal(actual[it], rhs)) continue;
+
+    sp_test_record(t, (sp_test_failure_t) {
+      .file = file,
+      .line = line,
+      .message = sp_test_format(t, "{} and {} differ at [{}]",
+        sp_fmt_cstr(sa), sp_fmt_cstr(se), sp_fmt_uint(it)),
+      .expected = sp_test_format(t, "{.quote}", sp_fmt_str(rhs)),
+      .actual = sp_test_format(t, "{.quote}", sp_fmt_str(actual[it])),
+    });
+    return false;
+  }
+  return true;
+}
+
+
+///////////////
+// REPORTING //
+///////////////
+static sp_str_t sp_test_duration(sp_mem_t mem, u64 ns) {
+  const c8* const units [] = { "ns", "us", "ms", "s" };
+  u32 unit = 0;
+  u64 time = ns;
+  while (unit < sp_carr_len(units) - 1 && time >= 10000) {
+    time /= 1000;
+    unit++;
+  }
+  return sp_fmt(mem, "{}{}", sp_fmt_uint(time), sp_fmt_cstr(units[unit])).value;
+}
+
+static void sp_test_report_attr(sp_io_writer_t* io, sp_mem_t mem, sp_str_t bar, sp_str_t key, sp_str_t value, u32 width) {
+  value = sp_str_trim_right(value);
+  sp_da(sp_str_t) lines = sp_str_split_c8(mem, value, '\n');
+
+  if (sp_str_empty(key)) {
+    sp_da_for(lines, it) {
+      sp_fmt_io(io, "  {}{}\n", sp_fmt_str(bar), sp_fmt_str(lines[it]));
+    }
+    return;
+  }
+
+  if (sp_da_size(lines) <= 1) {
+    sp_fmt_io(io, "  {}{.gray} {}\n",
+      sp_fmt_str(bar),
+      sp_fmt_str(sp_str_pad(mem, key, width)),
+      sp_fmt_str(value));
+    return;
+  }
+
+  sp_fmt_io(io, "  {}{.gray}\n", sp_fmt_str(bar), sp_fmt_str(key));
+  sp_da_for(lines, it) {
+    sp_fmt_io(io, "  {}  {}\n", sp_fmt_str(bar), sp_fmt_str(lines[it]));
+  }
+}
+
+static void sp_test_report_failure(sp_io_writer_t* io, sp_mem_t mem, sp_test_failure_t* failure) {
+  sp_str_t bar = sp_fmt(mem, "{.red}", sp_fmt_cstr("▐ ")).value;
+
+  u32 width = (u32)sizeof("expected") - 1;
+  sp_da_for(failure->kvs, it) {
+    width = sp_max(width, failure->kvs[it].key.len);
+  }
+
+  if (!sp_str_empty(failure->file)) {
+    sp_fmt_io(io, "  {}{.gray}:{.gray}\n",
+      sp_fmt_str(bar),
+      sp_fmt_str(failure->file),
+      sp_fmt_uint(failure->line));
+  }
+  if (!sp_str_empty(failure->message)) {
+    sp_test_report_attr(io, mem, bar, sp_zero_s(sp_str_t), failure->message, width);
+  }
+  if (!sp_str_empty(failure->expected)) {
+    sp_test_report_attr(io, mem, bar, sp_str_lit("expected"), failure->expected, width);
+  }
+  if (!sp_str_empty(failure->actual)) {
+    sp_test_report_attr(io, mem, bar, sp_str_lit("actual"), failure->actual, width);
+  }
+  sp_da_for(failure->kvs, it) {
+    sp_test_report_attr(io, mem, bar, failure->kvs[it].key, failure->kvs[it].value, width);
+  }
+}
+
+static void sp_test_report_log(sp_io_writer_t* io, sp_mem_t mem, sp_test_t* t) {
+  if (sp_da_empty(t->logs)) return;
+
+  sp_str_t bar = sp_fmt(mem, "{.red}", sp_fmt_cstr("▐ ")).value;
+  sp_fmt_io(io, "  {}{.gray}\n", sp_fmt_str(bar), sp_fmt_cstr("log"));
+  sp_da_for(t->logs, it) {
+    sp_fmt_io(io, "  {}  {}\n", sp_fmt_str(bar), sp_fmt_str(t->logs[it]));
+  }
+}
+
+static void sp_test_report(sp_test_t* t, sp_io_writer_t* io, u64 ns) {
+  sp_str_t duration = sp_test_duration(t->mem, ns);
+
+  if (!sp_da_empty(t->failures)) {
+    sp_fmt_io(io, "{} {.red} {.gray}\n",
+      sp_fmt_cstr(t->name),
+      sp_fmt_cstr("failed"),
+      sp_fmt_str(duration));
+  }
+  else if (t->updated) {
+    sp_fmt_io(io, "{} {.cyan} {.gray}\n",
+      sp_fmt_cstr(t->name),
+      sp_fmt_cstr("updated"),
+      sp_fmt_str(duration));
+  }
+  else if (t->skipped) {
+    sp_fmt_io(io, "{} {.yellow} {.gray} {.gray}\n",
+      sp_fmt_cstr(t->name),
+      sp_fmt_cstr("skipped"),
+      sp_fmt_str(t->skip_reason),
+      sp_fmt_str(duration));
+  }
+  else {
+    sp_fmt_io(io, "{} {.green} {.gray}\n",
+      sp_fmt_cstr(t->name),
+      sp_fmt_cstr("ok"),
+      sp_fmt_str(duration));
+  }
+
+  sp_da_for(t->notes, it) {
+    sp_fmt_io(io, "  {.gray} {}\n", sp_fmt_cstr("note"), sp_fmt_str(t->notes[it]));
+  }
+
+  sp_da_for(t->failures, it) {
+    sp_test_report_failure(io, t->mem, &t->failures[it]);
+  }
+
+  if (!sp_da_empty(t->failures)) {
+    sp_test_report_log(io, t->mem, t);
+  }
+}
+
+
+///////////////////
+// INSTANCE LIFE //
+///////////////////
+static sp_test_t* sp_test_context_new(sp_test_runner_t* runner, sp_test_instance_t* instance) {
+  sp_mem_arena_t* arena = sp_mem_arena_new(sp_mem_os_new());
+  sp_mem_t mem = sp_mem_arena_as_allocator(arena);
+
+  sp_test_t* t = sp_alloc_type(mem, sp_test_t);
+  sp_mem_zero(t, sizeof(*t));
+
+  t->name = instance->name;
+  t->decl = instance->decl;
+  t->arg = instance->arg;
+  t->user = instance->decl->user;
+  t->bookkeeping = arena;
+  t->mem = mem;
+  t->failures = sp_da_new(mem, sp_test_failure_t);
+  t->kvs = sp_da_new(mem, sp_test_kv_t);
+  t->logs = sp_da_new(mem, sp_str_t);
+  t->notes = sp_da_new(mem, sp_str_t);
+  t->dir_root = runner->dir_root;
+  t->update = runner->update;
+  return t;
+}
+
+static void sp_test_context_destroy(sp_test_t* t) {
+  sp_mem_arena_destroy(t->bookkeeping);
+}
+
+static sp_err_t sp_test_invoke(sp_test_t* t) {
+  if (!t->decl->fn && !t->decl->each) {
+    sp_test_fail(t, "decl has no test function");
+    return SP_ERR;
+  }
+
+  sp_err_t err = SP_OK;
+  if (t->decl->setup) {
+    err = t->decl->setup(t);
+  }
+  if (!err) {
+    if (t->decl->fn) err = t->decl->fn(t);
+    else             err = t->decl->each(t, t->arg);
+  }
+  if (t->decl->teardown) {
+    t->decl->teardown(t);
+  }
+  return err;
+}
+
+static void sp_test_report_leaks(sp_test_t* t) {
+  sp_test_tracking_t* k = &t->tracking;
+  if (!k->live_count && !k->double_frees && !k->wild_frees && !k->bad_sizes) return;
+
+  sp_io_dyn_mem_writer_t message = sp_zero;
+  sp_io_dyn_mem_writer_init(t->mem, &message);
+
+  if (k->live_count) {
+    sp_fmt_io(&message.base, "leaked {} {}, {} bytes\n",
+      sp_fmt_uint(k->live_count),
+      sp_fmt_cstr(k->live_count == 1 ? "allocation" : "allocations"),
+      sp_fmt_uint(k->live_bytes));
+    for (sp_test_tracking_node_t* node = k->live; node; node = node->next) {
+      sp_fmt_io(&message.base, "  #{} {} bytes\n", sp_fmt_uint(node->id), sp_fmt_uint(node->size));
+    }
+  }
+  if (k->double_frees) sp_fmt_io(&message.base, "{} double frees\n", sp_fmt_uint(k->double_frees));
+  if (k->wild_frees)   sp_fmt_io(&message.base, "{} wild frees\n", sp_fmt_uint(k->wild_frees));
+  if (k->bad_sizes)    sp_fmt_io(&message.base, "{} frees with a bad size\n", sp_fmt_uint(k->bad_sizes));
+
+  sp_test_record(t, (sp_test_failure_t) {
+    .message = sp_io_dyn_mem_writer_as_str(&message),
+  });
+}
+
+static void sp_test_teardown(sp_test_t* t) {
+  if (t->tracking_live) {
+    if (!t->skipped) sp_test_report_leaks(t);
+    sp_test_tracking_deinit(&t->tracking);
+    t->tracking_live = false;
+  }
+
+  if (!sp_str_empty(t->dir) && sp_fs_exists(t->dir)) {
+    sp_fs_remove_dir(t->dir);
+  }
+
+  if (t->scratch) {
+    sp_mem_arena_destroy(t->scratch);
+    t->scratch = SP_NULLPTR;
+  }
+}
+
+static void sp_test_run_instance(sp_test_runner_t* runner, sp_test_instance_t* instance) {
+  sp_test_t* t = sp_test_context_new(runner, instance);
+
+  sp_tm_point_t start = sp_tm_now_point();
+  sp_err_t err = sp_test_invoke(t);
+  sp_test_teardown(t);
+  u64 ns = sp_tm_point_diff(sp_tm_now_point(), start);
+
+  if (err && !t->skipped && sp_da_empty(t->failures)) {
+    sp_test_record(t, (sp_test_failure_t) {
+      .message = sp_test_format(t, "test returned err {} with no failure recorded", sp_fmt_int(err)),
+    });
+  }
+
+  sp_io_dyn_mem_writer_t report = sp_zero;
+  sp_io_dyn_mem_writer_init(t->mem, &report);
+  sp_test_report(t, &report.base, ns);
+
+  bool failed = !sp_da_empty(t->failures);
+  bool updated = !failed && t->updated;
+  bool skipped = !failed && !updated && t->skipped;
+  sp_str_t text = sp_io_dyn_mem_writer_as_str(&report);
+
+  sp_mutex_lock(&runner->mutex);
+  sp_io_write_str(&runner->out.base, text, SP_NULLPTR);
+  sp_io_flush(&runner->out.base);
+  if (failed)  sp_da_push(runner->failed, instance->name);
+  if (skipped) sp_da_push(runner->skipped, instance->name);
+  if (updated) sp_da_push(runner->updated, instance->name);
+  sp_mutex_unlock(&runner->mutex);
+
+  sp_test_context_destroy(t);
+}
+
+static s32 sp_test_worker(void* userdata) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)userdata;
+  while (true) {
+    s32 slot = sp_atomic_s32_add(&runner->cursor, 1);
+    if ((u64)slot >= sp_da_size(runner->queue)) break;
+    sp_test_run_instance(runner, &runner->queue[slot]);
+  }
+  return 0;
+}
+
+
+////////////
+// RUNNER //
+////////////
+bool sp_test_filtered(sp_glob_t* filter, const c8* name) {
+  if (!filter) return false;
+
+  sp_str_t path = sp_cstr_as_str(name);
+  if (sp_glob_match(filter, path)) return false;
+
+  s32 slash = sp_str_find_c8(path, '/');
+  if (slash != SP_STR_NO_MATCH && sp_glob_match(filter, sp_str_prefix(path, slash))) return false;
+
+  s32 dot = sp_str_find_c8(path, '.');
+  if (dot != SP_STR_NO_MATCH && sp_glob_match(filter, sp_str_prefix(path, dot))) return false;
+
+  return true;
+}
+
+static u32 sp_test_num_cpus(void) {
+#if defined(SP_SYSCALL_NUM_SCHED_GETAFFINITY)
+  u64 mask [16] = sp_zero;
+  s64 bytes = sp_syscall(SP_SYSCALL_NUM_SCHED_GETAFFINITY, 0, sizeof(mask), mask);
+  if (bytes <= 0) return 1;
+
+  u32 count = 0;
+  sp_for(it, (u32)bytes / (u32)sizeof(u64)) {
+    u64 word = mask[it];
+    while (word) {
+      count += (u32)(word & 1);
+      word >>= 1;
+    }
+  }
+  return count ? count : 1;
+#else
+  return 1;
+#endif
+}
+
+static const c8* sp_test_instance_name(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, u32 row) {
+  if (!decl->each) {
+    return sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name));
+  }
+
+  if (decl->case_name) {
+    u64 offset = (u64)((const u8*)decl->case_name - (const u8*)decl->cases);
+    const u8* row_base = (const u8*)decl->cases + (u64)row * decl->stride;
+    const c8* case_name = SP_NULLPTR;
+    sp_mem_copy(&case_name, row_base + offset, sizeof(case_name));
+    if (case_name) {
+      return sp_fmt_mem_cstr(mem, "{}.{}.{}",
+        sp_fmt_cstr(suite),
+        sp_fmt_cstr(decl->name),
+        sp_fmt_cstr(case_name));
+    }
+  }
+
+  return sp_fmt_mem_cstr(mem, "{}.{}.{}",
+    sp_fmt_cstr(suite),
+    sp_fmt_cstr(decl->name),
+    sp_fmt_uint(row));
+}
+
+static void sp_test_collect_decl(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool suite_serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+  u32 count = decl->each ? decl->count : 1;
+  sp_for(row, count) {
+    const c8* name = sp_test_instance_name(mem, suite, decl, row);
+    if (sp_test_filtered(filter, name)) continue;
+
+    sp_da_push(*out, ((sp_test_instance_t) {
+      .name = name,
+      .decl = decl,
+      .arg = decl->each ? (const void*)((const u8*)decl->cases + (u64)row * decl->stride) : SP_NULLPTR,
+      .serial = suite_serial || decl->serial,
+    }));
+  }
+}
+
+#if SP_TEST_AUTOREG
+#if defined(SP_WIN32)
+extern IMAGE_DOS_HEADER __ImageBase;
+
+typedef struct {
+  const void* begin;
+  const void* end;
+} sp_test_pe_bounds_t;
+
+static sp_test_pe_bounds_t sp_test_pe_bounds(const c8* name) {
+  sp_test_pe_bounds_t bounds = sp_zero;
+
+  const u8* base = (const u8*)&__ImageBase;
+  const IMAGE_NT_HEADERS* nt = (const IMAGE_NT_HEADERS*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew);
+  const IMAGE_SECTION_HEADER* sections = IMAGE_FIRST_SECTION(nt);
+
+  sp_for(it, nt->FileHeader.NumberOfSections) {
+    const IMAGE_SECTION_HEADER* section = &sections[it];
+
+    const c8* want = name;
+    bool match = true;
+    sp_for(n, (u32)sizeof(section->Name)) {
+      if ((c8)section->Name[n] != *want) { match = false; break; }
+      if (*want) want++;
+    }
+    if (!match) continue;
+
+    bounds.begin = base + section->VirtualAddress;
+    bounds.end   = base + section->VirtualAddress + section->Misc.VirtualSize;
+    break;
+  }
+
+  return bounds;
+}
+
+#define __sp_test_reg_begin   ((const sp_test_reg_t* const*)sp_test_pe_bounds("sp_test").begin)
+#define __sp_test_reg_end     ((const sp_test_reg_t* const*)sp_test_pe_bounds("sp_test").end)
+#define __sp_test_suite_begin ((const sp_test_suite_attr_t* const*)sp_test_pe_bounds("sp_suite").begin)
+#define __sp_test_suite_end   ((const sp_test_suite_attr_t* const*)sp_test_pe_bounds("sp_suite").end)
+#else
+#if defined(SP_MACOS)
+extern const sp_test_reg_t* const __start_sp_test[] __asm("section$start$__DATA$sp_test");
+extern const sp_test_reg_t* const __stop_sp_test[] __asm("section$end$__DATA$sp_test");
+extern const sp_test_suite_attr_t* const __start_sp_test_suite[] __asm("section$start$__DATA$sp_test_suite");
+extern const sp_test_suite_attr_t* const __stop_sp_test_suite[] __asm("section$end$__DATA$sp_test_suite");
+#else
+extern const sp_test_reg_t* const __start_sp_test[] __attribute__((weak));
+extern const sp_test_reg_t* const __stop_sp_test[] __attribute__((weak));
+extern const sp_test_suite_attr_t* const __start_sp_test_suite[] __attribute__((weak));
+extern const sp_test_suite_attr_t* const __stop_sp_test_suite[] __attribute__((weak));
+#endif
+#define __sp_test_reg_begin   (__start_sp_test)
+#define __sp_test_reg_end     (__stop_sp_test)
+#define __sp_test_suite_begin (__start_sp_test_suite)
+#define __sp_test_suite_end   (__stop_sp_test_suite)
+#endif
+#endif
+
+static bool sp_test_suite_serial(const c8* suite) {
+#if SP_TEST_AUTOREG
+  for (const sp_test_suite_attr_t* const* it = __sp_test_suite_begin, * const* end = __sp_test_suite_end; it < end; it++) {
+    if (!*it) continue;
+    if (sp_cstr_equal((*it)->suite, suite)) return (*it)->serial;
+  }
+#else
+  SP_UNUSED(suite);
+#endif
+  return false;
+}
+
+static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+  if (suites) {
+    for (const sp_test_suite_t* suite = suites; suite->name; suite++) {
+      bool serial = suite->serial || sp_test_suite_serial(suite->name);
+      for (const sp_test_decl_t* decl = suite->tests; decl->name; decl++) {
+        sp_test_collect_decl(mem, suite->name, decl, serial, filter, out);
+      }
+    }
+  }
+
+#if SP_TEST_AUTOREG
+  for (const sp_test_reg_t* const* it = __sp_test_reg_begin, * const* end = __sp_test_reg_end; it < end; it++) {
+    if (!*it) continue;
+    sp_test_collect_decl(mem, (*it)->suite, &(*it)->decl, sp_test_suite_serial((*it)->suite), filter, out);
+  }
+#endif
+}
+
+static sp_str_t sp_test_abi_name(void) {
+#if defined(SP_LIBC_MSVC)
+  return sp_str_lit("msvc");
+#elif defined(SP_LIBC_GNU)
+  return sp_str_lit("gnu");
+#elif defined(SP_LIBC_NONE)
+  return sp_str_lit("none");
+#elif defined(SP_MACOS)
+  return sp_str_lit("apple");
+#elif defined(SP_LINUX)
+  return sp_str_lit("musl");
+#else
+  return sp_str_lit("unknown");
+#endif
+}
+
+static sp_str_t sp_test_arch_name(void) {
+#if defined(SP_AMD64)
+  return sp_str_lit("x86_64");
+#elif defined(SP_ARM64)
+  return sp_str_lit("aarch64");
+#elif defined(SP_WASM)
+  return sp_str_lit("wasm32");
+#else
+  return sp_str_lit("unknown");
+#endif
+}
+
+static sp_cli_result_t sp_test_cli_handler(sp_cli_t* cli) {
+  SP_UNUSED(cli);
+  return SP_CLI_CONTINUE;
+}
+
+s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
+  const c8* filter = SP_NULLPTR;
+  u32 jobs = 1;
+  bool list = false;
+  bool update = false;
+
+  sp_cli_cmd_t cli = {
+    .name = "sp_test",
+    .summary = "run registered tests",
+    .opts = {
+      {
+        .name = "list",
+        .kind = SP_CLI_OPT_BOOLEAN,
+        .summary = "print instance names, one per line",
+        .ptr = &list,
+      },
+      {
+        .name = "filter",
+        .kind = SP_CLI_OPT_CSTR,
+        .summary = "run only instances matching a glob",
+        .placeholder = "glob",
+        .ptr = &filter,
+      },
+      {
+        .name = "jobs",
+        .kind = SP_CLI_OPT_U32,
+        .summary = "run on n threads; 0 uses one per processor",
+        .placeholder = "n",
+        .ptr = &jobs,
+      },
+      {
+        .name = "update",
+        .kind = SP_CLI_OPT_BOOLEAN,
+        .summary = "write golden files from actual values instead of comparing",
+        .ptr = &update,
+      },
+    },
+    .handler = sp_test_cli_handler,
+  };
+
+  switch (sp_cli_run((sp_cli_desc_t) { .root = &cli, .args = argv, .num_args = argc })) {
+    case SP_CLI_OK:
+    case SP_CLI_CONTINUE: break;
+    case SP_CLI_HELP:     return 0;
+    case SP_CLI_ERR:      return 1;
+  }
+
+  sp_mem_arena_t* arena = sp_mem_arena_new(sp_mem_os_new());
+
+  sp_test_runner_t* runner = sp_alloc_type(sp_mem_arena_as_allocator(arena), sp_test_runner_t);
+  sp_mem_zero(runner, sizeof(*runner));
+  runner->mem = sp_mem_arena_as_allocator(arena);
+  runner->queue = sp_da_new(runner->mem, sp_test_instance_t);
+  runner->failed = sp_da_new(runner->mem, const c8*);
+  runner->skipped = sp_da_new(runner->mem, const c8*);
+  runner->updated = sp_da_new(runner->mem, const c8*);
+  runner->update = update;
+  sp_mutex_init(&runner->mutex, SP_MUTEX_PLAIN);
+  sp_io_stream_writer_from_fd(&runner->out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
+  sp_io_writer_set_buffer(&runner->out.base, runner->out_buffer, sizeof(runner->out_buffer));
+
+  sp_glob_t* glob = SP_NULLPTR;
+  if (filter && *filter) {
+    glob = sp_glob_new(runner->mem, filter);
+    if (!glob) {
+      sp_fmt_io(&runner->out.base, "invalid filter {.quote}\n", sp_fmt_cstr(filter));
+      sp_io_flush(&runner->out.base);
+      return 1;
+    }
+  }
+
+  sp_test_collect(runner->mem, suites, glob, &runner->queue);
+
+  if (list) {
+    sp_da_for(runner->queue, it) {
+      sp_fmt_io(&runner->out.base, "{}\n", sp_fmt_cstr(runner->queue[it].name));
+    }
+    sp_io_flush(&runner->out.base);
+    return 0;
+  }
+
+  runner->dir_root = sp_fs_join_path(runner->mem,
+    sp_fs_join_path(runner->mem, sp_fs_get_cwd(runner->mem), sp_str_lit(".tmp")),
+    sp_str_lit("sp_test"));
+
+  if (jobs == 0) jobs = sp_test_num_cpus();
+
+  sp_da(sp_test_instance_t) parallel = sp_da_new(runner->mem, sp_test_instance_t);
+  sp_da(sp_test_instance_t) serial = sp_da_new(runner->mem, sp_test_instance_t);
+  sp_da_for(runner->queue, it) {
+    if (runner->queue[it].serial) sp_da_push(serial, runner->queue[it]);
+    else                          sp_da_push(parallel, runner->queue[it]);
+  }
+
+  sp_fmt_io(&runner->out.base, "> running {.black} test cases on {}-{}-{}\n",
+    sp_fmt_uint(sp_da_size(runner->queue)),
+    sp_fmt_str(sp_test_arch_name()),
+    sp_fmt_str(sp_os_get_name()),
+    sp_fmt_str(sp_test_abi_name()));
+  sp_io_flush(&runner->out.base);
+
+  runner->queue = parallel;
+  jobs = (u32)sp_min((u64)jobs, sp_da_size(parallel));
+  if (jobs <= 1) {
+    sp_da_for(parallel, it) {
+      sp_test_run_instance(runner, &parallel[it]);
+    }
+  }
+  else {
+    sp_thread_t* threads = sp_alloc_n(runner->mem, sp_thread_t, jobs);
+    sp_for(it, jobs) {
+      sp_thread_init(&threads[it], sp_test_worker, runner);
+    }
+    sp_for(it, jobs) {
+      sp_thread_join(&threads[it]);
+    }
+  }
+
+  sp_da_for(serial, it) {
+    sp_test_run_instance(runner, &serial[it]);
+  }
+
+  u64 total = sp_da_size(parallel) + sp_da_size(serial);
+  u64 failed = sp_da_size(runner->failed);
+  u64 skipped = sp_da_size(runner->skipped);
+  u64 updated = sp_da_size(runner->updated);
+
+  sp_fmt_io(&runner->out.base, "> {.green} passed, {.red} failed, {.yellow} skipped",
+    sp_fmt_uint(total - failed - skipped - updated),
+    sp_fmt_uint(failed),
+    sp_fmt_uint(skipped));
+  if (runner->update) {
+    sp_fmt_io(&runner->out.base, ", {.cyan} updated", sp_fmt_uint(updated));
+  }
+  sp_fmt_io(&runner->out.base, "\n");
+
+  sp_da_for(runner->failed, it) {
+    sp_fmt_io(&runner->out.base, "  {.red} {}\n", sp_fmt_cstr("failed"), sp_fmt_cstr(runner->failed[it]));
+  }
+  sp_io_flush(&runner->out.base);
+
+  if (sp_fs_exists(runner->dir_root)) {
+    sp_fs_remove_dir(runner->dir_root);
+  }
+
+  sp_mutex_destroy(&runner->mutex);
+  sp_mem_arena_destroy(arena);
+  return (s32)failed;
+}
+
+#endif
