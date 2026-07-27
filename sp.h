@@ -860,6 +860,10 @@ typedef enum {
   SP_ERR_OS,
 } sp_err_t;
 
+SP_TYPEDEF_FN(sp_str_t, sp_err_str_fn_t, sp_err_t err);
+
+SP_API sp_str_t sp_err_str(sp_err_t err);
+
 typedef enum {
   SP_OPT_NONE = 0,
   SP_OPT_SOME = 1,
@@ -3805,6 +3809,7 @@ typedef struct {
     sp_io_stream_writer_t err;
   } std;
   sp_atomic_s32_t unsupported [8];
+  sp_err_str_fn_t err_str;
 #if defined(SP_WIN32)
   sp_nt_dispatch_t nt;
   sp_ws2_dispatch_t ws2;
@@ -4869,7 +4874,88 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
 
 sp_rt_t sp_rt = {
   .vt = &sp_sys_vtable_platform,
+  .err_str = sp_err_str,
 };
+
+sp_str_t sp_err_str(sp_err_t err) {
+  switch (err) {
+    case SP_OK:                              return sp_str_lit("SP_OK");
+    case SP_ERR:                             return sp_str_lit("SP_ERR");
+    case SP_ERR_IO:                          return sp_str_lit("SP_ERR_IO");
+    case SP_ERR_IO_OPEN_FAILED:              return sp_str_lit("SP_ERR_IO_OPEN_FAILED");
+    case SP_ERR_IO_SEEK_INVALID:             return sp_str_lit("SP_ERR_IO_SEEK_INVALID");
+    case SP_ERR_IO_SEEK_FAILED:              return sp_str_lit("SP_ERR_IO_SEEK_FAILED");
+    case SP_ERR_IO_WRITE_FAILED:             return sp_str_lit("SP_ERR_IO_WRITE_FAILED");
+    case SP_ERR_IO_CLOSE_FAILED:             return sp_str_lit("SP_ERR_IO_CLOSE_FAILED");
+    case SP_ERR_IO_READ_FAILED:              return sp_str_lit("SP_ERR_IO_READ_FAILED");
+    case SP_ERR_IO_READ_ONLY:                return sp_str_lit("SP_ERR_IO_READ_ONLY");
+    case SP_ERR_IO_NO_SPACE:                 return sp_str_lit("SP_ERR_IO_NO_SPACE");
+    case SP_ERR_IO_EOF:                      return sp_str_lit("SP_ERR_IO_EOF");
+    case SP_ERR_IO_INVALID_WRITE:            return sp_str_lit("SP_ERR_IO_INVALID_WRITE");
+    case SP_ERR_IO_UNIMPLEMENTED:            return sp_str_lit("SP_ERR_IO_UNIMPLEMENTED");
+    case SP_ERR_IO_TIMEOUT:                  return sp_str_lit("SP_ERR_IO_TIMEOUT");
+    case SP_ERR_IO_NOT_FOUND:                return sp_str_lit("SP_ERR_IO_NOT_FOUND");
+    case SP_ERR_IO_ACCESS_DENIED:            return sp_str_lit("SP_ERR_IO_ACCESS_DENIED");
+    case SP_ERR_IO_IS_DIR:                   return sp_str_lit("SP_ERR_IO_IS_DIR");
+    case SP_ERR_IO_NOT_DIR:                  return sp_str_lit("SP_ERR_IO_NOT_DIR");
+    case SP_ERR_IO_EXISTS:                   return sp_str_lit("SP_ERR_IO_EXISTS");
+    case SP_ERR_IO_BUSY:                     return sp_str_lit("SP_ERR_IO_BUSY");
+    case SP_ERR_IO_TOO_MANY_FILES:           return sp_str_lit("SP_ERR_IO_TOO_MANY_FILES");
+    case SP_ERR_IO_NAME_TOO_LONG:            return sp_str_lit("SP_ERR_IO_NAME_TOO_LONG");
+    case SP_ERR_IO_BAD_FD:                   return sp_str_lit("SP_ERR_IO_BAD_FD");
+    case SP_ERR_IO_BROKEN_PIPE:              return sp_str_lit("SP_ERR_IO_BROKEN_PIPE");
+    case SP_ERR_IO_CONN_RESET:               return sp_str_lit("SP_ERR_IO_CONN_RESET");
+    case SP_ERR_IO_WOULD_BLOCK:              return sp_str_lit("SP_ERR_IO_WOULD_BLOCK");
+    case SP_ERR_FMT_UNKNOWN_DIRECTIVE:       return sp_str_lit("SP_ERR_FMT_UNKNOWN_DIRECTIVE");
+    case SP_ERR_FMT_BAD_DIRECTIVE:           return sp_str_lit("SP_ERR_FMT_BAD_DIRECTIVE");
+    case SP_ERR_FMT_TOO_MANY_DIRECTIVES:     return sp_str_lit("SP_ERR_FMT_TOO_MANY_DIRECTIVES");
+    case SP_ERR_FMT_BAD_PRECISION:           return sp_str_lit("SP_ERR_FMT_BAD_PRECISION");
+    case SP_ERR_FMT_BAD_PLACEHOLDER:         return sp_str_lit("SP_ERR_FMT_BAD_PLACEHOLDER");
+    case SP_ERR_FMT_UNTERMINATED_PLACEHOLDER: return sp_str_lit("SP_ERR_FMT_UNTERMINATED_PLACEHOLDER");
+    case SP_ERR_FMT_BAD_ARG:                 return sp_str_lit("SP_ERR_FMT_BAD_ARG");
+    case SP_ERR_FMT_WRONG_FILL_KIND:         return sp_str_lit("SP_ERR_FMT_WRONG_FILL_KIND");
+    case SP_ERR_FMT_WRONG_WIDTH_KIND:        return sp_str_lit("SP_ERR_FMT_WRONG_WIDTH_KIND");
+    case SP_ERR_FMT_WRONG_PRECISION_KIND:    return sp_str_lit("SP_ERR_FMT_WRONG_PRECISION_KIND");
+    case SP_ERR_FMT_WRONG_STYLE_KIND:        return sp_str_lit("SP_ERR_FMT_WRONG_STYLE_KIND");
+    case SP_ERR_SYS:                         return sp_str_lit("SP_ERR_SYS");
+    case SP_ERR_SYS_NOT_FOUND:               return sp_str_lit("SP_ERR_SYS_NOT_FOUND");
+    case SP_ERR_SYS_ACCESS_DENIED:           return sp_str_lit("SP_ERR_SYS_ACCESS_DENIED");
+    case SP_ERR_SYS_EXISTS:                  return sp_str_lit("SP_ERR_SYS_EXISTS");
+    case SP_ERR_SYS_IS_DIR:                  return sp_str_lit("SP_ERR_SYS_IS_DIR");
+    case SP_ERR_SYS_NOT_DIR:                 return sp_str_lit("SP_ERR_SYS_NOT_DIR");
+    case SP_ERR_SYS_BAD_FD:                  return sp_str_lit("SP_ERR_SYS_BAD_FD");
+    case SP_ERR_SYS_BUSY:                    return sp_str_lit("SP_ERR_SYS_BUSY");
+    case SP_ERR_SYS_INVALID:                 return sp_str_lit("SP_ERR_SYS_INVALID");
+    case SP_ERR_SYS_NO_SPACE:                return sp_str_lit("SP_ERR_SYS_NO_SPACE");
+    case SP_ERR_SYS_NO_MEMORY:               return sp_str_lit("SP_ERR_SYS_NO_MEMORY");
+    case SP_ERR_SYS_TOO_MANY_FILES:          return sp_str_lit("SP_ERR_SYS_TOO_MANY_FILES");
+    case SP_ERR_SYS_NAME_TOO_LONG:           return sp_str_lit("SP_ERR_SYS_NAME_TOO_LONG");
+    case SP_ERR_SYS_READ_ONLY_FS:            return sp_str_lit("SP_ERR_SYS_READ_ONLY_FS");
+    case SP_ERR_SYS_WOULD_BLOCK:             return sp_str_lit("SP_ERR_SYS_WOULD_BLOCK");
+    case SP_ERR_SYS_BROKEN_PIPE:             return sp_str_lit("SP_ERR_SYS_BROKEN_PIPE");
+    case SP_ERR_SYS_UNSUPPORTED:             return sp_str_lit("SP_ERR_SYS_UNSUPPORTED");
+    case SP_ERR_SYS_TIMED_OUT:               return sp_str_lit("SP_ERR_SYS_TIMED_OUT");
+    case SP_ERR_SYS_CONN_RESET:              return sp_str_lit("SP_ERR_SYS_CONN_RESET");
+    case SP_ERR_SYS_CONN_REFUSED:            return sp_str_lit("SP_ERR_SYS_CONN_REFUSED");
+    case SP_ERR_SYS_NOT_CONNECTED:           return sp_str_lit("SP_ERR_SYS_NOT_CONNECTED");
+    case SP_ERR_SYS_CROSS_DEVICE:            return sp_str_lit("SP_ERR_SYS_CROSS_DEVICE");
+    case SP_ERR_SYS_LOOP:                    return sp_str_lit("SP_ERR_SYS_LOOP");
+    case SP_ERR_SYS_FILE_TOO_BIG:            return sp_str_lit("SP_ERR_SYS_FILE_TOO_BIG");
+    case SP_ERR_SYS_INTERRUPTED:             return sp_str_lit("SP_ERR_SYS_INTERRUPTED");
+    case SP_ERR_SYS_NOT_EMPTY:               return sp_str_lit("SP_ERR_SYS_NOT_EMPTY");
+    case SP_ERR_SYS_BUG:                     return sp_str_lit("SP_ERR_SYS_BUG");
+    case SP_ERR_SYS_ADDR_IN_USE:             return sp_str_lit("SP_ERR_SYS_ADDR_IN_USE");
+    case SP_ERR_SYS_ADDR_UNAVAILABLE:        return sp_str_lit("SP_ERR_SYS_ADDR_UNAVAILABLE");
+    case SP_ERR_SYS_UNREACHABLE:             return sp_str_lit("SP_ERR_SYS_UNREACHABLE");
+    case SP_ERR_SYS_IO:                      return sp_str_lit("SP_ERR_SYS_IO");
+    case SP_ERR_SYS_UNSEEKABLE:              return sp_str_lit("SP_ERR_SYS_UNSEEKABLE");
+    case SP_ERR_SYS_TOO_MANY_LINKS:          return sp_str_lit("SP_ERR_SYS_TOO_MANY_LINKS");
+    case SP_ERR_SYS_NOT_TTY:                 return sp_str_lit("SP_ERR_SYS_NOT_TTY");
+    case SP_ERR_LAZY:                        return sp_str_lit("SP_ERR_LAZY");
+    case SP_ERR_OS:                          return sp_str_lit("SP_ERR_OS");
+  }
+  return sp_str_lit("");
+}
 sp_tls_block_t sp_tls_block;
 
 sp_err_t sp_sys_is_supported(u32 what) {
