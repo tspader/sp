@@ -270,7 +270,7 @@ SP_API bool        sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 cou
 
 SP_API void            sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
 SP_API void            sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
-SP_API sp_da(sp_str_t) sp_test_resolve_candidates(sp_mem_t mem, sp_str_t file, sp_str_t anchor);
+SP_API sp_da(sp_str_t) sp_test_resolve_roots(sp_mem_t mem, sp_str_t cwd, sp_str_t exe_dir);
 
 typedef struct {
   sp_atomic_s32_t state;
@@ -471,26 +471,6 @@ SP_API sp_err_t    sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_w
     }                                                               \
   } while (0)
 
-#define sp_test_near(T, A, B, EPS, SA, SB, FAIL)                            \
-  do {                                                                      \
-    sp_test_t* sp_test_it = (T);                                            \
-    f64 sp_test_lhs = (f64)(A);                                             \
-    f64 sp_test_rhs = (f64)(B);                                             \
-    f64 sp_test_eps = (f64)(EPS);                                           \
-    f64 sp_test_delta = sp_test_lhs - sp_test_rhs;                          \
-    if (sp_test_delta < 0.0) sp_test_delta = -sp_test_delta;                \
-    if (!(sp_test_delta <= sp_test_eps)) {                                  \
-      sp_test_record(sp_test_it, (sp_test_failure_t) {                      \
-        .file = sp_cstr_as_str(__FILE__),                                   \
-        .line = (u32)__LINE__,                                              \
-        .expected = sp_test_format(sp_test_it, "{} within {} of {}",        \
-          sp_fmt_cstr(SA), sp_fmt_float(sp_test_eps), sp_fmt_cstr(SB)),     \
-        .actual = sp_test_format(sp_test_it, "{:.6} vs {:.6}, delta {:.6}", \
-      });                                                                   \
-      FAIL;                                                                 \
-    }                                                                       \
-  } while (0)
-
 #define sp_test_streq(T, A, B, FAIL)                                                 \
   do {                                                                               \
     sp_test_t* sp_test_it = (T);                                                     \
@@ -588,9 +568,6 @@ SP_API sp_err_t    sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_w
 #define sp_expect_ge(T, A, B)       sp_test_cmp(T, A, B, #A, #B, >=, sp_test_soft)
 #define sp_must_ge(T, A, B)         sp_test_cmp(T, A, B, #A, #B, >=, sp_test_stop)
 
-#define sp_expect_near(T, A, B, E)  sp_test_near(T, A, B, E, #A, #B, sp_test_soft)
-#define sp_must_near(T, A, B, E)    sp_test_near(T, A, B, E, #A, #B, sp_test_stop)
-
 #define sp_expect_str_eq(T, A, B)   sp_test_streq(T, A, B, sp_test_soft)
 #define sp_must_str_eq(T, A, B)     sp_test_streq(T, A, B, sp_test_stop)
 #define sp_expect_str_eq_c(T, A, B) sp_test_streq(T, A, sp_cstr_as_str(B), sp_test_soft)
@@ -651,12 +628,15 @@ typedef struct {
   u32 next_id;
 } sp_test_tracking_t;
 
+typedef struct sp_test_runner_t sp_test_runner_t;
+
 struct sp_test_t {
   const c8* name;
   const sp_test_decl_t* decl;
   const void* arg;
   const void* user;
   void* state;
+  sp_test_runner_t* runner;
 
   sp_mem_arena_t* bookkeeping;
   sp_mem_t mem;
@@ -669,7 +649,6 @@ struct sp_test_t {
   sp_str_t skip_reason;
   bool skipped;
 
-  bool update;
   u32 updated;
 
   sp_mem_arena_t* scratch;
@@ -679,7 +658,6 @@ struct sp_test_t {
   sp_mem_t tracked_mem;
   bool tracking_live;
 
-  sp_str_t dir_root;
   sp_str_t dir;
 };
 
@@ -690,7 +668,7 @@ typedef struct {
   bool serial;
 } sp_test_instance_t;
 
-typedef struct {
+struct sp_test_runner_t {
   sp_mem_t mem;
   sp_io_stream_writer_t out;
   u8 out_buffer [8192];
@@ -701,8 +679,10 @@ typedef struct {
   sp_da(const c8*) skipped;
   sp_da(const c8*) updated;
   sp_str_t dir_root;
+  sp_str_t golden_root;
+  sp_test_once_t golden_once;
   bool update;
-} sp_test_runner_t;
+};
 
 
 static sp_test_tracking_node_t* sp_test_tracking_header(void* ptr) {
@@ -1024,7 +1004,7 @@ sp_mem_t sp_test_mem(sp_test_t* t) {
 sp_str_t sp_test_dir(sp_test_t* t) {
   if (sp_str_empty(t->dir)) {
     sp_str_t leaf = sp_str_replace_c8(t->mem, sp_cstr_as_str(t->name), '/', '_');
-    t->dir = sp_fs_join_path(t->mem, t->dir_root, leaf);
+    t->dir = sp_fs_join_path(t->mem, t->runner->dir_root, leaf);
     if (sp_fs_exists(t->dir)) sp_fs_remove_dir(t->dir);
     sp_fs_create_dir(t->dir);
   }
@@ -1048,57 +1028,62 @@ sp_err_t sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user) {
 ////////////
 // GOLDEN //
 ////////////
-sp_da(sp_str_t) sp_test_resolve_candidates(sp_mem_t mem, sp_str_t file, sp_str_t anchor) {
-  sp_da(sp_str_t) candidates = sp_da_new(mem, sp_str_t);
+sp_da(sp_str_t) sp_test_resolve_roots(sp_mem_t mem, sp_str_t cwd, sp_str_t exe_dir) {
+  sp_da(sp_str_t) roots = sp_da_new(mem, sp_str_t);
 
-  file = sp_fs_normalize_path(mem, file);
-  anchor = sp_fs_normalize_path(mem, anchor);
+  sp_str_t anchors [] = { cwd, exe_dir };
+  sp_carr_for(anchors, at) {
+    if (sp_str_empty(anchors[at])) continue;
 
-  bool rooted = sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS);
-  if (rooted) sp_da_push(candidates, file);
+    sp_str_t dir = sp_fs_normalize_path(mem, anchors[at]);
+    while (!sp_str_empty(dir)) {
+      bool seen = false;
+      sp_da_for(roots, it) {
+        if (sp_str_equal(roots[it], dir)) { seen = true; break; }
+      }
+      if (!seen) sp_da_push(roots, dir);
 
-  sp_da(sp_str_t) ancestors = sp_da_new(mem, sp_str_t);
-  sp_str_t dir = anchor;
-  while (!sp_str_empty(dir)) {
-    sp_da_push(ancestors, dir);
-    sp_str_t parent = sp_fs_parent_path(dir);
-    if (sp_str_equal(parent, dir)) break;
-    dir = parent;
-  }
-
-  // A suffix without a directory would let a bare file name match anywhere
-  // up the change, which would make --update write the new goldens next
-  // to the impostor.
-  for (u32 index = 0; index < file.len; index++) {
-    bool head = (index == 0) && !rooted;
-    bool after_slash = index > 0 && file.data[index - 1] == '/';
-    if (!head && !after_slash) continue;
-
-    sp_str_t suffix = sp_str_sub(file, (s32)index, (s32)(file.len - index));
-    if (sp_str_find_c8(suffix, '/') == SP_STR_NO_MATCH) continue;
-
-    sp_da_for(ancestors, it) {
-      sp_da_push(candidates, sp_fs_join_path(mem, ancestors[it], suffix));
+      sp_str_t parent = sp_fs_parent_path(dir);
+      if (sp_str_equal(parent, dir)) break;
+      dir = parent;
     }
   }
 
-  if (!rooted) sp_da_push(candidates, file);
-
-  return candidates;
+  return roots;
 }
 
-static sp_str_t sp_test_resolve_file(sp_test_t* t, sp_str_t file, sp_str_t anchor) {
-  sp_da(sp_str_t) candidates = sp_test_resolve_candidates(t->mem, file, anchor);
-  sp_da_for(candidates, it) {
-    if (sp_fs_is_target_file(candidates[it])) return candidates[it];
+typedef struct {
+  sp_test_t* t;
+  sp_str_t file;
+} sp_test_golden_root_args_t;
+
+static sp_err_t sp_test_golden_find_root(void* user) {
+  sp_test_golden_root_args_t* args = (sp_test_golden_root_args_t*)user;
+  sp_test_t* t = args->t;
+  sp_test_runner_t* runner = t->runner;
+
+  if (!sp_str_empty(runner->golden_root)) return SP_OK;
+
+  sp_str_t cwd = sp_fs_get_cwd(t->mem);
+  sp_str_t exe_dir = sp_fs_parent_path(sp_fs_get_exe_path(t->mem));
+  sp_da(sp_str_t) roots = sp_test_resolve_roots(t->mem, cwd, exe_dir);
+
+  sp_da_for(roots, it) {
+    if (!sp_fs_is_target_file(sp_fs_join_path(t->mem, roots[it], args->file))) continue;
+
+    sp_mutex_lock(&runner->mutex);
+    runner->golden_root = sp_str_copy(runner->mem, roots[it]);
+    sp_mutex_unlock(&runner->mutex);
+    return SP_OK;
   }
-  return sp_zero_s(sp_str_t);
+
+  return SP_ERR;
 }
 
 static void sp_test_golden_at(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
   sp_str_t actual_path = sp_test_format(t, "{}.actual", sp_fmt_str(path));
 
-  if (t->update) {
+  if (t->runner->update) {
     sp_str_t parent = sp_fs_parent_path(path);
     if (!sp_str_empty(parent) && !sp_fs_exists(parent)) {
       sp_fs_create_dir(parent);
@@ -1182,14 +1167,29 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
     return;
   }
 
-  sp_str_t anchor = sp_fs_parent_path(sp_fs_get_exe_path(t->mem));
-  sp_str_t src = sp_test_resolve_file(t, file, anchor);
-  if (sp_str_empty(src)) {
+  file = sp_fs_normalize_path(t->mem, file);
+
+  sp_str_t src = file;
+  if (!sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS)) {
+    sp_test_golden_root_args_t args = { .t = t, .file = file };
+    if (sp_test_once(&t->runner->golden_once, sp_test_golden_find_root, &args)) {
+      sp_test_record(t, (sp_test_failure_t) {
+        .file = file,
+        .line = line,
+        .message = sp_test_format(t, "cannot locate {} from the cwd or the test binary; pass --golden-root",
+          sp_fmt_str(file)),
+      });
+      return;
+    }
+    src = sp_fs_join_path(t->mem, t->runner->golden_root, file);
+  }
+
+  if (!sp_fs_is_target_file(src)) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
-      .message = sp_test_format(t, "cannot locate {} near {}; goldens are unreachable from this binary",
-        sp_fmt_str(file), sp_fmt_str(anchor)),
+      .message = sp_test_format(t, "cannot locate {}; goldens resolve against the calling source dir (--golden-root overrides)",
+        sp_fmt_str(src)),
     });
     return;
   }
@@ -1464,14 +1464,13 @@ static sp_test_t* sp_test_context_new(sp_test_runner_t* runner, sp_test_instance
   t->decl = instance->decl;
   t->arg = instance->arg;
   t->user = instance->decl->user;
+  t->runner = runner;
   t->bookkeeping = arena;
   t->mem = mem;
   t->failures = sp_da_new(mem, sp_test_failure_t);
   t->kvs = sp_da_new(mem, sp_test_kv_t);
   t->logs = sp_da_new(mem, sp_str_t);
   t->notes = sp_da_new(mem, sp_str_t);
-  t->dir_root = runner->dir_root;
-  t->update = runner->update;
   return t;
 }
 
@@ -1783,6 +1782,7 @@ static sp_cli_result_t sp_test_cli_handler(sp_cli_t* cli) {
 
 s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
   const c8* filter = SP_NULLPTR;
+  const c8* golden_root = SP_NULLPTR;
   u32 jobs = 1;
   bool list = false;
   bool update = false;
@@ -1817,6 +1817,13 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
         .summary = "write golden files from actual values instead of comparing",
         .ptr = &update,
       },
+      {
+        .name = "golden-root",
+        .kind = SP_CLI_OPT_CSTR,
+        .summary = "resolve golden files against this directory",
+        .placeholder = "dir",
+        .ptr = &golden_root,
+      },
     },
     .handler = sp_test_cli_handler,
   };
@@ -1838,6 +1845,13 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
   runner->skipped = sp_da_new(runner->mem, const c8*);
   runner->updated = sp_da_new(runner->mem, const c8*);
   runner->update = update;
+
+  sp_str_t root = sp_os_env_get(sp_str_lit("SP_TEST_GOLDEN_ROOT"));
+  if (golden_root && *golden_root) root = sp_cstr_as_str(golden_root);
+  if (!sp_str_empty(root)) {
+    runner->golden_root = sp_fs_normalize_path(runner->mem, root);
+  }
+
   sp_mutex_init(&runner->mutex, SP_MUTEX_PLAIN);
   sp_io_stream_writer_from_fd(&runner->out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
   sp_io_writer_set_buffer(&runner->out.base, runner->out_buffer, sizeof(runner->out_buffer));
