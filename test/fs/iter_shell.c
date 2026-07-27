@@ -44,7 +44,12 @@ static u32 fs_shell_batch_len(fs_shell_batch_t* batch) {
   return n;
 }
 
-static sp_err_t fs_shell_mock_dir_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_dir_t* out) {
+static sp_err_t fs_shell_mock_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out) {
+  *out = SP_SYS_INVALID_FD;
+  return SP_OK;
+}
+
+static sp_err_t fs_shell_mock_dir_from_fd(sp_sys_fd_t fd, sp_sys_dir_t* out) {
   *out = sp_zero_s(sp_sys_dir_t);
   return SP_OK;
 }
@@ -84,7 +89,8 @@ static sp_err_t fs_shell_mock_dir_close(sp_sys_dir_t* dir) {
 static void run_fs_shell_test(s32* utest_result, fs_shell_test_t t) {
   static sp_sys_vtable_t vt;
   vt = sp_sys_vtable_platform;
-  vt.dir_open = fs_shell_mock_dir_open;
+  vt.open_dir = fs_shell_mock_open_dir;
+  vt.dir_from_fd = fs_shell_mock_dir_from_fd;
   vt.dir_read = fs_shell_mock_dir_read;
   vt.dir_parse = fs_shell_mock_dir_parse;
   vt.dir_close = fs_shell_mock_dir_close;

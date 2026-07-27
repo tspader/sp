@@ -35,8 +35,7 @@ static void run_fd_rel_test(s32* utest_result, sp_test_file_manager_t* fs, fd_re
     sp_sys_fd_t fd;
   } cwd = sp_zero;
   cwd.path = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(t.op.cwd));
-  cwd.fd = sp_sys_open_dir_s(sp_sys_get_root(0), cwd.path);
-  ASSERT_NE(cwd.fd, SP_SYS_INVALID_FD);
+  ASSERT_EQ(sp_sys_open_dir_s(sp_sys_get_root(0), cwd.path, &cwd.fd), SP_OK);
 
   switch (t.op.kind) {
     case FD_REL_GET_METADATA: {

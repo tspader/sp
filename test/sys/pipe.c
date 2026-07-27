@@ -40,7 +40,7 @@ static void run_sys_pipe_test(s32* utest_result, sys_pipe_test_t t) {
         u64 len = sp_cstr_len(step->write.data);
         u64 n = 0;
         sp_err_t err = sp_sys_write(w, step->write.data, len, &n);
-        sys_expect_err(utest_result, "write", err, step->write.err, false);
+        sys_expect_err(utest_result, "write", err, step->write.err);
         if (err == SP_OK && !step->write.err) {
           EXPECT_EQ(n, len);
         }
@@ -50,7 +50,7 @@ static void run_sys_pipe_test(s32* utest_result, sys_pipe_test_t t) {
         c8 buf [SYS_TEST_BUF_SIZE] = sp_zero;
         u64 n = 0;
         sp_err_t err = sp_sys_read(r, buf, sizeof(buf), &n);
-        sys_expect_err(utest_result, "read", err, step->read.err, false);
+        sys_expect_err(utest_result, "read", err, step->read.err);
         if (err == SP_OK && !step->read.err) {
           sys_expect_bytes(utest_result, "read", buf, (s64)n, step->read.expect);
         }

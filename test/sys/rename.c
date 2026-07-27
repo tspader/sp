@@ -23,7 +23,7 @@ UTEST_F(sys_rename, refuses_missing_source) {
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_rename_refuses_missing_source",
     .steps = {
-      { .kind = SYS_STEP_RENAME, .rename = { .from = "src.bin", .to = "dst.bin", .fail = true } },
+      { .kind = SYS_STEP_RENAME, .rename = { .from = "src.bin", .to = "dst.bin", .err = SP_ERR_SYS_NOT_FOUND } },
     },
     .expect = {
       { .path = "dst.bin" },

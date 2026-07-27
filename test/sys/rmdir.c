@@ -25,7 +25,7 @@ UTEST_F(sys_rmdir, refuses_nonempty_directory) {
       { .path = "dir/file.bin", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_RMDIR, .rmdir = { .path = "dir", .fail = true } },
+      { .kind = SYS_STEP_RMDIR, .rmdir = { .path = "dir", .err = SP_ERR_SYS_NOT_EMPTY } },
     },
     .expect = {
       { .path = "dir/file.bin", .exists = true, .content = "A" },
@@ -40,7 +40,7 @@ UTEST_F(sys_rmdir, refuses_file) {
       { .path = "file.bin", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_RMDIR, .rmdir = { .path = "file.bin", .fail = true } },
+      { .kind = SYS_STEP_RMDIR, .rmdir = { .path = "file.bin", .err = SP_ERR_SYS_NOT_DIR } },
     },
     .expect = {
       { .path = "file.bin", .exists = true, .content = "A" },
@@ -52,7 +52,7 @@ UTEST_F(sys_rmdir, refuses_missing_path) {
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_rmdir_refuses_missing_path",
     .steps = {
-      { .kind = SYS_STEP_RMDIR, .rmdir = { .path = "dir", .fail = true } },
+      { .kind = SYS_STEP_RMDIR, .rmdir = { .path = "dir", .err = SP_ERR_SYS_NOT_FOUND } },
     },
   });
 }
