@@ -357,11 +357,13 @@ static void* sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 siz
 void* sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
   sp_mem_tracking_t* t = (sp_mem_tracking_t*)ud;
   switch (mode) {
-    case SP_ALLOCATOR_MODE_ALLOC:  return sp_mem_tracking_do_alloc(t, size);
-    case SP_ALLOCATOR_MODE_RESIZE: return sp_mem_tracking_do_realloc(t, ptr, size, old_size);
-    case SP_ALLOCATOR_MODE_FREE:   sp_mem_tracking_do_free(t, ptr, old_size); return SP_NULLPTR;
-    default:                       return SP_NULLPTR;
+    case SP_ALLOCATOR_MODE_ALLOC:
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:  return sp_mem_tracking_do_alloc(t, size);
+    case SP_ALLOCATOR_MODE_RESIZE:
+    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: return sp_mem_tracking_do_realloc(t, ptr, size, old_size);
+    case SP_ALLOCATOR_MODE_FREE:       sp_mem_tracking_do_free(t, ptr, old_size); return SP_NULLPTR;
   }
+  return SP_NULLPTR;
 }
 
 void sp_mem_tracking_init_ex(sp_mem_tracking_t* t, sp_mem_t backing) {
