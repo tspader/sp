@@ -6415,7 +6415,14 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_READ, fd, buf, count);
-  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  if (sp_sys_is_err(rc)) {
+    s64 err = -rc;
+    switch (err) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(err);
+    }
+  }
+
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -6459,7 +6466,13 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_WRITE, fd, buf, count);
-  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  if (sp_sys_is_err(rc)) {
+    s64 err = -rc;
+    switch (err) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(err);
+    }
+  }
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -6515,7 +6528,13 @@ sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* b
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_PREAD64, fd, buf, count, offset);
-  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  if (sp_sys_is_err(rc)) {
+    s64 err = -rc;
+    switch (err) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(err);
+    }
+  }
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -6568,7 +6587,13 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_PWRITE64, fd, buf, count, offset);
-  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  if (sp_sys_is_err(rc)) {
+    s64 err = -rc;
+    switch (err) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(err);
+    }
+  }
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
