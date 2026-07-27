@@ -4025,6 +4025,7 @@ typedef struct {
   sp_str_t out;
   sp_str_t err;
   sp_ps_status_t status;
+  sp_err_t error;
 } sp_ps_output_t;
 
 typedef struct sp_ps_os sp_ps_os_t;
@@ -7267,10 +7268,11 @@ typedef struct {
   s16 revents;
 } sp_sys_linux_pollfd_t;
 
-#define SP_SYS_LINUX_POLLIN  0x0001
-#define SP_SYS_LINUX_POLLOUT 0x0004
-#define SP_SYS_LINUX_POLLERR 0x0008
-#define SP_SYS_LINUX_POLLHUP 0x0010
+#define SP_SYS_LINUX_POLLIN   0x0001
+#define SP_SYS_LINUX_POLLOUT  0x0004
+#define SP_SYS_LINUX_POLLERR  0x0008
+#define SP_SYS_LINUX_POLLHUP  0x0010
+#define SP_SYS_LINUX_POLLNVAL 0x0020
 
 #define SP_SYS_LINUX_MSG_NOSIGNAL 0x4000
 
@@ -7280,7 +7282,7 @@ sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
   sp_sys_timespec_t ts = { 0, 0 };
   s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
   if (r < 0) return sp_sys_err_from_errno(-r);
-  if (r > 0 && (pfd.revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR))) *ready = 1;
+  if (r > 0 && (pfd.revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR | SP_SYS_LINUX_POLLNVAL))) *ready = 1;
   return SP_OK;
 }
 
@@ -7302,7 +7304,7 @@ sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
   s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, pfds, nfds, SP_NULLPTR, 0, 0);
   if (r < 0) return sp_sys_err_from_errno(-r);
   for (u64 i = 0; i < nfds; i++) {
-    if (pfds[i].revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR)) {
+    if (pfds[i].revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR | SP_SYS_LINUX_POLLNVAL)) {
       ready[i] = 1;
     }
   }
@@ -7394,7 +7396,7 @@ sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
     r = (s32)poll(&pfd, 1, 0);
   } while (r < 0 && errno == EINTR);
   if (r < 0) return sp_sys_err_from_errno(errno);
-  if (r > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR))) *ready = 1;
+  if (r > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL))) *ready = 1;
   return SP_OK;
 }
 
@@ -7422,7 +7424,7 @@ sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
   } while (r < 0 && errno == EINTR);
   if (r < 0) return sp_sys_err_from_errno(errno);
   for (u64 i = 0; i < nfds; i++) {
-    if (pfds[i].revents & (POLLIN | POLLHUP | POLLERR)) {
+    if (pfds[i].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) {
       ready[i] = 1;
     }
   }
@@ -13920,6 +13922,10 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
   proc.os = sp_alloc_type(mem, sp_ps_os_t);
   proc.os->pid = pid;
 
+  proc.io.in.fd = 0;
+  proc.io.out.fd = 0;
+  proc.io.err.fd = 0;
+
   if (io.in.pipes.read >= 0) {
     sp_sys_close(io.in.pipes.read);
 
@@ -14179,7 +14185,11 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   }
 
   while (nfds > 0) {
-    if (sp_sys_fds_wait(fds, ready, (u64)nfds) != SP_OK) break;
+    sp_err_t wait_err = sp_sys_fds_wait(fds, ready, (u64)nfds);
+    if (wait_err != SP_OK) {
+      if (result.error == SP_OK) result.error = wait_err;
+      break;
+    }
 
     sp_for(i, (u32)nfds) {
       if (!ready[i]) {
@@ -14187,17 +14197,22 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
       }
 
       u64 n = 0;
-      sp_io_read(readers[i], buffer, sizeof(buffer), &n);
+      sp_err_t read_err = sp_io_read(readers[i], buffer, sizeof(buffer), &n);
       if (n > 0) {
         sp_io_write_str(writers[i], sp_str((c8*)buffer, n), SP_NULLPTR);
-      } else {
-        fds[i] = fds[nfds - 1];
-        ready[i] = ready[nfds - 1];
-        readers[i] = readers[nfds - 1];
-        writers[i] = writers[nfds - 1];
-        nfds--;
-        i--;
       }
+      if (read_err == SP_OK && n > 0) continue;
+      if (read_err == SP_ERR_IO_WOULD_BLOCK) continue;
+
+      if (read_err != SP_OK && read_err != SP_ERR_IO_EOF && result.error == SP_OK) {
+        result.error = read_err;
+      }
+      fds[i] = fds[nfds - 1];
+      ready[i] = ready[nfds - 1];
+      readers[i] = readers[nfds - 1];
+      writers[i] = writers[nfds - 1];
+      nfds--;
+      i--;
     }
   }
 
@@ -14651,15 +14666,9 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
   proc.os = sp_alloc_type(mem, sp_ps_os_t);
   proc.os->pid = process_info.hProcess;
 
-  if (io.in.parent_fd != SP_SYS_INVALID_FD) {
-    proc.io.in.fd = io.in.parent_fd;
-  }
-  if (io.out.parent_fd != SP_SYS_INVALID_FD) {
-    proc.io.out.fd = io.out.parent_fd;
-  }
-  if (io.err.parent_fd != SP_SYS_INVALID_FD) {
-    proc.io.err.fd = io.err.parent_fd;
-  }
+  proc.io.in.fd = io.in.parent_fd;
+  proc.io.out.fd = io.out.parent_fd;
+  proc.io.err.fd = io.err.parent_fd;
 
   return proc;
 
@@ -15904,7 +15913,10 @@ sp_err_t sp_io_stream_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u
   sp_err_t err = sp_sys_read(pr->fd, ptr, size, &num_bytes);
 
   sp_err_t result = SP_OK;
-  if (err) {
+  if (err == SP_ERR_SYS_WOULD_BLOCK) {
+    result = SP_ERR_IO_WOULD_BLOCK;
+  }
+  else if (err) {
     result = SP_ERR_IO_READ_FAILED;
   }
   else if (size && !num_bytes) {
