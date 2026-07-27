@@ -1,0 +1,20 @@
+[package]
+name = "sp"
+version = "0.1.0"
+include = ["."]
+
+[[test]]
+name = "amalgamation"
+source = [
+  "test/main.c",
+  "test/test/*.c",
+  "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c"
+]
+
+[[test]]
+name = "meta"
+source = ["test/main.c", "test/test/*.c"]
+
+[[test]]
+name = "sys"
+source = ["test/main.c", "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c"]

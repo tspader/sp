@@ -1,5 +1,4 @@
-#include "sp.h"
-#include "sp/sp_test.h"
+#include "harness.h"
 
 #if !defined(SP_WASM)
 

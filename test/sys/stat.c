@@ -30,7 +30,7 @@ UTEST_F(sys_stat, refuses_missing_path) {
   run_sys_test(utest_result, (sys_test_t) {
     .label = "sys_stat_refuses_missing_path",
     .steps = {
-      { .kind = SYS_STEP_STAT, .stat = { .path = "file.bin", .fail = true } },
+      { .kind = SYS_STEP_STAT, .stat = { .path = "file.bin", .err = SP_ERR_SYS_NOT_FOUND } },
     },
   });
 }

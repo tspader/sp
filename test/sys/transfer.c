@@ -42,8 +42,7 @@ static void run_sys_transfer_test(s32* utest_result, sys_transfer_test_t t) {
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t sandbox = sp_test_file_create_dir(&fm, t.label);
-  sandbox_fd = sp_sys_open_dir_s(sp_sys_get_root(0), sandbox);
-  if (sandbox_fd == SP_SYS_INVALID_FD) {
+  if (sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd)) {
     SP_TEST_REPORT("failed to open sandbox {}", sp_fmt_str(sandbox));
     SP_FAIL();
     goto done;
@@ -102,7 +101,7 @@ static void run_sys_transfer_test(s32* utest_result, sys_transfer_test_t t) {
     u64 out_pos = 0;
     u64 moved = 0;
     sp_err_t err = sp_sys_transfer(in, t.track_in ? &in_pos : SP_NULLPTR, out, t.positional ? &out_pos : SP_NULLPTR, len, &moved);
-    sys_expect_err(utest_result, "transfer", err, t.expect.err, false);
+    sys_expect_err(utest_result, "transfer", err, t.expect.err);
     EXPECT_EQ(moved, t.expect.moved);
     if (t.track_in) EXPECT_EQ(in_pos, t.expect.in_pos);
     if (t.positional) EXPECT_EQ(out_pos, t.expect.out_pos);
@@ -195,8 +194,8 @@ UTEST_F(sys_transfer, reports_zero_moved_at_eof) {
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t sandbox = sp_test_file_create_dir(&fm, "sys_transfer_reports_zero_moved_at_eof");
-  sp_sys_fd_t sandbox_fd = sp_sys_open_dir_s(sp_sys_get_root(0), sandbox);
-  ASSERT_TRUE(sandbox_fd != SP_SYS_INVALID_FD);
+  sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd), SP_OK);
 
   sp_test_file_create_ex((sp_test_file_config_t) {
     .path = sp_fs_join_path(fm.mem, sandbox, sp_str_lit("src.bin")),

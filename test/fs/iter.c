@@ -69,8 +69,7 @@ static void run_fs_iter_test(s32* utest_result, sp_test_file_manager_t* fm, fs_i
   }
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
   if (t.relative) {
-    sandbox_fd = sp_sys_open_dir_s(sp_sys_get_root(0), sandbox);
-    if (sandbox_fd == SP_SYS_INVALID_FD) {
+    if (sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd)) {
       SP_TEST_REPORT("failed to open sandbox {}", sp_fmt_str(sandbox));
       SP_FAIL();
       return;
