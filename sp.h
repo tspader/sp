@@ -6273,7 +6273,7 @@ SP_PRIVATE size_t sp_sys_posix_io_count(u64 count) {
 sp_err_t sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
 #if defined(SP_WIN32)
   BY_HANDLE_FILE_INFORMATION info;
-  if (!GetFileInformationByHandle(sp_cast(HANDLE, fd), &info)) {
+  if (!GetFileInformationByHandle(sp_ptr_cast(HANDLE, fd), &info)) {
     switch (GetLastError()) {
       case ERROR_ACCESS_DENIED: return SP_ERR_SYS_ACCESS_DENIED;
       case ERROR_INVALID_HANDLE:
