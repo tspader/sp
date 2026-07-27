@@ -4,9 +4,6 @@
 #include "sp.h"
 #include "sp_glob.h"
 
-//////////////
-// REGISTRY //
-//////////////
 typedef struct sp_test_t sp_test_t;
 
 SP_TYPEDEF_FN(sp_err_t, sp_test_fn_t, sp_test_t* t);
@@ -101,10 +98,6 @@ typedef struct {
 
   #define sp_test_suite(SUITE, ...) __sp_test_reg_suite(sp_mcat(sp_test_suite_reg_, __COUNTER__), SUITE, __VA_ARGS__)
 
-  // sp_test(demo, eq) { ... } both defines the test function and registers it;
-  // the macro ends with the signature, so the brace block completes the
-  // definition. The body sees two implicit names: t (sp_test_t*) and, in the
-  // each variants, it (typed pointer to the current case row).
   #define sp_test(SUITE, NAME)                                              \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t);                \
     sp_test_reg(SUITE, {                                                    \
@@ -235,9 +228,6 @@ SP_API s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites
 SP_API bool sp_test_filtered(sp_glob_t* filter, const c8* name);
 
 
-/////////////
-// CONTEXT //
-/////////////
 typedef struct {
   sp_str_t key;
   sp_str_t value;
@@ -275,23 +265,12 @@ SP_API void        sp_test_record(sp_test_t* t, sp_test_failure_t failure);
 SP_API sp_str_t    sp_test_format(sp_test_t* t, const c8* fmt, ...);
 SP_API sp_str_t    sp_test_err_str(sp_test_t* t, sp_err_t err);
 
-// relative paths are resolved against the directory of the source file
-// containing the call; absolute paths are rejected (use the _abs variant).
-// resolution: sp_test_resolve_candidates enumerates where the calling file
-// may live at runtime and the first existing candidate wins, so goldens
-// stay addressable when the tree is relocated (cross-compile, synced trees).
-SP_API void            sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
-SP_API void            sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
-
-// pure; candidates for locating a compile-time path at runtime, backslashes
-// normalized to forward slashes. probe order: the path itself when rooted,
-// then each suffix of the path holding a directory component (longest first,
-// root or drive stripped) joined to each ancestor of anchor (nearest first),
-// then the path itself when relative, as a cwd-dependent last resort.
-SP_API sp_da(sp_str_t) sp_test_resolve_candidates(sp_mem_t mem, sp_str_t file, sp_str_t anchor);
-
 SP_API bool        sp_test_mem_eq(sp_test_t* t, const void* lhs, const void* rhs, u64 len, const c8* sl, const c8* sr, sp_str_t file, u32 line);
 SP_API bool        sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 count, const c8* const* expect, const c8* sa, const c8* se, sp_str_t file, u32 line);
+
+SP_API void            sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
+SP_API void            sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
+SP_API sp_da(sp_str_t) sp_test_resolve_candidates(sp_mem_t mem, sp_str_t file, sp_str_t anchor);
 
 typedef struct {
   sp_atomic_s32_t state;
@@ -300,6 +279,89 @@ typedef struct {
 
 SP_TYPEDEF_FN(sp_err_t, sp_test_once_fn_t, void* user);
 SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user);
+
+
+// stream: nonce frame
+// frame: tag len payload
+// str: len bytes
+#define SP_TEST_WIRE_VERSION    1
+#define SP_TEST_WIRE_NONCE_SIZE 8
+#define SP_TEST_WIRE_MAX_FRAME  (1u << 24)
+
+typedef enum {
+  SP_TEST_WIRE_PLAN = 1,
+  SP_TEST_WIRE_START = 2,
+  SP_TEST_WIRE_FAILURE = 3,
+  SP_TEST_WIRE_RESULT = 4,
+  SP_TEST_WIRE_SUMMARY = 5,
+} sp_test_wire_tag_t;
+
+typedef enum {
+  SP_TEST_WIRE_OK = 0,
+  SP_TEST_WIRE_FAIL = 1,
+  SP_TEST_WIRE_SKIP = 2,
+  SP_TEST_WIRE_UPDATE = 3,
+} sp_test_wire_status_t;
+
+typedef struct {
+  u32 v;
+  sp_str_t arch;
+  sp_str_t os;
+  sp_str_t abi;
+  sp_str_t* tests;
+  u32 num_tests;
+} sp_test_wire_plan_t;
+
+typedef struct {
+  u32 id;
+} sp_test_wire_start_t;
+
+typedef struct {
+  u32 id;
+  u32 line;
+  sp_str_t file;
+  sp_str_t message;
+  sp_str_t expected;
+  sp_str_t actual;
+  sp_test_kv_t* kvs;
+  u32 num_kvs;
+} sp_test_wire_failure_t;
+
+typedef struct {
+  u32 id;
+  sp_test_wire_status_t status;
+  u64 dur_ns;
+  sp_str_t reason;
+  sp_str_t* notes;
+  u32 num_notes;
+  sp_str_t* logs;
+  u32 num_logs;
+} sp_test_wire_result_t;
+
+typedef struct {
+  u32 passed;
+  u32 failed;
+  u32 skipped;
+  u32 updated;
+  u64 dur_ns;
+  sp_str_t capture;
+} sp_test_wire_summary_t;
+
+typedef struct {
+  sp_test_wire_tag_t tag;
+  union {
+    sp_test_wire_plan_t plan;
+    sp_test_wire_start_t start;
+    sp_test_wire_failure_t failure;
+    sp_test_wire_result_t result;
+    sp_test_wire_summary_t summary;
+  };
+} sp_test_wire_event_t;
+
+SP_API sp_err_t    sp_test_wire_write_nonce(sp_io_writer_t* io, const u8 nonce [SP_TEST_WIRE_NONCE_SIZE]);
+SP_API sp_err_t    sp_test_wire_write(sp_io_writer_t* io, const sp_test_wire_event_t* event);
+SP_API sp_err_t    sp_test_wire_scan_nonce(sp_io_reader_t* io, const u8 nonce [SP_TEST_WIRE_NONCE_SIZE]);
+SP_API sp_err_t    sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_wire_event_t* out);
 
 
 /////////////////////
@@ -643,9 +705,6 @@ typedef struct {
 } sp_test_runner_t;
 
 
-////////////////////////
-// TRACKING ALLOCATOR //
-////////////////////////
 static sp_test_tracking_node_t* sp_test_tracking_header(void* ptr) {
   return (sp_test_tracking_node_t*)((u8*)ptr - sizeof(sp_test_tracking_node_t));
 }
@@ -1249,9 +1308,32 @@ bool sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 count, const c8* 
 }
 
 
-///////////////
-// REPORTING //
-///////////////
+sp_err_t sp_test_wire_write_nonce(sp_io_writer_t* io, const u8 nonce [SP_TEST_WIRE_NONCE_SIZE]) {
+  SP_UNUSED(io);
+  SP_UNUSED(nonce);
+  return SP_ERR;
+}
+
+sp_err_t sp_test_wire_write(sp_io_writer_t* io, const sp_test_wire_event_t* event) {
+  SP_UNUSED(io);
+  SP_UNUSED(event);
+  return SP_ERR;
+}
+
+sp_err_t sp_test_wire_scan_nonce(sp_io_reader_t* io, const u8 nonce [SP_TEST_WIRE_NONCE_SIZE]) {
+  SP_UNUSED(io);
+  SP_UNUSED(nonce);
+  return SP_ERR;
+}
+
+sp_err_t sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_wire_event_t* out) {
+  SP_UNUSED(io);
+  SP_UNUSED(mem);
+  SP_UNUSED(out);
+  return SP_ERR;
+}
+
+
 static sp_str_t sp_test_duration(sp_mem_t mem, u64 ns) {
   const c8* const units [] = { "ns", "us", "ms", "s" };
   u32 unit = 0;
@@ -1369,9 +1451,6 @@ static void sp_test_report(sp_test_t* t, sp_io_writer_t* io, u64 ns) {
 }
 
 
-///////////////////
-// INSTANCE LIFE //
-///////////////////
 static sp_test_t* sp_test_context_new(sp_test_runner_t* runner, sp_test_instance_t* instance) {
   sp_mem_arena_t* arena = sp_mem_arena_new(sp_mem_os_new());
   sp_mem_t mem = sp_mem_arena_as_allocator(arena);
@@ -1505,9 +1584,6 @@ static s32 sp_test_worker(void* userdata) {
 }
 
 
-////////////
-// RUNNER //
-////////////
 bool sp_test_filtered(sp_glob_t* filter, const c8* name) {
   if (!filter) return false;
 
