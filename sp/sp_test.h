@@ -273,6 +273,7 @@ SP_API const void* sp_test_user(sp_test_t* t);
 
 SP_API void        sp_test_record(sp_test_t* t, sp_test_failure_t failure);
 SP_API sp_str_t    sp_test_format(sp_test_t* t, const c8* fmt, ...);
+SP_API sp_str_t    sp_test_err_str(sp_test_t* t, sp_err_t err);
 
 // relative paths are resolved against the directory of the source file
 // containing the call; absolute paths are rejected (use the _abs variant).
@@ -373,69 +374,67 @@ SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void
   #define sp_test_auto(X) __typeof__((X) + 0)
 #endif
 
-#define sp_test_cmp(T, A, B, SA, SB, OP, FAIL)                                     \
-  do {                                                                             \
-    sp_test_t* sp_test_it = (T);                                                    \
-    sp_test_auto(A) sp_test_lhs = (A);                                              \
-    sp_test_auto(B) sp_test_rhs = (B);                                              \
-    if (!(sp_test_lhs OP sp_test_rhs)) {                                            \
-      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
-        .file = sp_cstr_as_str(__FILE__),                                            \
-        .line = (u32)__LINE__,                                                       \
-        .expected = sp_test_format(sp_test_it, "{} {} {}",                           \
-          sp_fmt_cstr(SA), sp_fmt_cstr(#OP), sp_fmt_cstr(SB)),                       \
-        .actual = sp_test_format(sp_test_it, "{} vs {}",                             \
-          sp_fmt_str(sp_test_value(sp_test_it, sp_test_lhs)),                         \
-          sp_fmt_str(sp_test_value(sp_test_it, sp_test_rhs))),                        \
-      });                                                                            \
-      FAIL;                                                                          \
-    }                                                                                \
+#define sp_test_cmp(T, A, B, SA, SB, OP, FAIL)                 \
+  do {                                                         \
+    sp_test_t* sp_test_it = (T);                               \
+    sp_test_auto(A) sp_test_lhs = (A);                         \
+    sp_test_auto(B) sp_test_rhs = (B);                         \
+    if (!(sp_test_lhs OP sp_test_rhs)) {                       \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {         \
+        .file = sp_cstr_as_str(__FILE__),                      \
+        .line = (u32)__LINE__,                                 \
+        .expected = sp_test_format(sp_test_it, "{} {} {}",     \
+          sp_fmt_cstr(SA), sp_fmt_cstr(#OP), sp_fmt_cstr(SB)), \
+        .actual = sp_test_format(sp_test_it, "{} vs {}",       \
+          sp_fmt_str(sp_test_value(sp_test_it, sp_test_lhs)),  \
+          sp_fmt_str(sp_test_value(sp_test_it, sp_test_rhs))), \
+      });                                                      \
+      FAIL;                                                    \
+    }                                                          \
   } while (0)
 
-#define sp_test_bool(T, X, SX, WANT, FAIL)                                         \
-  do {                                                                             \
-    sp_test_t* sp_test_it = (T);                                                    \
-    bool sp_test_got = !!(X);                                                       \
-    if (sp_test_got != (WANT)) {                                                    \
-      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
-        .file = sp_cstr_as_str(__FILE__),                                            \
-        .line = (u32)__LINE__,                                                       \
-        .expected = sp_test_format(sp_test_it, "{} is {}",                           \
-          sp_fmt_cstr(SX), sp_fmt_cstr((WANT) ? "true" : "false")),                  \
-        .actual = sp_cstr_as_str(sp_test_got ? "true" : "false"),                    \
-      });                                                                            \
-      FAIL;                                                                          \
-    }                                                                                \
+#define sp_test_bool(T, X, SX, WANT, FAIL)                          \
+  do {                                                              \
+    sp_test_t* sp_test_it = (T);                                    \
+    bool sp_test_got = !!(X);                                       \
+    if (sp_test_got != (WANT)) {                                    \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {              \
+        .file = sp_cstr_as_str(__FILE__),                           \
+        .line = (u32)__LINE__,                                      \
+        .expected = sp_test_format(sp_test_it, "{} is {}",          \
+          sp_fmt_cstr(SX), sp_fmt_cstr((WANT) ? "true" : "false")), \
+        .actual = sp_cstr_as_str(sp_test_got ? "true" : "false"),   \
+      });                                                           \
+      FAIL;                                                         \
+    }                                                               \
   } while (0)
 
-#define sp_test_near(T, A, B, EPS, SA, SB, FAIL)                                   \
-  do {                                                                             \
-    sp_test_t* sp_test_it = (T);                                                    \
-    f64 sp_test_lhs = (f64)(A);                                                     \
-    f64 sp_test_rhs = (f64)(B);                                                     \
-    f64 sp_test_eps = (f64)(EPS);                                                   \
-    f64 sp_test_delta = sp_test_lhs - sp_test_rhs;                                  \
-    if (sp_test_delta < 0.0) sp_test_delta = -sp_test_delta;                         \
-    if (!(sp_test_delta <= sp_test_eps)) {                                          \
-      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
-        .file = sp_cstr_as_str(__FILE__),                                            \
-        .line = (u32)__LINE__,                                                       \
-        .expected = sp_test_format(sp_test_it, "{} within {} of {}",                 \
-          sp_fmt_cstr(SA), sp_fmt_float(sp_test_eps), sp_fmt_cstr(SB)),              \
-        .actual = sp_test_format(sp_test_it, "{:.6} vs {:.6}, delta {:.6}",          \
-          sp_fmt_float(sp_test_lhs), sp_fmt_float(sp_test_rhs),                       \
-          sp_fmt_float(sp_test_delta)),                                              \
-      });                                                                            \
-      FAIL;                                                                          \
-    }                                                                                \
+#define sp_test_near(T, A, B, EPS, SA, SB, FAIL)                            \
+  do {                                                                      \
+    sp_test_t* sp_test_it = (T);                                            \
+    f64 sp_test_lhs = (f64)(A);                                             \
+    f64 sp_test_rhs = (f64)(B);                                             \
+    f64 sp_test_eps = (f64)(EPS);                                           \
+    f64 sp_test_delta = sp_test_lhs - sp_test_rhs;                          \
+    if (sp_test_delta < 0.0) sp_test_delta = -sp_test_delta;                \
+    if (!(sp_test_delta <= sp_test_eps)) {                                  \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                      \
+        .file = sp_cstr_as_str(__FILE__),                                   \
+        .line = (u32)__LINE__,                                              \
+        .expected = sp_test_format(sp_test_it, "{} within {} of {}",        \
+          sp_fmt_cstr(SA), sp_fmt_float(sp_test_eps), sp_fmt_cstr(SB)),     \
+        .actual = sp_test_format(sp_test_it, "{:.6} vs {:.6}, delta {:.6}", \
+      });                                                                   \
+      FAIL;                                                                 \
+    }                                                                       \
   } while (0)
 
-#define sp_test_streq(T, A, B, FAIL)                                               \
-  do {                                                                             \
-    sp_test_t* sp_test_it = (T);                                                    \
-    sp_str_t sp_test_lhs = (A);                                                     \
-    sp_str_t sp_test_rhs = (B);                                                     \
-    if (!sp_str_equal(sp_test_lhs, sp_test_rhs)) {                                  \
+#define sp_test_streq(T, A, B, FAIL)                                                 \
+  do {                                                                               \
+    sp_test_t* sp_test_it = (T);                                                     \
+    sp_str_t sp_test_lhs = (A);                                                      \
+    sp_str_t sp_test_rhs = (B);                                                      \
+    if (!sp_str_equal(sp_test_lhs, sp_test_rhs)) {                                   \
       sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
         .file = sp_cstr_as_str(__FILE__),                                            \
         .line = (u32)__LINE__,                                                       \
@@ -446,49 +445,66 @@ SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void
     }                                                                                \
   } while (0)
 
-// elementwise == over two arrays/pointers of the same scalar element type;
-// strings want sp_expect_strs_eq (cstr elements here compare by pointer)
-#define sp_test_arr_cmp(T, A, B, COUNT, SA, SB, FAIL)                              \
-  do {                                                                             \
-    sp_test_t* sp_test_it = (T);                                                    \
-    sp_test_auto((A) + 0) sp_test_lhs = (A) + 0;                                    \
-    sp_test_auto((B) + 0) sp_test_rhs = (B) + 0;                                    \
-    u64 sp_test_count = (u64)(COUNT);                                               \
-    u64 sp_test_head = sp_test_count;                                               \
-    u64 sp_test_diffs = 0;                                                          \
-    for (u64 sp_test_index = 0; sp_test_index < sp_test_count; sp_test_index++) {   \
-      if (sp_test_lhs[sp_test_index] == sp_test_rhs[sp_test_index]) continue;       \
-      if (sp_test_head == sp_test_count) sp_test_head = sp_test_index;              \
-      sp_test_diffs++;                                                              \
-    }                                                                               \
-    if (sp_test_diffs) {                                                            \
-      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
-        .file = sp_cstr_as_str(__FILE__),                                            \
-        .line = (u32)__LINE__,                                                       \
-        .message = sp_test_format(sp_test_it, "{} and {} differ at [{}], {} of {} elements",     \
-          sp_fmt_cstr(SA), sp_fmt_cstr(SB), sp_fmt_uint(sp_test_head),               \
-          sp_fmt_uint(sp_test_diffs), sp_fmt_uint(sp_test_count)),                   \
-        .actual = sp_test_format(sp_test_it, "{} vs {}",                             \
-          sp_fmt_str(sp_test_value(sp_test_it, sp_test_lhs[sp_test_head])),           \
-          sp_fmt_str(sp_test_value(sp_test_it, sp_test_rhs[sp_test_head]))),          \
-      });                                                                            \
-      FAIL;                                                                          \
-    }                                                                                \
+#define sp_test_arr_cmp(T, A, B, COUNT, SA, SB, FAIL)                                        \
+  do {                                                                                       \
+    sp_test_t* sp_test_it = (T);                                                             \
+    sp_test_auto((A) + 0) sp_test_lhs = (A) + 0;                                             \
+    sp_test_auto((B) + 0) sp_test_rhs = (B) + 0;                                             \
+    u64 sp_test_count = (u64)(COUNT);                                                        \
+    u64 sp_test_head = sp_test_count;                                                        \
+    u64 sp_test_diffs = 0;                                                                   \
+    for (u64 sp_test_index = 0; sp_test_index < sp_test_count; sp_test_index++) {            \
+      if (sp_test_lhs[sp_test_index] == sp_test_rhs[sp_test_index]) continue;                \
+      if (sp_test_head == sp_test_count) sp_test_head = sp_test_index;                       \
+      sp_test_diffs++;                                                                       \
+    }                                                                                        \
+    if (sp_test_diffs) {                                                                     \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                                       \
+        .file = sp_cstr_as_str(__FILE__),                                                    \
+        .line = (u32)__LINE__,                                                               \
+        .message = sp_test_format(sp_test_it, "{} and {} differ at [{}], {} of {} elements", \
+          sp_fmt_cstr(SA), sp_fmt_cstr(SB), sp_fmt_uint(sp_test_head),                       \
+          sp_fmt_uint(sp_test_diffs), sp_fmt_uint(sp_test_count)),                           \
+        .actual = sp_test_format(sp_test_it, "{} vs {}",                                     \
+          sp_fmt_str(sp_test_value(sp_test_it, sp_test_lhs[sp_test_head])),                  \
+          sp_fmt_str(sp_test_value(sp_test_it, sp_test_rhs[sp_test_head]))),                 \
+      });                                                                                    \
+      FAIL;                                                                                  \
+    }                                                                                        \
   } while (0)
 
-#define sp_test_err_ok(T, ERR, SERR, FAIL)                                         \
-  do {                                                                             \
-    sp_test_t* sp_test_it = (T);                                                    \
-    sp_err_t sp_test_err = (ERR);                                                   \
-    if (sp_test_err != SP_OK) {                                                     \
-      sp_test_record(sp_test_it, (sp_test_failure_t) {                               \
-        .file = sp_cstr_as_str(__FILE__),                                            \
-        .line = (u32)__LINE__,                                                       \
-        .expected = sp_test_format(sp_test_it, "{} is SP_OK", sp_fmt_cstr(SERR)),    \
-        .actual = sp_test_format(sp_test_it, "err {}", sp_fmt_int(sp_test_err)),      \
-      });                                                                            \
-      FAIL;                                                                          \
-    }                                                                                \
+#define sp_test_err_ok(T, ERR, SERR, FAIL)                                        \
+  do {                                                                            \
+    sp_test_t* sp_test_it = (T);                                                  \
+    sp_err_t sp_test_err = (ERR);                                                 \
+    if (sp_test_err != SP_OK) {                                                   \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {                            \
+        .file = sp_cstr_as_str(__FILE__),                                         \
+        .line = (u32)__LINE__,                                                    \
+        .expected = sp_test_format(sp_test_it, "{} is SP_OK", sp_fmt_cstr(SERR)), \
+        .actual = sp_test_err_str(sp_test_it, sp_test_err),                       \
+      });                                                                         \
+      FAIL;                                                                       \
+    }                                                                             \
+  } while (0)
+
+#define sp_test_err_eq(T, A, B, SA, SB, FAIL)                    \
+  do {                                                           \
+    sp_test_t* sp_test_it = (T);                                 \
+    sp_err_t sp_test_lhs = (A);                                  \
+    sp_err_t sp_test_rhs = (B);                                  \
+    if (sp_test_lhs != sp_test_rhs) {                            \
+      sp_test_record(sp_test_it, (sp_test_failure_t) {           \
+        .file = sp_cstr_as_str(__FILE__),                        \
+        .line = (u32)__LINE__,                                   \
+        .expected = sp_test_format(sp_test_it, "{} == {}",       \
+          sp_fmt_cstr(SA), sp_fmt_cstr(SB)),                     \
+        .actual = sp_test_format(sp_test_it, "{} vs {}",         \
+          sp_fmt_str(sp_test_err_str(sp_test_it, sp_test_lhs)),  \
+          sp_fmt_str(sp_test_err_str(sp_test_it, sp_test_rhs))), \
+      });                                                        \
+      FAIL;                                                      \
+    }                                                            \
   } while (0)
 
 #define sp_test_soft                ((void)0)
@@ -529,6 +545,9 @@ SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void
 
 #define sp_expect_ok(T, ERR)        sp_test_err_ok(T, ERR, #ERR, sp_test_soft)
 #define sp_must_ok(T, ERR)          sp_test_err_ok(T, ERR, #ERR, return sp_test_err)
+
+#define sp_expect_err_eq(T, A, B)   sp_test_err_eq(T, A, B, #A, #B, sp_test_soft)
+#define sp_must_err_eq(T, A, B)     sp_test_err_eq(T, A, B, #A, #B, sp_test_stop)
 
 #define sp_expect_golden(T, PATH, ACTUAL)     sp_test_golden(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
 #define sp_expect_golden_abs(T, PATH, ACTUAL) sp_test_golden_abs(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
@@ -759,6 +778,12 @@ sp_str_t sp_test_format(sp_test_t* t, const c8* fmt, ...) {
   return result.value;
 }
 
+sp_str_t sp_test_err_str(sp_test_t* t, sp_err_t err) {
+  sp_str_t name = sp_rt.err_str(err);
+  if (!sp_str_empty(name)) return name;
+  return sp_test_format(t, "err {}", sp_fmt_int(err));
+}
+
 #if defined(__clang__)
   SP_TEST_VALUE_FN(sp_test_t* t, bool value) { return sp_test_format(t, "{}", sp_fmt_cstr(value ? "true" : "false")); }
   SP_TEST_VALUE_FN(sp_test_t* t, c8 value) { return sp_test_format(t, "{}", sp_fmt_char(value)); }
@@ -962,9 +987,6 @@ sp_err_t sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user) {
 ////////////
 // GOLDEN //
 ////////////
-// SP_FS_PATH_WINDOWS recognizes both path styles, so a windows registration
-// path resolves identically everywhere (sp_fs_is_absolute answers for the
-// host only)
 sp_da(sp_str_t) sp_test_resolve_candidates(sp_mem_t mem, sp_str_t file, sp_str_t anchor) {
   sp_da(sp_str_t) candidates = sp_da_new(mem, sp_str_t);
 
@@ -983,9 +1005,9 @@ sp_da(sp_str_t) sp_test_resolve_candidates(sp_mem_t mem, sp_str_t file, sp_str_t
     dir = parent;
   }
 
-  // a suffix without a directory component would let a bare file name match
-  // anywhere on the ancestor chain, and --update would then write goldens
-  // next to the impostor
+  // A suffix without a directory would let a bare file name match anywhere
+  // up the change, which would make --update write the new goldens next
+  // to the impostor.
   for (u32 index = 0; index < file.len; index++) {
     bool head = (index == 0) && !rooted;
     bool after_slash = index > 0 && file.data[index - 1] == '/';
