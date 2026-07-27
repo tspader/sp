@@ -8,7 +8,8 @@ name = "amalgamation"
 source = [
   "test/main.c",
   "test/test/*.c",
-  "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c"
+  "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c",
+  "test/mem/uninitialized.c"
 ]
 
 [[test]]
@@ -18,3 +19,7 @@ source = ["test/main.c", "test/test/*.c", "test/test/wire/*.c"]
 [[test]]
 name = "sys"
 source = ["test/main.c", "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c"]
+
+[[test]]
+name = "mem"
+source = ["test/main.c", "test/mem/uninitialized.c"]

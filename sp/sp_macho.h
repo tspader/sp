@@ -104,6 +104,9 @@ u8* sp_macho_section_push(sp_macho_t* m, u32 sect, const void* data, u64 size) {
   if (data) {
     sp_mem_copy(dest, data, (u32)size);
   }
+  else {
+    sp_mem_zero(dest, size);
+  }
 
   return dest;
 }

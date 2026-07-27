@@ -800,9 +800,11 @@ static void* sp_test_tracking_do_realloc(sp_test_tracking_t* k, void* old, u64 s
 static void* sp_test_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
   sp_test_tracking_t* k = (sp_test_tracking_t*)ud;
   switch (mode) {
-    case SP_ALLOCATOR_MODE_ALLOC:  return sp_test_tracking_do_alloc(k, size);
-    case SP_ALLOCATOR_MODE_RESIZE: return sp_test_tracking_do_realloc(k, ptr, size, old_size);
-    case SP_ALLOCATOR_MODE_FREE:   sp_test_tracking_do_free(k, ptr, old_size); return SP_NULLPTR;
+    case SP_ALLOCATOR_MODE_ALLOC:
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:  return sp_test_tracking_do_alloc(k, size);
+    case SP_ALLOCATOR_MODE_RESIZE:
+    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: return sp_test_tracking_do_realloc(k, ptr, size, old_size);
+    case SP_ALLOCATOR_MODE_FREE:       sp_test_tracking_do_free(k, ptr, old_size); return SP_NULLPTR;
   }
   return SP_NULLPTR;
 }

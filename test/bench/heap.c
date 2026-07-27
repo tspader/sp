@@ -144,8 +144,10 @@ static void* bench_malloc_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u6
   sp_unused(user_data);
   sp_unused(old_size);
   switch (mode) {
-    case SP_ALLOCATOR_MODE_ALLOC: return malloc(size);
-    case SP_ALLOCATOR_MODE_RESIZE: return realloc(ptr, size);
+    case SP_ALLOCATOR_MODE_ALLOC:
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED: return malloc(size);
+    case SP_ALLOCATOR_MODE_RESIZE:
+    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: return realloc(ptr, size);
     case SP_ALLOCATOR_MODE_FREE: free(ptr); return SP_NULLPTR;
   }
   return SP_NULLPTR;
@@ -196,7 +198,8 @@ static u64 bench_os_reservation(u64 size) {
 static void* bench_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
   bench_os_counters_t* counters = (bench_os_counters_t*)user_data;
   switch (mode) {
-    case SP_ALLOCATOR_MODE_ALLOC: {
+    case SP_ALLOCATOR_MODE_ALLOC:
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED: {
       void* p = sp_mem_os_alloc(size);
       if (p) {
         counters->used += size;
@@ -205,7 +208,8 @@ static void* bench_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 si
       }
       return p;
     }
-    case SP_ALLOCATOR_MODE_RESIZE: {
+    case SP_ALLOCATOR_MODE_RESIZE:
+    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: {
       if (!ptr) return bench_os_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC, size, SP_NULLPTR, 0);
       void* p = sp_mem_os_realloc(ptr, old_size, size);
       if (p) {
