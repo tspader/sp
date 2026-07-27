@@ -63,7 +63,7 @@ typedef struct {
   s32         env;
   s64         lseek;
   s32         chdir;
-  s32         dir_open;
+  s32         dir_from_fd;
   s32         dir_read;
   s32         dir_parse;
   s32         dir_close;
@@ -308,7 +308,7 @@ static sp_err_t sys_vtable_mock_chdir(const c8* path, u32 len) {
   return (sp_err_t)69;
 }
 
-static sp_err_t sys_vtable_mock_dir_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_dir_t* out) {
+static sp_err_t sys_vtable_mock_dir_from_fd(sp_sys_fd_t fd, sp_sys_dir_t* out) {
   return (sp_err_t)69;
 }
 
@@ -384,7 +384,7 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .env                    = sys_vtable_mock_env,
   .lseek                  = sys_vtable_mock_lseek,
   .chdir                  = sys_vtable_mock_chdir,
-  .dir_open               = sys_vtable_mock_dir_open,
+  .dir_from_fd            = sys_vtable_mock_dir_from_fd,
   .dir_read               = sys_vtable_mock_dir_read,
   .dir_parse              = sys_vtable_mock_dir_parse,
   .dir_close              = sys_vtable_mock_dir_close,
@@ -462,7 +462,7 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   sp_sys_env(SP_NULLPTR, SP_NULLPTR);
   r->lseek = sp_sys_lseek(0, 0, 0);
   r->chdir = sp_sys_chdir(SP_NULLPTR, 0);
-  r->dir_open = sp_sys_dir_open(0, SP_NULLPTR, 0, SP_NULLPTR);
+  r->dir_from_fd = sp_sys_dir_from_fd(0, SP_NULLPTR);
   r->dir_read = sp_sys_dir_read(SP_NULLPTR, SP_NULLPTR);
   r->dir_parse = sp_sys_dir_parse(SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR);
   r->dir_close = sp_sys_dir_close(SP_NULLPTR);
@@ -530,7 +530,7 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->env, 69);
   EXPECT_EQ(r->lseek, 69);
   EXPECT_EQ(r->chdir, 69);
-  EXPECT_EQ(r->dir_open, 69);
+  EXPECT_EQ(r->dir_from_fd, 69);
   EXPECT_EQ(r->dir_read, 69);
   EXPECT_EQ(r->dir_parse, 69);
   EXPECT_EQ(r->dir_close, 69);
