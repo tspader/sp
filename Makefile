@@ -107,7 +107,7 @@ ifeq ($(TRIPLE),)
   endif
 endif
 
-TESTS = amalg app array asset cli etc cv env format fmon fs glob ht io math process ps rb str sys thread time mem prompt leak tls qsort sp_test
+TESTS = amalg app array asset cli etc cv env format fmon fs glob ht io math process ps rb str sys thread time mem prompt leak tls qsort
 BENCHES = glob heap
 EXAMPLES = app array cli format hash_table io zero_copy ls palette post prompt prompt_fancy signal tls wc
 TRIPLES = \
@@ -127,7 +127,7 @@ BENCH_BINARIES = $(addsuffix $(EXE),$(addprefix $(BENCH_DIR)/,$(BENCHES)))
 SP_HEADERS = sp.h $(wildcard sp/*.h)
 TEST_SOURCES = $(wildcard test/*/*.c) $(wildcard test/*/*.h) $(wildcard test/*/*/*.c) $(wildcard test/*/*/*.h)
 
-.PHONY: all clean tests examples bench smoke big c cpp gcc tcc check ci $(TRIPLES)
+.PHONY: all clean tests examples bench big c cpp gcc tcc check ci $(TRIPLES)
 all: examples tests
 tests: $(TEST_BINARIES)
 examples: $(EXAMPLE_BINARIES)

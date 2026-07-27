@@ -20,29 +20,28 @@ static const sys_case_t sys_open_cases [] = {
     },
   },
   {
-    .name = "read_forbids_write",
+    .name = "ro_forbids_write",
     .setup = {
       { .path = "file.bin", .content = "A" },
     },
     .steps = {
       { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin" } },
-      { .kind = SYS_STEP_WRITE, .write = { .data = "B", .err = SP_ERR_SYS_BAD_FD } },
+      { .kind = SYS_STEP_WRITE, .write = { .data = "B", .err = SP_ERR_SYS_ACCESS_DENIED } },
     },
     .expect = {
       { .path = "file.bin", .exists = true, .content = "A" },
     },
   },
-  // disabled: reading a write-only fd has the same posix/windows divergence
-  // {
-  //   .name = "write_forbids_read",
-  //   .setup = {
-  //     { .path = "file.bin", .content = "A" },
-  //   },
-  //   .steps = {
-  //     { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO } },
-  //     { .kind = SYS_STEP_READ, .read = { .count = 1, .err = SP_ERR_SYS_BAD_FD } },
-  //   },
-  // },
+  {
+    .name = "write_forbids_read",
+    .setup = {
+      { .path = "file.bin", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO } },
+      { .kind = SYS_STEP_READ, .read = { .count = 1, .err = SP_ERR_SYS_ACCESS_DENIED } },
+    },
+  },
   {
     .name = "read_write_allows_both",
     .setup = {
