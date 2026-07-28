@@ -118,8 +118,14 @@ typedef struct {
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it);                     \
     __sp_test_each_thunk_def(SUITE, NAME, TYPE, __sp_test_fn(SUITE, NAME))
 
+  #define __sp_test_each_name_check(ARR)                                                 \
+    sp_static_assert(                                                                    \
+      sizeof((ARR)[0].name) == sizeof(const c8*) && sizeof(*(ARR)[0].name) == sizeof(c8),\
+      sp_test_each_name_not_a_cstr)
+
   #define sp_test_each(SUITE, NAME, TYPE, ARR, ...)                         \
     __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
+    __sp_test_each_name_check(ARR);                                         \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
       .each = __sp_test_thunk(SUITE, NAME),                                 \
@@ -145,6 +151,7 @@ typedef struct {
 
   #define sp_test_each_fn(SUITE, NAME, TYPE, ARR, FN, ...)                  \
     sp_static_assert(sizeof(TYPE) == sizeof((ARR)[0]), sp_test_each_row_type_mismatch); \
+    __sp_test_each_name_check(ARR);                                         \
     __sp_test_each_thunk_def(SUITE, NAME, TYPE, FN)                         \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
@@ -338,42 +345,42 @@ SP_API sp_err_t    sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_w
 /////////////////////
 // VALUE FORMATTING //
 /////////////////////
-#if defined(__clang__)
-  #define SP_TEST_VALUE_FN SP_API __attribute__((overloadable)) sp_str_t sp_test_value
+SP_API sp_str_t sp_test_value_bool(sp_test_t* t, bool value);
+SP_API sp_str_t sp_test_value_c8(sp_test_t* t, c8 value);
+SP_API sp_str_t sp_test_value_s8(sp_test_t* t, s8 value);
+SP_API sp_str_t sp_test_value_u8(sp_test_t* t, u8 value);
+SP_API sp_str_t sp_test_value_s16(sp_test_t* t, s16 value);
+SP_API sp_str_t sp_test_value_u16(sp_test_t* t, u16 value);
+SP_API sp_str_t sp_test_value_s32(sp_test_t* t, s32 value);
+SP_API sp_str_t sp_test_value_u32(sp_test_t* t, u32 value);
+SP_API sp_str_t sp_test_value_s64(sp_test_t* t, s64 value);
+SP_API sp_str_t sp_test_value_u64(sp_test_t* t, u64 value);
+SP_API sp_str_t sp_test_value_f32(sp_test_t* t, f32 value);
+SP_API sp_str_t sp_test_value_f64(sp_test_t* t, f64 value);
+SP_API sp_str_t sp_test_value_cstr(sp_test_t* t, const c8* value);
+SP_API sp_str_t sp_test_value_ptr(sp_test_t* t, void* value);
+SP_API sp_str_t sp_test_value_str(sp_test_t* t, sp_str_t value);
+SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 
-  SP_TEST_VALUE_FN(sp_test_t* t, bool value);
-  SP_TEST_VALUE_FN(sp_test_t* t, c8 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, s8 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, u8 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, s16 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, u16 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, s32 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, u32 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, s64 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, u64 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, f32 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, f64 value);
-  SP_TEST_VALUE_FN(sp_test_t* t, const c8* value);
-  SP_TEST_VALUE_FN(sp_test_t* t, void* value);
-  SP_TEST_VALUE_FN(sp_test_t* t, sp_str_t value);
+#if defined(SP_CPP)
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, bool value) { return sp_test_value_bool(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, c8 value) { return sp_test_value_c8(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, s8 value) { return sp_test_value_s8(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, u8 value) { return sp_test_value_u8(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, s16 value) { return sp_test_value_s16(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, u16 value) { return sp_test_value_u16(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, s32 value) { return sp_test_value_s32(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, u32 value) { return sp_test_value_u32(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, s64 value) { return sp_test_value_s64(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, u64 value) { return sp_test_value_u64(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, f32 value) { return sp_test_value_f32(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, f64 value) { return sp_test_value_f64(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, const c8* value) { return sp_test_value_cstr(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, c8* value) { return sp_test_value_cstr(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, void* value) { return sp_test_value_ptr(t, value); }
+  SP_INLINE sp_str_t sp_test_value(sp_test_t* t, sp_str_t value) { return sp_test_value_str(t, value); }
+  template <typename T> SP_INLINE sp_str_t sp_test_value(sp_test_t* t, const T& value) { SP_UNUSED(value); return sp_test_value_opaque(t); }
 #elif defined(__GNUC__) || defined(__TINYC__)
-  SP_API sp_str_t sp_test_value_bool(sp_test_t* t, bool value);
-  SP_API sp_str_t sp_test_value_c8(sp_test_t* t, c8 value);
-  SP_API sp_str_t sp_test_value_s8(sp_test_t* t, s8 value);
-  SP_API sp_str_t sp_test_value_u8(sp_test_t* t, u8 value);
-  SP_API sp_str_t sp_test_value_s16(sp_test_t* t, s16 value);
-  SP_API sp_str_t sp_test_value_u16(sp_test_t* t, u16 value);
-  SP_API sp_str_t sp_test_value_s32(sp_test_t* t, s32 value);
-  SP_API sp_str_t sp_test_value_u32(sp_test_t* t, u32 value);
-  SP_API sp_str_t sp_test_value_s64(sp_test_t* t, s64 value);
-  SP_API sp_str_t sp_test_value_u64(sp_test_t* t, u64 value);
-  SP_API sp_str_t sp_test_value_f32(sp_test_t* t, f32 value);
-  SP_API sp_str_t sp_test_value_f64(sp_test_t* t, f64 value);
-  SP_API sp_str_t sp_test_value_cstr(sp_test_t* t, const c8* value);
-  SP_API sp_str_t sp_test_value_ptr(sp_test_t* t, void* value);
-  SP_API sp_str_t sp_test_value_str(sp_test_t* t, sp_str_t value);
-  SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
-
   #define sp_test_value(T, V) _Generic((V), \
     bool:        sp_test_value_bool,        \
     c8:          sp_test_value_c8,          \
@@ -401,7 +408,9 @@ SP_API sp_err_t    sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_w
 ////////////////
 // ASSERTIONS //
 ////////////////
-#if (defined(__clang__) || defined(__GNUC__)) && !defined(__TINYC__)
+#if defined(SP_CPP)
+  #define sp_test_auto(X) auto
+#elif (defined(__clang__) || defined(__GNUC__)) && !defined(__TINYC__)
   #define sp_test_auto(X) __auto_type
 #else
   #define sp_test_auto(X) __typeof__((X) + 0)
@@ -749,44 +758,26 @@ sp_str_t sp_test_err_str(sp_test_t* t, sp_err_t err) {
   return sp_test_format(t, "err {}", sp_fmt_int(err));
 }
 
-#if defined(__clang__)
-  SP_TEST_VALUE_FN(sp_test_t* t, bool value) { return sp_test_format(t, "{}", sp_fmt_cstr(value ? "true" : "false")); }
-  SP_TEST_VALUE_FN(sp_test_t* t, c8 value) { return sp_test_format(t, "{}", sp_fmt_char(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, s8 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, u8 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, s16 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, u16 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, s32 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, u32 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, s64 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, u64 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, f32 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, f64 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, const c8* value) { return value ? sp_test_format(t, "{.quote}", sp_fmt_cstr(value)) : sp_str_lit("(null)"); }
-  SP_TEST_VALUE_FN(sp_test_t* t, void* value) { return sp_test_format(t, "{}", sp_fmt_ptr(value)); }
-  SP_TEST_VALUE_FN(sp_test_t* t, sp_str_t value) { return sp_test_format(t, "{.quote}", sp_fmt_str(value)); }
-#elif defined(__GNUC__) || defined(__TINYC__)
-  sp_str_t sp_test_value_bool(sp_test_t* t, bool value) { return sp_test_format(t, "{}", sp_fmt_cstr(value ? "true" : "false")); }
-  sp_str_t sp_test_value_c8(sp_test_t* t, c8 value) { return sp_test_format(t, "{}", sp_fmt_char(value)); }
-  sp_str_t sp_test_value_s8(sp_test_t* t, s8 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
-  sp_str_t sp_test_value_u8(sp_test_t* t, u8 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
-  sp_str_t sp_test_value_s16(sp_test_t* t, s16 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
-  sp_str_t sp_test_value_u16(sp_test_t* t, u16 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
-  sp_str_t sp_test_value_s32(sp_test_t* t, s32 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
-  sp_str_t sp_test_value_u32(sp_test_t* t, u32 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
-  sp_str_t sp_test_value_s64(sp_test_t* t, s64 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
-  sp_str_t sp_test_value_u64(sp_test_t* t, u64 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
-  sp_str_t sp_test_value_f32(sp_test_t* t, f32 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
-  sp_str_t sp_test_value_f64(sp_test_t* t, f64 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
-  sp_str_t sp_test_value_cstr(sp_test_t* t, const c8* value) { return value ? sp_test_format(t, "{.quote}", sp_fmt_cstr(value)) : sp_str_lit("(null)"); }
-  sp_str_t sp_test_value_ptr(sp_test_t* t, void* value) { return sp_test_format(t, "{}", sp_fmt_ptr(value)); }
-  sp_str_t sp_test_value_str(sp_test_t* t, sp_str_t value) { return sp_test_format(t, "{.quote}", sp_fmt_str(value)); }
+sp_str_t sp_test_value_bool(sp_test_t* t, bool value) { return sp_test_format(t, "{}", sp_fmt_cstr(value ? "true" : "false")); }
+sp_str_t sp_test_value_c8(sp_test_t* t, c8 value) { return sp_test_format(t, "{}", sp_fmt_char(value)); }
+sp_str_t sp_test_value_s8(sp_test_t* t, s8 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+sp_str_t sp_test_value_u8(sp_test_t* t, u8 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+sp_str_t sp_test_value_s16(sp_test_t* t, s16 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+sp_str_t sp_test_value_u16(sp_test_t* t, u16 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+sp_str_t sp_test_value_s32(sp_test_t* t, s32 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+sp_str_t sp_test_value_u32(sp_test_t* t, u32 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+sp_str_t sp_test_value_s64(sp_test_t* t, s64 value) { return sp_test_format(t, "{}", sp_fmt_int(value)); }
+sp_str_t sp_test_value_u64(sp_test_t* t, u64 value) { return sp_test_format(t, "{}", sp_fmt_uint(value)); }
+sp_str_t sp_test_value_f32(sp_test_t* t, f32 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
+sp_str_t sp_test_value_f64(sp_test_t* t, f64 value) { return sp_test_format(t, "{:.6}", sp_fmt_float(value)); }
+sp_str_t sp_test_value_cstr(sp_test_t* t, const c8* value) { return value ? sp_test_format(t, "{.quote}", sp_fmt_cstr(value)) : sp_str_lit("(null)"); }
+sp_str_t sp_test_value_ptr(sp_test_t* t, void* value) { return sp_test_format(t, "{}", sp_fmt_ptr(value)); }
+sp_str_t sp_test_value_str(sp_test_t* t, sp_str_t value) { return sp_test_format(t, "{.quote}", sp_fmt_str(value)); }
 
-  sp_str_t sp_test_value_opaque(sp_test_t* t, ...) {
-    SP_UNUSED(t);
-    return sp_str_lit("?");
-  }
-#endif
+sp_str_t sp_test_value_opaque(sp_test_t* t, ...) {
+  SP_UNUSED(t);
+  return sp_str_lit("?");
+}
 
 
 //////////////////
@@ -1784,6 +1775,18 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
   }
 
   sp_test_collect(runner->mem, suites, glob, &runner->queue);
+
+  sp_cstr_ht(bool) seen = SP_NULLPTR;
+  sp_cstr_ht_init(runner->mem, seen);
+  sp_da_for(runner->queue, it) {
+    const c8* name = runner->queue[it].name;
+    if (sp_cstr_ht_get(seen, name)) {
+      sp_fmt_io(&runner->out.base, "duplicate test {.quote}\n", sp_fmt_cstr(name));
+      sp_io_flush(&runner->out.base);
+      return 1;
+    }
+    sp_cstr_ht_insert(seen, name, true);
+  }
 
   if (list) {
     sp_da_for(runner->queue, it) {
