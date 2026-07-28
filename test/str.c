@@ -191,29 +191,6 @@ UTEST(str, sorting_tests) {
   ASSERT_EQ(sp_str_compare_alphabetical(sp_str_lit("abc"), sp_str_lit("ab")), SP_QSORT_B_FIRST);
 }
 
-sp_str_t sp_test_map_band_member(sp_str_map_context_t* context) {
-  return sp_str_concat(sp_mem_get_scratch(), context->str, sp_str_lit(" is in the band"));
-}
-
-UTEST(str, map_reduce) {
-  sp_str_t band [] = {
-    sp_str_lit("jerry"), sp_str_lit("bobby"), sp_str_lit("phil")
-  };
-  sp_da(sp_str_t) result = sp_str_map(sp_mem_get_scratch(), &band[0], SP_CARR_LEN(band), SP_NULLPTR, sp_test_map_band_member);
-  SP_EXPECT_STR_EQ_CSTR(result[0], "jerry is in the band");
-  SP_EXPECT_STR_EQ_CSTR(result[1], "bobby is in the band");
-  SP_EXPECT_STR_EQ_CSTR(result[2], "phil is in the band");
-
-  sp_str_t joined = sp_str_join_n(sp_mem_get_scratch(), band, SP_CARR_LEN(band), sp_str_lit(" and "));
-  SP_EXPECT_STR_EQ_CSTR(joined, "jerry and bobby and phil");
-
-  u32 len = 3;
-  sp_da(sp_str_t) clipped = sp_str_map(sp_mem_get_scratch(), &band[0], SP_CARR_LEN(band), &len, sp_str_map_kernel_prefix);
-  SP_EXPECT_STR_EQ_CSTR(clipped[0], "jer");
-  SP_EXPECT_STR_EQ_CSTR(clipped[1], "bob");
-  SP_EXPECT_STR_EQ_CSTR(clipped[2], "phi");
-}
-
 UTEST(str, valid_and_at) {
   sp_str_t valid = sp_str_lit("Hello");
   sp_str_t invalid = {.data = SP_NULLPTR, .len = 5};
@@ -306,66 +283,33 @@ UTEST(str, join_operations) {
   SP_EXPECT_STR_EQ_CSTR(sp_str_join(sp_mem_get_scratch(), sp_str_lit("hello"), sp_str_lit("world"), sp_str_lit(" - ")), "hello - world");
   SP_EXPECT_STR_EQ_CSTR(sp_str_join(sp_mem_get_scratch(), sp_str_lit("hello"), sp_str_lit("world"), sp_str_lit("")), "helloworld");
 
+  sp_str_t band [] = {
+    sp_str_lit("jerry"), sp_str_lit("bobby"), sp_str_lit("phil")
+  };
+  SP_EXPECT_STR_EQ_CSTR(sp_str_join_n(sp_mem_get_scratch(), band, SP_CARR_LEN(band), sp_str_lit(" and ")), "jerry and bobby and phil");
+
   const c8* strings[] = {"apple", "banana", "cherry"};
   SP_EXPECT_STR_EQ_CSTR(sp_str_join_cstr_n(sp_mem_get_scratch(), strings, 3, sp_str_lit(", ")), "apple, banana, cherry");
   SP_EXPECT_STR_EQ_CSTR(sp_str_join_cstr_n(sp_mem_get_scratch(), strings, 1, sp_str_lit(", ")), "apple");
   ASSERT_EQ(sp_str_join_cstr_n(sp_mem_get_scratch(), strings, 0, sp_str_lit(", ")).len, 0);
 }
 
-UTEST(str_kernel, map_trim) {
-  sp_str_t strings[] = {
-    sp_str_lit("  hello  "),
-    sp_str_lit("\tworld\n"),
-    sp_str_lit("  \t\n\r  "),
-    sp_str_lit("no_trim"),
-  };
+UTEST(str, case_transform) {
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_upper(sp_mem_get_scratch(), sp_str_lit("Hello World")), "HELLO WORLD");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_upper(sp_mem_get_scratch(), sp_str_lit("ALREADY UPPER")), "ALREADY UPPER");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_upper(sp_mem_get_scratch(), sp_str_lit("already lower")), "ALREADY LOWER");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_upper(sp_mem_get_scratch(), sp_str_lit("MiXeD cAsE")), "MIXED CASE");
 
-  sp_da(sp_str_t) results = sp_str_map(sp_mem_get_scratch(), strings, 4, NULL, sp_str_map_kernel_trim);
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_lower(sp_mem_get_scratch(), sp_str_lit("Hello World")), "hello world");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_lower(sp_mem_get_scratch(), sp_str_lit("ALREADY UPPER")), "already upper");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_lower(sp_mem_get_scratch(), sp_str_lit("already lower")), "already lower");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_lower(sp_mem_get_scratch(), sp_str_lit("MiXeD cAsE")), "mixed case");
 
-  ASSERT_EQ(sp_da_size(results), 4);
-  SP_EXPECT_STR_EQ_CSTR(results[0], "hello");
-  SP_EXPECT_STR_EQ_CSTR(results[1], "world");
-  SP_EXPECT_STR_EQ_CSTR(results[2], "");
-  SP_EXPECT_STR_EQ_CSTR(results[3], "no_trim");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_pascal_case(sp_mem_get_scratch(), sp_str_lit("hello world")), "Hello World");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_pascal_case(sp_mem_get_scratch(), sp_str_lit("the quick brown fox")), "The Quick Brown Fox");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_pascal_case(sp_mem_get_scratch(), sp_str_lit("SHOUTING TEXT")), "Shouting Text");
+  SP_EXPECT_STR_EQ_CSTR(sp_str_to_pascal_case(sp_mem_get_scratch(), sp_str_lit("123 numbers first")), "123 Numbers First");
 }
-
-UTEST(str_kernel, map_case_transform) {
-  sp_str_t strings[] = {
-    sp_str_lit("Hello World"),
-    sp_str_lit("ALREADY UPPER"),
-    sp_str_lit("already lower"),
-    sp_str_lit("MiXeD cAsE"),
-  };
-
-  sp_da(sp_str_t) results = sp_str_map(sp_mem_get_scratch(), strings, 4, NULL, sp_str_map_kernel_to_upper);
-  ASSERT_EQ(sp_da_size(results), 4);
-  SP_EXPECT_STR_EQ_CSTR(results[0], "HELLO WORLD");
-  SP_EXPECT_STR_EQ_CSTR(results[1], "ALREADY UPPER");
-  SP_EXPECT_STR_EQ_CSTR(results[2], "ALREADY LOWER");
-  SP_EXPECT_STR_EQ_CSTR(results[3], "MIXED CASE");
-
-  results = sp_str_map(sp_mem_get_scratch(), strings, 4, NULL, sp_str_map_kernel_to_lower);
-  ASSERT_EQ(sp_da_size(results), 4);
-  SP_EXPECT_STR_EQ_CSTR(results[0], "hello world");
-  SP_EXPECT_STR_EQ_CSTR(results[1], "already upper");
-  SP_EXPECT_STR_EQ_CSTR(results[2], "already lower");
-  SP_EXPECT_STR_EQ_CSTR(results[3], "mixed case");
-
-  sp_str_t strings2[] = {
-    sp_str_lit("hello world"),
-    sp_str_lit("the quick brown fox"),
-    sp_str_lit("SHOUTING TEXT"),
-    sp_str_lit("123 numbers first"),
-  };
-
-  results = sp_str_map(sp_mem_get_scratch(), strings2, 4, NULL, sp_str_map_kernel_pascal_case);
-  ASSERT_EQ(sp_da_size(results), 4);
-  SP_EXPECT_STR_EQ_CSTR(results[0], "Hello World");
-  SP_EXPECT_STR_EQ_CSTR(results[1], "The Quick Brown Fox");
-  SP_EXPECT_STR_EQ_CSTR(results[2], "Shouting Text");
-  SP_EXPECT_STR_EQ_CSTR(results[3], "123 Numbers First");
-}
-
 
 UTEST(str, trim) {
   SP_EXPECT_STR_EQ_CSTR(sp_str_trim(sp_str_lit("  hello  ")), "hello");
