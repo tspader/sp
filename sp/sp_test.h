@@ -18,7 +18,7 @@ typedef struct {
   const void* cases;
   u32 stride;
   u32 count;
-  const c8* const* case_name;
+  u32 case_name_offset;
   sp_test_setup_fn_t setup;
   sp_test_teardown_fn_t teardown;
   const void* user;
@@ -98,21 +98,12 @@ typedef struct {
 
   #define sp_test_suite(SUITE, ...) __sp_test_reg_suite(sp_mcat(sp_test_suite_reg_, __COUNTER__), SUITE, __VA_ARGS__)
 
-  #define sp_test(SUITE, NAME)                                              \
-    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t);                \
-    sp_test_reg(SUITE, {                                                    \
-      .name = #NAME,                                                        \
-      .fn = __sp_test_fn(SUITE, NAME)                                       \
-    });                                                                     \
-    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t)
-
-  #define sp_test_ex(SUITE, NAME, SETUP, TEARDOWN)                          \
+  #define sp_test(SUITE, NAME, ...)                                         \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t);                \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
       .fn = __sp_test_fn(SUITE, NAME),                                      \
-      .setup = (SETUP),                                                     \
-      .teardown = (TEARDOWN)                                                \
+      __VA_ARGS__                                                           \
     });                                                                     \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t)
 
@@ -127,7 +118,7 @@ typedef struct {
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it);                     \
     __sp_test_each_thunk_def(SUITE, NAME, TYPE, __sp_test_fn(SUITE, NAME))
 
-  #define sp_test_each_named(SUITE, NAME, TYPE, ARR, MEMBER)                \
+  #define sp_test_each(SUITE, NAME, TYPE, ARR, ...)                         \
     __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
@@ -135,13 +126,12 @@ typedef struct {
       .cases = (ARR),                                                       \
       .stride = (u32)sizeof((ARR)[0]),                                      \
       .count = (u32)sp_carr_len(ARR),                                       \
-      .case_name = &(ARR)[0].MEMBER                                         \
+      .case_name_offset = (u32)offsetof(TYPE, name) + 1,                    \
+      __VA_ARGS__                                                           \
     });                                                                     \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
 
-  #define sp_test_each(SUITE, NAME, TYPE, ARR) sp_test_each_named(SUITE, NAME, TYPE, ARR, name)
-
-  #define sp_test_each_ex(SUITE, NAME, TYPE, ARR, SETUP, TEARDOWN)          \
+  #define sp_test_each_anon(SUITE, NAME, TYPE, ARR, ...)                    \
     __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
@@ -149,52 +139,11 @@ typedef struct {
       .cases = (ARR),                                                       \
       .stride = (u32)sizeof((ARR)[0]),                                      \
       .count = (u32)sp_carr_len(ARR),                                       \
-      .case_name = &(ARR)[0].name,                                          \
-      .setup = (SETUP),                                                     \
-      .teardown = (TEARDOWN)                                                \
+      __VA_ARGS__                                                           \
     });                                                                     \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
 
-  #define sp_test_each_anon(SUITE, NAME, TYPE, ARR)                         \
-    __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
-    sp_test_reg(SUITE, {                                                    \
-      .name = #NAME,                                                        \
-      .each = __sp_test_thunk(SUITE, NAME),                                 \
-      .cases = (ARR),                                                       \
-      .stride = (u32)sizeof((ARR)[0]),                                      \
-      .count = (u32)sp_carr_len(ARR)                                        \
-    });                                                                     \
-    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
-
-  #define sp_test_args(SUITE, NAME, T)                                      \
-    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T);                \
-    sp_test_reg(SUITE, {                                                    \
-      .name = #NAME,                                                        \
-      .fn = __sp_test_fn(SUITE, NAME)                                       \
-    });                                                                     \
-    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T)
-
-  #define sp_test_each_args(SUITE, NAME, TYPE, ARR, T, IT)                  \
-    sp_static_assert(sizeof(TYPE) == sizeof((ARR)[0]), sp_test_each_row_type_mismatch); \
-    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T, TYPE* IT);      \
-    __sp_test_each_thunk_def(SUITE, NAME, TYPE, __sp_test_fn(SUITE, NAME))  \
-    sp_test_reg(SUITE, {                                                    \
-      .name = #NAME,                                                        \
-      .each = __sp_test_thunk(SUITE, NAME),                                 \
-      .cases = (ARR),                                                       \
-      .stride = (u32)sizeof((ARR)[0]),                                      \
-      .count = (u32)sp_carr_len(ARR),                                       \
-      .case_name = &(ARR)[0].name                                           \
-    });                                                                     \
-    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T, TYPE* IT)
-
-  #define sp_test_fn(SUITE, NAME, FN)                                       \
-    sp_test_reg(SUITE, {                                                    \
-      .name = #NAME,                                                        \
-      .fn = (FN)                                                            \
-    })
-
-  #define sp_test_each_fn(SUITE, NAME, TYPE, ARR, FN)                       \
+  #define sp_test_each_fn(SUITE, NAME, TYPE, ARR, FN, ...)                  \
     sp_static_assert(sizeof(TYPE) == sizeof((ARR)[0]), sp_test_each_row_type_mismatch); \
     __sp_test_each_thunk_def(SUITE, NAME, TYPE, FN)                         \
     sp_test_reg(SUITE, {                                                    \
@@ -203,24 +152,19 @@ typedef struct {
       .cases = (ARR),                                                       \
       .stride = (u32)sizeof((ARR)[0]),                                      \
       .count = (u32)sp_carr_len(ARR),                                       \
-      .case_name = &(ARR)[0].name                                           \
+      .case_name_offset = (u32)offsetof(TYPE, name) + 1,                    \
+      __VA_ARGS__                                                           \
     })
 #else
   #define __sp_test_unsupported() \
     sp_static_assert(false, no_sp_test_autoreg_for_this_object_format__pass_suites_to_sp_test_main)
 
-  #define sp_test_reg(SUITE, ...)                            __sp_test_unsupported()
-  #define sp_test_suite(SUITE, ...)                          __sp_test_unsupported()
-  #define sp_test(SUITE, NAME)                               __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t)
-  #define sp_test_ex(SUITE, NAME, SETUP, TEARDOWN)           sp_test(SUITE, NAME)
-  #define sp_test_each(SUITE, NAME, TYPE, ARR)                     __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
-  #define sp_test_each_named(SUITE, NAME, TYPE, ARR, MEMBER)       sp_test_each(SUITE, NAME, TYPE, ARR)
-  #define sp_test_each_ex(SUITE, NAME, TYPE, ARR, SETUP, TEARDOWN) sp_test_each(SUITE, NAME, TYPE, ARR)
-  #define sp_test_each_anon(SUITE, NAME, TYPE, ARR)                sp_test_each(SUITE, NAME, TYPE, ARR)
-  #define sp_test_args(SUITE, NAME, T)                             __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T)
-  #define sp_test_each_args(SUITE, NAME, TYPE, ARR, T, IT)         __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* T, TYPE* IT)
-  #define sp_test_fn(SUITE, NAME, FN)                              __sp_test_unsupported()
-  #define sp_test_each_fn(SUITE, NAME, TYPE, ARR, FN)              __sp_test_unsupported()
+  #define sp_test_reg(SUITE, ...)                          __sp_test_unsupported()
+  #define sp_test_suite(SUITE, ...)                        __sp_test_unsupported()
+  #define sp_test(SUITE, NAME, ...)                        __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t)
+  #define sp_test_each(SUITE, NAME, TYPE, ARR, ...)        __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
+  #define sp_test_each_anon(SUITE, NAME, TYPE, ARR, ...)   __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
+  #define sp_test_each_fn(SUITE, NAME, TYPE, ARR, FN, ...) __sp_test_unsupported()
 #endif
 
 SP_API s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites);
@@ -723,6 +667,7 @@ static void sp_test_tracking_do_free(sp_test_tracking_t* k, void* ptr, u64 size)
   alloc->state = SP_TEST_ALLOC_FREED;
   k->live_count--;
   k->live_bytes -= alloc->size;
+  sp_free(k->backing, ptr, alloc->size);
 }
 
 static void* sp_test_tracking_do_realloc(sp_test_tracking_t* k, void* old, u64 size, u64 old_size) {
@@ -780,7 +725,7 @@ sp_mem_t sp_test_tracking_as_allocator(sp_test_tracking_t* k) {
 
 void sp_test_tracking_deinit(sp_test_tracking_t* k) {
   sp_ht_for_kv(k->allocs, it) {
-    sp_free(k->backing, *it.key, it.val->size);
+    if (it.val->state == SP_TEST_ALLOC_LIVE) sp_free(k->backing, *it.key, it.val->size);
   }
   sp_ht_free(k->allocs);
   sp_mem_zero(k, sizeof(*k));
@@ -1599,11 +1544,9 @@ static const c8* sp_test_instance_name(sp_mem_t mem, const c8* suite, const sp_t
     return sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name));
   }
 
-  if (decl->case_name) {
-    u64 offset = (u64)((const u8*)decl->case_name - (const u8*)decl->cases);
+  if (decl->case_name_offset) {
     const u8* row_base = (const u8*)decl->cases + (u64)row * decl->stride;
-    const c8* case_name = SP_NULLPTR;
-    sp_mem_copy(&case_name, row_base + offset, sizeof(case_name));
+    const c8* case_name = *(const c8* const*)(row_base + decl->case_name_offset - 1);
     if (case_name) {
       return sp_fmt_mem_cstr(mem, "{}.{}.{}",
         sp_fmt_cstr(suite),
