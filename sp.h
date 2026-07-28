@@ -2654,25 +2654,6 @@ SP_API bool        sp_ht_on_compare_cstr_key(void* ka, void* kb, u64 size);
 
  */
 typedef struct {
-  void* user_data;
-
-  sp_io_writer_t* writer;
-  struct {
-    sp_str_t* data;
-    u32 len;
-  } elements;
-
-  sp_str_t str;
-  u32 index;
-} sp_str_reduce_context_t;
-
-typedef struct {
-  sp_mem_t mem;
-  sp_str_t str;
-  void* user_data;
-} sp_str_map_context_t;
-
-typedef struct {
   sp_str_t first;
   sp_str_t second;
 } sp_str_pair_t;
@@ -2699,9 +2680,6 @@ typedef struct {
   u8 codepoint_len;
 } sp_utf8_it_t;
 
-SP_TYPEDEF_FN(sp_str_t, sp_str_map_fn_t, sp_str_map_context_t* context);
-SP_TYPEDEF_FN(void, sp_str_reduce_fn_t, sp_str_reduce_context_t* context);
-
 #define sp_str_lit(STR)  (SP_RVAL(sp_str_t) { .data = (const c8*)(STR), .len = (u32)(sizeof(STR) - 1) })
 #define sp_str_for(str, it) for (u32 it = 0; it < str.len; it++)
 #define sp_str_for_it(str, it) for (sp_str_it_t it = sp_str_it(str); sp_str_it_valid(&it); sp_str_it_next(&it))
@@ -2716,8 +2694,6 @@ SP_API sp_str_t        sp_str_copy(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t        sp_str_concat(sp_mem_t mem, sp_str_t a, sp_str_t b);
 SP_API sp_str_t        sp_str_join(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_str_t join);
 SP_API sp_str_t        sp_str_join_n(sp_mem_t mem, sp_str_t* strs, u32 n, sp_str_t joiner);
-SP_API sp_str_t        sp_str_reduce(sp_mem_t mem, sp_str_t* strs, u32 n, void* ud, sp_str_reduce_fn_t fn);
-SP_API void            sp_str_reduce_kernel_join(sp_str_reduce_context_t* context);
 SP_API c8*             sp_cstr_from_str(sp_mem_t mem, sp_str_t str);
 SP_API void            sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
 SP_API sp_str_t        sp_str_from_cstr(sp_mem_t mem, const c8* str);
@@ -2791,15 +2767,6 @@ SP_API sp_wide_str_t   sp_wtf8_to_wtf16(sp_mem_t mem, sp_str_t wtf8);
 SP_API sp_str_t        sp_wtf16_to_wtf8(sp_mem_t mem, sp_wide_str_t wtf16);
 SP_API c8              sp_c8_to_upper(c8 c);
 SP_API c8              sp_c8_to_lower(c8 c);
-SP_API sp_da(sp_str_t) sp_str_map(sp_mem_t mem, sp_str_t* s, u32 n, void* ud, sp_str_map_fn_t fn);
-SP_API sp_str_t        sp_str_map_kernel_prepend(sp_str_map_context_t* context);
-SP_API sp_str_t        sp_str_map_kernel_append(sp_str_map_context_t* context);
-SP_API sp_str_t        sp_str_map_kernel_prefix(sp_str_map_context_t* context);
-SP_API sp_str_t        sp_str_map_kernel_trim(sp_str_map_context_t* context);
-SP_API sp_str_t        sp_str_map_kernel_pad(sp_str_map_context_t* context);
-SP_API sp_str_t        sp_str_map_kernel_to_upper(sp_str_map_context_t* context);
-SP_API sp_str_t        sp_str_map_kernel_to_lower(sp_str_map_context_t* context);
-SP_API sp_str_t        sp_str_map_kernel_pascal_case(sp_str_map_context_t* context);
 SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 
 
@@ -11888,66 +11855,17 @@ sp_str_t sp_str_truncate(sp_mem_t mem, sp_str_t str, u32 max_len, sp_str_t trail
   return sp_str_concat(mem, sp_str_prefix(str, max_len - trailer.len), trailer);
 }
 
-sp_da(sp_str_t) sp_str_map(sp_mem_t mem, sp_str_t* strs, u32 num_strs, void* user_data, sp_str_map_fn_t fn) {
-  sp_da(sp_str_t) results = sp_da_new(mem, sp_str_t);
-
-  sp_for(it, num_strs) {
-    sp_str_map_context_t context = {
-      .mem = mem,
-      .str = strs[it],
-      .user_data = user_data
-    };
-    sp_str_t result = fn(&context);
-    sp_da_push(results, result);
-  }
-
-  return results;
-}
-
-sp_str_t sp_str_map_kernel_prepend(sp_str_map_context_t* context) {
-  sp_str_t prefix = *(sp_str_t*)context->user_data;
-  return sp_str_concat(context->mem, prefix, context->str);
-}
-
-sp_str_t sp_str_map_kernel_append(sp_str_map_context_t* context) {
-  sp_str_t suffix = *(sp_str_t*)context->user_data;
-  return sp_str_concat(context->mem, context->str, suffix);
-}
-
-sp_str_t sp_str_map_kernel_prefix(sp_str_map_context_t* context) {
-  u32 len;
-  sp_mem_copy(&len, context->user_data, sizeof(len));
-  return sp_str_sub(context->str, 0, len);
-}
-
-sp_str_t sp_str_map_kernel_pad(sp_str_map_context_t* context) {
-  u32 len;
-  sp_mem_copy(&len, context->user_data, sizeof(len));
-  return sp_str_pad(context->mem, context->str, len);
-}
-
-sp_str_t sp_str_map_kernel_trim(sp_str_map_context_t* context) {
-  return sp_str_trim(context->str);
-}
-
-sp_str_t sp_str_map_kernel_to_upper(sp_str_map_context_t* context) {
-  return sp_str_to_upper(context->mem, context->str);
-}
-
-sp_str_t sp_str_map_kernel_to_lower(sp_str_map_context_t* context) {
-  return sp_str_to_lower(context->mem, context->str);
-}
-
-sp_str_t sp_str_map_kernel_pascal_case(sp_str_map_context_t* context) {
-  return sp_str_to_pascal_case(context->mem, context->str);
-}
-
 sp_da(sp_str_t) sp_str_pad_to_longest(sp_mem_t mem, sp_str_t* strs, u32 n) {
   u32 max_len = 0;
   sp_for(i, n) {
     if (strs[i].len > max_len) max_len = strs[i].len;
   }
-  return sp_str_map(mem, strs, n, &max_len, sp_str_map_kernel_pad);
+
+  sp_da(sp_str_t) results = sp_da_new(mem, sp_str_t);
+  sp_for(i, n) {
+    sp_da_push(results, sp_str_pad(mem, strs[i], max_len));
+  }
+  return results;
 }
 
 
@@ -18932,41 +18850,21 @@ sp_str_t sp_tm_epoch_to_iso8601(sp_mem_t mem, sp_tm_epoch_t time) {
   return sp_str(buf, 24);
 }
 
-sp_str_t sp_str_reduce(sp_mem_t mem, sp_str_t* strings, u32 num_strings, void* user_data, sp_str_reduce_fn_t fn) {
+sp_str_t sp_str_join_n(sp_mem_t mem, sp_str_t* strings, u32 num_strings, sp_str_t joiner) {
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &io);
 
-  sp_str_reduce_context_t context = {
-    .user_data = user_data,
-    .writer = &io.base,
-    .elements = {
-      .data = strings,
-      .len = num_strings,
-    },
-  };
-
   sp_for(index, num_strings) {
-    context.str = strings[index];
-    context.index = index;
-    fn(&context);
+    if (sp_str_empty(strings[index])) continue;
+
+    sp_io_write_str(&io.base, strings[index], SP_NULLPTR);
+
+    if (index != (num_strings - 1)) {
+      sp_io_write_str(&io.base, joiner, SP_NULLPTR);
+    }
   }
 
   return sp_io_dyn_mem_writer_as_str(&io);
-}
-
-void sp_str_reduce_kernel_join(sp_str_reduce_context_t* context) {
-  if (sp_str_empty(context->str)) return;
-
-  sp_io_write_str(context->writer, context->str, SP_NULLPTR);
-
-  if (context->index != (context->elements.len - 1)) {
-    sp_str_t joiner = *(sp_str_t*)context->user_data;
-    sp_io_write_str(context->writer, joiner, SP_NULLPTR);
-  }
-}
-
-sp_str_t sp_str_join_n(sp_mem_t mem, sp_str_t* strings, u32 num_strings, sp_str_t joiner) {
-  return sp_str_reduce(mem, strings, num_strings, &joiner, sp_str_reduce_kernel_join);
 }
 
 
