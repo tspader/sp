@@ -963,17 +963,31 @@ sp_da(sp_str_t) sp_test_resolve_roots(sp_mem_t mem, sp_str_t cwd, sp_str_t exe_d
 }
 
 static sp_str_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
-  if (!sp_str_empty(t->runner->golden_root)) return t->runner->golden_root;
+  sp_test_runner_t* runner = t->runner;
+
+  sp_mutex_lock(&runner->mutex);
+  sp_str_t root = runner->golden_root;
+  sp_mutex_unlock(&runner->mutex);
+  if (!sp_str_empty(root)) return root;
 
   sp_str_t cwd = sp_fs_get_cwd(t->mem);
   sp_str_t exe_dir = sp_fs_parent_path(sp_fs_get_exe_path(t->mem));
   sp_da(sp_str_t) roots = sp_test_resolve_roots(t->mem, cwd, exe_dir);
 
   sp_da_for(roots, it) {
-    if (sp_fs_is_target_file(sp_fs_join_path(t->mem, roots[it], file))) return roots[it];
+    if (!sp_fs_is_target_file(sp_fs_join_path(t->mem, roots[it], file))) continue;
+    root = roots[it];
+    break;
   }
+  if (sp_str_empty(root)) return root;
 
-  return sp_zero_s(sp_str_t);
+  sp_mutex_lock(&runner->mutex);
+  if (sp_str_empty(runner->golden_root)) {
+    runner->golden_root = sp_str_copy(runner->mem, root);
+  }
+  root = runner->golden_root;
+  sp_mutex_unlock(&runner->mutex);
+  return root;
 }
 
 static void sp_test_golden_at(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
@@ -1306,33 +1320,46 @@ static void sp_test_report_log(sp_io_writer_t* io, sp_mem_t mem, sp_test_t* t) {
   }
 }
 
-static void sp_test_report(sp_test_t* t, sp_io_writer_t* io, u64 ns) {
+static sp_test_wire_status_t sp_test_status(sp_test_t* t) {
+  if (!sp_da_empty(t->failures)) return SP_TEST_WIRE_FAIL;
+  if (t->updated)                return SP_TEST_WIRE_UPDATE;
+  if (t->skipped)                return SP_TEST_WIRE_SKIP;
+  return SP_TEST_WIRE_OK;
+}
+
+static void sp_test_report(sp_test_t* t, sp_io_writer_t* io, sp_test_wire_status_t status, u64 ns) {
   sp_str_t duration = sp_test_duration(t->mem, ns);
 
-  if (!sp_da_empty(t->failures)) {
-    sp_fmt_io(io, "{} {.red} {.gray}\n",
-      sp_fmt_cstr(t->name),
-      sp_fmt_cstr("failed"),
-      sp_fmt_str(duration));
-  }
-  else if (t->updated) {
-    sp_fmt_io(io, "{} {.cyan} {.gray}\n",
-      sp_fmt_cstr(t->name),
-      sp_fmt_cstr("updated"),
-      sp_fmt_str(duration));
-  }
-  else if (t->skipped) {
-    sp_fmt_io(io, "{} {.yellow} {.gray} {.gray}\n",
-      sp_fmt_cstr(t->name),
-      sp_fmt_cstr("skipped"),
-      sp_fmt_str(t->skip_reason),
-      sp_fmt_str(duration));
-  }
-  else {
-    sp_fmt_io(io, "{} {.green} {.gray}\n",
-      sp_fmt_cstr(t->name),
-      sp_fmt_cstr("ok"),
-      sp_fmt_str(duration));
+  switch (status) {
+    case SP_TEST_WIRE_FAIL: {
+      sp_fmt_io(io, "{} {.red} {.gray}\n",
+        sp_fmt_cstr(t->name),
+        sp_fmt_cstr("failed"),
+        sp_fmt_str(duration));
+      break;
+    }
+    case SP_TEST_WIRE_UPDATE: {
+      sp_fmt_io(io, "{} {.cyan} {.gray}\n",
+        sp_fmt_cstr(t->name),
+        sp_fmt_cstr("updated"),
+        sp_fmt_str(duration));
+      break;
+    }
+    case SP_TEST_WIRE_SKIP: {
+      sp_fmt_io(io, "{} {.yellow} {.gray} {.gray}\n",
+        sp_fmt_cstr(t->name),
+        sp_fmt_cstr("skipped"),
+        sp_fmt_str(t->skip_reason),
+        sp_fmt_str(duration));
+      break;
+    }
+    case SP_TEST_WIRE_OK: {
+      sp_fmt_io(io, "{} {.green} {.gray}\n",
+        sp_fmt_cstr(t->name),
+        sp_fmt_cstr("ok"),
+        sp_fmt_str(duration));
+      break;
+    }
   }
 
   sp_da_for(t->notes, it) {
@@ -1380,14 +1407,20 @@ static sp_err_t sp_test_invoke(sp_test_t* t) {
     return SP_ERR;
   }
 
-  sp_err_t err = SP_OK;
   if (t->decl->setup) {
-    err = t->decl->setup(t);
+    sp_err_t err = t->decl->setup(t);
+    if (err) {
+      if (!t->skipped && sp_da_empty(t->failures)) {
+        sp_test_fail(t, "setup failed: {}", sp_fmt_str(sp_test_err_str(t, err)));
+      }
+      return err;
+    }
   }
-  if (!err) {
-    if (t->decl->fn) err = t->decl->fn(t);
-    else             err = t->decl->each(t, t->arg);
-  }
+
+  sp_err_t err = SP_OK;
+  if (t->decl->fn) err = t->decl->fn(t);
+  else             err = t->decl->each(t, t->arg);
+
   if (t->decl->teardown) {
     t->decl->teardown(t);
   }
@@ -1465,21 +1498,23 @@ static void sp_test_run_instance(sp_test_runner_t* runner, sp_test_instance_t* i
     });
   }
 
+  sp_test_wire_status_t status = sp_test_status(t);
+
   sp_io_dyn_mem_writer_t report = sp_zero;
   sp_io_dyn_mem_writer_init(t->mem, &report);
-  sp_test_report(t, &report.base, ns);
+  sp_test_report(t, &report.base, status, ns);
 
-  bool failed = !sp_da_empty(t->failures);
-  bool updated = !failed && t->updated;
-  bool skipped = !failed && !updated && t->skipped;
   sp_str_t text = sp_io_dyn_mem_writer_as_str(&report);
 
   sp_mutex_lock(&runner->mutex);
   sp_io_write_str(&runner->out.base, text, SP_NULLPTR);
   sp_io_flush(&runner->out.base);
-  if (failed)  sp_da_push(runner->failed, instance->name);
-  if (skipped) sp_da_push(runner->skipped, instance->name);
-  if (updated) sp_da_push(runner->updated, instance->name);
+  switch (status) {
+    case SP_TEST_WIRE_FAIL:   sp_da_push(runner->failed, instance->name); break;
+    case SP_TEST_WIRE_SKIP:   sp_da_push(runner->skipped, instance->name); break;
+    case SP_TEST_WIRE_UPDATE: sp_da_push(runner->updated, instance->name); break;
+    case SP_TEST_WIRE_OK: break;
+  }
   sp_mutex_unlock(&runner->mutex);
 
   sp_test_context_destroy(t);
