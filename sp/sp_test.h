@@ -281,6 +281,33 @@ SP_TYPEDEF_FN(sp_err_t, sp_test_once_fn_t, void* user);
 SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user);
 
 
+typedef enum {
+  SP_TEST_ALLOC_LIVE,
+  SP_TEST_ALLOC_FREED,
+} sp_test_alloc_state_t;
+
+typedef struct {
+  sp_test_alloc_state_t state;
+  u64 size;
+  u32 id;
+} sp_test_alloc_t;
+
+typedef struct {
+  sp_mem_t backing;
+  sp_ht(void*, sp_test_alloc_t) allocs;
+  u64 live_bytes;
+  u32 live_count;
+  u32 double_frees;
+  u32 wild_frees;
+  u32 bad_sizes;
+  u32 next_id;
+} sp_test_tracking_t;
+
+SP_API void        sp_test_tracking_init(sp_test_tracking_t* k, sp_mem_t meta, sp_mem_t backing);
+SP_API sp_mem_t    sp_test_tracking_as_allocator(sp_test_tracking_t* k);
+SP_API void        sp_test_tracking_deinit(sp_test_tracking_t* k);
+
+
 // stream: nonce frame
 // frame: tag len payload
 // str: len bytes
@@ -605,29 +632,6 @@ SP_API sp_err_t    sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_w
 
 #include "sp_cli.h"
 
-#define SP_TEST_LIVE_MAGIC  0xA110CA7Eu
-#define SP_TEST_FREED_MAGIC 0xDEADBEEFu
-
-typedef struct SP_ALIGNED sp_test_tracking_node_t {
-  struct sp_test_tracking_node_t* prev;
-  struct sp_test_tracking_node_t* next;
-  u64 size;
-  u32 id;
-  u32 magic;
-} sp_test_tracking_node_t;
-
-typedef struct {
-  sp_mem_t backing;
-  sp_test_tracking_node_t* live;
-  sp_test_tracking_node_t* freed;
-  u64 live_bytes;
-  u32 live_count;
-  u32 double_frees;
-  u32 wild_frees;
-  u32 bad_sizes;
-  u32 next_id;
-} sp_test_tracking_t;
-
 typedef struct sp_test_runner_t sp_test_runner_t;
 
 struct sp_test_t {
@@ -655,6 +659,7 @@ struct sp_test_t {
   sp_mem_t scratch_mem;
 
   sp_test_tracking_t tracking;
+  sp_mem_heap_t* tracking_heap;
   sp_mem_t tracked_mem;
   bool tracking_live;
 
@@ -680,76 +685,44 @@ struct sp_test_runner_t {
   sp_da(const c8*) updated;
   sp_str_t dir_root;
   sp_str_t golden_root;
-  sp_test_once_t golden_once;
   bool update;
 };
 
 
-static sp_test_tracking_node_t* sp_test_tracking_header(void* ptr) {
-  return (sp_test_tracking_node_t*)((u8*)ptr - sizeof(sp_test_tracking_node_t));
-}
-
-static void* sp_test_tracking_user_ptr(sp_test_tracking_node_t* node) {
-  return (u8*)node + sizeof(sp_test_tracking_node_t);
-}
-
-static void sp_test_tracking_link(sp_test_tracking_node_t** list, sp_test_tracking_node_t* node) {
-  node->prev = SP_NULLPTR;
-  node->next = *list;
-  if (*list) (*list)->prev = node;
-  *list = node;
-}
-
-static void sp_test_tracking_unlink(sp_test_tracking_node_t** list, sp_test_tracking_node_t* node) {
-  if (node->prev) node->prev->next = node->next;
-  else            *list            = node->next;
-  if (node->next) node->next->prev = node->prev;
-  node->prev = SP_NULLPTR;
-  node->next = SP_NULLPTR;
-}
-
-static u32 sp_test_tracking_peek_magic(void* ptr) {
-  u32 magic = 0;
-  u8* base = (u8*)ptr - sizeof(sp_test_tracking_node_t);
-  sp_mem_copy(&magic, base + offsetof(sp_test_tracking_node_t, magic), sizeof(magic));
-  return magic;
-}
-
 static void* sp_test_tracking_do_alloc(sp_test_tracking_t* k, u64 size) {
   if (!size) return SP_NULLPTR;
+  if (!k->backing.on_alloc) return SP_NULLPTR;
 
-  void* raw = sp_alloc(k->backing, size + sizeof(sp_test_tracking_node_t));
-  if (!raw) return SP_NULLPTR;
+  void* ptr = sp_alloc(k->backing, size);
+  if (!ptr) return SP_NULLPTR;
 
-  sp_test_tracking_node_t* node = (sp_test_tracking_node_t*)raw;
-  node->size = size;
-  node->magic = SP_TEST_LIVE_MAGIC;
-  node->id = ++k->next_id;
-  sp_test_tracking_link(&k->live, node);
+  sp_ht_insert(k->allocs, ptr, ((sp_test_alloc_t) {
+    .state = SP_TEST_ALLOC_LIVE,
+    .size = size,
+    .id = ++k->next_id,
+  }));
   k->live_count++;
   k->live_bytes += size;
-  return sp_test_tracking_user_ptr(node);
+  return ptr;
 }
 
 static void sp_test_tracking_do_free(sp_test_tracking_t* k, void* ptr, u64 size) {
   if (!ptr) return;
 
-  u32 magic = sp_test_tracking_peek_magic(ptr);
-  if (magic == SP_TEST_LIVE_MAGIC) {
-    sp_test_tracking_node_t* node = sp_test_tracking_header(ptr);
-    if (node->size != size) k->bad_sizes++;
-    sp_test_tracking_unlink(&k->live, node);
-    node->magic = SP_TEST_FREED_MAGIC;
-    k->live_count--;
-    k->live_bytes -= node->size;
-    sp_test_tracking_link(&k->freed, node);
-  }
-  else if (magic == SP_TEST_FREED_MAGIC) {
-    k->double_frees++;
-  }
-  else {
+  sp_test_alloc_t* alloc = sp_ht_getp(k->allocs, ptr);
+  if (!alloc) {
     k->wild_frees++;
+    return;
   }
+  if (alloc->state == SP_TEST_ALLOC_FREED) {
+    k->double_frees++;
+    return;
+  }
+
+  if (alloc->size != size) k->bad_sizes++;
+  alloc->state = SP_TEST_ALLOC_FREED;
+  k->live_count--;
+  k->live_bytes -= alloc->size;
 }
 
 static void* sp_test_tracking_do_realloc(sp_test_tracking_t* k, void* old, u64 size, u64 old_size) {
@@ -759,21 +732,24 @@ static void* sp_test_tracking_do_realloc(sp_test_tracking_t* k, void* old, u64 s
     return SP_NULLPTR;
   }
 
-  u32 magic = sp_test_tracking_peek_magic(old);
-  if (magic != SP_TEST_LIVE_MAGIC) {
-    if (magic == SP_TEST_FREED_MAGIC) k->double_frees++;
-    else                              k->wild_frees++;
+  sp_test_alloc_t* alloc = sp_ht_getp(k->allocs, old);
+  if (!alloc) {
+    k->wild_frees++;
+    return SP_NULLPTR;
+  }
+  if (alloc->state == SP_TEST_ALLOC_FREED) {
+    k->double_frees++;
     return SP_NULLPTR;
   }
 
-  sp_test_tracking_node_t* node = sp_test_tracking_header(old);
-  if (node->size != old_size) k->bad_sizes++;
-  if (node->size == size) return old;
+  if (alloc->size != old_size) k->bad_sizes++;
+  if (alloc->size == size) return old;
 
+  u64 have = alloc->size;
   void* fresh = sp_test_tracking_do_alloc(k, size);
   if (!fresh) return SP_NULLPTR;
-  sp_mem_copy(fresh, old, sp_min(node->size, size));
-  sp_test_tracking_do_free(k, old, node->size);
+  sp_mem_copy(fresh, old, sp_min(have, size));
+  sp_test_tracking_do_free(k, old, have);
   return fresh;
 }
 
@@ -789,21 +765,24 @@ static void* sp_test_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 s
   return SP_NULLPTR;
 }
 
-static void sp_test_tracking_deinit(sp_test_tracking_t* k) {
-  sp_test_tracking_node_t* node = k->live;
-  while (node) {
-    sp_test_tracking_node_t* next = node->next;
-    sp_free(k->backing, node, node->size + sizeof(sp_test_tracking_node_t));
-    node = next;
-  }
+void sp_test_tracking_init(sp_test_tracking_t* k, sp_mem_t meta, sp_mem_t backing) {
+  sp_mem_zero(k, sizeof(*k));
+  k->backing = backing;
+  sp_ht_init(meta, k->allocs);
+}
 
-  node = k->freed;
-  while (node) {
-    sp_test_tracking_node_t* next = node->next;
-    sp_free(k->backing, node, node->size + sizeof(sp_test_tracking_node_t));
-    node = next;
-  }
+sp_mem_t sp_test_tracking_as_allocator(sp_test_tracking_t* k) {
+  return (sp_mem_t) {
+    .on_alloc = sp_test_tracking_on_alloc,
+    .user_data = k,
+  };
+}
 
+void sp_test_tracking_deinit(sp_test_tracking_t* k) {
+  sp_ht_for_kv(k->allocs, it) {
+    sp_free(k->backing, *it.key, it.val->size);
+  }
+  sp_ht_free(k->allocs);
   sp_mem_zero(k, sizeof(*k));
 }
 
@@ -890,9 +869,6 @@ void sp_test_record(sp_test_t* t, sp_test_failure_t failure) {
     failure.file = sp_str_sub(failure.file, (s32)here.len, (s32)(failure.file.len - here.len));
   }
 
-  failure.message = sp_str_copy(t->mem, failure.message);
-  failure.expected = sp_str_copy(t->mem, failure.expected);
-  failure.actual = sp_str_copy(t->mem, failure.actual);
   failure.kvs = sp_test_kv_snapshot(t);
   sp_da_push(t->failures, failure);
 }
@@ -991,11 +967,9 @@ sp_mem_t sp_test_arena(sp_test_t* t) {
 
 sp_mem_t sp_test_mem(sp_test_t* t) {
   if (!t->tracking_live) {
-    t->tracking.backing = sp_mem_os_new();
-    t->tracked_mem = (sp_mem_t) {
-      .on_alloc = sp_test_tracking_on_alloc,
-      .user_data = &t->tracking,
-    };
+    t->tracking_heap = sp_mem_heap_new();
+    sp_test_tracking_init(&t->tracking, t->mem, sp_mem_heap_as_allocator(t->tracking_heap));
+    t->tracked_mem = sp_test_tracking_as_allocator(&t->tracking);
     t->tracking_live = true;
   }
   return t->tracked_mem;
@@ -1052,32 +1026,18 @@ sp_da(sp_str_t) sp_test_resolve_roots(sp_mem_t mem, sp_str_t cwd, sp_str_t exe_d
   return roots;
 }
 
-typedef struct {
-  sp_test_t* t;
-  sp_str_t file;
-} sp_test_golden_root_args_t;
-
-static sp_err_t sp_test_golden_find_root(void* user) {
-  sp_test_golden_root_args_t* args = (sp_test_golden_root_args_t*)user;
-  sp_test_t* t = args->t;
-  sp_test_runner_t* runner = t->runner;
-
-  if (!sp_str_empty(runner->golden_root)) return SP_OK;
+static sp_str_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
+  if (!sp_str_empty(t->runner->golden_root)) return t->runner->golden_root;
 
   sp_str_t cwd = sp_fs_get_cwd(t->mem);
   sp_str_t exe_dir = sp_fs_parent_path(sp_fs_get_exe_path(t->mem));
   sp_da(sp_str_t) roots = sp_test_resolve_roots(t->mem, cwd, exe_dir);
 
   sp_da_for(roots, it) {
-    if (!sp_fs_is_target_file(sp_fs_join_path(t->mem, roots[it], args->file))) continue;
-
-    sp_mutex_lock(&runner->mutex);
-    runner->golden_root = sp_str_copy(runner->mem, roots[it]);
-    sp_mutex_unlock(&runner->mutex);
-    return SP_OK;
+    if (sp_fs_is_target_file(sp_fs_join_path(t->mem, roots[it], file))) return roots[it];
   }
 
-  return SP_ERR;
+  return sp_zero_s(sp_str_t);
 }
 
 static void sp_test_golden_at(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
@@ -1171,8 +1131,8 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
 
   sp_str_t src = file;
   if (!sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS)) {
-    sp_test_golden_root_args_t args = { .t = t, .file = file };
-    if (sp_test_once(&t->runner->golden_once, sp_test_golden_find_root, &args)) {
+    sp_str_t root = sp_test_golden_root(t, file);
+    if (sp_str_empty(root)) {
       sp_test_record(t, (sp_test_failure_t) {
         .file = file,
         .line = line,
@@ -1181,7 +1141,7 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
       });
       return;
     }
-    src = sp_fs_join_path(t->mem, t->runner->golden_root, file);
+    src = sp_fs_join_path(t->mem, root, file);
   }
 
   if (!sp_fs_is_target_file(src)) {
@@ -1498,6 +1458,12 @@ static sp_err_t sp_test_invoke(sp_test_t* t) {
   return err;
 }
 
+static s32 sp_test_leak_order(const void* a, const void* b) {
+  const sp_test_alloc_t* lhs = (const sp_test_alloc_t*)a;
+  const sp_test_alloc_t* rhs = (const sp_test_alloc_t*)b;
+  return (lhs->id > rhs->id) - (lhs->id < rhs->id);
+}
+
 static void sp_test_report_leaks(sp_test_t* t) {
   sp_test_tracking_t* k = &t->tracking;
   if (!k->live_count && !k->double_frees && !k->wild_frees && !k->bad_sizes) return;
@@ -1510,8 +1476,15 @@ static void sp_test_report_leaks(sp_test_t* t) {
       sp_fmt_uint(k->live_count),
       sp_fmt_cstr(k->live_count == 1 ? "allocation" : "allocations"),
       sp_fmt_uint(k->live_bytes));
-    for (sp_test_tracking_node_t* node = k->live; node; node = node->next) {
-      sp_fmt_io(&message.base, "  #{} {} bytes\n", sp_fmt_uint(node->id), sp_fmt_uint(node->size));
+
+    sp_da(sp_test_alloc_t) leaks = sp_da_new(t->mem, sp_test_alloc_t);
+    sp_ht_for_kv(k->allocs, it) {
+      if (it.val->state == SP_TEST_ALLOC_LIVE) sp_da_push(leaks, *it.val);
+    }
+    sp_os_qsort(leaks, sp_da_size(leaks), sizeof(sp_test_alloc_t), sp_test_leak_order);
+
+    sp_da_for(leaks, it) {
+      sp_fmt_io(&message.base, "  #{} {} bytes\n", sp_fmt_uint(leaks[it].id), sp_fmt_uint(leaks[it].size));
     }
   }
   if (k->double_frees) sp_fmt_io(&message.base, "{} double frees\n", sp_fmt_uint(k->double_frees));
@@ -1527,6 +1500,8 @@ static void sp_test_teardown(sp_test_t* t) {
   if (t->tracking_live) {
     if (!t->skipped) sp_test_report_leaks(t);
     sp_test_tracking_deinit(&t->tracking);
+    sp_mem_heap_destroy(t->tracking_heap);
+    t->tracking_heap = SP_NULLPTR;
     t->tracking_live = false;
   }
 
@@ -1591,11 +1566,10 @@ bool sp_test_filtered(sp_glob_t* filter, const c8* name) {
   sp_str_t path = sp_cstr_as_str(name);
   if (sp_glob_match(filter, path)) return false;
 
-  s32 slash = sp_str_find_c8(path, '/');
-  if (slash != SP_STR_NO_MATCH && sp_glob_match(filter, sp_str_prefix(path, slash))) return false;
-
-  s32 dot = sp_str_find_c8(path, '.');
-  if (dot != SP_STR_NO_MATCH && sp_glob_match(filter, sp_str_prefix(path, dot))) return false;
+  sp_for(it, path.len) {
+    if (path.data[it] != '.' && path.data[it] != '/') continue;
+    if (sp_glob_match(filter, sp_str_prefix(path, (s32)it))) return false;
+  }
 
   return true;
 }
@@ -1876,9 +1850,10 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
     return 0;
   }
 
+  sp_str_t iso = sp_tm_epoch_to_iso8601(runner->mem, sp_tm_now_epoch());
   runner->dir_root = sp_fs_join_path(runner->mem,
-    sp_fs_join_path(runner->mem, sp_fs_get_cwd(runner->mem), sp_str_lit(".tmp")),
-    sp_str_lit("sp_test"));
+    sp_fs_join_path(runner->mem, sp_fs_get_cwd(runner->mem), sp_str_lit(".spn/test")),
+    sp_str_replace_c8(runner->mem, iso, ':', '-'));
 
   if (jobs == 0) jobs = sp_test_num_cpus();
 
@@ -1942,7 +1917,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
 
   sp_mutex_destroy(&runner->mutex);
   sp_mem_arena_destroy(arena);
-  return (s32)failed;
+  return failed ? 1 : 0;
 }
 
 #endif
