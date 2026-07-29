@@ -3501,7 +3501,7 @@ static void sp_prompt_knight_rider_render(sp_prompt_ctx_t* ctx) {
 }
 
 sp_prompt_widget_t sp_prompt_knight_rider_widget(sp_prompt_ctx_t* ctx, sp_prompt_knight_rider_t config) {
-  config.speed = config.speed <= SP_PROMPT_KR_MIN_SPEED ? 1.0 : config.speed;
+  config.speed = config.speed <= SP_PROMPT_KR_MIN_SPEED ? 1.0f : config.speed;
   config.width = config.width ? config.width : SP_PROMPT_KR_WIDTH;
   config.ex.hold_start = config.ex.hold_start ? config.ex.hold_start : SP_PROMPT_KR_HOLD_START;
   config.ex.hold_end = config.ex.hold_end ? config.ex.hold_end : SP_PROMPT_KR_HOLD_END;

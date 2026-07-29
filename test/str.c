@@ -802,27 +802,27 @@ UTEST(utf8, decode_ascii) {
 }
 
 UTEST(utf8, decode_2byte) {
-  c8 cent[] = {(c8)0xC2, (c8)0xA2};
-  ASSERT_EQ(sp_utf8_decode(cent), 0xA2);
+  u8 cent[] = {0xC2, 0xA2};
+  ASSERT_EQ(sp_utf8_decode((c8*)cent), 0xA2);
 
-  c8 edge[] = {(c8)0xDF, (c8)0xBF};
-  ASSERT_EQ(sp_utf8_decode(edge), 0x7FF);
+  u8 edge[] = {0xDF, 0xBF};
+  ASSERT_EQ(sp_utf8_decode((c8*)edge), 0x7FF);
 }
 
 UTEST(utf8, decode_3byte) {
-  c8 euro[] = {(c8)0xE2, (c8)0x82, (c8)0xAC};
-  ASSERT_EQ(sp_utf8_decode(euro), 0x20AC);
+  u8 euro[] = {0xE2, 0x82, 0xAC};
+  ASSERT_EQ(sp_utf8_decode((c8*)euro), 0x20AC);
 
-  c8 cjk[] = {(c8)0xE4, (c8)0xB8, (c8)0xAD};
-  ASSERT_EQ(sp_utf8_decode(cjk), 0x4E2D);
+  u8 cjk[] = {0xE4, 0xB8, 0xAD};
+  ASSERT_EQ(sp_utf8_decode((c8*)cjk), 0x4E2D);
 }
 
 UTEST(utf8, decode_4byte) {
-  c8 emoji[] = {(c8)0xF0, (c8)0x9F, (c8)0x98, (c8)0x80};
-  ASSERT_EQ(sp_utf8_decode(emoji), 0x1F600);
+  u8 emoji[] = {0xF0, 0x9F, 0x98, 0x80};
+  ASSERT_EQ(sp_utf8_decode((c8*)emoji), 0x1F600);
 
-  c8 max[] = {(c8)0xF4, (c8)0x8F, (c8)0xBF, (c8)0xBF};
-  ASSERT_EQ(sp_utf8_decode(max), 0x10FFFF);
+  u8 max[] = {0xF4, 0x8F, 0xBF, 0xBF};
+  ASSERT_EQ(sp_utf8_decode((c8*)max), 0x10FFFF);
 }
 
 UTEST(utf8, encode_ascii) {

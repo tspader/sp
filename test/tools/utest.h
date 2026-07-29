@@ -235,8 +235,21 @@ utest_type_printer(long long unsigned int i) {
 #define utest_type_printer(...) UTEST_PRINTF("undef")
 #endif
 
+#if defined(_MSC_VER)
+/* MSVC takes the non-__typeof__ UTEST_COND below, which tests the raw
+   expressions; assertions on compile-time constants fold to C4127. */
+#define UTEST_SURPRESS_WARNING_BEGIN                                           \
+  __pragma(warning(push)) __pragma(warning(disable : 4127))
+#define UTEST_SURPRESS_WARNING_END __pragma(warning(pop))
+
+/* UTEST_SKIP returns from the top of a test, so the body below it is
+   unreachable by design (C4702). The code generator emits that one, and it
+   ignores block-scope pragmas, so it has to go for the whole file. */
+#pragma warning(disable : 4702)
+#else
 #define UTEST_SURPRESS_WARNING_BEGIN
 #define UTEST_SURPRESS_WARNING_END
+#endif
 
 #if defined(__cplusplus)
 #define UTEST_AUTO(x) auto

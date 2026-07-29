@@ -44,6 +44,7 @@
 #define sp_square(x) SP_SQUARE(x)
 
 #define SP_MATH_PI           3.14159265358979324
+#define SP_MATH_PI_F         3.14159265358979324f
 #define SP_MATH_HALF_PI      1.57079632679489662
 #define SP_MATH_TWO_OVER_PI  0.636619772367581343
 
@@ -362,7 +363,7 @@ f32 sp_sys_acosf(f32 x) {
   if (x >  1.0f) x =  1.0f;
   f32 a = sp_abs(x);
   f32 r = sp_sqrtf(1.0f - a) * (c0 + a * (c1 + a * (c2 + a * c3)));
-  return x < 0.0f ? SP_MATH_PI - r : r;
+  return x < 0.0f ? SP_MATH_PI_F - r : r;
 }
 sp_color_t sp_color_rgb_255(u8 r, u8 g, u8 b) {
   return (sp_color_t) SP_COLOR_RGB(r, g, b);

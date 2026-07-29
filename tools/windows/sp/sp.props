@@ -24,7 +24,8 @@
       <CompileAs>CompileAsC</CompileAs>
       <DiagnosticsFormat>Column</DiagnosticsFormat>
       <UseFullPaths>true</UseFullPaths>
-      <DisableSpecificWarnings>4100</DisableSpecificWarnings>
+      <!-- 4324: deliberate SP_ALIGNED types report their own tail padding -->
+      <DisableSpecificWarnings>4100;4324</DisableSpecificWarnings>
       <TreatSpecificWarningsAsErrors>4715</TreatSpecificWarningsAsErrors>
       <PreprocessorDefinitions>SP_CLI_TEST_DIR="$(SpCliTestDir)";$(SpImplementationDefines);$(SpPreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SpRoot);$(SpRoot)\include;$(SpRoot)\tools;$(SpRoot)\test\tools;$(SpRoot)\test\tools\process;$(SpRoot)\sp;$(SpAdditionalIncludeDirectories);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
