@@ -18316,9 +18316,10 @@ sp_str_t sp_fs_join_path(sp_mem_t mem, sp_str_t a, sp_str_t b) {
 
 sp_str_t sp_fs_replace_ext(sp_mem_t mem, sp_str_t path, sp_str_t ext) {
   sp_str_t stripped = sp_str_strip_right(path, sp_fs_get_ext(path));
+  if (sp_str_back(stripped) == '.') stripped.len--;
   return sp_str_empty(ext) ?
     sp_str_copy(mem, stripped) :
-    sp_str_join(mem, path, ext, sp_str_lit("."));
+    sp_str_join(mem, stripped, ext, sp_str_lit("."));
 }
 
 sp_fs_kind_t sp_fs_lstat_kind(sp_str_t path) {
