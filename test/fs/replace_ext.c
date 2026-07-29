@@ -22,12 +22,14 @@ UTEST_F_TEARDOWN(fs_replace_ext) {
 
 UTEST_F(fs_replace_ext, cases) {
   replace_ext_case_t cases[] = {
-    { "foo.c",       "o",   "foo.c.o" },
-    { "foo.c",       "",    "foo." },
+    { "foo.c",       "o",   "foo.o" },
+    { "foo.c",       "",    "foo" },
     { "foo",         "txt", "foo.txt" },
-    { "foo.bar.baz", "c",   "foo.bar.baz.c" },
-    { ".profile",    "txt", ".profile.txt" },
-    { "foo/bar.txt", "md",  "foo/bar.txt.md" },
+    { "foo.",        "txt", "foo.txt" },
+    { "foo..txt",    "md",  "foo..md" },
+    { "foo.bar.baz", "c",   "foo.bar.c" },
+    { ".profile",    "txt", ".txt" },
+    { "foo/bar.txt", "md",  "foo/bar.md" },
   };
 
   SP_CARR_FOR(cases, i) {
