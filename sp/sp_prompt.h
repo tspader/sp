@@ -769,10 +769,13 @@ void             sp_prompt_send_progress_ptr(sp_prompt_ctx_t* ctx, void* value);
 void             sp_prompt_send_progress_bool(sp_prompt_ctx_t* ctx, bool value);
 void             sp_prompt_send_status(sp_prompt_ctx_t* ctx, const c8* text);
 void             sp_prompt_send_status_str(sp_prompt_ctx_t* ctx, sp_str_t text);
+void             sp_prompt_log(sp_prompt_ctx_t* ctx, const c8* text);
+void             sp_prompt_log_str(sp_prompt_ctx_t* ctx, sp_str_t text);
 
 // @values
 const c8*        sp_prompt_get_str(sp_prompt_ctx_t* ctx);
 bool             sp_prompt_get_bool(sp_prompt_ctx_t* ctx);
+void*            sp_prompt_get_user_data(sp_prompt_ctx_t* ctx);
 void             sp_prompt_set_str(sp_prompt_ctx_t* ctx, sp_str_t value);
 void             sp_prompt_set_bool(sp_prompt_ctx_t* ctx, bool value);
 const c8*        sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option_t* options, u32 num_options);
@@ -912,6 +915,11 @@ struct sp_prompt_ctx_t {
   struct {
     sp_mutex_t lock;
     sp_mem_arena_t* arena;
+    struct {
+      sp_da(sp_str_t) pending[2];
+      sp_mem_arena_t* arenas[2];
+      u32 active;
+    } log;
   } channel;
   struct {
     sp_sys_fd_t read;
@@ -944,6 +952,29 @@ static void sp_prompt_emit_str(sp_prompt_ctx_t* ctx, sp_str_t str) {
 }
 
 #define sp_prompt_emit(ctx, cstr) sp_prompt_emit_bytes(ctx, cstr, sizeof(cstr) - 1)
+
+static sp_da(sp_str_t) sp_prompt_log_rows(sp_mem_t mem, sp_str_t text) {
+  sp_da(sp_str_t) rows = sp_da_new(mem, sp_str_t);
+  if (sp_str_empty(text)) {
+    sp_da_push(rows, sp_zero_s(sp_str_t));
+    return rows;
+  }
+
+  sp_da(sp_str_t) pieces = sp_str_split_c8(mem, text, '\n');
+  u32 count = sp_da_size(pieces);
+  if (count > 1 && sp_str_empty(pieces[count - 1])) {
+    count--;
+  }
+
+  sp_for(it, count) {
+    sp_str_t row = pieces[it];
+    while (!sp_str_empty(row) && row.data[row.len - 1] == '\r') {
+      row.len--;
+    }
+    sp_da_push(rows, row);
+  }
+  return rows;
+}
 
 static void sp_prompt_ansi_home(sp_prompt_ctx_t* ctx) {
   sp_prompt_emit(ctx, SP_ANSI_CURSOR_HOME);
@@ -1024,8 +1055,23 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
 
   if (ctx->terminal.fds.out != SP_SYS_INVALID_FD && ctx->terminal.fds.out != 0) {
     sp_sys_write(ctx->terminal.fds.out, "\n", 1, SP_NULLPTR);
+    sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+    sp_da(sp_str_t) pending = ctx->channel.log.pending[ctx->channel.log.active];
+    sp_da_for(pending, it) {
+      sp_da(sp_str_t) rows = sp_prompt_log_rows(s.mem, pending[it]);
+      sp_da_for(rows, row_it) {
+        sp_str_t row = rows[row_it];
+        if (row.len) {
+          sp_sys_write(ctx->terminal.fds.out, row.data, row.len, SP_NULLPTR);
+        }
+        sp_sys_write(ctx->terminal.fds.out, "\n", 1, SP_NULLPTR);
+      }
+    }
+    sp_mem_end_scratch(s);
   }
   sp_mutex_destroy(&ctx->channel.lock);
+  sp_mem_arena_destroy(ctx->channel.log.arenas[0]);
+  sp_mem_arena_destroy(ctx->channel.log.arenas[1]);
   sp_mem_arena_destroy(ctx->channel.arena);
   sp_mem_arena_destroy(ctx->arena);
 }
@@ -1043,6 +1089,10 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
 
   sp_mutex_init(&ctx->channel.lock, SP_MUTEX_PLAIN);
   ctx->channel.arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
+  ctx->channel.log.arenas[0] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
+  ctx->channel.log.arenas[1] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
+  sp_da_init(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[0]);
+  sp_da_init(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[1]);
 
   // Write buffering is really important, because our rendering algorithm is extremely
   // naive. It's not much more than this:
@@ -1097,6 +1147,10 @@ bool sp_prompt_get_bool(sp_prompt_ctx_t* ctx) {
   return ctx->value.as.bool_value;
 }
 
+void* sp_prompt_get_user_data(sp_prompt_ctx_t* ctx) {
+  return ctx->user_data;
+}
+
 const c8* sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option_t* options, u32 num_options) {
   sp_io_dyn_mem_writer_t w = sp_zero;
   sp_io_dyn_mem_writer_init(ctx->mem, &w);
@@ -1121,6 +1175,9 @@ const c8* sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option
 // deduplicate them so we don't fill up the pipe with useless bytes and risk deadlocking
 // if for some reason we're emitting progress extremely fast.
 void sp_prompt_wake(sp_prompt_ctx_t* ctx) {
+  if (ctx->wake.write == SP_SYS_INVALID_FD) {
+    return;
+  }
   if (sp_atomic_s32_cas(&ctx->wake.pending, SP_PROMPT_WAKE_NOT_PENDING, SP_PROMPT_WAKE_PENDING)) {
     u8 byte = 0;
     sp_sys_write(ctx->wake.write, &byte, 1, SP_NULLPTR);
@@ -1202,6 +1259,19 @@ void sp_prompt_send_status_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
 
 void sp_prompt_send_status(sp_prompt_ctx_t* ctx, const c8* text) {
   sp_prompt_send_status_str(ctx, sp_str_view(text));
+}
+
+void sp_prompt_log_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
+  sp_mutex_lock(&ctx->channel.lock);
+  u32 active = ctx->channel.log.active;
+  sp_mem_t mem = sp_mem_arena_as_allocator(ctx->channel.log.arenas[active]);
+  sp_da_push(ctx->channel.log.pending[active], sp_str_copy(mem, text));
+  sp_mutex_unlock(&ctx->channel.lock);
+  sp_prompt_wake(ctx);
+}
+
+void sp_prompt_log(sp_prompt_ctx_t* ctx, const c8* text) {
+  sp_prompt_log_str(ctx, sp_str_view(text));
 }
 
 bool sp_prompt_submitted(sp_prompt_ctx_t* ctx) {
@@ -1414,6 +1484,43 @@ static void sp_prompt_write_row_cells(sp_prompt_ctx_t* ctx, sp_prompt_cell_t* ce
   sp_prompt_write_style(ctx, sp_zero_s(sp_prompt_style_t));
 }
 
+static bool sp_prompt_has_pending_log(sp_prompt_ctx_t* ctx) {
+  sp_mutex_lock(&ctx->channel.lock);
+  bool any = !sp_da_empty(ctx->channel.log.pending[ctx->channel.log.active]);
+  sp_mutex_unlock(&ctx->channel.lock);
+  return any;
+}
+
+static void sp_prompt_flush_log(sp_prompt_ctx_t* ctx) {
+  sp_mutex_lock(&ctx->channel.lock);
+  u32 retired = ctx->channel.log.active;
+  bool any = !sp_da_empty(ctx->channel.log.pending[retired]);
+  if (any) {
+    ctx->channel.log.active = 1 - retired;
+  }
+  sp_mutex_unlock(&ctx->channel.lock);
+
+  if (!any) {
+    return;
+  }
+
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_da_for(ctx->channel.log.pending[retired], it) {
+    sp_da(sp_str_t) rows = sp_prompt_log_rows(s.mem, ctx->channel.log.pending[retired][it]);
+    sp_da_for(rows, row_it) {
+      sp_str_t row = rows[row_it];
+      if (row.len) {
+        sp_prompt_emit_str(ctx, row);
+      }
+      sp_prompt_emit(ctx, "\r\n");
+    }
+  }
+  sp_mem_end_scratch(s);
+
+  sp_da_clear(ctx->channel.log.pending[retired]);
+  sp_mem_arena_clear(ctx->channel.log.arenas[retired]);
+}
+
 static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
   sp_prompt_emit(ctx, SP_ANSI_BEGIN_SYNC);
   // erase the previous frame; a prompt's height can change across frames, so
@@ -1427,6 +1534,8 @@ static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
   }
 
   sp_prompt_ansi_clear(ctx);
+
+  sp_prompt_flush_log(ctx);
 
   // render the styled framebuffer to the terminal
   sp_for(line, ctx->cursor_row) {
@@ -1566,7 +1675,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
     sp_prompt_dispatch_event(ctx, ctx->widget, events[it]);
   }
 
-  if (!sp_da_empty(events)) {
+  if (!sp_da_empty(events) || sp_prompt_has_pending_log(ctx)) {
     sp_prompt_render_frame(ctx, ctx->widget);
     sp_prompt_present(ctx);
   }

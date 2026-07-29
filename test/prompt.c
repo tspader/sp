@@ -2899,6 +2899,263 @@ UTEST_F(prompt, send_status_from_thread_eventually_delivered) {
   SP_EXPECT_STR_EQ_CSTR(state.last_status_value, "from worker");
 }
 
+static sp_str_t prompt_writer_bytes(struct prompt* fixture) {
+  return (sp_str_t) {
+    .data = (c8*)fixture->writer.storage.data,
+    .len = (u32)fixture->writer.storage.len,
+  };
+}
+
+static bool prompt_log_drained(sp_prompt_ctx_t* ctx) {
+  return sp_da_empty(ctx->channel.log.pending[0]) && sp_da_empty(ctx->channel.log.pending[1]);
+}
+
+UTEST_F(prompt, log_initially_empty) {
+  EXPECT_TRUE(prompt_log_drained(&ut.ctx));
+}
+
+UTEST_F(prompt, log_queues_lines_in_order_and_copies_into_arena) {
+  c8 buf[] = "transient";
+  sp_prompt_log_str(&ut.ctx, sp_str(buf, 9));
+  buf[0] = 'X';
+  sp_prompt_log(&ut.ctx, "second");
+
+  sp_da(sp_str_t) pending = ut.ctx.channel.log.pending[ut.ctx.channel.log.active];
+  ASSERT_EQ(sp_da_size(pending), 2u);
+  SP_EXPECT_STR_EQ_CSTR(pending[0], "transient");
+  SP_EXPECT_STR_EQ_CSTR(pending[1], "second");
+}
+
+UTEST_F(prompt, log_before_begin_does_not_consume_wake_token) {
+  EXPECT_EQ(ut.ctx.wake.write, SP_SYS_INVALID_FD);
+  sp_prompt_log(&ut.ctx, "early");
+  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.wake.pending), SP_PROMPT_WAKE_NOT_PENDING);
+}
+
+UTEST_F(prompt, log_flushes_on_tick_with_crlf_and_clears) {
+  probe_state_t state = sp_zero;
+  sp_prompt_log(&ut.ctx, "one");
+  sp_prompt_log(&ut.ctx, "two");
+
+  sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
+  sp_app_tick(app);
+  sp_app_tick(app);
+
+  sp_str_t bytes = prompt_writer_bytes(utest_fixture);
+  EXPECT_TRUE(sp_str_contains(bytes, sp_str_lit("one\r\ntwo\r\n")));
+  EXPECT_TRUE(prompt_log_drained(&ut.ctx));
+  EXPECT_EQ(sp_mem_arena_bytes_used(ut.ctx.channel.log.arenas[0]), 0u);
+  EXPECT_EQ(sp_mem_arena_bytes_used(ut.ctx.channel.log.arenas[1]), 0u);
+}
+
+UTEST_F(prompt, log_after_init_flushes_without_events) {
+  probe_state_t state = sp_zero;
+  sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
+  sp_app_tick(app);
+
+  sp_prompt_log(&ut.ctx, "mid-run");
+  sp_app_tick(app);
+  sp_app_tick(app);
+
+  sp_str_t bytes = prompt_writer_bytes(utest_fixture);
+  EXPECT_TRUE(sp_str_contains(bytes, sp_str_lit("mid-run\r\n")));
+  EXPECT_TRUE(prompt_log_drained(&ut.ctx));
+}
+
+UTEST_F(prompt, log_queue_reused_across_flushes) {
+  probe_state_t state = sp_zero;
+  sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
+  sp_app_tick(app);
+
+  const c8* lines[] = { "one", "two", "three" };
+  sp_carr_for(lines, it) {
+    sp_prompt_log(&ut.ctx, lines[it]);
+    sp_app_tick(app);
+    sp_app_tick(app);
+  }
+
+  sp_str_t bytes = prompt_writer_bytes(utest_fixture);
+  EXPECT_TRUE(sp_str_contains(bytes, sp_str_lit("one\r\n")));
+  EXPECT_TRUE(sp_str_contains(bytes, sp_str_lit("two\r\n")));
+  EXPECT_TRUE(sp_str_contains(bytes, sp_str_lit("three\r\n")));
+  EXPECT_TRUE(prompt_log_drained(&ut.ctx));
+}
+
+UTEST_F(prompt, log_renders_above_widget_frame) {
+  sp_prompt_log(&ut.ctx, "hello from a worker");
+
+  sp_prompt_intro_t intro = {
+    .text = sp_str_lit("hello"),
+  };
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_intro_widget(&ut.ctx, intro),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .lines = {
+        "┌  hello",
+      },
+      .composited = {
+        "hello from a worker",
+        "┌  hello",
+      },
+    },
+  });
+}
+
+UTEST_F(prompt, log_splits_embedded_newlines) {
+  sp_prompt_log(&ut.ctx, "first\nsecond");
+
+  sp_prompt_intro_t intro = {
+    .text = sp_str_lit("hello"),
+  };
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_intro_widget(&ut.ctx, intro),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .composited = {
+        "first",
+        "second",
+        "┌  hello",
+      },
+    },
+  });
+}
+
+UTEST_F(prompt, log_strips_carriage_returns_before_newlines) {
+  sp_prompt_log(&ut.ctx, "crlf\r\nnext");
+
+  sp_prompt_intro_t intro = {
+    .text = sp_str_lit("hello"),
+  };
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_intro_widget(&ut.ctx, intro),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .composited = {
+        "crlf",
+        "next",
+        "┌  hello",
+      },
+    },
+  });
+}
+
+UTEST_F(prompt, log_swallows_single_trailing_newline) {
+  sp_prompt_log(&ut.ctx, "tail\n");
+
+  sp_prompt_intro_t intro = {
+    .text = sp_str_lit("hello"),
+  };
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_intro_widget(&ut.ctx, intro),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .composited = {
+        "tail",
+        "┌  hello",
+      },
+    },
+  });
+}
+
+UTEST_F(prompt, log_empty_line_renders_blank_row) {
+  sp_prompt_log(&ut.ctx, "");
+
+  sp_prompt_intro_t intro = {
+    .text = sp_str_lit("hello"),
+  };
+
+  sp_prompt_run_case(utest_result, utest_fixture, (sp_prompt_case_t) {
+    .widget = sp_prompt_intro_widget(&ut.ctx, intro),
+    .expect = {
+      .state = SP_PROMPT_STATE_SUBMIT,
+      .composited = {
+        "",
+        "┌  hello",
+      },
+    },
+  });
+}
+
+static s32 log_thread_fn(void* userdata) {
+  thread_signal_data_t* d = (thread_signal_data_t*)userdata;
+  while (sp_atomic_s32_get(&d->ready) == 0) {
+    sp_spin_pause();
+  }
+  sp_prompt_log(d->ctx, "from worker");
+  return 0;
+}
+
+UTEST_F(prompt, log_from_thread_eventually_flushed) {
+  SKIP_ON_FREESTANDING();
+  SKIP_ON_WASM();
+  probe_state_t state = sp_zero;
+  thread_signal_data_t d = { .ctx = &ut.ctx };
+
+  sp_thread_t worker = sp_zero;
+  sp_thread_init(&worker, log_thread_fn, &d);
+
+  sp_atomic_s32_set(&d.ready, 1);
+  sp_thread_join(&worker);
+
+  sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
+  sp_app_tick(app);
+  sp_app_tick(app);
+
+  sp_str_t bytes = prompt_writer_bytes(utest_fixture);
+  EXPECT_TRUE(sp_str_contains(bytes, sp_str_lit("from worker\r\n")));
+  EXPECT_TRUE(prompt_log_drained(&ut.ctx));
+}
+
+UTEST_F(prompt, prompt_end_frees_log) {
+  sp_prompt_ctx_t* ctx = sp_alloc_type(ut.mem.tracking, sp_prompt_ctx_t);
+  sp_prompt_ctx_init(ctx, ut.mem.tracking, 80, 20);
+  sp_prompt_log(ctx, "queued but never flushed");
+  sp_prompt_complete(ctx);
+  sp_prompt_end(ctx);
+  sp_free(ut.mem.tracking, ctx, sizeof(sp_prompt_ctx_t));
+}
+
+UTEST_F(prompt, prompt_end_flushes_pending_log_to_terminal) {
+  SKIP_ON_FREESTANDING();
+  SKIP_ON_WASM();
+  sp_sys_fd_t read_end = SP_SYS_INVALID_FD;
+  sp_sys_fd_t write_end = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_pipe(&read_end, &write_end), SP_OK);
+
+  sp_prompt_ctx_t* ctx = sp_alloc_type(ut.mem.tracking, sp_prompt_ctx_t);
+  sp_prompt_ctx_init(ctx, ut.mem.tracking, 80, 20);
+  ctx->terminal.fds.out = write_end;
+  sp_prompt_log(ctx, "step 1\nstep 2\n");
+  sp_prompt_complete(ctx);
+  sp_prompt_end(ctx);
+  sp_free(ut.mem.tracking, ctx, sizeof(sp_prompt_ctx_t));
+  sp_sys_close(write_end);
+
+  c8 buf[64] = sp_zero;
+  u64 total = 0;
+  while (total < sizeof(buf)) {
+    u64 num_read = 0;
+    if (sp_sys_read(read_end, buf + total, sizeof(buf) - total, &num_read) != SP_OK || !num_read) {
+      break;
+    }
+    total += num_read;
+  }
+  sp_sys_close(read_end);
+
+  SP_EXPECT_STR_EQ_CSTR(sp_str(buf, (u32)total), "\nstep 1\nstep 2\n");
+}
+
+UTEST_F(prompt, get_user_data_returns_widget_user_data) {
+  probe_state_t state = { .fire_on_init = SP_PROMPT_STATE_SUBMIT };
+  drive_until_quit(ut.mem.arena, &ut.ctx, probe_widget(&state));
+  EXPECT_EQ(sp_prompt_get_user_data(&ut.ctx), (void*)&state);
+}
+
 UTEST_F(prompt, idle_updates_do_not_grow_persistent_arena) {
   sp_prompt_spinner_t spinner = {
     .prompt = "loading",
