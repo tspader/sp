@@ -276,7 +276,7 @@ typedef struct {
   sp_cli_shorts_t shorts;
   sp_cli_parse_mode_t mode;
   bool raw;
-  const c8* positionals [SP_CLI_MAX_ARGS];
+  sp_str_t positionals [SP_CLI_MAX_ARGS];
   u32 num_positionals;
 } sp_cli_parser_t;
 
@@ -285,20 +285,12 @@ SP_PRIVATE sp_cli_result_t sp_cli_fail(sp_cli_t* cli, sp_cli_err_t err) {
   return SP_CLI_ERR;
 }
 
-SP_PRIVATE sp_cli_result_t sp_cli_fail_ex(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* name, const c8* value) {
-  return sp_cli_fail(cli, (sp_cli_err_t) {
-    .kind = kind,
-    .name = sp_cstr_as_str(name),
-    .value = sp_cstr_as_str(value),
-  });
-}
-
 SP_PRIVATE sp_cli_result_t sp_cli_fail_named(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* name) {
-  return sp_cli_fail_ex(cli, kind, name, SP_NULLPTR);
+  return sp_cli_fail(cli, (sp_cli_err_t) { .kind = kind, .name = sp_cstr_as_str(name) });
 }
 
-SP_PRIVATE sp_cli_result_t sp_cli_fail_valued(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* value) {
-  return sp_cli_fail_ex(cli, kind, SP_NULLPTR, value);
+SP_PRIVATE sp_cli_result_t sp_cli_fail_valued(sp_cli_t* cli, sp_cli_err_kind_t kind, sp_str_t value) {
+  return sp_cli_fail(cli, (sp_cli_err_t) { .kind = kind, .value = value });
 }
 
 SP_PRIVATE u32 sp_cli_num_fixed_args(sp_cli_cmd_t* cmd) {
@@ -449,7 +441,6 @@ typedef struct {
   sp_cli_opt_t* opt;
   sp_str_t value;
   sp_cli_cmd_t* cmd;
-  const c8* arg;
   sp_cli_err_t err;
 } sp_cli_step_t;
 
@@ -532,7 +523,7 @@ SP_PRIVATE sp_cli_step_t sp_cli_read_command(sp_cli_parser_t* parser) {
 }
 
 SP_PRIVATE sp_cli_step_t sp_cli_read_arg(sp_cli_parser_t* parser) {
-  return (sp_cli_step_t) { .kind = SP_CLI_STEP_ARG, .arg = sp_cli_next(parser).data };
+  return (sp_cli_step_t) { .kind = SP_CLI_STEP_ARG, .value = sp_cli_next(parser) };
 }
 
 SP_PRIVATE sp_cli_step_t sp_cli_read_step(sp_cli_parser_t* parser) {
@@ -583,7 +574,7 @@ SP_PRIVATE sp_cli_result_t sp_cli_parse_strict(sp_cli_parser_t* parser) {
       }
       case SP_CLI_STEP_ARG: {
         if (parser->num_positionals < sp_cli_num_fixed_args(cli->cmd)) {
-          parser->positionals[parser->num_positionals++] = step.arg;
+          parser->positionals[parser->num_positionals++] = step.value;
           break;
         }
         if (sp_cli_rest_arg(cli->cmd)) {
@@ -592,7 +583,7 @@ SP_PRIVATE sp_cli_result_t sp_cli_parse_strict(sp_cli_parser_t* parser) {
           parser->it = parser->num_args;
           break;
         }
-        return sp_cli_fail_valued(cli, SP_CLI_ERR_UNEXPECTED_ARG, step.arg);
+        return sp_cli_fail_valued(cli, SP_CLI_ERR_UNEXPECTED_ARG, step.value);
       }
       case SP_CLI_STEP_ERR: {
         return sp_cli_fail(cli, step.err);
@@ -645,7 +636,7 @@ SP_PRIVATE sp_cli_result_t sp_cli_check_args(sp_cli_parser_t* parser) {
     if (!arg->name) break;
 
     if (it < parser->num_positionals) {
-      sp_cli_err_t err = sp_cli_assign(arg->kind, arg->ptr, sp_cstr_as_str(parser->positionals[it]));
+      sp_cli_err_t err = sp_cli_assign(arg->kind, arg->ptr, parser->positionals[it]);
       if (err.kind != SP_CLI_ERR_NONE) {
         err.kind = SP_CLI_ERR_INVALID_ARG;
         err.name = sp_cstr_as_str(arg->name);
