@@ -1055,8 +1055,7 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
   sp_cli_view_t view = sp_cli_view(cli);
 
   if (cli->cmd->summary) {
-    sp_io_write_cstr(io, cli->cmd->summary, SP_NULLPTR);
-    sp_fmt_io(io, "\n");
+    sp_fmt_io(io, "{}\n", sp_fmt_cstr(cli->cmd->summary));
   }
 
   sp_cli_write_synopsis(io, cli, &view);
@@ -1212,7 +1211,7 @@ SP_PRIVATE sp_cli_opt_t* sp_cli_find_cluster_opt(sp_cli_t* cli, sp_str_t cursor,
 }
 
 SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_shell_t shell, const c8** words, u32 num_words) {
-  sp_str_t prefix = num_words ? sp_cstr_as_str(words[num_words - 1]) : sp_zero_s(sp_str_t);
+  sp_str_t prefix = sp_cstr_as_str(words[num_words - 1]);
 
   if (shell == SP_CLI_SHELL_POWERSHELL && sp_str_equal_cstr(prefix, SP_CLI_COMPLETE_EMPTY)) {
     prefix = sp_zero_s(sp_str_t);
@@ -1462,7 +1461,7 @@ sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
       sp_cli_write_error(err, cli.err, cli.theme);
       sp_cli_write_synopsis(err, &cli, &view);
       sp_fmt_io(err, "\n");
-      sp_fmt_io(err, "Use {.cyan} for full usage", sp_fmt_cstr("--help"));
+      sp_fmt_io(err, "Use {.$ .$} for full usage", SP_CLI_THEME_ARGS(cli.theme.label), sp_fmt_cstr("--help"));
       sp_fmt_io(err, "\n");
       break;
     }
