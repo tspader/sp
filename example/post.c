@@ -160,11 +160,11 @@ s32 run(s32 num_args, const c8** args) {
     .summary = "Make an HTTP request",
     .opts = {
       {
-        .brief = "X", .name = "method", .kind = SP_CLI_OPT_CSTR,
+        .brief = 'X', .name = "method", .kind = SP_CLI_OPT_CSTR,
         .summary = "Request method; defaults to POST when --data is given, GET otherwise", .placeholder = "METHOD", .ptr = &post.method,
       },
       {
-        .brief = "d",
+        .brief = 'd',
         .name = "data",
         .kind = SP_CLI_OPT_CSTR,
         .summary = "Request body; @path reads the body from a file",
@@ -172,7 +172,7 @@ s32 run(s32 num_args, const c8** args) {
         .ptr = &post.data,
       },
       {
-        .brief = "t",
+        .brief = 't',
         .name = "type",
         .kind = SP_CLI_OPT_CSTR,
         .summary = "Content-Type of the request body",
@@ -180,7 +180,7 @@ s32 run(s32 num_args, const c8** args) {
         .ptr = &post.type,
       },
       {
-        .brief = "o",
+        .brief = 'o',
         .name = "output",
         .kind = SP_CLI_OPT_CSTR,
         .summary = "Write the response body to a file instead of stdout",
@@ -188,7 +188,7 @@ s32 run(s32 num_args, const c8** args) {
         .ptr = &post.output,
       },
       {
-        .brief = "v",
+        .brief = 'v',
         .name = "verbose",
         .summary = "Log the request and response summary",
         .ptr = &post.verbose,

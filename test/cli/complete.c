@@ -72,8 +72,8 @@ UTEST_F(cli_complete, options_on_dash) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN },
-        { .brief = "f", .name = "force", .kind = SP_CLI_OPT_BOOLEAN },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN },
+        { .brief = 'f', .name = "force", .kind = SP_CLI_OPT_BOOLEAN },
       },
       .handler = cli_handler_ok,
     },
@@ -85,7 +85,7 @@ UTEST_F(cli_complete, subcommand_scopes_options) {
   sp_cli_cmd_t add = {
     .name = "add",
     .opts = {
-      { .brief = "f", .name = "force", .kind = SP_CLI_OPT_BOOLEAN },
+      { .brief = 'f', .name = "force", .kind = SP_CLI_OPT_BOOLEAN },
     },
     .handler = cli_handler_ok,
   };
@@ -95,7 +95,7 @@ UTEST_F(cli_complete, subcommand_scopes_options) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN },
       },
       .commands = { &add },
     },
@@ -123,7 +123,7 @@ UTEST_F(cli_complete, pending_short_value) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "f", .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
+        { .brief = 'f', .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
       },
       .handler = cli_handler_ok,
     },
@@ -139,8 +139,8 @@ UTEST_F(cli_complete, short_cluster_inline_value_consumes_rest) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "f", .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
-        { .brief = "v", .name = "veggie", .kind = SP_CLI_OPT_STR, .complete = cli_complete_veggies },
+        { .brief = 'f', .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
+        { .brief = 'v', .name = "veggie", .kind = SP_CLI_OPT_STR, .complete = cli_complete_veggies },
       },
       .commands = { &child },
     },
@@ -194,7 +194,7 @@ UTEST_F(cli_complete, inline_short_value) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "f", .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
+        { .brief = 'f', .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
       },
       .handler = cli_handler_ok,
     },

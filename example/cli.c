@@ -158,7 +158,7 @@ s32 run(s32 num_args, const c8** args) {
       .summary = "Add a package to the project",
       .opts = {
         {
-          .brief = "f",
+          .brief = 'f',
           .name = "force",
           .kind = SP_CLI_OPT_BOOLEAN,
           .summary = "Force reinstall even if already installed",
@@ -187,7 +187,7 @@ s32 run(s32 num_args, const c8** args) {
       .summary = "Build the project from source",
       .opts = {
         {
-          .brief = "j",
+          .brief = 'j',
           .name = "jobs",
           .kind = SP_CLI_OPT_U32,
           .summary = "Number of parallel jobs",
@@ -211,7 +211,7 @@ s32 run(s32 num_args, const c8** args) {
     .summary = "An example package manager",
     .opts = {
       {
-        .brief = "v",
+        .brief = 'v',
         .name = "verbose",
         .kind = SP_CLI_OPT_BOOLEAN,
         .summary = "Show verbose output",
