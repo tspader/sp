@@ -16768,9 +16768,6 @@ done:
   return result;
 }
 
-// sp_rt.std.out/.err are wired lazily, on first use. Wiring them in sp_main would take
-// the address of sp_io_stream_writer_write in code that sp_main always reaches, which on
-// WASM forces a fd_write import even for programs that never write.
 sp_io_writer_t* sp_io_get_std_out() {
   if (!sp_rt.std.out.base.write) {
     sp_io_stream_writer_from_fd(&sp_rt.std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
