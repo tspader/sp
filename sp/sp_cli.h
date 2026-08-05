@@ -418,11 +418,9 @@ SP_PRIVATE sp_cli_result_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt
 }
 
 SP_PRIVATE bool sp_cli_take_value(sp_cli_parser_t* parser, sp_str_t* value) {
-  sp_str_t next = sp_cli_peek(parser);
   if (sp_cli_done(parser)) return false;
-  if (sp_cli_token_is_flag(next)) return false;
-  *value = next;
-  sp_cli_next(parser);
+  if (sp_cli_token_is_flag(sp_cli_peek(parser))) return false;
+  *value = sp_cli_next(parser);
   return true;
 }
 
