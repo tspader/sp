@@ -1074,32 +1074,31 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
   }
 
   if (view.num_opts) {
+    c8 buffers [SP_CLI_MAX_OPTS * SP_CLI_MAX_DEPTH][SP_CLI_MAX_LABEL];
+    sp_str_t labels [SP_CLI_MAX_OPTS * SP_CLI_MAX_DEPTH];
     u32 width = 0;
     sp_for(it, view.num_opts) {
-      c8 buffer [SP_CLI_MAX_LABEL];
-      width = sp_max(width, sp_cli_opt_label(buffer, SP_CLI_MAX_LABEL, view.opts[it]).len);
+      labels[it] = sp_cli_opt_label(buffers[it], SP_CLI_MAX_LABEL, view.opts[it]);
+      width = sp_max(width, labels[it].len);
     }
     sp_cli_write_heading(io, theme.heading, "options");
     sp_for(it, view.num_opts) {
-      c8 buffer [SP_CLI_MAX_LABEL];
-      sp_cli_opt_t* opt = view.opts[it].opt;
-      sp_str_t label = sp_cli_opt_label(buffer, SP_CLI_MAX_LABEL, view.opts[it]);
-      sp_cli_write_label(io, theme.label, label, sp_cstr_as_str(opt->summary), width);
+      sp_cli_write_label(io, theme.label, labels[it], sp_cstr_as_str(view.opts[it].opt->summary), width);
     }
   }
 
   if (view.num_args) {
+    c8 buffers [SP_CLI_MAX_ARGS][SP_CLI_MAX_LABEL];
+    sp_str_t labels [SP_CLI_MAX_ARGS];
     u32 width = 0;
     sp_for(it, view.num_args) {
-      c8 buffer [SP_CLI_MAX_LABEL];
-      width = sp_max(width, sp_cli_arg_label(buffer, SP_CLI_MAX_LABEL, view.args[it]).len);
+      labels[it] = sp_cli_arg_label(buffers[it], SP_CLI_MAX_LABEL, view.args[it]);
+      width = sp_max(width, labels[it].len);
     }
     sp_cli_write_heading(io, theme.heading, "arguments");
     sp_for(it, view.num_args) {
-      c8 buffer [SP_CLI_MAX_LABEL];
       sp_cli_arg_t* arg = view.args[it];
-      sp_str_t label = sp_cli_arg_label(buffer, SP_CLI_MAX_LABEL, arg);
-      sp_cli_write_label_hint(io, theme.label, theme.hint, label, sp_cstr_as_str(arg->summary), width, arg->arity == SP_CLI_ARG_REQUIRED);
+      sp_cli_write_label_hint(io, theme.label, theme.hint, labels[it], sp_cstr_as_str(arg->summary), width, arg->arity == SP_CLI_ARG_REQUIRED);
     }
   }
 
