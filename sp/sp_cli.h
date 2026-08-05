@@ -360,7 +360,7 @@ SP_PRIVATE sp_cli_opt_t* sp_cli_find_brief(sp_cli_t* cli, c8 brief) {
   return SP_NULLPTR;
 }
 
-SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_str_t value) {
+SP_PRIVATE bool sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_str_t value) {
   switch (kind) {
     case SP_CLI_OPT_CSTR: {
       // Every value is either a whole element of desc.args or a NUL-terminated
@@ -377,7 +377,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_BOOLEAN: {
       bool parsed = true;
       if (!sp_str_empty(value) && !sp_parse_bool_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(bool*, ptr) = parsed;
       break;
@@ -385,7 +385,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_S8: {
       s8 parsed = 0;
       if (!sp_parse_s8_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(s8*, ptr) = parsed;
       break;
@@ -393,7 +393,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_S16: {
       s16 parsed = 0;
       if (!sp_parse_s16_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(s16*, ptr) = parsed;
       break;
@@ -401,7 +401,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_S32: {
       s32 parsed = 0;
       if (!sp_parse_s32_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(s32*, ptr) = parsed;
       break;
@@ -409,7 +409,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_S64: {
       s64 parsed = 0;
       if (!sp_parse_s64_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(s64*, ptr) = parsed;
       break;
@@ -417,7 +417,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_U8: {
       u8 parsed = 0;
       if (!sp_parse_u8_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(u8*, ptr) = parsed;
       break;
@@ -425,7 +425,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_U16: {
       u16 parsed = 0;
       if (!sp_parse_u16_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(u16*, ptr) = parsed;
       break;
@@ -433,7 +433,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_U32: {
       u32 parsed = 0;
       if (!sp_parse_u32_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(u32*, ptr) = parsed;
       break;
@@ -441,13 +441,13 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
     case SP_CLI_OPT_U64: {
       u64 parsed = 0;
       if (!sp_parse_u64_ex(value, &parsed)) {
-        return (sp_cli_err_t) { .kind = SP_CLI_ERR_INVALID_VALUE, .value = value };
+        return false;
       }
       if (ptr) *sp_cast(u64*, ptr) = parsed;
       break;
     }
   }
-  return sp_zero_s(sp_cli_err_t);
+  return true;
 }
 
 SP_PRIVATE sp_cli_result_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt_t* opt, sp_str_t value) {
@@ -455,10 +455,12 @@ SP_PRIVATE sp_cli_result_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt
     return sp_cli_fail_named(parser->cli, SP_CLI_ERR_MISSING_VALUE, opt->name);
   }
 
-  sp_cli_err_t err = sp_cli_assign(opt->kind, opt->ptr, value);
-  if (err.kind != SP_CLI_ERR_NONE) {
-    err.name = sp_cstr_as_str(opt->name);
-    return sp_cli_fail(parser->cli, err);
+  if (!sp_cli_assign(opt->kind, opt->ptr, value)) {
+    return sp_cli_fail(parser->cli, (sp_cli_err_t) {
+      .kind = SP_CLI_ERR_INVALID_VALUE,
+      .name = sp_cstr_as_str(opt->name),
+      .value = value,
+    });
   }
   return SP_CLI_OK;
 }
@@ -680,11 +682,12 @@ SP_PRIVATE sp_cli_result_t sp_cli_check_args(sp_cli_parser_t* parser) {
     if (!arg->name) break;
 
     if (it < parser->num_positionals) {
-      sp_cli_err_t err = sp_cli_assign(arg->kind, arg->ptr, parser->positionals[it]);
-      if (err.kind != SP_CLI_ERR_NONE) {
-        err.kind = SP_CLI_ERR_INVALID_ARG;
-        err.name = sp_cstr_as_str(arg->name);
-        return sp_cli_fail(cli, err);
+      if (!sp_cli_assign(arg->kind, arg->ptr, parser->positionals[it])) {
+        return sp_cli_fail(cli, (sp_cli_err_t) {
+          .kind = SP_CLI_ERR_INVALID_ARG,
+          .name = sp_cstr_as_str(arg->name),
+          .value = parser->positionals[it],
+        });
       }
     }
     else if (arg->arity == SP_CLI_ARG_REQUIRED) {
@@ -800,11 +803,12 @@ SP_PRIVATE sp_cli_result_t sp_cli_resolve_env(sp_cli_t* cli) {
         continue;
       }
 
-      sp_cli_err_t err = sp_cli_assign(var->kind, var->ptr, value);
-      if (err.kind != SP_CLI_ERR_NONE) {
-        err.kind = SP_CLI_ERR_INVALID_ENV;
-        err.name = sp_cstr_as_str(var->name);
-        return sp_cli_fail(cli, err);
+      if (!sp_cli_assign(var->kind, var->ptr, value)) {
+        return sp_cli_fail(cli, (sp_cli_err_t) {
+          .kind = SP_CLI_ERR_INVALID_ENV,
+          .name = sp_cstr_as_str(var->name),
+          .value = value,
+        });
       }
     }
   }
