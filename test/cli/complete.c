@@ -188,6 +188,51 @@ UTEST_F(cli_complete, inline_long_value) {
   });
 }
 
+UTEST_F(cli_complete, bash_split_long_value) {
+  run_cli_complete_test(&ur, ut.mem.arena, (cli_complete_test_t) {
+    .words = { "root", "--fruit", "=", "a" },
+    .cmd = {
+      .name = "root",
+      .opts = {
+        { .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
+      },
+      .handler = cli_handler_ok,
+    },
+    .expect = { "apple" },
+  });
+}
+
+UTEST_F(cli_complete, bash_split_trailing_separator) {
+  run_cli_complete_test(&ur, ut.mem.arena, (cli_complete_test_t) {
+    .words = { "root", "--fruit", "=" },
+    .cmd = {
+      .name = "root",
+      .opts = {
+        { .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
+      },
+      .handler = cli_handler_ok,
+    },
+    .expect = { "apple", "banana" },
+  });
+}
+
+UTEST_F(cli_complete, bash_split_pair_in_context) {
+  run_cli_complete_test(&ur, ut.mem.arena, (cli_complete_test_t) {
+    .words = { "root", "--fruit", "=", "apple", "" },
+    .cmd = {
+      .name = "root",
+      .opts = {
+        { .name = "fruit", .kind = SP_CLI_OPT_STR, .complete = cli_complete_fruits },
+      },
+      .args = {
+        { .name = "veggie", .complete = cli_complete_veggies },
+      },
+      .handler = cli_handler_ok,
+    },
+    .expect = { "carrot", "potato" },
+  });
+}
+
 UTEST_F(cli_complete, inline_short_value) {
   run_cli_complete_test(&ur, ut.mem.arena, (cli_complete_test_t) {
     .words = { "root", "-fa" },

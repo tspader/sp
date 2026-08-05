@@ -276,18 +276,16 @@ typedef struct {
   sp_cli_shorts_t shorts;
   sp_cli_parse_mode_t mode;
   bool raw;
-  bool help;
-  sp_cli_opt_t* pending;
   const c8* positionals [SP_CLI_MAX_ARGS];
   u32 num_positionals;
 } sp_cli_parser_t;
 
-SP_PRIVATE sp_err_t sp_cli_fail(sp_cli_t* cli, sp_cli_err_t err) {
+SP_PRIVATE sp_cli_result_t sp_cli_fail(sp_cli_t* cli, sp_cli_err_t err) {
   cli->err = err;
-  return SP_ERR;
+  return SP_CLI_ERR;
 }
 
-SP_PRIVATE sp_err_t sp_cli_fail_ex(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* name, const c8* value) {
+SP_PRIVATE sp_cli_result_t sp_cli_fail_ex(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* name, const c8* value) {
   return sp_cli_fail(cli, (sp_cli_err_t) {
     .kind = kind,
     .name = sp_cstr_as_str(name),
@@ -295,11 +293,11 @@ SP_PRIVATE sp_err_t sp_cli_fail_ex(sp_cli_t* cli, sp_cli_err_kind_t kind, const 
   });
 }
 
-SP_PRIVATE sp_err_t sp_cli_fail_named(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* name) {
+SP_PRIVATE sp_cli_result_t sp_cli_fail_named(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* name) {
   return sp_cli_fail_ex(cli, kind, name, SP_NULLPTR);
 }
 
-SP_PRIVATE sp_err_t sp_cli_fail_valued(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* value) {
+SP_PRIVATE sp_cli_result_t sp_cli_fail_valued(sp_cli_t* cli, sp_cli_err_kind_t kind, const c8* value) {
   return sp_cli_fail_ex(cli, kind, SP_NULLPTR, value);
 }
 
@@ -414,7 +412,7 @@ SP_PRIVATE sp_cli_err_t sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_st
   return sp_zero_s(sp_cli_err_t);
 }
 
-SP_PRIVATE sp_err_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt_t* opt, sp_str_t value) {
+SP_PRIVATE sp_cli_result_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt_t* opt, sp_str_t value) {
   if (opt->kind != SP_CLI_OPT_BOOLEAN && sp_str_empty(value)) {
     return sp_cli_fail_named(parser->cli, SP_CLI_ERR_MISSING_VALUE, opt->name);
   }
@@ -424,7 +422,7 @@ SP_PRIVATE sp_err_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt_t* opt
     err.name = sp_cstr_as_str(opt->name);
     return sp_cli_fail(parser->cli, err);
   }
-  return SP_OK;
+  return SP_CLI_OK;
 }
 
 SP_PRIVATE bool sp_cli_take_value(sp_cli_parser_t* parser, sp_str_t* value) {
@@ -469,6 +467,17 @@ SP_PRIVATE sp_cli_step_t sp_cli_read_long(sp_cli_parser_t* parser) {
       .kind = SP_CLI_STEP_ERR,
       .err = { .kind = SP_CLI_ERR_UNKNOWN_OPT, .name = name },
     };
+  }
+
+  // Completion words arrive pre-split by the shell: bash breaks --name=value
+  // into three words at the '=' (it's in COMP_WORDBREAKS), so in complete mode
+  // a bare '=' after a long option is the separator, not a value
+  if (parser->mode == SP_CLI_PARSE_COMPLETE && !has_value && sp_str_equal_cstr(sp_cli_peek(parser), "=")) {
+    sp_cli_next(parser);
+    if (sp_cli_done(parser)) {
+      return (sp_cli_step_t) { .kind = SP_CLI_STEP_OPT_PENDING, .opt = opt };
+    }
+    return (sp_cli_step_t) { .kind = SP_CLI_STEP_OPT, .opt = opt, .value = sp_cli_next(parser) };
   }
 
   if (!has_value && opt->kind != SP_CLI_OPT_BOOLEAN) {
@@ -544,12 +553,10 @@ SP_PRIVATE sp_cli_step_t sp_cli_read_step(sp_cli_parser_t* parser) {
   return sp_cli_read_arg(parser);
 }
 
-SP_PRIVATE sp_err_t sp_cli_parse_tokens(sp_cli_parser_t* parser) {
+SP_PRIVATE sp_cli_result_t sp_cli_parse_strict(sp_cli_parser_t* parser) {
   sp_cli_t* cli = parser->cli;
-  bool strict = parser->mode == SP_CLI_PARSE_STRICT;
 
   while (!sp_cli_done(parser) || !sp_cli_shorts_done(&parser->shorts)) {
-    parser->pending = SP_NULLPTR;
     sp_cli_step_t step = sp_cli_read_step(parser);
 
     switch (step.kind) {
@@ -558,32 +565,21 @@ SP_PRIVATE sp_err_t sp_cli_parse_tokens(sp_cli_parser_t* parser) {
         break;
       }
       case SP_CLI_STEP_HELP: {
-        if (strict) {
-          parser->help = true;
-          return SP_OK;
-        }
-        break;
+        return SP_CLI_HELP;
       }
       case SP_CLI_STEP_OPT: {
-        if (strict) {
-          sp_try(sp_cli_assign_opt(parser, step.opt, step.value));
-        }
+        if (sp_cli_assign_opt(parser, step.opt, step.value)) return SP_CLI_ERR;
         break;
       }
       case SP_CLI_STEP_OPT_PENDING: {
-        if (!strict) {
-          parser->pending = step.opt;
-          break;
-        }
         return sp_cli_fail_named(cli, SP_CLI_ERR_MISSING_VALUE, step.opt->name);
       }
       case SP_CLI_STEP_COMMAND: {
-        if (cli->depth < SP_CLI_MAX_DEPTH) {
-          sp_cli_push_cmd(cli, step.cmd);
-          break;
+        if (cli->depth == SP_CLI_MAX_DEPTH) {
+          return sp_cli_fail_named(cli, SP_CLI_ERR_MAX_DEPTH, step.cmd->name);
         }
-        if (!strict) break;
-        return sp_cli_fail_named(cli, SP_CLI_ERR_MAX_DEPTH, step.cmd->name);
+        sp_cli_push_cmd(cli, step.cmd);
+        break;
       }
       case SP_CLI_STEP_ARG: {
         if (parser->num_positionals < sp_cli_num_fixed_args(cli->cmd)) {
@@ -596,22 +592,52 @@ SP_PRIVATE sp_err_t sp_cli_parse_tokens(sp_cli_parser_t* parser) {
           parser->it = parser->num_args;
           break;
         }
-        if (!strict) {
-          parser->num_positionals++;
-          break;
-        }
         return sp_cli_fail_valued(cli, SP_CLI_ERR_UNEXPECTED_ARG, step.arg);
       }
       case SP_CLI_STEP_ERR: {
-        if (strict) return sp_cli_fail(cli, step.err);
+        return sp_cli_fail(cli, step.err);
+      }
+    }
+  }
+  return SP_CLI_OK;
+}
+
+SP_PRIVATE sp_cli_opt_t* sp_cli_parse_complete(sp_cli_parser_t* parser) {
+  parser->mode = SP_CLI_PARSE_COMPLETE;
+
+  sp_cli_t* cli = parser->cli;
+  sp_cli_opt_t* pending = SP_NULLPTR;
+
+  while (!sp_cli_done(parser) || !sp_cli_shorts_done(&parser->shorts)) {
+    sp_cli_step_t step = sp_cli_read_step(parser);
+    pending = step.kind == SP_CLI_STEP_OPT_PENDING ? step.opt : SP_NULLPTR;
+
+    switch (step.kind) {
+      case SP_CLI_STEP_ESCAPE: {
+        parser->raw = true;
+        break;
+      }
+      case SP_CLI_STEP_COMMAND: {
+        if (cli->depth < SP_CLI_MAX_DEPTH) sp_cli_push_cmd(cli, step.cmd);
+        break;
+      }
+      case SP_CLI_STEP_ARG: {
+        if (parser->num_positionals >= sp_cli_num_fixed_args(cli->cmd) && sp_cli_rest_arg(cli->cmd)) {
+          parser->it = parser->num_args;
+          break;
+        }
+        parser->num_positionals++;
+        break;
+      }
+      default: {
         break;
       }
     }
   }
-  return SP_OK;
+  return pending;
 }
 
-SP_PRIVATE sp_err_t sp_cli_check_args(sp_cli_parser_t* parser) {
+SP_PRIVATE sp_cli_result_t sp_cli_check_args(sp_cli_parser_t* parser) {
   sp_cli_t* cli = parser->cli;
 
   sp_carr_for(cli->cmd->args, it) {
@@ -630,7 +656,7 @@ SP_PRIVATE sp_err_t sp_cli_check_args(sp_cli_parser_t* parser) {
       return sp_cli_fail_named(cli, SP_CLI_ERR_MISSING_ARG, arg->name);
     }
   }
-  return SP_OK;
+  return SP_CLI_OK;
 }
 
 typedef struct {
@@ -737,7 +763,7 @@ sp_str_t sp_cli_err_kind_to_str(sp_cli_err_kind_t kind) {
 
 SP_PRIVATE sp_cli_theme_t sp_cli_theme_resolve(sp_cli_theme_t theme);
 
-SP_PRIVATE sp_err_t sp_cli_resolve_env(sp_cli_t* cli) {
+SP_PRIVATE sp_cli_result_t sp_cli_resolve_env(sp_cli_t* cli) {
   sp_for(i, cli->depth) {
     sp_cli_cmd_t* cmd = cli->path[i];
     sp_carr_for(cmd->env, it) {
@@ -760,7 +786,7 @@ SP_PRIVATE sp_err_t sp_cli_resolve_env(sp_cli_t* cli) {
       }
     }
   }
-  return SP_OK;
+  return SP_CLI_OK;
 }
 
 sp_cli_t sp_cli_parse(sp_cli_desc_t desc) {
@@ -774,28 +800,21 @@ sp_cli_t sp_cli_parse(sp_cli_desc_t desc) {
   parser.args = desc.num_args > 1 ? desc.args + 1 : SP_NULLPTR;
   parser.num_args = desc.num_args > 1 ? sp_cast(u32, desc.num_args - 1) : 0;
 
-  if (sp_cli_parse_tokens(&parser)) {
-    cli.status = SP_CLI_ERR;
-  }
-  else if (parser.help) {
+  cli.status = sp_cli_parse_strict(&parser);
+  if (cli.status != SP_CLI_OK) return cli;
+
+  cli.status = sp_cli_check_args(&parser);
+  if (cli.status != SP_CLI_OK) return cli;
+
+  if (!cli.cmd->handler) {
     cli.status = SP_CLI_HELP;
-  }
-  else if (sp_cli_check_args(&parser)) {
-    cli.status = SP_CLI_ERR;
-  }
-  else if (!cli.cmd->handler) {
-    cli.status = SP_CLI_HELP;
-  }
-  else if (sp_cli_resolve_env(&cli)) {
-    // Only resolve the environment if everything else parsed; otherwise,
-    // the error produced by a missing required env var swallows genuine
-    // requests for help
-    cli.status = SP_CLI_ERR;
-  }
-  else {
-    cli.status = SP_CLI_OK;
+    return cli;
   }
 
+  // Only resolve the environment once everything else parsed; otherwise,
+  // the error produced by a missing required env var swallows genuine
+  // requests for help
+  cli.status = sp_cli_resolve_env(&cli);
   return cli;
 }
 
@@ -1177,12 +1196,16 @@ SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_
 
   sp_cli_parser_t parser = sp_zero_s(sp_cli_parser_t);
   parser.cli = &cli;
-  parser.mode = SP_CLI_PARSE_COMPLETE;
   parser.args = num_words > 1 ? words + 1 : SP_NULLPTR;
   parser.num_args = num_words > 1 ? num_words - 2 : 0;
 
-  sp_err_t parsed = sp_cli_parse_tokens(&parser);
-  sp_assert(parsed == SP_OK);
+  sp_cli_opt_t* pending = sp_cli_parse_complete(&parser);
+
+  // When the cursor sits right after --name=, bash reports the '=' itself as
+  // the cursor word; the readline word being completed is empty
+  if (shell == SP_CLI_SHELL_BASH && pending && sp_str_equal_cstr(prefix, "=")) {
+    prefix = sp_zero_s(sp_str_t);
+  }
 
   sp_cli_complete_t ctx = {
     .shell = shell,
@@ -1191,8 +1214,8 @@ SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_
     .user_data = desc.user_data,
   };
 
-  if (parser.pending) {
-    if (parser.pending->complete) parser.pending->complete(&ctx);
+  if (pending) {
+    if (pending->complete) pending->complete(&ctx);
     return;
   }
 
