@@ -100,7 +100,7 @@ UTEST_F(cli_usage, option) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "f", .name = "force", .summary = "Force the operation" },
+        { .brief = 'f', .name = "force", .summary = "Force the operation" },
       },
     },
   });
@@ -140,9 +140,9 @@ UTEST_F(cli_usage, option_alignment) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "f", .name = "force", .summary = "Short label" },
+        { .brief = 'f', .name = "force", .summary = "Short label" },
         { .name = "dry-run", .summary = "No brief, wider" },
-        { .brief = "o", .name = "output", .summary = "Brief and placeholder", .placeholder = "PATH" },
+        { .brief = 'o', .name = "output", .summary = "Brief and placeholder", .placeholder = "PATH" },
       },
     },
   });
@@ -235,7 +235,7 @@ UTEST_F(cli_usage, no_summary) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "f", .name = "force" },
+        { .brief = 'f', .name = "force" },
       },
     },
   });
@@ -263,7 +263,7 @@ UTEST_F(cli_usage, option_brief_shadowed) {
   static sp_cli_cmd_t root = {
     .name = "test",
     .opts = {
-      { .brief = "v", .name = "verbose", .summary = "Verbose output" },
+      { .brief = 'v', .name = "verbose", .summary = "Verbose output" },
     },
   };
 
@@ -273,7 +273,7 @@ UTEST_F(cli_usage, option_brief_shadowed) {
     .cmd = {
       .name = "sub",
       .opts = {
-        { .brief = "v", .name = "voltage", .summary = "Peak voltage" },
+        { .brief = 'v', .name = "voltage", .summary = "Peak voltage" },
       },
     },
   });
@@ -289,7 +289,7 @@ UTEST_F(cli_usage, everything) {
       .name = "pkg",
       .summary = "A package manager",
       .opts = {
-        { .brief = "v", .name = "verbose", .summary = "Verbose output" },
+        { .brief = 'v', .name = "verbose", .summary = "Verbose output" },
         { .name = "config", .summary = "Config file", .placeholder = "PATH" },
       },
       .args = {

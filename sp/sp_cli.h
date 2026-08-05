@@ -115,7 +115,7 @@ typedef struct {
 } sp_cli_arg_t;
 
 typedef struct {
-  const c8* brief;
+  c8 brief;
   const c8* name;
   sp_cli_value_kind_t kind;
   const c8* summary;
@@ -364,7 +364,7 @@ SP_PRIVATE sp_cli_opt_t* sp_cli_find_brief(sp_cli_t* cli, c8 brief) {
     sp_carr_for(cmd->opts, i) {
       sp_cli_opt_t* opt = &cmd->opts[i];
       if (!opt->name) break;
-      if (opt->brief && opt->brief[0] == brief) return opt;
+      if (opt->brief == brief) return opt;
     }
   }
   return SP_NULLPTR;
@@ -644,7 +644,7 @@ SP_PRIVATE sp_str_t sp_cli_opt_label(c8* buf, u32 len, sp_cli_view_opt_t entry) 
   sp_io_mem_writer_from_buffer(&label, buf, len);
 
   if (entry.brief) {
-    sp_fmt_io(&label.base, "-{}, ", sp_fmt_cstr(opt->brief));
+    sp_fmt_io(&label.base, "-{}, ", sp_fmt_char(opt->brief));
   }
   else {
     sp_fmt_io(&label.base, "    ");
@@ -943,11 +943,11 @@ typedef struct {
 } sp_cli_view_t;
 
 SP_PRIVATE void sp_cli_view_put_opt(sp_cli_view_t* view, sp_cli_opt_t* opt) {
-  bool brief = opt->brief != SP_NULLPTR;
+  bool brief = opt->brief != 0;
   sp_for(it, view->num_opts) {
     sp_cli_opt_t* seen = view->opts[it].opt;
     if (sp_cstr_equal(opt->name, seen->name)) return;
-    if (brief && seen->brief && seen->brief[0] == opt->brief[0]) brief = false;
+    if (brief && seen->brief == opt->brief) brief = false;
   }
   view->opts[view->num_opts++] = (sp_cli_view_opt_t) { .opt = opt, .brief = brief };
 }

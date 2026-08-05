@@ -130,7 +130,7 @@ s32 run(s32 num_args, const c8** args) {
     .summary = "Fetch a url over https and save the response body to a file",
     .opts = {
       {
-        .brief = "o",
+        .brief = 'o',
         .name = "output",
         .kind = SP_CLI_OPT_CSTR,
         .summary = "Write the response body to this file instead of inferring one from the url",

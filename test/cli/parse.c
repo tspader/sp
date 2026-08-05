@@ -202,7 +202,7 @@ UTEST_F(cli_parse, bool_opt_brief) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
     .expect = {
@@ -217,7 +217,7 @@ UTEST_F(cli_parse, bool_opt_long) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
     .expect = {
@@ -232,8 +232,8 @@ UTEST_F(cli_parse, bool_opt_cluster) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
-        { .brief = "f", .name = "force", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[1] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'f', .name = "force", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[1] },
       },
     },
     .expect = {
@@ -248,7 +248,7 @@ UTEST_F(cli_parse, cluster_unknown_brief) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
     .expect = {
@@ -265,7 +265,7 @@ UTEST_F(cli_parse, string_opt_brief) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[0] },
+        { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[0] },
       },
     },
     .expect = {
@@ -280,7 +280,7 @@ UTEST_F(cli_parse, string_opt_brief_attached) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[0] },
+        { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[0] },
       },
     },
     .expect = {
@@ -295,7 +295,7 @@ UTEST_F(cli_parse, string_opt_long_eq) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[0] },
+        { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[0] },
       },
     },
     .expect = {
@@ -310,7 +310,7 @@ UTEST_F(cli_parse, string_opt_long_space) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[0] },
+        { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[0] },
       },
     },
     .expect = {
@@ -325,7 +325,7 @@ UTEST_F(cli_parse, string_opt_missing_value_at_end) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[0] },
+        { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[0] },
       },
     },
     .expect = {
@@ -341,8 +341,8 @@ UTEST_F(cli_parse, string_opt_missing_value_before_opt) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[0] },
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
     .expect = {
@@ -358,8 +358,8 @@ UTEST_F(cli_parse, string_opt_missing_value_before_brief) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[0] },
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
     .expect = {
@@ -375,7 +375,7 @@ UTEST_F(cli_parse, int_opt) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
+        { .brief = 'j', .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
       },
     },
     .expect = {
@@ -390,7 +390,7 @@ UTEST_F(cli_parse, int_opt_negative_eq) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
+        { .brief = 'j', .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
       },
     },
     .expect = {
@@ -405,7 +405,7 @@ UTEST_F(cli_parse, int_opt_invalid) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "j", .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
+        { .brief = 'j', .name = "jobs", .kind = SP_CLI_OPT_S64, .ptr = &cli_binds.nums[0] },
       },
     },
     .expect = {
@@ -433,9 +433,9 @@ UTEST_F(cli_parse, brief_after_long_only_opt) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "f", .name = "force", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'f', .name = "force", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
         { .name = "bin", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[1] },
-        { .brief = "m", .name = "mode", .ptr = &cli_binds.strs[0] },
+        { .brief = 'm', .name = "mode", .ptr = &cli_binds.strs[0] },
       },
     },
     .expect = {
@@ -450,7 +450,7 @@ UTEST_F(cli_parse, opt_after_positional) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .args = {
         { .name = "file", .ptr = &cli_binds.strs[0] },
@@ -469,8 +469,8 @@ UTEST_F(cli_parse, mixed_opts_and_args) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
-        { .brief = "o", .name = "output", .ptr = &cli_binds.strs[1] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[1] },
       },
       .args = {
         { .name = "file", .ptr = &cli_binds.strs[0] },
@@ -531,7 +531,7 @@ UTEST_F(cli_parse, opts_at_each_level) {
   sp_cli_cmd_t install = {
     .name = "install",
     .opts = {
-      { .brief = "f", .name = "force", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[1] },
+      { .brief = 'f', .name = "force", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[1] },
     },
     .handler = cli_handler_ok,
   };
@@ -542,7 +542,7 @@ UTEST_F(cli_parse, opts_at_each_level) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .commands = { &tool },
     },
@@ -601,7 +601,7 @@ UTEST_F(cli_parse, parent_opt_after_command) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .commands = { &build },
     },
@@ -620,7 +620,7 @@ UTEST_F(cli_parse, parent_brief_after_command) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .commands = { &build },
     },
@@ -635,7 +635,7 @@ UTEST_F(cli_parse, child_opt_shadows_parent) {
   sp_cli_cmd_t build = {
     .name = "build",
     .opts = {
-      { .brief = "m", .name = "mode", .ptr = &cli_binds.strs[1] },
+      { .brief = 'm', .name = "mode", .ptr = &cli_binds.strs[1] },
     },
     .handler = cli_handler_ok,
   };
@@ -645,7 +645,7 @@ UTEST_F(cli_parse, child_opt_shadows_parent) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "m", .name = "mode", .ptr = &cli_binds.strs[0] },
+        { .brief = 'm', .name = "mode", .ptr = &cli_binds.strs[0] },
       },
       .commands = { &build },
     },
@@ -693,7 +693,7 @@ UTEST_F(cli_parse, unknown_opt_misses_all_scopes) {
     .cmd = {
       .name = "root",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .commands = { &build },
     },
@@ -710,7 +710,7 @@ UTEST_F(cli_parse, bool_opt_explicit_true) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
     .expect = {
@@ -728,7 +728,7 @@ UTEST_F(cli_parse, bool_opt_explicit_false) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
   });
@@ -740,7 +740,7 @@ UTEST_F(cli_parse, bool_opt_invalid_value) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
     .expect = {
@@ -757,7 +757,7 @@ UTEST_F(cli_parse, bool_opt_does_not_consume_token) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .args = {
         { .name = "path", .ptr = &cli_binds.strs[0] },
@@ -776,7 +776,7 @@ UTEST_F(cli_parse, double_dash_ends_options) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .args = {
         { .name = "path", .ptr = &cli_binds.strs[0] },
@@ -847,7 +847,7 @@ UTEST_F(cli_parse, rest_after_double_dash) {
     .cmd = {
       .name = "run",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .args = {
         { .name = "entry", .ptr = &cli_binds.strs[0] },
@@ -867,7 +867,7 @@ UTEST_F(cli_parse, rest_stops_option_parsing) {
     .cmd = {
       .name = "run",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .args = {
         { .name = "entry", .ptr = &cli_binds.strs[0] },
@@ -887,7 +887,7 @@ UTEST_F(cli_parse, opts_before_rest_parse) {
     .cmd = {
       .name = "run",
       .opts = {
-        { .brief = "v", .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'v', .name = "verbose", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
       .args = {
         { .name = "entry", .ptr = &cli_binds.strs[0] },
@@ -995,7 +995,7 @@ UTEST_F(cli_parse, attached_values_are_argv_tails) {
     .name = "run",
     .opts = {
       { .name = "mode", .ptr = &cli_binds.strs[0] },
-      { .brief = "o", .name = "output", .ptr = &cli_binds.strs[1] },
+      { .brief = 'o', .name = "output", .ptr = &cli_binds.strs[1] },
     },
     .handler = cli_handler_ok,
   };
@@ -1036,7 +1036,7 @@ UTEST_F(cli_parse, declared_help_opt_wins) {
     .cmd = {
       .name = "test",
       .opts = {
-        { .brief = "h", .name = "help", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
+        { .brief = 'h', .name = "help", .kind = SP_CLI_OPT_BOOLEAN, .ptr = &cli_binds.flags[0] },
       },
     },
     .expect = {
