@@ -205,32 +205,24 @@ SP_API sp_cli_result_t sp_cli_set_error_c(sp_cli_t* cli, const c8* error);
 #if defined(SP_CLI_IMPLEMENTATION) && !defined(SP_CLI_IMPLEMENTED)
 #define SP_CLI_IMPLEMENTED
 
-typedef struct {
-  sp_str_t raw;
-} sp_cli_token_t;
-
-SP_PRIVATE sp_cli_token_t sp_cli_token(sp_str_t raw) {
-  return (sp_cli_token_t) { .raw = raw };
+SP_PRIVATE bool sp_cli_token_is_escape(sp_str_t tok) {
+  return sp_str_equal(tok, sp_str_lit("--"));
 }
 
-SP_PRIVATE bool sp_cli_token_is_escape(sp_cli_token_t tok) {
-  return sp_str_equal(tok.raw, sp_str_lit("--"));
+SP_PRIVATE bool sp_cli_token_is_long(sp_str_t tok) {
+  return sp_str_starts_with(tok, sp_str_lit("--")) && !sp_cli_token_is_escape(tok);
 }
 
-SP_PRIVATE bool sp_cli_token_is_long(sp_cli_token_t tok) {
-  return sp_str_starts_with(tok.raw, sp_str_lit("--")) && !sp_cli_token_is_escape(tok);
+SP_PRIVATE bool sp_cli_token_is_short(sp_str_t tok) {
+  return tok.len > 1 && sp_str_at(tok, 0) == '-' && sp_str_at(tok, 1) != '-';
 }
 
-SP_PRIVATE bool sp_cli_token_is_short(sp_cli_token_t tok) {
-  return tok.raw.len > 1 && sp_str_at(tok.raw, 0) == '-' && sp_str_at(tok.raw, 1) != '-';
+SP_PRIVATE bool sp_cli_token_is_flag(sp_str_t tok) {
+  return tok.len > 1 && sp_str_at(tok, 0) == '-';
 }
 
-SP_PRIVATE bool sp_cli_token_is_flag(sp_cli_token_t tok) {
-  return tok.raw.len > 1 && sp_str_at(tok.raw, 0) == '-';
-}
-
-SP_PRIVATE sp_str_t sp_cli_token_to_long(sp_cli_token_t tok, sp_str_t* value, bool* has_value) {
-  sp_str_t body = sp_str_strip_left(tok.raw, sp_str_lit("--"));
+SP_PRIVATE sp_str_t sp_cli_token_to_long(sp_str_t tok, sp_str_t* value, bool* has_value) {
+  sp_str_t body = sp_str_strip_left(tok, sp_str_lit("--"));
   s32 eq = sp_str_find_c8(body, '=');
   if (eq == SP_STR_NO_MATCH) {
     *value = sp_zero_s(sp_str_t);
@@ -247,8 +239,8 @@ typedef struct {
   u32 it;
 } sp_cli_shorts_t;
 
-SP_PRIVATE sp_cli_shorts_t sp_cli_token_to_short(sp_cli_token_t tok) {
-  return (sp_cli_shorts_t) { .cluster = sp_str_strip_left(tok.raw, sp_str_lit("-")) };
+SP_PRIVATE sp_cli_shorts_t sp_cli_token_to_short(sp_str_t tok) {
+  return (sp_cli_shorts_t) { .cluster = sp_str_strip_left(tok, sp_str_lit("-")) };
 }
 
 SP_PRIVATE bool sp_cli_shorts_done(sp_cli_shorts_t* shorts) {
@@ -271,27 +263,6 @@ SP_PRIVATE sp_str_t sp_cli_shorts_next_value(sp_cli_shorts_t* shorts) {
   return value;
 }
 
-typedef struct {
-  const c8** args;
-  u32 num_args;
-  u32 it;
-} sp_cli_lexer_t;
-
-SP_PRIVATE bool sp_cli_lexer_done(sp_cli_lexer_t* lex) {
-  return lex->it >= lex->num_args;
-}
-
-SP_PRIVATE sp_cli_token_t sp_cli_lexer_peek(sp_cli_lexer_t* lex) {
-  if (sp_cli_lexer_done(lex)) return sp_cli_token(sp_zero_s(sp_str_t));
-  return sp_cli_token(sp_cstr_as_str(lex->args[lex->it]));
-}
-
-SP_PRIVATE sp_cli_token_t sp_cli_lexer_next(sp_cli_lexer_t* lex) {
-  sp_cli_token_t tok = sp_cli_lexer_peek(lex);
-  lex->it++;
-  return tok;
-}
-
 typedef enum {
   SP_CLI_PARSE_STRICT,
   SP_CLI_PARSE_COMPLETE,
@@ -299,7 +270,9 @@ typedef enum {
 
 typedef struct {
   sp_cli_t* cli;
-  sp_cli_lexer_t lex;
+  const c8** args;
+  u32 num_args;
+  u32 it;
   sp_cli_shorts_t shorts;
   sp_cli_parse_mode_t mode;
   bool raw;
@@ -359,15 +332,18 @@ SP_PRIVATE void sp_cli_push_cmd(sp_cli_t* cli, sp_cli_cmd_t* cmd) {
 }
 
 SP_PRIVATE bool sp_cli_done(sp_cli_parser_t* parser) {
-  return sp_cli_lexer_done(&parser->lex);
+  return parser->it >= parser->num_args;
 }
 
-SP_PRIVATE sp_cli_token_t sp_cli_peek(sp_cli_parser_t* parser) {
-  return sp_cli_lexer_peek(&parser->lex);
+SP_PRIVATE sp_str_t sp_cli_peek(sp_cli_parser_t* parser) {
+  if (sp_cli_done(parser)) return sp_zero_s(sp_str_t);
+  return sp_cstr_as_str(parser->args[parser->it]);
 }
 
-SP_PRIVATE sp_cli_token_t sp_cli_next(sp_cli_parser_t* parser) {
-  return sp_cli_lexer_next(&parser->lex);
+SP_PRIVATE sp_str_t sp_cli_next(sp_cli_parser_t* parser) {
+  sp_str_t tok = sp_cli_peek(parser);
+  parser->it++;
+  return tok;
 }
 
 SP_PRIVATE sp_cli_opt_t* sp_cli_find_opt(sp_cli_t* cli, sp_str_t name) {
@@ -452,10 +428,10 @@ SP_PRIVATE sp_err_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt_t* opt
 }
 
 SP_PRIVATE bool sp_cli_take_value(sp_cli_parser_t* parser, sp_str_t* value) {
-  sp_cli_token_t next = sp_cli_peek(parser);
+  sp_str_t next = sp_cli_peek(parser);
   if (sp_cli_done(parser)) return false;
   if (sp_cli_token_is_flag(next)) return false;
-  *value = next.raw;
+  *value = next;
   sp_cli_next(parser);
   return true;
 }
@@ -531,32 +507,30 @@ SP_PRIVATE sp_cli_step_t sp_cli_read_brief(sp_cli_parser_t* parser) {
 }
 
 SP_PRIVATE sp_cli_step_t sp_cli_read_command(sp_cli_parser_t* parser) {
-  sp_cli_token_t tok = sp_cli_next(parser);
+  sp_str_t tok = sp_cli_next(parser);
 
   sp_carr_for(parser->cli->cmd->commands, it) {
     sp_cli_cmd_t* sub = parser->cli->cmd->commands[it];
     if (!sub) break;
-    if (sp_str_equal_cstr(tok.raw, sub->name)) {
+    if (sp_str_equal_cstr(tok, sub->name)) {
       return (sp_cli_step_t) { .kind = SP_CLI_STEP_COMMAND, .cmd = sub };
     }
   }
   return (sp_cli_step_t) {
     .kind = SP_CLI_STEP_ERR,
-    .err = { .kind = SP_CLI_ERR_UNKNOWN_COMMAND, .name = tok.raw },
+    .err = { .kind = SP_CLI_ERR_UNKNOWN_COMMAND, .name = tok },
   };
 }
 
 SP_PRIVATE sp_cli_step_t sp_cli_read_arg(sp_cli_parser_t* parser) {
-  const c8* arg = parser->lex.args[parser->lex.it];
-  sp_cli_next(parser);
-  return (sp_cli_step_t) { .kind = SP_CLI_STEP_ARG, .arg = arg };
+  return (sp_cli_step_t) { .kind = SP_CLI_STEP_ARG, .arg = sp_cli_next(parser).data };
 }
 
 SP_PRIVATE sp_cli_step_t sp_cli_read_step(sp_cli_parser_t* parser) {
   if (!sp_cli_shorts_done(&parser->shorts)) return sp_cli_read_brief(parser);
   if (parser->raw) return sp_cli_read_arg(parser);
 
-  sp_cli_token_t tok = sp_cli_peek(parser);
+  sp_str_t tok = sp_cli_peek(parser);
   if (sp_cli_token_is_escape(tok)) {
     sp_cli_next(parser);
     return (sp_cli_step_t) { .kind = SP_CLI_STEP_ESCAPE };
@@ -617,9 +591,9 @@ SP_PRIVATE sp_err_t sp_cli_parse_tokens(sp_cli_parser_t* parser) {
           break;
         }
         if (sp_cli_rest_arg(cli->cmd)) {
-          cli->rest = parser->lex.args + parser->lex.it - 1;
-          cli->num_rest = parser->lex.num_args - parser->lex.it + 1;
-          parser->lex.it = parser->lex.num_args;
+          cli->rest = parser->args + parser->it - 1;
+          cli->num_rest = parser->num_args - parser->it + 1;
+          parser->it = parser->num_args;
           break;
         }
         if (!strict) {
@@ -797,8 +771,8 @@ sp_cli_t sp_cli_parse(sp_cli_desc_t desc) {
 
   sp_cli_parser_t parser = sp_zero_s(sp_cli_parser_t);
   parser.cli = &cli;
-  parser.lex.args = desc.num_args > 1 ? desc.args + 1 : SP_NULLPTR;
-  parser.lex.num_args = desc.num_args > 1 ? sp_cast(u32, desc.num_args - 1) : 0;
+  parser.args = desc.num_args > 1 ? desc.args + 1 : SP_NULLPTR;
+  parser.num_args = desc.num_args > 1 ? sp_cast(u32, desc.num_args - 1) : 0;
 
   if (sp_cli_parse_tokens(&parser)) {
     cli.status = SP_CLI_ERR;
@@ -827,7 +801,6 @@ sp_cli_t sp_cli_parse(sp_cli_desc_t desc) {
 
 sp_cli_result_t sp_cli_dispatch(sp_cli_t* cli) {
   if (cli->status) return cli->status;
-  if (!cli->cmd->handler) return cli->status;
   return cli->cmd->handler(cli);
 }
 
@@ -1205,8 +1178,8 @@ SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_
   sp_cli_parser_t parser = sp_zero_s(sp_cli_parser_t);
   parser.cli = &cli;
   parser.mode = SP_CLI_PARSE_COMPLETE;
-  parser.lex.args = num_words > 1 ? words + 1 : SP_NULLPTR;
-  parser.lex.num_args = num_words > 1 ? num_words - 2 : 0;
+  parser.args = num_words > 1 ? words + 1 : SP_NULLPTR;
+  parser.num_args = num_words > 1 ? num_words - 2 : 0;
 
   sp_err_t parsed = sp_cli_parse_tokens(&parser);
   sp_assert(parsed == SP_OK);
@@ -1228,12 +1201,10 @@ SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_
     return;
   }
 
-  sp_cli_token_t cursor = sp_cli_token(prefix);
-
-  if (sp_cli_token_is_long(cursor)) {
+  if (sp_cli_token_is_long(prefix)) {
     sp_str_t value = sp_zero_s(sp_str_t);
     bool has_value = false;
-    sp_str_t name = sp_cli_token_to_long(cursor, &value, &has_value);
+    sp_str_t name = sp_cli_token_to_long(prefix, &value, &has_value);
     if (has_value) {
       sp_cli_opt_t* opt = sp_cli_find_opt(&cli, name);
       if (opt) {
@@ -1247,8 +1218,8 @@ SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_
     }
   }
 
-  if (sp_cli_token_is_short(cursor)) {
-    sp_cli_shorts_t shorts = sp_cli_token_to_short(cursor);
+  if (sp_cli_token_is_short(prefix)) {
+    sp_cli_shorts_t shorts = sp_cli_token_to_short(prefix);
     c8 brief;
     while ((brief = sp_cli_shorts_next_flag(&shorts))) {
       sp_cli_opt_t* opt = sp_cli_find_brief(&cli, brief);
