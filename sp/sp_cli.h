@@ -910,8 +910,8 @@ void sp_cli_err_print(sp_io_writer_t* io, sp_cli_err_t err) {
   }
 }
 
-SP_PRIVATE void sp_cli_write_diagnostic(sp_io_writer_t* io, sp_cli_err_t err, const c8* label, sp_cli_theme_entry_t theme) {
-  sp_fmt_io(io, "{.$ .$}: ", SP_CLI_THEME_ARGS(theme), sp_fmt_cstr(label));
+SP_PRIVATE void sp_cli_write_error(sp_io_writer_t* io, sp_cli_err_t err, sp_cli_theme_t theme) {
+  sp_fmt_io(io, "{.$ .$}: ", SP_CLI_THEME_ARGS(theme.error), sp_fmt_cstr("error"));
   sp_cli_err_print(io, err);
   sp_fmt_io(io, "\n");
 }
@@ -1389,11 +1389,10 @@ SP_PRIVATE bool sp_cli_shell_from_str(sp_str_t name, sp_cli_shell_t* shell) {
 SP_PRIVATE sp_cli_result_t sp_cli_complete_request(sp_io_writer_t* out, sp_io_writer_t* err, sp_cli_desc_t desc, sp_str_t request) {
   sp_cli_shell_t shell;
   if (!sp_cli_shell_from_str(sp_fs_get_stem(request), &shell)) {
-    sp_cli_theme_t theme = sp_cli_theme_resolve(desc.theme);
-    sp_cli_write_diagnostic(err, (sp_cli_err_t) {
+    sp_cli_write_error(err, (sp_cli_err_t) {
       .kind = SP_CLI_ERR_UNKNOWN_SHELL,
       .name = request,
-    }, "error", theme.error);
+    }, sp_cli_theme_resolve(desc.theme));
     return SP_CLI_ERR;
   }
 
@@ -1440,7 +1439,7 @@ sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
     }
     case SP_CLI_ERR: {
       sp_cli_view_t view = sp_cli_view(&cli);
-      sp_cli_write_diagnostic(io.err, cli.err, "error", cli.theme.error);
+      sp_cli_write_error(io.err, cli.err, cli.theme);
       sp_cli_write_synopsis(io.err, &cli, &view);
       sp_fmt_io(io.err, "\n");
       sp_fmt_io(io.err, "Use {.cyan} for full usage", sp_fmt_cstr("--help"));
