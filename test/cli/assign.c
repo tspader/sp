@@ -15,8 +15,7 @@ typedef union {
 } cli_assign_slot_t;
 
 typedef struct {
-  sp_cli_err_kind_t err;
-  const c8* err_value;
+  bool fail;
   const c8* cstr;
   bool cstr_null;
   const c8* str;
@@ -40,12 +39,8 @@ static void run_cli_assign_test(s32* utest_result, cli_assign_test_t t) {
   cli_assign_slot_t slot = t.preset;
   sp_str_t value = t.null_value ? sp_zero_s(sp_str_t) : sp_str_view(t.value);
 
-  sp_cli_err_t err = sp_cli_assign(t.kind, &slot, value);
-
-  EXPECT_EQ(t.expect.err, err.kind);
-  if (t.expect.err_value) {
-    SP_EXPECT_STR_EQ_CSTR(err.value, t.expect.err_value);
-  }
+  bool ok = sp_cli_assign(t.kind, &slot, value);
+  EXPECT_EQ(!t.expect.fail, ok);
 
   switch (t.kind) {
     case SP_CLI_OPT_CSTR:
@@ -133,8 +128,7 @@ UTEST_F(cli_assign, s64_invalid_keeps_preset) {
     .value = "abc",
     .preset = { .s64v = 999 },
     .expect = {
-      .err = SP_CLI_ERR_INVALID_VALUE,
-      .err_value = "abc",
+      .fail = true,
       .num = 999,
     },
   });
@@ -154,8 +148,7 @@ UTEST_F(cli_assign, s8_overflow_keeps_preset) {
     .value = "128",
     .preset = { .s8v = 7 },
     .expect = {
-      .err = SP_CLI_ERR_INVALID_VALUE,
-      .err_value = "128",
+      .fail = true,
       .num = 7,
     },
   });
@@ -166,8 +159,7 @@ UTEST_F(cli_assign, s32_overflow) {
     .kind = SP_CLI_OPT_S32,
     .value = "2147483648",
     .expect = {
-      .err = SP_CLI_ERR_INVALID_VALUE,
-      .err_value = "2147483648",
+      .fail = true,
     },
   });
 }
@@ -185,8 +177,7 @@ UTEST_F(cli_assign, u32_negative) {
     .kind = SP_CLI_OPT_U32,
     .value = "-1",
     .expect = {
-      .err = SP_CLI_ERR_INVALID_VALUE,
-      .err_value = "-1",
+      .fail = true,
     },
   });
 }
@@ -196,8 +187,7 @@ UTEST_F(cli_assign, u8_overflow) {
     .kind = SP_CLI_OPT_U8,
     .value = "300",
     .expect = {
-      .err = SP_CLI_ERR_INVALID_VALUE,
-      .err_value = "300",
+      .fail = true,
     },
   });
 }
@@ -241,8 +231,7 @@ UTEST_F(cli_assign, boolean_invalid_keeps_preset) {
     .value = "banana",
     .preset = { .b = true },
     .expect = {
-      .err = SP_CLI_ERR_INVALID_VALUE,
-      .err_value = "banana",
+      .fail = true,
       .flag = true,
     },
   });
