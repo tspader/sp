@@ -14,7 +14,7 @@ typedef struct {
 UTEST_EMPTY_FIXTURE(cli_token)
 
 static void run_cli_token_test(s32* utest_result, cli_token_test_t t) {
-  sp_cli_token_t tok = sp_cli_token(sp_cstr_as_str(t.arg));
+  sp_str_t tok = sp_cstr_as_str(t.arg);
   EXPECT_EQ(t.expect.escape,   sp_cli_token_is_escape(tok));
   EXPECT_EQ(t.expect.is_long,  sp_cli_token_is_long(tok));
   EXPECT_EQ(t.expect.is_short, sp_cli_token_is_short(tok));
@@ -89,7 +89,7 @@ UTEST_EMPTY_FIXTURE(cli_long)
 static void run_cli_long_test(s32* utest_result, cli_long_test_t t) {
   sp_str_t value = sp_zero_s(sp_str_t);
   bool has_value = false;
-  sp_str_t name = sp_cli_token_to_long(sp_cli_token(sp_cstr_as_str(t.arg)), &value, &has_value);
+  sp_str_t name = sp_cli_token_to_long(sp_cstr_as_str(t.arg), &value, &has_value);
   SP_EXPECT_STR_EQ_CSTR(name, t.expect.name);
   EXPECT_EQ(t.expect.has_value, has_value);
   SP_EXPECT_STR_EQ_CSTR(value, t.expect.value ? t.expect.value : "");
@@ -147,7 +147,7 @@ typedef struct {
 UTEST_EMPTY_FIXTURE(cli_shorts)
 
 static void run_cli_shorts_test(s32* utest_result, cli_shorts_test_t t) {
-  sp_cli_shorts_t shorts = sp_cli_token_to_short(sp_cli_token(sp_cstr_as_str(t.arg)));
+  sp_cli_shorts_t shorts = sp_cli_token_to_short(sp_cstr_as_str(t.arg));
   sp_carr_for(t.steps, it) {
     cli_shorts_step_t step = t.steps[it];
     switch (step.op) {
