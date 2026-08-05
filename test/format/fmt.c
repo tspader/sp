@@ -254,10 +254,10 @@ UTEST(format_fmt, errors) {
 
 UTEST(format_fmt, writer_variants) {
   c8 buffer[64] = sp_zero;
-  SP_EXPECT_STR_EQ_CSTR(__sp_fmt_buf(buffer, 64, "hello, {}", sp_fmt_cstr("world")).value, "hello, world");
+  SP_EXPECT_STR_EQ_CSTR(sp_fmt_buf(buffer, 64, "hello, {}", sp_fmt_cstr("world")).value, "hello, world");
 
   c8 decorated[64] = sp_zero;
-  SP_EXPECT_STR_EQ_CSTR(__sp_fmt_buf(decorated, 64, "{:>6 .red}", sp_fmt_cstr("hi")).value, "    \033[31mhi\033[0m");
+  SP_EXPECT_STR_EQ_CSTR(sp_fmt_buf(decorated, 64, "{:>6 .red}", sp_fmt_cstr("hi")).value, "    \033[31mhi\033[0m");
 
   c8 multi[64] = sp_zero;
   sp_io_mem_writer_t w = sp_zero;

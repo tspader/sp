@@ -3227,7 +3227,7 @@ SP_API void           sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, s
 SP_API sp_str_r  sp_fmt(sp_mem_t mem, const c8* fmt, ...);
 SP_API const c8* sp_fmt_mem_cstr(sp_mem_t mem, const c8* fmt, ...);
 SP_API sp_str_r  sp_fmt_mem_v(sp_mem_t mem, sp_str_t fmt, va_list args);
-SP_API sp_str_r  __sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...);
+SP_API sp_str_r  sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...);
 SP_API sp_str_r  sp_fmt_buf_v(c8* buffer, u64 len, sp_str_t fmt, va_list args);
 SP_API sp_err_t  sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...);
 SP_API sp_err_t  sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args);
@@ -9236,7 +9236,7 @@ s64 sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size) {
   if (fd < 0) return -1;
 
   c8 proc [64] = sp_zero;
-  __sp_fmt_buf(proc, 64, "/proc/self/fd/{}", sp_fmt_int(fd));
+  sp_fmt_buf(proc, 64, "/proc/self/fd/{}", sp_fmt_int(fd));
 
   s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, buf, size);
   sp_sys_close(fd);
@@ -17432,7 +17432,7 @@ sp_err_t sp_fmt_std_err(const c8* fmt, ...) {
   return result;
 }
 
-sp_str_r __sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...) {
+sp_str_r sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_str_r str = sp_fmt_buf_v(buffer, len, sp_cstr_as_str(fmt), args);
@@ -18410,7 +18410,7 @@ sp_str_t sp_fs_resolve(sp_mem_t mem, sp_sys_fd_t fd) {
 
 #elif defined(SP_LINUX)
   c8 self [64] = sp_zero;
-  __sp_fmt_buf(self, 64, "/proc/self/fd/{}", sp_fmt_int(fd));
+  sp_fmt_buf(self, 64, "/proc/self/fd/{}", sp_fmt_int(fd));
 
   c8 buf [SP_PATH_MAX + 1] = sp_zero;
   s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, self, buf, SP_PATH_MAX);
