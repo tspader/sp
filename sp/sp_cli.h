@@ -100,7 +100,6 @@ typedef struct {
   sp_str_t emit_prefix;
   sp_io_writer_t* out;
   void* user_data;
-  u32 count;
 } sp_cli_complete_t;
 
 SP_TYPEDEF_FN(void, sp_cli_completer_t, sp_cli_complete_t*);
@@ -191,6 +190,7 @@ SP_API sp_cli_result_t sp_cli_dispatch(sp_cli_t* cli);
 SP_API sp_cli_result_t sp_cli_run(sp_cli_desc_t desc);
 SP_API s32             sp_cli_main(sp_cli_desc_t desc);
 SP_API void            sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli);
+SP_API void            sp_cli_err_print(sp_io_writer_t* io, sp_cli_err_t err);
 SP_API void            sp_cli_candidate(sp_cli_complete_t* ctx, sp_str_t name, sp_str_t summary);
 SP_API void            sp_cli_write_completions(sp_io_writer_t* io, sp_cli_desc_t desc, sp_cli_shell_t shell);
 SP_API sp_cli_result_t sp_cli_set_error(sp_cli_t* cli, sp_str_t error);
@@ -673,25 +673,12 @@ SP_PRIVATE sp_str_t sp_cli_opt_label(c8* buf, u32 len, sp_cli_view_opt_t entry) 
 }
 
 SP_PRIVATE sp_str_t sp_cli_arg_label(c8* buf, u32 len, sp_cli_arg_t* arg) {
-  sp_io_mem_writer_t label = sp_zero;
-  sp_io_mem_writer_from_buffer(&label, buf, len);
-
   switch (arg->arity) {
-    case SP_CLI_ARG_REQUIRED: {
-      sp_fmt_io(&label.base, "{}", sp_fmt_cstr(arg->name));
-      break;
-    }
-    case SP_CLI_ARG_OPTIONAL: {
-      sp_fmt_io(&label.base, "[{}]", sp_fmt_cstr(arg->name));
-      break;
-    }
-    case SP_CLI_ARG_REST: {
-      sp_fmt_io(&label.base, "[{}...]", sp_fmt_cstr(arg->name));
-      break;
-    }
+    case SP_CLI_ARG_REQUIRED: { return sp_fmt_buf(buf, len, "{}", sp_fmt_cstr(arg->name)).value; }
+    case SP_CLI_ARG_OPTIONAL: { return sp_fmt_buf(buf, len, "[{}]", sp_fmt_cstr(arg->name)).value; }
+    case SP_CLI_ARG_REST:     { return sp_fmt_buf(buf, len, "[{}...]", sp_fmt_cstr(arg->name)).value; }
   }
-
-  return sp_io_mem_writer_as_str(&label);
+  SP_UNREACHABLE_RETURN(sp_zero_s(sp_str_t));
 }
 
 sp_str_t sp_cli_arg_arity_to_str(sp_cli_arg_arity_t arity) {
@@ -1140,8 +1127,6 @@ void sp_cli_candidate(sp_cli_complete_t* ctx, sp_str_t name, sp_str_t summary) {
       break;
     }
   }
-
-  ctx->count++;
 }
 
 SP_PRIVATE sp_str_t sp_cli_cmd_summary(sp_cli_cmd_t* cmd) {
@@ -1221,10 +1206,8 @@ SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_
       sp_cli_opt_t* opt = sp_cli_find_opt(&cli, name);
       if (opt) {
         c8 buffer [SP_CLI_MAX_LABEL];
-        sp_io_mem_writer_t emit = sp_zero;
-        sp_io_mem_writer_from_buffer(&emit, buffer, SP_CLI_MAX_LABEL);
-        sp_fmt_io(&emit.base, "--{}=", sp_fmt_cstr(opt->name));
-        sp_cli_complete_opt_value(&ctx, opt, sp_io_mem_writer_as_str(&emit), value);
+        sp_str_t emit = sp_fmt_buf(buffer, SP_CLI_MAX_LABEL, "--{}=", sp_fmt_cstr(opt->name)).value;
+        sp_cli_complete_opt_value(&ctx, opt, emit, value);
       }
       return;
     }
@@ -1240,10 +1223,8 @@ SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_
         u32 lead = shorts.it;
         sp_str_t value = sp_cli_shorts_next_value(&shorts);
         c8 buffer [SP_CLI_MAX_LABEL];
-        sp_io_mem_writer_t emit = sp_zero;
-        sp_io_mem_writer_from_buffer(&emit, buffer, SP_CLI_MAX_LABEL);
-        sp_fmt_io(&emit.base, "-{}", sp_fmt_str(sp_str_prefix(shorts.cluster, sp_cast(s32, lead))));
-        sp_cli_complete_opt_value(&ctx, opt, sp_io_mem_writer_as_str(&emit), value);
+        sp_str_t emit = sp_fmt_buf(buffer, SP_CLI_MAX_LABEL, "-{}", sp_fmt_str(sp_str_prefix(shorts.cluster, sp_cast(s32, lead)))).value;
+        sp_cli_complete_opt_value(&ctx, opt, emit, value);
         return;
       }
     }
@@ -1254,10 +1235,8 @@ SP_PRIVATE void sp_cli_complete(sp_io_writer_t* out, sp_cli_desc_t desc, sp_cli_
     sp_for(it, view.num_opts) {
       sp_cli_opt_t* opt = view.opts[it].opt;
       c8 buffer [SP_CLI_MAX_LABEL];
-      sp_io_mem_writer_t label = sp_zero;
-      sp_io_mem_writer_from_buffer(&label, buffer, SP_CLI_MAX_LABEL);
-      sp_fmt_io(&label.base, "--{}", sp_fmt_cstr(opt->name));
-      sp_cli_candidate(&ctx, sp_io_mem_writer_as_str(&label), sp_cli_opt_summary(opt));
+      sp_str_t label = sp_fmt_buf(buffer, SP_CLI_MAX_LABEL, "--{}", sp_fmt_cstr(opt->name)).value;
+      sp_cli_candidate(&ctx, label, sp_cli_opt_summary(opt));
     }
     return;
   }
@@ -1414,13 +1393,12 @@ SP_PRIVATE sp_cli_result_t sp_cli_complete_request(sp_io_writer_t* out, sp_io_wr
 }
 
 sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
-  struct { sp_io_writer_t* out; sp_io_writer_t* err; } io = {
-    sp_io_get_std_out(), sp_io_get_std_err()
-  };
+  sp_io_writer_t* out = sp_io_get_std_out();
+  sp_io_writer_t* err = sp_io_get_std_err();
 
   sp_str_t request = sp_os_env_get(sp_cli_complete_var(desc));
   if (!sp_str_empty(request) && !sp_str_equal_cstr(request, "0")) {
-    return sp_cli_complete_request(io.out, io.err, desc, request);
+    return sp_cli_complete_request(out, err, desc, request);
   }
 
   sp_cli_t cli = sp_cli_parse(desc);
@@ -1434,16 +1412,16 @@ sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
       break;
     }
     case SP_CLI_HELP: {
-      sp_cli_write_help(io.out, &cli);
+      sp_cli_write_help(out, &cli);
       break;
     }
     case SP_CLI_ERR: {
       sp_cli_view_t view = sp_cli_view(&cli);
-      sp_cli_write_error(io.err, cli.err, cli.theme);
-      sp_cli_write_synopsis(io.err, &cli, &view);
-      sp_fmt_io(io.err, "\n");
-      sp_fmt_io(io.err, "Use {.cyan} for full usage", sp_fmt_cstr("--help"));
-      sp_fmt_io(io.err, "\n");
+      sp_cli_write_error(err, cli.err, cli.theme);
+      sp_cli_write_synopsis(err, &cli, &view);
+      sp_fmt_io(err, "\n");
+      sp_fmt_io(err, "Use {.cyan} for full usage", sp_fmt_cstr("--help"));
+      sp_fmt_io(err, "\n");
       break;
     }
   }
