@@ -952,7 +952,7 @@ static sp_cli_result_t cmd_run(sp_cli_t* cli) {
   }
 
   tool->globs = cli->rest;
-  tool->num_globs = cli->num_rest;
+  while (tool->globs[tool->num_globs]) tool->num_globs++;
   sp_for(it, tool->num_globs) {
     sp_str_t glob = sp_cstr_as_str(tool->globs[it]);
     if (sp_str_starts_with(glob, str("-"))) {
@@ -1089,7 +1089,7 @@ s32 run(s32 num_args, const c8** args) {
     .args = args,
     .num_args = num_args,
     .user_data = &tool,
-    .complete_var = "SP_COMPLETE",
+    .completer = "SP_COMPLETE",
   };
 
   switch (sp_cli_run(desc)) {

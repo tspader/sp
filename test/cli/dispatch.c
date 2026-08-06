@@ -18,10 +18,11 @@ static void run_cli_dispatch_test(s32* utest_result, sp_mem_t mem, cli_dispatch_
   cli_binds = sp_zero_s(cli_binds_t);
   cli_dispatched = sp_zero_s(sp_str_t);
 
-  const c8* argv [CLI_TEST_MAX_ARGS + 1];
+  const c8* argv [CLI_TEST_MAX_ARGS + 2];
   u32 n = cli_count_args(t.args);
   argv[0] = "test";
   for (u32 it = 0; it < n; it++) argv[it + 1] = t.args[it];
+  argv[n + 1] = SP_NULLPTR;
 
   sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
     .root = &t.cmd,
@@ -129,10 +130,10 @@ static sp_cli_result_t cli_handler_continue(sp_cli_t* cli) {
 UTEST_F(cli_dispatch, run_user_data) {
   u32 value = 0;
   sp_cli_cmd_t cmd = { .name = "root", .handler = cli_handler_user_data };
-  const c8* args [] = { "root" };
+  const c8* args [] = { "root", SP_NULLPTR };
 
   EXPECT_EQ(SP_CLI_OK, sp_cli_run((sp_cli_desc_t) {
-    .root = &cmd, .args = args, .num_args = sp_carr_len(args), .user_data = &value,
+    .root = &cmd, .args = args, .num_args = sp_carr_len(args) - 1, .user_data = &value,
   }));
   EXPECT_EQ(69u, value);
 }
@@ -140,33 +141,33 @@ UTEST_F(cli_dispatch, run_user_data) {
 UTEST_F(cli_dispatch, run_skips_program_name) {
   sp_cli_cmd_t build = { .name = "build", .handler = cli_handler_ok };
   sp_cli_cmd_t root = { .name = "root", .commands = { &build } };
-  const c8* args [] = { "root", "build" };
+  const c8* args [] = { "root", "build", SP_NULLPTR };
 
   cli_dispatched = sp_zero_s(sp_str_t);
   EXPECT_EQ(SP_CLI_OK, sp_cli_run((sp_cli_desc_t) {
-    .root = &root, .args = args, .num_args = sp_carr_len(args),
+    .root = &root, .args = args, .num_args = sp_carr_len(args) - 1,
   }));
   SP_EXPECT_STR_EQ_CSTR(cli_dispatched, "build");
 }
 
 UTEST_F(cli_dispatch, run_handler_continue_propagates) {
   sp_cli_cmd_t cmd = { .name = "root", .handler = cli_handler_continue };
-  const c8* args [] = { "root" };
+  const c8* args [] = { "root", SP_NULLPTR };
 
   EXPECT_EQ(SP_CLI_CONTINUE, sp_cli_run((sp_cli_desc_t) {
-    .root = &cmd, .args = args, .num_args = sp_carr_len(args),
+    .root = &cmd, .args = args, .num_args = sp_carr_len(args) - 1,
   }));
 }
 
 UTEST_F(cli_dispatch, main_exit_codes) {
   sp_cli_cmd_t ok = { .name = "root", .handler = cli_handler_ok };
   sp_cli_cmd_t err = { .name = "root", .handler = cli_handler_err };
-  const c8* args [] = { "root" };
+  const c8* args [] = { "root", SP_NULLPTR };
 
   EXPECT_EQ(0, sp_cli_main((sp_cli_desc_t) {
-    .root = &ok, .args = args, .num_args = sp_carr_len(args),
+    .root = &ok, .args = args, .num_args = sp_carr_len(args) - 1,
   }));
   EXPECT_EQ(1, sp_cli_main((sp_cli_desc_t) {
-    .root = &err, .args = args, .num_args = sp_carr_len(args),
+    .root = &err, .args = args, .num_args = sp_carr_len(args) - 1,
   }));
 }

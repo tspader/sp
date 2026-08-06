@@ -61,7 +61,7 @@ sp_cli_result_t pkg_build(sp_cli_t* cli) {
 sp_cli_result_t pkg_tool_run(sp_cli_t* cli) {
   pkg_t* pkg = sp_cast(pkg_t*, cli->user_data);
   sp_log("Running tool: {.cyan}", sp_fmt_cstr(pkg->tool));
-  sp_for(it, cli->num_rest) {
+  for (u32 it = 0; cli->rest[it]; it++) {
     sp_log("  args[{}] {.gray}", sp_fmt_uint(it), sp_fmt_cstr(cli->rest[it]));
   }
   return SP_CLI_OK;
@@ -237,7 +237,7 @@ s32 run(s32 num_args, const c8** args) {
     .args = args,
     .num_args = num_args,
     .user_data = &pkg,
-    .complete_var = "PKG_COMPLETE",
+    .completer = "PKG_COMPLETE",
   };
 
   // Unless you have a reason not to, invoke the CLI like this. main() parses,
