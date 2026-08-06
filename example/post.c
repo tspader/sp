@@ -65,7 +65,7 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
     request.content_type = sp_cstr_as_str(post->type);
   }
 
-  sp_for(it, cli->num_rest) {
+  for (u32 it = 0; cli->rest[it]; it++) {
     if (it >= SP_HTTP_MAX_HEADERS) {
       result = sp_cli_set_error_c(cli, "too many headers");
       goto done;

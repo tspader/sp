@@ -27,10 +27,11 @@ static void run_cli_parse_test(s32* utest_result, sp_mem_t mem, cli_parse_test_t
 
   if (!t.cmd.commands[0] && !t.cmd.handler) t.cmd.handler = cli_handler_ok;
 
-  const c8* argv [CLI_TEST_MAX_ARGS + 1];
+  const c8* argv [CLI_TEST_MAX_ARGS + 2];
   u32 n = cli_count_args(t.args);
   argv[0] = "test";
   for (u32 it = 0; it < n; it++) argv[it + 1] = t.args[it];
+  argv[n + 1] = SP_NULLPTR;
 
   sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
     .root = &t.cmd,
@@ -78,10 +79,10 @@ static void run_cli_parse_test(s32* utest_result, sp_mem_t mem, cli_parse_test_t
     EXPECT_EQ(t.expect.nums[it], cli_binds.nums[it]);
   }
 
-  EXPECT_EQ(cli_count_args(t.expect.rest), cli.num_rest);
+  EXPECT_EQ(cli_count_args(t.expect.rest), cli_count_args(cli.rest));
   sp_carr_for(t.expect.rest, it) {
     if (!t.expect.rest[it]) break;
-    if (it >= cli.num_rest) break;
+    if (!cli.rest[it]) break;
     SP_EXPECT_STR_EQ_CSTR(sp_cstr_as_str(cli.rest[it]), t.expect.rest[it]);
   }
 }
@@ -177,6 +178,7 @@ UTEST_F(cli_parse, unexpected_positional) {
     .expect = {
       .err = SP_CLI_ERR_UNEXPECTED_ARG,
       .err_value = "b",
+      .strs = { "a" },
     },
   });
 }
@@ -961,7 +963,7 @@ UTEST_F(cli_parse, help_reports_deepest_command) {
 UTEST_F(cli_parse, binds_views_into_args) {
   const c8* package = "sp";
   const c8* mode = "debug";
-  const c8* args [] = { "prog", "--mode", mode, package, "x" };
+  const c8* args [] = { "prog", "--mode", mode, package, "x", SP_NULLPTR };
   sp_cli_cmd_t cmd = {
     .name = "run",
     .opts = {
@@ -976,21 +978,20 @@ UTEST_F(cli_parse, binds_views_into_args) {
 
   cli_binds = sp_zero_s(cli_binds_t);
   sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
-    .root = &cmd, .args = args, .num_args = sp_carr_len(args),
+    .root = &cmd, .args = args, .num_args = sp_carr_len(args) - 1,
   });
 
   EXPECT_EQ(SP_CLI_OK, cli.status);
-  EXPECT_EQ(1u, cli.num_rest);
-
   EXPECT_EQ(package, cli_binds.strs[0]);
   EXPECT_EQ(mode, cli_binds.strs[1]);
   EXPECT_EQ(args + 4, cli.rest);
+  EXPECT_EQ(SP_NULLPTR, (void*)cli.rest[1]);
 }
 
 UTEST_F(cli_parse, attached_values_are_argv_tails) {
   const c8* eq = "--mode=release";
   const c8* cluster = "-odist";
-  const c8* args [] = { "prog", eq, cluster };
+  const c8* args [] = { "prog", eq, cluster, SP_NULLPTR };
   sp_cli_cmd_t cmd = {
     .name = "run",
     .opts = {
@@ -1002,7 +1003,7 @@ UTEST_F(cli_parse, attached_values_are_argv_tails) {
 
   cli_binds = sp_zero_s(cli_binds_t);
   sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
-    .root = &cmd, .args = args, .num_args = sp_carr_len(args),
+    .root = &cmd, .args = args, .num_args = sp_carr_len(args) - 1,
   });
 
   EXPECT_EQ(SP_CLI_OK, cli.status);
@@ -1078,7 +1079,7 @@ UTEST_F(cli_parse, str_opt_long_eq) {
 
 UTEST_F(cli_parse, str_opt_attached_value_is_argv_tail) {
   const c8* eq = "--mode=release";
-  const c8* args [] = { "prog", eq };
+  const c8* args [] = { "prog", eq, SP_NULLPTR };
   sp_cli_cmd_t cmd = {
     .name = "run",
     .opts = {
@@ -1089,7 +1090,7 @@ UTEST_F(cli_parse, str_opt_attached_value_is_argv_tail) {
 
   cli_binds = sp_zero_s(cli_binds_t);
   sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
-    .root = &cmd, .args = args, .num_args = sp_carr_len(args),
+    .root = &cmd, .args = args, .num_args = sp_carr_len(args) - 1,
   });
 
   EXPECT_EQ(SP_CLI_OK, cli.status);
