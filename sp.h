@@ -174,14 +174,12 @@
 //////////////////
 // ARCHITECTURE //
 //////////////////
-#if defined(__x86_64__) || defined(_M_X64)
-  #define SP_AMD64
-  #define SP_AMD
-#endif
-
-#if defined(__aarch64__) || defined(_M_ARM64)
+#if defined(__aarch64__) || defined(_M_ARM64) || defined(_M_ARM64EC)
   #define SP_ARM64
   #define SP_ARM
+#elif defined(__x86_64__) || defined(_M_X64)
+  #define SP_AMD64
+  #define SP_AMD
 #endif
 
 //////////////
@@ -322,11 +320,11 @@
 // SP_INLINE //
 ///////////////
 #if defined(SP_CPP)
-  #define SP_INLINE inline
+  #define SP_INLINE static inline
 #elif defined(SP_MSVC)
-  #define SP_INLINE __forceinline
+  #define SP_INLINE static __forceinline
 #else
-  #define SP_INLINE inline
+  #define SP_INLINE static inline
 #endif
 
 /////////////////
@@ -695,6 +693,9 @@ SP_BEGIN_EXTERN_C()
 #elif defined(SP_WIN32)
   #include <winsock2.h>
   #include <windows.h>
+  #if defined(SP_MSVC)
+    #include <intrin.h>
+  #endif
   #include <assert.h>
   #include <direct.h>
   #include <fcntl.h>
@@ -3078,9 +3079,28 @@ SP_API sp_str_t             sp_fs_get_config_path(sp_mem_t mem);
 //     █████    █████   █████ █████   █████ ██████████ █████   █████ ██████████   █████ █████  ░░█████ ░░█████████
 //    ░░░░░    ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░░░░░░ ░░░░░   ░░░░░ ░░░░░░░░░░   ░░░░░ ░░░░░    ░░░░░   ░░░░░░░░░
 // @threading @concurrency
+// @spin @spin_lock
+typedef s32 sp_spin_lock_t;
+
+SP_API void sp_spin_pause();
+SP_API bool sp_spin_try_lock(sp_spin_lock_t* lock);
+SP_API void sp_spin_lock(sp_spin_lock_t* lock);
+SP_API void sp_spin_unlock(sp_spin_lock_t* lock);
+SP_API sp_spin_lock_t* sp_spin_lock_get(void* addr);
+
 // @atomic
 typedef s32 sp_atomic_s32_t;
+typedef u32 sp_atomic_u32_t;
+typedef u64 sp_atomic_u64_t;
 typedef void* sp_atomic_ptr_t;
+
+typedef enum {
+  SP_ATOMIC_RELAXED,
+  SP_ATOMIC_ACQUIRE,
+  SP_ATOMIC_RELEASE,
+  SP_ATOMIC_ACQ_REL,
+  SP_ATOMIC_SEQ_CST,
+} sp_atomic_order_t;
 
 SP_API bool  sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desired);
 SP_API s32   sp_atomic_s32_set(sp_atomic_s32_t* value, s32 desired);
@@ -3089,6 +3109,436 @@ SP_API s32   sp_atomic_s32_get(sp_atomic_s32_t* value);
 SP_API bool  sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* desired);
 SP_API void* sp_atomic_ptr_set(sp_atomic_ptr_t* value, void* desired);
 SP_API void* sp_atomic_ptr_get(sp_atomic_ptr_t* value);
+
+#if defined(__ATOMIC_SEQ_CST) && (defined(SP_GNUC) || defined(SP_TCC))
+  #define SP_ATOMIC_GNU
+#endif
+
+#if defined(SP_ATOMIC_GNU)
+SP_INLINE s32 sp_atomic_order_gnu(sp_atomic_order_t order) {
+  switch (order) {
+    case SP_ATOMIC_RELAXED: return __ATOMIC_RELAXED;
+    case SP_ATOMIC_ACQUIRE: return __ATOMIC_ACQUIRE;
+    case SP_ATOMIC_RELEASE: return __ATOMIC_RELEASE;
+    case SP_ATOMIC_ACQ_REL: return __ATOMIC_ACQ_REL;
+    case SP_ATOMIC_SEQ_CST: return __ATOMIC_SEQ_CST;
+  }
+  return __ATOMIC_SEQ_CST;
+}
+
+SP_INLINE s32 sp_atomic_order_gnu_load(sp_atomic_order_t order) {
+  switch (order) {
+    case SP_ATOMIC_RELAXED: return __ATOMIC_RELAXED;
+    case SP_ATOMIC_ACQUIRE: return __ATOMIC_ACQUIRE;
+    case SP_ATOMIC_RELEASE: return __ATOMIC_SEQ_CST;
+    case SP_ATOMIC_ACQ_REL: return __ATOMIC_SEQ_CST;
+    case SP_ATOMIC_SEQ_CST: return __ATOMIC_SEQ_CST;
+  }
+  return __ATOMIC_SEQ_CST;
+}
+
+SP_INLINE s32 sp_atomic_order_gnu_store(sp_atomic_order_t order) {
+  switch (order) {
+    case SP_ATOMIC_RELAXED: return __ATOMIC_RELAXED;
+    case SP_ATOMIC_ACQUIRE: return __ATOMIC_SEQ_CST;
+    case SP_ATOMIC_RELEASE: return __ATOMIC_RELEASE;
+    case SP_ATOMIC_ACQ_REL: return __ATOMIC_SEQ_CST;
+    case SP_ATOMIC_SEQ_CST: return __ATOMIC_SEQ_CST;
+  }
+  return __ATOMIC_SEQ_CST;
+}
+
+SP_INLINE s32 sp_atomic_order_gnu_fail(sp_atomic_order_t order) {
+  switch (order) {
+    case SP_ATOMIC_RELAXED: return __ATOMIC_RELAXED;
+    case SP_ATOMIC_ACQUIRE: return __ATOMIC_ACQUIRE;
+    case SP_ATOMIC_RELEASE: return __ATOMIC_RELAXED;
+    case SP_ATOMIC_ACQ_REL: return __ATOMIC_ACQUIRE;
+    case SP_ATOMIC_SEQ_CST: return __ATOMIC_SEQ_CST;
+  }
+  return __ATOMIC_SEQ_CST;
+}
+#endif
+
+SP_INLINE u32 sp_atomic_u32_load(sp_atomic_u32_t* value, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
+  #elif defined(SP_MSVC)
+    #if defined(SP_AMD64)
+      u32 result = (u32)__iso_volatile_load32((volatile s32*)value);
+      if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
+      return result;
+    #else
+      (void)order;
+      return (u32)_InterlockedOr((volatile long*)value, 0);
+    #endif
+  #elif defined(SP_GNUC)
+    (void)order;
+    __sync_synchronize();
+    u32 result = *(volatile u32*)value;
+    __sync_synchronize();
+    return result;
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    u32 result = *value;
+    sp_spin_unlock(lock);
+    return result;
+  #endif
+}
+
+SP_INLINE void sp_atomic_u32_store(sp_atomic_u32_t* value, u32 desired, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
+  #elif defined(SP_MSVC)
+    #if defined(SP_AMD64)
+      switch (order) {
+        case SP_ATOMIC_RELAXED: {
+          __iso_volatile_store32((volatile s32*)value, (s32)desired);
+          break;
+        }
+        case SP_ATOMIC_RELEASE: {
+          _ReadWriteBarrier();
+          __iso_volatile_store32((volatile s32*)value, (s32)desired);
+          break;
+        }
+        case SP_ATOMIC_ACQUIRE:
+        case SP_ATOMIC_ACQ_REL:
+        case SP_ATOMIC_SEQ_CST: {
+          _InterlockedExchange((volatile long*)value, (long)desired);
+          break;
+        }
+      }
+    #else
+      (void)order;
+      _InterlockedExchange((volatile long*)value, (long)desired);
+    #endif
+  #elif defined(SP_GNUC)
+    (void)order;
+    __sync_synchronize();
+    *(volatile u32*)value = desired;
+    __sync_synchronize();
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    *value = desired;
+    sp_spin_unlock(lock);
+  #endif
+}
+
+SP_INLINE u32 sp_atomic_u32_exchange(sp_atomic_u32_t* value, u32 desired, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
+  #elif defined(SP_MSVC)
+    (void)order;
+    return (u32)_InterlockedExchange((volatile long*)value, (long)desired);
+  #elif defined(SP_GNUC)
+    (void)order;
+    u32 old = __sync_lock_test_and_set(value, desired);
+    __sync_synchronize();
+    return old;
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    u32 old = *value;
+    *value = desired;
+    sp_spin_unlock(lock);
+    return old;
+  #endif
+}
+
+SP_INLINE u32 sp_atomic_u32_add(sp_atomic_u32_t* value, u32 add, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
+  #elif defined(SP_MSVC)
+    (void)order;
+    return (u32)_InterlockedExchangeAdd((volatile long*)value, (long)add);
+  #elif defined(SP_GNUC)
+    (void)order;
+    return __sync_fetch_and_add(value, add);
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    u32 old = *value;
+    *value = old + add;
+    sp_spin_unlock(lock);
+    return old;
+  #endif
+}
+
+SP_INLINE bool sp_atomic_u32_cas(sp_atomic_u32_t* value, u32 current, u32 desired, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
+  #elif defined(SP_MSVC)
+    (void)order;
+    return (u32)_InterlockedCompareExchange((volatile long*)value, (long)desired, (long)current) == current;
+  #elif defined(SP_GNUC)
+    (void)order;
+    return __sync_bool_compare_and_swap(value, current, desired);
+  #else
+    (void)order;
+    bool result = false;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    if (*value == current) {
+      *value = desired;
+      result = true;
+    }
+    sp_spin_unlock(lock);
+    return result;
+  #endif
+}
+
+SP_INLINE u64 sp_atomic_u64_load(sp_atomic_u64_t* value, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
+  #elif defined(SP_MSVC)
+    #if defined(SP_AMD64)
+      u64 result = (u64)__iso_volatile_load64((volatile s64*)value);
+      if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
+      return result;
+    #else
+      (void)order;
+      return (u64)_InterlockedOr64((volatile __int64*)value, 0);
+    #endif
+  #elif defined(SP_GNUC)
+    (void)order;
+    __sync_synchronize();
+    u64 result = *(volatile u64*)value;
+    __sync_synchronize();
+    return result;
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    u64 result = *value;
+    sp_spin_unlock(lock);
+    return result;
+  #endif
+}
+
+SP_INLINE void sp_atomic_u64_store(sp_atomic_u64_t* value, u64 desired, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
+  #elif defined(SP_MSVC)
+    #if defined(SP_AMD64)
+      switch (order) {
+        case SP_ATOMIC_RELAXED: {
+          __iso_volatile_store64((volatile s64*)value, (s64)desired);
+          break;
+        }
+        case SP_ATOMIC_RELEASE: {
+          _ReadWriteBarrier();
+          __iso_volatile_store64((volatile s64*)value, (s64)desired);
+          break;
+        }
+        case SP_ATOMIC_ACQUIRE:
+        case SP_ATOMIC_ACQ_REL:
+        case SP_ATOMIC_SEQ_CST: {
+          _InterlockedExchange64((volatile __int64*)value, (__int64)desired);
+          break;
+        }
+      }
+    #else
+      (void)order;
+      _InterlockedExchange64((volatile __int64*)value, (__int64)desired);
+    #endif
+  #elif defined(SP_GNUC)
+    (void)order;
+    __sync_synchronize();
+    *(volatile u64*)value = desired;
+    __sync_synchronize();
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    *value = desired;
+    sp_spin_unlock(lock);
+  #endif
+}
+
+SP_INLINE u64 sp_atomic_u64_exchange(sp_atomic_u64_t* value, u64 desired, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
+  #elif defined(SP_MSVC)
+    (void)order;
+    return (u64)_InterlockedExchange64((volatile __int64*)value, (__int64)desired);
+  #elif defined(SP_GNUC)
+    (void)order;
+    u64 old = __sync_lock_test_and_set(value, desired);
+    __sync_synchronize();
+    return old;
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    u64 old = *value;
+    *value = desired;
+    sp_spin_unlock(lock);
+    return old;
+  #endif
+}
+
+SP_INLINE u64 sp_atomic_u64_add(sp_atomic_u64_t* value, u64 add, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
+  #elif defined(SP_MSVC)
+    (void)order;
+    return (u64)_InterlockedExchangeAdd64((volatile __int64*)value, (__int64)add);
+  #elif defined(SP_GNUC)
+    (void)order;
+    return __sync_fetch_and_add(value, add);
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    u64 old = *value;
+    *value = old + add;
+    sp_spin_unlock(lock);
+    return old;
+  #endif
+}
+
+SP_INLINE bool sp_atomic_u64_cas(sp_atomic_u64_t* value, u64 current, u64 desired, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
+  #elif defined(SP_MSVC)
+    (void)order;
+    return (u64)_InterlockedCompareExchange64((volatile __int64*)value, (__int64)desired, (__int64)current) == current;
+  #elif defined(SP_GNUC)
+    (void)order;
+    return __sync_bool_compare_and_swap(value, current, desired);
+  #else
+    (void)order;
+    bool result = false;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    if (*value == current) {
+      *value = desired;
+      result = true;
+    }
+    sp_spin_unlock(lock);
+    return result;
+  #endif
+}
+
+SP_INLINE void* sp_atomic_ptr_load(sp_atomic_ptr_t* value, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
+  #elif defined(SP_MSVC)
+    #if defined(SP_AMD64)
+      void* result = (void*)(size_t)__iso_volatile_load64((volatile s64*)value);
+      if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
+      return result;
+    #else
+      (void)order;
+      return _InterlockedCompareExchangePointer(value, SP_NULLPTR, SP_NULLPTR);
+    #endif
+  #elif defined(SP_GNUC)
+    (void)order;
+    __sync_synchronize();
+    void* result = *(void* volatile*)value;
+    __sync_synchronize();
+    return result;
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    void* result = *value;
+    sp_spin_unlock(lock);
+    return result;
+  #endif
+}
+
+SP_INLINE void sp_atomic_ptr_store(sp_atomic_ptr_t* value, void* desired, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
+  #elif defined(SP_MSVC)
+    #if defined(SP_AMD64)
+      switch (order) {
+        case SP_ATOMIC_RELAXED: {
+          __iso_volatile_store64((volatile s64*)value, (s64)(size_t)desired);
+          break;
+        }
+        case SP_ATOMIC_RELEASE: {
+          _ReadWriteBarrier();
+          __iso_volatile_store64((volatile s64*)value, (s64)(size_t)desired);
+          break;
+        }
+        case SP_ATOMIC_ACQUIRE:
+        case SP_ATOMIC_ACQ_REL:
+        case SP_ATOMIC_SEQ_CST: {
+          _InterlockedExchangePointer(value, desired);
+          break;
+        }
+      }
+    #else
+      (void)order;
+      _InterlockedExchangePointer(value, desired);
+    #endif
+  #elif defined(SP_GNUC)
+    (void)order;
+    __sync_synchronize();
+    *(void* volatile*)value = desired;
+    __sync_synchronize();
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    *value = desired;
+    sp_spin_unlock(lock);
+  #endif
+}
+
+SP_INLINE void* sp_atomic_ptr_exchange(sp_atomic_ptr_t* value, void* desired, sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
+  #elif defined(SP_MSVC)
+    (void)order;
+    return _InterlockedExchangePointer(value, desired);
+  #elif defined(SP_GNUC)
+    (void)order;
+    void* old;
+    do {
+      old = *(void* volatile*)value;
+    } while (!__sync_bool_compare_and_swap(value, old, desired));
+    __sync_synchronize();
+    return old;
+  #else
+    (void)order;
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
+    void* old = *value;
+    *value = desired;
+    sp_spin_unlock(lock);
+    return old;
+  #endif
+}
+
+SP_INLINE void sp_atomic_fence(sp_atomic_order_t order) {
+  #if defined(SP_ATOMIC_GNU)
+    __atomic_thread_fence(sp_atomic_order_gnu(order));
+  #elif defined(SP_MSVC)
+    #if defined(SP_AMD64)
+      if (order == SP_ATOMIC_SEQ_CST) MemoryBarrier();
+      else if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
+    #else
+      if (order != SP_ATOMIC_RELAXED) MemoryBarrier();
+    #endif
+  #elif defined(SP_GNUC)
+    if (order != SP_ATOMIC_RELAXED) __sync_synchronize();
+  #else
+    if (order != SP_ATOMIC_RELAXED) {
+      sp_spin_lock_t* lock = sp_spin_lock_get(SP_NULLPTR);
+      sp_spin_lock(lock);
+      sp_spin_unlock(lock);
+    }
+  #endif
+}
 
 // @mutex
 typedef enum {
@@ -3150,14 +3600,6 @@ SP_API void sp_semaphore_destroy(sp_semaphore_t* semaphore);
 SP_API void sp_semaphore_wait(sp_semaphore_t* semaphore);
 SP_API bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
 SP_API void sp_semaphore_signal(sp_semaphore_t* semaphore);
-
-// @spin @spin_lock
-typedef s32 sp_spin_lock_t;
-
-SP_API void sp_spin_pause();
-SP_API bool sp_spin_try_lock(sp_spin_lock_t* lock);
-SP_API void sp_spin_lock(sp_spin_lock_t* lock);
-SP_API void sp_spin_unlock(sp_spin_lock_t* lock);
 
 // @thread
 #if defined(SP_WIN32)
@@ -13087,6 +13529,10 @@ void sp_spin_unlock(sp_spin_lock_t* lock) {
 }
 
 // @atomic
+sp_spin_lock_t* sp_spin_lock_get(void* addr) {
+  return &sp_rt.locks[(((size_t)addr) >> 3) % SP_RT_NUM_SPIN_LOCKS];
+}
+
 bool sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desired) {
   #if defined(SP_MSVC)
     return _InterlockedCompareExchange((long*)value, desired, current) == current;
@@ -13094,13 +13540,13 @@ bool sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desired) {
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
     bool result = false;
-    size_t index = ((((size_t)value) >> 3) & 0x1f);
-    sp_spin_lock(&sp_rt.locks[index]);
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
     if (*value == current) {
       *value = desired;
       result = true;
     }
-    sp_spin_unlock(&sp_rt.locks[index]);
+    sp_spin_unlock(lock);
     return result;
   #endif
 }
@@ -13154,13 +13600,13 @@ bool sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* desired) {
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
     bool result = false;
-    size_t index = ((((size_t)value) >> 3) & 0x1f);
-    sp_spin_lock(&sp_rt.locks[index]);
+    sp_spin_lock_t* lock = sp_spin_lock_get(value);
+    sp_spin_lock(lock);
     if (*value == current) {
       *value = desired;
       result = true;
     }
-    sp_spin_unlock(&sp_rt.locks[index]);
+    sp_spin_unlock(lock);
     return result;
   #endif
 }
