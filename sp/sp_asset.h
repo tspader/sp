@@ -22,7 +22,7 @@ typedef struct {
   sp_atomic_ptr_t data;
 } sp_asset_t;
 
-#define sp_asset_data(asset, T) ((T*)sp_atomic_ptr_get(&(asset)->data))
+#define sp_asset_data(asset, T) ((T*)sp_atomic_ptr_load(&(asset)->data, SP_ATOMIC_ACQUIRE))
 
 typedef struct sp_asset_registry sp_asset_registry_t;
 typedef struct sp_asset_import_context sp_asset_import_context_t;
@@ -166,7 +166,7 @@ static sp_asset_t* sp_asset_registry_alloc(sp_asset_registry_t* r, sp_asset_impo
   asset->kind = importer->kind;
   asset->state = SP_ASSET_STATE_QUEUED;
   asset->name = sp_str_copy(r->mem, name);
-  sp_atomic_ptr_set(&asset->data, data);
+  sp_atomic_ptr_store(&asset->data, data, SP_ATOMIC_RELEASE);
 
   sp_str_ht_insert(importer->assets, sp_str_copy(r->mem, name), asset);
 

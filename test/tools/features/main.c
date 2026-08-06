@@ -9,7 +9,7 @@ typedef struct {
 
 s32 fn(void* user_data) {
   test_t* test = (test_t*)user_data;
-  sp_atomic_s32_add(test->accumulator, test->value);
+  sp_atomic_s32_add(test->accumulator, test->value, SP_ATOMIC_SEQ_CST);
   return 0;
 }
 

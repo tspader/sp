@@ -40,7 +40,7 @@ void palette_signal_handler(sp_os_signal_t sig, void* userdata) {
   (void)sig;
   app_t* app = (app_t*)userdata;
   palette_restore_terminal(app);
-  sp_atomic_s32_set(&app->shutdown, 1);
+  sp_atomic_s32_store(&app->shutdown, 1, SP_ATOMIC_RELAXED);
 }
 
 void palette_enter_raw_mode(app_t* app) {
@@ -196,7 +196,7 @@ sp_app_result_t on_poll(sp_app_t* app) {
     case 27:
     case 'q':
     case 'Q': {
-      sp_atomic_s32_set(&state->shutdown, 1);
+      sp_atomic_s32_store(&state->shutdown, 1, SP_ATOMIC_RELAXED);
       break;
     }
     default: {
@@ -210,7 +210,7 @@ sp_app_result_t on_poll(sp_app_t* app) {
 sp_app_result_t on_update(sp_app_t* app) {
   app_t* state = (app_t*)app->user_data;
 
-  if (sp_atomic_s32_get(&state->shutdown)) {
+  if (sp_atomic_s32_load(&state->shutdown, SP_ATOMIC_RELAXED)) {
     return SP_APP_QUIT;
   }
   palette_render(state);

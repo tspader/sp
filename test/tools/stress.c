@@ -207,12 +207,12 @@ s32 sp_atomic_s32_stress_thread(void* userdata) {
   sp_for(i, data->iterations) {
     s32 op = i % 4;
     switch (op) {
-      case 0: sp_atomic_s32_add(data->counter, 1); break;
-      case 1: sp_atomic_s32_set(data->counter, i); break;
-      case 2: sp_atomic_s32_get(data->counter); break;
+      case 0: sp_atomic_s32_add(data->counter, 1, SP_ATOMIC_SEQ_CST); break;
+      case 1: sp_atomic_s32_store(data->counter, i, SP_ATOMIC_SEQ_CST); break;
+      case 2: sp_atomic_s32_load(data->counter, SP_ATOMIC_SEQ_CST); break;
       case 3: {
-        s32 current = sp_atomic_s32_get(data->counter);
-        sp_atomic_s32_cas(data->counter, current, current + 1);
+        s32 current = sp_atomic_s32_load(data->counter, SP_ATOMIC_SEQ_CST);
+        sp_atomic_s32_cas(data->counter, current, current + 1, SP_ATOMIC_SEQ_CST);
         break;
       }
     }
@@ -240,7 +240,7 @@ UTEST(stress, sp_atomic_s32) {
     sp_thread_join(&threads[i]);
   }
 
-  s32 final = sp_atomic_s32_get(&counter);
+  s32 final = sp_atomic_s32_load(&counter, SP_ATOMIC_SEQ_CST);
   EXPECT_TRUE(final >= 0);
 }
 
@@ -371,13 +371,13 @@ void fmon_stress_callback(sp_fmon_t* monitor, sp_fmon_event_t* event, void* user
   (void)monitor;
   fmon_stress_counters_t* counters = (fmon_stress_counters_t*)userdata;
   if (event->events & SP_FILE_CHANGE_EVENT_ADDED) {
-    sp_atomic_s32_add(&counters->add_count, 1);
+    sp_atomic_s32_add(&counters->add_count, 1, SP_ATOMIC_SEQ_CST);
   }
   if (event->events & SP_FILE_CHANGE_EVENT_MODIFIED) {
-    sp_atomic_s32_add(&counters->mod_count, 1);
+    sp_atomic_s32_add(&counters->mod_count, 1, SP_ATOMIC_SEQ_CST);
   }
   if (event->events & SP_FILE_CHANGE_EVENT_REMOVED) {
-    sp_atomic_s32_add(&counters->rem_count, 1);
+    sp_atomic_s32_add(&counters->rem_count, 1, SP_ATOMIC_SEQ_CST);
   }
 }
 
@@ -422,9 +422,9 @@ UTEST(stress, fmon) {
 
   // Poll to clear initial dir creation events
   fmon_stress_poll(monitor);
-  sp_atomic_s32_set(&counters.add_count, 0);
-  sp_atomic_s32_set(&counters.mod_count, 0);
-  sp_atomic_s32_set(&counters.rem_count, 0);
+  sp_atomic_s32_store(&counters.add_count, 0, SP_ATOMIC_SEQ_CST);
+  sp_atomic_s32_store(&counters.mod_count, 0, SP_ATOMIC_SEQ_CST);
+  sp_atomic_s32_store(&counters.rem_count, 0, SP_ATOMIC_SEQ_CST);
 
   u32 num_dirs = sp_da_size(dirs);
   UTEST_PRINTF("Created %u directories\n", num_dirs);
@@ -457,7 +457,7 @@ UTEST(stress, fmon) {
     fmon_stress_poll(monitor);
   }
 
-  s32 add_after_create = sp_atomic_s32_get(&counters.add_count);
+  s32 add_after_create = sp_atomic_s32_load(&counters.add_count, SP_ATOMIC_SEQ_CST);
   UTEST_PRINTF("Phase 1 (create): %d add events for %u files\n", add_after_create, files_created);
 
   // Phase 2: Modify files in batches
@@ -478,7 +478,7 @@ UTEST(stress, fmon) {
     fmon_stress_poll(monitor);
   }
 
-  s32 mod_after_modify = sp_atomic_s32_get(&counters.mod_count);
+  s32 mod_after_modify = sp_atomic_s32_load(&counters.mod_count, SP_ATOMIC_SEQ_CST);
   UTEST_PRINTF("Phase 2 (modify): %d mod events for %u files\n", mod_after_modify, files_modified);
 
   // Phase 3: Delete files in batches
@@ -496,7 +496,7 @@ UTEST(stress, fmon) {
     fmon_stress_poll(monitor);
   }
 
-  s32 rem_after_delete = sp_atomic_s32_get(&counters.rem_count);
+  s32 rem_after_delete = sp_atomic_s32_load(&counters.rem_count, SP_ATOMIC_SEQ_CST);
   UTEST_PRINTF("Phase 3 (delete): %d rem events for %u files\n", rem_after_delete, files_deleted);
 
   // Verify we got a reasonable number of events (coalescing is expected)

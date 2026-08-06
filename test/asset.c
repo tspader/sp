@@ -52,7 +52,7 @@ void sp_test_asset_import(sp_asset_import_context_t* context) {
   data->content = sp_str_copy(context->registry->mem, input->content);
   data->value = input->value;
 
-  sp_atomic_ptr_set(&context->asset->data, data);
+  sp_atomic_ptr_store(&context->asset->data, data, SP_ATOMIC_SEQ_CST);
 }
 
 // Gated importer: waits on a semaphore before doing work. Lets tests observe
@@ -136,9 +136,9 @@ UTEST_F(asset_registry, same_name_different_types) {
   ASSERT_NE(asset2, SP_NULLPTR);
   ASSERT_NE(asset3, SP_NULLPTR);
 
-  ASSERT_EQ(sp_atomic_ptr_get(&asset1->data), (void*)0x1);
-  ASSERT_EQ(sp_atomic_ptr_get(&asset2->data), (void*)0x2);
-  ASSERT_EQ(sp_atomic_ptr_get(&asset3->data), (void*)0x3);
+  ASSERT_EQ(sp_atomic_ptr_load(&asset1->data, SP_ATOMIC_SEQ_CST), (void*)0x1);
+  ASSERT_EQ(sp_atomic_ptr_load(&asset2->data, SP_ATOMIC_SEQ_CST), (void*)0x2);
+  ASSERT_EQ(sp_atomic_ptr_load(&asset3->data, SP_ATOMIC_SEQ_CST), (void*)0x3);
 
   sp_asset_registry_shutdown(&registry);
 }
@@ -193,12 +193,12 @@ UTEST_F(asset_registry, null_user_data) {
   // Add asset with NULL data
   sp_asset_t* asset = sp_asset_registry_add(&registry, SP_ASSET_KIND_TEST, sp_str_lit("null_asset"), SP_NULLPTR);
   ASSERT_NE(asset, SP_NULLPTR);
-  ASSERT_EQ(sp_atomic_ptr_get(&asset->data), SP_NULLPTR);
+  ASSERT_EQ(sp_atomic_ptr_load(&asset->data, SP_ATOMIC_SEQ_CST), SP_NULLPTR);
 
   // Should be findable
   sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit("null_asset"));
   ASSERT_EQ(found, asset);
-  ASSERT_EQ(sp_atomic_ptr_get(&found->data), SP_NULLPTR);
+  ASSERT_EQ(sp_atomic_ptr_load(&found->data, SP_ATOMIC_SEQ_CST), SP_NULLPTR);
 
   sp_asset_registry_shutdown(&registry);
 }
@@ -223,7 +223,7 @@ UTEST_F(asset_registry, empty_names) {
   // Should be findable with empty name
   sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, sp_str_lit(""));
   ASSERT_EQ(found, asset);
-  ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)0xDEAD);
+  ASSERT_EQ(sp_atomic_ptr_load(&found->data, SP_ATOMIC_SEQ_CST), (void*)0xDEAD);
 
   sp_asset_registry_shutdown(&registry);
 }
@@ -361,7 +361,7 @@ UTEST_F(asset_registry, concurrent_find_during_import) {
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
     if (i < 10) {
-      ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)(uintptr_t)i);
+      ASSERT_EQ(sp_atomic_ptr_load(&found->data, SP_ATOMIC_SEQ_CST), (void*)(uintptr_t)i);
     }
   }
 
@@ -406,7 +406,7 @@ UTEST_F(asset_registry, stress_many_assets) {
     sp_str_t name = sp_fmt(ut.mem.arena, "stress_{}", sp_fmt_int(i)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
-    ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)(uintptr_t)i);
+    ASSERT_EQ(sp_atomic_ptr_load(&found->data, SP_ATOMIC_SEQ_CST), (void*)(uintptr_t)i);
   }
 
   // Random access pattern
@@ -415,7 +415,7 @@ UTEST_F(asset_registry, stress_many_assets) {
     sp_str_t name = sp_fmt(ut.mem.arena, "stress_{}", sp_fmt_int(id)).value;
     sp_asset_t* found = sp_asset_registry_find(&registry, SP_ASSET_KIND_TEST, name);
     ASSERT_NE(found, SP_NULLPTR);
-    ASSERT_EQ(sp_atomic_ptr_get(&found->data), (void*)(uintptr_t)id);
+    ASSERT_EQ(sp_atomic_ptr_load(&found->data, SP_ATOMIC_SEQ_CST), (void*)(uintptr_t)id);
   }
 
   sp_asset_registry_shutdown(&registry);
@@ -445,7 +445,7 @@ UTEST_F(asset_registry, stable_pointers) {
   }
 
   // The original pointer should still be valid
-  ASSERT_EQ(sp_atomic_ptr_get(&first->data), (void*)0xAAAA);
+  ASSERT_EQ(sp_atomic_ptr_load(&first->data, SP_ATOMIC_SEQ_CST), (void*)0xAAAA);
   ASSERT_TRUE(sp_str_equal(first->name, sp_str_lit("first")));
 
   // And findable

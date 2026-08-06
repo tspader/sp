@@ -3,7 +3,7 @@
 
 void handle_interrupt(sp_os_signal_t signal, void* userdata) {
   sp_log("received signal: {.fg brightcyan}", sp_fmt_int((s32)signal));
-  sp_atomic_s32_set((sp_atomic_s32_t*)userdata, 1);
+  sp_atomic_s32_store((sp_atomic_s32_t*)userdata, 1, SP_ATOMIC_RELAXED);
 }
 
 s32 run(s32 num_args, const c8** args) {
@@ -14,7 +14,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_log("handler registered, send SIGINT to test");
 
   /* spin so we can test ctrl+c */
-  while (!sp_atomic_s32_get(&shutdown)) {
+  while (!sp_atomic_s32_load(&shutdown, SP_ATOMIC_RELAXED)) {
     sp_sleep_ns(100000000);
   }
 

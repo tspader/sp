@@ -923,12 +923,12 @@ sp_str_t sp_test_dir(sp_test_t* t) {
 }
 
 sp_err_t sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user) {
-  if (sp_atomic_s32_cas(&once->state, 0, 1)) {
+  if (sp_atomic_s32_cas(&once->state, 0, 1, SP_ATOMIC_ACQUIRE)) {
     once->err = fn(user);
-    sp_atomic_s32_set(&once->state, 2);
+    sp_atomic_s32_store(&once->state, 2, SP_ATOMIC_RELEASE);
   }
   else {
-    while (sp_atomic_s32_get(&once->state) != 2) {
+    while (sp_atomic_s32_load(&once->state, SP_ATOMIC_ACQUIRE) != 2) {
       sp_os_sleep_ms(1);
     }
   }
@@ -1533,7 +1533,7 @@ static void sp_test_run_instance(sp_test_runner_t* runner, sp_test_instance_t* i
 static s32 sp_test_worker(void* userdata) {
   sp_test_runner_t* runner = (sp_test_runner_t*)userdata;
   while (true) {
-    s32 slot = sp_atomic_s32_add(&runner->cursor, 1);
+    s32 slot = sp_atomic_s32_add(&runner->cursor, 1, SP_ATOMIC_RELAXED);
     if ((u64)slot >= sp_da_size(runner->queue)) break;
     sp_test_run_instance(runner, &runner->queue[slot]);
   }
