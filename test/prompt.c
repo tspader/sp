@@ -2426,7 +2426,7 @@ static void probe_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t event) {
     sp_prompt_set_state(ctx, s->fire_on_init);
   }
   if (event.kind == SP_PROMPT_EVENT_INIT && s->signal_on_init) {
-    sp_atomic_s32_set(s->signal_on_init, 1);
+    sp_atomic_s32_store(s->signal_on_init, 1, SP_ATOMIC_SEQ_CST);
   }
 }
 
@@ -2470,19 +2470,19 @@ static void drive_until_quit(sp_mem_t mem, sp_prompt_ctx_t* ctx, sp_prompt_widge
 }
 
 UTEST_F(prompt, state_initially_active) {
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_ACTIVE);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_ACTIVE);
   EXPECT_FALSE(sp_prompt_is_aborted(&ut.ctx));
 }
 
 UTEST_F(prompt, complete_transitions_state_to_submit) {
   sp_prompt_complete(&ut.ctx);
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_SUBMIT);
   EXPECT_TRUE(sp_prompt_is_aborted(&ut.ctx));
 }
 
 UTEST_F(prompt, abort_transitions_state_to_cancel) {
   sp_prompt_abort(&ut.ctx);
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_CANCEL);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_CANCEL);
   EXPECT_TRUE(sp_prompt_is_aborted(&ut.ctx));
 }
 
@@ -2491,20 +2491,20 @@ UTEST_F(prompt, lifecycle_is_one_shot_first_writer_wins) {
   sp_prompt_complete(&ut.ctx);
   sp_prompt_abort(&ut.ctx);
   sp_prompt_complete(&ut.ctx);
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_SUBMIT);
 }
 
 UTEST_F(prompt, complete_drives_widget_to_submit) {
   probe_state_t state = { .fire_on_init = SP_PROMPT_STATE_SUBMIT };
   drive_until_quit(ut.mem.arena, &ut.ctx, probe_widget(&state));
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_SUBMIT);
   EXPECT_TRUE(sp_prompt_submitted(&ut.ctx));
 }
 
 UTEST_F(prompt, abort_drives_widget_to_cancel) {
   probe_state_t state = { .fire_on_init = SP_PROMPT_STATE_CANCEL };
   drive_until_quit(ut.mem.arena, &ut.ctx, probe_widget(&state));
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_CANCEL);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_CANCEL);
   EXPECT_TRUE(sp_prompt_cancelled(&ut.ctx));
 }
 
@@ -2525,7 +2525,7 @@ typedef struct {
 
 static s32 thread_signal_fn(void* userdata) {
   thread_signal_data_t* d = (thread_signal_data_t*)userdata;
-  while (sp_atomic_s32_get(&d->ready) == 0) {
+  while (sp_atomic_s32_load(&d->ready, SP_ATOMIC_SEQ_CST) == 0) {
     sp_spin_pause();
   }
   sp_prompt_complete(d->ctx);
@@ -2546,7 +2546,7 @@ UTEST_F(prompt, complete_from_worker_thread_eventually_drives_submit) {
   drive_until_quit(ut.mem.arena, &ut.ctx, probe_widget(&state));
   sp_thread_join(&worker);
 
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_SUBMIT);
   EXPECT_TRUE(sp_prompt_submitted(&ut.ctx));
 }
 
@@ -2656,7 +2656,7 @@ UTEST_F(prompt, progress_after_complete_is_dropped) {
 
   drive_until_quit(ut.mem.arena, &ut.ctx, probe_widget(&state));
 
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_SUBMIT);
 }
 
 UTEST_F(prompt, progress_widget_renders_active_two_rows_plus_rail) {
@@ -2802,7 +2802,7 @@ UTEST_F(prompt, status_after_complete_does_not_block_submit) {
 
   drive_until_quit(ut.mem.arena, &ut.ctx, probe_widget(&state));
 
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.state), SP_PROMPT_STATE_SUBMIT);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.state, SP_ATOMIC_SEQ_CST), SP_PROMPT_STATE_SUBMIT);
 }
 
 UTEST_F(prompt, progress_widget_renders_status_below_bar) {
@@ -2872,7 +2872,7 @@ typedef struct {
 
 static s32 status_thread_fn(void* userdata) {
   status_thread_data_t* d = (status_thread_data_t*)userdata;
-  while (sp_atomic_s32_get(&d->ready) == 0) {
+  while (sp_atomic_s32_load(&d->ready, SP_ATOMIC_SEQ_CST) == 0) {
     sp_spin_pause();
   }
   sp_prompt_send_status(d->ctx, "from worker");
@@ -2888,7 +2888,7 @@ UTEST_F(prompt, send_status_from_thread_eventually_delivered) {
   sp_thread_t worker = sp_zero;
   sp_thread_init(&worker, status_thread_fn, &d);
 
-  sp_atomic_s32_set(&d.ready, 1);
+  sp_atomic_s32_store(&d.ready, 1, SP_ATOMIC_SEQ_CST);
   sp_thread_join(&worker);
 
   sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));
@@ -2929,7 +2929,7 @@ UTEST_F(prompt, log_queues_lines_in_order_and_copies_into_arena) {
 UTEST_F(prompt, log_before_begin_does_not_consume_wake_token) {
   EXPECT_EQ(ut.ctx.wake.write, SP_SYS_INVALID_FD);
   sp_prompt_log(&ut.ctx, "early");
-  EXPECT_EQ(sp_atomic_s32_get(&ut.ctx.wake.pending), SP_PROMPT_WAKE_NOT_PENDING);
+  EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.wake.pending, SP_ATOMIC_SEQ_CST), SP_PROMPT_WAKE_NOT_PENDING);
 }
 
 UTEST_F(prompt, log_flushes_on_tick_with_crlf_and_clears) {
@@ -3083,7 +3083,7 @@ UTEST_F(prompt, log_empty_line_renders_blank_row) {
 
 static s32 log_thread_fn(void* userdata) {
   thread_signal_data_t* d = (thread_signal_data_t*)userdata;
-  while (sp_atomic_s32_get(&d->ready) == 0) {
+  while (sp_atomic_s32_load(&d->ready, SP_ATOMIC_SEQ_CST) == 0) {
     sp_spin_pause();
   }
   sp_prompt_log(d->ctx, "from worker");
@@ -3099,7 +3099,7 @@ UTEST_F(prompt, log_from_thread_eventually_flushed) {
   sp_thread_t worker = sp_zero;
   sp_thread_init(&worker, log_thread_fn, &d);
 
-  sp_atomic_s32_set(&d.ready, 1);
+  sp_atomic_s32_store(&d.ready, 1, SP_ATOMIC_SEQ_CST);
   sp_thread_join(&worker);
 
   sp_app_t* app = ut.app = sp_app_new(ut.mem.arena, sp_prompt_app(&ut.ctx, probe_widget(&state)));

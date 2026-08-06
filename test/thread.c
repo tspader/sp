@@ -13,7 +13,7 @@ typedef struct {
 
 s32 fn(void* user_data) {
   thread_test_t* test = (thread_test_t*)user_data;
-  sp_atomic_s32_add(test->accumulator, test->value);
+  sp_atomic_s32_add(test->accumulator, test->value, SP_ATOMIC_SEQ_CST);
   return 0;
 }
 
@@ -35,7 +35,7 @@ UTEST(thread, hello) {
     sp_thread_join(&threads[it].thread);
   }
 
-  EXPECT_EQ(sp_atomic_s32_get(&accumulator), (0 + 1 + 2 + 3));
+  EXPECT_EQ(sp_atomic_s32_load(&accumulator, SP_ATOMIC_SEQ_CST), (0 + 1 + 2 + 3));
 }
 
 UTEST(sp_spin_lock, basic_lock_unlock) {
@@ -140,35 +140,35 @@ UTEST(sp_atomic_s32, basic_operations) {
   SKIP_ON_WASM()
   sp_atomic_s32_t value = 0;
 
-  s32 old = sp_atomic_s32_set(&value, 42);
+  s32 old = sp_atomic_s32_exchange(&value, 42, SP_ATOMIC_SEQ_CST);
   ASSERT_EQ(old, 0);
-  ASSERT_EQ(sp_atomic_s32_get(&value), 42);
+  ASSERT_EQ(sp_atomic_s32_load(&value, SP_ATOMIC_SEQ_CST), 42);
 
-  old = sp_atomic_s32_add(&value, 10);
+  old = sp_atomic_s32_add(&value, 10, SP_ATOMIC_SEQ_CST);
   ASSERT_EQ(old, 42);
-  ASSERT_EQ(sp_atomic_s32_get(&value), 52);
+  ASSERT_EQ(sp_atomic_s32_load(&value, SP_ATOMIC_SEQ_CST), 52);
 
-  old = sp_atomic_s32_add(&value, -2);
+  old = sp_atomic_s32_add(&value, -2, SP_ATOMIC_SEQ_CST);
   ASSERT_EQ(old, 52);
-  ASSERT_EQ(sp_atomic_s32_get(&value), 50);
+  ASSERT_EQ(sp_atomic_s32_load(&value, SP_ATOMIC_SEQ_CST), 50);
 }
 
 UTEST(sp_atomic_s32, cmp_and_swap_success) {
   SKIP_ON_WASM()
   sp_atomic_s32_t value = 100;
 
-  bool result = sp_atomic_s32_cas(&value, 100, 200);
+  bool result = sp_atomic_s32_cas(&value, 100, 200, SP_ATOMIC_SEQ_CST);
   ASSERT_TRUE(result);
-  ASSERT_EQ(sp_atomic_s32_get(&value), 200);
+  ASSERT_EQ(sp_atomic_s32_load(&value, SP_ATOMIC_SEQ_CST), 200);
 }
 
 UTEST(sp_atomic_s32, cmp_and_swap_fails) {
   SKIP_ON_WASM()
   sp_atomic_s32_t value = 100;
 
-  bool result = sp_atomic_s32_cas(&value, 50, 200);
+  bool result = sp_atomic_s32_cas(&value, 50, 200, SP_ATOMIC_SEQ_CST);
   ASSERT_FALSE(result);
-  ASSERT_EQ(sp_atomic_s32_get(&value), 100);
+  ASSERT_EQ(sp_atomic_s32_load(&value, SP_ATOMIC_SEQ_CST), 100);
 }
 
 UTEST(sp_atomic_s32, add_returns_old_value) {
@@ -176,11 +176,11 @@ UTEST(sp_atomic_s32, add_returns_old_value) {
   sp_atomic_s32_t value = 0;
 
   for (s32 i = 0; i < 100; i++) {
-    s32 old = sp_atomic_s32_add(&value, 1);
+    s32 old = sp_atomic_s32_add(&value, 1, SP_ATOMIC_SEQ_CST);
     ASSERT_EQ(old, i);
   }
 
-  ASSERT_EQ(sp_atomic_s32_get(&value), 100);
+  ASSERT_EQ(sp_atomic_s32_load(&value, SP_ATOMIC_SEQ_CST), 100);
 }
 
 typedef struct {
@@ -192,7 +192,7 @@ s32 sp_atomic_s32_add_thread(void* userdata) {
   sp_atomic_s32_thread_data_t* data = (sp_atomic_s32_thread_data_t*)userdata;
 
   for (s32 i = 0; i < data->iterations; i++) {
-    sp_atomic_s32_add(data->counter, 1);
+    sp_atomic_s32_add(data->counter, 1, SP_ATOMIC_SEQ_CST);
   }
 
   return 0;
@@ -214,5 +214,5 @@ UTEST(sp_atomic_s32, concurrent_adds) {
   sp_thread_join(&thread1);
   sp_thread_join(&thread2);
 
-  ASSERT_EQ(sp_atomic_s32_get(&counter), iterations * 2);
+  ASSERT_EQ(sp_atomic_s32_load(&counter, SP_ATOMIC_SEQ_CST), iterations * 2);
 }

@@ -273,12 +273,12 @@ typedef struct {
 
 static bool prompt_cancelling(sp_prompt_ctx_t* ctx) {
   if (!ctx) return false;
-  return sp_atomic_s32_get(&ctx->state) == SP_PROMPT_STATE_CANCEL;
+  return sp_atomic_s32_load(&ctx->state, SP_ATOMIC_SEQ_CST) == SP_PROMPT_STATE_CANCEL;
 }
 
 static void prompt_finish(sp_prompt_ctx_t* ctx) {
   while (true) {
-    s32 state = sp_atomic_s32_get(&ctx->state);
+    s32 state = sp_atomic_s32_load(&ctx->state, SP_ATOMIC_SEQ_CST);
     if (state == SP_PROMPT_STATE_CANCEL) return;
     if (state == SP_PROMPT_STATE_ACTIVE) {
       sp_prompt_complete(ctx);

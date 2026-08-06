@@ -1178,14 +1178,14 @@ void sp_prompt_wake(sp_prompt_ctx_t* ctx) {
   if (ctx->wake.write == SP_SYS_INVALID_FD) {
     return;
   }
-  if (sp_atomic_s32_cas(&ctx->wake.pending, SP_PROMPT_WAKE_NOT_PENDING, SP_PROMPT_WAKE_PENDING)) {
+  if (sp_atomic_s32_cas(&ctx->wake.pending, SP_PROMPT_WAKE_NOT_PENDING, SP_PROMPT_WAKE_PENDING, SP_ATOMIC_SEQ_CST)) {
     u8 byte = 0;
     sp_sys_write(ctx->wake.write, &byte, 1, SP_NULLPTR);
   }
 }
 
 void sp_prompt_set_state(sp_prompt_ctx_t* ctx, sp_prompt_state_t state) {
-  if (!sp_atomic_s32_cas(&ctx->state, SP_PROMPT_STATE_ACTIVE, (s32)state)) {
+  if (!sp_atomic_s32_cas(&ctx->state, SP_PROMPT_STATE_ACTIVE, (s32)state, SP_ATOMIC_SEQ_CST)) {
     return;
   }
   sp_prompt_wake(ctx);
@@ -1200,7 +1200,7 @@ void sp_prompt_abort(sp_prompt_ctx_t* ctx) {
 }
 
 bool sp_prompt_is_aborted(sp_prompt_ctx_t* ctx) {
-  return sp_atomic_s32_get(&ctx->state) != SP_PROMPT_STATE_ACTIVE;
+  return sp_atomic_s32_load(&ctx->state, SP_ATOMIC_SEQ_CST) != SP_PROMPT_STATE_ACTIVE;
 }
 
 static void sp_prompt_send_progress(sp_prompt_ctx_t* ctx, sp_prompt_event_data_t data) {
@@ -1662,7 +1662,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
         u8 drain[SP_PROMPT_WAKE_DRAIN_SIZE];
         u64 drained = 0;
         while (sp_sys_read(ctx->wake.read, drain, sizeof(drain), &drained) == SP_OK && drained) {}
-        sp_atomic_s32_set(&ctx->wake.pending, SP_PROMPT_WAKE_NOT_PENDING);
+        sp_atomic_s32_store(&ctx->wake.pending, SP_PROMPT_WAKE_NOT_PENDING, SP_ATOMIC_SEQ_CST);
       }
     }
   }

@@ -423,7 +423,7 @@ static s32 tls_mock_server_thread(void* userdata) {
     mbedtls_net_context client;
     mbedtls_net_init(&client);
     if (mbedtls_net_accept(&server->listen, &client, SP_NULLPTR, 0, SP_NULLPTR) != 0) break;
-    if (sp_atomic_s32_get(&server->stop)) {
+    if (sp_atomic_s32_load(&server->stop, SP_ATOMIC_SEQ_CST)) {
       mbedtls_net_free(&client);
       break;
     }
@@ -583,7 +583,7 @@ void run_fetch_test(s32* utest_result, sp_mem_t mem, fetch_test_t t) {
   if (t.expect.content_type) EXPECT_TRUE_MSG(sp_str_equal_cstr(response.content_type, t.expect.content_type), t.expect.content_type);
   if (t.expect.location) EXPECT_TRUE_MSG(sp_str_equal_cstr(response.location, t.expect.location), t.expect.location);
 
-  sp_atomic_s32_set(&server.stop, 1);
+  sp_atomic_s32_store(&server.stop, 1, SP_ATOMIC_SEQ_CST);
   mbedtls_net_context poke;
   mbedtls_net_init(&poke);
   mbedtls_net_connect(&poke, "127.0.0.1", port, MBEDTLS_NET_PROTO_TCP);
