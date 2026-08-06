@@ -33,11 +33,12 @@ static void run_cli_parse_test(s32* utest_result, sp_mem_t mem, cli_parse_test_t
   for (u32 it = 0; it < n; it++) argv[it + 1] = t.args[it];
   argv[n + 1] = SP_NULLPTR;
 
-  sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
+  sp_cli_t cli;
+  sp_cli_parse((sp_cli_desc_t) {
     .root = &t.cmd,
     .args = argv,
     .num_args = sp_cast(s32, n + 1),
-  });
+  }, &cli);
 
   if (t.expect.err) {
     EXPECT_EQ(SP_CLI_ERR, cli.status);
@@ -977,9 +978,10 @@ UTEST_F(cli_parse, binds_views_into_args) {
   };
 
   cli_binds = sp_zero_s(cli_binds_t);
-  sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
+  sp_cli_t cli;
+  sp_cli_parse((sp_cli_desc_t) {
     .root = &cmd, .args = args, .num_args = sp_carr_len(args) - 1,
-  });
+  }, &cli);
 
   EXPECT_EQ(SP_CLI_OK, cli.status);
   EXPECT_EQ(package, cli_binds.strs[0]);
@@ -1002,9 +1004,10 @@ UTEST_F(cli_parse, attached_values_are_argv_tails) {
   };
 
   cli_binds = sp_zero_s(cli_binds_t);
-  sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
+  sp_cli_t cli;
+  sp_cli_parse((sp_cli_desc_t) {
     .root = &cmd, .args = args, .num_args = sp_carr_len(args) - 1,
-  });
+  }, &cli);
 
   EXPECT_EQ(SP_CLI_OK, cli.status);
   EXPECT_EQ(eq + 7, cli_binds.strs[0]);
@@ -1089,9 +1092,10 @@ UTEST_F(cli_parse, str_opt_attached_value_is_argv_tail) {
   };
 
   cli_binds = sp_zero_s(cli_binds_t);
-  sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
+  sp_cli_t cli;
+  sp_cli_parse((sp_cli_desc_t) {
     .root = &cmd, .args = args, .num_args = sp_carr_len(args) - 1,
-  });
+  }, &cli);
 
   EXPECT_EQ(SP_CLI_OK, cli.status);
   EXPECT_EQ(eq + 7, cli_binds.views[0].data);

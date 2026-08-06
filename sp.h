@@ -1830,6 +1830,12 @@ SP_API void           sp_mem_fixed_clear(sp_mem_fixed_t* fixed);
 SP_API u64            sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed);
 SP_API void*          sp_mem_fixed_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size);
 
+/////////////////////
+// ERROR ALLOCATOR //
+/////////////////////
+SP_API sp_mem_t sp_mem_error();
+SP_API void*    sp_mem_error_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size);
+
 ////////////////////
 // PAGE ALLOCATOR //
 ////////////////////
@@ -2060,12 +2066,22 @@ typedef struct SP_ALIGNED {
   sp_mem_t allocator;
 } sp_da_header_t;
 
-#define sp_da_a(T) sp_mcat(stop_wasting_my_time___, T)
 #define sp_da(T) T*
-SP_API void* sp_da_init_ex(sp_mem_t mem, u32 stride);
-SP_API void* sp_da_resize(void* arr, u32 stride, u64 len);
-SP_API void* sp_da_grow_ex(void* arr, u32 stride, u64 addlen);
-SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
+#define sp_arr(T, N) struct { sp_da_header_t header; T items [N]; }
+
+#define sp_da_init(__mem, __arr) \
+  *sp_da_vp(__arr) = sp_da_init_ex((__mem), sp_da_stride(__arr))
+
+#define sp_da_new(__a, __T) \
+  ((__T*)sp_da_init_ex((__a), sizeof(__T)))
+
+#define sp_arr_init(__S)\
+  (sp_assert((u8*)(__S)->items - (u8*)(__S) == sizeof(sp_da_header_t)),\
+   (__S)->header = (sp_da_header_t) {\
+     .capacity = sp_carr_len((__S)->items),\
+     .allocator = sp_mem_error(),\
+   },\
+   (__S)->items)
 
 #define sp_da_for(__ARR, __IT)  for (u64 __IT = 0; __IT < sp_da_size((__ARR)); __IT++)
 #define sp_da_rfor(__ARR, __IT) for (u64 __IT = sp_da_size(__ARR); __IT-- > 0; )
@@ -2096,12 +2112,6 @@ SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
 
 #define sp_da_vp(__arr) \
   ((void**)&(__arr))
-
-#define sp_da_init(__mem, __arr) \
-  *sp_da_vp(__arr) = sp_da_init_ex((__mem), sp_da_stride(__arr))
-
-#define sp_da_new(__a, __T) \
-  ((__T*)sp_da_init_ex((__a), sizeof(__T)))
 
 #define sp_da_free(__arr)         \
   sp_mem_allocator_free(sp_da_mem(__arr), sp_da_head(__arr), sp_da_capacity(__arr) * sp_da_stride(__arr) + sizeof(sp_da_header_t))
@@ -2134,6 +2144,11 @@ SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
 
 #define sp_da_sort(arr, fn) sp_os_qsort(arr, sp_da_size(arr), sizeof((arr)[0]), fn)
 #define sp_da_bounds_ok(arr, it) ((it) < sp_da_size(arr))
+
+SP_API void* sp_da_init_ex(sp_mem_t mem, u32 stride);
+SP_API void* sp_da_resize(void* arr, u32 stride, u64 len);
+SP_API void* sp_da_grow_ex(void* arr, u32 stride, u64 addlen);
+SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
 
 
 //  ███████████   █████ ██████   █████   █████████     ███████████  █████  █████ ███████████ ███████████ ██████████ ███████████
@@ -10871,6 +10886,15 @@ void sp_mem_fixed_clear(sp_mem_fixed_t* fixed) {
 
 u64 sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed) {
   return fixed->bytes_used;
+}
+
+void* sp_mem_error_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory, u64 old_size) {
+  sp_assert(false);
+  return SP_NULLPTR;
+}
+
+sp_mem_t sp_mem_error() {
+  return (sp_mem_t) { .on_alloc = sp_mem_error_on_alloc };
 }
 
 void* sp_mem_fixed_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory, u64 old_size) {
