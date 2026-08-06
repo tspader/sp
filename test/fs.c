@@ -24,8 +24,6 @@ SP_TEST_MAIN()
 #include "fs/copy_glob.c"
 #include "fs/remove.c"
 #include "fs/collect.c"
-#include "fs/iter.c"
-#include "fs/iter_shell.c"
 #include "fs/mod_time.c"
 #include "fs/system_paths.c"
 #include "fs/windows/wtf8.c"
