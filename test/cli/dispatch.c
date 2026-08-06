@@ -24,11 +24,12 @@ static void run_cli_dispatch_test(s32* utest_result, sp_mem_t mem, cli_dispatch_
   for (u32 it = 0; it < n; it++) argv[it + 1] = t.args[it];
   argv[n + 1] = SP_NULLPTR;
 
-  sp_cli_t cli = sp_cli_parse((sp_cli_desc_t) {
+  sp_cli_t cli;
+  sp_cli_parse((sp_cli_desc_t) {
     .root = &t.cmd,
     .args = argv,
     .num_args = sp_cast(s32, n + 1),
-  });
+  }, &cli);
   sp_cli_result_t result = sp_cli_dispatch(&cli);
 
   EXPECT_EQ(t.expect.result, result);

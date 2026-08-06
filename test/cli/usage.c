@@ -35,12 +35,14 @@ static void run_cli_usage_test(s32* utest_result, sp_mem_t mem, cli_usage_test_t
 
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &io);
-  sp_cli_t cli = { .cmd = &t.cmd, .theme = { .mode = SP_CLI_THEME_REPLACE } };
+  sp_cli_t cli;
+  sp_cli_init(&cli, sp_zero_s(sp_cli_desc_t));
+  cli.theme = (sp_cli_theme_t) { .mode = SP_CLI_THEME_REPLACE };
   sp_carr_for(t.path, it) {
     if (!t.path[it]) break;
-    cli.path[cli.depth++] = t.path[it];
+    sp_cli_push_cmd(&cli, t.path[it]);
   }
-  cli.path[cli.depth++] = &t.cmd;
+  sp_cli_push_cmd(&cli, &t.cmd);
 
   sp_cli_write_help(&io.base, &cli);
   sp_str_t actual = sp_io_dyn_mem_writer_as_str(&io);

@@ -285,7 +285,8 @@ s32 run(s32 num_args, const c8** args) {
     // run() has no monopoly on output: sp_cli_write_help() renders the same
     // help it prints, so you can send it anywhere or skip it entirely.
 
-    sp_cli_t parsed = sp_cli_parse(cli);
+    sp_cli_t parsed;
+    sp_cli_parse(cli, &parsed);
     // ... inspect parsed.status / parsed.cmd / pkg here ...
     sp_cli_result_t result = sp_cli_dispatch(&parsed);
     return result == SP_CLI_ERR ? 1 : 0;
