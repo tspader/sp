@@ -29,6 +29,9 @@ typedef struct {
   s32         chmod;
   s32         clock_gettime;
   s32         nanosleep;
+  bool        futex_wait;
+  s32         futex_wake;
+  s32         futex_wake_all;
   s64         canonicalize_path;
   s32         fd_ready;
   s32         fd_wait;
@@ -170,6 +173,18 @@ static sp_err_t sys_vtable_mock_clock_gettime(s32 clockid, sp_sys_timespec_t* ts
 
 static sp_err_t sys_vtable_mock_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
   return (sp_err_t)69;
+}
+
+static bool sys_vtable_mock_futex_wait(u32* addr, u32 expected, const sp_sys_timespec_t* timeout) {
+  return true;
+}
+
+static void sys_vtable_mock_futex_wake(u32* addr) {
+  sys_vtable_results.futex_wake = 69;
+}
+
+static void sys_vtable_mock_futex_wake_all(u32* addr) {
+  sys_vtable_results.futex_wake_all = 69;
 }
 
 static s64 sys_vtable_mock_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
@@ -350,6 +365,9 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .chmod                  = sys_vtable_mock_chmod,
   .clock_gettime          = sys_vtable_mock_clock_gettime,
   .nanosleep              = sys_vtable_mock_nanosleep,
+  .futex_wait             = sys_vtable_mock_futex_wait,
+  .futex_wake             = sys_vtable_mock_futex_wake,
+  .futex_wake_all         = sys_vtable_mock_futex_wake_all,
   .canonicalize_path      = sys_vtable_mock_canonicalize_path,
   .fd_ready               = sys_vtable_mock_fd_ready,
   .fd_wait                = sys_vtable_mock_fd_wait,
@@ -428,6 +446,9 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   r->chmod = sp_sys_chmod(0, SP_NULLPTR, 0, SP_NULLPTR);
   r->clock_gettime = sp_sys_clock_gettime(0, SP_NULLPTR);
   r->nanosleep = sp_sys_nanosleep(SP_NULLPTR, SP_NULLPTR);
+  r->futex_wait = sp_sys_futex_wait(SP_NULLPTR, 0, SP_NULLPTR);
+  sp_sys_futex_wake(SP_NULLPTR);
+  sp_sys_futex_wake_all(SP_NULLPTR);
   r->canonicalize_path = sp_sys_canonicalize_path(SP_NULLPTR, 0, SP_NULLPTR, 0);
   r->fd_ready = sp_sys_fd_ready(0, &ready);
   r->fd_wait = sp_sys_fd_wait(0);
@@ -496,6 +517,9 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->chmod, 69);
   EXPECT_EQ(r->clock_gettime, 69);
   EXPECT_EQ(r->nanosleep, 69);
+  EXPECT_TRUE(r->futex_wait);
+  EXPECT_EQ(r->futex_wake, 69);
+  EXPECT_EQ(r->futex_wake_all, 69);
   EXPECT_EQ(r->canonicalize_path, 69);
   EXPECT_EQ(r->fd_ready, 69);
   EXPECT_EQ(r->fd_wait, 69);

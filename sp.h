@@ -1122,6 +1122,7 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_ENOTCONN             ENOTCONN
   #define SP_ETIMEDOUT            ETIMEDOUT
   #define SP_ECONNREFUSED         ECONNREFUSED
+  #define SP_ECANCELED            ECANCELED
   #define SP_EHOSTUNREACH         EHOSTUNREACH
   #define SP_EINPROGRESS          EINPROGRESS
   #define SP_EDQUOT               EDQUOT
@@ -1435,6 +1436,9 @@ SP_API sp_err_t    sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* 
 SP_API sp_err_t    sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
 SP_API sp_err_t    sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
+SP_API bool        sp_sys_futex_wait(u32* addr, u32 expected, const sp_sys_timespec_t* timeout);
+SP_API void        sp_sys_futex_wake(u32* addr);
+SP_API void        sp_sys_futex_wake_all(u32* addr);
 SP_API s64         sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready);
 SP_API sp_err_t    sp_sys_fd_wait(sp_sys_fd_t fd);
@@ -1521,6 +1525,9 @@ typedef struct {
   sp_err_t    (*chmod)(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
   sp_err_t    (*clock_gettime)(s32 clockid, sp_sys_timespec_t* ts);
   sp_err_t    (*nanosleep)(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
+  bool        (*futex_wait)(u32* addr, u32 expected, const sp_sys_timespec_t* timeout);
+  void        (*futex_wake)(u32* addr);
+  void        (*futex_wake_all)(u32* addr);
   s64         (*canonicalize_path)(const c8* path, u32 len, c8* buf, u64 size);
   sp_err_t    (*fd_ready)(sp_sys_fd_t fd, u8* ready);
   sp_err_t    (*fd_wait)(sp_sys_fd_t fd);
@@ -1587,6 +1594,9 @@ SP_API sp_err_t    sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t
 SP_API sp_err_t    sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_clock_gettime_p(s32 clockid, sp_sys_timespec_t* ts);
 SP_API sp_err_t    sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
+SP_API bool        sp_sys_futex_wait_p(u32* addr, u32 expected, const sp_sys_timespec_t* timeout);
+SP_API void        sp_sys_futex_wake_p(u32* addr);
+SP_API void        sp_sys_futex_wake_all_p(u32* addr);
 SP_API s64         sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready);
 SP_API sp_err_t    sp_sys_fd_wait_p(sp_sys_fd_t fd);
@@ -3999,6 +4009,7 @@ typedef s32 sp_nt_status_t;
 
 #define SP_NT_SUCCESS(s) ((sp_nt_status_t)(s) >= 0)
 #define SP_NT_STATUS_SUCCESS             ((sp_nt_status_t)0x00000000)
+#define SP_NT_STATUS_TIMEOUT             ((sp_nt_status_t)0x00000102)
 #define SP_NT_STATUS_NAME_TOO_LONG       ((sp_nt_status_t)0xC0000106)
 #define SP_NT_STATUS_OBJECT_NAME_INVALID ((sp_nt_status_t)0xC0000033)
 
@@ -4044,7 +4055,10 @@ typedef struct {
   X(sp_nt_status_t, NtCreateFile,                            (void**, u32, sp_nt_object_attributes_t*, sp_nt_io_status_block_t*, s64*, u32, u32, u32, u32, void*, u32)) \
   X(sp_nt_status_t, NtQueryObject,                           (void*, u32, void*, u32, u32*))      \
   X(sp_nt_status_t, NtQueryDirectoryFile,                    (void*, void*, void*, void*, sp_nt_io_status_block_t*, void*, u32, u32, u8, sp_nt_unicode_string_t*, u8)) \
-  X(sp_nt_status_t, NtFsControlFile,                         (void*, void*, void*, void*, sp_nt_io_status_block_t*, u32, void*, u32, void*, u32))
+  X(sp_nt_status_t, NtFsControlFile,                         (void*, void*, void*, void*, sp_nt_io_status_block_t*, u32, void*, u32, void*, u32)) \
+  X(sp_nt_status_t, RtlWaitOnAddress,                        (volatile void*, void*, size_t, s64*)) \
+  X(void,           RtlWakeAddressSingle,                    (void*)) \
+  X(void,           RtlWakeAddressAll,                       (void*))
 
 #define SP_NT_DECLARE_FUNCTION(ret, name, args) \
   ret (__stdcall *name) args;
@@ -4816,6 +4830,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_FCHMOD            91
   #define SP_SYSCALL_NUM_ARCH_PRCTL        158
   #define SP_SYSCALL_NUM_GETTID            186
+  #define SP_SYSCALL_NUM_FUTEX             202
   #define SP_SYSCALL_NUM_SCHED_GETAFFINITY 204
   #define SP_SYSCALL_NUM_GETDENTS64        217
   #define SP_SYSCALL_NUM_CLOCK_GETTIME     228
@@ -4869,6 +4884,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_FSTAT             80
   #define SP_SYSCALL_NUM_EXIT              93
   #define SP_SYSCALL_NUM_EXIT_GROUP        94
+  #define SP_SYSCALL_NUM_FUTEX             98
   #define SP_SYSCALL_NUM_NANOSLEEP         101
   #define SP_SYSCALL_NUM_CLOCK_GETTIME     113
   #define SP_SYSCALL_NUM_CLOCK_NANOSLEEP   115
@@ -4926,6 +4942,10 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 #elif defined(SP_ARM64)
   #define SP_SYS_LINUX_O_DIRECTORY 040000
 #endif
+
+#define SP_SYS_LINUX_FUTEX_WAIT         0
+#define SP_SYS_LINUX_FUTEX_WAKE         1
+#define SP_SYS_LINUX_FUTEX_PRIVATE_FLAG 128
 
 ///////////
 // TYPES //
@@ -5213,6 +5233,14 @@ SP_IMP void sp_win32_env_it_set_current(sp_os_env_it_t* it);
 SP_IMP sp_nt_status_t sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32 share, u32 disposition, u32 options, u32 file_attr, sp_sys_fd_t* out);
 SP_IMP sp_nt_status_t sp_sys_nt_close(sp_sys_fd_t fd);
 #endif
+#if defined(SP_MACOS)
+#define SP_SYS_ULOCK_COMPARE_AND_WAIT 0x00000001u
+#define SP_SYS_ULOCK_WAKE_ALL         0x00000100u
+#define SP_SYS_ULOCK_NO_ERRNO         0x01000000u
+
+extern s32 __ulock_wait2(u32 operation, void* addr, u64 value, u64 timeout_ns, u64 value2);
+extern s32 __ulock_wake(u32 operation, void* addr, u64 wake_value);
+#endif
 #if defined(SP_FREESTANDING)
 SP_IMP void* sp_sys_get_tp(void);
 SP_IMP s32   sp_sys_set_tp(void* tp);
@@ -5269,6 +5297,9 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .chmod                  = sp_sys_chmod_p,
   .clock_gettime          = sp_sys_clock_gettime_p,
   .nanosleep              = sp_sys_nanosleep_p,
+  .futex_wait             = sp_sys_futex_wait_p,
+  .futex_wake             = sp_sys_futex_wake_p,
+  .futex_wake_all         = sp_sys_futex_wake_all_p,
   .canonicalize_path      = sp_sys_canonicalize_path_p,
   .fd_ready               = sp_sys_fd_ready_p,
   .fd_wait                = sp_sys_fd_wait_p,
@@ -5510,6 +5541,18 @@ sp_err_t sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
 
 sp_err_t sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem) {
   return (sp_rt.vt->nanosleep)(req, rem);
+}
+
+bool sp_sys_futex_wait(u32* addr, u32 expected, const sp_sys_timespec_t* timeout) {
+  return (sp_rt.vt->futex_wait)(addr, expected, timeout);
+}
+
+void sp_sys_futex_wake(u32* addr) {
+  (sp_rt.vt->futex_wake)(addr);
+}
+
+void sp_sys_futex_wake_all(u32* addr) {
+  (sp_rt.vt->futex_wake_all)(addr);
 }
 
 s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
@@ -7558,6 +7601,79 @@ sp_err_t sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem
 #endif
 }
 
+//////////////////
+// SP_SYS_FUTEX //
+//////////////////
+bool sp_sys_futex_wait_p(u32* addr, u32 expected, const sp_sys_timespec_t* timeout) {
+#if defined(SP_LINUX)
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_FUTEX, addr, SP_SYS_LINUX_FUTEX_WAIT | SP_SYS_LINUX_FUTEX_PRIVATE_FLAG, expected, timeout);
+  return rc != -SP_ETIMEDOUT;
+
+#elif defined(SP_WIN32)
+  s64 timeout_100ns = 0;
+  s64* nt_timeout = SP_NULLPTR;
+  if (timeout) {
+    timeout_100ns = -(timeout->tv_sec * 10000000 + timeout->tv_nsec / 100);
+    nt_timeout = &timeout_100ns;
+  }
+  sp_nt_status_t status = SP_NT(RtlWaitOnAddress)(addr, &expected, sizeof(u32), nt_timeout);
+  return status != SP_NT_STATUS_TIMEOUT;
+
+#elif defined(SP_MACOS)
+  u64 timeout_ns = 0;
+  if (timeout) {
+    timeout_ns = (u64)timeout->tv_sec * SP_TM_S_TO_NS + (u64)timeout->tv_nsec;
+    if (!timeout_ns) timeout_ns = 1;
+  }
+  s32 status = __ulock_wait2(SP_SYS_ULOCK_COMPARE_AND_WAIT | SP_SYS_ULOCK_NO_ERRNO, addr, expected, timeout_ns, 0);
+  return status != -SP_ETIMEDOUT;
+
+#else
+  (void)addr;
+  (void)expected;
+  (void)timeout;
+  return false;
+#endif
+}
+
+void sp_sys_futex_wake_p(u32* addr) {
+#if defined(SP_LINUX)
+  sp_syscall(SP_SYSCALL_NUM_FUTEX, addr, SP_SYS_LINUX_FUTEX_WAKE | SP_SYS_LINUX_FUTEX_PRIVATE_FLAG, 1);
+
+#elif defined(SP_WIN32)
+  SP_NT(RtlWakeAddressSingle)(addr);
+
+#elif defined(SP_MACOS)
+  for (;;) {
+    s32 status = __ulock_wake(SP_SYS_ULOCK_COMPARE_AND_WAIT | SP_SYS_ULOCK_NO_ERRNO, addr, 0);
+    if (status == -SP_EINTR || status == -SP_ECANCELED) continue;
+    return;
+  }
+
+#else
+  (void)addr;
+#endif
+}
+
+void sp_sys_futex_wake_all_p(u32* addr) {
+#if defined(SP_LINUX)
+  sp_syscall(SP_SYSCALL_NUM_FUTEX, addr, SP_SYS_LINUX_FUTEX_WAKE | SP_SYS_LINUX_FUTEX_PRIVATE_FLAG, SP_LIMIT_S32_MAX);
+
+#elif defined(SP_WIN32)
+  SP_NT(RtlWakeAddressAll)(addr);
+
+#elif defined(SP_MACOS)
+  for (;;) {
+    s32 status = __ulock_wake(SP_SYS_ULOCK_COMPARE_AND_WAIT | SP_SYS_ULOCK_NO_ERRNO | SP_SYS_ULOCK_WAKE_ALL, addr, 0);
+    if (status == -SP_EINTR || status == -SP_ECANCELED) continue;
+    return;
+  }
+
+#else
+  (void)addr;
+#endif
+}
+
 #if defined(SP_WIN32)
 static s64 sp_sys_copy_env_var(const c8* name, c8* buf, u64 size) {
   DWORD len = GetEnvironmentVariableA(name, buf, (DWORD)size);
@@ -7703,7 +7819,7 @@ typedef struct {
 sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
   *ready = 0;
   sp_sys_linux_pollfd_t pfd = { .fd = fd, .events = SP_SYS_LINUX_POLLIN };
-  sp_sys_timespec_t ts = { 0, 0 };
+  sp_sys_timespec_t ts = sp_zero;
   s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
   if (r < 0) return sp_sys_err_from_errno(-r);
   if (r > 0 && (pfd.revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR | SP_SYS_LINUX_POLLNVAL))) *ready = 1;

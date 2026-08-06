@@ -8,8 +8,10 @@ name = "amalgamation"
 source = [
   "test/main.c",
   "test/test/*.c",
-  "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c",
-  "test/mem/uninitialized.c"
+  "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c", "test/sys/futex.c",
+  "test/fs/iter/os.c", "test/fs/iter/iter.c",
+  "test/mem/uninitialized.c",
+  "test/atomic.c"
 ]
 
 [[test]]
@@ -18,7 +20,15 @@ source = ["test/main.c", "test/test/*.c", "test/test/wire/*.c"]
 
 [[test]]
 name = "sys"
-source = ["test/main.c", "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c"]
+source = ["test/main.c", "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c", "test/sys/futex.c"]
+
+[[test]]
+name = "atomic"
+source = ["test/main.c", "test/atomic.c"]
+
+[[test]]
+name = "fs"
+source = ["test/main.c", "test/fs/iter/iter.c", "test/fs/iter/os.c"]
 
 [[test]]
 name = "mem"
