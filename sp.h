@@ -4819,7 +4819,6 @@ struct sp_app {
 
   s32 rc;
   sp_app_result_t result;
-  sp_atomic_s32_t shutdown;
 
   bool initted;
   bool deinitted;
