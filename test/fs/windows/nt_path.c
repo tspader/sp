@@ -40,7 +40,6 @@ UTEST(nt_path, drive_absolute_forward_slashes) {
   static const u16 suffix[] = {'f','o','o','\\','b','a','r'};
   EXPECT_TRUE(nt_path_ends_with(path.name, suffix, 7));
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, drive_absolute_backslashes) {
@@ -55,7 +54,6 @@ UTEST(nt_path, drive_absolute_backslashes) {
     EXPECT_EQ(path.name.Buffer[i], expected[i]);
   }
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, unc_path) {
@@ -69,7 +67,6 @@ UTEST(nt_path, unc_path) {
   static const u16 suffix[] = {'s','e','r','v','e','r','\\','s','h','a','r','e','\\','f','o','o'};
   EXPECT_TRUE(nt_path_ends_with(path.name, suffix, 16));
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, verbatim_passthrough) {
@@ -80,7 +77,6 @@ UTEST(nt_path, verbatim_passthrough) {
   static const u16 prefix[] = {'\\','?','?','\\','C',':','\\'};
   EXPECT_TRUE(nt_path_starts_with(path.name, prefix, 7));
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, dotdot_resolved) {
@@ -94,7 +90,6 @@ UTEST(nt_path, dotdot_resolved) {
     EXPECT_EQ(path.name.Buffer[i], expected[i]);
   }
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, dot_resolved) {
@@ -105,7 +100,6 @@ UTEST(nt_path, dot_resolved) {
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','f','o','o','\\','b','a','r'};
   EXPECT_EQ(path.name.Length, (u16)(sizeof(expected)));
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, mixed_slashes) {
@@ -116,7 +110,6 @@ UTEST(nt_path, mixed_slashes) {
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','f','o','o','\\','b','a','r','\\','b','a','z'};
   EXPECT_EQ(path.name.Length, (u16)(sizeof(expected)));
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, trailing_dot_stripped) {
@@ -127,7 +120,6 @@ UTEST(nt_path, trailing_dot_stripped) {
   static const u16 expected[] = {'\\','?','?','\\','C',':','\\','f','o','o','.','t','x','t'};
   EXPECT_EQ(path.name.Length, (u16)(sizeof(expected)));
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, non_ascii) {
@@ -141,7 +133,6 @@ UTEST(nt_path, non_ascii) {
     EXPECT_EQ(path.name.Buffer[i], expected[i]);
   }
 
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, empty_rejected) {
@@ -157,7 +148,6 @@ UTEST(nt_path, length_field_matches_buffer) {
   u32 count = 0;
   while (path.name.Buffer[count] && count < 256) count++;
   EXPECT_EQ((u32)(path.name.Length / sizeof(u16)), count);
-  sp_sys_nt_path_free(&path);
 }
 
 UTEST(nt_path, long_verbatim_exceeds_max_path) {
@@ -178,16 +168,13 @@ UTEST(nt_path, long_verbatim_exceeds_max_path) {
   EXPECT_TRUE(nt_path_starts_with(path.name, expected_prefix, 7));
   EXPECT_TRUE(path.name.Length / sizeof(u16) > 260);
 
-  sp_sys_nt_path_free(&path);
 }
 
-UTEST(nt_path, rtl_allocates_buffer) {
+UTEST(nt_path, buffer_is_inline) {
   sp_sys_nt_path_t path;
   sp_nt_status_t st = sp_sys_nt_path(sp_str_lit("C:\\x"), &path);
   EXPECT_TRUE(SP_NT_SUCCESS(st));
-  EXPECT_NE(path.heap_buffer, SP_NULLPTR);
-  sp_sys_nt_path_free(&path);
-  EXPECT_EQ(path.heap_buffer, SP_NULLPTR);
+  EXPECT_EQ(path.name.Buffer, path.data);
 }
 
 #else
