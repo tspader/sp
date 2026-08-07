@@ -1087,7 +1087,7 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   ctx->mem = sp_mem_arena_as_allocator(ctx->arena);
   sp_da_init(ctx->mem, ctx->frames);
 
-  sp_mutex_init(&ctx->channel.lock, SP_MUTEX_PLAIN);
+  sp_mutex_init(&ctx->channel.lock);
   ctx->channel.arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
   ctx->channel.log.arenas[0] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
   ctx->channel.log.arenas[1] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);

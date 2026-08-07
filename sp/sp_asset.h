@@ -101,10 +101,10 @@ void* sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, v
 }
 
 void sp_asset_registry_init(sp_asset_registry_t* registry, sp_mem_t mem, sp_asset_registry_config_t config) {
-  sp_mutex_init(&registry->mutex, SP_MUTEX_PLAIN);
-  sp_mutex_init(&registry->import_mutex, SP_MUTEX_PLAIN);
-  sp_mutex_init(&registry->completion_mutex, SP_MUTEX_PLAIN);
-  sp_mutex_init(&registry->alloc_mutex, SP_MUTEX_PLAIN);
+  sp_mutex_init(&registry->mutex);
+  sp_mutex_init(&registry->import_mutex);
+  sp_mutex_init(&registry->completion_mutex);
+  sp_mutex_init(&registry->alloc_mutex);
   sp_semaphore_init(&registry->semaphore);
   registry->shutdown_requested = false;
   registry->import_queue = SP_NULLPTR;

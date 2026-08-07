@@ -6,7 +6,6 @@
 #include "array.c"
 #include "cli.c"
 #include "etc.c"
-#include "cv.c"
 #include "env.c"
 #include "fmon.c"
 #include "format.c"

@@ -688,7 +688,7 @@ s32 fancy_main(s32 argc, const c8** argv) {
   publish.targets[2] = (fancy_target_t) { .label = "x86_64-linux-none", .status = "queued", .state = FANCY_JOB_QUEUED };
   publish.targets[3] = (fancy_target_t) { .label = "aarch64-macos", .status = "queued", .state = FANCY_JOB_QUEUED };
   publish.targets[4] = (fancy_target_t) { .label = "x86_64-windows-gnu", .status = "queued", .state = FANCY_JOB_QUEUED };
-  sp_mutex_init(&publish.lock, SP_MUTEX_PLAIN);
+  sp_mutex_init(&publish.lock);
 
   sp_prompt_run(ctx, fancy_publish_widget(&publish));
   if (publish.worker_started) {
