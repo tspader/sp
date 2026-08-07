@@ -869,7 +869,10 @@ struct sp_http_conn {
 };
 
 SP_PRIVATE sp_tls_error_t sp_http_map_io(sp_err_t err, sp_tls_error_t fallback) {
-  return err == SP_ERR_IO_TIMEOUT ? SP_TLS_ERR_TIMEOUT : fallback;
+  if (err == SP_ERR_IO_TIMEOUT) return SP_TLS_ERR_TIMEOUT;
+  if (err == SP_ERR_IO_NO_SPACE) return SP_TLS_ERR_OS;
+  if (err >= SP_ERR_SYS && err < SP_ERR_SYS + 100) return SP_TLS_ERR_OS;
+  return fallback;
 }
 
 // resolved timeouts: 0 means block forever, matching mbedtls_net_recv_timeout
@@ -958,8 +961,7 @@ SP_PRIVATE sp_err_t sp_http_pump_wait(sp_http_conn_t* conn, s32 rc) {
   bool readable = rc == MBEDTLS_ERR_SSL_WANT_READ;
   sp_err_t wait = sp_sys_socket_wait((sp_sys_socket_t)conn->net.fd, readable, conn->io_timeout_ms);
   if (wait == SP_ERR_SYS_TIMED_OUT) return SP_ERR_IO_TIMEOUT;
-  if (wait != SP_OK) return SP_ERR_IO;
-  return SP_OK;
+  return wait;
 }
 
 SP_PRIVATE sp_err_t sp_http_tls_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
@@ -971,8 +973,7 @@ SP_PRIVATE sp_err_t sp_http_tls_read(sp_io_reader_t* reader, void* ptr, u64 size
     s32 n = mbedtls_ssl_read(&conn->ssl, (unsigned char*)ptr, (size_t)sp_min(size, (u64)INT32_MAX));
     if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
       sp_err_t err = sp_http_pump_wait(conn, n);
-      if (err == SP_ERR_IO_TIMEOUT) return SP_ERR_IO_TIMEOUT;
-      if (err != SP_OK) return SP_ERR_IO_READ_FAILED;
+      if (err != SP_OK) return err;
       continue;
     }
     if (n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
@@ -981,9 +982,10 @@ SP_PRIVATE sp_err_t sp_http_tls_read(sp_io_reader_t* reader, void* ptr, u64 size
       return SP_ERR_IO_EOF;
     }
     if (n == MBEDTLS_ERR_SSL_TIMEOUT) return SP_ERR_IO_TIMEOUT;
+    if (n == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET) continue;
     // a raw EOF without close_notify could be a truncation attack, so it is
     // an error, not end-of-stream
-    if (n <= 0) return SP_ERR_IO_READ_FAILED;
+    if (n <= 0) return SP_ERR_IO;
     if (bytes_read) *bytes_read = (u64)n;
     return SP_OK;
   }
@@ -996,11 +998,10 @@ SP_PRIVATE sp_err_t sp_http_tls_write(sp_io_writer_t* writer, const void* ptr, u
     s32 n = mbedtls_ssl_write(&conn->ssl, (const unsigned char*)ptr, (size_t)sp_min(size, (u64)INT32_MAX));
     if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
       sp_err_t err = sp_http_pump_wait(conn, n);
-      if (err == SP_ERR_IO_TIMEOUT) return SP_ERR_IO_TIMEOUT;
-      if (err != SP_OK) return SP_ERR_IO_WRITE_FAILED;
+      if (err != SP_OK) return err;
       continue;
     }
-    if (n <= 0) return SP_ERR_IO_WRITE_FAILED;
+    if (n <= 0) return SP_ERR_IO;
     if (bytes_written) *bytes_written = (u64)n;
     return SP_OK;
   }
@@ -1154,7 +1155,6 @@ SP_PRIVATE sp_tls_error_t sp_http_copy_n(sp_io_reader_t* reader, sp_io_writer_t*
   u64 copied = 0;
   sp_err_t err = sp_io_copy(body, &limit.base, &copied);
   if (written) *written += copied;
-  if (err == SP_ERR_IO_WRITE_FAILED) return SP_TLS_ERR_OS;
   if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
   if (limit.remaining) return SP_TLS_ERR_PROTOCOL;
   return SP_TLS_OK;
@@ -1199,7 +1199,6 @@ SP_PRIVATE sp_tls_error_t sp_http_read_body(sp_io_reader_t* reader, sp_http_head
   u64 copied = 0;
   sp_err_t err = sp_io_copy(body, reader, &copied);
   if (written) *written += copied;
-  if (err == SP_ERR_IO_WRITE_FAILED) return SP_TLS_ERR_OS;
   if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
   return SP_TLS_OK;
 }

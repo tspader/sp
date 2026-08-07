@@ -93,10 +93,10 @@ UTEST_F(io_write, partial_no_space) {
 UTEST_F(io_write, error_zero_bytes) {
   run_io_mock_write_test(utest_result, (io_mock_write_test_t){
     .results = {
-      { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .steps = {
-      { .kind = IO_STEP_WRITE, .write = { "abc", SP_ERR_IO_WRITE_FAILED, 0 } },
+      { .kind = IO_STEP_WRITE, .write = { "abc", SP_ERR_SYS_ACCESS_DENIED, 0 } },
     },
   });
 }
@@ -106,11 +106,11 @@ UTEST_F(io_write, error_after_success) {
   run_io_mock_write_test(utest_result, (io_mock_write_test_t){
     .results = {
       { .bytes = 3, .err = SP_OK },
-      { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
-      { .kind = IO_STEP_WRITE, .write = { "xyz", SP_ERR_IO_WRITE_FAILED, 0 } },
+      { .kind = IO_STEP_WRITE, .write = { "xyz", SP_ERR_SYS_ACCESS_DENIED, 0 } },
     },
     .expect = { .received = "abc" },
   });
@@ -120,10 +120,10 @@ UTEST_F(io_write, error_after_success) {
 UTEST_F(io_write, bytes_and_error) {
   run_io_mock_write_test(utest_result, (io_mock_write_test_t){
     .results = {
-      { .bytes = 2, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 2, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .steps = {
-      { .kind = IO_STEP_WRITE, .write = { "abc", SP_ERR_IO_WRITE_FAILED, 2 } },
+      { .kind = IO_STEP_WRITE, .write = { "abc", SP_ERR_SYS_ACCESS_DENIED, 2 } },
     },
     .expect = { .received = "ab" },
   });
@@ -310,12 +310,12 @@ UTEST_F(io_write, buffered_drain_then_bypass) {
 UTEST_F(io_write, buffered_flush_backend_error) {
   run_io_mock_write_test(utest_result, (io_mock_write_test_t){
     .results = {
-      { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .buffer = 8,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
-      { .kind = IO_STEP_FLUSH, .flush = { SP_ERR_IO_WRITE_FAILED } },
+      { .kind = IO_STEP_FLUSH, .flush = { SP_ERR_SYS_ACCESS_DENIED } },
     },
   });
 }
@@ -327,13 +327,13 @@ UTEST_F(io_write, buffered_flush_backend_error) {
 UTEST_F(io_write, buffered_flush_partial_drops_tail) {
   run_io_mock_write_test(utest_result, (io_mock_write_test_t){
     .results = {
-      { .bytes = 2, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 2, .err = SP_ERR_SYS_ACCESS_DENIED },
       { .bytes = 2, .err = SP_OK },
     },
     .buffer = 8,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abcd", SP_OK, 4 } },
-      { .kind = IO_STEP_FLUSH, .flush = { SP_ERR_IO_WRITE_FAILED } },
+      { .kind = IO_STEP_FLUSH, .flush = { SP_ERR_SYS_ACCESS_DENIED } },
       { .kind = IO_STEP_WRITE, .write = { "xy", SP_OK, 2 } },
       { .kind = IO_STEP_FLUSH, .flush = { SP_OK } },
     },
@@ -427,9 +427,9 @@ UTEST_F(io_write_all, stops_on_error) {
   run_io_mock_write_all_test(utest_result, (io_mock_write_all_test_t){
     .results = {
       { .bytes = 4, .err = SP_OK },
-      { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
-    .call = { "abcdefgh", SP_ERR_IO_WRITE_FAILED, 4 },
+    .call = { "abcdefgh", SP_ERR_SYS_ACCESS_DENIED, 4 },
     .expect = { .received = "abcd" },
   });
 }
@@ -440,9 +440,9 @@ UTEST_F(io_write_all, bytes_and_error) {
   run_io_mock_write_all_test(utest_result, (io_mock_write_all_test_t){
     .results = {
       { .bytes = 4, .err = SP_OK },
-      { .bytes = 2, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 2, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
-    .call = { "abcdefgh", SP_ERR_IO_WRITE_FAILED, 6 },
+    .call = { "abcdefgh", SP_ERR_SYS_ACCESS_DENIED, 6 },
     .expect = { .received = "abcdef" },
   });
 }

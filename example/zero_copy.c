@@ -4,6 +4,21 @@
 #define PERF_FILE_SIZE_MB 256u
 #define PERF_NAIVE_BUFFER 4096u
 
+typedef enum {
+  SRC_FILE,
+  SRC_STREAM_FILE,
+} src_t;
+
+typedef enum {
+  SINK_FILE,
+  SINK_PIPE,
+} sink_t;
+
+typedef struct {
+  u64 bytes;
+  u64 ns;
+} run_t;
+
 static void fill_random(u8* p, u64 n, u64 seed) {
   u64 s = seed ? seed : 1;
   for (u64 i = 0; i < n; i++) {
@@ -28,45 +43,6 @@ static sp_err_t make_source(sp_str_t path, u64 size_bytes, sp_mem_t mem) {
   return sp_io_file_writer_close(&w);
 }
 
-typedef struct {
-  u64 bytes;
-  u64 ns;
-} run_t;
-
-static run_t copy_naive(sp_str_t src, sp_str_t dst, sp_mem_t mem) {
-  sp_io_file_reader_t r = sp_zero;
-  sp_io_file_writer_t w = sp_zero;
-  sp_io_file_reader_from_path(&r, src);
-  sp_io_file_writer_from_path(&w, dst);
-
-  u8* buf = sp_alloc_n(mem, u8, PERF_NAIVE_BUFFER);
-  u64 copied = 0;
-
-  sp_tm_timer_t t = sp_tm_start_timer();
-  sp_io_copy_b(&w.base, &r.base, buf, PERF_NAIVE_BUFFER, &copied);
-  u64 ns = sp_tm_read_timer(&t);
-
-  sp_io_file_reader_close(&r);
-  sp_io_file_writer_close(&w);
-  return (run_t){ .bytes = copied, .ns = ns };
-}
-
-static run_t copy_fast(sp_str_t src, sp_str_t dst) {
-  sp_io_file_reader_t r = sp_zero;
-  sp_io_file_writer_t w = sp_zero;
-  sp_io_file_reader_from_path(&r, src);
-  sp_io_file_writer_from_path(&w, dst);
-
-  u64 copied = 0;
-  sp_tm_timer_t t = sp_tm_start_timer();
-  sp_io_copy(&w.base, &r.base, &copied);
-  u64 ns = sp_tm_read_timer(&t);
-
-  sp_io_file_reader_close(&r);
-  sp_io_file_writer_close(&w);
-  return (run_t){ .bytes = copied, .ns = ns };
-}
-
 #if defined(SP_LINUX)
 static s32 drain_pipe(void* userdata) {
   sp_sys_fd_t fd = (sp_sys_fd_t)(uintptr_t)userdata;
@@ -87,57 +63,89 @@ static s32 open_blocking_pipe(sp_sys_fd_t* out_r, sp_sys_fd_t* out_w) {
   *out_w = fds[1];
   return 0;
 }
-
-static run_t copy_naive_pipe(sp_str_t src, sp_mem_t mem) {
-  sp_sys_fd_t pipe_r = SP_SYS_INVALID_FD;
-  sp_sys_fd_t pipe_w = SP_SYS_INVALID_FD;
-  open_blocking_pipe(&pipe_r, &pipe_w);
-
-  sp_thread_t drainer = sp_zero;
-  sp_thread_init(&drainer, drain_pipe, (void*)(uintptr_t)pipe_r);
-
-  sp_io_file_reader_t r = sp_zero;
-  sp_io_stream_writer_t w = sp_zero;
-  sp_io_file_reader_from_path(&r, src);
-  sp_io_stream_writer_from_fd(&w, pipe_w, SP_IO_CLOSE_MODE_NONE);
-
-  u8* buf = sp_alloc_n(mem, u8, PERF_NAIVE_BUFFER);
-  u64 copied = 0;
-
-  sp_tm_timer_t t = sp_tm_start_timer();
-  sp_io_copy_b(&w.base, &r.base, buf, PERF_NAIVE_BUFFER, &copied);
-  u64 ns = sp_tm_read_timer(&t);
-
-  sp_io_file_reader_close(&r);
-  sp_sys_close(pipe_w);
-  sp_thread_join(&drainer);
-  return (run_t){ .bytes = copied, .ns = ns };
-}
-
-static run_t copy_fast_pipe(sp_str_t src) {
-  sp_sys_fd_t pipe_r = SP_SYS_INVALID_FD;
-  sp_sys_fd_t pipe_w = SP_SYS_INVALID_FD;
-  open_blocking_pipe(&pipe_r, &pipe_w);
-
-  sp_thread_t drainer = sp_zero;
-  sp_thread_init(&drainer, drain_pipe, (void*)(uintptr_t)pipe_r);
-
-  sp_io_file_reader_t r = sp_zero;
-  sp_io_stream_writer_t w = sp_zero;
-  sp_io_file_reader_from_path(&r, src);
-  sp_io_stream_writer_from_fd(&w, pipe_w, SP_IO_CLOSE_MODE_NONE);
-
-  u64 copied = 0;
-  sp_tm_timer_t t = sp_tm_start_timer();
-  sp_io_copy(&w.base, &r.base, &copied);
-  u64 ns = sp_tm_read_timer(&t);
-
-  sp_io_file_reader_close(&r);
-  sp_sys_close(pipe_w);
-  sp_thread_join(&drainer);
-  return (run_t){ .bytes = copied, .ns = ns };
-}
 #endif
+
+static run_t copy_run(sp_str_t src_path, sp_str_t dst_path, src_t src, sink_t sink, bool fast, sp_mem_t mem) {
+  sp_io_file_reader_t fr = sp_zero;
+  sp_io_stream_reader_t sr = sp_zero;
+  sp_io_reader_t* reader = SP_NULLPTR;
+
+  switch (src) {
+    case SRC_FILE: {
+      sp_io_file_reader_from_path(&fr, src_path);
+      reader = &fr.base;
+      break;
+    }
+    case SRC_STREAM_FILE: {
+      sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+      if (sp_sys_open_s(sp_sys_get_root(0), src_path, SP_SYS_OPEN_MODE_RO, 0, &fd) != SP_OK) {
+        return sp_zero_s(run_t);
+      }
+      sp_io_stream_reader_from_file(&sr, fd, SP_IO_CLOSE_MODE_AUTO);
+      reader = &sr.base;
+      break;
+    }
+  }
+
+  sp_io_file_writer_t fw = sp_zero;
+  sp_io_stream_writer_t sw = sp_zero;
+  sp_io_writer_t* writer = SP_NULLPTR;
+#if defined(SP_LINUX)
+  sp_sys_fd_t pipe_w = SP_SYS_INVALID_FD;
+  sp_thread_t drainer = sp_zero;
+#endif
+
+  switch (sink) {
+    case SINK_FILE: {
+      sp_io_file_writer_from_path(&fw, dst_path);
+      writer = &fw.base;
+      break;
+    }
+    case SINK_PIPE: {
+#if defined(SP_LINUX)
+      sp_sys_fd_t pipe_r = SP_SYS_INVALID_FD;
+      open_blocking_pipe(&pipe_r, &pipe_w);
+      sp_thread_init(&drainer, drain_pipe, (void*)(uintptr_t)pipe_r);
+      sp_io_stream_writer_from_fd(&sw, pipe_w, SP_IO_CLOSE_MODE_NONE);
+      writer = &sw.base;
+#endif
+      break;
+    }
+  }
+
+  u8* buf = fast ? SP_NULLPTR : sp_alloc_n(mem, u8, PERF_NAIVE_BUFFER);
+  u64 copied = 0;
+
+  sp_tm_timer_t t = sp_tm_start_timer();
+  if (fast) {
+    sp_io_copy(writer, reader, &copied);
+  }
+  else {
+    sp_io_copy_b(writer, reader, buf, PERF_NAIVE_BUFFER, &copied);
+  }
+  u64 ns = sp_tm_read_timer(&t);
+
+  switch (src) {
+    case SRC_FILE:        sp_io_file_reader_close(&fr);   break;
+    case SRC_STREAM_FILE: sp_io_stream_reader_close(&sr); break;
+  }
+
+  switch (sink) {
+    case SINK_FILE: {
+      sp_io_file_writer_close(&fw);
+      break;
+    }
+    case SINK_PIPE: {
+#if defined(SP_LINUX)
+      sp_sys_close(pipe_w);
+      sp_thread_join(&drainer);
+#endif
+      break;
+    }
+  }
+
+  return (run_t){ .bytes = copied, .ns = ns };
+}
 
 static void report(const c8* label, run_t run) {
   // MB/s = bytes / 1e6 / (ns / 1e9) = bytes * 1000 / ns.
@@ -149,6 +157,19 @@ static void report(const c8* label, run_t run) {
     sp_fmt_uint(run.ns / 1000u),
     sp_fmt_uint(mb_per_s)
   );
+}
+
+static void run_pair(const c8* label, sp_str_t src, sp_str_t dst, src_t src_kind, sink_t sink_kind, sp_mem_t mem) {
+  sp_log("{}", sp_fmt_cstr(label));
+  run_t naive = copy_run(src, dst, src_kind, sink_kind, false, mem);
+  report("naive", naive);
+  run_t fast = copy_run(src, dst, src_kind, sink_kind, true, mem);
+  report("fast ", fast);
+
+  if (fast.ns) {
+    u64 speedup_x100 = (naive.ns * 100u) / fast.ns;
+    sp_log("  speedup: {}.{}x", sp_fmt_uint(speedup_x100 / 100u), sp_fmt_uint(speedup_x100 % 100u));
+  }
 }
 
 s32 run(s32 num_args, const c8** args) {
@@ -167,38 +188,15 @@ s32 run(s32 num_args, const c8** args) {
     return 1;
   }
 
-  // Run it twice to at least pretend to warm up the IO, but the amount that
-  // going kernel -> kernel saves us overshadows any caching
-  sp_log("file -> file (copy_file_range)");
-  run_t n1 = copy_naive(src, dst, mem); report("naive #1", n1);
-  run_t f1 = copy_fast (src, dst);      report("fast  #1", f1);
-  run_t n2 = copy_naive(src, dst, mem); report("naive #2", n2);
-  run_t f2 = copy_fast (src, dst);      report("fast  #2", f2);
+  // One untimed pass warms the page cache so the first timed run isn't
+  // penalized relative to the others.
+  copy_run(src, dst, SRC_FILE, SINK_FILE, false, mem);
 
-  if (f2.ns) {
-    u64 speedup_x100 = (n2.ns * 100u) / f2.ns;
-    sp_log(
-      "warm-cache speedup: {}.{}x  (naive #2 / fast #2)",
-      sp_fmt_uint(speedup_x100 / 100u),
-      sp_fmt_uint(speedup_x100 % 100u)
-    );
-  }
-
+  run_pair("file -> file (copy_file_range)", src, dst, SRC_FILE, SINK_FILE, mem);
+  run_pair("stream file -> file (copy_file_range)", src, dst, SRC_STREAM_FILE, SINK_FILE, mem);
 #if defined(SP_LINUX)
-  sp_log("file -> pipe (sendfile)");
-  run_t pn1 = copy_naive_pipe(src, mem); report("naive #1", pn1);
-  run_t pf1 = copy_fast_pipe(src); report("fast  #1", pf1);
-  run_t pn2 = copy_naive_pipe(src, mem); report("naive #2", pn2);
-  run_t pf2 = copy_fast_pipe(src); report("fast  #2", pf2);
-
-  if (pf2.ns) {
-    u64 speedup_x100 = (pn2.ns * 100u) / pf2.ns;
-    sp_log(
-      "warm-cache speedup: {}.{}x  (naive #2 / fast #2)",
-      sp_fmt_uint(speedup_x100 / 100u),
-      sp_fmt_uint(speedup_x100 % 100u)
-    );
-  }
+  run_pair("file -> pipe (sendfile)", src, dst, SRC_FILE, SINK_PIPE, mem);
+  run_pair("stream file -> pipe (sendfile)", src, dst, SRC_STREAM_FILE, SINK_PIPE, mem);
 #endif
 
   sp_fs_remove_file(src);

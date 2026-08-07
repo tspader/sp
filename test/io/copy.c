@@ -95,10 +95,10 @@ UTEST_F(io_copy, reader_fails_after_success) {
   run_io_mock_copy_reader_test(utest_result, (io_mock_copy_reader_test_t){
     .results = {
       { .bytes = 3, .err = SP_OK, .data = "abc" },
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .buffer = { .copy = 8 }, .capacity = { .writer = 32 },
-    .expect = { .err = SP_ERR_IO_READ_FAILED, .copied = 3, .final = "abc" },
+    .expect = { .err = SP_ERR_SYS_ACCESS_DENIED, .copied = 3, .final = "abc" },
   });
 }
 
@@ -107,10 +107,10 @@ UTEST_F(io_copy, reader_fails_after_success) {
 UTEST_F(io_copy, reader_bytes_and_error) {
   run_io_mock_copy_reader_test(utest_result, (io_mock_copy_reader_test_t){
     .results = {
-      { .bytes = 3, .err = SP_ERR_IO_READ_FAILED, .data = "abc" },
+      { .bytes = 3, .err = SP_ERR_SYS_ACCESS_DENIED, .data = "abc" },
     },
     .buffer = { .copy = 8 }, .capacity = { .writer = 32 },
-    .expect = { .err = SP_ERR_IO_READ_FAILED, .copied = 3, .final = "abc" },
+    .expect = { .err = SP_ERR_SYS_ACCESS_DENIED, .copied = 3, .final = "abc" },
   });
 }
 
@@ -149,10 +149,10 @@ UTEST_F(io_copy, writer_fails_immediately) {
   run_io_mock_copy_writer_test(utest_result, (io_mock_copy_writer_test_t){
     .source = "0123456789",
     .responses = {
-      { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .buffer = { .copy = 8 },
-    .expect = { .err = SP_ERR_IO_WRITE_FAILED, .copied = 0, .received = "" },
+    .expect = { .err = SP_ERR_SYS_ACCESS_DENIED, .copied = 0, .received = "" },
   });
 }
 
@@ -210,16 +210,18 @@ UTEST_F(io_copy, buffered_writer_overflow_flushes_partial) {
 ///////////////////
 // FAST PATH     //
 ///////////////////
-// Pin the read_from-on-writer negotiation contract. A tracking writer
-// records whether read_from was invoked and how many bytes flowed through
-// each path. We pair it with an exposes-fd reader (a file reader) or a
-// no-fd reader (a mem reader) to exercise the dispatch table.
+// Pin the transfer-on-writer negotiation contract. A tracking writer records
+// whether the transfer hook was driven and how many bytes flowed through each
+// path. We pair it with a reader that claims as_file (a file reader) or one
+// that does not (a mem reader) to exercise the dispatch.
 
 typedef struct {
   sp_io_writer_t base;
-  bool          read_from_returns_unimpl;
+  sp_err_t      transfer_then;      // returned once transfer_max_calls succeeded; 0 = never
+  u64           transfer_max_calls;
+  u64           transfer_calls;
   u64           bytes_via_write;
-  u64           bytes_via_read_from;
+  u64           bytes_via_transfer;
 } io_tracking_writer_t;
 
 static sp_err_t io_tracking_writer_write(sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written) {
@@ -230,29 +232,33 @@ static sp_err_t io_tracking_writer_write(sp_io_writer_t* w, const void* ptr, u64
   return SP_OK;
 }
 
-static sp_err_t io_tracking_writer_read_from(sp_io_writer_t* w, sp_io_reader_t* r, u64* moved) {
+// Single-shot per the transfer contract: one bounded move per call, honoring
+// the source cursor; sp_io_copy owns the loop.
+static sp_err_t io_tracking_writer_transfer(sp_io_writer_t* w, sp_sys_fd_t fd, u64* pos, u64 count, u64* moved) {
   io_tracking_writer_t* t = (io_tracking_writer_t*)w;
-  if (t->read_from_returns_unimpl) {
+  if (t->transfer_then && t->transfer_calls >= t->transfer_max_calls) {
     if (moved) *moved = 0;
-    return SP_ERR_IO_UNIMPLEMENTED;
+    return t->transfer_then;
   }
-  // Drain the reader via .read so the test can observe a real byte count.
+  t->transfer_calls++;
   u8 buf [4096];
-  u64 total = 0;
-  while (true) {
-    u64 chunk = 0;
-    sp_err_t err = sp_io_read(r, buf, sizeof(buf), &chunk);
-    total += chunk;
-    if (err == SP_ERR_IO_EOF) break;
-    if (err) { if (moved) *moved = total; return err; }
+  u64 n = 0;
+  u64 want = sp_min(count, (u64)sizeof(buf));
+  sp_err_t err = pos
+    ? sp_sys_pread(fd, buf, want, *pos, &n)
+    : sp_sys_read(fd, buf, want, &n);
+  if (err) {
+    if (moved) *moved = 0;
+    return err;
   }
-  t->bytes_via_read_from = total;
-  if (moved) *moved = total;
+  if (pos) *pos += n;
+  t->bytes_via_transfer += n;
+  if (moved) *moved = n;
   return SP_OK;
 }
 
-// Source has an fd (file reader) and writer advertises read_from. The fast
-// path is taken; the byte-loop path is not touched.
+// Source claims as_file (file reader) and writer advertises transfer. The
+// fast path is taken; the byte-loop path is not touched.
 UTEST_F(io_copy, fast_path_taken_when_both_sides_support) {
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
@@ -272,21 +278,22 @@ UTEST_F(io_copy, fast_path_taken_when_both_sides_support) {
 
   io_tracking_writer_t w = sp_zero;
   w.base.write     = io_tracking_writer_write;
-  w.base.read_from = io_tracking_writer_read_from;
+  w.base.transfer = io_tracking_writer_transfer;
 
   u64 copied = 0;
   EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_OK);
   EXPECT_EQ(copied, n);
-  EXPECT_EQ(w.bytes_via_read_from, n);
+  EXPECT_EQ(w.bytes_via_transfer, n);
   EXPECT_EQ(w.bytes_via_write, 0);
 
   sp_io_file_reader_close(&r);
   sp_test_file_manager_cleanup(&fm);
 }
 
-// Source has no fd (mem reader). Fast path declines; we fall through to the
-// byte-loop path. The tracking writer's read_from is never called.
-UTEST_F(io_copy, fast_path_skipped_when_source_has_no_fd) {
+// Source does not claim as_file (mem reader). Fast path declines; we fall
+// through to the byte-loop path. The tracking writer's transfer hook is
+// never driven.
+UTEST_F(io_copy, fast_path_skipped_when_source_is_not_a_file) {
   const c8* content = "the-quick-brown-fox-jumps-over";
   u64 n = sp_cstr_len(content);
 
@@ -295,22 +302,22 @@ UTEST_F(io_copy, fast_path_skipped_when_source_has_no_fd) {
 
   io_tracking_writer_t w = sp_zero;
   w.base.write     = io_tracking_writer_write;
-  w.base.read_from = io_tracking_writer_read_from;
+  w.base.transfer = io_tracking_writer_transfer;
 
   u64 copied = 0;
   EXPECT_EQ(sp_io_copy(&w.base, &r, &copied), SP_OK);
   EXPECT_EQ(copied, n);
-  EXPECT_EQ(w.bytes_via_read_from, 0);
+  EXPECT_EQ(w.bytes_via_transfer, 0);
   EXPECT_EQ(w.bytes_via_write, n);
 }
 
-// Writer declines the fast path with SP_ERR_IO_UNIMPLEMENTED. Copy falls
-// through to the byte loop without surfacing the unimplemented error to the
+// Writer declines the fast path with SP_ERR_SYS_UNSUPPORTED. Copy falls
+// through to the byte loop without surfacing the decline to the
 // caller. The end-to-end byte count is intact.
-UTEST_F(io_copy, fast_path_unimplemented_falls_through) {
+UTEST_F(io_copy, fast_path_declined_falls_through) {
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
-  sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_unimpl.bin"));
+  sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_declined.bin"));
 
   const c8* content = "fallback-content-xyz";
   u64 n = sp_cstr_len(content);
@@ -326,16 +333,121 @@ UTEST_F(io_copy, fast_path_unimplemented_falls_through) {
 
   io_tracking_writer_t w = sp_zero;
   w.base.write     = io_tracking_writer_write;
-  w.base.read_from = io_tracking_writer_read_from;
-  w.read_from_returns_unimpl = true;
+  w.base.transfer = io_tracking_writer_transfer;
+  w.transfer_then = SP_ERR_SYS_UNSUPPORTED;
 
   u64 copied = 0;
   EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_OK);
   EXPECT_EQ(copied, n);
-  EXPECT_EQ(w.bytes_via_read_from, 0);
+  EXPECT_EQ(w.bytes_via_transfer, 0);
   EXPECT_EQ(w.bytes_via_write, n);
 
   sp_io_file_reader_close(&r);
+  sp_test_file_manager_cleanup(&fm);
+}
+
+// The transfer hook declines mid-stream, after real progress. The claimed
+// cursor has already advanced past the transferred prefix, so the generic
+// loop must resume exactly there: every byte lands once and only once.
+UTEST_F(io_copy, fast_path_mid_stream_decline_resumes_in_fallback) {
+  sp_test_file_manager_t fm = sp_zero;
+  sp_test_file_manager_init(&fm);
+  sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_midstream.bin"));
+
+  u8 source [6000];
+  sp_for(i, sizeof(source)) source[i] = (u8)((i * 1103515245u + 12345u) >> 8);
+  {
+    sp_io_file_writer_t fw = sp_zero;
+    sp_io_file_writer_from_path(&fw, path);
+    EXPECT_EQ(sp_io_write(&fw.base, source, sizeof(source), SP_NULLPTR), SP_OK);
+    sp_io_file_writer_close(&fw);
+  }
+
+  sp_io_file_reader_t r = sp_zero;
+  sp_io_file_reader_from_path(&r, path);
+
+  io_tracking_writer_t w = sp_zero;
+  w.base.write    = io_tracking_writer_write;
+  w.base.transfer = io_tracking_writer_transfer;
+  w.transfer_max_calls = 1;
+  w.transfer_then = SP_ERR_SYS_UNSUPPORTED;
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_OK);
+  EXPECT_EQ(copied, sizeof(source));
+  EXPECT_EQ(w.bytes_via_transfer, 4096);
+  EXPECT_EQ(w.bytes_via_write, sizeof(source) - 4096);
+
+  sp_io_file_reader_close(&r);
+  sp_test_file_manager_cleanup(&fm);
+}
+
+// A real transfer error surfaces to the caller with the fast-path progress
+// accounted in bytes_copied; the fallback does not run.
+UTEST_F(io_copy, transfer_error_surfaces_with_partial_progress) {
+  sp_test_file_manager_t fm = sp_zero;
+  sp_test_file_manager_init(&fm);
+  sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_error.bin"));
+
+  u8 source [6000];
+  sp_for(i, sizeof(source)) source[i] = (u8)((i * 2654435761u + 7) >> 8);
+  {
+    sp_io_file_writer_t fw = sp_zero;
+    sp_io_file_writer_from_path(&fw, path);
+    EXPECT_EQ(sp_io_write(&fw.base, source, sizeof(source), SP_NULLPTR), SP_OK);
+    sp_io_file_writer_close(&fw);
+  }
+
+  sp_io_file_reader_t r = sp_zero;
+  sp_io_file_reader_from_path(&r, path);
+
+  io_tracking_writer_t w = sp_zero;
+  w.base.write    = io_tracking_writer_write;
+  w.base.transfer = io_tracking_writer_transfer;
+  w.transfer_max_calls = 1;
+  w.transfer_then = SP_ERR_SYS_ACCESS_DENIED;
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_ERR_SYS_ACCESS_DENIED);
+  EXPECT_EQ(copied, 4096);
+  EXPECT_EQ(w.bytes_via_write, 0);
+
+  sp_io_file_reader_close(&r);
+  sp_test_file_manager_cleanup(&fm);
+}
+
+// A streaming claim hands the transfer hook a NULL cursor: the kernel's fd
+// cursor drives the source and the whole copy rides the fast path.
+UTEST_F(io_copy, fast_path_stream_claim_uses_fd_cursor) {
+  sp_test_file_manager_t fm = sp_zero;
+  sp_test_file_manager_init(&fm);
+  sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_stream.bin"));
+
+  const c8* content = "stream-claim-content";
+  u64 n = sp_cstr_len(content);
+  {
+    sp_io_file_writer_t fw = sp_zero;
+    sp_io_file_writer_from_path(&fw, path);
+    sp_io_write(&fw.base, content, n, SP_NULLPTR);
+    sp_io_file_writer_close(&fw);
+  }
+
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_RO, 0, &fd), SP_OK);
+  sp_io_stream_reader_t sr = sp_zero;
+  sp_io_stream_reader_from_file(&sr, fd, SP_IO_CLOSE_MODE_AUTO);
+
+  io_tracking_writer_t w = sp_zero;
+  w.base.write    = io_tracking_writer_write;
+  w.base.transfer = io_tracking_writer_transfer;
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &sr.base, &copied), SP_OK);
+  EXPECT_EQ(copied, n);
+  EXPECT_EQ(w.bytes_via_transfer, n);
+  EXPECT_EQ(w.bytes_via_write, 0);
+
+  sp_io_stream_reader_close(&sr);
   sp_test_file_manager_cleanup(&fm);
 }
 
@@ -399,9 +511,9 @@ UTEST_F(io_copy, buffered_writer_flush_error) {
   run_io_mock_copy_writer_test(utest_result, (io_mock_copy_writer_test_t){
     .source = "01234567",
     .responses = {
-      { .bytes = 0, .err = SP_ERR_IO_WRITE_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .buffer = { .copy = 2, .write = 4 },
-    .expect = { .err = SP_ERR_IO_WRITE_FAILED, .copied = 4, .received = "" },
+    .expect = { .err = SP_ERR_SYS_ACCESS_DENIED, .copied = 4, .received = "" },
   });
 }

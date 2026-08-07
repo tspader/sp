@@ -29,7 +29,7 @@ sp_err_t io_mock_reader_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_
     // a distinctive failure rather than asserting, so the test framework can
     // continue running other cases.
     if (bytes_read) *bytes_read = 0;
-    return SP_ERR_IO_READ_FAILED;
+    return SP_ERR_SYS_BUG;
   }
   io_result_t* resp = &m->results[m->cursor++];
   u64 n = sp_min(size, resp->bytes);
@@ -44,7 +44,7 @@ sp_err_t io_mock_writer_write(sp_io_writer_t* w, const void* ptr, u64 size, u64*
   io_mock_writer_t* m = (io_mock_writer_t*)w;
   if (m->cursor >= m->num_results) {
     if (bytes_written) *bytes_written = 0;
-    return SP_ERR_IO_WRITE_FAILED;
+    return SP_ERR_SYS_BUG;
   }
   io_result_t* resp = &m->results[m->cursor++];
   u64 n = sp_min(size, resp->bytes);
