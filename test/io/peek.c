@@ -192,11 +192,11 @@ UTEST_F(io_peek, peek_normalizes_eof_with_bytes) {
 UTEST_F(io_peek, peek_propagates_hard_error) {
   run_io_peek_test(utest_result, (io_peek_test_t){
     .results = {
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .buffer = 64,
     .steps = {
-      { .kind = IO_PEEK_STEP_PEEK, .peek = { SP_ERR_IO_READ_FAILED, "" } },
+      { .kind = IO_PEEK_STEP_PEEK, .peek = { SP_ERR_SYS_ACCESS_DENIED, "" } },
     },
   });
 }
@@ -220,7 +220,7 @@ UTEST_F(io_peek, fill_more_preserves_unconsumed_bytes) {
 }
 
 // A buffer already full of unconsumed bytes cannot grow. The script has no
-// second entry: a backend call would surface as SP_ERR_IO_READ_FAILED.
+// second entry: a backend call would surface as the mock's overflow error.
 UTEST_F(io_peek, fill_more_reports_no_space_when_full) {
   run_io_peek_test(utest_result, (io_peek_test_t){
     .results = {

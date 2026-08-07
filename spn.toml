@@ -38,3 +38,7 @@ source = ["test/main.c", "test/sync/*.c", "test/sync/os/*.c"]
 [[test]]
 name = "mem"
 source = ["test/main.c", "test/mem/uninitialized.c"]
+
+[[bin]]
+name = "zero_copy"
+source = ["example/zero_copy.c"]

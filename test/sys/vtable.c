@@ -9,6 +9,7 @@ typedef struct {
   s64         pread;
   s64         pwrite;
   s64         transfer;
+  s64         transfer_positional;
   sp_sys_fd_t get_root;
   s64         get_exe_path;
   s64         get_cwd_path;
@@ -90,7 +91,11 @@ static sp_err_t sys_vtable_mock_pwrite(sp_sys_fd_t fd, const void* buf, u64 coun
   return (sp_err_t)69;
 }
 
-static sp_err_t sys_vtable_mock_transfer(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* out_pos, u64 count, u64* bytes_moved) {
+static sp_err_t sys_vtable_mock_transfer(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64* bytes_moved) {
+  return (sp_err_t)69;
+}
+
+static sp_err_t sys_vtable_mock_transfer_positional(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64 offset, u64* bytes_moved) {
   return (sp_err_t)69;
 }
 
@@ -345,6 +350,7 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .pread                  = sys_vtable_mock_pread,
   .pwrite                 = sys_vtable_mock_pwrite,
   .transfer               = sys_vtable_mock_transfer,
+  .transfer_positional              = sys_vtable_mock_transfer_positional,
   .get_root               = sys_vtable_mock_get_root,
   .get_exe_path           = sys_vtable_mock_get_exe_path,
   .get_cwd_path           = sys_vtable_mock_get_cwd_path,
@@ -421,7 +427,8 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   r->write = sp_sys_write(0, SP_NULLPTR, 0, SP_NULLPTR);
   r->pread = sp_sys_pread(0, SP_NULLPTR, 0, 0, SP_NULLPTR);
   r->pwrite = sp_sys_pwrite(0, SP_NULLPTR, 0, 0, SP_NULLPTR);
-  r->transfer = sp_sys_transfer(0, SP_NULLPTR, 0, SP_NULLPTR, 0, SP_NULLPTR);
+  r->transfer = sp_sys_transfer(0, SP_NULLPTR, 0, 0, SP_NULLPTR);
+  r->transfer_positional = sp_sys_transfer_positional(0, SP_NULLPTR, 0, 0, 0, SP_NULLPTR);
   r->get_root = sp_sys_get_root(0);
   r->get_exe_path = sp_sys_get_exe_path(SP_NULLPTR, 0);
   r->get_cwd_path = sp_sys_get_cwd_path(SP_NULLPTR, 0);
@@ -497,6 +504,7 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->pread, 69);
   EXPECT_EQ(r->pwrite, 69);
   EXPECT_EQ(r->transfer, 69);
+  EXPECT_EQ(r->transfer_positional, 69);
   EXPECT_EQ(r->get_root, 69);
   EXPECT_EQ(r->get_exe_path, 69);
   EXPECT_EQ(r->get_cwd_path, 69);

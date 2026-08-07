@@ -98,10 +98,10 @@ UTEST_F(io_read, eof_idempotent) {
 UTEST_F(io_read, error_zero_bytes) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .steps = {
-      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_SYS_ACCESS_DENIED } },
     },
   });
 }
@@ -111,11 +111,11 @@ UTEST_F(io_read, error_after_success) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
       { .bytes = 4, .err = SP_OK, .data = "abcd" },
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .steps = {
       { .kind = IO_STEP_READ, .read = { 8, SP_OK, "abcd" } },
-      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_SYS_ACCESS_DENIED } },
     },
   });
 }
@@ -125,10 +125,10 @@ UTEST_F(io_read, error_after_success) {
 UTEST_F(io_read, bytes_and_error) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 3, .err = SP_ERR_IO_READ_FAILED, .data = "abc" },
+      { .bytes = 3, .err = SP_ERR_SYS_ACCESS_DENIED, .data = "abc" },
     },
     .steps = {
-      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED, "abc" } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_SYS_ACCESS_DENIED, "abc" } },
     },
   });
 }
@@ -139,12 +139,12 @@ UTEST_F(io_read, bytes_and_error) {
 UTEST_F(io_read, error_then_error) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .steps = {
-      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED } },
-      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_SYS_ACCESS_DENIED } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_SYS_ACCESS_DENIED } },
     },
   });
 }
@@ -265,11 +265,11 @@ UTEST_F(io_read, buffered_eof_after_partial_drain) {
 UTEST_F(io_read, buffered_error_immediate) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .buffer = 8,
     .steps = {
-      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_SYS_ACCESS_DENIED } },
     },
   });
 }
@@ -294,11 +294,11 @@ UTEST_F(io_read, buffered_short_fill) {
 UTEST_F(io_read, error_then_recovery) {
   run_io_mock_read_test(utest_result, (io_mock_read_test_t){
     .results = {
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
       { .bytes = 3, .err = SP_OK, .data = "abc" },
     },
     .steps = {
-      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_IO_READ_FAILED } },
+      { .kind = IO_STEP_READ, .read = { 8, SP_ERR_SYS_ACCESS_DENIED } },
       { .kind = IO_STEP_READ, .read = { 8, SP_OK, "abc" } },
     },
   });
@@ -420,10 +420,10 @@ UTEST_F(io_read, all_error_partial) {
   run_io_mock_read_all_test(utest_result, (io_mock_read_all_test_t){
     .results = {
       { .bytes = 4, .err = SP_OK, .data = "abcd" },
-      { .bytes = 0, .err = SP_ERR_IO_READ_FAILED },
+      { .bytes = 0, .err = SP_ERR_SYS_ACCESS_DENIED },
     },
     .request = 8,
-    .err = SP_ERR_IO_READ_FAILED,
+    .err = SP_ERR_SYS_ACCESS_DENIED,
     .content = "abcd",
   });
 }

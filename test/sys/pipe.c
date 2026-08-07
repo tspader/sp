@@ -101,6 +101,27 @@ UTEST_F(sys_pipe, read_after_writer_closed_is_eof) {
   });
 }
 
+// A write that moves zero bytes must report WOULD_BLOCK, never (0, SP_OK) —
+// win32 reports a full PIPE_NOWAIT pipe as WriteFile success with zero
+// written, and sp_sys_write translates it; POSIX reports EAGAIN natively.
+UTEST_F(sys_pipe, write_to_full_pipe_reports_would_block) {
+  sp_sys_fd_t r = SP_SYS_INVALID_FD;
+  sp_sys_fd_t w = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_pipe(&r, &w), SP_OK);
+
+  u8 chunk [4096] = sp_zero;
+  sp_err_t err = SP_OK;
+  while (err == SP_OK) {
+    u64 n = 0;
+    err = sp_sys_write(w, chunk, sizeof(chunk), &n);
+    if (err == SP_OK) EXPECT_TRUE(n > 0);
+  }
+  EXPECT_EQ(err, SP_ERR_SYS_WOULD_BLOCK);
+
+  sp_sys_close(r);
+  sp_sys_close(w);
+}
+
 #if defined(SP_WIN32)
 UTEST_F(sys_pipe, write_after_reader_closed_reports_broken_pipe) {
   run_sys_pipe_test(utest_result, (sys_pipe_test_t) {

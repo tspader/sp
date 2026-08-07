@@ -785,30 +785,10 @@ typedef enum {
   SP_OK                   = 0,
   SP_ERR                = 1,
   SP_ERR_IO               = 1001,
-  SP_ERR_IO_OPEN_FAILED   = 1002,
-  SP_ERR_IO_SEEK_INVALID  = 1003,
-  SP_ERR_IO_SEEK_FAILED   = 1004,
-  SP_ERR_IO_WRITE_FAILED  = 1005,
-  SP_ERR_IO_CLOSE_FAILED  = 1006,
-  SP_ERR_IO_READ_FAILED   = 1007,
-  SP_ERR_IO_READ_ONLY     = 1008,
-  SP_ERR_IO_NO_SPACE      = 1009,
-  SP_ERR_IO_EOF           = 1010,
-  SP_ERR_IO_INVALID_WRITE = 1011,
-  SP_ERR_IO_UNIMPLEMENTED = 1012,
-  SP_ERR_IO_TIMEOUT      = 1013,
-  SP_ERR_IO_NOT_FOUND      = 1014,
-  SP_ERR_IO_ACCESS_DENIED  = 1015,
-  SP_ERR_IO_IS_DIR         = 1016,
-  SP_ERR_IO_NOT_DIR        = 1017,
-  SP_ERR_IO_EXISTS         = 1018,
-  SP_ERR_IO_BUSY           = 1019,
-  SP_ERR_IO_TOO_MANY_FILES = 1020,
-  SP_ERR_IO_NAME_TOO_LONG  = 1021,
-  SP_ERR_IO_BAD_FD         = 1022,
-  SP_ERR_IO_BROKEN_PIPE    = 1023,
-  SP_ERR_IO_CONN_RESET     = 1024,
-  SP_ERR_IO_WOULD_BLOCK    = 1025,
+  SP_ERR_IO_SEEK_INVALID  = 1002,
+  SP_ERR_IO_NO_SPACE      = 1003,
+  SP_ERR_IO_EOF           = 1004,
+  SP_ERR_IO_TIMEOUT       = 1005,
   SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
   SP_ERR_FMT_BAD_DIRECTIVE = 1103,
   SP_ERR_FMT_TOO_MANY_DIRECTIVES = 1104,
@@ -1411,7 +1391,8 @@ SP_API sp_err_t    sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_
 SP_API sp_err_t    sp_sys_write(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written);
 SP_API sp_err_t    sp_sys_pread(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* bytes_read);
 SP_API sp_err_t    sp_sys_pwrite(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset, u64* bytes_written);
-SP_API sp_err_t    sp_sys_transfer(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* out_pos, u64 count, u64* bytes_moved);
+SP_API sp_err_t    sp_sys_transfer(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64* bytes_moved);
+SP_API sp_err_t    sp_sys_transfer_positional(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64 offset, u64* bytes_moved);
 SP_API sp_sys_fd_t sp_sys_get_root(s32 it);
 SP_API s64         sp_sys_get_exe_path(c8* buf, u64 size);
 SP_API s64         sp_sys_get_cwd_path(c8* buf, u64 size);
@@ -1500,7 +1481,8 @@ typedef struct {
   sp_err_t    (*write)(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written);
   sp_err_t    (*pread)(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* bytes_read);
   sp_err_t    (*pwrite)(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset, u64* bytes_written);
-  sp_err_t    (*transfer)(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* out_pos, u64 count, u64* bytes_moved);
+  sp_err_t    (*transfer)(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64* bytes_moved);
+  sp_err_t    (*transfer_positional)(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64 offset, u64* bytes_moved);
   sp_sys_fd_t (*get_root)(s32 it);
   s64         (*get_exe_path)(c8* buf, u64 size);
   s64         (*get_cwd_path)(c8* buf, u64 size);
@@ -1569,7 +1551,8 @@ SP_API sp_err_t    sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* byte
 SP_API sp_err_t    sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written);
 SP_API sp_err_t    sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* bytes_read);
 SP_API sp_err_t    sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset, u64* bytes_written);
-SP_API sp_err_t    sp_sys_transfer_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* out_pos, u64 count, u64* bytes_moved);
+SP_API sp_err_t    sp_sys_transfer_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64* bytes_moved);
+SP_API sp_err_t    sp_sys_transfer_positional_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64 offset, u64* bytes_moved);
 SP_API sp_sys_fd_t sp_sys_get_root_p(s32 it);
 SP_API s64         sp_sys_get_exe_path_p(c8* buf, u64 size);
 SP_API s64         sp_sys_get_cwd_path_p(c8* buf, u64 size);
@@ -4413,15 +4396,16 @@ typedef enum {
 
 SP_TYPEDEF_FN(sp_err_t, sp_io_reader_read_cb, sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
 SP_TYPEDEF_FN(sp_err_t, sp_io_seek_cb, sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
-SP_TYPEDEF_FN(sp_err_t, sp_io_reader_as_fd_cb, sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos);
+SP_TYPEDEF_FN(sp_err_t, sp_io_reader_as_file_cb, sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos);
 SP_TYPEDEF_FN(sp_err_t, sp_io_reader_discard_cb, sp_io_reader_t* r, u64 n, u64* discarded);
 
 SP_TYPEDEF_FN(sp_err_t, sp_io_writer_write_cb, sp_io_writer_t* w, const void* ptr, u64 size, u64* bytes_written);
-SP_TYPEDEF_FN(sp_err_t, sp_io_writer_read_from_cb, sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_moved);
+
+SP_TYPEDEF_FN(sp_err_t, sp_io_writer_transfer_cb, sp_io_writer_t* w, sp_sys_fd_t fd, u64* pos, u64 count, u64* bytes_moved);
 
 struct sp_io_reader {
   sp_io_reader_read_cb read;
-  sp_io_reader_as_fd_cb as_fd;
+  sp_io_reader_as_file_cb as_file;
   sp_io_reader_discard_cb discard;
   sp_mem_buffer_t buffer;
   u64 cursor;
@@ -4449,7 +4433,7 @@ typedef struct {
 
 struct sp_io_writer {
   sp_io_writer_write_cb write;
-  sp_io_writer_read_from_cb read_from;
+  sp_io_writer_transfer_cb transfer;
   sp_mem_buffer_t buffer;
 };
 
@@ -4573,6 +4557,7 @@ SP_API sp_err_t       sp_io_file_writer_size_force(sp_io_file_writer_t* w, u64* 
 SP_API sp_err_t       sp_io_file_writer_close(sp_io_file_writer_t* w);
 
 SP_API void           sp_io_stream_reader_from_fd(sp_io_stream_reader_t* r, sp_sys_fd_t fd, sp_io_close_mode_t mode);
+SP_API void           sp_io_stream_reader_from_file(sp_io_stream_reader_t* r, sp_sys_fd_t file, sp_io_close_mode_t mode);
 SP_API sp_err_t       sp_io_stream_reader_close(sp_io_stream_reader_t* r);
 
 SP_API void           sp_io_stream_writer_from_fd(sp_io_stream_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t mode);
@@ -4945,7 +4930,7 @@ SP_IMP sp_err_t sp_io_file_reader_read(sp_io_reader_t* reader, void* ptr, u64 si
 SP_IMP sp_err_t sp_io_file_reader_discard(sp_io_reader_t* reader, u64 n, u64* discarded);
 SP_IMP sp_err_t sp_io_file_reader_seek_cb(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position);
 SP_IMP sp_err_t sp_io_stream_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
-SP_IMP sp_err_t sp_io_stream_reader_as_fd(sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos);
+SP_IMP sp_err_t sp_io_stream_reader_as_file(sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos);
 SP_IMP sp_err_t sp_io_eof_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
 SP_IMP sp_err_t sp_io_file_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
 SP_IMP sp_err_t sp_io_stream_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
@@ -5530,6 +5515,7 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .pread                  = sp_sys_pread_p,
   .pwrite                 = sp_sys_pwrite_p,
   .transfer               = sp_sys_transfer_p,
+  .transfer_positional    = sp_sys_transfer_positional_p,
   .get_root               = sp_sys_get_root_p,
   .get_exe_path           = sp_sys_get_exe_path_p,
   .get_cwd_path           = sp_sys_get_cwd_path_p,
@@ -5604,30 +5590,10 @@ sp_str_t sp_err_str(sp_err_t err) {
     case SP_OK:                              return sp_str_lit("SP_OK");
     case SP_ERR:                             return sp_str_lit("SP_ERR");
     case SP_ERR_IO:                          return sp_str_lit("SP_ERR_IO");
-    case SP_ERR_IO_OPEN_FAILED:              return sp_str_lit("SP_ERR_IO_OPEN_FAILED");
     case SP_ERR_IO_SEEK_INVALID:             return sp_str_lit("SP_ERR_IO_SEEK_INVALID");
-    case SP_ERR_IO_SEEK_FAILED:              return sp_str_lit("SP_ERR_IO_SEEK_FAILED");
-    case SP_ERR_IO_WRITE_FAILED:             return sp_str_lit("SP_ERR_IO_WRITE_FAILED");
-    case SP_ERR_IO_CLOSE_FAILED:             return sp_str_lit("SP_ERR_IO_CLOSE_FAILED");
-    case SP_ERR_IO_READ_FAILED:              return sp_str_lit("SP_ERR_IO_READ_FAILED");
-    case SP_ERR_IO_READ_ONLY:                return sp_str_lit("SP_ERR_IO_READ_ONLY");
     case SP_ERR_IO_NO_SPACE:                 return sp_str_lit("SP_ERR_IO_NO_SPACE");
     case SP_ERR_IO_EOF:                      return sp_str_lit("SP_ERR_IO_EOF");
-    case SP_ERR_IO_INVALID_WRITE:            return sp_str_lit("SP_ERR_IO_INVALID_WRITE");
-    case SP_ERR_IO_UNIMPLEMENTED:            return sp_str_lit("SP_ERR_IO_UNIMPLEMENTED");
     case SP_ERR_IO_TIMEOUT:                  return sp_str_lit("SP_ERR_IO_TIMEOUT");
-    case SP_ERR_IO_NOT_FOUND:                return sp_str_lit("SP_ERR_IO_NOT_FOUND");
-    case SP_ERR_IO_ACCESS_DENIED:            return sp_str_lit("SP_ERR_IO_ACCESS_DENIED");
-    case SP_ERR_IO_IS_DIR:                   return sp_str_lit("SP_ERR_IO_IS_DIR");
-    case SP_ERR_IO_NOT_DIR:                  return sp_str_lit("SP_ERR_IO_NOT_DIR");
-    case SP_ERR_IO_EXISTS:                   return sp_str_lit("SP_ERR_IO_EXISTS");
-    case SP_ERR_IO_BUSY:                     return sp_str_lit("SP_ERR_IO_BUSY");
-    case SP_ERR_IO_TOO_MANY_FILES:           return sp_str_lit("SP_ERR_IO_TOO_MANY_FILES");
-    case SP_ERR_IO_NAME_TOO_LONG:            return sp_str_lit("SP_ERR_IO_NAME_TOO_LONG");
-    case SP_ERR_IO_BAD_FD:                   return sp_str_lit("SP_ERR_IO_BAD_FD");
-    case SP_ERR_IO_BROKEN_PIPE:              return sp_str_lit("SP_ERR_IO_BROKEN_PIPE");
-    case SP_ERR_IO_CONN_RESET:               return sp_str_lit("SP_ERR_IO_CONN_RESET");
-    case SP_ERR_IO_WOULD_BLOCK:              return sp_str_lit("SP_ERR_IO_WOULD_BLOCK");
     case SP_ERR_FMT_UNKNOWN_DIRECTIVE:       return sp_str_lit("SP_ERR_FMT_UNKNOWN_DIRECTIVE");
     case SP_ERR_FMT_BAD_DIRECTIVE:           return sp_str_lit("SP_ERR_FMT_BAD_DIRECTIVE");
     case SP_ERR_FMT_TOO_MANY_DIRECTIVES:     return sp_str_lit("SP_ERR_FMT_TOO_MANY_DIRECTIVES");
@@ -5709,8 +5675,12 @@ sp_err_t sp_sys_pwrite(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset, u
   return (sp_rt.vt->pwrite)(fd, buf, count, offset, bytes_written);
 }
 
-sp_err_t sp_sys_transfer(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* out_pos, u64 count, u64* bytes_moved) {
-  return (sp_rt.vt->transfer)(in, in_pos, out, out_pos, count, bytes_moved);
+sp_err_t sp_sys_transfer(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64* bytes_moved) {
+  return (sp_rt.vt->transfer)(in, in_pos, out, count, bytes_moved);
+}
+
+sp_err_t sp_sys_transfer_positional(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64 offset, u64* bytes_moved) {
+  return (sp_rt.vt->transfer_positional)(in, in_pos, out, count, offset, bytes_moved);
 }
 
 sp_sys_fd_t sp_sys_get_root(s32 it) {
@@ -7204,8 +7174,10 @@ sp_err_t sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
   HANDLE w = SP_NULLPTR;
   SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), SP_NULLPTR, FALSE };
   if (!CreatePipe(&r, &w, &sa, 0)) return sp_sys_err_from_win32(GetLastError());
+  // Nonblocking mode is per handle, not per pipe; both ends need it.
   DWORD mode = PIPE_NOWAIT;
-  if (!SetNamedPipeHandleState(r, &mode, SP_NULLPTR, SP_NULLPTR)) {
+  if (!SetNamedPipeHandleState(r, &mode, SP_NULLPTR, SP_NULLPTR) ||
+      !SetNamedPipeHandleState(w, &mode, SP_NULLPTR, SP_NULLPTR)) {
     sp_err_t err = sp_sys_err_from_win32(GetLastError());
     CloseHandle(r);
     CloseHandle(w);
@@ -7227,6 +7199,7 @@ sp_err_t sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
   s32 fds[2];
   if (pipe(fds) < 0) return sp_sys_err_from_errno(errno);
   fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
+  fcntl(fds[1], F_SETFL, fcntl(fds[1], F_GETFL) | O_NONBLOCK);
   fcntl(fds[0], F_SETFD, fcntl(fds[0], F_GETFD) | FD_CLOEXEC);
   fcntl(fds[1], F_SETFD, fcntl(fds[1], F_GETFD) | FD_CLOEXEC);
   *read_end = fds[0];
@@ -7313,6 +7286,8 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
     if (err == ERROR_NO_DATA) return SP_ERR_SYS_BROKEN_PIPE;
     return sp_sys_err_from_win32(err);
   }
+  // A full PIPE_NOWAIT pipe reports success with zero bytes written.
+  if (count && !n) return SP_ERR_SYS_WOULD_BLOCK;
   if (bytes_written) *bytes_written = (u64)n;
   return SP_OK;
 
@@ -7444,6 +7419,8 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
   if (restore) SetFilePointerEx((HANDLE)fd, saved, SP_NULLPTR, FILE_BEGIN);
 
   if (!ok) return sp_sys_err_from_win32(err);
+  // A full PIPE_NOWAIT pipe reports success with zero bytes written.
+  if (count && !n) return SP_ERR_SYS_WOULD_BLOCK;
   if (bytes_written) *bytes_written = (u64)n;
   return SP_OK;
 
@@ -7486,63 +7463,78 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
 #endif
 }
 
-sp_err_t sp_sys_transfer_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64* out_pos, u64 count, u64* bytes_moved) {
+sp_err_t sp_sys_transfer_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64* bytes_moved) {
   if (bytes_moved) *bytes_moved = 0;
 
 #if defined(SP_LINUX)
-  s64 rc;
-  if (out_pos) {
-    sp_try(sp_sys_is_supported(SP_SYS_SUPPORT_COPY_FILE_RANGE));
-    rc = sp_syscall_retry(SP_SYSCALL_NUM_COPY_FILE_RANGE, in, in_pos, out, out_pos, count, 0);
-    if (rc < 0) {
-      switch (-rc) {
-        // If the OS literally does not have the fast path syscall, stop
-        // wasting time trying to call it, ever. Different runtime handle this
-        // differently:
-        // - Go used to cache ENOSYS, but then tried to get rid of this per-call
-        // checking in favor of just gating on the kernel version. But they
-        // found that that's not really possible, because ENOSYS can arise
-        // even on supported kernels thanks to seccomp / containers.
-        // - Rust caches ENOSYS but also EPERM (kind of). When they get EPERM,
-        // they probe by calling copy_file_range with a deliberately invalid
-        // handle. And the ordering of the kernel's checks tells them whether
-        // that EPERM was from seccomp (cache it) or not (don't)
-        // - Zig is weird. ENOSYS, EINVAL, and EOPNOTSUPP all globally kill
-        // the syscall.
-        case SP_ENOSYS: return sp_sys_mark_unsupported(SP_SYS_SUPPORT_COPY_FILE_RANGE);
-        // Otherwise, it just means that the fast path is unsupported *for
-        // this set of handles*, so we return UNSUPPORTED but do not globally
-        // flag this syscall as unsupported
-        case SP_EINVAL:
-        case SP_EXDEV:
-        case SP_EOPNOTSUPP:
-        case SP_EPERM:
-        case SP_EIO:
-        case SP_EBADF: return SP_ERR_SYS_UNSUPPORTED;
-        default: return sp_sys_err_from_errno(-rc);
-      }
+  sp_try(sp_sys_is_supported(SP_SYS_SUPPORT_SENDFILE));
+  s64 off = in_pos ? (s64)*in_pos : 0;
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_SENDFILE, out, in, in_pos ? &off : SP_NULLPTR, count);
+  if (rc < 0) {
+    switch (-rc) {
+      case SP_ENOSYS: return sp_sys_mark_unsupported(SP_SYS_SUPPORT_SENDFILE);
+      case SP_EINVAL:
+      case SP_EOPNOTSUPP:
+      case SP_EPERM: return SP_ERR_SYS_UNSUPPORTED;
+      default: return sp_sys_err_from_errno(-rc);
     }
   }
-  else {
-    sp_try(sp_sys_is_supported(SP_SYS_SUPPORT_SENDFILE));
-    s64 off = in_pos ? (s64)*in_pos : 0;
-    rc = sp_syscall_retry(SP_SYSCALL_NUM_SENDFILE, out, in, in_pos ? &off : SP_NULLPTR, count);
-    if (rc < 0) {
-      switch (-rc) {
-        case SP_ENOSYS: return sp_sys_mark_unsupported(SP_SYS_SUPPORT_SENDFILE);
-        case SP_EINVAL:
-        case SP_EOPNOTSUPP:
-        case SP_EPERM: return SP_ERR_SYS_UNSUPPORTED;
-        default: return sp_sys_err_from_errno(-rc);
+  if (in_pos) *in_pos = (u64)off;
+  if (bytes_moved) *bytes_moved = (u64)rc;
+  return SP_OK;
+
+#else
+  (void)in; (void)in_pos; (void)out; (void)count;
+  return SP_ERR_SYS_UNSUPPORTED;
+#endif
+}
+
+sp_err_t sp_sys_transfer_positional_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t out, u64 count, u64 offset, u64* bytes_moved) {
+  if (bytes_moved) *bytes_moved = 0;
+
+#if defined(SP_LINUX)
+  sp_try(sp_sys_is_supported(SP_SYS_SUPPORT_COPY_FILE_RANGE));
+  s64 out_off = (s64)offset;
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_COPY_FILE_RANGE, in, in_pos, out, &out_off, count, 0);
+  if (rc < 0) {
+    switch (-rc) {
+      // If the OS literally does not have the fast path syscall, stop
+      // wasting time trying to call it, ever. Different runtime handle this
+      // differently:
+      // - Go used to cache ENOSYS, but then tried to get rid of this per-call
+      // checking in favor of just gating on the kernel version. But they
+      // found that that's not really possible, because ENOSYS can arise
+      // even on supported kernels thanks to seccomp / containers.
+      // - Rust caches ENOSYS but also EPERM (kind of). When they get EPERM,
+      // they probe by calling copy_file_range with a deliberately invalid
+      // handle. And the ordering of the kernel's checks tells them whether
+      // that EPERM was from seccomp (cache it) or not (don't)
+      // - Zig is weird. ENOSYS, EINVAL, and EOPNOTSUPP all globally kill
+      // the syscall.
+      case SP_ENOSYS: {
+        return sp_sys_mark_unsupported(SP_SYS_SUPPORT_COPY_FILE_RANGE);
+      }
+      // Otherwise, it just means that the fast path is unsupported *for
+      // this set of handles*, so we return UNSUPPORTED but do not globally
+      // flag this syscall as unsupported
+      case SP_EINVAL:
+      case SP_EXDEV:
+      case SP_EOPNOTSUPP:
+      case SP_EPERM:
+      case SP_EIO:
+      case SP_EBADF: {
+        return SP_ERR_SYS_UNSUPPORTED;
+      }
+      default: {
+        return sp_sys_err_from_errno(-rc);
       }
     }
-    if (in_pos) *in_pos = (u64)off;
   }
   if (bytes_moved) *bytes_moved = (u64)rc;
   return SP_OK;
 
 #else
-  (void)in; (void)in_pos; (void)out; (void)out_pos; (void)count;
+  (void)in; (void)in_pos; (void)out; (void)offset; (void)count;
   return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
@@ -14759,7 +14751,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
         sp_io_write_str(writers[i], sp_str((c8*)buffer, n), SP_NULLPTR);
       }
       if (read_err == SP_OK && n > 0) continue;
-      if (read_err == SP_ERR_IO_WOULD_BLOCK) continue;
+      if (read_err == SP_ERR_SYS_WOULD_BLOCK) continue;
 
       if (read_err != SP_OK && read_err != SP_ERR_IO_EOF && result.error == SP_OK) {
         result.error = read_err;
@@ -16448,40 +16440,14 @@ sp_err_t sp_io_file_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64
   sp_io_file_reader_t* r = (sp_io_file_reader_t*)reader;
   u64 num_bytes = 0;
   sp_err_t err = sp_sys_pread(r->file, ptr, size, r->pos, &num_bytes);
-
-  sp_err_t result = SP_OK;
-  if (err) {
-    result = SP_ERR_IO_READ_FAILED;
-  }
-  else if (size && !num_bytes) {
-    result = SP_ERR_IO_EOF;
-  }
-  else {
-    r->pos += num_bytes;
-  }
-
+  r->pos += num_bytes;
   if (bytes_read) *bytes_read = num_bytes;
-  return result;
+  return err;
 }
 
 sp_err_t sp_io_stream_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
   sp_io_stream_reader_t* pr = (sp_io_stream_reader_t*)reader;
-  u64 num_bytes = 0;
-  sp_err_t err = sp_sys_read(pr->fd, ptr, size, &num_bytes);
-
-  sp_err_t result = SP_OK;
-  if (err == SP_ERR_SYS_WOULD_BLOCK) {
-    result = SP_ERR_IO_WOULD_BLOCK;
-  }
-  else if (err) {
-    result = SP_ERR_IO_READ_FAILED;
-  }
-  else if (size && !num_bytes) {
-    result = SP_ERR_IO_EOF;
-  }
-
-  if (bytes_read) *bytes_read = num_bytes;
-  return result;
+  return sp_sys_read(pr->fd, ptr, size, bytes_read);
 }
 
 sp_err_t sp_io_eof_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read) {
@@ -16490,9 +16456,9 @@ sp_err_t sp_io_eof_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read)
   return SP_ERR_IO_EOF;
 }
 
-sp_err_t sp_io_file_reader_as_fd(sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos) {
+sp_err_t sp_io_file_reader_as_file(sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos) {
   sp_io_file_reader_t* fr = (sp_io_file_reader_t*)r;
-  if (fr->file == SP_SYS_INVALID_FD) return SP_ERR_IO;
+  if (fr->file == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
   if (fd) *fd = fr->file;
   if (pos) *pos = &fr->pos;
   return SP_OK;
@@ -16511,26 +16477,28 @@ sp_err_t sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_sys_fd_t file, s
   *r = (sp_io_file_reader_t) {
     .base = {
       .read    = sp_io_file_reader_read,
-      .as_fd   = sp_io_file_reader_as_fd,
+      .as_file = sp_io_file_reader_as_file,
       .discard = sp_io_file_reader_discard,
     },
     .file = file,
     .close_mode = mode,
   };
 
-  if (sp_io_file_reader_size_force(r, SP_NULLPTR) != SP_OK) {
+  sp_err_t err = sp_io_file_reader_size_force(r, SP_NULLPTR);
+  if (err) {
     if (mode == SP_IO_CLOSE_MODE_AUTO) sp_sys_close(file);
     *r = sp_zero_s(sp_io_file_reader_t);
-    return SP_ERR_IO;
+    return err;
   }
   return SP_OK;
 }
 
 sp_err_t sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  if (sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_RO, 0, &fd) != SP_OK) {
+  sp_err_t err = sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_RO, 0, &fd);
+  if (err) {
     *r = sp_zero_s(sp_io_file_reader_t);
-    return SP_ERR_IO_OPEN_FAILED;
+    return err;
   }
   return sp_io_file_reader_from_file(r, fd, SP_IO_CLOSE_MODE_AUTO);
 }
@@ -16574,9 +16542,10 @@ sp_err_t sp_io_file_reader_size(sp_io_file_reader_t* r, u64* size) {
 
 sp_err_t sp_io_file_reader_size_force(sp_io_file_reader_t* r, u64* size) {
   sp_sys_file_meta_t st = sp_zero;
-  if (sp_sys_get_file_metadata(r->file, &st) != SP_OK) {
+  sp_err_t err = sp_sys_get_file_metadata(r->file, &st);
+  if (err) {
     if (size) *size = 0;
-    return SP_ERR_IO;
+    return err;
   }
   r->size = (u64)st.size;
   if (size) *size = r->size;
@@ -16585,16 +16554,14 @@ sp_err_t sp_io_file_reader_size_force(sp_io_file_reader_t* r, u64* size) {
 
 sp_err_t sp_io_file_reader_close(sp_io_file_reader_t* r) {
   if (r->close_mode == SP_IO_CLOSE_MODE_AUTO) {
-    if (sp_sys_close(r->file) != SP_OK) {
-      return SP_ERR_IO_CLOSE_FAILED;
-    }
+    return sp_sys_close(r->file);
   }
   return SP_OK;
 }
 
-sp_err_t sp_io_stream_reader_as_fd(sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos) {
+sp_err_t sp_io_stream_reader_as_file(sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos) {
   sp_io_stream_reader_t* pr = (sp_io_stream_reader_t*)r;
-  if (pr->fd == SP_SYS_INVALID_FD) return SP_ERR_IO;
+  if (pr->fd == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
   if (fd) *fd = pr->fd;
   if (pos) *pos = SP_NULLPTR;
   return SP_OK;
@@ -16603,89 +16570,46 @@ sp_err_t sp_io_stream_reader_as_fd(sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos
 void sp_io_stream_reader_from_fd(sp_io_stream_reader_t* r, sp_sys_fd_t fd, sp_io_close_mode_t mode) {
   *r = (sp_io_stream_reader_t) {
     .base = {
-      .read  = sp_io_stream_reader_read,
-      .as_fd = sp_io_stream_reader_as_fd,
+      .read = sp_io_stream_reader_read,
     },
     .fd = fd,
     .close_mode = mode,
   };
 }
 
+void sp_io_stream_reader_from_file(sp_io_stream_reader_t* r, sp_sys_fd_t file, sp_io_close_mode_t mode) {
+  *r = (sp_io_stream_reader_t) {
+    .base = {
+      .read    = sp_io_stream_reader_read,
+      .as_file = sp_io_stream_reader_as_file,
+    },
+    .fd = file,
+    .close_mode = mode,
+  };
+}
+
 sp_err_t sp_io_stream_reader_close(sp_io_stream_reader_t* r) {
   if (r->close_mode == SP_IO_CLOSE_MODE_AUTO) {
-    if (sp_sys_close(r->fd) != SP_OK) {
-      return SP_ERR_IO_CLOSE_FAILED;
-    }
+    return sp_sys_close(r->fd);
   }
   return SP_OK;
 }
 
 sp_err_t sp_io_stream_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
   sp_io_stream_writer_t* w = (sp_io_stream_writer_t*)writer;
-  u64 num_bytes = 0;
-  sp_err_t err = sp_sys_write(w->fd, ptr, size, &num_bytes);
-
-  sp_err_t result = SP_OK;
-  if (err) {
-    result = SP_ERR_IO_WRITE_FAILED;
-  }
-  else if (size && !num_bytes) {
-    result = SP_ERR_IO_EOF;
-  }
-
-  if (bytes_written) *bytes_written = num_bytes;
-  return result;
+  return sp_sys_write(w->fd, ptr, size, bytes_written);
 }
 
-#if defined(SP_LINUX)
-sp_err_t sp_io_stream_writer_read_from(sp_io_writer_t* writer, sp_io_reader_t* r, u64* bytes_moved) {
+sp_err_t sp_io_stream_writer_transfer(sp_io_writer_t* writer, sp_sys_fd_t fd, u64* pos, u64 count, u64* bytes_moved) {
   sp_io_stream_writer_t* w = (sp_io_stream_writer_t*)writer;
-  u64 total = 0;
-
-  if (!r->as_fd) { if (bytes_moved) *bytes_moved = 0; return SP_ERR_IO_UNIMPLEMENTED; }
-
-  sp_sys_fd_t in_fd = SP_SYS_INVALID_FD;
-  u64* in_pos = SP_NULLPTR;
-  if (r->as_fd(r, &in_fd, &in_pos) != SP_OK) {
-    if (bytes_moved) *bytes_moved = 0;
-    return SP_ERR_IO_UNIMPLEMENTED;
-  }
-  if (!in_pos) {
-    if (bytes_moved) *bytes_moved = 0;
-    return SP_ERR_IO_UNIMPLEMENTED;
-  }
-
-  const u64 chunk = (u64)1 << 30;
-
-  while (true) {
-    s64 off = (s64)*in_pos;
-    s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_SENDFILE, w->fd, in_fd, &off, chunk);
-
-    if (rc < 0) {
-      if (total == 0) {
-        if (bytes_moved) *bytes_moved = 0;
-        return SP_ERR_IO_UNIMPLEMENTED;
-      }
-      if (bytes_moved) *bytes_moved = total;
-      return SP_ERR_IO_WRITE_FAILED;
-    }
-    if (rc == 0) break;
-    *in_pos = (u64)off;
-    total += (u64)rc;
-  }
-
-  if (bytes_moved) *bytes_moved = total;
-  return SP_OK;
+  return sp_sys_transfer(fd, pos, w->fd, count, bytes_moved);
 }
-#endif
 
 void sp_io_stream_writer_from_fd(sp_io_stream_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t mode) {
   *w = (sp_io_stream_writer_t) {
     .base = {
-      .write = sp_io_stream_writer_write,
-#if defined(SP_LINUX)
-      .read_from = sp_io_stream_writer_read_from,
-#endif
+      .write    = sp_io_stream_writer_write,
+      .transfer = sp_io_stream_writer_transfer,
     },
     .fd = fd,
     .close_mode = mode,
@@ -16695,8 +16619,7 @@ void sp_io_stream_writer_from_fd(sp_io_stream_writer_t* w, sp_sys_fd_t fd, sp_io
 sp_err_t sp_io_stream_writer_close(sp_io_stream_writer_t* w) {
   sp_io_flush(&w->base);
   if (w->close_mode != SP_IO_CLOSE_MODE_AUTO) return SP_OK;
-  if (sp_sys_close(w->fd) != SP_OK) return SP_ERR_IO_CLOSE_FAILED;
-  return SP_OK;
+  return sp_sys_close(w->fd);
 }
 
 void sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size) {
@@ -16744,8 +16667,6 @@ SP_PRIVATE bool sp_io_socket_remaining(u64 deadline, u32* remaining) {
   return true;
 }
 
-// Poll slices are clamped to S32_MAX ms; the loop re-checks the deadline so
-// an expired slice of a longer wait is not reported as a timeout.
 SP_PRIVATE sp_err_t sp_io_socket_wait_deadline(sp_sys_socket_t socket, bool readable, u64 deadline) {
   while (true) {
     u32 remaining = 0;
@@ -16763,19 +16684,16 @@ SP_PRIVATE sp_err_t sp_io_socket_reader_read(sp_io_reader_t* reader, void* ptr, 
     u64 n = 0;
     sp_err_t err = sp_sys_socket_recv(r->socket, ptr, size, &n);
     if (err == SP_OK) {
-      if (!n) return SP_ERR_IO_EOF;
       if (bytes_read) *bytes_read = n;
       return SP_OK;
     }
-    if (err != SP_ERR_SYS_WOULD_BLOCK) return SP_ERR_IO_READ_FAILED;
+    if (err != SP_ERR_SYS_WOULD_BLOCK) return err;
     sp_err_t wait = sp_io_socket_wait_deadline(r->socket, true, deadline);
     if (wait == SP_ERR_SYS_TIMED_OUT) return SP_ERR_IO_TIMEOUT;
-    if (wait != SP_OK) return SP_ERR_IO_READ_FAILED;
+    if (wait != SP_OK) return wait;
   }
 }
 
-// A partial send returns immediately with what the kernel took; the timeout
-// only applies while zero bytes can move.
 SP_PRIVATE sp_err_t sp_io_socket_writer_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
   sp_io_socket_writer_t* w = (sp_io_socket_writer_t*)writer;
   if (bytes_written) *bytes_written = 0;
@@ -16783,14 +16701,14 @@ SP_PRIVATE sp_err_t sp_io_socket_writer_write(sp_io_writer_t* writer, const void
   while (true) {
     u64 n = 0;
     sp_err_t err = sp_sys_socket_send(w->socket, ptr, size, &n);
-    if (err == SP_OK && n) {
+    if (err == SP_OK) {
       if (bytes_written) *bytes_written = n;
       return SP_OK;
     }
-    if (err != SP_ERR_SYS_WOULD_BLOCK) return SP_ERR_IO_WRITE_FAILED;
+    if (err != SP_ERR_SYS_WOULD_BLOCK) return err;
     sp_err_t wait = sp_io_socket_wait_deadline(w->socket, false, deadline);
     if (wait == SP_ERR_SYS_TIMED_OUT) return SP_ERR_IO_TIMEOUT;
-    if (wait != SP_OK) return SP_ERR_IO_WRITE_FAILED;
+    if (wait != SP_OK) return wait;
   }
 }
 
@@ -16831,6 +16749,22 @@ void sp_io_limit_reader_init(sp_io_limit_reader_t* r, sp_io_reader_t* inner, u64
   r->remaining = limit;
 }
 
+static sp_err_t sp_io_backend_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  u64 num_read = 0;
+  sp_err_t err = reader->read(reader, ptr, size, &num_read);
+  if (!err && size && !num_read) err = SP_ERR_IO_EOF;
+  *bytes_read = num_read;
+  return err;
+}
+
+static sp_err_t sp_io_backend_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  u64 num_written = 0;
+  sp_err_t err = writer->write(writer, ptr, size, &num_written);
+  sp_assert(num_written || err || !size);
+  *bytes_written = num_written;
+  return err;
+}
+
 sp_err_t sp_io_fill(sp_io_reader_t* reader) {
   sp_assert(reader && reader->buffer.data);
   sp_assert(reader->cursor >= reader->buffer.len);
@@ -16846,7 +16780,7 @@ sp_err_t sp_io_fill_more(sp_io_reader_t* reader) {
   u64 num_read = 0;
 
   if (!buffered) {
-    sp_err_t err = reader->read(reader, reader->buffer.data, reader->buffer.capacity, &num_read);
+    sp_err_t err = sp_io_backend_read(reader, reader->buffer.data, reader->buffer.capacity, &num_read);
     if (num_read) {
       reader->buffer.len = num_read;
       reader->cursor = 0;
@@ -16860,7 +16794,7 @@ sp_err_t sp_io_fill_more(sp_io_reader_t* reader) {
     reader->cursor = 0;
   }
 
-  sp_err_t err = reader->read(reader, reader->buffer.data + reader->buffer.len, reader->buffer.capacity - reader->buffer.len, &num_read);
+  sp_err_t err = sp_io_backend_read(reader, reader->buffer.data + reader->buffer.len, reader->buffer.capacity - reader->buffer.len, &num_read);
   reader->buffer.len += num_read;
   return err;
 }
@@ -16931,7 +16865,7 @@ sp_err_t sp_io_discard(sp_io_reader_t* reader, u64 n, u64* discarded) {
     }
     else {
       u8 scratch[4096];
-      err = reader->read(reader, scratch, sp_min(n - total, (u64)sizeof(scratch)), &moved);
+      err = sp_io_backend_read(reader, scratch, sp_min(n - total, (u64)sizeof(scratch)), &moved);
     }
     total += moved;
   }
@@ -16944,11 +16878,7 @@ sp_err_t sp_io_discard(sp_io_reader_t* reader, u64 n, u64* discarded) {
 sp_err_t sp_io_copy(sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_copied) {
   u64 total = 0;
 
-  // Fast path: writer supports a kernel-side bulk transfer and reader can
-  // expose its fd. If the reader has userspace-buffered bytes, drain them
-  // through the normal write path first — the kernel doesn't know about
-  // them. If the writer has its own buffer, flush it for the same reason.
-  if (w->read_from && r->as_fd) {
+  if (w->transfer && r->as_file) {
     u64 buffered = r->buffer.len - r->cursor;
     if (buffered) {
       u64 wrote = 0;
@@ -16968,12 +16898,25 @@ sp_err_t sp_io_copy(sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_copied) {
       }
     }
 
-    u64 moved = 0;
-    sp_err_t err = w->read_from(w, r, &moved);
-    total += moved;
-    if (err != SP_ERR_IO_UNIMPLEMENTED) {
-      if (bytes_copied) *bytes_copied = total;
-      return err;
+    sp_sys_fd_t in_fd = SP_SYS_INVALID_FD;
+    u64* in_pos = SP_NULLPTR;
+    if (r->as_file(r, &in_fd, &in_pos) == SP_OK) {
+      u64 moved_total = 0;
+      while (true) {
+        u64 moved = 0;
+        sp_err_t err = w->transfer(w, in_fd, in_pos, (u64)1 << 30, &moved);
+        moved_total += moved;
+        total += moved;
+        if (bytes_copied) *bytes_copied = total;
+        if (err == SP_ERR_SYS_UNSUPPORTED) break;
+        if (err) return err;
+        // This is either an empty source or copy_file_range silent zero
+        // on weird filesystems. This isn't the best code...
+        if (!moved) {
+          if (moved_total) return SP_OK;
+          break;
+        }
+      }
     }
     // The fast path declined this pair. Fall through to the generic loop.
   }
@@ -16987,33 +16930,34 @@ sp_err_t sp_io_copy(sp_io_writer_t* w, sp_io_reader_t* r, u64* bytes_copied) {
 }
 
 sp_err_t sp_io_copy_b(sp_io_writer_t* w, sp_io_reader_t* r, u8* buffer, u64 n, u64* bytes_copied) {
-  sp_err_t err = SP_OK;
+  struct { sp_err_t r; sp_err_t w; sp_err_t rc; } err = sp_zero;
   u64 total = 0;
-
   while (true) {
-    // (bytes, error) is orthogonal on both sides. A read that produces bytes
-    // alongside an error must still have those bytes committed to the
-    // destination before we surface the error. A write that accepts a prefix
-    // before failing must have that prefix counted toward bytes_copied. The
-    // first error encountered wins; bytes_copied accurately reports what
-    // actually moved through.
     u64 chunk = 0;
-    sp_err_t rerr = sp_io_read(r, buffer, n, &chunk);
+    err.r = sp_io_read(r, buffer, n, &chunk);
 
     if (chunk) {
       u64 wrote = 0;
-      sp_err_t werr = sp_io_write_all(w, buffer, chunk, &wrote);
+      err.w = sp_io_write_all(w, buffer, chunk, &wrote);
+
+      // An error doesn't change the fact that the bytes were actually written
       total += wrote;
-      if (werr) { err = werr; goto done; }
+      if (err.w) {
+        err.rc = err.w;
+        goto done;
+      }
     }
 
-    if (rerr) { err = rerr; goto done; }
+    if (err.r) {
+      err.rc = err.r;
+      goto done;
+    }
   }
 
 done:
-  if (err == SP_ERR_IO_EOF) err = SP_OK;
+  if (err.rc == SP_ERR_IO_EOF) err.rc = SP_OK;
   if (bytes_copied) *bytes_copied = total;
-  return err;
+  return err.rc;
 }
 
 sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
@@ -17025,27 +16969,28 @@ sp_err_t sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read
   }
 
   if (!reader->buffer.data) {
-    return reader->read(reader, ptr, size, bytes_read);
+    u64 num_read = 0;
+    sp_err_t err = sp_io_backend_read(reader, ptr, size, &num_read);
+    if (bytes_read) *bytes_read = num_read;
+    return err;
   }
 
   sp_err_t err = SP_OK;
   u8* buffer = (u8*)ptr;
   u64 num_read = 0;
 
-  // Buffered bytes satisfy the read; we only touch the backend when we'd
-  // otherwise return zero bytes. A short read is always allowed, and a
-  // backend that can block (a socket) must not block while deliverable
-  // bytes are in hand.
+  // If we don't have enough buffered data, do a short read instead of going
+  // to the backend for the rest. Short reads are always OK, and going to the
+  // backend could block.
   bool drained = reader->cursor >= reader->buffer.len;
 
   if (drained && size >= reader->buffer.capacity) {
     // If the request is too large to buffer, just read it directly
-    err = reader->read(reader, buffer, size, &num_read);
+    err = sp_io_backend_read(reader, buffer, size, &num_read);
   }
   else {
-    // If the request is bufferable, do so by completely filling the buffer and then draining
-    // just what the user asked for. Drain relative to the cursor: a fill
-    // that produced nothing leaves the buffer state untouched.
+    // If the request is bufferable, do so by completely filling the buffer
+    // and then draining just what the user asked for.
     if (drained) err = sp_io_fill(reader);
 
     num_read = sp_min(size, reader->buffer.len - reader->cursor);
@@ -17118,71 +17063,19 @@ sp_err_t sp_io_file_writer_write(sp_io_writer_t* writer, const void* ptr, u64 si
   sp_err_t err = sp_sys_pwrite(w->fd, ptr, size, w->pos, &num_bytes);
   w->pos += num_bytes;
   if (w->pos > w->size) w->size = w->pos;
-
-  sp_err_t result = SP_OK;
-  if (err) {
-    result = SP_ERR_IO_WRITE_FAILED;
-  }
-  else if (size && !num_bytes) {
-    result = SP_ERR_IO_EOF;
-  }
-
   if (bytes_written) *bytes_written = num_bytes;
-  return result;
+  return err;
 }
 
-// Kernel-to-kernel fast path. Linux-only; on other platforms the read_from
-// callback isn't wired up and sp_io_copy falls through to the generic loop.
-// Asks the reader for an fd; if it has one, uses copy_file_range to move
-// bytes without bouncing through userspace. On first-call failure returns
-// SP_ERR_IO_UNIMPLEMENTED so the caller falls back. Partial progress + error
-// is reported faithfully.
-#if defined(SP_LINUX)
-sp_err_t sp_io_file_writer_read_from(sp_io_writer_t* writer, sp_io_reader_t* r, u64* bytes_moved) {
+sp_err_t sp_io_file_writer_transfer(sp_io_writer_t* writer, sp_sys_fd_t fd, u64* pos, u64 count, u64* bytes_moved) {
   sp_io_file_writer_t* w = (sp_io_file_writer_t*)writer;
-  u64 total = 0;
-
-  if (!r->as_fd) { if (bytes_moved) *bytes_moved = 0; return SP_ERR_IO_UNIMPLEMENTED; }
-
-  sp_sys_fd_t in_fd = SP_SYS_INVALID_FD;
-  u64* in_pos = SP_NULLPTR;
-  if (r->as_fd(r, &in_fd, &in_pos) != SP_OK) {
-    if (bytes_moved) *bytes_moved = 0;
-    return SP_ERR_IO_UNIMPLEMENTED;
-  }
-  if (!in_pos) {
-    // Source is streaming (cursor in kernel). copy_file_range requires
-    // regular files on both sides, so it would fail anyway. Bail cleanly.
-    if (bytes_moved) *bytes_moved = 0;
-    return SP_ERR_IO_UNIMPLEMENTED;
-  }
-
-  const u64 chunk = (u64)1 << 30;
-
-  while (true) {
-    s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_COPY_FILE_RANGE, in_fd, in_pos, w->fd, &w->pos, chunk, 0);
-
-    if (rc < 0) {
-      if (total == 0) {
-        // If the first call fails, the operation isn't supported, so we tell
-        // the caller to fall back to a userspace copy
-        if (bytes_moved) *bytes_moved = 0;
-        return SP_ERR_IO_UNIMPLEMENTED;
-      }
-
-      // We already made progress; surface as a write failure.
-      if (bytes_moved) *bytes_moved = total;
-      return SP_ERR_IO_WRITE_FAILED;
-    }
-    if (rc == 0) break;  // EOF on source
-    total += (u64)rc;
-  }
-
+  u64 moved = 0;
+  sp_err_t err = sp_sys_transfer_positional(fd, pos, w->fd, count, w->pos, &moved);
+  w->pos += moved;
   if (w->pos > w->size) w->size = w->pos;
-  if (bytes_moved) *bytes_moved = total;
-  return SP_OK;
+  if (bytes_moved) *bytes_moved = moved;
+  return err;
 }
-#endif
 
 sp_err_t sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position) {
   sp_assert(w);
@@ -17213,9 +17106,10 @@ sp_err_t sp_io_file_writer_size(sp_io_file_writer_t* w, u64* size) {
 
 sp_err_t sp_io_file_writer_size_force(sp_io_file_writer_t* w, u64* size) {
   sp_sys_file_meta_t st = sp_zero;
-  if (sp_sys_get_file_metadata(w->fd, &st) != SP_OK) {
+  sp_err_t err = sp_sys_get_file_metadata(w->fd, &st);
+  if (err) {
     if (size) *size = 0;
-    return SP_ERR_IO;
+    return err;
   }
   w->size = (u64)st.size;
   if (size) *size = w->size;
@@ -17230,28 +17124,24 @@ sp_err_t sp_io_file_writer_close(sp_io_file_writer_t* w) {
 
   if (w->close_mode != SP_IO_CLOSE_MODE_AUTO) return SP_OK;
 
-  if (sp_sys_close(w->fd) != SP_OK) {
-    return SP_ERR_IO_CLOSE_FAILED;
-  }
-  return SP_OK;
+  return sp_sys_close(w->fd);
 }
 
 sp_err_t sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t close_mode) {
   *w = (sp_io_file_writer_t) {
     .base = {
       .write     = sp_io_file_writer_write,
-#if defined(SP_LINUX)
-      .read_from = sp_io_file_writer_read_from,
-#endif
+      .transfer  = sp_io_file_writer_transfer,
     },
     .fd = fd,
     .close_mode = close_mode,
   };
 
-  if (sp_io_file_writer_size_force(w, SP_NULLPTR) != SP_OK) {
+  sp_err_t err = sp_io_file_writer_size_force(w, SP_NULLPTR);
+  if (err) {
     if (close_mode == SP_IO_CLOSE_MODE_AUTO) sp_sys_close(fd);
     *w = sp_zero_s(sp_io_file_writer_t);
-    return SP_ERR_IO;
+    return err;
   }
   return SP_OK;
 }
@@ -17259,9 +17149,10 @@ sp_err_t sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io
 sp_err_t sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path) {
   u32 flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE;
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  if (sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_WO, flags, &fd) != SP_OK) {
+  sp_err_t err = sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_WO, flags, &fd);
+  if (err) {
     *w = sp_zero_s(sp_io_file_writer_t);
-    return SP_ERR_IO_OPEN_FAILED;
+    return err;
   }
 
   return sp_io_file_writer_from_fd(w, fd, SP_IO_CLOSE_MODE_AUTO);
@@ -17286,16 +17177,9 @@ static sp_err_t sp_io_drain(sp_io_writer_t* writer, const void* data, u64 size, 
     const u8* ptr = ((const u8*)data) + total;
     u64 remaining = size - total;
 
-    // Account for any partial progress BEFORE inspecting the error. The (bytes,
-    // error) pair is orthogonal: a backend that returns SP_ERR_IO_NO_SPACE with
-    // written=4 has committed those 4 bytes, and the caller deserves to know.
-    //
-    // If write() returns 0 bytes written, but also does not report an error, we just
-    // keep looping. If this keeps happening, though, you're stuck. Defensively, it
-    // makes sense to just bail rather than risk *any* deadlock, but I think that doing
-    // that would just hide the real breaking of an invariant.
+    // An error doesn't change the fact that the bytes were actually written
     u64 written = 0;
-    result = writer->write(writer, ptr, remaining, &written);
+    result = sp_io_backend_write(writer, ptr, remaining, &written);
     total += written;
     if (result) goto done;
   }
@@ -17345,7 +17229,7 @@ sp_err_t sp_io_write(sp_io_writer_t* writer, const void* data, u64 size, u64* by
   const u8* ptr = (const u8*)data;
 
   if (!writer->buffer.data) {
-    err = writer->write(writer, data, size, &total);
+    err = sp_io_backend_write(writer, data, size, &total);
     goto done;
   }
 
@@ -17353,13 +17237,12 @@ sp_err_t sp_io_write(sp_io_writer_t* writer, const void* data, u64 size, u64* by
     // If the write is too big for the buffer, just flush whatever's currently
     // buffered and hand the data to the backend in a single write.
     sp_try_goto(sp_io_flush(writer), err, done);
-    sp_try_goto(writer->write(writer, ptr, size, &total), err, done);
+    sp_try_goto(sp_io_backend_write(writer, ptr, size, &total), err, done);
   }
   else {
     // If the write is bufferable in general, but the buffer is too full, flush it first.
     // The correct way to do this (on POSIX) is with writev(), which lets you write whatever's
-    // buffered AND the new data in one syscall. But this requires a bit of platform code,
-    // and there is a larger task to stop using libc to implement sp_io on Windows.
+    // buffered AND the new data in one syscall. One day.
     if (writer->buffer.capacity - writer->buffer.len < size) {
       sp_try_goto(sp_io_flush(writer), err, done);
     }

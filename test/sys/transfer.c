@@ -13,7 +13,6 @@ typedef struct {
   sp_err_t err;
   u64 moved;
   u64 in_pos;
-  u64 out_pos;
   const c8* content;
 } sys_transfer_expect_t;
 
@@ -98,13 +97,17 @@ static void run_sys_transfer_test(s32* utest_result, sys_transfer_test_t t) {
 
   {
     u64 in_pos = 0;
-    u64 out_pos = 0;
     u64 moved = 0;
-    sp_err_t err = sp_sys_transfer(in, t.track_in ? &in_pos : SP_NULLPTR, out, t.positional ? &out_pos : SP_NULLPTR, len, &moved);
+    sp_err_t err;
+    if (t.positional) {
+      err = sp_sys_transfer_positional(in, t.track_in ? &in_pos : SP_NULLPTR, out, len, 0, &moved);
+    }
+    else {
+      err = sp_sys_transfer(in, t.track_in ? &in_pos : SP_NULLPTR, out, len, &moved);
+    }
     sys_expect_err(utest_result, "transfer", err, t.expect.err);
     EXPECT_EQ(moved, t.expect.moved);
     if (t.track_in) EXPECT_EQ(in_pos, t.expect.in_pos);
-    if (t.positional) EXPECT_EQ(out_pos, t.expect.out_pos);
   }
 
   if (t.expect.content) {
@@ -145,7 +148,6 @@ UTEST_F(sys_transfer, copies_file_to_file) {
     .expect = {
       .moved = 16,
       .in_pos = 16,
-      .out_pos = 16,
       .content = "0123456789ABCDEF",
     },
   });
@@ -210,15 +212,54 @@ UTEST_F(sys_transfer, reports_zero_moved_at_eof) {
   u64 in_pos = 0;
   u64 out_pos = 0;
   u64 moved = 0;
-  EXPECT_EQ(sp_sys_transfer(in, &in_pos, out, &out_pos, 64, &moved), SP_OK);
+  EXPECT_EQ(sp_sys_transfer_positional(in, &in_pos, out, 64, out_pos, &moved), SP_OK);
   EXPECT_EQ(moved, (u64)4);
+  out_pos += moved;
 
   moved = 99;
-  EXPECT_EQ(sp_sys_transfer(in, &in_pos, out, &out_pos, 64, &moved), SP_OK);
+  EXPECT_EQ(sp_sys_transfer_positional(in, &in_pos, out, 64, out_pos, &moved), SP_OK);
   EXPECT_EQ(moved, (u64)0);
 
   sp_sys_close(in);
   sp_sys_close(out);
+  sp_sys_close(sandbox_fd);
+  sp_test_file_manager_cleanup(&fm);
+}
+
+UTEST_F(sys_transfer, transfer_positional_writes_at_offset) {
+  sp_test_file_manager_t fm = sp_zero;
+  sp_test_file_manager_init(&fm);
+  sp_str_t sandbox = sp_test_file_create_dir(&fm, "sys_transfer_transfer_positional_writes_at_offset");
+  sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd), SP_OK);
+
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = sp_fs_join_path(fm.mem, sandbox, sp_str_lit("src.bin")),
+    .content = sp_str_lit("AB"),
+  });
+  sp_test_file_create_ex((sp_test_file_config_t) {
+    .path = sp_fs_join_path(fm.mem, sandbox, sp_str_lit("dst.bin")),
+    .content = sp_str_lit("...."),
+  });
+
+  sp_sys_fd_t in = SP_SYS_INVALID_FD;
+  sp_sys_fd_t out = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_open_s(sandbox_fd, sp_str_lit("src.bin"), SP_SYS_OPEN_MODE_RO, 0, &in), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(sandbox_fd, sp_str_lit("dst.bin"), SP_SYS_OPEN_MODE_WO, 0, &out), SP_OK);
+
+  u64 in_pos = 0;
+  u64 moved = 0;
+  EXPECT_EQ(sp_sys_transfer_positional(in, &in_pos, out, 64, 2, &moved), SP_OK);
+  EXPECT_EQ(moved, (u64)2);
+  EXPECT_EQ(in_pos, (u64)2);
+
+  sp_sys_close(out);
+  out = SP_SYS_INVALID_FD;
+  sp_str_t actual = sp_zero;
+  sp_io_read_file(fm.mem, sp_fs_join_path(fm.mem, sandbox, sp_str_lit("dst.bin")), &actual);
+  sys_expect_bytes(utest_result, "transfer_positional", actual.data, (s64)actual.len, "..AB");
+
+  sp_sys_close(in);
   sp_sys_close(sandbox_fd);
   sp_test_file_manager_cleanup(&fm);
 }

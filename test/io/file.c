@@ -134,8 +134,25 @@ UTEST_F(io, file_reader_buffered_seek_discards_buffer) {
 UTEST_F(io, file_reader_nonexistent) {
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("nonexistent.file"));
   sp_io_file_reader_t r = sp_zero;
-  EXPECT_EQ(sp_io_file_reader_from_path(&r, path), SP_ERR_IO_OPEN_FAILED);
+  EXPECT_EQ(sp_io_file_reader_from_path(&r, path), SP_ERR_SYS_NOT_FOUND);
   sp_io_file_reader_close(&r);
+}
+
+UTEST_F(io, file_reader_forwards_access_denied) {
+  sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("wronly.file"));
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  EXPECT_EQ(sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_CREATE, &fd), SP_OK);
+  sp_io_file_reader_t r = sp_zero;
+  EXPECT_EQ(sp_io_file_reader_from_file(&r, fd, SP_IO_CLOSE_MODE_AUTO), SP_OK);
+  u8 dest [4] = sp_zero;
+  EXPECT_EQ(sp_io_read(&r.base, dest, sizeof(dest), SP_NULLPTR), SP_ERR_SYS_ACCESS_DENIED);
+  sp_io_file_reader_close(&r);
+}
+
+UTEST_F(io, file_writer_nonexistent_dir) {
+  sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("missing-dir/nested.file"));
+  sp_io_file_writer_t w = sp_zero;
+  EXPECT_EQ(sp_io_file_writer_from_path(&w, path), SP_ERR_SYS_NOT_FOUND);
 }
 
 
@@ -299,9 +316,9 @@ UTEST_F(io, file_writer_pad) {
   sp_io_file_reader_close(&r);
 }
 
-// File reader's as_fd callback returns the underlying fd. This is what the
-// writer-side fast path keys off of.
-UTEST_F(io, file_reader_as_fd) {
+// File reader's as_file callback returns the underlying fd and its cursor.
+// This is what the writer-side fast path keys off of.
+UTEST_F(io, file_reader_as_file) {
   sp_io_file_writer_t fw = sp_zero;
   sp_io_file_writer_from_path(&fw, ut.file_path);
   sp_io_write(&fw.base, "x", 1, SP_NULLPTR);
@@ -310,14 +327,43 @@ UTEST_F(io, file_reader_as_fd) {
   sp_io_file_reader_t r = sp_zero;
   sp_io_file_reader_from_path(&r, ut.file_path);
 
-  EXPECT_TRUE(r.base.as_fd != SP_NULLPTR);
+  EXPECT_TRUE(r.base.as_file != SP_NULLPTR);
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   u64* pos = SP_NULLPTR;
-  EXPECT_EQ(r.base.as_fd(&r.base, &fd, &pos), SP_OK);
+  EXPECT_EQ(r.base.as_file(&r.base, &fd, &pos), SP_OK);
   EXPECT_EQ((s64)fd, (s64)r.file);
   EXPECT_EQ(pos, &r.pos);
 
   sp_io_file_reader_close(&r);
+}
+
+// Stream readers only claim as_file when constructed over a known regular
+// file; the claim carries a null position, meaning the kernel's cursor. An
+// fd of unknown kind never claims it.
+UTEST_F(io, stream_reader_as_file) {
+  sp_io_file_writer_t fw = sp_zero;
+  sp_io_file_writer_from_path(&fw, ut.file_path);
+  sp_io_write(&fw.base, "x", 1, SP_NULLPTR);
+  sp_io_file_writer_close(&fw);
+
+  sp_sys_fd_t file = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_open_s(sp_sys_get_root(0), ut.file_path, SP_SYS_OPEN_MODE_RO, 0, &file), SP_OK);
+
+  sp_io_stream_reader_t r = sp_zero;
+  sp_io_stream_reader_from_file(&r, file, SP_IO_CLOSE_MODE_AUTO);
+
+  EXPECT_TRUE(r.base.as_file != SP_NULLPTR);
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  u64 sentinel = 0;
+  u64* pos = &sentinel;
+  EXPECT_EQ(r.base.as_file(&r.base, &fd, &pos), SP_OK);
+  EXPECT_EQ((s64)fd, (s64)r.fd);
+  EXPECT_TRUE(pos == SP_NULLPTR);
+  sp_io_stream_reader_close(&r);
+
+  sp_io_stream_reader_t unknown = sp_zero;
+  sp_io_stream_reader_from_fd(&unknown, SP_SYS_INVALID_FD, SP_IO_CLOSE_MODE_NONE);
+  EXPECT_TRUE(unknown.base.as_file == SP_NULLPTR);
 }
 
 // End-to-end: copy a non-trivial file via sp_io_copy and verify the
@@ -355,15 +401,49 @@ UTEST_F(io, file_to_file_copy) {
   sp_for(i, sizeof(source)) EXPECT_EQ((u8)loaded.data[i], source[i]);
 }
 
-// When the source has no fd (e.g. an in-memory reader), the fast path
-// declines and the generic loop produces the same result.
+// A stream reader over a regular file takes the same fast path through the
+// kernel's cursor; the copy still terminates at EOF and the destination
+// matches.
+UTEST_F(io, stream_file_to_file_copy) {
+  u8 source [4096];
+  sp_for(i, sizeof(source)) source[i] = (u8)((i * 1103515245u + 12345u) >> 8);
+
+  sp_io_file_writer_t sw = sp_zero;
+  sp_io_file_writer_from_path(&sw, ut.file_path);
+  EXPECT_EQ(sp_io_write(&sw.base, source, sizeof(source), SP_NULLPTR), SP_OK);
+  sp_io_file_writer_close(&sw);
+
+  sp_str_t dst_path = sp_test_file_path(&ut.file_manager, sp_str_lit("stream_file_to_file_copy.dst"));
+
+  sp_sys_fd_t file = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_open_s(sp_sys_get_root(0), ut.file_path, SP_SYS_OPEN_MODE_RO, 0, &file), SP_OK);
+  sp_io_stream_reader_t r = sp_zero;
+  sp_io_stream_reader_from_file(&r, file, SP_IO_CLOSE_MODE_AUTO);
+  sp_io_file_writer_t w = sp_zero;
+  sp_io_file_writer_from_path(&w, dst_path);
+
+  u64 copied = 0;
+  EXPECT_EQ(sp_io_copy(&w.base, &r.base, &copied), SP_OK);
+  EXPECT_EQ(copied, sizeof(source));
+
+  sp_io_stream_reader_close(&r);
+  sp_io_file_writer_close(&w);
+
+  sp_str_t loaded = sp_zero;
+  sp_io_read_file(ut.mem, dst_path, &loaded);
+  EXPECT_EQ(loaded.len, sizeof(source));
+  sp_for(i, sizeof(source)) EXPECT_EQ((u8)loaded.data[i], source[i]);
+}
+
+// When the source has no file to hand out (e.g. an in-memory reader), the
+// fast path declines and the generic loop produces the same result.
 UTEST_F(io, file_copy_fast_path_falls_back_for_mem_source) {
   const c8* content = "abcdefghijklmnopqrstuvwxyz0123456789";
   u64 n = sp_cstr_len(content);
 
   sp_io_reader_t r = sp_zero;
   sp_io_reader_from_mem(&r, content, n);
-  EXPECT_TRUE(r.as_fd == SP_NULLPTR);  // Mem reader has no fd to hand out.
+  EXPECT_TRUE(r.as_file == SP_NULLPTR);  // Mem reader has no file to hand out.
 
   sp_io_file_writer_t w = sp_zero;
   sp_io_file_writer_from_path(&w, ut.file_path);
