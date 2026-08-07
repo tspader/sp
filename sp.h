@@ -643,7 +643,6 @@ SP_BEGIN_EXTERN_C()
   #include <fcntl.h>
   #include <poll.h>
   #include <pthread.h>
-  #include <semaphore.h> // sem_t
   #include <spawn.h>
   #include <string.h>
   #include <stdio.h>
@@ -674,7 +673,6 @@ SP_BEGIN_EXTERN_C()
   #include <errno.h>
   #include <limits.h>
   #include <pthread.h>
-  #include <semaphore.h>
   #include <signal.h>
   #include <spawn.h>
   #include <stdio.h>
@@ -723,7 +721,6 @@ SP_BEGIN_EXTERN_C()
   #include <errno.h>
   #include <limits.h>
   #include <pthread.h>
-  #include <semaphore.h>
   #include <signal.h>
   #include <spawn.h>
   #include <stdio.h>
@@ -3833,39 +3830,25 @@ SP_INLINE void sp_atomic_fence(sp_atomic_order_t order) {
 }
 
 // @mutex
-typedef enum {
-  SP_MUTEX_NONE = 0,
-  SP_MUTEX_PLAIN = 1,
-  SP_MUTEX_TIMED = 2,
-  SP_MUTEX_RECURSIVE = 4
-} sp_mutex_kind_t;
+enum {
+  SP_MUTEX_UNLOCKED = 0,
+  SP_MUTEX_LOCKED = 1,
+  SP_MUTEX_CONTENDED = 2,
+};
 
-#if defined(SP_WIN32)
-  typedef CRITICAL_SECTION sp_mutex_t;
-#elif defined(SP_FREESTANDING)
-  typedef s32 sp_mutex_t;
-#elif defined(SP_POSIX)
-  typedef pthread_mutex_t sp_mutex_t;
-#else
-  typedef s32 sp_mutex_t;
-#endif
+typedef struct {
+  sp_atomic_u32_t state;
+} sp_mutex_t;
 
-SP_API void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind);
+SP_API void sp_mutex_init(sp_mutex_t* mutex);
 SP_API void sp_mutex_lock(sp_mutex_t* mutex);
 SP_API void sp_mutex_unlock(sp_mutex_t* mutex);
 SP_API void sp_mutex_destroy(sp_mutex_t* mutex);
-SP_API s32  sp_mutex_kind_to_c11(sp_mutex_kind_t kind);
 
 // @cv @condition_variable @condvar
-#if defined(SP_WIN32)
-  typedef CONDITION_VARIABLE sp_cv_t;
-#elif defined(SP_FREESTANDING)
-  typedef s32 sp_cv_t;
-#elif defined(SP_POSIX)
-  typedef pthread_cond_t sp_cv_t;
-#else
-  typedef s32 sp_cv_t;
-#endif
+typedef struct {
+  sp_atomic_u32_t seq;
+} sp_cv_t;
 
 SP_API void sp_cv_init(sp_cv_t* cv);
 SP_API void sp_cv_destroy(sp_cv_t* cv);
@@ -3875,20 +3858,13 @@ SP_API void sp_cv_notify_one(sp_cv_t* cv);
 SP_API void sp_cv_notify_all(sp_cv_t* cv);
 
 // @semaphore
-#if defined(SP_WIN32)
-  typedef HANDLE sp_semaphore_t;
-#elif defined(SP_FREESTANDING)
-  typedef s32 sp_semaphore_t;
-#elif defined(SP_MACOS)
-  typedef dispatch_semaphore_t sp_semaphore_t;
-#elif defined(SP_POSIX)
-  typedef sem_t sp_semaphore_t;
-#else
-  typedef s32 sp_semaphore_t;
-#endif
+typedef struct {
+  sp_atomic_u32_t count;
+} sp_semaphore_t;
 
 SP_API void sp_semaphore_init(sp_semaphore_t* semaphore);
 SP_API void sp_semaphore_destroy(sp_semaphore_t* semaphore);
+SP_API bool sp_semaphore_try_wait(sp_semaphore_t* semaphore);
 SP_API void sp_semaphore_wait(sp_semaphore_t* semaphore);
 SP_API bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms);
 SP_API void sp_semaphore_signal(sp_semaphore_t* semaphore);
@@ -3915,6 +3891,7 @@ typedef struct {
 SP_API void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata);
 SP_API void sp_thread_join(sp_thread_t* thread);
 SP_API s32  sp_thread_launch(void* userdata);
+SP_API u64  sp_thread_get_id();
 
 
 //     ███████     █████████
@@ -4530,7 +4507,6 @@ typedef struct {
   const sp_sys_vtable_t* vt;
   sp_os_signal_handler_t signal_handlers[3];
   void* signal_userdata[3];
-  sp_mutex_t mutex;
   sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
   struct {
     sp_tls_key_t key;
@@ -8632,6 +8608,13 @@ SP_PRIVATE u64 sp_sys_ns_from_timespec(s64 sec, s64 nsec) {
 }
 #endif
 
+SP_PRIVATE sp_sys_timespec_t sp_sys_timespec_from_ns(u64 ns) {
+  return SP_RVAL(sp_sys_timespec_t) {
+    .tv_sec = (s64)(ns / SP_TM_S_TO_NS),
+    .tv_nsec = (s64)(ns % SP_TM_S_TO_NS),
+  };
+}
+
 sp_err_t sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
 #if defined(SP_WIN32)
   if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
@@ -8655,10 +8638,7 @@ sp_err_t sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout
       .fd = socket,
       .events = (s16)(readable ? SP_SYS_LINUX_POLLIN : SP_SYS_LINUX_POLLOUT),
     };
-    sp_sys_timespec_t ts = {
-      .tv_sec = (s64)(remaining_ns / SP_TM_S_TO_NS),
-      .tv_nsec = (s64)(remaining_ns % SP_TM_S_TO_NS),
-    };
+    sp_sys_timespec_t ts = sp_sys_timespec_from_ns(remaining_ns);
     s64 rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, &pfd, 1, timeout_ms ? &ts : SP_NULLPTR, 0, 0);
     if (rc == -SP_EINTR) {
       if (timeout_ms) {
@@ -11317,7 +11297,6 @@ sp_mem_arena_t* sp_tls_rt_get_scratch_arena_for(sp_tls_rt_t* tls, sp_mem_t mem) 
 
 void sp_rt_init() {
   sp_tls_new(&sp_rt.tls.key, sp_tls_rt_deinit);
-  sp_mutex_init(&sp_rt.mutex, SP_MUTEX_PLAIN);
 #if defined(SP_WIN32)
   sp_nt_load();
 #endif
@@ -13890,24 +13869,18 @@ bool sp_spin_try_lock(sp_spin_lock_t* lock) {
     return __sync_lock_test_and_set(lock, 1) == 0;
   #elif defined(SP_MSVC)
     return _InterlockedExchange((LONG*)lock, 1) == 0;
+  #elif defined(SP_TCC) && defined(SP_AMD64)
+    s32 one = 1;
+    __asm__ __volatile__("xchgl %0, %1" : "+r"(one), "+m"(*lock) : : "memory");
+    return one == 0;
   #else
-    sp_mutex_lock(&sp_rt.mutex);
-
-    if (*lock == 0) {
-      *lock = 1;
-      sp_mutex_unlock(&sp_rt.mutex);
-      return true;
-    }
-    else {
-      sp_mutex_unlock(&sp_rt.mutex);
-      return false;
-    }
+    #error "sp_spin_try_lock"
   #endif
 }
 
 void sp_spin_lock(sp_spin_lock_t* lock) {
   while (!sp_spin_try_lock(lock)) {
-    while (*lock) {
+    while (*(volatile sp_spin_lock_t*)lock) {
       sp_spin_pause();
     }
   }
@@ -13918,10 +13891,11 @@ void sp_spin_unlock(sp_spin_lock_t* lock) {
     __sync_lock_release(lock);
   #elif defined(SP_MSVC)
     _InterlockedExchange((LONG*)lock, 0);
+  #elif defined(SP_TCC) && defined(SP_AMD64)
+    __asm__ __volatile__("" : : : "memory");
+    *(volatile s32*)lock = 0;
   #else
-    sp_mutex_lock(&sp_rt.mutex);
-    *lock = 0;
-    sp_mutex_unlock(&sp_rt.mutex);
+    #error "sp_spin_unlock"
   #endif
 }
 
@@ -13931,258 +13905,101 @@ sp_spin_lock_t* sp_spin_lock_get(void* addr) {
 }
 
 // @semaphore
-#if defined(SP_WIN32)
 void sp_semaphore_init(sp_semaphore_t* semaphore) {
-  *semaphore = CreateSemaphoreW(NULL, 0, 0x7FFFFFF, NULL);
+  semaphore->count = 0;
 }
 
 void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-  CloseHandle(*semaphore);
+  sp_unused(semaphore);
 }
 
-void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-  WaitForSingleObject(*semaphore, INFINITE);
-}
-
-bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-  sp_win32_dword_t result = WaitForSingleObject(*semaphore, ms);
-  return result == WAIT_OBJECT_0;
-}
-
-void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-  ReleaseSemaphore(*semaphore, 1, NULL);
-}
-#elif defined(SP_MACOS)
-void sp_semaphore_init(sp_semaphore_t* semaphore) {
-    *semaphore = dispatch_semaphore_create(0);
-}
-
-void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-  dispatch_release(*semaphore);
-}
-
-void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-    dispatch_semaphore_wait(*semaphore, DISPATCH_TIME_FOREVER);
-}
-
-bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-    dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, ms * NSEC_PER_MSEC);
-    return dispatch_semaphore_wait(*semaphore, timeout) == 0;
-}
-
-void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-    dispatch_semaphore_signal(*semaphore);
-}
-#elif defined(SP_POSIX)
-void sp_semaphore_init(sp_semaphore_t* semaphore) {
-  sem_init(semaphore, 0, 0);
-}
-
-void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-  sem_destroy(semaphore);
-}
-
-void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-  sem_wait(semaphore);
-}
-
-bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-  struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
-  ts.tv_sec += ms / 1000;
-  ts.tv_nsec += (ms % 1000) * 1000000;
-  if (ts.tv_nsec >= 1000000000) {
-    ts.tv_sec++;
-    ts.tv_nsec -= 1000000000;
+bool sp_semaphore_try_wait(sp_semaphore_t* semaphore) {
+  while (true) {
+    u32 count = sp_atomic_u32_load(&semaphore->count, SP_ATOMIC_RELAXED);
+    if (!count) return false;
+    if (sp_atomic_u32_cas(&semaphore->count, count, count - 1, SP_ATOMIC_ACQUIRE)) return true;
   }
-  return sem_timedwait(semaphore, &ts) == 0;
-}
-
-void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-  sem_post(semaphore);
-}
-
-#else
-void sp_semaphore_init(sp_semaphore_t* semaphore) {
-  SP_UNIMPLEMENTED();
-}
-
-void sp_semaphore_destroy(sp_semaphore_t* semaphore) {
-  SP_UNIMPLEMENTED();
 }
 
 void sp_semaphore_wait(sp_semaphore_t* semaphore) {
-  SP_UNIMPLEMENTED();
+  while (!sp_semaphore_try_wait(semaphore)) {
+    sp_sys_futex_wait(&semaphore->count, 0, SP_NULLPTR);
+  }
 }
 
 bool sp_semaphore_wait_for(sp_semaphore_t* semaphore, u32 ms) {
-  SP_UNIMPLEMENTED();
+  sp_tm_timer_t timer = sp_tm_start_timer();
+  u64 budget = sp_tm_ms_to_ns(ms);
+  while (!sp_semaphore_try_wait(semaphore)) {
+    u64 elapsed = sp_tm_read_timer(&timer);
+    if (elapsed >= budget) return false;
+    sp_sys_timespec_t timeout = sp_sys_timespec_from_ns(budget - elapsed);
+    if (!sp_sys_futex_wait(&semaphore->count, 0, &timeout)) return false;
+  }
   return true;
 }
 
 void sp_semaphore_signal(sp_semaphore_t* semaphore) {
-  SP_UNIMPLEMENTED();
+  sp_atomic_u32_add(&semaphore->count, 1, SP_ATOMIC_RELEASE);
+  sp_sys_futex_wake(&semaphore->count);
 }
-#endif
 
 // @mutex
-#if defined(SP_WIN32)
-s32 sp_mutex_kind_to_c11(sp_mutex_kind_t kind) {
-  return kind;
-}
-
-void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
-  SP_UNUSED(kind);
-  InitializeCriticalSection(mutex);
+void sp_mutex_init(sp_mutex_t* mutex) {
+  mutex->state = SP_MUTEX_UNLOCKED;
 }
 
 void sp_mutex_lock(sp_mutex_t* mutex) {
-  EnterCriticalSection(mutex);
-}
-
-void sp_mutex_unlock(sp_mutex_t* mutex) {
-  LeaveCriticalSection(mutex);
-}
-
-void sp_mutex_destroy(sp_mutex_t* mutex) {
-  DeleteCriticalSection(mutex);
-}
-
-#elif defined(SP_POSIX)
-void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
-  pthread_mutexattr_t attr;
-  pthread_mutexattr_init(&attr);
-
-  if (kind & SP_MUTEX_RECURSIVE) {
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  if (sp_atomic_u32_cas(&mutex->state, SP_MUTEX_UNLOCKED, SP_MUTEX_LOCKED, SP_ATOMIC_ACQUIRE)) return;
+  while (sp_atomic_u32_exchange(&mutex->state, SP_MUTEX_CONTENDED, SP_ATOMIC_ACQUIRE) != SP_MUTEX_UNLOCKED) {
+    sp_sys_futex_wait(&mutex->state, SP_MUTEX_CONTENDED, SP_NULLPTR);
   }
-
-  pthread_mutex_init(mutex, &attr);
-  pthread_mutexattr_destroy(&attr);
-}
-
-void sp_mutex_lock(sp_mutex_t* mutex) {
-  pthread_mutex_lock(mutex);
 }
 
 void sp_mutex_unlock(sp_mutex_t* mutex) {
-  pthread_mutex_unlock(mutex);
-}
-
-void sp_mutex_destroy(sp_mutex_t* mutex) {
-  pthread_mutex_destroy(mutex);
-}
-
-#else
-void sp_mutex_init(sp_mutex_t* mutex, sp_mutex_kind_t kind) {
-  sp_unused(mutex);
-  sp_unused(kind);
-}
-
-void sp_mutex_lock(sp_mutex_t* mutex) {
-  sp_unused(mutex);
-}
-
-void sp_mutex_unlock(sp_mutex_t* mutex) {
-  sp_unused(mutex);
+  if (sp_atomic_u32_exchange(&mutex->state, SP_MUTEX_UNLOCKED, SP_ATOMIC_RELEASE) == SP_MUTEX_CONTENDED) {
+    sp_sys_futex_wake(&mutex->state);
+  }
 }
 
 void sp_mutex_destroy(sp_mutex_t* mutex) {
   sp_unused(mutex);
 }
-
-#endif
 
 // @cv
-#if defined(SP_WIN32)
-void sp_cv_init(sp_cv_t* cond) {
-  InitializeConditionVariable(cond);
+void sp_cv_init(sp_cv_t* cv) {
+  cv->seq = 0;
 }
 
-void sp_cv_destroy(sp_cv_t* cond) {
-  SP_UNUSED(cond);
+void sp_cv_destroy(sp_cv_t* cv) {
+  sp_unused(cv);
 }
 
-void sp_cv_wait(sp_cv_t* cond, sp_mutex_t* mutex) {
-  SleepConditionVariableCS(cond, mutex, INFINITE);
+void sp_cv_wait(sp_cv_t* cv, sp_mutex_t* mutex) {
+  u32 seq = sp_atomic_u32_load(&cv->seq, SP_ATOMIC_RELAXED);
+  sp_mutex_unlock(mutex);
+  sp_sys_futex_wait(&cv->seq, seq, SP_NULLPTR);
+  sp_mutex_lock(mutex);
 }
 
-bool sp_cv_wait_for(sp_cv_t* cond, sp_mutex_t* mutex, u32 ms) {
-  return SleepConditionVariableCS(cond, mutex, (DWORD)ms) != 0;
+bool sp_cv_wait_for(sp_cv_t* cv, sp_mutex_t* mutex, u32 ms) {
+  u32 seq = sp_atomic_u32_load(&cv->seq, SP_ATOMIC_RELAXED);
+  sp_mutex_unlock(mutex);
+  sp_sys_timespec_t timeout = sp_sys_timespec_from_ns(sp_tm_ms_to_ns(ms));
+  bool woken = sp_sys_futex_wait(&cv->seq, seq, &timeout);
+  sp_mutex_lock(mutex);
+  return woken;
 }
 
-void sp_cv_notify_one(sp_cv_t* cond) {
-  WakeConditionVariable(cond);
+void sp_cv_notify_one(sp_cv_t* cv) {
+  sp_atomic_u32_add(&cv->seq, 1, SP_ATOMIC_RELAXED);
+  sp_sys_futex_wake(&cv->seq);
 }
 
-void sp_cv_notify_all(sp_cv_t* cond) {
-  WakeAllConditionVariable(cond);
+void sp_cv_notify_all(sp_cv_t* cv) {
+  sp_atomic_u32_add(&cv->seq, 1, SP_ATOMIC_RELAXED);
+  sp_sys_futex_wake_all(&cv->seq);
 }
-
-#elif defined(SP_POSIX)
-void sp_cv_init(sp_cv_t* cond) {
-  pthread_cond_init(cond, NULL);
-}
-
-void sp_cv_destroy(sp_cv_t* cond) {
-  pthread_cond_destroy(cond);
-}
-
-void sp_cv_wait(sp_cv_t* cond, sp_mutex_t* mutex) {
-  pthread_cond_wait(cond, mutex);
-}
-
-bool sp_cv_wait_for(sp_cv_t* cond, sp_mutex_t* mutex, u32 ms) {
-  sp_tm_epoch_t now = sp_tm_now_epoch();
-
-  struct timespec ts = {
-    .tv_sec = (time_t)(now.s + (ms / 1000)),
-    .tv_nsec = now.ns + ((ms % 1000) * 1000000),
-  };
-
-  if (ts.tv_nsec >= 1000000000) {
-    ts.tv_sec++;
-    ts.tv_nsec -= 1000000000;
-  }
-
-  return pthread_cond_timedwait(cond, mutex, &ts) == 0;
-}
-
-void sp_cv_notify_one(sp_cv_t* cond) {
-  pthread_cond_signal(cond);
-}
-
-void sp_cv_notify_all(sp_cv_t* cond) {
-  pthread_cond_broadcast(cond);
-}
-
-#else
-void sp_cv_init(sp_cv_t* cond) {
-  SP_UNIMPLEMENTED();
-}
-
-void sp_cv_destroy(sp_cv_t* cond) {
-  SP_UNIMPLEMENTED();
-}
-
-void sp_cv_wait(sp_cv_t* cond, sp_mutex_t* mutex) {
-  SP_UNIMPLEMENTED();
-}
-
-bool sp_cv_wait_for(sp_cv_t* cond, sp_mutex_t* mutex, u32 ms) {
-  SP_UNIMPLEMENTED();
-  return true;
-}
-
-void sp_cv_notify_one(sp_cv_t* cond) {
-  SP_UNIMPLEMENTED();
-}
-
-void sp_cv_notify_all(sp_cv_t* cond) {
-  SP_UNIMPLEMENTED();
-}
-
-#endif
 
 // @thread
 #if defined(SP_WIN32)
@@ -14196,7 +14013,6 @@ void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   *launch = SP_RVAL(sp_thread_launch_t) {
     .fn = fn,
     .userdata = userdata,
-    .semaphore = sp_zero_s(sp_semaphore_t)
   };
   sp_semaphore_init(&launch->semaphore);
 
@@ -14225,6 +14041,10 @@ void sp_thread_join(sp_thread_t* thread) {
   WaitForSingleObject(*thread, INFINITE);
   CloseHandle(*thread);
   *thread = SP_NULLPTR;
+}
+
+u64 sp_thread_get_id() {
+  return (u64)GetCurrentThreadId();
 }
 
 #elif defined(SP_POSIX)
@@ -14258,6 +14078,16 @@ void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   sp_semaphore_destroy(&launch.semaphore);
 }
 
+u64 sp_thread_get_id() {
+  #if defined(SP_LINUX)
+    return (u64)sp_syscall0(SP_SYSCALL_NUM_GETTID);
+  #elif defined(SP_MACOS)
+    u64 id = 0;
+    pthread_threadid_np(SP_NULLPTR, &id);
+    return id;
+  #endif
+}
+
 #elif defined(SP_WASM) || defined(SP_FREESTANDING)
 s32 sp_thread_launch(void* args) {
   sp_thread_launch_t* launch = (sp_thread_launch_t*)args;
@@ -14278,10 +14108,15 @@ void sp_thread_init(sp_thread_t* thread, sp_thread_fn_t fn, void* userdata) {
   SP_UNIMPLEMENTED();
 }
 
+u64 sp_thread_get_id() {
+  return 1;
+}
+
 #else
 #error "sp_thread_launch"
 #error "sp_thread_join"
 #error "sp_thread_init"
+#error "sp_thread_get_id"
 #endif
 
 
@@ -16292,7 +16127,7 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* os = sp_alloc_type(monitor->mem, sp_fmon_os_t);
   os->queue = dispatch_queue_create("sp.fmon", DISPATCH_QUEUE_SERIAL);
   os->monitor = monitor;
-  sp_mutex_init(&os->mutex, SP_MUTEX_PLAIN);
+  sp_mutex_init(&os->mutex);
   os->watch_arena = sp_mem_arena_new_ex(monitor->mem, SP_FMON_ARENA_SIZE, SP_MEM_ALIGNMENT);
   os->event_arena = sp_mem_arena_new_ex(monitor->mem, SP_FMON_ARENA_SIZE, SP_MEM_ALIGNMENT);
   os->mem.watch = sp_mem_arena_as_allocator(os->watch_arena);

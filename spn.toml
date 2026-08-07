@@ -11,7 +11,8 @@ source = [
   "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c", "test/sys/futex.c",
   "test/fs/iter/os.c", "test/fs/iter/iter.c",
   "test/mem/uninitialized.c",
-  "test/atomic.c"
+  "test/atomic.c",
+  "test/sync/*.c", "test/sync/os/*.c"
 ]
 
 [[test]]
@@ -29,6 +30,10 @@ source = ["test/main.c", "test/atomic.c"]
 [[test]]
 name = "fs"
 source = ["test/main.c", "test/fs/iter/iter.c", "test/fs/iter/os.c"]
+
+[[test]]
+name = "sync"
+source = ["test/main.c", "test/sync/*.c", "test/sync/os/*.c"]
 
 [[test]]
 name = "mem"

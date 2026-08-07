@@ -1805,7 +1805,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
     runner->golden_root = sp_fs_normalize_path(runner->mem, root);
   }
 
-  sp_mutex_init(&runner->mutex, SP_MUTEX_PLAIN);
+  sp_mutex_init(&runner->mutex);
   runner->color = sp_sys_is_tty(sp_sys_stdout);
   sp_io_stream_writer_from_fd(&runner->out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
   sp_io_writer_set_buffer(&runner->out.base, runner->out_buffer, sizeof(runner->out_buffer));
