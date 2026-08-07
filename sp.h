@@ -4280,7 +4280,7 @@ typedef struct {
 
 typedef struct {
   sp_nt_unicode_string_t name;
-  u16* heap_buffer;
+  u16 data [SP_PATH_MAX + 1];
 } sp_sys_nt_path_t;
 
 typedef struct {
@@ -4306,8 +4306,7 @@ typedef struct {
 // NT //
 ////////
 #define SP_NT_FUNCTIONS(X)                                                                                      \
-  X(sp_nt_status_t, RtlDosPathNameToNtPathName_U_WithStatus, (const u16*, sp_nt_unicode_string_t*, u16**, void*)) \
-  X(s32,            RtlFreeHeap,                             (void*, u32, void*)) \
+  X(u32,            RtlGetFullPathName_U,                    (const u16*, u32, u16*, u16**)) \
   X(sp_nt_status_t, RtlSetCurrentDirectory_U,                (sp_nt_unicode_string_t*))  \
   X(sp_nt_status_t, NtClose,                                 (void*))                         \
   X(sp_nt_status_t, NtSetInformationFile,                    (void*, sp_nt_io_status_block_t*, void*, u32, u32)) \
@@ -4355,7 +4354,6 @@ typedef struct {
 } sp_ws2_dispatch_t;
 
 SP_API sp_nt_status_t sp_sys_nt_path(sp_str_t utf8, sp_sys_nt_path_t* out);
-SP_API void           sp_sys_nt_path_free(sp_sys_nt_path_t* path);
 #endif
 
 
@@ -5481,7 +5479,6 @@ typedef sp_nt_file_rename_information_t sp_nt_file_link_information_t;
 
 SP_IMP void sp_nt_load(void);
 SP_IMP u8* sp_nt_peb_base(void);
-SP_IMP void* sp_nt_process_heap(void);
 SP_IMP u8* sp_nt_process_params(void);
 SP_IMP sp_str_t sp_win32_utf16_to_utf8(const u16* utf16, s32 len);
 SP_IMP u32 sp_win32_utf16_len(const u16* str);
@@ -6578,10 +6575,6 @@ SP_PRIVATE u8* sp_nt_peb_base(void) {
   return peb_base;
 }
 
-SP_PRIVATE void* sp_nt_process_heap(void) {
-  return *(void**)(sp_nt_peb_base() + 0x30);
-}
-
 SP_PRIVATE u8* sp_nt_process_params(void) {
   return *(u8**)(sp_nt_peb_base() + 0x20);
 }
@@ -6638,10 +6631,66 @@ SP_PRIVATE u32 sp_sys_nt_root_end_wtf16(const u16* p, u32 len) {
   return len;
 }
 
+// We used to just use RtlDosPathNameToNtPathName_U_WithStatus for absolute
+// paths. That function, however, enforces the standard DOS 260-character
+// limit on paths, because that is by definition what a DOS path is.
+//
+// Thankfully, Microsoft provided a fix. Simply reach into the PEB, and
+// globally set longPathAware for the process. Just reach right in there.
+// No one was gonna read that flag anyway. Just give it a little flip.
+//
+// Thankfully, the good folks who work on Zig provided a fix. Which is
+// just "build the NT path yourself, minus the insane parts". This code is
+// roughly aped from Zig, and there are a few edge cases it likewise doesn't
+// handle and which are sufficiently rare such that if you don't know about
+// them, you definitely don't care about them.
+//
+// Relative paths are rooted and use NtCreateFile, so they don't run into this
+// constraint by construction.
+SP_PRIVATE sp_nt_status_t sp_sys_nt_from_dos_wtf16(const u16* dos, u32 len, u16* dst, u32 dst_cap, sp_nt_unicode_string_t* out) {
+  static const u16 nt_prefix [] = { '\\', '?', '?', '\\' };
+
+  bool unc = len >= 2 &&
+    (dos[0] == '\\' || dos[0] == '/') &&
+    (dos[1] == '\\' || dos[1] == '/');
+  bool device = unc && len >= 4 &&
+    (dos[2] == '?' || dos[2] == '.') &&
+    (dos[3] == '\\' || dos[3] == '/');
+
+  if (device && dos[0] == '\\' && dos[1] == '\\' && dos[2] == '?' && dos[3] == '\\') {
+    if (len + 1 > dst_cap) return SP_NT_STATUS_NAME_TOO_LONG;
+    sp_mem_copy(dst, nt_prefix, sizeof(nt_prefix));
+    sp_mem_copy(dst + 4, dos + 4, (u64)(len - 4) * sizeof(u16));
+    dst[len] = 0;
+    out->Length = (u16)(len * sizeof(u16));
+    out->MaximumLength = out->Length;
+    out->Buffer = dst;
+    return SP_NT_STATUS_SUCCESS;
+  }
+
+  u32 offset = device ? 0 : (unc ? 6 : 4);
+
+  u32 bytes = SP_NT(RtlGetFullPathName_U)(dos, (dst_cap - offset) * (u32)sizeof(u16), dst + offset, SP_NULLPTR);
+  if (bytes == 0) return SP_NT_STATUS_OBJECT_NAME_INVALID;
+  u32 full = bytes / (u32)sizeof(u16);
+  if (full > dst_cap - offset) return SP_NT_STATUS_NAME_TOO_LONG;
+
+  sp_mem_copy(dst, nt_prefix, sizeof(nt_prefix));
+  if (!device && unc) {
+    dst[4] = 'U';
+    dst[5] = 'N';
+    dst[6] = 'C';
+  }
+
+  out->Length = (u16)((offset + full) * sizeof(u16));
+  out->MaximumLength = out->Length;
+  out->Buffer = dst;
+  return SP_NT_STATUS_SUCCESS;
+}
+
 typedef struct {
   sp_nt_unicode_string_t name;
   HANDLE root;
-  sp_sys_nt_path_t owned;
 } sp_sys_nt_target_t;
 
 SP_PRIVATE sp_nt_status_t sp_sys_nt_target(sp_sys_fd_t root_fd, sp_str_t utf8, u16* result, u32 result_cap, sp_sys_nt_target_t* out) {
@@ -6653,13 +6702,10 @@ SP_PRIVATE sp_nt_status_t sp_sys_nt_target(sp_sys_fd_t root_fd, sp_str_t utf8, u
   if (!wpath.data) return SP_NT_STATUS_OBJECT_NAME_INVALID;
 
   if (sp_fs_is_absolute_w(wpath)) {
-    sp_nt_unicode_string_t nt = sp_zero;
-    u16* file_part = SP_NULLPTR;
-    sp_nt_status_t status = SP_NT(RtlDosPathNameToNtPathName_U_WithStatus)(wpath.data, &nt, &file_part, SP_NULLPTR);
+    u32 used = wpath.len + 1;
+    if (used >= result_cap) return SP_NT_STATUS_NAME_TOO_LONG;
+    sp_nt_status_t status = sp_sys_nt_from_dos_wtf16(wpath.data, wpath.len, result + used, result_cap - used, &out->name);
     if (!SP_NT_SUCCESS(status)) return status;
-    out->owned.name = nt;
-    out->owned.heap_buffer = nt.Buffer;
-    out->name = nt;
     out->root = SP_NULLPTR;
     return SP_NT_STATUS_SUCCESS;
   }
@@ -6700,12 +6746,8 @@ SP_PRIVATE sp_nt_status_t sp_sys_nt_target(sp_sys_fd_t root_fd, sp_str_t utf8, u
   return SP_NT_STATUS_SUCCESS;
 }
 
-SP_PRIVATE void sp_sys_nt_target_free(sp_sys_nt_target_t* t) {
-  sp_sys_nt_path_free(&t->owned);
-}
-
 sp_nt_status_t sp_sys_nt_path(sp_str_t utf8, sp_sys_nt_path_t* out) {
-  *out = sp_zero_s(sp_sys_nt_path_t);
+  out->name = sp_zero_s(sp_nt_unicode_string_t);
   if (sp_str_empty(utf8)) return SP_NT_STATUS_OBJECT_NAME_INVALID;
 
   SP_ALIGNED u16 wbuf[SP_PATH_MAX + 1];
@@ -6713,21 +6755,7 @@ sp_nt_status_t sp_sys_nt_path(sp_str_t utf8, sp_sys_nt_path_t* out) {
   sp_wide_str_t wpath = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), utf8);
   if (!wpath.data) return SP_NT_STATUS_OBJECT_NAME_INVALID;
 
-  sp_nt_unicode_string_t nt = sp_zero;
-  u16* file_part = SP_NULLPTR;
-  sp_nt_status_t status = SP_NT(RtlDosPathNameToNtPathName_U_WithStatus)(wpath.data, &nt, &file_part, SP_NULLPTR);
-  if (!SP_NT_SUCCESS(status)) return status;
-
-  out->name = nt;
-  out->heap_buffer = nt.Buffer;
-  return SP_NT_STATUS_SUCCESS;
-}
-
-void sp_sys_nt_path_free(sp_sys_nt_path_t* path) {
-  if (!path || !path->heap_buffer) return;
-  SP_NT(RtlFreeHeap)(sp_nt_process_heap(), 0, path->heap_buffer);
-  path->heap_buffer = SP_NULLPTR;
-  path->name = sp_zero_s(sp_nt_unicode_string_t);
+  return sp_sys_nt_from_dos_wtf16(wpath.data, wpath.len, out->data, sp_carr_len(out->data), &out->name);
 }
 
 SP_PRIVATE sp_err_t sp_sys_err_from_win32(DWORD e) {
@@ -6842,8 +6870,6 @@ sp_nt_status_t sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32 s
     file_attr, share, disposition, options, SP_NULLPTR, 0
   );
 
-  sp_sys_nt_target_free(&t);
-
   if (SP_NT_SUCCESS(status)) *out = (sp_sys_fd_t)handle;
   return status;
 }
@@ -6926,7 +6952,6 @@ SP_PRIVATE sp_err_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, 
   u32 name_bytes = t.name.Length;
   u32 info_bytes = sizeof(sp_nt_file_rename_information_t) + name_bytes - sizeof(u16);
   if (info_bytes > sizeof(info_buf)) {
-    sp_sys_nt_target_free(&t);
     sp_sys_nt_close(handle);
     return SP_ERR_SYS_NAME_TOO_LONG;
   }
@@ -6947,7 +6972,6 @@ SP_PRIVATE sp_err_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, 
     status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, legacy_info_class);
   }
 
-  sp_sys_nt_target_free(&t);
   sp_sys_nt_close(handle);
 
   return sp_sys_err_from_nt(status);
@@ -9898,7 +9922,6 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
   u32 rdb_len = (u32)sizeof(sp_nt_symlink_reparse_buffer_t) + name_bytes * 2;
   SP_ALIGNED u8 rdb_buf [SP_NT_MAX_REPARSE_DATA];
   if (rdb_len > sizeof(rdb_buf)) {
-    sp_sys_nt_path_free(&nt_path);
     return SP_ERR_SYS_NAME_TOO_LONG;
   }
 
@@ -9913,7 +9936,6 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
   rdb->Flags = absolute ? 0 : SP_NT_SYMLINK_FLAG_RELATIVE;
   sp_mem_copy(rdb_buf + sizeof(sp_nt_symlink_reparse_buffer_t), stored.data, name_bytes);
   sp_mem_copy(rdb_buf + sizeof(sp_nt_symlink_reparse_buffer_t) + name_bytes, stored.data, name_bytes);
-  sp_sys_nt_path_free(&nt_path);
 
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(to_fd, link,
