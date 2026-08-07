@@ -7278,7 +7278,12 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   do {
     rc = read(fd, buf, sp_sys_posix_io_count(count));
   } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  if (rc < 0) {
+    switch (errno) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(errno);
+    }
+  }
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -7328,7 +7333,12 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
   do {
     rc = write(fd, buf, sp_sys_posix_io_count(count));
   } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  if (rc < 0) {
+    switch (errno) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(errno);
+    }
+  }
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -7390,7 +7400,12 @@ sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* b
   do {
     rc = pread(fd, buf, sp_sys_posix_io_count(count), (off_t)offset);
   } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  if (rc < 0) {
+    switch (errno) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(errno);
+    }
+  }
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -7449,7 +7464,12 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
   do {
     rc = pwrite(fd, buf, sp_sys_posix_io_count(count), (off_t)offset);
   } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  if (rc < 0) {
+    switch (errno) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(errno);
+    }
+  }
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -7734,7 +7754,12 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
   s32 rc = openat((int)fd, buf, sp_sys_posix_open_flags(mode, flags), 0644);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  if (rc < 0) {
+    switch (errno) {
+      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
+      default: return sp_sys_err_from_errno(errno);
+    }
+  }
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
 
