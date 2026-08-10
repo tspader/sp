@@ -16,9 +16,9 @@ typedef struct {
   sp_test_fn_t fn;
   sp_test_each_fn_t each;
   const void* cases;
-  u32 stride;
-  u32 count;
-  u32 case_name_offset;
+  u64 stride;
+  u64 count;
+  u64 case_name_offset;
   sp_test_setup_fn_t setup;
   sp_test_teardown_fn_t teardown;
   const void* user;
@@ -130,9 +130,9 @@ typedef struct {
       .name = #NAME,                                                        \
       .each = __sp_test_thunk(SUITE, NAME),                                 \
       .cases = (ARR),                                                       \
-      .stride = (u32)sizeof((ARR)[0]),                                      \
-      .count = (u32)sp_carr_len(ARR),                                       \
-      .case_name_offset = (u32)offsetof(TYPE, name) + 1,                    \
+      .stride = sizeof((ARR)[0]),                                      \
+      .count = sp_carr_len(ARR),                                       \
+      .case_name_offset = offsetof(TYPE, name) + 1,                    \
       __VA_ARGS__                                                           \
     });                                                                     \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
@@ -143,8 +143,8 @@ typedef struct {
       .name = #NAME,                                                        \
       .each = __sp_test_thunk(SUITE, NAME),                                 \
       .cases = (ARR),                                                       \
-      .stride = (u32)sizeof((ARR)[0]),                                      \
-      .count = (u32)sp_carr_len(ARR),                                       \
+      .stride = sizeof((ARR)[0]),                                      \
+      .count = sp_carr_len(ARR),                                       \
       __VA_ARGS__                                                           \
     });                                                                     \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
@@ -157,9 +157,9 @@ typedef struct {
       .name = #NAME,                                                        \
       .each = __sp_test_thunk(SUITE, NAME),                                 \
       .cases = (ARR),                                                       \
-      .stride = (u32)sizeof((ARR)[0]),                                      \
-      .count = (u32)sp_carr_len(ARR),                                       \
-      .case_name_offset = (u32)offsetof(TYPE, name) + 1,                    \
+      .stride = sizeof((ARR)[0]),                                      \
+      .count = sp_carr_len(ARR),                                       \
+      .case_name_offset = offsetof(TYPE, name) + 1,                    \
       __VA_ARGS__                                                           \
     })
 #else
