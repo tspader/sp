@@ -1210,7 +1210,7 @@ UTEST_F(ps, concurrent_existing_fd_small_writes) {
   u8* buffer = (u8*)sp_alloc(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
-  sp_ps_set_nonblocking(pipes[0]);
+  fcntl(pipes[0], SP_F_SETFL, fcntl(pipes[0], SP_F_GETFL) | O_NONBLOCK);
 
   bool a_done = false;
   bool b_done = false;
@@ -1303,7 +1303,7 @@ UTEST_F(ps, concurrent_existing_fd_large_writes) {
   u8* buffer = (u8*)sp_alloc(ut.mem, expected_total + 1024);
   u32 total_read = 0;
 
-  sp_ps_set_nonblocking(pipes[0]);
+  fcntl(pipes[0], SP_F_SETFL, fcntl(pipes[0], SP_F_GETFL) | O_NONBLOCK);
 
   bool a_done = false;
   bool b_done = false;

@@ -16,7 +16,7 @@ static bool io_socket_dial(sp_sys_socket_t socket, u16 port) {
 static bool io_socket_pair(sp_sys_socket_t* client, sp_sys_socket_t* server) {
   sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 } };
   sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  if (sp_sys_socket_open(&listener) != SP_OK) return false;
+  if (sp_sys_socket_open(&listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) return false;
   if (sp_sys_socket_bind(listener, addr) != SP_OK || sp_sys_socket_listen(listener, 1) != SP_OK) {
     sp_sys_socket_close(listener);
     return false;
@@ -28,7 +28,7 @@ static bool io_socket_pair(sp_sys_socket_t* client, sp_sys_socket_t* server) {
     return false;
   }
 
-  if (sp_sys_socket_open(client) != SP_OK) {
+  if (sp_sys_socket_open(client, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) {
     sp_sys_socket_close(listener);
     return false;
   }
@@ -39,7 +39,7 @@ static bool io_socket_pair(sp_sys_socket_t* client, sp_sys_socket_t* server) {
   }
 
   while (true) {
-    sp_err_t err = sp_sys_socket_accept(listener, server);
+    sp_err_t err = sp_sys_socket_accept(listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, server);
     if (err == SP_OK) break;
     if (err != SP_ERR_SYS_WOULD_BLOCK || sp_sys_socket_wait(listener, true, 1000) != SP_OK) {
       sp_sys_socket_close(listener);

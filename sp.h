@@ -1386,6 +1386,31 @@ typedef enum {
   SP_SYS_OPEN_APPEND    = 1 << 3,
 } sp_sys_open_flags_t;
 
+typedef enum {
+  SP_SYS_BLOCKING,
+  SP_SYS_NONBLOCKING,
+} sp_sys_io_mode_t;
+
+typedef enum {
+  SP_SYS_NOT_INHERITED,
+  SP_SYS_INHERITED,
+} sp_sys_inherited_t;
+
+typedef struct {
+  sp_sys_io_mode_t mode;
+  sp_sys_inherited_t inherited;
+} sp_sys_handle_desc_t;
+
+typedef struct {
+  sp_sys_handle_desc_t r;
+  sp_sys_handle_desc_t w;
+} sp_sys_pipe_desc_t;
+
+typedef struct {
+  sp_sys_fd_t r;
+  sp_sys_fd_t w;
+} sp_sys_pipe_t;
+
 SP_TYPEDEF_FN(int, sp_qsort_fn_t, const void *, const void *);
 SP_API sp_err_t    sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read);
 SP_API sp_err_t    sp_sys_write(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written);
@@ -1401,7 +1426,7 @@ SP_API s64         sp_sys_get_config_path(c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_close(sp_sys_fd_t fd);
-SP_API sp_err_t    sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
+SP_API sp_err_t    sp_sys_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
 SP_API sp_err_t    sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
 SP_API sp_err_t    sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1427,12 +1452,12 @@ SP_API sp_err_t    sp_sys_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows);
 SP_API bool        sp_sys_is_tty(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_tty_mode_apply(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
 SP_API sp_err_t    sp_sys_tty_use_vt(sp_sys_fd_t fd);
-SP_API sp_err_t    sp_sys_socket_open(sp_sys_socket_t* out);
+SP_API sp_err_t    sp_sys_socket_open(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
 SP_API sp_err_t    sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
 SP_API sp_err_t    sp_sys_socket_listen(sp_sys_socket_t socket, u32 backlog);
 SP_API sp_err_t    sp_sys_socket_connect(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
 SP_API sp_err_t    sp_sys_socket_error(sp_sys_socket_t socket);
-SP_API sp_err_t    sp_sys_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out);
+SP_API sp_err_t    sp_sys_socket_accept(sp_sys_socket_t listener, sp_sys_handle_desc_t desc, sp_sys_socket_t* out);
 SP_API sp_err_t    sp_sys_socket_close(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_recv(sp_sys_socket_t socket, void* buf, u64 count, u64* bytes_read);
 SP_API sp_err_t    sp_sys_socket_send(sp_sys_socket_t socket, const void* buf, u64 count, u64* bytes_written);
@@ -1491,7 +1516,7 @@ typedef struct {
   sp_err_t    (*open)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
   sp_err_t    (*open_dir)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t*);
   sp_err_t    (*close)(sp_sys_fd_t fd);
-  sp_err_t    (*pipe)(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
+  sp_err_t    (*pipe)(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
   sp_err_t    (*mkdir)(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
   sp_err_t    (*rmdir)(sp_sys_fd_t fd, const c8* path, u32 len);
   sp_err_t    (*unlink)(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1517,12 +1542,12 @@ typedef struct {
   bool        (*is_tty)(sp_sys_fd_t fd);
   sp_err_t    (*tty_mode_apply)(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
   sp_err_t    (*tty_use_vt)(sp_sys_fd_t fd);
-  sp_err_t    (*socket_open)(sp_sys_socket_t* out);
+  sp_err_t    (*socket_open)(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
   sp_err_t    (*socket_bind)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
   sp_err_t    (*socket_listen)(sp_sys_socket_t socket, u32 backlog);
   sp_err_t    (*socket_connect)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
   sp_err_t    (*socket_error)(sp_sys_socket_t socket);
-  sp_err_t    (*socket_accept)(sp_sys_socket_t listener, sp_sys_socket_t* out);
+  sp_err_t    (*socket_accept)(sp_sys_socket_t listener, sp_sys_handle_desc_t desc, sp_sys_socket_t* out);
   sp_err_t    (*socket_close)(sp_sys_socket_t socket);
   sp_err_t    (*socket_recv)(sp_sys_socket_t socket, void* buf, u64 count, u64* bytes_read);
   sp_err_t    (*socket_send)(sp_sys_socket_t socket, const void* buf, u64 count, u64* bytes_written);
@@ -1561,7 +1586,7 @@ SP_API s64         sp_sys_get_config_path_p(c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_close_p(sp_sys_fd_t fd);
-SP_API sp_err_t    sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end);
+SP_API sp_err_t    sp_sys_pipe_p(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
 SP_API sp_err_t    sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
 SP_API sp_err_t    sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1587,12 +1612,12 @@ SP_API sp_err_t    sp_sys_tty_size_p(sp_sys_fd_t fd, u32* cols, u32* rows);
 SP_API bool        sp_sys_is_tty_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_tty_mode_apply_p(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
 SP_API sp_err_t    sp_sys_tty_use_vt_p(sp_sys_fd_t fd);
-SP_API sp_err_t    sp_sys_socket_open_p(sp_sys_socket_t* out);
+SP_API sp_err_t    sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
 SP_API sp_err_t    sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
 SP_API sp_err_t    sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog);
 SP_API sp_err_t    sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
 SP_API sp_err_t    sp_sys_socket_error_p(sp_sys_socket_t socket);
-SP_API sp_err_t    sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out);
+SP_API sp_err_t    sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_handle_desc_t desc, sp_sys_socket_t* out);
 SP_API sp_err_t    sp_sys_socket_close_p(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_recv_p(sp_sys_socket_t socket, void* buf, u64 count, u64* bytes_read);
 SP_API sp_err_t    sp_sys_socket_send_p(sp_sys_socket_t socket, const void* buf, u64 count, u64* bytes_written);
@@ -4275,6 +4300,7 @@ typedef struct {
   void* SecurityQualityOfService;
 } sp_nt_object_attributes_t;
 
+#define SP_NT_OBJ_INHERIT           0x00000002
 #define SP_NT_OBJ_CASE_INSENSITIVE  0x00000040
 
 typedef struct {
@@ -4297,6 +4323,8 @@ typedef struct {
   X(sp_nt_status_t, NtQueryObject,                           (void*, u32, void*, u32, u32*))      \
   X(sp_nt_status_t, NtQueryDirectoryFile,                    (void*, void*, void*, void*, sp_nt_io_status_block_t*, void*, u32, u32, u8, sp_nt_unicode_string_t*, u8)) \
   X(sp_nt_status_t, NtFsControlFile,                         (void*, void*, void*, void*, sp_nt_io_status_block_t*, u32, void*, u32, void*, u32)) \
+  X(sp_nt_status_t, NtCreateNamedPipeFile,                   (void**, u32, sp_nt_object_attributes_t*, sp_nt_io_status_block_t*, u32, u32, u32, u32, u32, u32, u32, u32, u32, s64*)) \
+  X(sp_nt_status_t, NtOpenFile,                              (void**, u32, sp_nt_object_attributes_t*, sp_nt_io_status_block_t*, u32, u32)) \
   X(sp_nt_status_t, RtlWaitOnAddress,                        (volatile void*, void*, size_t, s64*)) \
   X(void,           RtlWakeAddressSingle,                    (void*)) \
   X(void,           RtlWakeAddressAll,                       (void*))
@@ -4316,6 +4344,7 @@ typedef struct {
   X(int,    WSAGetLastError, (void)) \
   X(int,    WSAIoctl,        (SOCKET, DWORD, void*, DWORD, void*, DWORD, DWORD*, WSAOVERLAPPED*, LPWSAOVERLAPPED_COMPLETION_ROUTINE)) \
   X(int,    WSAPoll,         (WSAPOLLFD*, ULONG, INT)) \
+  X(SOCKET, WSASocketW,      (int, int, int, LPWSAPROTOCOL_INFOW, GROUP, DWORD)) \
   X(SOCKET, socket,          (int, int, int)) \
   X(int,    bind,            (SOCKET, const struct sockaddr*, int)) \
   X(int,    listen,          (SOCKET, int)) \
@@ -4503,6 +4532,7 @@ typedef struct {
 #if defined(SP_WIN32)
   sp_nt_dispatch_t nt;
   sp_ws2_dispatch_t ws2;
+  sp_atomic_ptr_t pipe_device;
 #endif
 } sp_rt_t;
 
@@ -4972,9 +5002,6 @@ SP_IMP BOOL WINAPI sp_os_signal_console_ctrl(DWORD type);
 #if defined(SP_POSIX)
 SP_IMP sp_env_t           sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem);
 SP_IMP bool               sp_ps_is_fd_valid(sp_sys_fd_t fd);
-SP_IMP bool               sp_ps_create_pipes(s32 pipes [2]);
-SP_IMP void               sp_ps_set_nonblocking(s32 fd);
-SP_IMP void               sp_ps_set_blocking(s32 fd);
 SP_IMP void               sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_IMP sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode);
 SP_IMP void*              sp_posix_thread_launch(void* args);
@@ -5279,6 +5306,7 @@ typedef struct {
 #define SP_SYS_LINUX_AF_INET       2
 #define SP_SYS_LINUX_SOCK_STREAM   1
 #define SP_SYS_LINUX_SOCK_NONBLOCK 04000
+#define SP_SYS_LINUX_SOCK_CLOEXEC  02000000
 #define SP_SYS_LINUX_SOL_SOCKET    1
 #define SP_SYS_LINUX_SO_REUSEADDR  2
 #define SP_SYS_LINUX_SO_ERROR     4
@@ -5355,6 +5383,10 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_FILE_NON_DIRECTORY_FILE          0x00000040
 #define SP_NT_FILE_OPEN_FOR_BACKUP_INTENT      0x00004000
 #define SP_NT_FILE_OPEN_REPARSE_POINT          0x00200000
+
+#define SP_NT_FILE_PIPE_BYTE_STREAM_TYPE       0x00000000
+#define SP_NT_FILE_PIPE_BYTE_STREAM_MODE       0x00000000
+#define SP_NT_FILE_PIPE_QUEUE_OPERATION        0x00000000
 
 #define SP_NT_STATUS_OBJECT_NAME_COLLISION ((sp_nt_status_t)0xC0000035)
 #define SP_NT_STATUS_OBJECT_NAME_NOT_FOUND ((sp_nt_status_t)0xC0000034)
@@ -5715,8 +5747,8 @@ sp_err_t sp_sys_close(sp_sys_fd_t fd) {
   return (sp_rt.vt->close)(fd);
 }
 
-sp_err_t sp_sys_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
-  return (sp_rt.vt->pipe)(read_end, write_end);
+sp_err_t sp_sys_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc) {
+  return (sp_rt.vt->pipe)(pipe, desc);
 }
 
 sp_err_t sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
@@ -5847,8 +5879,8 @@ sp_err_t sp_tty_restore(sp_sys_fd_t in, sp_sys_fd_t out, const sp_sys_tty_state_
   return err;
 }
 
-sp_err_t sp_sys_socket_open(sp_sys_socket_t* out) {
-  return (sp_rt.vt->socket_open)(out);
+sp_err_t sp_sys_socket_open(sp_sys_socket_t* out, sp_sys_handle_desc_t desc) {
+  return (sp_rt.vt->socket_open)(out, desc);
 }
 
 sp_err_t sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
@@ -5867,8 +5899,8 @@ sp_err_t sp_sys_socket_error(sp_sys_socket_t socket) {
   return (sp_rt.vt->socket_error)(socket);
 }
 
-sp_err_t sp_sys_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out) {
-  return (sp_rt.vt->socket_accept)(listener, out);
+sp_err_t sp_sys_socket_accept(sp_sys_socket_t listener, sp_sys_handle_desc_t desc, sp_sys_socket_t* out) {
+  return (sp_rt.vt->socket_accept)(listener, desc, out);
 }
 
 sp_err_t sp_sys_socket_close(sp_sys_socket_t socket) {
@@ -7168,47 +7200,139 @@ sp_err_t sp_sys_close_p(sp_sys_fd_t fd) {
 /////////////////
 // SP_SYS_PIPE //
 /////////////////
-sp_err_t sp_sys_pipe_p(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
 #if defined(SP_WIN32)
-  HANDLE r = SP_NULLPTR;
-  HANDLE w = SP_NULLPTR;
-  SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), SP_NULLPTR, FALSE };
-  if (!CreatePipe(&r, &w, &sa, 0)) return sp_sys_err_from_win32(GetLastError());
-  // Nonblocking mode is per handle, not per pipe; both ends need it.
-  DWORD mode = PIPE_NOWAIT;
-  if (!SetNamedPipeHandleState(r, &mode, SP_NULLPTR, SP_NULLPTR) ||
-      !SetNamedPipeHandleState(w, &mode, SP_NULLPTR, SP_NULLPTR)) {
-    sp_err_t err = sp_sys_err_from_win32(GetLastError());
-    CloseHandle(r);
-    CloseHandle(w);
-    return err;
+SP_PRIVATE sp_err_t sp_sys_win32_pipe_device(void** out) {
+  void* device = sp_atomic_ptr_load(&sp_rt.pipe_device, SP_ATOMIC_ACQUIRE);
+  if (device) {
+    *out = device;
+    return SP_OK;
   }
-  *read_end = (sp_sys_fd_t)r;
-  *write_end = (sp_sys_fd_t)w;
+
+  static u16 path [] = { '\\', 'D', 'e', 'v', 'i', 'c', 'e', '\\', 'N', 'a', 'm', 'e', 'd', 'P', 'i', 'p', 'e', '\\' };
+  sp_nt_unicode_string_t name = {
+    .Length = sizeof(path),
+    .MaximumLength = sizeof(path),
+    .Buffer = path,
+  };
+  sp_nt_object_attributes_t attr = {
+    .Length = sizeof(sp_nt_object_attributes_t),
+    .ObjectName = &name,
+    .Attributes = SP_NT_OBJ_CASE_INSENSITIVE,
+  };
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtOpenFile)(
+    &device,
+    GENERIC_READ | SYNCHRONIZE,
+    &attr, &iosb,
+    FILE_SHARE_READ | FILE_SHARE_WRITE,
+    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT
+  );
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  if (!sp_atomic_ptr_cas(&sp_rt.pipe_device, SP_NULLPTR, device, SP_ATOMIC_ACQ_REL)) {
+    SP_NT(NtClose)(device);
+    device = sp_atomic_ptr_load(&sp_rt.pipe_device, SP_ATOMIC_ACQUIRE);
+  }
+  *out = device;
+  return SP_OK;
+}
+#endif
+
+sp_err_t sp_sys_pipe_p(sp_sys_pipe_t* out, sp_sys_pipe_desc_t desc) {
+  out->r = SP_SYS_INVALID_FD;
+  out->w = SP_SYS_INVALID_FD;
+
+#if defined(SP_WIN32)
+  void* device = SP_NULLPTR;
+  sp_err_t err = sp_sys_win32_pipe_device(&device);
+  if (err != SP_OK) return err;
+
+  sp_nt_unicode_string_t name = sp_zero;
+  sp_nt_object_attributes_t attr = {
+    .Length = sizeof(sp_nt_object_attributes_t),
+    .RootDirectory = device,
+    .ObjectName = &name,
+    .Attributes = SP_NT_OBJ_CASE_INSENSITIVE | (desc.r.inherited == SP_SYS_INHERITED ? SP_NT_OBJ_INHERIT : 0),
+  };
+  u32 options = desc.r.mode == SP_SYS_BLOCKING ? SP_NT_FILE_SYNCHRONOUS_IO_NONALERT : 0;
+
+  // NtCreateNamedPipeFile requires a default timeout; it only governs pipe
+  // waits, which anonymous pipes never issue. 50ms relative is the convention.
+  s64 timeout = -500000;
+
+  void* read_end = SP_NULLPTR;
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtCreateNamedPipeFile)(
+    &read_end,
+    GENERIC_READ | SYNCHRONIZE,
+    &attr, &iosb,
+    FILE_SHARE_READ | FILE_SHARE_WRITE,
+    SP_NT_FILE_CREATE,
+    options,
+    SP_NT_FILE_PIPE_BYTE_STREAM_TYPE,
+    SP_NT_FILE_PIPE_BYTE_STREAM_MODE,
+    SP_NT_FILE_PIPE_QUEUE_OPERATION,
+    1,
+    64 * 1024,
+    64 * 1024,
+    &timeout
+  );
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  attr.RootDirectory = read_end;
+  attr.Attributes = SP_NT_OBJ_CASE_INSENSITIVE | (desc.w.inherited == SP_SYS_INHERITED ? SP_NT_OBJ_INHERIT : 0);
+  options = SP_NT_FILE_NON_DIRECTORY_FILE;
+  if (desc.w.mode == SP_SYS_BLOCKING) options |= SP_NT_FILE_SYNCHRONOUS_IO_NONALERT;
+
+  void* write_end = SP_NULLPTR;
+  status = SP_NT(NtOpenFile)(
+    &write_end,
+    GENERIC_WRITE | SYNCHRONIZE,
+    &attr, &iosb,
+    FILE_SHARE_READ | FILE_SHARE_WRITE,
+    options
+  );
+  if (!SP_NT_SUCCESS(status)) {
+    SP_NT(NtClose)(read_end);
+    return sp_sys_err_from_nt(status);
+  }
+
+  out->r = (sp_sys_fd_t)read_end;
+  out->w = (sp_sys_fd_t)write_end;
   return SP_OK;
 
 #elif defined(SP_LINUX)
   s32 fds[2];
-  s64 r = sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_SYS_LINUX_O_NONBLOCK | SP_SYS_LINUX_O_CLOEXEC, 0, 0, 0);
+  u32 nonblock = desc.r.mode == SP_SYS_NONBLOCKING && desc.w.mode == SP_SYS_NONBLOCKING ? SP_SYS_LINUX_O_NONBLOCK : 0;
+  s64 r = sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_SYS_LINUX_O_CLOEXEC | nonblock, 0, 0, 0);
   if (r < 0) return sp_sys_err_from_errno(-r);
-  *read_end = fds[0];
-  *write_end = fds[1];
+  if (!nonblock && desc.r.mode == SP_SYS_NONBLOCKING) {
+    s64 flags = sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[0], SP_F_GETFL, 0);
+    sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[0], SP_F_SETFL, flags | SP_SYS_LINUX_O_NONBLOCK);
+  }
+  if (!nonblock && desc.w.mode == SP_SYS_NONBLOCKING) {
+    s64 flags = sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[1], SP_F_GETFL, 0);
+    sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[1], SP_F_SETFL, flags | SP_SYS_LINUX_O_NONBLOCK);
+  }
+  if (desc.r.inherited == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[0], SP_F_SETFD, 0);
+  if (desc.w.inherited == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[1], SP_F_SETFD, 0);
+  out->r = fds[0];
+  out->w = fds[1];
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 fds[2];
   if (pipe(fds) < 0) return sp_sys_err_from_errno(errno);
-  fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
-  fcntl(fds[1], F_SETFL, fcntl(fds[1], F_GETFL) | O_NONBLOCK);
-  fcntl(fds[0], F_SETFD, fcntl(fds[0], F_GETFD) | FD_CLOEXEC);
-  fcntl(fds[1], F_SETFD, fcntl(fds[1], F_GETFD) | FD_CLOEXEC);
-  *read_end = fds[0];
-  *write_end = fds[1];
+  if (desc.r.mode == SP_SYS_NONBLOCKING) fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
+  if (desc.w.mode == SP_SYS_NONBLOCKING) fcntl(fds[1], F_SETFL, fcntl(fds[1], F_GETFL) | O_NONBLOCK);
+  if (desc.r.inherited == SP_SYS_NOT_INHERITED) fcntl(fds[0], F_SETFD, fcntl(fds[0], F_GETFD) | FD_CLOEXEC);
+  if (desc.w.inherited == SP_SYS_NOT_INHERITED) fcntl(fds[1], F_SETFD, fcntl(fds[1], F_GETFD) | FD_CLOEXEC);
+  out->r = fds[0];
+  out->w = fds[1];
   return SP_OK;
 
 #elif defined(SP_WASM)
-  *read_end = SP_SYS_INVALID_FD;
-  *write_end = SP_SYS_INVALID_FD;
+  (void)desc;
   return SP_ERR_SYS_UNSUPPORTED;
 
 #else
@@ -7227,7 +7351,6 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   if (!ReadFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) {
     DWORD err = GetLastError();
     if (err == ERROR_BROKEN_PIPE) return SP_OK;
-    if (err == ERROR_NO_DATA) return SP_ERR_SYS_WOULD_BLOCK;
     return sp_sys_err_from_win32(err);
   }
   if (bytes_read) *bytes_read = (u64)n;
@@ -7286,8 +7409,6 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
     if (err == ERROR_NO_DATA) return SP_ERR_SYS_BROKEN_PIPE;
     return sp_sys_err_from_win32(err);
   }
-  // A full PIPE_NOWAIT pipe reports success with zero bytes written.
-  if (count && !n) return SP_ERR_SYS_WOULD_BLOCK;
   if (bytes_written) *bytes_written = (u64)n;
   return SP_OK;
 
@@ -7419,8 +7540,6 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
   if (restore) SetFilePointerEx((HANDLE)fd, saved, SP_NULLPTR, FILE_BEGIN);
 
   if (!ok) return sp_sys_err_from_win32(err);
-  // A full PIPE_NOWAIT pipe reports success with zero bytes written.
-  if (count && !n) return SP_ERR_SYS_WOULD_BLOCK;
   if (bytes_written) *bytes_written = (u64)n;
   return SP_OK;
 
@@ -8793,29 +8912,33 @@ sp_err_t sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket) {
 //////////////////////
 // SP_SYS_SOCKET_OPEN //
 //////////////////////
-sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out) {
+sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_handle_desc_t desc) {
   *out = SP_SYS_INVALID_SOCKET;
 
 #if defined(SP_WIN32)
   if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
-  SOCKET fd = sp_rt.ws2.socket(AF_INET, SOCK_STREAM, 0);
+  // socket() creates overlapped sockets; WSASocketW only does so when asked.
+  DWORD flags = WSA_FLAG_OVERLAPPED;
+  if (desc.inherited == SP_SYS_NOT_INHERITED) flags |= WSA_FLAG_NO_HANDLE_INHERIT;
+  SOCKET fd = sp_rt.ws2.WSASocketW(AF_INET, SOCK_STREAM, 0, SP_NULLPTR, 0, flags);
   if (fd == INVALID_SOCKET) return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
-  sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
-  if (err != SP_OK) {
-    sp_rt.ws2.closesocket(fd);
-    return err;
+  if (desc.mode == SP_SYS_NONBLOCKING) {
+    u_long nonblock = 1;
+    if (sp_rt.ws2.ioctlsocket(fd, FIONBIO, &nonblock) != 0) {
+      sp_err_t err = sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
+      sp_rt.ws2.closesocket(fd);
+      return err;
+    }
   }
   *out = (sp_sys_socket_t)fd;
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 fd = sp_syscall(SP_SYSCALL_NUM_SOCKET, SP_SYS_LINUX_AF_INET, SP_SYS_LINUX_SOCK_STREAM, 0);
+  u32 type = SP_SYS_LINUX_SOCK_STREAM | SP_SYS_LINUX_SOCK_CLOEXEC;
+  if (desc.mode == SP_SYS_NONBLOCKING) type |= SP_SYS_LINUX_SOCK_NONBLOCK;
+  s64 fd = sp_syscall(SP_SYSCALL_NUM_SOCKET, SP_SYS_LINUX_AF_INET, type, 0);
   if (fd < 0) return sp_sys_err_from_errno(-fd);
-  sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
-  if (err != SP_OK) {
-    sp_syscall(SP_SYSCALL_NUM_CLOSE, fd);
-    return err;
-  }
+  if (desc.inherited == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fd, SP_F_SETFD, 0);
   *out = (sp_sys_socket_t)fd;
   return SP_OK;
 
@@ -8826,15 +8949,13 @@ sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out) {
   int nosigpipe = 1;
   setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
 #endif
-  sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
-  if (err != SP_OK) {
-    close(fd);
-    return err;
-  }
+  if (desc.mode == SP_SYS_NONBLOCKING) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+  if (desc.inherited == SP_SYS_NOT_INHERITED) fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
   *out = (sp_sys_socket_t)fd;
   return SP_OK;
 
 #else
+  (void)desc;
   return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
@@ -8991,7 +9112,7 @@ sp_err_t sp_sys_socket_error_p(sp_sys_socket_t socket) {
 ////////////////////////
 // SP_SYS_SOCKET_ACCEPT //
 ////////////////////////
-sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) {
+sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_handle_desc_t desc, sp_sys_socket_t* out) {
   *out = SP_SYS_INVALID_SOCKET;
 
 #if defined(SP_WIN32)
@@ -9003,19 +9124,26 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) 
       if (e == WSAECONNRESET) continue;
       return sp_sys_err_from_wsa(e);
     }
-    sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
-    if (err != SP_OK) {
+    // Accepted sockets inherit the listener's properties; apply the desc
+    // explicitly in both directions.
+    u_long nonblock = desc.mode == SP_SYS_NONBLOCKING ? 1 : 0;
+    if (sp_rt.ws2.ioctlsocket(fd, FIONBIO, &nonblock) != 0) {
+      sp_err_t err = sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
       sp_rt.ws2.closesocket(fd);
       return err;
     }
+    SetHandleInformation((HANDLE)fd, HANDLE_FLAG_INHERIT, desc.inherited == SP_SYS_INHERITED ? HANDLE_FLAG_INHERIT : 0);
     *out = (sp_sys_socket_t)fd;
     return SP_OK;
   }
 
 #elif defined(SP_LINUX)
+  u32 flags = SP_SYS_LINUX_SOCK_CLOEXEC;
+  if (desc.mode == SP_SYS_NONBLOCKING) flags |= SP_SYS_LINUX_SOCK_NONBLOCK;
   while (true) {
-    s64 fd = sp_syscall(SP_SYSCALL_NUM_ACCEPT4, listener, 0, 0, SP_SYS_LINUX_SOCK_NONBLOCK);
+    s64 fd = sp_syscall(SP_SYSCALL_NUM_ACCEPT4, listener, 0, 0, flags);
     if (fd >= 0) {
+      if (desc.inherited == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fd, SP_F_SETFD, 0);
       *out = (sp_sys_socket_t)fd;
       return SP_OK;
     }
@@ -9056,11 +9184,8 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) 
       int nosigpipe = 1;
       setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
 #endif
-      sp_err_t err = sp_sys_socket_set_nonblocking((sp_sys_socket_t)fd);
-      if (err != SP_OK) {
-        close(fd);
-        return err;
-      }
+      if (desc.mode == SP_SYS_NONBLOCKING) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+      if (desc.inherited == SP_SYS_NOT_INHERITED) fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
       *out = (sp_sys_socket_t)fd;
       return SP_OK;
     }
@@ -9069,7 +9194,7 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_socket_t* out) 
   }
 
 #else
-  (void)listener;
+  (void)listener; (void)desc;
   return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
@@ -14191,10 +14316,7 @@ struct sp_ps_os {
 };
 
 SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
-SP_PRIVATE bool sp_ps_create_pipes(s32 pipes [2]);
 SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config);
-SP_PRIVATE void sp_ps_set_nonblocking(s32 fd);
-SP_PRIVATE void sp_ps_set_blocking(s32 fd);
 
 SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem) {
   sp_env_t env = sp_zero;
@@ -14226,25 +14348,12 @@ bool sp_ps_is_fd_valid(sp_sys_fd_t fd) {
   return fd > 0;
 }
 
-bool sp_ps_create_pipes(s32 pipes [2]) {
-  if (pipe(pipes) < 0) {
-    return false;
+SP_PRIVATE sp_sys_io_mode_t sp_ps_sys_io_mode(sp_ps_io_blocking_t block) {
+  switch (block) {
+    case SP_PS_IO_NONBLOCKING: return SP_SYS_NONBLOCKING;
+    case SP_PS_IO_BLOCKING:    return SP_SYS_BLOCKING;
   }
-
-  fcntl(pipes[0], F_SETFD, fcntl(pipes[0], F_GETFD) | FD_CLOEXEC);
-  fcntl(pipes[1], F_SETFD, fcntl(pipes[1], F_GETFD) | FD_CLOEXEC);
-
-  signal(SIGPIPE, SIG_IGN);
-
-  return true;
-}
-
-void sp_ps_set_nonblocking(s32 fd) {
-  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
-}
-
-void sp_ps_set_blocking(s32 fd) {
-  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+  SP_UNREACHABLE_RETURN(SP_SYS_BLOCKING);
 }
 
 sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config) {
@@ -14322,12 +14431,15 @@ bool sp_ps_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_stdio_config_entry_t*
       return posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0;
     }
     case SP_PS_IO_MODE_CREATE: {
-      s32 pipes [2] = { -1, -1 };
-      if (!sp_ps_create_pipes(pipes)) {
+      sp_sys_pipe_t pipes = sp_zero;
+      sp_sys_pipe_desc_t desc = {
+        .w = { .mode = sp_ps_sys_io_mode(io->block) },
+      };
+      if (sp_sys_pipe(&pipes, desc) != SP_OK) {
         return false;
       }
-      p->pipes.read = pipes[0];
-      p->pipes.write = pipes[1];
+      p->pipes.read = pipes.r;
+      p->pipes.write = pipes.w;
       return posix_spawn_file_actions_adddup2(p->fa, p->pipes.read, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_EXISTING: {
@@ -14352,12 +14464,15 @@ bool sp_ps_configure_io_out(sp_ps_io_out_config_t* io, sp_ps_stdio_config_entry_
       return posix_spawn_file_actions_addopen(p->fa, p->file_number, "/dev/null", p->flag, p->mode) == 0;
     }
     case SP_PS_IO_MODE_CREATE: {
-      s32 pipes [2] = { -1, -1 };
-      if (!sp_ps_create_pipes(pipes)) {
+      sp_sys_pipe_t pipes = sp_zero;
+      sp_sys_pipe_desc_t desc = {
+        .r = { .mode = sp_ps_sys_io_mode(io->block) },
+      };
+      if (sp_sys_pipe(&pipes, desc) != SP_OK) {
         return false;
       }
-      p->pipes.read = pipes[0];
-      p->pipes.write = pipes[1];
+      p->pipes.read = pipes.r;
+      p->pipes.write = pipes.w;
       return posix_spawn_file_actions_adddup2(p->fa, p->pipes.write, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_EXISTING: {
@@ -14477,31 +14592,16 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
 
   if (io.in.pipes.read >= 0) {
     sp_sys_close(io.in.pipes.read);
-
-    switch (config.io.in.block) {
-      case SP_PS_IO_NONBLOCKING: { sp_ps_set_nonblocking(io.in.pipes.write); break; }
-      case SP_PS_IO_BLOCKING: { sp_ps_set_blocking(io.in.pipes.write); break; }
-    }
     proc.io.in.fd = io.in.pipes.write;
   }
 
   if (io.out.pipes.read >= 0) {
     sp_sys_close(io.out.pipes.write);
-
-    switch (config.io.out.block) {
-      case SP_PS_IO_NONBLOCKING: { sp_ps_set_nonblocking(io.out.pipes.read); break; }
-      case SP_PS_IO_BLOCKING: { sp_ps_set_blocking(io.out.pipes.read); break; }
-    }
     proc.io.out.fd = io.out.pipes.read;
   }
 
   if (io.err.pipes.read >= 0) {
     sp_sys_close(io.err.pipes.write);
-
-    switch (config.io.err.block) {
-      case SP_PS_IO_NONBLOCKING: { sp_ps_set_nonblocking(io.err.pipes.read); break; }
-      case SP_PS_IO_BLOCKING:    { sp_ps_set_blocking(io.err.pipes.read);    break; }
-    }
     proc.io.err.fd = io.err.pipes.read;
   }
 

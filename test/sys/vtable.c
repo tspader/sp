@@ -128,7 +128,7 @@ static sp_err_t sys_vtable_mock_close(sp_sys_fd_t fd) {
   return (sp_err_t)69;
 }
 
-static sp_err_t sys_vtable_mock_pipe(sp_sys_fd_t* read_end, sp_sys_fd_t* write_end) {
+static sp_err_t sys_vtable_mock_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc) {
   return (sp_err_t)69;
 }
 
@@ -232,7 +232,7 @@ static sp_err_t sys_vtable_mock_tty_use_vt(sp_sys_fd_t fd) {
   return (sp_err_t)69;
 }
 
-static sp_err_t sys_vtable_mock_socket_open(sp_sys_socket_t* out) {
+static sp_err_t sys_vtable_mock_socket_open(sp_sys_socket_t* out, sp_sys_handle_desc_t desc) {
   return (sp_err_t)69;
 }
 
@@ -252,7 +252,7 @@ static sp_err_t sys_vtable_mock_socket_error(sp_sys_socket_t socket) {
   return (sp_err_t)69;
 }
 
-static sp_err_t sys_vtable_mock_socket_accept(sp_sys_socket_t listener, sp_sys_socket_t* out) {
+static sp_err_t sys_vtable_mock_socket_accept(sp_sys_socket_t listener, sp_sys_handle_desc_t desc, sp_sys_socket_t* out) {
   return (sp_err_t)69;
 }
 
@@ -440,7 +440,7 @@ UTEST_F(sys_vtable, every_function_dispatches) {
     r->open = opened;
   }
   r->close = sp_sys_close(0);
-  r->pipe = sp_sys_pipe(SP_NULLPTR, SP_NULLPTR);
+  r->pipe = sp_sys_pipe(SP_NULLPTR, sp_zero_s(sp_sys_pipe_desc_t));
   r->mkdir = sp_sys_mkdir(0, SP_NULLPTR, 0, 0);
   r->rmdir = sp_sys_rmdir(0, SP_NULLPTR, 0);
   r->unlink = sp_sys_unlink(0, SP_NULLPTR, 0);
@@ -466,12 +466,12 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   r->is_tty = sp_sys_is_tty(0);
   r->tty_mode_apply = sp_sys_tty_mode_apply(SP_NULLPTR, SP_NULLPTR, SP_SYS_TTY_MODE_RAW);
   r->tty_use_vt = sp_sys_tty_use_vt(0);
-  r->socket_open = sp_sys_socket_open(SP_NULLPTR);
+  r->socket_open = sp_sys_socket_open(SP_NULLPTR, sp_zero_s(sp_sys_handle_desc_t));
   r->socket_bind = sp_sys_socket_bind(0, addr);
   r->socket_listen = sp_sys_socket_listen(0, 0);
   r->socket_connect = sp_sys_socket_connect(0, addr);
   r->socket_error = sp_sys_socket_error(0);
-  r->socket_accept = sp_sys_socket_accept(0, SP_NULLPTR);
+  r->socket_accept = sp_sys_socket_accept(0, sp_zero_s(sp_sys_handle_desc_t), SP_NULLPTR);
   r->socket_close = sp_sys_socket_close(0);
   r->socket_recv = sp_sys_socket_recv(0, SP_NULLPTR, 0, SP_NULLPTR);
   r->socket_send = sp_sys_socket_send(0, SP_NULLPTR, 0, SP_NULLPTR);

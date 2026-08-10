@@ -35,7 +35,10 @@ void run_tty_test(s32* utest_result, tty_test_t t) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
 
   if (t.fd != TTY_FD_INVALID) {
-    ASSERT_EQ(sp_sys_pipe(&read_end, &write_end), SP_OK);
+    sp_sys_pipe_t p = sp_zero;
+    ASSERT_EQ(sp_sys_pipe(&p, sp_zero_s(sp_sys_pipe_desc_t)), SP_OK);
+    read_end = p.r;
+    write_end = p.w;
     fd = t.fd == TTY_FD_PIPE_READ ? read_end : write_end;
   }
 
