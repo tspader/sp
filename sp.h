@@ -1411,6 +1411,10 @@ typedef struct {
   sp_sys_fd_t w;
 } sp_sys_pipe_t;
 
+typedef struct {
+  sp_sys_fd_t fd;
+} sp_sys_event_t;
+
 SP_TYPEDEF_FN(int, sp_qsort_fn_t, const void *, const void *);
 SP_API sp_err_t    sp_sys_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read);
 SP_API sp_err_t    sp_sys_write(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written);
@@ -1427,6 +1431,7 @@ SP_API sp_err_t    sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_o
 SP_API sp_err_t    sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_close(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
+SP_API sp_err_t    sp_sys_pipe_ready(sp_sys_fd_t fd, u8* ready);
 SP_API sp_err_t    sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
 SP_API sp_err_t    sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1443,13 +1448,15 @@ SP_API bool        sp_sys_futex_wait(u32* addr, u32 expected, const sp_sys_times
 SP_API void        sp_sys_futex_wake(u32* addr);
 SP_API void        sp_sys_futex_wake_all(u32* addr);
 SP_API s64         sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size);
-SP_API sp_err_t    sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready);
-SP_API sp_err_t    sp_sys_fd_wait(sp_sys_fd_t fd);
-SP_API sp_err_t    sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
+SP_API sp_err_t    sp_sys_event_open(sp_sys_event_t* out);
+SP_API sp_err_t    sp_sys_event_signal(sp_sys_event_t event);
+SP_API sp_err_t    sp_sys_event_clear(sp_sys_event_t event);
+SP_API sp_err_t    sp_sys_wait(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled);
 SP_API sp_err_t    sp_sys_tty_get(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr);
 SP_API sp_err_t    sp_sys_tty_set(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr);
 SP_API sp_err_t    sp_sys_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows);
 SP_API bool        sp_sys_is_tty(sp_sys_fd_t fd);
+SP_API sp_err_t    sp_sys_tty_ready(sp_sys_fd_t fd, u8* ready);
 SP_API sp_err_t    sp_sys_tty_mode_apply(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
 SP_API sp_err_t    sp_sys_tty_use_vt(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_socket_open(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
@@ -1517,6 +1524,7 @@ typedef struct {
   sp_err_t    (*open_dir)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t*);
   sp_err_t    (*close)(sp_sys_fd_t fd);
   sp_err_t    (*pipe)(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
+  sp_err_t    (*pipe_ready)(sp_sys_fd_t fd, u8* ready);
   sp_err_t    (*mkdir)(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
   sp_err_t    (*rmdir)(sp_sys_fd_t fd, const c8* path, u32 len);
   sp_err_t    (*unlink)(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1533,13 +1541,15 @@ typedef struct {
   void        (*futex_wake)(u32* addr);
   void        (*futex_wake_all)(u32* addr);
   s64         (*canonicalize_path)(const c8* path, u32 len, c8* buf, u64 size);
-  sp_err_t    (*fd_ready)(sp_sys_fd_t fd, u8* ready);
-  sp_err_t    (*fd_wait)(sp_sys_fd_t fd);
-  sp_err_t    (*fds_wait)(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
+  sp_err_t    (*event_open)(sp_sys_event_t* out);
+  sp_err_t    (*event_signal)(sp_sys_event_t event);
+  sp_err_t    (*event_clear)(sp_sys_event_t event);
+  sp_err_t    (*wait)(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled);
   sp_err_t    (*tty_get)(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr);
   sp_err_t    (*tty_set)(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr);
   sp_err_t    (*tty_size)(sp_sys_fd_t fd, u32* cols, u32* rows);
   bool        (*is_tty)(sp_sys_fd_t fd);
+  sp_err_t    (*tty_ready)(sp_sys_fd_t fd, u8* ready);
   sp_err_t    (*tty_mode_apply)(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
   sp_err_t    (*tty_use_vt)(sp_sys_fd_t fd);
   sp_err_t    (*socket_open)(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
@@ -1587,6 +1597,7 @@ SP_API sp_err_t    sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys
 SP_API sp_err_t    sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_close_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_pipe_p(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
+SP_API sp_err_t    sp_sys_pipe_ready_p(sp_sys_fd_t fd, u8* ready);
 SP_API sp_err_t    sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
 SP_API sp_err_t    sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len);
@@ -1603,13 +1614,15 @@ SP_API bool        sp_sys_futex_wait_p(u32* addr, u32 expected, const sp_sys_tim
 SP_API void        sp_sys_futex_wake_p(u32* addr);
 SP_API void        sp_sys_futex_wake_all_p(u32* addr);
 SP_API s64         sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size);
-SP_API sp_err_t    sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready);
-SP_API sp_err_t    sp_sys_fd_wait_p(sp_sys_fd_t fd);
-SP_API sp_err_t    sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds);
+SP_API sp_err_t    sp_sys_event_open_p(sp_sys_event_t* out);
+SP_API sp_err_t    sp_sys_event_signal_p(sp_sys_event_t event);
+SP_API sp_err_t    sp_sys_event_clear_p(sp_sys_event_t event);
+SP_API sp_err_t    sp_sys_wait_p(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled);
 SP_API sp_err_t    sp_sys_tty_get_p(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr);
 SP_API sp_err_t    sp_sys_tty_set_p(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr);
 SP_API sp_err_t    sp_sys_tty_size_p(sp_sys_fd_t fd, u32* cols, u32* rows);
 SP_API bool        sp_sys_is_tty_p(sp_sys_fd_t fd);
+SP_API sp_err_t    sp_sys_tty_ready_p(sp_sys_fd_t fd, u8* ready);
 SP_API sp_err_t    sp_sys_tty_mode_apply_p(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
 SP_API sp_err_t    sp_sys_tty_use_vt_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
@@ -5076,6 +5089,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_SETSOCKOPT        54
   #define SP_SYSCALL_NUM_GETSOCKOPT        55
   #define SP_SYSCALL_NUM_ACCEPT4           288
+  #define SP_SYSCALL_NUM_EVENTFD2          290
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   326
   #define SP_SYSCALL_NUM_CLONE             56
   #define SP_SYSCALL_NUM_FORK              57
@@ -5122,6 +5136,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 
 #elif defined(SP_ARM64)
   #define SP_SYSCALL_NUM_GETCWD            17
+  #define SP_SYSCALL_NUM_EVENTFD2          19
   #define SP_SYSCALL_NUM_DUP3              24
   #define SP_SYSCALL_NUM_FCNTL             25
   #define SP_SYSCALL_NUM_INOTIFY_INIT1     26
@@ -5214,6 +5229,14 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 #define SP_SYS_LINUX_FUTEX_WAKE         1
 #define SP_SYS_LINUX_FUTEX_PRIVATE_FLAG 128
 
+#define SP_SYS_LINUX_POLLIN   0x0001
+#define SP_SYS_LINUX_POLLOUT  0x0004
+#define SP_SYS_LINUX_POLLERR  0x0008
+#define SP_SYS_LINUX_POLLHUP  0x0010
+#define SP_SYS_LINUX_POLLNVAL 0x0020
+
+#define SP_SYS_LINUX_MSG_NOSIGNAL 0x4000
+
 ///////////
 // TYPES //
 ///////////
@@ -5232,6 +5255,12 @@ typedef struct {
   u8  d_type;
   c8  d_name[];
 } sp_sys_dirent64_t;
+
+typedef struct {
+  s32 fd;
+  s16 events;
+  s16 revents;
+} sp_sys_linux_pollfd_t;
 
 typedef struct {
   u16 ws_row;
@@ -5557,6 +5586,7 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .open_dir               = sp_sys_open_dir_p,
   .close                  = sp_sys_close_p,
   .pipe                   = sp_sys_pipe_p,
+  .pipe_ready             = sp_sys_pipe_ready_p,
   .mkdir                  = sp_sys_mkdir_p,
   .rmdir                  = sp_sys_rmdir_p,
   .unlink                 = sp_sys_unlink_p,
@@ -5573,13 +5603,15 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .futex_wake             = sp_sys_futex_wake_p,
   .futex_wake_all         = sp_sys_futex_wake_all_p,
   .canonicalize_path      = sp_sys_canonicalize_path_p,
-  .fd_ready               = sp_sys_fd_ready_p,
-  .fd_wait                = sp_sys_fd_wait_p,
-  .fds_wait               = sp_sys_fds_wait_p,
+  .event_open             = sp_sys_event_open_p,
+  .event_signal           = sp_sys_event_signal_p,
+  .event_clear            = sp_sys_event_clear_p,
+  .wait                   = sp_sys_wait_p,
   .tty_get                = sp_sys_tty_get_p,
   .tty_set                = sp_sys_tty_set_p,
   .tty_size               = sp_sys_tty_size_p,
   .is_tty                 = sp_sys_is_tty_p,
+  .tty_ready              = sp_sys_tty_ready_p,
   .tty_mode_apply         = sp_sys_tty_mode_apply_p,
   .tty_use_vt             = sp_sys_tty_use_vt_p,
   .socket_open            = sp_sys_socket_open_p,
@@ -5751,6 +5783,10 @@ sp_err_t sp_sys_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc) {
   return (sp_rt.vt->pipe)(pipe, desc);
 }
 
+sp_err_t sp_sys_pipe_ready(sp_sys_fd_t fd, u8* ready) {
+  return (sp_rt.vt->pipe_ready)(fd, ready);
+}
+
 sp_err_t sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
   return (sp_rt.vt->mkdir)(fd, path, len, mode);
 }
@@ -5815,16 +5851,20 @@ s64 sp_sys_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
   return (sp_rt.vt->canonicalize_path)(path, len, buf, size);
 }
 
-sp_err_t sp_sys_fd_ready(sp_sys_fd_t fd, u8* ready) {
-  return (sp_rt.vt->fd_ready)(fd, ready);
+sp_err_t sp_sys_event_open(sp_sys_event_t* out) {
+  return (sp_rt.vt->event_open)(out);
 }
 
-sp_err_t sp_sys_fd_wait(sp_sys_fd_t fd) {
-  return (sp_rt.vt->fd_wait)(fd);
+sp_err_t sp_sys_event_signal(sp_sys_event_t event) {
+  return (sp_rt.vt->event_signal)(event);
 }
 
-sp_err_t sp_sys_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  return (sp_rt.vt->fds_wait)(fds, ready, nfds);
+sp_err_t sp_sys_event_clear(sp_sys_event_t event) {
+  return (sp_rt.vt->event_clear)(event);
+}
+
+sp_err_t sp_sys_wait(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled) {
+  return (sp_rt.vt->wait)(fds, n, timeout_ms, signaled);
 }
 
 sp_err_t sp_sys_tty_get(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr) {
@@ -5841,6 +5881,10 @@ sp_err_t sp_sys_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows) {
 
 bool sp_sys_is_tty(sp_sys_fd_t fd) {
   return (sp_rt.vt->is_tty)(fd);
+}
+
+sp_err_t sp_sys_tty_ready(sp_sys_fd_t fd, u8* ready) {
+  return (sp_rt.vt->tty_ready)(fd, ready);
 }
 
 sp_err_t sp_sys_tty_mode_apply(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode) {
@@ -7340,6 +7384,172 @@ sp_err_t sp_sys_pipe_p(sp_sys_pipe_t* out, sp_sys_pipe_desc_t desc) {
 #endif
 }
 
+sp_err_t sp_sys_pipe_ready_p(sp_sys_fd_t fd, u8* ready) {
+  *ready = 0;
+
+#if defined(SP_WIN32)
+  DWORD avail = 0;
+  if (!PeekNamedPipe((HANDLE)fd, SP_NULLPTR, 0, SP_NULLPTR, &avail, SP_NULLPTR)) {
+    DWORD err = GetLastError();
+    // A broken pipe is readable: the read returns EOF instead of blocking
+    if (err == ERROR_BROKEN_PIPE) {
+      *ready = 1;
+      return SP_OK;
+    }
+    return sp_sys_err_from_win32(err);
+  }
+  if (avail > 0) *ready = 1;
+  return SP_OK;
+
+#elif defined(SP_LINUX)
+  sp_sys_linux_pollfd_t pfd = { .fd = fd, .events = SP_SYS_LINUX_POLLIN };
+  sp_sys_timespec_t ts = sp_zero;
+  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
+  if (r < 0) return sp_sys_err_from_errno(-r);
+  if (r > 0 && (pfd.revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR))) *ready = 1;
+  return SP_OK;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  struct pollfd pfd = { .fd = fd, .events = POLLIN };
+  s32 r;
+  do {
+    r = (s32)poll(&pfd, 1, 0);
+  } while (r < 0 && errno == EINTR);
+  if (r < 0) return sp_sys_err_from_errno(errno);
+  if (r > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR))) *ready = 1;
+  return SP_OK;
+
+#elif defined(SP_WASM)
+  __wasi_subscription_t subs [2] = {
+    {
+      .userdata = 0,
+      .u = {
+        .tag = __WASI_EVENTTYPE_FD_READ,
+        .u = { .fd_read = { .file_descriptor = (__wasi_fd_t)fd } },
+      },
+    },
+    {
+      .userdata = 1,
+      .u = {
+        .tag = __WASI_EVENTTYPE_CLOCK,
+        .u = { .clock = { .id = 1, .timeout = 0, .precision = 0, .flags = 0 } },
+      },
+    },
+  };
+  __wasi_event_t events [2];
+  __wasi_size_t nev = 0;
+  __wasi_errno_t err = __wasi_poll_oneoff(subs, events, 2, &nev);
+  if (err) return sp_sys_err_from_wasi(err);
+  for (__wasi_size_t i = 0; i < nev; i++) {
+    if (events[i].userdata == 0) {
+      *ready = 1;
+      return SP_OK;
+    }
+  }
+  return SP_OK;
+
+#else
+  #error "sp_sys_pipe_ready"
+#endif
+}
+
+//////////////////
+// SP_SYS_EVENT //
+//////////////////
+sp_err_t sp_sys_event_open_p(sp_sys_event_t* out) {
+  out->fd = SP_SYS_INVALID_FD;
+
+#if defined(SP_WIN32)
+  // Manual reset so a wait observes the event without consuming it, matching poll
+  HANDLE h = CreateEventW(SP_NULLPTR, true, false, SP_NULLPTR);
+  if (h == SP_NULLPTR) return sp_sys_err_from_win32(GetLastError());
+  out->fd = (sp_sys_fd_t)h;
+  return SP_OK;
+
+#elif defined(SP_LINUX)
+  // EFD_CLOEXEC and EFD_NONBLOCK are numerically O_CLOEXEC and O_NONBLOCK
+  s64 r = sp_syscall(SP_SYSCALL_NUM_EVENTFD2, 0, SP_SYS_LINUX_O_CLOEXEC | SP_SYS_LINUX_O_NONBLOCK);
+  if (r < 0) return sp_sys_err_from_errno(-r);
+  out->fd = (sp_sys_fd_t)r;
+  return SP_OK;
+
+#elif defined(SP_MACOS)
+  s32 kq = kqueue();
+  if (kq < 0) return sp_sys_err_from_errno(errno);
+  struct kevent change;
+  EV_SET(&change, 0, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, SP_NULLPTR);
+  if (kevent(kq, &change, 1, SP_NULLPTR, 0, SP_NULLPTR) < 0) {
+    sp_err_t err = sp_sys_err_from_errno(errno);
+    close(kq);
+    return err;
+  }
+  out->fd = kq;
+  return SP_OK;
+
+#elif defined(SP_COSMO) || defined(SP_WASM)
+  return SP_ERR_SYS_UNSUPPORTED;
+
+#else
+  #error "sp_sys_event_open"
+#endif
+}
+
+sp_err_t sp_sys_event_signal_p(sp_sys_event_t event) {
+#if defined(SP_WIN32)
+  if (!SetEvent((HANDLE)event.fd)) return sp_sys_err_from_win32(GetLastError());
+  return SP_OK;
+
+#elif defined(SP_LINUX)
+  u64 one = 1;
+  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_WRITE, event.fd, &one, sizeof(one));
+  // EAGAIN means the counter is saturated, i.e. already signaled
+  if (r == -SP_EAGAIN) return SP_OK;
+  if (r < 0) return sp_sys_err_from_errno(-r);
+  return SP_OK;
+
+#elif defined(SP_MACOS)
+  struct kevent change;
+  EV_SET(&change, 0, EVFILT_USER, 0, NOTE_TRIGGER, 0, SP_NULLPTR);
+  if (kevent(event.fd, &change, 1, SP_NULLPTR, 0, SP_NULLPTR) < 0) return sp_sys_err_from_errno(errno);
+  return SP_OK;
+
+#elif defined(SP_COSMO) || defined(SP_WASM)
+  (void)event;
+  return SP_ERR_SYS_UNSUPPORTED;
+
+#else
+  #error "sp_sys_event_signal"
+#endif
+}
+
+sp_err_t sp_sys_event_clear_p(sp_sys_event_t event) {
+#if defined(SP_WIN32)
+  if (!ResetEvent((HANDLE)event.fd)) return sp_sys_err_from_win32(GetLastError());
+  return SP_OK;
+
+#elif defined(SP_LINUX)
+  u64 value = 0;
+  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_READ, event.fd, &value, sizeof(value));
+  // EAGAIN means the counter is zero, i.e. already clear
+  if (r == -SP_EAGAIN) return SP_OK;
+  if (r < 0) return sp_sys_err_from_errno(-r);
+  return SP_OK;
+
+#elif defined(SP_MACOS)
+  struct kevent ev;
+  struct timespec ts = sp_zero;
+  if (kevent(event.fd, SP_NULLPTR, 0, &ev, 1, &ts) < 0) return sp_sys_err_from_errno(errno);
+  return SP_OK;
+
+#elif defined(SP_COSMO) || defined(SP_WASM)
+  (void)event;
+  return SP_ERR_SYS_UNSUPPORTED;
+
+#else
+  #error "sp_sys_event_clear"
+#endif
+}
+
 //////////////////
 // SP_SYS_READ //
 //////////////////
@@ -8137,194 +8347,113 @@ s64 sp_sys_get_config_path_p(c8* buf, u64 size) {
 }
 #endif
 
-//////////////////
-// SP_SYS_READY //
-//////////////////
-#define SP_SYS_FDS_WAIT_CAP 64
+/////////////////
+// SP_SYS_WAIT //
+/////////////////
+#define SP_SYS_WAIT_CAP 64
+
+#if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+SP_PRIVATE u64 sp_sys_ns_from_timespec(s64 sec, s64 nsec) {
+  return (u64)sec * SP_TM_S_TO_NS + (u64)nsec;
+}
+#endif
+
+SP_PRIVATE sp_sys_timespec_t sp_sys_timespec_from_ns(u64 ns) {
+  return SP_RVAL(sp_sys_timespec_t) {
+    .tv_sec = (s64)(ns / SP_TM_S_TO_NS),
+    .tv_nsec = (s64)(ns % SP_TM_S_TO_NS),
+  };
+}
+
+sp_err_t sp_sys_wait_p(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled) {
+  if (n == 0 || n > SP_SYS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
 
 #if defined(SP_WIN32)
-static void sp_sys_fd_ready_handle(HANDLE h, u8* out_ready) {
-  *out_ready = 0;
-  if (h == SP_NULLPTR || h == INVALID_HANDLE_VALUE) return;
-
-  DWORD type = GetFileType(h);
-  if (type == FILE_TYPE_PIPE) {
-    DWORD avail = 0;
-    if (!PeekNamedPipe(h, SP_NULLPTR, 0, SP_NULLPTR, &avail, SP_NULLPTR)) {
-      *out_ready = 1;
-      return;
-    }
-    *out_ready = avail > 0 ? 1 : 0;
-    return;
+  HANDLE handles [SP_SYS_WAIT_CAP];
+  for (u64 i = 0; i < n; i++) {
+    handles[i] = (HANDLE)fds[i];
   }
-  if (type == FILE_TYPE_CHAR) {
-    DWORD console_mode = 0;
-    if (GetConsoleMode(h, &console_mode)) {
-      for (;;) {
-        DWORD num_events = 0;
-        if (!GetNumberOfConsoleInputEvents(h, &num_events) || num_events == 0) return;
-
-        INPUT_RECORD rec;
-        DWORD peeked = 0;
-        if (!PeekConsoleInputW(h, &rec, 1, &peeked) || peeked == 0) return;
-        if (rec.EventType == KEY_EVENT && rec.Event.KeyEvent.bKeyDown) {
-          *out_ready = 1;
-          return;
-        }
-
-        DWORD consumed = 0;
-        if (!ReadConsoleInputW(h, &rec, 1, &consumed) || consumed == 0) return;
-      }
-    }
-    *out_ready = (WaitForSingleObject(h, 0) == WAIT_OBJECT_0) ? 1 : 0;
-    return;
-  }
-  if (type == FILE_TYPE_DISK) {
-    *out_ready = 1;
-    return;
-  }
-  if (type == FILE_TYPE_UNKNOWN) {
-    return;
-  }
-  *out_ready = (WaitForSingleObject(h, 0) == WAIT_OBJECT_0) ? 1 : 0;
-}
-
-sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
-  sp_sys_fd_ready_handle((HANDLE)fd, ready);
+  DWORD rc = WaitForMultipleObjects((DWORD)n, handles, false, timeout_ms ? timeout_ms : INFINITE);
+  if (rc == WAIT_TIMEOUT) return SP_ERR_SYS_TIMED_OUT;
+  if (rc == WAIT_FAILED) return sp_sys_err_from_win32(GetLastError());
+  *signaled = (u64)(rc - WAIT_OBJECT_0);
   return SP_OK;
-}
-
-sp_err_t sp_sys_fd_wait_p(sp_sys_fd_t fd) {
-  for (;;) {
-    u8 ready = 0;
-    sp_sys_fd_ready_handle((HANDLE)fd, &ready);
-    if (ready) return SP_OK;
-    Sleep(1);
-  }
-}
-
-sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  if (nfds == 0) return SP_OK;
-  if (nfds > SP_SYS_FDS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
-  for (;;) {
-    u32 n = 0;
-    for (u64 i = 0; i < nfds; i++) {
-      ready[i] = 0;
-      sp_sys_fd_ready_handle((HANDLE)fds[i], &ready[i]);
-      if (ready[i]) n++;
-    }
-    if (n > 0) return SP_OK;
-    Sleep(1);
-  }
-}
 
 #elif defined(SP_LINUX)
-typedef struct {
-  s32 fd;
-  s16 events;
-  s16 revents;
-} sp_sys_linux_pollfd_t;
-
-#define SP_SYS_LINUX_POLLIN   0x0001
-#define SP_SYS_LINUX_POLLOUT  0x0004
-#define SP_SYS_LINUX_POLLERR  0x0008
-#define SP_SYS_LINUX_POLLHUP  0x0010
-#define SP_SYS_LINUX_POLLNVAL 0x0020
-
-#define SP_SYS_LINUX_MSG_NOSIGNAL 0x4000
-
-sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
-  *ready = 0;
-  sp_sys_linux_pollfd_t pfd = { .fd = fd, .events = SP_SYS_LINUX_POLLIN };
-  sp_sys_timespec_t ts = sp_zero;
-  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
-  if (r < 0) return sp_sys_err_from_errno(-r);
-  if (r > 0 && (pfd.revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR | SP_SYS_LINUX_POLLNVAL))) *ready = 1;
-  return SP_OK;
-}
-
-sp_err_t sp_sys_fd_wait_p(sp_sys_fd_t fd) {
-  sp_sys_linux_pollfd_t pfd = { .fd = fd, .events = SP_SYS_LINUX_POLLIN };
-  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, &pfd, 1, SP_NULLPTR, 0, 0);
-  if (r < 0) return sp_sys_err_from_errno(-r);
-  return SP_OK;
-}
-
-sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  if (nfds == 0) return SP_OK;
-  if (nfds > SP_SYS_FDS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
-  sp_sys_linux_pollfd_t pfds[SP_SYS_FDS_WAIT_CAP];
-  for (u64 i = 0; i < nfds; i++) {
+  sp_sys_linux_pollfd_t pfds [SP_SYS_WAIT_CAP];
+  for (u64 i = 0; i < n; i++) {
     pfds[i] = (sp_sys_linux_pollfd_t){ .fd = fds[i], .events = SP_SYS_LINUX_POLLIN };
-    ready[i] = 0;
   }
-  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, pfds, nfds, SP_NULLPTR, 0, 0);
-  if (r < 0) return sp_sys_err_from_errno(-r);
-  for (u64 i = 0; i < nfds; i++) {
-    if (pfds[i].revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR | SP_SYS_LINUX_POLLNVAL)) {
-      ready[i] = 1;
+  u64 deadline_ns = 0;
+  u64 remaining_ns = (u64)timeout_ms * SP_TM_MS_TO_NS;
+  if (timeout_ms) {
+    sp_sys_timespec_t now = sp_zero;
+    sp_syscall(SP_SYSCALL_NUM_CLOCK_GETTIME, SP_CLOCK_MONOTONIC, &now);
+    deadline_ns = sp_sys_ns_from_timespec(now.tv_sec, now.tv_nsec) + remaining_ns;
+  }
+  while (true) {
+    sp_sys_timespec_t ts = sp_sys_timespec_from_ns(remaining_ns);
+    s64 rc = sp_syscall(SP_SYSCALL_NUM_PPOLL, pfds, n, timeout_ms ? &ts : SP_NULLPTR, 0, 0);
+    if (rc == -SP_EINTR) {
+      if (timeout_ms) {
+        sp_sys_timespec_t now = sp_zero;
+        sp_syscall(SP_SYSCALL_NUM_CLOCK_GETTIME, SP_CLOCK_MONOTONIC, &now);
+        u64 now_ns = sp_sys_ns_from_timespec(now.tv_sec, now.tv_nsec);
+        if (now_ns >= deadline_ns) return SP_ERR_SYS_TIMED_OUT;
+        remaining_ns = deadline_ns - now_ns;
+      }
+      continue;
     }
+    if (rc < 0) return sp_sys_err_from_errno(-rc);
+    if (rc == 0) return SP_ERR_SYS_TIMED_OUT;
+    for (u64 i = 0; i < n; i++) {
+      if (pfds[i].revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR | SP_SYS_LINUX_POLLNVAL)) {
+        *signaled = i;
+        return SP_OK;
+      }
+    }
+    sp_unreachable_return(SP_ERR_SYS_BUG);
   }
-  return SP_OK;
-}
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  struct pollfd pfds [SP_SYS_WAIT_CAP];
+  for (u64 i = 0; i < n; i++) {
+    pfds[i] = (struct pollfd){ .fd = fds[i], .events = POLLIN };
+  }
+  u64 deadline_ns = 0;
+  s32 remaining_ms = timeout_ms ? (s32)sp_min(timeout_ms, (u32)SP_LIMIT_S32_MAX) : -1;
+  if (timeout_ms) {
+    struct timespec now = sp_zero;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    deadline_ns = sp_sys_ns_from_timespec((s64)now.tv_sec, (s64)now.tv_nsec) + (u64)timeout_ms * SP_TM_MS_TO_NS;
+  }
+  while (true) {
+    s32 rc = poll(pfds, (nfds_t)n, remaining_ms);
+    if (rc < 0 && errno == EINTR) {
+      if (timeout_ms) {
+        struct timespec now = sp_zero;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        u64 now_ns = sp_sys_ns_from_timespec((s64)now.tv_sec, (s64)now.tv_nsec);
+        if (now_ns >= deadline_ns) return SP_ERR_SYS_TIMED_OUT;
+        remaining_ms = (s32)sp_min((deadline_ns - now_ns) / SP_TM_MS_TO_NS + 1, (u64)SP_LIMIT_S32_MAX);
+      }
+      continue;
+    }
+    if (rc < 0) return sp_sys_err_from_errno(errno);
+    if (rc == 0) return SP_ERR_SYS_TIMED_OUT;
+    for (u64 i = 0; i < n; i++) {
+      if (pfds[i].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) {
+        *signaled = i;
+        return SP_OK;
+      }
+    }
+    sp_unreachable_return(SP_ERR_SYS_BUG);
+  }
 
 #elif defined(SP_WASM)
-static sp_err_t sp_sys_fd_wasi_ready(sp_sys_fd_t fd, u8* out_ready) {
-  *out_ready = 0;
-  __wasi_subscription_t subs[2] = {
-    {
-      .userdata = 0,
-      .u = {
-        .tag = __WASI_EVENTTYPE_FD_READ,
-        .u = { .fd_read = { .file_descriptor = (__wasi_fd_t)fd } },
-      },
-    },
-    {
-      .userdata = 1,
-      .u = {
-        .tag = __WASI_EVENTTYPE_CLOCK,
-        .u = { .clock = { .id = 1, .timeout = 0, .precision = 0, .flags = 0 } },
-      },
-    },
-  };
-  __wasi_event_t events[2];
-  __wasi_size_t nev = 0;
-  __wasi_errno_t err = __wasi_poll_oneoff(subs, events, 2, &nev);
-  if (err) return sp_sys_err_from_wasi(err);
-  for (__wasi_size_t i = 0; i < nev; i++) {
-    if (events[i].userdata == 0) {
-      *out_ready = 1;
-      return SP_OK;
-    }
-  }
-  return SP_OK;
-}
-
-sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
-  return sp_sys_fd_wasi_ready(fd, ready);
-}
-
-sp_err_t sp_sys_fd_wait_p(sp_sys_fd_t fd) {
-  __wasi_subscription_t sub = {
-    .userdata = 0,
-    .u = {
-      .tag = __WASI_EVENTTYPE_FD_READ,
-      .u = { .fd_read = { .file_descriptor = (__wasi_fd_t)fd } },
-    },
-  };
-  __wasi_event_t event;
-  __wasi_size_t nev = 0;
-  __wasi_errno_t err = __wasi_poll_oneoff(&sub, &event, 1, &nev);
-  if (err) return sp_sys_err_from_wasi(err);
-  return SP_OK;
-}
-
-sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  if (nfds == 0) return SP_OK;
-  if (nfds > SP_SYS_FDS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
-  __wasi_subscription_t subs[SP_SYS_FDS_WAIT_CAP];
-  __wasi_event_t        events[SP_SYS_FDS_WAIT_CAP];
-  for (u64 i = 0; i < nfds; i++) {
+  __wasi_subscription_t subs [SP_SYS_WAIT_CAP + 1];
+  __wasi_event_t        events [SP_SYS_WAIT_CAP + 1];
+  for (u64 i = 0; i < n; i++) {
     subs[i] = (__wasi_subscription_t){
       .userdata = (__wasi_userdata_t)i,
       .u = {
@@ -8332,63 +8461,33 @@ sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
         .u = { .fd_read = { .file_descriptor = (__wasi_fd_t)fds[i] } },
       },
     };
-    ready[i] = 0;
+  }
+  __wasi_size_t nsub = (__wasi_size_t)n;
+  if (timeout_ms) {
+    subs[nsub++] = (__wasi_subscription_t){
+      .userdata = (__wasi_userdata_t)n,
+      .u = {
+        .tag = __WASI_EVENTTYPE_CLOCK,
+        .u = { .clock = { .id = 1, .timeout = (__wasi_timestamp_t)timeout_ms * SP_TM_MS_TO_NS, .precision = 0, .flags = 0 } },
+      },
+    };
   }
   __wasi_size_t nev = 0;
-  __wasi_errno_t err = __wasi_poll_oneoff(subs, events, (__wasi_size_t)nfds, &nev);
+  __wasi_errno_t err = __wasi_poll_oneoff(subs, events, nsub, &nev);
   if (err) return sp_sys_err_from_wasi(err);
+  u64 lowest = n;
   for (__wasi_size_t i = 0; i < nev; i++) {
     u64 idx = (u64)events[i].userdata;
-    if (idx < nfds) ready[idx] = 1;
+    if (idx < lowest) lowest = idx;
   }
+  if (lowest == n) return SP_ERR_SYS_TIMED_OUT;
+  *signaled = lowest;
   return SP_OK;
-}
 
 #else
-sp_err_t sp_sys_fd_ready_p(sp_sys_fd_t fd, u8* ready) {
-  *ready = 0;
-  struct pollfd pfd = { .fd = fd, .events = POLLIN };
-  s32 r;
-  do {
-    r = (s32)poll(&pfd, 1, 0);
-  } while (r < 0 && errno == EINTR);
-  if (r < 0) return sp_sys_err_from_errno(errno);
-  if (r > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL))) *ready = 1;
-  return SP_OK;
-}
-
-sp_err_t sp_sys_fd_wait_p(sp_sys_fd_t fd) {
-  struct pollfd pfd = { .fd = fd, .events = POLLIN };
-  s32 r;
-  do {
-    r = (s32)poll(&pfd, 1, -1);
-  } while (r < 0 && errno == EINTR);
-  if (r < 0) return sp_sys_err_from_errno(errno);
-  return SP_OK;
-}
-
-sp_err_t sp_sys_fds_wait_p(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
-  if (nfds == 0) return SP_OK;
-  if (nfds > SP_SYS_FDS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
-  struct pollfd pfds[SP_SYS_FDS_WAIT_CAP];
-  for (u64 i = 0; i < nfds; i++) {
-    pfds[i] = (struct pollfd){ .fd = fds[i], .events = POLLIN };
-    ready[i] = 0;
-  }
-  s32 r;
-  do {
-    r = (s32)poll(pfds, (nfds_t)nfds, -1);
-  } while (r < 0 && errno == EINTR);
-  if (r < 0) return sp_sys_err_from_errno(errno);
-  for (u64 i = 0; i < nfds; i++) {
-    if (pfds[i].revents & (POLLIN | POLLHUP | POLLERR | POLLNVAL)) {
-      ready[i] = 1;
-    }
-  }
-  return SP_OK;
-}
-
+  #error "sp_sys_wait"
 #endif
+}
 
 ////////////
 // SP_TTY //
@@ -8601,6 +8700,62 @@ bool sp_sys_is_tty_p(sp_sys_fd_t fd) {
 #endif
 }
 
+//////////////////////
+// SP_SYS_TTY_READY //
+//////////////////////
+sp_err_t sp_sys_tty_ready_p(sp_sys_fd_t fd, u8* ready) {
+  *ready = 0;
+
+#if defined(SP_WIN32)
+  HANDLE h = (HANDLE)fd;
+  for (;;) {
+    DWORD num_events = 0;
+    if (!GetNumberOfConsoleInputEvents(h, &num_events)) return sp_sys_err_from_win32(GetLastError());
+    if (num_events == 0) return SP_OK;
+
+    INPUT_RECORD rec;
+    DWORD peeked = 0;
+    if (!PeekConsoleInputW(h, &rec, 1, &peeked)) return sp_sys_err_from_win32(GetLastError());
+    if (peeked == 0) return SP_OK;
+    if (rec.EventType == KEY_EVENT && rec.Event.KeyEvent.bKeyDown) {
+      *ready = 1;
+      return SP_OK;
+    }
+
+    // Consuming non-key-down records de-signals the console handle, so sp_sys_wait
+    // doesn't return hot on key-up/focus records
+    DWORD consumed = 0;
+    if (!ReadConsoleInputW(h, &rec, 1, &consumed)) return sp_sys_err_from_win32(GetLastError());
+    if (consumed == 0) return SP_OK;
+  }
+
+#elif defined(SP_LINUX)
+  sp_sys_linux_pollfd_t pfd = { .fd = fd, .events = SP_SYS_LINUX_POLLIN };
+  sp_sys_timespec_t ts = sp_zero;
+  s64 r = sp_syscall_retry(SP_SYSCALL_NUM_PPOLL, &pfd, 1, &ts, 0, 0);
+  if (r < 0) return sp_sys_err_from_errno(-r);
+  if (r > 0 && (pfd.revents & (SP_SYS_LINUX_POLLIN | SP_SYS_LINUX_POLLHUP | SP_SYS_LINUX_POLLERR))) *ready = 1;
+  return SP_OK;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  struct pollfd pfd = { .fd = fd, .events = POLLIN };
+  s32 r;
+  do {
+    r = (s32)poll(&pfd, 1, 0);
+  } while (r < 0 && errno == EINTR);
+  if (r < 0) return sp_sys_err_from_errno(errno);
+  if (r > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR))) *ready = 1;
+  return SP_OK;
+
+#elif defined(SP_WASM)
+  (void)fd;
+  return SP_ERR_SYS_UNSUPPORTED;
+
+#else
+  #error "sp_sys_tty_ready"
+#endif
+}
+
 ///////////////////////////
 // SP_SYS_TTY_MODE_APPLY //
 ///////////////////////////
@@ -8762,19 +8917,6 @@ SP_PRIVATE void sp_sys_win32_speed_up_loopback_connect(SOCKET fd) {
 //////////////////////
 // SP_SYS_SOCKET_WAIT //
 //////////////////////
-#if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
-SP_PRIVATE u64 sp_sys_ns_from_timespec(s64 sec, s64 nsec) {
-  return (u64)sec * SP_TM_S_TO_NS + (u64)nsec;
-}
-#endif
-
-SP_PRIVATE sp_sys_timespec_t sp_sys_timespec_from_ns(u64 ns) {
-  return SP_RVAL(sp_sys_timespec_t) {
-    .tv_sec = (s64)(ns / SP_TM_S_TO_NS),
-    .tv_nsec = (s64)(ns % SP_TM_S_TO_NS),
-  };
-}
-
 sp_err_t sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout_ms) {
 #if defined(SP_WIN32)
   if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
@@ -14815,7 +14957,6 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   sp_io_dyn_mem_writer_init(ps->mem, &write.err);
 
   sp_sys_fd_t fds[2];
-  u8 ready[2];
   sp_io_reader_t* readers[2];
   sp_io_writer_t* writers[2];
   s32 nfds = 0;
@@ -14834,35 +14975,29 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   }
 
   while (nfds > 0) {
-    sp_err_t wait_err = sp_sys_fds_wait(fds, ready, (u64)nfds);
+    u64 signaled = 0;
+    sp_err_t wait_err = sp_sys_wait(fds, (u64)nfds, 0, &signaled);
     if (wait_err != SP_OK) {
       if (result.error == SP_OK) result.error = wait_err;
       break;
     }
 
-    sp_for(i, (u32)nfds) {
-      if (!ready[i]) {
-        continue;
-      }
-
-      u64 n = 0;
-      sp_err_t read_err = sp_io_read(readers[i], buffer, sizeof(buffer), &n);
-      if (n > 0) {
-        sp_io_write_str(writers[i], sp_str((c8*)buffer, n), SP_NULLPTR);
-      }
-      if (read_err == SP_OK && n > 0) continue;
-      if (read_err == SP_ERR_SYS_WOULD_BLOCK) continue;
-
-      if (read_err != SP_OK && read_err != SP_ERR_IO_EOF && result.error == SP_OK) {
-        result.error = read_err;
-      }
-      fds[i] = fds[nfds - 1];
-      ready[i] = ready[nfds - 1];
-      readers[i] = readers[nfds - 1];
-      writers[i] = writers[nfds - 1];
-      nfds--;
-      i--;
+    u32 i = (u32)signaled;
+    u64 n = 0;
+    sp_err_t read_err = sp_io_read(readers[i], buffer, sizeof(buffer), &n);
+    if (n > 0) {
+      sp_io_write_str(writers[i], sp_str((c8*)buffer, n), SP_NULLPTR);
     }
+    if (read_err == SP_OK && n > 0) continue;
+    if (read_err == SP_ERR_SYS_WOULD_BLOCK) continue;
+
+    if (read_err != SP_OK && read_err != SP_ERR_IO_EOF && result.error == SP_OK) {
+      result.error = read_err;
+    }
+    fds[i] = fds[nfds - 1];
+    readers[i] = readers[nfds - 1];
+    writers[i] = writers[nfds - 1];
+    nfds--;
   }
 
   sp_ps_close_owned_fd(&ps->io.out.fd, ps->io.out.mode);

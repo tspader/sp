@@ -2927,7 +2927,7 @@ UTEST_F(prompt, log_queues_lines_in_order_and_copies_into_arena) {
 }
 
 UTEST_F(prompt, log_before_begin_does_not_consume_wake_token) {
-  EXPECT_EQ(ut.ctx.wake.write, SP_SYS_INVALID_FD);
+  EXPECT_EQ(ut.ctx.wake.event.fd, SP_SYS_INVALID_FD);
   sp_prompt_log(&ut.ctx, "early");
   EXPECT_EQ(sp_atomic_s32_load(&ut.ctx.wake.pending, SP_ATOMIC_SEQ_CST), SP_PROMPT_WAKE_NOT_PENDING);
 }

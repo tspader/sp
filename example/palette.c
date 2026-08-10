@@ -152,7 +152,7 @@ void palette_print_results(app_t* app) {
 
 s32 palette_read_key(void) {
   u8 ready = 0;
-  if (sp_sys_fd_ready(sp_sys_stdin, &ready) != SP_OK || !ready) return -1;
+  if (sp_sys_tty_ready(sp_sys_stdin, &ready) != SP_OK || !ready) return -1;
   c8 c = 0;
   u64 n = 0;
   if (sp_sys_read(sp_sys_stdin, &c, 1, &n) != SP_OK || n != 1) return -1;
