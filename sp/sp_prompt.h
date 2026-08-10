@@ -1030,7 +1030,13 @@ s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
   ctx->terminal.raw = false;
 
   if (sp_prompt_enable_raw_mode(ctx) == -1) return -1;
-  sp_sys_pipe(&ctx->wake.read, &ctx->wake.write);
+  sp_sys_pipe_t wake = sp_zero;
+  sp_sys_pipe(&wake, (sp_sys_pipe_desc_t) {
+    .r = { SP_SYS_NONBLOCKING },
+    .w = { SP_SYS_NONBLOCKING },
+  });
+  ctx->wake.read = wake.r;
+  ctx->wake.write = wake.w;
   sp_prompt_emit(ctx, SP_ANSI_HIDE_CURSOR);
   sp_io_flush(ctx->writer);
   return 0;

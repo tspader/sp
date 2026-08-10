@@ -7,7 +7,7 @@ UTEST_EMPTY_FIXTURE(sys_socket)
 
 static bool sys_socket_open_listener(sp_sys_socket_t* listener, u16* port) {
   sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 } };
-  if (sp_sys_socket_open(listener) != SP_OK) return false;
+  if (sp_sys_socket_open(listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) return false;
   if (sp_sys_socket_bind(*listener, addr) != SP_OK) return false;
   if (sp_sys_socket_listen(*listener, 1) != SP_OK) return false;
   if (sp_sys_socket_local_port(*listener, port) != SP_OK) return false;
@@ -26,11 +26,11 @@ static bool sys_socket_dial(sp_sys_socket_t socket, u16 port) {
 static bool sys_socket_pair(sp_sys_socket_t* listener, sp_sys_socket_t* client, sp_sys_socket_t* server) {
   u16 port = 0;
   if (!sys_socket_open_listener(listener, &port)) return false;
-  if (sp_sys_socket_open(client) != SP_OK) return false;
+  if (sp_sys_socket_open(client, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) return false;
   if (!sys_socket_dial(*client, port)) return false;
 
   while (true) {
-    sp_err_t err = sp_sys_socket_accept(*listener, server);
+    sp_err_t err = sp_sys_socket_accept(*listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, server);
     if (err == SP_OK) return true;
     if (err != SP_ERR_SYS_WOULD_BLOCK) return false;
     if (sp_sys_socket_wait(*listener, true, 1000) != SP_OK) return false;
@@ -186,7 +186,7 @@ UTEST_F(sys_socket, accept_would_block_when_nobody_connects) {
   ASSERT_TRUE(sys_socket_open_listener(&listener, &port));
 
   sp_sys_socket_t accepted = SP_SYS_INVALID_SOCKET;
-  EXPECT_EQ(sp_sys_socket_accept(listener, &accepted), SP_ERR_SYS_WOULD_BLOCK);
+  EXPECT_EQ(sp_sys_socket_accept(listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, &accepted), SP_ERR_SYS_WOULD_BLOCK);
   EXPECT_EQ(accepted, SP_SYS_INVALID_SOCKET);
 
   sp_sys_socket_close(listener);
@@ -198,7 +198,7 @@ UTEST_F(sys_socket, bind_reports_addr_in_use) {
   ASSERT_TRUE(sys_socket_open_listener(&listener, &port));
 
   sp_sys_socket_t other = SP_SYS_INVALID_SOCKET;
-  ASSERT_EQ(sp_sys_socket_open(&other), SP_OK);
+  ASSERT_EQ(sp_sys_socket_open(&other, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }), SP_OK);
   sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 }, .port = port };
   EXPECT_EQ(sp_sys_socket_bind(other, addr), SP_ERR_SYS_ADDR_IN_USE);
 
@@ -214,7 +214,7 @@ UTEST_F(sys_socket, connect_refused_when_nothing_listens) {
 
   sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
   sp_sys_socket_t client = SP_SYS_INVALID_SOCKET;
-  ASSERT_EQ(sp_sys_socket_open(&client), SP_OK);
+  ASSERT_EQ(sp_sys_socket_open(&client, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }), SP_OK);
 
   sp_err_t err = sp_sys_socket_connect(client, dial);
   if (err == SP_ERR_SYS_WOULD_BLOCK) {

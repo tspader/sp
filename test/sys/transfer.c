@@ -61,11 +61,14 @@ static void run_sys_transfer_test(s32* utest_result, sys_transfer_test_t t) {
       break;
     }
     case SYS_TRANSFER_END_PIPE: {
-      if (sp_sys_pipe(&in, &src_write) != SP_OK) {
+      sp_sys_pipe_t p = sp_zero;
+      if (sp_sys_pipe(&p, sp_zero_s(sp_sys_pipe_desc_t)) != SP_OK) {
         SP_TEST_REPORT("failed to create source pipe");
         SP_FAIL();
         goto done;
       }
+      in = p.r;
+      src_write = p.w;
       u64 written = 0;
       if (sp_sys_write(src_write, t.data, len, &written) != SP_OK || written != len) {
         SP_TEST_REPORT("failed to fill source pipe");
@@ -86,11 +89,14 @@ static void run_sys_transfer_test(s32* utest_result, sys_transfer_test_t t) {
       break;
     }
     case SYS_TRANSFER_END_PIPE: {
-      if (sp_sys_pipe(&dst_read, &out) != SP_OK) {
+      sp_sys_pipe_t p = sp_zero;
+      if (sp_sys_pipe(&p, sp_zero_s(sp_sys_pipe_desc_t)) != SP_OK) {
         SP_TEST_REPORT("failed to create destination pipe");
         SP_FAIL();
         goto done;
       }
+      dst_read = p.r;
+      out = p.w;
       break;
     }
   }

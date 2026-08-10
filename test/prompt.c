@@ -3123,9 +3123,10 @@ UTEST_F(prompt, prompt_end_frees_log) {
 UTEST_F(prompt, prompt_end_flushes_pending_log_to_terminal) {
   SKIP_ON_FREESTANDING();
   SKIP_ON_WASM();
-  sp_sys_fd_t read_end = SP_SYS_INVALID_FD;
-  sp_sys_fd_t write_end = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_pipe(&read_end, &write_end), SP_OK);
+  sp_sys_pipe_t p = sp_zero;
+  ASSERT_EQ(sp_sys_pipe(&p, sp_zero_s(sp_sys_pipe_desc_t)), SP_OK);
+  sp_sys_fd_t read_end = p.r;
+  sp_sys_fd_t write_end = p.w;
 
   sp_prompt_ctx_t* ctx = sp_alloc_type(ut.mem.tracking, sp_prompt_ctx_t);
   sp_prompt_ctx_init(ctx, ut.mem.tracking, 80, 20);
