@@ -18,6 +18,7 @@ typedef struct {
   sp_sys_fd_t open;
   s32         close;
   s32         pipe;
+  s32         pipe_ready;
   s32         mkdir;
   s32         rmdir;
   s32         unlink;
@@ -34,13 +35,15 @@ typedef struct {
   s32         futex_wake;
   s32         futex_wake_all;
   s64         canonicalize_path;
-  s32         fd_ready;
-  s32         fd_wait;
-  s32         fds_wait;
+  s32         event_open;
+  s32         event_signal;
+  s32         event_clear;
+  s32         wait;
   s32         tty_get;
   s32         tty_set;
   s32         tty_size;
   bool        is_tty;
+  s32         tty_ready;
   s32         tty_mode_apply;
   s32         tty_use_vt;
   s32         socket_open;
@@ -132,6 +135,10 @@ static sp_err_t sys_vtable_mock_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t des
   return (sp_err_t)69;
 }
 
+static sp_err_t sys_vtable_mock_pipe_ready(sp_sys_fd_t fd, u8* ready) {
+  return (sp_err_t)69;
+}
+
 static sp_err_t sys_vtable_mock_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
   return (sp_err_t)69;
 }
@@ -196,15 +203,19 @@ static s64 sys_vtable_mock_canonicalize_path(const c8* path, u32 len, c8* buf, u
   return 69;
 }
 
-static sp_err_t sys_vtable_mock_fd_ready(sp_sys_fd_t fd, u8* ready) {
+static sp_err_t sys_vtable_mock_event_open(sp_sys_event_t* out) {
   return (sp_err_t)69;
 }
 
-static sp_err_t sys_vtable_mock_fd_wait(sp_sys_fd_t fd) {
+static sp_err_t sys_vtable_mock_event_signal(sp_sys_event_t event) {
   return (sp_err_t)69;
 }
 
-static sp_err_t sys_vtable_mock_fds_wait(const sp_sys_fd_t* fds, u8* ready, u64 nfds) {
+static sp_err_t sys_vtable_mock_event_clear(sp_sys_event_t event) {
+  return (sp_err_t)69;
+}
+
+static sp_err_t sys_vtable_mock_wait(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled) {
   return (sp_err_t)69;
 }
 
@@ -222,6 +233,10 @@ static sp_err_t sys_vtable_mock_tty_size(sp_sys_fd_t fd, u32* cols, u32* rows) {
 
 static bool sys_vtable_mock_is_tty(sp_sys_fd_t fd) {
   return true;
+}
+
+static sp_err_t sys_vtable_mock_tty_ready(sp_sys_fd_t fd, u8* ready) {
+  return (sp_err_t)69;
 }
 
 static sp_err_t sys_vtable_mock_tty_mode_apply(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode) {
@@ -359,6 +374,7 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .open                   = sys_vtable_mock_open,
   .close                  = sys_vtable_mock_close,
   .pipe                   = sys_vtable_mock_pipe,
+  .pipe_ready             = sys_vtable_mock_pipe_ready,
   .mkdir                  = sys_vtable_mock_mkdir,
   .rmdir                  = sys_vtable_mock_rmdir,
   .unlink                 = sys_vtable_mock_unlink,
@@ -375,13 +391,15 @@ static const sp_sys_vtable_t sys_vtable_mock = {
   .futex_wake             = sys_vtable_mock_futex_wake,
   .futex_wake_all         = sys_vtable_mock_futex_wake_all,
   .canonicalize_path      = sys_vtable_mock_canonicalize_path,
-  .fd_ready               = sys_vtable_mock_fd_ready,
-  .fd_wait                = sys_vtable_mock_fd_wait,
-  .fds_wait               = sys_vtable_mock_fds_wait,
+  .event_open             = sys_vtable_mock_event_open,
+  .event_signal           = sys_vtable_mock_event_signal,
+  .event_clear            = sys_vtable_mock_event_clear,
+  .wait                   = sys_vtable_mock_wait,
   .tty_get                = sys_vtable_mock_tty_get,
   .tty_set                = sys_vtable_mock_tty_set,
   .tty_size               = sys_vtable_mock_tty_size,
   .is_tty                 = sys_vtable_mock_is_tty,
+  .tty_ready              = sys_vtable_mock_tty_ready,
   .tty_mode_apply         = sys_vtable_mock_tty_mode_apply,
   .tty_use_vt             = sys_vtable_mock_tty_use_vt,
   .socket_open            = sys_vtable_mock_socket_open,
@@ -441,6 +459,7 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   }
   r->close = sp_sys_close(0);
   r->pipe = sp_sys_pipe(SP_NULLPTR, sp_zero_s(sp_sys_pipe_desc_t));
+  r->pipe_ready = sp_sys_pipe_ready(0, &ready);
   r->mkdir = sp_sys_mkdir(0, SP_NULLPTR, 0, 0);
   r->rmdir = sp_sys_rmdir(0, SP_NULLPTR, 0);
   r->unlink = sp_sys_unlink(0, SP_NULLPTR, 0);
@@ -457,13 +476,15 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   sp_sys_futex_wake(SP_NULLPTR);
   sp_sys_futex_wake_all(SP_NULLPTR);
   r->canonicalize_path = sp_sys_canonicalize_path(SP_NULLPTR, 0, SP_NULLPTR, 0);
-  r->fd_ready = sp_sys_fd_ready(0, &ready);
-  r->fd_wait = sp_sys_fd_wait(0);
-  r->fds_wait = sp_sys_fds_wait(fds, &ready, 0);
+  r->event_open = sp_sys_event_open(SP_NULLPTR);
+  r->event_signal = sp_sys_event_signal(sp_zero_s(sp_sys_event_t));
+  r->event_clear = sp_sys_event_clear(sp_zero_s(sp_sys_event_t));
+  r->wait = sp_sys_wait(fds, 0, 0, SP_NULLPTR);
   r->tty_get = sp_sys_tty_get(0, SP_NULLPTR);
   r->tty_set = sp_sys_tty_set(0, SP_NULLPTR);
   r->tty_size = sp_sys_tty_size(0, SP_NULLPTR, SP_NULLPTR);
   r->is_tty = sp_sys_is_tty(0);
+  r->tty_ready = sp_sys_tty_ready(0, &ready);
   r->tty_mode_apply = sp_sys_tty_mode_apply(SP_NULLPTR, SP_NULLPTR, SP_SYS_TTY_MODE_RAW);
   r->tty_use_vt = sp_sys_tty_use_vt(0);
   r->socket_open = sp_sys_socket_open(SP_NULLPTR, sp_zero_s(sp_sys_handle_desc_t));
@@ -513,6 +534,7 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->open, 69);
   EXPECT_EQ(r->close, 69);
   EXPECT_EQ(r->pipe, 69);
+  EXPECT_EQ(r->pipe_ready, 69);
   EXPECT_EQ(r->mkdir, 69);
   EXPECT_EQ(r->rmdir, 69);
   EXPECT_EQ(r->unlink, 69);
@@ -529,13 +551,15 @@ UTEST_F(sys_vtable, every_function_dispatches) {
   EXPECT_EQ(r->futex_wake, 69);
   EXPECT_EQ(r->futex_wake_all, 69);
   EXPECT_EQ(r->canonicalize_path, 69);
-  EXPECT_EQ(r->fd_ready, 69);
-  EXPECT_EQ(r->fd_wait, 69);
-  EXPECT_EQ(r->fds_wait, 69);
+  EXPECT_EQ(r->event_open, 69);
+  EXPECT_EQ(r->event_signal, 69);
+  EXPECT_EQ(r->event_clear, 69);
+  EXPECT_EQ(r->wait, 69);
   EXPECT_EQ(r->tty_get, 69);
   EXPECT_EQ(r->tty_set, 69);
   EXPECT_EQ(r->tty_size, 69);
   EXPECT_TRUE(r->is_tty);
+  EXPECT_EQ(r->tty_ready, 69);
   EXPECT_EQ(r->tty_mode_apply, 69);
   EXPECT_EQ(r->tty_use_vt, 69);
   EXPECT_EQ(r->socket_open, 69);
