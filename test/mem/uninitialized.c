@@ -44,6 +44,7 @@ typedef struct {
 
 typedef struct {
   const c8* name;
+  mem_mem_kind_t kind;
   mem_step_t steps [MEM_MAX_STEPS];
 } mem_case_t;
 
@@ -74,7 +75,8 @@ static void mem_check_range(sp_test_t* t, u8* ptr, mem_range_t range, u8 value) 
   }
 }
 
-static sp_err_t mem_case_run(sp_test_t* t, mem_mem_kind_t kind, mem_case_t* c) {
+static sp_err_t mem_case_run(sp_test_t* t, mem_case_t* c) {
+  mem_mem_kind_t kind = c->kind;
   sp_mem_arena_t* arena = SP_NULLPTR;
   sp_mem_heap_t* heap = SP_NULLPTR;
   sp_mem_fixed_t fixed;
@@ -315,26 +317,14 @@ static const mem_case_t mem_heap_cases [] = {
   },
 };
 
-static sp_err_t mem_run_arena(sp_test_t* t, mem_case_t* c) {
-  return mem_case_run(t, MEM_MEM_ARENA, c);
-}
+sp_test_each_fn(mem, uninitialized, mem_case_t, mem_cases, mem_case_run, .axes = {
+  sp_test_axis(mem_case_t, kind, MEM_MEM_ARENA, MEM_MEM_FIXED, MEM_MEM_OS, MEM_MEM_HEAP)
+});
 
-static sp_err_t mem_run_fixed(sp_test_t* t, mem_case_t* c) {
-  return mem_case_run(t, MEM_MEM_FIXED, c);
-}
+sp_test_each_fn(mem, uninitialized_bump, mem_case_t, mem_bump_cases, mem_case_run, .axes = {
+  sp_test_axis(mem_case_t, kind, MEM_MEM_ARENA, MEM_MEM_FIXED)
+});
 
-static sp_err_t mem_run_os(sp_test_t* t, mem_case_t* c) {
-  return mem_case_run(t, MEM_MEM_OS, c);
-}
-
-static sp_err_t mem_run_heap(sp_test_t* t, mem_case_t* c) {
-  return mem_case_run(t, MEM_MEM_HEAP, c);
-}
-
-sp_test_each_fn(mem, uninitialized_arena, mem_case_t, mem_cases, mem_run_arena);
-sp_test_each_fn(mem, uninitialized_fixed, mem_case_t, mem_cases, mem_run_fixed);
-sp_test_each_fn(mem, uninitialized_os, mem_case_t, mem_cases, mem_run_os);
-sp_test_each_fn(mem, uninitialized_heap, mem_case_t, mem_cases, mem_run_heap);
-sp_test_each_fn(mem, uninitialized_bump_arena, mem_case_t, mem_bump_cases, mem_run_arena);
-sp_test_each_fn(mem, uninitialized_bump_fixed, mem_case_t, mem_bump_cases, mem_run_fixed);
-sp_test_each_fn(mem, uninitialized_heap_only, mem_case_t, mem_heap_cases, mem_run_heap);
+sp_test_each_fn(mem, uninitialized_heap, mem_case_t, mem_heap_cases, mem_case_run, .axes = {
+  sp_test_axis(mem_case_t, kind, MEM_MEM_HEAP)
+});
