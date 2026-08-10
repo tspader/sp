@@ -10,6 +10,28 @@ SP_TYPEDEF_FN(sp_err_t, sp_test_fn_t, sp_test_t* t);
 SP_TYPEDEF_FN(sp_err_t, sp_test_each_fn_t, sp_test_t* t, const void* it);
 SP_TYPEDEF_FN(sp_err_t, sp_test_setup_fn_t, sp_test_t* t);
 SP_TYPEDEF_FN(void, sp_test_teardown_fn_t, sp_test_t* t);
+SP_TYPEDEF_FN(const c8*, sp_test_axis_name_fn_t, s64 value);
+
+#define SP_TEST_MAX_AXES 4
+
+typedef enum {
+  SP_TEST_AXIS_NONE,
+  SP_TEST_AXIS_VALUES,
+  SP_TEST_AXIS_RANGE,
+} sp_test_axis_kind_t;
+
+typedef struct {
+  sp_test_axis_kind_t kind;
+  const c8* field;
+  u64 offset;
+  u64 size;
+  const s64* values;
+  u64 count;
+  sp_test_axis_name_fn_t name;
+  s64 from;
+  s64 to;
+  s64 step;
+} sp_test_axis_t;
 
 typedef struct {
   const c8* name;
@@ -19,6 +41,7 @@ typedef struct {
   u64 stride;
   u64 count;
   u64 case_name_offset;
+  sp_test_axis_t axes [SP_TEST_MAX_AXES];
   sp_test_setup_fn_t setup;
   sp_test_teardown_fn_t teardown;
   const void* user;
@@ -40,6 +63,44 @@ typedef struct {
   const c8* suite;
   bool serial;
 } sp_test_suite_attr_t;
+
+typedef struct {
+  const c8* name;
+  const sp_test_decl_t* decl;
+  const void* arg;
+  bool serial;
+} sp_test_instance_t;
+
+#define __sp_test_axis_field(TYPE, FIELD)      \
+    .field = #FIELD,                           \
+    .offset = offsetof(TYPE, FIELD),           \
+    .size = sizeof(((TYPE*)0)->FIELD)
+
+#define sp_test_axis(TYPE, FIELD, ...)                                       \
+  {                                                                          \
+    .kind = SP_TEST_AXIS_VALUES,                                             \
+    __sp_test_axis_field(TYPE, FIELD),                                       \
+    .values = (const s64 []) { __VA_ARGS__ },                                \
+    .count = sizeof((const s64 []) { __VA_ARGS__ }) / sizeof(s64),           \
+  }
+
+#define sp_test_axis_named(TYPE, FIELD, FN, ...)                                \
+  {                                                                          \
+    .kind = SP_TEST_AXIS_VALUES,                                             \
+    __sp_test_axis_field(TYPE, FIELD),                                       \
+    .values = (const s64 []) { __VA_ARGS__ },                                \
+    .count = sizeof((const s64 []) { __VA_ARGS__ }) / sizeof(s64),           \
+    .name = (FN),                                                            \
+  }
+
+#define sp_test_axis_range(TYPE, FIELD, FROM, TO, STEP)  \
+  {                                                      \
+    .kind = SP_TEST_AXIS_RANGE,                          \
+    __sp_test_axis_field(TYPE, FIELD),                   \
+    .from = (FROM),                                      \
+    .to = (TO),                                          \
+    .step = (STEP),                                      \
+  }
 
 #define __sp_test_fn(SUITE, NAME)    sp_mcat(sp_mcat(sp_test_fn_, SUITE), sp_mcat(_, NAME))
 #define __sp_test_thunk(SUITE, NAME) sp_mcat(__sp_test_fn(SUITE, NAME), _thunk)
@@ -162,6 +223,17 @@ typedef struct {
       .case_name_offset = offsetof(TYPE, name) + 1,                    \
       __VA_ARGS__                                                           \
     })
+
+  #define sp_test_sweep(SUITE, NAME, TYPE, ...)                             \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it);      \
+    __sp_test_each_thunk_def(SUITE, NAME, TYPE, __sp_test_fn(SUITE, NAME))  \
+    sp_test_reg(SUITE, {                                                    \
+      .name = #NAME,                                                        \
+      .each = __sp_test_thunk(SUITE, NAME),                                 \
+      .stride = sizeof(TYPE),                                               \
+      __VA_ARGS__                                                           \
+    });                                                                     \
+    static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
 #else
   #define __sp_test_unsupported() \
     sp_static_assert(false, no_sp_test_autoreg_for_this_object_format__pass_suites_to_sp_test_main)
@@ -172,11 +244,14 @@ typedef struct {
   #define sp_test_each(SUITE, NAME, TYPE, ARR, ...)        __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
   #define sp_test_each_anon(SUITE, NAME, TYPE, ARR, ...)   __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
   #define sp_test_each_fn(SUITE, NAME, TYPE, ARR, FN, ...) __sp_test_unsupported()
+  #define sp_test_sweep(SUITE, NAME, TYPE, ...)            __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
 #endif
 
 SP_API s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites);
 
 SP_API bool sp_test_filtered(sp_glob_t* filter, const c8* name);
+
+SP_API void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out);
 
 
 typedef struct {
@@ -618,13 +693,6 @@ struct sp_test_t {
 
   sp_str_t dir;
 };
-
-typedef struct {
-  const c8* name;
-  const sp_test_decl_t* decl;
-  const void* arg;
-  bool serial;
-} sp_test_instance_t;
 
 struct sp_test_runner_t {
   sp_mem_t mem;
@@ -1575,13 +1643,52 @@ static u32 sp_test_num_cpus(void) {
 #endif
 }
 
-static const c8* sp_test_instance_name(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, u32 row) {
-  if (!decl->each) {
+static bool sp_test_axis_fits(s64 value, u64 size) {
+  if (size == 8) return true;
+  s64 bits = (s64)size * 8;
+  return value >= -((s64)1 << (bits - 1)) && value < ((s64)1 << bits);
+}
+
+static u64 sp_test_axis_count(const sp_test_axis_t* axis) {
+  switch (axis->size) {
+    case 1: case 2: case 4: case 8: break;
+    default: SP_ASSERT(false);
+  }
+
+  switch (axis->kind) {
+    case SP_TEST_AXIS_VALUES: {
+      SP_ASSERT(axis->count);
+      return axis->count;
+    }
+    case SP_TEST_AXIS_RANGE: {
+      SP_ASSERT(axis->from <= axis->to);
+      SP_ASSERT(axis->step > 0);
+      return (u64)(axis->to - axis->from) / (u64)axis->step + 1;
+    }
+    default: SP_UNREACHABLE_RETURN(0);
+  }
+}
+
+static s64 sp_test_axis_value(const sp_test_axis_t* axis, u64 pick) {
+  switch (axis->kind) {
+    case SP_TEST_AXIS_VALUES: return axis->values[pick];
+    case SP_TEST_AXIS_RANGE: return axis->from + (s64)pick * axis->step;
+    default: SP_UNREACHABLE_RETURN(0);
+  }
+}
+
+static void sp_test_axis_apply(const sp_test_axis_t* axis, s64 value, u8* row) {
+  SP_ASSERT(sp_test_axis_fits(value, axis->size));
+  sp_mem_copy(row + axis->offset, &value, axis->size);
+}
+
+static const c8* sp_test_instance_base(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, u32 row) {
+  if (!decl->each || !decl->cases) {
     return sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name));
   }
 
   if (decl->case_name_offset) {
-    const u8* row_base = (const u8*)decl->cases + (u64)row * decl->stride;
+    const u8* row_base = (const u8*)decl->cases + row * decl->stride;
     const c8* case_name = *(const c8* const*)(row_base + decl->case_name_offset - 1);
     if (case_name) {
       return sp_fmt_mem_cstr(mem, "{}.{}.{}",
@@ -1597,18 +1704,68 @@ static const c8* sp_test_instance_name(sp_mem_t mem, const c8* suite, const sp_t
     sp_fmt_uint(row));
 }
 
-static void sp_test_collect_decl(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool suite_serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
-  u32 count = decl->each ? decl->count : 1;
-  sp_for(row, count) {
-    const c8* name = sp_test_instance_name(mem, suite, decl, row);
-    if (sp_test_filtered(filter, name)) continue;
+void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+  u64 counts [SP_TEST_MAX_AXES];
+  u32 num_axes = 0;
+  u64 combos = 1;
+  sp_carr_for(decl->axes, it) {
+    if (decl->axes[it].kind == SP_TEST_AXIS_NONE) break;
+    counts[num_axes] = sp_test_axis_count(&decl->axes[it]);
+    combos *= counts[num_axes];
+    num_axes++;
+  }
+  SP_ASSERT(!num_axes || decl->each);
 
-    sp_da_push(*out, ((sp_test_instance_t) {
-      .name = name,
-      .decl = decl,
-      .arg = decl->each ? (const void*)((const u8*)decl->cases + (u64)row * decl->stride) : SP_NULLPTR,
-      .serial = suite_serial || decl->serial,
-    }));
+  u64 rows = decl->each && decl->cases ? decl->count : 1;
+  sp_for(row, rows) {
+    const u8* source = SP_NULLPTR;
+    if (decl->cases) source = (const u8*)decl->cases + row * decl->stride;
+    else if (decl->each) source = (const u8*)sp_alloc(mem, decl->stride);
+    const c8* base = sp_test_instance_base(mem, suite, decl, row);
+
+    sp_for(combo, combos) {
+      const c8* name = base;
+      const void* arg = source;
+
+      if (num_axes) {
+        u64 picks [SP_TEST_MAX_AXES];
+        u64 rest = combo;
+        for (u32 it = num_axes; it-- > 0;) {
+          picks[it] = rest % counts[it];
+          rest /= counts[it];
+        }
+
+        u8* copy = (u8*)sp_alloc(mem, decl->stride);
+        sp_mem_copy(copy, source, decl->stride);
+        sp_for(it, num_axes) {
+          const sp_test_axis_t* axis = &decl->axes[it];
+          s64 value = sp_test_axis_value(axis, picks[it]);
+          sp_test_axis_apply(axis, value, copy);
+          if (axis->name) {
+            name = sp_fmt_mem_cstr(mem, "{}.{}={}",
+              sp_fmt_cstr(name),
+              sp_fmt_cstr(axis->field),
+              sp_fmt_cstr(axis->name(value)));
+          }
+          else {
+            name = sp_fmt_mem_cstr(mem, "{}.{}={}",
+              sp_fmt_cstr(name),
+              sp_fmt_cstr(axis->field),
+              sp_fmt_int(value));
+          }
+        }
+        arg = copy;
+      }
+
+      if (sp_test_filtered(filter, name)) continue;
+
+      sp_da_push(*out, ((sp_test_instance_t) {
+        .name = name,
+        .decl = decl,
+        .arg = arg,
+        .serial = serial || decl->serial,
+      }));
+    }
   }
 }
 
@@ -1687,7 +1844,7 @@ static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob
     for (const sp_test_suite_t* suite = suites; suite->name; suite++) {
       bool serial = suite->serial || sp_test_suite_serial(suite->name);
       for (const sp_test_decl_t* decl = suite->tests; decl->name; decl++) {
-        sp_test_collect_decl(mem, suite->name, decl, serial, filter, out);
+        sp_test_expand(mem, suite->name, decl, serial, filter, out);
       }
     }
   }
@@ -1695,7 +1852,7 @@ static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob
 #if SP_TEST_AUTOREG
   for (const sp_test_reg_t* const* it = __sp_test_reg_begin, * const* end = __sp_test_reg_end; it < end; it++) {
     if (!*it) continue;
-    sp_test_collect_decl(mem, (*it)->suite, &(*it)->decl, sp_test_suite_serial((*it)->suite), filter, out);
+    sp_test_expand(mem, (*it)->suite, &(*it)->decl, sp_test_suite_serial((*it)->suite), filter, out);
   }
 #endif
 }
