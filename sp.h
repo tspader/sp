@@ -7308,7 +7308,7 @@ SP_PRIVATE sp_err_t sp_sys_win32_pipe(sp_sys_pipe_t* out, sp_sys_win32_pipe_desc
     .Length = sizeof(sp_nt_object_attributes_t),
     .RootDirectory = device,
     .ObjectName = &name,
-    .Attributes = SP_NT_OBJ_CASE_INSENSITIVE | (desc.r.inherited == SP_SYS_INHERITED ? SP_NT_OBJ_INHERIT : 0),
+    .Attributes = (u32)(SP_NT_OBJ_CASE_INSENSITIVE | (desc.r.inherited == SP_SYS_INHERITED ? SP_NT_OBJ_INHERIT : 0)),
   };
   u32 options = desc.r.io == SP_SYS_WIN32_PIPE_SYNCHRONOUS ? SP_NT_FILE_SYNCHRONOUS_IO_NONALERT : 0;
 
@@ -8250,14 +8250,28 @@ bool sp_sys_futex_wait_p(u32* addr, u32 expected, const sp_sys_timespec_t* timeo
   return rc != -SP_ETIMEDOUT;
 
 #elif defined(SP_WIN32)
-  s64 timeout_100ns = 0;
-  s64* nt_timeout = SP_NULLPTR;
-  if (timeout) {
-    timeout_100ns = -(timeout->tv_sec * 10000000 + timeout->tv_nsec / 100);
-    nt_timeout = &timeout_100ns;
+  if (!timeout) {
+    return SP_NT(RtlWaitOnAddress)(addr, &expected, sizeof(u32), SP_NULLPTR) != SP_NT_STATUS_TIMEOUT;
   }
-  sp_nt_status_t status = SP_NT(RtlWaitOnAddress)(addr, &expected, sizeof(u32), nt_timeout);
-  return status != SP_NT_STATUS_TIMEOUT;
+  // Relative NT waits can expire up to one timer tick early; Linux and mac
+  // never report timeout before the deadline. Re-wait the remainder so false
+  // means the full duration elapsed on every platform.
+  LARGE_INTEGER freq, start;
+  QueryPerformanceFrequency(&freq);
+  QueryPerformanceCounter(&start);
+  s64 total_100ns = timeout->tv_sec * 10000000 + timeout->tv_nsec / 100;
+  s64 remaining_100ns = total_100ns;
+  while (true) {
+    s64 nt_timeout = -remaining_100ns;
+    sp_nt_status_t status = SP_NT(RtlWaitOnAddress)(addr, &expected, sizeof(u32), &nt_timeout);
+    if (status != SP_NT_STATUS_TIMEOUT) return true;
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    s64 ticks = now.QuadPart - start.QuadPart;
+    s64 elapsed_100ns = (ticks / freq.QuadPart) * 10000000 + ((ticks % freq.QuadPart) * 10000000) / freq.QuadPart;
+    if (elapsed_100ns >= total_100ns) return false;
+    remaining_100ns = total_100ns - elapsed_100ns;
+  }
 
 #elif defined(SP_MACOS)
   u64 timeout_ns = 0;
@@ -9350,7 +9364,9 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_handle_desc_t d
       int nosigpipe = 1;
       setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
 #endif
-      if (desc.mode == SP_SYS_NONBLOCKING) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+      int flags = fcntl(fd, F_GETFL);
+      if (desc.mode == SP_SYS_NONBLOCKING) flags |= O_NONBLOCK; else flags &= ~O_NONBLOCK;
+      fcntl(fd, F_SETFL, flags);
       if (desc.inherited == SP_SYS_NOT_INHERITED) fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
       *out = (sp_sys_socket_t)fd;
       return SP_OK;
