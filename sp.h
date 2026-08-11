@@ -1402,8 +1402,8 @@ typedef struct {
 } sp_sys_handle_desc_t;
 
 typedef struct {
-  sp_sys_handle_desc_t r;
-  sp_sys_handle_desc_t w;
+  sp_sys_inherited_t r;
+  sp_sys_inherited_t w;
 } sp_sys_pipe_desc_t;
 
 typedef struct {
@@ -7279,13 +7279,26 @@ SP_PRIVATE sp_err_t sp_sys_win32_pipe_device(void** out) {
   *out = device;
   return SP_OK;
 }
-#endif
 
-sp_err_t sp_sys_pipe_p(sp_sys_pipe_t* out, sp_sys_pipe_desc_t desc) {
+typedef enum {
+  SP_SYS_WIN32_PIPE_SYNCHRONOUS,
+  SP_SYS_WIN32_PIPE_OVERLAPPED,
+} sp_sys_win32_pipe_io_t;
+
+typedef struct {
+  sp_sys_win32_pipe_io_t io;
+  sp_sys_inherited_t inherited;
+} sp_sys_win32_pipe_end_t;
+
+typedef struct {
+  sp_sys_win32_pipe_end_t r;
+  sp_sys_win32_pipe_end_t w;
+} sp_sys_win32_pipe_desc_t;
+
+SP_PRIVATE sp_err_t sp_sys_win32_pipe(sp_sys_pipe_t* out, sp_sys_win32_pipe_desc_t desc) {
   out->r = SP_SYS_INVALID_FD;
   out->w = SP_SYS_INVALID_FD;
 
-#if defined(SP_WIN32)
   void* device = SP_NULLPTR;
   sp_err_t err = sp_sys_win32_pipe_device(&device);
   if (err != SP_OK) return err;
@@ -7297,7 +7310,7 @@ sp_err_t sp_sys_pipe_p(sp_sys_pipe_t* out, sp_sys_pipe_desc_t desc) {
     .ObjectName = &name,
     .Attributes = SP_NT_OBJ_CASE_INSENSITIVE | (desc.r.inherited == SP_SYS_INHERITED ? SP_NT_OBJ_INHERIT : 0),
   };
-  u32 options = desc.r.mode == SP_SYS_BLOCKING ? SP_NT_FILE_SYNCHRONOUS_IO_NONALERT : 0;
+  u32 options = desc.r.io == SP_SYS_WIN32_PIPE_SYNCHRONOUS ? SP_NT_FILE_SYNCHRONOUS_IO_NONALERT : 0;
 
   // NtCreateNamedPipeFile requires a default timeout; it only governs pipe
   // waits, which anonymous pipes never issue. 50ms relative is the convention.
@@ -7325,7 +7338,7 @@ sp_err_t sp_sys_pipe_p(sp_sys_pipe_t* out, sp_sys_pipe_desc_t desc) {
   attr.RootDirectory = read_end;
   attr.Attributes = SP_NT_OBJ_CASE_INSENSITIVE | (desc.w.inherited == SP_SYS_INHERITED ? SP_NT_OBJ_INHERIT : 0);
   options = SP_NT_FILE_NON_DIRECTORY_FILE;
-  if (desc.w.mode == SP_SYS_BLOCKING) options |= SP_NT_FILE_SYNCHRONOUS_IO_NONALERT;
+  if (desc.w.io == SP_SYS_WIN32_PIPE_SYNCHRONOUS) options |= SP_NT_FILE_SYNCHRONOUS_IO_NONALERT;
 
   void* write_end = SP_NULLPTR;
   status = SP_NT(NtOpenFile)(
@@ -7343,22 +7356,25 @@ sp_err_t sp_sys_pipe_p(sp_sys_pipe_t* out, sp_sys_pipe_desc_t desc) {
   out->r = (sp_sys_fd_t)read_end;
   out->w = (sp_sys_fd_t)write_end;
   return SP_OK;
+}
+#endif
+
+sp_err_t sp_sys_pipe_p(sp_sys_pipe_t* out, sp_sys_pipe_desc_t desc) {
+  out->r = SP_SYS_INVALID_FD;
+  out->w = SP_SYS_INVALID_FD;
+
+#if defined(SP_WIN32)
+  return sp_sys_win32_pipe(out, (sp_sys_win32_pipe_desc_t) {
+    .r = { .inherited = desc.r },
+    .w = { .inherited = desc.w },
+  });
 
 #elif defined(SP_LINUX)
   s32 fds[2];
-  u32 nonblock = desc.r.mode == SP_SYS_NONBLOCKING && desc.w.mode == SP_SYS_NONBLOCKING ? SP_SYS_LINUX_O_NONBLOCK : 0;
-  s64 r = sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_SYS_LINUX_O_CLOEXEC | nonblock, 0, 0, 0);
+  s64 r = sp_syscall(SP_SYSCALL_NUM_PIPE2, fds, SP_SYS_LINUX_O_CLOEXEC, 0, 0, 0);
   if (r < 0) return sp_sys_err_from_errno(-r);
-  if (!nonblock && desc.r.mode == SP_SYS_NONBLOCKING) {
-    s64 flags = sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[0], SP_F_GETFL, 0);
-    sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[0], SP_F_SETFL, flags | SP_SYS_LINUX_O_NONBLOCK);
-  }
-  if (!nonblock && desc.w.mode == SP_SYS_NONBLOCKING) {
-    s64 flags = sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[1], SP_F_GETFL, 0);
-    sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[1], SP_F_SETFL, flags | SP_SYS_LINUX_O_NONBLOCK);
-  }
-  if (desc.r.inherited == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[0], SP_F_SETFD, 0);
-  if (desc.w.inherited == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[1], SP_F_SETFD, 0);
+  if (desc.r == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[0], SP_F_SETFD, 0);
+  if (desc.w == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fds[1], SP_F_SETFD, 0);
   out->r = fds[0];
   out->w = fds[1];
   return SP_OK;
@@ -7366,10 +7382,8 @@ sp_err_t sp_sys_pipe_p(sp_sys_pipe_t* out, sp_sys_pipe_desc_t desc) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 fds[2];
   if (pipe(fds) < 0) return sp_sys_err_from_errno(errno);
-  if (desc.r.mode == SP_SYS_NONBLOCKING) fcntl(fds[0], F_SETFL, fcntl(fds[0], F_GETFL) | O_NONBLOCK);
-  if (desc.w.mode == SP_SYS_NONBLOCKING) fcntl(fds[1], F_SETFL, fcntl(fds[1], F_GETFL) | O_NONBLOCK);
-  if (desc.r.inherited == SP_SYS_NOT_INHERITED) fcntl(fds[0], F_SETFD, fcntl(fds[0], F_GETFD) | FD_CLOEXEC);
-  if (desc.w.inherited == SP_SYS_NOT_INHERITED) fcntl(fds[1], F_SETFD, fcntl(fds[1], F_GETFD) | FD_CLOEXEC);
+  if (desc.r == SP_SYS_NOT_INHERITED) fcntl(fds[0], F_SETFD, fcntl(fds[0], F_GETFD) | FD_CLOEXEC);
+  if (desc.w == SP_SYS_NOT_INHERITED) fcntl(fds[1], F_SETFD, fcntl(fds[1], F_GETFD) | FD_CLOEXEC);
   out->r = fds[0];
   out->w = fds[1];
   return SP_OK;
@@ -8364,21 +8378,9 @@ SP_PRIVATE sp_sys_timespec_t sp_sys_timespec_from_ns(u64 ns) {
   };
 }
 
-sp_err_t sp_sys_wait_p(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled) {
-  if (n == 0 || n > SP_SYS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
-
-#if defined(SP_WIN32)
-  HANDLE handles [SP_SYS_WAIT_CAP];
-  for (u64 i = 0; i < n; i++) {
-    handles[i] = (HANDLE)fds[i];
-  }
-  DWORD rc = WaitForMultipleObjects((DWORD)n, handles, false, timeout_ms ? timeout_ms : INFINITE);
-  if (rc == WAIT_TIMEOUT) return SP_ERR_SYS_TIMED_OUT;
-  if (rc == WAIT_FAILED) return sp_sys_err_from_win32(GetLastError());
-  *signaled = (u64)(rc - WAIT_OBJECT_0);
-  return SP_OK;
-
-#elif defined(SP_LINUX)
+#if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+SP_PRIVATE sp_err_t sp_sys_posix_poll(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled) {
+#if defined(SP_LINUX)
   sp_sys_linux_pollfd_t pfds [SP_SYS_WAIT_CAP];
   for (u64 i = 0; i < n; i++) {
     pfds[i] = (sp_sys_linux_pollfd_t){ .fd = fds[i], .events = SP_SYS_LINUX_POLLIN };
@@ -8448,6 +8450,29 @@ sp_err_t sp_sys_wait_p(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signa
     }
     sp_unreachable_return(SP_ERR_SYS_BUG);
   }
+#endif
+}
+#endif
+
+// Takes platform-waitable objects only; the portable set is {tty, event};
+// anything else is a caller bug. Win32 WFMO admits consoles, events, and
+// process handles — never synchronous pipes.
+sp_err_t sp_sys_wait_p(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signaled) {
+  if (n == 0 || n > SP_SYS_WAIT_CAP) { sp_unreachable_return(SP_ERR_SYS_BUG); }
+
+#if defined(SP_WIN32)
+  HANDLE handles [SP_SYS_WAIT_CAP];
+  for (u64 i = 0; i < n; i++) {
+    handles[i] = (HANDLE)fds[i];
+  }
+  DWORD rc = WaitForMultipleObjects((DWORD)n, handles, false, timeout_ms ? timeout_ms : INFINITE);
+  if (rc == WAIT_TIMEOUT) return SP_ERR_SYS_TIMED_OUT;
+  if (rc == WAIT_FAILED) return sp_sys_err_from_win32(GetLastError());
+  *signaled = (u64)(rc - WAIT_OBJECT_0);
+  return SP_OK;
+
+#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+  return sp_sys_posix_poll(fds, n, timeout_ms, signaled);
 
 #elif defined(SP_WASM)
   __wasi_subscription_t subs [SP_SYS_WAIT_CAP + 1];
@@ -14489,14 +14514,6 @@ bool sp_ps_is_fd_valid(sp_sys_fd_t fd) {
   return fd > 0;
 }
 
-SP_PRIVATE sp_sys_io_mode_t sp_ps_sys_io_mode(sp_ps_io_blocking_t block) {
-  switch (block) {
-    case SP_PS_IO_NONBLOCKING: return SP_SYS_NONBLOCKING;
-    case SP_PS_IO_BLOCKING:    return SP_SYS_BLOCKING;
-  }
-  SP_UNREACHABLE_RETURN(SP_SYS_BLOCKING);
-}
-
 sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config) {
   sp_da(c8*) args = sp_da_new(mem, c8*);
 
@@ -14573,10 +14590,7 @@ bool sp_ps_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_stdio_config_entry_t*
     }
     case SP_PS_IO_MODE_CREATE: {
       sp_sys_pipe_t pipes = sp_zero;
-      sp_sys_pipe_desc_t desc = {
-        .w = { .mode = sp_ps_sys_io_mode(io->block) },
-      };
-      if (sp_sys_pipe(&pipes, desc) != SP_OK) {
+      if (sp_sys_pipe(&pipes, sp_zero_s(sp_sys_pipe_desc_t)) != SP_OK) {
         return false;
       }
       p->pipes.read = pipes.r;
@@ -14606,10 +14620,7 @@ bool sp_ps_configure_io_out(sp_ps_io_out_config_t* io, sp_ps_stdio_config_entry_
     }
     case SP_PS_IO_MODE_CREATE: {
       sp_sys_pipe_t pipes = sp_zero;
-      sp_sys_pipe_desc_t desc = {
-        .r = { .mode = sp_ps_sys_io_mode(io->block) },
-      };
-      if (sp_sys_pipe(&pipes, desc) != SP_OK) {
+      if (sp_sys_pipe(&pipes, sp_zero_s(sp_sys_pipe_desc_t)) != SP_OK) {
         return false;
       }
       p->pipes.read = pipes.r;
@@ -14813,12 +14824,46 @@ sp_io_stream_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   return writer;
 }
 
+// The pipe fds are blocking; the ps BLOCKING/NONBLOCKING config is reader
+// semantics, implemented here instead of in the fd flags
+typedef struct {
+  sp_io_reader_t base;
+  sp_sys_fd_t fd;
+  sp_ps_io_blocking_t block;
+} sp_ps_posix_reader_t;
+
+SP_PRIVATE sp_err_t sp_ps_posix_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_ps_posix_reader_t* r = (sp_ps_posix_reader_t*)reader;
+  if (bytes_read) *bytes_read = 0;
+
+  switch (r->block) {
+    case SP_PS_IO_BLOCKING: {
+      break;
+    }
+    case SP_PS_IO_NONBLOCKING: {
+      u8 ready = 0;
+      sp_err_t err = sp_sys_pipe_ready(r->fd, &ready);
+      if (err != SP_OK) return err;
+      if (!ready) return SP_ERR_SYS_WOULD_BLOCK;
+
+      // ps is the only reader of this pipe, so the polled bytes cannot vanish
+      // and the blocking read completes inline
+      break;
+    }
+  }
+  return sp_sys_read(r->fd, ptr, size, bytes_read);
+}
+
 sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
 
-  sp_io_stream_reader_t* reader = sp_alloc_type(ps->mem, sp_io_stream_reader_t);
-  sp_io_stream_reader_from_fd(reader, ps->io.out.fd, SP_IO_CLOSE_MODE_NONE);
+  sp_ps_posix_reader_t* reader = sp_alloc_type(ps->mem, sp_ps_posix_reader_t);
+  *reader = (sp_ps_posix_reader_t) {
+    .base = { .read = sp_ps_posix_reader_read },
+    .fd = ps->io.out.fd,
+    .block = ps->io.out.block,
+  };
   return &reader->base;
 }
 
@@ -14826,8 +14871,12 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
 
-  sp_io_stream_reader_t* reader = sp_alloc_type(ps->mem, sp_io_stream_reader_t);
-  sp_io_stream_reader_from_fd(reader, ps->io.err.fd, SP_IO_CLOSE_MODE_NONE);
+  sp_ps_posix_reader_t* reader = sp_alloc_type(ps->mem, sp_ps_posix_reader_t);
+  *reader = (sp_ps_posix_reader_t) {
+    .base = { .read = sp_ps_posix_reader_read },
+    .fd = ps->io.err.fd,
+    .block = ps->io.err.block,
+  };
   return &reader->base;
 }
 
@@ -14975,7 +15024,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
 
   while (nfds > 0) {
     u64 signaled = 0;
-    sp_err_t wait_err = sp_sys_wait(fds, (u64)nfds, 0, &signaled);
+    sp_err_t wait_err = sp_sys_posix_poll(fds, (u64)nfds, 0, &signaled);
     if (wait_err != SP_OK) {
       if (result.error == SP_OK) result.error = wait_err;
       break;
@@ -15182,13 +15231,8 @@ sp_err_t sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio
       return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERR;
     }
     case SP_PS_IO_MODE_CREATE: {
-      // The parent's write end is always blocking: Win32 has no honest
-      // nonblocking pipe write, so a NONBLOCKING stdin config is POSIX-only
       sp_sys_pipe_t pipe = sp_zero;
-      sp_sys_pipe_desc_t desc = {
-        .r = { .inherited = SP_SYS_INHERITED },
-      };
-      sp_err_t err = sp_sys_pipe(&pipe, desc);
+      sp_err_t err = sp_sys_pipe(&pipe, (sp_sys_pipe_desc_t) { .r = SP_SYS_INHERITED });
       if (err != SP_OK) return err;
 
       entry->child = (sp_win32_handle_t)pipe.r;
@@ -15231,11 +15275,11 @@ sp_err_t sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_
       // The parent's read end is always overlapped: the ps BLOCKING/NONBLOCKING
       // config is reader semantics, implemented in sp_ps_win32_reader_read
       sp_sys_pipe_t pipe = sp_zero;
-      sp_sys_pipe_desc_t desc = {
-        .r = { .mode = SP_SYS_NONBLOCKING },
+      sp_sys_win32_pipe_desc_t desc = {
+        .r = { .io = SP_SYS_WIN32_PIPE_OVERLAPPED },
         .w = { .inherited = SP_SYS_INHERITED },
       };
-      sp_err_t err = sp_sys_pipe(&pipe, desc);
+      sp_err_t err = sp_sys_win32_pipe(&pipe, desc);
       if (err != SP_OK) return err;
 
       // Manual reset so a wait observes a completion without consuming it

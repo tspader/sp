@@ -77,7 +77,7 @@ static bool socket_dial(sp_sys_socket_t socket, u16 port) {
 
 static bool pair(sp_sys_socket_t* listener, sp_sys_socket_t* client, sp_sys_socket_t* server) {
   u16 port = 0;
-  if (!socket_open_listener(listener, &port)) return false;
+  if (!socket_open_listener(listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, &port)) return false;
   if (sp_sys_socket_open(client, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) return false;
   if (!socket_dial(*client, port)) return false;
 
