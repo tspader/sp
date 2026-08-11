@@ -51,7 +51,7 @@ static const test_t tests [] = {
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
   u16 port = 0;
-  sp_must(t, socket_open_listener(&listener, &port));
+  sp_must(t, socket_open_listener(&listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, &port));
   sp_expect_ne(t, port, (u16)0);
 
   sp_carr_for(c->steps, it) {
@@ -102,6 +102,6 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   return SP_OK;
 }
 
-sp_test_each_fn(sys, listen, test_t, tests, run);
+sp_test_each_fn(sys, socket_listen, test_t, tests, run);
 
 #endif

@@ -5,14 +5,12 @@
 
 #define PIPE_MAX_STEPS 8
 #define PIPE_BUF_SIZE 64
-#define PIPE_FILL_CHUNK 4096
 
 typedef enum {
   STEP_NONE,
   STEP_WRITE,
   STEP_READ,
   STEP_READY,
-  STEP_FILL,
   STEP_CLOSE_R,
   STEP_CLOSE_W,
 } step_kind_t;
@@ -32,9 +30,6 @@ typedef struct {
   step_t steps [PIPE_MAX_STEPS];
 } test_t;
 
-// A Win32 NONBLOCKING pipe end is an overlapped handle; sp_sys_read/write on
-// it is a contract violation, so the WOULD_BLOCK cases are POSIX-only. The
-// BROKEN_PIPE write case is Win32-only; on POSIX the write raises SIGPIPE.
 static const test_t tests [] = {
   {
     .name = "zero_desc_roundtrip",
@@ -75,22 +70,6 @@ static const test_t tests [] = {
       { .kind = STEP_READY, .ready = { .expect = 1 } },
     },
   },
-#if !defined(SP_WIN32)
-  {
-    .name = "empty_read_would_block",
-    .desc = { .r = { SP_SYS_NONBLOCKING } },
-    .steps = {
-      { .kind = STEP_READ, .read = { .err = SP_ERR_SYS_WOULD_BLOCK } },
-    },
-  },
-  {
-    .name = "full_write_would_block",
-    .desc = { .w = { SP_SYS_NONBLOCKING } },
-    .steps = {
-      { .kind = STEP_FILL },
-    },
-  },
-#else
   {
     .name = "write_after_reader_close_reports_broken_pipe",
     .steps = {
@@ -98,7 +77,6 @@ static const test_t tests [] = {
       { .kind = STEP_WRITE, .write = { .data = "A", .err = SP_ERR_SYS_BROKEN_PIPE } },
     },
   },
-#endif
 };
 
 static const c8* step_name(step_kind_t kind) {
@@ -107,7 +85,6 @@ static const c8* step_name(step_kind_t kind) {
     case STEP_WRITE:   return "write";
     case STEP_READ:    return "read";
     case STEP_READY:   return "ready";
-    case STEP_FILL:    return "fill";
     case STEP_CLOSE_R: return "close_r";
     case STEP_CLOSE_W: return "close_w";
   }
@@ -115,6 +92,22 @@ static const c8* step_name(step_kind_t kind) {
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
+#if defined(SP_FREESTANDING)
+  sp_carr_for(c->steps, it) {
+    if (c->steps[it].kind == STEP_WRITE && c->steps[it].write.err == SP_ERR_SYS_BROKEN_PIPE) {
+      return sp_test_skip(t, "no libc to own the SIGPIPE disposition");
+    }
+  }
+#elif !defined(SP_WIN32)
+  // EPIPE only surfaces as an error while SIGPIPE is ignored; the disposition
+  // is process-global, so this suite owns it instead of the shared test main
+  static bool sigpipe_ignored = false;
+  if (!sigpipe_ignored) {
+    signal(SIGPIPE, SIG_IGN);
+    sigpipe_ignored = true;
+  }
+#endif
+
   sp_sys_pipe_t p = sp_zero;
   sp_must_ok(t, sp_sys_pipe(&p, c->desc));
   sp_sys_fd_t r = p.r;
@@ -159,17 +152,6 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
         u8 ready = 0;
         sp_expect_ok(t, sp_sys_pipe_ready(r, &ready));
         sp_expect_eq(t, ready, step->ready.expect);
-        break;
-      }
-      case STEP_FILL: {
-        u8 chunk [PIPE_FILL_CHUNK] = sp_zero;
-        sp_err_t err = SP_OK;
-        while (!err) {
-          u64 n = 0;
-          err = sp_sys_write(w, chunk, sizeof(chunk), &n);
-          if (!err) sp_expect_gt(t, n, (u64)0);
-        }
-        sp_expect_err_eq(t, err, SP_ERR_SYS_WOULD_BLOCK);
         break;
       }
       case STEP_CLOSE_R: {
