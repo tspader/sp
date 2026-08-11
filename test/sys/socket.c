@@ -1,20 +1,72 @@
-#include "test.h"
-#include "utest.h"
+#include "sp/sp_test.h"
+#include "sock.h"
 
 #if !defined(SP_WASM)
 
-UTEST_EMPTY_FIXTURE(sys_socket)
+#define SOCKET_MAX_STEPS 8
+#define SOCKET_BUF_SIZE 64
 
-static bool sys_socket_open_listener(sp_sys_socket_t* listener, u16* port) {
-  sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 } };
-  if (sp_sys_socket_open(listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) return false;
-  if (sp_sys_socket_bind(*listener, addr) != SP_OK) return false;
-  if (sp_sys_socket_listen(*listener, 1) != SP_OK) return false;
-  if (sp_sys_socket_local_port(*listener, port) != SP_OK) return false;
-  return true;
-}
+typedef enum {
+  STEP_NONE,
+  STEP_SEND,
+  STEP_RECV,
+  STEP_WAIT,
+  STEP_CLOSE_CLIENT,
+} step_kind_t;
 
-static bool sys_socket_dial(sp_sys_socket_t socket, u16 port) {
+typedef struct {
+  step_kind_t kind;
+  union {
+    struct { const c8* data; } send;
+    struct { u64 request; u64 expect; const c8* content; sp_err_t err; } recv;
+    struct { u32 timeout_ms; sp_err_t err; } wait;
+  };
+} step_t;
+
+typedef struct {
+  const c8* name;
+  step_t steps [SOCKET_MAX_STEPS];
+} test_t;
+
+static const test_t tests [] = {
+  {
+    .name = "send_recv_roundtrip",
+    .steps = {
+      { .kind = STEP_SEND, .send = { .data = "AB" } },
+      { .kind = STEP_RECV, .recv = { .request = 8, .expect = 2, .content = "AB" } },
+    },
+  },
+  {
+    .name = "recv_returns_zero_after_peer_close",
+    .steps = {
+      { .kind = STEP_SEND, .send = { .data = "A" } },
+      { .kind = STEP_CLOSE_CLIENT },
+      { .kind = STEP_RECV, .recv = { .request = 8, .expect = 1, .content = "A" } },
+      { .kind = STEP_RECV, .recv = { .request = 8 } },
+    },
+  },
+  {
+    .name = "wait_readable_ready_after_send",
+    .steps = {
+      { .kind = STEP_SEND, .send = { .data = "A" } },
+      { .kind = STEP_WAIT, .wait = { .timeout_ms = 1000 } },
+    },
+  },
+  {
+    .name = "wait_readable_times_out_when_idle",
+    .steps = {
+      { .kind = STEP_WAIT, .wait = { .timeout_ms = 50, .err = SP_ERR_SYS_TIMED_OUT } },
+    },
+  },
+  {
+    .name = "recv_would_block_when_idle",
+    .steps = {
+      { .kind = STEP_RECV, .recv = { .request = 8, .err = SP_ERR_SYS_WOULD_BLOCK } },
+    },
+  },
+};
+
+static bool socket_dial(sp_sys_socket_t socket, u16 port) {
   sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
   sp_err_t err = sp_sys_socket_connect(socket, dial);
   if (err == SP_OK) return true;
@@ -23,11 +75,11 @@ static bool sys_socket_dial(sp_sys_socket_t socket, u16 port) {
   return sp_sys_socket_error(socket) == SP_OK;
 }
 
-static bool sys_socket_pair(sp_sys_socket_t* listener, sp_sys_socket_t* client, sp_sys_socket_t* server) {
+static bool pair(sp_sys_socket_t* listener, sp_sys_socket_t* client, sp_sys_socket_t* server) {
   u16 port = 0;
-  if (!sys_socket_open_listener(listener, &port)) return false;
+  if (!socket_open_listener(listener, &port)) return false;
   if (sp_sys_socket_open(client, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) return false;
-  if (!sys_socket_dial(*client, port)) return false;
+  if (!socket_dial(*client, port)) return false;
 
   while (true) {
     sp_err_t err = sp_sys_socket_accept(*listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, server);
@@ -37,84 +89,60 @@ static bool sys_socket_pair(sp_sys_socket_t* listener, sp_sys_socket_t* client, 
   }
 }
 
-typedef enum {
-  SYS_SOCKET_STEP_NONE,
-  SYS_SOCKET_STEP_SEND,
-  SYS_SOCKET_STEP_RECV,
-  SYS_SOCKET_STEP_WAIT_READABLE,
-  SYS_SOCKET_STEP_CLOSE_CLIENT,
-} sys_socket_step_kind_t;
-
-typedef struct {
-  sys_socket_step_kind_t kind;
-  union {
-    struct { const c8* data; } send;
-    struct { u64 request; u64 expect; const c8* content; sp_err_t err; } recv;
-    struct { u32 timeout_ms; sp_err_t expect; } wait;
-  };
-} sys_socket_step_t;
-
-typedef struct {
-  sys_socket_step_t steps [8];
-} sys_socket_test_t;
-
-void run_sys_socket_test(int* utest_result, sys_socket_test_t t) {
+static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
   sp_sys_socket_t client = SP_SYS_INVALID_SOCKET;
   sp_sys_socket_t server = SP_SYS_INVALID_SOCKET;
-  ASSERT_TRUE(sys_socket_pair(&listener, &client, &server));
+  sp_must(t, pair(&listener, &client, &server));
 
-  sp_carr_for(t.steps, it) {
-    const sys_socket_step_t* step = &t.steps[it];
-    if (step->kind == SYS_SOCKET_STEP_NONE) break;
+  sp_carr_for(c->steps, it) {
+    const step_t* step = &c->steps[it];
+    if (step->kind == STEP_NONE) break;
+    sp_test_kv(t, "step", sp_test_format(t, "{}", sp_fmt_uint(it)));
 
     switch (step->kind) {
-      case SYS_SOCKET_STEP_NONE: break;
+      case STEP_NONE: break;
 
-      case SYS_SOCKET_STEP_SEND: {
+      case STEP_SEND: {
         u64 len = sp_cstr_len(step->send.data);
         u64 sent = 0;
         while (sent < len) {
           u64 n = 0;
           sp_err_t err = sp_sys_socket_send(client, step->send.data + sent, len - sent, &n);
           if (err == SP_ERR_SYS_WOULD_BLOCK) {
-            ASSERT_EQ(sp_sys_socket_wait(client, false, 1000), SP_OK);
+            sp_must_ok(t, sp_sys_socket_wait(client, false, 1000));
             continue;
           }
-          ASSERT_EQ(err, SP_OK);
-          ASSERT_TRUE(n > 0);
+          sp_must_ok(t, err);
+          sp_must_gt(t, n, (u64)0);
           sent += n;
         }
         break;
       }
-
-      case SYS_SOCKET_STEP_RECV: {
-        u8 buf[64] = sp_zero;
+      case STEP_RECV: {
+        c8 buf [SOCKET_BUF_SIZE] = sp_zero;
         u64 n = 0;
         sp_err_t err = SP_OK;
         while (true) {
           err = sp_sys_socket_recv(server, buf, step->recv.request, &n);
           if (err != SP_ERR_SYS_WOULD_BLOCK) break;
           if (step->recv.err == SP_ERR_SYS_WOULD_BLOCK) break;
-          ASSERT_EQ(sp_sys_socket_wait(server, true, 1000), SP_OK);
+          sp_must_ok(t, sp_sys_socket_wait(server, true, 1000));
         }
-        EXPECT_EQ(err, step->recv.err);
-        if (err == SP_OK) {
-          EXPECT_EQ(n, step->recv.expect);
+        sp_expect_err_eq(t, err, step->recv.err);
+        if (!err && !step->recv.err) {
+          sp_expect_eq(t, n, step->recv.expect);
           if (step->recv.content) {
-            u64 expect_bytes = sp_cstr_len(step->recv.content);
-            sp_for(jt, expect_bytes) EXPECT_EQ((c8)buf[jt], step->recv.content[jt]);
+            sp_expect_str_eq_c(t, sp_str(buf, (u32)n), step->recv.content);
           }
         }
         break;
       }
-
-      case SYS_SOCKET_STEP_WAIT_READABLE: {
-        EXPECT_EQ(sp_sys_socket_wait(server, true, step->wait.timeout_ms), step->wait.expect);
+      case STEP_WAIT: {
+        sp_expect_err_eq(t, sp_sys_socket_wait(server, true, step->wait.timeout_ms), step->wait.err);
         break;
       }
-
-      case SYS_SOCKET_STEP_CLOSE_CLIENT: {
+      case STEP_CLOSE_CLIENT: {
         sp_sys_socket_close(client);
         client = SP_SYS_INVALID_SOCKET;
         break;
@@ -122,110 +150,13 @@ void run_sys_socket_test(int* utest_result, sys_socket_test_t t) {
     }
   }
 
+  sp_test_kv_clear(t, "step");
   if (client != SP_SYS_INVALID_SOCKET) sp_sys_socket_close(client);
   sp_sys_socket_close(server);
   sp_sys_socket_close(listener);
+  return SP_OK;
 }
 
-UTEST_F(sys_socket, send_recv_roundtrip) {
-  run_sys_socket_test(utest_result, (sys_socket_test_t){
-    .steps = {
-      { .kind = SYS_SOCKET_STEP_SEND, .send = { "hello world" } },
-      { .kind = SYS_SOCKET_STEP_RECV, .recv = { .request = 32, .expect = 11, .content = "hello world" } },
-    },
-  });
-}
-
-UTEST_F(sys_socket, recv_returns_zero_after_peer_close) {
-  run_sys_socket_test(utest_result, (sys_socket_test_t){
-    .steps = {
-      { .kind = SYS_SOCKET_STEP_SEND, .send = { "x" } },
-      { .kind = SYS_SOCKET_STEP_CLOSE_CLIENT },
-      { .kind = SYS_SOCKET_STEP_RECV, .recv = { .request = 8, .expect = 1, .content = "x" } },
-      { .kind = SYS_SOCKET_STEP_RECV, .recv = { .request = 8 } },
-    },
-  });
-}
-
-UTEST_F(sys_socket, wait_readable_ready_after_send) {
-  run_sys_socket_test(utest_result, (sys_socket_test_t){
-    .steps = {
-      { .kind = SYS_SOCKET_STEP_SEND, .send = { "x" } },
-      { .kind = SYS_SOCKET_STEP_WAIT_READABLE, .wait = { .timeout_ms = 1000 } },
-    },
-  });
-}
-
-UTEST_F(sys_socket, wait_readable_times_out_when_idle) {
-  run_sys_socket_test(utest_result, (sys_socket_test_t){
-    .steps = {
-      { .kind = SYS_SOCKET_STEP_WAIT_READABLE, .wait = { .timeout_ms = 50, .expect = SP_ERR_SYS_TIMED_OUT } },
-    },
-  });
-}
-
-UTEST_F(sys_socket, recv_would_block_when_idle) {
-  run_sys_socket_test(utest_result, (sys_socket_test_t){
-    .steps = {
-      { .kind = SYS_SOCKET_STEP_RECV, .recv = { .request = 8, .err = SP_ERR_SYS_WOULD_BLOCK } },
-    },
-  });
-}
-
-UTEST_F(sys_socket, listen_assigns_and_reports_local_port) {
-  sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  u16 port = 0;
-  ASSERT_TRUE(sys_socket_open_listener(&listener, &port));
-  EXPECT_NE(port, (u16)0);
-  sp_sys_socket_close(listener);
-}
-
-UTEST_F(sys_socket, accept_would_block_when_nobody_connects) {
-  sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  u16 port = 0;
-  ASSERT_TRUE(sys_socket_open_listener(&listener, &port));
-
-  sp_sys_socket_t accepted = SP_SYS_INVALID_SOCKET;
-  EXPECT_EQ(sp_sys_socket_accept(listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, &accepted), SP_ERR_SYS_WOULD_BLOCK);
-  EXPECT_EQ(accepted, SP_SYS_INVALID_SOCKET);
-
-  sp_sys_socket_close(listener);
-}
-
-UTEST_F(sys_socket, bind_reports_addr_in_use) {
-  sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  u16 port = 0;
-  ASSERT_TRUE(sys_socket_open_listener(&listener, &port));
-
-  sp_sys_socket_t other = SP_SYS_INVALID_SOCKET;
-  ASSERT_EQ(sp_sys_socket_open(&other, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }), SP_OK);
-  sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 }, .port = port };
-  EXPECT_EQ(sp_sys_socket_bind(other, addr), SP_ERR_SYS_ADDR_IN_USE);
-
-  sp_sys_socket_close(other);
-  sp_sys_socket_close(listener);
-}
-
-UTEST_F(sys_socket, connect_refused_when_nothing_listens) {
-  sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  u16 port = 0;
-  ASSERT_TRUE(sys_socket_open_listener(&listener, &port));
-  sp_sys_socket_close(listener);
-
-  sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
-  sp_sys_socket_t client = SP_SYS_INVALID_SOCKET;
-  ASSERT_EQ(sp_sys_socket_open(&client, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }), SP_OK);
-
-  sp_err_t err = sp_sys_socket_connect(client, dial);
-  if (err == SP_ERR_SYS_WOULD_BLOCK) {
-    EXPECT_EQ(sp_sys_socket_wait(client, false, 2000), SP_OK);
-    EXPECT_EQ(sp_sys_socket_error(client), SP_ERR_SYS_CONN_REFUSED);
-  }
-  else {
-    EXPECT_EQ(err, SP_ERR_SYS_CONN_REFUSED);
-  }
-
-  sp_sys_socket_close(client);
-}
+sp_test_each_fn(sys, socket, test_t, tests, run);
 
 #endif
