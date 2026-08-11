@@ -5025,7 +5025,6 @@ SP_IMP c8*               sp_ps_build_windows_cmdline(sp_mem_t mem, sp_ps_config_
 SP_IMP sp_win32_handle_t sp_ps_win32_open_null(sp_win32_dword_t access);
 SP_IMP sp_win32_handle_t sp_ps_win32_fd_to_handle(sp_sys_fd_t fd);
 SP_IMP sp_ps_status_t    sp_ps_win32_finish_process(sp_ps_t* ps);
-SP_IMP u64               sp_ps_win32_read_available(sp_sys_fd_t fd, sp_io_writer_t* builder, bool* open);
 SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 #endif
 
@@ -15038,6 +15037,8 @@ void sp_ps_output_free(sp_mem_t mem, sp_ps_output_t* output) {
 #elif defined(SP_WIN32)
 struct sp_ps_os {
   sp_win32_handle_t pid;
+  sp_win32_overlapped_t out;
+  sp_win32_overlapped_t err;
 };
 
 bool sp_ps_is_fd_valid(sp_sys_fd_t fd) {
@@ -15159,6 +15160,7 @@ sp_win32_handle_t sp_ps_win32_fd_to_handle(sp_sys_fd_t fd) {
 typedef struct {
   sp_win32_handle_t child;
   sp_sys_fd_t parent_fd;
+  sp_win32_handle_t event;
 } sp_ps_win32_stdio_entry_t;
 
 typedef struct {
@@ -15172,6 +15174,7 @@ typedef struct {
 sp_err_t sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio_entry_t* entry) {
   entry->child = SP_NULLPTR;
   entry->parent_fd = SP_SYS_INVALID_FD;
+  entry->event = SP_NULLPTR;
 
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
@@ -15179,21 +15182,17 @@ sp_err_t sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio
       return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERR;
     }
     case SP_PS_IO_MODE_CREATE: {
-      SECURITY_ATTRIBUTES attrs = sp_zero;
-      attrs.nLength = sizeof(attrs);
-      attrs.bInheritHandle = true;
+      // The parent's write end is always blocking: Win32 has no honest
+      // nonblocking pipe write, so a NONBLOCKING stdin config is POSIX-only
+      sp_sys_pipe_t pipe = sp_zero;
+      sp_sys_pipe_desc_t desc = {
+        .r = { .inherited = SP_SYS_INHERITED },
+      };
+      sp_err_t err = sp_sys_pipe(&pipe, desc);
+      if (err != SP_OK) return err;
 
-      sp_win32_handle_t child_read = SP_NULLPTR;
-      sp_win32_handle_t parent_write = SP_NULLPTR;
-      if (!CreatePipe(&child_read, &parent_write, &attrs, 0)) {
-        return SP_ERR;
-      }
-
-      // When we CreateProcess, the child shouldn't inherit the handle the parent uses to write to its input
-      SetHandleInformation(parent_write, HANDLE_FLAG_INHERIT, 0);
-
-      entry->child = child_read;
-      entry->parent_fd = (sp_sys_fd_t)parent_write;
+      entry->child = (sp_win32_handle_t)pipe.r;
+      entry->parent_fd = pipe.w;
       return SP_OK;
     }
     case SP_PS_IO_MODE_EXISTING: {
@@ -15221,6 +15220,7 @@ sp_err_t sp_ps_win32_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_win32_stdio
 sp_err_t sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_t std_handle, sp_win32_dword_t null_access, sp_ps_win32_stdio_entry_t* entry) {
   entry->child = SP_NULLPTR;
   entry->parent_fd = SP_SYS_INVALID_FD;
+  entry->event = SP_NULLPTR;
 
   switch (io->mode) {
     case SP_PS_IO_MODE_NULL: {
@@ -15228,20 +15228,27 @@ sp_err_t sp_ps_win32_configure_io_out(sp_ps_io_out_config_t* io, sp_win32_dword_
       return ((entry->child != SP_NULLPTR) && (entry->child != INVALID_HANDLE_VALUE)) ? SP_OK : SP_ERR;
     }
     case SP_PS_IO_MODE_CREATE: {
-      SECURITY_ATTRIBUTES attrs = sp_zero;
-      attrs.nLength = sizeof(attrs);
-      attrs.bInheritHandle = true;
+      // The parent's read end is always overlapped: the ps BLOCKING/NONBLOCKING
+      // config is reader semantics, implemented in sp_ps_win32_reader_read
+      sp_sys_pipe_t pipe = sp_zero;
+      sp_sys_pipe_desc_t desc = {
+        .r = { .mode = SP_SYS_NONBLOCKING },
+        .w = { .inherited = SP_SYS_INHERITED },
+      };
+      sp_err_t err = sp_sys_pipe(&pipe, desc);
+      if (err != SP_OK) return err;
 
-      sp_win32_handle_t parent_read = SP_NULLPTR;
-      sp_win32_handle_t child_write = SP_NULLPTR;
-      if (!CreatePipe(&parent_read, &child_write, &attrs, 0)) {
-        return SP_ERR;
+      // Manual reset so a wait observes a completion without consuming it
+      entry->event = CreateEventW(SP_NULLPTR, true, false, SP_NULLPTR);
+      if (!entry->event) {
+        sp_err_t event_err = sp_sys_err_from_win32(GetLastError());
+        sp_sys_close(pipe.r);
+        sp_sys_close(pipe.w);
+        return event_err;
       }
 
-      SetHandleInformation(parent_read, HANDLE_FLAG_INHERIT, 0);
-
-      entry->child = child_write;
-      entry->parent_fd = (sp_sys_fd_t)parent_read;
+      entry->child = (sp_win32_handle_t)pipe.w;
+      entry->parent_fd = pipe.r;
       return SP_OK;
     }
     case SP_PS_IO_MODE_EXISTING: {
@@ -15289,11 +15296,28 @@ void sp_ps_win32_close_child_handles(sp_ps_win32_stdio_t* io) {
   }
 }
 
-void sp_ps_win32_close_parent_fds(sp_ps_win32_stdio_t* io) {
+void sp_ps_win32_close_parent(sp_ps_win32_stdio_t* io) {
   sp_sys_fd_t fds[3] = { io->in.parent_fd, io->out.parent_fd, io->err.parent_fd };
   sp_for(i, 3) {
     if (fds[i] != SP_SYS_INVALID_FD) {
       CloseHandle((HANDLE)fds[i]);
+    }
+  }
+
+  sp_win32_handle_t events[2] = { io->out.event, io->err.event };
+  sp_for(i, 2) {
+    if (events[i]) {
+      CloseHandle(events[i]);
+    }
+  }
+}
+
+SP_PRIVATE void sp_ps_win32_close_events(sp_ps_os_t* os) {
+  sp_win32_overlapped_t* streams[2] = { &os->out, &os->err };
+  sp_for(i, 2) {
+    if (streams[i]->hEvent) {
+      CloseHandle(streams[i]->hEvent);
+      streams[i]->hEvent = SP_NULLPTR;
     }
   }
 }
@@ -15441,7 +15465,7 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
 
   if (!created) {
     sp_ps_win32_close_child_handles(&io);
-    sp_ps_win32_close_parent_fds(&io);
+    sp_ps_win32_close_parent(&io);
     return sp_zero_s(sp_ps_t);
   }
 
@@ -15449,6 +15473,8 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
   CloseHandle(process_info.hThread);
   proc.os = sp_alloc_type(mem, sp_ps_os_t);
   proc.os->pid = process_info.hProcess;
+  proc.os->out = (sp_win32_overlapped_t) { .hEvent = io.out.event };
+  proc.os->err = (sp_win32_overlapped_t) { .hEvent = io.err.event };
 
   proc.io.in.fd = io.in.parent_fd;
   proc.io.out.fd = io.out.parent_fd;
@@ -15459,7 +15485,7 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
 fail:
   sp_mem_end_scratch(scratch);
   sp_ps_win32_close_child_handles(&io);
-  sp_ps_win32_close_parent_fds(&io);
+  sp_ps_win32_close_parent(&io);
   return sp_zero_s(sp_ps_t);
 }
 
@@ -15488,12 +15514,82 @@ sp_io_stream_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   return writer;
 }
 
+SP_PRIVATE sp_err_t sp_ps_win32_reap(sp_sys_fd_t fd, sp_win32_overlapped_t* ov, u64* bytes_read) {
+  DWORD n = 0;
+  if (!GetOverlappedResult((sp_win32_handle_t)fd, ov, &n, true)) {
+    DWORD win32 = GetLastError();
+    // EOF is (SP_OK, 0), matching sp_sys_read
+    if (win32 == ERROR_BROKEN_PIPE) return SP_OK;
+    return sp_sys_err_from_win32(win32);
+  }
+  *bytes_read = (u64)n;
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_ps_win32_ov_read(sp_sys_fd_t fd, sp_win32_overlapped_t* ov, void* ptr, u32 count, u64* bytes_read) {
+  *ov = (sp_win32_overlapped_t) { .hEvent = ov->hEvent };
+  if (!ReadFile((sp_win32_handle_t)fd, ptr, count, SP_NULLPTR, ov)) {
+    DWORD win32 = GetLastError();
+    if (win32 == ERROR_BROKEN_PIPE) return SP_OK;
+    if (win32 != ERROR_IO_PENDING) return sp_sys_err_from_win32(win32);
+  }
+  // Every read issued here is reaped before returning; no operation outlives the call
+  return sp_ps_win32_reap(fd, ov, bytes_read);
+}
+
+// The parent read ends are overlapped, so sp_sys_read is off limits; the ps
+// BLOCKING/NONBLOCKING config is implemented here instead of in the handle mode
+typedef struct {
+  sp_io_reader_t base;
+  sp_sys_fd_t fd;
+  sp_win32_overlapped_t* ov;
+  sp_ps_io_blocking_t block;
+} sp_ps_win32_reader_t;
+
+SP_PRIVATE sp_err_t sp_ps_win32_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_ps_win32_reader_t* r = (sp_ps_win32_reader_t*)reader;
+  if (bytes_read) *bytes_read = 0;
+
+  u64 n = 0;
+  sp_err_t err = SP_OK;
+  DWORD count = sp_sys_win32_io_count(size);
+
+  switch (r->block) {
+    case SP_PS_IO_BLOCKING: {
+      err = sp_ps_win32_ov_read(r->fd, r->ov, ptr, count, &n);
+      break;
+    }
+    case SP_PS_IO_NONBLOCKING: {
+      DWORD available = 0;
+      if (!PeekNamedPipe((sp_win32_handle_t)r->fd, SP_NULLPTR, 0, SP_NULLPTR, &available, SP_NULLPTR)) {
+        DWORD win32 = GetLastError();
+        if (win32 == ERROR_BROKEN_PIPE) return SP_OK;
+        return sp_sys_err_from_win32(win32);
+      }
+      if (!available) return SP_ERR_SYS_WOULD_BLOCK;
+
+      // ps is the only reader of this pipe, so the peeked bytes cannot vanish
+      // and the read completes inline
+      err = sp_ps_win32_ov_read(r->fd, r->ov, ptr, sp_min(count, available), &n);
+      break;
+    }
+  }
+
+  if (bytes_read) *bytes_read = n;
+  return err;
+}
+
 sp_io_reader_t* sp_ps_io_out(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.out.fd)) return SP_NULLPTR;
 
-  sp_io_stream_reader_t* reader = sp_alloc_type(ps->mem, sp_io_stream_reader_t);
-  sp_io_stream_reader_from_fd(reader, ps->io.out.fd, SP_IO_CLOSE_MODE_NONE);
+  sp_ps_win32_reader_t* reader = sp_alloc_type(ps->mem, sp_ps_win32_reader_t);
+  *reader = (sp_ps_win32_reader_t) {
+    .base = { .read = sp_ps_win32_reader_read },
+    .fd = ps->io.out.fd,
+    .ov = &ps->os->out,
+    .block = ps->io.out.block,
+  };
   return &reader->base;
 }
 
@@ -15501,8 +15597,13 @@ sp_io_reader_t* sp_ps_io_err(sp_ps_t* ps) {
   if (!ps) return SP_NULLPTR;
   if (!sp_ps_is_fd_valid(ps->io.err.fd)) return SP_NULLPTR;
 
-  sp_io_stream_reader_t* reader = sp_alloc_type(ps->mem, sp_io_stream_reader_t);
-  sp_io_stream_reader_from_fd(reader, ps->io.err.fd, SP_IO_CLOSE_MODE_NONE);
+  sp_ps_win32_reader_t* reader = sp_alloc_type(ps->mem, sp_ps_win32_reader_t);
+  *reader = (sp_ps_win32_reader_t) {
+    .base = { .read = sp_ps_win32_reader_read },
+    .fd = ps->io.err.fd,
+    .ov = &ps->os->err,
+    .block = ps->io.err.block,
+  };
   return &reader->base;
 }
 
@@ -15567,87 +15668,116 @@ sp_ps_status_t sp_ps_wait(sp_ps_t* ps) {
   return sp_ps_win32_finish_process(ps);
 }
 
-u64 sp_ps_win32_read_available(sp_sys_fd_t fd, sp_io_writer_t* builder, bool* open) {
-  sp_win32_handle_t handle = sp_ps_win32_fd_to_handle(fd);
-  if (!handle) {
-    *open = false;
-    return 0;
-  }
-
+typedef struct {
+  sp_sys_fd_t fd;
+  sp_win32_overlapped_t* ov;
+  sp_io_writer_t* writer;
+  bool open;
+  bool pending;
   u8 buffer[4096];
-  u64 total = 0;
-
-  while (true) {
-    DWORD available = 0;
-    if (!PeekNamedPipe(handle, SP_NULLPTR, 0, SP_NULLPTR, &available, SP_NULLPTR)) {
-      if (GetLastError() == ERROR_BROKEN_PIPE) {
-        *open = false;
-      }
-      return total;
-    }
-
-    if (available == 0) {
-      return total;
-    }
-
-    u32 chunk = sp_min((u32)sizeof(buffer), (u32)available);
-    u64 num_read = 0;
-    if (sp_sys_read(fd, buffer, chunk, &num_read) != SP_OK || !num_read) {
-      *open = false;
-      return total;
-    }
-
-    sp_io_write_str(builder, sp_str((c8*)buffer, (u32)num_read), SP_NULLPTR);
-    total += num_read;
-  }
-}
+} sp_ps_win32_pump_stream_t;
 
 sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   sp_ps_output_t result = sp_zero;
 
   sp_ps_close_owned_fd(&ps->io.in.fd, ps->io.in.mode);
 
-  bool out_open = sp_ps_is_fd_valid(ps->io.out.fd);
-  bool err_open = sp_ps_is_fd_valid(ps->io.err.fd);
-
   sp_io_dyn_mem_writer_t out = sp_zero;
   sp_io_dyn_mem_writer_t err = sp_zero;
   sp_io_dyn_mem_writer_init(ps->mem, &out);
   sp_io_dyn_mem_writer_init(ps->mem, &err);
 
-  DWORD exit_code = 0;
-  bool process_done = !ps->os;
+  sp_ps_win32_pump_stream_t streams [2] = {
+    { .fd = ps->io.out.fd, .ov = &ps->os->out, .writer = &out.base, .open = sp_ps_is_fd_valid(ps->io.out.fd) },
+    { .fd = ps->io.err.fd, .ov = &ps->os->err, .writer = &err.base, .open = sp_ps_is_fd_valid(ps->io.err.fd) },
+  };
 
-  while (!process_done || out_open || err_open) {
-    bool read_any = false;
+  DWORD exit_code = (DWORD)-1;
+  bool process_done = !ps->os->pid;
 
-    if (out_open) {
-      read_any |= sp_ps_win32_read_available(ps->io.out.fd, &out.base, &out_open) > 0;
-    }
-    if (err_open) {
-      read_any |= sp_ps_win32_read_available(ps->io.err.fd, &err.base, &err_open) > 0;
-    }
+  while (true) {
+    sp_carr_for(streams, it) {
+      sp_ps_win32_pump_stream_t* s = &streams[it];
+      if (!s->open || s->pending) continue;
 
-    if (!process_done && ps->os->pid) {
-      DWORD wait = WaitForSingleObject(ps->os->pid, read_any ? 0 : 10);
-      if (wait == WAIT_OBJECT_0) {
-        process_done = true;
-        if (!GetExitCodeProcess(ps->os->pid, &exit_code)) {
-          exit_code = (DWORD)-1;
+      *s->ov = (sp_win32_overlapped_t) { .hEvent = s->ov->hEvent };
+      if (!ReadFile((sp_win32_handle_t)s->fd, s->buffer, sizeof(s->buffer), SP_NULLPTR, s->ov)) {
+        DWORD win32 = GetLastError();
+        if (win32 != ERROR_IO_PENDING) {
+          s->open = false;
+          if (win32 != ERROR_BROKEN_PIPE && result.error == SP_OK) result.error = sp_sys_err_from_win32(win32);
+          continue;
         }
-      } else if (wait == WAIT_FAILED) {
-        process_done = true;
+      }
+      s->pending = true;
+    }
+
+    sp_win32_handle_t handles [3];
+    sp_ps_win32_pump_stream_t* sources [3];
+    DWORD num_handles = 0;
+    sp_carr_for(streams, it) {
+      if (!streams[it].pending) continue;
+      handles[num_handles] = streams[it].ov->hEvent;
+      sources[num_handles] = &streams[it];
+      num_handles++;
+    }
+    if (!process_done) {
+      handles[num_handles] = ps->os->pid;
+      sources[num_handles] = SP_NULLPTR;
+      num_handles++;
+    }
+
+    if (!num_handles) break;
+
+    DWORD wait = WaitForMultipleObjects(num_handles, handles, false, INFINITE);
+    if (wait == WAIT_FAILED) {
+      if (process_done) break;
+      process_done = true;
+      continue;
+    }
+
+    sp_ps_win32_pump_stream_t* s = sources[wait - WAIT_OBJECT_0];
+    if (!s) {
+      // The child can exit with pipe data still buffered; keep draining until
+      // both streams break
+      process_done = true;
+      if (!GetExitCodeProcess(ps->os->pid, &exit_code)) {
         exit_code = (DWORD)-1;
       }
+      continue;
     }
 
-    if (!read_any && process_done && !out_open && !err_open) {
-      break;
+    s->pending = false;
+    u64 num_read = 0;
+    sp_err_t reap = sp_ps_win32_reap(s->fd, s->ov, &num_read);
+    if (reap != SP_OK) {
+      s->open = false;
+      if (result.error == SP_OK) result.error = reap;
+      continue;
     }
+    if (!num_read) {
+      s->open = false;
+      continue;
+    }
+    sp_io_write_str(s->writer, sp_str((c8*)s->buffer, (u32)num_read), SP_NULLPTR);
+  }
+
+  // The kernel writes the OVERLAPPED even for a cancelled read; a read left
+  // pending here would complete into a dead stack buffer
+  sp_carr_for(streams, it) {
+    sp_ps_win32_pump_stream_t* s = &streams[it];
+    if (!s->pending) continue;
+    CancelIoEx((sp_win32_handle_t)s->fd, s->ov);
+    u64 num_read = 0;
+    if (sp_ps_win32_reap(s->fd, s->ov, &num_read) == SP_OK && num_read) {
+      sp_io_write_str(s->writer, sp_str((c8*)s->buffer, (u32)num_read), SP_NULLPTR);
+    }
+    s->pending = false;
   }
 
   sp_ps_close_owned_fd(&ps->io.out.fd, ps->io.out.mode);
   sp_ps_close_owned_fd(&ps->io.err.fd, ps->io.err.mode);
+  sp_ps_win32_close_events(ps->os);
 
   if (ps->os->pid) {
     CloseHandle(ps->os->pid);
@@ -15658,7 +15788,7 @@ sp_ps_output_t sp_ps_output(sp_ps_t* ps) {
   result.err = sp_io_dyn_mem_writer_take_str(&err);
   result.status = (sp_ps_status_t) {
     .state = SP_PS_STATE_DONE,
-    .exit_code = process_done ? (s32)exit_code : -1,
+    .exit_code = (s32)exit_code,
   };
   return result;
 }
@@ -15686,6 +15816,7 @@ void sp_ps_free(sp_ps_t* ps) {
   sp_ps_close_owned_fd(&ps->io.err.fd, ps->io.err.mode);
 
   if (!ps->os) return;
+  sp_ps_win32_close_events(ps->os);
   if (ps->os->pid) {
     CloseHandle(ps->os->pid);
     ps->os->pid = SP_NULLPTR;

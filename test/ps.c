@@ -967,15 +967,18 @@ UTEST_F(ps, incremental_nonblocking_read) {
   u8 accumulated[100];
   u64 total_read = 0;
 
+  // The child can exit with data still buffered in the pipe; one more read
+  // after DONE drains it
+  sp_ps_status_t result = { .state = SP_PS_STATE_RUNNING };
   while (total_read < expected_size) {
     u64 n = 0;
     sp_io_read(out, accumulated + total_read, expected_size - total_read, &n);
     if (n > 0) {
       total_read += n;
-    } else {
-      sp_ps_status_t result = sp_ps_poll(&ps, 10);
-      if (result.state == SP_PS_STATE_DONE) break;
+      continue;
     }
+    if (result.state == SP_PS_STATE_DONE) break;
+    result = sp_ps_poll(&ps, 10);
   }
 
   EXPECT_EQ(total_read, expected_size);
@@ -986,7 +989,7 @@ UTEST_F(ps, incremental_nonblocking_read) {
     EXPECT_EQ(accumulated[i], expected_byte);
   }
 
-  sp_ps_status_t result = sp_ps_wait(&ps);
+  if (result.state != SP_PS_STATE_DONE) result = sp_ps_wait(&ps);
   EXPECT_EQ(result.state, SP_PS_STATE_DONE);
   EXPECT_EQ(result.exit_code, 0);
 }
