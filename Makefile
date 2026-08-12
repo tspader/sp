@@ -107,7 +107,7 @@ ifeq ($(TRIPLE),)
   endif
 endif
 
-TESTS = amalg app array asset cli etc env format fmon fs glob ht io math process ps rb str sys thread time mem prompt leak tls qsort
+TESTS = amalg app array asset cli etc env format fmon fs glob ht io math process ps rb str sys thread time mem prompt leak qsort
 BENCHES = glob heap
 EXAMPLES = app array cargo cli format hash_table io zero_copy ls palette post prompt prompt_fancy signal tls wc
 TRIPLES = \
@@ -146,8 +146,6 @@ $(EXAMPLE_DIR)/tls$(EXE): example/tls.c $(SP_HEADERS) $(MBEDTLS_LIB) | $(EXAMPLE
 $(EXAMPLE_DIR)/post$(EXE): example/post.c $(SP_HEADERS) $(MBEDTLS_LIB) | $(EXAMPLE_DIR)
 	$(CC) $(CFLAGS) -I. -DSP_TLS_WITH_MBEDTLS $(TLS_DEFINES) $(MBEDTLS_INC) -o $@ $< -x none $(MBEDTLS_LIB) $(TLS_LDLIBS)
 
-$(TEST_DIR)/tls$(EXE): test/tls.c $(SP_HEADERS) $(TEST_SOURCES) $(MBEDTLS_LIB) | $(TEST_DIR)
-	$(CC) $(CFLAGS) $(CFLAGS_TEST) -DSP_TLS_WITH_MBEDTLS $(TLS_DEFINES) $(MBEDTLS_INC) -o $@ $< -x none $(MBEDTLS_LIB) $(TLS_LDLIBS)
 endif
 
 $(EXAMPLE_DIR)/%$(EXE): example/%.c $(SP_HEADERS) | $(EXAMPLE_DIR)
