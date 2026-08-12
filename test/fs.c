@@ -26,5 +26,4 @@ SP_TEST_MAIN()
 #include "fs/collect.c"
 #include "fs/mod_time.c"
 #include "fs/system_paths.c"
-#include "fs/windows/wtf8.c"
 #include "fs/windows/nt_path.c"
