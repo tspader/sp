@@ -27,7 +27,8 @@ UTEST(wtf8, to_wtf16_cases) {
 
   SP_CARR_FOR(cases, i) {
     wtf8_case_t c = cases[i];
-    sp_wide_str_t str = sp_wtf8_to_wtf16(sp_mem_get_scratch(), c.utf8);
+    sp_wide_str_t str;
+    EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), c.utf8, &str), SP_OK);
     EXPECT_EQ(str.len, c.wtf16_len);
     sp_for(j, c.wtf16_len) {
       if (str.data[j] != c.wtf16[j]) {
@@ -40,74 +41,90 @@ UTEST(wtf8, to_wtf16_cases) {
   }
 }
 
-UTEST(wtf8, to_wtf16_alloc_null_terminates) {
-  sp_wide_str_t w = sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("hi"));
+UTEST(wtf8, to_wtf16_null_terminates) {
+  sp_wide_str_t w;
+  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("hi"), &w), SP_OK);
   EXPECT_EQ(w.len, (u32)2);
   EXPECT_EQ(w.data[0], (u16)'h');
   EXPECT_EQ(w.data[1], (u16)'i');
   EXPECT_EQ(w.data[2], (u16)0);
 }
 
-UTEST(wtf8, to_wtf16_alloc_empty_returns_null) {
-  sp_wide_str_t w = sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit(""));
-  EXPECT_EQ(w.data, (u16*)SP_NULLPTR);
+UTEST(wtf8, to_wtf16_empty) {
+  sp_wide_str_t w;
+  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit(""), &w), SP_OK);
+  EXPECT_EQ(w.data, (const u16*)SP_NULLPTR);
   EXPECT_EQ(w.len, 0u);
 }
 
-UTEST(wtf8, to_wtf16_alloc_rejects_invalid) {
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xC3")).data, (u16*)SP_NULLPTR);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xC3\x28")).data, (u16*)SP_NULLPTR);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xC0\x80")).data, (u16*)SP_NULLPTR);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xE0\x80\x80")).data, (u16*)SP_NULLPTR);
-}
+UTEST(wtf8, to_wtf16_rejects_malformed) {
+  sp_str_t cases[] = {
+    sp_str_lit("\xC0"),
+    sp_str_lit("\xC3"),
+    sp_str_lit("\xC3\x28"),
+    sp_str_lit("\xE2\x82"),
+    sp_str_lit("\xC0\x80"),
+    sp_str_lit("\xE0\x80\x80"),
+    sp_str_lit("\xF0\x80\x80\x80"),
+  };
 
-UTEST(wtf8, reject_invalid) {
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xC0")).len, 0u);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xC3")).len, 0u);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xC3\x28")).len, 0u);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xE2\x82")).len, 0u);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xC0\x80")).len, 0u);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xE0\x80\x80")).len, 0u);
-  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), sp_str_lit("\xF0\x80\x80\x80")).len, 0u);
+  SP_CARR_FOR(cases, i) {
+    sp_wide_str_t w;
+    EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), cases[i], &w), SP_ERR_SYS_INVALID);
+    EXPECT_EQ(w.data, (const u16*)SP_NULLPTR);
+    EXPECT_EQ(w.len, 0u);
+  }
 }
 
 UTEST(wtf8, roundtrip_ascii) {
   sp_str_t input = sp_str_lit("hello/world.txt");
-  sp_str_t back = sp_wtf16_to_wtf8(sp_mem_get_scratch(), sp_wtf8_to_wtf16(sp_mem_get_scratch(), input));
+  sp_wide_str_t w;
+  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), input, &w), SP_OK);
+  sp_str_t back;
+  EXPECT_EQ(sp_wtf16_to_wtf8(sp_mem_get_scratch(), w, &back), SP_OK);
   SP_EXPECT_STR_EQ(back, input);
 }
 
 UTEST(wtf8, roundtrip_non_ascii) {
   sp_str_t input = sp_str_lit("caf\xC3\xA9/\xE2\x82\xAC");
-  sp_str_t back = sp_wtf16_to_wtf8(sp_mem_get_scratch(), sp_wtf8_to_wtf16(sp_mem_get_scratch(), input));
+  sp_wide_str_t w;
+  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), input, &w), SP_OK);
+  sp_str_t back;
+  EXPECT_EQ(sp_wtf16_to_wtf8(sp_mem_get_scratch(), w, &back), SP_OK);
   SP_EXPECT_STR_EQ(back, input);
 }
 
 UTEST(wtf8, roundtrip_4byte_via_surrogate_pair) {
   sp_str_t input = sp_str_lit("\xF0\x9F\x98\x80");
-  sp_wide_str_t w = sp_wtf8_to_wtf16(sp_mem_get_scratch(), input);
+  sp_wide_str_t w;
+  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), input, &w), SP_OK);
   EXPECT_EQ(w.len, (u32)2);
   EXPECT_EQ(w.data[0], (u16)0xD83D);
   EXPECT_EQ(w.data[1], (u16)0xDE00);
-  sp_str_t back = sp_wtf16_to_wtf8(sp_mem_get_scratch(), w);
+  sp_str_t back;
+  EXPECT_EQ(sp_wtf16_to_wtf8(sp_mem_get_scratch(), w, &back), SP_OK);
   SP_EXPECT_STR_EQ(back, input);
 }
 
 UTEST(wtf8, roundtrip_unpaired_high_surrogate) {
   sp_str_t input = sp_str_lit("\xED\xA0\x80");
-  sp_wide_str_t w = sp_wtf8_to_wtf16(sp_mem_get_scratch(), input);
+  sp_wide_str_t w;
+  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), input, &w), SP_OK);
   EXPECT_EQ(w.len, (u32)1);
   EXPECT_EQ(w.data[0], (u16)0xD800);
-  sp_str_t back = sp_wtf16_to_wtf8(sp_mem_get_scratch(), w);
+  sp_str_t back;
+  EXPECT_EQ(sp_wtf16_to_wtf8(sp_mem_get_scratch(), w, &back), SP_OK);
   SP_EXPECT_STR_EQ(back, input);
 }
 
 UTEST(wtf8, roundtrip_unpaired_low_surrogate) {
   sp_str_t input = sp_str_lit("\xED\xBF\xBF");
-  sp_wide_str_t w = sp_wtf8_to_wtf16(sp_mem_get_scratch(), input);
+  sp_wide_str_t w;
+  EXPECT_EQ(sp_wtf8_to_wtf16(sp_mem_get_scratch(), input, &w), SP_OK);
   EXPECT_EQ(w.len, (u32)1);
   EXPECT_EQ(w.data[0], (u16)0xDFFF);
-  sp_str_t back = sp_wtf16_to_wtf8(sp_mem_get_scratch(), w);
+  sp_str_t back;
+  EXPECT_EQ(sp_wtf16_to_wtf8(sp_mem_get_scratch(), w, &back), SP_OK);
   SP_EXPECT_STR_EQ(back, input);
 }
 
@@ -120,5 +137,3 @@ UTEST(wtf8, validate) {
   EXPECT_FALSE(sp_wtf8_validate(sp_str_lit("\xC3")));
   EXPECT_FALSE(sp_wtf8_validate(sp_str_lit("\xC3\x28")));
 }
-
-

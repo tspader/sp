@@ -8,7 +8,7 @@ name = "amalgamation"
 source = [
   "test/main.c",
   "test/test/*.c",
-  "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c", "test/sys/futex.c",
+  "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
@@ -28,7 +28,7 @@ source = ["test/main.c", "test/test/*.c", "test/test/wire/*.c"]
 name = "sys"
 source = [
   "test/main.c",
-  "test/sys/sys.c", "test/sys/open.c", "test/sys/iter.c", "test/sys/futex.c",
+  "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",

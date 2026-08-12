@@ -2807,8 +2807,8 @@ SP_API u32             sp_utf8_to_lower(u32 codepoint);
 SP_API u32             sp_utf8_num_codepoints(sp_str_t str);
 SP_API sp_wide_str_t   sp_wide_str(const u16* str, u32 len);
 SP_API bool            sp_wtf8_validate(sp_str_t str);
-SP_API sp_wide_str_t   sp_wtf8_to_wtf16(sp_mem_t mem, sp_str_t wtf8);
-SP_API sp_str_t        sp_wtf16_to_wtf8(sp_mem_t mem, sp_wide_str_t wtf16);
+SP_API sp_err_t        sp_wtf8_to_wtf16(sp_mem_t mem, sp_str_t wtf8, sp_wide_str_t* out);
+SP_API sp_err_t        sp_wtf16_to_wtf8(sp_mem_t mem, sp_wide_str_t wtf16, sp_str_t* out);
 SP_API c8              sp_c8_to_upper(c8 c);
 SP_API c8              sp_c8_to_lower(c8 c);
 SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void* b);
@@ -5218,6 +5218,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 #define SP_SYS_LINUX_O_APPEND   02000
 #define SP_SYS_LINUX_O_NONBLOCK 04000
 #define SP_SYS_LINUX_O_CLOEXEC  02000000
+#define SP_SYS_LINUX_O_PATH     010000000
 #if defined(SP_AMD64)
   #define SP_SYS_LINUX_O_DIRECTORY 0200000
 #elif defined(SP_ARM64)
@@ -6579,6 +6580,13 @@ SP_PRIVATE sp_err_t sp_sys_err_from_errno(s64 e) {
     default:              return SP_ERR_SYS;
   }
 }
+
+SP_PRIVATE sp_err_t sp_sys_posix_path(const c8* path, u32 len, c8 buf[SP_PATH_MAX]) {
+  if (len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
+  sp_mem_copy(buf, path, len);
+  buf[len] = 0;
+  return SP_OK;
+}
 #endif
 
 #if defined(SP_MACOS) || defined(SP_COSMO)
@@ -6714,6 +6722,7 @@ SP_PRIVATE sp_nt_status_t sp_sys_nt_from_dos_wtf16(const u16* dos, u32 len, u16*
   }
 
   u32 offset = device ? 0 : (unc ? 6 : 4);
+  if (offset >= dst_cap) return SP_NT_STATUS_NAME_TOO_LONG;
 
   u32 bytes = SP_NT(RtlGetFullPathName_U)(dos, (dst_cap - offset) * (u32)sizeof(u16), dst + offset, SP_NULLPTR);
   if (bytes == 0) return SP_NT_STATUS_OBJECT_NAME_INVALID;
@@ -6740,11 +6749,12 @@ typedef struct {
 
 SP_PRIVATE sp_nt_status_t sp_sys_nt_target(sp_sys_fd_t root_fd, sp_str_t utf8, u16* result, u32 result_cap, sp_sys_nt_target_t* out) {
   *out = sp_zero_s(sp_sys_nt_target_t);
-  if (sp_str_empty(utf8)) return SP_NT_STATUS_OBJECT_NAME_INVALID;
+  if (sp_str_empty(utf8)) return SP_NT_STATUS_OBJECT_NAME_NOT_FOUND;
+  if (utf8.len >= SP_PATH_MAX) return SP_NT_STATUS_NAME_TOO_LONG;
 
   sp_mem_fixed_t fixed = sp_mem_fixed(result, (u64)result_cap * sizeof(u16));
-  sp_wide_str_t wpath = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), utf8);
-  if (!wpath.data) return SP_NT_STATUS_OBJECT_NAME_INVALID;
+  sp_wide_str_t wpath;
+  sp_try_as(sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), utf8, &wpath), SP_NT_STATUS_OBJECT_NAME_INVALID);
 
   if (sp_fs_is_absolute_w(wpath)) {
     u32 used = wpath.len + 1;
@@ -6793,12 +6803,13 @@ SP_PRIVATE sp_nt_status_t sp_sys_nt_target(sp_sys_fd_t root_fd, sp_str_t utf8, u
 
 sp_nt_status_t sp_sys_nt_path(sp_str_t utf8, sp_sys_nt_path_t* out) {
   out->name = sp_zero_s(sp_nt_unicode_string_t);
-  if (sp_str_empty(utf8)) return SP_NT_STATUS_OBJECT_NAME_INVALID;
+  if (sp_str_empty(utf8)) return SP_NT_STATUS_OBJECT_NAME_NOT_FOUND;
+  if (utf8.len >= SP_PATH_MAX) return SP_NT_STATUS_NAME_TOO_LONG;
 
   SP_ALIGNED u16 wbuf[SP_PATH_MAX + 1];
   sp_mem_fixed_t fixed = sp_mem_fixed(wbuf, sizeof(wbuf));
-  sp_wide_str_t wpath = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), utf8);
-  if (!wpath.data) return SP_NT_STATUS_OBJECT_NAME_INVALID;
+  sp_wide_str_t wpath;
+  sp_try_as(sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), utf8, &wpath), SP_NT_STATUS_OBJECT_NAME_INVALID);
 
   return sp_sys_nt_from_dos_wtf16(wpath.data, wpath.len, out->data, sp_carr_len(out->data), &out->name);
 }
@@ -7178,18 +7189,18 @@ sp_err_t sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_s
   struct {
     c8 from [SP_PATH_MAX];
     c8 to [SP_PATH_MAX];
-  } buffers = sp_zero;
-  sp_cstr_copy_to_n(from, from_len, buffers.from, SP_PATH_MAX);
-  sp_cstr_copy_to_n(to, to_len, buffers.to, SP_PATH_MAX);
+  } buffers;
+  sp_try(sp_sys_posix_path(from, from_len, buffers.from));
+  sp_try(sp_sys_posix_path(to, to_len, buffers.to));
   return sp_syscall_e(SP_SYSCALL_NUM_RENAMEAT, from_fd, buffers.from, to_fd, buffers.to);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct {
     c8 from [SP_PATH_MAX];
     c8 to [SP_PATH_MAX];
-  } buffers = sp_zero;
-  sp_cstr_copy_to_n(from, from_len, buffers.from, SP_PATH_MAX);
-  sp_cstr_copy_to_n(to, to_len, buffers.to, SP_PATH_MAX);
+  } buffers;
+  sp_try(sp_sys_posix_path(from, from_len, buffers.from));
+  sp_try(sp_sys_posix_path(to, to_len, buffers.to));
   return sp_sys_err_from_libc(renameat(from_fd, buffers.from, to_fd, buffers.to));
 
 #elif defined(SP_WASM)
@@ -8069,8 +8080,8 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  c8 buffer [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buffer, SP_PATH_MAX);
+  c8 buffer [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buffer));
 
   s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buffer, sp_sys_linux_open_flags(mode, flags), 0644);
   if (sp_sys_is_err(rc)) {
@@ -8085,8 +8096,8 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   s32 rc = openat((int)fd, buf, sp_sys_posix_open_flags(mode, flags), 0644);
   if (rc < 0) {
     switch (errno) {
@@ -8122,8 +8133,8 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t*
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_DIRECTORY | SP_SYS_LINUX_O_CLOEXEC, 0);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
 
@@ -8131,8 +8142,8 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t*
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   s32 rc = openat((int)fd, buf, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
   if (rc < 0) return sp_sys_err_from_errno(errno);
 
@@ -9934,20 +9945,18 @@ sp_err_t sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   return sp_sys_file_meta_from_nt_path(fd, sp_str(path, len), st, true);
 
 #elif defined(SP_LINUX)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   sp_sys_linux_stat_t raw = sp_zero;
-  sp_err_t err = sp_syscall_e(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, 0);
-  if (err != SP_OK) return err;
+  sp_try(sp_syscall_e(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, 0));
   sp_sys_file_meta_from_linux(&raw, st);
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   struct stat native;
-  sp_err_t err = sp_sys_err_from_libc(fstatat(fd, buf, &native, 0));
-  if (err != SP_OK) return err;
+  sp_try(sp_sys_err_from_libc(fstatat(fd, buf, &native, 0)));
   sp_sys_file_meta_from_libc(&native, st);
   return SP_OK;
 
@@ -9972,20 +9981,18 @@ sp_err_t sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   return sp_sys_file_meta_from_nt_path(fd, sp_str(path, len), st, false);
 
 #elif defined(SP_LINUX)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   sp_sys_linux_stat_t raw = sp_zero;
-  sp_err_t err = sp_syscall_e(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, SP_AT_SYMLINK_NOFOLLOW);
-  if (err != SP_OK) return err;
+  sp_try(sp_syscall_e(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, SP_AT_SYMLINK_NOFOLLOW));
   sp_sys_file_meta_from_linux(&raw, st);
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   struct stat native;
-  sp_err_t err = sp_sys_err_from_libc(fstatat(fd, buf, &native, AT_SYMLINK_NOFOLLOW));
-  if (err != SP_OK) return err;
+  sp_try(sp_sys_err_from_libc(fstatat(fd, buf, &native, AT_SYMLINK_NOFOLLOW)));
   sp_sys_file_meta_from_libc(&native, st);
   return SP_OK;
 
@@ -10024,13 +10031,13 @@ sp_err_t sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_syscall_e(SP_SYSCALL_NUM_MKDIRAT, fd, buf, mode);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_sys_err_from_libc(mkdirat(fd, buf, (mode_t)mode));
 
 #elif defined(SP_WASM)
@@ -10054,13 +10061,13 @@ sp_err_t sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
   return sp_sys_nt_delete(fd, sp_str(path, len), SP_NT_FILE_DIRECTORY_FILE);
 
 #elif defined(SP_LINUX)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_syscall_e(SP_SYSCALL_NUM_UNLINKAT, fd, buf, SP_AT_REMOVEDIR);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_sys_err_from_libc(unlinkat(fd, buf, AT_REMOVEDIR));
 
 #elif defined(SP_WASM)
@@ -10084,13 +10091,13 @@ sp_err_t sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
   return sp_sys_nt_delete(fd, sp_str(path, len), SP_NT_FILE_NON_DIRECTORY_FILE);
 
 #elif defined(SP_LINUX)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_syscall_e(SP_SYSCALL_NUM_UNLINKAT, fd, buf, 0);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_sys_err_from_libc(unlinkat(fd, buf, 0));
 
 #elif defined(SP_WASM)
@@ -10111,10 +10118,12 @@ sp_err_t sp_sys_unlink_s(sp_sys_fd_t fd, sp_str_t path) {
 //////////////////
 sp_err_t sp_sys_chdir_p(const c8* path, u32 len) {
 #if defined(SP_WIN32)
+  if (!len) return SP_ERR_SYS_NOT_FOUND;
+  if (len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
   SP_ALIGNED u16 wbuf[SP_PATH_MAX + 1];
   sp_mem_fixed_t fixed = sp_mem_fixed(wbuf, sizeof(wbuf));
-  sp_wide_str_t w = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), sp_str(path, len));
-  if (!w.data) return SP_ERR_SYS_INVALID;
+  sp_wide_str_t w;
+  sp_try(sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&fixed), sp_str(path, len), &w));
   sp_nt_unicode_string_t us = {
     .Length = sp_cast(u16, w.len * sizeof(u16)),
     .MaximumLength = sp_cast(u16, (w.len + 1) * sizeof(u16)),
@@ -10123,13 +10132,13 @@ sp_err_t sp_sys_chdir_p(const c8* path, u32 len) {
   return sp_sys_err_from_nt(SP_NT(RtlSetCurrentDirectory_U)(&us));
 
 #elif defined(SP_LINUX)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_syscall_e(SP_SYSCALL_NUM_CHDIR, buf);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_sys_err_from_libc(chdir(buf));
 
 #elif defined(SP_WASM)
@@ -10163,18 +10172,18 @@ sp_err_t sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len
   struct {
     c8 existing [SP_PATH_MAX];
     c8 alias [SP_PATH_MAX];
-  } buffers = sp_zero;
-  sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
-  sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
+  } buffers;
+  sp_try(sp_sys_posix_path(existing, existing_len, buffers.existing));
+  sp_try(sp_sys_posix_path(alias, alias_len, buffers.alias));
   return sp_syscall_e(SP_SYSCALL_NUM_LINKAT, from_fd, buffers.existing, to_fd, buffers.alias, 0);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct {
     c8 existing [SP_PATH_MAX];
     c8 alias [SP_PATH_MAX];
-  } buffers = sp_zero;
-  sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
-  sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
+  } buffers;
+  sp_try(sp_sys_posix_path(existing, existing_len, buffers.existing));
+  sp_try(sp_sys_posix_path(alias, alias_len, buffers.alias));
   return sp_sys_err_from_libc(linkat(from_fd, buffers.existing, to_fd, buffers.alias, 0));
 
 #elif defined(SP_WASM)
@@ -10197,11 +10206,13 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
 #if defined(SP_WIN32)
   sp_str_t target = sp_str(existing, existing_len);
   sp_str_t link = sp_str(alias, alias_len);
+  if (sp_str_empty(target)) return SP_ERR_SYS_INVALID;
+  if (target.len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
 
   SP_ALIGNED u16 wtarget_buf [SP_PATH_MAX + 1];
   sp_mem_fixed_t target_fixed = sp_mem_fixed(wtarget_buf, sizeof(wtarget_buf));
-  sp_wide_str_t wtarget = sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&target_fixed), target);
-  if (!wtarget.data) return SP_ERR_SYS_INVALID;
+  sp_wide_str_t wtarget;
+  sp_try(sp_wtf8_to_wtf16(sp_mem_fixed_as_allocator(&target_fixed), target, &wtarget));
 
   u16* wt = (u16*)wtarget.data;
   sp_for(it, wtarget.len) {
@@ -10295,18 +10306,18 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
   struct {
     c8 existing [SP_PATH_MAX];
     c8 alias [SP_PATH_MAX];
-  } buffers = sp_zero;
-  sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
-  sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
+  } buffers;
+  sp_try(sp_sys_posix_path(existing, existing_len, buffers.existing));
+  sp_try(sp_sys_posix_path(alias, alias_len, buffers.alias));
   return sp_syscall_e(SP_SYSCALL_NUM_SYMLINKAT, buffers.existing, to_fd, buffers.alias);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct {
     c8 existing [SP_PATH_MAX];
     c8 alias [SP_PATH_MAX];
-  } buffers = sp_zero;
-  sp_cstr_copy_to_n(existing, existing_len, buffers.existing, SP_PATH_MAX);
-  sp_cstr_copy_to_n(alias, alias_len, buffers.alias, SP_PATH_MAX);
+  } buffers;
+  sp_try(sp_sys_posix_path(existing, existing_len, buffers.existing));
+  sp_try(sp_sys_posix_path(alias, alias_len, buffers.alias));
   return sp_sys_err_from_libc(symlinkat(buffers.existing, to_fd, buffers.alias));
 
 #elif defined(SP_WASM)
@@ -10350,14 +10361,14 @@ sp_err_t sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_fi
   return sp_sys_err_from_nt(status);
 
 #elif defined(SP_LINUX)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   s32 mode = (s32)(st->raw_attrs & 07777);
   return sp_syscall_e(SP_SYSCALL_NUM_FCHMODAT, fd, buf, mode, 0);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, buf, SP_PATH_MAX);
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_sys_err_from_libc(fchmodat(fd, buf, (mode_t)(st->raw_attrs & 07777), 0));
 
 #elif defined(SP_WASM)
@@ -10403,34 +10414,40 @@ s64 sp_sys_canonicalize_path_p(const c8* path, u32 len, c8* buf, u64 size) {
   if (wlen >= 4 && wbuf[0] == '\\' && wbuf[1] == '\\' && wbuf[2] == '?' && wbuf[3] == '\\') skip = 4;
   SP_ALIGNED c8 u8buf[SP_PATH_MAX * 3 + 1];
   sp_mem_fixed_t fixed = sp_mem_fixed(u8buf, sizeof(u8buf));
-  sp_str_t utf8 = sp_wtf16_to_wtf8(sp_mem_fixed_as_allocator(&fixed), (sp_wide_str_t) { .data = wbuf + skip, .len = wlen - skip });
+  sp_str_t utf8;
+  if (sp_wtf16_to_wtf8(sp_mem_fixed_as_allocator(&fixed), (sp_wide_str_t) { .data = wbuf + skip, .len = wlen - skip }, &utf8) != SP_OK) return -1;
   if (utf8.len >= size) return -1;
   sp_mem_copy(buf, utf8.data, utf8.len);
   buf[utf8.len] = 0;
   return (s64)utf8.len;
 
 #elif defined(SP_LINUX)
-  c8 pbuf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, pbuf, SP_PATH_MAX);
-  s64 fd = sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, pbuf, SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_CLOEXEC, 0);
+  c8 pbuf [SP_PATH_MAX];
+  sp_try_as(sp_sys_posix_path(path, len, pbuf), -1);
+  s64 fd = sp_syscall(SP_SYSCALL_NUM_OPENAT, SP_AT_FDCWD, pbuf, SP_SYS_LINUX_O_PATH | SP_SYS_LINUX_O_CLOEXEC, 0);
   if (fd < 0) return -1;
 
   c8 proc [64] = sp_zero;
   sp_fmt_buf(proc, 64, "/proc/self/fd/{}", sp_fmt_int(fd));
 
-  s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, buf, size);
+  c8 rbuf [SP_PATH_MAX];
+  s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, rbuf, SP_PATH_MAX);
   sp_sys_close(fd);
-  return n < 0 ? -1 : n;
+  if (n < 0 || n == SP_PATH_MAX || (u64)n >= size) return -1;
+  sp_mem_copy(buf, rbuf, (u64)n);
+  buf[n] = 0;
+  return n;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   if (!path || !buf || size == 0) return -1;
-  c8 pbuf [SP_PATH_MAX] = sp_zero;
-  sp_cstr_copy_to_n(path, len, pbuf, SP_PATH_MAX);
-  c8 resolved[4096];
+  c8 pbuf [SP_PATH_MAX];
+  sp_try_as(sp_sys_posix_path(path, len, pbuf), -1);
+  c8 resolved [SP_PATH_MAX];
   if (!realpath(pbuf, resolved)) return -1;
-  u64 n = 0;
-  while (resolved[n] && n < size - 1) { buf[n] = resolved[n]; n++; }
-  buf[n] = '\0';
+  u64 n = sp_cstr_len(resolved);
+  if (n >= size) return -1;
+  sp_mem_copy(buf, resolved, n);
+  buf[n] = 0;
   return (s64)n;
 
 #elif defined(SP_WASM)
@@ -10460,15 +10477,20 @@ s64 sp_sys_get_exe_path_p(c8* buf, u64 size) {
   u32 wlen = image->Length / (u32)sizeof(u16);
   SP_ALIGNED c8 u8buf[SP_PATH_MAX * 3 + 1];
   sp_mem_fixed_t fixed = sp_mem_fixed(u8buf, sizeof(u8buf));
-  sp_str_t utf8 = sp_wtf16_to_wtf8(sp_mem_fixed_as_allocator(&fixed), (sp_wide_str_t) { .data = image->Buffer, .len = wlen });
+  sp_str_t utf8;
+  if (sp_wtf16_to_wtf8(sp_mem_fixed_as_allocator(&fixed), (sp_wide_str_t) { .data = image->Buffer, .len = wlen }, &utf8) != SP_OK) return -1;
   if (utf8.len >= size) return -1;
   sp_mem_copy(buf, utf8.data, utf8.len);
   buf[utf8.len] = 0;
   return (s64)utf8.len;
 
 #elif defined(SP_LINUX)
-  s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, "/proc/self/exe", buf, size);
-  return n < 0 ? -1 : n;
+  c8 rbuf [SP_PATH_MAX];
+  s64 n = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, "/proc/self/exe", rbuf, SP_PATH_MAX);
+  if (n < 0 || n == SP_PATH_MAX || (u64)n >= size) return -1;
+  sp_mem_copy(buf, rbuf, (u64)n);
+  buf[n] = 0;
+  return n;
 
 #elif defined(SP_MACOS)
   if (!buf || size == 0) return -1;
@@ -10502,7 +10524,8 @@ s64 sp_sys_get_cwd_path_p(c8* buf, u64 size) {
   u32 wlen = cwd->Length / (u32)sizeof(u16);
   SP_ALIGNED c8 u8buf[SP_PATH_MAX * 3 + 1];
   sp_mem_fixed_t fixed = sp_mem_fixed(u8buf, sizeof(u8buf));
-  sp_str_t utf8 = sp_wtf16_to_wtf8(sp_mem_fixed_as_allocator(&fixed), (sp_wide_str_t) { .data = cwd->Buffer, .len = wlen });
+  sp_str_t utf8;
+  if (sp_wtf16_to_wtf8(sp_mem_fixed_as_allocator(&fixed), (sp_wide_str_t) { .data = cwd->Buffer, .len = wlen }, &utf8) != SP_OK) return -1;
   if (utf8.len >= size) return -1;
   sp_mem_copy(buf, utf8.data, utf8.len);
   buf[utf8.len] = 0;
@@ -12542,11 +12565,12 @@ bool sp_wtf8_validate(sp_str_t str) {
   return true;
 }
 
-sp_wide_str_t sp_wtf8_to_wtf16(sp_mem_t mem, sp_str_t wtf8) {
-  sp_wide_str_t result = sp_zero_s(sp_wide_str_t);
-  if (sp_str_empty(wtf8)) return result;
+sp_err_t sp_wtf8_to_wtf16(sp_mem_t mem, sp_str_t wtf8, sp_wide_str_t* out) {
+  *out = sp_zero_s(sp_wide_str_t);
+  if (sp_str_empty(wtf8)) return SP_OK;
 
   u16* buf = sp_alloc_n(mem, u16, wtf8.len + 1);
+  if (!buf) return SP_ERR_SYS_NO_MEMORY;
   const c8* ptr = wtf8.data;
   u32 i = 0;
   u32 n = 0;
@@ -12575,15 +12599,21 @@ sp_wide_str_t sp_wtf8_to_wtf16(sp_mem_t mem, sp_str_t wtf8) {
   }
 
   buf[n] = 0;
-  return (sp_wide_str_t) { .data = buf, .len = n };
+  out->data = buf;
+  out->len = n;
+  return SP_OK;
 
 error:
   sp_free(mem, buf, (wtf8.len + 1) * sizeof(u16));
-  return result;
+  return SP_ERR_SYS_INVALID;
 }
 
-sp_str_t sp_wtf16_to_wtf8(sp_mem_t mem, sp_wide_str_t wtf16) {
+sp_err_t sp_wtf16_to_wtf8(sp_mem_t mem, sp_wide_str_t wtf16, sp_str_t* out) {
+  *out = sp_zero_s(sp_str_t);
+  if (!wtf16.len) return SP_OK;
+
   c8* buf = sp_alloc_n(mem, c8, wtf16.len * 3 + 1);
+  if (!buf) return SP_ERR_SYS_NO_MEMORY;
   u32 offset = 0;
   sp_for(i, wtf16.len) {
     u16 u = wtf16.data[i];
@@ -12599,7 +12629,9 @@ sp_str_t sp_wtf16_to_wtf8(sp_mem_t mem, sp_wide_str_t wtf16) {
   }
   buf[offset] = 0;
 
-  return (sp_str_t) { .data = buf, .len = offset };
+  out->data = buf;
+  out->len = offset;
+  return SP_OK;
 }
 
 sp_str_t sp_str(const c8* str, u32 len) {
@@ -13172,7 +13204,8 @@ sp_err_t sp_sys_dir_parse_p(sp_sys_dir_t* dir, sp_mem_buffer_t* buf, u64* cursor
   sp_mem_fixed_t allocator = sp_mem_fixed(buf->data + buf->capacity - SP_SYS_DIR_WIN32_SCRATCH, SP_SYS_DIR_WIN32_SCRATCH);
   sp_mem_t mem = sp_mem_fixed_as_allocator(&allocator);
 
-  sp_str_t utf8 = sp_wtf16_to_wtf8(mem, sp_wide_str(d->FileName, d->FileNameLength / sizeof(u16)));
+  sp_str_t utf8;
+  sp_try_as(sp_wtf16_to_wtf8(mem, sp_wide_str(d->FileName, d->FileNameLength / sizeof(u16)), &utf8), SP_ERR_SYS_NAME_TOO_LONG);
   out->name = utf8.data;
   out->len = utf8.len;
   out->kind = sp_sys_dir_win32_attrs(d->FileAttributes);
@@ -19354,7 +19387,9 @@ sp_str_t sp_fs_resolve(sp_mem_t mem, sp_sys_fd_t fd) {
   if (wlen == 0 || wlen >= SP_PATH_MAX) return sp_zero_s(sp_str_t);
   u32 skip = 0;
   if (wlen >= 4 && wbuf[0] == '\\' && wbuf[1] == '\\' && wbuf[2] == '?' && wbuf[3] == '\\') skip = 4;
-  return sp_wtf16_to_wtf8(mem, (sp_wide_str_t) { .data = wbuf + skip, .len = wlen - skip });
+  sp_str_t resolved;
+  if (sp_wtf16_to_wtf8(mem, (sp_wide_str_t) { .data = wbuf + skip, .len = wlen - skip }, &resolved) != SP_OK) return sp_zero_s(sp_str_t);
+  return resolved;
 
 #elif defined(SP_LINUX)
   c8 self [64] = sp_zero;
