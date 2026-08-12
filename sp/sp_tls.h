@@ -75,6 +75,7 @@ SP_API sp_tls_error_t   sp_tls_chain_der(const struct mbedtls_x509_crt* chain, s
 #define SP_HTTP_DEFAULT_CONNECT_TIMEOUT_MS 30000
 #define SP_HTTP_DEFAULT_IO_TIMEOUT_MS      60000
 #define SP_HTTP_TIMEOUT_INFINITE           0xffffffffu
+#define SP_HTTP_MAX_ADDRS                  16
 
 #ifndef SP_HTTP_MAX_HEADERS
   #define SP_HTTP_MAX_HEADERS 16
@@ -101,19 +102,39 @@ typedef struct {
   sp_str_t value;
 } sp_http_header_t;
 
+typedef enum {
+  SP_HTTP_ADDR_V4,
+  SP_HTTP_ADDR_V6,
+} sp_http_addr_kind_t;
+
 typedef struct {
-  sp_str_t         url;
-  sp_tls_trust_t*  trust;
-  sp_io_writer_t*  sink;
-  sp_http_method_t method;
-  sp_str_t         payload;
-  sp_str_t         content_type;
-  sp_http_header_t headers[SP_HTTP_MAX_HEADERS];
-  u32              max_redirects;
-  sp_str_t         proxy;
-  bool             no_proxy;
-  u32              connect_timeout_ms;
-  u32              io_timeout_ms;
+  sp_http_addr_kind_t kind;
+  u8                  data [16];
+} sp_http_addr_t;
+
+// Resolves a bare hostname to addresses; IP literals are handled before the
+// resolver is consulted, so implementations only ever see real names.
+typedef sp_tls_error_t (*sp_http_resolve_fn)(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count);
+
+typedef struct {
+  sp_http_resolve_fn resolve;
+  void*              user_data;
+} sp_http_resolver_t;
+
+typedef struct {
+  sp_str_t           url;
+  sp_tls_trust_t*    trust;
+  sp_http_resolver_t resolver;
+  sp_io_writer_t*    sink;
+  sp_http_method_t   method;
+  sp_str_t           payload;
+  sp_str_t           content_type;
+  sp_http_header_t   headers[SP_HTTP_MAX_HEADERS];
+  u32                max_redirects;
+  sp_str_t           proxy;
+  bool               no_proxy;
+  u32                connect_timeout_ms;
+  u32                io_timeout_ms;
 } sp_http_request_t;
 
 typedef struct {
@@ -124,8 +145,9 @@ typedef struct {
   sp_str_t location;
 } sp_http_response_t;
 
-SP_API bool           sp_http_url_parse(sp_str_t url, sp_http_url_t* out);
-SP_API sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_response_t* response);
+SP_API bool               sp_http_url_parse(sp_str_t url, sp_http_url_t* out);
+SP_API sp_http_resolver_t sp_http_resolver_default(void);
+SP_API sp_tls_error_t     sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_response_t* response);
 
 #endif
 
@@ -163,6 +185,10 @@ SP_PRIVATE bool           sp_http_ci_equal(sp_str_t a, sp_str_t b);
 SP_PRIVATE bool           sp_http_ci_contains(sp_str_t haystack, sp_str_t needle);
 SP_PRIVATE sp_str_t       sp_http_str_tail(sp_str_t str, s32 from);
 SP_PRIVATE sp_str_t       sp_http_host_bare(sp_str_t host);
+SP_PRIVATE bool           sp_http_v6_group(sp_str_t part, u16* value);
+SP_PRIVATE bool           sp_http_addr_parse_v4(sp_str_t host, sp_http_addr_t* out);
+SP_PRIVATE bool           sp_http_addr_parse_v6(sp_str_t host, sp_http_addr_t* out);
+SP_PRIVATE bool           sp_http_addr_parse(sp_str_t host, sp_http_addr_t* out);
 SP_PRIVATE bool           sp_http_url_host_ok(sp_str_t host);
 SP_PRIVATE bool           sp_http_url_port_ok(sp_str_t port);
 SP_PRIVATE bool           sp_http_url_path_ok(sp_str_t path);
@@ -187,13 +213,15 @@ SP_PRIVATE bool           sp_tls_win32_server_auth(const struct _CERT_CONTEXT* c
 // @http
 SP_PRIVATE sp_tls_error_t sp_http_map_io(sp_err_t err, sp_tls_error_t fallback);
 SP_PRIVATE u32            sp_http_timeout_ms(u32 requested, u32 fallback);
-SP_PRIVATE sp_tls_error_t sp_http_net_connect(struct mbedtls_net_context* net, const c8* host, const c8* port, u32 timeout_ms);
+SP_PRIVATE sp_tls_error_t sp_http_resolve_system(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count);
+SP_PRIVATE sp_tls_error_t sp_http_connect_addr(struct mbedtls_net_context* net, sp_http_addr_t addr, u16 port, u32 timeout_ms);
+SP_PRIVATE sp_tls_error_t sp_http_net_connect(struct mbedtls_net_context* net, sp_http_resolver_t resolver, sp_str_t host, u16 port, u32 timeout_ms);
 SP_PRIVATE sp_err_t       sp_http_pump_wait(sp_http_conn_t* conn, s32 rc);
 SP_PRIVATE sp_err_t       sp_http_tls_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
 SP_PRIVATE sp_err_t       sp_http_tls_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written);
 SP_PRIVATE sp_tls_error_t sp_http_conn_write(sp_http_conn_t* conn, sp_str_t data);
 SP_PRIVATE sp_tls_error_t sp_http_connect_reply(sp_http_conn_t* conn);
-SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_trust_t* trust, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms);
+SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_trust_t* trust, sp_http_resolver_t resolver, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms);
 SP_PRIVATE void           sp_http_conn_close(sp_http_conn_t* conn);
 SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_io_reader_t* reader, sp_str_t* head);
 SP_PRIVATE sp_tls_error_t sp_http_read_line(sp_io_reader_t* reader, sp_str_t* line);
@@ -276,6 +304,106 @@ SP_PRIVATE bool sp_http_url_host_ok(sp_str_t host) {
     if (!alnum && c != '-' && c != '.' && c != '_') return false;
   }
   return true;
+}
+
+SP_PRIVATE bool sp_http_v6_group(sp_str_t part, u16* value) {
+  if (sp_str_empty(part) || part.len > 4) return false;
+  u32 group = 0;
+  sp_for(it, part.len) {
+    c8 c = part.data[it];
+    u32 digit;
+    if (c >= '0' && c <= '9') digit = (u32)(c - '0');
+    else if (c >= 'a' && c <= 'f') digit = (u32)(c - 'a' + 10);
+    else if (c >= 'A' && c <= 'F') digit = (u32)(c - 'A' + 10);
+    else return false;
+    group = (group << 4) | digit;
+  }
+  *value = (u16)group;
+  return true;
+}
+
+SP_PRIVATE bool sp_http_addr_parse_v4(sp_str_t host, sp_http_addr_t* out) {
+  *out = sp_zero_s(sp_http_addr_t);
+  sp_str_t rest = host;
+  sp_for(it, 4) {
+    s32 dot = sp_str_find_c8(rest, '.');
+    if ((it < 3) != (dot != SP_STR_NO_MATCH)) return false;
+    sp_str_t part = dot == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, dot);
+    if (sp_str_empty(part) || part.len > 3) return false;
+    if (part.len > 1 && part.data[0] == '0') return false;
+    u32 value = 0;
+    if (!sp_parse_u32_ex(part, &value)) return false;
+    if (value > 255) return false;
+    out->data[it] = (u8)value;
+    rest = dot == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_http_str_tail(rest, dot + 1);
+  }
+  out->kind = SP_HTTP_ADDR_V4;
+  return true;
+}
+
+SP_PRIVATE bool sp_http_addr_parse_v6(sp_str_t host, sp_http_addr_t* out) {
+  *out = sp_zero_s(sp_http_addr_t);
+  u16 groups [8] = sp_zero;
+  u32 count = 0;
+  s32 run = -1;
+
+  sp_str_t rest = host;
+  if (sp_str_starts_with(rest, sp_str_lit("::"))) {
+    run = 0;
+    rest = sp_http_str_tail(rest, 2);
+  }
+  else if (!sp_str_empty(rest) && rest.data[0] == ':') {
+    return false;
+  }
+
+  while (!sp_str_empty(rest)) {
+    if (count == 8) return false;
+    s32 colon = sp_str_find_c8(rest, ':');
+    sp_str_t part = colon == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, colon);
+
+    if (sp_str_find_c8(part, '.') != SP_STR_NO_MATCH) {
+      if (colon != SP_STR_NO_MATCH || count > 6) return false;
+      sp_http_addr_t v4 = sp_zero;
+      if (!sp_http_addr_parse_v4(part, &v4)) return false;
+      groups[count++] = (u16)((v4.data[0] << 8) | v4.data[1]);
+      groups[count++] = (u16)((v4.data[2] << 8) | v4.data[3]);
+      break;
+    }
+
+    if (!sp_http_v6_group(part, &groups[count])) return false;
+    count++;
+
+    if (colon == SP_STR_NO_MATCH) break;
+    rest = sp_http_str_tail(rest, colon + 1);
+    if (sp_str_empty(rest)) return false;
+    if (rest.data[0] == ':') {
+      if (run >= 0) return false;
+      run = (s32)count;
+      rest = sp_http_str_tail(rest, 1);
+    }
+  }
+
+  if (run < 0 && count != 8) return false;
+  if (run >= 0 && count >= 8) return false;
+
+  u32 front = run < 0 ? count : (u32)run;
+  u32 back = count - front;
+  sp_for(it, front) {
+    out->data[it * 2 + 0] = (u8)(groups[it] >> 8);
+    out->data[it * 2 + 1] = (u8)(groups[it] & 0xff);
+  }
+  sp_for(it, back) {
+    u32 at = 8 - back + it;
+    out->data[at * 2 + 0] = (u8)(groups[front + it] >> 8);
+    out->data[at * 2 + 1] = (u8)(groups[front + it] & 0xff);
+  }
+  out->kind = SP_HTTP_ADDR_V6;
+  return true;
+}
+
+SP_PRIVATE bool sp_http_addr_parse(sp_str_t host, sp_http_addr_t* out) {
+  if (sp_str_find_c8(host, ':') != SP_STR_NO_MATCH) return sp_http_addr_parse_v6(host, out);
+  return sp_http_addr_parse_v4(host, out);
 }
 
 SP_PRIVATE bool sp_http_url_port_ok(sp_str_t port) {
@@ -512,6 +640,7 @@ SP_PRIVATE sp_str_t sp_http_proxy_from_env(sp_http_url_t url) {
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -881,7 +1010,124 @@ SP_PRIVATE u32 sp_http_timeout_ms(u32 requested, u32 fallback) {
   return requested ? requested : fallback;
 }
 
-SP_PRIVATE sp_tls_error_t sp_http_net_connect(mbedtls_net_context* net, const c8* host, const c8* port, u32 timeout_ms) {
+SP_PRIVATE sp_tls_error_t sp_http_resolve_system(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count) {
+  (void)user_data;
+  (void)timeout_ms;
+  *count = 0;
+
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
+  c8* name = sp_str_to_cstr(scratch.mem, host);
+
+  struct addrinfo hints = sp_zero;
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+  struct addrinfo* list = SP_NULLPTR;
+  s32 rc = getaddrinfo(name, SP_NULLPTR, &hints, &list);
+  sp_mem_end_scratch(scratch);
+  if (rc != 0) return SP_TLS_ERR_CONNECT;
+
+  u32 found = 0;
+  for (struct addrinfo* it = list; it && found < capacity; it = it->ai_next) {
+    if (it->ai_family == AF_INET) {
+      struct sockaddr_in* sa = (struct sockaddr_in*)it->ai_addr;
+      addrs[found] = sp_zero_s(sp_http_addr_t);
+      addrs[found].kind = SP_HTTP_ADDR_V4;
+      sp_mem_copy(addrs[found].data, &sa->sin_addr, 4);
+      found++;
+    }
+    else if (it->ai_family == AF_INET6) {
+      struct sockaddr_in6* sa = (struct sockaddr_in6*)it->ai_addr;
+      addrs[found] = sp_zero_s(sp_http_addr_t);
+      addrs[found].kind = SP_HTTP_ADDR_V6;
+      sp_mem_copy(addrs[found].data, &sa->sin6_addr, 16);
+      found++;
+    }
+  }
+  freeaddrinfo(list);
+
+  *count = found;
+  return found ? SP_TLS_OK : SP_TLS_ERR_CONNECT;
+}
+
+sp_http_resolver_t sp_http_resolver_default(void) {
+  return (sp_http_resolver_t) { .resolve = sp_http_resolve_system };
+}
+
+SP_PRIVATE sp_tls_error_t sp_http_connect_addr(mbedtls_net_context* net, sp_http_addr_t addr, u16 port, u32 timeout_ms) {
+  struct sockaddr_storage storage = sp_zero;
+  s32 family;
+  socklen_t addr_len;
+  if (addr.kind == SP_HTTP_ADDR_V4) {
+    struct sockaddr_in* sa = (struct sockaddr_in*)&storage;
+    sa->sin_family = AF_INET;
+    sa->sin_port = htons(port);
+    sp_mem_copy(&sa->sin_addr, addr.data, 4);
+    family = AF_INET;
+    addr_len = (socklen_t)sizeof(struct sockaddr_in);
+  }
+  else {
+    struct sockaddr_in6* sa = (struct sockaddr_in6*)&storage;
+    sa->sin6_family = AF_INET6;
+    sa->sin6_port = htons(port);
+    sp_mem_copy(&sa->sin6_addr, addr.data, 16);
+    family = AF_INET6;
+    addr_len = (socklen_t)sizeof(struct sockaddr_in6);
+  }
+
+#if defined(SP_WIN32)
+  SOCKET fd = socket(family, SOCK_STREAM, IPPROTO_TCP);
+  if (fd == INVALID_SOCKET) return SP_TLS_ERR_CONNECT;
+  u_long nonblock = 1;
+  ioctlsocket(fd, FIONBIO, &nonblock);
+  bool connected = connect(fd, (struct sockaddr*)&storage, (int)addr_len) == 0;
+  bool pending = !connected && WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+  int fd = socket(family, SOCK_STREAM, IPPROTO_TCP);
+  if (fd < 0) return SP_TLS_ERR_CONNECT;
+  fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+  bool connected = connect(fd, (struct sockaddr*)&storage, addr_len) == 0;
+  bool pending = !connected && errno == EINPROGRESS;
+#endif
+
+  sp_tls_error_t result = SP_TLS_ERR_CONNECT;
+  if (pending) {
+#if defined(SP_WIN32)
+    WSAPOLLFD pfd = sp_zero;
+    pfd.fd = fd;
+    pfd.events = POLLWRNORM;
+    s32 rc = WSAPoll(&pfd, 1, timeout_ms ? (INT)timeout_ms : -1);
+#else
+    struct pollfd pfd = sp_zero;
+    pfd.fd = fd;
+    pfd.events = POLLOUT;
+    s32 rc = poll(&pfd, 1, timeout_ms ? (s32)timeout_ms : -1);
+#endif
+    if (rc == 0) result = SP_TLS_ERR_TIMEOUT;
+    if (rc > 0) {
+      int err = 0;
+      socklen_t err_len = sizeof(err);
+      getsockopt(fd, SOL_SOCKET, SO_ERROR, (char*)&err, &err_len);
+      connected = err == 0;
+    }
+  }
+
+  if (connected) {
+    // Stays nonblocking: sp_io socket timeouts and the WANT_READ/WANT_WRITE
+    // pumps depend on it.
+    net->fd = (int)fd;
+    return SP_TLS_OK;
+  }
+
+#if defined(SP_WIN32)
+  closesocket(fd);
+#else
+  close(fd);
+#endif
+  return result;
+}
+
+SP_PRIVATE sp_tls_error_t sp_http_net_connect(mbedtls_net_context* net, sp_http_resolver_t resolver, sp_str_t host, u16 port, u32 timeout_ms) {
 #if defined(SP_WIN32)
   static bool wsa_init = false;
   if (!wsa_init) {
@@ -891,67 +1137,22 @@ SP_PRIVATE sp_tls_error_t sp_http_net_connect(mbedtls_net_context* net, const c8
   }
 #endif
 
-  struct addrinfo hints = sp_zero;
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_protocol = IPPROTO_TCP;
-  struct addrinfo* list = SP_NULLPTR;
-  if (getaddrinfo(host, port, &hints, &list) != 0) return SP_TLS_ERR_CONNECT;
-
-  sp_tls_error_t result = SP_TLS_ERR_CONNECT;
-  for (struct addrinfo* it = list; it; it = it->ai_next) {
-#if defined(SP_WIN32)
-    SOCKET fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
-    if (fd == INVALID_SOCKET) continue;
-    u_long nonblock = 1;
-    ioctlsocket(fd, FIONBIO, &nonblock);
-    bool connected = connect(fd, it->ai_addr, (int)it->ai_addrlen) == 0;
-    bool pending = !connected && WSAGetLastError() == WSAEWOULDBLOCK;
-#else
-    int fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
-    if (fd < 0) continue;
-    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
-    bool connected = connect(fd, it->ai_addr, it->ai_addrlen) == 0;
-    bool pending = !connected && errno == EINPROGRESS;
-#endif
-
-    if (pending) {
-#if defined(SP_WIN32)
-      WSAPOLLFD pfd = sp_zero;
-      pfd.fd = fd;
-      pfd.events = POLLWRNORM;
-      s32 rc = WSAPoll(&pfd, 1, timeout_ms ? (INT)timeout_ms : -1);
-#else
-      struct pollfd pfd = sp_zero;
-      pfd.fd = fd;
-      pfd.events = POLLOUT;
-      s32 rc = poll(&pfd, 1, timeout_ms ? (s32)timeout_ms : -1);
-#endif
-      if (rc == 0) result = SP_TLS_ERR_TIMEOUT;
-      if (rc > 0) {
-        int err = 0;
-        socklen_t err_len = sizeof(err);
-        getsockopt(fd, SOL_SOCKET, SO_ERROR, (char*)&err, &err_len);
-        connected = err == 0;
-      }
-    }
-
-    if (connected) {
-      // Stays nonblocking: sp_io socket timeouts and the WANT_READ/WANT_WRITE
-      // pumps depend on it.
-      net->fd = (int)fd;
-      result = SP_TLS_OK;
-      break;
-    }
-
-#if defined(SP_WIN32)
-    closesocket(fd);
-#else
-    close(fd);
-#endif
+  sp_http_addr_t addrs [SP_HTTP_MAX_ADDRS];
+  u32 count = 0;
+  if (sp_http_addr_parse(host, &addrs[0])) {
+    count = 1;
+  }
+  else {
+    sp_tls_error_t err = resolver.resolve(resolver.user_data, host, timeout_ms, addrs, SP_HTTP_MAX_ADDRS, &count);
+    if (err != SP_TLS_OK) return err;
+    if (!count) return SP_TLS_ERR_CONNECT;
   }
 
-  freeaddrinfo(list);
+  sp_tls_error_t result = SP_TLS_ERR_CONNECT;
+  sp_for(it, count) {
+    result = sp_http_connect_addr(net, addrs[it], port, timeout_ms);
+    if (result == SP_TLS_OK) break;
+  }
   return result;
 }
 
@@ -1043,7 +1244,7 @@ SP_PRIVATE sp_tls_error_t sp_http_connect_reply(sp_http_conn_t* conn) {
   return result;
 }
 
-SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_trust_t* trust, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms) {
+SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_trust_t* trust, sp_http_resolver_t resolver, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms) {
   mbedtls_net_init(&conn->net);
   mbedtls_ssl_init(&conn->ssl);
   mbedtls_ssl_config_init(&conn->conf);
@@ -1054,14 +1255,10 @@ SP_PRIVATE sp_tls_error_t sp_http_conn_open(sp_http_conn_t* conn, const sp_tls_t
   conn->io_timeout_ms = io_timeout_ms;
 
   sp_http_url_t target = proxy ? *proxy : url;
-  sp_str_t bare = sp_http_host_bare(target.host);
-  c8 host[SP_PATH_MAX];
-  c8 port[16];
-  if (bare.len >= sizeof(host) || target.port.len >= sizeof(port)) return SP_TLS_ERR_URL;
-  sp_cstr_copy_to_n(bare.data, bare.len, host, sizeof(host));
-  sp_cstr_copy_to_n(target.port.data, target.port.len, port, sizeof(port));
+  u32 port = 0;
+  sp_parse_u32_ex(target.port, &port);
 
-  sp_tls_error_t err = sp_http_net_connect(&conn->net, host, port, connect_timeout_ms);
+  sp_tls_error_t err = sp_http_net_connect(&conn->net, resolver, sp_http_host_bare(target.host), (u16)port, connect_timeout_ms);
   if (err != SP_TLS_OK) return err;
 
   sp_io_socket_reader_init(&conn->sock_reader, (sp_sys_socket_t)conn->net.fd, io_timeout_ms);
@@ -1128,6 +1325,9 @@ SP_PRIVATE void sp_http_conn_close(sp_http_conn_t* conn) {
 SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_io_reader_t* reader, sp_str_t* head) {
   sp_str_t acc = sp_zero;
   sp_err_t err = sp_io_peek_until(reader, sp_str_lit("\r\n\r\n"), &acc);
+  // a head that outgrows the buffer is the peer's protocol violation, not an
+  // OS failure
+  if (err == SP_ERR_IO_NO_SPACE) return SP_TLS_ERR_PROTOCOL;
   if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
   sp_io_consume(reader, acc.len);
   *head = sp_str_sub(acc, 0, (s32)acc.len - 4);
@@ -1137,6 +1337,7 @@ SP_PRIVATE sp_tls_error_t sp_http_read_head(sp_io_reader_t* reader, sp_str_t* he
 SP_PRIVATE sp_tls_error_t sp_http_read_line(sp_io_reader_t* reader, sp_str_t* line) {
   sp_str_t acc = sp_zero;
   sp_err_t err = sp_io_peek_until(reader, sp_str_lit("\r\n"), &acc);
+  if (err == SP_ERR_IO_NO_SPACE) return SP_TLS_ERR_PROTOCOL;
   if (err != SP_OK) return sp_http_map_io(err, SP_TLS_ERR_PROTOCOL);
   sp_io_consume(reader, acc.len);
   *line = sp_str_sub(acc, 0, (s32)acc.len - 2);
@@ -1310,6 +1511,7 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
   u32 max = request.max_redirects ? request.max_redirects : SP_HTTP_DEFAULT_REDIRECTS;
   u32 connect_timeout = sp_http_timeout_ms(request.connect_timeout_ms, SP_HTTP_DEFAULT_CONNECT_TIMEOUT_MS);
   u32 io_timeout = sp_http_timeout_ms(request.io_timeout_ms, SP_HTTP_DEFAULT_IO_TIMEOUT_MS);
+  sp_http_resolver_t resolver = request.resolver.resolve ? request.resolver : sp_http_resolver_default();
   sp_str_t current = request.url;
   sp_tls_error_t result = sp_http_headers_check(request.headers);
   u32 redirects = 0;
@@ -1353,7 +1555,7 @@ sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_re
     }
 
     sp_http_conn_t conn = sp_zero_s(sp_http_conn_t);
-    result = sp_http_conn_open(&conn, request.trust, url, use_proxy ? &proxy_url : SP_NULLPTR, connect_timeout, io_timeout);
+    result = sp_http_conn_open(&conn, request.trust, resolver, url, use_proxy ? &proxy_url : SP_NULLPTR, connect_timeout, io_timeout);
     if (result != SP_TLS_OK) {
       sp_http_conn_close(&conn);
       break;
@@ -1517,6 +1719,10 @@ sp_tls_error_t sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t m
   if (ders)  *ders = SP_NULLPTR;
   if (count) *count = 0;
   return SP_TLS_ERR_UNSUPPORTED;
+}
+
+sp_http_resolver_t sp_http_resolver_default(void) {
+  return sp_zero_s(sp_http_resolver_t);
 }
 
 sp_tls_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_response_t* response) {
