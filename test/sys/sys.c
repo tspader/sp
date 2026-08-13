@@ -31,6 +31,7 @@ static const c8* sys_step_name(sys_step_kind_t kind) {
     case SYS_STEP_OPEN_DIR: return "open_dir";
     case SYS_STEP_READ:     return "read";
     case SYS_STEP_WRITE:    return "write";
+    case SYS_STEP_PWRITE:   return "pwrite";
   }
   return "";
 }
@@ -137,6 +138,15 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
         sp_err_t err = sp_sys_write(fds[step->write.slot], step->write.data, len, &n);
         if (sys_check_err(t, err, step->write.err) && !err && n != len) {
           sp_test_fail(t, "write returned {} but expected {}", sp_fmt_uint(n), sp_fmt_uint(len));
+        }
+        break;
+      }
+      case SYS_STEP_PWRITE: {
+        u64 len = sp_cstr_len(step->pwrite.data);
+        u64 n = 0;
+        sp_err_t err = sp_sys_pwrite(fds[step->pwrite.slot], step->pwrite.data, len, step->pwrite.offset, &n);
+        if (sys_check_err(t, err, step->pwrite.err) && !err && n != len) {
+          sp_test_fail(t, "pwrite returned {} but expected {}", sp_fmt_uint(n), sp_fmt_uint(len));
         }
         break;
       }

@@ -19,6 +19,7 @@ typedef enum {
 typedef enum {
   PATH_LITERAL,
   PATH_LONG,
+  PATH_ABS,
 } path_kind_t;
 
 typedef struct {
@@ -54,49 +55,250 @@ static const test_t tests [] = {
     .err = SP_ERR_SYS_NAME_TOO_LONG,
     .not_exists = "newdir1.dir",
   },
-  // disabled: win32 strips trailing separators where POSIX kernels give them
-  // meaning (unlink("file/") deletes on win32, NOT_DIR on POSIX; lstat("lnk/")
-  // stats the link on win32, follows on POSIX). the POSIX kernels also
-  // disagree with each other in the directory/dir-symlink corners, so the
-  // contract needs pinning on real kernels before the win32 translation is
-  // written.
-  //
-  // {
-  //   .name = "unlink_trailing_slash_refuses_file",
-  //   .op = OP_UNLINK,
-  //   .path = "file.bin/",
-  //   .err = SP_ERR_SYS_NOT_DIR,
-  //   .file = "file.bin",
-  //   .exists = "file.bin",
-  // },
-  // {
-  //   .name = "stat_trailing_slash_refuses_file",
-  //   .op = OP_STAT,
-  //   .path = "file.bin/",
-  //   .err = SP_ERR_SYS_NOT_DIR,
-  //   .file = "file.bin",
-  // },
-  // {
-  //   .name = "lstat_trailing_slash_follows_dir_symlink",
-  //   .op = OP_LSTAT,
-  //   .path = "lnk/",
-  //   .dir = "dir",
-  //   .link = "lnk",
-  //   .target = "dir",
-  //   .kind = SP_FS_KIND_DIR,
-  // },
   {
-    .name = "rmdir_trailing_slash_removes_dir",
+    .name = "unlink_empty_path_refuses",
+    .op = OP_UNLINK,
+    .path = "",
+    .err = SP_ERR_SYS_NOT_FOUND,
+  },
+  // Deletion classifies the name itself, never the target: unlink takes any
+  // non-directory name including every kind of symlink, rmdir takes only real
+  // directories.
+  {
+    .name = "unlink_refuses_dir",
+    .op = OP_UNLINK,
+    .path = "dir",
+    .err = SP_ERR_SYS_IS_DIR,
+    .dir = "dir",
+    .exists = "dir",
+  },
+  {
+    .name = "unlink_deletes_file_link",
+    .op = OP_UNLINK,
+    .path = "lnk",
+    .file = "file.bin",
+    .link = "lnk",
+    .target = "file.bin",
+    .exists = "file.bin",
+    .not_exists = "lnk",
+  },
+  {
+    .name = "unlink_deletes_dir_link",
+    .op = OP_UNLINK,
+    .path = "lnk",
+    .dir = "dir",
+    .link = "lnk",
+    .target = "dir",
+    .exists = "dir",
+    .not_exists = "lnk",
+  },
+  {
+    .name = "unlink_deletes_dangling_link",
+    .op = OP_UNLINK,
+    .path = "lnk",
+    .link = "lnk",
+    .target = "missing",
+    .not_exists = "lnk",
+  },
+  {
+    .name = "rmdir_refuses_file_link",
+    .op = OP_RMDIR,
+    .path = "lnk",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .file = "file.bin",
+    .link = "lnk",
+    .target = "file.bin",
+    .exists = "lnk",
+  },
+  {
+    .name = "rmdir_refuses_dir_link",
+    .op = OP_RMDIR,
+    .path = "lnk",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .dir = "dir",
+    .link = "lnk",
+    .target = "dir",
+    .exists = "lnk",
+  },
+  {
+    .name = "rmdir_refuses_dangling_link",
+    .op = OP_RMDIR,
+    .path = "lnk",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .link = "lnk",
+    .target = "missing",
+    .exists = "lnk",
+  },
+};
+
+// The trailing-slash matrix: every op against every kind of final component,
+// pinned to what the linux and mac kernels agree on. win32 currently strips
+// the separator for relative paths and passes it raw to NT for absolute ones,
+// so several rows fail there until the NT translation lands.
+//
+// Where the kernels disagree there is no contract to pin yet; measured:
+//
+//                    linux     mac                    win32 (today)
+//  unlink dir/       IS_DIR    ACCESS_DENIED          IS_DIR
+//  unlink filelink/  NOT_DIR   SP_OK, deletes target  SP_OK, deletes link
+//  unlink dirlink/   NOT_DIR   ACCESS_DENIED          IS_DIR
+//  unlink danglink/  NOT_DIR   NOT_FOUND              SP_OK, deletes link
+//  rmdir  dirlink/   NOT_DIR   SP_OK, deletes target  SP_OK, deletes link
+//  mkdir  danglink/  EXISTS    SP_OK, creates target  SP_OK, creates target
+//  stat   filelink/  NOT_DIR   SP_OK                  SP_OK
+//  lstat  filelink/  NOT_DIR   SP_OK                  SP_OK
+//
+// linux refuses to resolve a trailing-slash symlink and demands a directory;
+// mac resolves it fully and applies the op to the target.
+static const test_t slash_tests [] = {
+  {
+    .name = "unlink_slash_file",
+    .op = OP_UNLINK,
+    .path = "file.bin/",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .file = "file.bin",
+    .exists = "file.bin",
+  },
+  {
+    .name = "rmdir_slash_dir",
     .op = OP_RMDIR,
     .path = "dir/",
     .dir = "dir",
     .not_exists = "dir",
   },
   {
-    .name = "unlink_empty_path_refuses",
-    .op = OP_UNLINK,
-    .path = "",
+    .name = "rmdir_slash_file",
+    .op = OP_RMDIR,
+    .path = "file.bin/",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .file = "file.bin",
+    .exists = "file.bin",
+  },
+  {
+    .name = "rmdir_slash_file_link",
+    .op = OP_RMDIR,
+    .path = "lnk/",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .file = "file.bin",
+    .link = "lnk",
+    .target = "file.bin",
+    .exists = "lnk",
+  },
+  {
+    .name = "mkdir_slash_new_dir",
+    .op = OP_MKDIR,
+    .path = "newdir/",
+    .exists = "newdir",
+  },
+  {
+    .name = "stat_slash_file",
+    .op = OP_STAT,
+    .path = "file.bin/",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .file = "file.bin",
+  },
+  {
+    .name = "stat_slash_dir",
+    .op = OP_STAT,
+    .path = "dir/",
+    .dir = "dir",
+    .kind = SP_FS_KIND_DIR,
+  },
+  {
+    .name = "stat_slash_dir_link",
+    .op = OP_STAT,
+    .path = "lnk/",
+    .dir = "dir",
+    .link = "lnk",
+    .target = "dir",
+    .kind = SP_FS_KIND_DIR,
+  },
+  {
+    .name = "stat_slash_dangling_link",
+    .op = OP_STAT,
+    .path = "lnk/",
     .err = SP_ERR_SYS_NOT_FOUND,
+    .link = "lnk",
+    .target = "missing",
+  },
+  {
+    .name = "stat_slash_missing",
+    .op = OP_STAT,
+    .path = "missing/",
+    .err = SP_ERR_SYS_NOT_FOUND,
+  },
+  {
+    .name = "lstat_slash_file",
+    .op = OP_LSTAT,
+    .path = "file.bin/",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .file = "file.bin",
+  },
+  {
+    .name = "lstat_slash_dir",
+    .op = OP_LSTAT,
+    .path = "dir/",
+    .dir = "dir",
+    .kind = SP_FS_KIND_DIR,
+  },
+  {
+    .name = "lstat_slash_dir_link",
+    .op = OP_LSTAT,
+    .path = "lnk/",
+    .dir = "dir",
+    .link = "lnk",
+    .target = "dir",
+    .kind = SP_FS_KIND_DIR,
+  },
+  {
+    .name = "lstat_slash_dangling_link",
+    .op = OP_LSTAT,
+    .path = "lnk/",
+    .err = SP_ERR_SYS_NOT_FOUND,
+    .link = "lnk",
+    .target = "missing",
+  },
+  {
+    .name = "unlink_slash_file_abs",
+    .op = OP_UNLINK,
+    .path_kind = PATH_ABS,
+    .path = "file.bin/",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .file = "file.bin",
+    .exists = "file.bin",
+  },
+  {
+    .name = "rmdir_slash_dir_abs",
+    .op = OP_RMDIR,
+    .path_kind = PATH_ABS,
+    .path = "dir/",
+    .dir = "dir",
+    .not_exists = "dir",
+  },
+  {
+    .name = "mkdir_slash_new_dir_abs",
+    .op = OP_MKDIR,
+    .path_kind = PATH_ABS,
+    .path = "newdir/",
+    .exists = "newdir",
+  },
+  {
+    .name = "stat_slash_file_abs",
+    .op = OP_STAT,
+    .path_kind = PATH_ABS,
+    .path = "file.bin/",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .file = "file.bin",
+  },
+  {
+    .name = "lstat_slash_dir_link_abs",
+    .op = OP_LSTAT,
+    .path_kind = PATH_ABS,
+    .path = "lnk/",
+    .dir = "dir",
+    .link = "lnk",
+    .target = "dir",
+    .kind = SP_FS_KIND_DIR,
   },
 };
 
@@ -116,6 +318,24 @@ static sp_str_t long_path(sp_mem_t mem, const c8* name) {
   buf[SP_PATH_MAX - 1] = '/';
   buf[SP_PATH_MAX] = 'x';
   return sp_str(buf, SP_PATH_MAX + 1);
+}
+
+// Joined by hand because the trailing separator is the payload and a path
+// helper may normalize it away.
+static sp_str_t abs_path(sp_mem_t mem, sp_str_t sandbox, const c8* rel) {
+  u32 rel_len = sp_cstr_len(rel);
+  c8* buf = sp_alloc_n(mem, c8, sandbox.len + 1 + rel_len);
+  sp_mem_copy(buf, sandbox.data, sandbox.len);
+  buf[sandbox.len] = '/';
+  sp_mem_copy(buf + sandbox.len + 1, rel, rel_len);
+  return sp_str(buf, sandbox.len + 1 + rel_len);
+}
+
+// Via link metadata so a surviving symlink counts even when its target is
+// gone.
+static bool entry_exists(sp_sys_fd_t fd, const c8* name) {
+  sp_sys_file_meta_t meta = sp_zero;
+  return sp_sys_get_link_metadata_s(fd, sp_cstr_as_str(name), &meta) == SP_OK;
 }
 
 static bool check_err(sp_test_t* t, sp_err_t err, sp_err_t want) {
@@ -144,7 +364,9 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     }
   }
 
-  sp_str_t path = c->path_kind == PATH_LONG ? long_path(mem, c->path) : sp_cstr_as_str(c->path);
+  sp_str_t path = sp_cstr_as_str(c->path);
+  if (c->path_kind == PATH_LONG) path = long_path(mem, c->path);
+  if (c->path_kind == PATH_ABS)  path = abs_path(mem, sandbox, c->path);
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_err_t err = SP_OK;
@@ -160,10 +382,10 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     sp_test_fail(t, "kind {} but expected {}", sp_fmt_int(meta.kind), sp_fmt_int(c->kind));
   }
 
-  if (c->exists && !sp_fs_exists(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->exists)))) {
+  if (c->exists && !entry_exists(sandbox_fd, c->exists)) {
     sp_test_fail(t, "expected {} to survive", sp_fmt_cstr(c->exists));
   }
-  if (c->not_exists && sp_fs_exists(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->not_exists)))) {
+  if (c->not_exists && entry_exists(sandbox_fd, c->not_exists)) {
     sp_test_fail(t, "expected {} not to be created", sp_fmt_cstr(c->not_exists));
   }
 
@@ -172,6 +394,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 }
 
 sp_test_each_fn(sys, path, test_t, tests, run);
+sp_test_each_fn(sys, slash, test_t, slash_tests, run);
 
 sp_test(sys, canonicalize_refuses_overflow) {
   sp_mem_t mem = sp_test_arena(t);

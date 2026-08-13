@@ -32,6 +32,7 @@ typedef enum {
   SYS_STEP_OPEN_DIR,
   SYS_STEP_READ,
   SYS_STEP_WRITE,
+  SYS_STEP_PWRITE,
 } sys_step_kind_t;
 
 typedef struct {
@@ -41,6 +42,7 @@ typedef struct {
     struct { u32 slot; const c8* path; sp_err_t err; } open_dir;
     struct { u32 slot; u64 count; const c8* expect; sp_err_t err; } read;
     struct { u32 slot; const c8* data; sp_err_t err; } write;
+    struct { u32 slot; const c8* data; u64 offset; sp_err_t err; } pwrite;
   };
 } sys_step_t;
 

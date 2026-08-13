@@ -2,6 +2,12 @@
 name = "sp"
 version = "0.1.0"
 include = ["."]
+system_deps = [
+  { lib = "ws2_32", when = { os = "windows" } },
+  { lib = "crypt32", when = { os = "windows" } },
+  { lib = "advapi32", when = { os = "windows" } },
+  { lib = "bcrypt", when = { os = "windows" } },
+]
 
 [[test]]
 name = "amalgamation"
@@ -9,6 +15,7 @@ source = [
   "test/main.c",
   "test/test/*.c",
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
+  "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
@@ -29,6 +36,7 @@ name = "sys"
 source = [
   "test/main.c",
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
+  "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
@@ -51,6 +59,20 @@ source = ["test/main.c", "test/sync/*.c", "test/sync/os/*.c"]
 [[test]]
 name = "mem"
 source = ["test/main.c", "test/mem/uninitialized.c"]
+
+[[test]]
+name = "tls"
+source = [
+  "test/main.c",
+  "test/tls/*.c",
+  "tools/vendor/mbedtls/library/*.c",
+]
+include = ["tools/vendor/mbedtls/include", "tools/vendor/mbedtls/library"]
+define = [
+  "SP_TLS_WITH_MBEDTLS",
+  { value = "SP_TLS_MACOS_SECTRUST", when = { os = "macos" } },
+]
+macos = { frameworks = ["Security", "CoreFoundation"] }
 
 [[bin]]
 name = "zero_copy"

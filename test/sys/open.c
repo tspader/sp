@@ -26,7 +26,7 @@ static const sys_case_t sys_open_cases [] = {
     },
     .steps = {
       { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin" } },
-      { .kind = SYS_STEP_WRITE, .write = { .data = "B", .err = SP_ERR_SYS_ACCESS_DENIED } },
+      { .kind = SYS_STEP_WRITE, .write = { .data = "B", .err = SP_ERR_SYS_BAD_FD } },
     },
     .expect = {
       { .path = "file.bin", .exists = true, .content = "A" },
@@ -39,7 +39,7 @@ static const sys_case_t sys_open_cases [] = {
     },
     .steps = {
       { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO } },
-      { .kind = SYS_STEP_READ, .read = { .count = 1, .err = SP_ERR_SYS_ACCESS_DENIED } },
+      { .kind = SYS_STEP_READ, .read = { .count = 1, .err = SP_ERR_SYS_BAD_FD } },
     },
   },
   {
@@ -191,6 +191,49 @@ static const sys_case_t sys_open_cases [] = {
     .steps = {
       { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_APPEND } },
       { .kind = SYS_STEP_WRITE, .write = { .data = "A" } },
+    },
+    .expect = {
+      { .path = "file.bin", .exists = true, .content = "A" },
+    },
+  },
+  {
+    // NT cannot truncate through an append-only handle, so the combination
+    // is rejected everywhere.
+    .name = "append_truncate_rejected",
+    .setup = {
+      { .path = "file.bin", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_APPEND | SP_SYS_OPEN_TRUNCATE, .err = SP_ERR_SYS_INVALID } },
+    },
+    .expect = {
+      { .path = "file.bin", .exists = true, .content = "A" },
+    },
+  },
+  {
+    // POSIX leaves RO|TRUNCATE undefined (linux truncates, NT errors), so the
+    // combination is rejected everywhere.
+    .name = "ro_truncate_rejected",
+    .setup = {
+      { .path = "file.bin", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_RO, .flags = SP_SYS_OPEN_TRUNCATE, .err = SP_ERR_SYS_INVALID } },
+    },
+    .expect = {
+      { .path = "file.bin", .exists = true, .content = "A" },
+    },
+  },
+  {
+    // 2^64 - 1 is WriteFile's write-to-EOF sentinel; POSIX rejects it as a
+    // negative offset. The sentinel must not leak through as silent append.
+    .name = "pwrite_refuses_max_offset",
+    .setup = {
+      { .path = "file.bin", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO } },
+      { .kind = SYS_STEP_PWRITE, .pwrite = { .data = "B", .offset = (u64)-1, .err = SP_ERR_SYS_INVALID } },
     },
     .expect = {
       { .path = "file.bin", .exists = true, .content = "A" },
