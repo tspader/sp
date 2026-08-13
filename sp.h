@@ -4338,6 +4338,11 @@ typedef struct {
   X(sp_nt_status_t, NtFsControlFile,                         (void*, void*, void*, void*, sp_nt_io_status_block_t*, u32, void*, u32, void*, u32)) \
   X(sp_nt_status_t, NtCreateNamedPipeFile,                   (void**, u32, sp_nt_object_attributes_t*, sp_nt_io_status_block_t*, u32, u32, u32, u32, u32, u32, u32, u32, u32, s64*)) \
   X(sp_nt_status_t, NtOpenFile,                              (void**, u32, sp_nt_object_attributes_t*, sp_nt_io_status_block_t*, u32, u32)) \
+  X(sp_nt_status_t, NtReadFile,                              (void*, void*, void*, void*, sp_nt_io_status_block_t*, void*, u32, s64*, u32*)) \
+  X(sp_nt_status_t, NtWriteFile,                             (void*, void*, void*, void*, sp_nt_io_status_block_t*, const void*, u32, s64*, u32*)) \
+  X(sp_nt_status_t, NtQueryInformationFile,                  (void*, sp_nt_io_status_block_t*, void*, u32, u32)) \
+  X(sp_nt_status_t, NtQueryVolumeInformationFile,            (void*, sp_nt_io_status_block_t*, void*, u32, u32)) \
+  X(sp_nt_status_t, NtWaitForSingleObject,                   (void*, u8, s64*)) \
   X(sp_nt_status_t, RtlWaitOnAddress,                        (volatile void*, void*, size_t, s64*)) \
   X(void,           RtlWakeAddressSingle,                    (void*)) \
   X(void,           RtlWakeAddressAll,                       (void*))
@@ -5400,14 +5405,24 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_STATUS_INVALID_DEVICE_REQUEST ((sp_nt_status_t)0xC0000010)
 #define SP_NT_STATUS_NO_SUCH_FILE          ((sp_nt_status_t)0xC000000F)
 #define SP_NT_STATUS_NO_MORE_FILES         ((sp_nt_status_t)0x80000006)
+#define SP_NT_STATUS_PENDING               ((sp_nt_status_t)0x00000103)
+#define SP_NT_STATUS_END_OF_FILE           ((sp_nt_status_t)0xC0000011)
+#define SP_NT_STATUS_PIPE_CLOSING          ((sp_nt_status_t)0xC00000B1)
+#define SP_NT_STATUS_PIPE_BROKEN           ((sp_nt_status_t)0xC000014B)
 
 #define SP_NT_FILE_DIRECTORY_INFORMATION  1
 #define SP_NT_FILE_BASIC_INFORMATION      4
 #define SP_NT_FILE_RENAME_INFORMATION    10
 #define SP_NT_FILE_DISPOSITION_INFORMATION 13
+#define SP_NT_FILE_POSITION_INFORMATION  14
 #define SP_NT_FILE_LINK_INFORMATION      11
 #define SP_NT_FILE_DISPOSITION_INFORMATION_EX 64
 #define SP_NT_FILE_RENAME_INFORMATION_EX      65
+
+#define SP_NT_FILE_FS_DEVICE_INFORMATION 4
+
+#define SP_NT_FILE_DEVICE_CD_ROM              0x00000002
+#define SP_NT_FILE_DEVICE_DISK                0x00000007
 
 #define SP_NT_FILE_DISPOSITION_DELETE                    0x00000001
 #define SP_NT_FILE_DISPOSITION_POSIX_SEMANTICS           0x00000002
@@ -5433,6 +5448,15 @@ typedef struct {
   u32 FileAttributes;
   u32 Reserved;
 } sp_nt_file_basic_information_t;
+
+typedef struct {
+  s64 CurrentByteOffset;
+} sp_nt_file_position_information_t;
+
+typedef struct {
+  u32 DeviceType;
+  u32 Characteristics;
+} sp_nt_file_fs_device_information_t;
 
 typedef struct {
   u32 NextEntryOffset;
@@ -6891,6 +6915,8 @@ SP_PRIVATE sp_err_t sp_sys_err_from_nt(sp_nt_status_t status) {
     case SP_NT_STATUS_NOT_SAME_DEVICE:        return SP_ERR_SYS_CROSS_DEVICE;
     case SP_NT_STATUS_NOT_SUPPORTED:          return SP_ERR_SYS_UNSUPPORTED;
     case SP_NT_STATUS_INVALID_HANDLE:         return SP_ERR_SYS_BAD_FD;
+    case SP_NT_STATUS_PIPE_CLOSING:
+    case SP_NT_STATUS_PIPE_BROKEN:            return SP_ERR_SYS_BROKEN_PIPE;
     case SP_NT_STATUS_INVALID_PARAMETER:
     case SP_NT_STATUS_OBJECT_PATH_SYNTAX_BAD: sp_unreachable_return(SP_ERR_SYS_BUG);
     default:                                  return SP_ERR_SYS;
@@ -7598,14 +7624,18 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   if (bytes_read) *bytes_read = 0;
 
 #if defined(SP_WIN32)
-  DWORD n = 0;
-  if (!ReadFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) {
-    DWORD err = GetLastError();
-    if (err == ERROR_BROKEN_PIPE) return SP_OK;
-    if (err == ERROR_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
-    return sp_sys_err_from_win32(err);
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtReadFile)((void*)fd, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb, buf, sp_sys_win32_io_count(count), SP_NULLPTR, SP_NULLPTR);
+  if (status == SP_NT_STATUS_PENDING) {
+    sp_nt_status_t wait = SP_NT(NtWaitForSingleObject)((void*)fd, 0, SP_NULLPTR);
+    status = SP_NT_SUCCESS(wait) ? iosb.Status : wait;
   }
-  if (bytes_read) *bytes_read = (u64)n;
+  if (!SP_NT_SUCCESS(status)) {
+    if (status == SP_NT_STATUS_END_OF_FILE || status == SP_NT_STATUS_PIPE_BROKEN) return SP_OK;
+    if (status == SP_NT_STATUS_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
+    return sp_sys_err_from_nt(status);
+  }
+  if (bytes_read) *bytes_read = (u64)iosb.Information;
   return SP_OK;
 
 #elif defined(SP_LINUX)
@@ -7644,14 +7674,17 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
   if (bytes_written) *bytes_written = 0;
 
 #if defined(SP_WIN32)
-  DWORD n = 0;
-  if (!WriteFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) {
-    DWORD err = GetLastError();
-    if (err == ERROR_NO_DATA) return SP_ERR_SYS_BROKEN_PIPE;
-    if (err == ERROR_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
-    return sp_sys_err_from_win32(err);
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtWriteFile)((void*)fd, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb, buf, sp_sys_win32_io_count(count), SP_NULLPTR, SP_NULLPTR);
+  if (status == SP_NT_STATUS_PENDING) {
+    sp_nt_status_t wait = SP_NT(NtWaitForSingleObject)((void*)fd, 0, SP_NULLPTR);
+    status = SP_NT_SUCCESS(wait) ? iosb.Status : wait;
   }
-  if (bytes_written) *bytes_written = (u64)n;
+  if (!SP_NT_SUCCESS(status)) {
+    if (status == SP_NT_STATUS_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
+    return sp_sys_err_from_nt(status);
+  }
+  if (bytes_written) *bytes_written = (u64)iosb.Information;
   return SP_OK;
 
 #elif defined(SP_LINUX)
@@ -7685,30 +7718,52 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
 ///////////////////
 // SP_SYS_PREAD //
 ///////////////////
+#if defined(SP_WIN32)
+SP_PRIVATE sp_err_t sp_sys_win32_positional_begin(sp_sys_fd_t fd, sp_nt_file_position_information_t* saved) {
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_file_fs_device_information_t dev = sp_zero;
+  sp_nt_status_t status = SP_NT(NtQueryVolumeInformationFile)((void*)fd, &iosb, &dev, sizeof(dev), SP_NT_FILE_FS_DEVICE_INFORMATION);
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  switch (dev.DeviceType) {
+    case SP_NT_FILE_DEVICE_CD_ROM:
+    case SP_NT_FILE_DEVICE_DISK:
+      break;
+    default:
+      return SP_ERR_SYS_UNSEEKABLE;
+  }
+
+  status = SP_NT(NtQueryInformationFile)((void*)fd, &iosb, saved, sizeof(*saved), SP_NT_FILE_POSITION_INFORMATION);
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+  return SP_OK;
+}
+#endif
+
 sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* bytes_read) {
   if (bytes_read) *bytes_read = 0;
+  if (offset > (u64)SP_LIMIT_S64_MAX) return SP_ERR_SYS_INVALID;
 
 #if defined(SP_WIN32)
-  OVERLAPPED ov = sp_zero;
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFFu);
-  ov.OffsetHigh = (DWORD)(offset >> 32);
+  sp_nt_file_position_information_t saved = sp_zero;
+  sp_try(sp_sys_win32_positional_begin(fd, &saved));
 
-  LARGE_INTEGER zero = { .QuadPart = 0 };
-  LARGE_INTEGER saved = sp_zero;
-  bool restore = SetFilePointerEx((HANDLE)fd, zero, &saved, FILE_CURRENT);
-
-  DWORD n = 0;
-  BOOL ok = ReadFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, &ov);
-  DWORD err = ok ? 0 : GetLastError();
-
-  if (restore) SetFilePointerEx((HANDLE)fd, saved, SP_NULLPTR, FILE_BEGIN);
-
-  if (!ok) {
-    if (err == ERROR_BROKEN_PIPE || err == ERROR_HANDLE_EOF) return SP_OK;
-    if (err == ERROR_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
-    return sp_sys_err_from_win32(err);
+  s64 off = (s64)offset;
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtReadFile)((void*)fd, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb, buf, sp_sys_win32_io_count(count), &off, SP_NULLPTR);
+  if (status == SP_NT_STATUS_PENDING) {
+    sp_nt_status_t wait = SP_NT(NtWaitForSingleObject)((void*)fd, 0, SP_NULLPTR);
+    status = SP_NT_SUCCESS(wait) ? iosb.Status : wait;
   }
-  if (bytes_read) *bytes_read = (u64)n;
+
+  sp_nt_io_status_block_t riosb = sp_zero;
+  SP_NT(NtSetInformationFile)((void*)fd, &riosb, &saved, sizeof(saved), SP_NT_FILE_POSITION_INFORMATION);
+
+  if (!SP_NT_SUCCESS(status)) {
+    if (status == SP_NT_STATUS_END_OF_FILE) return SP_OK;
+    if (status == SP_NT_STATUS_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
+    return sp_sys_err_from_nt(status);
+  }
+  if (bytes_read) *bytes_read = (u64)iosb.Information;
   return SP_OK;
 
 #elif defined(SP_LINUX)
@@ -7744,27 +7799,28 @@ sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* b
 ////////////////////
 sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset, u64* bytes_written) {
   if (bytes_written) *bytes_written = 0;
+  if (offset > (u64)SP_LIMIT_S64_MAX) return SP_ERR_SYS_INVALID;
 
 #if defined(SP_WIN32)
-  OVERLAPPED ov = sp_zero;
-  ov.Offset = (DWORD)(offset & 0xFFFFFFFFu);
-  ov.OffsetHigh = (DWORD)(offset >> 32);
+  sp_nt_file_position_information_t saved = sp_zero;
+  sp_try(sp_sys_win32_positional_begin(fd, &saved));
 
-  LARGE_INTEGER zero = { .QuadPart = 0 };
-  LARGE_INTEGER saved = sp_zero;
-  bool restore = SetFilePointerEx((HANDLE)fd, zero, &saved, FILE_CURRENT);
-
-  DWORD n = 0;
-  BOOL ok = WriteFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, &ov);
-  DWORD err = ok ? 0 : GetLastError();
-
-  if (restore) SetFilePointerEx((HANDLE)fd, saved, SP_NULLPTR, FILE_BEGIN);
-
-  if (!ok) {
-    if (err == ERROR_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
-    return sp_sys_err_from_win32(err);
+  s64 off = (s64)offset;
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtWriteFile)((void*)fd, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb, buf, sp_sys_win32_io_count(count), &off, SP_NULLPTR);
+  if (status == SP_NT_STATUS_PENDING) {
+    sp_nt_status_t wait = SP_NT(NtWaitForSingleObject)((void*)fd, 0, SP_NULLPTR);
+    status = SP_NT_SUCCESS(wait) ? iosb.Status : wait;
   }
-  if (bytes_written) *bytes_written = (u64)n;
+
+  sp_nt_io_status_block_t riosb = sp_zero;
+  SP_NT(NtSetInformationFile)((void*)fd, &riosb, &saved, sizeof(saved), SP_NT_FILE_POSITION_INFORMATION);
+
+  if (!SP_NT_SUCCESS(status)) {
+    if (status == SP_NT_STATUS_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
+    return sp_sys_err_from_nt(status);
+  }
+  if (bytes_written) *bytes_written = (u64)iosb.Information;
   return SP_OK;
 
 #elif defined(SP_LINUX)
@@ -8170,8 +8226,21 @@ sp_err_t sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem
 #if defined(SP_WIN32)
   (void)rem;
   u64 ns = (u64)req->tv_sec * SP_TM_S_TO_NS + (u64)req->tv_nsec;
-  Sleep((DWORD)(ns / SP_TM_MS_TO_NS));
-  return SP_OK;
+  if (!ns) return SP_OK;
+
+  LARGE_INTEGER freq, start;
+  QueryPerformanceFrequency(&freq);
+  QueryPerformanceCounter(&start);
+  while (true) {
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    u64 ticks = (u64)(now.QuadPart - start.QuadPart);
+    u64 f = (u64)freq.QuadPart;
+    u64 elapsed_ns = (ticks / f) * SP_TM_S_TO_NS + ((ticks % f) * SP_TM_S_TO_NS) / f;
+    if (elapsed_ns >= ns) return SP_OK;
+    u64 remaining_ms = (ns - elapsed_ns) / SP_TM_MS_TO_NS;
+    Sleep(remaining_ms ? (DWORD)sp_min(remaining_ms, (u64)0xFFFFFFFE) : 1);
+  }
 
 #elif defined(SP_LINUX)
   sp_sys_timespec_t remaining = sp_zero;
