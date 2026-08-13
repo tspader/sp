@@ -3,6 +3,13 @@
 
 #if !defined(SP_WASM)
 
+#if defined(SP_POSIX)
+  #include <signal.h>
+  #include <sys/socket.h>
+  #include <sys/wait.h>
+  #include <unistd.h>
+#endif
+
 #define LISTEN_MAX_STEPS 4
 
 typedef enum {
@@ -103,5 +110,48 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 }
 
 sp_test_each_fn(sys, socket_listen, test_t, tests, run);
+
+// Imperative: the expected failure mode is an infinite retry loop, so the
+// accept needs a sacrificial process and a deadline. The datagram socket is
+// made with raw socket() because sp_sys only opens stream sockets.
+sp_test(sys, socket_accept_refuses_non_stream) {
+#if defined(SP_POSIX)
+  s32 raw = socket(AF_INET, SOCK_DGRAM, 0);
+  if (raw < 0) return sp_test_skip(t, "no datagram sockets");
+
+  pid_t pid = fork();
+  if (pid < 0) {
+    close(raw);
+    return sp_test_skip(t, "fork not available");
+  }
+  if (pid == 0) {
+    sp_sys_socket_t out = SP_SYS_INVALID_SOCKET;
+    sp_sys_handle_desc_t desc = sp_zero;
+    _exit(sp_sys_socket_accept((sp_sys_socket_t)raw, desc, &out) == SP_ERR_SYS_UNSUPPORTED ? 0 : 1);
+  }
+
+  s32 status = 0;
+  sp_err_t result = SP_OK;
+  sp_for(it, 100) {
+    if (waitpid(pid, &status, WNOHANG) == pid) {
+      if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        sp_test_fail(t, "accept did not return UNSUPPORTED");
+      }
+      goto done;
+    }
+    sp_os_sleep_ms(5);
+  }
+
+  sp_test_fail(t, "accept spun on a non-stream socket");
+  kill(pid, SIGKILL);
+  waitpid(pid, &status, 0);
+
+done:
+  close(raw);
+  return result;
+#else
+  return sp_test_skip(t, "no raw sockets");
+#endif
+}
 
 #endif

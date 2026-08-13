@@ -11,6 +11,8 @@ typedef enum {
   STEP_WRITE,
   STEP_READ,
   STEP_READY,
+  STEP_PREAD,
+  STEP_PWRITE,
   STEP_CLOSE_R,
   STEP_CLOSE_W,
 } step_kind_t;
@@ -21,6 +23,8 @@ typedef struct {
     struct { const c8* data; sp_err_t err; } write;
     struct { const c8* expect; sp_err_t err; } read;
     struct { u8 expect; } ready;
+    struct { u64 offset; sp_err_t err; } pread;
+    struct { const c8* data; u64 offset; sp_err_t err; } pwrite;
   };
 } step_t;
 
@@ -36,6 +40,21 @@ static const test_t tests [] = {
     .steps = {
       { .kind = STEP_WRITE, .write = { .data = "A" } },
       { .kind = STEP_READ, .read = { .expect = "A" } },
+    },
+  },
+  {
+    // Primed with data so an implementation that honors the offset consumes
+    // stream bytes instead of blocking.
+    .name = "pread_refuses_positioned_read",
+    .steps = {
+      { .kind = STEP_WRITE, .write = { .data = "AB" } },
+      { .kind = STEP_PREAD, .pread = { .err = SP_ERR_SYS_UNSEEKABLE } },
+    },
+  },
+  {
+    .name = "pwrite_refuses_positioned_write",
+    .steps = {
+      { .kind = STEP_PWRITE, .pwrite = { .data = "A", .err = SP_ERR_SYS_UNSEEKABLE } },
     },
   },
   {
@@ -85,6 +104,8 @@ static const c8* step_name(step_kind_t kind) {
     case STEP_WRITE:   return "write";
     case STEP_READ:    return "read";
     case STEP_READY:   return "ready";
+    case STEP_PREAD:   return "pread";
+    case STEP_PWRITE:  return "pwrite";
     case STEP_CLOSE_R: return "close_r";
     case STEP_CLOSE_W: return "close_w";
   }
@@ -152,6 +173,17 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
         u8 ready = 0;
         sp_expect_ok(t, sp_sys_pipe_ready(r, &ready));
         sp_expect_eq(t, ready, step->ready.expect);
+        break;
+      }
+      case STEP_PREAD: {
+        c8 buf [PIPE_BUF_SIZE] = sp_zero;
+        u64 n = 0;
+        sp_expect_err_eq(t, sp_sys_pread(r, buf, 1, step->pread.offset, &n), step->pread.err);
+        break;
+      }
+      case STEP_PWRITE: {
+        u64 n = 0;
+        sp_expect_err_eq(t, sp_sys_pwrite(w, step->pwrite.data, sp_cstr_len(step->pwrite.data), step->pwrite.offset, &n), step->pwrite.err);
         break;
       }
       case STEP_CLOSE_R: {

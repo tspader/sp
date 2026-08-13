@@ -5132,6 +5132,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_PIPE2             293
   #define SP_SYSCALL_NUM_INOTIFY_INIT1     294
   #define SP_SYSCALL_NUM_PERF_EVENT_OPEN   298
+  #define SP_SYSCALL_NUM_STATX             332
 
 #elif defined(SP_ARM64)
   #define SP_SYSCALL_NUM_GETCWD            17
@@ -5194,6 +5195,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_GETSOCKOPT        209
   #define SP_SYSCALL_NUM_ACCEPT4           242
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   285
+  #define SP_SYSCALL_NUM_STATX             291
   #define SP_SYSCALL_NUM_OPEN              SP_SYSCALL_NUM_OPENAT
   #define SP_SYSCALL_NUM_STAT              SP_SYSCALL_NUM_NEWFSTATAT
   #define SP_SYSCALL_NUM_LSTAT             SP_SYSCALL_NUM_NEWFSTATAT
@@ -5224,6 +5226,9 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 #elif defined(SP_ARM64)
   #define SP_SYS_LINUX_O_DIRECTORY 040000
 #endif
+
+#define SP_SYS_LINUX_STATX_BASIC_STATS 0x7ff
+#define SP_SYS_LINUX_STATX_BTIME       0x800
 
 #define SP_SYS_LINUX_FUTEX_WAIT         0
 #define SP_SYS_LINUX_FUTEX_WAKE         1
@@ -5278,52 +5283,6 @@ typedef struct {
   u32 _c_ispeed;
   u32 _c_ospeed;
 } sp_sys_termios_t;
-
-#if defined(SP_AMD64)
-  typedef struct {
-    u64 st_dev;
-    u64 st_ino;
-    u64 st_nlink;
-    u32 st_mode;
-    u32 st_uid;
-    u32 st_gid;
-    u32 __pad0;
-    u64 st_rdev;
-    s64 st_size;
-    s64 st_blksize;
-    s64 st_blocks;
-    u64 st_atime_sec;
-    u64 st_atime_nsec;
-    u64 st_mtime_sec;
-    u64 st_mtime_nsec;
-    u64 st_ctime_sec;
-    u64 st_ctime_nsec;
-    s64 __unused[3];
-  } sp_sys_linux_stat_t;
-
-#elif defined(SP_ARM64)
-  typedef struct {
-    u64 st_dev;
-    u64 st_ino;
-    u32 st_mode;
-    u32 st_nlink;
-    u32 st_uid;
-    u32 st_gid;
-    u64 st_rdev;
-    u64 __pad;
-    s64  st_size;
-    s32  st_blksize;
-    s32  __pad2;
-    s64  st_blocks;
-    u64 st_atime_sec;
-    u64 st_atime_nsec;
-    u64 st_mtime_sec;
-    u64 st_mtime_nsec;
-    u64 st_ctime_sec;
-    u64 st_ctime_nsec;
-    u32 padding [2];
-  } sp_sys_linux_stat_t;
-#endif
 
 typedef struct {
   u16 family;
@@ -6464,23 +6423,60 @@ s32 sp_syscall_wait4(s32 pid, s32* status, s32 options, void* rusage) {
   return (s32)sp_syscall(SP_SYSCALL_NUM_WAIT4, pid, status, options, rusage);
 }
 
-static void sp_sys_file_meta_from_linux(const sp_sys_linux_stat_t* raw, sp_sys_file_meta_t* out) {
-  if      (SP_S_ISLNK(raw->st_mode)) out->kind = SP_FS_KIND_SYMLINK;
-  else if (SP_S_ISDIR(raw->st_mode)) out->kind = SP_FS_KIND_DIR;
-  else if (SP_S_ISREG(raw->st_mode)) out->kind = SP_FS_KIND_FILE;
-  else                               out->kind = SP_FS_KIND_NONE;
+typedef struct {
+  s64 tv_sec;
+  u32 tv_nsec;
+  s32 reserved;
+} sp_sys_linux_statx_timestamp_t;
 
-  out->size             = raw->st_size;
-  out->atime.tv_sec     = (s64)raw->st_atime_sec;
-  out->atime.tv_nsec    = (s64)raw->st_atime_nsec;
-  out->mtime.tv_sec     = (s64)raw->st_mtime_sec;
-  out->mtime.tv_nsec    = (s64)raw->st_mtime_nsec;
-  out->btime.tv_sec     = (s64)raw->st_ctime_sec;
-  out->btime.tv_nsec    = (s64)raw->st_ctime_nsec;
-  out->id               = raw->st_ino;
-  out->device           = raw->st_dev;
-  out->nlink            = raw->st_nlink;
-  out->raw_attrs        = raw->st_mode;
+typedef struct {
+  u32 stx_mask;
+  u32 stx_blksize;
+  u64 stx_attributes;
+  u32 stx_nlink;
+  u32 stx_uid;
+  u32 stx_gid;
+  u16 stx_mode;
+  u16 spare0;
+  u64 stx_ino;
+  u64 stx_size;
+  u64 stx_blocks;
+  u64 stx_attributes_mask;
+  sp_sys_linux_statx_timestamp_t stx_atime;
+  sp_sys_linux_statx_timestamp_t stx_btime;
+  sp_sys_linux_statx_timestamp_t stx_ctime;
+  sp_sys_linux_statx_timestamp_t stx_mtime;
+  u32 stx_rdev_major;
+  u32 stx_rdev_minor;
+  u32 stx_dev_major;
+  u32 stx_dev_minor;
+  u64 stx_mnt_id;
+  u32 stx_dio_mem_align;
+  u32 stx_dio_offset_align;
+  u64 spare3 [12];
+} sp_sys_linux_statx_t;
+
+static void sp_sys_file_meta_from_statx(const sp_sys_linux_statx_t* raw, sp_sys_file_meta_t* out) {
+  if      (SP_S_ISLNK(raw->stx_mode)) out->kind = SP_FS_KIND_SYMLINK;
+  else if (SP_S_ISDIR(raw->stx_mode)) out->kind = SP_FS_KIND_DIR;
+  else if (SP_S_ISREG(raw->stx_mode)) out->kind = SP_FS_KIND_FILE;
+  else                                out->kind = SP_FS_KIND_NONE;
+
+  out->size          = (s64)raw->stx_size;
+  out->atime.tv_sec  = raw->stx_atime.tv_sec;
+  out->atime.tv_nsec = (s64)raw->stx_atime.tv_nsec;
+  out->mtime.tv_sec  = raw->stx_mtime.tv_sec;
+  out->mtime.tv_nsec = (s64)raw->stx_mtime.tv_nsec;
+  // Zero when the filesystem has no birth time; never another timestamp.
+  out->btime = sp_zero_s(sp_sys_timespec_t);
+  if (raw->stx_mask & SP_SYS_LINUX_STATX_BTIME) {
+    out->btime.tv_sec  = raw->stx_btime.tv_sec;
+    out->btime.tv_nsec = (s64)raw->stx_btime.tv_nsec;
+  }
+  out->id        = raw->stx_ino;
+  out->device    = ((u64)raw->stx_dev_major << 32) | raw->stx_dev_minor;
+  out->nlink     = raw->stx_nlink;
+  out->raw_attrs = raw->stx_mode;
 }
 
 s64 sp_lx_getdents64(s32 fd, void* buf, u64 count) {
@@ -6521,7 +6517,8 @@ static void sp_sys_file_meta_from_libc(const struct stat* src, sp_sys_file_meta_
   out->atime.tv_nsec = (s64)src->st_atim.tv_nsec;
   out->mtime.tv_sec  = (s64)src->st_mtim.tv_sec;
   out->mtime.tv_nsec = (s64)src->st_mtim.tv_nsec;
-  out->btime         = out->mtime;
+  // No birth time on cosmo; absent is zero, not a copy of another timestamp.
+  out->btime         = sp_zero_s(sp_sys_timespec_t);
 #endif
 }
 
@@ -6893,9 +6890,9 @@ SP_PRIVATE sp_err_t sp_sys_err_from_nt(sp_nt_status_t status) {
     case SP_NT_STATUS_DIRECTORY_NOT_EMPTY:    return SP_ERR_SYS_NOT_EMPTY;
     case SP_NT_STATUS_NOT_SAME_DEVICE:        return SP_ERR_SYS_CROSS_DEVICE;
     case SP_NT_STATUS_NOT_SUPPORTED:          return SP_ERR_SYS_UNSUPPORTED;
+    case SP_NT_STATUS_INVALID_HANDLE:         return SP_ERR_SYS_BAD_FD;
     case SP_NT_STATUS_INVALID_PARAMETER:
-    case SP_NT_STATUS_OBJECT_PATH_SYNTAX_BAD:
-    case SP_NT_STATUS_INVALID_HANDLE:         sp_unreachable_return(SP_ERR_SYS_BUG);
+    case SP_NT_STATUS_OBJECT_PATH_SYNTAX_BAD: sp_unreachable_return(SP_ERR_SYS_BUG);
     default:                                  return SP_ERR_SYS;
   }
 }
@@ -6937,17 +6934,40 @@ SP_PRIVATE bool sp_sys_nt_needs_legacy_info(sp_nt_status_t status) {
     status == SP_NT_STATUS_NOT_SUPPORTED;
 }
 
-SP_PRIVATE sp_err_t sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, u32 options) {
+SP_PRIVATE sp_err_t sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, bool dir) {
+  // We have to conform to the lowest common denominator, which in this case
+  // is POSIX. That means that unlink() is for everything except directories,
+  // and rmdir is only for directories.
+  u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT;
+  if (dir) options |= SP_NT_FILE_DIRECTORY_FILE;
+
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(fd, path,
-    DELETE | SYNCHRONIZE,
+    DELETE | SYNCHRONIZE | FILE_READ_ATTRIBUTES,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     SP_NT_FILE_OPEN,
-    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT | options,
+    options,
     0,
     &handle
   );
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  BY_HANDLE_FILE_INFORMATION info = sp_zero;
+  if (!GetFileInformationByHandle((HANDLE)handle, &info)) {
+    sp_err_t err = sp_sys_err_from_win32(GetLastError());
+    sp_sys_nt_close(handle);
+    return err;
+  }
+  bool reparse = info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT;
+  bool directory = (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !reparse;
+  if (dir && reparse) {
+    sp_sys_nt_close(handle);
+    return SP_ERR_SYS_NOT_DIR;
+  }
+  if (!dir && directory) {
+    sp_sys_nt_close(handle);
+    return SP_ERR_SYS_IS_DIR;
+  }
 
   // IGNORE_READONLY_ATTRIBUTE is needed because NT refuses to set the delete
   // disposition on a read-only file; this comes from DOS? Either way, this
@@ -7133,28 +7153,25 @@ sp_err_t sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  sp_sys_linux_stat_t st = sp_zero;
-  switch (sp_syscall_r(SP_SYSCALL_NUM_FSTAT, fd, &st)) {
-    case SP_EOK: break;
-    case SP_ENOMEM: return SP_ERR_SYS_NO_MEMORY;
-    case SP_EBADF:
-    case SP_EFAULT:
-    case SP_EINVAL: sp_unreachable_return(SP_ERR_SYS_BUG);
-    default: return SP_ERR_SYS;
+  sp_sys_linux_statx_t stx = sp_zero;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_STATX, fd, "", SP_AT_EMPTY_PATH, SP_SYS_LINUX_STATX_BASIC_STATS | SP_SYS_LINUX_STATX_BTIME, &stx);
+  if (rc < 0) {
+    switch (-rc) {
+      case SP_EFAULT:
+      case SP_EINVAL: sp_unreachable_return(SP_ERR_SYS_BUG);
+      default: return sp_sys_err_from_errno(-rc);
+    }
   }
-
-  sp_sys_file_meta_from_linux(&st, meta);
+  sp_sys_file_meta_from_statx(&stx, meta);
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct stat native;
   if (fstat(fd, &native)) {
     switch (errno) {
-      case ENOMEM: return SP_ERR_SYS_NO_MEMORY;
-      case EBADF:
       case EFAULT:
       case EINVAL: sp_unreachable_return(SP_ERR_SYS_BUG);
-      default:     return SP_ERR_SYS;
+      default:     return sp_sys_err_from_errno(errno);
     }
   }
   sp_sys_file_meta_from_libc(&native, meta);
@@ -7585,6 +7602,7 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   if (!ReadFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) {
     DWORD err = GetLastError();
     if (err == ERROR_BROKEN_PIPE) return SP_OK;
+    if (err == ERROR_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
     return sp_sys_err_from_win32(err);
   }
   if (bytes_read) *bytes_read = (u64)n;
@@ -7592,13 +7610,7 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_READ, fd, buf, count);
-  if (sp_sys_is_err(rc)) {
-    s64 err = -rc;
-    switch (err) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(err);
-    }
-  }
+  if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
 
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
@@ -7608,12 +7620,7 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   do {
     rc = read(fd, buf, sp_sys_posix_io_count(count));
   } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) {
-    switch (errno) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(errno);
-    }
-  }
+  if (rc < 0) return sp_sys_err_from_errno(errno);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -7641,6 +7648,7 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
   if (!WriteFile((HANDLE)fd, buf, sp_sys_win32_io_count(count), &n, SP_NULLPTR)) {
     DWORD err = GetLastError();
     if (err == ERROR_NO_DATA) return SP_ERR_SYS_BROKEN_PIPE;
+    if (err == ERROR_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
     return sp_sys_err_from_win32(err);
   }
   if (bytes_written) *bytes_written = (u64)n;
@@ -7648,13 +7656,7 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_WRITE, fd, buf, count);
-  if (sp_sys_is_err(rc)) {
-    s64 err = -rc;
-    switch (err) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(err);
-    }
-  }
+  if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -7663,12 +7665,7 @@ sp_err_t sp_sys_write_p(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_w
   do {
     rc = write(fd, buf, sp_sys_posix_io_count(count));
   } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) {
-    switch (errno) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(errno);
-    }
-  }
+  if (rc < 0) return sp_sys_err_from_errno(errno);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -7708,6 +7705,7 @@ sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* b
 
   if (!ok) {
     if (err == ERROR_BROKEN_PIPE || err == ERROR_HANDLE_EOF) return SP_OK;
+    if (err == ERROR_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
     return sp_sys_err_from_win32(err);
   }
   if (bytes_read) *bytes_read = (u64)n;
@@ -7715,13 +7713,7 @@ sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* b
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_PREAD64, fd, buf, count, offset);
-  if (sp_sys_is_err(rc)) {
-    s64 err = -rc;
-    switch (err) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(err);
-    }
-  }
+  if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -7730,12 +7722,7 @@ sp_err_t sp_sys_pread_p(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* b
   do {
     rc = pread(fd, buf, sp_sys_posix_io_count(count), (off_t)offset);
   } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) {
-    switch (errno) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(errno);
-    }
-  }
+  if (rc < 0) return sp_sys_err_from_errno(errno);
   if (bytes_read) *bytes_read = (u64)rc;
   return SP_OK;
 
@@ -7773,19 +7760,16 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
 
   if (restore) SetFilePointerEx((HANDLE)fd, saved, SP_NULLPTR, FILE_BEGIN);
 
-  if (!ok) return sp_sys_err_from_win32(err);
+  if (!ok) {
+    if (err == ERROR_ACCESS_DENIED) return SP_ERR_SYS_BAD_FD;
+    return sp_sys_err_from_win32(err);
+  }
   if (bytes_written) *bytes_written = (u64)n;
   return SP_OK;
 
 #elif defined(SP_LINUX)
   s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_PWRITE64, fd, buf, count, offset);
-  if (sp_sys_is_err(rc)) {
-    s64 err = -rc;
-    switch (err) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(err);
-    }
-  }
+  if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -7794,12 +7778,7 @@ sp_err_t sp_sys_pwrite_p(sp_sys_fd_t fd, const void* buf, u64 count, u64 offset,
   do {
     rc = pwrite(fd, buf, sp_sys_posix_io_count(count), (off_t)offset);
   } while (rc == -1 && errno == SP_EINTR);
-  if (rc < 0) {
-    switch (errno) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(errno);
-    }
-  }
+  if (rc < 0) return sp_sys_err_from_errno(errno);
   if (bytes_written) *bytes_written = (u64)rc;
   return SP_OK;
 
@@ -8011,7 +7990,7 @@ sp_err_t sp_sys_clock_gettime_p(s32 clockid, sp_sys_timespec_t* ts) {
 SP_PRIVATE u32 sp_sys_nt_access_from_mode(sp_sys_open_mode_t mode, u32 flags) {
   u32 read = FILE_READ_DATA | FILE_READ_EA;
   u32 write = FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | FILE_APPEND_DATA;
-  if ((flags & SP_SYS_OPEN_APPEND) && !(flags & SP_SYS_OPEN_TRUNCATE)) write &= ~(u32)FILE_WRITE_DATA;
+  if (flags & SP_SYS_OPEN_APPEND) write &= ~(u32)FILE_WRITE_DATA;
 
   u32 access = SYNCHRONIZE | FILE_READ_ATTRIBUTES;
   switch (mode) {
@@ -8065,6 +8044,11 @@ SP_PRIVATE s32 sp_sys_posix_open_flags(sp_sys_open_mode_t mode, u32 flags) {
 sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
   *out = SP_SYS_INVALID_FD;
 
+  if (flags & SP_SYS_OPEN_TRUNCATE) {
+    if (mode == SP_SYS_OPEN_MODE_RO)  return SP_ERR_SYS_INVALID;
+    if (flags & SP_SYS_OPEN_APPEND)   return SP_ERR_SYS_INVALID;
+  }
+
 #if defined(SP_WIN32)
   u32 access = sp_sys_nt_access_from_mode(mode, flags);
   u32 share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
@@ -8084,13 +8068,7 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   sp_try(sp_sys_posix_path(path, len, buffer));
 
   s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buffer, sp_sys_linux_open_flags(mode, flags), 0644);
-  if (sp_sys_is_err(rc)) {
-    s64 err = -rc;
-    switch (err) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(err);
-    }
-  }
+  if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
 
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
@@ -8099,12 +8077,7 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
   s32 rc = openat((int)fd, buf, sp_sys_posix_open_flags(mode, flags), 0644);
-  if (rc < 0) {
-    switch (errno) {
-      case SP_EBADF: return SP_ERR_SYS_ACCESS_DENIED;
-      default: return sp_sys_err_from_errno(errno);
-    }
-  }
+  if (rc < 0) return sp_sys_err_from_errno(errno);
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
 
@@ -8201,10 +8174,12 @@ sp_err_t sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s64 rc = sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, req, rem);
+  sp_sys_timespec_t remaining = sp_zero;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, req, &remaining);
   while (rc == -SP_EINTR) {
-    rc = sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, rem, rem);
+    rc = sp_syscall(SP_SYSCALL_NUM_NANOSLEEP, &remaining, &remaining);
   }
+  if (rem) *rem = remaining;
   if (rc < 0) { sp_unreachable_return(SP_ERR_SYS_BUG); }
   return SP_OK;
 
@@ -9348,21 +9323,11 @@ sp_err_t sp_sys_socket_accept_p(sp_sys_socket_t listener, sp_sys_handle_desc_t d
       // I don't think there's a valid response besides retry, caller or callee,
       // so all you lose is tracking aborted connections. But if you're digging
       // around in here, this is the only reason sp.h absorbs this error.
-      case SP_ECONNABORTED:
-      // If your socket already has a pending error, Linux just returns it as
-      // accept()'s own. If that happens, you should treat it like EAGAIN,
-      // because it's not the result of the syscall you just tried.
       //
-      // The set of errors which this case yields on the protocol, but the
-      // following is what the man page says for TCP/IP.
-      case SP_EPROTO:
-      case SP_ENOPROTOOPT:
-      case SP_ENONET:
-      case SP_ENETDOWN:
-      case SP_ENETUNREACH:
-      case SP_EHOSTDOWN:
-      case SP_EHOSTUNREACH:
-      case SP_EOPNOTSUPP: continue;
+      // Only these two. The man page's list of already-pending network errors
+      // includes codes that are persistent for a non-stream socket (EOPNOTSUPP),
+      // which turns retry into an infinite spin.
+      case SP_ECONNABORTED: continue;
       default: return sp_sys_err_from_errno(-fd);
     }
   }
@@ -9947,9 +9912,9 @@ sp_err_t sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  sp_sys_linux_stat_t raw = sp_zero;
-  sp_try(sp_syscall_e(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, 0));
-  sp_sys_file_meta_from_linux(&raw, st);
+  sp_sys_linux_statx_t stx = sp_zero;
+  sp_try(sp_syscall_e(SP_SYSCALL_NUM_STATX, fd, buf, 0, SP_SYS_LINUX_STATX_BASIC_STATS | SP_SYS_LINUX_STATX_BTIME, &stx));
+  sp_sys_file_meta_from_statx(&stx, st);
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -9983,9 +9948,9 @@ sp_err_t sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  sp_sys_linux_stat_t raw = sp_zero;
-  sp_try(sp_syscall_e(SP_SYSCALL_NUM_NEWFSTATAT, fd, buf, &raw, SP_AT_SYMLINK_NOFOLLOW));
-  sp_sys_file_meta_from_linux(&raw, st);
+  sp_sys_linux_statx_t stx = sp_zero;
+  sp_try(sp_syscall_e(SP_SYSCALL_NUM_STATX, fd, buf, SP_AT_SYMLINK_NOFOLLOW, SP_SYS_LINUX_STATX_BASIC_STATS | SP_SYS_LINUX_STATX_BTIME, &stx));
+  sp_sys_file_meta_from_statx(&stx, st);
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -10058,7 +10023,7 @@ sp_err_t sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode) {
 //////////////////
 sp_err_t sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #if defined(SP_WIN32)
-  return sp_sys_nt_delete(fd, sp_str(path, len), SP_NT_FILE_DIRECTORY_FILE);
+  return sp_sys_nt_delete(fd, sp_str(path, len), true);
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX];
@@ -10088,7 +10053,7 @@ sp_err_t sp_sys_rmdir_s(sp_sys_fd_t fd, sp_str_t path) {
 ///////////////////
 sp_err_t sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #if defined(SP_WIN32)
-  return sp_sys_nt_delete(fd, sp_str(path, len), SP_NT_FILE_NON_DIRECTORY_FILE);
+  return sp_sys_nt_delete(fd, sp_str(path, len), false);
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX];
@@ -10098,7 +10063,16 @@ sp_err_t sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  return sp_sys_err_from_libc(unlinkat(fd, buf, 0));
+  s32 rc = unlinkat(fd, buf, 0);
+  if (rc < 0 && errno == SP_EPERM) {
+    // If the handle is a directory, macOS reports EPERM. But we can't
+    // just normalize that, because other errors ALSO report EPERM, so
+    // we have to issue another syscall to check
+    struct stat st;
+    if (fstatat(fd, buf, &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISDIR(st.st_mode)) return SP_ERR_SYS_IS_DIR;
+    return SP_ERR_SYS_ACCESS_DENIED;
+  }
+  return sp_sys_err_from_libc(rc);
 
 #elif defined(SP_WASM)
   (void)fd; (void)path; (void)len;
@@ -10526,6 +10500,15 @@ s64 sp_sys_get_cwd_path_p(c8* buf, u64 size) {
   sp_mem_fixed_t fixed = sp_mem_fixed(u8buf, sizeof(u8buf));
   sp_str_t utf8;
   if (sp_wtf16_to_wtf8(sp_mem_fixed_as_allocator(&fixed), (sp_wide_str_t) { .data = cwd->Buffer, .len = wlen }, &utf8) != SP_OK) return -1;
+
+  // The PEB DosPath always carries a trailing separator; strip it the way
+  // GetCurrentDirectoryW does, except at a drive root, where "C:" would mean
+  // something else (drive-relative).
+  c8 last = utf8.len ? utf8.data[utf8.len - 1] : 0;
+  if (utf8.len > 1 && (last == '\\' || last == '/') && !(utf8.len == 3 && utf8.data[1] == ':')) {
+    utf8.len--;
+  }
+
   if (utf8.len >= size) return -1;
   sp_mem_copy(buf, utf8.data, utf8.len);
   buf[utf8.len] = 0;
