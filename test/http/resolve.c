@@ -1,4 +1,4 @@
-#include "tls.h"
+#include "http.h"
 
 typedef struct {
   const c8* url;
@@ -83,4 +83,4 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   return SP_OK;
 }
 
-sp_test_each_fn(tls, resolve, test_t, tests, run);
+sp_test_each_fn(http, resolve, test_t, tests, run);

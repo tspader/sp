@@ -1,4 +1,4 @@
-#include "tls.h"
+#include "http.h"
 
 typedef struct {
   const c8* proxy;
@@ -114,4 +114,4 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   return SP_OK;
 }
 
-sp_test_each_fn(tls, proxy, test_t, tests, run);
+sp_test_each_fn(http, proxy, test_t, tests, run);

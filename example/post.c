@@ -1,7 +1,7 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
 #include "sp/sp_cli.h"
-#include "sp/sp_tls.h"
+#include "sp/sp_http.h"
 
 typedef struct {
   const c8* method;
@@ -34,9 +34,10 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
   sp_cli_result_t result = SP_CLI_OK;
   sp_tls_trust_t trust = sp_zero;
+  sp_tls_mbedtls_t client = sp_zero;
   sp_io_file_writer_t file = sp_zero;
   sp_http_response_t response = sp_zero;
-  sp_tls_error_t err = sp_zero;
+  sp_http_error_t err = sp_zero;
 
   sp_http_request_t request = {
     .url = sp_cstr_as_str(post->url),
@@ -81,12 +82,13 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
   }
 
   sp_tls_trust_init(&trust, mem);
-  if (sp_tls_trust_load(&trust) != SP_TLS_OK && trust.backend == SP_TLS_BACKEND_ANCHORS) {
+  if (sp_tls_trust_load(&trust) != SP_HTTP_OK && trust.backend == SP_TLS_BACKEND_ANCHORS) {
     sp_log("failed to load native trust store");
     post->exit = 1;
     goto done;
   }
-  request.trust = &trust;
+  sp_tls_mbedtls_init(&client, &trust);
+  request.tls = &client.base;
 
   if (post->output) {
     if (sp_io_file_writer_from_path(&file, sp_cstr_as_str(post->output)) != SP_OK) {
@@ -108,31 +110,31 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
   if (post->output) sp_io_file_writer_close(&file);
 
   switch (err) {
-    case SP_TLS_OK:
+    case SP_HTTP_OK:
       break;
-    case SP_TLS_ERR_STATUS:
+    case SP_HTTP_ERR_STATUS:
       sp_log("server returned status {}", sp_fmt_int(response.status));
       post->exit = 1;
       break;
-    case SP_TLS_ERR_URL:        sp_log("could not parse url");                  post->exit = 1; break;
-    case SP_TLS_ERR_CONNECT:    sp_log("could not connect to host");            post->exit = 1; break;
-    case SP_TLS_ERR_UNTRUSTED:  sp_log("server certificate is not trusted");    post->exit = 1; break;
-    case SP_TLS_ERR_HANDSHAKE:  sp_log("tls handshake rejected");               post->exit = 1; break;
-    case SP_TLS_ERR_REDIRECTS:  sp_log("too many redirects");                   post->exit = 1; break;
-    case SP_TLS_ERR_PROTOCOL:   sp_log("malformed or truncated http response"); post->exit = 1; break;
-    case SP_TLS_ERR_TIMEOUT:    sp_log("timed out");                            post->exit = 1; break;
-    case SP_TLS_ERR_PROXY:      sp_log("proxy refused or misbehaved");          post->exit = 1; break;
-    case SP_TLS_ERR_BAD_CONFIG: sp_log("bad request configuration");            post->exit = 1; break;
-    case SP_TLS_ERR_NO_STORE:
-    case SP_TLS_ERR_PARSE:
-    case SP_TLS_ERR_OS:
-    case SP_TLS_ERR_UNSUPPORTED:
+    case SP_HTTP_ERR_URL:        sp_log("could not parse url");                  post->exit = 1; break;
+    case SP_HTTP_ERR_CONNECT:    sp_log("could not connect to host");            post->exit = 1; break;
+    case SP_HTTP_ERR_UNTRUSTED:  sp_log("server certificate is not trusted");    post->exit = 1; break;
+    case SP_HTTP_ERR_HANDSHAKE:  sp_log("tls handshake rejected");               post->exit = 1; break;
+    case SP_HTTP_ERR_REDIRECTS:  sp_log("too many redirects");                   post->exit = 1; break;
+    case SP_HTTP_ERR_PROTOCOL:   sp_log("malformed or truncated http response"); post->exit = 1; break;
+    case SP_HTTP_ERR_TIMEOUT:    sp_log("timed out");                            post->exit = 1; break;
+    case SP_HTTP_ERR_PROXY:      sp_log("proxy refused or misbehaved");          post->exit = 1; break;
+    case SP_HTTP_ERR_BAD_CONFIG: sp_log("bad request configuration");            post->exit = 1; break;
+    case SP_HTTP_ERR_NO_STORE:
+    case SP_HTTP_ERR_PARSE:
+    case SP_HTTP_ERR_OS:
+    case SP_HTTP_ERR_UNSUPPORTED:
       sp_log("request failed (error {})", sp_fmt_int(err));
       post->exit = 1;
       break;
   }
 
-  if (post->verbose && err == SP_TLS_OK) {
+  if (post->verbose && err == SP_HTTP_OK) {
     sp_log("status {} ({} bytes, {})",
       sp_fmt_int(response.status),
       sp_fmt_uint(response.body_len),

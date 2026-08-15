@@ -1,7 +1,7 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
 #include "sp/sp_cli.h"
-#include "sp/sp_tls.h"
+#include "sp/sp_http.h"
 
 typedef struct {
   const c8* url;
@@ -32,9 +32,10 @@ sp_cli_result_t tls_run(sp_cli_t* cli) {
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
   sp_http_response_t res = sp_zero;
-  sp_tls_error_t err = sp_zero;
+  sp_http_error_t err = sp_zero;
   sp_str_t out_path = sp_zero;
   sp_io_file_writer_t out = sp_zero;
+  sp_tls_mbedtls_t client = sp_zero;
 
   sp_str_t url = sp_cstr_as_str(tls->url);
   sp_http_url_t parsed = sp_zero;
@@ -46,13 +47,14 @@ sp_cli_result_t tls_run(sp_cli_t* cli) {
 
   sp_tls_trust_t trust = sp_zero;
   sp_tls_trust_init(&trust, mem);
-  if (sp_tls_trust_load(&trust) != SP_TLS_OK && trust.backend == SP_TLS_BACKEND_ANCHORS) {
+  if (sp_tls_trust_load(&trust) != SP_HTTP_OK && trust.backend == SP_TLS_BACKEND_ANCHORS) {
     sp_log("failed to load native trust store");
     tls->exit = 1;
     goto done;
   }
   sp_log("backend: {}", sp_fmt_cstr(backend_name(trust.backend)));
   sp_log("anchors: {} loaded, {} skipped", sp_fmt_uint(trust.loaded), sp_fmt_uint(trust.skipped));
+  sp_tls_mbedtls_init(&client, &trust);
 
   out_path = output_name(mem, parsed, tls->output);
   if (sp_io_file_writer_from_path(&out, out_path) != SP_OK) {
@@ -64,32 +66,32 @@ sp_cli_result_t tls_run(sp_cli_t* cli) {
   sp_log("fetching {}", sp_fmt_str(url));
   err = sp_http_fetch(mem, (sp_http_request_t) {
     .url   = url,
-    .trust = &trust,
+    .tls   = &client.base,
     .sink  = &out.base,
   }, &res);
   sp_io_file_writer_close(&out);
 
   switch (err) {
-    case SP_TLS_OK:
+    case SP_HTTP_OK:
       sp_log("wrote {} bytes to {} (status {})", sp_fmt_uint(res.body_len), sp_fmt_str(out_path), sp_fmt_int(res.status));
       break;
-    case SP_TLS_ERR_STATUS:
+    case SP_HTTP_ERR_STATUS:
       sp_log("server returned status {}", sp_fmt_int(res.status));
       tls->exit = 1;
       break;
-    case SP_TLS_ERR_URL:        sp_log("could not parse url");                  tls->exit = 1; break;
-    case SP_TLS_ERR_CONNECT:    sp_log("could not connect to host");            tls->exit = 1; break;
-    case SP_TLS_ERR_UNTRUSTED:  sp_log("server certificate is not trusted");    tls->exit = 1; break;
-    case SP_TLS_ERR_HANDSHAKE:  sp_log("tls handshake rejected");               tls->exit = 1; break;
-    case SP_TLS_ERR_REDIRECTS:  sp_log("too many redirects");                   tls->exit = 1; break;
-    case SP_TLS_ERR_PROTOCOL:   sp_log("malformed or truncated http response"); tls->exit = 1; break;
-    case SP_TLS_ERR_TIMEOUT:    sp_log("timed out");                            tls->exit = 1; break;
-    case SP_TLS_ERR_PROXY:      sp_log("proxy refused or misbehaved");          tls->exit = 1; break;
-    case SP_TLS_ERR_NO_STORE:
-    case SP_TLS_ERR_PARSE:
-    case SP_TLS_ERR_OS:
-    case SP_TLS_ERR_BAD_CONFIG:
-    case SP_TLS_ERR_UNSUPPORTED:
+    case SP_HTTP_ERR_URL:        sp_log("could not parse url");                  tls->exit = 1; break;
+    case SP_HTTP_ERR_CONNECT:    sp_log("could not connect to host");            tls->exit = 1; break;
+    case SP_HTTP_ERR_UNTRUSTED:  sp_log("server certificate is not trusted");    tls->exit = 1; break;
+    case SP_HTTP_ERR_HANDSHAKE:  sp_log("tls handshake rejected");               tls->exit = 1; break;
+    case SP_HTTP_ERR_REDIRECTS:  sp_log("too many redirects");                   tls->exit = 1; break;
+    case SP_HTTP_ERR_PROTOCOL:   sp_log("malformed or truncated http response"); tls->exit = 1; break;
+    case SP_HTTP_ERR_TIMEOUT:    sp_log("timed out");                            tls->exit = 1; break;
+    case SP_HTTP_ERR_PROXY:      sp_log("proxy refused or misbehaved");          tls->exit = 1; break;
+    case SP_HTTP_ERR_NO_STORE:
+    case SP_HTTP_ERR_PARSE:
+    case SP_HTTP_ERR_OS:
+    case SP_HTTP_ERR_BAD_CONFIG:
+    case SP_HTTP_ERR_UNSUPPORTED:
       sp_log("fetch failed (error {})", sp_fmt_int(err));
       tls->exit = 1;
       break;
