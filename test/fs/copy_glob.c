@@ -1,74 +1,106 @@
 #include "fs.h"
 
 typedef struct {
-  const c8* label;
-  fs_setup_t src[16];
+  const c8* name;
+  bool missing_src;
+  fs_setup_t src [FS_MAX_SETUP];
   const c8* glob;
-  fs_expected_path_t expect[16];
-} copy_glob_test_t;
+  sp_err_t err;
+  fs_expected_path_t expect [FS_MAX_PATHS];
+} test_t;
 
-static void run_copy_glob_test(s32* utest_result, sp_test_file_manager_t* fm, copy_glob_test_t t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
-  sp_str_t src = sp_fs_join_path(fm->mem, sandbox, sp_str_lit("src"));
-  sp_str_t dst = sp_fs_join_path(fm->mem, sandbox, sp_str_lit("dst"));
-  sp_fs_create_dir(src);
-  sp_fs_create_dir(dst);
-
-  fs_apply_setup(utest_result, fm, src, t.src);
-  sp_fs_copy_glob(src, sp_str_view(t.glob), dst);
-  fs_expect_paths(utest_result, fm, dst, t.expect);
-}
-
-UTEST_F(fs, copy_glob_star) {
-  run_copy_glob_test(&ur, &ut.file_manager, (copy_glob_test_t){
-    .label = "copy_glob_star",
+static const test_t tests [] = {
+  {
+    .name = "star",
     .src = {
-      { .path = "a.txt", .kind = FS_SETUP_FILE },
-      { .path = "b.txt", .kind = FS_SETUP_FILE },
+      { "A" },
+      { "B" },
     },
     .glob = "*",
     .expect = {
-      { .path = "a.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-      { .path = "b.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+      { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
+      { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE },
     },
-  });
-}
-
-UTEST_F(fs, copy_glob_exact_name) {
-  run_copy_glob_test(&ur, &ut.file_manager, (copy_glob_test_t){
-    .label = "copy_glob_exact_name",
+  },
+  {
+    .name = "exact_name",
     .src = {
-      { .path = "a.txt", .kind = FS_SETUP_FILE },
-      { .path = "b.txt", .kind = FS_SETUP_FILE },
+      { "A" },
+      { "B" },
     },
-    .glob = "a.txt",
+    .glob = "A",
     .expect = {
-      { .path = "a.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-      { .path = "b.txt", .exists = FS_EXPECT_NOT_EXIST },
+      { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
+      { .path = "B" },
     },
-  });
-}
-
-UTEST_F(fs, copy_glob_no_match) {
-  run_copy_glob_test(&ur, &ut.file_manager, (copy_glob_test_t){
-    .label = "copy_glob_no_match",
+  },
+  {
+    .name = "star_suffix",
     .src = {
-      { .path = "a.txt", .kind = FS_SETUP_FILE },
-      { .path = "b.txt", .kind = FS_SETUP_FILE },
+      { "A.C" },
+      { "B.C" },
+      { "D.E" },
     },
-    .glob = "nope.txt",
+    .glob = "*.C",
     .expect = {
-      { .path = "a.txt", .exists = FS_EXPECT_NOT_EXIST },
-      { .path = "b.txt", .exists = FS_EXPECT_NOT_EXIST },
+      { .path = "A.C", .exists = true, .kind = SP_FS_KIND_FILE },
+      { .path = "B.C", .exists = true, .kind = SP_FS_KIND_FILE },
+      { .path = "D.E" },
     },
-  });
-}
-
-UTEST_F(fs, copy_glob_empty_src) {
-  run_copy_glob_test(&ur, &ut.file_manager, (copy_glob_test_t){
-    .label = "copy_glob_empty_src",
+  },
+  {
+    .name = "star_prefix",
+    .src = {
+      { "AB" },
+      { "AC" },
+      { "D" },
+    },
+    .glob = "A*",
+    .expect = {
+      { .path = "AB", .exists = true, .kind = SP_FS_KIND_FILE },
+      { .path = "AC", .exists = true, .kind = SP_FS_KIND_FILE },
+      { .path = "D" },
+    },
+  },
+  {
+    .name = "no_match",
+    .src = {
+      { "A" },
+      { "B" },
+    },
+    .glob = "C",
+    .expect = {
+      { .path = "A" },
+      { .path = "B" },
+    },
+  },
+  {
+    .name = "empty_src",
     .glob = "*",
-  });
+  },
+  {
+    .name = "missing_src",
+    .missing_src = true,
+    .glob = "*",
+    .err = SP_ERR_SYS_NOT_FOUND,
+  },
+};
+
+sp_test_each(fs, copy_glob, test_t, tests) {
+  sp_mem_t mem = sp_test_arena(t);
+  sp_str_t sandbox = sp_test_dir(t);
+  sp_str_t src = sp_fs_join_path(mem, sandbox, sp_str_lit("src"));
+  sp_str_t dst = sp_fs_join_path(mem, sandbox, sp_str_lit("dst"));
+  if (!it->missing_src) {
+    sp_fs_create_dir(src);
+    fs_apply_setup(t, src, it->src);
+  }
+
+  sp_expect_err_eq(t, sp_fs_copy_glob(src, sp_str_view(it->glob), dst), it->err);
+
+  // the destination is created by copy_glob itself, and only after the
+  // source has been read successfully
+  sp_expect_eq(t, sp_fs_is_dir(dst), it->err == SP_OK);
+  fs_expect_paths(t, dst, it->expect);
+  return SP_OK;
 }
-
-

@@ -1,29 +1,27 @@
-#include "fs.h"
+#include "sp.h"
+#include "sp/sp_test.h"
 
 typedef struct {
+  const c8* name;
   const c8* input;
-  bool expected;
-} is_root_case_t;
+  bool root;
+} test_t;
 
-UTEST(fs_is_root, cases) {
-  is_root_case_t cases[] = {
-    { "",       false },
-    { "/",      true },
-    { "\\",     true },
-    { "C:",     false },
-    { "a:",     false },
-    { "C:/",    true },
-    { "C:\\",   true },
-    { "foo",    false },
-    { "/foo",   false },
-    { "C:/foo", false },
-    { "//",     false },
-  };
+static const test_t tests [] = {
+  { .name = "empty",            .input = "" },
+  { .name = "slash",            .input = "/",     .root = true },
+  { .name = "backslash",        .input = "\\",    .root = true },
+  { .name = "drive_bare",       .input = "C:" },
+  { .name = "drive_lower_bare", .input = "a:" },
+  { .name = "drive_slash",      .input = "C:/",   .root = true },
+  { .name = "drive_backslash",  .input = "C:\\",  .root = true },
+  { .name = "relative",         .input = "A" },
+  { .name = "slash_prefix",     .input = "/A" },
+  { .name = "drive_prefix",     .input = "C:/A" },
+  { .name = "double_slash",     .input = "//" },
+};
 
-  SP_CARR_FOR(cases, i) {
-    bool result = sp_fs_is_root(sp_str_view(cases[i].input));
-    EXPECT_EQ(result, cases[i].expected);
-  }
+sp_test_each(fs, is_root, test_t, tests) {
+  sp_expect_eq(t, sp_fs_is_root(sp_str_view(it->input)), it->root);
+  return SP_OK;
 }
-
-

@@ -1,65 +1,34 @@
-#include "fs.h"
+#include "sp.h"
+#include "sp/sp_test.h"
 
 typedef struct {
+  const c8* name;
   const c8* input;
-  const c8* expected;
-} normalize_path_case_t;
+  const c8* expect;
+} test_t;
 
-struct fs_normalize_path {
-  sp_mem_heap_t* heap;
-  sp_mem_t mem;
+static const test_t tests [] = {
+  { .name = "empty",                    .input = "",                       .expect = "" },
+  { .name = "bare",                     .input = "A",                      .expect = "A" },
+  { .name = "trailing_slash",           .input = "A/",                     .expect = "A" },
+  { .name = "nested",                   .input = "A/B",                    .expect = "A/B" },
+  { .name = "nested_ext",               .input = "A/B.txt",                .expect = "A/B.txt" },
+  { .name = "hidden",                   .input = ".A",                     .expect = ".A" },
+  { .name = "drive_forward",            .input = "C:/A/B.txt",             .expect = "C:/A/B.txt" },
+  { .name = "drive_backslash",          .input = "C:\\A\\B.txt",           .expect = "C:/A/B.txt" },
+  { .name = "mixed_separators",         .input = "C:/A\\B/C\\D.txt",       .expect = "C:/A/B/C/D.txt" },
+  { .name = "drive_backslash_trailing", .input = "C:\\A\\B\\",             .expect = "C:/A/B" },
+  { .name = "backslash",                .input = "A\\B",                   .expect = "A/B" },
+  { .name = "root_backslash",           .input = "\\",                     .expect = "" },
+  { .name = "root_slash",               .input = "/",                      .expect = "" },
+  { .name = "backslash_trailing",       .input = "A\\",                    .expect = "A" },
+  { .name = "preserves_dotdot",         .input = "A\\B\\..\\C",            .expect = "A/B/../C" },
+  { .name = "preserves_dot",            .input = "A\\.\\B",                .expect = "A/./B" },
+  { .name = "nonexistent_path",         .input = "C:\\no\\such\\path\\file.txt", .expect = "C:/no/such/path/file.txt" },
 };
 
-UTEST_F_SETUP(fs_normalize_path) {
-  ut.heap = sp_mem_heap_new();
-  ut.mem = sp_mem_heap_as_allocator(ut.heap);
-}
-
-UTEST_F_TEARDOWN(fs_normalize_path) {
-  sp_mem_heap_destroy(ut.heap);
-}
-
-UTEST_F(fs_normalize_path, cases) {
-  normalize_path_case_t cases[] = {
-    { "",                              "" },
-    { "foo",                           "foo" },
-    { "foo/",                          "foo" },
-    { "foo/bar",                       "foo/bar" },
-    { "foo/bar.txt",                   "foo/bar.txt" },
-    { ".profile",                      ".profile" },
-    { "C:/foo/bar.txt",                "C:/foo/bar.txt" },
-    { "C:\\foo\\bar.txt",              "C:/foo/bar.txt" },
-    { "C:/Users\\Test/sub\\file.txt",  "C:/Users/Test/sub/file.txt" },
-    { "C:\\Users\\Test\\",             "C:/Users/Test" },
-    { "foo\\bar",                      "foo/bar" },
-    { "\\",                            "" },
-    { "/",                             "" },
-    { "foo\\",                         "foo" },
-  };
-
-  SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_fs_normalize_path(ut.mem, sp_str_view(cases[i].input));
-    SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
-  }
-}
-
-UTEST_F(fs_normalize_path, preserves_dotdot) {
-  SP_EXPECT_STR_EQ_CSTR(
-    sp_fs_normalize_path(ut.mem, sp_str_lit("a\\b\\..\\c")),
-    "a/b/../c"
-  );
-}
-
-UTEST_F(fs_normalize_path, preserves_dot) {
-  SP_EXPECT_STR_EQ_CSTR(
-    sp_fs_normalize_path(ut.mem, sp_str_lit("a\\.\\b")),
-    "a/./b"
-  );
-}
-
-UTEST_F(fs_normalize_path, nonexistent_path) {
-  SP_EXPECT_STR_EQ_CSTR(
-    sp_fs_normalize_path(ut.mem, sp_str_lit("C:\\no\\such\\path\\file.txt")),
-    "C:/no/such/path/file.txt"
-  );
+sp_test_each(fs, normalize_path, test_t, tests) {
+  sp_str_t result = sp_fs_normalize_path(sp_test_arena(t), sp_str_view(it->input));
+  sp_expect_str_eq_c(t, result, it->expect);
+  return SP_OK;
 }

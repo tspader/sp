@@ -1,27 +1,25 @@
-#include "fs.h"
+#include "sp.h"
+#include "sp/sp_test.h"
 
 typedef struct {
+  const c8* name;
   const c8* input;
-  const c8* expected;
-} get_name_case_t;
+  const c8* expect;
+} test_t;
 
-UTEST(fs_get_name, cases) {
-  get_name_case_t cases[] = {
-    { "",                        "" },
-    { "foo",                     "foo" },
-    { "foo/",                    "" },
-    { "foo/bar.txt",             "bar.txt" },
-    // Backslash: get_name only splits on '/', whole thing is the "name"
-    { "C:\\foo\\bar.txt",        "C:\\foo\\bar.txt" },
-    { "C:/Users/Test/file.txt",  "file.txt" },
-    { "/foo",                    "foo" },
-    { "/foo/bar/",               "" },
-  };
+static const test_t tests [] = {
+  { .name = "empty",                   .input = "",             .expect = "" },
+  { .name = "bare",                    .input = "A",            .expect = "A" },
+  { .name = "trailing_slash",          .input = "A/",           .expect = "" },
+  { .name = "after_dir",               .input = "A/B.txt",      .expect = "B.txt" },
+  // backslash: get_name only splits on '/', the whole thing is the name
+  { .name = "backslash_not_separator", .input = "C:\\A\\B.txt", .expect = "C:\\A\\B.txt" },
+  { .name = "drive_forward",           .input = "C:/A/B/C.txt", .expect = "C.txt" },
+  { .name = "absolute",                .input = "/A",           .expect = "A" },
+  { .name = "absolute_trailing_slash", .input = "/A/B/",        .expect = "" },
+};
 
-  SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_fs_get_name(sp_str_view(cases[i].input));
-    SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
-  }
+sp_test_each(fs, get_name, test_t, tests) {
+  sp_expect_str_eq_c(t, sp_fs_get_name(sp_str_view(it->input)), it->expect);
+  return SP_OK;
 }
-
-

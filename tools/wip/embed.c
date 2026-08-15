@@ -32,7 +32,12 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_str_t out_hdr = sp_str_view(argv[3]);
   sp_log("scanning {}", sp_fmt_str(src_dir));
 
-  sp_da(sp_fs_entry_t) files = sp_fs_collect_recursive(mem, src_dir);
+  sp_da(sp_fs_entry_t) files;
+  if (sp_fs_collect_recursive(mem, src_dir, &files)) {
+    sp_log("could not read {}", sp_fmt_str(src_dir));
+    rc = 1;
+    goto cleanup;
+  }
   if (sp_da_empty(files)) {
     sp_log("no files found in {}", sp_fmt_str(src_dir));
     rc = 1;

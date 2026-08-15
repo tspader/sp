@@ -1,47 +1,34 @@
-#include "fs.h"
+#include "sp.h"
+#include "sp/sp_test.h"
 
-static void assert_normalized(s32* utest_result, sp_str_t path, const c8* label) {
-  sp_for(i, path.len) {
-    if (path.data[i] == '\\') {
-      SP_TEST_REPORT("{}: contains backslash", sp_fmt_cstr(label));
-      SP_FAIL();
-      return;
-    }
+static void expect_normalized(sp_test_t* t, sp_str_t path, const c8* label) {
+  if (sp_str_contains(path, sp_str_lit("\\"))) {
+    sp_test_fail(t, "{}: contains backslash", sp_fmt_cstr(label));
   }
   if (path.len > 0 && path.data[path.len - 1] == '/') {
-    SP_TEST_REPORT("{}: trailing slash", sp_fmt_cstr(label));
-    SP_FAIL();
+    sp_test_fail(t, "{}: trailing slash", sp_fmt_cstr(label));
   }
 }
 
-struct fs_system_paths {
-  sp_mem_heap_t* heap;
-  sp_mem_t mem;
-};
+sp_test(fs, system_paths_nonempty) {
+  sp_test_skip_on_wasm()
 
-UTEST_F_SETUP(fs_system_paths) {
-  ut.heap = sp_mem_heap_new();
-  ut.mem = sp_mem_heap_as_allocator(ut.heap);
+  sp_mem_t mem = sp_test_arena(t);
+  sp_must_gt(t, sp_fs_get_storage_path(mem).len, 0);
+  sp_must_gt(t, sp_fs_get_config_path(mem).len, 0);
+  return SP_OK;
 }
 
-UTEST_F_TEARDOWN(fs_system_paths) {
-  sp_mem_heap_destroy(ut.heap);
+sp_test(fs, system_paths_storage_path_normalized) {
+  sp_test_skip_on_wasm()
+
+  expect_normalized(t, sp_fs_get_storage_path(sp_test_arena(t)), "storage_path");
+  return SP_OK;
 }
 
-UTEST_F(fs_system_paths, nonempty) {
-  SKIP_ON_WASM()
-  ASSERT_GT(sp_fs_get_storage_path(ut.mem).len, 0);
-  ASSERT_GT(sp_fs_get_config_path(ut.mem).len, 0);
-}
+sp_test(fs, system_paths_config_path_normalized) {
+  sp_test_skip_on_wasm()
 
-UTEST_F(fs_system_paths, storage_path_normalized) {
-  SKIP_ON_WASM()
-  sp_str_t path = sp_fs_get_storage_path(ut.mem);
-  assert_normalized(&ur, path, "storage_path");
-}
-
-UTEST_F(fs_system_paths, config_path_normalized) {
-  SKIP_ON_WASM()
-  sp_str_t path = sp_fs_get_config_path(ut.mem);
-  assert_normalized(&ur, path, "config_path");
+  expect_normalized(t, sp_fs_get_config_path(sp_test_arena(t)), "config_path");
+  return SP_OK;
 }

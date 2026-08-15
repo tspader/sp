@@ -275,7 +275,7 @@ sp_test_each(fs, iter_shell, test_t, tests, .serial = true) {
       produced++;
     }
     sp_expect_err_eq(t, walk, it->expect.walk);
-    sp_fs_dir_close(&iter);
+    sp_expect_ok(t, sp_fs_dir_close(&iter));
   }
 
   sp_sys_set_vtable(old);

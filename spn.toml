@@ -22,6 +22,7 @@ source = [
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c",
   "test/fs/iter/os.c", "test/fs/iter/iter.c", "test/fs/wtf8/*.c",
+  "test/fs/*.c", "test/fs/windows/nt_path.c",
   "test/mem/uninitialized.c",
   "test/atomic.c",
   "test/sync/*.c", "test/sync/os/*.c"
@@ -50,7 +51,7 @@ source = ["test/main.c", "test/atomic.c"]
 
 [[test]]
 name = "fs"
-source = ["test/main.c", "test/fs/iter/iter.c", "test/fs/iter/os.c", "test/fs/wtf8/*.c"]
+source = ["test/main.c", "test/fs/iter/iter.c", "test/fs/iter/os.c", "test/fs/wtf8/*.c", "test/fs/*.c", "test/fs/windows/nt_path.c"]
 
 [[test]]
 name = "sync"
