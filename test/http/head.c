@@ -1,7 +1,7 @@
-#include "tls.h"
+#include "http.h"
 
 typedef struct {
-  sp_tls_error_t err;
+  sp_http_error_t err;
   s32            status;
   const c8*      location;
   const c8*      content_type;
@@ -55,45 +55,45 @@ static const test_t tests [] = {
   {
     .name = "conflicting_lengths",
     .head = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 9",
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "length_not_numeric",
     .head = "HTTP/1.1 200 OK\r\nContent-Length: abc",
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "te_not_chunked",
     .head = "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip",
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "not_http",
     .head = "ICY 200 OK",
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "no_status",
     .head = "HTTP/1.1",
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "status_not_numeric",
     .head = "HTTP/1.1 abc OK",
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "empty",
     .head = "",
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
 };
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_http_head_t head = sp_zero;
-  sp_tls_error_t err = sp_http_parse_head(sp_cstr_as_str(c->head), &head);
+  sp_http_error_t err = sp_http_parse_head(sp_cstr_as_str(c->head), &head);
   sp_expect_eq(t, (s32)err, (s32)c->expect.err);
-  if (err != SP_TLS_OK || c->expect.err != SP_TLS_OK) return SP_OK;
+  if (err != SP_HTTP_OK || c->expect.err != SP_HTTP_OK) return SP_OK;
 
   sp_expect_eq(t, head.status, c->expect.status);
   sp_expect_eq(t, head.chunked, c->expect.chunked);
@@ -104,4 +104,4 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   return SP_OK;
 }
 
-sp_test_each_fn(tls, head, test_t, tests, run);
+sp_test_each_fn(http, head, test_t, tests, run);

@@ -62,10 +62,10 @@ name = "mem"
 source = ["test/main.c", "test/mem/uninitialized.c"]
 
 [[test]]
-name = "tls"
+name = "http"
 source = [
   "test/main.c",
-  "test/tls/*.c",
+  "test/http/*.c",
   "tools/vendor/mbedtls/library/*.c",
 ]
 include = ["tools/vendor/mbedtls/include", "tools/vendor/mbedtls/library"]

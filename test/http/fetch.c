@@ -1,5 +1,5 @@
-#define SP_TLS_IMPLEMENTATION
-#include "tls.h"
+#define SP_HTTP_IMPLEMENTATION
+#include "http.h"
 
 #if !defined(SP_WIN32)
 #include <signal.h>
@@ -35,7 +35,7 @@ typedef struct {
 } counted_t;
 
 typedef struct {
-  sp_tls_error_t err;
+  sp_http_error_t err;
   s32            status;
   const c8*      body;
   const c8*      content_type;
@@ -75,7 +75,7 @@ static const test_t tests [] = {
   {
     .name = "status_404",
     .scripts = {{ { .send = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found" } }},
-    .expect = { .err = SP_TLS_ERR_STATUS, .status = 404, .body = "not found" },
+    .expect = { .err = SP_HTTP_ERR_STATUS, .status = 404, .body = "not found" },
   },
   {
     .name = "no_body_204",
@@ -90,27 +90,27 @@ static const test_t tests [] = {
   {
     .name = "interim_flood",
     .scripts = {{ { .send = "HTTP/1.1 100 Continue\r\n\r\n", .repeat = 20 } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "upgrade_101",
     .scripts = {{ { .send = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n" } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "bad_status_line",
     .scripts = {{ { .send = "ICY 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "conflicting_length",
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 9999\r\n\r\nhello" } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "te_gzip",
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\nblob" } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "chunked",
@@ -120,27 +120,27 @@ static const test_t tests [] = {
   {
     .name = "chunked_bad_separator",
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloXX\r\n0\r\n\r\n" } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "huge_head",
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nX-Pad: ", .pad = 96 * 1024 } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "crlf_location",
     .scripts = {{ { .send = "HTTP/1.1 302 Found\r\nLocation: /a\rSet-Cookie: pwn=1\r\n\r\n" } }},
-    .expect = { .err = SP_TLS_ERR_URL },
+    .expect = { .err = SP_HTTP_ERR_URL },
   },
   {
     .name = "redirect_userinfo",
     .scripts = {{ { .send = "HTTP/1.1 302 Found\r\nLocation: http://evil@127.0.0.1/x\r\n\r\n" } }},
-    .expect = { .err = SP_TLS_ERR_URL },
+    .expect = { .err = SP_HTTP_ERR_URL },
   },
   {
     .name = "redirect_loop",
     .scripts = {{ { .send = "HTTP/1.1 302 Found\r\nLocation: /loop\r\n\r\n" } }},
-    .expect = { .err = SP_TLS_ERR_REDIRECTS },
+    .expect = { .err = SP_HTTP_ERR_REDIRECTS },
   },
   {
     .name = "redirect_follow",
@@ -161,7 +161,7 @@ static const test_t tests [] = {
   {
     .name = "truncated_body",
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nhello" } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "query_no_path",
@@ -181,7 +181,7 @@ static const test_t tests [] = {
     .tls = true,
     .no_close_notify = true,
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello" } }},
-    .expect = { .err = SP_TLS_ERR_PROTOCOL },
+    .expect = { .err = SP_HTTP_ERR_PROTOCOL },
   },
   {
     .name = "tls_trusted",
@@ -194,7 +194,7 @@ static const test_t tests [] = {
     .tls = true,
     .untrusted = true,
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello" } }},
-    .expect = { .err = SP_TLS_ERR_UNTRUSTED },
+    .expect = { .err = SP_HTTP_ERR_UNTRUSTED },
   },
   {
     .name = "redirect_query_url",
@@ -209,7 +209,7 @@ static const test_t tests [] = {
     .name = "timeout_head",
     .io_timeout_ms = 120,
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", .delay_ms = 1000 } }},
-    .expect = { .err = SP_TLS_ERR_TIMEOUT },
+    .expect = { .err = SP_HTTP_ERR_TIMEOUT },
   },
   {
     .name = "timeout_body",
@@ -218,14 +218,14 @@ static const test_t tests [] = {
       { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhe" },
       { .send = "llo", .delay_ms = 1000 },
     }},
-    .expect = { .err = SP_TLS_ERR_TIMEOUT },
+    .expect = { .err = SP_HTTP_ERR_TIMEOUT },
   },
   {
     .name = "timeout_tls",
     .tls = true,
     .io_timeout_ms = 120,
     .scripts = {{ { .send = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", .delay_ms = 1000 } }},
-    .expect = { .err = SP_TLS_ERR_TIMEOUT },
+    .expect = { .err = SP_HTTP_ERR_TIMEOUT },
   },
   {
     .name = "proxy_absolute_form",
@@ -250,7 +250,7 @@ static const test_t tests [] = {
     .proxy = true,
     .proxy_connect = true,
     .connect_reply = "HTTP/1.1 403 Forbidden\r\n\r\n",
-    .expect = { .err = SP_TLS_ERR_PROXY },
+    .expect = { .err = SP_HTTP_ERR_PROXY },
   },
   {
     .name = "custom_resolver",
@@ -264,7 +264,7 @@ static const test_t tests [] = {
     .name = "resolver_error_propagates",
     .resolve = RESOLVE_REFUSE,
     .resolve_host = "A",
-    .expect = { .err = SP_TLS_ERR_CONNECT },
+    .expect = { .err = SP_HTTP_ERR_CONNECT },
   },
   {
     .name = "literal_bypasses_resolver",
@@ -397,27 +397,27 @@ static const test_t tests [] = {
   {
     .name = "header_crlf_rejected",
     .headers = { { "X-Bad", "a\r\nEvil: 1" } },
-    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+    .expect = { .err = SP_HTTP_ERR_BAD_CONFIG },
   },
   {
     .name = "header_name_crlf_rejected",
     .headers = { { "X-Bad\r\nEvil", "1" } },
-    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+    .expect = { .err = SP_HTTP_ERR_BAD_CONFIG },
   },
   {
     .name = "header_lone_newline_rejected",
     .headers = { { "X-Bad", "a\nb" } },
-    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+    .expect = { .err = SP_HTTP_ERR_BAD_CONFIG },
   },
   {
     .name = "header_reserved_rejected",
     .headers = { { "Content-Length", "5" } },
-    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+    .expect = { .err = SP_HTTP_ERR_BAD_CONFIG },
   },
   {
     .name = "header_connection_rejected",
     .headers = { { "Connection", "keep-alive" } },
-    .expect = { .err = SP_TLS_ERR_BAD_CONFIG },
+    .expect = { .err = SP_HTTP_ERR_BAD_CONFIG },
   },
   {
     .name = "redirect_cross_host_strips_auth",
@@ -629,17 +629,17 @@ static u32 count_matches(sp_str_t haystack, sp_str_t needle) {
   return count;
 }
 
-static sp_tls_error_t resolve_local(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count) {
+static sp_http_error_t resolve_local(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count) {
   (void)user_data; (void)host; (void)timeout_ms; (void)capacity;
   addrs[0] = (sp_http_addr_t) { .kind = SP_HTTP_ADDR_V4, .data = { 127, 0, 0, 1 } };
   *count = 1;
-  return SP_TLS_OK;
+  return SP_HTTP_OK;
 }
 
-static sp_tls_error_t resolve_refuse(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count) {
+static sp_http_error_t resolve_refuse(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count) {
   (void)user_data; (void)host; (void)timeout_ms; (void)addrs; (void)capacity;
   *count = 0;
-  return SP_TLS_ERR_CONNECT;
+  return SP_HTTP_ERR_CONNECT;
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
@@ -697,6 +697,8 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   if (c->tls && !c->untrusted) {
     sp_must_eq(t, mbedtls_x509_crt_parse((mbedtls_x509_crt*)trust.anchors, (const unsigned char*)fetch_cert, sp_cstr_len(fetch_cert) + 1), 0);
   }
+  sp_tls_mbedtls_t client = sp_zero;
+  sp_tls_mbedtls_init(&client, &trust);
 
   sp_io_dyn_mem_writer_t body = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &body);
@@ -714,7 +716,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   sp_http_request_t request = {
     .url    = url,
-    .trust  = &trust,
+    .tls    = &client.base,
     .sink   = &body.base,
     .method = c->method,
     .proxy  = c->proxy ? sp_fmt(mem, "127.0.0.1:{}", sp_fmt_cstr(port)).value : sp_str_lit(""),
@@ -733,7 +735,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   }
 
   sp_http_response_t response = sp_zero;
-  sp_tls_error_t err = sp_http_fetch(mem, request, &response);
+  sp_http_error_t err = sp_http_fetch(mem, request, &response);
 
   sp_expect_eq(t, (s32)err, (s32)c->expect.err);
   if (c->expect.status) sp_expect_eq(t, response.status, c->expect.status);
@@ -773,4 +775,4 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   return SP_OK;
 }
 
-sp_test_each_fn(tls, fetch, test_t, tests, run);
+sp_test_each_fn(http, fetch, test_t, tests, run);
