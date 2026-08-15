@@ -1,9 +1,9 @@
 #include "sp.h"
 #include "sp/sp_test.h"
 
-#define FS_ITER_MAX_SETUP 8
-#define FS_ITER_MAX_ENTRIES 8
-#define FS_ITER_BULK_PREFIX "R"
+#define MAX_SETUP 8
+#define MAX_ENTRIES 8
+#define BULK_PREFIX "R"
 
 #define A16 "AAAAAAAAAAAAAAAA"
 #define A255 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 "AAAAAAAAAAAAAAA"
@@ -25,12 +25,12 @@ typedef struct {
 } entry_t;
 
 typedef struct {
-  entry_t entries [FS_ITER_MAX_ENTRIES];
+  entry_t entries [MAX_ENTRIES];
 } expect_t;
 
 typedef struct {
   const c8* name;
-  setup_t setup [FS_ITER_MAX_SETUP];
+  setup_t setup [MAX_SETUP];
   const c8* dir;
   bool relative;
   u32 bulk;
@@ -174,7 +174,7 @@ sp_test_each(fs, iter, test_t, tests) {
   sp_str_t* bulk_names = sp_alloc_n(mem, sp_str_t, it->bulk ? it->bulk : 1);
   bool* bulk_seen = sp_alloc_n(mem, bool, it->bulk ? it->bulk : 1);
   sp_for(b, it->bulk) {
-    bulk_names[b] = sp_fmt(mem, "{}{}", sp_fmt_cstr(FS_ITER_BULK_PREFIX), sp_fmt_uint(b)).value;
+    bulk_names[b] = sp_fmt(mem, "{}{}", sp_fmt_cstr(BULK_PREFIX), sp_fmt_uint(b)).value;
     sp_expect_ok(t, sp_fs_create_file(sp_fs_join_path(mem, dir, bulk_names[b])));
   }
 
@@ -227,7 +227,7 @@ sp_test_each(fs, iter, test_t, tests) {
       }
     }
     sp_expect_ok(t, walk);
-    sp_fs_dir_close(&iter);
+    sp_expect_ok(t, sp_fs_dir_close(&iter));
   }
 
   sp_carr_for(it->expect.entries, e) {

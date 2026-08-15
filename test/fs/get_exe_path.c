@@ -1,60 +1,49 @@
-#include "fs.h"
+#include "sp.h"
+#include "sp/sp_test.h"
 
-struct fs_get_exe_path {
-  sp_mem_heap_t* heap;
-  sp_mem_t mem;
-};
+sp_test(fs, get_exe_path_basic_properties) {
+  sp_test_skip_on_wasm()
 
-UTEST_F_SETUP(fs_get_exe_path) {
-  ut.heap = sp_mem_heap_new();
-  ut.mem = sp_mem_heap_as_allocator(ut.heap);
-}
+  sp_str_t exe = sp_fs_get_exe_path(sp_test_arena(t));
+  sp_must_gt(t, exe.len, 0);
 
-UTEST_F_TEARDOWN(fs_get_exe_path) {
-  sp_mem_heap_destroy(ut.heap);
-}
-
-UTEST_F(fs_get_exe_path, basic_properties) {
-  SKIP_ON_WASM()
-  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
-  ASSERT_GT(exe.len, 0);
-
-  // normalized: no backslashes
-  sp_for(i, exe.len) {
-    ASSERT_NE(exe.data[i], '\\');
-  }
-
-  // normalized: no trailing slash
-  ASSERT_NE(exe.data[exe.len - 1], '/');
+  // normalized: no backslashes, no trailing slash
+  sp_must(t, !sp_str_contains(exe, sp_str_lit("\\")));
+  sp_must_ne(t, exe.data[exe.len - 1], '/');
 
   // has a filename component
-  sp_str_t name = sp_fs_get_name(exe);
-  ASSERT_GT(name.len, 0);
+  sp_must_gt(t, sp_fs_get_name(exe).len, 0);
+  return SP_OK;
 }
 
-UTEST_F(fs_get_exe_path, is_absolute) {
-  SKIP_ON_WASM()
-  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
+sp_test(fs, get_exe_path_is_absolute) {
+  sp_test_skip_on_wasm()
+
+  sp_str_t exe = sp_fs_get_exe_path(sp_test_arena(t));
   // absolute: starts with / on POSIX, or X: on Windows
-  bool is_absolute = (exe.data[0] == '/') || (exe.len >= 2 && exe.data[1] == ':');
-  ASSERT_TRUE(is_absolute);
+  sp_must(t, (exe.data[0] == '/') || (exe.len >= 2 && exe.data[1] == ':'));
+  return SP_OK;
 }
 
-UTEST_F(fs_get_exe_path, exists_on_disk) {
-  SKIP_ON_WASM()
-  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
-  ASSERT_TRUE(sp_fs_exists(exe));
+sp_test(fs, get_exe_path_exists_on_disk) {
+  sp_test_skip_on_wasm()
+
+  sp_must(t, sp_fs_exists(sp_fs_get_exe_path(sp_test_arena(t))));
+  return SP_OK;
 }
 
-UTEST_F(fs_get_exe_path, is_canonical) {
-  SKIP_ON_WASM()
-  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
-  sp_str_t canonical = sp_fs_canonicalize_path(ut.mem, exe);
-  SP_EXPECT_STR_EQ(canonical, exe);
+sp_test(fs, get_exe_path_is_canonical) {
+  sp_test_skip_on_wasm()
+
+  sp_mem_t mem = sp_test_arena(t);
+  sp_str_t exe = sp_fs_get_exe_path(mem);
+  sp_expect_str_eq(t, sp_fs_canonicalize_path(mem, exe), exe);
+  return SP_OK;
 }
 
-UTEST_F(fs_get_exe_path, no_dotdot) {
-  SKIP_ON_WASM()
-  sp_str_t exe = sp_fs_get_exe_path(ut.mem);
-  ASSERT_FALSE(sp_str_contains(exe, sp_str_lit("..")));
+sp_test(fs, get_exe_path_no_dotdot) {
+  sp_test_skip_on_wasm()
+
+  sp_must(t, !sp_str_contains(sp_fs_get_exe_path(sp_test_arena(t)), sp_str_lit("..")));
+  return SP_OK;
 }

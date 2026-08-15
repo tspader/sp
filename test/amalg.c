@@ -9,7 +9,6 @@
 #include "env.c"
 #include "fmon.c"
 #include "format.c"
-#include "fs.c"
 #include "glob.c"
 #include "ht.c"
 #include "io.c"

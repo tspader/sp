@@ -15,11 +15,12 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, wtf8_roundtrip, test_t, tests) {
+  sp_mem_t mem = sp_test_arena(t);
   sp_str_t input = sp_cstr_as_str(it->input);
   sp_wide_str_t w;
-  sp_must_ok(t, sp_wtf8_to_wtf16(sp_test_arena(t), input, &w));
+  sp_must_ok(t, sp_wtf8_to_wtf16(mem, input, &w));
   sp_str_t back;
-  sp_must_ok(t, sp_wtf16_to_wtf8(sp_test_arena(t), w, &back));
+  sp_must_ok(t, sp_wtf16_to_wtf8(mem, w, &back));
   sp_expect_str_eq(t, back, input);
   return SP_OK;
 }

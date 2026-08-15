@@ -1,39 +1,26 @@
-#include "fs.h"
+#include "sp.h"
+#include "sp/sp_test.h"
 
 typedef struct {
-  const c8* path;
+  const c8* name;
+  const c8* input;
   const c8* ext;
-  const c8* expected;
-} replace_ext_case_t;
+  const c8* expect;
+} test_t;
 
-struct fs_replace_ext {
-  sp_mem_heap_t* heap;
-  sp_mem_t mem;
+static const test_t tests [] = {
+  { .name = "swap",          .input = "A.c",     .ext = "o",   .expect = "A.o" },
+  { .name = "strip",         .input = "A.c",     .ext = "",    .expect = "A" },
+  { .name = "add",           .input = "A",       .ext = "txt", .expect = "A.txt" },
+  { .name = "trailing_dot",  .input = "A.",      .ext = "txt", .expect = "A.txt" },
+  { .name = "double_dot",    .input = "A..txt",  .ext = "md",  .expect = "A..md" },
+  { .name = "multiple_dots", .input = "A.B.C",   .ext = "d",   .expect = "A.B.d" },
+  { .name = "hidden",        .input = ".A",      .ext = "txt", .expect = ".txt" },
+  { .name = "nested",        .input = "A/B.txt", .ext = "md",  .expect = "A/B.md" },
 };
 
-UTEST_F_SETUP(fs_replace_ext) {
-  ut.heap = sp_mem_heap_new();
-  ut.mem = sp_mem_heap_as_allocator(ut.heap);
-}
-
-UTEST_F_TEARDOWN(fs_replace_ext) {
-  sp_mem_heap_destroy(ut.heap);
-}
-
-UTEST_F(fs_replace_ext, cases) {
-  replace_ext_case_t cases[] = {
-    { "foo.c",       "o",   "foo.o" },
-    { "foo.c",       "",    "foo" },
-    { "foo",         "txt", "foo.txt" },
-    { "foo.",        "txt", "foo.txt" },
-    { "foo..txt",    "md",  "foo..md" },
-    { "foo.bar.baz", "c",   "foo.bar.c" },
-    { ".profile",    "txt", ".txt" },
-    { "foo/bar.txt", "md",  "foo/bar.md" },
-  };
-
-  SP_CARR_FOR(cases, i) {
-    sp_str_t result = sp_fs_replace_ext(ut.mem, sp_str_view(cases[i].path), sp_str_view(cases[i].ext));
-    SP_EXPECT_STR_EQ_CSTR(result, cases[i].expected);
-  }
+sp_test_each(fs, replace_ext, test_t, tests) {
+  sp_str_t result = sp_fs_replace_ext(sp_test_arena(t), sp_str_view(it->input), sp_str_view(it->ext));
+  sp_expect_str_eq_c(t, result, it->expect);
+  return SP_OK;
 }

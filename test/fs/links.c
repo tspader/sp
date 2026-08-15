@@ -1,171 +1,146 @@
 #include "fs.h"
 
 typedef struct {
-  const c8* label;
-  fs_setup_t setup[16];
+  sp_err_t err;
+  fs_expected_path_t paths [FS_MAX_PATHS];
+} expect_t;
+
+typedef struct {
+  const c8* name;
+  fs_setup_t setup [FS_MAX_SETUP];
   bool symlink;
   const c8* target;
-  const c8* link_path;
-  bool expect_ok;
-  fs_expected_path_t expected[16];
-} link_test_t;
+  const c8* link;
+  const c8* rewrite;
+  expect_t expect;
+} test_t;
 
-static void run_link_test(s32* utest_result, sp_test_file_manager_t* fm, link_test_t t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
-  sp_fs_create_dir(sandbox);
-  fs_apply_setup(utest_result, fm, sandbox, t.setup);
-
-  sp_str_t target = sp_fs_join_path(fm->mem, sandbox, sp_str_view(t.target));
-  sp_str_t link_path = sp_fs_join_path(fm->mem, sandbox, sp_str_view(t.link_path));
-
-  sp_err_t result = t.symlink
-    ? sp_fs_create_sym_link(target, link_path)
-    : sp_fs_create_hard_link(target, link_path);
-
-  fs_expect_bool(utest_result, link_path, "link_ok", result == SP_OK, t.expect_ok);
-  fs_expect_paths(utest_result, fm, sandbox, t.expected);
-}
-
-UTEST_F(fs, create_hard_link_file) {
-  sp_mem_t a = ut.file_manager.mem;
-  run_link_test(&ur, &ut.file_manager, (link_test_t){
-    .label = "create_hard_link_file",
+static const test_t tests [] = {
+  {
+    .name = "hard_link_file",
     .setup = {
-      { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
+      { .path = "A", .content = "A" },
     },
-    .target = "file.txt",
-    .link_path = "file.hard",
-    .expect_ok = true,
-    .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-      { .path = "file.hard", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-    }
-  });
-
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_hard_link_file"));
-  sp_str_t source = sp_fs_join_path(a, sandbox, sp_str_lit("file.txt"));
-  sp_str_t link = sp_fs_join_path(a, sandbox, sp_str_lit("file.hard"));
-
-  sp_io_file_writer_t writer = sp_zero;
-  sp_io_file_writer_from_path(&writer, source);
-  sp_io_write_str(&writer.base, sp_str_lit("updated"), SP_NULLPTR);
-  sp_io_file_writer_close(&writer);
-  sp_str_t link_content = sp_zero;
-  sp_io_read_file(a, link, &link_content);
-  SP_EXPECT_STR_EQ(link_content, sp_str_lit("updated"));
-}
-
-UTEST_F(fs, create_hard_link_existing_destination_fails) {
-  run_link_test(&ur, &ut.file_manager, (link_test_t){
-    .label = "create_hard_link_existing_destination_fails",
-    .setup = {
-      { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
-      { .path = "dest.txt", .kind = FS_SETUP_FILE, .content = "bye" },
+    .target = "A",
+    .link = "B",
+    .rewrite = "B",
+    .expect = {
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
+        { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
+      },
     },
-    .target = "file.txt",
-    .link_path = "dest.txt",
-    .expect_ok = false,
-    .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-      { .path = "dest.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-    }
-  });
-}
-
-UTEST_F(fs, create_hard_link_directory_fails) {
-  run_link_test(&ur, &ut.file_manager, (link_test_t){
-    .label = "create_hard_link_directory_fails",
+  },
+  {
+    .name = "hard_link_existing_destination_fails",
     .setup = {
-      { .path = "dir", .kind = FS_SETUP_DIR },
+      { .path = "A", .content = "A" },
+      { .path = "B", .content = "B" },
     },
-    .target = "dir",
-    .link_path = "dir.hard",
-    .expect_ok = false,
-    .expected = {
-      { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
-      { .path = "dir.hard", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-    }
-  });
-}
-
-UTEST_F(fs, create_symlink_file) {
-  SKIP_IF_NO_SYMLINKS();
-  sp_mem_t a = ut.file_manager.mem;
-  run_link_test(&ur, &ut.file_manager, (link_test_t){
-    .label = "create_symlink_file",
+    .target = "A",
+    .link = "B",
+    .expect = {
+      .err = SP_ERR_SYS_EXISTS,
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
+        { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
+    },
+  },
+  {
+    .name = "hard_link_directory_fails",
     .setup = {
-      { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
+      { "A", FS_SETUP_DIR },
+    },
+    .target = "A",
+    .link = "B",
+    .expect = {
+      // hard-linking a directory: POSIX reports EPERM; NT reports
+      // STATUS_FILE_IS_A_DIRECTORY from FileLinkInformation
+#if defined(SP_WIN32)
+      .err = SP_ERR_SYS_IS_DIR,
+#else
+      .err = SP_ERR_SYS_ACCESS_DENIED,
+#endif
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        { .path = "B" },
+      },
+    },
+  },
+  {
+    .name = "symlink_file",
+    .setup = {
+      { .path = "A", .content = "A" },
     },
     .symlink = true,
-    .target = "file.txt",
-    .link_path = "file.link",
-    .expect_ok = true,
-    .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-      { .path = "file.link", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_SYMLINK },
-    }
-  });
-
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("create_symlink_file"));
-  sp_str_t link = sp_fs_join_path(a, sandbox, sp_str_lit("file.link"));
-  sp_str_t symlink_content = sp_zero;
-  sp_io_read_file(a, link, &symlink_content);
-  SP_EXPECT_STR_EQ(symlink_content, sp_str_lit("hello"));
-}
-
-UTEST_F(fs, create_symlink_directory) {
-  SKIP_IF_NO_SYMLINKS();
-  run_link_test(&ur, &ut.file_manager, (link_test_t){
-    .label = "create_symlink_directory",
+    .target = "A",
+    .link = "L",
+    .expect = {
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
+        { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .content = "A" },
+      },
+    },
+  },
+  {
+    .name = "symlink_directory",
     .setup = {
-      { .path = "dir", .kind = FS_SETUP_DIR },
+      { "A", FS_SETUP_DIR },
     },
     .symlink = true,
-    .target = "dir",
-    .link_path = "dir.link",
-    .expect_ok = true,
-    .expected = {
-      { .path = "dir", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_DIR },
-      { .path = "dir.link", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_SYMLINK },
-    }
-  });
-}
-
-UTEST_F(fs, create_symlink_existing_destination_fails) {
-  SKIP_IF_NO_SYMLINKS();
-  run_link_test(&ur, &ut.file_manager, (link_test_t){
-    .label = "create_symlink_existing_destination_fails",
+    .target = "A",
+    .link = "L",
+    .expect = {
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK },
+      },
+    },
+  },
+  {
+    .name = "symlink_existing_destination_fails",
     .setup = {
-      { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
-      { .path = "dest.txt", .kind = FS_SETUP_FILE, .content = "bye" },
+      { .path = "A", .content = "A" },
+      { .path = "B", .content = "B" },
     },
     .symlink = true,
-    .target = "file.txt",
-    .link_path = "dest.txt",
-    .expect_ok = false,
-    .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-      { .path = "dest.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
-    }
-  });
+    .target = "A",
+    .link = "B",
+    .expect = {
+      .err = SP_ERR_SYS_EXISTS,
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
+        { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
+    },
+  },
+};
+
+sp_test_each(fs, links, test_t, tests) {
+  if (it->symlink) fs_skip_if_no_symlinks(t);
+
+  sp_mem_t mem = sp_test_arena(t);
+  sp_str_t sandbox = sp_test_dir(t);
+  fs_apply_setup(t, sandbox, it->setup);
+
+  sp_str_t target = sp_fs_join_path(mem, sandbox, sp_str_view(it->target));
+  sp_str_t link = sp_fs_join_path(mem, sandbox, sp_str_view(it->link));
+
+  sp_err_t result = it->symlink
+    ? sp_fs_create_sym_link(target, link)
+    : sp_fs_create_hard_link(target, link);
+  sp_expect_err_eq(t, result, it->expect.err);
+
+  // a hard link shares content with its target: rewrite the target through
+  // one name, then the expected paths observe the update through the other
+  if (it->rewrite) {
+    sp_io_file_writer_t writer = sp_zero;
+    sp_io_file_writer_from_path(&writer, target);
+    sp_io_write_str(&writer.base, sp_str_view(it->rewrite), SP_NULLPTR);
+    sp_io_file_writer_close(&writer);
+  }
+
+  fs_expect_paths(t, sandbox, it->expect.paths);
+  return SP_OK;
 }
-
-// canonicalize through a symlink should resolve to the real target
-UTEST_F(fs, canonicalize_through_symlink) {
-  SKIP_IF_NO_SYMLINKS();
-  sp_mem_t a = ut.file_manager.mem;
-  sp_str_t sandbox = sp_test_file_path(&ut.file_manager, sp_str_lit("canon_through_symlink"));
-  sp_fs_create_dir(sandbox);
-
-  sp_str_t real = sp_fs_join_path(a, sandbox, sp_str_lit("real.txt"));
-  sp_str_t link = sp_fs_join_path(a, sandbox, sp_str_lit("link.txt"));
-
-  sp_test_file_create_ex((sp_test_file_config_t) { .path = real, .content = sp_str_lit("data") });
-  ASSERT_EQ(sp_fs_create_sym_link(real, link), SP_OK);
-
-  sp_str_t canon_link = sp_fs_canonicalize_path(a, link);
-  sp_str_t canon_real = sp_fs_canonicalize_path(a, real);
-  SP_EXPECT_STR_EQ(canon_link, canon_real);
-}
-
-

@@ -268,6 +268,36 @@ typedef struct {
   sp_da(sp_test_kv_t) kvs;
 } sp_test_failure_t;
 
+#if defined(SP_FREESTANDING)
+  #define sp_test_skip_on_freestanding() return sp_test_skip(t, "skipped on freestanding");
+#else
+  #define sp_test_skip_on_freestanding()
+#endif
+
+#if defined(SP_WIN32)
+  #define sp_test_skip_on_win32() return sp_test_skip(t, "skipped on win32");
+#else
+  #define sp_test_skip_on_win32()
+#endif
+
+#if defined(SP_MACOS)
+  #define sp_test_skip_on_macos() return sp_test_skip(t, "skipped on macos");
+#else
+  #define sp_test_skip_on_macos()
+#endif
+
+#if defined(SP_WASM)
+  #define sp_test_skip_on_wasm() return sp_test_skip(t, "skipped on wasm");
+#else
+  #define sp_test_skip_on_wasm()
+#endif
+
+#if defined(SP_LINUX)
+  #define sp_test_skip_on_linux() return sp_test_skip(t, "skipped on linux");
+#else
+  #define sp_test_skip_on_linux()
+#endif
+
 SP_API sp_err_t    sp_test_skip(sp_test_t* t, const c8* fmt, ...);
 SP_API void        sp_test_fail(sp_test_t* t, const c8* fmt, ...);
 SP_API sp_str_t    sp_test_get_name(sp_test_t* t);

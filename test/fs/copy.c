@@ -1,193 +1,216 @@
 #include "fs.h"
 
 typedef enum {
-  COPY_FILE,
-  COPY_DIR,
-  COPY_LINK,
-} copy_action_t;
+  OP_COPY_FILE,
+  OP_COPY,
+  OP_LINK,
+} op_t;
 
 typedef struct {
-  const c8* path;
-  bool exists;
-  sp_fs_kind_t attr;
-  const c8* content;
-} copy_expect_t;
-
-typedef struct {
-  const c8* label;
-  fs_setup_t setup[16];
-  copy_action_t action;
+  const c8* name;
+  fs_setup_t setup [FS_MAX_SETUP];
+  op_t op;
   const c8* src;
   const c8* dst;
-  copy_expect_t expect[16];
-} copy_test_t;
+  sp_err_t err;
+  fs_expected_path_t expect [FS_MAX_PATHS];
+} test_t;
 
-static void run_copy_test(s32* utest_result, sp_test_file_manager_t* fm, copy_test_t t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
-  sp_fs_create_dir(sandbox);
-  fs_apply_setup(utest_result, fm, sandbox, t.setup);
-
-  sp_str_t src = sp_fs_join_path(fm->mem, sandbox, sp_str_view(t.src));
-  sp_str_t dst = sp_fs_join_path(fm->mem, sandbox, sp_str_view(t.dst));
-
-  switch (t.action) {
-    case COPY_FILE: sp_fs_copy_file(src, dst); break;
-    case COPY_DIR:  sp_fs_copy(src, dst); break;
-    case COPY_LINK: sp_fs_link(src, dst, SP_FS_LINK_COPY); break;
-  }
-
-  sp_for(i, 16) {
-    copy_expect_t* exp = &t.expect[i];
-    if (!exp->path) break;
-
-    sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_str_view(exp->path));
-    bool exists = sp_fs_exists(path);
-    fs_expect_bool(utest_result, path, "exists", exists, exp->exists);
-
-    if (exp->exists && exists) {
-      fs_expect_attr(utest_result, path, sp_fs_get_kind(path), exp->attr);
-      if (exp->content) {
-        sp_str_t file_content = sp_zero;
-        sp_io_read_file(fm->mem, path, &file_content);
-        SP_EXPECT_STR_EQ(file_content, sp_str_view(exp->content));
-      }
-    }
-  }
-}
-
-UTEST_F(fs, copy_file_basic) {
-  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
-    .label = "copy_file_basic",
+static const test_t tests [] = {
+  {
+    .name = "file_basic",
     .setup = {
-      { .path = "source.txt", .kind = FS_SETUP_FILE, .content = "hello world" },
+      { .path = "A", .content = "A" },
     },
-    .action = COPY_FILE,
-    .src = "source.txt",
-    .dst = "dest.txt",
+    .src = "A",
+    .dst = "B",
     .expect = {
-      { .path = "source.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "hello world" },
-      { .path = "dest.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "hello world" },
+      { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
     },
-  });
-}
-
-UTEST_F(fs, copy_file_via_link) {
-  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
-    .label = "copy_file_via_link",
+  },
+  {
+    .name = "file_via_link",
     .setup = {
-      { .path = "source.txt", .kind = FS_SETUP_FILE, .content = "test content" },
+      { .path = "A", .content = "A" },
     },
-    .action = COPY_LINK,
-    .src = "source.txt",
-    .dst = "copy.txt",
+    .op = OP_LINK,
+    .src = "A",
+    .dst = "B",
     .expect = {
-      { .path = "source.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "test content" },
-      { .path = "copy.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "test content" },
+      { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
     },
-  });
-}
-
-UTEST_F(fs, copy_dir_basic) {
-  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
-    .label = "copy_dir_basic",
+  },
+  {
+    .name = "file_through_symlink",
     .setup = {
-      { .path = "src", .kind = FS_SETUP_DIR },
-      { .path = "src/a.txt", .kind = FS_SETUP_FILE, .content = "aaa" },
-      { .path = "src/b.txt", .kind = FS_SETUP_FILE, .content = "bbb" },
-      { .path = "dst", .kind = FS_SETUP_DIR },
+      { .path = "A", .content = "A" },
+      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
     },
-    .action = COPY_DIR,
-    .src = "src",
-    .dst = "dst",
+    .src = "L",
+    .dst = "B",
     .expect = {
-      { .path = "dst/src", .exists = true, .attr = SP_FS_KIND_DIR },
-      { .path = "dst/src/a.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "aaa" },
-      { .path = "dst/src/b.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "bbb" },
+      { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
     },
-  });
-}
-
-UTEST_F(fs, copy_dir_nested) {
-  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
-    .label = "copy_dir_nested",
-    .setup = {
-      { .path = "src", .kind = FS_SETUP_DIR },
-      { .path = "src/sub", .kind = FS_SETUP_DIR },
-      { .path = "src/a.txt", .kind = FS_SETUP_FILE, .content = "top" },
-      { .path = "src/sub/b.txt", .kind = FS_SETUP_FILE, .content = "deep" },
-      { .path = "dst", .kind = FS_SETUP_DIR },
-    },
-    .action = COPY_DIR,
-    .src = "src",
-    .dst = "dst",
+  },
+  {
+    .name = "file_source_missing",
+    .src = "A",
+    .dst = "B",
+    .err = SP_ERR_SYS_NOT_FOUND,
     .expect = {
-      { .path = "dst/src", .exists = true, .attr = SP_FS_KIND_DIR },
-      { .path = "dst/src/a.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "top" },
-      { .path = "dst/src/sub", .exists = true, .attr = SP_FS_KIND_DIR },
-      { .path = "dst/src/sub/b.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "deep" },
+      { .path = "B" },
     },
-  });
-}
-
-UTEST_F(fs, copy_dir_with_nonalphanumeric) {
-  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
-    .label = "copy_dir_with_nonalphanumeric",
+  },
+  {
+    .name = "file_source_is_dir",
     .setup = {
-      { .path = "foo.bar", .kind = FS_SETUP_DIR },
-      { .path = "baz", .kind = FS_SETUP_DIR },
+      { "A", FS_SETUP_DIR },
     },
-    .action = COPY_DIR,
-    .src = "foo.bar",
-    .dst = "baz",
+    .src = "A",
+    .dst = "B",
+    .err = SP_ERR_SYS_IS_DIR,
     .expect = {
-      { .path = "baz/foo.bar", .exists = true, .attr = SP_FS_KIND_DIR },
+      { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+      { .path = "B" },
     },
-  });
-}
-
-UTEST_F(fs, unicode_copy_file) {
-  run_copy_test(&ur, &ut.file_manager, (copy_test_t){
-    .label = "unicode_copy_file",
+  },
+#if defined(SP_POSIX)
+  {
+    .name = "file_source_is_fifo",
     .setup = {
-      { .path = "\xc3\xb6riginal.txt", .kind = FS_SETUP_FILE, .content = "hello" },
+      { .path = "F", .kind = FS_SETUP_FIFO },
     },
-    .action = COPY_FILE,
+    .src = "F",
+    .dst = "B",
+    .err = SP_ERR_SYS_UNSUPPORTED,
+    .expect = {
+      { .path = "B" },
+    },
+  },
+  {
+    .name = "source_is_fifo",
+    .setup = {
+      { .path = "F", .kind = FS_SETUP_FIFO },
+    },
+    .op = OP_COPY,
+    .src = "F",
+    .dst = "B",
+    .err = SP_ERR_SYS_UNSUPPORTED,
+    .expect = {
+      { .path = "B" },
+    },
+  },
+#endif
+  {
+    .name = "dir_basic",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { .path = "A/B", .content = "B" },
+      { .path = "A/C", .content = "C" },
+      { "D", FS_SETUP_DIR },
+    },
+    .op = OP_COPY,
+    .src = "A",
+    .dst = "D",
+    .expect = {
+      { .path = "D/A", .exists = true, .kind = SP_FS_KIND_DIR },
+      { .path = "D/A/B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
+      { .path = "D/A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+    },
+  },
+  {
+    .name = "dir_nested",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { "A/B", FS_SETUP_DIR },
+      { .path = "A/C", .content = "C" },
+      { .path = "A/B/D", .content = "D" },
+      { "E", FS_SETUP_DIR },
+    },
+    .op = OP_COPY,
+    .src = "A",
+    .dst = "E",
+    .expect = {
+      { .path = "E/A", .exists = true, .kind = SP_FS_KIND_DIR },
+      { .path = "E/A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      { .path = "E/A/B", .exists = true, .kind = SP_FS_KIND_DIR },
+      { .path = "E/A/B/D", .exists = true, .kind = SP_FS_KIND_FILE, .content = "D" },
+    },
+  },
+  {
+    .name = "dir_with_nonalphanumeric",
+    .setup = {
+      { "A.B", FS_SETUP_DIR },
+      { "C", FS_SETUP_DIR },
+    },
+    .op = OP_COPY,
+    .src = "A.B",
+    .dst = "C",
+    .expect = {
+      { .path = "C/A.B", .exists = true, .kind = SP_FS_KIND_DIR },
+    },
+  },
+  {
+    .name = "unicode_file",
+    .setup = {
+      { .path = "\xc3\xb6riginal.txt", .content = "A" },
+    },
     .src = "\xc3\xb6riginal.txt",
     .dst = "\xc3\xbc\x63opy.txt",
     .expect = {
-      { .path = "\xc3\xb6riginal.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "hello" },
-      { .path = "\xc3\xbc\x63opy.txt", .exists = true, .attr = SP_FS_KIND_FILE, .content = "hello" },
+      { .path = "\xc3\xb6riginal.txt", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      { .path = "\xc3\xbc\x63opy.txt", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
     },
-  });
+  },
+};
+
+sp_test_each(fs, copy, test_t, tests) {
+  skip_if_symlinks_needed(t, it->setup);
+
+  sp_mem_t mem = sp_test_arena(t);
+  sp_str_t sandbox = sp_test_dir(t);
+  fs_apply_setup(t, sandbox, it->setup);
+
+  sp_str_t src = sp_fs_join_path(mem, sandbox, sp_str_view(it->src));
+  sp_str_t dst = sp_fs_join_path(mem, sandbox, sp_str_view(it->dst));
+
+  sp_err_t result = SP_OK;
+  switch (it->op) {
+    case OP_COPY_FILE: result = sp_fs_copy_file(src, dst); break;
+    case OP_COPY:      result = sp_fs_copy(src, dst); break;
+    case OP_LINK:      result = sp_fs_link(src, dst, SP_FS_LINK_COPY); break;
+  }
+  sp_expect_err_eq(t, result, it->err);
+
+  fs_expect_paths(t, sandbox, it->expect);
+  return SP_OK;
 }
 
 #if defined(SP_POSIX)
-UTEST_F(fs, copy_preserves_file_attributes) {
-  sp_mem_t a = ut.file_manager.mem;
-  sp_str_t source_file = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("source_attrs.txt"));
-  sp_test_file_create_ex((sp_test_file_config_t) {
-    .path = source_file,
-    .content = sp_str_lit("preserved content"),
-  });
+sp_test(fs, copy_preserves_file_attributes) {
+  sp_mem_t mem = sp_test_arena(t);
+  sp_str_t source = fs_path(t, sp_str_lit("A"));
+  sp_fs_create_file_str(source, sp_str_lit("A"));
 
-  ASSERT_EQ(chmod(sp_cstr_from_str(a, source_file), 0755), 0);
+  sp_must_eq(t, chmod(sp_cstr_from_str(mem, source), 0755), 0);
 
-  struct stat original_stat = {0};
-  ASSERT_EQ(stat(sp_cstr_from_str(a, source_file), &original_stat), 0);
+  struct stat original_stat = sp_zero;
+  sp_must_eq(t, stat(sp_cstr_from_str(mem, source), &original_stat), 0);
 
-  sp_str_t copy_file = sp_test_file_path(&ut.file_manager, sp_str_lit("copy_attrs.txt"));
-  ASSERT_EQ(sp_fs_copy(source_file, copy_file), SP_OK);
-  ASSERT_TRUE(sp_fs_is_file(copy_file));
+  sp_str_t copy = fs_path(t, sp_str_lit("B"));
+  sp_must_ok(t, sp_fs_copy(source, copy));
+  sp_must(t, sp_fs_is_file(copy));
 
-  struct stat copy_stat = {0};
-  ASSERT_EQ(stat(sp_cstr_from_str(a, copy_file), &copy_stat), 0);
+  struct stat copy_stat = sp_zero;
+  sp_must_eq(t, stat(sp_cstr_from_str(mem, copy), &copy_stat), 0);
 
-  ASSERT_EQ(original_stat.st_mode, copy_stat.st_mode);
-  ASSERT_EQ(original_stat.st_size, copy_stat.st_size);
+  sp_must_eq(t, original_stat.st_mode, copy_stat.st_mode);
+  sp_must_eq(t, original_stat.st_size, copy_stat.st_size);
   sp_str_t preserved = sp_zero;
-  sp_io_read_file(a, copy_file, &preserved);
-  SP_EXPECT_STR_EQ(preserved, sp_str_lit("preserved content"));
+  sp_io_read_file(mem, copy, &preserved);
+  sp_expect_str_eq(t, preserved, sp_str_lit("A"));
+  return SP_OK;
 }
 #endif
-
-

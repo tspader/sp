@@ -1,109 +1,162 @@
 #include "fs.h"
 
 typedef struct {
-  const c8* label;
-  fs_setup_t setup[16];
-  bool remove_dir;
-  const c8* remove_path;
-  fs_expected_path_t expected[16];
-} remove_test_t;
+  const c8* name;
+  fs_setup_t setup [FS_MAX_SETUP];
+  bool dir;
+  const c8* path;
+  sp_err_t err;
+  fs_expected_path_t expect [FS_MAX_PATHS];
+} test_t;
 
-static void run_remove_test(s32* utest_result, sp_test_file_manager_t* fm, remove_test_t t) {
-  sp_str_t sandbox = sp_test_file_path(fm, sp_str_view(t.label));
-  sp_fs_create_dir(sandbox);
-  fs_apply_setup(utest_result, fm, sandbox, t.setup);
-
-  sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_str_view(t.remove_path));
-  if (t.remove_dir) {
-    sp_fs_remove_dir(path);
-  } else {
-    sp_fs_remove_file(path);
-  }
-
-  fs_expect_paths(utest_result, fm, sandbox, t.expected);
-}
-
-UTEST_F(fs, remove_file_basic) {
-  run_remove_test(&ur, &ut.file_manager, (remove_test_t){
-    .label = "remove_file_basic",
+static const test_t tests [] = {
+  {
+    .name = "file_basic",
     .setup = {
-      { .path = "file.txt", .kind = FS_SETUP_FILE, .content = "hello" },
+      { "A" },
     },
-    .remove_path = "file.txt",
-    .expected = {
-      { .path = "file.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+    .path = "A",
+    .expect = {
+      { .path = "A" },
     },
-  });
-}
-
-UTEST_F(fs, remove_dir_recursive) {
-  run_remove_test(&ur, &ut.file_manager, (remove_test_t){
-    .label = "remove_dir_recursive",
+  },
+  {
+    .name = "file_missing",
+    .path = "A",
+    .err = SP_ERR_SYS_NOT_FOUND,
+  },
+  {
+    .name = "file_is_dir",
     .setup = {
-      { .path = "tree", .kind = FS_SETUP_DIR },
-      { .path = "tree/file1.txt", .kind = FS_SETUP_FILE, .content = "a" },
-      { .path = "tree/sub", .kind = FS_SETUP_DIR },
-      { .path = "tree/sub/file2.txt", .kind = FS_SETUP_FILE, .content = "b" },
+      { "A", FS_SETUP_DIR },
     },
-    .remove_dir = true,
-    .remove_path = "tree",
-    .expected = {
-      { .path = "tree", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-      { .path = "tree/file1.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-      { .path = "tree/sub", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-      { .path = "tree/sub/file2.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+    .path = "A",
+    .err = SP_ERR_SYS_IS_DIR,
+    .expect = {
+      { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
     },
-  });
-}
-
-UTEST_F(fs, remove_dir_does_not_follow_symlink) {
-  SKIP_IF_NO_SYMLINKS();
-  run_remove_test(&ur, &ut.file_manager, (remove_test_t){
-    .label = "remove_dir_does_not_follow_symlink",
+  },
+  {
+    .name = "dir_recursive",
     .setup = {
-      { .path = "outside.txt", .kind = FS_SETUP_FILE, .content = "outside" },
-      { .path = "tree", .kind = FS_SETUP_DIR },
-      { .path = "tree/link", .kind = FS_SETUP_SYMLINK, .target = "outside.txt" },
-      { .path = "tree/file.txt", .kind = FS_SETUP_FILE, .content = "inside" },
+      { "A", FS_SETUP_DIR },
+      { "A/B" },
+      { "A/C", FS_SETUP_DIR },
+      { "A/C/D" },
     },
-    .remove_dir = true,
-    .remove_path = "tree",
-    .expected = {
-      { .path = "tree", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-      { .path = "tree/link", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-      { .path = "tree/file.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-      { .path = "outside.txt", .exists = FS_EXPECT_EXIST, .attr = SP_FS_KIND_FILE },
+    .dir = true,
+    .path = "A",
+    .expect = {
+      { .path = "A" },
+      { .path = "A/B" },
+      { .path = "A/C" },
+      { .path = "A/C/D" },
     },
-  });
-}
-
-UTEST_F(fs, unicode_remove_file) {
-  run_remove_test(&ur, &ut.file_manager, (remove_test_t){
-    .label = "unicode_remove_file",
+  },
+  {
+    .name = "dir_missing",
+    .dir = true,
+    .path = "A",
+    .err = SP_ERR_SYS_NOT_FOUND,
+  },
+  {
+    .name = "dir_is_file",
     .setup = {
-      { .path = "\xc3\xb6\x70\x65\x6e.txt", .kind = FS_SETUP_FILE },
+      { "A" },
     },
-    .remove_path = "\xc3\xb6\x70\x65\x6e.txt",
-    .expected = {
-      { .path = "\xc3\xb6\x70\x65\x6e.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+    .dir = true,
+    .path = "A",
+    .err = SP_ERR_SYS_NOT_DIR,
+    .expect = {
+      { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
     },
-  });
-}
-
-UTEST_F(fs, unicode_remove_dir) {
-  run_remove_test(&ur, &ut.file_manager, (remove_test_t){
-    .label = "unicode_remove_dir",
+  },
+  {
+    .name = "dir_does_not_follow_symlink",
     .setup = {
-      { .path = "\xc3\xa4\x62\x63", .kind = FS_SETUP_DIR },
-      { .path = "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt", .kind = FS_SETUP_FILE, .content = "data" },
+      { "B" },
+      { "A", FS_SETUP_DIR },
+      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "B" },
+      { "A/C" },
     },
-    .remove_dir = true,
-    .remove_path = "\xc3\xa4\x62\x63",
-    .expected = {
-      { .path = "\xc3\xa4\x62\x63", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
-      { .path = "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt", .exists = FS_EXPECT_NOT_EXIST, .attr = SP_FS_KIND_NONE },
+    .dir = true,
+    .path = "A",
+    .expect = {
+      { .path = "A" },
+      { .path = "A/L" },
+      { .path = "A/C" },
+      { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE },
     },
-  });
+  },
+  {
+    .name = "dir_symlink_root_removes_link_only",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { "A/B" },
+      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+    },
+    .dir = true,
+    .path = "L",
+    .expect = {
+      { .path = "L" },
+      { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+      { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+    },
+  },
+#if defined(SP_POSIX)
+  {
+    .name = "dir_with_fifo",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { .path = "A/F", .kind = FS_SETUP_FIFO },
+      { "A/B" },
+    },
+    .dir = true,
+    .path = "A",
+    .expect = {
+      { .path = "A" },
+      { .path = "A/F" },
+      { .path = "A/B" },
+    },
+  },
+#endif
+  {
+    .name = "unicode_file",
+    .setup = {
+      { "\xc3\xb6\x70\x65\x6e.txt" },
+    },
+    .path = "\xc3\xb6\x70\x65\x6e.txt",
+    .expect = {
+      { .path = "\xc3\xb6\x70\x65\x6e.txt" },
+    },
+  },
+  {
+    .name = "unicode_dir",
+    .setup = {
+      { "\xc3\xa4\x62\x63", FS_SETUP_DIR },
+      { "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt" },
+    },
+    .dir = true,
+    .path = "\xc3\xa4\x62\x63",
+    .expect = {
+      { .path = "\xc3\xa4\x62\x63" },
+      { .path = "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt" },
+    },
+  },
+};
+
+sp_test_each(fs, remove, test_t, tests) {
+  skip_if_symlinks_needed(t, it->setup);
+
+  sp_str_t sandbox = sp_test_dir(t);
+  fs_apply_setup(t, sandbox, it->setup);
+
+  sp_str_t path = sp_fs_join_path(sp_test_arena(t), sandbox, sp_str_view(it->path));
+  sp_err_t result = it->dir
+    ? sp_fs_remove_dir(path)
+    : sp_fs_remove_file(path);
+  sp_expect_err_eq(t, result, it->err);
+
+  fs_expect_paths(t, sandbox, it->expect);
+  return SP_OK;
 }
-
-

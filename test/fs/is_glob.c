@@ -1,26 +1,24 @@
-#include "fs.h"
+#include "sp.h"
+#include "sp/sp_test.h"
 
 typedef struct {
+  const c8* name;
   const c8* input;
-  bool expected;
-} is_glob_case_t;
+  bool glob;
+} test_t;
 
-UTEST(fs_is_glob, cases) {
-  is_glob_case_t cases[] = {
-    { "",          false },
-    { "foo",       false },
-    { "foo.txt",   false },
-    { "foo?bar",   false },
-    { "*",         true },
-    { "*.txt",     true },
-    { "foo/*",     true },
-    { "foo*bar",   true },
-  };
+static const test_t tests [] = {
+  { .name = "empty",             .input = "" },
+  { .name = "plain",             .input = "A" },
+  { .name = "plain_ext",         .input = "A.txt" },
+  { .name = "question_not_glob", .input = "A?B" },
+  { .name = "star",              .input = "*",     .glob = true },
+  { .name = "star_ext",          .input = "*.txt", .glob = true },
+  { .name = "star_in_dir",       .input = "A/*",   .glob = true },
+  { .name = "star_infix",        .input = "A*B",   .glob = true },
+};
 
-  SP_CARR_FOR(cases, i) {
-    bool result = sp_fs_is_glob(sp_str_view(cases[i].input));
-    EXPECT_EQ(result, cases[i].expected);
-  }
+sp_test_each(fs, is_glob, test_t, tests) {
+  sp_expect_eq(t, sp_fs_is_glob(sp_str_view(it->input)), it->glob);
+  return SP_OK;
 }
-
-

@@ -14,7 +14,11 @@ s32 run(s32 num_args, const c8** args) {
   sp_str_t dir = cwd;
   if (num_args == 2) dir = sp_fs_join_path(mem, cwd, sp_str_view(args[1]));
 
-  sp_da(sp_fs_entry_t) entries = sp_fs_collect(mem, dir);
+  sp_da(sp_fs_entry_t) entries;
+  if (sp_fs_collect(mem, dir, &entries)) {
+    sp_log("could not read {}", sp_fmt_str(dir));
+    return 1;
+  }
   sp_da_sort(entries, compare_entries);
 
   sp_da_for(entries, it) {
