@@ -9,6 +9,14 @@ typedef struct {
   s32       exit;
 } tls_t;
 
+static sp_str_t output_name(sp_mem_t mem, sp_http_url_t url, const c8* override) {
+  if (override) return sp_cstr_as_str(override);
+  sp_str_t name = sp_fs_get_name(url.path);
+  if (sp_str_empty(name) || sp_str_equal_cstr(name, "/")) return sp_str_lit("index.html");
+  return sp_str_copy(mem, name);
+}
+
+#if defined(SP_TLS_WITH_MBEDTLS)
 static const c8* backend_name(sp_tls_backend_t backend) {
   switch (backend) {
     case SP_TLS_BACKEND_ANCHORS:   return "anchors (mbedTLS verifies extracted roots)";
@@ -18,14 +26,6 @@ static const c8* backend_name(sp_tls_backend_t backend) {
   return "unknown";
 }
 
-static sp_str_t output_name(sp_mem_t mem, sp_http_url_t url, const c8* override) {
-  if (override) return sp_cstr_as_str(override);
-  sp_str_t name = sp_fs_get_name(url.path);
-  if (sp_str_empty(name) || sp_str_equal_cstr(name, "/")) return sp_str_lit("index.html");
-  return sp_str_copy(mem, name);
-}
-
-#if defined(SP_TLS_WITH_MBEDTLS)
 sp_cli_result_t tls_run(sp_cli_t* cli) {
   tls_t* tls = sp_cast(tls_t*, cli->user_data);
 
@@ -107,19 +107,7 @@ done:
 #else
 sp_cli_result_t tls_run(sp_cli_t* cli) {
   tls_t* tls = sp_cast(tls_t*, cli->user_data);
-
-  sp_mem_heap_t* heap = sp_mem_heap_new();
-  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
-
-  sp_tls_trust_t trust = sp_zero;
-  sp_tls_trust_init(&trust, mem);
-  sp_tls_trust_load(&trust);
-
-  sp_log("backend: {}", sp_fmt_cstr(backend_name(trust.backend)));
   sp_log("mbedTLS not compiled in for this target; cannot fetch {}", sp_fmt_cstr(tls->url));
-
-  sp_tls_trust_free(&trust);
-  sp_mem_heap_destroy(heap);
   return SP_CLI_OK;
 }
 #endif

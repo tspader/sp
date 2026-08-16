@@ -7,10 +7,6 @@
   #define SP_HTTP_SOCKETS
 #endif
 
-struct mbedtls_x509_crt;
-struct mbedtls_ssl_config;
-struct mbedtls_ssl_context;
-
 typedef enum {
   SP_HTTP_OK = 0,
   SP_HTTP_ERR_NO_STORE,
@@ -29,16 +25,11 @@ typedef enum {
   SP_HTTP_ERR_PROXY,
 } sp_http_error_t;
 
-// @http
 #define SP_HTTP_DEFAULT_REDIRECTS          16
 #define SP_HTTP_DEFAULT_CONNECT_TIMEOUT_MS 30000
 #define SP_HTTP_DEFAULT_IO_TIMEOUT_MS      60000
 #define SP_HTTP_TIMEOUT_INFINITE           0xffffffffu
 #define SP_HTTP_MAX_ADDRS                  16
-
-#ifndef SP_HTTP_MAX_HEADERS
-  #define SP_HTTP_MAX_HEADERS 16
-#endif
 
 typedef struct {
   sp_str_t scheme;
@@ -54,12 +45,50 @@ typedef enum {
   SP_HTTP_PUT,
   SP_HTTP_PATCH,
   SP_HTTP_DELETE,
+  SP_HTTP_HEAD,
 } sp_http_method_t;
 
 typedef struct {
   sp_str_t name;
   sp_str_t value;
 } sp_http_header_t;
+
+typedef enum {
+  SP_HTTP_BODY_NONE,
+  SP_HTTP_BODY_LENGTH,
+  SP_HTTP_BODY_CHUNKED,
+  SP_HTTP_BODY_EOF,
+} sp_http_body_kind_t;
+
+typedef struct {
+  sp_http_body_kind_t kind;
+  u64                 length;
+} sp_http_body_t;
+
+typedef struct {
+  sp_str_t method;
+  sp_str_t target;
+  sp_str_t headers;
+} sp_http_request_head_t;
+
+typedef struct {
+  s32      status;
+  sp_str_t headers;
+} sp_http_response_head_t;
+
+typedef struct {
+  sp_str_t rest;
+} sp_http_headers_it_t;
+
+typedef struct {
+  sp_io_reader_t      base;
+  sp_io_reader_t*     inner;
+  sp_http_body_kind_t kind;
+  u64                 remaining;
+  bool                line_pending;
+  bool                done;
+  sp_http_error_t     err;
+} sp_http_body_reader_t;
 
 typedef enum {
   SP_HTTP_ADDR_V4,
@@ -71,8 +100,6 @@ typedef struct {
   u8                  data [16];
 } sp_http_addr_t;
 
-// Resolves a bare hostname to addresses; IP literals are handled before the
-// resolver is consulted, so implementations only ever see real names.
 typedef sp_http_error_t (*sp_http_resolve_fn)(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count);
 
 typedef struct {
@@ -80,8 +107,9 @@ typedef struct {
   void*              user_data;
 } sp_http_resolver_t;
 
-
-// @tls
+/////////
+// TLS //
+/////////
 typedef struct sp_tls sp_tls_t;
 
 struct sp_tls {
@@ -91,51 +119,6 @@ struct sp_tls {
   sp_io_writer_t* writer;
 };
 
-typedef enum {
-  SP_TLS_BACKEND_NONE,
-  SP_TLS_BACKEND_ANCHORS,
-  SP_TLS_BACKEND_OS_VERIFY,
-} sp_tls_backend_t;
-
-typedef struct {
-  sp_tls_backend_t         backend;
-  struct mbedtls_x509_crt* anchors;
-  u32                      loaded;
-  u32                      skipped;
-  sp_mem_t                 mem;
-} sp_tls_trust_t;
-
-typedef struct {
-  sp_str_t hostname;
-} sp_tls_verify_t;
-
-typedef s32 (*sp_tls_verify_fn)(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u32* flags);
-
-SP_API sp_tls_backend_t sp_tls_native_backend(void);
-
-
-SP_API sp_http_error_t  sp_tls_trust_init(sp_tls_trust_t* trust, sp_mem_t mem);
-SP_API void             sp_tls_trust_free(sp_tls_trust_t* trust);
-SP_API sp_http_error_t  sp_tls_trust_load(sp_tls_trust_t* trust);
-
-
-SP_API sp_http_error_t  sp_tls_load_windows(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped);
-SP_API sp_http_error_t  sp_tls_load_unix(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped);
-SP_API sp_http_error_t  sp_tls_load_pem(struct mbedtls_x509_crt* chain, sp_str_t path, u32* loaded, u32* skipped);
-
-
-SP_API sp_http_error_t  sp_tls_conf_apply(const sp_tls_trust_t* trust, struct mbedtls_ssl_config* conf);
-SP_API sp_http_error_t  sp_tls_ssl_attach(const sp_tls_trust_t* trust, struct mbedtls_ssl_context* ssl, sp_tls_verify_t* verify, sp_str_t hostname);
-
-
-SP_API s32              sp_tls_verify_cb(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u32* flags);
-SP_API sp_http_error_t  sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname);
-SP_API sp_http_error_t  sp_tls_windows_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname);
-
-
-SP_API sp_http_error_t  sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t mem, sp_mem_slice_t** ders, u32* count);
-
-
 #if defined(SP_TLS_WITH_MBEDTLS)
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/ssl.h>
@@ -143,6 +126,24 @@ SP_API sp_http_error_t  sp_tls_chain_der(const struct mbedtls_x509_crt* chain, s
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/error.h>
+
+typedef enum {
+  SP_TLS_BACKEND_NONE,
+  SP_TLS_BACKEND_ANCHORS,
+  SP_TLS_BACKEND_OS_VERIFY,
+} sp_tls_backend_t;
+
+typedef struct {
+  sp_tls_backend_t  backend;
+  mbedtls_x509_crt* anchors;
+  u32               loaded;
+  u32               skipped;
+  sp_mem_t          mem;
+} sp_tls_trust_t;
+
+typedef struct {
+  sp_str_t hostname;
+} sp_tls_verify_t;
 
 typedef struct sp_tls_mbedtls sp_tls_mbedtls_t;
 
@@ -172,38 +173,58 @@ struct sp_tls_mbedtls {
   sp_tls_mbedtls_writer_t  writer;
 };
 
+SP_API sp_http_error_t  sp_tls_trust_init(sp_tls_trust_t* trust, sp_mem_t mem);
+SP_API void             sp_tls_trust_free(sp_tls_trust_t* trust);
+SP_API sp_http_error_t  sp_tls_trust_load(sp_tls_trust_t* trust);
+SP_API sp_http_error_t  sp_tls_load_pem(mbedtls_x509_crt* chain, sp_str_t path, u32* loaded, u32* skipped);
 SP_API void             sp_tls_mbedtls_init(sp_tls_mbedtls_t* tls, const sp_tls_trust_t* trust);
 #endif
 
-
-// @http
 typedef struct {
-  sp_str_t           url;
-  sp_tls_t*          tls;
-  sp_http_resolver_t resolver;
-  sp_io_writer_t*    sink;
-  sp_http_method_t   method;
-  sp_str_t           payload;
-  sp_str_t           content_type;
-  sp_http_header_t   headers[SP_HTTP_MAX_HEADERS];
-  u32                max_redirects;
-  sp_str_t           proxy;
-  bool               no_proxy;
-  u32                connect_timeout_ms;
-  u32                io_timeout_ms;
+  sp_str_t                url;
+  sp_tls_t*               tls;
+  sp_http_resolver_t      resolver;
+  sp_io_writer_t*         sink;
+  sp_http_method_t        method;
+  sp_str_t                payload;
+  sp_str_t                content_type;
+  const sp_http_header_t* headers;
+  u32                     num_headers;
+  u32                     max_redirects;
+  sp_str_t                proxy;
+  bool                    no_proxy;
+  u32                     connect_timeout_ms;
+  u32                     io_timeout_ms;
 } sp_http_request_t;
 
 typedef struct {
   s32      status;
   u64      body_len;
   sp_str_t url;
-  sp_str_t content_type;
-  sp_str_t location;
+  sp_str_t headers;
 } sp_http_response_t;
 
-SP_API bool               sp_http_url_parse(sp_str_t url, sp_http_url_t* out);
-SP_API sp_http_resolver_t sp_http_resolver_default(void);
-SP_API sp_http_error_t    sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_response_t* response);
+SP_API bool                 sp_http_url_parse(sp_str_t url, sp_http_url_t* out);
+SP_API sp_str_t             sp_http_method_name(sp_http_method_t method);
+SP_API bool                 sp_http_method_parse(sp_str_t name, sp_http_method_t* out);
+SP_API sp_str_t             sp_http_status_reason(s32 status);
+SP_API sp_http_headers_it_t sp_http_headers_it(sp_str_t headers);
+SP_API bool                 sp_http_headers_it_next(sp_http_headers_it_t* it, sp_http_header_t* out);
+SP_API sp_str_t             sp_http_headers_find(sp_str_t headers, sp_str_t name);
+SP_API bool                 sp_http_headers_has(sp_str_t headers, sp_str_t name);
+SP_API sp_http_error_t      sp_http_headers_check(const sp_http_header_t* headers, u32 count);
+SP_API sp_http_error_t      sp_http_request_head_parse(sp_str_t head, sp_http_request_head_t* out);
+SP_API sp_http_error_t      sp_http_response_head_parse(sp_str_t head, sp_http_response_head_t* out);
+SP_API sp_http_error_t      sp_http_body_parse(sp_str_t headers, sp_http_body_t* out);
+SP_API sp_http_error_t      sp_http_response_body_parse(s32 status, bool head_request, sp_str_t headers, sp_http_body_t* out);
+SP_API sp_http_error_t      sp_http_head_read(sp_io_reader_t* reader, sp_str_t* head);
+SP_API void                 sp_http_body_reader_init(sp_http_body_reader_t* r, sp_io_reader_t* inner, sp_http_body_t body);
+SP_API sp_http_error_t      sp_http_body_read(sp_io_reader_t* reader, sp_http_body_t body, sp_io_writer_t* sink, u64* len);
+SP_API sp_http_error_t      sp_http_request_head_write(sp_io_writer_t* writer, sp_str_t method, sp_str_t target, const sp_http_header_t* headers, u32 count);
+SP_API sp_http_error_t      sp_http_response_head_write(sp_io_writer_t* writer, s32 status, const sp_http_header_t* headers, u32 count);
+SP_API sp_http_error_t      sp_http_response_write(sp_io_writer_t* writer, s32 status, const sp_http_header_t* headers, u32 count, sp_str_t body);
+SP_API sp_http_resolver_t   sp_http_resolver_default(void);
+SP_API sp_http_error_t      sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_response_t* response);
 
 #endif
 
@@ -216,25 +237,16 @@ SP_API sp_http_error_t    sp_http_fetch(sp_mem_t mem, sp_http_request_t request,
 #define SP_HTTP_IMPL_H
 
 typedef struct {
-  s32      status;
-  sp_str_t location;
-  sp_str_t content_type;
-  bool     chunked;
-  bool     has_length;
-  u64      length;
-} sp_http_head_t;
-
-typedef struct {
   sp_http_url_t           url;
   bool                    absolute_form;
   sp_http_method_t        method;
   sp_str_t                payload;
   sp_str_t                content_type;
   const sp_http_header_t* headers;
+  u32                     num_headers;
   bool                    strip_auth;
 } sp_http_wire_t;
 
-// @http
 SP_PRIVATE bool            sp_http_ci_equal(sp_str_t a, sp_str_t b);
 SP_PRIVATE bool            sp_http_ci_contains(sp_str_t haystack, sp_str_t needle);
 SP_PRIVATE sp_str_t        sp_http_str_tail(sp_str_t str, s32 from);
@@ -246,7 +258,10 @@ SP_PRIVATE bool            sp_http_addr_parse(sp_str_t host, sp_http_addr_t* out
 SP_PRIVATE bool            sp_http_url_host_ok(sp_str_t host);
 SP_PRIVATE bool            sp_http_url_port_ok(sp_str_t port);
 SP_PRIVATE bool            sp_http_url_path_ok(sp_str_t path);
-SP_PRIVATE sp_http_error_t sp_http_parse_head(sp_str_t head, sp_http_head_t* out);
+SP_PRIVATE bool            sp_http_token_ok(sp_str_t token);
+SP_PRIVATE bool            sp_http_header_value_ok(sp_str_t value);
+SP_PRIVATE sp_http_error_t sp_http_status_line_parse(sp_str_t line, s32* status);
+SP_PRIVATE sp_http_error_t sp_http_header_lines_check(sp_str_t lines);
 SP_PRIVATE bool            sp_http_location_is_absolute(sp_str_t location);
 SP_PRIVATE sp_str_t        sp_http_resolve_url(sp_mem_t mem, sp_http_url_t base, sp_str_t location);
 SP_PRIVATE bool            sp_http_no_proxy_match(sp_str_t host, sp_str_t no_proxy);
@@ -255,13 +270,16 @@ SP_PRIVATE sp_str_t        sp_http_env_either(const c8* lower, const c8* upper);
 SP_PRIVATE sp_str_t        sp_http_proxy_from_env(sp_http_url_t url);
 SP_PRIVATE sp_http_error_t sp_http_map_io(sp_err_t err, sp_http_error_t fallback);
 SP_PRIVATE u32             sp_http_timeout_ms(u32 requested, u32 fallback);
-SP_PRIVATE sp_http_error_t sp_http_read_head(sp_io_reader_t* reader, sp_str_t* head);
 SP_PRIVATE sp_http_error_t sp_http_read_line(sp_io_reader_t* reader, sp_str_t* line);
-SP_PRIVATE sp_http_error_t sp_http_copy_n(sp_io_reader_t* reader, sp_io_writer_t* body, u64 n, u64* written);
-SP_PRIVATE sp_http_error_t sp_http_read_body(sp_io_reader_t* reader, sp_http_head_t head, sp_io_writer_t* body, u64* written);
-SP_PRIVATE sp_str_t        sp_http_method_name(sp_http_method_t method);
-SP_PRIVATE bool            sp_http_headers_have(const sp_http_header_t* headers, sp_str_t name);
-SP_PRIVATE sp_http_error_t sp_http_headers_check(const sp_http_header_t* headers);
+SP_PRIVATE sp_http_error_t sp_http_chunk_begin(sp_http_body_reader_t* r);
+SP_PRIVATE sp_err_t        sp_http_body_reader_advance(sp_http_body_reader_t* r, void* dst, u64 size, u64* moved);
+SP_PRIVATE sp_err_t        sp_http_body_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
+SP_PRIVATE sp_err_t        sp_http_body_reader_discard(sp_io_reader_t* reader, u64 n, u64* discarded);
+SP_PRIVATE bool            sp_http_header_list_have(const sp_http_header_t* headers, u32 count, sp_str_t name);
+SP_PRIVATE bool            sp_http_headers_reserved(const sp_http_header_t* headers, u32 count);
+SP_PRIVATE sp_http_error_t sp_http_header_write(sp_io_writer_t* writer, sp_http_header_t header);
+SP_PRIVATE sp_http_error_t sp_http_headers_write(sp_io_writer_t* writer, const sp_http_header_t* headers, u32 count);
+SP_PRIVATE sp_http_error_t sp_http_response_head_io(sp_io_writer_t* writer, s32 status, const sp_http_header_t* headers, u32 count);
 SP_PRIVATE sp_str_t        sp_http_build_request(sp_mem_t mem, sp_http_wire_t wire);
 SP_PRIVATE bool            sp_http_proxy_url_parse(sp_mem_t mem, sp_str_t proxy, sp_http_url_t* out);
 
@@ -278,13 +296,14 @@ SP_PRIVATE void            sp_http_conn_close(sp_http_conn_t* conn);
 #endif
 
 #if defined(SP_TLS_WITH_MBEDTLS)
-// @tls
-SP_PRIVATE u32             sp_tls_chain_count(const struct mbedtls_x509_crt* chain);
-#if defined(SP_WIN32)
-// PCCERT_CONTEXT spelled out; wincrypt.h isn't in scope until the implementation
-SP_PRIVATE bool            sp_tls_win32_server_auth(const struct _CERT_CONTEXT* ctx);
-#endif
-
+SP_PRIVATE sp_tls_backend_t sp_tls_native_backend(void);
+SP_PRIVATE u32             sp_tls_chain_count(const mbedtls_x509_crt* chain);
+SP_PRIVATE sp_http_error_t sp_tls_load_unix(mbedtls_x509_crt* chain, u32* loaded, u32* skipped);
+SP_PRIVATE sp_http_error_t sp_tls_conf_apply(const sp_tls_trust_t* trust, mbedtls_ssl_config* conf);
+SP_PRIVATE sp_http_error_t sp_tls_ssl_attach(const sp_tls_trust_t* trust, mbedtls_ssl_context* ssl, sp_tls_verify_t* verify, sp_str_t hostname);
+SP_PRIVATE s32             sp_tls_verify_cb(void* user_data, mbedtls_x509_crt* crt, s32 depth, u32* flags);
+SP_PRIVATE sp_http_error_t sp_tls_macos_eval(const mbedtls_x509_crt* chain, sp_str_t hostname);
+SP_PRIVATE sp_http_error_t sp_tls_windows_eval(const mbedtls_x509_crt* chain, sp_str_t hostname);
 SP_PRIVATE sp_http_error_t sp_tls_mbedtls_open(sp_tls_t* base, sp_sys_socket_t socket, sp_str_t hostname, u32 io_timeout_ms);
 SP_PRIVATE void            sp_tls_mbedtls_close(sp_tls_t* base);
 SP_PRIVATE sp_http_error_t sp_tls_mbedtls_handshake(sp_tls_mbedtls_t* tls, sp_str_t hostname);
@@ -300,21 +319,6 @@ SP_PRIVATE sp_err_t        sp_tls_mbedtls_write(sp_io_writer_t* writer, const vo
 #ifndef SP_HTTP_C
 #if defined(SP_HTTP_IMPLEMENTATION)
 #define SP_HTTP_C
-
-sp_tls_backend_t sp_tls_native_backend(void) {
-#if defined(SP_WIN32)
-  return SP_TLS_BACKEND_OS_VERIFY;
-#elif defined(SP_MACOS) && defined(SP_TLS_MACOS_SECTRUST)
-  return SP_TLS_BACKEND_OS_VERIFY;
-#elif defined(SP_MACOS)
-  // If you didn't compile in SecTrust, fail here instead of at runtime
-  return SP_TLS_BACKEND_NONE;
-#elif defined(SP_LINUX)
-  return SP_TLS_BACKEND_ANCHORS;
-#else
-  return SP_TLS_BACKEND_NONE;
-#endif
-}
 
 SP_PRIVATE bool sp_http_ci_equal(sp_str_t a, sp_str_t b) {
   if (a.len != b.len) return false;
@@ -549,55 +553,241 @@ bool sp_http_url_parse(sp_str_t url, sp_http_url_t* out) {
   return sp_http_url_host_ok(out->host) && sp_http_url_port_ok(out->port) && sp_http_url_path_ok(out->path);
 }
 
+SP_PRIVATE bool sp_http_token_ok(sp_str_t token) {
+  if (sp_str_empty(token)) return false;
+  sp_for(it, token.len) {
+    u8 c = (u8)token.data[it];
+    bool tchar =
+      (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+      c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' ||
+      c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_' ||
+      c == '`' || c == '|' || c == '~';
+    if (!tchar) return false;
+  }
+  return true;
+}
 
-SP_PRIVATE sp_http_error_t sp_http_parse_head(sp_str_t head, sp_http_head_t* out) {
-  *out = sp_zero_s(sp_http_head_t);
+SP_PRIVATE bool sp_http_header_value_ok(sp_str_t value) {
+  sp_for(it, value.len) {
+    u8 c = (u8)value.data[it];
+    if ((c < 0x20 && c != '\t') || c == 0x7f) return false;
+  }
+  return true;
+}
 
-  sp_str_t rest = head;
-  bool first = true;
-  for (;;) {
+SP_PRIVATE sp_http_error_t sp_http_status_line_parse(sp_str_t line, s32* status) {
+  if (!sp_str_starts_with(line, sp_str_lit("HTTP/"))) return SP_HTTP_ERR_PROTOCOL;
+  s32 sp1 = sp_str_find_c8(line, ' ');
+  if (sp1 == SP_STR_NO_MATCH) return SP_HTTP_ERR_PROTOCOL;
+  sp_str_t after = sp_str_trim_left(sp_http_str_tail(line, sp1 + 1));
+  s32 sp2 = sp_str_find_c8(after, ' ');
+  sp_str_t code = sp2 == SP_STR_NO_MATCH ? after : sp_str_sub(after, 0, sp2);
+  u32 value = 0;
+  if (!sp_parse_u32_ex(code, &value)) return SP_HTTP_ERR_PROTOCOL;
+  if (value < 100 || value > 599) return SP_HTTP_ERR_PROTOCOL;
+  *status = (s32)value;
+  return SP_HTTP_OK;
+}
+
+SP_PRIVATE sp_http_error_t sp_http_header_lines_check(sp_str_t lines) {
+  sp_str_t rest = lines;
+  while (!sp_str_empty(rest)) {
     s32 nl = sp_str_find(rest, sp_str_lit("\r\n"));
     sp_str_t line = nl == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, nl);
+    rest = nl == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_http_str_tail(rest, nl + 2);
 
-    if (first) {
-      if (!sp_str_starts_with(line, sp_str_lit("HTTP/"))) return SP_HTTP_ERR_PROTOCOL;
-      s32 sp1 = sp_str_find_c8(line, ' ');
-      if (sp1 == SP_STR_NO_MATCH) return SP_HTTP_ERR_PROTOCOL;
-      sp_str_t after = sp_str_trim_left(sp_http_str_tail(line, sp1 + 1));
-      s32 sp2 = sp_str_find_c8(after, ' ');
-      sp_str_t code = sp2 == SP_STR_NO_MATCH ? after : sp_str_sub(after, 0, sp2);
-      u32 status = 0;
-      if (!sp_parse_u32_ex(code, &status)) return SP_HTTP_ERR_PROTOCOL;
-      out->status = (s32)status;
-      first = false;
-    }
-    else if (!sp_str_empty(line)) {
-      s32 colon = sp_str_find_c8(line, ':');
-      if (colon != SP_STR_NO_MATCH) {
-        sp_str_t name = sp_str_sub(line, 0, colon);
-        sp_str_t value = sp_str_trim(sp_http_str_tail(line, colon + 1));
-        if (sp_http_ci_equal(name, sp_str_lit("location"))) {
-          out->location = value;
-        }
-        else if (sp_http_ci_equal(name, sp_str_lit("content-type"))) {
-          out->content_type = value;
-        }
-        else if (sp_http_ci_equal(name, sp_str_lit("content-length"))) {
-          u64 length = 0;
-          if (!sp_parse_u64_ex(value, &length)) return SP_HTTP_ERR_PROTOCOL;
-          if (out->has_length && out->length != length) return SP_HTTP_ERR_PROTOCOL;
-          out->has_length = true;
-          out->length = length;
-        }
-        else if (sp_http_ci_equal(name, sp_str_lit("transfer-encoding"))) {
-          out->chunked = sp_http_ci_contains(value, sp_str_lit("chunked"));
-          if (!out->chunked) return SP_HTTP_ERR_PROTOCOL;
-        }
-      }
-    }
+    s32 colon = sp_str_find_c8(line, ':');
+    if (colon == SP_STR_NO_MATCH) return SP_HTTP_ERR_PROTOCOL;
+    if (!sp_http_token_ok(sp_str_sub(line, 0, colon))) return SP_HTTP_ERR_PROTOCOL;
+    if (!sp_http_header_value_ok(sp_http_str_tail(line, colon + 1))) return SP_HTTP_ERR_PROTOCOL;
+  }
+  return SP_HTTP_OK;
+}
 
-    if (nl == SP_STR_NO_MATCH) break;
-    rest = sp_http_str_tail(rest, nl + 2);
+sp_http_headers_it_t sp_http_headers_it(sp_str_t headers) {
+  return (sp_http_headers_it_t) { .rest = headers };
+}
+
+bool sp_http_headers_it_next(sp_http_headers_it_t* it, sp_http_header_t* out) {
+  if (sp_str_empty(it->rest)) return false;
+  s32 nl = sp_str_find(it->rest, sp_str_lit("\r\n"));
+  sp_str_t line = nl == SP_STR_NO_MATCH ? it->rest : sp_str_sub(it->rest, 0, nl);
+  it->rest = nl == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_http_str_tail(it->rest, nl + 2);
+
+  s32 colon = sp_str_find_c8(line, ':');
+  if (colon == SP_STR_NO_MATCH || colon == 0) return false;
+  out->name = sp_str_sub(line, 0, colon);
+  out->value = sp_str_trim(sp_http_str_tail(line, colon + 1));
+  return true;
+}
+
+sp_str_t sp_http_headers_find(sp_str_t headers, sp_str_t name) {
+  sp_http_headers_it_t it = sp_http_headers_it(headers);
+  sp_http_header_t header = sp_zero;
+  while (sp_http_headers_it_next(&it, &header)) {
+    if (sp_http_ci_equal(header.name, name)) return header.value;
+  }
+  return sp_zero_s(sp_str_t);
+}
+
+bool sp_http_headers_has(sp_str_t headers, sp_str_t name) {
+  sp_http_headers_it_t it = sp_http_headers_it(headers);
+  sp_http_header_t header = sp_zero;
+  while (sp_http_headers_it_next(&it, &header)) {
+    if (sp_http_ci_equal(header.name, name)) return true;
+  }
+  return false;
+}
+
+sp_http_error_t sp_http_request_head_parse(sp_str_t head, sp_http_request_head_t* out) {
+  *out = sp_zero_s(sp_http_request_head_t);
+  s32 nl = sp_str_find(head, sp_str_lit("\r\n"));
+  sp_str_t line = nl == SP_STR_NO_MATCH ? head : sp_str_sub(head, 0, nl);
+
+  s32 sp1 = sp_str_find_c8(line, ' ');
+  if (sp1 == SP_STR_NO_MATCH) return SP_HTTP_ERR_PROTOCOL;
+  sp_str_t method = sp_str_sub(line, 0, sp1);
+  sp_str_t after = sp_http_str_tail(line, sp1 + 1);
+  s32 sp2 = sp_str_find_c8(after, ' ');
+  if (sp2 == SP_STR_NO_MATCH) return SP_HTTP_ERR_PROTOCOL;
+  sp_str_t target = sp_str_sub(after, 0, sp2);
+  sp_str_t version = sp_http_str_tail(after, sp2 + 1);
+
+  if (!sp_http_token_ok(method)) return SP_HTTP_ERR_PROTOCOL;
+  if (sp_str_empty(target) || !sp_http_url_path_ok(target)) return SP_HTTP_ERR_PROTOCOL;
+  if (!sp_str_equal_cstr(version, "HTTP/1.1") && !sp_str_equal_cstr(version, "HTTP/1.0")) return SP_HTTP_ERR_PROTOCOL;
+
+  out->method = method;
+  out->target = target;
+  if (nl == SP_STR_NO_MATCH) return SP_HTTP_OK;
+  sp_str_t lines = sp_http_str_tail(head, nl + 2);
+  sp_http_error_t err = sp_http_header_lines_check(lines);
+  if (err != SP_HTTP_OK) return err;
+  out->headers = lines;
+  return SP_HTTP_OK;
+}
+
+sp_http_error_t sp_http_response_head_parse(sp_str_t head, sp_http_response_head_t* out) {
+  *out = sp_zero_s(sp_http_response_head_t);
+  s32 nl = sp_str_find(head, sp_str_lit("\r\n"));
+  sp_str_t line = nl == SP_STR_NO_MATCH ? head : sp_str_sub(head, 0, nl);
+  sp_http_error_t err = sp_http_status_line_parse(line, &out->status);
+  if (err != SP_HTTP_OK) return err;
+  if (nl == SP_STR_NO_MATCH) return SP_HTTP_OK;
+  sp_str_t lines = sp_http_str_tail(head, nl + 2);
+  err = sp_http_header_lines_check(lines);
+  if (err != SP_HTTP_OK) return err;
+  out->headers = lines;
+  return SP_HTTP_OK;
+}
+
+sp_http_error_t sp_http_body_parse(sp_str_t headers, sp_http_body_t* out) {
+  *out = sp_zero_s(sp_http_body_t);
+  bool chunked = false;
+  bool has_length = false;
+  u64 length = 0;
+  sp_http_headers_it_t it = sp_http_headers_it(headers);
+  sp_http_header_t header = sp_zero;
+  while (sp_http_headers_it_next(&it, &header)) {
+    if (sp_http_ci_equal(header.name, sp_str_lit("content-length"))) {
+      u64 value = 0;
+      if (!sp_parse_u64_ex(header.value, &value)) return SP_HTTP_ERR_PROTOCOL;
+      if (has_length && length != value) return SP_HTTP_ERR_PROTOCOL;
+      has_length = true;
+      length = value;
+    }
+    else if (sp_http_ci_equal(header.name, sp_str_lit("transfer-encoding"))) {
+      if (!sp_http_ci_contains(header.value, sp_str_lit("chunked"))) return SP_HTTP_ERR_PROTOCOL;
+      chunked = true;
+    }
+  }
+  if (chunked && has_length) return SP_HTTP_ERR_PROTOCOL;
+  if (chunked) {
+    out->kind = SP_HTTP_BODY_CHUNKED;
+  }
+  else if (has_length) {
+    out->kind = SP_HTTP_BODY_LENGTH;
+    out->length = length;
+  }
+  return SP_HTTP_OK;
+}
+
+sp_http_error_t sp_http_response_body_parse(s32 status, bool head_request, sp_str_t headers, sp_http_body_t* out) {
+  *out = sp_zero_s(sp_http_body_t);
+  bool interim = status >= 100 && status <= 199;
+  if (head_request || interim || status == 204 || status == 304) return SP_HTTP_OK;
+  sp_http_error_t err = sp_http_body_parse(headers, out);
+  if (err != SP_HTTP_OK) return err;
+  // a response with no framing headers is delimited by connection close
+  if (out->kind == SP_HTTP_BODY_NONE) out->kind = SP_HTTP_BODY_EOF;
+  return SP_HTTP_OK;
+}
+
+sp_str_t sp_http_method_name(sp_http_method_t method) {
+  switch (method) {
+    case SP_HTTP_GET:    return sp_str_lit("GET");
+    case SP_HTTP_POST:   return sp_str_lit("POST");
+    case SP_HTTP_PUT:    return sp_str_lit("PUT");
+    case SP_HTTP_PATCH:  return sp_str_lit("PATCH");
+    case SP_HTTP_DELETE: return sp_str_lit("DELETE");
+    case SP_HTTP_HEAD:   return sp_str_lit("HEAD");
+  }
+  return sp_zero_s(sp_str_t);
+}
+
+bool sp_http_method_parse(sp_str_t name, sp_http_method_t* out) {
+  const sp_http_method_t methods [] = {
+    SP_HTTP_GET, SP_HTTP_POST, SP_HTTP_PUT, SP_HTTP_PATCH, SP_HTTP_DELETE, SP_HTTP_HEAD,
+  };
+  sp_carr_for(methods, it) {
+    if (sp_str_equal(name, sp_http_method_name(methods[it]))) {
+      *out = methods[it];
+      return true;
+    }
+  }
+  return false;
+}
+
+sp_str_t sp_http_status_reason(s32 status) {
+  switch (status) {
+    case 100: return sp_str_lit("Continue");
+    case 101: return sp_str_lit("Switching Protocols");
+    case 200: return sp_str_lit("OK");
+    case 201: return sp_str_lit("Created");
+    case 202: return sp_str_lit("Accepted");
+    case 204: return sp_str_lit("No Content");
+    case 206: return sp_str_lit("Partial Content");
+    case 301: return sp_str_lit("Moved Permanently");
+    case 302: return sp_str_lit("Found");
+    case 303: return sp_str_lit("See Other");
+    case 304: return sp_str_lit("Not Modified");
+    case 307: return sp_str_lit("Temporary Redirect");
+    case 308: return sp_str_lit("Permanent Redirect");
+    case 400: return sp_str_lit("Bad Request");
+    case 401: return sp_str_lit("Unauthorized");
+    case 403: return sp_str_lit("Forbidden");
+    case 404: return sp_str_lit("Not Found");
+    case 405: return sp_str_lit("Method Not Allowed");
+    case 408: return sp_str_lit("Request Timeout");
+    case 409: return sp_str_lit("Conflict");
+    case 411: return sp_str_lit("Length Required");
+    case 413: return sp_str_lit("Content Too Large");
+    case 414: return sp_str_lit("URI Too Long");
+    case 415: return sp_str_lit("Unsupported Media Type");
+    case 429: return sp_str_lit("Too Many Requests");
+    case 500: return sp_str_lit("Internal Server Error");
+    case 501: return sp_str_lit("Not Implemented");
+    case 502: return sp_str_lit("Bad Gateway");
+    case 503: return sp_str_lit("Service Unavailable");
+    case 504: return sp_str_lit("Gateway Timeout");
+  }
+  return sp_zero_s(sp_str_t);
+}
+
+sp_http_error_t sp_http_headers_check(const sp_http_header_t* headers, u32 count) {
+  sp_for(it, count) {
+    if (!sp_http_token_ok(headers[it].name)) return SP_HTTP_ERR_BAD_CONFIG;
+    if (!sp_http_header_value_ok(headers[it].value)) return SP_HTTP_ERR_BAD_CONFIG;
   }
   return SP_HTTP_OK;
 }
@@ -684,17 +874,14 @@ SP_PRIVATE sp_http_error_t sp_http_map_io(sp_err_t err, sp_http_error_t fallback
   return fallback;
 }
 
-// resolved timeouts: 0 means block forever, matching mbedtls_net_recv_timeout
 SP_PRIVATE u32 sp_http_timeout_ms(u32 requested, u32 fallback) {
   if (requested == SP_HTTP_TIMEOUT_INFINITE) return 0;
   return requested ? requested : fallback;
 }
 
-SP_PRIVATE sp_http_error_t sp_http_read_head(sp_io_reader_t* reader, sp_str_t* head) {
+sp_http_error_t sp_http_head_read(sp_io_reader_t* reader, sp_str_t* head) {
   sp_str_t acc = sp_zero;
   sp_err_t err = sp_io_peek_until(reader, sp_str_lit("\r\n\r\n"), &acc);
-  // a head that outgrows the buffer is the peer's protocol violation, not an
-  // OS failure
   if (err == SP_ERR_IO_NO_SPACE) return SP_HTTP_ERR_PROTOCOL;
   if (err != SP_OK) return sp_http_map_io(err, SP_HTTP_ERR_PROTOCOL);
   sp_io_consume(reader, acc.len);
@@ -712,105 +899,195 @@ SP_PRIVATE sp_http_error_t sp_http_read_line(sp_io_reader_t* reader, sp_str_t* l
   return SP_HTTP_OK;
 }
 
-SP_PRIVATE sp_http_error_t sp_http_copy_n(sp_io_reader_t* reader, sp_io_writer_t* body, u64 n, u64* written) {
-  if (!body) {
-    sp_err_t err = sp_io_discard(reader, n, SP_NULLPTR);
-    if (err != SP_OK) return sp_http_map_io(err, SP_HTTP_ERR_PROTOCOL);
-    return SP_HTTP_OK;
-  }
-
-  sp_io_limit_reader_t limit = sp_zero;
-  sp_io_limit_reader_init(&limit, reader, n);
-  u64 copied = 0;
-  sp_err_t err = sp_io_copy(body, &limit.base, &copied);
-  if (written) *written += copied;
-  if (err != SP_OK) return sp_http_map_io(err, SP_HTTP_ERR_PROTOCOL);
-  if (limit.remaining) return SP_HTTP_ERR_PROTOCOL;
-  return SP_HTTP_OK;
-}
-
-SP_PRIVATE sp_http_error_t sp_http_read_body(sp_io_reader_t* reader, sp_http_head_t head, sp_io_writer_t* body, u64* written) {
-  if (head.status < 200 || head.status == 204 || head.status == 304) {
-    return SP_HTTP_OK;
-  }
-  if (head.chunked) {
-    for (;;) {
-      sp_str_t line = sp_zero;
-      sp_http_error_t err = sp_http_read_line(reader, &line);
-      if (err != SP_HTTP_OK) return err;
-      sp_str_t size_str = line;
-      s32 semi = sp_str_find_c8(size_str, ';');
-      if (semi != SP_STR_NO_MATCH) size_str = sp_str_sub(size_str, 0, semi);
-      size_str = sp_str_trim(size_str);
-
-      u64 size = 0;
-      if (!sp_parse_hex_ex(size_str, &size)) return SP_HTTP_ERR_PROTOCOL;
-      if (size == 0) break;
-
-      sp_http_error_t copy_err = sp_http_copy_n(reader, body, size, written);
-      if (copy_err != SP_HTTP_OK) return copy_err;
-
-      sp_str_t crlf = sp_zero;
-      copy_err = sp_http_read_line(reader, &crlf);
-      if (copy_err != SP_HTTP_OK) return copy_err;
-      if (!sp_str_empty(crlf)) return SP_HTTP_ERR_PROTOCOL;
+SP_PRIVATE sp_http_error_t sp_http_chunk_begin(sp_http_body_reader_t* r) {
+  for (;;) {
+    sp_str_t line = sp_zero;
+    sp_http_error_t err = sp_http_read_line(r->inner, &line);
+    if (err != SP_HTTP_OK) return err;
+    if (r->line_pending) {
+      if (!sp_str_empty(line)) return SP_HTTP_ERR_PROTOCOL;
+      r->line_pending = false;
+      continue;
     }
-    return SP_HTTP_OK;
+    s32 semi = sp_str_find_c8(line, ';');
+    sp_str_t size_str = semi == SP_STR_NO_MATCH ? line : sp_str_sub(line, 0, semi);
+    size_str = sp_str_trim(size_str);
+    u64 size = 0;
+    if (!sp_parse_hex_ex(size_str, &size)) return SP_HTTP_ERR_PROTOCOL;
+    if (size) {
+      r->remaining = size;
+      return SP_HTTP_OK;
+    }
+    for (;;) {
+      sp_str_t trailer = sp_zero;
+      err = sp_http_read_line(r->inner, &trailer);
+      if (err != SP_HTTP_OK) return err;
+      if (sp_str_empty(trailer)) {
+        r->done = true;
+        return SP_HTTP_OK;
+      }
+    }
   }
-  if (head.has_length) {
-    return sp_http_copy_n(reader, body, head.length, written);
+}
+
+SP_PRIVATE sp_err_t sp_http_body_reader_advance(sp_http_body_reader_t* r, void* dst, u64 size, u64* moved) {
+  *moved = 0;
+  if (r->err != SP_HTTP_OK) return SP_ERR_IO;
+  if (r->done) return SP_ERR_IO_EOF;
+
+  switch (r->kind) {
+    case SP_HTTP_BODY_NONE: {
+      r->done = true;
+      return SP_ERR_IO_EOF;
+    }
+    case SP_HTTP_BODY_EOF: {
+      sp_err_t err = dst
+        ? sp_io_read(r->inner, dst, size, moved)
+        : sp_io_discard(r->inner, size, moved);
+      if (err == SP_ERR_IO_EOF) r->done = true;
+      return err;
+    }
+    case SP_HTTP_BODY_LENGTH: {
+      if (!r->remaining) {
+        r->done = true;
+        return SP_ERR_IO_EOF;
+      }
+      u64 n = sp_min(size, r->remaining);
+      sp_err_t err = dst
+        ? sp_io_read(r->inner, dst, n, moved)
+        : sp_io_discard(r->inner, n, moved);
+      r->remaining -= *moved;
+      if (err == SP_ERR_IO_EOF && r->remaining) {
+        r->err = SP_HTTP_ERR_PROTOCOL;
+        return SP_ERR_IO;
+      }
+      return err;
+    }
+    case SP_HTTP_BODY_CHUNKED: {
+      if (!r->remaining) {
+        sp_http_error_t herr = sp_http_chunk_begin(r);
+        if (herr != SP_HTTP_OK) {
+          r->err = herr;
+          return SP_ERR_IO;
+        }
+        if (r->done) return SP_ERR_IO_EOF;
+      }
+      u64 n = sp_min(size, r->remaining);
+      sp_err_t err = dst
+        ? sp_io_read(r->inner, dst, n, moved)
+        : sp_io_discard(r->inner, n, moved);
+      r->remaining -= *moved;
+      if (!r->remaining) r->line_pending = true;
+      if (err == SP_ERR_IO_EOF) {
+        r->err = SP_HTTP_ERR_PROTOCOL;
+        return SP_ERR_IO;
+      }
+      return err;
+    }
   }
-  if (!body) {
-    sp_err_t err = sp_io_discard(reader, SP_LIMIT_U64_MAX, SP_NULLPTR);
-    if (err != SP_OK && err != SP_ERR_IO_EOF) return sp_http_map_io(err, SP_HTTP_ERR_PROTOCOL);
-    return SP_HTTP_OK;
-  }
-  u64 copied = 0;
-  sp_err_t err = sp_io_copy(body, reader, &copied);
-  if (written) *written += copied;
+  return SP_ERR_IO;
+}
+
+SP_PRIVATE sp_err_t sp_http_body_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read) {
+  sp_http_body_reader_t* r = (sp_http_body_reader_t*)reader;
+  u64 moved = 0;
+  sp_err_t err = sp_http_body_reader_advance(r, ptr, size, &moved);
+  if (bytes_read) *bytes_read = moved;
+  return err;
+}
+
+SP_PRIVATE sp_err_t sp_http_body_reader_discard(sp_io_reader_t* reader, u64 n, u64* discarded) {
+  sp_http_body_reader_t* r = (sp_http_body_reader_t*)reader;
+  return sp_http_body_reader_advance(r, SP_NULLPTR, n, discarded);
+}
+
+void sp_http_body_reader_init(sp_http_body_reader_t* r, sp_io_reader_t* inner, sp_http_body_t body) {
+  *r = sp_zero_s(sp_http_body_reader_t);
+  r->base.read = sp_http_body_reader_read;
+  r->base.discard = sp_http_body_reader_discard;
+  r->inner = inner;
+  r->kind = body.kind;
+  if (body.kind == SP_HTTP_BODY_LENGTH) r->remaining = body.length;
+}
+
+sp_http_error_t sp_http_body_read(sp_io_reader_t* reader, sp_http_body_t body, sp_io_writer_t* sink, u64* len) {
+  sp_http_body_reader_t r = sp_zero;
+  sp_http_body_reader_init(&r, reader, body);
+  u64 moved = 0;
+  sp_err_t err = sink
+    ? sp_io_copy(sink, &r.base, &moved)
+    : sp_io_discard(&r.base, SP_LIMIT_U64_MAX, &moved);
+  if (len) *len = moved;
+  if (r.err != SP_HTTP_OK) return r.err;
+  if (!sink && err == SP_ERR_IO_EOF) err = SP_OK;
   if (err != SP_OK) return sp_http_map_io(err, SP_HTTP_ERR_PROTOCOL);
   return SP_HTTP_OK;
 }
 
-SP_PRIVATE sp_str_t sp_http_method_name(sp_http_method_t method) {
-  switch (method) {
-    case SP_HTTP_GET:    return sp_str_lit("GET");
-    case SP_HTTP_POST:   return sp_str_lit("POST");
-    case SP_HTTP_PUT:    return sp_str_lit("PUT");
-    case SP_HTTP_PATCH:  return sp_str_lit("PATCH");
-    case SP_HTTP_DELETE: return sp_str_lit("DELETE");
-  }
-  return sp_str_lit("GET");
-}
-
-SP_PRIVATE bool sp_http_headers_have(const sp_http_header_t* headers, sp_str_t name) {
-  sp_for(it, SP_HTTP_MAX_HEADERS) {
-    if (sp_str_empty(headers[it].name)) break;
+SP_PRIVATE bool sp_http_header_list_have(const sp_http_header_t* headers, u32 count, sp_str_t name) {
+  sp_for(it, count) {
     if (sp_http_ci_equal(headers[it].name, name)) return true;
   }
   return false;
 }
 
-SP_PRIVATE sp_http_error_t sp_http_headers_check(const sp_http_header_t* headers) {
-  sp_for(it, SP_HTTP_MAX_HEADERS) {
-    sp_str_t name = headers[it].name;
-    sp_str_t value = headers[it].value;
-    if (sp_str_empty(name)) break;
-    sp_for(at, name.len) {
-      u8 c = (u8)name.data[at];
-      if (c <= 0x20 || c >= 0x7f || c == ':') return SP_HTTP_ERR_BAD_CONFIG;
-    }
-    sp_for(at, value.len) {
-      u8 c = (u8)value.data[at];
-      if ((c < 0x20 && c != '\t') || c == 0x7f) return SP_HTTP_ERR_BAD_CONFIG;
-    }
-    if (sp_http_ci_equal(name, sp_str_lit("content-length")) ||
-        sp_http_ci_equal(name, sp_str_lit("transfer-encoding")) ||
-        sp_http_ci_equal(name, sp_str_lit("connection"))) {
-      return SP_HTTP_ERR_BAD_CONFIG;
-    }
+SP_PRIVATE bool sp_http_headers_reserved(const sp_http_header_t* headers, u32 count) {
+  return sp_http_header_list_have(headers, count, sp_str_lit("content-length")) ||
+         sp_http_header_list_have(headers, count, sp_str_lit("transfer-encoding")) ||
+         sp_http_header_list_have(headers, count, sp_str_lit("connection"));
+}
+
+SP_PRIVATE sp_http_error_t sp_http_header_write(sp_io_writer_t* writer, sp_http_header_t header) {
+  sp_err_t err = sp_fmt_io(writer, "{}: {}\r\n", sp_fmt_str(header.name), sp_fmt_str(header.value));
+  return err == SP_OK ? SP_HTTP_OK : sp_http_map_io(err, SP_HTTP_ERR_OS);
+}
+
+SP_PRIVATE sp_http_error_t sp_http_headers_write(sp_io_writer_t* writer, const sp_http_header_t* headers, u32 count) {
+  sp_http_error_t err = sp_http_headers_check(headers, count);
+  if (err != SP_HTTP_OK) return err;
+  sp_for(it, count) {
+    err = sp_http_header_write(writer, headers[it]);
+    if (err != SP_HTTP_OK) return err;
   }
   return SP_HTTP_OK;
+}
+
+sp_http_error_t sp_http_request_head_write(sp_io_writer_t* writer, sp_str_t method, sp_str_t target, const sp_http_header_t* headers, u32 count) {
+  if (!sp_http_token_ok(method)) return SP_HTTP_ERR_BAD_CONFIG;
+  if (sp_str_empty(target) || !sp_http_url_path_ok(target)) return SP_HTTP_ERR_BAD_CONFIG;
+  sp_err_t err = sp_fmt_io(writer, "{} {} HTTP/1.1\r\n", sp_fmt_str(method), sp_fmt_str(target));
+  if (err != SP_OK) return sp_http_map_io(err, SP_HTTP_ERR_OS);
+  sp_http_error_t herr = sp_http_headers_write(writer, headers, count);
+  if (herr != SP_HTTP_OK) return herr;
+  err = sp_io_write_str(writer, sp_str_lit("\r\n"), SP_NULLPTR);
+  return err == SP_OK ? SP_HTTP_OK : sp_http_map_io(err, SP_HTTP_ERR_OS);
+}
+
+SP_PRIVATE sp_http_error_t sp_http_response_head_io(sp_io_writer_t* writer, s32 status, const sp_http_header_t* headers, u32 count) {
+  if (status < 100 || status > 599) return SP_HTTP_ERR_BAD_CONFIG;
+  sp_err_t err = sp_fmt_io(writer, "HTTP/1.1 {} {}\r\n", sp_fmt_int(status), sp_fmt_str(sp_http_status_reason(status)));
+  if (err != SP_OK) return sp_http_map_io(err, SP_HTTP_ERR_OS);
+  return sp_http_headers_write(writer, headers, count);
+}
+
+sp_http_error_t sp_http_response_head_write(sp_io_writer_t* writer, s32 status, const sp_http_header_t* headers, u32 count) {
+  sp_http_error_t err = sp_http_response_head_io(writer, status, headers, count);
+  if (err != SP_HTTP_OK) return err;
+  sp_err_t werr = sp_io_write_str(writer, sp_str_lit("\r\n"), SP_NULLPTR);
+  return werr == SP_OK ? SP_HTTP_OK : sp_http_map_io(werr, SP_HTTP_ERR_OS);
+}
+
+sp_http_error_t sp_http_response_write(sp_io_writer_t* writer, s32 status, const sp_http_header_t* headers, u32 count, sp_str_t body) {
+  if (sp_http_header_list_have(headers, count, sp_str_lit("content-length")) ||
+      sp_http_header_list_have(headers, count, sp_str_lit("transfer-encoding"))) {
+    return SP_HTTP_ERR_BAD_CONFIG;
+  }
+  sp_http_error_t err = sp_http_response_head_io(writer, status, headers, count);
+  if (err != SP_HTTP_OK) return err;
+  sp_err_t werr = sp_fmt_io(writer, "Content-Length: {}\r\n\r\n", sp_fmt_uint(body.len));
+  if (werr != SP_OK) return sp_http_map_io(werr, SP_HTTP_ERR_OS);
+  werr = sp_io_write_str(writer, body, SP_NULLPTR);
+  return werr == SP_OK ? SP_HTTP_OK : sp_http_map_io(werr, SP_HTTP_ERR_OS);
 }
 
 SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_wire_t wire) {
@@ -825,20 +1102,22 @@ SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_wire_t wire) {
   if (!sp_str_empty(path) && path.data[0] == '?') {
     path = sp_fmt(mem, "/{}", sp_fmt_str(path)).value;
   }
-  sp_str_t target = wire.absolute_form
-    ? sp_fmt(mem, "http://{}{}", sp_fmt_str(host_header), sp_fmt_str(path)).value
-    : path;
 
   sp_io_dyn_mem_writer_t head = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &head);
-  sp_io_write_str(&head.base, sp_fmt(mem, "{} {} HTTP/1.1\r\n", sp_fmt_str(sp_http_method_name(wire.method)), sp_fmt_str(target)).value, SP_NULLPTR);
-  if (!sp_http_headers_have(wire.headers, sp_str_lit("host"))) {
-    sp_io_write_str(&head.base, sp_fmt(mem, "Host: {}\r\n", sp_fmt_str(host_header)).value, SP_NULLPTR);
+  if (wire.absolute_form) {
+    sp_fmt_io(&head.base, "{} http://{}{} HTTP/1.1\r\n", sp_fmt_str(sp_http_method_name(wire.method)), sp_fmt_str(host_header), sp_fmt_str(path));
   }
-  if (!sp_http_headers_have(wire.headers, sp_str_lit("user-agent"))) {
+  else {
+    sp_fmt_io(&head.base, "{} {} HTTP/1.1\r\n", sp_fmt_str(sp_http_method_name(wire.method)), sp_fmt_str(path));
+  }
+  if (!sp_http_header_list_have(wire.headers, wire.num_headers, sp_str_lit("host"))) {
+    sp_fmt_io(&head.base, "Host: {}\r\n", sp_fmt_str(host_header));
+  }
+  if (!sp_http_header_list_have(wire.headers, wire.num_headers, sp_str_lit("user-agent"))) {
     sp_io_write_str(&head.base, sp_str_lit("User-Agent: sp-http/1.0\r\n"), SP_NULLPTR);
   }
-  if (!sp_http_headers_have(wire.headers, sp_str_lit("accept"))) {
+  if (!sp_http_header_list_have(wire.headers, wire.num_headers, sp_str_lit("accept"))) {
     sp_io_write_str(&head.base, sp_str_lit("Accept: */*\r\n"), SP_NULLPTR);
   }
   sp_io_write_str(&head.base, sp_str_lit("Connection: close\r\n"), SP_NULLPTR);
@@ -847,19 +1126,19 @@ SP_PRIVATE sp_str_t sp_http_build_request(sp_mem_t mem, sp_http_wire_t wire) {
     wire.method == SP_HTTP_PUT ||
     wire.method == SP_HTTP_PATCH;
   if (body_expected || !sp_str_empty(wire.payload)) {
-    sp_io_write_str(&head.base, sp_fmt(mem, "Content-Length: {}\r\n", sp_fmt_uint(wire.payload.len)).value, SP_NULLPTR);
+    sp_fmt_io(&head.base, "Content-Length: {}\r\n", sp_fmt_uint(wire.payload.len));
   }
-  if (!sp_str_empty(wire.payload) && !sp_str_empty(wire.content_type) && !sp_http_headers_have(wire.headers, sp_str_lit("content-type"))) {
-    sp_io_write_str(&head.base, sp_fmt(mem, "Content-Type: {}\r\n", sp_fmt_str(wire.content_type)).value, SP_NULLPTR);
+  if (!sp_str_empty(wire.payload) && !sp_str_empty(wire.content_type) && !sp_http_header_list_have(wire.headers, wire.num_headers, sp_str_lit("content-type"))) {
+    sp_fmt_io(&head.base, "Content-Type: {}\r\n", sp_fmt_str(wire.content_type));
   }
-  sp_for(it, SP_HTTP_MAX_HEADERS) {
-    if (sp_str_empty(wire.headers[it].name)) break;
+  sp_for(it, wire.num_headers) {
+    sp_http_header_t header = wire.headers[it];
     if (wire.strip_auth &&
-        (sp_http_ci_equal(wire.headers[it].name, sp_str_lit("authorization")) ||
-         sp_http_ci_equal(wire.headers[it].name, sp_str_lit("cookie")))) {
+        (sp_http_ci_equal(header.name, sp_str_lit("authorization")) ||
+         sp_http_ci_equal(header.name, sp_str_lit("cookie")))) {
       continue;
     }
-    sp_io_write_str(&head.base, sp_fmt(mem, "{}: {}\r\n", sp_fmt_str(wire.headers[it].name), sp_fmt_str(wire.headers[it].value)).value, SP_NULLPTR);
+    sp_http_header_write(&head.base, header);
   }
   sp_io_write_str(&head.base, sp_str_lit("\r\n"), SP_NULLPTR);
   return sp_io_dyn_mem_writer_as_str(&head);
@@ -991,8 +1270,6 @@ SP_PRIVATE sp_http_error_t sp_http_connect_addr(sp_sys_socket_t* out, sp_http_ad
   }
 
   if (connected) {
-    // Stays nonblocking: sp_io socket timeouts and the WANT_READ/WANT_WRITE
-    // pumps depend on it.
     *out = (sp_sys_socket_t)fd;
     return SP_HTTP_OK;
   }
@@ -1035,9 +1312,6 @@ SP_PRIVATE sp_http_error_t sp_http_conn_write(sp_http_conn_t* conn, sp_str_t dat
   return err == SP_OK ? SP_HTTP_OK : sp_http_map_io(err, SP_HTTP_ERR_OS);
 }
 
-// reads the proxy's reply to CONNECT one byte at a time; the reader is
-// unbuffered here, so nothing past the head is consumed and the TLS handshake
-// sees a clean stream
 SP_PRIVATE sp_http_error_t sp_http_connect_reply(sp_http_conn_t* conn) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
   c8* head = sp_alloc_n(scratch.mem, c8, SP_HTTP_HEAD_MAX);
@@ -1054,8 +1328,8 @@ SP_PRIVATE sp_http_error_t sp_http_connect_reply(sp_http_conn_t* conn) {
     len += n;
 
     if (sp_str_ends_with(sp_str(head, (u32)len), sp_str_lit("\r\n\r\n"))) {
-      sp_http_head_t parsed = sp_zero;
-      if (sp_http_parse_head(sp_str(head, (u32)len - 4), &parsed) == SP_HTTP_OK &&
+      sp_http_response_head_t parsed = sp_zero;
+      if (sp_http_response_head_parse(sp_str(head, (u32)len - 4), &parsed) == SP_HTTP_OK &&
           parsed.status >= 200 && parsed.status <= 299) {
         result = SP_HTTP_OK;
       }
@@ -1121,7 +1395,8 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
   u32 io_timeout = sp_http_timeout_ms(request.io_timeout_ms, SP_HTTP_DEFAULT_IO_TIMEOUT_MS);
   sp_http_resolver_t resolver = request.resolver.resolve ? request.resolver : sp_http_resolver_default();
   sp_str_t current = request.url;
-  sp_http_error_t result = sp_http_headers_check(request.headers);
+  sp_http_error_t result = sp_http_headers_check(request.headers, request.num_headers);
+  if (result == SP_HTTP_OK && sp_http_headers_reserved(request.headers, request.num_headers)) result = SP_HTTP_ERR_BAD_CONFIG;
   u32 redirects = 0;
 
   if (result != SP_HTTP_OK) {
@@ -1177,6 +1452,7 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
       .payload       = payload,
       .content_type  = content_type,
       .headers       = request.headers,
+      .num_headers   = request.num_headers,
       .strip_auth    = !sp_http_ci_equal(url.host, origin_host) || (origin_tls && !url.tls),
     }));
     sp_mem_end_scratch(scratch);
@@ -1190,14 +1466,14 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
 
     sp_io_reader_set_buffer(conn.reader, conn.buffer, sizeof(conn.buffer));
 
-    sp_http_head_t parsed = sp_zero;
+    sp_http_response_head_t parsed = sp_zero;
     u32 interim = 0;
     for (;;) {
       sp_str_t head = sp_zero;
-      result = sp_http_read_head(conn.reader, &head);
+      result = sp_http_head_read(conn.reader, &head);
       if (result != SP_HTTP_OK) break;
 
-      result = sp_http_parse_head(head, &parsed);
+      result = sp_http_response_head_parse(head, &parsed);
       if (result != SP_HTTP_OK) break;
 
       if (parsed.status >= 100 && parsed.status <= 199) {
@@ -1217,39 +1493,45 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
     resp.status = parsed.status;
     resp.url = current;
 
+    sp_str_t location = sp_http_headers_find(parsed.headers, sp_str_lit("location"));
     bool is_redirect =
       parsed.status == 301 || parsed.status == 302 || parsed.status == 303 ||
       parsed.status == 307 || parsed.status == 308;
-    if (is_redirect && !sp_str_empty(parsed.location)) {
+    if (is_redirect && !sp_str_empty(location)) {
       if (redirects++ >= max) {
         result = SP_HTTP_ERR_REDIRECTS;
         sp_http_conn_close(&conn);
         break;
       }
-      bool rewrite = parsed.status == 303 ||
-        ((parsed.status == 301 || parsed.status == 302) && method != SP_HTTP_GET);
+      bool rewrite =
+        (parsed.status == 301 || parsed.status == 302 || parsed.status == 303) &&
+        method != SP_HTTP_GET && method != SP_HTTP_HEAD;
       if (rewrite) {
         method = SP_HTTP_GET;
         payload = sp_zero_s(sp_str_t);
         content_type = sp_zero_s(sp_str_t);
       }
-      current = sp_http_resolve_url(mem, url, parsed.location);
+      current = sp_http_resolve_url(mem, url, location);
       sp_http_conn_close(&conn);
       continue;
     }
 
-    resp.content_type = sp_str_copy(mem, parsed.content_type);
-    resp.location = sp_str_copy(mem, parsed.location);
+    sp_http_body_t body = sp_zero;
+    result = sp_http_response_body_parse(parsed.status, method == SP_HTTP_HEAD, parsed.headers, &body);
+    if (result != SP_HTTP_OK) {
+      sp_http_conn_close(&conn);
+      break;
+    }
 
-    u64 written = 0;
-    result = sp_http_read_body(conn.reader, parsed, request.sink, request.sink ? &written : SP_NULLPTR);
-    resp.body_len = written;
+    resp.headers = sp_str_copy(mem, parsed.headers);
+
+    u64 len = 0;
+    result = sp_http_body_read(conn.reader, body, request.sink, &len);
+    resp.body_len = len;
     sp_http_conn_close(&conn);
 
     if (result != SP_HTTP_OK) break;
-    if (parsed.status >= 400)                          result = SP_HTTP_ERR_STATUS;
-    else if (parsed.status >= 200 && parsed.status < 300) result = SP_HTTP_OK;
-    else                                               result = SP_HTTP_ERR_PROTOCOL;
+    result = parsed.status >= 200 && parsed.status < 300 ? SP_HTTP_OK : SP_HTTP_ERR_STATUS;
     break;
   }
 
@@ -1288,6 +1570,21 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 
+SP_PRIVATE sp_tls_backend_t sp_tls_native_backend(void) {
+#if defined(SP_WIN32)
+  return SP_TLS_BACKEND_OS_VERIFY;
+#elif defined(SP_MACOS) && defined(SP_TLS_MACOS_SECTRUST)
+  return SP_TLS_BACKEND_OS_VERIFY;
+#elif defined(SP_MACOS)
+  // If you didn't compile in SecTrust, fail here instead of at runtime
+  return SP_TLS_BACKEND_NONE;
+#elif defined(SP_LINUX)
+  return SP_TLS_BACKEND_ANCHORS;
+#else
+  return SP_TLS_BACKEND_NONE;
+#endif
+}
+
 SP_PRIVATE u32 sp_tls_chain_count(const mbedtls_x509_crt* chain) {
   u32 count = 0;
   const mbedtls_x509_crt* it = chain;
@@ -1316,14 +1613,9 @@ void sp_tls_trust_free(sp_tls_trust_t* trust) {
 }
 
 sp_http_error_t sp_tls_trust_load(sp_tls_trust_t* trust) {
-  trust->backend = sp_tls_native_backend();
   switch (trust->backend) {
     case SP_TLS_BACKEND_ANCHORS:
-#if defined(SP_WIN32)
-      return sp_tls_load_windows(trust->anchors, trust->mem, &trust->loaded, &trust->skipped);
-#else
-      return sp_tls_load_unix(trust->anchors, trust->mem, &trust->loaded, &trust->skipped);
-#endif
+      return sp_tls_load_unix(trust->anchors, &trust->loaded, &trust->skipped);
     case SP_TLS_BACKEND_OS_VERIFY:
       return SP_HTTP_OK;
     case SP_TLS_BACKEND_NONE:
@@ -1332,18 +1624,18 @@ sp_http_error_t sp_tls_trust_load(sp_tls_trust_t* trust) {
   return SP_HTTP_ERR_UNSUPPORTED;
 }
 
-sp_http_error_t sp_tls_load_pem(struct mbedtls_x509_crt* chain, sp_str_t path, u32* loaded, u32* skipped) {
+sp_http_error_t sp_tls_load_pem(mbedtls_x509_crt* chain, sp_str_t path, u32* loaded, u32* skipped) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
   sp_str_t content = sp_zero;
   sp_http_error_t result = SP_HTTP_ERR_NO_STORE;
   if (sp_io_read_file(scratch.mem, path, &content) == SP_OK) {
     c8* pem = sp_str_to_cstr(scratch.mem, content);
-    s32 rc = mbedtls_x509_crt_parse((mbedtls_x509_crt*)chain, (const unsigned char*)pem, (size_t)content.len + 1);
+    s32 rc = mbedtls_x509_crt_parse(chain, (const unsigned char*)pem, (size_t)content.len + 1);
     if (rc < 0) {
       result = SP_HTTP_ERR_PARSE;
     }
     else {
-      if (loaded)  *loaded = sp_tls_chain_count((mbedtls_x509_crt*)chain);
+      if (loaded)  *loaded = sp_tls_chain_count(chain);
       if (skipped) *skipped = (u32)rc;
       result = SP_HTTP_OK;
     }
@@ -1352,8 +1644,7 @@ sp_http_error_t sp_tls_load_pem(struct mbedtls_x509_crt* chain, sp_str_t path, u
   return result;
 }
 
-sp_http_error_t sp_tls_load_unix(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped) {
-  (void)mem;
+SP_PRIVATE sp_http_error_t sp_tls_load_unix(mbedtls_x509_crt* chain, u32* loaded, u32* skipped) {
   sp_str_t env = sp_os_env_get(sp_str_lit("SSL_CERT_FILE"));
   if (!sp_str_empty(env)) {
     return sp_tls_load_pem(chain, env, loaded, skipped);
@@ -1374,69 +1665,12 @@ sp_http_error_t sp_tls_load_unix(struct mbedtls_x509_crt* chain, sp_mem_t mem, u
   return SP_HTTP_ERR_NO_STORE;
 }
 
-#if defined(SP_WIN32)
-SP_PRIVATE bool sp_tls_win32_server_auth(PCCERT_CONTEXT ctx) {
-  DWORD size = 0;
-  if (!CertGetEnhancedKeyUsage(ctx, 0, SP_NULLPTR, &size)) return false;
-  bool result = false;
-  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-  PCERT_ENHKEY_USAGE usage = (PCERT_ENHKEY_USAGE)sp_alloc(scratch.mem, size);
-  if (CertGetEnhancedKeyUsage(ctx, 0, usage, &size)) {
-    if (usage->cUsageIdentifier == 0) {
-      result = GetLastError() == CRYPT_E_NOT_FOUND;
-    }
-    else {
-      sp_for(it, usage->cUsageIdentifier) {
-        if (sp_cstr_equal(usage->rgpszUsageIdentifier[it], "1.3.6.1.5.5.7.3.1")) {
-          result = true;
-          break;
-        }
-      }
-    }
-  }
-  sp_mem_end_scratch(scratch);
-  return result;
-}
-
-sp_http_error_t sp_tls_load_windows(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped) {
-  (void)mem;
-  mbedtls_x509_crt* certs = (mbedtls_x509_crt*)chain;
-  u32 skip = 0;
-  HCERTSTORE store = CertOpenSystemStoreA(0, "ROOT");
-  if (!store) return SP_HTTP_ERR_NO_STORE;
-  PCCERT_CONTEXT ctx = SP_NULLPTR;
-  while ((ctx = CertEnumCertificatesInStore(store, ctx)) != SP_NULLPTR) {
-    if (!(ctx->dwCertEncodingType & X509_ASN_ENCODING)) continue;
-    if (!sp_tls_win32_server_auth(ctx)) {
-      skip++;
-      continue;
-    }
-    if (mbedtls_x509_crt_parse_der(certs, ctx->pbCertEncoded, ctx->cbCertEncoded) != 0) skip++;
-  }
-  CertCloseStore(store, 0);
-  if (loaded)  *loaded = sp_tls_chain_count(certs);
-  if (skipped) *skipped = skip;
-  return sp_tls_chain_count(certs) ? SP_HTTP_OK : SP_HTTP_ERR_NO_STORE;
-}
-#else
-sp_http_error_t sp_tls_load_windows(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped) {
-  (void)chain; (void)mem;
-  if (loaded)  *loaded = 0;
-  if (skipped) *skipped = 0;
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-#endif
-
-sp_http_error_t sp_tls_conf_apply(const sp_tls_trust_t* trust, struct mbedtls_ssl_config* conf) {
-  mbedtls_ssl_config* cfg = (mbedtls_ssl_config*)conf;
+SP_PRIVATE sp_http_error_t sp_tls_conf_apply(const sp_tls_trust_t* trust, mbedtls_ssl_config* conf) {
   switch (trust->backend) {
     case SP_TLS_BACKEND_ANCHORS:
-      mbedtls_ssl_conf_authmode(cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
-      mbedtls_ssl_conf_ca_chain(cfg, (mbedtls_x509_crt*)trust->anchors, SP_NULLPTR);
-      return SP_HTTP_OK;
     case SP_TLS_BACKEND_OS_VERIFY:
-      mbedtls_ssl_conf_authmode(cfg, MBEDTLS_SSL_VERIFY_REQUIRED);
-      mbedtls_ssl_conf_ca_chain(cfg, (mbedtls_x509_crt*)trust->anchors, SP_NULLPTR);
+      mbedtls_ssl_conf_authmode(conf, MBEDTLS_SSL_VERIFY_REQUIRED);
+      mbedtls_ssl_conf_ca_chain(conf, trust->anchors, SP_NULLPTR);
       return SP_HTTP_OK;
     case SP_TLS_BACKEND_NONE:
       return SP_HTTP_ERR_UNSUPPORTED;
@@ -1444,24 +1678,23 @@ sp_http_error_t sp_tls_conf_apply(const sp_tls_trust_t* trust, struct mbedtls_ss
   return SP_HTTP_ERR_UNSUPPORTED;
 }
 
-sp_http_error_t sp_tls_ssl_attach(const sp_tls_trust_t* trust, struct mbedtls_ssl_context* ssl, sp_tls_verify_t* verify, sp_str_t hostname) {
-  mbedtls_ssl_context* context = (mbedtls_ssl_context*)ssl;
+SP_PRIVATE sp_http_error_t sp_tls_ssl_attach(const sp_tls_trust_t* trust, mbedtls_ssl_context* ssl, sp_tls_verify_t* verify, sp_str_t hostname) {
   if (sp_str_empty(hostname) || hostname.len >= SP_PATH_MAX) return SP_HTTP_ERR_URL;
   c8 host[SP_PATH_MAX];
   sp_cstr_copy_to_n(hostname.data, hostname.len, host, sizeof(host));
-  if (mbedtls_ssl_set_hostname(context, host) != 0) return SP_HTTP_ERR_OS;
+  if (mbedtls_ssl_set_hostname(ssl, host) != 0) return SP_HTTP_ERR_OS;
   if (trust->backend == SP_TLS_BACKEND_OS_VERIFY) {
 #if !defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
     return SP_HTTP_ERR_BAD_CONFIG;
 #else
     if (verify) verify->hostname = hostname;
-    mbedtls_ssl_set_verify(context, sp_tls_verify_cb, verify);
+    mbedtls_ssl_set_verify(ssl, sp_tls_verify_cb, verify);
 #endif
   }
   return SP_HTTP_OK;
 }
 
-s32 sp_tls_verify_cb(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u32* flags) {
+SP_PRIVATE s32 sp_tls_verify_cb(void* user_data, mbedtls_x509_crt* crt, s32 depth, u32* flags) {
   *flags = 0;
   if (depth != 0) return 0;
   sp_tls_verify_t* verify = (sp_tls_verify_t*)user_data;
@@ -1477,7 +1710,7 @@ s32 sp_tls_verify_cb(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u
   return 0;
 }
 
-sp_http_error_t sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname) {
+SP_PRIVATE sp_http_error_t sp_tls_macos_eval(const mbedtls_x509_crt* chain, sp_str_t hostname) {
 #if defined(SP_MACOS) && defined(SP_TLS_MACOS_SECTRUST)
   if (sp_str_empty(hostname) || hostname.len >= SP_PATH_MAX) return SP_HTTP_ERR_UNTRUSTED;
 
@@ -1485,7 +1718,7 @@ sp_http_error_t sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t
   if (!certs) return SP_HTTP_ERR_OS;
 
   bool converted = true;
-  const mbedtls_x509_crt* it = (const mbedtls_x509_crt*)chain;
+  const mbedtls_x509_crt* it = chain;
   while (it) {
     CFDataRef der = CFDataCreate(SP_NULLPTR, it->raw.p, (CFIndex)it->raw.len);
     SecCertificateRef cert = der ? SecCertificateCreateWithData(SP_NULLPTR, der) : SP_NULLPTR;
@@ -1525,9 +1758,9 @@ sp_http_error_t sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t
 #endif
 }
 
-sp_http_error_t sp_tls_windows_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname) {
+SP_PRIVATE sp_http_error_t sp_tls_windows_eval(const mbedtls_x509_crt* chain, sp_str_t hostname) {
 #if defined(SP_WIN32)
-  const mbedtls_x509_crt* leaf = (const mbedtls_x509_crt*)chain;
+  const mbedtls_x509_crt* leaf = chain;
   if (!leaf) return SP_HTTP_ERR_UNTRUSTED;
   if (sp_str_empty(hostname) || hostname.len >= SP_PATH_MAX) return SP_HTTP_ERR_UNTRUSTED;
 
@@ -1583,24 +1816,6 @@ sp_http_error_t sp_tls_windows_eval(const struct mbedtls_x509_crt* chain, sp_str
 #endif
 }
 
-sp_http_error_t sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t mem, sp_mem_slice_t** ders, u32* count) {
-  u32 total = sp_tls_chain_count((const mbedtls_x509_crt*)chain);
-  sp_mem_slice_t* out = sp_alloc_n(mem, sp_mem_slice_t, total);
-  const mbedtls_x509_crt* it = (const mbedtls_x509_crt*)chain;
-  u32 index = 0;
-  while (it) {
-    out[index].data = it->raw.p;
-    out[index].len = it->raw.len;
-    it = it->next;
-    index++;
-  }
-  if (ders)  *ders = out;
-  if (count) *count = total;
-  return SP_HTTP_OK;
-}
-
-// mbedtls returns WANT_READ/WANT_WRITE when the nonblocking socket has no
-// data/space; park on the socket until it's ready or the io timeout expires.
 SP_PRIVATE sp_err_t sp_tls_mbedtls_wait(sp_tls_mbedtls_t* tls, s32 rc) {
   bool readable = rc == MBEDTLS_ERR_SSL_WANT_READ;
   sp_err_t wait = sp_sys_socket_wait(tls->socket, readable, tls->io_timeout_ms);
@@ -1621,7 +1836,6 @@ SP_PRIVATE sp_err_t sp_tls_mbedtls_read(sp_io_reader_t* reader, void* ptr, u64 s
       continue;
     }
     if (n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
-      // latched: mbedtls reports close_notify only once, then raw EOF
       wrapper->eof = true;
       return SP_ERR_IO_EOF;
     }
@@ -1721,78 +1935,6 @@ void sp_tls_mbedtls_init(sp_tls_mbedtls_t* tls, const sp_tls_trust_t* trust) {
   tls->reader.tls = tls;
   tls->writer.base.write = sp_tls_mbedtls_write;
   tls->writer.tls = tls;
-}
-
-#else
-
-sp_http_error_t sp_tls_trust_init(sp_tls_trust_t* trust, sp_mem_t mem) {
-  *trust = sp_zero_s(sp_tls_trust_t);
-  trust->mem = mem;
-  trust->backend = sp_tls_native_backend();
-  return SP_HTTP_OK;
-}
-
-void sp_tls_trust_free(sp_tls_trust_t* trust) {
-  *trust = sp_zero_s(sp_tls_trust_t);
-}
-
-sp_http_error_t sp_tls_trust_load(sp_tls_trust_t* trust) {
-  trust->backend = sp_tls_native_backend();
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-
-sp_http_error_t sp_tls_load_windows(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped) {
-  (void)chain; (void)mem;
-  if (loaded)  *loaded = 0;
-  if (skipped) *skipped = 0;
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-
-sp_http_error_t sp_tls_load_unix(struct mbedtls_x509_crt* chain, sp_mem_t mem, u32* loaded, u32* skipped) {
-  (void)chain; (void)mem;
-  if (loaded)  *loaded = 0;
-  if (skipped) *skipped = 0;
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-
-sp_http_error_t sp_tls_load_pem(struct mbedtls_x509_crt* chain, sp_str_t path, u32* loaded, u32* skipped) {
-  (void)chain; (void)path;
-  if (loaded)  *loaded = 0;
-  if (skipped) *skipped = 0;
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-
-sp_http_error_t sp_tls_conf_apply(const sp_tls_trust_t* trust, struct mbedtls_ssl_config* conf) {
-  (void)trust; (void)conf;
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-
-sp_http_error_t sp_tls_ssl_attach(const sp_tls_trust_t* trust, struct mbedtls_ssl_context* ssl, sp_tls_verify_t* verify, sp_str_t hostname) {
-  (void)trust; (void)ssl;
-  if (verify) verify->hostname = hostname;
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-
-s32 sp_tls_verify_cb(void* user_data, struct mbedtls_x509_crt* crt, s32 depth, u32* flags) {
-  (void)user_data; (void)crt; (void)depth; (void)flags;
-  return 0;
-}
-
-sp_http_error_t sp_tls_macos_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname) {
-  (void)chain; (void)hostname;
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-
-sp_http_error_t sp_tls_windows_eval(const struct mbedtls_x509_crt* chain, sp_str_t hostname) {
-  (void)chain; (void)hostname;
-  return SP_HTTP_ERR_UNSUPPORTED;
-}
-
-sp_http_error_t sp_tls_chain_der(const struct mbedtls_x509_crt* chain, sp_mem_t mem, sp_mem_slice_t** ders, u32* count) {
-  (void)chain; (void)mem;
-  if (ders)  *ders = SP_NULLPTR;
-  if (count) *count = 0;
-  return SP_HTTP_ERR_UNSUPPORTED;
 }
 
 #endif // SP_TLS_WITH_MBEDTLS
