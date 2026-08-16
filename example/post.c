@@ -14,19 +14,6 @@ typedef struct {
 } post_t;
 
 #if defined(SP_TLS_WITH_MBEDTLS)
-static const c8* method_names[] = { "GET", "POST", "PUT", "PATCH", "DELETE" };
-
-static bool method_parse(sp_mem_t mem, sp_str_t str, sp_http_method_t* method) {
-  sp_str_t upper = sp_str_to_upper(mem, str);
-  sp_carr_for(method_names, it) {
-    if (sp_str_equal_cstr(upper, method_names[it])) {
-      *method = (sp_http_method_t)it;
-      return true;
-    }
-  }
-  return false;
-}
-
 sp_cli_result_t post_run(sp_cli_t* cli) {
   post_t* post = sp_cast(post_t*, cli->user_data);
 
@@ -38,6 +25,8 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
   sp_io_file_writer_t file = sp_zero;
   sp_http_response_t response = sp_zero;
   sp_http_error_t err = sp_zero;
+  u32 num_headers = 0;
+  sp_http_header_t* headers = SP_NULLPTR;
 
   sp_http_request_t request = {
     .url = sp_cstr_as_str(post->url),
@@ -58,28 +47,30 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
     request.method = SP_HTTP_POST;
   }
 
-  if (post->method && !method_parse(mem, sp_cstr_as_str(post->method), &request.method)) {
-    result = sp_cli_set_error_c(cli, "method must be one of GET, POST, PUT, PATCH, DELETE");
+  if (post->method && !sp_http_method_parse(sp_str_to_upper(mem, sp_cstr_as_str(post->method)), &request.method)) {
+    result = sp_cli_set_error_c(cli, "method must be one of GET, POST, PUT, PATCH, DELETE, HEAD");
     goto done;
   }
   if (post->type) {
     request.content_type = sp_cstr_as_str(post->type);
   }
 
-  for (u32 it = 0; cli->rest[it]; it++) {
-    if (it >= SP_HTTP_MAX_HEADERS) {
-      result = sp_cli_set_error_c(cli, "too many headers");
-      goto done;
-    }
+  while (cli->rest[num_headers]) num_headers++;
+  headers = sp_alloc_n(mem, sp_http_header_t, num_headers);
+  sp_for(it, num_headers) {
     sp_str_t header = sp_cstr_as_str(cli->rest[it]);
     s32 colon = sp_str_find_c8(header, ':');
     if (colon == SP_STR_NO_MATCH) {
       result = sp_cli_set_error(cli, sp_fmt(mem, "header must be 'Name: Value', got {}", sp_fmt_str(header)).value);
       goto done;
     }
-    request.headers[it].name = sp_str_sub(header, 0, colon);
-    request.headers[it].value = sp_str_trim(sp_str_sub(header, colon + 1, (s32)header.len - colon - 1));
+    headers[it] = (sp_http_header_t) {
+      .name = sp_str_sub(header, 0, colon),
+      .value = sp_str_trim(sp_str_sub(header, colon + 1, (s32)header.len - colon - 1)),
+    };
   }
+  request.headers = headers;
+  request.num_headers = num_headers;
 
   sp_tls_trust_init(&trust, mem);
   if (sp_tls_trust_load(&trust) != SP_HTTP_OK && trust.backend == SP_TLS_BACKEND_ANCHORS) {
@@ -103,7 +94,7 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
   }
 
   if (post->verbose) {
-    sp_log("{} {} ({} bytes)", sp_fmt_cstr(method_names[request.method]), sp_fmt_str(request.url), sp_fmt_uint(request.payload.len));
+    sp_log("{} {} ({} bytes)", sp_fmt_str(sp_http_method_name(request.method)), sp_fmt_str(request.url), sp_fmt_uint(request.payload.len));
   }
 
   err = sp_http_fetch(mem, request, &response);
@@ -135,10 +126,11 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
   }
 
   if (post->verbose && err == SP_HTTP_OK) {
+    sp_str_t content_type = sp_http_headers_find(response.headers, sp_str_lit("content-type"));
     sp_log("status {} ({} bytes, {})",
       sp_fmt_int(response.status),
       sp_fmt_uint(response.body_len),
-      sp_fmt_str(sp_str_empty(response.content_type) ? sp_str_lit("no content type") : response.content_type));
+      sp_fmt_str(sp_str_empty(content_type) ? sp_str_lit("no content type") : content_type));
   }
 
 done:

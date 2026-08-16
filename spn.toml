@@ -66,6 +66,13 @@ name = "http"
 source = [
   "test/main.c",
   "test/http/*.c",
+]
+
+[[test]]
+name = "tls"
+source = [
+  "test/main.c",
+  "test/http/tls/*.c",
   "tools/vendor/mbedtls/library/*.c",
 ]
 include = ["tools/vendor/mbedtls/include", "tools/vendor/mbedtls/library"]
