@@ -66,9 +66,8 @@ static const test_t tests [] = {
   },
 };
 
-static bool socket_dial(sp_sys_socket_t socket, u16 port) {
-  sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
-  sp_err_t err = sp_sys_socket_connect(socket, dial);
+static bool socket_dial(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
+  sp_err_t err = sp_sys_socket_connect(socket, addr);
   if (err == SP_OK) return true;
   if (err != SP_ERR_SYS_WOULD_BLOCK) return false;
   if (sp_sys_socket_wait(socket, false, 1000) != SP_OK) return false;
@@ -76,10 +75,10 @@ static bool socket_dial(sp_sys_socket_t socket, u16 port) {
 }
 
 static bool pair(sp_sys_socket_t* listener, sp_sys_socket_t* client, sp_sys_socket_t* server) {
-  u16 port = 0;
-  if (!socket_open_listener(listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, &port)) return false;
-  if (sp_sys_socket_open(client, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) return false;
-  if (!socket_dial(*client, port)) return false;
+  sp_sys_ipv4_t addr = sp_zero;
+  if (!socket_open_listener(listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, &addr)) return false;
+  if (sp_sys_socket_open(client, SP_SYS_SOCKET_STREAM, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }) != SP_OK) return false;
+  if (!socket_dial(*client, addr)) return false;
 
   while (true) {
     sp_err_t err = sp_sys_socket_accept(*listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, server);

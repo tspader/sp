@@ -1,9 +1,11 @@
 #define SP_IMPLEMENTATION
 #include "sp/sp_test.h"
+#include "sp/sp_io.h"
 
-// test/sys/inherit.c re-executes this binary as [exe probe <op> <handle>] to
-// observe a handle from inside a child process. Exit 0 means the op
-// succeeded, 1 means it failed, 2 means the invocation was malformed.
+// test/sys/inherit.c and test/io/ops/inherit.c re-execute this binary as
+// [exe probe <op> <handle>] to observe a handle from inside a child process.
+// Exit 0 means the op succeeded, 1 means it failed, 2 means the invocation
+// was malformed.
 static s32 probe(const c8* op, const c8* handle) {
   sp_sys_fd_t fd = (sp_sys_fd_t)sp_parse_s64(sp_cstr_as_str(handle));
   u64 n = 0;

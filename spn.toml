@@ -18,10 +18,13 @@ source = [
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
   "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
-  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
+  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c", "test/sys/socket/nodelay.c",
+  "test/sys/socket/addr.c", "test/sys/socket/dgram.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c",
+  "test/io/ops/*.c",
+  "test/io/task/*.c",
   "test/fs/iter/os.c", "test/fs/iter/iter.c", "test/fs/wtf8/*.c",
   "test/fs/*.c", "test/fs/windows/nt_path.c",
   "test/msvc/*.c",
@@ -29,6 +32,10 @@ source = [
   "test/atomic.c",
   "test/sync/*.c", "test/sync/os/*.c"
 ]
+
+[[test]]
+name = "io"
+source = ["test/main.c", "test/io/ops/*.c", "test/io/task/*.c"]
 
 [[test]]
 name = "meta"
@@ -41,7 +48,8 @@ source = [
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
   "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
-  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
+  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c", "test/sys/socket/nodelay.c",
+  "test/sys/socket/addr.c", "test/sys/socket/dgram.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c"
@@ -71,7 +79,18 @@ source = ["test/main.c", "test/mem/uninitialized.c"]
 name = "http"
 source = [
   "test/main.c",
-  "test/http/*.c",
+  "test/http/impl.c",
+  "test/http/pure/*.c",
+  "test/http/conn/*.c",
+  "test/http/sim/*.c",
+]
+
+[[test]]
+name = "http_smoke"
+source = [
+  "test/main.c",
+  "test/http/impl.c",
+  "test/http/smoke/*.c",
 ]
 
 [[test]]
@@ -98,6 +117,11 @@ source = ["example/zero_copy.c"]
 [[example]]
 name = "msvc"
 source = ["example/msvc.c"]
+
+[[bin]]
+name = "fuzz_heap"
+source = ["test/fuzz/heap/*.c"]
+include = ["."]
 
 [profile.sanitizer]
 linkage = "shared"
