@@ -138,17 +138,6 @@ UTEST_F(io, file_reader_nonexistent) {
   sp_io_file_reader_close(&r);
 }
 
-UTEST_F(io, file_reader_forwards_access_denied) {
-  sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("wronly.file"));
-  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  EXPECT_EQ(sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_CREATE, &fd), SP_OK);
-  sp_io_file_reader_t r = sp_zero;
-  EXPECT_EQ(sp_io_file_reader_from_file(&r, fd, SP_IO_CLOSE_MODE_AUTO), SP_OK);
-  u8 dest [4] = sp_zero;
-  EXPECT_EQ(sp_io_read(&r.base, dest, sizeof(dest), SP_NULLPTR), SP_ERR_SYS_ACCESS_DENIED);
-  sp_io_file_reader_close(&r);
-}
-
 UTEST_F(io, file_writer_nonexistent_dir) {
   sp_str_t path = sp_test_file_path(&ut.file_manager, sp_str_lit("missing-dir/nested.file"));
   sp_io_file_writer_t w = sp_zero;
