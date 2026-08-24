@@ -231,6 +231,7 @@ static void sys_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_s
 }
 
 static void run_sys_test(s32* utest_result, sys_test_t t) {
+  SKIP_ON_WASM()
   sp_sys_fd_t fds [SYS_TEST_MAX_FDS];
   sp_carr_for(fds, it) fds[it] = SP_SYS_INVALID_FD;
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
