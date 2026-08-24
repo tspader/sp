@@ -17,6 +17,7 @@ struct mem {
 
 UTEST_F_SETUP(mem) {
   (void)utest_fixture;
+  sp_tls_rt_get();
   sp_tls_set(sp_rt.tls.key, SP_NULLPTR);
   sp_tls_rt_get();
 }
