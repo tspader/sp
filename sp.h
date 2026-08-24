@@ -789,6 +789,7 @@ typedef enum {
   SP_ERR_IO_NO_SPACE      = 1003,
   SP_ERR_IO_EOF           = 1004,
   SP_ERR_IO_TIMEOUT       = 1005,
+  SP_ERR_IO_CANCELED      = 1006,
   SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
   SP_ERR_FMT_BAD_DIRECTIVE = 1103,
   SP_ERR_FMT_TOO_MANY_DIRECTIVES = 1104,
@@ -946,6 +947,7 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_ENOSYS               38
   #define SP_ENOTEMPTY            39
   #define SP_ELOOP                40
+  #define SP_ETIME                62
   #define SP_ENONET               64
   #define SP_EPROTO               71
   #define SP_ENOPROTOOPT          92
@@ -966,6 +968,7 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_EHOSTUNREACH         113
   #define SP_EINPROGRESS          115
   #define SP_EDQUOT               122
+  #define SP_ECANCELED            125
 
   #define SP_AT_FDCWD             (-100)
   #define SP_AT_SYMLINK_NOFOLLOW  0x100
@@ -1099,6 +1102,7 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_ETIMEDOUT            ETIMEDOUT
   #define SP_ECONNREFUSED         ECONNREFUSED
   #define SP_ECANCELED            ECANCELED
+  #define SP_ETIME                ETIME
   #define SP_EHOSTUNREACH         EHOSTUNREACH
   #define SP_EINPROGRESS          EINPROGRESS
   #define SP_EDQUOT               EDQUOT
@@ -5140,6 +5144,8 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_INOTIFY_INIT1     294
   #define SP_SYSCALL_NUM_PERF_EVENT_OPEN   298
   #define SP_SYSCALL_NUM_STATX             332
+  #define SP_SYSCALL_NUM_IO_URING_SETUP    425
+  #define SP_SYSCALL_NUM_IO_URING_ENTER    426
 
 #elif defined(SP_ARM64)
   #define SP_SYSCALL_NUM_GETCWD            17
@@ -5203,6 +5209,8 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_ACCEPT4           242
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   285
   #define SP_SYSCALL_NUM_STATX             291
+  #define SP_SYSCALL_NUM_IO_URING_SETUP    425
+  #define SP_SYSCALL_NUM_IO_URING_ENTER    426
   #define SP_SYSCALL_NUM_OPEN              SP_SYSCALL_NUM_OPENAT
   #define SP_SYSCALL_NUM_STAT              SP_SYSCALL_NUM_NEWFSTATAT
   #define SP_SYSCALL_NUM_LSTAT             SP_SYSCALL_NUM_NEWFSTATAT
@@ -5643,6 +5651,7 @@ sp_str_t sp_err_str(sp_err_t err) {
     case SP_ERR_IO_NO_SPACE:                 return sp_str_lit("SP_ERR_IO_NO_SPACE");
     case SP_ERR_IO_EOF:                      return sp_str_lit("SP_ERR_IO_EOF");
     case SP_ERR_IO_TIMEOUT:                  return sp_str_lit("SP_ERR_IO_TIMEOUT");
+    case SP_ERR_IO_CANCELED:                 return sp_str_lit("SP_ERR_IO_CANCELED");
     case SP_ERR_FMT_UNKNOWN_DIRECTIVE:       return sp_str_lit("SP_ERR_FMT_UNKNOWN_DIRECTIVE");
     case SP_ERR_FMT_BAD_DIRECTIVE:           return sp_str_lit("SP_ERR_FMT_BAD_DIRECTIVE");
     case SP_ERR_FMT_TOO_MANY_DIRECTIVES:     return sp_str_lit("SP_ERR_FMT_TOO_MANY_DIRECTIVES");
