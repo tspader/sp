@@ -260,6 +260,7 @@ static sp_err_t io_tracking_writer_transfer(sp_io_writer_t* w, sp_sys_fd_t fd, u
 // Source claims as_file (file reader) and writer advertises transfer. The
 // fast path is taken; the byte-loop path is not touched.
 UTEST_F(io_copy, fast_path_taken_when_both_sides_support) {
+  SKIP_ON_WASM()
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_src.bin"));
@@ -315,6 +316,7 @@ UTEST_F(io_copy, fast_path_skipped_when_source_is_not_a_file) {
 // through to the byte loop without surfacing the decline to the
 // caller. The end-to-end byte count is intact.
 UTEST_F(io_copy, fast_path_declined_falls_through) {
+  SKIP_ON_WASM()
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_declined.bin"));
@@ -350,6 +352,7 @@ UTEST_F(io_copy, fast_path_declined_falls_through) {
 // cursor has already advanced past the transferred prefix, so the generic
 // loop must resume exactly there: every byte lands once and only once.
 UTEST_F(io_copy, fast_path_mid_stream_decline_resumes_in_fallback) {
+  SKIP_ON_WASM()
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_midstream.bin"));
@@ -385,6 +388,7 @@ UTEST_F(io_copy, fast_path_mid_stream_decline_resumes_in_fallback) {
 // A real transfer error surfaces to the caller with the fast-path progress
 // accounted in bytes_copied; the fallback does not run.
 UTEST_F(io_copy, transfer_error_surfaces_with_partial_progress) {
+  SKIP_ON_WASM()
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_error.bin"));
@@ -419,6 +423,7 @@ UTEST_F(io_copy, transfer_error_surfaces_with_partial_progress) {
 // A streaming claim hands the transfer hook a NULL cursor: the kernel's fd
 // cursor drives the source and the whole copy rides the fast path.
 UTEST_F(io_copy, fast_path_stream_claim_uses_fd_cursor) {
+  SKIP_ON_WASM()
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
   sp_str_t path = sp_test_file_create_empty(&fm, sp_str_lit("fastpath_stream.bin"));
