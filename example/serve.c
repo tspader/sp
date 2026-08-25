@@ -36,6 +36,8 @@ static void serve_client(serve_t* serve, sp_sys_socket_t client) {
   sp_http_request_head_t request = sp_zero;
   sp_http_body_t body = sp_zero;
   sp_http_method_t method = SP_HTTP_GET;
+  bool known_method = false;
+  sp_str_t target = sp_zero;
   sp_io_dyn_mem_writer_t payload = sp_zero;
   sp_io_dyn_mem_writer_init(scratch.mem, &payload);
 
@@ -46,8 +48,8 @@ static void serve_client(serve_t* serve, sp_sys_socket_t client) {
     goto done;
   }
 
-  bool known_method = sp_http_method_parse(request.method, &method);
-  sp_str_t target = sp_str_copy(scratch.mem, request.target);
+  known_method = sp_http_method_parse(request.method, &method);
+  target = sp_str_copy(scratch.mem, request.target);
 
   if (sp_http_body_read(&reader.base, body, &payload.base, SP_NULLPTR) != SP_HTTP_OK) {
     respond(&writer.base, 400, sp_str_lit("text/plain"), sp_str_lit("bad body\n"));
