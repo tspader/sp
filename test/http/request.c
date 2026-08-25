@@ -1,10 +1,11 @@
 #include "http.h"
 
 typedef struct {
-  sp_http_error_t err;
-  const c8*       method;
-  const c8*       target;
-  header_t        headers [HTTP_TEST_MAX_HEADERS];
+  sp_http_error_t   err;
+  const c8*         method;
+  const c8*         target;
+  sp_http_version_t version;
+  header_t          headers [HTTP_TEST_MAX_HEADERS];
 } expect_t;
 
 typedef struct {
@@ -31,7 +32,7 @@ static const test_t tests [] = {
   {
     .name = "http_1_0",
     .head = "GET / HTTP/1.0",
-    .expect = { .method = "GET", .target = "/" },
+    .expect = { .method = "GET", .target = "/", .version = SP_HTTP_VERSION_1_0 },
   },
   {
     .name = "unknown_method_kept",
@@ -93,6 +94,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   sp_expect_str_eq_c(t, parsed.method, c->expect.method);
   sp_expect_str_eq_c(t, parsed.target, c->expect.target);
+  sp_expect_eq(t, (s32)parsed.version, (s32)c->expect.version);
   return expect_headers(t, parsed.headers, c->expect.headers, HTTP_TEST_MAX_HEADERS);
 }
 
