@@ -231,6 +231,10 @@ static sp_err_t mock_socket_reuse_addr(sp_sys_socket_t socket) {
   return (sp_err_t)69;
 }
 
+static sp_err_t mock_socket_no_delay(sp_sys_socket_t socket) {
+  return (sp_err_t)69;
+}
+
 static sp_err_t mock_socket_local_port(sp_sys_socket_t socket, u16* out) {
   return (sp_err_t)69;
 }
@@ -351,6 +355,7 @@ static const sp_sys_vtable_t mock = {
   .socket_wait            = mock_socket_wait,
   .socket_set_nonblocking = mock_socket_set_nonblocking,
   .socket_reuse_addr      = mock_socket_reuse_addr,
+  .socket_no_delay        = mock_socket_no_delay,
   .socket_local_port      = mock_socket_local_port,
   .alloc                  = mock_alloc,
   .free                   = mock_free,
@@ -600,6 +605,10 @@ static s64 call_socket_reuse_addr(void) {
   return (s64)sp_sys_socket_reuse_addr(0);
 }
 
+static s64 call_socket_no_delay(void) {
+  return (s64)sp_sys_socket_no_delay(0);
+}
+
 static s64 call_socket_local_port(void) {
   return (s64)sp_sys_socket_local_port(0, SP_NULLPTR);
 }
@@ -728,6 +737,7 @@ static const test_t tests [] = {
   { "socket_wait", call_socket_wait, 69 },
   { "socket_set_nonblocking", call_socket_set_nonblocking, 69 },
   { "socket_reuse_addr", call_socket_reuse_addr, 69 },
+  { "socket_no_delay", call_socket_no_delay, 69 },
   { "socket_local_port", call_socket_local_port, 69 },
   { "alloc", call_alloc, 69 },
   { "free", call_free, 69 },

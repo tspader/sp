@@ -17,7 +17,7 @@ source = [
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
   "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c",
-  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
+  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c", "test/sys/socket/nodelay.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c",
@@ -44,7 +44,7 @@ source = [
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
   "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c",
-  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
+  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c", "test/sys/socket/nodelay.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c"
@@ -71,6 +71,7 @@ name = "http"
 source = [
   "test/main.c",
   "test/http/*.c",
+  "test/http/conn/*.c",
 ]
 
 [[test]]

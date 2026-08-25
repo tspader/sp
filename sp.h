@@ -661,6 +661,7 @@ SP_BEGIN_EXTERN_C()
   #include <sys/event.h>
   #include <sys/socket.h>
   #include <netinet/in.h>
+  #include <netinet/tcp.h>
   #include <poll.h>
   #if defined(SP_FMON_MACOS_USE_FSEVENTS)
     #include <CoreServices/CoreServices.h>
@@ -736,6 +737,7 @@ SP_BEGIN_EXTERN_C()
   #include <sys/mman.h>
   #include <sys/socket.h>
   #include <netinet/in.h>
+  #include <netinet/tcp.h>
 #endif
 
 
@@ -1474,6 +1476,7 @@ SP_API sp_err_t    sp_sys_socket_send(sp_sys_socket_t socket, const void* buf, u
 SP_API sp_err_t    sp_sys_socket_wait(sp_sys_socket_t socket, bool readable, u32 timeout_ms);
 SP_API sp_err_t    sp_sys_socket_set_nonblocking(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_reuse_addr(sp_sys_socket_t socket);
+SP_API sp_err_t    sp_sys_socket_no_delay(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out);
 SP_API void*       sp_sys_alloc(u64 size);
 SP_API void        sp_sys_free(void* ptr, u64 size);
@@ -1567,6 +1570,7 @@ typedef struct {
   sp_err_t    (*socket_wait)(sp_sys_socket_t socket, bool readable, u32 timeout_ms);
   sp_err_t    (*socket_set_nonblocking)(sp_sys_socket_t socket);
   sp_err_t    (*socket_reuse_addr)(sp_sys_socket_t socket);
+  sp_err_t    (*socket_no_delay)(sp_sys_socket_t socket);
   sp_err_t    (*socket_local_port)(sp_sys_socket_t socket, u16* out);
   void*       (*alloc)(u64 size);
   void        (*free)(void* ptr, u64 size);
@@ -1640,6 +1644,7 @@ SP_API sp_err_t    sp_sys_socket_send_p(sp_sys_socket_t socket, const void* buf,
 SP_API sp_err_t    sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u32 timeout_ms);
 SP_API sp_err_t    sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket);
+SP_API sp_err_t    sp_sys_socket_no_delay_p(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out);
 SP_API void*       sp_sys_alloc_p(u64 size);
 SP_API void        sp_sys_free_p(void* ptr, u64 size);
@@ -5313,6 +5318,8 @@ typedef struct {
 #define SP_SYS_LINUX_SOL_SOCKET    1
 #define SP_SYS_LINUX_SO_REUSEADDR  2
 #define SP_SYS_LINUX_SO_ERROR     4
+#define SP_SYS_LINUX_IPPROTO_TCP  6
+#define SP_SYS_LINUX_TCP_NODELAY  1
 
 //////////////////////
 // SYSCALL WRAPPERS //
@@ -5619,6 +5626,7 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .socket_wait            = sp_sys_socket_wait_p,
   .socket_set_nonblocking = sp_sys_socket_set_nonblocking_p,
   .socket_reuse_addr      = sp_sys_socket_reuse_addr_p,
+  .socket_no_delay        = sp_sys_socket_no_delay_p,
   .socket_local_port      = sp_sys_socket_local_port_p,
   .alloc                  = sp_sys_alloc_p,
   .free                   = sp_sys_free_p,
@@ -5962,6 +5970,10 @@ sp_err_t sp_sys_socket_set_nonblocking(sp_sys_socket_t socket) {
 
 sp_err_t sp_sys_socket_reuse_addr(sp_sys_socket_t socket) {
   return (sp_rt.vt->socket_reuse_addr)(socket);
+}
+
+sp_err_t sp_sys_socket_no_delay(sp_sys_socket_t socket) {
+  return (sp_rt.vt->socket_no_delay)(socket);
 }
 
 sp_err_t sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out) {
@@ -9154,6 +9166,34 @@ sp_err_t sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   int reuse = 1;
   if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) != 0) {
+    return sp_sys_err_from_errno(errno);
+  }
+  return SP_OK;
+
+#else
+  (void)socket;
+  return SP_ERR_SYS_UNSUPPORTED;
+#endif
+}
+
+sp_err_t sp_sys_socket_no_delay_p(sp_sys_socket_t socket) {
+#if defined(SP_WIN32)
+  if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
+  BOOL no_delay = TRUE;
+  if (sp_rt.ws2.setsockopt((SOCKET)socket, IPPROTO_TCP, TCP_NODELAY, (const char*)&no_delay, sizeof(no_delay)) != 0) {
+    return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
+  }
+  return SP_OK;
+
+#elif defined(SP_LINUX)
+  s32 no_delay = 1;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_SETSOCKOPT, socket, SP_SYS_LINUX_IPPROTO_TCP, SP_SYS_LINUX_TCP_NODELAY, &no_delay, sizeof(no_delay));
+  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  return SP_OK;
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  int no_delay = 1;
+  if (setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &no_delay, sizeof(no_delay)) != 0) {
     return sp_sys_err_from_errno(errno);
   }
   return SP_OK;

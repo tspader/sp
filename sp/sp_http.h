@@ -2,6 +2,7 @@
 #define SP_HTTP_H
 
 #include "sp.h"
+#include "sp_io.h"
 
 #if defined(SP_WIN32) || defined(SP_POSIX)
   #define SP_HTTP_SOCKETS
@@ -65,10 +66,16 @@ typedef struct {
   u64                 length;
 } sp_http_body_t;
 
+typedef enum {
+  SP_HTTP_VERSION_1_1,
+  SP_HTTP_VERSION_1_0,
+} sp_http_version_t;
+
 typedef struct {
-  sp_str_t method;
-  sp_str_t target;
-  sp_str_t headers;
+  sp_str_t          method;
+  sp_str_t          target;
+  sp_str_t          headers;
+  sp_http_version_t version;
 } sp_http_request_head_t;
 
 typedef struct {
@@ -226,6 +233,186 @@ SP_API sp_http_error_t      sp_http_response_write(sp_io_writer_t* writer, s32 s
 SP_API sp_http_resolver_t   sp_http_resolver_default(void);
 SP_API sp_http_error_t      sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_response_t* response);
 
+typedef struct {
+  sp_str_t path;
+  sp_str_t query;
+} sp_http_target_t;
+
+SP_API sp_http_target_t     sp_http_target_split(sp_str_t target);
+SP_API sp_str_t             sp_http_query_find(sp_str_t query, sp_str_t key);
+SP_API sp_str_t             sp_http_percent_decode(sp_mem_t mem, sp_str_t str);
+SP_API sp_str_t             sp_http_mime_type(sp_str_t path);
+
+////////////
+// SERVER //
+////////////
+
+#define SP_HTTP_REPLY_MAX_HEADERS 8
+
+#define SP_HTTP_WANT_RECV    (1u << 0)
+#define SP_HTTP_WANT_SEND    (1u << 1)
+#define SP_HTTP_WANT_REQUEST (1u << 2)
+#define SP_HTTP_WANT_CLOSE   (1u << 3)
+
+typedef struct sp_http_ctx sp_http_ctx_t;
+typedef struct sp_http_stream sp_http_stream_t;
+typedef struct sp_http_conn sp_http_conn_t;
+
+typedef enum {
+  SP_HTTP_REPLY_ONESHOT,
+  SP_HTTP_REPLY_STREAM,
+} sp_http_reply_kind_t;
+
+typedef struct {
+  sp_http_reply_kind_t kind;
+  s32                  status;
+  sp_str_t             content_type;
+  sp_str_t             body;
+  sp_http_header_t     headers [SP_HTTP_REPLY_MAX_HEADERS];
+  u32                  num_headers;
+  sp_http_stream_t*    stream;
+} sp_http_reply_t;
+
+SP_TYPEDEF_FN(sp_http_reply_t, sp_http_handler_t, sp_http_ctx_t* c);
+
+typedef struct {
+  sp_http_method_t  method;
+  const c8*         path;
+  sp_http_handler_t handler;
+} sp_http_route_t;
+
+typedef struct {
+  const sp_http_route_t* routes;
+  u32                    count;
+  void*                  user_data;
+} sp_http_router_t;
+
+struct sp_http_ctx {
+  sp_mem_t          mem;
+  sp_http_method_t  method;
+  sp_str_t          path;
+  sp_str_t          query;
+  sp_str_t          headers;
+  sp_str_t          body;
+  sp_http_stream_t* stream;
+  void*             user_data;
+};
+
+struct sp_http_stream {
+  sp_io_writer_t base;
+  u8*            ring;
+  u32            cap;
+  u32            head;
+  u32            len;
+  bool           held;
+  bool           dead;
+};
+
+typedef struct {
+  sp_mem_t mem;
+  u32      head_max;
+  u32      body_max;
+  u32      stream_max;
+} sp_http_conn_desc_t;
+
+typedef enum {
+  SP_HTTP_CONN_HEAD,
+  SP_HTTP_CONN_BODY,
+  SP_HTTP_CONN_REQUEST,
+  SP_HTTP_CONN_REPLY,
+  SP_HTTP_CONN_STREAM,
+  SP_HTTP_CONN_CLOSED,
+} sp_http_conn_state_t;
+
+struct sp_http_conn {
+  sp_http_conn_desc_t  desc;
+  sp_http_conn_state_t state;
+  sp_mem_arena_t*      arena;
+  sp_http_ctx_t        ctx;
+  sp_http_stream_t     stream;
+  bool                 keep_alive;
+  bool                 method_known;
+  struct {
+    u8* data;
+    u32 cap;
+    u32 len;
+    u32 scan;
+    u32 body_at;
+    u32 need;
+  } in;
+  struct {
+    sp_io_mem_writer_t head;
+    u8*                head_data;
+    sp_mem_slice_t     slices [3];
+    u32                count;
+    u32                at;
+    u64                cursor;
+  } out;
+};
+
+typedef struct {
+  sp_io_t             io;
+  sp_sys_ipv4_t       addr;
+  sp_http_router_t    router;
+  sp_http_conn_desc_t conn;
+  u32                 max_conns;
+  u32                 idle_ms;
+} sp_http_server_desc_t;
+
+typedef struct {
+  sp_http_conn_t  conn;
+  sp_sys_socket_t socket;
+  sp_io_op_t      recv;
+  sp_io_op_t      send;
+  sp_io_time_t    active;
+  bool            recv_armed;
+  bool            send_armed;
+  bool            closing;
+  bool            live;
+} sp_http_slot_t;
+
+typedef struct {
+  sp_http_server_desc_t desc;
+  sp_sys_socket_t       listener;
+  u16                   port;
+  sp_io_op_t            accept;
+  bool                  accept_armed;
+  sp_http_slot_t*       slots;
+  u64                   idle_ns;
+  bool                  stopping;
+  sp_atomic_u32_t       quit;
+} sp_http_server_t;
+
+SP_API void             sp_http_conn_init(sp_http_conn_t* conn, sp_http_conn_desc_t desc);
+SP_API void             sp_http_conn_deinit(sp_http_conn_t* conn);
+SP_API void             sp_http_conn_reset(sp_http_conn_t* conn);
+SP_API u32              sp_http_conn_step(sp_http_conn_t* conn);
+SP_API sp_mem_slice_t   sp_http_conn_recv_slot(sp_http_conn_t* conn);
+SP_API void             sp_http_conn_received(sp_http_conn_t* conn, u64 n);
+SP_API sp_mem_slice_t   sp_http_conn_send_slot(sp_http_conn_t* conn);
+SP_API void             sp_http_conn_sent(sp_http_conn_t* conn, u64 n);
+SP_API void             sp_http_conn_reply(sp_http_conn_t* conn, sp_http_reply_t reply);
+SP_API void             sp_http_conn_serve(sp_http_conn_t* conn, sp_sys_socket_t socket, const sp_http_router_t* router);
+
+SP_API sp_http_reply_t  sp_http_route(const sp_http_router_t* router, sp_http_ctx_t* c);
+SP_API sp_str_t         sp_http_ctx_query(sp_http_ctx_t* c, const c8* key);
+SP_API sp_str_t         sp_http_ctx_header(sp_http_ctx_t* c, const c8* name);
+SP_API sp_http_stream_t* sp_http_ctx_stream(sp_http_ctx_t* c);
+SP_API sp_http_reply_t  sp_http_reply_status(s32 status);
+SP_API sp_http_reply_t  sp_http_reply_text(s32 status, sp_str_t body);
+SP_API sp_http_reply_t  sp_http_reply_json(s32 status, sp_str_t body);
+SP_API sp_http_reply_t  sp_http_reply_file(sp_http_ctx_t* c, sp_str_t root, sp_str_t rel);
+SP_API sp_http_reply_t  sp_http_reply_stream(sp_http_stream_t* stream, sp_str_t content_type);
+SP_API void             sp_http_reply_header(sp_http_reply_t* reply, sp_str_t name, sp_str_t value);
+SP_API bool             sp_http_stream_closed(const sp_http_stream_t* stream);
+SP_API void             sp_http_stream_close(sp_http_stream_t* stream);
+
+SP_API sp_http_error_t  sp_http_server_init(sp_http_server_t* server, sp_http_server_desc_t desc);
+SP_API void             sp_http_server_pump(sp_http_server_t* server, sp_io_timeout_t timeout);
+SP_API void             sp_http_server_run(sp_http_server_t* server);
+SP_API void             sp_http_server_stop(sp_http_server_t* server);
+SP_API void             sp_http_server_deinit(sp_http_server_t* server);
+
 #endif
 
 #if defined SP_IMPLEMENTATION && !defined(SP_HTTP_IMPLEMENTATION)
@@ -284,15 +471,15 @@ SP_PRIVATE sp_str_t        sp_http_build_request(sp_mem_t mem, sp_http_wire_t wi
 SP_PRIVATE bool            sp_http_proxy_url_parse(sp_mem_t mem, sp_str_t proxy, sp_http_url_t* out);
 
 #if defined(SP_HTTP_SOCKETS)
-typedef struct sp_http_conn sp_http_conn_t;
+typedef struct sp_http_transport sp_http_transport_t;
 
 SP_PRIVATE sp_http_error_t sp_http_resolve_system(void* user_data, sp_str_t host, u32 timeout_ms, sp_http_addr_t* addrs, u32 capacity, u32* count);
 SP_PRIVATE sp_http_error_t sp_http_connect_addr(sp_sys_socket_t* out, sp_http_addr_t addr, u16 port, u32 timeout_ms);
 SP_PRIVATE sp_http_error_t sp_http_net_connect(sp_sys_socket_t* out, sp_http_resolver_t resolver, sp_str_t host, u16 port, u32 timeout_ms);
-SP_PRIVATE sp_http_error_t sp_http_conn_write(sp_http_conn_t* conn, sp_str_t data);
-SP_PRIVATE sp_http_error_t sp_http_connect_reply(sp_http_conn_t* conn);
-SP_PRIVATE sp_http_error_t sp_http_conn_open(sp_http_conn_t* conn, sp_tls_t* tls, sp_http_resolver_t resolver, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms);
-SP_PRIVATE void            sp_http_conn_close(sp_http_conn_t* conn);
+SP_PRIVATE sp_http_error_t sp_http_transport_write(sp_http_transport_t* conn, sp_str_t data);
+SP_PRIVATE sp_http_error_t sp_http_connect_reply(sp_http_transport_t* conn);
+SP_PRIVATE sp_http_error_t sp_http_transport_open(sp_http_transport_t* conn, sp_tls_t* tls, sp_http_resolver_t resolver, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms);
+SP_PRIVATE void            sp_http_transport_close(sp_http_transport_t* conn);
 #endif
 
 #if defined(SP_TLS_WITH_MBEDTLS)
@@ -655,10 +842,12 @@ sp_http_error_t sp_http_request_head_parse(sp_str_t head, sp_http_request_head_t
 
   if (!sp_http_token_ok(method)) return SP_HTTP_ERR_PROTOCOL;
   if (sp_str_empty(target) || !sp_http_url_path_ok(target)) return SP_HTTP_ERR_PROTOCOL;
-  if (!sp_str_equal_cstr(version, "HTTP/1.1") && !sp_str_equal_cstr(version, "HTTP/1.0")) return SP_HTTP_ERR_PROTOCOL;
+  bool v11 = sp_str_equal_cstr(version, "HTTP/1.1");
+  if (!v11 && !sp_str_equal_cstr(version, "HTTP/1.0")) return SP_HTTP_ERR_PROTOCOL;
 
   out->method = method;
   out->target = target;
+  out->version = v11 ? SP_HTTP_VERSION_1_1 : SP_HTTP_VERSION_1_0;
   if (nl == SP_STR_NO_MATCH) return SP_HTTP_OK;
   sp_str_t lines = sp_http_str_tail(head, nl + 2);
   sp_http_error_t err = sp_http_header_lines_check(lines);
@@ -775,6 +964,7 @@ sp_str_t sp_http_status_reason(s32 status) {
     case 414: return sp_str_lit("URI Too Long");
     case 415: return sp_str_lit("Unsupported Media Type");
     case 429: return sp_str_lit("Too Many Requests");
+    case 431: return sp_str_lit("Request Header Fields Too Large");
     case 500: return sp_str_lit("Internal Server Error");
     case 501: return sp_str_lit("Not Implemented");
     case 502: return sp_str_lit("Bad Gateway");
@@ -1172,7 +1362,7 @@ SP_PRIVATE bool sp_http_proxy_url_parse(sp_mem_t mem, sp_str_t proxy, sp_http_ur
 #define SP_HTTP_HEAD_MAX    SP_HTTP_BUFFER_SIZE
 #define SP_HTTP_MAX_INTERIM 8
 
-struct sp_http_conn {
+struct sp_http_transport {
   sp_sys_socket_t       socket;
   sp_tls_t*             tls;
   u32                   io_timeout_ms;
@@ -1307,12 +1497,12 @@ SP_PRIVATE sp_http_error_t sp_http_net_connect(sp_sys_socket_t* out, sp_http_res
   return result;
 }
 
-SP_PRIVATE sp_http_error_t sp_http_conn_write(sp_http_conn_t* conn, sp_str_t data) {
+SP_PRIVATE sp_http_error_t sp_http_transport_write(sp_http_transport_t* conn, sp_str_t data) {
   sp_err_t err = sp_io_write_all(conn->writer, data.data, data.len, SP_NULLPTR);
   return err == SP_OK ? SP_HTTP_OK : sp_http_map_io(err, SP_HTTP_ERR_OS);
 }
 
-SP_PRIVATE sp_http_error_t sp_http_connect_reply(sp_http_conn_t* conn) {
+SP_PRIVATE sp_http_error_t sp_http_connect_reply(sp_http_transport_t* conn) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
   c8* head = sp_alloc_n(scratch.mem, c8, SP_HTTP_HEAD_MAX);
   u64 len = 0;
@@ -1340,7 +1530,7 @@ SP_PRIVATE sp_http_error_t sp_http_connect_reply(sp_http_conn_t* conn) {
   return result;
 }
 
-SP_PRIVATE sp_http_error_t sp_http_conn_open(sp_http_conn_t* conn, sp_tls_t* tls, sp_http_resolver_t resolver, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms) {
+SP_PRIVATE sp_http_error_t sp_http_transport_open(sp_http_transport_t* conn, sp_tls_t* tls, sp_http_resolver_t resolver, sp_http_url_t url, const sp_http_url_t* proxy, u32 connect_timeout_ms, u32 io_timeout_ms) {
   conn->socket = SP_SYS_INVALID_SOCKET;
   conn->tls = SP_NULLPTR;
   conn->io_timeout_ms = io_timeout_ms;
@@ -1364,7 +1554,7 @@ SP_PRIVATE sp_http_error_t sp_http_conn_open(sp_http_conn_t* conn, sp_tls_t* tls
       "Host: {}:{}\r\n"
       "\r\n",
       sp_fmt_str(url.host), sp_fmt_str(url.port), sp_fmt_str(url.host), sp_fmt_str(url.port)).value;
-    err = sp_http_conn_write(conn, connect_req);
+    err = sp_http_transport_write(conn, connect_req);
     sp_mem_end_scratch(scratch);
     if (err != SP_HTTP_OK) return SP_HTTP_ERR_PROXY;
     err = sp_http_connect_reply(conn);
@@ -1381,7 +1571,7 @@ SP_PRIVATE sp_http_error_t sp_http_conn_open(sp_http_conn_t* conn, sp_tls_t* tls
   return SP_HTTP_OK;
 }
 
-SP_PRIVATE void sp_http_conn_close(sp_http_conn_t* conn) {
+SP_PRIVATE void sp_http_transport_close(sp_http_transport_t* conn) {
   if (conn->tls) conn->tls->close(conn->tls);
   if (conn->socket != SP_SYS_INVALID_SOCKET) sp_sys_socket_close(conn->socket);
   conn->tls = SP_NULLPTR;
@@ -1437,15 +1627,15 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
       break;
     }
 
-    sp_http_conn_t conn = sp_zero_s(sp_http_conn_t);
-    result = sp_http_conn_open(&conn, request.tls, resolver, url, use_proxy ? &proxy_url : SP_NULLPTR, connect_timeout, io_timeout);
+    sp_http_transport_t conn = sp_zero_s(sp_http_transport_t);
+    result = sp_http_transport_open(&conn, request.tls, resolver, url, use_proxy ? &proxy_url : SP_NULLPTR, connect_timeout, io_timeout);
     if (result != SP_HTTP_OK) {
-      sp_http_conn_close(&conn);
+      sp_http_transport_close(&conn);
       break;
     }
 
     sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_for(mem);
-    result = sp_http_conn_write(&conn, sp_http_build_request(scratch.mem, (sp_http_wire_t) {
+    result = sp_http_transport_write(&conn, sp_http_build_request(scratch.mem, (sp_http_wire_t) {
       .url           = url,
       .absolute_form = use_proxy && !url.tls,
       .method        = method,
@@ -1457,10 +1647,10 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
     }));
     sp_mem_end_scratch(scratch);
     if (result == SP_HTTP_OK && !sp_str_empty(payload)) {
-      result = sp_http_conn_write(&conn, payload);
+      result = sp_http_transport_write(&conn, payload);
     }
     if (result != SP_HTTP_OK) {
-      sp_http_conn_close(&conn);
+      sp_http_transport_close(&conn);
       break;
     }
 
@@ -1486,7 +1676,7 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
       break;
     }
     if (result != SP_HTTP_OK) {
-      sp_http_conn_close(&conn);
+      sp_http_transport_close(&conn);
       break;
     }
 
@@ -1500,7 +1690,7 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
     if (is_redirect && !sp_str_empty(location)) {
       if (redirects++ >= max) {
         result = SP_HTTP_ERR_REDIRECTS;
-        sp_http_conn_close(&conn);
+        sp_http_transport_close(&conn);
         break;
       }
       bool rewrite =
@@ -1512,14 +1702,14 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
         content_type = sp_zero_s(sp_str_t);
       }
       current = sp_http_resolve_url(mem, url, location);
-      sp_http_conn_close(&conn);
+      sp_http_transport_close(&conn);
       continue;
     }
 
     sp_http_body_t body = sp_zero;
     result = sp_http_response_body_parse(parsed.status, method == SP_HTTP_HEAD, parsed.headers, &body);
     if (result != SP_HTTP_OK) {
-      sp_http_conn_close(&conn);
+      sp_http_transport_close(&conn);
       break;
     }
 
@@ -1528,7 +1718,7 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
     u64 len = 0;
     result = sp_http_body_read(conn.reader, body, request.sink, &len);
     resp.body_len = len;
-    sp_http_conn_close(&conn);
+    sp_http_transport_close(&conn);
 
     if (result != SP_HTTP_OK) break;
     result = parsed.status >= 200 && parsed.status < 300 ? SP_HTTP_OK : SP_HTTP_ERR_STATUS;
@@ -1552,6 +1742,845 @@ sp_http_error_t sp_http_fetch(sp_mem_t mem, sp_http_request_t request, sp_http_r
 }
 
 #endif // SP_HTTP_SOCKETS
+
+///////////////
+// PROTOCOL  //
+///////////////
+
+sp_http_target_t sp_http_target_split(sp_str_t target) {
+  s32 at = sp_str_find_c8(target, '?');
+  if (at == SP_STR_NO_MATCH) {
+    return (sp_http_target_t) { .path = target };
+  }
+  return (sp_http_target_t) {
+    .path = sp_str_sub(target, 0, at),
+    .query = sp_http_str_tail(target, at + 1),
+  };
+}
+
+sp_str_t sp_http_query_find(sp_str_t query, sp_str_t key) {
+  sp_str_t rest = query;
+  while (!sp_str_empty(rest)) {
+    s32 amp = sp_str_find_c8(rest, '&');
+    sp_str_t pair = amp == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, amp);
+    rest = amp == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_http_str_tail(rest, amp + 1);
+    s32 eq = sp_str_find_c8(pair, '=');
+    sp_str_t name = eq == SP_STR_NO_MATCH ? pair : sp_str_sub(pair, 0, eq);
+    if (sp_str_equal(name, key)) {
+      return eq == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_http_str_tail(pair, eq + 1);
+    }
+  }
+  return sp_zero_s(sp_str_t);
+}
+
+sp_str_t sp_http_percent_decode(sp_mem_t mem, sp_str_t str) {
+  c8* out = sp_alloc_n(mem, c8, str.len);
+  u32 len = 0;
+  u32 it = 0;
+  while (it < str.len) {
+    u64 value = 0;
+    if (str.data[it] == '%' && it + 3 <= str.len && sp_parse_hex_ex(sp_str_sub(str, (s32)it + 1, 2), &value)) {
+      out[len++] = (c8)value;
+      it += 3;
+      continue;
+    }
+    out[len++] = str.data[it++];
+  }
+  return sp_str(out, len);
+}
+
+sp_str_t sp_http_mime_type(sp_str_t path) {
+  static const struct {
+    const c8* extension;
+    const c8* type;
+  } types [] = {
+    { "html",  "text/html" },
+    { "htm",   "text/html" },
+    { "js",    "text/javascript" },
+    { "mjs",   "text/javascript" },
+    { "css",   "text/css" },
+    { "txt",   "text/plain" },
+    { "json",  "application/json" },
+    { "map",   "application/json" },
+    { "xml",   "application/xml" },
+    { "wasm",  "application/wasm" },
+    { "pdf",   "application/pdf" },
+    { "svg",   "image/svg+xml" },
+    { "png",   "image/png" },
+    { "jpg",   "image/jpeg" },
+    { "jpeg",  "image/jpeg" },
+    { "gif",   "image/gif" },
+    { "webp",  "image/webp" },
+    { "ico",   "image/x-icon" },
+    { "woff",  "font/woff" },
+    { "woff2", "font/woff2" },
+    { "ttf",   "font/ttf" },
+  };
+  s32 dot = sp_str_find_c8_reverse(path, '.');
+  s32 slash = sp_str_find_c8_reverse(path, '/');
+  if (dot == SP_STR_NO_MATCH || slash > dot) {
+    return sp_str_lit("application/octet-stream");
+  }
+  sp_str_t extension = sp_http_str_tail(path, dot + 1);
+  sp_carr_for(types, it) {
+    if (sp_http_ci_equal(extension, sp_cstr_as_str(types[it].extension))) {
+      return sp_cstr_as_str(types[it].type);
+    }
+  }
+  return sp_str_lit("application/octet-stream");
+}
+
+//////////
+// CONN //
+//////////
+
+#define SP_HTTP_CONN_DEFAULT_HEAD_MAX   16384
+#define SP_HTTP_CONN_DEFAULT_BODY_MAX   65536
+#define SP_HTTP_CONN_DEFAULT_STREAM_MAX 65536
+#define SP_HTTP_CONN_REPLY_HEAD_MIN     1024
+#define SP_HTTP_CONN_CONTINUE           sp_str_lit("HTTP/1.1 100 Continue\r\n\r\n")
+
+static sp_http_conn_t* stream_conn(sp_http_stream_t* stream) {
+  return (sp_http_conn_t*)((u8*)stream - offsetof(sp_http_conn_t, stream));
+}
+
+static bool conn_streaming(const sp_http_conn_t* conn) {
+  return conn->state == SP_HTTP_CONN_STREAM && !conn->stream.dead;
+}
+
+static u32 reply_head_cap(const sp_http_conn_t* conn) {
+  u32 cap = conn->desc.head_max;
+  return cap < SP_HTTP_CONN_REPLY_HEAD_MIN ? SP_HTTP_CONN_REPLY_HEAD_MIN : cap;
+}
+
+static sp_err_t stream_write(sp_io_writer_t* writer, const void* ptr, u64 size, u64* bytes_written) {
+  sp_http_stream_t* stream = (sp_http_stream_t*)writer;
+  *bytes_written = 0;
+  if (stream->dead) return SP_ERR_IO_EOF;
+  if (size > stream->cap - stream->len) {
+    stream->dead = true;
+    stream_conn(stream)->state = SP_HTTP_CONN_CLOSED;
+    return SP_ERR_IO_NO_SPACE;
+  }
+  u32 tail = (stream->head + stream->len) % stream->cap;
+  u32 first = sp_min((u32)size, stream->cap - tail);
+  sp_mem_copy(stream->ring + tail, ptr, first);
+  sp_mem_copy(stream->ring, (const u8*)ptr + first, (u32)size - first);
+  stream->len += (u32)size;
+  *bytes_written = size;
+  return SP_OK;
+}
+
+static sp_mem_slice_t stream_segment(sp_http_stream_t* stream) {
+  return sp_mem_slice(stream->ring + stream->head, sp_min(stream->len, stream->cap - stream->head));
+}
+
+static void stream_consume(sp_http_stream_t* stream, u32 n) {
+  stream->head = (stream->head + n) % stream->cap;
+  stream->len -= n;
+}
+
+static bool out_pending(const sp_http_conn_t* conn) {
+  return conn->out.at < conn->out.count;
+}
+
+static void out_push(sp_http_conn_t* conn, sp_str_t bytes) {
+  conn->out.slices[conn->out.count++] = sp_mem_slice((u8*)bytes.data, bytes.len);
+}
+
+static void ctx_clear(sp_http_conn_t* conn) {
+  sp_mem_t mem = conn->ctx.mem;
+  void* user_data = conn->ctx.user_data;
+  conn->ctx = (sp_http_ctx_t) { .mem = mem, .stream = &conn->stream, .user_data = user_data };
+}
+
+static void conn_fail(sp_http_conn_t* conn, s32 status) {
+  conn->keep_alive = false;
+  sp_http_conn_reply(conn, sp_http_reply_text(status, sp_http_status_reason(status)));
+}
+
+static void conn_next(sp_http_conn_t* conn) {
+  u32 consumed = conn->in.body_at + conn->in.need;
+  u32 leftover = conn->in.len - consumed;
+  sp_mem_move(conn->in.data, conn->in.data + consumed, leftover);
+  conn->in.len = leftover;
+  conn->in.scan = 0;
+  conn->in.body_at = 0;
+  conn->in.need = 0;
+  conn->out.at = 0;
+  conn->out.count = 0;
+  conn->out.cursor = 0;
+  conn->keep_alive = false;
+  conn->method_known = false;
+  sp_mem_arena_clear(conn->arena);
+  ctx_clear(conn);
+  conn->state = SP_HTTP_CONN_HEAD;
+}
+
+static bool conn_head(sp_http_conn_t* conn) {
+  sp_str_t buffered = sp_str((c8*)conn->in.data, conn->in.len);
+  s32 end = sp_str_find(sp_http_str_tail(buffered, (s32)conn->in.scan), sp_str_lit("\r\n\r\n"));
+  if (end == SP_STR_NO_MATCH) {
+    if (conn->in.len >= conn->desc.head_max) {
+      conn_fail(conn, 431);
+      return true;
+    }
+    conn->in.scan = conn->in.len > 3 ? conn->in.len - 3 : 0;
+    return false;
+  }
+  end += (s32)conn->in.scan;
+  if ((u32)end + 4 > conn->desc.head_max) {
+    conn_fail(conn, 431);
+    return true;
+  }
+
+  sp_http_request_head_t head = sp_zero;
+  sp_http_body_t body = sp_zero;
+  if (sp_http_request_head_parse(sp_str_sub(buffered, 0, end), &head) != SP_HTTP_OK ||
+      sp_http_body_parse(head.headers, &body) != SP_HTTP_OK) {
+    conn_fail(conn, 400);
+    return true;
+  }
+
+  u64 need = 0;
+  switch (body.kind) {
+    case SP_HTTP_BODY_NONE:
+    case SP_HTTP_BODY_EOF: {
+      need = 0;
+      break;
+    }
+    case SP_HTTP_BODY_LENGTH: {
+      need = body.length;
+      break;
+    }
+    case SP_HTTP_BODY_CHUNKED: {
+      conn_fail(conn, 411);
+      return true;
+    }
+  }
+  if (need > conn->desc.body_max) {
+    conn_fail(conn, 413);
+    return true;
+  }
+
+  sp_http_target_t target = sp_http_target_split(head.target);
+  conn->in.body_at = (u32)end + 4;
+  conn->in.need = (u32)need;
+  conn->method_known = sp_http_method_parse(head.method, &conn->ctx.method);
+  conn->ctx.path = sp_http_percent_decode(conn->ctx.mem, target.path);
+  conn->ctx.query = target.query;
+  conn->ctx.headers = head.headers;
+  conn->keep_alive = head.version == SP_HTTP_VERSION_1_1 &&
+    !sp_http_ci_contains(sp_http_headers_find(head.headers, sp_str_lit("connection")), sp_str_lit("close"));
+  if (need && sp_http_ci_equal(sp_http_headers_find(head.headers, sp_str_lit("expect")), sp_str_lit("100-continue"))) {
+    out_push(conn, SP_HTTP_CONN_CONTINUE);
+  }
+  conn->state = SP_HTTP_CONN_BODY;
+  return true;
+}
+
+void sp_http_conn_init(sp_http_conn_t* conn, sp_http_conn_desc_t desc) {
+  *conn = sp_zero_s(sp_http_conn_t);
+  conn->desc = desc;
+  if (!conn->desc.head_max) conn->desc.head_max = SP_HTTP_CONN_DEFAULT_HEAD_MAX;
+  if (!conn->desc.body_max) conn->desc.body_max = SP_HTTP_CONN_DEFAULT_BODY_MAX;
+  if (!conn->desc.stream_max) conn->desc.stream_max = SP_HTTP_CONN_DEFAULT_STREAM_MAX;
+  conn->arena = sp_mem_arena_new(conn->desc.mem);
+  conn->in.cap = conn->desc.head_max + conn->desc.body_max;
+  conn->in.data = sp_alloc_n(conn->desc.mem, u8, conn->in.cap);
+  conn->out.head_data = sp_alloc_n(conn->desc.mem, u8, reply_head_cap(conn));
+  conn->stream.base.write = stream_write;
+  conn->stream.ring = sp_alloc_n(conn->desc.mem, u8, conn->desc.stream_max);
+  conn->stream.cap = conn->desc.stream_max;
+  conn->ctx.mem = sp_mem_arena_as_allocator(conn->arena);
+  sp_http_conn_reset(conn);
+}
+
+void sp_http_conn_deinit(sp_http_conn_t* conn) {
+  sp_mem_arena_destroy(conn->arena);
+  sp_free(conn->desc.mem, conn->in.data, conn->in.cap);
+  sp_free(conn->desc.mem, conn->out.head_data, reply_head_cap(conn));
+  sp_free(conn->desc.mem, conn->stream.ring, conn->desc.stream_max);
+}
+
+void sp_http_conn_reset(sp_http_conn_t* conn) {
+  conn->in.len = 0;
+  conn->in.body_at = 0;
+  conn->in.need = 0;
+  conn->stream.head = 0;
+  conn->stream.len = 0;
+  conn->stream.held = false;
+  conn->stream.dead = false;
+  conn_next(conn);
+}
+
+u32 sp_http_conn_step(sp_http_conn_t* conn) {
+  for (;;) {
+    switch (conn->state) {
+      case SP_HTTP_CONN_HEAD: {
+        if (!conn_head(conn)) return SP_HTTP_WANT_RECV;
+        break;
+      }
+      case SP_HTTP_CONN_BODY: {
+        bool complete = conn->in.len >= conn->in.body_at + conn->in.need;
+        if (out_pending(conn)) {
+          return SP_HTTP_WANT_SEND | (complete ? 0 : SP_HTTP_WANT_RECV);
+        }
+        if (!complete) return SP_HTTP_WANT_RECV;
+        conn->ctx.body = sp_str((c8*)conn->in.data + conn->in.body_at, conn->in.need);
+        if (!conn->method_known) {
+          sp_http_conn_reply(conn, sp_http_reply_text(501, sp_http_status_reason(501)));
+          break;
+        }
+        conn->state = SP_HTTP_CONN_REQUEST;
+        break;
+      }
+      case SP_HTTP_CONN_REQUEST: {
+        return SP_HTTP_WANT_REQUEST;
+      }
+      case SP_HTTP_CONN_REPLY: {
+        if (out_pending(conn)) return SP_HTTP_WANT_SEND;
+        if (!conn->keep_alive) {
+          conn->state = SP_HTTP_CONN_CLOSED;
+          break;
+        }
+        conn_next(conn);
+        break;
+      }
+      case SP_HTTP_CONN_STREAM: {
+        bool pending = out_pending(conn) || conn->stream.len;
+        if (conn->stream.dead) {
+          return pending ? SP_HTTP_WANT_SEND : SP_HTTP_WANT_CLOSE;
+        }
+        u32 want = pending ? SP_HTTP_WANT_SEND : 0u;
+        if (conn->in.len < conn->in.cap) want |= SP_HTTP_WANT_RECV;
+        return want;
+      }
+      case SP_HTTP_CONN_CLOSED: {
+        return SP_HTTP_WANT_CLOSE;
+      }
+    }
+  }
+}
+
+sp_mem_slice_t sp_http_conn_recv_slot(sp_http_conn_t* conn) {
+  return sp_mem_slice(conn->in.data + conn->in.len, conn->in.cap - conn->in.len);
+}
+
+void sp_http_conn_received(sp_http_conn_t* conn, u64 n) {
+  switch (conn->state) {
+    case SP_HTTP_CONN_HEAD:
+    case SP_HTTP_CONN_BODY:
+    case SP_HTTP_CONN_CLOSED: {
+      if (n == 0) conn->state = SP_HTTP_CONN_CLOSED;
+      conn->in.len += (u32)n;
+      break;
+    }
+    case SP_HTTP_CONN_REQUEST:
+    case SP_HTTP_CONN_REPLY: {
+      if (n == 0) conn->keep_alive = false;
+      conn->in.len += (u32)n;
+      break;
+    }
+    case SP_HTTP_CONN_STREAM: {
+      if (n == 0) {
+        conn->stream.dead = true;
+        conn->state = SP_HTTP_CONN_CLOSED;
+      }
+      break;
+    }
+  }
+}
+
+sp_mem_slice_t sp_http_conn_send_slot(sp_http_conn_t* conn) {
+  if (out_pending(conn)) {
+    return sp_mem_slice_suffix(conn->out.slices[conn->out.at], conn->out.slices[conn->out.at].len - conn->out.cursor);
+  }
+  if (conn->state == SP_HTTP_CONN_STREAM) {
+    return stream_segment(&conn->stream);
+  }
+  return sp_zero_s(sp_mem_slice_t);
+}
+
+void sp_http_conn_sent(sp_http_conn_t* conn, u64 n) {
+  if (n == 0) {
+    conn->stream.dead = true;
+    conn->state = SP_HTTP_CONN_CLOSED;
+    return;
+  }
+  if (out_pending(conn)) {
+    conn->out.cursor += n;
+    if (conn->out.cursor == conn->out.slices[conn->out.at].len) {
+      conn->out.at++;
+      conn->out.cursor = 0;
+    }
+    if (!out_pending(conn)) {
+      conn->out.at = 0;
+      conn->out.count = 0;
+    }
+    return;
+  }
+  stream_consume(&conn->stream, (u32)n);
+}
+
+static bool status_has_length(s32 status) {
+  return status >= 200 && status != 204 && status != 304;
+}
+
+void sp_http_conn_reply(sp_http_conn_t* conn, sp_http_reply_t reply) {
+  sp_http_header_t headers [SP_HTTP_REPLY_MAX_HEADERS + 3];
+  u32 count = 0;
+  if (!sp_str_empty(reply.content_type)) {
+    headers[count++] = (sp_http_header_t) { .name = sp_str_lit("Content-Type"), .value = reply.content_type };
+  }
+  sp_for(it, reply.num_headers) {
+    headers[count++] = reply.headers[it];
+  }
+
+  bool head_only = conn->method_known && conn->ctx.method == SP_HTTP_HEAD;
+  bool has_length = reply.kind == SP_HTTP_REPLY_ONESHOT && status_has_length(reply.status);
+  if (reply.kind == SP_HTTP_REPLY_ONESHOT) {
+    conn->stream.held = false;
+    conn->stream.dead = false;
+    conn->stream.head = 0;
+    conn->stream.len = 0;
+  }
+  if (has_length) {
+    sp_str_t length = sp_fmt(conn->ctx.mem, "{}", sp_fmt_uint(reply.body.len)).value;
+    headers[count++] = (sp_http_header_t) { .name = sp_str_lit("Content-Length"), .value = length };
+  }
+  if (reply.kind == SP_HTTP_REPLY_STREAM) {
+    sp_assert(reply.stream == &conn->stream);
+    conn->keep_alive = false;
+  }
+  if (!conn->keep_alive) {
+    headers[count++] = (sp_http_header_t) { .name = sp_str_lit("Connection"), .value = sp_str_lit("close") };
+  }
+
+  sp_io_mem_writer_from_buffer(&conn->out.head, conn->out.head_data, reply_head_cap(conn));
+  if (sp_http_response_head_write(&conn->out.head.base, reply.status, headers, count) != SP_HTTP_OK) {
+    conn->state = SP_HTTP_CONN_CLOSED;
+    return;
+  }
+  out_push(conn, sp_io_mem_writer_as_str(&conn->out.head));
+  if (has_length && !head_only && !sp_str_empty(reply.body)) {
+    out_push(conn, reply.body);
+  }
+  conn->state = reply.kind == SP_HTTP_REPLY_STREAM ? SP_HTTP_CONN_STREAM : SP_HTTP_CONN_REPLY;
+  if (reply.kind == SP_HTTP_REPLY_STREAM && head_only) {
+    conn->stream.dead = true;
+    conn->stream.held = false;
+    conn->stream.len = 0;
+  }
+}
+
+static bool route_method_matches(sp_http_method_t route_method, sp_http_method_t method) {
+  if (route_method == method) return true;
+  return method == SP_HTTP_HEAD && route_method == SP_HTTP_GET;
+}
+
+static bool route_matches(const sp_http_route_t* route, sp_str_t path) {
+  sp_str_t pattern = sp_cstr_as_str(route->path);
+  if (sp_str_ends_with(pattern, sp_str_lit("*"))) {
+    return sp_str_starts_with(path, sp_str_sub(pattern, 0, (s32)pattern.len - 1));
+  }
+  return sp_str_equal(path, pattern);
+}
+
+static sp_http_reply_t route_no_method(const sp_http_router_t* router, sp_http_ctx_t* c) {
+  sp_io_dyn_mem_writer_t allow = sp_zero;
+  sp_io_dyn_mem_writer_init(c->mem, &allow);
+  u32 seen = 0;
+  sp_for(it, router->count) {
+    const sp_http_route_t* route = &router->routes[it];
+    if (!route_matches(route, c->path)) continue;
+    if (seen & (1u << route->method)) continue;
+    if (seen) sp_io_write_str(&allow.base, sp_str_lit(", "), SP_NULLPTR);
+    sp_io_write_str(&allow.base, sp_http_method_name(route->method), SP_NULLPTR);
+    seen |= 1u << route->method;
+  }
+  sp_http_reply_t reply = sp_http_reply_status(405);
+  sp_http_reply_header(&reply, sp_str_lit("Allow"), sp_io_dyn_mem_writer_as_str(&allow));
+  return reply;
+}
+
+sp_http_reply_t sp_http_route(const sp_http_router_t* router, sp_http_ctx_t* c) {
+  bool path_matched = false;
+  sp_for(it, router->count) {
+    const sp_http_route_t* route = &router->routes[it];
+    if (!route_matches(route, c->path)) continue;
+    path_matched = true;
+    if (!route_method_matches(route->method, c->method)) continue;
+    c->user_data = router->user_data;
+    return route->handler(c);
+  }
+  if (path_matched) return route_no_method(router, c);
+  return sp_http_reply_status(404);
+}
+
+sp_str_t sp_http_ctx_query(sp_http_ctx_t* c, const c8* key) {
+  return sp_http_percent_decode(c->mem, sp_http_query_find(c->query, sp_cstr_as_str(key)));
+}
+
+sp_str_t sp_http_ctx_header(sp_http_ctx_t* c, const c8* name) {
+  return sp_http_headers_find(c->headers, sp_cstr_as_str(name));
+}
+
+sp_http_stream_t* sp_http_ctx_stream(sp_http_ctx_t* c) {
+  c->stream->held = true;
+  return c->stream;
+}
+
+sp_http_reply_t sp_http_reply_status(s32 status) {
+  return (sp_http_reply_t) { .status = status };
+}
+
+sp_http_reply_t sp_http_reply_text(s32 status, sp_str_t body) {
+  return (sp_http_reply_t) { .status = status, .content_type = sp_str_lit("text/plain"), .body = body };
+}
+
+sp_http_reply_t sp_http_reply_json(s32 status, sp_str_t body) {
+  return (sp_http_reply_t) { .status = status, .content_type = sp_str_lit("application/json"), .body = body };
+}
+
+static bool path_segment_ok(sp_str_t segment) {
+  if (sp_str_equal_cstr(segment, "..")) return false;
+  if (sp_str_find_c8(segment, '\\') != SP_STR_NO_MATCH) return false;
+  if (sp_str_find_c8(segment, '\0') != SP_STR_NO_MATCH) return false;
+  return true;
+}
+
+static bool path_is_contained(sp_str_t rel) {
+  if (sp_str_empty(rel) || rel.data[0] == '/') return false;
+  sp_str_t rest = rel;
+  while (!sp_str_empty(rest)) {
+    s32 slash = sp_str_find_c8(rest, '/');
+    sp_str_t segment = slash == SP_STR_NO_MATCH ? rest : sp_str_sub(rest, 0, slash);
+    rest = slash == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_http_str_tail(rest, slash + 1);
+    if (!path_segment_ok(segment)) return false;
+  }
+  return true;
+}
+
+sp_http_reply_t sp_http_reply_file(sp_http_ctx_t* c, sp_str_t root, sp_str_t rel) {
+  if (!path_is_contained(rel)) {
+    return sp_http_reply_status(404);
+  }
+  sp_str_t content = sp_zero;
+  if (sp_io_read_file(c->mem, sp_fs_join_path(c->mem, root, rel), &content) != SP_OK) {
+    return sp_http_reply_status(404);
+  }
+  return (sp_http_reply_t) { .status = 200, .content_type = sp_http_mime_type(rel), .body = content };
+}
+
+sp_http_reply_t sp_http_reply_stream(sp_http_stream_t* stream, sp_str_t content_type) {
+  return (sp_http_reply_t) { .kind = SP_HTTP_REPLY_STREAM, .status = 200, .content_type = content_type, .stream = stream };
+}
+
+void sp_http_reply_header(sp_http_reply_t* reply, sp_str_t name, sp_str_t value) {
+  sp_assert(reply->num_headers < SP_HTTP_REPLY_MAX_HEADERS);
+  reply->headers[reply->num_headers++] = (sp_http_header_t) { .name = name, .value = value };
+}
+
+bool sp_http_stream_closed(const sp_http_stream_t* stream) {
+  return stream->dead;
+}
+
+void sp_http_stream_close(sp_http_stream_t* stream) {
+  stream->dead = true;
+  stream->held = false;
+}
+
+#if defined(SP_HTTP_SOCKETS)
+
+void sp_http_conn_serve(sp_http_conn_t* conn, sp_sys_socket_t socket, const sp_http_router_t* router) {
+  for (;;) {
+    u32 want = sp_http_conn_step(conn);
+    if (want & SP_HTTP_WANT_REQUEST) {
+      sp_http_conn_reply(conn, sp_http_route(router, &conn->ctx));
+      continue;
+    }
+    if (want & SP_HTTP_WANT_SEND) {
+      sp_mem_slice_t out = sp_http_conn_send_slot(conn);
+      u64 n = 0;
+      sp_err_t err = sp_sys_socket_send(socket, out.data, out.len, &n);
+      sp_http_conn_sent(conn, err == SP_OK ? n : 0);
+      continue;
+    }
+    if (conn_streaming(conn)) {
+      sp_http_stream_close(&conn->stream);
+      continue;
+    }
+    if (want & SP_HTTP_WANT_RECV) {
+      sp_mem_slice_t in = sp_http_conn_recv_slot(conn);
+      u64 n = 0;
+      sp_err_t err = sp_sys_socket_recv(socket, in.data, in.len, &n);
+      sp_http_conn_received(conn, err == SP_OK ? n : 0);
+      continue;
+    }
+    sp_sys_socket_close(socket);
+    return;
+  }
+}
+
+////////////
+// SERVER //
+////////////
+
+#define SP_HTTP_SERVER_DEFAULT_CONNS   16
+#define SP_HTTP_SERVER_DEFAULT_IDLE_MS 5000
+#define SP_HTTP_SERVER_DONE_MAX        64
+
+static void server_arm_accept(sp_http_server_t* server) {
+  server->accept = (sp_io_op_t) {
+    .kind = SP_IO_OP_ACCEPT,
+    .accept = { .socket = server->listener },
+    .user_data = server,
+  };
+  sp_assert(sp_io_submit(server->desc.io, &server->accept) == SP_OK);
+  server->accept_armed = true;
+}
+
+static sp_http_slot_t* slot_take(sp_http_server_t* server) {
+  sp_for(it, server->desc.max_conns) {
+    if (!server->slots[it].live) return &server->slots[it];
+  }
+  return SP_NULLPTR;
+}
+
+static void slot_arm_recv(sp_http_server_t* server, sp_http_slot_t* slot) {
+  slot->recv = (sp_io_op_t) {
+    .kind = SP_IO_OP_RECV,
+    .recv = { .socket = slot->socket, .buf = sp_http_conn_recv_slot(&slot->conn) },
+    .user_data = slot,
+  };
+  sp_assert(sp_io_submit(server->desc.io, &slot->recv) == SP_OK);
+  slot->recv_armed = true;
+}
+
+static void slot_arm_send(sp_http_server_t* server, sp_http_slot_t* slot) {
+  slot->send = (sp_io_op_t) {
+    .kind = SP_IO_OP_SEND,
+    .send = { .socket = slot->socket, .buf = sp_http_conn_send_slot(&slot->conn) },
+    .user_data = slot,
+  };
+  sp_assert(sp_io_submit(server->desc.io, &slot->send) == SP_OK);
+  slot->send_armed = true;
+}
+
+static void slot_settle(sp_http_server_t* server, sp_http_slot_t* slot) {
+  if (slot->recv_armed || slot->send_armed) return;
+  if (slot->socket != SP_SYS_INVALID_SOCKET) {
+    sp_sys_socket_close(slot->socket);
+    slot->socket = SP_SYS_INVALID_SOCKET;
+  }
+  if (slot->conn.stream.held) return;
+  slot->live = false;
+  if (!server->accept_armed && !server->stopping) {
+    server_arm_accept(server);
+  }
+}
+
+static void slot_close(sp_http_server_t* server, sp_http_slot_t* slot) {
+  slot->closing = true;
+  if (slot->recv_armed) sp_io_cancel(server->desc.io, &slot->recv);
+  if (slot->send_armed) sp_io_cancel(server->desc.io, &slot->send);
+  slot_settle(server, slot);
+}
+
+static void slot_drive(sp_http_server_t* server, sp_http_slot_t* slot) {
+  if (slot->closing) {
+    slot_settle(server, slot);
+    return;
+  }
+  u32 want = sp_http_conn_step(&slot->conn);
+  while (want & SP_HTTP_WANT_REQUEST) {
+    sp_http_conn_reply(&slot->conn, sp_http_route(&server->desc.router, &slot->conn.ctx));
+    want = sp_http_conn_step(&slot->conn);
+  }
+  if (want & SP_HTTP_WANT_CLOSE) {
+    slot_close(server, slot);
+    return;
+  }
+  if ((want & SP_HTTP_WANT_SEND) && !slot->send_armed) slot_arm_send(server, slot);
+  if ((want & SP_HTTP_WANT_RECV) && !slot->recv_armed) slot_arm_recv(server, slot);
+}
+
+static void slot_complete(sp_http_server_t* server, sp_http_slot_t* slot, sp_io_op_t* op) {
+  u64 n = op->result.err == SP_OK ? op->result.len : 0;
+  if (op == &slot->recv) {
+    slot->recv_armed = false;
+    if (!slot->closing) sp_http_conn_received(&slot->conn, n);
+  }
+  else {
+    slot->send_armed = false;
+    if (!slot->closing) sp_http_conn_sent(&slot->conn, n);
+  }
+  slot->active = sp_io_now(server->desc.io, SP_IO_CLOCK_AWAKE);
+  slot_drive(server, slot);
+}
+
+static void server_accepted(sp_http_server_t* server, sp_io_op_t* op) {
+  server->accept_armed = false;
+  if (op->result.err != SP_OK) {
+    if (!server->stopping) server_arm_accept(server);
+    return;
+  }
+  if (server->stopping) {
+    sp_sys_socket_close(op->result.socket);
+    return;
+  }
+  sp_http_slot_t* slot = slot_take(server);
+  sp_sys_socket_no_delay(op->result.socket);
+  slot->socket = op->result.socket;
+  slot->live = true;
+  slot->closing = false;
+  slot->active = sp_io_now(server->desc.io, SP_IO_CLOCK_AWAKE);
+  sp_http_conn_reset(&slot->conn);
+  slot_drive(server, slot);
+  if (slot_take(server)) {
+    server_arm_accept(server);
+  }
+}
+
+static void server_dispatch(sp_http_server_t* server, sp_io_op_t* op) {
+  if (op == &server->accept) {
+    server_accepted(server, op);
+    return;
+  }
+  sp_http_slot_t* slot = sp_cast(sp_http_slot_t*, op->user_data);
+  sp_assert(slot >= server->slots && slot < server->slots + server->desc.max_conns);
+  slot_complete(server, slot, op);
+}
+
+static bool server_armed(const sp_http_server_t* server) {
+  if (server->accept_armed) return true;
+  sp_for(it, server->desc.max_conns) {
+    if (server->slots[it].recv_armed || server->slots[it].send_armed) return true;
+  }
+  return false;
+}
+
+sp_http_error_t sp_http_server_init(sp_http_server_t* server, sp_http_server_desc_t desc) {
+  *server = sp_zero_s(sp_http_server_t);
+  server->desc = desc;
+  server->desc.max_conns = desc.max_conns ? desc.max_conns : SP_HTTP_SERVER_DEFAULT_CONNS;
+  server->desc.idle_ms = desc.idle_ms ? desc.idle_ms : SP_HTTP_SERVER_DEFAULT_IDLE_MS;
+  server->idle_ns = (u64)server->desc.idle_ms * 1000 * 1000;
+  server->listener = SP_SYS_INVALID_SOCKET;
+
+  sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
+  if (sp_sys_socket_open(&listener, sp_zero_s(sp_sys_handle_desc_t)) != SP_OK) {
+    return SP_HTTP_ERR_OS;
+  }
+  if (sp_sys_socket_reuse_addr(listener) != SP_OK ||
+      sp_sys_socket_bind(listener, desc.addr) != SP_OK ||
+      sp_sys_socket_listen(listener, (s32)server->desc.max_conns) != SP_OK ||
+      sp_sys_socket_local_port(listener, &server->port) != SP_OK) {
+    sp_sys_socket_close(listener);
+    return SP_HTTP_ERR_OS;
+  }
+  server->listener = listener;
+
+  server->slots = sp_alloc_n(server->desc.conn.mem, sp_http_slot_t, server->desc.max_conns);
+  sp_for(it, server->desc.max_conns) {
+    server->slots[it] = sp_zero_s(sp_http_slot_t);
+    server->slots[it].socket = SP_SYS_INVALID_SOCKET;
+    sp_http_conn_init(&server->slots[it].conn, server->desc.conn);
+  }
+
+  server_arm_accept(server);
+  return SP_HTTP_OK;
+}
+
+void sp_http_server_pump(sp_http_server_t* server, sp_io_timeout_t timeout) {
+  sp_io_time_t now = sp_io_now(server->desc.io, SP_IO_CLOCK_AWAKE);
+  sp_for(it, server->desc.max_conns) {
+    sp_http_slot_t* slot = &server->slots[it];
+    if (!slot->live) continue;
+    bool idle = now.ns - slot->active.ns > server->idle_ns && !conn_streaming(&slot->conn) && !slot->closing;
+    if (idle) {
+      slot_close(server, slot);
+      continue;
+    }
+    slot_drive(server, slot);
+  }
+
+  sp_io_op_t* done [SP_HTTP_SERVER_DONE_MAX];
+  sp_for(round, 2) {
+    u32 count = 0;
+    sp_io_wait(server->desc.io, done, sp_carr_len(done), round == 0 ? timeout : sp_io_timeout_after(0), &count);
+    if (count == 0) break;
+    sp_for(it, count) {
+      server_dispatch(server, done[it]);
+    }
+  }
+}
+
+void sp_http_server_run(sp_http_server_t* server) {
+  while (!sp_atomic_u32_load(&server->quit, SP_ATOMIC_ACQUIRE)) {
+    sp_http_server_pump(server, sp_io_timeout_after(server->idle_ns));
+  }
+}
+
+void sp_http_server_stop(sp_http_server_t* server) {
+  sp_atomic_u32_store(&server->quit, 1, SP_ATOMIC_RELEASE);
+  sp_io_wake(server->desc.io);
+}
+
+void sp_http_server_deinit(sp_http_server_t* server) {
+  server->stopping = true;
+  if (server->accept_armed) sp_io_cancel(server->desc.io, &server->accept);
+  sp_for(it, server->desc.max_conns) {
+    if (server->slots[it].live) slot_close(server, &server->slots[it]);
+  }
+
+  sp_io_op_t* done [SP_HTTP_SERVER_DONE_MAX];
+  while (server_armed(server)) {
+    u32 count = 0;
+    sp_io_wait(server->desc.io, done, sp_carr_len(done), sp_io_timeout_none(), &count);
+    sp_for(it, count) {
+      server_dispatch(server, done[it]);
+    }
+  }
+
+  sp_for(it, server->desc.max_conns) {
+    sp_http_conn_deinit(&server->slots[it].conn);
+  }
+  sp_free(server->desc.conn.mem, server->slots, sizeof(sp_http_slot_t) * server->desc.max_conns);
+  sp_sys_socket_close(server->listener);
+}
+
+#else
+
+void sp_http_conn_serve(sp_http_conn_t* conn, sp_sys_socket_t socket, const sp_http_router_t* router) {
+  sp_unused(conn); sp_unused(socket); sp_unused(router);
+}
+
+sp_http_error_t sp_http_server_init(sp_http_server_t* server, sp_http_server_desc_t desc) {
+  *server = sp_zero_s(sp_http_server_t);
+  server->desc = desc;
+  server->listener = SP_SYS_INVALID_SOCKET;
+  return SP_HTTP_ERR_UNSUPPORTED;
+}
+
+void sp_http_server_pump(sp_http_server_t* server, sp_io_timeout_t timeout) {
+  sp_unused(server); sp_unused(timeout);
+}
+
+void sp_http_server_run(sp_http_server_t* server) {
+  sp_unused(server);
+}
+
+void sp_http_server_stop(sp_http_server_t* server) {
+  sp_unused(server);
+}
+
+void sp_http_server_deinit(sp_http_server_t* server) {
+  sp_unused(server);
+}
+
+#endif
 
 #if defined(SP_TLS_WITH_MBEDTLS)
 
