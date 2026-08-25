@@ -127,6 +127,19 @@ struct sp_tls {
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/error.h>
 
+// mbedtls has a process-global PSA key store, which is used for TLS 1.3
+// handshakes. By default, it isn't thread safe. The only way to fix this from
+// our code would be:
+// - A lock that covers every `mbedtls_ssl_read` / `mbedtls_ssl_write`, but
+//   then nothing is actually concurrent
+// - Downgrade to TLS 1.2
+//
+// The only solution is to force the consumer to choose multithreaded or single
+// threaded, and make everyone agree
+#if !defined(MBEDTLS_THREADING_C) && !defined(SP_TLS_MBEDTLS_SINGLE_THREAD)
+  #error "sp_http is multithreaded, but the mbedtls configuration is single threaded; compile with SP_TLS_MBEDTLS_SINGLE_THREAD, or enable multithreading in mbedtls with MBEDTLS_THREADING_C"
+#endif
+
 typedef enum {
   SP_TLS_BACKEND_NONE,
   SP_TLS_BACKEND_ANCHORS,
