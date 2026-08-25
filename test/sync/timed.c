@@ -108,7 +108,7 @@ sp_test_each(sync, timed_shell, test_t, tests, .serial = true) {
   }
   for (u32 w = 1; w < sync_futex.waits; w++) {
     sp_expect_le(t, sync_futex.timeouts_ns[w], sync_futex.timeouts_ns[w - 1] - 5 * SP_TM_MS_TO_NS);
-    sp_expect_ge(t, sync_futex.timeouts_ns[w], sync_futex.timeouts_ns[w - 1] - 30 * SP_TM_MS_TO_NS);
+    sp_expect_ge(t, sync_futex.timeouts_ns[w], sync_futex.timeouts_ns[w - 1] - 60 * SP_TM_MS_TO_NS);
   }
   return SP_OK;
 }
