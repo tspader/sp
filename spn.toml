@@ -73,15 +73,33 @@ name = "tls"
 source = [
   "test/main.c",
   "test/http/tls/*.c",
-  "tools/vendor/mbedtls/library/*.c",
 ]
-include = ["tools/vendor/mbedtls/include", "tools/vendor/mbedtls/library"]
+deps = ["mbedtls"]
 define = [
   "SP_TLS_WITH_MBEDTLS",
   { value = "SP_TLS_MACOS_SECTRUST", when = { os = "macos" } },
+  { value = "SP_TLS_MBEDTLS_SINGLE_THREAD", when = { os = "windows" } },
 ]
 macos = { frameworks = ["Security", "CoreFoundation"] }
+
+[deps.test]
+mbedtls = "3.6.6"
 
 [[bin]]
 name = "zero_copy"
 source = ["example/zero_copy.c"]
+
+[profile.sanitizer]
+linkage = "shared"
+sanitize = ["address", "undefined"]
+
+[profile.tsan]
+linkage = "shared"
+sanitize = ["thread"]
+
+[[toolchain]]
+name = "clang"
+compiler = "clang"
+linker = "ld"
+archiver = "ar"
+driver = "clang"
