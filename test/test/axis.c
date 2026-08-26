@@ -48,7 +48,8 @@ static const axis_case_t axis_cases [] = {
       .cases = axis_one,
       .stride = sizeof(axis_row_t),
       .count = sp_carr_len(axis_one),
-      .case_name_offset = offsetof(axis_row_t, name) + 1,
+      .named = true,
+      .case_name_offset = offsetof(axis_row_t, name),
       .axes = { sp_test_axis(axis_row_t, kind, AXIS_A, AXIS_C) },
     },
     .expect = {
@@ -68,7 +69,8 @@ static const axis_case_t axis_cases [] = {
       .cases = axis_one,
       .stride = sizeof(axis_row_t),
       .count = sp_carr_len(axis_one),
-      .case_name_offset = offsetof(axis_row_t, name) + 1,
+      .named = true,
+      .case_name_offset = offsetof(axis_row_t, name),
       .axes = { sp_test_axis_named(axis_row_t, kind, axis_kind_name, AXIS_A, AXIS_C) },
     },
     .expect = {
@@ -88,7 +90,8 @@ static const axis_case_t axis_cases [] = {
       .cases = axis_one,
       .stride = sizeof(axis_row_t),
       .count = sp_carr_len(axis_one),
-      .case_name_offset = offsetof(axis_row_t, name) + 1,
+      .named = true,
+      .case_name_offset = offsetof(axis_row_t, name),
       .axes = { sp_test_axis_range(axis_row_t, w, 0, 6, 3) },
     },
     .expect = {
@@ -109,7 +112,8 @@ static const axis_case_t axis_cases [] = {
       .cases = axis_one,
       .stride = sizeof(axis_row_t),
       .count = sp_carr_len(axis_one),
-      .case_name_offset = offsetof(axis_row_t, name) + 1,
+      .named = true,
+      .case_name_offset = offsetof(axis_row_t, name),
       .axes = {
         sp_test_axis(axis_row_t, kind, AXIS_A, AXIS_B),
         sp_test_axis_range(axis_row_t, w, 1, 2, 1),
@@ -139,7 +143,8 @@ static const axis_case_t axis_cases [] = {
       .cases = axis_two,
       .stride = sizeof(axis_row_t),
       .count = sp_carr_len(axis_two),
-      .case_name_offset = offsetof(axis_row_t, name) + 1,
+      .named = true,
+      .case_name_offset = offsetof(axis_row_t, name),
       .axes = { sp_test_axis(axis_row_t, kind, AXIS_A, AXIS_B) },
     },
     .expect = {
@@ -201,7 +206,8 @@ static const axis_case_t axis_cases [] = {
       .cases = axis_one,
       .stride = sizeof(axis_row_t),
       .count = sp_carr_len(axis_one),
-      .case_name_offset = offsetof(axis_row_t, name) + 1,
+      .named = true,
+      .case_name_offset = offsetof(axis_row_t, name),
     },
     .expect = {
       .names = { "S.T.R" },
