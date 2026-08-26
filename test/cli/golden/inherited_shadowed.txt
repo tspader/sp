@@ -1,0 +1,6 @@
+
+usage
+  pkg build [OPTIONS]
+
+options
+  -m, --mode Build mode

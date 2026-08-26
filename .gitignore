@@ -6,6 +6,7 @@
 .tmp
 .vs
 *.a
+*.actual
 *.dll
 *.dSYM
 *.dylib

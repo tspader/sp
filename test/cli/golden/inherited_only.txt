@@ -1,0 +1,5 @@
+
+usage
+  pkg list [OPTIONS]
+
+Use pkg --help for global options and environment
