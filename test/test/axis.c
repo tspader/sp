@@ -241,7 +241,7 @@ sp_test_each(axis, expand, axis_case_t, axis_cases) {
   sp_mem_t mem = sp_test_arena(t);
 
   sp_da(sp_test_instance_t) instances = sp_da_new(mem, sp_test_instance_t);
-  sp_test_expand(mem, "S", &it->decl, false, SP_NULLPTR, &instances);
+  sp_test_expand(mem, "S", &it->decl, SP_NULLPTR, &instances);
 
   u32 want = 0;
   while (want < AXIS_MAX && it->expect.names[want]) want++;
