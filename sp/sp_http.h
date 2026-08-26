@@ -366,6 +366,7 @@ struct sp_http_conn {
 typedef struct {
   sp_io_t             io;
   sp_sys_ipv4_t       addr;
+  sp_sys_socket_t     listener;
   sp_http_router_t    router;
   sp_http_conn_desc_t conn;
   u32                 max_conns;
@@ -2384,7 +2385,7 @@ static void slot_arm_send(sp_http_server_t* server, sp_http_slot_t* slot) {
 static void slot_settle(sp_http_server_t* server, sp_http_slot_t* slot) {
   if (slot->recv_armed || slot->send_armed) return;
   if (slot->socket != SP_SYS_INVALID_SOCKET) {
-    sp_sys_socket_close(slot->socket);
+    sp_io_close(server->desc.io, slot->socket);
     slot->socket = SP_SYS_INVALID_SOCKET;
   }
   if (slot->conn.stream.held) return;
@@ -2440,7 +2441,7 @@ static void server_accepted(sp_http_server_t* server, sp_io_op_t* op) {
     return;
   }
   if (server->stopping) {
-    sp_sys_socket_close(op->result.socket);
+    sp_io_close(server->desc.io, op->result.socket);
     return;
   }
   sp_http_slot_t* slot = slot_take(server);
@@ -2482,18 +2483,24 @@ sp_http_error_t sp_http_server_init(sp_http_server_t* server, sp_http_server_des
   server->idle_ns = (u64)server->desc.idle_ms * 1000 * 1000;
   server->listener = SP_SYS_INVALID_SOCKET;
 
-  sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  if (sp_sys_socket_open(&listener, sp_zero_s(sp_sys_handle_desc_t)) != SP_OK) {
-    return SP_HTTP_ERR_OS;
+  if (desc.listener) {
+    server->listener = desc.listener;
+    server->port = desc.addr.port;
   }
-  if (sp_sys_socket_reuse_addr(listener) != SP_OK ||
-      sp_sys_socket_bind(listener, desc.addr) != SP_OK ||
-      sp_sys_socket_listen(listener, (s32)server->desc.max_conns) != SP_OK ||
-      sp_sys_socket_local_port(listener, &server->port) != SP_OK) {
-    sp_sys_socket_close(listener);
-    return SP_HTTP_ERR_OS;
+  else {
+    sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
+    if (sp_sys_socket_open(&listener, sp_zero_s(sp_sys_handle_desc_t)) != SP_OK) {
+      return SP_HTTP_ERR_OS;
+    }
+    if (sp_sys_socket_reuse_addr(listener) != SP_OK ||
+        sp_sys_socket_bind(listener, desc.addr) != SP_OK ||
+        sp_sys_socket_listen(listener, (s32)server->desc.max_conns) != SP_OK ||
+        sp_sys_socket_local_port(listener, &server->port) != SP_OK) {
+      sp_sys_socket_close(listener);
+      return SP_HTTP_ERR_OS;
+    }
+    server->listener = listener;
   }
-  server->listener = listener;
 
   server->slots = sp_alloc_n(server->desc.conn.mem, sp_http_slot_t, server->desc.max_conns);
   sp_for(it, server->desc.max_conns) {
@@ -2561,7 +2568,7 @@ void sp_http_server_deinit(sp_http_server_t* server) {
     sp_http_conn_deinit(&server->slots[it].conn);
   }
   sp_free(server->desc.conn.mem, server->slots, sizeof(sp_http_slot_t) * server->desc.max_conns);
-  sp_sys_socket_close(server->listener);
+  sp_io_close(server->desc.io, server->listener);
 }
 
 #else

@@ -39,6 +39,7 @@ typedef struct {
 
 typedef enum {
   SP_IO_OP_ACCEPT,
+  SP_IO_OP_CONNECT,
   SP_IO_OP_RECV,
   SP_IO_OP_SEND,
   SP_IO_OP_READ,
@@ -53,6 +54,12 @@ struct sp_io_op {
       sp_sys_socket_t socket;
       sp_sys_handle_desc_t desc;
     } accept;
+    struct {
+      sp_sys_ipv4_t addr;
+      sp_sys_handle_desc_t desc;
+      sp_sys_socket_t socket;
+      u8 sockaddr [16];
+    } connect;
     struct {
       sp_sys_socket_t socket;
       sp_mem_slice_t buf;
@@ -86,6 +93,7 @@ struct sp_io_vtable_t {
   sp_err_t     (*submit)(void* user_data, sp_io_op_t* op);
   sp_err_t     (*wait)(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count);
   sp_err_t     (*cancel)(void* user_data, sp_io_op_t* op);
+  sp_err_t     (*close)(void* user_data, sp_sys_socket_t socket);
   sp_err_t     (*wake)(void* user_data);
   sp_io_time_t (*now)(void* user_data, sp_io_clock_t clock);
   void         (*destroy)(void* user_data);
@@ -96,6 +104,7 @@ SP_API void         sp_io_destroy(sp_io_t io);
 SP_API sp_err_t     sp_io_submit(sp_io_t io, sp_io_op_t* op);
 SP_API sp_err_t     sp_io_wait(sp_io_t io, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count);
 SP_API sp_err_t     sp_io_cancel(sp_io_t io, sp_io_op_t* op);
+SP_API sp_err_t     sp_io_close(sp_io_t io, sp_sys_socket_t socket);
 SP_API sp_err_t     sp_io_wake(sp_io_t io);
 SP_API sp_io_time_t sp_io_now(sp_io_t io, sp_io_clock_t clock);
 
@@ -136,6 +145,70 @@ SP_API sp_err_t sp_io_uring_init(sp_io_uring_t* ring, u32 entries);
 SP_API void     sp_io_uring_deinit(sp_io_uring_t* ring);
 SP_API sp_io_t  sp_io_uring_as_io(sp_io_uring_t* ring);
 
+#define SP_IO_SIM_MAX_ACTORS    4
+#define SP_IO_SIM_MAX_OPS       32
+#define SP_IO_SIM_MAX_CONNS     8
+#define SP_IO_SIM_MAX_LISTENERS 2
+#define SP_IO_SIM_MAX_BACKLOG   4
+#define SP_IO_SIM_WIRE_MAX      4096
+#define SP_IO_SIM_SOCKET_BASE   0x51000000
+
+typedef struct sp_io_sim sp_io_sim_t;
+
+typedef struct {
+  sp_io_sim_t* sim;
+  u32          id;
+} sp_io_sim_actor_t;
+
+typedef struct {
+  sp_sys_socket_t socket;
+  u16             port;
+  sp_sys_socket_t backlog [SP_IO_SIM_MAX_BACKLOG];
+  u32             backlog_count;
+  bool            live;
+} sp_io_sim_listener_t;
+
+typedef struct {
+  u8  data [SP_IO_SIM_WIRE_MAX];
+  u64 len;
+} sp_io_sim_wire_t;
+
+typedef struct {
+  sp_sys_socket_t  sockets [2];
+  sp_io_sim_wire_t wire [2];
+  bool             open [2];
+  u64              chunk;
+  bool             reset;
+  bool             live;
+} sp_io_sim_conn_t;
+
+typedef struct {
+  sp_io_op_t* op;
+  u32         actor;
+  u64         deadline;
+} sp_io_sim_op_t;
+
+struct sp_io_sim {
+  u64                  now;
+  u64                  completions;
+  sp_sys_socket_t      next_socket;
+  sp_io_sim_actor_t    actors [SP_IO_SIM_MAX_ACTORS];
+  u32                  actor_count;
+  sp_io_sim_listener_t listeners [SP_IO_SIM_MAX_LISTENERS];
+  sp_io_sim_conn_t     conns [SP_IO_SIM_MAX_CONNS];
+  sp_io_sim_op_t       armed [SP_IO_SIM_MAX_OPS];
+  u32                  armed_count;
+  sp_io_sim_op_t       done [SP_IO_SIM_MAX_OPS];
+  u32                  done_count;
+};
+
+SP_API void            sp_io_sim_init(sp_io_sim_t* sim);
+SP_API sp_io_t         sp_io_sim_actor(sp_io_sim_t* sim);
+SP_API sp_sys_socket_t sp_io_sim_listen(sp_io_sim_t* sim, u16 port);
+SP_API void            sp_io_sim_advance(sp_io_sim_t* sim, u64 ns);
+SP_API void            sp_io_sim_kill(sp_io_sim_t* sim, sp_sys_socket_t socket);
+SP_API void            sp_io_sim_chunk(sp_io_sim_t* sim, sp_sys_socket_t socket, u64 max);
+
 #endif
 
 #if defined(SP_IMPLEMENTATION) && !defined(SP_IO_IMPLEMENTATION)
@@ -161,6 +234,10 @@ sp_err_t sp_io_cancel(sp_io_t io, sp_io_op_t* op) {
   return io.vt->cancel(io.user_data, op);
 }
 
+sp_err_t sp_io_close(sp_io_t io, sp_sys_socket_t socket) {
+  return io.vt->close(io.user_data, socket);
+}
+
 sp_err_t sp_io_wake(sp_io_t io) {
   return io.vt->wake(io.user_data);
 }
@@ -179,6 +256,7 @@ sp_io_time_t sp_io_now(sp_io_t io, sp_io_clock_t clock) {
 #define SP_IO_URING_OP_TIMEOUT       11
 #define SP_IO_URING_OP_ACCEPT        13
 #define SP_IO_URING_OP_ASYNC_CANCEL  14
+#define SP_IO_URING_OP_CONNECT       16
 #define SP_IO_URING_OP_READ          22
 #define SP_IO_URING_OP_WRITE         23
 #define SP_IO_URING_OP_SEND          26
@@ -390,6 +468,21 @@ SP_PRIVATE sp_err_t sp_io_uring_submit(void* user_data, sp_io_op_t* op) {
       sqe->op_flags = sp_io_uring_accept_flags(op->accept.desc);
       break;
     }
+    case SP_IO_OP_CONNECT: {
+      sp_try(sp_sys_socket_open(&op->connect.socket, op->connect.desc));
+      sp_static_assert(sizeof(sp_sys_linux_sockaddr_in_t) <= sizeof(op->connect.sockaddr), sp_io_uring_sockaddr_fits);
+      sp_sys_linux_sockaddr_in_t* sa = (sp_sys_linux_sockaddr_in_t*)op->connect.sockaddr;
+      *sa = sp_zero_s(sp_sys_linux_sockaddr_in_t);
+      sa->family = SP_SYS_LINUX_AF_INET;
+      sa->port[0] = (u8)(op->connect.addr.port >> 8);
+      sa->port[1] = (u8)(op->connect.addr.port & 0xFF);
+      sp_mem_copy(sa->addr, op->connect.addr.octets, 4);
+      sqe->opcode = SP_IO_URING_OP_CONNECT;
+      sqe->fd = (s32)op->connect.socket;
+      sqe->addr = (u64)sp_uptr(op->connect.sockaddr);
+      sqe->off = sizeof(sp_sys_linux_sockaddr_in_t);
+      break;
+    }
     case SP_IO_OP_RECV: {
       sqe->opcode = SP_IO_URING_OP_RECV;
       sqe->fd = (s32)op->recv.socket;
@@ -447,6 +540,10 @@ SP_PRIVATE void sp_io_uring_complete(sp_io_op_t* op, s32 res) {
         op->result.socket = (sp_sys_socket_t)res;
         break;
       }
+      case SP_IO_OP_CONNECT: {
+        op->result.socket = op->connect.socket;
+        break;
+      }
       case SP_IO_OP_RECV:
       case SP_IO_OP_SEND:
       case SP_IO_OP_READ:
@@ -468,6 +565,11 @@ SP_PRIVATE void sp_io_uring_complete(sp_io_op_t* op, s32 res) {
   }
   else {
     op->result.err = sp_sys_err_from_errno(e);
+  }
+
+  if (op->kind == SP_IO_OP_CONNECT) {
+    sp_sys_socket_close(op->connect.socket);
+    op->connect.socket = SP_SYS_INVALID_SOCKET;
   }
 }
 
@@ -550,6 +652,11 @@ SP_PRIVATE sp_err_t sp_io_uring_cancel(void* user_data, sp_io_op_t* op) {
   sqe->user_data = SP_IO_URING_USER_DATA_CANCEL;
   sp_io_uring_push(ring);
   return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_uring_close(void* user_data, sp_sys_socket_t socket) {
+  sp_unused(user_data);
+  return sp_sys_socket_close(socket);
 }
 
 SP_PRIVATE sp_err_t sp_io_uring_wake(void* user_data) {
@@ -660,6 +767,11 @@ SP_PRIVATE sp_err_t sp_io_uring_cancel(void* user_data, sp_io_op_t* op) {
   return SP_ERR_SYS_UNSUPPORTED;
 }
 
+SP_PRIVATE sp_err_t sp_io_uring_close(void* user_data, sp_sys_socket_t socket) {
+  sp_unused(user_data); sp_unused(socket);
+  return SP_ERR_SYS_UNSUPPORTED;
+}
+
 SP_PRIVATE sp_err_t sp_io_uring_wake(void* user_data) {
   sp_unused(user_data);
   return SP_ERR_SYS_UNSUPPORTED;
@@ -695,6 +807,7 @@ SP_PRIVATE const sp_io_vtable_t sp_io_uring_vtable = {
   .submit  = sp_io_uring_submit,
   .wait    = sp_io_uring_wait,
   .cancel  = sp_io_uring_cancel,
+  .close   = sp_io_uring_close,
   .wake    = sp_io_uring_wake,
   .now     = sp_io_uring_now,
   .destroy = sp_io_uring_destroy,
@@ -702,6 +815,328 @@ SP_PRIVATE const sp_io_vtable_t sp_io_uring_vtable = {
 
 sp_io_t sp_io_uring_as_io(sp_io_uring_t* ring) {
   return (sp_io_t) { .user_data = ring, .vt = &sp_io_uring_vtable };
+}
+
+SP_PRIVATE sp_io_sim_conn_t* sp_io_sim_conn(sp_io_sim_t* sim, sp_sys_socket_t socket, u32* end) {
+  sp_carr_for(sim->conns, it) {
+    sp_io_sim_conn_t* conn = &sim->conns[it];
+    if (!conn->live) continue;
+    sp_for(at, 2) {
+      if (conn->sockets[at] == socket) {
+        *end = at;
+        return conn;
+      }
+    }
+  }
+  return SP_NULLPTR;
+}
+
+SP_PRIVATE sp_io_sim_listener_t* sp_io_sim_listener(sp_io_sim_t* sim, sp_sys_socket_t socket) {
+  sp_carr_for(sim->listeners, it) {
+    if (sim->listeners[it].live && sim->listeners[it].socket == socket) return &sim->listeners[it];
+  }
+  return SP_NULLPTR;
+}
+
+SP_PRIVATE sp_io_sim_listener_t* sp_io_sim_listener_at(sp_io_sim_t* sim, u16 port) {
+  sp_carr_for(sim->listeners, it) {
+    if (sim->listeners[it].live && sim->listeners[it].port == port) return &sim->listeners[it];
+  }
+  return SP_NULLPTR;
+}
+
+SP_PRIVATE void sp_io_sim_deliver(sp_io_sim_t* sim, u32 at) {
+  sp_assert(sim->done_count < SP_IO_SIM_MAX_OPS);
+  sim->done[sim->done_count++] = sim->armed[at];
+  sim->armed_count--;
+  sp_for(it, sim->armed_count - at) {
+    sim->armed[at + it] = sim->armed[at + it + 1];
+  }
+  sim->completions++;
+}
+
+SP_PRIVATE bool sp_io_sim_step_op(sp_io_sim_t* sim, u32 at) {
+  sp_io_op_t* op = sim->armed[at].op;
+
+  switch (op->kind) {
+    case SP_IO_OP_ACCEPT: {
+      sp_io_sim_listener_t* listener = sp_io_sim_listener(sim, op->accept.socket);
+      sp_assert(listener);
+      if (!listener->backlog_count) return false;
+      op->result.err = SP_OK;
+      op->result.socket = listener->backlog[0];
+      listener->backlog_count--;
+      sp_for(it, listener->backlog_count) {
+        listener->backlog[it] = listener->backlog[it + 1];
+      }
+      return true;
+    }
+    case SP_IO_OP_CONNECT: {
+      sp_io_sim_listener_t* listener = sp_io_sim_listener_at(sim, op->connect.addr.port);
+      if (!listener) {
+        op->result.err = SP_ERR_SYS_CONN_REFUSED;
+        return true;
+      }
+      if (listener->backlog_count == SP_IO_SIM_MAX_BACKLOG) return false;
+      sp_io_sim_conn_t* conn = SP_NULLPTR;
+      sp_carr_for(sim->conns, it) {
+        if (!sim->conns[it].live) {
+          conn = &sim->conns[it];
+          break;
+        }
+      }
+      sp_assert(conn);
+      *conn = (sp_io_sim_conn_t) {
+        .sockets = { sim->next_socket, sim->next_socket + 1 },
+        .open = { true, true },
+        .live = true,
+      };
+      sim->next_socket += 2;
+      listener->backlog[listener->backlog_count++] = conn->sockets[1];
+      op->result.err = SP_OK;
+      op->result.socket = conn->sockets[0];
+      return true;
+    }
+    case SP_IO_OP_RECV: {
+      u32 end = 0;
+      sp_io_sim_conn_t* conn = sp_io_sim_conn(sim, op->recv.socket, &end);
+      sp_assert(conn);
+      if (conn->reset) {
+        op->result.err = SP_ERR_SYS_CONN_RESET;
+        return true;
+      }
+      sp_io_sim_wire_t* wire = &conn->wire[end];
+      if (wire->len) {
+        u64 n = sp_min(op->recv.buf.len, wire->len);
+        if (conn->chunk) n = sp_min(n, conn->chunk);
+        sp_mem_copy(op->recv.buf.data, wire->data, n);
+        wire->len -= n;
+        sp_mem_move(wire->data, wire->data + n, wire->len);
+        op->result.err = SP_OK;
+        op->result.len = n;
+        return true;
+      }
+      if (!conn->open[1 - end]) {
+        op->result.err = SP_OK;
+        op->result.len = 0;
+        return true;
+      }
+      return false;
+    }
+    case SP_IO_OP_SEND: {
+      u32 end = 0;
+      sp_io_sim_conn_t* conn = sp_io_sim_conn(sim, op->send.socket, &end);
+      sp_assert(conn);
+      if (conn->reset || !conn->open[1 - end]) {
+        op->result.err = SP_ERR_SYS_CONN_RESET;
+        return true;
+      }
+      sp_io_sim_wire_t* wire = &conn->wire[1 - end];
+      sp_assert(wire->len + op->send.buf.len <= SP_IO_SIM_WIRE_MAX);
+      sp_mem_copy(wire->data + wire->len, op->send.buf.data, op->send.buf.len);
+      wire->len += op->send.buf.len;
+      op->result.err = SP_OK;
+      op->result.len = op->send.buf.len;
+      return true;
+    }
+    case SP_IO_OP_TIMEOUT: {
+      if (sim->now < sim->armed[at].deadline) return false;
+      op->result.err = SP_OK;
+      return true;
+    }
+    case SP_IO_OP_READ:
+    case SP_IO_OP_WRITE: {
+      sp_assert(false);
+      return false;
+    }
+  }
+  sp_unreachable_return(false);
+}
+
+SP_PRIVATE void sp_io_sim_step(sp_io_sim_t* sim) {
+  bool progressed = true;
+  while (progressed) {
+    progressed = false;
+    sp_for(it, sim->armed_count) {
+      sp_io_op_t* op = sim->armed[it].op;
+      op->result.err = SP_OK;
+      op->result.len = 0;
+      op->result.socket = SP_SYS_INVALID_SOCKET;
+      if (!sp_io_sim_step_op(sim, it)) continue;
+      sp_io_sim_deliver(sim, it);
+      progressed = true;
+      break;
+    }
+  }
+}
+
+SP_PRIVATE void sp_io_sim_finish(sp_io_sim_t* sim, u32 at, sp_err_t err) {
+  sim->armed[at].op->result.err = err;
+  sim->armed[at].op->result.len = 0;
+  sp_io_sim_deliver(sim, at);
+}
+
+SP_PRIVATE sp_err_t sp_io_sim_submit(void* user_data, sp_io_op_t* op) {
+  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
+  sp_io_sim_t* sim = actor->sim;
+  sp_assert(sim->armed_count < SP_IO_SIM_MAX_OPS);
+
+  u64 deadline = 0;
+  if (op->kind == SP_IO_OP_TIMEOUT) {
+    sp_assert(op->timeout.timeout.kind != SP_IO_TIMEOUT_NONE);
+    deadline = op->timeout.timeout.kind == SP_IO_TIMEOUT_DURATION
+      ? sim->now + op->timeout.timeout.time.ns
+      : op->timeout.timeout.time.ns;
+  }
+
+  sim->armed[sim->armed_count++] = (sp_io_sim_op_t) {
+    .op = op,
+    .actor = actor->id,
+    .deadline = deadline,
+  };
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_sim_wait(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count) {
+  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
+  sp_io_sim_t* sim = actor->sim;
+  sp_unused(timeout);
+
+  sp_io_sim_step(sim);
+
+  *count = 0;
+  u32 kept = 0;
+  sp_for(it, sim->done_count) {
+    if (sim->done[it].actor == actor->id && *count < max) {
+      done[(*count)++] = sim->done[it].op;
+      continue;
+    }
+    sim->done[kept++] = sim->done[it];
+  }
+  sim->done_count = kept;
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_sim_cancel(void* user_data, sp_io_op_t* op) {
+  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
+  sp_io_sim_t* sim = actor->sim;
+  sp_for(it, sim->armed_count) {
+    if (sim->armed[it].op == op) {
+      sp_io_sim_finish(sim, it, SP_ERR_IO_CANCELED);
+      return SP_OK;
+    }
+  }
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_sim_close(void* user_data, sp_sys_socket_t socket) {
+  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
+  sp_io_sim_t* sim = actor->sim;
+
+  u32 it = 0;
+  while (it < sim->armed_count) {
+    sp_io_op_t* op = sim->armed[it].op;
+    bool owned =
+      (op->kind == SP_IO_OP_ACCEPT && op->accept.socket == socket) ||
+      (op->kind == SP_IO_OP_RECV && op->recv.socket == socket) ||
+      (op->kind == SP_IO_OP_SEND && op->send.socket == socket);
+    if (owned) {
+      sp_io_sim_finish(sim, it, SP_ERR_IO_CANCELED);
+      continue;
+    }
+    it++;
+  }
+
+  sp_io_sim_listener_t* listener = sp_io_sim_listener(sim, socket);
+  if (listener) {
+    sp_for(at, listener->backlog_count) {
+      u32 end = 0;
+      sp_io_sim_conn_t* conn = sp_io_sim_conn(sim, listener->backlog[at], &end);
+      conn->reset = true;
+    }
+    listener->live = false;
+    return SP_OK;
+  }
+
+  u32 end = 0;
+  sp_io_sim_conn_t* conn = sp_io_sim_conn(sim, socket, &end);
+  sp_assert(conn);
+  conn->open[end] = false;
+  if (!conn->open[0] && !conn->open[1]) {
+    conn->live = false;
+  }
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_sim_wake(void* user_data) {
+  sp_unused(user_data);
+  return SP_OK;
+}
+
+SP_PRIVATE sp_io_time_t sp_io_sim_now(void* user_data, sp_io_clock_t clock) {
+  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
+  return (sp_io_time_t) { .ns = actor->sim->now, .clock = clock };
+}
+
+SP_PRIVATE void sp_io_sim_destroy(void* user_data) {
+  sp_unused(user_data);
+}
+
+SP_PRIVATE const sp_io_vtable_t sp_io_sim_vtable = {
+  .submit  = sp_io_sim_submit,
+  .wait    = sp_io_sim_wait,
+  .cancel  = sp_io_sim_cancel,
+  .close   = sp_io_sim_close,
+  .wake    = sp_io_sim_wake,
+  .now     = sp_io_sim_now,
+  .destroy = sp_io_sim_destroy,
+};
+
+void sp_io_sim_init(sp_io_sim_t* sim) {
+  *sim = sp_zero_s(sp_io_sim_t);
+  sim->next_socket = SP_IO_SIM_SOCKET_BASE;
+}
+
+sp_io_t sp_io_sim_actor(sp_io_sim_t* sim) {
+  sp_assert(sim->actor_count < SP_IO_SIM_MAX_ACTORS);
+  sp_io_sim_actor_t* actor = &sim->actors[sim->actor_count];
+  *actor = (sp_io_sim_actor_t) { .sim = sim, .id = sim->actor_count };
+  sim->actor_count++;
+  return (sp_io_t) { .user_data = actor, .vt = &sp_io_sim_vtable };
+}
+
+sp_sys_socket_t sp_io_sim_listen(sp_io_sim_t* sim, u16 port) {
+  sp_assert(!sp_io_sim_listener_at(sim, port));
+  sp_carr_for(sim->listeners, it) {
+    if (sim->listeners[it].live) continue;
+    sim->listeners[it] = (sp_io_sim_listener_t) {
+      .socket = sim->next_socket++,
+      .port = port,
+      .live = true,
+    };
+    return sim->listeners[it].socket;
+  }
+  sp_unreachable_return(SP_SYS_INVALID_SOCKET);
+}
+
+void sp_io_sim_advance(sp_io_sim_t* sim, u64 ns) {
+  sim->now += ns;
+}
+
+void sp_io_sim_kill(sp_io_sim_t* sim, sp_sys_socket_t socket) {
+  u32 end = 0;
+  sp_io_sim_conn_t* conn = sp_io_sim_conn(sim, socket, &end);
+  sp_assert(conn);
+  conn->reset = true;
+  conn->wire[0].len = 0;
+  conn->wire[1].len = 0;
+}
+
+void sp_io_sim_chunk(sp_io_sim_t* sim, sp_sys_socket_t socket, u64 max) {
+  u32 end = 0;
+  sp_io_sim_conn_t* conn = sp_io_sim_conn(sim, socket, &end);
+  sp_assert(conn);
+  conn->chunk = max;
 }
 
 #endif

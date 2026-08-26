@@ -1,7 +1,7 @@
 #ifndef HTTP_CLIENT_TEST_H
 #define HTTP_CLIENT_TEST_H
 
-#include "http.h"
+#include "../http.h"
 
 #define CLIENT_TEST_CAPTURE 8192
 #define CLIENT_TEST_WAIT_MS 3000
