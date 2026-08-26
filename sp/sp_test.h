@@ -271,7 +271,7 @@ SP_API s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites
 
 SP_API bool sp_test_filtered(sp_glob_t* filter, const c8* name);
 
-SP_API void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out);
+SP_API void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_glob_t* filter, sp_da(sp_test_instance_t)* out);
 
 
 typedef struct {
@@ -1651,7 +1651,7 @@ static const c8* sp_test_instance_base(sp_mem_t mem, const c8* suite, const sp_t
     sp_fmt_uint(row));
 }
 
-static void sp_test_expand_each(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+static void sp_test_expand_each(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
   u64 counts [SP_TEST_MAX_AXES];
   u32 num_axes = 0;
   u64 combos = 1;
@@ -1709,13 +1709,13 @@ static void sp_test_expand_each(sp_mem_t mem, const c8* suite, const sp_test_dec
         .name = name,
         .decl = decl,
         .arg = arg,
-        .serial = serial || decl->serial,
+        .serial = decl->serial,
       }));
     }
   }
 }
 
-void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
   switch (decl->kind) {
     case SP_TEST_DECL_FN: {
       const c8* name = sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name));
@@ -1725,12 +1725,12 @@ void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, b
         .name = name,
         .decl = decl,
         .arg = SP_NULLPTR,
-        .serial = serial || decl->serial,
+        .serial = decl->serial,
       }));
       return;
     }
     case SP_TEST_DECL_EACH: {
-      sp_test_expand_each(mem, suite, decl, serial, filter, out);
+      sp_test_expand_each(mem, suite, decl, filter, out);
       return;
     }
   }
@@ -1779,13 +1779,20 @@ static bool sp_test_suite_serial(const c8* suite) {
   return false;
 }
 
+static void sp_test_mark_serial(sp_da(sp_test_instance_t) instances, u64 from) {
+  for (u64 it = from; it < sp_da_size(instances); it++) {
+    instances[it].serial = true;
+  }
+}
+
 static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
   if (suites) {
     for (const sp_test_suite_t* suite = suites; suite->name; suite++) {
-      bool serial = suite->serial || sp_test_suite_serial(suite->name);
+      u64 from = sp_da_size(*out);
       for (const sp_test_decl_t* decl = suite->tests; decl->name; decl++) {
-        sp_test_expand(mem, suite->name, decl, serial, filter, out);
+        sp_test_expand(mem, suite->name, decl, filter, out);
       }
+      if (suite->serial) sp_test_mark_serial(*out, from);
     }
   }
 
@@ -1793,7 +1800,10 @@ static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob
   for (const sp_test_entry_t* const* it = __sp_test_begin, * const* end = __sp_test_end; it < end; it++) {
     if (!*it) continue;
     if ((*it)->kind != SP_TEST_ENTRY_TEST) continue;
-    sp_test_expand(mem, (*it)->suite, &(*it)->decl, sp_test_suite_serial((*it)->suite), filter, out);
+
+    u64 from = sp_da_size(*out);
+    sp_test_expand(mem, (*it)->suite, &(*it)->decl, filter, out);
+    if (sp_test_suite_serial((*it)->suite)) sp_test_mark_serial(*out, from);
   }
 #endif
 }
