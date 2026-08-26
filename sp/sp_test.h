@@ -48,6 +48,7 @@ typedef struct {
       const void* cases;
       u64 stride;
       u64 count;
+      bool named;
       u64 case_name_offset;
       sp_test_axis_t axes [SP_TEST_MAX_AXES];
     };
@@ -207,7 +208,8 @@ typedef struct {
       .cases = (ARR),                                                       \
       .stride = sizeof((ARR)[0]),                                           \
       .count = sp_carr_len(ARR),                                            \
-      .case_name_offset = offsetof(TYPE, name) + 1,                         \
+      .named = true,                                                        \
+      .case_name_offset = offsetof(TYPE, name),                             \
       __VA_ARGS__                                                           \
     });                                                                     \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
@@ -236,7 +238,8 @@ typedef struct {
       .cases = (ARR),                                                       \
       .stride = sizeof((ARR)[0]),                                           \
       .count = sp_carr_len(ARR),                                            \
-      .case_name_offset = offsetof(TYPE, name) + 1,                         \
+      .named = true,                                                        \
+      .case_name_offset = offsetof(TYPE, name),                             \
       __VA_ARGS__                                                           \
     })
 
@@ -1631,9 +1634,9 @@ static const c8* sp_test_instance_base(sp_mem_t mem, const c8* suite, const sp_t
     return sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name));
   }
 
-  if (decl->case_name_offset) {
+  if (decl->named) {
     const u8* row_base = (const u8*)decl->cases + row * decl->stride;
-    const c8* case_name = *(const c8* const*)(row_base + decl->case_name_offset - 1);
+    const c8* case_name = *(const c8* const*)(row_base + decl->case_name_offset);
     if (case_name) {
       return sp_fmt_mem_cstr(mem, "{}.{}.{}",
         sp_fmt_cstr(suite),
