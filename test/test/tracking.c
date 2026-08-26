@@ -300,7 +300,7 @@ sp_test_each(tracking, ops, track_case_t, track_cases) {
       track_expect_bytes(t, arena, ptr[slot], size[slot], (u8)('A' + slot));
     }
   }
-  sp_test_kv_clear(t, SP_NULLPTR);
+  sp_test_kv_clear_all(t);
 
   sp_expect_eq(t, k.live_count, it->expect.live);
   sp_expect_eq(t, k.live_bytes, it->expect.bytes);

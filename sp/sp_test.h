@@ -325,6 +325,7 @@ SP_API sp_str_t    sp_test_get_name(sp_test_t* t);
 SP_API void        sp_test_kv(sp_test_t* t, const c8* key, sp_str_t value);
 SP_API void        sp_test_kv_c(sp_test_t* t, const c8* key, const c8* value);
 SP_API void        sp_test_kv_clear(sp_test_t* t, const c8* key);
+SP_API void        sp_test_kv_clear_all(sp_test_t* t);
 
 SP_API void        sp_test_set_state(sp_test_t* t, void* state);
 SP_API void*       sp_test_state(sp_test_t* t);
@@ -665,7 +666,6 @@ struct sp_test_t {
   sp_test_tracking_t tracking;
   sp_mem_heap_t* tracking_heap;
   sp_mem_t tracked_mem;
-  bool tracking_live;
 
   sp_str_t dir;
 };
@@ -896,11 +896,6 @@ void sp_test_kv_c(sp_test_t* t, const c8* key, const c8* value) {
 }
 
 void sp_test_kv_clear(sp_test_t* t, const c8* key) {
-  if (!key) {
-    sp_da_clear(t->kvs);
-    return;
-  }
-
   sp_str_t target = sp_cstr_as_str(key);
   sp_da(sp_test_kv_t) kept = sp_da_new(t->mem, sp_test_kv_t);
   sp_da_for(t->kvs, it) {
@@ -908,6 +903,10 @@ void sp_test_kv_clear(sp_test_t* t, const c8* key) {
     sp_da_push(kept, t->kvs[it]);
   }
   t->kvs = kept;
+}
+
+void sp_test_kv_clear_all(sp_test_t* t) {
+  sp_da_clear(t->kvs);
 }
 
 void sp_test_set_state(sp_test_t* t, void* state) {
@@ -947,11 +946,10 @@ sp_mem_t sp_test_arena(sp_test_t* t) {
 }
 
 sp_mem_t sp_test_mem(sp_test_t* t) {
-  if (!t->tracking_live) {
+  if (!t->tracking_heap) {
     t->tracking_heap = sp_mem_heap_new();
     sp_test_tracking_init(&t->tracking, t->mem, sp_mem_heap_as_allocator(t->tracking_heap));
     t->tracked_mem = sp_test_tracking_as_allocator(&t->tracking);
-    t->tracking_live = true;
   }
   return t->tracked_mem;
 }
@@ -1491,12 +1489,11 @@ static void sp_test_report_leaks(sp_test_t* t) {
 }
 
 static void sp_test_teardown(sp_test_t* t) {
-  if (t->tracking_live) {
+  if (t->tracking_heap) {
     if (!t->skipped) sp_test_report_leaks(t);
     sp_test_tracking_deinit(&t->tracking);
     sp_mem_heap_destroy(t->tracking_heap);
     t->tracking_heap = SP_NULLPTR;
-    t->tracking_live = false;
   }
 
   if (!sp_str_empty(t->dir) && sp_fs_exists(t->dir)) {
