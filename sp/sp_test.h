@@ -271,7 +271,7 @@ SP_API s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites
 
 SP_API bool sp_test_filtered(sp_glob_t* filter, const c8* name);
 
-SP_API void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_glob_t* filter, sp_da(sp_test_instance_t)* out);
+SP_API void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_da(sp_test_instance_t)* out);
 
 
 typedef struct {
@@ -1648,7 +1648,7 @@ static const c8* sp_test_instance_base(sp_mem_t mem, const c8* suite, const sp_t
     sp_fmt_uint(row));
 }
 
-static void sp_test_expand_each(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+static void sp_test_expand_each(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_da(sp_test_instance_t)* out) {
   u64 counts [SP_TEST_MAX_AXES];
   u32 num_axes = 0;
   u64 combos = 1;
@@ -1700,8 +1700,6 @@ static void sp_test_expand_each(sp_mem_t mem, const c8* suite, const sp_test_dec
         arg = copy;
       }
 
-      if (sp_test_filtered(filter, name)) continue;
-
       sp_da_push(*out, ((sp_test_instance_t) {
         .name = name,
         .decl = decl,
@@ -1712,14 +1710,11 @@ static void sp_test_expand_each(sp_mem_t mem, const c8* suite, const sp_test_dec
   }
 }
 
-void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, sp_da(sp_test_instance_t)* out) {
   switch (decl->kind) {
     case SP_TEST_DECL_FN: {
-      const c8* name = sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name));
-      if (sp_test_filtered(filter, name)) return;
-
       sp_da_push(*out, ((sp_test_instance_t) {
-        .name = name,
+        .name = sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name)),
         .decl = decl,
         .arg = SP_NULLPTR,
         .serial = decl->serial,
@@ -1727,7 +1722,7 @@ void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, s
       return;
     }
     case SP_TEST_DECL_EACH: {
-      sp_test_expand_each(mem, suite, decl, filter, out);
+      sp_test_expand_each(mem, suite, decl, out);
       return;
     }
   }
@@ -1761,8 +1756,14 @@ void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, s
   #endif
 #endif
 
-static bool sp_test_suite_serial(const c8* suite) {
+typedef struct {
+  const c8* suite;
+  const sp_test_decl_t* decl;
+  bool serial;
+} sp_test_source_t;
+
 #if SP_TEST_AUTOREG
+static bool sp_test_suite_serial(const c8* suite) {
   // COFF incremental linking pads the sections grouped by $ with zeroed slots,
   // so we can't assume that we're iterating a tightly packed array
   for (const sp_test_entry_t* const* it = __sp_test_begin, * const* end = __sp_test_end; it < end; it++) {
@@ -1770,26 +1771,22 @@ static bool sp_test_suite_serial(const c8* suite) {
     if ((*it)->kind != SP_TEST_ENTRY_SUITE) continue;
     if (sp_cstr_equal((*it)->suite, suite)) return (*it)->serial;
   }
-#else
-  SP_UNUSED(suite);
-#endif
   return false;
 }
+#endif
 
-static void sp_test_mark_serial(sp_da(sp_test_instance_t) instances, u64 from) {
-  for (u64 it = from; it < sp_da_size(instances); it++) {
-    instances[it].serial = true;
-  }
-}
+static sp_da(sp_test_source_t) sp_test_sources(sp_mem_t mem, const sp_test_suite_t* suites) {
+  sp_da(sp_test_source_t) sources = sp_da_new(mem, sp_test_source_t);
 
-static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
   if (suites) {
     for (const sp_test_suite_t* suite = suites; suite->name; suite++) {
-      u64 from = sp_da_size(*out);
       for (const sp_test_decl_t* decl = suite->tests; decl->name; decl++) {
-        sp_test_expand(mem, suite->name, decl, filter, out);
+        sp_da_push(sources, ((sp_test_source_t) {
+          .suite = suite->name,
+          .decl = decl,
+          .serial = suite->serial,
+        }));
       }
-      if (suite->serial) sp_test_mark_serial(*out, from);
     }
   }
 
@@ -1798,11 +1795,34 @@ static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob
     if (!*it) continue;
     if ((*it)->kind != SP_TEST_ENTRY_TEST) continue;
 
-    u64 from = sp_da_size(*out);
-    sp_test_expand(mem, (*it)->suite, &(*it)->decl, filter, out);
-    if (sp_test_suite_serial((*it)->suite)) sp_test_mark_serial(*out, from);
+    sp_da_push(sources, ((sp_test_source_t) {
+      .suite = (*it)->suite,
+      .decl = &(*it)->decl,
+      .serial = sp_test_suite_serial((*it)->suite),
+    }));
   }
 #endif
+
+  return sources;
+}
+
+static void sp_test_mark_serial(sp_da(sp_test_instance_t) instances, u64 from) {
+  for (u64 it = from; it < sp_da_size(instances); it++) {
+    instances[it].serial = true;
+  }
+}
+
+static sp_da(sp_test_instance_t) sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites) {
+  sp_da(sp_test_instance_t) instances = sp_da_new(mem, sp_test_instance_t);
+
+  sp_da(sp_test_source_t) sources = sp_test_sources(mem, suites);
+  sp_da_for(sources, it) {
+    u64 from = sp_da_size(instances);
+    sp_test_expand(mem, sources[it].suite, sources[it].decl, &instances);
+    if (sources[it].serial) sp_test_mark_serial(instances, from);
+  }
+
+  return instances;
 }
 
 static sp_str_t sp_test_abi_name(void) {
@@ -1924,8 +1944,16 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
     }
   }
 
-  sp_da(sp_test_instance_t) instances = sp_da_new(runner->mem, sp_test_instance_t);
-  sp_test_collect(runner->mem, suites, glob, &instances);
+  sp_da(sp_test_instance_t) instances = sp_test_collect(runner->mem, suites);
+
+  if (glob) {
+    sp_da(sp_test_instance_t) kept = sp_da_new(runner->mem, sp_test_instance_t);
+    sp_da_for(instances, it) {
+      if (sp_test_filtered(glob, instances[it].name)) continue;
+      sp_da_push(kept, instances[it]);
+    }
+    instances = kept;
+  }
 
   sp_cstr_ht(bool) seen = SP_NULLPTR;
   sp_cstr_ht_init(runner->mem, seen);
