@@ -1,0 +1,11 @@
+
+usage
+  pkg add [OPTIONS]
+
+options
+  -f, --force Force reinstall
+
+environment
+  PKG_TOKEN optional Auth token
+
+Use pkg --help for global options and environment

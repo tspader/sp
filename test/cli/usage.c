@@ -261,23 +261,83 @@ UTEST_F(cli_usage, command_path) {
   });
 }
 
-UTEST_F(cli_usage, option_brief_shadowed) {
+UTEST_F(cli_usage, inherited) {
   static sp_cli_cmd_t root = {
-    .name = "test",
+    .name = "pkg",
     .opts = {
       { .brief = 'v', .name = "verbose", .summary = "Verbose output" },
+    },
+    .env = {
+      { .name = "PKG_HOME", .summary = "Install root", .required = true },
     },
   };
 
   run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
-    .name = "option_brief_shadowed",
+    .name = "inherited",
     .path = { &root },
     .cmd = {
-      .name = "sub",
+      .name = "add",
       .opts = {
-        { .brief = 'v', .name = "voltage", .summary = "Peak voltage" },
+        { .brief = 'f', .name = "force", .summary = "Force reinstall" },
+      },
+      .env = {
+        { .name = "PKG_TOKEN", .summary = "Auth token" },
       },
     },
+  });
+}
+
+UTEST_F(cli_usage, inherited_only) {
+  static sp_cli_cmd_t root = {
+    .name = "pkg",
+    .opts = {
+      { .brief = 'v', .name = "verbose", .summary = "Verbose output" },
+    },
+    .env = {
+      { .name = "PKG_HOME", .summary = "Install root", .required = true },
+    },
+  };
+
+  run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
+    .name = "inherited_only",
+    .path = { &root },
+    .cmd = { .name = "list" },
+  });
+}
+
+UTEST_F(cli_usage, inherited_shadowed) {
+  static sp_cli_cmd_t root = {
+    .name = "pkg",
+    .opts = {
+      { .brief = 'm', .name = "mode", .summary = "Root mode" },
+    },
+  };
+
+  run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
+    .name = "inherited_shadowed",
+    .path = { &root },
+    .cmd = {
+      .name = "build",
+      .opts = {
+        { .brief = 'm', .name = "mode", .summary = "Build mode" },
+      },
+    },
+  });
+}
+
+UTEST_F(cli_usage, inherited_path) {
+  static sp_cli_cmd_t pkg = { .name = "pkg" };
+  static sp_cli_cmd_t tool = {
+    .name = "tool",
+    .opts = {
+      { .name = "toolchain", .summary = "Toolchain to use", .placeholder = "NAME" },
+    },
+  };
+
+  run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
+    .name = "inherited_path",
+    .path = { &pkg, &tool },
+    .cmd = { .name = "run" },
   });
 }
 

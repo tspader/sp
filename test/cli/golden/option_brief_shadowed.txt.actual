@@ -1,7 +1,0 @@
-
-usage
-  test sub [OPTIONS]
-
-options
-  -v, --voltage Peak voltage
-  -v, --verbose Verbose output

@@ -1,0 +1,5 @@
+
+usage
+  pkg tool run [OPTIONS]
+
+Use pkg tool --help for global options and environment
