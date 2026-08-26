@@ -54,15 +54,19 @@ typedef struct {
   bool serial;
 } sp_test_suite_t;
 
-typedef struct {
-  const c8* suite;
-  sp_test_decl_t decl;
-} sp_test_reg_t;
+typedef enum {
+  SP_TEST_ENTRY_TEST,
+  SP_TEST_ENTRY_SUITE,
+} sp_test_entry_kind_t;
 
 typedef struct {
+  sp_test_entry_kind_t kind;
   const c8* suite;
-  bool serial;
-} sp_test_suite_attr_t;
+  union {
+    sp_test_decl_t decl;
+    bool serial;
+  };
+} sp_test_entry_t;
 
 typedef struct {
   const c8* name;
@@ -108,54 +112,52 @@ typedef struct {
 #if defined(__ELF__) || defined(SP_WASM) || (defined(SP_TCC) && defined(SP_LINUX))
   #define SP_TEST_AUTOREG 1
 
-  #if defined(__ELF__) && defined(__has_attribute)
-    #if __has_attribute(retain)
-      #define SP_TEST_RETAIN __attribute__((retain))
-    #endif
-  #endif
-  #if !defined(SP_TEST_RETAIN)
-    #define SP_TEST_RETAIN
-  #endif
-
-  #define __sp_test_reg_section   __attribute__((used, section("sp_test"))) SP_TEST_RETAIN
-  #define __sp_test_suite_section __attribute__((used, section("sp_test_suite"))) SP_TEST_RETAIN
+  #define __sp_test_section   __attribute__((used, section("sp_test")))
+  #define __sp_test_ptr_const const
 #elif defined(SP_MACOS)
   #define SP_TEST_AUTOREG 1
 
-  #define __sp_test_reg_section   __attribute__((used, section("__DATA,sp_test")))
-  #define __sp_test_suite_section __attribute__((used, section("__DATA,sp_test_suite")))
+  #define __sp_test_section   __attribute__((used, section("__DATA,sp_test"), no_sanitize("address")))
+  #define __sp_test_ptr_const const
 #elif defined(SP_WIN32) && defined(SP_GNUC)
   #define SP_TEST_AUTOREG 1
 
-  #define __sp_test_reg_section   __attribute__((used, section("sp_test")))
-  #define __sp_test_suite_section __attribute__((used, section("sp_suite")))
+  // The pointer must be const: lld's MinGW driver only merges and $-sorts
+  // same-named section chunks with identical flags, and the anchors are const
+  #define __sp_test_section   __attribute__((used, section("sp_test$m")))
+  #define __sp_test_ptr_const const
 #elif defined(SP_WIN32) && defined(SP_MSVC)
   #define SP_TEST_AUTOREG 1
 
-  #pragma section("sp_test", read)
-  #pragma section("sp_suite", read)
-  #define __sp_test_reg_section   __declspec(allocate("sp_test"))
-  #define __sp_test_suite_section __declspec(allocate("sp_suite"))
+  // The pointer must NOT be const: MSVC's C++ frontend discards unreferenced
+  // const statics, sectioned or not. The pragmas keep the pages read-only
+  #pragma section("sp_test$a", read)
+  #pragma section("sp_test$m", read)
+  #pragma section("sp_test$z", read)
+  #define __sp_test_section   __declspec(allocate("sp_test$m"))
+  #define __sp_test_ptr_const
 #else
   #define SP_TEST_AUTOREG 0
 #endif
 
 #if SP_TEST_AUTOREG
   #define __sp_test_reg(ID, SUITE, ...)                                       \
-    static const sp_test_reg_t sp_mcat(ID, _v) = {                            \
+    static const sp_test_entry_t sp_mcat(ID, _v) = {                          \
+      .kind = SP_TEST_ENTRY_TEST,                                             \
       .suite = #SUITE,                                                        \
       .decl = __VA_ARGS__                                                     \
     };                                                                        \
-    static __sp_test_reg_section const sp_test_reg_t* ID = &sp_mcat(ID, _v)
+    static __sp_test_section const sp_test_entry_t* __sp_test_ptr_const ID = &sp_mcat(ID, _v)
 
   #define sp_test_reg(SUITE, ...) __sp_test_reg(sp_mcat(sp_test_reg_, __COUNTER__), SUITE, __VA_ARGS__)
 
   #define __sp_test_reg_suite(ID, SUITE, ...)                                 \
-    static const sp_test_suite_attr_t sp_mcat(ID, _v) = {                     \
+    static const sp_test_entry_t sp_mcat(ID, _v) = {                          \
+      .kind = SP_TEST_ENTRY_SUITE,                                            \
       .suite = #SUITE,                                                        \
       __VA_ARGS__                                                             \
     };                                                                        \
-    static __sp_test_suite_section const sp_test_suite_attr_t* ID = &sp_mcat(ID, _v)
+    static __sp_test_section const sp_test_entry_t* __sp_test_ptr_const ID = &sp_mcat(ID, _v)
 
   #define sp_test_suite(SUITE, ...) __sp_test_reg_suite(sp_mcat(sp_test_suite_reg_, __COUNTER__), SUITE, __VA_ARGS__)
 
@@ -518,7 +520,9 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 #elif (defined(__clang__) || defined(__GNUC__)) && !defined(__TINYC__)
   #define sp_test_auto(X) __auto_type
 #else
-  #define sp_test_auto(X) __typeof__((X) + 0)
+  // The ternary decays arrays like +0 would, without the pointer arithmetic
+  // MSVC rejects for void* (C2036)
+  #define sp_test_auto(X) __typeof__(0 ? (X) : (X))
 #endif
 
 #define sp_test_cmp(T, A, B, SA, SB, OP, FAIL)                 \
@@ -1800,67 +1804,40 @@ void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, b
 }
 
 #if SP_TEST_AUTOREG
-#if defined(SP_WIN32)
-extern IMAGE_DOS_HEADER __ImageBase;
+  #if defined(SP_WIN32) && defined(SP_MSVC)
+    __declspec(allocate("sp_test$a")) static const sp_test_entry_t* const __sp_test_anchor_a = SP_NULLPTR;
+    __declspec(allocate("sp_test$z")) static const sp_test_entry_t* const __sp_test_anchor_z = SP_NULLPTR;
 
-typedef struct {
-  const void* begin;
-  const void* end;
-} sp_test_pe_bounds_t;
+    #define __sp_test_begin (&__sp_test_anchor_a + 1)
+    #define __sp_test_end   (&__sp_test_anchor_z)
+    #elif defined(SP_WIN32) && defined(SP_GNUC)
+    __attribute__((used, section("sp_test$a"))) static const sp_test_entry_t* const __sp_test_anchor_a = SP_NULLPTR;
+    __attribute__((used, section("sp_test$z"))) static const sp_test_entry_t* const __sp_test_anchor_z = SP_NULLPTR;
 
-static sp_test_pe_bounds_t sp_test_pe_bounds(const c8* name) {
-  sp_test_pe_bounds_t bounds = sp_zero;
+    #define __sp_test_begin (&__sp_test_anchor_a + 1)
+    #define __sp_test_end   (&__sp_test_anchor_z)
+    #elif defined(SP_MACOS)
+    extern const sp_test_entry_t* const __start_sp_test[] __asm("section$start$__DATA$sp_test");
+    extern const sp_test_entry_t* const __stop_sp_test[] __asm("section$end$__DATA$sp_test");
 
-  const u8* base = (const u8*)&__ImageBase;
-  const IMAGE_NT_HEADERS* nt = (const IMAGE_NT_HEADERS*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew);
-  const IMAGE_SECTION_HEADER* sections = IMAGE_FIRST_SECTION(nt);
+    #define __sp_test_begin (__start_sp_test)
+    #define __sp_test_end   (__stop_sp_test)
+  #else
+    extern const sp_test_entry_t* const __start_sp_test[] __attribute__((weak));
+    extern const sp_test_entry_t* const __stop_sp_test[] __attribute__((weak));
 
-  sp_for(it, nt->FileHeader.NumberOfSections) {
-    const IMAGE_SECTION_HEADER* section = &sections[it];
-
-    const c8* want = name;
-    bool match = true;
-    sp_for(n, (u32)sizeof(section->Name)) {
-      if ((c8)section->Name[n] != *want) { match = false; break; }
-      if (*want) want++;
-    }
-    if (!match) continue;
-
-    bounds.begin = base + section->VirtualAddress;
-    bounds.end   = base + section->VirtualAddress + section->Misc.VirtualSize;
-    break;
-  }
-
-  return bounds;
-}
-
-#define __sp_test_reg_begin   ((const sp_test_reg_t* const*)sp_test_pe_bounds("sp_test").begin)
-#define __sp_test_reg_end     ((const sp_test_reg_t* const*)sp_test_pe_bounds("sp_test").end)
-#define __sp_test_suite_begin ((const sp_test_suite_attr_t* const*)sp_test_pe_bounds("sp_suite").begin)
-#define __sp_test_suite_end   ((const sp_test_suite_attr_t* const*)sp_test_pe_bounds("sp_suite").end)
-#else
-#if defined(SP_MACOS)
-extern const sp_test_reg_t* const __start_sp_test[] __asm("section$start$__DATA$sp_test");
-extern const sp_test_reg_t* const __stop_sp_test[] __asm("section$end$__DATA$sp_test");
-extern const sp_test_suite_attr_t* const __start_sp_test_suite[] __asm("section$start$__DATA$sp_test_suite");
-extern const sp_test_suite_attr_t* const __stop_sp_test_suite[] __asm("section$end$__DATA$sp_test_suite");
-#else
-extern const sp_test_reg_t* const __start_sp_test[] __attribute__((weak));
-extern const sp_test_reg_t* const __stop_sp_test[] __attribute__((weak));
-extern const sp_test_suite_attr_t* const __start_sp_test_suite[] __attribute__((weak));
-extern const sp_test_suite_attr_t* const __stop_sp_test_suite[] __attribute__((weak));
-#endif
-#define __sp_test_reg_begin   (__start_sp_test)
-#define __sp_test_reg_end     (__stop_sp_test)
-#define __sp_test_suite_begin (__start_sp_test_suite)
-#define __sp_test_suite_end   (__stop_sp_test_suite)
-#endif
+    #define __sp_test_begin (__start_sp_test)
+    #define __sp_test_end   (__stop_sp_test)
+  #endif
 #endif
 
 static bool sp_test_suite_serial(const c8* suite) {
 #if SP_TEST_AUTOREG
-  for (const sp_test_suite_attr_t* const* it = __sp_test_suite_begin, * const* end = __sp_test_suite_end; it < end; it++) {
+  // COFF incremental linking pads the sections grouped by $ with zeroed slots,
+  // so we can't assume that we're iterating a tightly packed array
+  for (const sp_test_entry_t* const* it = __sp_test_begin, * const* end = __sp_test_end; it < end; it++) {
     if (!*it) continue;
+    if ((*it)->kind != SP_TEST_ENTRY_SUITE) continue;
     if (sp_cstr_equal((*it)->suite, suite)) return (*it)->serial;
   }
 #else
@@ -1880,8 +1857,9 @@ static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob
   }
 
 #if SP_TEST_AUTOREG
-  for (const sp_test_reg_t* const* it = __sp_test_reg_begin, * const* end = __sp_test_reg_end; it < end; it++) {
+  for (const sp_test_entry_t* const* it = __sp_test_begin, * const* end = __sp_test_end; it < end; it++) {
     if (!*it) continue;
+    if ((*it)->kind != SP_TEST_ENTRY_TEST) continue;
     sp_test_expand(mem, (*it)->suite, &(*it)->decl, sp_test_suite_serial((*it)->suite), filter, out);
   }
 #endif
