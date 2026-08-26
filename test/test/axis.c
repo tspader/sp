@@ -42,14 +42,17 @@ static const axis_case_t axis_cases [] = {
   {
     .name = "values",
     .decl = {
+      .suite = "S",
       .name = "T",
       .kind = SP_TEST_DECL_EACH,
-      .each = axis_stub,
-      .cases = axis_one,
-      .stride = sizeof(axis_row_t),
-      .count = sp_carr_len(axis_one),
-      .named = true,
-      .case_name_offset = offsetof(axis_row_t, name),
+      .each = {
+        .fn = axis_stub,
+        .cases = axis_one,
+        .stride = sizeof(axis_row_t),
+        .count = sp_carr_len(axis_one),
+        .named = true,
+        .case_name_offset = offsetof(axis_row_t, name),
+      },
       .axes = { sp_test_axis(axis_row_t, kind, AXIS_A, AXIS_C) },
     },
     .expect = {
@@ -63,14 +66,17 @@ static const axis_case_t axis_cases [] = {
   {
     .name = "named",
     .decl = {
+      .suite = "S",
       .name = "T",
       .kind = SP_TEST_DECL_EACH,
-      .each = axis_stub,
-      .cases = axis_one,
-      .stride = sizeof(axis_row_t),
-      .count = sp_carr_len(axis_one),
-      .named = true,
-      .case_name_offset = offsetof(axis_row_t, name),
+      .each = {
+        .fn = axis_stub,
+        .cases = axis_one,
+        .stride = sizeof(axis_row_t),
+        .count = sp_carr_len(axis_one),
+        .named = true,
+        .case_name_offset = offsetof(axis_row_t, name),
+      },
       .axes = { sp_test_axis_named(axis_row_t, kind, axis_kind_name, AXIS_A, AXIS_C) },
     },
     .expect = {
@@ -84,14 +90,17 @@ static const axis_case_t axis_cases [] = {
   {
     .name = "range",
     .decl = {
+      .suite = "S",
       .name = "T",
       .kind = SP_TEST_DECL_EACH,
-      .each = axis_stub,
-      .cases = axis_one,
-      .stride = sizeof(axis_row_t),
-      .count = sp_carr_len(axis_one),
-      .named = true,
-      .case_name_offset = offsetof(axis_row_t, name),
+      .each = {
+        .fn = axis_stub,
+        .cases = axis_one,
+        .stride = sizeof(axis_row_t),
+        .count = sp_carr_len(axis_one),
+        .named = true,
+        .case_name_offset = offsetof(axis_row_t, name),
+      },
       .axes = { sp_test_axis_range(axis_row_t, w, 0, 6, 3) },
     },
     .expect = {
@@ -106,14 +115,17 @@ static const axis_case_t axis_cases [] = {
   {
     .name = "cross",
     .decl = {
+      .suite = "S",
       .name = "T",
       .kind = SP_TEST_DECL_EACH,
-      .each = axis_stub,
-      .cases = axis_one,
-      .stride = sizeof(axis_row_t),
-      .count = sp_carr_len(axis_one),
-      .named = true,
-      .case_name_offset = offsetof(axis_row_t, name),
+      .each = {
+        .fn = axis_stub,
+        .cases = axis_one,
+        .stride = sizeof(axis_row_t),
+        .count = sp_carr_len(axis_one),
+        .named = true,
+        .case_name_offset = offsetof(axis_row_t, name),
+      },
       .axes = {
         sp_test_axis(axis_row_t, kind, AXIS_A, AXIS_B),
         sp_test_axis_range(axis_row_t, w, 1, 2, 1),
@@ -137,14 +149,17 @@ static const axis_case_t axis_cases [] = {
   {
     .name = "rows",
     .decl = {
+      .suite = "S",
       .name = "T",
       .kind = SP_TEST_DECL_EACH,
-      .each = axis_stub,
-      .cases = axis_two,
-      .stride = sizeof(axis_row_t),
-      .count = sp_carr_len(axis_two),
-      .named = true,
-      .case_name_offset = offsetof(axis_row_t, name),
+      .each = {
+        .fn = axis_stub,
+        .cases = axis_two,
+        .stride = sizeof(axis_row_t),
+        .count = sp_carr_len(axis_two),
+        .named = true,
+        .case_name_offset = offsetof(axis_row_t, name),
+      },
       .axes = { sp_test_axis(axis_row_t, kind, AXIS_A, AXIS_B) },
     },
     .expect = {
@@ -165,10 +180,13 @@ static const axis_case_t axis_cases [] = {
   {
     .name = "sweep",
     .decl = {
+      .suite = "S",
       .name = "T",
-      .kind = SP_TEST_DECL_EACH,
-      .each = axis_stub,
-      .stride = sizeof(axis_row_t),
+      .kind = SP_TEST_DECL_SWEEP,
+      .sweep = {
+        .fn = axis_stub,
+        .stride = sizeof(axis_row_t),
+      },
       .axes = { sp_test_axis(axis_row_t, kind, AXIS_B) },
     },
     .expect = {
@@ -181,12 +199,15 @@ static const axis_case_t axis_cases [] = {
   {
     .name = "anon",
     .decl = {
+      .suite = "S",
       .name = "T",
       .kind = SP_TEST_DECL_EACH,
-      .each = axis_stub,
-      .cases = axis_two,
-      .stride = sizeof(axis_row_t),
-      .count = sp_carr_len(axis_two),
+      .each = {
+        .fn = axis_stub,
+        .cases = axis_two,
+        .stride = sizeof(axis_row_t),
+        .count = sp_carr_len(axis_two),
+      },
       .axes = { sp_test_axis(axis_row_t, kind, AXIS_A) },
     },
     .expect = {
@@ -200,14 +221,17 @@ static const axis_case_t axis_cases [] = {
   {
     .name = "plain",
     .decl = {
+      .suite = "S",
       .name = "T",
       .kind = SP_TEST_DECL_EACH,
-      .each = axis_stub,
-      .cases = axis_one,
-      .stride = sizeof(axis_row_t),
-      .count = sp_carr_len(axis_one),
-      .named = true,
-      .case_name_offset = offsetof(axis_row_t, name),
+      .each = {
+        .fn = axis_stub,
+        .cases = axis_one,
+        .stride = sizeof(axis_row_t),
+        .count = sp_carr_len(axis_one),
+        .named = true,
+        .case_name_offset = offsetof(axis_row_t, name),
+      },
     },
     .expect = {
       .names = { "S.T.R" },
@@ -241,7 +265,7 @@ sp_test_each(axis, expand, axis_case_t, axis_cases) {
   sp_mem_t mem = sp_test_arena(t);
 
   sp_da(sp_test_instance_t) instances = sp_da_new(mem, sp_test_instance_t);
-  sp_test_expand(mem, "S", &it->decl, &instances);
+  sp_test_expand(mem, &it->decl, &instances);
 
   u32 want = 0;
   while (want < AXIS_MAX && it->expect.names[want]) want++;
@@ -252,7 +276,7 @@ sp_test_each(axis, expand, axis_case_t, axis_cases) {
 
     sp_expect_str_eq_c(t, sp_cstr_as_str(instances[at].name), it->expect.names[at]);
 
-    const axis_row_t* got = (const axis_row_t*)instances[at].arg;
+    const axis_row_t* got = (const axis_row_t*)instances[at].each.arg;
     const axis_row_t* row = &it->expect.rows[at];
     sp_expect_str_eq(t, axis_name_str(got->name), axis_name_str(row->name));
     sp_expect_eq(t, (u32)got->kind, (u32)row->kind);
