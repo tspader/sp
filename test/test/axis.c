@@ -259,7 +259,7 @@ sp_test_each(axis, expand, axis_case_t, axis_cases) {
     sp_expect_eq(t, got->n, row->n);
     sp_expect_eq(t, got->w, row->w);
   }
-  sp_test_kv_clear(t, SP_NULLPTR);
+  sp_test_kv_clear_all(t);
 
   return SP_OK;
 }
