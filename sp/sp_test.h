@@ -1901,7 +1901,6 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
   sp_test_runner_t* runner = sp_alloc_type(sp_mem_arena_as_allocator(arena), sp_test_runner_t);
   sp_mem_zero(runner, sizeof(*runner));
   runner->mem = sp_mem_arena_as_allocator(arena);
-  runner->queue = sp_da_new(runner->mem, sp_test_instance_t);
   runner->failed = sp_da_new(runner->mem, const c8*);
   runner->skipped = sp_da_new(runner->mem, const c8*);
   runner->updated = sp_da_new(runner->mem, const c8*);
@@ -1928,12 +1927,13 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
     }
   }
 
-  sp_test_collect(runner->mem, suites, glob, &runner->queue);
+  sp_da(sp_test_instance_t) instances = sp_da_new(runner->mem, sp_test_instance_t);
+  sp_test_collect(runner->mem, suites, glob, &instances);
 
   sp_cstr_ht(bool) seen = SP_NULLPTR;
   sp_cstr_ht_init(runner->mem, seen);
-  sp_da_for(runner->queue, it) {
-    const c8* name = runner->queue[it].name;
+  sp_da_for(instances, it) {
+    const c8* name = instances[it].name;
     if (sp_cstr_ht_get(seen, name)) {
       sp_fmt_io(&runner->out.base, "duplicate test {.quote}\n", sp_fmt_cstr(name));
       sp_io_flush(&runner->out.base);
@@ -1943,8 +1943,8 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
   }
 
   if (list) {
-    sp_da_for(runner->queue, it) {
-      sp_fmt_io(&runner->out.base, "{}\n", sp_fmt_cstr(runner->queue[it].name));
+    sp_da_for(instances, it) {
+      sp_fmt_io(&runner->out.base, "{}\n", sp_fmt_cstr(instances[it].name));
     }
     sp_io_flush(&runner->out.base);
     return 0;
@@ -1959,19 +1959,19 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_suite_t* suites) {
 
   sp_da(sp_test_instance_t) parallel = sp_da_new(runner->mem, sp_test_instance_t);
   sp_da(sp_test_instance_t) serial = sp_da_new(runner->mem, sp_test_instance_t);
-  sp_da_for(runner->queue, it) {
-    if (runner->queue[it].serial) sp_da_push(serial, runner->queue[it]);
-    else                          sp_da_push(parallel, runner->queue[it]);
+  sp_da_for(instances, it) {
+    if (instances[it].serial) sp_da_push(serial, instances[it]);
+    else                      sp_da_push(parallel, instances[it]);
   }
+  runner->queue = parallel;
 
   sp_fmt_io(&runner->out.base, "> running {.$} test cases on {}-{}-{}\n",
-    sp_test_style(runner->color, sp_fmt_style_black), sp_fmt_uint(sp_da_size(runner->queue)),
+    sp_test_style(runner->color, sp_fmt_style_black), sp_fmt_uint(sp_da_size(instances)),
     sp_fmt_str(sp_test_arch_name()),
     sp_fmt_str(sp_os_get_name()),
     sp_fmt_str(sp_test_abi_name()));
   sp_io_flush(&runner->out.base);
 
-  runner->queue = parallel;
   jobs = (u32)sp_min((u64)jobs, sp_da_size(parallel));
   if (jobs <= 1) {
     sp_da_for(parallel, it) {
