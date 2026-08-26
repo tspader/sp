@@ -33,15 +33,25 @@ typedef struct {
   s64 step;
 } sp_test_axis_t;
 
+typedef enum {
+  SP_TEST_DECL_FN,
+  SP_TEST_DECL_EACH,
+} sp_test_decl_kind_t;
+
 typedef struct {
   const c8* name;
-  sp_test_fn_t fn;
-  sp_test_each_fn_t each;
-  const void* cases;
-  u64 stride;
-  u64 count;
-  u64 case_name_offset;
-  sp_test_axis_t axes [SP_TEST_MAX_AXES];
+  sp_test_decl_kind_t kind;
+  union {
+    sp_test_fn_t fn; // SP_TEST_DECL_FN
+    struct {         // SP_TEST_DECL_EACH
+      sp_test_each_fn_t each;
+      const void* cases;
+      u64 stride;
+      u64 count;
+      u64 case_name_offset;
+      sp_test_axis_t axes [SP_TEST_MAX_AXES];
+    };
+  };
   sp_test_setup_fn_t setup;
   sp_test_teardown_fn_t teardown;
   const void* user;
@@ -165,6 +175,7 @@ typedef struct {
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t);                \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
+      .kind = SP_TEST_DECL_FN,                                              \
       .fn = __sp_test_fn(SUITE, NAME),                                      \
       __VA_ARGS__                                                           \
     });                                                                     \
@@ -191,11 +202,12 @@ typedef struct {
     __sp_test_each_name_check(ARR);                                         \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
+      .kind = SP_TEST_DECL_EACH,                                            \
       .each = __sp_test_thunk(SUITE, NAME),                                 \
       .cases = (ARR),                                                       \
-      .stride = sizeof((ARR)[0]),                                      \
-      .count = sp_carr_len(ARR),                                       \
-      .case_name_offset = offsetof(TYPE, name) + 1,                    \
+      .stride = sizeof((ARR)[0]),                                           \
+      .count = sp_carr_len(ARR),                                            \
+      .case_name_offset = offsetof(TYPE, name) + 1,                         \
       __VA_ARGS__                                                           \
     });                                                                     \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
@@ -204,10 +216,11 @@ typedef struct {
     __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
+      .kind = SP_TEST_DECL_EACH,                                            \
       .each = __sp_test_thunk(SUITE, NAME),                                 \
       .cases = (ARR),                                                       \
-      .stride = sizeof((ARR)[0]),                                      \
-      .count = sp_carr_len(ARR),                                       \
+      .stride = sizeof((ARR)[0]),                                           \
+      .count = sp_carr_len(ARR),                                            \
       __VA_ARGS__                                                           \
     });                                                                     \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
@@ -218,11 +231,12 @@ typedef struct {
     __sp_test_each_thunk_def(SUITE, NAME, TYPE, FN)                         \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
+      .kind = SP_TEST_DECL_EACH,                                            \
       .each = __sp_test_thunk(SUITE, NAME),                                 \
       .cases = (ARR),                                                       \
-      .stride = sizeof((ARR)[0]),                                      \
-      .count = sp_carr_len(ARR),                                       \
-      .case_name_offset = offsetof(TYPE, name) + 1,                    \
+      .stride = sizeof((ARR)[0]),                                           \
+      .count = sp_carr_len(ARR),                                            \
+      .case_name_offset = offsetof(TYPE, name) + 1,                         \
       __VA_ARGS__                                                           \
     })
 
@@ -231,6 +245,7 @@ typedef struct {
     __sp_test_each_thunk_def(SUITE, NAME, TYPE, __sp_test_fn(SUITE, NAME))  \
     sp_test_reg(SUITE, {                                                    \
       .name = #NAME,                                                        \
+      .kind = SP_TEST_DECL_EACH,                                            \
       .each = __sp_test_thunk(SUITE, NAME),                                 \
       .stride = sizeof(TYPE),                                               \
       __VA_ARGS__                                                           \
@@ -1412,11 +1427,6 @@ static void sp_test_context_destroy(sp_test_t* t) {
 }
 
 static sp_err_t sp_test_invoke(sp_test_t* t) {
-  if (!t->decl->fn && !t->decl->each) {
-    sp_test_fail(t, "decl has no test function");
-    return SP_ERR;
-  }
-
   if (t->decl->setup) {
     sp_err_t err = t->decl->setup(t);
     if (err) {
@@ -1428,8 +1438,10 @@ static sp_err_t sp_test_invoke(sp_test_t* t) {
   }
 
   sp_err_t err = SP_OK;
-  if (t->decl->fn) err = t->decl->fn(t);
-  else             err = t->decl->each(t, t->arg);
+  switch (t->decl->kind) {
+    case SP_TEST_DECL_FN:   err = t->decl->fn(t); break;
+    case SP_TEST_DECL_EACH: err = t->decl->each(t, t->arg); break;
+  }
 
   if (t->decl->teardown) {
     t->decl->teardown(t);
@@ -1615,7 +1627,7 @@ static void sp_test_axis_apply(const sp_test_axis_t* axis, s64 value, u8* row) {
 }
 
 static const c8* sp_test_instance_base(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, u32 row) {
-  if (!decl->each || !decl->cases) {
+  if (!decl->cases) {
     return sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name));
   }
 
@@ -1636,7 +1648,7 @@ static const c8* sp_test_instance_base(sp_mem_t mem, const c8* suite, const sp_t
     sp_fmt_uint(row));
 }
 
-void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+static void sp_test_expand_each(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
   u64 counts [SP_TEST_MAX_AXES];
   u32 num_axes = 0;
   u64 combos = 1;
@@ -1646,13 +1658,12 @@ void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, b
     combos *= counts[num_axes];
     num_axes++;
   }
-  SP_ASSERT(!num_axes || decl->each);
 
-  u64 rows = decl->each && decl->cases ? decl->count : 1;
+  u64 rows = decl->cases ? decl->count : 1;
   sp_for(row, rows) {
     const u8* source = SP_NULLPTR;
     if (decl->cases) source = (const u8*)decl->cases + row * decl->stride;
-    else if (decl->each) source = (const u8*)sp_alloc(mem, decl->stride);
+    else             source = (const u8*)sp_alloc(mem, decl->stride);
     const c8* base = sp_test_instance_base(mem, suite, decl, row);
 
     sp_for(combo, combos) {
@@ -1697,6 +1708,27 @@ void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, b
         .arg = arg,
         .serial = serial || decl->serial,
       }));
+    }
+  }
+}
+
+void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, bool serial, sp_glob_t* filter, sp_da(sp_test_instance_t)* out) {
+  switch (decl->kind) {
+    case SP_TEST_DECL_FN: {
+      const c8* name = sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(suite), sp_fmt_cstr(decl->name));
+      if (sp_test_filtered(filter, name)) return;
+
+      sp_da_push(*out, ((sp_test_instance_t) {
+        .name = name,
+        .decl = decl,
+        .arg = SP_NULLPTR,
+        .serial = serial || decl->serial,
+      }));
+      return;
+    }
+    case SP_TEST_DECL_EACH: {
+      sp_test_expand_each(mem, suite, decl, serial, filter, out);
+      return;
     }
   }
 }
