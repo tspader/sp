@@ -1,5 +1,4 @@
-#define SP_HTTP_IMPLEMENTATION
-#include "http.h"
+#include "../http.h"
 
 #if !defined(SP_WIN32)
 #include <signal.h>

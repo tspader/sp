@@ -70,8 +70,18 @@ source = ["test/main.c", "test/mem/uninitialized.c"]
 name = "http"
 source = [
   "test/main.c",
-  "test/http/*.c",
+  "test/http/impl.c",
+  "test/http/pure/*.c",
   "test/http/conn/*.c",
+  "test/http/sim/*.c",
+]
+
+[[test]]
+name = "http_smoke"
+source = [
+  "test/main.c",
+  "test/http/impl.c",
+  "test/http/smoke/*.c",
 ]
 
 [[test]]
@@ -94,6 +104,10 @@ mbedtls = "3.6.6"
 [[bin]]
 name = "zero_copy"
 source = ["example/zero_copy.c"]
+
+[[bin]]
+name = "fuzz_heap"
+source = ["test/fuzz/heap.c"]
 
 [profile.sanitizer]
 linkage = "shared"

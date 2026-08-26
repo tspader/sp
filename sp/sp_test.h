@@ -54,15 +54,20 @@ typedef struct {
   bool serial;
 } sp_test_suite_t;
 
-typedef struct {
+typedef struct sp_test_reg_t {
   const c8* suite;
   sp_test_decl_t decl;
+  struct sp_test_reg_t* next;
 } sp_test_reg_t;
 
-typedef struct {
+typedef struct sp_test_suite_attr_t {
   const c8* suite;
   bool serial;
+  struct sp_test_suite_attr_t* next;
 } sp_test_suite_attr_t;
+
+SP_API void sp_test_reg_push(sp_test_reg_t* reg);
+SP_API void sp_test_suite_attr_push(sp_test_suite_attr_t* attr);
 
 typedef struct {
   const c8* name;
@@ -105,57 +110,46 @@ typedef struct {
 #define __sp_test_fn(SUITE, NAME)    sp_mcat(sp_mcat(sp_test_fn_, SUITE), sp_mcat(_, NAME))
 #define __sp_test_thunk(SUITE, NAME) sp_mcat(__sp_test_fn(SUITE, NAME), _thunk)
 
-#if defined(__ELF__) || defined(SP_WASM) || (defined(SP_TCC) && defined(SP_LINUX))
+// Tests register themselves from constructors that run before main and link
+// their reg into an intrusive list. Discovery never walks linker sections, so
+// it holds no assumptions a sanitizer can break (ASan pads globals placed in
+// user sections with redzones on Mach-O and PE).
+#if defined(SP_GNUC) || (defined(SP_TCC) && defined(SP_LINUX))
   #define SP_TEST_AUTOREG 1
 
-  #if defined(__ELF__) && defined(__has_attribute)
-    #if __has_attribute(retain)
-      #define SP_TEST_RETAIN __attribute__((retain))
-    #endif
-  #endif
-  #if !defined(SP_TEST_RETAIN)
-    #define SP_TEST_RETAIN
-  #endif
-
-  #define __sp_test_reg_section   __attribute__((used, section("sp_test"))) SP_TEST_RETAIN
-  #define __sp_test_suite_section __attribute__((used, section("sp_test_suite"))) SP_TEST_RETAIN
-#elif defined(SP_MACOS)
+  #define __sp_test_ctor(ID)      __attribute__((constructor)) static void ID(void)
+  #define __sp_test_ctor_decl(ID) static void ID(void)
+#elif defined(SP_MSVC)
   #define SP_TEST_AUTOREG 1
 
-  #define __sp_test_reg_section   __attribute__((used, section("__DATA,sp_test")))
-  #define __sp_test_suite_section __attribute__((used, section("__DATA,sp_test_suite")))
-#elif defined(SP_WIN32) && defined(SP_GNUC)
-  #define SP_TEST_AUTOREG 1
-
-  #define __sp_test_reg_section   __attribute__((used, section("sp_test")))
-  #define __sp_test_suite_section __attribute__((used, section("sp_suite")))
-#elif defined(SP_WIN32) && defined(SP_MSVC)
-  #define SP_TEST_AUTOREG 1
-
-  #pragma section("sp_test", read)
-  #pragma section("sp_suite", read)
-  #define __sp_test_reg_section   __declspec(allocate("sp_test"))
-  #define __sp_test_suite_section __declspec(allocate("sp_suite"))
+  #pragma section(".CRT$XCU", read)
+  #define __sp_test_ctor(ID)                                                            \
+    static void __cdecl ID(void);                                                       \
+    __declspec(allocate(".CRT$XCU")) static void (__cdecl* sp_mcat(ID, _entry))(void) = ID; \
+    static void __cdecl ID(void)
+  #define __sp_test_ctor_decl(ID) static void __cdecl ID(void)
 #else
   #define SP_TEST_AUTOREG 0
 #endif
 
 #if SP_TEST_AUTOREG
   #define __sp_test_reg(ID, SUITE, ...)                                       \
-    static const sp_test_reg_t sp_mcat(ID, _v) = {                            \
+    static sp_test_reg_t ID = {                                               \
       .suite = #SUITE,                                                        \
       .decl = __VA_ARGS__                                                     \
     };                                                                        \
-    static __sp_test_reg_section const sp_test_reg_t* ID = &sp_mcat(ID, _v)
+    __sp_test_ctor(sp_mcat(ID, _ctor)) { sp_test_reg_push(&ID); }             \
+    __sp_test_ctor_decl(sp_mcat(ID, _ctor))
 
   #define sp_test_reg(SUITE, ...) __sp_test_reg(sp_mcat(sp_test_reg_, __COUNTER__), SUITE, __VA_ARGS__)
 
   #define __sp_test_reg_suite(ID, SUITE, ...)                                 \
-    static const sp_test_suite_attr_t sp_mcat(ID, _v) = {                     \
+    static sp_test_suite_attr_t ID = {                                        \
       .suite = #SUITE,                                                        \
       __VA_ARGS__                                                             \
     };                                                                        \
-    static __sp_test_suite_section const sp_test_suite_attr_t* ID = &sp_mcat(ID, _v)
+    __sp_test_ctor(sp_mcat(ID, _ctor)) { sp_test_suite_attr_push(&ID); }      \
+    __sp_test_ctor_decl(sp_mcat(ID, _ctor))
 
   #define sp_test_suite(SUITE, ...) __sp_test_reg_suite(sp_mcat(sp_test_suite_reg_, __COUNTER__), SUITE, __VA_ARGS__)
 
@@ -236,7 +230,7 @@ typedef struct {
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
 #else
   #define __sp_test_unsupported() \
-    sp_static_assert(false, no_sp_test_autoreg_for_this_object_format__pass_suites_to_sp_test_main)
+    sp_static_assert(false, no_sp_test_autoreg_for_this_compiler__pass_suites_to_sp_test_main)
 
   #define sp_test_reg(SUITE, ...)                          __sp_test_unsupported()
   #define sp_test_suite(SUITE, ...)                        __sp_test_unsupported()
@@ -518,7 +512,7 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 #elif (defined(__clang__) || defined(__GNUC__)) && !defined(__TINYC__)
   #define sp_test_auto(X) __auto_type
 #else
-  #define sp_test_auto(X) __typeof__((X) + 0)
+  #define sp_test_auto(X) __typeof__(0 ? (X) : (X))
 #endif
 
 #define sp_test_cmp(T, A, B, SA, SB, OP, FAIL)                 \
@@ -1799,73 +1793,25 @@ void sp_test_expand(sp_mem_t mem, const c8* suite, const sp_test_decl_t* decl, b
   }
 }
 
-#if SP_TEST_AUTOREG
-#if defined(SP_WIN32)
-extern IMAGE_DOS_HEADER __ImageBase;
+static sp_test_reg_t* __sp_test_regs = SP_NULLPTR;
+static sp_test_reg_t** __sp_test_regs_tail = &__sp_test_regs;
+static sp_test_suite_attr_t* __sp_test_suites = SP_NULLPTR;
+static sp_test_suite_attr_t** __sp_test_suites_tail = &__sp_test_suites;
 
-typedef struct {
-  const void* begin;
-  const void* end;
-} sp_test_pe_bounds_t;
-
-static sp_test_pe_bounds_t sp_test_pe_bounds(const c8* name) {
-  sp_test_pe_bounds_t bounds = sp_zero;
-
-  const u8* base = (const u8*)&__ImageBase;
-  const IMAGE_NT_HEADERS* nt = (const IMAGE_NT_HEADERS*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew);
-  const IMAGE_SECTION_HEADER* sections = IMAGE_FIRST_SECTION(nt);
-
-  sp_for(it, nt->FileHeader.NumberOfSections) {
-    const IMAGE_SECTION_HEADER* section = &sections[it];
-
-    const c8* want = name;
-    bool match = true;
-    sp_for(n, (u32)sizeof(section->Name)) {
-      if ((c8)section->Name[n] != *want) { match = false; break; }
-      if (*want) want++;
-    }
-    if (!match) continue;
-
-    bounds.begin = base + section->VirtualAddress;
-    bounds.end   = base + section->VirtualAddress + section->Misc.VirtualSize;
-    break;
-  }
-
-  return bounds;
+void sp_test_reg_push(sp_test_reg_t* reg) {
+  *__sp_test_regs_tail = reg;
+  __sp_test_regs_tail = &reg->next;
 }
 
-#define __sp_test_reg_begin   ((const sp_test_reg_t* const*)sp_test_pe_bounds("sp_test").begin)
-#define __sp_test_reg_end     ((const sp_test_reg_t* const*)sp_test_pe_bounds("sp_test").end)
-#define __sp_test_suite_begin ((const sp_test_suite_attr_t* const*)sp_test_pe_bounds("sp_suite").begin)
-#define __sp_test_suite_end   ((const sp_test_suite_attr_t* const*)sp_test_pe_bounds("sp_suite").end)
-#else
-#if defined(SP_MACOS)
-extern const sp_test_reg_t* const __start_sp_test[] __asm("section$start$__DATA$sp_test");
-extern const sp_test_reg_t* const __stop_sp_test[] __asm("section$end$__DATA$sp_test");
-extern const sp_test_suite_attr_t* const __start_sp_test_suite[] __asm("section$start$__DATA$sp_test_suite");
-extern const sp_test_suite_attr_t* const __stop_sp_test_suite[] __asm("section$end$__DATA$sp_test_suite");
-#else
-extern const sp_test_reg_t* const __start_sp_test[] __attribute__((weak));
-extern const sp_test_reg_t* const __stop_sp_test[] __attribute__((weak));
-extern const sp_test_suite_attr_t* const __start_sp_test_suite[] __attribute__((weak));
-extern const sp_test_suite_attr_t* const __stop_sp_test_suite[] __attribute__((weak));
-#endif
-#define __sp_test_reg_begin   (__start_sp_test)
-#define __sp_test_reg_end     (__stop_sp_test)
-#define __sp_test_suite_begin (__start_sp_test_suite)
-#define __sp_test_suite_end   (__stop_sp_test_suite)
-#endif
-#endif
+void sp_test_suite_attr_push(sp_test_suite_attr_t* attr) {
+  *__sp_test_suites_tail = attr;
+  __sp_test_suites_tail = &attr->next;
+}
 
 static bool sp_test_suite_serial(const c8* suite) {
-#if SP_TEST_AUTOREG
-  for (const sp_test_suite_attr_t* const* it = __sp_test_suite_begin, * const* end = __sp_test_suite_end; it < end; it++) {
-    if (!*it) continue;
-    if (sp_cstr_equal((*it)->suite, suite)) return (*it)->serial;
+  for (const sp_test_suite_attr_t* it = __sp_test_suites; it; it = it->next) {
+    if (sp_cstr_equal(it->suite, suite)) return it->serial;
   }
-#else
-  SP_UNUSED(suite);
-#endif
   return false;
 }
 
@@ -1879,12 +1825,9 @@ static void sp_test_collect(sp_mem_t mem, const sp_test_suite_t* suites, sp_glob
     }
   }
 
-#if SP_TEST_AUTOREG
-  for (const sp_test_reg_t* const* it = __sp_test_reg_begin, * const* end = __sp_test_reg_end; it < end; it++) {
-    if (!*it) continue;
-    sp_test_expand(mem, (*it)->suite, &(*it)->decl, sp_test_suite_serial((*it)->suite), filter, out);
+  for (const sp_test_reg_t* it = __sp_test_regs; it; it = it->next) {
+    sp_test_expand(mem, it->suite, &it->decl, sp_test_suite_serial(it->suite), filter, out);
   }
-#endif
 }
 
 static sp_str_t sp_test_abi_name(void) {

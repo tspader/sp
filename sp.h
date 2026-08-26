@@ -10719,12 +10719,32 @@ sp_str_t sp_os_get_name() {
 // SP_MAIN //
 /////////////
 #if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
+// There's no libc start code to run __attribute__((constructor)) functions, so
+// walk the arrays the linker collected them into before entering the user's fn
+#if defined(SP_WASM_FREESTANDING)
+SP_EXTERN_C void __wasm_call_ctors(void);
+#else
+extern void (*__init_array_start[])(void) __attribute__((weak));
+extern void (*__init_array_end[])(void) __attribute__((weak));
+#endif
+
+static void sp_main_run_ctors(void) {
+#if defined(SP_WASM_FREESTANDING)
+  __wasm_call_ctors();
+#else
+  for (void (**it)(void) = __init_array_start; it != __init_array_end; it++) {
+    (*it)();
+  }
+#endif
+}
+
 void sp_main(s32 argc, const c8** argv, sp_entry_fn_t fn) {
   environ = (c8**)(argv + argc + 1);
   sp_tls_block.self = &sp_tls_block;
   sp_tls_block.data = SP_NULLPTR;
   sp_sys_set_tp(&sp_tls_block);
   sp_tls_rt_get();
+  sp_main_run_ctors();
   sp_sys_exit(fn(argc, argv));
 }
 #endif
