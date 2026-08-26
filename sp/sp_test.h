@@ -366,89 +366,6 @@ SP_API sp_mem_t    sp_test_tracking_as_allocator(sp_test_tracking_t* k);
 SP_API void        sp_test_tracking_deinit(sp_test_tracking_t* k);
 
 
-// stream: nonce frame
-// frame: tag len payload
-// str: len bytes
-#define SP_TEST_WIRE_VERSION    1
-#define SP_TEST_WIRE_NONCE_SIZE 8
-#define SP_TEST_WIRE_MAX_FRAME  (1u << 24)
-
-typedef enum {
-  SP_TEST_WIRE_PLAN = 1,
-  SP_TEST_WIRE_START = 2,
-  SP_TEST_WIRE_FAILURE = 3,
-  SP_TEST_WIRE_RESULT = 4,
-  SP_TEST_WIRE_SUMMARY = 5,
-} sp_test_wire_tag_t;
-
-typedef enum {
-  SP_TEST_WIRE_OK = 0,
-  SP_TEST_WIRE_FAIL = 1,
-  SP_TEST_WIRE_SKIP = 2,
-  SP_TEST_WIRE_UPDATE = 3,
-} sp_test_wire_status_t;
-
-typedef struct {
-  u32 v;
-  sp_str_t arch;
-  sp_str_t os;
-  sp_str_t abi;
-  sp_str_t* tests;
-  u32 num_tests;
-} sp_test_wire_plan_t;
-
-typedef struct {
-  u32 id;
-} sp_test_wire_start_t;
-
-typedef struct {
-  u32 id;
-  u32 line;
-  sp_str_t file;
-  sp_str_t message;
-  sp_str_t expected;
-  sp_str_t actual;
-  sp_test_kv_t* kvs;
-  u32 num_kvs;
-} sp_test_wire_failure_t;
-
-typedef struct {
-  u32 id;
-  sp_test_wire_status_t status;
-  u64 dur_ns;
-  sp_str_t reason;
-  sp_str_t* notes;
-  u32 num_notes;
-  sp_str_t* logs;
-  u32 num_logs;
-} sp_test_wire_result_t;
-
-typedef struct {
-  u32 passed;
-  u32 failed;
-  u32 skipped;
-  u32 updated;
-  u64 dur_ns;
-  sp_str_t capture;
-} sp_test_wire_summary_t;
-
-typedef struct {
-  sp_test_wire_tag_t tag;
-  union {
-    sp_test_wire_plan_t plan;
-    sp_test_wire_start_t start;
-    sp_test_wire_failure_t failure;
-    sp_test_wire_result_t result;
-    sp_test_wire_summary_t summary;
-  };
-} sp_test_wire_event_t;
-
-SP_API sp_err_t    sp_test_wire_write_nonce(sp_io_writer_t* io, const u8 nonce [SP_TEST_WIRE_NONCE_SIZE]);
-SP_API sp_err_t    sp_test_wire_write(sp_io_writer_t* io, const sp_test_wire_event_t* event);
-SP_API sp_err_t    sp_test_wire_scan_nonce(sp_io_reader_t* io, const u8 nonce [SP_TEST_WIRE_NONCE_SIZE]);
-SP_API sp_err_t    sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_wire_event_t* out);
-
-
 /////////////////////
 // VALUE FORMATTING //
 /////////////////////
@@ -695,6 +612,13 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 #include "sp_cli.h"
 
 typedef struct sp_test_runner_t sp_test_runner_t;
+
+typedef enum {
+  SP_TEST_STATUS_OK,
+  SP_TEST_STATUS_FAIL,
+  SP_TEST_STATUS_SKIP,
+  SP_TEST_STATUS_UPDATE,
+} sp_test_status_t;
 
 struct sp_test_t {
   const c8* name;
@@ -1323,32 +1247,6 @@ bool sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 count, const c8* 
 }
 
 
-sp_err_t sp_test_wire_write_nonce(sp_io_writer_t* io, const u8 nonce [SP_TEST_WIRE_NONCE_SIZE]) {
-  SP_UNUSED(io);
-  SP_UNUSED(nonce);
-  return SP_ERR;
-}
-
-sp_err_t sp_test_wire_write(sp_io_writer_t* io, const sp_test_wire_event_t* event) {
-  SP_UNUSED(io);
-  SP_UNUSED(event);
-  return SP_ERR;
-}
-
-sp_err_t sp_test_wire_scan_nonce(sp_io_reader_t* io, const u8 nonce [SP_TEST_WIRE_NONCE_SIZE]) {
-  SP_UNUSED(io);
-  SP_UNUSED(nonce);
-  return SP_ERR;
-}
-
-sp_err_t sp_test_wire_read(sp_io_reader_t* io, sp_mem_t mem, sp_test_wire_event_t* out) {
-  SP_UNUSED(io);
-  SP_UNUSED(mem);
-  SP_UNUSED(out);
-  return SP_ERR;
-}
-
-
 static sp_fmt_argv_t sp_test_style(bool color, sp_fmt_style_t style) {
   return sp_fmt_style(color ? style : sp_fmt_style_none);
 }
@@ -1431,33 +1329,33 @@ static void sp_test_report_log(sp_io_writer_t* io, sp_mem_t mem, bool color, sp_
   }
 }
 
-static sp_test_wire_status_t sp_test_status(sp_test_t* t) {
-  if (!sp_da_empty(t->failures)) return SP_TEST_WIRE_FAIL;
-  if (t->updated)                return SP_TEST_WIRE_UPDATE;
-  if (t->skipped)                return SP_TEST_WIRE_SKIP;
-  return SP_TEST_WIRE_OK;
+static sp_test_status_t sp_test_status(sp_test_t* t) {
+  if (!sp_da_empty(t->failures)) return SP_TEST_STATUS_FAIL;
+  if (t->updated)                return SP_TEST_STATUS_UPDATE;
+  if (t->skipped)                return SP_TEST_STATUS_SKIP;
+  return SP_TEST_STATUS_OK;
 }
 
-static void sp_test_report(sp_test_t* t, sp_io_writer_t* io, sp_test_wire_status_t status, u64 ns) {
+static void sp_test_report(sp_test_t* t, sp_io_writer_t* io, sp_test_status_t status, u64 ns) {
   bool color = t->runner->color;
   sp_str_t duration = sp_test_duration(t->mem, ns);
 
   switch (status) {
-    case SP_TEST_WIRE_FAIL: {
+    case SP_TEST_STATUS_FAIL: {
       sp_fmt_io(io, "{} {.$} {.$}\n",
         sp_fmt_cstr(t->name),
         sp_test_style(color, sp_fmt_style_red), sp_fmt_cstr("failed"),
         sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(duration));
       break;
     }
-    case SP_TEST_WIRE_UPDATE: {
+    case SP_TEST_STATUS_UPDATE: {
       sp_fmt_io(io, "{} {.$} {.$}\n",
         sp_fmt_cstr(t->name),
         sp_test_style(color, sp_fmt_style_cyan), sp_fmt_cstr("updated"),
         sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(duration));
       break;
     }
-    case SP_TEST_WIRE_SKIP: {
+    case SP_TEST_STATUS_SKIP: {
       sp_fmt_io(io, "{} {.$} {.$} {.$}\n",
         sp_fmt_cstr(t->name),
         sp_test_style(color, sp_fmt_style_yellow), sp_fmt_cstr("skipped"),
@@ -1465,7 +1363,7 @@ static void sp_test_report(sp_test_t* t, sp_io_writer_t* io, sp_test_wire_status
         sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(duration));
       break;
     }
-    case SP_TEST_WIRE_OK: {
+    case SP_TEST_STATUS_OK: {
       sp_fmt_io(io, "{} {.$} {.$}\n",
         sp_fmt_cstr(t->name),
         sp_test_style(color, sp_fmt_style_green), sp_fmt_cstr("ok"),
@@ -1610,7 +1508,7 @@ static void sp_test_run_instance(sp_test_runner_t* runner, sp_test_instance_t* i
     });
   }
 
-  sp_test_wire_status_t status = sp_test_status(t);
+  sp_test_status_t status = sp_test_status(t);
 
   sp_io_dyn_mem_writer_t report = sp_zero;
   sp_io_dyn_mem_writer_init(t->mem, &report);
@@ -1622,10 +1520,10 @@ static void sp_test_run_instance(sp_test_runner_t* runner, sp_test_instance_t* i
   sp_io_write_str(&runner->out.base, text, SP_NULLPTR);
   sp_io_flush(&runner->out.base);
   switch (status) {
-    case SP_TEST_WIRE_FAIL:   sp_da_push(runner->failed, instance->name); break;
-    case SP_TEST_WIRE_SKIP:   sp_da_push(runner->skipped, instance->name); break;
-    case SP_TEST_WIRE_UPDATE: sp_da_push(runner->updated, instance->name); break;
-    case SP_TEST_WIRE_OK: break;
+    case SP_TEST_STATUS_FAIL:   sp_da_push(runner->failed, instance->name); break;
+    case SP_TEST_STATUS_SKIP:   sp_da_push(runner->skipped, instance->name); break;
+    case SP_TEST_STATUS_UPDATE: sp_da_push(runner->updated, instance->name); break;
+    case SP_TEST_STATUS_OK: break;
   }
   sp_mutex_unlock(&runner->mutex);
 

@@ -30,7 +30,7 @@ source = [
 
 [[test]]
 name = "meta"
-source = ["test/main.c", "test/test/*.c", "test/test/wire/*.c"]
+source = ["test/main.c", "test/test/*.c"]
 
 [[test]]
 name = "sys"
