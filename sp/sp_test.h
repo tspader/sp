@@ -710,7 +710,7 @@ struct sp_test_runner_t {
   sp_str_t dir_root;
   sp_str_t golden_root;
   bool update;
-  bool color;
+  sp_term_t term;
 };
 
 
@@ -1290,10 +1290,6 @@ bool sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 count, const c8* 
 }
 
 
-static sp_fmt_argv_t sp_test_style(bool color, sp_fmt_style_t style) {
-  return sp_fmt_style(color ? style : sp_fmt_style_none);
-}
-
 static sp_str_t sp_test_duration(sp_mem_t mem, u64 ns) {
   const c8* const units [] = { "ns", "us", "ms", "s" };
   u32 unit = 0;
@@ -1305,70 +1301,63 @@ static sp_str_t sp_test_duration(sp_mem_t mem, u64 ns) {
   return sp_fmt(mem, "{}{}", sp_fmt_uint(time), sp_fmt_cstr(units[unit])).value;
 }
 
-static sp_str_t sp_test_report_bar(sp_mem_t mem, bool color) {
-  return sp_fmt(mem, "{.$}", sp_test_style(color, sp_fmt_style_red), sp_fmt_cstr("▐ ")).value;
-}
-
-static void sp_test_report_attr(sp_io_writer_t* io, sp_mem_t mem, bool color, sp_str_t bar, sp_str_t key, sp_str_t value, u32 width) {
+static void sp_test_report_attr(sp_term_t* term, sp_mem_t mem, sp_str_t key, sp_str_t value, u32 width) {
   value = sp_str_trim_right(value);
   sp_da(sp_str_t) lines = sp_str_split_c8(mem, value, '\n');
 
   if (sp_str_empty(key)) {
     sp_da_for(lines, it) {
-      sp_fmt_io(io, "  {}{}\n", sp_fmt_str(bar), sp_fmt_str(lines[it]));
+      sp_term_fmt(term, "  {.red}{}\n", sp_fmt_cstr("▐ "), sp_fmt_str(lines[it]));
     }
     return;
   }
 
   if (sp_da_size(lines) <= 1) {
-    sp_fmt_io(io, "  {}{.$} {}\n",
-      sp_fmt_str(bar),
-      sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(sp_str_pad(mem, key, width)),
+    sp_term_fmt(term, "  {.red}{.gray} {}\n",
+      sp_fmt_cstr("▐ "),
+      sp_fmt_str(sp_str_pad(mem, key, width)),
       sp_fmt_str(value));
     return;
   }
 
-  sp_fmt_io(io, "  {}{.$}\n", sp_fmt_str(bar), sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(key));
+  sp_term_fmt(term, "  {.red}{.gray}\n", sp_fmt_cstr("▐ "), sp_fmt_str(key));
   sp_da_for(lines, it) {
-    sp_fmt_io(io, "  {}  {}\n", sp_fmt_str(bar), sp_fmt_str(lines[it]));
+    sp_term_fmt(term, "  {.red}  {}\n", sp_fmt_cstr("▐ "), sp_fmt_str(lines[it]));
   }
 }
 
-static void sp_test_report_failure(sp_io_writer_t* io, sp_mem_t mem, bool color, sp_test_failure_t* failure) {
-  sp_str_t bar = sp_test_report_bar(mem, color);
-
+static void sp_test_report_failure(sp_term_t* term, sp_mem_t mem, sp_test_failure_t* failure) {
   u32 width = (u32)sizeof("expected") - 1;
   sp_da_for(failure->kvs, it) {
     width = sp_max(width, failure->kvs[it].key.len);
   }
 
   if (!sp_str_empty(failure->file)) {
-    sp_fmt_io(io, "  {}{.$}:{.$}\n",
-      sp_fmt_str(bar),
-      sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(failure->file),
-      sp_test_style(color, sp_fmt_style_gray), sp_fmt_uint(failure->line));
+    sp_term_fmt(term, "  {.red}{.gray}:{.gray}\n",
+      sp_fmt_cstr("▐ "),
+      sp_fmt_str(failure->file),
+      sp_fmt_uint(failure->line));
   }
   if (!sp_str_empty(failure->message)) {
-    sp_test_report_attr(io, mem, color, bar, sp_zero_s(sp_str_t), failure->message, width);
+    sp_test_report_attr(term, mem, sp_zero_s(sp_str_t), failure->message, width);
   }
   if (!sp_str_empty(failure->expected)) {
-    sp_test_report_attr(io, mem, color, bar, sp_str_lit("expected"), failure->expected, width);
+    sp_test_report_attr(term, mem, sp_str_lit("expected"), failure->expected, width);
   }
   if (!sp_str_empty(failure->actual)) {
-    sp_test_report_attr(io, mem, color, bar, sp_str_lit("actual"), failure->actual, width);
+    sp_test_report_attr(term, mem, sp_str_lit("actual"), failure->actual, width);
   }
   sp_da_for(failure->kvs, it) {
-    sp_test_report_attr(io, mem, color, bar, failure->kvs[it].key, failure->kvs[it].value, width);
+    sp_test_report_attr(term, mem, failure->kvs[it].key, failure->kvs[it].value, width);
   }
 }
 
-static void sp_test_report_log(sp_io_writer_t* io, sp_mem_t mem, bool color, sp_test_t* t) {
+static void sp_test_report_log(sp_term_t* term, sp_test_t* t) {
   if (sp_da_empty(t->logs)) return;
 
-  sp_str_t bar = sp_test_report_bar(mem, color);
-  sp_fmt_io(io, "  {}{.$}\n", sp_fmt_str(bar), sp_test_style(color, sp_fmt_style_gray), sp_fmt_cstr("log"));
+  sp_term_fmt(term, "  {.red}{.gray}\n", sp_fmt_cstr("▐ "), sp_fmt_cstr("log"));
   sp_da_for(t->logs, it) {
-    sp_fmt_io(io, "  {}  {}\n", sp_fmt_str(bar), sp_fmt_str(t->logs[it]));
+    sp_term_fmt(term, "  {.red}  {}\n", sp_fmt_cstr("▐ "), sp_fmt_str(t->logs[it]));
   }
 }
 
@@ -1379,52 +1368,51 @@ static sp_test_status_t sp_test_status(sp_test_t* t) {
   return SP_TEST_STATUS_OK;
 }
 
-static void sp_test_report(sp_test_t* t, sp_io_writer_t* io, sp_test_status_t status, u64 ns) {
-  bool color = t->runner->color;
+static void sp_test_report(sp_test_t* t, sp_term_t* term, sp_test_status_t status, u64 ns) {
   sp_str_t duration = sp_test_duration(t->mem, ns);
 
   switch (status) {
     case SP_TEST_STATUS_FAIL: {
-      sp_fmt_io(io, "{} {.$} {.$}\n",
+      sp_term_fmt(term, "{} {.red} {.gray}\n",
         sp_fmt_cstr(t->instance->name),
-        sp_test_style(color, sp_fmt_style_red), sp_fmt_cstr("failed"),
-        sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(duration));
+        sp_fmt_cstr("failed"),
+        sp_fmt_str(duration));
       break;
     }
     case SP_TEST_STATUS_UPDATE: {
-      sp_fmt_io(io, "{} {.$} {.$}\n",
+      sp_term_fmt(term, "{} {.cyan} {.gray}\n",
         sp_fmt_cstr(t->instance->name),
-        sp_test_style(color, sp_fmt_style_cyan), sp_fmt_cstr("updated"),
-        sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(duration));
+        sp_fmt_cstr("updated"),
+        sp_fmt_str(duration));
       break;
     }
     case SP_TEST_STATUS_SKIP: {
-      sp_fmt_io(io, "{} {.$} {.$} {.$}\n",
+      sp_term_fmt(term, "{} {.yellow} {.gray} {.gray}\n",
         sp_fmt_cstr(t->instance->name),
-        sp_test_style(color, sp_fmt_style_yellow), sp_fmt_cstr("skipped"),
-        sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(t->skip_reason),
-        sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(duration));
+        sp_fmt_cstr("skipped"),
+        sp_fmt_str(t->skip_reason),
+        sp_fmt_str(duration));
       break;
     }
     case SP_TEST_STATUS_OK: {
-      sp_fmt_io(io, "{} {.$} {.$}\n",
+      sp_term_fmt(term, "{} {.green} {.gray}\n",
         sp_fmt_cstr(t->instance->name),
-        sp_test_style(color, sp_fmt_style_green), sp_fmt_cstr("ok"),
-        sp_test_style(color, sp_fmt_style_gray), sp_fmt_str(duration));
+        sp_fmt_cstr("ok"),
+        sp_fmt_str(duration));
       break;
     }
   }
 
   sp_da_for(t->notes, it) {
-    sp_fmt_io(io, "  {.$} {}\n", sp_test_style(color, sp_fmt_style_gray), sp_fmt_cstr("note"), sp_fmt_str(t->notes[it]));
+    sp_term_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("note"), sp_fmt_str(t->notes[it]));
   }
 
   sp_da_for(t->failures, it) {
-    sp_test_report_failure(io, t->mem, color, &t->failures[it]);
+    sp_test_report_failure(term, t->mem, &t->failures[it]);
   }
 
   if (!sp_da_empty(t->failures)) {
-    sp_test_report_log(io, t->mem, color, t);
+    sp_test_report_log(term, t);
   }
 }
 
@@ -1550,7 +1538,8 @@ static void sp_test_run_instance(sp_test_runner_t* runner, const sp_test_instanc
 
   sp_io_dyn_mem_writer_t report = sp_zero;
   sp_io_dyn_mem_writer_init(t->mem, &report);
-  sp_test_report(t, &report.base, status, ns);
+  sp_term_t term = { .io = &report.base, .color = runner->term.color };
+  sp_test_report(t, &term, status, ns);
 
   sp_str_t text = sp_io_dyn_mem_writer_as_str(&report);
 
@@ -1908,9 +1897,9 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   }
 
   sp_mutex_init(&runner->mutex);
-  runner->color = sp_sys_is_tty(sp_sys_stdout);
   sp_io_stream_writer_from_fd(&runner->out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
   sp_io_writer_set_buffer(&runner->out.base, runner->out_buffer, sizeof(runner->out_buffer));
+  runner->term = (sp_term_t) { .io = &runner->out.base, .color = sp_term_color_detect(sp_sys_stdout) };
 
   sp_glob_t* glob = SP_NULLPTR;
   if (filter && *filter) {
@@ -2007,8 +1996,8 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   }
   runner->queue = parallel;
 
-  sp_fmt_io(&runner->out.base, "> running {.$} test cases on {}-{}-{}\n",
-    sp_test_style(runner->color, sp_fmt_style_black), sp_fmt_uint(sp_da_size(instances)),
+  sp_term_fmt(&runner->term, "> running {.black} test cases on {}-{}-{}\n",
+    sp_fmt_uint(sp_da_size(instances)),
     sp_fmt_str(sp_test_arch_name()),
     sp_fmt_str(sp_os_get_name()),
     sp_fmt_str(sp_test_abi_name()));
@@ -2039,17 +2028,17 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   u64 skipped = sp_da_size(runner->skipped);
   u64 updated = sp_da_size(runner->updated);
 
-  sp_fmt_io(&runner->out.base, "> {.$} passed, {.$} failed, {.$} skipped",
-    sp_test_style(runner->color, sp_fmt_style_green), sp_fmt_uint(total - failed - skipped - updated),
-    sp_test_style(runner->color, sp_fmt_style_red), sp_fmt_uint(failed),
-    sp_test_style(runner->color, sp_fmt_style_yellow), sp_fmt_uint(skipped));
+  sp_term_fmt(&runner->term, "> {.green} passed, {.red} failed, {.yellow} skipped",
+    sp_fmt_uint(total - failed - skipped - updated),
+    sp_fmt_uint(failed),
+    sp_fmt_uint(skipped));
   if (runner->update) {
-    sp_fmt_io(&runner->out.base, ", {.$} updated", sp_test_style(runner->color, sp_fmt_style_cyan), sp_fmt_uint(updated));
+    sp_term_fmt(&runner->term, ", {.cyan} updated", sp_fmt_uint(updated));
   }
-  sp_fmt_io(&runner->out.base, "\n");
+  sp_term_fmt(&runner->term, "\n");
 
   sp_da_for(runner->failed, it) {
-    sp_fmt_io(&runner->out.base, "  {.$} {}\n", sp_test_style(runner->color, sp_fmt_style_red), sp_fmt_cstr("failed"), sp_fmt_cstr(runner->failed[it]));
+    sp_term_fmt(&runner->term, "  {.red} {}\n", sp_fmt_cstr("failed"), sp_fmt_cstr(runner->failed[it]));
   }
   sp_io_flush(&runner->out.base);
 
