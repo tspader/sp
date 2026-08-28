@@ -102,7 +102,7 @@ UTEST(format_fmt, dynamic_style) {
     {
       "{.$}",
       { sp_fmt_style(sp_fmt_style_red), sp_fmt_cstr("x") },
-      "\033[31mx\033[0m"
+      "x"
     },
     {
       "{.$}",
@@ -112,7 +112,7 @@ UTEST(format_fmt, dynamic_style) {
     {
       "{.$ .$}",
       { sp_fmt_style(sp_fmt_style_red), sp_fmt_style(sp_fmt_style_none), sp_fmt_cstr("x") },
-      "\033[31mx\033[0m"
+      "x"
     },
     {
       .fmt = "{.$}",
@@ -257,7 +257,7 @@ UTEST(format_fmt, writer_variants) {
   SP_EXPECT_STR_EQ_CSTR(sp_fmt_buf(buffer, 64, "hello, {}", sp_fmt_cstr("world")).value, "hello, world");
 
   c8 decorated[64] = sp_zero;
-  SP_EXPECT_STR_EQ_CSTR(sp_fmt_buf(decorated, 64, "{:>6 .red}", sp_fmt_cstr("hi")).value, "    \033[31mhi\033[0m");
+  SP_EXPECT_STR_EQ_CSTR(sp_fmt_buf(decorated, 64, "{:>6 .red}", sp_fmt_cstr("hi")).value, "    hi");
 
   c8 multi[64] = sp_zero;
   sp_io_mem_writer_t w = sp_zero;

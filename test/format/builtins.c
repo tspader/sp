@@ -5,37 +5,22 @@ UTEST(format_builtin, color_style) {
     {
       .fmt = "{.red}",
       .args = { sp_fmt_cstr("hi") },
-      .expect = "\033[31mhi\033[0m"
-    },
-    {
-      .fmt = "{.br_cyan}",
-      .args = { sp_fmt_cstr("hi") },
-      .expect = "\033[96mhi\033[0m"
+      .expect = "hi"
     },
     {
       .fmt = "{.italic}",
       .args = { sp_fmt_cstr("hi") },
-      .expect = "\033[3mhi\033[0m"
-    },
-    {
-      .fmt = "{.gray}",
-      .args = { sp_fmt_cstr("hi") },
-      .expect = "\033[90mhi\033[0m"
-    },
-    {
-      .fmt = "{.br_red}",
-      .args = { sp_fmt_cstr("hi") },
-      .expect = "\033[91mhi\033[0m"
+      .expect = "hi"
     },
     {
       .fmt = "{.bold}",
       .args = { sp_fmt_int(42) },
-      .expect = "\033[1m42\033[0m"
+      .expect = "42"
     },
     {
       .fmt = "{.hyperlink}",
       .args = { sp_fmt_cstr("https://x") },
-      .expect = "\033]8;;https://x\033\\https://x\033[0m"
+      .expect = "https://x"
     },
     {
       .fmt = "{.quote}",
@@ -45,32 +30,27 @@ UTEST(format_builtin, color_style) {
     {
       .fmt = "{.quote .red}",
       .args = { sp_fmt_cstr("hi") },
-      .expect = "\"\033[31mhi\033[0m\""
+      .expect = "\"hi\""
     },
     {
       .fmt = "{:*^8 .red}",
       .args = { sp_fmt_cstr("hi") },
-      .expect = "***\033[31mhi\033[0m***"
+      .expect = "***hi***"
     },
     {
       .fmt = "{.$}",
       .args = { sp_fmt_red(), sp_fmt_cstr("hi") },
-      .expect = "\033[31mhi\033[0m"
-    },
-    {
-      .fmt = "{.$}",
-      .args = { sp_fmt_bold(), sp_fmt_int(42) },
-      .expect = "\033[1m42\033[0m"
+      .expect = "hi"
     },
     {
       .fmt = "{.$ .bold}",
       .args = { sp_fmt_green(), sp_fmt_cstr("hi") },
-      .expect = "\033[32m\033[1mhi\033[0m\033[0m"
+      .expect = "hi"
     },
     {
       .fmt = "{:*^8 .$}",
       .args = { sp_fmt_cyan(), sp_fmt_cstr("hi") },
-      .expect = "***\033[36mhi\033[0m***"
+      .expect = "***hi***"
     },
   };
   SP_CARR_FOR(cases, i) run_format_fmt(utest_result, cases[i]);
@@ -162,7 +142,7 @@ UTEST(format_builtin, radix) {
     {
       .fmt = "{:>6x .cyan}",
       .args = { sp_fmt_uint(255) },
-      .expect = "    \033[36mff\033[0m"
+      .expect = "    ff"
     },
     {
       .fmt = "{:x}",

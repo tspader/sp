@@ -11356,15 +11356,6 @@ static void sp_fmt_style_open(sp_io_writer_t* io, sp_fmt_style_t style, sp_fmt_a
   }
 }
 
-static void sp_fmt_style_close(sp_io_writer_t* io, sp_fmt_style_t style) {
-  if (style == sp_fmt_style_quote) {
-    sp_io_write_c8(io, '"');
-  }
-  else if (style != sp_fmt_style_none && style != sp_fmt_style_unset) {
-    sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
-  }
-}
-
 bool sp_parse_u64_ex(sp_str_t str, u64* out) {
   if (str.len == 0) return false;
 
@@ -18542,14 +18533,21 @@ sp_str_r sp_fmt_buf_v(c8* buffer, u64 len, sp_str_t fmt, va_list args) {
   return str;
 }
 
+typedef enum {
+  SP_FMT_SINK_PLAIN = 0,
+  SP_FMT_SINK_ANSI,
+  SP_FMT_SINK_SPANS,
+} sp_fmt_sink_kind_t;
+
 typedef struct {
+  sp_fmt_sink_kind_t kind;
   sp_io_dyn_mem_writer_t* io;
   sp_da(sp_fmt_span_t) spans;
-} sp_fmt_span_sink_t;
+} sp_fmt_sink_t;
 
-static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_span_sink_t* sink);
+static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_sink_t* sink);
 
-static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, sp_fmt_span_sink_t* sink) {
+static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, sp_fmt_sink_t* sink) {
   sp_fmt_parser_t p = { .str = fmt };
 
   while (true) {
@@ -18615,7 +18613,8 @@ static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, s
 }
 
 sp_err_t sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
-  return sp_fmt_io_v_ex(io, fmt, args, SP_NULLPTR);
+  sp_fmt_sink_t sink = sp_zero;
+  return sp_fmt_io_v_ex(io, fmt, args, &sink);
 }
 
 sp_fmt_styled_r sp_fmt_styled_v(sp_mem_t mem, sp_str_t fmt, va_list args) {
@@ -18623,7 +18622,8 @@ sp_fmt_styled_r sp_fmt_styled_v(sp_mem_t mem, sp_str_t fmt, va_list args) {
 
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &io);
-  sp_fmt_span_sink_t sink = {
+  sp_fmt_sink_t sink = {
+    .kind = SP_FMT_SINK_SPANS,
     .io = &io,
     .spans = sp_da_new(mem, sp_fmt_span_t),
   };
@@ -18706,7 +18706,7 @@ sp_err_t sp_fmt_render_bytes(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
   return sp_fmt_write_size(io, n);
 }
 
-static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_span_sink_t* sink) {
+static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_sink_t* sink) {
   u8 num_dirs = arg->spec.directive.num;
 
   sp_for(i, num_dirs) {
@@ -18802,44 +18802,73 @@ static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_s
   }
 
   sp_for(it, left_pad) sp_io_write_c8(io, fill);
-  if (sink) {
-    sp_assert(io == &sink->io->base);
-    u64 opens [SP_FMT_MAX_DIRECTIVES] = sp_zero;
-    u64 closes [SP_FMT_MAX_DIRECTIVES] = sp_zero;
-    sp_for(it, num_dirs) {
-      sp_io_dyn_mem_writer_size(sink->io, &opens[it]);
-      if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
-    }
-    sp_io_write_str(io, content, SP_NULLPTR);
-    u8 j = num_dirs;
-    while (j--) {
-      if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
-      sp_io_dyn_mem_writer_size(sink->io, &closes[j]);
-    }
-    sp_for(it, num_dirs) {
-      sp_fmt_style_t style = arg->spec.directive.styles[it];
-      if (closes[it] > opens[it] && sp_fmt_style_to_ansi(style)) {
-        sp_fmt_span_t span = {
-          .start = sp_cast(u32, opens[it]),
-          .len = sp_cast(u32, closes[it] - opens[it]),
-          .style = style,
-        };
-        sp_da_push(sink->spans, span);
+  switch (sink->kind) {
+    case SP_FMT_SINK_PLAIN: {
+      sp_for(it, num_dirs) {
+        if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
       }
+      sp_io_write_str(io, content, SP_NULLPTR);
+      u8 j = num_dirs;
+      while (j--) {
+        if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+      }
+      break;
     }
-  }
-  else {
-    sp_for(it, num_dirs) sp_fmt_style_open(io, arg->spec.directive.styles[it], arg);
-    sp_io_write_str(io, content, SP_NULLPTR);
-    u8 j = num_dirs;
-    while (j--) sp_fmt_style_close(io, arg->spec.directive.styles[j]);
+    case SP_FMT_SINK_ANSI: {
+      sp_for(it, num_dirs) sp_fmt_style_open(io, arg->spec.directive.styles[it], arg);
+      sp_io_write_str(io, content, SP_NULLPTR);
+      bool reset = false;
+      u8 j = num_dirs;
+      while (j--) {
+        sp_fmt_style_t style = arg->spec.directive.styles[j];
+        if (style == sp_fmt_style_quote) {
+          sp_io_write_c8(io, '"');
+        }
+        else if (style == sp_fmt_style_hyperlink) {
+          sp_io_write_cstr(io, "\033]8;;\033\\", SP_NULLPTR);
+        }
+        else if (!reset && sp_fmt_style_to_ansi(style)) {
+          sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
+          reset = true;
+        }
+      }
+      break;
+    }
+    case SP_FMT_SINK_SPANS: {
+      sp_assert(io == &sink->io->base);
+      u64 opens [SP_FMT_MAX_DIRECTIVES] = sp_zero;
+      u64 closes [SP_FMT_MAX_DIRECTIVES] = sp_zero;
+      sp_for(it, num_dirs) {
+        sp_io_dyn_mem_writer_size(sink->io, &opens[it]);
+        if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+      }
+      sp_io_write_str(io, content, SP_NULLPTR);
+      u8 j = num_dirs;
+      while (j--) {
+        if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+        sp_io_dyn_mem_writer_size(sink->io, &closes[j]);
+      }
+      sp_for(it, num_dirs) {
+        sp_fmt_style_t style = arg->spec.directive.styles[it];
+        if (closes[it] > opens[it] && sp_fmt_style_to_ansi(style)) {
+          sp_fmt_span_t span = {
+            .start = sp_cast(u32, opens[it]),
+            .len = sp_cast(u32, closes[it] - opens[it]),
+            .style = style,
+          };
+          sp_da_push(sink->spans, span);
+        }
+      }
+      break;
+    }
   }
   sp_for(it, right_pad) sp_io_write_c8(io, fill);
   return SP_OK;
 }
 
 sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
-  return sp_fmt_render_ex(io, arg, SP_NULLPTR);
+  sp_fmt_sink_t sink = sp_zero;
+  return sp_fmt_render_ex(io, arg, &sink);
 }
 
 static const c8 sp_fmt_digit_pairs[201] =
