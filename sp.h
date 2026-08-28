@@ -4237,6 +4237,50 @@ SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 SP_API bool      sp_parse_is_digit(c8 c);
 
 
+//  ███████████ ██████████ ███████████   ██████   ██████
+// ░█░░░███░░░█░░███░░░░░█░░███░░░░░███ ░░██████ ██████
+// ░   ░███  ░  ░███  █ ░  ░███    ░███  ░███░█████░███
+//     ░███     ░██████    ░██████████   ░███░░███ ░███
+//     ░███     ░███░░█    ░███░░░░░███  ░███ ░░░  ░███
+//     ░███     ░███ ░   █ ░███    ░███  ░███      ░███
+//     █████    ██████████ █████   █████ █████     █████
+//    ░░░░░    ░░░░░░░░░░ ░░░░░   ░░░░░ ░░░░░     ░░░░░
+// @term
+/*
+  sp_fmt never lowers styles to escape codes; against a bare writer, style directives render
+  their content and nothing else. A terminal is a writer plus a resolved color mode, and is
+  the only thing that turns styles into bytes. Wrap any writer whose bytes are destined for
+  a terminal you know about; use the std terminals for stdout and stderr, which detect their
+  mode once (NO_COLOR, CLICOLOR_FORCE, whether the stream is a tty).
+*/
+typedef enum {
+  SP_TERM_COLOR_NONE = 0,
+  SP_TERM_COLOR_ANSI,
+} sp_term_color_t;
+
+typedef struct {
+  bool no_color;
+  bool force_color;
+  bool tty;
+} sp_term_hints_t;
+
+typedef struct {
+  sp_io_writer_t* io;
+  sp_term_color_t color;
+} sp_term_t;
+
+SP_API sp_term_color_t sp_term_color_resolve(sp_term_hints_t hints);
+SP_API sp_term_color_t sp_term_color_detect(sp_sys_fd_t fd);
+SP_API sp_term_t*      sp_term_std_out();
+SP_API sp_term_t*      sp_term_std_err();
+SP_API sp_err_t        sp_term_fmt(sp_term_t* term, const c8* fmt, ...);
+SP_API sp_err_t        sp_term_fmt_v(sp_term_t* term, sp_str_t fmt, va_list args);
+SP_API sp_err_t        sp_term_styled(sp_term_t* term, sp_str_t text, const sp_fmt_span_t* spans, u64 num_spans);
+SP_API sp_err_t        sp_term_style(sp_term_t* term, sp_fmt_style_t style);
+SP_API sp_err_t        sp_term_rgb(sp_term_t* term, u8 r, u8 g, u8 b);
+SP_API sp_err_t        sp_term_reset(sp_term_t* term);
+
+
 //    █████████     ███████    ██████   █████ ███████████ ██████████ █████ █████ ███████████
 //   ███░░░░░███  ███░░░░░███ ░░██████ ░░███ ░█░░░███░░░█░░███░░░░░█░░███ ░░███ ░█░░░███░░░█
 //  ███     ░░░  ███     ░░███ ░███░███ ░███ ░   ░███  ░  ░███  █ ░  ░░███ ███  ░   ░███  ░
@@ -4547,6 +4591,10 @@ typedef struct {
     sp_io_stream_writer_t out;
     sp_io_stream_writer_t err;
   } std;
+  struct {
+    sp_term_t out;
+    sp_term_t err;
+  } term;
   sp_atomic_s32_t unsupported [8];
   sp_err_str_fn_t err_str;
 #if defined(SP_WIN32)
@@ -17828,7 +17876,6 @@ done:
 sp_io_writer_t* sp_io_get_std_out() {
   if (!sp_rt.std.out.base.write) {
     sp_io_stream_writer_from_fd(&sp_rt.std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-    if (sp_sys_is_tty(sp_sys_stdout)) sp_sys_tty_use_vt(sp_sys_stdout);
   }
   return &sp_rt.std.out.base;
 }
@@ -17836,7 +17883,6 @@ sp_io_writer_t* sp_io_get_std_out() {
 sp_io_writer_t* sp_io_get_std_err() {
   if (!sp_rt.std.err.base.write) {
     sp_io_stream_writer_from_fd(&sp_rt.std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
-    if (sp_sys_is_tty(sp_sys_stderr)) sp_sys_tty_use_vt(sp_sys_stderr);
   }
   return &sp_rt.std.err.base;
 }
@@ -18687,6 +18733,134 @@ void sp_print_err(const c8* fmt, ...) {
   va_start(args, fmt);
   sp_fmt_io_v(sp_io_get_std_err(), sp_str_view(fmt), args);
   va_end(args);
+}
+
+sp_term_color_t sp_term_color_resolve(sp_term_hints_t hints) {
+  if (hints.no_color) return SP_TERM_COLOR_NONE;
+  if (hints.force_color) return SP_TERM_COLOR_ANSI;
+  if (hints.tty) return SP_TERM_COLOR_ANSI;
+  return SP_TERM_COLOR_NONE;
+}
+
+sp_term_color_t sp_term_color_detect(sp_sys_fd_t fd) {
+  sp_term_hints_t hints = {
+    .no_color = !sp_str_empty(sp_os_env_get(sp_str_lit("NO_COLOR"))),
+    .force_color = !sp_str_empty(sp_os_env_get(sp_str_lit("CLICOLOR_FORCE"))),
+  };
+  if (!hints.no_color) {
+    hints.tty = sp_sys_is_tty(fd) && !sp_sys_tty_use_vt(fd);
+  }
+  return sp_term_color_resolve(hints);
+}
+
+sp_term_t* sp_term_std_out() {
+  if (!sp_rt.term.out.io) {
+    sp_rt.term.out = (sp_term_t) {
+      .io = sp_io_get_std_out(),
+      .color = sp_term_color_detect(sp_sys_stdout),
+    };
+  }
+  return &sp_rt.term.out;
+}
+
+sp_term_t* sp_term_std_err() {
+  if (!sp_rt.term.err.io) {
+    sp_rt.term.err = (sp_term_t) {
+      .io = sp_io_get_std_err(),
+      .color = sp_term_color_detect(sp_sys_stderr),
+    };
+  }
+  return &sp_rt.term.err;
+}
+
+sp_err_t sp_term_fmt_v(sp_term_t* term, sp_str_t fmt, va_list args) {
+  sp_fmt_sink_t sink = {
+    .kind = term->color == SP_TERM_COLOR_ANSI ? SP_FMT_SINK_ANSI : SP_FMT_SINK_PLAIN,
+  };
+  return sp_fmt_io_v_ex(term->io, fmt, args, &sink);
+}
+
+sp_err_t sp_term_fmt(sp_term_t* term, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_err_t result = sp_term_fmt_v(term, sp_cstr_as_str(fmt), args);
+  va_end(args);
+  return result;
+}
+
+sp_err_t sp_term_styled(sp_term_t* term, sp_str_t text, const sp_fmt_span_t* spans, u64 num_spans) {
+  if (term->color != SP_TERM_COLOR_ANSI) {
+    return sp_io_write_str(term->io, text, SP_NULLPTR);
+  }
+
+  sp_for(it, num_spans) {
+    sp_assert((u64)spans[it].start + spans[it].len <= text.len);
+  }
+
+  u64 pos = 0;
+  while (true) {
+    bool shrunk = false;
+    sp_for(it, num_spans) {
+      if (!spans[it].len) continue;
+      if (!sp_fmt_style_to_ansi(spans[it].style)) continue;
+      if ((u64)spans[it].start + spans[it].len == pos) shrunk = true;
+    }
+
+    if (shrunk) {
+      sp_try(sp_io_write_cstr(term->io, SP_ANSI_RESET, SP_NULLPTR));
+      sp_for(it, num_spans) {
+        if (!spans[it].len) continue;
+        const c8* ansi = sp_fmt_style_to_ansi(spans[it].style);
+        if (!ansi) continue;
+        if (spans[it].start <= pos && pos < (u64)spans[it].start + spans[it].len) {
+          sp_try(sp_io_write_cstr(term->io, ansi, SP_NULLPTR));
+        }
+      }
+    }
+    else {
+      sp_for(it, num_spans) {
+        if (!spans[it].len) continue;
+        const c8* ansi = sp_fmt_style_to_ansi(spans[it].style);
+        if (!ansi) continue;
+        if (spans[it].start == pos) {
+          sp_try(sp_io_write_cstr(term->io, ansi, SP_NULLPTR));
+        }
+      }
+    }
+
+    if (pos >= text.len) break;
+
+    u64 boundary = text.len;
+    sp_for(it, num_spans) {
+      if (!spans[it].len) continue;
+      if (!sp_fmt_style_to_ansi(spans[it].style)) continue;
+      u64 start = spans[it].start;
+      u64 end = start + spans[it].len;
+      if (start > pos) boundary = sp_min(boundary, start);
+      if (end > pos) boundary = sp_min(boundary, end);
+    }
+    sp_try(sp_io_write(term->io, text.data + pos, boundary - pos, SP_NULLPTR));
+    pos = boundary;
+  }
+
+  return SP_OK;
+}
+
+sp_err_t sp_term_style(sp_term_t* term, sp_fmt_style_t style) {
+  if (term->color != SP_TERM_COLOR_ANSI) return SP_OK;
+  const c8* ansi = sp_fmt_style_to_ansi(style);
+  if (!ansi) return SP_OK;
+  return sp_io_write_cstr(term->io, ansi, SP_NULLPTR);
+}
+
+sp_err_t sp_term_rgb(sp_term_t* term, u8 r, u8 g, u8 b) {
+  if (term->color != SP_TERM_COLOR_ANSI) return SP_OK;
+  return sp_fmt_io(term->io, "\033[38;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b));
+}
+
+sp_err_t sp_term_reset(sp_term_t* term) {
+  if (term->color != SP_TERM_COLOR_ANSI) return SP_OK;
+  return sp_io_write_cstr(term->io, SP_ANSI_RESET, SP_NULLPTR);
 }
 
 sp_err_t sp_fmt_render_bytes(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
