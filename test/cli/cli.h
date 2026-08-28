@@ -14,6 +14,7 @@ typedef struct {
   const c8* strs [CLI_TEST_MAX_BINDS];
   sp_str_t views [CLI_TEST_MAX_BINDS];
   s64 nums [CLI_TEST_MAX_BINDS];
+  sp_cli_choice_t choices [CLI_TEST_MAX_BINDS];
 } cli_binds_t;
 
 static cli_binds_t cli_binds;

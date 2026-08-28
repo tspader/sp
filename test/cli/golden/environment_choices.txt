@@ -1,0 +1,6 @@
+
+usage
+  test
+
+environment
+  MODE optional Which mode (A, B)

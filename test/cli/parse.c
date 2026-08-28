@@ -10,6 +10,7 @@ typedef struct {
   const c8* strs [CLI_TEST_MAX_BINDS];
   const c8* views [CLI_TEST_MAX_BINDS];
   s64 nums [CLI_TEST_MAX_BINDS];
+  sp_cli_choice_t choices [CLI_TEST_MAX_BINDS];
   const c8* rest [CLI_TEST_MAX_ARGS];
 } cli_parse_expect_t;
 
@@ -78,6 +79,11 @@ static void run_cli_parse_test(s32* utest_result, sp_mem_t mem, cli_parse_test_t
   }
   sp_carr_for(t.expect.nums, it) {
     EXPECT_EQ(t.expect.nums[it], cli_binds.nums[it]);
+  }
+  sp_carr_for(t.expect.choices, it) {
+    if (!t.expect.choices[it].name) continue;
+    SP_EXPECT_STR_EQ_CSTR(sp_cstr_as_str(cli_binds.choices[it].name), t.expect.choices[it].name);
+    EXPECT_EQ(t.expect.choices[it].value, cli_binds.choices[it].value);
   }
 
   EXPECT_EQ(cli_count_args(t.expect.rest), cli_count_args(cli.rest));
@@ -1149,6 +1155,119 @@ UTEST_F(cli_parse, int_arg_invalid) {
       .err_name = "jobs",
       .err_value = "abc",
       .nums = { 999 },
+    },
+  });
+}
+
+UTEST_F(cli_parse, choice_opt) {
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "--mode", "B" },
+    .cmd = {
+      .name = "test",
+      .opts = {
+        { .name = "mode", .kind = SP_CLI_OPT_CHOICE, .ptr = &cli_binds.choices[0], .choices = { { "A", 1 }, { "B", 2 } } },
+      },
+    },
+    .expect = {
+      .choices = { { "B", 2 } },
+    },
+  });
+}
+
+UTEST_F(cli_parse, choice_opt_invalid) {
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "--mode", "C" },
+    .cmd = {
+      .name = "test",
+      .opts = {
+        { .name = "mode", .kind = SP_CLI_OPT_CHOICE, .ptr = &cli_binds.choices[0], .choices = { { "A", 1 }, { "B", 2 } } },
+      },
+    },
+    .expect = {
+      .err = SP_CLI_ERR_INVALID_VALUE,
+      .err_name = "mode",
+      .err_value = "C",
+    },
+  });
+}
+
+UTEST_F(cli_parse, choice_opt_rejects_number) {
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "--mode", "2" },
+    .cmd = {
+      .name = "test",
+      .opts = {
+        { .name = "mode", .kind = SP_CLI_OPT_CHOICE, .ptr = &cli_binds.choices[0], .choices = { { "A", 1 }, { "B", 2 } } },
+      },
+    },
+    .expect = {
+      .err = SP_CLI_ERR_INVALID_VALUE,
+      .err_name = "mode",
+      .err_value = "2",
+    },
+  });
+}
+
+UTEST_F(cli_parse, choice_opt_missing_keeps_preset) {
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .binds = {
+      .choices = { { "A", 1 } },
+    },
+    .cmd = {
+      .name = "test",
+      .opts = {
+        { .name = "mode", .kind = SP_CLI_OPT_CHOICE, .ptr = &cli_binds.choices[0], .choices = { { "A", 1 }, { "B", 2 } } },
+      },
+    },
+    .expect = {
+      .choices = { { "A", 1 } },
+    },
+  });
+}
+
+UTEST_F(cli_parse, choices_validate_other_kinds) {
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "--mode", "B" },
+    .cmd = {
+      .name = "test",
+      .opts = {
+        { .name = "mode", .ptr = &cli_binds.strs[0], .choices = { { "A" }, { "B" } } },
+      },
+    },
+    .expect = {
+      .strs = { "B" },
+    },
+  });
+}
+
+UTEST_F(cli_parse, choice_arg) {
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "A" },
+    .cmd = {
+      .name = "test",
+      .args = {
+        { .name = "mode", .kind = SP_CLI_OPT_CHOICE, .ptr = &cli_binds.choices[0], .choices = { { "A", 1 }, { "B", 2 } } },
+      },
+    },
+    .expect = {
+      .choices = { { "A", 1 } },
+    },
+  });
+}
+
+UTEST_F(cli_parse, choice_arg_invalid) {
+  run_cli_parse_test(&ur, ut.mem.arena, (cli_parse_test_t) {
+    .args = { "C" },
+    .cmd = {
+      .name = "test",
+      .args = {
+        { .name = "mode", .kind = SP_CLI_OPT_CHOICE, .ptr = &cli_binds.choices[0], .choices = { { "A", 1 }, { "B", 2 } } },
+      },
+    },
+    .expect = {
+      .err = SP_CLI_ERR_INVALID_ARG,
+      .err_name = "mode",
+      .err_value = "C",
     },
   });
 }

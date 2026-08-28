@@ -1,0 +1,6 @@
+
+usage
+  test mode
+
+arguments
+  mode required Which mode (A, B)

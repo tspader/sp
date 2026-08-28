@@ -135,6 +135,32 @@ UTEST_F(cli_usage, option_placeholder) {
   });
 }
 
+// A choice option: the label stays bare and the set trails the summary.
+UTEST_F(cli_usage, option_choices) {
+  run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
+    .name = "option_choices",
+    .cmd = {
+      .name = "test",
+      .opts = {
+        { .name = "mode", .summary = "Which mode", .choices = { { "A" }, { "B" }, { "C" } } },
+      },
+    },
+  });
+}
+
+// A placeholder renders as usual on a choice option; the set still trails.
+UTEST_F(cli_usage, option_choices_placeholder) {
+  run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
+    .name = "option_choices_placeholder",
+    .cmd = {
+      .name = "test",
+      .opts = {
+        { .name = "mode", .summary = "Which mode", .placeholder = "MODE", .choices = { { "A" }, { "B" } } },
+      },
+    },
+  });
+}
+
 // Mixed-width option labels: summaries align to the widest label in the column.
 UTEST_F(cli_usage, option_alignment) {
   run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
@@ -172,6 +198,19 @@ UTEST_F(cli_usage, argument_optional) {
       .name = "test",
       .args = {
         { .name = "file", .arity = SP_CLI_ARG_OPTIONAL, .summary = "The file to read" },
+      },
+    },
+  });
+}
+
+// A choice argument: the set trails the summary.
+UTEST_F(cli_usage, argument_choices) {
+  run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
+    .name = "argument_choices",
+    .cmd = {
+      .name = "test",
+      .args = {
+        { .name = "mode", .summary = "Which mode", .choices = { { "A" }, { "B" } } },
       },
     },
   });
@@ -225,6 +264,19 @@ UTEST_F(cli_usage, environment_optional) {
       .name = "test",
       .env = {
         { .name = "LOG_LEVEL", .summary = "Verbosity" },
+      },
+    },
+  });
+}
+
+// A choice environment variable: the set trails the summary.
+UTEST_F(cli_usage, environment_choices) {
+  run_cli_usage_test(&ur, ut.mem.arena, (cli_usage_test_t) {
+    .name = "environment_choices",
+    .cmd = {
+      .name = "test",
+      .env = {
+        { .name = "MODE", .summary = "Which mode", .choices = { { "A" }, { "B" } } },
       },
     },
   });

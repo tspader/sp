@@ -148,6 +148,48 @@ UTEST_F(cli_complete, short_cluster_inline_value_consumes_rest) {
   });
 }
 
+UTEST_F(cli_complete, choice_values) {
+  run_cli_complete_test(&ur, ut.mem.arena, (cli_complete_test_t) {
+    .words = { "root", "--mode", "" },
+    .cmd = {
+      .name = "root",
+      .opts = {
+        { .name = "mode", .choices = { { "A" }, { "B" } } },
+      },
+      .handler = cli_handler_ok,
+    },
+    .expect = { "A", "B" },
+  });
+}
+
+UTEST_F(cli_complete, completer_wins_over_choices) {
+  run_cli_complete_test(&ur, ut.mem.arena, (cli_complete_test_t) {
+    .words = { "root", "--mode", "" },
+    .cmd = {
+      .name = "root",
+      .opts = {
+        { .name = "mode", .complete = cli_complete_fruits, .choices = { { "A" }, { "B" } } },
+      },
+      .handler = cli_handler_ok,
+    },
+    .expect = { "apple", "banana" },
+  });
+}
+
+UTEST_F(cli_complete, positional_choice_values) {
+  run_cli_complete_test(&ur, ut.mem.arena, (cli_complete_test_t) {
+    .words = { "root", "" },
+    .cmd = {
+      .name = "root",
+      .args = {
+        { .name = "mode", .choices = { { "A" }, { "B" } } },
+      },
+      .handler = cli_handler_ok,
+    },
+    .expect = { "A", "B" },
+  });
+}
+
 UTEST_F(cli_complete, positional_value) {
   run_cli_complete_test(&ur, ut.mem.arena, (cli_complete_test_t) {
     .words = { "root", "" },

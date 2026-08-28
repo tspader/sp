@@ -4,6 +4,7 @@
   - Define your CLI declaratively and hook up handlers
   - Add commands (e.g. pkg add)
   - Add options (e.g. --foo or --bar=BAZ) to your commands, and give them briefs (e.g. -f)
+  - Add options which only accept a fixed set of names, each mapped to a value (e.g. --profile debug)
   - Add arguments (e.g. pkg add some_dependency)
   - Add nested commands (e.g. pkg tool run sqlite)
 
@@ -14,6 +15,11 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
 #include "sp/sp_cli.h"
+
+typedef enum {
+  PKG_PROFILE_DEBUG,
+  PKG_PROFILE_RELEASE,
+} pkg_profile_t;
 
 typedef struct {
   bool verbose;
@@ -27,6 +33,7 @@ typedef struct {
   struct {
     const c8* target;
     u32 jobs;
+    sp_cli_choice_t profile;
   } build;
   const c8* tool;
 } pkg_t;
@@ -39,9 +46,9 @@ sp_cli_result_t pkg_add(sp_cli_t* cli) {
   sp_str_t version = sp_str_empty(pkg->add.version) ? sp_str_lit("latest") : pkg->add.version;
   if (pkg->verbose) sp_log("PKG_HOME={.gray}", sp_fmt_cstr(pkg->home));
   if (pkg->add.force) {
-    sp_log("Adding {.cyan} {.yellow} to project", sp_fmt_cstr(pkg->add.package), sp_fmt_str(version));
-  } else {
     sp_log("Force reinstalling {.cyan} {.yellow} to project", sp_fmt_cstr(pkg->add.package), sp_fmt_str(version));
+  } else {
+    sp_log("Adding {.cyan} {.yellow} to project", sp_fmt_cstr(pkg->add.package), sp_fmt_str(version));
   }
   return SP_CLI_OK;
 }
@@ -54,7 +61,7 @@ sp_cli_result_t pkg_build(sp_cli_t* cli) {
 
   const c8* target = pkg->build.target ? pkg->build.target : "all";
   if (pkg->verbose) sp_log("PKG_HOME={.gray}", sp_fmt_cstr(pkg->home));
-  sp_log("Building {.cyan} with {.yellow} jobs", sp_fmt_cstr(target), sp_fmt_uint(pkg->build.jobs));
+  sp_log("Building {.cyan} ({.yellow}) with {.yellow} jobs", sp_fmt_cstr(target), sp_fmt_cstr(pkg->build.profile.name), sp_fmt_uint(pkg->build.jobs));
   return SP_CLI_OK;
 }
 
@@ -97,7 +104,10 @@ void complete_tools(sp_cli_complete_t* ctx) {
 
 s32 run(s32 num_args, const c8** args) {
   pkg_t pkg = {
-    .build = { .jobs = 1 },
+    .build = {
+      .jobs = 1,
+      .profile = { "debug", PKG_PROFILE_DEBUG },
+    },
   };
 
   ////////////////////
@@ -200,6 +210,17 @@ s32 run(s32 num_args, const c8** args) {
           .placeholder = "NAME",
           .ptr = &pkg.build.target,
           .complete = complete_targets,
+        },
+        {
+          .brief = 'p',
+          .name = "profile",
+          .kind = SP_CLI_OPT_CHOICE,
+          .summary = "Build profile",
+          .ptr = &pkg.build.profile,
+          .choices = {
+            { "debug",   PKG_PROFILE_DEBUG },
+            { "release", PKG_PROFILE_RELEASE },
+          },
         },
       },
       .handler = pkg_build,
