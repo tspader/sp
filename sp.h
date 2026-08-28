@@ -3980,8 +3980,6 @@ SP_API sp_str_r  sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...);
 SP_API sp_str_r  sp_fmt_buf_v(c8* buffer, u64 len, sp_str_t fmt, va_list args);
 SP_API sp_err_t  sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...);
 SP_API sp_err_t  sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args);
-SP_API sp_err_t  sp_fmt_std_out(const c8* fmt, ...);
-SP_API sp_err_t  sp_fmt_std_err(const c8* fmt, ...);
 
 SP_API sp_err_t  sp_fmt_write_s64(sp_io_writer_t* io, s64 value);
 SP_API sp_err_t  sp_fmt_write_ptr(sp_io_writer_t* io, void* value);
@@ -13391,9 +13389,9 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
   if (cond) return;
 
 #if SP_ASSERT_ENABLED(SP_ASSERT_LOG)
-  sp_io_writer_t* io = sp_io_get_std_err();
-  sp_fmt_io(
-    io,
+  sp_term_t* term = sp_term_std_err();
+  sp_term_fmt(
+    term,
     "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
     sp_fmt_cstr("assert"),
     sp_fmt_str(file),
@@ -13402,7 +13400,7 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
     sp_fmt_cstr("()"),
     sp_fmt_str(expr)
   );
-  sp_io_write_cstr(io, "\n", SP_NULLPTR);
+  sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 #endif
 
 #if SP_ASSERT_ENABLED(SP_ASSERT_TRAP)
@@ -18519,22 +18517,6 @@ sp_err_t sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...) {
   return result;
 }
 
-sp_err_t sp_fmt_std_out(const c8* fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_err_t result = sp_fmt_io_v(sp_io_get_std_out(), sp_cstr_as_str(fmt), args);
-  va_end(args);
-  return result;
-}
-
-sp_err_t sp_fmt_std_err(const c8* fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_err_t result = sp_fmt_io_v(sp_io_get_std_err(), sp_cstr_as_str(fmt), args);
-  va_end(args);
-  return result;
-}
-
 sp_str_r sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -18693,45 +18675,48 @@ sp_fmt_styled_r sp_fmt_styled(sp_mem_t mem, const c8* fmt, ...) {
 void sp_log(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_out(), sp_str_view(fmt), args);
+  sp_term_t* term = sp_term_std_out();
+  sp_term_fmt_v(term, sp_str_view(fmt), args);
   va_end(args);
-  sp_io_write_cstr(sp_io_get_std_out(), "\n", SP_NULLPTR);
+  sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
 
 void sp_log_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_out(), fmt, args);
+  sp_term_t* term = sp_term_std_out();
+  sp_term_fmt_v(term, fmt, args);
   va_end(args);
-  sp_io_write_cstr(sp_io_get_std_out(), "\n", SP_NULLPTR);
+  sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
 
 void sp_log_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_err(), sp_str_view(fmt), args);
+  sp_term_t* term = sp_term_std_err();
+  sp_term_fmt_v(term, sp_str_view(fmt), args);
   va_end(args);
-  sp_io_write_cstr(sp_io_get_std_err(), "\n", SP_NULLPTR);
+  sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
 
 void sp_print(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_out(), sp_str_view(fmt), args);
+  sp_term_fmt_v(sp_term_std_out(), sp_str_view(fmt), args);
   va_end(args);
 }
 
 void sp_print_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_out(), fmt, args);
+  sp_term_fmt_v(sp_term_std_out(), fmt, args);
   va_end(args);
 }
 
 void sp_print_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_err(), sp_str_view(fmt), args);
+  sp_term_fmt_v(sp_term_std_err(), sp_str_view(fmt), args);
   va_end(args);
 }
 
