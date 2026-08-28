@@ -27,6 +27,10 @@
   #define SP_CLI_MAX_DEPTH 4
 #endif
 
+#ifndef SP_CLI_MAX_CHOICES
+  #define SP_CLI_MAX_CHOICES 8
+#endif
+
 typedef enum {
   SP_CLI_ARG_REQUIRED,
   SP_CLI_ARG_OPTIONAL,
@@ -45,6 +49,7 @@ typedef enum {
   SP_CLI_OPT_U16,
   SP_CLI_OPT_U32,
   SP_CLI_OPT_U64,
+  SP_CLI_OPT_CHOICE,
 } sp_cli_value_kind_t;
 
 typedef enum {
@@ -77,9 +82,15 @@ typedef enum {
 } sp_cli_err_kind_t;
 
 typedef struct {
+  const c8* name;
+  s32 value;
+} sp_cli_choice_t;
+
+typedef struct {
   sp_cli_err_kind_t kind;
   sp_str_t name;
   sp_str_t value;
+  const sp_cli_choice_t* choices;
 } sp_cli_err_t;
 
 typedef struct sp_cli sp_cli_t;
@@ -111,6 +122,7 @@ typedef struct {
   const c8* summary;
   void* ptr;
   sp_cli_completer_t complete;
+  sp_cli_choice_t choices [SP_CLI_MAX_CHOICES];
 } sp_cli_arg_t;
 
 typedef struct {
@@ -121,6 +133,7 @@ typedef struct {
   const c8* placeholder;
   void* ptr;
   sp_cli_completer_t complete;
+  sp_cli_choice_t choices [SP_CLI_MAX_CHOICES];
 } sp_cli_opt_t;
 
 typedef struct {
@@ -129,6 +142,7 @@ typedef struct {
   const c8* summary;
   void* ptr;
   bool required;
+  sp_cli_choice_t choices [SP_CLI_MAX_CHOICES];
 } sp_cli_env_t;
 
 #define SP_CLI_NO_OPTS sp_zero
@@ -317,6 +331,7 @@ SP_PRIVATE void sp_cli_init(sp_cli_t* cli, sp_cli_desc_t desc) {
 }
 
 SP_PRIVATE void sp_cli_load_opt(sp_cli_t* cli, sp_cli_opt_t* opt) {
+  sp_assert(opt->kind != SP_CLI_OPT_CHOICE || opt->choices[0].name);
   sp_cli_opt_t copy = *opt;
   sp_da_for(cli->opts, it) {
     if (sp_cstr_equal(copy.name, cli->opts[it].name)) return;
@@ -326,6 +341,7 @@ SP_PRIVATE void sp_cli_load_opt(sp_cli_t* cli, sp_cli_opt_t* opt) {
 }
 
 SP_PRIVATE void sp_cli_load_env(sp_cli_t* cli, sp_cli_env_t* var) {
+  sp_assert(var->kind != SP_CLI_OPT_CHOICE || var->choices[0].name);
   sp_da_for(cli->env, it) {
     if (sp_cstr_equal(var->name, cli->env[it].name)) return;
   }
@@ -358,6 +374,7 @@ SP_PRIVATE void sp_cli_load_cmd(sp_cli_t* cli) {
   sp_cli_cmd_t* cmd = cli->cmd;
   sp_carr_for_until(cmd->args, it, cmd->args[it].name) {
     if (it) sp_assert(cmd->args[it - 1].arity != SP_CLI_ARG_REST);
+    sp_assert(cmd->args[it].kind != SP_CLI_OPT_CHOICE || cmd->args[it].choices[0].name);
     sp_da_push(cli->args, cmd->args[it]);
   }
   sp_carr_for_until(cmd->commands, it, cmd->commands[it]) {
@@ -487,23 +504,55 @@ SP_PRIVATE bool sp_cli_assign(sp_cli_value_kind_t kind, void* ptr, sp_str_t valu
       if (ptr) *sp_cast(u64*, ptr) = parsed;
       break;
     }
+    case SP_CLI_OPT_CHOICE: {
+      return false;
+    }
   }
   return true;
+}
+
+SP_PRIVATE const sp_cli_choice_t* sp_cli_find_choice(const sp_cli_choice_t* choices, sp_str_t value) {
+  sp_for(it, SP_CLI_MAX_CHOICES) {
+    if (!choices[it].name) break;
+    if (sp_str_equal_cstr(value, choices[it].name)) return &choices[it];
+  }
+  return SP_NULLPTR;
+}
+
+SP_PRIVATE sp_cli_result_t sp_cli_bind(sp_cli_t* cli, sp_cli_err_kind_t err, const c8* name, sp_cli_value_kind_t kind, void* ptr, const sp_cli_choice_t* choices, sp_str_t value) {
+  if (choices[0].name) {
+    const sp_cli_choice_t* choice = sp_cli_find_choice(choices, value);
+    if (!choice) {
+      return sp_cli_fail(cli, (sp_cli_err_t) {
+        .kind = err,
+        .name = sp_cstr_as_str(name),
+        .value = value,
+        .choices = choices,
+      });
+    }
+    if (kind == SP_CLI_OPT_CHOICE) {
+      // Stored by value: the copied name points at the caller's string, so the
+      // binding stays valid after the parser's working copies are gone
+      if (ptr) *sp_cast(sp_cli_choice_t*, ptr) = *choice;
+      return SP_CLI_OK;
+    }
+  }
+
+  if (!sp_cli_assign(kind, ptr, value)) {
+    return sp_cli_fail(cli, (sp_cli_err_t) {
+      .kind = err,
+      .name = sp_cstr_as_str(name),
+      .value = value,
+    });
+  }
+  return SP_CLI_OK;
 }
 
 SP_PRIVATE sp_cli_result_t sp_cli_assign_opt(sp_cli_parser_t* parser, sp_cli_opt_t* opt, sp_str_t value) {
   if (opt->kind != SP_CLI_OPT_BOOLEAN && sp_str_empty(value)) {
     return sp_cli_fail_named(parser->cli, SP_CLI_ERR_MISSING_VALUE, opt->name);
   }
-
-  if (!sp_cli_assign(opt->kind, opt->ptr, value)) {
-    return sp_cli_fail(parser->cli, (sp_cli_err_t) {
-      .kind = SP_CLI_ERR_INVALID_VALUE,
-      .name = sp_cstr_as_str(opt->name),
-      .value = value,
-    });
-  }
-  return SP_CLI_OK;
+  return sp_cli_bind(parser->cli, SP_CLI_ERR_INVALID_VALUE, opt->name, opt->kind, opt->ptr, opt->choices, value);
 }
 
 SP_PRIVATE bool sp_cli_take_value(sp_cli_parser_t* parser, sp_str_t* value) {
@@ -669,13 +718,8 @@ SP_PRIVATE sp_cli_result_t sp_cli_parse_strict(sp_cli_parser_t* parser) {
           parser->it = parser->num_args;
           break;
         }
-        if (!sp_cli_assign(arg->kind, arg->ptr, step.value)) {
-          return sp_cli_fail(cli, (sp_cli_err_t) {
-            .kind = SP_CLI_ERR_INVALID_ARG,
-            .name = sp_cstr_as_str(arg->name),
-            .value = step.value,
-          });
-        }
+        sp_cli_result_t result = sp_cli_bind(cli, SP_CLI_ERR_INVALID_ARG, arg->name, arg->kind, arg->ptr, arg->choices, step.value);
+        if (result) return result;
         parser->arg++;
         break;
       }
@@ -785,6 +829,7 @@ sp_str_t sp_cli_opt_kind_to_str(sp_cli_value_kind_t kind) {
     case SP_CLI_OPT_U16:     { return sp_str_lit("u16"); }
     case SP_CLI_OPT_U32:     { return sp_str_lit("u32"); }
     case SP_CLI_OPT_U64:     { return sp_str_lit("u64"); }
+    case SP_CLI_OPT_CHOICE:  { return sp_str_lit("choice"); }
   }
   SP_UNREACHABLE_RETURN(sp_str_lit(""));
 }
@@ -833,13 +878,8 @@ SP_PRIVATE sp_cli_result_t sp_cli_resolve_env(sp_cli_t* cli) {
       continue;
     }
 
-    if (!sp_cli_assign(var->kind, var->ptr, value)) {
-      return sp_cli_fail(cli, (sp_cli_err_t) {
-        .kind = SP_CLI_ERR_INVALID_ENV,
-        .name = sp_cstr_as_str(var->name),
-        .value = value,
-      });
-    }
+    sp_cli_result_t result = sp_cli_bind(cli, SP_CLI_ERR_INVALID_ENV, var->name, var->kind, var->ptr, var->choices, value);
+    if (result) return result;
   }
   return SP_CLI_OK;
 }
@@ -914,6 +954,16 @@ SP_PRIVATE sp_cli_theme_t sp_cli_theme_resolve(sp_cli_theme_t theme) {
   };
 }
 
+SP_PRIVATE void sp_cli_write_choices(sp_io_writer_t* io, sp_cli_theme_entry_t entry, const sp_cli_choice_t* choices) {
+  sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr("("));
+  sp_for(it, SP_CLI_MAX_CHOICES) {
+    if (!choices[it].name) break;
+    if (it) sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(", "));
+    sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(choices[it].name));
+  }
+  sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(")"));
+}
+
 void sp_cli_err_print(sp_io_writer_t* io, sp_cli_err_t err) {
   switch (err.kind) {
     case SP_CLI_ERR_NONE: {
@@ -972,6 +1022,11 @@ void sp_cli_err_print(sp_io_writer_t* io, sp_cli_err_t err) {
       break;
     }
   }
+
+  if (err.choices) {
+    sp_fmt_io(io, ", expected one of ");
+    sp_cli_write_choices(io, sp_zero_s(sp_cli_theme_entry_t), err.choices);
+  }
 }
 
 SP_PRIVATE void sp_cli_write_error(sp_io_writer_t* io, sp_cli_err_t err, sp_cli_theme_t theme) {
@@ -986,11 +1041,16 @@ SP_PRIVATE void sp_cli_write_heading(sp_io_writer_t* io, sp_cli_theme_entry_t en
   sp_fmt_io(io, "\n");
 }
 
+SP_PRIVATE void sp_cli_write_choice_hint(sp_io_writer_t* io, sp_cli_theme_entry_t entry, const sp_cli_choice_t* choices) {
+  if (!choices[0].name) return;
+  sp_fmt_io(io, " ");
+  sp_cli_write_choices(io, entry, choices);
+}
+
 SP_PRIVATE void sp_cli_write_label(sp_io_writer_t* io, sp_cli_theme_entry_t entry, sp_str_t label, sp_str_t summary, u32 width) {
   sp_fmt_io(io, "  {:<$ .$ .$} {}",
     sp_fmt_uint(width), SP_CLI_THEME_ARGS(entry), sp_fmt_str(label),
     sp_fmt_str(summary));
-  sp_fmt_io(io, "\n");
 }
 
 SP_PRIVATE void sp_cli_write_label_hint(sp_io_writer_t* io, sp_cli_theme_entry_t label_entry, sp_cli_theme_entry_t hint_entry, sp_str_t label, const c8* hint, sp_str_t summary, u32 width) {
@@ -998,7 +1058,6 @@ SP_PRIVATE void sp_cli_write_label_hint(sp_io_writer_t* io, sp_cli_theme_entry_t
     sp_fmt_uint(width), SP_CLI_THEME_ARGS(label_entry), sp_fmt_str(label),
     SP_CLI_THEME_ARGS(hint_entry), sp_fmt_cstr(hint),
     sp_fmt_str(summary));
-  sp_fmt_io(io, "\n");
 }
 
 SP_PRIVATE void sp_cli_write_synopsis(sp_io_writer_t* io, sp_cli_t* cli) {
@@ -1042,6 +1101,7 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
     sp_da_for(cli->commands, it) {
       sp_cli_cmd_t* sub = cli->commands[it];
       sp_cli_write_label(io, theme.label, sp_cstr_as_str(sub->name), sp_cstr_as_str(sub->summary), width);
+      sp_fmt_io(io, "\n");
     }
   }
 
@@ -1056,6 +1116,8 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
     sp_cli_write_heading(io, theme.heading, "options");
     sp_for(it, cli->num_own_opts) {
       sp_cli_write_label(io, theme.label, labels[it], sp_cstr_as_str(cli->opts[it].summary), width);
+      sp_cli_write_choice_hint(io, theme.hint, cli->opts[it].choices);
+      sp_fmt_io(io, "\n");
     }
   }
 
@@ -1076,6 +1138,8 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
       else {
         sp_cli_write_label_hint(io, theme.label, theme.hint, labels[it], "optional", sp_cstr_as_str(arg->summary), width);
       }
+      sp_cli_write_choice_hint(io, theme.hint, arg->choices);
+      sp_fmt_io(io, "\n");
     }
   }
 
@@ -1093,6 +1157,8 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
       else {
         sp_cli_write_label_hint(io, theme.label, theme.hint, sp_cstr_as_str(var->name), "optional", sp_cstr_as_str(var->summary), width);
       }
+      sp_cli_write_choice_hint(io, theme.hint, var->choices);
+      sp_fmt_io(io, "\n");
     }
   }
 
@@ -1175,18 +1241,32 @@ void sp_cli_candidate(sp_cli_complete_t* ctx, sp_str_t name, sp_str_t summary) {
   #define SP_CLI_COMPLETE_EMPTY "__sp_complete_empty__"
 #endif
 
+SP_PRIVATE void sp_cli_complete_choices(sp_cli_complete_t* ctx, const sp_cli_choice_t* choices) {
+  sp_for(it, SP_CLI_MAX_CHOICES) {
+    if (!choices[it].name) break;
+    sp_cli_candidate(ctx, sp_cstr_as_str(choices[it].name), sp_zero_s(sp_str_t));
+  }
+}
+
 SP_PRIVATE void sp_cli_complete_arg(sp_cli_complete_t* ctx, sp_cli_parser_t* parser) {
   sp_cli_t* cli = parser->cli;
   if (parser->arg == sp_da_size(cli->args)) return;
   sp_cli_arg_t* arg = &cli->args[parser->arg];
-  if (arg->complete) arg->complete(ctx);
+  if (arg->complete) {
+    arg->complete(ctx);
+    return;
+  }
+  sp_cli_complete_choices(ctx, arg->choices);
 }
 
 SP_PRIVATE void sp_cli_complete_value(sp_cli_complete_t* ctx, sp_cli_opt_t* opt, sp_str_t cursor, sp_str_t value) {
-  if (!opt->complete) return;
   ctx->emit_prefix = sp_str_prefix(cursor, sp_cast(s32, cursor.len - value.len));
   ctx->prefix = value;
-  opt->complete(ctx);
+  if (opt->complete) {
+    opt->complete(ctx);
+    return;
+  }
+  sp_cli_complete_choices(ctx, opt->choices);
 }
 
 SP_PRIVATE sp_cli_opt_t* sp_cli_find_cluster_opt(sp_cli_t* cli, sp_str_t cursor, sp_str_t* value) {

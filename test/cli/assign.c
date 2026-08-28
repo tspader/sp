@@ -63,6 +63,7 @@ static void run_cli_assign_test(s32* utest_result, cli_assign_test_t t) {
     case SP_CLI_OPT_U16: EXPECT_EQ(sp_cast(u16, t.expect.unum), slot.u16v); break;
     case SP_CLI_OPT_U32: EXPECT_EQ(sp_cast(u32, t.expect.unum), slot.u32v); break;
     case SP_CLI_OPT_U64: EXPECT_EQ(t.expect.unum, slot.u64v); break;
+    case SP_CLI_OPT_CHOICE: break;
   }
 }
 

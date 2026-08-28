@@ -1,0 +1,6 @@
+
+usage
+  test [OPTIONS]
+
+options
+      --mode MODE Which mode (A, B)
