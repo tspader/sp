@@ -108,15 +108,16 @@ void push_row(sp_str_t fmt, sp_str_t args, sp_str_t result) {
 }
 
 void render_row(row_t row) {
-  sp_str_t cells [3];
+  sp_term_t* term = sp_term_std_out();
   sp_for(it, 3) {
-    cells[it] = sp_fmt(mem, "{:<$ .$}",
+    if (it) sp_term_fmt(term, " ");
+    sp_term_fmt(term, "{:<$ .$}",
       sp_fmt_uint(ctx.width[it]),
       sp_fmt_uint(row.cols[it].style),
       sp_fmt_str(row.cols[it].text)
-    ).value;
+    );
   }
-  sp_log("{}", sp_fmt_str(sp_str_join_n(mem, cells, 3, sp_str_lit(" "))));
+  sp_term_fmt(term, "\n");
 }
 
 void render_table() {
