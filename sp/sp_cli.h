@@ -215,8 +215,8 @@ SP_API void            sp_cli_parse(sp_cli_desc_t desc, sp_cli_t* cli);
 SP_API sp_cli_result_t sp_cli_dispatch(sp_cli_t* cli);
 SP_API sp_cli_result_t sp_cli_run(sp_cli_desc_t desc);
 SP_API s32             sp_cli_main(sp_cli_desc_t desc);
-SP_API void            sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli);
-SP_API void            sp_cli_err_print(sp_io_writer_t* io, sp_cli_err_t err);
+SP_API void            sp_cli_write_help(sp_term_t* term, sp_cli_t* cli);
+SP_API void            sp_cli_err_print(sp_term_t* term, sp_cli_err_t err);
 SP_API void            sp_cli_candidate(sp_cli_complete_t* ctx, sp_str_t name, sp_str_t summary);
 SP_API void            sp_cli_write_completions(sp_io_writer_t* io, sp_cli_desc_t desc, sp_cli_shell_t shell);
 SP_API sp_cli_result_t sp_cli_set_error(sp_cli_t* cli, sp_str_t error);
@@ -954,154 +954,154 @@ SP_PRIVATE sp_cli_theme_t sp_cli_theme_resolve(sp_cli_theme_t theme) {
   };
 }
 
-SP_PRIVATE void sp_cli_write_choices(sp_io_writer_t* io, sp_cli_theme_entry_t entry, const sp_cli_choice_t* choices) {
-  sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr("("));
+SP_PRIVATE void sp_cli_write_choices(sp_term_t* term, sp_cli_theme_entry_t entry, const sp_cli_choice_t* choices) {
+  sp_term_fmt(term, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr("("));
   sp_for(it, SP_CLI_MAX_CHOICES) {
     if (!choices[it].name) break;
-    if (it) sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(", "));
-    sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(choices[it].name));
+    if (it) sp_term_fmt(term, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(", "));
+    sp_term_fmt(term, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(choices[it].name));
   }
-  sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(")"));
+  sp_term_fmt(term, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(")"));
 }
 
-void sp_cli_err_print(sp_io_writer_t* io, sp_cli_err_t err) {
+void sp_cli_err_print(sp_term_t* term, sp_cli_err_t err) {
   switch (err.kind) {
     case SP_CLI_ERR_NONE: {
       break;
     }
     case SP_CLI_ERR_CUSTOM: {
-      sp_fmt_io(io, "{}", sp_fmt_str(err.value));
+      sp_term_fmt(term, "{}", sp_fmt_str(err.value));
       break;
     }
     case SP_CLI_ERR_UNKNOWN_OPT: {
-      sp_fmt_io(io, "unknown option: --{}", sp_fmt_str(err.name));
+      sp_term_fmt(term, "unknown option: --{}", sp_fmt_str(err.name));
       break;
     }
     case SP_CLI_ERR_UNKNOWN_BRIEF: {
-      sp_fmt_io(io, "unknown option: -{}", sp_fmt_str(err.name));
+      sp_term_fmt(term, "unknown option: -{}", sp_fmt_str(err.name));
       break;
     }
     case SP_CLI_ERR_INVALID_VALUE: {
-      sp_fmt_io(io, "invalid value for option --{}: {.quote}", sp_fmt_str(err.name), sp_fmt_str(err.value));
+      sp_term_fmt(term, "invalid value for option --{}: {.quote}", sp_fmt_str(err.name), sp_fmt_str(err.value));
       break;
     }
     case SP_CLI_ERR_MISSING_VALUE: {
-      sp_fmt_io(io, "missing value for option: --{}", sp_fmt_str(err.name));
+      sp_term_fmt(term, "missing value for option: --{}", sp_fmt_str(err.name));
       break;
     }
     case SP_CLI_ERR_MISSING_ARG: {
-      sp_fmt_io(io, "missing required argument: {}", sp_fmt_str(err.name));
+      sp_term_fmt(term, "missing required argument: {}", sp_fmt_str(err.name));
       break;
     }
     case SP_CLI_ERR_INVALID_ARG: {
-      sp_fmt_io(io, "invalid value for argument {}: {.quote}", sp_fmt_str(err.name), sp_fmt_str(err.value));
+      sp_term_fmt(term, "invalid value for argument {}: {.quote}", sp_fmt_str(err.name), sp_fmt_str(err.value));
       break;
     }
     case SP_CLI_ERR_UNEXPECTED_ARG: {
-      sp_fmt_io(io, "unexpected argument: {}", sp_fmt_str(err.value));
+      sp_term_fmt(term, "unexpected argument: {}", sp_fmt_str(err.value));
       break;
     }
     case SP_CLI_ERR_UNKNOWN_COMMAND: {
-      sp_fmt_io(io, "unknown command: {}", sp_fmt_str(err.name));
+      sp_term_fmt(term, "unknown command: {}", sp_fmt_str(err.name));
       break;
     }
     case SP_CLI_ERR_MAX_DEPTH: {
-      sp_fmt_io(io, "command {} exceeds SP_CLI_MAX_DEPTH ({})", sp_fmt_str(err.name), sp_fmt_uint(SP_CLI_MAX_DEPTH));
+      sp_term_fmt(term, "command {} exceeds SP_CLI_MAX_DEPTH ({})", sp_fmt_str(err.name), sp_fmt_uint(SP_CLI_MAX_DEPTH));
       break;
     }
     case SP_CLI_ERR_MISSING_ENV: {
-      sp_fmt_io(io, "missing required environment variable: {}", sp_fmt_str(err.name));
+      sp_term_fmt(term, "missing required environment variable: {}", sp_fmt_str(err.name));
       break;
     }
     case SP_CLI_ERR_INVALID_ENV: {
-      sp_fmt_io(io, "invalid value for environment variable {}: {.quote}", sp_fmt_str(err.name), sp_fmt_str(err.value));
+      sp_term_fmt(term, "invalid value for environment variable {}: {.quote}", sp_fmt_str(err.name), sp_fmt_str(err.value));
       break;
     }
     case SP_CLI_ERR_UNKNOWN_SHELL: {
-      sp_fmt_io(io, "unknown completion shell: {.quote}", sp_fmt_str(err.name));
+      sp_term_fmt(term, "unknown completion shell: {.quote}", sp_fmt_str(err.name));
       break;
     }
   }
 
   if (err.choices) {
-    sp_fmt_io(io, ", expected one of ");
-    sp_cli_write_choices(io, sp_zero_s(sp_cli_theme_entry_t), err.choices);
+    sp_term_fmt(term, ", expected one of ");
+    sp_cli_write_choices(term, sp_zero_s(sp_cli_theme_entry_t), err.choices);
   }
 }
 
-SP_PRIVATE void sp_cli_write_error(sp_io_writer_t* io, sp_cli_err_t err, sp_cli_theme_t theme) {
-  sp_fmt_io(io, "{.$ .$}: ", SP_CLI_THEME_ARGS(theme.error), sp_fmt_cstr("error"));
-  sp_cli_err_print(io, err);
-  sp_fmt_io(io, "\n");
+SP_PRIVATE void sp_cli_write_error(sp_term_t* term, sp_cli_err_t err, sp_cli_theme_t theme) {
+  sp_term_fmt(term, "{.$ .$}: ", SP_CLI_THEME_ARGS(theme.error), sp_fmt_cstr("error"));
+  sp_cli_err_print(term, err);
+  sp_term_fmt(term, "\n");
 }
 
-SP_PRIVATE void sp_cli_write_heading(sp_io_writer_t* io, sp_cli_theme_entry_t entry, const c8* name) {
-  sp_fmt_io(io, "\n");
-  sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(name));
-  sp_fmt_io(io, "\n");
+SP_PRIVATE void sp_cli_write_heading(sp_term_t* term, sp_cli_theme_entry_t entry, const c8* name) {
+  sp_term_fmt(term, "\n");
+  sp_term_fmt(term, "{.$ .$}", SP_CLI_THEME_ARGS(entry), sp_fmt_cstr(name));
+  sp_term_fmt(term, "\n");
 }
 
-SP_PRIVATE void sp_cli_write_choice_hint(sp_io_writer_t* io, sp_cli_theme_entry_t entry, const sp_cli_choice_t* choices) {
+SP_PRIVATE void sp_cli_write_choice_hint(sp_term_t* term, sp_cli_theme_entry_t entry, const sp_cli_choice_t* choices) {
   if (!choices[0].name) return;
-  sp_fmt_io(io, " ");
-  sp_cli_write_choices(io, entry, choices);
+  sp_term_fmt(term, " ");
+  sp_cli_write_choices(term, entry, choices);
 }
 
-SP_PRIVATE void sp_cli_write_label(sp_io_writer_t* io, sp_cli_theme_entry_t entry, sp_str_t label, sp_str_t summary, u32 width) {
-  sp_fmt_io(io, "  {:<$ .$ .$} {}",
+SP_PRIVATE void sp_cli_write_label(sp_term_t* term, sp_cli_theme_entry_t entry, sp_str_t label, sp_str_t summary, u32 width) {
+  sp_term_fmt(term, "  {:<$ .$ .$} {}",
     sp_fmt_uint(width), SP_CLI_THEME_ARGS(entry), sp_fmt_str(label),
     sp_fmt_str(summary));
 }
 
-SP_PRIVATE void sp_cli_write_label_hint(sp_io_writer_t* io, sp_cli_theme_entry_t label_entry, sp_cli_theme_entry_t hint_entry, sp_str_t label, const c8* hint, sp_str_t summary, u32 width) {
-  sp_fmt_io(io, "  {:<$ .$ .$} {.$ .$} {}",
+SP_PRIVATE void sp_cli_write_label_hint(sp_term_t* term, sp_cli_theme_entry_t label_entry, sp_cli_theme_entry_t hint_entry, sp_str_t label, const c8* hint, sp_str_t summary, u32 width) {
+  sp_term_fmt(term, "  {:<$ .$ .$} {.$ .$} {}",
     sp_fmt_uint(width), SP_CLI_THEME_ARGS(label_entry), sp_fmt_str(label),
     SP_CLI_THEME_ARGS(hint_entry), sp_fmt_cstr(hint),
     sp_fmt_str(summary));
 }
 
-SP_PRIVATE void sp_cli_write_synopsis(sp_io_writer_t* io, sp_cli_t* cli) {
+SP_PRIVATE void sp_cli_write_synopsis(sp_term_t* term, sp_cli_t* cli) {
   sp_cli_theme_t theme = cli->theme;
 
-  sp_cli_write_heading(io, theme.heading, "usage");
+  sp_cli_write_heading(term, theme.heading, "usage");
 
-  sp_fmt_io(io, "  ");
+  sp_term_fmt(term, "  ");
   sp_for(it, cli->depth) {
-    if (it) sp_fmt_io(io, " ");
-    sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(theme.command), sp_fmt_cstr(cli->path[it]->name));
+    if (it) sp_term_fmt(term, " ");
+    sp_term_fmt(term, "{.$ .$}", SP_CLI_THEME_ARGS(theme.command), sp_fmt_cstr(cli->path[it]->name));
   }
 
-  if (sp_da_size(cli->opts)) sp_fmt_io(io, " [OPTIONS]");
+  if (sp_da_size(cli->opts)) sp_term_fmt(term, " [OPTIONS]");
 
   sp_da_for(cli->args, it) {
     c8 buffer [SP_CLI_MAX_LABEL];
     sp_str_t label = sp_cli_arg_label(buffer, SP_CLI_MAX_LABEL, &cli->args[it]);
-    sp_fmt_io(io, " {}", sp_fmt_str(label));
+    sp_term_fmt(term, " {}", sp_fmt_str(label));
   }
 
-  if (sp_da_size(cli->commands)) sp_fmt_io(io, " <COMMAND>");
-  sp_fmt_io(io, "\n");
+  if (sp_da_size(cli->commands)) sp_term_fmt(term, " <COMMAND>");
+  sp_term_fmt(term, "\n");
 }
 
-void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
+void sp_cli_write_help(sp_term_t* term, sp_cli_t* cli) {
   sp_cli_theme_t theme = cli->theme;
 
   if (cli->cmd->summary) {
-    sp_fmt_io(io, "{}\n", sp_fmt_cstr(cli->cmd->summary));
+    sp_term_fmt(term, "{}\n", sp_fmt_cstr(cli->cmd->summary));
   }
 
-  sp_cli_write_synopsis(io, cli);
+  sp_cli_write_synopsis(term, cli);
 
   if (sp_da_size(cli->commands)) {
     u32 width = 0;
     sp_da_for(cli->commands, it) {
       width = sp_max(width, sp_cstr_as_str(cli->commands[it]->name).len);
     }
-    sp_cli_write_heading(io, theme.heading, "commands");
+    sp_cli_write_heading(term, theme.heading, "commands");
     sp_da_for(cli->commands, it) {
       sp_cli_cmd_t* sub = cli->commands[it];
-      sp_cli_write_label(io, theme.label, sp_cstr_as_str(sub->name), sp_cstr_as_str(sub->summary), width);
-      sp_fmt_io(io, "\n");
+      sp_cli_write_label(term, theme.label, sp_cstr_as_str(sub->name), sp_cstr_as_str(sub->summary), width);
+      sp_term_fmt(term, "\n");
     }
   }
 
@@ -1113,11 +1113,11 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
       labels[it] = sp_cli_opt_label(buffers[it], SP_CLI_MAX_LABEL, &cli->opts[it]);
       width = sp_max(width, labels[it].len);
     }
-    sp_cli_write_heading(io, theme.heading, "options");
+    sp_cli_write_heading(term, theme.heading, "options");
     sp_for(it, cli->num_own_opts) {
-      sp_cli_write_label(io, theme.label, labels[it], sp_cstr_as_str(cli->opts[it].summary), width);
-      sp_cli_write_choice_hint(io, theme.hint, cli->opts[it].choices);
-      sp_fmt_io(io, "\n");
+      sp_cli_write_label(term, theme.label, labels[it], sp_cstr_as_str(cli->opts[it].summary), width);
+      sp_cli_write_choice_hint(term, theme.hint, cli->opts[it].choices);
+      sp_term_fmt(term, "\n");
     }
   }
 
@@ -1129,17 +1129,17 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
       labels[it] = sp_cli_arg_label(buffers[it], SP_CLI_MAX_LABEL, &cli->args[it]);
       width = sp_max(width, labels[it].len);
     }
-    sp_cli_write_heading(io, theme.heading, "arguments");
+    sp_cli_write_heading(term, theme.heading, "arguments");
     sp_da_for(cli->args, it) {
       sp_cli_arg_t* arg = &cli->args[it];
       if (arg->arity == SP_CLI_ARG_REQUIRED) {
-        sp_cli_write_label_hint(io, theme.label, sp_zero_s(sp_cli_theme_entry_t), labels[it], "required", sp_cstr_as_str(arg->summary), width);
+        sp_cli_write_label_hint(term, theme.label, sp_zero_s(sp_cli_theme_entry_t), labels[it], "required", sp_cstr_as_str(arg->summary), width);
       }
       else {
-        sp_cli_write_label_hint(io, theme.label, theme.hint, labels[it], "optional", sp_cstr_as_str(arg->summary), width);
+        sp_cli_write_label_hint(term, theme.label, theme.hint, labels[it], "optional", sp_cstr_as_str(arg->summary), width);
       }
-      sp_cli_write_choice_hint(io, theme.hint, arg->choices);
-      sp_fmt_io(io, "\n");
+      sp_cli_write_choice_hint(term, theme.hint, arg->choices);
+      sp_term_fmt(term, "\n");
     }
   }
 
@@ -1148,29 +1148,29 @@ void sp_cli_write_help(sp_io_writer_t* io, sp_cli_t* cli) {
     sp_for(it, cli->num_own_env) {
       width = sp_max(width, sp_cstr_as_str(cli->env[it].name).len);
     }
-    sp_cli_write_heading(io, theme.heading, "environment");
+    sp_cli_write_heading(term, theme.heading, "environment");
     sp_for(it, cli->num_own_env) {
       sp_cli_env_t* var = &cli->env[it];
       if (var->required) {
-        sp_cli_write_label_hint(io, theme.label, sp_zero_s(sp_cli_theme_entry_t), sp_cstr_as_str(var->name), "required", sp_cstr_as_str(var->summary), width);
+        sp_cli_write_label_hint(term, theme.label, sp_zero_s(sp_cli_theme_entry_t), sp_cstr_as_str(var->name), "required", sp_cstr_as_str(var->summary), width);
       }
       else {
-        sp_cli_write_label_hint(io, theme.label, theme.hint, sp_cstr_as_str(var->name), "optional", sp_cstr_as_str(var->summary), width);
+        sp_cli_write_label_hint(term, theme.label, theme.hint, sp_cstr_as_str(var->name), "optional", sp_cstr_as_str(var->summary), width);
       }
-      sp_cli_write_choice_hint(io, theme.hint, var->choices);
-      sp_fmt_io(io, "\n");
+      sp_cli_write_choice_hint(term, theme.hint, var->choices);
+      sp_term_fmt(term, "\n");
     }
   }
 
   if (sp_da_size(cli->opts) > cli->num_own_opts || sp_da_size(cli->env) > cli->num_own_env) {
-    sp_fmt_io(io, "\n");
-    sp_fmt_io(io, "Use ");
+    sp_term_fmt(term, "\n");
+    sp_term_fmt(term, "Use ");
     sp_for(it, cli->depth - 1) {
-      if (it) sp_fmt_io(io, " ");
-      sp_fmt_io(io, "{.$ .$}", SP_CLI_THEME_ARGS(theme.command), sp_fmt_cstr(cli->path[it]->name));
+      if (it) sp_term_fmt(term, " ");
+      sp_term_fmt(term, "{.$ .$}", SP_CLI_THEME_ARGS(theme.command), sp_fmt_cstr(cli->path[it]->name));
     }
-    sp_fmt_io(io, " {.$ .$} for global options and environment", SP_CLI_THEME_ARGS(theme.label), sp_fmt_cstr("--help"));
-    sp_fmt_io(io, "\n");
+    sp_term_fmt(term, " {.$ .$} for global options and environment", SP_CLI_THEME_ARGS(theme.label), sp_fmt_cstr("--help"));
+    sp_term_fmt(term, "\n");
   }
 }
 
@@ -1476,7 +1476,7 @@ SP_PRIVATE bool sp_cli_shell_from_str(sp_str_t name, sp_cli_shell_t* shell) {
   return false;
 }
 
-SP_PRIVATE sp_cli_result_t sp_cli_complete_request(sp_io_writer_t* out, sp_io_writer_t* err, sp_cli_desc_t desc, sp_str_t request) {
+SP_PRIVATE sp_cli_result_t sp_cli_complete_request(sp_io_writer_t* out, sp_term_t* err, sp_cli_desc_t desc, sp_str_t request) {
   sp_cli_shell_t shell;
   if (!sp_cli_shell_from_str(sp_fs_get_stem(request), &shell)) {
     sp_cli_write_error(err, (sp_cli_err_t) {
@@ -1504,12 +1504,9 @@ SP_PRIVATE sp_cli_result_t sp_cli_complete_request(sp_io_writer_t* out, sp_io_wr
 }
 
 sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
-  sp_io_writer_t* out = sp_io_get_std_out();
-  sp_io_writer_t* err = sp_io_get_std_err();
-
   sp_str_t request = sp_os_env_get(sp_cli_completer(desc));
   if (!sp_str_empty(request) && !sp_str_equal_cstr(request, "0")) {
-    return sp_cli_complete_request(out, err, desc, request);
+    return sp_cli_complete_request(sp_io_get_std_out(), sp_term_std_err(), desc, request);
   }
 
   sp_cli_t cli;
@@ -1524,15 +1521,16 @@ sp_cli_result_t sp_cli_run(sp_cli_desc_t desc) {
       break;
     }
     case SP_CLI_HELP: {
-      sp_cli_write_help(out, &cli);
+      sp_cli_write_help(sp_term_std_out(), &cli);
       break;
     }
     case SP_CLI_ERR: {
-      sp_cli_write_error(err, cli.err, cli.theme);
-      sp_cli_write_synopsis(err, &cli);
-      sp_fmt_io(err, "\n");
-      sp_fmt_io(err, "Use {.$ .$} for full usage", SP_CLI_THEME_ARGS(cli.theme.label), sp_fmt_cstr("--help"));
-      sp_fmt_io(err, "\n");
+      sp_term_t* term = sp_term_std_err();
+      sp_cli_write_error(term, cli.err, cli.theme);
+      sp_cli_write_synopsis(term, &cli);
+      sp_term_fmt(term, "\n");
+      sp_term_fmt(term, "Use {.$ .$} for full usage", SP_CLI_THEME_ARGS(cli.theme.label), sp_fmt_cstr("--help"));
+      sp_term_fmt(term, "\n");
       break;
     }
   }
