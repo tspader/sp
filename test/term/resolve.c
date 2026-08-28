@@ -23,7 +23,7 @@ UTEST(term_resolve, resolve) {
       .expect = { SP_TERM_COLOR_ANSI }
     },
     {
-      .hints = { .tty = true, .no_color = true },
+      .hints = { .no_color = true, .tty = true },
       .expect = { SP_TERM_COLOR_NONE }
     },
     {
@@ -31,7 +31,7 @@ UTEST(term_resolve, resolve) {
       .expect = { SP_TERM_COLOR_ANSI }
     },
     {
-      .hints = { .tty = true, .force_color = true },
+      .hints = { .force_color = true, .tty = true },
       .expect = { SP_TERM_COLOR_ANSI }
     },
     {
