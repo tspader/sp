@@ -1277,6 +1277,21 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
 #define SP_ANSI_BG_BRIGHT_CYAN    sp_ansi_u8_to_str(SP_ANSI_BG_BRIGHT_CYAN_U8)
 #define SP_ANSI_BG_BRIGHT_WHITE   sp_ansi_u8_to_str(SP_ANSI_BG_BRIGHT_WHITE_U8)
 
+#define SP_ANSI_SGR_FMT           "\033[{}m"
+#define SP_ANSI_SGR_RGB_FMT       "\033[38;2;{};{};{}m"
+#define SP_ANSI_CURSOR_HOME       "\r"
+#define SP_ANSI_CURSOR_UP         "\033[A"
+#define SP_ANSI_CURSOR_UP_N_FMT   "\033[{}A"
+#define SP_ANSI_NEWLINE           "\n"
+#define SP_ANSI_ERASE_DISPLAY     "\033[J"
+#define SP_ANSI_ERASE_LINE        "\033[2K"
+#define SP_ANSI_HIDE_CURSOR       "\033[?25l"
+#define SP_ANSI_SHOW_CURSOR       "\033[?25h"
+// DEC private mode 2026: synchronized output. Terminals that don't support it
+// ignore the sequence, so the wrap is a safe no-op fallback.
+#define SP_ANSI_BEGIN_SYNC        "\033[?2026h"
+#define SP_ANSI_END_SYNC          "\033[?2026l"
+
 
 //   █████████  █████ █████  █████████
 //  ███░░░░░███░░███ ░░███  ███░░░░░███
@@ -3980,8 +3995,6 @@ SP_API sp_str_r  sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...);
 SP_API sp_str_r  sp_fmt_buf_v(c8* buffer, u64 len, sp_str_t fmt, va_list args);
 SP_API sp_err_t  sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...);
 SP_API sp_err_t  sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args);
-SP_API sp_err_t  sp_fmt_std_out(const c8* fmt, ...);
-SP_API sp_err_t  sp_fmt_std_err(const c8* fmt, ...);
 
 SP_API sp_err_t  sp_fmt_write_s64(sp_io_writer_t* io, s64 value);
 SP_API sp_err_t  sp_fmt_write_ptr(sp_io_writer_t* io, void* value);
@@ -4235,6 +4248,35 @@ SP_API bool      sp_parse_bool_ex(sp_str_t str, bool* out);
 SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 SP_API bool      sp_parse_is_digit(c8 c);
+
+typedef enum {
+  SP_TTY_COLOR_NONE = 0,
+  SP_TTY_COLOR_ANSI,
+} sp_tty_color_t;
+
+typedef struct {
+  bool no_color;
+  bool force_color;
+  bool tty;
+} sp_tty_hints_t;
+
+typedef struct {
+  sp_io_writer_t* io;
+  sp_tty_color_t color;
+} sp_tty_t;
+
+SP_API bool sp_tty_supports_ansi(sp_sys_fd_t fd);
+SP_API sp_tty_color_t sp_tty_color_resolve(sp_tty_hints_t hints);
+SP_API sp_tty_color_t sp_tty_color_detect(sp_sys_fd_t fd);
+SP_API sp_tty_t* sp_tty_std_out();
+SP_API sp_tty_t* sp_tty_std_err();
+SP_API sp_err_t sp_tty_fmt(sp_tty_t* term, const c8* fmt, ...);
+SP_API sp_err_t sp_tty_fmt_v(sp_tty_t* term, sp_str_t fmt, va_list args);
+SP_API sp_err_t sp_tty_styled(sp_tty_t* term, sp_str_t text, const sp_fmt_span_t* spans, u64 num_spans);
+SP_API sp_err_t sp_tty_style(sp_tty_t* term, sp_fmt_style_t style);
+SP_API sp_err_t sp_tty_sgr(sp_tty_t* term, u8 code);
+SP_API sp_err_t sp_tty_rgb(sp_tty_t* term, u8 r, u8 g, u8 b);
+SP_API sp_err_t sp_tty_reset(sp_tty_t* term);
 
 
 //    █████████     ███████    ██████   █████ ███████████ ██████████ █████ █████ ███████████
@@ -4547,6 +4589,10 @@ typedef struct {
     sp_io_stream_writer_t out;
     sp_io_stream_writer_t err;
   } std;
+  struct {
+    sp_tty_t out;
+    sp_tty_t err;
+  } term;
   sp_atomic_s32_t unsupported [8];
   sp_err_str_fn_t err_str;
 #if defined(SP_WIN32)
@@ -5045,9 +5091,9 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 // syscalls (e.g. ioctl), we'll do something like this:
 //
 // #if defined(SP_LINUX)
-//   typedef sp_sys_termios_t sp_termios_t;
+//   typedef sp_sys_termios_t sp_ttyios_t;
 // #else
-//   typedef struct termios sp_termios_t;
+//   typedef struct termios sp_ttyios_t;
 // #endif
 //
 // Which lets us (a) reuse the code that needs struct termios, identically (b) without
@@ -8605,13 +8651,13 @@ sp_err_t sp_sys_wait_p(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signa
 
   sp_static_assert(sizeof(sp_console_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
 #elif defined(SP_LINUX)
-  typedef sp_sys_termios_t sp_termios_t;
+  typedef sp_sys_termios_t sp_ttyios_t;
 
-  sp_static_assert(sizeof(sp_termios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
+  sp_static_assert(sizeof(sp_ttyios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  typedef struct termios sp_termios_t;
+  typedef struct termios sp_ttyios_t;
 
-  sp_static_assert(sizeof(sp_termios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
+  sp_static_assert(sizeof(sp_ttyios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
 #endif
 
 ////////////////////
@@ -8646,7 +8692,7 @@ sp_err_t sp_sys_tty_get_p(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 rc;
   do {
-    rc = tcgetattr(fd, (sp_termios_t*)(void*)attr->opaque);
+    rc = tcgetattr(fd, (sp_ttyios_t*)(void*)attr->opaque);
   } while (rc == -1 && errno == SP_EINTR);
   if (rc < 0) return sp_sys_err_from_errno(errno);
   attr->present = true;
@@ -8683,7 +8729,7 @@ sp_err_t sp_sys_tty_set_p(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 rc;
   do {
-    rc = tcsetattr(fd, SP_TCSAFLUSH, (const sp_termios_t*)(const void*)attr->opaque);
+    rc = tcsetattr(fd, SP_TCSAFLUSH, (const sp_ttyios_t*)(const void*)attr->opaque);
   } while (rc == -1 && errno == SP_EINTR);
   if (rc < 0) return sp_sys_err_from_errno(errno);
   return SP_OK;
@@ -8785,11 +8831,11 @@ bool sp_sys_is_tty_p(sp_sys_fd_t fd) {
   return sp_sys_tty_win32_is_pty(handle);
 
 #elif defined(SP_LINUX)
-  sp_termios_t t = sp_zero;
+  sp_ttyios_t t = sp_zero;
   return sp_syscall_retry(SP_SYSCALL_NUM_IOCTL, fd, SP_TCGETS, &t) >= 0;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  sp_termios_t t = sp_zero;
+  sp_ttyios_t t = sp_zero;
   s32 rc;
   do {
     rc = tcgetattr(fd, &t);
@@ -8864,7 +8910,7 @@ sp_err_t sp_sys_tty_ready_p(sp_sys_fd_t fd, u8* ready) {
 // SP_SYS_TTY_MODE_APPLY //
 ///////////////////////////
 #if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
-SP_PRIVATE void sp_sys_tty_mode_apply_termios(sp_termios_t* t, sp_sys_tty_mode_t mode) {
+SP_PRIVATE void sp_sys_tty_mode_apply_termios(sp_ttyios_t* t, sp_sys_tty_mode_t mode) {
   switch (mode) {
     case SP_SYS_TTY_MODE_COOKED: {
       t->c_iflag |= (u32)(SP_BRKINT | SP_ICRNL | SP_IXON);
@@ -8922,8 +8968,8 @@ sp_err_t sp_sys_tty_mode_apply_p(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, 
   return SP_OK;
 
 #elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
-  sp_sys_tty_mode_apply_termios((sp_termios_t*)(void*)in->opaque, mode);
-  if (out->present) sp_sys_tty_mode_apply_termios((sp_termios_t*)(void*)out->opaque, mode);
+  sp_sys_tty_mode_apply_termios((sp_ttyios_t*)(void*)in->opaque, mode);
+  if (out->present) sp_sys_tty_mode_apply_termios((sp_ttyios_t*)(void*)out->opaque, mode);
   return SP_OK;
 
 #elif defined(SP_WASM)
@@ -11356,15 +11402,6 @@ static void sp_fmt_style_open(sp_io_writer_t* io, sp_fmt_style_t style, sp_fmt_a
   }
 }
 
-static void sp_fmt_style_close(sp_io_writer_t* io, sp_fmt_style_t style) {
-  if (style == sp_fmt_style_quote) {
-    sp_io_write_c8(io, '"');
-  }
-  else if (style != sp_fmt_style_none && style != sp_fmt_style_unset) {
-    sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
-  }
-}
-
 bool sp_parse_u64_ex(sp_str_t str, u64* out) {
   if (str.len == 0) return false;
 
@@ -13352,9 +13389,9 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
   if (cond) return;
 
 #if SP_ASSERT_ENABLED(SP_ASSERT_LOG)
-  sp_io_writer_t* io = sp_io_get_std_err();
-  sp_fmt_io(
-    io,
+  sp_tty_t* term = sp_tty_std_err();
+  sp_tty_fmt(
+    term,
     "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
     sp_fmt_cstr("assert"),
     sp_fmt_str(file),
@@ -13363,7 +13400,7 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
     sp_fmt_cstr("()"),
     sp_fmt_str(expr)
   );
-  sp_io_write_cstr(io, "\n", SP_NULLPTR);
+  sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 #endif
 
 #if SP_ASSERT_ENABLED(SP_ASSERT_TRAP)
@@ -17837,7 +17874,6 @@ done:
 sp_io_writer_t* sp_io_get_std_out() {
   if (!sp_rt.std.out.base.write) {
     sp_io_stream_writer_from_fd(&sp_rt.std.out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-    if (sp_sys_is_tty(sp_sys_stdout)) sp_sys_tty_use_vt(sp_sys_stdout);
   }
   return &sp_rt.std.out.base;
 }
@@ -17845,7 +17881,6 @@ sp_io_writer_t* sp_io_get_std_out() {
 sp_io_writer_t* sp_io_get_std_err() {
   if (!sp_rt.std.err.base.write) {
     sp_io_stream_writer_from_fd(&sp_rt.std.err, sp_sys_stderr, SP_IO_CLOSE_MODE_NONE);
-    if (sp_sys_is_tty(sp_sys_stderr)) sp_sys_tty_use_vt(sp_sys_stderr);
   }
   return &sp_rt.std.err.base;
 }
@@ -18482,22 +18517,6 @@ sp_err_t sp_fmt_io(sp_io_writer_t* io, const c8* fmt, ...) {
   return result;
 }
 
-sp_err_t sp_fmt_std_out(const c8* fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_err_t result = sp_fmt_io_v(sp_io_get_std_out(), sp_cstr_as_str(fmt), args);
-  va_end(args);
-  return result;
-}
-
-sp_err_t sp_fmt_std_err(const c8* fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  sp_err_t result = sp_fmt_io_v(sp_io_get_std_err(), sp_cstr_as_str(fmt), args);
-  va_end(args);
-  return result;
-}
-
 sp_str_r sp_fmt_buf(c8* buffer, u64 len, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -18542,14 +18561,21 @@ sp_str_r sp_fmt_buf_v(c8* buffer, u64 len, sp_str_t fmt, va_list args) {
   return str;
 }
 
+typedef enum {
+  SP_FMT_SINK_PLAIN = 0,
+  SP_FMT_SINK_ANSI,
+  SP_FMT_SINK_SPANS,
+} sp_fmt_sink_kind_t;
+
 typedef struct {
+  sp_fmt_sink_kind_t kind;
   sp_io_dyn_mem_writer_t* io;
   sp_da(sp_fmt_span_t) spans;
-} sp_fmt_span_sink_t;
+} sp_fmt_sink_t;
 
-static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_span_sink_t* sink);
+static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_sink_t* sink);
 
-static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, sp_fmt_span_sink_t* sink) {
+static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, sp_fmt_sink_t* sink) {
   sp_fmt_parser_t p = { .str = fmt };
 
   while (true) {
@@ -18615,7 +18641,8 @@ static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, s
 }
 
 sp_err_t sp_fmt_io_v(sp_io_writer_t* io, sp_str_t fmt, va_list args) {
-  return sp_fmt_io_v_ex(io, fmt, args, SP_NULLPTR);
+  sp_fmt_sink_t sink = sp_zero;
+  return sp_fmt_io_v_ex(io, fmt, args, &sink);
 }
 
 sp_fmt_styled_r sp_fmt_styled_v(sp_mem_t mem, sp_str_t fmt, va_list args) {
@@ -18623,7 +18650,8 @@ sp_fmt_styled_r sp_fmt_styled_v(sp_mem_t mem, sp_str_t fmt, va_list args) {
 
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &io);
-  sp_fmt_span_sink_t sink = {
+  sp_fmt_sink_t sink = {
+    .kind = SP_FMT_SINK_SPANS,
     .io = &io,
     .spans = sp_da_new(mem, sp_fmt_span_t),
   };
@@ -18647,46 +18675,187 @@ sp_fmt_styled_r sp_fmt_styled(sp_mem_t mem, const c8* fmt, ...) {
 void sp_log(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_out(), sp_str_view(fmt), args);
+  sp_tty_t* term = sp_tty_std_out();
+  sp_tty_fmt_v(term, sp_str_view(fmt), args);
   va_end(args);
-  sp_io_write_cstr(sp_io_get_std_out(), "\n", SP_NULLPTR);
+  sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
 
 void sp_log_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_out(), fmt, args);
+  sp_tty_t* term = sp_tty_std_out();
+  sp_tty_fmt_v(term, fmt, args);
   va_end(args);
-  sp_io_write_cstr(sp_io_get_std_out(), "\n", SP_NULLPTR);
+  sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
 
 void sp_log_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_err(), sp_str_view(fmt), args);
+  sp_tty_t* term = sp_tty_std_err();
+  sp_tty_fmt_v(term, sp_str_view(fmt), args);
   va_end(args);
-  sp_io_write_cstr(sp_io_get_std_err(), "\n", SP_NULLPTR);
+  sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
 
 void sp_print(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_out(), sp_str_view(fmt), args);
+  sp_tty_fmt_v(sp_tty_std_out(), sp_str_view(fmt), args);
   va_end(args);
 }
 
 void sp_print_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_out(), fmt, args);
+  sp_tty_fmt_v(sp_tty_std_out(), fmt, args);
   va_end(args);
 }
 
 void sp_print_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_fmt_io_v(sp_io_get_std_err(), sp_str_view(fmt), args);
+  sp_tty_fmt_v(sp_tty_std_err(), sp_str_view(fmt), args);
   va_end(args);
+}
+
+sp_tty_color_t sp_tty_color_resolve(sp_tty_hints_t hints) {
+  if (hints.no_color) return SP_TTY_COLOR_NONE;
+  if (hints.force_color) return SP_TTY_COLOR_ANSI;
+  if (hints.tty) return SP_TTY_COLOR_ANSI;
+  return SP_TTY_COLOR_NONE;
+}
+
+bool sp_tty_supports_ansi(sp_sys_fd_t fd) {
+  if (!sp_sys_is_tty(fd)) return false;
+  return sp_sys_tty_use_vt(fd) == SP_OK;
+}
+
+sp_tty_color_t sp_tty_color_detect(sp_sys_fd_t fd) {
+  sp_tty_hints_t hints = {
+    .no_color = !sp_str_empty(sp_os_env_get(sp_str_lit("NO_COLOR"))),
+    .force_color = !sp_str_empty(sp_os_env_get(sp_str_lit("CLICOLOR_FORCE"))),
+  };
+  if (!hints.no_color) {
+    hints.tty = sp_tty_supports_ansi(fd);
+  }
+  return sp_tty_color_resolve(hints);
+}
+
+sp_tty_t* sp_tty_std_out() {
+  if (!sp_rt.term.out.io) {
+    sp_rt.term.out = (sp_tty_t) {
+      .io = sp_io_get_std_out(),
+      .color = sp_tty_color_detect(sp_sys_stdout),
+    };
+  }
+  return &sp_rt.term.out;
+}
+
+sp_tty_t* sp_tty_std_err() {
+  if (!sp_rt.term.err.io) {
+    sp_rt.term.err = (sp_tty_t) {
+      .io = sp_io_get_std_err(),
+      .color = sp_tty_color_detect(sp_sys_stderr),
+    };
+  }
+  return &sp_rt.term.err;
+}
+
+sp_err_t sp_tty_fmt_v(sp_tty_t* term, sp_str_t fmt, va_list args) {
+  sp_fmt_sink_t sink = {
+    .kind = term->color == SP_TTY_COLOR_ANSI ? SP_FMT_SINK_ANSI : SP_FMT_SINK_PLAIN,
+  };
+  return sp_fmt_io_v_ex(term->io, fmt, args, &sink);
+}
+
+sp_err_t sp_tty_fmt(sp_tty_t* term, const c8* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  sp_err_t result = sp_tty_fmt_v(term, sp_cstr_as_str(fmt), args);
+  va_end(args);
+  return result;
+}
+
+sp_err_t sp_tty_styled(sp_tty_t* term, sp_str_t text, const sp_fmt_span_t* spans, u64 num_spans) {
+  if (term->color != SP_TTY_COLOR_ANSI) {
+    return sp_io_write_str(term->io, text, SP_NULLPTR);
+  }
+
+  sp_for(it, num_spans) {
+    sp_assert((u64)spans[it].start + spans[it].len <= text.len);
+  }
+
+  u64 pos = 0;
+  while (true) {
+    bool shrunk = false;
+    sp_for(it, num_spans) {
+      if (!spans[it].len) continue;
+      if (!sp_fmt_style_to_ansi(spans[it].style)) continue;
+      if ((u64)spans[it].start + spans[it].len == pos) shrunk = true;
+    }
+
+    if (shrunk) {
+      sp_try(sp_io_write_cstr(term->io, SP_ANSI_RESET, SP_NULLPTR));
+      sp_for(it, num_spans) {
+        if (!spans[it].len) continue;
+        const c8* ansi = sp_fmt_style_to_ansi(spans[it].style);
+        if (!ansi) continue;
+        if (spans[it].start <= pos && pos < (u64)spans[it].start + spans[it].len) {
+          sp_try(sp_io_write_cstr(term->io, ansi, SP_NULLPTR));
+        }
+      }
+    }
+    else {
+      sp_for(it, num_spans) {
+        if (!spans[it].len) continue;
+        const c8* ansi = sp_fmt_style_to_ansi(spans[it].style);
+        if (!ansi) continue;
+        if (spans[it].start == pos) {
+          sp_try(sp_io_write_cstr(term->io, ansi, SP_NULLPTR));
+        }
+      }
+    }
+
+    if (pos >= text.len) break;
+
+    u64 boundary = text.len;
+    sp_for(it, num_spans) {
+      if (!spans[it].len) continue;
+      if (!sp_fmt_style_to_ansi(spans[it].style)) continue;
+      u64 start = spans[it].start;
+      u64 end = start + spans[it].len;
+      if (start > pos) boundary = sp_min(boundary, start);
+      if (end > pos) boundary = sp_min(boundary, end);
+    }
+    sp_try(sp_io_write(term->io, text.data + pos, boundary - pos, SP_NULLPTR));
+    pos = boundary;
+  }
+
+  return SP_OK;
+}
+
+sp_err_t sp_tty_style(sp_tty_t* term, sp_fmt_style_t style) {
+  if (term->color != SP_TTY_COLOR_ANSI) return SP_OK;
+  const c8* ansi = sp_fmt_style_to_ansi(style);
+  if (!ansi) return SP_OK;
+  return sp_io_write_cstr(term->io, ansi, SP_NULLPTR);
+}
+
+sp_err_t sp_tty_sgr(sp_tty_t* term, u8 code) {
+  if (term->color != SP_TTY_COLOR_ANSI) return SP_OK;
+  return sp_fmt_io(term->io, SP_ANSI_SGR_FMT, sp_fmt_uint(code));
+}
+
+sp_err_t sp_tty_rgb(sp_tty_t* term, u8 r, u8 g, u8 b) {
+  if (term->color != SP_TTY_COLOR_ANSI) return SP_OK;
+  return sp_fmt_io(term->io, SP_ANSI_SGR_RGB_FMT, sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b));
+}
+
+sp_err_t sp_tty_reset(sp_tty_t* term) {
+  if (term->color != SP_TTY_COLOR_ANSI) return SP_OK;
+  return sp_io_write_cstr(term->io, SP_ANSI_RESET, SP_NULLPTR);
 }
 
 sp_err_t sp_fmt_render_bytes(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
@@ -18706,7 +18875,7 @@ sp_err_t sp_fmt_render_bytes(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
   return sp_fmt_write_size(io, n);
 }
 
-static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_span_sink_t* sink) {
+static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_sink_t* sink) {
   u8 num_dirs = arg->spec.directive.num;
 
   sp_for(i, num_dirs) {
@@ -18802,44 +18971,73 @@ static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_s
   }
 
   sp_for(it, left_pad) sp_io_write_c8(io, fill);
-  if (sink) {
-    sp_assert(io == &sink->io->base);
-    u64 opens [SP_FMT_MAX_DIRECTIVES] = sp_zero;
-    u64 closes [SP_FMT_MAX_DIRECTIVES] = sp_zero;
-    sp_for(it, num_dirs) {
-      sp_io_dyn_mem_writer_size(sink->io, &opens[it]);
-      if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
-    }
-    sp_io_write_str(io, content, SP_NULLPTR);
-    u8 j = num_dirs;
-    while (j--) {
-      if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
-      sp_io_dyn_mem_writer_size(sink->io, &closes[j]);
-    }
-    sp_for(it, num_dirs) {
-      sp_fmt_style_t style = arg->spec.directive.styles[it];
-      if (closes[it] > opens[it] && sp_fmt_style_to_ansi(style)) {
-        sp_fmt_span_t span = {
-          .start = sp_cast(u32, opens[it]),
-          .len = sp_cast(u32, closes[it] - opens[it]),
-          .style = style,
-        };
-        sp_da_push(sink->spans, span);
+  switch (sink->kind) {
+    case SP_FMT_SINK_PLAIN: {
+      sp_for(it, num_dirs) {
+        if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
       }
+      sp_io_write_str(io, content, SP_NULLPTR);
+      u8 j = num_dirs;
+      while (j--) {
+        if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+      }
+      break;
     }
-  }
-  else {
-    sp_for(it, num_dirs) sp_fmt_style_open(io, arg->spec.directive.styles[it], arg);
-    sp_io_write_str(io, content, SP_NULLPTR);
-    u8 j = num_dirs;
-    while (j--) sp_fmt_style_close(io, arg->spec.directive.styles[j]);
+    case SP_FMT_SINK_ANSI: {
+      sp_for(it, num_dirs) sp_fmt_style_open(io, arg->spec.directive.styles[it], arg);
+      sp_io_write_str(io, content, SP_NULLPTR);
+      bool reset = false;
+      u8 j = num_dirs;
+      while (j--) {
+        sp_fmt_style_t style = arg->spec.directive.styles[j];
+        if (style == sp_fmt_style_quote) {
+          sp_io_write_c8(io, '"');
+        }
+        else if (style == sp_fmt_style_hyperlink) {
+          sp_io_write_cstr(io, "\033]8;;\033\\", SP_NULLPTR);
+        }
+        else if (!reset && sp_fmt_style_to_ansi(style)) {
+          sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
+          reset = true;
+        }
+      }
+      break;
+    }
+    case SP_FMT_SINK_SPANS: {
+      sp_assert(io == &sink->io->base);
+      u64 opens [SP_FMT_MAX_DIRECTIVES] = sp_zero;
+      u64 closes [SP_FMT_MAX_DIRECTIVES] = sp_zero;
+      sp_for(it, num_dirs) {
+        sp_io_dyn_mem_writer_size(sink->io, &opens[it]);
+        if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+      }
+      sp_io_write_str(io, content, SP_NULLPTR);
+      u8 j = num_dirs;
+      while (j--) {
+        if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+        sp_io_dyn_mem_writer_size(sink->io, &closes[j]);
+      }
+      sp_for(it, num_dirs) {
+        sp_fmt_style_t style = arg->spec.directive.styles[it];
+        if (closes[it] > opens[it] && sp_fmt_style_to_ansi(style)) {
+          sp_fmt_span_t span = {
+            .start = sp_cast(u32, opens[it]),
+            .len = sp_cast(u32, closes[it] - opens[it]),
+            .style = style,
+          };
+          sp_da_push(sink->spans, span);
+        }
+      }
+      break;
+    }
   }
   sp_for(it, right_pad) sp_io_write_c8(io, fill);
   return SP_OK;
 }
 
 sp_err_t sp_fmt_render(sp_io_writer_t* io, sp_fmt_arg_t* arg) {
-  return sp_fmt_render_ex(io, arg, SP_NULLPTR);
+  sp_fmt_sink_t sink = sp_zero;
+  return sp_fmt_render_ex(io, arg, &sink);
 }
 
 static const c8 sp_fmt_digit_pairs[201] =

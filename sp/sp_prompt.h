@@ -348,37 +348,6 @@
 #define SP_PROMPT_KEY_ESCAPE 27
 #define SP_PROMPT_KEY_DELETE 127
 
-#define SP_PROMPT_UTF8_2_BYTE_MASK 0xE0
-#define SP_PROMPT_UTF8_2_BYTE_PREFIX 0xC0
-#define SP_PROMPT_UTF8_3_BYTE_MASK 0xF0
-#define SP_PROMPT_UTF8_3_BYTE_PREFIX 0xE0
-#define SP_PROMPT_UTF8_4_BYTE_MASK 0xF8
-#define SP_PROMPT_UTF8_4_BYTE_PREFIX 0xF0
-#define SP_PROMPT_UTF8_2_BYTE_LEN 2
-#define SP_PROMPT_UTF8_3_BYTE_LEN 3
-#define SP_PROMPT_UTF8_4_BYTE_LEN 4
-
-//////////
-// ANSI //
-//////////
-// Static ANSI sequences. The _FMT variants are sp_fmt(ctx->mem, ).value templates ({} is the
-// placeholder).
-#define SP_ANSI_CURSOR_HOME       "\r"
-#define SP_ANSI_CURSOR_UP         "\x1b[A"
-#define SP_ANSI_CURSOR_UP_N_FMT   "\x1b[{}A"
-#define SP_ANSI_NEWLINE           "\n"
-#define SP_ANSI_ERASE_DISPLAY     "\x1b[J"
-#define SP_ANSI_ERASE_LINE        "\x1b[2K"
-#define SP_ANSI_SGR_RESET         "\x1b[0m"
-#define SP_ANSI_SGR_ANSI_FMT      "\x1b[{}m"
-#define SP_ANSI_SGR_RGB_FMT       "\x1b[38;2;{};{};{}m"
-#define SP_ANSI_HIDE_CURSOR       "\x1b[?25l"
-#define SP_ANSI_SHOW_CURSOR       "\x1b[?25h"
-// DEC private mode 2026: synchronized output. Terminals that don't support it
-// ignore the sequence, so the wrap is a safe no-op fallback.
-#define SP_ANSI_BEGIN_SYNC        "\x1b[?2026h"
-#define SP_ANSI_END_SYNC          "\x1b[?2026l"
-
 /////////////
 // CONTEXT //
 /////////////
@@ -893,7 +862,7 @@ struct sp_prompt_ctx_t {
     u32 count;
     u32 index;
   } primed;
-  sp_io_writer_t* writer;
+  sp_tty_t tty;
   sp_prompt_cell_t* framebuffer;
   sp_da(sp_prompt_frame_t) frames;
   struct {
@@ -941,8 +910,8 @@ static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
 }
 
 static void sp_prompt_emit_bytes(sp_prompt_ctx_t* ctx, const void* ptr, u64 size) {
-  SP_ASSERT(ctx->writer);
-  sp_io_write(ctx->writer, ptr, size, SP_NULLPTR);
+  SP_ASSERT(ctx->tty.io);
+  sp_io_write(ctx->tty.io, ptr, size, SP_NULLPTR);
 }
 
 static void sp_prompt_emit_str(sp_prompt_ctx_t* ctx, sp_str_t str) {
@@ -1023,21 +992,19 @@ sp_prompt_ctx_t* sp_prompt_begin(sp_mem_t mem) {
 }
 
 s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
-  ctx->terminal.fds.in = sp_sys_stdin;
-  ctx->terminal.fds.out = sp_sys_stdout;
   ctx->terminal.raw = false;
 
   if (sp_prompt_enable_raw_mode(ctx) == -1) return -1;
   sp_sys_event_open(&ctx->wake.event);
   sp_prompt_emit(ctx, SP_ANSI_HIDE_CURSOR);
-  sp_io_flush(ctx->writer);
+  sp_io_flush(ctx->tty.io);
   return 0;
 }
 
 void sp_prompt_end(sp_prompt_ctx_t* ctx) {
   if (ctx->terminal.raw) {
     sp_prompt_emit(ctx, SP_ANSI_SHOW_CURSOR);
-    sp_io_flush(ctx->writer);
+    sp_io_flush(ctx->tty.io);
     sp_tty_restore(ctx->terminal.fds.in, ctx->terminal.fds.out, &ctx->terminal.cache);
     ctx->terminal.raw = false;
   }
@@ -1076,6 +1043,8 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   ctx->rows = rows;
   ctx->state = SP_PROMPT_STATE_ACTIVE;
   ctx->wake.event.fd = SP_SYS_INVALID_FD;
+  ctx->terminal.fds.in = sp_sys_stdin;
+  ctx->terminal.fds.out = sp_sys_stdout;
   ctx->arena = sp_mem_arena_new(mem);
   ctx->mem = sp_mem_arena_as_allocator(ctx->arena);
   sp_da_init(ctx->mem, ctx->frames);
@@ -1102,12 +1071,15 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   //
   // Empirically, you get pretty bad tearing on Windows without buffering.
   sp_io_stream_writer_t* fw = sp_mem_arena_alloc_type(ctx->arena, sp_io_stream_writer_t);
-  sp_io_stream_writer_from_fd(fw, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
-  ctx->writer = &fw->base;
+  sp_io_stream_writer_from_fd(fw, ctx->terminal.fds.out, SP_IO_CLOSE_MODE_NONE);
+  ctx->tty = (sp_tty_t) {
+    .io = &fw->base,
+    .color = sp_tty_color_detect(ctx->terminal.fds.out),
+  };
 
   u64 buffer_size = ctx->cols * ctx->rows * SP_PROMPT_CELL_BUFFER_BYTES + SP_PROMPT_BUFFER_EXTRA_BYTES;
   u8* buffer = sp_mem_arena_alloc_n(ctx->arena, u8, buffer_size);
-  sp_io_writer_set_buffer(ctx->writer, buffer, buffer_size);
+  sp_io_writer_set_buffer(ctx->tty.io, buffer, buffer_size);
 
   u32 cell_count = ctx->cols * ctx->rows;
   if (ctx->framebuffer == SP_NULLPTR) {
@@ -1340,9 +1312,9 @@ static bool sp_prompt_poll_stdin(sp_prompt_ctx_t* ctx) {
   return sp_sys_tty_ready(ctx->terminal.fds.in, &ready) == SP_OK && ready;
 }
 
-SP_PRIVATE bool sp_prompt_read_byte(void* out) {
+SP_PRIVATE bool sp_prompt_read_byte(sp_prompt_ctx_t* ctx, void* out) {
   u64 nread = 0;
-  return sp_sys_read(sp_sys_stdin, out, 1, &nread) == SP_OK && nread == 1;
+  return sp_sys_read(ctx->terminal.fds.in, out, 1, &nread) == SP_OK && nread == 1;
 }
 
 sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
@@ -1353,7 +1325,7 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
   }
 
   u8 c = 0;
-  if (!sp_prompt_read_byte(&c)) {
+  if (!sp_prompt_read_byte(ctx, &c)) {
     return event;
   }
 
@@ -1371,13 +1343,13 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
       }
 
       u8 seq[2] = {0};
-      if (!sp_prompt_read_byte(&seq[0])) {
+      if (!sp_prompt_read_byte(ctx, &seq[0])) {
         event.kind = SP_PROMPT_EVENT_ESCAPE;
         return event;
       }
 
       if (sp_prompt_poll_stdin(ctx)) {
-        if (!sp_prompt_read_byte(&seq[1])) {
+        if (!sp_prompt_read_byte(ctx, &seq[1])) {
           seq[1] = 0;
         }
       }
@@ -1397,13 +1369,10 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
   }
 
   c8 utf8_bytes[4] = { sp_cast(c8, c) };
-  u32 needed = 1;
-  if      ((c & SP_PROMPT_UTF8_2_BYTE_MASK) == SP_PROMPT_UTF8_2_BYTE_PREFIX) needed = SP_PROMPT_UTF8_2_BYTE_LEN;
-  else if ((c & SP_PROMPT_UTF8_3_BYTE_MASK) == SP_PROMPT_UTF8_3_BYTE_PREFIX) needed = SP_PROMPT_UTF8_3_BYTE_LEN;
-  else if ((c & SP_PROMPT_UTF8_4_BYTE_MASK) == SP_PROMPT_UTF8_4_BYTE_PREFIX) needed = SP_PROMPT_UTF8_4_BYTE_LEN;
+  u32 needed = sp_utf8_num_bytes_from_byte(c);
 
   sp_for_range(i, 1, needed) {
-    if (!sp_prompt_read_byte(&utf8_bytes[i])) break;
+    if (!sp_prompt_read_byte(ctx, &utf8_bytes[i])) break;
   }
 
   event.kind = SP_PROMPT_EVENT_INPUT;
@@ -1436,24 +1405,17 @@ static bool sp_prompt_style_equal(sp_prompt_style_t left, sp_prompt_style_t righ
 static void sp_prompt_write_style(sp_prompt_ctx_t* ctx, sp_prompt_style_t style) {
   switch (style.tag) {
     case SP_PROMPT_STYLE_NONE: {
-      sp_prompt_emit(ctx, SP_ANSI_SGR_RESET);
+      sp_tty_reset(&ctx->tty);
       break;
     }
     case SP_PROMPT_STYLE_ANSI: {
-      sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-      sp_str_t esc = sp_fmt(s.mem, SP_ANSI_SGR_ANSI_FMT, sp_fmt_uint(style.ansi)).value;
-      sp_prompt_emit_str(ctx, esc);
-      sp_mem_end_scratch(s);
+      sp_tty_sgr(&ctx->tty, style.ansi);
       break;
     }
     case SP_PROMPT_STYLE_RGB: {
-      sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-      sp_str_t esc = sp_fmt(s.mem, SP_ANSI_SGR_RGB_FMT, sp_fmt_uint(style.rgb.r), sp_fmt_uint(style.rgb.g), sp_fmt_uint(style.rgb.b)).value;
-      sp_prompt_emit_str(ctx, esc);
-      sp_mem_end_scratch(s);
+      sp_tty_rgb(&ctx->tty, style.rgb.r, style.rgb.g, style.rgb.b);
       break;
     }
-
   }
 }
 
@@ -1555,7 +1517,7 @@ static void sp_prompt_present(sp_prompt_ctx_t* ctx) {
   }
 
   sp_prompt_emit(ctx, SP_ANSI_END_SYNC);
-  sp_io_flush(ctx->writer);
+  sp_io_flush(ctx->tty.io);
 }
 
 sp_app_result_t sp_prompt_app_on_init(sp_app_t* app) {
@@ -1708,18 +1670,13 @@ bool sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
 }
 
 u32 sp_prompt_text_width(sp_str_t text) {
-  u32 width = 0;
-  sp_str_for_utf8(text, it) {
-    SP_UNUSED(it);
-    width++;
-  }
-  return width;
+  return sp_utf8_num_codepoints(text);
 }
 
 sp_str_t sp_prompt_repeat(sp_prompt_ctx_t* ctx, u32 codepoint, u32 count) {
   SP_UNUSED(ctx);
   sp_io_dyn_mem_writer_t builder = sp_zero;
-  sp_io_dyn_mem_writer_init(sp_mem_begin_scratch().mem, &builder);
+  sp_io_dyn_mem_writer_init(sp_mem_get_scratch(), &builder);
   c8 buf[4] = sp_zero;
   u8 len = sp_utf8_encode(codepoint, buf);
   sp_for(it, count) {
@@ -1999,13 +1956,9 @@ void sp_prompt_success(sp_prompt_ctx_t* ctx, const c8* message) {
 }
 
 static void sp_prompt_str_append_codepoint(sp_prompt_ctx_t* ctx, sp_str_t* value, u32 codepoint) {
-  sp_io_dyn_mem_writer_t builder = sp_zero;
-  sp_io_dyn_mem_writer_init(ctx->mem, &builder);
-  sp_io_write_str(&builder.base, *value, SP_NULLPTR);
   c8 buf[4] = sp_zero;
   u8 len = sp_utf8_encode(codepoint, buf);
-  sp_io_write_str(&builder.base, sp_str(buf, len), SP_NULLPTR);
-  *value = sp_io_dyn_mem_writer_as_str(&builder);
+  *value = sp_str_concat(ctx->mem, *value, sp_str(buf, len));
 }
 
 static sp_str_t sp_prompt_str_pop_codepoint(sp_str_t value) {
@@ -3364,12 +3317,6 @@ static const u8 sp_prompt_kr_default_inactive[3] = { 0x33, 0x00, 0x00 };
 
 static const u32 sp_prompt_kr_diamond_shapes[4] = { 0x2B25, 0x25C6, 0x2B29, 0x2B2A };
 
-static u8 sp_prompt_kr_clamp_u8(f32 v) {
-  if (v < 0.0f) return 0;
-  if (v > 255.0f) return 255;
-  return (u8)v;
-}
-
 static void sp_prompt_kr_derive_palette(u8 r, u8 g, u8 b, u8 trail[SP_PROMPT_KR_TRAIL_LEN][3], u8 inactive[3]) {
   if (r == 0 && g == 0 && b == 0) {
     sp_for(it, SP_PROMPT_KR_TRAIL_LEN) {
@@ -3411,14 +3358,14 @@ static void sp_prompt_kr_derive_palette(u8 r, u8 g, u8 b, u8 trail[SP_PROMPT_KR_
     if (g1 > 255.0f) g1 = 255.0f;
     if (b1 > 255.0f) b1 = 255.0f;
 
-    trail[it][0] = sp_prompt_kr_clamp_u8(r1 * alpha);
-    trail[it][1] = sp_prompt_kr_clamp_u8(g1 * alpha);
-    trail[it][2] = sp_prompt_kr_clamp_u8(b1 * alpha);
+    trail[it][0] = (u8)sp_clamp(r1 * alpha, 0.0f, 255.0f);
+    trail[it][1] = (u8)sp_clamp(g1 * alpha, 0.0f, 255.0f);
+    trail[it][2] = (u8)sp_clamp(b1 * alpha, 0.0f, 255.0f);
   }
 
-  inactive[0] = sp_prompt_kr_clamp_u8(r * SP_PROMPT_KR_INACTIVE_ALPHA);
-  inactive[1] = sp_prompt_kr_clamp_u8(g * SP_PROMPT_KR_INACTIVE_ALPHA);
-  inactive[2] = sp_prompt_kr_clamp_u8(b * SP_PROMPT_KR_INACTIVE_ALPHA);
+  inactive[0] = (u8)sp_clamp(r * SP_PROMPT_KR_INACTIVE_ALPHA, 0.0f, 255.0f);
+  inactive[1] = (u8)sp_clamp(g * SP_PROMPT_KR_INACTIVE_ALPHA, 0.0f, 255.0f);
+  inactive[2] = (u8)sp_clamp(b * SP_PROMPT_KR_INACTIVE_ALPHA, 0.0f, 255.0f);
 }
 
 static void sp_prompt_knight_rider_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t event) {
@@ -3475,9 +3422,9 @@ static void sp_prompt_knight_rider_render(sp_prompt_ctx_t* ctx) {
     }
     else {
       codepoint = 0x00B7;
-      style.rgb.r = sp_prompt_kr_clamp_u8((f32)inactive[0] * fade);
-      style.rgb.g = sp_prompt_kr_clamp_u8((f32)inactive[1] * fade);
-      style.rgb.b = sp_prompt_kr_clamp_u8((f32)inactive[2] * fade);
+      style.rgb.r = (u8)sp_clamp((f32)inactive[0] * fade, 0.0f, 255.0f);
+      style.rgb.g = (u8)sp_clamp((f32)inactive[1] * fade, 0.0f, 255.0f);
+      style.rgb.b = (u8)sp_clamp((f32)inactive[2] * fade, 0.0f, 255.0f);
     }
 
     sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, codepoint, 1), style);

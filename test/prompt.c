@@ -48,7 +48,7 @@ UTEST_F_SETUP(prompt) {
   ut.app = SP_NULLPTR;
   sp_prompt_ctx_init(&ut.ctx, ut.mem.tracking, 80, 20);
   sp_io_dyn_mem_writer_init(ut.mem.arena, &ut.writer);
-  ut.ctx.writer = &ut.writer.base;
+  ut.ctx.tty = (sp_tty_t) { .io = &ut.writer.base, .color = SP_TTY_COLOR_ANSI };
 }
 
 UTEST_F_TEARDOWN(prompt) {
