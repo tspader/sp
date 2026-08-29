@@ -348,16 +348,6 @@
 #define SP_PROMPT_KEY_ESCAPE 27
 #define SP_PROMPT_KEY_DELETE 127
 
-#define SP_PROMPT_UTF8_2_BYTE_MASK 0xE0
-#define SP_PROMPT_UTF8_2_BYTE_PREFIX 0xC0
-#define SP_PROMPT_UTF8_3_BYTE_MASK 0xF0
-#define SP_PROMPT_UTF8_3_BYTE_PREFIX 0xE0
-#define SP_PROMPT_UTF8_4_BYTE_MASK 0xF8
-#define SP_PROMPT_UTF8_4_BYTE_PREFIX 0xF0
-#define SP_PROMPT_UTF8_2_BYTE_LEN 2
-#define SP_PROMPT_UTF8_3_BYTE_LEN 3
-#define SP_PROMPT_UTF8_4_BYTE_LEN 4
-
 /////////////
 // CONTEXT //
 /////////////
@@ -1379,10 +1369,7 @@ sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx) {
   }
 
   c8 utf8_bytes[4] = { sp_cast(c8, c) };
-  u32 needed = 1;
-  if      ((c & SP_PROMPT_UTF8_2_BYTE_MASK) == SP_PROMPT_UTF8_2_BYTE_PREFIX) needed = SP_PROMPT_UTF8_2_BYTE_LEN;
-  else if ((c & SP_PROMPT_UTF8_3_BYTE_MASK) == SP_PROMPT_UTF8_3_BYTE_PREFIX) needed = SP_PROMPT_UTF8_3_BYTE_LEN;
-  else if ((c & SP_PROMPT_UTF8_4_BYTE_MASK) == SP_PROMPT_UTF8_4_BYTE_PREFIX) needed = SP_PROMPT_UTF8_4_BYTE_LEN;
+  u32 needed = sp_utf8_num_bytes_from_byte(c);
 
   sp_for_range(i, 1, needed) {
     if (!sp_prompt_read_byte(ctx, &utf8_bytes[i])) break;
@@ -1683,18 +1670,13 @@ bool sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget) {
 }
 
 u32 sp_prompt_text_width(sp_str_t text) {
-  u32 width = 0;
-  sp_str_for_utf8(text, it) {
-    SP_UNUSED(it);
-    width++;
-  }
-  return width;
+  return sp_utf8_num_codepoints(text);
 }
 
 sp_str_t sp_prompt_repeat(sp_prompt_ctx_t* ctx, u32 codepoint, u32 count) {
   SP_UNUSED(ctx);
   sp_io_dyn_mem_writer_t builder = sp_zero;
-  sp_io_dyn_mem_writer_init(sp_mem_begin_scratch().mem, &builder);
+  sp_io_dyn_mem_writer_init(sp_mem_get_scratch(), &builder);
   c8 buf[4] = sp_zero;
   u8 len = sp_utf8_encode(codepoint, buf);
   sp_for(it, count) {
@@ -1974,13 +1956,9 @@ void sp_prompt_success(sp_prompt_ctx_t* ctx, const c8* message) {
 }
 
 static void sp_prompt_str_append_codepoint(sp_prompt_ctx_t* ctx, sp_str_t* value, u32 codepoint) {
-  sp_io_dyn_mem_writer_t builder = sp_zero;
-  sp_io_dyn_mem_writer_init(ctx->mem, &builder);
-  sp_io_write_str(&builder.base, *value, SP_NULLPTR);
   c8 buf[4] = sp_zero;
   u8 len = sp_utf8_encode(codepoint, buf);
-  sp_io_write_str(&builder.base, sp_str(buf, len), SP_NULLPTR);
-  *value = sp_io_dyn_mem_writer_as_str(&builder);
+  *value = sp_str_concat(ctx->mem, *value, sp_str(buf, len));
 }
 
 static sp_str_t sp_prompt_str_pop_codepoint(sp_str_t value) {
@@ -3339,12 +3317,6 @@ static const u8 sp_prompt_kr_default_inactive[3] = { 0x33, 0x00, 0x00 };
 
 static const u32 sp_prompt_kr_diamond_shapes[4] = { 0x2B25, 0x25C6, 0x2B29, 0x2B2A };
 
-static u8 sp_prompt_kr_clamp_u8(f32 v) {
-  if (v < 0.0f) return 0;
-  if (v > 255.0f) return 255;
-  return (u8)v;
-}
-
 static void sp_prompt_kr_derive_palette(u8 r, u8 g, u8 b, u8 trail[SP_PROMPT_KR_TRAIL_LEN][3], u8 inactive[3]) {
   if (r == 0 && g == 0 && b == 0) {
     sp_for(it, SP_PROMPT_KR_TRAIL_LEN) {
@@ -3386,14 +3358,14 @@ static void sp_prompt_kr_derive_palette(u8 r, u8 g, u8 b, u8 trail[SP_PROMPT_KR_
     if (g1 > 255.0f) g1 = 255.0f;
     if (b1 > 255.0f) b1 = 255.0f;
 
-    trail[it][0] = sp_prompt_kr_clamp_u8(r1 * alpha);
-    trail[it][1] = sp_prompt_kr_clamp_u8(g1 * alpha);
-    trail[it][2] = sp_prompt_kr_clamp_u8(b1 * alpha);
+    trail[it][0] = (u8)sp_clamp(r1 * alpha, 0.0f, 255.0f);
+    trail[it][1] = (u8)sp_clamp(g1 * alpha, 0.0f, 255.0f);
+    trail[it][2] = (u8)sp_clamp(b1 * alpha, 0.0f, 255.0f);
   }
 
-  inactive[0] = sp_prompt_kr_clamp_u8(r * SP_PROMPT_KR_INACTIVE_ALPHA);
-  inactive[1] = sp_prompt_kr_clamp_u8(g * SP_PROMPT_KR_INACTIVE_ALPHA);
-  inactive[2] = sp_prompt_kr_clamp_u8(b * SP_PROMPT_KR_INACTIVE_ALPHA);
+  inactive[0] = (u8)sp_clamp(r * SP_PROMPT_KR_INACTIVE_ALPHA, 0.0f, 255.0f);
+  inactive[1] = (u8)sp_clamp(g * SP_PROMPT_KR_INACTIVE_ALPHA, 0.0f, 255.0f);
+  inactive[2] = (u8)sp_clamp(b * SP_PROMPT_KR_INACTIVE_ALPHA, 0.0f, 255.0f);
 }
 
 static void sp_prompt_knight_rider_event(sp_prompt_ctx_t* ctx, sp_prompt_event_t event) {
@@ -3450,9 +3422,9 @@ static void sp_prompt_knight_rider_render(sp_prompt_ctx_t* ctx) {
     }
     else {
       codepoint = 0x00B7;
-      style.rgb.r = sp_prompt_kr_clamp_u8((f32)inactive[0] * fade);
-      style.rgb.g = sp_prompt_kr_clamp_u8((f32)inactive[1] * fade);
-      style.rgb.b = sp_prompt_kr_clamp_u8((f32)inactive[2] * fade);
+      style.rgb.r = (u8)sp_clamp((f32)inactive[0] * fade, 0.0f, 255.0f);
+      style.rgb.g = (u8)sp_clamp((f32)inactive[1] * fade, 0.0f, 255.0f);
+      style.rgb.b = (u8)sp_clamp((f32)inactive[2] * fade, 0.0f, 255.0f);
     }
 
     sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, codepoint, 1), style);
