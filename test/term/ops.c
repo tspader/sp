@@ -22,7 +22,7 @@ typedef struct {
 } term_ops_expect_t;
 
 typedef struct {
-  sp_term_color_t color;
+  sp_tty_color_t color;
   term_op_t ops [TERM_OPS_MAX_OPS];
   term_ops_expect_t expect;
 } term_ops_test_t;
@@ -30,16 +30,16 @@ typedef struct {
 static void run_term_ops(s32* utest_result, term_ops_test_t t) {
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(sp_mem_get_scratch(), &io);
-  sp_term_t term = { .io = &io.base, .color = t.color };
+  sp_tty_t term = { .io = &io.base, .color = t.color };
 
   sp_carr_for(t.ops, it) {
     term_op_t op = t.ops[it];
     if (op.kind == TERM_OP_NONE) break;
     switch (op.kind) {
       case TERM_OP_NONE:  break;
-      case TERM_OP_STYLE: EXPECT_EQ(sp_term_style(&term, op.style), SP_OK); break;
-      case TERM_OP_RGB:   EXPECT_EQ(sp_term_rgb(&term, op.rgb[0], op.rgb[1], op.rgb[2]), SP_OK); break;
-      case TERM_OP_RESET: EXPECT_EQ(sp_term_reset(&term), SP_OK); break;
+      case TERM_OP_STYLE: EXPECT_EQ(sp_tty_style(&term, op.style), SP_OK); break;
+      case TERM_OP_RGB:   EXPECT_EQ(sp_tty_rgb(&term, op.rgb[0], op.rgb[1], op.rgb[2]), SP_OK); break;
+      case TERM_OP_RESET: EXPECT_EQ(sp_tty_reset(&term), SP_OK); break;
       case TERM_OP_TEXT:  EXPECT_EQ(sp_io_write_cstr(term.io, op.text, SP_NULLPTR), SP_OK); break;
     }
   }
@@ -50,7 +50,7 @@ static void run_term_ops(s32* utest_result, term_ops_test_t t) {
 UTEST(term_ops, ansi) {
   term_ops_test_t cases[] = {
     {
-      .color = SP_TERM_COLOR_ANSI,
+      .color = SP_TTY_COLOR_ANSI,
       .ops = {
         { .kind = TERM_OP_STYLE, .style = sp_fmt_style_red },
         { .kind = TERM_OP_TEXT, .text = "x" },
@@ -59,7 +59,7 @@ UTEST(term_ops, ansi) {
       .expect = { "\033[31mx\033[0m" }
     },
     {
-      .color = SP_TERM_COLOR_ANSI,
+      .color = SP_TTY_COLOR_ANSI,
       .ops = {
         { .kind = TERM_OP_RGB, .rgb = { 250, 100, 25 } },
         { .kind = TERM_OP_TEXT, .text = "x" },
@@ -68,7 +68,7 @@ UTEST(term_ops, ansi) {
       .expect = { "\033[38;2;250;100;25mx\033[0m" }
     },
     {
-      .color = SP_TERM_COLOR_ANSI,
+      .color = SP_TTY_COLOR_ANSI,
       .ops = {
         { .kind = TERM_OP_STYLE, .style = sp_fmt_style_quote },
         { .kind = TERM_OP_TEXT, .text = "x" },

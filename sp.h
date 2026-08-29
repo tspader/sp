@@ -1277,6 +1277,21 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
 #define SP_ANSI_BG_BRIGHT_CYAN    sp_ansi_u8_to_str(SP_ANSI_BG_BRIGHT_CYAN_U8)
 #define SP_ANSI_BG_BRIGHT_WHITE   sp_ansi_u8_to_str(SP_ANSI_BG_BRIGHT_WHITE_U8)
 
+#define SP_ANSI_SGR_FMT           "\033[{}m"
+#define SP_ANSI_SGR_RGB_FMT       "\033[38;2;{};{};{}m"
+#define SP_ANSI_CURSOR_HOME       "\r"
+#define SP_ANSI_CURSOR_UP         "\033[A"
+#define SP_ANSI_CURSOR_UP_N_FMT   "\033[{}A"
+#define SP_ANSI_NEWLINE           "\n"
+#define SP_ANSI_ERASE_DISPLAY     "\033[J"
+#define SP_ANSI_ERASE_LINE        "\033[2K"
+#define SP_ANSI_HIDE_CURSOR       "\033[?25l"
+#define SP_ANSI_SHOW_CURSOR       "\033[?25h"
+// DEC private mode 2026: synchronized output. Terminals that don't support it
+// ignore the sequence, so the wrap is a safe no-op fallback.
+#define SP_ANSI_BEGIN_SYNC        "\033[?2026h"
+#define SP_ANSI_END_SYNC          "\033[?2026l"
+
 
 //   █████████  █████ █████  █████████
 //  ███░░░░░███░░███ ░░███  ███░░░░░███
@@ -4234,49 +4249,34 @@ SP_API bool      sp_parse_hash_ex(sp_str_t str, sp_hash_t* out);
 SP_API bool      sp_parse_hex_ex(sp_str_t str, u64* out);
 SP_API bool      sp_parse_is_digit(c8 c);
 
-
-//  ███████████ ██████████ ███████████   ██████   ██████
-// ░█░░░███░░░█░░███░░░░░█░░███░░░░░███ ░░██████ ██████
-// ░   ░███  ░  ░███  █ ░  ░███    ░███  ░███░█████░███
-//     ░███     ░██████    ░██████████   ░███░░███ ░███
-//     ░███     ░███░░█    ░███░░░░░███  ░███ ░░░  ░███
-//     ░███     ░███ ░   █ ░███    ░███  ░███      ░███
-//     █████    ██████████ █████   █████ █████     █████
-//    ░░░░░    ░░░░░░░░░░ ░░░░░   ░░░░░ ░░░░░     ░░░░░
-// @term
-/*
-  sp_fmt never lowers styles to escape codes; against a bare writer, style directives render
-  their content and nothing else. A terminal is a writer plus a resolved color mode, and is
-  the only thing that turns styles into bytes. Wrap any writer whose bytes are destined for
-  a terminal you know about; use the std terminals for stdout and stderr, which detect their
-  mode once (NO_COLOR, CLICOLOR_FORCE, whether the stream is a tty).
-*/
 typedef enum {
-  SP_TERM_COLOR_NONE = 0,
-  SP_TERM_COLOR_ANSI,
-} sp_term_color_t;
+  SP_TTY_COLOR_NONE = 0,
+  SP_TTY_COLOR_ANSI,
+} sp_tty_color_t;
 
 typedef struct {
   bool no_color;
   bool force_color;
   bool tty;
-} sp_term_hints_t;
+} sp_tty_hints_t;
 
 typedef struct {
   sp_io_writer_t* io;
-  sp_term_color_t color;
-} sp_term_t;
+  sp_tty_color_t color;
+} sp_tty_t;
 
-SP_API sp_term_color_t sp_term_color_resolve(sp_term_hints_t hints);
-SP_API sp_term_color_t sp_term_color_detect(sp_sys_fd_t fd);
-SP_API sp_term_t*      sp_term_std_out();
-SP_API sp_term_t*      sp_term_std_err();
-SP_API sp_err_t        sp_term_fmt(sp_term_t* term, const c8* fmt, ...);
-SP_API sp_err_t        sp_term_fmt_v(sp_term_t* term, sp_str_t fmt, va_list args);
-SP_API sp_err_t        sp_term_styled(sp_term_t* term, sp_str_t text, const sp_fmt_span_t* spans, u64 num_spans);
-SP_API sp_err_t        sp_term_style(sp_term_t* term, sp_fmt_style_t style);
-SP_API sp_err_t        sp_term_rgb(sp_term_t* term, u8 r, u8 g, u8 b);
-SP_API sp_err_t        sp_term_reset(sp_term_t* term);
+SP_API bool sp_tty_supports_ansi(sp_sys_fd_t fd);
+SP_API sp_tty_color_t sp_tty_color_resolve(sp_tty_hints_t hints);
+SP_API sp_tty_color_t sp_tty_color_detect(sp_sys_fd_t fd);
+SP_API sp_tty_t* sp_tty_std_out();
+SP_API sp_tty_t* sp_tty_std_err();
+SP_API sp_err_t sp_tty_fmt(sp_tty_t* term, const c8* fmt, ...);
+SP_API sp_err_t sp_tty_fmt_v(sp_tty_t* term, sp_str_t fmt, va_list args);
+SP_API sp_err_t sp_tty_styled(sp_tty_t* term, sp_str_t text, const sp_fmt_span_t* spans, u64 num_spans);
+SP_API sp_err_t sp_tty_style(sp_tty_t* term, sp_fmt_style_t style);
+SP_API sp_err_t sp_tty_sgr(sp_tty_t* term, u8 code);
+SP_API sp_err_t sp_tty_rgb(sp_tty_t* term, u8 r, u8 g, u8 b);
+SP_API sp_err_t sp_tty_reset(sp_tty_t* term);
 
 
 //    █████████     ███████    ██████   █████ ███████████ ██████████ █████ █████ ███████████
@@ -4590,8 +4590,8 @@ typedef struct {
     sp_io_stream_writer_t err;
   } std;
   struct {
-    sp_term_t out;
-    sp_term_t err;
+    sp_tty_t out;
+    sp_tty_t err;
   } term;
   sp_atomic_s32_t unsupported [8];
   sp_err_str_fn_t err_str;
@@ -5091,9 +5091,9 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 // syscalls (e.g. ioctl), we'll do something like this:
 //
 // #if defined(SP_LINUX)
-//   typedef sp_sys_termios_t sp_termios_t;
+//   typedef sp_sys_termios_t sp_ttyios_t;
 // #else
-//   typedef struct termios sp_termios_t;
+//   typedef struct termios sp_ttyios_t;
 // #endif
 //
 // Which lets us (a) reuse the code that needs struct termios, identically (b) without
@@ -8651,13 +8651,13 @@ sp_err_t sp_sys_wait_p(const sp_sys_fd_t* fds, u64 n, u32 timeout_ms, u64* signa
 
   sp_static_assert(sizeof(sp_console_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
 #elif defined(SP_LINUX)
-  typedef sp_sys_termios_t sp_termios_t;
+  typedef sp_sys_termios_t sp_ttyios_t;
 
-  sp_static_assert(sizeof(sp_termios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
+  sp_static_assert(sizeof(sp_ttyios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  typedef struct termios sp_termios_t;
+  typedef struct termios sp_ttyios_t;
 
-  sp_static_assert(sizeof(sp_termios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
+  sp_static_assert(sizeof(sp_ttyios_t) <= SP_SYS_TTY_ATTR_SIZE, tty_attr_fits);
 #endif
 
 ////////////////////
@@ -8692,7 +8692,7 @@ sp_err_t sp_sys_tty_get_p(sp_sys_fd_t fd, sp_sys_tty_attr_t* attr) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 rc;
   do {
-    rc = tcgetattr(fd, (sp_termios_t*)(void*)attr->opaque);
+    rc = tcgetattr(fd, (sp_ttyios_t*)(void*)attr->opaque);
   } while (rc == -1 && errno == SP_EINTR);
   if (rc < 0) return sp_sys_err_from_errno(errno);
   attr->present = true;
@@ -8729,7 +8729,7 @@ sp_err_t sp_sys_tty_set_p(sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr) {
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 rc;
   do {
-    rc = tcsetattr(fd, SP_TCSAFLUSH, (const sp_termios_t*)(const void*)attr->opaque);
+    rc = tcsetattr(fd, SP_TCSAFLUSH, (const sp_ttyios_t*)(const void*)attr->opaque);
   } while (rc == -1 && errno == SP_EINTR);
   if (rc < 0) return sp_sys_err_from_errno(errno);
   return SP_OK;
@@ -8831,11 +8831,11 @@ bool sp_sys_is_tty_p(sp_sys_fd_t fd) {
   return sp_sys_tty_win32_is_pty(handle);
 
 #elif defined(SP_LINUX)
-  sp_termios_t t = sp_zero;
+  sp_ttyios_t t = sp_zero;
   return sp_syscall_retry(SP_SYSCALL_NUM_IOCTL, fd, SP_TCGETS, &t) >= 0;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  sp_termios_t t = sp_zero;
+  sp_ttyios_t t = sp_zero;
   s32 rc;
   do {
     rc = tcgetattr(fd, &t);
@@ -8910,7 +8910,7 @@ sp_err_t sp_sys_tty_ready_p(sp_sys_fd_t fd, u8* ready) {
 // SP_SYS_TTY_MODE_APPLY //
 ///////////////////////////
 #if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
-SP_PRIVATE void sp_sys_tty_mode_apply_termios(sp_termios_t* t, sp_sys_tty_mode_t mode) {
+SP_PRIVATE void sp_sys_tty_mode_apply_termios(sp_ttyios_t* t, sp_sys_tty_mode_t mode) {
   switch (mode) {
     case SP_SYS_TTY_MODE_COOKED: {
       t->c_iflag |= (u32)(SP_BRKINT | SP_ICRNL | SP_IXON);
@@ -8968,8 +8968,8 @@ sp_err_t sp_sys_tty_mode_apply_p(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, 
   return SP_OK;
 
 #elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
-  sp_sys_tty_mode_apply_termios((sp_termios_t*)(void*)in->opaque, mode);
-  if (out->present) sp_sys_tty_mode_apply_termios((sp_termios_t*)(void*)out->opaque, mode);
+  sp_sys_tty_mode_apply_termios((sp_ttyios_t*)(void*)in->opaque, mode);
+  if (out->present) sp_sys_tty_mode_apply_termios((sp_ttyios_t*)(void*)out->opaque, mode);
   return SP_OK;
 
 #elif defined(SP_WASM)
@@ -13389,8 +13389,8 @@ void sp_assert_f(sp_str_t file, sp_str_t line, sp_str_t func, sp_str_t expr, boo
   if (cond) return;
 
 #if SP_ASSERT_ENABLED(SP_ASSERT_LOG)
-  sp_term_t* term = sp_term_std_err();
-  sp_term_fmt(
+  sp_tty_t* term = sp_tty_std_err();
+  sp_tty_fmt(
     term,
     "{.red} {}:{.gray}:{.yellow}{.yellow} {}",
     sp_fmt_cstr("assert"),
@@ -18675,8 +18675,8 @@ sp_fmt_styled_r sp_fmt_styled(sp_mem_t mem, const c8* fmt, ...) {
 void sp_log(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_term_t* term = sp_term_std_out();
-  sp_term_fmt_v(term, sp_str_view(fmt), args);
+  sp_tty_t* term = sp_tty_std_out();
+  sp_tty_fmt_v(term, sp_str_view(fmt), args);
   va_end(args);
   sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
@@ -18684,8 +18684,8 @@ void sp_log(const c8* fmt, ...) {
 void sp_log_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_term_t* term = sp_term_std_out();
-  sp_term_fmt_v(term, fmt, args);
+  sp_tty_t* term = sp_tty_std_out();
+  sp_tty_fmt_v(term, fmt, args);
   va_end(args);
   sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
@@ -18693,8 +18693,8 @@ void sp_log_str(sp_str_t fmt, ...) {
 void sp_log_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_term_t* term = sp_term_std_err();
-  sp_term_fmt_v(term, sp_str_view(fmt), args);
+  sp_tty_t* term = sp_tty_std_err();
+  sp_tty_fmt_v(term, sp_str_view(fmt), args);
   va_end(args);
   sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
@@ -18702,79 +18702,84 @@ void sp_log_err(const c8* fmt, ...) {
 void sp_print(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_term_fmt_v(sp_term_std_out(), sp_str_view(fmt), args);
+  sp_tty_fmt_v(sp_tty_std_out(), sp_str_view(fmt), args);
   va_end(args);
 }
 
 void sp_print_str(sp_str_t fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_term_fmt_v(sp_term_std_out(), fmt, args);
+  sp_tty_fmt_v(sp_tty_std_out(), fmt, args);
   va_end(args);
 }
 
 void sp_print_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_term_fmt_v(sp_term_std_err(), sp_str_view(fmt), args);
+  sp_tty_fmt_v(sp_tty_std_err(), sp_str_view(fmt), args);
   va_end(args);
 }
 
-sp_term_color_t sp_term_color_resolve(sp_term_hints_t hints) {
-  if (hints.no_color) return SP_TERM_COLOR_NONE;
-  if (hints.force_color) return SP_TERM_COLOR_ANSI;
-  if (hints.tty) return SP_TERM_COLOR_ANSI;
-  return SP_TERM_COLOR_NONE;
+sp_tty_color_t sp_tty_color_resolve(sp_tty_hints_t hints) {
+  if (hints.no_color) return SP_TTY_COLOR_NONE;
+  if (hints.force_color) return SP_TTY_COLOR_ANSI;
+  if (hints.tty) return SP_TTY_COLOR_ANSI;
+  return SP_TTY_COLOR_NONE;
 }
 
-sp_term_color_t sp_term_color_detect(sp_sys_fd_t fd) {
-  sp_term_hints_t hints = {
+bool sp_tty_supports_ansi(sp_sys_fd_t fd) {
+  if (!sp_sys_is_tty(fd)) return false;
+  return sp_sys_tty_use_vt(fd) == SP_OK;
+}
+
+sp_tty_color_t sp_tty_color_detect(sp_sys_fd_t fd) {
+  sp_tty_hints_t hints = {
     .no_color = !sp_str_empty(sp_os_env_get(sp_str_lit("NO_COLOR"))),
     .force_color = !sp_str_empty(sp_os_env_get(sp_str_lit("CLICOLOR_FORCE"))),
   };
   if (!hints.no_color) {
-    hints.tty = sp_sys_is_tty(fd) && !sp_sys_tty_use_vt(fd);
+    hints.tty = sp_tty_supports_ansi(fd);
   }
-  return sp_term_color_resolve(hints);
+  return sp_tty_color_resolve(hints);
 }
 
-sp_term_t* sp_term_std_out() {
+sp_tty_t* sp_tty_std_out() {
   if (!sp_rt.term.out.io) {
-    sp_rt.term.out = (sp_term_t) {
+    sp_rt.term.out = (sp_tty_t) {
       .io = sp_io_get_std_out(),
-      .color = sp_term_color_detect(sp_sys_stdout),
+      .color = sp_tty_color_detect(sp_sys_stdout),
     };
   }
   return &sp_rt.term.out;
 }
 
-sp_term_t* sp_term_std_err() {
+sp_tty_t* sp_tty_std_err() {
   if (!sp_rt.term.err.io) {
-    sp_rt.term.err = (sp_term_t) {
+    sp_rt.term.err = (sp_tty_t) {
       .io = sp_io_get_std_err(),
-      .color = sp_term_color_detect(sp_sys_stderr),
+      .color = sp_tty_color_detect(sp_sys_stderr),
     };
   }
   return &sp_rt.term.err;
 }
 
-sp_err_t sp_term_fmt_v(sp_term_t* term, sp_str_t fmt, va_list args) {
+sp_err_t sp_tty_fmt_v(sp_tty_t* term, sp_str_t fmt, va_list args) {
   sp_fmt_sink_t sink = {
-    .kind = term->color == SP_TERM_COLOR_ANSI ? SP_FMT_SINK_ANSI : SP_FMT_SINK_PLAIN,
+    .kind = term->color == SP_TTY_COLOR_ANSI ? SP_FMT_SINK_ANSI : SP_FMT_SINK_PLAIN,
   };
   return sp_fmt_io_v_ex(term->io, fmt, args, &sink);
 }
 
-sp_err_t sp_term_fmt(sp_term_t* term, const c8* fmt, ...) {
+sp_err_t sp_tty_fmt(sp_tty_t* term, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_err_t result = sp_term_fmt_v(term, sp_cstr_as_str(fmt), args);
+  sp_err_t result = sp_tty_fmt_v(term, sp_cstr_as_str(fmt), args);
   va_end(args);
   return result;
 }
 
-sp_err_t sp_term_styled(sp_term_t* term, sp_str_t text, const sp_fmt_span_t* spans, u64 num_spans) {
-  if (term->color != SP_TERM_COLOR_ANSI) {
+sp_err_t sp_tty_styled(sp_tty_t* term, sp_str_t text, const sp_fmt_span_t* spans, u64 num_spans) {
+  if (term->color != SP_TTY_COLOR_ANSI) {
     return sp_io_write_str(term->io, text, SP_NULLPTR);
   }
 
@@ -18831,20 +18836,25 @@ sp_err_t sp_term_styled(sp_term_t* term, sp_str_t text, const sp_fmt_span_t* spa
   return SP_OK;
 }
 
-sp_err_t sp_term_style(sp_term_t* term, sp_fmt_style_t style) {
-  if (term->color != SP_TERM_COLOR_ANSI) return SP_OK;
+sp_err_t sp_tty_style(sp_tty_t* term, sp_fmt_style_t style) {
+  if (term->color != SP_TTY_COLOR_ANSI) return SP_OK;
   const c8* ansi = sp_fmt_style_to_ansi(style);
   if (!ansi) return SP_OK;
   return sp_io_write_cstr(term->io, ansi, SP_NULLPTR);
 }
 
-sp_err_t sp_term_rgb(sp_term_t* term, u8 r, u8 g, u8 b) {
-  if (term->color != SP_TERM_COLOR_ANSI) return SP_OK;
-  return sp_fmt_io(term->io, "\033[38;2;{};{};{}m", sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b));
+sp_err_t sp_tty_sgr(sp_tty_t* term, u8 code) {
+  if (term->color != SP_TTY_COLOR_ANSI) return SP_OK;
+  return sp_fmt_io(term->io, SP_ANSI_SGR_FMT, sp_fmt_uint(code));
 }
 
-sp_err_t sp_term_reset(sp_term_t* term) {
-  if (term->color != SP_TERM_COLOR_ANSI) return SP_OK;
+sp_err_t sp_tty_rgb(sp_tty_t* term, u8 r, u8 g, u8 b) {
+  if (term->color != SP_TTY_COLOR_ANSI) return SP_OK;
+  return sp_fmt_io(term->io, SP_ANSI_SGR_RGB_FMT, sp_fmt_uint(r), sp_fmt_uint(g), sp_fmt_uint(b));
+}
+
+sp_err_t sp_tty_reset(sp_tty_t* term) {
+  if (term->color != SP_TTY_COLOR_ANSI) return SP_OK;
   return sp_io_write_cstr(term->io, SP_ANSI_RESET, SP_NULLPTR);
 }
 

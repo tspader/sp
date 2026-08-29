@@ -35,7 +35,7 @@ static void run_cli_usage_test(s32* utest_result, sp_mem_t mem, cli_usage_test_t
 
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &io);
-  sp_term_t term = { .io = &io.base };
+  sp_tty_t term = { .io = &io.base };
   sp_cli_t cli;
   sp_cli_init(&cli, sp_zero_s(sp_cli_desc_t));
   sp_carr_for(t.path, it) {

@@ -108,16 +108,16 @@ void push_row(sp_str_t fmt, sp_str_t args, sp_str_t result) {
 }
 
 void render_row(row_t row) {
-  sp_term_t* term = sp_term_std_out();
+  sp_tty_t* term = sp_tty_std_out();
   sp_for(it, 3) {
-    if (it) sp_term_fmt(term, " ");
-    sp_term_fmt(term, "{:<$ .$}",
+    if (it) sp_tty_fmt(term, " ");
+    sp_tty_fmt(term, "{:<$ .$}",
       sp_fmt_uint(ctx.width[it]),
       sp_fmt_uint(row.cols[it].style),
       sp_fmt_str(row.cols[it].text)
     );
   }
-  sp_term_fmt(term, "\n");
+  sp_tty_fmt(term, "\n");
 }
 
 void render_table() {
