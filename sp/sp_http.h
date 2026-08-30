@@ -373,19 +373,22 @@ typedef struct {
   u32                 idle_ms;
 } sp_http_server_desc_t;
 
-typedef struct {
-  sp_http_conn_t  conn;
-  sp_sys_socket_t socket;
-  sp_io_op_t      recv;
-  sp_io_op_t      send;
-  sp_io_time_t    active;
-  bool            recv_armed;
-  bool            send_armed;
-  bool            closing;
-  bool            live;
-} sp_http_slot_t;
+typedef struct sp_http_server sp_http_server_t;
 
 typedef struct {
+  sp_http_conn_t    conn;
+  sp_http_server_t* server;
+  sp_sys_socket_t   socket;
+  sp_io_op_t        recv;
+  sp_io_op_t        send;
+  sp_io_time_t      active;
+  bool              recv_armed;
+  bool              send_armed;
+  bool              closing;
+  bool              live;
+} sp_http_slot_t;
+
+struct sp_http_server {
   sp_http_server_desc_t desc;
   sp_sys_socket_t       listener;
   u16                   port;
@@ -395,7 +398,7 @@ typedef struct {
   u64                   idle_ns;
   bool                  stopping;
   sp_atomic_u32_t       quit;
-} sp_http_server_t;
+};
 
 SP_API void             sp_http_conn_init(sp_http_conn_t* conn, sp_http_conn_desc_t desc);
 SP_API void             sp_http_conn_deinit(sp_http_conn_t* conn);
@@ -2343,12 +2346,15 @@ void sp_http_conn_serve(sp_http_conn_t* conn, sp_sys_socket_t socket, const sp_h
 
 #define SP_HTTP_SERVER_DEFAULT_CONNS   16
 #define SP_HTTP_SERVER_DEFAULT_IDLE_MS 5000
-#define SP_HTTP_SERVER_DONE_MAX        64
+
+static void server_on_accept(sp_io_t io, sp_io_op_t* op);
+static void server_on_slot(sp_io_t io, sp_io_op_t* op);
 
 static void server_arm_accept(sp_http_server_t* server) {
   server->accept = (sp_io_op_t) {
     .kind = SP_IO_OP_ACCEPT,
     .accept = { .socket = server->listener },
+    .callback = server_on_accept,
     .user_data = server,
   };
   sp_assert(sp_io_submit(server->desc.io, &server->accept) == SP_OK);
@@ -2366,6 +2372,7 @@ static void slot_arm_recv(sp_http_server_t* server, sp_http_slot_t* slot) {
   slot->recv = (sp_io_op_t) {
     .kind = SP_IO_OP_RECV,
     .recv = { .socket = slot->socket, .buf = sp_http_conn_recv_slot(&slot->conn) },
+    .callback = server_on_slot,
     .user_data = slot,
   };
   sp_assert(sp_io_submit(server->desc.io, &slot->recv) == SP_OK);
@@ -2376,6 +2383,7 @@ static void slot_arm_send(sp_http_server_t* server, sp_http_slot_t* slot) {
   slot->send = (sp_io_op_t) {
     .kind = SP_IO_OP_SEND,
     .send = { .socket = slot->socket, .buf = sp_http_conn_send_slot(&slot->conn) },
+    .callback = server_on_slot,
     .user_data = slot,
   };
   sp_assert(sp_io_submit(server->desc.io, &slot->send) == SP_OK);
@@ -2457,14 +2465,15 @@ static void server_accepted(sp_http_server_t* server, sp_io_op_t* op) {
   }
 }
 
-static void server_dispatch(sp_http_server_t* server, sp_io_op_t* op) {
-  if (op == &server->accept) {
-    server_accepted(server, op);
-    return;
-  }
+static void server_on_accept(sp_io_t io, sp_io_op_t* op) {
+  sp_unused(io);
+  server_accepted(sp_cast(sp_http_server_t*, op->user_data), op);
+}
+
+static void server_on_slot(sp_io_t io, sp_io_op_t* op) {
+  sp_unused(io);
   sp_http_slot_t* slot = sp_cast(sp_http_slot_t*, op->user_data);
-  sp_assert(slot >= server->slots && slot < server->slots + server->desc.max_conns);
-  slot_complete(server, slot, op);
+  slot_complete(slot->server, slot, op);
 }
 
 static bool server_armed(const sp_http_server_t* server) {
@@ -2505,6 +2514,7 @@ sp_http_error_t sp_http_server_init(sp_http_server_t* server, sp_http_server_des
   server->slots = sp_alloc_n(server->desc.conn.mem, sp_http_slot_t, server->desc.max_conns);
   sp_for(it, server->desc.max_conns) {
     server->slots[it] = sp_zero_s(sp_http_slot_t);
+    server->slots[it].server = server;
     server->slots[it].socket = SP_SYS_INVALID_SOCKET;
     sp_http_conn_init(&server->slots[it].conn, server->desc.conn);
   }
@@ -2526,14 +2536,10 @@ void sp_http_server_pump(sp_http_server_t* server, sp_io_timeout_t timeout) {
     slot_drive(server, slot);
   }
 
-  sp_io_op_t* done [SP_HTTP_SERVER_DONE_MAX];
   sp_for(round, 2) {
     u32 count = 0;
-    sp_io_wait(server->desc.io, done, sp_carr_len(done), round == 0 ? timeout : sp_io_timeout_after(0), &count);
+    sp_io_dispatch(server->desc.io, round == 0 ? timeout : sp_io_timeout_after(0), &count);
     if (count == 0) break;
-    sp_for(it, count) {
-      server_dispatch(server, done[it]);
-    }
   }
 }
 
@@ -2555,13 +2561,8 @@ void sp_http_server_deinit(sp_http_server_t* server) {
     if (server->slots[it].live) slot_close(server, &server->slots[it]);
   }
 
-  sp_io_op_t* done [SP_HTTP_SERVER_DONE_MAX];
   while (server_armed(server)) {
-    u32 count = 0;
-    sp_io_wait(server->desc.io, done, sp_carr_len(done), sp_io_timeout_none(), &count);
-    sp_for(it, count) {
-      server_dispatch(server, done[it]);
-    }
+    sp_io_dispatch(server->desc.io, sp_io_timeout_none(), SP_NULLPTR);
   }
 
   sp_for(it, server->desc.max_conns) {
