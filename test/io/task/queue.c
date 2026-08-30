@@ -12,6 +12,7 @@ typedef struct {
   u32 foreign;
   u32 consumers;
   u32 items;
+  bool cancel;
 } queue_test_t;
 
 static const queue_test_t queue_tests [] = {
@@ -24,6 +25,8 @@ static const queue_test_t queue_tests [] = {
 typedef struct {
   sp_task_queue_t queue;
   u32 items;
+  u32 total;
+  sp_task_t* victim;
   sp_atomic_u32_t sum;
   sp_atomic_u32_t count;
   u32 storage [TASK_QUEUE_MAX_CAPACITY];
@@ -91,3 +94,73 @@ static sp_err_t run_queue_test(sp_test_t* t, queue_test_t* c) {
 }
 
 sp_test_each_fn(task, queue, queue_test_t, queue_tests, run_queue_test);
+
+#if defined(SP_TASK_FIBER_SUPPORTED)
+
+static const queue_test_t fiber_queue_tests [] = {
+  { .name = "foreign_producers_wake_fibers", .capacity = 4, .producers = 1, .foreign = 2, .consumers = 2, .items = 32 },
+  { .name = "foreign_backpressure", .capacity = 1, .foreign = 2, .consumers = 1, .items = 16 },
+  { .name = "cancel_races_foreign_notify", .capacity = 2, .foreign = 2, .consumers = 2, .items = 64, .cancel = true },
+};
+
+static void queue_closer_consumer(void* context) {
+  queue_state_t* s = sp_cast(queue_state_t*, context);
+  while (true) {
+    u32 value = 0;
+    if (sp_task_queue_get(&s->queue, &value)) break;
+    sp_atomic_u32_add(&s->sum, value, SP_ATOMIC_RELAXED);
+    if (sp_atomic_u32_add(&s->count, 1, SP_ATOMIC_ACQ_REL) + 1 == s->total) {
+      sp_task_queue_close(&s->queue);
+    }
+  }
+}
+
+static void queue_canceller(void* context) {
+  queue_state_t* s = sp_cast(queue_state_t*, context);
+  sp_task_cancel(s->victim);
+}
+
+static sp_err_t run_queue_fiber_test(sp_test_t* t, queue_test_t* c) {
+  sp_test_skip_on_freestanding();
+
+  sp_io_blocking_t io_mem;
+  sp_io_t io = sp_io_blocking_init(&io_mem);
+  sp_task_fiber_t* f = sp_alloc_type(sp_test_arena(t), sp_task_fiber_t);
+  sp_task_sched_t sched = sp_task_fiber_init(f, io, sp_test_arena(t));
+
+  queue_state_t s = sp_zero;
+  s.items = c->items;
+  s.total = (c->producers + c->foreign) * c->items;
+  s.queue = sp_task_queue_init(sp_mem_slice((u8*)s.storage, c->capacity * sizeof(u32)), sizeof(u32));
+
+  sp_for(it, c->producers) {
+    sp_task_spawn(sched, queue_producer, &s);
+  }
+  sp_for(it, c->consumers) {
+    sp_task_t* task = sp_task_spawn(sched, queue_closer_consumer, &s);
+    if (!it) s.victim = task;
+  }
+  if (c->cancel) {
+    sp_task_spawn(sched, queue_canceller, &s);
+  }
+
+  sp_thread_t threads [TASK_QUEUE_MAX_WORKERS] = sp_zero;
+  sp_for(it, c->foreign) {
+    sp_thread_init(&threads[it], queue_producer_thread, &s);
+  }
+
+  sp_task_run(sched);
+  sp_for(it, c->foreign) {
+    sp_thread_join(&threads[it]);
+  }
+  sp_task_fiber_deinit(f);
+
+  u32 senders = c->producers + c->foreign;
+  sp_expect_eq(t, sp_atomic_u32_load(&s.count, SP_ATOMIC_ACQUIRE), senders * c->items);
+  sp_expect_eq(t, sp_atomic_u32_load(&s.sum, SP_ATOMIC_ACQUIRE), senders * (c->items * (c->items + 1) / 2));
+  return SP_OK;
+}
+
+sp_test_each_fn(task, fiber_queue, queue_test_t, fiber_queue_tests, run_queue_fiber_test);
+
+#endif
