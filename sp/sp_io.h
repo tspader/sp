@@ -177,6 +177,25 @@ SP_API sp_err_t sp_io_uring_init(sp_io_uring_t* ring, u32 entries);
 SP_API void     sp_io_uring_deinit(sp_io_uring_t* ring);
 SP_API sp_io_t  sp_io_uring_as_io(sp_io_uring_t* ring);
 
+#define SP_IO_POLL_MAX_OPS 64
+
+typedef struct {
+  sp_io_op_t* op;
+  u64 deadline;
+} sp_io_poll_armed_t;
+
+typedef struct {
+  sp_io_poll_armed_t armed [SP_IO_POLL_MAX_OPS];
+  u32 armed_count;
+  sp_io_op_t* done [SP_IO_POLL_MAX_OPS];
+  u32 done_count;
+  sp_sys_event_t wake;
+} sp_io_poll_t;
+
+SP_API sp_err_t sp_io_poll_init(sp_io_poll_t* p);
+SP_API void     sp_io_poll_deinit(sp_io_poll_t* p);
+SP_API sp_io_t  sp_io_poll_as_io(sp_io_poll_t* p);
+
 #define SP_IO_SIM_MAX_OPS       32
 #define SP_IO_SIM_MAX_CONNS     8
 #define SP_IO_SIM_MAX_LISTENERS 2
@@ -599,6 +618,20 @@ sp_io_t sp_io_blocking_init(sp_io_blocking_t* b) {
   *b = sp_zero_s(sp_io_blocking_t);
   return sp_io_blocking_as_io(b);
 }
+
+SP_PRIVATE void sp_io_blocking_heap_destroy(void* user_data) {
+  sp_sys_free(user_data, sizeof(sp_io_blocking_t));
+}
+
+SP_PRIVATE const sp_io_vtable_t sp_io_blocking_heap_vtable = {
+  .submit  = sp_io_blocking_submit,
+  .wait    = sp_io_blocking_wait,
+  .cancel  = sp_io_blocking_cancel,
+  .close   = sp_io_blocking_close,
+  .wake    = sp_io_blocking_wake,
+  .now     = sp_io_blocking_now,
+  .destroy = sp_io_blocking_heap_destroy,
+};
 
 #if defined(SP_LINUX)
 
@@ -1141,19 +1174,6 @@ void sp_io_uring_deinit(sp_io_uring_t* ring) {
   if (ring->map.sqes) sp_syscall(SP_SYSCALL_NUM_MUNMAP, ring->map.sqes, ring->map.sqes_len);
 }
 
-sp_err_t sp_io_new(sp_io_t* io) {
-  *io = sp_zero_s(sp_io_t);
-  sp_io_uring_t* ring = sp_sys_alloc_type(sp_io_uring_t);
-  if (!ring) return SP_ERR_SYS_NO_MEMORY;
-  sp_err_t err = sp_io_uring_init(ring, SP_IO_URING_DEFAULT_ENTRIES);
-  if (err) {
-    sp_sys_free(ring, sizeof(*ring));
-    return err;
-  }
-  *io = sp_io_uring_as_io(ring);
-  return SP_OK;
-}
-
 #else
 
 SP_PRIVATE sp_err_t sp_io_uring_submit(void* user_data, sp_io_op_t* op) {
@@ -1201,29 +1221,6 @@ void sp_io_uring_deinit(sp_io_uring_t* ring) {
   sp_unused(ring);
 }
 
-SP_PRIVATE void sp_io_blocking_heap_destroy(void* user_data) {
-  sp_sys_free(user_data, sizeof(sp_io_blocking_t));
-}
-
-SP_PRIVATE const sp_io_vtable_t sp_io_blocking_heap_vtable = {
-  .submit  = sp_io_blocking_submit,
-  .wait    = sp_io_blocking_wait,
-  .cancel  = sp_io_blocking_cancel,
-  .close   = sp_io_blocking_close,
-  .wake    = sp_io_blocking_wake,
-  .now     = sp_io_blocking_now,
-  .destroy = sp_io_blocking_heap_destroy,
-};
-
-sp_err_t sp_io_new(sp_io_t* io) {
-  *io = sp_zero_s(sp_io_t);
-  sp_io_blocking_t* b = sp_sys_alloc_type(sp_io_blocking_t);
-  if (!b) return SP_ERR_SYS_NO_MEMORY;
-  sp_io_blocking_init(b);
-  *io = (sp_io_t) { .user_data = b, .vt = &sp_io_blocking_heap_vtable };
-  return SP_OK;
-}
-
 #endif
 
 SP_PRIVATE const sp_io_vtable_t sp_io_uring_vtable = {
@@ -1238,6 +1235,468 @@ SP_PRIVATE const sp_io_vtable_t sp_io_uring_vtable = {
 
 sp_io_t sp_io_uring_as_io(sp_io_uring_t* ring) {
   return (sp_io_t) { .user_data = ring, .vt = &sp_io_uring_vtable };
+}
+
+#if defined(SP_LINUX) || defined(SP_MACOS)
+
+#if !defined(SP_IMPL_H)
+  #error "sp_io.h's poll backend is built on sp.h's syscall layer; include it from the TU that defines SP_IMPLEMENTATION"
+#endif
+
+#if defined(SP_MACOS)
+  typedef struct pollfd sp_io_pollfd_t;
+  #define SP_IO_POLLFD_IN       POLLIN
+  #define SP_IO_POLLFD_OUT      POLLOUT
+  #define SP_IO_POLLFD_NONBLOCK O_NONBLOCK
+#else
+  typedef sp_sys_linux_pollfd_t sp_io_pollfd_t;
+  #define SP_IO_POLLFD_IN       SP_SYS_LINUX_POLLIN
+  #define SP_IO_POLLFD_OUT      SP_SYS_LINUX_POLLOUT
+  #define SP_IO_POLLFD_NONBLOCK SP_SYS_LINUX_O_NONBLOCK
+#endif
+
+SP_PRIVATE s64 sp_io_poll_enter(sp_io_pollfd_t* fds, u32 nfds, bool bounded, u64 ns) {
+#if defined(SP_MACOS)
+  s32 ms = -1;
+  if (bounded) ms = (s32)sp_min((ns + SP_TM_MS_TO_NS - 1) / SP_TM_MS_TO_NS, (u64)SP_LIMIT_S32_MAX);
+  s32 rc = poll(fds, nfds, ms);
+  return rc < 0 ? -(s64)errno : (s64)rc;
+#else
+  sp_sys_timespec_t ts = sp_sys_timespec_from_ns(ns);
+  return sp_syscall(SP_SYSCALL_NUM_PPOLL, fds, nfds, bounded ? &ts : SP_NULLPTR, 0, 0);
+#endif
+}
+
+SP_PRIVATE s64 sp_io_poll_fcntl(s32 fd, s32 cmd, s64 arg) {
+#if defined(SP_MACOS)
+  s32 rc = fcntl(fd, cmd, (s32)arg);
+  return rc < 0 ? -(s64)errno : (s64)rc;
+#else
+  return sp_syscall(SP_SYSCALL_NUM_FCNTL, fd, cmd, arg);
+#endif
+}
+
+SP_PRIVATE void sp_io_poll_arm(sp_io_poll_t* p, sp_io_op_t* op, u64 deadline) {
+  sp_assert(p->armed_count < SP_IO_POLL_MAX_OPS);
+  p->armed[p->armed_count++] = (sp_io_poll_armed_t) { .op = op, .deadline = deadline };
+}
+
+SP_PRIVATE void sp_io_poll_finish(sp_io_poll_t* p, sp_io_op_t* op) {
+  sp_assert(p->done_count < SP_IO_POLL_MAX_OPS);
+  p->done[p->done_count++] = op;
+}
+
+SP_PRIVATE u64 sp_io_poll_op_deadline(sp_io_timeout_t timeout) {
+  switch (timeout.kind) {
+    case SP_IO_TIMEOUT_NONE: sp_unreachable_return(0);
+    case SP_IO_TIMEOUT_DURATION: {
+      u64 now = sp_io_blocking_now_ns(timeout.time.clock);
+      return timeout.time.ns > SP_LIMIT_U64_MAX - now ? SP_LIMIT_U64_MAX : now + timeout.time.ns;
+    }
+    case SP_IO_TIMEOUT_DEADLINE: return timeout.time.ns;
+  }
+  return 0;
+}
+
+SP_PRIVATE sp_io_pollfd_t sp_io_poll_fd(sp_io_op_t* op) {
+  switch (op->kind) {
+    case SP_IO_OP_ACCEPT:  return (sp_io_pollfd_t) { .fd = (s32)op->accept.socket, .events = SP_IO_POLLFD_IN };
+    case SP_IO_OP_RECV:    return (sp_io_pollfd_t) { .fd = (s32)op->recv.socket, .events = SP_IO_POLLFD_IN };
+    case SP_IO_OP_READ:    return (sp_io_pollfd_t) { .fd = (s32)op->read.fd, .events = SP_IO_POLLFD_IN };
+    case SP_IO_OP_CONNECT: return (sp_io_pollfd_t) { .fd = (s32)op->connect.socket, .events = SP_IO_POLLFD_OUT };
+    case SP_IO_OP_SEND:    return (sp_io_pollfd_t) { .fd = (s32)op->send.socket, .events = SP_IO_POLLFD_OUT };
+    case SP_IO_OP_WRITE:   return (sp_io_pollfd_t) { .fd = (s32)op->write.fd, .events = SP_IO_POLLFD_OUT };
+    case SP_IO_OP_TIMEOUT:
+    case SP_IO_OP_WORK:
+    case SP_IO_OP_IS_TTY:
+    case SP_IO_OP_TTY_GET:
+    case SP_IO_OP_TTY_SET: {
+      sp_unreachable_case();
+    }
+  }
+  return sp_zero_s(sp_io_pollfd_t);
+}
+
+SP_PRIVATE bool sp_io_poll_inline(sp_io_poll_t* p, sp_io_op_t* op) {
+  switch (op->kind) {
+    case SP_IO_OP_IS_TTY: {
+      op->result.flag = sp_sys_is_tty(op->is_tty.fd);
+      break;
+    }
+    case SP_IO_OP_TTY_GET: {
+      op->result.err = sp_sys_tty_get(op->tty_get.fd, op->tty_get.attr);
+      break;
+    }
+    case SP_IO_OP_TTY_SET: {
+      op->result.err = sp_sys_tty_set(op->tty_set.fd, op->tty_set.attr);
+      break;
+    }
+    case SP_IO_OP_ACCEPT:
+    case SP_IO_OP_CONNECT:
+    case SP_IO_OP_RECV:
+    case SP_IO_OP_SEND:
+    case SP_IO_OP_READ:
+    case SP_IO_OP_WRITE:
+    case SP_IO_OP_TIMEOUT:
+    case SP_IO_OP_WORK: {
+      return false;
+    }
+  }
+
+  sp_io_complete(sp_io_poll_as_io(p), op);
+  return true;
+}
+
+SP_PRIVATE sp_err_t sp_io_poll_submit(void* user_data, sp_io_op_t* op) {
+  sp_io_poll_t* p = (sp_io_poll_t*)user_data;
+  op->result.err = SP_OK;
+  op->result.len = 0;
+  op->result.socket = SP_SYS_INVALID_SOCKET;
+  op->result.flag = false;
+
+  if (op->kind == SP_IO_OP_WORK) return SP_ERR_SYS_UNSUPPORTED;
+  if (sp_io_poll_inline(p, op)) return SP_OK;
+
+  switch (op->kind) {
+    case SP_IO_OP_CONNECT: {
+      sp_sys_handle_desc_t desc = op->connect.desc;
+      desc.mode = SP_SYS_NONBLOCKING;
+      op->connect.socket = SP_SYS_INVALID_SOCKET;
+      sp_err_t err = sp_sys_socket_open(&op->connect.socket, desc);
+      if (!err) {
+        err = sp_sys_socket_connect(op->connect.socket, op->connect.addr);
+        if (err == SP_ERR_SYS_WOULD_BLOCK) {
+          sp_io_poll_arm(p, op, 0);
+          return SP_OK;
+        }
+      }
+      if (err) {
+        if (op->connect.socket != SP_SYS_INVALID_SOCKET) sp_sys_socket_close(op->connect.socket);
+        op->connect.socket = SP_SYS_INVALID_SOCKET;
+        op->result.err = err;
+      }
+      else {
+        op->result.socket = op->connect.socket;
+      }
+      sp_io_poll_finish(p, op);
+      return SP_OK;
+    }
+    case SP_IO_OP_TIMEOUT: {
+      sp_io_poll_arm(p, op, sp_io_poll_op_deadline(op->timeout.timeout));
+      return SP_OK;
+    }
+    case SP_IO_OP_ACCEPT:
+    case SP_IO_OP_RECV:
+    case SP_IO_OP_SEND:
+    case SP_IO_OP_READ:
+    case SP_IO_OP_WRITE: {
+      sp_io_poll_arm(p, op, 0);
+      return SP_OK;
+    }
+    case SP_IO_OP_WORK:
+    case SP_IO_OP_IS_TTY:
+    case SP_IO_OP_TTY_GET:
+    case SP_IO_OP_TTY_SET: {
+      sp_unreachable_case();
+    }
+  }
+  return SP_OK;
+}
+
+SP_PRIVATE bool sp_io_poll_step(sp_io_op_t* op) {
+  switch (op->kind) {
+    case SP_IO_OP_ACCEPT: {
+      sp_err_t err = sp_sys_socket_accept(op->accept.socket, op->accept.desc, &op->result.socket);
+      if (err == SP_ERR_SYS_WOULD_BLOCK || err == SP_ERR_SYS_CONN_RESET) return false;
+      op->result.err = err;
+      return true;
+    }
+    case SP_IO_OP_CONNECT: {
+      sp_err_t err = sp_sys_socket_error(op->connect.socket);
+      if (err) {
+        sp_sys_socket_close(op->connect.socket);
+        op->connect.socket = SP_SYS_INVALID_SOCKET;
+        op->result.err = err;
+      }
+      else {
+        op->result.socket = op->connect.socket;
+      }
+      return true;
+    }
+    case SP_IO_OP_RECV: {
+      sp_err_t err = sp_sys_socket_recv(op->recv.socket, op->recv.buf.data, op->recv.buf.len, &op->result.len);
+      if (err == SP_ERR_SYS_WOULD_BLOCK) return false;
+      op->result.err = err;
+      return true;
+    }
+    case SP_IO_OP_SEND: {
+      sp_err_t err = sp_sys_socket_send(op->send.socket, op->send.buf.data, op->send.buf.len, &op->result.len);
+      if (err == SP_ERR_SYS_WOULD_BLOCK) return false;
+      op->result.err = err;
+      return true;
+    }
+    case SP_IO_OP_READ: {
+      sp_err_t err = sp_sys_read(op->read.fd, op->read.buf.data, op->read.buf.len, &op->result.len);
+      if (err == SP_ERR_SYS_WOULD_BLOCK) return false;
+      op->result.err = err;
+      return true;
+    }
+    case SP_IO_OP_WRITE: {
+      sp_err_t err = sp_sys_write(op->write.fd, op->write.buf.data, op->write.buf.len, &op->result.len);
+      if (err == SP_ERR_SYS_WOULD_BLOCK) return false;
+      op->result.err = err;
+      return true;
+    }
+    case SP_IO_OP_TIMEOUT:
+    case SP_IO_OP_WORK:
+    case SP_IO_OP_IS_TTY:
+    case SP_IO_OP_TTY_GET:
+    case SP_IO_OP_TTY_SET: {
+      sp_unreachable_case();
+    }
+  }
+  return false;
+}
+
+SP_PRIVATE bool sp_io_poll_step_nonblocking(sp_io_op_t* op) {
+  s32 fd = sp_io_poll_fd(op).fd;
+  s64 flags = sp_io_poll_fcntl(fd, SP_F_GETFL, 0);
+  bool restore = flags >= 0 && !(flags & SP_IO_POLLFD_NONBLOCK);
+  if (restore) sp_io_poll_fcntl(fd, SP_F_SETFL, flags | SP_IO_POLLFD_NONBLOCK);
+  bool completed = sp_io_poll_step(op);
+  if (restore) sp_io_poll_fcntl(fd, SP_F_SETFL, flags);
+  return completed;
+}
+
+SP_PRIVATE bool sp_io_poll_ready(sp_io_op_t* op) {
+  sp_io_pollfd_t fd = sp_io_poll_fd(op);
+  s64 rc = sp_io_poll_enter(&fd, 1, true, 0);
+  return rc > 0 && fd.revents;
+}
+
+SP_PRIVATE sp_err_t sp_io_poll_wait(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count) {
+  sp_io_poll_t* p = (sp_io_poll_t*)user_data;
+  sp_assert(max);
+  *count = 0;
+  bool bounded = timeout.kind != SP_IO_TIMEOUT_NONE;
+  sp_tm_timer_t timer = sp_tm_start_timer();
+  u64 budget = sp_io_blocking_remaining(timeout);
+
+  while (true) {
+    while (p->done_count && *count < max) {
+      done[(*count)++] = p->done[0];
+      p->done_count--;
+      sp_for(it, p->done_count) {
+        p->done[it] = p->done[it + 1];
+      }
+    }
+
+    bool timed = false;
+    u64 nearest = 0;
+    u32 kept = 0;
+    sp_for(it, p->armed_count) {
+      sp_io_poll_armed_t armed = p->armed[it];
+      if (armed.op->kind == SP_IO_OP_TIMEOUT) {
+        u64 now = sp_io_blocking_now_ns(armed.op->timeout.timeout.time.clock);
+        if (now >= armed.deadline && *count < max) {
+          armed.op->result.err = SP_OK;
+          done[(*count)++] = armed.op;
+          continue;
+        }
+        u64 remaining = now >= armed.deadline ? 0 : armed.deadline - now;
+        if (!timed || remaining < nearest) nearest = remaining;
+        timed = true;
+      }
+      p->armed[kept++] = armed;
+    }
+    p->armed_count = kept;
+
+    if (*count == max) return SP_OK;
+
+    sp_io_pollfd_t fds [SP_IO_POLL_MAX_OPS + 1];
+    fds[0] = (sp_io_pollfd_t) { .fd = (s32)p->wake.fd, .events = SP_IO_POLLFD_IN };
+    u32 nfds = 1;
+    sp_for(it, p->armed_count) {
+      if (p->armed[it].op->kind == SP_IO_OP_TIMEOUT) continue;
+      fds[nfds++] = sp_io_poll_fd(p->armed[it].op);
+    }
+
+    u64 wait_ns = SP_LIMIT_U64_MAX;
+    if (bounded) {
+      u64 elapsed = sp_tm_read_timer(&timer);
+      wait_ns = elapsed >= budget ? 0 : budget - elapsed;
+    }
+    if (timed) wait_ns = sp_min(wait_ns, nearest);
+    if (*count) wait_ns = 0;
+
+    s64 rc = sp_io_poll_enter(fds, nfds, bounded || timed || *count > 0, wait_ns);
+    if (rc < 0 && rc != -SP_EINTR) {
+      return *count ? SP_OK : sp_sys_err_from_errno(-rc);
+    }
+
+    bool woke = false;
+    if (rc > 0 && fds[0].revents) {
+      sp_err_t err = sp_sys_event_clear(p->wake);
+      if (err && !*count) return err;
+      woke = true;
+    }
+
+    if (rc > 0) {
+      u32 at = 0;
+      kept = 0;
+      sp_for(it, p->armed_count) {
+        sp_io_poll_armed_t armed = p->armed[it];
+        if (armed.op->kind != SP_IO_OP_TIMEOUT) {
+          at++;
+          if (fds[at].revents && *count < max && sp_io_poll_step_nonblocking(armed.op)) {
+            done[(*count)++] = armed.op;
+            continue;
+          }
+        }
+        p->armed[kept++] = armed;
+      }
+      p->armed_count = kept;
+    }
+
+    if (*count || woke) return SP_OK;
+    if (bounded && sp_tm_read_timer(&timer) >= budget) return SP_OK;
+  }
+}
+
+SP_PRIVATE sp_err_t sp_io_poll_cancel(void* user_data, sp_io_op_t* op) {
+  sp_io_poll_t* p = (sp_io_poll_t*)user_data;
+  sp_for(it, p->armed_count) {
+    if (p->armed[it].op != op) continue;
+    sp_io_poll_armed_t armed = p->armed[it];
+    p->armed_count--;
+    sp_for(jt, p->armed_count - it) {
+      p->armed[it + jt] = p->armed[it + jt + 1];
+    }
+    if (op->kind == SP_IO_OP_TIMEOUT) {
+      if (sp_io_blocking_now_ns(op->timeout.timeout.time.clock) >= armed.deadline) {
+        op->result.err = SP_OK;
+        sp_io_poll_finish(p, op);
+        return SP_OK;
+      }
+    }
+    else if (sp_io_poll_ready(op) && sp_io_poll_step_nonblocking(op)) {
+      sp_io_poll_finish(p, op);
+      return SP_OK;
+    }
+    if (op->kind == SP_IO_OP_CONNECT && op->connect.socket != SP_SYS_INVALID_SOCKET) {
+      sp_sys_socket_close(op->connect.socket);
+      op->connect.socket = SP_SYS_INVALID_SOCKET;
+    }
+    op->result.err = SP_ERR_IO_CANCELED;
+    op->result.len = 0;
+    sp_io_poll_finish(p, op);
+    return SP_OK;
+  }
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_poll_wake(void* user_data) {
+  sp_io_poll_t* p = (sp_io_poll_t*)user_data;
+  return sp_sys_event_signal(p->wake);
+}
+
+SP_PRIVATE void sp_io_poll_destroy(void* user_data) {
+  sp_io_poll_t* p = (sp_io_poll_t*)user_data;
+  sp_io_poll_deinit(p);
+  sp_sys_free(p, sizeof(*p));
+}
+
+sp_err_t sp_io_poll_init(sp_io_poll_t* p) {
+  *p = sp_zero_s(sp_io_poll_t);
+  p->wake.fd = SP_SYS_INVALID_FD;
+  return sp_sys_event_open(&p->wake);
+}
+
+void sp_io_poll_deinit(sp_io_poll_t* p) {
+  if (p->wake.fd != SP_SYS_INVALID_FD) sp_sys_close(p->wake.fd);
+}
+
+#else
+
+SP_PRIVATE sp_err_t sp_io_poll_submit(void* user_data, sp_io_op_t* op) {
+  sp_unused(user_data); sp_unused(op);
+  return SP_ERR_SYS_UNSUPPORTED;
+}
+
+SP_PRIVATE sp_err_t sp_io_poll_wait(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count) {
+  sp_unused(user_data); sp_unused(done); sp_unused(max); sp_unused(timeout);
+  *count = 0;
+  return SP_ERR_SYS_UNSUPPORTED;
+}
+
+SP_PRIVATE sp_err_t sp_io_poll_cancel(void* user_data, sp_io_op_t* op) {
+  sp_unused(user_data); sp_unused(op);
+  return SP_ERR_SYS_UNSUPPORTED;
+}
+
+SP_PRIVATE sp_err_t sp_io_poll_wake(void* user_data) {
+  sp_unused(user_data);
+  return SP_ERR_SYS_UNSUPPORTED;
+}
+
+SP_PRIVATE void sp_io_poll_destroy(void* user_data) {
+  sp_unused(user_data);
+}
+
+sp_err_t sp_io_poll_init(sp_io_poll_t* p) {
+  *p = sp_zero_s(sp_io_poll_t);
+  return SP_ERR_SYS_UNSUPPORTED;
+}
+
+void sp_io_poll_deinit(sp_io_poll_t* p) {
+  sp_unused(p);
+}
+
+#endif
+
+SP_PRIVATE const sp_io_vtable_t sp_io_poll_vtable = {
+  .submit  = sp_io_poll_submit,
+  .wait    = sp_io_poll_wait,
+  .cancel  = sp_io_poll_cancel,
+  .close   = sp_io_blocking_close,
+  .wake    = sp_io_poll_wake,
+  .now     = sp_io_blocking_now,
+  .destroy = sp_io_poll_destroy,
+};
+
+sp_io_t sp_io_poll_as_io(sp_io_poll_t* p) {
+  return (sp_io_t) { .user_data = p, .vt = &sp_io_poll_vtable };
+}
+
+sp_err_t sp_io_new(sp_io_t* io) {
+  *io = sp_zero_s(sp_io_t);
+#if defined(SP_LINUX)
+  sp_io_uring_t* ring = sp_sys_alloc_type(sp_io_uring_t);
+  if (!ring) return SP_ERR_SYS_NO_MEMORY;
+  sp_err_t err = sp_io_uring_init(ring, SP_IO_URING_DEFAULT_ENTRIES);
+  if (err) {
+    sp_sys_free(ring, sizeof(*ring));
+    return err;
+  }
+  *io = sp_io_uring_as_io(ring);
+  return SP_OK;
+#elif defined(SP_MACOS)
+  sp_io_poll_t* p = sp_sys_alloc_type(sp_io_poll_t);
+  if (!p) return SP_ERR_SYS_NO_MEMORY;
+  sp_err_t err = sp_io_poll_init(p);
+  if (err) {
+    sp_sys_free(p, sizeof(*p));
+    return err;
+  }
+  *io = sp_io_poll_as_io(p);
+  return SP_OK;
+#else
+  sp_io_blocking_t* b = sp_sys_alloc_type(sp_io_blocking_t);
+  if (!b) return SP_ERR_SYS_NO_MEMORY;
+  sp_io_blocking_init(b);
+  *io = (sp_io_t) { .user_data = b, .vt = &sp_io_blocking_heap_vtable };
+  return SP_OK;
+#endif
 }
 
 SP_PRIVATE sp_io_sim_conn_t* sp_io_sim_conn(sp_io_sim_t* sim, sp_sys_socket_t socket, u32* end) {
