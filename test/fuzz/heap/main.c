@@ -1,8 +1,5 @@
 #define SP_IMPLEMENTATION
-#include "types.h"
-#include "gen/gen.h"
-#include "ops/ops.h"
-#include "oracle/oracle.h"
+#include "fuzz.h"
 #include "sp/sp_cli.h"
 
 static sp_str_t err_str(err_t err) {
@@ -18,100 +15,37 @@ static sp_str_t err_str(err_t err) {
     case ERR_IDENTITY: return sp_str_lit("allocation does not resolve to its span or large");
     case ERR_ACCOUNTING: return sp_str_lit("bytes_used diverged from the model");
     case ERR_RESERVED: return sp_str_lit("bytes_reserved diverged from the model");
+    case ERR_PEAK: return sp_str_lit("peak_reserved dropped below an observed watermark");
     case ERR_LEAK: return sp_str_lit("spans leaked from every list");
     case ERR_SPAN: return sp_str_lit("span invariant violated");
     case ERR_LARGE: return sp_str_lit("large list invariant violated");
     case ERR_DRAIN: return sp_str_lit("heap did not drain after freeing everything");
+    case ERR_FLIP: return sp_str_lit("heap shape diverged under the zeroing flip");
     case ERR_COUNT: break;
   }
   sp_unreachable_return(sp_str_lit("unknown"));
 }
 
-
-sp_prng_profile_t* profile_new(sp_mem_t mem) {
-  return sp_prng_profile_new(mem, (sp_prng_profile_desc_t) {
-    .entries = {
-      {
-        .kind = SP_PRNG_KIND_SWARM,
-        .name = "ops",
-        .swarm = {
-          .count = OP_COUNT,
-          .bind = sp_prng_bind(profile_t, ops),
-        },
-      },
-      {
-        .kind = SP_PRNG_KIND_SWARM,
-        .name = "sizes",
-        .swarm = {
-          .count = SIZE_COUNT,
-          .bind = sp_prng_bind(profile_t, sizes),
-        },
-      },
-      {
-        .kind = SP_PRNG_KIND_CHANCE,
-        .name = "big",
-        .chance = {
-          .numerator = 1,
-          .denominator = 8,
-          .bind = sp_prng_bind(profile_t, big),
-        },
-      },
-      {
-        .kind = SP_PRNG_KIND_RANGE,
-        .name = "steps",
-        .range = {
-          .min = 1,
-          .max = 64,
-          .bind = sp_prng_bind(profile_t, steps),
-        },
-      },
-      {
-        .kind = SP_PRNG_KIND_RANGE,
-        .name = "big_steps",
-        .range = {
-          .min = 128,
-          .max = 2048,
-          .bind = sp_prng_bind(profile_t, big_steps),
-        },
-      },
-      {
-        .kind = SP_PRNG_KIND_RANGE,
-        .name = "max_live",
-        .range = {
-          .min = 1,
-          .max = 16,
-          .bind = sp_prng_bind(profile_t, max_live),
-        },
-      },
-      {
-        .kind = SP_PRNG_KIND_RANGE,
-        .name = "big_max_live",
-        .range = {
-          .min = 16,
-          .max = MAX_SLOTS,
-          .bind = sp_prng_bind(profile_t, big_max_live),
-        },
-      },
-    }
-  });
+static bool shape_eq(shape_t a, shape_t b) {
+  return a.segments == b.segments &&
+         a.spans == b.spans &&
+         a.recycled == b.recycled &&
+         a.larges == b.larges &&
+         a.reserved == b.reserved &&
+         a.peak == b.peak;
 }
 
 static err_t run_iteration(const sp_prng_profile_t* profile, sp_prng_t base, u64 iter) {
-  state_t state = sp_zero;
-  state.prng = sp_prng_iter(base, iter);
-  state.heap = sp_mem_heap_new();
-  u64 steps = gen_state(&state, profile);
+  sp_prng_t prng = sp_prng_iter(base, iter);
+  trace_t trace = gen_trace(&prng, profile);
+  trace_t flipped = flip_trace(trace);
 
-  err_t err = ERR_OK;
-  for (u64 it = 0; it < steps && !err; it++) {
-    err = step(&state);
-    if (!err) err = oracle_heap(&state);
-  }
-  if (!err) err = drain(&state);
-  if (!err) err = oracle_heap(&state);
-
-  sp_mem_heap_destroy(state.heap);
-  return err;
+  shape_t shape = sp_zero;
+  shape_t flip_shape = sp_zero;
+  try(run_trace(&trace, &shape));
+  try(run_trace(&flipped, &flip_shape));
+  must(shape_eq(shape, flip_shape), ERR_FLIP);
+  return ERR_OK;
 }
 
 typedef struct {
@@ -183,9 +117,8 @@ static s32 entry(s32 num_args, const c8** args) {
   }
   sp_log("--seed 0x{:x}", sp_fmt_uint(seed));
 
-  sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_prng_t prng = sp_prng_new(seed);
-  sp_prng_profile_t* profile = profile_new(sp_mem_heap_as_allocator(heap));
+  sp_prng_profile_t* profile = profile_new(sp_mem_os_new());
 
   u64 first = opts.iter >= 0 ? (u64)opts.iter : 0;
   u64 last = opts.iter >= 0 ? (u64)opts.iter + 1 : opts.iters;

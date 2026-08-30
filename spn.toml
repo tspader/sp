@@ -118,8 +118,8 @@ source = ["example/msvc.c"]
 
 [[bin]]
 name = "fuzz_heap"
-source = ["test/fuzz/heap/*.c", "test/fuzz/heap/*/*.c"]
-include = [".", "test/fuzz/heap"]
+source = ["test/fuzz/heap/*.c"]
+include = ["."]
 
 [profile.sanitizer]
 linkage = "shared"
