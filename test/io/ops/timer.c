@@ -114,6 +114,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
         sp_io_op_t* op = &h.ops[step->timer.slot];
         op->kind = SP_IO_OP_TIMEOUT;
         op->timeout.timeout = harness_make_timeout(&h, step->timer.timeout, step->timer.ms, step->timer.clock);
+        harness_arm(&h, op);
         sp_expect_ok(t, sp_io_submit(h.io, op));
         break;
       }

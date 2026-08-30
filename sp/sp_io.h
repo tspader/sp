@@ -45,7 +45,14 @@ typedef enum {
   SP_IO_OP_READ,
   SP_IO_OP_WRITE,
   SP_IO_OP_TIMEOUT,
+  SP_IO_OP_WORK,
+  SP_IO_OP_IS_TTY,
+  SP_IO_OP_TTY_GET,
+  SP_IO_OP_TTY_SET,
 } sp_io_op_kind_t;
+
+SP_TYPEDEF_FN(void, sp_io_op_fn_t, sp_io_t io, sp_io_op_t* op);
+SP_TYPEDEF_FN(void, sp_io_work_fn_t, void* context);
 
 struct sp_io_op {
   sp_io_op_kind_t kind;
@@ -80,12 +87,30 @@ struct sp_io_op {
       sp_io_timeout_t timeout;
       sp_sys_timespec_t ts;
     } timeout;
+    struct {
+      sp_io_work_fn_t fn;
+      void* context;
+    } work;
+    struct {
+      sp_sys_fd_t fd;
+    } is_tty;
+    struct {
+      sp_sys_fd_t fd;
+      sp_sys_tty_attr_t* attr;
+    } tty_get;
+    struct {
+      sp_sys_fd_t fd;
+      const sp_sys_tty_attr_t* attr;
+    } tty_set;
   };
+  sp_io_op_fn_t callback;
   void* user_data;
+  bool done;
   struct {
     sp_err_t err;
     u64 len;
     sp_sys_socket_t socket;
+    bool flag;
   } result;
 };
 
@@ -102,7 +127,8 @@ struct sp_io_vtable_t {
 SP_API sp_err_t     sp_io_new(sp_io_t* io);
 SP_API void         sp_io_destroy(sp_io_t io);
 SP_API sp_err_t     sp_io_submit(sp_io_t io, sp_io_op_t* op);
-SP_API sp_err_t     sp_io_wait(sp_io_t io, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count);
+SP_API void         sp_io_complete(sp_io_t io, sp_io_op_t* op);
+SP_API sp_err_t     sp_io_dispatch(sp_io_t io, sp_io_timeout_t timeout, u32* count);
 SP_API sp_err_t     sp_io_cancel(sp_io_t io, sp_io_op_t* op);
 SP_API sp_err_t     sp_io_close(sp_io_t io, sp_sys_socket_t socket);
 SP_API sp_err_t     sp_io_wake(sp_io_t io);
@@ -184,7 +210,6 @@ typedef struct {
 
 typedef struct {
   sp_io_op_t* op;
-  u32         actor;
   u64         deadline;
 } sp_io_sim_op_t;
 
@@ -218,16 +243,31 @@ SP_API void            sp_io_sim_chunk(sp_io_sim_t* sim, sp_sys_socket_t socket,
 #if defined(SP_IO_IMPLEMENTATION) && !defined(SP_IO_C)
 #define SP_IO_C
 
+#define SP_IO_DISPATCH_MAX 64
+
 void sp_io_destroy(sp_io_t io) {
   io.vt->destroy(io.user_data);
 }
 
 sp_err_t sp_io_submit(sp_io_t io, sp_io_op_t* op) {
+  op->done = false;
   return io.vt->submit(io.user_data, op);
 }
 
-sp_err_t sp_io_wait(sp_io_t io, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count) {
-  return io.vt->wait(io.user_data, done, max, timeout, count);
+void sp_io_complete(sp_io_t io, sp_io_op_t* op) {
+  op->done = true;
+  if (op->callback) op->callback(io, op);
+}
+
+sp_err_t sp_io_dispatch(sp_io_t io, sp_io_timeout_t timeout, u32* out_count) {
+  sp_io_op_t* done [SP_IO_DISPATCH_MAX];
+  u32 count = 0;
+  sp_try(io.vt->wait(io.user_data, done, SP_IO_DISPATCH_MAX, timeout, &count));
+  sp_for(it, count) {
+    sp_io_complete(io, done[it]);
+  }
+  if (out_count) *out_count = count;
+  return SP_OK;
 }
 
 sp_err_t sp_io_cancel(sp_io_t io, sp_io_op_t* op) {
@@ -455,8 +495,46 @@ SP_PRIVATE sp_err_t sp_io_uring_arm_wake(sp_io_uring_t* ring) {
   return SP_OK;
 }
 
+SP_PRIVATE bool sp_io_uring_inline(sp_io_uring_t* ring, sp_io_op_t* op) {
+  op->result.err = SP_OK;
+  op->result.len = 0;
+  op->result.socket = SP_SYS_INVALID_SOCKET;
+  op->result.flag = false;
+
+  switch (op->kind) {
+    case SP_IO_OP_IS_TTY: {
+      op->result.flag = sp_sys_is_tty(op->is_tty.fd);
+      break;
+    }
+    case SP_IO_OP_TTY_GET: {
+      op->result.err = sp_sys_tty_get(op->tty_get.fd, op->tty_get.attr);
+      break;
+    }
+    case SP_IO_OP_TTY_SET: {
+      op->result.err = sp_sys_tty_set(op->tty_set.fd, op->tty_set.attr);
+      break;
+    }
+    case SP_IO_OP_ACCEPT:
+    case SP_IO_OP_CONNECT:
+    case SP_IO_OP_RECV:
+    case SP_IO_OP_SEND:
+    case SP_IO_OP_READ:
+    case SP_IO_OP_WRITE:
+    case SP_IO_OP_TIMEOUT:
+    case SP_IO_OP_WORK: {
+      return false;
+    }
+  }
+
+  sp_io_complete(sp_io_uring_as_io(ring), op);
+  return true;
+}
+
 SP_PRIVATE sp_err_t sp_io_uring_submit(void* user_data, sp_io_op_t* op) {
   sp_io_uring_t* ring = (sp_io_uring_t*)user_data;
+  if (op->kind == SP_IO_OP_WORK) return SP_ERR_SYS_UNSUPPORTED;
+  if (sp_io_uring_inline(ring, op)) return SP_OK;
+
   sp_io_uring_sqe_t* sqe = SP_NULLPTR;
   sp_try(sp_io_uring_sqe(ring, &sqe));
   sqe->user_data = (u64)sp_uptr(op);
@@ -523,6 +601,12 @@ SP_PRIVATE sp_err_t sp_io_uring_submit(void* user_data, sp_io_op_t* op) {
       sqe->op_flags = sp_io_uring_timeout_flags(op->timeout.timeout);
       break;
     }
+    case SP_IO_OP_WORK:
+    case SP_IO_OP_IS_TTY:
+    case SP_IO_OP_TTY_GET:
+    case SP_IO_OP_TTY_SET: {
+      sp_unreachable_case();
+    }
   }
 
   sp_io_uring_push(ring);
@@ -533,6 +617,7 @@ SP_PRIVATE void sp_io_uring_complete(sp_io_op_t* op, s32 res) {
   op->result.err = SP_OK;
   op->result.len = 0;
   op->result.socket = SP_SYS_INVALID_SOCKET;
+  op->result.flag = false;
 
   if (res >= 0) {
     switch (op->kind) {
@@ -552,6 +637,12 @@ SP_PRIVATE void sp_io_uring_complete(sp_io_op_t* op, s32 res) {
         break;
       }
       case SP_IO_OP_TIMEOUT: break;
+      case SP_IO_OP_WORK:
+      case SP_IO_OP_IS_TTY:
+      case SP_IO_OP_TTY_GET:
+      case SP_IO_OP_TTY_SET: {
+        sp_unreachable_case();
+      }
     }
     return;
   }
@@ -944,6 +1035,19 @@ SP_PRIVATE bool sp_io_sim_step_op(sp_io_sim_t* sim, u32 at) {
       op->result.err = SP_OK;
       return true;
     }
+    case SP_IO_OP_WORK: {
+      op->work.fn(op->work.context);
+      return true;
+    }
+    case SP_IO_OP_IS_TTY: {
+      op->result.flag = false;
+      return true;
+    }
+    case SP_IO_OP_TTY_GET:
+    case SP_IO_OP_TTY_SET: {
+      op->result.err = SP_ERR_SYS_UNSUPPORTED;
+      return true;
+    }
     case SP_IO_OP_READ:
     case SP_IO_OP_WRITE: {
       sp_assert(false);
@@ -962,6 +1066,7 @@ SP_PRIVATE void sp_io_sim_step(sp_io_sim_t* sim) {
       op->result.err = SP_OK;
       op->result.len = 0;
       op->result.socket = SP_SYS_INVALID_SOCKET;
+      op->result.flag = false;
       if (!sp_io_sim_step_op(sim, it)) continue;
       sp_io_sim_deliver(sim, it);
       progressed = true;
@@ -991,10 +1096,19 @@ SP_PRIVATE sp_err_t sp_io_sim_submit(void* user_data, sp_io_op_t* op) {
 
   sim->armed[sim->armed_count++] = (sp_io_sim_op_t) {
     .op = op,
-    .actor = actor->id,
     .deadline = deadline,
   };
   return SP_OK;
+}
+
+SP_PRIVATE bool sp_io_sim_next_deadline(sp_io_sim_t* sim, u64* out) {
+  bool found = false;
+  sp_for(it, sim->armed_count) {
+    if (sim->armed[it].op->kind != SP_IO_OP_TIMEOUT) continue;
+    if (!found || sim->armed[it].deadline < *out) *out = sim->armed[it].deadline;
+    found = true;
+  }
+  return found;
 }
 
 SP_PRIVATE sp_err_t sp_io_sim_wait(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count) {
@@ -1002,19 +1116,21 @@ SP_PRIVATE sp_err_t sp_io_sim_wait(void* user_data, sp_io_op_t** done, u32 max, 
   sp_io_sim_t* sim = actor->sim;
   sp_unused(timeout);
 
-  sp_io_sim_step(sim);
-
   *count = 0;
-  u32 kept = 0;
-  sp_for(it, sim->done_count) {
-    if (sim->done[it].actor == actor->id && *count < max) {
-      done[(*count)++] = sim->done[it].op;
-      continue;
+  while (true) {
+    sp_io_sim_step(sim);
+    while (sim->done_count && *count < max) {
+      done[(*count)++] = sim->done[0].op;
+      sim->done_count--;
+      sp_for(it, sim->done_count) {
+        sim->done[it] = sim->done[it + 1];
+      }
     }
-    sim->done[kept++] = sim->done[it];
+    if (*count) return SP_OK;
+    u64 deadline = 0;
+    if (!sp_io_sim_next_deadline(sim, &deadline)) return SP_OK;
+    sim->now = sp_max(sim->now, deadline);
   }
-  sim->done_count = kept;
-  return SP_OK;
 }
 
 SP_PRIVATE sp_err_t sp_io_sim_cancel(void* user_data, sp_io_op_t* op) {

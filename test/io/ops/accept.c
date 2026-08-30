@@ -45,6 +45,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   op->kind = SP_IO_OP_ACCEPT;
   op->accept.socket = h.listener;
   op->accept.desc = c->desc;
+  harness_arm(&h, op);
   sp_must_ok(t, sp_io_submit(h.io, op));
   sp_try(harness_connect(t, &h));
 
