@@ -1201,9 +1201,27 @@ void sp_io_uring_deinit(sp_io_uring_t* ring) {
   sp_unused(ring);
 }
 
+SP_PRIVATE void sp_io_blocking_heap_destroy(void* user_data) {
+  sp_sys_free(user_data, sizeof(sp_io_blocking_t));
+}
+
+SP_PRIVATE const sp_io_vtable_t sp_io_blocking_heap_vtable = {
+  .submit  = sp_io_blocking_submit,
+  .wait    = sp_io_blocking_wait,
+  .cancel  = sp_io_blocking_cancel,
+  .close   = sp_io_blocking_close,
+  .wake    = sp_io_blocking_wake,
+  .now     = sp_io_blocking_now,
+  .destroy = sp_io_blocking_heap_destroy,
+};
+
 sp_err_t sp_io_new(sp_io_t* io) {
   *io = sp_zero_s(sp_io_t);
-  return SP_ERR_SYS_UNSUPPORTED;
+  sp_io_blocking_t* b = sp_sys_alloc_type(sp_io_blocking_t);
+  if (!b) return SP_ERR_SYS_NO_MEMORY;
+  sp_io_blocking_init(b);
+  *io = (sp_io_t) { .user_data = b, .vt = &sp_io_blocking_heap_vtable };
+  return SP_OK;
 }
 
 #endif
