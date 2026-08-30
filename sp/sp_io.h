@@ -367,6 +367,20 @@ typedef struct {
 
 SP_API sp_task_sched_t sp_task_threaded_init(sp_task_threaded_t* t, sp_io_t io);
 
+SP_API sp_err_t sp_io_op_run(sp_io_t io, sp_io_op_t* op);
+
+SP_API sp_err_t sp_io_connect(sp_io_t io, sp_sys_ipv4_t addr, sp_sys_socket_t* out);
+SP_API sp_err_t sp_io_accept(sp_io_t io, sp_sys_socket_t listener, sp_sys_socket_t* out);
+SP_API sp_err_t sp_io_recv(sp_io_t io, sp_sys_socket_t socket, sp_mem_slice_t buf, u64* out_len);
+SP_API sp_err_t sp_io_send_all(sp_io_t io, sp_sys_socket_t socket, sp_mem_slice_t buf);
+SP_API sp_err_t sp_io_fd_read(sp_io_t io, sp_sys_fd_t fd, sp_mem_slice_t buf, u64* out_len);
+SP_API sp_err_t sp_io_fd_write_all(sp_io_t io, sp_sys_fd_t fd, sp_mem_slice_t buf);
+SP_API sp_err_t sp_io_sleep(sp_io_t io, u64 ns);
+SP_API sp_err_t sp_io_work(sp_io_t io, sp_io_work_fn_t fn, void* context);
+SP_API sp_err_t sp_io_is_tty(sp_io_t io, sp_sys_fd_t fd, bool* out);
+SP_API sp_err_t sp_io_tty_get(sp_io_t io, sp_sys_fd_t fd, sp_sys_tty_attr_t* attr);
+SP_API sp_err_t sp_io_tty_set(sp_io_t io, sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr);
+
 #endif
 
 #if defined(SP_IMPLEMENTATION) && !defined(SP_IO_IMPLEMENTATION)
@@ -2079,5 +2093,155 @@ sp_task_sched_t sp_task_threaded_init(sp_task_threaded_t* t, sp_io_t io) {
   return (sp_task_sched_t) { .user_data = t, .vt = &sp_task_threaded_vtable };
 }
 
+SP_PRIVATE void sp_io_op_notify(sp_io_t io, sp_io_op_t* op) {
+  sp_unused(io);
+  sp_task_notify((sp_task_waiter_t*)op->user_data);
+}
+
+sp_err_t sp_io_op_run(sp_io_t io, sp_io_op_t* op) {
+  sp_task_waiter_t w = sp_task_waiter();
+  op->callback = sp_io_op_notify;
+  op->user_data = &w;
+  if (w.task) {
+    if (sp_atomic_u32_load(&w.task->cancel_requested, SP_ATOMIC_SEQ_CST)) return SP_ERR_IO_CANCELED;
+    w.task->wait.io = io;
+    w.task->wait.op = op;
+    sp_atomic_u32_store(&w.task->wait_state, SP_TASK_WAIT_OP, SP_ATOMIC_SEQ_CST);
+  }
+  sp_err_t err = sp_io_submit(io, op);
+  if (err) {
+    if (w.task) {
+      while (!sp_atomic_u32_cas(&w.task->wait_state, SP_TASK_WAIT_OP, SP_TASK_WAIT_NONE, SP_ATOMIC_ACQ_REL)) {}
+    }
+    return err;
+  }
+  if (w.task && sp_atomic_u32_load(&w.task->cancel_requested, SP_ATOMIC_SEQ_CST)) {
+    sp_io_cancel(io, op);
+  }
+  sp_task_wait(&w);
+  if (w.task) {
+    while (!sp_atomic_u32_cas(&w.task->wait_state, SP_TASK_WAIT_OP, SP_TASK_WAIT_NONE, SP_ATOMIC_ACQ_REL)) {}
+  }
+  return SP_OK;
+}
+
+sp_err_t sp_io_connect(sp_io_t io, sp_sys_ipv4_t addr, sp_sys_socket_t* out) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_CONNECT,
+    .connect = { .addr = addr },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  sp_try(op.result.err);
+  *out = op.result.socket;
+  return SP_OK;
+}
+
+sp_err_t sp_io_accept(sp_io_t io, sp_sys_socket_t listener, sp_sys_socket_t* out) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_ACCEPT,
+    .accept = { .socket = listener },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  sp_try(op.result.err);
+  *out = op.result.socket;
+  return SP_OK;
+}
+
+sp_err_t sp_io_recv(sp_io_t io, sp_sys_socket_t socket, sp_mem_slice_t buf, u64* out_len) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_RECV,
+    .recv = { .socket = socket, .buf = buf },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  sp_try(op.result.err);
+  *out_len = op.result.len;
+  return SP_OK;
+}
+
+sp_err_t sp_io_send_all(sp_io_t io, sp_sys_socket_t socket, sp_mem_slice_t buf) {
+  u64 sent = 0;
+  while (sent < buf.len) {
+    sp_io_op_t op = {
+      .kind = SP_IO_OP_SEND,
+      .send = { .socket = socket, .buf = sp_mem_slice(buf.data + sent, buf.len - sent) },
+    };
+    sp_try(sp_io_op_run(io, &op));
+    sp_try(op.result.err);
+    sent += op.result.len;
+  }
+  return SP_OK;
+}
+
+sp_err_t sp_io_fd_read(sp_io_t io, sp_sys_fd_t fd, sp_mem_slice_t buf, u64* out_len) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_READ,
+    .read = { .fd = fd, .buf = buf },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  sp_try(op.result.err);
+  *out_len = op.result.len;
+  return SP_OK;
+}
+
+sp_err_t sp_io_fd_write_all(sp_io_t io, sp_sys_fd_t fd, sp_mem_slice_t buf) {
+  u64 written = 0;
+  while (written < buf.len) {
+    sp_io_op_t op = {
+      .kind = SP_IO_OP_WRITE,
+      .write = { .fd = fd, .buf = sp_mem_slice(buf.data + written, buf.len - written) },
+    };
+    sp_try(sp_io_op_run(io, &op));
+    sp_try(op.result.err);
+    written += op.result.len;
+  }
+  return SP_OK;
+}
+
+sp_err_t sp_io_sleep(sp_io_t io, u64 ns) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_TIMEOUT,
+    .timeout = { .timeout = sp_io_timeout_after(ns) },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  return op.result.err;
+}
+
+sp_err_t sp_io_work(sp_io_t io, sp_io_work_fn_t fn, void* context) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_WORK,
+    .work = { .fn = fn, .context = context },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  return op.result.err;
+}
+
+sp_err_t sp_io_is_tty(sp_io_t io, sp_sys_fd_t fd, bool* out) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_IS_TTY,
+    .is_tty = { .fd = fd },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  sp_try(op.result.err);
+  *out = op.result.flag;
+  return SP_OK;
+}
+
+sp_err_t sp_io_tty_get(sp_io_t io, sp_sys_fd_t fd, sp_sys_tty_attr_t* attr) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_TTY_GET,
+    .tty_get = { .fd = fd, .attr = attr },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  return op.result.err;
+}
+
+sp_err_t sp_io_tty_set(sp_io_t io, sp_sys_fd_t fd, const sp_sys_tty_attr_t* attr) {
+  sp_io_op_t op = {
+    .kind = SP_IO_OP_TTY_SET,
+    .tty_set = { .fd = fd, .attr = attr },
+  };
+  sp_try(sp_io_op_run(io, &op));
+  return op.result.err;
+}
 
 #endif
