@@ -22,9 +22,16 @@ typedef struct {
   sp_sys_socket_t socket;
   sp_err_t        err;
   bool            eof;
+  sp_io_op_t*     done_op;
   c8              captured [SIM_TEST_CAPTURE];
   u32             len;
 } client_t;
+
+SP_INLINE void client_on_done(sp_io_t io, sp_io_op_t* op) {
+  sp_unused(io);
+  client_t* client = sp_cast(client_t*, op->user_data);
+  client->done_op = op;
+}
 
 SP_INLINE void server_run(fixture_t* fx) {
   u64 last = SP_LIMIT_U64_MAX;
@@ -54,10 +61,10 @@ SP_INLINE void server_stop(fixture_t* fx) {
 }
 
 SP_INLINE sp_io_op_t* client_reap(client_t* client) {
-  sp_io_op_t* done [1];
-  u32 count = 0;
-  sp_assert(sp_io_wait(client->io, done, 1, sp_io_timeout_after(0), &count) == SP_OK);
-  return count ? done[0] : SP_NULLPTR;
+  sp_assert(sp_io_dispatch(client->io, sp_io_timeout_after(0), SP_NULLPTR) == SP_OK);
+  sp_io_op_t* done = client->done_op;
+  client->done_op = SP_NULLPTR;
+  return done;
 }
 
 SP_INLINE client_t client_connect(fixture_t* fx) {
@@ -68,12 +75,15 @@ SP_INLINE client_t client_connect(fixture_t* fx) {
   sp_io_op_t op = {
     .kind = SP_IO_OP_CONNECT,
     .connect = { .addr = { .port = SIM_TEST_PORT } },
+    .callback = client_on_done,
+    .user_data = &client,
   };
   sp_assert(sp_io_submit(client.io, &op) == SP_OK);
   server_run(fx);
   sp_assert(client_reap(&client) == &op);
   client.err = op.result.err;
   client.socket = op.result.socket;
+  client.done_op = SP_NULLPTR;
   return client;
 }
 
@@ -84,6 +94,8 @@ SP_INLINE void client_send(fixture_t* fx, client_t* client, const c8* bytes) {
       .socket = client->socket,
       .buf = { .data = (u8*)bytes, .len = sp_cstr_len(bytes) },
     },
+    .callback = client_on_done,
+    .user_data = client,
   };
   sp_assert(sp_io_submit(client->io, &op) == SP_OK);
   server_run(fx);
@@ -100,6 +112,8 @@ SP_INLINE sp_str_t client_recv(fixture_t* fx, client_t* client) {
         .socket = client->socket,
         .buf = { .data = buf, .len = sizeof(buf) },
       },
+      .callback = client_on_done,
+      .user_data = client,
     };
     sp_assert(sp_io_submit(client->io, &op) == SP_OK);
     server_run(fx);
