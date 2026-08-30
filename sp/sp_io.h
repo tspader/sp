@@ -240,6 +240,110 @@ SP_API void            sp_io_sim_advance(sp_io_sim_t* sim, u64 ns);
 SP_API void            sp_io_sim_kill(sp_io_sim_t* sim, sp_sys_socket_t socket);
 SP_API void            sp_io_sim_chunk(sp_io_sim_t* sim, sp_sys_socket_t socket, u64 max);
 
+typedef struct sp_task sp_task_t;
+typedef struct sp_task_sched_vtable_t sp_task_sched_vtable_t;
+
+typedef struct {
+  void* user_data;
+  const sp_task_sched_vtable_t* vt;
+} sp_task_sched_t;
+
+SP_TYPEDEF_FN(void, sp_task_fn_t, void* context);
+
+typedef enum {
+  SP_TASK_WAIT_NONE,
+  SP_TASK_WAIT_PARK,
+  SP_TASK_WAIT_OP,
+  SP_TASK_WAIT_LOCKED,
+} sp_task_wait_kind_t;
+
+typedef struct {
+  sp_task_t*      task;
+  sp_atomic_u32_t signal;
+} sp_task_waiter_t;
+
+struct sp_task {
+  sp_task_sched_t sched;
+  sp_task_fn_t    fn;
+  void*           context;
+  sp_atomic_u32_t done;
+  sp_atomic_u32_t cancel_requested;
+  sp_atomic_u32_t unparked;
+  sp_atomic_u32_t wait_state;
+  struct {
+    sp_io_t     io;
+    sp_io_op_t* op;
+  } wait;
+  sp_atomic_ptr_t awaiter;
+  bool            parked;
+  sp_task_t*      next;
+  sp_thread_t     thread;
+  void*           sp;
+  sp_mem_slice_t  stack;
+};
+
+struct sp_task_sched_vtable_t {
+  sp_task_t* (*spawn)(void* user_data, sp_task_fn_t fn, void* context);
+  void       (*park)(void* user_data, sp_task_t* task);
+  void       (*unpark)(void* user_data, sp_task_t* task);
+  void       (*run)(void* user_data);
+};
+
+SP_API sp_task_t*       sp_task_current(void);
+SP_API sp_task_t*       sp_task_spawn(sp_task_sched_t sched, sp_task_fn_t fn, void* context);
+SP_API void             sp_task_run(sp_task_sched_t sched);
+SP_API void             sp_task_await(sp_task_t* task);
+SP_API void             sp_task_cancel(sp_task_t* task);
+SP_API void             sp_task_enter(sp_task_t* task);
+SP_API sp_task_waiter_t sp_task_waiter(void);
+SP_API void             sp_task_wait(sp_task_waiter_t* w);
+SP_API sp_err_t         sp_task_wait_cancelable(sp_task_waiter_t* w);
+SP_API void             sp_task_notify(sp_task_waiter_t* w);
+
+#define SP_TASK_GROUP_MAX 8
+
+typedef struct {
+  sp_task_sched_t sched;
+  sp_task_t*      tasks [SP_TASK_GROUP_MAX];
+  u32             count;
+} sp_task_group_t;
+
+SP_API sp_task_group_t sp_task_group(sp_task_sched_t sched);
+SP_API sp_task_t*      sp_task_group_spawn(sp_task_group_t* g, sp_task_fn_t fn, void* context);
+SP_API void            sp_task_group_await(sp_task_group_t* g);
+SP_API void            sp_task_group_cancel(sp_task_group_t* g);
+
+#define SP_TASK_QUEUE_WAITERS 16
+
+typedef struct {
+  sp_mem_slice_t    buffer;
+  u32               elem_size;
+  u64               start;
+  u64               len;
+  bool              closed;
+  sp_spin_lock_t    lock;
+  sp_task_waiter_t* getters [SP_TASK_QUEUE_WAITERS];
+  u32               getter_count;
+  sp_task_waiter_t* putters [SP_TASK_QUEUE_WAITERS];
+  u32               putter_count;
+} sp_task_queue_t;
+
+SP_API sp_task_queue_t sp_task_queue_init(sp_mem_slice_t buffer, u32 elem_size);
+SP_API void            sp_task_queue_close(sp_task_queue_t* q);
+SP_API sp_err_t        sp_task_queue_put(sp_task_queue_t* q, const void* elem);
+SP_API sp_err_t        sp_task_queue_get(sp_task_queue_t* q, void* elem);
+
+#define SP_TASK_MAX              64
+
+typedef struct {
+  sp_io_t         io;
+  sp_task_t       tasks [SP_TASK_MAX];
+  u32             count;
+  sp_atomic_u32_t live;
+} sp_task_threaded_t;
+
+SP_API sp_task_sched_t sp_task_threaded_init(sp_task_threaded_t* t, sp_io_t io);
+
 #endif
 
 #if defined(SP_IMPLEMENTATION) && !defined(SP_IO_IMPLEMENTATION)
@@ -1433,5 +1537,289 @@ void sp_io_sim_chunk(sp_io_sim_t* sim, sp_sys_socket_t socket, u64 max) {
   sp_assert(conn);
   conn->chunk = max;
 }
+
+SP_PRIVATE SP_THREAD_LOCAL sp_task_t* sp_task_tls_current = SP_NULLPTR;
+
+sp_task_t* sp_task_current(void) {
+  return sp_task_tls_current;
+}
+
+sp_task_t* sp_task_spawn(sp_task_sched_t sched, sp_task_fn_t fn, void* context) {
+  return sched.vt->spawn(sched.user_data, fn, context);
+}
+
+void sp_task_run(sp_task_sched_t sched) {
+  sched.vt->run(sched.user_data);
+}
+
+void sp_task_enter(sp_task_t* task) {
+  sp_task_tls_current = task;
+  task->fn(task->context);
+  sp_task_tls_current = SP_NULLPTR;
+  sp_atomic_u32_store(&task->done, 1, SP_ATOMIC_SEQ_CST);
+  sp_task_waiter_t* awaiter = (sp_task_waiter_t*)sp_atomic_ptr_exchange(&task->awaiter, SP_NULLPTR, SP_ATOMIC_SEQ_CST);
+  if (awaiter) sp_task_notify(awaiter);
+}
+
+sp_task_waiter_t sp_task_waiter(void) {
+  return (sp_task_waiter_t) { .task = sp_task_current() };
+}
+
+SP_PRIVATE void sp_task_waiter_park(sp_task_waiter_t* w) {
+  if (w->task) {
+    w->task->sched.vt->park(w->task->sched.user_data, w->task);
+  }
+  else {
+    sp_sys_futex_wait(&w->signal, 0, SP_NULLPTR);
+  }
+}
+
+void sp_task_wait(sp_task_waiter_t* w) {
+  while (!sp_atomic_u32_load(&w->signal, SP_ATOMIC_ACQUIRE)) {
+    sp_task_waiter_park(w);
+  }
+}
+
+sp_err_t sp_task_wait_cancelable(sp_task_waiter_t* w) {
+  while (!sp_atomic_u32_load(&w->signal, SP_ATOMIC_ACQUIRE)) {
+    if (!w->task) {
+      sp_sys_futex_wait(&w->signal, 0, SP_NULLPTR);
+      continue;
+    }
+    if (sp_atomic_u32_load(&w->task->cancel_requested, SP_ATOMIC_SEQ_CST)) return SP_ERR_IO_CANCELED;
+    sp_atomic_u32_store(&w->task->wait_state, SP_TASK_WAIT_PARK, SP_ATOMIC_SEQ_CST);
+    if (sp_atomic_u32_load(&w->task->cancel_requested, SP_ATOMIC_SEQ_CST)) {
+      sp_atomic_u32_store(&w->task->wait_state, SP_TASK_WAIT_NONE, SP_ATOMIC_SEQ_CST);
+      return SP_ERR_IO_CANCELED;
+    }
+    sp_task_waiter_park(w);
+    sp_atomic_u32_store(&w->task->wait_state, SP_TASK_WAIT_NONE, SP_ATOMIC_SEQ_CST);
+  }
+  return SP_OK;
+}
+
+void sp_task_notify(sp_task_waiter_t* w) {
+  sp_task_t* task = w->task;
+  sp_atomic_u32_store(&w->signal, 1, SP_ATOMIC_RELEASE);
+  if (task) {
+    task->sched.vt->unpark(task->sched.user_data, task);
+  }
+  else {
+    sp_sys_futex_wake(&w->signal);
+  }
+}
+
+void sp_task_await(sp_task_t* task) {
+  sp_task_waiter_t w = sp_task_waiter();
+  sp_atomic_ptr_store(&task->awaiter, &w, SP_ATOMIC_SEQ_CST);
+  if (sp_atomic_u32_load(&task->done, SP_ATOMIC_SEQ_CST)) {
+    if (sp_atomic_ptr_exchange(&task->awaiter, SP_NULLPTR, SP_ATOMIC_SEQ_CST) == &w) return;
+  }
+  sp_task_wait(&w);
+}
+
+void sp_task_cancel(sp_task_t* task) {
+  sp_atomic_u32_store(&task->cancel_requested, 1, SP_ATOMIC_SEQ_CST);
+  u32 state = sp_atomic_u32_load(&task->wait_state, SP_ATOMIC_SEQ_CST);
+  if (state == SP_TASK_WAIT_OP) {
+    if (sp_atomic_u32_cas(&task->wait_state, SP_TASK_WAIT_OP, SP_TASK_WAIT_LOCKED, SP_ATOMIC_ACQ_REL)) {
+      sp_io_cancel(task->wait.io, task->wait.op);
+      sp_atomic_u32_store(&task->wait_state, SP_TASK_WAIT_OP, SP_ATOMIC_RELEASE);
+    }
+  }
+  else if (state == SP_TASK_WAIT_PARK) {
+    task->sched.vt->unpark(task->sched.user_data, task);
+  }
+  sp_task_await(task);
+}
+
+sp_task_group_t sp_task_group(sp_task_sched_t sched) {
+  return (sp_task_group_t) { .sched = sched };
+}
+
+sp_task_t* sp_task_group_spawn(sp_task_group_t* g, sp_task_fn_t fn, void* context) {
+  sp_assert(g->count < SP_TASK_GROUP_MAX);
+  sp_task_t* task = sp_task_spawn(g->sched, fn, context);
+  g->tasks[g->count++] = task;
+  return task;
+}
+
+void sp_task_group_await(sp_task_group_t* g) {
+  sp_for(it, g->count) {
+    sp_task_await(g->tasks[it]);
+  }
+  g->count = 0;
+}
+
+void sp_task_group_cancel(sp_task_group_t* g) {
+  sp_for(it, g->count) {
+    sp_atomic_u32_store(&g->tasks[it]->cancel_requested, 1, SP_ATOMIC_SEQ_CST);
+  }
+  sp_for(it, g->count) {
+    sp_task_cancel(g->tasks[it]);
+  }
+  g->count = 0;
+}
+
+SP_PRIVATE void sp_task_waiters_remove(sp_task_waiter_t** list, u32* count, sp_task_waiter_t* w) {
+  sp_for(it, *count) {
+    if (list[it] != w) continue;
+    (*count)--;
+    sp_for(at, *count - it) {
+      list[it + at] = list[it + at + 1];
+    }
+    return;
+  }
+}
+
+SP_PRIVATE void sp_task_waiters_notify_one(sp_task_waiter_t** list, u32* count) {
+  if (!*count) return;
+  sp_task_waiter_t* w = list[0];
+  sp_task_waiters_remove(list, count, w);
+  sp_task_notify(w);
+}
+
+SP_PRIVATE void sp_task_waiters_notify_all(sp_task_waiter_t** list, u32* count) {
+  while (*count) sp_task_waiters_notify_one(list, count);
+}
+
+sp_task_queue_t sp_task_queue_init(sp_mem_slice_t buffer, u32 elem_size) {
+  return (sp_task_queue_t) { .buffer = buffer, .elem_size = elem_size };
+}
+
+void sp_task_queue_close(sp_task_queue_t* q) {
+  sp_spin_lock(&q->lock);
+  q->closed = true;
+  sp_task_waiters_notify_all(q->getters, &q->getter_count);
+  sp_task_waiters_notify_all(q->putters, &q->putter_count);
+  sp_spin_unlock(&q->lock);
+}
+
+SP_PRIVATE sp_err_t sp_task_queue_block(sp_task_queue_t* q, sp_task_waiter_t** list, u32* count) {
+  sp_assert(*count < SP_TASK_QUEUE_WAITERS);
+  sp_task_waiter_t w = sp_task_waiter();
+  list[(*count)++] = &w;
+  sp_spin_unlock(&q->lock);
+  sp_err_t err = sp_task_wait_cancelable(&w);
+  sp_spin_lock(&q->lock);
+  sp_task_waiters_remove(list, count, &w);
+  if (err && sp_atomic_u32_load(&w.signal, SP_ATOMIC_ACQUIRE)) {
+    sp_task_waiters_notify_one(list, count);
+  }
+  return err;
+}
+
+sp_err_t sp_task_queue_put(sp_task_queue_t* q, const void* elem) {
+  u64 capacity = q->buffer.len / q->elem_size;
+  sp_spin_lock(&q->lock);
+  while (q->len == capacity) {
+    if (q->closed) {
+      sp_spin_unlock(&q->lock);
+      return SP_ERR_IO_CLOSED;
+    }
+    sp_err_t err = sp_task_queue_block(q, q->putters, &q->putter_count);
+    if (err) {
+      sp_spin_unlock(&q->lock);
+      return err;
+    }
+  }
+  if (q->closed) {
+    sp_spin_unlock(&q->lock);
+    return SP_ERR_IO_CLOSED;
+  }
+  u64 at = ((q->start + q->len) % capacity) * q->elem_size;
+  sp_mem_copy(q->buffer.data + at, elem, q->elem_size);
+  q->len++;
+  sp_task_waiters_notify_one(q->getters, &q->getter_count);
+  sp_spin_unlock(&q->lock);
+  return SP_OK;
+}
+
+sp_err_t sp_task_queue_get(sp_task_queue_t* q, void* elem) {
+  u64 capacity = q->buffer.len / q->elem_size;
+  sp_spin_lock(&q->lock);
+  while (!q->len) {
+    if (q->closed) {
+      sp_spin_unlock(&q->lock);
+      return SP_ERR_IO_CLOSED;
+    }
+    sp_err_t err = sp_task_queue_block(q, q->getters, &q->getter_count);
+    if (err) {
+      sp_spin_unlock(&q->lock);
+      return err;
+    }
+  }
+  sp_mem_copy(elem, q->buffer.data + q->start * q->elem_size, q->elem_size);
+  q->start = (q->start + 1) % capacity;
+  q->len--;
+  sp_task_waiters_notify_one(q->putters, &q->putter_count);
+  sp_spin_unlock(&q->lock);
+  return SP_OK;
+}
+
+SP_PRIVATE sp_task_t* sp_task_threaded_spawn(void* user_data, sp_task_fn_t fn, void* context);
+SP_PRIVATE void       sp_task_threaded_park(void* user_data, sp_task_t* task);
+SP_PRIVATE void       sp_task_threaded_unpark(void* user_data, sp_task_t* task);
+SP_PRIVATE void       sp_task_threaded_run(void* user_data);
+
+SP_PRIVATE const sp_task_sched_vtable_t sp_task_threaded_vtable = {
+  .spawn  = sp_task_threaded_spawn,
+  .park   = sp_task_threaded_park,
+  .unpark = sp_task_threaded_unpark,
+  .run    = sp_task_threaded_run,
+};
+
+SP_PRIVATE s32 sp_task_threaded_main(void* user_data) {
+  sp_task_t* task = (sp_task_t*)user_data;
+  sp_task_threaded_t* t = (sp_task_threaded_t*)task->sched.user_data;
+  sp_task_enter(task);
+  sp_atomic_u32_add(&t->live, (u32)-1, SP_ATOMIC_ACQ_REL);
+  sp_io_wake(t->io);
+  return 0;
+}
+
+SP_PRIVATE sp_task_t* sp_task_threaded_spawn(void* user_data, sp_task_fn_t fn, void* context) {
+  sp_task_threaded_t* t = (sp_task_threaded_t*)user_data;
+  sp_assert(t->count < SP_TASK_MAX);
+  sp_task_t* task = &t->tasks[t->count++];
+  *task = (sp_task_t) {
+    .sched = { .user_data = t, .vt = &sp_task_threaded_vtable },
+    .fn = fn,
+    .context = context,
+  };
+  sp_atomic_u32_add(&t->live, 1, SP_ATOMIC_ACQ_REL);
+  sp_thread_init(&task->thread, sp_task_threaded_main, task);
+  return task;
+}
+
+SP_PRIVATE void sp_task_threaded_park(void* user_data, sp_task_t* task) {
+  sp_unused(user_data);
+  while (!sp_atomic_u32_exchange(&task->unparked, 0, SP_ATOMIC_ACQ_REL)) {
+    sp_sys_futex_wait(&task->unparked, 0, SP_NULLPTR);
+  }
+}
+
+SP_PRIVATE void sp_task_threaded_unpark(void* user_data, sp_task_t* task) {
+  sp_unused(user_data);
+  sp_atomic_u32_store(&task->unparked, 1, SP_ATOMIC_RELEASE);
+  sp_sys_futex_wake(&task->unparked);
+}
+
+SP_PRIVATE void sp_task_threaded_run(void* user_data) {
+  sp_task_threaded_t* t = (sp_task_threaded_t*)user_data;
+  while (sp_atomic_u32_load(&t->live, SP_ATOMIC_ACQUIRE)) {
+    sp_io_dispatch(t->io, sp_io_timeout_none(), SP_NULLPTR);
+  }
+  sp_for(it, t->count) {
+    sp_thread_join(&t->tasks[it].thread);
+  }
+}
+
+sp_task_sched_t sp_task_threaded_init(sp_task_threaded_t* t, sp_io_t io) {
+  *t = sp_zero_s(sp_task_threaded_t);
+  t->io = io;
+  return (sp_task_sched_t) { .user_data = t, .vt = &sp_task_threaded_vtable };
+}
+
 
 #endif
