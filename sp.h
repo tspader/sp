@@ -792,6 +792,7 @@ typedef enum {
   SP_ERR_IO_EOF           = 1004,
   SP_ERR_IO_TIMEOUT       = 1005,
   SP_ERR_IO_CANCELED      = 1006,
+  SP_ERR_IO_CLOSED        = 1007,
   SP_ERR_FMT_UNKNOWN_DIRECTIVE = 1102,
   SP_ERR_FMT_BAD_DIRECTIVE = 1103,
   SP_ERR_FMT_TOO_MANY_DIRECTIVES = 1104,
@@ -5660,6 +5661,7 @@ sp_str_t sp_err_str(sp_err_t err) {
     case SP_ERR_IO_EOF:                      return sp_str_lit("SP_ERR_IO_EOF");
     case SP_ERR_IO_TIMEOUT:                  return sp_str_lit("SP_ERR_IO_TIMEOUT");
     case SP_ERR_IO_CANCELED:                 return sp_str_lit("SP_ERR_IO_CANCELED");
+    case SP_ERR_IO_CLOSED:                   return sp_str_lit("SP_ERR_IO_CLOSED");
     case SP_ERR_FMT_UNKNOWN_DIRECTIVE:       return sp_str_lit("SP_ERR_FMT_UNKNOWN_DIRECTIVE");
     case SP_ERR_FMT_BAD_DIRECTIVE:           return sp_str_lit("SP_ERR_FMT_BAD_DIRECTIVE");
     case SP_ERR_FMT_TOO_MANY_DIRECTIVES:     return sp_str_lit("SP_ERR_FMT_TOO_MANY_DIRECTIVES");
