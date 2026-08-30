@@ -334,6 +334,29 @@ SP_API sp_err_t        sp_task_queue_put(sp_task_queue_t* q, const void* elem);
 SP_API sp_err_t        sp_task_queue_get(sp_task_queue_t* q, void* elem);
 
 #define SP_TASK_MAX              64
+#define SP_TASK_FIBER_STACK_SIZE 262144
+
+#if (defined(SP_AMD64) || defined(SP_ARM64)) && !defined(SP_WIN32) && !defined(SP_WASM)
+  #define SP_TASK_FIBER_SUPPORTED
+#endif
+
+typedef struct {
+  sp_io_t         io;
+  sp_mem_t        mem;
+  sp_task_t       tasks [SP_TASK_MAX];
+  u32             count;
+  sp_atomic_u32_t live;
+  sp_task_t*      ready;
+  sp_task_t*      ready_tail;
+  sp_spin_lock_t  inbox_lock;
+  sp_task_t*      inbox;
+  u64             thread_id;
+  sp_task_t*      running;
+  void*           run_sp;
+} sp_task_fiber_t;
+
+SP_API sp_task_sched_t sp_task_fiber_init(sp_task_fiber_t* f, sp_io_t io, sp_mem_t mem);
+SP_API void            sp_task_fiber_deinit(sp_task_fiber_t* f);
 
 typedef struct {
   sp_io_t         io;
@@ -1755,6 +1778,241 @@ sp_err_t sp_task_queue_get(sp_task_queue_t* q, void* elem) {
   sp_task_waiters_notify_one(q->putters, &q->putter_count);
   sp_spin_unlock(&q->lock);
   return SP_OK;
+}
+
+#if defined(SP_TASK_FIBER_SUPPORTED)
+
+#if defined(SP_MACOS)
+  #define SP_TASK_FIBER_SYM "_sp_task_fiber_swap"
+  #define SP_TASK_FIBER_TYPE ""
+#else
+  #define SP_TASK_FIBER_SYM "sp_task_fiber_swap"
+  #define SP_TASK_FIBER_TYPE ".type sp_task_fiber_swap, @function\n"
+#endif
+
+SP_EXTERN_C void sp_task_fiber_swap(void** save, void* load);
+
+#if defined(SP_AMD64)
+__asm__(
+  ".text\n"
+  ".globl " SP_TASK_FIBER_SYM "\n"
+  SP_TASK_FIBER_TYPE
+  SP_TASK_FIBER_SYM ":\n"
+  "pushq %rbp\n"
+  "pushq %rbx\n"
+  "pushq %r12\n"
+  "pushq %r13\n"
+  "pushq %r14\n"
+  "pushq %r15\n"
+  "movq %rsp, (%rdi)\n"
+  "movq %rsi, %rsp\n"
+  "popq %r15\n"
+  "popq %r14\n"
+  "popq %r13\n"
+  "popq %r12\n"
+  "popq %rbx\n"
+  "popq %rbp\n"
+  "retq\n"
+);
+#elif defined(SP_ARM64)
+__asm__(
+  ".text\n"
+  ".globl " SP_TASK_FIBER_SYM "\n"
+  SP_TASK_FIBER_TYPE
+  SP_TASK_FIBER_SYM ":\n"
+  "sub sp, sp, #160\n"
+  "stp x19, x20, [sp, #0]\n"
+  "stp x21, x22, [sp, #16]\n"
+  "stp x23, x24, [sp, #32]\n"
+  "stp x25, x26, [sp, #48]\n"
+  "stp x27, x28, [sp, #64]\n"
+  "stp x29, x30, [sp, #80]\n"
+  "stp d8, d9, [sp, #96]\n"
+  "stp d10, d11, [sp, #112]\n"
+  "stp d12, d13, [sp, #128]\n"
+  "stp d14, d15, [sp, #144]\n"
+  "mov x9, sp\n"
+  "str x9, [x0]\n"
+  "mov sp, x1\n"
+  "ldp x19, x20, [sp, #0]\n"
+  "ldp x21, x22, [sp, #16]\n"
+  "ldp x23, x24, [sp, #32]\n"
+  "ldp x25, x26, [sp, #48]\n"
+  "ldp x27, x28, [sp, #64]\n"
+  "ldp x29, x30, [sp, #80]\n"
+  "ldp d8, d9, [sp, #96]\n"
+  "ldp d10, d11, [sp, #112]\n"
+  "ldp d12, d13, [sp, #128]\n"
+  "ldp d14, d15, [sp, #144]\n"
+  "add sp, sp, #160\n"
+  "ret\n"
+);
+#endif
+
+#else
+
+SP_PRIVATE void sp_task_fiber_swap(void** save, void* load) {
+  sp_unused(save);
+  sp_unused(load);
+  sp_assert(false);
+}
+
+#endif
+
+SP_PRIVATE sp_task_t* sp_task_fiber_spawn(void* user_data, sp_task_fn_t fn, void* context);
+SP_PRIVATE void       sp_task_fiber_park(void* user_data, sp_task_t* task);
+SP_PRIVATE void       sp_task_fiber_unpark(void* user_data, sp_task_t* task);
+SP_PRIVATE void       sp_task_fiber_run(void* user_data);
+
+SP_PRIVATE const sp_task_sched_vtable_t sp_task_fiber_vtable = {
+  .spawn  = sp_task_fiber_spawn,
+  .park   = sp_task_fiber_park,
+  .unpark = sp_task_fiber_unpark,
+  .run    = sp_task_fiber_run,
+};
+
+SP_PRIVATE SP_THREAD_LOCAL sp_task_fiber_t* sp_task_fiber_tls = SP_NULLPTR;
+
+SP_PRIVATE void sp_task_fiber_entry(void) {
+  sp_task_fiber_t* f = sp_task_fiber_tls;
+  sp_task_t* task = f->running;
+  sp_task_enter(task);
+  sp_atomic_u32_add(&f->live, (u32)-1, SP_ATOMIC_ACQ_REL);
+  sp_task_fiber_swap(&task->sp, f->run_sp);
+}
+
+SP_PRIVATE void sp_task_fiber_seed(sp_task_t* task) {
+  u8* top = (u8*)(sp_uptr(task->stack.data + task->stack.len) & ~(uintptr_t)15);
+#if defined(SP_AMD64)
+  void** frame = (void**)(top - 16);
+  frame[0] = (void*)sp_uptr(sp_task_fiber_entry);
+  void** saved = frame - 6;
+  sp_for(it, 6) {
+    saved[it] = SP_NULLPTR;
+  }
+  task->sp = saved;
+#elif defined(SP_ARM64)
+  u8* frame = top - 160;
+  sp_mem_zero(frame, 160);
+  *(void**)(frame + 88) = (void*)sp_uptr(sp_task_fiber_entry);
+  task->sp = frame;
+#else
+  sp_unused(top);
+  task->sp = SP_NULLPTR;
+#endif
+}
+
+SP_PRIVATE void sp_task_fiber_ready(sp_task_fiber_t* f, sp_task_t* task) {
+  task->next = SP_NULLPTR;
+  if (f->ready_tail) f->ready_tail->next = task;
+  else f->ready = task;
+  f->ready_tail = task;
+}
+
+SP_PRIVATE sp_task_t* sp_task_fiber_pop(sp_task_fiber_t* f) {
+  sp_task_t* task = f->ready;
+  if (!task) return SP_NULLPTR;
+  f->ready = task->next;
+  if (!f->ready) f->ready_tail = SP_NULLPTR;
+  return task;
+}
+
+SP_PRIVATE void sp_task_fiber_resume(sp_task_fiber_t* f, sp_task_t* task) {
+  f->running = task;
+  sp_task_tls_current = task;
+  sp_task_fiber_swap(&f->run_sp, task->sp);
+  sp_task_tls_current = SP_NULLPTR;
+  f->running = SP_NULLPTR;
+}
+
+SP_PRIVATE void sp_task_fiber_yield(sp_task_fiber_t* f, sp_task_t* task) {
+  sp_task_fiber_swap(&task->sp, f->run_sp);
+}
+
+SP_PRIVATE sp_task_t* sp_task_fiber_spawn(void* user_data, sp_task_fn_t fn, void* context) {
+  sp_task_fiber_t* f = (sp_task_fiber_t*)user_data;
+  sp_assert(f->count < SP_TASK_MAX);
+  sp_task_t* task = &f->tasks[f->count++];
+  *task = (sp_task_t) {
+    .sched = { .user_data = f, .vt = &sp_task_fiber_vtable },
+    .fn = fn,
+    .context = context,
+    .stack = sp_mem_slice(sp_alloc_n(f->mem, u8, SP_TASK_FIBER_STACK_SIZE), SP_TASK_FIBER_STACK_SIZE),
+  };
+  sp_task_fiber_seed(task);
+  sp_atomic_u32_add(&f->live, 1, SP_ATOMIC_RELAXED);
+  sp_task_fiber_ready(f, task);
+  return task;
+}
+
+SP_PRIVATE void sp_task_fiber_park(void* user_data, sp_task_t* task) {
+  sp_task_fiber_t* f = (sp_task_fiber_t*)user_data;
+  if (sp_atomic_u32_exchange(&task->unparked, 0, SP_ATOMIC_ACQ_REL)) return;
+  task->parked = true;
+  sp_task_fiber_yield(f, task);
+  sp_atomic_u32_exchange(&task->unparked, 0, SP_ATOMIC_ACQ_REL);
+}
+
+SP_PRIVATE void sp_task_fiber_unpark(void* user_data, sp_task_t* task) {
+  sp_task_fiber_t* f = (sp_task_fiber_t*)user_data;
+  sp_atomic_u32_store(&task->unparked, 1, SP_ATOMIC_RELEASE);
+  if (sp_thread_get_id() == f->thread_id) {
+    if (task->parked) {
+      task->parked = false;
+      sp_task_fiber_ready(f, task);
+    }
+    return;
+  }
+  sp_spin_lock(&f->inbox_lock);
+  task->next = f->inbox;
+  f->inbox = task;
+  sp_spin_unlock(&f->inbox_lock);
+  sp_io_wake(f->io);
+}
+
+SP_PRIVATE void sp_task_fiber_drain(sp_task_fiber_t* f) {
+  sp_spin_lock(&f->inbox_lock);
+  sp_task_t* task = f->inbox;
+  f->inbox = SP_NULLPTR;
+  sp_spin_unlock(&f->inbox_lock);
+  while (task) {
+    sp_task_t* next = task->next;
+    if (task->parked) {
+      task->parked = false;
+      sp_task_fiber_ready(f, task);
+    }
+    task = next;
+  }
+}
+
+SP_PRIVATE void sp_task_fiber_run(void* user_data) {
+  sp_task_fiber_t* f = (sp_task_fiber_t*)user_data;
+  f->thread_id = sp_thread_get_id();
+  sp_task_fiber_tls = f;
+  while (true) {
+    sp_task_fiber_drain(f);
+    sp_task_t* task = SP_NULLPTR;
+    while ((task = sp_task_fiber_pop(f))) {
+      sp_task_fiber_resume(f, task);
+    }
+    if (!sp_atomic_u32_load(&f->live, SP_ATOMIC_ACQUIRE)) break;
+    sp_io_dispatch(f->io, sp_io_timeout_none(), SP_NULLPTR);
+  }
+  sp_task_fiber_tls = SP_NULLPTR;
+}
+
+sp_task_sched_t sp_task_fiber_init(sp_task_fiber_t* f, sp_io_t io, sp_mem_t mem) {
+  *f = sp_zero_s(sp_task_fiber_t);
+  f->io = io;
+  f->mem = mem;
+  return (sp_task_sched_t) { .user_data = f, .vt = &sp_task_fiber_vtable };
+}
+
+void sp_task_fiber_deinit(sp_task_fiber_t* f) {
+  sp_for(it, f->count) {
+    sp_free(f->mem, f->tasks[it].stack.data, f->tasks[it].stack.len);
+  }
+  f->count = 0;
 }
 
 SP_PRIVATE sp_task_t* sp_task_threaded_spawn(void* user_data, sp_task_fn_t fn, void* context);
