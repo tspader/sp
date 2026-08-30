@@ -277,6 +277,8 @@ struct sp_task {
   sp_atomic_ptr_t awaiter;
   bool            parked;
   sp_task_t*      next;
+  sp_task_t*      inbox_next;
+  sp_atomic_u32_t inboxed;
   sp_thread_t     thread;
   void*           sp;
   sp_mem_slice_t  stack;
@@ -1434,7 +1436,6 @@ SP_PRIVATE bool sp_io_sim_next_deadline(sp_io_sim_t* sim, u64* out) {
 SP_PRIVATE sp_err_t sp_io_sim_wait(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count) {
   sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
   sp_io_sim_t* sim = actor->sim;
-  sp_unused(timeout);
 
   *count = 0;
   while (true) {
@@ -1448,7 +1449,10 @@ SP_PRIVATE sp_err_t sp_io_sim_wait(void* user_data, sp_io_op_t** done, u32 max, 
     }
     if (*count) return SP_OK;
     u64 deadline = 0;
-    if (!sp_io_sim_next_deadline(sim, &deadline)) return SP_OK;
+    if (!sp_io_sim_next_deadline(sim, &deadline)) {
+      sp_assert(timeout.kind != SP_IO_TIMEOUT_NONE);
+      return SP_OK;
+    }
     sim->now = sp_max(sim->now, deadline);
   }
 }
@@ -1977,8 +1981,9 @@ SP_PRIVATE void sp_task_fiber_unpark(void* user_data, sp_task_t* task) {
     }
     return;
   }
+  if (sp_atomic_u32_exchange(&task->inboxed, 1, SP_ATOMIC_ACQ_REL)) return;
   sp_spin_lock(&f->inbox_lock);
-  task->next = f->inbox;
+  task->inbox_next = f->inbox;
   f->inbox = task;
   sp_spin_unlock(&f->inbox_lock);
   sp_io_wake(f->io);
@@ -1990,7 +1995,8 @@ SP_PRIVATE void sp_task_fiber_drain(sp_task_fiber_t* f) {
   f->inbox = SP_NULLPTR;
   sp_spin_unlock(&f->inbox_lock);
   while (task) {
-    sp_task_t* next = task->next;
+    sp_task_t* next = task->inbox_next;
+    sp_atomic_u32_store(&task->inboxed, 0, SP_ATOMIC_RELEASE);
     if (task->parked) {
       task->parked = false;
       sp_task_fiber_ready(f, task);
