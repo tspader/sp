@@ -177,7 +177,6 @@ SP_API sp_err_t sp_io_uring_init(sp_io_uring_t* ring, u32 entries);
 SP_API void     sp_io_uring_deinit(sp_io_uring_t* ring);
 SP_API sp_io_t  sp_io_uring_as_io(sp_io_uring_t* ring);
 
-#define SP_IO_SIM_MAX_ACTORS    4
 #define SP_IO_SIM_MAX_OPS       32
 #define SP_IO_SIM_MAX_CONNS     8
 #define SP_IO_SIM_MAX_LISTENERS 2
@@ -186,11 +185,6 @@ SP_API sp_io_t  sp_io_uring_as_io(sp_io_uring_t* ring);
 #define SP_IO_SIM_SOCKET_BASE   0x51000000
 
 typedef struct sp_io_sim sp_io_sim_t;
-
-typedef struct {
-  sp_io_sim_t* sim;
-  u32          id;
-} sp_io_sim_actor_t;
 
 typedef struct {
   sp_sys_socket_t socket;
@@ -223,8 +217,6 @@ struct sp_io_sim {
   u64                  now;
   u64                  completions;
   sp_sys_socket_t      next_socket;
-  sp_io_sim_actor_t    actors [SP_IO_SIM_MAX_ACTORS];
-  u32                  actor_count;
   sp_io_sim_listener_t listeners [SP_IO_SIM_MAX_LISTENERS];
   sp_io_sim_conn_t     conns [SP_IO_SIM_MAX_CONNS];
   sp_io_sim_op_t       armed [SP_IO_SIM_MAX_OPS];
@@ -1404,8 +1396,7 @@ SP_PRIVATE void sp_io_sim_finish(sp_io_sim_t* sim, u32 at, sp_err_t err) {
 }
 
 SP_PRIVATE sp_err_t sp_io_sim_submit(void* user_data, sp_io_op_t* op) {
-  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
-  sp_io_sim_t* sim = actor->sim;
+  sp_io_sim_t* sim = (sp_io_sim_t*)user_data;
   sp_assert(sim->armed_count < SP_IO_SIM_MAX_OPS);
 
   u64 deadline = 0;
@@ -1434,8 +1425,7 @@ SP_PRIVATE bool sp_io_sim_next_deadline(sp_io_sim_t* sim, u64* out) {
 }
 
 SP_PRIVATE sp_err_t sp_io_sim_wait(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count) {
-  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
-  sp_io_sim_t* sim = actor->sim;
+  sp_io_sim_t* sim = (sp_io_sim_t*)user_data;
 
   *count = 0;
   while (true) {
@@ -1458,8 +1448,7 @@ SP_PRIVATE sp_err_t sp_io_sim_wait(void* user_data, sp_io_op_t** done, u32 max, 
 }
 
 SP_PRIVATE sp_err_t sp_io_sim_cancel(void* user_data, sp_io_op_t* op) {
-  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
-  sp_io_sim_t* sim = actor->sim;
+  sp_io_sim_t* sim = (sp_io_sim_t*)user_data;
   sp_for(it, sim->armed_count) {
     if (sim->armed[it].op == op) {
       sp_io_sim_finish(sim, it, SP_ERR_IO_CANCELED);
@@ -1470,8 +1459,7 @@ SP_PRIVATE sp_err_t sp_io_sim_cancel(void* user_data, sp_io_op_t* op) {
 }
 
 SP_PRIVATE sp_err_t sp_io_sim_close(void* user_data, sp_sys_socket_t socket) {
-  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
-  sp_io_sim_t* sim = actor->sim;
+  sp_io_sim_t* sim = (sp_io_sim_t*)user_data;
 
   u32 it = 0;
   while (it < sim->armed_count) {
@@ -1514,8 +1502,8 @@ SP_PRIVATE sp_err_t sp_io_sim_wake(void* user_data) {
 }
 
 SP_PRIVATE sp_io_time_t sp_io_sim_now(void* user_data, sp_io_clock_t clock) {
-  sp_io_sim_actor_t* actor = (sp_io_sim_actor_t*)user_data;
-  return (sp_io_time_t) { .ns = actor->sim->now, .clock = clock };
+  sp_io_sim_t* sim = (sp_io_sim_t*)user_data;
+  return (sp_io_time_t) { .ns = sim->now, .clock = clock };
 }
 
 SP_PRIVATE void sp_io_sim_destroy(void* user_data) {
@@ -1538,11 +1526,7 @@ void sp_io_sim_init(sp_io_sim_t* sim) {
 }
 
 sp_io_t sp_io_sim_actor(sp_io_sim_t* sim) {
-  sp_assert(sim->actor_count < SP_IO_SIM_MAX_ACTORS);
-  sp_io_sim_actor_t* actor = &sim->actors[sim->actor_count];
-  *actor = (sp_io_sim_actor_t) { .sim = sim, .id = sim->actor_count };
-  sim->actor_count++;
-  return (sp_io_t) { .user_data = actor, .vt = &sp_io_sim_vtable };
+  return (sp_io_t) { .user_data = sim, .vt = &sp_io_sim_vtable };
 }
 
 sp_sys_socket_t sp_io_sim_listen(sp_io_sim_t* sim, u16 port) {
@@ -2016,7 +2000,7 @@ SP_PRIVATE void sp_task_fiber_run(void* user_data) {
       sp_task_fiber_resume(f, task);
     }
     if (!sp_atomic_u32_load(&f->live, SP_ATOMIC_ACQUIRE)) break;
-    sp_io_dispatch(f->io, sp_io_timeout_none(), SP_NULLPTR);
+    sp_assert(sp_io_dispatch(f->io, sp_io_timeout_none(), SP_NULLPTR) == SP_OK);
   }
   sp_task_fiber_tls = SP_NULLPTR;
 }
@@ -2086,7 +2070,7 @@ SP_PRIVATE void sp_task_threaded_unpark(void* user_data, sp_task_t* task) {
 SP_PRIVATE void sp_task_threaded_run(void* user_data) {
   sp_task_threaded_t* t = (sp_task_threaded_t*)user_data;
   while (sp_atomic_u32_load(&t->live, SP_ATOMIC_ACQUIRE)) {
-    sp_io_dispatch(t->io, sp_io_timeout_none(), SP_NULLPTR);
+    sp_assert(sp_io_dispatch(t->io, sp_io_timeout_none(), SP_NULLPTR) == SP_OK);
   }
   sp_for(it, t->count) {
     sp_thread_join(&t->tasks[it].thread);
