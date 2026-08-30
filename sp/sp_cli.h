@@ -851,7 +851,7 @@ void sp_cli_parse(sp_cli_desc_t desc, sp_cli_t* cli) {
   cli->status = sp_cli_check_args(&parser);
   if (cli->status != SP_CLI_OK) return;
 
-  if (!cli->cmd->handler) {
+  if (!cli->cmd->handler && cli->cmd->commands[0]) {
     cli->status = SP_CLI_HELP;
     return;
   }
@@ -864,6 +864,7 @@ void sp_cli_parse(sp_cli_desc_t desc, sp_cli_t* cli) {
 
 sp_cli_result_t sp_cli_dispatch(sp_cli_t* cli) {
   if (cli->status) return cli->status;
+  if (!cli->cmd->handler) return SP_CLI_CONTINUE;
   return cli->cmd->handler(cli);
 }
 

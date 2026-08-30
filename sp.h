@@ -1943,7 +1943,10 @@ SP_API void                  sp_mem_end_scratch(sp_mem_arena_marker_t marker);
   requests from the OS; empty spans go onto a free list for reuse by any
   bucket, and segments are only returned to the OS when the heap is
   destroyed. Large allocations aren't carved out from anything; each large
-  allocation makes a syscall.
+  allocation makes a syscall. The heap never zeroes large allocations
+  itself: sp_sys_alloc must return zeroed memory (every backend is a page
+  allocator), and both the zeroing alloc variants and realloc's grow
+  zeroing lean on that for large allocations.
 
   ## Design
 
@@ -2045,6 +2048,8 @@ SP_API void*                sp_mem_heap_realloc(sp_mem_heap_t* heap, void* ptr, 
 SP_API void*                sp_mem_heap_realloc_uninitialized(sp_mem_heap_t* heap, void* ptr, u64 size);
 SP_API void                 sp_mem_heap_free(sp_mem_heap_t* heap, void* ptr);
 SP_API sp_mem_heap_span_t*  sp_mem_heap_find_span(sp_mem_heap_t* heap, void* ptr);
+SP_API u32                  sp_mem_heap_bucket_of(u64 size);
+SP_API u64                  sp_mem_heap_bucket_size(u32 bucket);
 
 ///////////
 // SLICE //
@@ -4955,10 +4960,6 @@ SP_IMP sp_hash_t sp_hash_str(sp_str_t str);
 SP_IMP sp_mem_arena_block_t* sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 block_size);
 SP_IMP u64 sp_mem_arena_block_align(sp_mem_arena_block_t* block, u8 alignment);
 SP_IMP sp_mem_arena_block_t* sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 size);
-SP_IMP u32 sp_mem_heap_bucket_of(u64 size);
-SP_IMP u64 sp_mem_heap_bucket_size(u32 bucket);
-SP_IMP void sp_mem_heap_track_reserve(sp_mem_heap_t* heap, u64 bytes);
-SP_IMP void sp_mem_heap_span_release(sp_mem_heap_t* heap, sp_mem_heap_span_t* span);
 
 // @string
 SP_IMP bool sp_utf8_is_cont(u8 b);
@@ -18099,7 +18100,7 @@ u64 sp_mem_heap_bucket_size(u32 bucket) {
     (node)->next = SP_NULLPTR; \
   } while (0)
 
-void sp_mem_heap_track_reserve(sp_mem_heap_t* heap, u64 bytes) {
+static void sp_mem_heap_track_reserve(sp_mem_heap_t* heap, u64 bytes) {
   heap->bytes_reserved += bytes;
   heap->peak_reserved = sp_max(heap->peak_reserved, heap->bytes_reserved);
 }
@@ -18183,13 +18184,13 @@ static sp_mem_heap_span_t* sp_mem_heap_span_new(sp_mem_heap_t* heap, u32 bucket)
   return span;
 }
 
-void sp_mem_heap_span_release(sp_mem_heap_t* heap, sp_mem_heap_span_t* span) {
+static void sp_mem_heap_span_release(sp_mem_heap_t* heap, sp_mem_heap_span_t* span) {
   sp_mem_heap_list_unlink(&heap->buckets[span->bucket].partial, span);
   span->magic = 0;
   sp_mem_heap_list_push(&heap->recycled, span);
 }
 
-void* sp_mem_heap_alloc_chunk(sp_mem_heap_t* heap, u32 bucket) {
+static void* sp_mem_heap_alloc_chunk(sp_mem_heap_t* heap, u32 bucket) {
   sp_mem_heap_span_t* span = heap->buckets[bucket].partial;
   if (!span) span = sp_mem_heap_span_new(heap, bucket);
   if (!span) return SP_NULLPTR;
@@ -18206,7 +18207,7 @@ void* sp_mem_heap_alloc_chunk(sp_mem_heap_t* heap, u32 bucket) {
   return chunk;
 }
 
-void* sp_mem_heap_alloc_large(sp_mem_heap_t* heap, u64 size) {
+static void* sp_mem_heap_alloc_large(sp_mem_heap_t* heap, u64 size) {
   u64 capacity = sp_align_offset(size + sizeof(sp_mem_heap_large_t), SP_MEM_HEAP_SPAN_SIZE);
   if (capacity <= size) return SP_NULLPTR;
   sp_mem_heap_large_t* large = (sp_mem_heap_large_t*)sp_sys_alloc(capacity);
