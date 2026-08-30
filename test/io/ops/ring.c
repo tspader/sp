@@ -51,7 +51,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
     sp_io_op_t* done [OPS_MAX_SLOTS] = sp_zero;
     u32 count = 0;
-    sp_must_ok(t, sp_io_wait(h.io, done, c->max, sp_io_timeout_after(sp_tm_ms_to_ns(OPS_WAIT_MS)), &count));
+    sp_must_ok(t, h.io.vt->wait(h.io.user_data, done, c->max, sp_io_timeout_after(sp_tm_ms_to_ns(OPS_WAIT_MS)), &count));
     sp_expect_le(t, count, c->max);
     sp_must_gt(t, count, (u32)0);
     if (c->expect.waits[call]) sp_expect_eq(t, count, c->expect.waits[call]);

@@ -78,7 +78,21 @@ typedef struct {
   sp_io_op_t ops [OPS_MAX_SLOTS];
   sp_mem_slice_t bufs [OPS_MAX_SLOTS];
   u8 storage [OPS_MAX_SLOTS][OPS_BUF_SIZE];
+  sp_io_op_t* done [OPS_MAX_SLOTS];
+  u32 done_count;
 } ops_harness_t;
+
+static void harness_on_done(sp_io_t io, sp_io_op_t* op) {
+  sp_unused(io);
+  ops_harness_t* h = (ops_harness_t*)op->user_data;
+  sp_assert(h->done_count < OPS_MAX_SLOTS);
+  h->done[h->done_count++] = op;
+}
+
+static void harness_arm(ops_harness_t* h, sp_io_op_t* op) {
+  op->callback = harness_on_done;
+  op->user_data = h;
+}
 
 static sp_err_t harness_listen(sp_test_t* t, ops_harness_t* h) {
   sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 } };
@@ -165,6 +179,11 @@ static sp_mem_slice_t harness_op_buf(const sp_io_op_t* op) {
     case SP_IO_OP_READ:    return op->read.buf;
     case SP_IO_OP_WRITE:   return op->write.buf;
     case SP_IO_OP_TIMEOUT: return sp_zero_s(sp_mem_slice_t);
+    case SP_IO_OP_CONNECT: return sp_zero_s(sp_mem_slice_t);
+    case SP_IO_OP_WORK:    return sp_zero_s(sp_mem_slice_t);
+    case SP_IO_OP_IS_TTY:  return sp_zero_s(sp_mem_slice_t);
+    case SP_IO_OP_TTY_GET: return sp_zero_s(sp_mem_slice_t);
+    case SP_IO_OP_TTY_SET: return sp_zero_s(sp_mem_slice_t);
   }
   return sp_zero_s(sp_mem_slice_t);
 }
@@ -228,7 +247,15 @@ static sp_err_t harness_submit(sp_test_t* t, ops_harness_t* h, const ops_submit_
       op->timeout.timeout = harness_make_timeout(h, SP_IO_TIMEOUT_DURATION, s->ms, SP_IO_CLOCK_AWAKE);
       break;
     }
+    case SP_IO_OP_CONNECT:
+    case SP_IO_OP_WORK:
+    case SP_IO_OP_IS_TTY:
+    case SP_IO_OP_TTY_GET:
+    case SP_IO_OP_TTY_SET: {
+      sp_unreachable_case();
+    }
   }
+  harness_arm(h, op);
   return sp_io_submit(h->io, op);
 }
 
@@ -243,10 +270,10 @@ static sp_io_timeout_t harness_timeout(ops_harness_t* h, const ops_wait_t* w) {
 }
 
 static void harness_wait(sp_test_t* t, ops_harness_t* h, const ops_wait_t* w) {
-  sp_io_op_t* done [OPS_MAX_DONE] = sp_zero;
+  h->done_count = 0;
   u32 count = 0;
   sp_tm_timer_t timer = sp_tm_start_timer();
-  sp_err_t err = sp_io_wait(h->io, done, OPS_MAX_DONE, harness_timeout(h, w), &count);
+  sp_err_t err = sp_io_dispatch(h->io, harness_timeout(h, w), &count);
   u64 elapsed = sp_tm_read_timer(&timer);
 
   sp_expect_ok(t, err);
@@ -261,7 +288,7 @@ static void harness_wait(sp_test_t* t, ops_harness_t* h, const ops_wait_t* w) {
     sp_test_kv(t, "slot", sp_test_format(t, "{}", sp_fmt_uint(d->slot)));
     sp_io_op_t* op = &h->ops[d->slot];
     bool found = false;
-    sp_for(jt, count) found = found || done[jt] == op;
+    sp_for(jt, h->done_count) found = found || h->done[jt] == op;
     sp_expect(t, found);
     if (!found) continue;
 
