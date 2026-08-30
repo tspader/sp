@@ -134,6 +134,12 @@ SP_API sp_err_t     sp_io_close(sp_io_t io, sp_sys_socket_t socket);
 SP_API sp_err_t     sp_io_wake(sp_io_t io);
 SP_API sp_io_time_t sp_io_now(sp_io_t io, sp_io_clock_t clock);
 
+typedef struct {
+  sp_atomic_u32_t woken;
+} sp_io_blocking_t;
+
+SP_API sp_io_t sp_io_blocking_init(sp_io_blocking_t* b);
+
 typedef struct sp_io_uring_sqe sp_io_uring_sqe_t;
 typedef struct sp_io_uring_cqe sp_io_uring_cqe_t;
 
@@ -284,6 +290,179 @@ sp_err_t sp_io_wake(sp_io_t io) {
 
 sp_io_time_t sp_io_now(sp_io_t io, sp_io_clock_t clock) {
   return io.vt->now(io.user_data, clock);
+}
+
+SP_PRIVATE sp_err_t     sp_io_blocking_submit(void* user_data, sp_io_op_t* op);
+SP_PRIVATE sp_err_t     sp_io_blocking_wait(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count);
+SP_PRIVATE sp_err_t     sp_io_blocking_cancel(void* user_data, sp_io_op_t* op);
+SP_PRIVATE sp_err_t     sp_io_blocking_close(void* user_data, sp_sys_socket_t socket);
+SP_PRIVATE sp_err_t     sp_io_blocking_wake(void* user_data);
+SP_PRIVATE sp_io_time_t sp_io_blocking_now(void* user_data, sp_io_clock_t clock);
+SP_PRIVATE void         sp_io_blocking_destroy(void* user_data);
+
+SP_PRIVATE const sp_io_vtable_t sp_io_blocking_vtable = {
+  .submit  = sp_io_blocking_submit,
+  .wait    = sp_io_blocking_wait,
+  .cancel  = sp_io_blocking_cancel,
+  .close   = sp_io_blocking_close,
+  .wake    = sp_io_blocking_wake,
+  .now     = sp_io_blocking_now,
+  .destroy = sp_io_blocking_destroy,
+};
+
+SP_PRIVATE sp_io_t sp_io_blocking_as_io(sp_io_blocking_t* b) {
+  return (sp_io_t) { .user_data = b, .vt = &sp_io_blocking_vtable };
+}
+
+SP_PRIVATE s32 sp_io_blocking_clockid(sp_io_clock_t clock) {
+  switch (clock) {
+    case SP_IO_CLOCK_AWAKE: return SP_CLOCK_MONOTONIC;
+    case SP_IO_CLOCK_BOOT:  return SP_CLOCK_MONOTONIC;
+    case SP_IO_CLOCK_REAL:  return SP_CLOCK_REALTIME;
+  }
+  return SP_CLOCK_MONOTONIC;
+}
+
+SP_PRIVATE u64 sp_io_blocking_now_ns(sp_io_clock_t clock) {
+  sp_sys_timespec_t ts = sp_zero;
+  sp_sys_clock_gettime(sp_io_blocking_clockid(clock), &ts);
+  return (u64)ts.tv_sec * SP_TM_S_TO_NS + (u64)ts.tv_nsec;
+}
+
+SP_PRIVATE u64 sp_io_blocking_remaining(sp_io_timeout_t timeout) {
+  switch (timeout.kind) {
+    case SP_IO_TIMEOUT_NONE: return 0;
+    case SP_IO_TIMEOUT_DURATION: return timeout.time.ns;
+    case SP_IO_TIMEOUT_DEADLINE: {
+      u64 now = sp_io_blocking_now_ns(timeout.time.clock);
+      return timeout.time.ns > now ? timeout.time.ns - now : 0;
+    }
+  }
+  return 0;
+}
+
+SP_PRIVATE sp_err_t sp_io_blocking_sleep(sp_io_timeout_t timeout) {
+  sp_sys_timespec_t ts = sp_sys_timespec_from_ns(sp_io_blocking_remaining(timeout));
+  return sp_sys_nanosleep(&ts, SP_NULLPTR);
+}
+
+SP_PRIVATE sp_err_t sp_io_blocking_submit(void* user_data, sp_io_op_t* op) {
+  sp_io_blocking_t* b = (sp_io_blocking_t*)user_data;
+  op->result.err = SP_OK;
+  op->result.len = 0;
+  op->result.socket = SP_SYS_INVALID_SOCKET;
+  op->result.flag = false;
+
+  switch (op->kind) {
+    case SP_IO_OP_ACCEPT: {
+      op->result.err = sp_sys_socket_accept(op->accept.socket, op->accept.desc, &op->result.socket);
+      break;
+    }
+    case SP_IO_OP_CONNECT: {
+      sp_sys_socket_t socket = SP_SYS_INVALID_SOCKET;
+      op->result.err = sp_sys_socket_open(&socket, op->connect.desc);
+      if (!op->result.err) {
+        op->result.err = sp_sys_socket_connect(socket, op->connect.addr);
+        if (op->result.err) sp_sys_socket_close(socket);
+        else op->result.socket = socket;
+      }
+      break;
+    }
+    case SP_IO_OP_RECV: {
+      op->result.err = sp_sys_socket_recv(op->recv.socket, op->recv.buf.data, op->recv.buf.len, &op->result.len);
+      break;
+    }
+    case SP_IO_OP_SEND: {
+      op->result.err = sp_sys_socket_send(op->send.socket, op->send.buf.data, op->send.buf.len, &op->result.len);
+      break;
+    }
+    case SP_IO_OP_READ: {
+      op->result.err = sp_sys_read(op->read.fd, op->read.buf.data, op->read.buf.len, &op->result.len);
+      break;
+    }
+    case SP_IO_OP_WRITE: {
+      op->result.err = sp_sys_write(op->write.fd, op->write.buf.data, op->write.buf.len, &op->result.len);
+      break;
+    }
+    case SP_IO_OP_TIMEOUT: {
+      op->result.err = sp_io_blocking_sleep(op->timeout.timeout);
+      break;
+    }
+    case SP_IO_OP_WORK: {
+      op->work.fn(op->work.context);
+      break;
+    }
+    case SP_IO_OP_IS_TTY: {
+      op->result.flag = sp_sys_is_tty(op->is_tty.fd);
+      break;
+    }
+    case SP_IO_OP_TTY_GET: {
+      op->result.err = sp_sys_tty_get(op->tty_get.fd, op->tty_get.attr);
+      break;
+    }
+    case SP_IO_OP_TTY_SET: {
+      op->result.err = sp_sys_tty_set(op->tty_set.fd, op->tty_set.attr);
+      break;
+    }
+  }
+
+  sp_io_complete(sp_io_blocking_as_io(b), op);
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_blocking_wait(void* user_data, sp_io_op_t** done, u32 max, sp_io_timeout_t timeout, u32* count) {
+  sp_io_blocking_t* io = (sp_io_blocking_t*)user_data;
+  sp_unused(done);
+  sp_unused(max);
+  *count = 0;
+
+  bool bounded = timeout.kind != SP_IO_TIMEOUT_NONE;
+  sp_tm_timer_t timer = sp_tm_start_timer();
+  u64 budget = sp_io_blocking_remaining(timeout);
+
+  while (!sp_atomic_u32_exchange(&io->woken, 0, SP_ATOMIC_ACQ_REL)) {
+    if (!bounded) {
+      sp_sys_futex_wait(&io->woken, 0, SP_NULLPTR);
+      continue;
+    }
+    u64 elapsed = sp_tm_read_timer(&timer);
+    if (elapsed >= budget) return SP_OK;
+    sp_sys_timespec_t ts = sp_sys_timespec_from_ns(budget - elapsed);
+    if (!sp_sys_futex_wait(&io->woken, 0, &ts)) return SP_OK;
+  }
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_io_blocking_cancel(void* user_data, sp_io_op_t* op) {
+  sp_unused(user_data);
+  sp_unused(op);
+  return SP_ERR_SYS_UNSUPPORTED;
+}
+
+SP_PRIVATE sp_err_t sp_io_blocking_close(void* user_data, sp_sys_socket_t socket) {
+  sp_unused(user_data);
+  return sp_sys_socket_close(socket);
+}
+
+SP_PRIVATE sp_err_t sp_io_blocking_wake(void* user_data) {
+  sp_io_blocking_t* b = (sp_io_blocking_t*)user_data;
+  sp_atomic_u32_store(&b->woken, 1, SP_ATOMIC_RELEASE);
+  sp_sys_futex_wake(&b->woken);
+  return SP_OK;
+}
+
+SP_PRIVATE sp_io_time_t sp_io_blocking_now(void* user_data, sp_io_clock_t clock) {
+  sp_unused(user_data);
+  return (sp_io_time_t) { .ns = sp_io_blocking_now_ns(clock), .clock = clock };
+}
+
+SP_PRIVATE void sp_io_blocking_destroy(void* user_data) {
+  sp_unused(user_data);
+}
+
+sp_io_t sp_io_blocking_init(sp_io_blocking_t* b) {
+  *b = sp_zero_s(sp_io_blocking_t);
+  return sp_io_blocking_as_io(b);
 }
 
 #if defined(SP_LINUX)
