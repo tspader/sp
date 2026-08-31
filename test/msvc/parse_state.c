@@ -52,6 +52,16 @@ static const test_t tests [] = {
     .expect = { .ok = true, .install_path = "C:/A", .build_version = "17.0", .product_line = "" },
   },
   {
+    .name = "whitespace",
+    .json = "{\n  \"installationPath\" : \"C:\\\\A\",\n  \"buildVersion\":\n\"17.0.0\"\n}",
+    .expect = { .ok = true, .install_path = "C:/A", .build_version = "17.0.0", .product_line = "" },
+  },
+  {
+    .name = "key_in_value",
+    .json = "{\"A\":\"installationPath\",\"installationPath\":\"C:\\\\A\",\"buildVersion\":\"17.0.0\"}",
+    .expect = { .ok = true, .install_path = "C:/A", .build_version = "17.0.0", .product_line = "" },
+  },
+  {
     .name = "empty",
     .json = "",
   },

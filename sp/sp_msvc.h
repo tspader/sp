@@ -91,13 +91,39 @@ static sp_str_t sp_msvc_arch_name(sp_msvc_arch_t arch) {
   SP_UNREACHABLE_RETURN(sp_str_lit("x64"));
 }
 
+static u32 sp_msvc_json_skip_ws(sp_str_t json, u32 it) {
+  while (it < json.len) {
+    c8 c = json.data[it];
+    if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
+    it++;
+  }
+  return it;
+}
+
 static sp_str_t sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_for(mem);
-  sp_str_t needle = sp_fmt(scratch.mem, "\"{}\":\"", sp_fmt_str(key)).value;
-  s32 pos = sp_str_find(json, needle);
-  u32 start = (u32)pos + needle.len;
+  sp_str_t needle = sp_fmt(scratch.mem, "\"{}\"", sp_fmt_str(key)).value;
+
+  u32 cursor = 0;
+  u32 start = 0;
+  bool found = false;
+  while (!found && cursor < json.len) {
+    s32 pos = sp_str_find(sp_str_sub(json, (s32)cursor, (s32)(json.len - cursor)), needle);
+    if (pos == SP_STR_NO_MATCH) break;
+
+    u32 it = cursor + (u32)pos + needle.len;
+    cursor = cursor + (u32)pos + 1;
+
+    it = sp_msvc_json_skip_ws(json, it);
+    if (it >= json.len || json.data[it] != ':') continue;
+    it = sp_msvc_json_skip_ws(json, it + 1);
+    if (it >= json.len || json.data[it] != '"') continue;
+
+    start = it + 1;
+    found = true;
+  }
   sp_mem_end_scratch(scratch);
-  if (pos == SP_STR_NO_MATCH) return sp_zero_s(sp_str_t);
+  if (!found) return sp_zero_s(sp_str_t);
 
   sp_io_dyn_mem_writer_t value = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &value);
