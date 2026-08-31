@@ -62,19 +62,27 @@ static const test_t tests [] = {
     .expect = { .ok = true, .install_path = "C:/A", .build_version = "17.0.0", .product_line = "" },
   },
   {
+    .name = "duplicate_key",
+    .json = "{\"buildVersion\":\"1.0\",\"buildVersion\":\"2.0\",\"installationPath\":\"C:\\\\A\"}",
+    .expect = { .ok = true, .install_path = "C:/A", .build_version = "1.0", .product_line = "" },
+  },
+  {
     .name = "empty",
     .json = "",
   },
 };
 
 sp_test_each(msvc, parse_state, test_t, tests) {
+  sp_io_reader_t reader = sp_zero;
+  sp_io_reader_from_mem(&reader, it->json, sp_cstr_len(it->json));
+
   sp_msvc_state_t state = sp_zero;
-  bool ok = sp_msvc_parse_state(sp_test_arena(t), sp_cstr_as_str(it->json), &state);
+  bool ok = sp_msvc_parse_state(&reader, &state);
   sp_must_eq(t, ok, it->expect.ok);
   if (!ok) return SP_OK;
 
-  sp_expect_str_eq_c(t, state.install_path, it->expect.install_path);
-  sp_expect_str_eq_c(t, state.build_version, it->expect.build_version);
-  sp_expect_str_eq_c(t, state.product_line, it->expect.product_line);
+  sp_expect_str_eq_c(t, sp_msvc_path_str(&state.install_path), it->expect.install_path);
+  sp_expect_str_eq_c(t, sp_msvc_path_str(&state.build_version), it->expect.build_version);
+  sp_expect_str_eq_c(t, sp_msvc_path_str(&state.product_line), it->expect.product_line);
   return SP_OK;
 }

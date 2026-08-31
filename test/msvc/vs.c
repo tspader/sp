@@ -44,18 +44,22 @@ static const test_t tests [] = {
 
 sp_test_each(msvc, vs_new, test_t, tests) {
   sp_msvc_state_t state = {
-    .install_path = sp_str_lit("C:/V"),
-    .build_version = sp_str_lit("17.14.6"),
-    .product_line = sp_str_lit("2022"),
+    .install_path = sp_msvc_path_new(sp_str_lit("C:/V")),
+    .build_version = sp_msvc_path_new(sp_str_lit("17.14.6")),
+    .product_line = sp_msvc_path_new(sp_str_lit("2022")),
   };
-  sp_msvc_vs_t vs = sp_msvc_vs_new(sp_test_arena(t), it->host, it->target, state, sp_str_lit("1.2.3"));
+  sp_msvc_vs_t vs = sp_msvc_vs_new(it->host, it->target, &state, sp_str_lit("1.2.3"));
 
-  sp_expect_str_eq_c(t, vs.install_path, "C:/V");
-  sp_expect_str_eq_c(t, vs.version.product, "2022");
-  sp_expect_str_eq_c(t, vs.version.build.str, "17.14.6");
-  sp_expect_str_eq_c(t, vs.version.tools.str, "1.2.3");
-  sp_expect_str_eq_c(t, vs.lib, it->expect.lib);
-  sp_expect_str_eq_c(t, vs.include, it->expect.include);
-  sp_expect_str_eq_c(t, vs.bin, it->expect.bin);
+  sp_expect_str_eq_c(t, sp_msvc_path_str(&vs.install_path), "C:/V");
+  sp_expect_str_eq_c(t, sp_msvc_version_str(&vs.version.product), "2022");
+  sp_expect_str_eq_c(t, sp_msvc_version_str(&vs.version.build), "17.14.6");
+  sp_expect_str_eq_c(t, sp_msvc_version_str(&vs.version.tools), "1.2.3");
+  sp_expect_eq(t, vs.host, it->host);
+  sp_expect_eq(t, vs.target, it->target);
+
+  sp_msvc_vs_paths_t paths = sp_msvc_vs_render(sp_test_arena(t), &vs);
+  sp_expect_str_eq_c(t, paths.lib, it->expect.lib);
+  sp_expect_str_eq_c(t, paths.include, it->expect.include);
+  sp_expect_str_eq_c(t, paths.bin, it->expect.bin);
   return SP_OK;
 }
