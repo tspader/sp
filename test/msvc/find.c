@@ -29,7 +29,7 @@ sp_test(msvc, find) {
 
     sp_io_mem_writer_t io = sp_zero;
     sp_io_mem_writer_from_buffer(&io, buf, sizeof(buf));
-    sp_must_eq(t, sp_msvc_vs_path_w(&io.base, vs, SP_MSVC_VS_PATH_LIB), SP_OK);
+    sp_must_eq(t, sp_msvc_vs_path_io(&io.base, vs, SP_MSVC_VS_PATH_LIB), SP_OK);
     sp_must_eq(t, sp_io_write_str(&io.base, sp_str_lit("/vcruntime.lib"), SP_NULLPTR), SP_OK);
     sp_expect(t, sp_fs_exists(sp_io_mem_writer_as_str(&io)));
     if (it) sp_expect(t, !sp_msvc_version_gt(vs->version.build, msvc.installations[it - 1].version.build));

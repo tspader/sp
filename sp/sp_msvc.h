@@ -36,13 +36,13 @@ typedef enum {
   SP_MSVC_SDK_PATH_INCLUDE_UCRT,
   SP_MSVC_SDK_PATH_INCLUDE_UM,
   SP_MSVC_SDK_PATH_INCLUDE_SHARED,
-} sp_msvc_sdk_path_t;
+} sp_msvc_sdk_path_id_t;
 
 typedef enum {
   SP_MSVC_VS_PATH_LIB,
   SP_MSVC_VS_PATH_INCLUDE,
   SP_MSVC_VS_PATH_BIN,
-} sp_msvc_vs_path_t;
+} sp_msvc_vs_path_id_t;
 
 typedef struct {
   c8 data [SP_MSVC_PATH_MAX];
@@ -99,12 +99,12 @@ typedef struct {
 SP_API sp_str_t sp_msvc_path_str(const sp_msvc_path_t* path);
 SP_API sp_str_t sp_msvc_version_str(const sp_msvc_version_t* version);
 
-SP_API sp_str_t sp_msvc_sdk_path(sp_mem_t mem, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_t kind);
-SP_API sp_str_r sp_msvc_sdk_path_buf(c8* buffer, u64 len, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_t kind);
-SP_API sp_err_t sp_msvc_sdk_path_w(sp_io_writer_t* io, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_t kind);
-SP_API sp_str_t sp_msvc_vs_path(sp_mem_t mem, const sp_msvc_vs_t* vs, sp_msvc_vs_path_t kind);
-SP_API sp_str_r sp_msvc_vs_path_buf(c8* buffer, u64 len, const sp_msvc_vs_t* vs, sp_msvc_vs_path_t kind);
-SP_API sp_err_t sp_msvc_vs_path_w(sp_io_writer_t* io, const sp_msvc_vs_t* vs, sp_msvc_vs_path_t kind);
+SP_API sp_str_t sp_msvc_sdk_path(sp_mem_t mem, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_id_t id);
+SP_API sp_str_r sp_msvc_sdk_path_buf(c8* buffer, u64 len, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_id_t id);
+SP_API sp_err_t sp_msvc_sdk_path_io(sp_io_writer_t* io, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_id_t id);
+SP_API sp_str_t sp_msvc_vs_path(sp_mem_t mem, const sp_msvc_vs_t* vs, sp_msvc_vs_path_id_t id);
+SP_API sp_str_r sp_msvc_vs_path_buf(c8* buffer, u64 len, const sp_msvc_vs_t* vs, sp_msvc_vs_path_id_t id);
+SP_API sp_err_t sp_msvc_vs_path_io(sp_io_writer_t* io, const sp_msvc_vs_t* vs, sp_msvc_vs_path_id_t id);
 
 SP_API sp_msvc_sdk_paths_t sp_msvc_sdk_render(sp_mem_t mem, const sp_msvc_sdk_t* sdk);
 SP_API sp_msvc_vs_paths_t  sp_msvc_vs_render(sp_mem_t mem, const sp_msvc_vs_t* vs);
@@ -308,12 +308,12 @@ SP_PRIVATE sp_msvc_vs_t sp_msvc_vs_new(sp_msvc_arch_t host, sp_msvc_arch_t targe
   };
 }
 
-sp_err_t sp_msvc_sdk_path_w(sp_io_writer_t* io, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_t kind) {
+sp_err_t sp_msvc_sdk_path_io(sp_io_writer_t* io, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_id_t id) {
   sp_str_t root = sp_msvc_path_str(&sdk->root);
   sp_str_t version = sp_msvc_version_str(&sdk->version);
   sp_str_t arch = sp_msvc_arch_to_str(sdk->arch);
 
-  switch (kind) {
+  switch (id) {
     case SP_MSVC_SDK_PATH_LIB_UM:         return sp_fmt_io(io, "{}/Lib/{}/um/{}",      sp_fmt_str(root), sp_fmt_str(version), sp_fmt_str(arch));
     case SP_MSVC_SDK_PATH_LIB_UCRT:       return sp_fmt_io(io, "{}/Lib/{}/ucrt/{}",    sp_fmt_str(root), sp_fmt_str(version), sp_fmt_str(arch));
     case SP_MSVC_SDK_PATH_INCLUDE_UCRT:   return sp_fmt_io(io, "{}/Include/{}/ucrt",   sp_fmt_str(root), sp_fmt_str(version));
@@ -323,51 +323,51 @@ sp_err_t sp_msvc_sdk_path_w(sp_io_writer_t* io, const sp_msvc_sdk_t* sdk, sp_msv
   SP_UNREACHABLE_RETURN(SP_ERR);
 }
 
-sp_str_r sp_msvc_sdk_path_buf(c8* buffer, u64 len, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_t kind) {
+sp_str_r sp_msvc_sdk_path_buf(c8* buffer, u64 len, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_id_t id) {
   sp_io_mem_writer_t io = sp_zero;
   sp_io_mem_writer_from_buffer(&io, buffer, len);
 
   sp_str_r result = sp_zero;
-  result.err = sp_msvc_sdk_path_w(&io.base, sdk, kind);
+  result.err = sp_msvc_sdk_path_io(&io.base, sdk, id);
   if (!result.err) result.value = sp_io_mem_writer_as_str(&io);
   return result;
 }
 
-sp_str_t sp_msvc_sdk_path(sp_mem_t mem, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_t kind) {
+sp_str_t sp_msvc_sdk_path(sp_mem_t mem, const sp_msvc_sdk_t* sdk, sp_msvc_sdk_path_id_t id) {
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &io);
-  sp_msvc_sdk_path_w(&io.base, sdk, kind);
+  sp_msvc_sdk_path_io(&io.base, sdk, id);
   return sp_io_dyn_mem_writer_as_str(&io);
 }
 
-sp_err_t sp_msvc_vs_path_w(sp_io_writer_t* io, const sp_msvc_vs_t* vs, sp_msvc_vs_path_t kind) {
+sp_err_t sp_msvc_vs_path_io(sp_io_writer_t* io, const sp_msvc_vs_t* vs, sp_msvc_vs_path_id_t id) {
   sp_str_t install = sp_msvc_path_str(&vs->install_path);
   sp_str_t tools = sp_msvc_version_str(&vs->version.tools);
   sp_str_t host = sp_msvc_arch_to_str(vs->host);
   sp_str_t target = sp_msvc_arch_to_str(vs->target);
 
-  switch (kind) {
-    case SP_MSVC_VS_PATH_LIB:     return sp_fmt_io(io, "{}/VC/Tools/MSVC/{}/Lib/{}",        sp_fmt_str(install), sp_fmt_str(tools), sp_fmt_str(target));
-    case SP_MSVC_VS_PATH_INCLUDE: return sp_fmt_io(io, "{}/VC/Tools/MSVC/{}/include",       sp_fmt_str(install), sp_fmt_str(tools));
-    case SP_MSVC_VS_PATH_BIN:     return sp_fmt_io(io, "{}/VC/Tools/MSVC/{}/bin/Host{}/{}", sp_fmt_str(install), sp_fmt_str(tools), sp_fmt_str(host), sp_fmt_str(target));
+  switch (id) {
+    case SP_MSVC_VS_PATH_LIB: return sp_fmt_io(io, "{}/VC/Tools/MSVC/{}/Lib/{}", sp_fmt_str(install), sp_fmt_str(tools), sp_fmt_str(target));
+    case SP_MSVC_VS_PATH_INCLUDE: return sp_fmt_io(io, "{}/VC/Tools/MSVC/{}/include", sp_fmt_str(install), sp_fmt_str(tools));
+    case SP_MSVC_VS_PATH_BIN: return sp_fmt_io(io, "{}/VC/Tools/MSVC/{}/bin/Host{}/{}", sp_fmt_str(install), sp_fmt_str(tools), sp_fmt_str(host), sp_fmt_str(target));
   }
   SP_UNREACHABLE_RETURN(SP_ERR);
 }
 
-sp_str_r sp_msvc_vs_path_buf(c8* buffer, u64 len, const sp_msvc_vs_t* vs, sp_msvc_vs_path_t kind) {
+sp_str_r sp_msvc_vs_path_buf(c8* buffer, u64 len, const sp_msvc_vs_t* vs, sp_msvc_vs_path_id_t id) {
   sp_io_mem_writer_t io = sp_zero;
   sp_io_mem_writer_from_buffer(&io, buffer, len);
 
   sp_str_r result = sp_zero;
-  result.err = sp_msvc_vs_path_w(&io.base, vs, kind);
+  result.err = sp_msvc_vs_path_io(&io.base, vs, id);
   if (!result.err) result.value = sp_io_mem_writer_as_str(&io);
   return result;
 }
 
-sp_str_t sp_msvc_vs_path(sp_mem_t mem, const sp_msvc_vs_t* vs, sp_msvc_vs_path_t kind) {
+sp_str_t sp_msvc_vs_path(sp_mem_t mem, const sp_msvc_vs_t* vs, sp_msvc_vs_path_id_t id) {
   sp_io_dyn_mem_writer_t io = sp_zero;
   sp_io_dyn_mem_writer_init(mem, &io);
-  sp_msvc_vs_path_w(&io.base, vs, kind);
+  sp_msvc_vs_path_io(&io.base, vs, id);
   return sp_io_dyn_mem_writer_as_str(&io);
 }
 
@@ -532,7 +532,7 @@ static sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t 
 
     sp_io_mem_writer_t io = sp_zero;
     sp_io_mem_writer_from_buffer(&io, buf, sizeof(buf));
-    if (sp_msvc_vs_path_w(&io.base, &vs, SP_MSVC_VS_PATH_LIB)) continue;
+    if (sp_msvc_vs_path_io(&io.base, &vs, SP_MSVC_VS_PATH_LIB)) continue;
     if (sp_io_write_str(&io.base, sp_str_lit("/vcruntime.lib"), SP_NULLPTR)) continue;
     if (!sp_fs_exists(sp_io_mem_writer_as_str(&io))) continue;
 
