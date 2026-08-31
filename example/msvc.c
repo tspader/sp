@@ -1,7 +1,6 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
-#define SP_MSVC_IMPLEMENTATION
 #include "sp/sp_msvc.h"
 
 s32 msvc_main(s32 argc, const c8** argv);
@@ -21,11 +20,11 @@ s32 msvc_main(s32 argc, const c8** argv) {
     return 1;
   }
 
-  sp_log("{.fg cyan} Visual Studio installation(s)", sp_fmt_uint(sp_da_size(result.installations)));
+  sp_log("{.cyan} Visual Studio installation(s)", sp_fmt_uint(sp_da_size(result.installations)));
   sp_da_for(result.installations, i) {
     sp_msvc_vs_t* vs = &result.installations[i];
     sp_log("");
-    sp_log("  [{.fg yellow}] VS {.fg green}", sp_fmt_uint(i), sp_fmt_str(vs->version.product));
+    sp_log("  [{.yellow}] VS {.green}", sp_fmt_uint(i), sp_fmt_str(vs->version.product));
     sp_log("      build:   {}", sp_fmt_str(vs->version.build.str));
     sp_log("      tools:   {}", sp_fmt_str(vs->version.tools.str));
     sp_log("      path:    {}", sp_fmt_str(vs->install_path));
@@ -35,11 +34,11 @@ s32 msvc_main(s32 argc, const c8** argv) {
   }
 
   sp_log("");
-  sp_log("{.fg cyan} Windows SDK(s)", sp_fmt_uint(sp_da_size(result.sdks)));
+  sp_log("{.cyan} Windows SDK(s)", sp_fmt_uint(sp_da_size(result.sdks)));
   sp_da_for(result.sdks, i) {
     sp_msvc_sdk_t* sdk = &result.sdks[i];
     sp_log("");
-    sp_log("  [{.fg yellow}] SDK {.fg green}", sp_fmt_uint(i), sp_fmt_str(sdk->version.str));
+    sp_log("  [{.yellow}] SDK {.green}", sp_fmt_uint(i), sp_fmt_str(sdk->version.str));
     sp_log("      root:       {}", sp_fmt_str(sdk->root));
     sp_log("      lib_um:     {}", sp_fmt_str(sdk->lib_um));
     sp_log("      lib_ucrt:   {}", sp_fmt_str(sdk->lib_ucrt));
