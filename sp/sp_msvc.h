@@ -83,7 +83,7 @@ SP_PRIVATE sp_msvc_vs_t      sp_msvc_vs_new(sp_mem_t mem, sp_msvc_arch_t host, s
 #if defined(SP_MSVC_IMPLEMENTATION) && !defined(SP_MSVC_IMPLEMENTED)
 #define SP_MSVC_IMPLEMENTED
 
-static sp_str_t sp_msvc_arch_name(sp_msvc_arch_t arch) {
+static sp_str_t sp_msvc_arch_to_str(sp_msvc_arch_t arch) {
   switch (arch) {
     case SP_MSVC_ARCH_X64:   { return sp_str_lit("x64"); }
     case SP_MSVC_ARCH_ARM64: { return sp_str_lit("arm64"); }
@@ -101,8 +101,8 @@ static u32 sp_msvc_json_skip_ws(sp_str_t json, u32 it) {
 }
 
 static sp_str_t sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key) {
-  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_for(mem);
-  sp_str_t needle = sp_fmt(scratch.mem, "\"{}\"", sp_fmt_str(key)).value;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(mem);
+  sp_str_t needle = sp_fmt(s.mem, "\"{}\"", sp_fmt_str(key)).value;
 
   u32 cursor = 0;
   u32 start = 0;
@@ -122,7 +122,7 @@ static sp_str_t sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key) 
     start = it + 1;
     found = true;
   }
-  sp_mem_end_scratch(scratch);
+  sp_mem_end_scratch(s);
   if (!found) return sp_zero_s(sp_str_t);
 
   sp_io_dyn_mem_writer_t value = sp_zero;
@@ -179,7 +179,7 @@ SP_PRIVATE bool sp_msvc_parse_state(sp_mem_t mem, sp_str_t json, sp_msvc_state_t
 }
 
 SP_PRIVATE sp_msvc_sdk_t sp_msvc_sdk_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_str_t root, sp_str_t version) {
-  sp_str_t arch_name = sp_msvc_arch_name(arch);
+  sp_str_t arch_name = sp_msvc_arch_to_str(arch);
 
   return (sp_msvc_sdk_t) {
     .version        = sp_msvc_parse_version(mem, version),
@@ -193,7 +193,7 @@ SP_PRIVATE sp_msvc_sdk_t sp_msvc_sdk_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_s
 }
 
 SP_PRIVATE sp_msvc_vs_t sp_msvc_vs_new(sp_mem_t mem, sp_msvc_arch_t host, sp_msvc_arch_t target, sp_msvc_state_t state, sp_str_t tools_version) {
-  sp_str_t target_name = sp_msvc_arch_name(target);
+  sp_str_t target_name = sp_msvc_arch_to_str(target);
   sp_str_t tools = sp_fmt(mem, "{}/VC/Tools/MSVC/{}", sp_fmt_str(state.install_path), sp_fmt_str(tools_version)).value;
 
   return (sp_msvc_vs_t) {
@@ -205,7 +205,7 @@ SP_PRIVATE sp_msvc_vs_t sp_msvc_vs_new(sp_mem_t mem, sp_msvc_arch_t host, sp_msv
     .install_path = sp_str_copy(mem, state.install_path),
     .lib          = sp_fmt(mem, "{}/Lib/{}", sp_fmt_str(tools), sp_fmt_str(target_name)).value,
     .include      = sp_fmt(mem, "{}/include", sp_fmt_str(tools)).value,
-    .bin          = sp_fmt(mem, "{}/bin/Host{}/{}", sp_fmt_str(tools), sp_fmt_str(sp_msvc_arch_name(host)), sp_fmt_str(target_name)).value,
+    .bin          = sp_fmt(mem, "{}/bin/Host{}/{}", sp_fmt_str(tools), sp_fmt_str(sp_msvc_arch_to_str(host)), sp_fmt_str(target_name)).value,
   };
 }
 
