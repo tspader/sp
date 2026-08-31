@@ -34,12 +34,6 @@ typedef struct {
 } sp_msvc_sdk_t;
 
 typedef struct {
-  sp_str_t install_path;
-  sp_str_t build_version;
-  sp_str_t product_line;
-} sp_msvc_state_t;
-
-typedef struct {
   struct {
     sp_str_t product;
     sp_msvc_version_t build;
@@ -58,12 +52,6 @@ typedef struct {
   sp_da(sp_msvc_vs_t) installations;
 } sp_msvc_t;
 
-SP_API sp_msvc_version_t sp_msvc_parse_version(sp_mem_t mem, sp_str_t str);
-SP_API bool              sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b);
-SP_API bool              sp_msvc_parse_state(sp_mem_t mem, sp_str_t json, sp_msvc_state_t* out);
-SP_API sp_msvc_sdk_t     sp_msvc_sdk_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_str_t root, sp_str_t version);
-SP_API sp_msvc_vs_t      sp_msvc_vs_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_msvc_state_t state, sp_str_t tools_version);
-
 #if defined(SP_WIN32)
 SP_API sp_msvc_err_t sp_msvc_find(sp_mem_t mem, sp_msvc_arch_t arch, sp_msvc_t* out);
 SP_API void          sp_msvc_free(sp_msvc_t* msvc);
@@ -74,7 +62,26 @@ SP_API void          sp_msvc_free(sp_msvc_t* msvc);
   #define SP_MSVC_IMPLEMENTATION
 #endif
 
-#if defined(SP_MSVC_IMPLEMENTATION)
+#ifndef SP_MSVC_IMPL_H
+#if defined(SP_PRIVATE_HEADER) || defined(SP_MSVC_IMPLEMENTATION)
+#define SP_MSVC_IMPL_H
+
+typedef struct {
+  sp_str_t install_path;
+  sp_str_t build_version;
+  sp_str_t product_line;
+} sp_msvc_state_t;
+
+SP_PRIVATE sp_msvc_version_t sp_msvc_parse_version(sp_mem_t mem, sp_str_t str);
+SP_PRIVATE bool              sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b);
+SP_PRIVATE bool              sp_msvc_parse_state(sp_mem_t mem, sp_str_t json, sp_msvc_state_t* out);
+SP_PRIVATE sp_msvc_sdk_t     sp_msvc_sdk_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_str_t root, sp_str_t version);
+SP_PRIVATE sp_msvc_vs_t      sp_msvc_vs_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_msvc_state_t state, sp_str_t tools_version);
+#endif
+#endif // SP_MSVC_IMPL_H
+
+#if defined(SP_MSVC_IMPLEMENTATION) && !defined(SP_MSVC_IMPLEMENTED)
+#define SP_MSVC_IMPLEMENTED
 
 static sp_str_t sp_msvc_arch_name(sp_msvc_arch_t arch) {
   switch (arch) {
@@ -106,7 +113,7 @@ static sp_str_t sp_msvc_json_get_str(sp_mem_t mem, sp_str_t json, sp_str_t key) 
   return sp_io_dyn_mem_writer_as_str(&value);
 }
 
-sp_msvc_version_t sp_msvc_parse_version(sp_mem_t mem, sp_str_t str) {
+SP_PRIVATE sp_msvc_version_t sp_msvc_parse_version(sp_mem_t mem, sp_str_t str) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_for(mem);
   u32 parts [4] = sp_zero;
   sp_da(sp_str_t) split = sp_str_split_c8(scratch.mem, str, '.');
@@ -125,14 +132,14 @@ sp_msvc_version_t sp_msvc_parse_version(sp_mem_t mem, sp_str_t str) {
   };
 }
 
-bool sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b) {
+SP_PRIVATE bool sp_msvc_version_gt(sp_msvc_version_t a, sp_msvc_version_t b) {
   if (a.major != b.major) return a.major > b.major;
   if (a.minor != b.minor) return a.minor > b.minor;
   if (a.build != b.build) return a.build > b.build;
   return a.revision > b.revision;
 }
 
-bool sp_msvc_parse_state(sp_mem_t mem, sp_str_t json, sp_msvc_state_t* out) {
+SP_PRIVATE bool sp_msvc_parse_state(sp_mem_t mem, sp_str_t json, sp_msvc_state_t* out) {
   *out = sp_zero_s(sp_msvc_state_t);
 
   sp_str_t install = sp_msvc_json_get_str(mem, json, sp_str_lit("installationPath"));
@@ -145,7 +152,7 @@ bool sp_msvc_parse_state(sp_mem_t mem, sp_str_t json, sp_msvc_state_t* out) {
   return true;
 }
 
-sp_msvc_sdk_t sp_msvc_sdk_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_str_t root, sp_str_t version) {
+SP_PRIVATE sp_msvc_sdk_t sp_msvc_sdk_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_str_t root, sp_str_t version) {
   sp_str_t arch_name = sp_msvc_arch_name(arch);
 
   return (sp_msvc_sdk_t) {
@@ -159,7 +166,7 @@ sp_msvc_sdk_t sp_msvc_sdk_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_str_t root, 
   };
 }
 
-sp_msvc_vs_t sp_msvc_vs_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_msvc_state_t state, sp_str_t tools_version) {
+SP_PRIVATE sp_msvc_vs_t sp_msvc_vs_new(sp_mem_t mem, sp_msvc_arch_t arch, sp_msvc_state_t state, sp_str_t tools_version) {
   sp_str_t arch_name = sp_msvc_arch_name(arch);
   sp_str_t tools = sp_fmt(mem, "{}/VC/Tools/MSVC/{}", sp_fmt_str(state.install_path), sp_fmt_str(tools_version)).value;
 
