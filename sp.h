@@ -18586,7 +18586,7 @@ static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, s
       if (sp_fmt_peek(&p, 1) == '{') {
         sp_fmt_advance(&p);
         sp_fmt_advance(&p);
-        sp_io_write_c8(io, '{');
+        sp_try(sp_io_write_c8(io, '{'));
         continue;
       }
 
@@ -18627,13 +18627,13 @@ static sp_err_t sp_fmt_io_v_ex(sp_io_writer_t* io, sp_str_t fmt, va_list args, s
       if (sp_fmt_peek(&p, 1) == '}') {
         sp_fmt_advance(&p);
         sp_fmt_advance(&p);
-        sp_io_write_c8(io, '}');
+        sp_try(sp_io_write_c8(io, '}'));
         continue;
       }
       return SP_ERR_FMT_BAD_PLACEHOLDER;
     }
 
-    sp_io_write_c8(io, c);
+    sp_try(sp_io_write_c8(io, c));
     sp_fmt_advance(&p);
   }
 
@@ -18970,34 +18970,34 @@ static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_s
     case SP_FMT_ALIGN_NONE:   left_pad = pad; break;
   }
 
-  sp_for(it, left_pad) sp_io_write_c8(io, fill);
+  sp_for(it, left_pad) sp_try(sp_io_write_c8(io, fill));
   switch (sink->kind) {
     case SP_FMT_SINK_PLAIN: {
       sp_for(it, num_dirs) {
-        if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+        if (arg->spec.directive.styles[it] == sp_fmt_style_quote) sp_try(sp_io_write_c8(io, '"'));
       }
-      sp_io_write_str(io, content, SP_NULLPTR);
+      sp_try(sp_io_write_str(io, content, SP_NULLPTR));
       u8 j = num_dirs;
       while (j--) {
-        if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_io_write_c8(io, '"');
+        if (arg->spec.directive.styles[j] == sp_fmt_style_quote) sp_try(sp_io_write_c8(io, '"'));
       }
       break;
     }
     case SP_FMT_SINK_ANSI: {
       sp_for(it, num_dirs) sp_fmt_style_open(io, arg->spec.directive.styles[it], arg);
-      sp_io_write_str(io, content, SP_NULLPTR);
+      sp_try(sp_io_write_str(io, content, SP_NULLPTR));
       bool reset = false;
       u8 j = num_dirs;
       while (j--) {
         sp_fmt_style_t style = arg->spec.directive.styles[j];
         if (style == sp_fmt_style_quote) {
-          sp_io_write_c8(io, '"');
+          sp_try(sp_io_write_c8(io, '"'));
         }
         else if (style == sp_fmt_style_hyperlink) {
-          sp_io_write_cstr(io, "\033]8;;\033\\", SP_NULLPTR);
+          sp_try(sp_io_write_cstr(io, "\033]8;;\033\\", SP_NULLPTR));
         }
         else if (!reset && sp_fmt_style_to_ansi(style)) {
-          sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR);
+          sp_try(sp_io_write_cstr(io, SP_ANSI_RESET, SP_NULLPTR));
           reset = true;
         }
       }
@@ -19031,7 +19031,7 @@ static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_s
       break;
     }
   }
-  sp_for(it, right_pad) sp_io_write_c8(io, fill);
+  sp_for(it, right_pad) sp_try(sp_io_write_c8(io, fill));
   return SP_OK;
 }
 
