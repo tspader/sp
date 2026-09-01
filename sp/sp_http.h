@@ -2498,16 +2498,18 @@ sp_http_error_t sp_http_server_init(sp_http_server_t* server, sp_http_server_des
   }
   else {
     sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-    if (sp_sys_socket_open(&listener, sp_zero_s(sp_sys_handle_desc_t)) != SP_OK) {
+    if (sp_sys_socket_open(&listener, SP_SYS_SOCKET_STREAM, sp_zero_s(sp_sys_handle_desc_t)) != SP_OK) {
       return SP_HTTP_ERR_OS;
     }
+    sp_sys_ipv4_t bound = sp_zero;
     if (sp_sys_socket_reuse_addr(listener) != SP_OK ||
         sp_sys_socket_bind(listener, desc.addr) != SP_OK ||
         sp_sys_socket_listen(listener, (s32)server->desc.max_conns) != SP_OK ||
-        sp_sys_socket_local_port(listener, &server->port) != SP_OK) {
+        sp_sys_socket_local_addr(listener, &bound) != SP_OK) {
       sp_sys_socket_close(listener);
       return SP_HTTP_ERR_OS;
     }
+    server->port = bound.port;
     server->listener = listener;
   }
 

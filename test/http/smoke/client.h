@@ -23,7 +23,7 @@ typedef struct {
 static s32 client_main(void* user_data) {
   client_t* client = sp_cast(client_t*, user_data);
   sp_sys_socket_t socket = SP_SYS_INVALID_SOCKET;
-  if (sp_sys_socket_open(&socket, sp_zero_s(sp_sys_handle_desc_t)) != SP_OK) goto done;
+  if (sp_sys_socket_open(&socket, SP_SYS_SOCKET_STREAM, sp_zero_s(sp_sys_handle_desc_t)) != SP_OK) goto done;
   if (sp_sys_socket_connect(socket, (sp_sys_ipv4_t) { .octets = { 127, 0, 0, 1 }, .port = client->port }) != SP_OK) goto close;
 
   sp_str_t send = sp_cstr_as_str(client->send);

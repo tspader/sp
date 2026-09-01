@@ -83,8 +83,8 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
       sp_sys_socket_t client = SP_SYS_INVALID_SOCKET;
       sp_sys_socket_t server = SP_SYS_INVALID_SOCKET;
-      u16 port = 0;
-      sp_must(t, socket_open_listener(&listener, sp_zero_s(sp_sys_handle_desc_t), &port));
+      sp_sys_ipv4_t addr = sp_zero;
+      sp_must(t, socket_open_listener(&listener, sp_zero_s(sp_sys_handle_desc_t), &addr));
 
       sp_sys_handle_desc_t desc = { .inherited = c->inherited };
       sp_sys_handle_desc_t open_desc = sp_zero;
@@ -92,8 +92,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       if (c->kind == KIND_SOCK_OPEN) open_desc = desc;
       else                           accept_desc = desc;
 
-      sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 }, .port = port };
-      sp_must_ok(t, sp_sys_socket_open(&client, open_desc));
+      sp_must_ok(t, sp_sys_socket_open(&client, SP_SYS_SOCKET_STREAM, open_desc));
       sp_must_ok(t, sp_sys_socket_connect(client, addr));
       sp_must_ok(t, sp_sys_socket_accept(listener, accept_desc, &server));
 

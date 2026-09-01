@@ -514,7 +514,7 @@ SP_PRIVATE sp_err_t sp_io_blocking_submit(void* user_data, sp_io_op_t* op) {
     }
     case SP_IO_OP_CONNECT: {
       sp_sys_socket_t socket = SP_SYS_INVALID_SOCKET;
-      op->result.err = sp_sys_socket_open(&socket, op->connect.desc);
+      op->result.err = sp_sys_socket_open(&socket, SP_SYS_SOCKET_STREAM, op->connect.desc);
       if (!op->result.err) {
         op->result.err = sp_sys_socket_connect(socket, op->connect.addr);
         if (op->result.err) sp_sys_socket_close(socket);
@@ -894,7 +894,7 @@ SP_PRIVATE sp_err_t sp_io_uring_submit(void* user_data, sp_io_op_t* op) {
       break;
     }
     case SP_IO_OP_CONNECT: {
-      sp_try(sp_sys_socket_open(&op->connect.socket, op->connect.desc));
+      sp_try(sp_sys_socket_open(&op->connect.socket, SP_SYS_SOCKET_STREAM, op->connect.desc));
       sp_static_assert(sizeof(sp_sys_linux_sockaddr_in_t) <= sizeof(op->connect.sockaddr), sp_io_uring_sockaddr_fits);
       sp_sys_linux_sockaddr_in_t* sa = (sp_sys_linux_sockaddr_in_t*)op->connect.sockaddr;
       *sa = sp_zero_s(sp_sys_linux_sockaddr_in_t);
@@ -1362,7 +1362,7 @@ SP_PRIVATE sp_err_t sp_io_poll_submit(void* user_data, sp_io_op_t* op) {
       sp_sys_handle_desc_t desc = op->connect.desc;
       desc.mode = SP_SYS_NONBLOCKING;
       op->connect.socket = SP_SYS_INVALID_SOCKET;
-      sp_err_t err = sp_sys_socket_open(&op->connect.socket, desc);
+      sp_err_t err = sp_sys_socket_open(&op->connect.socket, SP_SYS_SOCKET_STREAM, desc);
       if (!err) {
         err = sp_sys_socket_connect(op->connect.socket, op->connect.addr);
         if (err == SP_ERR_SYS_WOULD_BLOCK) {
