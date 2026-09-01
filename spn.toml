@@ -18,6 +18,7 @@ source = [
   "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c", "test/sys/socket/nodelay.c",
+  "test/sys/socket/addr.c", "test/sys/socket/dgram.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c",
@@ -46,6 +47,7 @@ source = [
   "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c", "test/sys/socket/nodelay.c",
+  "test/sys/socket/addr.c", "test/sys/socket/dgram.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c"

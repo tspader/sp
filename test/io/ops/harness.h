@@ -96,17 +96,16 @@ static void harness_arm(ops_harness_t* h, sp_io_op_t* op) {
 
 static sp_err_t harness_listen(sp_test_t* t, ops_harness_t* h) {
   sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 } };
-  sp_must_ok(t, sp_sys_socket_open(&h->listener, sp_zero_s(sp_sys_handle_desc_t)));
+  sp_must_ok(t, sp_sys_socket_open(&h->listener, SP_SYS_SOCKET_STREAM, sp_zero_s(sp_sys_handle_desc_t)));
   sp_must_ok(t, sp_sys_socket_bind(h->listener, addr));
   sp_must_ok(t, sp_sys_socket_listen(h->listener, 2));
   return SP_OK;
 }
 
 static sp_err_t harness_connect(sp_test_t* t, ops_harness_t* h) {
-  u16 port = 0;
-  sp_must_ok(t, sp_sys_socket_local_port(h->listener, &port));
-  sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 }, .port = port };
-  sp_must_ok(t, sp_sys_socket_open(&h->client, sp_zero_s(sp_sys_handle_desc_t)));
+  sp_sys_ipv4_t addr = sp_zero;
+  sp_must_ok(t, sp_sys_socket_local_addr(h->listener, &addr));
+  sp_must_ok(t, sp_sys_socket_open(&h->client, SP_SYS_SOCKET_STREAM, sp_zero_s(sp_sys_handle_desc_t)));
   sp_must_ok(t, sp_sys_socket_connect(h->client, addr));
   return SP_OK;
 }

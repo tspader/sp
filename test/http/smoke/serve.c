@@ -73,12 +73,12 @@ static const sp_http_route_t routes [] = {
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  sp_must_ok(t, sp_sys_socket_open(&listener, sp_zero_s(sp_sys_handle_desc_t)));
+  sp_must_ok(t, sp_sys_socket_open(&listener, SP_SYS_SOCKET_STREAM, sp_zero_s(sp_sys_handle_desc_t)));
   sp_must_ok(t, sp_sys_socket_bind(listener, (sp_sys_ipv4_t) { .octets = { 127, 0, 0, 1 } }));
   sp_must_ok(t, sp_sys_socket_listen(listener, 2));
 
-  u16 port = 0;
-  sp_must_ok(t, sp_sys_socket_local_port(listener, &port));
+  sp_sys_ipv4_t bound = sp_zero;
+  sp_must_ok(t, sp_sys_socket_local_addr(listener, &bound));
 
   sp_http_router_t router = { .routes = routes, .count = sp_carr_len(routes) };
   sp_http_conn_t conn = sp_zero;
@@ -92,7 +92,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   u32 num_clients = c->clients ? c->clients : 1;
   client_t clients [SERVE_TEST_MAX_CLIENTS] = sp_zero;
   sp_for(it, num_clients) {
-    clients[it] = (client_t) { .port = port, .send = c->send };
+    clients[it] = (client_t) { .port = bound.port, .send = c->send };
     sp_thread_t thread = sp_zero;
     sp_thread_init(&thread, client_main, &clients[it]);
 

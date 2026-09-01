@@ -216,9 +216,9 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   server.steps = c->steps;
 
   sp_must_eq(t, mbedtls_net_bind(&server.listen, "127.0.0.1", "0", MBEDTLS_NET_PROTO_TCP), 0);
-  u16 port_value = 0;
-  sp_must_ok(t, sp_sys_socket_local_port((sp_sys_socket_t)server.listen.fd, &port_value));
-  const c8* port = sp_str_to_cstr(mem, sp_fmt(mem, "{}", sp_fmt_uint(port_value)).value);
+  sp_sys_ipv4_t server_addr = sp_zero;
+  sp_must_ok(t, sp_sys_socket_local_addr((sp_sys_socket_t)server.listen.fd, &server_addr));
+  const c8* port = sp_str_to_cstr(mem, sp_fmt(mem, "{}", sp_fmt_uint(server_addr.port)).value);
 
   mbedtls_x509_crt_init(&server.crt);
   mbedtls_pk_init(&server.pk);

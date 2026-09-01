@@ -183,7 +183,7 @@ static sp_err_t mock_tty_use_vt(sp_sys_fd_t fd) {
   return (sp_err_t)69;
 }
 
-static sp_err_t mock_socket_open(sp_sys_socket_t* out, sp_sys_handle_desc_t desc) {
+static sp_err_t mock_socket_open(sp_sys_socket_t* out, sp_sys_socket_type_t type, sp_sys_handle_desc_t desc) {
   return (sp_err_t)69;
 }
 
@@ -235,7 +235,7 @@ static sp_err_t mock_socket_no_delay(sp_sys_socket_t socket) {
   return (sp_err_t)69;
 }
 
-static sp_err_t mock_socket_local_port(sp_sys_socket_t socket, u16* out) {
+static sp_err_t mock_socket_local_addr(sp_sys_socket_t socket, sp_sys_ipv4_t* out) {
   return (sp_err_t)69;
 }
 
@@ -356,7 +356,7 @@ static const sp_sys_vtable_t mock = {
   .socket_set_nonblocking = mock_socket_set_nonblocking,
   .socket_reuse_addr      = mock_socket_reuse_addr,
   .socket_no_delay        = mock_socket_no_delay,
-  .socket_local_port      = mock_socket_local_port,
+  .socket_local_addr      = mock_socket_local_addr,
   .alloc                  = mock_alloc,
   .free                   = mock_free,
   .memcpy                 = mock_memcpy,
@@ -558,7 +558,7 @@ static s64 call_tty_use_vt(void) {
 }
 
 static s64 call_socket_open(void) {
-  return (s64)sp_sys_socket_open(SP_NULLPTR, sp_zero_s(sp_sys_handle_desc_t));
+  return (s64)sp_sys_socket_open(SP_NULLPTR, SP_SYS_SOCKET_STREAM, sp_zero_s(sp_sys_handle_desc_t));
 }
 
 static s64 call_socket_bind(void) {
@@ -609,8 +609,8 @@ static s64 call_socket_no_delay(void) {
   return (s64)sp_sys_socket_no_delay(0);
 }
 
-static s64 call_socket_local_port(void) {
-  return (s64)sp_sys_socket_local_port(0, SP_NULLPTR);
+static s64 call_socket_local_addr(void) {
+  return (s64)sp_sys_socket_local_addr(0, SP_NULLPTR);
 }
 
 static s64 call_alloc(void) {
@@ -738,7 +738,7 @@ static const test_t tests [] = {
   { "socket_set_nonblocking", call_socket_set_nonblocking, 69 },
   { "socket_reuse_addr", call_socket_reuse_addr, 69 },
   { "socket_no_delay", call_socket_no_delay, 69 },
-  { "socket_local_port", call_socket_local_port, 69 },
+  { "socket_local_addr", call_socket_local_addr, 69 },
   { "alloc", call_alloc, 69 },
   { "free", call_free, 69 },
   { "memcpy", call_memcpy, 69 },

@@ -1324,6 +1324,11 @@ typedef struct {
   u16 port;
 } sp_sys_ipv4_t;
 
+typedef enum {
+  SP_SYS_SOCKET_STREAM,
+  SP_SYS_SOCKET_DGRAM,
+} sp_sys_socket_type_t;
+
 #define SP_SYS_TTY_ATTR_SIZE 128
 
 typedef struct {
@@ -1465,7 +1470,7 @@ SP_API bool        sp_sys_is_tty(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_tty_ready(sp_sys_fd_t fd, u8* ready);
 SP_API sp_err_t    sp_sys_tty_mode_apply(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
 SP_API sp_err_t    sp_sys_tty_use_vt(sp_sys_fd_t fd);
-SP_API sp_err_t    sp_sys_socket_open(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
+SP_API sp_err_t    sp_sys_socket_open(sp_sys_socket_t* out, sp_sys_socket_type_t type, sp_sys_handle_desc_t desc);
 SP_API sp_err_t    sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
 SP_API sp_err_t    sp_sys_socket_listen(sp_sys_socket_t socket, u32 backlog);
 SP_API sp_err_t    sp_sys_socket_connect(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
@@ -1478,7 +1483,7 @@ SP_API sp_err_t    sp_sys_socket_wait(sp_sys_socket_t socket, bool readable, u32
 SP_API sp_err_t    sp_sys_socket_set_nonblocking(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_reuse_addr(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_no_delay(sp_sys_socket_t socket);
-SP_API sp_err_t    sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out);
+SP_API sp_err_t    sp_sys_socket_local_addr(sp_sys_socket_t socket, sp_sys_ipv4_t* out);
 SP_API void*       sp_sys_alloc(u64 size);
 SP_API void        sp_sys_free(void* ptr, u64 size);
 SP_API void*       sp_sys_memcpy(void* dest, const void* src, u64 n);
@@ -1559,7 +1564,7 @@ typedef struct {
   sp_err_t    (*tty_ready)(sp_sys_fd_t fd, u8* ready);
   sp_err_t    (*tty_mode_apply)(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
   sp_err_t    (*tty_use_vt)(sp_sys_fd_t fd);
-  sp_err_t    (*socket_open)(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
+  sp_err_t    (*socket_open)(sp_sys_socket_t* out, sp_sys_socket_type_t type, sp_sys_handle_desc_t desc);
   sp_err_t    (*socket_bind)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
   sp_err_t    (*socket_listen)(sp_sys_socket_t socket, u32 backlog);
   sp_err_t    (*socket_connect)(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
@@ -1572,7 +1577,7 @@ typedef struct {
   sp_err_t    (*socket_set_nonblocking)(sp_sys_socket_t socket);
   sp_err_t    (*socket_reuse_addr)(sp_sys_socket_t socket);
   sp_err_t    (*socket_no_delay)(sp_sys_socket_t socket);
-  sp_err_t    (*socket_local_port)(sp_sys_socket_t socket, u16* out);
+  sp_err_t    (*socket_local_addr)(sp_sys_socket_t socket, sp_sys_ipv4_t* out);
   void*       (*alloc)(u64 size);
   void        (*free)(void* ptr, u64 size);
   void*       (*memcpy)(void* dest, const void* src, u64 n);
@@ -1633,7 +1638,7 @@ SP_API bool        sp_sys_is_tty_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_tty_ready_p(sp_sys_fd_t fd, u8* ready);
 SP_API sp_err_t    sp_sys_tty_mode_apply_p(sp_sys_tty_attr_t* in, sp_sys_tty_attr_t* out, sp_sys_tty_mode_t mode);
 SP_API sp_err_t    sp_sys_tty_use_vt_p(sp_sys_fd_t fd);
-SP_API sp_err_t    sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_handle_desc_t desc);
+SP_API sp_err_t    sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_socket_type_t type, sp_sys_handle_desc_t desc);
 SP_API sp_err_t    sp_sys_socket_bind_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
 SP_API sp_err_t    sp_sys_socket_listen_p(sp_sys_socket_t socket, u32 backlog);
 SP_API sp_err_t    sp_sys_socket_connect_p(sp_sys_socket_t socket, sp_sys_ipv4_t addr);
@@ -1646,7 +1651,7 @@ SP_API sp_err_t    sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u
 SP_API sp_err_t    sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_no_delay_p(sp_sys_socket_t socket);
-SP_API sp_err_t    sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out);
+SP_API sp_err_t    sp_sys_socket_local_addr_p(sp_sys_socket_t socket, sp_sys_ipv4_t* out);
 SP_API void*       sp_sys_alloc_p(u64 size);
 SP_API void        sp_sys_free_p(void* ptr, u64 size);
 SP_API void*       sp_sys_memcpy_p(void* dest, const void* src, u64 n);
@@ -5315,6 +5320,7 @@ typedef struct {
 
 #define SP_SYS_LINUX_AF_INET       2
 #define SP_SYS_LINUX_SOCK_STREAM   1
+#define SP_SYS_LINUX_SOCK_DGRAM    2
 #define SP_SYS_LINUX_SOCK_NONBLOCK 04000
 #define SP_SYS_LINUX_SOCK_CLOEXEC  02000000
 #define SP_SYS_LINUX_SOL_SOCKET    1
@@ -5629,7 +5635,7 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .socket_set_nonblocking = sp_sys_socket_set_nonblocking_p,
   .socket_reuse_addr      = sp_sys_socket_reuse_addr_p,
   .socket_no_delay        = sp_sys_socket_no_delay_p,
-  .socket_local_port      = sp_sys_socket_local_port_p,
+  .socket_local_addr      = sp_sys_socket_local_addr_p,
   .alloc                  = sp_sys_alloc_p,
   .free                   = sp_sys_free_p,
   .memcpy                 = sp_sys_memcpy_p,
@@ -5927,8 +5933,8 @@ sp_err_t sp_tty_restore(sp_sys_fd_t in, sp_sys_fd_t out, const sp_sys_tty_state_
   return err;
 }
 
-sp_err_t sp_sys_socket_open(sp_sys_socket_t* out, sp_sys_handle_desc_t desc) {
-  return (sp_rt.vt->socket_open)(out, desc);
+sp_err_t sp_sys_socket_open(sp_sys_socket_t* out, sp_sys_socket_type_t type, sp_sys_handle_desc_t desc) {
+  return (sp_rt.vt->socket_open)(out, type, desc);
 }
 
 sp_err_t sp_sys_socket_bind(sp_sys_socket_t socket, sp_sys_ipv4_t addr) {
@@ -5979,8 +5985,8 @@ sp_err_t sp_sys_socket_no_delay(sp_sys_socket_t socket) {
   return (sp_rt.vt->socket_no_delay)(socket);
 }
 
-sp_err_t sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out) {
-  return (sp_rt.vt->socket_local_port)(socket, out);
+sp_err_t sp_sys_socket_local_addr(sp_sys_socket_t socket, sp_sys_ipv4_t* out) {
+  return (sp_rt.vt->socket_local_addr)(socket, out);
 }
 
 void* sp_sys_alloc(u64 size) {
@@ -9210,15 +9216,20 @@ sp_err_t sp_sys_socket_no_delay_p(sp_sys_socket_t socket) {
 //////////////////////
 // SP_SYS_SOCKET_OPEN //
 //////////////////////
-sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_handle_desc_t desc) {
+sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_socket_type_t type, sp_sys_handle_desc_t desc) {
   *out = SP_SYS_INVALID_SOCKET;
 
 #if defined(SP_WIN32)
   if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
+  int socket_type = 0;
+  switch (type) {
+    case SP_SYS_SOCKET_STREAM: socket_type = SOCK_STREAM; break;
+    case SP_SYS_SOCKET_DGRAM:  socket_type = SOCK_DGRAM; break;
+  }
   // socket() creates overlapped sockets; WSASocketW only does so when asked.
   DWORD flags = WSA_FLAG_OVERLAPPED;
   if (desc.inherited == SP_SYS_NOT_INHERITED) flags |= WSA_FLAG_NO_HANDLE_INHERIT;
-  SOCKET fd = sp_rt.ws2.WSASocketW(AF_INET, SOCK_STREAM, 0, SP_NULLPTR, 0, flags);
+  SOCKET fd = sp_rt.ws2.WSASocketW(AF_INET, socket_type, 0, SP_NULLPTR, 0, flags);
   if (fd == INVALID_SOCKET) return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   if (desc.mode == SP_SYS_NONBLOCKING) {
     u_long nonblock = 1;
@@ -9232,16 +9243,25 @@ sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_handle_desc_t desc) {
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  u32 type = SP_SYS_LINUX_SOCK_STREAM | SP_SYS_LINUX_SOCK_CLOEXEC;
-  if (desc.mode == SP_SYS_NONBLOCKING) type |= SP_SYS_LINUX_SOCK_NONBLOCK;
-  s64 fd = sp_syscall(SP_SYSCALL_NUM_SOCKET, SP_SYS_LINUX_AF_INET, type, 0);
+  u32 socket_type = SP_SYS_LINUX_SOCK_CLOEXEC;
+  switch (type) {
+    case SP_SYS_SOCKET_STREAM: socket_type |= SP_SYS_LINUX_SOCK_STREAM; break;
+    case SP_SYS_SOCKET_DGRAM:  socket_type |= SP_SYS_LINUX_SOCK_DGRAM; break;
+  }
+  if (desc.mode == SP_SYS_NONBLOCKING) socket_type |= SP_SYS_LINUX_SOCK_NONBLOCK;
+  s64 fd = sp_syscall(SP_SYSCALL_NUM_SOCKET, SP_SYS_LINUX_AF_INET, socket_type, 0);
   if (fd < 0) return sp_sys_err_from_errno(-fd);
   if (desc.inherited == SP_SYS_INHERITED) sp_syscall(SP_SYSCALL_NUM_FCNTL, fd, SP_F_SETFD, 0);
   *out = (sp_sys_socket_t)fd;
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  int socket_type = 0;
+  switch (type) {
+    case SP_SYS_SOCKET_STREAM: socket_type = SOCK_STREAM; break;
+    case SP_SYS_SOCKET_DGRAM:  socket_type = SOCK_DGRAM; break;
+  }
+  int fd = socket(AF_INET, socket_type, 0);
   if (fd < 0) return sp_sys_err_from_errno(errno);
 #if defined(SP_MACOS)
   int nosigpipe = 1;
@@ -9253,7 +9273,7 @@ sp_err_t sp_sys_socket_open_p(sp_sys_socket_t* out, sp_sys_handle_desc_t desc) {
   return SP_OK;
 
 #else
-  (void)desc;
+  (void)type; (void)desc;
   return SP_ERR_SYS_UNSUPPORTED;
 #endif
 }
@@ -9591,10 +9611,10 @@ sp_err_t sp_sys_socket_send_p(sp_sys_socket_t socket, const void* ptr, u64 size,
 }
 
 /////////////////////////////
-// SP_SYS_SOCKET_LOCAL_PORT //
+// SP_SYS_SOCKET_LOCAL_ADDR //
 /////////////////////////////
-sp_err_t sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out) {
-  *out = 0;
+sp_err_t sp_sys_socket_local_addr_p(sp_sys_socket_t socket, sp_sys_ipv4_t* out) {
+  *out = sp_zero_s(sp_sys_ipv4_t);
 
 #if defined(SP_WIN32)
   if (!sp_sys_win32_ws2_ensure()) return SP_ERR_SYS_UNSUPPORTED;
@@ -9603,7 +9623,8 @@ sp_err_t sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out) {
   if (sp_rt.ws2.getsockname((SOCKET)socket, (struct sockaddr*)&sa, &len) != 0) {
     return sp_sys_err_from_wsa(sp_rt.ws2.WSAGetLastError());
   }
-  *out = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
+  sp_mem_copy(out->octets, &sa.sin_addr, 4);
+  out->port = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
   return SP_OK;
 
 #elif defined(SP_LINUX)
@@ -9611,7 +9632,8 @@ sp_err_t sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out) {
   u32 len = sizeof(sa);
   s64 rc = sp_syscall(SP_SYSCALL_NUM_GETSOCKNAME, socket, &sa, &len);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
-  *out = (u16)((sa.port[0] << 8) | sa.port[1]);
+  sp_mem_copy(out->octets, sa.addr, 4);
+  out->port = (u16)((sa.port[0] << 8) | sa.port[1]);
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -9620,7 +9642,8 @@ sp_err_t sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out) {
   if (getsockname(socket, (struct sockaddr*)&sa, &len) != 0) {
     return sp_sys_err_from_errno(errno);
   }
-  *out = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
+  sp_mem_copy(out->octets, &sa.sin_addr, 4);
+  out->port = (u16)((((u8*)&sa.sin_port)[0] << 8) | ((u8*)&sa.sin_port)[1]);
   return SP_OK;
 
 #else

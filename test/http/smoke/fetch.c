@@ -550,12 +550,12 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   }
   if (!server.script_count) server.script_count = 1;
 
-  sp_must_ok(t, sp_sys_socket_open(&server.listener, (sp_sys_handle_desc_t) { SP_SYS_BLOCKING }));
+  sp_must_ok(t, sp_sys_socket_open(&server.listener, SP_SYS_SOCKET_STREAM, (sp_sys_handle_desc_t) { SP_SYS_BLOCKING }));
   sp_must_ok(t, sp_sys_socket_bind(server.listener, (sp_sys_ipv4_t) { .octets = { 127, 0, 0, 1 } }));
   sp_must_ok(t, sp_sys_socket_listen(server.listener, 4));
-  u16 port_value = 0;
-  sp_must_ok(t, sp_sys_socket_local_port(server.listener, &port_value));
-  const c8* port = sp_str_to_cstr(mem, sp_fmt(mem, "{}", sp_fmt_uint(port_value)).value);
+  sp_sys_ipv4_t server_addr = sp_zero;
+  sp_must_ok(t, sp_sys_socket_local_addr(server.listener, &server_addr));
+  const c8* port = sp_str_to_cstr(mem, sp_fmt(mem, "{}", sp_fmt_uint(server_addr.port)).value);
 
   sp_carr_for(c->scripts, s) {
     sp_carr_for(c->scripts[s], step) {
@@ -621,8 +621,8 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   sp_atomic_s32_store(&server.stop, 1, SP_ATOMIC_SEQ_CST);
   sp_sys_socket_t poke = SP_SYS_INVALID_SOCKET;
-  if (sp_sys_socket_open(&poke, (sp_sys_handle_desc_t) { SP_SYS_BLOCKING }) == SP_OK) {
-    sp_sys_socket_connect(poke, (sp_sys_ipv4_t) { .octets = { 127, 0, 0, 1 }, .port = port_value });
+  if (sp_sys_socket_open(&poke, SP_SYS_SOCKET_STREAM, (sp_sys_handle_desc_t) { SP_SYS_BLOCKING }) == SP_OK) {
+    sp_sys_socket_connect(poke, server_addr);
     sp_sys_socket_close(poke);
   }
   sp_thread_join(&thread);

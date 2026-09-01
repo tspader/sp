@@ -32,9 +32,6 @@ typedef struct {
 
 static const test_t tests [] = {
   {
-    .name = "assigns_local_port",
-  },
-  {
     .name = "accept_would_block_when_nobody_connects",
     .steps = {
       { .kind = STEP_ACCEPT, .err = SP_ERR_SYS_WOULD_BLOCK },
@@ -57,9 +54,9 @@ static const test_t tests [] = {
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
-  u16 port = 0;
-  sp_must(t, socket_open_listener(&listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, &port));
-  sp_expect_ne(t, port, (u16)0);
+  sp_sys_ipv4_t addr = sp_zero;
+  sp_must(t, socket_open_listener(&listener, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }, &addr));
+  sp_expect_ne(t, addr.port, (u16)0);
 
   sp_carr_for(c->steps, it) {
     const step_t* step = &c->steps[it];
@@ -82,17 +79,15 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       }
       case STEP_BIND: {
         sp_sys_socket_t other = SP_SYS_INVALID_SOCKET;
-        sp_must_ok(t, sp_sys_socket_open(&other, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }));
-        sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 }, .port = port };
+        sp_must_ok(t, sp_sys_socket_open(&other, SP_SYS_SOCKET_STREAM, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }));
         sp_expect_err_eq(t, sp_sys_socket_bind(other, addr), step->err);
         sp_sys_socket_close(other);
         break;
       }
       case STEP_CONNECT: {
         sp_sys_socket_t client = SP_SYS_INVALID_SOCKET;
-        sp_must_ok(t, sp_sys_socket_open(&client, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }));
-        sp_sys_ipv4_t dial = { .octets = { 127, 0, 0, 1 }, .port = port };
-        sp_err_t err = sp_sys_socket_connect(client, dial);
+        sp_must_ok(t, sp_sys_socket_open(&client, SP_SYS_SOCKET_STREAM, (sp_sys_handle_desc_t) { SP_SYS_NONBLOCKING }));
+        sp_err_t err = sp_sys_socket_connect(client, addr);
         if (err == SP_ERR_SYS_WOULD_BLOCK) {
           sp_expect_ok(t, sp_sys_socket_wait(client, false, 2000));
           err = sp_sys_socket_error(client);

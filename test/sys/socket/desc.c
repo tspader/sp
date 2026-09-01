@@ -66,7 +66,7 @@ static const test_t tests [] = {
 };
 
 typedef struct {
-  u16 port;
+  sp_sys_ipv4_t addr;
   sp_sys_socket_t socket;
   sp_err_t err;
 } peer_t;
@@ -74,10 +74,9 @@ typedef struct {
 static s32 dialer(void* userdata) {
   peer_t* peer = (peer_t*)userdata;
   sp_os_sleep_ms(DESC_DELAY_MS);
-  peer->err = sp_sys_socket_open(&peer->socket, sp_zero_s(sp_sys_handle_desc_t));
+  peer->err = sp_sys_socket_open(&peer->socket, SP_SYS_SOCKET_STREAM, sp_zero_s(sp_sys_handle_desc_t));
   if (peer->err) return 0;
-  sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 }, .port = peer->port };
-  peer->err = sp_sys_socket_connect(peer->socket, addr);
+  peer->err = sp_sys_socket_connect(peer->socket, peer->addr);
   return 0;
 }
 
@@ -99,10 +98,10 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_socket_t listener = SP_SYS_INVALID_SOCKET;
   sp_sys_socket_t client = SP_SYS_INVALID_SOCKET;
   sp_sys_socket_t server = SP_SYS_INVALID_SOCKET;
-  u16 port = 0;
-  sp_must(t, socket_open_listener(&listener, c->listener, &port));
+  sp_sys_ipv4_t addr = sp_zero;
+  sp_must(t, socket_open_listener(&listener, c->listener, &addr));
 
-  peer_t peer = { .port = port };
+  peer_t peer = { .addr = addr };
   sp_thread_t thread = sp_zero;
   bool spawned = false;
 
@@ -115,8 +114,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     sp_must_ok(t, peer.err);
   }
   else {
-    sp_sys_ipv4_t addr = { .octets = { 127, 0, 0, 1 }, .port = port };
-    sp_must_ok(t, sp_sys_socket_open(&client, sp_zero_s(sp_sys_handle_desc_t)));
+    sp_must_ok(t, sp_sys_socket_open(&client, SP_SYS_SOCKET_STREAM, sp_zero_s(sp_sys_handle_desc_t)));
     sp_must_ok(t, sp_sys_socket_connect(client, addr));
 
     if (c->listener.mode == SP_SYS_NONBLOCKING) {
