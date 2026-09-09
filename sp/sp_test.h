@@ -4,6 +4,14 @@
 #include "sp.h"
 #include "sp_glob.h"
 
+#ifndef SP_TEST_RUNS_RETAINED
+  #define SP_TEST_RUNS_RETAINED 3
+#endif
+
+#ifndef SP_TEST_RUNS_GRACE_S
+  #define SP_TEST_RUNS_GRACE_S 3600
+#endif
+
 typedef struct sp_test_t sp_test_t;
 
 SP_TYPEDEF_FN(sp_err_t, sp_test_fn_t, sp_test_t* t);
@@ -63,6 +71,7 @@ typedef struct {
   sp_test_teardown_fn_t teardown;
   const void* user;
   bool serial;
+  bool keep;
 } sp_test_decl_t;
 
 typedef struct {
@@ -103,6 +112,7 @@ typedef struct {
   sp_test_teardown_fn_t teardown;
   const void* user;
   bool serial;
+  bool keep;
 } sp_test_instance_t;
 
 #define __sp_test_axis_field(TYPE, FIELD)      \
@@ -669,6 +679,12 @@ typedef enum {
   SP_TEST_STATUS_UPDATE,
 } sp_test_status_t;
 
+typedef enum {
+  SP_TEST_KEEP_NEVER,
+  SP_TEST_KEEP_FAILED,
+  SP_TEST_KEEP_ALWAYS,
+} sp_test_keep_t;
+
 struct sp_test_t {
   const sp_test_instance_t* instance;
   void* state;
@@ -710,6 +726,8 @@ struct sp_test_runner_t {
   sp_str_t dir_root;
   sp_str_t golden_root;
   bool update;
+  sp_test_keep_t keep;
+  bool kept;
   sp_tty_t term;
 };
 
@@ -824,10 +842,14 @@ sp_str_t sp_test_format(sp_test_t* t, const c8* fmt, ...) {
   return result.value;
 }
 
-sp_str_t sp_test_err_str(sp_test_t* t, sp_err_t err) {
+static sp_str_t sp_test_err_name(sp_mem_t mem, sp_err_t err) {
   sp_str_t name = sp_rt.err_str(err);
   if (!sp_str_empty(name)) return name;
-  return sp_test_format(t, "err {}", sp_fmt_int(err));
+  return sp_cstr_as_str(sp_fmt_mem_cstr(mem, "err {}", sp_fmt_int(err)));
+}
+
+sp_str_t sp_test_err_str(sp_test_t* t, sp_err_t err) {
+  return sp_test_err_name(t->mem, err);
 }
 
 sp_str_t sp_test_value_bool(sp_test_t* t, bool value) { return sp_test_format(t, "{}", sp_fmt_cstr(value ? "true" : "false")); }
@@ -985,8 +1007,8 @@ sp_str_t sp_test_dir(sp_test_t* t) {
   if (sp_str_empty(t->dir)) {
     sp_str_t leaf = sp_str_replace_c8(t->mem, sp_cstr_as_str(t->instance->name), '/', '_');
     t->dir = sp_fs_join_path(t->mem, t->runner->dir_root, leaf);
-    if (sp_fs_exists(t->dir)) sp_fs_remove_dir(t->dir);
-    sp_fs_create_dir(t->dir);
+    sp_err_t err = sp_fs_create_dir(t->dir);
+    if (err) sp_test_fail(t, "failed to create test dir: {}", sp_fmt_str(sp_test_err_str(t, err)));
   }
   return t->dir;
 }
@@ -1368,6 +1390,11 @@ static sp_test_status_t sp_test_status(sp_test_t* t) {
   return SP_TEST_STATUS_OK;
 }
 
+static sp_err_t sp_test_remove_dir(sp_str_t path) {
+  sp_err_t err = sp_fs_remove_dir(path);
+  return err == SP_ERR_SYS_NOT_FOUND ? SP_OK : err;
+}
+
 static void sp_test_report(sp_test_t* t, sp_tty_t* term, sp_test_status_t status, u64 ns) {
   sp_str_t duration = sp_test_duration(t->mem, ns);
 
@@ -1405,6 +1432,10 @@ static void sp_test_report(sp_test_t* t, sp_tty_t* term, sp_test_status_t status
 
   sp_da_for(t->notes, it) {
     sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("note"), sp_fmt_str(t->notes[it]));
+  }
+
+  if (!sp_str_empty(t->dir)) {
+    sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("dir"), sp_fmt_str(t->dir));
   }
 
   sp_da_for(t->failures, it) {
@@ -1510,10 +1541,6 @@ static void sp_test_teardown(sp_test_t* t) {
     t->tracking_heap = SP_NULLPTR;
   }
 
-  if (!sp_str_empty(t->dir) && sp_fs_exists(t->dir)) {
-    sp_fs_remove_dir(t->dir);
-  }
-
   if (t->scratch) {
     sp_mem_arena_destroy(t->scratch);
     t->scratch = SP_NULLPTR;
@@ -1536,6 +1563,24 @@ static void sp_test_run_instance(sp_test_runner_t* runner, const sp_test_instanc
 
   sp_test_status_t status = sp_test_status(t);
 
+  bool keep = false;
+  switch (runner->keep) {
+    case SP_TEST_KEEP_NEVER:  keep = false; break;
+    case SP_TEST_KEEP_FAILED: keep = instance->keep || status == SP_TEST_STATUS_FAIL; break;
+    case SP_TEST_KEEP_ALWAYS: keep = true; break;
+  }
+
+  if (!sp_str_empty(t->dir) && !keep) {
+    sp_err_t err = sp_test_remove_dir(t->dir);
+    if (err) {
+      sp_test_fail(t, "failed to remove test dir: {}", sp_fmt_str(sp_test_err_str(t, err)));
+      status = sp_test_status(t);
+    }
+    else {
+      t->dir = sp_zero_s(sp_str_t);
+    }
+  }
+
   sp_io_dyn_mem_writer_t report = sp_zero;
   sp_io_dyn_mem_writer_init(t->mem, &report);
   sp_tty_t term = { .io = &report.base, .color = runner->term.color };
@@ -1546,6 +1591,7 @@ static void sp_test_run_instance(sp_test_runner_t* runner, const sp_test_instanc
   sp_mutex_lock(&runner->mutex);
   sp_io_write_str(&runner->out.base, text, SP_NULLPTR);
   sp_io_flush(&runner->out.base);
+  if (!sp_str_empty(t->dir)) runner->kept = true;
   switch (status) {
     case SP_TEST_STATUS_FAIL:   sp_da_push(runner->failed, instance->name); break;
     case SP_TEST_STATUS_SKIP:   sp_da_push(runner->skipped, instance->name); break;
@@ -1696,6 +1742,7 @@ static void sp_test_expand_row(sp_mem_t mem, const sp_test_decl_t* decl, const s
       .setup = decl->setup,
       .teardown = decl->teardown,
       .user = decl->user,
+      .keep = decl->keep,
     }));
   }
 }
@@ -1711,6 +1758,7 @@ void sp_test_expand(sp_mem_t mem, const sp_test_decl_t* decl, sp_da(sp_test_inst
         .setup = decl->setup,
         .teardown = decl->teardown,
         .user = decl->user,
+        .keep = decl->keep,
       }));
       return;
     }
@@ -1825,12 +1873,32 @@ static sp_cli_result_t sp_test_cli_handler(sp_cli_t* cli) {
   return SP_CLI_CONTINUE;
 }
 
+#define SP_TEST_KEEP_CHOICES        \
+  { "never", SP_TEST_KEEP_NEVER },  \
+  { "failed", SP_TEST_KEEP_FAILED }, \
+  { "always", SP_TEST_KEEP_ALWAYS }
+
+static sp_str_t sp_test_run_name(sp_mem_t mem, sp_tm_epoch_t time) {
+  return sp_str_replace_c8(mem, sp_tm_epoch_to_iso8601(mem, time), ':', '-');
+}
+
+static s32 sp_test_run_sort_kernel(const void* a, const void* b) {
+  const sp_fs_entry_t* ea = (const sp_fs_entry_t*)a;
+  const sp_fs_entry_t* eb = (const sp_fs_entry_t*)b;
+  bool da = ea->kind == SP_FS_KIND_DIR;
+  bool db = eb->kind == SP_FS_KIND_DIR;
+  if (da != db) return da ? SP_QSORT_A_FIRST : SP_QSORT_B_FIRST;
+  return sp_str_compare_alphabetical(ea->name, eb->name);
+}
+
 s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   const c8* filter = SP_NULLPTR;
-  const c8* golden_root = SP_NULLPTR;
   u32 jobs = 1;
   bool list = false;
   bool update = false;
+  struct { const c8* opt; const c8* env; } golden = sp_zero;
+  struct { const c8* opt; const c8* env; } dir = sp_zero;
+  struct { sp_cli_choice_t opt; sp_cli_choice_t env; } keep = sp_zero;
 
   sp_cli_cmd_t cli = {
     .name = "sp_test",
@@ -1867,7 +1935,43 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
         .kind = SP_CLI_OPT_CSTR,
         .summary = "resolve golden files against this directory",
         .placeholder = "dir",
-        .ptr = &golden_root,
+        .ptr = &golden.opt,
+      },
+      {
+        .name = "keep",
+        .kind = SP_CLI_OPT_CHOICE,
+        .summary = "keep test directories after run (defaults to only failed tests)",
+        .placeholder = "policy",
+        .ptr = &keep.opt,
+        .choices = { SP_TEST_KEEP_CHOICES },
+      },
+      {
+        .name = "dir",
+        .kind = SP_CLI_OPT_CSTR,
+        .summary = "root for test directories (defaults to $cwd/.sp/test)",
+        .placeholder = "dir",
+        .ptr = &dir.opt,
+      },
+    },
+    .env = {
+      {
+        .name = "SP_TEST_KEEP",
+        .kind = SP_CLI_OPT_CHOICE,
+        .summary = "default policy for --keep",
+        .ptr = &keep.env,
+        .choices = { SP_TEST_KEEP_CHOICES },
+      },
+      {
+        .name = "SP_TEST_DIR",
+        .kind = SP_CLI_OPT_CSTR,
+        .summary = "default for --dir",
+        .ptr = &dir.env,
+      },
+      {
+        .name = "SP_TEST_GOLDEN_ROOT",
+        .kind = SP_CLI_OPT_CSTR,
+        .summary = "default for --golden-root",
+        .ptr = &golden.env,
       },
     },
     .handler = sp_test_cli_handler,
@@ -1889,12 +1993,14 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   runner->skipped = sp_da_new(runner->mem, const c8*);
   runner->updated = sp_da_new(runner->mem, const c8*);
   runner->update = update;
+  runner->keep = SP_TEST_KEEP_FAILED;
+  if (keep.env.name) runner->keep = (sp_test_keep_t)keep.env.value;
+  if (keep.opt.name) runner->keep = (sp_test_keep_t)keep.opt.value;
 
-  sp_str_t root = sp_os_env_get(sp_str_lit("SP_TEST_GOLDEN_ROOT"));
-  if (golden_root && *golden_root) root = sp_cstr_as_str(golden_root);
-  if (!sp_str_empty(root)) {
-    runner->golden_root = sp_fs_normalize_path(runner->mem, root);
-  }
+  sp_str_t golden_root = sp_zero;
+  if (golden.env) golden_root = sp_cstr_as_str(golden.env);
+  if (golden.opt) golden_root = sp_cstr_as_str(golden.opt);
+  if (!sp_str_empty(golden_root)) runner->golden_root = sp_fs_normalize_path(runner->mem, golden_root);
 
   sp_mutex_init(&runner->mutex);
   sp_io_stream_writer_from_fd(&runner->out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
@@ -1981,10 +2087,38 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
     return 0;
   }
 
-  sp_str_t iso = sp_tm_epoch_to_iso8601(runner->mem, sp_tm_now_epoch());
-  runner->dir_root = sp_fs_join_path(runner->mem,
-    sp_fs_join_path(runner->mem, sp_fs_get_cwd(runner->mem), sp_str_lit(".spn/test")),
-    sp_str_replace_c8(runner->mem, iso, ':', '-'));
+  sp_str_t root = sp_str_lit(".sp/test");
+  if (dir.env) root = sp_cstr_as_str(dir.env);
+  if (dir.opt) root = sp_cstr_as_str(dir.opt);
+  root = sp_fs_normalize_path(runner->mem, root);
+  if (!sp_fs_is_absolute(root)) root = sp_fs_join_path(runner->mem, sp_fs_get_cwd(runner->mem), root);
+
+  sp_tm_epoch_t now = sp_tm_now_epoch();
+  sp_tm_epoch_t grace = { .s = now.s - SP_TEST_RUNS_GRACE_S, .ns = now.ns };
+  sp_str_t runs_dir = sp_fs_join_path(runner->mem, root, sp_fs_get_stem(sp_fs_get_exe_path(runner->mem)));
+  runner->dir_root = sp_fs_join_path(runner->mem, runs_dir, sp_test_run_name(runner->mem, now));
+
+  sp_str_t cutoff = sp_test_run_name(runner->mem, grace);
+  sp_da(sp_fs_entry_t) listing = SP_NULLPTR;
+  sp_fs_collect(runner->mem, runs_dir, &listing);
+  sp_da_sort(listing, sp_test_run_sort_kernel);
+
+  u64 runs = 0;
+  sp_da_for(listing, it) {
+    if (listing[it].kind != SP_FS_KIND_DIR) break;
+    runs++;
+  }
+
+  u64 candidates = runs > SP_TEST_RUNS_RETAINED ? runs - SP_TEST_RUNS_RETAINED : 0;
+  sp_for(it, candidates) {
+    if (sp_str_compare_alphabetical(listing[it].name, cutoff) != SP_QSORT_A_FIRST) break;
+    sp_err_t err = sp_test_remove_dir(listing[it].path);
+    if (err) {
+      sp_tty_fmt(&runner->term, "> failed to prune {}: {}\n",
+        sp_fmt_str(listing[it].path),
+        sp_fmt_str(sp_test_err_name(runner->mem, err)));
+    }
+  }
 
   if (jobs == 0) jobs = sp_test_num_cpus();
 
@@ -2042,8 +2176,15 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   }
   sp_io_flush(&runner->out.base);
 
-  if (sp_fs_exists(runner->dir_root)) {
-    sp_fs_remove_dir(runner->dir_root);
+  if (!runner->kept) {
+    sp_err_t err = sp_test_remove_dir(runner->dir_root);
+    if (err) {
+      sp_tty_fmt(&runner->term, "> {.red} {}: {}\n",
+        sp_fmt_cstr("failed to remove"),
+        sp_fmt_str(runner->dir_root),
+        sp_fmt_str(sp_test_err_name(runner->mem, err)));
+      sp_io_flush(&runner->out.base);
+    }
   }
 
   sp_mutex_destroy(&runner->mutex);

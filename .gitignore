@@ -25,3 +25,4 @@ build
 compile_commands.json
 doc
 /tools/vendor
+.sp
