@@ -281,3 +281,326 @@ UTEST_F(env, iterate_matches_capture) {
   EXPECT_EQ(it_count, sp_env_count(&captured));
   sp_env_destroy(&captured);
 }
+
+///////////////
+// HOST KEYS //
+///////////////
+#define ENV_TEST_MAX_OS 2
+#define ENV_TEST_MAX_OPS 4
+#define ENV_TEST_MAX_VARS 4
+#define ENV_TEST_SENTINEL "sp-env-host-keys"
+#define ENV_TEST_NEW_KEY "SP_ENV_HOST_KEYS_TEST"
+#define ENV_TEST_OS_KEY "SP_ENV_HOST_KEYS_OS"
+#define ENV_TEST_OS_KEY_LOWER "sp_env_host_keys_os"
+
+#if defined(SP_WIN32)
+static void env_os_set(const c8* key, const c8* value) {
+  _putenv_s(key, value);
+}
+
+static void env_os_unset(const c8* key) {
+  _putenv_s(key, "");
+}
+#elif defined(SP_POSIX)
+static void env_os_set(const c8* key, const c8* value) {
+  setenv(key, value, 1);
+}
+
+static void env_os_unset(const c8* key) {
+  unsetenv(key);
+}
+#else
+static void env_os_set(const c8* key, const c8* value) {
+  SP_UNIMPLEMENTED();
+  sp_unused(key);
+  sp_unused(value);
+}
+
+static void env_os_unset(const c8* key) {
+  SP_UNIMPLEMENTED();
+  sp_unused(key);
+}
+#endif
+
+typedef struct {
+  const c8* key;
+  const c8* value;
+} env_os_var_t;
+
+typedef enum {
+  ENV_OP_NONE,
+  ENV_OP_INSERT,
+  ENV_OP_ERASE,
+  ENV_OP_COPY,
+} env_op_kind_t;
+
+typedef struct {
+  env_op_kind_t kind;
+  const c8* key;
+  const c8* value;
+} env_op_t;
+
+typedef enum {
+  ENV_VALUE_MISSING,
+  ENV_VALUE_LITERAL,
+  ENV_VALUE_OS,
+} env_value_kind_t;
+
+typedef struct {
+  const c8* key;
+  env_value_kind_t kind;
+  const c8* value;
+} env_var_expect_t;
+
+typedef struct {
+  s32 count_delta;
+  bool keys_preserved;
+  env_var_expect_t vars [ENV_TEST_MAX_VARS];
+} env_host_expect_t;
+
+typedef struct {
+  env_os_var_t os [ENV_TEST_MAX_OS];
+  env_op_t ops [ENV_TEST_MAX_OPS];
+  env_host_expect_t expect;
+} env_host_test_t;
+
+void run_env_host_test(struct env* utest_fixture, s32* utest_result, env_host_test_t t) {
+  SKIP_ON_WASM()
+  EXPECT_FALSE(sp_str_empty(sp_os_env_get(sp_str_lit("PATH"))));
+
+  sp_carr_for(t.os, it) {
+    if (!t.os[it].key) break;
+    env_os_set(t.os[it].key, t.os[it].value);
+  }
+
+  sp_env_t env = sp_env_capture(ut.mem);
+  u32 captured = sp_env_count(&env);
+
+  sp_ht(sp_str_t, bool) spellings = sp_zero;
+  sp_str_ht_init(ut.mem, spellings);
+  sp_str_ht_for(env.vars, it) {
+    sp_str_ht_insert(spellings, sp_str_copy(ut.mem, *sp_str_ht_it_getkp(env.vars, it)), true);
+  }
+
+  sp_carr_for(t.ops, it) {
+    env_op_t op = t.ops[it];
+    switch (op.kind) {
+      case ENV_OP_NONE: {
+        break;
+      }
+      case ENV_OP_INSERT: {
+        sp_env_insert_c(&env, op.key, op.value);
+        break;
+      }
+      case ENV_OP_ERASE: {
+        sp_env_erase_c(&env, op.key);
+        break;
+      }
+      case ENV_OP_COPY: {
+        sp_env_t copy = sp_env_copy(ut.mem, &env);
+        sp_env_destroy(&env);
+        env = copy;
+        break;
+      }
+    }
+  }
+
+  EXPECT_EQ(sp_env_count(&env), (u32)((s32)captured + t.expect.count_delta));
+
+  sp_carr_for(t.expect.vars, it) {
+    env_var_expect_t var = t.expect.vars[it];
+    if (!var.key) break;
+
+    sp_str_t key = sp_cstr_as_str(var.key);
+    switch (var.kind) {
+      case ENV_VALUE_MISSING: {
+        EXPECT_FALSE(sp_env_contains(&env, key));
+        break;
+      }
+      case ENV_VALUE_LITERAL: {
+        EXPECT_TRUE(sp_env_contains(&env, key));
+        SP_EXPECT_STR_EQ_CSTR(sp_env_get(&env, key), var.value);
+        break;
+      }
+      case ENV_VALUE_OS: {
+        sp_str_t os = sp_os_env_get(key);
+        EXPECT_TRUE(sp_env_contains(&env, key) == !sp_str_empty(os));
+        SP_EXPECT_STR_EQ(sp_env_get(&env, key), os);
+        break;
+      }
+    }
+  }
+
+  if (t.expect.keys_preserved) {
+    EXPECT_EQ(sp_env_count(&env), (u32)sp_str_ht_size(spellings));
+    sp_str_ht_for(env.vars, it) {
+      EXPECT_TRUE(sp_str_ht_get(spellings, *sp_str_ht_it_getkp(env.vars, it)) != SP_NULLPTR);
+    }
+  }
+
+  sp_carr_for(t.os, it) {
+    if (!t.os[it].key) break;
+    env_os_unset(t.os[it].key);
+  }
+
+  sp_str_ht_free(spellings);
+  sp_env_destroy(&env);
+}
+
+UTEST_F(env, host_capture_get_matches_os) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .expect = {
+      .vars = {
+        { .key = "PATH", .kind = ENV_VALUE_OS },
+        { .key = SP_TEST_ENV_OS_KEY, .kind = ENV_VALUE_OS },
+        { .key = "SP_ENV_HOST_KEYS_UNSET", .kind = ENV_VALUE_OS },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_os_set_spelling_matches_os) {
+  SKIP_ON_FREESTANDING()
+  SKIP_ON_WASM()
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .os = {
+      { .key = ENV_TEST_OS_KEY, .value = ENV_TEST_SENTINEL },
+    },
+    .expect = {
+      .vars = {
+        { .key = ENV_TEST_OS_KEY, .kind = ENV_VALUE_OS },
+        { .key = ENV_TEST_OS_KEY_LOWER, .kind = ENV_VALUE_OS },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_insert_over_captured) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .ops = {
+      { .kind = ENV_OP_INSERT, .key = "PATH", .value = ENV_TEST_SENTINEL },
+    },
+    .expect = {
+      .keys_preserved = true,
+      .vars = {
+        { .key = "PATH", .kind = ENV_VALUE_LITERAL, .value = ENV_TEST_SENTINEL },
+        { .key = SP_TEST_ENV_OS_KEY, .kind = ENV_VALUE_OS },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_insert_over_captured_twice) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .ops = {
+      { .kind = ENV_OP_INSERT, .key = "PATH", .value = "first" },
+      { .kind = ENV_OP_INSERT, .key = "PATH", .value = ENV_TEST_SENTINEL },
+    },
+    .expect = {
+      .keys_preserved = true,
+      .vars = {
+        { .key = "PATH", .kind = ENV_VALUE_LITERAL, .value = ENV_TEST_SENTINEL },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_erase_captured) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .ops = {
+      { .kind = ENV_OP_ERASE, .key = "PATH" },
+    },
+    .expect = {
+      .count_delta = -1,
+      .vars = {
+        { .key = "PATH" },
+        { .key = SP_TEST_ENV_OS_KEY, .kind = ENV_VALUE_OS },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_erase_then_insert) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .ops = {
+      { .kind = ENV_OP_ERASE, .key = "PATH" },
+      { .kind = ENV_OP_INSERT, .key = "PATH", .value = ENV_TEST_SENTINEL },
+    },
+    .expect = {
+      .vars = {
+        { .key = "PATH", .kind = ENV_VALUE_LITERAL, .value = ENV_TEST_SENTINEL },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_copy_matches_os) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .ops = {
+      { .kind = ENV_OP_COPY },
+    },
+    .expect = {
+      .keys_preserved = true,
+      .vars = {
+        { .key = "PATH", .kind = ENV_VALUE_OS },
+        { .key = SP_TEST_ENV_OS_KEY, .kind = ENV_VALUE_OS },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_copy_then_insert_over) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .ops = {
+      { .kind = ENV_OP_COPY },
+      { .kind = ENV_OP_INSERT, .key = "PATH", .value = ENV_TEST_SENTINEL },
+    },
+    .expect = {
+      .keys_preserved = true,
+      .vars = {
+        { .key = "PATH", .kind = ENV_VALUE_LITERAL, .value = ENV_TEST_SENTINEL },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_insert_over_then_copy) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .ops = {
+      { .kind = ENV_OP_INSERT, .key = "PATH", .value = ENV_TEST_SENTINEL },
+      { .kind = ENV_OP_COPY },
+    },
+    .expect = {
+      .keys_preserved = true,
+      .vars = {
+        { .key = "PATH", .kind = ENV_VALUE_LITERAL, .value = ENV_TEST_SENTINEL },
+      },
+    },
+  });
+}
+
+UTEST_F(env, host_insert_new) {
+  run_env_host_test(&ut, &ur, (env_host_test_t) {
+    .ops = {
+      { .kind = ENV_OP_INSERT, .key = ENV_TEST_NEW_KEY, .value = ENV_TEST_SENTINEL },
+    },
+    .expect = {
+      .count_delta = 1,
+      .vars = {
+        { .key = ENV_TEST_NEW_KEY, .kind = ENV_VALUE_LITERAL, .value = ENV_TEST_SENTINEL },
+        { .key = "PATH", .kind = ENV_VALUE_OS },
+      },
+    },
+  });
+}
+
+UTEST_F(env, capture_values_match_os) {
+  SKIP_ON_WASM()
+  sp_env_t captured = sp_env_capture(ut.mem);
+
+  for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
+    SP_EXPECT_STR_EQ(sp_env_get(&captured, it.key), sp_os_env_get(it.key));
+  }
+
+  sp_env_destroy(&captured);
+}

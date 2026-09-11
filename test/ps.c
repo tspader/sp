@@ -618,6 +618,40 @@ UTEST_F(ps, env_existing) {
   });
 }
 
+UTEST_F(ps, env_inherit_extra_overrides) {
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
+    .config = {
+      .extra = {
+        { .key = sp_str_lit("PATH"), .value = sp_str_lit("sp-env-host-keys") },
+      },
+    },
+    .expected = {
+      { .key = sp_str_lit("PATH"), .value = sp_str_lit("sp-env-host-keys") },
+    }
+  });
+}
+
+UTEST_F(ps, env_existing_extra_overrides) {
+  sp_env_t env = sp_zero;
+  sp_env_init(ut.mem, &env);
+  sp_env_insert(&env, sp_str_lit("jerry"), sp_str_lit("garcia"));
+  sp_env_insert(&env, sp_str_lit("phil"), sp_str_lit("lesh"));
+
+  sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
+    .config = {
+      .env = env,
+      .extra = {
+        { .key = sp_str_lit("jerry"), .value = sp_str_lit("weir") },
+      },
+      .mode = SP_PS_ENV_EXISTING,
+    },
+    .expected = {
+      { .key = sp_str_lit("jerry"), .value = sp_str_lit("weir") },
+      { .key = sp_str_lit("phil"), .value = sp_str_lit("lesh") },
+    }
+  });
+}
+
 UTEST_F(ps, empty_env_var) {
   sp_test_proc_env_verify(&ut, &ur, (sp_test_proc_env_config_t) {
     .config = {
