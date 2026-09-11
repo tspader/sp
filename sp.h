@@ -5057,6 +5057,13 @@ SP_IMP void sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir);
 SP_IMP void sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file);
 #endif
 
+// @env
+SP_IMP void sp_env_table_init(sp_mem_t mem, sp_env_t* env);
+#if defined(SP_WIN32)
+SP_IMP sp_hash_t sp_env_on_hash_key(void* key, u64 size);
+SP_IMP bool      sp_env_on_compare_key(void* ka, void* kb, u64 size);
+#endif
+
 // @os
 SP_IMP void sp_os_signal_from_native(s32 sig);
 SP_IMP s32  sp_os_signal_to_native(sp_os_signal_t signal);
@@ -5065,8 +5072,8 @@ SP_IMP BOOL WINAPI sp_os_signal_console_ctrl(DWORD type);
 #endif
 
 // @ps
-#if defined(SP_POSIX)
 SP_IMP sp_env_t           sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem);
+#if defined(SP_POSIX)
 SP_IMP bool               sp_ps_is_fd_valid(sp_sys_fd_t fd);
 SP_IMP void               sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_IMP sp_io_close_mode_t sp_ps_io_close_mode(sp_ps_io_mode_t mode);
@@ -5075,6 +5082,7 @@ SP_IMP void*              sp_posix_thread_launch(void* args);
 #if defined(SP_WIN32)
 SP_IMP void              sp_ps_win32_append_quoted_arg(sp_io_writer_t* builder, sp_str_t arg);
 SP_IMP c8*               sp_ps_build_windows_cmdline(sp_mem_t mem, sp_ps_config_t* config);
+SP_IMP sp_str_t          sp_env_to_win32_block(sp_mem_t mem, sp_env_t* env);
 SP_IMP sp_win32_handle_t sp_ps_win32_open_null(sp_win32_dword_t access);
 SP_IMP sp_win32_handle_t sp_ps_win32_fd_to_handle(sp_sys_fd_t fd);
 SP_IMP sp_ps_status_t    sp_ps_win32_finish_process(sp_ps_t* ps);
@@ -14052,11 +14060,44 @@ void sp_sys_env_p(const c8** env, u32* len) {
 }
 
 
+#if defined(SP_WIN32)
+sp_hash_t sp_env_on_hash_key(void* key, u64 size) {
+  sp_unused(size);
+  sp_str_t name = *(sp_str_t*)key;
+  sp_hash_t hash = SP_HT_HASH_SEED;
+  sp_for(i, name.len) {
+    c8 folded = sp_c8_to_lower(name.data[i]);
+    hash = sp_hash_bytes(&folded, 1, hash);
+  }
+  return hash;
+}
+
+bool sp_env_on_compare_key(void* ka, void* kb, u64 size) {
+  sp_unused(size);
+  sp_str_t a = *(sp_str_t*)ka;
+  sp_str_t b = *(sp_str_t*)kb;
+  if (a.len != b.len) return false;
+  sp_for(i, a.len) {
+    if (sp_c8_to_lower(a.data[i]) != sp_c8_to_lower(b.data[i])) return false;
+  }
+  return true;
+}
+
+void sp_env_table_init(sp_mem_t mem, sp_env_t* env) {
+  sp_ht_init(mem, env->vars);
+  sp_ht_set_fns(env->vars, sp_env_on_hash_key, sp_env_on_compare_key);
+}
+#else
+void sp_env_table_init(sp_mem_t mem, sp_env_t* env) {
+  sp_str_ht_init(mem, env->vars);
+}
+#endif
+
 void sp_env_init(sp_mem_t mem, sp_env_t* env) {
   *env = sp_zero_s(sp_env_t);
   env->mem = mem;
   env->arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
-  sp_str_ht_init(mem, env->vars);
+  sp_env_table_init(mem, env);
 }
 
 sp_env_t sp_env_capture(sp_mem_t mem) {
@@ -14630,31 +14671,6 @@ u64 sp_thread_get_id() {
 //  █████        █████   █████ ░░░███████░   ░░█████████  ██████████░░█████████ ░░█████████
 // ░░░░░        ░░░░░   ░░░░░    ░░░░░░░      ░░░░░░░░░  ░░░░░░░░░░  ░░░░░░░░░   ░░░░░░░░░
 // @ps @process
-#if defined(SP_POSIX)
-typedef struct {
-  posix_spawn_file_actions_t* fa;
-  sp_ps_io_file_number_t file_number;
-  s32 flag;
-  s32 mode;
-  struct {
-    s32 read;
-    s32 write;
-  } pipes;
-} sp_ps_stdio_config_entry_t;
-
-typedef struct {
-  sp_ps_stdio_config_entry_t in;
-  sp_ps_stdio_config_entry_t out;
-  sp_ps_stdio_config_entry_t err;
-} sp_ps_stdio_config_t;
-
-struct sp_ps_os {
-  s32 pid;
-};
-
-SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
-SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config);
-
 SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem) {
   sp_env_t env = sp_zero;
 
@@ -14680,6 +14696,31 @@ SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem) {
 
   return env;
 }
+
+#if defined(SP_POSIX)
+typedef struct {
+  posix_spawn_file_actions_t* fa;
+  sp_ps_io_file_number_t file_number;
+  s32 flag;
+  s32 mode;
+  struct {
+    s32 read;
+    s32 write;
+  } pipes;
+} sp_ps_stdio_config_entry_t;
+
+typedef struct {
+  sp_ps_stdio_config_entry_t in;
+  sp_ps_stdio_config_entry_t out;
+  sp_ps_stdio_config_entry_t err;
+} sp_ps_stdio_config_t;
+
+struct sp_ps_os {
+  s32 pid;
+};
+
+SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
+SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config);
 
 bool sp_ps_is_fd_valid(sp_sys_fd_t fd) {
   return fd > 0;
@@ -15586,6 +15627,22 @@ void sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg) {
   }
 }
 
+sp_str_t sp_env_to_win32_block(sp_mem_t mem, sp_env_t* env) {
+  sp_io_dyn_mem_writer_t b = sp_zero;
+  sp_io_dyn_mem_writer_init(mem, &b);
+
+  sp_str_ht_for(env->vars, it) {
+    sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
+    sp_str_t val = *sp_str_ht_it_getp(env->vars, it);
+    sp_fmt_io(&b.base, "{}={}", sp_fmt_str(key), sp_fmt_str(val));
+    sp_io_write_c8(&b.base, '\0');
+  }
+
+  sp_io_write_c8(&b.base, '\0');
+  sp_io_write_c8(&b.base, '\0');
+  return sp_io_dyn_mem_writer_as_str(&b);
+}
+
 sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
   sp_ps_t proc = sp_zero_s(sp_ps_t);
   proc.mem = mem;
@@ -15599,49 +15656,8 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
 
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_for(mem);
   c8* cmdline = sp_ps_build_windows_cmdline(scratch.mem, &config);
-
-  sp_io_dyn_mem_writer_t b = sp_zero;
-  sp_io_dyn_mem_writer_init(scratch.mem, &b);
-
-  switch (config.env.mode) {
-    case SP_PS_ENV_INHERIT: {
-      for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
-        sp_io_write_str(&b.base, it.key, SP_NULLPTR);
-        sp_io_write_c8(&b.base, '=');
-        sp_io_write_str(&b.base, it.value, SP_NULLPTR);
-        sp_io_write_c8(&b.base, '\0');
-      }
-      break;
-    }
-    case SP_PS_ENV_EXISTING: {
-      sp_env_t* env = &config.env.env;
-      sp_str_ht_for(env->vars, it) {
-        sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
-        sp_str_t val = *sp_str_ht_it_getp(env->vars, it);
-
-        sp_fmt_io(&b.base, "{}={}", sp_fmt_str(key), sp_fmt_str(val));
-        sp_io_write_c8(&b.base, '\0');
-      }
-
-      break;
-    }
-    case SP_PS_ENV_CLEAN: {
-      break;
-    }
-  }
-
-  for (s32 it = SP_PS_MAX_ENV - 1; it >= 0; it--) {
-    sp_env_var_t e = config.env.extra[it];
-    if (sp_str_empty(e.key)) continue;
-
-    sp_fmt_io(&b.base, "{}={}", sp_fmt_str(e.key), sp_fmt_str(e.value));
-    sp_io_write_c8(&b.base, '\0');
-  }
-
-  sp_io_write_c8(&b.base, '\0');
-  sp_io_write_c8(&b.base, '\0');
-
-  sp_str_t env = sp_io_dyn_mem_writer_as_str(&b);
+  sp_env_t env = sp_ps_build_env(&config.env, scratch.mem);
+  sp_str_t block = sp_env_to_win32_block(scratch.mem, &env);
 
   c8* cwd = sp_str_empty(config.cwd) ? SP_NULLPTR : sp_str_to_cstr(scratch.mem, config.cwd);
 
@@ -15675,7 +15691,7 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
   startup.hStdOutput = io.out.child;
   startup.hStdError = io.err.child;
 
-  created = CreateProcessA(SP_NULLPTR, cmdline, SP_NULLPTR, SP_NULLPTR, true, 0, (void*)env.data, cwd, &startup, &process_info);
+  created = CreateProcessA(SP_NULLPTR, cmdline, SP_NULLPTR, SP_NULLPTR, true, 0, (void*)block.data, cwd, &startup, &process_info);
   sp_mem_end_scratch(scratch);
 
   if (!created) {
