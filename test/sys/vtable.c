@@ -99,6 +99,10 @@ static sp_err_t mock_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t t
   return (sp_err_t)69;
 }
 
+static sp_err_t mock_readlink(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size, u64* target_len) {
+  return (sp_err_t)69;
+}
+
 static sp_err_t mock_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
   return (sp_err_t)69;
 }
@@ -318,6 +322,7 @@ static const sp_sys_vtable_t mock = {
   .rename                 = mock_rename,
   .link                   = mock_link,
   .symlink                = mock_symlink,
+  .readlink               = mock_readlink,
   .get_path_metadata      = mock_get_path_metadata,
   .get_link_metadata      = mock_get_link_metadata,
   .get_file_metadata      = mock_get_file_metadata,
@@ -460,6 +465,11 @@ static s64 call_link(void) {
 
 static s64 call_symlink(void) {
   return (s64)sp_sys_symlink(SP_NULLPTR, 0, 0, SP_NULLPTR, 0);
+}
+
+static s64 call_readlink(void) {
+  u64 len = 0;
+  return (s64)sp_sys_readlink(0, SP_NULLPTR, 0, SP_NULLPTR, 0, &len);
 }
 
 static s64 call_get_path_metadata(void) {
@@ -695,6 +705,7 @@ static const test_t tests [] = {
   { "rename", call_rename, 69 },
   { "link", call_link, 69 },
   { "symlink", call_symlink, 69 },
+  { "readlink", call_readlink, 69 },
   { "get_path_metadata", call_get_path_metadata, 69 },
   { "get_link_metadata", call_get_link_metadata, 69 },
   { "get_file_metadata", call_get_file_metadata, 69 },

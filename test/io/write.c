@@ -41,12 +41,18 @@ void run_io_mock_write_test(int* utest_result, io_mock_write_test_t t) {
         EXPECT_EQ(err, step->flush.err);
         break;
       }
+      case IO_STEP_PAD: {
+        u64 bytes = 0;
+        sp_err_t err = sp_io_pad(&w.base, step->pad.size, &bytes);
+        EXPECT_EQ(err, step->pad.err);
+        EXPECT_EQ(bytes, step->pad.bytes);
+        break;
+      }
       case IO_STEP_NONE:
       case IO_STEP_READ:
       case IO_STEP_SEEK:
       case IO_STEP_SIZE:
-      case IO_STEP_COPY:
-      case IO_STEP_PAD: {
+      case IO_STEP_COPY: {
         sp_unreachable_case();
       }
     }
@@ -186,6 +192,17 @@ UTEST_F(io_write, buffered_small_no_backend_call) {
     .buffer = 8,
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
+    },
+  });
+}
+
+UTEST_F(io_write, buffered_pad_no_backend_call) {
+  run_io_mock_write_test(utest_result, (io_mock_write_test_t){
+    .results = {0},
+    .buffer = 8,
+    .steps = {
+      { .kind = IO_STEP_WRITE, .write = { "abc", SP_OK, 3 } },
+      { .kind = IO_STEP_PAD, .pad = { .size = 3, .bytes = 3 } },
     },
   });
 }

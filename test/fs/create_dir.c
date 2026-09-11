@@ -64,13 +64,7 @@ static const test_t tests [] = {
     },
     .target = "A/B",
     .expect = {
-      // mkdir under a file component: POSIX reports ENOTDIR; NT path resolution
-      // reports STATUS_OBJECT_PATH_NOT_FOUND
-#if defined(SP_WIN32)
-      .err = SP_ERR_SYS_NOT_FOUND,
-#else
       .err = SP_ERR_SYS_NOT_DIR,
-#endif
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
         { .path = "A/B" },
@@ -86,10 +80,35 @@ static const test_t tests [] = {
     },
     .target = "L",
     .expect = {
-      .err = SP_ERR_SYS_EXISTS,
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
         { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK },
+      },
+    },
+  },
+  {
+    .name = "destination_under_symlink_to_directory",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+    },
+    .target = "L/B",
+    .expect = {
+      .paths = {
+        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_DIR },
+      },
+    },
+  },
+  {
+    .name = "destination_is_dangling_symlink",
+    .setup = {
+      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+    },
+    .target = "L",
+    .expect = {
+      .err = SP_ERR_SYS_EXISTS,
+      .paths = {
+        { .path = "A" },
       },
     },
   },

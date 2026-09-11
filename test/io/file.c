@@ -477,6 +477,98 @@ UTEST_F(io, read_file_larger_than_single_read) {
 //
 // The only way this surfaces is if you mix positional and streaming IO on the same kernel
 // handle, which is definitely a user error.
+// Constructing over an fd is free: no syscall is made until something asks
+// for the size, and the answer is then memoized.
+UTEST_F(io, file_reader_from_file_defers_stat) {
+  sp_io_file_writer_t w = sp_zero;
+  sp_io_file_writer_from_path(&w, ut.file_path);
+  sp_io_write(&w.base, "abc", 3, SP_NULLPTR);
+  sp_io_file_writer_close(&w);
+
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_open_s(sp_sys_get_root(0), ut.file_path, SP_SYS_OPEN_MODE_RO, 0, &fd), SP_OK);
+
+  sp_io_file_reader_t r = sp_zero;
+  EXPECT_EQ(sp_io_file_reader_from_file(&r, fd, SP_IO_CLOSE_MODE_AUTO), SP_OK);
+  EXPECT_FALSE(r.size_known);
+
+  u64 size = 0;
+  EXPECT_EQ(sp_io_file_reader_size(&r, &size), SP_OK);
+  EXPECT_EQ(size, (u64)3);
+  EXPECT_TRUE(r.size_known);
+  sp_io_file_reader_close(&r);
+}
+
+UTEST_F(io, file_writer_from_fd_defers_stat) {
+  sp_io_file_writer_t w = sp_zero;
+  sp_io_file_writer_from_path(&w, ut.file_path);
+  sp_io_write(&w.base, "abc", 3, SP_NULLPTR);
+  sp_io_file_writer_close(&w);
+
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  ASSERT_EQ(sp_sys_open_s(sp_sys_get_root(0), ut.file_path, SP_SYS_OPEN_MODE_WO, 0, &fd), SP_OK);
+
+  sp_io_file_writer_t a = sp_zero;
+  EXPECT_EQ(sp_io_file_writer_from_fd(&a, fd, SP_IO_CLOSE_MODE_AUTO), SP_OK);
+  EXPECT_FALSE(a.size_known);
+
+  s64 pos = 0;
+  EXPECT_EQ(sp_io_file_writer_seek(&a, 0, SP_IO_SEEK_END, &pos), SP_OK);
+  EXPECT_EQ(pos, (s64)3);
+  EXPECT_TRUE(a.size_known);
+  sp_io_file_writer_close(&a);
+}
+
+// The size is fetched once, on first need, and memoized: after the first
+// query it is answered from the struct even if the file has since grown.
+// size_force is the explicit refresh.
+UTEST_F(io, file_reader_size_is_memoized) {
+  sp_io_file_writer_t w = sp_zero;
+  sp_io_file_writer_from_path(&w, ut.file_path);
+  sp_io_write(&w.base, "abc", 3, SP_NULLPTR);
+  sp_io_flush(&w.base);
+
+  sp_io_file_reader_t r = sp_zero;
+  sp_io_file_reader_from_path(&r, ut.file_path);
+  EXPECT_FALSE(r.size_known);
+
+  u64 size = 0;
+  EXPECT_EQ(sp_io_file_reader_size(&r, &size), SP_OK);
+  EXPECT_EQ(size, (u64)3);
+  EXPECT_TRUE(r.size_known);
+
+  sp_io_write(&w.base, "def", 3, SP_NULLPTR);
+  sp_io_flush(&w.base);
+
+  EXPECT_EQ(sp_io_file_reader_size(&r, &size), SP_OK);
+  EXPECT_EQ(size, (u64)3);
+  EXPECT_EQ(sp_io_file_reader_size_force(&r, &size), SP_OK);
+  EXPECT_EQ(size, (u64)6);
+
+  sp_io_file_reader_close(&r);
+  sp_io_file_writer_close(&w);
+}
+
+// A writer opened by path truncates, so it knows the size is zero without
+// asking; writes then keep the size current.
+UTEST_F(io, file_writer_from_path_knows_size) {
+  sp_io_file_writer_t w = sp_zero;
+  sp_io_file_writer_from_path(&w, ut.file_path);
+  EXPECT_TRUE(w.size_known);
+  EXPECT_EQ(w.size, (u64)0);
+
+  sp_io_write(&w.base, "abcd", 4, SP_NULLPTR);
+  sp_io_flush(&w.base);
+  u64 size = 0;
+  EXPECT_EQ(sp_io_file_writer_size(&w, &size), SP_OK);
+  EXPECT_EQ(size, (u64)4);
+
+  s64 pos = 0;
+  EXPECT_EQ(sp_io_file_writer_seek(&w, -1, SP_IO_SEEK_END, &pos), SP_OK);
+  EXPECT_EQ(pos, (s64)3);
+  sp_io_file_writer_close(&w);
+}
+
 UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
   SKIP_ON_WIN32()
   sp_io_file_writer_t w = sp_zero;

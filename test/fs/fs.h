@@ -61,7 +61,6 @@ typedef enum {
   FS_SETUP_FILE,
   FS_SETUP_DIR,
   FS_SETUP_SYMLINK,
-  FS_SETUP_HARD_LINK,
   FS_SETUP_FIFO,
 } fs_setup_kind_t;
 
@@ -79,6 +78,7 @@ typedef struct {
   bool exists;
   sp_fs_kind_t kind;
   const c8* content;
+  const c8* target;
 } fs_expected_path_t;
 
 static bool fs_setup_needs_symlinks(const fs_setup_t setup [FS_MAX_SETUP]) {
@@ -146,13 +146,6 @@ static void fs_apply_setup(sp_test_t* t, sp_str_t sandbox, const fs_setup_t setu
         }
         break;
       }
-      case FS_SETUP_HARD_LINK: {
-        sp_str_t target = sp_fs_join_path(mem, sandbox, sp_str_view(ent->target));
-        if (sp_fs_create_hard_link(target, path) != SP_OK) {
-          sp_test_fail(t, "failed to create hard link {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
-        }
-        break;
-      }
       case FS_SETUP_FIFO: {
 #if defined(SP_POSIX)
         if (mkfifo(sp_cstr_from_str(mem, path), 0644) != 0) {
@@ -163,6 +156,16 @@ static void fs_apply_setup(sp_test_t* t, sp_str_t sandbox, const fs_setup_t setu
 #endif
         break;
       }
+    }
+  }
+}
+
+static void fs_expect_no_temps(sp_test_t* t, sp_str_t sandbox) {
+  sp_da(sp_fs_entry_t) entries = sp_zero;
+  sp_expect_ok(t, sp_fs_collect_recursive(sp_test_arena(t), sandbox, &entries));
+  sp_da_for(entries, it) {
+    if (sp_str_ends_with(entries[it].name, sp_str_lit(".tmp"))) {
+      sp_test_fail(t, "temp file left behind: {}", sp_fmt_str(entries[it].path));
     }
   }
 }
@@ -195,6 +198,17 @@ static void fs_expect_paths(sp_test_t* t, sp_str_t sandbox, const fs_expected_pa
           .actual = sp_test_format(t, "{.quote}", sp_fmt_str(actual)),
         });
       }
+    }
+
+    if (info->target) {
+      sp_str_t expected = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(info->target));
+#if defined(SP_WIN32)
+      expected = sp_str_replace_c8(mem, expected, '/', '\\');
+#endif
+      c8 buf [SP_PATH_MAX];
+      sp_str_t actual = sp_zero;
+      sp_expect_ok(t, sp_sys_readlink_s(sp_sys_get_root(0), path, buf, sizeof(buf), &actual));
+      sp_expect_str_eq(t, actual, expected);
     }
   }
 }
