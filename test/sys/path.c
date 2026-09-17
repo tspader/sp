@@ -417,7 +417,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   switch (c->op) {
     case OP_UNLINK: err = sp_sys_unlink_s(sandbox_fd, path); break;
     case OP_RMDIR:  err = sp_sys_rmdir_s(sandbox_fd, path); break;
-    case OP_MKDIR:  err = sp_sys_mkdir_s(sandbox_fd, path, 0755); break;
+    case OP_MKDIR:  err = sp_sys_mkdir_s(sandbox_fd, path, sp_sys_default_dir_perms); break;
     case OP_STAT:   err = sp_sys_get_path_metadata_s(sandbox_fd, path, &meta); break;
     case OP_LSTAT:  err = sp_sys_get_link_metadata_s(sandbox_fd, path, &meta); break;
   }
@@ -489,9 +489,8 @@ sp_test(sys, canonicalize_ignores_read_permission) {
   if (geteuid() == 0) return sp_test_skip(t, "running as root");
 #endif
 
-  sp_sys_file_meta_t meta = sp_zero;
-  sp_err_t err = sp_sys_chmod_s(sp_sys_get_root(0), path, &meta);
-  if (err == SP_ERR_SYS_UNSUPPORTED) return sp_test_skip(t, "chmod not supported");
+  sp_err_t err = sp_sys_set_file_perms_s(sp_sys_get_root(0), path, sp_zero_s(sp_sys_file_perms_t));
+  if (err == SP_ERR_SYS_UNSUPPORTED) return sp_test_skip(t, "set_file_perms not supported");
   sp_try(err);
 
   c8 buf [SP_PATH_MAX] = sp_zero;

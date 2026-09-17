@@ -8,7 +8,7 @@ typedef enum {
 
 typedef enum {
   OP_WRITE,
-  OP_CHMOD,
+  OP_SET_PERMS,
 } op_t;
 
 typedef struct {
@@ -20,9 +20,9 @@ typedef struct {
 
 static const test_t tests [] = {
   { .name = "write_moves_mtime", .field = FIELD_MTIME, .op = OP_WRITE, .moves = true },
-  { .name = "chmod_keeps_mtime", .field = FIELD_MTIME, .op = OP_CHMOD },
+  { .name = "set_perms_keeps_mtime", .field = FIELD_MTIME, .op = OP_SET_PERMS },
   { .name = "write_keeps_btime", .field = FIELD_BTIME, .op = OP_WRITE },
-  { .name = "chmod_keeps_btime", .field = FIELD_BTIME, .op = OP_CHMOD },
+  { .name = "set_perms_keeps_btime", .field = FIELD_BTIME, .op = OP_SET_PERMS },
 };
 
 static s64 field_ns(const sp_sys_file_meta_t* meta, field_t field) {
@@ -52,9 +52,10 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       sp_sys_close(fd);
       break;
     }
-    case OP_CHMOD: {
-      sp_sys_file_meta_t meta = sp_zero;
-      sp_must_ok(t, sp_sys_chmod_s(root, path, &meta));
+    case OP_SET_PERMS: {
+      sp_sys_file_perms_t perms = before.perms;
+      sp_sys_set_read_only(&perms, true);
+      sp_must_ok(t, sp_sys_set_file_perms_s(root, path, perms));
       break;
     }
   }
