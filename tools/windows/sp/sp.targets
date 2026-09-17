@@ -11,6 +11,13 @@
   <ItemGroup Condition="'$(SpProjectReferences)' != ''">
     <ProjectReference Include="$(SpProjectReferences)" />
   </ItemGroup>
+  <Target Name="SpObjectNames" BeforeTargets="PrepareForBuild">
+    <ItemGroup>
+      <ClCompile Condition="$([System.String]::Copy('%(RelativeDir)').StartsWith('..\'))">
+        <ObjectFileName>$(IntDir)$([System.String]::Copy('%(RelativeDir)').Replace('..\', '').Replace('\', '_'))%(Filename).obj</ObjectFileName>
+      </ClCompile>
+    </ItemGroup>
+  </Target>
   <Target Name="Run" DependsOnTargets="Build">
     <Exec Command="&quot;$(TargetPath)&quot;" />
   </Target>

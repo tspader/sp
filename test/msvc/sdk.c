@@ -54,7 +54,7 @@ sp_test_each(msvc, sdk_new, test_t, tests) {
   c8 buf [SP_MSVC_PATH_MAX] = sp_zero;
   sp_expect_str_eq_c(t, sp_msvc_sdk_path_buf(buf, sizeof(buf), &sdk, SP_MSVC_SDK_PATH_LIB_UM).value, it->expect.lib_um);
 
-  c8 small [8] = sp_zero;
-  sp_expect_eq(t, sp_msvc_sdk_path_buf(small, sizeof(small), &sdk, SP_MSVC_SDK_PATH_LIB_UM).err, SP_ERR_IO_NO_SPACE);
+  c8 tiny [8] = sp_zero;
+  sp_expect_eq(t, sp_msvc_sdk_path_buf(tiny, sizeof(tiny), &sdk, SP_MSVC_SDK_PATH_LIB_UM).err, SP_ERR_IO_NO_SPACE);
   return SP_OK;
 }

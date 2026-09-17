@@ -54,7 +54,7 @@ jobs:
       - run: msbuild tools\windows\sp\sp.sln /p:Configuration=Release /p:Platform=x64 /m
       - shell: bash
         run: |
-          for t in tools/windows/sp/build/vs/Release/bin/*.exe; do
+          for t in tools/windows/sp/build/vs/Release/bin/*.exe tools/windows/sp/build/vs/Release/bin/spn/*.exe; do
             echo "=== $t ==="
             "$t" || exit 1
           done

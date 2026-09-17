@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{20000010-0010-4010-8010-000000000010}</ProjectGuid>
+    <RootNamespace>tls</RootNamespace>
+    <ProjectName>tls</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <SpTargetName>tls</SpTargetName>
+    <SpSource>..\..\..\..\test\main.c;..\..\..\..\test\http\tls\*.c</SpSource>
+    <SpHeaders>..\..\..\..\sp.h;..\..\..\..\sp\sp_test.h;..\..\..\..\sp\sp_http.h</SpHeaders>
+    <SpUseImplementationDefines>false</SpUseImplementationDefines>
+    <SpProjectReferences></SpProjectReferences>
+    <SpPreprocessorDefinitions>SP_TLS_WITH_MBEDTLS;SP_TLS_MBEDTLS_SINGLE_THREAD</SpPreprocessorDefinitions>
+    <SpAdditionalIncludeDirectories></SpAdditionalIncludeDirectories>
+    <SpAdditionalDependencies></SpAdditionalDependencies>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)'==''">Debug</Configuration>
+    <Platform Condition="'$(Platform)'==''">x64</Platform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <Import Project="..\sp.props" />
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)build\vs\$(Configuration)\bin\spn\</OutDir>
+    <IntDir>$(SolutionDir)build\vs\$(Configuration)\obj\spn\$(MSBuildProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <SpMbedtlsVendorDir>$(SpRoot)\tools\vendor\mbedtls</SpMbedtlsVendorDir>
+    <SpBuildDir>$(MSBuildThisFileDirectory)..\build\vs</SpBuildDir>
+    <SpMbedtlsFetchDir>$(SpBuildDir)\mbedtls-3.6.6</SpMbedtlsFetchDir>
+    <SpMbedtlsDir Condition="Exists('$(SpMbedtlsVendorDir)\library')">$(SpMbedtlsVendorDir)</SpMbedtlsDir>
+    <SpMbedtlsDir Condition="'$(SpMbedtlsDir)' == ''">$(SpMbedtlsFetchDir)</SpMbedtlsDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(SpMbedtlsDir)\include;$(SpMbedtlsDir)\library;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Target Name="SpMbedtls" BeforeTargets="PrepareForBuild">
+    <DownloadFile Condition="!Exists('$(SpMbedtlsDir)\library')" SourceUrl="https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.6.6.zip" DestinationFolder="$(SpBuildDir)" DestinationFileName="mbedtls-3.6.6.zip" />
+    <Unzip Condition="!Exists('$(SpMbedtlsDir)\library')" SourceFiles="$(SpBuildDir)\mbedtls-3.6.6.zip" DestinationFolder="$(SpBuildDir)" />
+    <ItemGroup>
+      <ClCompile Include="$(SpMbedtlsDir)\library\*.c">
+        <WarningLevel>Level1</WarningLevel>
+        <SDLCheck>false</SDLCheck>
+      </ClCompile>
+    </ItemGroup>
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="..\sp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>
