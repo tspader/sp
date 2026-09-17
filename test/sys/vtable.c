@@ -75,7 +75,7 @@ static sp_err_t mock_pipe_ready(sp_sys_fd_t fd, u8* ready) {
   return (sp_err_t)69;
 }
 
-static sp_err_t mock_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
+static sp_err_t mock_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
   return (sp_err_t)69;
 }
 
@@ -115,7 +115,7 @@ static sp_err_t mock_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
   return (sp_err_t)69;
 }
 
-static sp_err_t mock_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
+static sp_err_t mock_set_file_perms(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
   return (sp_err_t)69;
 }
 
@@ -326,7 +326,7 @@ static const sp_sys_vtable_t mock = {
   .get_path_metadata      = mock_get_path_metadata,
   .get_link_metadata      = mock_get_link_metadata,
   .get_file_metadata      = mock_get_file_metadata,
-  .chmod                  = mock_chmod,
+  .set_file_perms         = mock_set_file_perms,
   .clock_gettime          = mock_clock_gettime,
   .nanosleep              = mock_nanosleep,
   .futex_wait             = mock_futex_wait,
@@ -444,7 +444,7 @@ static s64 call_pipe_ready(void) {
 }
 
 static s64 call_mkdir(void) {
-  return (s64)sp_sys_mkdir(0, SP_NULLPTR, 0, 0);
+  return (s64)sp_sys_mkdir(0, SP_NULLPTR, 0, sp_zero_s(sp_sys_file_perms_t));
 }
 
 static s64 call_rmdir(void) {
@@ -484,8 +484,8 @@ static s64 call_get_file_metadata(void) {
   return (s64)sp_sys_get_file_metadata(0, SP_NULLPTR);
 }
 
-static s64 call_chmod(void) {
-  return (s64)sp_sys_chmod(0, SP_NULLPTR, 0, SP_NULLPTR);
+static s64 call_set_file_perms(void) {
+  return (s64)sp_sys_set_file_perms(0, SP_NULLPTR, 0, sp_zero_s(sp_sys_file_perms_t));
 }
 
 static s64 call_clock_gettime(void) {
@@ -709,7 +709,7 @@ static const test_t tests [] = {
   { "get_path_metadata", call_get_path_metadata, 69 },
   { "get_link_metadata", call_get_link_metadata, 69 },
   { "get_file_metadata", call_get_file_metadata, 69 },
-  { "chmod", call_chmod, 69 },
+  { "set_file_perms", call_set_file_perms, 69 },
   { "clock_gettime", call_clock_gettime, 69 },
   { "nanosleep", call_nanosleep, 69 },
   { "futex_wait", call_futex_wait, 1 },

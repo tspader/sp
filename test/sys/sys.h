@@ -189,13 +189,9 @@ static bool sys_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_st
           SP_FAIL();
           return false;
         }
-#if defined(SP_WIN32)
-        meta.raw_attrs |= FILE_ATTRIBUTE_READONLY;
-#else
-        meta.raw_attrs &= ~(u32)0222;
-#endif
-        if (sp_sys_chmod_s(sp_sys_get_root(0), path, &meta)) {
-          SP_TEST_REPORT("failed to chmod {}", sp_fmt_str(path));
+        sp_sys_set_read_only(&meta.perms, true);
+        if (sp_sys_set_file_perms_s(sp_sys_get_root(0), path, meta.perms)) {
+          SP_TEST_REPORT("failed to set perms on {}", sp_fmt_str(path));
           SP_FAIL();
           return false;
         }
@@ -376,7 +372,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
         break;
       }
       case SYS_STEP_MKDIR: {
-        sp_err_t err = sp_sys_mkdir_s(sandbox_fd, sp_cstr_as_str(step->mkdir.path), 0755);
+        sp_err_t err = sp_sys_mkdir_s(sandbox_fd, sp_cstr_as_str(step->mkdir.path), sp_sys_default_dir_perms);
         sys_expect_err(utest_result, "mkdir", err, step->mkdir.err);
         break;
       }

@@ -1363,6 +1363,18 @@ typedef enum {
 } sp_fs_kind_t;
 
 typedef struct {
+  u32 value;
+} sp_sys_file_perms_t;
+
+#if defined(SP_WIN32)
+  #define sp_sys_default_file_perms (SP_RVAL(sp_sys_file_perms_t) { .value = 0 })
+  #define sp_sys_default_dir_perms  (SP_RVAL(sp_sys_file_perms_t) { .value = 0 })
+#else
+  #define sp_sys_default_file_perms (SP_RVAL(sp_sys_file_perms_t) { .value = 0666 })
+  #define sp_sys_default_dir_perms  (SP_RVAL(sp_sys_file_perms_t) { .value = 0777 })
+#endif
+
+typedef struct {
   sp_fs_kind_t kind;
   s64 size;
   sp_sys_timespec_t atime;
@@ -1371,7 +1383,7 @@ typedef struct {
   u64 id;
   u64 device;
   u64 nlink;
-  u32 raw_attrs;
+  sp_sys_file_perms_t perms;
 } sp_sys_file_meta_t;
 
 typedef struct {
@@ -1446,7 +1458,7 @@ SP_API sp_err_t    sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, sp_s
 SP_API sp_err_t    sp_sys_close(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
 SP_API sp_err_t    sp_sys_pipe_ready(sp_sys_fd_t fd, u8* ready);
-SP_API sp_err_t    sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
+SP_API sp_err_t    sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_rename(sp_sys_fd_t from, const c8* pfrom, u32 lf, sp_sys_fd_t to, const c8* pto, u32 lt);
@@ -1456,7 +1468,7 @@ SP_API sp_err_t    sp_sys_readlink(sp_sys_fd_t fd, const c8* path, u32 len, c8* 
 SP_API sp_err_t    sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
-SP_API sp_err_t    sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_set_file_perms(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_set_times(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
 SP_API sp_err_t    sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
 SP_API sp_err_t    sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
@@ -1506,7 +1518,7 @@ SP_API sp_err_t    sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_open_mode
 SP_API sp_err_t    sp_sys_open_dir_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_get_path_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
-SP_API sp_err_t    sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode);
+SP_API sp_err_t    sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_rmdir_s(sp_sys_fd_t fd, sp_str_t path);
 SP_API sp_err_t    sp_sys_unlink_s(sp_sys_fd_t fd, sp_str_t path);
 SP_API sp_err_t    sp_sys_rename_s(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to);
@@ -1514,13 +1526,16 @@ SP_API sp_err_t    sp_sys_chdir_s(sp_str_t path);
 SP_API sp_err_t    sp_sys_link_s(sp_sys_fd_t from_fd, sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias);
 SP_API sp_err_t    sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias);
 SP_API sp_err_t    sp_sys_readlink_s(sp_sys_fd_t fd, sp_str_t path, c8* buf, u64 size, sp_str_t* target);
-SP_API sp_err_t    sp_sys_chmod_s(sp_sys_fd_t fd, sp_str_t path, const sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_set_file_perms_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_set_times_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
 SP_API s64         sp_sys_canonicalize_path_s(sp_str_t path, c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_dir_from_fd(sp_sys_fd_t fd, sp_sys_dir_t* out);
 SP_API sp_err_t    sp_sys_dir_read(sp_sys_dir_t* dir, sp_mem_buffer_t* buf);
 SP_API sp_err_t    sp_sys_dir_parse(sp_sys_dir_t* dir, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out);
 SP_API sp_err_t    sp_sys_dir_close(sp_sys_dir_t* dir);
+SP_API bool        sp_sys_is_read_only(sp_sys_file_perms_t perms);
+SP_API void        sp_sys_set_read_only(sp_sys_file_perms_t* perms, bool read_only);
+SP_API void        sp_sys_set_executable(sp_sys_file_perms_t* perms, bool executable);
 
 SP_API sp_err_t    sp_tty_set_mode(sp_sys_fd_t in, sp_sys_fd_t out, sp_sys_tty_mode_t mode, sp_sys_tty_state_t* saved);
 SP_API sp_err_t    sp_tty_restore(sp_sys_fd_t in, sp_sys_fd_t out, const sp_sys_tty_state_t* saved);
@@ -1543,7 +1558,7 @@ typedef struct {
   sp_err_t    (*close)(sp_sys_fd_t fd);
   sp_err_t    (*pipe)(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
   sp_err_t    (*pipe_ready)(sp_sys_fd_t fd, u8* ready);
-  sp_err_t    (*mkdir)(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
+  sp_err_t    (*mkdir)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms);
   sp_err_t    (*rmdir)(sp_sys_fd_t fd, const c8* path, u32 len);
   sp_err_t    (*unlink)(sp_sys_fd_t fd, const c8* path, u32 len);
   sp_err_t    (*rename)(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
@@ -1553,7 +1568,7 @@ typedef struct {
   sp_err_t    (*get_path_metadata)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
   sp_err_t    (*get_link_metadata)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
   sp_err_t    (*get_file_metadata)(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
-  sp_err_t    (*chmod)(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
+  sp_err_t    (*set_file_perms)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms);
   sp_err_t    (*set_times)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
   sp_err_t    (*clock_gettime)(s32 clockid, sp_sys_timespec_t* ts);
   sp_err_t    (*nanosleep)(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
@@ -1618,7 +1633,7 @@ SP_API sp_err_t    sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp
 SP_API sp_err_t    sp_sys_close_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_pipe_p(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
 SP_API sp_err_t    sp_sys_pipe_ready_p(sp_sys_fd_t fd, u8* ready);
-SP_API sp_err_t    sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode);
+SP_API sp_err_t    sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
@@ -1628,7 +1643,7 @@ SP_API sp_err_t    sp_sys_readlink_p(sp_sys_fd_t fd, const c8* path, u32 len, c8
 SP_API sp_err_t    sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
-SP_API sp_err_t    sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_set_file_perms_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_set_times_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
 SP_API sp_err_t    sp_sys_clock_gettime_p(s32 clockid, sp_sys_timespec_t* ts);
 SP_API sp_err_t    sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_timespec_t* rem);
@@ -5670,7 +5685,7 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .get_path_metadata      = sp_sys_get_path_metadata_p,
   .get_link_metadata      = sp_sys_get_link_metadata_p,
   .get_file_metadata      = sp_sys_get_file_metadata_p,
-  .chmod                  = sp_sys_chmod_p,
+  .set_file_perms         = sp_sys_set_file_perms_p,
   .set_times              = sp_sys_set_times_p,
   .clock_gettime          = sp_sys_clock_gettime_p,
   .nanosleep              = sp_sys_nanosleep_p,
@@ -5861,8 +5876,8 @@ sp_err_t sp_sys_pipe_ready(sp_sys_fd_t fd, u8* ready) {
   return (sp_rt.vt->pipe_ready)(fd, ready);
 }
 
-sp_err_t sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
-  return (sp_rt.vt->mkdir)(fd, path, len, mode);
+sp_err_t sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
+  return (sp_rt.vt->mkdir)(fd, path, len, perms);
 }
 
 sp_err_t sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len) {
@@ -5901,8 +5916,8 @@ sp_err_t sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
   return (sp_rt.vt->get_file_metadata)(fd, st);
 }
 
-sp_err_t sp_sys_chmod(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
-  return (sp_rt.vt->chmod)(fd, path, len, st);
+sp_err_t sp_sys_set_file_perms(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
+  return (sp_rt.vt->set_file_perms)(fd, path, len, perms);
 }
 
 sp_err_t sp_sys_set_times(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime) {
@@ -6599,7 +6614,7 @@ static void sp_sys_file_meta_from_statx(const sp_sys_linux_statx_t* raw, sp_sys_
   out->id        = raw->stx_ino;
   out->device    = ((u64)raw->stx_dev_major << 32) | raw->stx_dev_minor;
   out->nlink     = raw->stx_nlink;
-  out->raw_attrs = raw->stx_mode;
+  out->perms.value = raw->stx_mode;
 }
 
 s64 sp_lx_getdents64(s32 fd, void* buf, u64 count) {
@@ -6627,7 +6642,7 @@ static void sp_sys_file_meta_from_libc(const struct stat* src, sp_sys_file_meta_
   out->id        = (u64)src->st_ino;
   out->device    = (u64)src->st_dev;
   out->nlink     = (u64)src->st_nlink;
-  out->raw_attrs = (u32)src->st_mode;
+  out->perms.value = (u32)src->st_mode;
 #if defined(SP_MACOS)
   out->atime.tv_sec  = (s64)src->st_atimespec.tv_sec;
   out->atime.tv_nsec = (s64)src->st_atimespec.tv_nsec;
@@ -7329,7 +7344,7 @@ sp_err_t sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
   meta->id = sp_cast(s64, (id.high | id.low));
   meta->device = info.dwVolumeSerialNumber;
   meta->nlink = info.nNumberOfLinks;
-  meta->raw_attrs = info.dwFileAttributes;
+  meta->perms.value = info.dwFileAttributes;
 
   sp_sys_timespec_from_filetime(info.ftLastAccessTime, &meta->atime);
   sp_sys_timespec_from_filetime(info.ftLastWriteTime, &meta->mtime);
@@ -8282,7 +8297,7 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   c8 buffer [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buffer));
 
-  s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buffer, sp_sys_linux_open_flags(mode, flags), 0644);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buffer, sp_sys_linux_open_flags(mode, flags), sp_sys_default_file_perms.value);
   if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
 
   *out = (sp_sys_fd_t)rc;
@@ -8291,7 +8306,7 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  s32 rc = openat((int)fd, buf, sp_sys_posix_open_flags(mode, flags), 0644);
+  s32 rc = openat((int)fd, buf, sp_sys_posix_open_flags(mode, flags), (mode_t)sp_sys_default_file_perms.value);
   if (rc < 0) return sp_sys_err_from_errno(errno);
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
@@ -10207,9 +10222,9 @@ sp_err_t sp_sys_get_link_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_m
 //////////////////
 // SP_SYS_MKDIR //
 //////////////////
-sp_err_t sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
+sp_err_t sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
 #if defined(SP_WIN32)
-  (void)mode;
+  (void)perms;
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(
     fd,
@@ -10228,15 +10243,15 @@ sp_err_t sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  return sp_syscall_e(SP_SYSCALL_NUM_MKDIRAT, fd, buf, mode);
+  return sp_syscall_e(SP_SYSCALL_NUM_MKDIRAT, fd, buf, perms.value & 07777);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, sp_sys_posix_trim_slashes(path, len), buf));
-  return sp_sys_err_from_libc(mkdirat(fd, buf, (mode_t)mode));
+  return sp_sys_err_from_libc(mkdirat(fd, buf, (mode_t)(perms.value & 07777)));
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)mode;
+  (void)fd; (void)path; (void)len; (void)perms;
   return SP_ERR_SYS_UNSUPPORTED;
 
 #else
@@ -10244,8 +10259,8 @@ sp_err_t sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, s32 mode) {
 #endif
 }
 
-sp_err_t sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, s32 mode) {
-  return sp_sys_mkdir(fd, path.data, path.len, mode);
+sp_err_t sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_perms_t perms) {
+  return sp_sys_mkdir(fd, path.data, path.len, perms);
 }
 
 //////////////////
@@ -10636,10 +10651,10 @@ sp_err_t sp_sys_readlink_s(sp_sys_fd_t fd, sp_str_t path, c8* buf, u64 size, sp_
   return err;
 }
 
-//////////////////
-// SP_SYS_CHMOD //
-//////////////////
-sp_err_t sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_file_meta_t* st) {
+///////////////////////////
+// SP_SYS_SET_FILE_PERMS //
+///////////////////////////
+sp_err_t sp_sys_set_file_perms_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
 #if defined(SP_WIN32)
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(
@@ -10655,7 +10670,7 @@ sp_err_t sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_fi
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
 
   sp_nt_file_basic_information_t info = sp_zero;
-  info.FileAttributes = st->raw_attrs ? st->raw_attrs : FILE_ATTRIBUTE_NORMAL;
+  info.FileAttributes = perms.value ? perms.value : FILE_ATTRIBUTE_NORMAL;
 
   sp_nt_io_status_block_t iosb = sp_zero;
   status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, &info, sizeof(info), SP_NT_FILE_BASIC_INFORMATION);
@@ -10666,20 +10681,20 @@ sp_err_t sp_sys_chmod_p(sp_sys_fd_t fd, const c8* path, u32 len, const sp_sys_fi
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  s32 mode = (s32)(st->raw_attrs & 07777);
+  s32 mode = (s32)(perms.value & 07777);
   return sp_syscall_e(SP_SYSCALL_NUM_FCHMODAT, fd, buf, mode, 0);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  return sp_sys_err_from_libc(fchmodat(fd, buf, (mode_t)(st->raw_attrs & 07777), 0));
+  return sp_sys_err_from_libc(fchmodat(fd, buf, (mode_t)(perms.value & 07777), 0));
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)st;
+  (void)fd; (void)path; (void)len; (void)perms;
   return SP_ERR_SYS_UNSUPPORTED;
 
 #else
-  #error "sp_sys_chmod"
+  #error "sp_sys_set_file_perms"
 #endif
 }
 
@@ -10688,8 +10703,41 @@ sp_err_t sp_sys_set_times_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_time
   return SP_ERR_SYS_UNSUPPORTED;
 }
 
-sp_err_t sp_sys_chmod_s(sp_sys_fd_t fd, sp_str_t path, const sp_sys_file_meta_t* st) {
-  return sp_sys_chmod(fd, path.data, path.len, st);
+sp_err_t sp_sys_set_file_perms_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_perms_t perms) {
+  return sp_sys_set_file_perms(fd, path.data, path.len, perms);
+}
+
+bool sp_sys_is_read_only(sp_sys_file_perms_t perms) {
+#if defined(SP_WIN32)
+  return (perms.value & FILE_ATTRIBUTE_READONLY) != 0;
+#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_WASM)
+  return (perms.value & 0222) == 0;
+#else
+  #error "sp_sys_is_read_only"
+#endif
+}
+
+void sp_sys_set_read_only(sp_sys_file_perms_t* perms, bool read_only) {
+#if defined(SP_WIN32)
+  if (read_only) perms->value |= FILE_ATTRIBUTE_READONLY;
+  else           perms->value &= ~(u32)FILE_ATTRIBUTE_READONLY;
+#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_WASM)
+  if (read_only) perms->value &= ~(u32)0222;
+  else           perms->value |= 0200;
+#else
+  #error "sp_sys_set_read_only"
+#endif
+}
+
+void sp_sys_set_executable(sp_sys_file_perms_t* perms, bool executable) {
+#if defined(SP_WIN32)
+  (void)perms; (void)executable;
+#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_WASM)
+  if (executable) perms->value |= (perms->value & 0444) >> 2;
+  else            perms->value &= ~(u32)0111;
+#else
+  #error "sp_sys_set_executable"
+#endif
 }
 
 sp_err_t sp_sys_set_times_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_timespec_t atime, sp_sys_timespec_t mtime) {
@@ -19957,7 +20005,7 @@ cleanup:
 SP_PRIVATE sp_err_t sp_fs_create_parent_at(sp_sys_fd_t dir, sp_str_t path);
 
 SP_PRIVATE sp_err_t sp_fs_mkdir_at(sp_sys_fd_t dir, sp_str_t path) {
-  sp_err_t err = sp_sys_mkdir_s(dir, path, 0755);
+  sp_err_t err = sp_sys_mkdir_s(dir, path, sp_sys_default_dir_perms);
   if (!err || err == SP_ERR_SYS_NOT_FOUND) return err;
 
   sp_sys_file_meta_t st = sp_zero;
@@ -20344,7 +20392,7 @@ sp_err_t sp_fs_write_atomic_cstr(sp_str_t path, const c8* str) {
   return sp_fs_write_atomic(path, sp_str_view(str));
 }
 
-SP_PRIVATE sp_err_t sp_fs_copy_bytes(sp_str_t from, sp_str_t to, sp_fs_atomic_mode_t mode, const sp_sys_file_meta_t* meta) {
+SP_PRIVATE sp_err_t sp_fs_copy_bytes(sp_str_t from, sp_str_t to, sp_fs_atomic_mode_t mode, sp_sys_file_perms_t perms) {
   sp_io_file_reader_t reader = sp_zero;
   sp_try(sp_io_file_reader_from_path(&reader, from));
 
@@ -20357,7 +20405,7 @@ SP_PRIVATE sp_err_t sp_fs_copy_bytes(sp_str_t from, sp_str_t to, sp_fs_atomic_mo
 
   err = sp_io_copy(sp_fs_atomic_writer(&af), &reader.base, SP_NULLPTR);
   sp_io_file_reader_close(&reader);
-  if (!err) err = sp_sys_chmod_s(af.dir, af.temp, meta);
+  if (!err) err = sp_sys_set_file_perms_s(af.dir, af.temp, perms);
   if (err) {
     sp_fs_atomic_abort(&af);
     return err;
@@ -20368,7 +20416,7 @@ SP_PRIVATE sp_err_t sp_fs_copy_bytes(sp_str_t from, sp_str_t to, sp_fs_atomic_mo
 SP_PRIVATE sp_err_t sp_fs_copy_tree_file(sp_str_t from, sp_str_t to, sp_fs_atomic_mode_t mode) {
   sp_sys_file_meta_t meta = sp_zero;
   sp_try(sp_sys_get_path_metadata_s(sp_sys_get_root(0), from, &meta));
-  return sp_fs_copy_bytes(from, to, mode, &meta);
+  return sp_fs_copy_bytes(from, to, mode, meta.perms);
 }
 
 SP_PRIVATE sp_err_t sp_fs_copy_link(sp_str_t from, sp_str_t to, sp_fs_atomic_mode_t mode) {
@@ -20399,7 +20447,7 @@ sp_err_t sp_fs_copy_file(sp_str_t from, sp_str_t to, sp_fs_atomic_mode_t mode) {
   sp_try(sp_sys_get_path_metadata_s(sp_sys_get_root(0), from, &meta));
 
   switch (meta.kind) {
-    case SP_FS_KIND_FILE:    return sp_fs_copy_bytes(from, to, mode, &meta);
+    case SP_FS_KIND_FILE:    return sp_fs_copy_bytes(from, to, mode, meta.perms);
     case SP_FS_KIND_DIR:     return SP_ERR_SYS_IS_DIR;
     case SP_FS_KIND_SYMLINK:
     case SP_FS_KIND_NONE:    return SP_ERR_SYS_UNSUPPORTED;
@@ -20485,7 +20533,7 @@ sp_err_t sp_fs_copy(sp_str_t from, sp_str_t to) {
   sp_try(sp_sys_get_path_metadata_s(sp_sys_get_root(0), from, &meta));
 
   switch (meta.kind) {
-    case SP_FS_KIND_FILE:    return sp_fs_copy_bytes(from, to, SP_FS_ATOMIC_REPLACE, &meta);
+    case SP_FS_KIND_FILE:    return sp_fs_copy_bytes(from, to, SP_FS_ATOMIC_REPLACE, meta.perms);
     case SP_FS_KIND_DIR:     return sp_fs_copy_tree(from, to, SP_FS_ATOMIC_REPLACE);
     case SP_FS_KIND_SYMLINK:
     case SP_FS_KIND_NONE:    return SP_ERR_SYS_UNSUPPORTED;
