@@ -152,20 +152,27 @@ typedef struct {
 #if defined(__ELF__) || defined(SP_WASM) || (defined(SP_TCC) && defined(SP_LINUX))
   #define SP_TEST_AUTOREG 1
 
-  #define __sp_test_section   __attribute__((used, section("sp_test")))
+  #if SP_HAS_ATTRIBUTE(retain)
+    #define __sp_test_section __attribute__((used, retain, section("sp_test")))
+  #else
+    #define __sp_test_section __attribute__((used, section("sp_test")))
+  #endif
   #define __sp_test_ptr_const const
+  #define __sp_test_keep(ID)
 #elif defined(SP_MACOS)
   #define SP_TEST_AUTOREG 1
 
   #define __sp_test_section   __attribute__((used, section("__DATA,sp_test"), no_sanitize("address")))
   #define __sp_test_ptr_const const
+  #define __sp_test_keep(ID)
 #elif defined(SP_WIN32) && defined(SP_GNUC)
   #define SP_TEST_AUTOREG 1
 
   // The pointer must be const: lld's MinGW driver only merges and $-sorts
   // same-named section chunks with identical flags, and the anchors are const
-  #define __sp_test_section   __attribute__((used, section("sp_test$m")))
+  #define __sp_test_section   __declspec(dllexport) __attribute__((used, section("sp_test$m")))
   #define __sp_test_ptr_const const
+  #define __sp_test_keep(ID)
 #elif defined(SP_WIN32) && defined(SP_MSVC)
   #define SP_TEST_AUTOREG 1
 
@@ -176,6 +183,7 @@ typedef struct {
   #pragma section("sp_test$z", read)
   #define __sp_test_section   __declspec(allocate("sp_test$m"))
   #define __sp_test_ptr_const
+  #define __sp_test_keep(ID)  __pragma(comment(linker, "/include:" sp_mstr(ID)))
 #else
   #define SP_TEST_AUTOREG 0
 #endif
@@ -189,9 +197,10 @@ typedef struct {
         __VA_ARGS__                                                           \
       }                                                                       \
     };                                                                        \
-    static __sp_test_section const sp_test_entry_t* __sp_test_ptr_const ID = &sp_mcat(ID, _v)
+    __sp_test_keep(ID)                                                        \
+    SP_EXTERN_C __sp_test_section const sp_test_entry_t* __sp_test_ptr_const ID = &sp_mcat(ID, _v)
 
-  #define sp_test_reg(SUITE, ...) __sp_test_reg(sp_mcat(sp_test_reg_, __COUNTER__), SUITE, __VA_ARGS__)
+  #define sp_test_reg(SUITE, NAME, ...) __sp_test_reg(sp_mcat(sp_mcat(sp_test_reg_, SUITE), sp_mcat(_, NAME)), SUITE, __VA_ARGS__)
 
   #define __sp_test_reg_suite(ID, SUITE, ...)                                 \
     static const sp_test_entry_t sp_mcat(ID, _v) = {                          \
@@ -201,13 +210,14 @@ typedef struct {
         __VA_ARGS__                                                           \
       }                                                                       \
     };                                                                        \
-    static __sp_test_section const sp_test_entry_t* __sp_test_ptr_const ID = &sp_mcat(ID, _v)
+    __sp_test_keep(ID)                                                        \
+    SP_EXTERN_C __sp_test_section const sp_test_entry_t* __sp_test_ptr_const ID = &sp_mcat(ID, _v)
 
-  #define sp_test_suite(SUITE, ...) __sp_test_reg_suite(sp_mcat(sp_test_suite_reg_, __COUNTER__), SUITE, __VA_ARGS__)
+  #define sp_test_suite(SUITE, ...) __sp_test_reg_suite(sp_mcat(sp_test_suite_reg_, SUITE), SUITE, __VA_ARGS__)
 
   #define sp_test(SUITE, NAME, ...)                                         \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t);                \
-    sp_test_reg(SUITE,                                                      \
+    sp_test_reg(SUITE, NAME,                                                \
       .name = #NAME,                                                        \
       .kind = SP_TEST_DECL_FN,                                              \
       .fn = __sp_test_fn(SUITE, NAME),                                      \
@@ -234,7 +244,7 @@ typedef struct {
   #define sp_test_each(SUITE, NAME, TYPE, ARR, ...)                         \
     __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
     __sp_test_each_name_check(ARR);                                         \
-    sp_test_reg(SUITE,                                                      \
+    sp_test_reg(SUITE, NAME,                                                \
       .name = #NAME,                                                        \
       .kind = SP_TEST_DECL_EACH,                                            \
       .each = {                                                             \
@@ -251,7 +261,7 @@ typedef struct {
 
   #define sp_test_each_anon(SUITE, NAME, TYPE, ARR, ...)                    \
     __sp_test_each_def(SUITE, NAME, TYPE, ARR)                              \
-    sp_test_reg(SUITE,                                                      \
+    sp_test_reg(SUITE, NAME,                                                \
       .name = #NAME,                                                        \
       .kind = SP_TEST_DECL_EACH,                                            \
       .each = {                                                             \
@@ -268,7 +278,7 @@ typedef struct {
     sp_static_assert(sizeof(TYPE) == sizeof((ARR)[0]), sp_test_each_row_type_mismatch); \
     __sp_test_each_name_check(ARR);                                         \
     __sp_test_each_thunk_def(SUITE, NAME, TYPE, FN)                         \
-    sp_test_reg(SUITE,                                                      \
+    sp_test_reg(SUITE, NAME,                                                \
       .name = #NAME,                                                        \
       .kind = SP_TEST_DECL_EACH,                                            \
       .each = {                                                             \
@@ -285,7 +295,7 @@ typedef struct {
   #define sp_test_sweep(SUITE, NAME, TYPE, ...)                             \
     static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it);      \
     __sp_test_each_thunk_def(SUITE, NAME, TYPE, __sp_test_fn(SUITE, NAME))  \
-    sp_test_reg(SUITE,                                                      \
+    sp_test_reg(SUITE, NAME,                                                \
       .name = #NAME,                                                        \
       .kind = SP_TEST_DECL_SWEEP,                                           \
       .sweep = {                                                            \
@@ -299,7 +309,7 @@ typedef struct {
   #define __sp_test_unsupported() \
     sp_static_assert(false, no_sp_test_autoreg_for_this_object_format__pass_entries_to_sp_test_main)
 
-  #define sp_test_reg(SUITE, ...)                          __sp_test_unsupported()
+  #define sp_test_reg(SUITE, NAME, ...)                    __sp_test_unsupported()
   #define sp_test_suite(SUITE, ...)                        __sp_test_unsupported()
   #define sp_test(SUITE, NAME, ...)                        __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t)
   #define sp_test_each(SUITE, NAME, TYPE, ARR, ...)        __sp_test_unsupported(); static sp_err_t __sp_test_fn(SUITE, NAME)(sp_test_t* t, TYPE* it)
