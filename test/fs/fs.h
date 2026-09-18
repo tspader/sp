@@ -117,6 +117,30 @@ static void fs_expect_kind(sp_test_t* t, sp_str_t path, sp_fs_kind_t actual, sp_
   );
 }
 
+typedef struct {
+  sp_str_t key;
+  sp_fs_kind_t kind;
+  bool seen;
+} fs_match_t;
+
+static void fs_match(sp_test_t* t, fs_match_t* matches, u32 n, sp_str_t key, sp_fs_kind_t kind) {
+  sp_for(it, n) {
+    fs_match_t* match = &matches[it];
+    if (!sp_str_equal(match->key, key)) continue;
+    if (match->seen) sp_test_fail(t, "{} produced twice", sp_fmt_str(key));
+    match->seen = true;
+    fs_expect_kind(t, key, kind, match->kind);
+    return;
+  }
+  sp_test_fail(t, "unexpected entry {}", sp_fmt_str(key));
+}
+
+static void fs_match_finish(sp_test_t* t, fs_match_t* matches, u32 n) {
+  sp_for(it, n) {
+    if (!matches[it].seen) sp_test_fail(t, "never produced {}", sp_fmt_str(matches[it].key));
+  }
+}
+
 static void fs_apply_setup(sp_test_t* t, sp_str_t sandbox, const fs_setup_t setup [FS_MAX_SETUP]) {
   sp_mem_t mem = sp_test_arena(t);
   sp_for(it, FS_MAX_SETUP) {

@@ -18,12 +18,12 @@
     <ProjectName>fs</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <SpTargetName>fs</SpTargetName>
-    <SpSource>..\..\..\..\test\main.c;..\..\..\..\test\fs\iter\iter.c;..\..\..\..\test\fs\iter\os.c;..\..\..\..\test\fs\wtf8\*.c;..\..\..\..\test\fs\*.c;..\..\..\..\test\fs\windows\nt_path.c</SpSource>
+    <SpSource>..\..\..\..\test\main.c;..\..\..\..\test\fs\dir\*.c;..\..\..\..\test\fs\it\*.c;..\..\..\..\test\fs\wtf8\*.c;..\..\..\..\test\fs\*.c;..\..\..\..\test\fs\windows\nt_path.c</SpSource>
     <SpHeaders>..\..\..\..\sp.h;..\..\..\..\sp\sp_test.h</SpHeaders>
     <SpUseImplementationDefines>false</SpUseImplementationDefines>
     <SpProjectReferences></SpProjectReferences>
     <SpPreprocessorDefinitions></SpPreprocessorDefinitions>
-    <SpAdditionalIncludeDirectories></SpAdditionalIncludeDirectories>
+    <SpAdditionalIncludeDirectories>$(MSBuildProjectDirectory)\..\..\..\..\test\fs</SpAdditionalIncludeDirectories>
     <SpAdditionalDependencies></SpAdditionalDependencies>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
