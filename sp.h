@@ -3019,11 +3019,6 @@ SP_API void              sp_tm_epoch_to_iso8601_w(sp_io_writer_t* io, sp_tm_epoc
 #define SP_FS_IT_BUF_SIZE SP_SYS_DIR_MIN_BUF
 
 typedef enum {
-  SP_FS_LINK_HARD,
-  SP_FS_LINK_SYMBOLIC,
-} sp_fs_link_kind_t;
-
-typedef enum {
   SP_FS_ATOMIC_REPLACE,
   SP_FS_ATOMIC_EXCLUSIVE,
 } sp_fs_atomic_mode_t;
@@ -3132,7 +3127,6 @@ SP_API sp_err_t             sp_fs_create_hard_link(sp_str_t target, sp_str_t lin
 SP_API sp_err_t             sp_fs_create_hard_link_at(sp_path_t target, sp_path_t link_path);
 SP_API sp_err_t             sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path);
 SP_API sp_err_t             sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path);
-SP_API sp_err_t             sp_fs_link(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind);
 SP_API sp_err_t             sp_fs_copy(sp_str_t from, sp_str_t to);
 SP_API sp_err_t             sp_fs_copy_into(sp_str_t from, sp_str_t dir);
 SP_API sp_err_t             sp_fs_copy_file(sp_str_t from, sp_str_t to, sp_fs_atomic_mode_t mode);
@@ -20161,14 +20155,6 @@ sp_err_t sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path) {
 
 sp_err_t sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path) {
   return sp_fs_create_sym_link_at(target, sp_path_at_root(link_path));
-}
-
-sp_err_t sp_fs_link(sp_str_t from, sp_str_t to, sp_fs_link_kind_t kind) {
-  switch (kind) {
-    case SP_FS_LINK_HARD:     return sp_fs_create_hard_link(from, to);
-    case SP_FS_LINK_SYMBOLIC: return sp_fs_create_sym_link(from, to);
-  }
-  SP_UNREACHABLE_RETURN(SP_OK);
 }
 
 sp_err_t sp_fs_remove_file_at(sp_path_t path) {
