@@ -225,7 +225,7 @@ sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
   sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
 
   sp_fs_atomic_t af = sp_zero;
-  sp_err_t err = drive(&af, sp_fs_atomic_open_at(&af, dir, sp_str_view(it->path)), it);
+  sp_err_t err = drive(&af, sp_fs_atomic_open_at(&af, (sp_path_t) { .dir = dir, .sub = sp_str_view(it->path) }), it);
   sp_sys_close(dir);
 
   sp_expect_err_eq(t, err, it->expect.err);
@@ -235,15 +235,17 @@ sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
 }
 
 sp_test_each(fs, atomic_staged, test_t, staged_tests) {
-  sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t path = sp_fs_join_path(mem, sandbox, sp_str_view(it->path));
-  sp_str_t staging = sp_fs_join_path(mem, sandbox, sp_str_lit("S"));
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
+
+  sp_path_t path = { .dir = dir, .sub = sp_str_view(it->path) };
 
   sp_fs_atomic_t af = sp_zero;
-  sp_err_t err = drive(&af, sp_fs_atomic_open_staged(&af, path, staging), it);
+  sp_err_t err = drive(&af, sp_fs_atomic_open_staged_at(&af, path, sp_str_lit("S")), it);
+  sp_sys_close(dir);
 
   sp_expect_err_eq(t, err, it->expect.err);
   fs_expect_paths(t, sandbox, it->expect.paths);
@@ -252,9 +254,13 @@ sp_test_each(fs, atomic_staged, test_t, staged_tests) {
 }
 
 sp_test(fs, atomic_staged_empty_staging_is_bug) {
-  sp_str_t path = sp_fs_join_path(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), &dir));
+
+  sp_path_t path = { .dir = dir, .sub = sp_str_lit("A") };
 
   sp_fs_atomic_t af = sp_zero;
-  sp_expect_err_eq(t, sp_fs_atomic_open_staged(&af, path, sp_str_lit("")), SP_ERR_SYS_BUG);
+  sp_expect_err_eq(t, sp_fs_atomic_open_staged_at(&af, path, sp_str_lit("")), SP_ERR_SYS_BUG);
+  sp_sys_close(dir);
   return SP_OK;
 }

@@ -124,22 +124,26 @@ sp_test_each(fs, links, test_t, tests) {
   sp_str_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t target = sp_fs_join_path(mem, sandbox, sp_str_view(it->target));
-  sp_str_t link = sp_fs_join_path(mem, sandbox, sp_str_view(it->link));
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
+
+  sp_path_t target = { .dir = dir, .sub = sp_str_view(it->target) };
+  sp_path_t link = { .dir = dir, .sub = sp_str_view(it->link) };
 
   sp_err_t result = it->symlink
-    ? sp_fs_create_sym_link(target, link)
-    : sp_fs_create_hard_link(target, link);
+    ? sp_fs_create_sym_link_at(sp_fs_join_path(mem, sandbox, target.sub), link)
+    : sp_fs_create_hard_link_at(target, link);
   sp_expect_err_eq(t, result, it->expect.err);
 
   // a hard link shares content with its target: rewrite the target through
   // one name, then the expected paths observe the update through the other
   if (it->rewrite) {
     sp_io_file_writer_t writer = sp_zero;
-    sp_io_file_writer_from_path(&writer, target);
+    sp_io_file_writer_from_path_at(&writer, target);
     sp_io_write_str(&writer.base, sp_str_view(it->rewrite), SP_NULLPTR);
     sp_io_file_writer_close(&writer);
   }
+  sp_sys_close(dir);
 
   fs_expect_paths(t, sandbox, it->expect.paths);
   return SP_OK;

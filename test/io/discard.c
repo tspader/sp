@@ -83,13 +83,13 @@ UTEST_F(io_discard, eof_with_final_bytes_is_ok) {
 UTEST_F(io, discard_file_skips_by_position) {
   {
     sp_io_file_writer_t w = sp_zero;
-    ASSERT_EQ(sp_io_file_writer_from_path(&w, ut.file_path), SP_OK);
+    ASSERT_EQ(sp_io_file_writer_from_path_at(&w, ut.file), SP_OK);
     sp_io_write(&w.base, "hello world", 11, SP_NULLPTR);
     sp_io_file_writer_close(&w);
   }
 
   sp_io_file_reader_t r = sp_zero;
-  ASSERT_EQ(sp_io_file_reader_from_path(&r, ut.file_path), SP_OK);
+  ASSERT_EQ(sp_io_file_reader_from_path_at(&r, ut.file), SP_OK);
 
   u64 discarded = 0;
   EXPECT_EQ(sp_io_discard(&r.base, 6, &discarded), SP_OK);

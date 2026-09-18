@@ -136,8 +136,12 @@ sp_test_each(fs, create_dir, test_t, tests) {
   sp_str_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t target = sp_fs_join_path(sp_test_arena(t), sandbox, sp_str_view(it->target));
-  sp_expect_err_eq(t, sp_fs_create_dir(target), it->expect.err);
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
+
+  sp_path_t target = { dir, sp_cstr_as_str(it->target) };
+  sp_expect_err_eq(t, sp_fs_create_dir_at(target), it->expect.err);
+  sp_sys_close(dir);
 
   fs_expect_paths(t, sandbox, it->expect.paths);
   return SP_OK;
