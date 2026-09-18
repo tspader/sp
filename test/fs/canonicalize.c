@@ -204,16 +204,17 @@ sp_test_each(fs, canonicalize, test_t, tests) {
   skip_if_symlinks_needed(t, it->setup);
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t input = sp_str_view(it->input);
-  if (it->setup[0].path) {
-    sp_str_t sandbox = sp_test_dir(t);
-    fs_apply_setup(t, sandbox, it->setup);
-    input = sp_fs_join_path(mem, sandbox, input);
-  }
+  sp_str_t sandbox = sp_test_dir(t);
+  fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t result = sp_fs_canonicalize_path(mem, input);
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
+
+  sp_path_t input = { .dir = dir, .sub = sp_str_view(it->input) };
+  sp_str_t result = sp_fs_canonicalize_path_at(mem, input);
 
   if (it->expect.empty) {
+    sp_sys_close(dir);
     if (result.len != 0) sp_test_fail(t, "expected empty, got {}", sp_fmt_str(result));
     return SP_OK;
   }
@@ -232,12 +233,14 @@ sp_test_each(fs, canonicalize, test_t, tests) {
     sp_expect(t, sp_fs_exists(result));
   }
   if (it->expect.idempotent) {
-    sp_expect_str_eq(t, sp_fs_canonicalize_path(mem, result), result);
+    sp_path_t again = { .dir = dir, .sub = result };
+    sp_expect_str_eq(t, sp_fs_canonicalize_path_at(mem, again), result);
   }
   if (it->expect.same_as) {
-    sp_str_t other = sp_fs_join_path(mem, sp_test_dir(t), sp_str_view(it->expect.same_as));
-    sp_expect_str_eq(t, result, sp_fs_canonicalize_path(mem, other));
+    sp_path_t other = { .dir = dir, .sub = sp_str_view(it->expect.same_as) };
+    sp_expect_str_eq(t, result, sp_fs_canonicalize_path_at(mem, other));
   }
+  sp_sys_close(dir);
   return SP_OK;
 }
 

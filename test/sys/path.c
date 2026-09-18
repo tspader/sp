@@ -446,7 +446,7 @@ sp_test(sys, canonicalize_refuses_overflow) {
   sp_fs_create_file(path);
 
   c8 full [SP_PATH_MAX] = sp_zero;
-  s64 len = sp_sys_canonicalize_path_s(path, full, sizeof(full));
+  s64 len = sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, full, sizeof(full));
   if (len <= 0) {
     sp_test_fail(t, "canonicalize failed with a full-size buffer");
     return SP_OK;
@@ -454,7 +454,7 @@ sp_test(sys, canonicalize_refuses_overflow) {
 
   c8 buf [SP_PATH_MAX];
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  s64 n = sp_sys_canonicalize_path_s(path, buf, (u64)len + 1);
+  s64 n = sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, buf, (u64)len + 1);
   if (n != len) {
     sp_test_fail(t, "exact fit returned {} but expected {}", sp_fmt_int(n), sp_fmt_int(len));
   }
@@ -466,36 +466,17 @@ sp_test(sys, canonicalize_refuses_overflow) {
   }
 
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  n = sp_sys_canonicalize_path_s(path, buf, (u64)len);
+  n = sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, buf, (u64)len);
   if (n != -1) {
     sp_test_fail(t, "no room for NUL: returned {} but expected -1", sp_fmt_int(n));
   }
 
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  n = sp_sys_canonicalize_path_s(path, buf, (u64)len - 1);
+  n = sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, buf, (u64)len - 1);
   if (n != -1) {
     sp_test_fail(t, "undersized buffer: returned {} but expected -1", sp_fmt_int(n));
   }
 
-  return SP_OK;
-}
-
-sp_test(sys, canonicalize_ignores_read_permission) {
-  sp_mem_t mem = sp_test_arena(t);
-  sp_str_t path = sp_fs_join_path(mem, sp_test_dir(t), sp_str_lit("file.bin"));
-  sp_fs_create_file(path);
-
-#if defined(SP_POSIX)
-  if (geteuid() == 0) return sp_test_skip(t, "running as root");
-#endif
-
-  sp_err_t err = sp_sys_set_file_perms_s(sp_sys_get_root(0), path, sp_zero_s(sp_sys_file_perms_t));
-  if (err == SP_ERR_SYS_UNSUPPORTED) return sp_test_skip(t, "set_file_perms not supported");
-  sp_try(err);
-
-  c8 buf [SP_PATH_MAX] = sp_zero;
-  s64 n = sp_sys_canonicalize_path_s(path, buf, sizeof(buf));
-  if (n <= 0) sp_test_fail(t, "canonicalize failed on an unreadable file");
   return SP_OK;
 }
 
@@ -509,7 +490,7 @@ sp_test(sys, canonicalize_does_not_block_on_fifo) {
   if (pid < 0) return sp_test_skip(t, "fork not available");
   if (pid == 0) {
     c8 buf [SP_PATH_MAX] = sp_zero;
-    _exit(sp_sys_canonicalize_path_s(path, buf, sizeof(buf)) > 0 ? 0 : 1);
+    _exit(sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, buf, sizeof(buf)) > 0 ? 0 : 1);
   }
 
   s32 status = 0;

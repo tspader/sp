@@ -534,20 +534,23 @@ static const test_t tests [] = {
 sp_test_each(fs, copy, test_t, tests) {
   skip_if_symlinks_needed(t, it->setup);
 
-  sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t src = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(it->src));
-  sp_str_t dst = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(it->dst));
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
+
+  sp_path_t src = { .dir = dir, .sub = sp_cstr_as_str(it->src) };
+  sp_path_t dst = { .dir = dir, .sub = sp_cstr_as_str(it->dst) };
 
   sp_err_t result = SP_OK;
   switch (it->op) {
-    case OP_COPY_FILE: result = sp_fs_copy_file(src, dst, it->mode); break;
-    case OP_COPY_TREE: result = sp_fs_copy_tree(src, dst, it->mode); break;
-    case OP_COPY:      result = sp_fs_copy(src, dst); break;
-    case OP_COPY_INTO: result = sp_fs_copy_into(src, dst); break;
+    case OP_COPY_FILE: result = sp_fs_copy_file_at(src, dst, it->mode); break;
+    case OP_COPY_TREE: result = sp_fs_copy_tree_at(src, dst, it->mode); break;
+    case OP_COPY:      result = sp_fs_copy_at(src, dst); break;
+    case OP_COPY_INTO: result = sp_fs_copy_into_at(src, dst); break;
   }
+  sp_sys_close(dir);
   sp_expect_err_eq(t, result, it->err);
 
   fs_expect_paths(t, sandbox, it->expect);
@@ -569,18 +572,22 @@ static const size_test_t sizes [] = {
 
 sp_test_each(fs, copy_size, size_test_t, sizes) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t from = fs_path_c(t, "A");
-  sp_str_t to = fs_path_c(t, "B");
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), &dir));
+
+  sp_path_t from = { .dir = dir, .sub = sp_str_lit("A") };
+  sp_path_t to = { .dir = dir, .sub = sp_str_lit("B") };
 
   u8* data = sp_alloc_n(mem, u8, it->size);
   sp_for(i, it->size) {
     data[i] = (u8)(i * 31 + 7);
   }
-  sp_must_ok(t, sp_fs_create_file_slice(from, sp_mem_slice(data, it->size)));
-  sp_must_ok(t, sp_fs_copy_file(from, to, SP_FS_ATOMIC_REPLACE));
+  sp_must_ok(t, sp_fs_create_file_slice_at(from, sp_mem_slice(data, it->size)));
+  sp_must_ok(t, sp_fs_copy_file_at(from, to, SP_FS_ATOMIC_REPLACE));
 
   sp_str_t copied = sp_zero;
-  sp_must_ok(t, sp_io_read_file(mem, to, &copied));
+  sp_must_ok(t, sp_io_read_file_at(mem, to, &copied));
+  sp_sys_close(dir);
   sp_must_eq(t, copied.len, it->size);
   sp_expect_mem_eq(t, copied.data, data, it->size);
   return SP_OK;

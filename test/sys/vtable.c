@@ -139,7 +139,7 @@ static void mock_futex_wake_all(u32* addr) {
   recorded = 69;
 }
 
-static s64 mock_canonicalize_path(const c8* path, u32 len, c8* buf, u64 size) {
+static s64 mock_canonicalize_path(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size) {
   return 69;
 }
 
@@ -513,7 +513,7 @@ static s64 call_futex_wake_all(void) {
 }
 
 static s64 call_canonicalize_path(void) {
-  return sp_sys_canonicalize_path(SP_NULLPTR, 0, SP_NULLPTR, 0);
+  return sp_sys_canonicalize_path(0, SP_NULLPTR, 0, SP_NULLPTR, 0);
 }
 
 static s64 call_event_open(void) {
