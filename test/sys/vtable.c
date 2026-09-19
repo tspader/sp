@@ -53,6 +53,10 @@ static s64 mock_get_config_path(c8* buf, u64 size) {
   return 69;
 }
 
+static s64 mock_get_fd_path(sp_sys_fd_t fd, c8* buf, u64 size) {
+  return 69;
+}
+
 static sp_err_t mock_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
   *out = 69;
   return (sp_err_t)69;
@@ -311,6 +315,7 @@ static const sp_sys_vtable_t mock = {
   .get_cwd_path           = mock_get_cwd_path,
   .get_storage_path       = mock_get_storage_path,
   .get_config_path        = mock_get_config_path,
+  .get_fd_path            = mock_get_fd_path,
   .open                   = mock_open,
   .open_dir               = mock_open_dir,
   .close                  = mock_close,
@@ -416,6 +421,10 @@ static s64 call_get_storage_path(void) {
 
 static s64 call_get_config_path(void) {
   return sp_sys_get_config_path(SP_NULLPTR, 0);
+}
+
+static s64 call_get_fd_path(void) {
+  return sp_sys_get_fd_path(0, SP_NULLPTR, 0);
 }
 
 static s64 call_open(void) {
@@ -694,6 +703,7 @@ static const test_t tests [] = {
   { "get_cwd_path", call_get_cwd_path, 69 },
   { "get_storage_path", call_get_storage_path, 69 },
   { "get_config_path", call_get_config_path, 69 },
+  { "get_fd_path", call_get_fd_path, 69 },
   { "open", call_open, 69 },
   { "open_dir", call_open_dir, 69 },
   { "close", call_close, 69 },
