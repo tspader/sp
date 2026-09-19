@@ -143,10 +143,6 @@ static void mock_futex_wake_all(u32* addr) {
   recorded = 69;
 }
 
-static s64 mock_canonicalize_path(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size) {
-  return 69;
-}
-
 static sp_err_t mock_event_open(sp_sys_event_t* out) {
   return (sp_err_t)69;
 }
@@ -337,7 +333,6 @@ static const sp_sys_vtable_t mock = {
   .futex_wait             = mock_futex_wait,
   .futex_wake             = mock_futex_wake,
   .futex_wake_all         = mock_futex_wake_all,
-  .canonicalize_path      = mock_canonicalize_path,
   .event_open             = mock_event_open,
   .event_signal           = mock_event_signal,
   .event_clear            = mock_event_clear,
@@ -519,10 +514,6 @@ static s64 call_futex_wake_all(void) {
   recorded = 0;
   sp_sys_futex_wake_all(SP_NULLPTR);
   return recorded;
-}
-
-static s64 call_canonicalize_path(void) {
-  return sp_sys_canonicalize_path(0, SP_NULLPTR, 0, SP_NULLPTR, 0);
 }
 
 static s64 call_event_open(void) {
@@ -725,7 +716,6 @@ static const test_t tests [] = {
   { "futex_wait", call_futex_wait, 1 },
   { "futex_wake", call_futex_wake, 69 },
   { "futex_wake_all", call_futex_wake_all, 69 },
-  { "canonicalize_path", call_canonicalize_path, 69 },
   { "event_open", call_event_open, 69 },
   { "event_signal", call_event_signal, 69 },
   { "event_clear", call_event_clear, 69 },

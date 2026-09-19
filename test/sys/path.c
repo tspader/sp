@@ -440,21 +440,25 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 sp_test_each_fn(sys, path, test_t, tests, run);
 sp_test_each_fn(sys, slash, test_t, slash_tests, run);
 
-sp_test(sys, canonicalize_refuses_overflow) {
+sp_test(sys, get_fd_path_refuses_overflow) {
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t path = sp_fs_join_path(mem, sp_test_dir(t), sp_str_lit("file.bin"));
   sp_fs_create_file(path);
 
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_PATH, 0, &fd));
+
   c8 full [SP_PATH_MAX] = sp_zero;
-  s64 len = sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, full, sizeof(full));
+  s64 len = sp_sys_get_fd_path(fd, full, sizeof(full));
   if (len <= 0) {
-    sp_test_fail(t, "canonicalize failed with a full-size buffer");
+    sp_sys_close(fd);
+    sp_test_fail(t, "get_fd_path failed with a full-size buffer");
     return SP_OK;
   }
 
   c8 buf [SP_PATH_MAX];
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  s64 n = sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, buf, (u64)len + 1);
+  s64 n = sp_sys_get_fd_path(fd, buf, (u64)len + 1);
   if (n != len) {
     sp_test_fail(t, "exact fit returned {} but expected {}", sp_fmt_int(n), sp_fmt_int(len));
   }
@@ -466,49 +470,17 @@ sp_test(sys, canonicalize_refuses_overflow) {
   }
 
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  n = sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, buf, (u64)len);
+  n = sp_sys_get_fd_path(fd, buf, (u64)len);
   if (n != -1) {
     sp_test_fail(t, "no room for NUL: returned {} but expected -1", sp_fmt_int(n));
   }
 
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  n = sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, buf, (u64)len - 1);
+  n = sp_sys_get_fd_path(fd, buf, (u64)len - 1);
   if (n != -1) {
     sp_test_fail(t, "undersized buffer: returned {} but expected -1", sp_fmt_int(n));
   }
 
+  sp_sys_close(fd);
   return SP_OK;
-}
-
-sp_test(sys, canonicalize_does_not_block_on_fifo) {
-#if defined(SP_POSIX)
-  sp_mem_t mem = sp_test_arena(t);
-  sp_str_t path = sp_fs_join_path(mem, sp_test_dir(t), sp_str_lit("fifo"));
-  if (mkfifo(sp_str_to_cstr(mem, path), 0644)) return sp_test_skip(t, "fifos not available");
-
-  pid_t pid = fork();
-  if (pid < 0) return sp_test_skip(t, "fork not available");
-  if (pid == 0) {
-    c8 buf [SP_PATH_MAX] = sp_zero;
-    _exit(sp_sys_canonicalize_path_s(sp_sys_get_root(0), path, buf, sizeof(buf)) > 0 ? 0 : 1);
-  }
-
-  s32 status = 0;
-  sp_for(it, 100) {
-    if (waitpid(pid, &status, WNOHANG) == pid) {
-      if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        sp_test_fail(t, "canonicalize failed on a fifo");
-      }
-      return SP_OK;
-    }
-    sp_os_sleep_ms(5);
-  }
-
-  sp_test_fail(t, "canonicalize blocked on a fifo with no writer");
-  kill(pid, SIGKILL);
-  waitpid(pid, &status, 0);
-  return SP_OK;
-#else
-  return sp_test_skip(t, "no fifos");
-#endif
 }

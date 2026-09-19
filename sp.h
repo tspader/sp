@@ -1403,6 +1403,7 @@ typedef enum {
   SP_SYS_OPEN_MODE_RO,
   SP_SYS_OPEN_MODE_WO,
   SP_SYS_OPEN_MODE_RW,
+  SP_SYS_OPEN_MODE_PATH,
 } sp_sys_open_mode_t;
 
 typedef enum {
@@ -1476,7 +1477,6 @@ SP_API sp_err_t    sp_sys_nanosleep(const sp_sys_timespec_t* req, sp_sys_timespe
 SP_API bool        sp_sys_futex_wait(u32* addr, u32 expected, const sp_sys_timespec_t* timeout);
 SP_API void        sp_sys_futex_wake(u32* addr);
 SP_API void        sp_sys_futex_wake_all(u32* addr);
-SP_API s64         sp_sys_canonicalize_path(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_event_open(sp_sys_event_t* out);
 SP_API sp_err_t    sp_sys_event_signal(sp_sys_event_t event);
 SP_API sp_err_t    sp_sys_event_clear(sp_sys_event_t event);
@@ -1529,7 +1529,6 @@ SP_API sp_err_t    sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str
 SP_API sp_err_t    sp_sys_readlink_s(sp_sys_fd_t fd, sp_str_t path, c8* buf, u64 size, sp_str_t* target);
 SP_API sp_err_t    sp_sys_set_file_perms_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_set_times_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
-SP_API s64         sp_sys_canonicalize_path_s(sp_sys_fd_t fd, sp_str_t path, c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_dir_from_fd(sp_sys_fd_t fd, sp_sys_dir_t* out);
 SP_API sp_err_t    sp_sys_dir_read(sp_sys_dir_t* dir, sp_mem_buffer_t* buf);
 SP_API sp_err_t    sp_sys_dir_parse(sp_sys_dir_t* dir, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out);
@@ -1577,7 +1576,6 @@ typedef struct {
   bool        (*futex_wait)(u32* addr, u32 expected, const sp_sys_timespec_t* timeout);
   void        (*futex_wake)(u32* addr);
   void        (*futex_wake_all)(u32* addr);
-  s64         (*canonicalize_path)(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size);
   sp_err_t    (*event_open)(sp_sys_event_t* out);
   sp_err_t    (*event_signal)(sp_sys_event_t event);
   sp_err_t    (*event_clear)(sp_sys_event_t event);
@@ -1653,7 +1651,6 @@ SP_API sp_err_t    sp_sys_nanosleep_p(const sp_sys_timespec_t* req, sp_sys_times
 SP_API bool        sp_sys_futex_wait_p(u32* addr, u32 expected, const sp_sys_timespec_t* timeout);
 SP_API void        sp_sys_futex_wake_p(u32* addr);
 SP_API void        sp_sys_futex_wake_all_p(u32* addr);
-SP_API s64         sp_sys_canonicalize_path_p(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_event_open_p(sp_sys_event_t* out);
 SP_API sp_err_t    sp_sys_event_signal_p(sp_sys_event_t event);
 SP_API sp_err_t    sp_sys_event_clear_p(sp_sys_event_t event);
@@ -5722,7 +5719,6 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .futex_wait             = sp_sys_futex_wait_p,
   .futex_wake             = sp_sys_futex_wake_p,
   .futex_wake_all         = sp_sys_futex_wake_all_p,
-  .canonicalize_path      = sp_sys_canonicalize_path_p,
   .event_open             = sp_sys_event_open_p,
   .event_signal           = sp_sys_event_signal_p,
   .event_clear            = sp_sys_event_clear_p,
@@ -5976,10 +5972,6 @@ void sp_sys_futex_wake(u32* addr) {
 
 void sp_sys_futex_wake_all(u32* addr) {
   (sp_rt.vt->futex_wake_all)(addr);
-}
-
-s64 sp_sys_canonicalize_path(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size) {
-  return (sp_rt.vt->canonicalize_path)(fd, path, len, buf, size);
 }
 
 sp_err_t sp_sys_event_open(sp_sys_event_t* out) {
@@ -8270,6 +8262,7 @@ SP_PRIVATE u32 sp_sys_nt_access_from_mode(sp_sys_open_mode_t mode, u32 flags) {
     case SP_SYS_OPEN_MODE_RO: { access |= read; break; }
     case SP_SYS_OPEN_MODE_WO: { access |= write; break; }
     case SP_SYS_OPEN_MODE_RW: { access |= read | write; break; }
+    case SP_SYS_OPEN_MODE_PATH: { break; }
   }
   return access;
 }
@@ -8289,6 +8282,7 @@ SP_PRIVATE u32 sp_sys_linux_open_flags(sp_sys_open_mode_t mode, u32 flags) {
     case SP_SYS_OPEN_MODE_RO: { o |= SP_SYS_LINUX_O_RDONLY; break; }
     case SP_SYS_OPEN_MODE_WO: { o |= SP_SYS_LINUX_O_WRONLY; break; }
     case SP_SYS_OPEN_MODE_RW: { o |= SP_SYS_LINUX_O_RDWR; break; }
+    case SP_SYS_OPEN_MODE_PATH: { o |= SP_SYS_LINUX_O_PATH; break; }
   }
   if (flags & (SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE)) o |= SP_SYS_LINUX_O_CREAT;
   if (flags & SP_SYS_OPEN_EXCLUSIVE) o |= SP_SYS_LINUX_O_EXCL;
@@ -8304,6 +8298,7 @@ SP_PRIVATE s32 sp_sys_posix_open_flags(sp_sys_open_mode_t mode, u32 flags) {
     case SP_SYS_OPEN_MODE_RO: { o |= O_RDONLY; break; }
     case SP_SYS_OPEN_MODE_WO: { o |= O_WRONLY; break; }
     case SP_SYS_OPEN_MODE_RW: { o |= O_RDWR; break; }
+    case SP_SYS_OPEN_MODE_PATH: { o |= O_RDONLY | O_NONBLOCK; break; }
   }
   if (flags & (SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE)) o |= O_CREAT;
   if (flags & SP_SYS_OPEN_EXCLUSIVE) o |= O_EXCL;
@@ -8318,15 +8313,17 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   *out = SP_SYS_INVALID_FD;
 
   if (flags & SP_SYS_OPEN_TRUNCATE) {
-    if (mode == SP_SYS_OPEN_MODE_RO)  return SP_ERR_SYS_INVALID;
-    if (flags & SP_SYS_OPEN_APPEND)   return SP_ERR_SYS_INVALID;
+    if (mode == SP_SYS_OPEN_MODE_RO)   return SP_ERR_SYS_INVALID;
+    if (mode == SP_SYS_OPEN_MODE_PATH) return SP_ERR_SYS_INVALID;
+    if (flags & SP_SYS_OPEN_APPEND)    return SP_ERR_SYS_INVALID;
   }
 
 #if defined(SP_WIN32)
   u32 access = sp_sys_nt_access_from_mode(mode, flags);
   u32 share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
   u32 disposition = sp_sys_nt_disposition_from_flags(flags);
-  u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT | SP_NT_FILE_NON_DIRECTORY_FILE;
+  u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT;
+  if (mode != SP_SYS_OPEN_MODE_PATH) options |= SP_NT_FILE_NON_DIRECTORY_FILE;
   if (flags & SP_SYS_OPEN_EXCLUSIVE) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
 
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
@@ -10787,9 +10784,9 @@ sp_err_t sp_sys_set_times_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_timespec_t ati
   return sp_sys_set_times(fd, path.data, path.len, atime, mtime);
 }
 
-///////////////////////////////
-// SP_SYS_CANONICALIZE_PATH //
-///////////////////////////////
+////////////////////////
+// SP_SYS_GET_FD_PATH //
+////////////////////////
 s64 sp_sys_get_fd_path_p(sp_sys_fd_t fd, c8* buf, u64 size) {
 #if defined(SP_WIN32)
   if (!buf) return -1;
@@ -10836,61 +10833,6 @@ s64 sp_sys_get_fd_path_p(sp_sys_fd_t fd, c8* buf, u64 size) {
 #endif
 }
 
-s64 sp_sys_canonicalize_path_p(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size) {
-#if defined(SP_WIN32)
-  sp_sys_fd_t handle = SP_SYS_INVALID_FD;
-  if (!SP_NT_SUCCESS(sp_sys_nt_open(
-    fd,
-    sp_str(path, len),
-    FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-    SP_NT_FILE_OPEN,
-    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT,
-    0,
-    &handle
-  ))) {
-    return -1;
-  }
-
-  s64 n = sp_sys_get_fd_path(handle, buf, size);
-  sp_sys_nt_close(handle);
-  return n;
-
-#elif defined(SP_LINUX)
-  c8 pbuf [SP_PATH_MAX];
-  sp_try_as(sp_sys_posix_path(path, len, pbuf), -1);
-  s64 file = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, pbuf, SP_SYS_LINUX_O_PATH | SP_SYS_LINUX_O_CLOEXEC, 0);
-  if (file < 0) return -1;
-
-  s64 n = sp_sys_get_fd_path((sp_sys_fd_t)file, buf, size);
-  sp_sys_close((sp_sys_fd_t)file);
-  return n;
-
-#elif defined(SP_MACOS) || defined(SP_COSMO)
-  if (!path) return -1;
-  c8 pbuf [SP_PATH_MAX];
-  sp_try_as(sp_sys_posix_path(path, len, pbuf), -1);
-
-  s32 file = openat((s32)fd, pbuf, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-  if (file < 0) return -1;
-
-  s64 n = sp_sys_get_fd_path(file, buf, size);
-  sp_sys_close(file);
-  return n;
-
-#elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)buf; (void)size;
-  return -1;
-
-#else
-  #error "sp_sys_canonicalize_path"
-#endif
-}
-
-s64 sp_sys_canonicalize_path_s(sp_sys_fd_t fd, sp_str_t path, c8* buf, u64 size) {
-  return sp_sys_canonicalize_path(fd, path.data, path.len, buf, size);
-}
-
 /////////////////////////
 // SP_SYS_GET_EXE_PATH //
 /////////////////////////
@@ -10919,12 +10861,26 @@ s64 sp_sys_get_exe_path_p(c8* buf, u64 size) {
   c8 raw[4096];
   u32 raw_size = sizeof(raw);
   if (_NSGetExecutablePath(raw, &raw_size)) return -1;
-  return sp_sys_canonicalize_path(sp_sys_get_root(0), raw, sp_cstr_len(raw), buf, size);
+
+  c8 resolved [SP_PATH_MAX];
+  if (!realpath(raw, resolved)) return -1;
+  u64 n = sp_cstr_len(resolved);
+  if (n >= size) return -1;
+  sp_mem_copy(buf, resolved, n);
+  buf[n] = 0;
+  return (s64)n;
 
 #elif defined(SP_COSMO)
   if (!buf || size == 0) return -1;
   extern char* program_invocation_name;
-  return sp_sys_canonicalize_path(sp_sys_get_root(0), program_invocation_name, sp_cstr_len(program_invocation_name), buf, size);
+
+  c8 resolved [SP_PATH_MAX];
+  if (!realpath(program_invocation_name, resolved)) return -1;
+  u64 n = sp_cstr_len(resolved);
+  if (n >= size) return -1;
+  sp_mem_copy(buf, resolved, n);
+  buf[n] = 0;
+  return (s64)n;
 
 #elif defined(SP_WASM)
   (void)buf; (void)size;
@@ -20007,14 +19963,22 @@ sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t path) {
   return sp_fs_get_mod_time_at(sp_path_at_root(path));
 }
 
-sp_str_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path) {
+SP_PRIVATE sp_str_t sp_fs_canonicalize_to(sp_path_t path, c8 buf [SP_PATH_MAX]) {
   if (sp_str_empty(path.sub)) return sp_zero_s(sp_str_t);
 
-  c8 buf[SP_PATH_MAX];
-  s64 len = sp_sys_canonicalize_path_s(path.dir, path.sub, buf, SP_PATH_MAX);
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  if (sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_PATH, 0, &fd)) return sp_zero_s(sp_str_t);
+
+  s64 len = sp_sys_get_fd_path(fd, buf, SP_PATH_MAX);
+  sp_sys_close(fd);
   if (len <= 0) return sp_zero_s(sp_str_t);
 
-  return sp_str_copy(mem, sp_str(buf, len));
+  return sp_str(buf, len);
+}
+
+sp_str_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path) {
+  c8 buf [SP_PATH_MAX];
+  return sp_str_copy(mem, sp_fs_canonicalize_to(path, buf));
 }
 
 sp_str_t sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path) {
@@ -20603,15 +20567,10 @@ SP_PRIVATE bool sp_fs_path_within(sp_str_t path, sp_str_t root) {
 SP_PRIVATE bool sp_fs_tree_contains_at(sp_path_t from, sp_path_t to) {
   c8 root_buf [SP_PATH_MAX];
   c8 nearest_buf [SP_PATH_MAX];
-  sp_str_t root = sp_zero;
+  sp_str_t root = sp_fs_canonicalize_to(from, root_buf);
   sp_str_t nearest = sp_zero;
-
-  s64 len = sp_sys_canonicalize_path_s(from.dir, from.sub, root_buf, SP_PATH_MAX);
-  if (len > 0) root = sp_str(root_buf, len);
-
   while (sp_str_empty(nearest) && !sp_str_empty(to.sub) && !sp_fs_is_root(to.sub)) {
-    len = sp_sys_canonicalize_path_s(to.dir, to.sub, nearest_buf, SP_PATH_MAX);
-    if (len > 0) nearest = sp_str(nearest_buf, len);
+    nearest = sp_fs_canonicalize_to(to, nearest_buf);
     to.sub = sp_fs_parent_path(to.sub);
   }
   return sp_fs_path_within(nearest, root);
