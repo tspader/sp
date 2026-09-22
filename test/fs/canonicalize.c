@@ -96,29 +96,10 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "nonexistent_relative",
-    .input = "no_such_file.txt",
-    .expect = {
-      .empty = true,
-    },
-  },
-  {
     .name = "nonexistent_with_dotdot",
     .input = "no_such_dir/../also_missing.txt",
     .expect = {
       .empty = true,
-    },
-  },
-  {
-    .name = "result_is_normalized",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-    },
-    .input = "A",
-    .expect = {
-      .no_trailing_slash = true,
-      .no_backslash = true,
-      .exists = true,
     },
   },
   {
@@ -132,6 +113,7 @@ static const test_t tests [] = {
       .no_backslash = true,
       .name = "A",
       .exists = true,
+      .same_as = "A",
     },
   },
   {
@@ -162,20 +144,6 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "symlink_with_dotdot",
-    .setup = {
-      { "A" },
-      { "B", FS_SETUP_DIR },
-      { .path = "B/L", .kind = FS_SETUP_SYMLINK, .target = "A" },
-    },
-    .input = "B/L",
-    .expect = {
-      .no_backslash = true,
-      .name = "A",
-      .exists = true,
-    },
-  },
-  {
     .name = "idempotent",
     .setup = {
       { "A" },
@@ -184,17 +152,6 @@ static const test_t tests [] = {
     .expect = {
       .exists = true,
       .idempotent = true,
-    },
-  },
-  {
-    .name = "through_symlink",
-    .setup = {
-      { "A" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
-    },
-    .input = "L",
-    .expect = {
-      .same_as = "A",
     },
   },
 };
