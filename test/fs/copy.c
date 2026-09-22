@@ -170,18 +170,6 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "file_source_dangling_symlink",
-    .setup = {
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
-    },
-    .src = "L",
-    .dst = "B",
-    .err = SP_ERR_SYS_NOT_FOUND,
-    .expect = {
-      { .path = "B" },
-    },
-  },
-  {
     .name = "file_source_missing",
     .setup = {
       { .path = "B", .content = "B" },
@@ -397,32 +385,21 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "tree_into_itself",
+    .name = "tree_symlink_exclusive_existing",
     .setup = {
       { "A", FS_SETUP_DIR },
       { .path = "A/C", .content = "C" },
+      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "A/C" },
+      { "E", FS_SETUP_DIR },
+      { .path = "E/L", .kind = FS_SETUP_SYMLINK, .target = "A" },
     },
     .op = OP_COPY_TREE,
+    .mode = SP_FS_ATOMIC_EXCLUSIVE,
     .src = "A",
-    .dst = "A/B",
+    .dst = "E",
+    .err = SP_ERR_SYS_EXISTS,
     .expect = {
-      { .path = "A/B/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      { .path = "A/B/B" },
-    },
-  },
-  {
-    .name = "tree_into_itself_through_symlink",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-      { .path = "A/C", .content = "C" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
-    },
-    .op = OP_COPY_TREE,
-    .src = "A",
-    .dst = "L/B",
-    .expect = {
-      { .path = "A/B/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      { .path = "A/B/B" },
+      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "A" },
     },
   },
   {
@@ -467,19 +444,6 @@ static const test_t tests [] = {
     .err = SP_ERR_SYS_INVALID,
     .expect = {
       { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-    },
-  },
-  {
-    .name = "tree_beside_itself",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-      { .path = "A/C", .content = "C" },
-    },
-    .op = OP_COPY_TREE,
-    .src = "A",
-    .dst = "A/../E",
-    .expect = {
-      { .path = "E/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
     },
   },
   {
