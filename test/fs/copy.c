@@ -202,7 +202,12 @@ static const test_t tests [] = {
     },
     .src = "A",
     .dst = "P/B",
+    // a file in the parent chain: POSIX reports ENOTDIR, NT reports PATH_NOT_FOUND
+#if defined(SP_WIN32)
+    .err = SP_ERR_SYS_NOT_FOUND,
+#else
     .err = SP_ERR_SYS_NOT_DIR,
+#endif
     .expect = {
       { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
       { .path = "P", .exists = true, .kind = SP_FS_KIND_FILE, .content = "P" },
@@ -376,8 +381,8 @@ static const test_t tests [] = {
       { "A", FS_SETUP_DIR },
       { .path = "A/C", .content = "C" },
       { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "A/C" },
-      { "E", FS_SETUP_DIR },
-      { .path = "E/L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "E/F", .content = "F" },
+      { .path = "E/L", .kind = FS_SETUP_SYMLINK, .target = "E/F" },
     },
     .op = OP_COPY_TREE,
     .mode = SP_FS_ATOMIC_EXCLUSIVE,
@@ -385,7 +390,7 @@ static const test_t tests [] = {
     .dst = "E",
     .err = SP_ERR_SYS_EXISTS,
     .expect = {
-      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "A" },
+      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "E/F" },
     },
   },
   {
