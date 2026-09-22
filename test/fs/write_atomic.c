@@ -35,6 +35,17 @@ static const test_t tests [] = {
     },
   },
   {
+    .name = "missing_parent",
+    .path = "D/A",
+    .content = "A",
+    .expect = {
+      .err = SP_ERR_SYS_NOT_FOUND,
+      .paths = {
+        { .path = "D" },
+      },
+    },
+  },
+  {
     .name = "replace_existing",
     .setup = {
       { .path = "A", .content = "old" },
