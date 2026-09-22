@@ -15,7 +15,7 @@ typedef struct {
 
 typedef struct {
   const c8* path;
-  sp_err_t from_fd;
+  sp_err_t it_open;
   sp_err_t read;
   sim_entry_t entries [SIM_MAX_ENTRIES];
 } sim_dir_t;

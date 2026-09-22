@@ -51,24 +51,25 @@ static sp_err_t close_fd(sp_sys_fd_t fd) {
   return SP_OK;
 }
 
-static sp_err_t dir_from_fd(sp_sys_fd_t fd, sp_sys_dir_t* out) {
-  s64 handle = (s64)fd - FD_BASE;
-  if (active->opened[handle].dir->from_fd) return active->opened[handle].dir->from_fd;
-  *out = sp_zero_s(sp_sys_dir_t);
-  out->handle = handle;
+static sp_err_t dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
+  s64 slot = (s64)fd - FD_BASE;
+  if (active->opened[slot].dir->it_open) return active->opened[slot].dir->it_open;
+  *out = sp_zero_s(sp_sys_dir_it_t);
+  out->fd = fd;
+  out->state = slot;
   return SP_OK;
 }
 
-static sp_err_t dir_read(sp_sys_dir_t* dir, sp_mem_buffer_t* buf) {
-  sim_open_t* slot = &active->opened[dir->handle];
+static sp_err_t dir_it_read(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
+  sim_open_t* slot = &active->opened[it->state];
   if (slot->dir->read) return slot->dir->read;
   buf->len = slot->served ? 0 : dir_len(slot->dir);
   slot->served = true;
   return SP_OK;
 }
 
-static sp_err_t dir_parse(sp_sys_dir_t* dir, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out) {
-  const sim_entry_t* entry = &active->opened[dir->handle].dir->entries[*cursor];
+static sp_err_t dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out) {
+  const sim_entry_t* entry = &active->opened[it->state].dir->entries[*cursor];
   *cursor += 1;
 
   *out = sp_zero_s(sp_sys_dir_entry_t);
@@ -78,7 +79,7 @@ static sp_err_t dir_parse(sp_sys_dir_t* dir, sp_mem_buffer_t* buf, u64* cursor, 
   return SP_OK;
 }
 
-static sp_err_t dir_close(sp_sys_dir_t* dir) {
+static sp_err_t dir_it_close(sp_sys_dir_it_t* it) {
   active->count.closes++;
   return SP_OK;
 }
@@ -95,10 +96,10 @@ void sim_begin(sim_t* sim, const sim_dir_t* dirs) {
   *sim = (sim_t) { .dirs = dirs, .vt = sp_sys_vtable_platform };
   sim->vt.open_dir = open_dir;
   sim->vt.close = close_fd;
-  sim->vt.dir_from_fd = dir_from_fd;
-  sim->vt.dir_read = dir_read;
-  sim->vt.dir_parse = dir_parse;
-  sim->vt.dir_close = dir_close;
+  sim->vt.dir_it_open = dir_it_open;
+  sim->vt.dir_it_read = dir_it_read;
+  sim->vt.dir_it_parse = dir_it_parse;
+  sim->vt.dir_it_close = dir_it_close;
   sim->vt.get_link_metadata = get_link_metadata;
   sim->saved = sp_sys_set_vtable(&sim->vt);
   active = sim;

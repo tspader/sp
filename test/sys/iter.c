@@ -115,7 +115,7 @@ sp_test_each(sys, iter, sys_iter_case_t, sys_iter_cases) {
   };
   buf.len = sys_iter_pack(raw, it->raw);
 
-  sp_sys_dir_t dir = sp_zero;
+  sp_sys_dir_it_t dir = sp_zero;
   u64 cursor = 0;
 
   sp_carr_for(it->raw, n) {
@@ -129,7 +129,7 @@ sp_test_each(sys, iter, sys_iter_case_t, sys_iter_cases) {
     sp_test_kv_c(t, "entry", it->raw[n].name);
 
     sp_sys_dir_entry_t entry = sp_zero;
-    sp_must_ok(t, sp_sys_dir_parse(&dir, &buf, &cursor, &entry));
+    sp_must_ok(t, sp_sys_dir_it_parse(&dir, &buf, &cursor, &entry));
 
     sp_expect_str_eq(t, sp_str(entry.name, entry.len), sp_cstr_as_str(it->raw[n].name));
     sp_expect_eq(t, (u32)entry.kind, (u32)it->raw[n].kind);

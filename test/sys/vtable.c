@@ -283,19 +283,19 @@ static sp_err_t mock_chdir(const c8* path, u32 len) {
   return (sp_err_t)69;
 }
 
-static sp_err_t mock_dir_from_fd(sp_sys_fd_t fd, sp_sys_dir_t* out) {
+static sp_err_t mock_dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
   return (sp_err_t)69;
 }
 
-static sp_err_t mock_dir_read(sp_sys_dir_t* dir, sp_mem_buffer_t* buf) {
+static sp_err_t mock_dir_it_read(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   return (sp_err_t)69;
 }
 
-static sp_err_t mock_dir_parse(sp_sys_dir_t* dir, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out) {
+static sp_err_t mock_dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out) {
   return (sp_err_t)69;
 }
 
-static sp_err_t mock_dir_close(sp_sys_dir_t* dir) {
+static sp_err_t mock_dir_it_close(sp_sys_dir_it_t* it) {
   return (sp_err_t)69;
 }
 
@@ -368,10 +368,10 @@ static const sp_sys_vtable_t mock = {
   .env                    = mock_env,
   .lseek                  = mock_lseek,
   .chdir                  = mock_chdir,
-  .dir_from_fd            = mock_dir_from_fd,
-  .dir_read               = mock_dir_read,
-  .dir_parse              = mock_dir_parse,
-  .dir_close              = mock_dir_close,
+  .dir_it_open            = mock_dir_it_open,
+  .dir_it_read            = mock_dir_it_read,
+  .dir_it_parse           = mock_dir_it_parse,
+  .dir_it_close           = mock_dir_it_close,
 };
 
 static s64 call_read(void) {
@@ -666,20 +666,20 @@ static s64 call_chdir(void) {
   return (s64)sp_sys_chdir(SP_NULLPTR, 0);
 }
 
-static s64 call_dir_from_fd(void) {
-  return (s64)sp_sys_dir_from_fd(0, SP_NULLPTR);
+static s64 call_dir_it_open(void) {
+  return (s64)sp_sys_dir_it_open(0, SP_NULLPTR);
 }
 
-static s64 call_dir_read(void) {
-  return (s64)sp_sys_dir_read(SP_NULLPTR, SP_NULLPTR);
+static s64 call_dir_it_read(void) {
+  return (s64)sp_sys_dir_it_read(SP_NULLPTR, SP_NULLPTR);
 }
 
-static s64 call_dir_parse(void) {
-  return (s64)sp_sys_dir_parse(SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR);
+static s64 call_dir_it_parse(void) {
+  return (s64)sp_sys_dir_it_parse(SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR);
 }
 
-static s64 call_dir_close(void) {
-  return (s64)sp_sys_dir_close(SP_NULLPTR);
+static s64 call_dir_it_close(void) {
+  return (s64)sp_sys_dir_it_close(SP_NULLPTR);
 }
 
 static const test_t tests [] = {
@@ -751,10 +751,10 @@ static const test_t tests [] = {
   { "env", call_env, 69 },
   { "lseek", call_lseek, 69 },
   { "chdir", call_chdir, 69 },
-  { "dir_from_fd", call_dir_from_fd, 69 },
-  { "dir_read", call_dir_read, 69 },
-  { "dir_parse", call_dir_parse, 69 },
-  { "dir_close", call_dir_close, 69 },
+  { "dir_it_open", call_dir_it_open, 69 },
+  { "dir_it_read", call_dir_it_read, 69 },
+  { "dir_it_parse", call_dir_it_parse, 69 },
+  { "dir_it_close", call_dir_it_close, 69 },
 };
 
 static sp_err_t run(sp_test_t* t, test_t* c) {

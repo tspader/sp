@@ -25,9 +25,9 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "closes_fd_when_from_fd_fails",
+    .name = "closes_fd_when_it_open_fails",
     .dirs = {
-      { .path = "T", .from_fd = SP_ERR_SYS_IO },
+      { .path = "T", .it_open = SP_ERR_SYS_IO },
     },
     .expect = {
       .open = SP_ERR_SYS_IO,
