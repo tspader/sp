@@ -84,7 +84,12 @@ static const test_t open_at_tests [] = {
     .content = "B",
     .op = OP_REPLACE,
     .expect = {
+      // a file in the parent chain: POSIX reports ENOTDIR, NT reports PATH_NOT_FOUND
+#if defined(SP_WIN32)
+      .err = SP_ERR_SYS_NOT_FOUND,
+#else
       .err = SP_ERR_SYS_NOT_DIR,
+#endif
       .paths = {
         { .path = "P", .exists = true, .kind = SP_FS_KIND_FILE, .content = "P" },
       },
@@ -193,7 +198,12 @@ static const test_t staged_tests [] = {
     .content = "A",
     .op = OP_REPLACE,
     .expect = {
+      // a file in the parent chain: POSIX reports ENOTDIR, NT reports PATH_NOT_FOUND
+#if defined(SP_WIN32)
+      .err = SP_ERR_SYS_NOT_FOUND,
+#else
       .err = SP_ERR_SYS_NOT_DIR,
+#endif
       .paths = {
         { .path = "S", .exists = true, .kind = SP_FS_KIND_FILE, .content = "S" },
       },
