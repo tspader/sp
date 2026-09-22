@@ -52,12 +52,12 @@ static const test_t open_at_tests [] = {
   },
   {
     .name = "exclusive_new",
-    .path = "A/B",
+    .path = "B",
     .content = "B",
     .op = OP_EXCLUSIVE,
     .expect = {
       .paths = {
-        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
+        { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
       },
     },
   },
@@ -134,6 +134,7 @@ static const test_t staged_tests [] = {
   {
     .name = "exclusive_existing",
     .setup = {
+      { "S", FS_SETUP_DIR },
       { .path = "A", .content = "old" },
     },
     .path = "A",
@@ -149,6 +150,7 @@ static const test_t staged_tests [] = {
   {
     .name = "parent_is_file",
     .setup = {
+      { "S", FS_SETUP_DIR },
       { .path = "P", .content = "P" },
     },
     .path = "P/B",
@@ -164,6 +166,7 @@ static const test_t staged_tests [] = {
   {
     .name = "exclusive_parent_is_file",
     .setup = {
+      { "S", FS_SETUP_DIR },
       { .path = "P", .content = "P" },
     },
     .path = "P/B",
@@ -193,6 +196,9 @@ static const test_t staged_tests [] = {
   },
   {
     .name = "abort_leaves_nothing",
+    .setup = {
+      { "S", FS_SETUP_DIR },
+    },
     .path = "A/B",
     .content = "B",
     .op = OP_ABORT,
