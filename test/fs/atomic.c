@@ -24,15 +24,14 @@ typedef struct {
 // the process root.
 static const test_t open_at_tests [] = {
   {
-    .name = "nested_parents_created",
-    .path = "A/B/C",
-    .content = "C",
+    .name = "missing_parent",
+    .path = "A/B",
+    .content = "B",
     .op = OP_REPLACE,
     .expect = {
+      .err = SP_ERR_SYS_NOT_FOUND,
       .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
-        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_DIR },
-        { .path = "A/B/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+        { .path = "A" },
       },
     },
   },
@@ -93,41 +92,47 @@ static const test_t open_at_tests [] = {
   },
   {
     .name = "abort_leaves_nothing",
-    .path = "A/B",
-    .content = "B",
+    .path = "A",
+    .content = "A",
     .op = OP_ABORT,
     .expect = {
       .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
-        { .path = "A/B" },
+        { .path = "A" },
       },
     },
   },
 };
 
 // The temp lives in a staging directory "S" under the sandbox, so the
-// destination's parent is first probed by the commit, not the open.
+// destination's parent is first seen by the commit, not the open.
 static const test_t staged_tests [] = {
   {
-    .name = "parent_created_at_commit",
-    .path = "A/B/C",
-    .content = "C",
+    .name = "missing_parent_at_commit",
+    .setup = {
+      { "S", FS_SETUP_DIR },
+    },
+    .path = "A/B",
+    .content = "B",
     .op = OP_REPLACE,
     .expect = {
+      .err = SP_ERR_SYS_NOT_FOUND,
       .paths = {
-        { .path = "S", .exists = true, .kind = SP_FS_KIND_DIR },
-        { .path = "A/B/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+        { .path = "A" },
       },
     },
   },
   {
-    .name = "exclusive_parent_created_at_commit",
+    .name = "exclusive_missing_parent_at_commit",
+    .setup = {
+      { "S", FS_SETUP_DIR },
+    },
     .path = "A/B",
     .content = "B",
     .op = OP_EXCLUSIVE,
     .expect = {
+      .err = SP_ERR_SYS_NOT_FOUND,
       .paths = {
-        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
+        { .path = "A" },
       },
     },
   },
