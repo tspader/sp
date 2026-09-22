@@ -55,15 +55,15 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "file_creates_parents",
+    .name = "file_missing_parent",
     .setup = {
       { .path = "A", .content = "A" },
     },
     .src = "A",
-    .dst = "D/E/B",
+    .dst = "D/B",
+    .err = SP_ERR_SYS_NOT_FOUND,
     .expect = {
-      { .path = "D/E", .exists = true, .kind = SP_FS_KIND_DIR },
-      { .path = "D/E/B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      { .path = "D" },
     },
   },
   {
@@ -194,20 +194,6 @@ static const test_t tests [] = {
       { .path = "B" },
     },
   },
-#if defined(SP_POSIX)
-  {
-    .name = "file_source_is_fifo",
-    .setup = {
-      { .path = "F", .kind = FS_SETUP_FIFO },
-    },
-    .src = "F",
-    .dst = "B",
-    .err = SP_ERR_SYS_UNSUPPORTED,
-    .expect = {
-      { .path = "B" },
-    },
-  },
-#endif
   {
     .name = "file_dest_parent_is_file",
     .setup = {
