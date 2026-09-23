@@ -125,7 +125,7 @@ sp_test_each(fs, links, test_t, tests) {
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
 
   sp_path_t target = { .dir = dir, .sub = sp_str_view(it->target) };
   sp_path_t link = { .dir = dir, .sub = sp_str_view(it->link) };

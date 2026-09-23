@@ -116,7 +116,7 @@ sp_test_each(fs, fd_relative, test_t, tests) {
 
   sp_str_t cwd_path = sp_fs_join_path(mem, sandbox, sp_str_view(it->cwd));
   sp_sys_fd_t cwd = SP_SYS_INVALID_FD;
-  if (sp_sys_open_dir_s(sp_sys_get_root(0), cwd_path, &cwd) != SP_OK) {
+  if (sp_sys_open_dir_s(sp_sys_get_root(0), cwd_path, 0, &cwd) != SP_OK) {
     sp_test_fail(t, "failed to open dir {}", sp_fmt_str(cwd_path));
     return SP_ERR;
   }

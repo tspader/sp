@@ -551,10 +551,10 @@ sp_test_each(fs, copy, test_t, tests) {
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
 
   sp_sys_fd_t dst_dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), fs_path_c(t, it->dst_dir ? it->dst_dir : ""), &dst_dir));
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), fs_path_c(t, it->dst_dir ? it->dst_dir : ""), 0, &dst_dir));
 
   sp_path_t src = { .dir = dir, .sub = sp_cstr_as_str(it->src) };
   sp_path_t dst = { .dir = dst_dir, .sub = sp_cstr_as_str(it->dst) };
@@ -589,7 +589,7 @@ static const size_test_t sizes [] = {
 sp_test_each(fs, copy_size, size_test_t, sizes) {
   sp_mem_t mem = sp_test_arena(t);
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), &dir));
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), 0, &dir));
 
   sp_path_t from = { .dir = dir, .sub = sp_str_lit("A") };
   sp_path_t to = { .dir = dir, .sub = sp_str_lit("B") };

@@ -22,7 +22,7 @@ source = [
   "test/sys/tty/contract.c", "test/sys/tty/mode.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c",
-  "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/wtf8/*.c",
+  "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c",
   "test/fs/*.c", "test/fs/windows/nt_path.c",
   "test/msvc/*.c",
   "test/mem/uninitialized.c",
@@ -54,7 +54,7 @@ source = ["test/main.c", "test/atomic.c"]
 
 [[test]]
 name = "fs"
-source = ["test/main.c", "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/wtf8/*.c", "test/fs/*.c", "test/fs/windows/nt_path.c"]
+source = ["test/main.c", "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c", "test/fs/*.c", "test/fs/windows/nt_path.c"]
 include = [".", "test/fs"]
 
 [[test]]

@@ -453,7 +453,7 @@ static sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
 
   SP_ALIGNED u8 dir_buf [SP_SYS_DIR_MIN_BUF];
   sp_fs_dir_t dir = sp_zero;
-  if (sp_fs_dir_open(&dir, sp_sys_get_root(0), lib, sp_mem_slice(dir_buf, sizeof(dir_buf)))) {
+  if (sp_fs_dir_open(&dir, sp_sys_get_root(0), lib, 0, sp_mem_slice(dir_buf, sizeof(dir_buf)))) {
     return SP_MSVC_ERR_SDK_NOT_FOUND;
   }
 
@@ -500,7 +500,7 @@ static sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t 
 
   SP_ALIGNED u8 dir_buf [SP_SYS_DIR_MIN_BUF];
   sp_fs_dir_t dir = sp_zero;
-  if (sp_fs_dir_open(&dir, sp_sys_get_root(0), instances.value, sp_mem_slice(dir_buf, sizeof(dir_buf)))) {
+  if (sp_fs_dir_open(&dir, sp_sys_get_root(0), instances.value, 0, sp_mem_slice(dir_buf, sizeof(dir_buf)))) {
     return SP_MSVC_ERR_VS_NOT_FOUND;
   }
 

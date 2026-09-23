@@ -1414,6 +1414,10 @@ typedef enum {
 } sp_sys_open_flags_t;
 
 typedef enum {
+  SP_SYS_OPEN_DIR_NO_FOLLOW = 1 << 0,
+} sp_sys_open_dir_flags_t;
+
+typedef enum {
   SP_SYS_BLOCKING,
   SP_SYS_NONBLOCKING,
 } sp_sys_io_mode_t;
@@ -1456,7 +1460,7 @@ SP_API s64         sp_sys_get_storage_path(c8* buf, u64 size);
 SP_API s64         sp_sys_get_config_path(c8* buf, u64 size);
 SP_API s64         sp_sys_get_fd_path(sp_sys_fd_t fd, c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
-SP_API sp_err_t    sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out);
+SP_API sp_err_t    sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_close(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
 SP_API sp_err_t    sp_sys_pipe_ready(sp_sys_fd_t fd, u8* ready);
@@ -1516,7 +1520,7 @@ SP_API sp_err_t    sp_sys_chdir(const c8* path, u32 len);
 
 
 SP_API sp_err_t    sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
-SP_API sp_err_t    sp_sys_open_dir_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_fd_t* out);
+SP_API sp_err_t    sp_sys_open_dir_s(sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_get_path_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_mkdir_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_perms_t perms);
@@ -1555,7 +1559,7 @@ typedef struct {
   s64         (*get_config_path)(c8* buf, u64 size);
   s64         (*get_fd_path)(sp_sys_fd_t fd, c8* buf, u64 size);
   sp_err_t    (*open)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
-  sp_err_t    (*open_dir)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t*);
+  sp_err_t    (*open_dir)(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t*);
   sp_err_t    (*close)(sp_sys_fd_t fd);
   sp_err_t    (*pipe)(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
   sp_err_t    (*pipe_ready)(sp_sys_fd_t fd, u8* ready);
@@ -1630,7 +1634,7 @@ SP_API s64         sp_sys_get_storage_path_p(c8* buf, u64 size);
 SP_API s64         sp_sys_get_config_path_p(c8* buf, u64 size);
 SP_API s64         sp_sys_get_fd_path_p(sp_sys_fd_t fd, c8* buf, u64 size);
 SP_API sp_err_t    sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
-SP_API sp_err_t    sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out);
+SP_API sp_err_t    sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_close_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_pipe_p(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
 SP_API sp_err_t    sp_sys_pipe_ready_p(sp_sys_fd_t fd, u8* ready);
@@ -3120,6 +3124,7 @@ SP_API sp_err_t             sp_fs_create_file_slice_at(sp_path_t path, sp_mem_sl
 SP_API sp_err_t             sp_fs_create_file_cstr(sp_str_t path, const c8* str);
 SP_API sp_err_t             sp_fs_create_file_cstr_at(sp_path_t path, const c8* str);
 SP_API sp_err_t             sp_fs_remove_dir(sp_str_t path);
+SP_API sp_err_t             sp_fs_remove_dir_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_remove_file(sp_str_t path);
 SP_API sp_err_t             sp_fs_remove_file_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path);
@@ -3129,7 +3134,7 @@ SP_API sp_err_t             sp_fs_create_sym_link_at(sp_str_t target, sp_path_t 
 SP_API sp_err_t             sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
-SP_API sp_err_t             sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, sp_mem_slice_t buf);
+SP_API sp_err_t             sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_mem_slice_t buf);
 SP_API sp_err_t             sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out);
 SP_API sp_err_t             sp_fs_dir_close(sp_fs_dir_t* it);
 SP_API sp_fs_it_t           sp_fs_it_new(sp_mem_t mem, sp_str_t path);
@@ -5350,8 +5355,10 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 #define SP_SYS_LINUX_O_PATH     010000000
 #if defined(SP_AMD64)
   #define SP_SYS_LINUX_O_DIRECTORY 0200000
+  #define SP_SYS_LINUX_O_NOFOLLOW  0400000
 #elif defined(SP_ARM64)
   #define SP_SYS_LINUX_O_DIRECTORY 040000
+  #define SP_SYS_LINUX_O_NOFOLLOW  0100000
 #endif
 
 #define SP_SYS_LINUX_STATX_BASIC_STATS 0x7ff
@@ -5883,8 +5890,8 @@ sp_err_t sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t
   return (sp_rt.vt->open)(fd, path, len, mode, flags, out);
 }
 
-sp_err_t sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out) {
-  return (sp_rt.vt->open_dir)(fd, path, len, out);
+sp_err_t sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
+  return (sp_rt.vt->open_dir)(fd, path, len, flags, out);
 }
 
 sp_err_t sp_sys_close(sp_sys_fd_t fd) {
@@ -8353,17 +8360,32 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
 #endif
 }
 
-sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out) {
+sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
   *out = SP_SYS_INVALID_FD;
+  if (flags & ~(u32)SP_SYS_OPEN_DIR_NO_FOLLOW) return SP_ERR_SYS_INVALID;
 
 #if defined(SP_WIN32)
   u32 access = SYNCHRONIZE | FILE_READ_ATTRIBUTES | FILE_READ_DATA | FILE_READ_EA;
   u32 share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
   u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT | SP_NT_FILE_DIRECTORY_FILE;
+  if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
 
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(fd, sp_str(path, len), access, share, SP_NT_FILE_OPEN, options, FILE_ATTRIBUTE_NORMAL, &handle);
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) {
+    BY_HANDLE_FILE_INFORMATION info = sp_zero;
+    if (!GetFileInformationByHandle((HANDLE)handle, &info)) {
+      sp_err_t err = sp_sys_err_from_win32(GetLastError());
+      sp_sys_nt_close(handle);
+      return err;
+    }
+    if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+      sp_sys_nt_close(handle);
+      return SP_ERR_SYS_LOOP;
+    }
+  }
 
   *out = handle;
   return SP_OK;
@@ -8371,7 +8393,9 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t*
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_DIRECTORY | SP_SYS_LINUX_O_CLOEXEC, 0);
+  u32 o = SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_DIRECTORY | SP_SYS_LINUX_O_CLOEXEC;
+  if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) o |= SP_SYS_LINUX_O_NOFOLLOW;
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, o, 0);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
 
   *out = (sp_sys_fd_t)rc;
@@ -8380,14 +8404,16 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t*
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  s32 rc = openat((int)fd, buf, O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
+  s32 o = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+  if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) o |= O_NOFOLLOW;
+  s32 rc = openat((int)fd, buf, o, 0);
   if (rc < 0) return sp_sys_err_from_errno(errno);
 
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len;
+  (void)fd; (void)path; (void)len; (void)flags;
   return SP_ERR_SYS_UNSUPPORTED;
 
 #else
@@ -8400,8 +8426,8 @@ sp_err_t sp_sys_open_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_open_mode_t mode, u
   return sp_sys_open(fd, path.data, path.len, mode, flags, out);
 }
 
-sp_err_t sp_sys_open_dir_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_fd_t* out) {
-  return sp_sys_open_dir(fd, path.data, path.len, out);
+sp_err_t sp_sys_open_dir_s(sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_sys_fd_t* out) {
+  return sp_sys_open_dir(fd, path.data, path.len, flags, out);
 }
 
 /////////////////////
@@ -20124,12 +20150,12 @@ sp_err_t sp_fs_remove_file(sp_str_t path) {
   return sp_fs_remove_file_at(sp_path_at_root(path));
 }
 
-sp_err_t sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, sp_mem_slice_t buf) {
+sp_err_t sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_mem_slice_t buf) {
   *it = sp_zero_s(sp_fs_dir_t);
   sp_assert(buf.len >= SP_SYS_DIR_MIN_BUF);
 
   sp_sys_fd_t dir_fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_dir_s(fd, path, &dir_fd));
+  sp_try(sp_sys_open_dir_s(fd, path, flags, &dir_fd));
 
   sp_err_t err = sp_sys_dir_it_open(dir_fd, &it->dir);
   if (err) {
@@ -20187,7 +20213,7 @@ SP_PRIVATE sp_err_t sp_fs_it_join(sp_fs_it_t* it, u32 prefix, sp_str_t name, u32
 
 SP_PRIVATE sp_err_t sp_fs_it_push(sp_fs_it_t* it, u32 len) {
   sp_fs_it_frame_t frame = { .len = len };
-  sp_try(sp_fs_dir_open(&frame.dir, it->dir, sp_str(it->path, len), sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
+  sp_try(sp_fs_dir_open(&frame.dir, it->dir, sp_str(it->path, len), 0, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
   sp_da_push(it->stack, frame);
   return SP_OK;
 }
@@ -20321,6 +20347,62 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
 done:
   sp_mem_end_scratch(s);
   return err;
+}
+
+/*
+  sp_fs_remove_dir_at(path)
+
+  Iterate the entries produced by a path and fd, depth-first and traversing
+  into subdirectories, and unlink them. Fails if this root (i.e. fd + path)
+  does not refer to a directory, and unlinks the root at the end.
+
+  This function uses O(depth) memory. It can be used with directories of
+  arbitrary depth, and each directory is opened exactly once.
+
+
+  # SYMLINKS
+
+  When the path is a symlink, this function unlinks rather than resolving the
+  link and removing the contents in the link target. POSIX semantics say that
+  a trailing slash on the path follows the link implicitly. This is silly, we
+  don't encode arguments implicitly in strings.
+
+
+  # ERRORS
+
+  ## NOT_FOUND
+
+  When you ask to remove D, but D doesn't exist, we return NOT_FOUND. Often,
+  callers just want to *ensure* a directory's absence, and they don't care if
+  their call removed it, or someone else, or if it never existed. By returning
+  NOT_FOUND, we also let callers who DO care handle the case when they
+  expected something to exist but it didn't.
+
+  When you ask to remove D, we may encounter NOT_FOUND while removing something
+  in D's tree. We do not report such errors; these aren't paths that the caller
+  named. For example, iterating D might yield D/M/W. The caller never specified
+  D/M/W. They asked us to remove everything under D, which is satisfied.
+
+  The combination of these two give a nice property: NOT_FOUND is returned if
+  and only if nothing was removed.
+
+
+  ## FAIL FAST
+
+  If removing D/M/W gives us some other error (e.g. it's read only), we
+  immediately fail. It's coherent to keep going, trying every entry that you
+  can, and sometimes what you want when cleaning up. But it's full of subtle
+  hidden rules, and it's much simpler for caller and library if we just tell
+  you that something failed and let you decide.
+
+
+  ## FINAL REMOVE CAN FAIL
+
+  Once
+
+  */
+SP_API sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
+  return SP_OK;
 }
 
 static sp_atomic_s32_t sp_fs_atomic_sequence;
@@ -20532,10 +20614,10 @@ typedef struct {
 } sp_fs_copy_frame_t;
 
 SP_PRIVATE sp_err_t sp_fs_copy_frame_open(sp_fs_copy_frame_t* frame, sp_path_t from, sp_path_t to) {
-  sp_try(sp_fs_dir_open(&frame->from, from.dir, from.sub, sp_mem_slice(frame->buf, SP_FS_IT_BUF_SIZE)));
+  sp_try(sp_fs_dir_open(&frame->from, from.dir, from.sub, 0, sp_mem_slice(frame->buf, SP_FS_IT_BUF_SIZE)));
 
   sp_err_t err = sp_fs_create_dir_at(to);
-  if (!err) err = sp_sys_open_dir_s(to.dir, to.sub, &frame->to);
+  if (!err) err = sp_sys_open_dir_s(to.dir, to.sub, 0, &frame->to);
   if (err) sp_fs_dir_close(&frame->from);
   return err;
 }

@@ -244,7 +244,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
   }
 
   sp_str_t sandbox = sp_test_file_create_dir(&fm, t.label);
-  if (sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd)) {
+  if (sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd)) {
     SP_TEST_REPORT("failed to open sandbox {}", sp_fmt_str(sandbox));
     SP_FAIL();
     goto done;
@@ -275,7 +275,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
       }
       case SYS_STEP_OPEN_DIR: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-        if (sp_sys_open_dir_s(sandbox_fd, sp_cstr_as_str(step->open_dir.path), &fd)) {
+        if (sp_sys_open_dir_s(sandbox_fd, sp_cstr_as_str(step->open_dir.path), 0, &fd)) {
           SP_TEST_REPORT("failed to open_dir {}", sp_fmt_cstr(step->open_dir.path));
           SP_FAIL();
         }

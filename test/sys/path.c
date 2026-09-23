@@ -395,7 +395,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd));
+  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));
 
   if (c->file) sp_fs_create_file_str(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A"));
   if (c->dir)  sp_fs_create_dir(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->dir)));

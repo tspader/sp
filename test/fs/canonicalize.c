@@ -165,7 +165,7 @@ sp_test_each(fs, canonicalize, test_t, tests) {
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &dir));
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
 
   sp_path_t input = { .dir = dir, .sub = sp_str_view(it->input) };
   sp_str_t result = sp_fs_canonicalize_path_at(mem, input);

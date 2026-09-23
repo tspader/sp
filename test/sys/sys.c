@@ -56,7 +56,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     return sp_test_skip(t, "symlinks not available");
   }
 
-  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd));
+  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));
 
   sp_carr_for(c->setup, it) {
     sys_setup_t* ent = &c->setup[it];
@@ -104,7 +104,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
       case SYS_STEP_OPEN_DIR: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
         sp_str_t path = sp_cstr_as_str(step->open_dir.path);
-        sp_err_t err = sp_sys_open_dir_s(sandbox_fd, path, &fd);
+        sp_err_t err = sp_sys_open_dir_s(sandbox_fd, path, 0, &fd);
         sys_check_err(t, err, step->open_dir.err);
         if (!err) {
           if (step->open_dir.err) sp_sys_close(fd);

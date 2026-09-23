@@ -110,14 +110,14 @@ sp_test_each(fs, dir, test_t, tests) {
 
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
   if (it->relative) {
-    sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd));
+    sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));
   }
 
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
   sp_fs_dir_t iter = sp_zero;
   sp_err_t open_err = it->relative
-    ? sp_fs_dir_open(&iter, sandbox_fd, sp_cstr_as_str(it->dir), sp_mem_slice(buf, sizeof(buf)))
-    : sp_fs_dir_open(&iter, sp_sys_get_root(0), dir, sp_mem_slice(buf, sizeof(buf)));
+    ? sp_fs_dir_open(&iter, sandbox_fd, sp_cstr_as_str(it->dir), 0, sp_mem_slice(buf, sizeof(buf)))
+    : sp_fs_dir_open(&iter, sp_sys_get_root(0), dir, 0, sp_mem_slice(buf, sizeof(buf)));
   sp_expect_ok(t, open_err);
 
   if (!open_err) {

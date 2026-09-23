@@ -35,10 +35,32 @@ static u32 dir_len(const sim_dir_t* dir) {
   return n;
 }
 
-static sp_err_t open_dir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_fd_t* out) {
+static sp_str_t resolve(sp_sys_fd_t fd, const c8* path, u32 len, c8 buf [SP_PATH_MAX]) {
+  s64 slot = (s64)fd - FD_BASE;
+  if (slot < 0 || slot >= (s64)active->count.dirs) return sp_str(path, len);
+
+  sp_str_t base = sp_cstr_as_str(active->opened[slot].dir->path);
+  sp_assert(base.len + 1 + len < SP_PATH_MAX);
+  sp_str_copy_to(base, buf, SP_PATH_MAX);
+  buf[base.len] = '/';
+  sp_mem_copy(buf + base.len + 1, path, len);
+  return sp_str(buf, base.len + 1 + len);
+}
+
+static void record(sp_str_t path, sp_fs_kind_t kind) {
+  sp_assert(active->num_removed < SIM_MAX_REMOVED);
+  sp_assert(path.len < SIM_MAX_REMOVED_PATH);
+  sim_removed_t* out = &active->removed[active->num_removed++];
+  sp_str_copy_to(path, out->path, SIM_MAX_REMOVED_PATH);
+  out->kind = kind;
+}
+
+static sp_err_t open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
   active->count.opens++;
-  const sim_dir_t* dir = find_dir(sp_str(path, len));
+  c8 buf [SP_PATH_MAX];
+  const sim_dir_t* dir = find_dir(resolve(fd, path, len, buf));
   if (!dir) return SP_ERR_SYS_NOT_FOUND;
+  if (dir->open) return dir->open;
   sp_assert(active->count.dirs < SIM_MAX_OPENS);
   active->opened[active->count.dirs] = (sim_open_t) { .dir = dir };
   *out = (sp_sys_fd_t)(FD_BASE + active->count.dirs);
@@ -85,10 +107,39 @@ static sp_err_t dir_it_close(sp_sys_dir_it_t* it) {
 }
 
 static sp_err_t get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  const sim_entry_t* entry = find_entry(sp_str(path, len));
-  if (!entry) return SP_ERR_SYS_NOT_FOUND;
+  c8 buf [SP_PATH_MAX];
+  sp_str_t full = resolve(fd, path, len, buf);
   *st = sp_zero_s(sp_sys_file_meta_t);
-  st->kind = entry->stat;
+
+  const sim_entry_t* entry = find_entry(full);
+  if (entry) {
+    st->kind = entry->stat;
+    return SP_OK;
+  }
+  if (find_dir(full)) {
+    st->kind = SP_FS_KIND_DIR;
+    return SP_OK;
+  }
+  return SP_ERR_SYS_NOT_FOUND;
+}
+
+static sp_err_t unlink_entry(sp_sys_fd_t fd, const c8* path, u32 len) {
+  c8 buf [SP_PATH_MAX];
+  sp_str_t full = resolve(fd, path, len, buf);
+  const sim_entry_t* entry = find_entry(full);
+  if (!entry) return SP_ERR_SYS_NOT_FOUND;
+  if (entry->unlink) return entry->unlink;
+  record(full, SP_FS_KIND_FILE);
+  return SP_OK;
+}
+
+static sp_err_t remove_dir(sp_sys_fd_t fd, const c8* path, u32 len) {
+  c8 buf [SP_PATH_MAX];
+  sp_str_t full = resolve(fd, path, len, buf);
+  const sim_dir_t* dir = find_dir(full);
+  if (!dir) return SP_ERR_SYS_NOT_FOUND;
+  if (dir->rmdir) return dir->rmdir;
+  record(full, SP_FS_KIND_DIR);
   return SP_OK;
 }
 
@@ -101,6 +152,8 @@ void sim_begin(sim_t* sim, const sim_dir_t* dirs) {
   sim->vt.dir_it_parse = dir_it_parse;
   sim->vt.dir_it_close = dir_it_close;
   sim->vt.get_link_metadata = get_link_metadata;
+  sim->vt.unlink = unlink_entry;
+  sim->vt.rmdir = remove_dir;
   sim->saved = sp_sys_set_vtable(&sim->vt);
   active = sim;
 }

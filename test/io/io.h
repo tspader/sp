@@ -20,7 +20,7 @@ UTEST_F_SETUP(io) {
   sp_test_file_manager_init(&ut.file_manager);
   ut.file.sub = sp_str_lit("sp_io_rw.file");
   sp_test_file_create_empty(&ut.file_manager, ut.file.sub);
-  sp_sys_open_dir_s(sp_sys_get_root(0), ut.file_manager.paths.test, &ut.file.dir);
+  sp_sys_open_dir_s(sp_sys_get_root(0), ut.file_manager.paths.test, 0, &ut.file.dir);
 }
 
 UTEST_F_TEARDOWN(io) {

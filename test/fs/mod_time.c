@@ -2,7 +2,7 @@
 
 sp_test(fs, mod_time_nonzero) {
   sp_sys_fd_t sandbox = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), &sandbox));
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), 0, &sandbox));
 
   sp_path_t file = { .dir = sandbox, .sub = sp_str_lit("A") };
   sp_path_t dir = { .dir = sandbox, .sub = sp_str_lit("B") };
@@ -17,7 +17,7 @@ sp_test(fs, mod_time_nonzero) {
 
 sp_test(fs, mod_time_updates_after_write) {
   sp_sys_fd_t sandbox = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), &sandbox));
+  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), 0, &sandbox));
 
   sp_path_t file = { sandbox, sp_str_lit("A") };
   sp_fs_create_file_str_at(file, sp_str_lit("A"));

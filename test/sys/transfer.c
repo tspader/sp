@@ -122,7 +122,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_fd_t dst_r = SP_SYS_INVALID_FD;
   u64 len = sp_cstr_len(c->data);
 
-  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd));
+  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));
 
   switch (c->src) {
     case END_FILE: {
