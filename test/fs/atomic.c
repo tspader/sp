@@ -273,15 +273,3 @@ sp_test_each(fs, atomic_staged, test_t, staged_tests) {
   fs_expect_no_temps(t, sandbox);
   return SP_OK;
 }
-
-sp_test(fs, atomic_staged_empty_staging_is_bug) {
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), &dir));
-
-  sp_path_t path = { .dir = dir, .sub = sp_str_lit("A") };
-
-  sp_fs_atomic_t af = sp_zero;
-  sp_expect_err_eq(t, sp_fs_atomic_open_staged_at(&af, path, sp_str_lit("")), SP_ERR_SYS_BUG);
-  sp_sys_close(dir);
-  return SP_OK;
-}

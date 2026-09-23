@@ -20356,10 +20356,6 @@ SP_PRIVATE sp_err_t sp_fs_atomic_create(sp_fs_atomic_t* af, sp_sys_fd_t dir, sp_
   u32 flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE;
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   sp_err_t err = sp_sys_open_s(dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
-  if (err == SP_ERR_SYS_NOT_FOUND) {
-    err = sp_fs_create_parent_at(dir, af->temp);
-    if (!err) err = sp_sys_open_s(dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
-  }
   if (err) {
     *af = sp_zero_s(sp_fs_atomic_t);
     return err;
@@ -20382,7 +20378,7 @@ sp_err_t sp_fs_atomic_open(sp_fs_atomic_t* af, sp_str_t path) {
 }
 
 sp_err_t sp_fs_atomic_open_staged_at(sp_fs_atomic_t* af, sp_path_t path, sp_str_t staging) {
-  if (sp_str_empty(staging)) return SP_ERR_SYS_BUG;
+  sp_assert(!sp_str_empty(staging));
   return sp_fs_atomic_create(af, path.dir, path.sub, staging);
 }
 
@@ -20414,14 +20410,7 @@ sp_err_t sp_fs_atomic_commit(sp_fs_atomic_t* af, sp_fs_atomic_mode_t mode) {
   sp_err_t close_err = sp_io_file_writer_close(&af->writer);
   if (!err) err = close_err;
 
-  if (!err) {
-    err = sp_fs_atomic_publish(af, mode);
-    if (err == SP_ERR_SYS_NOT_FOUND) {
-      err = sp_fs_create_parent_at(af->dir, af->path);
-      if (!err) err = sp_fs_atomic_publish(af, mode);
-    }
-  }
-
+  if (!err) err = sp_fs_atomic_publish(af, mode);
   if (err) sp_sys_unlink_s(af->dir, af->temp);
   af->temp = sp_zero_s(sp_str_t);
   return err;
@@ -20482,27 +20471,6 @@ sp_err_t sp_fs_write_atomic_cstr(sp_str_t path, const c8* str) {
   return sp_fs_write_atomic_cstr_at(sp_path_at_root(path), str);
 }
 
-SP_PRIVATE sp_err_t sp_fs_copy_bytes_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode, sp_sys_file_perms_t perms) {
-  sp_io_file_reader_t reader = sp_zero;
-  sp_try(sp_io_file_reader_from_path_at(&reader, from));
-
-  sp_fs_atomic_t af = sp_zero;
-  sp_err_t err = sp_fs_atomic_open_at(&af, to);
-  if (err) {
-    sp_io_file_reader_close(&reader);
-    return err;
-  }
-
-  err = sp_io_copy(sp_fs_atomic_writer(&af), &reader.base, SP_NULLPTR);
-  sp_io_file_reader_close(&reader);
-  if (!err) err = sp_sys_set_file_perms_s(af.dir, af.temp, perms);
-  if (err) {
-    sp_fs_atomic_abort(&af);
-    return err;
-  }
-  return sp_fs_atomic_commit(&af, mode);
-}
-
 SP_PRIVATE sp_err_t sp_fs_copy_link_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
   c8 buf [SP_PATH_MAX];
   sp_str_t target = sp_zero;
@@ -20510,12 +20478,9 @@ SP_PRIVATE sp_err_t sp_fs_copy_link_at(sp_path_t from, sp_path_t to, sp_fs_atomi
 
   switch (mode) {
     case SP_FS_ATOMIC_REPLACE: {
-      c8 temp_buf [SP_PATH_MAX];
-      sp_str_t temp = sp_fs_temp_name(sp_fs_parent_path(to.sub), sp_fs_get_name(to.sub), temp_buf);
-      sp_try(sp_sys_symlink_s(target, to.dir, temp));
-      sp_err_t err = sp_sys_rename_s(to.dir, temp, to.dir, to.sub);
-      if (err) sp_sys_unlink_s(to.dir, temp);
-      return err;
+      sp_err_t err = sp_sys_unlink_s(to.dir, to.sub);
+      if (err && err != SP_ERR_SYS_NOT_FOUND) return err;
+      return sp_sys_symlink_s(target, to.dir, to.sub);
     }
     case SP_FS_ATOMIC_EXCLUSIVE: {
       return sp_sys_symlink_s(target, to.dir, to.sub);
@@ -20525,16 +20490,39 @@ SP_PRIVATE sp_err_t sp_fs_copy_link_at(sp_path_t from, sp_path_t to, sp_fs_atomi
 }
 
 sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
-  sp_sys_file_meta_t meta = sp_zero;
-  sp_try(sp_sys_get_path_metadata_s(from.dir, from.sub, &meta));
+  sp_io_file_reader_t reader = sp_zero;
+  sp_try(sp_io_file_reader_from_path_at(&reader, from));
 
-  switch (meta.kind) {
-    case SP_FS_KIND_FILE:    return sp_fs_copy_bytes_at(from, to, mode, meta.perms);
-    case SP_FS_KIND_DIR:     return SP_ERR_SYS_IS_DIR;
-    case SP_FS_KIND_SYMLINK:
-    case SP_FS_KIND_NONE:    return SP_ERR_SYS_UNSUPPORTED;
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_err_t err = sp_sys_get_file_metadata(reader.file, &meta);
+  if (!err) {
+    switch (meta.kind) {
+      case SP_FS_KIND_FILE:    break;
+      case SP_FS_KIND_DIR:     err = SP_ERR_SYS_IS_DIR; break;
+      case SP_FS_KIND_SYMLINK:
+      case SP_FS_KIND_NONE:    err = SP_ERR_SYS_UNSUPPORTED; break;
+    }
   }
-  SP_UNREACHABLE_RETURN(SP_OK);
+  if (err) {
+    sp_io_file_reader_close(&reader);
+    return err;
+  }
+
+  sp_fs_atomic_t af = sp_zero;
+  err = sp_fs_atomic_open_at(&af, to);
+  if (err) {
+    sp_io_file_reader_close(&reader);
+    return err;
+  }
+
+  err = sp_io_copy(sp_fs_atomic_writer(&af), &reader.base, SP_NULLPTR);
+  sp_io_file_reader_close(&reader);
+  if (!err) err = sp_sys_set_file_perms_s(af.dir, af.temp, meta.perms);
+  if (err) {
+    sp_fs_atomic_abort(&af);
+    return err;
+  }
+  return sp_fs_atomic_commit(&af, mode);
 }
 
 typedef struct {
@@ -20601,7 +20589,7 @@ sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
 
     switch (meta.kind) {
       case SP_FS_KIND_FILE: {
-        err = sp_fs_copy_bytes_at(src, dst, mode, meta.perms);
+        err = sp_fs_copy_file_at(src, dst, mode);
         break;
       }
       case SP_FS_KIND_SYMLINK: {
@@ -20634,7 +20622,7 @@ sp_err_t sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
   sp_try(sp_sys_get_path_metadata_s(from.dir, from.sub, &meta));
 
   switch (meta.kind) {
-    case SP_FS_KIND_FILE:    return sp_fs_copy_bytes_at(from, to, mode, meta.perms);
+    case SP_FS_KIND_FILE:    return sp_fs_copy_file_at(from, to, mode);
     case SP_FS_KIND_DIR:     return sp_fs_copy_tree_at(from, to, mode);
     case SP_FS_KIND_SYMLINK:
     case SP_FS_KIND_NONE:    return SP_ERR_SYS_UNSUPPORTED;
