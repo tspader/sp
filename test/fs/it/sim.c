@@ -105,13 +105,16 @@ static const test_t tests [] = {
     .name = "deinit_closes_open_frames",
     .root = "T",
     .recursive = true,
-    .stop_after = 1,
+    .stop_after = 2,
     .dirs = {
       { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B" },
+      { .path = "T/B", .entries = { { "C", SP_FS_KIND_FILE }, { "D", SP_FS_KIND_FILE } } },
     },
     .expect = {
-      .entries = { { "T/B", "B", SP_FS_KIND_DIR } },
+      .entries = {
+        { "T/B", "B", SP_FS_KIND_DIR },
+        { "T/B/C", "C", SP_FS_KIND_FILE },
+      },
       .opens = 2,
     },
   },
@@ -178,12 +181,12 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
   sim_t s = sp_zero;
   sim_begin(&s, it->dirs);
 
-  sp_fs_it_t walk = it->recursive ? sp_fs_it_new_recursive(mem, root) : sp_fs_it_new(mem, root);
+  sp_fs_it_t walk = sp_fs_it_new(mem, root);
   sp_expect_err_eq(t, walk.err, it->expect.open);
   sp_expect(t, !walk.entry.path.data);
 
   u32 produced = 0;
-  while (sp_fs_it_next(&walk)) {
+  while (it->recursive ? sp_fs_it_walk(&walk) : sp_fs_it_next(&walk)) {
     if (produced < MAX_WALK && it->expect.entries[produced].path) {
       const entry_t* want = &it->expect.entries[produced];
       sp_expect_str_eq_c(t, walk.entry.path, want->path);

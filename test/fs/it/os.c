@@ -181,9 +181,11 @@ sp_test_each(fs, it, test_t, tests) {
     matches[n++] = (fs_match_t) { .key = sp_fs_join_path(mem, base, sp_cstr_as_str(want->path)), .kind = want->kind };
   }
 
-  sp_fs_it_t walk = it->recursive ? sp_fs_it_new_recursive_at(mem, root) : sp_fs_it_new_at(mem, root);
-  while (sp_fs_it_next(&walk)) {
+  sp_fs_it_t walk = sp_fs_it_new_at(mem, root, 0);
+  while (it->recursive ? sp_fs_it_walk(&walk) : sp_fs_it_next(&walk)) {
     sp_expect_str_eq(t, walk.entry.name, sp_fs_get_name(walk.entry.path));
+    sp_expect_str_eq(t, walk.at.sub, walk.entry.name);
+    sp_expect_eq(t, (u32)sp_fs_get_kind_at(walk.at), (u32)walk.entry.kind);
     fs_match(t, matches, n, walk.entry.path, walk.entry.kind);
   }
   sp_expect_err_eq(t, walk.err, it->expect.err);

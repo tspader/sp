@@ -3065,20 +3065,27 @@ typedef struct {
   u32 len;
 } sp_fs_it_frame_t;
 
+typedef enum {
+  SP_FS_IT_ENTRY,
+  SP_FS_IT_LEAVE,
+} sp_fs_it_yield_t;
+
 typedef struct {
   sp_mem_t mem;
   sp_sys_fd_t dir;
   sp_fs_entry_t entry;
+  sp_path_t at;
+  sp_fs_it_yield_t yield;
   sp_da(sp_fs_it_frame_t) stack;
   c8 path [SP_PATH_MAX];
-  bool recursive;
+  bool entered;
   sp_err_t err;
 } sp_fs_it_t;
 
 #define sp_fs_for(mem, dir, it) \
   for (sp_fs_it_t it = sp_fs_it_new(mem, dir); sp_fs_it_next(&it);)
 #define sp_fs_for_recursive(mem, dir, it) \
-  for (sp_fs_it_t it = sp_fs_it_new_recursive(mem, dir); sp_fs_it_next(&it);)
+  for (sp_fs_it_t it = sp_fs_it_new(mem, dir); sp_fs_it_walk(&it);)
 
 SP_API sp_str_t             sp_fs_get_name(sp_str_t path);
 SP_API sp_str_t             sp_fs_get_name_for(sp_str_t path, sp_fs_path_kind_t kind);
@@ -3139,10 +3146,10 @@ SP_API sp_err_t             sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_s
 SP_API sp_err_t             sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out);
 SP_API sp_err_t             sp_fs_dir_close(sp_fs_dir_t* it);
 SP_API sp_fs_it_t           sp_fs_it_new(sp_mem_t mem, sp_str_t path);
-SP_API sp_fs_it_t           sp_fs_it_new_at(sp_mem_t mem, sp_path_t path);
-SP_API sp_fs_it_t           sp_fs_it_new_recursive(sp_mem_t mem, sp_str_t path);
-SP_API sp_fs_it_t           sp_fs_it_new_recursive_at(sp_mem_t mem, sp_path_t path);
+SP_API sp_fs_it_t           sp_fs_it_new_at(sp_mem_t mem, sp_path_t path, u32 flags);
 SP_API bool                 sp_fs_it_next(sp_fs_it_t* it);
+SP_API bool                 sp_fs_it_walk(sp_fs_it_t* it);
+SP_API sp_err_t             sp_fs_it_enter(sp_fs_it_t* it);
 SP_API void                 sp_fs_it_deinit(sp_fs_it_t* it);
 
 // literally sys+normalize, if normalize isnt needed this isn't either?
@@ -20220,17 +20227,13 @@ SP_PRIVATE sp_err_t sp_fs_it_join(sp_fs_it_t* it, u32 prefix, sp_str_t name, u32
   return SP_OK;
 }
 
-SP_PRIVATE sp_err_t sp_fs_it_push(sp_fs_it_t* it, u32 len) {
-  sp_fs_it_frame_t frame = { .len = len };
-  sp_try(sp_fs_dir_open(&frame.dir, it->dir, sp_str(it->path, len), 0, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
-  sp_da_push(it->stack, frame);
-  return SP_OK;
-}
-
-SP_PRIVATE sp_err_t sp_fs_it_open(sp_fs_it_t* it, sp_str_t path) {
+SP_PRIVATE sp_err_t sp_fs_it_open(sp_fs_it_t* it, sp_str_t path, u32 flags) {
   u32 len = 0;
   sp_try(sp_fs_it_join(it, 0, sp_fs_trim_path(path), &len));
-  return sp_fs_it_push(it, len);
+  sp_fs_it_frame_t frame = { .len = len };
+  sp_try(sp_fs_dir_open(&frame.dir, it->dir, sp_str(it->path, len), flags, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
+  sp_da_push(it->stack, frame);
+  return SP_OK;
 }
 
 SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
@@ -20259,9 +20262,6 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
       it->entry.kind = sp_fs_get_link_kind_at((sp_path_t) { .dir = it->dir, .sub = it->entry.path });
     }
 
-    if (it->recursive && it->entry.kind == SP_FS_KIND_DIR) {
-      sp_try(sp_fs_it_push(it, len));
-    }
     return SP_OK;
   }
   return SP_OK;
@@ -20273,6 +20273,14 @@ bool sp_fs_it_next(sp_fs_it_t* it) {
   it->err = sp_fs_it_step(it);
   if (it->err) sp_fs_it_unwind(it);
   return !it->err && !sp_da_empty(it->stack);
+}
+
+bool sp_fs_it_walk(sp_fs_it_t* it) {
+  return false;
+}
+
+sp_err_t sp_fs_it_enter(sp_fs_it_t* it) {
+  return SP_ERR_SYS_UNSUPPORTED;
 }
 
 void sp_fs_it_deinit(sp_fs_it_t* it) {
@@ -20289,23 +20297,24 @@ SP_PRIVATE sp_fs_entry_t sp_fs_entry_copy(sp_mem_t mem, sp_fs_entry_t entry) {
   };
 }
 
-SP_PRIVATE sp_err_t sp_fs_collect_it(sp_mem_t mem, sp_fs_it_t* it, sp_da(sp_fs_entry_t)* out) {
-  *out = sp_da_new(mem, sp_fs_entry_t);
-  while (sp_fs_it_next(it)) {
-    sp_da_push(*out, sp_fs_entry_copy(mem, it->entry));
-  }
-  sp_fs_it_deinit(it);
-  return it->err;
-}
-
 sp_err_t sp_fs_collect(sp_mem_t mem, sp_str_t path, sp_da(sp_fs_entry_t)* out) {
+  *out = sp_da_new(mem, sp_fs_entry_t);
   sp_fs_it_t it = sp_fs_it_new(mem, path);
-  return sp_fs_collect_it(mem, &it, out);
+  while (sp_fs_it_next(&it)) {
+    sp_da_push(*out, sp_fs_entry_copy(mem, it.entry));
+  }
+  sp_fs_it_deinit(&it);
+  return it.err;
 }
 
 sp_err_t sp_fs_collect_recursive(sp_mem_t mem, sp_str_t path, sp_da(sp_fs_entry_t)* out) {
-  sp_fs_it_t it = sp_fs_it_new_recursive(mem, path);
-  return sp_fs_collect_it(mem, &it, out);
+  *out = sp_da_new(mem, sp_fs_entry_t);
+  sp_fs_it_t it = sp_fs_it_new(mem, path);
+  while (sp_fs_it_walk(&it)) {
+    sp_da_push(*out, sp_fs_entry_copy(mem, it.entry));
+  }
+  sp_fs_it_deinit(&it);
+  return it.err;
 }
 
 typedef struct {
@@ -20753,26 +20762,15 @@ sp_err_t sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
   SP_UNREACHABLE_RETURN(SP_OK);
 }
 
-sp_fs_it_t sp_fs_it_new_at(sp_mem_t mem, sp_path_t path) {
+sp_fs_it_t sp_fs_it_new_at(sp_mem_t mem, sp_path_t path, u32 flags) {
   sp_fs_it_t it = { .mem = mem, .dir = path.dir };
   sp_da_init(mem, it.stack);
-  it.err = sp_fs_it_open(&it, path.sub);
+  it.err = sp_fs_it_open(&it, path.sub, flags);
   return it;
 }
 
 sp_fs_it_t sp_fs_it_new(sp_mem_t mem, sp_str_t path) {
-  return sp_fs_it_new_at(mem, sp_path_at_root(path));
-}
-
-sp_fs_it_t sp_fs_it_new_recursive_at(sp_mem_t mem, sp_path_t path) {
-  sp_fs_it_t it = { .mem = mem, .dir = path.dir, .recursive = true };
-  sp_da_init(mem, it.stack);
-  it.err = sp_fs_it_open(&it, path.sub);
-  return it;
-}
-
-sp_fs_it_t sp_fs_it_new_recursive(sp_mem_t mem, sp_str_t path) {
-  return sp_fs_it_new_recursive_at(mem, sp_path_at_root(path));
+  return sp_fs_it_new_at(mem, sp_path_at_root(path), 0);
 }
 
 //
