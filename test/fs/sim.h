@@ -9,6 +9,11 @@
 #define SIM_MAX_REMOVED 8
 #define SIM_MAX_REMOVED_PATH 64
 
+typedef enum {
+  SIM_OP_UNLINK,
+  SIM_OP_RMDIR,
+} sim_op_t;
+
 typedef struct {
   const c8* name;
   sp_fs_kind_t kind;
@@ -35,11 +40,13 @@ typedef struct {
   u32 dirs;
   u32 closes;
   u32 fd_closes;
+  u32 rmdirs;
+  u32 nofollow;
 } sim_count_t;
 
 typedef struct {
   c8 path [SIM_MAX_REMOVED_PATH];
-  sp_fs_kind_t kind;
+  sim_op_t op;
 } sim_removed_t;
 
 typedef struct {

@@ -3081,6 +3081,7 @@ typedef struct {
   for (sp_fs_it_t it = sp_fs_it_new_recursive(mem, dir); sp_fs_it_next(&it);)
 
 SP_API sp_str_t             sp_fs_get_name(sp_str_t path);
+SP_API sp_str_t             sp_fs_get_name_for(sp_str_t path, sp_fs_path_kind_t kind);
 SP_API sp_str_t             sp_fs_parent_path(sp_str_t path);
 SP_API sp_str_t             sp_fs_trim_path(sp_str_t path);
 SP_API sp_str_t             sp_fs_normalize_path(sp_mem_t mem, sp_str_t path);
@@ -19758,6 +19759,14 @@ sp_str_t sp_fs_get_name(sp_str_t path) {
   return sp_str_suffix(path, ((s32)path.len) - it - 1);
 }
 
+sp_str_t sp_fs_get_name_for(sp_str_t path, sp_fs_path_kind_t kind) {
+  if (kind != SP_FS_PATH_WINDOWS) return sp_fs_get_name(path);
+
+  s32 slash = sp_str_find_c8_reverse(path, '/');
+  s32 backslash = sp_str_find_c8_reverse(path, '\\');
+  return sp_str_suffix(path, ((s32)path.len) - sp_max(slash, backslash) - 1);
+}
+
 sp_str_t sp_fs_trim_path(sp_str_t path) {
   if (sp_str_empty(path)) return path;
 
@@ -20299,54 +20308,29 @@ sp_err_t sp_fs_collect_recursive(sp_mem_t mem, sp_str_t path, sp_da(sp_fs_entry_
   return sp_fs_collect_it(mem, &it, out);
 }
 
+typedef struct {
+  sp_fs_dir_t dir;
+  SP_ALIGNED u8 buf [SP_FS_IT_BUF_SIZE];
+  u32 name_offset;
+  u32 name_len;
+} sp_fs_remove_frame_t;
+
+SP_PRIVATE sp_err_t sp_fs_remove_frame_push(sp_da(sp_fs_remove_frame_t)* stack, sp_path_t path, u32 name_offset) {
+  sp_fs_remove_frame_t frame = { .name_offset = name_offset, .name_len = path.sub.len };
+  sp_try(sp_fs_dir_open(&frame.dir, path.dir, path.sub, SP_SYS_OPEN_DIR_NO_FOLLOW, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
+  sp_da_push(*stack, frame);
+  return SP_OK;
+}
+
+SP_PRIVATE sp_path_t sp_fs_remove_frame_path(sp_fs_remove_frame_t* parent, sp_fs_remove_frame_t* frame) {
+  return (sp_path_t) {
+    .dir = parent->dir.dir.fd,
+    .sub = sp_str(sp_ptr_cast(const c8*, parent->buf) + frame->name_offset, frame->name_len),
+  };
+}
+
 sp_err_t sp_fs_remove_dir(sp_str_t path) {
-  sp_sys_file_meta_t st = sp_zero;
-  sp_try(sp_sys_get_link_metadata_s(sp_sys_get_root(0), path, &st));
-
-  switch (st.kind) {
-    case SP_FS_KIND_DIR: {
-      break;
-    }
-    case SP_FS_KIND_SYMLINK: {
-      // remove the link itself, never the target; windows directory
-      // symlinks can only be removed as directories, so flip on refusal
-      sp_err_t err = sp_fs_remove_file(path);
-      if (err == SP_ERR_SYS_IS_DIR) err = sp_sys_rmdir_s(sp_sys_get_root(0), path);
-      return err;
-    }
-    default: {
-      return SP_ERR_SYS_NOT_DIR;
-    }
-  }
-
-  sp_err_t err = SP_OK;
-  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-
-  sp_da(sp_fs_entry_t) entries;
-  err = sp_fs_collect(s.mem, path, &entries);
-  if (err) goto done;
-
-  sp_da_for(entries, i) {
-    sp_fs_entry_t* entry = &entries[i];
-
-    // entry kinds are hints; flip on a contradicting error so a lying or
-    // absent d_type can't strand an entry
-    if (entry->kind == SP_FS_KIND_DIR) {
-      err = sp_fs_remove_dir(entry->path);
-      if (err == SP_ERR_SYS_NOT_DIR) err = sp_fs_remove_file(entry->path);
-    }
-    else {
-      err = sp_fs_remove_file(entry->path);
-      if (err == SP_ERR_SYS_IS_DIR) err = sp_fs_remove_dir(entry->path);
-    }
-    if (err) goto done;
-  }
-
-  err = sp_sys_rmdir_s(sp_sys_get_root(0), path);
-
-done:
-  sp_mem_end_scratch(s);
-  return err;
+  return sp_fs_remove_dir_at(sp_path_at_root(path));
 }
 
 /*
@@ -20401,8 +20385,65 @@ done:
   Once
 
   */
-SP_API sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
-  return SP_OK;
+sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
+  sp_str_t sub = sp_fs_trim_path(path.sub);
+  sp_str_t name = sp_fs_get_name_for(sub, sp_os_get_path_kind());
+  if (sp_str_empty(name) || sp_str_equal(name, sp_str_lit(".")) || sp_str_equal(name, sp_str_lit(".."))) {
+    return SP_ERR_SYS_INVALID;
+  }
+
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_try(sp_sys_get_link_metadata_s(path.dir, sub, &meta));
+  switch (meta.kind) {
+    case SP_FS_KIND_DIR:     break;
+    case SP_FS_KIND_SYMLINK: return sp_sys_unlink_s(path.dir, sub);
+    case SP_FS_KIND_FILE:
+    case SP_FS_KIND_NONE:    return SP_ERR_SYS_NOT_DIR;
+  }
+
+  sp_path_t root = { .dir = path.dir, .sub = sub };
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_da(sp_fs_remove_frame_t) stack = sp_da_new(s.mem, sp_fs_remove_frame_t);
+  sp_err_t err = sp_fs_remove_frame_push(&stack, root, 0);
+
+  while (!err && !sp_da_empty(stack)) {
+    u64 depth = sp_da_size(stack) - 1;
+    sp_fs_remove_frame_t* top = &stack[depth];
+    top->dir.buf.data = top->buf;
+
+    sp_fs_dir_entry_t entry = sp_zero;
+    err = sp_fs_dir_next(&top->dir, &entry);
+    if (err) break;
+
+    if (!entry.name.data) {
+      sp_path_t self = depth ? sp_fs_remove_frame_path(&stack[depth - 1], top) : root;
+      sp_fs_dir_close(&top->dir);
+      err = sp_sys_rmdir_s(self.dir, self.sub);
+      sp_da_pop(stack);
+    }
+    else {
+      sp_path_t child = { .dir = top->dir.dir.fd, .sub = entry.name };
+      u32 offset = (u32)(sp_ptr_cast(const u8*, entry.name.data) - top->buf);
+
+      // entry kinds are hints; flip on a contradicting error so a lying or
+      // absent d_type can't strand an entry
+      if (entry.kind == SP_FS_KIND_DIR) {
+        err = sp_fs_remove_frame_push(&stack, child, offset);
+        if (err == SP_ERR_SYS_NOT_DIR || err == SP_ERR_SYS_LOOP) err = sp_sys_unlink_s(child.dir, child.sub);
+      }
+      else {
+        err = sp_sys_unlink_s(child.dir, child.sub);
+        if (err == SP_ERR_SYS_IS_DIR) err = sp_fs_remove_frame_push(&stack, child, offset);
+      }
+    }
+    if (err == SP_ERR_SYS_NOT_FOUND) err = SP_OK;
+  }
+
+  sp_da_for(stack, it) {
+    sp_fs_dir_close(&stack[it].dir);
+  }
+  sp_mem_end_scratch(s);
+  return err;
 }
 
 static sp_atomic_s32_t sp_fs_atomic_sequence;

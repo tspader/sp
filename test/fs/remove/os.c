@@ -5,13 +5,17 @@
                   "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 typedef struct {
+  sp_err_t err;
+  fs_expected_path_t paths [FS_MAX_PATHS];
+} expect_t;
+
+typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
   bool dir;
   const c8* cwd;
   const c8* path;
-  sp_err_t err;
-  fs_expected_path_t expect [FS_MAX_PATHS];
+  expect_t expect;
 } test_t;
 
 static const test_t tests [] = {
@@ -22,13 +26,17 @@ static const test_t tests [] = {
     },
     .path = "A",
     .expect = {
-      { .path = "A" },
+      .paths = {
+        { .path = "A" },
+      },
     },
   },
   {
     .name = "file_missing",
     .path = "A",
-    .err = SP_ERR_SYS_NOT_FOUND,
+    .expect = {
+      .err = SP_ERR_SYS_NOT_FOUND,
+    },
   },
   {
     .name = "file_is_dir",
@@ -36,9 +44,11 @@ static const test_t tests [] = {
       { "A", FS_SETUP_DIR },
     },
     .path = "A",
-    .err = SP_ERR_SYS_IS_DIR,
     .expect = {
-      { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+      .err = SP_ERR_SYS_IS_DIR,
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+      },
     },
   },
   {
@@ -53,30 +63,51 @@ static const test_t tests [] = {
     .dir = true,
     .path = "A",
     .expect = {
-      { .path = "A" },
-      { .path = "A/B" },
-      { .path = "A/C" },
-      { .path = "A/C/D" },
-      { .path = "A/E" },
+      .paths = {
+        { .path = "A" },
+        { .path = "A/B" },
+        { .path = "A/C" },
+        { .path = "A/C/D" },
+        { .path = "A/E" },
+      },
     },
   },
   {
-    .name = "dir_nested_sub",
+    .name = "dir_multi_component_sub",
     .setup = {
       { "A/B/C" },
     },
     .dir = true,
     .path = "A/B",
     .expect = {
-      { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
-      { .path = "A/B" },
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        { .path = "A/B" },
+      },
+    },
+  },
+  {
+    .name = "dir_unicode_child_round_trips",
+    .setup = {
+      { "\xc3\xa4\x62\x63", FS_SETUP_DIR },
+      { "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt" },
+    },
+    .dir = true,
+    .path = "\xc3\xa4\x62\x63",
+    .expect = {
+      .paths = {
+        { .path = "\xc3\xa4\x62\x63" },
+        { .path = "\xc3\xa4\x62\x63/\xc3\xbc\x66\x69\x6c\x65.txt" },
+      },
     },
   },
   {
     .name = "dir_missing",
     .dir = true,
     .path = "A",
-    .err = SP_ERR_SYS_NOT_FOUND,
+    .expect = {
+      .err = SP_ERR_SYS_NOT_FOUND,
+    },
   },
   {
     .name = "dir_is_file",
@@ -85,9 +116,11 @@ static const test_t tests [] = {
     },
     .dir = true,
     .path = "A",
-    .err = SP_ERR_SYS_NOT_DIR,
     .expect = {
-      { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
+      .err = SP_ERR_SYS_NOT_DIR,
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
     },
   },
   {
@@ -98,9 +131,11 @@ static const test_t tests [] = {
     .dir = true,
     .cwd = "A",
     .path = ".",
-    .err = SP_ERR_SYS_INVALID,
     .expect = {
-      { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      .err = SP_ERR_SYS_INVALID,
+      .paths = {
+        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
     },
   },
   {
@@ -110,11 +145,29 @@ static const test_t tests [] = {
     },
     .dir = true,
     .path = "A/..",
-    .err = SP_ERR_SYS_INVALID,
     .expect = {
-      { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      .err = SP_ERR_SYS_INVALID,
+      .paths = {
+        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
     },
   },
+#if defined(SP_WIN32)
+  {
+    .name = "dir_dotdot_backslash_rejected",
+    .setup = {
+      { "A/B" },
+    },
+    .dir = true,
+    .path = "A\\..",
+    .expect = {
+      .err = SP_ERR_SYS_INVALID,
+      .paths = {
+        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
+    },
+  },
+#endif
   {
     .name = "dir_empty_rejected",
     .setup = {
@@ -123,26 +176,32 @@ static const test_t tests [] = {
     .dir = true,
     .cwd = "A",
     .path = "",
-    .err = SP_ERR_SYS_INVALID,
     .expect = {
-      { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      .err = SP_ERR_SYS_INVALID,
+      .paths = {
+        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
     },
   },
   {
     .name = "dir_does_not_follow_symlink",
     .setup = {
-      { "B" },
+      { "B", FS_SETUP_DIR },
+      { "B/C" },
       { "A", FS_SETUP_DIR },
       { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "B" },
-      { "A/C" },
+      { "A/D" },
     },
     .dir = true,
     .path = "A",
     .expect = {
-      { .path = "A" },
-      { .path = "A/L" },
-      { .path = "A/C" },
-      { .path = "B", .exists = true, .kind = SP_FS_KIND_FILE },
+      .paths = {
+        { .path = "A" },
+        { .path = "A/L" },
+        { .path = "A/D" },
+        { .path = "B", .exists = true, .kind = SP_FS_KIND_DIR },
+        { .path = "B/C", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
     },
   },
   {
@@ -155,9 +214,11 @@ static const test_t tests [] = {
     .dir = true,
     .path = "L",
     .expect = {
-      { .path = "L" },
-      { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
-      { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      .paths = {
+        { .path = "L" },
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
     },
   },
   {
@@ -170,9 +231,11 @@ static const test_t tests [] = {
     .dir = true,
     .path = "L/",
     .expect = {
-      { .path = "L" },
-      { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
-      { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      .paths = {
+        { .path = "L" },
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
     },
   },
 #if defined(SP_POSIX)
@@ -186,9 +249,11 @@ static const test_t tests [] = {
     .dir = true,
     .path = "A",
     .expect = {
-      { .path = "A" },
-      { .path = "A/F" },
-      { .path = "A/B" },
+      .paths = {
+        { .path = "A" },
+        { .path = "A/F" },
+        { .path = "A/B" },
+      },
     },
   },
 #endif
@@ -207,13 +272,13 @@ sp_test_each(fs, remove, test_t, tests) {
 
   sp_path_t path = { .dir = dir, .sub = sp_cstr_as_str(it->path) };
   sp_err_t result = it->dir ? sp_fs_remove_dir_at(path) : sp_fs_remove_file_at(path);
-  sp_expect_err_eq(t, result, it->err);
+  sp_expect_err_eq(t, result, it->expect.err);
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_expect_ok(t, sp_sys_get_file_metadata(dir, &meta));
   sp_sys_close(dir);
 
-  fs_expect_paths(t, sandbox, it->expect);
+  fs_expect_paths(t, sandbox, it->expect.paths);
   return SP_OK;
 }
 
@@ -246,24 +311,21 @@ sp_test(fs, remove_dir_deeper_than_path_max) {
 
 #if defined(SP_POSIX)
 sp_test(fs, remove_dir_unwritable_subdir_fails) {
-  sp_mem_t mem = sp_test_arena(t);
+  sp_sys_fd_t root = sp_sys_get_root(0);
   sp_str_t locked = fs_path_c(t, "A/B");
   sp_must_ok(t, sp_fs_create_dir(locked));
   sp_must_ok(t, sp_fs_create_file(fs_path_c(t, "A/B/C")));
-
-  const c8* locked_c = sp_cstr_from_str(mem, locked);
-  sp_must_eq(t, chmod(locked_c, 0555), 0);
+  sp_must_ok(t, sp_sys_set_file_perms_s(root, locked, (sp_sys_file_perms_t) { .value = 0555 }));
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), 0, &dir));
+  sp_must_ok(t, sp_sys_open_dir_s(root, sp_test_dir(t), 0, &dir));
   sp_err_t result = sp_fs_remove_dir_at((sp_path_t) { .dir = dir, .sub = sp_str_lit("A") });
   sp_sys_close(dir);
-  sp_must_eq(t, chmod(locked_c, 0755), 0);
 
   if (!result) return sp_test_skip(t, "directory permissions not enforced");
+  sp_must_ok(t, sp_sys_set_file_perms_s(root, locked, (sp_sys_file_perms_t) { .value = 0755 }));
   sp_expect_err_eq(t, result, SP_ERR_SYS_ACCESS_DENIED);
   fs_expect_paths(t, sp_test_dir(t), (const fs_expected_path_t [FS_MAX_PATHS]) {
-    { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
     { .path = "A/B", .exists = true, .kind = SP_FS_KIND_DIR },
     { .path = "A/B/C", .exists = true, .kind = SP_FS_KIND_FILE },
   });

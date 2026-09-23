@@ -35,30 +35,31 @@ static u32 dir_len(const sim_dir_t* dir) {
   return n;
 }
 
-static sp_str_t resolve(sp_sys_fd_t fd, const c8* path, u32 len, c8 buf [SP_PATH_MAX]) {
-  s64 slot = (s64)fd - FD_BASE;
-  if (slot < 0 || slot >= (s64)active->count.dirs) return sp_str(path, len);
-
-  sp_str_t base = sp_cstr_as_str(active->opened[slot].dir->path);
-  sp_assert(base.len + 1 + len < SP_PATH_MAX);
-  sp_str_copy_to(base, buf, SP_PATH_MAX);
-  buf[base.len] = '/';
-  sp_mem_copy(buf + base.len + 1, path, len);
-  return sp_str(buf, base.len + 1 + len);
+static s64 slot_of(sp_sys_fd_t fd) {
+  return (s64)fd - FD_BASE;
 }
 
-static void record(sp_str_t path, sp_fs_kind_t kind) {
+static sp_str_t resolve(sp_mem_t mem, sp_sys_fd_t fd, const c8* path, u32 len) {
+  if (fd == sp_sys_get_root(0)) return sp_str(path, len);
+  s64 slot = slot_of(fd);
+  sp_assert(slot >= 0 && slot < (s64)active->count.dirs);
+  return sp_fs_join_path(mem, sp_cstr_as_str(active->opened[slot].dir->path), sp_str(path, len));
+}
+
+static void record(sp_str_t path, sim_op_t op) {
   sp_assert(active->num_removed < SIM_MAX_REMOVED);
   sp_assert(path.len < SIM_MAX_REMOVED_PATH);
   sim_removed_t* out = &active->removed[active->num_removed++];
   sp_str_copy_to(path, out->path, SIM_MAX_REMOVED_PATH);
-  out->kind = kind;
+  out->op = op;
 }
 
 static sp_err_t open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
   active->count.opens++;
-  c8 buf [SP_PATH_MAX];
-  const sim_dir_t* dir = find_dir(resolve(fd, path, len, buf));
+  if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) active->count.nofollow++;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  const sim_dir_t* dir = find_dir(resolve(s.mem, fd, path, len));
+  sp_mem_end_scratch(s);
   if (!dir) return SP_ERR_SYS_NOT_FOUND;
   if (dir->open) return dir->open;
   sp_assert(active->count.dirs < SIM_MAX_OPENS);
@@ -74,7 +75,7 @@ static sp_err_t close_fd(sp_sys_fd_t fd) {
 }
 
 static sp_err_t dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
-  s64 slot = (s64)fd - FD_BASE;
+  s64 slot = slot_of(fd);
   if (active->opened[slot].dir->it_open) return active->opened[slot].dir->it_open;
   *out = sp_zero_s(sp_sys_dir_it_t);
   out->fd = fd;
@@ -94,9 +95,13 @@ static sp_err_t dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cur
   const sim_entry_t* entry = &active->opened[it->state].dir->entries[*cursor];
   *cursor += 1;
 
+  u32 len = (u32)sp_cstr_len(entry->name);
+  sp_assert(len <= buf->capacity);
+  sp_mem_copy(buf->data, entry->name, len);
+
   *out = sp_zero_s(sp_sys_dir_entry_t);
-  out->name = entry->name;
-  out->len = (u32)sp_cstr_len(entry->name);
+  out->name = sp_ptr_cast(const c8*, buf->data);
+  out->len = len;
   out->kind = entry->kind;
   return SP_OK;
 }
@@ -107,40 +112,46 @@ static sp_err_t dir_it_close(sp_sys_dir_it_t* it) {
 }
 
 static sp_err_t get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  c8 buf [SP_PATH_MAX];
-  sp_str_t full = resolve(fd, path, len, buf);
-  *st = sp_zero_s(sp_sys_file_meta_t);
-
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_str_t full = resolve(s.mem, fd, path, len);
   const sim_entry_t* entry = find_entry(full);
-  if (entry) {
+  const sim_dir_t* dir = find_dir(full);
+  sp_mem_end_scratch(s);
+
+  *st = sp_zero_s(sp_sys_file_meta_t);
+  if (entry && entry->stat != SP_FS_KIND_NONE) {
     st->kind = entry->stat;
     return SP_OK;
   }
-  if (find_dir(full)) {
+  if (dir) {
     st->kind = SP_FS_KIND_DIR;
     return SP_OK;
   }
+  if (entry) return SP_OK;
   return SP_ERR_SYS_NOT_FOUND;
 }
 
 static sp_err_t unlink_entry(sp_sys_fd_t fd, const c8* path, u32 len) {
-  c8 buf [SP_PATH_MAX];
-  sp_str_t full = resolve(fd, path, len, buf);
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_str_t full = resolve(s.mem, fd, path, len);
   const sim_entry_t* entry = find_entry(full);
-  if (!entry) return SP_ERR_SYS_NOT_FOUND;
-  if (entry->unlink) return entry->unlink;
-  record(full, SP_FS_KIND_FILE);
-  return SP_OK;
+  sp_err_t err = SP_ERR_SYS_NOT_FOUND;
+  if (entry) err = entry->unlink;
+  if (entry && !err) record(full, SIM_OP_UNLINK);
+  sp_mem_end_scratch(s);
+  return err;
 }
 
 static sp_err_t remove_dir(sp_sys_fd_t fd, const c8* path, u32 len) {
-  c8 buf [SP_PATH_MAX];
-  sp_str_t full = resolve(fd, path, len, buf);
+  active->count.rmdirs++;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_str_t full = resolve(s.mem, fd, path, len);
   const sim_dir_t* dir = find_dir(full);
-  if (!dir) return SP_ERR_SYS_NOT_FOUND;
-  if (dir->rmdir) return dir->rmdir;
-  record(full, SP_FS_KIND_DIR);
-  return SP_OK;
+  sp_err_t err = SP_ERR_SYS_NOT_FOUND;
+  if (dir) err = dir->rmdir;
+  if (dir && !err) record(full, SIM_OP_RMDIR);
+  sp_mem_end_scratch(s);
+  return err;
 }
 
 void sim_begin(sim_t* sim, const sim_dir_t* dirs) {
