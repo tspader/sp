@@ -7476,6 +7476,26 @@ SP_PRIVATE u32 sp_sys_posix_trim_slashes(const c8* path, u32 len) {
 }
 #endif
 
+#if defined(SP_WASM)
+SP_PRIVATE sp_sys_timespec_t sp_sys_timespec_from_ns(u64 ns);
+
+static void sp_sys_file_meta_from_wasi(const __wasi_filestat_t* src, sp_sys_file_meta_t* meta) {
+  if      (src->filetype == __WASI_FILETYPE_SYMBOLIC_LINK) meta->kind = SP_FS_KIND_SYMLINK;
+  else if (src->filetype == __WASI_FILETYPE_DIRECTORY)     meta->kind = SP_FS_KIND_DIR;
+  else if (src->filetype == __WASI_FILETYPE_REGULAR_FILE)  meta->kind = SP_FS_KIND_FILE;
+  else                                                     meta->kind = SP_FS_KIND_NONE;
+
+  meta->size   = (s64)src->size;
+  meta->atime  = sp_sys_timespec_from_ns(src->atim);
+  meta->mtime  = sp_sys_timespec_from_ns(src->mtim);
+  meta->btime  = sp_zero_s(sp_sys_timespec_t);
+  meta->id     = src->ino;
+  meta->device = src->dev;
+  meta->nlink  = src->nlink;
+  meta->perms  = meta->kind == SP_FS_KIND_DIR ? sp_sys_default_dir_perms : sp_sys_default_file_perms;
+}
+#endif
+
 
 //////////////////////////////
 // SP_SYS_GET_FILE_METADATA //
@@ -7551,8 +7571,10 @@ sp_err_t sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
   return SP_OK;
 
 #elif defined(SP_WASM)
-  (void)fd; (void)meta;
-  return SP_ERR_SYS_UNSUPPORTED;
+  __wasi_filestat_t native = sp_zero;
+  sp_try(sp_sys_err_from_wasi(sp_wasi_fd_filestat_get((__wasi_fd_t)fd, &native)));
+  sp_sys_file_meta_from_wasi(&native, meta);
+  return SP_OK;
 
 #else
   #error "sp_sys_get_file_metadata"
@@ -10375,8 +10397,11 @@ sp_err_t sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   return SP_OK;
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)st;
-  return SP_ERR_SYS_UNSUPPORTED;
+  __wasi_filestat_t native = sp_zero;
+  sp_try(sp_sys_err_from_wasi(sp_wasi_path_filestat_get((__wasi_fd_t)fd, __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW, path, len, &native)));
+  if (path[len - 1] == '/' && native.filetype != __WASI_FILETYPE_DIRECTORY) return SP_ERR_SYS_NOT_DIR;
+  sp_sys_file_meta_from_wasi(&native, st);
+  return SP_OK;
 
 #else
   #error "sp_sys_get_path_metadata"
@@ -10412,8 +10437,11 @@ sp_err_t sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   return SP_OK;
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)st;
-  return SP_ERR_SYS_UNSUPPORTED;
+  __wasi_filestat_t native = sp_zero;
+  sp_try(sp_sys_err_from_wasi(sp_wasi_path_filestat_get((__wasi_fd_t)fd, 0, path, len, &native)));
+  if (path[len - 1] == '/' && native.filetype != __WASI_FILETYPE_DIRECTORY) return SP_ERR_SYS_NOT_DIR;
+  sp_sys_file_meta_from_wasi(&native, st);
+  return SP_OK;
 
 #else
   #error "sp_sys_get_link_metadata"
