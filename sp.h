@@ -8467,6 +8467,36 @@ SP_PRIVATE s32 sp_sys_posix_open_flags(sp_sys_open_mode_t mode, u32 flags) {
   return o;
 }
 
+#elif defined(SP_WASM)
+#define SP_SYS_WASI_DIR_RIGHTS ( \
+  __WASI_RIGHTS_FD_READ | __WASI_RIGHTS_FD_READDIR | __WASI_RIGHTS_FD_FILESTAT_GET | __WASI_RIGHTS_FD_FDSTAT_SET_FLAGS | \
+  __WASI_RIGHTS_PATH_OPEN | __WASI_RIGHTS_PATH_CREATE_DIRECTORY | __WASI_RIGHTS_PATH_CREATE_FILE | \
+  __WASI_RIGHTS_PATH_LINK_SOURCE | __WASI_RIGHTS_PATH_LINK_TARGET | __WASI_RIGHTS_PATH_SYMLINK | __WASI_RIGHTS_PATH_READLINK | \
+  __WASI_RIGHTS_PATH_RENAME_SOURCE | __WASI_RIGHTS_PATH_RENAME_TARGET | \
+  __WASI_RIGHTS_PATH_FILESTAT_GET | __WASI_RIGHTS_PATH_FILESTAT_SET_SIZE | __WASI_RIGHTS_PATH_FILESTAT_SET_TIMES | \
+  __WASI_RIGHTS_PATH_REMOVE_DIRECTORY | __WASI_RIGHTS_PATH_UNLINK_FILE)
+
+SP_PRIVATE __wasi_rights_t sp_sys_wasi_open_rights(sp_sys_open_mode_t mode) {
+  __wasi_rights_t common = __WASI_RIGHTS_FD_SEEK | __WASI_RIGHTS_FD_TELL | __WASI_RIGHTS_FD_ADVISE | __WASI_RIGHTS_FD_FILESTAT_GET | __WASI_RIGHTS_FD_FDSTAT_SET_FLAGS | __WASI_RIGHTS_POLL_FD_READWRITE;
+  __wasi_rights_t read = __WASI_RIGHTS_FD_READ;
+  __wasi_rights_t write = __WASI_RIGHTS_FD_WRITE | __WASI_RIGHTS_FD_DATASYNC | __WASI_RIGHTS_FD_SYNC | __WASI_RIGHTS_FD_ALLOCATE | __WASI_RIGHTS_FD_FILESTAT_SET_SIZE | __WASI_RIGHTS_FD_FILESTAT_SET_TIMES;
+  switch (mode) {
+    case SP_SYS_OPEN_MODE_RO:   return common | read;
+    case SP_SYS_OPEN_MODE_WO:   return common | write;
+    case SP_SYS_OPEN_MODE_RW:   return common | read | write;
+    case SP_SYS_OPEN_MODE_PATH: return common;
+  }
+  return common;
+}
+
+SP_PRIVATE __wasi_oflags_t sp_sys_wasi_open_flags(u32 flags) {
+  __wasi_oflags_t o = 0;
+  if (flags & (SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE)) o |= __WASI_OFLAGS_CREAT;
+  if (flags & SP_SYS_OPEN_EXCLUSIVE) o |= __WASI_OFLAGS_EXCL;
+  if (flags & SP_SYS_OPEN_TRUNCATE)  o |= __WASI_OFLAGS_TRUNC;
+  return o;
+}
+
 #endif
 
 sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
@@ -8512,8 +8542,13 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   return SP_OK;
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)mode; (void)flags;
-  return SP_ERR_SYS_UNSUPPORTED;
+  __wasi_rights_t rights = sp_sys_wasi_open_rights(mode);
+  __wasi_fdflags_t fdflags = (flags & SP_SYS_OPEN_APPEND) ? __WASI_FDFLAGS_APPEND : 0;
+  __wasi_fd_t opened = -1;
+  sp_try(sp_sys_err_from_wasi(sp_wasi_path_open((__wasi_fd_t)fd, __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW, path, len, sp_sys_wasi_open_flags(flags), rights, rights, fdflags, &opened)));
+
+  *out = (sp_sys_fd_t)opened;
+  return SP_OK;
 
 #else
   #error "sp_sys_open"
@@ -8581,8 +8616,14 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, s
   return SP_OK;
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)flags;
-  return SP_ERR_SYS_UNSUPPORTED;
+  __wasi_lookupflags_t lookup = (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) ? 0 : __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW;
+  __wasi_rights_t inheriting = SP_SYS_WASI_DIR_RIGHTS | sp_sys_wasi_open_rights(SP_SYS_OPEN_MODE_RW);
+  __wasi_fd_t opened = -1;
+  __wasi_errno_t err = sp_wasi_path_open((__wasi_fd_t)fd, lookup, path, len, __WASI_OFLAGS_DIRECTORY, SP_SYS_WASI_DIR_RIGHTS, inheriting, 0, &opened);
+  if (err) return sp_sys_open_dir_nofollow_err(fd, path, len, flags, sp_sys_err_from_wasi(err));
+
+  *out = (sp_sys_fd_t)opened;
+  return SP_OK;
 
 #else
   #error "sp_sys_open_dir"
