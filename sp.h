@@ -5910,12 +5910,16 @@ s64 sp_sys_get_fd_path(sp_sys_fd_t fd, c8* buf, u64 size) {
   return (sp_rt.vt->get_fd_path)(fd, buf, size);
 }
 
+SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
+  return sp_fs_trim_path(sp_str(path, len)).len;
+}
+
 sp_err_t sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
-  return (sp_rt.vt->open)(fd, path, len, mode, flags, out);
+  return (sp_rt.vt->open)(fd, path, sp_sys_trim_path(path, len), mode, flags, out);
 }
 
 sp_err_t sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
-  return (sp_rt.vt->open_dir)(fd, path, len, flags, out);
+  return (sp_rt.vt->open_dir)(fd, path, sp_sys_trim_path(path, len), flags, out);
 }
 
 sp_err_t sp_sys_close(sp_sys_fd_t fd) {
@@ -5931,39 +5935,39 @@ sp_err_t sp_sys_pipe_ready(sp_sys_fd_t fd, u8* ready) {
 }
 
 sp_err_t sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
-  return (sp_rt.vt->mkdir)(fd, path, len, perms);
+  return (sp_rt.vt->mkdir)(fd, path, sp_sys_trim_path(path, len), perms);
 }
 
 sp_err_t sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len) {
-  return (sp_rt.vt->rmdir)(fd, path, len);
+  return (sp_rt.vt->rmdir)(fd, path, sp_sys_trim_path(path, len));
 }
 
 sp_err_t sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len) {
-  return (sp_rt.vt->unlink)(fd, path, len);
+  return (sp_rt.vt->unlink)(fd, path, sp_sys_trim_path(path, len));
 }
 
 sp_err_t sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
-  return (sp_rt.vt->rename)(from_fd, from, from_len, to_fd, alias, alias_len);
+  return (sp_rt.vt->rename)(from_fd, from, sp_sys_trim_path(from, from_len), to_fd, alias, sp_sys_trim_path(alias, alias_len));
 }
 
 sp_err_t sp_sys_link(sp_sys_fd_t from, const c8* existing, u32 existing_len, sp_sys_fd_t to, const c8* alias, u32 alias_len) {
-  return (sp_rt.vt->link)(from, existing, existing_len, to, alias, alias_len);
+  return (sp_rt.vt->link)(from, existing, sp_sys_trim_path(existing, existing_len), to, alias, sp_sys_trim_path(alias, alias_len));
 }
 
 sp_err_t sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
-  return (sp_rt.vt->symlink)(existing, existing_len, to_fd, alias, alias_len);
+  return (sp_rt.vt->symlink)(existing, existing_len, to_fd, alias, sp_sys_trim_path(alias, alias_len));
 }
 
 sp_err_t sp_sys_readlink(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size, u64* target_len) {
-  return (sp_rt.vt->readlink)(fd, path, len, buf, size, target_len);
+  return (sp_rt.vt->readlink)(fd, path, sp_sys_trim_path(path, len), buf, size, target_len);
 }
 
 sp_err_t sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  return (sp_rt.vt->get_path_metadata)(fd, path, len, st);
+  return (sp_rt.vt->get_path_metadata)(fd, path, sp_sys_trim_path(path, len), st);
 }
 
 sp_err_t sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  return (sp_rt.vt->get_link_metadata)(fd, path, len, st);
+  return (sp_rt.vt->get_link_metadata)(fd, path, sp_sys_trim_path(path, len), st);
 }
 
 sp_err_t sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
@@ -5971,11 +5975,11 @@ sp_err_t sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
 }
 
 sp_err_t sp_sys_set_file_perms(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
-  return (sp_rt.vt->set_file_perms)(fd, path, len, perms);
+  return (sp_rt.vt->set_file_perms)(fd, path, sp_sys_trim_path(path, len), perms);
 }
 
 sp_err_t sp_sys_set_times(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime) {
-  return (sp_rt.vt->set_times)(fd, path, len, atime, mtime);
+  return (sp_rt.vt->set_times)(fd, path, sp_sys_trim_path(path, len), atime, mtime);
 }
 
 sp_err_t sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
@@ -6163,7 +6167,7 @@ s64 sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence) {
 }
 
 sp_err_t sp_sys_chdir(const c8* path, u32 len) {
-  return (sp_rt.vt->chdir)(path, len);
+  return (sp_rt.vt->chdir)(path, sp_sys_trim_path(path, len));
 }
 
 sp_err_t sp_sys_dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
@@ -7296,7 +7300,6 @@ SP_PRIVATE sp_err_t sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, bool dir) {
   // We have to conform to the lowest common denominator, which in this case
   // is POSIX. That means that unlink() is for everything except directories,
   // and rmdir is only for directories.
-  path = sp_fs_trim_path(path);
   u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT;
   if (dir) options |= SP_NT_FILE_DIRECTORY_FILE;
 
@@ -7430,11 +7433,8 @@ static void sp_sys_timespec_from_filetime(FILETIME ft, sp_sys_timespec_t* out) {
 }
 
 static sp_err_t sp_sys_file_meta_from_nt_path(sp_sys_fd_t dir, sp_str_t path, sp_sys_file_meta_t* out, bool follow_symlinks) {
-  sp_str_t trimmed = sp_fs_trim_path(path);
-  bool trailing = trimmed.len != path.len;
-  path = trimmed;
   u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT;
-  if (!follow_symlinks && !trailing) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
+  if (!follow_symlinks) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(
     dir,
@@ -7446,7 +7446,6 @@ static sp_err_t sp_sys_file_meta_from_nt_path(sp_sys_fd_t dir, sp_str_t path, sp
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
   sp_err_t rc = sp_sys_get_file_metadata_p(fd, out);
   sp_sys_nt_close(fd);
-  if (!rc && trailing && out->kind != SP_FS_KIND_DIR) return SP_ERR_SYS_NOT_DIR;
   return rc;
 }
 
@@ -7468,11 +7467,6 @@ SP_PRIVATE sp_err_t sp_sys_tty_err_from_win32(DWORD err) {
 
 SP_PRIVATE size_t sp_sys_posix_io_count(u64 count) {
   return count > SP_SYS_POSIX_IO_MAX ? SP_SYS_POSIX_IO_MAX : (size_t)count;
-}
-
-SP_PRIVATE u32 sp_sys_posix_trim_slashes(const c8* path, u32 len) {
-  while (len > 1 && path[len - 1] == '/') len--;
-  return len;
 }
 #endif
 
@@ -10433,14 +10427,12 @@ sp_err_t sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   sp_try(sp_sys_posix_path(path, len, buf));
   struct stat native;
   sp_try(sp_sys_err_from_libc(fstatat(fd, buf, &native, 0)));
-  if (path[len - 1] == '/' && !S_ISDIR(native.st_mode)) return SP_ERR_SYS_NOT_DIR;
   sp_sys_file_meta_from_libc(&native, st);
   return SP_OK;
 
 #elif defined(SP_WASM)
   __wasi_filestat_t native = sp_zero;
   sp_try(sp_sys_err_from_wasi(sp_wasi_path_filestat_get((__wasi_fd_t)fd, __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW, path, len, &native)));
-  if (path[len - 1] == '/' && native.filetype != __WASI_FILETYPE_DIRECTORY) return SP_ERR_SYS_NOT_DIR;
   sp_sys_file_meta_from_wasi(&native, st);
   return SP_OK;
 
@@ -10473,14 +10465,12 @@ sp_err_t sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   sp_try(sp_sys_posix_path(path, len, buf));
   struct stat native;
   sp_try(sp_sys_err_from_libc(fstatat(fd, buf, &native, AT_SYMLINK_NOFOLLOW)));
-  if (path[len - 1] == '/' && !S_ISDIR(native.st_mode)) return SP_ERR_SYS_NOT_DIR;
   sp_sys_file_meta_from_libc(&native, st);
   return SP_OK;
 
 #elif defined(SP_WASM)
   __wasi_filestat_t native = sp_zero;
   sp_try(sp_sys_err_from_wasi(sp_wasi_path_filestat_get((__wasi_fd_t)fd, 0, path, len, &native)));
-  if (path[len - 1] == '/' && native.filetype != __WASI_FILETYPE_DIRECTORY) return SP_ERR_SYS_NOT_DIR;
   sp_sys_file_meta_from_wasi(&native, st);
   return SP_OK;
 
@@ -10521,7 +10511,7 @@ sp_err_t sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_per
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
-  sp_try(sp_sys_posix_path(path, sp_sys_posix_trim_slashes(path, len), buf));
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_sys_err_from_libc(mkdirat(fd, buf, (mode_t)(perms.value & 07777)));
 
 #elif defined(SP_WASM)
@@ -10551,7 +10541,7 @@ sp_err_t sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
-  sp_try(sp_sys_posix_path(path, sp_sys_posix_trim_slashes(path, len), buf));
+  sp_try(sp_sys_posix_path(path, len, buf));
   return sp_sys_err_from_libc(unlinkat(fd, buf, AT_REMOVEDIR));
 
 #elif defined(SP_WASM)
@@ -10572,14 +10562,7 @@ sp_err_t sp_sys_rmdir_s(sp_sys_fd_t fd, sp_str_t path) {
 ///////////////////
 sp_err_t sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 #if defined(SP_WIN32)
-  sp_str_t full = sp_str(path, len);
-  sp_str_t trimmed = sp_fs_trim_path(full);
-  if (trimmed.len != full.len) {
-    sp_sys_file_meta_t meta = sp_zero;
-    sp_try(sp_sys_file_meta_from_nt_path(fd, trimmed, &meta, false));
-    return meta.kind == SP_FS_KIND_DIR ? SP_ERR_SYS_IS_DIR : SP_ERR_SYS_NOT_DIR;
-  }
-  return sp_sys_nt_delete(fd, full, false);
+  return sp_sys_nt_delete(fd, sp_str(path, len), false);
 
 #elif defined(SP_LINUX)
   c8 buf [SP_PATH_MAX];
@@ -10588,14 +10571,7 @@ sp_err_t sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
-  u32 n = sp_sys_posix_trim_slashes(path, len);
-  sp_try(sp_sys_posix_path(path, n, buf));
-
-  if (n != len) {
-    struct stat st;
-    sp_try(sp_sys_err_from_libc(fstatat(fd, buf, &st, AT_SYMLINK_NOFOLLOW)));
-    return S_ISDIR(st.st_mode) ? SP_ERR_SYS_IS_DIR : SP_ERR_SYS_NOT_DIR;
-  }
+  sp_try(sp_sys_posix_path(path, len, buf));
 
   s32 rc = unlinkat(fd, buf, 0);
   if (rc < 0 && errno == SP_EPERM) {
