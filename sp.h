@@ -8365,6 +8365,14 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
 #endif
 }
 
+SP_PRIVATE sp_err_t sp_sys_open_dir_nofollow_err(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_err_t err) {
+  if (err != SP_ERR_SYS_NOT_DIR || !(flags & SP_SYS_OPEN_DIR_NO_FOLLOW)) return err;
+
+  sp_sys_file_meta_t st = sp_zero;
+  if (sp_sys_get_link_metadata_p(fd, path, len, &st)) return err;
+  return st.kind == SP_FS_KIND_SYMLINK ? SP_ERR_SYS_LOOP : err;
+}
+
 sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
   *out = SP_SYS_INVALID_FD;
   if (flags & ~(u32)SP_SYS_OPEN_DIR_NO_FOLLOW) return SP_ERR_SYS_INVALID;
@@ -8377,7 +8385,7 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, s
 
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(fd, sp_str(path, len), access, share, SP_NT_FILE_OPEN, options, FILE_ATTRIBUTE_NORMAL, &handle);
-  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+  if (!SP_NT_SUCCESS(status)) return sp_sys_open_dir_nofollow_err(fd, path, len, flags, sp_sys_err_from_nt(status));
 
   if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) {
     BY_HANDLE_FILE_INFORMATION info = sp_zero;
@@ -8401,7 +8409,7 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, s
   u32 o = SP_SYS_LINUX_O_RDONLY | SP_SYS_LINUX_O_DIRECTORY | SP_SYS_LINUX_O_CLOEXEC;
   if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) o |= SP_SYS_LINUX_O_NOFOLLOW;
   s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, fd, buf, o, 0);
-  if (rc < 0) return sp_sys_err_from_errno(-rc);
+  if (rc < 0) return sp_sys_open_dir_nofollow_err(fd, path, len, flags, sp_sys_err_from_errno(-rc));
 
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
@@ -8412,7 +8420,7 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, s
   s32 o = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
   if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) o |= O_NOFOLLOW;
   s32 rc = openat((int)fd, buf, o, 0);
-  if (rc < 0) return sp_sys_err_from_errno(errno);
+  if (rc < 0) return sp_sys_open_dir_nofollow_err(fd, path, len, flags, sp_sys_err_from_errno(errno));
 
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
