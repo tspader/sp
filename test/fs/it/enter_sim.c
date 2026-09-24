@@ -11,6 +11,7 @@ typedef struct {
 
 typedef struct {
   const c8* path;
+  const c8* name;
   sp_fs_kind_t kind;
   sp_fs_it_yield_t yield;
 } yield_t;
@@ -37,10 +38,10 @@ static const test_t tests [] = {
     .enter = { { "T/B" } },
     .expect = {
       .yields = {
-        { "T/B", SP_FS_KIND_DIR },
-        { "T/B/D", SP_FS_KIND_FILE },
-        { "T/B", SP_FS_KIND_DIR, SP_FS_IT_LEAVE },
-        { "T/C", SP_FS_KIND_FILE },
+        { "T/B", "B", SP_FS_KIND_DIR },
+        { "T/B/D", "D", SP_FS_KIND_FILE },
+        { "T/B", "B", SP_FS_KIND_DIR, SP_FS_IT_LEAVE },
+        { "T/C", "C", SP_FS_KIND_FILE },
       },
       .opens = 2,
     },
@@ -53,7 +54,7 @@ static const test_t tests [] = {
     },
     .expect = {
       .yields = {
-        { "T/B", SP_FS_KIND_DIR },
+        { "T/B", "B", SP_FS_KIND_DIR },
       },
       .opens = 1,
     },
@@ -67,9 +68,9 @@ static const test_t tests [] = {
     .enter = { { "T/B" } },
     .expect = {
       .yields = {
-        { "T/B", SP_FS_KIND_FILE },
-        { "T/B/C", SP_FS_KIND_FILE },
-        { "T/B", SP_FS_KIND_DIR, SP_FS_IT_LEAVE },
+        { "T/B", "B", SP_FS_KIND_FILE },
+        { "T/B/C", "C", SP_FS_KIND_FILE },
+        { "T/B", "B", SP_FS_KIND_DIR, SP_FS_IT_LEAVE },
       },
       .opens = 2,
     },
@@ -83,8 +84,8 @@ static const test_t tests [] = {
     .enter = { { "T/B", SP_ERR_SYS_IO } },
     .expect = {
       .yields = {
-        { "T/B", SP_FS_KIND_DIR },
-        { "T/C", SP_FS_KIND_FILE },
+        { "T/B", "B", SP_FS_KIND_DIR },
+        { "T/C", "C", SP_FS_KIND_FILE },
       },
       .opens = 2,
     },
@@ -113,6 +114,8 @@ sp_test_each(fs, it_enter_sim, test_t, tests, .serial = true) {
     if (produced < MAX_YIELDS && it->expect.yields[produced].path) {
       const yield_t* want = &it->expect.yields[produced];
       sp_expect_str_eq_c(t, walk.entry.path, want->path);
+      sp_expect_str_eq_c(t, walk.entry.name, want->name);
+      sp_expect_str_eq(t, walk.at.sub, walk.entry.name);
       sp_expect_eq(t, (u32)walk.entry.kind, (u32)want->kind);
       sp_expect_eq(t, (u32)walk.yield, (u32)want->yield);
     }

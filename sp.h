@@ -3063,6 +3063,7 @@ typedef struct {
   sp_fs_dir_t dir;
   SP_ALIGNED u8 buf [SP_FS_IT_BUF_SIZE];
   u32 len;
+  u32 name_len;
 } sp_fs_it_frame_t;
 
 typedef enum {
@@ -20233,7 +20234,7 @@ SP_PRIVATE sp_err_t sp_fs_it_join(sp_fs_it_t* it, u32 prefix, sp_str_t name, u32
 }
 
 SP_PRIVATE sp_err_t sp_fs_it_push(sp_fs_it_t* it, sp_path_t path, u32 len, u32 flags) {
-  sp_fs_it_frame_t frame = { .len = len };
+  sp_fs_it_frame_t frame = { .len = len, .name_len = path.sub.len };
   sp_try(sp_fs_dir_open(&frame.dir, path.dir, path.sub, flags, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
   sp_da_push(it->stack, frame);
   return SP_OK;
@@ -20264,7 +20265,6 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
     return SP_OK;
   }
 
-  sp_str_t path = sp_str(it->path, top->len);
   sp_da_pop(it->stack);
   sp_try(sp_fs_dir_close(&top->dir));
   if (sp_da_empty(it->stack)) return SP_OK;
@@ -20272,8 +20272,8 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
   sp_fs_it_frame_t* parent = sp_da_back(it->stack);
   it->yield = SP_FS_IT_LEAVE;
   it->entry = (sp_fs_entry_t) {
-    .path = path,
-    .name = sp_fs_get_name(path),
+    .path = sp_str(it->path, top->len),
+    .name = sp_str(it->path + top->len - top->name_len, top->name_len),
     .kind = SP_FS_KIND_DIR,
   };
   it->at = (sp_path_t) { .dir = parent->dir.dir.fd, .sub = it->entry.name };
@@ -20291,7 +20291,7 @@ bool sp_fs_it_next(sp_fs_it_t* it) {
 
 sp_err_t sp_fs_it_enter(sp_fs_it_t* it) {
   sp_assert(it->yield == SP_FS_IT_ENTRY && !sp_str_empty(it->entry.path));
-  sp_assert(sp_da_back(it->stack)->len != it->entry.path.len);
+  sp_assert(sp_da_back(it->stack)->len < it->entry.path.len);
   return sp_fs_it_push(it, it->at, it->entry.path.len, SP_SYS_OPEN_DIR_NO_FOLLOW);
 }
 
@@ -20301,9 +20301,8 @@ bool sp_fs_it_walk(sp_fs_it_t* it) {
     if (it->entry.kind != SP_FS_KIND_DIR) return true;
 
     it->err = sp_fs_it_enter(it);
-    if (!it->err) return true;
-    sp_fs_it_unwind(it);
-    return false;
+    if (it->err) sp_fs_it_unwind(it);
+    return !it->err;
   }
   return false;
 }
@@ -20317,9 +20316,10 @@ sp_fs_it_t sp_fs_it_new_at(sp_mem_t mem, sp_path_t path, u32 flags) {
   sp_fs_it_t it = sp_zero;
   sp_da_init(mem, it.stack);
 
+  path.sub = sp_fs_trim_path(path.sub);
   u32 len = 0;
-  it.err = sp_fs_it_join(&it, 0, sp_fs_trim_path(path.sub), &len);
-  if (!it.err) it.err = sp_fs_it_push(&it, (sp_path_t) { .dir = path.dir, .sub = sp_str(it.path, len) }, len, flags);
+  it.err = sp_fs_it_join(&it, 0, path.sub, &len);
+  if (!it.err) it.err = sp_fs_it_push(&it, path, len, flags);
   return it;
 }
 
@@ -20680,41 +20680,36 @@ sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
   sp_fs_it_t it = sp_fs_it_new_at(s.mem, from, 0);
   sp_da(sp_sys_fd_t) dest = sp_da_new(s.mem, sp_sys_fd_t);
 
-  sp_sys_fd_t root = SP_SYS_INVALID_FD;
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   sp_sys_file_meta_t target = sp_zero;
   sp_err_t err = it.err;
   if (!err) err = sp_fs_create_dir_at(to);
-  if (!err) err = sp_sys_open_dir_s(to.dir, to.sub, 0, &root);
-  if (!err) sp_da_push(dest, root);
-  if (!err) err = sp_sys_get_file_metadata(root, &target);
+  if (!err) err = sp_sys_open_dir_s(to.dir, to.sub, 0, &fd);
+  if (!err) sp_da_push(dest, fd);
+  if (!err) err = sp_sys_get_file_metadata(fd, &target);
   if (!err && sp_fs_is_same_file(&source, &target)) err = SP_ERR_SYS_INVALID;
 
   while (!err && sp_fs_it_next(&it)) {
-    sp_path_t dst = { .dir = *sp_da_back(dest), .sub = it.entry.name };
-    switch (it.yield) {
-      case SP_FS_IT_LEAVE: {
-        sp_sys_close(dst.dir);
-        sp_da_pop(dest);
-        break;
-      }
-      case SP_FS_IT_ENTRY: {
-        switch (it.entry.kind) {
-          case SP_FS_KIND_FILE:    err = sp_fs_copy_file_at(it.at, dst, mode); break;
-          case SP_FS_KIND_SYMLINK: err = sp_fs_copy_link_at(it.at, dst, mode); break;
-          case SP_FS_KIND_NONE:    err = SP_ERR_SYS_UNSUPPORTED; break;
-          case SP_FS_KIND_DIR: {
-            sp_sys_file_meta_t meta = sp_zero;
-            err = sp_sys_get_link_metadata_s(it.at.dir, it.at.sub, &meta);
-            if (err || sp_fs_is_same_file(&meta, &target)) break;
+    if (it.yield == SP_FS_IT_LEAVE) {
+      sp_sys_close(*sp_da_back(dest));
+      sp_da_pop(dest);
+      continue;
+    }
 
-            sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-            err = sp_fs_it_enter(&it);
-            if (!err) err = sp_fs_create_dir_at(dst);
-            if (!err) err = sp_sys_open_dir_s(dst.dir, dst.sub, 0, &fd);
-            if (!err) sp_da_push(dest, fd);
-            break;
-          }
-        }
+    sp_path_t dst = { .dir = *sp_da_back(dest), .sub = it.entry.name };
+    switch (it.entry.kind) {
+      case SP_FS_KIND_FILE:    err = sp_fs_copy_file_at(it.at, dst, mode); break;
+      case SP_FS_KIND_SYMLINK: err = sp_fs_copy_link_at(it.at, dst, mode); break;
+      case SP_FS_KIND_NONE:    err = SP_ERR_SYS_UNSUPPORTED; break;
+      case SP_FS_KIND_DIR: {
+        sp_sys_file_meta_t meta = sp_zero;
+        err = sp_sys_get_link_metadata_s(it.at.dir, it.at.sub, &meta);
+        if (err || sp_fs_is_same_file(&meta, &target)) break;
+
+        err = sp_fs_it_enter(&it);
+        if (!err) err = sp_fs_create_dir_at(dst);
+        if (!err) err = sp_sys_open_dir_s(dst.dir, dst.sub, 0, &fd);
+        if (!err) sp_da_push(dest, fd);
         break;
       }
     }
