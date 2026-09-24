@@ -20,6 +20,7 @@ typedef struct {
 typedef struct {
   sp_err_t open;
   sp_err_t walk;
+  const c8* failed;
   entry_t entries [MAX_WALK];
   u32 opens;
 } expect_t;
@@ -27,6 +28,7 @@ typedef struct {
 typedef struct {
   const c8* name;
   const c8* root;
+  u32 flags;
   bool recursive;
   u32 stop_after;
   sim_dir_t dirs [SIM_MAX_DIRS];
@@ -84,6 +86,7 @@ static const test_t tests [] = {
     },
     .expect = {
       .walk = SP_ERR_SYS_NOT_FOUND,
+      .failed = "T/B",
       .opens = 2,
     },
   },
@@ -105,17 +108,25 @@ static const test_t tests [] = {
     .name = "deinit_closes_open_frames",
     .root = "T",
     .recursive = true,
-    .stop_after = 2,
+    .stop_after = 1,
     .dirs = {
       { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .entries = { { "C", SP_FS_KIND_FILE }, { "D", SP_FS_KIND_FILE } } },
+      { .path = "T/B" },
     },
     .expect = {
-      .entries = {
-        { "T/B", "B", SP_FS_KIND_DIR },
-        { "T/B/C", "C", SP_FS_KIND_FILE },
-      },
+      .entries = { { "T/B", "B", SP_FS_KIND_DIR } },
       .opens = 2,
+    },
+  },
+  {
+    .name = "root_flags_forwarded",
+    .root = "T",
+    .flags = SP_SYS_OPEN_DIR_NO_FOLLOW,
+    .dirs = {
+      { .path = "T" },
+    },
+    .expect = {
+      .opens = 1,
     },
   },
   {
@@ -181,7 +192,7 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
   sim_t s = sp_zero;
   sim_begin(&s, it->dirs);
 
-  sp_fs_it_t walk = sp_fs_it_new(mem, root);
+  sp_fs_it_t walk = sp_fs_it_new_at(mem, (sp_path_t) { .dir = sp_sys_get_root(0), .sub = root }, it->flags);
   sp_expect_err_eq(t, walk.err, it->expect.open);
   sp_expect(t, !walk.entry.path.data);
 
@@ -200,6 +211,7 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
     if (produced == it->stop_after) break;
   }
   sp_expect_err_eq(t, walk.err, it->expect.walk);
+  if (it->expect.failed) sp_expect_str_eq_c(t, walk.entry.path, it->expect.failed);
   sp_fs_it_deinit(&walk);
 
   sim_end(&s);
@@ -212,5 +224,7 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
   sp_expect_eq(t, produced, expected);
   sp_expect_eq(t, s.count.opens, it->expect.opens);
   sp_expect_eq(t, s.count.closes, s.count.dirs);
+  u32 root_nofollow = (it->flags & SP_SYS_OPEN_DIR_NO_FOLLOW) ? 1 : 0;
+  if (s.count.opens) sp_expect_eq(t, s.count.nofollow, s.count.opens - 1 + root_nofollow);
   return SP_OK;
 }

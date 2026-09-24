@@ -3071,14 +3071,11 @@ typedef enum {
 } sp_fs_it_yield_t;
 
 typedef struct {
-  sp_mem_t mem;
-  sp_sys_fd_t dir;
   sp_fs_entry_t entry;
   sp_path_t at;
   sp_fs_it_yield_t yield;
   sp_da(sp_fs_it_frame_t) stack;
   c8 path [SP_PATH_MAX];
-  bool entered;
   sp_err_t err;
 } sp_fs_it_t;
 
@@ -20227,11 +20224,11 @@ SP_PRIVATE sp_err_t sp_fs_it_join(sp_fs_it_t* it, u32 prefix, sp_str_t name, u32
   return SP_OK;
 }
 
-SP_PRIVATE sp_err_t sp_fs_it_open(sp_fs_it_t* it, sp_str_t path, u32 flags) {
+SP_PRIVATE sp_err_t sp_fs_it_open(sp_fs_it_t* it, sp_path_t path, u32 flags) {
   u32 len = 0;
-  sp_try(sp_fs_it_join(it, 0, sp_fs_trim_path(path), &len));
+  sp_try(sp_fs_it_join(it, 0, sp_fs_trim_path(path.sub), &len));
   sp_fs_it_frame_t frame = { .len = len };
-  sp_try(sp_fs_dir_open(&frame.dir, it->dir, sp_str(it->path, len), flags, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
+  sp_try(sp_fs_dir_open(&frame.dir, path.dir, sp_str(it->path, len), flags, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
   sp_da_push(it->stack, frame);
   return SP_OK;
 }
@@ -20259,7 +20256,7 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
 
     // If the OS didn't give us a hint, specifically get it from metadata
     if (it->entry.kind == SP_FS_KIND_NONE) {
-      it->entry.kind = sp_fs_get_link_kind_at((sp_path_t) { .dir = it->dir, .sub = it->entry.path });
+      it->entry.kind = sp_fs_get_link_kind_at((sp_path_t) { .dir = top->dir.dir.fd, .sub = it->entry.name });
     }
 
     return SP_OK;
@@ -20763,9 +20760,9 @@ sp_err_t sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
 }
 
 sp_fs_it_t sp_fs_it_new_at(sp_mem_t mem, sp_path_t path, u32 flags) {
-  sp_fs_it_t it = { .mem = mem, .dir = path.dir };
+  sp_fs_it_t it = sp_zero;
   sp_da_init(mem, it.stack);
-  it.err = sp_fs_it_open(&it, path.sub, flags);
+  it.err = sp_fs_it_open(&it, path, flags);
   return it;
 }
 

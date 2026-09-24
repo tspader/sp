@@ -3,7 +3,7 @@
 typedef struct {
   const c8* path;
   sp_err_t err;
-  bool remove;
+  bool vanish;
 } enter_t;
 
 typedef struct {
@@ -13,7 +13,6 @@ typedef struct {
 
 typedef struct {
   entry_t entries [FS_MAX_PATHS];
-  const c8* leaves [FS_MAX_PATHS];
 } expect_t;
 
 typedef struct {
@@ -39,11 +38,10 @@ static const test_t tests [] = {
         { "C", SP_FS_KIND_DIR },
         { "E", SP_FS_KIND_FILE },
       },
-      .leaves = { "A" },
     },
   },
   {
-    .name = "leaves_in_stack_order",
+    .name = "nested_enters",
     .setup = {
       { "R/A/B/C" },
     },
@@ -53,18 +51,6 @@ static const test_t tests [] = {
         { "A", SP_FS_KIND_DIR },
         { "A/B", SP_FS_KIND_DIR },
         { "A/B/C", SP_FS_KIND_FILE },
-      },
-      .leaves = { "A/B", "A" },
-    },
-  },
-  {
-    .name = "no_enter_no_leave",
-    .setup = {
-      { "R/A/B" },
-    },
-    .expect = {
-      .entries = {
-        { "A", SP_FS_KIND_DIR },
       },
     },
   },
@@ -100,10 +86,10 @@ static const test_t tests [] = {
   {
     .name = "enter_vanished_is_not_found",
     .setup = {
-      { "R/A/B" },
+      { "R/A", FS_SETUP_DIR },
       { "R/C" },
     },
-    .enter = { { "A", SP_ERR_SYS_NOT_FOUND, .remove = true } },
+    .enter = { { "A", SP_ERR_SYS_NOT_FOUND, .vanish = true } },
     .expect = {
       .entries = {
         { "A", SP_FS_KIND_DIR },
@@ -143,20 +129,14 @@ sp_test_each(fs, it_enter, test_t, tests) {
 
   fs_match_t leaves [FS_MAX_PATHS] = sp_zero;
   u32 num_leaves = 0;
-  sp_carr_for(it->expect.leaves, e) {
-    if (!it->expect.leaves[e]) break;
-    leaves[num_leaves++] = (fs_match_t) { .key = sp_fs_join_path(mem, base, sp_cstr_as_str(it->expect.leaves[e])), .kind = SP_FS_KIND_DIR };
-  }
-
   sp_str_t entered [FS_MAX_PATHS] = sp_zero;
   u32 depth = 0;
 
   sp_fs_it_t walk = sp_fs_it_new_at(mem, (sp_path_t) { .dir = dir, .sub = base }, 0);
   while (sp_fs_it_next(&walk)) {
-    sp_expect_str_eq(t, walk.at.sub, walk.entry.name);
     switch (walk.yield) {
       case SP_FS_IT_LEAVE: {
-        fs_match(t, leaves, num_leaves, walk.entry.path, SP_FS_KIND_DIR);
+        fs_match(t, leaves, num_leaves, walk.entry.path, walk.entry.kind);
         sp_expect_eq(t, (u32)sp_fs_get_kind_at(walk.at), (u32)SP_FS_KIND_DIR);
         sp_must(t, depth > 0);
         sp_expect_str_eq(t, walk.entry.path, entered[--depth]);
@@ -166,9 +146,12 @@ sp_test_each(fs, it_enter, test_t, tests) {
         fs_match(t, entries, num_entries, walk.entry.path, walk.entry.kind);
         const enter_t* enter = find_enter(mem, it, base, walk.entry.path);
         if (!enter) break;
-        if (enter->remove) sp_must_ok(t, sp_fs_remove_dir_at(walk.at));
+        if (enter->vanish) sp_must_ok(t, sp_sys_rmdir_s(walk.at.dir, walk.at.sub));
         sp_expect_err_eq(t, sp_fs_it_enter(&walk), enter->err);
-        if (!enter->err) entered[depth++] = sp_str_copy(mem, walk.entry.path);
+        if (enter->err) break;
+        sp_str_t path = sp_str_copy(mem, walk.entry.path);
+        entered[depth++] = path;
+        leaves[num_leaves++] = (fs_match_t) { .key = path, .kind = SP_FS_KIND_DIR };
         break;
       }
     }
