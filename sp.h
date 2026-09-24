@@ -3044,6 +3044,7 @@ typedef struct {
 
 typedef struct {
   sp_str_t path;
+  sp_str_t rel;
   sp_str_t name;
   sp_fs_kind_t kind;
 } sp_fs_entry_t;
@@ -3052,38 +3053,6 @@ typedef struct {
   sp_str_t name;
   sp_fs_kind_t kind;
 } sp_fs_dir_entry_t;
-
-typedef struct {
-  sp_sys_dir_it_t dir;
-  sp_mem_buffer_t buf;
-  u64 cursor;
-} sp_fs_dir_t;
-
-typedef struct {
-  sp_fs_dir_t dir;
-  SP_ALIGNED u8 buf [SP_FS_IT_BUF_SIZE];
-  u32 len;
-  u32 name_len;
-} sp_fs_it_frame_t;
-
-typedef enum {
-  SP_FS_IT_ENTRY,
-  SP_FS_IT_LEAVE,
-} sp_fs_it_yield_t;
-
-typedef struct {
-  sp_fs_entry_t entry;
-  sp_path_t at;
-  sp_fs_it_yield_t yield;
-  sp_da(sp_fs_it_frame_t) stack;
-  c8 path [SP_PATH_MAX];
-  sp_err_t err;
-} sp_fs_it_t;
-
-#define sp_fs_for(mem, dir, it) \
-  for (sp_fs_it_t it = sp_fs_it_new(mem, dir); sp_fs_it_next(&it);)
-#define sp_fs_for_recursive(mem, dir, it) \
-  for (sp_fs_it_t it = sp_fs_it_new(mem, dir); sp_fs_it_walk(&it);)
 
 SP_API sp_str_t             sp_fs_get_name(sp_str_t path);
 SP_API sp_str_t             sp_fs_get_name_for(sp_str_t path, sp_fs_path_kind_t kind);
@@ -3140,27 +3109,76 @@ SP_API sp_err_t             sp_fs_create_sym_link_at(sp_str_t target, sp_path_t 
 SP_API sp_err_t             sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
-SP_API sp_err_t             sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_mem_slice_t buf);
-SP_API sp_err_t             sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out);
-SP_API sp_err_t             sp_fs_dir_close(sp_fs_dir_t* it);
-SP_API sp_fs_it_t           sp_fs_it_new(sp_mem_t mem, sp_str_t path);
-SP_API sp_fs_it_t           sp_fs_it_new_at(sp_mem_t mem, sp_path_t path, u32 flags);
-SP_API bool                 sp_fs_it_next(sp_fs_it_t* it);
-SP_API bool                 sp_fs_it_walk(sp_fs_it_t* it);
-SP_API sp_err_t             sp_fs_it_enter(sp_fs_it_t* it);
-SP_API void                 sp_fs_it_deinit(sp_fs_it_t* it);
 
 // literally sys+normalize, if normalize isnt needed this isn't either?
 SP_API sp_str_t             sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path);
 SP_API sp_str_t             sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path);
 
 // just put these in os
-SP_API sp_str_t             sp_fs_get_cwd(sp_mem_t mem);
+SP_API sp_str_t             sp_fs_get_cwd_path(sp_mem_t mem);
 
 // these currently forward to sys+normalize; remove from fs AND sys and just put in os
 SP_API sp_str_t             sp_fs_get_exe_path(sp_mem_t mem);
 SP_API sp_str_t             sp_fs_get_storage_path(sp_mem_t mem);
 SP_API sp_str_t             sp_fs_get_config_path(sp_mem_t mem);
+
+/*
+  sp_fs_it_t
+  A filesystem iterator
+
+  sp_sys_dir_it_t is the OS level iteration state (usually, just the handle to
+  the top level directory, but on WASM also a cookie and on macOS a DIR*). The
+  syscalls are strictly about answering:
+  - Asking the OS fill a buffer with the next N entries for the handle
+  - Parsing those opaque bytes into entries
+
+  That can be driven however you want! There's no concept of the "next" entry,
+  traversing into child directories, or buffer ownership. Syscalls.
+
+
+ */
+typedef struct {
+  sp_sys_dir_it_t dir;
+  sp_mem_buffer_t buf;
+  u64 cursor;
+} sp_fs_dir_t;
+
+typedef struct {
+  sp_fs_dir_t dir;
+  SP_ALIGNED u8 buf [SP_FS_IT_BUF_SIZE];
+  u32 len;
+  u32 name_len;
+} sp_fs_it_frame_t;
+
+typedef enum {
+  SP_FS_IT_ENTRY,
+  SP_FS_IT_LEAVE,
+} sp_fs_it_yield_t;
+
+typedef struct {
+  sp_fs_entry_t entry;
+  sp_path_t at;
+  sp_fs_it_yield_t yield;
+  sp_da(sp_fs_it_frame_t) stack;
+  c8 path [SP_PATH_MAX];
+  sp_err_t err;
+} sp_fs_it_t;
+
+#define sp_fs_for(mem, dir, it) \
+  for (sp_fs_it_t it = sp_fs_it_new(mem, dir); sp_fs_it_next(&it);)
+#define sp_fs_for_recursive(mem, dir, it) \
+  for (sp_fs_it_t it = sp_fs_it_new(mem, dir); sp_fs_it_walk(&it);)
+
+SP_API sp_err_t   sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_mem_slice_t buf);
+SP_API sp_err_t   sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out);
+SP_API sp_err_t   sp_fs_dir_close(sp_fs_dir_t* it);
+SP_API sp_fs_it_t sp_fs_it_new(sp_mem_t mem, sp_str_t path);
+SP_API sp_fs_it_t sp_fs_it_new_at(sp_mem_t mem, sp_path_t path, u32 flags);
+SP_API bool       sp_fs_it_next(sp_fs_it_t* it);
+SP_API bool       sp_fs_it_walk(sp_fs_it_t* it);
+SP_API sp_err_t   sp_fs_it_enter(sp_fs_it_t* it);
+SP_API void       sp_fs_it_deinit(sp_fs_it_t* it);
+
 
 //  ███████████ █████   █████ ███████████   ██████████   █████████   ██████████   █████ ██████   █████   █████████
 // ░█░░░███░░░█░░███   ░░███ ░░███░░░░░███ ░░███░░░░░█  ███░░░░░███ ░░███░░░░███ ░░███ ░░██████ ░░███   ███░░░░░███
@@ -20028,7 +20046,7 @@ sp_str_t sp_fs_get_exe_path(sp_mem_t mem) {
   return sp_str_copy(mem, sp_str(buf, len));
 }
 
-sp_str_t sp_fs_get_cwd(sp_mem_t mem) {
+sp_str_t sp_fs_get_cwd_path(sp_mem_t mem) {
   c8 buf[SP_PATH_MAX];
   s64 len = sp_sys_get_cwd_path(buf, SP_PATH_MAX);
   if (len <= 0) return sp_zero_s(sp_str_t);
@@ -20174,6 +20192,8 @@ sp_err_t sp_fs_remove_file(sp_str_t path) {
 
 sp_err_t sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_mem_slice_t buf) {
   *it = sp_zero_s(sp_fs_dir_t);
+
+  // @spader wtf?
   sp_assert(buf.len >= SP_SYS_DIR_MIN_BUF);
 
   sp_sys_fd_t dir_fd = SP_SYS_INVALID_FD;
@@ -20224,12 +20244,18 @@ SP_PRIVATE void sp_fs_it_unwind(sp_fs_it_t* it) {
   sp_da_clear(it->stack);
 }
 
+// @spader this is garbage; we have to control all the trimming and "custom" path
+// functions, because it smells like we have no idea what inputs we take
+SP_PRIVATE u32 sp_fs_it_child(sp_fs_it_t* it, u32 prefix) {
+  return prefix + (prefix && !sp_fs_is_sep(it->path[prefix - 1]));
+}
+
 SP_PRIVATE sp_err_t sp_fs_it_join(sp_fs_it_t* it, u32 prefix, sp_str_t name, u32* len) {
-  u32 sep = prefix && !sp_fs_is_sep(it->path[prefix - 1]);
-  if (prefix + sep + name.len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
-  if (sep) it->path[prefix] = '/';
-  sp_str_copy_to(name, it->path + prefix + sep, name.len);
-  *len = prefix + sep + name.len;
+  u32 start = sp_fs_it_child(it, prefix);
+  if (start + name.len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
+  if (start > prefix) it->path[prefix] = '/';
+  sp_str_copy_to(name, it->path + start, name.len);
+  *len = start + name.len;
   return SP_OK;
 }
 
@@ -20243,6 +20269,7 @@ SP_PRIVATE sp_err_t sp_fs_it_push(sp_fs_it_t* it, sp_path_t path, u32 len, u32 f
 SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
   sp_fs_it_frame_t* top = sp_da_back(it->stack);
   top->dir.buf.data = top->buf;
+  u32 root = sp_fs_it_child(it, it->stack[0].len);
 
   sp_fs_dir_entry_t d = sp_zero;
   sp_try(sp_fs_dir_next(&top->dir, &d));
@@ -20253,6 +20280,7 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
     it->yield = SP_FS_IT_ENTRY;
     it->entry = (sp_fs_entry_t) {
       .path = sp_str(it->path, len),
+      .rel = sp_str(it->path + root, len - root),
       .name = sp_str(it->path + len - d.name.len, d.name.len),
       .kind = d.kind,
     };
@@ -20273,6 +20301,7 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
   it->yield = SP_FS_IT_LEAVE;
   it->entry = (sp_fs_entry_t) {
     .path = sp_str(it->path, top->len),
+    .rel = sp_str(it->path + root, top->len - root),
     .name = sp_str(it->path + top->len - top->name_len, top->name_len),
     .kind = SP_FS_KIND_DIR,
   };
@@ -20331,6 +20360,7 @@ SP_PRIVATE sp_fs_entry_t sp_fs_entry_copy(sp_mem_t mem, sp_fs_entry_t entry) {
   sp_str_t path = sp_str_copy(mem, entry.path);
   return (sp_fs_entry_t) {
     .path = path,
+    .rel = sp_str_suffix(path, (s32)entry.rel.len),
     .name = sp_str_suffix(path, (s32)entry.name.len),
     .kind = entry.kind,
   };
@@ -20668,58 +20698,28 @@ sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
   return sp_fs_atomic_commit(&af, mode);
 }
 
-SP_PRIVATE bool sp_fs_is_same_file(const sp_sys_file_meta_t* a, const sp_sys_file_meta_t* b) {
-  return a->device == b->device && a->id == b->id;
-}
-
 sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
-  sp_sys_file_meta_t source = sp_zero;
-  sp_try(sp_sys_get_path_metadata_s(from.dir, from.sub, &source));
-
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   sp_fs_it_t it = sp_fs_it_new_at(s.mem, from, 0);
-  sp_da(sp_sys_fd_t) dest = sp_da_new(s.mem, sp_sys_fd_t);
 
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_sys_file_meta_t target = sp_zero;
   sp_err_t err = it.err;
   if (!err) err = sp_fs_create_dir_at(to);
   if (!err) err = sp_sys_open_dir_s(to.dir, to.sub, 0, &fd);
-  if (!err) sp_da_push(dest, fd);
-  if (!err) err = sp_sys_get_file_metadata(fd, &target);
-  if (!err && sp_fs_is_same_file(&source, &target)) err = SP_ERR_SYS_INVALID;
 
-  while (!err && sp_fs_it_next(&it)) {
-    if (it.yield == SP_FS_IT_LEAVE) {
-      sp_sys_close(*sp_da_back(dest));
-      sp_da_pop(dest);
-      continue;
-    }
-
-    sp_path_t dst = { .dir = *sp_da_back(dest), .sub = it.entry.name };
+  while (!err && sp_fs_it_walk(&it)) {
+    sp_path_t dst = { .dir = fd, .sub = it.entry.rel };
     switch (it.entry.kind) {
+      case SP_FS_KIND_DIR:     err = sp_fs_create_dir_at(dst); break;
       case SP_FS_KIND_FILE:    err = sp_fs_copy_file_at(it.at, dst, mode); break;
       case SP_FS_KIND_SYMLINK: err = sp_fs_copy_link_at(it.at, dst, mode); break;
       case SP_FS_KIND_NONE:    err = SP_ERR_SYS_UNSUPPORTED; break;
-      case SP_FS_KIND_DIR: {
-        sp_sys_file_meta_t meta = sp_zero;
-        err = sp_sys_get_link_metadata_s(it.at.dir, it.at.sub, &meta);
-        if (err || sp_fs_is_same_file(&meta, &target)) break;
-
-        err = sp_fs_it_enter(&it);
-        if (!err) err = sp_fs_create_dir_at(dst);
-        if (!err) err = sp_sys_open_dir_s(dst.dir, dst.sub, 0, &fd);
-        if (!err) sp_da_push(dest, fd);
-        break;
-      }
     }
   }
   if (!err) err = it.err;
 
   sp_fs_it_deinit(&it);
-  sp_da_for(dest, i) {
-    sp_sys_close(dest[i]);
-  }
+  if (fd != SP_SYS_INVALID_FD) sp_sys_close(fd);
   sp_mem_end_scratch(s);
   return err;
 }

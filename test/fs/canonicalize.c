@@ -205,6 +205,6 @@ sp_test(fs, canon_dot_resolves_to_cwd) {
   sp_test_skip_on_wasm()
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_expect_str_eq(t, sp_fs_canonicalize_path(mem, sp_str_lit(".")), sp_fs_get_cwd(mem));
+  sp_expect_str_eq(t, sp_fs_canonicalize_path(mem, sp_str_lit(".")), sp_fs_get_cwd_path(mem));
   return SP_OK;
 }

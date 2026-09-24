@@ -38,7 +38,7 @@ s32 compare_entries(const void* pa, const void* pb) {
 
 s32 main(s32 num_args, const c8** args) {
   sp_mem_t mem = sp_mem_os_new();
-  sp_str_t cwd = sp_fs_get_cwd(mem);
+  sp_str_t cwd = sp_fs_get_cwd_path(mem);
   sp_str_t dir = cwd;
   if (num_args == 2) dir = sp_fs_join_path(mem, cwd, sp_cstr_as_str(args[1]));
 

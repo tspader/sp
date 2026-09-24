@@ -134,6 +134,7 @@ sp_test_each(fs, it_enter, test_t, tests) {
 
   sp_fs_it_t walk = sp_fs_it_new_at(mem, (sp_path_t) { .dir = dir, .sub = base }, 0);
   while (sp_fs_it_next(&walk)) {
+    sp_expect_str_eq(t, sp_fs_join_path(mem, base, walk.entry.rel), walk.entry.path);
     switch (walk.yield) {
       case SP_FS_IT_LEAVE: {
         fs_match(t, leaves, num_leaves, walk.entry.path, walk.entry.kind);

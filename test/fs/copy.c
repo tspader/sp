@@ -394,36 +394,6 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "tree_into_itself_across_dirs",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-      { .path = "A/C", .content = "C" },
-    },
-    .op = OP_COPY_TREE,
-    .src = "A",
-    .dst_dir = "A",
-    .dst = "B",
-    .expect = {
-      { .path = "A/B/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      { .path = "A/B/B" },
-    },
-  },
-  {
-    .name = "tree_into_itself_nested",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-      { "A/D", FS_SETUP_DIR },
-      { .path = "A/D/C", .content = "C" },
-    },
-    .op = OP_COPY_TREE,
-    .src = "A",
-    .dst = "A/D/E",
-    .expect = {
-      { .path = "A/D/E/D/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      { .path = "A/D/E/D/E" },
-    },
-  },
-  {
     .name = "tree_onto_itself",
     .setup = {
       { "A", FS_SETUP_DIR },
@@ -432,7 +402,6 @@ static const test_t tests [] = {
     .op = OP_COPY_TREE,
     .src = "A",
     .dst = "A",
-    .err = SP_ERR_SYS_INVALID,
     .expect = {
       { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
     },

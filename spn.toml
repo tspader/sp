@@ -101,6 +101,10 @@ source = ["example/zero_copy.c"]
 name = "msvc"
 source = ["example/msvc.c"]
 
+[[example]]
+name = "filesystem"
+source = ["example/filesystem.c"]
+
 [profile.sanitizer]
 linkage = "shared"
 sanitize = ["address", "undefined"]

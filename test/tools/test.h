@@ -162,7 +162,7 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a) {
     return sp_test_file_manager_top_level;
   }
 
-  sp_str_t tmp = sp_fs_join_path(a, sp_fs_get_cwd(a), sp_str_lit(".tmp"));
+  sp_str_t tmp = sp_fs_join_path(a, sp_fs_get_cwd_path(a), sp_str_lit(".tmp"));
   if (!sp_fs_exists(tmp)) {
     sp_fs_create_dir(tmp);
   }

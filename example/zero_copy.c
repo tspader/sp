@@ -176,7 +176,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
-  sp_str_t cwd = sp_fs_get_cwd(mem);
+  sp_str_t cwd = sp_fs_get_cwd_path(mem);
   sp_str_t src = sp_str_concat(mem, cwd, sp_str_lit("/io.src"));
   sp_str_t dst = sp_str_concat(mem, cwd, sp_str_lit("/io.dst"));
 

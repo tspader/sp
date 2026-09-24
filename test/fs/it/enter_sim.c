@@ -116,6 +116,7 @@ sp_test_each(fs, it_enter_sim, test_t, tests, .serial = true) {
       sp_expect_str_eq_c(t, walk.entry.path, want->path);
       sp_expect_str_eq_c(t, walk.entry.name, want->name);
       sp_expect_str_eq(t, walk.at.sub, walk.entry.name);
+      sp_expect_str_eq(t, sp_fs_join_path(mem, sp_str_lit("T"), walk.entry.rel), walk.entry.path);
       sp_expect_eq(t, (u32)walk.entry.kind, (u32)want->kind);
       sp_expect_eq(t, (u32)walk.yield, (u32)want->yield);
     }

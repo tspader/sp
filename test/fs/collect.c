@@ -76,6 +76,7 @@ sp_test_each(fs, collect, test_t, tests) {
   sp_expect_eq(t, sp_da_size(results), (u64)n);
   sp_da_for(results, i) {
     sp_expect_str_eq(t, results[i].name, sp_fs_get_name(results[i].path));
+    sp_expect_str_eq(t, sp_fs_join_path(mem, root, results[i].rel), results[i].path);
     fs_match(t, matches, n, results[i].path, results[i].kind);
   }
   fs_match_finish(t, matches, n);

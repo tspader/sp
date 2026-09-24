@@ -153,7 +153,7 @@ sp_test(fs, create_dir_create_multi_level_relative, .serial = true) {
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);
 
-  sp_str_t cwd = sp_fs_get_cwd(mem);
+  sp_str_t cwd = sp_fs_get_cwd_path(mem);
   sp_must_ok(t, sp_sys_chdir_s(sandbox));
   sp_err_t result = sp_fs_create_dir(sp_str_lit("A/B"));
   sp_must_ok(t, sp_sys_chdir_s(cwd));

@@ -202,6 +202,7 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
       const entry_t* want = &it->expect.entries[produced];
       sp_expect_str_eq_c(t, walk.entry.path, want->path);
       sp_expect_str_eq_c(t, walk.entry.name, want->name);
+      sp_expect_str_eq(t, sp_fs_join_path(mem, root, walk.entry.rel), walk.entry.path);
       sp_expect_eq(t, (u32)walk.entry.kind, (u32)want->kind);
     }
     else {

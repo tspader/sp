@@ -1072,7 +1072,7 @@ static sp_str_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
   sp_mutex_unlock(&runner->mutex);
   if (!sp_str_empty(root)) return root;
 
-  sp_str_t cwd = sp_fs_get_cwd(t->mem);
+  sp_str_t cwd = sp_fs_get_cwd_path(t->mem);
   sp_str_t exe_dir = sp_fs_parent_path(sp_fs_get_exe_path(t->mem));
   sp_da(sp_str_t) roots = sp_test_resolve_roots(t->mem, cwd, exe_dir);
 
@@ -2101,7 +2101,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   if (dir.env) root = sp_cstr_as_str(dir.env);
   if (dir.opt) root = sp_cstr_as_str(dir.opt);
   root = sp_fs_normalize_path(runner->mem, root);
-  if (!sp_fs_is_absolute(root)) root = sp_fs_join_path(runner->mem, sp_fs_get_cwd(runner->mem), root);
+  if (!sp_fs_is_absolute(root)) root = sp_fs_join_path(runner->mem, sp_fs_get_cwd_path(runner->mem), root);
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   sp_tm_epoch_t grace = { .s = now.s - SP_TEST_RUNS_GRACE_S, .ns = now.ns };
