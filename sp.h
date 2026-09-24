@@ -6227,6 +6227,11 @@ c8** environ;
 #define SP_S_ISBLK(m)  (((m) & SP_S_IFMT) == SP_S_IFBLK)
 #define SP_S_ISSOCK(m) (((m) & SP_S_IFMT) == SP_S_IFSOCK)
 
+#if defined(SP_WASM)
+  #define sp_wasi_import(name) \
+    __attribute__((import_module("wasi_snapshot_preview1"), import_name(name)))
+#endif
+
 #if defined(SP_WASM_WASI)
   #include <wasi/api.h>
 #elif defined(SP_WASM_FREESTANDING)
@@ -6244,6 +6249,16 @@ c8** environ;
   typedef uint16_t      __wasi_subclockflags_t;
   typedef uint8_t       __wasi_whence_t;
   typedef uint32_t      __wasi_exitcode_t;
+  typedef uint64_t      __wasi_rights_t;
+  typedef uint16_t      __wasi_oflags_t;
+  typedef uint32_t      __wasi_lookupflags_t;
+  typedef uint16_t      __wasi_fdflags_t;
+  typedef uint64_t      __wasi_dircookie_t;
+  typedef uint32_t      __wasi_dirnamlen_t;
+  typedef uint64_t      __wasi_inode_t;
+  typedef uint64_t      __wasi_device_t;
+  typedef uint64_t      __wasi_linkcount_t;
+  typedef uint8_t       __wasi_filetype_t;
 
   typedef struct __wasi_iovec_t {
     uint8_t*      buf;
@@ -6294,15 +6309,79 @@ c8** environ;
     __wasi_subscription_u_t u;
   } __wasi_subscription_t;
 
-  #define __WASI_EVENTTYPE_CLOCK    ((__wasi_eventtype_t)0)
-  #define __WASI_EVENTTYPE_FD_READ  ((__wasi_eventtype_t)1)
-  #define __WASI_EVENTTYPE_FD_WRITE ((__wasi_eventtype_t)2)
-  #define __WASI_WHENCE_SET         ((__wasi_whence_t)0)
-  #define __WASI_WHENCE_CUR         ((__wasi_whence_t)1)
-  #define __WASI_WHENCE_END         ((__wasi_whence_t)2)
+  typedef struct __wasi_dirent_t {
+    __wasi_dircookie_t d_next;
+    __wasi_inode_t     d_ino;
+    __wasi_dirnamlen_t d_namlen;
+    __wasi_filetype_t  d_type;
+  } __wasi_dirent_t;
 
-  #define sp_wasi_import(name) \
-    __attribute__((import_module("wasi_snapshot_preview1"), import_name(name)))
+  typedef struct __wasi_filestat_t {
+    __wasi_device_t    dev;
+    __wasi_inode_t     ino;
+    __wasi_filetype_t  filetype;
+    __wasi_linkcount_t nlink;
+    __wasi_filesize_t  size;
+    __wasi_timestamp_t atim;
+    __wasi_timestamp_t mtim;
+    __wasi_timestamp_t ctim;
+  } __wasi_filestat_t;
+
+  #define __WASI_EVENTTYPE_CLOCK              ((__wasi_eventtype_t)0)
+  #define __WASI_EVENTTYPE_FD_READ            ((__wasi_eventtype_t)1)
+  #define __WASI_EVENTTYPE_FD_WRITE           ((__wasi_eventtype_t)2)
+  #define __WASI_WHENCE_SET                   ((__wasi_whence_t)0)
+  #define __WASI_WHENCE_CUR                   ((__wasi_whence_t)1)
+  #define __WASI_WHENCE_END                   ((__wasi_whence_t)2)
+  #define __WASI_DIRCOOKIE_START              ((__wasi_dircookie_t)0)
+  #define __WASI_FILETYPE_UNKNOWN             ((__wasi_filetype_t)0)
+  #define __WASI_FILETYPE_BLOCK_DEVICE        ((__wasi_filetype_t)1)
+  #define __WASI_FILETYPE_CHARACTER_DEVICE    ((__wasi_filetype_t)2)
+  #define __WASI_FILETYPE_DIRECTORY           ((__wasi_filetype_t)3)
+  #define __WASI_FILETYPE_REGULAR_FILE        ((__wasi_filetype_t)4)
+  #define __WASI_FILETYPE_SOCKET_DGRAM        ((__wasi_filetype_t)5)
+  #define __WASI_FILETYPE_SOCKET_STREAM       ((__wasi_filetype_t)6)
+  #define __WASI_FILETYPE_SYMBOLIC_LINK       ((__wasi_filetype_t)7)
+  #define __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW   ((__wasi_lookupflags_t)(1 << 0))
+  #define __WASI_OFLAGS_CREAT                 ((__wasi_oflags_t)(1 << 0))
+  #define __WASI_OFLAGS_DIRECTORY             ((__wasi_oflags_t)(1 << 1))
+  #define __WASI_OFLAGS_EXCL                  ((__wasi_oflags_t)(1 << 2))
+  #define __WASI_OFLAGS_TRUNC                 ((__wasi_oflags_t)(1 << 3))
+  #define __WASI_FDFLAGS_APPEND               ((__wasi_fdflags_t)(1 << 0))
+  #define __WASI_FDFLAGS_DSYNC                ((__wasi_fdflags_t)(1 << 1))
+  #define __WASI_FDFLAGS_NONBLOCK             ((__wasi_fdflags_t)(1 << 2))
+  #define __WASI_FDFLAGS_RSYNC                ((__wasi_fdflags_t)(1 << 3))
+  #define __WASI_FDFLAGS_SYNC                 ((__wasi_fdflags_t)(1 << 4))
+  #define __WASI_RIGHTS_FD_DATASYNC           ((__wasi_rights_t)(1 << 0))
+  #define __WASI_RIGHTS_FD_READ               ((__wasi_rights_t)(1 << 1))
+  #define __WASI_RIGHTS_FD_SEEK               ((__wasi_rights_t)(1 << 2))
+  #define __WASI_RIGHTS_FD_FDSTAT_SET_FLAGS   ((__wasi_rights_t)(1 << 3))
+  #define __WASI_RIGHTS_FD_SYNC               ((__wasi_rights_t)(1 << 4))
+  #define __WASI_RIGHTS_FD_TELL               ((__wasi_rights_t)(1 << 5))
+  #define __WASI_RIGHTS_FD_WRITE              ((__wasi_rights_t)(1 << 6))
+  #define __WASI_RIGHTS_FD_ADVISE             ((__wasi_rights_t)(1 << 7))
+  #define __WASI_RIGHTS_FD_ALLOCATE           ((__wasi_rights_t)(1 << 8))
+  #define __WASI_RIGHTS_PATH_CREATE_DIRECTORY ((__wasi_rights_t)(1 << 9))
+  #define __WASI_RIGHTS_PATH_CREATE_FILE      ((__wasi_rights_t)(1 << 10))
+  #define __WASI_RIGHTS_PATH_LINK_SOURCE      ((__wasi_rights_t)(1 << 11))
+  #define __WASI_RIGHTS_PATH_LINK_TARGET      ((__wasi_rights_t)(1 << 12))
+  #define __WASI_RIGHTS_PATH_OPEN             ((__wasi_rights_t)(1 << 13))
+  #define __WASI_RIGHTS_FD_READDIR            ((__wasi_rights_t)(1 << 14))
+  #define __WASI_RIGHTS_PATH_READLINK         ((__wasi_rights_t)(1 << 15))
+  #define __WASI_RIGHTS_PATH_RENAME_SOURCE    ((__wasi_rights_t)(1 << 16))
+  #define __WASI_RIGHTS_PATH_RENAME_TARGET    ((__wasi_rights_t)(1 << 17))
+  #define __WASI_RIGHTS_PATH_FILESTAT_GET     ((__wasi_rights_t)(1 << 18))
+  #define __WASI_RIGHTS_PATH_FILESTAT_SET_SIZE  ((__wasi_rights_t)(1 << 19))
+  #define __WASI_RIGHTS_PATH_FILESTAT_SET_TIMES ((__wasi_rights_t)(1 << 20))
+  #define __WASI_RIGHTS_FD_FILESTAT_GET       ((__wasi_rights_t)(1 << 21))
+  #define __WASI_RIGHTS_FD_FILESTAT_SET_SIZE  ((__wasi_rights_t)(1 << 22))
+  #define __WASI_RIGHTS_FD_FILESTAT_SET_TIMES ((__wasi_rights_t)(1 << 23))
+  #define __WASI_RIGHTS_PATH_SYMLINK          ((__wasi_rights_t)(1 << 24))
+  #define __WASI_RIGHTS_PATH_REMOVE_DIRECTORY ((__wasi_rights_t)(1 << 25))
+  #define __WASI_RIGHTS_PATH_UNLINK_FILE      ((__wasi_rights_t)(1 << 26))
+  #define __WASI_RIGHTS_POLL_FD_READWRITE     ((__wasi_rights_t)(1 << 27))
+  #define __WASI_RIGHTS_SOCK_SHUTDOWN         ((__wasi_rights_t)(1 << 28))
+  #define __WASI_RIGHTS_SOCK_ACCEPT           ((__wasi_rights_t)(1 << 29))
 
   sp_wasi_import("fd_read")
   extern __wasi_errno_t __wasi_fd_read(__wasi_fd_t fd, const __wasi_iovec_t* iovs, __wasi_size_t niov, __wasi_size_t* nread);
@@ -6342,6 +6421,41 @@ c8** environ;
 
   sp_wasi_import("proc_exit")
   extern _Noreturn void __wasi_proc_exit(__wasi_exitcode_t code);
+#endif
+
+#if defined(SP_WASM)
+  sp_wasi_import("path_open")
+  extern __wasi_errno_t sp_wasi_path_open(__wasi_fd_t fd, __wasi_lookupflags_t dirflags, const c8* path, __wasi_size_t path_len, __wasi_oflags_t oflags, __wasi_rights_t fs_rights_base, __wasi_rights_t fs_rights_inheriting, __wasi_fdflags_t fdflags, __wasi_fd_t* opened);
+
+  sp_wasi_import("fd_readdir")
+  extern __wasi_errno_t sp_wasi_fd_readdir(__wasi_fd_t fd, u8* buf, __wasi_size_t buf_len, __wasi_dircookie_t cookie, __wasi_size_t* used);
+
+  sp_wasi_import("path_filestat_get")
+  extern __wasi_errno_t sp_wasi_path_filestat_get(__wasi_fd_t fd, __wasi_lookupflags_t flags, const c8* path, __wasi_size_t path_len, __wasi_filestat_t* filestat);
+
+  sp_wasi_import("fd_filestat_get")
+  extern __wasi_errno_t sp_wasi_fd_filestat_get(__wasi_fd_t fd, __wasi_filestat_t* filestat);
+
+  sp_wasi_import("path_create_directory")
+  extern __wasi_errno_t sp_wasi_path_create_directory(__wasi_fd_t fd, const c8* path, __wasi_size_t path_len);
+
+  sp_wasi_import("path_remove_directory")
+  extern __wasi_errno_t sp_wasi_path_remove_directory(__wasi_fd_t fd, const c8* path, __wasi_size_t path_len);
+
+  sp_wasi_import("path_unlink_file")
+  extern __wasi_errno_t sp_wasi_path_unlink_file(__wasi_fd_t fd, const c8* path, __wasi_size_t path_len);
+
+  sp_wasi_import("path_rename")
+  extern __wasi_errno_t sp_wasi_path_rename(__wasi_fd_t fd, const c8* old_path, __wasi_size_t old_path_len, __wasi_fd_t new_fd, const c8* new_path, __wasi_size_t new_path_len);
+
+  sp_wasi_import("path_link")
+  extern __wasi_errno_t sp_wasi_path_link(__wasi_fd_t old_fd, __wasi_lookupflags_t old_flags, const c8* old_path, __wasi_size_t old_path_len, __wasi_fd_t new_fd, const c8* new_path, __wasi_size_t new_path_len);
+
+  sp_wasi_import("path_symlink")
+  extern __wasi_errno_t sp_wasi_path_symlink(const c8* old_path, __wasi_size_t old_path_len, __wasi_fd_t fd, const c8* new_path, __wasi_size_t new_path_len);
+
+  sp_wasi_import("path_readlink")
+  extern __wasi_errno_t sp_wasi_path_readlink(__wasi_fd_t fd, const c8* path, __wasi_size_t path_len, u8* buf, __wasi_size_t buf_len, __wasi_size_t* used);
 #endif
 
 #if defined(SP_WASM)
