@@ -408,8 +408,8 @@ sp_test(sys, get_fd_path_refuses_overflow) {
   sp_must_ok(t, sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_PATH, 0, &fd));
 
   c8 full [SP_PATH_MAX] = sp_zero;
-  s64 len = sp_sys_get_fd_path(fd, full, sizeof(full));
-  if (len <= 0) {
+  u64 len = 0;
+  if (sp_sys_get_fd_path(fd, full, sizeof(full), &len)) {
     sp_sys_close(fd);
     sp_test_fail(t, "get_fd_path failed with a full-size buffer");
     return SP_OK;
@@ -417,27 +417,31 @@ sp_test(sys, get_fd_path_refuses_overflow) {
 
   c8 buf [SP_PATH_MAX];
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  s64 n = sp_sys_get_fd_path(fd, buf, (u64)len + 1);
-  if (n != len) {
-    sp_test_fail(t, "exact fit returned {} but expected {}", sp_fmt_int(n), sp_fmt_int(len));
+  u64 n = 0;
+  sp_err_t err = sp_sys_get_fd_path(fd, buf, len + 1, &n);
+  if (err) {
+    sp_test_fail(t, "exact fit failed: {}", sp_fmt_str(sp_err_str(err)));
+  }
+  else if (n != len) {
+    sp_test_fail(t, "exact fit returned {} but expected {}", sp_fmt_int((s64)n), sp_fmt_int((s64)len));
   }
   else if (buf[len] != 0) {
     sp_test_fail(t, "exact fit did not NUL-terminate");
   }
-  else if (!sp_mem_is_equal(buf, full, (u64)len)) {
+  else if (!sp_mem_is_equal(buf, full, len)) {
     sp_test_fail(t, "exact fit returned different path");
   }
 
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  n = sp_sys_get_fd_path(fd, buf, (u64)len);
-  if (n != -1) {
-    sp_test_fail(t, "no room for NUL: returned {} but expected -1", sp_fmt_int(n));
+  err = sp_sys_get_fd_path(fd, buf, len, &n);
+  if (err != SP_ERR_SYS_NAME_TOO_LONG) {
+    sp_test_fail(t, "no room for NUL: returned {} but expected SP_ERR_SYS_NAME_TOO_LONG", sp_fmt_str(sp_err_str(err)));
   }
 
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
-  n = sp_sys_get_fd_path(fd, buf, (u64)len - 1);
-  if (n != -1) {
-    sp_test_fail(t, "undersized buffer: returned {} but expected -1", sp_fmt_int(n));
+  err = sp_sys_get_fd_path(fd, buf, len - 1, &n);
+  if (err != SP_ERR_SYS_NAME_TOO_LONG) {
+    sp_test_fail(t, "undersized buffer: returned {} but expected SP_ERR_SYS_NAME_TOO_LONG", sp_fmt_str(sp_err_str(err)));
   }
 
   sp_sys_close(fd);

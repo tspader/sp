@@ -20,10 +20,19 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   c8 buf [SP_PATH_MAX];
   sp_for(it, sizeof(buf)) buf[it] = (c8)0xAB;
 
-  s64 n = c->fn == PATH_CWD ?
-    sp_sys_get_cwd_path(buf, sizeof(buf)) :
-    sp_sys_get_exe_path(buf, sizeof(buf));
-  if (n <= 0) return sp_test_skip(t, "not available");
+  u64 n = 0;
+  switch (c->fn) {
+    case PATH_CWD: {
+      if (sp_sys_get_fd_path(sp_sys_get_root(0), buf, sizeof(buf), &n)) return sp_test_skip(t, "not available");
+      break;
+    }
+    case PATH_EXE: {
+      s64 rc = sp_sys_get_exe_path(buf, sizeof(buf));
+      if (rc <= 0) return sp_test_skip(t, "not available");
+      n = (u64)rc;
+      break;
+    }
+  }
 
   if (buf[n] != 0) {
     sp_test_fail(t, "not NUL-terminated");

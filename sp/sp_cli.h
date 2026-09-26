@@ -1381,8 +1381,8 @@ SP_PRIVATE sp_str_t sp_cli_completer_path(sp_cli_desc_t desc, c8* buffer, u32 le
   if (sp_fs_is_absolute(arg0)) return arg0;
 
   c8 cwd [SP_PATH_MAX];
-  s64 cwd_len = sp_sys_get_cwd_path(cwd, sizeof(cwd));
-  if (cwd_len <= 0) return arg0;
+  u64 cwd_len = 0;
+  if (sp_sys_get_fd_path(sp_fs_get_cwd(), cwd, sizeof(cwd), &cwd_len)) return arg0;
   if (sp_cast(u32, cwd_len) + 1 + arg0.len > len) return arg0;
 
   sp_io_mem_writer_t path = sp_zero;
