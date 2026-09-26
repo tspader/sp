@@ -5920,16 +5920,12 @@ s64 sp_sys_get_fd_path(sp_sys_fd_t fd, c8* buf, u64 size) {
   return (sp_rt.vt->get_fd_path)(fd, buf, size);
 }
 
-SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
-  return sp_fs_trim_path(sp_str(path, len)).len;
-}
-
 sp_err_t sp_sys_open(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
-  return (sp_rt.vt->open)(fd, path, sp_sys_trim_path(path, len), mode, flags, out);
+  return (sp_rt.vt->open)(fd, path, len, mode, flags, out);
 }
 
 sp_err_t sp_sys_open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
-  return (sp_rt.vt->open_dir)(fd, path, sp_sys_trim_path(path, len), flags, out);
+  return (sp_rt.vt->open_dir)(fd, path, len, flags, out);
 }
 
 sp_err_t sp_sys_close(sp_sys_fd_t fd) {
@@ -5945,39 +5941,39 @@ sp_err_t sp_sys_pipe_ready(sp_sys_fd_t fd, u8* ready) {
 }
 
 sp_err_t sp_sys_mkdir(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
-  return (sp_rt.vt->mkdir)(fd, path, sp_sys_trim_path(path, len), perms);
+  return (sp_rt.vt->mkdir)(fd, path, len, perms);
 }
 
 sp_err_t sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len) {
-  return (sp_rt.vt->rmdir)(fd, path, sp_sys_trim_path(path, len));
+  return (sp_rt.vt->rmdir)(fd, path, len);
 }
 
 sp_err_t sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len) {
-  return (sp_rt.vt->unlink)(fd, path, sp_sys_trim_path(path, len));
+  return (sp_rt.vt->unlink)(fd, path, len);
 }
 
 sp_err_t sp_sys_rename(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
-  return (sp_rt.vt->rename)(from_fd, from, sp_sys_trim_path(from, from_len), to_fd, alias, sp_sys_trim_path(alias, alias_len));
+  return (sp_rt.vt->rename)(from_fd, from, from_len, to_fd, alias, alias_len);
 }
 
 sp_err_t sp_sys_link(sp_sys_fd_t from, const c8* existing, u32 existing_len, sp_sys_fd_t to, const c8* alias, u32 alias_len) {
-  return (sp_rt.vt->link)(from, existing, sp_sys_trim_path(existing, existing_len), to, alias, sp_sys_trim_path(alias, alias_len));
+  return (sp_rt.vt->link)(from, existing, existing_len, to, alias, alias_len);
 }
 
 sp_err_t sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
-  return (sp_rt.vt->symlink)(existing, existing_len, to_fd, alias, sp_sys_trim_path(alias, alias_len));
+  return (sp_rt.vt->symlink)(existing, existing_len, to_fd, alias, alias_len);
 }
 
 sp_err_t sp_sys_readlink(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size, u64* target_len) {
-  return (sp_rt.vt->readlink)(fd, path, sp_sys_trim_path(path, len), buf, size, target_len);
+  return (sp_rt.vt->readlink)(fd, path, len, buf, size, target_len);
 }
 
 sp_err_t sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  return (sp_rt.vt->get_path_metadata)(fd, path, sp_sys_trim_path(path, len), st);
+  return (sp_rt.vt->get_path_metadata)(fd, path, len, st);
 }
 
 sp_err_t sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  return (sp_rt.vt->get_link_metadata)(fd, path, sp_sys_trim_path(path, len), st);
+  return (sp_rt.vt->get_link_metadata)(fd, path, len, st);
 }
 
 sp_err_t sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
@@ -5985,11 +5981,11 @@ sp_err_t sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
 }
 
 sp_err_t sp_sys_set_file_perms(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
-  return (sp_rt.vt->set_file_perms)(fd, path, sp_sys_trim_path(path, len), perms);
+  return (sp_rt.vt->set_file_perms)(fd, path, len, perms);
 }
 
 sp_err_t sp_sys_set_times(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime) {
-  return (sp_rt.vt->set_times)(fd, path, sp_sys_trim_path(path, len), atime, mtime);
+  return (sp_rt.vt->set_times)(fd, path, len, atime, mtime);
 }
 
 sp_err_t sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts) {
@@ -6177,7 +6173,7 @@ s64 sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence) {
 }
 
 sp_err_t sp_sys_chdir(const c8* path, u32 len) {
-  return (sp_rt.vt->chdir)(path, sp_sys_trim_path(path, len));
+  return (sp_rt.vt->chdir)(path, len);
 }
 
 sp_err_t sp_sys_dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
@@ -6240,6 +6236,10 @@ c8** environ;
 #define SP_S_ISFIFO(m) (((m) & SP_S_IFMT) == SP_S_IFIFO)
 #define SP_S_ISBLK(m)  (((m) & SP_S_IFMT) == SP_S_IFBLK)
 #define SP_S_ISSOCK(m) (((m) & SP_S_IFMT) == SP_S_IFSOCK)
+
+SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
+  return sp_fs_trim_path(sp_str(path, len)).len;
+}
 
 #if defined(SP_WASM)
   #define sp_wasi_import(name) \
@@ -6894,11 +6894,15 @@ SP_PRIVATE sp_err_t sp_sys_err_from_errno(s64 e) {
   }
 }
 
-SP_PRIVATE sp_err_t sp_sys_posix_path(const c8* path, u32 len, c8 buf[SP_PATH_MAX]) {
+SP_PRIVATE sp_err_t sp_sys_posix_cstr(const c8* str, u32 len, c8 buf[SP_PATH_MAX]) {
   if (len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
-  sp_mem_copy(buf, path, len);
+  sp_mem_copy(buf, str, len);
   buf[len] = 0;
   return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_sys_posix_path(const c8* path, u32 len, c8 buf[SP_PATH_MAX]) {
+  return sp_sys_posix_cstr(path, sp_sys_trim_path(path, len), buf);
 }
 #endif
 
@@ -7115,6 +7119,7 @@ typedef struct {
 
 SP_PRIVATE sp_nt_status_t sp_sys_nt_target(sp_sys_fd_t root_fd, sp_str_t utf8, u16* result, u32 result_cap, sp_sys_nt_target_t* out) {
   *out = sp_zero_s(sp_sys_nt_target_t);
+  utf8 = sp_fs_trim_path(utf8);
   if (sp_str_empty(utf8)) return SP_NT_STATUS_OBJECT_NAME_NOT_FOUND;
   if (utf8.len >= SP_PATH_MAX) return SP_NT_STATUS_NAME_TOO_LONG;
 
@@ -8546,6 +8551,7 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   return SP_OK;
 
 #elif defined(SP_WASM)
+  len = sp_sys_trim_path(path, len);
   __wasi_rights_t rights = sp_sys_wasi_open_rights(mode);
   __wasi_fdflags_t fdflags = (flags & SP_SYS_OPEN_APPEND) ? __WASI_FDFLAGS_APPEND : 0;
   __wasi_fd_t opened = -1;
@@ -8620,6 +8626,7 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, s
   return SP_OK;
 
 #elif defined(SP_WASM)
+  len = sp_sys_trim_path(path, len);
   __wasi_lookupflags_t lookup = (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) ? 0 : __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW;
   __wasi_rights_t inheriting = SP_SYS_WASI_DIR_RIGHTS | sp_sys_wasi_open_rights(SP_SYS_OPEN_MODE_RW);
   __wasi_fd_t opened = -1;
@@ -10457,6 +10464,7 @@ sp_err_t sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   return SP_OK;
 
 #elif defined(SP_WASM)
+  len = sp_sys_trim_path(path, len);
   __wasi_filestat_t native = sp_zero;
   sp_try(sp_sys_err_from_wasi(sp_wasi_path_filestat_get((__wasi_fd_t)fd, __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW, path, len, &native)));
   sp_sys_file_meta_from_wasi(&native, st);
@@ -10495,6 +10503,7 @@ sp_err_t sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   return SP_OK;
 
 #elif defined(SP_WASM)
+  len = sp_sys_trim_path(path, len);
   __wasi_filestat_t native = sp_zero;
   sp_try(sp_sys_err_from_wasi(sp_wasi_path_filestat_get((__wasi_fd_t)fd, 0, path, len, &native)));
   sp_sys_file_meta_from_wasi(&native, st);
@@ -10628,6 +10637,7 @@ sp_err_t sp_sys_unlink_s(sp_sys_fd_t fd, sp_str_t path) {
 //////////////////
 sp_err_t sp_sys_chdir_p(const c8* path, u32 len) {
 #if defined(SP_WIN32)
+  len = sp_sys_trim_path(path, len);
   if (!len) return SP_ERR_SYS_NOT_FOUND;
   if (len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
   SP_ALIGNED u16 wbuf[SP_PATH_MAX + 1];
@@ -10817,7 +10827,7 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
     c8 existing [SP_PATH_MAX];
     c8 alias [SP_PATH_MAX];
   } buffers;
-  sp_try(sp_sys_posix_path(existing, existing_len, buffers.existing));
+  sp_try(sp_sys_posix_cstr(existing, existing_len, buffers.existing));
   sp_try(sp_sys_posix_path(alias, alias_len, buffers.alias));
   return sp_syscall_e(SP_SYSCALL_NUM_SYMLINKAT, buffers.existing, to_fd, buffers.alias);
 
@@ -10826,7 +10836,7 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
     c8 existing [SP_PATH_MAX];
     c8 alias [SP_PATH_MAX];
   } buffers;
-  sp_try(sp_sys_posix_path(existing, existing_len, buffers.existing));
+  sp_try(sp_sys_posix_cstr(existing, existing_len, buffers.existing));
   sp_try(sp_sys_posix_path(alias, alias_len, buffers.alias));
   return sp_sys_err_from_libc(symlinkat(buffers.existing, to_fd, buffers.alias));
 
