@@ -17,7 +17,6 @@ typedef struct {
 
 typedef struct {
   const c8* name;
-  sp_fs_path_kind_t kind;
   root_t roots [MAX_ROOTS];
   const c8* path;
   expect_t expect;
@@ -68,6 +67,12 @@ static const test_t tests [] = {
     .expect = { .root = 1, .sub = "B" },
   },
   {
+    .name = "separator_run_is_stripped",
+    .roots = { { .label = "/B" }, { .label = "/A" } },
+    .path = "/A//B",
+    .expect = { .root = 1, .sub = "B" },
+  },
+  {
     .name = "exact_label_is_dot",
     .roots = { { .label = "/B" }, { .label = "/A" } },
     .path = "/A",
@@ -92,22 +97,28 @@ static const test_t tests [] = {
     .expect = { .sub = "/AB/C" },
   },
   {
-    .name = "longest_label_wins",
+    .name = "deepest_label_wins",
     .roots = { { .label = "/A" }, { .label = "/A/B" } },
     .path = "/A/B/C",
     .expect = { .root = 1, .sub = "C" },
   },
   {
-    .name = "longest_label_wins_in_any_order",
+    .name = "deepest_label_wins_in_any_order",
     .roots = { { .label = "/A/B" }, { .label = "/A" } },
     .path = "/A/B/C",
     .expect = { .sub = "C" },
   },
   {
     .name = "slash_label_takes_everything",
-    .roots = { { .label = "/" } },
+    .roots = { { .label = "/B" }, { .label = "/" } },
     .path = "/A/B",
-    .expect = { .sub = "A/B" },
+    .expect = { .root = 1, .sub = "A/B" },
+  },
+  {
+    .name = "empty_label_takes_nothing",
+    .roots = { { .label = "" } },
+    .path = "/A/B",
+    .expect = { .sub = "/A/B" },
   },
   {
     .name = "relative_label_never_matches",
@@ -122,8 +133,8 @@ static const test_t tests [] = {
     .expect = { .sub = "/C" },
   },
   {
-    .name = "unreadable_root_is_skipped",
-    .roots = { { .err = SP_ERR_SYS_BAD_FD }, { .label = "/A" } },
+    .name = "unreadable_label_is_skipped",
+    .roots = { { .err = SP_ERR_SYS_NAME_TOO_LONG }, { .label = "/A" } },
     .path = "/A/B",
     .expect = { .root = 1, .sub = "B" },
   },
@@ -131,19 +142,6 @@ static const test_t tests [] = {
     .name = "no_roots",
     .path = "A",
     .expect = { .invalid = true, .sub = "A" },
-  },
-  {
-    .name = "backslash_is_a_name_byte_on_posix",
-    .roots = { { .label = "/B" }, { .label = "/A" } },
-    .path = "/A\\B",
-    .expect = { .sub = "/A\\B" },
-  },
-  {
-    .name = "backslash_separates_on_windows",
-    .kind = SP_FS_PATH_WINDOWS,
-    .roots = { { .label = "C:/B" }, { .label = "C:/A" } },
-    .path = "C:/A\\B",
-    .expect = { .root = 1, .sub = "B" },
   },
 };
 

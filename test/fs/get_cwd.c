@@ -64,7 +64,7 @@ sp_test(fs, get_cwd_override, .serial = true) {
   return SP_OK;
 }
 
-sp_test(fs, path_at_root_resolves_against_cwd) {
+sp_test(fs, path_at_cwd_passes_through) {
   sp_test_skip_on_wasm()
 
   sp_str_t file = sp_fs_join_path(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
