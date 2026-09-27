@@ -109,7 +109,8 @@ endif
 
 TESTS = amalg app array asset cli etc env format fmon glob ht io math process ps rb str sys thread time mem prompt leak qsort term
 BENCHES = glob heap
-EXAMPLES = app array cargo cli format hash_table io zero_copy ls palette post prompt prompt_fancy serve signal tls wc filesystem
+EXAMPLES = app array cargo cli format hash_table io zero_copy ls palette post prompt prompt_fancy serve signal tls wc
+EXAMPLES += fs/absolute fs/config fs/iterator fs/ls fs/preopen fs/roots fs/workspace
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \
@@ -148,7 +149,7 @@ $(EXAMPLE_DIR)/post$(EXE): example/post.c $(SP_HEADERS) $(MBEDTLS_LIB) | $(EXAMP
 
 endif
 
-$(EXAMPLE_DIR)/%$(EXE): example/%.c $(SP_HEADERS) | $(EXAMPLE_DIR)
+$(EXAMPLE_DIR)/%$(EXE): example/%.c $(SP_HEADERS) | $(EXAMPLE_DIR) $(EXAMPLE_DIR)/fs
 	$(CC) $(CFLAGS) -I. -o $@ $< $(LDLIBS_PLATFORM)
 
 $(TEST_DIR)/%$(EXE): test/%.c $(SP_HEADERS) $(TEST_SOURCES) | $(TEST_DIR)
@@ -178,7 +179,7 @@ wasm:
 	+$(MAKE) wasm32-wasi wasm32-freestanding
 	+$(MAKE) MODE=cpp wasm32-wasi wasm32-freestanding
 
-$(BUILD_DIR) $(EXAMPLE_DIR) $(TEST_DIR) $(BENCH_DIR) $(BUILD_DIR)/mbedtls:
+$(BUILD_DIR) $(EXAMPLE_DIR) $(EXAMPLE_DIR)/fs $(TEST_DIR) $(BENCH_DIR) $(BUILD_DIR)/mbedtls:
 	mkdir -p $@
 
 clean:
