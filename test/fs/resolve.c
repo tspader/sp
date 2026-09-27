@@ -39,9 +39,8 @@ static sp_sys_fd_t get_root(s32 it) {
   return (sp_sys_fd_t)(FD_BASE + it);
 }
 
-static sp_err_t get_fd_path(sp_sys_fd_t fd, c8* buf, u64 size, u64* len) {
+static sp_err_t get_root_label(s32 it, c8* buf, u64 size, u64* len) {
   *len = 0;
-  s32 it = (s32)fd - FD_BASE;
   if (it < 0 || it >= num_roots()) return SP_ERR_SYS_BAD_FD;
 
   const root_t* root = &active->roots[it];
@@ -151,11 +150,11 @@ static const test_t tests [] = {
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_vtable_t vt = sp_sys_vtable_platform;
   vt.get_root = get_root;
-  vt.get_fd_path = get_fd_path;
+  vt.get_root_label = get_root_label;
 
   active = c;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
-  sp_path_t path = sp_path_resolve_for(sp_cstr_as_str(c->path), c->kind);
+  sp_path_t path = sp_path_resolve(sp_cstr_as_str(c->path));
   sp_sys_set_vtable(saved);
   active = SP_NULLPTR;
 

@@ -48,7 +48,7 @@ sp_test(fs, get_cwd_override, .serial = true) {
 
   sp_rt.cwd = dir;
   sp_sys_fd_t cwd = sp_fs_get_cwd();
-  sp_path_t path = sp_path_at_root(sp_str_lit("A"));
+  sp_path_t path = sp_path_at_cwd(sp_str_lit("A"));
   bool found = sp_fs_is_file(sp_str_lit("A"));
   sp_str_t cwd_path = sp_fs_get_cwd_path(sp_test_arena(t));
   sp_rt.cwd = SP_SYS_INVALID_FD;
@@ -70,10 +70,10 @@ sp_test(fs, path_at_root_resolves_against_cwd) {
   sp_str_t file = sp_fs_join_path(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_must_ok(t, sp_fs_create_file(file));
 
-  sp_path_t path = sp_path_at_root(file);
+  sp_path_t path = sp_path_at_cwd(file);
   sp_expect_eq(t, path.dir, sp_fs_get_cwd());
   sp_expect_str_eq(t, path.sub, file);
   sp_expect(t, sp_fs_is_file_at(path));
-  sp_expect(t, sp_fs_is_dir_at(sp_path_at_root(sp_str_lit("."))));
+  sp_expect(t, sp_fs_is_dir_at(sp_path_at_cwd(sp_str_lit("."))));
   return SP_OK;
 }
