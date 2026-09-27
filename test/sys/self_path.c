@@ -23,7 +23,9 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   u64 n = 0;
   switch (c->fn) {
     case PATH_CWD: {
-      if (sp_sys_get_fd_path(sp_sys_get_root(0), buf, sizeof(buf), &n)) return sp_test_skip(t, "not available");
+      sp_sys_fd_t root = sp_sys_get_root(0);
+      if (root == SP_SYS_INVALID_FD) return sp_test_skip(t, "no roots");
+      sp_must_ok(t, sp_sys_get_fd_path(root, buf, sizeof(buf), &n));
       break;
     }
     case PATH_EXE: {

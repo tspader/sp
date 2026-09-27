@@ -70,7 +70,7 @@ sp_cli_result_t command(sp_cli_t* cli) {
   args_t args = ctx->args;
 
   sp_str_t dir = sp_str_empty(args.dir) ? sp_str_lit(".") : args.dir;
-  sp_path_t path = sp_path_at_root(dir);
+  sp_path_t path = sp_path_resolve(dir);
 
   if (args.walk) {
     walk(dir, path);

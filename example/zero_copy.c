@@ -78,7 +78,7 @@ static run_t copy_run(sp_str_t src_path, sp_str_t dst_path, src_t src, sink_t si
     }
     case SRC_STREAM_FILE: {
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-      if (sp_sys_open_s(sp_sys_get_root(0), src_path, SP_SYS_OPEN_MODE_RO, 0, &fd) != SP_OK) {
+      if (sp_sys_open_s(sp_fs_get_cwd(), src_path, SP_SYS_OPEN_MODE_RO, 0, &fd) != SP_OK) {
         return sp_zero_s(run_t);
       }
       sp_io_stream_reader_from_file(&sr, fd, SP_IO_CLOSE_MODE_AUTO);

@@ -52,12 +52,15 @@ sp_test(fs, get_cwd_override, .serial = true) {
   bool found = sp_fs_is_file(sp_str_lit("A"));
   sp_str_t cwd_path = sp_fs_get_cwd_path(sp_test_arena(t));
   sp_rt.cwd = SP_SYS_INVALID_FD;
+  sp_sys_fd_t restored = sp_fs_get_cwd();
   sp_sys_close(dir);
 
   sp_expect_eq(t, cwd, dir);
   sp_expect_eq(t, path.dir, dir);
+  sp_expect_str_eq(t, path.sub, sp_str_lit("A"));
   sp_expect(t, found);
   sp_expect_str_eq(t, cwd_path, sp_fs_canonicalize_path(sp_test_arena(t), sp_test_dir(t)));
+  sp_expect_eq(t, restored, sp_sys_get_root(0));
   return SP_OK;
 }
 

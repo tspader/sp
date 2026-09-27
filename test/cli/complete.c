@@ -408,9 +408,12 @@ static void run_cli_completer_path_test(s32* utest_result, sp_mem_t mem, cli_com
   }, buffer, sizeof(buffer));
 
   if (t.expect.anchored) {
+    sp_sys_fd_t dir = sp_fs_get_cwd();
+    if (dir == SP_SYS_INVALID_FD) UTEST_SKIP("no cwd");
+
     c8 cwd [SP_PATH_MAX];
     u64 cwd_len = 0;
-    sp_err_t err = sp_sys_get_fd_path(sp_fs_get_cwd(), cwd, sizeof(cwd), &cwd_len);
+    sp_err_t err = sp_sys_get_fd_path(dir, cwd, sizeof(cwd), &cwd_len);
     EXPECT_EQ(err, SP_OK);
     if (err) return;
     sp_str_t expected = sp_fmt(mem, "{}/{}", sp_fmt_str(sp_str(cwd, sp_cast(u32, cwd_len))), sp_fmt_cstr(t.arg0)).value;
