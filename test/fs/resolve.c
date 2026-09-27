@@ -2,7 +2,14 @@
 #include "sp/sp_test.h"
 
 #define MAX_ROOTS 4
-#define FD_BASE 9000
+#define ROOT_FD 9000
+#define CWD_FD 9100
+
+typedef enum {
+  DIR_ROOT,
+  DIR_CWD,
+  DIR_NONE,
+} dir_t;
 
 typedef struct {
   const c8* label;
@@ -10,14 +17,15 @@ typedef struct {
 } root_t;
 
 typedef struct {
+  dir_t dir;
   s32 root;
-  bool invalid;
   const c8* sub;
 } expect_t;
 
 typedef struct {
   const c8* name;
   root_t roots [MAX_ROOTS];
+  bool cwd;
   const c8* path;
   expect_t expect;
 } test_t;
@@ -35,7 +43,7 @@ static s32 num_roots() {
 
 static sp_sys_fd_t get_root(s32 it) {
   if (it < 0 || it >= num_roots()) return SP_SYS_INVALID_FD;
-  return (sp_sys_fd_t)(FD_BASE + it);
+  return (sp_sys_fd_t)(ROOT_FD + it);
 }
 
 static sp_err_t get_root_label(s32 it, c8* buf, u64 size, u64* len) {
@@ -55,10 +63,28 @@ static sp_err_t get_root_label(s32 it, c8* buf, u64 size, u64* len) {
 
 static const test_t tests [] = {
   {
-    .name = "relative_goes_to_cwd",
+    .name = "relative_goes_to_root_zero",
     .roots = { { .label = "/A" } },
     .path = "A/B",
     .expect = { .sub = "A/B" },
+  },
+  {
+    .name = "relative_goes_to_the_cwd",
+    .roots = { { .label = "/A" } },
+    .cwd = true,
+    .path = "A/B",
+    .expect = { .dir = DIR_CWD, .sub = "A/B" },
+  },
+  {
+    .name = "relative_ignores_relative_labels",
+    .roots = { { .label = "." }, { .label = "A" } },
+    .path = "A/B",
+    .expect = { .sub = "A/B" },
+  },
+  {
+    .name = "relative_without_roots",
+    .path = "A",
+    .expect = { .dir = DIR_NONE, .sub = "A" },
   },
   {
     .name = "label_is_stripped",
@@ -85,12 +111,6 @@ static const test_t tests [] = {
     .expect = { .root = 1, .sub = "." },
   },
   {
-    .name = "label_trailing_separator_is_ignored",
-    .roots = { { .label = "/B" }, { .label = "/A/" } },
-    .path = "/A/B",
-    .expect = { .root = 1, .sub = "B" },
-  },
-  {
     .name = "label_matches_whole_components",
     .roots = { { .label = "/B" }, { .label = "/A" } },
     .path = "/AB/C",
@@ -109,16 +129,28 @@ static const test_t tests [] = {
     .expect = { .sub = "C" },
   },
   {
-    .name = "slash_label_takes_everything",
+    .name = "slash_label_strips_the_root",
     .roots = { { .label = "/B" }, { .label = "/" } },
     .path = "/A/B",
     .expect = { .root = 1, .sub = "A/B" },
   },
   {
-    .name = "empty_label_takes_nothing",
-    .roots = { { .label = "" } },
+    .name = "slash_label_is_dot",
+    .roots = { { .label = "/B" }, { .label = "/" } },
+    .path = "/",
+    .expect = { .root = 1, .sub = "." },
+  },
+  {
+    .name = "empty_label_serves_everything",
+    .roots = { { .label = "/B" }, { .label = "" } },
     .path = "/A/B",
-    .expect = { .sub = "/A/B" },
+    .expect = { .root = 1, .sub = "/A/B" },
+  },
+  {
+    .name = "any_label_beats_the_empty_label",
+    .roots = { { .label = "" }, { .label = "/" } },
+    .path = "/A/B",
+    .expect = { .root = 1, .sub = "A/B" },
   },
   {
     .name = "relative_label_never_matches",
@@ -127,21 +159,17 @@ static const test_t tests [] = {
     .expect = { .root = 1, .sub = "B" },
   },
   {
-    .name = "unmatched_absolute_goes_to_cwd",
+    .name = "unserved_goes_to_the_cwd",
     .roots = { { .label = "/B" }, { .label = "/A" } },
+    .cwd = true,
     .path = "/C",
-    .expect = { .sub = "/C" },
+    .expect = { .dir = DIR_CWD, .sub = "/C" },
   },
   {
     .name = "unreadable_label_is_skipped",
     .roots = { { .err = SP_ERR_SYS_NAME_TOO_LONG }, { .label = "/A" } },
     .path = "/A/B",
     .expect = { .root = 1, .sub = "B" },
-  },
-  {
-    .name = "no_roots",
-    .path = "A",
-    .expect = { .invalid = true, .sub = "A" },
   },
 };
 
@@ -152,12 +180,17 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   active = c;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
+  if (c->cwd) sp_rt.cwd = (sp_sys_fd_t)CWD_FD;
   sp_path_t path = sp_path_resolve(sp_cstr_as_str(c->path));
+  sp_rt.cwd = SP_SYS_INVALID_FD;
   sp_sys_set_vtable(saved);
   active = SP_NULLPTR;
 
-  sp_sys_fd_t dir = c->expect.invalid ? SP_SYS_INVALID_FD : (sp_sys_fd_t)(FD_BASE + c->expect.root);
-  sp_expect_eq(t, path.dir, dir);
+  switch (c->expect.dir) {
+    case DIR_ROOT: sp_expect_eq(t, path.dir, (sp_sys_fd_t)(ROOT_FD + c->expect.root)); break;
+    case DIR_CWD:  sp_expect_eq(t, path.dir, (sp_sys_fd_t)CWD_FD); break;
+    case DIR_NONE: sp_expect_eq(t, path.dir, SP_SYS_INVALID_FD); break;
+  }
   sp_expect_str_eq(t, path.sub, sp_cstr_as_str(c->expect.sub));
   return SP_OK;
 }

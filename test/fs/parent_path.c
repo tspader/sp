@@ -13,6 +13,7 @@ static const test_t tests [] = {
   { .name = "bare",                 .input = "A",       .expect = "." },
   { .name = "bare_trailing",        .input = "A/",      .expect = "." },
   { .name = "dot",                  .input = ".",       .expect = "." },
+  { .name = "dotdot",               .input = "..",      .expect = "." },
   { .name = "nested",               .input = "A/B",     .expect = "A" },
   { .name = "nested_trailing",      .input = "A/B/",    .expect = "A" },
   { .name = "separator_run",        .input = "A//B",    .expect = "A" },

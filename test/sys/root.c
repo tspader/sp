@@ -20,6 +20,7 @@ UTEST_F(sys_root, every_root_has_a_label) {
     u64 len = 0;
     EXPECT_EQ(sp_sys_get_root_label(it, buf, sizeof(buf), &len), SP_OK);
     EXPECT_EQ(buf[len], 0);
+    EXPECT_TRUE(len <= 1 || buf[len - 1] != '/');
   }
 }
 
@@ -30,6 +31,17 @@ UTEST_F(sys_root, native_root_serves_everything) {
   u64 len = 1;
   EXPECT_EQ(sp_sys_get_root_label(0, buf, sizeof(buf), &len), SP_OK);
   EXPECT_EQ(len, 0);
+}
+
+UTEST_F(sys_root, wasm_handles_have_no_path) {
+#if !defined(SP_WASM)
+  UTEST_SKIP("wasm only");
+#else
+  c8 buf [SP_PATH_MAX] = sp_zero;
+  u64 len = 1;
+  EXPECT_EQ(sp_sys_get_fd_path(sp_sys_stdout, buf, sizeof(buf), &len), SP_ERR_SYS_UNSUPPORTED);
+  EXPECT_EQ(len, 0);
+#endif
 }
 
 UTEST_F(sys_root, label_needs_room_for_nul) {

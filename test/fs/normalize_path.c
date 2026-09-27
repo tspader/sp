@@ -14,6 +14,7 @@ static const test_t tests [] = {
   { .name = "nested",               .input = "A/B",       .expect = "A/B" },
   { .name = "trailing_slash",       .input = "A/",        .expect = "A" },
   { .name = "root",                 .input = "/",         .expect = "/" },
+  { .name = "keeps_separator_run",  .input = "A//B",      .expect = "A//B" },
   { .name = "keeps_dot",            .input = "A/./B",     .expect = "A/./B" },
   { .name = "keeps_dotdot",         .input = "A/B/../C",  .expect = "A/B/../C" },
   { .name = "backslash_is_a_name",  .input = "A\\B\\",    .expect = "A\\B\\" },

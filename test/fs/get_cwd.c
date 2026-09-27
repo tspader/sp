@@ -10,7 +10,7 @@ sp_test(fs, get_cwd_contract) {
   return SP_OK;
 }
 
-sp_test(fs, get_cwd_unlinked_cwd_does_not_leak_deleted_suffix, .serial = true) {
+sp_test(fs, get_cwd_unlinked_cwd_has_no_path, .serial = true) {
   // @spader
 #if !defined(SP_LINUX)
   return sp_test_skip(t, "unlinked-cwd is a Linux-only scenario");
@@ -28,7 +28,7 @@ sp_test(fs, get_cwd_unlinked_cwd_does_not_leak_deleted_suffix, .serial = true) {
   // restore cwd before any assertion can fail, so other tests aren't poisoned
   sp_sys_chdir_s(original);
 
-  sp_must(t, !sp_str_contains(cwd, sp_str_lit(" (deleted)")));
+  sp_must(t, sp_str_empty(cwd));
   return SP_OK;
 #endif
 }

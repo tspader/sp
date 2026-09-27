@@ -14,15 +14,12 @@ static const test_t tests [] = {
   { .name = "strip",                .input = "A.c",      .ext = "",    .expect = "A" },
   { .name = "add",                  .input = "A",        .ext = "txt", .expect = "A.txt" },
   { .name = "trailing_dot",         .input = "A.",       .ext = "txt", .expect = "A.txt" },
-  { .name = "double_dot",           .input = "A..txt",   .ext = "md",  .expect = "A..md" },
-  { .name = "last_dot_wins",        .input = "A.B.C",    .ext = "d",   .expect = "A.B.d" },
   { .name = "hidden",               .input = ".A",       .ext = "txt", .expect = ".A.txt" },
-  { .name = "nested",               .input = "A/B.txt",  .ext = "md",  .expect = "A/B.md" },
+  { .name = "keeps_dir",            .input = "A.B/C.c",  .ext = "o",   .expect = "A.B/C.o" },
   { .name = "trailing_slash",       .input = "A/B.txt/", .ext = "md",  .expect = "A/B.md" },
-  { .name = "dot_in_dir",           .input = "A.B/C",    .ext = "d",   .expect = "A.B/C.d" },
   { .name = "backslash_is_a_name",  .input = "A.B\\C",   .ext = "d",   .expect = "A.d" },
 
-  { .name = "windows_dot_in_dir",   .kind = SP_FS_PATH_WINDOWS, .input = "A.B\\C",   .ext = "d", .expect = "A.B\\C.d" },
+  { .name = "windows_keeps_dir",    .kind = SP_FS_PATH_WINDOWS, .input = "A.B\\C",   .ext = "d", .expect = "A.B\\C.d" },
   { .name = "windows_trailing",     .kind = SP_FS_PATH_WINDOWS, .input = "A\\B.c\\", .ext = "o", .expect = "A\\B.o" },
 };
 

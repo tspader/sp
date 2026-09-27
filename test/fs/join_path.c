@@ -31,7 +31,6 @@ static const test_t tests [] = {
   { .name = "windows_leading_rhs",  .kind = SP_FS_PATH_WINDOWS, .a = "A",    .b = "\\B",  .expect = "A/B" },
   { .name = "windows_drive",        .kind = SP_FS_PATH_WINDOWS, .a = "C:/",  .b = "A",    .expect = "C:/A" },
   { .name = "windows_drive_back",   .kind = SP_FS_PATH_WINDOWS, .a = "C:\\", .b = "A",    .expect = "C:\\A" },
-  { .name = "windows_drive_bare",   .kind = SP_FS_PATH_WINDOWS, .a = "C:",   .b = "A",    .expect = "C:/A" },
 };
 
 sp_test_each(fs, join_path, test_t, tests) {

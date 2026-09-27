@@ -835,6 +835,17 @@ UTEST_F(glob, set_nested_path) {
   sp_glob_set_free(set);
 }
 
+UTEST_F(glob, set_extension_matches_hidden_file) {
+  sp_glob_set_t* set = sp_glob_set_new(ut.mem.tracking);
+  sp_glob_set_add(set, "*.c");
+  sp_glob_set_build(set);
+
+  EXPECT_TRUE(sp_glob_set_match(set, sp_str_lit(".c")));
+  EXPECT_TRUE(sp_glob_set_match(set, sp_str_lit("src/.c")));
+
+  sp_glob_set_free(set);
+}
+
 UTEST_F(glob, set_basename_literal) {
   sp_glob_set_t* set = sp_glob_set_new(ut.mem.tracking);
   sp_glob_set_add(set, "**/foo");

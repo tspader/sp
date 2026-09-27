@@ -2,6 +2,7 @@
 
 typedef struct {
   const c8* name;
+  sp_fs_path_kind_t kind;
   const c8* cwd;
   const c8* exe_dir;
   const c8* expect [16];
@@ -12,35 +13,40 @@ static const resolve_case_t resolve_cases [] = {
     .name = "disjoint",
     .cwd = "/a/b",
     .exe_dir = "/x/y",
-    .expect = { "/a/b", "/a", "/x/y", "/x" },
+    .expect = { "/a/b", "/a", "/", "/x/y", "/x" },
   },
   {
     .name = "overlap",
     .cwd = "/x/repo",
     .exe_dir = "/x/repo/build/debug",
-    .expect = { "/x/repo", "/x", "/x/repo/build/debug", "/x/repo/build" },
+    .expect = { "/x/repo", "/x", "/", "/x/repo/build/debug", "/x/repo/build" },
   },
   {
     .name = "windows",
+    .kind = SP_FS_PATH_WINDOWS,
     .cwd = "C:\\repo",
     .exe_dir = "C:\\repo\\build",
-    .expect = { "C:/repo", "C:", "C:/repo/build" },
+    .expect = { "C:/repo", "C:/", "C:/repo/build" },
   },
   {
     .name = "trailing",
     .cwd = "/a/b/",
     .exe_dir = "",
-    .expect = { "/a/b", "/a" },
+    .expect = { "/a/b", "/a", "/" },
   },
   {
     .name = "empty",
     .cwd = "",
     .exe_dir = "/x",
-    .expect = { "/x" },
+    .expect = { "/x", "/" },
   },
 };
 
 sp_test_each(golden, resolve, resolve_case_t, resolve_cases) {
+  if (it->kind != SP_FS_PATH_POSIX && it->kind != sp_os_get_path_kind()) {
+    return sp_test_skip(t, "paths of another kind");
+  }
+
   sp_da(sp_str_t) roots = sp_test_resolve_roots(sp_test_arena(t),
     sp_cstr_as_str(it->cwd), sp_cstr_as_str(it->exe_dir));
 

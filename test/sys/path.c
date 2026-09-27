@@ -35,6 +35,7 @@ typedef struct {
   const c8* exists;
   const c8* not_exists;
   sp_fs_kind_t kind;
+  bool posix;
 } test_t;
 
 static const test_t tests [] = {
@@ -129,6 +130,22 @@ static const test_t tests [] = {
 };
 
 static const test_t slash_tests [] = {
+  {
+    .name = "mkdir_backslash_is_a_name",
+    .op = OP_MKDIR,
+    .path = "A\\",
+    .exists = "A\\",
+    .not_exists = "A",
+    .posix = true,
+  },
+  {
+    .name = "stat_drive_is_a_name",
+    .op = OP_STAT,
+    .path = "A:/",
+    .file = "A:",
+    .kind = SP_FS_KIND_FILE,
+    .posix = true,
+  },
   {
     .name = "unlink_slash_file",
     .op = OP_UNLINK,
@@ -351,6 +368,10 @@ static bool check_err(sp_test_t* t, sp_err_t err, sp_err_t want) {
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
+  if (c->posix && sp_os_get_path_kind() != SP_FS_PATH_POSIX) {
+    return sp_test_skip(t, "posix paths only");
+  }
+
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;

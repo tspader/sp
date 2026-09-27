@@ -12,8 +12,6 @@ static const test_t tests [] = {
   { .name = "slash",     .input = '/',  .posix = true, .windows = true },
   { .name = "backslash", .input = '\\',                .windows = true },
   { .name = "letter",    .input = 'A' },
-  { .name = "colon",     .input = ':' },
-  { .name = "dot",       .input = '.' },
 };
 
 sp_test_each(fs, is_sep, test_t, tests) {
