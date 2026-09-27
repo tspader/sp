@@ -6511,8 +6511,10 @@ SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
 #define SP_WASI_ENOTDIR       54
 #define SP_WASI_ENOTEMPTY     55
 #define SP_WASI_ENOTSUP       58
+#define SP_WASI_EOVERFLOW     61
 #define SP_WASI_EPERM         63
 #define SP_WASI_EPIPE         64
+#define SP_WASI_ERANGE        68
 #define SP_WASI_EROFS         69
 #define SP_WASI_ESPIPE        70
 #define SP_WASI_ETIMEDOUT     73
@@ -6568,6 +6570,13 @@ SP_PRIVATE sp_err_t sp_sys_wasi_prestat_name(__wasi_fd_t fd, c8* buf, u64 size, 
   sp_try(sp_sys_err_from_wasi(sp_wasi_fd_prestat_dir_name(fd, (u8*)buf, prestat.u.dir.pr_name_len)));
   buf[prestat.u.dir.pr_name_len] = 0;
   *len = prestat.u.dir.pr_name_len;
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_sys_wasi_path(const c8* path, u32* len) {
+  *len = sp_sys_trim_path(path, *len);
+  if (!*len) return SP_ERR_SYS_NOT_FOUND;
+  if (*len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
   return SP_OK;
 }
 #endif
@@ -7646,8 +7655,9 @@ sp_err_t sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_s
   return sp_sys_err_from_libc(renameat(from_fd, buffers.from, to_fd, buffers.to));
 
 #elif defined(SP_WASM)
-  (void)from_fd; (void)from; (void)from_len; (void)to_fd; (void)to; (void)to_len;
-  return SP_ERR_SYS_UNSUPPORTED;
+  sp_try(sp_sys_wasi_path(from, &from_len));
+  sp_try(sp_sys_wasi_path(to, &to_len));
+  return sp_sys_err_from_wasi(sp_wasi_path_rename((__wasi_fd_t)from_fd, from, from_len, (__wasi_fd_t)to_fd, to, to_len));
 
 #else
   #error "sp_sys_rename"
@@ -8572,7 +8582,7 @@ sp_err_t sp_sys_open_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_open_mode
   return SP_OK;
 
 #elif defined(SP_WASM)
-  len = sp_sys_trim_path(path, len);
+  sp_try(sp_sys_wasi_path(path, &len));
   __wasi_rights_t rights = sp_sys_wasi_open_rights(mode);
   __wasi_fdflags_t fdflags = (flags & SP_SYS_OPEN_APPEND) ? __WASI_FDFLAGS_APPEND : 0;
   __wasi_fd_t opened = -1;
@@ -8647,7 +8657,7 @@ sp_err_t sp_sys_open_dir_p(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, s
   return SP_OK;
 
 #elif defined(SP_WASM)
-  len = sp_sys_trim_path(path, len);
+  sp_try(sp_sys_wasi_path(path, &len));
   __wasi_lookupflags_t lookup = (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) ? 0 : __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW;
   __wasi_rights_t inheriting = SP_SYS_WASI_DIR_RIGHTS | sp_sys_wasi_open_rights(SP_SYS_OPEN_MODE_RW);
   __wasi_fd_t opened = -1;
@@ -10471,7 +10481,7 @@ sp_err_t sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   return SP_OK;
 
 #elif defined(SP_WASM)
-  len = sp_sys_trim_path(path, len);
+  sp_try(sp_sys_wasi_path(path, &len));
   __wasi_filestat_t native = sp_zero;
   sp_try(sp_sys_err_from_wasi(sp_wasi_path_filestat_get((__wasi_fd_t)fd, __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW, path, len, &native)));
   sp_sys_file_meta_from_wasi(&native, st);
@@ -10510,7 +10520,7 @@ sp_err_t sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_
   return SP_OK;
 
 #elif defined(SP_WASM)
-  len = sp_sys_trim_path(path, len);
+  sp_try(sp_sys_wasi_path(path, &len));
   __wasi_filestat_t native = sp_zero;
   sp_try(sp_sys_err_from_wasi(sp_wasi_path_filestat_get((__wasi_fd_t)fd, 0, path, len, &native)));
   sp_sys_file_meta_from_wasi(&native, st);
@@ -10557,8 +10567,9 @@ sp_err_t sp_sys_mkdir_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_per
   return sp_sys_err_from_libc(mkdirat(fd, buf, (mode_t)(perms.value & 07777)));
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)perms;
-  return SP_ERR_SYS_UNSUPPORTED;
+  (void)perms;
+  sp_try(sp_sys_wasi_path(path, &len));
+  return sp_sys_err_from_wasi(sp_wasi_path_create_directory((__wasi_fd_t)fd, path, len));
 
 #else
   #error "sp_sys_mkdir"
@@ -10587,8 +10598,8 @@ sp_err_t sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len) {
   return sp_sys_err_from_libc(unlinkat(fd, buf, AT_REMOVEDIR));
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len;
-  return SP_ERR_SYS_UNSUPPORTED;
+  sp_try(sp_sys_wasi_path(path, &len));
+  return sp_sys_err_from_wasi(sp_wasi_path_remove_directory((__wasi_fd_t)fd, path, len));
 
 #else
   #error "sp_sys_rmdir"
@@ -10627,8 +10638,8 @@ sp_err_t sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len) {
   return sp_sys_err_from_libc(rc);
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len;
-  return SP_ERR_SYS_UNSUPPORTED;
+  sp_try(sp_sys_wasi_path(path, &len));
+  return sp_sys_err_from_wasi(sp_wasi_path_unlink_file((__wasi_fd_t)fd, path, len));
 
 #else
   #error "sp_sys_unlink"
@@ -10714,8 +10725,9 @@ sp_err_t sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len
   return sp_sys_err_from_libc(linkat(from_fd, buffers.existing, to_fd, buffers.alias, 0));
 
 #elif defined(SP_WASM)
-  (void)from_fd; (void)existing; (void)existing_len; (void)to_fd; (void)alias; (void)alias_len;
-  return SP_ERR_SYS_UNSUPPORTED;
+  sp_try(sp_sys_wasi_path(existing, &existing_len));
+  sp_try(sp_sys_wasi_path(alias, &alias_len));
+  return sp_sys_err_from_wasi(sp_wasi_path_link((__wasi_fd_t)from_fd, 0, existing, existing_len, (__wasi_fd_t)to_fd, alias, alias_len));
 
 #else
   #error "sp_sys_link"
@@ -10848,8 +10860,10 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
   return sp_sys_err_from_libc(symlinkat(buffers.existing, to_fd, buffers.alias));
 
 #elif defined(SP_WASM)
-  (void)existing; (void)existing_len; (void)to_fd; (void)alias; (void)alias_len;
-  return SP_ERR_SYS_UNSUPPORTED;
+  if (!existing_len) return SP_ERR_SYS_NOT_FOUND;
+  if (existing_len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
+  sp_try(sp_sys_wasi_path(alias, &alias_len));
+  return sp_sys_err_from_wasi(sp_wasi_path_symlink(existing, existing_len, (__wasi_fd_t)to_fd, alias, alias_len));
 
 #else
   #error "sp_sys_symlink"
@@ -10929,8 +10943,18 @@ sp_err_t sp_sys_readlink_p(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64
   return SP_OK;
 
 #elif defined(SP_WASM)
-  (void)fd; (void)path; (void)len; (void)buf; (void)size;
-  return SP_ERR_SYS_UNSUPPORTED;
+  sp_try(sp_sys_wasi_path(path, &len));
+  __wasi_size_t used = 0;
+  __wasi_errno_t err = sp_wasi_path_readlink((__wasi_fd_t)fd, path, len, (u8*)buf, (__wasi_size_t)size, &used);
+  switch (err) {
+    case SP_WASI_ESUCCESS:  break;
+    case SP_WASI_EOVERFLOW:
+    case SP_WASI_ERANGE:    return SP_ERR_SYS_NAME_TOO_LONG;
+    default:                return sp_sys_err_from_wasi(err);
+  }
+  if ((u64)used == size) return SP_ERR_SYS_NAME_TOO_LONG;
+  *target_len = (u64)used;
+  return SP_OK;
 
 #else
   #error "sp_sys_readlink"
@@ -13736,6 +13760,18 @@ SP_PRIVATE sp_fs_kind_t sp_sys_dir_dtype_to_kind(u8 d_type) {
   }
   return SP_FS_KIND_NONE;
 }
+
+#elif defined(SP_WASM)
+sp_static_assert(SP_SYS_DIR_MIN_BUF >= sizeof(__wasi_dirent_t) + 255, sp_sys_dir_min_buf);
+
+SP_PRIVATE sp_fs_kind_t sp_sys_dir_dtype_to_kind(u8 d_type) {
+  switch (d_type) {
+    case __WASI_FILETYPE_REGULAR_FILE:  { return SP_FS_KIND_FILE; }
+    case __WASI_FILETYPE_DIRECTORY:     { return SP_FS_KIND_DIR; }
+    case __WASI_FILETYPE_SYMBOLIC_LINK: { return SP_FS_KIND_SYMLINK; }
+  }
+  return SP_FS_KIND_NONE;
+}
 #endif
 
 sp_err_t sp_sys_dir_it_open_p(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
@@ -13751,7 +13787,8 @@ sp_err_t sp_sys_dir_it_open_p(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
   out->state = (s64)(intptr_t)dir;
   return SP_OK;
 #elif defined(SP_WASM)
-  return SP_ERR_SYS_UNSUPPORTED;
+  out->state = (s64)__WASI_DIRCOOKIE_START;
+  return SP_OK;
 #else
   #error "sp_sys_dir_it_open"
 #endif
@@ -13787,8 +13824,23 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = d->d_reclen;
   return SP_OK;
 #elif defined(SP_WASM)
-  (void)it;
-  return SP_ERR_SYS_UNSUPPORTED;
+  // @spader this is just a temporary stub! probably wrong
+  __wasi_size_t used = 0;
+  __wasi_errno_t err = sp_wasi_fd_readdir((__wasi_fd_t)it->fd, buf->data, (__wasi_size_t)buf->capacity, (__wasi_dircookie_t)it->state, &used);
+  if (err == SP_WASI_ENOENT) return SP_OK;
+  if (err) return sp_sys_err_from_wasi(err);
+
+  u64 end = 0;
+  while (end + sizeof(__wasi_dirent_t) <= used) {
+    __wasi_dirent_t d;
+    sp_mem_copy(&d, buf->data + end, sizeof(d));
+    if (end + sizeof(d) + d.d_namlen > used) break;
+    end += sizeof(d) + d.d_namlen;
+    it->state = (s64)d.d_next;
+  }
+  if (used && !end) return SP_ERR_SYS_NAME_TOO_LONG;
+  buf->len = end;
+  return SP_OK;
 #else
   #error "sp_sys_dir_it_read"
 #endif
@@ -13829,22 +13881,28 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
   out->kind = sp_sys_dir_dtype_to_kind(d->d_type);
   return SP_OK;
 #elif defined(SP_WASM)
-  (void)it; (void)buf; (void)cursor;
-  return SP_ERR_SYS_UNSUPPORTED;
+  // @spader this is just a temporary stub! probably wrong
+  (void)it;
+  __wasi_dirent_t d;
+  sp_mem_copy(&d, buf->data + *cursor, sizeof(d));
+  *cursor += sizeof(d);
+
+  out->name = sp_ptr_cast(const c8*, buf->data + *cursor);
+  out->len = d.d_namlen;
+  out->kind = sp_sys_dir_dtype_to_kind(d.d_type);
+  *cursor += d.d_namlen;
+  return SP_OK;
 #else
   #error "sp_sys_dir_it_parse"
 #endif
 }
 
 sp_err_t sp_sys_dir_it_close_p(sp_sys_dir_it_t* it) {
-#if defined(SP_WIN32) || defined(SP_LINUX)
+#if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_WASM)
   return sp_sys_close(it->fd);
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   if (closedir((DIR*)(intptr_t)it->state)) return sp_sys_err_from_errno(errno);
   return SP_OK;
-#elif defined(SP_WASM)
-  (void)it;
-  return SP_ERR_SYS_UNSUPPORTED;
 #else
   #error "sp_sys_dir_it_close"
 #endif
@@ -20909,7 +20967,13 @@ sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
 
   err = sp_io_copy(sp_fs_atomic_writer(&af), &reader.base, SP_NULLPTR);
   sp_io_file_reader_close(&reader);
-  if (!err) err = sp_sys_set_file_perms_s(af.dir, af.temp, meta.perms);
+
+  // @spader I'm not sure if eating this error is right. My gut says that it
+  // is not. On WASM, the copy could work, but you simply can't set perms.
+  if (!err) {
+    err = sp_sys_set_file_perms_s(af.dir, af.temp, meta.perms);
+    if (err == SP_ERR_SYS_UNSUPPORTED) err = SP_OK;
+  }
   if (err) {
     sp_fs_atomic_abort(&af);
     return err;

@@ -35,6 +35,7 @@ static const test_t tests [] = {
 };
 
 static sp_err_t run(sp_test_t* t, test_t* it) {
+  sp_test_skip_on_wasm();
   sp_str_t path = sp_fs_join_path(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_fs_create_file(path);
   sp_sys_fd_t root = sp_sys_get_root(0);
@@ -89,6 +90,7 @@ sp_test(sys, default_perms_then_read_only) {
 
 sp_test(sys, mkdir_applies_perms) {
   sp_test_skip_on_win32();
+  sp_test_skip_on_wasm();
   sp_str_t path = sp_fs_join_path(sp_test_arena(t), sp_test_dir(t), sp_str_lit("D"));
   sp_sys_fd_t root = sp_sys_get_root(0);
 

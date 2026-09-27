@@ -53,6 +53,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case OP_SET_PERMS: {
+      sp_test_skip_on_wasm();
       sp_sys_file_perms_t perms = before.perms;
       sp_sys_set_read_only(&perms, true);
       sp_must_ok(t, sp_sys_set_file_perms_s(root, path, perms));
