@@ -8723,7 +8723,22 @@ sp_sys_fd_t sp_sys_get_root_p(s32 it) {
 
 sp_err_t sp_sys_get_root_label_p(s32 it, c8* buf, u64 size, u64* len) {
   *len = 0;
-  return SP_ERR_SYS_UNSUPPORTED;
+
+#if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+  if (it != 0) return SP_ERR_SYS_BAD_FD;
+  if (!size) return SP_ERR_SYS_NAME_TOO_LONG;
+  buf[0] = 0;
+  return SP_OK;
+
+#elif defined(SP_WASM)
+  sp_try(sp_sys_wasi_prestat_name((__wasi_fd_t)(3 + it), buf, size, len));
+  *len = sp_sys_trim_path(buf, (u32)*len);
+  buf[*len] = 0;
+  return SP_OK;
+
+#else
+  #error "sp_sys_get_root_label"
+#endif
 }
 
 //////////////////////
@@ -11085,28 +11100,37 @@ sp_err_t sp_sys_set_times_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_timespec_t ati
 ////////////////////////
 // SP_SYS_GET_FD_PATH //
 ////////////////////////
-sp_err_t sp_sys_get_fd_path_p(sp_sys_fd_t fd, c8* buf, u64 size, u64* len) {
-  *len = 0;
-
 #if defined(SP_WIN32)
-  u16 wbuf[SP_PATH_MAX];
+SP_PRIVATE sp_err_t sp_sys_get_handle_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
+  return sp_sys_file_meta_from_nt_path(fd, sp_str_lit("."), meta, false);
+}
+
+SP_PRIVATE sp_err_t sp_sys_read_fd_path(sp_sys_fd_t fd, c8 buf [SP_PATH_MAX], u64* len) {
+  u16 wbuf [SP_PATH_MAX];
   DWORD wlen = GetFinalPathNameByHandleW((HANDLE)fd, (LPWSTR)wbuf, SP_PATH_MAX, 0);
   if (wlen == 0) return sp_sys_err_from_win32(GetLastError());
   if (wlen >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
 
   sp_wide_str_t wide = sp_sys_dos_from_nt_wtf16(wbuf, wlen);
-  SP_ALIGNED c8 u8buf[SP_PATH_MAX * 3 + 1];
+  SP_ALIGNED c8 u8buf [SP_PATH_MAX * 3 + 1];
   sp_mem_fixed_t fixed = sp_mem_fixed(u8buf, sizeof(u8buf));
-  sp_str_t utf8;
+  sp_str_t utf8 = sp_zero;
   sp_try(sp_wtf16_to_wtf8(sp_mem_fixed_as_allocator(&fixed), wide, &utf8));
-  s64 n = sp_sys_win32_copy_path(utf8, buf, size);
+
+  s64 n = sp_sys_win32_copy_path(utf8, buf, SP_PATH_MAX);
   if (n < 0) return SP_ERR_SYS_NAME_TOO_LONG;
   *len = (u64)n;
   return SP_OK;
+}
 
 #elif defined(SP_LINUX)
+SP_PRIVATE sp_err_t sp_sys_get_handle_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
+  return sp_sys_get_file_metadata_p(fd, meta);
+}
+
+SP_PRIVATE sp_err_t sp_sys_read_fd_path(sp_sys_fd_t fd, c8 buf [SP_PATH_MAX], u64* len) {
   if (fd == SP_AT_FDCWD) {
-    s64 rc = sp_syscall(SP_SYSCALL_NUM_GETCWD, buf, size);
+    s64 rc = sp_syscall(SP_SYSCALL_NUM_GETCWD, buf, SP_PATH_MAX);
     if (rc == -SP_ERANGE) return SP_ERR_SYS_NAME_TOO_LONG;
     if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
     *len = (u64)rc - 1;
@@ -11116,33 +11140,60 @@ sp_err_t sp_sys_get_fd_path_p(sp_sys_fd_t fd, c8* buf, u64 size, u64* len) {
   c8 proc [64] = sp_zero;
   sp_fmt_buf(proc, 64, "/proc/self/fd/{}", sp_fmt_int(fd));
 
-  c8 rbuf [SP_PATH_MAX];
-  s64 rc = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, rbuf, SP_PATH_MAX);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_READLINKAT, SP_AT_FDCWD, proc, buf, SP_PATH_MAX);
   if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
-  if (rc == SP_PATH_MAX || (u64)rc >= size) return SP_ERR_SYS_NAME_TOO_LONG;
-  sp_mem_copy(buf, rbuf, (u64)rc);
-  buf[rc] = 0;
+  if (rc == SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
   *len = (u64)rc;
   return SP_OK;
+}
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  c8 resolved [SP_PATH_MAX];
+SP_PRIVATE sp_err_t sp_sys_get_handle_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
+  if (fd == SP_AT_FDCWD) return sp_sys_get_path_metadata_p(fd, ".", 1, meta);
+  return sp_sys_get_file_metadata_p(fd, meta);
+}
+
+SP_PRIVATE sp_err_t sp_sys_read_fd_path(sp_sys_fd_t fd, c8 buf [SP_PATH_MAX], u64* len) {
   if (fd == SP_AT_FDCWD) {
-    if (!getcwd(resolved, sizeof(resolved))) return sp_sys_err_from_errno(errno);
+    if (!getcwd(buf, SP_PATH_MAX)) return sp_sys_err_from_errno(errno);
   }
-  else if (fcntl((s32)fd, F_GETPATH, resolved) < 0) {
+  else if (fcntl((s32)fd, F_GETPATH, buf) < 0) {
     return sp_sys_err_from_errno(errno);
   }
 
-  u64 n = sp_cstr_len(resolved);
+  *len = sp_cstr_len(buf);
+  return SP_OK;
+}
+#endif
+
+sp_err_t sp_sys_get_fd_path_p(sp_sys_fd_t fd, c8* buf, u64 size, u64* len) {
+  *len = 0;
+
+#if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+  sp_sys_file_meta_t handle = sp_zero;
+  sp_err_t err = sp_sys_get_handle_metadata(fd, &handle);
+  if (err == SP_ERR_SYS_BAD_FD) return err;
+  if (err) return SP_ERR_SYS_NOT_FOUND;
+
+  c8 path [SP_PATH_MAX];
+  u64 n = 0;
+  err = sp_sys_read_fd_path(fd, path, &n);
+  if (err == SP_ERR_SYS_NAME_TOO_LONG) return err;
+  if (err) return SP_ERR_SYS_NOT_FOUND;
+
+  sp_sys_file_meta_t named = sp_zero;
+  if (sp_sys_get_link_metadata_p(sp_sys_get_root_p(0), path, (u32)n, &named)) return SP_ERR_SYS_NOT_FOUND;
+  if (named.id != handle.id) return SP_ERR_SYS_NOT_FOUND;
+  if (named.device != handle.device) return SP_ERR_SYS_NOT_FOUND;
+
   if (n >= size) return SP_ERR_SYS_NAME_TOO_LONG;
-  sp_mem_copy(buf, resolved, n);
+  sp_mem_copy(buf, path, n);
   buf[n] = 0;
   *len = n;
   return SP_OK;
 
 #elif defined(SP_WASM)
-  return sp_sys_wasi_prestat_name((__wasi_fd_t)fd, buf, size, len);
+  return SP_ERR_SYS_UNSUPPORTED;
 
 #else
   #error "sp_sys_get_fd_path"
@@ -20037,104 +20088,120 @@ sp_str_r sp_fmt_write_f64_buf(c8* buffer, u64 len, f64 value, u32 precision) {
   return str;
 }
 
-sp_str_t sp_fs_get_name(sp_str_t path) {
-  // The only valid separator is '/'. If you're calling this function on a path
-  // that might contain a '\', normalize it first. Garbage in, garbage out.
-  s32 it = sp_str_find_c8_reverse(path, '/');
-  return sp_str_suffix(path, ((s32)path.len) - it - 1);
-}
-
-sp_str_t sp_fs_get_name_for(sp_str_t path, sp_fs_path_kind_t kind) {
-  if (kind != SP_FS_PATH_WINDOWS) return sp_fs_get_name(path);
-
-  s32 slash = sp_str_find_c8_reverse(path, '/');
-  s32 backslash = sp_str_find_c8_reverse(path, '\\');
-  return sp_str_suffix(path, ((s32)path.len) - sp_max(slash, backslash) - 1);
-}
-
-sp_str_t sp_fs_trim_path(sp_str_t path) {
-  if (sp_str_empty(path)) return path;
-
-  while (!sp_str_empty(path) && !sp_fs_is_root(path)) {
-    switch (sp_str_back(path)) {
-      case '/':
-      case '\\': {
-        path.len--;
-        break;
-      }
-      default: {
-        return path;
-      }
-    }
+bool sp_fs_is_sep_for(c8 c, sp_fs_path_kind_t kind) {
+  switch (kind) {
+    case SP_FS_PATH_POSIX:   return c == '/';
+    case SP_FS_PATH_WINDOWS: return c == '/' || c == '\\';
   }
-
-  return path;
+  SP_UNREACHABLE_RETURN(false);
 }
 
-sp_str_t sp_fs_parent_path(sp_str_t path) {
-  if (sp_str_empty(path)) return path;
-  if (sp_fs_is_root(path)) return path;
+SP_PRIVATE u32 sp_fs_root_len(sp_str_t path, sp_fs_path_kind_t kind) {
+  if (sp_str_empty(path)) return 0;
+  if (sp_fs_is_sep_for(path.data[0], kind)) return 1;
 
-  path = sp_fs_trim_path(path);
-
-  s32 index = sp_str_find_c8_reverse(path, '/');
-  return index == SP_STR_NO_MATCH ? sp_str_lit("") : sp_str_prefix(path, index);
-}
-
-sp_str_t sp_fs_get_ext(sp_str_t path) {
-  for (u32 index = 0; index < path.len; index++) {
-    c8 c = sp_str_at_reverse(path, index);
-
-    switch (c) {
-      case '.': return sp_str_sub_reverse(path, 0, index);
-      case '/': return sp_str_sub_reverse(path, 0, 0);
-      default:  break;
-    }
+  switch (kind) {
+    case SP_FS_PATH_POSIX:   return 0;
+    case SP_FS_PATH_WINDOWS: return path.len >= 3 && path.data[1] == ':' && sp_fs_is_sep_for(path.data[2], kind) ? 3 : 0;
   }
-
-  return sp_str_sub_reverse(path, 0, 0);
+  SP_UNREACHABLE_RETURN(0);
 }
 
-sp_str_t sp_fs_get_stem(sp_str_t path) {
-  sp_str_t file_name = sp_fs_get_name(path);
-  if (!file_name.len) return path;
+SP_PRIVATE u32 sp_fs_stem_len(sp_str_t name) {
+  u32 hidden = 0;
+  while (hidden < name.len && name.data[hidden] == '.') hidden++;
 
-  sp_str_t extension = sp_fs_get_ext(path);
-
-  sp_str_t stem = {
-    .data = file_name.data,
-    .len = file_name.len - extension.len,
-  };
-
-  if (sp_str_back(stem) == '.') stem.len--;
-
-  return stem;
-}
-
-bool sp_fs_is_sep(c8 c) {
-  return c == '/' || c == '\\';
+  for (u32 it = name.len; it > hidden; it--) {
+    if (name.data[it - 1] == '.') return it - 1;
+  }
+  return name.len;
 }
 
 bool sp_fs_is_absolute_for(sp_str_t path, sp_fs_path_kind_t kind) {
-  if (path.len == 0) return false;
+  return sp_fs_root_len(path, kind) > 0;
+}
 
-  if (sp_fs_is_sep(path.data[0])) {
-    return true;
+sp_str_t sp_fs_trim_path_for(sp_str_t path, sp_fs_path_kind_t kind) {
+  u32 root = sp_fs_root_len(path, kind);
+  while (path.len > root && sp_fs_is_sep_for(sp_str_back(path), kind)) path.len--;
+  return path;
+}
+
+bool sp_fs_is_root_for(sp_str_t path, sp_fs_path_kind_t kind) {
+  u32 root = sp_fs_root_len(path, kind);
+  return root && sp_fs_trim_path_for(path, kind).len == root;
+}
+
+sp_str_t sp_fs_get_name_for(sp_str_t path, sp_fs_path_kind_t kind) {
+  path = sp_fs_trim_path_for(path, kind);
+
+  u32 root = sp_fs_root_len(path, kind);
+  u32 start = path.len;
+  while (start > root && !sp_fs_is_sep_for(path.data[start - 1], kind)) start--;
+  return sp_str_suffix(path, (s32)(path.len - start));
+}
+
+sp_str_t sp_fs_parent_path_for(sp_str_t path, sp_fs_path_kind_t kind) {
+  path = sp_fs_trim_path_for(path, kind);
+  if (sp_str_empty(path)) return path;
+
+  sp_str_t name = sp_fs_get_name_for(path, kind);
+  sp_str_t parent = sp_fs_trim_path_for(sp_str_prefix(path, (s32)(path.len - name.len)), kind);
+  return sp_str_empty(parent) ? sp_str_lit(".") : parent;
+}
+
+sp_str_t sp_fs_get_stem_for(sp_str_t path, sp_fs_path_kind_t kind) {
+  sp_str_t name = sp_fs_get_name_for(path, kind);
+  return sp_str_prefix(name, (s32)sp_fs_stem_len(name));
+}
+
+sp_str_t sp_fs_get_ext_for(sp_str_t path, sp_fs_path_kind_t kind) {
+  sp_str_t name = sp_fs_get_name_for(path, kind);
+  u32 dot = sp_fs_stem_len(name);
+  return sp_str_suffix(name, (s32)(name.len - sp_min(dot + 1, name.len)));
+}
+
+sp_str_t sp_fs_replace_ext_for(sp_mem_t mem, sp_str_t path, sp_str_t ext, sp_fs_path_kind_t kind) {
+  path = sp_fs_trim_path_for(path, kind);
+
+  sp_str_t name = sp_fs_get_name_for(path, kind);
+  sp_str_t base = sp_str_prefix(path, (s32)(path.len - name.len + sp_fs_stem_len(name)));
+  return sp_str_empty(ext) ?
+    sp_str_copy(mem, base) :
+    sp_str_join(mem, base, ext, sp_str_lit("."));
+}
+
+sp_str_t sp_fs_join_path_for(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_fs_path_kind_t kind) {
+  a = sp_fs_trim_path_for(a, kind);
+  b = sp_fs_trim_path_for(b, kind);
+  if (sp_str_empty(a)) return sp_str_copy(mem, b);
+
+  while (!sp_str_empty(b) && sp_fs_is_sep_for(b.data[0], kind)) b = sp_str_suffix(b, (s32)b.len - 1);
+  if (sp_str_empty(b)) return sp_str_copy(mem, a);
+  if (sp_fs_is_sep_for(sp_str_back(a), kind)) return sp_str_concat(mem, a, b);
+  return sp_str_join(mem, a, b, sp_str_lit("/"));
+}
+
+sp_str_t sp_fs_normalize_path_for(sp_mem_t mem, sp_str_t path, sp_fs_path_kind_t kind) {
+  path = sp_fs_trim_path_for(path, kind);
+
+  c8* buffer = sp_alloc_n(mem, c8, path.len);
+  sp_for(it, path.len) {
+    buffer[it] = sp_fs_is_sep_for(path.data[it], kind) ? '/' : path.data[it];
   }
+  return sp_str(buffer, path.len);
+}
 
-  if (kind != SP_FS_PATH_WINDOWS) return false;
+bool sp_fs_is_sep(c8 c) {
+  return sp_fs_is_sep_for(c, sp_os_get_path_kind());
+}
 
-  return (path.len >= 3 && path.data[1] == ':' && sp_fs_is_sep(path.data[2]));
+bool sp_fs_is_root(sp_str_t path) {
+  return sp_fs_is_root_for(path, sp_os_get_path_kind());
 }
 
 bool sp_fs_is_absolute(sp_str_t path) {
   return sp_fs_is_absolute_for(path, sp_os_get_path_kind());
-}
-
-bool sp_fs_is_root(sp_str_t path) {
-  if (path.len == 1 && sp_fs_is_sep(path.data[0])) return true;
-  if (path.len == 3 && path.data[1] == ':' && sp_fs_is_sep(path.data[2])) return true;
-  return false;
 }
 
 bool sp_fs_is_absolute_w(sp_wide_str_t path) {
@@ -20145,34 +20212,36 @@ bool sp_fs_is_absolute_w(sp_wide_str_t path) {
   return false;
 }
 
-sp_str_t sp_fs_normalize_path(sp_mem_t mem, sp_str_t path) {
-  path = sp_fs_trim_path(path);
-
-  c8* buffer = (c8*)sp_mem_allocator_alloc(mem, path.len);
-  sp_for(i, path.len) {
-    c8 c = path.data[i];
-    buffer[i] = (c == '\\' ? '/' : c);
-  }
-  return (sp_str_t) { .data = buffer, .len = path.len };
+sp_str_t sp_fs_trim_path(sp_str_t path) {
+  return sp_fs_trim_path_for(path, sp_os_get_path_kind());
 }
 
-sp_str_t sp_fs_join_path(sp_mem_t mem, sp_str_t a, sp_str_t b) {
-  a = sp_fs_trim_path(a);
-  b = sp_fs_trim_path(b);
-  if (sp_str_empty(a)) return sp_str_copy(mem, b);
-  if (sp_str_empty(b)) return sp_str_copy(mem, a);
-  if (sp_str_back(a) == '/' || sp_str_back(a) == '\\') {
-    return sp_str_concat(mem, a, b);
-  }
-  return sp_str_join(mem, a, b, sp_str_lit("/"));
+sp_str_t sp_fs_get_name(sp_str_t path) {
+  return sp_fs_get_name_for(path, sp_os_get_path_kind());
+}
+
+sp_str_t sp_fs_parent_path(sp_str_t path) {
+  return sp_fs_parent_path_for(path, sp_os_get_path_kind());
+}
+
+sp_str_t sp_fs_get_stem(sp_str_t path) {
+  return sp_fs_get_stem_for(path, sp_os_get_path_kind());
+}
+
+sp_str_t sp_fs_get_ext(sp_str_t path) {
+  return sp_fs_get_ext_for(path, sp_os_get_path_kind());
 }
 
 sp_str_t sp_fs_replace_ext(sp_mem_t mem, sp_str_t path, sp_str_t ext) {
-  sp_str_t stripped = sp_str_strip_right(path, sp_fs_get_ext(path));
-  if (sp_str_back(stripped) == '.') stripped.len--;
-  return sp_str_empty(ext) ?
-    sp_str_copy(mem, stripped) :
-    sp_str_join(mem, stripped, ext, sp_str_lit("."));
+  return sp_fs_replace_ext_for(mem, path, ext, sp_os_get_path_kind());
+}
+
+sp_str_t sp_fs_join_path(sp_mem_t mem, sp_str_t a, sp_str_t b) {
+  return sp_fs_join_path_for(mem, a, b, sp_os_get_path_kind());
+}
+
+sp_str_t sp_fs_normalize_path(sp_mem_t mem, sp_str_t path) {
+  return sp_fs_normalize_path_for(mem, path, sp_os_get_path_kind());
 }
 
 sp_sys_fd_t sp_fs_get_cwd() {
@@ -20180,48 +20249,42 @@ sp_sys_fd_t sp_fs_get_cwd() {
   return sp_sys_get_root(0);
 }
 
-bool sp_fs_is_sep_for(c8 c, sp_fs_path_kind_t kind) {
-  return false;
-}
-
-bool sp_fs_is_root_for(sp_str_t path, sp_fs_path_kind_t kind) {
-  return false;
-}
-
-sp_str_t sp_fs_trim_path_for(sp_str_t path, sp_fs_path_kind_t kind) {
-  return sp_zero_s(sp_str_t);
-}
-
-sp_str_t sp_fs_parent_path_for(sp_str_t path, sp_fs_path_kind_t kind) {
-  return sp_zero_s(sp_str_t);
-}
-
-sp_str_t sp_fs_get_ext_for(sp_str_t path, sp_fs_path_kind_t kind) {
-  return sp_zero_s(sp_str_t);
-}
-
-sp_str_t sp_fs_get_stem_for(sp_str_t path, sp_fs_path_kind_t kind) {
-  return sp_zero_s(sp_str_t);
-}
-
-sp_str_t sp_fs_replace_ext_for(sp_mem_t mem, sp_str_t path, sp_str_t ext, sp_fs_path_kind_t kind) {
-  return sp_zero_s(sp_str_t);
-}
-
-sp_str_t sp_fs_join_path_for(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_fs_path_kind_t kind) {
-  return sp_zero_s(sp_str_t);
-}
-
-sp_str_t sp_fs_normalize_path_for(sp_mem_t mem, sp_str_t path, sp_fs_path_kind_t kind) {
-  return sp_zero_s(sp_str_t);
-}
-
 sp_path_t sp_path_at_cwd(sp_str_t sub) {
   return (sp_path_t) { .dir = sp_fs_get_cwd(), .sub = sub };
 }
 
+SP_PRIVATE s32 sp_fs_match_label(sp_str_t path, sp_str_t label) {
+  if (sp_str_empty(label)) return 0;
+  if (!sp_str_starts_with(path, label)) return SP_STR_NO_MATCH;
+
+  u32 at = label.len;
+  bool boundary = at == path.len || sp_fs_is_sep(path.data[at]) || sp_fs_is_sep(sp_str_back(label));
+  if (!boundary) return SP_STR_NO_MATCH;
+
+  while (at < path.len && sp_fs_is_sep(path.data[at])) at++;
+  return (s32)at;
+}
+
 sp_path_t sp_path_resolve(sp_str_t path) {
-  return sp_path_at_cwd(path);
+  sp_path_t best = sp_path_at_cwd(path);
+  if (!sp_fs_is_absolute(path)) return best;
+
+  s32 deepest = SP_STR_NO_MATCH;
+  for (s32 it = 0;; it++) {
+    sp_sys_fd_t root = sp_sys_get_root(it);
+    if (root == SP_SYS_INVALID_FD) return best;
+
+    c8 buf [SP_PATH_MAX];
+    u64 len = 0;
+    if (sp_sys_get_root_label(it, buf, SP_PATH_MAX, &len)) continue;
+
+    s32 matched = sp_fs_match_label(path, sp_str(buf, (u32)len));
+    if (matched <= deepest) continue;
+
+    sp_str_t rest = sp_str_suffix(path, (s32)path.len - matched);
+    deepest = matched;
+    best = (sp_path_t) { .dir = root, .sub = sp_str_empty(rest) ? sp_str_lit(".") : rest };
+  }
 }
 
 sp_fs_kind_t sp_fs_get_link_kind_at(sp_path_t path) {
@@ -20416,7 +20479,6 @@ SP_PRIVATE sp_err_t sp_fs_mkdir_at(sp_sys_fd_t dir, sp_str_t path) {
 }
 
 sp_err_t sp_fs_create_dir_at(sp_path_t path) {
-  path.sub = sp_fs_trim_path(path.sub);
   sp_err_t err = sp_fs_mkdir_at(path.dir, path.sub);
   if (err != SP_ERR_SYS_NOT_FOUND) return err;
 
@@ -20744,24 +20806,22 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
 
   */
 sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
-  sp_str_t sub = sp_fs_trim_path(path.sub);
-  sp_str_t name = sp_fs_get_name_for(sub, sp_os_get_path_kind());
+  sp_str_t name = sp_fs_get_name(path.sub);
   if (sp_str_empty(name) || sp_str_equal(name, sp_str_lit(".")) || sp_str_equal(name, sp_str_lit(".."))) {
     return SP_ERR_SYS_INVALID;
   }
 
   sp_sys_file_meta_t meta = sp_zero;
-  sp_try(sp_sys_get_link_metadata_s(path.dir, sub, &meta));
+  sp_try(sp_sys_get_link_metadata_s(path.dir, path.sub, &meta));
   switch (meta.kind) {
     case SP_FS_KIND_DIR:     break;
-    case SP_FS_KIND_SYMLINK: return sp_sys_unlink_s(path.dir, sub);
+    case SP_FS_KIND_SYMLINK: return sp_sys_unlink_s(path.dir, path.sub);
     case SP_FS_KIND_FILE:
     case SP_FS_KIND_NONE:    return SP_ERR_SYS_NOT_DIR;
   }
 
-  sp_path_t root = { .dir = path.dir, .sub = sub };
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_fs_it_t it = sp_fs_it_new_at(s.mem, root, SP_SYS_OPEN_DIR_NO_FOLLOW);
+  sp_fs_it_t it = sp_fs_it_new_at(s.mem, path, SP_SYS_OPEN_DIR_NO_FOLLOW);
   sp_err_t err = it.err;
 
   while (!err && sp_fs_it_next(&it)) {
@@ -20792,30 +20852,33 @@ sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
   sp_mem_end_scratch(s);
   if (err) return err;
 
-  err = sp_sys_rmdir_s(root.dir, root.sub);
+  err = sp_sys_rmdir_s(path.dir, path.sub);
   return err == SP_ERR_SYS_NOT_FOUND ? SP_OK : err;
 }
 
 static sp_atomic_s32_t sp_fs_atomic_sequence;
 
-SP_PRIVATE sp_str_t sp_fs_temp_name(sp_str_t dir, sp_str_t name, c8 buf [SP_PATH_MAX]) {
+SP_PRIVATE sp_err_t sp_fs_temp_name(sp_str_t dir, sp_str_t name, c8 buf [SP_PATH_MAX], sp_str_t* temp) {
   sp_tm_epoch_t now = sp_tm_now_epoch();
   u64 stamp = (now.s << 20) ^ (u64)now.ns;
   u64 sequence = (u64)(u32)sp_atomic_s32_add(&sp_fs_atomic_sequence, 1, SP_ATOMIC_SEQ_CST);
 
+  c8 leaf_buf [SP_PATH_MAX];
   sp_io_mem_writer_t io = sp_zero;
-  sp_io_mem_writer_from_buffer(&io, buf, SP_PATH_MAX);
-  if (sp_str_empty(dir)) {
-    sp_fmt_io(&io.base, ".{}.{}.{}.tmp", sp_fmt_str(name), sp_fmt_uint(stamp), sp_fmt_uint(sequence));
-  } else {
-    sp_fmt_io(&io.base, "{}/.{}.{}.{}.tmp", sp_fmt_str(dir), sp_fmt_str(name), sp_fmt_uint(stamp), sp_fmt_uint(sequence));
-  }
-  return sp_io_mem_writer_as_str(&io);
+  sp_io_mem_writer_from_buffer(&io, leaf_buf, SP_PATH_MAX);
+  sp_fmt_io(&io.base, ".{}.{}.{}.tmp", sp_fmt_str(name), sp_fmt_uint(stamp), sp_fmt_uint(sequence));
+
+  sp_str_t leaf = sp_io_mem_writer_as_str(&io);
+  if (dir.len + leaf.len + 1 >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
+
+  sp_mem_fixed_t fixed = sp_mem_fixed_ex(buf, SP_PATH_MAX, 1);
+  *temp = sp_fs_join_path(sp_mem_fixed_as_allocator(&fixed), dir, leaf);
+  return SP_OK;
 }
 
 SP_PRIVATE sp_err_t sp_fs_create_parent_at(sp_sys_fd_t dir, sp_str_t path) {
   sp_str_t parent = sp_fs_parent_path(path);
-  if (sp_str_empty(parent)) return SP_OK;
+  if (sp_str_equal(parent, sp_fs_trim_path(path))) return SP_OK;
   sp_err_t err = sp_fs_create_dir_at((sp_path_t) { .dir = dir, .sub = parent });
   return err == SP_ERR_SYS_EXISTS ? SP_ERR_SYS_NOT_DIR : err;
 }
@@ -20824,11 +20887,11 @@ SP_PRIVATE sp_err_t sp_fs_atomic_create(sp_fs_atomic_t* af, sp_sys_fd_t dir, sp_
   *af = sp_zero_s(sp_fs_atomic_t);
   af->dir = dir;
   af->path = path;
-  af->temp = sp_fs_temp_name(temp_dir, sp_fs_get_name(path), af->temp_buf);
 
   u32 flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE;
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_err_t err = sp_sys_open_s(dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
+  sp_err_t err = sp_fs_temp_name(temp_dir, sp_fs_get_name(path), af->temp_buf, &af->temp);
+  if (!err) err = sp_sys_open_s(dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
   if (err) {
     *af = sp_zero_s(sp_fs_atomic_t);
     return err;

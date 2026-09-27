@@ -596,10 +596,12 @@ bool sp_glob_match(sp_glob_t* g, sp_str_t path) {
 }
 
 sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path) {
+  sp_str_t basename = sp_fs_get_name(path);
+  s32 dot = sp_str_find_c8_reverse(basename, '.');
   return (sp_glob_candidate_t){
     .path = path,
-    .basename = sp_fs_get_name(path),
-    .ext = sp_fs_get_ext(path),
+    .basename = basename,
+    .ext = dot == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_str_suffix(basename, (s32)basename.len - dot - 1),
   };
 }
 
