@@ -1,119 +1,63 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
-#include "sp/sp_cli.h"
 
-typedef struct {
-  sp_str_t dir;
-  bool walk;
-} args_t;
+static bool is_hidden(sp_fs_entry_t entry) {
+  return sp_str_starts_with(entry.name, sp_str_lit("."));
+}
 
-typedef struct {
-  args_t args;
-  sp_mem_heap_t* heap;
-  sp_mem_t mem;
-} ctx_t;
-
-void print_entry(sp_fs_entry_t entry, u32 depth) {
+static void print_entry(sp_fs_entry_t entry, u32 depth) {
   sp_print("{:$}", sp_fmt_uint(depth * 2), sp_fmt_cstr(""));
-  sp_print("{.gray}", sp_fmt_cstr("│ "));
   switch (entry.kind) {
-    case SP_FS_KIND_DIR: sp_log("{.blue .bold}", sp_fmt_str(entry.name)); break;
-    case SP_FS_KIND_FILE: sp_log("{}", sp_fmt_str(entry.name)); break;
-    case SP_FS_KIND_SYMLINK: sp_log("{.cyan} -> {.gray}", sp_fmt_str(entry.name), sp_fmt_str(entry.path)); break;
-    case SP_FS_KIND_NONE: break;
-  }
-
-}
-
-void report(sp_str_t dir, sp_err_t err) {
-  if (err) sp_log("{.red}: {}", sp_fmt_str(dir), sp_fmt_str(sp_err_str(err)));
-}
-
-void iterate(sp_str_t dir, sp_path_t path) {
-  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-
-  print_entry((sp_fs_entry_t) {
-    .kind = SP_FS_KIND_DIR,
-    .name = sp_fs_get_name(dir)
-  }, 0);
-
-  sp_fs_it_t it = sp_fs_it_new_at(s.mem, path, 0);
-  while (sp_fs_it_next(&it)) {
-    if (it.yield == SP_FS_IT_LEAVE) {
-      continue;
+    case SP_FS_KIND_DIR: {
+      sp_log("{.blue}/", sp_fmt_str(entry.name));
+      break;
     }
-    print_entry(it.entry, sp_da_size(it.stack));
-
-    // switch (it.entry.kind) {
-    //   case SP_FS_KIND_DIR: sp_fs_it_enter(&it);
-    //   case SP_FS_KIND_FILE:
-    //   case SP_FS_KIND_SYMLINK:
-    //   case SP_FS_KIND_NONE: break;
-    // }
+    case SP_FS_KIND_FILE: {
+      sp_log("{}", sp_fmt_str(entry.name));
+      break;
+    }
+    case SP_FS_KIND_SYMLINK: {
+      sp_log("{.cyan}", sp_fmt_str(entry.name));
+      break;
+    }
+    case SP_FS_KIND_NONE: {
+      break;
+    }
   }
-  report(dir, it.err);
-  sp_mem_end_scratch(s);
-}
-
-void walk(sp_str_t dir, sp_path_t path) {
-  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_fs_it_t it = sp_fs_it_new_at(s.mem, path, 0);
-  while (sp_fs_it_walk(&it)) {
-    print_entry(it.entry, sp_da_size(it.stack) - 1);
-  }
-  report(dir, it.err);
-  sp_mem_end_scratch(s);
-}
-
-sp_cli_result_t command(sp_cli_t* cli) {
-  ctx_t* ctx = sp_ptr_cast(ctx_t*, cli->user_data);
-  args_t args = ctx->args;
-
-  sp_str_t dir = sp_str_empty(args.dir) ? sp_str_lit(".") : args.dir;
-  sp_path_t path = sp_path_resolve(dir);
-
-  if (args.walk) {
-    walk(dir, path);
-  } else {
-    iterate(dir, path);
-  }
-  return SP_CLI_OK;
 }
 
 s32 run(s32 num_args, const c8** args) {
-  ctx_t ctx = sp_zero;
-  ctx.heap = sp_mem_heap_new();
-  ctx.mem = sp_mem_heap_as_allocator(ctx.heap);
+  sp_str_t dir = num_args > 1 ? sp_cstr_as_str(args[1]) : sp_str_lit(".");
 
-  sp_cli_cmd_t root = {
-    .name = "filesystem",
-    .summary = "",
-    .opts = {
-      {
-        .brief = 'w',
-        .name = "walk",
-        .kind = SP_CLI_OPT_BOOLEAN,
-        .summary = "Walk (as opposed to flat traversal)",
-        .ptr = &ctx.args.walk
-      },
-    },
-    .args = {
-      {
-        .name = "dir",
-        .summary = "The directory",
-        .arity = SP_CLI_ARG_OPTIONAL,
-        .kind = SP_CLI_OPT_STR,
-        .ptr = &ctx.args.dir
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_fs_it_t it = sp_fs_it_new_at(s.mem, sp_path_resolve(dir), 0);
+  u32 dirs = 0;
+  while (sp_fs_it_next(&it)) {
+    switch (it.yield) {
+      case SP_FS_IT_ENTRY: {
+        if (is_hidden(it.entry)) break;
+
+        print_entry(it.entry, sp_da_size(it.stack) - 1);
+        if (it.entry.kind == SP_FS_KIND_DIR) sp_fs_it_enter(&it);
+        break;
       }
-    },
-    .handler = command,
-  };
+      case SP_FS_IT_LEAVE: {
+        dirs++;
+        break;
+      }
+    }
+  }
 
-  return sp_cli_main((sp_cli_desc_t) {
-    .root = &root,
-    .args = args,
-    .num_args = num_args,
-    .user_data = &ctx
-  });
+  sp_err_t err = it.err;
+  if (err) {
+    sp_log("{.red}: {}", sp_fmt_str(dir), sp_fmt_str(sp_err_str(err)));
+  }
+  else {
+    sp_log("{} {.gray}", sp_fmt_uint(dirs), sp_fmt_cstr("directories"));
+  }
+
+  sp_fs_it_deinit(&it);
+  sp_mem_end_scratch(s);
+  return err ? 1 : 0;
 }
 SP_MAIN(run)

@@ -102,8 +102,8 @@ name = "msvc"
 source = ["example/msvc.c"]
 
 [[example]]
-name = "filesystem"
-source = ["example/filesystem.c"]
+name = "iterator"
+source = ["example/fs/iterator.c"]
 
 [profile.sanitizer]
 linkage = "shared"

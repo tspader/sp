@@ -176,9 +176,8 @@ s32 run(s32 num_args, const c8** args) {
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
-  sp_str_t cwd = sp_fs_get_cwd_path(mem);
-  sp_str_t src = sp_str_concat(mem, cwd, sp_str_lit("/io.src"));
-  sp_str_t dst = sp_str_concat(mem, cwd, sp_str_lit("/io.dst"));
+  sp_str_t src = sp_str_lit("io.src");
+  sp_str_t dst = sp_str_lit("io.dst");
 
   u64 size_bytes = (u64)PERF_FILE_SIZE_MB * 1024u * 1024u;
   sp_log("preparing {} MiB source at {}", sp_fmt_uint(PERF_FILE_SIZE_MB), sp_fmt_str(src));
