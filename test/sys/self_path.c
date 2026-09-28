@@ -29,9 +29,9 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case PATH_EXE: {
-      s64 rc = sp_sys_get_exe_path(buf, sizeof(buf));
-      if (rc <= 0) return sp_test_skip(t, "not available");
-      n = (u64)rc;
+      sp_err_t err = sp_sys_get_exe_path(buf, sizeof(buf), &n);
+      if (err == SP_ERR_SYS_UNSUPPORTED) return sp_test_skip(t, "not available");
+      sp_must_ok(t, err);
       break;
     }
   }

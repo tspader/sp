@@ -579,14 +579,16 @@ UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &fd);
   const s64 parked = 7;
-  sp_sys_lseek(fd, parked, SP_IO_SEEK_SET);
+  sp_sys_lseek(fd, parked, SP_IO_SEEK_SET, SP_NULLPTR);
 
   sp_io_file_reader_t r = sp_zero;
   sp_io_file_reader_from_file(&r, fd, SP_IO_CLOSE_MODE_NONE);
 
   u8 buf [4] = sp_zero;
   sp_io_read(&r.base, buf, 4, SP_NULLPTR);
-  EXPECT_EQ(sp_sys_lseek(fd, 0, SP_IO_SEEK_CUR), parked);
+  s64 position = 0;
+  sp_sys_lseek(fd, 0, SP_IO_SEEK_CUR, &position);
+  EXPECT_EQ(position, parked);
 
   sp_io_file_reader_close(&r);
   sp_sys_close(fd);
