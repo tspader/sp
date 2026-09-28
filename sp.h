@@ -3179,10 +3179,10 @@ typedef struct {
   sp_err_t err;
 } sp_fs_it_t;
 
-#define sp_fs_for(mem, dir, it) \
-  for (sp_fs_it_t it = sp_fs_it_new(mem, dir); sp_fs_it_next(&it);)
-#define sp_fs_for_recursive(mem, dir, it) \
-  for (sp_fs_it_t it = sp_fs_it_new(mem, dir); sp_fs_it_walk(&it);)
+#define sp_fs_for(mem, path, it) \
+  for (sp_fs_it_t it = sp_fs_it_new_at(mem, path, 0); sp_fs_it_next(&it);)
+#define sp_fs_for_recursive(mem, path, it) \
+  for (sp_fs_it_t it = sp_fs_it_new_at(mem, path, 0); sp_fs_it_walk(&it);)
 
 SP_API sp_err_t   sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_mem_slice_t buf);
 SP_API sp_err_t   sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out);
