@@ -3,11 +3,9 @@
 
 #define MAX_ROOTS 4
 #define ROOT_FD 9000
-#define CWD_FD 9100
 
 typedef enum {
   DIR_ROOT,
-  DIR_CWD,
   DIR_NONE,
 } dir_t;
 
@@ -25,7 +23,6 @@ typedef struct {
 typedef struct {
   const c8* name;
   root_t roots [MAX_ROOTS];
-  bool cwd;
   const c8* path;
   expect_t expect;
 } test_t;
@@ -67,13 +64,6 @@ static const test_t tests [] = {
     .roots = { { .label = "/A" } },
     .path = "A/B",
     .expect = { .sub = "A/B" },
-  },
-  {
-    .name = "relative_goes_to_the_cwd",
-    .roots = { { .label = "/A" } },
-    .cwd = true,
-    .path = "A/B",
-    .expect = { .dir = DIR_CWD, .sub = "A/B" },
   },
   {
     .name = "relative_ignores_relative_labels",
@@ -159,13 +149,6 @@ static const test_t tests [] = {
     .expect = { .root = 1, .sub = "B" },
   },
   {
-    .name = "unserved_goes_to_the_cwd",
-    .roots = { { .label = "/B" }, { .label = "/A" } },
-    .cwd = true,
-    .path = "/C",
-    .expect = { .dir = DIR_CWD, .sub = "/C" },
-  },
-  {
     .name = "unreadable_label_is_skipped",
     .roots = { { .err = SP_ERR_SYS_NAME_TOO_LONG }, { .label = "/A" } },
     .path = "/A/B",
@@ -180,15 +163,12 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   active = c;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
-  if (c->cwd) sp_rt.cwd = (sp_sys_fd_t)CWD_FD;
   sp_path_t path = sp_path_resolve(sp_cstr_as_str(c->path));
-  sp_rt.cwd = SP_SYS_INVALID_FD;
   sp_sys_set_vtable(saved);
   active = SP_NULLPTR;
 
   switch (c->expect.dir) {
     case DIR_ROOT: sp_expect_eq(t, path.dir, (sp_sys_fd_t)(ROOT_FD + c->expect.root)); break;
-    case DIR_CWD:  sp_expect_eq(t, path.dir, (sp_sys_fd_t)CWD_FD); break;
     case DIR_NONE: sp_expect_eq(t, path.dir, SP_SYS_INVALID_FD); break;
   }
   sp_expect_str_eq(t, path.sub, sp_cstr_as_str(c->expect.sub));

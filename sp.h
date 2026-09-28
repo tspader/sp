@@ -4659,7 +4659,6 @@ typedef struct {
 
 typedef struct {
   const sp_sys_vtable_t* vt;
-  sp_sys_fd_t cwd;
   sp_os_signal_handler_t signal_handlers[3];
   void* signal_userdata[3];
   sp_spin_lock_t locks [SP_RT_NUM_SPIN_LOCKS];
@@ -5800,7 +5799,6 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
 
 sp_rt_t sp_rt = {
   .vt = &sp_sys_vtable_platform,
-  .cwd = SP_SYS_INVALID_FD,
   .err_str = sp_err_str,
 };
 
@@ -20245,7 +20243,6 @@ sp_str_t sp_fs_normalize_path(sp_mem_t mem, sp_str_t path) {
 }
 
 sp_sys_fd_t sp_fs_get_cwd() {
-  if (sp_rt.cwd != SP_SYS_INVALID_FD) return sp_rt.cwd;
   return sp_sys_get_root(0);
 }
 
