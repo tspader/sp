@@ -27,6 +27,7 @@ typedef struct {
   target_t target;
   const c8* path;
   const c8* alias;
+  const c8* decoy;
   fate_t fate;
   expect_t expect;
 } test_t;
@@ -78,6 +79,14 @@ static const test_t tests [] = {
     .expect = { .err = SP_ERR_SYS_NOT_FOUND },
   },
   {
+    .name = "unlinked_beside_a_deleted_suffix",
+    .target = TARGET_FILE,
+    .path = "A",
+    .decoy = "A (deleted)",
+    .fate = FATE_UNLINKED,
+    .expect = { .err = SP_ERR_SYS_NOT_FOUND },
+  },
+  {
     .name = "replaced",
     .target = TARGET_FILE,
     .path = "A",
@@ -103,8 +112,6 @@ static const test_t tests [] = {
   },
 };
 
-// Invalid by construction, not closed-then-reused: past any fd rlimit on
-// POSIX, not a multiple of 4 on NT. No recycling race.
 #define GARBAGE_FD ((sp_sys_fd_t)0x55555)
 
 static bool same_file(sp_path_t a, sp_path_t b) {
@@ -123,6 +130,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   sp_path_t path = { .dir = sandbox, .sub = sp_cstr_as_str(c->path) };
   sp_path_t alias = { .dir = sandbox, .sub = sp_cstr_as_str(c->alias) };
+  sp_path_t decoy = { .dir = sandbox, .sub = sp_cstr_as_str(c->decoy) };
   sp_path_t other = { .dir = sandbox, .sub = sp_str_lit("B") };
   sp_path_t expect = { .dir = sandbox, .sub = sp_cstr_as_str(c->expect.path) };
 
@@ -132,6 +140,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case TARGET_FILE: {
       sp_must_ok(t, sp_fs_create_file_at(path));
       if (c->alias) sp_must_ok(t, sp_fs_create_hard_link_at(path, alias));
+      if (c->decoy) sp_must_ok(t, sp_fs_create_file_at(decoy));
       sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, &fd));
       break;
     }

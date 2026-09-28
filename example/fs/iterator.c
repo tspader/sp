@@ -31,14 +31,15 @@ s32 run(s32 num_args, const c8** args) {
 
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   sp_fs_it_t it = sp_fs_it_new_at(s.mem, sp_path_resolve(dir), 0);
+  sp_err_t err = it.err;
   u32 dirs = 0;
-  while (sp_fs_it_next(&it)) {
+  while (!err && sp_fs_it_next(&it)) {
     switch (it.yield) {
       case SP_FS_IT_ENTRY: {
         if (is_hidden(it.entry)) break;
 
         print_entry(it.entry, sp_da_size(it.stack) - 1);
-        if (it.entry.kind == SP_FS_KIND_DIR) sp_fs_it_enter(&it);
+        if (it.entry.kind == SP_FS_KIND_DIR) err = sp_fs_it_enter(&it);
         break;
       }
       case SP_FS_IT_LEAVE: {
@@ -47,8 +48,8 @@ s32 run(s32 num_args, const c8** args) {
       }
     }
   }
+  if (!err) err = it.err;
 
-  sp_err_t err = it.err;
   if (err) {
     sp_log("{.red}: {}", sp_fmt_str(dir), sp_fmt_str(sp_err_str(err)));
   }
