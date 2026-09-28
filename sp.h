@@ -3123,6 +3123,7 @@ SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_
 SP_API sp_sys_fd_t          sp_fs_get_cwd();
 SP_API sp_path_t            sp_path_at_cwd(sp_str_t sub);
 SP_API sp_path_t            sp_path_resolve(sp_str_t path);
+SP_API sp_path_t            sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub);
 
 // literally sys+normalize, if normalize isnt needed this isn't either?
 SP_API sp_str_t             sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path);
@@ -20282,6 +20283,10 @@ sp_path_t sp_path_resolve(sp_str_t path) {
     deepest = matched;
     best = (sp_path_t) { .dir = root, .sub = sp_str_empty(rest) ? sp_str_lit(".") : rest };
   }
+}
+
+sp_path_t sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub) {
+  return (sp_path_t) { .dir = path.dir, .sub = sp_fs_join_path(mem, path.sub, sub) };
 }
 
 sp_fs_kind_t sp_fs_get_link_kind_at(sp_path_t path) {
