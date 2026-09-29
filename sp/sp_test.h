@@ -1024,6 +1024,17 @@ sp_mem_t sp_test_mem(sp_test_t* t) {
   return t->tracked_mem;
 }
 
+static sp_str_t sp_test_path_str(sp_mem_t mem, sp_path_t path) {
+  c8 buf [SP_PATH_MAX];
+  u64 len = 0;
+  for (s32 it = 0; sp_sys_get_root(it) != SP_SYS_INVALID_FD; it++) {
+    if (sp_sys_get_root(it) != path.dir) continue;
+    if (sp_sys_get_root_label(it, buf, sizeof(buf), &len)) break;
+    return sp_fs_join_path(mem, sp_str(buf, (u32)len), path.sub);
+  }
+  return sp_str_copy(mem, path.sub);
+}
+
 sp_path_t sp_test_dir(sp_test_t* t) {
   if (sp_str_empty(t->dir.sub)) {
     sp_str_t leaf = sp_str_replace_c8(t->mem, sp_cstr_as_str(t->instance->name), '/', '_');
@@ -1471,7 +1482,7 @@ static void sp_test_report(sp_test_t* t, sp_tty_t* term, sp_test_status_t status
   }
 
   if (!sp_str_empty(t->dir.sub)) {
-    sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("dir"), sp_fmt_str(t->dir.sub));
+    sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("dir"), sp_fmt_str(sp_test_path_str(t->mem, t->dir)));
   }
 
   sp_da_for(t->failures, it) {
