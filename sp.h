@@ -3157,6 +3157,7 @@ typedef struct {
   sp_sys_dir_it_t dir;
   sp_mem_buffer_t buf;
   u64 cursor;
+  bool rescan;
 } sp_fs_dir_it_t;
 
 typedef struct {
@@ -20636,8 +20637,13 @@ sp_err_t sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_fs_dir_entry_t* out) {
     // Pull another chunk from the kernel and advance the cursor
     if (it->cursor >= it->buf.len) {
       sp_try(sp_sys_dir_it_read(&it->dir, &it->buf));
-      if (!it->buf.len) return SP_OK;
       it->cursor = 0;
+      if (!it->buf.len) {
+        if (!it->rescan) return SP_OK;
+        it->rescan = false;
+        sp_try(sp_sys_dir_it_rewind(&it->dir));
+        continue;
+      }
     }
 
     sp_sys_dir_entry_t entry = sp_zero;
@@ -20741,6 +20747,18 @@ sp_err_t sp_fs_it_enter(sp_fs_it_t* it) {
   sp_assert(it->yield == SP_FS_IT_ENTRY && !sp_str_empty(it->entry.path));
   sp_assert(sp_da_back(it->stack)->len < it->entry.path.len);
   return sp_fs_it_push(it, it->at, it->entry.path.len, SP_SYS_OPEN_DIR_NO_FOLLOW);
+}
+
+SP_PRIVATE sp_err_t sp_fs_it_unlink(sp_fs_it_t* it) {
+  sp_try(sp_sys_unlink_s(it->at.dir, it->at.sub));
+  sp_da_back(it->stack)->dir.rescan = true;
+  return SP_OK;
+}
+
+SP_PRIVATE sp_err_t sp_fs_it_rmdir(sp_fs_it_t* it) {
+  sp_try(sp_sys_rmdir_s(it->at.dir, it->at.sub));
+  sp_da_back(it->stack)->dir.rescan = true;
+  return SP_OK;
 }
 
 bool sp_fs_it_walk(sp_fs_it_t* it) {
@@ -20882,7 +20900,7 @@ sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
   while (!err && sp_fs_it_next(&it)) {
     switch (it.yield) {
       case SP_FS_IT_LEAVE: {
-        err = sp_sys_rmdir_s(it.at.dir, it.at.sub);
+        err = sp_fs_it_rmdir(&it);
         break;
       }
       case SP_FS_IT_ENTRY: {
@@ -20890,10 +20908,10 @@ sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
         // absent d_type can't strand an entry
         if (it.entry.kind == SP_FS_KIND_DIR) {
           err = sp_fs_it_enter(&it);
-          if (err == SP_ERR_SYS_NOT_DIR || err == SP_ERR_SYS_LOOP) err = sp_sys_unlink_s(it.at.dir, it.at.sub);
+          if (err == SP_ERR_SYS_NOT_DIR || err == SP_ERR_SYS_LOOP) err = sp_fs_it_unlink(&it);
         }
         else {
-          err = sp_sys_unlink_s(it.at.dir, it.at.sub);
+          err = sp_fs_it_unlink(&it);
           if (err == SP_ERR_SYS_IS_DIR) err = sp_fs_it_enter(&it);
         }
         break;
