@@ -10,12 +10,17 @@ typedef struct {
 } expect_t;
 
 typedef struct {
+  u32 count;
+  const c8* dir;
+} bulk_t;
+
+typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
   bool dir;
   const c8* cwd;
   const c8* path;
-  u32 bulk;
+  bulk_t bulk;
   expect_t expect;
 } test_t;
 
@@ -80,10 +85,26 @@ static const test_t tests [] = {
     },
     .dir = true,
     .path = "A",
-    .bulk = 96,
+    .bulk = { .count = 96 },
     .expect = {
       .paths = {
         { .path = "A" },
+      },
+    },
+  },
+  {
+    .name = "subdir_refills_across_batches",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { "A/B", FS_SETUP_DIR },
+    },
+    .dir = true,
+    .path = "A",
+    .bulk = { .count = 96, .dir = "B" },
+    .expect = {
+      .paths = {
+        { .path = "A" },
+        { .path = "A/B" },
       },
     },
   },
@@ -283,9 +304,10 @@ sp_test_each(fs, remove, test_t, tests) {
 
   sp_path_t base = it->cwd ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd)) : sandbox;
   sp_path_t target = sp_path_join(mem, base, sp_cstr_as_str(it->path));
-  sp_for(b, it->bulk) {
+  sp_path_t into = it->bulk.dir ? sp_path_join(mem, target, sp_cstr_as_str(it->bulk.dir)) : target;
+  sp_for(b, it->bulk.count) {
     sp_str_t name = sp_fmt(mem, "R{}", sp_fmt_uint(b)).value;
-    sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, target, name)));
+    sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, into, name)));
   }
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_fs_open_dir_at(base, &dir));

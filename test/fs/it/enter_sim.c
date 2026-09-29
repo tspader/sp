@@ -7,6 +7,7 @@
 typedef struct {
   const c8* path;
   sp_err_t err;
+  sp_fs_it_yield_t yield;
 } enter_t;
 
 typedef struct {
@@ -90,15 +91,34 @@ static const test_t tests [] = {
       .opens = 2,
     },
   },
+  {
+    .name = "enter_at_leave_relists",
+    .dirs = {
+      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "T/B", .entries = { { "D", SP_FS_KIND_FILE } } },
+    },
+    .enter = { { "T/B" }, { "T/B", .yield = SP_FS_IT_LEAVE } },
+    .expect = {
+      .yields = {
+        { "T/B", "B", SP_FS_KIND_DIR },
+        { "T/B/D", "D", SP_FS_KIND_FILE },
+        { "T/B", "B", SP_FS_KIND_DIR, SP_FS_IT_LEAVE },
+        { "T/B/D", "D", SP_FS_KIND_FILE },
+        { "T/B", "B", SP_FS_KIND_DIR, SP_FS_IT_LEAVE },
+      },
+      .opens = 3,
+    },
+  },
 };
 
-static const enter_t* find_enter(const test_t* test, sp_str_t path) {
+static s32 find_enter(const test_t* test, sp_str_t path, sp_fs_it_yield_t yield, const bool* used) {
   sp_carr_for(test->enter, e) {
     const enter_t* enter = &test->enter[e];
     if (!enter->path) break;
-    if (sp_str_equal(sp_cstr_as_str(enter->path), path)) return enter;
+    if (used[e] || enter->yield != yield) continue;
+    if (sp_str_equal(sp_cstr_as_str(enter->path), path)) return (s32)e;
   }
-  return SP_NULLPTR;
+  return -1;
 }
 
 sp_test_each(fs, it_enter_sim, test_t, tests, .serial = true) {
@@ -109,6 +129,7 @@ sp_test_each(fs, it_enter_sim, test_t, tests, .serial = true) {
 
   u32 leaves = 0;
   u32 produced = 0;
+  bool used [MAX_YIELDS] = sp_zero;
   sp_fs_it_t walk = sp_fs_it_new_at(mem, sp_path_at(sp_sys_get_root(0), sp_str_lit("T")), 0);
   while (sp_fs_it_next(&walk)) {
     if (produced < MAX_YIELDS && it->expect.yields[produced].path) {
@@ -125,17 +146,15 @@ sp_test_each(fs, it_enter_sim, test_t, tests, .serial = true) {
     }
     produced++;
 
-    switch (walk.yield) {
-      case SP_FS_IT_LEAVE: {
-        leaves++;
-        sp_expect_eq(t, s.count.closes, leaves);
-        break;
-      }
-      case SP_FS_IT_ENTRY: {
-        const enter_t* enter = find_enter(it, walk.entry.path);
-        if (enter) sp_expect_err_eq(t, sp_fs_it_enter(&walk), enter->err);
-        break;
-      }
+    if (walk.yield == SP_FS_IT_LEAVE) {
+      leaves++;
+      sp_expect_eq(t, s.count.closes, leaves);
+    }
+
+    s32 enter = find_enter(it, walk.entry.path, walk.yield, used);
+    if (enter >= 0) {
+      used[enter] = true;
+      sp_expect_err_eq(t, sp_fs_it_enter(&walk), it->enter[enter].err);
     }
   }
   sp_expect_ok(t, walk.err);

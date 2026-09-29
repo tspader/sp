@@ -37,27 +37,46 @@ static sp_str_t resolve(sp_mem_t mem, sp_sys_fd_t fd, const c8* path, u32 len) {
   return sp_fs_join_path(mem, sp_cstr_as_str(active->opened[slot].dir->path), sp_str(path, len));
 }
 
+static void mark_gone(sp_str_t path) {
+  const sim_dir_t* dir = find_dir(sp_fs_parent_path(path));
+  const sim_entry_t* entry = find_entry(path);
+  if (entry) active->gone[dir - active->dirs][entry - dir->entries] = true;
+}
+
 static void record(sp_str_t path, sim_op_t op) {
   sp_assert(active->num_removed < SIM_MAX_REMOVED);
   sp_assert(path.len < SIM_MAX_REMOVED_PATH);
   sim_removed_t* out = &active->removed[active->num_removed++];
   sp_str_copy_to(path, out->path, SIM_MAX_REMOVED_PATH);
   out->op = op;
+  mark_gone(path);
+}
 
-  const sim_dir_t* dir = find_dir(sp_fs_parent_path(path));
-  const sim_entry_t* entry = find_entry(path);
-  if (entry) active->gone[dir - active->dirs][entry - dir->entries] = true;
+static bool dir_empty(const sim_dir_t* dir) {
+  sp_carr_for(dir->entries, it) {
+    const sim_entry_t* entry = &dir->entries[it];
+    if (!entry->name) break;
+    if (entry->absent) continue;
+    if (!active->gone[dir - active->dirs][it]) return false;
+  }
+  return true;
 }
 
 static sp_err_t open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
   active->count.opens++;
   if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) active->count.nofollow++;
+  if (active->count.dirs == SIM_MAX_OPENS) return SP_ERR_SYS_TOO_MANY_FILES;
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  const sim_dir_t* dir = find_dir(resolve(s.mem, fd, path, len));
+  sp_str_t full = resolve(s.mem, fd, path, len);
+  const sim_entry_t* entry = find_entry(full);
+  const sim_dir_t* dir = find_dir(full);
   sp_mem_end_scratch(s);
+  if (entry && entry->absent) return SP_ERR_SYS_NOT_FOUND;
   if (!dir) return SP_ERR_SYS_NOT_FOUND;
   if (dir->open) return dir->open;
-  sp_assert(active->count.dirs < SIM_MAX_OPENS);
+  sp_for(o, active->count.dirs) {
+    if (active->opened[o].dir == dir && dir->reopen) return dir->reopen;
+  }
   active->opened[active->count.dirs] = (sim_open_t) { .dir = dir };
   *out = (sp_sys_fd_t)(FD_BASE + active->count.dirs);
   active->count.dirs++;
@@ -79,8 +98,6 @@ static sp_err_t dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
 }
 
 static sp_err_t dir_it_read(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
-  active->count.reads++;
-  if (active->count.reads > SIM_MAX_READS) return SP_ERR_SYS_TIMED_OUT;
   sim_open_t* slot = &active->opened[it->state];
   const sim_dir_t* dir = slot->dir;
   if (dir->read) return dir->read;
@@ -115,11 +132,6 @@ static sp_err_t dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cur
   return SP_OK;
 }
 
-static sp_err_t dir_it_rewind(sp_sys_dir_it_t* it) {
-  active->opened[it->state].position = 0;
-  return SP_OK;
-}
-
 static sp_err_t dir_it_close(sp_sys_dir_it_t* it) {
   active->count.closes++;
   return SP_OK;
@@ -133,6 +145,7 @@ static sp_err_t get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sy
   sp_mem_end_scratch(s);
 
   *st = sp_zero_s(sp_sys_file_meta_t);
+  if (entry && entry->absent) return SP_ERR_SYS_NOT_FOUND;
   if (entry && entry->stat != SP_FS_KIND_NONE) {
     st->kind = entry->stat;
     return SP_OK;
@@ -150,7 +163,7 @@ static sp_err_t unlink_entry(sp_sys_fd_t fd, const c8* path, u32 len) {
   sp_str_t full = resolve(s.mem, fd, path, len);
   const sim_entry_t* entry = find_entry(full);
   sp_err_t err = SP_ERR_SYS_NOT_FOUND;
-  if (entry) err = entry->unlink;
+  if (entry && !entry->absent) err = entry->unlink;
   if (entry && !err) record(full, SIM_OP_UNLINK);
   sp_mem_end_scratch(s);
   return err;
@@ -163,7 +176,9 @@ static sp_err_t remove_dir(sp_sys_fd_t fd, const c8* path, u32 len) {
   const sim_dir_t* dir = find_dir(full);
   sp_err_t err = SP_ERR_SYS_NOT_FOUND;
   if (dir) err = dir->rmdir;
+  if (dir && !err && !dir_empty(dir)) err = SP_ERR_SYS_NOT_EMPTY;
   if (dir && !err) record(full, SIM_OP_RMDIR);
+  if (dir && err == SP_ERR_SYS_NOT_FOUND) mark_gone(full);
   sp_mem_end_scratch(s);
   return err;
 }
@@ -175,7 +190,6 @@ void sim_begin(sim_t* sim, const sim_dir_t* dirs) {
   sim->vt.dir_it_open = dir_it_open;
   sim->vt.dir_it_read = dir_it_read;
   sim->vt.dir_it_parse = dir_it_parse;
-  sim->vt.dir_it_rewind = dir_it_rewind;
   sim->vt.dir_it_close = dir_it_close;
   sim->vt.get_link_metadata = get_link_metadata;
   sim->vt.unlink = unlink_entry;

@@ -1538,7 +1538,6 @@ SP_API sp_err_t    sp_sys_set_times_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_time
 SP_API sp_err_t    sp_sys_dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out);
 SP_API sp_err_t    sp_sys_dir_it_read(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf);
 SP_API sp_err_t    sp_sys_dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out);
-SP_API sp_err_t    sp_sys_dir_it_rewind(sp_sys_dir_it_t* it);
 SP_API sp_err_t    sp_sys_dir_it_close(sp_sys_dir_it_t* it);
 SP_API bool        sp_sys_is_read_only(sp_sys_file_perms_t perms);
 SP_API void        sp_sys_set_read_only(sp_sys_file_perms_t* perms, bool read_only);
@@ -1621,7 +1620,6 @@ typedef struct {
   sp_err_t    (*dir_it_open)(sp_sys_fd_t fd, sp_sys_dir_it_t* out);
   sp_err_t    (*dir_it_read)(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf);
   sp_err_t    (*dir_it_parse)(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out);
-  sp_err_t    (*dir_it_rewind)(sp_sys_dir_it_t* it);
   sp_err_t    (*dir_it_close)(sp_sys_dir_it_t* it);
 } sp_sys_vtable_t;
 
@@ -1697,7 +1695,6 @@ SP_API sp_err_t    sp_sys_chdir_p(const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_dir_it_open_p(sp_sys_fd_t fd, sp_sys_dir_it_t* out);
 SP_API sp_err_t    sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf);
 SP_API sp_err_t    sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out);
-SP_API sp_err_t    sp_sys_dir_it_rewind_p(sp_sys_dir_it_t* it);
 SP_API sp_err_t    sp_sys_dir_it_close_p(sp_sys_dir_it_t* it);
 
 SP_API const sp_sys_vtable_t  sp_sys_vtable_platform;
@@ -3026,6 +3023,7 @@ SP_API void              sp_tm_epoch_to_iso8601_w(sp_io_writer_t* io, sp_tm_epoc
 // @fs @filesystem
 #define SP_PATH_MAX 4096
 #define SP_FS_IT_BUF_SIZE SP_SYS_DIR_MIN_BUF
+#define SP_FS_IT_MAX_DEPTH (SP_PATH_MAX / 2 + 1)
 
 typedef enum {
   SP_FS_ATOMIC_REPLACE,
@@ -3143,11 +3141,10 @@ SP_API sp_path_t            sp_path_parent(sp_mem_t mem, sp_path_t path);
   A filesystem iterator
 
   sp_sys_dir_it_t is the OS level iteration state (usually, just the handle to
-  the top level directory, but on WASM also a cookie, on Windows a pending
-  restart, and on macOS a DIR*). The syscalls are strictly about answering:
+  the top level directory, but on WASM also a cookie and on macOS a DIR*). The
+  syscalls are strictly about answering:
   - Asking the OS fill a buffer with the next N entries for the handle
   - Parsing those opaque bytes into entries
-  - Rewinding the handle to the first entry
 
   That can be driven however you want! There's no concept of the "next" entry,
   traversing into child directories, or buffer ownership. Syscalls.
@@ -3158,7 +3155,6 @@ typedef struct {
   sp_sys_dir_it_t dir;
   sp_mem_buffer_t buf;
   u64 cursor;
-  bool rescan;
 } sp_fs_dir_it_t;
 
 typedef struct {
@@ -5798,7 +5794,6 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .dir_it_open            = sp_sys_dir_it_open_p,
   .dir_it_read            = sp_sys_dir_it_read_p,
   .dir_it_parse           = sp_sys_dir_it_parse_p,
-  .dir_it_rewind          = sp_sys_dir_it_rewind_p,
   .dir_it_close           = sp_sys_dir_it_close_p,
 };
 
@@ -6194,10 +6189,6 @@ sp_err_t sp_sys_dir_it_read(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
 
 sp_err_t sp_sys_dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out) {
   return (sp_rt.vt->dir_it_parse)(it, buf, cursor, out);
-}
-
-sp_err_t sp_sys_dir_it_rewind(sp_sys_dir_it_t* it) {
-  return (sp_rt.vt->dir_it_rewind)(it);
 }
 
 sp_err_t sp_sys_dir_it_close(sp_sys_dir_it_t* it) {
@@ -13889,8 +13880,6 @@ sp_err_t sp_sys_dir_it_open_p(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
 sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = 0;
 #if defined(SP_WIN32)
-  u8 restart = (u8)it->state;
-  it->state = 0;
   sp_nt_io_status_block_t iosb = sp_zero;
   sp_nt_status_t status = SP_NT(NtQueryDirectoryFile)(
     (void*)(intptr_t)it->fd,
@@ -13898,7 +13887,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
     &iosb,
     buf->data, (u32)(buf->capacity - SP_SYS_DIR_WIN32_SCRATCH),
     SP_NT_FILE_DIRECTORY_INFORMATION,
-    0, SP_NULLPTR, restart);
+    0, SP_NULLPTR, 0);
   if (status == SP_NT_STATUS_NO_MORE_FILES) return SP_OK;
   if (status == SP_NT_STATUS_NO_SUCH_FILE) return SP_OK;
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
@@ -13988,23 +13977,6 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
   return SP_OK;
 #else
   #error "sp_sys_dir_it_parse"
-#endif
-}
-
-sp_err_t sp_sys_dir_it_rewind_p(sp_sys_dir_it_t* it) {
-#if defined(SP_WIN32)
-  it->state = true;
-  return SP_OK;
-#elif defined(SP_LINUX)
-  return sp_sys_lseek(it->fd, 0, SP_IO_SEEK_SET, SP_NULLPTR);
-#elif defined(SP_MACOS) || defined(SP_COSMO)
-  rewinddir((DIR*)(intptr_t)it->state);
-  return SP_OK;
-#elif defined(SP_WASM)
-  it->state = (s64)__WASI_DIRCOOKIE_START;
-  return SP_OK;
-#else
-  #error "sp_sys_dir_it_rewind"
 #endif
 }
 
@@ -20636,13 +20608,8 @@ sp_err_t sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_fs_dir_entry_t* out) {
     // Pull another chunk from the kernel and advance the cursor
     if (it->cursor >= it->buf.len) {
       sp_try(sp_sys_dir_it_read(&it->dir, &it->buf));
+      if (!it->buf.len) return SP_OK;
       it->cursor = 0;
-      if (!it->buf.len) {
-        if (!it->rescan) return SP_OK;
-        it->rescan = false;
-        sp_try(sp_sys_dir_it_rewind(&it->dir));
-        continue;
-      }
     }
 
     sp_sys_dir_entry_t entry = sp_zero;
@@ -20743,21 +20710,9 @@ bool sp_fs_it_next(sp_fs_it_t* it) {
 }
 
 sp_err_t sp_fs_it_enter(sp_fs_it_t* it) {
-  sp_assert(it->yield == SP_FS_IT_ENTRY && !sp_str_empty(it->entry.path));
+  sp_assert(!sp_str_empty(it->entry.path));
   sp_assert(sp_da_back(it->stack)->len < it->entry.path.len);
   return sp_fs_it_push(it, it->at, it->entry.path.len, SP_SYS_OPEN_DIR_NO_FOLLOW);
-}
-
-SP_PRIVATE sp_err_t sp_fs_it_unlink(sp_fs_it_t* it) {
-  sp_try(sp_sys_unlink_s(it->at.dir, it->at.sub));
-  sp_da_back(it->stack)->dir.rescan = true;
-  return SP_OK;
-}
-
-SP_PRIVATE sp_err_t sp_fs_it_rmdir(sp_fs_it_t* it) {
-  sp_try(sp_sys_rmdir_s(it->at.dir, it->at.sub));
-  sp_da_back(it->stack)->dir.rescan = true;
-  return SP_OK;
 }
 
 bool sp_fs_it_walk(sp_fs_it_t* it) {
@@ -20833,9 +20788,10 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
   into subdirectories, and unlink them. Fails if this root (i.e. fd + path)
   does not refer to a directory, and unlinks the root at the end.
 
-  This function uses O(depth) memory, and each directory is opened exactly
-  once. Every path under the root must fit in SP_PATH_MAX; a deeper tree fails
-  with NAME_TOO_LONG, and can be removed by opening a handle partway down.
+  This function uses O(depth) memory. A directory is reopened only when its
+  rmdir reports NOT_EMPTY after a pass that removed one of its entries. Every
+  path under the root must fit in SP_PATH_MAX; a deeper tree fails with
+  NAME_TOO_LONG, and can be removed by opening a handle partway down.
 
 
   # SYMLINKS
@@ -20879,6 +20835,48 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
   Once
 
   */
+SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed) {
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_fs_it_t it = sp_fs_it_new_at(s.mem, path, SP_SYS_OPEN_DIR_NO_FOLLOW);
+  bool progress [SP_FS_IT_MAX_DEPTH] = sp_zero;
+  sp_err_t err = it.err;
+
+  while (!err && sp_fs_it_next(&it)) {
+    u64 depth = sp_da_size(it.stack);
+    switch (it.yield) {
+      case SP_FS_IT_LEAVE: {
+        err = sp_sys_rmdir_s(it.at.dir, it.at.sub);
+        if (err == SP_ERR_SYS_NOT_EMPTY && progress[depth]) err = sp_fs_it_enter(&it);
+        break;
+      }
+      case SP_FS_IT_ENTRY: {
+        // entry kinds are hints; flip on a contradicting error so a lying or
+        // absent d_type can't strand an entry
+        if (it.entry.kind == SP_FS_KIND_DIR) {
+          err = sp_fs_it_enter(&it);
+          if (err == SP_ERR_SYS_NOT_DIR || err == SP_ERR_SYS_LOOP) err = sp_sys_unlink_s(it.at.dir, it.at.sub);
+        }
+        else {
+          err = sp_sys_unlink_s(it.at.dir, it.at.sub);
+          if (err == SP_ERR_SYS_IS_DIR) err = sp_fs_it_enter(&it);
+        }
+        break;
+      }
+    }
+    if (!err) {
+      if (sp_da_size(it.stack) > depth) progress[depth] = false;
+      else progress[depth - 1] = true;
+    }
+    if (err == SP_ERR_SYS_NOT_FOUND) err = SP_OK;
+  }
+  if (!err) err = it.err;
+
+  *progressed = progress[0];
+  sp_fs_it_deinit(&it);
+  sp_mem_end_scratch(s);
+  return err;
+}
+
 sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
   sp_str_t name = sp_fs_get_name(path.sub);
   if (sp_str_empty(name) || sp_fs_is_dot(name)) return SP_ERR_SYS_INVALID;
@@ -20892,40 +20890,16 @@ sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
     case SP_FS_KIND_NONE:    return SP_ERR_SYS_NOT_DIR;
   }
 
-  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_fs_it_t it = sp_fs_it_new_at(s.mem, path, SP_SYS_OPEN_DIR_NO_FOLLOW);
-  sp_err_t err = it.err;
-
-  while (!err && sp_fs_it_next(&it)) {
-    switch (it.yield) {
-      case SP_FS_IT_LEAVE: {
-        err = sp_fs_it_rmdir(&it);
-        break;
-      }
-      case SP_FS_IT_ENTRY: {
-        // entry kinds are hints; flip on a contradicting error so a lying or
-        // absent d_type can't strand an entry
-        if (it.entry.kind == SP_FS_KIND_DIR) {
-          err = sp_fs_it_enter(&it);
-          if (err == SP_ERR_SYS_NOT_DIR || err == SP_ERR_SYS_LOOP) err = sp_fs_it_unlink(&it);
-        }
-        else {
-          err = sp_fs_it_unlink(&it);
-          if (err == SP_ERR_SYS_IS_DIR) err = sp_fs_it_enter(&it);
-        }
-        break;
-      }
-    }
-    if (err == SP_ERR_SYS_NOT_FOUND) err = SP_OK;
+  bool progressed = false;
+  while (true) {
+    bool retry = progressed;
+    sp_err_t err = sp_fs_remove_pass(path, &progressed);
+    if (err == SP_ERR_SYS_NOT_FOUND && retry) return SP_OK;
+    if (err) return err;
+    err = sp_sys_rmdir_s(path.dir, path.sub);
+    if (err == SP_ERR_SYS_NOT_EMPTY && progressed) continue;
+    return err == SP_ERR_SYS_NOT_FOUND ? SP_OK : err;
   }
-  if (!err) err = it.err;
-
-  sp_fs_it_deinit(&it);
-  sp_mem_end_scratch(s);
-  if (err) return err;
-
-  err = sp_sys_rmdir_s(path.dir, path.sub);
-  return err == SP_ERR_SYS_NOT_FOUND ? SP_OK : err;
 }
 
 static sp_atomic_s32_t sp_fs_atomic_sequence;
