@@ -405,8 +405,6 @@ SP_API bool        sp_test_mem_eq(sp_test_t* t, const void* lhs, const void* rhs
 SP_API bool        sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 count, const c8* const* expect, const c8* sa, const c8* se, sp_str_t file, u32 line);
 
 SP_API void            sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
-SP_API void            sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
-SP_API sp_da(sp_str_t) sp_test_resolve_roots(sp_mem_t mem, sp_str_t cwd, sp_str_t exe_dir);
 
 typedef struct {
   sp_atomic_s32_t state;
@@ -673,8 +671,7 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 #define sp_expect_err_eq(T, A, B)   sp_test_err_eq(T, A, B, #A, #B, sp_test_soft)
 #define sp_must_err_eq(T, A, B)     sp_test_err_eq(T, A, B, #A, #B, sp_test_stop)
 
-#define sp_expect_golden(T, PATH, ACTUAL)     sp_test_golden(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
-#define sp_expect_golden_abs(T, PATH, ACTUAL) sp_test_golden_abs(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
+#define sp_expect_golden(T, PATH, ACTUAL) sp_test_golden(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
 
 #endif
 
@@ -745,7 +742,7 @@ struct sp_test_runner_t {
   sp_da(const c8*) updated;
   sp_path_t dir_root;
   sp_test_once_t symlinks;
-  sp_str_t golden_root;
+  sp_path_t golden_root;
   bool update;
   sp_test_keep_t keep;
   bool kept;
@@ -1077,111 +1074,99 @@ bool sp_test_symlinks_supported(sp_test_t* t) {
 ////////////
 // GOLDEN //
 ////////////
-sp_da(sp_str_t) sp_test_resolve_roots(sp_mem_t mem, sp_str_t cwd, sp_str_t exe_dir) {
-  sp_da(sp_str_t) roots = sp_da_new(mem, sp_str_t);
+static sp_path_t sp_test_golden_search(sp_mem_t mem, sp_path_t dir, sp_str_t file) {
+  while (true) {
+    if (sp_fs_is_target_file_at(sp_path_join(mem, dir, file))) return dir;
 
-  sp_str_t anchors [] = { cwd, exe_dir };
-  sp_carr_for(anchors, at) {
-    if (sp_str_empty(anchors[at])) continue;
-
-    sp_str_t dir = sp_fs_normalize_path(mem, anchors[at]);
-    while (!sp_str_empty(dir)) {
-      bool seen = false;
-      sp_da_for(roots, it) {
-        if (sp_str_equal(roots[it], dir)) { seen = true; break; }
-      }
-      if (!seen) sp_da_push(roots, dir);
-
-      sp_str_t parent = sp_fs_parent_path(dir);
-      if (sp_str_equal(parent, dir)) break;
-      dir = parent;
-    }
+    sp_path_t parent = sp_path_parent(mem, dir);
+    sp_sys_file_meta_t from = sp_zero;
+    sp_sys_file_meta_t to = sp_zero;
+    if (sp_sys_get_path_metadata_s(dir.dir, dir.sub, &from)) return sp_zero_s(sp_path_t);
+    if (sp_sys_get_path_metadata_s(parent.dir, parent.sub, &to)) return sp_zero_s(sp_path_t);
+    if (from.id == to.id && from.device == to.device) return sp_zero_s(sp_path_t);
+    dir = parent;
   }
-
-  return roots;
 }
 
-static sp_str_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
+static sp_path_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
   sp_test_runner_t* runner = t->runner;
 
   sp_mutex_lock(&runner->mutex);
-  sp_str_t root = runner->golden_root;
+  sp_path_t root = runner->golden_root;
   sp_mutex_unlock(&runner->mutex);
-  if (!sp_str_empty(root)) return root;
+  if (!sp_str_empty(root.sub)) return root;
 
-  sp_str_t cwd = sp_fs_get_cwd_path(t->mem);
-  sp_str_t exe_dir = sp_fs_parent_path(sp_fs_get_exe_path(t->mem));
-  sp_da(sp_str_t) roots = sp_test_resolve_roots(t->mem, cwd, exe_dir);
+  sp_path_t anchors [2] = { sp_path_at_cwd(sp_str_lit(".")) };
+  sp_str_t exe = sp_fs_get_exe_path(t->mem);
+  if (!sp_str_empty(exe)) anchors[1] = sp_path_resolve(sp_fs_parent_path(exe));
 
-  sp_da_for(roots, it) {
-    if (!sp_fs_is_target_file(sp_fs_join_path(t->mem, roots[it], file))) continue;
-    root = roots[it];
-    break;
+  sp_carr_for(anchors, it) {
+    if (sp_str_empty(anchors[it].sub)) continue;
+    root = sp_test_golden_search(t->mem, anchors[it], file);
+    if (!sp_str_empty(root.sub)) break;
   }
-  if (sp_str_empty(root)) return root;
+  if (sp_str_empty(root.sub)) return root;
 
   sp_mutex_lock(&runner->mutex);
-  if (sp_str_empty(runner->golden_root)) {
-    runner->golden_root = sp_str_copy(runner->mem, root);
+  if (sp_str_empty(runner->golden_root.sub)) {
+    runner->golden_root = sp_path_at(root.dir, sp_str_copy(runner->mem, root.sub));
   }
   root = runner->golden_root;
   sp_mutex_unlock(&runner->mutex);
   return root;
 }
 
-static void sp_test_golden_at(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
-  sp_str_t actual_path = sp_test_format(t, "{}.actual", sp_fmt_str(path));
+static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_str_t file, u32 line) {
+  sp_str_t shown = sp_test_path_str(t->mem, path);
+  sp_path_t actual_path = sp_path_at(path.dir, sp_test_format(t, "{}.actual", sp_fmt_str(path.sub)));
 
   if (t->runner->update) {
-    sp_str_t parent = sp_fs_parent_path(path);
-    if (!sp_str_empty(parent) && !sp_fs_exists(parent)) {
-      sp_fs_create_dir(parent);
-    }
+    sp_fs_create_dir_at(sp_path_parent(t->mem, path));
 
-    sp_err_t err = sp_fs_create_file_str(path, actual);
+    sp_err_t err = sp_fs_create_file_str_at(path, actual);
     if (err) {
       sp_test_record(t, (sp_test_failure_t) {
         .file = file,
         .line = line,
         .message = sp_test_format(t, "failed to update golden {}: err {}",
-          sp_fmt_str(path), sp_fmt_int(err)),
+          sp_fmt_str(shown), sp_fmt_int(err)),
       });
       return;
     }
 
-    if (sp_fs_exists(actual_path)) sp_fs_remove_file(actual_path);
+    if (sp_fs_exists_at(actual_path)) sp_fs_remove_file_at(actual_path);
     t->updated++;
     return;
   }
 
-  if (!sp_fs_exists(path)) {
+  if (!sp_fs_exists_at(path)) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
       .message = sp_test_format(t, "golden {} does not exist; run with --update to create it",
-        sp_fmt_str(path)),
+        sp_fmt_str(shown)),
     });
     return;
   }
 
   sp_str_t want = sp_zero;
-  sp_err_t err = sp_io_read_file(t->mem, path, &want);
+  sp_err_t err = sp_io_read_file_at(t->mem, path, &want);
   if (err) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
       .message = sp_test_format(t, "failed to read golden {}: err {}",
-        sp_fmt_str(path), sp_fmt_int(err)),
+        sp_fmt_str(shown), sp_fmt_int(err)),
     });
     return;
   }
 
   if (sp_str_equal(want, actual)) {
-    if (sp_fs_exists(actual_path)) sp_fs_remove_file(actual_path);
+    if (sp_fs_exists_at(actual_path)) sp_fs_remove_file_at(actual_path);
     return;
   }
 
-  sp_fs_create_file_str(actual_path, actual);
+  sp_fs_create_file_str_at(actual_path, actual);
 
   sp_da(sp_str_t) want_lines = sp_str_split_c8(t->mem, want, '\n');
   sp_da(sp_str_t) got_lines = sp_str_split_c8(t->mem, actual, '\n');
@@ -1199,29 +1184,22 @@ static void sp_test_golden_at(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_s
     .file = file,
     .line = line,
     .message = sp_test_format(t, "golden mismatch at {}:{}; wrote {}",
-      sp_fmt_str(path), sp_fmt_uint(diff + 1), sp_fmt_str(actual_path)),
+      sp_fmt_str(shown), sp_fmt_uint(diff + 1), sp_fmt_str(sp_test_path_str(t->mem, actual_path))),
     .expected = sp_test_format(t, "{.quote}", sp_fmt_str(want_line)),
     .actual = sp_test_format(t, "{.quote}", sp_fmt_str(got_line)),
   });
 }
 
 void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
-  if (sp_fs_is_absolute_for(path, SP_FS_PATH_WINDOWS)) {
-    sp_test_record(t, (sp_test_failure_t) {
-      .file = file,
-      .line = line,
-      .message = sp_test_format(t, "golden path {} is absolute; paths resolve against the calling source dir (use sp_expect_golden_abs)",
-        sp_fmt_str(path)),
-    });
-    return;
-  }
-
   file = sp_fs_normalize_path(t->mem, file);
 
-  sp_str_t src = file;
-  if (!sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS)) {
-    sp_str_t root = sp_test_golden_root(t, file);
-    if (sp_str_empty(root)) {
+  sp_path_t src = sp_zero;
+  if (sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS)) {
+    src = sp_path_resolve(file);
+  }
+  else {
+    sp_path_t root = sp_test_golden_root(t, file);
+    if (sp_str_empty(root.sub)) {
       sp_test_record(t, (sp_test_failure_t) {
         .file = file,
         .line = line,
@@ -1230,24 +1208,23 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
       });
       return;
     }
-    src = sp_fs_join_path(t->mem, root, file);
+    src = sp_path_join(t->mem, root, file);
   }
 
-  if (!sp_fs_is_target_file(src)) {
+  if (src.dir == SP_SYS_INVALID_FD || !sp_fs_is_target_file_at(src)) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
       .message = sp_test_format(t, "cannot locate {}; goldens resolve against the calling source dir (--golden-root overrides)",
-        sp_fmt_str(src)),
+        sp_fmt_str(sp_test_path_str(t->mem, src))),
     });
     return;
   }
 
-  sp_test_golden_at(t, sp_fs_join_path(t->mem, sp_fs_parent_path(src), path), actual, file, line);
-}
-
-void sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
-  sp_test_golden_at(t, path, actual, file, line);
+  sp_path_t golden = sp_fs_is_absolute(path) ?
+    sp_path_resolve(path) :
+    sp_path_join(t->mem, sp_path_parent(t->mem, src), path);
+  sp_test_golden_at(t, golden, actual, file, line);
 }
 
 
@@ -2038,7 +2015,14 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   sp_str_t golden_root = sp_zero;
   if (golden.env) golden_root = sp_cstr_as_str(golden.env);
   if (golden.opt) golden_root = sp_cstr_as_str(golden.opt);
-  if (!sp_str_empty(golden_root)) runner->golden_root = sp_fs_normalize_path(runner->mem, golden_root);
+  if (!sp_str_empty(golden_root)) {
+    runner->golden_root = sp_path_resolve(sp_fs_normalize_path(runner->mem, golden_root));
+    if (runner->golden_root.dir == SP_SYS_INVALID_FD) {
+      sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(golden_root));
+      sp_io_flush(&runner->out.base);
+      return 1;
+    }
+  }
 
   sp_mutex_init(&runner->mutex);
   sp_io_stream_writer_from_fd(&runner->out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);

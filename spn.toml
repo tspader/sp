@@ -14,7 +14,7 @@ name = "amalgamation"
 source = [
   "test/main.c",
   "test/test/axis.c", "test/test/filter.c", "test/test/matrix.c",
-  "test/test/resolve.c", "test/test/sweep.c", "test/test/tracking.c",
+  "test/test/sweep.c", "test/test/tracking.c",
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
   "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
