@@ -50,7 +50,7 @@ else
 endif
 
 ifneq (,$(findstring wasm32,$(TRIPLE)))
-  RUNNER = wasmtime run
+  RUNNER = wasmtime run --dir $(CURDIR)
 endif
 
 LDLIBS_PLATFORM =
