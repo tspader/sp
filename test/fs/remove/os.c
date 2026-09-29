@@ -15,6 +15,7 @@ typedef struct {
   bool dir;
   const c8* cwd;
   const c8* path;
+  u32 bulk;
   expect_t expect;
 } test_t;
 
@@ -69,6 +70,20 @@ static const test_t tests [] = {
         { .path = "A/C" },
         { .path = "A/C/D" },
         { .path = "A/E" },
+      },
+    },
+  },
+  {
+    .name = "dir_refills_across_batches",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+    },
+    .dir = true,
+    .path = "A",
+    .bulk = 96,
+    .expect = {
+      .paths = {
+        { .path = "A" },
       },
     },
   },
@@ -267,6 +282,11 @@ sp_test_each(fs, remove, test_t, tests) {
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_path_t base = it->cwd ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd)) : sandbox;
+  sp_path_t target = sp_path_join(mem, base, sp_cstr_as_str(it->path));
+  sp_for(b, it->bulk) {
+    sp_str_t name = sp_fmt(mem, "R{}", sp_fmt_uint(b)).value;
+    sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, target, name)));
+  }
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_fs_open_dir_at(base, &dir));
 

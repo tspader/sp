@@ -103,6 +103,40 @@ static const test_t tests [] = {
     },
   },
   {
+    .name = "shifted_listing_is_rescanned",
+    .dirs = {
+      { .path = "T", .batch = 1, .entries = { { "A", SP_FS_KIND_FILE }, { "B", SP_FS_KIND_FILE } } },
+    },
+    .expect = {
+      .removed = { { "T/A", SIM_OP_UNLINK }, { "T/B", SIM_OP_UNLINK }, { "T", SIM_OP_RMDIR } },
+      .opens = 1,
+      .rmdirs = 1,
+    },
+  },
+  {
+    .name = "removed_subdir_shifts_parent_listing",
+    .dirs = {
+      { .path = "T", .batch = 1, .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
+      { .path = "T/B" },
+    },
+    .expect = {
+      .removed = { { "T/B", SIM_OP_RMDIR }, { "T/C", SIM_OP_UNLINK }, { "T", SIM_OP_RMDIR } },
+      .opens = 2,
+      .rmdirs = 2,
+    },
+  },
+  {
+    .name = "unlink_error_propagates_without_rescan",
+    .dirs = {
+      { .path = "T", .entries = { { "A", SP_FS_KIND_FILE }, { "B", SP_FS_KIND_FILE, .unlink = SP_ERR_SYS_ACCESS_DENIED } } },
+    },
+    .expect = {
+      .err = SP_ERR_SYS_ACCESS_DENIED,
+      .removed = { { "T/A", SIM_OP_UNLINK } },
+      .opens = 1,
+    },
+  },
+  {
     .name = "read_error_fails_fast_and_unwinds",
     .dirs = {
       { .path = "T", .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
