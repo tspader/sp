@@ -33,8 +33,8 @@ static const test_t tests [] = {
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
-  sp_str_t path = sp_fs_join_path(mem, sandbox, sp_str_lit("L"));
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t path = sp_path_join(mem, sandbox, sp_str_lit("L"));
   sp_str_t expected = c->expect.target ? sp_cstr_as_str(c->expect.target) : sp_zero_s(sp_str_t);
 
   switch (c->setup) {
@@ -42,18 +42,19 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case SETUP_FILE: {
-      sp_must_ok(t, sp_fs_create_file(path));
+      sp_must_ok(t, sp_fs_create_file_at(path));
       break;
     }
     case SETUP_LINK: {
       sp_test_skip_without_symlinks();
-      sp_must_ok(t, sp_fs_create_sym_link(sp_cstr_as_str(c->target), path, SP_FS_KIND_FILE));
+      sp_must_ok(t, sp_fs_create_sym_link_at(sp_cstr_as_str(c->target), path, SP_FS_KIND_FILE));
       break;
     }
     case SETUP_LINK_ABSOLUTE: {
+      sp_test_skip_on_wasm();
       sp_test_skip_without_symlinks();
-      expected = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->target));
-      sp_must_ok(t, sp_fs_create_sym_link(expected, path, SP_FS_KIND_FILE));
+      expected = sp_fs_join_path(mem, sp_fs_canonicalize_path_at(mem, sandbox), sp_cstr_as_str(c->target));
+      sp_must_ok(t, sp_fs_create_sym_link_at(expected, path, SP_FS_KIND_FILE));
       break;
     }
   }
@@ -66,7 +67,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   c8 buf [SP_PATH_MAX];
   sp_str_t target = sp_zero;
-  sp_err_t err = sp_sys_readlink_s(sp_sys_get_root(0), path, buf, c->size ? c->size : sizeof(buf), &target);
+  sp_err_t err = sp_sys_readlink_s(path.dir, path.sub, buf, c->size ? c->size : sizeof(buf), &target);
   if (err == SP_ERR_SYS_UNSUPPORTED) return sp_test_skip(t, "readlink not supported");
 
   sp_expect_err_eq(t, err, c->expect.err);

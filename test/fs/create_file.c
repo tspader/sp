@@ -71,13 +71,10 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, create_file, test_t, tests) {
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
-
-  sp_path_t path = { .dir = dir, .sub = sp_str_view(it->path) };
+  sp_path_t path = sp_path_join(sp_test_arena(t), sandbox, sp_str_view(it->path));
   sp_err_t result = SP_OK;
   switch (it->variant) {
     case VARIANT_EMPTY: {
@@ -97,7 +94,6 @@ sp_test_each(fs, create_file, test_t, tests) {
       break;
     }
   }
-  sp_sys_close(dir);
   sp_expect_ok(t, result);
 
   fs_expect_paths(t, sandbox, it->expect);

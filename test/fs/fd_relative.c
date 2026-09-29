@@ -110,16 +110,16 @@ sp_test_each(fs, fd_relative, test_t, tests) {
 #if !defined(SP_WIN32)
   if (it->win32) return sp_test_skip(t, "windows only");
 #endif
+#if defined(SP_WASM)
+  if (it->op == OP_OPEN_ABS) return sp_test_skip(t, "no absolute names on wasm");
+#endif
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t cwd_path = sp_fs_join_path(mem, sandbox, sp_str_view(it->cwd));
+  sp_path_t cwd_path = sp_path_join(mem, sandbox, sp_str_view(it->cwd));
   sp_sys_fd_t cwd = SP_SYS_INVALID_FD;
-  if (sp_sys_open_dir_s(sp_sys_get_root(0), cwd_path, 0, &cwd) != SP_OK) {
-    sp_test_fail(t, "failed to open dir {}", sp_fmt_str(cwd_path));
-    return SP_ERR;
-  }
+  sp_must_ok(t, sp_sys_open_dir_s(cwd_path.dir, cwd_path.sub, 0, &cwd));
 
   switch (it->op) {
     case OP_STAT: {
@@ -130,7 +130,7 @@ sp_test_each(fs, fd_relative, test_t, tests) {
     case OP_OPEN:
     case OP_OPEN_ABS: {
       sp_str_t path = it->op == OP_OPEN_ABS
-        ? sp_fs_join_path(mem, sandbox, sp_str_view(it->path))
+        ? sp_fs_canonicalize_path_at(mem, sp_path_join(mem, sandbox, sp_str_view(it->path)))
         : sp_str_view(it->path);
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
       sp_expect_ok(t, sp_sys_open_s(cwd, path, SP_SYS_OPEN_MODE_RO, 0, &fd));

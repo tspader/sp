@@ -112,13 +112,11 @@ sp_test_each(fs, it_enter, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
-
-  sp_str_t base = sp_str_lit("R");
+  sp_path_t root = sp_path_join(mem, sandbox, sp_str_lit("R"));
+  sp_str_t base = root.sub;
   fs_match_t entries [FS_MAX_PATHS] = sp_zero;
   u32 num_entries = 0;
   sp_carr_for(it->expect.entries, e) {
@@ -132,7 +130,7 @@ sp_test_each(fs, it_enter, test_t, tests) {
   sp_str_t entered [FS_MAX_PATHS] = sp_zero;
   u32 depth = 0;
 
-  sp_fs_it_t walk = sp_fs_it_new_at(mem, (sp_path_t) { .dir = dir, .sub = base }, 0);
+  sp_fs_it_t walk = sp_fs_it_new_at(mem, root, 0);
   while (sp_fs_it_next(&walk)) {
     sp_expect_str_eq(t, sp_fs_join_path(mem, base, walk.entry.rel), walk.entry.path);
     switch (walk.yield) {
@@ -160,7 +158,6 @@ sp_test_each(fs, it_enter, test_t, tests) {
   sp_expect_ok(t, walk.err);
   sp_expect_eq(t, depth, (u32)0);
   sp_fs_it_deinit(&walk);
-  sp_sys_close(dir);
 
   fs_match_finish(t, entries, num_entries);
   fs_match_finish(t, leaves, num_leaves);

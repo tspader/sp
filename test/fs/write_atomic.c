@@ -61,17 +61,11 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, write_atomic, test_t, tests) {
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
-
-  sp_path_t path = { .dir = dir, .sub = sp_str_view(it->path) };
-  sp_err_t err = sp_fs_write_atomic_at(path, sp_str_view(it->content));
-  sp_sys_close(dir);
-
-  sp_expect_err_eq(t, err, it->expect.err);
+  sp_path_t path = sp_path_join(sp_test_arena(t), sandbox, sp_str_view(it->path));
+  sp_expect_err_eq(t, sp_fs_write_atomic_at(path, sp_str_view(it->content)), it->expect.err);
   fs_expect_paths(t, sandbox, it->expect.paths);
   fs_expect_no_temps(t, sandbox);
   return SP_OK;

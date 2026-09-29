@@ -91,10 +91,10 @@ sp_test_each(fs, dir, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t dir = it->dir ? sp_fs_join_path(mem, sandbox, sp_cstr_as_str(it->dir)) : sandbox;
+  sp_path_t dir = it->dir ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->dir)) : sandbox;
 
   fs_match_t* matches = sp_alloc_n(mem, fs_match_t, FS_MAX_PATHS + it->bulk);
   u32 n = 0;
@@ -104,20 +104,20 @@ sp_test_each(fs, dir, test_t, tests) {
   }
   sp_for(b, it->bulk) {
     sp_str_t name = sp_fmt(mem, "{}{}", sp_fmt_cstr(BULK_PREFIX), sp_fmt_uint(b)).value;
-    sp_expect_ok(t, sp_fs_create_file(sp_fs_join_path(mem, dir, name)));
+    sp_expect_ok(t, sp_fs_create_file_at(sp_path_join(mem, dir, name)));
     matches[n++] = (fs_match_t) { .key = name, .kind = SP_FS_KIND_FILE };
   }
 
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
   if (it->relative) {
-    sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));
+    sp_try(sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &sandbox_fd));
   }
 
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
   sp_fs_dir_t iter = sp_zero;
   sp_err_t open_err = it->relative
     ? sp_fs_dir_open(&iter, sandbox_fd, sp_cstr_as_str(it->dir), 0, sp_mem_slice(buf, sizeof(buf)))
-    : sp_fs_dir_open(&iter, sp_sys_get_root(0), dir, 0, sp_mem_slice(buf, sizeof(buf)));
+    : sp_fs_dir_open(&iter, dir.dir, dir.sub, 0, sp_mem_slice(buf, sizeof(buf)));
   sp_expect_ok(t, open_err);
 
   if (!open_err) {

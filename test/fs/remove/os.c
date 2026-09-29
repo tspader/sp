@@ -263,12 +263,12 @@ sp_test_each(fs, remove, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t base = it->cwd ? sp_fs_join_path(mem, sandbox, sp_cstr_as_str(it->cwd)) : sandbox;
+  sp_path_t base = it->cwd ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd)) : sandbox;
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), base, 0, &dir));
+  sp_must_ok(t, sp_sys_open_dir_s(base.dir, base.sub, 0, &dir));
 
   sp_path_t path = { .dir = dir, .sub = sp_cstr_as_str(it->path) };
   sp_err_t result = it->dir ? sp_fs_remove_dir_at(path) : sp_fs_remove_file_at(path);
@@ -283,10 +283,7 @@ sp_test_each(fs, remove, test_t, tests) {
 }
 
 sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sp_test_dir(t), 0, &dir));
-
-  sp_path_t root = { .dir = dir, .sub = sp_str_lit("A") };
+  sp_path_t root = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("A"));
   sp_must_ok(t, sp_fs_create_dir_at(root));
 
   sp_sys_fd_t cur = SP_SYS_INVALID_FD;
@@ -318,27 +315,24 @@ sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
 
   sp_expect_ok(t, sp_fs_remove_dir_at(root));
   sp_expect(t, !sp_fs_exists_at(root));
-  sp_sys_close(dir);
   return SP_OK;
 }
 
 #if defined(SP_POSIX)
 sp_test(fs, remove_dir_unwritable_subdir_fails) {
-  sp_sys_fd_t root = sp_sys_get_root(0);
-  sp_str_t locked = fs_path_c(t, "A/B");
-  sp_must_ok(t, sp_fs_create_dir(locked));
-  sp_must_ok(t, sp_fs_create_file(fs_path_c(t, "A/B/C")));
-  sp_must_ok(t, sp_sys_set_file_perms_s(root, locked, (sp_sys_file_perms_t) { .value = 0555 }));
+  sp_mem_t mem = sp_test_arena(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t locked = sp_path_join(mem, sandbox, sp_str_lit("A/B"));
+  sp_must_ok(t, sp_fs_create_dir_at(locked));
+  sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, sandbox, sp_str_lit("A/B/C"))));
+  sp_must_ok(t, sp_sys_set_file_perms_s(locked.dir, locked.sub, (sp_sys_file_perms_t) { .value = 0555 }));
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(root, sp_test_dir(t), 0, &dir));
-  sp_err_t result = sp_fs_remove_dir_at((sp_path_t) { .dir = dir, .sub = sp_str_lit("A") });
-  sp_sys_close(dir);
+  sp_err_t result = sp_fs_remove_dir_at(sp_path_join(mem, sandbox, sp_str_lit("A")));
 
   if (!result) return sp_test_skip(t, "directory permissions not enforced");
-  sp_must_ok(t, sp_sys_set_file_perms_s(root, locked, (sp_sys_file_perms_t) { .value = 0755 }));
+  sp_must_ok(t, sp_sys_set_file_perms_s(locked.dir, locked.sub, (sp_sys_file_perms_t) { .value = 0755 }));
   sp_expect_err_eq(t, result, SP_ERR_SYS_ACCESS_DENIED);
-  fs_expect_paths(t, sp_test_dir(t), (const fs_expected_path_t [FS_MAX_PATHS]) {
+  fs_expect_paths(t, sandbox, (const fs_expected_path_t [FS_MAX_PATHS]) {
     { .path = "A/B", .exists = true, .kind = SP_FS_KIND_DIR },
     { .path = "A/B/C", .exists = true, .kind = SP_FS_KIND_FILE },
   });

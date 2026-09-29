@@ -125,14 +125,12 @@ static const sym_t sym_links [] = {
 };
 
 sp_test_each(fs, hard_link, hard_t, hard_links) {
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_mem_t mem = sp_test_arena(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
-
-  sp_path_t target = { .dir = dir, .sub = sp_cstr_as_str(it->target) };
-  sp_path_t link = { .dir = dir, .sub = sp_cstr_as_str(it->link) };
+  sp_path_t target = sp_path_join(mem, sandbox, sp_cstr_as_str(it->target));
+  sp_path_t link = sp_path_join(mem, sandbox, sp_cstr_as_str(it->link));
   sp_expect_err_eq(t, sp_fs_create_hard_link_at(target, link), it->err);
 
   // a hard link shares content with its target: rewrite the target through
@@ -143,7 +141,6 @@ sp_test_each(fs, hard_link, hard_t, hard_links) {
     sp_io_write_str(&writer.base, sp_cstr_as_str(it->rewrite), SP_NULLPTR);
     sp_io_file_writer_close(&writer);
   }
-  sp_sys_close(dir);
 
   fs_expect_paths(t, sandbox, it->expect);
   return SP_OK;
@@ -152,15 +149,11 @@ sp_test_each(fs, hard_link, hard_t, hard_links) {
 sp_test_each(fs, sym_link, sym_t, sym_links) {
   sp_test_skip_without_symlinks();
 
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
-
-  sp_path_t link = { .dir = dir, .sub = sp_cstr_as_str(it->link) };
+  sp_path_t link = sp_path_join(sp_test_arena(t), sandbox, sp_cstr_as_str(it->link));
   sp_expect_err_eq(t, sp_fs_create_sym_link_at(sp_cstr_as_str(it->target), link, it->kind), it->err);
-  sp_sys_close(dir);
 
   fs_expect_paths(t, sandbox, it->expect);
   return SP_OK;

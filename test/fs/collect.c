@@ -55,9 +55,9 @@ static const test_t tests [] = {
 
 sp_test_each(fs, collect, test_t, tests) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
-  sp_str_t root = sp_fs_join_path(mem, sandbox, sp_str_lit("R"));
+  sp_str_t root = sp_path_join(mem, sandbox, sp_str_lit("R")).sub;
 
   fs_match_t matches [FS_MAX_PATHS] = sp_zero;
   u32 n = 0;

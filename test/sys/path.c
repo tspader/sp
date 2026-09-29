@@ -380,19 +380,22 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   }
 
   if (c->link) sp_test_skip_without_symlinks();
+#if defined(SP_WASM)
+  if (c->path_kind == PATH_ABS) return sp_test_skip(t, "no absolute names on wasm");
+#endif
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
-  if (c->file) sp_must_ok(t, sp_fs_create_file_str(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A")));
-  if (c->dir)  sp_must_ok(t, sp_fs_create_dir(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->dir))));
-  if (c->link) sp_must_ok(t, sp_fs_create_sym_link(sp_cstr_as_str(c->target), sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->link)), c->dir_link ? SP_FS_KIND_DIR : SP_FS_KIND_FILE));
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  if (c->file) sp_must_ok(t, sp_fs_create_file_str_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A")));
+  if (c->dir)  sp_must_ok(t, sp_fs_create_dir_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->dir))));
+  if (c->link) sp_must_ok(t, sp_fs_create_sym_link_at(sp_cstr_as_str(c->target), sp_path_join(mem, sandbox, sp_cstr_as_str(c->link)), c->dir_link ? SP_FS_KIND_DIR : SP_FS_KIND_FILE));
 
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));
+  sp_try(sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &sandbox_fd));
 
   sp_str_t path = sp_cstr_as_str(c->path);
   if (c->path_kind == PATH_LONG) path = long_path(mem, c->path);
-  if (c->path_kind == PATH_ABS)  path = abs_path(mem, sandbox, c->path);
+  if (c->path_kind == PATH_ABS)  path = abs_path(mem, sp_fs_canonicalize_path_at(mem, sandbox), c->path);
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_err_t err = SP_OK;

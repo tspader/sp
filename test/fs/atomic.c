@@ -239,11 +239,11 @@ static sp_err_t drive(sp_fs_atomic_t* af, sp_err_t err, const test_t* it) {
 }
 
 sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
+  sp_must_ok(t, sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &dir));
 
   sp_fs_atomic_t af = sp_zero;
   sp_err_t err = drive(&af, sp_fs_atomic_open_at(&af, (sp_path_t) { .dir = dir, .sub = sp_str_view(it->path) }), it);
@@ -256,11 +256,11 @@ sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
 }
 
 sp_test_each(fs, atomic_staged, test_t, staged_tests) {
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
+  sp_must_ok(t, sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &dir));
 
   sp_path_t path = { .dir = dir, .sub = sp_str_view(it->path) };
 

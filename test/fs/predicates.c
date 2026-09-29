@@ -91,26 +91,24 @@ static const test_t tests [] = {
 sp_test_each(fs, predicates, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_mem_t mem = sp_test_arena(t);
+  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
   fs_apply_setup(t, sandbox, it->setup);
-
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
 
   sp_carr_for(it->probes, i) {
     const probe_t* probe = &it->probes[i];
     if (!probe->path) break;
-    sp_path_t path = { dir, sp_cstr_as_str(probe->path) };
+    sp_str_t label = sp_cstr_as_str(probe->path);
+    sp_path_t path = sp_path_join(mem, sandbox, label);
 
-    fs_expect_bool(t, path.sub, "exists", sp_fs_exists_at(path), probe->exists);
-    fs_expect_bool(t, path.sub, "is_regular_file", sp_fs_is_file_at(path), probe->file);
-    fs_expect_bool(t, path.sub, "is_dir", sp_fs_is_dir_at(path), probe->dir);
-    fs_expect_bool(t, path.sub, "is_symlink", sp_fs_is_symlink_at(path), probe->symlink);
-    fs_expect_bool(t, path.sub, "is_target_regular_file", sp_fs_is_target_file_at(path), probe->target_file);
-    fs_expect_bool(t, path.sub, "is_target_dir", sp_fs_is_target_dir_at(path), probe->target_dir);
-    fs_expect_kind(t, path.sub, sp_fs_get_kind_at(path), probe->kind);
+    fs_expect_bool(t, label, "exists", sp_fs_exists_at(path), probe->exists);
+    fs_expect_bool(t, label, "is_regular_file", sp_fs_is_file_at(path), probe->file);
+    fs_expect_bool(t, label, "is_dir", sp_fs_is_dir_at(path), probe->dir);
+    fs_expect_bool(t, label, "is_symlink", sp_fs_is_symlink_at(path), probe->symlink);
+    fs_expect_bool(t, label, "is_target_regular_file", sp_fs_is_target_file_at(path), probe->target_file);
+    fs_expect_bool(t, label, "is_target_dir", sp_fs_is_target_dir_at(path), probe->target_dir);
+    fs_expect_kind(t, label, sp_fs_get_kind_at(path), probe->kind);
   }
 
-  sp_sys_close(dir);
   return SP_OK;
 }

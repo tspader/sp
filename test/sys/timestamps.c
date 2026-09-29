@@ -31,13 +31,11 @@ static s64 field_ns(const sp_sys_file_meta_t* meta, field_t field) {
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
-  sp_mem_t mem = sp_test_arena(t);
-  sp_str_t path = sp_fs_join_path(mem, sp_test_dir(t), sp_str_lit("A"));
-  sp_fs_create_file_str(path, sp_str_lit("A"));
+  sp_path_t path = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("A"));
+  sp_fs_create_file_str_at(path, sp_str_lit("A"));
 
-  sp_sys_fd_t root = sp_sys_get_root(0);
   sp_sys_file_meta_t before = sp_zero;
-  sp_err_t err = sp_sys_get_path_metadata_s(root, path, &before);
+  sp_err_t err = sp_sys_get_path_metadata_s(path.dir, path.sub, &before);
   if (err == SP_ERR_SYS_UNSUPPORTED) return sp_test_skip(t, "metadata not supported");
   sp_try(err);
 
@@ -46,7 +44,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   switch (c->op) {
     case OP_WRITE: {
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-      sp_must_ok(t, sp_sys_open_s(root, path, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_APPEND, &fd));
+      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_APPEND, &fd));
       u64 n = 0;
       sp_expect_ok(t, sp_sys_write(fd, "B", 1, &n));
       sp_sys_close(fd);
@@ -56,13 +54,13 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       sp_test_skip_on_wasm();
       sp_sys_file_perms_t perms = before.perms;
       sp_sys_set_read_only(&perms, true);
-      sp_must_ok(t, sp_sys_set_file_perms_s(root, path, perms));
+      sp_must_ok(t, sp_sys_set_file_perms_s(path.dir, path.sub, perms));
       break;
     }
   }
 
   sp_sys_file_meta_t after = sp_zero;
-  sp_try(sp_sys_get_path_metadata_s(root, path, &after));
+  sp_try(sp_sys_get_path_metadata_s(path.dir, path.sub, &after));
 
   bool moved = field_ns(&before, c->field) != field_ns(&after, c->field);
   if (moved != c->moves) {
