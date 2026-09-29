@@ -189,7 +189,7 @@ static const test_t tests [] = {
       { "B", FS_SETUP_DIR },
       { "B/C" },
       { "A", FS_SETUP_DIR },
-      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "../B" },
+      { .path = "A/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "../B" },
       { "A/D" },
     },
     .dir = true,
@@ -209,7 +209,7 @@ static const test_t tests [] = {
     .setup = {
       { "A", FS_SETUP_DIR },
       { "A/B" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .dir = true,
     .path = "L",
@@ -226,7 +226,7 @@ static const test_t tests [] = {
     .setup = {
       { "A", FS_SETUP_DIR },
       { "A/B" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .dir = true,
     .path = "L/",

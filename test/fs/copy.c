@@ -135,7 +135,7 @@ static const test_t tests [] = {
     .setup = {
       { .path = "A", .content = "A" },
       { "D", FS_SETUP_DIR },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "D" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "D" },
     },
     .src = "A",
     .dst = "L/B",
@@ -360,13 +360,28 @@ static const test_t tests [] = {
     },
   },
   {
+    .name = "tree_symlink_to_dir_preserved",
+    .setup = {
+      { .path = "A/Z/F", .content = "F" },
+      { .path = "A/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "Z" },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst = "E",
+    .expect = {
+      { .path = "E/Z/F", .exists = true, .kind = SP_FS_KIND_FILE, .content = "F" },
+      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "Z" },
+      { .path = "E/L/F", .exists = true, .kind = SP_FS_KIND_FILE, .content = "F" },
+    },
+  },
+  {
     .name = "tree_symlink_replaced",
     .setup = {
       { "A", FS_SETUP_DIR },
       { .path = "A/C", .content = "C" },
       { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "C" },
       { "E", FS_SETUP_DIR },
-      { .path = "E/L", .kind = FS_SETUP_SYMLINK, .target = "../A" },
+      { .path = "E/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "../A" },
     },
     .op = OP_COPY_TREE,
     .src = "A",

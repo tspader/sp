@@ -24,7 +24,7 @@ static const test_t tests [] = {
       { "A" },
       { "B", FS_SETUP_DIR },
       { .path = "C", .kind = FS_SETUP_SYMLINK, .target = "A" },
-      { .path = "D", .kind = FS_SETUP_SYMLINK, .target = "B" },
+      { .path = "D", .kind = FS_SETUP_DIR_SYMLINK, .target = "B" },
     },
     .probes = {
       {

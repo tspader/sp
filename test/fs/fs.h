@@ -31,6 +31,7 @@ typedef enum {
   FS_SETUP_FILE,
   FS_SETUP_DIR,
   FS_SETUP_SYMLINK,
+  FS_SETUP_DIR_SYMLINK,
   FS_SETUP_FIFO,
 } fs_setup_kind_t;
 
@@ -54,7 +55,7 @@ typedef struct {
 static bool fs_setup_needs_symlinks(const fs_setup_t setup [FS_MAX_SETUP]) {
   sp_for(it, FS_MAX_SETUP) {
     if (!setup[it].path) break;
-    if (setup[it].kind == FS_SETUP_SYMLINK) return true;
+    if (setup[it].kind == FS_SETUP_SYMLINK || setup[it].kind == FS_SETUP_DIR_SYMLINK) return true;
   }
   return false;
 }
@@ -127,8 +128,10 @@ static void fs_apply_setup(sp_test_t* t, sp_str_t sandbox, const fs_setup_t setu
         err = sp_fs_create_dir(path);
         break;
       }
-      case FS_SETUP_SYMLINK: {
-        err = sp_fs_create_sym_link(sp_cstr_as_str(ent->target), path);
+      case FS_SETUP_SYMLINK:
+      case FS_SETUP_DIR_SYMLINK: {
+        sp_fs_kind_t kind = ent->kind == FS_SETUP_DIR_SYMLINK ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
+        err = sp_fs_create_sym_link(sp_cstr_as_str(ent->target), path, kind);
         break;
       }
       case FS_SETUP_FIFO: {

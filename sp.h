@@ -1471,7 +1471,7 @@ SP_API sp_err_t    sp_sys_rmdir(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_rename(sp_sys_fd_t from, const c8* pfrom, u32 lf, sp_sys_fd_t to, const c8* pto, u32 lt);
 SP_API sp_err_t    sp_sys_link(sp_sys_fd_t from, const c8* pfrom, u32 lf, sp_sys_fd_t to, const c8* pto, u32 lt);
-SP_API sp_err_t    sp_sys_symlink(const c8* from, u32 lf, sp_sys_fd_t to, const c8* pto, u32 lt);
+SP_API sp_err_t    sp_sys_symlink(const c8* from, u32 lf, sp_sys_fd_t to, const c8* pto, u32 lt, sp_fs_kind_t kind);
 SP_API sp_err_t    sp_sys_readlink(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size, u64* target_len);
 SP_API sp_err_t    sp_sys_get_path_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
@@ -1531,7 +1531,7 @@ SP_API sp_err_t    sp_sys_unlink_s(sp_sys_fd_t fd, sp_str_t path);
 SP_API sp_err_t    sp_sys_rename_s(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to);
 SP_API sp_err_t    sp_sys_chdir_s(sp_str_t path);
 SP_API sp_err_t    sp_sys_link_s(sp_sys_fd_t from_fd, sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias);
-SP_API sp_err_t    sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias);
+SP_API sp_err_t    sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias, sp_fs_kind_t kind);
 SP_API sp_err_t    sp_sys_readlink_s(sp_sys_fd_t fd, sp_str_t path, c8* buf, u64 size, sp_str_t* target);
 SP_API sp_err_t    sp_sys_set_file_perms_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_set_times_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
@@ -1570,7 +1570,7 @@ typedef struct {
   sp_err_t    (*unlink)(sp_sys_fd_t fd, const c8* path, u32 len);
   sp_err_t    (*rename)(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
   sp_err_t    (*link)(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-  sp_err_t    (*symlink)(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+  sp_err_t    (*symlink)(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len, sp_fs_kind_t kind);
   sp_err_t    (*readlink)(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size, u64* target_len);
   sp_err_t    (*get_path_metadata)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
   sp_err_t    (*get_link_metadata)(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
@@ -1645,7 +1645,7 @@ SP_API sp_err_t    sp_sys_rmdir_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_unlink_p(sp_sys_fd_t fd, const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_rename_p(sp_sys_fd_t from_fd, const c8* from, u32 from_len, sp_sys_fd_t to_fd, const c8* to, u32 to_len);
 SP_API sp_err_t    sp_sys_link_p(sp_sys_fd_t from_fd, const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
-SP_API sp_err_t    sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len);
+SP_API sp_err_t    sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len, sp_fs_kind_t kind);
 SP_API sp_err_t    sp_sys_readlink_p(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size, u64* target_len);
 SP_API sp_err_t    sp_sys_get_path_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata_p(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st);
@@ -3115,8 +3115,8 @@ SP_API sp_err_t             sp_fs_remove_file(sp_str_t path);
 SP_API sp_err_t             sp_fs_remove_file_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path);
 SP_API sp_err_t             sp_fs_create_hard_link_at(sp_path_t target, sp_path_t link_path);
-SP_API sp_err_t             sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path);
-SP_API sp_err_t             sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path);
+SP_API sp_err_t             sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path, sp_fs_kind_t kind);
+SP_API sp_err_t             sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path, sp_fs_kind_t kind);
 SP_API sp_err_t             sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
@@ -5964,8 +5964,8 @@ sp_err_t sp_sys_link(sp_sys_fd_t from, const c8* existing, u32 existing_len, sp_
   return (sp_rt.vt->link)(from, existing, existing_len, to, alias, alias_len);
 }
 
-sp_err_t sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
-  return (sp_rt.vt->symlink)(existing, existing_len, to_fd, alias, alias_len);
+sp_err_t sp_sys_symlink(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len, sp_fs_kind_t kind) {
+  return (sp_rt.vt->symlink)(existing, existing_len, to_fd, alias, alias_len, kind);
 }
 
 sp_err_t sp_sys_readlink(sp_sys_fd_t fd, const c8* path, u32 len, c8* buf, u64 size, u64* target_len) {
@@ -10795,7 +10795,14 @@ sp_err_t sp_sys_link_s(sp_sys_fd_t from_fd, sp_str_t existing, sp_sys_fd_t to_fd
 ////////////////////
 // SP_SYS_SYMLINK //
 ////////////////////
-sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len) {
+sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_fd, const c8* alias, u32 alias_len, sp_fs_kind_t kind) {
+  switch (kind) {
+    case SP_FS_KIND_FILE:
+    case SP_FS_KIND_DIR:     break;
+    case SP_FS_KIND_NONE:
+    case SP_FS_KIND_SYMLINK: return SP_ERR_SYS_INVALID;
+  }
+
 #if defined(SP_WIN32)
   sp_str_t target = sp_str(existing, existing_len);
   sp_str_t link = sp_str(alias, alias_len);
@@ -10816,26 +10823,7 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
     (wtarget.len >= 3 && wt[1] == ':' && wt[2] == '\\') ||
     (wtarget.len >= 2 && wt[0] == '\\' && wt[1] == '\\');
 
-  u32 dir_option = SP_NT_FILE_NON_DIRECTORY_FILE;
-  {
-    c8 probe_buf [SP_PATH_MAX];
-    sp_str_t probe = target;
-    if (!absolute) {
-      u32 parent_len = 0;
-      sp_for(it, link.len) {
-        if (link.data[it] == '/' || link.data[it] == '\\') parent_len = (u32)it + 1;
-      }
-      if ((u64)parent_len + target.len <= sizeof(probe_buf)) {
-        sp_mem_copy(probe_buf, link.data, parent_len);
-        sp_mem_copy(probe_buf + parent_len, target.data, target.len);
-        probe = sp_str(probe_buf, parent_len + target.len);
-      }
-    }
-    sp_sys_file_meta_t meta = sp_zero;
-    if (!sp_sys_file_meta_from_nt_path(to_fd, probe, &meta, true) && meta.kind == SP_FS_KIND_DIR) {
-      dir_option = SP_NT_FILE_DIRECTORY_FILE;
-    }
-  }
+  u32 dir_option = kind == SP_FS_KIND_DIR ? SP_NT_FILE_DIRECTORY_FILE : SP_NT_FILE_NON_DIRECTORY_FILE;
 
   sp_wide_str_t stored = wtarget;
   sp_sys_nt_path_t nt_path = sp_zero;
@@ -10924,8 +10912,8 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_fd_t to_f
 #endif
 }
 
-sp_err_t sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias) {
-  return sp_sys_symlink(existing.data, existing.len, to_fd, alias.data, alias.len);
+sp_err_t sp_sys_symlink_s(sp_str_t existing, sp_sys_fd_t to_fd, sp_str_t alias, sp_fs_kind_t kind) {
+  return sp_sys_symlink(existing.data, existing.len, to_fd, alias.data, alias.len, kind);
 }
 
 /////////////////////
@@ -20563,12 +20551,12 @@ sp_err_t sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path) {
   return sp_fs_create_hard_link_at(sp_path_at_cwd(target), sp_path_at_cwd(link_path));
 }
 
-sp_err_t sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path) {
-  return sp_sys_symlink_s(target, link_path.dir, link_path.sub);
+sp_err_t sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path, sp_fs_kind_t kind) {
+  return sp_sys_symlink_s(target, link_path.dir, link_path.sub, kind);
 }
 
-sp_err_t sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path) {
-  return sp_fs_create_sym_link_at(target, sp_path_at_cwd(link_path));
+sp_err_t sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path, sp_fs_kind_t kind) {
+  return sp_fs_create_sym_link_at(target, sp_path_at_cwd(link_path), kind);
 }
 
 sp_err_t sp_fs_remove_file_at(sp_path_t path) {
@@ -21038,15 +21026,16 @@ SP_PRIVATE sp_err_t sp_fs_copy_link_at(sp_path_t from, sp_path_t to, sp_fs_atomi
   c8 buf [SP_PATH_MAX];
   sp_str_t target = sp_zero;
   sp_try(sp_sys_readlink_s(from.dir, from.sub, buf, sizeof(buf), &target));
+  sp_fs_kind_t kind = sp_fs_get_target_kind_at(from) == SP_FS_KIND_DIR ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
 
   switch (mode) {
     case SP_FS_ATOMIC_REPLACE: {
       sp_err_t err = sp_sys_unlink_s(to.dir, to.sub);
       if (err && err != SP_ERR_SYS_NOT_FOUND) return err;
-      return sp_sys_symlink_s(target, to.dir, to.sub);
+      return sp_sys_symlink_s(target, to.dir, to.sub, kind);
     }
     case SP_FS_ATOMIC_EXCLUSIVE: {
-      return sp_sys_symlink_s(target, to.dir, to.sub);
+      return sp_sys_symlink_s(target, to.dir, to.sub, kind);
     }
   }
   SP_UNREACHABLE_RETURN(SP_OK);

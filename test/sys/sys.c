@@ -3,7 +3,7 @@
 static bool sys_case_wants_symlinks(sys_case_t* c) {
   sp_carr_for(c->setup, it) {
     if (!c->setup[it].path) break;
-    if (c->setup[it].kind == SYS_SETUP_SYMLINK) return true;
+    if (c->setup[it].kind == SYS_SETUP_SYMLINK || c->setup[it].kind == SYS_SETUP_DIR_SYMLINK) return true;
   }
   return false;
 }
@@ -53,9 +53,11 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
         sp_fs_create_dir(path);
         break;
       }
-      case SYS_SETUP_SYMLINK: {
+      case SYS_SETUP_SYMLINK:
+      case SYS_SETUP_DIR_SYMLINK: {
         sp_str_t target = sp_cstr_as_str(ent->target);
-        if (sp_fs_create_sym_link(target, path)) {
+        sp_fs_kind_t kind = ent->kind == SYS_SETUP_DIR_SYMLINK ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
+        if (sp_fs_create_sym_link(target, path, kind)) {
           sp_test_fail(t, "failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           goto done;
         }

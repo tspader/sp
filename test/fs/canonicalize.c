@@ -120,7 +120,7 @@ static const test_t tests [] = {
     .name = "resolves_symlink_to_dir",
     .setup = {
       { "A", FS_SETUP_DIR },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .input = "L",
     .expect = {

@@ -14,6 +14,7 @@ typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
   const c8* target;
+  sp_fs_kind_t kind;
   const c8* link;
   sp_err_t err;
   fs_expected_path_t expect [FS_MAX_PATHS];
@@ -75,6 +76,7 @@ static const sym_t sym_links [] = {
       { .path = "A", .content = "A" },
     },
     .target = "A",
+    .kind = SP_FS_KIND_FILE,
     .link = "L",
     .expect = {
       { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
@@ -84,13 +86,25 @@ static const sym_t sym_links [] = {
   {
     .name = "directory",
     .setup = {
-      { "A", FS_SETUP_DIR },
+      { .path = "A/F", .content = "F" },
     },
     .target = "A",
+    .kind = SP_FS_KIND_DIR,
     .link = "L",
     .expect = {
       { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
       { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "A" },
+      { .path = "L/F", .exists = true, .kind = SP_FS_KIND_FILE, .content = "F" },
+    },
+  },
+  {
+    .name = "dangling",
+    .target = "A",
+    .kind = SP_FS_KIND_FILE,
+    .link = "L",
+    .expect = {
+      { .path = "A" },
+      { .path = "L", .target = "A" },
     },
   },
   {
@@ -100,6 +114,7 @@ static const sym_t sym_links [] = {
       { .path = "B", .content = "B" },
     },
     .target = "A",
+    .kind = SP_FS_KIND_FILE,
     .link = "B",
     .err = SP_ERR_SYS_EXISTS,
     .expect = {
@@ -144,7 +159,7 @@ sp_test_each(fs, sym_link, sym_t, sym_links) {
   sp_must_ok(t, sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &dir));
 
   sp_path_t link = { .dir = dir, .sub = sp_cstr_as_str(it->link) };
-  sp_expect_err_eq(t, sp_fs_create_sym_link_at(sp_cstr_as_str(it->target), link), it->err);
+  sp_expect_err_eq(t, sp_fs_create_sym_link_at(sp_cstr_as_str(it->target), link, it->kind), it->err);
   sp_sys_close(dir);
 
   fs_expect_paths(t, sandbox, it->expect);

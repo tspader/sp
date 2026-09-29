@@ -73,7 +73,7 @@ static const test_t tests [] = {
     .setup = {
       { "R/A", FS_SETUP_DIR },
       { "R/A/B" },
-      { .path = "R/L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "R/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .enter = { { "L", SP_ERR_SYS_LOOP } },
     .expect = {

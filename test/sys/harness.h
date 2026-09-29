@@ -15,6 +15,7 @@ typedef enum {
   SYS_SETUP_FILE,
   SYS_SETUP_DIR,
   SYS_SETUP_SYMLINK,
+  SYS_SETUP_DIR_SYMLINK,
 } sys_setup_kind_t;
 
 typedef struct {

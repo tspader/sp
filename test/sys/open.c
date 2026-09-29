@@ -261,7 +261,7 @@ static const sys_case_t sys_open_dir_cases [] = {
     .name = "follows_dir_symlink",
     .setup = {
       { .path = "dir", .kind = SYS_SETUP_DIR },
-      { .path = "link", .kind = SYS_SETUP_SYMLINK, .target = "dir" },
+      { .path = "link", .kind = SYS_SETUP_DIR_SYMLINK, .target = "dir" },
     },
     .steps = {
       { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "link" } },
@@ -271,7 +271,7 @@ static const sys_case_t sys_open_dir_cases [] = {
     .name = "nofollow_refuses_dir_symlink",
     .setup = {
       { .path = "dir", .kind = SYS_SETUP_DIR },
-      { .path = "link", .kind = SYS_SETUP_SYMLINK, .target = "dir" },
+      { .path = "link", .kind = SYS_SETUP_DIR_SYMLINK, .target = "dir" },
     },
     .steps = {
       { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "link", .flags = SP_SYS_OPEN_DIR_NO_FOLLOW, .err = SP_ERR_SYS_LOOP } },

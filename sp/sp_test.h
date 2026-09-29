@@ -1046,7 +1046,7 @@ static sp_err_t sp_test_probe_symlinks(void* user) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   sp_str_t link = sp_fs_join_path(s.mem, runner->dir_root, sp_str_lit("L"));
   sp_err_t err = sp_fs_create_dir(runner->dir_root);
-  if (!err) err = sp_fs_create_sym_link(sp_str_lit("A"), link);
+  if (!err) err = sp_fs_create_sym_link(sp_str_lit("A"), link, SP_FS_KIND_FILE);
   if (!err) sp_fs_remove_file(link);
   sp_mem_end_scratch(s);
   return err;

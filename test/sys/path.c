@@ -32,6 +32,7 @@ typedef struct {
   const c8* dir;
   const c8* link;
   const c8* target;
+  bool dir_link;
   const c8* exists;
   const c8* not_exists;
   sp_fs_kind_t kind;
@@ -87,6 +88,7 @@ static const test_t tests [] = {
     .dir = "dir",
     .link = "lnk",
     .target = "dir",
+    .dir_link = true,
     .exists = "dir",
     .not_exists = "lnk",
   },
@@ -116,6 +118,7 @@ static const test_t tests [] = {
     .dir = "dir",
     .link = "lnk",
     .target = "dir",
+    .dir_link = true,
     .exists = "lnk",
   },
   {
@@ -168,6 +171,7 @@ static const test_t slash_tests [] = {
     .dir = "dir",
     .link = "lnk",
     .target = "dir",
+    .dir_link = true,
     .exists = "dir",
     .not_exists = "lnk",
   },
@@ -209,6 +213,7 @@ static const test_t slash_tests [] = {
     .dir = "dir",
     .link = "lnk",
     .target = "dir",
+    .dir_link = true,
     .exists = "dir",
   },
   {
@@ -277,6 +282,7 @@ static const test_t slash_tests [] = {
     .dir = "dir",
     .link = "lnk",
     .target = "dir",
+    .dir_link = true,
     .kind = SP_FS_KIND_SYMLINK,
   },
   {
@@ -326,6 +332,7 @@ static const test_t slash_tests [] = {
     .dir = "dir",
     .link = "lnk",
     .target = "dir",
+    .dir_link = true,
     .kind = SP_FS_KIND_SYMLINK,
   },
 };
@@ -378,7 +385,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_str_t sandbox = sp_test_dir(t);
   if (c->file) sp_must_ok(t, sp_fs_create_file_str(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A")));
   if (c->dir)  sp_must_ok(t, sp_fs_create_dir(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->dir))));
-  if (c->link) sp_must_ok(t, sp_fs_create_sym_link(sp_cstr_as_str(c->target), sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->link))));
+  if (c->link) sp_must_ok(t, sp_fs_create_sym_link(sp_cstr_as_str(c->target), sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->link)), c->dir_link ? SP_FS_KIND_DIR : SP_FS_KIND_FILE));
 
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
   sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));

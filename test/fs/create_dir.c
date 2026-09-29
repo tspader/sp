@@ -76,7 +76,7 @@ static const test_t tests [] = {
     .name = "destination_is_symlink_to_directory",
     .setup = {
       { "A", FS_SETUP_DIR },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .target = "L",
     .expect = {
@@ -90,7 +90,7 @@ static const test_t tests [] = {
     .name = "destination_under_symlink_to_directory",
     .setup = {
       { "A", FS_SETUP_DIR },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .target = "L/B",
     .expect = {
