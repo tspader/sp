@@ -20,6 +20,7 @@ typedef struct {
   const c8* dir;
   bool relative;
   u32 bulk;
+  bool rescan;
   entry_t expect [FS_MAX_PATHS];
 } test_t;
 
@@ -85,7 +86,34 @@ static const test_t tests [] = {
     .name = "refills_across_batches",
     .bulk = 96,
   },
+  {
+    .name = "rescan_restarts_listing",
+    .setup = {
+      { "A" },
+    },
+    .rescan = true,
+    .expect = {
+      { "A", SP_FS_KIND_FILE },
+    },
+  },
 };
+
+static void expect_listing(sp_test_t* t, sp_fs_dir_it_t* iter, fs_match_t* matches, u32 n) {
+  sp_for(m, n) {
+    matches[m].seen = false;
+  }
+
+  sp_err_t walk = SP_OK;
+  while (true) {
+    sp_fs_dir_entry_t entry = sp_zero;
+    walk = sp_fs_dir_it_next(iter, &entry);
+    if (walk) break;
+    if (!entry.name.data) break;
+    fs_match(t, matches, n, entry.name, entry.kind);
+  }
+  sp_expect_ok(t, walk);
+  fs_match_finish(t, matches, n);
+}
 
 sp_test_each(fs, dir, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
@@ -120,18 +148,13 @@ sp_test_each(fs, dir, test_t, tests) {
   sp_expect_ok(t, open_err);
 
   if (!open_err) {
-    sp_err_t walk = SP_OK;
-    while (true) {
-      sp_fs_dir_entry_t entry = sp_zero;
-      walk = sp_fs_dir_it_next(&iter, &entry);
-      if (walk) break;
-      if (!entry.name.data) break;
-      fs_match(t, matches, n, entry.name, entry.kind);
+    expect_listing(t, &iter, matches, n);
+    if (it->rescan) {
+      iter.rescan = true;
+      expect_listing(t, &iter, matches, n);
     }
-    sp_expect_ok(t, walk);
     sp_expect_ok(t, sp_fs_dir_it_close(&iter));
   }
-  fs_match_finish(t, matches, n);
 
   if (sandbox_fd != SP_SYS_INVALID_FD) sp_sys_close(sandbox_fd);
   return SP_OK;
