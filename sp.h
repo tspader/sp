@@ -3104,6 +3104,7 @@ SP_API sp_tm_epoch_t        sp_fs_get_mod_time(sp_str_t path);
 SP_API sp_tm_epoch_t        sp_fs_get_mod_time_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_create_dir(sp_str_t path);
 SP_API sp_err_t             sp_fs_create_dir_at(sp_path_t path);
+SP_API sp_err_t             sp_fs_create_parent_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_create_file(sp_str_t path);
 SP_API sp_err_t             sp_fs_create_file_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_create_file_str(sp_str_t path, sp_str_t str);
@@ -20525,8 +20526,6 @@ sp_err_t sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   return sp_io_read_file_at(mem, sp_path_at_cwd(path), content);
 }
 
-SP_PRIVATE sp_err_t sp_fs_create_parent_at(sp_path_t path);
-
 SP_PRIVATE sp_err_t sp_fs_mkdir_at(sp_sys_fd_t dir, sp_str_t path) {
   sp_err_t err = sp_sys_mkdir_s(dir, path, sp_sys_default_dir_perms);
   if (!err || err == SP_ERR_SYS_NOT_FOUND) return err;
@@ -20949,7 +20948,7 @@ SP_PRIVATE sp_err_t sp_fs_temp_name(sp_str_t dir, sp_str_t name, c8 buf [SP_PATH
   return SP_OK;
 }
 
-SP_PRIVATE sp_err_t sp_fs_create_parent_at(sp_path_t path) {
+SP_API sp_err_t sp_fs_create_parent_at(sp_path_t path) {
   sp_str_t parent = sp_fs_parent_path(path.sub);
   if (sp_str_equal(parent, sp_fs_trim_path(path.sub))) return SP_OK;
   sp_err_t err = sp_fs_create_dir_at(sp_path_at(path.dir, parent));
