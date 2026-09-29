@@ -372,21 +372,16 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     return sp_test_skip(t, "posix paths only");
   }
 
+  if (c->link) sp_test_skip_without_symlinks();
+
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);
+  if (c->file) sp_must_ok(t, sp_fs_create_file_str(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A")));
+  if (c->dir)  sp_must_ok(t, sp_fs_create_dir(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->dir))));
+  if (c->link) sp_must_ok(t, sp_fs_create_sym_link(sp_cstr_as_str(c->target), sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->link))));
+
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
   sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));
-
-  if (c->file) sp_fs_create_file_str(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A"));
-  if (c->dir)  sp_fs_create_dir(sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->dir)));
-  if (c->link) {
-    sp_str_t target = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->target));
-    sp_str_t link = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->link));
-    if (sp_fs_create_sym_link(target, link)) {
-      sp_sys_close(sandbox_fd);
-      return sp_test_skip(t, "symlinks not available");
-    }
-  }
 
   sp_str_t path = sp_cstr_as_str(c->path);
   if (c->path_kind == PATH_LONG) path = long_path(mem, c->path);

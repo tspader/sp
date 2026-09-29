@@ -131,7 +131,7 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, create_dir, test_t, tests) {
-  skip_if_symlinks_needed(t, it->setup);
+  if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_str_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);

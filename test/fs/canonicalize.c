@@ -158,7 +158,7 @@ static const test_t tests [] = {
 
 sp_test_each(fs, canonicalize, test_t, tests) {
   sp_test_skip_on_wasm()
-  skip_if_symlinks_needed(t, it->setup);
+  if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);

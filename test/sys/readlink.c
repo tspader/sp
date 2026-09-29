@@ -46,16 +46,14 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case SETUP_LINK: {
-      if (sp_fs_create_sym_link(sp_cstr_as_str(c->target), path)) {
-        return sp_test_skip(t, "symlinks not available");
-      }
+      sp_test_skip_without_symlinks();
+      sp_must_ok(t, sp_fs_create_sym_link(sp_cstr_as_str(c->target), path));
       break;
     }
     case SETUP_LINK_ABSOLUTE: {
+      sp_test_skip_without_symlinks();
       expected = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(c->target));
-      if (sp_fs_create_sym_link(expected, path)) {
-        return sp_test_skip(t, "symlinks not available");
-      }
+      sp_must_ok(t, sp_fs_create_sym_link(expected, path));
       break;
     }
   }

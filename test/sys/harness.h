@@ -59,8 +59,6 @@ typedef struct {
   sys_expect_t expect [SYS_CASE_MAX_EXPECT];
 } sys_case_t;
 
-static sp_test_once_t sys_symlink_probe = sp_zero;
-
 sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c);
 
 #endif

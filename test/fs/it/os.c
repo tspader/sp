@@ -105,7 +105,7 @@ static const test_t tests [] = {
     .setup = {
       { "R/A", FS_SETUP_DIR },
       { "R/A/B" },
-      { .path = "R/L", .kind = FS_SETUP_SYMLINK, .target = "R/A" },
+      { .path = "R/L", .kind = FS_SETUP_SYMLINK, .target = "A" },
     },
     .recursive = true,
     .expect = {
@@ -161,7 +161,7 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, it, test_t, tests) {
-  skip_if_symlinks_needed(t, it->setup);
+  if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);

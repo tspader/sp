@@ -1,21 +1,5 @@
 #include "harness.h"
 
-static sp_err_t sys_probe_symlinks(void* user) {
-  sp_str_t dir = *(sp_str_t*)user;
-
-  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-  sp_str_t target = sp_fs_join_path(scratch.mem, dir, sp_str_lit("probe_target"));
-  sp_str_t link = sp_fs_join_path(scratch.mem, dir, sp_str_lit("probe_link"));
-
-  sp_fs_create_file(target);
-  sp_err_t err = sp_fs_create_sym_link(target, link);
-  if (!err) sp_fs_remove_file(link);
-  sp_fs_remove_file(target);
-
-  sp_mem_end_scratch(scratch);
-  return err;
-}
-
 static bool sys_case_wants_symlinks(sys_case_t* c) {
   sp_carr_for(c->setup, it) {
     if (!c->setup[it].path) break;
@@ -49,13 +33,10 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
   sp_carr_for(fds, it) fds[it] = SP_SYS_INVALID_FD;
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
 
+  if (sys_case_wants_symlinks(c)) sp_test_skip_without_symlinks();
+
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t sandbox = sp_test_dir(t);
-
-  if (sys_case_wants_symlinks(c) && sp_test_once(&sys_symlink_probe, sys_probe_symlinks, &sandbox)) {
-    return sp_test_skip(t, "symlinks not available");
-  }
-
   sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd));
 
   sp_carr_for(c->setup, it) {
@@ -73,7 +54,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
         break;
       }
       case SYS_SETUP_SYMLINK: {
-        sp_str_t target = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(ent->target));
+        sp_str_t target = sp_cstr_as_str(ent->target);
         if (sp_fs_create_sym_link(target, path)) {
           sp_test_fail(t, "failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           goto done;

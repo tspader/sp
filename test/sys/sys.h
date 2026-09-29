@@ -174,7 +174,7 @@ static bool sys_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_st
         break;
       }
       case SYS_SETUP_SYMLINK: {
-        sp_str_t target = sp_fs_join_path(fm->mem, sandbox, sp_cstr_as_str(ent->target));
+        sp_str_t target = sp_cstr_as_str(ent->target);
         if (sp_fs_create_sym_link(target, path) != SP_OK) {
           SP_TEST_REPORT("failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();

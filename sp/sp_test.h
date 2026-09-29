@@ -369,6 +369,8 @@ typedef struct {
   #define sp_test_skip_on_linux()
 #endif
 
+#define sp_test_skip_without_symlinks() if (!sp_test_symlinks_supported(t)) return sp_test_skip(t, "symlinks not available");
+
 SP_API sp_err_t    sp_test_skip(sp_test_t* t, const c8* fmt, ...);
 SP_API void        sp_test_fail(sp_test_t* t, const c8* fmt, ...);
 SP_API sp_str_t    sp_test_get_name(sp_test_t* t);
@@ -407,6 +409,8 @@ typedef struct {
 
 SP_TYPEDEF_FN(sp_err_t, sp_test_once_fn_t, void* user);
 SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user);
+
+SP_API bool        sp_test_symlinks_supported(sp_test_t* t);
 
 
 typedef enum {
@@ -734,6 +738,7 @@ struct sp_test_runner_t {
   sp_da(const c8*) skipped;
   sp_da(const c8*) updated;
   sp_str_t dir_root;
+  sp_test_once_t symlinks;
   sp_str_t golden_root;
   bool update;
   sp_test_keep_t keep;
@@ -1034,6 +1039,21 @@ sp_err_t sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user) {
     }
   }
   return once->err;
+}
+
+static sp_err_t sp_test_probe_symlinks(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_str_t link = sp_fs_join_path(s.mem, runner->dir_root, sp_str_lit("L"));
+  sp_err_t err = sp_fs_create_dir(runner->dir_root);
+  if (!err) err = sp_fs_create_sym_link(sp_str_lit("A"), link);
+  if (!err) sp_fs_remove_file(link);
+  sp_mem_end_scratch(s);
+  return err;
+}
+
+bool sp_test_symlinks_supported(sp_test_t* t) {
+  return !sp_test_once(&t->runner->symlinks, sp_test_probe_symlinks, t->runner);
 }
 
 

@@ -349,14 +349,14 @@ static const test_t tests [] = {
     .setup = {
       { "A", FS_SETUP_DIR },
       { .path = "A/C", .content = "C" },
-      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "A/C" },
+      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "C" },
     },
     .op = OP_COPY_TREE,
     .src = "A",
     .dst = "E",
     .expect = {
       { .path = "E/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "A/C" },
+      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "C" },
     },
   },
   {
@@ -364,15 +364,15 @@ static const test_t tests [] = {
     .setup = {
       { "A", FS_SETUP_DIR },
       { .path = "A/C", .content = "C" },
-      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "A/C" },
+      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "C" },
       { "E", FS_SETUP_DIR },
-      { .path = "E/L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "E/L", .kind = FS_SETUP_SYMLINK, .target = "../A" },
     },
     .op = OP_COPY_TREE,
     .src = "A",
     .dst = "E",
     .expect = {
-      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "A/C" },
+      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "C" },
     },
   },
   {
@@ -380,9 +380,9 @@ static const test_t tests [] = {
     .setup = {
       { "A", FS_SETUP_DIR },
       { .path = "A/C", .content = "C" },
-      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "A/C" },
+      { .path = "A/L", .kind = FS_SETUP_SYMLINK, .target = "C" },
       { .path = "E/F", .content = "F" },
-      { .path = "E/L", .kind = FS_SETUP_SYMLINK, .target = "E/F" },
+      { .path = "E/L", .kind = FS_SETUP_SYMLINK, .target = "F" },
     },
     .op = OP_COPY_TREE,
     .mode = SP_FS_ATOMIC_EXCLUSIVE,
@@ -390,7 +390,7 @@ static const test_t tests [] = {
     .dst = "E",
     .err = SP_ERR_SYS_EXISTS,
     .expect = {
-      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "E/F" },
+      { .path = "E/L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "F" },
     },
   },
   {
@@ -514,7 +514,7 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, copy, test_t, tests) {
-  skip_if_symlinks_needed(t, it->setup);
+  if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_str_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
