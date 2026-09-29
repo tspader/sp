@@ -73,6 +73,7 @@ static sp_err_t child_pass(sp_test_t* t);
 static sp_err_t child_fail(sp_test_t* t);
 static sp_err_t child_leak(sp_test_t* t);
 static sp_err_t child_skip(sp_test_t* t);
+static sp_err_t child_golden(sp_test_t* t);
 static sp_err_t child_each(sp_test_t* t, const void* arg);
 
 static const sp_test_entry_t child_entries [] = {
@@ -95,6 +96,10 @@ static const sp_test_entry_t child_entries [] = {
   {
     .kind = SP_TEST_ENTRY_TEST,
     .decl = { .suite = "child", .name = "declared", .kind = SP_TEST_DECL_FN, .fn = child_pass, .keep = true },
+  },
+  {
+    .kind = SP_TEST_ENTRY_TEST,
+    .decl = { .suite = "child", .name = "golden", .kind = SP_TEST_DECL_FN, .fn = child_golden },
   },
   {
     .kind = SP_TEST_ENTRY_TEST,
@@ -141,6 +146,11 @@ static sp_err_t child_leak(sp_test_t* t) {
 static sp_err_t child_skip(sp_test_t* t) {
   sp_must_ok(t, child_touch(t));
   return sp_test_skip(t, "S");
+}
+
+static sp_err_t child_golden(sp_test_t* t) {
+  sp_test_golden(t, sp_str_lit("G"), sp_str_lit("A"), sp_os_env_get(sp_str_lit("SP_TEST_CHILD_FILE")), (u32)__LINE__);
+  return SP_OK;
 }
 
 static sp_err_t child_each(sp_test_t* t, const void* arg) {
