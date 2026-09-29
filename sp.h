@@ -1538,6 +1538,7 @@ SP_API sp_err_t    sp_sys_set_times_s(sp_sys_fd_t fd, sp_str_t path, sp_sys_time
 SP_API sp_err_t    sp_sys_dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out);
 SP_API sp_err_t    sp_sys_dir_it_read(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf);
 SP_API sp_err_t    sp_sys_dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out);
+SP_API sp_err_t    sp_sys_dir_it_rewind(sp_sys_dir_it_t* it);
 SP_API sp_err_t    sp_sys_dir_it_close(sp_sys_dir_it_t* it);
 SP_API bool        sp_sys_is_read_only(sp_sys_file_perms_t perms);
 SP_API void        sp_sys_set_read_only(sp_sys_file_perms_t* perms, bool read_only);
@@ -1620,6 +1621,7 @@ typedef struct {
   sp_err_t    (*dir_it_open)(sp_sys_fd_t fd, sp_sys_dir_it_t* out);
   sp_err_t    (*dir_it_read)(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf);
   sp_err_t    (*dir_it_parse)(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out);
+  sp_err_t    (*dir_it_rewind)(sp_sys_dir_it_t* it);
   sp_err_t    (*dir_it_close)(sp_sys_dir_it_t* it);
 } sp_sys_vtable_t;
 
@@ -1695,6 +1697,7 @@ SP_API sp_err_t    sp_sys_chdir_p(const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_dir_it_open_p(sp_sys_fd_t fd, sp_sys_dir_it_t* out);
 SP_API sp_err_t    sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf);
 SP_API sp_err_t    sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out);
+SP_API sp_err_t    sp_sys_dir_it_rewind_p(sp_sys_dir_it_t* it);
 SP_API sp_err_t    sp_sys_dir_it_close_p(sp_sys_dir_it_t* it);
 
 SP_API const sp_sys_vtable_t  sp_sys_vtable_platform;
@@ -3139,10 +3142,11 @@ SP_API sp_path_t            sp_path_parent(sp_mem_t mem, sp_path_t path);
   A filesystem iterator
 
   sp_sys_dir_it_t is the OS level iteration state (usually, just the handle to
-  the top level directory, but on WASM also a cookie and on macOS a DIR*). The
-  syscalls are strictly about answering:
+  the top level directory, but on WASM also a cookie, on Windows a pending
+  restart, and on macOS a DIR*). The syscalls are strictly about answering:
   - Asking the OS fill a buffer with the next N entries for the handle
   - Parsing those opaque bytes into entries
+  - Rewinding the handle to the first entry
 
   That can be driven however you want! There's no concept of the "next" entry,
   traversing into child directories, or buffer ownership. Syscalls.
@@ -5792,6 +5796,7 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .dir_it_open            = sp_sys_dir_it_open_p,
   .dir_it_read            = sp_sys_dir_it_read_p,
   .dir_it_parse           = sp_sys_dir_it_parse_p,
+  .dir_it_rewind          = sp_sys_dir_it_rewind_p,
   .dir_it_close           = sp_sys_dir_it_close_p,
 };
 
@@ -6187,6 +6192,10 @@ sp_err_t sp_sys_dir_it_read(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
 
 sp_err_t sp_sys_dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out) {
   return (sp_rt.vt->dir_it_parse)(it, buf, cursor, out);
+}
+
+sp_err_t sp_sys_dir_it_rewind(sp_sys_dir_it_t* it) {
+  return (sp_rt.vt->dir_it_rewind)(it);
 }
 
 sp_err_t sp_sys_dir_it_close(sp_sys_dir_it_t* it) {
@@ -13878,6 +13887,8 @@ sp_err_t sp_sys_dir_it_open_p(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
 sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = 0;
 #if defined(SP_WIN32)
+  u8 restart = (u8)it->state;
+  it->state = 0;
   sp_nt_io_status_block_t iosb = sp_zero;
   sp_nt_status_t status = SP_NT(NtQueryDirectoryFile)(
     (void*)(intptr_t)it->fd,
@@ -13885,7 +13896,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
     &iosb,
     buf->data, (u32)(buf->capacity - SP_SYS_DIR_WIN32_SCRATCH),
     SP_NT_FILE_DIRECTORY_INFORMATION,
-    0, SP_NULLPTR, 0);
+    0, SP_NULLPTR, restart);
   if (status == SP_NT_STATUS_NO_MORE_FILES) return SP_OK;
   if (status == SP_NT_STATUS_NO_SUCH_FILE) return SP_OK;
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
@@ -13975,6 +13986,23 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
   return SP_OK;
 #else
   #error "sp_sys_dir_it_parse"
+#endif
+}
+
+sp_err_t sp_sys_dir_it_rewind_p(sp_sys_dir_it_t* it) {
+#if defined(SP_WIN32)
+  it->state = true;
+  return SP_OK;
+#elif defined(SP_LINUX)
+  return sp_sys_lseek(it->fd, 0, SP_IO_SEEK_SET, SP_NULLPTR);
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  rewinddir((DIR*)(intptr_t)it->state);
+  return SP_OK;
+#elif defined(SP_WASM)
+  it->state = (s64)__WASI_DIRCOOKIE_START;
+  return SP_OK;
+#else
+  #error "sp_sys_dir_it_rewind"
 #endif
 }
 
