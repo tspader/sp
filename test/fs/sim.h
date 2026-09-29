@@ -8,6 +8,7 @@
 #define SIM_MAX_OPENS 4
 #define SIM_MAX_REMOVED 8
 #define SIM_MAX_REMOVED_PATH 64
+#define SIM_MAX_READS 32
 
 typedef enum {
   SIM_OP_UNLINK,
@@ -27,12 +28,14 @@ typedef struct {
   sp_err_t it_open;
   sp_err_t read;
   sp_err_t rmdir;
+  u32 batch;
   sim_entry_t entries [SIM_MAX_ENTRIES];
 } sim_dir_t;
 
 typedef struct {
   const sim_dir_t* dir;
-  bool served;
+  u32 position;
+  u32 listed [SIM_MAX_ENTRIES];
 } sim_open_t;
 
 typedef struct {
@@ -42,6 +45,7 @@ typedef struct {
   u32 fd_closes;
   u32 rmdirs;
   u32 nofollow;
+  u32 reads;
 } sim_count_t;
 
 typedef struct {
@@ -55,6 +59,7 @@ typedef struct {
   sim_open_t opened [SIM_MAX_OPENS];
   sim_removed_t removed [SIM_MAX_REMOVED];
   u32 num_removed;
+  bool gone [SIM_MAX_DIRS][SIM_MAX_ENTRIES];
   sp_sys_vtable_t vt;
   const sp_sys_vtable_t* saved;
 } sim_t;

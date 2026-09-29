@@ -26,15 +26,6 @@ static const sim_entry_t* find_entry(sp_str_t path) {
   return SP_NULLPTR;
 }
 
-static u32 dir_len(const sim_dir_t* dir) {
-  u32 n = 0;
-  sp_carr_for(dir->entries, it) {
-    if (!dir->entries[it].name) break;
-    n++;
-  }
-  return n;
-}
-
 static s64 slot_of(sp_sys_fd_t fd) {
   return (s64)fd - FD_BASE;
 }
@@ -52,6 +43,10 @@ static void record(sp_str_t path, sim_op_t op) {
   sim_removed_t* out = &active->removed[active->num_removed++];
   sp_str_copy_to(path, out->path, SIM_MAX_REMOVED_PATH);
   out->op = op;
+
+  const sim_dir_t* dir = find_dir(sp_fs_parent_path(path));
+  const sim_entry_t* entry = find_entry(path);
+  if (entry) active->gone[dir - active->dirs][entry - dir->entries] = true;
 }
 
 static sp_err_t open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
@@ -84,15 +79,29 @@ static sp_err_t dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
 }
 
 static sp_err_t dir_it_read(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
+  active->count.reads++;
+  if (active->count.reads > SIM_MAX_READS) return SP_ERR_SYS_TIMED_OUT;
   sim_open_t* slot = &active->opened[it->state];
-  if (slot->dir->read) return slot->dir->read;
-  buf->len = slot->served ? 0 : dir_len(slot->dir);
-  slot->served = true;
+  const sim_dir_t* dir = slot->dir;
+  if (dir->read) return dir->read;
+
+  u32 batch = dir->batch ? dir->batch : SIM_MAX_ENTRIES;
+  u32 position = 0;
+  buf->len = 0;
+  sp_carr_for(dir->entries, e) {
+    if (!dir->entries[e].name) break;
+    if (active->gone[dir - active->dirs][e]) continue;
+    if (position++ < slot->position) continue;
+    if (buf->len == batch) break;
+    slot->listed[buf->len++] = e;
+  }
+  slot->position += (u32)buf->len;
   return SP_OK;
 }
 
 static sp_err_t dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cursor, sp_sys_dir_entry_t* out) {
-  const sim_entry_t* entry = &active->opened[it->state].dir->entries[*cursor];
+  sim_open_t* slot = &active->opened[it->state];
+  const sim_entry_t* entry = &slot->dir->entries[slot->listed[*cursor]];
   *cursor += 1;
 
   u32 len = (u32)sp_cstr_len(entry->name);
@@ -103,6 +112,11 @@ static sp_err_t dir_it_parse(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* cur
   out->name = sp_ptr_cast(const c8*, buf->data);
   out->len = len;
   out->kind = entry->kind;
+  return SP_OK;
+}
+
+static sp_err_t dir_it_rewind(sp_sys_dir_it_t* it) {
+  active->opened[it->state].position = 0;
   return SP_OK;
 }
 
@@ -161,6 +175,7 @@ void sim_begin(sim_t* sim, const sim_dir_t* dirs) {
   sim->vt.dir_it_open = dir_it_open;
   sim->vt.dir_it_read = dir_it_read;
   sim->vt.dir_it_parse = dir_it_parse;
+  sim->vt.dir_it_rewind = dir_it_rewind;
   sim->vt.dir_it_close = dir_it_close;
   sim->vt.get_link_metadata = get_link_metadata;
   sim->vt.unlink = unlink_entry;
