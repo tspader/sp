@@ -263,7 +263,7 @@ sp_test_each(fs, remove, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_path_t base = it->cwd ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd)) : sandbox;
@@ -283,7 +283,7 @@ sp_test_each(fs, remove, test_t, tests) {
 }
 
 sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
-  sp_path_t root = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("A"));
+  sp_path_t root = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_must_ok(t, sp_fs_create_dir_at(root));
 
   sp_sys_fd_t cur = SP_SYS_INVALID_FD;
@@ -321,7 +321,7 @@ sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
 #if defined(SP_POSIX)
 sp_test(fs, remove_dir_unwritable_subdir_fails) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t locked = sp_path_join(mem, sandbox, sp_str_lit("A/B"));
   sp_must_ok(t, sp_fs_create_dir_at(locked));
   sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, sandbox, sp_str_lit("A/B/C"))));

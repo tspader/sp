@@ -369,6 +369,12 @@ typedef struct {
   #define sp_test_skip_on_linux()
 #endif
 
+#if defined(SP_WASM)
+  #define sp_test_skip_without_absolute_names() return sp_test_skip(t, "no absolute names on wasm");
+#else
+  #define sp_test_skip_without_absolute_names() ((void)0)
+#endif
+
 #define sp_test_skip_without_symlinks() if (!sp_test_symlinks_supported(t)) return sp_test_skip(t, "symlinks not available");
 
 SP_API sp_err_t    sp_test_skip(sp_test_t* t, const c8* fmt, ...);
@@ -388,7 +394,7 @@ SP_API void        sp_test_note(sp_test_t* t, const c8* fmt, ...);
 
 SP_API sp_mem_t    sp_test_mem(sp_test_t* t);
 SP_API sp_mem_t    sp_test_arena(sp_test_t* t);
-SP_API sp_str_t    sp_test_dir(sp_test_t* t);
+SP_API sp_path_t   sp_test_dir(sp_test_t* t);
 SP_API const void* sp_test_user(sp_test_t* t);
 
 SP_API void        sp_test_record(sp_test_t* t, sp_test_failure_t failure);
@@ -724,7 +730,7 @@ struct sp_test_t {
   sp_mem_heap_t* tracking_heap;
   sp_mem_t tracked_mem;
 
-  sp_str_t dir;
+  sp_path_t dir;
 };
 
 struct sp_test_runner_t {
@@ -737,7 +743,7 @@ struct sp_test_runner_t {
   sp_da(const c8*) failed;
   sp_da(const c8*) skipped;
   sp_da(const c8*) updated;
-  sp_str_t dir_root;
+  sp_path_t dir_root;
   sp_test_once_t symlinks;
   sp_str_t golden_root;
   bool update;
@@ -1018,11 +1024,11 @@ sp_mem_t sp_test_mem(sp_test_t* t) {
   return t->tracked_mem;
 }
 
-sp_str_t sp_test_dir(sp_test_t* t) {
-  if (sp_str_empty(t->dir)) {
+sp_path_t sp_test_dir(sp_test_t* t) {
+  if (sp_str_empty(t->dir.sub)) {
     sp_str_t leaf = sp_str_replace_c8(t->mem, sp_cstr_as_str(t->instance->name), '/', '_');
-    t->dir = sp_fs_join_path(t->mem, t->runner->dir_root, leaf);
-    sp_err_t err = sp_fs_create_dir(t->dir);
+    t->dir = sp_path_join(t->mem, t->runner->dir_root, leaf);
+    sp_err_t err = sp_fs_create_dir_at(t->dir);
     if (err) sp_test_fail(t, "failed to create test dir: {}", sp_fmt_str(sp_test_err_str(t, err)));
   }
   return t->dir;
@@ -1044,10 +1050,10 @@ sp_err_t sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user) {
 static sp_err_t sp_test_probe_symlinks(void* user) {
   sp_test_runner_t* runner = (sp_test_runner_t*)user;
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_str_t link = sp_fs_join_path(s.mem, runner->dir_root, sp_str_lit("L"));
-  sp_err_t err = sp_fs_create_dir(runner->dir_root);
-  if (!err) err = sp_fs_create_sym_link(sp_str_lit("A"), link, SP_FS_KIND_FILE);
-  if (!err) sp_fs_remove_file(link);
+  sp_path_t link = sp_path_join(s.mem, runner->dir_root, sp_str_lit("L"));
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_create_sym_link_at(sp_str_lit("A"), link, SP_FS_KIND_FILE);
+  if (!err) sp_fs_remove_file_at(link);
   sp_mem_end_scratch(s);
   return err;
 }
@@ -1420,8 +1426,8 @@ static sp_test_status_t sp_test_status(sp_test_t* t) {
   return SP_TEST_STATUS_OK;
 }
 
-static sp_err_t sp_test_remove_dir(sp_str_t path) {
-  sp_err_t err = sp_fs_remove_dir(path);
+static sp_err_t sp_test_remove_dir(sp_path_t path) {
+  sp_err_t err = sp_fs_remove_dir_at(path);
   return err == SP_ERR_SYS_NOT_FOUND ? SP_OK : err;
 }
 
@@ -1464,8 +1470,8 @@ static void sp_test_report(sp_test_t* t, sp_tty_t* term, sp_test_status_t status
     sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("note"), sp_fmt_str(t->notes[it]));
   }
 
-  if (!sp_str_empty(t->dir)) {
-    sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("dir"), sp_fmt_str(t->dir));
+  if (!sp_str_empty(t->dir.sub)) {
+    sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("dir"), sp_fmt_str(t->dir.sub));
   }
 
   sp_da_for(t->failures, it) {
@@ -1600,14 +1606,14 @@ static void sp_test_run_instance(sp_test_runner_t* runner, const sp_test_instanc
     case SP_TEST_KEEP_ALWAYS: keep = true; break;
   }
 
-  if (!sp_str_empty(t->dir) && !keep) {
+  if (!sp_str_empty(t->dir.sub) && !keep) {
     sp_err_t err = sp_test_remove_dir(t->dir);
     if (err) {
       sp_test_fail(t, "failed to remove test dir: {}", sp_fmt_str(sp_test_err_str(t, err)));
       status = sp_test_status(t);
     }
     else {
-      t->dir = sp_zero_s(sp_str_t);
+      t->dir = sp_zero_s(sp_path_t);
     }
   }
 
@@ -1621,7 +1627,7 @@ static void sp_test_run_instance(sp_test_runner_t* runner, const sp_test_instanc
   sp_mutex_lock(&runner->mutex);
   sp_io_write_str(&runner->out.base, text, SP_NULLPTR);
   sp_io_flush(&runner->out.base);
-  if (!sp_str_empty(t->dir)) runner->kept = true;
+  if (!sp_str_empty(t->dir.sub)) runner->kept = true;
   switch (status) {
     case SP_TEST_STATUS_FAIL:   sp_da_push(runner->failed, instance->name); break;
     case SP_TEST_STATUS_SKIP:   sp_da_push(runner->skipped, instance->name); break;
@@ -1912,15 +1918,6 @@ static sp_str_t sp_test_run_name(sp_mem_t mem, sp_tm_epoch_t time) {
   return sp_str_replace_c8(mem, sp_tm_epoch_to_iso8601(mem, time), ':', '-');
 }
 
-static s32 sp_test_run_sort_kernel(const void* a, const void* b) {
-  const sp_fs_entry_t* ea = (const sp_fs_entry_t*)a;
-  const sp_fs_entry_t* eb = (const sp_fs_entry_t*)b;
-  bool da = ea->kind == SP_FS_KIND_DIR;
-  bool db = eb->kind == SP_FS_KIND_DIR;
-  if (da != db) return da ? SP_QSORT_A_FIRST : SP_QSORT_B_FIRST;
-  return sp_str_compare_alphabetical(ea->name, eb->name);
-}
-
 s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   const c8* filter = SP_NULLPTR;
   u32 jobs = 1;
@@ -1978,7 +1975,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
       {
         .name = "dir",
         .kind = SP_CLI_OPT_CSTR,
-        .summary = "root for test directories (defaults to $cwd/.sp/test)",
+        .summary = "root for test directories (defaults to .sp/test)",
         .placeholder = "dir",
         .ptr = &dir.opt,
       },
@@ -2117,35 +2114,39 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
     return 0;
   }
 
-  sp_str_t root = sp_str_lit(".sp/test");
-  if (dir.env) root = sp_cstr_as_str(dir.env);
-  if (dir.opt) root = sp_cstr_as_str(dir.opt);
-  root = sp_fs_normalize_path(runner->mem, root);
-  if (!sp_fs_is_absolute(root)) root = sp_fs_join_path(runner->mem, sp_fs_get_cwd_path(runner->mem), root);
+  sp_str_t dir_name = sp_str_lit(".sp/test");
+  if (dir.env) dir_name = sp_cstr_as_str(dir.env);
+  if (dir.opt) dir_name = sp_cstr_as_str(dir.opt);
+  dir_name = sp_fs_normalize_path(runner->mem, dir_name);
+
+  sp_path_t root = sp_path_resolve(dir_name);
+  if (root.dir == SP_SYS_INVALID_FD) {
+    sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(dir_name));
+    sp_io_flush(&runner->out.base);
+    return 1;
+  }
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   sp_tm_epoch_t grace = { .s = now.s - SP_TEST_RUNS_GRACE_S, .ns = now.ns };
-  sp_str_t runs_dir = sp_fs_join_path(runner->mem, root, sp_fs_get_stem(sp_fs_get_exe_path(runner->mem)));
-  runner->dir_root = sp_fs_join_path(runner->mem, runs_dir, sp_test_run_name(runner->mem, now));
+  sp_path_t runs_dir = sp_path_join(runner->mem, root, sp_fs_get_stem(sp_fs_get_exe_path(runner->mem)));
+  runner->dir_root = sp_path_join(runner->mem, runs_dir, sp_test_run_name(runner->mem, now));
 
   sp_str_t cutoff = sp_test_run_name(runner->mem, grace);
-  sp_da(sp_fs_entry_t) listing = SP_NULLPTR;
-  sp_fs_collect(runner->mem, runs_dir, &listing);
-  sp_da_sort(listing, sp_test_run_sort_kernel);
-
-  u64 runs = 0;
-  sp_da_for(listing, it) {
-    if (listing[it].kind != SP_FS_KIND_DIR) break;
-    runs++;
+  sp_da(sp_str_t) runs = sp_da_new(runner->mem, sp_str_t);
+  sp_fs_for(runner->mem, runs_dir, it) {
+    if (it.entry.kind != SP_FS_KIND_DIR) continue;
+    sp_da_push(runs, sp_str_copy(runner->mem, it.entry.name));
   }
+  sp_da_sort(runs, sp_str_sort_kernel_alphabetical);
 
-  u64 candidates = runs > SP_TEST_RUNS_RETAINED ? runs - SP_TEST_RUNS_RETAINED : 0;
+  u64 candidates = sp_da_size(runs) > SP_TEST_RUNS_RETAINED ? sp_da_size(runs) - SP_TEST_RUNS_RETAINED : 0;
   sp_for(it, candidates) {
-    if (sp_str_compare_alphabetical(listing[it].name, cutoff) != SP_QSORT_A_FIRST) break;
-    sp_err_t err = sp_test_remove_dir(listing[it].path);
+    if (sp_str_compare_alphabetical(runs[it], cutoff) != SP_QSORT_A_FIRST) break;
+    sp_path_t run = sp_path_join(runner->mem, runs_dir, runs[it]);
+    sp_err_t err = sp_test_remove_dir(run);
     if (err) {
       sp_tty_fmt(&runner->term, "> failed to prune {}: {}\n",
-        sp_fmt_str(listing[it].path),
+        sp_fmt_str(run.sub),
         sp_fmt_str(sp_test_err_name(runner->mem, err)));
     }
   }
@@ -2211,7 +2212,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
     if (err) {
       sp_tty_fmt(&runner->term, "> {.red} {}: {}\n",
         sp_fmt_cstr("failed to remove"),
-        sp_fmt_str(runner->dir_root),
+        sp_fmt_str(runner->dir_root.sub),
         sp_fmt_str(sp_test_err_name(runner->mem, err)));
       sp_io_flush(&runner->out.base);
     }

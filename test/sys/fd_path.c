@@ -126,7 +126,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_test_skip_on_wasm()
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(c->path));
   sp_path_t alias = sp_path_join(mem, sandbox, sp_cstr_as_str(c->alias));
   sp_path_t decoy = sp_path_join(mem, sandbox, sp_cstr_as_str(c->decoy));
@@ -234,7 +234,7 @@ static const room_t rooms [] = {
 sp_test_each(sys, fd_path_room, room_t, rooms) {
   sp_test_skip_on_wasm()
 
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &dir));
 

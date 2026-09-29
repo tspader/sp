@@ -19,7 +19,7 @@ sp_test(fs, get_cwd_unlinked_cwd_has_no_path, .serial = true) {
   sp_str_t original = sp_fs_get_cwd_path(mem);
   sp_must_gt(t, original.len, 0);
 
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &dir));
 
@@ -49,7 +49,7 @@ sp_test(fs, get_cwd_is_root_zero) {
 sp_test(fs, path_at_cwd_passes_through) {
   sp_test_skip_on_wasm()
 
-  sp_path_t file = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("A"));
+  sp_path_t file = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_must_ok(t, sp_fs_create_file_at(file));
 
   sp_path_t path = sp_path_at_cwd(file.sub);

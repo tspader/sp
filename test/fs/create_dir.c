@@ -133,7 +133,7 @@ static const test_t tests [] = {
 sp_test_each(fs, create_dir, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_path_t target = sp_path_join(sp_test_arena(t), sandbox, sp_cstr_as_str(it->target));

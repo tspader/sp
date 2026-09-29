@@ -36,7 +36,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
   if (sys_case_wants_symlinks(c)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
 
   sp_carr_for(c->setup, it) {
     sys_setup_t* ent = &c->setup[it];

@@ -114,7 +114,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 #endif
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t src = sp_path_join(mem, sandbox, sp_str_lit("src"));
   sp_path_t dst = sp_path_join(mem, sandbox, sp_str_lit("dst"));
   sp_sys_fd_t in = SP_SYS_INVALID_FD;

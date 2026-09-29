@@ -104,7 +104,13 @@ static const test_t tests [] = {
     .name = "label_matches_whole_components",
     .roots = { { .label = "/B" }, { .label = "/A" } },
     .path = "/AB/C",
-    .expect = { .sub = "/AB/C" },
+    .expect = { .dir = DIR_NONE, .sub = "/AB/C" },
+  },
+  {
+    .name = "absolute_without_serving_root",
+    .roots = { { .label = "/A" } },
+    .path = "/B/C",
+    .expect = { .dir = DIR_NONE, .sub = "/B/C" },
   },
   {
     .name = "deepest_label_wins",

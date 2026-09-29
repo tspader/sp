@@ -532,7 +532,7 @@ sp_test_each(fs, copy, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
@@ -574,7 +574,7 @@ static const size_test_t sizes [] = {
 
 sp_test_each(fs, copy_size, size_test_t, sizes) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("B"));
 
@@ -600,7 +600,7 @@ static sp_sys_file_perms_t mode(u32 value) {
 // postcondition: dest has source's bytes and mode, on a fresh inode; timestamps unspecified
 sp_test(fs, copy_file_preserves_mode, .serial = true) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("B"));
   sp_must_ok(t, sp_fs_create_file_str_at(from, sp_str_lit("A")));
@@ -628,7 +628,7 @@ sp_test(fs, copy_file_preserves_mode, .serial = true) {
 
 sp_test(fs, copy_file_replaces_read_only_dest) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("B"));
   sp_must_ok(t, sp_fs_create_file_str_at(from, sp_str_lit("A")));
@@ -645,7 +645,7 @@ sp_test(fs, copy_file_replaces_read_only_dest) {
 
 sp_test(fs, copy_file_unwritable_parent_leaves_nothing) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t dir = sp_path_join(mem, sandbox, sp_str_lit("D"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("D/B"));
@@ -665,7 +665,7 @@ sp_test(fs, copy_file_unwritable_parent_leaves_nothing) {
 
 sp_test(fs, copy_tree_unreadable_subdir_fails) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t locked = sp_path_join(mem, sandbox, sp_str_lit("A/B"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("E"));

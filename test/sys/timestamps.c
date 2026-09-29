@@ -31,7 +31,7 @@ static s64 field_ns(const sp_sys_file_meta_t* meta, field_t field) {
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
-  sp_path_t path = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("A"));
+  sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_fs_create_file_str_at(path, sp_str_lit("A"));
 
   sp_sys_file_meta_t before = sp_zero;

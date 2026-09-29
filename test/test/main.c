@@ -117,8 +117,8 @@ static const sp_test_entry_t child_entries [] = {
 };
 
 static sp_err_t child_touch(sp_test_t* t) {
-  sp_str_t path = sp_fs_join_path(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
-  return sp_fs_create_file_cstr(path, "A");
+  sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
+  return sp_fs_create_file_cstr_at(path, "A");
 }
 
 static sp_err_t child_pass(sp_test_t* t) {

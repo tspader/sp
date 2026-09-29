@@ -20277,9 +20277,9 @@ SP_PRIVATE s32 sp_fs_match_label(sp_str_t path, sp_str_t label) {
 }
 
 sp_path_t sp_path_resolve(sp_str_t path) {
-  sp_path_t best = sp_path_at_cwd(path);
-  if (!sp_fs_is_absolute(path)) return best;
+  if (!sp_fs_is_absolute(path)) return sp_path_at_cwd(path);
 
+  sp_path_t best = { .dir = SP_SYS_INVALID_FD, .sub = path };
   s32 deepest = SP_STR_NO_MATCH;
   for (s32 it = 0;; it++) {
     sp_sys_fd_t root = sp_sys_get_root(it);

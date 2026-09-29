@@ -36,7 +36,7 @@ static const test_t tests [] = {
 
 static sp_err_t run(sp_test_t* t, test_t* it) {
   sp_test_skip_on_wasm();
-  sp_path_t path = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("A"));
+  sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_fs_create_file_at(path);
 
   sp_sys_file_meta_t meta = sp_zero;
@@ -66,7 +66,7 @@ static sp_err_t run(sp_test_t* t, test_t* it) {
 sp_test_each_fn(sys, perms, test_t, tests, run);
 
 sp_test(sys, default_perms_then_read_only) {
-  sp_path_t path = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("A"));
+  sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_fs_create_file_at(path);
 
   sp_err_t err = sp_sys_set_file_perms_s(path.dir, path.sub, sp_sys_default_file_perms);
@@ -89,7 +89,7 @@ sp_test(sys, default_perms_then_read_only) {
 sp_test(sys, mkdir_applies_perms) {
   sp_test_skip_on_win32();
   sp_test_skip_on_wasm();
-  sp_path_t path = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("D"));
+  sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("D"));
 
   sp_sys_file_perms_t perms = sp_sys_default_dir_perms;
   sp_sys_set_read_only(&perms, true);

@@ -2,7 +2,7 @@
 
 sp_test(fs, mod_time_nonzero) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   sp_path_t file = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t dir = sp_path_join(mem, sandbox, sp_str_lit("B"));
   sp_fs_create_file_at(file);
@@ -14,7 +14,7 @@ sp_test(fs, mod_time_nonzero) {
 }
 
 sp_test(fs, mod_time_updates_after_write) {
-  sp_path_t file = sp_path_join(sp_test_arena(t), sp_path_resolve(sp_test_dir(t)), sp_str_lit("A"));
+  sp_path_t file = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_fs_create_file_str_at(file, sp_str_lit("A"));
 
   sp_tm_epoch_t before = sp_fs_get_mod_time_at(file);

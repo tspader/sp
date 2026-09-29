@@ -380,12 +380,10 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   }
 
   if (c->link) sp_test_skip_without_symlinks();
-#if defined(SP_WASM)
-  if (c->path_kind == PATH_ABS) return sp_test_skip(t, "no absolute names on wasm");
-#endif
+  if (c->path_kind == PATH_ABS) sp_test_skip_without_absolute_names();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   if (c->file) sp_must_ok(t, sp_fs_create_file_str_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A")));
   if (c->dir)  sp_must_ok(t, sp_fs_create_dir_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->dir))));
   if (c->link) sp_must_ok(t, sp_fs_create_sym_link_at(sp_cstr_as_str(c->target), sp_path_join(mem, sandbox, sp_cstr_as_str(c->link)), c->dir_link ? SP_FS_KIND_DIR : SP_FS_KIND_FILE));

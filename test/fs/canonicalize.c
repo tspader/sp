@@ -161,7 +161,7 @@ sp_test_each(fs, canonicalize, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;

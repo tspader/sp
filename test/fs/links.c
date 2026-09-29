@@ -126,7 +126,7 @@ static const sym_t sym_links [] = {
 
 sp_test_each(fs, hard_link, hard_t, hard_links) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_path_t target = sp_path_join(mem, sandbox, sp_cstr_as_str(it->target));
@@ -149,7 +149,7 @@ sp_test_each(fs, hard_link, hard_t, hard_links) {
 sp_test_each(fs, sym_link, sym_t, sym_links) {
   sp_test_skip_without_symlinks();
 
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_path_t link = sp_path_join(sp_test_arena(t), sandbox, sp_cstr_as_str(it->link));

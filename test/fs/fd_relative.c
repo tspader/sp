@@ -110,11 +110,10 @@ sp_test_each(fs, fd_relative, test_t, tests) {
 #if !defined(SP_WIN32)
   if (it->win32) return sp_test_skip(t, "windows only");
 #endif
-#if defined(SP_WASM)
-  if (it->op == OP_OPEN_ABS) return sp_test_skip(t, "no absolute names on wasm");
-#endif
+  if (it->op == OP_OPEN_ABS) sp_test_skip_without_absolute_names();
+
   sp_mem_t mem = sp_test_arena(t);
-  sp_path_t sandbox = sp_path_resolve(sp_test_dir(t));
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_path_t cwd_path = sp_path_join(mem, sandbox, sp_str_view(it->cwd));
