@@ -1,13 +1,9 @@
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
-static sp_path_t in(sp_sys_fd_t dir, const c8* sub) {
-  return (sp_path_t) { .dir = dir, .sub = sp_cstr_as_str(sub) };
-}
-
 static sp_err_t list(sp_sys_fd_t dir) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_fs_it_t it = sp_fs_it_new_at(s.mem, in(dir, "."), 0);
+  sp_fs_it_t it = sp_fs_it_new_at(s.mem, sp_path_at(dir, sp_str_lit(".")), 0);
   while (sp_fs_it_walk(&it)) {
     sp_log("{}", sp_fmt_str(it.entry.rel));
   }
@@ -19,11 +15,11 @@ static sp_err_t list(sp_sys_fd_t dir) {
 }
 
 static sp_err_t build(sp_sys_fd_t dir) {
-  sp_try(sp_fs_create_dir_at(in(dir, "src/nested")));
-  sp_try(sp_fs_create_file_cstr_at(in(dir, "src/A"), "A"));
-  sp_try(sp_fs_create_file_cstr_at(in(dir, "src/nested/B"), "B"));
-  sp_try(sp_fs_copy_at(in(dir, "src"), in(dir, "dst"), SP_FS_ATOMIC_REPLACE));
-  sp_try(sp_fs_remove_dir_at(in(dir, "src")));
+  sp_try(sp_fs_create_dir_at(sp_path_at(dir, sp_str_lit("src/nested"))));
+  sp_try(sp_fs_create_file_cstr_at(sp_path_at(dir, sp_str_lit("src/A")), "A"));
+  sp_try(sp_fs_create_file_cstr_at(sp_path_at(dir, sp_str_lit("src/nested/B")), "B"));
+  sp_try(sp_fs_copy_at(sp_path_at(dir, sp_str_lit("src")), sp_path_at(dir, sp_str_lit("dst")), SP_FS_ATOMIC_REPLACE));
+  sp_try(sp_fs_remove_dir_at(sp_path_at(dir, sp_str_lit("src"))));
   return list(dir);
 }
 
@@ -31,7 +27,7 @@ static sp_err_t work(sp_path_t path) {
   sp_try(sp_fs_create_dir_at(path));
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_err_t err = sp_sys_open_dir_s(path.dir, path.sub, 0, &dir);
+  sp_err_t err = sp_fs_open_dir_at(path, &dir);
   if (!err) {
     err = build(dir);
     sp_sys_close(dir);

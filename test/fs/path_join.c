@@ -21,7 +21,7 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, path_join, test_t, tests) {
-  sp_path_t path = { .dir = (sp_sys_fd_t)DIR_FD, .sub = sp_cstr_as_str(it->a) };
+  sp_path_t path = sp_path_at((sp_sys_fd_t)DIR_FD, sp_cstr_as_str(it->a));
   sp_path_t result = sp_path_join(sp_test_arena(t), path, sp_cstr_as_str(it->b));
   sp_expect_eq(t, result.dir, (sp_sys_fd_t)DIR_FD);
   sp_expect_str_eq_c(t, result.sub, it->expect);

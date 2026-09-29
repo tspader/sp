@@ -21,9 +21,9 @@ sp_test(fs, get_cwd_unlinked_cwd_has_no_path, .serial = true) {
 
   sp_path_t sandbox = sp_test_dir(t);
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &dir));
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
-  sp_path_t doomed = { .dir = dir, .sub = sp_str_lit("A") };
+  sp_path_t doomed = sp_path_at(dir, sp_str_lit("A"));
   sp_err_t err = sp_fs_create_dir_at(doomed);
   if (!err) err = sp_sys_chdir_s(sp_fs_canonicalize_path_at(mem, doomed));
   if (!err) err = sp_fs_remove_dir_at(doomed);

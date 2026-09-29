@@ -536,14 +536,14 @@ sp_test_each(fs, copy, test_t, tests) {
   fs_apply_setup(t, sandbox, it->setup);
 
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &dir));
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_path_t dst_base = it->dst_dir ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->dst_dir)) : sandbox;
   sp_sys_fd_t dst_dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(dst_base.dir, dst_base.sub, 0, &dst_dir));
+  sp_must_ok(t, sp_fs_open_dir_at(dst_base, &dst_dir));
 
-  sp_path_t src = { .dir = dir, .sub = sp_cstr_as_str(it->src) };
-  sp_path_t dst = { .dir = dst_dir, .sub = sp_cstr_as_str(it->dst) };
+  sp_path_t src = sp_path_at(dir, sp_cstr_as_str(it->src));
+  sp_path_t dst = sp_path_at(dst_dir, sp_cstr_as_str(it->dst));
 
   sp_err_t result = SP_OK;
   switch (it->op) {

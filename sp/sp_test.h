@@ -2128,7 +2128,9 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   sp_tm_epoch_t grace = { .s = now.s - SP_TEST_RUNS_GRACE_S, .ns = now.ns };
-  sp_path_t runs_dir = sp_path_join(runner->mem, root, sp_fs_get_stem(sp_fs_get_exe_path(runner->mem)));
+  sp_str_t exe = sp_fs_get_exe_path(runner->mem);
+  if (sp_str_empty(exe)) exe = sp_cstr_as_str(argv[0]);
+  sp_path_t runs_dir = sp_path_join(runner->mem, root, sp_fs_get_stem(exe));
   runner->dir_root = sp_path_join(runner->mem, runs_dir, sp_test_run_name(runner->mem, now));
 
   sp_str_t cutoff = sp_test_run_name(runner->mem, grace);

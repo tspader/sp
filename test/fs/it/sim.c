@@ -192,7 +192,7 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
   sim_t s = sp_zero;
   sim_begin(&s, it->dirs);
 
-  sp_fs_it_t walk = sp_fs_it_new_at(mem, (sp_path_t) { .dir = sp_sys_get_root(0), .sub = root }, it->flags);
+  sp_fs_it_t walk = sp_fs_it_new_at(mem, sp_path_at(sp_sys_get_root(0), root), it->flags);
   sp_expect_err_eq(t, walk.err, it->expect.open);
   sp_expect(t, !walk.entry.path.data);
 

@@ -118,7 +118,7 @@ static const test_t tests [] = {
 sp_test_each(fs, remove_sim, test_t, tests, .serial = true) {
   sim_t s = sp_zero;
   sim_begin(&s, it->dirs);
-  sp_err_t err = sp_fs_remove_dir_at((sp_path_t) { .dir = sp_sys_get_root(0), .sub = sp_str_lit("T") });
+  sp_err_t err = sp_fs_remove_dir_at(sp_path_at(sp_sys_get_root(0), sp_str_lit("T")));
   sim_end(&s);
 
   sp_expect_err_eq(t, err, it->expect.err);

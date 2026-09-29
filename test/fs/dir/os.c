@@ -110,27 +110,26 @@ sp_test_each(fs, dir, test_t, tests) {
 
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
   if (it->relative) {
-    sp_try(sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &sandbox_fd));
+    sp_try(sp_fs_open_dir_at(sandbox, &sandbox_fd));
   }
 
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_t iter = sp_zero;
-  sp_err_t open_err = it->relative
-    ? sp_fs_dir_open(&iter, sandbox_fd, sp_cstr_as_str(it->dir), 0, sp_mem_slice(buf, sizeof(buf)))
-    : sp_fs_dir_open(&iter, dir.dir, dir.sub, 0, sp_mem_slice(buf, sizeof(buf)));
+  sp_fs_dir_it_t iter = sp_zero;
+  sp_path_t opened = it->relative ? sp_path_at(sandbox_fd, sp_cstr_as_str(it->dir)) : dir;
+  sp_err_t open_err = sp_fs_dir_it_open(&iter, opened, 0, sp_mem_slice(buf, sizeof(buf)));
   sp_expect_ok(t, open_err);
 
   if (!open_err) {
     sp_err_t walk = SP_OK;
     while (true) {
       sp_fs_dir_entry_t entry = sp_zero;
-      walk = sp_fs_dir_next(&iter, &entry);
+      walk = sp_fs_dir_it_next(&iter, &entry);
       if (walk) break;
       if (!entry.name.data) break;
       fs_match(t, matches, n, entry.name, entry.kind);
     }
     sp_expect_ok(t, walk);
-    sp_expect_ok(t, sp_fs_dir_close(&iter));
+    sp_expect_ok(t, sp_fs_dir_it_close(&iter));
   }
   fs_match_finish(t, matches, n);
 

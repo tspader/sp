@@ -3120,22 +3120,19 @@ SP_API sp_err_t             sp_fs_create_sym_link_at(sp_str_t target, sp_path_t 
 SP_API sp_err_t             sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
+SP_API sp_err_t             sp_fs_open_dir_at(sp_path_t path, sp_sys_fd_t* out);
 SP_API sp_sys_fd_t          sp_fs_get_cwd();
-SP_API sp_path_t            sp_path_at_cwd(sp_str_t sub);
-SP_API sp_path_t            sp_path_resolve(sp_str_t path);
-SP_API sp_path_t            sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub);
-
-// literally sys+normalize, if normalize isnt needed this isn't either?
-SP_API sp_str_t             sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path);
-SP_API sp_str_t             sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path);
-
-// just put these in os
 SP_API sp_str_t             sp_fs_get_cwd_path(sp_mem_t mem);
-
-// these currently forward to sys+normalize; remove from fs AND sys and just put in os
 SP_API sp_str_t             sp_fs_get_exe_path(sp_mem_t mem);
 SP_API sp_str_t             sp_fs_get_storage_path(sp_mem_t mem);
 SP_API sp_str_t             sp_fs_get_config_path(sp_mem_t mem);
+SP_API sp_str_t             sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path);
+SP_API sp_str_t             sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path);
+SP_API sp_path_t            sp_path_at(sp_sys_fd_t dir, sp_str_t sub);
+SP_API sp_path_t            sp_path_at_cwd(sp_str_t sub);
+SP_API sp_path_t            sp_path_resolve(sp_str_t path);
+SP_API sp_path_t            sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub);
+SP_API sp_path_t            sp_path_parent(sp_mem_t mem, sp_path_t path);
 
 /*
   sp_fs_it_t
@@ -3156,10 +3153,10 @@ typedef struct {
   sp_sys_dir_it_t dir;
   sp_mem_buffer_t buf;
   u64 cursor;
-} sp_fs_dir_t;
+} sp_fs_dir_it_t;
 
 typedef struct {
-  sp_fs_dir_t dir;
+  sp_fs_dir_it_t dir;
   SP_ALIGNED u8 buf [SP_FS_IT_BUF_SIZE];
   u32 len;
   u32 name_len;
@@ -3184,9 +3181,9 @@ typedef struct {
 #define sp_fs_for_recursive(mem, path, it) \
   for (sp_fs_it_t it = sp_fs_it_new_at(mem, path, 0); sp_fs_it_walk(&it);)
 
-SP_API sp_err_t   sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_mem_slice_t buf);
-SP_API sp_err_t   sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out);
-SP_API sp_err_t   sp_fs_dir_close(sp_fs_dir_t* it);
+SP_API sp_err_t   sp_fs_dir_it_open(sp_fs_dir_it_t* it, sp_path_t path, u32 flags, sp_mem_slice_t buf);
+SP_API sp_err_t   sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_fs_dir_entry_t* out);
+SP_API sp_err_t   sp_fs_dir_it_close(sp_fs_dir_it_t* it);
 SP_API sp_fs_it_t sp_fs_it_new(sp_mem_t mem, sp_str_t path);
 SP_API sp_fs_it_t sp_fs_it_new_at(sp_mem_t mem, sp_path_t path, u32 flags);
 SP_API bool       sp_fs_it_next(sp_fs_it_t* it);
@@ -20119,6 +20116,10 @@ SP_PRIVATE u32 sp_fs_root_len(sp_str_t path, sp_fs_path_kind_t kind) {
   SP_UNREACHABLE_RETURN(0);
 }
 
+SP_PRIVATE bool sp_fs_is_dot(sp_str_t name) {
+  return sp_str_equal(name, sp_str_lit(".")) || sp_str_equal(name, sp_str_lit(".."));
+}
+
 SP_PRIVATE u32 sp_fs_stem_len(sp_str_t name) {
   u32 hidden = 0;
   while (hidden < name.len && name.data[hidden] == '.') hidden++;
@@ -20260,8 +20261,12 @@ sp_sys_fd_t sp_fs_get_cwd() {
   return sp_sys_get_root(0);
 }
 
+sp_path_t sp_path_at(sp_sys_fd_t dir, sp_str_t sub) {
+  return (sp_path_t) { .dir = dir, .sub = sub };
+}
+
 sp_path_t sp_path_at_cwd(sp_str_t sub) {
-  return (sp_path_t) { .dir = sp_fs_get_cwd(), .sub = sub };
+  return sp_path_at(sp_fs_get_cwd(), sub);
 }
 
 SP_PRIVATE s32 sp_fs_match_label(sp_str_t path, sp_str_t label) {
@@ -20279,7 +20284,7 @@ SP_PRIVATE s32 sp_fs_match_label(sp_str_t path, sp_str_t label) {
 sp_path_t sp_path_resolve(sp_str_t path) {
   if (!sp_fs_is_absolute(path)) return sp_path_at_cwd(path);
 
-  sp_path_t best = { .dir = SP_SYS_INVALID_FD, .sub = path };
+  sp_path_t best = sp_path_at(SP_SYS_INVALID_FD, path);
   s32 deepest = SP_STR_NO_MATCH;
   for (s32 it = 0;; it++) {
     sp_sys_fd_t root = sp_sys_get_root(it);
@@ -20294,12 +20299,21 @@ sp_path_t sp_path_resolve(sp_str_t path) {
 
     sp_str_t rest = sp_str_suffix(path, (s32)path.len - matched);
     deepest = matched;
-    best = (sp_path_t) { .dir = root, .sub = sp_str_empty(rest) ? sp_str_lit(".") : rest };
+    best = sp_path_at(root, sp_str_empty(rest) ? sp_str_lit(".") : rest);
   }
 }
 
 sp_path_t sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub) {
-  return (sp_path_t) { .dir = path.dir, .sub = sp_fs_join_path(mem, path.sub, sub) };
+  return sp_path_at(path.dir, sp_fs_join_path(mem, path.sub, sub));
+}
+
+sp_path_t sp_path_parent(sp_mem_t mem, sp_path_t path) {
+  if (sp_str_empty(path.sub) || sp_fs_is_dot(sp_fs_get_name(path.sub))) return sp_path_join(mem, path, sp_str_lit(".."));
+  return sp_path_at(path.dir, sp_fs_parent_path(path.sub));
+}
+
+sp_err_t sp_fs_open_dir_at(sp_path_t path, sp_sys_fd_t* out) {
+  return sp_sys_open_dir_s(path.dir, path.sub, 0, out);
 }
 
 sp_fs_kind_t sp_fs_get_link_kind_at(sp_path_t path) {
@@ -20482,7 +20496,7 @@ sp_err_t sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
   return sp_io_read_file_at(mem, sp_path_at_cwd(path), content);
 }
 
-SP_PRIVATE sp_err_t sp_fs_create_parent_at(sp_sys_fd_t dir, sp_str_t path);
+SP_PRIVATE sp_err_t sp_fs_create_parent_at(sp_path_t path);
 
 SP_PRIVATE sp_err_t sp_fs_mkdir_at(sp_sys_fd_t dir, sp_str_t path) {
   sp_err_t err = sp_sys_mkdir_s(dir, path, sp_sys_default_dir_perms);
@@ -20497,7 +20511,7 @@ sp_err_t sp_fs_create_dir_at(sp_path_t path) {
   sp_err_t err = sp_fs_mkdir_at(path.dir, path.sub);
   if (err != SP_ERR_SYS_NOT_FOUND) return err;
 
-  sp_try(sp_fs_create_parent_at(path.dir, path.sub));
+  sp_try(sp_fs_create_parent_at(path));
   return sp_fs_mkdir_at(path.dir, path.sub);
 }
 
@@ -20567,14 +20581,14 @@ sp_err_t sp_fs_remove_file(sp_str_t path) {
   return sp_fs_remove_file_at(sp_path_at_cwd(path));
 }
 
-sp_err_t sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flags, sp_mem_slice_t buf) {
-  *it = sp_zero_s(sp_fs_dir_t);
+sp_err_t sp_fs_dir_it_open(sp_fs_dir_it_t* it, sp_path_t path, u32 flags, sp_mem_slice_t buf) {
+  *it = sp_zero_s(sp_fs_dir_it_t);
 
   // @spader wtf?
   sp_assert(buf.len >= SP_SYS_DIR_MIN_BUF);
 
   sp_sys_fd_t dir_fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_dir_s(fd, path, flags, &dir_fd));
+  sp_try(sp_sys_open_dir_s(path.dir, path.sub, flags, &dir_fd));
 
   sp_err_t err = sp_sys_dir_it_open(dir_fd, &it->dir);
   if (err) {
@@ -20587,7 +20601,7 @@ sp_err_t sp_fs_dir_open(sp_fs_dir_t* it, sp_sys_fd_t fd, sp_str_t path, u32 flag
   return SP_OK;
 }
 
-sp_err_t sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out) {
+sp_err_t sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_fs_dir_entry_t* out) {
   *out = sp_zero_s(sp_fs_dir_entry_t);
 
   while (true) {
@@ -20602,7 +20616,7 @@ sp_err_t sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out) {
     sp_try(sp_sys_dir_it_parse(&it->dir, &it->buf, &it->cursor, &entry));
 
     sp_str_t name = sp_str(entry.name, entry.len);
-    if (sp_str_equal(name, sp_str_lit(".")) || sp_str_equal(name, sp_str_lit(".."))) continue;
+    if (sp_fs_is_dot(name)) continue;
 
     out->name = name;
     out->kind = entry.kind;
@@ -20610,13 +20624,13 @@ sp_err_t sp_fs_dir_next(sp_fs_dir_t* it, sp_fs_dir_entry_t* out) {
   }
 }
 
-sp_err_t sp_fs_dir_close(sp_fs_dir_t* it) {
+sp_err_t sp_fs_dir_it_close(sp_fs_dir_it_t* it) {
   return sp_sys_dir_it_close(&it->dir);
 }
 
 SP_PRIVATE void sp_fs_it_unwind(sp_fs_it_t* it) {
   sp_da_for(it->stack, i) {
-    sp_fs_dir_close(&it->stack[i].dir);
+    sp_fs_dir_it_close(&it->stack[i].dir);
   }
   sp_da_clear(it->stack);
 }
@@ -20638,7 +20652,7 @@ SP_PRIVATE sp_err_t sp_fs_it_join(sp_fs_it_t* it, u32 prefix, sp_str_t name, u32
 
 SP_PRIVATE sp_err_t sp_fs_it_push(sp_fs_it_t* it, sp_path_t path, u32 len, u32 flags) {
   sp_fs_it_frame_t frame = { .len = len, .name_len = path.sub.len };
-  sp_try(sp_fs_dir_open(&frame.dir, path.dir, path.sub, flags, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
+  sp_try(sp_fs_dir_it_open(&frame.dir, path, flags, sp_mem_slice(frame.buf, SP_FS_IT_BUF_SIZE)));
   sp_da_push(it->stack, frame);
   return SP_OK;
 }
@@ -20649,7 +20663,7 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
   u32 root = sp_fs_it_child(it, it->stack[0].len);
 
   sp_fs_dir_entry_t d = sp_zero;
-  sp_try(sp_fs_dir_next(&top->dir, &d));
+  sp_try(sp_fs_dir_it_next(&top->dir, &d));
 
   if (d.name.data) {
     u32 len = 0;
@@ -20661,7 +20675,7 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
       .name = sp_str(it->path + len - d.name.len, d.name.len),
       .kind = d.kind,
     };
-    it->at = (sp_path_t) { .dir = top->dir.dir.fd, .sub = it->entry.name };
+    it->at = sp_path_at(top->dir.dir.fd, it->entry.name);
 
     // If the OS didn't give us a hint, specifically get it from metadata
     if (it->entry.kind == SP_FS_KIND_NONE) {
@@ -20671,7 +20685,7 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
   }
 
   sp_da_pop(it->stack);
-  sp_try(sp_fs_dir_close(&top->dir));
+  sp_try(sp_fs_dir_it_close(&top->dir));
   if (sp_da_empty(it->stack)) return SP_OK;
 
   sp_fs_it_frame_t* parent = sp_da_back(it->stack);
@@ -20682,7 +20696,7 @@ SP_PRIVATE sp_err_t sp_fs_it_step(sp_fs_it_t* it) {
     .name = sp_str(it->path + top->len - top->name_len, top->name_len),
     .kind = SP_FS_KIND_DIR,
   };
-  it->at = (sp_path_t) { .dir = parent->dir.dir.fd, .sub = it->entry.name };
+  it->at = sp_path_at(parent->dir.dir.fd, it->entry.name);
   return SP_OK;
 }
 
@@ -20822,9 +20836,7 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
   */
 sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
   sp_str_t name = sp_fs_get_name(path.sub);
-  if (sp_str_empty(name) || sp_str_equal(name, sp_str_lit(".")) || sp_str_equal(name, sp_str_lit(".."))) {
-    return SP_ERR_SYS_INVALID;
-  }
+  if (sp_str_empty(name) || sp_fs_is_dot(name)) return SP_ERR_SYS_INVALID;
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_try(sp_sys_get_link_metadata_s(path.dir, path.sub, &meta));
@@ -20891,10 +20903,10 @@ SP_PRIVATE sp_err_t sp_fs_temp_name(sp_str_t dir, sp_str_t name, c8 buf [SP_PATH
   return SP_OK;
 }
 
-SP_PRIVATE sp_err_t sp_fs_create_parent_at(sp_sys_fd_t dir, sp_str_t path) {
-  sp_str_t parent = sp_fs_parent_path(path);
-  if (sp_str_equal(parent, sp_fs_trim_path(path))) return SP_OK;
-  sp_err_t err = sp_fs_create_dir_at((sp_path_t) { .dir = dir, .sub = parent });
+SP_PRIVATE sp_err_t sp_fs_create_parent_at(sp_path_t path) {
+  sp_str_t parent = sp_fs_parent_path(path.sub);
+  if (sp_str_equal(parent, sp_fs_trim_path(path.sub))) return SP_OK;
+  sp_err_t err = sp_fs_create_dir_at(sp_path_at(path.dir, parent));
   return err == SP_ERR_SYS_EXISTS ? SP_ERR_SYS_NOT_DIR : err;
 }
 
@@ -21090,10 +21102,10 @@ sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   sp_err_t err = it.err;
   if (!err) err = sp_fs_create_dir_at(to);
-  if (!err) err = sp_sys_open_dir_s(to.dir, to.sub, 0, &fd);
+  if (!err) err = sp_fs_open_dir_at(to, &fd);
 
   while (!err && sp_fs_it_walk(&it)) {
-    sp_path_t dst = { .dir = fd, .sub = it.entry.rel };
+    sp_path_t dst = sp_path_at(fd, it.entry.rel);
     switch (it.entry.kind) {
       case SP_FS_KIND_DIR:     err = sp_fs_create_dir_at(dst); break;
       case SP_FS_KIND_FILE:    err = sp_fs_copy_file_at(it.at, dst, mode); break;

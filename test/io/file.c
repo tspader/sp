@@ -132,14 +132,14 @@ UTEST_F(io, file_reader_buffered_seek_discards_buffer) {
 }
 
 UTEST_F(io, file_reader_nonexistent) {
-  sp_path_t path = { .dir = ut.file.dir, .sub = sp_str_lit("nonexistent.file") };
+  sp_path_t path = sp_path_at(ut.file.dir, sp_str_lit("nonexistent.file"));
   sp_io_file_reader_t r = sp_zero;
   EXPECT_EQ(sp_io_file_reader_from_path_at(&r, path), SP_ERR_SYS_NOT_FOUND);
   sp_io_file_reader_close(&r);
 }
 
 UTEST_F(io, file_writer_nonexistent_dir) {
-  sp_path_t path = { .dir = ut.file.dir, .sub = sp_str_lit("missing-dir/nested.file") };
+  sp_path_t path = sp_path_at(ut.file.dir, sp_str_lit("missing-dir/nested.file"));
   sp_io_file_writer_t w = sp_zero;
   EXPECT_EQ(sp_io_file_writer_from_path_at(&w, path), SP_ERR_SYS_NOT_FOUND);
 }
@@ -370,7 +370,7 @@ UTEST_F(io, file_to_file_copy) {
   EXPECT_EQ(sp_io_write(&sw.base, source, sizeof(source), SP_NULLPTR), SP_OK);
   sp_io_file_writer_close(&sw);
 
-  sp_path_t dst_path = { .dir = ut.file.dir, .sub = sp_str_lit("file_to_file_copy.dst") };
+  sp_path_t dst_path = sp_path_at(ut.file.dir, sp_str_lit("file_to_file_copy.dst"));
 
   sp_io_file_reader_t r = sp_zero;
   sp_io_file_reader_from_path_at(&r, ut.file);
@@ -402,7 +402,7 @@ UTEST_F(io, stream_file_to_file_copy) {
   EXPECT_EQ(sp_io_write(&sw.base, source, sizeof(source), SP_NULLPTR), SP_OK);
   sp_io_file_writer_close(&sw);
 
-  sp_path_t dst_path = { .dir = ut.file.dir, .sub = sp_str_lit("stream_file_to_file_copy.dst") };
+  sp_path_t dst_path = sp_path_at(ut.file.dir, sp_str_lit("stream_file_to_file_copy.dst"));
 
   sp_sys_fd_t file = SP_SYS_INVALID_FD;
   ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &file), SP_OK);

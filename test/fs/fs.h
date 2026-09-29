@@ -48,10 +48,6 @@ static bool fs_setup_needs_symlinks(const fs_setup_t setup [FS_MAX_SETUP]) {
   return false;
 }
 
-static sp_path_t fs_parent(sp_path_t path) {
-  return (sp_path_t) { .dir = path.dir, .sub = sp_fs_parent_path(path.sub) };
-}
-
 static void fs_expect_bool(sp_test_t* t, sp_str_t path, const c8* label, bool actual, bool expected) {
   if (actual == expected) return;
 
@@ -108,7 +104,8 @@ static void fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t set
     if (!ent->path) break;
 
     sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
-    sp_fs_create_dir_at(fs_parent(path));
+    sp_path_t parent = sp_path_parent(mem, path);
+    sp_fs_create_dir_at(parent);
 
     sp_err_t err = SP_OK;
     switch (ent->kind) {
@@ -128,8 +125,7 @@ static void fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t set
       }
       case FS_SETUP_FIFO: {
 #if defined(SP_POSIX)
-        sp_str_t parent = sp_fs_canonicalize_path_at(mem, fs_parent(path));
-        sp_str_t fifo = sp_fs_join_path(mem, parent, sp_fs_get_name(path.sub));
+        sp_str_t fifo = sp_fs_join_path(mem, sp_fs_canonicalize_path_at(mem, parent), sp_fs_get_name(path.sub));
         err = mkfifo(sp_cstr_from_str(mem, fifo), 0644) ? SP_ERR_SYS : SP_OK;
 #else
         err = SP_ERR_SYS_UNSUPPORTED;
