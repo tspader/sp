@@ -20848,11 +20848,22 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
   Once
 
   */
-SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed) {
+SP_PRIVATE sp_err_t sp_fs_remove_unlisted(sp_path_t path) {
+  sp_err_t err = sp_sys_rmdir_s(path.dir, path.sub);
+  return err == SP_ERR_SYS_NOT_EMPTY ? SP_ERR_SYS_ACCESS_DENIED : err;
+}
+
+SP_PRIVATE sp_err_t sp_fs_remove_enter(sp_fs_it_t* it) {
+  sp_err_t err = sp_fs_it_enter(it);
+  return err == SP_ERR_SYS_ACCESS_DENIED ? sp_fs_remove_unlisted(it->at) : err;
+}
+
+SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed, bool* listed) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   sp_fs_it_t it = sp_fs_it_new_at(s.mem, path, SP_SYS_OPEN_DIR_NO_FOLLOW);
   bool progress [SP_FS_IT_MAX_DEPTH] = sp_zero;
   sp_err_t err = it.err;
+  *listed = err != SP_ERR_SYS_ACCESS_DENIED;
 
   while (!err && sp_fs_it_next(&it)) {
     u64 depth = sp_da_size(it.stack);
@@ -20866,12 +20877,12 @@ SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed) {
         // entry kinds are hints; flip on a contradicting error so a lying or
         // absent d_type can't strand an entry
         if (it.entry.kind == SP_FS_KIND_DIR) {
-          err = sp_fs_it_enter(&it);
+          err = sp_fs_remove_enter(&it);
           if (err == SP_ERR_SYS_NOT_DIR || err == SP_ERR_SYS_LOOP) err = sp_sys_unlink_s(it.at.dir, it.at.sub);
         }
         else {
           err = sp_sys_unlink_s(it.at.dir, it.at.sub);
-          if (err == SP_ERR_SYS_IS_DIR) err = sp_fs_it_enter(&it);
+          if (err == SP_ERR_SYS_IS_DIR) err = sp_fs_remove_enter(&it);
         }
         break;
       }
@@ -20906,10 +20917,11 @@ sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
   bool progressed = false;
   while (true) {
     bool retry = progressed;
-    sp_err_t err = sp_fs_remove_pass(path, &progressed);
+    bool listed = false;
+    sp_err_t err = sp_fs_remove_pass(path, &progressed, &listed);
     if (err == SP_ERR_SYS_NOT_FOUND && retry) return SP_OK;
-    if (err) return err;
-    err = sp_sys_rmdir_s(path.dir, path.sub);
+    if (err && listed) return err;
+    err = listed ? sp_sys_rmdir_s(path.dir, path.sub) : sp_fs_remove_unlisted(path);
     if (err == SP_ERR_SYS_NOT_EMPTY && progressed) continue;
     return err == SP_ERR_SYS_NOT_FOUND ? SP_OK : err;
   }
