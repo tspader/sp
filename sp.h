@@ -8913,32 +8913,32 @@ void sp_sys_futex_wake_all_p(u32* addr) {
 }
 
 #if defined(SP_WIN32)
-static sp_err_t sp_sys_copy_env_var(const c8* name, c8* buf, u64 size, u64* len) {
+static sp_err_t sp_sys_copy_env_path(const c8* name, c8* buf, u64 size, u64* len) {
   *len = 0;
   DWORD n = GetEnvironmentVariableA(name, buf, (DWORD)size);
   if (n == 0) return SP_ERR_SYS_NOT_FOUND;
   if (n >= size) return SP_ERR_SYS_NAME_TOO_LONG;
-  *len = n;
+  *len = (u64)sp_sys_win32_copy_path(sp_fs_trim_path(sp_str(buf, n)), buf, size);
   return SP_OK;
 }
 
 sp_err_t sp_sys_get_storage_path_p(c8* buf, u64 size, u64* len) {
-  return sp_sys_copy_env_var("LOCALAPPDATA", buf, size, len);
+  return sp_sys_copy_env_path("LOCALAPPDATA", buf, size, len);
 }
 
 sp_err_t sp_sys_get_config_path_p(c8* buf, u64 size, u64* len) {
-  return sp_sys_copy_env_var("APPDATA", buf, size, len);
+  return sp_sys_copy_env_path("APPDATA", buf, size, len);
 }
 #else
 static sp_err_t sp_sys_xdg_or_home(sp_str_t xdg_var, sp_str_t home_suffix, c8* buf, u64 size, u64* len) {
   *len = 0;
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
-  sp_str_t value = sp_os_env_get(xdg_var);
+  sp_str_t value = sp_fs_trim_path(sp_os_env_get(xdg_var));
   if (sp_str_empty(value)) {
     sp_str_t home = sp_os_env_get(sp_str_lit("HOME"));
     if (!sp_str_empty(home)) {
-      value = sp_str_join(sp_mem_get_scratch(), home, home_suffix, sp_str_lit("/"));
+      value = sp_fs_join_path(scratch.mem, home, home_suffix);
     }
   }
 
@@ -20457,7 +20457,7 @@ sp_err_t sp_fs_get_storage_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
   sp_try(sp_sys_get_storage_path(buf, SP_PATH_MAX, &len));
-  *path = sp_fs_normalize_path(mem, sp_str(buf, (u32)len));
+  *path = sp_str_copy(mem, sp_str(buf, (u32)len));
   return SP_OK;
 }
 
@@ -20465,7 +20465,7 @@ sp_err_t sp_fs_get_config_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
   sp_try(sp_sys_get_config_path(buf, SP_PATH_MAX, &len));
-  *path = sp_fs_normalize_path(mem, sp_str(buf, (u32)len));
+  *path = sp_str_copy(mem, sp_str(buf, (u32)len));
   return SP_OK;
 }
 
