@@ -105,6 +105,18 @@ source = ["example/msvc.c"]
 name = "iterator"
 source = ["example/fs/iterator.c"]
 
+[[example]]
+name = "prompt"
+source = ["example/prompt.c"]
+
+[[example]]
+name = "prompt_fancy"
+source = ["example/prompt_fancy.c"]
+
+[[example]]
+name = "cargo"
+source = ["example/cargo.c"]
+
 [profile.sanitizer]
 linkage = "shared"
 sanitize = ["address", "undefined"]

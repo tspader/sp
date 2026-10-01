@@ -53,8 +53,8 @@ UTEST_F_SETUP(prompt) {
 
 UTEST_F_TEARDOWN(prompt) {
   sp_app_destroy(ut.app);
-  sp_io_dyn_mem_writer_close(&ut.writer);
   sp_prompt_end(&ut.ctx);
+  sp_io_dyn_mem_writer_close(&ut.writer);
   sp_mem_arena_destroy(ut.arena);
   EXPECT_TRUE(sp_mem_tracking_ok(&ut.tracker));
   sp_mem_tracking_deinit(&ut.tracker);
@@ -2511,6 +2511,7 @@ UTEST_F(prompt, abort_drives_widget_to_cancel) {
 UTEST_F(prompt, prompt_end_frees_channel) {
   sp_prompt_ctx_t* ctx = sp_alloc_type(ut.mem.tracking, sp_prompt_ctx_t);
   sp_prompt_ctx_init(ctx, ut.mem.tracking, 80, 20);
+  ctx->tty = ut.ctx.tty;
   sp_prompt_send_progress_f32(ctx, 0.5f);
   sp_prompt_send_status(ctx, "halfway");
   sp_prompt_complete(ctx);
@@ -3114,41 +3115,105 @@ UTEST_F(prompt, log_from_thread_eventually_flushed) {
 UTEST_F(prompt, prompt_end_frees_log) {
   sp_prompt_ctx_t* ctx = sp_alloc_type(ut.mem.tracking, sp_prompt_ctx_t);
   sp_prompt_ctx_init(ctx, ut.mem.tracking, 80, 20);
+  ctx->tty = ut.ctx.tty;
   sp_prompt_log(ctx, "queued but never flushed");
   sp_prompt_complete(ctx);
   sp_prompt_end(ctx);
   sp_free(ut.mem.tracking, ctx, sizeof(sp_prompt_ctx_t));
 }
 
-UTEST_F(prompt, prompt_end_flushes_pending_log_to_terminal) {
-  SKIP_ON_FREESTANDING();
-  SKIP_ON_WASM();
-  sp_sys_pipe_t p = sp_zero;
-  ASSERT_EQ(sp_sys_pipe(&p, sp_zero_s(sp_sys_pipe_desc_t)), SP_OK);
-  sp_sys_fd_t read_end = p.r;
-  sp_sys_fd_t write_end = p.w;
-
+UTEST_F(prompt, prompt_end_flushes_pending_log_to_writer) {
   sp_prompt_ctx_t* ctx = sp_alloc_type(ut.mem.tracking, sp_prompt_ctx_t);
   sp_prompt_ctx_init(ctx, ut.mem.tracking, 80, 20);
-  ctx->terminal.fds.out = write_end;
+  ctx->tty = ut.ctx.tty;
   sp_prompt_log(ctx, "step 1\nstep 2\n");
   sp_prompt_complete(ctx);
   sp_prompt_end(ctx);
   sp_free(ut.mem.tracking, ctx, sizeof(sp_prompt_ctx_t));
-  sp_sys_close(write_end);
 
-  c8 buf[64] = sp_zero;
-  u64 total = 0;
-  while (total < sizeof(buf)) {
-    u64 num_read = 0;
-    if (sp_sys_read(read_end, buf + total, sizeof(buf) - total, &num_read) != SP_OK || !num_read) {
-      break;
-    }
-    total += num_read;
+  SP_EXPECT_STR_EQ_CSTR(prompt_writer_bytes(utest_fixture), "\r\nstep 1\r\nstep 2\r\n");
+}
+
+typedef struct {
+  sp_prompt_fds_t fds;
+} prompt_config_expect_t;
+
+typedef struct {
+  sp_prompt_fds_t fds;
+  prompt_config_expect_t expect;
+} prompt_config_test_t;
+
+static void run_prompt_config_test(s32* utest_result, prompt_config_test_t t) {
+  sp_prompt_config_t config = sp_prompt_config_resolve((sp_prompt_config_t) { .fds = t.fds });
+  EXPECT_EQ(config.fds.in, t.expect.fds.in);
+  EXPECT_EQ(config.fds.out, t.expect.fds.out);
+}
+
+UTEST_F(prompt, config_zero_fds_resolve_to_stdin_and_stderr) {
+  run_prompt_config_test(utest_result, (prompt_config_test_t) {
+    .expect = {
+      .fds = { .in = sp_sys_stdin, .out = sp_sys_stderr },
+    },
+  });
+}
+
+UTEST_F(prompt, config_explicit_fds_are_kept) {
+  run_prompt_config_test(utest_result, (prompt_config_test_t) {
+    .fds = { .in = 68, .out = 69 },
+    .expect = {
+      .fds = { .in = 68, .out = 69 },
+    },
+  });
+}
+
+typedef enum {
+  PROMPT_FD_DEFAULT,
+  PROMPT_FD_PIPE_R,
+  PROMPT_FD_PIPE_W,
+} prompt_fd_t;
+
+typedef struct {
+  prompt_fd_t in;
+  prompt_fd_t out;
+} prompt_begin_test_t;
+
+static sp_sys_fd_t prompt_begin_test_fd(sp_sys_pipe_t p, prompt_fd_t fd) {
+  switch (fd) {
+    case PROMPT_FD_DEFAULT: return 0;
+    case PROMPT_FD_PIPE_R: return p.r;
+    case PROMPT_FD_PIPE_W: return p.w;
   }
-  sp_sys_close(read_end);
+  return 0;
+}
 
-  SP_EXPECT_STR_EQ_CSTR(sp_str(buf, (u32)total), "\nstep 1\nstep 2\n");
+static void run_prompt_begin_rejects_test(s32* utest_result, struct prompt* fixture, prompt_begin_test_t t) {
+  sp_sys_pipe_t p = sp_zero;
+  ASSERT_EQ(sp_sys_pipe(&p, sp_zero_s(sp_sys_pipe_desc_t)), SP_OK);
+
+  sp_prompt_ctx_t* ctx = sp_prompt_begin_ex(fixture->mem.tracking, (sp_prompt_config_t) {
+    .fds = {
+      .in = prompt_begin_test_fd(p, t.in),
+      .out = prompt_begin_test_fd(p, t.out),
+    },
+  });
+  EXPECT_TRUE(ctx == SP_NULLPTR);
+
+  sp_sys_close(p.r);
+  sp_sys_close(p.w);
+}
+
+UTEST_F(prompt, begin_rejects_out_that_is_not_a_tty) {
+  SKIP_ON_WASM();
+  run_prompt_begin_rejects_test(utest_result, utest_fixture, (prompt_begin_test_t) {
+    .out = PROMPT_FD_PIPE_W,
+  });
+}
+
+UTEST_F(prompt, begin_rejects_in_that_is_not_a_tty) {
+  SKIP_ON_WASM();
+  run_prompt_begin_rejects_test(utest_result, utest_fixture, (prompt_begin_test_t) {
+    .in = PROMPT_FD_PIPE_R,
+  });
 }
 
 UTEST_F(prompt, get_user_data_returns_widget_user_data) {

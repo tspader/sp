@@ -69,14 +69,16 @@
   To use the library, you need (a) a context, and (b) to set up the terminal for drawing. In the common
   case, you can do both with one call:
 
-    sp_prompt_ctx_t* ctx = sp_prompt_begin();
+    sp_prompt_ctx_t* ctx = sp_prompt_begin(mem);
 
-  This detects the size of the terminal, saves the current terminal state, and enters raw mode. If you
-  need more control over the order of these operations, or want a custom output size, do this:
+  This detects the size of the terminal, saves the current terminal state, and enters raw mode. Input is
+  read from stdin and the prompt is drawn to stderr, which leaves stdout free for your program's output.
+  If either one is not a terminal, you get SP_NULLPTR. To use a different terminal, pass its file
+  descriptors:
 
-    sp_prompt_ctx_t ctx = sp_zero; // Zero initialization is required
-    sp_prompt_init(&ctx, 69, 420);
-    sp_prompt_begin_ex(&ctx, 69, 420);
+    sp_prompt_ctx_t* ctx = sp_prompt_begin_ex(mem, (sp_prompt_config_t) {
+      .fds = { .in = in, .out = out },
+    });
 
 
   ### RUNNING A WIDGET
@@ -692,11 +694,21 @@ typedef struct {
   } ex;
 } sp_prompt_knight_rider_t;
 
+typedef struct {
+  sp_sys_fd_t in;
+  sp_sys_fd_t out;
+} sp_prompt_fds_t;
+
+typedef struct {
+  sp_prompt_fds_t fds;
+} sp_prompt_config_t;
+
 /////////
 // API //
 /////////
 // @lifecycle
 sp_prompt_ctx_t* sp_prompt_begin(sp_mem_t mem);
+sp_prompt_ctx_t* sp_prompt_begin_ex(sp_mem_t mem, sp_prompt_config_t config);
 void             sp_prompt_end(sp_prompt_ctx_t* ctx);
 
 // @widgets
@@ -758,8 +770,6 @@ u32              sp_prompt_text_width(sp_str_t text);
 sp_str_t         sp_prompt_repeat(sp_prompt_ctx_t* ctx, u32 codepoint, u32 count);
 
 // @advanced
-sp_prompt_ctx_t* sp_prompt_new(sp_mem_t mem);
-s32              sp_prompt_begin_ex(sp_prompt_ctx_t* ctx);
 void             sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows);
 void             sp_prompt_prime_events(sp_prompt_ctx_t* ctx, sp_prompt_event_t events[SP_PROMPT_PRIMED_EVENT_CAP]);
 bool             sp_prompt_run(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
@@ -866,7 +876,7 @@ struct sp_prompt_ctx_t {
   sp_prompt_cell_t* framebuffer;
   sp_da(sp_prompt_frame_t) frames;
   struct {
-    struct { sp_sys_fd_t in; sp_sys_fd_t out; } fds;
+    sp_prompt_fds_t fds;
     sp_sys_tty_state_t cache;
     bool raw;
   } terminal;
@@ -901,13 +911,9 @@ struct sp_prompt_ctx_t {
 SP_PRIVATE void sp_prompt_wake(sp_prompt_ctx_t* ctx);
 SP_PRIVATE sp_prompt_event_t sp_prompt_drain_stdin(sp_prompt_ctx_t* ctx);
 SP_PRIVATE void sp_prompt_dispatch_event(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget, sp_prompt_event_t event);
+SP_PRIVATE void sp_prompt_flush_log(sp_prompt_ctx_t* ctx);
+SP_PRIVATE sp_prompt_config_t sp_prompt_config_resolve(sp_prompt_config_t config);
 
-
-static s32 sp_prompt_enable_raw_mode(sp_prompt_ctx_t* ctx) {
-  if (sp_tty_set_mode(ctx->terminal.fds.in, ctx->terminal.fds.out, SP_SYS_TTY_MODE_RAW, &ctx->terminal.cache)) return -1;
-  ctx->terminal.raw = true;
-  return 0;
-}
 
 static void sp_prompt_emit_bytes(sp_prompt_ctx_t* ctx, const void* ptr, u64 size) {
   SP_ASSERT(ctx->tty.io);
@@ -971,90 +977,35 @@ static void sp_prompt_framebuffer_clear(sp_prompt_ctx_t* ctx) {
   ctx->cursor_col = 0;
 }
 
-sp_prompt_ctx_t* sp_prompt_new(sp_mem_t mem) {
-  sp_prompt_ctx_t* ctx = sp_alloc_type(mem, sp_prompt_ctx_t);
-  u32 cols = 0;
-  u32 rows = 0;
-  sp_sys_tty_size(sp_sys_stdout, &cols, &rows);
-  if (cols == 0) cols = SP_PROMPT_DEFAULT_COLS;
-  if (rows == 0) rows = SP_PROMPT_DEFAULT_ROWS;
-  sp_prompt_ctx_init(ctx, mem, cols, rows);
-  return ctx;
+sp_prompt_config_t sp_prompt_config_resolve(sp_prompt_config_t config) {
+  if (!config.fds.in) config.fds.in = sp_sys_stdin;
+  if (!config.fds.out) config.fds.out = sp_sys_stderr;
+  return config;
 }
 
 sp_prompt_ctx_t* sp_prompt_begin(sp_mem_t mem) {
-  sp_prompt_ctx_t* ctx = sp_prompt_new(mem);
-  if (sp_prompt_begin_ex(ctx)) {
-    sp_free(mem, ctx, sizeof(sp_prompt_ctx_t));
-    return SP_NULLPTR;
-  }
-  return ctx;
+  return sp_prompt_begin_ex(mem, sp_zero_s(sp_prompt_config_t));
 }
 
-s32 sp_prompt_begin_ex(sp_prompt_ctx_t* ctx) {
-  ctx->terminal.raw = false;
+sp_prompt_ctx_t* sp_prompt_begin_ex(sp_mem_t mem, sp_prompt_config_t config) {
+  sp_prompt_fds_t fds = sp_prompt_config_resolve(config).fds;
+  if (!sp_sys_is_tty(fds.out)) return SP_NULLPTR;
 
-  if (sp_prompt_enable_raw_mode(ctx) == -1) return -1;
-  sp_sys_event_open(&ctx->wake.event);
-  sp_prompt_emit(ctx, SP_ANSI_HIDE_CURSOR);
-  sp_io_flush(ctx->tty.io);
-  return 0;
-}
+  sp_tty_color_t color = sp_tty_color_detect(fds.out);
+  sp_sys_tty_state_t cache = sp_zero;
+  if (sp_tty_set_mode(fds.in, fds.out, SP_SYS_TTY_MODE_RAW, &cache)) return SP_NULLPTR;
 
-void sp_prompt_end(sp_prompt_ctx_t* ctx) {
-  if (ctx->terminal.raw) {
-    sp_prompt_emit(ctx, SP_ANSI_SHOW_CURSOR);
-    sp_io_flush(ctx->tty.io);
-    sp_tty_restore(ctx->terminal.fds.in, ctx->terminal.fds.out, &ctx->terminal.cache);
-    ctx->terminal.raw = false;
-  }
+  u32 cols = 0;
+  u32 rows = 0;
+  sp_sys_tty_size(fds.out, &cols, &rows);
+  if (cols == 0) cols = SP_PROMPT_DEFAULT_COLS;
+  if (rows == 0) rows = SP_PROMPT_DEFAULT_ROWS;
 
-  if (ctx->wake.event.fd != SP_SYS_INVALID_FD) {
-    sp_sys_close(ctx->wake.event.fd);
-    ctx->wake.event.fd = SP_SYS_INVALID_FD;
-  }
-
-  if (ctx->terminal.fds.out != SP_SYS_INVALID_FD && ctx->terminal.fds.out != 0) {
-    sp_sys_write(ctx->terminal.fds.out, "\n", 1, SP_NULLPTR);
-    sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-    sp_da(sp_str_t) pending = ctx->channel.log.pending[ctx->channel.log.active];
-    sp_da_for(pending, it) {
-      sp_da(sp_str_t) rows = sp_prompt_log_rows(s.mem, pending[it]);
-      sp_da_for(rows, row_it) {
-        sp_str_t row = rows[row_it];
-        if (row.len) {
-          sp_sys_write(ctx->terminal.fds.out, row.data, row.len, SP_NULLPTR);
-        }
-        sp_sys_write(ctx->terminal.fds.out, "\n", 1, SP_NULLPTR);
-      }
-    }
-    sp_mem_end_scratch(s);
-  }
-  sp_mutex_destroy(&ctx->channel.lock);
-  sp_mem_arena_destroy(ctx->channel.log.arenas[0]);
-  sp_mem_arena_destroy(ctx->channel.log.arenas[1]);
-  sp_mem_arena_destroy(ctx->channel.arena);
-  sp_mem_arena_destroy(ctx->arena);
-}
-
-void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) {
-  *ctx = sp_zero_s(sp_prompt_ctx_t);
-  ctx->cols = cols;
-  ctx->rows = rows;
-  ctx->state = SP_PROMPT_STATE_ACTIVE;
-  ctx->wake.event.fd = SP_SYS_INVALID_FD;
-  ctx->terminal.fds.in = sp_sys_stdin;
-  ctx->terminal.fds.out = sp_sys_stdout;
-  ctx->arena = sp_mem_arena_new(mem);
-  ctx->mem = sp_mem_arena_as_allocator(ctx->arena);
-  sp_da_init(ctx->mem, ctx->frames);
-
-  sp_mutex_init(&ctx->channel.lock);
-  ctx->channel.arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
-  ctx->channel.log.arenas[0] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
-  ctx->channel.log.arenas[1] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
-  sp_da_init(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[0]);
-  sp_da_init(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[1]);
+  sp_prompt_ctx_t* ctx = sp_alloc_type(mem, sp_prompt_ctx_t);
+  sp_prompt_ctx_init(ctx, mem, cols, rows);
+  ctx->terminal.fds = fds;
+  ctx->terminal.cache = cache;
+  ctx->terminal.raw = true;
 
   // Write buffering is really important, because our rendering algorithm is extremely
   // naive. It's not much more than this:
@@ -1071,15 +1022,66 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   //
   // Empirically, you get pretty bad tearing on Windows without buffering.
   sp_io_stream_writer_t* fw = sp_mem_arena_alloc_type(ctx->arena, sp_io_stream_writer_t);
-  sp_io_stream_writer_from_fd(fw, ctx->terminal.fds.out, SP_IO_CLOSE_MODE_NONE);
+  sp_io_stream_writer_from_fd(fw, fds.out, SP_IO_CLOSE_MODE_NONE);
   ctx->tty = (sp_tty_t) {
     .io = &fw->base,
-    .color = sp_tty_color_detect(ctx->terminal.fds.out),
+    .color = color,
   };
 
   u64 buffer_size = ctx->cols * ctx->rows * SP_PROMPT_CELL_BUFFER_BYTES + SP_PROMPT_BUFFER_EXTRA_BYTES;
   u8* buffer = sp_mem_arena_alloc_n(ctx->arena, u8, buffer_size);
   sp_io_writer_set_buffer(ctx->tty.io, buffer, buffer_size);
+
+  sp_sys_event_open(&ctx->wake.event);
+  sp_prompt_emit(ctx, SP_ANSI_HIDE_CURSOR);
+  sp_io_flush(ctx->tty.io);
+  return ctx;
+}
+
+void sp_prompt_end(sp_prompt_ctx_t* ctx) {
+  sp_prompt_emit(ctx, "\r\n");
+  sp_prompt_flush_log(ctx);
+  sp_io_flush(ctx->tty.io);
+
+  if (ctx->terminal.raw) {
+    sp_prompt_emit(ctx, SP_ANSI_SHOW_CURSOR);
+    sp_io_flush(ctx->tty.io);
+    sp_tty_restore(ctx->terminal.fds.in, ctx->terminal.fds.out, &ctx->terminal.cache);
+    ctx->terminal.raw = false;
+  }
+
+  if (ctx->wake.event.fd != SP_SYS_INVALID_FD) {
+    sp_sys_close(ctx->wake.event.fd);
+    ctx->wake.event.fd = SP_SYS_INVALID_FD;
+  }
+
+  sp_mutex_destroy(&ctx->channel.lock);
+  sp_mem_arena_destroy(ctx->channel.log.arenas[0]);
+  sp_mem_arena_destroy(ctx->channel.log.arenas[1]);
+  sp_mem_arena_destroy(ctx->channel.arena);
+  sp_mem_arena_destroy(ctx->arena);
+}
+
+void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) {
+  *ctx = sp_zero_s(sp_prompt_ctx_t);
+  ctx->cols = cols;
+  ctx->rows = rows;
+  ctx->state = SP_PROMPT_STATE_ACTIVE;
+  ctx->wake.event.fd = SP_SYS_INVALID_FD;
+  ctx->terminal.fds = (sp_prompt_fds_t) {
+    .in = SP_SYS_INVALID_FD,
+    .out = SP_SYS_INVALID_FD,
+  };
+  ctx->arena = sp_mem_arena_new(mem);
+  ctx->mem = sp_mem_arena_as_allocator(ctx->arena);
+  sp_da_init(ctx->mem, ctx->frames);
+
+  sp_mutex_init(&ctx->channel.lock);
+  ctx->channel.arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
+  ctx->channel.log.arenas[0] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
+  ctx->channel.log.arenas[1] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
+  sp_da_init(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[0]);
+  sp_da_init(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[1]);
 
   u32 cell_count = ctx->cols * ctx->rows;
   if (ctx->framebuffer == SP_NULLPTR) {
@@ -1444,7 +1446,7 @@ static bool sp_prompt_has_pending_log(sp_prompt_ctx_t* ctx) {
   return any;
 }
 
-static void sp_prompt_flush_log(sp_prompt_ctx_t* ctx) {
+void sp_prompt_flush_log(sp_prompt_ctx_t* ctx) {
   sp_mutex_lock(&ctx->channel.lock);
   u32 retired = ctx->channel.log.active;
   bool any = !sp_da_empty(ctx->channel.log.pending[retired]);
