@@ -20419,23 +20419,17 @@ sp_tm_epoch_t sp_fs_get_mod_time(sp_str_t path) {
   return sp_fs_get_mod_time_at(sp_path_at_cwd(path));
 }
 
-SP_PRIVATE sp_str_t sp_fs_canonicalize_to(sp_path_t path, c8 buf [SP_PATH_MAX]) {
-  if (sp_str_empty(path.sub)) return sp_zero_s(sp_str_t);
-
+sp_err_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path, sp_str_t* canonical) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  if (sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_PATH, 0, &fd)) return sp_zero_s(sp_str_t);
+  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_PATH, 0, &fd));
 
+  c8 buf [SP_PATH_MAX];
   u64 len = 0;
   sp_err_t err = sp_sys_get_fd_path(fd, buf, SP_PATH_MAX, &len);
   sp_sys_close(fd);
-  if (err) return sp_zero_s(sp_str_t);
+  sp_try(err);
 
-  return sp_str(buf, (u32)len);
-}
-
-sp_err_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path, sp_str_t* canonical) {
-  c8 buf [SP_PATH_MAX];
-  *canonical = sp_str_copy(mem, sp_fs_canonicalize_to(path, buf));
+  *canonical = sp_str_copy(mem, sp_str(buf, (u32)len));
   return SP_OK;
 }
 
