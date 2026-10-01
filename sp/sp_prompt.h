@@ -738,6 +738,7 @@ bool             sp_prompt_cancelled(sp_prompt_ctx_t* ctx);
 // @signals
 void             sp_prompt_complete(sp_prompt_ctx_t* ctx);
 void             sp_prompt_abort(sp_prompt_ctx_t* ctx);
+void             sp_prompt_use_wake(sp_prompt_ctx_t* ctx, sp_sys_event_t event);
 bool             sp_prompt_is_aborted(sp_prompt_ctx_t* ctx);
 void             sp_prompt_send_progress_f32(sp_prompt_ctx_t* ctx, f32 value);
 void             sp_prompt_send_progress_f64(sp_prompt_ctx_t* ctx, f64 value);
@@ -904,6 +905,7 @@ struct sp_prompt_ctx_t {
   struct {
     sp_sys_event_t event;
     sp_atomic_s32_t pending;
+    bool external;
   } wake;
 };
 
@@ -1058,10 +1060,13 @@ void sp_prompt_end(sp_prompt_ctx_t* ctx) {
     ctx->terminal.raw = false;
   }
 
-  if (ctx->wake.event.fd != SP_SYS_INVALID_FD) {
-    sp_sys_close(ctx->wake.event.fd);
-    ctx->wake.event.fd = SP_SYS_INVALID_FD;
+  if (!ctx->wake.external) {
+    if (ctx->wake.event.fd != SP_SYS_INVALID_FD) {
+      sp_sys_close(ctx->wake.event.fd);
+    }
   }
+  ctx->wake.event.fd = SP_SYS_INVALID_FD;
+  ctx->wake.external = false;
 
   sp_mutex_destroy(&ctx->channel.lock);
   sp_mem_arena_destroy(ctx->channel.log.arenas[0]);
@@ -1152,9 +1157,23 @@ void sp_prompt_wake(sp_prompt_ctx_t* ctx) {
   if (ctx->wake.event.fd == SP_SYS_INVALID_FD) {
     return;
   }
+  if (ctx->wake.external) {
+    sp_sys_event_signal(ctx->wake.event);
+    return;
+  }
   if (sp_atomic_s32_cas(&ctx->wake.pending, SP_PROMPT_WAKE_NOT_PENDING, SP_PROMPT_WAKE_PENDING, SP_ATOMIC_SEQ_CST)) {
     sp_sys_event_signal(ctx->wake.event);
   }
+}
+
+void sp_prompt_use_wake(sp_prompt_ctx_t* ctx, sp_sys_event_t event) {
+  if (!ctx->wake.external) {
+    if (ctx->wake.event.fd != SP_SYS_INVALID_FD) {
+      sp_sys_close(ctx->wake.event.fd);
+    }
+  }
+  ctx->wake.event = event;
+  ctx->wake.external = true;
 }
 
 void sp_prompt_set_state(sp_prompt_ctx_t* ctx, sp_prompt_state_t state) {
@@ -1615,7 +1634,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
   //
   // The event is level-triggered, so it must be cleared before the next queue scan;
   // clearing after the scan would drop any wake signaled in between.
-  if (sp_da_empty(events)) {
+  if (sp_da_empty(events) && ctx->state == SP_PROMPT_STATE_ACTIVE) {
     if (!ctx->widget.on_update) {
       sp_sys_fd_t fds [2] = { ctx->terminal.fds.in, ctx->wake.event.fd };
       u64 n = ctx->wake.event.fd != SP_SYS_INVALID_FD ? 2 : 1;
@@ -1636,7 +1655,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
     sp_prompt_dispatch_event(ctx, ctx->widget, events[it]);
   }
 
-  if (!sp_da_empty(events) || sp_prompt_has_pending_log(ctx)) {
+  if (!sp_da_empty(events) || sp_prompt_has_pending_log(ctx) || ctx->state != SP_PROMPT_STATE_ACTIVE) {
     sp_prompt_render_frame(ctx, ctx->widget);
     sp_prompt_present(ctx);
   }

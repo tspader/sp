@@ -1667,6 +1667,13 @@ static u32 sp_test_num_cpus(void) {
     }
   }
   return count ? count : 1;
+#elif defined(SP_MACOS)
+  s64 count = (s64)sysconf(_SC_NPROCESSORS_ONLN);
+  return count > 0 ? (u32)count : 1;
+#elif defined(SP_WIN32)
+  SYSTEM_INFO info = sp_zero;
+  GetSystemInfo(&info);
+  return info.dwNumberOfProcessors ? (u32)info.dwNumberOfProcessors : 1;
 #else
   return 1;
 #endif
