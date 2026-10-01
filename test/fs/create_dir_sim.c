@@ -30,7 +30,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   mkdirs = 0;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
-  sp_err_t err = sp_fs_create_dir_at(sp_path_at_cwd(sp_cstr_as_str(c->target)));
+  sp_err_t err = sp_fs_create_dir_at(sp_path_cwd(sp_cstr_as_str(c->target)));
   sp_sys_set_vtable(saved);
 
   sp_expect_err_eq(t, err, SP_ERR_SYS_NOT_FOUND);

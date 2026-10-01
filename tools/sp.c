@@ -160,7 +160,7 @@ static sp_da(const target_t*) target_resolve(sp_mem_t mem, sp_str_t query) {
 
 static sp_da(sp_str_t) tests_discover(sp_mem_t mem, sp_str_t dir, sp_str_t ext) {
   sp_da(sp_str_t) names = sp_da_new(mem, sp_str_t);
-  sp_fs_for(mem, sp_path_resolve(dir), it) {
+  sp_fs_for(mem, sp_path_from_str(dir), it) {
     sp_str_t name = it.entry.name;
     if (!sp_str_empty(ext)) {
       if (!sp_str_ends_with(name, ext)) continue;

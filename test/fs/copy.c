@@ -542,8 +542,8 @@ sp_test_each(fs, copy, test_t, tests) {
   sp_sys_fd_t dst_dir = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_fs_open_dir_at(dst_base, &dst_dir));
 
-  sp_path_t src = sp_path_at(dir, sp_cstr_as_str(it->src));
-  sp_path_t dst = sp_path_at(dst_dir, sp_cstr_as_str(it->dst));
+  sp_path_t src = sp_path(dir, sp_cstr_as_str(it->src));
+  sp_path_t dst = sp_path(dst_dir, sp_cstr_as_str(it->dst));
 
   sp_err_t result = SP_OK;
   switch (it->op) {

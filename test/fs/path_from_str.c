@@ -169,7 +169,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   active = c;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
-  sp_path_t path = sp_path_resolve(sp_cstr_as_str(c->path));
+  sp_path_t path = sp_path_from_str(sp_cstr_as_str(c->path));
   sp_sys_set_vtable(saved);
   active = SP_NULLPTR;
 
@@ -181,4 +181,4 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   return SP_OK;
 }
 
-sp_test_each_fn(fs, resolve, test_t, tests, run, .serial = true);
+sp_test_each_fn(fs, path_from_str, test_t, tests, run, .serial = true);

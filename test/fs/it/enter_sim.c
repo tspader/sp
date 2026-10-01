@@ -130,7 +130,7 @@ sp_test_each(fs, it_enter_sim, test_t, tests, .serial = true) {
   u32 leaves = 0;
   u32 produced = 0;
   bool used [MAX_YIELDS] = sp_zero;
-  sp_fs_it_t walk = sp_fs_it_new_at(mem, sp_path_at(sp_sys_get_root(0), sp_str_lit("T")), 0);
+  sp_fs_it_t walk = sp_fs_it_new_at(mem, sp_path(sp_sys_get_root(0), sp_str_lit("T")), 0);
   while (sp_fs_it_next(&walk)) {
     if (produced < MAX_YIELDS && it->expect.yields[produced].path) {
       const yield_t* want = &it->expect.yields[produced];

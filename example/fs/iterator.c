@@ -30,7 +30,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_str_t dir = num_args > 1 ? sp_cstr_as_str(args[1]) : sp_str_lit(".");
 
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_fs_it_t it = sp_fs_it_new_at(s.mem, sp_path_resolve(dir), 0);
+  sp_fs_it_t it = sp_fs_it_new_at(s.mem, sp_path_from_str(dir), 0);
   sp_err_t err = it.err;
   u32 dirs = 0;
   while (!err && sp_fs_it_next(&it)) {

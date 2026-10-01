@@ -14,7 +14,7 @@ static void print_root(s32 it) {
 }
 
 static void print_path(sp_str_t path) {
-  sp_path_t resolved = sp_path_resolve(path);
+  sp_path_t resolved = sp_path_from_str(path);
   sp_log(
     "{:>4} {} {.gray} {}",
     sp_fmt_int(resolved.dir),

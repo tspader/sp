@@ -12,8 +12,8 @@ static sp_err_t start(sp_mem_t mem, sp_path_t config, sp_path_t state) {
 s32 run(s32 num_args, const c8** args) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
 
-  sp_path_t config = sp_path_resolve(sp_str_lit("/config/app.toml"));
-  sp_path_t state = sp_path_resolve(sp_str_lit("/data/last_run"));
+  sp_path_t config = sp_path_from_str(sp_str_lit("/config/app.toml"));
+  sp_path_t state = sp_path_from_str(sp_str_lit("/data/last_run"));
   sp_err_t err = start(s.mem, config, state);
   if (err) {
     sp_log("{.red}", sp_fmt_str(sp_err_str(err)));

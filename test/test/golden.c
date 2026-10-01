@@ -106,7 +106,7 @@ sp_test_each(runner, golden, test_t, tests) {
   if (it->update) sp_must_ok(t, sp_fs_create_file_cstr_at(actual, "stale"));
 
   sp_str_t cwd = it->cwd ? sp_fs_join_path(mem, sandbox.sub, sp_cstr_as_str(it->cwd)) : sandbox.sub;
-  sp_must_ok(t, sp_fs_create_dir_at(sp_path_at(sandbox.dir, cwd)));
+  sp_must_ok(t, sp_fs_create_dir_at(sp_path(sandbox.dir, cwd)));
 
   sp_ps_config_t config = {
     .command = exe,

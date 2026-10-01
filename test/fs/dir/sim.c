@@ -42,7 +42,7 @@ sp_test_each(fs, dir_sim, test_t, tests, .serial = true) {
 
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
   sp_fs_dir_it_t dir = sp_zero;
-  sp_err_t open_err = sp_fs_dir_it_open(&dir, sp_path_at(sp_sys_get_root(0), sp_str_lit("T")), 0, sp_mem_slice(buf, sizeof(buf)));
+  sp_err_t open_err = sp_fs_dir_it_open(&dir, sp_path(sp_sys_get_root(0), sp_str_lit("T")), 0, sp_mem_slice(buf, sizeof(buf)));
   sp_expect_err_eq(t, open_err, it->expect.open);
 
   if (!open_err) {

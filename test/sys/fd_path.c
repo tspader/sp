@@ -149,7 +149,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case TARGET_CWD: {
-      expect = sp_path_at_cwd(sp_cstr_as_str(c->expect.path));
+      expect = sp_path_cwd(sp_cstr_as_str(c->expect.path));
       fd = expect.dir;
       break;
     }
@@ -195,7 +195,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_expect_err_eq(t, err, c->expect.err);
   if (!err) {
     sp_expect_eq(t, buf[len], 0);
-    sp_expect(t, same_file(expect, sp_path_at_cwd(sp_str(buf, (u32)len))));
+    sp_expect(t, same_file(expect, sp_path_cwd(sp_str(buf, (u32)len))));
   }
 
   switch (c->target) {

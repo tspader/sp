@@ -115,7 +115,7 @@ sp_test_each(fs, dir, test_t, tests) {
 
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
   sp_fs_dir_it_t iter = sp_zero;
-  sp_path_t opened = it->relative ? sp_path_at(sandbox_fd, sp_cstr_as_str(it->dir)) : dir;
+  sp_path_t opened = it->relative ? sp_path(sandbox_fd, sp_cstr_as_str(it->dir)) : dir;
   sp_err_t open_err = sp_fs_dir_it_open(&iter, opened, 0, sp_mem_slice(buf, sizeof(buf)));
   sp_expect_ok(t, open_err);
 

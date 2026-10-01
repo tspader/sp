@@ -312,7 +312,7 @@ sp_test_each(fs, remove, test_t, tests) {
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_fs_open_dir_at(base, &dir));
 
-  sp_path_t path = sp_path_at(dir, sp_cstr_as_str(it->path));
+  sp_path_t path = sp_path(dir, sp_cstr_as_str(it->path));
   sp_err_t result = it->dir ? sp_fs_remove_dir_at(path) : sp_fs_remove_file_at(path);
   sp_expect_err_eq(t, result, it->expect.err);
 
@@ -331,7 +331,7 @@ sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
   sp_sys_fd_t cur = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_fs_open_dir_at(root, &cur));
   sp_for(level, DEEP_LEVELS) {
-    sp_path_t child = sp_path_at(cur, sp_str_lit(DEEP_NAME));
+    sp_path_t child = sp_path(cur, sp_str_lit(DEEP_NAME));
     sp_must_ok(t, sp_fs_create_dir_at(child));
 
     sp_sys_fd_t next = SP_SYS_INVALID_FD;
@@ -339,7 +339,7 @@ sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
     sp_sys_close(cur);
     cur = next;
   }
-  sp_must_ok(t, sp_fs_create_file_at(sp_path_at(cur, sp_str_lit("F"))));
+  sp_must_ok(t, sp_fs_create_file_at(sp_path(cur, sp_str_lit("F"))));
   sp_sys_close(cur);
 
   sp_expect_err_eq(t, sp_fs_remove_dir_at(root), SP_ERR_SYS_NAME_TOO_LONG);
@@ -352,7 +352,7 @@ sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
     sp_sys_close(cur);
     cur = next;
   }
-  sp_expect_ok(t, sp_fs_remove_dir_at(sp_path_at(cur, sp_str_lit(DEEP_NAME))));
+  sp_expect_ok(t, sp_fs_remove_dir_at(sp_path(cur, sp_str_lit(DEEP_NAME))));
   sp_sys_close(cur);
 
   sp_expect_ok(t, sp_fs_remove_dir_at(root));

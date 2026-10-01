@@ -1096,9 +1096,9 @@ static sp_path_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
   sp_mutex_unlock(&runner->mutex);
   if (!sp_str_empty(root.sub)) return root;
 
-  sp_path_t anchors [2] = { sp_path_at_cwd(sp_str_lit(".")) };
+  sp_path_t anchors [2] = { sp_path_cwd(sp_str_lit(".")) };
   sp_str_t exe = sp_zero;
-  if (!sp_fs_get_exe_path(t->mem, &exe)) anchors[1] = sp_path_resolve(sp_fs_parent_path(exe));
+  if (!sp_fs_get_exe_path(t->mem, &exe)) anchors[1] = sp_path_from_str(sp_fs_parent_path(exe));
 
   sp_carr_for(anchors, it) {
     if (sp_str_empty(anchors[it].sub)) continue;
@@ -1109,7 +1109,7 @@ static sp_path_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
 
   sp_mutex_lock(&runner->mutex);
   if (sp_str_empty(runner->golden_root.sub)) {
-    runner->golden_root = sp_path_at(root.dir, sp_str_copy(runner->mem, root.sub));
+    runner->golden_root = sp_path(root.dir, sp_str_copy(runner->mem, root.sub));
   }
   root = runner->golden_root;
   sp_mutex_unlock(&runner->mutex);
@@ -1118,7 +1118,7 @@ static sp_path_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
 
 static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_str_t file, u32 line) {
   sp_str_t shown = sp_test_path_str(t->mem, path);
-  sp_path_t actual_path = sp_path_at(path.dir, sp_test_format(t, "{}.actual", sp_fmt_str(path.sub)));
+  sp_path_t actual_path = sp_path(path.dir, sp_test_format(t, "{}.actual", sp_fmt_str(path.sub)));
 
   if (t->runner->update) {
     sp_fs_create_dir_at(sp_path_parent(t->mem, path));
@@ -1195,7 +1195,7 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
 
   sp_path_t src = sp_zero;
   if (sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS)) {
-    src = sp_path_resolve(file);
+    src = sp_path_from_str(file);
   }
   else {
     sp_path_t root = sp_test_golden_root(t, file);
@@ -1222,7 +1222,7 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
   }
 
   sp_path_t golden = sp_fs_is_absolute(path) ?
-    sp_path_resolve(path) :
+    sp_path_from_str(path) :
     sp_path_join(t->mem, sp_path_parent(t->mem, src), path);
   sp_test_golden_at(t, golden, actual, file, line);
 }
@@ -2016,7 +2016,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   if (golden.env) golden_root = sp_cstr_as_str(golden.env);
   if (golden.opt) golden_root = sp_cstr_as_str(golden.opt);
   if (!sp_str_empty(golden_root)) {
-    runner->golden_root = sp_path_resolve(sp_fs_normalize_path(runner->mem, golden_root));
+    runner->golden_root = sp_path_from_str(sp_fs_normalize_path(runner->mem, golden_root));
     if (runner->golden_root.dir == SP_SYS_INVALID_FD) {
       sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(golden_root));
       sp_io_flush(&runner->out.base);
@@ -2114,7 +2114,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   if (dir.opt) dir_name = sp_cstr_as_str(dir.opt);
   dir_name = sp_fs_normalize_path(runner->mem, dir_name);
 
-  sp_path_t root = sp_path_resolve(dir_name);
+  sp_path_t root = sp_path_from_str(dir_name);
   if (root.dir == SP_SYS_INVALID_FD) {
     sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(dir_name));
     sp_io_flush(&runner->out.base);

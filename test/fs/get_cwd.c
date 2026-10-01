@@ -24,7 +24,7 @@ sp_test(fs, get_cwd_unlinked_cwd_has_no_path, .serial = true) {
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
-  sp_path_t doomed = sp_path_at(dir, sp_str_lit("A"));
+  sp_path_t doomed = sp_path(dir, sp_str_lit("A"));
   sp_str_t canonical = sp_zero;
   sp_err_t err = sp_fs_create_dir_at(doomed);
   if (!err) err = sp_fs_canonicalize_path_at(mem, doomed, &canonical);
@@ -50,16 +50,16 @@ sp_test(fs, get_cwd_is_root_zero) {
   return SP_OK;
 }
 
-sp_test(fs, path_at_cwd_passes_through) {
+sp_test(fs, path_cwd_passes_through) {
   sp_test_skip_on_wasm()
 
   sp_path_t file = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_must_ok(t, sp_fs_create_file_at(file));
 
-  sp_path_t path = sp_path_at_cwd(file.sub);
+  sp_path_t path = sp_path_cwd(file.sub);
   sp_expect_eq(t, path.dir, sp_fs_get_cwd());
   sp_expect_str_eq(t, path.sub, file.sub);
   sp_expect(t, sp_fs_is_file_at(path));
-  sp_expect(t, sp_fs_is_dir_at(sp_path_at_cwd(sp_str_lit("."))));
+  sp_expect(t, sp_fs_is_dir_at(sp_path_cwd(sp_str_lit("."))));
   return SP_OK;
 }

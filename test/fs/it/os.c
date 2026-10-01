@@ -171,7 +171,7 @@ sp_test_each(fs, it, test_t, tests) {
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_str_t base = sp_str_lit("R");
-  sp_path_t root = sp_path_at(dir, sp_cstr_as_str(it->root ? it->root : "R"));
+  sp_path_t root = sp_path(dir, sp_cstr_as_str(it->root ? it->root : "R"));
 
   fs_match_t matches [FS_MAX_PATHS] = sp_zero;
   u32 n = 0;
