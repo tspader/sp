@@ -53,15 +53,17 @@ typedef struct {
 // FIXTURES //
 //////////////
 sp_str_t get_process_path(sp_mem_t mem) {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path(mem));
-  sp_str_t process = sp_fs_join_path(mem, exe, sp_str_lit("process"));
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
+  sp_str_t process = sp_fs_join_path(mem, sp_fs_parent_path(exe), sp_str_lit("process"));
   process = sp_fs_replace_ext(mem, process, sp_os_get_executable_ext());
   return process;
 }
 
 const c8* get_process_path_c(sp_mem_t mem) {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path(mem));
-  sp_str_t process = sp_fs_join_path(mem, exe, sp_str_lit("process"));
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
+  sp_str_t process = sp_fs_join_path(mem, sp_fs_parent_path(exe), sp_str_lit("process"));
   process = sp_fs_replace_ext(mem, process, sp_os_get_executable_ext());
   return sp_str_to_cstr(mem, process);
 }

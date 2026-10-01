@@ -383,7 +383,9 @@ static test_t test_init(sp_mem_t mem, tool_t* tool, const target_t* target, sp_s
       break;
     }
     case EXEC_DOCKER: {
-      sp_str_t mount = sp_fmt(mem, "{}:/sp", sp_fmt_str(sp_fs_get_cwd_path(mem))).value;
+      sp_str_t cwd = sp_zero;
+      sp_fs_get_cwd_path(mem, &cwd);
+      sp_str_t mount = sp_fmt(mem, "{}:/sp", sp_fmt_str(cwd)).value;
       sp_str_t path = sp_fmt(mem, "/sp/{}", sp_fmt_str(rel)).value;
       test.display = sp_fmt(mem, "docker run --rm --platform linux/arm64 -v {} -w /sp debian:stable-slim {}", sp_fmt_str(mount), sp_fmt_str(path)).value;
       test.config = (sp_ps_config_t) {

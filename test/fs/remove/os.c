@@ -380,4 +380,21 @@ sp_test(fs, remove_dir_unwritable_subdir_fails) {
   });
   return SP_OK;
 }
+
+sp_test(fs, remove_dir_unreadable_empty_subdir_is_removed) {
+  sp_mem_t mem = sp_test_arena(t);
+  sp_path_t sandbox = sp_test_dir(t);
+  sp_path_t locked = sp_path_join(mem, sandbox, sp_str_lit("A/B"));
+  sp_must_ok(t, sp_fs_create_dir_at(locked));
+  sp_must_ok(t, sp_sys_set_file_perms_s(locked.dir, locked.sub, (sp_sys_file_perms_t) { .value = 0 }));
+
+  sp_err_t result = sp_fs_remove_dir_at(sp_path_join(mem, sandbox, sp_str_lit("A")));
+
+  sp_sys_set_file_perms_s(locked.dir, locked.sub, (sp_sys_file_perms_t) { .value = 0755 });
+  sp_expect_ok(t, result);
+  fs_expect_paths(t, sandbox, (const fs_expected_path_t [FS_MAX_PATHS]) {
+    { .path = "A" },
+  });
+  return SP_OK;
+}
 #endif

@@ -42,8 +42,10 @@ static const c8* inherited_name(s64 value) {
 
 static s32 spawn_probe(sp_test_t* t, const c8* op, s64 handle) {
   sp_mem_t mem = sp_test_arena(t);
+  sp_str_t exe = sp_zero;
+  sp_expect_ok(t, sp_fs_get_exe_path(mem, &exe));
   sp_ps_output_t out = sp_ps_run(mem, (sp_ps_config_t) {
-    .command = sp_fs_get_exe_path(mem),
+    .command = exe,
     .args = {
       sp_str_lit("probe"),
       sp_cstr_as_str(op),

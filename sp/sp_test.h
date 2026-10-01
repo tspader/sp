@@ -1097,8 +1097,8 @@ static sp_path_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
   if (!sp_str_empty(root.sub)) return root;
 
   sp_path_t anchors [2] = { sp_path_at_cwd(sp_str_lit(".")) };
-  sp_str_t exe = sp_fs_get_exe_path(t->mem);
-  if (!sp_str_empty(exe)) anchors[1] = sp_path_resolve(sp_fs_parent_path(exe));
+  sp_str_t exe = sp_zero;
+  if (!sp_fs_get_exe_path(t->mem, &exe)) anchors[1] = sp_path_resolve(sp_fs_parent_path(exe));
 
   sp_carr_for(anchors, it) {
     if (sp_str_empty(anchors[it].sub)) continue;
@@ -2123,8 +2123,8 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   sp_tm_epoch_t grace = { .s = now.s - SP_TEST_RUNS_GRACE_S, .ns = now.ns };
-  sp_str_t exe = sp_fs_get_exe_path(runner->mem);
-  if (sp_str_empty(exe)) exe = sp_cstr_as_str(argv[0]);
+  sp_str_t exe = sp_zero;
+  if (sp_fs_get_exe_path(runner->mem, &exe)) exe = sp_cstr_as_str(argv[0]);
   sp_path_t runs_dir = sp_path_join(runner->mem, root, sp_fs_get_stem(exe));
   runner->dir_root = sp_path_join(runner->mem, runs_dir, sp_test_run_name(runner->mem, now));
 

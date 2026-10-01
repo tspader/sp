@@ -128,9 +128,8 @@ sp_test_each(fs, fd_relative, test_t, tests) {
     }
     case OP_OPEN:
     case OP_OPEN_ABS: {
-      sp_str_t path = it->op == OP_OPEN_ABS
-        ? sp_fs_canonicalize_path_at(mem, sp_path_join(mem, sandbox, sp_str_view(it->path)))
-        : sp_str_view(it->path);
+      sp_str_t path = sp_str_view(it->path);
+      if (it->op == OP_OPEN_ABS) sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sp_path_join(mem, sandbox, path), &path));
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
       sp_expect_ok(t, sp_sys_open_s(cwd, path, SP_SYS_OPEN_MODE_RO, 0, &fd));
 

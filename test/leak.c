@@ -166,8 +166,9 @@ UTEST(tracking, realloc_zero_is_free) {
 // SP_PS LEAK //
 //////////////
 static sp_str_t leak_ps_get_process_path(sp_mem_t mem) {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path(mem));
-  sp_str_t process = sp_fs_join_path(mem, exe, sp_str_lit("process"));
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
+  sp_str_t process = sp_fs_join_path(mem, sp_fs_parent_path(exe), sp_str_lit("process"));
   return sp_fs_replace_ext(mem, process, sp_os_get_executable_ext());
 }
 

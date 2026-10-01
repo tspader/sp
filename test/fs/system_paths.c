@@ -14,21 +14,29 @@ sp_test(fs, system_paths_nonempty) {
   sp_test_skip_on_wasm()
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_must_gt(t, sp_fs_get_storage_path(mem).len, 0);
-  sp_must_gt(t, sp_fs_get_config_path(mem).len, 0);
+  sp_str_t storage = sp_zero;
+  sp_str_t config = sp_zero;
+  sp_must_ok(t, sp_fs_get_storage_path(mem, &storage));
+  sp_must_ok(t, sp_fs_get_config_path(mem, &config));
+  sp_must_gt(t, storage.len, 0);
+  sp_must_gt(t, config.len, 0);
   return SP_OK;
 }
 
 sp_test(fs, system_paths_storage_path_normalized) {
   sp_test_skip_on_wasm()
 
-  expect_normalized(t, sp_fs_get_storage_path(sp_test_arena(t)), "storage_path");
+  sp_str_t path = sp_zero;
+  sp_must_ok(t, sp_fs_get_storage_path(sp_test_arena(t), &path));
+  expect_normalized(t, path, "storage_path");
   return SP_OK;
 }
 
 sp_test(fs, system_paths_config_path_normalized) {
   sp_test_skip_on_wasm()
 
-  expect_normalized(t, sp_fs_get_config_path(sp_test_arena(t)), "config_path");
+  sp_str_t path = sp_zero;
+  sp_must_ok(t, sp_fs_get_config_path(sp_test_arena(t), &path));
+  expect_normalized(t, path, "config_path");
   return SP_OK;
 }

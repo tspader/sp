@@ -125,8 +125,10 @@ static void fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t set
       }
       case FS_SETUP_FIFO: {
 #if defined(SP_POSIX)
-        sp_str_t fifo = sp_fs_join_path(mem, sp_fs_canonicalize_path_at(mem, parent), sp_fs_get_name(path.sub));
-        err = mkfifo(sp_cstr_from_str(mem, fifo), 0644) ? SP_ERR_SYS : SP_OK;
+        sp_str_t dir = sp_zero;
+        err = sp_fs_canonicalize_path_at(mem, parent, &dir);
+        sp_str_t fifo = sp_fs_join_path(mem, dir, sp_fs_get_name(path.sub));
+        if (!err) err = mkfifo(sp_cstr_from_str(mem, fifo), 0644) ? SP_ERR_SYS : SP_OK;
 #else
         err = SP_ERR_SYS_UNSUPPORTED;
 #endif

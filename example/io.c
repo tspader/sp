@@ -11,7 +11,8 @@ s32 run(s32 num_args, const c8** args) {
     .data = sp_alloc_n(mem, u8, 64),
     .capacity = 64
   };
-  sp_str_t exe = sp_fs_get_exe_path(mem);
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
 
   // sp_io provides utilities for opening a file from a path
   sp_io_file_reader_from_path(&r, exe);

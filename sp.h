@@ -3124,12 +3124,12 @@ SP_API sp_err_t             sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_
 SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_open_dir_at(sp_path_t path, sp_sys_fd_t* out);
 SP_API sp_sys_fd_t          sp_fs_get_cwd();
-SP_API sp_str_t             sp_fs_get_cwd_path(sp_mem_t mem);
-SP_API sp_str_t             sp_fs_get_exe_path(sp_mem_t mem);
-SP_API sp_str_t             sp_fs_get_storage_path(sp_mem_t mem);
-SP_API sp_str_t             sp_fs_get_config_path(sp_mem_t mem);
-SP_API sp_str_t             sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path);
-SP_API sp_str_t             sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path);
+SP_API sp_err_t             sp_fs_get_cwd_path(sp_mem_t mem, sp_str_t* path);
+SP_API sp_err_t             sp_fs_get_exe_path(sp_mem_t mem, sp_str_t* path);
+SP_API sp_err_t             sp_fs_get_storage_path(sp_mem_t mem, sp_str_t* path);
+SP_API sp_err_t             sp_fs_get_config_path(sp_mem_t mem, sp_str_t* path);
+SP_API sp_err_t             sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path, sp_str_t* canonical);
+SP_API sp_err_t             sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path, sp_str_t* canonical);
 SP_API sp_path_t            sp_path_at(sp_sys_fd_t dir, sp_str_t sub);
 SP_API sp_path_t            sp_path_at_cwd(sp_str_t sub);
 SP_API sp_path_t            sp_path_resolve(sp_str_t path);
@@ -16964,7 +16964,11 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   sp_fmon_dir_t dir = sp_zero;
   dir.overlapped.hEvent = event;
   dir.handle = (sp_win32_handle_t)handle;
-  dir.path = sp_fs_canonicalize_path(monitor->mem, path);
+  if (sp_fs_canonicalize_path(monitor->mem, path, &dir.path)) {
+    CloseHandle(dir.handle);
+    CloseHandle(event);
+    return;
+  }
   dir.notify_information = sp_alloc(monitor->mem, SP_FILE_MONITOR_BUFFER_SIZE);
   sp_mem_zero(dir.notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
 
@@ -16975,14 +16979,16 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
 
 void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
   sp_fmon_os_t* os = monitor->os;
-  sp_str_t canonical = sp_fs_canonicalize_path(monitor->mem, file_path);
+  sp_str_t canonical = sp_zero;
+  if (sp_fs_canonicalize_path(monitor->mem, file_path, &canonical)) return;
   sp_da_push(os->watch_files, canonical);
 
   sp_str_t dir_path = sp_fs_parent_path(canonical);
   if (dir_path.len > 0) {
     bool found = false;
     sp_da_for(os->dirs, i) {
-      sp_str_t path = sp_fs_canonicalize_path(monitor->mem, os->dirs[i].path); // @spader
+      sp_str_t path = sp_zero;
+      if (sp_fs_canonicalize_path(monitor->mem, os->dirs[i].path, &path)) continue; // @spader
       if (sp_str_equal(path, dir_path)) {
         found = true;
         break;
@@ -17159,7 +17165,8 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
 
 void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
-  sp_str_t canonical = sp_fs_canonicalize_path(monitor->mem, file_path);
+  sp_str_t canonical = sp_zero;
+  if (sp_fs_canonicalize_path(monitor->mem, file_path, &canonical)) return;
   sp_str_ht_insert(os->files, canonical, 1);
 
   sp_str_t dir_path = sp_fs_parent_path(canonical);
@@ -17408,7 +17415,7 @@ void sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir) {
 
 void sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file) {
   sp_mutex_lock(&os->mutex);
-  sp_da_push(os->watch_files, sp_fs_canonicalize_path(os->mem.watch, file));
+  sp_da_push(os->watch_files, sp_str_copy(os->mem.watch, file));
   sp_mutex_unlock(&os->mutex);
 }
 
@@ -17420,30 +17427,34 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
 void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
   sp_fmon_os_t* os = monitor->os;
 
-  sp_fmon_os_push_file(os, path);
+  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
-  {
-    sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-
-    sp_str_t dir = sp_fs_parent_path(sp_fs_canonicalize_path(path));
-
-    bool found = false;
-    sp_mutex_lock(&os->mutex);
-    sp_da_for(os->watch_paths, it) {
-      if (sp_str_equal(os->watch_paths[it], dir)) {
-        found = true;
-        break;
-      }
-    }
-    sp_mutex_unlock(&os->mutex);
-
-    if (!found) {
-      sp_fmon_os_push_dir(os, dir);
-      sp_fmon_fsevents_recreate_stream(monitor);
-    }
-
+  sp_str_t canonical = sp_zero;
+  if (sp_fs_canonicalize_path(scratch.mem, path, &canonical)) {
     sp_mem_end_scratch(scratch);
+    return;
   }
+
+  sp_fmon_os_push_file(os, canonical);
+
+  sp_str_t dir = sp_fs_parent_path(canonical);
+
+  bool found = false;
+  sp_mutex_lock(&os->mutex);
+  sp_da_for(os->watch_paths, it) {
+    if (sp_str_equal(os->watch_paths[it], dir)) {
+      found = true;
+      break;
+    }
+  }
+  sp_mutex_unlock(&os->mutex);
+
+  if (!found) {
+    sp_fmon_os_push_dir(os, dir);
+    sp_fmon_fsevents_recreate_stream(monitor);
+  }
+
+  sp_mem_end_scratch(scratch);
 }
 
 void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
@@ -20422,41 +20433,50 @@ SP_PRIVATE sp_str_t sp_fs_canonicalize_to(sp_path_t path, c8 buf [SP_PATH_MAX]) 
   return sp_str(buf, (u32)len);
 }
 
-sp_str_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path) {
+sp_err_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path, sp_str_t* canonical) {
   c8 buf [SP_PATH_MAX];
-  return sp_str_copy(mem, sp_fs_canonicalize_to(path, buf));
+  *canonical = sp_str_copy(mem, sp_fs_canonicalize_to(path, buf));
+  return SP_OK;
 }
 
-sp_str_t sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path) {
-  return sp_fs_canonicalize_path_at(mem, sp_path_at_cwd(path));
+sp_err_t sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path, sp_str_t* canonical) {
+  return sp_fs_canonicalize_path_at(mem, sp_path_at_cwd(path), canonical);
 }
 
-sp_str_t sp_fs_get_exe_path(sp_mem_t mem) {
+sp_err_t sp_fs_get_exe_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
-  if (sp_sys_get_exe_path(buf, SP_PATH_MAX, &len)) return sp_zero_s(sp_str_t);
-  return sp_str_copy(mem, sp_str(buf, (u32)len));
+  *path = sp_zero_s(sp_str_t);
+  if (sp_sys_get_exe_path(buf, SP_PATH_MAX, &len)) return SP_OK;
+  *path = sp_str_copy(mem, sp_str(buf, (u32)len));
+  return SP_OK;
 }
 
-sp_str_t sp_fs_get_cwd_path(sp_mem_t mem) {
+sp_err_t sp_fs_get_cwd_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
-  if (sp_sys_get_fd_path(sp_fs_get_cwd(), buf, SP_PATH_MAX, &len)) return sp_zero_s(sp_str_t);
-  return sp_str_copy(mem, sp_str(buf, (u32)len));
+  *path = sp_zero_s(sp_str_t);
+  if (sp_sys_get_fd_path(sp_fs_get_cwd(), buf, SP_PATH_MAX, &len)) return SP_OK;
+  *path = sp_str_copy(mem, sp_str(buf, (u32)len));
+  return SP_OK;
 }
 
-sp_str_t sp_fs_get_storage_path(sp_mem_t mem) {
+sp_err_t sp_fs_get_storage_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
-  if (sp_sys_get_storage_path(buf, SP_PATH_MAX, &len)) return sp_zero_s(sp_str_t);
-  return sp_fs_normalize_path(mem, sp_str(buf, (u32)len));
+  *path = sp_zero_s(sp_str_t);
+  if (sp_sys_get_storage_path(buf, SP_PATH_MAX, &len)) return SP_OK;
+  *path = sp_fs_normalize_path(mem, sp_str(buf, (u32)len));
+  return SP_OK;
 }
 
-sp_str_t sp_fs_get_config_path(sp_mem_t mem) {
+sp_err_t sp_fs_get_config_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
-  if (sp_sys_get_config_path(buf, SP_PATH_MAX, &len)) return sp_zero_s(sp_str_t);
-  return sp_fs_normalize_path(mem, sp_str(buf, (u32)len));
+  *path = sp_zero_s(sp_str_t);
+  if (sp_sys_get_config_path(buf, SP_PATH_MAX, &len)) return SP_OK;
+  *path = sp_fs_normalize_path(mem, sp_str(buf, (u32)len));
+  return SP_OK;
 }
 
 sp_err_t sp_io_read_file_at(sp_mem_t mem, sp_path_t path, sp_str_t* content) {

@@ -70,7 +70,8 @@ sp_test_each(runner, prune, prune_case_t, prune_cases) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  sp_str_t exe = sp_fs_get_exe_path(mem);
+  sp_str_t exe = sp_zero;
+  sp_must_ok(t, sp_fs_get_exe_path(mem, &exe));
   sp_path_t runs = sp_path_join(mem, sandbox, sp_fs_join_path(mem, sp_str_lit("T"), sp_fs_get_stem(exe)));
   sp_tm_epoch_t now = sp_tm_now_epoch();
 

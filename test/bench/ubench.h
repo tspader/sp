@@ -1488,7 +1488,8 @@ s32 ubench_main(s32 argc, const c8 *const argv[]) {
          returns, which is what binds the strings into SQLite). */
       {
         sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-        sp_str_t exe = sp_fs_get_exe_path(s.mem);
+        sp_str_t exe = sp_zero;
+        sp_fs_get_exe_path(s.mem, &exe);
         sp_cstr_copy_to_n(exe.data, exe.len,
                           exe_path_buf, sizeof(exe_path_buf));
         if (exe_path_buf[0]) {

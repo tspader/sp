@@ -53,7 +53,9 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case SETUP_LINK_ABSOLUTE: {
       sp_test_skip_without_absolute_names();
       sp_test_skip_without_symlinks();
-      expected = sp_fs_join_path(mem, sp_fs_canonicalize_path_at(mem, sandbox), sp_cstr_as_str(c->target));
+      sp_str_t root = sp_zero;
+      sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sandbox, &root));
+      expected = sp_fs_join_path(mem, root, sp_cstr_as_str(c->target));
       sp_must_ok(t, sp_fs_create_sym_link_at(expected, path, SP_FS_KIND_FILE));
       break;
     }

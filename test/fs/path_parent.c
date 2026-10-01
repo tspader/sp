@@ -15,7 +15,7 @@ static const test_t tests [] = {
   { .name = "trailing_sep",    .sub = "A/B/",  .expect = "A" },
   { .name = "root_label",      .sub = ".",     .expect = "./.." },
   { .name = "trailing_dot",    .sub = "./",    .expect = "./.." },
-  { .name = "empty",           .sub = "",      .expect = ".." },
+  { .name = "empty",           .sub = "",      .expect = "" },
   { .name = "dotdot",          .sub = "..",    .expect = "../.." },
   { .name = "nested_dotdot",   .sub = "A/..",  .expect = "A/../.." },
   { .name = "trailing_dotdot", .sub = "A/../", .expect = "A/../.." },

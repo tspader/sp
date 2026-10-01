@@ -92,14 +92,16 @@ sp_test_each(runner, golden, test_t, tests) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  sp_str_t exe = sp_fs_get_exe_path(mem);
+  sp_str_t exe = sp_zero;
+  sp_must_ok(t, sp_fs_get_exe_path(mem, &exe));
 
   sp_path_t src = sp_path_join(mem, sandbox, sp_str_lit("S/main.c"));
   sp_path_t golden = sp_path_join(mem, sandbox, sp_str_lit("S/G"));
   sp_path_t actual = sp_path_join(mem, sandbox, sp_str_lit("S/G.actual"));
   sp_must_ok(t, sp_fs_create_dir_at(sp_path_parent(mem, src)));
   sp_must_ok(t, sp_fs_create_file_at(src));
-  sp_str_t file = it->absolute ? sp_fs_canonicalize_path_at(mem, src) : sp_str_lit("S/main.c");
+  sp_str_t file = sp_str_lit("S/main.c");
+  if (it->absolute) sp_must_ok(t, sp_fs_canonicalize_path_at(mem, src, &file));
   if (it->golden) sp_must_ok(t, sp_fs_create_file_cstr_at(golden, it->golden));
   if (it->update) sp_must_ok(t, sp_fs_create_file_cstr_at(actual, "stale"));
 

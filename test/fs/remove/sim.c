@@ -244,6 +244,41 @@ static const test_t tests [] = {
     },
   },
   {
+    .name = "unreadable_empty_subdir_is_removed",
+    .dirs = {
+      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "T/B", .open = SP_ERR_SYS_ACCESS_DENIED },
+    },
+    .expect = {
+      .removed = { { "T/B", SIM_OP_RMDIR }, { "T", SIM_OP_RMDIR } },
+      .opens = 2,
+      .rmdirs = 2,
+    },
+  },
+  {
+    .name = "unreadable_empty_root_is_removed",
+    .dirs = {
+      { .path = "T", .open = SP_ERR_SYS_ACCESS_DENIED },
+    },
+    .expect = {
+      .removed = { { "T", SIM_OP_RMDIR } },
+      .opens = 1,
+      .rmdirs = 1,
+    },
+  },
+  {
+    .name = "unreadable_subdir_with_entries_is_access_denied",
+    .dirs = {
+      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "T/B", .open = SP_ERR_SYS_ACCESS_DENIED, .entries = { { "C", SP_FS_KIND_FILE } } },
+    },
+    .expect = {
+      .err = SP_ERR_SYS_ACCESS_DENIED,
+      .opens = 2,
+      .rmdirs = 1,
+    },
+  },
+  {
     .name = "read_error_fails_fast_and_unwinds",
     .dirs = {
       { .path = "T", .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },

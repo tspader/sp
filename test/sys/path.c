@@ -393,7 +393,11 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   sp_str_t path = sp_cstr_as_str(c->path);
   if (c->path_kind == PATH_LONG) path = long_path(mem, c->path);
-  if (c->path_kind == PATH_ABS)  path = abs_path(mem, sp_fs_canonicalize_path_at(mem, sandbox), c->path);
+  if (c->path_kind == PATH_ABS) {
+    sp_str_t root = sp_zero;
+    sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sandbox, &root));
+    path = abs_path(mem, root, c->path);
+  }
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_err_t err = SP_OK;
