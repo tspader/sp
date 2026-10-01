@@ -20319,7 +20319,7 @@ sp_path_t sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub) {
 }
 
 sp_path_t sp_path_parent(sp_mem_t mem, sp_path_t path) {
-  if (sp_str_empty(path.sub) || sp_fs_is_dot(sp_fs_get_name(path.sub))) return sp_path_join(mem, path, sp_str_lit(".."));
+  if (sp_fs_is_dot(sp_fs_get_name(path.sub))) return sp_path_join(mem, path, sp_str_lit(".."));
   return sp_path_at(path.dir, sp_fs_parent_path(path.sub));
 }
 
