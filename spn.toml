@@ -77,6 +77,13 @@ source = [
 ]
 
 [[test]]
+name = "promptt"
+source = [
+  "test/main.c",
+  "test/prompt/*.c",
+]
+
+[[test]]
 name = "tls"
 source = [
   "test/main.c",

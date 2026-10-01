@@ -777,7 +777,9 @@ sp_app_config_t  sp_prompt_app(sp_prompt_ctx_t* ctx, sp_prompt_widget_t widget);
 #endif
 
 
-#if defined(SP_PROMPT_IMPLEMENTATION)
+#if !defined(SP_PROMPT_IMPL_H)
+#if defined(SP_PROMPT_PRIVATE_HEADER) || defined(SP_PROMPT_IMPLEMENTATION)
+#define SP_PROMPT_IMPL_H
 
 typedef struct {
   u32 cursor;
@@ -914,6 +916,12 @@ SP_PRIVATE void sp_prompt_dispatch_event(sp_prompt_ctx_t* ctx, sp_prompt_widget_
 SP_PRIVATE void sp_prompt_flush_log(sp_prompt_ctx_t* ctx);
 SP_PRIVATE sp_prompt_config_t sp_prompt_config_resolve(sp_prompt_config_t config);
 
+#endif
+#endif
+
+#ifndef SP_PROMPT_C
+#if defined(SP_PROMPT_IMPLEMENTATION)
+#define SP_PROMPT_C
 
 static void sp_prompt_emit_bytes(sp_prompt_ctx_t* ctx, const void* ptr, u64 size) {
   SP_ASSERT(ctx->tty.io);
@@ -3458,4 +3466,5 @@ sp_prompt_widget_t sp_prompt_knight_rider_widget(sp_prompt_ctx_t* ctx, sp_prompt
 void sp_prompt_knight_rider(sp_prompt_ctx_t* ctx, sp_prompt_knight_rider_t config) {
   sp_prompt_run(ctx, sp_prompt_knight_rider_widget(ctx, config));
 }
+#endif
 #endif

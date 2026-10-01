@@ -14,7 +14,6 @@
 #include "io.c"
 #include "math.c"
 #include "mem.c"
-#include "prompt.c"
 #include "ps.c"
 #include "rb.c"
 #include "str.c"
