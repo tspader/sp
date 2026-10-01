@@ -13907,7 +13907,6 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = d->d_reclen;
   return SP_OK;
 #elif defined(SP_WASM)
-  // @spader this is just a temporary stub! probably wrong
   __wasi_size_t used = 0;
   __wasi_errno_t err = sp_wasi_fd_readdir((__wasi_fd_t)it->fd, buf->data, (__wasi_size_t)buf->capacity, (__wasi_dircookie_t)it->state, &used);
   if (err == SP_WASI_ENOENT) return SP_OK;
@@ -13964,7 +13963,6 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
   out->kind = sp_sys_dir_dtype_to_kind(d->d_type);
   return SP_OK;
 #elif defined(SP_WASM)
-  // @spader this is just a temporary stub! probably wrong
   (void)it;
   __wasi_dirent_t d;
   sp_mem_copy(&d, buf->data + *cursor, sizeof(d));
@@ -20584,9 +20582,6 @@ sp_err_t sp_fs_remove_file(sp_str_t path) {
 sp_err_t sp_fs_dir_it_open(sp_fs_dir_it_t* it, sp_path_t path, u32 flags, sp_mem_slice_t buf) {
   *it = sp_zero_s(sp_fs_dir_it_t);
 
-  // @spader wtf?
-  sp_assert(buf.len >= SP_SYS_DIR_MIN_BUF);
-
   sp_sys_fd_t dir_fd = SP_SYS_INVALID_FD;
   sp_try(sp_sys_open_dir_s(path.dir, path.sub, flags, &dir_fd));
 
@@ -20635,8 +20630,6 @@ SP_PRIVATE void sp_fs_it_unwind(sp_fs_it_t* it) {
   sp_da_clear(it->stack);
 }
 
-// @spader this is garbage; we have to control all the trimming and "custom" path
-// functions, because it smells like we have no idea what inputs we take
 SP_PRIVATE u32 sp_fs_it_child(sp_fs_it_t* it, u32 prefix) {
   return prefix + (prefix && !sp_fs_is_sep(it->path[prefix - 1]));
 }
@@ -20817,8 +20810,8 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
   named. For example, iterating D might yield D/M/W. The caller never specified
   D/M/W. They asked us to remove everything under D, which is satisfied.
 
-  The combination of these two give a nice property: NOT_FOUND is returned if
-  and only if nothing was removed.
+  The combination of these two give a nice property: NOT_FOUND is returned only
+  if nothing was removed.
 
 
   ## FAIL FAST
