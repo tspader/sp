@@ -20446,8 +20446,7 @@ sp_err_t sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path, sp_str_t* canonica
 sp_err_t sp_fs_get_exe_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
-  *path = sp_zero_s(sp_str_t);
-  if (sp_sys_get_exe_path(buf, SP_PATH_MAX, &len)) return SP_OK;
+  sp_try(sp_sys_get_exe_path(buf, SP_PATH_MAX, &len));
   *path = sp_str_copy(mem, sp_str(buf, (u32)len));
   return SP_OK;
 }
@@ -20455,8 +20454,7 @@ sp_err_t sp_fs_get_exe_path(sp_mem_t mem, sp_str_t* path) {
 sp_err_t sp_fs_get_cwd_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
-  *path = sp_zero_s(sp_str_t);
-  if (sp_sys_get_fd_path(sp_fs_get_cwd(), buf, SP_PATH_MAX, &len)) return SP_OK;
+  sp_try(sp_sys_get_fd_path(sp_fs_get_cwd(), buf, SP_PATH_MAX, &len));
   *path = sp_str_copy(mem, sp_str(buf, (u32)len));
   return SP_OK;
 }
@@ -20464,8 +20462,7 @@ sp_err_t sp_fs_get_cwd_path(sp_mem_t mem, sp_str_t* path) {
 sp_err_t sp_fs_get_storage_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
-  *path = sp_zero_s(sp_str_t);
-  if (sp_sys_get_storage_path(buf, SP_PATH_MAX, &len)) return SP_OK;
+  sp_try(sp_sys_get_storage_path(buf, SP_PATH_MAX, &len));
   *path = sp_fs_normalize_path(mem, sp_str(buf, (u32)len));
   return SP_OK;
 }
@@ -20473,8 +20470,7 @@ sp_err_t sp_fs_get_storage_path(sp_mem_t mem, sp_str_t* path) {
 sp_err_t sp_fs_get_config_path(sp_mem_t mem, sp_str_t* path) {
   c8 buf[SP_PATH_MAX];
   u64 len = 0;
-  *path = sp_zero_s(sp_str_t);
-  if (sp_sys_get_config_path(buf, SP_PATH_MAX, &len)) return SP_OK;
+  sp_try(sp_sys_get_config_path(buf, SP_PATH_MAX, &len));
   *path = sp_fs_normalize_path(mem, sp_str(buf, (u32)len));
   return SP_OK;
 }
