@@ -835,6 +835,17 @@ UTEST_F(glob, set_nested_path) {
   sp_glob_set_free(set);
 }
 
+UTEST_F(glob, set_extension_matches_hidden_file) {
+  sp_glob_set_t* set = sp_glob_set_new(ut.mem.tracking);
+  sp_glob_set_add(set, "*.c");
+  sp_glob_set_build(set);
+
+  EXPECT_TRUE(sp_glob_set_match(set, sp_str_lit(".c")));
+  EXPECT_TRUE(sp_glob_set_match(set, sp_str_lit("src/.c")));
+
+  sp_glob_set_free(set);
+}
+
 UTEST_F(glob, set_basename_literal) {
   sp_glob_set_t* set = sp_glob_set_new(ut.mem.tracking);
   sp_glob_set_add(set, "**/foo");
@@ -971,6 +982,46 @@ UTEST_F(glob, set_duplicate_extension) {
   EXPECT_EQ(sp_da_size(indices), 2u);
 
   sp_glob_set_free(set);
+}
+
+typedef struct {
+  const c8* pattern;
+  const c8* path;
+} no_match_test_t;
+
+void run_no_match_test(int* utest_result, sp_mem_t mem, no_match_test_t t) {
+  sp_str_t path = sp_cstr_as_str(t.path);
+
+  sp_glob_t* g = sp_glob_new(mem, t.pattern);
+  EXPECT_FALSE(sp_glob_match(g, path));
+  sp_glob_free(g);
+
+  sp_glob_set_t* set = sp_glob_set_new(mem);
+  sp_glob_set_add(set, t.pattern);
+  sp_glob_set_build(set);
+  EXPECT_FALSE(sp_glob_set_match(set, path));
+  sp_glob_set_free(set);
+}
+
+UTEST_F(glob, no_match_extension_trailing_slash) {
+  run_no_match_test(utest_result, ut.mem.tracking, (no_match_test_t) {
+    .pattern = "*.c",
+    .path = "A.c/",
+  });
+}
+
+UTEST_F(glob, no_match_basename_trailing_slash) {
+  run_no_match_test(utest_result, ut.mem.tracking, (no_match_test_t) {
+    .pattern = "**/A",
+    .path = "B/A/",
+  });
+}
+
+UTEST_F(glob, no_match_basename_backslash) {
+  run_no_match_test(utest_result, ut.mem.tracking, (no_match_test_t) {
+    .pattern = "**/A",
+    .path = "B\\A",
+  });
 }
 
 UTEST_F(glob, parse_empty) {

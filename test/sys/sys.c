@@ -1,25 +1,9 @@
 #include "harness.h"
 
-static sp_err_t sys_probe_symlinks(void* user) {
-  sp_str_t dir = *(sp_str_t*)user;
-
-  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-  sp_str_t target = sp_fs_join_path(scratch.mem, dir, sp_str_lit("probe_target"));
-  sp_str_t link = sp_fs_join_path(scratch.mem, dir, sp_str_lit("probe_link"));
-
-  sp_fs_create_file(target);
-  sp_err_t err = sp_fs_create_sym_link(target, link);
-  if (!err) sp_fs_remove_file(link);
-  sp_fs_remove_file(target);
-
-  sp_mem_end_scratch(scratch);
-  return err;
-}
-
 static bool sys_case_wants_symlinks(sys_case_t* c) {
   sp_carr_for(c->setup, it) {
     if (!c->setup[it].path) break;
-    if (c->setup[it].kind == SYS_SETUP_SYMLINK) return true;
+    if (c->setup[it].kind == SYS_SETUP_SYMLINK || c->setup[it].kind == SYS_SETUP_DIR_SYMLINK) return true;
   }
   return false;
 }
@@ -49,39 +33,39 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
   sp_carr_for(fds, it) fds[it] = SP_SYS_INVALID_FD;
   sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
 
+  if (sys_case_wants_symlinks(c)) sp_test_skip_without_symlinks();
+
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
-
-  if (sys_case_wants_symlinks(c) && sp_test_once(&sys_symlink_probe, sys_probe_symlinks, &sandbox)) {
-    return sp_test_skip(t, "symlinks not available");
-  }
-
-  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd));
+  sp_path_t sandbox = sp_test_dir(t);
 
   sp_carr_for(c->setup, it) {
     sys_setup_t* ent = &c->setup[it];
     if (!ent->path) break;
-    sp_str_t path = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(ent->path));
+    sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
 
     switch (ent->kind) {
       case SYS_SETUP_FILE: {
-        sp_fs_create_file_str(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""));
+        sp_fs_create_file_str_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""));
         break;
       }
       case SYS_SETUP_DIR: {
-        sp_fs_create_dir(path);
+        sp_fs_create_dir_at(path);
         break;
       }
-      case SYS_SETUP_SYMLINK: {
-        sp_str_t target = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(ent->target));
-        if (sp_fs_create_sym_link(target, path)) {
-          sp_test_fail(t, "failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
-          goto done;
+      case SYS_SETUP_SYMLINK:
+      case SYS_SETUP_DIR_SYMLINK: {
+        sp_str_t target = sp_cstr_as_str(ent->target);
+        sp_fs_kind_t kind = ent->kind == SYS_SETUP_DIR_SYMLINK ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
+        if (sp_fs_create_sym_link_at(target, path, kind)) {
+          sp_test_fail(t, "failed to create symlink {} -> {}", sp_fmt_cstr(ent->path), sp_fmt_str(target));
+          return SP_OK;
         }
         break;
       }
     }
   }
+
+  sp_try(sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &sandbox_fd));
 
   sp_carr_for(c->steps, it) {
     sys_step_t* step = &c->steps[it];
@@ -104,7 +88,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
       case SYS_STEP_OPEN_DIR: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
         sp_str_t path = sp_cstr_as_str(step->open_dir.path);
-        sp_err_t err = sp_sys_open_dir_s(sandbox_fd, path, &fd);
+        sp_err_t err = sp_sys_open_dir_s(sandbox_fd, path, step->open_dir.flags, &fd);
         sys_check_err(t, err, step->open_dir.err);
         if (!err) {
           if (step->open_dir.err) sp_sys_close(fd);
@@ -165,20 +149,20 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
   sp_carr_for(c->expect, it) {
     sys_expect_t* ent = &c->expect[it];
     if (!ent->path) break;
-    sp_str_t path = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(ent->path));
+    sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
 
-    bool exists = sp_fs_exists(path);
+    bool exists = sp_fs_exists_at(path);
     if (exists != ent->exists) {
-      sp_test_fail(t, "expected {} {} exist", sp_fmt_str(path), sp_fmt_cstr(ent->exists ? "to" : "not to"));
+      sp_test_fail(t, "expected {} {} exist", sp_fmt_cstr(ent->path), sp_fmt_cstr(ent->exists ? "to" : "not to"));
       continue;
     }
 
     if (ent->content) {
       sp_str_t actual = sp_zero;
-      sp_io_read_file(mem, path, &actual);
+      sp_io_read_file_at(mem, path, &actual);
       if (!sp_str_equal(actual, sp_cstr_as_str(ent->content))) {
         sp_test_record(t, (sp_test_failure_t) {
-          .message = sp_test_format(t, "content of {}", sp_fmt_str(path)),
+          .message = sp_test_format(t, "content of {}", sp_fmt_cstr(ent->path)),
           .expected = sp_test_format(t, "{.quote}", sp_fmt_cstr(ent->content)),
           .actual = sp_test_format(t, "{.quote}", sp_fmt_str(actual)),
         });
@@ -186,7 +170,6 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     }
   }
 
-done:
-  if (sandbox_fd != SP_SYS_INVALID_FD) sp_sys_close(sandbox_fd);
+  sp_sys_close(sandbox_fd);
   return SP_OK;
 }

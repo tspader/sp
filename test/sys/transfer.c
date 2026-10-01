@@ -114,20 +114,19 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 #endif
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
-  sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
+  sp_path_t sandbox = sp_test_dir(t);
+  sp_path_t src = sp_path_join(mem, sandbox, sp_str_lit("src"));
+  sp_path_t dst = sp_path_join(mem, sandbox, sp_str_lit("dst"));
   sp_sys_fd_t in = SP_SYS_INVALID_FD;
   sp_sys_fd_t out = SP_SYS_INVALID_FD;
   sp_sys_fd_t src_w = SP_SYS_INVALID_FD;
   sp_sys_fd_t dst_r = SP_SYS_INVALID_FD;
   u64 len = sp_cstr_len(c->data);
 
-  sp_try(sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd));
-
   switch (c->src) {
     case END_FILE: {
-      sp_fs_create_file_str(sp_fs_join_path(mem, sandbox, sp_str_lit("src")), sp_cstr_as_str(c->data));
-      sp_must_ok(t, sp_sys_open_s(sandbox_fd, sp_str_lit("src"), SP_SYS_OPEN_MODE_RO, 0, &in));
+      sp_must_ok(t, sp_fs_create_file_str_at(src, sp_cstr_as_str(c->data)));
+      sp_must_ok(t, sp_sys_open_s(src.dir, src.sub, SP_SYS_OPEN_MODE_RO, 0, &in));
       break;
     }
     case END_PIPE: {
@@ -146,10 +145,10 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case END_FILE: {
       u32 flags = SP_SYS_OPEN_CREATE;
       if (c->prefill) {
-        sp_fs_create_file_str(sp_fs_join_path(mem, sandbox, sp_str_lit("dst")), sp_cstr_as_str(c->prefill));
+        sp_must_ok(t, sp_fs_create_file_str_at(dst, sp_cstr_as_str(c->prefill)));
         flags = 0;
       }
-      sp_must_ok(t, sp_sys_open_s(sandbox_fd, sp_str_lit("dst"), SP_SYS_OPEN_MODE_WO, flags, &out));
+      sp_must_ok(t, sp_sys_open_s(dst.dir, dst.sub, SP_SYS_OPEN_MODE_WO, flags, &out));
       break;
     }
     case END_PIPE: {
@@ -183,7 +182,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
         sp_sys_close(out);
         out = SP_SYS_INVALID_FD;
         sp_str_t actual = sp_zero;
-        sp_io_read_file(mem, sp_fs_join_path(mem, sandbox, sp_str_lit("dst")), &actual);
+        sp_io_read_file_at(mem, dst, &actual);
         sp_expect_str_eq_c(t, actual, c->expect);
         break;
       }
@@ -201,7 +200,6 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   if (out != SP_SYS_INVALID_FD) sp_sys_close(out);
   if (src_w != SP_SYS_INVALID_FD) sp_sys_close(src_w);
   if (dst_r != SP_SYS_INVALID_FD) sp_sys_close(dst_r);
-  if (sandbox_fd != SP_SYS_INVALID_FD) sp_sys_close(sandbox_fd);
   return SP_OK;
 }
 

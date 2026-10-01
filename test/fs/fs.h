@@ -12,48 +12,6 @@
 #define FS_MAX_PATHS 8
 
 
-/////////////
-// SANDBOX //
-/////////////
-static sp_str_t fs_path(sp_test_t* t, sp_str_t relative) {
-  return sp_fs_join_path(sp_test_arena(t), sp_test_dir(t), relative);
-}
-
-static sp_str_t fs_path_c(sp_test_t* t, const c8* relative) {
-  return fs_path(t, sp_cstr_as_str(relative));
-}
-
-
-///////////////////
-// SYMLINK PROBE //
-///////////////////
-static sp_test_once_t fs_symlink_probe = sp_zero;
-
-static sp_err_t fs_probe_symlinks(void* user) {
-  sp_str_t dir = *(sp_str_t*)user;
-
-  sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-  sp_str_t target = sp_fs_join_path(scratch.mem, dir, sp_str_lit("probe_target"));
-  sp_str_t link = sp_fs_join_path(scratch.mem, dir, sp_str_lit("probe_link"));
-
-  sp_fs_create_file(target);
-  sp_err_t err = sp_fs_create_sym_link(target, link);
-  if (!err) sp_fs_remove_file(link);
-  sp_fs_remove_file(target);
-
-  sp_mem_end_scratch(scratch);
-  return err;
-}
-
-static bool fs_symlinks_available(sp_test_t* t) {
-  sp_str_t dir = sp_test_dir(t);
-  return sp_test_once(&fs_symlink_probe, fs_probe_symlinks, &dir) == SP_OK;
-}
-
-#define fs_skip_if_no_symlinks(t) \
-  do { if (!fs_symlinks_available(t)) return sp_test_skip(t, "symlinks not available"); } while (0)
-
-
 ////////////////////
 // SHARED HARNESS //
 ////////////////////
@@ -61,6 +19,7 @@ typedef enum {
   FS_SETUP_FILE,
   FS_SETUP_DIR,
   FS_SETUP_SYMLINK,
+  FS_SETUP_DIR_SYMLINK,
   FS_SETUP_FIFO,
 } fs_setup_kind_t;
 
@@ -84,13 +43,10 @@ typedef struct {
 static bool fs_setup_needs_symlinks(const fs_setup_t setup [FS_MAX_SETUP]) {
   sp_for(it, FS_MAX_SETUP) {
     if (!setup[it].path) break;
-    if (setup[it].kind == FS_SETUP_SYMLINK) return true;
+    if (setup[it].kind == FS_SETUP_SYMLINK || setup[it].kind == FS_SETUP_DIR_SYMLINK) return true;
   }
   return false;
 }
-
-#define skip_if_symlinks_needed(T, SETUP) \
-  do { if (fs_setup_needs_symlinks(SETUP)) fs_skip_if_no_symlinks(T); } while (0)
 
 static void fs_expect_bool(sp_test_t* t, sp_str_t path, const c8* label, bool actual, bool expected) {
   if (actual == expected) return;
@@ -141,83 +97,84 @@ static void fs_match_finish(sp_test_t* t, fs_match_t* matches, u32 n) {
   }
 }
 
-static void fs_apply_setup(sp_test_t* t, sp_str_t sandbox, const fs_setup_t setup [FS_MAX_SETUP]) {
+static void fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t setup [FS_MAX_SETUP]) {
   sp_mem_t mem = sp_test_arena(t);
   sp_for(it, FS_MAX_SETUP) {
     const fs_setup_t* ent = &setup[it];
     if (!ent->path) break;
 
-    sp_str_t path = sp_fs_join_path(mem, sandbox, sp_str_view(ent->path));
-    sp_str_t parent = sp_fs_parent_path(path);
+    sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
+    sp_path_t parent = sp_path_parent(mem, path);
+    sp_fs_create_dir_at(parent);
 
-    if (!sp_str_empty(parent) && !sp_str_equal(parent, path) && !sp_fs_exists(parent)) {
-      sp_fs_create_dir(parent);
-    }
-
+    sp_err_t err = SP_OK;
     switch (ent->kind) {
       case FS_SETUP_FILE: {
-        sp_fs_create_file_str(path, ent->content ? sp_str_view(ent->content) : sp_str_lit(""));
+        err = sp_fs_create_file_str_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""));
         break;
       }
       case FS_SETUP_DIR: {
-        sp_fs_create_dir(path);
+        err = sp_fs_create_dir_at(path);
         break;
       }
-      case FS_SETUP_SYMLINK: {
-        sp_str_t target = sp_fs_join_path(mem, sandbox, sp_str_view(ent->target));
-        if (sp_fs_create_sym_link(target, path) != SP_OK) {
-          sp_test_fail(t, "failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
-        }
+      case FS_SETUP_SYMLINK:
+      case FS_SETUP_DIR_SYMLINK: {
+        sp_fs_kind_t kind = ent->kind == FS_SETUP_DIR_SYMLINK ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
+        err = sp_fs_create_sym_link_at(sp_cstr_as_str(ent->target), path, kind);
         break;
       }
       case FS_SETUP_FIFO: {
 #if defined(SP_POSIX)
-        if (mkfifo(sp_cstr_from_str(mem, path), 0644) != 0) {
-          sp_test_fail(t, "failed to create fifo {}", sp_fmt_str(path));
-        }
+        sp_str_t dir = sp_zero;
+        err = sp_fs_canonicalize_path_at(mem, parent, &dir);
+        sp_str_t fifo = sp_fs_join_path(mem, dir, sp_fs_get_name(path.sub));
+        if (!err) err = mkfifo(sp_cstr_from_str(mem, fifo), 0644) ? SP_ERR_SYS : SP_OK;
 #else
-        sp_test_fail(t, "fifo setup requires posix");
+        err = SP_ERR_SYS_UNSUPPORTED;
 #endif
         break;
       }
     }
+    if (err) sp_test_fail(t, "failed to create {}: {}", sp_fmt_cstr(ent->path), sp_fmt_str(sp_test_err_str(t, err)));
   }
 }
 
-static void fs_expect_no_temps(sp_test_t* t, sp_str_t sandbox) {
-  sp_da(sp_fs_entry_t) entries = sp_zero;
-  sp_expect_ok(t, sp_fs_collect_recursive(sp_test_arena(t), sandbox, &entries));
-  sp_da_for(entries, it) {
-    if (sp_str_ends_with(entries[it].name, sp_str_lit(".tmp"))) {
-      sp_test_fail(t, "temp file left behind: {}", sp_fmt_str(entries[it].path));
+static void fs_expect_no_temps(sp_test_t* t, sp_path_t sandbox) {
+  sp_fs_it_t walk = sp_fs_it_new_at(sp_test_arena(t), sandbox, 0);
+  while (sp_fs_it_walk(&walk)) {
+    if (sp_str_ends_with(walk.entry.name, sp_str_lit(".tmp"))) {
+      sp_test_fail(t, "temp file left behind: {}", sp_fmt_str(walk.entry.rel));
     }
   }
+  sp_expect_ok(t, walk.err);
+  sp_fs_it_deinit(&walk);
 }
 
-static void fs_expect_paths(sp_test_t* t, sp_str_t sandbox, const fs_expected_path_t expected [FS_MAX_PATHS]) {
+static void fs_expect_paths(sp_test_t* t, sp_path_t sandbox, const fs_expected_path_t expected [FS_MAX_PATHS]) {
   sp_mem_t mem = sp_test_arena(t);
   sp_for(it, FS_MAX_PATHS) {
     const fs_expected_path_t* info = &expected[it];
     if (!info->path) break;
 
-    sp_str_t path = sp_fs_join_path(mem, sandbox, sp_str_view(info->path));
+    sp_str_t label = sp_cstr_as_str(info->path);
+    sp_path_t path = sp_path_join(mem, sandbox, label);
 
-    bool exists = sp_fs_exists(path);
+    bool exists = sp_fs_exists_at(path);
     if (exists != info->exists) {
-      sp_test_fail(t, "expected {} {} exist", sp_fmt_str(path), sp_fmt_cstr(info->exists ? "to" : "not to"));
+      sp_test_fail(t, "expected {} {} exist", sp_fmt_str(label), sp_fmt_cstr(info->exists ? "to" : "not to"));
     }
 
     if (info->exists) {
-      fs_expect_kind(t, path, sp_fs_get_kind(path), info->kind);
+      fs_expect_kind(t, label, sp_fs_get_kind_at(path), info->kind);
     }
 
     if (info->content) {
       sp_str_t actual = sp_zero;
-      sp_io_read_file(mem, path, &actual);
-      sp_str_t content = sp_str_view(info->content);
+      sp_io_read_file_at(mem, path, &actual);
+      sp_str_t content = sp_cstr_as_str(info->content);
       if (!sp_str_equal(actual, content)) {
         sp_test_record(t, (sp_test_failure_t) {
-          .message = sp_test_format(t, "content of {}", sp_fmt_str(path)),
+          .message = sp_test_format(t, "content of {}", sp_fmt_str(label)),
           .expected = sp_test_format(t, "{.quote}", sp_fmt_str(content)),
           .actual = sp_test_format(t, "{.quote}", sp_fmt_str(actual)),
         });
@@ -225,14 +182,10 @@ static void fs_expect_paths(sp_test_t* t, sp_str_t sandbox, const fs_expected_pa
     }
 
     if (info->target) {
-      sp_str_t expected = sp_fs_join_path(mem, sandbox, sp_cstr_as_str(info->target));
-#if defined(SP_WIN32)
-      expected = sp_str_replace_c8(mem, expected, '/', '\\');
-#endif
       c8 buf [SP_PATH_MAX];
       sp_str_t actual = sp_zero;
-      sp_expect_ok(t, sp_sys_readlink_s(sp_sys_get_root(0), path, buf, sizeof(buf), &actual));
-      sp_expect_str_eq(t, actual, expected);
+      sp_expect_ok(t, sp_sys_readlink_s(path.dir, path.sub, buf, sizeof(buf), &actual));
+      sp_expect_str_eq_c(t, sp_fs_normalize_path(mem, actual), info->target);
     }
   }
 }

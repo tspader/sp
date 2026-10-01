@@ -53,15 +53,17 @@ typedef struct {
 // FIXTURES //
 //////////////
 sp_str_t get_process_path(sp_mem_t mem) {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path(mem));
-  sp_str_t process = sp_fs_join_path(mem, exe, sp_str_lit("process"));
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
+  sp_str_t process = sp_fs_join_path(mem, sp_fs_parent_path(exe), sp_str_lit("process"));
   process = sp_fs_replace_ext(mem, process, sp_os_get_executable_ext());
   return process;
 }
 
 const c8* get_process_path_c(sp_mem_t mem) {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path(mem));
-  sp_str_t process = sp_fs_join_path(mem, exe, sp_str_lit("process"));
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
+  sp_str_t process = sp_fs_join_path(mem, sp_fs_parent_path(exe), sp_str_lit("process"));
   process = sp_fs_replace_ext(mem, process, sp_os_get_executable_ext());
   return sp_str_to_cstr(mem, process);
 }
@@ -311,7 +313,7 @@ UTEST_F(ps, io_create_file_null) {
     },
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
-  sp_sys_lseek(fd, 0, SP_SEEK_SET);
+  sp_sys_lseek(fd, 0, SP_SEEK_SET, SP_NULLPTR);
 
   u64 bytes_read = 0;
   sp_sys_read(fd, ut.buffer.data, ut.buffer.len, &bytes_read);
@@ -327,7 +329,7 @@ UTEST_F(ps, io_file_create_null) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   sp_sys_open_s(sp_sys_get_root(0), file_path, SP_SYS_OPEN_MODE_RW, SP_SYS_OPEN_CREATE, &fd);
   sp_sys_write(fd, sp_test_ps_canary.data, sp_test_ps_canary.len, SP_NULLPTR);
-  sp_sys_lseek(fd, 0, SP_SEEK_SET);
+  sp_sys_lseek(fd, 0, SP_SEEK_SET, SP_NULLPTR);
 
   sp_test_proc_io(&ut, &ur, (sp_test_proc_io_config_t) {
     .io = {
@@ -366,7 +368,7 @@ UTEST_F(ps, io_create_null_file) {
     },
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
-  sp_sys_lseek(fd, 0, SP_SEEK_SET);
+  sp_sys_lseek(fd, 0, SP_SEEK_SET, SP_NULLPTR);
 
   u64 bytes_read = 0;
   sp_sys_read(fd, ut.buffer.data, ut.buffer.len, &bytes_read);
@@ -382,7 +384,7 @@ UTEST_F(ps, io_file_null_file) {
   sp_sys_fd_t in_fd = SP_SYS_INVALID_FD;
   sp_sys_open_s(sp_sys_get_root(0), in_path, SP_SYS_OPEN_MODE_RW, SP_SYS_OPEN_CREATE, &in_fd);
   sp_sys_write(in_fd, sp_test_ps_canary.data, sp_test_ps_canary.len, SP_NULLPTR);
-  sp_sys_lseek(in_fd, 0, SP_SEEK_SET);
+  sp_sys_lseek(in_fd, 0, SP_SEEK_SET, SP_NULLPTR);
 
   sp_str_t err_path = sp_test_file_create_empty(&ut.file_manager, sp_str_lit("stderr.file"));
   sp_sys_fd_t err_fd = SP_SYS_INVALID_FD;
@@ -401,7 +403,7 @@ UTEST_F(ps, io_file_null_file) {
     },
     .fn = TEST_PROC_FUNCTION_ECHO,
   });
-  sp_sys_lseek(err_fd, 0, SP_SEEK_SET);
+  sp_sys_lseek(err_fd, 0, SP_SEEK_SET, SP_NULLPTR);
 
   u64 bytes_read = 0;
   sp_sys_read(err_fd, ut.buffer.data, ut.buffer.len, &bytes_read);

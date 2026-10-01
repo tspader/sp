@@ -21,7 +21,7 @@ static void sys_probe_symlinks(sp_test_file_manager_t* fm) {
   sp_str_t target = sp_test_file_path_c(fm, ".sys_symlink_probe_target");
   sp_str_t link = sp_test_file_path_c(fm, ".sys_symlink_probe_link");
   sp_fs_create_file(target);
-  sys_symlinks_available = sp_fs_create_sym_link(target, link) == SP_OK;
+  sys_symlinks_available = sp_fs_create_sym_link(target, link, SP_FS_KIND_FILE) == SP_OK;
   if (sys_symlinks_available) sp_fs_remove_file(link);
   sp_fs_remove_file(target);
 }
@@ -30,6 +30,7 @@ typedef enum {
   SYS_SETUP_FILE,
   SYS_SETUP_DIR,
   SYS_SETUP_SYMLINK,
+  SYS_SETUP_DIR_SYMLINK,
   SYS_SETUP_READONLY,
 } sys_setup_kind_t;
 
@@ -80,7 +81,7 @@ typedef struct {
     struct { u32 slot; u64 count; u64 offset; const c8* expect; } pread;
     struct { u32 slot; const c8* data; sp_err_t err; } write;
     struct { u32 slot; const c8* data; u64 offset; } pwrite;
-    struct { const c8* target; const c8* alias; } symlink;
+    struct { const c8* target; const c8* alias; sp_fs_kind_t kind; sp_err_t err; } symlink;
     struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; sp_err_t err; } rename;
     struct { const c8* path; sp_fs_kind_t kind; sp_err_t err; } lstat;
     struct { const c8* path; sp_fs_kind_t kind; s64 size; sp_err_t err; } stat;
@@ -108,7 +109,7 @@ typedef struct {
 static bool sys_test_wants_symlinks(sys_test_t* t) {
   sp_carr_for(t->setup, it) {
     if (!t->setup[it].path) break;
-    if (t->setup[it].kind == SYS_SETUP_SYMLINK) return true;
+    if (t->setup[it].kind == SYS_SETUP_SYMLINK || t->setup[it].kind == SYS_SETUP_DIR_SYMLINK) return true;
   }
   sp_carr_for(t->steps, it) {
     if (t->steps[it].kind == SYS_STEP_NONE) break;
@@ -173,9 +174,11 @@ static bool sys_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_st
         sp_fs_create_dir(path);
         break;
       }
-      case SYS_SETUP_SYMLINK: {
-        sp_str_t target = sp_fs_join_path(fm->mem, sandbox, sp_cstr_as_str(ent->target));
-        if (sp_fs_create_sym_link(target, path) != SP_OK) {
+      case SYS_SETUP_SYMLINK:
+      case SYS_SETUP_DIR_SYMLINK: {
+        sp_str_t target = sp_cstr_as_str(ent->target);
+        sp_fs_kind_t kind = ent->kind == SYS_SETUP_DIR_SYMLINK ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
+        if (sp_fs_create_sym_link(target, path, kind) != SP_OK) {
           SP_TEST_REPORT("failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
           SP_FAIL();
           return false;
@@ -244,7 +247,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
   }
 
   sp_str_t sandbox = sp_test_file_create_dir(&fm, t.label);
-  if (sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, &sandbox_fd)) {
+  if (sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd)) {
     SP_TEST_REPORT("failed to open sandbox {}", sp_fmt_str(sandbox));
     SP_FAIL();
     goto done;
@@ -275,7 +278,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
       }
       case SYS_STEP_OPEN_DIR: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-        if (sp_sys_open_dir_s(sandbox_fd, sp_cstr_as_str(step->open_dir.path), &fd)) {
+        if (sp_sys_open_dir_s(sandbox_fd, sp_cstr_as_str(step->open_dir.path), 0, &fd)) {
           SP_TEST_REPORT("failed to open_dir {}", sp_fmt_cstr(step->open_dir.path));
           SP_FAIL();
         }
@@ -342,8 +345,8 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
         break;
       }
       case SYS_STEP_SYMLINK: {
-        sp_err_t err = sp_sys_symlink_s(sp_cstr_as_str(step->symlink.target), sandbox_fd, sp_cstr_as_str(step->symlink.alias));
-        sys_expect_err(utest_result, "symlink", err, SP_OK);
+        sp_err_t err = sp_sys_symlink_s(sp_cstr_as_str(step->symlink.target), sandbox_fd, sp_cstr_as_str(step->symlink.alias), step->symlink.kind);
+        sys_expect_err(utest_result, "symlink", err, step->symlink.err);
         break;
       }
       case SYS_STEP_RENAME: {

@@ -19,7 +19,9 @@ static sp_str_t cli_usage_golden_dir(sp_mem_t mem) {
   sp_str_t baked = sp_str_lit(SP_CLI_TEST_DIR);
   if (sp_fs_exists(baked)) return sp_fs_join_path(mem, baked, sp_str_lit("golden"));
 
-  sp_str_t dir = sp_fs_parent_path(sp_fs_get_exe_path(mem));
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
+  sp_str_t dir = sp_fs_parent_path(exe);
   while (!sp_str_empty(dir)) {
     sp_str_t candidate = sp_fs_join_path(mem, dir, sp_str_lit("test/cli/golden"));
     if (sp_fs_exists(candidate)) return candidate;
@@ -49,7 +51,9 @@ static void run_cli_usage_test(s32* utest_result, sp_mem_t mem, cli_usage_test_t
 
   sp_str_t dir = cli_usage_golden_dir(mem);
   if (sp_str_empty(dir)) {
-    SP_TEST_REPORT("could not locate the golden directory from {}\n", sp_fmt_str(sp_fs_get_exe_path(mem)));
+    sp_str_t exe = sp_zero;
+    sp_fs_get_exe_path(mem, &exe);
+    SP_TEST_REPORT("could not locate the golden directory from {}\n", sp_fmt_str(exe));
     SP_FAIL();
     return;
   }

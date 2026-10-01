@@ -118,6 +118,7 @@ SP_IMP bool                sp_glob_match_class(sp_glob_token_t* tok, c8 c);
 SP_IMP bool                sp_glob_match_alternates(sp_glob_token_t* tok, sp_da(sp_glob_token_t) tokens, u32 t, sp_str_t path, u32 p);
 SP_IMP bool                sp_glob_match_tokens(sp_da(sp_glob_token_t) tokens, sp_str_t path);
 SP_IMP sp_glob_strategy_t  sp_glob_detect_strategy(sp_glob_t* glob);
+SP_IMP sp_str_t            sp_glob_basename(sp_str_t path);
 SP_IMP sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path);
 SP_IMP void                sp_glob_set_ht_add(sp_mem_t mem, sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx);
 SP_IMP void                sp_glob_set_ht_collect(sp_glob_set_index_table_t ht, sp_str_t key, sp_da(u32)* out);
@@ -559,6 +560,11 @@ sp_glob_t* sp_glob_new_str(sp_mem_t mem, sp_str_t pattern) {
   return g;
 }
 
+sp_str_t sp_glob_basename(sp_str_t path) {
+  s32 slash = sp_str_find_c8_reverse(path, '/');
+  return slash == SP_STR_NO_MATCH ? path : sp_str_suffix(path, (s32)path.len - slash - 1);
+}
+
 bool sp_glob_match(sp_glob_t* g, sp_str_t path) {
   SP_ASSERT(g);
 
@@ -567,7 +573,7 @@ bool sp_glob_match(sp_glob_t* g, sp_str_t path) {
       return sp_str_equal(g->literal, path);
     }
     case SP_GLOB_STRATEGY_BASENAME_LITERAL: {
-      sp_str_t basename = sp_fs_get_name(path);
+      sp_str_t basename = sp_glob_basename(path);
       return sp_str_equal(g->literal, basename);
     }
     case SP_GLOB_STRATEGY_EXTENSION: {
@@ -596,10 +602,12 @@ bool sp_glob_match(sp_glob_t* g, sp_str_t path) {
 }
 
 sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path) {
+  sp_str_t basename = sp_glob_basename(path);
+  s32 dot = sp_str_find_c8_reverse(basename, '.');
   return (sp_glob_candidate_t){
     .path = path,
-    .basename = sp_fs_get_name(path),
-    .ext = sp_fs_get_ext(path),
+    .basename = basename,
+    .ext = dot == SP_STR_NO_MATCH ? sp_zero_s(sp_str_t) : sp_str_suffix(basename, (s32)basename.len - dot - 1),
   };
 }
 

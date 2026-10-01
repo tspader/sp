@@ -36,13 +36,16 @@ s32 compare_entries(const void* pa, const void* pb) {
   return sp_str_compare_alphabetical(a->name, b->name);
 }
 
-s32 main(s32 num_args, const c8** args) {
-  sp_mem_t mem = sp_mem_os_new();
-  sp_str_t cwd = sp_fs_get_cwd(mem);
-  sp_str_t dir = cwd;
-  if (num_args == 2) dir = sp_fs_join_path(mem, cwd, sp_cstr_as_str(args[1]));
+s32 run(s32 num_args, const c8** args) {
+  sp_mem_heap_t* heap = sp_mem_heap_new();
+  sp_mem_t mem = sp_mem_heap_as_allocator(heap);
+  sp_str_t dir = num_args == 2 ? sp_cstr_as_str(args[1]) : sp_str_lit(".");
 
-  sp_da(sp_fs_entry_t) entries = sp_fs_collect(mem, dir);
+  sp_da(sp_fs_entry_t) entries;
+  if (sp_fs_collect(mem, dir, &entries)) {
+    sp_log("could not read {}", sp_fmt_str(dir));
+    return 1;
+  }
   sp_da_sort(entries, compare_entries);
 
   sp_da_for(entries, it) {
@@ -56,6 +59,7 @@ s32 main(s32 num_args, const c8** args) {
   }
   return 0;
 }
+SP_MAIN(run)
 ```
 A few modules showcased in this example:
 - `sp_mem_t` is an allocator; everything that allocates takes one. In the example, we use the default heap allocator.

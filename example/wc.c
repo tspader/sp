@@ -10,8 +10,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
-  sp_str_t cwd = sp_fs_get_cwd(mem);
-  sp_str_t path = sp_fs_join_path(mem, cwd, sp_str_view(args[1]));
+  sp_str_t path = sp_cstr_as_str(args[1]);
   sp_str_t content = sp_zero;
   sp_io_read_file(mem, path, &content);
 

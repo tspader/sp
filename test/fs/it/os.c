@@ -105,7 +105,7 @@ static const test_t tests [] = {
     .setup = {
       { "R/A", FS_SETUP_DIR },
       { "R/A/B" },
-      { .path = "R/L", .kind = FS_SETUP_SYMLINK, .target = "R/A" },
+      { .path = "R/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .recursive = true,
     .expect = {
@@ -161,14 +161,17 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, it, test_t, tests) {
-  skip_if_symlinks_needed(t, it->setup);
+  if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t base = sp_fs_join_path(mem, sandbox, sp_str_lit("R"));
-  sp_str_t root = sp_fmt(mem, "{}/{}", sp_fmt_str(sandbox), sp_fmt_cstr(it->root ? it->root : "R")).value;
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
+
+  sp_str_t base = sp_str_lit("R");
+  sp_path_t root = sp_path(dir, sp_cstr_as_str(it->root ? it->root : "R"));
 
   fs_match_t matches [FS_MAX_PATHS] = sp_zero;
   u32 n = 0;
@@ -178,15 +181,19 @@ sp_test_each(fs, it, test_t, tests) {
     matches[n++] = (fs_match_t) { .key = sp_fs_join_path(mem, base, sp_cstr_as_str(want->path)), .kind = want->kind };
   }
 
-  sp_fs_it_t walk = it->recursive ? sp_fs_it_new_recursive(mem, root) : sp_fs_it_new(mem, root);
-  while (sp_fs_it_next(&walk)) {
+  sp_fs_it_t walk = sp_fs_it_new_at(mem, root, 0);
+  while (it->recursive ? sp_fs_it_walk(&walk) : sp_fs_it_next(&walk)) {
     sp_expect_str_eq(t, walk.entry.name, sp_fs_get_name(walk.entry.path));
+    sp_expect_str_eq(t, sp_fs_join_path(mem, base, walk.entry.rel), walk.entry.path);
+    sp_expect_str_eq(t, walk.at.sub, walk.entry.name);
+    sp_expect_eq(t, (u32)sp_fs_get_kind_at(walk.at), (u32)walk.entry.kind);
     fs_match(t, matches, n, walk.entry.path, walk.entry.kind);
   }
   sp_expect_err_eq(t, walk.err, it->expect.err);
   sp_expect(t, !sp_fs_it_next(&walk));
   sp_expect_err_eq(t, walk.err, it->expect.err);
   sp_fs_it_deinit(&walk);
+  sp_sys_close(dir);
 
   fs_match_finish(t, matches, n);
   return SP_OK;

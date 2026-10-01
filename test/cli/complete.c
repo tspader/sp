@@ -409,9 +409,11 @@ static void run_cli_completer_path_test(s32* utest_result, sp_mem_t mem, cli_com
 
   if (t.expect.anchored) {
     c8 cwd [SP_PATH_MAX];
-    s64 cwd_len = sp_sys_get_cwd_path(cwd, sizeof(cwd));
-    EXPECT_GT(cwd_len, 0);
-    if (cwd_len <= 0) return;
+    u64 cwd_len = 0;
+    sp_err_t err = sp_sys_get_fd_path(sp_fs_get_cwd(), cwd, sizeof(cwd), &cwd_len);
+    if (err == SP_ERR_SYS_UNSUPPORTED) UTEST_SKIP("no cwd path");
+    EXPECT_EQ(err, SP_OK);
+    if (err) return;
     sp_str_t expected = sp_fmt(mem, "{}/{}", sp_fmt_str(sp_str(cwd, sp_cast(u32, cwd_len))), sp_fmt_cstr(t.arg0)).value;
     SP_EXPECT_STR_EQ(path, expected);
   }
@@ -434,9 +436,19 @@ UTEST_F(cli_complete, completer_path_relative) {
 }
 
 UTEST_F(cli_complete, completer_path_relative_backslash) {
+  SKIP_UNLESS_WIN32()
+
   run_cli_completer_path_test(&ur, ut.mem.arena, (cli_completer_path_test_t) {
     .arg0 = "B\\A",
     .expect = { .anchored = true },
+  });
+}
+
+UTEST_F(cli_complete, completer_path_backslash_is_a_name) {
+  SKIP_ON_WIN32()
+
+  run_cli_completer_path_test(&ur, ut.mem.arena, (cli_completer_path_test_t) {
+    .arg0 = "B\\A",
   });
 }
 

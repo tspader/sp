@@ -11,7 +11,8 @@ s32 run(s32 num_args, const c8** args) {
     .data = sp_alloc_n(mem, u8, 64),
     .capacity = 64
   };
-  sp_str_t exe = sp_fs_get_exe_path(mem);
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
 
   // sp_io provides utilities for opening a file from a path
   sp_io_file_reader_from_path(&r, exe);
@@ -24,7 +25,7 @@ s32 run(s32 num_args, const c8** args) {
   // Or, if you already have a file descriptor, wrap it. sp_io will close file descriptors
   // for you automatically if you pass SP_IO_CLOSE_MODE_AUTO
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_sys_open_s(sp_sys_get_root(0), exe, SP_SYS_OPEN_MODE_RO, 0, &fd);
+  sp_sys_open_s(sp_fs_get_cwd(), exe, SP_SYS_OPEN_MODE_RO, 0, &fd);
   sp_io_file_reader_from_file(&r, (sp_sys_fd_t)fd, SP_IO_CLOSE_MODE_AUTO);
   sp_io_read(&r.base, buffer.data, buffer.capacity, &buffer.len);
   sp_log("sp_io_file_reader_from_file: {}", sp_fmt_str(sp_mem_buffer_as_str(&buffer)));

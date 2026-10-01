@@ -99,16 +99,16 @@ typedef struct {
   io_step_t steps [IO_MAX_STEPS];
 } io_seeking_reader_file_test_t;
 
-void run_io_seeking_reader_file_test(int* utest_result, sp_str_t path, io_seeking_reader_file_test_t t) {
+void run_io_seeking_reader_file_test(int* utest_result, sp_path_t path, io_seeking_reader_file_test_t t) {
   {
     sp_io_file_writer_t w = sp_zero;
-    sp_io_file_writer_from_path(&w, path);
+    sp_io_file_writer_from_path_at(&w, path);
     if (t.content) sp_io_write(&w.base, t.content, sp_cstr_len(t.content), SP_NULLPTR);
     sp_io_file_writer_close(&w);
   }
 
   sp_io_file_reader_t fr = sp_zero;
-  sp_io_file_reader_from_path(&fr, path);
+  sp_io_file_reader_from_path_at(&fr, path);
 
   u8 wrapper_buf [64] = sp_zero;
   if (t.buffer) sp_io_reader_set_buffer(&fr.base, wrapper_buf, t.buffer);
@@ -155,7 +155,7 @@ void run_io_seeking_reader_file_test(int* utest_result, sp_str_t path, io_seekin
 }
 
 UTEST_F(io, seeking_reader_file_seek) {
-  run_io_seeking_reader_file_test(utest_result, ut.file_path, (io_seeking_reader_file_test_t){
+  run_io_seeking_reader_file_test(utest_result, ut.file, (io_seeking_reader_file_test_t){
     .content = "0123456789ABCDEF",
     .steps = {
       { .kind = IO_STEP_SEEK, .seek = { 5, SP_IO_SEEK_SET, SP_OK, 5 } },
@@ -165,7 +165,7 @@ UTEST_F(io, seeking_reader_file_seek) {
 }
 
 UTEST_F(io, seeking_reader_file_seek_whence) {
-  run_io_seeking_reader_file_test(utest_result, ut.file_path, (io_seeking_reader_file_test_t){
+  run_io_seeking_reader_file_test(utest_result, ut.file, (io_seeking_reader_file_test_t){
     .content = "0123456789ABCDEF",
     .steps = {
       { .kind = IO_STEP_SEEK, .seek = {  4, SP_IO_SEEK_SET, SP_OK,  4 } },
@@ -179,7 +179,7 @@ UTEST_F(io, seeking_reader_file_seek_whence) {
 }
 
 UTEST_F(io, seeking_reader_file_seek_invalid) {
-  run_io_seeking_reader_file_test(utest_result, ut.file_path, (io_seeking_reader_file_test_t){
+  run_io_seeking_reader_file_test(utest_result, ut.file, (io_seeking_reader_file_test_t){
     .content = "0123456789",
     .steps = {
       { .kind = IO_STEP_SEEK, .seek = { -10, SP_IO_SEEK_SET, SP_ERR_IO_SEEK_INVALID, -1 } },
@@ -188,7 +188,7 @@ UTEST_F(io, seeking_reader_file_seek_invalid) {
 }
 
 UTEST_F(io, seeking_reader_file_seek_buffered) {
-  run_io_seeking_reader_file_test(utest_result, ut.file_path, (io_seeking_reader_file_test_t){
+  run_io_seeking_reader_file_test(utest_result, ut.file, (io_seeking_reader_file_test_t){
     .content = "0123456789ABCDEF",
     .buffer = 8,
     .steps = {

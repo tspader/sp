@@ -78,7 +78,7 @@ static run_t copy_run(sp_str_t src_path, sp_str_t dst_path, src_t src, sink_t si
     }
     case SRC_STREAM_FILE: {
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-      if (sp_sys_open_s(sp_sys_get_root(0), src_path, SP_SYS_OPEN_MODE_RO, 0, &fd) != SP_OK) {
+      if (sp_sys_open_s(sp_fs_get_cwd(), src_path, SP_SYS_OPEN_MODE_RO, 0, &fd) != SP_OK) {
         return sp_zero_s(run_t);
       }
       sp_io_stream_reader_from_file(&sr, fd, SP_IO_CLOSE_MODE_AUTO);
@@ -176,9 +176,8 @@ s32 run(s32 num_args, const c8** args) {
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
-  sp_str_t cwd = sp_fs_get_cwd(mem);
-  sp_str_t src = sp_str_concat(mem, cwd, sp_str_lit("/io.src"));
-  sp_str_t dst = sp_str_concat(mem, cwd, sp_str_lit("/io.dst"));
+  sp_str_t src = sp_str_lit("io.src");
+  sp_str_t dst = sp_str_lit("io.dst");
 
   u64 size_bytes = (u64)PERF_FILE_SIZE_MB * 1024u * 1024u;
   sp_log("preparing {} MiB source at {}", sp_fmt_uint(PERF_FILE_SIZE_MB), sp_fmt_str(src));

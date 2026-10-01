@@ -257,6 +257,36 @@ static const sys_case_t sys_open_dir_cases [] = {
       { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "dir", .err = SP_ERR_SYS_NOT_FOUND } },
     },
   },
+  {
+    .name = "follows_dir_symlink",
+    .setup = {
+      { .path = "dir", .kind = SYS_SETUP_DIR },
+      { .path = "link", .kind = SYS_SETUP_DIR_SYMLINK, .target = "dir" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "link" } },
+    },
+  },
+  {
+    .name = "nofollow_refuses_dir_symlink",
+    .setup = {
+      { .path = "dir", .kind = SYS_SETUP_DIR },
+      { .path = "link", .kind = SYS_SETUP_DIR_SYMLINK, .target = "dir" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "link", .flags = SP_SYS_OPEN_DIR_NO_FOLLOW, .err = SP_ERR_SYS_LOOP } },
+    },
+  },
+  {
+    .name = "nofollow_refuses_file_symlink",
+    .setup = {
+      { .path = "file.bin", .content = "A" },
+      { .path = "link", .kind = SYS_SETUP_SYMLINK, .target = "file.bin" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "link", .flags = SP_SYS_OPEN_DIR_NO_FOLLOW, .err = SP_ERR_SYS_LOOP } },
+    },
+  },
 };
 
 sp_test_each_fn(sys, open, sys_case_t, sys_open_cases, sys_case_run);

@@ -369,6 +369,14 @@ typedef struct {
   #define sp_test_skip_on_linux()
 #endif
 
+#if defined(SP_WASM)
+  #define sp_test_skip_without_absolute_names() return sp_test_skip(t, "no absolute names on wasm");
+#else
+  #define sp_test_skip_without_absolute_names() ((void)0)
+#endif
+
+#define sp_test_skip_without_symlinks() if (!sp_test_symlinks_supported(t)) return sp_test_skip(t, "symlinks not available");
+
 SP_API sp_err_t    sp_test_skip(sp_test_t* t, const c8* fmt, ...);
 SP_API void        sp_test_fail(sp_test_t* t, const c8* fmt, ...);
 SP_API sp_str_t    sp_test_get_name(sp_test_t* t);
@@ -386,7 +394,7 @@ SP_API void        sp_test_note(sp_test_t* t, const c8* fmt, ...);
 
 SP_API sp_mem_t    sp_test_mem(sp_test_t* t);
 SP_API sp_mem_t    sp_test_arena(sp_test_t* t);
-SP_API sp_str_t    sp_test_dir(sp_test_t* t);
+SP_API sp_path_t   sp_test_dir(sp_test_t* t);
 SP_API const void* sp_test_user(sp_test_t* t);
 
 SP_API void        sp_test_record(sp_test_t* t, sp_test_failure_t failure);
@@ -397,8 +405,6 @@ SP_API bool        sp_test_mem_eq(sp_test_t* t, const void* lhs, const void* rhs
 SP_API bool        sp_test_strs_eq(sp_test_t* t, const sp_str_t* actual, u64 count, const c8* const* expect, const c8* sa, const c8* se, sp_str_t file, u32 line);
 
 SP_API void            sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
-SP_API void            sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line);
-SP_API sp_da(sp_str_t) sp_test_resolve_roots(sp_mem_t mem, sp_str_t cwd, sp_str_t exe_dir);
 
 typedef struct {
   sp_atomic_s32_t state;
@@ -407,6 +413,8 @@ typedef struct {
 
 SP_TYPEDEF_FN(sp_err_t, sp_test_once_fn_t, void* user);
 SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user);
+
+SP_API bool        sp_test_symlinks_supported(sp_test_t* t);
 
 
 typedef enum {
@@ -663,8 +671,7 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 #define sp_expect_err_eq(T, A, B)   sp_test_err_eq(T, A, B, #A, #B, sp_test_soft)
 #define sp_must_err_eq(T, A, B)     sp_test_err_eq(T, A, B, #A, #B, sp_test_stop)
 
-#define sp_expect_golden(T, PATH, ACTUAL)     sp_test_golden(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
-#define sp_expect_golden_abs(T, PATH, ACTUAL) sp_test_golden_abs(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
+#define sp_expect_golden(T, PATH, ACTUAL) sp_test_golden(T, PATH, ACTUAL, sp_cstr_as_str(__FILE__), (u32)__LINE__)
 
 #endif
 
@@ -720,7 +727,7 @@ struct sp_test_t {
   sp_mem_heap_t* tracking_heap;
   sp_mem_t tracked_mem;
 
-  sp_str_t dir;
+  sp_path_t dir;
 };
 
 struct sp_test_runner_t {
@@ -733,8 +740,9 @@ struct sp_test_runner_t {
   sp_da(const c8*) failed;
   sp_da(const c8*) skipped;
   sp_da(const c8*) updated;
-  sp_str_t dir_root;
-  sp_str_t golden_root;
+  sp_path_t dir_root;
+  sp_test_once_t symlinks;
+  sp_path_t golden_root;
   bool update;
   sp_test_keep_t keep;
   bool kept;
@@ -1013,11 +1021,22 @@ sp_mem_t sp_test_mem(sp_test_t* t) {
   return t->tracked_mem;
 }
 
-sp_str_t sp_test_dir(sp_test_t* t) {
-  if (sp_str_empty(t->dir)) {
+static sp_str_t sp_test_path_str(sp_mem_t mem, sp_path_t path) {
+  c8 buf [SP_PATH_MAX];
+  u64 len = 0;
+  for (s32 it = 0; sp_sys_get_root(it) != SP_SYS_INVALID_FD; it++) {
+    if (sp_sys_get_root(it) != path.dir) continue;
+    if (sp_sys_get_root_label(it, buf, sizeof(buf), &len)) break;
+    return sp_fs_join_path(mem, sp_str(buf, (u32)len), path.sub);
+  }
+  return sp_str_copy(mem, path.sub);
+}
+
+sp_path_t sp_test_dir(sp_test_t* t) {
+  if (sp_str_empty(t->dir.sub)) {
     sp_str_t leaf = sp_str_replace_c8(t->mem, sp_cstr_as_str(t->instance->name), '/', '_');
-    t->dir = sp_fs_join_path(t->mem, t->runner->dir_root, leaf);
-    sp_err_t err = sp_fs_create_dir(t->dir);
+    t->dir = sp_path_join(t->mem, t->runner->dir_root, leaf);
+    sp_err_t err = sp_fs_create_dir_at(t->dir);
     if (err) sp_test_fail(t, "failed to create test dir: {}", sp_fmt_str(sp_test_err_str(t, err)));
   }
   return t->dir;
@@ -1036,115 +1055,118 @@ sp_err_t sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user) {
   return once->err;
 }
 
+static sp_err_t sp_test_probe_symlinks(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t link = sp_path_join(s.mem, runner->dir_root, sp_str_lit("L"));
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_create_sym_link_at(sp_str_lit("A"), link, SP_FS_KIND_FILE);
+  if (!err) sp_fs_remove_file_at(link);
+  sp_mem_end_scratch(s);
+  return err;
+}
+
+bool sp_test_symlinks_supported(sp_test_t* t) {
+  return !sp_test_once(&t->runner->symlinks, sp_test_probe_symlinks, t->runner);
+}
+
 
 ////////////
 // GOLDEN //
 ////////////
-sp_da(sp_str_t) sp_test_resolve_roots(sp_mem_t mem, sp_str_t cwd, sp_str_t exe_dir) {
-  sp_da(sp_str_t) roots = sp_da_new(mem, sp_str_t);
+static sp_path_t sp_test_golden_search(sp_mem_t mem, sp_path_t dir, sp_str_t file) {
+  while (true) {
+    if (sp_fs_is_target_file_at(sp_path_join(mem, dir, file))) return dir;
 
-  sp_str_t anchors [] = { cwd, exe_dir };
-  sp_carr_for(anchors, at) {
-    if (sp_str_empty(anchors[at])) continue;
-
-    sp_str_t dir = sp_fs_normalize_path(mem, anchors[at]);
-    while (!sp_str_empty(dir)) {
-      bool seen = false;
-      sp_da_for(roots, it) {
-        if (sp_str_equal(roots[it], dir)) { seen = true; break; }
-      }
-      if (!seen) sp_da_push(roots, dir);
-
-      sp_str_t parent = sp_fs_parent_path(dir);
-      if (sp_str_equal(parent, dir)) break;
-      dir = parent;
-    }
+    sp_path_t parent = sp_path_parent(mem, dir);
+    sp_sys_file_meta_t from = sp_zero;
+    sp_sys_file_meta_t to = sp_zero;
+    if (sp_sys_get_path_metadata_s(dir.dir, dir.sub, &from)) return sp_zero_s(sp_path_t);
+    if (sp_sys_get_path_metadata_s(parent.dir, parent.sub, &to)) return sp_zero_s(sp_path_t);
+    if (from.id == to.id && from.device == to.device) return sp_zero_s(sp_path_t);
+    dir = parent;
   }
-
-  return roots;
 }
 
-static sp_str_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
+static sp_path_t sp_test_golden_root(sp_test_t* t, sp_str_t file) {
   sp_test_runner_t* runner = t->runner;
 
   sp_mutex_lock(&runner->mutex);
-  sp_str_t root = runner->golden_root;
+  sp_path_t root = runner->golden_root;
   sp_mutex_unlock(&runner->mutex);
-  if (!sp_str_empty(root)) return root;
+  if (!sp_str_empty(root.sub)) return root;
 
-  sp_str_t cwd = sp_fs_get_cwd(t->mem);
-  sp_str_t exe_dir = sp_fs_parent_path(sp_fs_get_exe_path(t->mem));
-  sp_da(sp_str_t) roots = sp_test_resolve_roots(t->mem, cwd, exe_dir);
+  sp_path_t anchors [2] = { sp_path_cwd(sp_str_lit(".")) };
+  sp_str_t exe = sp_zero;
+  if (!sp_fs_get_exe_path(t->mem, &exe)) anchors[1] = sp_path_from_str(sp_fs_parent_path(exe));
 
-  sp_da_for(roots, it) {
-    if (!sp_fs_is_target_file(sp_fs_join_path(t->mem, roots[it], file))) continue;
-    root = roots[it];
-    break;
+  sp_carr_for(anchors, it) {
+    if (sp_str_empty(anchors[it].sub)) continue;
+    root = sp_test_golden_search(t->mem, anchors[it], file);
+    if (!sp_str_empty(root.sub)) break;
   }
-  if (sp_str_empty(root)) return root;
+  if (sp_str_empty(root.sub)) return root;
 
   sp_mutex_lock(&runner->mutex);
-  if (sp_str_empty(runner->golden_root)) {
-    runner->golden_root = sp_str_copy(runner->mem, root);
+  if (sp_str_empty(runner->golden_root.sub)) {
+    runner->golden_root = sp_path(root.dir, sp_str_copy(runner->mem, root.sub));
   }
   root = runner->golden_root;
   sp_mutex_unlock(&runner->mutex);
   return root;
 }
 
-static void sp_test_golden_at(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
-  sp_str_t actual_path = sp_test_format(t, "{}.actual", sp_fmt_str(path));
+static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_str_t file, u32 line) {
+  sp_str_t shown = sp_test_path_str(t->mem, path);
+  sp_path_t actual_path = sp_path(path.dir, sp_test_format(t, "{}.actual", sp_fmt_str(path.sub)));
 
   if (t->runner->update) {
-    sp_str_t parent = sp_fs_parent_path(path);
-    if (!sp_str_empty(parent) && !sp_fs_exists(parent)) {
-      sp_fs_create_dir(parent);
-    }
+    sp_fs_create_dir_at(sp_path_parent(t->mem, path));
 
-    sp_err_t err = sp_fs_create_file_str(path, actual);
+    sp_err_t err = sp_fs_create_file_str_at(path, actual);
     if (err) {
       sp_test_record(t, (sp_test_failure_t) {
         .file = file,
         .line = line,
         .message = sp_test_format(t, "failed to update golden {}: err {}",
-          sp_fmt_str(path), sp_fmt_int(err)),
+          sp_fmt_str(shown), sp_fmt_int(err)),
       });
       return;
     }
 
-    if (sp_fs_exists(actual_path)) sp_fs_remove_file(actual_path);
+    if (sp_fs_exists_at(actual_path)) sp_fs_remove_file_at(actual_path);
     t->updated++;
     return;
   }
 
-  if (!sp_fs_exists(path)) {
+  if (!sp_fs_exists_at(path)) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
       .message = sp_test_format(t, "golden {} does not exist; run with --update to create it",
-        sp_fmt_str(path)),
+        sp_fmt_str(shown)),
     });
     return;
   }
 
   sp_str_t want = sp_zero;
-  sp_err_t err = sp_io_read_file(t->mem, path, &want);
+  sp_err_t err = sp_io_read_file_at(t->mem, path, &want);
   if (err) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
       .message = sp_test_format(t, "failed to read golden {}: err {}",
-        sp_fmt_str(path), sp_fmt_int(err)),
+        sp_fmt_str(shown), sp_fmt_int(err)),
     });
     return;
   }
 
   if (sp_str_equal(want, actual)) {
-    if (sp_fs_exists(actual_path)) sp_fs_remove_file(actual_path);
+    if (sp_fs_exists_at(actual_path)) sp_fs_remove_file_at(actual_path);
     return;
   }
 
-  sp_fs_create_file_str(actual_path, actual);
+  sp_fs_create_file_str_at(actual_path, actual);
 
   sp_da(sp_str_t) want_lines = sp_str_split_c8(t->mem, want, '\n');
   sp_da(sp_str_t) got_lines = sp_str_split_c8(t->mem, actual, '\n');
@@ -1162,29 +1184,22 @@ static void sp_test_golden_at(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_s
     .file = file,
     .line = line,
     .message = sp_test_format(t, "golden mismatch at {}:{}; wrote {}",
-      sp_fmt_str(path), sp_fmt_uint(diff + 1), sp_fmt_str(actual_path)),
+      sp_fmt_str(shown), sp_fmt_uint(diff + 1), sp_fmt_str(sp_test_path_str(t->mem, actual_path))),
     .expected = sp_test_format(t, "{.quote}", sp_fmt_str(want_line)),
     .actual = sp_test_format(t, "{.quote}", sp_fmt_str(got_line)),
   });
 }
 
 void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
-  if (sp_fs_is_absolute_for(path, SP_FS_PATH_WINDOWS)) {
-    sp_test_record(t, (sp_test_failure_t) {
-      .file = file,
-      .line = line,
-      .message = sp_test_format(t, "golden path {} is absolute; paths resolve against the calling source dir (use sp_expect_golden_abs)",
-        sp_fmt_str(path)),
-    });
-    return;
-  }
-
   file = sp_fs_normalize_path(t->mem, file);
 
-  sp_str_t src = file;
-  if (!sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS)) {
-    sp_str_t root = sp_test_golden_root(t, file);
-    if (sp_str_empty(root)) {
+  sp_path_t src = sp_zero;
+  if (sp_fs_is_absolute_for(file, SP_FS_PATH_WINDOWS)) {
+    src = sp_path_from_str(file);
+  }
+  else {
+    sp_path_t root = sp_test_golden_root(t, file);
+    if (sp_str_empty(root.sub)) {
       sp_test_record(t, (sp_test_failure_t) {
         .file = file,
         .line = line,
@@ -1193,24 +1208,23 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
       });
       return;
     }
-    src = sp_fs_join_path(t->mem, root, file);
+    src = sp_path_join(t->mem, root, file);
   }
 
-  if (!sp_fs_is_target_file(src)) {
+  if (src.dir == SP_SYS_INVALID_FD || !sp_fs_is_target_file_at(src)) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
       .message = sp_test_format(t, "cannot locate {}; goldens resolve against the calling source dir (--golden-root overrides)",
-        sp_fmt_str(src)),
+        sp_fmt_str(sp_test_path_str(t->mem, src))),
     });
     return;
   }
 
-  sp_test_golden_at(t, sp_fs_join_path(t->mem, sp_fs_parent_path(src), path), actual, file, line);
-}
-
-void sp_test_golden_abs(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file, u32 line) {
-  sp_test_golden_at(t, path, actual, file, line);
+  sp_path_t golden = sp_fs_is_absolute(path) ?
+    sp_path_from_str(path) :
+    sp_path_join(t->mem, sp_path_parent(t->mem, src), path);
+  sp_test_golden_at(t, golden, actual, file, line);
 }
 
 
@@ -1400,8 +1414,8 @@ static sp_test_status_t sp_test_status(sp_test_t* t) {
   return SP_TEST_STATUS_OK;
 }
 
-static sp_err_t sp_test_remove_dir(sp_str_t path) {
-  sp_err_t err = sp_fs_remove_dir(path);
+static sp_err_t sp_test_remove_dir(sp_path_t path) {
+  sp_err_t err = sp_fs_remove_dir_at(path);
   return err == SP_ERR_SYS_NOT_FOUND ? SP_OK : err;
 }
 
@@ -1444,8 +1458,8 @@ static void sp_test_report(sp_test_t* t, sp_tty_t* term, sp_test_status_t status
     sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("note"), sp_fmt_str(t->notes[it]));
   }
 
-  if (!sp_str_empty(t->dir)) {
-    sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("dir"), sp_fmt_str(t->dir));
+  if (!sp_str_empty(t->dir.sub)) {
+    sp_tty_fmt(term, "  {.gray} {}\n", sp_fmt_cstr("dir"), sp_fmt_str(sp_test_path_str(t->mem, t->dir)));
   }
 
   sp_da_for(t->failures, it) {
@@ -1580,14 +1594,14 @@ static void sp_test_run_instance(sp_test_runner_t* runner, const sp_test_instanc
     case SP_TEST_KEEP_ALWAYS: keep = true; break;
   }
 
-  if (!sp_str_empty(t->dir) && !keep) {
+  if (!sp_str_empty(t->dir.sub) && !keep) {
     sp_err_t err = sp_test_remove_dir(t->dir);
     if (err) {
       sp_test_fail(t, "failed to remove test dir: {}", sp_fmt_str(sp_test_err_str(t, err)));
       status = sp_test_status(t);
     }
     else {
-      t->dir = sp_zero_s(sp_str_t);
+      t->dir = sp_zero_s(sp_path_t);
     }
   }
 
@@ -1601,7 +1615,7 @@ static void sp_test_run_instance(sp_test_runner_t* runner, const sp_test_instanc
   sp_mutex_lock(&runner->mutex);
   sp_io_write_str(&runner->out.base, text, SP_NULLPTR);
   sp_io_flush(&runner->out.base);
-  if (!sp_str_empty(t->dir)) runner->kept = true;
+  if (!sp_str_empty(t->dir.sub)) runner->kept = true;
   switch (status) {
     case SP_TEST_STATUS_FAIL:   sp_da_push(runner->failed, instance->name); break;
     case SP_TEST_STATUS_SKIP:   sp_da_push(runner->skipped, instance->name); break;
@@ -1892,15 +1906,6 @@ static sp_str_t sp_test_run_name(sp_mem_t mem, sp_tm_epoch_t time) {
   return sp_str_replace_c8(mem, sp_tm_epoch_to_iso8601(mem, time), ':', '-');
 }
 
-static s32 sp_test_run_sort_kernel(const void* a, const void* b) {
-  const sp_fs_entry_t* ea = (const sp_fs_entry_t*)a;
-  const sp_fs_entry_t* eb = (const sp_fs_entry_t*)b;
-  bool da = ea->kind == SP_FS_KIND_DIR;
-  bool db = eb->kind == SP_FS_KIND_DIR;
-  if (da != db) return da ? SP_QSORT_A_FIRST : SP_QSORT_B_FIRST;
-  return sp_str_compare_alphabetical(ea->name, eb->name);
-}
-
 s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   const c8* filter = SP_NULLPTR;
   u32 jobs = 1;
@@ -1958,7 +1963,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
       {
         .name = "dir",
         .kind = SP_CLI_OPT_CSTR,
-        .summary = "root for test directories (defaults to $cwd/.sp/test)",
+        .summary = "root for test directories (defaults to .sp/test)",
         .placeholder = "dir",
         .ptr = &dir.opt,
       },
@@ -2010,7 +2015,14 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   sp_str_t golden_root = sp_zero;
   if (golden.env) golden_root = sp_cstr_as_str(golden.env);
   if (golden.opt) golden_root = sp_cstr_as_str(golden.opt);
-  if (!sp_str_empty(golden_root)) runner->golden_root = sp_fs_normalize_path(runner->mem, golden_root);
+  if (!sp_str_empty(golden_root)) {
+    runner->golden_root = sp_path_from_str(sp_fs_normalize_path(runner->mem, golden_root));
+    if (runner->golden_root.dir == SP_SYS_INVALID_FD) {
+      sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(golden_root));
+      sp_io_flush(&runner->out.base);
+      return 1;
+    }
+  }
 
   sp_mutex_init(&runner->mutex);
   sp_io_stream_writer_from_fd(&runner->out, sp_sys_stdout, SP_IO_CLOSE_MODE_NONE);
@@ -2097,35 +2109,41 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
     return 0;
   }
 
-  sp_str_t root = sp_str_lit(".sp/test");
-  if (dir.env) root = sp_cstr_as_str(dir.env);
-  if (dir.opt) root = sp_cstr_as_str(dir.opt);
-  root = sp_fs_normalize_path(runner->mem, root);
-  if (!sp_fs_is_absolute(root)) root = sp_fs_join_path(runner->mem, sp_fs_get_cwd(runner->mem), root);
+  sp_str_t dir_name = sp_str_lit(".sp/test");
+  if (dir.env) dir_name = sp_cstr_as_str(dir.env);
+  if (dir.opt) dir_name = sp_cstr_as_str(dir.opt);
+  dir_name = sp_fs_normalize_path(runner->mem, dir_name);
+
+  sp_path_t root = sp_path_from_str(dir_name);
+  if (root.dir == SP_SYS_INVALID_FD) {
+    sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(dir_name));
+    sp_io_flush(&runner->out.base);
+    return 1;
+  }
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   sp_tm_epoch_t grace = { .s = now.s - SP_TEST_RUNS_GRACE_S, .ns = now.ns };
-  sp_str_t runs_dir = sp_fs_join_path(runner->mem, root, sp_fs_get_stem(sp_fs_get_exe_path(runner->mem)));
-  runner->dir_root = sp_fs_join_path(runner->mem, runs_dir, sp_test_run_name(runner->mem, now));
+  sp_str_t exe = sp_zero;
+  if (sp_fs_get_exe_path(runner->mem, &exe)) exe = sp_cstr_as_str(argv[0]);
+  sp_path_t runs_dir = sp_path_join(runner->mem, root, sp_fs_get_stem(exe));
+  runner->dir_root = sp_path_join(runner->mem, runs_dir, sp_test_run_name(runner->mem, now));
 
   sp_str_t cutoff = sp_test_run_name(runner->mem, grace);
-  sp_da(sp_fs_entry_t) listing = SP_NULLPTR;
-  sp_fs_collect(runner->mem, runs_dir, &listing);
-  sp_da_sort(listing, sp_test_run_sort_kernel);
-
-  u64 runs = 0;
-  sp_da_for(listing, it) {
-    if (listing[it].kind != SP_FS_KIND_DIR) break;
-    runs++;
+  sp_da(sp_str_t) runs = sp_da_new(runner->mem, sp_str_t);
+  sp_fs_for(runner->mem, runs_dir, it) {
+    if (it.entry.kind != SP_FS_KIND_DIR) continue;
+    sp_da_push(runs, sp_str_copy(runner->mem, it.entry.name));
   }
+  sp_da_sort(runs, sp_str_sort_kernel_alphabetical);
 
-  u64 candidates = runs > SP_TEST_RUNS_RETAINED ? runs - SP_TEST_RUNS_RETAINED : 0;
+  u64 candidates = sp_da_size(runs) > SP_TEST_RUNS_RETAINED ? sp_da_size(runs) - SP_TEST_RUNS_RETAINED : 0;
   sp_for(it, candidates) {
-    if (sp_str_compare_alphabetical(listing[it].name, cutoff) != SP_QSORT_A_FIRST) break;
-    sp_err_t err = sp_test_remove_dir(listing[it].path);
+    if (sp_str_compare_alphabetical(runs[it], cutoff) != SP_QSORT_A_FIRST) break;
+    sp_path_t run = sp_path_join(runner->mem, runs_dir, runs[it]);
+    sp_err_t err = sp_test_remove_dir(run);
     if (err) {
       sp_tty_fmt(&runner->term, "> failed to prune {}: {}\n",
-        sp_fmt_str(listing[it].path),
+        sp_fmt_str(run.sub),
         sp_fmt_str(sp_test_err_name(runner->mem, err)));
     }
   }
@@ -2191,7 +2209,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
     if (err) {
       sp_tty_fmt(&runner->term, "> {.red} {}: {}\n",
         sp_fmt_cstr("failed to remove"),
-        sp_fmt_str(runner->dir_root),
+        sp_fmt_str(runner->dir_root.sub),
         sp_fmt_str(sp_test_err_name(runner->mem, err)));
       sp_io_flush(&runner->out.base);
     }

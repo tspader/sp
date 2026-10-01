@@ -1,7 +1,7 @@
 #include "fs.h"
 
 typedef struct {
-  bool empty;
+  sp_err_t err;
   bool no_trailing_slash;
   bool no_backslash;
   const c8* name;
@@ -82,43 +82,24 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "nonexistent_returns_empty",
+    .name = "nonexistent_is_not_found",
     .input = "/this/path/does/not/exist/at/all",
     .expect = {
-      .empty = true,
+      .err = SP_ERR_SYS_NOT_FOUND,
     },
   },
   {
     .name = "empty_input",
     .input = "",
     .expect = {
-      .empty = true,
-    },
-  },
-  {
-    .name = "nonexistent_relative",
-    .input = "no_such_file.txt",
-    .expect = {
-      .empty = true,
+      .err = SP_ERR_SYS_NOT_FOUND,
     },
   },
   {
     .name = "nonexistent_with_dotdot",
     .input = "no_such_dir/../also_missing.txt",
     .expect = {
-      .empty = true,
-    },
-  },
-  {
-    .name = "result_is_normalized",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-    },
-    .input = "A",
-    .expect = {
-      .no_trailing_slash = true,
-      .no_backslash = true,
-      .exists = true,
+      .err = SP_ERR_SYS_NOT_FOUND,
     },
   },
   {
@@ -132,13 +113,14 @@ static const test_t tests [] = {
       .no_backslash = true,
       .name = "A",
       .exists = true,
+      .same_as = "A",
     },
   },
   {
     .name = "resolves_symlink_to_dir",
     .setup = {
       { "A", FS_SETUP_DIR },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .input = "L",
     .expect = {
@@ -162,20 +144,6 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "symlink_with_dotdot",
-    .setup = {
-      { "A" },
-      { "B", FS_SETUP_DIR },
-      { .path = "B/L", .kind = FS_SETUP_SYMLINK, .target = "A" },
-    },
-    .input = "B/L",
-    .expect = {
-      .no_backslash = true,
-      .name = "A",
-      .exists = true,
-    },
-  },
-  {
     .name = "idempotent",
     .setup = {
       { "A" },
@@ -186,35 +154,25 @@ static const test_t tests [] = {
       .idempotent = true,
     },
   },
-  {
-    .name = "through_symlink",
-    .setup = {
-      { "A" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
-    },
-    .input = "L",
-    .expect = {
-      .same_as = "A",
-    },
-  },
 };
 
 sp_test_each(fs, canonicalize, test_t, tests) {
   sp_test_skip_on_wasm()
-  skip_if_symlinks_needed(t, it->setup);
+  if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t input = sp_str_view(it->input);
-  if (it->setup[0].path) {
-    sp_str_t sandbox = sp_test_dir(t);
-    fs_apply_setup(t, sandbox, it->setup);
-    input = sp_fs_join_path(mem, sandbox, input);
-  }
+  sp_path_t sandbox = sp_test_dir(t);
+  fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t result = sp_fs_canonicalize_path(mem, input);
+  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
-  if (it->expect.empty) {
-    if (result.len != 0) sp_test_fail(t, "expected empty, got {}", sp_fmt_str(result));
+  sp_path_t input = sp_path(dir, sp_str_view(it->input));
+  sp_str_t result = sp_zero;
+  sp_expect_err_eq(t, sp_fs_canonicalize_path_at(mem, input, &result), it->expect.err);
+
+  if (it->expect.err) {
+    sp_sys_close(dir);
     return SP_OK;
   }
 
@@ -229,15 +187,19 @@ sp_test_each(fs, canonicalize, test_t, tests) {
     sp_expect_str_eq_c(t, sp_fs_get_name(result), it->expect.name);
   }
   if (it->expect.exists) {
-    sp_expect(t, sp_fs_exists(result));
+    sp_expect(t, sp_fs_exists_at(sp_path(dir, result)));
   }
   if (it->expect.idempotent) {
-    sp_expect_str_eq(t, sp_fs_canonicalize_path(mem, result), result);
+    sp_str_t again = sp_zero;
+    sp_expect_ok(t, sp_fs_canonicalize_path_at(mem, sp_path(dir, result), &again));
+    sp_expect_str_eq(t, again, result);
   }
   if (it->expect.same_as) {
-    sp_str_t other = sp_fs_join_path(mem, sp_test_dir(t), sp_str_view(it->expect.same_as));
-    sp_expect_str_eq(t, result, sp_fs_canonicalize_path(mem, other));
+    sp_str_t other = sp_zero;
+    sp_expect_ok(t, sp_fs_canonicalize_path_at(mem, sp_path(dir, sp_str_view(it->expect.same_as)), &other));
+    sp_expect_str_eq(t, result, other);
   }
+  sp_sys_close(dir);
   return SP_OK;
 }
 
@@ -245,6 +207,10 @@ sp_test(fs, canon_dot_resolves_to_cwd) {
   sp_test_skip_on_wasm()
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_expect_str_eq(t, sp_fs_canonicalize_path(mem, sp_str_lit(".")), sp_fs_get_cwd(mem));
+  sp_str_t canonical = sp_zero;
+  sp_str_t cwd = sp_zero;
+  sp_must_ok(t, sp_fs_canonicalize_path(mem, sp_str_lit("."), &canonical));
+  sp_must_ok(t, sp_fs_get_cwd_path(mem, &cwd));
+  sp_expect_str_eq(t, canonical, cwd);
   return SP_OK;
 }

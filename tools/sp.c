@@ -160,7 +160,7 @@ static sp_da(const target_t*) target_resolve(sp_mem_t mem, sp_str_t query) {
 
 static sp_da(sp_str_t) tests_discover(sp_mem_t mem, sp_str_t dir, sp_str_t ext) {
   sp_da(sp_str_t) names = sp_da_new(mem, sp_str_t);
-  sp_fs_for(mem, dir, it) {
+  sp_fs_for(mem, sp_path_from_str(dir), it) {
     sp_str_t name = it.entry.name;
     if (!sp_str_empty(ext)) {
       if (!sp_str_ends_with(name, ext)) continue;
@@ -383,7 +383,9 @@ static test_t test_init(sp_mem_t mem, tool_t* tool, const target_t* target, sp_s
       break;
     }
     case EXEC_DOCKER: {
-      sp_str_t mount = sp_fmt(mem, "{}:/sp", sp_fmt_str(sp_fs_get_cwd(mem))).value;
+      sp_str_t cwd = sp_zero;
+      sp_fs_get_cwd_path(mem, &cwd);
+      sp_str_t mount = sp_fmt(mem, "{}:/sp", sp_fmt_str(cwd)).value;
       sp_str_t path = sp_fmt(mem, "/sp/{}", sp_fmt_str(rel)).value;
       test.display = sp_fmt(mem, "docker run --rm --platform linux/arm64 -v {} -w /sp debian:stable-slim {}", sp_fmt_str(mount), sp_fmt_str(path)).value;
       test.config = (sp_ps_config_t) {

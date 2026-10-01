@@ -32,18 +32,6 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_str_t out_hdr = sp_str_view(argv[3]);
   sp_log("scanning {}", sp_fmt_str(src_dir));
 
-  sp_da(sp_fs_entry_t) files;
-  if (sp_fs_collect_recursive(mem, src_dir, &files)) {
-    sp_log("could not read {}", sp_fmt_str(src_dir));
-    rc = 1;
-    goto cleanup;
-  }
-  if (sp_da_empty(files)) {
-    sp_log("no files found in {}", sp_fmt_str(src_dir));
-    rc = 1;
-    goto cleanup;
-  }
-
   sp_elf_t* elf = sp_elf_new_with_null_section(mem);
   sp_elf_symtab_new(elf);
 
@@ -52,18 +40,13 @@ s32 embed_main(s32 argc, const c8** argv) {
 
   sp_da(embed_entry_t) entries = sp_da_new(mem, embed_entry_t);
 
-  sp_da_for(files, it) {
-    sp_fs_entry_t ent = files[it];
-    if (ent.kind == SP_FS_KIND_DIR) {
-      continue;
-    }
-
-    u32 skip = src_dir.len + 1;
-    sp_str_t rel_path = sp_str_sub(ent.path, skip, ent.path.len - skip);
+  sp_fs_it_t files = sp_fs_it_new(mem, src_dir);
+  while (sp_fs_it_walk(&files)) {
+    sp_str_t rel_path = sp_str_copy(mem, files.entry.rel);
     sp_str_t symbol = symbol_from_path(mem, rel_path);
 
     sp_str_t content = sp_zero;
-    sp_io_read_file(mem, ent.path, &content);
+    sp_io_read_file(mem, files.entry.path, &content);
     u64 size = content.len;
 
     sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
@@ -105,6 +88,17 @@ s32 embed_main(s32 argc, const c8** argv) {
       .symbol = symbol,
       .size = size,
     }));
+  }
+  sp_fs_it_deinit(&files);
+  if (files.err) {
+    sp_log("could not read {}", sp_fmt_str(src_dir));
+    rc = 1;
+    goto cleanup;
+  }
+  if (sp_da_empty(entries)) {
+    sp_log("no files found in {}", sp_fmt_str(src_dir));
+    rc = 1;
+    goto cleanup;
   }
 
   {

@@ -14,15 +14,15 @@ name = "amalgamation"
 source = [
   "test/main.c",
   "test/test/axis.c", "test/test/filter.c", "test/test/matrix.c",
-  "test/test/resolve.c", "test/test/sweep.c", "test/test/tracking.c",
-  "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
-  "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
+  "test/test/sweep.c", "test/test/tracking.c",
+  "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
+  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
-  "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
+  "test/sys/tty/contract.c", "test/sys/tty/mode.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c",
-  "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/wtf8/*.c",
+  "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c",
   "test/fs/*.c", "test/fs/windows/nt_path.c",
   "test/msvc/*.c",
   "test/mem/uninitialized.c",
@@ -39,11 +39,11 @@ source = ["test/test/*.c"]
 name = "sys"
 source = [
   "test/main.c",
-  "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/iter.c", "test/sys/futex.c",
-  "test/sys/fd.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
+  "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
+  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
-  "test/sys/tty/contract.c", "test/sys/tty/mode.c", "test/sys/vtable.c",
+  "test/sys/tty/contract.c", "test/sys/tty/mode.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c"
 ]
@@ -54,7 +54,7 @@ source = ["test/main.c", "test/atomic.c"]
 
 [[test]]
 name = "fs"
-source = ["test/main.c", "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/wtf8/*.c", "test/fs/*.c", "test/fs/windows/nt_path.c"]
+source = ["test/main.c", "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c", "test/fs/*.c", "test/fs/windows/nt_path.c"]
 include = [".", "test/fs"]
 
 [[test]]
@@ -100,6 +100,10 @@ source = ["example/zero_copy.c"]
 [[example]]
 name = "msvc"
 source = ["example/msvc.c"]
+
+[[example]]
+name = "iterator"
+source = ["example/fs/iterator.c"]
 
 [profile.sanitizer]
 linkage = "shared"

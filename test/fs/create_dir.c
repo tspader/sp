@@ -76,7 +76,7 @@ static const test_t tests [] = {
     .name = "destination_is_symlink_to_directory",
     .setup = {
       { "A", FS_SETUP_DIR },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .target = "L",
     .expect = {
@@ -90,7 +90,7 @@ static const test_t tests [] = {
     .name = "destination_under_symlink_to_directory",
     .setup = {
       { "A", FS_SETUP_DIR },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .target = "L/B",
     .expect = {
@@ -131,32 +131,14 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, create_dir, test_t, tests) {
-  skip_if_symlinks_needed(t, it->setup);
+  if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_str_t target = sp_fs_join_path(sp_test_arena(t), sandbox, sp_str_view(it->target));
-  sp_expect_err_eq(t, sp_fs_create_dir(target), it->expect.err);
+  sp_path_t target = sp_path_join(sp_test_arena(t), sandbox, sp_cstr_as_str(it->target));
+  sp_expect_err_eq(t, sp_fs_create_dir_at(target), it->expect.err);
 
   fs_expect_paths(t, sandbox, it->expect.paths);
-  return SP_OK;
-}
-
-sp_test(fs, create_dir_create_multi_level_relative, .serial = true) {
-  sp_test_skip_on_wasm()
-
-  sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
-
-  sp_str_t cwd = sp_fs_get_cwd(mem);
-  sp_must_ok(t, sp_sys_chdir_s(sandbox));
-  sp_err_t result = sp_fs_create_dir(sp_str_lit("A/B"));
-  sp_must_ok(t, sp_sys_chdir_s(cwd));
-
-  sp_expect_ok(t, result);
-  sp_str_t created = sp_fs_join_path(mem, sandbox, sp_str_lit("A/B"));
-  sp_expect(t, sp_fs_exists(created));
-  sp_expect_eq(t, sp_fs_get_kind(created), SP_FS_KIND_DIR);
   return SP_OK;
 }

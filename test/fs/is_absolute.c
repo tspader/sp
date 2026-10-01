@@ -11,12 +11,13 @@ typedef struct {
 static const test_t tests [] = {
   { .name = "empty",                  .input = "" },
   { .name = "root_slash",             .input = "/",       .posix = true, .windows = true },
-  { .name = "root_backslash",         .input = "\\",      .posix = true, .windows = true },
+  { .name = "root_backslash",         .input = "\\",                     .windows = true },
   { .name = "double_slash",           .input = "//",      .posix = true, .windows = true },
   { .name = "slash_prefix",           .input = "/A",      .posix = true, .windows = true },
-  { .name = "backslash_prefix",       .input = "\\A",     .posix = true, .windows = true },
+  { .name = "backslash_prefix",       .input = "\\A",                    .windows = true },
   { .name = "relative",               .input = "A" },
   { .name = "relative_nested",        .input = "A/B" },
+  { .name = "dot",                    .input = "." },
   { .name = "drive_bare",             .input = "C:" },
   { .name = "drive_lower_bare",       .input = "a:" },
   { .name = "drive_relative",         .input = "C:A" },
@@ -27,7 +28,7 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, is_absolute, test_t, tests) {
-  sp_str_t path = sp_str_view(it->input);
+  sp_str_t path = sp_cstr_as_str(it->input);
   sp_expect_eq(t, sp_fs_is_absolute_for(path, SP_FS_PATH_POSIX), it->posix);
   sp_expect_eq(t, sp_fs_is_absolute_for(path, SP_FS_PATH_WINDOWS), it->windows);
   return SP_OK;

@@ -15,6 +15,7 @@ typedef enum {
   SYS_SETUP_FILE,
   SYS_SETUP_DIR,
   SYS_SETUP_SYMLINK,
+  SYS_SETUP_DIR_SYMLINK,
 } sys_setup_kind_t;
 
 typedef struct {
@@ -39,7 +40,7 @@ typedef struct {
   sys_step_kind_t kind;
   union {
     struct { u32 slot; const c8* path; sp_sys_open_mode_t mode; u32 flags; sp_err_t err; } open;
-    struct { u32 slot; const c8* path; sp_err_t err; } open_dir;
+    struct { u32 slot; const c8* path; u32 flags; sp_err_t err; } open_dir;
     struct { u32 slot; u64 count; const c8* expect; sp_err_t err; } read;
     struct { u32 slot; const c8* data; sp_err_t err; } write;
     struct { u32 slot; const c8* data; u64 offset; sp_err_t err; } pwrite;
@@ -58,8 +59,6 @@ typedef struct {
   sys_step_t steps [SYS_CASE_MAX_STEPS];
   sys_expect_t expect [SYS_CASE_MAX_EXPECT];
 } sys_case_t;
-
-static sp_test_once_t sys_symlink_probe = sp_zero;
 
 sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c);
 

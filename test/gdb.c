@@ -41,8 +41,9 @@ typedef struct gdb {
 } sp_gdb;
 
 static sp_str_t gdb_fixture_path(sp_mem_t mem) {
-  sp_str_t exe = sp_fs_parent_path(sp_fs_get_exe_path(mem));
-  sp_str_t fixture = sp_fs_join_path(mem, exe, sp_str_lit("gdb_fixture"));
+  sp_str_t exe = sp_zero;
+  sp_fs_get_exe_path(mem, &exe);
+  sp_str_t fixture = sp_fs_join_path(mem, sp_fs_parent_path(exe), sp_str_lit("gdb_fixture"));
   return sp_fs_replace_ext(mem, fixture, sp_os_get_executable_ext());
 }
 

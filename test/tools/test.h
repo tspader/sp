@@ -162,7 +162,9 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a) {
     return sp_test_file_manager_top_level;
   }
 
-  sp_str_t tmp = sp_fs_join_path(a, sp_fs_get_cwd(a), sp_str_lit(".tmp"));
+  sp_str_t cwd = sp_zero;
+  sp_fs_get_cwd_path(a, &cwd);
+  sp_str_t tmp = sp_fs_join_path(a, cwd, sp_str_lit(".tmp"));
   if (!sp_fs_exists(tmp)) {
     sp_fs_create_dir(tmp);
   }
@@ -178,14 +180,14 @@ static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a) {
 
   // Cache in a long-lived allocator (os) so the result outlives `a`, which is
   // typically a per-test arena that gets destroyed in cleanup.
-  sp_test_file_manager_top_level = sp_fs_canonicalize_path(sp_mem_os_new(), root);
+  sp_fs_canonicalize_path(sp_mem_os_new(), root, &sp_test_file_manager_top_level);
   return sp_test_file_manager_top_level;
 }
 
 void sp_test_file_manager_init(sp_test_file_manager_t* fs) {
   fs->arena = sp_mem_arena_new(sp_mem_os_new());
   fs->mem = sp_mem_arena_as_allocator(fs->arena);
-  fs->paths.bin = sp_fs_get_exe_path(fs->mem);
+  sp_fs_get_exe_path(fs->mem, &fs->paths.bin);
   fs->paths.test = sp_test_file_manager_get_top_level(fs->mem);
 
   if (!sp_fs_exists(fs->paths.test)) {

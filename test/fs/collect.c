@@ -55,9 +55,9 @@ static const test_t tests [] = {
 
 sp_test_each(fs, collect, test_t, tests) {
   sp_mem_t mem = sp_test_arena(t);
-  sp_str_t sandbox = sp_test_dir(t);
+  sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
-  sp_str_t root = sp_fs_join_path(mem, sandbox, sp_str_lit("R"));
+  sp_str_t root = sp_path_join(mem, sandbox, sp_str_lit("R")).sub;
 
   fs_match_t matches [FS_MAX_PATHS] = sp_zero;
   u32 n = 0;
@@ -76,6 +76,7 @@ sp_test_each(fs, collect, test_t, tests) {
   sp_expect_eq(t, sp_da_size(results), (u64)n);
   sp_da_for(results, i) {
     sp_expect_str_eq(t, results[i].name, sp_fs_get_name(results[i].path));
+    sp_expect_str_eq(t, sp_fs_join_path(mem, root, results[i].rel), results[i].path);
     fs_match(t, matches, n, results[i].path, results[i].kind);
   }
   fs_match_finish(t, matches, n);
