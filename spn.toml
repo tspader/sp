@@ -77,6 +77,13 @@ source = [
 ]
 
 [[test]]
+name = "promptt"
+source = [
+  "test/main.c",
+  "test/prompt/*.c",
+]
+
+[[test]]
 name = "tls"
 source = [
   "test/main.c",
@@ -104,6 +111,18 @@ source = ["example/msvc.c"]
 [[example]]
 name = "iterator"
 source = ["example/fs/iterator.c"]
+
+[[example]]
+name = "prompt"
+source = ["example/prompt.c"]
+
+[[example]]
+name = "prompt_fancy"
+source = ["example/prompt_fancy.c"]
+
+[[example]]
+name = "cargo"
+source = ["example/cargo.c"]
 
 [profile.sanitizer]
 linkage = "shared"
