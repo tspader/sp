@@ -212,7 +212,7 @@
   #if defined(SP_WIN32)
     #define SP_IMPORT __declspec(dllimport)
   #else
-    #define SP_IMPORT
+    #define SP_IMPORT extern
   #endif
 #endif
 

@@ -97,6 +97,18 @@ define = [
 ]
 macos = { frameworks = ["Security", "CoreFoundation"] }
 
+[[lib]]
+name = "sp"
+kinds = ["shared"]
+source = ["test/tools/linkage/lib-impl.c"]
+define = ["SP_SHARED_LIB"]
+
+[[test]]
+name = "linkage"
+source = ["test/tools/linkage/main-decl.c"]
+define = ["SP_SHARED_LIB"]
+deps = ["sp"]
+
 [deps.test]
 mbedtls = "3.6.6"
 
