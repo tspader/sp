@@ -7035,18 +7035,18 @@ SP_PRIVATE void sp_nt_load(void) {
 
 SP_PRIVATE u8* sp_nt_peb_base(void) {
   u8* peb_base;
-  #if defined(_MSC_VER)
-    #if defined(_M_X64)
+  #if defined(SP_DIALECT_MSVC)
+    #if defined(SP_AMD64)
       peb_base = (u8*)__readgsqword(0x60);
-    #elif defined(_M_ARM64)
+    #elif defined(SP_ARM64)
       peb_base = *(u8**)(_ReadStatusReg(0x5E82) + 0x60);
     #else
       #error "sp.h requires 64-bit Windows"
     #endif
   #else
-    #if defined(__x86_64__)
+    #if defined(SP_AMD64)
       __asm__ volatile ("movq %%gs:0x60, %0" : "=r"(peb_base));
-    #elif defined(__aarch64__)
+    #elif defined(SP_ARM64)
       __asm__ volatile ("ldr %0, [x18, #0x60]" : "=r"(peb_base));
     #else
       #error "sp.h requires 64-bit Windows"
@@ -14448,29 +14448,7 @@ typedef struct {
 
 SP_PRIVATE sp_win32_peb_t sp_win32_get_peb() {
   sp_win32_peb_t peb = sp_zero;
-
-  #if defined(_MSC_VER)
-    static const s32 tpidr_el0 = 0x5E82;
-    static const u32 peb_offset = 0x60;
-
-    #if defined(_M_X64)
-      peb.base = (u8*)__readgsqword(peb_offset);
-    #elif defined(_M_ARM64)
-      peb.base = *(u8**)(_ReadStatusReg(tpidr_el0) + peb_offset);
-    #else
-      #error "unsupported architecture"
-    #endif
-  #else
-    #if defined(__x86_64__)
-      __asm__ volatile ("movq %%gs:0x60, %0" : "=r"(peb.base));
-    #elif defined(__i386__)
-      __asm__ volatile ("movl %%fs:0x30, %0" : "=r"(peb.base));
-    #elif defined(__aarch64__)
-      __asm__ volatile ("ldr %0, [x18, #0x60]" : "=r"(peb.base));
-    #else
-      #error "unsupported architecture"
-    #endif
-  #endif
+  peb.base = sp_nt_peb_base();
 
   // PEB->ProcessParameters
   peb.params.base = *(u8**)(peb.base + 0x20);
