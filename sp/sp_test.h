@@ -517,7 +517,7 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 #else
   // The ternary decays arrays like +0 would, without the pointer arithmetic
   // MSVC rejects for void* (C2036)
-  #define sp_test_auto(X) __typeof__(0 ? (X) : (X))
+  #define sp_test_auto(X) sp_type_of(0 ? (X) : (X))
 #endif
 
 #define sp_test_cmp(T, A, B, SA, SB, OP, FAIL)                 \

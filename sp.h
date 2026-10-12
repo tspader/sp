@@ -465,6 +465,33 @@
   #define sp_const_cast(type, x) ((type)(x))
 #endif
 
+////////////////
+// sp_type_of //
+////////////////
+#if SP_CPP_VERSION >= 201103L
+  template <typename T> struct sp_type_of_impl      { typedef T type; };
+  template <typename T> struct sp_type_of_impl<T&>  { typedef T type; };
+  template <typename T> struct sp_type_of_impl<T&&> { typedef T type; };
+  #define sp_type_of(x) typename sp_type_of_impl<decltype(x)>::type
+#elif defined(SP_DIALECT_GNUC) || defined(SP_TCC)
+  #define sp_type_of(x) __typeof__(x)
+#elif defined(SP_CL) && SP_HAS_TYPE_OF
+  #define sp_type_of(x) __typeof__(x)
+#elif SP_C_VERSION >= 202311L
+  #define sp_type_of(x) typeof(x)
+#else
+  #define sp_type_of(x) sp_type_of_is_unsupported_on_this_toolchain(x)
+#endif
+
+////////////////////
+// SP_CL_SUPPRESS //
+////////////////////
+#if defined(SP_CL)
+  #define SP_CL_SUPPRESS(n) __pragma(warning(suppress: n))
+#else
+  #define SP_CL_SUPPRESS(n)
+#endif
+
 #define SP_EXIT_SUCCESS() exit(0)
 #define SP_EXIT_FAILURE() exit(1)
 
@@ -2675,10 +2702,11 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_for(ht, it) \
   for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it))
 
-#define sp_ht_key_t(ht)   __typeof__((ht)->data[0].key)*
-#define sp_ht_value_t(ht) __typeof__((ht)->data[0].val)*
+#define sp_ht_key_t(ht)   sp_type_of((ht)->data[0].key)*
+#define sp_ht_value_t(ht) sp_type_of((ht)->data[0].val)*
 
 #define sp_ht_for_kv(ht, it)                                                       \
+  SP_CL_SUPPRESS(4116)                                                             \
   for (                                                                            \
     struct { sp_ht_it_t idx; sp_ht_key_t(ht) key; sp_ht_value_t(ht) val; } it = {  \
       sp_ht_it_init(ht),                                                           \
