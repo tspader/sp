@@ -123,7 +123,7 @@
   #define SP_MACOS
   #define SP_UNIX
 
-#elif __COSMOPOLITAN__
+#elif defined(__COSMOPOLITAN__)
   #define SP_COSMO
   #define SP_UNIX
 
