@@ -149,7 +149,7 @@ typedef struct {
 #define __sp_test_fn(SUITE, NAME)    sp_mcat(sp_mcat(sp_test_fn_, SUITE), sp_mcat(_, NAME))
 #define __sp_test_thunk(SUITE, NAME) sp_mcat(__sp_test_fn(SUITE, NAME), _thunk)
 
-#if defined(__ELF__) || defined(SP_WASM) || (defined(SP_TCC) && defined(SP_LINUX))
+#if defined(SP_ELF) || defined(SP_WASM) || (defined(SP_TCC) && defined(SP_LINUX))
   #define SP_TEST_AUTOREG 1
 
   #if SP_HAS_ATTRIBUTE(retain)
@@ -482,7 +482,7 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
   SP_INLINE sp_str_t sp_test_value(sp_test_t* t, void* value) { return sp_test_value_ptr(t, value); }
   SP_INLINE sp_str_t sp_test_value(sp_test_t* t, sp_str_t value) { return sp_test_value_str(t, value); }
   template <typename T> SP_INLINE sp_str_t sp_test_value(sp_test_t* t, const T& value) { SP_UNUSED(value); return sp_test_value_opaque(t); }
-#elif defined(__GNUC__) || defined(__TINYC__)
+#elif SP_HAS_GENERIC
   #define sp_test_value(T, V) _Generic((V), \
     bool:        sp_test_value_bool,        \
     c8:          sp_test_value_c8,          \
@@ -512,7 +512,7 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 ////////////////
 #if defined(SP_CPP)
   #define sp_test_auto(X) auto
-#elif (defined(__clang__) || defined(__GNUC__)) && !defined(__TINYC__)
+#elif defined(SP_DIALECT_GNUC)
   #define sp_test_auto(X) __auto_type
 #else
   // The ternary decays arrays like +0 would, without the pointer arithmetic

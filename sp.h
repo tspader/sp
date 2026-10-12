@@ -339,7 +339,7 @@
 /////////////////
 // SP_NOEXCEPT //
 ////////////////
-#if defined(SP_CPP) && (__cplusplus >= 201103L)
+#if SP_CPP_VERSION >= 201103L
   #define SP_NOEXCEPT noexcept
 #else
   #define SP_NOEXCEPT
@@ -500,14 +500,14 @@
 //////////////////////
 // SP_STATIC_ASSERT //
 //////////////////////
-#if defined(SP_CPP) && (__cplusplus >= 201103L)
+#if SP_CPP_VERSION >= 201103L
   #define sp_static_assert(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
-#elif !defined(SP_CPP) && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)
+#elif SP_C_VERSION >= 202311L
   #define sp_static_assert(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
-#elif !defined(SP_CPP) && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#elif SP_C_VERSION >= 201112L
   #define sp_static_assert(CONDITION, MESSAGE) _Static_assert(CONDITION, #MESSAGE)
 #else
-  #ifdef __COUNTER__
+  #if SP_HAS_COUNTER
     #define SP_STATIC_ASSERT_ID __COUNTER__
   #else
     #define SP_STATIC_ASSERT_ID __LINE__
@@ -3297,11 +3297,7 @@ typedef enum {
   SP_ATOMIC_SEQ_CST,
 } sp_atomic_order_t;
 
-#if defined(__ATOMIC_SEQ_CST) && (defined(SP_DIALECT_GNUC) || defined(SP_TCC))
-  #define SP_ATOMIC_GNU
-#endif
-
-#if defined(SP_ATOMIC_GNU)
+#if SP_HAS_ATOMIC_BUILTINS
 SP_INLINE s32 sp_atomic_order_gnu(sp_atomic_order_t order) {
   switch (order) {
     case SP_ATOMIC_RELAXED: return __ATOMIC_RELAXED;
@@ -3348,7 +3344,7 @@ SP_INLINE s32 sp_atomic_order_gnu_fail(sp_atomic_order_t order) {
 #endif
 
 SP_INLINE s32 sp_atomic_s32_load(sp_atomic_s32_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3376,7 +3372,7 @@ SP_INLINE s32 sp_atomic_s32_load(sp_atomic_s32_t* value, sp_atomic_order_t order
 }
 
 SP_INLINE void sp_atomic_s32_store(sp_atomic_s32_t* value, s32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3416,7 +3412,7 @@ SP_INLINE void sp_atomic_s32_store(sp_atomic_s32_t* value, s32 desired, sp_atomi
 }
 
 SP_INLINE s32 sp_atomic_s32_exchange(sp_atomic_s32_t* value, s32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3438,7 +3434,7 @@ SP_INLINE s32 sp_atomic_s32_exchange(sp_atomic_s32_t* value, s32 desired, sp_ato
 }
 
 SP_INLINE s32 sp_atomic_s32_add(sp_atomic_s32_t* value, s32 add, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3458,7 +3454,7 @@ SP_INLINE s32 sp_atomic_s32_add(sp_atomic_s32_t* value, s32 add, sp_atomic_order
 }
 
 SP_INLINE bool sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3481,7 +3477,7 @@ SP_INLINE bool sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desire
 }
 
 SP_INLINE u32 sp_atomic_u32_load(sp_atomic_u32_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3509,7 +3505,7 @@ SP_INLINE u32 sp_atomic_u32_load(sp_atomic_u32_t* value, sp_atomic_order_t order
 }
 
 SP_INLINE void sp_atomic_u32_store(sp_atomic_u32_t* value, u32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3549,7 +3545,7 @@ SP_INLINE void sp_atomic_u32_store(sp_atomic_u32_t* value, u32 desired, sp_atomi
 }
 
 SP_INLINE u32 sp_atomic_u32_exchange(sp_atomic_u32_t* value, u32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3571,7 +3567,7 @@ SP_INLINE u32 sp_atomic_u32_exchange(sp_atomic_u32_t* value, u32 desired, sp_ato
 }
 
 SP_INLINE u32 sp_atomic_u32_add(sp_atomic_u32_t* value, u32 add, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3591,7 +3587,7 @@ SP_INLINE u32 sp_atomic_u32_add(sp_atomic_u32_t* value, u32 add, sp_atomic_order
 }
 
 SP_INLINE bool sp_atomic_u32_cas(sp_atomic_u32_t* value, u32 current, u32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3614,7 +3610,7 @@ SP_INLINE bool sp_atomic_u32_cas(sp_atomic_u32_t* value, u32 current, u32 desire
 }
 
 SP_INLINE u64 sp_atomic_u64_load(sp_atomic_u64_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3642,7 +3638,7 @@ SP_INLINE u64 sp_atomic_u64_load(sp_atomic_u64_t* value, sp_atomic_order_t order
 }
 
 SP_INLINE void sp_atomic_u64_store(sp_atomic_u64_t* value, u64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3682,7 +3678,7 @@ SP_INLINE void sp_atomic_u64_store(sp_atomic_u64_t* value, u64 desired, sp_atomi
 }
 
 SP_INLINE u64 sp_atomic_u64_exchange(sp_atomic_u64_t* value, u64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3704,7 +3700,7 @@ SP_INLINE u64 sp_atomic_u64_exchange(sp_atomic_u64_t* value, u64 desired, sp_ato
 }
 
 SP_INLINE u64 sp_atomic_u64_add(sp_atomic_u64_t* value, u64 add, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3724,7 +3720,7 @@ SP_INLINE u64 sp_atomic_u64_add(sp_atomic_u64_t* value, u64 add, sp_atomic_order
 }
 
 SP_INLINE bool sp_atomic_u64_cas(sp_atomic_u64_t* value, u64 current, u64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3747,7 +3743,7 @@ SP_INLINE bool sp_atomic_u64_cas(sp_atomic_u64_t* value, u64 current, u64 desire
 }
 
 SP_INLINE s64 sp_atomic_s64_load(sp_atomic_s64_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3775,7 +3771,7 @@ SP_INLINE s64 sp_atomic_s64_load(sp_atomic_s64_t* value, sp_atomic_order_t order
 }
 
 SP_INLINE void sp_atomic_s64_store(sp_atomic_s64_t* value, s64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3815,7 +3811,7 @@ SP_INLINE void sp_atomic_s64_store(sp_atomic_s64_t* value, s64 desired, sp_atomi
 }
 
 SP_INLINE s64 sp_atomic_s64_exchange(sp_atomic_s64_t* value, s64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3837,7 +3833,7 @@ SP_INLINE s64 sp_atomic_s64_exchange(sp_atomic_s64_t* value, s64 desired, sp_ato
 }
 
 SP_INLINE s64 sp_atomic_s64_add(sp_atomic_s64_t* value, s64 add, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3857,7 +3853,7 @@ SP_INLINE s64 sp_atomic_s64_add(sp_atomic_s64_t* value, s64 add, sp_atomic_order
 }
 
 SP_INLINE bool sp_atomic_s64_cas(sp_atomic_s64_t* value, s64 current, s64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3880,7 +3876,7 @@ SP_INLINE bool sp_atomic_s64_cas(sp_atomic_s64_t* value, s64 current, s64 desire
 }
 
 SP_INLINE void* sp_atomic_ptr_load(sp_atomic_ptr_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3908,7 +3904,7 @@ SP_INLINE void* sp_atomic_ptr_load(sp_atomic_ptr_t* value, sp_atomic_order_t ord
 }
 
 SP_INLINE void sp_atomic_ptr_store(sp_atomic_ptr_t* value, void* desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
@@ -3948,7 +3944,7 @@ SP_INLINE void sp_atomic_ptr_store(sp_atomic_ptr_t* value, void* desired, sp_ato
 }
 
 SP_INLINE void* sp_atomic_ptr_exchange(sp_atomic_ptr_t* value, void* desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3973,7 +3969,7 @@ SP_INLINE void* sp_atomic_ptr_exchange(sp_atomic_ptr_t* value, void* desired, sp
 }
 
 SP_INLINE bool sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
   #elif defined(SP_DIALECT_MSVC)
     (void)order;
@@ -3996,7 +3992,7 @@ SP_INLINE bool sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* de
 }
 
 SP_INLINE void sp_atomic_fence(sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_thread_fence(sp_atomic_order_gnu(order));
   #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
