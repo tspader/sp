@@ -2803,6 +2803,7 @@ SP_API c8              sp_str_back(sp_str_t str);
 SP_API s32             sp_str_compare_alphabetical(sp_str_t a, sp_str_t b);
 SP_API sp_str_t        sp_str_prefix(sp_str_t str, s32 len);
 SP_API sp_str_t        sp_str_suffix(sp_str_t str, s32 len);
+SP_API sp_str_t        sp_str_skip(sp_str_t str, s32 n);
 SP_API sp_str_t        sp_str_sub(sp_str_t str, s32 index, s32 len);
 SP_API sp_str_t        sp_str_sub_reverse(sp_str_t str, s32 index, s32 len);
 SP_API sp_str_t        sp_str_replace_c8(sp_mem_t mem, sp_str_t str, c8 from, c8 to);
@@ -2856,7 +2857,22 @@ SP_API c8              sp_c8_to_upper(c8 c);
 SP_API c8              sp_c8_to_lower(c8 c);
 SP_API s32             sp_str_sort_kernel_alphabetical(const void* a, const void* b);
 
+typedef struct {
+  sp_str_t str;
+  c8 delimiter;
+  s32 index;
+} sp_str_split_it_t;
 
+SP_API sp_str_split_it_t sp_str_split_it(sp_str_t str, c8 delimiter);
+SP_API bool              sp_str_split_it_next(sp_str_split_it_t* it, sp_str_t* out);
+
+#define sp_str_for_split(str, delimiter, it)                       \
+  for (                                                            \
+    struct { sp_str_split_it_t state; sp_str_t value; } it = {     \
+      .state = sp_str_split_it(str, delimiter)                     \
+    };                                                             \
+    sp_str_split_it_next(&it.state, &it.value);                    \
+  )
 
 //  █████          ███████      █████████
 // ░░███         ███░░░░░███   ███░░░░░███
@@ -3131,6 +3147,7 @@ SP_API sp_err_t             sp_fs_get_config_path(sp_mem_t mem, sp_str_t* path);
 SP_API sp_err_t             sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path, sp_str_t* canonical);
 SP_API sp_err_t             sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path, sp_str_t* canonical);
 SP_API sp_path_t            sp_path(sp_sys_fd_t dir, sp_str_t sub);
+SP_API sp_path_t            sp_path_c(sp_sys_fd_t dir, const c8* sub);
 SP_API sp_path_t            sp_path_cwd(sp_str_t sub);
 SP_API sp_path_t            sp_path_from_str(sp_str_t path);
 SP_API sp_path_t            sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub);
@@ -9293,7 +9310,7 @@ SP_PRIVATE bool sp_sys_tty_win32_is_pty(HANDLE handle) {
   sp_for(it, wide_len) {
     u32 index = wide_len - 1 - it;
     if (buf[index] == '\\' || buf[index] == '/') {
-      name = sp_str_sub(name, (s32)index + 1, (s32)(wide_len - index - 1));
+      name = sp_str_skip(name, (s32)index + 1);
       break;
     }
   }
@@ -13488,6 +13505,10 @@ sp_str_t sp_str_suffix(sp_str_t str, s32 len) {
   return sp_str_sub(str, str.len - len, len);
 }
 
+
+sp_str_t sp_str_skip(sp_str_t str, s32 n) {
+  return sp_str_sub(str, n, str.len - n);
+}
 sp_str_t sp_str_sub(sp_str_t str, s32 index, s32 len) {
   SP_ASSERT(index + len <= (s32)str.len);
   if (!len) return sp_zero_s(sp_str_t);
@@ -13532,6 +13553,25 @@ sp_str_t sp_str_from_cstr(sp_mem_t mem, const c8* str) {
 void sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity) {
   if (!str.data) return;
   sp_mem_copy(buffer, str.data, sp_min(str.len, capacity));
+}
+
+sp_str_split_it_t sp_str_split_it(sp_str_t str, c8 delimiter) {
+  return (sp_str_split_it_t) {
+    .str = str,
+    .delimiter = delimiter,
+    .index = sp_str_empty(str) ? SP_STR_NO_MATCH : 0,
+  };
+}
+
+bool sp_str_split_it_next(sp_str_split_it_t* it, sp_str_t* str) {
+  if (it->index < 0) return false;
+
+  sp_str_t rest = sp_str_skip(it->str, it->index);
+  sp_str_pair_t pair = sp_str_cleave_c8(rest, it->delimiter);
+
+  *str = pair.first;
+  it->index = pair.first.len < rest.len ? it->index + (s32)pair.first.len + 1 : SP_STR_NO_MATCH;
+  return true;
 }
 
 sp_str_it_t sp_str_it(sp_str_t str) {
@@ -13640,7 +13680,7 @@ sp_str_pair_t sp_str_cleave_c8(sp_str_t str, c8 delimiter) {
   for (u32 i = 0; i < str.len; i++) {
     if (sp_str_at(str, i) == delimiter) {
       result.first = sp_str_sub(str, 0, i);
-      result.second = sp_str_sub(str, i + 1, str.len - i - 1);
+      result.second = sp_str_skip(str, i + 1);
       return result;
     }
   }
@@ -13702,7 +13742,7 @@ sp_str_t sp_str_trim(sp_str_t str) {
 sp_str_t sp_str_strip_left(sp_str_t str, sp_str_t strip) {
   if (sp_str_empty(str)) return sp_zero_s(sp_str_t);
   if (!sp_str_starts_with(str, strip)) return str;
-  return sp_str_suffix(str, str.len - strip.len);
+  return sp_str_skip(str, strip.len);
 }
 
 sp_str_t sp_str_strip_right(sp_str_t str, sp_str_t strip) {
@@ -14465,7 +14505,7 @@ SP_PRIVATE sp_env_var_t sp_os_env_parse_var(sp_str_t entry) {
   sp_for_range(i, start, entry.len) {
     if (entry.data[i] == '=') {
       result.key = sp_str_sub(entry, 0, i);
-      result.value = sp_str_sub(entry, i + 1, entry.len - i - 1);
+      result.value = sp_str_skip(entry, i + 1);
       break;
     }
   }
@@ -20162,7 +20202,7 @@ sp_str_t sp_fs_get_name_for(sp_str_t path, sp_fs_path_kind_t kind) {
   u32 root = sp_fs_root_len(path, kind);
   u32 start = path.len;
   while (start > root && !sp_fs_is_sep_for(path.data[start - 1], kind)) start--;
-  return sp_str_suffix(path, (s32)(path.len - start));
+  return sp_str_skip(path, (s32)start);
 }
 
 sp_str_t sp_fs_parent_path_for(sp_str_t path, sp_fs_path_kind_t kind) {
@@ -20182,7 +20222,7 @@ sp_str_t sp_fs_get_stem_for(sp_str_t path, sp_fs_path_kind_t kind) {
 sp_str_t sp_fs_get_ext_for(sp_str_t path, sp_fs_path_kind_t kind) {
   sp_str_t name = sp_fs_get_name_for(path, kind);
   u32 dot = sp_fs_stem_len(name);
-  return sp_str_suffix(name, (s32)(name.len - sp_min(dot + 1, name.len)));
+  return sp_str_skip(name, (s32)sp_min(dot + 1, name.len));
 }
 
 sp_str_t sp_fs_replace_ext_for(sp_mem_t mem, sp_str_t path, sp_str_t ext, sp_fs_path_kind_t kind) {
@@ -20200,7 +20240,7 @@ sp_str_t sp_fs_join_path_for(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_fs_path_ki
   b = sp_fs_trim_path_for(b, kind);
   if (sp_str_empty(a)) return sp_str_copy(mem, b);
 
-  while (!sp_str_empty(b) && sp_fs_is_sep_for(b.data[0], kind)) b = sp_str_suffix(b, (s32)b.len - 1);
+  while (!sp_str_empty(b) && sp_fs_is_sep_for(b.data[0], kind)) b = sp_str_skip(b, 1);
   if (sp_str_empty(b)) return sp_str_copy(mem, a);
   if (sp_fs_is_sep_for(sp_str_back(a), kind)) return sp_str_concat(mem, a, b);
   return sp_str_join(mem, a, b, sp_str_lit("/"));
@@ -20276,6 +20316,10 @@ sp_path_t sp_path(sp_sys_fd_t dir, sp_str_t sub) {
   return (sp_path_t) { .dir = dir, .sub = sub };
 }
 
+sp_path_t sp_path_c(sp_sys_fd_t dir, const c8* sub) {
+  return (sp_path_t) { .dir = dir, .sub = sp_cstr_as_str(sub) };
+}
+
 sp_path_t sp_path_cwd(sp_str_t sub) {
   return sp_path(sp_fs_get_cwd(), sub);
 }
@@ -20308,7 +20352,7 @@ sp_path_t sp_path_from_str(sp_str_t path) {
     s32 matched = sp_fs_match_label(path, sp_str(buf, (u32)len));
     if (matched <= deepest) continue;
 
-    sp_str_t rest = sp_str_suffix(path, (s32)path.len - matched);
+    sp_str_t rest = sp_str_skip(path, matched);
     deepest = matched;
     best = sp_path(root, sp_str_empty(rest) ? sp_str_lit(".") : rest);
   }
