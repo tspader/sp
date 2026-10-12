@@ -158,23 +158,6 @@
   #define SP_DIALECT_MSVC
 #endif
 
-//////////
-// LIBC //
-//////////
-#if defined(__GLIBC__)
-  #define SP_LIBC_GNU
-#elif defined(__MINGW64__)
-  #define SP_LIBC_GNU
-#elif defined(_MSC_VER)
-  #define SP_LIBC_MSVC
-#elif defined(SP_FREESTANDING)
-  #define SP_LIBC_NONE
-#elif defined(SP_MACOS)
-  #define SP_LIBC_APPLE
-#elif defined(SP_LINUX)
-  #define SP_LIBC_MUSL
-#endif
-
 //////////////////
 // ARCHITECTURE //
 //////////////////
@@ -791,6 +774,23 @@ SP_BEGIN_EXTERN_C()
   #include <sys/mman.h>
   #include <sys/socket.h>
   #include <netinet/in.h>
+#endif
+
+//////////
+// LIBC //
+//////////
+#if defined(__GLIBC__)
+  #define SP_LIBC_GNU
+#elif defined(__MINGW64__)
+  #define SP_LIBC_GNU
+#elif defined(SP_DIALECT_MSVC)
+  #define SP_LIBC_MSVC
+#elif defined(SP_FREESTANDING)
+  #define SP_LIBC_NONE
+#elif defined(SP_MACOS)
+  #define SP_LIBC_APPLE
+#elif defined(SP_LINUX)
+  #define SP_LIBC_MUSL
 #endif
 
 
