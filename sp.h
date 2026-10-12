@@ -311,7 +311,14 @@
 // ░░░░░     ░░░░░ ░░░░░   ░░░░░   ░░░░░░░░░  ░░░░░   ░░░░░    ░░░░░░░     ░░░░░░░░░
 // @macro
 
-#define SP_ATTRIBUTE(a) __attribute__((a))
+//////////////////
+// SP_ATTRIBUTE //
+//////////////////
+#if defined(SP_DIALECT_GNUC) || defined(SP_TCC)
+  #define SP_ATTRIBUTE(a) __attribute__((a))
+#else
+  #define SP_ATTRIBUTE(a)
+#endif
 
 //////////////
 // SP_ALIGN //
@@ -320,9 +327,10 @@
   #define SP_ALIGN(n) __declspec(align(n))
 #elif defined(SP_DIALECT_GNUC) || defined(SP_TCC)
   #define SP_ALIGN(n) SP_ATTRIBUTE(aligned(n))
+#elif SP_CPP_VERSION >= 201103L
+  #define SP_ALIGN(n) alignas(n)
 #else
-  // @spader Too lazy to actually think about this
-  #define SP_ALIGN(n) _Alignas(n)
+  #define SP_ALIGN(n) sp_align_is_unsupported_on_this_toolchain(n)
 #endif
 
 ///////////////
@@ -395,10 +403,16 @@
 /////////////////////
 // SP_THREAD_LOCAL //
 /////////////////////
-#ifdef SP_CPP
+#if defined(SP_DIALECT_MSVC)
+  #define SP_THREAD_LOCAL __declspec(thread)
+#elif defined(SP_DIALECT_GNUC)
+  #define SP_THREAD_LOCAL __thread
+#elif SP_CPP_VERSION >= 201103L
   #define SP_THREAD_LOCAL thread_local
-#else
+#elif SP_C_VERSION >= 201112L
   #define SP_THREAD_LOCAL _Thread_local
+#else
+  #define SP_THREAD_LOCAL sp_thread_local_is_unsupported_on_this_toolchain
 #endif
 
 ///////////////////
