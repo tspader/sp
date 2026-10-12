@@ -165,7 +165,7 @@ typedef struct {
   #define __sp_test_section   __attribute__((used, section("__DATA,sp_test"), no_sanitize("address")))
   #define __sp_test_ptr_const const
   #define __sp_test_keep(ID)
-#elif defined(SP_WIN32) && defined(SP_GNUC)
+#elif defined(SP_WIN32) && defined(SP_DIALECT_GNUC)
   #define SP_TEST_AUTOREG 1
 
   // The pointer must be const: lld's MinGW driver only merges and $-sorts
@@ -173,7 +173,7 @@ typedef struct {
   #define __sp_test_section   __declspec(dllexport) __attribute__((used, section("sp_test$m")))
   #define __sp_test_ptr_const const
   #define __sp_test_keep(ID)
-#elif defined(SP_WIN32) && defined(SP_MSVC)
+#elif defined(SP_WIN32) && defined(SP_DIALECT_MSVC)
   #define SP_TEST_AUTOREG 1
 
   // The pointer must NOT be const: MSVC's C++ frontend discards unreferenced
@@ -1823,13 +1823,13 @@ void sp_test_expand(sp_mem_t mem, const sp_test_decl_t* decl, sp_da(sp_test_inst
 }
 
 #if SP_TEST_AUTOREG
-  #if defined(SP_WIN32) && defined(SP_MSVC)
+  #if defined(SP_WIN32) && defined(SP_DIALECT_MSVC)
     __declspec(allocate("sp_test$a")) static const sp_test_entry_t* const __sp_test_anchor_a = SP_NULLPTR;
     __declspec(allocate("sp_test$z")) static const sp_test_entry_t* const __sp_test_anchor_z = SP_NULLPTR;
 
     #define __sp_test_begin (&__sp_test_anchor_a + 1)
     #define __sp_test_end   (&__sp_test_anchor_z)
-    #elif defined(SP_WIN32) && defined(SP_GNUC)
+    #elif defined(SP_WIN32) && defined(SP_DIALECT_GNUC)
     __attribute__((used, section("sp_test$a"))) static const sp_test_entry_t* const __sp_test_anchor_a = SP_NULLPTR;
     __attribute__((used, section("sp_test$z"))) static const sp_test_entry_t* const __sp_test_anchor_z = SP_NULLPTR;
 

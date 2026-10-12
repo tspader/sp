@@ -24,7 +24,7 @@ typedef u64 ubench_size_t;
   #define UBENCH_C_FUNC
 #endif
 
-#if defined(SP_MSVC)
+#if defined(SP_DIALECT_MSVC)
   #define UBENCH_UNUSED
 #else
   #define UBENCH_UNUSED SP_ATTRIBUTE(unused)
@@ -36,7 +36,7 @@ typedef u64 ubench_size_t;
   #define UBENCH_EXTERN extern
 #endif
 
-#if defined(SP_MSVC)
+#if defined(SP_DIALECT_MSVC)
   #define UBENCH_DO_NOT_OPTIMIZE(x)                                              \
     do {                                                                         \
       _ReadWriteBarrier();                                                       \
@@ -303,7 +303,7 @@ SP_IMP void bench__bind_f64_or_null(sqlite3_stmt *stmt, int idx, f64 v);
 ///////////////////////
 // UBENCH_DO_NOTHING //
 ///////////////////////
-#if defined(SP_MSVC)
+#if defined(SP_DIALECT_MSVC)
   UBENCH_C_FUNC void _ReadWriteBarrier(void);
 
   void ubench_do_nothing(void *ptr) {
@@ -347,7 +347,7 @@ SP_IMP void bench__bind_f64_or_null(sqlite3_stmt *stmt, int idx, f64 v);
         f##_cpp_global UBENCH_INITIALIZER_END_DISABLE_WARNINGS;                  \
     f##_cpp_struct::f##_cpp_struct()
 
-#elif defined(SP_MSVC)
+#elif defined(SP_DIALECT_MSVC)
   #define UBENCH_SYMBOL_PREFIX
 
   #if defined(SP_CLANG)
@@ -387,7 +387,7 @@ SP_IMP void bench__bind_f64_or_null(sqlite3_stmt *stmt, int idx, f64 v);
 #define UBENCH_SURPRESS_WARNINGS_BEGIN
 #define UBENCH_SURPRESS_WARNINGS_END
 #endif
-#elif defined(SP_GNUC) && __GNUC__ >= 8 && defined(SP_CPP)
+#elif defined(SP_DIALECT_GNUC) && __GNUC__ >= 8 && defined(SP_CPP)
 #define UBENCH_SURPRESS_WARNINGS_BEGIN                                         \
   _Pragma("GCC diagnostic push")                                               \
       _Pragma("GCC diagnostic ignored \"-Wclass-memaccess\"")
