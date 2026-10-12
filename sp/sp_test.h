@@ -149,7 +149,7 @@ typedef struct {
 #define __sp_test_fn(SUITE, NAME)    sp_mcat(sp_mcat(sp_test_fn_, SUITE), sp_mcat(_, NAME))
 #define __sp_test_thunk(SUITE, NAME) sp_mcat(__sp_test_fn(SUITE, NAME), _thunk)
 
-#if defined(__ELF__) || defined(SP_WASM) || (defined(SP_TCC) && defined(SP_LINUX))
+#if defined(SP_ELF) || defined(SP_WASM) || (defined(SP_TCC) && defined(SP_LINUX))
   #define SP_TEST_AUTOREG 1
 
   #if SP_HAS_ATTRIBUTE(retain)
@@ -165,7 +165,7 @@ typedef struct {
   #define __sp_test_section   __attribute__((used, section("__DATA,sp_test"), no_sanitize("address")))
   #define __sp_test_ptr_const const
   #define __sp_test_keep(ID)
-#elif defined(SP_WIN32) && defined(SP_GNUC)
+#elif defined(SP_WIN32) && defined(SP_DIALECT_GNUC)
   #define SP_TEST_AUTOREG 1
 
   // The pointer must be const: lld's MinGW driver only merges and $-sorts
@@ -173,7 +173,7 @@ typedef struct {
   #define __sp_test_section   __declspec(dllexport) __attribute__((used, section("sp_test$m")))
   #define __sp_test_ptr_const const
   #define __sp_test_keep(ID)
-#elif defined(SP_WIN32) && defined(SP_MSVC)
+#elif defined(SP_WIN32) && defined(SP_DIALECT_MSVC)
   #define SP_TEST_AUTOREG 1
 
   // The pointer must NOT be const: MSVC's C++ frontend discards unreferenced
@@ -482,25 +482,27 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
   SP_INLINE sp_str_t sp_test_value(sp_test_t* t, void* value) { return sp_test_value_ptr(t, value); }
   SP_INLINE sp_str_t sp_test_value(sp_test_t* t, sp_str_t value) { return sp_test_value_str(t, value); }
   template <typename T> SP_INLINE sp_str_t sp_test_value(sp_test_t* t, const T& value) { SP_UNUSED(value); return sp_test_value_opaque(t); }
-#elif defined(__GNUC__) || defined(__TINYC__)
+#elif SP_HAS_GENERIC
   #define sp_test_value(T, V) _Generic((V), \
-    bool:        sp_test_value_bool,        \
     c8:          sp_test_value_c8,          \
-    s8:          sp_test_value_s8,          \
-    u8:          sp_test_value_u8,          \
-    s16:         sp_test_value_s16,         \
-    u16:         sp_test_value_u16,         \
-    s32:         sp_test_value_s32,         \
-    u32:         sp_test_value_u32,         \
-    s64:         sp_test_value_s64,         \
-    u64:         sp_test_value_u64,         \
-    f32:         sp_test_value_f32,         \
-    f64:         sp_test_value_f64,         \
-    const c8*:   sp_test_value_cstr,        \
-    c8*:         sp_test_value_cstr,        \
-    void*:       sp_test_value_ptr,         \
-    sp_str_t:    sp_test_value_str,         \
-    default:     sp_test_value_opaque       \
+    default:     _Generic((V),              \
+      bool:        sp_test_value_bool,      \
+      s8:          sp_test_value_s8,        \
+      u8:          sp_test_value_u8,        \
+      s16:         sp_test_value_s16,       \
+      u16:         sp_test_value_u16,       \
+      s32:         sp_test_value_s32,       \
+      u32:         sp_test_value_u32,       \
+      s64:         sp_test_value_s64,       \
+      u64:         sp_test_value_u64,       \
+      f32:         sp_test_value_f32,       \
+      f64:         sp_test_value_f64,       \
+      const c8*:   sp_test_value_cstr,      \
+      c8*:         sp_test_value_cstr,      \
+      void*:       sp_test_value_ptr,       \
+      sp_str_t:    sp_test_value_str,       \
+      default:     sp_test_value_opaque     \
+    )                                       \
   )(T, V)
 #else
   #define sp_test_value(T, V) (SP_UNUSED(T), SP_UNUSED(V), sp_str_lit("?"))
@@ -512,12 +514,12 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
 ////////////////
 #if defined(SP_CPP)
   #define sp_test_auto(X) auto
-#elif (defined(__clang__) || defined(__GNUC__)) && !defined(__TINYC__)
+#elif defined(SP_DIALECT_GNUC)
   #define sp_test_auto(X) __auto_type
 #else
   // The ternary decays arrays like +0 would, without the pointer arithmetic
   // MSVC rejects for void* (C2036)
-  #define sp_test_auto(X) __typeof__(0 ? (X) : (X))
+  #define sp_test_auto(X) sp_type_of(0 ? (X) : (X))
 #endif
 
 #define sp_test_cmp(T, A, B, SA, SB, OP, FAIL)                 \
@@ -841,8 +843,9 @@ sp_mem_t sp_test_tracking_as_allocator(sp_test_tracking_t* k) {
 }
 
 void sp_test_tracking_deinit(sp_test_tracking_t* k) {
-  sp_ht_for_kv(k->allocs, it) {
-    if (it.val->state == SP_TEST_ALLOC_LIVE) sp_free(k->backing, *it.key, it.val->size);
+  sp_ht_for(k->allocs, it) {
+    sp_test_alloc_t* alloc = sp_ht_it_getp(k->allocs, it);
+    if (alloc->state == SP_TEST_ALLOC_LIVE) sp_free(k->backing, *sp_ht_it_getkp(k->allocs, it), alloc->size);
   }
   sp_ht_free(k->allocs);
   sp_mem_zero(k, sizeof(*k));
@@ -1539,8 +1542,9 @@ static void sp_test_report_leaks(sp_test_t* t) {
       sp_fmt_uint(k->live_bytes));
 
     sp_da(sp_test_alloc_t) leaks = sp_da_new(t->mem, sp_test_alloc_t);
-    sp_ht_for_kv(k->allocs, it) {
-      if (it.val->state == SP_TEST_ALLOC_LIVE) sp_da_push(leaks, *it.val);
+    sp_ht_for(k->allocs, it) {
+      sp_test_alloc_t* alloc = sp_ht_it_getp(k->allocs, it);
+      if (alloc->state == SP_TEST_ALLOC_LIVE) sp_da_push(leaks, *alloc);
     }
     sp_os_qsort(leaks, sp_da_size(leaks), sizeof(sp_test_alloc_t), sp_test_leak_order);
 
@@ -1823,13 +1827,13 @@ void sp_test_expand(sp_mem_t mem, const sp_test_decl_t* decl, sp_da(sp_test_inst
 }
 
 #if SP_TEST_AUTOREG
-  #if defined(SP_WIN32) && defined(SP_MSVC)
+  #if defined(SP_WIN32) && defined(SP_DIALECT_MSVC)
     __declspec(allocate("sp_test$a")) static const sp_test_entry_t* const __sp_test_anchor_a = SP_NULLPTR;
     __declspec(allocate("sp_test$z")) static const sp_test_entry_t* const __sp_test_anchor_z = SP_NULLPTR;
 
     #define __sp_test_begin (&__sp_test_anchor_a + 1)
     #define __sp_test_end   (&__sp_test_anchor_z)
-    #elif defined(SP_WIN32) && defined(SP_GNUC)
+    #elif defined(SP_WIN32) && defined(SP_DIALECT_GNUC)
     __attribute__((used, section("sp_test$a"))) static const sp_test_entry_t* const __sp_test_anchor_a = SP_NULLPTR;
     __attribute__((used, section("sp_test$z"))) static const sp_test_entry_t* const __sp_test_anchor_z = SP_NULLPTR;
 

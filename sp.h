@@ -123,7 +123,7 @@
   #define SP_MACOS
   #define SP_UNIX
 
-#elif __COSMOPOLITAN__
+#elif defined(__COSMOPOLITAN__)
   #define SP_COSMO
   #define SP_UNIX
 
@@ -140,35 +140,22 @@
 //////////////
 // COMPILER //
 //////////////
-#if defined(_MSC_VER)
-  #define SP_MSVC
-#endif
-
 #if defined(__TINYC__)
   #define SP_TCC
 #elif defined(__clang__)
   #define SP_CLANG
-  #define SP_GNUC
-#elif defined(__GNUC__) && !defined(SP_CLANG)
+#elif defined(__GNUC__)
   #define SP_GCC
-  #define SP_GNUC
+#elif defined(_MSC_VER)
+  #define SP_CL
 #endif
 
-//////////
-// LIBC //
-//////////
-#if defined(__GLIBC__)
-  #define SP_LIBC_GNU
-#elif defined(__MINGW64__)
-  #define SP_LIBC_GNU
-#elif defined(_MSC_VER)
-  #define SP_LIBC_MSVC
-#elif defined(SP_FREESTANDING)
-  #define SP_LIBC_NONE
-#elif defined(SP_MACOS)
-  #define SP_LIBC_APPLE
-#elif defined(SP_LINUX)
-  #define SP_LIBC_MUSL
+#if defined(SP_GCC) || defined(SP_CLANG)
+  #define SP_DIALECT_GNUC
+#endif
+
+#if defined(_MSC_VER)
+  #define SP_DIALECT_MSVC
 #endif
 
 //////////////////
@@ -182,11 +169,73 @@
   #define SP_AMD
 #endif
 
+///////////////////
+// OBJECT FORMAT //
+///////////////////
+#if defined(__ELF__)
+  #define SP_ELF
+#endif
+
 //////////////
 // LANGUAGE //
 //////////////
-#ifdef __cplusplus
+#if defined(__cplusplus)
   #define SP_CPP
+#endif
+
+#if defined(SP_CPP)
+  #define SP_C_VERSION 0
+#elif defined(__STDC_VERSION__)
+  #define SP_C_VERSION __STDC_VERSION__
+#else
+  #define SP_C_VERSION 0
+#endif
+
+#if !defined(SP_CPP)
+  #define SP_CPP_VERSION 0
+#elif defined(_MSVC_LANG)
+  #define SP_CPP_VERSION _MSVC_LANG
+#else
+  #define SP_CPP_VERSION __cplusplus
+#endif
+
+//////////////
+// FEATURES //
+//////////////
+#if defined(__has_attribute)
+  #define SP_HAS_ATTRIBUTE(x) __has_attribute(x)
+#else
+  #define SP_HAS_ATTRIBUTE(x) 0
+#endif
+
+#if defined(__COUNTER__)
+  #define SP_HAS_COUNTER 1
+#else
+  #define SP_HAS_COUNTER 0
+#endif
+
+#if defined(__ATOMIC_SEQ_CST) && (defined(SP_DIALECT_GNUC) || defined(SP_TCC))
+  #define SP_HAS_ATOMIC_BUILTINS 1
+#else
+  #define SP_HAS_ATOMIC_BUILTINS 0
+#endif
+
+#if !defined(SP_CPP) && (SP_C_VERSION >= 201112L || defined(SP_DIALECT_GNUC) || defined(SP_TCC))
+  #define SP_HAS_GENERIC 1
+#else
+  #define SP_HAS_GENERIC 0
+#endif
+
+#if SP_CPP_VERSION >= 201103L
+  #define SP_HAS_TYPE_OF 1
+#elif defined(SP_DIALECT_GNUC) || defined(SP_TCC)
+  #define SP_HAS_TYPE_OF 1
+#elif defined(SP_CL) && (_MSC_VER >= 1939)
+  #define SP_HAS_TYPE_OF 1
+#elif SP_C_VERSION >= 202311L
+  #define SP_HAS_TYPE_OF 1
+#else
+  #define SP_HAS_TYPE_OF 0
 #endif
 
 
@@ -262,35 +311,32 @@
 // ░░░░░     ░░░░░ ░░░░░   ░░░░░   ░░░░░░░░░  ░░░░░   ░░░░░    ░░░░░░░     ░░░░░░░░░
 // @macro
 
-#define SP_ATTRIBUTE(a) __attribute__((a))
-
-//////////////////////
-// SP_HAS_ATTRIBUTE //
-//////////////////////
-#if defined(SP_MSVC)
-  #define SP_HAS_ATTRIBUTE(attr) 0
-#elif defined(SP_TCC)
-  #define SP_HAS_ATTRIBUTE(attr) 0
+//////////////////
+// SP_ATTRIBUTE //
+//////////////////
+#if defined(SP_DIALECT_GNUC) || defined(SP_TCC)
+  #define SP_ATTRIBUTE(a) __attribute__((a))
 #else
-  #define SP_HAS_ATTRIBUTE(attr) __has_attribute(attr)
+  #define SP_ATTRIBUTE(a)
 #endif
 
 //////////////
 // SP_ALIGN //
 //////////////
-#if defined(SP_MSVC)
+#if defined(SP_DIALECT_MSVC)
   #define SP_ALIGN(n) __declspec(align(n))
-#elif defined(SP_GNUC) || defined(SP_TCC)
+#elif defined(SP_DIALECT_GNUC) || defined(SP_TCC)
   #define SP_ALIGN(n) SP_ATTRIBUTE(aligned(n))
+#elif SP_CPP_VERSION >= 201103L
+  #define SP_ALIGN(n) alignas(n)
 #else
-  // @spader Too lazy to actually think about this
-  #define SP_ALIGN(n) _Alignas(n)
+  #define SP_ALIGN(n) sp_align_is_unsupported_on_this_toolchain(n)
 #endif
 
 ///////////////
 // SP_LIKELY //
 ///////////////
-#if defined(SP_GNUC)
+#if defined(SP_DIALECT_GNUC)
   #define SP_LIKELY(x)   __builtin_expect(!!(x), 1)
   #define SP_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #else
@@ -301,7 +347,7 @@
 /////////////////
 // SP_NOEXCEPT //
 ////////////////
-#if defined(SP_CPP) && (__cplusplus >= 201103L)
+#if SP_CPP_VERSION >= 201103L
   #define SP_NOEXCEPT noexcept
 #else
   #define SP_NOEXCEPT
@@ -310,7 +356,7 @@
 ////////////////
 // SP_NOTHROW //
 ////////////////
-#if defined(SP_CPP) && defined(SP_MSVC)
+#if defined(SP_CPP) && defined(SP_DIALECT_MSVC)
   #define SP_NOTHROW __declspec(nothrow)
 #else
   #define SP_NOTHROW
@@ -321,7 +367,7 @@
 ///////////////
 #if defined(SP_CPP)
   #define SP_INLINE static inline
-#elif defined(SP_MSVC)
+#elif defined(SP_DIALECT_MSVC)
   #define SP_INLINE static __forceinline
 #else
   #define SP_INLINE static inline
@@ -330,7 +376,7 @@
 /////////////////
 // SP_NOINLINE //
 /////////////////
-#if defined(SP_MSVC)
+#if defined(SP_DIALECT_MSVC)
   #define SP_NOINLINE __declspec(noinline)
 #else
   #define SP_NOINLINE SP_ATTRIBUTE(noinline)
@@ -357,10 +403,16 @@
 /////////////////////
 // SP_THREAD_LOCAL //
 /////////////////////
-#ifdef SP_CPP
+#if defined(SP_DIALECT_MSVC)
+  #define SP_THREAD_LOCAL __declspec(thread)
+#elif defined(SP_DIALECT_GNUC)
+  #define SP_THREAD_LOCAL __thread
+#elif SP_CPP_VERSION >= 201103L
   #define SP_THREAD_LOCAL thread_local
-#else
+#elif SP_C_VERSION >= 201112L
   #define SP_THREAD_LOCAL _Thread_local
+#else
+  #define SP_THREAD_LOCAL sp_thread_local_is_unsupported_on_this_toolchain
 #endif
 
 ///////////////////
@@ -413,6 +465,33 @@
   #define sp_const_cast(type, x) ((type)(x))
 #endif
 
+////////////////
+// sp_type_of //
+////////////////
+#if SP_CPP_VERSION >= 201103L
+  template <typename T> struct sp_type_of_impl      { typedef T type; };
+  template <typename T> struct sp_type_of_impl<T&>  { typedef T type; };
+  template <typename T> struct sp_type_of_impl<T&&> { typedef T type; };
+  #define sp_type_of(x) typename sp_type_of_impl<decltype(x)>::type
+#elif defined(SP_DIALECT_GNUC) || defined(SP_TCC)
+  #define sp_type_of(x) __typeof__(x)
+#elif defined(SP_CL) && SP_HAS_TYPE_OF
+  #define sp_type_of(x) __typeof__(x)
+#elif SP_C_VERSION >= 202311L
+  #define sp_type_of(x) typeof(x)
+#else
+  #define sp_type_of(x) sp_type_of_is_unsupported_on_this_toolchain(x)
+#endif
+
+////////////////////
+// SP_CL_SUPPRESS //
+////////////////////
+#if defined(SP_CL)
+  #define SP_CL_SUPPRESS(n) __pragma(warning(suppress: n))
+#else
+  #define SP_CL_SUPPRESS(n)
+#endif
+
 #define SP_EXIT_SUCCESS() exit(0)
 #define SP_EXIT_FAILURE() exit(1)
 
@@ -462,14 +541,14 @@
 //////////////////////
 // SP_STATIC_ASSERT //
 //////////////////////
-#if defined(SP_CPP) && (__cplusplus >= 201103L)
+#if SP_CPP_VERSION >= 201103L
   #define sp_static_assert(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
-#elif !defined(SP_CPP) && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 202311L)
+#elif SP_C_VERSION >= 202311L
   #define sp_static_assert(CONDITION, MESSAGE) static_assert(CONDITION, #MESSAGE)
-#elif !defined(SP_CPP) && defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#elif SP_C_VERSION >= 201112L
   #define sp_static_assert(CONDITION, MESSAGE) _Static_assert(CONDITION, #MESSAGE)
 #else
-  #ifdef __COUNTER__
+  #if SP_HAS_COUNTER
     #define SP_STATIC_ASSERT_ID __COUNTER__
   #else
     #define SP_STATIC_ASSERT_ID __LINE__
@@ -691,7 +770,7 @@ SP_BEGIN_EXTERN_C()
 #elif defined(SP_WIN32)
   #include <winsock2.h>
   #include <windows.h>
-  #if defined(SP_MSVC)
+  #if defined(SP_DIALECT_MSVC)
     #include <intrin.h>
   #endif
   #include <assert.h>
@@ -736,6 +815,23 @@ SP_BEGIN_EXTERN_C()
   #include <sys/mman.h>
   #include <sys/socket.h>
   #include <netinet/in.h>
+#endif
+
+//////////
+// LIBC //
+//////////
+#if defined(__GLIBC__)
+  #define SP_LIBC_GNU
+#elif defined(__MINGW64__)
+  #define SP_LIBC_GNU
+#elif defined(SP_DIALECT_MSVC)
+  #define SP_LIBC_MSVC
+#elif defined(SP_FREESTANDING)
+  #define SP_LIBC_NONE
+#elif defined(SP_MACOS)
+  #define SP_LIBC_APPLE
+#elif defined(SP_LINUX)
+  #define SP_LIBC_MUSL
 #endif
 
 
@@ -2606,10 +2702,11 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_for(ht, it) \
   for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it))
 
-#define sp_ht_key_t(ht)   __typeof__((ht)->data[0].key)*
-#define sp_ht_value_t(ht) __typeof__((ht)->data[0].val)*
+#define sp_ht_key_t(ht)   sp_type_of((ht)->data[0].key)*
+#define sp_ht_value_t(ht) sp_type_of((ht)->data[0].val)*
 
 #define sp_ht_for_kv(ht, it)                                                       \
+  SP_CL_SUPPRESS(4116)                                                             \
   for (                                                                            \
     struct { sp_ht_it_t idx; sp_ht_key_t(ht) key; sp_ht_value_t(ht) val; } it = {  \
       sp_ht_it_init(ht),                                                           \
@@ -3242,11 +3339,7 @@ typedef enum {
   SP_ATOMIC_SEQ_CST,
 } sp_atomic_order_t;
 
-#if defined(__ATOMIC_SEQ_CST) && (defined(SP_GNUC) || defined(SP_TCC))
-  #define SP_ATOMIC_GNU
-#endif
-
-#if defined(SP_ATOMIC_GNU)
+#if SP_HAS_ATOMIC_BUILTINS
 SP_INLINE s32 sp_atomic_order_gnu(sp_atomic_order_t order) {
   switch (order) {
     case SP_ATOMIC_RELAXED: return __ATOMIC_RELAXED;
@@ -3293,9 +3386,9 @@ SP_INLINE s32 sp_atomic_order_gnu_fail(sp_atomic_order_t order) {
 #endif
 
 SP_INLINE s32 sp_atomic_s32_load(sp_atomic_s32_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       s32 result = __iso_volatile_load32((volatile s32*)value);
       if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
@@ -3304,7 +3397,7 @@ SP_INLINE s32 sp_atomic_s32_load(sp_atomic_s32_t* value, sp_atomic_order_t order
       (void)order;
       return (s32)_InterlockedOr((volatile long*)value, 0);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     s32 result = *(volatile s32*)value;
@@ -3321,9 +3414,9 @@ SP_INLINE s32 sp_atomic_s32_load(sp_atomic_s32_t* value, sp_atomic_order_t order
 }
 
 SP_INLINE void sp_atomic_s32_store(sp_atomic_s32_t* value, s32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       switch (order) {
         case SP_ATOMIC_RELAXED: {
@@ -3346,7 +3439,7 @@ SP_INLINE void sp_atomic_s32_store(sp_atomic_s32_t* value, s32 desired, sp_atomi
       (void)order;
       _InterlockedExchange((volatile long*)value, (long)desired);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     *(volatile s32*)value = desired;
@@ -3361,12 +3454,12 @@ SP_INLINE void sp_atomic_s32_store(sp_atomic_s32_t* value, s32 desired, sp_atomi
 }
 
 SP_INLINE s32 sp_atomic_s32_exchange(sp_atomic_s32_t* value, s32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (s32)_InterlockedExchange((volatile long*)value, (long)desired);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     s32 old = __sync_lock_test_and_set(value, desired);
     __sync_synchronize();
@@ -3383,12 +3476,12 @@ SP_INLINE s32 sp_atomic_s32_exchange(sp_atomic_s32_t* value, s32 desired, sp_ato
 }
 
 SP_INLINE s32 sp_atomic_s32_add(sp_atomic_s32_t* value, s32 add, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (s32)_InterlockedExchangeAdd((volatile long*)value, (long)add);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_fetch_and_add(value, add);
   #else
@@ -3403,12 +3496,12 @@ SP_INLINE s32 sp_atomic_s32_add(sp_atomic_s32_t* value, s32 add, sp_atomic_order
 }
 
 SP_INLINE bool sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return _InterlockedCompareExchange((volatile long*)value, (long)desired, (long)current) == (long)current;
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
@@ -3426,9 +3519,9 @@ SP_INLINE bool sp_atomic_s32_cas(sp_atomic_s32_t* value, s32 current, s32 desire
 }
 
 SP_INLINE u32 sp_atomic_u32_load(sp_atomic_u32_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       u32 result = (u32)__iso_volatile_load32((volatile s32*)value);
       if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
@@ -3437,7 +3530,7 @@ SP_INLINE u32 sp_atomic_u32_load(sp_atomic_u32_t* value, sp_atomic_order_t order
       (void)order;
       return (u32)_InterlockedOr((volatile long*)value, 0);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     u32 result = *(volatile u32*)value;
@@ -3454,9 +3547,9 @@ SP_INLINE u32 sp_atomic_u32_load(sp_atomic_u32_t* value, sp_atomic_order_t order
 }
 
 SP_INLINE void sp_atomic_u32_store(sp_atomic_u32_t* value, u32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       switch (order) {
         case SP_ATOMIC_RELAXED: {
@@ -3479,7 +3572,7 @@ SP_INLINE void sp_atomic_u32_store(sp_atomic_u32_t* value, u32 desired, sp_atomi
       (void)order;
       _InterlockedExchange((volatile long*)value, (long)desired);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     *(volatile u32*)value = desired;
@@ -3494,12 +3587,12 @@ SP_INLINE void sp_atomic_u32_store(sp_atomic_u32_t* value, u32 desired, sp_atomi
 }
 
 SP_INLINE u32 sp_atomic_u32_exchange(sp_atomic_u32_t* value, u32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (u32)_InterlockedExchange((volatile long*)value, (long)desired);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     u32 old = __sync_lock_test_and_set(value, desired);
     __sync_synchronize();
@@ -3516,12 +3609,12 @@ SP_INLINE u32 sp_atomic_u32_exchange(sp_atomic_u32_t* value, u32 desired, sp_ato
 }
 
 SP_INLINE u32 sp_atomic_u32_add(sp_atomic_u32_t* value, u32 add, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (u32)_InterlockedExchangeAdd((volatile long*)value, (long)add);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_fetch_and_add(value, add);
   #else
@@ -3536,12 +3629,12 @@ SP_INLINE u32 sp_atomic_u32_add(sp_atomic_u32_t* value, u32 add, sp_atomic_order
 }
 
 SP_INLINE bool sp_atomic_u32_cas(sp_atomic_u32_t* value, u32 current, u32 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (u32)_InterlockedCompareExchange((volatile long*)value, (long)desired, (long)current) == current;
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
@@ -3559,9 +3652,9 @@ SP_INLINE bool sp_atomic_u32_cas(sp_atomic_u32_t* value, u32 current, u32 desire
 }
 
 SP_INLINE u64 sp_atomic_u64_load(sp_atomic_u64_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       u64 result = (u64)__iso_volatile_load64((volatile s64*)value);
       if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
@@ -3570,7 +3663,7 @@ SP_INLINE u64 sp_atomic_u64_load(sp_atomic_u64_t* value, sp_atomic_order_t order
       (void)order;
       return (u64)_InterlockedOr64((volatile __int64*)value, 0);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     u64 result = *(volatile u64*)value;
@@ -3587,9 +3680,9 @@ SP_INLINE u64 sp_atomic_u64_load(sp_atomic_u64_t* value, sp_atomic_order_t order
 }
 
 SP_INLINE void sp_atomic_u64_store(sp_atomic_u64_t* value, u64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       switch (order) {
         case SP_ATOMIC_RELAXED: {
@@ -3612,7 +3705,7 @@ SP_INLINE void sp_atomic_u64_store(sp_atomic_u64_t* value, u64 desired, sp_atomi
       (void)order;
       _InterlockedExchange64((volatile __int64*)value, (__int64)desired);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     *(volatile u64*)value = desired;
@@ -3627,12 +3720,12 @@ SP_INLINE void sp_atomic_u64_store(sp_atomic_u64_t* value, u64 desired, sp_atomi
 }
 
 SP_INLINE u64 sp_atomic_u64_exchange(sp_atomic_u64_t* value, u64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (u64)_InterlockedExchange64((volatile __int64*)value, (__int64)desired);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     u64 old = __sync_lock_test_and_set(value, desired);
     __sync_synchronize();
@@ -3649,12 +3742,12 @@ SP_INLINE u64 sp_atomic_u64_exchange(sp_atomic_u64_t* value, u64 desired, sp_ato
 }
 
 SP_INLINE u64 sp_atomic_u64_add(sp_atomic_u64_t* value, u64 add, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (u64)_InterlockedExchangeAdd64((volatile __int64*)value, (__int64)add);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_fetch_and_add(value, add);
   #else
@@ -3669,12 +3762,12 @@ SP_INLINE u64 sp_atomic_u64_add(sp_atomic_u64_t* value, u64 add, sp_atomic_order
 }
 
 SP_INLINE bool sp_atomic_u64_cas(sp_atomic_u64_t* value, u64 current, u64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (u64)_InterlockedCompareExchange64((volatile __int64*)value, (__int64)desired, (__int64)current) == current;
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
@@ -3692,9 +3785,9 @@ SP_INLINE bool sp_atomic_u64_cas(sp_atomic_u64_t* value, u64 current, u64 desire
 }
 
 SP_INLINE s64 sp_atomic_s64_load(sp_atomic_s64_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       s64 result = __iso_volatile_load64((volatile s64*)value);
       if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
@@ -3703,7 +3796,7 @@ SP_INLINE s64 sp_atomic_s64_load(sp_atomic_s64_t* value, sp_atomic_order_t order
       (void)order;
       return (s64)_InterlockedOr64((volatile __int64*)value, 0);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     s64 result = *(volatile s64*)value;
@@ -3720,9 +3813,9 @@ SP_INLINE s64 sp_atomic_s64_load(sp_atomic_s64_t* value, sp_atomic_order_t order
 }
 
 SP_INLINE void sp_atomic_s64_store(sp_atomic_s64_t* value, s64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       switch (order) {
         case SP_ATOMIC_RELAXED: {
@@ -3745,7 +3838,7 @@ SP_INLINE void sp_atomic_s64_store(sp_atomic_s64_t* value, s64 desired, sp_atomi
       (void)order;
       _InterlockedExchange64((volatile __int64*)value, (__int64)desired);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     *(volatile s64*)value = desired;
@@ -3760,12 +3853,12 @@ SP_INLINE void sp_atomic_s64_store(sp_atomic_s64_t* value, s64 desired, sp_atomi
 }
 
 SP_INLINE s64 sp_atomic_s64_exchange(sp_atomic_s64_t* value, s64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (s64)_InterlockedExchange64((volatile __int64*)value, (__int64)desired);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     s64 old = __sync_lock_test_and_set(value, desired);
     __sync_synchronize();
@@ -3782,12 +3875,12 @@ SP_INLINE s64 sp_atomic_s64_exchange(sp_atomic_s64_t* value, s64 desired, sp_ato
 }
 
 SP_INLINE s64 sp_atomic_s64_add(sp_atomic_s64_t* value, s64 add, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_fetch_add(value, add, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return (s64)_InterlockedExchangeAdd64((volatile __int64*)value, (__int64)add);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_fetch_and_add(value, add);
   #else
@@ -3802,12 +3895,12 @@ SP_INLINE s64 sp_atomic_s64_add(sp_atomic_s64_t* value, s64 add, sp_atomic_order
 }
 
 SP_INLINE bool sp_atomic_s64_cas(sp_atomic_s64_t* value, s64 current, s64 desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return _InterlockedCompareExchange64((volatile __int64*)value, (__int64)desired, (__int64)current) == (__int64)current;
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
@@ -3825,9 +3918,9 @@ SP_INLINE bool sp_atomic_s64_cas(sp_atomic_s64_t* value, s64 current, s64 desire
 }
 
 SP_INLINE void* sp_atomic_ptr_load(sp_atomic_ptr_t* value, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_load_n(value, sp_atomic_order_gnu_load(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       void* result = (void*)(size_t)__iso_volatile_load64((volatile s64*)value);
       if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
@@ -3836,7 +3929,7 @@ SP_INLINE void* sp_atomic_ptr_load(sp_atomic_ptr_t* value, sp_atomic_order_t ord
       (void)order;
       return _InterlockedCompareExchangePointer(value, SP_NULLPTR, SP_NULLPTR);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     void* result = *(void* volatile*)value;
@@ -3853,9 +3946,9 @@ SP_INLINE void* sp_atomic_ptr_load(sp_atomic_ptr_t* value, sp_atomic_order_t ord
 }
 
 SP_INLINE void sp_atomic_ptr_store(sp_atomic_ptr_t* value, void* desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_store_n(value, desired, sp_atomic_order_gnu_store(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       switch (order) {
         case SP_ATOMIC_RELAXED: {
@@ -3878,7 +3971,7 @@ SP_INLINE void sp_atomic_ptr_store(sp_atomic_ptr_t* value, void* desired, sp_ato
       (void)order;
       _InterlockedExchangePointer(value, desired);
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     __sync_synchronize();
     *(void* volatile*)value = desired;
@@ -3893,12 +3986,12 @@ SP_INLINE void sp_atomic_ptr_store(sp_atomic_ptr_t* value, void* desired, sp_ato
 }
 
 SP_INLINE void* sp_atomic_ptr_exchange(sp_atomic_ptr_t* value, void* desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_exchange_n(value, desired, sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return _InterlockedExchangePointer(value, desired);
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     void* old;
     do {
@@ -3918,12 +4011,12 @@ SP_INLINE void* sp_atomic_ptr_exchange(sp_atomic_ptr_t* value, void* desired, sp
 }
 
 SP_INLINE bool sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* desired, sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     return __atomic_compare_exchange_n(value, &current, desired, false, sp_atomic_order_gnu(order), sp_atomic_order_gnu_fail(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     (void)order;
     return _InterlockedCompareExchangePointer(value, desired, current) == current;
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     (void)order;
     return __sync_bool_compare_and_swap(value, current, desired);
   #else
@@ -3941,16 +4034,16 @@ SP_INLINE bool sp_atomic_ptr_cas(sp_atomic_ptr_t* value, void* current, void* de
 }
 
 SP_INLINE void sp_atomic_fence(sp_atomic_order_t order) {
-  #if defined(SP_ATOMIC_GNU)
+  #if SP_HAS_ATOMIC_BUILTINS
     __atomic_thread_fence(sp_atomic_order_gnu(order));
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     #if defined(SP_AMD64)
       if (order == SP_ATOMIC_SEQ_CST) MemoryBarrier();
       else if (order != SP_ATOMIC_RELAXED) _ReadWriteBarrier();
     #else
       if (order != SP_ATOMIC_RELAXED) MemoryBarrier();
     #endif
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     if (order != SP_ATOMIC_RELAXED) __sync_synchronize();
   #else
     if (order != SP_ATOMIC_RELAXED) {
@@ -6984,18 +7077,18 @@ SP_PRIVATE void sp_nt_load(void) {
 
 SP_PRIVATE u8* sp_nt_peb_base(void) {
   u8* peb_base;
-  #if defined(_MSC_VER)
-    #if defined(_M_X64)
+  #if defined(SP_DIALECT_MSVC)
+    #if defined(SP_AMD64)
       peb_base = (u8*)__readgsqword(0x60);
-    #elif defined(_M_ARM64)
+    #elif defined(SP_ARM64)
       peb_base = *(u8**)(_ReadStatusReg(0x5E82) + 0x60);
     #else
       #error "sp.h requires 64-bit Windows"
     #endif
   #else
-    #if defined(__x86_64__)
+    #if defined(SP_AMD64)
       __asm__ volatile ("movq %%gs:0x60, %0" : "=r"(peb_base));
-    #elif defined(__aarch64__)
+    #elif defined(SP_ARM64)
       __asm__ volatile ("ldr %0, [x18, #0x60]" : "=r"(peb_base));
     #else
       #error "sp.h requires 64-bit Windows"
@@ -10448,9 +10541,9 @@ void sp_sys_assert_p(bool cond) {
 
   #if defined(SP_CLANG)
     __builtin_debugtrap();
-  #elif defined(SP_GNUC)
+  #elif defined(SP_DIALECT_GNUC)
     __builtin_trap();
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     __debugbreak();
   #else
     #if defined(SP_AMD64)
@@ -14397,29 +14490,7 @@ typedef struct {
 
 SP_PRIVATE sp_win32_peb_t sp_win32_get_peb() {
   sp_win32_peb_t peb = sp_zero;
-
-  #if defined(_MSC_VER)
-    static const s32 tpidr_el0 = 0x5E82;
-    static const u32 peb_offset = 0x60;
-
-    #if defined(_M_X64)
-      peb.base = (u8*)__readgsqword(peb_offset);
-    #elif defined(_M_ARM64)
-      peb.base = *(u8**)(_ReadStatusReg(tpidr_el0) + peb_offset);
-    #else
-      #error "unsupported architecture"
-    #endif
-  #else
-    #if defined(__x86_64__)
-      __asm__ volatile ("movq %%gs:0x60, %0" : "=r"(peb.base));
-    #elif defined(__i386__)
-      __asm__ volatile ("movl %%fs:0x30, %0" : "=r"(peb.base));
-    #elif defined(__aarch64__)
-      __asm__ volatile ("ldr %0, [x18, #0x60]" : "=r"(peb.base));
-    #else
-      #error "unsupported architecture"
-    #endif
-  #endif
+  peb.base = sp_nt_peb_base();
 
   // PEB->ProcessParameters
   peb.params.base = *(u8**)(peb.base + 0x20);
@@ -15019,29 +15090,29 @@ u64 sp_tm_fps_to_ns(u64 fps) {
 // @spin
 void sp_spin_pause() {
   #if defined(SP_AMD64)
-    #if defined(SP_MSVC)
+    #if defined(SP_DIALECT_MSVC)
       _mm_pause();
     #elif defined(SP_TCC)
       volatile int x = 0; (void)x;
-    #elif defined(SP_GNUC)
+    #elif defined(SP_DIALECT_GNUC)
       __asm__ __volatile__("pause");
     #endif
 
   #elif defined(SP_ARM64)
-    #if defined(SP_MSVC)
+    #if defined(SP_DIALECT_MSVC)
       __yield();
     #elif defined(SP_TCC)
       volatile int x = 0; (void)x;
-    #elif defined(SP_GNUC)
+    #elif defined(SP_DIALECT_GNUC)
       __asm__ __volatile__("yield");
     #endif
   #endif
 }
 
 bool sp_spin_try_lock(sp_spin_lock_t* lock) {
-  #if defined(SP_GNUC)
+  #if defined(SP_DIALECT_GNUC)
     return __sync_lock_test_and_set(lock, 1) == 0;
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     return _InterlockedExchange((LONG*)lock, 1) == 0;
   #elif defined(SP_TCC) && defined(SP_AMD64)
     s32 one = 1;
@@ -15061,9 +15132,9 @@ void sp_spin_lock(sp_spin_lock_t* lock) {
 }
 
 void sp_spin_unlock(sp_spin_lock_t* lock) {
-  #if defined(SP_GNUC)
+  #if defined(SP_DIALECT_GNUC)
     __sync_lock_release(lock);
-  #elif defined(SP_MSVC)
+  #elif defined(SP_DIALECT_MSVC)
     _InterlockedExchange((LONG*)lock, 0);
   #elif defined(SP_TCC) && defined(SP_AMD64)
     __asm__ __volatile__("" : : : "memory");
