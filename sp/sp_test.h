@@ -841,8 +841,9 @@ sp_mem_t sp_test_tracking_as_allocator(sp_test_tracking_t* k) {
 }
 
 void sp_test_tracking_deinit(sp_test_tracking_t* k) {
-  sp_ht_for_kv(k->allocs, it) {
-    if (it.val->state == SP_TEST_ALLOC_LIVE) sp_free(k->backing, *it.key, it.val->size);
+  sp_ht_for(k->allocs, it) {
+    sp_test_alloc_t* alloc = sp_ht_it_getp(k->allocs, it);
+    if (alloc->state == SP_TEST_ALLOC_LIVE) sp_free(k->backing, *sp_ht_it_getkp(k->allocs, it), alloc->size);
   }
   sp_ht_free(k->allocs);
   sp_mem_zero(k, sizeof(*k));
@@ -1539,8 +1540,9 @@ static void sp_test_report_leaks(sp_test_t* t) {
       sp_fmt_uint(k->live_bytes));
 
     sp_da(sp_test_alloc_t) leaks = sp_da_new(t->mem, sp_test_alloc_t);
-    sp_ht_for_kv(k->allocs, it) {
-      if (it.val->state == SP_TEST_ALLOC_LIVE) sp_da_push(leaks, *it.val);
+    sp_ht_for(k->allocs, it) {
+      sp_test_alloc_t* alloc = sp_ht_it_getp(k->allocs, it);
+      if (alloc->state == SP_TEST_ALLOC_LIVE) sp_da_push(leaks, *alloc);
     }
     sp_os_qsort(leaks, sp_da_size(leaks), sizeof(sp_test_alloc_t), sp_test_leak_order);
 
