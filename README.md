@@ -25,36 +25,43 @@ It's written in ~15,000 lines of plain C99[^1] and has zero dependencies. It doe
 `sp.h` can be also be compiled as a traditional shared or static library. `sp.h` makes no assumptions about its place in your code. You can use any small piece of it as a standalone utility, or you can use it as the foundation for almost any program. Give it a try!
 
 ## example: `ls`
-Here's a minimal `ls` in 30 lines of code.
+Here's a minimal `ls` in 40 lines of code.
 ```c
 #define SP_IMPLEMENTATION
 #include "sp.h"
 
 s32 compare_entries(const void* pa, const void* pb) {
-  const sp_fs_entry_t* a = (const sp_fs_entry_t*)pa;
-  const sp_fs_entry_t* b = (const sp_fs_entry_t*)pb;
+  const sp_fs_dir_entry_t* a = (const sp_fs_dir_entry_t*)pa;
+  const sp_fs_dir_entry_t* b = (const sp_fs_dir_entry_t*)pb;
   return sp_str_compare_alphabetical(a->name, b->name);
 }
 
 s32 run(s32 num_args, const c8** args) {
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
-  sp_str_t dir = num_args == 2 ? sp_cstr_as_str(args[1]) : sp_str_lit(".");
+  sp_str_t path = num_args == 2 ? sp_cstr_as_str(args[1]) : sp_str_lit(".");
 
-  sp_da(sp_fs_entry_t) entries;
-  if (sp_fs_collect(mem, dir, &entries)) {
-    sp_log("could not read {}", sp_fmt_str(dir));
+  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  if (sp_fs_open_dir_at(sp_path_cwd(path), &dir)) {
+    sp_log("could not read {}", sp_fmt_str(path));
     return 1;
   }
+
+  sp_da(sp_fs_dir_entry_t) entries = sp_da_new(mem, sp_fs_dir_entry_t);
+  sp_fs_dir_for(dir, it) {
+    sp_fs_dir_entry_t entry = { .name = sp_str_copy(mem, it.entry.name), .kind = it.entry.kind };
+    sp_da_push(entries, entry);
+  }
+  sp_fs_close_dir(dir);
   sp_da_sort(entries, compare_entries);
 
   sp_da_for(entries, it) {
-    sp_fs_entry_t* entry = &entries[it];
+    sp_fs_dir_entry_t* entry = &entries[it];
     switch (entry->kind) {
-      case SP_FS_KIND_DIR:  sp_log("{.blue}", sp_fmt_str(entry->name)); break;
-      case SP_FS_KIND_FILE: sp_log("{}", sp_fmt_str(entry->name)); break;
-      case SP_FS_KIND_SYMLINK: sp_log("{.cyan} -> {}", sp_fmt_str(entry->name), sp_fmt_str(entry->path)); break;
-      case SP_FS_KIND_NONE: break;
+      case SP_FS_KIND_DIR:     sp_log("{.blue}", sp_fmt_str(entry->name)); break;
+      case SP_FS_KIND_FILE:    sp_log("{}", sp_fmt_str(entry->name)); break;
+      case SP_FS_KIND_SYMLINK: sp_log("{.cyan}", sp_fmt_str(entry->name)); break;
+      case SP_FS_KIND_NONE:    break;
     }
   }
   return 0;

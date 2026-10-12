@@ -160,7 +160,9 @@ static sp_da(const target_t*) target_resolve(sp_mem_t mem, sp_str_t query) {
 
 static sp_da(sp_str_t) tests_discover(sp_mem_t mem, sp_str_t dir, sp_str_t ext) {
   sp_da(sp_str_t) names = sp_da_new(mem, sp_str_t);
-  sp_fs_for(mem, sp_path_from_str(dir), it) {
+  sp_sys_dir_t root = sp_sys_dir(SP_SYS_INVALID_FD);
+  if (sp_fs_open_dir_at(sp_path_from_str(dir), &root)) return names;
+  sp_fs_dir_for(root, it) {
     sp_str_t name = it.entry.name;
     if (!sp_str_empty(ext)) {
       if (!sp_str_ends_with(name, ext)) continue;
@@ -173,6 +175,7 @@ static sp_da(sp_str_t) tests_discover(sp_mem_t mem, sp_str_t dir, sp_str_t ext) 
     if (sp_str_equal(name, str("process"))) continue;
     sp_da_push(names, sp_str_copy(mem, name));
   }
+  sp_fs_close_dir(root);
   sp_os_qsort(names, sp_da_size(names), sizeof(sp_str_t), sp_str_sort_kernel_alphabetical);
   return names;
 }
