@@ -484,23 +484,25 @@ SP_API sp_str_t sp_test_value_opaque(sp_test_t* t, ...);
   template <typename T> SP_INLINE sp_str_t sp_test_value(sp_test_t* t, const T& value) { SP_UNUSED(value); return sp_test_value_opaque(t); }
 #elif SP_HAS_GENERIC
   #define sp_test_value(T, V) _Generic((V), \
-    bool:        sp_test_value_bool,        \
     c8:          sp_test_value_c8,          \
-    s8:          sp_test_value_s8,          \
-    u8:          sp_test_value_u8,          \
-    s16:         sp_test_value_s16,         \
-    u16:         sp_test_value_u16,         \
-    s32:         sp_test_value_s32,         \
-    u32:         sp_test_value_u32,         \
-    s64:         sp_test_value_s64,         \
-    u64:         sp_test_value_u64,         \
-    f32:         sp_test_value_f32,         \
-    f64:         sp_test_value_f64,         \
-    const c8*:   sp_test_value_cstr,        \
-    c8*:         sp_test_value_cstr,        \
-    void*:       sp_test_value_ptr,         \
-    sp_str_t:    sp_test_value_str,         \
-    default:     sp_test_value_opaque       \
+    default:     _Generic((V),              \
+      bool:        sp_test_value_bool,      \
+      s8:          sp_test_value_s8,        \
+      u8:          sp_test_value_u8,        \
+      s16:         sp_test_value_s16,       \
+      u16:         sp_test_value_u16,       \
+      s32:         sp_test_value_s32,       \
+      u32:         sp_test_value_u32,       \
+      s64:         sp_test_value_s64,       \
+      u64:         sp_test_value_u64,       \
+      f32:         sp_test_value_f32,       \
+      f64:         sp_test_value_f64,       \
+      const c8*:   sp_test_value_cstr,      \
+      c8*:         sp_test_value_cstr,      \
+      void*:       sp_test_value_ptr,       \
+      sp_str_t:    sp_test_value_str,       \
+      default:     sp_test_value_opaque     \
+    )                                       \
   )(T, V)
 #else
   #define sp_test_value(T, V) (SP_UNUSED(T), SP_UNUSED(V), sp_str_lit("?"))
