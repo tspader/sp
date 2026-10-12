@@ -233,9 +233,9 @@ sp_app_config_t app_main(s32 num_args, const c8** args) {
   s32 value = -1;
 
   /* palette [hue] [saturation] [value] */
-  if (num_args > 1) hue        = sp_parse_s32(sp_str_view(args[1]));
-  if (num_args > 2) saturation = sp_parse_s32(sp_str_view(args[2]));
-  if (num_args > 3) value      = sp_parse_s32(sp_str_view(args[3]));
+  if (num_args > 1) hue        = sp_parse_s32(sp_cstr_as_str(args[1]));
+  if (num_args > 2) saturation = sp_parse_s32(sp_cstr_as_str(args[2]));
+  if (num_args > 3) value      = sp_parse_s32(sp_cstr_as_str(args[3]));
 
   sp_mem_heap_t* heap = sp_mem_heap_new();
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);

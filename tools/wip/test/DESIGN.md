@@ -205,7 +205,7 @@ static const ext_case_t ext_cases[] = {
 
 static void run_ext(sp_test_t* t, const void* arg) {
   const ext_case_t* c = arg;
-  sp_expect_str_eq_c(t, sp_fs_get_ext(sp_str_view(c->input)), c->expect);
+  sp_expect_str_eq_c(t, sp_fs_get_ext(sp_cstr_as_str(c->input)), c->expect);
 }
 ```
 

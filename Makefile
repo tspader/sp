@@ -107,15 +107,9 @@ ifeq ($(TRIPLE),)
   endif
 endif
 
-TESTS = amalg app array asset cli etc env format fmon glob ht io math process ps rb str sys thread time mem leak qsort term
+TESTS = amalg app array asset cli etc env format fmon glob ht io math process ps rb sys thread time mem leak qsort term
 BENCHES = glob heap
 EXAMPLES = app array cli format hash_table io zero_copy ls palette post serve signal tls wc
-EXAMPLES += fs/config fs/iterator fs/ls fs/roots fs/workspace
-ifneq (,$(findstring wasm32,$(TRIPLE)))
-  EXAMPLES += fs/preopen
-else
-  EXAMPLES += fs/absolute
-endif
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \

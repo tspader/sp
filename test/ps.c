@@ -158,7 +158,7 @@ void sp_test_proc_io(sp_ps* utest_fixture, s32* utest_result, sp_test_proc_io_co
   sp_ps_config_t config = {
     .command = get_process_path(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_view(test_proc_function_to_cstr(test.fn)),
+      sp_str_lit("--fn"), sp_cstr_as_str(test_proc_function_to_cstr(test.fn)),
     },
     .io = test.io,
   };
@@ -465,7 +465,7 @@ void sp_test_proc_env_verify(sp_ps* utest_fixture, s32* utest_result, sp_test_pr
   sp_ps_config_t config = {
     .command = get_process_path(ut.mem),
     .args = {
-      sp_str_lit("--fn"), sp_str_view(test_proc_function_to_cstr(TEST_PROC_FUNCTION_PRINT_ENV)),
+      sp_str_lit("--fn"), sp_cstr_as_str(test_proc_function_to_cstr(TEST_PROC_FUNCTION_PRINT_ENV)),
       sp_str_lit("--stdout")
     },
     .env = test.config,

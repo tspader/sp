@@ -504,7 +504,7 @@ void sp_glob_free(sp_glob_t* g) {
 }
 
 sp_glob_t* sp_glob_new(sp_mem_t mem, const c8* pattern) {
-  return sp_glob_new_str(mem, sp_str_view(pattern));
+  return sp_glob_new_str(mem, sp_cstr_as_str(pattern));
 }
 
 sp_glob_t* sp_glob_new_str(sp_mem_t mem, sp_str_t pattern) {

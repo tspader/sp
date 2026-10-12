@@ -124,7 +124,7 @@ static sp_cli_result_t cli_handler_user_data(sp_cli_t* cli) {
 }
 
 static sp_cli_result_t cli_handler_continue(sp_cli_t* cli) {
-  cli_dispatched = sp_str_view(cli->cmd->name);
+  cli_dispatched = sp_cstr_as_str(cli->cmd->name);
   return SP_CLI_CONTINUE;
 }
 

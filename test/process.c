@@ -81,7 +81,7 @@ s32 main(s32 num_args, const c8** args) {
     return 0;
   }
 
-  test_proc_function_t function = test_proc_function_from_str(sp_str_view(function_str));
+  test_proc_function_t function = test_proc_function_from_str(sp_cstr_as_str(function_str));
 
   if (function == TEST_PROC_FUNCTION_INVALID) {
     sp_log("unknown function: {.fg brightred}", sp_fmt_cstr(function_str));
@@ -161,7 +161,7 @@ s32 main(s32 num_args, const c8** args) {
       break;
     }
     case TEST_PROC_FUNCTION_WAIT: {
-      sp_str_t arg = sp_str_view(args[0]);
+      sp_str_t arg = sp_cstr_as_str(args[0]);
       f64 ms = sp_parse_f64(arg);
       sp_log("process.c ({.fg brightyellow}) is sleeping for {.fg cyan}ms", sp_fmt_int(sp_getpid()), sp_fmt_float(ms));
       sp_os_sleep_ms(ms);

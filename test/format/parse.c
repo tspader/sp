@@ -26,7 +26,7 @@ typedef struct {
 } format_parse_test_t;
 
 static void run_format_parse_test(s32* utest_result, format_parse_test_t t) {
-  sp_str_t in = sp_str_view(t.input);
+  sp_str_t in = sp_cstr_as_str(t.input);
   switch (t.kind) {
     case PARSE_U8: EXPECT_EQ(sp_parse_u8(in), (u8)t.u); break;
     case PARSE_U16: EXPECT_EQ(sp_parse_u16(in), (u16)t.u); break;
@@ -55,7 +55,7 @@ typedef struct {
 } format_parse_ex_test_t;
 
 static void run_format_parse_ex_test(s32* utest_result, format_parse_ex_test_t t) {
-  sp_str_t in = sp_str_view(t.input);
+  sp_str_t in = sp_cstr_as_str(t.input);
   switch (t.kind) {
     case PARSE_U8: { u8 v; EXPECT_EQ(sp_parse_u8_ex(in, &v), t.ok); if (t.ok) EXPECT_EQ(v, (u8)t.u); break; }
     case PARSE_U16: { u16 v; EXPECT_EQ(sp_parse_u16_ex(in, &v), t.ok); if (t.ok) EXPECT_EQ(v, (u16)t.u); break; }

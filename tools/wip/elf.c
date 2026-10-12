@@ -21,7 +21,7 @@ s32 embed_main(s32 argc, const c8** argv) {
 
   sp_mem_t mem = sp_mem_os_new();
 
-  sp_str_t output_path = sp_str_view(argv[1]);
+  sp_str_t output_path = sp_cstr_as_str(argv[1]);
   u32 num_files = argc - 2;
 
   sp_log("embedding {.fg brightblack} files into {.fg cyan}", sp_fmt_uint(num_files), sp_fmt_str(output_path));
@@ -56,7 +56,7 @@ s32 embed_main(s32 argc, const c8** argv) {
   sp_elf_add_symbol(symtab, elf, sp_str_lit("embed_files"), header_base, header_size, STB_GLOBAL, STT_OBJECT, (u16)data_sec_idx);
 
   sp_for(i, num_files) {
-    sp_str_t path = sp_str_view(argv[2 + i]);
+    sp_str_t path = sp_cstr_as_str(argv[2 + i]);
     sp_str_t basename = sp_fs_get_name(path);
     sp_str_t content = sp_zero;
     sp_io_read_file(mem, path, &content);

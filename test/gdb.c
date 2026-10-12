@@ -68,7 +68,7 @@ static bool gdb_available(void) {
 
 static void gdb_add_ex(sp_mem_t mem, sp_ps_config_t* config, const c8* command) {
   sp_ps_config_add_arg(mem, config, sp_str_lit("-ex"));
-  sp_ps_config_add_arg(mem, config, sp_str_view(command));
+  sp_ps_config_add_arg(mem, config, sp_cstr_as_str(command));
 }
 
 static sp_str_t gdb_run(sp_gdb* fix, const c8* mark, const c8* command) {
@@ -102,7 +102,7 @@ void run_gdb_test(s32* utest_result, sp_gdb* fix, gdb_test_t t) {
     if (!t.expect.present[it]) {
       break;
     }
-    sp_str_t needle = sp_str_view(t.expect.present[it]);
+    sp_str_t needle = sp_cstr_as_str(t.expect.present[it]);
     if (!sp_str_contains(out, needle)) {
       SP_TEST_REPORT("[{}] expected {.fg brightred} present in:\n{}\n", sp_fmt_cstr(t.mark), sp_fmt_str(needle), sp_fmt_str(out));
       SP_FAIL();
@@ -113,7 +113,7 @@ void run_gdb_test(s32* utest_result, sp_gdb* fix, gdb_test_t t) {
     if (!t.expect.absent[it]) {
       break;
     }
-    sp_str_t needle = sp_str_view(t.expect.absent[it]);
+    sp_str_t needle = sp_cstr_as_str(t.expect.absent[it]);
     if (sp_str_contains(out, needle)) {
       SP_TEST_REPORT("[{}] expected {.fg brightred} absent in:\n{}\n", sp_fmt_cstr(t.mark), sp_fmt_str(needle), sp_fmt_str(out));
       SP_FAIL();

@@ -27,9 +27,9 @@ s32 embed_main(s32 argc, const c8** argv) {
     goto cleanup;
   }
 
-  sp_str_t src_dir = sp_str_view(argv[1]);
-  sp_str_t out_obj = sp_str_view(argv[2]);
-  sp_str_t out_hdr = sp_str_view(argv[3]);
+  sp_str_t src_dir = sp_cstr_as_str(argv[1]);
+  sp_str_t out_obj = sp_cstr_as_str(argv[2]);
+  sp_str_t out_hdr = sp_cstr_as_str(argv[3]);
   sp_log("scanning {}", sp_fmt_str(src_dir));
 
   sp_elf_t* elf = sp_elf_new_with_null_section(mem);
@@ -102,7 +102,7 @@ s32 embed_main(s32 argc, const c8** argv) {
   }
 
   {
-    sp_str_t file_path = sp_str_view(argv[4]);
+    sp_str_t file_path = sp_cstr_as_str(argv[4]);
     sp_str_t symbol = sp_str_lit("include_spn_h");
     sp_str_t path = sp_str_lit("include/spn.h");
 

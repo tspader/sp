@@ -227,7 +227,7 @@ static const test_t staged_tests [] = {
 };
 
 static sp_err_t drive(sp_fs_atomic_t* af, sp_err_t err, const test_t* it) {
-  if (!err) err = sp_io_write_str(sp_fs_atomic_writer(af), sp_str_view(it->content), SP_NULLPTR);
+  if (!err) err = sp_io_write_str(sp_fs_atomic_writer(af), sp_cstr_as_str(it->content), SP_NULLPTR);
   if (!err) {
     switch (it->op) {
       case OP_REPLACE:   err = sp_fs_atomic_commit(af, SP_FS_ATOMIC_REPLACE); break;
@@ -246,7 +246,7 @@ sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_fs_atomic_t af = sp_zero;
-  sp_err_t err = drive(&af, sp_fs_atomic_open_at(&af, sp_path(dir, sp_str_view(it->path))), it);
+  sp_err_t err = drive(&af, sp_fs_atomic_open_at(&af, sp_path(dir, sp_cstr_as_str(it->path))), it);
   sp_sys_close(dir);
 
   sp_expect_err_eq(t, err, it->expect.err);
@@ -262,7 +262,7 @@ sp_test_each(fs, atomic_staged, test_t, staged_tests) {
   sp_sys_fd_t dir = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
-  sp_path_t path = sp_path(dir, sp_str_view(it->path));
+  sp_path_t path = sp_path(dir, sp_cstr_as_str(it->path));
 
   sp_fs_atomic_t af = sp_zero;
   sp_err_t err = drive(&af, sp_fs_atomic_open_staged_at(&af, path, sp_str_lit("S")), it);
