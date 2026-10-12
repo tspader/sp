@@ -186,6 +186,13 @@
   #define SP_AMD
 #endif
 
+///////////////////
+// OBJECT FORMAT //
+///////////////////
+#if defined(__ELF__)
+  #define SP_ELF
+#endif
+
 //////////////
 // LANGUAGE //
 //////////////
@@ -207,6 +214,45 @@
   #define SP_CPP_VERSION _MSVC_LANG
 #else
   #define SP_CPP_VERSION __cplusplus
+#endif
+
+//////////////
+// FEATURES //
+//////////////
+#if defined(__has_attribute)
+  #define SP_HAS_ATTRIBUTE(x) __has_attribute(x)
+#else
+  #define SP_HAS_ATTRIBUTE(x) 0
+#endif
+
+#if defined(__COUNTER__)
+  #define SP_HAS_COUNTER 1
+#else
+  #define SP_HAS_COUNTER 0
+#endif
+
+#if defined(__ATOMIC_SEQ_CST) && (defined(SP_GNUC) || defined(SP_TCC))
+  #define SP_HAS_ATOMIC_BUILTINS 1
+#else
+  #define SP_HAS_ATOMIC_BUILTINS 0
+#endif
+
+#if !defined(SP_CPP) && (SP_C_VERSION >= 201112L || defined(SP_GNUC) || defined(SP_TCC))
+  #define SP_HAS_GENERIC 1
+#else
+  #define SP_HAS_GENERIC 0
+#endif
+
+#if SP_CPP_VERSION >= 201103L
+  #define SP_HAS_TYPE_OF 1
+#elif defined(SP_GNUC) || defined(SP_TCC)
+  #define SP_HAS_TYPE_OF 1
+#elif defined(SP_CL) && (_MSC_VER >= 1939)
+  #define SP_HAS_TYPE_OF 1
+#elif SP_C_VERSION >= 202311L
+  #define SP_HAS_TYPE_OF 1
+#else
+  #define SP_HAS_TYPE_OF 0
 #endif
 
 
@@ -283,17 +329,6 @@
 // @macro
 
 #define SP_ATTRIBUTE(a) __attribute__((a))
-
-//////////////////////
-// SP_HAS_ATTRIBUTE //
-//////////////////////
-#if defined(SP_MSVC)
-  #define SP_HAS_ATTRIBUTE(attr) 0
-#elif defined(SP_TCC)
-  #define SP_HAS_ATTRIBUTE(attr) 0
-#else
-  #define SP_HAS_ATTRIBUTE(attr) __has_attribute(attr)
-#endif
 
 //////////////
 // SP_ALIGN //
