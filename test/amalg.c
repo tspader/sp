@@ -16,7 +16,6 @@
 #include "mem.c"
 #include "ps.c"
 #include "rb.c"
-#include "str.c"
 #include "thread.c"
 #include "time.c"
 
