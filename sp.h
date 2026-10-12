@@ -2786,7 +2786,6 @@ SP_API void            sp_str_copy_to(sp_str_t str, c8* buffer, u32 capacity);
 SP_API sp_str_t        sp_str_from_cstr(sp_mem_t mem, const c8* str);
 SP_API sp_str_t        sp_str_from_cstr_n(sp_mem_t mem, const c8* str, u32 len);
 SP_API sp_str_t        sp_str_alloc(sp_mem_t mem, u32 capacity);
-SP_API sp_str_t        sp_str_view(const c8* cstr);
 SP_API bool            sp_str_empty(sp_str_t);
 SP_API bool            sp_str_equal(sp_str_t a, sp_str_t b);
 SP_API bool            sp_str_equal_cstr(sp_str_t a, const c8* b);
@@ -13385,13 +13384,6 @@ sp_str_t sp_str_alloc(sp_mem_t mem, u32 capacity) {
   };
 }
 
-sp_str_t sp_str_view(const c8* cstr) {
-  return (sp_str_t) {
-    .data = cstr,
-    .len = sp_cstr_len(cstr),
-  };
-}
-
 bool sp_str_empty(sp_str_t str) {
   return !str.len;
 }
@@ -14586,7 +14578,7 @@ sp_os_env_it_t sp_os_env_it_begin() {
   sp_mem_t mem = sp_mem_os_new();
   sp_env_init(mem, &os->env);
   for (c8** p = environ; *p; p++) {
-    sp_str_pair_t pair = sp_str_cleave_c8(sp_str_view(*p), '=');
+    sp_str_pair_t pair = sp_str_cleave_c8(sp_cstr_as_str(*p), '=');
     sp_str_ht_insert(os->env.vars, pair.first, pair.second);
   }
 
@@ -14644,7 +14636,7 @@ SP_PRIVATE bool sp_os_env_key_equal(sp_str_t a, sp_str_t b) {
 
 sp_str_t sp_os_env_get(sp_str_t key) {
   for (c8** envp = environ; envp && *envp; envp++) {
-    sp_str_pair_t pair = sp_str_cleave_c8(sp_str_view(*envp), '=');
+    sp_str_pair_t pair = sp_str_cleave_c8(sp_cstr_as_str(*envp), '=');
     if (sp_os_env_key_equal(pair.first, key)) {
       return pair.second;
     }
@@ -14654,7 +14646,7 @@ sp_str_t sp_os_env_get(sp_str_t key) {
 
 SP_PRIVATE void sp_os_env_it_set(sp_os_env_it_t* it) {
   c8** envp = (c8**)it->os;
-  sp_str_t entry = sp_str_view(*envp);
+  sp_str_t entry = sp_cstr_as_str(*envp);
   u32 offset = (entry.len > 0 && entry.data[0] == '=') ? 1 : 0;
   sp_str_t scan = { .data = entry.data + offset, .len = entry.len - offset };
   sp_str_pair_t pair = sp_str_cleave_c8(scan, '=');
@@ -16811,20 +16803,20 @@ void sp_ps_output_free(sp_mem_t mem, sp_ps_output_t* output) {
 static sp_ps_config_t sp_ps_config_view_from_cstr(const sp_ps_config_cstr_t* src) {
   sp_ps_config_t dst = sp_zero;
 
-  dst.command = sp_str_view(src->command);
-  dst.cwd = sp_str_view(src->cwd);
+  dst.command = sp_cstr_as_str(src->command);
+  dst.cwd = sp_cstr_as_str(src->cwd);
 
   sp_for(i, SP_PS_MAX_ARGS) {
     if (!src->args[i] || !*src->args[i]) break;
-    dst.args[i] = sp_str_view(src->args[i]);
+    dst.args[i] = sp_cstr_as_str(src->args[i]);
   }
 
   dst.env.env = src->env.env;
   dst.env.mode = src->env.mode;
   sp_for(i, SP_PS_MAX_ENV) {
     if (!src->env.extra[i].key) break;
-    dst.env.extra[i].key = sp_str_view(src->env.extra[i].key);
-    dst.env.extra[i].value = sp_str_view(src->env.extra[i].value);
+    dst.env.extra[i].key = sp_cstr_as_str(src->env.extra[i].key);
+    dst.env.extra[i].value = sp_cstr_as_str(src->env.extra[i].value);
   }
 
   dst.io = src->io;
@@ -17305,7 +17297,7 @@ SP_PRIVATE void sp_fmon_fsevents_callback(
   sp_mutex_lock(&os->mutex);
 
   sp_for(it, num_events) {
-    sp_str_t file_path = sp_str_view(paths[it]);
+    sp_str_t file_path = sp_cstr_as_str(paths[it]);
 
     bool watching_file = false;
     sp_da_for(os->watch_files, wf_it) {
@@ -19377,7 +19369,7 @@ void sp_log(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_tty_t* term = sp_tty_std_out();
-  sp_tty_fmt_v(term, sp_str_view(fmt), args);
+  sp_tty_fmt_v(term, sp_cstr_as_str(fmt), args);
   va_end(args);
   sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
@@ -19395,7 +19387,7 @@ void sp_log_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_tty_t* term = sp_tty_std_err();
-  sp_tty_fmt_v(term, sp_str_view(fmt), args);
+  sp_tty_fmt_v(term, sp_cstr_as_str(fmt), args);
   va_end(args);
   sp_io_write_cstr(term->io, "\n", SP_NULLPTR);
 }
@@ -19403,7 +19395,7 @@ void sp_log_err(const c8* fmt, ...) {
 void sp_print(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_tty_fmt_v(sp_tty_std_out(), sp_str_view(fmt), args);
+  sp_tty_fmt_v(sp_tty_std_out(), sp_cstr_as_str(fmt), args);
   va_end(args);
 }
 
@@ -19417,7 +19409,7 @@ void sp_print_str(sp_str_t fmt, ...) {
 void sp_print_err(const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  sp_tty_fmt_v(sp_tty_std_err(), sp_str_view(fmt), args);
+  sp_tty_fmt_v(sp_tty_std_err(), sp_cstr_as_str(fmt), args);
   va_end(args);
 }
 
@@ -20602,7 +20594,7 @@ sp_err_t sp_fs_create_file_str(sp_str_t path, sp_str_t str) {
 }
 
 sp_err_t sp_fs_create_file_cstr_at(sp_path_t path, const c8* str) {
-  return sp_fs_create_file_str_at(path, sp_str_view(str));
+  return sp_fs_create_file_str_at(path, sp_cstr_as_str(str));
 }
 
 sp_err_t sp_fs_create_file_cstr(sp_str_t path, const c8* str) {
@@ -21105,7 +21097,7 @@ sp_err_t sp_fs_write_atomic(sp_str_t path, sp_str_t str) {
 }
 
 sp_err_t sp_fs_write_atomic_cstr_at(sp_path_t path, const c8* str) {
-  return sp_fs_write_atomic_at(path, sp_str_view(str));
+  return sp_fs_write_atomic_at(path, sp_cstr_as_str(str));
 }
 
 sp_err_t sp_fs_write_atomic_cstr(sp_str_t path, const c8* str) {

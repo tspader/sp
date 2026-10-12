@@ -74,7 +74,7 @@
   } while (0) \
   UTEST_SURPRESS_WARNING_END
 
-#define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), sp_str_view(b), false)
+#define SP_EXPECT_STR_EQ_CSTR(a, b) SP_TEST_STREQ((a), sp_cstr_as_str(b), false)
 #define SP_EXPECT_STR_EQ(a, b) SP_TEST_STREQ((a), (b), false)
 
 typedef struct {

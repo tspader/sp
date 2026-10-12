@@ -37,7 +37,7 @@ CLI_TEST_FIXTURE(cli_assign)
 
 static void run_cli_assign_test(s32* utest_result, cli_assign_test_t t) {
   cli_assign_slot_t slot = t.preset;
-  sp_str_t value = t.null_value ? sp_zero_s(sp_str_t) : sp_str_view(t.value);
+  sp_str_t value = t.null_value ? sp_zero_s(sp_str_t) : sp_cstr_as_str(t.value);
 
   bool ok = sp_cli_assign(t.kind, &slot, value);
   EXPECT_EQ(!t.expect.fail, ok);

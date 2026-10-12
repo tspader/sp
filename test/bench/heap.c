@@ -518,8 +518,8 @@ static void bench_run(const bench_workload_t* w, const bench_backend_t* backend)
 }
 
 s32 main(s32 argc, const c8** argv) {
-  sp_str_t workload_filter = argc > 1 ? sp_str_view(argv[1]) : sp_str_lit("");
-  sp_str_t backend_filter = argc > 2 ? sp_str_view(argv[2]) : sp_str_lit("");
+  sp_str_t workload_filter = argc > 1 ? sp_cstr_as_str(argv[1]) : sp_str_lit("");
+  sp_str_t backend_filter = argc > 2 ? sp_cstr_as_str(argv[2]) : sp_str_lit("");
 
   sp_mem_zero(state.ptrs, sizeof(state.ptrs));
   sp_mem_zero(state.sizes, sizeof(state.sizes));
@@ -545,7 +545,7 @@ s32 main(s32 argc, const c8** argv) {
     sp_carr_for(backends, b) {
       const bench_backend_t* backend = &backends[b];
       if (!sp_str_empty(backend_filter)) {
-        if (!sp_str_equal(sp_str_view(backend->name), backend_filter)) {
+        if (!sp_str_equal(sp_cstr_as_str(backend->name), backend_filter)) {
           continue;
         }
       }

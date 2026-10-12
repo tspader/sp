@@ -218,7 +218,7 @@ UTEST_F(env, to_posix_envp) {
   bool found_aa = false;
   bool found_bb = false;
   for (u32 i = 0; i < count; i++) {
-    sp_str_t entry = sp_str_view(envp[i]);
+    sp_str_t entry = sp_cstr_as_str(envp[i]);
     if (sp_str_equal(entry, sp_str_lit("AA=11"))) found_aa = true;
     if (sp_str_equal(entry, sp_str_lit("BB=22"))) found_bb = true;
   }

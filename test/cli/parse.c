@@ -63,7 +63,7 @@ static void run_cli_parse_test(s32* utest_result, sp_mem_t mem, cli_parse_test_t
   if (t.expect.cmd) {
     EXPECT_NE(SP_NULLPTR, (void*)cli.cmd);
     if (cli.cmd) {
-      SP_EXPECT_STR_EQ_CSTR(sp_str_view(cli.cmd->name), t.expect.cmd);
+      SP_EXPECT_STR_EQ_CSTR(sp_cstr_as_str(cli.cmd->name), t.expect.cmd);
     }
   }
 

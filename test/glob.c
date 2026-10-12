@@ -20,7 +20,7 @@ typedef struct {
 
 void run_parse_test(int* utest_result, sp_mem_t mem, parse_test_t t) {
   sp_da(sp_glob_token_t) tokens = sp_da_new(mem, sp_glob_token_t);
-  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t.pattern), &tokens);
+  sp_glob_err_t err = sp_glob_parse(mem, sp_cstr_as_str(t.pattern), &tokens);
 
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
 
@@ -90,7 +90,7 @@ typedef struct {
 
 void run_parse_error_test(int* utest_result, sp_mem_t mem, parse_error_test_t t) {
   sp_da(sp_glob_token_t) tokens = sp_da_new(mem, sp_glob_token_t);
-  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t.pattern), &tokens);
+  sp_glob_err_t err = sp_glob_parse(mem, sp_cstr_as_str(t.pattern), &tokens);
   EXPECT_EQ(err, t.expected_err);
 }
 
@@ -704,7 +704,7 @@ typedef struct {
 void run_strategy_test(int* utest_result, sp_mem_t mem, strategy_test_t t) {
   sp_glob_t glob = sp_zero;
   sp_da_init(mem, glob.tokens);
-  sp_glob_err_t err = sp_glob_parse(mem, sp_str_view(t.pattern), &glob.tokens);
+  sp_glob_err_t err = sp_glob_parse(mem, sp_cstr_as_str(t.pattern), &glob.tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
   if (err == SP_GLOB_ERR_OK) {
     sp_glob_strategy_t strategy = sp_glob_detect_strategy(&glob);

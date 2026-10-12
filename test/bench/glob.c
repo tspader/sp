@@ -17,7 +17,7 @@ typedef struct {
 static void run_glob_bench(ubench_run_state_t* ubench_run_state, glob_bench_t bench) {
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
   sp_glob_t* glob = sp_glob_new(scratch.mem, bench.patterns[0]);
-  sp_str_t path = sp_str_view(bench.path);
+  sp_str_t path = sp_cstr_as_str(bench.path);
 
   SP_ASSERT(glob != SP_NULLPTR);
   SP_ASSERT(sp_glob_match(glob, path) == bench.expect.match);
@@ -40,7 +40,7 @@ static void run_glob_set_bench(ubench_run_state_t* ubench_run_state, glob_bench_
     sp_glob_set_add(set, bench.patterns[it]);
   }
   sp_glob_set_build(set);
-  sp_str_t path = sp_str_view(bench.path);
+  sp_str_t path = sp_cstr_as_str(bench.path);
 
   SP_ASSERT(sp_glob_set_match(set, path) == bench.expect.match);
 

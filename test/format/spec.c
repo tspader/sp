@@ -8,7 +8,7 @@ typedef struct {
 } format_spec_test_t;
 
 static sp_err_t format_parse_spec(const c8* str, sp_fmt_spec_t* spec) {
-  sp_fmt_parser_t parser = { .str = sp_str_view(str), .i = 0 };
+  sp_fmt_parser_t parser = { .str = sp_cstr_as_str(str), .i = 0 };
   return sp_fmt_parse_specifier(&parser, spec);
 }
 

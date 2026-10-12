@@ -71,7 +71,7 @@ static void fancy_nl(sp_prompt_ctx_t* ctx) {
 }
 
 static void fancy_render_cstr(sp_prompt_ctx_t* ctx, const c8* text, sp_prompt_style_t style) {
-  sp_prompt_render_line(ctx, sp_str_view(text), style);
+  sp_prompt_render_line(ctx, sp_cstr_as_str(text), style);
 }
 
 static void fancy_render_str(sp_prompt_ctx_t* ctx, sp_str_t text, sp_prompt_style_t style) {
@@ -149,7 +149,7 @@ static void fancy_scan_render(sp_prompt_ctx_t* ctx) {
     fancy_render_cstr(ctx, symbol, symbol_style);
     fancy_render_cstr(ctx, "  ", sp_zero_s(sp_prompt_style_t));
     fancy_render_cstr(ctx, scan->probes[it].label, sp_zero_s(sp_prompt_style_t));
-    u32 width = sp_prompt_text_width(sp_str_view(scan->probes[it].label));
+    u32 width = sp_prompt_text_width(sp_cstr_as_str(scan->probes[it].label));
     sp_for_range(pad, width, 20) {
       SP_UNUSED(pad);
       fancy_render_cstr(ctx, " ", sp_zero_s(sp_prompt_style_t));
@@ -390,7 +390,7 @@ static void fancy_publish_render(sp_prompt_ctx_t* ctx) {
     fancy_render_cstr(ctx, fancy_job_symbol(target->state, copy.frame), fancy_job_style(target->state));
     fancy_render_cstr(ctx, "  ", sp_zero_s(sp_prompt_style_t));
     fancy_render_cstr(ctx, target->label, sp_zero_s(sp_prompt_style_t));
-    u32 width = sp_prompt_text_width(sp_str_view(target->label));
+    u32 width = sp_prompt_text_width(sp_cstr_as_str(target->label));
     sp_for_range(pad, width, 24) {
       SP_UNUSED(pad);
       fancy_render_cstr(ctx, " ", sp_zero_s(sp_prompt_style_t));

@@ -128,7 +128,7 @@ UTEST(str, string_creation) {
   SP_EXPECT_STR_EQ_CSTR(str2, "World");
 
   const c8* cstr = "Dynamic";
-  sp_str_t str3 = sp_str_view(cstr);
+  sp_str_t str3 = sp_cstr_as_str(cstr);
   ASSERT_EQ(str3.len, 7);
   SP_EXPECT_STR_EQ_CSTR(str3, "Dynamic");
 
@@ -665,7 +665,7 @@ UTEST(str, char_find_c8_reverse) {
 UTEST(str, view_creation) {
   {
     const c8* cstr = "hello world";
-    sp_str_t view = sp_str_view(cstr);
+    sp_str_t view = sp_cstr_as_str(cstr);
     ASSERT_EQ(view.len, 11);
     ASSERT_EQ(view.data, cstr);
     SP_EXPECT_STR_EQ(view, sp_str_lit("hello world"));
@@ -673,21 +673,21 @@ UTEST(str, view_creation) {
 
   {
     const c8* cstr = "";
-    sp_str_t view = sp_str_view(cstr);
+    sp_str_t view = sp_cstr_as_str(cstr);
     ASSERT_EQ(view.len, 0);
     ASSERT_EQ(view.data, cstr);
     SP_EXPECT_STR_EQ(view, sp_str_lit(""));
   }
 
   {
-    sp_str_t view = sp_str_view(SP_NULLPTR);
+    sp_str_t view = sp_cstr_as_str(SP_NULLPTR);
     ASSERT_EQ(view.len, 0);
     ASSERT_EQ(view.data, SP_NULLPTR);
   }
 
   {
     c8 buffer[] = "mutable";
-    sp_str_t view = sp_str_view(buffer);
+    sp_str_t view = sp_cstr_as_str(buffer);
     buffer[0] = 'M';
     ASSERT_EQ(view.data[0], 'M');
   }
@@ -698,7 +698,7 @@ UTEST(sp_str_from_cstr, string_from_cstr) {
     const c8* cstr = "hello world";
     sp_str_t str = sp_str_from_cstr(sp_mem_get_scratch(), cstr);
     ASSERT_EQ(str.len, 11);
-    SP_EXPECT_STR_EQ(str, sp_str_view(cstr));
+    SP_EXPECT_STR_EQ(str, sp_cstr_as_str(cstr));
     ASSERT_NE(str.data, cstr);
   }
 

@@ -21,12 +21,12 @@ static cli_binds_t cli_binds;
 static sp_str_t cli_dispatched;
 
 static sp_cli_result_t cli_handler_ok(sp_cli_t* cli) {
-  cli_dispatched = sp_str_view(cli->cmd->name);
+  cli_dispatched = sp_cstr_as_str(cli->cmd->name);
   return SP_CLI_OK;
 }
 
 static sp_cli_result_t cli_handler_err(sp_cli_t* cli) {
-  cli_dispatched = sp_str_view(cli->cmd->name);
+  cli_dispatched = sp_cstr_as_str(cli->cmd->name);
   return SP_CLI_ERR;
 }
 

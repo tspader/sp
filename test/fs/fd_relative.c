@@ -116,19 +116,19 @@ sp_test_each(fs, fd_relative, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_path_t cwd_path = sp_path_join(mem, sandbox, sp_str_view(it->cwd));
+  sp_path_t cwd_path = sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd));
   sp_sys_fd_t cwd = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_fs_open_dir_at(cwd_path, &cwd));
 
   switch (it->op) {
     case OP_STAT: {
       sp_sys_file_meta_t metadata = sp_zero;
-      sp_expect_ok(t, sp_sys_get_path_metadata_s(cwd, sp_str_view(it->path), &metadata));
+      sp_expect_ok(t, sp_sys_get_path_metadata_s(cwd, sp_cstr_as_str(it->path), &metadata));
       break;
     }
     case OP_OPEN:
     case OP_OPEN_ABS: {
-      sp_str_t path = sp_str_view(it->path);
+      sp_str_t path = sp_cstr_as_str(it->path);
       if (it->op == OP_OPEN_ABS) sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sp_path_join(mem, sandbox, path), &path));
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
       sp_expect_ok(t, sp_sys_open_s(cwd, path, SP_SYS_OPEN_MODE_RO, 0, &fd));
@@ -145,11 +145,11 @@ sp_test_each(fs, fd_relative, test_t, tests) {
       break;
     }
     case OP_RENAME: {
-      sp_expect_ok(t, sp_sys_rename_s(cwd, sp_str_view(it->path), cwd, sp_str_view(it->dest)));
+      sp_expect_ok(t, sp_sys_rename_s(cwd, sp_cstr_as_str(it->path), cwd, sp_cstr_as_str(it->dest)));
       break;
     }
     case OP_LINK: {
-      sp_expect_ok(t, sp_sys_link_s(cwd, sp_str_view(it->path), cwd, sp_str_view(it->dest)));
+      sp_expect_ok(t, sp_sys_link_s(cwd, sp_cstr_as_str(it->path), cwd, sp_cstr_as_str(it->dest)));
       break;
     }
   }

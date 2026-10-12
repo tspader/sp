@@ -81,7 +81,7 @@ void sp_table_write_str(sp_table_writer_t* table, sp_str_t value) {
 }
 
 void sp_table_write_cstr(sp_table_writer_t* table, const c8* value) {
-  sp_table_write_str(table, sp_str_view(value));
+  sp_table_write_str(table, sp_cstr_as_str(value));
 }
 
 void sp_table_write_u64(sp_table_writer_t* table, u64 value) {

@@ -943,7 +943,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
       filter = argv[index] + sizeof(filter_str) - 1;
     } else if (0 ==
                UTEST_STRNCMP(argv[index], output_str, sizeof(output_str) - 1)) {
-      sp_str_t path = sp_str_view(argv[index] + sizeof(output_str) - 1);
+      sp_str_t path = sp_cstr_as_str(argv[index] + sizeof(output_str) - 1);
       sp_io_file_writer_from_path(&utest_state.output, path);
       utest_state.has_output = 1;
     } else if (0 == UTEST_STRNCMP(argv[index], list_str,
@@ -958,7 +958,7 @@ s32 utest_main(s32 argc, const c8 **argv) {
       enable_mixed_units = 0;
     } else if (0 == UTEST_STRNCMP(argv[index], random_order_with_seed_str,
                                   sizeof(random_order_with_seed_str) - 1)) {
-      seed = sp_parse_u32(sp_str_view(
+      seed = sp_parse_u32(sp_cstr_as_str(
           argv[index] + sizeof(random_order_with_seed_str) - 1));
       random_order = 1;
     } else if (0 == UTEST_STRNCMP(argv[index], random_order_str,

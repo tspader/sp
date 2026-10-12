@@ -366,7 +366,7 @@ u32 sp_elf_strtab_size(sp_elf_section_t* strtab) {
 sp_str_t sp_elf_strtab_get(sp_elf_section_t* strtab, u32 offset) {
   SP_ASSERT(strtab && strtab->type == SHT_STRTAB);
   SP_ASSERT(offset < strtab->buffer.size);
-  return sp_str_view((const c8*)strtab->buffer.data + offset);
+  return sp_cstr_as_str((const c8*)strtab->buffer.data + offset);
 }
 
 u32 sp_elf_add_symbol(sp_elf_section_t* symbols, sp_elf_t* elf, sp_str_t name, u64 value, u64 size, u8 bind, u8 type, u16 shndx) {
@@ -666,7 +666,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
     Elf64_Shdr* header = &section_headers[it];
 
     sp_assert(header->sh_name < string_header->sh_size);
-    sp_str_t name = sp_str_view(string_table + header->sh_name);
+    sp_str_t name = sp_cstr_as_str(string_table + header->sh_name);
 
     sp_elf_section_t* section = sp_elf_add_section(elf, name, header->sh_type, header->sh_addralign);
     section->flags = header->sh_flags;

@@ -64,8 +64,8 @@ sp_test_each(fs, write_atomic, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_path_t path = sp_path_join(sp_test_arena(t), sandbox, sp_str_view(it->path));
-  sp_expect_err_eq(t, sp_fs_write_atomic_at(path, sp_str_view(it->content)), it->expect.err);
+  sp_path_t path = sp_path_join(sp_test_arena(t), sandbox, sp_cstr_as_str(it->path));
+  sp_expect_err_eq(t, sp_fs_write_atomic_at(path, sp_cstr_as_str(it->content)), it->expect.err);
   fs_expect_paths(t, sandbox, it->expect.paths);
   fs_expect_no_temps(t, sandbox);
   return SP_OK;

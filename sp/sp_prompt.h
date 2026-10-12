@@ -1144,7 +1144,7 @@ const c8* sp_prompt_join_selection(sp_prompt_ctx_t* ctx, sp_prompt_select_option
       sp_io_write_str(&w.base, sp_str_lit(", "), SP_NULLPTR);
     }
     first = false;
-    sp_io_write_str(&w.base, sp_str_view(options[it].label), SP_NULLPTR);
+    sp_io_write_str(&w.base, sp_cstr_as_str(options[it].label), SP_NULLPTR);
   }
 
   sp_io_write_c8(&w.base, '\0');
@@ -1250,7 +1250,7 @@ void sp_prompt_send_status_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
 }
 
 void sp_prompt_send_status(sp_prompt_ctx_t* ctx, const c8* text) {
-  sp_prompt_send_status_str(ctx, sp_str_view(text));
+  sp_prompt_send_status_str(ctx, sp_cstr_as_str(text));
 }
 
 void sp_prompt_log_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
@@ -1263,7 +1263,7 @@ void sp_prompt_log_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
 }
 
 void sp_prompt_log(sp_prompt_ctx_t* ctx, const c8* text) {
-  sp_prompt_log_str(ctx, sp_str_view(text));
+  sp_prompt_log_str(ctx, sp_cstr_as_str(text));
 }
 
 bool sp_prompt_submitted(sp_prompt_ctx_t* ctx) {
@@ -1846,13 +1846,13 @@ sp_prompt_widget_t sp_prompt_message_widget(sp_prompt_ctx_t* ctx, sp_prompt_mess
 
 void sp_prompt_intro(sp_prompt_ctx_t* ctx, const c8* title) {
   sp_prompt_run(ctx, sp_prompt_intro_widget(ctx, (sp_prompt_intro_t) {
-    .text = sp_str_view(title),
+    .text = sp_cstr_as_str(title),
   }));
 }
 
 void sp_prompt_outro(sp_prompt_ctx_t* ctx, const c8* message) {
   sp_prompt_run(ctx, sp_prompt_outro_widget(ctx, (sp_prompt_outro_t) {
-    .text = sp_str_view(message),
+    .text = sp_cstr_as_str(message),
   }));
 }
 
@@ -1903,14 +1903,14 @@ static void sp_prompt_note_append(sp_prompt_note_t* note, sp_str_t text, sp_da(s
 
 sp_prompt_note_t sp_prompt_note_new(sp_mem_t mem, const c8* title) {
   return (sp_prompt_note_t) {
-    .title = sp_str_copy(mem, sp_str_view(title)),
+    .title = sp_str_copy(mem, sp_cstr_as_str(title)),
     .mem = mem,
     .lines = sp_da_new(mem, sp_prompt_note_line_t),
   };
 }
 
 void sp_prompt_note_line(sp_prompt_note_t* note, const c8* text) {
-  sp_prompt_note_append(note, sp_str_copy(note->mem, sp_str_view(text)), SP_NULLPTR);
+  sp_prompt_note_append(note, sp_str_copy(note->mem, sp_cstr_as_str(text)), SP_NULLPTR);
 }
 
 void sp_prompt_note_line_fmt(sp_prompt_note_t* note, const c8* fmt, ...) {
@@ -1932,7 +1932,7 @@ void sp_prompt_note_ex(sp_prompt_ctx_t* ctx, sp_prompt_note_t note) {
 
 void sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* message, const c8* title) {
   sp_prompt_note_t note = sp_prompt_note_new(sp_mem_arena_as_allocator(ctx->arena), title);
-  sp_str_t text = sp_str_view(message);
+  sp_str_t text = sp_cstr_as_str(message);
   if (!sp_str_empty(text)) {
     sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(note.mem);
     sp_da(sp_str_t) split = sp_str_split_c8(s.mem, text, '\n');
@@ -1946,7 +1946,7 @@ void sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* message, const c8* title) {
 
 void sp_prompt_cancel(sp_prompt_ctx_t* ctx, const c8* message) {
   sp_prompt_run(ctx, sp_prompt_message_widget(ctx, (sp_prompt_message_t) {
-    .text = sp_str_view(message),
+    .text = sp_cstr_as_str(message),
     .symbol = 0x25a0,
     .ansi = SP_ANSI_FG_RED_U8,
   }));
@@ -1954,7 +1954,7 @@ void sp_prompt_cancel(sp_prompt_ctx_t* ctx, const c8* message) {
 
 void sp_prompt_info(sp_prompt_ctx_t* ctx, const c8* message) {
   sp_prompt_run(ctx, sp_prompt_message_widget(ctx, (sp_prompt_message_t) {
-    .text = sp_str_view(message),
+    .text = sp_cstr_as_str(message),
     .symbol = 0x25cf,
     .ansi = SP_ANSI_FG_CYAN_U8,
   }));
@@ -1962,7 +1962,7 @@ void sp_prompt_info(sp_prompt_ctx_t* ctx, const c8* message) {
 
 void sp_prompt_warn(sp_prompt_ctx_t* ctx, const c8* message) {
   sp_prompt_run(ctx, sp_prompt_message_widget(ctx, (sp_prompt_message_t) {
-    .text = sp_str_view(message),
+    .text = sp_cstr_as_str(message),
     .symbol = 0x25b2,
     .ansi = SP_ANSI_FG_YELLOW_U8,
   }));
@@ -1970,7 +1970,7 @@ void sp_prompt_warn(sp_prompt_ctx_t* ctx, const c8* message) {
 
 void sp_prompt_error(sp_prompt_ctx_t* ctx, const c8* message) {
   sp_prompt_run(ctx, sp_prompt_message_widget(ctx, (sp_prompt_message_t) {
-    .text = sp_str_view(message),
+    .text = sp_cstr_as_str(message),
     .symbol = 0x25a0,
     .ansi = SP_ANSI_FG_RED_U8,
   }));
@@ -1978,7 +1978,7 @@ void sp_prompt_error(sp_prompt_ctx_t* ctx, const c8* message) {
 
 void sp_prompt_success(sp_prompt_ctx_t* ctx, const c8* message) {
   sp_prompt_run(ctx, sp_prompt_message_widget(ctx, (sp_prompt_message_t) {
-    .text = sp_str_view(message),
+    .text = sp_cstr_as_str(message),
     .symbol = 0x25c6,
     .ansi = SP_ANSI_FG_GREEN_U8,
   }));
@@ -2212,7 +2212,7 @@ static void sp_prompt_confirm_render(sp_prompt_ctx_t* ctx) {
   };
 
   sp_prompt_write_state_prefix(ctx);
-  sp_prompt_render_line(ctx, sp_str_view(confirm->config.prompt), sp_zero_s(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, sp_cstr_as_str(confirm->config.prompt), sp_zero_s(sp_prompt_style_t));
   ctx->cursor_col = 0;
   ctx->cursor_row++;
 
@@ -2321,7 +2321,7 @@ static sp_str_t sp_prompt_option_label(sp_prompt_select_option_t* option) {
     return sp_str_lit("");
   }
 
-  return sp_str_view(option->label);
+  return sp_cstr_as_str(option->label);
 }
 
 static sp_str_t sp_prompt_option_hint(sp_prompt_select_option_t* option) {
@@ -2329,7 +2329,7 @@ static sp_str_t sp_prompt_option_hint(sp_prompt_select_option_t* option) {
     return sp_str_lit("");
   }
 
-  return sp_str_view(option->hint);
+  return sp_cstr_as_str(option->hint);
 }
 
 static bool sp_prompt_str_contains_case_insensitive(sp_str_t str, sp_str_t needle) {
@@ -2490,7 +2490,7 @@ static void sp_prompt_select_render(sp_prompt_ctx_t* ctx) {
   };
 
   sp_prompt_write_state_prefix(ctx);
-  sp_prompt_render_line(ctx, select->config.prompt == SP_NULLPTR ? sp_str_lit("") : sp_str_view(select->config.prompt), sp_zero_s(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, select->config.prompt == SP_NULLPTR ? sp_str_lit("") : sp_cstr_as_str(select->config.prompt), sp_zero_s(sp_prompt_style_t));
   if (select->config.filter) {
     sp_prompt_render_line(ctx, sp_str_lit(" "), sp_zero_s(sp_prompt_style_t));
     if (sp_str_empty(select->state.filter_value)) {
@@ -2757,7 +2757,7 @@ static void sp_prompt_multiselect_render(sp_prompt_ctx_t* ctx) {
   };
 
   sp_prompt_write_state_prefix(ctx);
-  sp_prompt_render_line(ctx, select->config.prompt == SP_NULLPTR ? sp_str_lit("") : sp_str_view(select->config.prompt), sp_zero_s(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, select->config.prompt == SP_NULLPTR ? sp_str_lit("") : sp_cstr_as_str(select->config.prompt), sp_zero_s(sp_prompt_style_t));
   if (select->config.filter) {
     sp_prompt_render_line(ctx, sp_str_lit(" "), sp_zero_s(sp_prompt_style_t));
     if (sp_str_empty(select->state.filter_value)) {
@@ -2995,8 +2995,8 @@ sp_prompt_widget_t sp_prompt_password_widget(sp_prompt_ctx_t* ctx, sp_prompt_pas
 
 const c8* sp_prompt_text(sp_prompt_ctx_t* ctx, const c8* prompt, const c8* initial) {
   sp_prompt_run(ctx, sp_prompt_text_widget(ctx, (sp_prompt_text_t) {
-    .prompt = sp_str_view(prompt),
-    .prefill = sp_str_view(initial),
+    .prompt = sp_cstr_as_str(prompt),
+    .prefill = sp_cstr_as_str(initial),
   }));
   return sp_prompt_get_str(ctx);
 }
@@ -3019,8 +3019,8 @@ void sp_prompt_multiselect(sp_prompt_ctx_t* ctx, sp_prompt_multiselect_t config)
 
 const c8* sp_prompt_password(sp_prompt_ctx_t* ctx, const c8* prompt, const c8* prefill) {
   sp_prompt_run(ctx, sp_prompt_password_widget(ctx, (sp_prompt_password_t) {
-    .prompt = sp_str_view(prompt),
-    .prefill = sp_str_view(prefill),
+    .prompt = sp_cstr_as_str(prompt),
+    .prefill = sp_cstr_as_str(prefill),
     .mask = true,
   }));
   return sp_prompt_get_str(ctx);
@@ -3103,7 +3103,7 @@ static void sp_prompt_spinner_render(sp_prompt_ctx_t* ctx) {
     sp_prompt_render_line(ctx, sp_prompt_repeat(ctx, codepoint, 1), style);
     sp_prompt_render_line(ctx, sp_str_lit("  "), sp_zero_s(sp_prompt_style_t));
   }
-  sp_prompt_render_line(ctx, sp_str_view(spinner->config.prompt), sp_zero_s(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, sp_cstr_as_str(spinner->config.prompt), sp_zero_s(sp_prompt_style_t));
   ctx->cursor_col = 0;
   ctx->cursor_row++;
 }
@@ -3185,7 +3185,7 @@ static void sp_prompt_progress_render(sp_prompt_ctx_t* ctx) {
   f32 ratio = p->value;
 
   sp_prompt_write_state_prefix(ctx);
-  sp_prompt_render_line(ctx, sp_str_view(p->config.prompt), sp_zero_s(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, sp_cstr_as_str(p->config.prompt), sp_zero_s(sp_prompt_style_t));
   ctx->cursor_col = 0;
   ctx->cursor_row++;
 
@@ -3460,7 +3460,7 @@ static void sp_prompt_knight_rider_render(sp_prompt_ctx_t* ctx) {
   }
 
   sp_prompt_render_line(ctx, sp_str_lit("  "), sp_zero_s(sp_prompt_style_t));
-  sp_prompt_render_line(ctx, sp_str_view(c.prompt), sp_zero_s(sp_prompt_style_t));
+  sp_prompt_render_line(ctx, sp_cstr_as_str(c.prompt), sp_zero_s(sp_prompt_style_t));
   ctx->cursor_col = 0;
   ctx->cursor_row++;
 }
