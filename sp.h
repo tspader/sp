@@ -140,18 +140,22 @@
 //////////////
 // COMPILER //
 //////////////
-#if defined(_MSC_VER)
-  #define SP_MSVC
-#endif
-
 #if defined(__TINYC__)
   #define SP_TCC
 #elif defined(__clang__)
   #define SP_CLANG
-  #define SP_GNUC
-#elif defined(__GNUC__) && !defined(SP_CLANG)
+#elif defined(__GNUC__)
   #define SP_GCC
+#elif defined(_MSC_VER)
+  #define SP_CL
+#endif
+
+#if defined(SP_GCC) || defined(SP_CLANG)
   #define SP_GNUC
+#endif
+
+#if defined(_MSC_VER)
+  #define SP_MSVC
 #endif
 
 //////////
