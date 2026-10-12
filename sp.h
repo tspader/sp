@@ -2804,7 +2804,6 @@ SP_API sp_str_t        sp_str_prefix(sp_str_t str, s32 len);
 SP_API sp_str_t        sp_str_suffix(sp_str_t str, s32 len);
 SP_API sp_str_t        sp_str_skip(sp_str_t str, s32 n);
 SP_API sp_str_t        sp_str_sub(sp_str_t str, s32 index, s32 len);
-SP_API sp_str_t        sp_str_sub_reverse(sp_str_t str, s32 index, s32 len);
 SP_API sp_str_t        sp_str_replace_c8(sp_mem_t mem, sp_str_t str, c8 from, c8 to);
 SP_API sp_str_t        sp_str_pad(sp_mem_t mem, sp_str_t str, u32 n);
 SP_API sp_str_t        sp_str_trim_left(sp_str_t str);
@@ -13410,7 +13409,7 @@ bool sp_str_starts_with(sp_str_t str, sp_str_t prefix) {
 bool sp_str_ends_with(sp_str_t str, sp_str_t suffix) {
   if (str.len < suffix.len) return false;
 
-  return sp_str_equal(sp_str_sub_reverse(str, 0, suffix.len), suffix);
+  return sp_str_equal(sp_str_suffix(str, suffix.len), suffix);
 }
 
 bool sp_str_contains(sp_str_t str, sp_str_t needle) {
@@ -13505,14 +13504,6 @@ sp_str_t sp_str_sub(sp_str_t str, s32 index, s32 len) {
   SP_ASSERT(index + len <= (s32)str.len);
   if (!len) return sp_zero_s(sp_str_t);
   return sp_str(str.data + index, (u32)len);
-}
-
-sp_str_t sp_str_sub_reverse(sp_str_t str, s32 index, s32 len) {
-  if (!len) return sp_zero_s(sp_str_t);
-  return (sp_str_t) {
-    .data = str.data + str.len + index - len,
-    .len = (u32)len,
-  };
 }
 
 c8* sp_cstr_from_str(sp_mem_t mem, sp_str_t str) {
@@ -21251,8 +21242,6 @@ sp_str_t sp_str_join_n(sp_mem_t mem, sp_str_t* strings, u32 num_strings, sp_str_
   sp_io_dyn_mem_writer_init(mem, &io);
 
   sp_for(index, num_strings) {
-    if (sp_str_empty(strings[index])) continue;
-
     sp_io_write_str(&io.base, strings[index], SP_NULLPTR);
 
     if (index != (num_strings - 1)) {

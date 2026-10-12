@@ -24,6 +24,7 @@ source = [
   "test/sys/inherit.c",
   "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c",
   "test/fs/*.c", "test/fs/windows/nt_path.c",
+  "test/str/*.c", "test/str/utf8/*.c",
   "test/msvc/*.c",
   "test/mem/uninitialized.c",
   "test/atomic.c",
