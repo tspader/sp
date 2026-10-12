@@ -189,8 +189,24 @@
 //////////////
 // LANGUAGE //
 //////////////
-#ifdef __cplusplus
+#if defined(__cplusplus)
   #define SP_CPP
+#endif
+
+#if defined(SP_CPP)
+  #define SP_C_VERSION 0
+#elif defined(__STDC_VERSION__)
+  #define SP_C_VERSION __STDC_VERSION__
+#else
+  #define SP_C_VERSION 0
+#endif
+
+#if !defined(SP_CPP)
+  #define SP_CPP_VERSION 0
+#elif defined(_MSVC_LANG)
+  #define SP_CPP_VERSION _MSVC_LANG
+#else
+  #define SP_CPP_VERSION __cplusplus
 #endif
 
 
