@@ -121,10 +121,6 @@ name = "msvc"
 source = ["example/msvc.c"]
 
 [[example]]
-name = "iterator"
-source = ["example/fs/iterator.c"]
-
-[[example]]
 name = "prompt"
 source = ["example/prompt.c"]
 
