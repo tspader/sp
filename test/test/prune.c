@@ -114,8 +114,11 @@ sp_test_each(runner, prune, prune_case_t, prune_cases) {
   }
   sp_expect_strs_eq(t, survivors, sp_da_size(survivors), it->expect);
 
+  sp_sys_dir_t runs_dir = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(runs, &runs_dir));
   u64 entries = 0;
-  sp_fs_for(mem, runs, walk) entries++;
+  sp_fs_dir_for(runs_dir, walk) entries++;
+  sp_fs_close_dir(runs_dir);
   sp_expect_eq(t, entries, sp_da_size(survivors));
   return SP_OK;
 }

@@ -64,8 +64,11 @@ sp_test_each(runner, dir, dir_case_t, dir_cases) {
   sp_must_eq(t, out.status.exit_code, 0);
 
   sp_str_t runs = sp_fs_join_path(mem, sp_cstr_as_str(it->expect), sp_fs_get_stem(exe));
+  sp_sys_dir_t runs_dir = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(sp_path_join(mem, sandbox, runs), &runs_dir));
   sp_da(sp_str_t) names = sp_da_new(mem, sp_str_t);
-  sp_fs_for(mem, sp_path_join(mem, sandbox, runs), walk) sp_da_push(names, sp_str_copy(mem, walk.entry.name));
+  sp_fs_dir_for(runs_dir, walk) sp_da_push(names, sp_str_copy(mem, walk.entry.name));
+  sp_fs_close_dir(runs_dir);
   sp_must_eq(t, sp_da_size(names), (u64)1);
 
   sp_str_t dir = sp_fs_join_path(mem, sp_fs_join_path(mem, runs, names[0]), sp_str_lit("child.pass"));

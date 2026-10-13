@@ -31,7 +31,7 @@ static bool sys_check_err(sp_test_t* t, sp_err_t err, sp_err_t want) {
 sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
   sp_sys_fd_t fds [SYS_CASE_MAX_FDS];
   sp_carr_for(fds, it) fds[it] = SP_SYS_INVALID_FD;
-  sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
+  sp_sys_dir_t sandbox_dir = sp_zero;
 
   if (sys_case_wants_symlinks(c)) sp_test_skip_without_symlinks();
 
@@ -65,7 +65,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     }
   }
 
-  sp_try(sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &sandbox_fd));
+  sp_try(sp_fs_open_dir_at(sandbox, &sandbox_dir));
 
   sp_carr_for(c->steps, it) {
     sys_step_t* step = &c->steps[it];
@@ -77,7 +77,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
 
       case SYS_STEP_OPEN: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-        sp_err_t err = sp_sys_open_s(sandbox_fd, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, &fd);
+        sp_err_t err = sp_sys_open_s(sandbox_dir, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, &fd);
         sys_check_err(t, err, step->open.err);
         if (!err) {
           if (step->open.err) sp_sys_close(fd);
@@ -86,13 +86,13 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
         break;
       }
       case SYS_STEP_OPEN_DIR: {
-        sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+        sp_sys_dir_t dir = sp_zero;
         sp_str_t path = sp_cstr_as_str(step->open_dir.path);
-        sp_err_t err = sp_sys_open_dir_s(sandbox_fd, path, step->open_dir.flags, &fd);
+        sp_err_t err = sp_sys_open_dir_s(sandbox_dir, path, step->open_dir.flags, &dir);
         sys_check_err(t, err, step->open_dir.err);
         if (!err) {
-          if (step->open_dir.err) sp_sys_close(fd);
-          else                    fds[step->open_dir.slot] = fd;
+          if (step->open_dir.err) sp_fs_close_dir(dir);
+          else                    fds[step->open_dir.slot] = dir.fd;
         }
         break;
       }
@@ -170,6 +170,6 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     }
   }
 
-  sp_sys_close(sandbox_fd);
+  sp_fs_close_dir(sandbox_dir);
   return SP_OK;
 }
