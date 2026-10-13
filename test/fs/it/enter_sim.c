@@ -25,10 +25,27 @@ typedef struct {
   const c8* name;
   sim_dir_t dirs [SIM_MAX_DIRS];
   enter_t enter [MAX_VISITS];
+  const c8* skip [MAX_VISITS];
   expect_t expect;
 } test_t;
 
 static const test_t tests [] = {
+  {
+    .name = "descends_without_enter",
+    .dirs = {
+      { .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
+      { .path = "B", .entries = { { "D", SP_FS_KIND_FILE } } },
+    },
+    .expect = {
+      .visits = {
+        { "B", SP_FS_KIND_DIR },
+        { "B/D", SP_FS_KIND_FILE },
+        { "B", SP_FS_KIND_DIR, SP_FS_POST_ORDER },
+        { "C", SP_FS_KIND_FILE },
+      },
+      .opens = 2,
+    },
+  },
   {
     .name = "leaves_after_children_before_siblings",
     .dirs = {
@@ -52,6 +69,7 @@ static const test_t tests [] = {
       { .entries = { { "B", SP_FS_KIND_DIR } } },
       { .path = "B", .entries = { { "C", SP_FS_KIND_FILE } } },
     },
+    .skip = { "B" },
     .expect = {
       .visits = {
         { "B", SP_FS_KIND_DIR },
@@ -120,6 +138,14 @@ static s32 find_enter(const test_t* test, sp_str_t path, sp_fs_order_t order, co
   return -1;
 }
 
+static bool is_skipped(const test_t* test, sp_str_t path) {
+  sp_carr_for(test->skip, s) {
+    if (!test->skip[s]) break;
+    if (sp_str_equal_cstr(path, test->skip[s])) return true;
+  }
+  return false;
+}
+
 sp_test_each(fs, it_enter_sim, test_t, tests, .serial = true) {
   sp_mem_t mem = sp_test_arena(t);
 
@@ -162,7 +188,7 @@ sp_test_each(fs, it_enter_sim, test_t, tests, .serial = true) {
         used[enter] = true;
         sp_expect_err_eq(t, sp_fs_it_enter(&walk), it->enter[enter].err);
       }
-      else if (visit.order == SP_FS_PRE_ORDER) {
+      else if (visit.order == SP_FS_PRE_ORDER && is_skipped(it, entry.path)) {
         sp_fs_it_skip(&walk);
       }
     }

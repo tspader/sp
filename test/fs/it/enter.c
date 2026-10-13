@@ -19,31 +19,43 @@ typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
   enter_t enter [FS_MAX_PATHS];
+  const c8* skip [FS_MAX_PATHS];
   expect_t expect;
 } test_t;
 
 static const test_t tests [] = {
   {
-    .name = "enters_only_listed",
+    .name = "descends_without_enter",
     .setup = {
-      { "R/A/B" },
-      { "R/C/D" },
-      { "R/E" },
+      { "A/B" },
+      { "C" },
     },
-    .enter = { { "A" } },
     .expect = {
       .entries = {
         { "A", SP_FS_KIND_DIR },
         { "A/B", SP_FS_KIND_FILE },
-        { "C", SP_FS_KIND_DIR },
-        { "E", SP_FS_KIND_FILE },
+        { "C", SP_FS_KIND_FILE },
+      },
+    },
+  },
+  {
+    .name = "skip_prunes_dir",
+    .setup = {
+      { "A/B" },
+      { "C" },
+    },
+    .skip = { "A" },
+    .expect = {
+      .entries = {
+        { "A", SP_FS_KIND_DIR },
+        { "C", SP_FS_KIND_FILE },
       },
     },
   },
   {
     .name = "nested_enters",
     .setup = {
-      { "R/A/B/C" },
+      { "A/B/C" },
     },
     .enter = { { "A" }, { "A/B" } },
     .expect = {
@@ -57,8 +69,8 @@ static const test_t tests [] = {
   {
     .name = "enter_file_is_not_dir",
     .setup = {
-      { "R/A" },
-      { "R/B" },
+      { "A" },
+      { "B" },
     },
     .enter = { { "A", SP_ERR_SYS_NOT_DIR } },
     .expect = {
@@ -71,9 +83,8 @@ static const test_t tests [] = {
   {
     .name = "enter_symlink_is_loop",
     .setup = {
-      { "R/A", FS_SETUP_DIR },
-      { "R/A/B" },
-      { .path = "R/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
+      { "A", FS_SETUP_DIR },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .enter = { { "L", SP_ERR_SYS_LOOP } },
     .expect = {
@@ -86,8 +97,8 @@ static const test_t tests [] = {
   {
     .name = "enter_vanished_is_not_found",
     .setup = {
-      { "R/A", FS_SETUP_DIR },
-      { "R/C" },
+      { "A", FS_SETUP_DIR },
+      { "C" },
     },
     .enter = { { "A", SP_ERR_SYS_NOT_FOUND, .vanish = true } },
     .expect = {
@@ -106,6 +117,14 @@ static const enter_t* find_enter(const test_t* test, sp_str_t path) {
     if (sp_str_equal_cstr(path, enter->path)) return enter;
   }
   return SP_NULLPTR;
+}
+
+static bool is_skipped(const test_t* test, sp_str_t path) {
+  sp_carr_for(test->skip, s) {
+    if (!test->skip[s]) break;
+    if (sp_str_equal_cstr(path, test->skip[s])) return true;
+  }
+  return false;
 }
 
 sp_test_each(fs, it_enter, test_t, tests) {
@@ -128,8 +147,8 @@ sp_test_each(fs, it_enter, test_t, tests) {
   sp_str_t entered [FS_MAX_PATHS] = sp_zero;
   u32 depth = 0;
 
-  sp_sys_dir_t root = sp_sys_dir(SP_SYS_INVALID_FD);
-  sp_must_ok(t, sp_fs_open_dir_at(sp_path_join(mem, sandbox, sp_str_lit("R")), &root));
+  sp_sys_dir_t root = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &root));
 
   sp_fs_it_t walk = sp_fs_it(mem, root);
   sp_fs_visit_t visit = sp_zero;
@@ -145,17 +164,22 @@ sp_test_each(fs, it_enter, test_t, tests) {
       }
       case SP_FS_PRE_ORDER: {
         fs_match(t, entries, num_entries, entry.path, entry.kind);
-        const enter_t* enter = find_enter(it, entry.path);
-        if (!enter) {
+        bool descend = entry.kind == SP_FS_KIND_DIR;
+        if (is_skipped(it, entry.path)) {
           sp_fs_it_skip(&walk);
-          break;
+          descend = false;
         }
-        if (enter->vanish) sp_must_ok(t, sp_sys_rmdir_s(entry.at.dir, entry.at.sub));
-        sp_expect_err_eq(t, sp_fs_it_enter(&walk), enter->err);
-        if (enter->err) break;
-        sp_str_t path = sp_str_copy(mem, entry.path);
-        entered[depth++] = path;
-        leaves[num_leaves++] = (fs_match_t) { .key = path, .kind = SP_FS_KIND_DIR };
+        const enter_t* enter = find_enter(it, entry.path);
+        if (enter) {
+          if (enter->vanish) sp_must_ok(t, sp_sys_rmdir_s(entry.at.dir, entry.at.sub));
+          sp_expect_err_eq(t, sp_fs_it_enter(&walk), enter->err);
+          descend = !enter->err;
+        }
+        if (descend) {
+          sp_str_t path = sp_str_copy(mem, entry.path);
+          entered[depth++] = path;
+          leaves[num_leaves++] = (fs_match_t) { .key = path, .kind = SP_FS_KIND_DIR };
+        }
         break;
       }
     }
