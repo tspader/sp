@@ -240,7 +240,7 @@ static sp_err_t drive(sp_fs_atomic_t* af, sp_err_t err, const test_t* it) {
 
 sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
@@ -257,7 +257,7 @@ sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
 
 sp_test_each(fs, atomic_staged, test_t, staged_tests) {
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));

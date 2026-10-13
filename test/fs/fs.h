@@ -97,46 +97,47 @@ static void fs_match_finish(sp_test_t* t, fs_match_t* matches, u32 n) {
   }
 }
 
-static void fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t setup [FS_MAX_SETUP]) {
+static sp_err_t fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t setup [FS_MAX_SETUP]) {
   sp_mem_t mem = sp_test_arena(t);
   sp_for(it, FS_MAX_SETUP) {
     const fs_setup_t* ent = &setup[it];
     if (!ent->path) break;
+    sp_test_kv_c(t, "setup", ent->path);
 
     sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
     sp_path_t parent = sp_path_parent(mem, path);
     sp_fs_create_dir_at(parent);
 
-    sp_err_t err = SP_OK;
     switch (ent->kind) {
       case FS_SETUP_FILE: {
-        err = sp_fs_create_file_str_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""));
+        sp_try(sp_fs_create_file_str_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit("")));
         break;
       }
       case FS_SETUP_DIR: {
-        err = sp_fs_create_dir_at(path);
+        sp_try(sp_fs_create_dir_at(path));
         break;
       }
       case FS_SETUP_SYMLINK:
       case FS_SETUP_DIR_SYMLINK: {
         sp_fs_kind_t kind = ent->kind == FS_SETUP_DIR_SYMLINK ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
-        err = sp_fs_create_sym_link_at(sp_cstr_as_str(ent->target), path, kind);
+        sp_try(sp_fs_create_sym_link_at(sp_cstr_as_str(ent->target), path, kind));
         break;
       }
       case FS_SETUP_FIFO: {
 #if defined(SP_POSIX)
         sp_str_t dir = sp_zero;
-        err = sp_fs_canonicalize_path_at(mem, parent, &dir);
+        sp_try(sp_fs_canonicalize_path_at(mem, parent, &dir));
         sp_str_t fifo = sp_fs_join_path(mem, dir, sp_fs_get_name(path.sub));
-        if (!err) err = mkfifo(sp_cstr_from_str(mem, fifo), 0644) ? SP_ERR_SYS : SP_OK;
-#else
-        err = SP_ERR_SYS_UNSUPPORTED;
-#endif
+        if (mkfifo(sp_cstr_from_str(mem, fifo), 0644)) return SP_ERR_SYS;
         break;
+#else
+        return SP_ERR_SYS_UNSUPPORTED;
+#endif
       }
     }
-    if (err) sp_test_fail(t, "failed to create {}: {}", sp_fmt_cstr(ent->path), sp_fmt_str(sp_test_err_str(t, err)));
   }
+  sp_test_kv_clear(t, "setup");
+  return SP_OK;
 }
 
 static void fs_expect_no_temps(sp_test_t* t, sp_path_t sandbox) {

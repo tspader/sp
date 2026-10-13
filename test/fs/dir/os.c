@@ -92,7 +92,7 @@ sp_test_each(fs, dir, test_t, tests) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_path_t dir = it->dir ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->dir)) : sandbox;
 
@@ -143,7 +143,7 @@ sp_test(fs, dir_reiterates_handle) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
 
   sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));

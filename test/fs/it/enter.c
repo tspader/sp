@@ -132,7 +132,7 @@ sp_test_each(fs, it_enter, test_t, tests) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   fs_match_t entries [FS_MAX_PATHS] = sp_zero;
   u32 num_entries = 0;

@@ -72,7 +72,7 @@ static const test_t tests [] = {
 
 sp_test_each(fs, create_file, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_path_t path = sp_path_join(sp_test_arena(t), sandbox, sp_cstr_as_str(it->path));
   sp_err_t result = SP_OK;
