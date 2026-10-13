@@ -410,7 +410,7 @@ static void run_cli_completer_path_test(s32* utest_result, sp_mem_t mem, cli_com
   if (t.expect.anchored) {
     c8 cwd [SP_PATH_MAX];
     u64 cwd_len = 0;
-    sp_err_t err = sp_sys_get_fd_path(sp_fs_get_cwd(), cwd, sizeof(cwd), &cwd_len);
+    sp_err_t err = sp_sys_get_fd_path(sp_fs_get_cwd().fd, cwd, sizeof(cwd), &cwd_len);
     if (err == SP_ERR_SYS_UNSUPPORTED) UTEST_SKIP("no cwd path");
     EXPECT_EQ(err, SP_OK);
     if (err) return;
