@@ -535,11 +535,11 @@ sp_test_each(fs, copy, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_path_t dst_base = it->dst_dir ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->dst_dir)) : sandbox;
-  sp_sys_fd_t dst_dir = SP_SYS_INVALID_FD;
+  sp_sys_dir_t dst_dir = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_must_ok(t, sp_fs_open_dir_at(dst_base, &dst_dir));
 
   sp_path_t src = sp_path(dir, sp_cstr_as_str(it->src));
@@ -551,8 +551,8 @@ sp_test_each(fs, copy, test_t, tests) {
     case OP_COPY_TREE: result = sp_fs_copy_tree_at(src, dst, it->mode); break;
     case OP_COPY:      result = sp_fs_copy_at(src, dst, it->mode); break;
   }
-  sp_sys_close(dst_dir);
-  sp_sys_close(dir);
+  sp_fs_close_dir(dst_dir);
+  sp_fs_close_dir(dir);
   sp_expect_err_eq(t, result, it->err);
 
   fs_expect_paths(t, sandbox, it->expect);

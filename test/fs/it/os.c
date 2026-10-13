@@ -6,14 +6,12 @@ typedef struct {
 } entry_t;
 
 typedef struct {
-  sp_err_t err;
   entry_t entries [FS_MAX_PATHS];
 } expect_t;
 
 typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
-  const c8* root;
   bool recursive;
   expect_t expect;
 } test_t;
@@ -22,9 +20,9 @@ static const test_t tests [] = {
   {
     .name = "lists_entries_with_kinds",
     .setup = {
-      { "R/A" },
-      { "R/B", FS_SETUP_DIR },
-      { "R/C" },
+      { "A" },
+      { "B", FS_SETUP_DIR },
+      { "C" },
     },
     .expect = {
       .entries = {
@@ -37,8 +35,8 @@ static const test_t tests [] = {
   {
     .name = "hidden_file",
     .setup = {
-      { "R/.A" },
-      { "R/B" },
+      { ".A" },
+      { "B" },
     },
     .expect = {
       .entries = {
@@ -50,8 +48,8 @@ static const test_t tests [] = {
   {
     .name = "unicode_entries",
     .setup = {
-      { "R/\xc3\xb1\x61\x6d\x65.txt" },
-      { "R/\xc3\xbc\x6e\x69", FS_SETUP_DIR },
+      { "\xc3\xb1\x61\x6d\x65.txt" },
+      { "\xc3\xbc\x6e\x69", FS_SETUP_DIR },
     },
     .expect = {
       .entries = {
@@ -62,16 +60,13 @@ static const test_t tests [] = {
   },
   {
     .name = "empty_dir",
-    .setup = {
-      { "R", FS_SETUP_DIR },
-    },
   },
   {
     .name = "does_not_recurse",
     .setup = {
-      { "R/A", FS_SETUP_DIR },
-      { "R/A/B" },
-      { "R/C" },
+      { "A", FS_SETUP_DIR },
+      { "A/B" },
+      { "C" },
     },
     .expect = {
       .entries = {
@@ -83,11 +78,11 @@ static const test_t tests [] = {
   {
     .name = "recursive_nested_dirs",
     .setup = {
-      { "R/A", FS_SETUP_DIR },
-      { "R/A/B", FS_SETUP_DIR },
-      { "R/C" },
-      { "R/A/D" },
-      { "R/A/B/E" },
+      { "A", FS_SETUP_DIR },
+      { "A/B", FS_SETUP_DIR },
+      { "C" },
+      { "A/D" },
+      { "A/B/E" },
     },
     .recursive = true,
     .expect = {
@@ -103,9 +98,9 @@ static const test_t tests [] = {
   {
     .name = "recursive_symlink_not_followed",
     .setup = {
-      { "R/A", FS_SETUP_DIR },
-      { "R/A/B" },
-      { .path = "R/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
+      { "A", FS_SETUP_DIR },
+      { "A/B" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .recursive = true,
     .expect = {
@@ -116,39 +111,11 @@ static const test_t tests [] = {
       },
     },
   },
-  {
-    .name = "trailing_slash_root",
-    .setup = {
-      { "R/A" },
-    },
-    .root = "R/",
-    .expect = {
-      .entries = {
-        { "A", SP_FS_KIND_FILE },
-      },
-    },
-  },
-  {
-    .name = "nonexistent",
-    .expect = {
-      .err = SP_ERR_SYS_NOT_FOUND,
-    },
-  },
-  {
-    .name = "file_not_dir",
-    .setup = {
-      { "R" },
-    },
-    .expect = {
-      .err = SP_ERR_SYS_NOT_DIR,
-    },
-  },
 #if defined(SP_POSIX)
   {
     .name = "special_file",
     .setup = {
-      { "R", FS_SETUP_DIR },
-      { .path = "R/F", .kind = FS_SETUP_FIFO },
+      { .path = "F", .kind = FS_SETUP_FIFO },
     },
     .expect = {
       .entries = {
@@ -167,33 +134,31 @@ sp_test_each(fs, it, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
-
-  sp_str_t base = sp_str_lit("R");
-  sp_path_t root = sp_path(dir, sp_cstr_as_str(it->root ? it->root : "R"));
-
   fs_match_t matches [FS_MAX_PATHS] = sp_zero;
   u32 n = 0;
   sp_carr_for(it->expect.entries, e) {
     const entry_t* want = &it->expect.entries[e];
     if (!want->path) break;
-    matches[n++] = (fs_match_t) { .key = sp_fs_join_path(mem, base, sp_cstr_as_str(want->path)), .kind = want->kind };
+    matches[n++] = (fs_match_t) { .key = sp_cstr_as_str(want->path), .kind = want->kind };
   }
 
-  sp_fs_it_t walk = sp_fs_it_new_at(mem, root, 0);
-  while (it->recursive ? sp_fs_it_walk(&walk) : sp_fs_it_next(&walk)) {
-    sp_expect_str_eq(t, walk.entry.name, sp_fs_get_name(walk.entry.path));
-    sp_expect_str_eq(t, sp_fs_join_path(mem, base, walk.entry.rel), walk.entry.path);
-    sp_expect_str_eq(t, walk.at.sub, walk.entry.name);
-    sp_expect_eq(t, (u32)sp_fs_get_kind_at(walk.at), (u32)walk.entry.kind);
-    fs_match(t, matches, n, walk.entry.path, walk.entry.kind);
+  sp_sys_dir_t root = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &root));
+
+  sp_fs_it_t walk = sp_fs_it(mem, root);
+  sp_fs_it_entry_t entry = sp_zero;
+  while (sp_fs_it_next(&walk, &entry)) {
+    if (!it->recursive) sp_fs_it_skip(&walk);
+    sp_expect_str_eq(t, entry.name, sp_fs_get_name(entry.path));
+    sp_expect_str_eq(t, entry.at.sub, entry.name);
+    sp_expect_eq(t, (u32)sp_fs_get_kind_at(entry.at), (u32)entry.kind);
+    fs_match(t, matches, n, entry.path, entry.kind);
   }
-  sp_expect_err_eq(t, walk.err, it->expect.err);
-  sp_expect(t, !sp_fs_it_next(&walk));
-  sp_expect_err_eq(t, walk.err, it->expect.err);
+  sp_expect_ok(t, walk.err);
+  sp_expect(t, !sp_fs_it_next(&walk, &entry));
+  sp_expect_ok(t, walk.err);
   sp_fs_it_deinit(&walk);
-  sp_sys_close(dir);
+  sp_fs_close_dir(root);
 
   fs_match_finish(t, matches, n);
   return SP_OK;

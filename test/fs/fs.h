@@ -140,14 +140,21 @@ static void fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t set
 }
 
 static void fs_expect_no_temps(sp_test_t* t, sp_path_t sandbox) {
-  sp_fs_it_t walk = sp_fs_it_new_at(sp_test_arena(t), sandbox, 0);
-  while (sp_fs_it_walk(&walk)) {
-    if (sp_str_ends_with(walk.entry.name, sp_str_lit(".tmp"))) {
-      sp_test_fail(t, "temp file left behind: {}", sp_fmt_str(walk.entry.rel));
+  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_err_t err = sp_fs_open_dir_at(sandbox, &dir);
+  sp_expect_ok(t, err);
+  if (err) return;
+
+  sp_fs_it_entry_t entry = sp_zero;
+  sp_fs_it_t it = sp_fs_it(sp_test_arena(t), dir);
+  while (sp_fs_it_next(&it, &entry)) {
+    if (sp_str_ends_with(entry.name, sp_str_lit(".tmp"))) {
+      sp_test_fail(t, "temp file left behind: {}", sp_fmt_str(entry.path));
     }
   }
-  sp_expect_ok(t, walk.err);
-  sp_fs_it_deinit(&walk);
+  sp_expect_ok(t, it.err);
+  sp_fs_it_deinit(&it);
+  sp_fs_close_dir(dir);
 }
 
 static void fs_expect_paths(sp_test_t* t, sp_path_t sandbox, const fs_expected_path_t expected [FS_MAX_PATHS]) {

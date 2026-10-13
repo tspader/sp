@@ -24,10 +24,10 @@ static const test_t tests [] = {
   {
     .name = "entry_vanished_is_ok",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_FILE, .absent = true }, { "C", SP_FS_KIND_FILE } } },
+      { .entries = { { "B", SP_FS_KIND_FILE, .absent = true }, { "C", SP_FS_KIND_FILE } } },
     },
     .expect = {
-      .removed = { { "T/C", SIM_OP_UNLINK }, { "T", SIM_OP_RMDIR } },
+      .removed = { { "C", SIM_OP_UNLINK }, { "", SIM_OP_RMDIR } },
       .opens = 1,
       .rmdirs = 1,
     },
@@ -35,10 +35,10 @@ static const test_t tests [] = {
   {
     .name = "dir_vanished_before_open_is_ok",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR, .absent = true } } },
+      { .entries = { { "B", SP_FS_KIND_DIR, .absent = true } } },
     },
     .expect = {
-      .removed = { { "T", SIM_OP_RMDIR } },
+      .removed = { { "", SIM_OP_RMDIR } },
       .opens = 2,
       .rmdirs = 1,
     },
@@ -46,10 +46,10 @@ static const test_t tests [] = {
   {
     .name = "root_vanished_after_walk_is_ok",
     .dirs = {
-      { .path = "T", .rmdir = SP_ERR_SYS_NOT_FOUND, .entries = { { "B", SP_FS_KIND_FILE } } },
+      { .rmdir = SP_ERR_SYS_NOT_FOUND, .entries = { { "B", SP_FS_KIND_FILE } } },
     },
     .expect = {
-      .removed = { { "T/B", SIM_OP_UNLINK } },
+      .removed = { { "B", SIM_OP_UNLINK } },
       .opens = 1,
       .rmdirs = 1,
     },
@@ -57,7 +57,7 @@ static const test_t tests [] = {
   {
     .name = "root_vanished_before_open_is_not_found",
     .dirs = {
-      { .path = "T", .open = SP_ERR_SYS_NOT_FOUND },
+      { .open = SP_ERR_SYS_NOT_FOUND },
     },
     .expect = {
       .err = SP_ERR_SYS_NOT_FOUND,
@@ -67,10 +67,10 @@ static const test_t tests [] = {
   {
     .name = "root_vanished_before_retry_is_ok",
     .dirs = {
-      { .path = "T", .rmdir = SP_ERR_SYS_NOT_EMPTY, .reopen = SP_ERR_SYS_NOT_FOUND, .entries = { { "A", SP_FS_KIND_FILE } } },
+      { .rmdir = SP_ERR_SYS_NOT_EMPTY, .reopen = SP_ERR_SYS_NOT_FOUND, .entries = { { "A", SP_FS_KIND_FILE } } },
     },
     .expect = {
-      .removed = { { "T/A", SIM_OP_UNLINK } },
+      .removed = { { "A", SIM_OP_UNLINK } },
       .opens = 2,
       .rmdirs = 1,
     },
@@ -78,11 +78,11 @@ static const test_t tests [] = {
   {
     .name = "file_hint_that_is_dir_is_walked",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_FILE, .unlink = SP_ERR_SYS_IS_DIR } } },
-      { .path = "T/B", .entries = { { "C", SP_FS_KIND_FILE } } },
+      { .entries = { { "B", SP_FS_KIND_FILE, .unlink = SP_ERR_SYS_IS_DIR } } },
+      { .path = "B", .entries = { { "C", SP_FS_KIND_FILE } } },
     },
     .expect = {
-      .removed = { { "T/B/C", SIM_OP_UNLINK }, { "T/B", SIM_OP_RMDIR }, { "T", SIM_OP_RMDIR } },
+      .removed = { { "B/C", SIM_OP_UNLINK }, { "B", SIM_OP_RMDIR }, { "", SIM_OP_RMDIR } },
       .opens = 2,
       .rmdirs = 2,
     },
@@ -90,11 +90,11 @@ static const test_t tests [] = {
   {
     .name = "dir_hint_that_is_not_dir_is_unlinked",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .open = SP_ERR_SYS_NOT_DIR },
+      { .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .open = SP_ERR_SYS_NOT_DIR },
     },
     .expect = {
-      .removed = { { "T/B", SIM_OP_UNLINK }, { "T", SIM_OP_RMDIR } },
+      .removed = { { "B", SIM_OP_UNLINK }, { "", SIM_OP_RMDIR } },
       .opens = 2,
       .rmdirs = 1,
     },
@@ -102,11 +102,11 @@ static const test_t tests [] = {
   {
     .name = "dir_hint_that_is_symlink_is_unlinked",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .open = SP_ERR_SYS_LOOP },
+      { .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .open = SP_ERR_SYS_LOOP },
     },
     .expect = {
-      .removed = { { "T/B", SIM_OP_UNLINK }, { "T", SIM_OP_RMDIR } },
+      .removed = { { "B", SIM_OP_UNLINK }, { "", SIM_OP_RMDIR } },
       .opens = 2,
       .rmdirs = 1,
     },
@@ -114,7 +114,7 @@ static const test_t tests [] = {
   {
     .name = "not_empty_without_progress_propagates",
     .dirs = {
-      { .path = "T", .rmdir = SP_ERR_SYS_NOT_EMPTY },
+      { .rmdir = SP_ERR_SYS_NOT_EMPTY },
     },
     .expect = {
       .err = SP_ERR_SYS_NOT_EMPTY,
@@ -125,7 +125,7 @@ static const test_t tests [] = {
   {
     .name = "vanished_entry_is_not_progress",
     .dirs = {
-      { .path = "T", .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "B", SP_FS_KIND_FILE, .absent = true } } },
+      { .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "B", SP_FS_KIND_FILE, .absent = true } } },
     },
     .expect = {
       .err = SP_ERR_SYS_NOT_EMPTY,
@@ -136,12 +136,12 @@ static const test_t tests [] = {
   {
     .name = "vanished_subdir_at_rmdir_is_not_progress",
     .dirs = {
-      { .path = "T", .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .rmdir = SP_ERR_SYS_NOT_FOUND, .entries = { { "C", SP_FS_KIND_FILE } } },
+      { .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .rmdir = SP_ERR_SYS_NOT_FOUND, .entries = { { "C", SP_FS_KIND_FILE } } },
     },
     .expect = {
       .err = SP_ERR_SYS_NOT_EMPTY,
-      .removed = { { "T/B/C", SIM_OP_UNLINK } },
+      .removed = { { "B/C", SIM_OP_UNLINK } },
       .opens = 2,
       .rmdirs = 2,
     },
@@ -149,12 +149,12 @@ static const test_t tests [] = {
   {
     .name = "parent_progress_survives_child_pass",
     .dirs = {
-      { .path = "T", .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "A", SP_FS_KIND_FILE }, { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .rmdir = SP_ERR_SYS_NOT_FOUND },
+      { .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "A", SP_FS_KIND_FILE }, { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .rmdir = SP_ERR_SYS_NOT_FOUND },
     },
     .expect = {
       .err = SP_ERR_SYS_NOT_EMPTY,
-      .removed = { { "T/A", SIM_OP_UNLINK } },
+      .removed = { { "A", SIM_OP_UNLINK } },
       .opens = 3,
       .rmdirs = 3,
     },
@@ -162,11 +162,11 @@ static const test_t tests [] = {
   {
     .name = "not_empty_after_progress_retries_once",
     .dirs = {
-      { .path = "T", .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "A", SP_FS_KIND_FILE } } },
+      { .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "A", SP_FS_KIND_FILE } } },
     },
     .expect = {
       .err = SP_ERR_SYS_NOT_EMPTY,
-      .removed = { { "T/A", SIM_OP_UNLINK } },
+      .removed = { { "A", SIM_OP_UNLINK } },
       .opens = 2,
       .rmdirs = 2,
     },
@@ -174,12 +174,12 @@ static const test_t tests [] = {
   {
     .name = "subdir_not_empty_after_progress_retries_once",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "C", SP_FS_KIND_FILE } } },
+      { .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .rmdir = SP_ERR_SYS_NOT_EMPTY, .entries = { { "C", SP_FS_KIND_FILE } } },
     },
     .expect = {
       .err = SP_ERR_SYS_NOT_EMPTY,
-      .removed = { { "T/B/C", SIM_OP_UNLINK } },
+      .removed = { { "B/C", SIM_OP_UNLINK } },
       .opens = 3,
       .rmdirs = 2,
     },
@@ -187,10 +187,10 @@ static const test_t tests [] = {
   {
     .name = "shifted_listing_is_reopened",
     .dirs = {
-      { .path = "T", .batch = 1, .entries = { { "A", SP_FS_KIND_FILE }, { "B", SP_FS_KIND_FILE } } },
+      { .batch = 1, .entries = { { "A", SP_FS_KIND_FILE }, { "B", SP_FS_KIND_FILE } } },
     },
     .expect = {
-      .removed = { { "T/A", SIM_OP_UNLINK }, { "T/B", SIM_OP_UNLINK }, { "T", SIM_OP_RMDIR } },
+      .removed = { { "A", SIM_OP_UNLINK }, { "B", SIM_OP_UNLINK }, { "", SIM_OP_RMDIR } },
       .opens = 2,
       .rmdirs = 2,
     },
@@ -198,11 +198,11 @@ static const test_t tests [] = {
   {
     .name = "shifted_subdir_listing_is_reopened",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .batch = 1, .entries = { { "A", SP_FS_KIND_FILE }, { "C", SP_FS_KIND_FILE } } },
+      { .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .batch = 1, .entries = { { "A", SP_FS_KIND_FILE }, { "C", SP_FS_KIND_FILE } } },
     },
     .expect = {
-      .removed = { { "T/B/A", SIM_OP_UNLINK }, { "T/B/C", SIM_OP_UNLINK }, { "T/B", SIM_OP_RMDIR }, { "T", SIM_OP_RMDIR } },
+      .removed = { { "B/A", SIM_OP_UNLINK }, { "B/C", SIM_OP_UNLINK }, { "B", SIM_OP_RMDIR }, { "", SIM_OP_RMDIR } },
       .opens = 3,
       .rmdirs = 3,
     },
@@ -210,11 +210,11 @@ static const test_t tests [] = {
   {
     .name = "removed_subdir_shifts_parent_listing",
     .dirs = {
-      { .path = "T", .batch = 1, .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
-      { .path = "T/B" },
+      { .batch = 1, .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
+      { .path = "B" },
     },
     .expect = {
-      .removed = { { "T/B", SIM_OP_RMDIR }, { "T/C", SIM_OP_UNLINK }, { "T", SIM_OP_RMDIR } },
+      .removed = { { "B", SIM_OP_RMDIR }, { "C", SIM_OP_UNLINK }, { "", SIM_OP_RMDIR } },
       .opens = 3,
       .rmdirs = 3,
     },
@@ -222,23 +222,23 @@ static const test_t tests [] = {
   {
     .name = "unlink_error_propagates_without_retry",
     .dirs = {
-      { .path = "T", .entries = { { "A", SP_FS_KIND_FILE }, { "B", SP_FS_KIND_FILE, .unlink = SP_ERR_SYS_ACCESS_DENIED } } },
+      { .entries = { { "A", SP_FS_KIND_FILE }, { "B", SP_FS_KIND_FILE, .unlink = SP_ERR_SYS_ACCESS_DENIED } } },
     },
     .expect = {
       .err = SP_ERR_SYS_ACCESS_DENIED,
-      .removed = { { "T/A", SIM_OP_UNLINK } },
+      .removed = { { "A", SIM_OP_UNLINK } },
       .opens = 1,
     },
   },
   {
     .name = "rmdir_error_propagates_without_retry",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .rmdir = SP_ERR_SYS_ACCESS_DENIED, .entries = { { "C", SP_FS_KIND_FILE } } },
+      { .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .rmdir = SP_ERR_SYS_ACCESS_DENIED, .entries = { { "C", SP_FS_KIND_FILE } } },
     },
     .expect = {
       .err = SP_ERR_SYS_ACCESS_DENIED,
-      .removed = { { "T/B/C", SIM_OP_UNLINK } },
+      .removed = { { "B/C", SIM_OP_UNLINK } },
       .opens = 2,
       .rmdirs = 1,
     },
@@ -246,11 +246,11 @@ static const test_t tests [] = {
   {
     .name = "unreadable_empty_subdir_is_removed",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .open = SP_ERR_SYS_ACCESS_DENIED },
+      { .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .open = SP_ERR_SYS_ACCESS_DENIED },
     },
     .expect = {
-      .removed = { { "T/B", SIM_OP_RMDIR }, { "T", SIM_OP_RMDIR } },
+      .removed = { { "B", SIM_OP_RMDIR }, { "", SIM_OP_RMDIR } },
       .opens = 2,
       .rmdirs = 2,
     },
@@ -258,10 +258,10 @@ static const test_t tests [] = {
   {
     .name = "unreadable_empty_root_is_removed",
     .dirs = {
-      { .path = "T", .open = SP_ERR_SYS_ACCESS_DENIED },
+      { .open = SP_ERR_SYS_ACCESS_DENIED },
     },
     .expect = {
-      .removed = { { "T", SIM_OP_RMDIR } },
+      .removed = { { "", SIM_OP_RMDIR } },
       .opens = 1,
       .rmdirs = 1,
     },
@@ -269,8 +269,8 @@ static const test_t tests [] = {
   {
     .name = "unreadable_subdir_with_entries_is_access_denied",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR } } },
-      { .path = "T/B", .open = SP_ERR_SYS_ACCESS_DENIED, .entries = { { "C", SP_FS_KIND_FILE } } },
+      { .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B", .open = SP_ERR_SYS_ACCESS_DENIED, .entries = { { "C", SP_FS_KIND_FILE } } },
     },
     .expect = {
       .err = SP_ERR_SYS_ACCESS_DENIED,
@@ -281,8 +281,8 @@ static const test_t tests [] = {
   {
     .name = "read_error_fails_fast_and_unwinds",
     .dirs = {
-      { .path = "T", .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
-      { .path = "T/B", .read = SP_ERR_SYS_IO },
+      { .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
+      { .path = "B", .read = SP_ERR_SYS_IO },
     },
     .expect = {
       .err = SP_ERR_SYS_IO,
@@ -294,7 +294,7 @@ static const test_t tests [] = {
 sp_test_each(fs, remove_sim, test_t, tests, .serial = true) {
   sim_t s = sp_zero;
   sim_begin(&s, it->dirs);
-  sp_err_t err = sp_fs_remove_dir_at(sp_path(sp_sys_get_root(0), sp_str_lit("T")));
+  sp_err_t err = sp_fs_remove_dir_at(sim_root());
   sim_end(&s);
 
   sp_expect_err_eq(t, err, it->expect.err);

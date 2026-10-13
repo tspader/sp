@@ -164,7 +164,7 @@ sp_test_each(fs, canonicalize, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
   fs_apply_setup(t, sandbox, it->setup);
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_path_t input = sp_path(dir, sp_cstr_as_str(it->input));
@@ -172,7 +172,7 @@ sp_test_each(fs, canonicalize, test_t, tests) {
   sp_expect_err_eq(t, sp_fs_canonicalize_path_at(mem, input, &result), it->expect.err);
 
   if (it->expect.err) {
-    sp_sys_close(dir);
+    sp_fs_close_dir(dir);
     return SP_OK;
   }
 
@@ -199,7 +199,7 @@ sp_test_each(fs, canonicalize, test_t, tests) {
     sp_expect_ok(t, sp_fs_canonicalize_path_at(mem, sp_path(dir, sp_cstr_as_str(it->expect.same_as)), &other));
     sp_expect_str_eq(t, result, other);
   }
-  sp_sys_close(dir);
+  sp_fs_close_dir(dir);
   return SP_OK;
 }
 

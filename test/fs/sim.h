@@ -66,5 +66,6 @@ typedef struct {
 
 void sim_begin(sim_t* sim, const sim_dir_t* dirs);
 void sim_end(sim_t* sim);
+sp_path_t sim_root();
 
 #endif // FS_SIM_H

@@ -3250,6 +3250,7 @@ SP_API sp_err_t             sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t p
 SP_API sp_path_t            sp_path(sp_sys_dir_t dir, sp_str_t sub);
 SP_API sp_path_t            sp_path_c(sp_sys_dir_t dir, const c8* sub);
 SP_API sp_path_t            sp_path_cwd(sp_str_t sub);
+SP_API sp_path_t            sp_path_cwd_c(const c8* sub);
 SP_API sp_path_t            sp_path_from_str(sp_str_t path);
 SP_API sp_path_t            sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub);
 SP_API sp_path_t            sp_path_parent(sp_mem_t mem, sp_path_t path);
@@ -20420,6 +20421,10 @@ sp_path_t sp_path_c(sp_sys_dir_t dir, const c8* sub) {
 
 sp_path_t sp_path_cwd(sp_str_t sub) {
   return sp_path(sp_fs_get_cwd(), sub);
+}
+
+sp_path_t sp_path_cwd_c(const c8* sub) {
+  return sp_path(sp_fs_get_cwd(), sp_cstr_as_str(sub));
 }
 
 SP_PRIVATE s32 sp_fs_match_label(sp_str_t path, sp_str_t label) {

@@ -1,4 +1,3 @@
-#include "sp.h"
 #include "sp/sp_test.h"
 
 typedef struct {
