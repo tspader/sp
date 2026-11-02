@@ -152,6 +152,7 @@ sp_test(fs, dir_it_rejects_small_buffer) {
 sp_test(fs, dir_it_next_after_close_yields_nothing) {
   static const fs_setup_t setup [FS_MAX_SETUP] = {
     { "A" },
+    { "B" },
   };
 
   sp_path_t sandbox = sp_test_dir(t);
@@ -166,6 +167,8 @@ sp_test(fs, dir_it_next_after_close_yields_nothing) {
   sp_expect(t, sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry));
   sp_expect_ok(t, sp_fs_dir_it_close(&iter));
   sp_expect(t, !sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry));
+  sp_expect_err_eq(t, iter.err, SP_ERR_SYS_BAD_FD);
+  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
   sp_fs_close_dir(dir);
   return SP_OK;
 }
@@ -202,7 +205,7 @@ sp_test(fs, dir_it_invalid_handle_yields_nothing) {
   u32 n = 0;
   while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) n++;
   sp_expect_eq(t, n, (u32)0);
-  sp_expect(t, iter.err != SP_OK);
+  sp_expect_err_eq(t, iter.err, SP_ERR_SYS_BAD_FD);
   sp_expect_ok(t, sp_fs_dir_it_close(&iter));
   return SP_OK;
 }

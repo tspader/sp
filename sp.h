@@ -13999,6 +13999,7 @@ sp_err_t sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
   *out = sp_zero_s(sp_sys_dir_it_t);
   out->dir = dir;
   out->fd = dir.fd;
+  if (dir.fd == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
 
 #if defined(SP_WIN32)
   sp_try(sp_sys_dir_it_fd(dir, &out->fd));
@@ -14039,6 +14040,7 @@ sp_err_t sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
 
 sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = 0;
+  if (it->fd == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
 #if defined(SP_WIN32)
   sp_nt_io_status_block_t iosb = sp_zero;
   sp_nt_status_t status = SP_NT(NtQueryDirectoryFile)(
@@ -14063,7 +14065,6 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = (u64)n;
   return SP_OK;
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  if (!it->state) return SP_ERR_SYS_BAD_FD;
   errno = 0;
   struct dirent* d = readdir((DIR*)(intptr_t)it->state);
   if (!d) return errno ? sp_sys_err_from_errno(errno) : SP_OK;
@@ -14144,15 +14145,15 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
 
 sp_err_t sp_sys_dir_it_close_p(sp_sys_dir_it_t* it) {
 #if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_WASM)
-  if (it->fd == it->dir.fd) return SP_OK;
   sp_sys_fd_t fd = it->fd;
-  it->fd = it->dir.fd;
+  it->fd = SP_SYS_INVALID_FD;
+  if (fd == SP_SYS_INVALID_FD || fd == it->dir.fd) return SP_OK;
   return sp_sys_close_p(fd);
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   DIR* stream = (DIR*)(intptr_t)it->state;
+  it->fd = SP_SYS_INVALID_FD;
   if (!stream) return SP_OK;
   it->state = 0;
-  it->fd = it->dir.fd;
   if (closedir(stream)) return sp_sys_err_from_errno(errno);
   return SP_OK;
 #else
@@ -20788,6 +20789,8 @@ bool sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_mem_slice_t buf, sp_fs_dir_entry_t
 }
 
 sp_err_t sp_fs_dir_it_close(sp_fs_dir_it_t* it) {
+  it->len = 0;
+  it->cursor = 0;
   return sp_sys_dir_it_close(&it->sys);
 }
 
