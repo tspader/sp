@@ -170,6 +170,31 @@ sp_test(fs, dir_it_next_after_close_yields_nothing) {
   return SP_OK;
 }
 
+sp_test(fs, dir_it_file_handle_is_not_dir) {
+  static const fs_setup_t setup [FS_MAX_SETUP] = {
+    { "A" },
+  };
+
+  sp_path_t sandbox = sp_test_dir(t);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
+
+  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
+  sp_sys_fd_t file = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_s(dir, sp_str_lit("A"), SP_SYS_OPEN_MODE_RO, 0, &file));
+
+  sp_fs_dir_it_t iter = sp_fs_dir_it(sp_sys_dir(file));
+  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
+  sp_expect(t, !sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry));
+  sp_expect_err_eq(t, iter.err, SP_ERR_SYS_NOT_DIR);
+  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
+
+  sp_sys_close(file);
+  sp_fs_close_dir(dir);
+  return SP_OK;
+}
+
 sp_test(fs, dir_it_invalid_handle_yields_nothing) {
   sp_fs_dir_it_t iter = sp_fs_dir_it(sp_sys_dir(SP_SYS_INVALID_FD));
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];

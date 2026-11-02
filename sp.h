@@ -5683,6 +5683,7 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_STATUS_DIRECTORY_NOT_EMPTY   ((sp_nt_status_t)0xC0000101)
 #define SP_NT_STATUS_TOO_MANY_OPENED_FILES ((sp_nt_status_t)0xC000011F)
 #define SP_NT_STATUS_INVALID_HANDLE        ((sp_nt_status_t)0xC0000008)
+#define SP_NT_STATUS_OBJECT_TYPE_MISMATCH  ((sp_nt_status_t)0xC0000024)
 #define SP_NT_STATUS_NOT_SAME_DEVICE       ((sp_nt_status_t)0xC00000D4)
 #define SP_NT_STATUS_INVALID_DEVICE_REQUEST ((sp_nt_status_t)0xC0000010)
 #define SP_NT_STATUS_NOT_A_REPARSE_POINT   ((sp_nt_status_t)0xC0000275)
@@ -14049,6 +14050,8 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   it->state = 0;
   if (status == SP_NT_STATUS_NO_MORE_FILES) return SP_OK;
   if (status == SP_NT_STATUS_NO_SUCH_FILE) return SP_OK;
+  if (status == SP_NT_STATUS_INVALID_PARAMETER) return SP_ERR_SYS_NOT_DIR;
+  if (status == SP_NT_STATUS_OBJECT_TYPE_MISMATCH) return SP_ERR_SYS_BAD_FD;
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
   buf->len = (u64)iosb.Information;
   return SP_OK;
