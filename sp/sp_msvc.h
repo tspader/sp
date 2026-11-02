@@ -451,16 +451,13 @@ static sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
   c8 buf [SP_PATH_MAX] = sp_zero;
   sp_str_t lib = sp_fmt_buf(buf, sizeof(buf), "{}/Lib", sp_fmt_str(sp_msvc_path_str(&root))).value;
 
-  SP_ALIGNED u8 dir_buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_it_t dir = sp_zero;
-  if (sp_fs_dir_it_open(&dir, sp_path_cwd(lib), 0, sp_mem_slice(dir_buf, sizeof(dir_buf)))) {
+  sp_sys_dir_t dir = sp_zero;
+  if (sp_fs_open_dir_at(sp_path_cwd(lib), &dir)) {
     return SP_MSVC_ERR_SDK_NOT_FOUND;
   }
 
-  while (true) {
-    sp_fs_dir_entry_t entry = sp_zero;
-    if (sp_fs_dir_it_next(&dir, &entry)) break;
-    if (!entry.name.data) break;
+  sp_fs_dir_for(dir, it) {
+    sp_fs_dir_entry_t entry = it.entry;
     if (entry.kind != SP_FS_KIND_DIR) continue;
     if (!sp_str_starts_with(entry.name, sp_str_lit("10."))) continue;
 
@@ -470,7 +467,7 @@ static sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
 
     sp_msvc_add_sdk(msvc, &sdk);
   }
-  sp_fs_dir_it_close(&dir);
+  sp_fs_close_dir(dir);
 
   if (!msvc->num_sdks) return SP_MSVC_ERR_SDK_NOT_FOUND;
   return SP_MSVC_OK;
@@ -498,16 +495,13 @@ static sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t 
   );
   if (instances.err) return SP_MSVC_ERR_VS_NOT_FOUND;
 
-  SP_ALIGNED u8 dir_buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_it_t dir = sp_zero;
-  if (sp_fs_dir_it_open(&dir, sp_path_cwd(instances.value), 0, sp_mem_slice(dir_buf, sizeof(dir_buf)))) {
+  sp_sys_dir_t dir = sp_zero;
+  if (sp_fs_open_dir_at(sp_path_cwd(instances.value), &dir)) {
     return SP_MSVC_ERR_VS_NOT_FOUND;
   }
 
-  while (true) {
-    sp_fs_dir_entry_t entry = sp_zero;
-    if (sp_fs_dir_it_next(&dir, &entry)) break;
-    if (!entry.name.data) break;
+  sp_fs_dir_for(dir, it) {
+    sp_fs_dir_entry_t entry = it.entry;
     if (entry.kind != SP_FS_KIND_DIR) continue;
 
     c8 buf [SP_PATH_MAX] = sp_zero;
@@ -538,7 +532,7 @@ static sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t 
 
     sp_msvc_add_vs(msvc, &vs);
   }
-  sp_fs_dir_it_close(&dir);
+  sp_fs_close_dir(dir);
 
   if (!msvc->num_installations) return SP_MSVC_ERR_VS_NOT_FOUND;
   return SP_MSVC_OK;

@@ -14143,7 +14143,10 @@ sp_err_t sp_sys_dir_it_close_p(sp_sys_dir_it_t* it) {
   (void)it;
   return SP_OK;
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  if (closedir((DIR*)(intptr_t)it->state)) return sp_sys_err_from_errno(errno);
+  DIR* stream = (DIR*)(intptr_t)it->state;
+  if (!stream) return SP_OK;
+  it->state = 0;
+  if (closedir(stream)) return sp_sys_err_from_errno(errno);
   return SP_OK;
 #else
   #error "sp_sys_dir_it_close"
@@ -20777,19 +20780,103 @@ sp_err_t sp_fs_dir_it_close(sp_fs_dir_it_t* it) {
   return sp_sys_dir_it_close(&it->sys);
 }
 
+SP_PRIVATE void sp_fs_it_unwind(sp_fs_it_t* it) {
+  sp_da_for(it->stack, i) {
+    sp_fs_dir_it_close(&it->stack[i].dir);
+    if (i) sp_fs_close_dir(it->stack[i].dir.sys.dir);
+  }
+  sp_da_clear(it->stack);
+}
+
+SP_PRIVATE sp_err_t sp_fs_it_join(sp_fs_it_t* it, u32 prefix, sp_str_t name, u32* len) {
+  u32 start = prefix ? prefix + 1 : 0;
+  if (start + name.len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
+  if (prefix) it->path[prefix] = '/';
+  sp_str_copy_to(name, it->path + start, name.len);
+  *len = start + name.len;
+  return SP_OK;
+}
+
+SP_PRIVATE sp_fs_it_entry_t sp_fs_it_entry(sp_fs_it_t* it, sp_sys_dir_t parent, u32 len, u32 name_len, sp_fs_kind_t kind) {
+  sp_str_t name = sp_str(it->path + len - name_len, name_len);
+  return (sp_fs_it_entry_t) {
+    .path = sp_str(it->path, len),
+    .name = name,
+    .kind = kind,
+    .at = sp_path(parent, name),
+  };
+}
+
+SP_PRIVATE sp_err_t sp_fs_it_push(sp_fs_it_t* it, sp_fs_it_entry_t entry) {
+  sp_sys_dir_t dir = sp_zero;
+  sp_try(sp_sys_open_dir_s(entry.at.dir, entry.at.sub, SP_SYS_OPEN_DIR_NO_FOLLOW, &dir));
+
+  sp_fs_it_frame_t frame = { .dir = sp_fs_dir_it(dir), .len = entry.path.len, .name_len = entry.name.len };
+  if (frame.dir.err) {
+    sp_fs_close_dir(dir);
+    return frame.dir.err;
+  }
+  sp_da_push(it->stack, frame);
+  return SP_OK;
+}
+
 sp_fs_it_t sp_fs_it(sp_mem_t mem, sp_sys_dir_t root) {
   sp_fs_it_t it = sp_zero;
   sp_da_init(mem, it.stack);
   sp_fs_it_frame_t frame = { .dir = sp_fs_dir_it(root) };
   it.err = frame.dir.err;
-  sp_da_push(it.stack, frame);
+  if (!it.err) sp_da_push(it.stack, frame);
   return it;
 }
 
 bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
   *out = sp_zero_s(sp_fs_visit_t);
-  if (it->err || sp_da_empty(it->stack)) return false;
-  it->err = SP_ERR_SYS_UNSUPPORTED;
+  if (it->err) return false;
+
+  if (it->descend) {
+    it->descend = false;
+    it->err = sp_fs_it_push(it, it->last);
+    if (it->err) {
+      sp_fs_it_unwind(it);
+      return false;
+    }
+  }
+
+  while (!sp_da_empty(it->stack)) {
+    sp_fs_it_frame_t* top = sp_da_back(it->stack);
+
+    sp_fs_dir_entry_t d = sp_zero;
+    if (sp_fs_dir_it_next(&top->dir, sp_mem_slice(top->buf, SP_SYS_DIR_MIN_BUF), &d)) {
+      u32 len = 0;
+      it->err = sp_fs_it_join(it, top->len, d.name, &len);
+      if (it->err) {
+        sp_fs_it_unwind(it);
+        return false;
+      }
+
+      it->last = sp_fs_it_entry(it, top->dir.sys.dir, len, d.name.len, d.kind);
+      if (it->last.kind == SP_FS_KIND_NONE) it->last.kind = sp_fs_get_link_kind_at(it->last.at);
+      it->descend = it->last.kind == SP_FS_KIND_DIR;
+
+      *out = (sp_fs_visit_t) { .order = SP_FS_PRE_ORDER, .entry = it->last };
+      return true;
+    }
+
+    if (top->dir.err) {
+      it->err = top->dir.err;
+      sp_fs_it_unwind(it);
+      return false;
+    }
+
+    sp_da_pop(it->stack);
+    sp_fs_dir_it_close(&top->dir);
+    if (sp_da_empty(it->stack)) break;
+    sp_fs_close_dir(top->dir.sys.dir);
+
+    it->last = sp_fs_it_entry(it, sp_da_back(it->stack)->dir.sys.dir, top->len, top->name_len, SP_FS_KIND_DIR);
+    *out = (sp_fs_visit_t) { .order = SP_FS_POST_ORDER, .entry = it->last };
+    return true;
+  }
   return false;
 }
 
@@ -20805,8 +20892,11 @@ bool sp_fs_it_next(sp_fs_it_t* it, sp_fs_it_entry_t* out) {
 }
 
 sp_err_t sp_fs_it_enter(sp_fs_it_t* it) {
+  sp_assert(!sp_str_empty(it->last.path));
+  if (it->err) return it->err;
+  if (sp_da_empty(it->stack)) return SP_ERR_SYS_INVALID;
   it->descend = false;
-  return SP_ERR_SYS_UNSUPPORTED;
+  return sp_fs_it_push(it, it->last);
 }
 
 void sp_fs_it_skip(sp_fs_it_t* it) {
@@ -20814,10 +20904,7 @@ void sp_fs_it_skip(sp_fs_it_t* it) {
 }
 
 void sp_fs_it_deinit(sp_fs_it_t* it) {
-  sp_da_for(it->stack, i) {
-    sp_fs_dir_it_close(&it->stack[i].dir);
-    if (i) sp_fs_close_dir(it->stack[i].dir.sys.dir);
-  }
+  sp_fs_it_unwind(it);
   sp_da_free(it->stack);
 }
 

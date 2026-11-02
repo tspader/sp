@@ -135,6 +135,13 @@ sp_test_each(fs, dir, test_t, tests) {
   return SP_OK;
 }
 
+sp_test(fs, dir_for_invalid_handle_yields_nothing) {
+  u32 n = 0;
+  sp_fs_dir_for(sp_sys_dir(SP_SYS_INVALID_FD), it) n++;
+  sp_expect_eq(t, n, (u32)0);
+  return SP_OK;
+}
+
 sp_test(fs, dir_reiterates_handle) {
   static const fs_setup_t setup [FS_MAX_SETUP] = {
     { "A" },

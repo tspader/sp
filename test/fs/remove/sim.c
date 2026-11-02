@@ -314,6 +314,6 @@ sp_test_each(fs, remove_sim, test_t, tests, .serial = true) {
   sp_expect_eq(t, s.count.nofollow, s.count.opens);
   sp_expect_eq(t, s.count.rmdirs, it->expect.rmdirs);
   sp_expect_eq(t, s.count.closes, s.count.dirs);
-  sp_expect_eq(t, s.count.fd_closes, (u32)0);
+  sp_expect_eq(t, s.count.fd_closes, s.count.dirs);
   return SP_OK;
 }
