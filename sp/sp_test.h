@@ -2143,10 +2143,14 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   sp_da(sp_str_t) runs = sp_da_new(runner->mem, sp_str_t);
   sp_sys_dir_t runs_handle = sp_sys_dir(SP_SYS_INVALID_FD);
   if (!sp_fs_open_dir_at(runs_dir, &runs_handle)) {
-    sp_fs_dir_for(runs_handle, it) {
-      if (it.entry.kind != SP_FS_KIND_DIR) continue;
-      sp_da_push(runs, sp_str_copy(runner->mem, it.entry.name));
+    sp_fs_dir_it_t iter = sp_fs_dir_it(runs_handle);
+    SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+    sp_fs_dir_entry_t entry = sp_zero;
+    while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) {
+      if (entry.kind != SP_FS_KIND_DIR) continue;
+      sp_da_push(runs, sp_str_copy(runner->mem, entry.name));
     }
+    sp_fs_dir_it_close(&iter);
     sp_fs_close_dir(runs_handle);
   }
   sp_da_sort(runs, sp_str_sort_kernel_alphabetical);

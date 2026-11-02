@@ -117,7 +117,11 @@ sp_test_each(runner, prune, prune_case_t, prune_cases) {
   sp_sys_dir_t runs_dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(runs, &runs_dir));
   u64 entries = 0;
-  sp_fs_dir_for(runs_dir, walk) entries++;
+  sp_fs_dir_it_t iter = sp_fs_dir_it(runs_dir);
+  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
+  while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) entries++;
+  sp_fs_dir_it_close(&iter);
   sp_fs_close_dir(runs_dir);
   sp_expect_eq(t, entries, sp_da_size(survivors));
   return SP_OK;

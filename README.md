@@ -25,7 +25,7 @@ It's written in ~15,000 lines of plain C99[^1] and has zero dependencies. It doe
 `sp.h` can be also be compiled as a traditional shared or static library. `sp.h` makes no assumptions about its place in your code. You can use any small piece of it as a standalone utility, or you can use it as the foundation for almost any program. Give it a try!
 
 ## example: `ls`
-Here's a minimal `ls` in 40 lines of code.
+Here's a minimal `ls` in 44 lines of code.
 ```c
 #define SP_IMPLEMENTATION
 #include "sp.h"
@@ -48,10 +48,14 @@ s32 run(s32 num_args, const c8** args) {
   }
 
   sp_da(sp_fs_dir_entry_t) entries = sp_da_new(mem, sp_fs_dir_entry_t);
-  sp_fs_dir_for(dir, it) {
-    sp_fs_dir_entry_t entry = { .name = sp_str_copy(mem, it.entry.name), .kind = it.entry.kind };
-    sp_da_push(entries, entry);
+  sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
+  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
+  while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) {
+    sp_fs_dir_entry_t copy = { .name = sp_str_copy(mem, entry.name), .kind = entry.kind };
+    sp_da_push(entries, copy);
   }
+  sp_fs_dir_it_close(&iter);
   sp_fs_close_dir(dir);
   sp_da_sort(entries, compare_entries);
 

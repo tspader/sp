@@ -456,8 +456,10 @@ static sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
     return SP_MSVC_ERR_SDK_NOT_FOUND;
   }
 
-  sp_fs_dir_for(dir, it) {
-    sp_fs_dir_entry_t entry = it.entry;
+  sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
+  SP_ALIGNED u8 dir_buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
+  while (sp_fs_dir_it_next(&iter, sp_mem_slice(dir_buf, sizeof(dir_buf)), &entry)) {
     if (entry.kind != SP_FS_KIND_DIR) continue;
     if (!sp_str_starts_with(entry.name, sp_str_lit("10."))) continue;
 
@@ -467,6 +469,7 @@ static sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
 
     sp_msvc_add_sdk(msvc, &sdk);
   }
+  sp_fs_dir_it_close(&iter);
   sp_fs_close_dir(dir);
 
   if (!msvc->num_sdks) return SP_MSVC_ERR_SDK_NOT_FOUND;
@@ -500,8 +503,10 @@ static sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t 
     return SP_MSVC_ERR_VS_NOT_FOUND;
   }
 
-  sp_fs_dir_for(dir, it) {
-    sp_fs_dir_entry_t entry = it.entry;
+  sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
+  SP_ALIGNED u8 dir_buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
+  while (sp_fs_dir_it_next(&iter, sp_mem_slice(dir_buf, sizeof(dir_buf)), &entry)) {
     if (entry.kind != SP_FS_KIND_DIR) continue;
 
     c8 buf [SP_PATH_MAX] = sp_zero;

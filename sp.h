@@ -3301,29 +3301,6 @@ typedef struct {
   sp_err_t err;
 } sp_fs_it_t;
 
-#define sp_fs_dir_for(dir, it)                                                             \
-  for (                                                                                    \
-    struct {                                                                               \
-      sp_fs_dir_it_t it;                                                                   \
-      SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];                                              \
-      sp_fs_dir_entry_t entry;                                                             \
-    } it = { sp_fs_dir_it(dir) };                                                          \
-    sp_fs_dir_it_next(&it.it, sp_mem_slice(it.buf, SP_SYS_DIR_MIN_BUF), &it.entry) ||      \
-      (sp_fs_dir_it_close(&it.it), false);                                                 \
-  )
-
-#define sp_fs_for(mem, dir, it)                                                            \
-  for (                                                                                    \
-    struct { sp_fs_it_t it; sp_fs_it_entry_t entry; } it = { sp_fs_it(mem, dir) };         \
-    sp_fs_it_next(&it.it, &it.entry) || (sp_fs_it_deinit(&it.it), false);                  \
-  )
-
-#define sp_fs_for_visit(mem, dir, it)                                                      \
-  for (                                                                                    \
-    struct { sp_fs_it_t it; sp_fs_visit_t visit; } it = { sp_fs_it(mem, dir) };            \
-    sp_fs_it_visit(&it.it, &it.visit) || (sp_fs_it_deinit(&it.it), false);                 \
-  )
-
 SP_API sp_fs_dir_it_t       sp_fs_dir_it(sp_sys_dir_t dir);
 SP_API bool                 sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_mem_slice_t buf, sp_fs_dir_entry_t* out);
 SP_API sp_err_t             sp_fs_dir_it_close(sp_fs_dir_it_t* it);

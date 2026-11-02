@@ -135,10 +135,15 @@ sp_test_each(fs, dir, test_t, tests) {
   return SP_OK;
 }
 
-sp_test(fs, dir_for_invalid_handle_yields_nothing) {
+sp_test(fs, dir_it_invalid_handle_yields_nothing) {
+  sp_fs_dir_it_t iter = sp_fs_dir_it(sp_sys_dir(SP_SYS_INVALID_FD));
+  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
   u32 n = 0;
-  sp_fs_dir_for(sp_sys_dir(SP_SYS_INVALID_FD), it) n++;
+  while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) n++;
   sp_expect_eq(t, n, (u32)0);
+  sp_expect(t, iter.err != SP_OK);
+  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
   return SP_OK;
 }
 
@@ -162,12 +167,21 @@ sp_test(fs, dir_reiterates_handle) {
   u32 n = sp_carr_len(matches);
 
   sp_for(pass, 2) {
-    sp_fs_dir_for(dir, it) fs_match(t, matches, n, it.entry.name, it.entry.kind);
+    sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
+    SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+    sp_fs_dir_entry_t entry = sp_zero;
+    while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) fs_match(t, matches, n, entry.name, entry.kind);
+    sp_expect_ok(t, iter.err);
+    sp_expect_ok(t, sp_fs_dir_it_close(&iter));
     fs_match_finish(t, matches, n);
     sp_for(i, n) matches[i].seen = false;
   }
 
-  sp_fs_for(mem, dir, it) fs_match(t, matches, n, it.entry.name, it.entry.kind);
+  sp_fs_it_t walk = sp_fs_it(mem, dir);
+  sp_fs_it_entry_t entry = sp_zero;
+  while (sp_fs_it_next(&walk, &entry)) fs_match(t, matches, n, entry.name, entry.kind);
+  sp_expect_ok(t, walk.err);
+  sp_fs_it_deinit(&walk);
   fs_match_finish(t, matches, n);
 
   sp_fs_close_dir(dir);
