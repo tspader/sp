@@ -3197,7 +3197,6 @@ SP_API sp_str_t             sp_fs_join_path(sp_mem_t mem, sp_str_t a, sp_str_t b
 SP_API sp_str_t             sp_fs_join_path_for(sp_mem_t mem, sp_str_t a, sp_str_t b, sp_fs_path_kind_t kind);
 SP_API sp_str_t             sp_fs_normalize_path(sp_mem_t mem, sp_str_t path);
 SP_API sp_str_t             sp_fs_normalize_path_for(sp_mem_t mem, sp_str_t path, sp_fs_path_kind_t kind);
-SP_API sp_err_t             sp_fs_collect_recursive(sp_mem_t mem, sp_str_t path, sp_da(sp_fs_it_entry_t)* out);
 SP_API bool                 sp_fs_exists(sp_str_t path);
 SP_API bool                 sp_fs_exists_at(sp_path_t path);
 SP_API bool                 sp_fs_is_file(sp_str_t path);
@@ -20914,31 +20913,6 @@ u32 sp_fs_it_get_entry_depth(sp_fs_it_entry_t entry) {
     if (sp_fs_is_sep(entry.path.data[it])) depth++;
   }
   return depth;
-}
-
-SP_PRIVATE sp_fs_it_entry_t sp_fs_it_copy_entry(sp_mem_t mem, sp_fs_it_entry_t entry) {
-  sp_str_t path = sp_str_copy(mem, entry.path);
-  return (sp_fs_it_entry_t) {
-    .path = path,
-    .name = sp_str_suffix(path, (s32)entry.name.len),
-    .kind = entry.kind,
-  };
-}
-
-sp_err_t sp_fs_collect_recursive(sp_mem_t mem, sp_str_t path, sp_da(sp_fs_it_entry_t)* out) {
-  *out = sp_da_new(mem, sp_fs_it_entry_t);
-
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
-  sp_try(sp_fs_open_dir_at(sp_path_cwd(path), &dir));
-
-  sp_fs_it_t it = sp_fs_it(mem, dir);
-  sp_fs_it_entry_t entry = sp_zero;
-  while (sp_fs_it_next(&it, &entry)) {
-    sp_da_push(*out, sp_fs_it_copy_entry(mem, entry));
-  }
-  sp_fs_it_deinit(&it);
-  sp_fs_close_dir(dir);
-  return it.err;
 }
 
 sp_err_t sp_fs_remove_dir(sp_str_t path) {
