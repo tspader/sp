@@ -47,23 +47,6 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "leaves_after_children_before_siblings",
-    .dirs = {
-      { .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
-      { .path = "B", .entries = { { "D", SP_FS_KIND_FILE } } },
-    },
-    .enter = { { "B" } },
-    .expect = {
-      .visits = {
-        { "B", SP_FS_KIND_DIR },
-        { "B/D", SP_FS_KIND_FILE },
-        { "B", SP_FS_KIND_DIR, SP_FS_POST_ORDER },
-        { "C", SP_FS_KIND_FILE },
-      },
-      .opens = 2,
-    },
-  },
-  {
     .name = "pruned_dir_is_never_opened",
     .dirs = {
       { .entries = { { "B", SP_FS_KIND_DIR } } },

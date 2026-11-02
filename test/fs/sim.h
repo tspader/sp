@@ -42,6 +42,7 @@ typedef struct {
 typedef struct {
   u32 opens;
   u32 dirs;
+  u32 its;
   u32 closes;
   u32 fd_closes;
   u32 rmdirs;

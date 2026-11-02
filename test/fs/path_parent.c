@@ -25,6 +25,7 @@ sp_test_each(fs, path_parent, test_t, tests) {
   sp_sys_dir_t dir = sp_sys_dir(69);
   sp_path_t path = sp_path(dir, sp_cstr_as_str(it->sub));
   sp_path_t result = sp_path_parent(sp_test_arena(t), path);
+  sp_expect_eq(t, result.dir.fd, dir.fd);
   sp_expect_str_eq_c(t, result.sub, it->expect);
   return SP_OK;
 }

@@ -1,6 +1,7 @@
 #include "sp/sp_test.h"
 
 #define MAX_ROOTS 4
+#define ROOT_FD 9000
 
 typedef struct {
   const c8* label;
@@ -124,6 +125,7 @@ static const test_t tests [] = {
 };
 
 static const test_t* active;
+static sp_sys_fd_t root_fd(s32 it);
 static sp_sys_dir_t get_root(s32 it);
 static sp_err_t get_root_label(s32 it, c8* buf, u64 size, u64* len);
 
@@ -137,7 +139,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_path_t path = sp_path_from_str(sp_cstr_as_str(c->path));
   sp_sys_set_vtable(saved);
   active = SP_NULLPTR;
-  sp_expect_eq(t, path.dir.fd, c->expect.root);
+  sp_expect_eq(t, path.dir.fd, root_fd(c->expect.root));
   sp_expect_str_eq(t, path.sub, sp_cstr_as_str(c->expect.sub));
   return SP_OK;
 }
@@ -154,9 +156,13 @@ static s32 num_roots() {
   return n;
 }
 
+sp_sys_fd_t root_fd(s32 it) {
+  return it == SP_SYS_INVALID_FD ? SP_SYS_INVALID_FD : (sp_sys_fd_t)(ROOT_FD + it);
+}
+
 sp_sys_dir_t get_root(s32 it) {
   if (it < 0 || it >= num_roots()) return sp_sys_dir(SP_SYS_INVALID_FD);
-  return sp_sys_dir(it);
+  return sp_sys_dir(root_fd(it));
 }
 
 sp_err_t get_root_label(s32 it, c8* buf, u64 size, u64* len) {

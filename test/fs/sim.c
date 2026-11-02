@@ -102,6 +102,7 @@ static sp_err_t dir_it_open(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
   *out = sp_zero_s(sp_sys_dir_it_t);
   out->dir = dir;
   out->state = slot;
+  active->count.its++;
   return SP_OK;
 }
 

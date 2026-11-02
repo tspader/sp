@@ -19,7 +19,7 @@ typedef struct {
 
 typedef struct {
   sp_err_t walk;
-  const c8* failed;
+  sp_err_t enter;
   entry_t entries [MAX_WALK];
   u32 opens;
 } expect_t;
@@ -65,7 +65,18 @@ static const test_t tests [] = {
     },
     .expect = {
       .walk = SP_ERR_SYS_NOT_FOUND,
-      .failed = "B",
+      .entries = { { "B", SP_FS_KIND_DIR } },
+      .opens = 2,
+    },
+  },
+  {
+    .name = "subdir_it_open_error_unwinds",
+    .dirs = {
+      { .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
+      { .path = "B", .it_open = SP_ERR_SYS_IO },
+    },
+    .expect = {
+      .walk = SP_ERR_SYS_IO,
       .entries = { { "B", SP_FS_KIND_DIR } },
       .opens = 2,
     },
@@ -78,6 +89,31 @@ static const test_t tests [] = {
     },
     .expect = {
       .walk = SP_ERR_SYS_IO,
+      .entries = { { "B", SP_FS_KIND_DIR } },
+      .opens = 2,
+    },
+  },
+  {
+    .name = "enter_after_error_returns_error",
+    .dirs = {
+      { .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
+      { .path = "B", .read = SP_ERR_SYS_IO },
+    },
+    .expect = {
+      .walk = SP_ERR_SYS_IO,
+      .enter = SP_ERR_SYS_IO,
+      .entries = { { "B", SP_FS_KIND_DIR } },
+      .opens = 2,
+    },
+  },
+  {
+    .name = "enter_after_end_is_invalid",
+    .dirs = {
+      { .entries = { { "B", SP_FS_KIND_DIR } } },
+      { .path = "B" },
+    },
+    .expect = {
+      .enter = SP_ERR_SYS_INVALID,
       .entries = { { "B", SP_FS_KIND_DIR } },
       .opens = 2,
     },
@@ -150,7 +186,6 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
   sp_expect_ok(t, err);
 
   u32 produced = 0;
-  sp_str_t last = sp_zero;
   if (!err) {
     sp_fs_it_t walk = sp_fs_it(mem, root);
     sp_fs_it_entry_t entry = sp_zero;
@@ -164,12 +199,11 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
         sp_test_fail(t, "walker produced unexpected entry {}", sp_fmt_str(entry.path));
       }
       sp_expect_str_eq(t, entry.name, sp_fs_get_name(entry.path));
-      last = sp_str_copy(mem, entry.path);
       produced++;
       if (produced == it->stop_after) break;
     }
     sp_expect_err_eq(t, walk.err, it->expect.walk);
-    if (it->expect.failed) sp_expect_str_eq_c(t, last, it->expect.failed);
+    if (it->expect.enter) sp_expect_err_eq(t, sp_fs_it_enter(&walk), it->expect.enter);
     sp_fs_it_deinit(&walk);
     sp_fs_close_dir(root);
   }
@@ -183,7 +217,7 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
   }
   sp_expect_eq(t, produced, expected);
   sp_expect_eq(t, s.count.opens, it->expect.opens);
-  sp_expect_eq(t, s.count.closes, s.count.dirs);
+  sp_expect_eq(t, s.count.closes, s.count.its);
   sp_expect_eq(t, s.count.fd_closes, s.count.dirs);
   if (s.count.opens) sp_expect_eq(t, s.count.nofollow, s.count.opens - 1);
   return SP_OK;
