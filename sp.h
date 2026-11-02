@@ -1492,6 +1492,7 @@ typedef struct {
 
 typedef struct {
   sp_sys_dir_t dir;
+  sp_sys_fd_t fd;
   s64 state;
 } sp_sys_dir_it_t;
 
@@ -13980,24 +13981,46 @@ SP_PRIVATE sp_fs_kind_t sp_sys_dir_dtype_to_kind(u8 d_type) {
 }
 #endif
 
+#if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
+SP_PRIVATE sp_err_t sp_sys_dir_it_fd(sp_sys_dir_t dir, sp_sys_fd_t* out) {
+  *out = dir.fd;
+  if (dir.fd != sp_sys_get_root_p(0).fd) return SP_OK;
+
+  sp_sys_dir_t opened = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_try(sp_sys_open_dir_p(dir, ".", 1, 0, &opened));
+  *out = opened.fd;
+  return SP_OK;
+}
+#endif
+
 sp_err_t sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
   *out = sp_zero_s(sp_sys_dir_it_t);
   out->dir = dir;
+  out->fd = dir.fd;
 
 #if defined(SP_WIN32)
+  sp_try(sp_sys_dir_it_fd(dir, &out->fd));
   out->state = 1;
   return SP_OK;
 #elif defined(SP_LINUX)
-  s64 position = 0;
-  return sp_sys_lseek(dir.fd, 0, SP_IO_SEEK_SET, &position);
-#elif defined(SP_MACOS) || defined(SP_COSMO)
-  s32 dup_fd = dup((s32)dir.fd);
-  if (dup_fd < 0) return sp_sys_err_from_errno(errno);
+  sp_try(sp_sys_dir_it_fd(dir, &out->fd));
+  if (out->fd != dir.fd) return SP_OK;
 
-  DIR* stream = fdopendir(dup_fd);
+  s64 position = 0;
+  return sp_sys_lseek_p(dir.fd, 0, SP_IO_SEEK_SET, &position);
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  sp_try(sp_sys_dir_it_fd(dir, &out->fd));
+  if (out->fd == dir.fd) {
+    s32 dup_fd = dup((s32)dir.fd);
+    if (dup_fd < 0) return sp_sys_err_from_errno(errno);
+    out->fd = (sp_sys_fd_t)dup_fd;
+  }
+
+  DIR* stream = fdopendir((s32)out->fd);
   if (!stream) {
     sp_err_t err = sp_sys_err_from_errno(errno);
-    sp_sys_close(dup_fd);
+    sp_sys_close_p(out->fd);
+    out->fd = dir.fd;
     return err;
   }
 
@@ -14017,7 +14040,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
 #if defined(SP_WIN32)
   sp_nt_io_status_block_t iosb = sp_zero;
   sp_nt_status_t status = SP_NT(NtQueryDirectoryFile)(
-    (void*)(intptr_t)it->dir.fd,
+    (void*)(intptr_t)it->fd,
     SP_NULLPTR, SP_NULLPTR, SP_NULLPTR,
     &iosb,
     buf->data, (u32)(buf->capacity - SP_SYS_DIR_WIN32_SCRATCH),
@@ -14030,7 +14053,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = (u64)iosb.Information;
   return SP_OK;
 #elif defined(SP_LINUX)
-  s64 n = sp_lx_getdents64(it->dir.fd, buf->data, buf->capacity);
+  s64 n = sp_lx_getdents64(it->fd, buf->data, buf->capacity);
   if (n == -SP_ENOENT) return SP_OK;
   if (n < 0) return sp_sys_err_from_errno(-n);
   buf->len = (u64)n;
@@ -14044,7 +14067,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   return SP_OK;
 #elif defined(SP_WASM)
   __wasi_size_t used = 0;
-  __wasi_errno_t err = sp_wasi_fd_readdir((__wasi_fd_t)it->dir.fd, buf->data, (__wasi_size_t)buf->capacity, (__wasi_dircookie_t)it->state, &used);
+  __wasi_errno_t err = sp_wasi_fd_readdir((__wasi_fd_t)it->fd, buf->data, (__wasi_size_t)buf->capacity, (__wasi_dircookie_t)it->state, &used);
   if (err == SP_WASI_ENOENT) return SP_OK;
   if (err) return sp_sys_err_from_wasi(err);
 
@@ -14116,12 +14139,15 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
 
 sp_err_t sp_sys_dir_it_close_p(sp_sys_dir_it_t* it) {
 #if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_WASM)
-  (void)it;
-  return SP_OK;
+  if (it->fd == it->dir.fd) return SP_OK;
+  sp_sys_fd_t fd = it->fd;
+  it->fd = it->dir.fd;
+  return sp_sys_close_p(fd);
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   DIR* stream = (DIR*)(intptr_t)it->state;
   if (!stream) return SP_OK;
   it->state = 0;
+  it->fd = it->dir.fd;
   if (closedir(stream)) return sp_sys_err_from_errno(errno);
   return SP_OK;
 #else
