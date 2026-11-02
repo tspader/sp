@@ -20754,6 +20754,10 @@ sp_fs_dir_it_t sp_fs_dir_it(sp_sys_dir_t dir) {
 bool sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_mem_slice_t buf, sp_fs_dir_entry_t* out) {
   *out = sp_zero_s(sp_fs_dir_entry_t);
   if (it->err) return false;
+  if (buf.len < SP_SYS_DIR_MIN_BUF) {
+    it->err = SP_ERR_SYS_INVALID;
+    return false;
+  }
 
   sp_mem_buffer_t chunk = { .data = buf.data, .len = it->len, .capacity = buf.len };
   while (true) {

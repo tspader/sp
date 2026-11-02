@@ -135,6 +135,20 @@ sp_test_each(fs, dir, test_t, tests) {
   return SP_OK;
 }
 
+sp_test(fs, dir_it_rejects_small_buffer) {
+  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_must_ok(t, sp_fs_open_dir_at(sp_test_dir(t), &dir));
+
+  sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
+  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
+  sp_expect(t, !sp_fs_dir_it_next(&iter, sp_mem_slice(buf, SP_SYS_DIR_MIN_BUF - 1), &entry));
+  sp_expect_err_eq(t, iter.err, SP_ERR_SYS_INVALID);
+  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
+  sp_fs_close_dir(dir);
+  return SP_OK;
+}
+
 sp_test(fs, dir_it_invalid_handle_yields_nothing) {
   sp_fs_dir_it_t iter = sp_fs_dir_it(sp_sys_dir(SP_SYS_INVALID_FD));
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
