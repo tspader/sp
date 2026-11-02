@@ -20924,6 +20924,7 @@ void sp_fs_it_deinit(sp_fs_it_t* it) {
   sp_fs_it_unwind(it);
   sp_da_free(it->stack);
   it->stack = SP_NULLPTR;
+  it->descend = false;
 }
 
 u32 sp_fs_it_get_entry_depth(sp_fs_it_entry_t entry) {

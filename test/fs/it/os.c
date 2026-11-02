@@ -164,6 +164,29 @@ sp_test_each(fs, it, test_t, tests) {
   return SP_OK;
 }
 
+sp_test(fs, it_next_after_deinit_yields_nothing) {
+  static const fs_setup_t setup [FS_MAX_SETUP] = {
+    { "A/F" },
+  };
+
+  sp_mem_t mem = sp_test_arena(t);
+  sp_path_t sandbox = sp_test_dir(t);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
+
+  sp_sys_dir_t root = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &root));
+
+  sp_fs_it_t walk = sp_fs_it(mem, root);
+  sp_fs_it_entry_t entry = sp_zero;
+  sp_must(t, sp_fs_it_next(&walk, &entry));
+  sp_expect_eq(t, (u32)entry.kind, (u32)SP_FS_KIND_DIR);
+  sp_fs_it_deinit(&walk);
+  sp_expect(t, !sp_fs_it_next(&walk, &entry));
+  sp_expect_ok(t, walk.err);
+  sp_fs_close_dir(root);
+  return SP_OK;
+}
+
 sp_test(fs, it_deinit_is_idempotent) {
   sp_mem_t mem = sp_test_arena(t);
   sp_fs_it_t zeroed = sp_zero;
