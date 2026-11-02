@@ -14059,6 +14059,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = (u64)n;
   return SP_OK;
 #elif defined(SP_MACOS) || defined(SP_COSMO)
+  if (!it->state) return SP_ERR_SYS_BAD_FD;
   errno = 0;
   struct dirent* d = readdir((DIR*)(intptr_t)it->state);
   if (!d) return errno ? sp_sys_err_from_errno(errno) : SP_OK;
