@@ -163,3 +163,17 @@ sp_test_each(fs, it, test_t, tests) {
   fs_match_finish(t, matches, n);
   return SP_OK;
 }
+
+sp_test(fs, it_deinit_is_idempotent) {
+  sp_mem_t mem = sp_test_arena(t);
+  sp_fs_it_t zeroed = sp_zero;
+  sp_fs_it_deinit(&zeroed);
+
+  sp_sys_dir_t root = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_must_ok(t, sp_fs_open_dir_at(sp_test_dir(t), &root));
+  sp_fs_it_t walk = sp_fs_it(mem, root);
+  sp_fs_it_deinit(&walk);
+  sp_fs_it_deinit(&walk);
+  sp_fs_close_dir(root);
+  return SP_OK;
+}

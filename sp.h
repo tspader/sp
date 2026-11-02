@@ -20920,8 +20920,10 @@ void sp_fs_it_skip(sp_fs_it_t* it) {
 }
 
 void sp_fs_it_deinit(sp_fs_it_t* it) {
+  if (!it->stack) return;
   sp_fs_it_unwind(it);
   sp_da_free(it->stack);
+  it->stack = SP_NULLPTR;
 }
 
 u32 sp_fs_it_get_entry_depth(sp_fs_it_entry_t entry) {
@@ -21008,7 +21010,8 @@ SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed, bool* li
   sp_err_t err = sp_sys_open_dir_s(path.dir, path.sub, SP_SYS_OPEN_DIR_NO_FOLLOW, &root);
   *listed = err != SP_ERR_SYS_ACCESS_DENIED;
 
-  sp_fs_it_t it = sp_fs_it(s.mem, root);
+  sp_fs_it_t it = sp_zero;
+  if (!err) it = sp_fs_it(s.mem, root);
   sp_fs_visit_t visit = sp_zero;
   while (!err && sp_fs_it_visit(&it, &visit)) {
     sp_path_t at = visit.entry.at;
@@ -21295,7 +21298,8 @@ sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
   if (!err) err = sp_fs_create_dir_at(to);
   if (!err) err = sp_fs_open_dir_at(to, &dst);
 
-  sp_fs_it_t it = sp_fs_it(s.mem, src);
+  sp_fs_it_t it = sp_zero;
+  if (!err) it = sp_fs_it(s.mem, src);
   sp_fs_it_entry_t entry = sp_zero;
   while (!err && sp_fs_it_next(&it, &entry)) {
     sp_path_t target = sp_path(dst, entry.path);
