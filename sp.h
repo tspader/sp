@@ -3299,6 +3299,7 @@ typedef struct {
   c8 path [SP_PATH_MAX];
   sp_fs_it_entry_t last;
   bool descend;
+  bool entered;
   sp_err_t err;
 } sp_fs_it_t;
 
@@ -20845,6 +20846,7 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
 
   if (it->descend) {
     it->descend = false;
+    it->entered = true;
     it->err = sp_fs_it_push(it, it->last);
     if (it->err) {
       sp_fs_it_unwind(it);
@@ -20867,6 +20869,7 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
       it->last = sp_fs_it_entry(it, top->dir.sys.dir, len, d.name.len, d.kind);
       if (it->last.kind == SP_FS_KIND_NONE) it->last.kind = sp_fs_get_link_kind_at(it->last.at);
       it->descend = it->last.kind == SP_FS_KIND_DIR;
+      it->entered = false;
 
       *out = (sp_fs_visit_t) { .order = SP_FS_PRE_ORDER, .entry = it->last };
       return true;
@@ -20884,6 +20887,7 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
     sp_fs_close_dir(top->dir.sys.dir);
 
     it->last = sp_fs_it_entry(it, sp_da_back(it->stack)->dir.sys.dir, top->len, top->name_len, SP_FS_KIND_DIR);
+    it->entered = false;
     *out = (sp_fs_visit_t) { .order = SP_FS_POST_ORDER, .entry = it->last };
     return true;
   }
@@ -20902,11 +20906,13 @@ bool sp_fs_it_next(sp_fs_it_t* it, sp_fs_it_entry_t* out) {
 }
 
 sp_err_t sp_fs_it_enter(sp_fs_it_t* it) {
-  sp_assert(!sp_str_empty(it->last.path));
   if (it->err) return it->err;
   if (sp_da_empty(it->stack)) return SP_ERR_SYS_INVALID;
+  if (sp_str_empty(it->last.path) || it->entered) return SP_ERR_SYS_INVALID;
   it->descend = false;
-  return sp_fs_it_push(it, it->last);
+  sp_err_t err = sp_fs_it_push(it, it->last);
+  it->entered = !err;
+  return err;
 }
 
 void sp_fs_it_skip(sp_fs_it_t* it) {

@@ -4,6 +4,7 @@ typedef struct {
   const c8* path;
   sp_err_t err;
   bool vanish;
+  bool twice;
 } enter_t;
 
 typedef struct {
@@ -24,6 +25,19 @@ typedef struct {
 } test_t;
 
 static const test_t tests [] = {
+  {
+    .name = "enter_twice_is_invalid",
+    .setup = {
+      { "A/B" },
+    },
+    .enter = { { "A", .twice = true } },
+    .expect = {
+      .entries = {
+        { "A", SP_FS_KIND_DIR },
+        { "A/B", SP_FS_KIND_FILE },
+      },
+    },
+  },
   {
     .name = "descends_without_enter",
     .setup = {
@@ -173,6 +187,7 @@ sp_test_each(fs, it_enter, test_t, tests) {
         if (enter) {
           if (enter->vanish) sp_must_ok(t, sp_sys_rmdir_s(entry.at.dir, entry.at.sub));
           sp_expect_err_eq(t, sp_fs_it_enter(&walk), enter->err);
+          if (enter->twice) sp_expect_err_eq(t, sp_fs_it_enter(&walk), SP_ERR_SYS_INVALID);
           descend = !enter->err;
         }
         if (descend) {
