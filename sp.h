@@ -1492,7 +1492,6 @@ typedef struct {
 
 typedef struct {
   sp_sys_dir_t dir;
-  sp_sys_fd_t fd;
   s64 state;
 } sp_sys_dir_it_t;
 
@@ -3241,6 +3240,7 @@ SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_
 SP_API sp_err_t             sp_fs_open_dir_at(sp_path_t path, sp_sys_dir_t* out);
 SP_API sp_err_t             sp_fs_close_dir(sp_sys_dir_t dir);
 SP_API sp_sys_dir_t         sp_fs_get_cwd();
+SP_API sp_err_t             sp_fs_open_cwd(sp_sys_dir_t* out);
 SP_API sp_err_t             sp_fs_get_cwd_path(sp_mem_t mem, sp_str_t* path);
 SP_API sp_err_t             sp_fs_get_exe_path(sp_mem_t mem, sp_str_t* path);
 SP_API sp_err_t             sp_fs_get_storage_path(sp_mem_t mem, sp_str_t* path);
@@ -3267,6 +3267,9 @@ SP_API sp_path_t            sp_path_parent(sp_mem_t mem, sp_path_t path);
   This layer has no concept of the "next" entry, or traversing into child
   directories, or buffer ownership. This layer is just the portable primitives
   on which you build those things
+
+  The handle has to be one you opened (sp_fs_open_dir_at, sp_fs_open_cwd).
+  sp_fs_get_cwd() is a path anchor, not an iterable handle; iterating it fails.
 
 
   # sp_fs_dir_it_t
@@ -14009,47 +14012,25 @@ SP_PRIVATE sp_fs_kind_t sp_sys_dir_dtype_to_kind(u8 d_type) {
 }
 #endif
 
-#if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO)
-SP_PRIVATE sp_err_t sp_sys_dir_it_fd(sp_sys_dir_t dir, sp_sys_fd_t* out) {
-  *out = dir.fd;
-  if (dir.fd != sp_sys_get_root_p(0).fd) return SP_OK;
-
-  sp_sys_dir_t opened = sp_sys_dir(SP_SYS_INVALID_FD);
-  sp_try(sp_sys_open_dir_p(dir, ".", 1, 0, &opened));
-  *out = opened.fd;
-  return SP_OK;
-}
-#endif
-
 sp_err_t sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
   *out = sp_zero_s(sp_sys_dir_it_t);
   out->dir = dir;
-  out->fd = dir.fd;
   if (dir.fd == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
 
 #if defined(SP_WIN32)
-  sp_try(sp_sys_dir_it_fd(dir, &out->fd));
   out->state = 1;
   return SP_OK;
 #elif defined(SP_LINUX)
-  sp_try(sp_sys_dir_it_fd(dir, &out->fd));
-  if (out->fd != dir.fd) return SP_OK;
-
   s64 position = 0;
   return sp_sys_lseek_p(dir.fd, 0, SP_IO_SEEK_SET, &position);
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  sp_try(sp_sys_dir_it_fd(dir, &out->fd));
-  if (out->fd == dir.fd) {
-    s32 dup_fd = dup((s32)dir.fd);
-    if (dup_fd < 0) return sp_sys_err_from_errno(errno);
-    out->fd = (sp_sys_fd_t)dup_fd;
-  }
+  s32 dup_fd = dup((s32)dir.fd);
+  if (dup_fd < 0) return sp_sys_err_from_errno(errno);
 
-  DIR* stream = fdopendir((s32)out->fd);
+  DIR* stream = fdopendir(dup_fd);
   if (!stream) {
     sp_err_t err = sp_sys_err_from_errno(errno);
-    sp_sys_close_p(out->fd);
-    out->fd = dir.fd;
+    sp_sys_close_p((sp_sys_fd_t)dup_fd);
     return err;
   }
 
@@ -14066,11 +14047,11 @@ sp_err_t sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
 
 sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = 0;
-  if (it->fd == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
+  if (it->dir.fd == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
 #if defined(SP_WIN32)
   sp_nt_io_status_block_t iosb = sp_zero;
   sp_nt_status_t status = SP_NT(NtQueryDirectoryFile)(
-    (void*)(intptr_t)it->fd,
+    (void*)(intptr_t)it->dir.fd,
     SP_NULLPTR, SP_NULLPTR, SP_NULLPTR,
     &iosb,
     buf->data, (u32)(buf->capacity - SP_SYS_DIR_WIN32_SCRATCH),
@@ -14085,7 +14066,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = (u64)iosb.Information;
   return SP_OK;
 #elif defined(SP_LINUX)
-  s64 n = sp_lx_getdents64(it->fd, buf->data, buf->capacity);
+  s64 n = sp_lx_getdents64(it->dir.fd, buf->data, buf->capacity);
   if (n == -SP_ENOENT) return SP_OK;
   if (n < 0) return sp_sys_err_from_errno(-n);
   buf->len = (u64)n;
@@ -14099,7 +14080,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   return SP_OK;
 #elif defined(SP_WASM)
   __wasi_size_t used = 0;
-  __wasi_errno_t err = sp_wasi_fd_readdir((__wasi_fd_t)it->fd, buf->data, (__wasi_size_t)buf->capacity, (__wasi_dircookie_t)it->state, &used);
+  __wasi_errno_t err = sp_wasi_fd_readdir((__wasi_fd_t)it->dir.fd, buf->data, (__wasi_size_t)buf->capacity, (__wasi_dircookie_t)it->state, &used);
   if (err == SP_WASI_ENOENT) return SP_OK;
   if (err) return sp_sys_err_from_wasi(err);
 
@@ -14170,14 +14151,11 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
 }
 
 sp_err_t sp_sys_dir_it_close_p(sp_sys_dir_it_t* it) {
+  it->dir.fd = SP_SYS_INVALID_FD;
 #if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_WASM)
-  sp_sys_fd_t fd = it->fd;
-  it->fd = SP_SYS_INVALID_FD;
-  if (fd == SP_SYS_INVALID_FD || fd == it->dir.fd) return SP_OK;
-  return sp_sys_close_p(fd);
+  return SP_OK;
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   DIR* stream = (DIR*)(intptr_t)it->state;
-  it->fd = SP_SYS_INVALID_FD;
   if (!stream) return SP_OK;
   it->state = 0;
   if (closedir(stream)) return sp_sys_err_from_errno(errno);
@@ -20448,6 +20426,10 @@ sp_sys_dir_t sp_fs_get_cwd() {
   return sp_sys_get_root(0);
 }
 
+sp_err_t sp_fs_open_cwd(sp_sys_dir_t* out) {
+  return sp_fs_open_dir_at(sp_path_cwd_c("."), out);
+}
+
 sp_path_t sp_path(sp_sys_dir_t dir, sp_str_t sub) {
   return (sp_path_t) { .dir = dir, .sub = sub };
 }
@@ -20822,8 +20804,9 @@ sp_err_t sp_fs_dir_it_close(sp_fs_dir_it_t* it) {
 
 SP_PRIVATE void sp_fs_it_unwind(sp_fs_it_t* it) {
   sp_da_for(it->stack, i) {
+    sp_sys_dir_t dir = it->stack[i].dir.sys.dir;
     sp_fs_dir_it_close(&it->stack[i].dir);
-    if (i) sp_fs_close_dir(it->stack[i].dir.sys.dir);
+    if (i) sp_fs_close_dir(dir);
   }
   sp_da_clear(it->stack);
 }
@@ -20911,9 +20894,10 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
     }
 
     sp_da_pop(it->stack);
+    sp_sys_dir_t dir = top->dir.sys.dir;
     sp_fs_dir_it_close(&top->dir);
     if (sp_da_empty(it->stack)) break;
-    sp_fs_close_dir(top->dir.sys.dir);
+    sp_fs_close_dir(dir);
 
     it->last = sp_fs_it_entry(it, sp_da_back(it->stack)->dir.sys.dir, top->len, top->name_len, SP_FS_KIND_DIR);
     it->entered = false;

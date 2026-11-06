@@ -251,51 +251,40 @@ sp_test(fs, dir_reiterates_handle) {
   return SP_OK;
 }
 
-static sp_da(sp_str_t) dir_it_names(sp_test_t* t, sp_mem_t mem, sp_sys_dir_t dir) {
-  sp_da(sp_str_t) names = sp_da_new(mem, sp_str_t);
-  sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
+sp_test(fs, dir_it_cwd_anchor_fails) {
+  sp_test_skip_on_wasm()
+
+  sp_fs_dir_it_t iter = sp_fs_dir_it(sp_fs_get_cwd());
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
   sp_fs_dir_entry_t entry = sp_zero;
-  while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) sp_da_push(names, sp_str_copy(mem, entry.name));
-  sp_expect_ok(t, iter.err);
+  sp_expect(t, !sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry));
+  sp_expect(t, iter.err != SP_OK);
   sp_expect_ok(t, sp_fs_dir_it_close(&iter));
-  sp_da_sort(names, sp_str_sort_kernel_alphabetical);
-  return names;
-}
-
-sp_test(fs, dir_it_cwd_matches_opened_cwd) {
-  sp_mem_t mem = sp_test_arena(t);
-  sp_sys_dir_t opened = sp_sys_dir(SP_SYS_INVALID_FD);
-  sp_must_ok(t, sp_fs_open_dir_at(sp_path_cwd_c("."), &opened));
-  sp_da(sp_str_t) expect = dir_it_names(t, mem, opened);
-  sp_fs_close_dir(opened);
-
-  sp_da(sp_str_t) names = dir_it_names(t, mem, sp_fs_get_cwd());
-  sp_must_eq(t, sp_da_size(names), sp_da_size(expect));
-  sp_da_for(names, i) sp_expect_str_eq(t, names[i], expect[i]);
   return SP_OK;
 }
 
-sp_test(fs, it_cwd_matches_opened_cwd) {
+sp_test(fs, open_cwd_iterates) {
+  sp_test_skip_on_wasm()
+
   sp_mem_t mem = sp_test_arena(t);
-  sp_sys_dir_t opened = sp_sys_dir(SP_SYS_INVALID_FD);
-  sp_must_ok(t, sp_fs_open_dir_at(sp_path_cwd_c("."), &opened));
-  sp_da(sp_str_t) expect = dir_it_names(t, mem, opened);
-  sp_fs_close_dir(opened);
+  sp_sys_dir_t cwd = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_must_ok(t, sp_fs_open_cwd(&cwd));
 
-  sp_da(sp_str_t) names = sp_da_new(mem, sp_str_t);
-  sp_fs_it_t walk = sp_fs_it(mem, sp_fs_get_cwd());
-  sp_fs_it_entry_t entry = sp_zero;
-  while (sp_fs_it_next(&walk, &entry)) {
-    sp_fs_it_skip(&walk);
-    sp_expect_eq(t, entry.at.dir.fd, sp_fs_get_cwd().fd);
-    sp_da_push(names, sp_str_copy(mem, entry.name));
-  }
-  sp_expect_ok(t, walk.err);
-  sp_fs_it_deinit(&walk);
-  sp_da_sort(names, sp_str_sort_kernel_alphabetical);
+  sp_str_t expect = sp_zero;
+  sp_str_t actual = sp_zero;
+  sp_expect_ok(t, sp_fs_get_cwd_path(mem, &expect));
+  sp_expect_ok(t, sp_fs_canonicalize_path_at(mem, sp_path_c(cwd, "."), &actual));
+  sp_expect_str_eq(t, actual, expect);
 
-  sp_must_eq(t, sp_da_size(names), sp_da_size(expect));
-  sp_da_for(names, i) sp_expect_str_eq(t, names[i], expect[i]);
+  sp_fs_dir_it_t iter = sp_fs_dir_it(cwd);
+  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
+  u32 n = 0;
+  while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) n++;
+  sp_expect_ok(t, iter.err);
+  sp_expect(t, n > 0);
+  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
+
+  sp_fs_close_dir(cwd);
   return SP_OK;
 }
