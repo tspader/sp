@@ -19,7 +19,7 @@ static const test_t tests [] = {
 
 static u32 mkdirs;
 
-static sp_err_t mkdir_missing(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_perms_t perms) {
+static sp_err_t mkdir_missing(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_perms_t perms) {
   mkdirs++;
   return mkdirs > MAX_MKDIRS ? SP_ERR_SYS_LOOP : SP_ERR_SYS_NOT_FOUND;
 }

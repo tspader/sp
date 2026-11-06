@@ -258,6 +258,15 @@ static const sys_case_t sys_open_dir_cases [] = {
     },
   },
   {
+    .name = "accepts_trailing_slash",
+    .setup = {
+      { .path = "dir", .kind = SYS_SETUP_DIR },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "dir/" } },
+    },
+  },
+  {
     .name = "follows_dir_symlink",
     .setup = {
       { .path = "dir", .kind = SYS_SETUP_DIR },

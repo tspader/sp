@@ -93,7 +93,7 @@ sp_test_each(fs, predicates, test_t, tests) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_carr_for(it->probes, i) {
     const probe_t* probe = &it->probes[i];

@@ -5,7 +5,6 @@
 typedef struct {
   sp_err_t open;
   sp_err_t walk;
-  u32 fd_closes;
 } expect_t;
 
 typedef struct {
@@ -18,20 +17,19 @@ static const test_t tests [] = {
   {
     .name = "propagates_read_error",
     .dirs = {
-      { .path = "T", .read = SP_ERR_SYS_BAD_FD },
+      { .read = SP_ERR_SYS_BAD_FD },
     },
     .expect = {
       .walk = SP_ERR_SYS_BAD_FD,
     },
   },
   {
-    .name = "closes_fd_when_it_open_fails",
+    .name = "propagates_it_open_error",
     .dirs = {
-      { .path = "T", .it_open = SP_ERR_SYS_IO },
+      { .it_open = SP_ERR_SYS_IO },
     },
     .expect = {
       .open = SP_ERR_SYS_IO,
-      .fd_closes = 1,
     },
   },
 };
@@ -40,25 +38,29 @@ sp_test_each(fs, dir_sim, test_t, tests, .serial = true) {
   sim_t s = sp_zero;
   sim_begin(&s, it->dirs);
 
-  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_it_t dir = sp_zero;
-  sp_err_t open_err = sp_fs_dir_it_open(&dir, sp_path(sp_sys_get_root(0), sp_str_lit("T")), 0, sp_mem_slice(buf, sizeof(buf)));
-  sp_expect_err_eq(t, open_err, it->expect.open);
+  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_err_t err = sp_fs_open_dir_at(sim_root(), &dir);
+  sp_expect_ok(t, err);
 
-  if (!open_err) {
-    sp_err_t walk = SP_OK;
-    while (true) {
+  sp_err_t open_err = SP_OK;
+  if (!err) {
+    sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
+    open_err = iter.err;
+    sp_expect_err_eq(t, open_err, it->expect.open);
+
+    if (!open_err) {
+      SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
       sp_fs_dir_entry_t entry = sp_zero;
-      walk = sp_fs_dir_it_next(&dir, &entry);
-      if (walk || !entry.name.data) break;
+      while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) {}
+      sp_expect_err_eq(t, iter.err, it->expect.walk);
+      sp_expect_ok(t, sp_fs_dir_it_close(&iter));
     }
-    sp_expect_err_eq(t, walk, it->expect.walk);
-    sp_expect_ok(t, sp_fs_dir_it_close(&dir));
+    sp_fs_close_dir(dir);
   }
 
   sim_end(&s);
 
-  sp_expect_eq(t, s.count.fd_closes, it->expect.fd_closes);
   sp_expect_eq(t, s.count.closes, open_err ? (u32)0 : (u32)1);
+  sp_expect_eq(t, s.count.fd_closes, (u32)1);
   return SP_OK;
 }

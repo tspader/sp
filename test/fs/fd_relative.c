@@ -114,10 +114,10 @@ sp_test_each(fs, fd_relative, test_t, tests) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_path_t cwd_path = sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd));
-  sp_sys_fd_t cwd = SP_SYS_INVALID_FD;
+  sp_sys_dir_t cwd = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_must_ok(t, sp_fs_open_dir_at(cwd_path, &cwd));
 
   switch (it->op) {
@@ -154,7 +154,7 @@ sp_test_each(fs, fd_relative, test_t, tests) {
     }
   }
 
-  sp_sys_close(cwd);
+  sp_fs_close_dir(cwd);
   fs_expect_paths(t, sandbox, it->expect);
   return SP_OK;
 }

@@ -1027,8 +1027,8 @@ sp_mem_t sp_test_mem(sp_test_t* t) {
 static sp_str_t sp_test_path_str(sp_mem_t mem, sp_path_t path) {
   c8 buf [SP_PATH_MAX];
   u64 len = 0;
-  for (s32 it = 0; sp_sys_get_root(it) != SP_SYS_INVALID_FD; it++) {
-    if (sp_sys_get_root(it) != path.dir) continue;
+  for (s32 it = 0; sp_sys_get_root(it).fd != SP_SYS_INVALID_FD; it++) {
+    if (sp_sys_get_root(it).fd != path.dir.fd) continue;
     if (sp_sys_get_root_label(it, buf, sizeof(buf), &len)) break;
     return sp_fs_join_path(mem, sp_str(buf, (u32)len), path.sub);
   }
@@ -1214,7 +1214,7 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
     src = sp_path_join(t->mem, root, file);
   }
 
-  if (src.dir == SP_SYS_INVALID_FD || !sp_fs_is_target_file_at(src)) {
+  if (src.dir.fd == SP_SYS_INVALID_FD || !sp_fs_is_target_file_at(src)) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
@@ -2028,7 +2028,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   if (golden.opt) golden_root = sp_cstr_as_str(golden.opt);
   if (!sp_str_empty(golden_root)) {
     runner->golden_root = sp_path_from_str(sp_fs_normalize_path(runner->mem, golden_root));
-    if (runner->golden_root.dir == SP_SYS_INVALID_FD) {
+    if (runner->golden_root.dir.fd == SP_SYS_INVALID_FD) {
       sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(golden_root));
       sp_io_flush(&runner->out.base);
       return 1;
@@ -2126,7 +2126,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   dir_name = sp_fs_normalize_path(runner->mem, dir_name);
 
   sp_path_t root = sp_path_from_str(dir_name);
-  if (root.dir == SP_SYS_INVALID_FD) {
+  if (root.dir.fd == SP_SYS_INVALID_FD) {
     sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(dir_name));
     sp_io_flush(&runner->out.base);
     return 1;
@@ -2141,9 +2141,17 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
 
   sp_str_t cutoff = sp_test_run_name(runner->mem, grace);
   sp_da(sp_str_t) runs = sp_da_new(runner->mem, sp_str_t);
-  sp_fs_for(runner->mem, runs_dir, it) {
-    if (it.entry.kind != SP_FS_KIND_DIR) continue;
-    sp_da_push(runs, sp_str_copy(runner->mem, it.entry.name));
+  sp_sys_dir_t runs_handle = sp_sys_dir(SP_SYS_INVALID_FD);
+  if (!sp_fs_open_dir_at(runs_dir, &runs_handle)) {
+    sp_fs_dir_it_t iter = sp_fs_dir_it(runs_handle);
+    SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+    sp_fs_dir_entry_t entry = sp_zero;
+    while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) {
+      if (entry.kind != SP_FS_KIND_DIR) continue;
+      sp_da_push(runs, sp_str_copy(runner->mem, entry.name));
+    }
+    sp_fs_dir_it_close(&iter);
+    sp_fs_close_dir(runs_handle);
   }
   sp_da_sort(runs, sp_str_sort_kernel_alphabetical);
 

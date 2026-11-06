@@ -31,9 +31,9 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case OP_READ:  err = sp_sys_read(GARBAGE_FD, buf, sizeof(buf), &n); break;
     case OP_WRITE: err = sp_sys_write(GARBAGE_FD, "A", 1, &n); break;
     case OP_OPEN_DIR: {
-      sp_sys_fd_t out = SP_SYS_INVALID_FD;
-      err = sp_sys_open_dir_s(GARBAGE_FD, sp_str_lit("A"), 0, &out);
-      if (!err) sp_sys_close(out);
+      sp_sys_dir_t out = sp_zero;
+      err = sp_sys_open_dir_s(sp_sys_dir(GARBAGE_FD), sp_str_lit("A"), 0, &out);
+      if (!err) sp_fs_close_dir(out);
       break;
     }
   }
