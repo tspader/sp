@@ -3256,19 +3256,45 @@ SP_API sp_path_t            sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t 
 SP_API sp_path_t            sp_path_parent(sp_mem_t mem, sp_path_t path);
 
 /*
-  sp_fs_dir_it_t, sp_fs_it_t
-  Directory iterators
+  # sp_sys_dir_it_t
 
   sp_sys_dir_it_t is the OS level iteration state (usually, just the handle to
   the top level directory, but on WASM also a cookie and on macOS a DIR*). The
-  syscalls are strictly about answering:
+  syscalls strictly handle:
   - Asking the OS fill a buffer with the next N entries for the handle
   - Parsing those opaque bytes into entries
 
-  That can be driven however you want! There's no concept of the "next" entry,
-  traversing into child directories, or buffer ownership. Syscalls.
+  This layer has no concept of the "next" entry, or traversing into child
+  directories, or buffer ownership. This layer is just the portable primitives
+  on which you build those things
 
 
+  # sp_fs_dir_it_t
+
+  This is an iterator for a single directory. It holds the low level "fill
+  a buffer with entries" iterator, peels off entries one at a time, and asks
+  the kernel for more entries when the buffer is exhausted.
+
+  It doesn't own the buffer. Rather, it's just a cursor to go along with the
+  aforementioned kernel level iterator state. The idea is that callers ought
+  to be able to use the shell of iteration, the logic of "if empty, refill;
+  yield entry", without prescribing anything about the buffer.
+
+  Want to use a heap buffer? Sure. Stack buffer? Sure. Does your code work a
+  lot better when the kernel fills 4KB of entries at a time? 8KB? 64KB? No
+  problem! As long as you don't stomp the buffer between calls to next(),
+  do whatever you want.
+
+
+  # sp_fs_it_t
+
+  This packages the above "iterate a single directory" along with some
+  convenient defaults into one high level API for iterating entire trees of
+  files:
+  - A dynamically sized stack of frames, where a frame is an iterator for a
+    single directory plus a fixed size stack buffer to use for entries
+  - Logic to enter child directories and unwind back up the tree on error
+  - Functions for the caller to skip subtrees, or change tree traversal order
  */
 typedef struct {
   sp_sys_dir_it_t sys;
