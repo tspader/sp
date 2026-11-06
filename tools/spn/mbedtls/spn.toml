@@ -1,0 +1,211 @@
+[package]
+name = "mbedtls"
+version = "3.6.7"
+
+[package.upstream]
+url = "https://github.com/Mbed-TLS/mbedtls.git"
+commit = "0bebf8b8c7f07abe3571ded48a11aa907a1ffb20"
+
+[options.threading]
+type = "bool"
+default = [{ value = false, when = { os = "windows" } }, { value = true }]
+public = true
+define = "MBEDTLS_THREADING_PTHREAD"
+
+[options.threading_c]
+type = "bool"
+default = [{ value = true, when = { threading = true } }, { value = false }]
+public = true
+define = "MBEDTLS_THREADING_C"
+
+[options.everest]
+type = "bool"
+default = false
+public = true
+define = "MBEDTLS_ECDH_VARIANT_EVEREST_ENABLED"
+
+[options.user_config]
+type = "bool"
+default = true
+define = 'MBEDTLS_USER_CONFIG_FILE="user.h"'
+
+[options.p256m]
+type = "bool"
+default = false
+define = "MBEDTLS_PSA_P256M_DRIVER_ENABLED"
+
+[[lib]]
+name = "mbedtls"
+kinds = ["static"]
+include = [
+  "include",
+  "library",
+  { path = "config", tree = "manifest" },
+  { path = "3rdparty/everest/include", when = { everest = true } },
+]
+define = [{ value = "WIN32_LEAN_AND_MEAN", when = { os = "windows" } }]
+source = [
+  "library/debug.c",
+  "library/mps_reader.c",
+  "library/mps_trace.c",
+  "library/net_sockets.c",
+  "library/ssl_cache.c",
+  "library/ssl_ciphersuites.c",
+  "library/ssl_client.c",
+  "library/ssl_cookie.c",
+  "library/ssl_debug_helpers_generated.c",
+  "library/ssl_msg.c",
+  "library/ssl_ticket.c",
+  "library/ssl_tls.c",
+  "library/ssl_tls12_client.c",
+  "library/ssl_tls12_server.c",
+  "library/ssl_tls13_keys.c",
+  "library/ssl_tls13_server.c",
+  "library/ssl_tls13_client.c",
+  "library/ssl_tls13_generic.c",
+]
+deps = ["mbedx509"]
+
+[[lib]]
+name = "mbedx509"
+kinds = ["static"]
+include = [
+  "include",
+  "library",
+  { path = "config", tree = "manifest" },
+  { path = "3rdparty/everest/include", when = { everest = true } },
+]
+define = [{ value = "WIN32_LEAN_AND_MEAN", when = { os = "windows" } }]
+source = [
+  "library/pkcs7.c",
+  "library/x509.c",
+  "library/x509_create.c",
+  "library/x509_crl.c",
+  "library/x509_crt.c",
+  "library/x509_csr.c",
+  "library/x509write.c",
+  "library/x509write_crt.c",
+  "library/x509write_csr.c",
+]
+deps = ["mbedcrypto"]
+
+[[lib]]
+name = "mbedcrypto"
+kinds = ["static"]
+include = [
+  "include",
+  "library",
+  { path = "3rdparty/everest/include", when = { everest = true } },
+  { path = "3rdparty/everest/include/everest", when = { everest = true } },
+  { path = "3rdparty/everest/include/everest/kremlib", when = { everest = true } },
+  { path = "3rdparty/p256-m", when = { p256m = true } },
+  { path = "3rdparty/p256-m/p256-m", when = { p256m = true } },
+  { path = "config", tree = "manifest" },
+]
+define = [{ value = "WIN32_LEAN_AND_MEAN", when = { os = "windows" } }]
+source = [
+  "library/aes.c",
+  "library/aesni.c",
+  "library/aesce.c",
+  "library/aria.c",
+  "library/asn1parse.c",
+  "library/asn1write.c",
+  "library/base64.c",
+  "library/bignum.c",
+  "library/bignum_core.c",
+  "library/bignum_mod.c",
+  "library/bignum_mod_raw.c",
+  "library/block_cipher.c",
+  "library/camellia.c",
+  "library/ccm.c",
+  "library/chacha20.c",
+  "library/chachapoly.c",
+  "library/cipher.c",
+  "library/cipher_wrap.c",
+  "library/constant_time.c",
+  "library/cmac.c",
+  "library/ctr_drbg.c",
+  "library/des.c",
+  "library/dhm.c",
+  "library/ecdh.c",
+  "library/ecdsa.c",
+  "library/ecjpake.c",
+  "library/ecp.c",
+  "library/ecp_curves.c",
+  "library/ecp_curves_new.c",
+  "library/entropy.c",
+  "library/entropy_poll.c",
+  "library/error.c",
+  "library/gcm.c",
+  "library/hkdf.c",
+  "library/hmac_drbg.c",
+  "library/lmots.c",
+  "library/lms.c",
+  "library/md.c",
+  "library/md5.c",
+  "library/memory_buffer_alloc.c",
+  "library/nist_kw.c",
+  "library/oid.c",
+  "library/padlock.c",
+  "library/pem.c",
+  "library/pk.c",
+  "library/pk_ecc.c",
+  "library/pk_wrap.c",
+  "library/pkcs12.c",
+  "library/pkcs5.c",
+  "library/pkparse.c",
+  "library/pkwrite.c",
+  "library/platform.c",
+  "library/platform_util.c",
+  "library/poly1305.c",
+  "library/psa_crypto.c",
+  "library/psa_crypto_aead.c",
+  "library/psa_crypto_cipher.c",
+  "library/psa_crypto_client.c",
+  "library/psa_crypto_driver_wrappers_no_static.c",
+  "library/psa_crypto_ecp.c",
+  "library/psa_crypto_ffdh.c",
+  "library/psa_crypto_hash.c",
+  "library/psa_crypto_mac.c",
+  "library/psa_crypto_pake.c",
+  "library/psa_crypto_rsa.c",
+  "library/psa_crypto_random.c",
+  "library/psa_crypto_se.c",
+  "library/psa_crypto_slot_management.c",
+  "library/psa_crypto_storage.c",
+  "library/psa_its_file.c",
+  "library/psa_util.c",
+  "library/ripemd160.c",
+  "library/rsa.c",
+  "library/rsa_alt_helpers.c",
+  "library/sha1.c",
+  "library/sha256.c",
+  "library/sha512.c",
+  "library/sha3.c",
+  "library/threading.c",
+  "library/timing.c",
+  "library/version.c",
+  "library/version_features.c",
+  { path = "3rdparty/everest/library/everest.c", when = { everest = true } },
+  { path = "3rdparty/everest/library/x25519.c", when = { everest = true } },
+  { path = "3rdparty/everest/library/Hacl_Curve25519_joined.c", when = { everest = true } },
+  { path = "3rdparty/p256-m/p256-m_driver_entrypoints.c", when = { p256m = true } },
+  { path = "3rdparty/p256-m/p256-m/p256-m.c", when = { p256m = true } },
+]
+system_deps = [
+  { value = "pthread", when = { threading = true } },
+  { value = "ws2_32", when = { os = "windows" } },
+  { value = "bcrypt", when = { os = "windows" } },
+]
+
+[package.publish]
+include = [
+  { from = "source/include/mbedtls/*", to = "mbedtls" },
+  { from = "source/include/psa/*", to = "psa" },
+  { from = "source/3rdparty/everest/include/everest/*", to = "everest", when = { everest = true } },
+]
+
+[profile.default]
+linkage = "shared"
+abi = "gnu"
+options = { threading = true, everest = true, p256m = true }

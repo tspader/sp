@@ -111,7 +111,7 @@ define = ["SP_SHARED_LIB"]
 deps = ["sp"]
 
 [deps.test]
-mbedtls = "3.6.6"
+mbedtls = { path = "tools/spn/mbedtls" }
 
 [[example]]
 name = "zero_copy"
