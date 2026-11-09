@@ -20498,7 +20498,6 @@ sp_err_t sp_fs_close_dir(sp_sys_dir_t dir) {
 }
 
 sp_fs_kind_t sp_fs_get_link_kind_at(sp_path_t path) {
-  if (sp_str_empty(path.sub)) return SP_FS_KIND_NONE;
   sp_sys_file_meta_t st = sp_zero;
   s32 rc = sp_sys_get_link_metadata_s(path.dir, path.sub, &st);
   return rc == 0 ? st.kind : SP_FS_KIND_NONE;
@@ -20509,7 +20508,6 @@ sp_fs_kind_t sp_fs_get_link_kind(sp_str_t path) {
 }
 
 sp_fs_kind_t sp_fs_get_target_kind_at(sp_path_t path) {
-  if (sp_str_empty(path.sub)) return SP_FS_KIND_NONE;
   sp_sys_file_meta_t st = sp_zero;
   s32 rc = sp_sys_get_path_metadata_s(path.dir, path.sub, &st);
   return rc == 0 ? st.kind : SP_FS_KIND_NONE;
