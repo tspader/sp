@@ -10,6 +10,9 @@
 
 #define FS_MAX_SETUP 8
 #define FS_MAX_PATHS 8
+#define FS_DEEP_LEVELS 40
+#define FS_DEEP_NAME "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
+                     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 
 ////////////////////
@@ -138,6 +141,25 @@ static sp_err_t fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t
   }
   sp_test_kv_clear(t, "setup");
   return SP_OK;
+}
+
+static sp_err_t fs_create_deep_tree(sp_path_t root) {
+  sp_try(sp_fs_create_dir_at(root));
+
+  sp_sys_dir_t cur = sp_zero;
+  sp_try(sp_fs_open_dir_at(root, &cur));
+  sp_for(level, FS_DEEP_LEVELS) {
+    sp_path_t child = sp_path(cur, sp_str_lit(FS_DEEP_NAME));
+    sp_sys_dir_t next = sp_zero;
+    sp_err_t err = sp_fs_create_dir_at(child);
+    if (!err) err = sp_fs_open_dir_at(child, &next);
+    sp_fs_close_dir(cur);
+    sp_try(err);
+    cur = next;
+  }
+  sp_err_t err = sp_fs_create_file_at(sp_path(cur, sp_str_lit("F")));
+  sp_fs_close_dir(cur);
+  return err;
 }
 
 static void fs_expect_no_temps(sp_test_t* t, sp_path_t sandbox) {

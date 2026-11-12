@@ -21266,30 +21266,47 @@ sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
 
 sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_da(sp_sys_dir_t) dst = sp_da_new(s.mem, sp_sys_dir_t);
 
   sp_sys_dir_t src = sp_sys_dir(SP_SYS_INVALID_FD);
-  sp_sys_dir_t dst = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   sp_err_t err = sp_fs_open_dir_at(from, &src);
   if (!err) err = sp_fs_create_dir_at(to);
-  if (!err) err = sp_fs_open_dir_at(to, &dst);
+  if (!err) err = sp_fs_open_dir_at(to, &dir);
+  if (!err) sp_da_push(dst, dir);
 
   sp_fs_it_t it = sp_zero;
   if (!err) it = sp_fs_it(s.mem, src);
-  sp_fs_it_entry_t entry = sp_zero;
-  while (!err && sp_fs_it_next(&it, &entry)) {
-    sp_path_t target = sp_path(dst, entry.path);
-    switch (entry.kind) {
-      case SP_FS_KIND_DIR:     err = sp_fs_create_dir_at(target); break;
-      case SP_FS_KIND_FILE:    err = sp_fs_copy_file_at(entry.at, target, mode); break;
-      case SP_FS_KIND_SYMLINK: err = sp_fs_copy_link_at(entry.at, target, mode); break;
-      case SP_FS_KIND_NONE:    err = SP_ERR_SYS_UNSUPPORTED; break;
+  sp_fs_visit_t visit = sp_zero;
+  while (!err && sp_fs_it_visit(&it, &visit)) {
+    switch (visit.order) {
+      case SP_FS_PRE_ORDER: {
+        sp_path_t target = sp_path(*sp_da_back(dst), visit.entry.name);
+        switch (visit.entry.kind) {
+          case SP_FS_KIND_DIR: {
+            err = sp_fs_create_dir_at(target);
+            if (!err) err = sp_fs_open_dir_at(target, &dir);
+            if (!err) sp_da_push(dst, dir);
+            break;
+          }
+          case SP_FS_KIND_FILE:    err = sp_fs_copy_file_at(visit.entry.at, target, mode); break;
+          case SP_FS_KIND_SYMLINK: err = sp_fs_copy_link_at(visit.entry.at, target, mode); break;
+          case SP_FS_KIND_NONE:    err = SP_ERR_SYS_UNSUPPORTED; break;
+        }
+        break;
+      }
+      case SP_FS_POST_ORDER: {
+        sp_fs_close_dir(*sp_da_back(dst));
+        sp_da_pop(dst);
+        break;
+      }
     }
   }
   if (!err) err = it.err;
 
   sp_fs_it_deinit(&it);
+  sp_da_for(dst, i) sp_fs_close_dir(dst[i]);
   if (src.fd != SP_SYS_INVALID_FD) sp_fs_close_dir(src);
-  if (dst.fd != SP_SYS_INVALID_FD) sp_fs_close_dir(dst);
   sp_mem_end_scratch(s);
   return err;
 }

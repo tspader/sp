@@ -1,9 +1,5 @@
 #include "fs.h"
 
-#define DEEP_LEVELS 40
-#define DEEP_NAME "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
-                  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-
 typedef struct {
   sp_err_t err;
   fs_expected_path_t paths [FS_MAX_PATHS];
@@ -326,21 +322,7 @@ sp_test_each(fs, remove, test_t, tests) {
 
 sp_test(fs, remove_dir_deeper_than_path_max) {
   sp_path_t root = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
-  sp_must_ok(t, sp_fs_create_dir_at(root));
-
-  sp_sys_dir_t cur = sp_zero;
-  sp_must_ok(t, sp_fs_open_dir_at(root, &cur));
-  sp_for(level, DEEP_LEVELS) {
-    sp_path_t child = sp_path(cur, sp_str_lit(DEEP_NAME));
-    sp_must_ok(t, sp_fs_create_dir_at(child));
-
-    sp_sys_dir_t next = sp_zero;
-    sp_must_ok(t, sp_fs_open_dir_at(child, &next));
-    sp_fs_close_dir(cur);
-    cur = next;
-  }
-  sp_must_ok(t, sp_fs_create_file_at(sp_path(cur, sp_str_lit("F"))));
-  sp_fs_close_dir(cur);
+  sp_must_ok(t, fs_create_deep_tree(root));
 
   sp_expect_ok(t, sp_fs_remove_dir_at(root));
   sp_expect(t, !sp_fs_exists_at(root));
