@@ -20805,9 +20805,8 @@ sp_err_t sp_fs_dir_it_close(sp_fs_dir_it_t* it) {
 
 SP_PRIVATE void sp_fs_it_unwind(sp_fs_it_t* it) {
   sp_da_for(it->stack, i) {
-    sp_sys_dir_t dir = it->stack[i].dir.sys.dir;
     sp_fs_dir_it_close(&it->stack[i].dir);
-    if (i) sp_fs_close_dir(dir);
+    if (i) sp_fs_close_dir(it->stack[i].dir.sys.dir);
   }
   sp_da_clear(it->stack);
 }
@@ -20895,10 +20894,9 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
     }
 
     sp_da_pop(it->stack);
-    sp_sys_dir_t dir = top->dir.sys.dir;
     sp_fs_dir_it_close(&top->dir);
     if (sp_da_empty(it->stack)) break;
-    sp_fs_close_dir(dir);
+    sp_fs_close_dir(top->dir.sys.dir);
 
     it->last = sp_fs_it_entry(it, sp_da_back(it->stack)->dir.sys.dir, top->len, top->name_len, SP_FS_KIND_DIR);
     it->entered = false;
