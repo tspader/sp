@@ -31,23 +31,25 @@ void pruned(sp_mem_t mem, sp_sys_dir_t dir) {
 }
 
 void ordered(sp_mem_t mem, sp_sys_dir_t dir) {
-  u32 counts [SP_FS_IT_MAX_DEPTH] = sp_zero;
+  sp_da(u32) counts = sp_da_new(mem, u32);
+  sp_da_push(counts, 0);
 
   sp_fs_it_t it = sp_fs_it(mem, dir);
   sp_fs_visit_t visit = sp_zero;
   while (sp_fs_it_visit(&it, &visit)) {
     sp_fs_it_entry_t entry = visit.entry;
-    u64 depth = sp_da_size(it.stack);
     switch (visit.order) {
       case SP_FS_PRE_ORDER: {
-        if (entry.kind != SP_FS_KIND_DIR) counts[depth - 1]++;
+        if (entry.kind != SP_FS_KIND_DIR) (*sp_da_back(counts))++;
         else if (sp_str_equal(entry.name, sp_str_lit(".git"))) sp_fs_it_skip(&it);
-        else counts[depth] = 0;
+        else sp_da_push(counts, 0);
         break;
       }
       case SP_FS_POST_ORDER: {
-        sp_log("{}: {}", sp_fmt_str(entry.path), sp_fmt_int(counts[depth]));
-        counts[depth - 1] += counts[depth];
+        u32 count = *sp_da_back(counts);
+        sp_da_pop(counts);
+        sp_log("{}: {}", sp_fmt_str(entry.path), sp_fmt_int(count));
+        *sp_da_back(counts) += count;
         break;
       }
     }
@@ -55,6 +57,7 @@ void ordered(sp_mem_t mem, sp_sys_dir_t dir) {
   sp_fs_it_deinit(&it);
 
   sp_log("total: {}", sp_fmt_int(counts[0]));
+  sp_da_free(counts);
 }
 
 s32 run(s32 num_args, const c8** args) {

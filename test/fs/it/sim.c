@@ -7,9 +7,6 @@
 #define A16 "AAAAAAAAAAAAAAAA"
 #define A240 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16
 #define A256 A240 A16
-#define A2044 A256 A256 A256 A256 A256 A256 A256 A240 "AAAAAAAAAAAA"
-#define A2046 A2044 "AA"
-#define A2047 A2044 "AAA"
 #define A2048 A256 A256 A256 A256 A256 A256 A256 A256
 
 typedef struct {
@@ -134,28 +131,16 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "path_fits_max",
+    .name = "path_longer_than_path_max",
     .dirs = {
       { .entries = { { A2048, SP_FS_KIND_DIR } } },
-      { .path = A2048, .entries = { { A2046, SP_FS_KIND_FILE } } },
+      { .path = A2048, .entries = { { A2048, SP_FS_KIND_FILE } } },
     },
     .expect = {
       .entries = {
         { A2048, SP_FS_KIND_DIR },
-        { A2048 "/" A2046, SP_FS_KIND_FILE },
+        { A2048 "/" A2048, SP_FS_KIND_FILE },
       },
-      .opens = 2,
-    },
-  },
-  {
-    .name = "path_too_long",
-    .dirs = {
-      { .entries = { { A2048, SP_FS_KIND_DIR } } },
-      { .path = A2048, .entries = { { A2047, SP_FS_KIND_FILE } } },
-    },
-    .expect = {
-      .walk = SP_ERR_SYS_NAME_TOO_LONG,
-      .entries = { { A2048, SP_FS_KIND_DIR } },
       .opens = 2,
     },
   },

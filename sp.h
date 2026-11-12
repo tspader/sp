@@ -3139,7 +3139,6 @@ SP_API void              sp_tm_epoch_to_iso8601_w(sp_io_writer_t* io, sp_tm_epoc
 // ░░░░░       ░░░░░ ░░░░░░░░░░░ ░░░░░░░░░░  ░░░░░░░░░     ░░░░░     ░░░░░░░░░     ░░░░░    ░░░░░░░░░░ ░░░░░     ░░░░░
 // @fs @filesystem
 #define SP_PATH_MAX 4096
-#define SP_FS_IT_MAX_DEPTH (SP_PATH_MAX / 2 + 1)
 
 typedef enum {
   SP_FS_ATOMIC_REPLACE,
@@ -3324,7 +3323,7 @@ typedef struct {
 
 typedef struct {
   sp_da(sp_fs_it_frame_t) stack;
-  c8 path [SP_PATH_MAX];
+  sp_da(c8) path;
   sp_fs_it_entry_t last;
   bool descend;
   sp_err_t err;
@@ -20798,15 +20797,6 @@ SP_PRIVATE void sp_fs_it_unwind(sp_fs_it_t* it) {
   sp_da_clear(it->stack);
 }
 
-SP_PRIVATE sp_err_t sp_fs_it_join(sp_fs_it_t* it, u32 prefix, sp_str_t name, u32* len) {
-  u32 start = prefix ? prefix + 1 : 0;
-  if (start + name.len >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
-  if (prefix) it->path[prefix] = '/';
-  sp_str_copy_to(name, it->path + start, name.len);
-  *len = start + name.len;
-  return SP_OK;
-}
-
 SP_PRIVATE sp_fs_it_entry_t sp_fs_it_entry(sp_fs_it_t* it, sp_sys_dir_t parent, u32 len, u32 name_len, sp_fs_kind_t kind) {
   sp_str_t name = sp_str(it->path + len - name_len, name_len);
   return (sp_fs_it_entry_t) {
@@ -20833,6 +20823,7 @@ SP_PRIVATE sp_err_t sp_fs_it_push(sp_fs_it_t* it, sp_fs_it_entry_t entry) {
 sp_fs_it_t sp_fs_it(sp_mem_t mem, sp_sys_dir_t root) {
   sp_fs_it_t it = sp_zero;
   sp_da_init(mem, it.stack);
+  sp_da_init(mem, it.path);
   sp_fs_it_frame_t frame = { .dir = sp_fs_dir_it(root) };
   it.err = frame.dir.err;
   if (!it.err) sp_da_push(it.stack, frame);
@@ -20857,12 +20848,13 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
 
     sp_fs_dir_entry_t d = sp_zero;
     if (sp_fs_dir_it_next(&top->dir, sp_mem_slice(top->buf, SP_SYS_DIR_MIN_BUF), &d)) {
-      u32 len = 0;
-      it->err = sp_fs_it_join(it, top->len, d.name, &len);
-      if (it->err) {
-        sp_fs_it_unwind(it);
-        return false;
-      }
+      u32 start = top->len ? top->len + 1 : 0;
+      u32 len = start + d.name.len;
+      sp_da_clear(it->path);
+      *sp_da_vp(it->path) = sp_da_grow(it->path, len);
+      sp_da_head(it->path)->size = len;
+      if (top->len) it->path[top->len] = '/';
+      sp_str_copy_to(d.name, it->path + start, d.name.len);
 
       it->last = sp_fs_it_entry(it, top->dir.sys.dir, len, d.name.len, d.kind);
       if (it->last.kind == SP_FS_KIND_NONE) it->last.kind = sp_fs_get_link_kind_at(it->last.at);
@@ -20916,7 +20908,9 @@ void sp_fs_it_deinit(sp_fs_it_t* it) {
   if (!it->stack) return;
   sp_fs_it_unwind(it);
   sp_da_free(it->stack);
+  sp_da_free(it->path);
   it->stack = SP_NULLPTR;
+  it->path = SP_NULLPTR;
 }
 
 sp_err_t sp_fs_remove_dir(sp_str_t path) {
@@ -20931,9 +20925,7 @@ sp_err_t sp_fs_remove_dir(sp_str_t path) {
   does not refer to a directory, and unlinks the root at the end.
 
   This function uses O(depth) memory. A directory is reopened only when its
-  rmdir reports NOT_EMPTY after a pass that removed one of its entries. Every
-  path under the root must fit in SP_PATH_MAX; a deeper tree fails with
-  NAME_TOO_LONG, and can be removed by opening a handle partway down.
+  rmdir reports NOT_EMPTY after a pass that removed one of its entries.
 
 
   # SYMLINKS
@@ -20989,7 +20981,8 @@ SP_PRIVATE sp_err_t sp_fs_remove_enter(sp_fs_it_t* it, sp_path_t at) {
 
 SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed, bool* listed) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  bool progress [SP_FS_IT_MAX_DEPTH] = sp_zero;
+  sp_da(bool) progress = sp_da_new(s.mem, bool);
+  sp_da_push(progress, false);
 
   sp_sys_dir_t root = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_err_t err = sp_sys_open_dir_s(path.dir, path.sub, SP_SYS_OPEN_DIR_NO_FOLLOW, &root);
@@ -21001,6 +20994,7 @@ SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed, bool* li
   while (!err && sp_fs_it_visit(&it, &visit)) {
     sp_path_t at = visit.entry.at;
     u64 depth = sp_da_size(it.stack);
+    while (sp_da_size(progress) <= depth) sp_da_push(progress, false);
     switch (visit.order) {
       case SP_FS_POST_ORDER: {
         err = sp_sys_rmdir_s(at.dir, at.sub);
