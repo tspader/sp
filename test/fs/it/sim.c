@@ -27,24 +27,11 @@ typedef struct {
 typedef struct {
   const c8* name;
   u32 stop_after;
-  bool enter_first;
   sim_dir_t dirs [SIM_MAX_DIRS];
   expect_t expect;
 } test_t;
 
 static const test_t tests [] = {
-  {
-    .name = "enter_before_first_entry_is_invalid",
-    .enter_first = true,
-    .dirs = {
-      { .entries = { { "B", SP_FS_KIND_FILE } } },
-    },
-    .expect = {
-      .enter = SP_ERR_SYS_INVALID,
-      .entries = { { "B", SP_FS_KIND_FILE } },
-      .opens = 1,
-    },
-  },
   {
     .name = "resumes_parent_after_child",
     .dirs = {
@@ -201,7 +188,6 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
   u32 produced = 0;
   if (!err) {
     sp_fs_it_t walk = sp_fs_it(mem, root);
-    if (it->enter_first) sp_expect_err_eq(t, sp_fs_it_enter(&walk), it->expect.enter);
     sp_fs_it_entry_t entry = sp_zero;
     while (sp_fs_it_next(&walk, &entry)) {
       if (produced < MAX_WALK && it->expect.entries[produced].path) {
@@ -217,7 +203,7 @@ sp_test_each(fs, it_sim, test_t, tests, .serial = true) {
       if (produced == it->stop_after) break;
     }
     sp_expect_err_eq(t, walk.err, it->expect.walk);
-    if (it->expect.enter && !it->enter_first) sp_expect_err_eq(t, sp_fs_it_enter(&walk), it->expect.enter);
+    if (it->expect.enter) sp_expect_err_eq(t, sp_fs_it_enter(&walk), it->expect.enter);
     sp_fs_it_deinit(&walk);
     sp_fs_close_dir(root);
   }

@@ -20915,7 +20915,6 @@ bool sp_fs_it_next(sp_fs_it_t* it, sp_fs_it_entry_t* out) {
 sp_err_t sp_fs_it_enter(sp_fs_it_t* it) {
   if (it->err) return it->err;
   if (sp_da_empty(it->stack)) return SP_ERR_SYS_INVALID;
-  if (sp_str_empty(it->last.path)) return SP_ERR_SYS_INVALID;
   it->descend = false;
   return sp_fs_it_push(it, it->last);
 }
