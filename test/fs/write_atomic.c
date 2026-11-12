@@ -1,5 +1,8 @@
 #include "fs.h"
 
+#define A16 "AAAAAAAAAAAAAAAA"
+#define A255 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 "AAAAAAAAAAAAAAA"
+
 typedef struct {
   sp_err_t err;
   fs_expected_path_t paths [FS_MAX_PATHS];
@@ -55,6 +58,16 @@ static const test_t tests [] = {
     .expect = {
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "new" },
+      },
+    },
+  },
+  {
+    .name = "name_at_component_limit",
+    .path = A255,
+    .content = "A",
+    .expect = {
+      .paths = {
+        { .path = A255, .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
       },
     },
   },

@@ -21058,24 +21058,6 @@ sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
 
 static sp_atomic_s32_t sp_fs_atomic_sequence;
 
-SP_PRIVATE sp_err_t sp_fs_temp_name(sp_str_t dir, sp_str_t name, c8 buf [SP_PATH_MAX], sp_str_t* temp) {
-  sp_tm_epoch_t now = sp_tm_now_epoch();
-  u64 stamp = (now.s << 20) ^ (u64)now.ns;
-  u64 sequence = (u64)(u32)sp_atomic_s32_add(&sp_fs_atomic_sequence, 1, SP_ATOMIC_SEQ_CST);
-
-  c8 leaf_buf [SP_PATH_MAX];
-  sp_io_mem_writer_t io = sp_zero;
-  sp_io_mem_writer_from_buffer(&io, leaf_buf, SP_PATH_MAX);
-  sp_fmt_io(&io.base, ".{}.{}.{}.tmp", sp_fmt_str(name), sp_fmt_uint(stamp), sp_fmt_uint(sequence));
-
-  sp_str_t leaf = sp_io_mem_writer_as_str(&io);
-  if (dir.len + leaf.len + 1 >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
-
-  sp_mem_fixed_t fixed = sp_mem_fixed_ex(buf, SP_PATH_MAX, 1);
-  *temp = sp_fs_join_path(sp_mem_fixed_as_allocator(&fixed), dir, leaf);
-  return SP_OK;
-}
-
 SP_API sp_err_t sp_fs_create_parent_at(sp_path_t path) {
   sp_str_t parent = sp_fs_parent_path(path.sub);
   if (sp_str_equal(parent, sp_fs_trim_path(path.sub))) return SP_OK;
@@ -21085,13 +21067,27 @@ SP_API sp_err_t sp_fs_create_parent_at(sp_path_t path) {
 
 SP_PRIVATE sp_err_t sp_fs_atomic_create(sp_fs_atomic_t* af, sp_sys_dir_t dir, sp_str_t path, sp_str_t temp_dir) {
   *af = sp_zero_s(sp_fs_atomic_t);
+
+  sp_tm_epoch_t now = sp_tm_now_epoch();
+  u64 stamp = (now.s << 20) ^ (u64)now.ns;
+  u64 sequence = (u64)(u32)sp_atomic_s32_add(&sp_fs_atomic_sequence, 1, SP_ATOMIC_SEQ_CST);
+
+  c8 leaf_buf [64];
+  sp_io_mem_writer_t io = sp_zero;
+  sp_io_mem_writer_from_buffer(&io, leaf_buf, sizeof(leaf_buf));
+  sp_fmt_io(&io.base, ".{}.{}.tmp", sp_fmt_uint(stamp), sp_fmt_uint(sequence));
+
+  sp_str_t leaf = sp_io_mem_writer_as_str(&io);
+  if (temp_dir.len + leaf.len + 1 >= SP_PATH_MAX) return SP_ERR_SYS_NAME_TOO_LONG;
+
   af->dir = dir;
   af->path = path;
+  sp_mem_fixed_t fixed = sp_mem_fixed_ex(af->temp_buf, SP_PATH_MAX, 1);
+  af->temp = sp_fs_join_path(sp_mem_fixed_as_allocator(&fixed), temp_dir, leaf);
 
   u32 flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE;
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_err_t err = sp_fs_temp_name(temp_dir, sp_fs_get_name(path), af->temp_buf, &af->temp);
-  if (!err) err = sp_sys_open_s(dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
+  sp_err_t err = sp_sys_open_s(dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
   if (err) {
     *af = sp_zero_s(sp_fs_atomic_t);
     return err;
