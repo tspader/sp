@@ -6,7 +6,9 @@ sp_test(fs, get_cwd_contract) {
 
   sp_str_t cwd = sp_zero;
   sp_must_ok(t, sp_fs_get_cwd_path(sp_test_arena(t), &cwd));
-  sp_must(t, sp_fs_is_dir(cwd));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_must_ok(t, sp_fs_get_link_metadata(cwd, &meta));
+  sp_must_eq(t, meta.kind, SP_FS_KIND_DIR);
   sp_must(t, sp_fs_is_absolute(cwd));
   return SP_OK;
 }
@@ -59,7 +61,11 @@ sp_test(fs, path_cwd_passes_through) {
   sp_path_t path = sp_path_cwd(file.sub);
   sp_expect_eq(t, path.dir.fd, sp_fs_get_cwd().fd);
   sp_expect_str_eq(t, path.sub, file.sub);
-  sp_expect(t, sp_fs_is_file_at(path));
-  sp_expect(t, sp_fs_is_dir_at(sp_path_cwd(sp_str_lit("."))));
+
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_expect_ok(t, sp_fs_get_link_metadata_at(path, &meta));
+  sp_expect_eq(t, meta.kind, SP_FS_KIND_FILE);
+  sp_expect_ok(t, sp_fs_get_link_metadata_at(sp_path_cwd(sp_str_lit(".")), &meta));
+  sp_expect_eq(t, meta.kind, SP_FS_KIND_DIR);
   return SP_OK;
 }

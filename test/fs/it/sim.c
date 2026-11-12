@@ -158,6 +158,16 @@ static const test_t tests [] = {
       .opens = 2,
     },
   },
+  {
+    .name = "kind_stays_unknown_when_stat_fails",
+    .dirs = {
+      { .entries = { { "B", SP_FS_KIND_UNKNOWN, .absent = true } } },
+    },
+    .expect = {
+      .entries = { { "B", SP_FS_KIND_UNKNOWN } },
+      .opens = 1,
+    },
+  },
 };
 
 sp_test_each(fs, it_sim, test_t, tests, .serial = true) {

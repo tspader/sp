@@ -157,7 +157,9 @@ sp_test_each(fs, it_enter, test_t, tests) {
     switch (visit.order) {
       case SP_FS_POST_ORDER: {
         fs_match(t, leaves, num_leaves, entry.path, entry.kind);
-        sp_expect_eq(t, (u32)sp_fs_get_kind_at(entry.at), (u32)SP_FS_KIND_DIR);
+        sp_sys_file_meta_t meta = sp_zero;
+        sp_expect_ok(t, sp_fs_get_link_metadata_at(entry.at, &meta));
+        sp_expect_eq(t, (u32)meta.kind, (u32)SP_FS_KIND_DIR);
         sp_must(t, depth > 0);
         sp_expect_str_eq(t, entry.path, entered[--depth]);
         break;

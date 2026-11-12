@@ -51,19 +51,6 @@ static bool fs_setup_needs_symlinks(const fs_setup_t setup [FS_MAX_SETUP]) {
   return false;
 }
 
-static void fs_expect_bool(sp_test_t* t, sp_str_t path, const c8* label, bool actual, bool expected) {
-  if (actual == expected) return;
-
-  sp_test_fail(
-    t,
-    "{} {} was {} but expected {}",
-    sp_fmt_cstr(label),
-    sp_fmt_str(path),
-    sp_fmt_cstr(actual ? "true" : "false"),
-    sp_fmt_cstr(expected ? "true" : "false")
-  );
-}
-
 static void fs_expect_kind(sp_test_t* t, sp_str_t path, sp_fs_kind_t actual, sp_fs_kind_t expected) {
   if (actual == expected) return;
 
@@ -189,13 +176,14 @@ static void fs_expect_paths(sp_test_t* t, sp_path_t sandbox, const fs_expected_p
     sp_str_t label = sp_cstr_as_str(info->path);
     sp_path_t path = sp_path_join(mem, sandbox, label);
 
-    bool exists = sp_fs_exists_at(path);
+    sp_sys_file_meta_t meta = sp_zero;
+    bool exists = !sp_fs_get_link_metadata_at(path, &meta);
     if (exists != info->exists) {
       sp_test_fail(t, "expected {} {} exist", sp_fmt_str(label), sp_fmt_cstr(info->exists ? "to" : "not to"));
     }
 
     if (info->exists) {
-      fs_expect_kind(t, label, sp_fs_get_kind_at(path), info->kind);
+      fs_expect_kind(t, label, meta.kind, info->kind);
     }
 
     if (info->content) {

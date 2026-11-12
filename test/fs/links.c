@@ -104,7 +104,7 @@ static const sym_t sym_links [] = {
     .link = "L",
     .expect = {
       { .path = "A" },
-      { .path = "L", .target = "A" },
+      { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "A" },
     },
   },
   {

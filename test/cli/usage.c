@@ -16,15 +16,16 @@ static void cli_print_usage_file(sp_str_t path, sp_str_t content) {
 }
 
 static sp_str_t cli_usage_golden_dir(sp_mem_t mem) {
+  sp_sys_file_meta_t meta = sp_zero;
   sp_str_t baked = sp_str_lit(SP_CLI_TEST_DIR);
-  if (sp_fs_exists(baked)) return sp_fs_join_path(mem, baked, sp_str_lit("golden"));
+  if (!sp_fs_get_path_metadata(baked, &meta)) return sp_fs_join_path(mem, baked, sp_str_lit("golden"));
 
   sp_str_t exe = sp_zero;
   sp_fs_get_exe_path(mem, &exe);
   sp_str_t dir = sp_fs_parent_path(exe);
   while (!sp_str_empty(dir)) {
     sp_str_t candidate = sp_fs_join_path(mem, dir, sp_str_lit("test/cli/golden"));
-    if (sp_fs_exists(candidate)) return candidate;
+    if (!sp_fs_get_path_metadata(candidate, &meta)) return candidate;
     sp_str_t parent = sp_fs_parent_path(dir);
     if (sp_str_equal(parent, dir)) break;
     dir = parent;

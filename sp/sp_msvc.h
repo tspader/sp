@@ -465,7 +465,8 @@ static sp_msvc_err_t sp_msvc_find_sdks(sp_msvc_t* msvc, sp_msvc_arch_t arch) {
 
     sp_msvc_sdk_t sdk = sp_msvc_sdk_new(arch, sp_msvc_path_str(&root), entry.name);
     sp_str_r lib_ucrt = sp_msvc_sdk_path_buf(buf, sizeof(buf), &sdk, SP_MSVC_SDK_PATH_LIB_UCRT);
-    if (lib_ucrt.err || !sp_fs_is_dir(lib_ucrt.value)) continue;
+    sp_sys_file_meta_t meta = sp_zero;
+    if (lib_ucrt.err || sp_fs_get_link_metadata(lib_ucrt.value, &meta) || meta.kind != SP_FS_KIND_DIR) continue;
 
     sp_msvc_add_sdk(msvc, &sdk);
   }
@@ -533,7 +534,8 @@ static sp_msvc_err_t sp_msvc_find_installations(sp_msvc_t* msvc, sp_msvc_arch_t 
     sp_io_mem_writer_from_buffer(&io, buf, sizeof(buf));
     if (sp_msvc_vs_path_io(&io.base, &vs, SP_MSVC_VS_PATH_LIB)) continue;
     if (sp_io_write_str(&io.base, sp_str_lit("/vcruntime.lib"), SP_NULLPTR)) continue;
-    if (!sp_fs_exists(sp_io_mem_writer_as_str(&io))) continue;
+    sp_sys_file_meta_t meta = sp_zero;
+    if (sp_fs_get_path_metadata(sp_io_mem_writer_as_str(&io), &meta)) continue;
 
     sp_msvc_add_vs(msvc, &vs);
   }

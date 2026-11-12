@@ -1079,13 +1079,14 @@ bool sp_test_symlinks_supported(sp_test_t* t) {
 ////////////
 static sp_path_t sp_test_golden_search(sp_mem_t mem, sp_path_t dir, sp_str_t file) {
   while (true) {
-    if (sp_fs_is_target_file_at(sp_path_join(mem, dir, file))) return dir;
+    sp_sys_file_meta_t meta = sp_zero;
+    if (!sp_fs_get_path_metadata_at(sp_path_join(mem, dir, file), &meta) && meta.kind == SP_FS_KIND_FILE) return dir;
 
     sp_path_t parent = sp_path_parent(mem, dir);
     sp_sys_file_meta_t from = sp_zero;
     sp_sys_file_meta_t to = sp_zero;
-    if (sp_sys_get_path_metadata_s(dir.dir, dir.sub, &from)) return sp_zero_s(sp_path_t);
-    if (sp_sys_get_path_metadata_s(parent.dir, parent.sub, &to)) return sp_zero_s(sp_path_t);
+    if (sp_fs_get_path_metadata_at(dir, &from)) return sp_zero_s(sp_path_t);
+    if (sp_fs_get_path_metadata_at(parent, &to)) return sp_zero_s(sp_path_t);
     if (from.id == to.id && from.device == to.device) return sp_zero_s(sp_path_t);
     dir = parent;
   }
@@ -1137,12 +1138,14 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
       return;
     }
 
-    if (sp_fs_exists_at(actual_path)) sp_fs_remove_file_at(actual_path);
+    sp_fs_remove_file_at(actual_path);
     t->updated++;
     return;
   }
 
-  if (!sp_fs_exists_at(path)) {
+  sp_str_t want = sp_zero;
+  sp_err_t err = sp_io_read_file_at(t->mem, path, &want);
+  if (err == SP_ERR_SYS_NOT_FOUND) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
@@ -1151,9 +1154,6 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
     });
     return;
   }
-
-  sp_str_t want = sp_zero;
-  sp_err_t err = sp_io_read_file_at(t->mem, path, &want);
   if (err) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
@@ -1165,7 +1165,7 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
   }
 
   if (sp_str_equal(want, actual)) {
-    if (sp_fs_exists_at(actual_path)) sp_fs_remove_file_at(actual_path);
+    sp_fs_remove_file_at(actual_path);
     return;
   }
 
@@ -1214,7 +1214,8 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
     src = sp_path_join(t->mem, root, file);
   }
 
-  if (src.dir.fd == SP_SYS_INVALID_FD || !sp_fs_is_target_file_at(src)) {
+  sp_sys_file_meta_t meta = sp_zero;
+  if (src.dir.fd == SP_SYS_INVALID_FD || sp_fs_get_path_metadata_at(src, &meta) || meta.kind != SP_FS_KIND_FILE) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,

@@ -211,7 +211,8 @@ static void sys_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_s
     if (!ent->path) break;
     sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_cstr_as_str(ent->path));
 
-    bool exists = sp_fs_exists(path);
+    sp_sys_file_meta_t meta = sp_zero;
+    bool exists = !sp_fs_get_path_metadata(path, &meta);
     if (exists != ent->exists) {
       SP_TEST_REPORT("expected {} {} exist", sp_fmt_str(path), sp_fmt_cstr(ent->exists ? "to" : "not to"));
       SP_FAIL();

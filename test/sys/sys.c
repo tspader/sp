@@ -156,7 +156,8 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     if (!ent->path) break;
     sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
 
-    bool exists = sp_fs_exists_at(path);
+    sp_sys_file_meta_t meta = sp_zero;
+    bool exists = !sp_fs_get_path_metadata_at(path, &meta);
     if (exists != ent->exists) {
       sp_test_fail(t, "expected {} {} exist", sp_fmt_cstr(ent->path), sp_fmt_cstr(ent->exists ? "to" : "not to"));
       continue;

@@ -325,7 +325,8 @@ sp_test(fs, remove_dir_deeper_than_path_max) {
   sp_must_ok(t, fs_create_deep_tree(root));
 
   sp_expect_ok(t, sp_fs_remove_dir_at(root));
-  sp_expect(t, !sp_fs_exists_at(root));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_expect_err_eq(t, sp_fs_get_path_metadata_at(root, &meta), SP_ERR_SYS_NOT_FOUND);
   return SP_OK;
 }
 

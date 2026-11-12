@@ -726,7 +726,8 @@ sp_test(fs, copy_file_unwritable_parent_leaves_nothing) {
 
   if (!result) return sp_test_skip(t, "directory permissions not enforced");
   sp_expect_err_eq(t, result, SP_ERR_SYS_ACCESS_DENIED);
-  sp_expect(t, !sp_fs_exists_at(to));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_expect_err_eq(t, sp_fs_get_path_metadata_at(to, &meta), SP_ERR_SYS_NOT_FOUND);
   fs_expect_no_temps(t, sandbox);
   return SP_OK;
 }
@@ -746,7 +747,8 @@ sp_test(fs, copy_tree_unreadable_subdir_fails) {
 
   if (!result) return sp_test_skip(t, "directory permissions not enforced");
   sp_expect_err_eq(t, result, SP_ERR_SYS_ACCESS_DENIED);
-  sp_expect(t, !sp_fs_exists_at(sp_path_join(mem, sandbox, sp_str_lit("E/B/C"))));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_expect_err_eq(t, sp_fs_get_path_metadata_at(sp_path_join(mem, sandbox, sp_str_lit("E/B/C")), &meta), SP_ERR_SYS_NOT_FOUND);
   return SP_OK;
 }
 #endif

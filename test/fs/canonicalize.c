@@ -187,7 +187,8 @@ sp_test_each(fs, canonicalize, test_t, tests) {
     sp_expect_str_eq_c(t, sp_fs_get_name(result), it->expect.name);
   }
   if (it->expect.exists) {
-    sp_expect(t, sp_fs_exists_at(sp_path(dir, result)));
+    sp_sys_file_meta_t meta = sp_zero;
+    sp_expect_ok(t, sp_fs_get_path_metadata_at(sp_path(dir, result), &meta));
   }
   if (it->expect.idempotent) {
     sp_str_t again = sp_zero;

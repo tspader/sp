@@ -151,7 +151,9 @@ sp_test_each(fs, it, test_t, tests) {
     if (!it->recursive) sp_fs_it_skip(&walk);
     sp_expect_str_eq(t, entry.name, sp_fs_get_name(entry.path));
     sp_expect_str_eq(t, entry.at.sub, entry.name);
-    sp_expect_eq(t, (u32)sp_fs_get_kind_at(entry.at), (u32)entry.kind);
+    sp_sys_file_meta_t meta = sp_zero;
+    sp_expect_ok(t, sp_fs_get_link_metadata_at(entry.at, &meta));
+    sp_expect_eq(t, (u32)meta.kind, (u32)entry.kind);
     fs_match(t, matches, n, entry.path, entry.kind);
   }
   sp_expect_ok(t, walk.err);

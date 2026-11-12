@@ -532,7 +532,8 @@ static s32 run_machine(tool_t* tool, const target_t* target) {
   }
 
   sp_str_t dir = tests_dir(mem, tool, target);
-  if (!sp_fs_exists(dir)) {
+  sp_sys_file_meta_t meta = sp_zero;
+  if (sp_fs_get_path_metadata(dir, &meta)) {
     sp_log("warn {} missing; run without --no-build", sp_fmt_str(dir));
     return 1;
   }
@@ -798,7 +799,8 @@ static s32 run_pretty(tool_t* tool, const target_t* target) {
   }
 
   sp_str_t dir = tests_dir(mem, tool, target);
-  if (!sp_fs_exists(dir)) {
+  sp_sys_file_meta_t meta = sp_zero;
+  if (sp_fs_get_path_metadata(dir, &meta)) {
     sp_prompt_error(ctx, sp_str_to_cstr(mem, sp_fmt(mem, "{} missing; run without --no-build", sp_fmt_str(dir)).value));
     status = 1;
     goto done;

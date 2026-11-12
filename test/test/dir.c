@@ -76,7 +76,9 @@ sp_test_each(runner, dir, dir_case_t, dir_cases) {
   sp_must_eq(t, sp_da_size(names), (u64)1);
 
   sp_str_t dir = sp_fs_join_path(mem, sp_fs_join_path(mem, runs, names[0]), sp_str_lit("child.pass"));
-  sp_expect(t, sp_fs_is_file_at(sp_path_join(mem, sandbox, sp_fs_join_path(mem, dir, sp_str_lit("A")))));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_expect_ok(t, sp_fs_get_link_metadata_at(sp_path_join(mem, sandbox, sp_fs_join_path(mem, dir, sp_str_lit("A"))), &meta));
+  sp_expect_eq(t, meta.kind, SP_FS_KIND_FILE);
   sp_expect(t, sp_str_contains(out.out, sp_test_format(t, "\n  dir {}\n", sp_fmt_str(dir))));
   return SP_OK;
 }

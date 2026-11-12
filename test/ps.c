@@ -79,7 +79,8 @@ UTEST_F_SETUP(ps) {
   ut.arena = sp_mem_arena_new(sp_mem_os_new());
   ut.mem = sp_mem_arena_as_allocator(ut.arena);
   sp_str_t process = get_process_path(ut.mem);
-  EXPECT_TRUE(sp_fs_exists(process));
+  sp_sys_file_meta_t meta = sp_zero;
+  EXPECT_EQ(sp_fs_get_path_metadata(process, &meta), SP_OK);
 
   static bool warmed = false;
   if (!warmed) {
