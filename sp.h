@@ -20883,9 +20883,7 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
     if (sp_fs_dir_it_next(&top->dir, sp_mem_slice(top->buf, SP_SYS_DIR_MIN_BUF), &d)) {
       u32 start = top->len ? top->len + 1 : 0;
       u32 len = start + d.name.len;
-      sp_da_clear(it->path);
       *sp_da_vp(it->path) = sp_da_grow(it->path, len);
-      sp_da_head(it->path)->size = len;
       if (top->len) it->path[top->len] = '/';
       sp_str_copy_to(d.name, it->path + start, d.name.len);
 
@@ -21071,7 +21069,7 @@ sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
   if (sp_str_empty(name) || sp_fs_is_dot(name)) return SP_ERR_SYS_INVALID;
 
   sp_sys_file_meta_t meta = sp_zero;
-  sp_try(sp_sys_get_link_metadata_s(path.dir, path.sub, &meta));
+  sp_try(sp_fs_get_link_metadata_at(path, &meta));
   switch (meta.kind) {
     case SP_FS_KIND_DIR:     break;
     case SP_FS_KIND_SYMLINK: return sp_sys_unlink_s(path.dir, path.sub);
@@ -21385,7 +21383,7 @@ sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
 
 sp_err_t sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
   sp_sys_file_meta_t meta = sp_zero;
-  sp_try(sp_sys_get_path_metadata_s(from.dir, from.sub, &meta));
+  sp_try(sp_fs_get_path_metadata_at(from, &meta));
 
   switch (meta.kind) {
     case SP_FS_KIND_FILE:    return sp_fs_copy_file_at(from, to, mode);

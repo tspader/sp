@@ -33,7 +33,6 @@ static const test_t tests [] = {
     .setup = {
       { .path = "A", .content = "A" },
     },
-    .op = OP_WRITE_ATOMIC,
     .path = "A",
     .content = "B",
     .expect = {
@@ -49,7 +48,6 @@ static const test_t tests [] = {
     .setup = {
       { .path = "A", .content = "A" },
     },
-    .op = OP_WRITE_ATOMIC,
     .path = "A",
     .content = "B",
     .sync = SP_ERR_SYS_IO,

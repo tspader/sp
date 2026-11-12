@@ -39,7 +39,7 @@ typedef struct {
 } test_t;
 
 static const test_t tests [] = {
-  { .name = "file_reader_from_path", .op = OP_FILE_READER, .expect = { .sub = "F" } },
+  { .name = "file_reader_from_path", .expect = { .sub = "F" } },
   { .name = "file_writer_from_path", .op = OP_FILE_WRITER, .expect = { .sub = "F" } },
   { .name = "get_path_metadata", .op = OP_GET_PATH_METADATA, .expect = { .sub = "F" } },
   { .name = "get_link_metadata", .op = OP_GET_LINK_METADATA, .expect = { .sub = "F" } },
