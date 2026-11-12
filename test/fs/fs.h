@@ -141,7 +141,7 @@ static sp_err_t fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t
 }
 
 static void fs_expect_no_temps(sp_test_t* t, sp_path_t sandbox) {
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   sp_err_t err = sp_fs_open_dir_at(sandbox, &dir);
   sp_expect_ok(t, err);
   if (err) return;

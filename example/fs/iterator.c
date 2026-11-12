@@ -62,7 +62,7 @@ s32 run(s32 num_args, const c8** args) {
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
   sp_str_t path = num_args == 2 ? sp_cstr_as_str(args[1]) : sp_str_lit(".");
 
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   if (sp_fs_open_dir_at(sp_path_cwd(path), &dir)) {
     sp_log("could not open {}", sp_fmt_str(path));
     return 1;

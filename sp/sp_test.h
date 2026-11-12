@@ -2141,7 +2141,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
 
   sp_str_t cutoff = sp_test_run_name(runner->mem, grace);
   sp_da(sp_str_t) runs = sp_da_new(runner->mem, sp_str_t);
-  sp_sys_dir_t runs_handle = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t runs_handle = sp_zero;
   if (!sp_fs_open_dir_at(runs_dir, &runs_handle)) {
     sp_fs_dir_it_t iter = sp_fs_dir_it(runs_handle);
     SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];

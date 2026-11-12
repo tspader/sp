@@ -38,7 +38,7 @@ sp_test_each(fs, dir_sim, test_t, tests, .serial = true) {
   sim_t s = sp_zero;
   sim_begin(&s, it->dirs);
 
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   sp_err_t err = sp_fs_open_dir_at(sim_root(), &dir);
   sp_expect_ok(t, err);
 

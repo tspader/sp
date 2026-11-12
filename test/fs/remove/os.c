@@ -309,7 +309,7 @@ sp_test_each(fs, remove, test_t, tests) {
     sp_str_t name = sp_fmt(mem, "R{}", sp_fmt_uint(b)).value;
     sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, into, name)));
   }
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(base, &dir));
 
   sp_path_t path = sp_path(dir, sp_cstr_as_str(it->path));
@@ -328,13 +328,13 @@ sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
   sp_path_t root = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
   sp_must_ok(t, sp_fs_create_dir_at(root));
 
-  sp_sys_dir_t cur = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t cur = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(root, &cur));
   sp_for(level, DEEP_LEVELS) {
     sp_path_t child = sp_path(cur, sp_str_lit(DEEP_NAME));
     sp_must_ok(t, sp_fs_create_dir_at(child));
 
-    sp_sys_dir_t next = sp_sys_dir(SP_SYS_INVALID_FD);
+    sp_sys_dir_t next = sp_zero;
     sp_must_ok(t, sp_fs_open_dir_at(child, &next));
     sp_fs_close_dir(cur);
     cur = next;
@@ -347,7 +347,7 @@ sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
 
   sp_must_ok(t, sp_fs_open_dir_at(root, &cur));
   sp_for(level, DEEP_LEVELS / 2) {
-    sp_sys_dir_t next = sp_sys_dir(SP_SYS_INVALID_FD);
+    sp_sys_dir_t next = sp_zero;
     sp_must_ok(t, sp_sys_open_dir_s(cur, sp_str_lit(DEEP_NAME), 0, &next));
     sp_fs_close_dir(cur);
     cur = next;

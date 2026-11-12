@@ -117,7 +117,7 @@ sp_test_each(fs, fd_relative, test_t, tests) {
   sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_path_t cwd_path = sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd));
-  sp_sys_dir_t cwd = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t cwd = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(cwd_path, &cwd));
 
   switch (it->op) {

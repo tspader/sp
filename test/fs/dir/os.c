@@ -113,7 +113,7 @@ sp_test_each(fs, dir, test_t, tests) {
     sp_try(sp_fs_open_dir_at(sandbox, &sandbox_dir));
   }
 
-  sp_sys_dir_t opened = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t opened = sp_zero;
   sp_path_t path = it->relative ? sp_path(sandbox_dir, sp_cstr_as_str(it->dir)) : dir;
   sp_err_t open_err = sp_fs_open_dir_at(path, &opened);
   sp_expect_ok(t, open_err);
@@ -136,7 +136,7 @@ sp_test_each(fs, dir, test_t, tests) {
 }
 
 sp_test(fs, dir_it_rejects_small_buffer) {
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sp_test_dir(t), &dir));
 
   sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
@@ -158,7 +158,7 @@ sp_test(fs, dir_it_next_after_close_yields_nothing) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
 
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
@@ -181,7 +181,7 @@ sp_test(fs, dir_it_file_handle_is_not_dir) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
 
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
   sp_sys_fd_t file = SP_SYS_INVALID_FD;
   sp_must_ok(t, sp_sys_open_s(dir, sp_str_lit("A"), SP_SYS_OPEN_MODE_RO, 0, &file));
@@ -240,7 +240,7 @@ sp_test(fs, dir_reiterates_handle) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
 
-  sp_sys_dir_t dir = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   fs_match_t matches [] = {
@@ -275,7 +275,7 @@ sp_test(fs, open_cwd_iterates) {
   sp_test_skip_on_wasm()
 
   sp_mem_t mem = sp_test_arena(t);
-  sp_sys_dir_t cwd = sp_sys_dir(SP_SYS_INVALID_FD);
+  sp_sys_dir_t cwd = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sp_path_cwd(sp_str_lit(".")), &cwd));
 
   sp_str_t expect = sp_zero;
