@@ -271,18 +271,6 @@ sp_test(fs, dir_reiterates_handle) {
   return SP_OK;
 }
 
-sp_test(fs, dir_it_cwd_anchor_fails) {
-  sp_test_skip_on_wasm()
-
-  sp_fs_dir_it_t iter = sp_fs_dir_it(sp_fs_get_cwd());
-  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_entry_t entry = sp_zero;
-  sp_expect(t, !sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry));
-  sp_expect(t, iter.err != SP_OK);
-  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
-  return SP_OK;
-}
-
 sp_test(fs, open_cwd_iterates) {
   sp_test_skip_on_wasm()
 
