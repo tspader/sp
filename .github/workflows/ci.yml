@@ -21,7 +21,7 @@ jobs:
         include:
           - { id: x86_64-linux,  os: ubuntu-latest,    triples: x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl }
           - { id: aarch64-linux, os: ubuntu-24.04-arm, triples: aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl }
-          - { id: macos,         os: macos-14,         triples: aarch64-macos }
+          - { id: macos,         os: macos-latest,     triples: aarch64-macos }
           - { id: windows,       os: windows-latest,   triples: x86_64-windows-gnu }
           - { id: wasm,          os: ubuntu-latest,    triples: wasm32-wasi wasm32-freestanding }
     name: ${{ matrix.id }}
