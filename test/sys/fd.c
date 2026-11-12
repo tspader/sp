@@ -5,6 +5,7 @@ typedef enum {
   OP_READ,
   OP_WRITE,
   OP_OPEN_DIR,
+  OP_OPEN_DIR_INVALID,
 } op_t;
 
 typedef struct {
@@ -16,6 +17,7 @@ static const test_t tests [] = {
   { .name = "read_refuses_garbage_fd", .op = OP_READ },
   { .name = "write_refuses_garbage_fd", .op = OP_WRITE },
   { .name = "open_dir_refuses_garbage_root", .op = OP_OPEN_DIR },
+  { .name = "open_dir_refuses_invalid_root", .op = OP_OPEN_DIR_INVALID },
 };
 
 // Invalid by construction, not closed-then-reused: past any fd rlimit on
@@ -33,6 +35,12 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case OP_OPEN_DIR: {
       sp_sys_dir_t out = sp_zero;
       err = sp_sys_open_dir_s(sp_sys_dir(GARBAGE_FD), sp_str_lit("A"), 0, &out);
+      if (!err) sp_fs_close_dir(out);
+      break;
+    }
+    case OP_OPEN_DIR_INVALID: {
+      sp_sys_dir_t out = sp_zero;
+      err = sp_sys_open_dir_s(sp_sys_dir(SP_SYS_INVALID_FD), sp_str_lit("A"), 0, &out);
       if (!err) sp_fs_close_dir(out);
       break;
     }

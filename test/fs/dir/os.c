@@ -198,8 +198,28 @@ sp_test(fs, dir_it_file_handle_is_not_dir) {
   return SP_OK;
 }
 
-sp_test(fs, dir_it_invalid_handle_yields_nothing) {
-  sp_fs_dir_it_t iter = sp_fs_dir_it(sp_sys_dir(SP_SYS_INVALID_FD));
+typedef enum {
+  NO_DIR_HANDLE,
+  NO_DIR_ITERATOR,
+} no_dir_kind_t;
+
+typedef struct {
+  const c8* name;
+  no_dir_kind_t kind;
+} no_dir_test_t;
+
+static const no_dir_test_t no_dir_tests [] = {
+  { .name = "invalid_handle", .kind = NO_DIR_HANDLE },
+  { .name = "zero_iterator", .kind = NO_DIR_ITERATOR },
+};
+
+sp_test_each(fs, dir_it_without_dir_yields_nothing, no_dir_test_t, no_dir_tests) {
+  sp_fs_dir_it_t iter = sp_zero;
+  switch (it->kind) {
+    case NO_DIR_HANDLE:   iter = sp_fs_dir_it(sp_sys_dir(SP_SYS_INVALID_FD)); break;
+    case NO_DIR_ITERATOR: break;
+  }
+
   SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
   sp_fs_dir_entry_t entry = sp_zero;
   u32 n = 0;

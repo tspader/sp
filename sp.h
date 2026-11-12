@@ -3304,6 +3304,7 @@ typedef struct {
   u64 len;
   u64 cursor;
   sp_err_t err;
+  bool open;
 } sp_fs_dir_it_t;
 
 typedef enum {
@@ -7326,6 +7327,8 @@ SP_PRIVATE sp_nt_status_t sp_sys_nt_target(sp_sys_fd_t root_fd, sp_str_t utf8, u
     out->root = SP_NULLPTR;
     return SP_NT_STATUS_SUCCESS;
   }
+
+  if (root_fd == SP_SYS_INVALID_FD) return SP_NT_STATUS_INVALID_HANDLE;
 
   bool saw_dotdot = false;
   u32 nlen = sp_sys_normalize_relative_wtf16((u16*)wpath.data, wpath.len, &saw_dotdot);
@@ -15486,7 +15489,7 @@ SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
 SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config);
 
 bool sp_ps_is_fd_valid(sp_sys_fd_t fd) {
-  return fd > 0;
+  return fd != SP_SYS_INVALID_FD;
 }
 
 sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config) {
@@ -15573,7 +15576,7 @@ bool sp_ps_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_stdio_config_entry_t*
       return posix_spawn_file_actions_adddup2(p->fa, p->pipes.read, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_EXISTING: {
-      if (!io->fd) {
+      if (io->fd == SP_SYS_INVALID_FD) {
         return false;
       }
       return posix_spawn_file_actions_adddup2(p->fa, io->fd, p->file_number) == 0;
@@ -15603,7 +15606,7 @@ bool sp_ps_configure_io_out(sp_ps_io_out_config_t* io, sp_ps_stdio_config_entry_
       return posix_spawn_file_actions_adddup2(p->fa, p->pipes.write, p->file_number) == 0;
     }
     case SP_PS_IO_MODE_EXISTING: {
-      if (!io->fd) {
+      if (io->fd == SP_SYS_INVALID_FD) {
         return false;
       }
       return posix_spawn_file_actions_adddup2(p->fa, io->fd, p->file_number) == 0;
@@ -15713,9 +15716,9 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
   proc.os = sp_alloc_type(mem, sp_ps_os_t);
   proc.os->pid = pid;
 
-  proc.io.in.fd = 0;
-  proc.io.out.fd = 0;
-  proc.io.err.fd = 0;
+  proc.io.in.fd = SP_SYS_INVALID_FD;
+  proc.io.out.fd = SP_SYS_INVALID_FD;
+  proc.io.err.fd = SP_SYS_INVALID_FD;
 
   if (io.in.pipes.read >= 0) {
     sp_sys_close(io.in.pipes.read);
@@ -15784,7 +15787,7 @@ SP_PRIVATE void sp_ps_close_owned_fd(sp_sys_fd_t* fd, sp_ps_io_mode_t mode) {
   if (sp_ps_io_close_mode(mode) != SP_IO_CLOSE_MODE_AUTO) return;
   if (!sp_ps_is_fd_valid(*fd)) return;
   sp_sys_close(*fd);
-  *fd = 0;
+  *fd = SP_SYS_INVALID_FD;
 }
 
 sp_io_stream_writer_t* sp_ps_io_in(sp_ps_t* ps) {
@@ -15794,7 +15797,7 @@ sp_io_stream_writer_t* sp_ps_io_in(sp_ps_t* ps) {
   sp_io_stream_writer_t* writer = sp_alloc_type(ps->mem, sp_io_stream_writer_t);
   sp_io_stream_writer_from_fd(writer, ps->io.in.fd, sp_ps_io_close_mode(ps->io.in.mode));
   if (sp_ps_io_close_mode(ps->io.in.mode) == SP_IO_CLOSE_MODE_AUTO) {
-    ps->io.in.fd = 0;
+    ps->io.in.fd = SP_SYS_INVALID_FD;
   }
   return writer;
 }
@@ -17269,7 +17272,7 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
   linux_monitor->fd = sp_syscall_notify_init1(SP_IN_NONBLOCK | SP_IN_CLOEXEC);
   if (linux_monitor->fd < 0) {
     // Handle error but don't crash
-    linux_monitor->fd = 0;
+    linux_monitor->fd = SP_SYS_INVALID_FD;
   }
 
   sp_da_init(monitor->mem, linux_monitor->fds);
@@ -17283,7 +17286,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   if (!monitor->os) return;
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
 
-  if (os->fd <= 0) return;
+  if (os->fd == SP_SYS_INVALID_FD) return;
 
   c8 path_cstr[SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path.data, path.len, path_cstr, SP_PATH_MAX);
@@ -17311,7 +17314,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
 void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   if (!monitor->os) return;
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
-  if (os->fd > 0) {
+  if (os->fd != SP_SYS_INVALID_FD) {
     sp_sys_close(os->fd);
   }
   sp_ht_free(os->files);
@@ -17338,7 +17341,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   if (!monitor->os) return;
 
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
-  if (os->fd <= 0) return;
+  if (os->fd == SP_SYS_INVALID_FD) return;
 
   u64 len = 0;
   if (sp_sys_read(os->fd, os->buffer, sizeof(os->buffer), &len) != SP_OK || !len) return;
@@ -17631,9 +17634,6 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* os = sp_alloc_type(monitor->mem, sp_fmon_os_t);
 
   os->kq = kqueue();
-  if (os->kq == -1) {
-    os->kq = 0;
-  }
 
   sp_da_init(monitor->mem, os->fds);
   sp_da_init(monitor->mem, os->watch_paths);
@@ -17647,7 +17647,7 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   sp_da_for(os->fds, it) {
     close(os->fds[it]);
   }
-  if (os->kq > 0) {
+  if (os->kq != -1) {
     close(os->kq);
   }
 }
@@ -17656,7 +17656,7 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   if (!monitor->os) return;
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
 
-  if (os->kq <= 0) return;
+  if (os->kq == -1) return;
 
   c8 cstr[SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
@@ -17689,7 +17689,7 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
   if (!monitor->os) return;
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
 
-  if (os->kq <= 0) return;
+  if (os->kq == -1) return;
 
   c8 cstr[SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
@@ -17719,7 +17719,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   if (!monitor->os) return;
 
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
-  if (os->kq <= 0) return;
+  if (os->kq == -1) return;
 
   struct kevent events[16];
   struct timespec timeout = {0, 0};
@@ -20760,12 +20760,17 @@ sp_err_t sp_fs_remove_file(sp_str_t path) {
 sp_fs_dir_it_t sp_fs_dir_it(sp_sys_dir_t dir) {
   sp_fs_dir_it_t it = sp_zero;
   it.err = sp_sys_dir_it_open(dir, &it.sys);
+  it.open = !it.err;
   return it;
 }
 
 bool sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_mem_slice_t buf, sp_fs_dir_entry_t* out) {
   *out = sp_zero_s(sp_fs_dir_entry_t);
   if (it->err) return false;
+  if (!it->open) {
+    it->err = SP_ERR_SYS_BAD_FD;
+    return false;
+  }
   if (buf.len < SP_SYS_DIR_MIN_BUF) {
     it->err = SP_ERR_SYS_INVALID;
     return false;
@@ -20795,6 +20800,7 @@ bool sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_mem_slice_t buf, sp_fs_dir_entry_t
 }
 
 sp_err_t sp_fs_dir_it_close(sp_fs_dir_it_t* it) {
+  it->open = false;
   it->len = 0;
   it->cursor = 0;
   return sp_sys_dir_it_close(&it->sys);
