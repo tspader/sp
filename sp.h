@@ -14050,7 +14050,6 @@ sp_err_t sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
 
 sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   buf->len = 0;
-  if (it->dir.fd == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
 #if defined(SP_WIN32)
   sp_nt_io_status_block_t iosb = sp_zero;
   sp_nt_status_t status = SP_NT(NtQueryDirectoryFile)(
@@ -14154,8 +14153,8 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
 }
 
 sp_err_t sp_sys_dir_it_close_p(sp_sys_dir_it_t* it) {
-  it->dir.fd = SP_SYS_INVALID_FD;
 #if defined(SP_WIN32) || defined(SP_LINUX) || defined(SP_WASM)
+  (void)it;
   return SP_OK;
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   DIR* stream = (DIR*)(intptr_t)it->state;
