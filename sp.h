@@ -7810,6 +7810,7 @@ sp_err_t sp_sys_sync_p(sp_sys_fd_t fd) {
     rc = fcntl(fd, F_FULLFSYNC);
   } while (rc == -1 && errno == SP_EINTR);
   if (rc != -1) return SP_OK;
+  if (errno != SP_ENOTSUP) return sp_sys_err_from_errno(errno);
 
   do {
     rc = fsync(fd);
