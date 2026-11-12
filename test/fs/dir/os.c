@@ -85,6 +85,17 @@ static const test_t tests [] = {
     .name = "refills_across_batches",
     .bulk = 96,
   },
+#if defined(SP_POSIX)
+  {
+    .name = "special_file",
+    .setup = {
+      { .path = "F", .kind = FS_SETUP_FIFO },
+    },
+    .expect = {
+      { "F", SP_FS_KIND_UNKNOWN },
+    },
+  },
+#endif
 };
 
 sp_test_each(fs, dir, test_t, tests) {

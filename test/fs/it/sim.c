@@ -145,9 +145,9 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "kind_none_falls_back_to_stat",
+    .name = "kind_unknown_falls_back_to_stat",
     .dirs = {
-      { .entries = { { "B", SP_FS_KIND_NONE, .stat = SP_FS_KIND_DIR } } },
+      { .entries = { { "B", SP_FS_KIND_UNKNOWN, .stat = SP_FS_KIND_DIR } } },
       { .path = "B", .entries = { { "C", SP_FS_KIND_FILE } } },
     },
     .expect = {

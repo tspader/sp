@@ -120,7 +120,7 @@ static const test_t tests [] = {
     .expect = {
       .entries = {
         // a fifo is listed, with a kind sp_fs can't express
-        { "F" },
+        { "F", SP_FS_KIND_UNKNOWN },
       },
     },
   },

@@ -30,6 +30,7 @@ typedef struct {
   sp_err_t err;
   const c8* file;
   const c8* dir;
+  const c8* fifo;
   const c8* link;
   const c8* target;
   bool dir_link;
@@ -130,6 +131,22 @@ static const test_t tests [] = {
     .target = "missing",
     .exists = "lnk",
   },
+#if defined(SP_POSIX)
+  {
+    .name = "stat_fifo_is_unknown",
+    .op = OP_STAT,
+    .path = "F",
+    .fifo = "F",
+    .kind = SP_FS_KIND_UNKNOWN,
+  },
+  {
+    .name = "lstat_fifo_is_unknown",
+    .op = OP_LSTAT,
+    .path = "F",
+    .fifo = "F",
+    .kind = SP_FS_KIND_UNKNOWN,
+  },
+#endif
 };
 
 static const test_t slash_tests [] = {
@@ -387,6 +404,16 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   if (c->file) sp_must_ok(t, sp_fs_create_file_str_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A")));
   if (c->dir)  sp_must_ok(t, sp_fs_create_dir_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->dir))));
   if (c->link) sp_must_ok(t, sp_fs_create_sym_link_at(sp_cstr_as_str(c->target), sp_path_join(mem, sandbox, sp_cstr_as_str(c->link)), c->dir_link ? SP_FS_KIND_DIR : SP_FS_KIND_FILE));
+#if defined(SP_POSIX)
+  if (c->fifo) {
+    sp_str_t root = sp_zero;
+    sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sandbox, &root));
+    sp_str_t fifo = abs_path(mem, root, c->fifo);
+    c8 buf [SP_PATH_MAX];
+    sp_cstr_copy_to_n(fifo.data, fifo.len, buf, sizeof(buf));
+    sp_must(t, !mkfifo(buf, 0644));
+  }
+#endif
 
   sp_sys_dir_t sandbox_dir = sp_zero;
   sp_try(sp_fs_open_dir_at(sandbox, &sandbox_dir));

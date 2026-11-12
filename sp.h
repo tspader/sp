@@ -1464,6 +1464,7 @@ typedef enum {
   SP_FS_KIND_FILE,
   SP_FS_KIND_DIR,
   SP_FS_KIND_SYMLINK,
+  SP_FS_KIND_UNKNOWN,
 } sp_fs_kind_t;
 
 typedef struct {
@@ -6963,7 +6964,7 @@ static void sp_sys_file_meta_from_statx(const sp_sys_linux_statx_t* raw, sp_sys_
   if      (SP_S_ISLNK(raw->stx_mode)) out->kind = SP_FS_KIND_SYMLINK;
   else if (SP_S_ISDIR(raw->stx_mode)) out->kind = SP_FS_KIND_DIR;
   else if (SP_S_ISREG(raw->stx_mode)) out->kind = SP_FS_KIND_FILE;
-  else                                out->kind = SP_FS_KIND_NONE;
+  else                                out->kind = SP_FS_KIND_UNKNOWN;
 
   out->size          = (s64)raw->stx_size;
   out->atime.tv_sec  = raw->stx_atime.tv_sec;
@@ -7001,7 +7002,7 @@ static void sp_sys_file_meta_from_libc(const struct stat* src, sp_sys_file_meta_
   if      (S_ISLNK(src->st_mode)) out->kind = SP_FS_KIND_SYMLINK;
   else if (S_ISDIR(src->st_mode)) out->kind = SP_FS_KIND_DIR;
   else if (S_ISREG(src->st_mode)) out->kind = SP_FS_KIND_FILE;
-  else                            out->kind = SP_FS_KIND_NONE;
+  else                            out->kind = SP_FS_KIND_UNKNOWN;
 
   out->size      = (s64)src->st_size;
   out->id        = (u64)src->st_ino;
@@ -7681,7 +7682,7 @@ static void sp_sys_file_meta_from_wasi(const __wasi_filestat_t* src, sp_sys_file
   if      (src->filetype == __WASI_FILETYPE_SYMBOLIC_LINK) meta->kind = SP_FS_KIND_SYMLINK;
   else if (src->filetype == __WASI_FILETYPE_DIRECTORY)     meta->kind = SP_FS_KIND_DIR;
   else if (src->filetype == __WASI_FILETYPE_REGULAR_FILE)  meta->kind = SP_FS_KIND_FILE;
-  else                                                     meta->kind = SP_FS_KIND_NONE;
+  else                                                     meta->kind = SP_FS_KIND_UNKNOWN;
 
   meta->size   = (s64)src->size;
   meta->atime  = sp_sys_timespec_from_ns(src->atim);
@@ -10943,6 +10944,7 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_dir_t to_
   switch (kind) {
     case SP_FS_KIND_FILE:
     case SP_FS_KIND_DIR:     break;
+    case SP_FS_KIND_UNKNOWN:
     case SP_FS_KIND_NONE:
     case SP_FS_KIND_SYMLINK: return SP_ERR_SYS_INVALID;
   }
@@ -13982,7 +13984,7 @@ SP_PRIVATE sp_fs_kind_t sp_sys_dir_dtype_to_kind(u8 d_type) {
     case SP_DT_DIR: { return SP_FS_KIND_DIR; }
     case SP_DT_LNK: { return SP_FS_KIND_SYMLINK; }
   }
-  return SP_FS_KIND_NONE;
+  return SP_FS_KIND_UNKNOWN;
 }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -13994,7 +13996,7 @@ SP_PRIVATE sp_fs_kind_t sp_sys_dir_dtype_to_kind(u8 d_type) {
     case SP_DT_DIR: { return SP_FS_KIND_DIR; }
     case SP_DT_LNK: { return SP_FS_KIND_SYMLINK; }
   }
-  return SP_FS_KIND_NONE;
+  return SP_FS_KIND_UNKNOWN;
 }
 
 #elif defined(SP_WASM)
@@ -14006,7 +14008,7 @@ SP_PRIVATE sp_fs_kind_t sp_sys_dir_dtype_to_kind(u8 d_type) {
     case __WASI_FILETYPE_DIRECTORY:     { return SP_FS_KIND_DIR; }
     case __WASI_FILETYPE_SYMBOLIC_LINK: { return SP_FS_KIND_SYMLINK; }
   }
-  return SP_FS_KIND_NONE;
+  return SP_FS_KIND_UNKNOWN;
 }
 #endif
 
@@ -20857,7 +20859,7 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
       sp_str_copy_to(d.name, it->path + start, d.name.len);
 
       it->last = sp_fs_it_entry(it, top->dir.sys.dir, len, d.name.len, d.kind);
-      if (it->last.kind == SP_FS_KIND_NONE) it->last.kind = sp_fs_get_link_kind_at(it->last.at);
+      if (it->last.kind == SP_FS_KIND_UNKNOWN) it->last.kind = sp_fs_get_link_kind_at(it->last.at);
       it->descend = it->last.kind == SP_FS_KIND_DIR;
 
       *out = (sp_fs_visit_t) { .order = SP_FS_PRE_ORDER, .entry = it->last };
@@ -21040,6 +21042,7 @@ sp_err_t sp_fs_remove_dir_at(sp_path_t path) {
     case SP_FS_KIND_DIR:     break;
     case SP_FS_KIND_SYMLINK: return sp_sys_unlink_s(path.dir, path.sub);
     case SP_FS_KIND_FILE:
+    case SP_FS_KIND_UNKNOWN:
     case SP_FS_KIND_NONE:    return SP_ERR_SYS_NOT_DIR;
   }
 
@@ -21233,6 +21236,7 @@ sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
       case SP_FS_KIND_FILE:    break;
       case SP_FS_KIND_DIR:     err = SP_ERR_SYS_IS_DIR; break;
       case SP_FS_KIND_SYMLINK:
+      case SP_FS_KIND_UNKNOWN:
       case SP_FS_KIND_NONE:    err = SP_ERR_SYS_UNSUPPORTED; break;
     }
   }
@@ -21291,6 +21295,7 @@ sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
           }
           case SP_FS_KIND_FILE:    err = sp_fs_copy_file_at(visit.entry.at, target, mode); break;
           case SP_FS_KIND_SYMLINK: err = sp_fs_copy_link_at(visit.entry.at, target, mode); break;
+          case SP_FS_KIND_UNKNOWN:
           case SP_FS_KIND_NONE:    err = SP_ERR_SYS_UNSUPPORTED; break;
         }
         break;
@@ -21319,6 +21324,7 @@ sp_err_t sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
     case SP_FS_KIND_FILE:    return sp_fs_copy_file_at(from, to, mode);
     case SP_FS_KIND_DIR:     return sp_fs_copy_tree_at(from, to, mode);
     case SP_FS_KIND_SYMLINK:
+    case SP_FS_KIND_UNKNOWN:
     case SP_FS_KIND_NONE:    return SP_ERR_SYS_UNSUPPORTED;
   }
   SP_UNREACHABLE_RETURN(SP_OK);

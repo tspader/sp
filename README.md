@@ -25,7 +25,7 @@ It's written in ~15,000 lines of plain C99[^1] and has zero dependencies. It doe
 `sp.h` can be also be compiled as a traditional shared or static library. `sp.h` makes no assumptions about its place in your code. You can use any small piece of it as a standalone utility, or you can use it as the foundation for almost any program. Give it a try!
 
 ## example: `ls`
-Here's a minimal `ls` in 44 lines of code.
+Here's a minimal `ls` in 45 lines of code.
 ```c
 #define SP_IMPLEMENTATION
 #include "sp.h"
@@ -65,6 +65,7 @@ s32 run(s32 num_args, const c8** args) {
       case SP_FS_KIND_DIR:     sp_log("{.blue}", sp_fmt_str(entry->name)); break;
       case SP_FS_KIND_FILE:    sp_log("{}", sp_fmt_str(entry->name)); break;
       case SP_FS_KIND_SYMLINK: sp_log("{.cyan}", sp_fmt_str(entry->name)); break;
+      case SP_FS_KIND_UNKNOWN:
       case SP_FS_KIND_NONE:    break;
     }
   }
