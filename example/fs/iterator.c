@@ -37,7 +37,7 @@ void ordered(sp_mem_t mem, sp_sys_dir_t dir) {
   sp_fs_visit_t visit = sp_zero;
   while (sp_fs_it_visit(&it, &visit)) {
     sp_fs_it_entry_t entry = visit.entry;
-    u32 depth = sp_fs_it_get_entry_depth(entry);
+    u64 depth = sp_da_size(it.stack);
     switch (visit.order) {
       case SP_FS_PRE_ORDER: {
         if (entry.kind != SP_FS_KIND_DIR) counts[depth - 1]++;

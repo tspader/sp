@@ -3339,7 +3339,6 @@ SP_API bool                 sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out);
 SP_API sp_err_t             sp_fs_it_enter(sp_fs_it_t* it);
 SP_API void                 sp_fs_it_skip(sp_fs_it_t* it);
 SP_API void                 sp_fs_it_deinit(sp_fs_it_t* it);
-SP_API u32                  sp_fs_it_get_entry_depth(sp_fs_it_entry_t entry);
 
 
 //  ███████████ █████   █████ ███████████   ██████████   █████████   ██████████   █████ ██████   █████   █████████
@@ -20918,14 +20917,6 @@ void sp_fs_it_deinit(sp_fs_it_t* it) {
   sp_fs_it_unwind(it);
   sp_da_free(it->stack);
   it->stack = SP_NULLPTR;
-}
-
-u32 sp_fs_it_get_entry_depth(sp_fs_it_entry_t entry) {
-  u32 depth = 1;
-  sp_str_for(entry.path, it) {
-    if (sp_fs_is_sep(entry.path.data[it])) depth++;
-  }
-  return depth;
 }
 
 sp_err_t sp_fs_remove_dir(sp_str_t path) {
