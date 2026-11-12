@@ -288,7 +288,7 @@ sp_test(fs, open_cwd_iterates) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_sys_dir_t cwd = sp_sys_dir(SP_SYS_INVALID_FD);
-  sp_must_ok(t, sp_fs_open_cwd(&cwd));
+  sp_must_ok(t, sp_fs_open_dir_at(sp_path_cwd(sp_str_lit(".")), &cwd));
 
   sp_str_t expect = sp_zero;
   sp_str_t actual = sp_zero;

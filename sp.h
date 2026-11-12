@@ -3240,7 +3240,6 @@ SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_
 SP_API sp_err_t             sp_fs_open_dir_at(sp_path_t path, sp_sys_dir_t* out);
 SP_API sp_err_t             sp_fs_close_dir(sp_sys_dir_t dir);
 SP_API sp_sys_dir_t         sp_fs_get_cwd();
-SP_API sp_err_t             sp_fs_open_cwd(sp_sys_dir_t* out);
 SP_API sp_err_t             sp_fs_get_cwd_path(sp_mem_t mem, sp_str_t* path);
 SP_API sp_err_t             sp_fs_get_exe_path(sp_mem_t mem, sp_str_t* path);
 SP_API sp_err_t             sp_fs_get_storage_path(sp_mem_t mem, sp_str_t* path);
@@ -3250,7 +3249,6 @@ SP_API sp_err_t             sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t p
 SP_API sp_path_t            sp_path(sp_sys_dir_t dir, sp_str_t sub);
 SP_API sp_path_t            sp_path_c(sp_sys_dir_t dir, const c8* sub);
 SP_API sp_path_t            sp_path_cwd(sp_str_t sub);
-SP_API sp_path_t            sp_path_cwd_c(const c8* sub);
 SP_API sp_path_t            sp_path_from_str(sp_str_t path);
 SP_API sp_path_t            sp_path_join(sp_mem_t mem, sp_path_t path, sp_str_t sub);
 SP_API sp_path_t            sp_path_parent(sp_mem_t mem, sp_path_t path);
@@ -3268,7 +3266,7 @@ SP_API sp_path_t            sp_path_parent(sp_mem_t mem, sp_path_t path);
   directories, or buffer ownership. This layer is just the portable primitives
   on which you build those things
 
-  The handle has to be one you opened (sp_fs_open_dir_at, sp_fs_open_cwd).
+  The handle has to be one you opened (sp_fs_open_dir_at).
   sp_fs_get_cwd() is a path anchor, not an iterable handle; iterating it fails.
 
 
@@ -20423,10 +20421,6 @@ sp_sys_dir_t sp_fs_get_cwd() {
   return sp_sys_get_root(0);
 }
 
-sp_err_t sp_fs_open_cwd(sp_sys_dir_t* out) {
-  return sp_fs_open_dir_at(sp_path_cwd_c("."), out);
-}
-
 sp_path_t sp_path(sp_sys_dir_t dir, sp_str_t sub) {
   return (sp_path_t) { .dir = dir, .sub = sub };
 }
@@ -20437,10 +20431,6 @@ sp_path_t sp_path_c(sp_sys_dir_t dir, const c8* sub) {
 
 sp_path_t sp_path_cwd(sp_str_t sub) {
   return sp_path(sp_fs_get_cwd(), sub);
-}
-
-sp_path_t sp_path_cwd_c(const c8* sub) {
-  return sp_path(sp_fs_get_cwd(), sp_cstr_as_str(sub));
 }
 
 SP_PRIVATE s32 sp_fs_match_label(sp_str_t path, sp_str_t label) {

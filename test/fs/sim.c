@@ -213,5 +213,5 @@ void sim_end(sim_t* sim) {
 }
 
 sp_path_t sim_root() {
-  return sp_path_cwd_c(SIM_ROOT);
+  return sp_path_cwd(sp_str_lit(SIM_ROOT));
 }
