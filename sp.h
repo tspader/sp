@@ -21399,6 +21399,23 @@ sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mo
   sp_sys_dir_t dir = sp_zero;
   sp_err_t err = sp_fs_open_dir_at(from, &src);
   if (!err) err = sp_fs_create_dir_at(to);
+
+  sp_sys_file_meta_t source = sp_zero;
+  if (!err) err = sp_sys_get_file_metadata(src.fd, &source);
+
+  c8 buf [SP_PATH_MAX];
+  sp_io_mem_writer_t up = sp_zero;
+  sp_io_mem_writer_from_buffer(&up, buf, SP_PATH_MAX);
+  sp_io_write_str(&up.base, sp_str_empty(to.sub) ? sp_str_lit(".") : to.sub, SP_NULLPTR);
+  sp_sys_file_meta_t last = sp_zero;
+  while (!err && !sp_io_write_str(&up.base, sp_str_lit("/.."), SP_NULLPTR)) {
+    sp_sys_file_meta_t ancestor = sp_zero;
+    if (sp_sys_get_path_metadata_s(to.dir, sp_io_mem_writer_as_str(&up), &ancestor)) break;
+    if (ancestor.id == last.id && ancestor.device == last.device) break;
+    if (ancestor.id == source.id && ancestor.device == source.device) err = SP_ERR_SYS_INVALID;
+    last = ancestor;
+  }
+
   if (!err) err = sp_fs_open_dir_at(to, &dir);
   if (!err) sp_da_push(dst, dir);
 

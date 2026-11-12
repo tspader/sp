@@ -422,6 +422,49 @@ static const test_t tests [] = {
     },
   },
   {
+    .name = "tree_into_itself",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst = "A/B",
+    .err = SP_ERR_SYS_INVALID,
+    .expect = {
+      { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      { .path = "A/B/C" },
+    },
+  },
+  {
+    .name = "tree_into_itself_nested",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst = "A/D/E",
+    .err = SP_ERR_SYS_INVALID,
+    .expect = {
+      { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      { .path = "A/D/E/C" },
+    },
+  },
+  {
+    .name = "tree_into_itself_through_symlink",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst = "L/B",
+    .err = SP_ERR_SYS_INVALID,
+    .expect = {
+      { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      { .path = "A/B/C" },
+    },
+  },
+  {
     .name = "tree_dest_parent_is_file",
     .setup = {
       { "A", FS_SETUP_DIR },
