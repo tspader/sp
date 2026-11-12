@@ -16,6 +16,7 @@ static const c8* sys_step_name(sys_step_kind_t kind) {
     case SYS_STEP_READ:     return "read";
     case SYS_STEP_WRITE:    return "write";
     case SYS_STEP_PWRITE:   return "pwrite";
+    case SYS_STEP_SYNC:     return "sync";
   }
   return "";
 }
@@ -132,6 +133,10 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
         if (sys_check_err(t, err, step->pwrite.err) && !err && n != len) {
           sp_test_fail(t, "pwrite returned {} but expected {}", sp_fmt_uint(n), sp_fmt_uint(len));
         }
+        break;
+      }
+      case SYS_STEP_SYNC: {
+        sys_check_err(t, sp_sys_sync(fds[step->sync.slot]), step->sync.err);
         break;
       }
     }

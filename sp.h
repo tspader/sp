@@ -1579,6 +1579,7 @@ SP_API sp_err_t    sp_sys_readlink(sp_sys_dir_t dir, const c8* path, u32 len, c8
 SP_API sp_err_t    sp_sys_get_path_metadata(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_sync(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_set_file_perms(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_set_times(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
 SP_API sp_err_t    sp_sys_clock_gettime(s32 clockid, sp_sys_timespec_t* ts);
@@ -1678,6 +1679,7 @@ typedef struct {
   sp_err_t    (*get_path_metadata)(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_meta_t* st);
   sp_err_t    (*get_link_metadata)(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_meta_t* st);
   sp_err_t    (*get_file_metadata)(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
+  sp_err_t    (*sync)(sp_sys_fd_t fd);
   sp_err_t    (*set_file_perms)(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_perms_t perms);
   sp_err_t    (*set_times)(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
   sp_err_t    (*clock_gettime)(s32 clockid, sp_sys_timespec_t* ts);
@@ -1753,6 +1755,7 @@ SP_API sp_err_t    sp_sys_readlink_p(sp_sys_dir_t dir, const c8* path, u32 len, 
 SP_API sp_err_t    sp_sys_get_path_metadata_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* st);
+SP_API sp_err_t    sp_sys_sync_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_set_file_perms_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_perms_t perms);
 SP_API sp_err_t    sp_sys_set_times_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime);
 SP_API sp_err_t    sp_sys_clock_gettime_p(s32 clockid, sp_sys_timespec_t* ts);
@@ -4606,6 +4609,7 @@ typedef struct {
   X(sp_nt_status_t, NtOpenFile,                              (void**, u32, sp_nt_object_attributes_t*, sp_nt_io_status_block_t*, u32, u32)) \
   X(sp_nt_status_t, NtReadFile,                              (void*, void*, void*, void*, sp_nt_io_status_block_t*, void*, u32, s64*, u32*)) \
   X(sp_nt_status_t, NtWriteFile,                             (void*, void*, void*, void*, sp_nt_io_status_block_t*, const void*, u32, s64*, u32*)) \
+  X(sp_nt_status_t, NtFlushBuffersFile,                      (void*, sp_nt_io_status_block_t*)) \
   X(sp_nt_status_t, NtQueryInformationFile,                  (void*, sp_nt_io_status_block_t*, void*, u32, u32)) \
   X(sp_nt_status_t, NtQueryVolumeInformationFile,            (void*, sp_nt_io_status_block_t*, void*, u32, u32)) \
   X(sp_nt_status_t, NtWaitForSingleObject,                   (void*, u8, s64*)) \
@@ -4916,6 +4920,7 @@ SP_API sp_err_t        sp_fs_atomic_open_at(sp_fs_atomic_t* af, sp_path_t path);
 SP_API sp_err_t        sp_fs_atomic_open_staged(sp_fs_atomic_t* af, sp_str_t path, sp_str_t staging);
 SP_API sp_err_t        sp_fs_atomic_open_staged_at(sp_fs_atomic_t* af, sp_path_t path, sp_str_t staging);
 SP_API sp_io_writer_t* sp_fs_atomic_writer(sp_fs_atomic_t* af);
+SP_API sp_err_t        sp_fs_atomic_sync(sp_fs_atomic_t* af);
 SP_API sp_err_t        sp_fs_atomic_commit(sp_fs_atomic_t* af, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t        sp_fs_atomic_abort(sp_fs_atomic_t* af);
 SP_API sp_err_t        sp_fs_write_atomic(sp_str_t path, sp_str_t str);
@@ -5409,6 +5414,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_WAIT4             61
   #define SP_SYSCALL_NUM_KILL              62
   #define SP_SYSCALL_NUM_FCNTL             72
+  #define SP_SYSCALL_NUM_FSYNC             74
   #define SP_SYSCALL_NUM_GETCWD            79
   #define SP_SYSCALL_NUM_CHDIR             80
   #define SP_SYSCALL_NUM_RENAME            82
@@ -5478,6 +5484,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_READLINKAT        78
   #define SP_SYSCALL_NUM_NEWFSTATAT        79
   #define SP_SYSCALL_NUM_FSTAT             80
+  #define SP_SYSCALL_NUM_FSYNC             82
   #define SP_SYSCALL_NUM_EXIT              93
   #define SP_SYSCALL_NUM_EXIT_GROUP        94
   #define SP_SYSCALL_NUM_FUTEX             98
@@ -5895,6 +5902,7 @@ const sp_sys_vtable_t sp_sys_vtable_platform = {
   .get_path_metadata      = sp_sys_get_path_metadata_p,
   .get_link_metadata      = sp_sys_get_link_metadata_p,
   .get_file_metadata      = sp_sys_get_file_metadata_p,
+  .sync                   = sp_sys_sync_p,
   .set_file_perms         = sp_sys_set_file_perms_p,
   .set_times              = sp_sys_set_times_p,
   .clock_gettime          = sp_sys_clock_gettime_p,
@@ -6127,6 +6135,10 @@ sp_err_t sp_sys_get_link_metadata(sp_sys_dir_t dir, const c8* path, u32 len, sp_
 
 sp_err_t sp_sys_get_file_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* st) {
   return (sp_rt.vt->get_file_metadata)(fd, st);
+}
+
+sp_err_t sp_sys_sync(sp_sys_fd_t fd) {
+  return (sp_rt.vt->sync)(fd);
 }
 
 sp_err_t sp_sys_set_file_perms(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_perms_t perms) {
@@ -6611,6 +6623,9 @@ SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
 
   sp_wasi_import("fd_readdir")
   extern __wasi_errno_t sp_wasi_fd_readdir(__wasi_fd_t fd, u8* buf, __wasi_size_t buf_len, __wasi_dircookie_t cookie, __wasi_size_t* used);
+
+  sp_wasi_import("fd_sync")
+  extern __wasi_errno_t sp_wasi_fd_sync(__wasi_fd_t fd);
 
   sp_wasi_import("path_filestat_get")
   extern __wasi_errno_t sp_wasi_path_filestat_get(__wasi_fd_t fd, __wasi_lookupflags_t flags, const c8* path, __wasi_size_t path_len, __wasi_filestat_t* filestat);
@@ -7789,6 +7804,48 @@ sp_err_t sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
 
 #else
   #error "sp_sys_get_file_metadata"
+#endif
+}
+
+sp_err_t sp_sys_sync_p(sp_sys_fd_t fd) {
+#if defined(SP_WIN32)
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtFlushBuffersFile)((void*)fd, &iosb);
+  if (status == SP_NT_STATUS_PENDING) {
+    sp_nt_status_t wait = SP_NT(NtWaitForSingleObject)((void*)fd, 0, SP_NULLPTR);
+    status = SP_NT_SUCCESS(wait) ? iosb.Status : wait;
+  }
+  return sp_sys_err_from_nt(status);
+
+#elif defined(SP_LINUX)
+  s64 rc = sp_syscall_retry(SP_SYSCALL_NUM_FSYNC, fd);
+  if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
+  return SP_OK;
+
+#elif defined(SP_MACOS)
+  s32 rc;
+  do {
+    rc = fcntl(fd, F_FULLFSYNC);
+  } while (rc == -1 && errno == SP_EINTR);
+  if (rc != -1) return SP_OK;
+
+  do {
+    rc = fsync(fd);
+  } while (rc == -1 && errno == SP_EINTR);
+  return sp_sys_err_from_libc(rc);
+
+#elif defined(SP_COSMO)
+  s32 rc;
+  do {
+    rc = fsync(fd);
+  } while (rc == -1 && errno == SP_EINTR);
+  return sp_sys_err_from_libc(rc);
+
+#elif defined(SP_WASM)
+  return sp_sys_err_from_wasi(sp_wasi_fd_sync((__wasi_fd_t)fd));
+
+#else
+  #error "sp_sys_sync"
 #endif
 }
 
@@ -21185,6 +21242,11 @@ sp_io_writer_t* sp_fs_atomic_writer(sp_fs_atomic_t* af) {
   return &af->writer.base;
 }
 
+sp_err_t sp_fs_atomic_sync(sp_fs_atomic_t* af) {
+  sp_try(sp_io_flush(&af->writer.base));
+  return sp_sys_sync(af->writer.fd);
+}
+
 SP_PRIVATE sp_err_t sp_fs_atomic_publish(sp_fs_atomic_t* af, sp_fs_atomic_mode_t mode) {
   switch (mode) {
     case SP_FS_ATOMIC_REPLACE:
@@ -21221,6 +21283,7 @@ sp_err_t sp_fs_atomic_abort(sp_fs_atomic_t* af) {
 
 SP_PRIVATE sp_err_t sp_fs_atomic_write(sp_fs_atomic_t* af, const void* data, u64 size) {
   sp_err_t err = sp_io_write_all(sp_fs_atomic_writer(af), data, size, SP_NULLPTR);
+  if (!err) err = sp_fs_atomic_sync(af);
   if (err) {
     sp_fs_atomic_abort(af);
     return err;
