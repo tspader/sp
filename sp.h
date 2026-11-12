@@ -5440,6 +5440,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_READLINKAT        267
   #define SP_SYSCALL_NUM_FCHMODAT          268
   #define SP_SYSCALL_NUM_PPOLL             271
+  #define SP_SYSCALL_NUM_UTIMENSAT         280
   #define SP_SYSCALL_NUM_DUP3              292
   #define SP_SYSCALL_NUM_PIPE2             293
   #define SP_SYSCALL_NUM_INOTIFY_INIT1     294
@@ -5463,6 +5464,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_CHDIR             49
   #define SP_SYSCALL_NUM_FCHMOD            52
   #define SP_SYSCALL_NUM_FCHMODAT          53
+  #define SP_SYSCALL_NUM_UTIMENSAT         88
   #define SP_SYSCALL_NUM_OPENAT            56
   #define SP_SYSCALL_NUM_CLOSE             57
   #define SP_SYSCALL_NUM_PIPE2             59
@@ -6414,6 +6416,7 @@ SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
   typedef uint16_t      __wasi_oflags_t;
   typedef uint32_t      __wasi_lookupflags_t;
   typedef uint16_t      __wasi_fdflags_t;
+  typedef uint16_t      __wasi_fstflags_t;
   typedef uint64_t      __wasi_dircookie_t;
   typedef uint32_t      __wasi_dirnamlen_t;
   typedef uint64_t      __wasi_inode_t;
@@ -6529,6 +6532,8 @@ SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
   #define __WASI_FDFLAGS_NONBLOCK             ((__wasi_fdflags_t)(1 << 2))
   #define __WASI_FDFLAGS_RSYNC                ((__wasi_fdflags_t)(1 << 3))
   #define __WASI_FDFLAGS_SYNC                 ((__wasi_fdflags_t)(1 << 4))
+  #define __WASI_FSTFLAGS_ATIM                ((__wasi_fstflags_t)(1 << 0))
+  #define __WASI_FSTFLAGS_MTIM                ((__wasi_fstflags_t)(1 << 2))
   #define __WASI_RIGHTS_FD_DATASYNC           ((__wasi_rights_t)(1 << 0))
   #define __WASI_RIGHTS_FD_READ               ((__wasi_rights_t)(1 << 1))
   #define __WASI_RIGHTS_FD_SEEK               ((__wasi_rights_t)(1 << 2))
@@ -6609,6 +6614,9 @@ SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
 
   sp_wasi_import("path_filestat_get")
   extern __wasi_errno_t sp_wasi_path_filestat_get(__wasi_fd_t fd, __wasi_lookupflags_t flags, const c8* path, __wasi_size_t path_len, __wasi_filestat_t* filestat);
+
+  sp_wasi_import("path_filestat_set_times")
+  extern __wasi_errno_t sp_wasi_path_filestat_set_times(__wasi_fd_t fd, __wasi_lookupflags_t flags, const c8* path, __wasi_size_t path_len, __wasi_timestamp_t atim, __wasi_timestamp_t mtim, __wasi_fstflags_t fst_flags);
 
   sp_wasi_import("fd_filestat_get")
   extern __wasi_errno_t sp_wasi_fd_filestat_get(__wasi_fd_t fd, __wasi_filestat_t* filestat);
@@ -7635,6 +7643,10 @@ static void sp_sys_timespec_from_filetime(FILETIME ft, sp_sys_timespec_t* out) {
     out->tv_sec = 0;
     out->tv_nsec = 0;
   }
+}
+
+static s64 sp_sys_nt_time_from_timespec(sp_sys_timespec_t ts) {
+  return ts.tv_sec * 10000000LL + ts.tv_nsec / 100 + 116444736000000000LL;
 }
 
 static sp_err_t sp_sys_file_meta_from_nt_path(sp_sys_fd_t dir, sp_str_t path, sp_sys_file_meta_t* out, bool follow_symlinks) {
@@ -11204,8 +11216,56 @@ sp_err_t sp_sys_set_file_perms_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_s
 }
 
 sp_err_t sp_sys_set_times_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime) {
-  (void)dir; (void)path; (void)len; (void)atime; (void)mtime;
-  return SP_ERR_SYS_UNSUPPORTED;
+#if defined(SP_WIN32)
+  sp_nt_file_basic_information_t info = {
+    .LastAccessTime = sp_sys_nt_time_from_timespec(atime),
+    .LastWriteTime = sp_sys_nt_time_from_timespec(mtime),
+  };
+  if (info.LastAccessTime <= 0 || info.LastWriteTime <= 0) return SP_ERR_SYS_INVALID;
+
+  sp_sys_fd_t handle = SP_SYS_INVALID_FD;
+  sp_nt_status_t status = sp_sys_nt_open(
+    dir.fd,
+    sp_str(path, len),
+    FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    SP_NT_FILE_OPEN,
+    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT,
+    0,
+    &handle
+  );
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  sp_nt_io_status_block_t iosb = sp_zero;
+  status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, &info, sizeof(info), SP_NT_FILE_BASIC_INFORMATION);
+
+  sp_sys_nt_close(handle);
+  return sp_sys_err_from_nt(status);
+
+#elif defined(SP_LINUX)
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
+  sp_sys_timespec_t times [2] = { atime, mtime };
+  return sp_syscall_e(SP_SYSCALL_NUM_UTIMENSAT, dir.fd, buf, times, 0);
+
+#elif defined(SP_MACOS) || defined(SP_COSMO)
+  c8 buf [SP_PATH_MAX];
+  sp_try(sp_sys_posix_path(path, len, buf));
+  struct timespec times [2] = {
+    { .tv_sec = (time_t)atime.tv_sec, .tv_nsec = (long)atime.tv_nsec },
+    { .tv_sec = (time_t)mtime.tv_sec, .tv_nsec = (long)mtime.tv_nsec },
+  };
+  return sp_sys_err_from_libc(utimensat(dir.fd, buf, times, 0));
+
+#elif defined(SP_WASM)
+  sp_try(sp_sys_wasi_path(path, &len));
+  __wasi_timestamp_t atim = (__wasi_timestamp_t)(atime.tv_sec * SP_TM_S_TO_NS + atime.tv_nsec);
+  __wasi_timestamp_t mtim = (__wasi_timestamp_t)(mtime.tv_sec * SP_TM_S_TO_NS + mtime.tv_nsec);
+  return sp_sys_err_from_wasi(sp_wasi_path_filestat_set_times((__wasi_fd_t)dir.fd, __WASI_LOOKUPFLAGS_SYMLINK_FOLLOW, path, len, atim, mtim, __WASI_FSTFLAGS_ATIM | __WASI_FSTFLAGS_MTIM));
+
+#else
+  #error "sp_sys_set_times"
+#endif
 }
 
 sp_err_t sp_sys_set_file_perms_s(sp_sys_dir_t dir, sp_str_t path, sp_sys_file_perms_t perms) {

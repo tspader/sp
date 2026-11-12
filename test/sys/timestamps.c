@@ -72,3 +72,74 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 }
 
 sp_test_each_fn(sys, timestamps, test_t, tests, run);
+
+typedef enum {
+  SETUP_FILE,
+  SETUP_DIR,
+  SETUP_LINK,
+} setup_t;
+
+typedef struct {
+  const c8* set;
+  const c8* kept;
+} set_expect_t;
+
+typedef struct {
+  const c8* name;
+  setup_t setup;
+  const c8* path;
+  set_expect_t expect;
+} set_test_t;
+
+static const set_test_t set_tests [] = {
+  { .name = "file", .setup = SETUP_FILE, .path = "A", .expect = { .set = "A" } },
+  { .name = "dir", .setup = SETUP_DIR, .path = "A", .expect = { .set = "A" } },
+  { .name = "follows_link", .setup = SETUP_LINK, .path = "L", .expect = { .set = "A", .kept = "L" } },
+};
+
+static const sp_sys_timespec_t set_atime = { .tv_sec = 1000000000 };
+static const sp_sys_timespec_t set_mtime = { .tv_sec = 1100000000 };
+
+static sp_err_t run_set(sp_test_t* t, set_test_t* c) {
+  sp_mem_t mem = sp_test_arena(t);
+  sp_path_t sandbox = sp_test_dir(t);
+  sp_path_t a = sp_path_join(mem, sandbox, sp_str_lit("A"));
+
+  switch (c->setup) {
+    case SETUP_FILE: {
+      sp_must_ok(t, sp_fs_create_file_at(a));
+      break;
+    }
+    case SETUP_DIR: {
+      sp_must_ok(t, sp_fs_create_dir_at(a));
+      break;
+    }
+    case SETUP_LINK: {
+      sp_test_skip_without_symlinks();
+      sp_must_ok(t, sp_fs_create_file_at(a));
+      sp_must_ok(t, sp_fs_create_sym_link_at(sp_str_lit("A"), sp_path_join(mem, sandbox, sp_str_lit("L")), SP_FS_KIND_FILE));
+      break;
+    }
+  }
+
+  sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(c->path));
+  sp_must_ok(t, sp_sys_set_times_s(path.dir, path.sub, set_atime, set_mtime));
+
+  sp_path_t set = sp_path_join(mem, sandbox, sp_cstr_as_str(c->expect.set));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_must_ok(t, sp_sys_get_path_metadata_s(set.dir, set.sub, &meta));
+  sp_expect_eq(t, meta.atime.tv_sec, set_atime.tv_sec);
+  sp_expect_eq(t, meta.atime.tv_nsec, set_atime.tv_nsec);
+  sp_expect_eq(t, meta.mtime.tv_sec, set_mtime.tv_sec);
+  sp_expect_eq(t, meta.mtime.tv_nsec, set_mtime.tv_nsec);
+
+  if (c->expect.kept) {
+    sp_path_t kept = sp_path_join(mem, sandbox, sp_cstr_as_str(c->expect.kept));
+    sp_sys_file_meta_t link = sp_zero;
+    sp_must_ok(t, sp_sys_get_link_metadata_s(kept.dir, kept.sub, &link));
+    sp_expect_ne(t, link.mtime.tv_sec, set_mtime.tv_sec);
+  }
+  return SP_OK;
+}
+
+sp_test_each_fn(sys, set_times, set_test_t, set_tests, run_set);
