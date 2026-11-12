@@ -17970,7 +17970,7 @@ sp_err_t sp_io_file_reader_from_path_at(sp_io_file_reader_t* r, sp_path_t path) 
 }
 
 sp_err_t sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path) {
-  return sp_io_file_reader_from_path_at(r, sp_path_cwd(path));
+  return sp_io_file_reader_from_path_at(r, sp_path_from_str(path));
 }
 
 sp_err_t sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
@@ -18647,7 +18647,7 @@ sp_err_t sp_io_file_writer_from_path_at(sp_io_file_writer_t* w, sp_path_t path) 
 }
 
 sp_err_t sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path) {
-  return sp_io_file_writer_from_path_at(w, sp_path_cwd(path));
+  return sp_io_file_writer_from_path_at(w, sp_path_from_str(path));
 }
 
 sp_err_t sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* ptr, u64 size) {
@@ -20589,7 +20589,7 @@ sp_err_t sp_fs_get_path_metadata_at(sp_path_t path, sp_sys_file_meta_t* meta) {
 }
 
 sp_err_t sp_fs_get_path_metadata(sp_str_t path, sp_sys_file_meta_t* meta) {
-  return sp_fs_get_path_metadata_at(sp_path_cwd(path), meta);
+  return sp_fs_get_path_metadata_at(sp_path_from_str(path), meta);
 }
 
 sp_err_t sp_fs_get_link_metadata_at(sp_path_t path, sp_sys_file_meta_t* meta) {
@@ -20597,7 +20597,7 @@ sp_err_t sp_fs_get_link_metadata_at(sp_path_t path, sp_sys_file_meta_t* meta) {
 }
 
 sp_err_t sp_fs_get_link_metadata(sp_str_t path, sp_sys_file_meta_t* meta) {
-  return sp_fs_get_link_metadata_at(sp_path_cwd(path), meta);
+  return sp_fs_get_link_metadata_at(sp_path_from_str(path), meta);
 }
 
 sp_err_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path, sp_str_t* canonical) {
@@ -20615,7 +20615,7 @@ sp_err_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path, sp_str_t* cano
 }
 
 sp_err_t sp_fs_canonicalize_path(sp_mem_t mem, sp_str_t path, sp_str_t* canonical) {
-  return sp_fs_canonicalize_path_at(mem, sp_path_cwd(path), canonical);
+  return sp_fs_canonicalize_path_at(mem, sp_path_from_str(path), canonical);
 }
 
 sp_err_t sp_fs_get_exe_path(sp_mem_t mem, sp_str_t* path) {
@@ -20684,7 +20684,7 @@ cleanup:
 }
 
 sp_err_t sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
-  return sp_io_read_file_at(mem, sp_path_cwd(path), content);
+  return sp_io_read_file_at(mem, sp_path_from_str(path), content);
 }
 
 SP_PRIVATE sp_err_t sp_fs_mkdir_at(sp_sys_dir_t dir, sp_str_t path) {
@@ -20705,7 +20705,7 @@ sp_err_t sp_fs_create_dir_at(sp_path_t path) {
 }
 
 sp_err_t sp_fs_create_dir(sp_str_t path) {
-  return sp_fs_create_dir_at(sp_path_cwd(path));
+  return sp_fs_create_dir_at(sp_path_from_str(path));
 }
 
 sp_err_t sp_fs_create_file_at(sp_path_t path) {
@@ -20715,7 +20715,7 @@ sp_err_t sp_fs_create_file_at(sp_path_t path) {
 }
 
 sp_err_t sp_fs_create_file(sp_str_t path) {
-  return sp_fs_create_file_at(sp_path_cwd(path));
+  return sp_fs_create_file_at(sp_path_from_str(path));
 }
 
 sp_err_t sp_fs_create_file_slice_at(sp_path_t path, sp_mem_slice_t slice) {
@@ -20727,7 +20727,7 @@ sp_err_t sp_fs_create_file_slice_at(sp_path_t path, sp_mem_slice_t slice) {
 }
 
 sp_err_t sp_fs_create_file_slice(sp_str_t path, sp_mem_slice_t slice) {
-  return sp_fs_create_file_slice_at(sp_path_cwd(path), slice);
+  return sp_fs_create_file_slice_at(sp_path_from_str(path), slice);
 }
 
 sp_err_t sp_fs_create_file_str_at(sp_path_t path, sp_str_t str) {
@@ -20735,7 +20735,7 @@ sp_err_t sp_fs_create_file_str_at(sp_path_t path, sp_str_t str) {
 }
 
 sp_err_t sp_fs_create_file_str(sp_str_t path, sp_str_t str) {
-  return sp_fs_create_file_str_at(sp_path_cwd(path), str);
+  return sp_fs_create_file_str_at(sp_path_from_str(path), str);
 }
 
 sp_err_t sp_fs_create_file_cstr_at(sp_path_t path, const c8* str) {
@@ -20743,7 +20743,7 @@ sp_err_t sp_fs_create_file_cstr_at(sp_path_t path, const c8* str) {
 }
 
 sp_err_t sp_fs_create_file_cstr(sp_str_t path, const c8* str) {
-  return sp_fs_create_file_cstr_at(sp_path_cwd(path), str);
+  return sp_fs_create_file_cstr_at(sp_path_from_str(path), str);
 }
 
 sp_err_t sp_fs_create_hard_link_at(sp_path_t target, sp_path_t link_path) {
@@ -20751,7 +20751,7 @@ sp_err_t sp_fs_create_hard_link_at(sp_path_t target, sp_path_t link_path) {
 }
 
 sp_err_t sp_fs_create_hard_link(sp_str_t target, sp_str_t link_path) {
-  return sp_fs_create_hard_link_at(sp_path_cwd(target), sp_path_cwd(link_path));
+  return sp_fs_create_hard_link_at(sp_path_from_str(target), sp_path_from_str(link_path));
 }
 
 sp_err_t sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path, sp_fs_kind_t kind) {
@@ -20759,7 +20759,7 @@ sp_err_t sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path, sp_fs_ki
 }
 
 sp_err_t sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path, sp_fs_kind_t kind) {
-  return sp_fs_create_sym_link_at(target, sp_path_cwd(link_path), kind);
+  return sp_fs_create_sym_link_at(target, sp_path_from_str(link_path), kind);
 }
 
 sp_err_t sp_fs_remove_file_at(sp_path_t path) {
@@ -20767,7 +20767,7 @@ sp_err_t sp_fs_remove_file_at(sp_path_t path) {
 }
 
 sp_err_t sp_fs_remove_file(sp_str_t path) {
-  return sp_fs_remove_file_at(sp_path_cwd(path));
+  return sp_fs_remove_file_at(sp_path_from_str(path));
 }
 
 sp_fs_dir_it_t sp_fs_dir_it(sp_sys_dir_t dir) {
@@ -20945,7 +20945,7 @@ void sp_fs_it_deinit(sp_fs_it_t* it) {
 }
 
 sp_err_t sp_fs_remove_dir(sp_str_t path) {
-  return sp_fs_remove_dir_at(sp_path_cwd(path));
+  return sp_fs_remove_dir_at(sp_path_from_str(path));
 }
 
 /*
@@ -21138,7 +21138,7 @@ sp_err_t sp_fs_atomic_open_at(sp_fs_atomic_t* af, sp_path_t path) {
 }
 
 sp_err_t sp_fs_atomic_open(sp_fs_atomic_t* af, sp_str_t path) {
-  return sp_fs_atomic_open_at(af, sp_path_cwd(path));
+  return sp_fs_atomic_open_at(af, sp_path_from_str(path));
 }
 
 sp_err_t sp_fs_atomic_open_staged_at(sp_fs_atomic_t* af, sp_path_t path, sp_str_t staging) {
@@ -21147,7 +21147,7 @@ sp_err_t sp_fs_atomic_open_staged_at(sp_fs_atomic_t* af, sp_path_t path, sp_str_
 }
 
 sp_err_t sp_fs_atomic_open_staged(sp_fs_atomic_t* af, sp_str_t path, sp_str_t staging) {
-  return sp_fs_atomic_open_staged_at(af, sp_path_cwd(path), staging);
+  return sp_fs_atomic_open_staged_at(af, sp_path_from_str(path), staging);
 }
 
 sp_io_writer_t* sp_fs_atomic_writer(sp_fs_atomic_t* af) {
@@ -21210,7 +21210,7 @@ sp_err_t sp_fs_write_atomic_slice_staged_at(sp_path_t path, sp_str_t staging, sp
 }
 
 sp_err_t sp_fs_write_atomic_slice_staged(sp_str_t path, sp_str_t staging, sp_mem_slice_t slice) {
-  return sp_fs_write_atomic_slice_staged_at(sp_path_cwd(path), staging, slice);
+  return sp_fs_write_atomic_slice_staged_at(sp_path_from_str(path), staging, slice);
 }
 
 sp_err_t sp_fs_write_atomic_slice_at(sp_path_t path, sp_mem_slice_t slice) {
@@ -21220,7 +21220,7 @@ sp_err_t sp_fs_write_atomic_slice_at(sp_path_t path, sp_mem_slice_t slice) {
 }
 
 sp_err_t sp_fs_write_atomic_slice(sp_str_t path, sp_mem_slice_t slice) {
-  return sp_fs_write_atomic_slice_at(sp_path_cwd(path), slice);
+  return sp_fs_write_atomic_slice_at(sp_path_from_str(path), slice);
 }
 
 sp_err_t sp_fs_write_atomic_at(sp_path_t path, sp_str_t str) {
@@ -21230,7 +21230,7 @@ sp_err_t sp_fs_write_atomic_at(sp_path_t path, sp_str_t str) {
 }
 
 sp_err_t sp_fs_write_atomic(sp_str_t path, sp_str_t str) {
-  return sp_fs_write_atomic_at(sp_path_cwd(path), str);
+  return sp_fs_write_atomic_at(sp_path_from_str(path), str);
 }
 
 sp_err_t sp_fs_write_atomic_cstr_at(sp_path_t path, const c8* str) {
@@ -21238,7 +21238,7 @@ sp_err_t sp_fs_write_atomic_cstr_at(sp_path_t path, const c8* str) {
 }
 
 sp_err_t sp_fs_write_atomic_cstr(sp_str_t path, const c8* str) {
-  return sp_fs_write_atomic_cstr_at(sp_path_cwd(path), str);
+  return sp_fs_write_atomic_cstr_at(sp_path_from_str(path), str);
 }
 
 SP_PRIVATE sp_err_t sp_fs_copy_link_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {
