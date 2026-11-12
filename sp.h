@@ -20800,8 +20800,6 @@ bool sp_fs_dir_it_next(sp_fs_dir_it_t* it, sp_mem_slice_t buf, sp_fs_dir_entry_t
 
 sp_err_t sp_fs_dir_it_close(sp_fs_dir_it_t* it) {
   it->open = false;
-  it->len = 0;
-  it->cursor = 0;
   return sp_sys_dir_it_close(&it->sys);
 }
 
