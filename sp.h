@@ -11255,6 +11255,9 @@ sp_err_t sp_sys_set_file_perms_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_s
 }
 
 sp_err_t sp_sys_set_times_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_timespec_t atime, sp_sys_timespec_t mtime) {
+  if (atime.tv_nsec < 0 || atime.tv_nsec >= (s64)SP_TM_S_TO_NS) return SP_ERR_SYS_INVALID;
+  if (mtime.tv_nsec < 0 || mtime.tv_nsec >= (s64)SP_TM_S_TO_NS) return SP_ERR_SYS_INVALID;
+
 #if defined(SP_WIN32)
   sp_nt_file_basic_information_t info = {
     .LastAccessTime = sp_sys_nt_time_from_timespec(atime),
@@ -11297,6 +11300,7 @@ sp_err_t sp_sys_set_times_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_ti
   return sp_sys_err_from_libc(utimensat(dir.fd, buf, times, 0));
 
 #elif defined(SP_WASM)
+  if (atime.tv_sec < 0 || mtime.tv_sec < 0) return SP_ERR_SYS_INVALID;
   sp_try(sp_sys_wasi_path(path, &len));
   __wasi_timestamp_t atim = (__wasi_timestamp_t)(atime.tv_sec * SP_TM_S_TO_NS + atime.tv_nsec);
   __wasi_timestamp_t mtim = (__wasi_timestamp_t)(mtime.tv_sec * SP_TM_S_TO_NS + mtime.tv_nsec);
