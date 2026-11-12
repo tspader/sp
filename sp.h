@@ -14018,7 +14018,6 @@ SP_PRIVATE sp_fs_kind_t sp_sys_dir_dtype_to_kind(u8 d_type) {
 sp_err_t sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
   *out = sp_zero_s(sp_sys_dir_it_t);
   out->dir = dir;
-  if (dir.fd == SP_SYS_INVALID_FD) return SP_ERR_SYS_BAD_FD;
 
 #if defined(SP_WIN32)
   out->state = 1;
