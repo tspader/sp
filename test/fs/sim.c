@@ -1,11 +1,13 @@
 #include "sim.h"
 
 #define FD_BASE 7777
+#define SIM_ROOT "T"
 
 static sim_t* active;
 
 static const sim_dir_t* find_dir(sp_str_t path) {
-  sp_for(it, SIM_MAX_DIRS) {
+  if (sp_str_empty(path) || sp_str_equal(path, sp_str_lit("."))) return &active->dirs[0];
+  sp_for_range(it, 1, SIM_MAX_DIRS) {
     const sim_dir_t* dir = &active->dirs[it];
     if (!dir->path) break;
     if (sp_str_equal_cstr(path, dir->path)) return dir;
@@ -30,11 +32,16 @@ static s64 slot_of(sp_sys_fd_t fd) {
   return (s64)fd - FD_BASE;
 }
 
-static sp_str_t resolve(sp_mem_t mem, sp_sys_fd_t fd, const c8* path, u32 len) {
-  if (fd == sp_sys_get_root(0)) return sp_str(path, len);
-  s64 slot = slot_of(fd);
+static sp_str_t dir_path(const sim_dir_t* dir) {
+  return dir == active->dirs ? sp_str_lit("") : sp_cstr_as_str(dir->path);
+}
+
+static sp_str_t resolve(sp_mem_t mem, sp_sys_dir_t parent, const c8* path, u32 len) {
+  sp_str_t sub = sp_str(path, len);
+  if (parent.fd == sp_sys_get_root(0).fd) return sp_str_equal_cstr(sub, SIM_ROOT) ? sp_str_lit("") : sub;
+  s64 slot = slot_of(parent.fd);
   sp_assert(slot >= 0 && slot < (s64)active->count.dirs);
-  return sp_fs_join_path(mem, sp_cstr_as_str(active->opened[slot].dir->path), sp_str(path, len));
+  return sp_fs_join_path(mem, dir_path(active->opened[slot].dir), sub);
 }
 
 static void mark_gone(sp_str_t path) {
@@ -62,12 +69,12 @@ static bool dir_empty(const sim_dir_t* dir) {
   return true;
 }
 
-static sp_err_t open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_sys_fd_t* out) {
+static sp_err_t open_dir(sp_sys_dir_t parent, const c8* path, u32 len, u32 flags, sp_sys_dir_t* out) {
   active->count.opens++;
   if (flags & SP_SYS_OPEN_DIR_NO_FOLLOW) active->count.nofollow++;
   if (active->count.dirs == SIM_MAX_OPENS) return SP_ERR_SYS_TOO_MANY_FILES;
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_str_t full = resolve(s.mem, fd, path, len);
+  sp_str_t full = resolve(s.mem, parent, path, len);
   const sim_entry_t* entry = find_entry(full);
   const sim_dir_t* dir = find_dir(full);
   sp_mem_end_scratch(s);
@@ -78,7 +85,7 @@ static sp_err_t open_dir(sp_sys_fd_t fd, const c8* path, u32 len, u32 flags, sp_
     if (active->opened[o].dir == dir && dir->reopen) return dir->reopen;
   }
   active->opened[active->count.dirs] = (sim_open_t) { .dir = dir };
-  *out = (sp_sys_fd_t)(FD_BASE + active->count.dirs);
+  *out = sp_sys_dir((sp_sys_fd_t)(FD_BASE + active->count.dirs));
   active->count.dirs++;
   return SP_OK;
 }
@@ -88,12 +95,14 @@ static sp_err_t close_fd(sp_sys_fd_t fd) {
   return SP_OK;
 }
 
-static sp_err_t dir_it_open(sp_sys_fd_t fd, sp_sys_dir_it_t* out) {
-  s64 slot = slot_of(fd);
+static sp_err_t dir_it_open(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
+  s64 slot = slot_of(dir.fd);
+  if (slot < 0 || slot >= (s64)active->count.dirs) return SP_ERR_SYS_BAD_FD;
   if (active->opened[slot].dir->it_open) return active->opened[slot].dir->it_open;
   *out = sp_zero_s(sp_sys_dir_it_t);
-  out->fd = fd;
+  out->dir = dir;
   out->state = slot;
+  active->count.its++;
   return SP_OK;
 }
 
@@ -137,9 +146,9 @@ static sp_err_t dir_it_close(sp_sys_dir_it_t* it) {
   return SP_OK;
 }
 
-static sp_err_t get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sys_file_meta_t* st) {
+static sp_err_t get_link_metadata(sp_sys_dir_t parent, const c8* path, u32 len, sp_sys_file_meta_t* st) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_str_t full = resolve(s.mem, fd, path, len);
+  sp_str_t full = resolve(s.mem, parent, path, len);
   const sim_entry_t* entry = find_entry(full);
   const sim_dir_t* dir = find_dir(full);
   sp_mem_end_scratch(s);
@@ -158,9 +167,9 @@ static sp_err_t get_link_metadata(sp_sys_fd_t fd, const c8* path, u32 len, sp_sy
   return SP_ERR_SYS_NOT_FOUND;
 }
 
-static sp_err_t unlink_entry(sp_sys_fd_t fd, const c8* path, u32 len) {
+static sp_err_t unlink_entry(sp_sys_dir_t parent, const c8* path, u32 len) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_str_t full = resolve(s.mem, fd, path, len);
+  sp_str_t full = resolve(s.mem, parent, path, len);
   const sim_entry_t* entry = find_entry(full);
   sp_err_t err = SP_ERR_SYS_NOT_FOUND;
   if (entry && !entry->absent) err = entry->unlink;
@@ -169,10 +178,10 @@ static sp_err_t unlink_entry(sp_sys_fd_t fd, const c8* path, u32 len) {
   return err;
 }
 
-static sp_err_t remove_dir(sp_sys_fd_t fd, const c8* path, u32 len) {
+static sp_err_t remove_dir(sp_sys_dir_t parent, const c8* path, u32 len) {
   active->count.rmdirs++;
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_str_t full = resolve(s.mem, fd, path, len);
+  sp_str_t full = resolve(s.mem, parent, path, len);
   const sim_dir_t* dir = find_dir(full);
   sp_err_t err = SP_ERR_SYS_NOT_FOUND;
   if (dir) err = dir->rmdir;
@@ -201,4 +210,8 @@ void sim_begin(sim_t* sim, const sim_dir_t* dirs) {
 void sim_end(sim_t* sim) {
   sp_sys_set_vtable(sim->saved);
   active = SP_NULLPTR;
+}
+
+sp_path_t sim_root() {
+  return sp_path_cwd(sp_str_lit(SIM_ROOT));
 }

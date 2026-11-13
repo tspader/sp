@@ -1670,10 +1670,8 @@ SP_PRIVATE sp_http_error_t sp_tls_load_unix(mbedtls_x509_crt* chain, u32* loaded
     "/etc/pki/tls/cacert.pem",
   };
   sp_carr_for(candidates, it) {
-    sp_str_t path = sp_cstr_as_str(candidates[it]);
-    if (sp_fs_exists(path)) {
-      return sp_tls_load_pem(chain, path, loaded, skipped);
-    }
+    sp_http_error_t err = sp_tls_load_pem(chain, sp_cstr_as_str(candidates[it]), loaded, skipped);
+    if (err != SP_HTTP_ERR_NO_STORE) return err;
   }
   return SP_HTTP_ERR_NO_STORE;
 }

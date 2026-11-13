@@ -152,8 +152,8 @@ static void sys_expect_meta(s32* utest_result, const c8* label, sp_err_t err, sp
   }
 }
 
-static sp_sys_fd_t sys_dir_fd(sp_sys_fd_t sandbox, const sp_sys_fd_t* fds, sys_dir_t dir) {
-  return dir == SYS_DIR_SANDBOX ? sandbox : fds[dir - SYS_DIR_SLOT_0];
+static sp_sys_dir_t sys_dir_fd(sp_sys_dir_t sandbox, const sp_sys_fd_t* fds, sys_dir_t dir) {
+  return dir == SYS_DIR_SANDBOX ? sandbox : sp_sys_dir(fds[dir - SYS_DIR_SLOT_0]);
 }
 
 static bool sys_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_str_t sandbox, sys_setup_t* setup) {
@@ -211,7 +211,8 @@ static void sys_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_s
     if (!ent->path) break;
     sp_str_t path = sp_fs_join_path(fm->mem, sandbox, sp_cstr_as_str(ent->path));
 
-    bool exists = sp_fs_exists(path);
+    sp_sys_file_meta_t meta = sp_zero;
+    bool exists = !sp_fs_get_path_metadata(path, &meta);
     if (exists != ent->exists) {
       SP_TEST_REPORT("expected {} {} exist", sp_fmt_str(path), sp_fmt_cstr(ent->exists ? "to" : "not to"));
       SP_FAIL();
@@ -233,7 +234,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
   SKIP_ON_WASM()
   sp_sys_fd_t fds [SYS_TEST_MAX_FDS];
   sp_carr_for(fds, it) fds[it] = SP_SYS_INVALID_FD;
-  sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
+  sp_sys_dir_t sandbox_dir = sp_zero;
 
   sp_test_file_manager_t fm = sp_zero;
   sp_test_file_manager_init(&fm);
@@ -247,10 +248,11 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
   }
 
   sp_str_t sandbox = sp_test_file_create_dir(&fm, t.label);
-  if (sp_sys_open_dir_s(sp_sys_get_root(0), sandbox, 0, &sandbox_fd)) {
+  if (sp_fs_open_dir_at(sp_path_cwd(sandbox), &sandbox_dir)) {
     SP_TEST_REPORT("failed to open sandbox {}", sp_fmt_str(sandbox));
     SP_FAIL();
-    goto done;
+    sp_test_file_manager_cleanup(&fm);
+    return;
   }
 
   if (!sys_apply_setup(utest_result, &fm, sandbox, t.setup)) goto done;
@@ -264,7 +266,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
 
       case SYS_STEP_OPEN: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-        sp_err_t err = sp_sys_open_s(sandbox_fd, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, &fd);
+        sp_err_t err = sp_sys_open_s(sandbox_dir, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, &fd);
         sys_expect_err(utest_result, "open", err, step->open.err);
         if (err == SP_OK) {
           if (step->open.err) {
@@ -277,13 +279,13 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
         break;
       }
       case SYS_STEP_OPEN_DIR: {
-        sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-        if (sp_sys_open_dir_s(sandbox_fd, sp_cstr_as_str(step->open_dir.path), 0, &fd)) {
+        sp_sys_dir_t dir = sp_zero;
+        if (sp_sys_open_dir_s(sandbox_dir, sp_cstr_as_str(step->open_dir.path), 0, &dir)) {
           SP_TEST_REPORT("failed to open_dir {}", sp_fmt_cstr(step->open_dir.path));
           SP_FAIL();
         }
         else {
-          fds[step->open_dir.slot] = fd;
+          fds[step->open_dir.slot] = dir.fd;
         }
         break;
       }
@@ -345,26 +347,26 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
         break;
       }
       case SYS_STEP_SYMLINK: {
-        sp_err_t err = sp_sys_symlink_s(sp_cstr_as_str(step->symlink.target), sandbox_fd, sp_cstr_as_str(step->symlink.alias), step->symlink.kind);
+        sp_err_t err = sp_sys_symlink_s(sp_cstr_as_str(step->symlink.target), sandbox_dir, sp_cstr_as_str(step->symlink.alias), step->symlink.kind);
         sys_expect_err(utest_result, "symlink", err, step->symlink.err);
         break;
       }
       case SYS_STEP_RENAME: {
         sp_err_t err = sp_sys_rename_s(
-          sys_dir_fd(sandbox_fd, fds, step->rename.from_dir), sp_cstr_as_str(step->rename.from),
-          sys_dir_fd(sandbox_fd, fds, step->rename.to_dir), sp_cstr_as_str(step->rename.to));
+          sys_dir_fd(sandbox_dir, fds, step->rename.from_dir), sp_cstr_as_str(step->rename.from),
+          sys_dir_fd(sandbox_dir, fds, step->rename.to_dir), sp_cstr_as_str(step->rename.to));
         sys_expect_err(utest_result, "rename", err, step->rename.err);
         break;
       }
       case SYS_STEP_LSTAT: {
         sp_sys_file_meta_t meta = sp_zero;
-        sp_err_t err = sp_sys_get_link_metadata_s(sandbox_fd, sp_cstr_as_str(step->lstat.path), &meta);
+        sp_err_t err = sp_sys_get_link_metadata_s(sandbox_dir, sp_cstr_as_str(step->lstat.path), &meta);
         sys_expect_meta(utest_result, "lstat", err, step->lstat.err, &meta, step->lstat.kind, 0);
         break;
       }
       case SYS_STEP_STAT: {
         sp_sys_file_meta_t meta = sp_zero;
-        sp_err_t err = sp_sys_get_path_metadata_s(sandbox_fd, sp_cstr_as_str(step->stat.path), &meta);
+        sp_err_t err = sp_sys_get_path_metadata_s(sandbox_dir, sp_cstr_as_str(step->stat.path), &meta);
         sys_expect_meta(utest_result, "stat", err, step->stat.err, &meta, step->stat.kind, step->stat.size);
         break;
       }
@@ -375,24 +377,24 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
         break;
       }
       case SYS_STEP_MKDIR: {
-        sp_err_t err = sp_sys_mkdir_s(sandbox_fd, sp_cstr_as_str(step->mkdir.path), sp_sys_default_dir_perms);
+        sp_err_t err = sp_sys_mkdir_s(sandbox_dir, sp_cstr_as_str(step->mkdir.path), sp_sys_default_dir_perms);
         sys_expect_err(utest_result, "mkdir", err, step->mkdir.err);
         break;
       }
       case SYS_STEP_RMDIR: {
-        sp_err_t err = sp_sys_rmdir_s(sandbox_fd, sp_cstr_as_str(step->rmdir.path));
+        sp_err_t err = sp_sys_rmdir_s(sandbox_dir, sp_cstr_as_str(step->rmdir.path));
         sys_expect_err(utest_result, "rmdir", err, step->rmdir.err);
         break;
       }
       case SYS_STEP_UNLINK: {
-        sp_err_t err = sp_sys_unlink_s(sandbox_fd, sp_cstr_as_str(step->unlink.path));
+        sp_err_t err = sp_sys_unlink_s(sandbox_dir, sp_cstr_as_str(step->unlink.path));
         sys_expect_err(utest_result, "unlink", err, step->unlink.err);
         break;
       }
       case SYS_STEP_LINK: {
         sp_err_t err = sp_sys_link_s(
-          sys_dir_fd(sandbox_fd, fds, step->link.existing_dir), sp_cstr_as_str(step->link.existing),
-          sys_dir_fd(sandbox_fd, fds, step->link.alias_dir), sp_cstr_as_str(step->link.alias));
+          sys_dir_fd(sandbox_dir, fds, step->link.existing_dir), sp_cstr_as_str(step->link.existing),
+          sys_dir_fd(sandbox_dir, fds, step->link.alias_dir), sp_cstr_as_str(step->link.alias));
         sys_expect_err(utest_result, "link", err, step->link.err);
         break;
       }
@@ -415,7 +417,7 @@ done:
   sp_carr_for(t.steps, it) {
     if (t.steps[it].kind == SYS_STEP_SYMLINK) sp_fs_remove_file(sp_cstr_as_str(t.steps[it].symlink.alias));
   }
-  if (sandbox_fd != SP_SYS_INVALID_FD) sp_sys_close(sandbox_fd);
+  sp_fs_close_dir(sandbox_dir);
   sp_test_file_manager_cleanup(&fm);
 }
 

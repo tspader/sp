@@ -16,8 +16,9 @@ source = [
   "test/test/axis.c", "test/test/filter.c", "test/test/matrix.c",
   "test/test/sweep.c", "test/test/tracking.c",
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
-  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
+  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/set_times.c", "test/sys/perms.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
+  "test/sys/sync.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
@@ -41,8 +42,9 @@ name = "sys"
 source = [
   "test/main.c",
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
-  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
+  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/set_times.c", "test/sys/perms.c", "test/sys/self_path.c",
   "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
+  "test/sys/sync.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
@@ -90,7 +92,7 @@ source = [
   "test/main.c",
   "test/http/tls/*.c",
 ]
-deps = ["mbedtls"]
+deps = [{ pkg = "mbedtls", when = { os = { not = "wasi" } } }]
 define = [
   "SP_TLS_WITH_MBEDTLS",
   { value = "SP_TLS_MACOS_SECTRUST", when = { os = "macos" } },
@@ -111,7 +113,7 @@ define = ["SP_SHARED_LIB"]
 deps = ["sp"]
 
 [deps.test]
-mbedtls = "3.6.6"
+mbedtls = { path = "tools/spn/mbedtls", when = { os = { not = "wasi" } } }
 
 [[example]]
 name = "zero_copy"

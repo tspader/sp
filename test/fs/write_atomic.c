@@ -1,5 +1,8 @@
 #include "fs.h"
 
+#define A16 "AAAAAAAAAAAAAAAA"
+#define A255 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 "AAAAAAAAAAAAAAA"
+
 typedef struct {
   sp_err_t err;
   fs_expected_path_t paths [FS_MAX_PATHS];
@@ -58,11 +61,21 @@ static const test_t tests [] = {
       },
     },
   },
+  {
+    .name = "name_at_component_limit",
+    .path = A255,
+    .content = "A",
+    .expect = {
+      .paths = {
+        { .path = A255, .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      },
+    },
+  },
 };
 
 sp_test_each(fs, write_atomic, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_path_t path = sp_path_join(sp_test_arena(t), sandbox, sp_cstr_as_str(it->path));
   sp_expect_err_eq(t, sp_fs_write_atomic_at(path, sp_cstr_as_str(it->content)), it->expect.err);

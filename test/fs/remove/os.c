@@ -1,9 +1,5 @@
 #include "fs.h"
 
-#define DEEP_LEVELS 40
-#define DEEP_NAME "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
-                  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-
 typedef struct {
   sp_err_t err;
   fs_expected_path_t paths [FS_MAX_PATHS];
@@ -300,7 +296,7 @@ sp_test_each(fs, remove, test_t, tests) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_path_t base = it->cwd ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd)) : sandbox;
   sp_path_t target = sp_path_join(mem, base, sp_cstr_as_str(it->path));
@@ -309,7 +305,7 @@ sp_test_each(fs, remove, test_t, tests) {
     sp_str_t name = sp_fmt(mem, "R{}", sp_fmt_uint(b)).value;
     sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, into, name)));
   }
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(base, &dir));
 
   sp_path_t path = sp_path(dir, sp_cstr_as_str(it->path));
@@ -317,46 +313,20 @@ sp_test_each(fs, remove, test_t, tests) {
   sp_expect_err_eq(t, result, it->expect.err);
 
   sp_sys_file_meta_t meta = sp_zero;
-  sp_expect_ok(t, sp_sys_get_file_metadata(dir, &meta));
-  sp_sys_close(dir);
+  sp_expect_ok(t, sp_sys_get_file_metadata(dir.fd, &meta));
+  sp_fs_close_dir(dir);
 
   fs_expect_paths(t, sandbox, it->expect.paths);
   return SP_OK;
 }
 
-sp_test(fs, remove_dir_deeper_than_path_max_is_name_too_long) {
+sp_test(fs, remove_dir_deeper_than_path_max) {
   sp_path_t root = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
-  sp_must_ok(t, sp_fs_create_dir_at(root));
-
-  sp_sys_fd_t cur = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_fs_open_dir_at(root, &cur));
-  sp_for(level, DEEP_LEVELS) {
-    sp_path_t child = sp_path(cur, sp_str_lit(DEEP_NAME));
-    sp_must_ok(t, sp_fs_create_dir_at(child));
-
-    sp_sys_fd_t next = SP_SYS_INVALID_FD;
-    sp_must_ok(t, sp_fs_open_dir_at(child, &next));
-    sp_sys_close(cur);
-    cur = next;
-  }
-  sp_must_ok(t, sp_fs_create_file_at(sp_path(cur, sp_str_lit("F"))));
-  sp_sys_close(cur);
-
-  sp_expect_err_eq(t, sp_fs_remove_dir_at(root), SP_ERR_SYS_NAME_TOO_LONG);
-  sp_expect(t, sp_fs_exists_at(root));
-
-  sp_must_ok(t, sp_fs_open_dir_at(root, &cur));
-  sp_for(level, DEEP_LEVELS / 2) {
-    sp_sys_fd_t next = SP_SYS_INVALID_FD;
-    sp_must_ok(t, sp_sys_open_dir_s(cur, sp_str_lit(DEEP_NAME), 0, &next));
-    sp_sys_close(cur);
-    cur = next;
-  }
-  sp_expect_ok(t, sp_fs_remove_dir_at(sp_path(cur, sp_str_lit(DEEP_NAME))));
-  sp_sys_close(cur);
+  sp_must_ok(t, fs_create_deep_tree(root));
 
   sp_expect_ok(t, sp_fs_remove_dir_at(root));
-  sp_expect(t, !sp_fs_exists_at(root));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_expect_err_eq(t, sp_fs_get_path_metadata_at(root, &meta), SP_ERR_SYS_NOT_FOUND);
   return SP_OK;
 }
 

@@ -136,15 +136,9 @@ sp_test_each(runner, golden, test_t, tests) {
   sp_expect(t, sp_str_contains(out.out, sp_test_format(t, "\nchild.golden {} ", sp_fmt_cstr(it->expect.status))));
 
   sp_str_t content = sp_zero;
-  sp_expect_eq(t, sp_fs_exists_at(golden), it->expect.golden != SP_NULLPTR);
-  if (it->expect.golden) {
-    sp_expect_ok(t, sp_io_read_file_at(mem, golden, &content));
-    sp_expect_str_eq_c(t, content, it->expect.golden);
-  }
-  sp_expect_eq(t, sp_fs_exists_at(actual), it->expect.actual != SP_NULLPTR);
-  if (it->expect.actual) {
-    sp_expect_ok(t, sp_io_read_file_at(mem, actual, &content));
-    sp_expect_str_eq_c(t, content, it->expect.actual);
-  }
+  sp_expect_err_eq(t, sp_io_read_file_at(mem, golden, &content), it->expect.golden ? SP_OK : SP_ERR_SYS_NOT_FOUND);
+  if (it->expect.golden) sp_expect_str_eq_c(t, content, it->expect.golden);
+  sp_expect_err_eq(t, sp_io_read_file_at(mem, actual, &content), it->expect.actual ? SP_OK : SP_ERR_SYS_NOT_FOUND);
+  if (it->expect.actual) sp_expect_str_eq_c(t, content, it->expect.actual);
   return SP_OK;
 }

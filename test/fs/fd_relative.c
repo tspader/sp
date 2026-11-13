@@ -17,6 +17,7 @@ typedef struct {
   const c8* dest;
   const c8* content;
   bool win32;
+  bool parent;
   fs_expected_path_t expect [FS_MAX_PATHS];
 } test_t;
 
@@ -29,6 +30,7 @@ static const test_t tests [] = {
     .cwd = "A",
     .op = OP_STAT,
     .path = "../A/F",
+    .parent = true,
   },
   {
     .name = "open_dotdot",
@@ -38,6 +40,7 @@ static const test_t tests [] = {
     .cwd = "A",
     .path = "../A/F",
     .content = "A",
+    .parent = true,
   },
   {
     .name = "rename_dotdot",
@@ -48,6 +51,7 @@ static const test_t tests [] = {
     .op = OP_RENAME,
     .path = "F",
     .dest = "../A/G",
+    .parent = true,
     .expect = {
       { .path = "A/F" },
       { .path = "A/G", .exists = true, .kind = SP_FS_KIND_FILE },
@@ -62,6 +66,7 @@ static const test_t tests [] = {
     .op = OP_LINK,
     .path = "F",
     .dest = "../A/G",
+    .parent = true,
     .expect = {
       { .path = "A/G", .exists = true, .kind = SP_FS_KIND_FILE },
     },
@@ -103,6 +108,7 @@ static const test_t tests [] = {
     .cwd = "A/B",
     .path = "../G",
     .content = "B",
+    .parent = true,
   },
 };
 
@@ -111,13 +117,14 @@ sp_test_each(fs, fd_relative, test_t, tests) {
   if (it->win32) return sp_test_skip(t, "windows only");
 #endif
   if (it->op == OP_OPEN_ABS) sp_test_skip_without_absolute_names();
+  if (it->parent) sp_test_skip_without_parent_names();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_path_t cwd_path = sp_path_join(mem, sandbox, sp_cstr_as_str(it->cwd));
-  sp_sys_fd_t cwd = SP_SYS_INVALID_FD;
+  sp_sys_dir_t cwd = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(cwd_path, &cwd));
 
   switch (it->op) {
@@ -154,7 +161,7 @@ sp_test_each(fs, fd_relative, test_t, tests) {
     }
   }
 
-  sp_sys_close(cwd);
+  sp_fs_close_dir(cwd);
   fs_expect_paths(t, sandbox, it->expect);
   return SP_OK;
 }

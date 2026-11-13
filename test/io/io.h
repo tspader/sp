@@ -20,12 +20,12 @@ UTEST_F_SETUP(io) {
   sp_test_file_manager_init(&ut.file_manager);
   ut.file.sub = sp_str_lit("sp_io_rw.file");
   sp_test_file_create_empty(&ut.file_manager, ut.file.sub);
-  sp_sys_open_dir_s(sp_sys_get_root(0), ut.file_manager.paths.test, 0, &ut.file.dir);
+  sp_fs_open_dir_at(sp_path_cwd(ut.file_manager.paths.test), &ut.file.dir);
 }
 
 UTEST_F_TEARDOWN(io) {
   SKIP_ON_WASM()
-  sp_sys_close(ut.file.dir);
+  sp_fs_close_dir(ut.file.dir);
   sp_test_file_manager_cleanup(&ut.file_manager);
   sp_mem_arena_destroy(ut.arena);
 }

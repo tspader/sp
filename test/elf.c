@@ -671,7 +671,6 @@ UTEST_F(elf, oracle_cc_read) {
     .args = {sp_str_lit("-c"), c_path, sp_str_lit("-o"), fixture_path},
   });
   ASSERT_EQ(compile.status.exit_code, 0);
-  EXPECT_TRUE(sp_fs_exists(fixture_path));
 
   sp_elf_t* read_elf = sp_elf_read_from_file(ut.mem.tracking, fixture_path);
   ASSERT_NE(read_elf, SP_NULLPTR);
@@ -735,7 +734,6 @@ UTEST_F(elf, oracle_cc_link) {
     .args = {c_path, obj_path, sp_str_lit("-o"), bin_path},
   });
   ASSERT_EQ(compile.status.exit_code, 0);
-  EXPECT_TRUE(sp_fs_exists(bin_path));
 
   sp_ps_output_t run = sp_ps_run(sp_mem_get_scratch(), (sp_ps_config_t){
     .command = bin_path,

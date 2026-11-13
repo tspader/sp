@@ -21,7 +21,7 @@ jobs:
         include:
           - { id: x86_64-linux,  os: ubuntu-latest,    triples: x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl }
           - { id: aarch64-linux, os: ubuntu-24.04-arm, triples: aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl }
-          - { id: macos,         os: macos-14,         triples: aarch64-macos }
+          - { id: macos,         os: macos-latest,     triples: aarch64-macos }
           - { id: windows,       os: windows-latest,   triples: x86_64-windows-gnu }
           - { id: wasm,          os: ubuntu-latest,    triples: wasm32-wasi wasm32-freestanding }
     name: ${{ matrix.id }}
@@ -39,6 +39,17 @@ jobs:
         run: |
           for triple in ${{ matrix.triples }}; do
             make ci TRIPLE=$triple
+          done
+      - if: contains(matrix.triples, 'wasm32')
+        run: curl -fsSL https://github.com/boonbane/spn/releases/latest/download/install.sh | sh
+      - if: contains(matrix.triples, 'wasm32')
+        shell: bash
+        run: |
+          tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
+          spn build --test --target wasm32-wasi $tests
+          for t in $tests; do
+            echo "> $t"
+            wasmtime run --dir "$PWD" build/wasm32-wasi-musl/debug/test/$t.wasm || exit 1
           done
 
   gcc:

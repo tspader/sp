@@ -30,6 +30,7 @@ typedef struct {
   sp_err_t err;
   const c8* file;
   const c8* dir;
+  const c8* fifo;
   const c8* link;
   const c8* target;
   bool dir_link;
@@ -130,6 +131,15 @@ static const test_t tests [] = {
     .target = "missing",
     .exists = "lnk",
   },
+#if defined(SP_POSIX)
+  {
+    .name = "stat_fifo_is_unknown",
+    .op = OP_STAT,
+    .path = "F",
+    .fifo = "F",
+    .kind = SP_FS_KIND_UNKNOWN,
+  },
+#endif
 };
 
 static const test_t slash_tests [] = {
@@ -360,9 +370,9 @@ static sp_str_t abs_path(sp_mem_t mem, sp_str_t sandbox, const c8* rel) {
   return sp_str(buf, sandbox.len + 1 + rel_len);
 }
 
-static bool entry_exists(sp_sys_fd_t fd, const c8* name) {
+static bool entry_exists(sp_sys_dir_t dir, const c8* name) {
   sp_sys_file_meta_t meta = sp_zero;
-  return sp_sys_get_link_metadata_s(fd, sp_cstr_as_str(name), &meta) == SP_OK;
+  return sp_sys_get_link_metadata_s(dir, sp_cstr_as_str(name), &meta) == SP_OK;
 }
 
 static bool check_err(sp_test_t* t, sp_err_t err, sp_err_t want) {
@@ -387,9 +397,19 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   if (c->file) sp_must_ok(t, sp_fs_create_file_str_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->file)), sp_str_lit("A")));
   if (c->dir)  sp_must_ok(t, sp_fs_create_dir_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->dir))));
   if (c->link) sp_must_ok(t, sp_fs_create_sym_link_at(sp_cstr_as_str(c->target), sp_path_join(mem, sandbox, sp_cstr_as_str(c->link)), c->dir_link ? SP_FS_KIND_DIR : SP_FS_KIND_FILE));
+#if defined(SP_POSIX)
+  if (c->fifo) {
+    sp_str_t root = sp_zero;
+    sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sandbox, &root));
+    sp_str_t fifo = abs_path(mem, root, c->fifo);
+    c8 buf [SP_PATH_MAX];
+    sp_cstr_copy_to_n(fifo.data, fifo.len, buf, sizeof(buf));
+    sp_must(t, !mkfifo(buf, 0644));
+  }
+#endif
 
-  sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &sandbox_fd));
+  sp_sys_dir_t sandbox_dir = sp_zero;
+  sp_try(sp_fs_open_dir_at(sandbox, &sandbox_dir));
 
   sp_str_t path = sp_cstr_as_str(c->path);
   if (c->path_kind == PATH_LONG) path = long_path(mem, c->path);
@@ -402,25 +422,25 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_file_meta_t meta = sp_zero;
   sp_err_t err = SP_OK;
   switch (c->op) {
-    case OP_UNLINK: err = sp_sys_unlink_s(sandbox_fd, path); break;
-    case OP_RMDIR:  err = sp_sys_rmdir_s(sandbox_fd, path); break;
-    case OP_MKDIR:  err = sp_sys_mkdir_s(sandbox_fd, path, sp_sys_default_dir_perms); break;
-    case OP_STAT:   err = sp_sys_get_path_metadata_s(sandbox_fd, path, &meta); break;
-    case OP_LSTAT:  err = sp_sys_get_link_metadata_s(sandbox_fd, path, &meta); break;
+    case OP_UNLINK: err = sp_sys_unlink_s(sandbox_dir, path); break;
+    case OP_RMDIR:  err = sp_sys_rmdir_s(sandbox_dir, path); break;
+    case OP_MKDIR:  err = sp_sys_mkdir_s(sandbox_dir, path, sp_sys_default_dir_perms); break;
+    case OP_STAT:   err = sp_sys_get_path_metadata_s(sandbox_dir, path, &meta); break;
+    case OP_LSTAT:  err = sp_sys_get_link_metadata_s(sandbox_dir, path, &meta); break;
   }
 
   if (check_err(t, err, c->err) && !err && c->kind && meta.kind != c->kind) {
     sp_test_fail(t, "kind {} but expected {}", sp_fmt_int(meta.kind), sp_fmt_int(c->kind));
   }
 
-  if (c->exists && !entry_exists(sandbox_fd, c->exists)) {
+  if (c->exists && !entry_exists(sandbox_dir, c->exists)) {
     sp_test_fail(t, "expected {} to survive", sp_fmt_cstr(c->exists));
   }
-  if (c->not_exists && entry_exists(sandbox_fd, c->not_exists)) {
+  if (c->not_exists && entry_exists(sandbox_dir, c->not_exists)) {
     sp_test_fail(t, "expected {} not to be created", sp_fmt_cstr(c->not_exists));
   }
 
-  sp_sys_close(sandbox_fd);
+  sp_fs_close_dir(sandbox_dir);
   return SP_OK;
 }
 

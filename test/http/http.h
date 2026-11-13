@@ -2,7 +2,7 @@
 #define HTTP_TEST_H
 
 // The suite links against private sp_http functions across translation units,
-// so they must have external linkage; the implementation TU (fetch.c) defines
+// so they must have external linkage; the implementation TU (http.c) defines
 // SP_PRIVATE empty for the same reason.
 #define SP_PRIVATE
 #define SP_IMP

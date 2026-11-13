@@ -53,7 +53,8 @@ static bool gdb_available(void) {
     sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
     sp_str_t fixture = gdb_fixture_path(scratch.mem);
     cached = 0;
-    if (sp_fs_exists(fixture)) {
+    sp_sys_file_meta_t meta = sp_zero;
+    if (!sp_fs_get_path_metadata(fixture, &meta)) {
       sp_ps_output_t probe = sp_ps_run_c(scratch.mem, (sp_ps_config_cstr_t) {
         .command = "gdb",
         .args = { "-q", "-nx", "-batch", "-ex", "python 1", "-ex", "run", sp_str_to_cstr(scratch.mem, fixture) },

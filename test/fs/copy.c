@@ -422,6 +422,81 @@ static const test_t tests [] = {
     },
   },
   {
+    .name = "tree_into_itself",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst = "A/B",
+    .err = SP_ERR_SYS_INVALID,
+    .expect = {
+      { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      { .path = "A/B/C" },
+    },
+  },
+  {
+    .name = "tree_into_itself_nested",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst = "A/D/E",
+    .err = SP_ERR_SYS_INVALID,
+    .expect = {
+      { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      { .path = "A/D/E/C" },
+    },
+  },
+  {
+    .name = "tree_into_itself_through_symlink",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst = "L/B",
+    .err = SP_ERR_SYS_INVALID,
+    .expect = {
+      { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      { .path = "A/B/C" },
+    },
+  },
+#if !defined(SP_WASM)
+  {
+    .name = "tree_into_itself_through_handle",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+      { "A/X", FS_SETUP_DIR },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst_dir = "A/X",
+    .dst = "B",
+    .err = SP_ERR_SYS_INVALID,
+    .expect = {
+      { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      { .path = "A/X/B/C" },
+    },
+  },
+#endif
+  {
+    .name = "tree_into_dir_behind_symlink_in_source",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+      { "X", FS_SETUP_DIR },
+      { .path = "A/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "../X" },
+    },
+    .op = OP_COPY_TREE,
+    .src = "A",
+    .dst = "A/L/B",
+    .expect = {
+      { .path = "X/B/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+    },
+  },
+  {
     .name = "tree_dest_parent_is_file",
     .setup = {
       { "A", FS_SETUP_DIR },
@@ -533,13 +608,13 @@ sp_test_each(fs, copy, test_t, tests) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
+  sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_path_t dst_base = it->dst_dir ? sp_path_join(mem, sandbox, sp_cstr_as_str(it->dst_dir)) : sandbox;
-  sp_sys_fd_t dst_dir = SP_SYS_INVALID_FD;
+  sp_sys_dir_t dst_dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(dst_base, &dst_dir));
 
   sp_path_t src = sp_path(dir, sp_cstr_as_str(it->src));
@@ -551,8 +626,8 @@ sp_test_each(fs, copy, test_t, tests) {
     case OP_COPY_TREE: result = sp_fs_copy_tree_at(src, dst, it->mode); break;
     case OP_COPY:      result = sp_fs_copy_at(src, dst, it->mode); break;
   }
-  sp_sys_close(dst_dir);
-  sp_sys_close(dir);
+  sp_fs_close_dir(dst_dir);
+  sp_fs_close_dir(dir);
   sp_expect_err_eq(t, result, it->err);
 
   fs_expect_paths(t, sandbox, it->expect);
@@ -589,6 +664,31 @@ sp_test_each(fs, copy_size, size_test_t, sizes) {
   sp_must_ok(t, sp_io_read_file_at(mem, to, &copied));
   sp_must_eq(t, copied.len, it->size);
   sp_expect_mem_eq(t, copied.data, data, it->size);
+  return SP_OK;
+}
+
+sp_test(fs, copy_tree_deeper_than_path_max) {
+  sp_mem_t mem = sp_test_arena(t);
+  sp_path_t from = sp_path_join(mem, sp_test_dir(t), sp_str_lit("A"));
+  sp_path_t to = sp_path_join(mem, sp_test_dir(t), sp_str_lit("B"));
+  sp_must_ok(t, fs_create_deep_tree(from));
+
+  sp_must_ok(t, sp_fs_copy_tree_at(from, to, SP_FS_ATOMIC_REPLACE));
+
+  sp_sys_dir_t cur = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(to, &cur));
+  sp_for(level, FS_DEEP_LEVELS) {
+    sp_sys_dir_t next = sp_zero;
+    sp_err_t err = sp_fs_open_dir_at(sp_path(cur, sp_str_lit(FS_DEEP_NAME)), &next);
+    sp_fs_close_dir(cur);
+    sp_must_ok(t, err);
+    cur = next;
+  }
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_err_t err = sp_sys_get_link_metadata_s(cur, sp_str_lit("F"), &meta);
+  sp_fs_close_dir(cur);
+  sp_must_ok(t, err);
+  sp_expect_eq(t, meta.kind, SP_FS_KIND_FILE);
   return SP_OK;
 }
 
@@ -658,7 +758,8 @@ sp_test(fs, copy_file_unwritable_parent_leaves_nothing) {
 
   if (!result) return sp_test_skip(t, "directory permissions not enforced");
   sp_expect_err_eq(t, result, SP_ERR_SYS_ACCESS_DENIED);
-  sp_expect(t, !sp_fs_exists_at(to));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_expect_err_eq(t, sp_fs_get_path_metadata_at(to, &meta), SP_ERR_SYS_NOT_FOUND);
   fs_expect_no_temps(t, sandbox);
   return SP_OK;
 }
@@ -678,7 +779,8 @@ sp_test(fs, copy_tree_unreadable_subdir_fails) {
 
   if (!result) return sp_test_skip(t, "directory permissions not enforced");
   sp_expect_err_eq(t, result, SP_ERR_SYS_ACCESS_DENIED);
-  sp_expect(t, !sp_fs_exists_at(sp_path_join(mem, sandbox, sp_str_lit("E/B/C"))));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_expect_err_eq(t, sp_fs_get_path_metadata_at(sp_path_join(mem, sandbox, sp_str_lit("E/B/C")), &meta), SP_ERR_SYS_NOT_FOUND);
   return SP_OK;
 }
 #endif

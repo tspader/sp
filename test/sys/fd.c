@@ -10,12 +10,14 @@ typedef enum {
 typedef struct {
   const c8* name;
   op_t op;
+  bool invalid;
 } test_t;
 
 static const test_t tests [] = {
   { .name = "read_refuses_garbage_fd", .op = OP_READ },
   { .name = "write_refuses_garbage_fd", .op = OP_WRITE },
   { .name = "open_dir_refuses_garbage_root", .op = OP_OPEN_DIR },
+  { .name = "open_dir_refuses_invalid_root", .op = OP_OPEN_DIR, .invalid = true },
 };
 
 // Invalid by construction, not closed-then-reused: past any fd rlimit on
@@ -26,14 +28,15 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   c8 buf [4] = sp_zero;
   u64 n = 0;
   sp_err_t err = SP_OK;
+  sp_sys_fd_t fd = c->invalid ? SP_SYS_INVALID_FD : GARBAGE_FD;
 
   switch (c->op) {
-    case OP_READ:  err = sp_sys_read(GARBAGE_FD, buf, sizeof(buf), &n); break;
-    case OP_WRITE: err = sp_sys_write(GARBAGE_FD, "A", 1, &n); break;
+    case OP_READ:  err = sp_sys_read(fd, buf, sizeof(buf), &n); break;
+    case OP_WRITE: err = sp_sys_write(fd, "A", 1, &n); break;
     case OP_OPEN_DIR: {
-      sp_sys_fd_t out = SP_SYS_INVALID_FD;
-      err = sp_sys_open_dir_s(GARBAGE_FD, sp_str_lit("A"), 0, &out);
-      if (!err) sp_sys_close(out);
+      sp_sys_dir_t out = sp_zero;
+      err = sp_sys_open_dir_s(sp_sys_dir(fd), sp_str_lit("A"), 0, &out);
+      if (!err) sp_fs_close_dir(out);
       break;
     }
   }

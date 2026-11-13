@@ -110,12 +110,20 @@ sp_test_each(runner, prune, prune_case_t, prune_cases) {
   sp_da(sp_str_t) survivors = sp_da_new(mem, sp_str_t);
   sp_carr_for(it->seeds, at) {
     if (!it->seeds[at].id) break;
-    if (sp_fs_exists_at(paths[at])) sp_da_push(survivors, sp_cstr_as_str(it->seeds[at].id));
+    sp_sys_file_meta_t meta = sp_zero;
+    if (!sp_fs_get_path_metadata_at(paths[at], &meta)) sp_da_push(survivors, sp_cstr_as_str(it->seeds[at].id));
   }
   sp_expect_strs_eq(t, survivors, sp_da_size(survivors), it->expect);
 
+  sp_sys_dir_t runs_dir = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(runs, &runs_dir));
   u64 entries = 0;
-  sp_fs_for(mem, runs, walk) entries++;
+  sp_fs_dir_it_t iter = sp_fs_dir_it(runs_dir);
+  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+  sp_fs_dir_entry_t entry = sp_zero;
+  while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) entries++;
+  sp_fs_dir_it_close(&iter);
+  sp_fs_close_dir(runs_dir);
   sp_expect_eq(t, entries, sp_da_size(survivors));
   return SP_OK;
 }
