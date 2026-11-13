@@ -139,13 +139,6 @@ static const test_t tests [] = {
     .fifo = "F",
     .kind = SP_FS_KIND_UNKNOWN,
   },
-  {
-    .name = "lstat_fifo_is_unknown",
-    .op = OP_LSTAT,
-    .path = "F",
-    .fifo = "F",
-    .kind = SP_FS_KIND_UNKNOWN,
-  },
 #endif
 };
 

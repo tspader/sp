@@ -31,7 +31,7 @@ typedef struct {
 
 static const test_t tests [] = {
   {
-    .name = "descends_without_enter",
+    .name = "leaves_after_children_before_siblings",
     .dirs = {
       { .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
       { .path = "B", .entries = { { "D", SP_FS_KIND_FILE } } },

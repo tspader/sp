@@ -69,3 +69,20 @@ sp_test(fs, path_cwd_passes_through) {
   sp_expect_eq(t, meta.kind, SP_FS_KIND_DIR);
   return SP_OK;
 }
+
+sp_test(fs, open_cwd_dot_is_cwd) {
+  sp_test_skip_on_wasm()
+
+  sp_mem_t mem = sp_test_arena(t);
+  sp_sys_dir_t cwd = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(sp_path_cwd(sp_str_lit(".")), &cwd));
+
+  sp_str_t expect = sp_zero;
+  sp_str_t actual = sp_zero;
+  sp_expect_ok(t, sp_fs_get_cwd_path(mem, &expect));
+  sp_expect_ok(t, sp_fs_canonicalize_path_at(mem, sp_path_c(cwd, "."), &actual));
+  sp_expect_str_eq(t, actual, expect);
+
+  sp_fs_close_dir(cwd);
+  return SP_OK;
+}

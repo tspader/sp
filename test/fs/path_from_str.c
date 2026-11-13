@@ -2,6 +2,7 @@
 
 #define MAX_ROOTS 4
 #define ROOT_FD 9000
+#define NO_ROOT -1
 
 typedef struct {
   const c8* label;
@@ -36,7 +37,7 @@ static const test_t tests [] = {
   {
     .name = "relative_without_roots",
     .path = "A",
-    .expect = { .root = SP_SYS_INVALID_FD, .sub = "A" },
+    .expect = { .root = NO_ROOT,.sub = "A" },
   },
   {
     .name = "label_is_stripped",
@@ -66,13 +67,13 @@ static const test_t tests [] = {
     .name = "label_matches_whole_components",
     .roots = { { .label = "/B" }, { .label = "/A" } },
     .path = "/AB/C",
-    .expect = { .root = SP_SYS_INVALID_FD, .sub = "/AB/C" },
+    .expect = { .root = NO_ROOT,.sub = "/AB/C" },
   },
   {
     .name = "absolute_without_serving_root",
     .roots = { { .label = "/A" } },
     .path = "/B/C",
-    .expect = { .root = SP_SYS_INVALID_FD, .sub = "/B/C" },
+    .expect = { .root = NO_ROOT,.sub = "/B/C" },
   },
   {
     .name = "deepest_label_wins",
@@ -157,7 +158,7 @@ static s32 num_roots() {
 }
 
 sp_sys_fd_t root_fd(s32 it) {
-  return it == SP_SYS_INVALID_FD ? SP_SYS_INVALID_FD : (sp_sys_fd_t)(ROOT_FD + it);
+  return it == NO_ROOT ? SP_SYS_INVALID_FD : (sp_sys_fd_t)(ROOT_FD + it);
 }
 
 sp_sys_dir_t get_root(s32 it) {

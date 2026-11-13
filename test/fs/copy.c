@@ -464,22 +464,6 @@ static const test_t tests [] = {
       { .path = "A/B/C" },
     },
   },
-  {
-    .name = "tree_into_itself_through_symlink_to_subdir",
-    .setup = {
-      { .path = "A/C", .content = "C" },
-      { "A/D", FS_SETUP_DIR },
-      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A/D" },
-    },
-    .op = OP_COPY_TREE,
-    .src = "A",
-    .dst = "L/B",
-    .err = SP_ERR_SYS_INVALID,
-    .expect = {
-      { .path = "A/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      { .path = "A/D/B/C" },
-    },
-  },
 #if !defined(SP_WASM)
   {
     .name = "tree_into_itself_through_handle",

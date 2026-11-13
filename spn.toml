@@ -92,7 +92,7 @@ source = [
   "test/main.c",
   "test/http/tls/*.c",
 ]
-deps = ["mbedtls"]
+deps = [{ pkg = "mbedtls", when = { os = { not = "wasi" } } }]
 define = [
   "SP_TLS_WITH_MBEDTLS",
   { value = "SP_TLS_MACOS_SECTRUST", when = { os = "macos" } },
@@ -113,7 +113,7 @@ define = ["SP_SHARED_LIB"]
 deps = ["sp"]
 
 [deps.test]
-mbedtls = { path = "tools/spn/mbedtls" }
+mbedtls = { path = "tools/spn/mbedtls", when = { os = { not = "wasi" } } }
 
 [[example]]
 name = "zero_copy"

@@ -40,6 +40,17 @@ jobs:
           for triple in ${{ matrix.triples }}; do
             make ci TRIPLE=$triple
           done
+      - if: contains(matrix.triples, 'wasm32')
+        run: curl -fsSL https://github.com/boonbane/spn/releases/latest/download/install.sh | sh
+      - if: contains(matrix.triples, 'wasm32')
+        shell: bash
+        run: |
+          tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
+          spn build --test --target wasm32-wasi $tests
+          for t in $tests; do
+            echo "> $t"
+            wasmtime run --dir "$PWD" build/wasm32-wasi-musl/debug/test/$t.wasm || exit 1
+          done
 
   gcc:
     runs-on: ubuntu-latest

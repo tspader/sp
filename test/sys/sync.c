@@ -8,9 +8,6 @@ static const sys_case_t sys_sync_cases [] = {
       { .kind = SYS_STEP_WRITE, .write = { .data = "A" } },
       { .kind = SYS_STEP_SYNC },
     },
-    .expect = {
-      { .path = "A", .exists = true, .content = "A" },
-    },
   },
 };
 

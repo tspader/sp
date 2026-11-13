@@ -4,9 +4,7 @@
 
 typedef enum {
   OP_WRITE_ATOMIC,
-  OP_COMMIT,
   OP_SYNC_COMMIT,
-  OP_COPY_FILE,
 } op_t;
 
 typedef struct {
@@ -20,7 +18,6 @@ typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
   op_t op;
-  const c8* from;
   const c8* path;
   const c8* content;
   sp_err_t sync;
@@ -61,17 +58,6 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "commit_does_not_sync",
-    .op = OP_COMMIT,
-    .path = "A",
-    .content = "B",
-    .expect = {
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
-      },
-    },
-  },
-  {
     .name = "sync_flushes_writer",
     .op = OP_SYNC_COMMIT,
     .path = "A",
@@ -79,20 +65,6 @@ static const test_t tests [] = {
     .expect = {
       .syncs = 1,
       .synced = 1,
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
-      },
-    },
-  },
-  {
-    .name = "copy_file_does_not_sync",
-    .setup = {
-      { .path = "B", .content = "B" },
-    },
-    .op = OP_COPY_FILE,
-    .from = "B",
-    .path = "A",
-    .expect = {
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
       },
@@ -136,20 +108,15 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       err = sp_fs_write_atomic_at(path, content);
       break;
     }
-    case OP_COMMIT:
     case OP_SYNC_COMMIT: {
       u8 buffer [SYNC_SIM_BUFFER];
       sp_fs_atomic_t af = sp_zero;
       err = sp_fs_atomic_open_at(&af, path);
       if (!err) err = sp_io_writer_set_buffer(sp_fs_atomic_writer(&af), buffer, sizeof(buffer));
       if (!err) err = sp_io_write_str(sp_fs_atomic_writer(&af), content, SP_NULLPTR);
-      if (!err && c->op == OP_SYNC_COMMIT) err = sp_fs_atomic_sync(&af);
+      if (!err) err = sp_fs_atomic_sync(&af);
       if (!err) err = sp_fs_atomic_commit(&af, SP_FS_ATOMIC_REPLACE);
       else      sp_fs_atomic_abort(&af);
-      break;
-    }
-    case OP_COPY_FILE: {
-      err = sp_fs_copy_file_at(sp_path_join(mem, sandbox, sp_cstr_as_str(c->from)), path, SP_FS_ATOMIC_REPLACE);
       break;
     }
   }

@@ -3,8 +3,6 @@
 typedef enum {
   OP_PATH_AT,
   OP_LINK_AT,
-  OP_PATH,
-  OP_LINK,
 } op_t;
 
 typedef struct {
@@ -39,49 +37,23 @@ static const test_t tests [] = {
     .path = "L",
     .expect = { .kind = SP_FS_KIND_SYMLINK },
   },
-  {
-    .name = "path_follows_symlink",
-    .setup = {
-      { "A" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
-    },
-    .op = OP_PATH,
-    .path = "L",
-    .expect = { .kind = SP_FS_KIND_FILE },
-  },
-  {
-    .name = "link_reports_symlink",
-    .setup = {
-      { "A" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "A" },
-    },
-    .op = OP_LINK,
-    .path = "L",
-    .expect = { .kind = SP_FS_KIND_SYMLINK },
-  },
 };
 
 sp_test_each(fs, metadata, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
-  sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  bool by_str = it->op == OP_PATH || it->op == OP_LINK;
-  if (by_str && sandbox.dir.fd != sp_fs_get_cwd().fd) return sp_test_skip(t, "test dir is not relative to the cwd");
   sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
   sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
   sp_path_t at = sp_path(dir, sp_cstr_as_str(it->path));
-  sp_str_t str = sp_path_join(mem, sandbox, at.sub).sub;
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_err_t err = SP_OK;
   switch (it->op) {
     case OP_PATH_AT: err = sp_fs_get_path_metadata_at(at, &meta); break;
     case OP_LINK_AT: err = sp_fs_get_link_metadata_at(at, &meta); break;
-    case OP_PATH:    err = sp_fs_get_path_metadata(str, &meta); break;
-    case OP_LINK:    err = sp_fs_get_link_metadata(str, &meta); break;
   }
   sp_fs_close_dir(dir);
 

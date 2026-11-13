@@ -375,6 +375,12 @@ typedef struct {
   #define sp_test_skip_without_absolute_names() ((void)0)
 #endif
 
+#if defined(SP_WASM)
+  #define sp_test_skip_without_parent_names() return sp_test_skip(t, "no names above a handle on wasm");
+#else
+  #define sp_test_skip_without_parent_names() ((void)0)
+#endif
+
 #define sp_test_skip_without_symlinks() if (!sp_test_symlinks_supported(t)) return sp_test_skip(t, "symlinks not available");
 
 SP_API sp_err_t    sp_test_skip(sp_test_t* t, const c8* fmt, ...);

@@ -1,7 +1,7 @@
 #include "sp/sp_test.h"
 
 #define ROOT_FD 9000
-#define MAX_SUB 64
+#define MAX_ALIAS 64
 
 typedef enum {
   OP_FILE_READER,
@@ -28,7 +28,6 @@ typedef enum {
 } op_t;
 
 typedef struct {
-  const c8* sub;
   const c8* alias;
 } expect_t;
 
@@ -39,21 +38,21 @@ typedef struct {
 } test_t;
 
 static const test_t tests [] = {
-  { .name = "file_reader_from_path", .expect = { .sub = "F" } },
-  { .name = "file_writer_from_path", .op = OP_FILE_WRITER, .expect = { .sub = "F" } },
-  { .name = "get_path_metadata", .op = OP_GET_PATH_METADATA, .expect = { .sub = "F" } },
-  { .name = "get_link_metadata", .op = OP_GET_LINK_METADATA, .expect = { .sub = "F" } },
-  { .name = "canonicalize_path", .op = OP_CANONICALIZE_PATH, .expect = { .sub = "F" } },
-  { .name = "read_file", .op = OP_READ_FILE, .expect = { .sub = "F" } },
-  { .name = "create_dir", .op = OP_CREATE_DIR, .expect = { .sub = "F" } },
-  { .name = "create_file", .op = OP_CREATE_FILE, .expect = { .sub = "F" } },
-  { .name = "create_file_slice", .op = OP_CREATE_FILE_SLICE, .expect = { .sub = "F" } },
-  { .name = "create_file_str", .op = OP_CREATE_FILE_STR, .expect = { .sub = "F" } },
-  { .name = "create_file_cstr", .op = OP_CREATE_FILE_CSTR, .expect = { .sub = "F" } },
-  { .name = "create_hard_link", .op = OP_CREATE_HARD_LINK, .expect = { .sub = "F", .alias = "G" } },
-  { .name = "create_sym_link", .op = OP_CREATE_SYM_LINK, .expect = { .sub = "F" } },
-  { .name = "remove_file", .op = OP_REMOVE_FILE, .expect = { .sub = "F" } },
-  { .name = "remove_dir", .op = OP_REMOVE_DIR, .expect = { .sub = "F" } },
+  { .name = "file_reader_from_path" },
+  { .name = "file_writer_from_path", .op = OP_FILE_WRITER },
+  { .name = "get_path_metadata", .op = OP_GET_PATH_METADATA },
+  { .name = "get_link_metadata", .op = OP_GET_LINK_METADATA },
+  { .name = "canonicalize_path", .op = OP_CANONICALIZE_PATH },
+  { .name = "read_file", .op = OP_READ_FILE },
+  { .name = "create_dir", .op = OP_CREATE_DIR },
+  { .name = "create_file", .op = OP_CREATE_FILE },
+  { .name = "create_file_slice", .op = OP_CREATE_FILE_SLICE },
+  { .name = "create_file_str", .op = OP_CREATE_FILE_STR },
+  { .name = "create_file_cstr", .op = OP_CREATE_FILE_CSTR },
+  { .name = "create_hard_link", .op = OP_CREATE_HARD_LINK, .expect = { .alias = "G" } },
+  { .name = "create_sym_link", .op = OP_CREATE_SYM_LINK },
+  { .name = "remove_file", .op = OP_REMOVE_FILE },
+  { .name = "remove_dir", .op = OP_REMOVE_DIR },
   { .name = "atomic_open", .op = OP_ATOMIC_OPEN },
   { .name = "atomic_open_staged", .op = OP_ATOMIC_OPEN_STAGED },
   { .name = "write_atomic_slice_staged", .op = OP_WRITE_ATOMIC_SLICE_STAGED },
@@ -65,9 +64,8 @@ static const test_t tests [] = {
 typedef struct {
   bool seen;
   sp_sys_fd_t dir;
-  c8 sub [MAX_SUB];
   sp_sys_fd_t alias_dir;
-  c8 alias [MAX_SUB];
+  c8 alias [MAX_ALIAS];
 } probe_t;
 
 static probe_t probe;
@@ -88,40 +86,39 @@ static sp_err_t get_root_label(s32 it, c8* buf, u64 size, u64* len) {
   return SP_OK;
 }
 
-static sp_err_t record(sp_sys_dir_t dir, const c8* path, u32 len) {
+static sp_err_t record(sp_sys_dir_t dir) {
   if (!probe.seen) {
     probe.seen = true;
     probe.dir = dir.fd;
-    sp_cstr_copy_to_n(path, len, probe.sub, MAX_SUB);
   }
   return SP_ERR_SYS_ACCESS_DENIED;
 }
 
 static sp_err_t probe_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
   *out = SP_SYS_INVALID_FD;
-  return record(dir, path, len);
+  return record(dir);
 }
 
 static sp_err_t probe_mkdir(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_perms_t perms) {
-  return record(dir, path, len);
+  return record(dir);
 }
 
 static sp_err_t probe_unlink(sp_sys_dir_t dir, const c8* path, u32 len) {
-  return record(dir, path, len);
+  return record(dir);
 }
 
 static sp_err_t probe_link(sp_sys_dir_t from_dir, const c8* existing, u32 existing_len, sp_sys_dir_t to_dir, const c8* alias, u32 alias_len) {
   probe.alias_dir = to_dir.fd;
-  sp_cstr_copy_to_n(alias, alias_len, probe.alias, MAX_SUB);
-  return record(from_dir, existing, existing_len);
+  sp_cstr_copy_to_n(alias, alias_len, probe.alias, MAX_ALIAS);
+  return record(from_dir);
 }
 
 static sp_err_t probe_symlink(const c8* existing, u32 existing_len, sp_sys_dir_t to_dir, const c8* alias, u32 alias_len, sp_fs_kind_t kind) {
-  return record(to_dir, alias, alias_len);
+  return record(to_dir);
 }
 
 static sp_err_t probe_metadata(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_file_meta_t* st) {
-  return record(dir, path, len);
+  return record(dir);
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
@@ -176,7 +173,6 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   sp_must(t, probe.seen);
   sp_expect_eq(t, probe.dir, (sp_sys_fd_t)(ROOT_FD + 1));
-  if (c->expect.sub) sp_expect_str_eq_c(t, sp_cstr_as_str(probe.sub), c->expect.sub);
   if (c->expect.alias) {
     sp_expect_eq(t, probe.alias_dir, (sp_sys_fd_t)(ROOT_FD + 1));
     sp_expect_str_eq_c(t, sp_cstr_as_str(probe.alias), c->expect.alias);

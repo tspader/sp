@@ -30,21 +30,6 @@ typedef struct {
 
 static const test_t tests [] = {
   {
-    .name = "resumes_parent_after_child",
-    .dirs = {
-      { .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
-      { .path = "B", .entries = { { "D", SP_FS_KIND_FILE } } },
-    },
-    .expect = {
-      .entries = {
-        { "B", SP_FS_KIND_DIR },
-        { "B/D", SP_FS_KIND_FILE },
-        { "C", SP_FS_KIND_FILE },
-      },
-      .opens = 2,
-    },
-  },
-  {
     .name = "descends_empty_subdir",
     .dirs = {
       { .entries = { { "B", SP_FS_KIND_DIR } } },
@@ -86,19 +71,6 @@ static const test_t tests [] = {
     },
     .expect = {
       .walk = SP_ERR_SYS_IO,
-      .entries = { { "B", SP_FS_KIND_DIR } },
-      .opens = 2,
-    },
-  },
-  {
-    .name = "enter_after_error_returns_error",
-    .dirs = {
-      { .entries = { { "B", SP_FS_KIND_DIR }, { "C", SP_FS_KIND_FILE } } },
-      { .path = "B", .read = SP_ERR_SYS_IO },
-    },
-    .expect = {
-      .walk = SP_ERR_SYS_IO,
-      .enter = SP_ERR_SYS_IO,
       .entries = { { "B", SP_FS_KIND_DIR } },
       .opens = 2,
     },

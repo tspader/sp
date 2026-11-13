@@ -200,9 +200,9 @@ system_deps = [
 
 [package.publish]
 include = [
-  { from = "source/include/mbedtls/*", to = "mbedtls" },
-  { from = "source/include/psa/*", to = "psa" },
-  { from = "source/3rdparty/everest/include/everest/*", to = "everest", when = { everest = true } },
+  { from = "include/mbedtls/*", to = "mbedtls" },
+  { from = "include/psa/*", to = "psa" },
+  { from = "3rdparty/everest/include/everest/*", to = "everest", when = { everest = true } },
 ]
 
 [profile.default]

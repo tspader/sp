@@ -14,7 +14,6 @@ typedef enum {
 
 typedef struct {
   sp_err_t err;
-  const c8* set;
   const c8* kept;
 } expect_t;
 
@@ -27,9 +26,9 @@ typedef struct {
 } test_t;
 
 static const test_t tests [] = {
-  { .name = "file", .path = "A", .expect = { .set = "A" } },
-  { .name = "dir", .setup = SETUP_DIR, .path = "A", .expect = { .set = "A" } },
-  { .name = "follows_link", .setup = SETUP_LINK, .path = "L", .expect = { .set = "A", .kept = "L" } },
+  { .name = "file", .path = "A" },
+  { .name = "dir", .setup = SETUP_DIR, .path = "A" },
+  { .name = "follows_link", .setup = SETUP_LINK, .path = "L", .expect = { .kept = "L" } },
   { .name = "nanoseconds_past_a_second", .path = "A", .nsec = 1000000000, .expect = { .err = SP_ERR_SYS_INVALID } },
   { .name = "nanoseconds_negative", .path = "A", .nsec = -1, .expect = { .err = SP_ERR_SYS_INVALID } },
 };
@@ -62,9 +61,8 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_expect_err_eq(t, sp_sys_set_times_s(path.dir, path.sub, atime, mtime), c->expect.err);
   if (c->expect.err) return SP_OK;
 
-  sp_path_t set = sp_path_join(mem, sandbox, sp_cstr_as_str(c->expect.set));
   sp_sys_file_meta_t meta = sp_zero;
-  sp_must_ok(t, sp_sys_get_path_metadata_s(set.dir, set.sub, &meta));
+  sp_must_ok(t, sp_sys_get_path_metadata_s(a.dir, a.sub, &meta));
   sp_expect_eq(t, meta.atime.tv_sec, atime.tv_sec);
   sp_expect_eq(t, meta.atime.tv_nsec, atime.tv_nsec);
   sp_expect_eq(t, meta.mtime.tv_sec, mtime.tv_sec);

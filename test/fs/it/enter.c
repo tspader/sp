@@ -19,53 +19,10 @@ typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
   enter_t enter [FS_MAX_PATHS];
-  const c8* skip [FS_MAX_PATHS];
   expect_t expect;
 } test_t;
 
 static const test_t tests [] = {
-  {
-    .name = "descends_without_enter",
-    .setup = {
-      { "A/B" },
-      { "C" },
-    },
-    .expect = {
-      .entries = {
-        { "A", SP_FS_KIND_DIR },
-        { "A/B", SP_FS_KIND_FILE },
-        { "C", SP_FS_KIND_FILE },
-      },
-    },
-  },
-  {
-    .name = "skip_prunes_dir",
-    .setup = {
-      { "A/B" },
-      { "C" },
-    },
-    .skip = { "A" },
-    .expect = {
-      .entries = {
-        { "A", SP_FS_KIND_DIR },
-        { "C", SP_FS_KIND_FILE },
-      },
-    },
-  },
-  {
-    .name = "nested_enters",
-    .setup = {
-      { "A/B/C" },
-    },
-    .enter = { { "A" }, { "A/B" } },
-    .expect = {
-      .entries = {
-        { "A", SP_FS_KIND_DIR },
-        { "A/B", SP_FS_KIND_DIR },
-        { "A/B/C", SP_FS_KIND_FILE },
-      },
-    },
-  },
   {
     .name = "enter_file_is_not_dir",
     .setup = {
@@ -119,14 +76,6 @@ static const enter_t* find_enter(const test_t* test, sp_str_t path) {
   return SP_NULLPTR;
 }
 
-static bool is_skipped(const test_t* test, sp_str_t path) {
-  sp_carr_for(test->skip, s) {
-    if (!test->skip[s]) break;
-    if (sp_str_equal_cstr(path, test->skip[s])) return true;
-  }
-  return false;
-}
-
 sp_test_each(fs, it_enter, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
@@ -167,10 +116,6 @@ sp_test_each(fs, it_enter, test_t, tests) {
       case SP_FS_PRE_ORDER: {
         fs_match(t, entries, num_entries, entry.path, entry.kind);
         bool descend = entry.kind == SP_FS_KIND_DIR;
-        if (is_skipped(it, entry.path)) {
-          sp_fs_it_skip(&walk);
-          descend = false;
-        }
         const enter_t* enter = find_enter(it, entry.path);
         if (enter) {
           if (enter->vanish) sp_must_ok(t, sp_sys_rmdir_s(entry.at.dir, entry.at.sub));

@@ -14184,6 +14184,10 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
   __wasi_size_t used = 0;
   __wasi_errno_t err = sp_wasi_fd_readdir((__wasi_fd_t)it->dir.fd, buf->data, (__wasi_size_t)buf->capacity, (__wasi_dircookie_t)it->state, &used);
   if (err == SP_WASI_ENOENT) return SP_OK;
+  if (err == SP_WASI_EBADF) {
+    __wasi_filestat_t native = sp_zero;
+    if (!sp_wasi_fd_filestat_get((__wasi_fd_t)it->dir.fd, &native) && native.filetype != __WASI_FILETYPE_DIRECTORY) return SP_ERR_SYS_NOT_DIR;
+  }
   if (err) return sp_sys_err_from_wasi(err);
 
   u64 end = 0;

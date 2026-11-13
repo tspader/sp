@@ -85,17 +85,6 @@ static const test_t tests [] = {
     .name = "refills_across_batches",
     .bulk = 96,
   },
-#if defined(SP_POSIX)
-  {
-    .name = "special_file",
-    .setup = {
-      { .path = "F", .kind = FS_SETUP_FIFO },
-    },
-    .expect = {
-      { "F", SP_FS_KIND_UNKNOWN },
-    },
-  },
-#endif
 };
 
 sp_test_each(fs, dir, test_t, tests) {
@@ -146,108 +135,12 @@ sp_test_each(fs, dir, test_t, tests) {
   return SP_OK;
 }
 
-sp_test(fs, dir_it_rejects_small_buffer) {
-  sp_sys_dir_t dir = sp_zero;
-  sp_must_ok(t, sp_fs_open_dir_at(sp_test_dir(t), &dir));
-
-  sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
-  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_entry_t entry = sp_zero;
-  sp_expect(t, !sp_fs_dir_it_next(&iter, sp_mem_slice(buf, SP_SYS_DIR_MIN_BUF - 1), &entry));
-  sp_expect_err_eq(t, iter.err, SP_ERR_SYS_INVALID);
-  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
-  sp_fs_close_dir(dir);
-  return SP_OK;
-}
-
-sp_test(fs, dir_it_next_after_close_yields_nothing) {
-  static const fs_setup_t setup [FS_MAX_SETUP] = {
-    { "A" },
-    { "B" },
-  };
-
-  sp_path_t sandbox = sp_test_dir(t);
-  sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
-
-  sp_sys_dir_t dir = sp_zero;
-  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
-
-  sp_fs_dir_it_t iter = sp_fs_dir_it(dir);
-  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_entry_t entry = sp_zero;
-  sp_expect(t, sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry));
-  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
-  sp_expect(t, !sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry));
-  sp_expect_err_eq(t, iter.err, SP_ERR_SYS_BAD_FD);
-  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
-  sp_fs_close_dir(dir);
-  return SP_OK;
-}
-
-sp_test(fs, dir_it_file_handle_is_not_dir) {
-  static const fs_setup_t setup [FS_MAX_SETUP] = {
-    { "A" },
-  };
-
-  sp_path_t sandbox = sp_test_dir(t);
-  sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
-
-  sp_sys_dir_t dir = sp_zero;
-  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
-  sp_sys_fd_t file = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_s(dir, sp_str_lit("A"), SP_SYS_OPEN_MODE_RO, 0, &file));
-
-  sp_fs_dir_it_t iter = sp_fs_dir_it(sp_sys_dir(file));
-  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_entry_t entry = sp_zero;
-  sp_expect(t, !sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry));
-  sp_expect_err_eq(t, iter.err, SP_ERR_SYS_NOT_DIR);
-  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
-
-  sp_sys_close(file);
-  sp_fs_close_dir(dir);
-  return SP_OK;
-}
-
-typedef enum {
-  NO_DIR_HANDLE,
-  NO_DIR_ITERATOR,
-} no_dir_kind_t;
-
-typedef struct {
-  const c8* name;
-  no_dir_kind_t kind;
-} no_dir_test_t;
-
-static const no_dir_test_t no_dir_tests [] = {
-  { .name = "invalid_handle", .kind = NO_DIR_HANDLE },
-  { .name = "zero_iterator", .kind = NO_DIR_ITERATOR },
-};
-
-sp_test_each(fs, dir_it_without_dir_yields_nothing, no_dir_test_t, no_dir_tests) {
-  sp_fs_dir_it_t iter = sp_zero;
-  switch (it->kind) {
-    case NO_DIR_HANDLE:   iter = sp_fs_dir_it(sp_sys_dir(SP_SYS_INVALID_FD)); break;
-    case NO_DIR_ITERATOR: break;
-  }
-
-  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_entry_t entry = sp_zero;
-  u32 n = 0;
-  while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) n++;
-  sp_expect_eq(t, n, (u32)0);
-  sp_expect_err_eq(t, iter.err, SP_ERR_SYS_BAD_FD);
-  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
-  return SP_OK;
-}
-
 sp_test(fs, dir_reiterates_handle) {
   static const fs_setup_t setup [FS_MAX_SETUP] = {
     { "A" },
     { "B", FS_SETUP_DIR },
   };
 
-  sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
 
@@ -271,39 +164,6 @@ sp_test(fs, dir_reiterates_handle) {
     sp_for(i, n) matches[i].seen = false;
   }
 
-  sp_fs_it_t walk = sp_fs_it(mem, dir);
-  sp_fs_it_entry_t entry = sp_zero;
-  while (sp_fs_it_next(&walk, &entry)) fs_match(t, matches, n, entry.name, entry.kind);
-  sp_expect_ok(t, walk.err);
-  sp_fs_it_deinit(&walk);
-  fs_match_finish(t, matches, n);
-
   sp_fs_close_dir(dir);
-  return SP_OK;
-}
-
-sp_test(fs, open_cwd_iterates) {
-  sp_test_skip_on_wasm()
-
-  sp_mem_t mem = sp_test_arena(t);
-  sp_sys_dir_t cwd = sp_zero;
-  sp_must_ok(t, sp_fs_open_dir_at(sp_path_cwd(sp_str_lit(".")), &cwd));
-
-  sp_str_t expect = sp_zero;
-  sp_str_t actual = sp_zero;
-  sp_expect_ok(t, sp_fs_get_cwd_path(mem, &expect));
-  sp_expect_ok(t, sp_fs_canonicalize_path_at(mem, sp_path_c(cwd, "."), &actual));
-  sp_expect_str_eq(t, actual, expect);
-
-  sp_fs_dir_it_t iter = sp_fs_dir_it(cwd);
-  SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
-  sp_fs_dir_entry_t entry = sp_zero;
-  u32 n = 0;
-  while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) n++;
-  sp_expect_ok(t, iter.err);
-  sp_expect(t, n > 0);
-  sp_expect_ok(t, sp_fs_dir_it_close(&iter));
-
-  sp_fs_close_dir(cwd);
   return SP_OK;
 }

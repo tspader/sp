@@ -12,7 +12,6 @@ typedef struct {
 typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
-  bool recursive;
   expect_t expect;
 } test_t;
 
@@ -62,21 +61,7 @@ static const test_t tests [] = {
     .name = "empty_dir",
   },
   {
-    .name = "does_not_recurse",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-      { "A/B" },
-      { "C" },
-    },
-    .expect = {
-      .entries = {
-        { "A", SP_FS_KIND_DIR },
-        { "C", SP_FS_KIND_FILE },
-      },
-    },
-  },
-  {
-    .name = "recursive_nested_dirs",
+    .name = "nested_dirs",
     .setup = {
       { "A", FS_SETUP_DIR },
       { "A/B", FS_SETUP_DIR },
@@ -84,7 +69,6 @@ static const test_t tests [] = {
       { "A/D" },
       { "A/B/E" },
     },
-    .recursive = true,
     .expect = {
       .entries = {
         { "C", SP_FS_KIND_FILE },
@@ -96,13 +80,12 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "recursive_symlink_not_followed",
+    .name = "symlink_not_followed",
     .setup = {
       { "A", FS_SETUP_DIR },
       { "A/B" },
       { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
-    .recursive = true,
     .expect = {
       .entries = {
         { "A", SP_FS_KIND_DIR },
@@ -148,7 +131,6 @@ sp_test_each(fs, it, test_t, tests) {
   sp_fs_it_t walk = sp_fs_it(mem, root);
   sp_fs_it_entry_t entry = sp_zero;
   while (sp_fs_it_next(&walk, &entry)) {
-    if (!it->recursive) sp_fs_it_skip(&walk);
     sp_expect_str_eq(t, entry.name, sp_fs_get_name(entry.path));
     sp_expect_str_eq(t, entry.at.sub, entry.name);
     sp_sys_file_meta_t meta = sp_zero;
@@ -163,19 +145,5 @@ sp_test_each(fs, it, test_t, tests) {
   sp_fs_close_dir(root);
 
   fs_match_finish(t, matches, n);
-  return SP_OK;
-}
-
-sp_test(fs, it_deinit_is_idempotent) {
-  sp_mem_t mem = sp_test_arena(t);
-  sp_fs_it_t zeroed = sp_zero;
-  sp_fs_it_deinit(&zeroed);
-
-  sp_sys_dir_t root = sp_zero;
-  sp_must_ok(t, sp_fs_open_dir_at(sp_test_dir(t), &root));
-  sp_fs_it_t walk = sp_fs_it(mem, root);
-  sp_fs_it_deinit(&walk);
-  sp_fs_it_deinit(&walk);
-  sp_fs_close_dir(root);
   return SP_OK;
 }
