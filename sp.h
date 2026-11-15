@@ -20668,36 +20668,46 @@ sp_err_t sp_fs_get_config_path(sp_mem_t mem, sp_str_t* path) {
   return SP_OK;
 }
 
-sp_err_t sp_fs_read_at(sp_mem_t mem, sp_path_t path, sp_str_t* content) {
-  sp_assert(content);
-  sp_err_t err = SP_OK;
-  sp_err_t read_err = SP_OK;
-  c8* buffer = SP_NULLPTR;
-  u64 size = 0;
+SP_PRIVATE sp_err_t sp_fs_read_stream(sp_mem_t mem, sp_io_stream_reader_t* reader, sp_str_t* content) {
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_try(sp_sys_get_file_metadata(reader->fd, &meta));
+
+  if (!meta.size) {
+    sp_io_dyn_mem_writer_t writer = sp_zero;
+    sp_io_dyn_mem_writer_init(mem, &writer);
+    sp_err_t err = sp_io_copy(&writer.base, &reader->base, SP_NULLPTR);
+    if (err) {
+      sp_io_dyn_mem_writer_close(&writer);
+      return err;
+    }
+    *content = sp_io_dyn_mem_writer_take_str(&writer);
+    return SP_OK;
+  }
+
+  u64 size = (u64)meta.size;
   u64 bytes_read = 0;
-
-  sp_io_file_reader_t reader = sp_zero;
-  sp_try(sp_io_file_reader_from_path_at(&reader, path));
-
-  sp_try_goto(sp_io_file_reader_size(&reader, &size), err, cleanup);
-  if (!size) goto cleanup;
-
-  buffer = sp_alloc_n(mem, c8, size);
-  read_err = sp_io_read_all(&reader.base, buffer, size, &bytes_read);
-  if (read_err != SP_OK && read_err != SP_ERR_IO_EOF) {
-    err = read_err;
-    goto cleanup;
+  c8* buffer = sp_alloc_n(mem, c8, size);
+  sp_err_t err = sp_io_read_all(&reader->base, buffer, size, &bytes_read);
+  if (err && err != SP_ERR_IO_EOF) {
+    sp_mem_allocator_free(mem, buffer, size);
+    return err;
   }
   if (bytes_read < size) {
     buffer = (c8*)sp_realloc(mem, buffer, size, bytes_read);
   }
-  content->data = buffer;
-  content->len = (u32)bytes_read;
-  buffer = SP_NULLPTR;
+  *content = sp_str(buffer, (u32)bytes_read);
+  return SP_OK;
+}
 
-cleanup:
-  if (buffer) sp_mem_allocator_free(mem, buffer, size);
-  sp_io_file_reader_close(&reader);
+sp_err_t sp_fs_read_at(sp_mem_t mem, sp_path_t path, sp_str_t* content) {
+  sp_assert(content);
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, &fd));
+
+  sp_io_stream_reader_t reader = sp_zero;
+  sp_io_stream_reader_from_fd(&reader, fd, SP_IO_CLOSE_MODE_AUTO);
+  sp_err_t err = sp_fs_read_stream(mem, &reader, content);
+  sp_io_stream_reader_close(&reader);
   return err;
 }
 
@@ -21186,8 +21196,65 @@ sp_err_t sp_fs_atomic_abort(sp_fs_atomic_t* af) {
   return err;
 }
 
+SP_PRIVATE sp_err_t sp_fs_write_in_place(sp_path_t path, sp_mem_slice_t slice, u32 flags) {
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, flags, &fd));
+
+  sp_io_stream_writer_t writer = sp_zero;
+  sp_io_stream_writer_from_fd(&writer, fd, SP_IO_CLOSE_MODE_AUTO);
+  sp_err_t written = sp_io_write_all(&writer.base, slice.data, slice.len, SP_NULLPTR);
+  sp_err_t closed = sp_io_stream_writer_close(&writer);
+  return written ? written : closed;
+}
+
+SP_PRIVATE sp_err_t sp_fs_atomic_write(sp_fs_atomic_t* af, sp_mem_slice_t slice, sp_fs_atomic_mode_t mode) {
+  sp_err_t err = sp_io_write_all(sp_fs_atomic_writer(af), slice.data, slice.len, SP_NULLPTR);
+  if (err) {
+    sp_fs_atomic_abort(af);
+    return err;
+  }
+  return sp_fs_atomic_commit(af, mode);
+}
+
 sp_err_t sp_fs_write_slice_at(sp_path_t path, sp_mem_slice_t slice, sp_fs_write_mode_t mode) {
-  return SP_ERR_SYS_UNSUPPORTED;
+  switch (mode) {
+    case SP_FS_WRITE_TRUNCATE: {
+      return sp_fs_write_in_place(path, slice, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE);
+    }
+    case SP_FS_WRITE_APPEND: {
+      return sp_fs_write_in_place(path, slice, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_APPEND);
+    }
+    case SP_FS_WRITE_REPLACE: {
+      c8 buf [SP_PATH_MAX];
+      sp_sys_file_meta_t meta = sp_zero;
+      sp_err_t err = sp_fs_get_link_metadata_at(path, &meta);
+      if (!err && meta.kind == SP_FS_KIND_SYMLINK) {
+        sp_mem_fixed_t fixed = sp_mem_fixed_ex(buf, SP_PATH_MAX, 1);
+        sp_str_t target = sp_zero;
+        sp_try(sp_fs_canonicalize_path_at(sp_mem_fixed_as_allocator(&fixed), path, &target));
+        path = sp_path_from_str(target);
+        err = sp_fs_get_link_metadata_at(path, &meta);
+      }
+      if (err && err != SP_ERR_SYS_NOT_FOUND) return err;
+
+      sp_fs_atomic_t af = sp_zero;
+      sp_try(sp_fs_atomic_open_at(&af, path));
+      if (!err && meta.kind == SP_FS_KIND_FILE) {
+        err = sp_sys_set_file_perms_s(af.dir, af.temp, meta.perms);
+        if (err && err != SP_ERR_SYS_UNSUPPORTED) {
+          sp_fs_atomic_abort(&af);
+          return err;
+        }
+      }
+      return sp_fs_atomic_write(&af, slice, SP_FS_ATOMIC_REPLACE);
+    }
+    case SP_FS_WRITE_EXCLUSIVE: {
+      sp_fs_atomic_t af = sp_zero;
+      sp_try(sp_fs_atomic_open_at(&af, path));
+      return sp_fs_atomic_write(&af, slice, SP_FS_ATOMIC_EXCLUSIVE);
+    }
+  }
+  SP_UNREACHABLE_RETURN(SP_OK);
 }
 
 sp_err_t sp_fs_write_slice(sp_str_t path, sp_mem_slice_t slice, sp_fs_write_mode_t mode) {
