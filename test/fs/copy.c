@@ -657,11 +657,11 @@ sp_test_each(fs, copy_size, size_test_t, sizes) {
   sp_for(i, it->size) {
     data[i] = (u8)(i * 31 + 7);
   }
-  sp_must_ok(t, sp_fs_create_file_slice_at(from, sp_mem_slice(data, it->size)));
+  sp_must_ok(t, sp_fs_write_slice_at(from, sp_mem_slice(data, it->size), SP_FS_WRITE_TRUNCATE));
   sp_must_ok(t, sp_fs_copy_file_at(from, to, SP_FS_ATOMIC_REPLACE));
 
   sp_str_t copied = sp_zero;
-  sp_must_ok(t, sp_io_read_file_at(mem, to, &copied));
+  sp_must_ok(t, sp_fs_read_at(mem, to, &copied));
   sp_must_eq(t, copied.len, it->size);
   sp_expect_mem_eq(t, copied.data, data, it->size);
   return SP_OK;
@@ -703,7 +703,7 @@ sp_test(fs, copy_file_preserves_mode, .serial = true) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("B"));
-  sp_must_ok(t, sp_fs_create_file_str_at(from, sp_str_lit("A")));
+  sp_must_ok(t, sp_fs_write_at(from, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE));
   sp_must_ok(t, sp_sys_set_file_perms_s(from.dir, from.sub, mode(0755)));
 
   sp_sys_file_meta_t from_meta = sp_zero;
@@ -721,7 +721,7 @@ sp_test(fs, copy_file_preserves_mode, .serial = true) {
   sp_must(t, to_meta.id != from_meta.id);
 
   sp_str_t copied = sp_zero;
-  sp_io_read_file_at(mem, to, &copied);
+  sp_fs_read_at(mem, to, &copied);
   sp_expect_str_eq(t, copied, sp_str_lit("A"));
   return SP_OK;
 }
@@ -731,14 +731,14 @@ sp_test(fs, copy_file_replaces_read_only_dest) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("B"));
-  sp_must_ok(t, sp_fs_create_file_str_at(from, sp_str_lit("A")));
-  sp_must_ok(t, sp_fs_create_file_str_at(to, sp_str_lit("B")));
+  sp_must_ok(t, sp_fs_write_at(from, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE));
+  sp_must_ok(t, sp_fs_write_at(to, sp_str_lit("B"), SP_FS_WRITE_TRUNCATE));
   sp_must_ok(t, sp_sys_set_file_perms_s(to.dir, to.sub, mode(0444)));
 
   sp_must_ok(t, sp_fs_copy_file_at(from, to, SP_FS_ATOMIC_REPLACE));
 
   sp_str_t copied = sp_zero;
-  sp_io_read_file_at(mem, to, &copied);
+  sp_fs_read_at(mem, to, &copied);
   sp_expect_str_eq(t, copied, sp_str_lit("A"));
   return SP_OK;
 }
@@ -749,7 +749,7 @@ sp_test(fs, copy_file_unwritable_parent_leaves_nothing) {
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
   sp_path_t dir = sp_path_join(mem, sandbox, sp_str_lit("D"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("D/B"));
-  sp_must_ok(t, sp_fs_create_file_str_at(from, sp_str_lit("A")));
+  sp_must_ok(t, sp_fs_write_at(from, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE));
   sp_must_ok(t, sp_fs_create_dir_at(dir));
 
   sp_must_ok(t, sp_sys_set_file_perms_s(dir.dir, dir.sub, mode(0555)));
@@ -771,7 +771,7 @@ sp_test(fs, copy_tree_unreadable_subdir_fails) {
   sp_path_t locked = sp_path_join(mem, sandbox, sp_str_lit("A/B"));
   sp_path_t to = sp_path_join(mem, sandbox, sp_str_lit("E"));
   sp_must_ok(t, sp_fs_create_dir_at(locked));
-  sp_must_ok(t, sp_fs_create_file_str_at(sp_path_join(mem, sandbox, sp_str_lit("A/B/C")), sp_str_lit("C")));
+  sp_must_ok(t, sp_fs_write_at(sp_path_join(mem, sandbox, sp_str_lit("A/B/C")), sp_str_lit("C"), SP_FS_WRITE_TRUNCATE));
 
   sp_must_ok(t, sp_sys_set_file_perms_s(locked.dir, locked.sub, mode(0)));
   sp_err_t result = sp_fs_copy_tree_at(from, to, SP_FS_ATOMIC_REPLACE);

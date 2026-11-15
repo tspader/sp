@@ -36,7 +36,7 @@ sp_cli_result_t post_run(sp_cli_t* cli) {
     sp_str_t data = sp_cstr_as_str(post->data);
     if (!sp_str_empty(data) && data.data[0] == '@') {
       sp_str_t path = sp_str_sub(data, 1, (s32)data.len - 1);
-      if (sp_io_read_file(mem, path, &request.payload) != SP_OK) {
+      if (sp_fs_read(mem, path, &request.payload) != SP_OK) {
         result = sp_cli_set_error(cli, sp_fmt(mem, "could not read {}", sp_fmt_str(path)).value);
         goto done;
       }

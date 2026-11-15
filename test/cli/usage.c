@@ -68,7 +68,7 @@ static void run_cli_usage_test(s32* utest_result, sp_mem_t mem, cli_usage_test_t
   }
 
   sp_str_t expected = sp_zero;
-  if (sp_io_read_file(mem, path, &expected) != SP_OK) {
+  if (sp_fs_read(mem, path, &expected) != SP_OK) {
     SP_TEST_REPORT("missing golden {}; rerun with SP_CLI_TEST_UPDATE=1\n", sp_fmt_str(path));
     SP_FAIL();
     return;

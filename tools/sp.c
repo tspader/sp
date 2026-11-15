@@ -87,7 +87,7 @@ static sp_str_t failed_path(sp_mem_t mem, tool_t* tool, const target_t* target) 
 
 static sp_str_t state_read(sp_mem_t mem, sp_str_t path) {
   sp_str_t content = sp_zero;
-  sp_io_read_file(mem, path, &content);
+  sp_fs_read(mem, path, &content);
   return content;
 }
 

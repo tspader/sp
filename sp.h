@@ -3149,6 +3149,23 @@ typedef enum {
   SP_FS_ATOMIC_EXCLUSIVE,
 } sp_fs_atomic_mode_t;
 
+// Where do the bytes land?
+// 1. In place
+// 2. In a tempfile
+//
+// What if the destination exists?
+// 1. Overwrite
+// 2. Append
+// 3. Fail
+//
+// You wouldn't use a tempfile if you were appending
+typedef enum {
+  SP_FS_WRITE_TRUNCATE,
+  SP_FS_WRITE_APPEND,
+  SP_FS_WRITE_REPLACE,
+  SP_FS_WRITE_EXCLUSIVE,
+} sp_fs_write_mode_t;
+
 typedef enum {
   SP_OS_NO_FOLLOW_SYMLINK,
   SP_OS_FOLLOW_SYMLINK,
@@ -3209,12 +3226,6 @@ SP_API sp_err_t             sp_fs_create_dir_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_create_parent_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_create_file(sp_str_t path);
 SP_API sp_err_t             sp_fs_create_file_at(sp_path_t path);
-SP_API sp_err_t             sp_fs_create_file_str(sp_str_t path, sp_str_t str);
-SP_API sp_err_t             sp_fs_create_file_str_at(sp_path_t path, sp_str_t str);
-SP_API sp_err_t             sp_fs_create_file_slice(sp_str_t path, sp_mem_slice_t slice);
-SP_API sp_err_t             sp_fs_create_file_slice_at(sp_path_t path, sp_mem_slice_t slice);
-SP_API sp_err_t             sp_fs_create_file_cstr(sp_str_t path, const c8* str);
-SP_API sp_err_t             sp_fs_create_file_cstr_at(sp_path_t path, const c8* str);
 SP_API sp_err_t             sp_fs_remove_dir(sp_str_t path);
 SP_API sp_err_t             sp_fs_remove_dir_at(sp_path_t path);
 SP_API sp_err_t             sp_fs_remove_file(sp_str_t path);
@@ -3223,6 +3234,14 @@ SP_API sp_err_t             sp_fs_create_hard_link(sp_str_t target, sp_str_t lin
 SP_API sp_err_t             sp_fs_create_hard_link_at(sp_path_t target, sp_path_t link_path);
 SP_API sp_err_t             sp_fs_create_sym_link(sp_str_t target, sp_str_t link_path, sp_fs_kind_t kind);
 SP_API sp_err_t             sp_fs_create_sym_link_at(sp_str_t target, sp_path_t link_path, sp_fs_kind_t kind);
+SP_API sp_err_t             sp_fs_read(sp_mem_t mem, sp_str_t path, sp_str_t* content);
+SP_API sp_err_t             sp_fs_read_at(sp_mem_t mem, sp_path_t path, sp_str_t* content);
+SP_API sp_err_t             sp_fs_write(sp_str_t path, sp_str_t str, sp_fs_write_mode_t mode);
+SP_API sp_err_t             sp_fs_write_at(sp_path_t path, sp_str_t str, sp_fs_write_mode_t mode);
+SP_API sp_err_t             sp_fs_write_slice(sp_str_t path, sp_mem_slice_t slice, sp_fs_write_mode_t mode);
+SP_API sp_err_t             sp_fs_write_slice_at(sp_path_t path, sp_mem_slice_t slice, sp_fs_write_mode_t mode);
+SP_API sp_err_t             sp_fs_write_cstr(sp_str_t path, const c8* str, sp_fs_write_mode_t mode);
+SP_API sp_err_t             sp_fs_write_cstr_at(sp_path_t path, const c8* str, sp_fs_write_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t             sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode);
@@ -4823,8 +4842,6 @@ SP_API sp_err_t       sp_io_copy_b(sp_io_writer_t* dst, sp_io_reader_t* src, u8*
 
 SP_API sp_err_t       sp_io_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
 SP_API sp_err_t       sp_io_read_all(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
-SP_API sp_err_t       sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content);
-SP_API sp_err_t       sp_io_read_file_at(sp_mem_t mem, sp_path_t path, sp_str_t* content);
 SP_API void           sp_io_reader_from_mem(sp_io_reader_t* reader, const void* ptr, u64 size);
 SP_API void           sp_io_reader_set_buffer(sp_io_reader_t* reader, u8* buf, u64 capacity);
 
@@ -4909,14 +4926,6 @@ SP_API sp_io_writer_t* sp_fs_atomic_writer(sp_fs_atomic_t* af);
 SP_API sp_err_t        sp_fs_atomic_sync(sp_fs_atomic_t* af);
 SP_API sp_err_t        sp_fs_atomic_commit(sp_fs_atomic_t* af, sp_fs_atomic_mode_t mode);
 SP_API sp_err_t        sp_fs_atomic_abort(sp_fs_atomic_t* af);
-SP_API sp_err_t        sp_fs_write_atomic(sp_str_t path, sp_str_t str);
-SP_API sp_err_t        sp_fs_write_atomic_at(sp_path_t path, sp_str_t str);
-SP_API sp_err_t        sp_fs_write_atomic_slice(sp_str_t path, sp_mem_slice_t slice);
-SP_API sp_err_t        sp_fs_write_atomic_slice_at(sp_path_t path, sp_mem_slice_t slice);
-SP_API sp_err_t        sp_fs_write_atomic_slice_staged(sp_str_t path, sp_str_t staging, sp_mem_slice_t slice);
-SP_API sp_err_t        sp_fs_write_atomic_slice_staged_at(sp_path_t path, sp_str_t staging, sp_mem_slice_t slice);
-SP_API sp_err_t        sp_fs_write_atomic_cstr(sp_str_t path, const c8* str);
-SP_API sp_err_t        sp_fs_write_atomic_cstr_at(sp_path_t path, const c8* str);
 
 
 //  ███████████  ███████████      ███████      █████████  ██████████  █████████   █████████
@@ -20659,7 +20668,7 @@ sp_err_t sp_fs_get_config_path(sp_mem_t mem, sp_str_t* path) {
   return SP_OK;
 }
 
-sp_err_t sp_io_read_file_at(sp_mem_t mem, sp_path_t path, sp_str_t* content) {
+sp_err_t sp_fs_read_at(sp_mem_t mem, sp_path_t path, sp_str_t* content) {
   sp_assert(content);
   sp_err_t err = SP_OK;
   sp_err_t read_err = SP_OK;
@@ -20692,8 +20701,8 @@ cleanup:
   return err;
 }
 
-sp_err_t sp_io_read_file(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
-  return sp_io_read_file_at(mem, sp_path_from_str(path), content);
+sp_err_t sp_fs_read(sp_mem_t mem, sp_str_t path, sp_str_t* content) {
+  return sp_fs_read_at(mem, sp_path_from_str(path), content);
 }
 
 SP_PRIVATE sp_err_t sp_fs_mkdir_at(sp_sys_dir_t dir, sp_str_t path) {
@@ -20725,34 +20734,6 @@ sp_err_t sp_fs_create_file_at(sp_path_t path) {
 
 sp_err_t sp_fs_create_file(sp_str_t path) {
   return sp_fs_create_file_at(sp_path_from_str(path));
-}
-
-sp_err_t sp_fs_create_file_slice_at(sp_path_t path, sp_mem_slice_t slice) {
-  sp_io_file_writer_t io = sp_zero;
-  sp_try(sp_io_file_writer_from_path_at(&io, path));
-  sp_err_t written = sp_io_write_all(&io.base, slice.data, slice.len, SP_NULLPTR);
-  sp_err_t closed = sp_io_file_writer_close(&io);
-  return written ? written : closed;
-}
-
-sp_err_t sp_fs_create_file_slice(sp_str_t path, sp_mem_slice_t slice) {
-  return sp_fs_create_file_slice_at(sp_path_from_str(path), slice);
-}
-
-sp_err_t sp_fs_create_file_str_at(sp_path_t path, sp_str_t str) {
-  return sp_fs_create_file_slice_at(path, sp_mem_slice((u8*)str.data, str.len));
-}
-
-sp_err_t sp_fs_create_file_str(sp_str_t path, sp_str_t str) {
-  return sp_fs_create_file_str_at(sp_path_from_str(path), str);
-}
-
-sp_err_t sp_fs_create_file_cstr_at(sp_path_t path, const c8* str) {
-  return sp_fs_create_file_str_at(path, sp_cstr_as_str(str));
-}
-
-sp_err_t sp_fs_create_file_cstr(sp_str_t path, const c8* str) {
-  return sp_fs_create_file_cstr_at(sp_path_from_str(path), str);
 }
 
 sp_err_t sp_fs_create_hard_link_at(sp_path_t target, sp_path_t link_path) {
@@ -21205,52 +21186,28 @@ sp_err_t sp_fs_atomic_abort(sp_fs_atomic_t* af) {
   return err;
 }
 
-SP_PRIVATE sp_err_t sp_fs_atomic_write(sp_fs_atomic_t* af, const void* data, u64 size) {
-  sp_err_t err = sp_io_write_all(sp_fs_atomic_writer(af), data, size, SP_NULLPTR);
-  if (!err) err = sp_fs_atomic_sync(af);
-  if (err) {
-    sp_fs_atomic_abort(af);
-    return err;
-  }
-  return sp_fs_atomic_commit(af, SP_FS_ATOMIC_REPLACE);
+sp_err_t sp_fs_write_slice_at(sp_path_t path, sp_mem_slice_t slice, sp_fs_write_mode_t mode) {
+  return SP_ERR_SYS_UNSUPPORTED;
 }
 
-sp_err_t sp_fs_write_atomic_slice_staged_at(sp_path_t path, sp_str_t staging, sp_mem_slice_t slice) {
-  sp_fs_atomic_t af = sp_zero;
-  sp_try(sp_fs_atomic_open_staged_at(&af, path, staging));
-  return sp_fs_atomic_write(&af, slice.data, slice.len);
+sp_err_t sp_fs_write_slice(sp_str_t path, sp_mem_slice_t slice, sp_fs_write_mode_t mode) {
+  return sp_fs_write_slice_at(sp_path_from_str(path), slice, mode);
 }
 
-sp_err_t sp_fs_write_atomic_slice_staged(sp_str_t path, sp_str_t staging, sp_mem_slice_t slice) {
-  return sp_fs_write_atomic_slice_staged_at(sp_path_from_str(path), staging, slice);
+sp_err_t sp_fs_write_at(sp_path_t path, sp_str_t str, sp_fs_write_mode_t mode) {
+  return sp_fs_write_slice_at(path, sp_mem_slice((u8*)str.data, str.len), mode);
 }
 
-sp_err_t sp_fs_write_atomic_slice_at(sp_path_t path, sp_mem_slice_t slice) {
-  sp_fs_atomic_t af = sp_zero;
-  sp_try(sp_fs_atomic_open_at(&af, path));
-  return sp_fs_atomic_write(&af, slice.data, slice.len);
+sp_err_t sp_fs_write(sp_str_t path, sp_str_t str, sp_fs_write_mode_t mode) {
+  return sp_fs_write_at(sp_path_from_str(path), str, mode);
 }
 
-sp_err_t sp_fs_write_atomic_slice(sp_str_t path, sp_mem_slice_t slice) {
-  return sp_fs_write_atomic_slice_at(sp_path_from_str(path), slice);
+sp_err_t sp_fs_write_cstr_at(sp_path_t path, const c8* str, sp_fs_write_mode_t mode) {
+  return sp_fs_write_at(path, sp_cstr_as_str(str), mode);
 }
 
-sp_err_t sp_fs_write_atomic_at(sp_path_t path, sp_str_t str) {
-  sp_fs_atomic_t af = sp_zero;
-  sp_try(sp_fs_atomic_open_at(&af, path));
-  return sp_fs_atomic_write(&af, str.data, str.len);
-}
-
-sp_err_t sp_fs_write_atomic(sp_str_t path, sp_str_t str) {
-  return sp_fs_write_atomic_at(sp_path_from_str(path), str);
-}
-
-sp_err_t sp_fs_write_atomic_cstr_at(sp_path_t path, const c8* str) {
-  return sp_fs_write_atomic_at(path, sp_cstr_as_str(str));
-}
-
-sp_err_t sp_fs_write_atomic_cstr(sp_str_t path, const c8* str) {
-  return sp_fs_write_atomic_cstr_at(sp_path_from_str(path), str);
+sp_err_t sp_fs_write_cstr(sp_str_t path, const c8* str, sp_fs_write_mode_t mode) {
+  return sp_fs_write_cstr_at(sp_path_from_str(path), str, mode);
 }
 
 SP_PRIVATE sp_err_t sp_fs_copy_link_at(sp_path_t from, sp_path_t to, sp_fs_atomic_mode_t mode) {

@@ -221,7 +221,7 @@ static void sys_expect_paths(s32* utest_result, sp_test_file_manager_t* fm, sp_s
 
     if (ent->content) {
       sp_str_t actual = sp_zero;
-      sp_io_read_file(fm->mem, path, &actual);
+      sp_fs_read(fm->mem, path, &actual);
       if (!sp_str_equal(actual, sp_cstr_as_str(ent->content))) {
         SP_TEST_REPORT("{} content was {} but expected {}", sp_fmt_str(path), sp_fmt_str(actual), sp_fmt_cstr(ent->content));
         SP_FAIL();

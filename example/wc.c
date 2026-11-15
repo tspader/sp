@@ -12,7 +12,7 @@ s32 run(s32 num_args, const c8** args) {
 
   sp_str_t path = sp_cstr_as_str(args[1]);
   sp_str_t content = sp_zero;
-  sp_io_read_file(mem, path, &content);
+  sp_fs_read(mem, path, &content);
 
   sp_ht(sp_str_t, u32) counts = sp_zero;
   sp_str_ht_init(mem, counts);

@@ -3,7 +3,7 @@
 #define SYNC_SIM_BUFFER 16
 
 typedef enum {
-  OP_WRITE_ATOMIC,
+  OP_WRITE,
   OP_SYNC_COMMIT,
 } op_t;
 
@@ -26,34 +26,15 @@ typedef struct {
 
 static const test_t tests [] = {
   {
-    .name = "write_atomic_syncs_written_data",
+    .name = "write_does_not_sync",
     .setup = {
       { .path = "A", .content = "A" },
     },
     .path = "A",
     .content = "B",
     .expect = {
-      .syncs = 1,
-      .synced = 1,
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
-      },
-    },
-  },
-  {
-    .name = "write_atomic_sync_fails",
-    .setup = {
-      { .path = "A", .content = "A" },
-    },
-    .path = "A",
-    .content = "B",
-    .sync = SP_ERR_SYS_IO,
-    .expect = {
-      .err = SP_ERR_SYS_IO,
-      .syncs = 1,
-      .synced = 1,
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
       },
     },
   },
@@ -67,6 +48,24 @@ static const test_t tests [] = {
       .synced = 1,
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
+      },
+    },
+  },
+  {
+    .name = "sync_failure_keeps_destination",
+    .setup = {
+      { .path = "A", .content = "A" },
+    },
+    .op = OP_SYNC_COMMIT,
+    .path = "A",
+    .content = "B",
+    .sync = SP_ERR_SYS_IO,
+    .expect = {
+      .err = SP_ERR_SYS_IO,
+      .syncs = 1,
+      .synced = 1,
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
       },
     },
   },
@@ -104,8 +103,8 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_err_t err = SP_OK;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
   switch (c->op) {
-    case OP_WRITE_ATOMIC: {
-      err = sp_fs_write_atomic_at(path, content);
+    case OP_WRITE: {
+      err = sp_fs_write_at(path, content, SP_FS_WRITE_REPLACE);
       break;
     }
     case OP_SYNC_COMMIT: {

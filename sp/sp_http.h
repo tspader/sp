@@ -1641,7 +1641,7 @@ sp_http_error_t sp_tls_load_pem(mbedtls_x509_crt* chain, sp_str_t path, u32* loa
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
   sp_str_t content = sp_zero;
   sp_http_error_t result = SP_HTTP_ERR_NO_STORE;
-  if (sp_io_read_file(scratch.mem, path, &content) == SP_OK) {
+  if (sp_fs_read(scratch.mem, path, &content) == SP_OK) {
     c8* pem = sp_str_to_cstr(scratch.mem, content);
     s32 rc = mbedtls_x509_crt_parse(chain, (const unsigned char*)pem, (size_t)content.len + 1);
     if (rc < 0) {

@@ -9,22 +9,18 @@ typedef enum {
   OP_GET_PATH_METADATA,
   OP_GET_LINK_METADATA,
   OP_CANONICALIZE_PATH,
-  OP_READ_FILE,
+  OP_READ,
   OP_CREATE_DIR,
   OP_CREATE_FILE,
-  OP_CREATE_FILE_SLICE,
-  OP_CREATE_FILE_STR,
-  OP_CREATE_FILE_CSTR,
   OP_CREATE_HARD_LINK,
   OP_CREATE_SYM_LINK,
   OP_REMOVE_FILE,
   OP_REMOVE_DIR,
+  OP_WRITE,
+  OP_WRITE_SLICE,
+  OP_WRITE_CSTR,
   OP_ATOMIC_OPEN,
   OP_ATOMIC_OPEN_STAGED,
-  OP_WRITE_ATOMIC_SLICE_STAGED,
-  OP_WRITE_ATOMIC_SLICE,
-  OP_WRITE_ATOMIC,
-  OP_WRITE_ATOMIC_CSTR,
 } op_t;
 
 typedef struct {
@@ -43,22 +39,18 @@ static const test_t tests [] = {
   { .name = "get_path_metadata", .op = OP_GET_PATH_METADATA },
   { .name = "get_link_metadata", .op = OP_GET_LINK_METADATA },
   { .name = "canonicalize_path", .op = OP_CANONICALIZE_PATH },
-  { .name = "read_file", .op = OP_READ_FILE },
+  { .name = "read", .op = OP_READ },
   { .name = "create_dir", .op = OP_CREATE_DIR },
   { .name = "create_file", .op = OP_CREATE_FILE },
-  { .name = "create_file_slice", .op = OP_CREATE_FILE_SLICE },
-  { .name = "create_file_str", .op = OP_CREATE_FILE_STR },
-  { .name = "create_file_cstr", .op = OP_CREATE_FILE_CSTR },
   { .name = "create_hard_link", .op = OP_CREATE_HARD_LINK, .expect = { .alias = "G" } },
   { .name = "create_sym_link", .op = OP_CREATE_SYM_LINK },
   { .name = "remove_file", .op = OP_REMOVE_FILE },
   { .name = "remove_dir", .op = OP_REMOVE_DIR },
+  { .name = "write", .op = OP_WRITE },
+  { .name = "write_slice", .op = OP_WRITE_SLICE },
+  { .name = "write_cstr", .op = OP_WRITE_CSTR },
   { .name = "atomic_open", .op = OP_ATOMIC_OPEN },
   { .name = "atomic_open_staged", .op = OP_ATOMIC_OPEN_STAGED },
-  { .name = "write_atomic_slice_staged", .op = OP_WRITE_ATOMIC_SLICE_STAGED },
-  { .name = "write_atomic_slice", .op = OP_WRITE_ATOMIC_SLICE },
-  { .name = "write_atomic", .op = OP_WRITE_ATOMIC },
-  { .name = "write_atomic_cstr", .op = OP_WRITE_ATOMIC_CSTR },
 };
 
 typedef struct {
@@ -152,22 +144,18 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case OP_GET_PATH_METADATA:         sp_fs_get_path_metadata(path, &meta); break;
     case OP_GET_LINK_METADATA:         sp_fs_get_link_metadata(path, &meta); break;
     case OP_CANONICALIZE_PATH:         sp_fs_canonicalize_path(mem, path, &str); break;
-    case OP_READ_FILE:                 sp_io_read_file(mem, path, &str); break;
+    case OP_READ:                      sp_fs_read(mem, path, &str); break;
     case OP_CREATE_DIR:                sp_fs_create_dir(path); break;
     case OP_CREATE_FILE:               sp_fs_create_file(path); break;
-    case OP_CREATE_FILE_SLICE:         sp_fs_create_file_slice(path, slice); break;
-    case OP_CREATE_FILE_STR:           sp_fs_create_file_str(path, sp_str_lit("A")); break;
-    case OP_CREATE_FILE_CSTR:          sp_fs_create_file_cstr(path, "A"); break;
     case OP_CREATE_HARD_LINK:          sp_fs_create_hard_link(path, other); break;
     case OP_CREATE_SYM_LINK:           sp_fs_create_sym_link(sp_str_lit("A"), path, SP_FS_KIND_FILE); break;
     case OP_REMOVE_FILE:               sp_fs_remove_file(path); break;
     case OP_REMOVE_DIR:                sp_fs_remove_dir(path); break;
+    case OP_WRITE:                     sp_fs_write(path, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE); break;
+    case OP_WRITE_SLICE:               sp_fs_write_slice(path, slice, SP_FS_WRITE_TRUNCATE); break;
+    case OP_WRITE_CSTR:                sp_fs_write_cstr(path, "A", SP_FS_WRITE_TRUNCATE); break;
     case OP_ATOMIC_OPEN:               sp_fs_atomic_open(&af, path); break;
     case OP_ATOMIC_OPEN_STAGED:        sp_fs_atomic_open_staged(&af, path, sp_str_lit("S")); break;
-    case OP_WRITE_ATOMIC_SLICE_STAGED: sp_fs_write_atomic_slice_staged(path, sp_str_lit("S"), slice); break;
-    case OP_WRITE_ATOMIC_SLICE:        sp_fs_write_atomic_slice(path, slice); break;
-    case OP_WRITE_ATOMIC:              sp_fs_write_atomic(path, sp_str_lit("A")); break;
-    case OP_WRITE_ATOMIC_CSTR:         sp_fs_write_atomic_cstr(path, "A"); break;
   }
   sp_sys_set_vtable(saved);
 

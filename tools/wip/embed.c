@@ -46,7 +46,7 @@ s32 embed_main(s32 argc, const c8** argv) {
     sp_str_t symbol = symbol_from_path(mem, rel_path);
 
     sp_str_t content = sp_zero;
-    sp_io_read_file(mem, files.entry.path, &content);
+    sp_fs_read(mem, files.entry.path, &content);
     u64 size = content.len;
 
     sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));
@@ -107,7 +107,7 @@ s32 embed_main(s32 argc, const c8** argv) {
     sp_str_t path = sp_str_lit("include/spn.h");
 
     sp_str_t content = sp_zero;
-    sp_io_read_file(mem, file_path, &content);
+    sp_fs_read(mem, file_path, &content);
     u64 size = content.len;
 
     sp_elf_section_t* symtab = sp_elf_find_section_by_name(elf, sp_str_lit(".symtab"));

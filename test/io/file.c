@@ -215,7 +215,7 @@ void run_io_file_writer_test(int* utest_result, sp_mem_t mem, sp_path_t path, io
 
   if (t.expect.content) {
     sp_str_t loaded = sp_zero;
-    sp_io_read_file_at(mem, path, &loaded);
+    sp_fs_read_at(mem, path, &loaded);
     u64 n = sp_cstr_len(t.expect.content);
     EXPECT_EQ(loaded.len, n);
     sp_for(it, n) {
@@ -385,7 +385,7 @@ UTEST_F(io, file_to_file_copy) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  sp_io_read_file_at(ut.mem, dst_path, &loaded);
+  sp_fs_read_at(ut.mem, dst_path, &loaded);
   EXPECT_EQ(loaded.len, sizeof(source));
   sp_for(i, sizeof(source)) EXPECT_EQ((u8)loaded.data[i], source[i]);
 }
@@ -419,7 +419,7 @@ UTEST_F(io, stream_file_to_file_copy) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  sp_io_read_file_at(ut.mem, dst_path, &loaded);
+  sp_fs_read_at(ut.mem, dst_path, &loaded);
   EXPECT_EQ(loaded.len, sizeof(source));
   sp_for(i, sizeof(source)) EXPECT_EQ((u8)loaded.data[i], source[i]);
 }
@@ -444,16 +444,16 @@ UTEST_F(io, file_copy_fast_path_falls_back_for_mem_source) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  sp_io_read_file_at(ut.mem, ut.file, &loaded);
+  sp_fs_read_at(ut.mem, ut.file, &loaded);
   EXPECT_EQ(loaded.len, n);
   sp_for(i, n) EXPECT_EQ(loaded.data[i], content[i]);
 }
 
 // A single backend read caps below the request on large files (Linux caps
-// any read at MAX_RW_COUNT = 0x7ffff000), so read_file must loop; a short
+// any read at MAX_RW_COUNT = 0x7ffff000), so sp_fs_read must loop; a short
 // read does not mean the file was smaller. The file is sparse, so it costs
 // no disk — but the read materializes ~2GB in memory.
-UTEST_F(io, read_file_larger_than_single_read) {
+UTEST_F(io, read_larger_than_single_read) {
   const u64 size = (u64)0x7ffff000 + 1;
 
   sp_io_file_writer_t w = sp_zero;
@@ -463,7 +463,7 @@ UTEST_F(io, read_file_larger_than_single_read) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  EXPECT_EQ(sp_io_read_file_at(ut.mem, ut.file, &loaded), SP_OK);
+  EXPECT_EQ(sp_fs_read_at(ut.mem, ut.file, &loaded), SP_OK);
   EXPECT_EQ(loaded.len, (u32)size);
   if (loaded.len == (u32)size) {
     EXPECT_EQ(loaded.data[size - 1], '!');

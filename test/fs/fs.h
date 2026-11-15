@@ -100,7 +100,7 @@ static sp_err_t fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t
 
     switch (ent->kind) {
       case FS_SETUP_FILE: {
-        sp_try(sp_fs_create_file_str_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit("")));
+        sp_try(sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE));
         break;
       }
       case FS_SETUP_DIR: {
@@ -188,7 +188,7 @@ static void fs_expect_paths(sp_test_t* t, sp_path_t sandbox, const fs_expected_p
 
     if (info->content) {
       sp_str_t actual = sp_zero;
-      sp_io_read_file_at(mem, path, &actual);
+      sp_fs_read_at(mem, path, &actual);
       sp_str_t content = sp_cstr_as_str(info->content);
       if (!sp_str_equal(actual, content)) {
         sp_test_record(t, (sp_test_failure_t) {

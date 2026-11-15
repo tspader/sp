@@ -46,7 +46,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
 
     switch (ent->kind) {
       case SYS_SETUP_FILE: {
-        sp_fs_create_file_str_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""));
+        sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE);
         break;
       }
       case SYS_SETUP_DIR: {
@@ -165,7 +165,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
 
     if (ent->content) {
       sp_str_t actual = sp_zero;
-      sp_io_read_file_at(mem, path, &actual);
+      sp_fs_read_at(mem, path, &actual);
       if (!sp_str_equal(actual, sp_cstr_as_str(ent->content))) {
         sp_test_record(t, (sp_test_failure_t) {
           .message = sp_test_format(t, "content of {}", sp_fmt_cstr(ent->path)),
