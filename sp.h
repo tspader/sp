@@ -7480,6 +7480,14 @@ sp_nt_status_t sp_sys_nt_close(sp_sys_fd_t fd) {
   return SP_NT(NtClose)(sp_ptr_cast(void*, fd));
 }
 
+SP_PRIVATE u32 sp_sys_nt_attributes_from_perms(sp_sys_file_perms_t perms) {
+  u32 settable =
+    FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_ARCHIVE |
+    FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
+  u32 attributes = perms.value & settable;
+  return attributes ? attributes : FILE_ATTRIBUTE_NORMAL;
+}
+
 sp_nt_status_t sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32 share, u32 disposition, u32 options, u32 file_attr, sp_sys_fd_t* out) {
   *out = SP_SYS_INVALID_FD;
 
@@ -11238,7 +11246,7 @@ sp_err_t sp_sys_set_file_perms_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_s
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
 
   sp_nt_file_basic_information_t info = sp_zero;
-  info.FileAttributes = perms.value ? perms.value : FILE_ATTRIBUTE_NORMAL;
+  info.FileAttributes = sp_sys_nt_attributes_from_perms(perms);
 
   sp_nt_io_status_block_t iosb = sp_zero;
   status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, &info, sizeof(info), SP_NT_FILE_BASIC_INFORMATION);
@@ -11259,7 +11267,7 @@ sp_err_t sp_sys_set_file_perms_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_s
 
 #elif defined(SP_WASM)
   (void)dir; (void)path; (void)len; (void)perms;
-  return SP_ERR_SYS_UNSUPPORTED;
+  return SP_OK;
 
 #else
   #error "sp_sys_set_file_perms"
