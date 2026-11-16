@@ -8286,6 +8286,10 @@ sp_err_t sp_sys_read_p(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
   __wasi_iovec_t iov = { (uint8_t*)buf, (__wasi_size_t)count };
   __wasi_size_t n = 0;
   __wasi_errno_t err = __wasi_fd_read((__wasi_fd_t)fd, &iov, 1, &n);
+  if (err == SP_WASI_EBADF) {
+    __wasi_filestat_t native = sp_zero;
+    if (!sp_wasi_fd_filestat_get((__wasi_fd_t)fd, &native) && native.filetype == __WASI_FILETYPE_DIRECTORY) return SP_ERR_SYS_IS_DIR;
+  }
   if (err) return sp_sys_err_from_wasi(err);
   if (bytes_read) *bytes_read = (u64)n;
   return SP_OK;

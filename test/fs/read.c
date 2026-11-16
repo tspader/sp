@@ -33,6 +33,15 @@ static const test_t tests [] = {
       .err = SP_ERR_SYS_NOT_FOUND,
     },
   },
+  {
+    .name = "directory",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+    },
+    .expect = {
+      .err = SP_ERR_SYS_IS_DIR,
+    },
+  },
 };
 
 sp_test_each(fs, read, test_t, tests) {
