@@ -20,7 +20,7 @@ sp_test_each(fs, write_pipe, test_t, tests) {
   sp_sys_pipe_t pipe = sp_zero;
   sp_must_ok(t, sp_sys_pipe(&pipe, sp_zero_s(sp_sys_pipe_desc_t)));
 
-  sp_err_t err = sp_fs_write(fd_path(sp_test_arena(t), pipe.w), sp_str_lit("A"), it->mode);
+  sp_err_t err = sp_fs_write(fd_path(sp_test_arena(t), pipe.w), sp_str_lit("A"), it->mode, sp_sys_default_file_perms);
   sp_sys_close(pipe.w);
 
   c8 buffer [2] = sp_zero;

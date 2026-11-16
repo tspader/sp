@@ -1133,7 +1133,7 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
   if (t->runner->update) {
     sp_fs_create_dir_at(sp_path_parent(t->mem, path));
 
-    sp_err_t err = sp_fs_write_at(path, actual, SP_FS_WRITE_TRUNCATE);
+    sp_err_t err = sp_fs_write_at(path, actual, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
     if (err) {
       sp_test_record(t, (sp_test_failure_t) {
         .file = file,
@@ -1175,7 +1175,7 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
     return;
   }
 
-  sp_fs_write_at(actual_path, actual, SP_FS_WRITE_TRUNCATE);
+  sp_fs_write_at(actual_path, actual, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
 
   sp_da(sp_str_t) want_lines = sp_str_split_c8(t->mem, want, '\n');
   sp_da(sp_str_t) got_lines = sp_str_split_c8(t->mem, actual, '\n');

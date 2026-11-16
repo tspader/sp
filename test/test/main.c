@@ -123,7 +123,7 @@ static const sp_test_entry_t child_entries [] = {
 
 static sp_err_t child_touch(sp_test_t* t) {
   sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
-  return sp_fs_write_cstr_at(path, "A", SP_FS_WRITE_TRUNCATE);
+  return sp_fs_write_cstr_at(path, "A", SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
 }
 
 static sp_err_t child_pass(sp_test_t* t) {

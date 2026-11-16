@@ -22,7 +22,7 @@ sp_test(fs, atomic_retries_temp_name_collision, .serial = true) {
 
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
   sp_fs_atomic_t af = sp_zero;
-  sp_err_t err = sp_fs_atomic_open_at(&af, path);
+  sp_err_t err = sp_fs_atomic_open_at(&af, path, sp_sys_default_file_perms);
   if (!err) err = sp_io_write_str(sp_fs_atomic_writer(&af), sp_str_lit("A"), SP_NULLPTR);
   if (!err) err = sp_fs_atomic_commit(&af, SP_FS_ATOMIC_REPLACE);
   sp_sys_set_vtable(saved);

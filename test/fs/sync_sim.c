@@ -135,13 +135,13 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
   switch (c->op) {
     case OP_WRITE: {
-      err = sp_fs_write_at(path, content, c->mode);
+      err = sp_fs_write_at(path, content, c->mode, sp_sys_default_file_perms);
       break;
     }
     case OP_SYNC_COMMIT: {
       u8 buffer [SYNC_SIM_BUFFER];
       sp_fs_atomic_t af = sp_zero;
-      err = sp_fs_atomic_open_at(&af, path);
+      err = sp_fs_atomic_open_at(&af, path, sp_sys_default_file_perms);
       if (!err) err = sp_io_writer_set_buffer(sp_fs_atomic_writer(&af), buffer, sizeof(buffer));
       if (!err) err = sp_io_write_str(sp_fs_atomic_writer(&af), content, SP_NULLPTR);
       if (!err) err = sp_fs_atomic_sync(&af);

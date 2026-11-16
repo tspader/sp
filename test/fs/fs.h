@@ -100,7 +100,7 @@ static sp_err_t fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t
 
     switch (ent->kind) {
       case FS_SETUP_FILE: {
-        sp_try(sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE));
+        sp_try(sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
         break;
       }
       case FS_SETUP_DIR: {

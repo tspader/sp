@@ -54,7 +54,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
 
     switch (ent->kind) {
       case SYS_SETUP_FILE: {
-        sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE);
+        sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
         break;
       }
       case SYS_SETUP_DIR: {

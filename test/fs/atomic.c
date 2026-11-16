@@ -130,7 +130,7 @@ sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_fs_atomic_t af = sp_zero;
-  sp_err_t err = sp_fs_atomic_open_at(&af, sp_path(dir, sp_cstr_as_str(it->path)));
+  sp_err_t err = sp_fs_atomic_open_at(&af, sp_path(dir, sp_cstr_as_str(it->path)), sp_sys_default_file_perms);
   if (!err) err = sp_io_write_str(sp_fs_atomic_writer(&af), sp_cstr_as_str(it->content), SP_NULLPTR);
   if (!err) {
     switch (it->op) {

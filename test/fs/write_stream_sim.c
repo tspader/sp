@@ -23,7 +23,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   vt.pwrite = unseekable_pwrite;
 
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
-  sp_err_t err = sp_fs_write_at(path, sp_str_lit("A"), c->mode);
+  sp_err_t err = sp_fs_write_at(path, sp_str_lit("A"), c->mode, sp_sys_default_file_perms);
   sp_sys_set_vtable(saved);
   sp_expect_ok(t, err);
 

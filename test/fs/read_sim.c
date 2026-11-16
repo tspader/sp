@@ -96,7 +96,7 @@ static sp_err_t unseekable_pread(sp_sys_fd_t fd, void* buf, u64 count, u64 offse
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t path = sp_path_join(mem, sp_test_dir(t), sp_str_lit("A"));
-  sp_must_ok(t, sp_fs_write_cstr_at(path, c->content, SP_FS_WRITE_TRUNCATE));
+  sp_must_ok(t, sp_fs_write_cstr_at(path, c->content, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
 
   sp_sys_vtable_t vt = sp_sys_vtable_platform;
   vt.get_file_metadata = sized_metadata;

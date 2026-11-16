@@ -82,7 +82,7 @@ sp_test_each(runner, prune, prune_case_t, prune_cases) {
     if (!seed->id) break;
     paths[at] = sp_path_join(mem, runs, prune_run_name(mem, now, seed->age_s));
     if (seed->file) {
-      sp_must_ok(t, sp_fs_write_cstr_at(paths[at], "A", SP_FS_WRITE_TRUNCATE));
+      sp_must_ok(t, sp_fs_write_cstr_at(paths[at], "A", SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
     }
     else {
       sp_must_ok(t, sp_fs_create_dir_at(paths[at]));

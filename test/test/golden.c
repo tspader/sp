@@ -102,8 +102,8 @@ sp_test_each(runner, golden, test_t, tests) {
   sp_must_ok(t, sp_fs_create_file_at(src));
   sp_str_t file = sp_str_lit("S/main.c");
   if (it->absolute) sp_must_ok(t, sp_fs_canonicalize_path_at(mem, src, &file));
-  if (it->golden) sp_must_ok(t, sp_fs_write_cstr_at(golden, it->golden, SP_FS_WRITE_TRUNCATE));
-  if (it->update) sp_must_ok(t, sp_fs_write_cstr_at(actual, "stale", SP_FS_WRITE_TRUNCATE));
+  if (it->golden) sp_must_ok(t, sp_fs_write_cstr_at(golden, it->golden, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
+  if (it->update) sp_must_ok(t, sp_fs_write_cstr_at(actual, "stale", SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
 
   sp_str_t cwd = it->cwd ? sp_fs_join_path(mem, sandbox.sub, sp_cstr_as_str(it->cwd)) : sandbox.sub;
   sp_must_ok(t, sp_fs_create_dir_at(sp_path(sandbox.dir, cwd)));

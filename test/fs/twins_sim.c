@@ -149,10 +149,10 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case OP_CREATE_SYM_LINK:           sp_fs_create_sym_link(sp_str_lit("A"), path, SP_FS_KIND_FILE); break;
     case OP_REMOVE_FILE:               sp_fs_remove_file(path); break;
     case OP_REMOVE_DIR:                sp_fs_remove_dir(path); break;
-    case OP_WRITE:                     sp_fs_write(path, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE); break;
-    case OP_WRITE_SLICE:               sp_fs_write_slice(path, slice, SP_FS_WRITE_TRUNCATE); break;
-    case OP_WRITE_CSTR:                sp_fs_write_cstr(path, "A", SP_FS_WRITE_TRUNCATE); break;
-    case OP_ATOMIC_OPEN:               sp_fs_atomic_open(&af, path); break;
+    case OP_WRITE:                     sp_fs_write(path, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms); break;
+    case OP_WRITE_SLICE:               sp_fs_write_slice(path, slice, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms); break;
+    case OP_WRITE_CSTR:                sp_fs_write_cstr(path, "A", SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms); break;
+    case OP_ATOMIC_OPEN:               sp_fs_atomic_open(&af, path, sp_sys_default_file_perms); break;
   }
   sp_sys_set_vtable(saved);
 

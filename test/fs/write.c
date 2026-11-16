@@ -339,15 +339,15 @@ sp_test_each(fs, write, test_t, tests) {
   sp_err_t err = SP_OK;
   switch (it->variant) {
     case VARIANT_STR: {
-      err = sp_fs_write_at(path, sp_cstr_as_str(it->content), it->mode);
+      err = sp_fs_write_at(path, sp_cstr_as_str(it->content), it->mode, sp_sys_default_file_perms);
       break;
     }
     case VARIANT_SLICE: {
-      err = sp_fs_write_slice_at(path, sp_mem_slice((u8*)it->content, sp_cstr_len(it->content)), it->mode);
+      err = sp_fs_write_slice_at(path, sp_mem_slice((u8*)it->content, sp_cstr_len(it->content)), it->mode, sp_sys_default_file_perms);
       break;
     }
     case VARIANT_CSTR: {
-      err = sp_fs_write_cstr_at(path, it->content, it->mode);
+      err = sp_fs_write_cstr_at(path, it->content, it->mode, sp_sys_default_file_perms);
       break;
     }
   }
