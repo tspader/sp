@@ -138,7 +138,7 @@ sp_test_each(fs, fd_relative, test_t, tests) {
       sp_str_t path = sp_cstr_as_str(it->path);
       if (it->op == OP_OPEN_ABS) sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sp_path_join(mem, sandbox, path), &path));
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-      sp_expect_ok(t, sp_sys_open_s(cwd, path, SP_SYS_OPEN_MODE_RO, 0, &fd));
+      sp_expect_ok(t, sp_sys_open_s(cwd, path, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd));
 
       if (fd != SP_SYS_INVALID_FD) {
         if (it->content) {

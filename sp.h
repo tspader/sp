@@ -1564,7 +1564,7 @@ SP_API sp_err_t    sp_sys_get_exe_path(c8* buf, u64 size, u64* len);
 SP_API sp_err_t    sp_sys_get_storage_path(c8* buf, u64 size, u64* len);
 SP_API sp_err_t    sp_sys_get_config_path(c8* buf, u64 size, u64* len);
 SP_API sp_err_t    sp_sys_get_fd_path(sp_sys_fd_t fd, c8* buf, u64 size, u64* len);
-SP_API sp_err_t    sp_sys_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
+SP_API sp_err_t    sp_sys_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_open_dir(sp_sys_dir_t dir, const c8* path, u32 len, u32 flags, sp_sys_dir_t* out);
 SP_API sp_err_t    sp_sys_close(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_pipe(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
@@ -1625,7 +1625,7 @@ SP_API sp_err_t    sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence, s64* pos
 SP_API sp_err_t    sp_sys_chdir(const c8* path, u32 len);
 
 
-SP_API sp_err_t    sp_sys_open_s(sp_sys_dir_t dir, sp_str_t path, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
+SP_API sp_err_t    sp_sys_open_s(sp_sys_dir_t dir, sp_str_t path, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_open_dir_s(sp_sys_dir_t dir, sp_str_t path, u32 flags, sp_sys_dir_t* out);
 SP_API sp_err_t    sp_sys_get_path_metadata_s(sp_sys_dir_t dir, sp_str_t path, sp_sys_file_meta_t* st);
 SP_API sp_err_t    sp_sys_get_link_metadata_s(sp_sys_dir_t dir, sp_str_t path, sp_sys_file_meta_t* st);
@@ -1664,7 +1664,7 @@ typedef struct {
   sp_err_t    (*get_storage_path)(c8* buf, u64 size, u64* len);
   sp_err_t    (*get_config_path)(c8* buf, u64 size, u64* len);
   sp_err_t    (*get_fd_path)(sp_sys_fd_t fd, c8* buf, u64 size, u64* len);
-  sp_err_t    (*open)(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
+  sp_err_t    (*open)(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* out);
   sp_err_t    (*open_dir)(sp_sys_dir_t dir, const c8* path, u32 len, u32 flags, sp_sys_dir_t*);
   sp_err_t    (*close)(sp_sys_fd_t fd);
   sp_err_t    (*pipe)(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
@@ -1740,7 +1740,7 @@ SP_API sp_err_t    sp_sys_get_exe_path_p(c8* buf, u64 size, u64* len);
 SP_API sp_err_t    sp_sys_get_storage_path_p(c8* buf, u64 size, u64* len);
 SP_API sp_err_t    sp_sys_get_config_path_p(c8* buf, u64 size, u64* len);
 SP_API sp_err_t    sp_sys_get_fd_path_p(sp_sys_fd_t fd, c8* buf, u64 size, u64* len);
-SP_API sp_err_t    sp_sys_open_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out);
+SP_API sp_err_t    sp_sys_open_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* out);
 SP_API sp_err_t    sp_sys_open_dir_p(sp_sys_dir_t dir, const c8* path, u32 len, u32 flags, sp_sys_dir_t* out);
 SP_API sp_err_t    sp_sys_close_p(sp_sys_fd_t fd);
 SP_API sp_err_t    sp_sys_pipe_p(sp_sys_pipe_t* pipe, sp_sys_pipe_desc_t desc);
@@ -6066,8 +6066,8 @@ sp_err_t sp_sys_get_fd_path(sp_sys_fd_t fd, c8* buf, u64 size, u64* len) {
   return (sp_rt.vt->get_fd_path)(fd, buf, size, len);
 }
 
-sp_err_t sp_sys_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
-  return (sp_rt.vt->open)(dir, path, len, mode, flags, out);
+sp_err_t sp_sys_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* out) {
+  return (sp_rt.vt->open)(dir, path, len, mode, flags, perms, out);
 }
 
 sp_err_t sp_sys_open_dir(sp_sys_dir_t dir, const c8* path, u32 len, u32 flags, sp_sys_dir_t* out) {
@@ -8779,7 +8779,7 @@ SP_PRIVATE __wasi_oflags_t sp_sys_wasi_open_flags(u32 flags) {
 
 #endif
 
-sp_err_t sp_sys_open_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
+sp_err_t sp_sys_open_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* out) {
   *out = SP_SYS_INVALID_FD;
 
   if (flags & SP_SYS_OPEN_TRUNCATE) {
@@ -8797,7 +8797,7 @@ sp_err_t sp_sys_open_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mo
   if (flags & SP_SYS_OPEN_EXCLUSIVE) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
 
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
-  sp_nt_status_t status = sp_sys_nt_open(dir.fd, sp_str(path, len), access, share, disposition, options, FILE_ATTRIBUTE_NORMAL, &handle);
+  sp_nt_status_t status = sp_sys_nt_open(dir.fd, sp_str(path, len), access, share, disposition, options, sp_sys_nt_attributes_from_perms(perms), &handle);
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
 
   *out = handle;
@@ -8807,7 +8807,7 @@ sp_err_t sp_sys_open_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mo
   c8 buffer [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buffer));
 
-  s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, dir.fd, buffer, sp_sys_linux_open_flags(mode, flags), sp_sys_default_file_perms.value);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_OPENAT, dir.fd, buffer, sp_sys_linux_open_flags(mode, flags), perms.value & 07777);
   if (sp_sys_is_err(rc)) return sp_sys_err_from_errno(-rc);
 
   *out = (sp_sys_fd_t)rc;
@@ -8816,12 +8816,13 @@ sp_err_t sp_sys_open_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mo
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   c8 buf [SP_PATH_MAX];
   sp_try(sp_sys_posix_path(path, len, buf));
-  s32 rc = openat((int)dir.fd, buf, sp_sys_posix_open_flags(mode, flags), (mode_t)sp_sys_default_file_perms.value);
+  s32 rc = openat((int)dir.fd, buf, sp_sys_posix_open_flags(mode, flags), (mode_t)(perms.value & 07777));
   if (rc < 0) return sp_sys_err_from_errno(errno);
   *out = (sp_sys_fd_t)rc;
   return SP_OK;
 
 #elif defined(SP_WASM)
+  (void)perms;
   sp_try(sp_sys_wasi_path(path, &len));
   __wasi_rights_t rights = sp_sys_wasi_open_rights(mode);
   __wasi_fdflags_t fdflags = (flags & SP_SYS_OPEN_APPEND) ? __WASI_FDFLAGS_APPEND : 0;
@@ -8913,8 +8914,8 @@ sp_err_t sp_sys_open_dir_p(sp_sys_dir_t dir, const c8* path, u32 len, u32 flags,
 
 }
 
-sp_err_t sp_sys_open_s(sp_sys_dir_t dir, sp_str_t path, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
-  return sp_sys_open(dir, path.data, path.len, mode, flags, out);
+sp_err_t sp_sys_open_s(sp_sys_dir_t dir, sp_str_t path, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* out) {
+  return sp_sys_open(dir, path.data, path.len, mode, flags, perms, out);
 }
 
 sp_err_t sp_sys_open_dir_s(sp_sys_dir_t dir, sp_str_t path, u32 flags, sp_sys_dir_t* out) {
@@ -17989,7 +17990,7 @@ sp_err_t sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_sys_fd_t file, s
 
 sp_err_t sp_io_file_reader_from_path_at(sp_io_file_reader_t* r, sp_path_t path) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_err_t err = sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, &fd);
+  sp_err_t err = sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd);
   if (err) {
     *r = sp_zero_s(sp_io_file_reader_t);
     return err;
@@ -18663,7 +18664,7 @@ sp_err_t sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io
 sp_err_t sp_io_file_writer_from_path_at(sp_io_file_writer_t* w, sp_path_t path) {
   u32 flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE;
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_err_t err = sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, flags, &fd);
+  sp_err_t err = sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, flags, sp_sys_default_file_perms, &fd);
   if (err) {
     *w = sp_zero_s(sp_io_file_writer_t);
     return err;
@@ -20630,7 +20631,7 @@ sp_err_t sp_fs_get_link_metadata(sp_str_t path, sp_sys_file_meta_t* meta) {
 
 sp_err_t sp_fs_canonicalize_path_at(sp_mem_t mem, sp_path_t path, sp_str_t* canonical) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_PATH, 0, &fd));
+  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_PATH, 0, sp_sys_default_file_perms, &fd));
 
   c8 buf [SP_PATH_MAX];
   u64 len = 0;
@@ -20721,7 +20722,7 @@ SP_PRIVATE sp_err_t sp_fs_read_stream(sp_mem_t mem, sp_io_stream_reader_t* reade
 sp_err_t sp_fs_read_at(sp_mem_t mem, sp_path_t path, sp_str_t* content) {
   sp_assert(content);
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, &fd));
+  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd));
 
   sp_io_stream_reader_t reader = sp_zero;
   sp_io_stream_reader_from_fd(&reader, fd, SP_IO_CLOSE_MODE_AUTO);
@@ -20757,7 +20758,7 @@ sp_err_t sp_fs_create_dir(sp_str_t path) {
 
 sp_err_t sp_fs_create_file_at(sp_path_t path) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE, &fd));
+  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE, sp_sys_default_file_perms, &fd));
   return sp_sys_close(fd);
 }
 
@@ -21141,7 +21142,7 @@ sp_err_t sp_fs_atomic_open_at(sp_fs_atomic_t* af, sp_path_t path) {
 
     sp_mem_fixed_t fixed = sp_mem_fixed_ex(af->temp_buf, SP_PATH_MAX, 1);
     af->temp = sp_fs_join_path(sp_mem_fixed_as_allocator(&fixed), parent, leaf);
-    err = sp_sys_open_s(path.dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
+    err = sp_sys_open_s(path.dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, sp_sys_default_file_perms, &fd);
   }
   if (err) {
     *af = sp_zero_s(sp_fs_atomic_t);
@@ -21205,7 +21206,7 @@ sp_err_t sp_fs_atomic_abort(sp_fs_atomic_t* af) {
 
 SP_PRIVATE sp_err_t sp_fs_write_in_place(sp_path_t path, sp_mem_slice_t slice, u32 flags) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, flags, &fd));
+  sp_try(sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, flags, sp_sys_default_file_perms, &fd));
 
   sp_io_stream_writer_t writer = sp_zero;
   sp_io_stream_writer_from_fd(&writer, fd, SP_IO_CLOSE_MODE_AUTO);

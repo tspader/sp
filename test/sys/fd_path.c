@@ -140,7 +140,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       sp_must_ok(t, sp_fs_create_file_at(path));
       if (c->alias) sp_must_ok(t, sp_fs_create_hard_link_at(path, alias));
       if (c->decoy) sp_must_ok(t, sp_fs_create_file_at(decoy));
-      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, &fd));
+      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd));
       break;
     }
     case TARGET_DIR: {

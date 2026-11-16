@@ -44,7 +44,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   switch (c->op) {
     case OP_WRITE: {
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_APPEND, &fd));
+      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_APPEND, sp_sys_default_file_perms, &fd));
       u64 n = 0;
       sp_expect_ok(t, sp_sys_write(fd, "B", 1, &n));
       sp_sys_close(fd);

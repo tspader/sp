@@ -8,6 +8,13 @@ static bool sys_case_wants_symlinks(sys_case_t* c) {
   return false;
 }
 
+static bool sys_case_wants_perms(sys_case_t* c) {
+  sp_carr_for(c->steps, it) {
+    if (c->steps[it].kind == SYS_STEP_OPEN && c->steps[it].open.read_only) return true;
+  }
+  return false;
+}
+
 static const c8* sys_step_name(sys_step_kind_t kind) {
   switch (kind) {
     case SYS_STEP_NONE:     return "none";
@@ -35,6 +42,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
   sp_sys_dir_t sandbox_dir = sp_zero;
 
   if (sys_case_wants_symlinks(c)) sp_test_skip_without_symlinks();
+  if (sys_case_wants_perms(c)) sp_test_skip_on_wasm();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
@@ -78,7 +86,9 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
 
       case SYS_STEP_OPEN: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-        sp_err_t err = sp_sys_open_s(sandbox_dir, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, &fd);
+        sp_sys_file_perms_t perms = sp_sys_default_file_perms;
+        sp_sys_set_read_only(&perms, step->open.read_only);
+        sp_err_t err = sp_sys_open_s(sandbox_dir, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, perms, &fd);
         sys_check_err(t, err, step->open.err);
         if (!err) {
           if (step->open.err) sp_sys_close(fd);
@@ -161,6 +171,9 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     if (exists != ent->exists) {
       sp_test_fail(t, "expected {} {} exist", sp_fmt_cstr(ent->path), sp_fmt_cstr(ent->exists ? "to" : "not to"));
       continue;
+    }
+    if (exists && sp_sys_is_read_only(meta.perms) != ent->read_only) {
+      sp_test_fail(t, "expected {} {} be read-only", sp_fmt_cstr(ent->path), sp_fmt_cstr(ent->read_only ? "to" : "not to"));
     }
 
     if (ent->content) {

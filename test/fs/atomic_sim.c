@@ -4,9 +4,9 @@
 
 static u32 creates;
 
-static sp_err_t colliding_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* fd) {
+static sp_err_t colliding_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* fd) {
   if ((flags & SP_SYS_OPEN_EXCLUSIVE) && creates++ < COLLISIONS) return SP_ERR_SYS_EXISTS;
-  return sp_sys_open_p(dir, path, len, mode, flags, fd);
+  return sp_sys_open_p(dir, path, len, mode, flags, perms, fd);
 }
 
 sp_test(fs, atomic_retries_temp_name_collision, .serial = true) {

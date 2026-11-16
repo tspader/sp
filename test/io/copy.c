@@ -438,7 +438,7 @@ UTEST_F(io_copy, fast_path_stream_claim_uses_fd_cursor) {
   }
 
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_RO, 0, &fd), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(sp_sys_get_root(0), path, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd), SP_OK);
   sp_io_stream_reader_t sr = sp_zero;
   sp_io_stream_reader_from_file(&sr, fd, SP_IO_CLOSE_MODE_AUTO);
 

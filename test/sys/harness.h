@@ -40,7 +40,7 @@ typedef enum {
 typedef struct {
   sys_step_kind_t kind;
   union {
-    struct { u32 slot; const c8* path; sp_sys_open_mode_t mode; u32 flags; sp_err_t err; } open;
+    struct { u32 slot; const c8* path; sp_sys_open_mode_t mode; u32 flags; bool read_only; sp_err_t err; } open;
     struct { u32 slot; const c8* path; u32 flags; sp_err_t err; } open_dir;
     struct { u32 slot; u64 count; const c8* expect; sp_err_t err; } read;
     struct { u32 slot; const c8* data; sp_err_t err; } write;
@@ -52,6 +52,7 @@ typedef struct {
 typedef struct {
   const c8* path;
   bool exists;
+  bool read_only;
   const c8* content;
 } sys_expect_t;
 

@@ -336,7 +336,7 @@ UTEST_F(io, stream_reader_as_file) {
   sp_io_file_writer_close(&fw);
 
   sp_sys_fd_t file = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &file), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &file), SP_OK);
 
   sp_io_stream_reader_t r = sp_zero;
   sp_io_stream_reader_from_file(&r, file, SP_IO_CLOSE_MODE_AUTO);
@@ -405,7 +405,7 @@ UTEST_F(io, stream_file_to_file_copy) {
   sp_path_t dst_path = sp_path(ut.file.dir, sp_str_lit("stream_file_to_file_copy.dst"));
 
   sp_sys_fd_t file = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &file), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &file), SP_OK);
   sp_io_stream_reader_t r = sp_zero;
   sp_io_stream_reader_from_file(&r, file, SP_IO_CLOSE_MODE_AUTO);
   sp_io_file_writer_t w = sp_zero;
@@ -486,7 +486,7 @@ UTEST_F(io, file_reader_from_file_defers_stat) {
   sp_io_file_writer_close(&w);
 
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &fd), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd), SP_OK);
 
   sp_io_file_reader_t r = sp_zero;
   EXPECT_EQ(sp_io_file_reader_from_file(&r, fd, SP_IO_CLOSE_MODE_AUTO), SP_OK);
@@ -506,7 +506,7 @@ UTEST_F(io, file_writer_from_fd_defers_stat) {
   sp_io_file_writer_close(&w);
 
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_WO, 0, &fd), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_WO, 0, sp_sys_default_file_perms, &fd), SP_OK);
 
   sp_io_file_writer_t a = sp_zero;
   EXPECT_EQ(sp_io_file_writer_from_fd(&a, fd, SP_IO_CLOSE_MODE_AUTO), SP_OK);
@@ -577,7 +577,7 @@ UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
   sp_io_file_writer_close(&w);
 
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &fd);
+  sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd);
   const s64 parked = 7;
   sp_sys_lseek(fd, parked, SP_IO_SEEK_SET, SP_NULLPTR);
 

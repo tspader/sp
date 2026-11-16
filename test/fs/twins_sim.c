@@ -84,7 +84,7 @@ static sp_err_t record(sp_sys_dir_t dir) {
   return SP_ERR_SYS_ACCESS_DENIED;
 }
 
-static sp_err_t probe_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_fd_t* out) {
+static sp_err_t probe_open(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mode_t mode, u32 flags, sp_sys_file_perms_t perms, sp_sys_fd_t* out) {
   *out = SP_SYS_INVALID_FD;
   return record(dir);
 }

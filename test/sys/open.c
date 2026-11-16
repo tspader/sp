@@ -99,6 +99,27 @@ static const sys_case_t sys_open_cases [] = {
     },
   },
   {
+    .name = "create_applies_perms",
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE, .read_only = true } },
+    },
+    .expect = {
+      { .path = "file.bin", .exists = true, .read_only = true },
+    },
+  },
+  {
+    .name = "create_keeps_perms_of_existing_file",
+    .setup = {
+      { .path = "file.bin", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE, .read_only = true } },
+    },
+    .expect = {
+      { .path = "file.bin", .exists = true, .content = "A" },
+    },
+  },
+  {
     .name = "excl_refuses_existing_file",
     .setup = {
       { .path = "file.bin", .content = "AAAA" },

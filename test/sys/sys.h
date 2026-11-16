@@ -266,7 +266,7 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
 
       case SYS_STEP_OPEN: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-        sp_err_t err = sp_sys_open_s(sandbox_dir, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, &fd);
+        sp_err_t err = sp_sys_open_s(sandbox_dir, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, sp_sys_default_file_perms, &fd);
         sys_expect_err(utest_result, "open", err, step->open.err);
         if (err == SP_OK) {
           if (step->open.err) {

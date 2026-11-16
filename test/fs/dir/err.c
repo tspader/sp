@@ -53,7 +53,7 @@ sp_test_each(fs, dir_err, test_t, tests) {
   switch (it->from) {
     case FROM_DIR: break;
     case FROM_FILE: {
-      sp_must_ok(t, sp_sys_open_s(dir, sp_str_lit("A"), SP_SYS_OPEN_MODE_RO, 0, &file));
+      sp_must_ok(t, sp_sys_open_s(dir, sp_str_lit("A"), SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &file));
       from = sp_sys_dir(file);
       break;
     }

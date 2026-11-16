@@ -126,7 +126,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   switch (c->src) {
     case END_FILE: {
       sp_must_ok(t, sp_fs_write_cstr_at(src, c->data, SP_FS_WRITE_TRUNCATE));
-      sp_must_ok(t, sp_sys_open_s(src.dir, src.sub, SP_SYS_OPEN_MODE_RO, 0, &in));
+      sp_must_ok(t, sp_sys_open_s(src.dir, src.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &in));
       break;
     }
     case END_PIPE: {
@@ -148,7 +148,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
         sp_must_ok(t, sp_fs_write_cstr_at(dst, c->prefill, SP_FS_WRITE_TRUNCATE));
         flags = 0;
       }
-      sp_must_ok(t, sp_sys_open_s(dst.dir, dst.sub, SP_SYS_OPEN_MODE_WO, flags, &out));
+      sp_must_ok(t, sp_sys_open_s(dst.dir, dst.sub, SP_SYS_OPEN_MODE_WO, flags, sp_sys_default_file_perms, &out));
       break;
     }
     case END_PIPE: {
