@@ -9,6 +9,7 @@ typedef struct {
   const c8* name;
   const c8* content;
   s64 size;
+  sp_err_t metadata;
   sp_err_t read;
   expect_t expect;
 } test_t;
@@ -42,7 +43,15 @@ static const test_t tests [] = {
     .content = "AB",
     .size = 1,
     .expect = {
-      .content = "A",
+      .content = "AB",
+    },
+  },
+  {
+    .name = "size_unavailable",
+    .content = "AB",
+    .metadata = SP_ERR_SYS_IO,
+    .expect = {
+      .content = "AB",
     },
   },
   {
@@ -58,12 +67,14 @@ static const test_t tests [] = {
 
 typedef struct {
   s64 size;
+  sp_err_t metadata;
   sp_err_t read;
 } probe_t;
 
 static probe_t probe;
 
 static sp_err_t sized_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
+  if (probe.metadata) return probe.metadata;
   sp_try(sp_sys_get_file_metadata_p(fd, meta));
   meta->size = probe.size;
   return SP_OK;
@@ -91,7 +102,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   vt.get_file_metadata = sized_metadata;
   vt.read = probed_read;
   vt.pread = unseekable_pread;
-  probe = (probe_t) { .size = c->size, .read = c->read };
+  probe = (probe_t) { .size = c->size, .metadata = c->metadata, .read = c->read };
 
   sp_str_t content = sp_zero;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);

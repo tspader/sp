@@ -20671,33 +20671,42 @@ sp_err_t sp_fs_get_config_path(sp_mem_t mem, sp_str_t* path) {
 }
 
 SP_PRIVATE sp_err_t sp_fs_read_stream(sp_mem_t mem, sp_io_stream_reader_t* reader, sp_str_t* content) {
+  u64 limit = SP_LIMIT_U32_MAX;
+  u64 capacity = 4096;
   sp_sys_file_meta_t meta = sp_zero;
-  sp_try(sp_sys_get_file_metadata(reader->fd, &meta));
-
-  if (!meta.size) {
-    sp_io_dyn_mem_writer_t writer = sp_zero;
-    sp_io_dyn_mem_writer_init(mem, &writer);
-    sp_err_t err = sp_io_copy(&writer.base, &reader->base, SP_NULLPTR);
-    if (err) {
-      sp_io_dyn_mem_writer_close(&writer);
-      return err;
-    }
-    *content = sp_io_dyn_mem_writer_take_str(&writer);
-    return SP_OK;
+  if (!sp_sys_get_file_metadata(reader->fd, &meta) && meta.size > 0) {
+    capacity = sp_min((u64)meta.size, limit);
   }
 
-  u64 size = (u64)meta.size;
-  u64 bytes_read = 0;
-  c8* buffer = sp_alloc_n(mem, c8, size);
-  sp_err_t err = sp_io_read_all(&reader->base, buffer, size, &bytes_read);
-  if (err && err != SP_ERR_IO_EOF) {
-    sp_mem_allocator_free(mem, buffer, size);
+  u8* buffer = sp_alloc_uninitialized_n(mem, u8, capacity);
+  u64 len = 0;
+  sp_err_t err = SP_OK;
+  while (!err) {
+    if (len == capacity) {
+      u8 next = 0;
+      err = sp_io_read(&reader->base, &next, 1, SP_NULLPTR);
+      if (err) break;
+      if (capacity == limit) {
+        err = SP_ERR_SYS_FILE_TOO_BIG;
+        break;
+      }
+
+      u64 grown = sp_min(capacity * 2, limit);
+      buffer = (u8*)sp_realloc_uninitialized(mem, buffer, capacity, grown);
+      capacity = grown;
+      buffer[len++] = next;
+    }
+
+    u64 num_read = 0;
+    err = sp_io_read(&reader->base, buffer + len, capacity - len, &num_read);
+    len += num_read;
+  }
+  if (err != SP_ERR_IO_EOF) {
+    sp_free(mem, buffer, capacity);
     return err;
   }
-  if (bytes_read < size) {
-    buffer = (c8*)sp_realloc(mem, buffer, size, bytes_read);
-  }
-  *content = sp_str(buffer, (u32)bytes_read);
+
+  *content = sp_str((c8*)sp_realloc_uninitialized(mem, buffer, capacity, len), (u32)len);
   return SP_OK;
 }
 
