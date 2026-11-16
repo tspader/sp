@@ -1,5 +1,8 @@
 #include "fs.h"
 
+#define A16 "AAAAAAAAAAAAAAAA"
+#define A255 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 "AAAAAAAAAAAAAAA"
+
 typedef enum {
   OP_REPLACE,
   OP_EXCLUSIVE,
@@ -32,6 +35,17 @@ static const test_t open_at_tests [] = {
       .err = SP_ERR_SYS_NOT_FOUND,
       .paths = {
         { .path = "A" },
+      },
+    },
+  },
+  {
+    .name = "name_at_component_limit",
+    .path = A255,
+    .content = "A",
+    .op = OP_REPLACE,
+    .expect = {
+      .paths = {
+        { .path = A255, .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
       },
     },
   },

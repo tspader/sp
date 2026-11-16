@@ -40,8 +40,23 @@ sp_test_each(fs, read, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
+  sp_sys_dir_t dir = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
+
   sp_str_t content = sp_zero;
-  sp_expect_err_eq(t, sp_fs_read_at(mem, sp_path_join(mem, sandbox, sp_str_lit("A")), &content), it->expect.err);
+  sp_err_t err = sp_fs_read_at(mem, sp_path(dir, sp_str_lit("A")), &content);
+  sp_fs_close_dir(dir);
+
+  sp_expect_err_eq(t, err, it->expect.err);
   sp_expect_str_eq(t, content, it->expect.content ? sp_cstr_as_str(it->expect.content) : sp_str_lit(""));
   return SP_OK;
 }
+
+#if defined(SP_LINUX)
+sp_test(fs, read_procfs) {
+  sp_str_t content = sp_zero;
+  sp_expect_ok(t, sp_fs_read(sp_test_arena(t), sp_str_lit("/proc/self/stat"), &content));
+  sp_expect(t, !sp_str_empty(content));
+  return SP_OK;
+}
+#endif

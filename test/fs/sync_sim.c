@@ -18,6 +18,7 @@ typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
   op_t op;
+  sp_fs_write_mode_t mode;
   const c8* path;
   const c8* content;
   sp_err_t sync;
@@ -26,15 +27,45 @@ typedef struct {
 
 static const test_t tests [] = {
   {
-    .name = "write_does_not_sync",
-    .setup = {
-      { .path = "A", .content = "A" },
-    },
+    .name = "truncate_does_not_sync",
     .path = "A",
-    .content = "B",
+    .content = "A",
     .expect = {
       .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      },
+    },
+  },
+  {
+    .name = "append_does_not_sync",
+    .mode = SP_FS_WRITE_APPEND,
+    .path = "A",
+    .content = "A",
+    .expect = {
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      },
+    },
+  },
+  {
+    .name = "replace_does_not_sync",
+    .mode = SP_FS_WRITE_REPLACE,
+    .path = "A",
+    .content = "A",
+    .expect = {
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      },
+    },
+  },
+  {
+    .name = "exclusive_does_not_sync",
+    .mode = SP_FS_WRITE_EXCLUSIVE,
+    .path = "A",
+    .content = "A",
+    .expect = {
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
       },
     },
   },
@@ -104,7 +135,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
   switch (c->op) {
     case OP_WRITE: {
-      err = sp_fs_write_at(path, content, SP_FS_WRITE_REPLACE);
+      err = sp_fs_write_at(path, content, c->mode);
       break;
     }
     case OP_SYNC_COMMIT: {

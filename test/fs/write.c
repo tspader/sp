@@ -1,8 +1,5 @@
 #include "fs.h"
 
-#define A16 "AAAAAAAAAAAAAAAA"
-#define A255 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 A16 "AAAAAAAAAAAAAAA"
-
 typedef enum {
   VARIANT_STR,
   VARIANT_SLICE,
@@ -88,6 +85,20 @@ static const test_t tests [] = {
     },
   },
   {
+    .name = "truncate_onto_dir",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+    },
+    .path = "A",
+    .content = "A",
+    .expect = {
+      .err = SP_ERR_SYS_IS_DIR,
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+      },
+    },
+  },
+  {
     .name = "truncate_slice",
     .path = "A",
     .content = "A",
@@ -131,6 +142,22 @@ static const test_t tests [] = {
     .expect = {
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "AB" },
+      },
+    },
+  },
+  {
+    .name = "append_through_symlink",
+    .setup = {
+      { .path = "T", .content = "T" },
+      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
+    },
+    .path = "L",
+    .content = "A",
+    .mode = SP_FS_WRITE_APPEND,
+    .expect = {
+      .paths = {
+        { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
+        { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "TA" },
       },
     },
   },
@@ -179,17 +206,6 @@ static const test_t tests [] = {
       .err = SP_ERR_SYS_NOT_FOUND,
       .paths = {
         { .path = "D" },
-      },
-    },
-  },
-  {
-    .name = "replace_name_at_component_limit",
-    .path = A255,
-    .content = "A",
-    .mode = SP_FS_WRITE_REPLACE,
-    .expect = {
-      .paths = {
-        { .path = A255, .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
       },
     },
   },
@@ -282,6 +298,33 @@ static const test_t tests [] = {
       },
     },
   },
+  {
+    .name = "exclusive_missing_parent",
+    .path = "D/A",
+    .content = "A",
+    .mode = SP_FS_WRITE_EXCLUSIVE,
+    .expect = {
+      .err = SP_ERR_SYS_NOT_FOUND,
+      .paths = {
+        { .path = "D" },
+      },
+    },
+  },
+  {
+    .name = "exclusive_onto_dir",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+    },
+    .path = "A",
+    .content = "A",
+    .mode = SP_FS_WRITE_EXCLUSIVE,
+    .expect = {
+      .err = SP_ERR_SYS_EXISTS,
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+      },
+    },
+  },
 };
 
 sp_test_each(fs, write, test_t, tests) {
@@ -290,7 +333,10 @@ sp_test_each(fs, write, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
-  sp_path_t path = sp_path_join(sp_test_arena(t), sandbox, sp_cstr_as_str(it->path));
+  sp_sys_dir_t dir = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
+
+  sp_path_t path = sp_path(dir, sp_cstr_as_str(it->path));
   sp_err_t err = SP_OK;
   switch (it->variant) {
     case VARIANT_STR: {
@@ -306,6 +352,7 @@ sp_test_each(fs, write, test_t, tests) {
       break;
     }
   }
+  sp_fs_close_dir(dir);
   sp_expect_err_eq(t, err, it->expect.err);
 
   fs_expect_paths(t, sandbox, it->expect.paths);

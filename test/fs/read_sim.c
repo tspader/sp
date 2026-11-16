@@ -1,6 +1,7 @@
 #include "fs.h"
 
 typedef struct {
+  sp_err_t err;
   const c8* content;
 } expect_t;
 
@@ -8,12 +9,13 @@ typedef struct {
   const c8* name;
   const c8* content;
   s64 size;
+  sp_err_t read;
   expect_t expect;
 } test_t;
 
 static const test_t tests [] = {
   {
-    .name = "size_zero_reads_to_eof",
+    .name = "size_zero",
     .content = "AB",
     .expect = {
       .content = "AB",
@@ -43,14 +45,36 @@ static const test_t tests [] = {
       .content = "A",
     },
   },
+  {
+    .name = "read_failure",
+    .content = "AB",
+    .size = 2,
+    .read = SP_ERR_SYS_IO,
+    .expect = {
+      .err = SP_ERR_SYS_IO,
+    },
+  },
 };
 
-static s64 reported;
+typedef struct {
+  s64 size;
+  sp_err_t read;
+} probe_t;
+
+static probe_t probe;
 
 static sp_err_t sized_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
   sp_try(sp_sys_get_file_metadata_p(fd, meta));
-  meta->size = reported;
+  meta->size = probe.size;
   return SP_OK;
+}
+
+static sp_err_t probed_read(sp_sys_fd_t fd, void* buf, u64 count, u64* bytes_read) {
+  if (probe.read) {
+    if (bytes_read) *bytes_read = 0;
+    return probe.read;
+  }
+  return sp_sys_read_p(fd, buf, count, bytes_read);
 }
 
 static sp_err_t unseekable_pread(sp_sys_fd_t fd, void* buf, u64 count, u64 offset, u64* bytes_read) {
@@ -65,16 +89,17 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   sp_sys_vtable_t vt = sp_sys_vtable_platform;
   vt.get_file_metadata = sized_metadata;
+  vt.read = probed_read;
   vt.pread = unseekable_pread;
-  reported = c->size;
+  probe = (probe_t) { .size = c->size, .read = c->read };
 
   sp_str_t content = sp_zero;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
   sp_err_t err = sp_fs_read_at(mem, path, &content);
   sp_sys_set_vtable(saved);
 
-  sp_expect_ok(t, err);
-  sp_expect_str_eq_c(t, content, c->expect.content);
+  sp_expect_err_eq(t, err, c->expect.err);
+  sp_expect_str_eq(t, content, c->expect.content ? sp_cstr_as_str(c->expect.content) : sp_str_lit(""));
   return SP_OK;
 }
 
