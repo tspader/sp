@@ -20,7 +20,6 @@ typedef enum {
   OP_WRITE_SLICE,
   OP_WRITE_CSTR,
   OP_ATOMIC_OPEN,
-  OP_ATOMIC_OPEN_STAGED,
 } op_t;
 
 typedef struct {
@@ -50,7 +49,6 @@ static const test_t tests [] = {
   { .name = "write_slice", .op = OP_WRITE_SLICE },
   { .name = "write_cstr", .op = OP_WRITE_CSTR },
   { .name = "atomic_open", .op = OP_ATOMIC_OPEN },
-  { .name = "atomic_open_staged", .op = OP_ATOMIC_OPEN_STAGED },
 };
 
 typedef struct {
@@ -155,7 +153,6 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case OP_WRITE_SLICE:               sp_fs_write_slice(path, slice, SP_FS_WRITE_TRUNCATE); break;
     case OP_WRITE_CSTR:                sp_fs_write_cstr(path, "A", SP_FS_WRITE_TRUNCATE); break;
     case OP_ATOMIC_OPEN:               sp_fs_atomic_open(&af, path); break;
-    case OP_ATOMIC_OPEN_STAGED:        sp_fs_atomic_open_staged(&af, path, sp_str_lit("S")); break;
   }
   sp_sys_set_vtable(saved);
 

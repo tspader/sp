@@ -4920,8 +4920,6 @@ typedef struct {
 
 SP_API sp_err_t        sp_fs_atomic_open(sp_fs_atomic_t* af, sp_str_t path);
 SP_API sp_err_t        sp_fs_atomic_open_at(sp_fs_atomic_t* af, sp_path_t path);
-SP_API sp_err_t        sp_fs_atomic_open_staged(sp_fs_atomic_t* af, sp_str_t path, sp_str_t staging);
-SP_API sp_err_t        sp_fs_atomic_open_staged_at(sp_fs_atomic_t* af, sp_path_t path, sp_str_t staging);
 SP_API sp_io_writer_t* sp_fs_atomic_writer(sp_fs_atomic_t* af);
 SP_API sp_err_t        sp_fs_atomic_sync(sp_fs_atomic_t* af);
 SP_API sp_err_t        sp_fs_atomic_commit(sp_fs_atomic_t* af, sp_fs_atomic_mode_t mode);
@@ -21095,11 +21093,12 @@ SP_API sp_err_t sp_fs_create_parent_at(sp_path_t path) {
   return err == SP_ERR_SYS_EXISTS ? SP_ERR_SYS_NOT_DIR : err;
 }
 
-SP_PRIVATE sp_err_t sp_fs_atomic_create(sp_fs_atomic_t* af, sp_sys_dir_t dir, sp_str_t path, sp_str_t temp_dir) {
+sp_err_t sp_fs_atomic_open_at(sp_fs_atomic_t* af, sp_path_t path) {
   *af = sp_zero_s(sp_fs_atomic_t);
-  af->dir = dir;
-  af->path = path;
+  af->dir = path.dir;
+  af->path = path.sub;
 
+  sp_str_t parent = sp_fs_parent_path(path.sub);
   u32 flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE;
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   sp_err_t err = SP_ERR_SYS_EXISTS;
@@ -21114,14 +21113,14 @@ SP_PRIVATE sp_err_t sp_fs_atomic_create(sp_fs_atomic_t* af, sp_sys_dir_t dir, sp
     sp_fmt_io(&io.base, ".{}.{}.tmp", sp_fmt_uint(stamp), sp_fmt_uint(sequence));
 
     sp_str_t leaf = sp_io_mem_writer_as_str(&io);
-    if (temp_dir.len + leaf.len + 1 >= SP_PATH_MAX) {
+    if (parent.len + leaf.len + 1 >= SP_PATH_MAX) {
       err = SP_ERR_SYS_NAME_TOO_LONG;
       break;
     }
 
     sp_mem_fixed_t fixed = sp_mem_fixed_ex(af->temp_buf, SP_PATH_MAX, 1);
-    af->temp = sp_fs_join_path(sp_mem_fixed_as_allocator(&fixed), temp_dir, leaf);
-    err = sp_sys_open_s(dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
+    af->temp = sp_fs_join_path(sp_mem_fixed_as_allocator(&fixed), parent, leaf);
+    err = sp_sys_open_s(path.dir, af->temp, SP_SYS_OPEN_MODE_WO, flags, &fd);
   }
   if (err) {
     *af = sp_zero_s(sp_fs_atomic_t);
@@ -21130,27 +21129,14 @@ SP_PRIVATE sp_err_t sp_fs_atomic_create(sp_fs_atomic_t* af, sp_sys_dir_t dir, sp
 
   err = sp_io_file_writer_from_fd(&af->writer, fd, SP_IO_CLOSE_MODE_AUTO);
   if (err) {
-    sp_sys_unlink_s(dir, af->temp);
+    sp_sys_unlink_s(path.dir, af->temp);
     *af = sp_zero_s(sp_fs_atomic_t);
   }
   return err;
 }
 
-sp_err_t sp_fs_atomic_open_at(sp_fs_atomic_t* af, sp_path_t path) {
-  return sp_fs_atomic_create(af, path.dir, path.sub, sp_fs_parent_path(path.sub));
-}
-
 sp_err_t sp_fs_atomic_open(sp_fs_atomic_t* af, sp_str_t path) {
   return sp_fs_atomic_open_at(af, sp_path_from_str(path));
-}
-
-sp_err_t sp_fs_atomic_open_staged_at(sp_fs_atomic_t* af, sp_path_t path, sp_str_t staging) {
-  sp_assert(!sp_str_empty(staging));
-  return sp_fs_atomic_create(af, path.dir, path.sub, staging);
-}
-
-sp_err_t sp_fs_atomic_open_staged(sp_fs_atomic_t* af, sp_str_t path, sp_str_t staging) {
-  return sp_fs_atomic_open_staged_at(af, sp_path_from_str(path), staging);
 }
 
 sp_io_writer_t* sp_fs_atomic_writer(sp_fs_atomic_t* af) {

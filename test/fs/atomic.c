@@ -122,136 +122,6 @@ static const test_t open_at_tests [] = {
   },
 };
 
-// The temp lives in a staging directory "S" under the sandbox, so the
-// destination's parent is first seen by the commit, not the open.
-static const test_t staged_tests [] = {
-  {
-    .name = "missing_parent_at_commit",
-    .setup = {
-      { "S", FS_SETUP_DIR },
-    },
-    .path = "A/B",
-    .content = "B",
-    .op = OP_REPLACE,
-    .expect = {
-      .err = SP_ERR_SYS_NOT_FOUND,
-      .paths = {
-        { .path = "A" },
-      },
-    },
-  },
-  {
-    .name = "exclusive_missing_parent_at_commit",
-    .setup = {
-      { "S", FS_SETUP_DIR },
-    },
-    .path = "A/B",
-    .content = "B",
-    .op = OP_EXCLUSIVE,
-    .expect = {
-      .err = SP_ERR_SYS_NOT_FOUND,
-      .paths = {
-        { .path = "A" },
-      },
-    },
-  },
-  {
-    .name = "exclusive_existing",
-    .setup = {
-      { "S", FS_SETUP_DIR },
-      { .path = "A", .content = "old" },
-    },
-    .path = "A",
-    .content = "new",
-    .op = OP_EXCLUSIVE,
-    .expect = {
-      .err = SP_ERR_SYS_EXISTS,
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "old" },
-      },
-    },
-  },
-  {
-    .name = "parent_is_file",
-    .setup = {
-      { "S", FS_SETUP_DIR },
-      { .path = "P", .content = "P" },
-    },
-    .path = "P/B",
-    .content = "B",
-    .op = OP_REPLACE,
-    .expect = {
-      .err = SP_ERR_SYS_NOT_DIR,
-      .paths = {
-        { .path = "P", .exists = true, .kind = SP_FS_KIND_FILE, .content = "P" },
-      },
-    },
-  },
-  {
-    .name = "exclusive_parent_is_file",
-    .setup = {
-      { "S", FS_SETUP_DIR },
-      { .path = "P", .content = "P" },
-    },
-    .path = "P/B",
-    .content = "B",
-    .op = OP_EXCLUSIVE,
-    .expect = {
-      .err = SP_ERR_SYS_NOT_DIR,
-      .paths = {
-        { .path = "P", .exists = true, .kind = SP_FS_KIND_FILE, .content = "P" },
-      },
-    },
-  },
-  {
-    .name = "staging_is_file",
-    .setup = {
-      { .path = "S", .content = "S" },
-    },
-    .path = "A",
-    .content = "A",
-    .op = OP_REPLACE,
-    .expect = {
-      // a file in the parent chain: POSIX reports ENOTDIR, NT reports PATH_NOT_FOUND
-#if defined(SP_WIN32)
-      .err = SP_ERR_SYS_NOT_FOUND,
-#else
-      .err = SP_ERR_SYS_NOT_DIR,
-#endif
-      .paths = {
-        { .path = "S", .exists = true, .kind = SP_FS_KIND_FILE, .content = "S" },
-      },
-    },
-  },
-  {
-    .name = "abort_leaves_nothing",
-    .setup = {
-      { "S", FS_SETUP_DIR },
-    },
-    .path = "A/B",
-    .content = "B",
-    .op = OP_ABORT,
-    .expect = {
-      .paths = {
-        { .path = "A" },
-        { .path = "A/B" },
-      },
-    },
-  },
-};
-
-static sp_err_t drive(sp_fs_atomic_t* af, sp_err_t err, const test_t* it) {
-  if (!err) err = sp_io_write_str(sp_fs_atomic_writer(af), sp_cstr_as_str(it->content), SP_NULLPTR);
-  if (!err) {
-    switch (it->op) {
-      case OP_REPLACE:   err = sp_fs_atomic_commit(af, SP_FS_ATOMIC_REPLACE); break;
-      case OP_EXCLUSIVE: err = sp_fs_atomic_commit(af, SP_FS_ATOMIC_EXCLUSIVE); break;
-      case OP_ABORT:     err = sp_fs_atomic_abort(af); break;
-    }
-  }
-  return err;
-}
-
 sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
@@ -260,26 +130,15 @@ sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   sp_fs_atomic_t af = sp_zero;
-  sp_err_t err = drive(&af, sp_fs_atomic_open_at(&af, sp_path(dir, sp_cstr_as_str(it->path))), it);
-  sp_fs_close_dir(dir);
-
-  sp_expect_err_eq(t, err, it->expect.err);
-  fs_expect_paths(t, sandbox, it->expect.paths);
-  fs_expect_no_temps(t, sandbox);
-  return SP_OK;
-}
-
-sp_test_each(fs, atomic_staged, test_t, staged_tests) {
-  sp_path_t sandbox = sp_test_dir(t);
-  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
-
-  sp_sys_dir_t dir = sp_zero;
-  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
-
-  sp_path_t path = sp_path(dir, sp_cstr_as_str(it->path));
-
-  sp_fs_atomic_t af = sp_zero;
-  sp_err_t err = drive(&af, sp_fs_atomic_open_staged_at(&af, path, sp_str_lit("S")), it);
+  sp_err_t err = sp_fs_atomic_open_at(&af, sp_path(dir, sp_cstr_as_str(it->path)));
+  if (!err) err = sp_io_write_str(sp_fs_atomic_writer(&af), sp_cstr_as_str(it->content), SP_NULLPTR);
+  if (!err) {
+    switch (it->op) {
+      case OP_REPLACE:   err = sp_fs_atomic_commit(&af, SP_FS_ATOMIC_REPLACE); break;
+      case OP_EXCLUSIVE: err = sp_fs_atomic_commit(&af, SP_FS_ATOMIC_EXCLUSIVE); break;
+      case OP_ABORT:     err = sp_fs_atomic_abort(&af); break;
+    }
+  }
   sp_fs_close_dir(dir);
 
   sp_expect_err_eq(t, err, it->expect.err);
