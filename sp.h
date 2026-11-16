@@ -21224,16 +21224,8 @@ sp_err_t sp_fs_write_slice_at(sp_path_t path, sp_mem_slice_t slice, sp_fs_write_
       return sp_fs_write_in_place(path, slice, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_APPEND);
     }
     case SP_FS_WRITE_REPLACE: {
-      c8 buf [SP_PATH_MAX];
       sp_sys_file_meta_t meta = sp_zero;
       sp_err_t err = sp_fs_get_link_metadata_at(path, &meta);
-      if (!err && meta.kind == SP_FS_KIND_SYMLINK) {
-        sp_mem_fixed_t fixed = sp_mem_fixed_ex(buf, SP_PATH_MAX, 1);
-        sp_str_t target = sp_zero;
-        sp_try(sp_fs_canonicalize_path_at(sp_mem_fixed_as_allocator(&fixed), path, &target));
-        path = sp_path_from_str(target);
-        err = sp_fs_get_link_metadata_at(path, &meta);
-      }
       if (err && err != SP_ERR_SYS_NOT_FOUND) return err;
 
       sp_fs_atomic_t af = sp_zero;

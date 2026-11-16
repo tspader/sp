@@ -210,23 +210,23 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "replace_through_symlink",
+    .name = "replace_symlink",
     .setup = {
-      { .path = "D/T", .content = "T" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "D/T" },
+      { .path = "T", .content = "T" },
+      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
     },
     .path = "L",
     .content = "A",
     .mode = SP_FS_WRITE_REPLACE,
     .expect = {
       .paths = {
-        { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "D/T" },
-        { .path = "D/T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+        { .path = "L", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+        { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "T" },
       },
     },
   },
   {
-    .name = "replace_through_dangling_symlink",
+    .name = "replace_dangling_symlink",
     .setup = {
       { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
     },
@@ -234,9 +234,8 @@ static const test_t tests [] = {
     .content = "A",
     .mode = SP_FS_WRITE_REPLACE,
     .expect = {
-      .err = SP_ERR_SYS_NOT_FOUND,
       .paths = {
-        { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
+        { .path = "L", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
         { .path = "T" },
       },
     },
