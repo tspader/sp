@@ -7551,6 +7551,7 @@ sp_nt_status_t sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32 s
     &handle, access, &attr, &iosb, SP_NULLPTR,
     file_attr, share, disposition, options, SP_NULLPTR, 0
   );
+  if (disposition == SP_NT_FILE_CREATE && status == SP_NT_STATUS_FILE_IS_A_DIRECTORY) return SP_NT_STATUS_OBJECT_NAME_COLLISION;
 
   if (SP_NT_SUCCESS(status)) *out = (sp_sys_fd_t)handle;
   return status;
@@ -21320,7 +21321,9 @@ SP_PRIVATE sp_err_t sp_fs_write_in_place(sp_path_t path, sp_mem_slice_t slice, u
   sp_io_stream_writer_from_fd(&writer, fd, SP_IO_CLOSE_MODE_AUTO);
   sp_err_t written = sp_io_write_all(&writer.base, slice.data, slice.len, SP_NULLPTR);
   sp_err_t closed = sp_io_stream_writer_close(&writer);
-  return written ? written : closed;
+  sp_err_t err = written ? written : closed;
+  if (err && (flags & SP_SYS_OPEN_EXCLUSIVE)) sp_sys_unlink_s(path.dir, path.sub);
+  return err;
 }
 
 SP_PRIVATE sp_err_t sp_fs_write_in_temp(sp_path_t path, sp_mem_slice_t slice, sp_fs_atomic_mode_t mode, sp_sys_file_perms_t perms) {
@@ -21338,7 +21341,7 @@ SP_PRIVATE sp_err_t sp_fs_write_in_temp(sp_path_t path, sp_mem_slice_t slice, sp
 sp_err_t sp_fs_write_slice_at(sp_path_t path, sp_mem_slice_t slice, sp_fs_write_mode_t mode, sp_sys_file_perms_t perms) {
   switch (mode) {
     case SP_FS_WRITE_TRUNCATE:  return sp_fs_write_in_place(path, slice, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE, perms);
-    case SP_FS_WRITE_NEW:       return SP_ERR_SYS_UNSUPPORTED;
+    case SP_FS_WRITE_NEW:       return sp_fs_write_in_place(path, slice, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE, perms);
     case SP_FS_WRITE_REPLACE:   return sp_fs_write_in_temp(path, slice, SP_FS_ATOMIC_REPLACE, perms);
     case SP_FS_WRITE_EXCLUSIVE: return sp_fs_write_in_temp(path, slice, SP_FS_ATOMIC_EXCLUSIVE, perms);
   }

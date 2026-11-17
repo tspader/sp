@@ -144,6 +144,15 @@ static const sys_case_t sys_open_cases [] = {
     },
   },
   {
+    .name = "excl_refuses_directory",
+    .setup = {
+      { .path = "D", .kind = SYS_SETUP_DIR },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "D", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE, .err = SP_ERR_SYS_EXISTS } },
+    },
+  },
+  {
     .name = "excl_implies_create",
     .steps = {
       { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_EXCLUSIVE } },
