@@ -34,6 +34,8 @@ static const test_t tests [] = {
 };
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
+  if (!c->expect.err) sp_test_skip_without_fine_timestamps();
+
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t a = sp_path_join(mem, sandbox, sp_str_lit("A"));

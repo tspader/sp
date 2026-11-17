@@ -140,6 +140,7 @@ static const test_t tests [] = {
 
 sp_test_each(fs, it, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
+  if (fs_setup_needs_reparse_points(it->setup)) reparse_skip_unless_supported();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);

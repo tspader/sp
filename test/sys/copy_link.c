@@ -72,12 +72,14 @@ sp_test_each(sys, copy_link, test_t, tests) {
     }
 #if defined(SP_WIN32)
     case SETUP_JUNCTION: {
+      reparse_skip_unless_supported();
       sp_str_t root = sp_zero;
       sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sandbox, &root));
       sp_must_ok(t, reparse_create_junction(mem, from, sp_fs_join_path(mem, root, sp_str_lit("A"))));
       break;
     }
     case SETUP_STUB: {
+      reparse_skip_unless_supported();
       sp_must_ok(t, reparse_create_stub(mem, from, SP_FS_KIND_FILE));
       break;
     }

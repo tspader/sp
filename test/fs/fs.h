@@ -92,6 +92,38 @@ static bool fs_setup_needs_symlinks(const fs_setup_t setup [FS_MAX_SETUP]) {
   return false;
 }
 
+static bool fs_setup_needs_hard_links(const fs_setup_t setup [FS_MAX_SETUP]) {
+  sp_for(it, FS_MAX_SETUP) {
+    if (!setup[it].path) break;
+    if (setup[it].kind == FS_SETUP_HARD_LINK) return true;
+  }
+  return false;
+}
+
+static bool fs_setup_needs_junctions(const fs_setup_t setup [FS_MAX_SETUP]) {
+#if defined(SP_WIN32)
+  sp_for(it, FS_MAX_SETUP) {
+    if (!setup[it].path) break;
+    if (setup[it].kind == FS_SETUP_JUNCTION) return true;
+  }
+#else
+  (void)setup;
+#endif
+  return false;
+}
+
+static bool fs_setup_needs_reparse_points(const fs_setup_t setup [FS_MAX_SETUP]) {
+#if defined(SP_WIN32)
+  sp_for(it, FS_MAX_SETUP) {
+    if (!setup[it].path) break;
+    if (setup[it].kind == FS_SETUP_JUNCTION || setup[it].kind == FS_SETUP_STUB_DIR) return true;
+  }
+#else
+  (void)setup;
+#endif
+  return false;
+}
+
 static void fs_expect_kind(sp_test_t* t, sp_str_t path, sp_fs_kind_t actual, sp_fs_kind_t expected) {
   if (actual == expected) return;
 

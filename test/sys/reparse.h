@@ -3,6 +3,7 @@
 
 #define SP_PRIVATE_HEADER
 #include "sp.h"
+#include "sp/sp_test.h"
 
 #if defined(SP_WIN32)
 
@@ -43,9 +44,12 @@ static sp_err_t reparse_set(sp_mem_t mem, sp_path_t path, void* data, u32 len) {
   if (handle == INVALID_HANDLE_VALUE) return SP_ERR_SYS;
 
   DWORD returned = 0;
-  BOOL ok = DeviceIoControl(handle, SP_NT_FSCTL_SET_REPARSE_POINT, data, len, SP_NULLPTR, 0, &returned, SP_NULLPTR);
+  sp_err_t err = SP_OK;
+  if (!DeviceIoControl(handle, SP_NT_FSCTL_SET_REPARSE_POINT, data, len, SP_NULLPTR, 0, &returned, SP_NULLPTR)) {
+    err = GetLastError() == ERROR_INVALID_FUNCTION ? SP_ERR_SYS_UNSUPPORTED : SP_ERR_SYS;
+  }
   CloseHandle(handle);
-  return ok ? SP_OK : SP_ERR_SYS;
+  return err;
 }
 
 static sp_err_t reparse_get_tag(sp_mem_t mem, sp_path_t path, u32* tag) {
@@ -105,6 +109,33 @@ static sp_err_t reparse_create_stub(sp_mem_t mem, sp_path_t path, sp_fs_kind_t k
   };
   return reparse_set(mem, path, &stub, sizeof(stub));
 }
+
+static bool reparse_supported(sp_test_t* t) {
+  sp_mem_t mem = sp_test_arena(t);
+  sp_path_t probe = sp_path_join(mem, sp_test_dir(t), sp_str_lit("R"));
+  sp_err_t err = reparse_create_stub(mem, probe, SP_FS_KIND_FILE);
+  sp_fs_remove_file_at(probe);
+  return err != SP_ERR_SYS_UNSUPPORTED;
+}
+
+static bool reparse_on_network_path(sp_test_t* t) {
+  static const u16 unc [] = { '\\', '?', '?', '\\', 'U', 'N', 'C', '\\' };
+  sp_mem_t mem = sp_test_arena(t);
+  sp_str_t root = sp_zero;
+  if (sp_fs_canonicalize_path_at(mem, sp_test_dir(t), &root)) return false;
+
+  sp_sys_nt_path_t* nt = sp_alloc_type(mem, sp_sys_nt_path_t);
+  if (!SP_NT_SUCCESS(sp_sys_nt_path(root, nt))) return false;
+  return nt->name.Length >= sizeof(unc) && sp_mem_is_equal(nt->name.Buffer, unc, sizeof(unc));
+}
+
+#define reparse_skip_unless_supported() if (!reparse_supported(t)) return sp_test_skip(t, "reparse points not available");
+#define reparse_skip_on_network_path() if (reparse_on_network_path(t)) return sp_test_skip(t, "a junction cannot target a network path");
+
+#else
+
+#define reparse_skip_unless_supported() ((void)0)
+#define reparse_skip_on_network_path() ((void)0)
 
 #endif
 

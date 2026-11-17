@@ -70,6 +70,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     }
 #if defined(SP_WIN32)
     case SETUP_JUNCTION: {
+      reparse_skip_unless_supported();
       sp_str_t root = sp_zero;
       sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sandbox, &root));
       expected = sp_fs_join_path(mem, root, sp_cstr_as_str(c->target));
@@ -77,6 +78,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case SETUP_STUB: {
+      reparse_skip_unless_supported();
       sp_must_ok(t, reparse_create_stub(mem, path, SP_FS_KIND_FILE));
       break;
     }

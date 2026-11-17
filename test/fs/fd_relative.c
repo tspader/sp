@@ -118,6 +118,7 @@ sp_test_each(fs, fd_relative, test_t, tests) {
 #endif
   if (it->op == OP_OPEN_ABS) sp_test_skip_without_absolute_names();
   if (it->parent) sp_test_skip_without_parent_names();
+  if (it->op == OP_LINK) sp_test_skip_without_hard_links();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);

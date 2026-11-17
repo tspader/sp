@@ -124,6 +124,8 @@ static bool same_file(sp_path_t a, sp_path_t b) {
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_test_skip_on_wasm()
+  if (c->alias) sp_test_skip_without_hard_links();
+  if (c->fate == FATE_REPLACED) sp_test_skip_without_posix_unlink();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);

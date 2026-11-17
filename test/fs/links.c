@@ -119,6 +119,8 @@ static const sym_t sym_links [] = {
 };
 
 sp_test_each(fs, hard_link, hard_t, hard_links) {
+  if (it->err != SP_ERR_SYS_UNSUPPORTED) sp_test_skip_without_hard_links();
+
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));

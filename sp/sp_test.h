@@ -382,6 +382,9 @@ typedef struct {
 #endif
 
 #define sp_test_skip_without_symlinks() if (!sp_test_symlinks_supported(t)) return sp_test_skip(t, "symlinks not available");
+#define sp_test_skip_without_hard_links() if (!sp_test_hard_links_supported(t)) return sp_test_skip(t, "hard links not available");
+#define sp_test_skip_without_posix_unlink() if (!sp_test_posix_unlink_supported(t)) return sp_test_skip(t, "an unlinked name stays taken while the file is open");
+#define sp_test_skip_without_fine_timestamps() if (!sp_test_fine_timestamps_supported(t)) return sp_test_skip(t, "timestamps lose their nanoseconds");
 
 SP_API sp_err_t    sp_test_skip(sp_test_t* t, const c8* fmt, ...);
 SP_API void        sp_test_fail(sp_test_t* t, const c8* fmt, ...);
@@ -421,6 +424,9 @@ SP_TYPEDEF_FN(sp_err_t, sp_test_once_fn_t, void* user);
 SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user);
 
 SP_API bool        sp_test_symlinks_supported(sp_test_t* t);
+SP_API bool        sp_test_hard_links_supported(sp_test_t* t);
+SP_API bool        sp_test_posix_unlink_supported(sp_test_t* t);
+SP_API bool        sp_test_fine_timestamps_supported(sp_test_t* t);
 
 
 typedef enum {
@@ -750,6 +756,9 @@ struct sp_test_runner_t {
   sp_da(const c8*) updated;
   sp_path_t dir_root;
   sp_test_once_t symlinks;
+  sp_test_once_t hard_links;
+  sp_test_once_t posix_unlink;
+  sp_test_once_t fine_timestamps;
   sp_path_t golden_root;
   bool update;
   sp_test_keep_t keep;
@@ -1077,6 +1086,70 @@ static sp_err_t sp_test_probe_symlinks(void* user) {
 
 bool sp_test_symlinks_supported(sp_test_t* t) {
   return !sp_test_once(&t->runner->symlinks, sp_test_probe_symlinks, t->runner);
+}
+
+static sp_err_t sp_test_probe_hard_links(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t file = sp_path_join(s.mem, runner->dir_root, sp_str_lit("H"));
+  sp_path_t link = sp_path_join(s.mem, runner->dir_root, sp_str_lit("K"));
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+  if (!err) {
+    err = sp_fs_create_hard_link_at(file, link);
+    sp_fs_remove_file_at(link);
+    sp_fs_remove_file_at(file);
+  }
+  sp_mem_end_scratch(s);
+  return err;
+}
+
+bool sp_test_hard_links_supported(sp_test_t* t) {
+  return sp_test_once(&t->runner->hard_links, sp_test_probe_hard_links, t->runner) != SP_ERR_SYS_UNSUPPORTED;
+}
+
+static sp_err_t sp_test_probe_posix_unlink(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t file = sp_path_join(s.mem, runner->dir_root, sp_str_lit("U"));
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+  if (!err) err = sp_sys_open_s(file.dir, file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd);
+  if (!err) {
+    err = sp_sys_unlink_s(file.dir, file.sub);
+    if (!err) err = sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+    sp_sys_close(fd);
+    sp_fs_remove_file_at(file);
+  }
+  sp_mem_end_scratch(s);
+  return err;
+}
+
+bool sp_test_posix_unlink_supported(sp_test_t* t) {
+  return sp_test_once(&t->runner->posix_unlink, sp_test_probe_posix_unlink, t->runner) != SP_ERR_SYS_BUSY;
+}
+
+static sp_err_t sp_test_probe_fine_timestamps(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t file = sp_path_join(s.mem, runner->dir_root, sp_str_lit("T"));
+  sp_sys_timespec_t time = { .tv_sec = 1000000000, .tv_nsec = 100 };
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+  if (!err) {
+    err = sp_sys_set_times_s(file.dir, file.sub, time, time);
+    if (!err) err = sp_sys_get_path_metadata_s(file.dir, file.sub, &meta);
+    sp_fs_remove_file_at(file);
+  }
+  sp_mem_end_scratch(s);
+  if (err) return SP_OK;
+  return meta.mtime.tv_nsec == time.tv_nsec ? SP_OK : SP_ERR_SYS_UNSUPPORTED;
+}
+
+bool sp_test_fine_timestamps_supported(sp_test_t* t) {
+  return sp_test_once(&t->runner->fine_timestamps, sp_test_probe_fine_timestamps, t->runner) != SP_ERR_SYS_UNSUPPORTED;
 }
 
 

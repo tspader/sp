@@ -63,6 +63,8 @@ static const test_t tests [] = {
 };
 
 sp_test_each(sys, reparse, test_t, tests) {
+  reparse_skip_unless_supported();
+
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t entry = sp_path_join(mem, sandbox, sp_str_lit("E"));
@@ -73,12 +75,14 @@ sp_test_each(sys, reparse, test_t, tests) {
   sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sandbox, &root));
   switch (it->entry) {
     case ENTRY_JUNCTION: {
+      reparse_skip_on_network_path();
       sp_must_ok(t, sp_fs_create_dir_at(target));
       sp_must_ok(t, sp_fs_write_at(child, sp_str_lit("C"), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       sp_must_ok(t, reparse_create_junction(mem, entry, sp_fs_join_path(mem, root, sp_str_lit("T"))));
       break;
     }
     case ENTRY_DANGLING_JUNCTION: {
+      reparse_skip_on_network_path();
       sp_must_ok(t, reparse_create_junction(mem, entry, sp_fs_join_path(mem, root, sp_str_lit("T"))));
       break;
     }

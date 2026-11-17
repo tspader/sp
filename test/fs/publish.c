@@ -104,6 +104,8 @@ static sp_err_t probed_link(sp_sys_dir_t from_dir, const c8* existing, u32 exist
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
+  if (c->rename == SP_ERR_SYS_UNSUPPORTED && !c->link) sp_test_skip_without_hard_links();
+
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, c->setup));
   sp_path_t path = sp_path_join(sp_test_arena(t), sandbox, sp_str_lit("A"));
