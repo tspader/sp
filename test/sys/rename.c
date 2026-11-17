@@ -39,6 +39,19 @@ static const sys_case_t tests [] = {
     },
   },
   {
+    .name = "refuses_file_onto_directory",
+    .setup = {
+      { .path = "A", .content = "A" },
+      { .path = "B", .kind = SYS_SETUP_DIR },
+    },
+    .steps = {
+      { .kind = SYS_STEP_RENAME, .rename = { .from = "A", .to = "B", .err = SP_ERR_SYS_IS_DIR } },
+    },
+    .expect = {
+      { .path = "A", .exists = true, .content = "A" },
+    },
+  },
+  {
     .name = "renames_directory",
     .setup = {
       { .path = "D", .kind = SYS_SETUP_DIR },

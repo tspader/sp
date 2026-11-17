@@ -7663,6 +7663,40 @@ SP_PRIVATE sp_err_t sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, bool dir) {
   return sp_sys_err_from_nt(status);
 }
 
+SP_PRIVATE sp_nt_status_t sp_sys_nt_rename_legacy(sp_sys_fd_t handle, sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to, sp_nt_file_rename_information_t* info, u32 info_bytes, u32 info_class) {
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, info_class);
+  if (!info->ReplaceIfExists) return status;
+  if (status != SP_NT_STATUS_OBJECT_NAME_COLLISION && status != SP_NT_STATUS_ACCESS_DENIED) return status;
+
+  sp_sys_file_meta_t dest = sp_zero;
+  if (sp_sys_get_link_metadata_p(sp_sys_dir(to_fd), to.data, to.len, &dest)) return status;
+
+  switch (dest.kind) {
+    case SP_FS_KIND_DIR: {
+      sp_sys_file_meta_t source = sp_zero;
+      if (sp_sys_get_link_metadata_p(sp_sys_dir(from_fd), from.data, from.len, &source)) return status;
+      return source.kind == SP_FS_KIND_DIR ? status : SP_NT_STATUS_FILE_IS_A_DIRECTORY;
+    }
+    case SP_FS_KIND_FILE: {
+      if (!sp_sys_is_read_only(dest.perms)) return status;
+      sp_sys_file_perms_t writable = dest.perms;
+      sp_sys_set_read_only(&writable, false);
+      if (sp_sys_set_file_perms_p(sp_sys_dir(to_fd), to.data, to.len, writable)) return status;
+
+      sp_nt_status_t retried = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, info_class);
+      if (!SP_NT_SUCCESS(retried)) sp_sys_set_file_perms_p(sp_sys_dir(to_fd), to.data, to.len, dest.perms);
+      return retried;
+    }
+    case SP_FS_KIND_SYMLINK:
+    case SP_FS_KIND_UNKNOWN:
+    case SP_FS_KIND_NONE: {
+      return status;
+    }
+  }
+  SP_UNREACHABLE_RETURN(status);
+}
+
 SP_PRIVATE sp_nt_status_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to, u32 access, u32 flags, u32 info_class, u32 legacy_info_class) {
   SP_ALIGNED u16 path_buf [SP_PATH_MAX + 1];
   SP_ALIGNED u8 info_buf [sizeof(sp_nt_file_rename_information_t) + SP_PATH_MAX * sizeof(u16)];
@@ -7705,7 +7739,7 @@ SP_PRIVATE sp_nt_status_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t 
   if (legacy_info_class && sp_sys_nt_needs_legacy_info(status)) {
     info->Flags = 0;
     info->ReplaceIfExists = (flags & SP_NT_FILE_RENAME_REPLACE_IF_EXISTS) ? 1 : 0;
-    status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, legacy_info_class);
+    status = sp_sys_nt_rename_legacy(handle, from_fd, from, to_fd, to, info, info_bytes, legacy_info_class);
   }
 
   sp_sys_nt_close(handle);
