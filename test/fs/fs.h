@@ -3,6 +3,7 @@
 
 #include "sp.h"
 #include "sp/sp_test.h"
+#include "test/sys/reparse.h"
 
 #if defined(SP_POSIX)
   #include "sys/stat.h"
@@ -24,6 +25,10 @@ typedef enum {
   FS_SETUP_SYMLINK,
   FS_SETUP_DIR_SYMLINK,
   FS_SETUP_FIFO,
+#if defined(SP_WIN32)
+  FS_SETUP_JUNCTION,
+  FS_SETUP_STUB_DIR,
+#endif
 } fs_setup_kind_t;
 
 typedef struct {
@@ -41,6 +46,9 @@ typedef struct {
   sp_fs_kind_t kind;
   const c8* content;
   const c8* target;
+#if defined(SP_WIN32)
+  bool junction;
+#endif
 } fs_expected_path_t;
 
 static bool fs_setup_needs_symlinks(const fs_setup_t setup [FS_MAX_SETUP]) {
@@ -113,6 +121,18 @@ static sp_err_t fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t
         sp_try(sp_fs_create_sym_link_at(sp_cstr_as_str(ent->target), path, kind));
         break;
       }
+#if defined(SP_WIN32)
+      case FS_SETUP_JUNCTION: {
+        sp_str_t root = sp_zero;
+        sp_try(sp_fs_canonicalize_path_at(mem, sandbox, &root));
+        sp_try(reparse_create_junction(mem, path, sp_fs_join_path(mem, root, sp_cstr_as_str(ent->target))));
+        break;
+      }
+      case FS_SETUP_STUB_DIR: {
+        sp_try(reparse_create_stub(mem, path, SP_FS_KIND_DIR));
+        break;
+      }
+#endif
       case FS_SETUP_FIFO: {
 #if defined(SP_POSIX)
         sp_str_t dir = sp_zero;
@@ -205,6 +225,14 @@ static void fs_expect_paths(sp_test_t* t, sp_path_t sandbox, const fs_expected_p
       sp_expect_ok(t, sp_sys_readlink_s(path.dir, path.sub, buf, sizeof(buf), &actual));
       sp_expect_str_eq_c(t, sp_fs_normalize_path(mem, actual), info->target);
     }
+
+#if defined(SP_WIN32)
+    if (info->junction) {
+      u32 tag = 0;
+      sp_expect_ok(t, reparse_get_tag(mem, path, &tag));
+      sp_expect_eq(t, tag, (u32)SP_NT_IO_REPARSE_TAG_MOUNT_POINT);
+    }
+#endif
   }
 }
 
