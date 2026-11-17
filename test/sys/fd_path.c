@@ -179,7 +179,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case FATE_RENAMED: {
-      sp_must_ok(t, sp_sys_rename_s(path.dir, path.sub, other.dir, other.sub));
+      sp_must_ok(t, sp_sys_rename_s(path.dir, path.sub, other.dir, other.sub, 0));
       break;
     }
     case FATE_REPLACED: {

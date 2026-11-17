@@ -69,6 +69,79 @@ static const sys_case_t tests [] = {
       { .path = "E/B", .exists = true, .content = "A" },
     },
   },
+#if defined(SP_WASM)
+  {
+    .name = "no_replace_unsupported",
+    .setup = {
+      { .path = "A", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_RENAME, .rename = { .from = "A", .to = "B", .flags = SP_SYS_RENAME_NO_REPLACE, .err = SP_ERR_SYS_UNSUPPORTED } },
+    },
+    .expect = {
+      { .path = "A", .exists = true, .content = "A" },
+      { .path = "B" },
+    },
+  },
+#else
+  {
+    .name = "no_replace_moves_to_free_name",
+    .setup = {
+      { .path = "A", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_RENAME, .rename = { .from = "A", .to = "B", .flags = SP_SYS_RENAME_NO_REPLACE } },
+    },
+    .expect = {
+      { .path = "A" },
+      { .path = "B", .exists = true, .content = "A" },
+    },
+  },
+  {
+    .name = "no_replace_refuses_file",
+    .setup = {
+      { .path = "A", .content = "A" },
+      { .path = "B", .content = "B" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_RENAME, .rename = { .from = "A", .to = "B", .flags = SP_SYS_RENAME_NO_REPLACE, .err = SP_ERR_SYS_EXISTS } },
+    },
+    .expect = {
+      { .path = "A", .exists = true, .content = "A" },
+      { .path = "B", .exists = true, .content = "B" },
+    },
+  },
+  {
+    .name = "no_replace_refuses_directory",
+    .setup = {
+      { .path = "A", .content = "A" },
+      { .path = "B", .kind = SYS_SETUP_DIR },
+      { .path = "B/C", .content = "C" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_RENAME, .rename = { .from = "A", .to = "B", .flags = SP_SYS_RENAME_NO_REPLACE, .err = SP_ERR_SYS_EXISTS } },
+    },
+    .expect = {
+      { .path = "A", .exists = true, .content = "A" },
+      { .path = "B/C", .exists = true, .content = "C" },
+    },
+  },
+  {
+    .name = "no_replace_refuses_symlink",
+    .setup = {
+      { .path = "A", .content = "A" },
+      { .path = "T", .content = "T" },
+      { .path = "B", .kind = SYS_SETUP_SYMLINK, .target = "T" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_RENAME, .rename = { .from = "A", .to = "B", .flags = SP_SYS_RENAME_NO_REPLACE, .err = SP_ERR_SYS_EXISTS } },
+    },
+    .expect = {
+      { .path = "A", .exists = true, .content = "A" },
+      { .path = "B", .exists = true, .content = "T" },
+    },
+  },
+#endif
 };
 
 sp_test_each_fn(sys, rename, sys_case_t, tests, sys_case_run);

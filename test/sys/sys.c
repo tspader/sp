@@ -164,7 +164,8 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
       case SYS_STEP_RENAME: {
         sp_err_t err = sp_sys_rename_s(
           sys_step_dir(sandbox_dir, fds, step->rename.from_dir), sp_cstr_as_str(step->rename.from),
-          sys_step_dir(sandbox_dir, fds, step->rename.to_dir), sp_cstr_as_str(step->rename.to)
+          sys_step_dir(sandbox_dir, fds, step->rename.to_dir), sp_cstr_as_str(step->rename.to),
+          step->rename.flags
         );
         sys_check_err(t, err, step->rename.err);
         break;

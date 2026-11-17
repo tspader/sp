@@ -152,7 +152,7 @@ sp_test_each(fs, fd_relative, test_t, tests) {
       break;
     }
     case OP_RENAME: {
-      sp_expect_ok(t, sp_sys_rename_s(cwd, sp_cstr_as_str(it->path), cwd, sp_cstr_as_str(it->dest)));
+      sp_expect_ok(t, sp_sys_rename_s(cwd, sp_cstr_as_str(it->path), cwd, sp_cstr_as_str(it->dest), 0));
       break;
     }
     case OP_LINK: {

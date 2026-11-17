@@ -56,7 +56,7 @@ typedef struct {
     struct { u32 slot; const c8* data; sp_err_t err; } write;
     struct { u32 slot; const c8* data; u64 offset; sp_err_t err; } pwrite;
     struct { u32 slot; sp_err_t err; } sync;
-    struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; sp_err_t err; } rename;
+    struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; u32 flags; sp_err_t err; } rename;
   };
 } sys_step_t;
 
