@@ -144,7 +144,7 @@ static sp_err_t fs_create_deep_tree(sp_path_t root) {
     sp_try(err);
     cur = next;
   }
-  sp_err_t err = sp_fs_create_file_at(sp_path(cur, sp_str_lit("F")));
+  sp_err_t err = sp_fs_write_at(sp_path(cur, sp_str_lit("F")), sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
   sp_fs_close_dir(cur);
   return err;
 }

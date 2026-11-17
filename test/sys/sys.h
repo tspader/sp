@@ -20,7 +20,7 @@ static void sys_probe_symlinks(sp_test_file_manager_t* fm) {
 
   sp_str_t target = sp_test_file_path_c(fm, ".sys_symlink_probe_target");
   sp_str_t link = sp_test_file_path_c(fm, ".sys_symlink_probe_link");
-  sp_fs_create_file(target);
+  sp_fs_write(target, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
   sys_symlinks_available = sp_fs_create_sym_link(target, link, SP_FS_KIND_FILE) == SP_OK;
   if (sys_symlinks_available) sp_fs_remove_file(link);
   sp_fs_remove_file(target);

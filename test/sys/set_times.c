@@ -40,7 +40,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 
   switch (c->setup) {
     case SETUP_FILE: {
-      sp_must_ok(t, sp_fs_create_file_at(a));
+      sp_must_ok(t, sp_fs_write_at(a, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       break;
     }
     case SETUP_DIR: {
@@ -49,7 +49,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     }
     case SETUP_LINK: {
       sp_test_skip_without_symlinks();
-      sp_must_ok(t, sp_fs_create_file_at(a));
+      sp_must_ok(t, sp_fs_write_at(a, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       sp_must_ok(t, sp_fs_create_sym_link_at(sp_str_lit("A"), sp_path_join(mem, sandbox, sp_str_lit("L")), SP_FS_KIND_FILE));
       break;
     }

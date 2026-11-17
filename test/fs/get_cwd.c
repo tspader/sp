@@ -56,7 +56,7 @@ sp_test(fs, path_cwd_passes_through) {
   sp_test_skip_on_wasm()
 
   sp_path_t file = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
-  sp_must_ok(t, sp_fs_create_file_at(file));
+  sp_must_ok(t, sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
 
   sp_path_t path = sp_path_cwd(file.sub);
   sp_expect_eq(t, path.dir.fd, sp_fs_get_cwd().fd);

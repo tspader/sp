@@ -104,7 +104,7 @@ sp_test_each(fs, dir, test_t, tests) {
   }
   sp_for(b, it->bulk) {
     sp_str_t name = sp_fmt(mem, "{}{}", sp_fmt_cstr(BULK_PREFIX), sp_fmt_uint(b)).value;
-    sp_expect_ok(t, sp_fs_create_file_at(sp_path_join(mem, dir, name)));
+    sp_expect_ok(t, sp_fs_write_at(sp_path_join(mem, dir, name), sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
     matches[n++] = (fs_match_t) { .key = name, .kind = SP_FS_KIND_FILE };
   }
 

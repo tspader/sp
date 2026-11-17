@@ -303,7 +303,7 @@ sp_test_each(fs, remove, test_t, tests) {
   sp_path_t into = it->bulk.dir ? sp_path_join(mem, target, sp_cstr_as_str(it->bulk.dir)) : target;
   sp_for(b, it->bulk.count) {
     sp_str_t name = sp_fmt(mem, "R{}", sp_fmt_uint(b)).value;
-    sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, into, name)));
+    sp_must_ok(t, sp_fs_write_at(sp_path_join(mem, into, name), sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
   }
   sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(base, &dir));
@@ -336,7 +336,7 @@ sp_test(fs, remove_dir_unwritable_subdir_fails) {
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t locked = sp_path_join(mem, sandbox, sp_str_lit("A/B"));
   sp_must_ok(t, sp_fs_create_dir_at(locked));
-  sp_must_ok(t, sp_fs_create_file_at(sp_path_join(mem, sandbox, sp_str_lit("A/B/C"))));
+  sp_must_ok(t, sp_fs_write_at(sp_path_join(mem, sandbox, sp_str_lit("A/B/C")), sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
   sp_must_ok(t, sp_sys_set_file_perms_s(locked.dir, locked.sub, (sp_sys_file_perms_t) { .value = 0555 }));
 
   sp_err_t result = sp_fs_remove_dir_at(sp_path_join(mem, sandbox, sp_str_lit("A")));

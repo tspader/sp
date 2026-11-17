@@ -99,7 +99,7 @@ sp_test_each(runner, golden, test_t, tests) {
   sp_path_t golden = sp_path_join(mem, sandbox, sp_str_lit("S/G"));
   sp_path_t actual = sp_path_join(mem, sandbox, sp_str_lit("S/G.actual"));
   sp_must_ok(t, sp_fs_create_dir_at(sp_path_parent(mem, src)));
-  sp_must_ok(t, sp_fs_create_file_at(src));
+  sp_must_ok(t, sp_fs_write_at(src, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
   sp_str_t file = sp_str_lit("S/main.c");
   if (it->absolute) sp_must_ok(t, sp_fs_canonicalize_path_at(mem, src, &file));
   if (it->golden) sp_must_ok(t, sp_fs_write_cstr_at(golden, it->golden, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));

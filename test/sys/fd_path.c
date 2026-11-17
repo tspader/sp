@@ -137,9 +137,9 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   switch (c->target) {
     case TARGET_FILE: {
-      sp_must_ok(t, sp_fs_create_file_at(path));
+      sp_must_ok(t, sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       if (c->alias) sp_must_ok(t, sp_fs_create_hard_link_at(path, alias));
-      if (c->decoy) sp_must_ok(t, sp_fs_create_file_at(decoy));
+      if (c->decoy) sp_must_ok(t, sp_fs_write_at(decoy, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd));
       break;
     }
@@ -184,7 +184,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     }
     case FATE_REPLACED: {
       sp_must_ok(t, sp_sys_unlink_s(path.dir, path.sub));
-      sp_must_ok(t, sp_fs_create_file_at(path));
+      sp_must_ok(t, sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       break;
     }
   }

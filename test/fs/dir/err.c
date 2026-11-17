@@ -43,7 +43,7 @@ static const test_t tests [] = {
 
 sp_test_each(fs, dir_err, test_t, tests) {
   sp_path_t sandbox = sp_test_dir(t);
-  sp_must_ok(t, sp_fs_create_file_at(sp_path_join(sp_test_arena(t), sandbox, sp_str_lit("A"))));
+  sp_must_ok(t, sp_fs_write_at(sp_path_join(sp_test_arena(t), sandbox, sp_str_lit("A")), sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
 
   sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));

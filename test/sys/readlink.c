@@ -42,7 +42,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case SETUP_FILE: {
-      sp_must_ok(t, sp_fs_create_file_at(path));
+      sp_must_ok(t, sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       break;
     }
     case SETUP_LINK: {

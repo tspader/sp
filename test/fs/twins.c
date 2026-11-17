@@ -11,7 +11,6 @@ typedef enum {
   OP_CANONICALIZE_PATH,
   OP_READ,
   OP_CREATE_DIR,
-  OP_CREATE_FILE,
   OP_CREATE_HARD_LINK,
   OP_CREATE_SYM_LINK,
   OP_REMOVE_FILE,
@@ -40,7 +39,6 @@ static const test_t tests [] = {
   { .name = "canonicalize_path", .op = OP_CANONICALIZE_PATH },
   { .name = "read", .op = OP_READ },
   { .name = "create_dir", .op = OP_CREATE_DIR },
-  { .name = "create_file", .op = OP_CREATE_FILE },
   { .name = "create_hard_link", .op = OP_CREATE_HARD_LINK, .expect = { .alias = "G" } },
   { .name = "create_sym_link", .op = OP_CREATE_SYM_LINK },
   { .name = "remove_file", .op = OP_REMOVE_FILE },
@@ -144,7 +142,6 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case OP_CANONICALIZE_PATH:         sp_fs_canonicalize_path(mem, path, &str); break;
     case OP_READ:                      sp_fs_read(mem, path, &str); break;
     case OP_CREATE_DIR:                sp_fs_create_dir(path); break;
-    case OP_CREATE_FILE:               sp_fs_create_file(path); break;
     case OP_CREATE_HARD_LINK:          sp_fs_create_hard_link(path, other); break;
     case OP_CREATE_SYM_LINK:           sp_fs_create_sym_link(sp_str_lit("A"), path, SP_FS_KIND_FILE); break;
     case OP_REMOVE_FILE:               sp_fs_remove_file(path); break;
