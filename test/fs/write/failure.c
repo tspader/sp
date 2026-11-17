@@ -57,4 +57,4 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   return SP_OK;
 }
 
-sp_test_each_fn(fs, write_failure_sim, test_t, tests, run, .serial = true);
+sp_test_each_fn(fs, write_failure, test_t, tests, run, .serial = true);
