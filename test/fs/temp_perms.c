@@ -56,7 +56,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
   switch (c->op) {
     case OP_WRITE: err = sp_fs_write_at(to, sp_str_lit("A"), SP_FS_WRITE_REPLACE, read_only); break;
-    case OP_COPY:  err = sp_fs_copy_file_at(from, to, SP_FS_ATOMIC_REPLACE); break;
+    case OP_COPY:  err = sp_fs_copy_file_at(from, to, SP_FS_WRITE_REPLACE); break;
   }
   sp_sys_set_vtable(saved);
 

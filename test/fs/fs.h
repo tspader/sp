@@ -25,6 +25,7 @@ typedef enum {
   FS_SETUP_DIR,
   FS_SETUP_SYMLINK,
   FS_SETUP_DIR_SYMLINK,
+  FS_SETUP_HARD_LINK,
   FS_SETUP_FIFO,
 #if defined(SP_WIN32)
   FS_SETUP_JUNCTION,
@@ -151,6 +152,10 @@ static sp_err_t fs_apply_setup(sp_test_t* t, sp_path_t sandbox, const fs_setup_t
       case FS_SETUP_DIR_SYMLINK: {
         sp_fs_kind_t kind = ent->kind == FS_SETUP_DIR_SYMLINK ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
         sp_try(sp_fs_create_sym_link_at(sp_cstr_as_str(ent->target), path, kind));
+        break;
+      }
+      case FS_SETUP_HARD_LINK: {
+        sp_try(sp_fs_create_hard_link_at(sp_path_join(mem, sandbox, sp_cstr_as_str(ent->target)), path));
         break;
       }
 #if defined(SP_WIN32)
