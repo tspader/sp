@@ -11144,6 +11144,40 @@ sp_err_t sp_sys_link_s(sp_sys_dir_t from_dir, sp_str_t existing, sp_sys_dir_t to
   return sp_sys_link(from_dir, existing.data, existing.len, to_dir, alias.data, alias.len);
 }
 
+#if defined(SP_WIN32)
+SP_PRIVATE sp_err_t sp_sys_nt_create_reparse(sp_sys_fd_t dir, sp_str_t path, u32 dir_option, u8* rdb, u32 len) {
+  sp_sys_fd_t handle = SP_SYS_INVALID_FD;
+  sp_nt_status_t status = sp_sys_nt_open(dir, path,
+    DELETE | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
+    0,
+    SP_NT_FILE_CREATE,
+    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT | dir_option,
+    FILE_ATTRIBUTE_NORMAL,
+    &handle
+  );
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  sp_nt_io_status_block_t iosb = sp_zero;
+  status = SP_NT(NtFsControlFile)(
+    (void*)handle, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb,
+    SP_NT_FSCTL_SET_REPARSE_POINT, rdb, len, SP_NULLPTR, 0
+  );
+
+  if (!SP_NT_SUCCESS(status)) {
+    sp_nt_file_disposition_information_t info = { .DeleteFile = 1 };
+    sp_nt_io_status_block_t diosb = sp_zero;
+    SP_NT(NtSetInformationFile)((void*)handle, &diosb, &info, sizeof(info), SP_NT_FILE_DISPOSITION_INFORMATION);
+  }
+
+  sp_sys_nt_close(handle);
+
+  switch (status) {
+    case SP_NT_STATUS_INVALID_DEVICE_REQUEST: return SP_ERR_SYS_UNSUPPORTED;
+    default:                                  return sp_sys_err_from_nt(status);
+  }
+}
+#endif
+
 ////////////////////
 // SP_SYS_SYMLINK //
 ////////////////////
@@ -11206,35 +11240,7 @@ sp_err_t sp_sys_symlink_p(const c8* existing, u32 existing_len, sp_sys_dir_t to_
   sp_mem_copy(rdb_buf + sizeof(sp_nt_symlink_reparse_buffer_t), stored.data, name_bytes);
   sp_mem_copy(rdb_buf + sizeof(sp_nt_symlink_reparse_buffer_t) + name_bytes, stored.data, name_bytes);
 
-  sp_sys_fd_t handle = SP_SYS_INVALID_FD;
-  sp_nt_status_t status = sp_sys_nt_open(to_dir.fd, link,
-    DELETE | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE,
-    0,
-    SP_NT_FILE_CREATE,
-    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT | dir_option,
-    FILE_ATTRIBUTE_NORMAL,
-    &handle
-  );
-  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
-
-  sp_nt_io_status_block_t iosb = sp_zero;
-  status = SP_NT(NtFsControlFile)(
-    (void*)handle, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb,
-    SP_NT_FSCTL_SET_REPARSE_POINT, rdb_buf, rdb_len, SP_NULLPTR, 0
-  );
-
-  if (!SP_NT_SUCCESS(status)) {
-    sp_nt_file_disposition_information_t info = { .DeleteFile = 1 };
-    sp_nt_io_status_block_t diosb = sp_zero;
-    SP_NT(NtSetInformationFile)((void*)handle, &diosb, &info, sizeof(info), SP_NT_FILE_DISPOSITION_INFORMATION);
-  }
-
-  sp_sys_nt_close(handle);
-
-  switch (status) {
-    case SP_NT_STATUS_INVALID_DEVICE_REQUEST: return SP_ERR_SYS_UNSUPPORTED;
-    default:                                  return sp_sys_err_from_nt(status);
-  }
+  return sp_sys_nt_create_reparse(to_dir.fd, link, dir_option, rdb_buf, rdb_len);
 
 #elif defined(SP_LINUX)
   struct {
@@ -11378,7 +11384,48 @@ sp_err_t sp_sys_readlink_s(sp_sys_dir_t dir, sp_str_t path, c8* buf, u64 size, s
 }
 
 sp_err_t sp_sys_copy_link_p(sp_sys_dir_t from_dir, const c8* from, u32 from_len, sp_sys_dir_t to_dir, const c8* to, u32 to_len) {
-  return SP_ERR_SYS_UNSUPPORTED;
+#if defined(SP_WIN32)
+  sp_sys_fd_t handle = SP_SYS_INVALID_FD;
+  sp_nt_status_t status = sp_sys_nt_open(
+    from_dir.fd,
+    sp_str(from, from_len),
+    FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    SP_NT_FILE_OPEN,
+    SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_REPARSE_POINT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT,
+    0,
+    &handle
+  );
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  SP_ALIGNED u8 rdb [SP_NT_MAX_REPARSE_DATA];
+  sp_nt_io_status_block_t iosb = sp_zero;
+  status = SP_NT(NtFsControlFile)(
+    (void*)handle, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb,
+    SP_NT_FSCTL_GET_REPARSE_POINT, SP_NULLPTR, 0, rdb, sizeof(rdb)
+  );
+
+  sp_nt_file_attribute_tag_information_t info = sp_zero;
+  sp_nt_io_status_block_t qiosb = sp_zero;
+  if (SP_NT_SUCCESS(status)) {
+    status = SP_NT(NtQueryInformationFile)((void*)handle, &qiosb, &info, sizeof(info), SP_NT_FILE_ATTRIBUTE_TAG_INFORMATION);
+  }
+  sp_sys_nt_close(handle);
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+  if (!sp_sys_nt_is_link(info.FileAttributes, info.ReparseTag)) return SP_ERR_SYS_INVALID;
+
+  u32 dir_option = (info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? SP_NT_FILE_DIRECTORY_FILE : SP_NT_FILE_NON_DIRECTORY_FILE;
+  return sp_sys_nt_create_reparse(to_dir.fd, sp_str(to, to_len), dir_option, rdb, (u32)iosb.Information);
+
+#elif defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_WASM)
+  c8 target [SP_PATH_MAX];
+  u64 len = 0;
+  sp_try(sp_sys_readlink_p(from_dir, from, from_len, target, sizeof(target), &len));
+  return sp_sys_symlink_p(target, (u32)len, to_dir, to, to_len, SP_FS_KIND_FILE);
+
+#else
+  #error "sp_sys_copy_link"
+#endif
 }
 
 sp_err_t sp_sys_copy_link_s(sp_sys_dir_t from_dir, sp_str_t from, sp_sys_dir_t to_dir, sp_str_t to) {
@@ -21435,26 +21482,24 @@ sp_err_t sp_fs_append_cstr(sp_str_t path, const c8* str, sp_sys_file_perms_t per
 }
 
 SP_PRIVATE sp_err_t sp_fs_copy_link_at(sp_path_t from, sp_path_t to, sp_fs_write_mode_t mode) {
-  c8 buf [SP_PATH_MAX];
-  sp_str_t target = sp_zero;
-  sp_try(sp_sys_readlink_s(from.dir, from.sub, buf, sizeof(buf), &target));
-  sp_sys_file_meta_t meta = sp_zero;
-  sp_fs_kind_t kind = SP_FS_KIND_FILE;
-  if (!sp_fs_get_path_metadata_at(from, &meta) && meta.kind == SP_FS_KIND_DIR) kind = SP_FS_KIND_DIR;
+  sp_err_t err = sp_sys_copy_link_s(from.dir, from.sub, to.dir, to.sub);
+  if (err != SP_ERR_SYS_EXISTS) return err;
 
   switch (mode) {
-    case SP_FS_WRITE_TRUNCATE:
-    case SP_FS_WRITE_REPLACE: {
-      sp_err_t err = sp_sys_unlink_s(to.dir, to.sub);
-      if (err && err != SP_ERR_SYS_NOT_FOUND) return err;
-      return sp_sys_symlink_s(target, to.dir, to.sub, kind);
-    }
     case SP_FS_WRITE_NEW:
-    case SP_FS_WRITE_EXCLUSIVE: {
-      return sp_sys_symlink_s(target, to.dir, to.sub, kind);
-    }
+    case SP_FS_WRITE_EXCLUSIVE: return err;
+    case SP_FS_WRITE_TRUNCATE:
+    case SP_FS_WRITE_REPLACE:   break;
   }
-  SP_UNREACHABLE_RETURN(SP_OK);
+
+  sp_sys_file_meta_t source = sp_zero;
+  sp_sys_file_meta_t dest = sp_zero;
+  sp_try(sp_fs_get_link_metadata_at(from, &source));
+  sp_try(sp_fs_get_link_metadata_at(to, &dest));
+  if (source.id == dest.id && source.device == dest.device) return SP_OK;
+
+  sp_try(sp_sys_unlink_s(to.dir, to.sub));
+  return sp_sys_copy_link_s(from.dir, from.sub, to.dir, to.sub);
 }
 
 SP_PRIVATE sp_err_t sp_fs_copy_in_place(sp_io_file_reader_t* reader, sp_sys_file_meta_t source, sp_path_t to, sp_fs_write_mode_t mode) {
