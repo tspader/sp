@@ -7622,8 +7622,14 @@ SP_PRIVATE sp_err_t sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, bool dir) {
   //
   //   NOT_SUPPORTED means that the IGNORE_READONLY flag isn't supported
   if (sp_sys_nt_needs_legacy_info(status)) {
-    sp_nt_file_disposition_information_t info = { .DeleteFile = 1 };
-    status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, &info, sizeof(info), SP_NT_FILE_DISPOSITION_INFORMATION);
+    sp_sys_file_perms_t perms = { .value = info.dwFileAttributes };
+    sp_sys_file_perms_t writable = perms;
+    sp_sys_set_read_only(&writable, false);
+    if (sp_sys_is_read_only(perms)) sp_sys_set_file_perms_p(sp_sys_dir(fd), path.data, path.len, writable);
+
+    sp_nt_file_disposition_information_t legacy = { .DeleteFile = 1 };
+    status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, &legacy, sizeof(legacy), SP_NT_FILE_DISPOSITION_INFORMATION);
+    if (!SP_NT_SUCCESS(status) && sp_sys_is_read_only(perms)) sp_sys_set_file_perms_p(sp_sys_dir(fd), path.data, path.len, perms);
   }
 
   sp_sys_nt_close(handle);
