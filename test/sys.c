@@ -10,7 +10,6 @@ SP_TEST_MAIN()
 #include "sys/mkdir.c"
 #include "sys/rmdir.c"
 #include "sys/unlink.c"
-#include "sys/rename.c"
 #include "sys/link.c"
 #include "sys/symlink.c"
 #include "sys/stat.c"

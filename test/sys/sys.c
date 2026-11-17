@@ -9,6 +9,10 @@ static bool sys_case_wants_symlinks(sys_case_t* c) {
 }
 
 static bool sys_case_wants_perms(sys_case_t* c) {
+  sp_carr_for(c->setup, it) {
+    if (!c->setup[it].path) break;
+    if (c->setup[it].kind == SYS_SETUP_READ_ONLY_FILE) return true;
+  }
   sp_carr_for(c->steps, it) {
     if (c->steps[it].kind == SYS_STEP_OPEN && c->steps[it].open.read_only) return true;
   }
@@ -24,8 +28,13 @@ static const c8* sys_step_name(sys_step_kind_t kind) {
     case SYS_STEP_WRITE:    return "write";
     case SYS_STEP_PWRITE:   return "pwrite";
     case SYS_STEP_SYNC:     return "sync";
+    case SYS_STEP_RENAME:   return "rename";
   }
   return "";
+}
+
+static sp_sys_dir_t sys_step_dir(sp_sys_dir_t sandbox, const sp_sys_fd_t* fds, sys_dir_t dir) {
+  return dir == SYS_DIR_SANDBOX ? sandbox : sp_sys_dir(fds[dir - SYS_DIR_SLOT_0]);
 }
 
 static bool sys_check_err(sp_test_t* t, sp_err_t err, sp_err_t want) {
@@ -53,8 +62,11 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
 
     switch (ent->kind) {
-      case SYS_SETUP_FILE: {
-        sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+      case SYS_SETUP_FILE:
+      case SYS_SETUP_READ_ONLY_FILE: {
+        sp_sys_file_perms_t perms = sp_sys_default_file_perms;
+        sp_sys_set_read_only(&perms, ent->kind == SYS_SETUP_READ_ONLY_FILE);
+        sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE, perms);
         break;
       }
       case SYS_SETUP_DIR: {
@@ -147,6 +159,14 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
       }
       case SYS_STEP_SYNC: {
         sys_check_err(t, sp_sys_sync(fds[step->sync.slot]), step->sync.err);
+        break;
+      }
+      case SYS_STEP_RENAME: {
+        sp_err_t err = sp_sys_rename_s(
+          sys_step_dir(sandbox_dir, fds, step->rename.from_dir), sp_cstr_as_str(step->rename.from),
+          sys_step_dir(sandbox_dir, fds, step->rename.to_dir), sp_cstr_as_str(step->rename.to)
+        );
+        sys_check_err(t, err, step->rename.err);
         break;
       }
     }

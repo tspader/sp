@@ -31,7 +31,6 @@ typedef enum {
   SYS_SETUP_DIR,
   SYS_SETUP_SYMLINK,
   SYS_SETUP_DIR_SYMLINK,
-  SYS_SETUP_READONLY,
 } sys_setup_kind_t;
 
 typedef struct {
@@ -53,7 +52,6 @@ typedef enum {
   SYS_STEP_WRITE,
   SYS_STEP_PWRITE,
   SYS_STEP_SYMLINK,
-  SYS_STEP_RENAME,
   SYS_STEP_LSTAT,
   SYS_STEP_STAT,
   SYS_STEP_FSTAT,
@@ -82,7 +80,6 @@ typedef struct {
     struct { u32 slot; const c8* data; sp_err_t err; } write;
     struct { u32 slot; const c8* data; u64 offset; } pwrite;
     struct { const c8* target; const c8* alias; sp_fs_kind_t kind; sp_err_t err; } symlink;
-    struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; sp_err_t err; } rename;
     struct { const c8* path; sp_fs_kind_t kind; sp_err_t err; } lstat;
     struct { const c8* path; sp_fs_kind_t kind; s64 size; sp_err_t err; } stat;
     struct { u32 slot; sp_fs_kind_t kind; s64 size; } fstat;
@@ -180,21 +177,6 @@ static bool sys_apply_setup(s32* utest_result, sp_test_file_manager_t* fm, sp_st
         sp_fs_kind_t kind = ent->kind == SYS_SETUP_DIR_SYMLINK ? SP_FS_KIND_DIR : SP_FS_KIND_FILE;
         if (sp_fs_create_sym_link(target, path, kind) != SP_OK) {
           SP_TEST_REPORT("failed to create symlink {} -> {}", sp_fmt_str(path), sp_fmt_str(target));
-          SP_FAIL();
-          return false;
-        }
-        break;
-      }
-      case SYS_SETUP_READONLY: {
-        sp_sys_file_meta_t meta = sp_zero;
-        if (sp_sys_get_path_metadata_s(sp_sys_get_root(0), path, &meta)) {
-          SP_TEST_REPORT("failed to stat {}", sp_fmt_str(path));
-          SP_FAIL();
-          return false;
-        }
-        sp_sys_set_read_only(&meta.perms, true);
-        if (sp_sys_set_file_perms_s(sp_sys_get_root(0), path, meta.perms)) {
-          SP_TEST_REPORT("failed to set perms on {}", sp_fmt_str(path));
           SP_FAIL();
           return false;
         }
@@ -349,13 +331,6 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
       case SYS_STEP_SYMLINK: {
         sp_err_t err = sp_sys_symlink_s(sp_cstr_as_str(step->symlink.target), sandbox_dir, sp_cstr_as_str(step->symlink.alias), step->symlink.kind);
         sys_expect_err(utest_result, "symlink", err, step->symlink.err);
-        break;
-      }
-      case SYS_STEP_RENAME: {
-        sp_err_t err = sp_sys_rename_s(
-          sys_dir_fd(sandbox_dir, fds, step->rename.from_dir), sp_cstr_as_str(step->rename.from),
-          sys_dir_fd(sandbox_dir, fds, step->rename.to_dir), sp_cstr_as_str(step->rename.to));
-        sys_expect_err(utest_result, "rename", err, step->rename.err);
         break;
       }
       case SYS_STEP_LSTAT: {

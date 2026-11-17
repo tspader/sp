@@ -16,6 +16,7 @@ typedef enum {
   SYS_SETUP_DIR,
   SYS_SETUP_SYMLINK,
   SYS_SETUP_DIR_SYMLINK,
+  SYS_SETUP_READ_ONLY_FILE,
 } sys_setup_kind_t;
 
 typedef struct {
@@ -35,7 +36,16 @@ typedef enum {
   SYS_STEP_WRITE,
   SYS_STEP_PWRITE,
   SYS_STEP_SYNC,
+  SYS_STEP_RENAME,
 } sys_step_kind_t;
+
+typedef enum {
+  SYS_DIR_SANDBOX,
+  SYS_DIR_SLOT_0,
+  SYS_DIR_SLOT_1,
+  SYS_DIR_SLOT_2,
+  SYS_DIR_SLOT_3,
+} sys_dir_t;
 
 typedef struct {
   sys_step_kind_t kind;
@@ -46,6 +56,7 @@ typedef struct {
     struct { u32 slot; const c8* data; sp_err_t err; } write;
     struct { u32 slot; const c8* data; u64 offset; sp_err_t err; } pwrite;
     struct { u32 slot; sp_err_t err; } sync;
+    struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; sp_err_t err; } rename;
   };
 } sys_step_t;
 
