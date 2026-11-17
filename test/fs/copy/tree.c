@@ -21,33 +21,6 @@ static const copy_any_mode_t any_mode [] = {
     },
   },
   {
-    .name = "empty",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-    },
-    .src = "A",
-    .dst = "E",
-    .expect = {
-      .paths = {
-        { .path = "E", .exists = true, .kind = SP_FS_KIND_DIR },
-      },
-    },
-  },
-  {
-    .name = "empty_subdir",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-      { "A/B", FS_SETUP_DIR },
-    },
-    .src = "A",
-    .dst = "E",
-    .expect = {
-      .paths = {
-        { .path = "E/B", .exists = true, .kind = SP_FS_KIND_DIR },
-      },
-    },
-  },
-  {
     .name = "creates_parents",
     .setup = {
       { "A", FS_SETUP_DIR },
@@ -125,21 +98,6 @@ static const copy_any_mode_t any_mode [] = {
     },
   },
   {
-    .name = "dir_onto_file",
-    .setup = {
-      { .path = "A/B/C", .content = "C" },
-      { .path = "E/B", .content = "B" },
-    },
-    .src = "A",
-    .dst = "E",
-    .expect = {
-      .err = SP_ERR_SYS_EXISTS,
-      .paths = {
-        { .path = "E/B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
-      },
-    },
-  },
-  {
     .name = "symlink_preserved",
     .setup = {
       { "A", FS_SETUP_DIR },
@@ -189,6 +147,66 @@ static const copy_any_mode_t any_mode [] = {
     },
   },
 #endif
+  {
+    .name = "into_dir_behind_symlink_in_source",
+    .setup = {
+      { .path = "A/C", .content = "C" },
+      { "X", FS_SETUP_DIR },
+      { .path = "A/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "../X" },
+    },
+    .src = "A",
+    .dst = "A/L/B",
+    .expect = {
+      .paths = {
+        { .path = "X/B/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+      },
+    },
+  },
+};
+
+static const copy_any_mode_t no_mode [] = {
+  {
+    .name = "empty",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+    },
+    .src = "A",
+    .dst = "E",
+    .expect = {
+      .paths = {
+        { .path = "E", .exists = true, .kind = SP_FS_KIND_DIR },
+      },
+    },
+  },
+  {
+    .name = "empty_subdir",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { "A/B", FS_SETUP_DIR },
+    },
+    .src = "A",
+    .dst = "E",
+    .expect = {
+      .paths = {
+        { .path = "E/B", .exists = true, .kind = SP_FS_KIND_DIR },
+      },
+    },
+  },
+  {
+    .name = "dir_onto_file",
+    .setup = {
+      { .path = "A/B/C", .content = "C" },
+      { .path = "E/B", .content = "B" },
+    },
+    .src = "A",
+    .dst = "E",
+    .expect = {
+      .err = SP_ERR_SYS_EXISTS,
+      .paths = {
+        { .path = "E/B", .exists = true, .kind = SP_FS_KIND_FILE, .content = "B" },
+      },
+    },
+  },
   {
     .name = "into_itself",
     .setup = {
@@ -254,21 +272,6 @@ static const copy_any_mode_t any_mode [] = {
     },
   },
 #endif
-  {
-    .name = "into_dir_behind_symlink_in_source",
-    .setup = {
-      { .path = "A/C", .content = "C" },
-      { "X", FS_SETUP_DIR },
-      { .path = "A/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "../X" },
-    },
-    .src = "A",
-    .dst = "A/L/B",
-    .expect = {
-      .paths = {
-        { .path = "X/B/C", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      },
-    },
-  },
   {
     .name = "dest_parent_is_file",
     .setup = {
@@ -437,6 +440,10 @@ static const copy_by_mode_t by_mode [] = {
 sp_test_each(fs, copy_tree, copy_any_mode_t, any_mode, .axes = {
   sp_test_axis_named(copy_any_mode_t, mode, fs_write_mode_name, FS_WRITE_MODES)
 }) {
+  return copy_run(t, COPY_TREE, it->setup, it->mode, it->src, it->dst_dir, it->dst, &it->expect);
+}
+
+sp_test_each(fs, copy_tree_no_mode, copy_any_mode_t, no_mode) {
   return copy_run(t, COPY_TREE, it->setup, it->mode, it->src, it->dst_dir, it->dst, &it->expect);
 }
 
