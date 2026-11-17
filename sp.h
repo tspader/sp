@@ -11265,13 +11265,27 @@ sp_err_t sp_sys_readlink_p(sp_sys_dir_t dir, const c8* path, u32 len, c8* buf, u
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
 
   sp_nt_symlink_reparse_buffer_t* rdb = (sp_nt_symlink_reparse_buffer_t*)rdb_buf;
-  if (rdb->ReparseTag != SP_NT_IO_REPARSE_TAG_SYMLINK) return SP_ERR_SYS_INVALID;
+  u16* names = SP_NULLPTR;
+  bool relative = false;
+  switch (rdb->ReparseTag) {
+    case SP_NT_IO_REPARSE_TAG_SYMLINK: {
+      names = (u16*)(rdb_buf + sizeof(sp_nt_symlink_reparse_buffer_t));
+      relative = rdb->Flags & SP_NT_SYMLINK_FLAG_RELATIVE;
+      break;
+    }
+    case SP_NT_IO_REPARSE_TAG_MOUNT_POINT: {
+      names = (u16*)(rdb_buf + sizeof(sp_nt_mount_point_reparse_buffer_t));
+      break;
+    }
+    default: {
+      return SP_ERR_SYS_INVALID;
+    }
+  }
 
-  u16* names = (u16*)(rdb_buf + sizeof(sp_nt_symlink_reparse_buffer_t));
   u16* name = names + rdb->SubstituteNameOffset / sizeof(u16);
   u32 name_len = rdb->SubstituteNameLength / (u32)sizeof(u16);
   sp_wide_str_t wide = { .data = name, .len = name_len };
-  if (!(rdb->Flags & SP_NT_SYMLINK_FLAG_RELATIVE)) {
+  if (!relative) {
     wide = sp_sys_dos_from_nt_wtf16(name, name_len);
   }
 
