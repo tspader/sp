@@ -55,13 +55,7 @@ static const hard_t hard_links [] = {
     },
     .target = "A",
     .link = "B",
-    // hard-linking a directory: POSIX reports EPERM; NT reports
-    // STATUS_FILE_IS_A_DIRECTORY from FileLinkInformation
-#if defined(SP_WIN32)
-    .err = SP_ERR_SYS_IS_DIR,
-#else
-    .err = SP_ERR_SYS_ACCESS_DENIED,
-#endif
+    .err = SP_ERR_SYS_UNSUPPORTED,
     .expect = {
       { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
       { .path = "B" },
