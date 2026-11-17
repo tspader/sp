@@ -122,9 +122,9 @@ sp_test_each(sys, futex, sys_futex_case_t, sys_futex_cases) {
         };
         sp_sys_timespec_t begin = sp_zero;
         sp_sys_timespec_t end = sp_zero;
-        sp_try(sp_sys_clock_gettime(SP_CLOCK_MONOTONIC, &begin));
+        sp_try(sp_sys_clock_gettime(SP_SYS_CLOCK_MONOTONIC,&begin));
         bool woken = sp_sys_futex_wait(&futex, step->wait.expected, &timeout);
-        sp_try(sp_sys_clock_gettime(SP_CLOCK_MONOTONIC, &end));
+        sp_try(sp_sys_clock_gettime(SP_SYS_CLOCK_MONOTONIC,&end));
 
         sp_expect_eq(t, woken, !step->wait.timed_out);
         s64 elapsed = ((end.tv_sec - begin.tv_sec) * (s64)SP_TM_S_TO_NS) + (end.tv_nsec - begin.tv_nsec);
