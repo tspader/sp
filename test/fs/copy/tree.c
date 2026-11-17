@@ -171,6 +171,24 @@ static const copy_any_mode_t any_mode [] = {
       },
     },
   },
+#if defined(SP_WIN32)
+  {
+    .name = "junction_preserved",
+    .setup = {
+      { .path = "T/F", .content = "F" },
+      { "A", FS_SETUP_DIR },
+      { .path = "A/J", .kind = FS_SETUP_JUNCTION, .target = "T" },
+    },
+    .src = "A",
+    .dst = "E",
+    .expect = {
+      .paths = {
+        { .path = "E/J", .exists = true, .kind = SP_FS_KIND_SYMLINK, .junction = true },
+        { .path = "E/J/F", .exists = true, .kind = SP_FS_KIND_FILE, .content = "F" },
+      },
+    },
+  },
+#endif
   {
     .name = "into_itself",
     .setup = {
