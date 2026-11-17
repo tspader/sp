@@ -21280,7 +21280,10 @@ SP_PRIVATE sp_err_t sp_fs_atomic_publish(sp_fs_atomic_t* af, sp_fs_atomic_mode_t
     case SP_FS_ATOMIC_REPLACE:
       return sp_sys_rename_s(af->dir, af->temp, af->dir, af->path, 0);
     case SP_FS_ATOMIC_EXCLUSIVE: {
-      sp_err_t err = sp_sys_link_s(af->dir, af->temp, af->dir, af->path);
+      sp_err_t err = sp_sys_rename_s(af->dir, af->temp, af->dir, af->path, SP_SYS_RENAME_NO_REPLACE);
+      if (err != SP_ERR_SYS_UNSUPPORTED) return err;
+
+      err = sp_sys_link_s(af->dir, af->temp, af->dir, af->path);
       if (!err) sp_sys_unlink_s(af->dir, af->temp);
       return err;
     }
