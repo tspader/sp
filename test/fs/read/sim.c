@@ -11,6 +11,7 @@ typedef struct {
   s64 size;
   sp_err_t metadata;
   sp_err_t read;
+  u32 failing_alloc;
   expect_t expect;
 } test_t;
 
@@ -63,6 +64,24 @@ static const test_t tests [] = {
       .err = SP_ERR_SYS_IO,
     },
   },
+  {
+    .name = "first_allocation_fails",
+    .content = "AB",
+    .size = 2,
+    .failing_alloc = 1,
+    .expect = {
+      .err = SP_ERR_SYS_NO_MEMORY,
+    },
+  },
+  {
+    .name = "growing_allocation_fails",
+    .content = "AB",
+    .size = 1,
+    .failing_alloc = 2,
+    .expect = {
+      .err = SP_ERR_SYS_NO_MEMORY,
+    },
+  },
 };
 
 typedef struct {
@@ -71,7 +90,30 @@ typedef struct {
   sp_err_t read;
 } probe_t;
 
+typedef struct {
+  sp_mem_t backing;
+  u32 failing;
+  u32 allocs;
+} budget_t;
+
 static probe_t probe;
+
+static void* budgeted_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
+  budget_t* budget = (budget_t*)user_data;
+  switch (mode) {
+    case SP_ALLOCATOR_MODE_FREE: {
+      break;
+    }
+    case SP_ALLOCATOR_MODE_ALLOC:
+    case SP_ALLOCATOR_MODE_RESIZE:
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:
+    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: {
+      if (++budget->allocs == budget->failing) return SP_NULLPTR;
+      break;
+    }
+  }
+  return budget->backing.on_alloc(budget->backing.user_data, mode, size, ptr, old_size);
+}
 
 static sp_err_t sized_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
   if (probe.metadata) return probe.metadata;
@@ -104,13 +146,19 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   vt.pread = unseekable_pread;
   probe = (probe_t) { .size = c->size, .metadata = c->metadata, .read = c->read };
 
+  sp_test_tracking_t tracking = sp_zero;
+  sp_test_tracking_init(&tracking, mem, mem);
+  budget_t budget = { .backing = sp_test_tracking_as_allocator(&tracking), .failing = c->failing_alloc };
+
   sp_str_t content = sp_zero;
   const sp_sys_vtable_t* saved = sp_sys_set_vtable(&vt);
-  sp_err_t err = sp_fs_read_at(mem, path, &content);
+  sp_err_t err = sp_fs_read_at((sp_mem_t) { .on_alloc = budgeted_alloc, .user_data = &budget }, path, &content);
   sp_sys_set_vtable(saved);
 
   sp_expect_err_eq(t, err, c->expect.err);
   sp_expect_str_eq(t, content, c->expect.content ? sp_cstr_as_str(c->expect.content) : sp_str_lit(""));
+  sp_expect_eq(t, tracking.live_count, err ? 0u : 1u);
+  sp_test_tracking_deinit(&tracking);
   return SP_OK;
 }
 
