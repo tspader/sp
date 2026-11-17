@@ -270,6 +270,57 @@ static const test_t tests [] = {
       },
     },
   },
+#if defined(SP_WIN32)
+  {
+    .name = "dir_does_not_follow_junction",
+    .setup = {
+      { "B", FS_SETUP_DIR },
+      { "B/C" },
+      { "A", FS_SETUP_DIR },
+      { .path = "A/J", .kind = FS_SETUP_JUNCTION, .target = "B" },
+    },
+    .dir = true,
+    .path = "A",
+    .expect = {
+      .paths = {
+        { .path = "A" },
+        { .path = "B", .exists = true, .kind = SP_FS_KIND_DIR },
+        { .path = "B/C", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
+    },
+  },
+  {
+    .name = "dir_junction_root_removes_link_only",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { "A/B" },
+      { .path = "J", .kind = FS_SETUP_JUNCTION, .target = "A" },
+    },
+    .dir = true,
+    .path = "J",
+    .expect = {
+      .paths = {
+        { .path = "J" },
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        { .path = "A/B", .exists = true, .kind = SP_FS_KIND_FILE },
+      },
+    },
+  },
+  {
+    .name = "dir_with_reparse_dir_that_is_not_a_link",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { "A/S", FS_SETUP_STUB_DIR },
+    },
+    .dir = true,
+    .path = "A",
+    .expect = {
+      .paths = {
+        { .path = "A" },
+      },
+    },
+  },
+#endif
 #if defined(SP_POSIX)
   {
     .name = "dir_with_fifo",

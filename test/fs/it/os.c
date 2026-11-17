@@ -94,6 +94,34 @@ static const test_t tests [] = {
       },
     },
   },
+#if defined(SP_WIN32)
+  {
+    .name = "junction_not_followed",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+      { "A/B" },
+      { .path = "J", .kind = FS_SETUP_JUNCTION, .target = "A" },
+    },
+    .expect = {
+      .entries = {
+        { "A", SP_FS_KIND_DIR },
+        { "A/B", SP_FS_KIND_FILE },
+        { "J", SP_FS_KIND_SYMLINK },
+      },
+    },
+  },
+  {
+    .name = "reparse_dir_that_is_not_a_link",
+    .setup = {
+      { "S", FS_SETUP_STUB_DIR },
+    },
+    .expect = {
+      .entries = {
+        { "S", SP_FS_KIND_DIR },
+      },
+    },
+  },
+#endif
 #if defined(SP_POSIX)
   {
     .name = "special_file",
