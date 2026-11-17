@@ -21415,15 +21415,52 @@ SP_PRIVATE sp_err_t sp_fs_copy_link_at(sp_path_t from, sp_path_t to, sp_fs_write
   SP_UNREACHABLE_RETURN(SP_OK);
 }
 
-sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_write_mode_t mode) {
-  sp_fs_atomic_mode_t publish = SP_FS_ATOMIC_REPLACE;
-  switch (mode) {
-    case SP_FS_WRITE_TRUNCATE:
-    case SP_FS_WRITE_NEW:       return SP_ERR_SYS_UNSUPPORTED;
-    case SP_FS_WRITE_REPLACE:   publish = SP_FS_ATOMIC_REPLACE; break;
-    case SP_FS_WRITE_EXCLUSIVE: publish = SP_FS_ATOMIC_EXCLUSIVE; break;
+SP_PRIVATE sp_err_t sp_fs_copy_in_place(sp_io_file_reader_t* reader, sp_sys_file_meta_t source, sp_path_t to, sp_fs_write_mode_t mode) {
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  sp_err_t err = sp_sys_open_s(to.dir, to.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE, source.perms, &fd);
+  bool created = !err;
+  if (err && mode == SP_FS_WRITE_TRUNCATE) {
+    sp_sys_file_meta_t dest = sp_zero;
+    if (!sp_fs_get_path_metadata_at(to, &dest) && dest.id == source.id && dest.device == source.device) {
+      sp_io_file_reader_close(reader);
+      return SP_OK;
+    }
+    err = sp_sys_open_s(to.dir, to.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE, source.perms, &fd);
+  }
+  if (err) {
+    sp_io_file_reader_close(reader);
+    return err;
   }
 
+  sp_io_stream_writer_t writer = sp_zero;
+  sp_io_stream_writer_from_fd(&writer, fd, SP_IO_CLOSE_MODE_AUTO);
+  sp_err_t copied = sp_io_copy(&writer.base, &reader->base, SP_NULLPTR);
+  sp_err_t closed = sp_io_stream_writer_close(&writer);
+  sp_io_file_reader_close(reader);
+
+  err = copied ? copied : closed;
+  if (err && created) sp_sys_unlink_s(to.dir, to.sub);
+  return err;
+}
+
+SP_PRIVATE sp_err_t sp_fs_copy_in_temp(sp_io_file_reader_t* reader, sp_sys_file_perms_t perms, sp_path_t to, sp_fs_atomic_mode_t mode) {
+  sp_fs_atomic_t af = sp_zero;
+  sp_err_t err = sp_fs_atomic_open_at(&af, to, perms);
+  if (err) {
+    sp_io_file_reader_close(reader);
+    return err;
+  }
+
+  err = sp_io_copy(sp_fs_atomic_writer(&af), &reader->base, SP_NULLPTR);
+  sp_io_file_reader_close(reader);
+  if (err) {
+    sp_fs_atomic_abort(&af);
+    return err;
+  }
+  return sp_fs_atomic_commit(&af, mode);
+}
+
+sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_write_mode_t mode) {
   sp_io_file_reader_t reader = sp_zero;
   sp_try(sp_io_file_reader_from_path_at(&reader, from));
 
@@ -21443,20 +21480,13 @@ sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_write_mode_t mod
     return err;
   }
 
-  sp_fs_atomic_t af = sp_zero;
-  err = sp_fs_atomic_open_at(&af, to, meta.perms);
-  if (err) {
-    sp_io_file_reader_close(&reader);
-    return err;
+  switch (mode) {
+    case SP_FS_WRITE_TRUNCATE:
+    case SP_FS_WRITE_NEW:       return sp_fs_copy_in_place(&reader, meta, to, mode);
+    case SP_FS_WRITE_REPLACE:   return sp_fs_copy_in_temp(&reader, meta.perms, to, SP_FS_ATOMIC_REPLACE);
+    case SP_FS_WRITE_EXCLUSIVE: return sp_fs_copy_in_temp(&reader, meta.perms, to, SP_FS_ATOMIC_EXCLUSIVE);
   }
-
-  err = sp_io_copy(sp_fs_atomic_writer(&af), &reader.base, SP_NULLPTR);
-  sp_io_file_reader_close(&reader);
-  if (err) {
-    sp_fs_atomic_abort(&af);
-    return err;
-  }
-  return sp_fs_atomic_commit(&af, publish);
+  SP_UNREACHABLE_RETURN(SP_OK);
 }
 
 sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_write_mode_t mode) {
