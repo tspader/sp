@@ -195,6 +195,30 @@ static const sys_case_t sys_open_cases [] = {
     },
   },
   {
+    .name = "truncate_keeps_perms_of_existing_file",
+    .setup = {
+      { .path = "A", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_TRUNCATE, .read_only = true } },
+    },
+    .expect = {
+      { .path = "A", .exists = true, .content = "" },
+    },
+  },
+  {
+    .name = "create_truncate_keeps_perms_of_existing_file",
+    .setup = {
+      { .path = "A", .content = "A" },
+    },
+    .steps = {
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE, .read_only = true } },
+    },
+    .expect = {
+      { .path = "A", .exists = true, .content = "" },
+    },
+  },
+  {
     .name = "append_preserves_content",
     .setup = {
       { .path = "A", .content = "AA" },
@@ -321,3 +345,25 @@ static const sys_case_t sys_open_dir_cases [] = {
 
 sp_test_each_fn(sys, open, sys_case_t, sys_open_cases, sys_case_run);
 sp_test_each_fn(sys, open_dir, sys_case_t, sys_open_dir_cases, sys_case_run);
+
+#if defined(SP_WIN32)
+sp_test(sys, open_truncate_keeps_hidden) {
+  sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
+  sp_must_ok(t, sp_fs_write_at(path, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
+
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_must_ok(t, sp_sys_get_path_metadata_s(path.dir, path.sub, &meta));
+  meta.perms.value |= FILE_ATTRIBUTE_HIDDEN;
+  sp_must_ok(t, sp_sys_set_file_perms_s(path.dir, path.sub, meta.perms));
+
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE, sp_sys_default_file_perms, &fd));
+  sp_sys_close(fd);
+
+  sp_sys_file_meta_t after = sp_zero;
+  sp_must_ok(t, sp_sys_get_path_metadata_s(path.dir, path.sub, &after));
+  sp_expect_eq(t, after.size, 0);
+  sp_expect(t, after.perms.value & FILE_ATTRIBUTE_HIDDEN);
+  return SP_OK;
+}
+#endif
