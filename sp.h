@@ -5729,6 +5729,7 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_STATUS_OBJECT_TYPE_MISMATCH  ((sp_nt_status_t)0xC0000024)
 #define SP_NT_STATUS_NOT_SAME_DEVICE       ((sp_nt_status_t)0xC00000D4)
 #define SP_NT_STATUS_INVALID_DEVICE_REQUEST ((sp_nt_status_t)0xC0000010)
+#define SP_NT_STATUS_TOO_MANY_LINKS        ((sp_nt_status_t)0xC0000265)
 #define SP_NT_STATUS_NOT_A_REPARSE_POINT   ((sp_nt_status_t)0xC0000275)
 #define SP_NT_STATUS_NO_SUCH_FILE          ((sp_nt_status_t)0xC000000F)
 #define SP_NT_STATUS_NO_MORE_FILES         ((sp_nt_status_t)0x80000006)
@@ -7501,6 +7502,7 @@ SP_PRIVATE sp_err_t sp_sys_err_from_nt(sp_nt_status_t status) {
     case SP_NT_STATUS_TOO_MANY_OPENED_FILES:  return SP_ERR_SYS_TOO_MANY_FILES;
     case SP_NT_STATUS_DIRECTORY_NOT_EMPTY:    return SP_ERR_SYS_NOT_EMPTY;
     case SP_NT_STATUS_NOT_SAME_DEVICE:        return SP_ERR_SYS_CROSS_DEVICE;
+    case SP_NT_STATUS_TOO_MANY_LINKS:         return SP_ERR_SYS_TOO_MANY_LINKS;
     case SP_NT_STATUS_NOT_SUPPORTED:          return SP_ERR_SYS_UNSUPPORTED;
     case SP_NT_STATUS_INVALID_HANDLE:         return SP_ERR_SYS_BAD_FD;
     case SP_NT_STATUS_PIPE_CLOSING:
@@ -7625,7 +7627,7 @@ SP_PRIVATE sp_err_t sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, bool dir) {
   return sp_sys_err_from_nt(status);
 }
 
-SP_PRIVATE sp_err_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to, u32 access, u32 flags, u32 info_class, u32 legacy_info_class) {
+SP_PRIVATE sp_nt_status_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, sp_sys_fd_t to_fd, sp_str_t to, u32 access, u32 flags, u32 info_class, u32 legacy_info_class) {
   SP_ALIGNED u16 path_buf [SP_PATH_MAX + 1];
   SP_ALIGNED u8 info_buf [sizeof(sp_nt_file_rename_information_t) + SP_PATH_MAX * sizeof(u16)];
 
@@ -7638,20 +7640,20 @@ SP_PRIVATE sp_err_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, 
     SP_NT_NO_OPTIONS,
     &handle
   );
-  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+  if (!SP_NT_SUCCESS(status)) return status;
 
   sp_sys_nt_target_t t;
   status = sp_sys_nt_target(to_fd, to, path_buf, SP_PATH_MAX + 1, &t);
   if (!SP_NT_SUCCESS(status)) {
     sp_sys_nt_close(handle);
-    return sp_sys_err_from_nt(status);
+    return status;
   }
 
   u32 name_bytes = t.name.Length;
   u32 info_bytes = sizeof(sp_nt_file_rename_information_t) + name_bytes - sizeof(u16);
   if (info_bytes > sizeof(info_buf)) {
     sp_sys_nt_close(handle);
-    return SP_ERR_SYS_NAME_TOO_LONG;
+    return SP_NT_STATUS_NAME_TOO_LONG;
   }
 
   sp_nt_file_rename_information_t* info = (sp_nt_file_rename_information_t*)info_buf;
@@ -7676,8 +7678,8 @@ SP_PRIVATE sp_err_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, 
   // INVALID_PARAMETER, for both the Ex and legacy classes and for links. A
   // missing parent is PATH_NOT_FOUND. This is NT's ENOTDIR for these two
   // primitives; elsewhere INVALID_PARAMETER still means a bug on our side.
-  if (status == SP_NT_STATUS_INVALID_PARAMETER) return SP_ERR_SYS_NOT_DIR;
-  return sp_sys_err_from_nt(status);
+  if (status == SP_NT_STATUS_INVALID_PARAMETER) return SP_NT_STATUS_NOT_A_DIRECTORY;
+  return status;
 }
 
 static void sp_sys_timespec_from_filetime(FILETIME ft, sp_sys_timespec_t* out) {
@@ -7893,14 +7895,14 @@ sp_err_t sp_sys_rename_p(sp_sys_dir_t from_dir, const c8* from, u32 from_len, sp
 #if defined(SP_WIN32)
   u32 nt = SP_NT_FILE_RENAME_POSIX_SEMANTICS;
   if (replace) nt |= SP_NT_FILE_RENAME_REPLACE_IF_EXISTS | SP_NT_FILE_RENAME_IGNORE_READONLY_ATTRIBUTE;
-  return sp_sys_nt_set_name_info(
+  return sp_sys_err_from_nt(sp_sys_nt_set_name_info(
     from_dir.fd, sp_str(from, from_len),
     to_dir.fd, sp_str(to, to_len),
     DELETE | SYNCHRONIZE,
     nt,
     SP_NT_FILE_RENAME_INFORMATION_EX,
     SP_NT_FILE_RENAME_INFORMATION
-  );
+  ));
 
 #elif defined(SP_LINUX)
   struct {
@@ -11036,7 +11038,7 @@ sp_err_t sp_sys_chdir_s(sp_str_t path) {
 /////////////////
 sp_err_t sp_sys_link_p(sp_sys_dir_t from_dir, const c8* existing, u32 existing_len, sp_sys_dir_t to_dir, const c8* alias, u32 alias_len) {
 #if defined(SP_WIN32)
-  return sp_sys_nt_set_name_info(
+  sp_nt_status_t status = sp_sys_nt_set_name_info(
     from_dir.fd, sp_str(existing, existing_len),
     to_dir.fd, sp_str(alias, alias_len),
     FILE_READ_ATTRIBUTES | SYNCHRONIZE,
@@ -11044,6 +11046,11 @@ sp_err_t sp_sys_link_p(sp_sys_dir_t from_dir, const c8* existing, u32 existing_l
     SP_NT_FILE_LINK_INFORMATION,
     0
   );
+  switch (status) {
+    case SP_NT_STATUS_INVALID_DEVICE_REQUEST:
+    case SP_NT_STATUS_FILE_IS_A_DIRECTORY:    return SP_ERR_SYS_UNSUPPORTED;
+    default:                                  return sp_sys_err_from_nt(status);
+  }
 
 #elif defined(SP_LINUX)
   struct {
@@ -11052,7 +11059,9 @@ sp_err_t sp_sys_link_p(sp_sys_dir_t from_dir, const c8* existing, u32 existing_l
   } buffers;
   sp_try(sp_sys_posix_path(existing, existing_len, buffers.existing));
   sp_try(sp_sys_posix_path(alias, alias_len, buffers.alias));
-  return sp_syscall_e(SP_SYSCALL_NUM_LINKAT, from_dir.fd, buffers.existing, to_dir.fd, buffers.alias, 0);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_LINKAT, from_dir.fd, buffers.existing, to_dir.fd, buffers.alias, 0);
+  if (rc == -SP_EPERM) return SP_ERR_SYS_UNSUPPORTED;
+  return sp_sys_err_from_errno(-rc);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   struct {
@@ -11061,12 +11070,16 @@ sp_err_t sp_sys_link_p(sp_sys_dir_t from_dir, const c8* existing, u32 existing_l
   } buffers;
   sp_try(sp_sys_posix_path(existing, existing_len, buffers.existing));
   sp_try(sp_sys_posix_path(alias, alias_len, buffers.alias));
-  return sp_sys_err_from_libc(linkat(from_dir.fd, buffers.existing, to_dir.fd, buffers.alias, 0));
+  s32 rc = linkat(from_dir.fd, buffers.existing, to_dir.fd, buffers.alias, 0);
+  if (rc < 0 && errno == SP_EPERM) return SP_ERR_SYS_UNSUPPORTED;
+  return sp_sys_err_from_libc(rc);
 
 #elif defined(SP_WASM)
   sp_try(sp_sys_wasi_path(existing, &existing_len));
   sp_try(sp_sys_wasi_path(alias, &alias_len));
-  return sp_sys_err_from_wasi(sp_wasi_path_link((__wasi_fd_t)from_dir.fd, 0, existing, existing_len, (__wasi_fd_t)to_dir.fd, alias, alias_len));
+  __wasi_errno_t err = sp_wasi_path_link((__wasi_fd_t)from_dir.fd, 0, existing, existing_len, (__wasi_fd_t)to_dir.fd, alias, alias_len);
+  if (err == SP_WASI_EPERM) return SP_ERR_SYS_UNSUPPORTED;
+  return sp_sys_err_from_wasi(err);
 
 #else
   #error "sp_sys_link"
