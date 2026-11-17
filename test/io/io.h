@@ -54,7 +54,7 @@ typedef struct {
     struct { u64 request; sp_err_t err; const c8* content; } read;
     struct { const c8* data; sp_err_t err; u64 bytes; } write;
     struct { sp_err_t err; } flush;
-    struct { s64 offset; sp_io_whence_t whence; sp_err_t err; s64 pos; } seek;
+    struct { s64 offset; sp_sys_seek_t whence; sp_err_t err; s64 pos; } seek;
     struct { sp_err_t err; u64 size; } size;
     struct { u64 buffer; sp_err_t err; u64 copied; } copy;
     struct { u64 size; sp_err_t err; u64 bytes; } pad;

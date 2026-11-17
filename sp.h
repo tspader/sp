@@ -1451,6 +1451,12 @@ typedef enum {
 } sp_sys_clock_t;
 
 typedef enum {
+  SP_SYS_SEEK_SET,
+  SP_SYS_SEEK_CUR,
+  SP_SYS_SEEK_END,
+} sp_sys_seek_t;
+
+typedef enum {
   SP_FS_KIND_NONE = 0,
   SP_FS_KIND_FILE,
   SP_FS_KIND_DIR,
@@ -1620,7 +1626,7 @@ SP_API void        sp_sys_assert(bool cond);
 SP_API void        sp_sys_exit(s32 code);
 SP_API void        sp_sys_env(const c8** env, u32* len);
 
-SP_API sp_err_t    sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence, s64* position);
+SP_API sp_err_t    sp_sys_lseek(sp_sys_fd_t fd, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_API sp_err_t    sp_sys_chdir(const c8* path, u32 len);
 
 
@@ -1721,7 +1727,7 @@ typedef struct {
   void        (*assert)(bool cond);
   void        (*exit)(s32 code);
   void        (*env)(const c8** env, u32* len);
-  sp_err_t    (*lseek)(sp_sys_fd_t fd, s64 offset, s32 whence, s64* position);
+  sp_err_t    (*lseek)(sp_sys_fd_t fd, s64 offset, sp_sys_seek_t whence, s64* position);
   sp_err_t    (*chdir)(const c8* path, u32 len);
   sp_err_t    (*dir_it_open)(sp_sys_dir_t dir, sp_sys_dir_it_t* out);
   sp_err_t    (*dir_it_read)(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf);
@@ -1798,7 +1804,7 @@ SP_API s32         sp_sys_memcmp_p(const void* a, const void* b, u64 n);
 SP_API void        sp_sys_assert_p(bool cond);
 SP_API void        sp_sys_exit_p(s32 code);
 SP_API void        sp_sys_env_p(const c8** env, u32* len);
-SP_API sp_err_t    sp_sys_lseek_p(sp_sys_fd_t fd, s64 offset, s32 whence, s64* position);
+SP_API sp_err_t    sp_sys_lseek_p(sp_sys_fd_t fd, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_API sp_err_t    sp_sys_chdir_p(const c8* path, u32 len);
 SP_API sp_err_t    sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out);
 SP_API sp_err_t    sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf);
@@ -4709,18 +4715,12 @@ void           sp_sys_tls_init(sp_tls_rt_t* tls);
   This trivializes the asymmetric cases (kernel -> userspace and userspace -> kernel). The kernel side, in terms of function signatures, must be represented by an IO type. The userspace side must be represented by a pointer. (You can, of course, wrap the pointer in an IO type if you like the interface, but again we're only talking about fast path dispatching) We therefore have a case where one side *cannot* have a fast path function, by definition, and so we know to use the other one.
  */
 typedef enum {
-  SP_IO_SEEK_SET,
-  SP_IO_SEEK_CUR,
-  SP_IO_SEEK_END,
-} sp_io_whence_t;
-
-typedef enum {
   SP_IO_CLOSE_MODE_NONE,
   SP_IO_CLOSE_MODE_AUTO,
 } sp_io_close_mode_t;
 
 SP_TYPEDEF_FN(sp_err_t, sp_io_reader_read_cb, sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
-SP_TYPEDEF_FN(sp_err_t, sp_io_seek_cb, sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_TYPEDEF_FN(sp_err_t, sp_io_seek_cb, sp_io_reader_t* r, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_TYPEDEF_FN(sp_err_t, sp_io_reader_as_file_cb, sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos);
 SP_TYPEDEF_FN(sp_err_t, sp_io_reader_discard_cb, sp_io_reader_t* r, u64 n, u64* discarded);
 
@@ -4868,7 +4868,7 @@ SP_API sp_err_t       sp_io_pad(sp_io_writer_t* writer, u64 size, u64* bytes_wri
 SP_API sp_err_t       sp_io_flush(sp_io_writer_t* w);
 SP_API sp_err_t       sp_io_writer_set_buffer(sp_io_writer_t* writer, u8* buf, u64 capacity);
 
-SP_API sp_err_t       sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_API void           sp_io_seeking_reader_from_reader(sp_io_seeking_reader_t* sr, sp_io_reader_t* r, sp_io_seek_cb seek);
 SP_API void           sp_io_seeking_reader_from_mem(sp_io_seeking_reader_t* sr, sp_io_reader_t* backing, const void* ptr, u64 size);
 SP_API void           sp_io_seeking_reader_from_file_reader(sp_io_seeking_reader_t* sr, sp_io_file_reader_t* fr);
@@ -4876,7 +4876,7 @@ SP_API void           sp_io_seeking_reader_from_file_reader(sp_io_seeking_reader
 SP_API sp_err_t       sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path);
 SP_API sp_err_t       sp_io_file_reader_from_path_at(sp_io_file_reader_t* r, sp_path_t path);
 SP_API sp_err_t       sp_io_file_reader_from_file(sp_io_file_reader_t* r, sp_sys_fd_t file, sp_io_close_mode_t mode);
-SP_API sp_err_t       sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_API sp_err_t       sp_io_file_reader_size(sp_io_file_reader_t* r, u64* size);
 SP_API sp_err_t       sp_io_file_reader_size_force(sp_io_file_reader_t* r, u64* size);
 SP_API sp_err_t       sp_io_file_reader_close(sp_io_file_reader_t* r);
@@ -4884,7 +4884,7 @@ SP_API sp_err_t       sp_io_file_reader_close(sp_io_file_reader_t* r);
 SP_API sp_err_t       sp_io_file_writer_from_path(sp_io_file_writer_t* w, sp_str_t path);
 SP_API sp_err_t       sp_io_file_writer_from_path_at(sp_io_file_writer_t* w, sp_path_t path);
 SP_API sp_err_t       sp_io_file_writer_from_fd(sp_io_file_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t close_mode);
-SP_API sp_err_t       sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_API sp_err_t       sp_io_file_writer_size(sp_io_file_writer_t* w, u64* size);
 SP_API sp_err_t       sp_io_file_writer_size_force(sp_io_file_writer_t* w, u64* size);
 SP_API sp_err_t       sp_io_file_writer_close(sp_io_file_writer_t* w);
@@ -4896,14 +4896,14 @@ SP_API sp_err_t       sp_io_stream_reader_close(sp_io_stream_reader_t* r);
 SP_API void           sp_io_stream_writer_from_fd(sp_io_stream_writer_t* w, sp_sys_fd_t fd, sp_io_close_mode_t mode);
 SP_API sp_err_t       sp_io_stream_writer_close(sp_io_stream_writer_t* w);
 
-SP_API sp_err_t       sp_io_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_mem_seek(sp_io_reader_t* r, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_API void           sp_io_mem_writer_from_buffer(sp_io_mem_writer_t* w, void* ptr, u64 size);
-SP_API sp_err_t       sp_io_mem_writer_seek(sp_io_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_mem_writer_seek(sp_io_mem_writer_t* w, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_API sp_err_t       sp_io_mem_writer_size(sp_io_mem_writer_t* w, u64* size);
 SP_API sp_str_t       sp_io_mem_writer_as_str(sp_io_mem_writer_t* w);
 
 SP_API void           sp_io_dyn_mem_writer_init(sp_mem_t mem, sp_io_dyn_mem_writer_t* w);
-SP_API sp_err_t       sp_io_dyn_mem_writer_seek(sp_io_dyn_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position);
+SP_API sp_err_t       sp_io_dyn_mem_writer_seek(sp_io_dyn_mem_writer_t* w, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_API sp_err_t       sp_io_dyn_mem_writer_size(sp_io_dyn_mem_writer_t* w, u64* size);
 SP_API sp_err_t       sp_io_dyn_mem_writer_close(sp_io_dyn_mem_writer_t* w);
 SP_API sp_str_t       sp_io_dyn_mem_writer_as_str(sp_io_dyn_mem_writer_t* w);
@@ -5272,7 +5272,7 @@ SP_PRIVATE void  sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t);
 // @io
 SP_IMP sp_err_t sp_io_file_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
 SP_IMP sp_err_t sp_io_file_reader_discard(sp_io_reader_t* reader, u64 n, u64* discarded);
-SP_IMP sp_err_t sp_io_file_reader_seek_cb(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position);
+SP_IMP sp_err_t sp_io_file_reader_seek_cb(sp_io_reader_t* reader, s64 offset, sp_sys_seek_t whence, s64* position);
 SP_IMP sp_err_t sp_io_stream_reader_read(sp_io_reader_t* reader, void* ptr, u64 size, u64* bytes_read);
 SP_IMP sp_err_t sp_io_stream_reader_as_file(sp_io_reader_t* r, sp_sys_fd_t* fd, u64** pos);
 SP_IMP sp_err_t sp_io_eof_read(sp_io_reader_t* r, void* ptr, u64 size, u64* bytes_read);
@@ -6355,7 +6355,7 @@ void sp_sys_env(const c8** env, u32* len) {
   (sp_rt.vt->env)(env, len);
 }
 
-sp_err_t sp_sys_lseek(sp_sys_fd_t fd, s64 offset, s32 whence, s64* position) {
+sp_err_t sp_sys_lseek(sp_sys_fd_t fd, s64 offset, sp_sys_seek_t whence, s64* position) {
   return (sp_rt.vt->lseek)(fd, offset, whence, position);
 }
 
@@ -8653,59 +8653,59 @@ sp_err_t sp_sys_transfer_positional_p(sp_sys_fd_t in, u64* in_pos, sp_sys_fd_t o
 //////////////////
 // SP_SYS_LSEEK //
 //////////////////
-sp_err_t sp_sys_lseek_p(sp_sys_fd_t fd, s64 offset, s32 whence, s64* position) {
+sp_err_t sp_sys_lseek_p(sp_sys_fd_t fd, s64 offset, sp_sys_seek_t whence, s64* position) {
   if (position) *position = 0;
 
 #if defined(SP_WIN32)
-  DWORD method;
+  s32 method = -1;
   switch (whence) {
-    case SP_IO_SEEK_SET: method = FILE_BEGIN;   break;
-    case SP_IO_SEEK_CUR: method = FILE_CURRENT; break;
-    case SP_IO_SEEK_END: method = FILE_END;     break;
-    default: return SP_ERR_SYS_INVALID;
+    case SP_SYS_SEEK_SET: method = FILE_BEGIN;   break;
+    case SP_SYS_SEEK_CUR: method = FILE_CURRENT; break;
+    case SP_SYS_SEEK_END: method = FILE_END;     break;
   }
+  if (method < 0) return SP_ERR_SYS_INVALID;
   LARGE_INTEGER dist = { .QuadPart = offset };
   LARGE_INTEGER new_pos;
-  if (!SetFilePointerEx((HANDLE)fd, dist, &new_pos, method)) return sp_sys_err_from_win32(GetLastError());
+  if (!SetFilePointerEx((HANDLE)fd, dist, &new_pos, (DWORD)method)) return sp_sys_err_from_win32(GetLastError());
   if (position) *position = (s64)new_pos.QuadPart;
   return SP_OK;
 
 #elif defined(SP_LINUX)
-  s32 native;
+  s32 native = -1;
   switch (whence) {
-    case SP_IO_SEEK_SET: native = 0; break;
-    case SP_IO_SEEK_CUR: native = 1; break;
-    case SP_IO_SEEK_END: native = 2; break;
-    default: return SP_ERR_SYS_INVALID;
+    case SP_SYS_SEEK_SET: native = 0; break;
+    case SP_SYS_SEEK_CUR: native = 1; break;
+    case SP_SYS_SEEK_END: native = 2; break;
   }
+  if (native < 0) return SP_ERR_SYS_INVALID;
   s64 rc = sp_syscall(SP_SYSCALL_NUM_LSEEK, fd, offset, native);
   if (rc < 0) return sp_sys_err_from_errno(-rc);
   if (position) *position = rc;
   return SP_OK;
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  s32 native;
+  s32 native = -1;
   switch (whence) {
-    case SP_IO_SEEK_SET: native = SEEK_SET; break;
-    case SP_IO_SEEK_CUR: native = SEEK_CUR; break;
-    case SP_IO_SEEK_END: native = SEEK_END; break;
-    default: return SP_ERR_SYS_INVALID;
+    case SP_SYS_SEEK_SET: native = SEEK_SET; break;
+    case SP_SYS_SEEK_CUR: native = SEEK_CUR; break;
+    case SP_SYS_SEEK_END: native = SEEK_END; break;
   }
+  if (native < 0) return SP_ERR_SYS_INVALID;
   s64 rc = lseek(fd, offset, native);
   if (rc < 0) return sp_sys_err_from_errno(errno);
   if (position) *position = rc;
   return SP_OK;
 
 #elif defined(SP_WASM)
-  __wasi_whence_t native;
+  s32 native = -1;
   switch (whence) {
-    case SP_IO_SEEK_SET: native = __WASI_WHENCE_SET; break;
-    case SP_IO_SEEK_CUR: native = __WASI_WHENCE_CUR; break;
-    case SP_IO_SEEK_END: native = __WASI_WHENCE_END; break;
-    default: return SP_ERR_SYS_INVALID;
+    case SP_SYS_SEEK_SET: native = __WASI_WHENCE_SET; break;
+    case SP_SYS_SEEK_CUR: native = __WASI_WHENCE_CUR; break;
+    case SP_SYS_SEEK_END: native = __WASI_WHENCE_END; break;
   }
+  if (native < 0) return SP_ERR_SYS_INVALID;
   __wasi_filesize_t newoff = 0;
-  sp_try(sp_sys_err_from_wasi(__wasi_fd_seek((__wasi_fd_t)fd, (__wasi_filedelta_t)offset, native, &newoff)));
+  sp_try(sp_sys_err_from_wasi(__wasi_fd_seek((__wasi_fd_t)fd, (__wasi_filedelta_t)offset, (__wasi_whence_t)native, &newoff)));
   if (position) *position = (s64)newoff;
   return SP_OK;
 
@@ -14332,7 +14332,7 @@ sp_err_t sp_sys_dir_it_open_p(sp_sys_dir_t dir, sp_sys_dir_it_t* out) {
   return SP_OK;
 #elif defined(SP_LINUX)
   s64 position = 0;
-  return sp_sys_lseek_p(dir.fd, 0, SP_IO_SEEK_SET, &position);
+  return sp_sys_lseek_p(dir.fd, 0, SP_SYS_SEEK_SET, &position);
 #elif defined(SP_MACOS) || defined(SP_COSMO)
   s32 dup_fd = dup((s32)dir.fd);
   if (dup_fd < 0) return sp_sys_err_from_errno(errno);
@@ -18189,7 +18189,7 @@ sp_err_t sp_io_file_reader_from_path(sp_io_file_reader_t* r, sp_str_t path) {
   return sp_io_file_reader_from_path_at(r, sp_path_from_str(path));
 }
 
-sp_err_t sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_sys_seek_t whence, s64* position) {
   sp_err_t err = SP_OK;
   s64 pos = 0;
 
@@ -18199,9 +18199,9 @@ sp_err_t sp_io_file_reader_seek(sp_io_file_reader_t* r, s64 offset, sp_io_whence
   base->buffer.len = 0;
 
   switch (whence) {
-    case SP_IO_SEEK_SET: pos = offset; break;
-    case SP_IO_SEEK_CUR: pos = (s64)r->pos + offset; break;
-    case SP_IO_SEEK_END: {
+    case SP_SYS_SEEK_SET: pos = offset; break;
+    case SP_SYS_SEEK_CUR: pos = (s64)r->pos + offset; break;
+    case SP_SYS_SEEK_END: {
       u64 size = 0;
       err = sp_io_file_reader_size(r, &size);
       if (err) {
@@ -18226,7 +18226,7 @@ done:
   return err;
 }
 
-sp_err_t sp_io_file_reader_seek_cb(sp_io_reader_t* reader, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_file_reader_seek_cb(sp_io_reader_t* reader, s64 offset, sp_sys_seek_t whence, s64* position) {
   return sp_io_file_reader_seek((sp_io_file_reader_t*)reader, offset, whence, position);
 }
 
@@ -18715,18 +18715,18 @@ done:
   return result;
 }
 
-sp_err_t sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_seeking_reader_seek(sp_io_seeking_reader_t* r, s64 offset, sp_sys_seek_t whence, s64* position) {
   sp_assert(r);
   return r->seek(r->reader, offset, whence, position);
 }
 
-sp_err_t sp_io_mem_seek(sp_io_reader_t* r, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_mem_seek(sp_io_reader_t* r, s64 offset, sp_sys_seek_t whence, s64* position) {
   s64 pos = 0;
 
   switch (whence) {
-    case SP_IO_SEEK_SET: pos = offset; break;
-    case SP_IO_SEEK_CUR: pos = (s64)r->cursor + offset; break;
-    case SP_IO_SEEK_END: pos = (s64)r->buffer.len + offset; break;
+    case SP_SYS_SEEK_SET: pos = offset; break;
+    case SP_SYS_SEEK_CUR: pos = (s64)r->cursor + offset; break;
+    case SP_SYS_SEEK_END: pos = (s64)r->buffer.len + offset; break;
   }
 
   if (pos < 0 || (u64)pos > r->buffer.len) {
@@ -18774,15 +18774,15 @@ sp_err_t sp_io_file_writer_transfer(sp_io_writer_t* writer, sp_sys_fd_t fd, u64*
   return err;
 }
 
-sp_err_t sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_file_writer_seek(sp_io_file_writer_t* w, s64 offset, sp_sys_seek_t whence, s64* position) {
   sp_assert(w);
   sp_try(sp_io_flush(&w->base));
 
   s64 new_pos = 0;
   switch (whence) {
-    case SP_IO_SEEK_SET: new_pos = offset; break;
-    case SP_IO_SEEK_CUR: new_pos = (s64)w->pos + offset; break;
-    case SP_IO_SEEK_END: {
+    case SP_SYS_SEEK_SET: new_pos = offset; break;
+    case SP_SYS_SEEK_CUR: new_pos = (s64)w->pos + offset; break;
+    case SP_SYS_SEEK_END: {
       u64 size = 0;
       sp_err_t err = sp_io_file_writer_size(w, &size);
       if (err) {
@@ -19469,22 +19469,22 @@ sp_err_t sp_io_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64 siz
   return result;
 }
 
-sp_err_t sp_io_mem_writer_seek(sp_io_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_mem_writer_seek(sp_io_mem_writer_t* w, s64 offset, sp_sys_seek_t whence, s64* position) {
   sp_assert(w);
   sp_try(sp_io_flush(&w->base));
 
   s64 pos = 0;
 
   switch (whence) {
-    case SP_IO_SEEK_SET: {
+    case SP_SYS_SEEK_SET: {
       pos = offset;
       break;
     }
-    case SP_IO_SEEK_CUR: {
+    case SP_SYS_SEEK_CUR: {
       pos = (s64)w->pos + offset;
       break;
     }
-    case SP_IO_SEEK_END: {
+    case SP_SYS_SEEK_END: {
       pos = (s64)w->len + offset;
       break;
     }
@@ -19539,7 +19539,7 @@ sp_err_t sp_io_dyn_mem_writer_write(sp_io_writer_t* writer, const void* ptr, u64
   return SP_OK;
 }
 
-sp_err_t sp_io_dyn_mem_writer_seek(sp_io_dyn_mem_writer_t* w, s64 offset, sp_io_whence_t whence, s64* position) {
+sp_err_t sp_io_dyn_mem_writer_seek(sp_io_dyn_mem_writer_t* w, s64 offset, sp_sys_seek_t whence, s64* position) {
   sp_assert(w);
   sp_try(sp_io_flush(&w->base));
 
@@ -19547,15 +19547,15 @@ sp_err_t sp_io_dyn_mem_writer_seek(sp_io_dyn_mem_writer_t* w, s64 offset, sp_io_
   position = position ? position : &pos;
 
   switch (whence) {
-    case SP_IO_SEEK_SET: {
+    case SP_SYS_SEEK_SET: {
       *position = offset;
       break;
     }
-    case SP_IO_SEEK_CUR: {
+    case SP_SYS_SEEK_CUR: {
       *position = (s64)w->cursor + offset;
       break;
     }
-    case SP_IO_SEEK_END: {
+    case SP_SYS_SEEK_END: {
       *position = (s64)w->storage.len + offset;
       break;
     }

@@ -297,8 +297,8 @@ UTEST_F(io_mem, writer_seek) {
   run_io_mem_test(utest_result, (io_mem_test_t){
     .writer_capacity = 64,
     .steps = {
-      { .kind = IO_STEP_SEEK, .seek = { 32, SP_IO_SEEK_SET, SP_OK, 32 } },
-      { .kind = IO_STEP_SEEK, .seek = { 0,  SP_IO_SEEK_END, SP_OK, 64 } },
+      { .kind = IO_STEP_SEEK, .seek = { 32, SP_SYS_SEEK_SET, SP_OK, 32 } },
+      { .kind = IO_STEP_SEEK, .seek = { 0,  SP_SYS_SEEK_END, SP_OK, 64 } },
     },
   });
 }

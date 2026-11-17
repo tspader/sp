@@ -56,9 +56,9 @@ UTEST_F(io_seeking_reader, seek) {
   run_io_seeking_reader_test(utest_result, (io_seeking_reader_test_t){
     .source = "0123456789ABCDEF",
     .steps = {
-      { .kind = IO_STEP_SEEK, .seek = { 8, SP_IO_SEEK_SET, SP_OK, 8  } },
+      { .kind = IO_STEP_SEEK, .seek = { 8, SP_SYS_SEEK_SET, SP_OK, 8  } },
       { .kind = IO_STEP_READ, .read = { 1, SP_OK, "8" } },
-      { .kind = IO_STEP_SEEK, .seek = { 0, SP_IO_SEEK_END, SP_OK, 16 } },
+      { .kind = IO_STEP_SEEK, .seek = { 0, SP_SYS_SEEK_END, SP_OK, 16 } },
     },
   });
 }
@@ -67,8 +67,8 @@ UTEST_F(io_seeking_reader, seek_invalid) {
   run_io_seeking_reader_test(utest_result, (io_seeking_reader_test_t){
     .source = "0123456789",
     .steps = {
-      { .kind = IO_STEP_SEEK, .seek = { 100, SP_IO_SEEK_SET, SP_ERR_IO_SEEK_INVALID, -1 } },
-      { .kind = IO_STEP_SEEK, .seek = { -10, SP_IO_SEEK_SET, SP_ERR_IO_SEEK_INVALID, -1 } },
+      { .kind = IO_STEP_SEEK, .seek = { 100, SP_SYS_SEEK_SET, SP_ERR_IO_SEEK_INVALID, -1 } },
+      { .kind = IO_STEP_SEEK, .seek = { -10, SP_SYS_SEEK_SET, SP_ERR_IO_SEEK_INVALID, -1 } },
     },
   });
 }
@@ -83,7 +83,7 @@ UTEST_F(io_seeking_reader, seek_back_after_eof) {
     .steps = {
       { .kind = IO_STEP_READ, .read = { 5, SP_OK, "hello" } },
       { .kind = IO_STEP_READ, .read = { 2, SP_ERR_IO_EOF } },
-      { .kind = IO_STEP_SEEK, .seek = { 0, SP_IO_SEEK_SET, SP_OK, 0 } },
+      { .kind = IO_STEP_SEEK, .seek = { 0, SP_SYS_SEEK_SET, SP_OK, 0 } },
       { .kind = IO_STEP_READ, .read = { 5, SP_OK, "hello" } },
     },
   });
@@ -158,7 +158,7 @@ UTEST_F(io, seeking_reader_file_seek) {
   run_io_seeking_reader_file_test(utest_result, ut.file, (io_seeking_reader_file_test_t){
     .content = "0123456789ABCDEF",
     .steps = {
-      { .kind = IO_STEP_SEEK, .seek = { 5, SP_IO_SEEK_SET, SP_OK, 5 } },
+      { .kind = IO_STEP_SEEK, .seek = { 5, SP_SYS_SEEK_SET, SP_OK, 5 } },
       { .kind = IO_STEP_READ, .read = { 5, SP_OK, "56789" } },
     },
   });
@@ -168,11 +168,11 @@ UTEST_F(io, seeking_reader_file_seek_whence) {
   run_io_seeking_reader_file_test(utest_result, ut.file, (io_seeking_reader_file_test_t){
     .content = "0123456789ABCDEF",
     .steps = {
-      { .kind = IO_STEP_SEEK, .seek = {  4, SP_IO_SEEK_SET, SP_OK,  4 } },
-      { .kind = IO_STEP_SEEK, .seek = {  3, SP_IO_SEEK_CUR, SP_OK,  7 } },
+      { .kind = IO_STEP_SEEK, .seek = {  4, SP_SYS_SEEK_SET, SP_OK,  4 } },
+      { .kind = IO_STEP_SEEK, .seek = {  3, SP_SYS_SEEK_CUR, SP_OK,  7 } },
       { .kind = IO_STEP_READ, .read = {  1, SP_OK, "7" } },
-      { .kind = IO_STEP_SEEK, .seek = {  0, SP_IO_SEEK_END, SP_OK, 16 } },
-      { .kind = IO_STEP_SEEK, .seek = { -2, SP_IO_SEEK_END, SP_OK, 14 } },
+      { .kind = IO_STEP_SEEK, .seek = {  0, SP_SYS_SEEK_END, SP_OK, 16 } },
+      { .kind = IO_STEP_SEEK, .seek = { -2, SP_SYS_SEEK_END, SP_OK, 14 } },
       { .kind = IO_STEP_READ, .read = {  1, SP_OK, "E" } },
     },
   });
@@ -182,7 +182,7 @@ UTEST_F(io, seeking_reader_file_seek_invalid) {
   run_io_seeking_reader_file_test(utest_result, ut.file, (io_seeking_reader_file_test_t){
     .content = "0123456789",
     .steps = {
-      { .kind = IO_STEP_SEEK, .seek = { -10, SP_IO_SEEK_SET, SP_ERR_IO_SEEK_INVALID, -1 } },
+      { .kind = IO_STEP_SEEK, .seek = { -10, SP_SYS_SEEK_SET, SP_ERR_IO_SEEK_INVALID, -1 } },
     },
   });
 }
@@ -193,7 +193,7 @@ UTEST_F(io, seeking_reader_file_seek_buffered) {
     .buffer = 8,
     .steps = {
       { .kind = IO_STEP_READ, .read = {  1, SP_OK, "0" } },
-      { .kind = IO_STEP_SEEK, .seek = { 10, SP_IO_SEEK_SET, SP_OK, 10 } },
+      { .kind = IO_STEP_SEEK, .seek = { 10, SP_SYS_SEEK_SET, SP_OK, 10 } },
       { .kind = IO_STEP_READ, .read = {  1, SP_OK, "A" } },
     },
   });
