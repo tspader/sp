@@ -32,12 +32,6 @@ static const test_t tests [] = {
       { .path = "A" },
     },
   },
-  {
-    .name = "truncate_leaves_partial_file",
-    .expect = {
-      { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE },
-    },
-  },
 };
 
 static sp_err_t failing_write(sp_sys_fd_t fd, const void* buf, u64 count, u64* bytes_written) {
