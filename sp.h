@@ -5454,6 +5454,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_PIPE2             293
   #define SP_SYSCALL_NUM_INOTIFY_INIT1     294
   #define SP_SYSCALL_NUM_PERF_EVENT_OPEN   298
+  #define SP_SYSCALL_NUM_RENAMEAT2         316
   #define SP_SYSCALL_NUM_STATX             332
 
 #elif defined(SP_ARM64)
@@ -5518,6 +5519,7 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
   #define SP_SYSCALL_NUM_SETSOCKOPT        208
   #define SP_SYSCALL_NUM_GETSOCKOPT        209
   #define SP_SYSCALL_NUM_ACCEPT4           242
+  #define SP_SYSCALL_NUM_RENAMEAT2         276
   #define SP_SYSCALL_NUM_COPY_FILE_RANGE   285
   #define SP_SYSCALL_NUM_STATX             291
   #define SP_SYSCALL_NUM_OPEN              SP_SYSCALL_NUM_OPENAT
@@ -5555,6 +5557,8 @@ SP_IMP DWORD WINAPI      sp_win32_thread_launch(LPVOID args);
 
 #define SP_SYS_LINUX_STATX_BASIC_STATS 0x7ff
 #define SP_SYS_LINUX_STATX_BTIME       0x800
+
+#define SP_SYS_LINUX_RENAME_NOREPLACE 1
 
 #define SP_SYS_LINUX_FUTEX_WAIT         0
 #define SP_SYS_LINUX_FUTEX_WAKE         1
@@ -7662,7 +7666,7 @@ SP_PRIVATE sp_err_t sp_sys_nt_set_name_info(sp_sys_fd_t from_fd, sp_str_t from, 
 
   if (legacy_info_class && sp_sys_nt_needs_legacy_info(status)) {
     info->Flags = 0;
-    info->ReplaceIfExists = 1;
+    info->ReplaceIfExists = (flags & SP_NT_FILE_RENAME_REPLACE_IF_EXISTS) ? 1 : 0;
     status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, info, info_bytes, legacy_info_class);
   }
 
@@ -7883,15 +7887,17 @@ sp_err_t sp_sys_sync_p(sp_sys_fd_t fd) {
 // SP_SYS_RENAME //
 ///////////////////
 sp_err_t sp_sys_rename_p(sp_sys_dir_t from_dir, const c8* from, u32 from_len, sp_sys_dir_t to_dir, const c8* to, u32 to_len, sp_sys_rename_flags_t flags) {
-  if (flags) return SP_ERR_SYS_UNSUPPORTED;
+  if (flags & ~(u32)SP_SYS_RENAME_NO_REPLACE) return SP_ERR_SYS_INVALID;
+  bool replace = !(flags & SP_SYS_RENAME_NO_REPLACE);
 
 #if defined(SP_WIN32)
+  u32 nt = SP_NT_FILE_RENAME_POSIX_SEMANTICS;
+  if (replace) nt |= SP_NT_FILE_RENAME_REPLACE_IF_EXISTS | SP_NT_FILE_RENAME_IGNORE_READONLY_ATTRIBUTE;
   return sp_sys_nt_set_name_info(
     from_dir.fd, sp_str(from, from_len),
     to_dir.fd, sp_str(to, to_len),
     DELETE | SYNCHRONIZE,
-    SP_NT_FILE_RENAME_REPLACE_IF_EXISTS | SP_NT_FILE_RENAME_POSIX_SEMANTICS |
-    SP_NT_FILE_RENAME_IGNORE_READONLY_ATTRIBUTE,
+    nt,
     SP_NT_FILE_RENAME_INFORMATION_EX,
     SP_NT_FILE_RENAME_INFORMATION
   );
@@ -7903,9 +7909,21 @@ sp_err_t sp_sys_rename_p(sp_sys_dir_t from_dir, const c8* from, u32 from_len, sp
   } buffers;
   sp_try(sp_sys_posix_path(from, from_len, buffers.from));
   sp_try(sp_sys_posix_path(to, to_len, buffers.to));
-  return sp_syscall_e(SP_SYSCALL_NUM_RENAMEAT, from_dir.fd, buffers.from, to_dir.fd, buffers.to);
+  s64 rc = sp_syscall(SP_SYSCALL_NUM_RENAMEAT2, from_dir.fd, buffers.from, to_dir.fd, buffers.to, replace ? 0 : SP_SYS_LINUX_RENAME_NOREPLACE);
+  if (rc == -SP_EINVAL && !replace) return SP_ERR_SYS_UNSUPPORTED;
+  return sp_sys_err_from_errno(-rc);
 
-#elif defined(SP_MACOS) || defined(SP_COSMO)
+#elif defined(SP_MACOS)
+  struct {
+    c8 from [SP_PATH_MAX];
+    c8 to [SP_PATH_MAX];
+  } buffers;
+  sp_try(sp_sys_posix_path(from, from_len, buffers.from));
+  sp_try(sp_sys_posix_path(to, to_len, buffers.to));
+  return sp_sys_err_from_libc(renameatx_np(from_dir.fd, buffers.from, to_dir.fd, buffers.to, replace ? 0 : RENAME_EXCL));
+
+#elif defined(SP_COSMO)
+  if (!replace) return SP_ERR_SYS_UNSUPPORTED;
   struct {
     c8 from [SP_PATH_MAX];
     c8 to [SP_PATH_MAX];
@@ -7915,6 +7933,7 @@ sp_err_t sp_sys_rename_p(sp_sys_dir_t from_dir, const c8* from, u32 from_len, sp
   return sp_sys_err_from_libc(renameat(from_dir.fd, buffers.from, to_dir.fd, buffers.to));
 
 #elif defined(SP_WASM)
+  if (!replace) return SP_ERR_SYS_UNSUPPORTED;
   sp_try(sp_sys_wasi_path(from, &from_len));
   sp_try(sp_sys_wasi_path(to, &to_len));
   return sp_sys_err_from_wasi(sp_wasi_path_rename((__wasi_fd_t)from_dir.fd, from, from_len, (__wasi_fd_t)to_dir.fd, to, to_len));
