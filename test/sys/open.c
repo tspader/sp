@@ -4,217 +4,217 @@ static const sys_case_t sys_open_cases [] = {
   {
     .name = "read_refuses_missing_file",
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .err = SP_ERR_SYS_NOT_FOUND } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .err = SP_ERR_SYS_NOT_FOUND } },
     },
     .expect = {
-      { .path = "file.bin" },
+      { .path = "A" },
     },
   },
   {
     .name = "write_refuses_missing_file",
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .err = SP_ERR_SYS_NOT_FOUND } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .err = SP_ERR_SYS_NOT_FOUND } },
     },
     .expect = {
-      { .path = "file.bin" },
+      { .path = "A" },
     },
   },
   {
     .name = "ro_forbids_write",
     .setup = {
-      { .path = "file.bin", .content = "A" },
+      { .path = "A", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin" } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A" } },
       { .kind = SYS_STEP_WRITE, .write = { .data = "B", .err = SP_ERR_SYS_BAD_FD } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "A" },
+      { .path = "A", .exists = true, .content = "A" },
     },
   },
   {
     .name = "write_forbids_read",
     .setup = {
-      { .path = "file.bin", .content = "A" },
+      { .path = "A", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO } },
       { .kind = SYS_STEP_READ, .read = { .count = 1, .err = SP_ERR_SYS_BAD_FD } },
     },
   },
   {
     .name = "read_write_allows_both",
     .setup = {
-      { .path = "file.bin", .content = "AB" },
+      { .path = "A", .content = "AB" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_RW } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_RW } },
       { .kind = SYS_STEP_READ, .read = { .count = 2, .expect = "AB" } },
       { .kind = SYS_STEP_WRITE, .write = { .data = "CD" } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "ABCD" },
+      { .path = "A", .exists = true, .content = "ABCD" },
     },
   },
   {
     .name = "write_preserves_content",
     .setup = {
-      { .path = "file.bin", .content = "AAAA" },
+      { .path = "A", .content = "AAAA" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "AAAA" },
+      { .path = "A", .exists = true, .content = "AAAA" },
     },
   },
   {
     .name = "write_refuses_directory",
     .setup = {
-      { .path = "dir", .kind = SYS_SETUP_DIR },
+      { .path = "D", .kind = SYS_SETUP_DIR },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "dir", .mode = SP_SYS_OPEN_MODE_WO, .err = SP_ERR_SYS_IS_DIR } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "D", .mode = SP_SYS_OPEN_MODE_WO, .err = SP_ERR_SYS_IS_DIR } },
     },
   },
   {
     .name = "create_creates_missing_file",
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "" },
+      { .path = "A", .exists = true, .content = "" },
     },
   },
   {
     .name = "create_opens_existing_file",
     .setup = {
-      { .path = "file.bin", .content = "AAAA" },
+      { .path = "A", .content = "AAAA" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "AAAA" },
+      { .path = "A", .exists = true, .content = "AAAA" },
     },
   },
   {
     .name = "create_applies_perms",
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE, .read_only = true } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE, .read_only = true } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .read_only = true },
+      { .path = "A", .exists = true, .read_only = true },
     },
   },
   {
     .name = "create_keeps_perms_of_existing_file",
     .setup = {
-      { .path = "file.bin", .content = "A" },
+      { .path = "A", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE, .read_only = true } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE, .read_only = true } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "A" },
+      { .path = "A", .exists = true, .content = "A" },
     },
   },
   {
     .name = "excl_refuses_existing_file",
     .setup = {
-      { .path = "file.bin", .content = "AAAA" },
+      { .path = "A", .content = "AAAA" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE, .err = SP_ERR_SYS_EXISTS } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE, .err = SP_ERR_SYS_EXISTS } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "AAAA" },
+      { .path = "A", .exists = true, .content = "AAAA" },
     },
   },
   {
     .name = "excl_refuses_symlink",
     .setup = {
-      { .path = "lnk", .kind = SYS_SETUP_SYMLINK, .target = "victim" },
+      { .path = "L", .kind = SYS_SETUP_SYMLINK, .target = "T" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "lnk", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE, .err = SP_ERR_SYS_EXISTS } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "L", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_EXCLUSIVE, .err = SP_ERR_SYS_EXISTS } },
     },
     .expect = {
-      { .path = "victim" },
+      { .path = "T" },
     },
   },
   {
     .name = "excl_implies_create",
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_EXCLUSIVE } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_EXCLUSIVE } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true },
+      { .path = "A", .exists = true },
     },
   },
   {
     .name = "truncate_empties_existing_file",
     .setup = {
-      { .path = "file.bin", .content = "AAAA" },
+      { .path = "A", .content = "AAAA" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_TRUNCATE } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_TRUNCATE } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "" },
+      { .path = "A", .exists = true, .content = "" },
     },
   },
   {
     .name = "truncate_refuses_missing_file",
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_TRUNCATE, .err = SP_ERR_SYS_NOT_FOUND } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_TRUNCATE, .err = SP_ERR_SYS_NOT_FOUND } },
     },
     .expect = {
-      { .path = "file.bin" },
+      { .path = "A" },
     },
   },
   {
     .name = "create_truncate_creates_missing_file",
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "" },
+      { .path = "A", .exists = true, .content = "" },
     },
   },
   {
     .name = "create_truncate_empties_existing_file",
     .setup = {
-      { .path = "file.bin", .content = "AAAA" },
+      { .path = "A", .content = "AAAA" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_TRUNCATE } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "" },
+      { .path = "A", .exists = true, .content = "" },
     },
   },
   {
     .name = "append_preserves_content",
     .setup = {
-      { .path = "file.bin", .content = "AA" },
+      { .path = "A", .content = "AA" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_APPEND } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_APPEND } },
       { .kind = SYS_STEP_WRITE, .write = { .data = "BB" } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "AABB" },
+      { .path = "A", .exists = true, .content = "AABB" },
     },
   },
   {
     .name = "create_append_creates_missing_file",
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_APPEND } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_CREATE | SP_SYS_OPEN_APPEND } },
       { .kind = SYS_STEP_WRITE, .write = { .data = "A" } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "A" },
+      { .path = "A", .exists = true, .content = "A" },
     },
   },
   {
@@ -222,13 +222,13 @@ static const sys_case_t sys_open_cases [] = {
     // is rejected everywhere.
     .name = "append_truncate_rejected",
     .setup = {
-      { .path = "file.bin", .content = "A" },
+      { .path = "A", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_APPEND | SP_SYS_OPEN_TRUNCATE, .err = SP_ERR_SYS_INVALID } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO, .flags = SP_SYS_OPEN_APPEND | SP_SYS_OPEN_TRUNCATE, .err = SP_ERR_SYS_INVALID } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "A" },
+      { .path = "A", .exists = true, .content = "A" },
     },
   },
   {
@@ -236,13 +236,13 @@ static const sys_case_t sys_open_cases [] = {
     // combination is rejected everywhere.
     .name = "ro_truncate_rejected",
     .setup = {
-      { .path = "file.bin", .content = "A" },
+      { .path = "A", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_RO, .flags = SP_SYS_OPEN_TRUNCATE, .err = SP_ERR_SYS_INVALID } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_RO, .flags = SP_SYS_OPEN_TRUNCATE, .err = SP_ERR_SYS_INVALID } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "A" },
+      { .path = "A", .exists = true, .content = "A" },
     },
   },
   {
@@ -250,14 +250,14 @@ static const sys_case_t sys_open_cases [] = {
     // negative offset. The sentinel must not leak through as silent append.
     .name = "pwrite_refuses_max_offset",
     .setup = {
-      { .path = "file.bin", .content = "A" },
+      { .path = "A", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN, .open = { .path = "file.bin", .mode = SP_SYS_OPEN_MODE_WO } },
+      { .kind = SYS_STEP_OPEN, .open = { .path = "A", .mode = SP_SYS_OPEN_MODE_WO } },
       { .kind = SYS_STEP_PWRITE, .pwrite = { .data = "B", .offset = (u64)-1, .err = SP_ERR_SYS_INVALID } },
     },
     .expect = {
-      { .path = "file.bin", .exists = true, .content = "A" },
+      { .path = "A", .exists = true, .content = "A" },
     },
   },
 };
@@ -266,16 +266,16 @@ static const sys_case_t sys_open_dir_cases [] = {
   {
     .name = "refuses_file",
     .setup = {
-      { .path = "file.bin", .content = "A" },
+      { .path = "A", .content = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "file.bin", .err = SP_ERR_SYS_NOT_DIR } },
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "A", .err = SP_ERR_SYS_NOT_DIR } },
     },
   },
   {
     .name = "refuses_missing_path",
     .steps = {
-      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "dir", .err = SP_ERR_SYS_NOT_FOUND } },
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "D", .err = SP_ERR_SYS_NOT_FOUND } },
     },
   },
   {
@@ -290,31 +290,31 @@ static const sys_case_t sys_open_dir_cases [] = {
   {
     .name = "follows_dir_symlink",
     .setup = {
-      { .path = "dir", .kind = SYS_SETUP_DIR },
-      { .path = "link", .kind = SYS_SETUP_DIR_SYMLINK, .target = "dir" },
+      { .path = "D", .kind = SYS_SETUP_DIR },
+      { .path = "L", .kind = SYS_SETUP_DIR_SYMLINK, .target = "D" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "link" } },
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "L" } },
     },
   },
   {
     .name = "nofollow_refuses_dir_symlink",
     .setup = {
-      { .path = "dir", .kind = SYS_SETUP_DIR },
-      { .path = "link", .kind = SYS_SETUP_DIR_SYMLINK, .target = "dir" },
+      { .path = "D", .kind = SYS_SETUP_DIR },
+      { .path = "L", .kind = SYS_SETUP_DIR_SYMLINK, .target = "D" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "link", .flags = SP_SYS_OPEN_DIR_NO_FOLLOW, .err = SP_ERR_SYS_LOOP } },
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "L", .flags = SP_SYS_OPEN_DIR_NO_FOLLOW, .err = SP_ERR_SYS_LOOP } },
     },
   },
   {
     .name = "nofollow_refuses_file_symlink",
     .setup = {
-      { .path = "file.bin", .content = "A" },
-      { .path = "link", .kind = SYS_SETUP_SYMLINK, .target = "file.bin" },
+      { .path = "A", .content = "A" },
+      { .path = "L", .kind = SYS_SETUP_SYMLINK, .target = "A" },
     },
     .steps = {
-      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "link", .flags = SP_SYS_OPEN_DIR_NO_FOLLOW, .err = SP_ERR_SYS_LOOP } },
+      { .kind = SYS_STEP_OPEN_DIR, .open_dir = { .path = "L", .flags = SP_SYS_OPEN_DIR_NO_FOLLOW, .err = SP_ERR_SYS_LOOP } },
     },
   },
 };
