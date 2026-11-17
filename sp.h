@@ -1071,10 +1071,6 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_AT_EACCESS           0x200
   #define SP_AT_EMPTY_PATH        0x1000
 
-  #define SP_SEEK_SET             0
-  #define SP_SEEK_CUR             1
-  #define SP_SEEK_END             2
-
   #define SP_F_DUPFD              0
   #define SP_F_GETFD              1
   #define SP_F_SETFD              2
@@ -1142,9 +1138,6 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_TIOCGWINSZ              0x5413
 
 #elif defined(SP_WIN32)
-  #define SP_SEEK_SET             SEEK_SET
-  #define SP_SEEK_CUR             SEEK_CUR
-  #define SP_SEEK_END             SEEK_END
   #define SP_EINTR                EINTR
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
@@ -1203,10 +1196,6 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_AT_REMOVEDIR         AT_REMOVEDIR
   #define SP_AT_SYMLINK_FOLLOW    AT_SYMLINK_FOLLOW
   #define SP_AT_EACCESS           AT_EACCESS
-
-  #define SP_SEEK_SET             SEEK_SET
-  #define SP_SEEK_CUR             SEEK_CUR
-  #define SP_SEEK_END             SEEK_END
 
   #define SP_F_DUPFD              F_DUPFD
   #define SP_F_GETFD              F_GETFD
