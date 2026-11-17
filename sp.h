@@ -5693,8 +5693,6 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_FILE_OPEN         0x00000001
 #define SP_NT_FILE_CREATE       0x00000002
 #define SP_NT_FILE_OPEN_IF      0x00000003
-#define SP_NT_FILE_OVERWRITE    0x00000004
-#define SP_NT_FILE_OVERWRITE_IF 0x00000005
 
 #define SP_NT_FILE_DIRECTORY_FILE              0x00000001
 #define SP_NT_FILE_SYNCHRONOUS_IO_NONALERT     0x00000020
@@ -5743,6 +5741,7 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_FILE_RENAME_INFORMATION    10
 #define SP_NT_FILE_DISPOSITION_INFORMATION 13
 #define SP_NT_FILE_POSITION_INFORMATION  14
+#define SP_NT_FILE_END_OF_FILE_INFORMATION 20
 #define SP_NT_FILE_LINK_INFORMATION      11
 #define SP_NT_FILE_DISPOSITION_INFORMATION_EX 64
 #define SP_NT_FILE_RENAME_INFORMATION_EX      65
@@ -5783,6 +5782,10 @@ typedef struct {
 typedef struct {
   s64 CurrentByteOffset;
 } sp_nt_file_position_information_t;
+
+typedef struct {
+  s64 EndOfFile;
+} sp_nt_file_end_of_file_information_t;
 
 typedef struct {
   u32 DeviceType;
@@ -8778,10 +8781,8 @@ SP_PRIVATE u32 sp_sys_nt_access_from_mode(sp_sys_open_mode_t mode, sp_sys_open_f
 }
 
 SP_PRIVATE u32 sp_sys_nt_disposition_from_flags(sp_sys_open_flags_t flags) {
-  if (flags & SP_SYS_OPEN_EXCLUSIVE)                                  return SP_NT_FILE_CREATE;
-  if ((flags & SP_SYS_OPEN_CREATE) && (flags & SP_SYS_OPEN_TRUNCATE)) return SP_NT_FILE_OVERWRITE_IF;
-  if (flags & SP_SYS_OPEN_CREATE)                                     return SP_NT_FILE_OPEN_IF;
-  if (flags & SP_SYS_OPEN_TRUNCATE)                                   return SP_NT_FILE_OVERWRITE;
+  if (flags & SP_SYS_OPEN_EXCLUSIVE) return SP_NT_FILE_CREATE;
+  if (flags & SP_SYS_OPEN_CREATE)    return SP_NT_FILE_OPEN_IF;
   return SP_NT_FILE_OPEN;
 }
 
@@ -8869,6 +8870,16 @@ sp_err_t sp_sys_open_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_open_mo
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
   sp_nt_status_t status = sp_sys_nt_open(dir.fd, sp_str(path, len), access, share, disposition, options, sp_sys_nt_attributes_from_perms(perms), &handle);
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
+  if (flags & SP_SYS_OPEN_TRUNCATE) {
+    sp_nt_file_end_of_file_information_t eof = sp_zero;
+    sp_nt_io_status_block_t iosb = sp_zero;
+    status = SP_NT(NtSetInformationFile)((void*)handle, &iosb, &eof, sizeof(eof), SP_NT_FILE_END_OF_FILE_INFORMATION);
+    if (!SP_NT_SUCCESS(status) && GetFileType((HANDLE)handle) == FILE_TYPE_DISK) {
+      sp_sys_nt_close(handle);
+      return sp_sys_err_from_nt(status);
+    }
+  }
 
   *out = handle;
   return SP_OK;
