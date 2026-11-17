@@ -1,23 +1,37 @@
 #include "fs.h"
 
+typedef enum {
+  OP_WRITE,
+  OP_APPEND,
+} op_t;
+
+typedef enum {
+  EXISTING_NONE,
+  EXISTING_WRITABLE,
+  EXISTING_READ_ONLY,
+} existing_t;
+
 typedef struct {
   bool read_only;
 } expect_t;
 
 typedef struct {
   const c8* name;
-  bool existing_read_only;
+  existing_t existing;
+  op_t op;
   sp_fs_write_mode_t mode;
   bool read_only;
   expect_t expect;
 } test_t;
 
 static const test_t tests [] = {
-  { .name = "truncate_new", .read_only = true, .expect = { .read_only = true } },
-  { .name = "append_new", .mode = SP_FS_WRITE_APPEND, .read_only = true, .expect = { .read_only = true } },
-  { .name = "replace_new", .mode = SP_FS_WRITE_REPLACE, .read_only = true, .expect = { .read_only = true } },
-  { .name = "exclusive_new", .mode = SP_FS_WRITE_EXCLUSIVE, .read_only = true, .expect = { .read_only = true } },
-  { .name = "replace_does_not_keep_existing", .existing_read_only = true, .mode = SP_FS_WRITE_REPLACE },
+  { .name = "truncate_creates", .read_only = true, .expect = { .read_only = true } },
+  { .name = "replace_creates", .mode = SP_FS_WRITE_REPLACE, .read_only = true, .expect = { .read_only = true } },
+  { .name = "exclusive_creates", .mode = SP_FS_WRITE_EXCLUSIVE, .read_only = true, .expect = { .read_only = true } },
+  { .name = "append_creates", .op = OP_APPEND, .read_only = true, .expect = { .read_only = true } },
+  { .name = "truncate_keeps_existing", .existing = EXISTING_WRITABLE, .read_only = true },
+  { .name = "append_keeps_existing", .existing = EXISTING_WRITABLE, .op = OP_APPEND, .read_only = true },
+  { .name = "replace_does_not_keep_existing", .existing = EXISTING_READ_ONLY, .mode = SP_FS_WRITE_REPLACE },
 };
 
 sp_test_each(fs, write_perms, test_t, tests) {
@@ -28,11 +42,17 @@ sp_test_each(fs, write_perms, test_t, tests) {
 
   sp_sys_file_perms_t read_only = sp_sys_default_file_perms;
   sp_sys_set_read_only(&read_only, true);
-  if (it->existing_read_only) {
-    sp_must_ok(t, sp_fs_write_at(path, sp_str_lit("A"), SP_FS_WRITE_EXCLUSIVE, read_only));
+  switch (it->existing) {
+    case EXISTING_NONE:      break;
+    case EXISTING_WRITABLE:  sp_must_ok(t, sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms)); break;
+    case EXISTING_READ_ONLY: sp_must_ok(t, sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, read_only)); break;
   }
 
-  sp_expect_ok(t, sp_fs_write_at(path, sp_str_lit("B"), it->mode, it->read_only ? read_only : sp_sys_default_file_perms));
+  sp_sys_file_perms_t perms = it->read_only ? read_only : sp_sys_default_file_perms;
+  switch (it->op) {
+    case OP_WRITE:  sp_expect_ok(t, sp_fs_write_at(path, sp_str_lit("B"), it->mode, perms)); break;
+    case OP_APPEND: sp_expect_ok(t, sp_fs_append_at(path, sp_str_lit("B"), perms)); break;
+  }
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_must_ok(t, sp_fs_get_path_metadata_at(path, &meta));

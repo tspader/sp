@@ -4,6 +4,7 @@
 
 typedef enum {
   OP_WRITE,
+  OP_APPEND,
   OP_SYNC_COMMIT,
 } op_t;
 
@@ -38,7 +39,7 @@ static const test_t tests [] = {
   },
   {
     .name = "append_does_not_sync",
-    .mode = SP_FS_WRITE_APPEND,
+    .op = OP_APPEND,
     .path = "A",
     .content = "A",
     .expect = {
@@ -136,6 +137,10 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   switch (c->op) {
     case OP_WRITE: {
       err = sp_fs_write_at(path, content, c->mode, sp_sys_default_file_perms);
+      break;
+    }
+    case OP_APPEND: {
+      err = sp_fs_append_at(path, content, sp_sys_default_file_perms);
       break;
     }
     case OP_SYNC_COMMIT: {

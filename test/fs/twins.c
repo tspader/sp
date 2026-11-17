@@ -18,6 +18,9 @@ typedef enum {
   OP_WRITE,
   OP_WRITE_SLICE,
   OP_WRITE_CSTR,
+  OP_APPEND,
+  OP_APPEND_SLICE,
+  OP_APPEND_CSTR,
   OP_ATOMIC_OPEN,
 } op_t;
 
@@ -46,6 +49,9 @@ static const test_t tests [] = {
   { .name = "write", .op = OP_WRITE },
   { .name = "write_slice", .op = OP_WRITE_SLICE },
   { .name = "write_cstr", .op = OP_WRITE_CSTR },
+  { .name = "append", .op = OP_APPEND },
+  { .name = "append_slice", .op = OP_APPEND_SLICE },
+  { .name = "append_cstr", .op = OP_APPEND_CSTR },
   { .name = "atomic_open", .op = OP_ATOMIC_OPEN },
 };
 
@@ -149,6 +155,9 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     case OP_WRITE:                     sp_fs_write(path, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms); break;
     case OP_WRITE_SLICE:               sp_fs_write_slice(path, slice, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms); break;
     case OP_WRITE_CSTR:                sp_fs_write_cstr(path, "A", SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms); break;
+    case OP_APPEND:                    sp_fs_append(path, sp_str_lit("A"), sp_sys_default_file_perms); break;
+    case OP_APPEND_SLICE:              sp_fs_append_slice(path, slice, sp_sys_default_file_perms); break;
+    case OP_APPEND_CSTR:               sp_fs_append_cstr(path, "A", sp_sys_default_file_perms); break;
     case OP_ATOMIC_OPEN:               sp_fs_atomic_open(&af, path, sp_sys_default_file_perms); break;
   }
   sp_sys_set_vtable(saved);

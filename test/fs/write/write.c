@@ -121,47 +121,6 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "append_new",
-    .path = "A",
-    .content = "A",
-    .mode = SP_FS_WRITE_APPEND,
-    .expect = {
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
-      },
-    },
-  },
-  {
-    .name = "append_existing",
-    .setup = {
-      { .path = "A", .content = "A" },
-    },
-    .path = "A",
-    .content = "B",
-    .mode = SP_FS_WRITE_APPEND,
-    .expect = {
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "AB" },
-      },
-    },
-  },
-  {
-    .name = "append_through_symlink",
-    .setup = {
-      { .path = "T", .content = "T" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
-    },
-    .path = "L",
-    .content = "A",
-    .mode = SP_FS_WRITE_APPEND,
-    .expect = {
-      .paths = {
-        { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
-        { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "TA" },
-      },
-    },
-  },
-  {
     .name = "replace_new",
     .path = "A",
     .content = "A",
