@@ -5729,6 +5729,7 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_STATUS_INVALID_DEVICE_REQUEST ((sp_nt_status_t)0xC0000010)
 #define SP_NT_STATUS_TOO_MANY_LINKS        ((sp_nt_status_t)0xC0000265)
 #define SP_NT_STATUS_NOT_A_REPARSE_POINT   ((sp_nt_status_t)0xC0000275)
+#define SP_NT_STATUS_IO_REPARSE_TAG_NOT_HANDLED ((sp_nt_status_t)0xC0000279)
 #define SP_NT_STATUS_NO_SUCH_FILE          ((sp_nt_status_t)0xC000000F)
 #define SP_NT_STATUS_NO_MORE_FILES         ((sp_nt_status_t)0x80000006)
 #define SP_NT_STATUS_PENDING               ((sp_nt_status_t)0x00000103)
@@ -5737,12 +5738,13 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_STATUS_PIPE_CLOSING          ((sp_nt_status_t)0xC00000B1)
 #define SP_NT_STATUS_PIPE_BROKEN           ((sp_nt_status_t)0xC000014B)
 
-#define SP_NT_FILE_DIRECTORY_INFORMATION  1
+#define SP_NT_FILE_FULL_DIRECTORY_INFORMATION 2
 #define SP_NT_FILE_BASIC_INFORMATION      4
 #define SP_NT_FILE_RENAME_INFORMATION    10
 #define SP_NT_FILE_DISPOSITION_INFORMATION 13
 #define SP_NT_FILE_POSITION_INFORMATION  14
 #define SP_NT_FILE_END_OF_FILE_INFORMATION 20
+#define SP_NT_FILE_ATTRIBUTE_TAG_INFORMATION 35
 #define SP_NT_FILE_LINK_INFORMATION      11
 #define SP_NT_FILE_DISPOSITION_INFORMATION_EX 64
 #define SP_NT_FILE_RENAME_INFORMATION_EX      65
@@ -5804,8 +5806,14 @@ typedef struct {
   s64 AllocationSize;
   u32 FileAttributes;
   u32 FileNameLength;
+  u32 EaSize;
   u16 FileName [1];
-} sp_nt_file_directory_information_t;
+} sp_nt_file_full_dir_information_t;
+
+typedef struct {
+  u32 FileAttributes;
+  u32 ReparseTag;
+} sp_nt_file_attribute_tag_information_t;
 
 typedef struct {
   u8 DeleteFile;
@@ -7557,6 +7565,27 @@ sp_nt_status_t sp_sys_nt_open(sp_sys_fd_t root, sp_str_t utf8, u32 access, u32 s
   return status;
 }
 
+SP_PRIVATE bool sp_sys_nt_is_link(u32 attributes, u32 tag) {
+  return (attributes & FILE_ATTRIBUTE_REPARSE_POINT) && (tag & SP_NT_REPARSE_TAG_NAME_SURROGATE);
+}
+
+SP_PRIVATE sp_fs_kind_t sp_sys_nt_kind(u32 attributes, u32 tag) {
+  if (sp_sys_nt_is_link(attributes, tag)) return SP_FS_KIND_SYMLINK;
+  if (attributes & FILE_ATTRIBUTE_DIRECTORY) return SP_FS_KIND_DIR;
+  return SP_FS_KIND_FILE;
+}
+
+SP_PRIVATE sp_nt_status_t sp_sys_nt_reparse_tag(sp_sys_fd_t handle, u32 attributes, u32* tag) {
+  *tag = 0;
+  if (!(attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return SP_NT_STATUS_SUCCESS;
+
+  sp_nt_file_attribute_tag_information_t info = sp_zero;
+  sp_nt_io_status_block_t iosb = sp_zero;
+  sp_nt_status_t status = SP_NT(NtQueryInformationFile)((void*)handle, &iosb, &info, sizeof(info), SP_NT_FILE_ATTRIBUTE_TAG_INFORMATION);
+  if (SP_NT_SUCCESS(status)) *tag = info.ReparseTag;
+  return status;
+}
+
 SP_PRIVATE bool sp_sys_nt_needs_legacy_info(sp_nt_status_t status) {
   return
     status == SP_NT_STATUS_INVALID_INFO_CLASS ||
@@ -7588,9 +7617,15 @@ SP_PRIVATE sp_err_t sp_sys_nt_delete(sp_sys_fd_t fd, sp_str_t path, bool dir) {
     sp_sys_nt_close(handle);
     return err;
   }
-  bool reparse = info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT;
-  bool directory = (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !reparse;
-  if (dir && reparse) {
+  u32 tag = 0;
+  status = sp_sys_nt_reparse_tag(handle, info.dwFileAttributes, &tag);
+  if (!SP_NT_SUCCESS(status)) {
+    sp_sys_nt_close(handle);
+    return sp_sys_err_from_nt(status);
+  }
+  bool link = sp_sys_nt_is_link(info.dwFileAttributes, tag);
+  bool directory = (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !link;
+  if (dir && link) {
     sp_sys_nt_close(handle);
     return SP_ERR_SYS_NOT_DIR;
   }
@@ -7713,17 +7748,17 @@ static s64 sp_sys_nt_time_from_timespec(sp_sys_timespec_t ts) {
 static sp_err_t sp_sys_file_meta_from_nt_path(sp_sys_fd_t dir, sp_str_t path, sp_sys_file_meta_t* out, bool follow_symlinks) {
   u32 options = SP_NT_FILE_SYNCHRONOUS_IO_NONALERT | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT;
   if (!follow_symlinks) options |= SP_NT_FILE_OPEN_REPARSE_POINT;
+  u32 access = FILE_READ_ATTRIBUTES | SYNCHRONIZE;
+  u32 share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_nt_status_t status = sp_sys_nt_open(
-    dir,
-    path,
-    FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-    SP_NT_FILE_OPEN, options, 0, &fd
-  );
+  sp_nt_status_t status = sp_sys_nt_open(dir, path, access, share, SP_NT_FILE_OPEN, options, 0, &fd);
+  bool unhandled = status == SP_NT_STATUS_IO_REPARSE_TAG_NOT_HANDLED;
+  if (unhandled) status = sp_sys_nt_open(dir, path, access, share, SP_NT_FILE_OPEN, options | SP_NT_FILE_OPEN_REPARSE_POINT, 0, &fd);
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+
   sp_err_t rc = sp_sys_get_file_metadata_p(fd, out);
   sp_sys_nt_close(fd);
+  if (!rc && unhandled && out->kind == SP_FS_KIND_SYMLINK) return sp_sys_err_from_nt(SP_NT_STATUS_IO_REPARSE_TAG_NOT_HANDLED);
   return rc;
 }
 
@@ -7784,17 +7819,10 @@ sp_err_t sp_sys_get_file_metadata_p(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
     }
   }
 
-  if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
-    // @spader This is very wrong but just right enough to be usable. The right
-    // thing to do is call GetFileInformationByHandleEx(), which returns the
-    // reparse kind (unlike the existing call) and handle the different cases
-    // (e.g. OneDrive links), of which symlinks are one.
-    meta->kind = SP_FS_KIND_SYMLINK;
-  } else if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-    meta->kind = SP_FS_KIND_DIR;
-  } else {
-    meta->kind = SP_FS_KIND_FILE;
-  }
+  u32 tag = 0;
+  sp_nt_status_t status = sp_sys_nt_reparse_tag(fd, info.dwFileAttributes, &tag);
+  if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
+  meta->kind = sp_sys_nt_kind(info.dwFileAttributes, tag);
 
   struct { u64 high; u64 low; } size = {
     sp_cast(u64, info.nFileSizeHigh) << 32,
@@ -8956,7 +8984,13 @@ sp_err_t sp_sys_open_dir_p(sp_sys_dir_t dir, const c8* path, u32 len, sp_sys_ope
       sp_sys_nt_close(handle);
       return err;
     }
-    if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+    u32 tag = 0;
+    status = sp_sys_nt_reparse_tag(handle, info.dwFileAttributes, &tag);
+    if (!SP_NT_SUCCESS(status)) {
+      sp_sys_nt_close(handle);
+      return sp_sys_err_from_nt(status);
+    }
+    if (sp_sys_nt_is_link(info.dwFileAttributes, tag)) {
       sp_sys_nt_close(handle);
       return SP_ERR_SYS_LOOP;
     }
@@ -14214,13 +14248,7 @@ sp_da(sp_str_t) sp_str_pad_to_longest(sp_mem_t mem, sp_str_t* strs, u32 n) {
 //////////////
 #ifdef SP_WIN32
 #define SP_SYS_DIR_WIN32_SCRATCH (255 * 3 + 1 + SP_MEM_ALIGNMENT - 1)
-sp_static_assert(SP_SYS_DIR_MIN_BUF >= SP_SYS_DIR_WIN32_SCRATCH + sizeof(sp_nt_file_directory_information_t) + 255 * sizeof(u16), sp_sys_dir_min_buf);
-
-SP_PRIVATE sp_fs_kind_t sp_sys_dir_win32_attrs(sp_win32_dword_t attrs) {
-  if (attrs & FILE_ATTRIBUTE_REPARSE_POINT) return SP_FS_KIND_SYMLINK;
-  if (attrs & FILE_ATTRIBUTE_DIRECTORY) return SP_FS_KIND_DIR;
-  return SP_FS_KIND_FILE;
-}
+sp_static_assert(SP_SYS_DIR_MIN_BUF >= SP_SYS_DIR_WIN32_SCRATCH + sizeof(sp_nt_file_full_dir_information_t) + 255 * sizeof(u16), sp_sys_dir_min_buf);
 
 #elif defined(SP_LINUX)
 sp_static_assert(SP_SYS_DIR_MIN_BUF >= sizeof(sp_sys_dirent64_t) + 255 + 1, sp_sys_dir_min_buf);
@@ -14300,7 +14328,7 @@ sp_err_t sp_sys_dir_it_read_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf) {
     SP_NULLPTR, SP_NULLPTR, SP_NULLPTR,
     &iosb,
     buf->data, (u32)(buf->capacity - SP_SYS_DIR_WIN32_SCRATCH),
-    SP_NT_FILE_DIRECTORY_INFORMATION,
+    SP_NT_FILE_FULL_DIRECTORY_INFORMATION,
     0, SP_NULLPTR, (u8)(it->state != 0));
   it->state = 0;
   if (status == SP_NT_STATUS_NO_MORE_FILES) return SP_OK;
@@ -14353,7 +14381,7 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
   *out = sp_zero_s(sp_sys_dir_entry_t);
 #if defined(SP_WIN32)
   (void)it;
-  sp_nt_file_directory_information_t* d = sp_ptr_cast(sp_nt_file_directory_information_t*, buf->data + *cursor);
+  sp_nt_file_full_dir_information_t* d = sp_ptr_cast(sp_nt_file_full_dir_information_t*, buf->data + *cursor);
   *cursor = d->NextEntryOffset ? *cursor + d->NextEntryOffset : buf->len;
 
   sp_mem_fixed_t allocator = sp_mem_fixed(buf->data + buf->capacity - SP_SYS_DIR_WIN32_SCRATCH, SP_SYS_DIR_WIN32_SCRATCH);
@@ -14363,7 +14391,7 @@ sp_err_t sp_sys_dir_it_parse_p(sp_sys_dir_it_t* it, sp_mem_buffer_t* buf, u64* c
   sp_try_as(sp_wtf16_to_wtf8(mem, sp_wide_str(d->FileName, d->FileNameLength / sizeof(u16)), &utf8), SP_ERR_SYS_NAME_TOO_LONG);
   out->name = utf8.data;
   out->len = utf8.len;
-  out->kind = sp_sys_dir_win32_attrs(d->FileAttributes);
+  out->kind = sp_sys_nt_kind(d->FileAttributes, d->EaSize);
   return SP_OK;
 #elif defined(SP_LINUX)
   (void)it;
