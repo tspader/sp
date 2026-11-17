@@ -38,6 +38,17 @@ static const test_t tests [] = {
     },
   },
   {
+    .name = "new_does_not_sync",
+    .mode = SP_FS_WRITE_NEW,
+    .path = "A",
+    .content = "A",
+    .expect = {
+      .paths = {
+        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+      },
+    },
+  },
+  {
     .name = "append_does_not_sync",
     .op = OP_APPEND,
     .path = "A",

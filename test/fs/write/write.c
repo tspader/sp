@@ -7,23 +7,26 @@ typedef enum {
 } variant_t;
 
 typedef struct {
-  sp_err_t err;
-  fs_expected_path_t paths [FS_MAX_PATHS];
-} expect_t;
+  const c8* name;
+  sp_fs_write_mode_t mode;
+  variant_t variant;
+  const c8* path;
+  const c8* content;
+  fs_expect_t expect;
+} any_mode_t;
 
 typedef struct {
   const c8* name;
   fs_setup_t setup [FS_MAX_SETUP];
+  sp_fs_write_mode_t mode;
   const c8* path;
   const c8* content;
-  sp_fs_write_mode_t mode;
-  variant_t variant;
-  expect_t expect;
-} test_t;
+  fs_expect_by_mode_t expect;
+} by_mode_t;
 
-static const test_t tests [] = {
+static const any_mode_t any_mode [] = {
   {
-    .name = "truncate_new",
+    .name = "free_name",
     .path = "A",
     .content = "A",
     .expect = {
@@ -33,23 +36,7 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "truncate_existing",
-    .setup = {
-      { .path = "A", .content = "AB" },
-    },
-    .path = "A",
-    .content = "C",
-    .expect = {
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      },
-    },
-  },
-  {
-    .name = "truncate_empty",
-    .setup = {
-      { .path = "A", .content = "A" },
-    },
+    .name = "empty",
     .path = "A",
     .content = "",
     .expect = {
@@ -59,50 +46,10 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "truncate_missing_parent",
-    .path = "D/A",
-    .content = "A",
-    .expect = {
-      .err = SP_ERR_SYS_NOT_FOUND,
-      .paths = {
-        { .path = "D" },
-      },
-    },
-  },
-  {
-    .name = "truncate_through_symlink",
-    .setup = {
-      { .path = "T", .content = "T" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
-    },
-    .path = "L",
-    .content = "A",
-    .expect = {
-      .paths = {
-        { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
-        { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
-      },
-    },
-  },
-  {
-    .name = "truncate_onto_dir",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-    },
-    .path = "A",
-    .content = "A",
-    .expect = {
-      .err = SP_ERR_SYS_IS_DIR,
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
-      },
-    },
-  },
-  {
-    .name = "truncate_slice",
-    .path = "A",
-    .content = "A",
+    .name = "slice",
     .variant = VARIANT_SLICE,
+    .path = "A",
+    .content = "A",
     .expect = {
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
@@ -110,21 +57,10 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "truncate_cstr",
-    .path = "A",
-    .content = "A",
+    .name = "cstr",
     .variant = VARIANT_CSTR,
-    .expect = {
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
-      },
-    },
-  },
-  {
-    .name = "replace_new",
     .path = "A",
     .content = "A",
-    .mode = SP_FS_WRITE_REPLACE,
     .expect = {
       .paths = {
         { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
@@ -132,188 +68,201 @@ static const test_t tests [] = {
     },
   },
   {
-    .name = "replace_existing",
-    .setup = {
-      { .path = "A", .content = "AB" },
-    },
-    .path = "A",
-    .content = "C",
-    .mode = SP_FS_WRITE_REPLACE,
-    .expect = {
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
-      },
-    },
-  },
-  {
-    .name = "replace_empty",
-    .path = "A",
-    .content = "",
-    .mode = SP_FS_WRITE_REPLACE,
-    .expect = {
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "" },
-      },
-    },
-  },
-  {
-    .name = "replace_missing_parent",
+    .name = "missing_parent",
     .path = "D/A",
     .content = "A",
-    .mode = SP_FS_WRITE_REPLACE,
     .expect = {
       .err = SP_ERR_SYS_NOT_FOUND,
       .paths = {
         { .path = "D" },
-      },
-    },
-  },
-  {
-    .name = "replace_symlink",
-    .setup = {
-      { .path = "T", .content = "T" },
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
-    },
-    .path = "L",
-    .content = "A",
-    .mode = SP_FS_WRITE_REPLACE,
-    .expect = {
-      .paths = {
-        { .path = "L", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
-        { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "T" },
-      },
-    },
-  },
-  {
-    .name = "replace_dangling_symlink",
-    .setup = {
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
-    },
-    .path = "L",
-    .content = "A",
-    .mode = SP_FS_WRITE_REPLACE,
-    .expect = {
-      .paths = {
-        { .path = "L", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
-        { .path = "T" },
-      },
-    },
-  },
-  {
-    .name = "replace_onto_dir",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-    },
-    .path = "A",
-    .content = "A",
-    .mode = SP_FS_WRITE_REPLACE,
-    .expect = {
-      .err = SP_ERR_SYS_IS_DIR,
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
-      },
-    },
-  },
-  {
-    .name = "exclusive_new",
-    .path = "A",
-    .content = "A",
-    .mode = SP_FS_WRITE_EXCLUSIVE,
-    .expect = {
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
-      },
-    },
-  },
-  {
-    .name = "exclusive_existing",
-    .setup = {
-      { .path = "A", .content = "A" },
-    },
-    .path = "A",
-    .content = "B",
-    .mode = SP_FS_WRITE_EXCLUSIVE,
-    .expect = {
-      .err = SP_ERR_SYS_EXISTS,
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
-      },
-    },
-  },
-  {
-    .name = "exclusive_existing_symlink",
-    .setup = {
-      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
-    },
-    .path = "L",
-    .content = "A",
-    .mode = SP_FS_WRITE_EXCLUSIVE,
-    .expect = {
-      .err = SP_ERR_SYS_EXISTS,
-      .paths = {
-        { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
-        { .path = "T" },
-      },
-    },
-  },
-  {
-    .name = "exclusive_missing_parent",
-    .path = "D/A",
-    .content = "A",
-    .mode = SP_FS_WRITE_EXCLUSIVE,
-    .expect = {
-      .err = SP_ERR_SYS_NOT_FOUND,
-      .paths = {
-        { .path = "D" },
-      },
-    },
-  },
-  {
-    .name = "exclusive_onto_dir",
-    .setup = {
-      { "A", FS_SETUP_DIR },
-    },
-    .path = "A",
-    .content = "A",
-    .mode = SP_FS_WRITE_EXCLUSIVE,
-    .expect = {
-      .err = SP_ERR_SYS_EXISTS,
-      .paths = {
-        { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
       },
     },
   },
 };
 
-sp_test_each(fs, write, test_t, tests) {
-  if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
+static const by_mode_t by_mode [] = {
+  {
+    .name = "file",
+    .setup = {
+      { .path = "A", .content = "AB" },
+    },
+    .path = "A",
+    .content = "C",
+    .expect = {
+      .truncate = {
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+        },
+      },
+      .replace = {
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "C" },
+        },
+      },
+      .fail = {
+        .err = SP_ERR_SYS_EXISTS,
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "AB" },
+        },
+      },
+    },
+  },
+  {
+    .name = "file_with_empty_content",
+    .setup = {
+      { .path = "A", .content = "A" },
+    },
+    .path = "A",
+    .content = "",
+    .expect = {
+      .truncate = {
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "" },
+        },
+      },
+      .replace = {
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "" },
+        },
+      },
+      .fail = {
+        .err = SP_ERR_SYS_EXISTS,
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+        },
+      },
+    },
+  },
+  {
+    .name = "symlink",
+    .setup = {
+      { .path = "T", .content = "T" },
+      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
+    },
+    .path = "L",
+    .content = "A",
+    .expect = {
+      .truncate = {
+        .paths = {
+          { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
+          { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+        },
+      },
+      .replace = {
+        .paths = {
+          { .path = "L", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+          { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "T" },
+        },
+      },
+      .fail = {
+        .err = SP_ERR_SYS_EXISTS,
+        .paths = {
+          { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
+          { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "T" },
+        },
+      },
+    },
+  },
+  {
+    .name = "dangling_symlink",
+    .setup = {
+      { .path = "L", .kind = FS_SETUP_SYMLINK, .target = "T" },
+    },
+    .path = "L",
+    .content = "A",
+    .expect = {
+      .truncate = {
+        .paths = {
+          { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
+          { .path = "T", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+        },
+      },
+      .replace = {
+        .paths = {
+          { .path = "L", .exists = true, .kind = SP_FS_KIND_FILE, .content = "A" },
+          { .path = "T" },
+        },
+      },
+      .fail = {
+        .err = SP_ERR_SYS_EXISTS,
+        .paths = {
+          { .path = "L", .exists = true, .kind = SP_FS_KIND_SYMLINK, .target = "T" },
+          { .path = "T" },
+        },
+      },
+    },
+  },
+  {
+    .name = "dir",
+    .setup = {
+      { "A", FS_SETUP_DIR },
+    },
+    .path = "A",
+    .content = "A",
+    .expect = {
+      .truncate = {
+        .err = SP_ERR_SYS_IS_DIR,
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        },
+      },
+      .replace = {
+        .err = SP_ERR_SYS_IS_DIR,
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        },
+      },
+      .fail = {
+        .err = SP_ERR_SYS_EXISTS,
+        .paths = {
+          { .path = "A", .exists = true, .kind = SP_FS_KIND_DIR },
+        },
+      },
+    },
+  },
+};
+
+static sp_err_t run(sp_test_t* t, const fs_setup_t setup [FS_MAX_SETUP], sp_fs_write_mode_t mode, variant_t variant, const c8* path, const c8* content, const fs_expect_t* expect) {
+  if (fs_setup_needs_symlinks(setup)) sp_test_skip_without_symlinks();
 
   sp_path_t sandbox = sp_test_dir(t);
-  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
+  sp_must_ok(t, fs_apply_setup(t, sandbox, setup));
 
   sp_sys_dir_t dir = sp_zero;
   sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
-  sp_path_t path = sp_path(dir, sp_cstr_as_str(it->path));
+  sp_path_t at = sp_path(dir, sp_cstr_as_str(path));
   sp_err_t err = SP_OK;
-  switch (it->variant) {
+  switch (variant) {
     case VARIANT_STR: {
-      err = sp_fs_write_at(path, sp_cstr_as_str(it->content), it->mode, sp_sys_default_file_perms);
+      err = sp_fs_write_at(at, sp_cstr_as_str(content), mode, sp_sys_default_file_perms);
       break;
     }
     case VARIANT_SLICE: {
-      err = sp_fs_write_slice_at(path, sp_mem_slice((u8*)it->content, sp_cstr_len(it->content)), it->mode, sp_sys_default_file_perms);
+      err = sp_fs_write_slice_at(at, sp_mem_slice((u8*)content, sp_cstr_len(content)), mode, sp_sys_default_file_perms);
       break;
     }
     case VARIANT_CSTR: {
-      err = sp_fs_write_cstr_at(path, it->content, it->mode, sp_sys_default_file_perms);
+      err = sp_fs_write_cstr_at(at, content, mode, sp_sys_default_file_perms);
       break;
     }
   }
   sp_fs_close_dir(dir);
-  sp_expect_err_eq(t, err, it->expect.err);
+  sp_expect_err_eq(t, err, expect->err);
 
-  fs_expect_paths(t, sandbox, it->expect.paths);
+  fs_expect_paths(t, sandbox, expect->paths);
   fs_expect_no_temps(t, sandbox);
   return SP_OK;
+}
+
+sp_test_each(fs, write, any_mode_t, any_mode, .axes = {
+  sp_test_axis_named(any_mode_t, mode, fs_write_mode_name, FS_WRITE_MODES)
+}) {
+  return run(t, (const fs_setup_t [FS_MAX_SETUP]) sp_zero, it->mode, it->variant, it->path, it->content, &it->expect);
+}
+
+sp_test_each(fs, write_onto, by_mode_t, by_mode, .axes = {
+  sp_test_axis_named(by_mode_t, mode, fs_write_mode_name, FS_WRITE_MODES)
+}) {
+  return run(t, it->setup, it->mode, VARIANT_STR, it->path, it->content, fs_expect_for(&it->expect, it->mode));
 }

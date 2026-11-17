@@ -13,6 +13,7 @@ typedef struct {
 
 static const test_t tests [] = {
   { .name = "truncate" },
+  { .name = "new", .mode = SP_FS_WRITE_NEW },
   { .name = "append", .op = OP_APPEND },
 };
 

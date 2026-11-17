@@ -12,6 +12,7 @@
 #define FS_MAX_SETUP 8
 #define FS_MAX_PATHS 8
 #define FS_DEEP_LEVELS 40
+#define FS_WRITE_MODES SP_FS_WRITE_TRUNCATE, SP_FS_WRITE_NEW, SP_FS_WRITE_REPLACE, SP_FS_WRITE_EXCLUSIVE
 #define FS_DEEP_NAME "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
                      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
@@ -50,6 +51,37 @@ typedef struct {
   bool junction;
 #endif
 } fs_expected_path_t;
+
+typedef struct {
+  sp_err_t err;
+  fs_expected_path_t paths [FS_MAX_PATHS];
+} fs_expect_t;
+
+typedef struct {
+  fs_expect_t truncate;
+  fs_expect_t replace;
+  fs_expect_t fail;
+} fs_expect_by_mode_t;
+
+static const c8* fs_write_mode_name(s64 mode) {
+  switch ((sp_fs_write_mode_t)mode) {
+    case SP_FS_WRITE_TRUNCATE:  return "truncate";
+    case SP_FS_WRITE_NEW:       return "new";
+    case SP_FS_WRITE_REPLACE:   return "replace";
+    case SP_FS_WRITE_EXCLUSIVE: return "exclusive";
+  }
+  return "";
+}
+
+static const fs_expect_t* fs_expect_for(const fs_expect_by_mode_t* expect, sp_fs_write_mode_t mode) {
+  switch (mode) {
+    case SP_FS_WRITE_TRUNCATE:  return &expect->truncate;
+    case SP_FS_WRITE_REPLACE:   return &expect->replace;
+    case SP_FS_WRITE_NEW:
+    case SP_FS_WRITE_EXCLUSIVE: return &expect->fail;
+  }
+  return SP_NULLPTR;
+}
 
 static bool fs_setup_needs_symlinks(const fs_setup_t setup [FS_MAX_SETUP]) {
   sp_for(it, FS_MAX_SETUP) {

@@ -26,6 +26,7 @@ typedef struct {
 
 static const test_t tests [] = {
   { .name = "truncate_creates", .read_only = true, .expect = { .read_only = true } },
+  { .name = "new_creates", .mode = SP_FS_WRITE_NEW, .read_only = true, .expect = { .read_only = true } },
   { .name = "replace_creates", .mode = SP_FS_WRITE_REPLACE, .read_only = true, .expect = { .read_only = true } },
   { .name = "exclusive_creates", .mode = SP_FS_WRITE_EXCLUSIVE, .read_only = true, .expect = { .read_only = true } },
   { .name = "append_creates", .op = OP_APPEND, .read_only = true, .expect = { .read_only = true } },
