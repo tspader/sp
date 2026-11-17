@@ -5733,6 +5733,7 @@ SP_PRIVATE void sp_rt_init(void);
 #define SP_NT_STATUS_NO_MORE_FILES         ((sp_nt_status_t)0x80000006)
 #define SP_NT_STATUS_PENDING               ((sp_nt_status_t)0x00000103)
 #define SP_NT_STATUS_END_OF_FILE           ((sp_nt_status_t)0xC0000011)
+#define SP_NT_STATUS_PIPE_DISCONNECTED     ((sp_nt_status_t)0xC00000B0)
 #define SP_NT_STATUS_PIPE_CLOSING          ((sp_nt_status_t)0xC00000B1)
 #define SP_NT_STATUS_PIPE_BROKEN           ((sp_nt_status_t)0xC000014B)
 
@@ -7508,6 +7509,7 @@ SP_PRIVATE sp_err_t sp_sys_err_from_nt(sp_nt_status_t status) {
     case SP_NT_STATUS_TOO_MANY_LINKS:         return SP_ERR_SYS_TOO_MANY_LINKS;
     case SP_NT_STATUS_NOT_SUPPORTED:          return SP_ERR_SYS_UNSUPPORTED;
     case SP_NT_STATUS_INVALID_HANDLE:         return SP_ERR_SYS_BAD_FD;
+    case SP_NT_STATUS_PIPE_DISCONNECTED:
     case SP_NT_STATUS_PIPE_CLOSING:
     case SP_NT_STATUS_PIPE_BROKEN:            return SP_ERR_SYS_BROKEN_PIPE;
     case SP_NT_STATUS_INVALID_PARAMETER:
