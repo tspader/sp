@@ -11325,6 +11325,7 @@ sp_err_t sp_sys_readlink_p(sp_sys_dir_t dir, const c8* path, u32 len, c8* buf, u
     SP_NT_FSCTL_GET_REPARSE_POINT, SP_NULLPTR, 0, rdb_buf, sizeof(rdb_buf)
   );
   sp_sys_nt_close(handle);
+  if (status == SP_NT_STATUS_INVALID_DEVICE_REQUEST) status = SP_NT_STATUS_NOT_A_REPARSE_POINT;
   if (!SP_NT_SUCCESS(status)) return sp_sys_err_from_nt(status);
 
   sp_nt_symlink_reparse_buffer_t* rdb = (sp_nt_symlink_reparse_buffer_t*)rdb_buf;
@@ -11427,6 +11428,7 @@ sp_err_t sp_sys_copy_link_p(sp_sys_dir_t from_dir, const c8* from, u32 from_len,
     (void*)handle, SP_NULLPTR, SP_NULLPTR, SP_NULLPTR, &iosb,
     SP_NT_FSCTL_GET_REPARSE_POINT, SP_NULLPTR, 0, rdb, sizeof(rdb)
   );
+  if (status == SP_NT_STATUS_INVALID_DEVICE_REQUEST) status = SP_NT_STATUS_NOT_A_REPARSE_POINT;
 
   sp_nt_file_attribute_tag_information_t info = sp_zero;
   sp_nt_io_status_block_t qiosb = sp_zero;
