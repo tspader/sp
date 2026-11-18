@@ -123,6 +123,7 @@ static const test_t open_at_tests [] = {
 };
 
 sp_test_each(fs, atomic_open_at, test_t, open_at_tests) {
+  if (it->op == OP_EXCLUSIVE) fs_skip_without_exclusive();
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 

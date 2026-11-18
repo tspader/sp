@@ -224,6 +224,7 @@ static const by_mode_t by_mode [] = {
 
 static sp_err_t run(sp_test_t* t, const fs_setup_t setup [FS_MAX_SETUP], sp_fs_write_mode_t mode, variant_t variant, const c8* path, const c8* content, const fs_expect_t* expect) {
   if (fs_setup_needs_symlinks(setup)) sp_test_skip_without_symlinks();
+  if (mode == SP_FS_WRITE_EXCLUSIVE) fs_skip_without_exclusive();
 
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, setup));

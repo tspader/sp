@@ -57,7 +57,6 @@ typedef enum {
   SYS_STEP_FSTAT,
   SYS_STEP_MKDIR,
   SYS_STEP_RMDIR,
-  SYS_STEP_UNLINK,
   SYS_STEP_LINK,
 } sys_step_kind_t;
 
@@ -85,7 +84,6 @@ typedef struct {
     struct { u32 slot; sp_fs_kind_t kind; s64 size; } fstat;
     struct { const c8* path; sp_err_t err; } mkdir;
     struct { const c8* path; sp_err_t err; } rmdir;
-    struct { const c8* path; sp_err_t err; } unlink;
     struct { const c8* existing; sys_dir_t existing_dir; const c8* alias; sys_dir_t alias_dir; sp_err_t err; } link;
   };
 } sys_step_t;
@@ -359,11 +357,6 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
       case SYS_STEP_RMDIR: {
         sp_err_t err = sp_sys_rmdir_s(sandbox_dir, sp_cstr_as_str(step->rmdir.path));
         sys_expect_err(utest_result, "rmdir", err, step->rmdir.err);
-        break;
-      }
-      case SYS_STEP_UNLINK: {
-        sp_err_t err = sp_sys_unlink_s(sandbox_dir, sp_cstr_as_str(step->unlink.path));
-        sys_expect_err(utest_result, "unlink", err, step->unlink.err);
         break;
       }
       case SYS_STEP_LINK: {

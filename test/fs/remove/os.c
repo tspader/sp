@@ -344,6 +344,7 @@ static const test_t tests [] = {
 
 sp_test_each(fs, remove, test_t, tests) {
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
+  if (fs_setup_needs_fifos(it->setup)) posix_skip_without_fifos();
   if (fs_setup_needs_reparse_points(it->setup)) reparse_skip_unless_supported();
 
   sp_mem_t mem = sp_test_arena(t);

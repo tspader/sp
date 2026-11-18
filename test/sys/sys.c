@@ -1,4 +1,5 @@
 #include "harness.h"
+#include "posix.h"
 
 static bool sys_case_wants_symlinks(sys_case_t* c) {
   sp_carr_for(c->setup, it) {
@@ -19,6 +20,14 @@ static bool sys_case_wants_perms(sys_case_t* c) {
   return false;
 }
 
+static bool sys_case_wants_no_replace_rename(sys_case_t* c) {
+  sp_carr_for(c->steps, it) {
+    sys_step_t* step = &c->steps[it];
+    if (step->kind == SYS_STEP_RENAME && (step->rename.flags & SP_SYS_RENAME_NO_REPLACE) && !step->rename.err) return true;
+  }
+  return false;
+}
+
 static const c8* sys_step_name(sys_step_kind_t kind) {
   switch (kind) {
     case SYS_STEP_NONE:     return "none";
@@ -29,6 +38,7 @@ static const c8* sys_step_name(sys_step_kind_t kind) {
     case SYS_STEP_PWRITE:   return "pwrite";
     case SYS_STEP_SYNC:     return "sync";
     case SYS_STEP_RENAME:   return "rename";
+    case SYS_STEP_UNLINK:   return "unlink";
   }
   return "";
 }
@@ -52,6 +62,8 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
 
   if (sys_case_wants_symlinks(c)) sp_test_skip_without_symlinks();
   if (sys_case_wants_perms(c)) sp_test_skip_on_wasm();
+  if (sys_case_wants_perms(c)) posix_skip_without_modes();
+  if (sys_case_wants_no_replace_rename(c)) sp_test_skip_without_no_replace_rename();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
@@ -168,6 +180,10 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
           step->rename.flags
         );
         sys_check_err(t, err, step->rename.err);
+        break;
+      }
+      case SYS_STEP_UNLINK: {
+        sys_check_err(t, sp_sys_unlink_s(sandbox_dir, sp_cstr_as_str(step->unlink.path)), step->unlink.err);
         break;
       }
     }

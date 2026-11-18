@@ -372,6 +372,7 @@ static const size_test_t sizes [] = {
 sp_test_each(fs, copy_file_size, size_test_t, sizes, .axes = {
   sp_test_axis_named(size_test_t, mode, fs_write_mode_name, FS_WRITE_MODES)
 }) {
+  if (it->mode == SP_FS_WRITE_EXCLUSIVE) fs_skip_without_exclusive();
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));
@@ -398,6 +399,7 @@ static sp_sys_file_perms_t mode(u32 value) {
 
 // postcondition: dest has source's bytes and its mode less the umask, on a fresh inode; timestamps unspecified
 sp_test(fs, copy_file_creates_with_source_mode, .serial = true) {
+  posix_skip_without_modes();
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));

@@ -132,6 +132,7 @@ static sp_err_t sync_probe(sp_sys_fd_t fd) {
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
+  if (c->mode == SP_FS_WRITE_EXCLUSIVE) fs_skip_without_exclusive();
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_must_ok(t, fs_apply_setup(t, sandbox, c->setup));

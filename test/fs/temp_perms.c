@@ -38,6 +38,7 @@ static sp_err_t probed_set_file_perms(sp_sys_dir_t dir, const c8* path, u32 len,
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_test_skip_on_wasm();
+  posix_skip_without_modes();
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t from = sp_path_join(mem, sandbox, sp_str_lit("A"));

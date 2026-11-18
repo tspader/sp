@@ -31,8 +31,10 @@ typedef struct {
 static sp_err_t copy_run(sp_test_t* t, copy_op_t op, const fs_setup_t setup [FS_MAX_SETUP], sp_fs_write_mode_t mode, const c8* src, const c8* dst_dir, const c8* dst, const fs_expect_t* expect) {
   if (fs_setup_needs_symlinks(setup)) sp_test_skip_without_symlinks();
   if (fs_setup_needs_hard_links(setup)) sp_test_skip_without_hard_links();
+  if (fs_setup_needs_fifos(setup)) posix_skip_without_fifos();
   if (fs_setup_needs_reparse_points(setup)) reparse_skip_unless_supported();
   if (fs_setup_needs_junctions(setup)) reparse_skip_on_network_path();
+  if (mode == SP_FS_WRITE_EXCLUSIVE) fs_skip_without_exclusive();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);

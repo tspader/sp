@@ -1,5 +1,6 @@
 #include "sp.h"
 #include "sp/sp_test.h"
+#include "posix.h"
 
 #if defined(SP_POSIX)
   #include <signal.h>
@@ -389,6 +390,8 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
     return sp_test_skip(t, "posix paths only");
   }
 
+  if (c->posix) posix_skip_without_names();
+  if (c->fifo) posix_skip_without_fifos();
   if (c->link) sp_test_skip_without_symlinks();
   if (c->path_kind == PATH_ABS) sp_test_skip_without_absolute_names();
 

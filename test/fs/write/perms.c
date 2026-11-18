@@ -37,6 +37,8 @@ static const test_t tests [] = {
 
 sp_test_each(fs, write_perms, test_t, tests) {
   sp_test_skip_on_wasm();
+  posix_skip_without_modes();
+  if (it->mode == SP_FS_WRITE_EXCLUSIVE) fs_skip_without_exclusive();
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
   sp_path_t path = sp_path_join(mem, sandbox, sp_str_lit("A"));

@@ -383,6 +383,7 @@ typedef struct {
 
 #define sp_test_skip_without_symlinks() if (!sp_test_symlinks_supported(t)) return sp_test_skip(t, "symlinks not available");
 #define sp_test_skip_without_hard_links() if (!sp_test_hard_links_supported(t)) return sp_test_skip(t, "hard links not available");
+#define sp_test_skip_without_no_replace_rename() if (!sp_test_no_replace_rename_supported(t)) return sp_test_skip(t, "no-replace rename not available");
 #define sp_test_skip_without_posix_unlink() if (!sp_test_posix_unlink_supported(t)) return sp_test_skip(t, "an unlinked name stays taken while the file is open");
 #define sp_test_skip_without_fine_timestamps() if (!sp_test_fine_timestamps_supported(t)) return sp_test_skip(t, "timestamps lose their nanoseconds");
 
@@ -425,6 +426,7 @@ SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void
 
 SP_API bool        sp_test_symlinks_supported(sp_test_t* t);
 SP_API bool        sp_test_hard_links_supported(sp_test_t* t);
+SP_API bool        sp_test_no_replace_rename_supported(sp_test_t* t);
 SP_API bool        sp_test_posix_unlink_supported(sp_test_t* t);
 SP_API bool        sp_test_fine_timestamps_supported(sp_test_t* t);
 
@@ -757,6 +759,7 @@ struct sp_test_runner_t {
   sp_path_t dir_root;
   sp_test_once_t symlinks;
   sp_test_once_t hard_links;
+  sp_test_once_t no_replace_rename;
   sp_test_once_t posix_unlink;
   sp_test_once_t fine_timestamps;
   sp_path_t golden_root;
@@ -1106,6 +1109,26 @@ static sp_err_t sp_test_probe_hard_links(void* user) {
 
 bool sp_test_hard_links_supported(sp_test_t* t) {
   return sp_test_once(&t->runner->hard_links, sp_test_probe_hard_links, t->runner) != SP_ERR_SYS_UNSUPPORTED;
+}
+
+static sp_err_t sp_test_probe_no_replace_rename(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t from = sp_path_join(s.mem, runner->dir_root, sp_str_lit("N"));
+  sp_path_t to = sp_path_join(s.mem, runner->dir_root, sp_str_lit("O"));
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_write_at(from, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+  if (!err) {
+    err = sp_sys_rename_s(from.dir, from.sub, to.dir, to.sub, SP_SYS_RENAME_NO_REPLACE);
+    sp_fs_remove_file_at(from);
+    sp_fs_remove_file_at(to);
+  }
+  sp_mem_end_scratch(s);
+  return err;
+}
+
+bool sp_test_no_replace_rename_supported(sp_test_t* t) {
+  return sp_test_once(&t->runner->no_replace_rename, sp_test_probe_no_replace_rename, t->runner) != SP_ERR_SYS_UNSUPPORTED;
 }
 
 static sp_err_t sp_test_probe_posix_unlink(void* user) {

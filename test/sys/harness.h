@@ -37,6 +37,7 @@ typedef enum {
   SYS_STEP_PWRITE,
   SYS_STEP_SYNC,
   SYS_STEP_RENAME,
+  SYS_STEP_UNLINK,
 } sys_step_kind_t;
 
 typedef enum {
@@ -57,6 +58,7 @@ typedef struct {
     struct { u32 slot; const c8* data; u64 offset; sp_err_t err; } pwrite;
     struct { u32 slot; sp_err_t err; } sync;
     struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; u32 flags; sp_err_t err; } rename;
+    struct { const c8* path; sp_err_t err; } unlink;
   };
 } sys_step_t;
 

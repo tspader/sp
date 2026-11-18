@@ -4,6 +4,7 @@
 #include "sp.h"
 #include "sp/sp_test.h"
 #include "test/sys/reparse.h"
+#include "test/sys/posix.h"
 
 #if defined(SP_POSIX)
   #include "sys/stat.h"
@@ -13,6 +14,7 @@
 #define FS_MAX_PATHS 8
 #define FS_DEEP_LEVELS 40
 #define FS_WRITE_MODES SP_FS_WRITE_TRUNCATE, SP_FS_WRITE_NEW, SP_FS_WRITE_REPLACE, SP_FS_WRITE_EXCLUSIVE
+#define fs_skip_without_exclusive() if (!sp_test_no_replace_rename_supported(t) && !sp_test_hard_links_supported(t)) return sp_test_skip(t, "EXCLUSIVE has no no-replace rename or hard link to publish with");
 #define FS_DEEP_NAME "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
                      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
@@ -96,6 +98,14 @@ static bool fs_setup_needs_hard_links(const fs_setup_t setup [FS_MAX_SETUP]) {
   sp_for(it, FS_MAX_SETUP) {
     if (!setup[it].path) break;
     if (setup[it].kind == FS_SETUP_HARD_LINK) return true;
+  }
+  return false;
+}
+
+static bool fs_setup_needs_fifos(const fs_setup_t setup [FS_MAX_SETUP]) {
+  sp_for(it, FS_MAX_SETUP) {
+    if (!setup[it].path) break;
+    if (setup[it].kind == FS_SETUP_FIFO) return true;
   }
   return false;
 }
