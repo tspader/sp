@@ -1113,8 +1113,6 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_IN_NONBLOCK      0x00000800
   #define SP_IN_CLOEXEC       0x00080000
 
-  #define SP_CLOCK_REALTIME          0
-  #define SP_CLOCK_MONOTONIC         1
   #define SP_TIMER_ABSTIME           1
 
   #define SP_BRKINT                  0x0002
@@ -1239,8 +1237,6 @@ typedef OVERLAPPED       sp_win32_overlapped_t;
   #define SP_IN_NONBLOCK      IN_NONBLOCK
   #define SP_IN_CLOEXEC       IN_CLOEXEC
 
-  #define SP_CLOCK_REALTIME          CLOCK_REALTIME
-  #define SP_CLOCK_MONOTONIC         CLOCK_MONOTONIC
   #define SP_TIMER_ABSTIME           TIMER_ABSTIME
 
   #define SP_BRKINT                  BRKINT
@@ -6544,6 +6540,8 @@ SP_PRIVATE u32 sp_sys_trim_path(const c8* path, u32 len) {
     __wasi_prestat_u_t   u;
   } __wasi_prestat_t;
 
+  #define __WASI_CLOCKID_REALTIME             ((__wasi_clockid_t)0)
+  #define __WASI_CLOCKID_MONOTONIC            ((__wasi_clockid_t)1)
   #define __WASI_EVENTTYPE_CLOCK              ((__wasi_eventtype_t)0)
   #define __WASI_EVENTTYPE_FD_READ            ((__wasi_eventtype_t)1)
   #define __WASI_EVENTTYPE_FD_WRITE           ((__wasi_eventtype_t)2)
@@ -8753,21 +8751,6 @@ sp_err_t sp_sys_lseek_p(sp_sys_fd_t fd, s64 offset, sp_sys_seek_t whence, s64* p
 ///////////////////////////
 // SP_SYS_CLOCK_GETTIME //
 //////////////////////////
-#if defined(SP_WASM)
-#define SP_CLOCK_REALTIME 0
-#define SP_CLOCK_MONOTONIC 1
-#endif
-
-#if defined(SP_LINUX) || defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_WASM)
-SP_PRIVATE sp_err_t sp_sys_native_clockid(sp_sys_clock_t clockid, s32* native) {
-  switch (clockid) {
-    case SP_SYS_CLOCK_REALTIME:  { *native = SP_CLOCK_REALTIME; return SP_OK; }
-    case SP_SYS_CLOCK_MONOTONIC: { *native = SP_CLOCK_MONOTONIC; return SP_OK; }
-  }
-  return SP_ERR_SYS_INVALID;
-}
-#endif
-
 sp_err_t sp_sys_clock_gettime_p(sp_sys_clock_t clockid, sp_sys_timespec_t* ts) {
 #if defined(SP_WIN32)
   if (clockid == SP_SYS_CLOCK_MONOTONIC) {
@@ -8792,13 +8775,21 @@ sp_err_t sp_sys_clock_gettime_p(sp_sys_clock_t clockid, sp_sys_timespec_t* ts) {
   return SP_ERR_SYS_INVALID;
 
 #elif defined(SP_LINUX)
-  s32 id = 0;
-  sp_try(sp_sys_native_clockid(clockid, &id));
+  s32 id = -1;
+  switch (clockid) {
+    case SP_SYS_CLOCK_REALTIME:  id = 0; break;
+    case SP_SYS_CLOCK_MONOTONIC: id = 1; break;
+  }
+  if (id < 0) return SP_ERR_SYS_INVALID;
   return sp_syscall_e(SP_SYSCALL_NUM_CLOCK_GETTIME, id, ts);
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-  s32 id = 0;
-  sp_try(sp_sys_native_clockid(clockid, &id));
+  s32 id = -1;
+  switch (clockid) {
+    case SP_SYS_CLOCK_REALTIME:  id = CLOCK_REALTIME; break;
+    case SP_SYS_CLOCK_MONOTONIC: id = CLOCK_MONOTONIC; break;
+  }
+  if (id < 0) return SP_ERR_SYS_INVALID;
   struct timespec native;
   sp_err_t err = sp_sys_err_from_libc(clock_gettime((clockid_t)id, &native));
   if (err != SP_OK) return err;
@@ -8807,8 +8798,12 @@ sp_err_t sp_sys_clock_gettime_p(sp_sys_clock_t clockid, sp_sys_timespec_t* ts) {
   return SP_OK;
 
 #elif defined(SP_WASM)
-  s32 id = 0;
-  sp_try(sp_sys_native_clockid(clockid, &id));
+  s32 id = -1;
+  switch (clockid) {
+    case SP_SYS_CLOCK_REALTIME:  id = __WASI_CLOCKID_REALTIME; break;
+    case SP_SYS_CLOCK_MONOTONIC: id = __WASI_CLOCKID_MONOTONIC; break;
+  }
+  if (id < 0) return SP_ERR_SYS_INVALID;
   __wasi_timestamp_t ns = 0;
   __wasi_errno_t err = __wasi_clock_time_get((__wasi_clockid_t)id, 1000, &ns);
   if (err) return sp_sys_err_from_wasi(err);
