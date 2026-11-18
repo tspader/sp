@@ -1382,7 +1382,7 @@ SP_PRIVATE sp_str_t sp_cli_completer_path(sp_cli_desc_t desc, c8* buffer, u32 le
 
   c8 cwd [SP_PATH_MAX];
   u64 cwd_len = 0;
-  if (sp_sys_get_fd_path(sp_fs_get_cwd(), cwd, sizeof(cwd), &cwd_len)) return arg0;
+  if (sp_sys_get_fd_path(sp_fs_get_cwd().fd, cwd, sizeof(cwd), &cwd_len)) return arg0;
   if (sp_cast(u32, cwd_len) + 1 + arg0.len > len) return arg0;
 
   sp_mem_fixed_t fixed = sp_mem_fixed_ex(buffer, len, 1);

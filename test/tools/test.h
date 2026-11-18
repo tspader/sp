@@ -156,27 +156,21 @@ static sp_str_t sp_test_file_manager_top_level = sp_zero;
 
 static sp_str_t sp_test_file_manager_get_top_level(sp_mem_t a) {
   if (!sp_str_empty(sp_test_file_manager_top_level)) {
-    if (!sp_fs_exists(sp_test_file_manager_top_level)) {
-      sp_fs_create_dir(sp_test_file_manager_top_level);
-    }
+    sp_fs_create_dir(sp_test_file_manager_top_level);
     return sp_test_file_manager_top_level;
   }
 
   sp_str_t cwd = sp_zero;
   sp_fs_get_cwd_path(a, &cwd);
   sp_str_t tmp = sp_fs_join_path(a, cwd, sp_str_lit(".tmp"));
-  if (!sp_fs_exists(tmp)) {
-    sp_fs_create_dir(tmp);
-  }
+  sp_fs_create_dir(tmp);
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   sp_str_t iso = sp_tm_epoch_to_iso8601(a, now);
   sp_str_t sanitized = sp_str_replace_c8(a, iso, ':', '-');
   sp_str_t root = sp_fs_join_path(a, tmp, sanitized);
 
-  if (!sp_fs_exists(root)) {
-    sp_fs_create_dir(root);
-  }
+  sp_fs_create_dir(root);
 
   // Cache in a long-lived allocator (os) so the result outlives `a`, which is
   // typically a per-test arena that gets destroyed in cleanup.
@@ -189,10 +183,7 @@ void sp_test_file_manager_init(sp_test_file_manager_t* fs) {
   fs->mem = sp_mem_arena_as_allocator(fs->arena);
   sp_fs_get_exe_path(fs->mem, &fs->paths.bin);
   fs->paths.test = sp_test_file_manager_get_top_level(fs->mem);
-
-  if (!sp_fs_exists(fs->paths.test)) {
-    sp_fs_create_dir(fs->paths.test);
-  }
+  sp_fs_create_dir(fs->paths.test);
 }
 
 sp_str_t sp_test_file_path_c(sp_test_file_manager_t* manager, const c8* name) {
@@ -205,7 +196,7 @@ sp_str_t sp_test_file_path(sp_test_file_manager_t* manager, sp_str_t name) {
 
 void sp_test_file_create_ex(sp_test_file_config_t config) {
   sp_str_t parent = sp_fs_parent_path(config.path);
-  if (!sp_str_empty(parent) && !sp_str_equal(parent, config.path) && !sp_fs_exists(parent)) {
+  if (!sp_str_empty(parent) && !sp_str_equal(parent, config.path)) {
     sp_fs_create_dir(parent);
   }
 
@@ -245,9 +236,7 @@ void sp_test_file_manager_cleanup(sp_test_file_manager_t* manager) {
     return;
   }
 
-  if (sp_fs_exists(manager->paths.test)) {
-    sp_fs_remove_dir(manager->paths.test);
-  }
+  sp_fs_remove_dir(manager->paths.test);
 
   if (manager->arena) {
     sp_mem_arena_destroy(manager->arena);

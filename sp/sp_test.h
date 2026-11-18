@@ -375,7 +375,17 @@ typedef struct {
   #define sp_test_skip_without_absolute_names() ((void)0)
 #endif
 
+#if defined(SP_WASM)
+  #define sp_test_skip_without_parent_names() return sp_test_skip(t, "no names above a handle on wasm");
+#else
+  #define sp_test_skip_without_parent_names() ((void)0)
+#endif
+
 #define sp_test_skip_without_symlinks() if (!sp_test_symlinks_supported(t)) return sp_test_skip(t, "symlinks not available");
+#define sp_test_skip_without_hard_links() if (!sp_test_hard_links_supported(t)) return sp_test_skip(t, "hard links not available");
+#define sp_test_skip_without_no_replace_rename() if (!sp_test_no_replace_rename_supported(t)) return sp_test_skip(t, "no-replace rename not available");
+#define sp_test_skip_without_posix_unlink() if (!sp_test_posix_unlink_supported(t)) return sp_test_skip(t, "an unlinked name stays taken while the file is open");
+#define sp_test_skip_without_fine_timestamps() if (!sp_test_fine_timestamps_supported(t)) return sp_test_skip(t, "timestamps lose their nanoseconds");
 
 SP_API sp_err_t    sp_test_skip(sp_test_t* t, const c8* fmt, ...);
 SP_API void        sp_test_fail(sp_test_t* t, const c8* fmt, ...);
@@ -415,6 +425,10 @@ SP_TYPEDEF_FN(sp_err_t, sp_test_once_fn_t, void* user);
 SP_API sp_err_t    sp_test_once(sp_test_once_t* once, sp_test_once_fn_t fn, void* user);
 
 SP_API bool        sp_test_symlinks_supported(sp_test_t* t);
+SP_API bool        sp_test_hard_links_supported(sp_test_t* t);
+SP_API bool        sp_test_no_replace_rename_supported(sp_test_t* t);
+SP_API bool        sp_test_posix_unlink_supported(sp_test_t* t);
+SP_API bool        sp_test_fine_timestamps_supported(sp_test_t* t);
 
 
 typedef enum {
@@ -744,6 +758,10 @@ struct sp_test_runner_t {
   sp_da(const c8*) updated;
   sp_path_t dir_root;
   sp_test_once_t symlinks;
+  sp_test_once_t hard_links;
+  sp_test_once_t no_replace_rename;
+  sp_test_once_t posix_unlink;
+  sp_test_once_t fine_timestamps;
   sp_path_t golden_root;
   bool update;
   sp_test_keep_t keep;
@@ -1027,8 +1045,8 @@ sp_mem_t sp_test_mem(sp_test_t* t) {
 static sp_str_t sp_test_path_str(sp_mem_t mem, sp_path_t path) {
   c8 buf [SP_PATH_MAX];
   u64 len = 0;
-  for (s32 it = 0; sp_sys_get_root(it) != SP_SYS_INVALID_FD; it++) {
-    if (sp_sys_get_root(it) != path.dir) continue;
+  for (s32 it = 0; sp_sys_get_root(it).fd != SP_SYS_INVALID_FD; it++) {
+    if (sp_sys_get_root(it).fd != path.dir.fd) continue;
     if (sp_sys_get_root_label(it, buf, sizeof(buf), &len)) break;
     return sp_fs_join_path(mem, sp_str(buf, (u32)len), path.sub);
   }
@@ -1073,19 +1091,104 @@ bool sp_test_symlinks_supported(sp_test_t* t) {
   return !sp_test_once(&t->runner->symlinks, sp_test_probe_symlinks, t->runner);
 }
 
+static sp_err_t sp_test_probe_hard_links(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t file = sp_path_join(s.mem, runner->dir_root, sp_str_lit("H"));
+  sp_path_t link = sp_path_join(s.mem, runner->dir_root, sp_str_lit("K"));
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+  if (!err) {
+    err = sp_fs_create_hard_link_at(file, link);
+    sp_fs_remove_file_at(link);
+    sp_fs_remove_file_at(file);
+  }
+  sp_mem_end_scratch(s);
+  return err;
+}
+
+bool sp_test_hard_links_supported(sp_test_t* t) {
+  return sp_test_once(&t->runner->hard_links, sp_test_probe_hard_links, t->runner) != SP_ERR_SYS_UNSUPPORTED;
+}
+
+static sp_err_t sp_test_probe_no_replace_rename(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t from = sp_path_join(s.mem, runner->dir_root, sp_str_lit("N"));
+  sp_path_t to = sp_path_join(s.mem, runner->dir_root, sp_str_lit("O"));
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_write_at(from, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+  if (!err) {
+    err = sp_sys_rename_s(from.dir, from.sub, to.dir, to.sub, SP_SYS_RENAME_NO_REPLACE);
+    sp_fs_remove_file_at(from);
+    sp_fs_remove_file_at(to);
+  }
+  sp_mem_end_scratch(s);
+  return err;
+}
+
+bool sp_test_no_replace_rename_supported(sp_test_t* t) {
+  return sp_test_once(&t->runner->no_replace_rename, sp_test_probe_no_replace_rename, t->runner) != SP_ERR_SYS_UNSUPPORTED;
+}
+
+static sp_err_t sp_test_probe_posix_unlink(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t file = sp_path_join(s.mem, runner->dir_root, sp_str_lit("U"));
+  sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+  if (!err) err = sp_sys_open_s(file.dir, file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd);
+  if (!err) {
+    err = sp_sys_unlink_s(file.dir, file.sub);
+    if (!err) err = sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+    sp_sys_close(fd);
+    sp_fs_remove_file_at(file);
+  }
+  sp_mem_end_scratch(s);
+  return err;
+}
+
+bool sp_test_posix_unlink_supported(sp_test_t* t) {
+  return sp_test_once(&t->runner->posix_unlink, sp_test_probe_posix_unlink, t->runner) != SP_ERR_SYS_BUSY;
+}
+
+static sp_err_t sp_test_probe_fine_timestamps(void* user) {
+  sp_test_runner_t* runner = (sp_test_runner_t*)user;
+  sp_mem_arena_marker_t s = sp_mem_begin_scratch();
+  sp_path_t file = sp_path_join(s.mem, runner->dir_root, sp_str_lit("T"));
+  sp_sys_timespec_t time = { .tv_sec = 1000000000, .tv_nsec = 100 };
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_err_t err = sp_fs_create_dir_at(runner->dir_root);
+  if (!err) err = sp_fs_write_at(file, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+  if (!err) {
+    err = sp_sys_set_times_s(file.dir, file.sub, time, time);
+    if (!err) err = sp_sys_get_path_metadata_s(file.dir, file.sub, &meta);
+    sp_fs_remove_file_at(file);
+  }
+  sp_mem_end_scratch(s);
+  if (err) return SP_OK;
+  return meta.mtime.tv_nsec == time.tv_nsec ? SP_OK : SP_ERR_SYS_UNSUPPORTED;
+}
+
+bool sp_test_fine_timestamps_supported(sp_test_t* t) {
+  return sp_test_once(&t->runner->fine_timestamps, sp_test_probe_fine_timestamps, t->runner) != SP_ERR_SYS_UNSUPPORTED;
+}
+
 
 ////////////
 // GOLDEN //
 ////////////
 static sp_path_t sp_test_golden_search(sp_mem_t mem, sp_path_t dir, sp_str_t file) {
   while (true) {
-    if (sp_fs_is_target_file_at(sp_path_join(mem, dir, file))) return dir;
+    sp_sys_file_meta_t meta = sp_zero;
+    if (!sp_fs_get_path_metadata_at(sp_path_join(mem, dir, file), &meta) && meta.kind == SP_FS_KIND_FILE) return dir;
 
     sp_path_t parent = sp_path_parent(mem, dir);
     sp_sys_file_meta_t from = sp_zero;
     sp_sys_file_meta_t to = sp_zero;
-    if (sp_sys_get_path_metadata_s(dir.dir, dir.sub, &from)) return sp_zero_s(sp_path_t);
-    if (sp_sys_get_path_metadata_s(parent.dir, parent.sub, &to)) return sp_zero_s(sp_path_t);
+    if (sp_fs_get_path_metadata_at(dir, &from)) return sp_zero_s(sp_path_t);
+    if (sp_fs_get_path_metadata_at(parent, &to)) return sp_zero_s(sp_path_t);
     if (from.id == to.id && from.device == to.device) return sp_zero_s(sp_path_t);
     dir = parent;
   }
@@ -1126,7 +1229,7 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
   if (t->runner->update) {
     sp_fs_create_dir_at(sp_path_parent(t->mem, path));
 
-    sp_err_t err = sp_fs_create_file_str_at(path, actual);
+    sp_err_t err = sp_fs_write_at(path, actual, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
     if (err) {
       sp_test_record(t, (sp_test_failure_t) {
         .file = file,
@@ -1137,12 +1240,14 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
       return;
     }
 
-    if (sp_fs_exists_at(actual_path)) sp_fs_remove_file_at(actual_path);
+    sp_fs_remove_file_at(actual_path);
     t->updated++;
     return;
   }
 
-  if (!sp_fs_exists_at(path)) {
+  sp_str_t want = sp_zero;
+  sp_err_t err = sp_fs_read_at(t->mem, path, &want);
+  if (err == SP_ERR_SYS_NOT_FOUND) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
@@ -1151,9 +1256,6 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
     });
     return;
   }
-
-  sp_str_t want = sp_zero;
-  sp_err_t err = sp_io_read_file_at(t->mem, path, &want);
   if (err) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
@@ -1165,11 +1267,11 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
   }
 
   if (sp_str_equal(want, actual)) {
-    if (sp_fs_exists_at(actual_path)) sp_fs_remove_file_at(actual_path);
+    sp_fs_remove_file_at(actual_path);
     return;
   }
 
-  sp_fs_create_file_str_at(actual_path, actual);
+  sp_fs_write_at(actual_path, actual, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
 
   sp_da(sp_str_t) want_lines = sp_str_split_c8(t->mem, want, '\n');
   sp_da(sp_str_t) got_lines = sp_str_split_c8(t->mem, actual, '\n');
@@ -1214,7 +1316,8 @@ void sp_test_golden(sp_test_t* t, sp_str_t path, sp_str_t actual, sp_str_t file,
     src = sp_path_join(t->mem, root, file);
   }
 
-  if (src.dir == SP_SYS_INVALID_FD || !sp_fs_is_target_file_at(src)) {
+  sp_sys_file_meta_t meta = sp_zero;
+  if (src.dir.fd == SP_SYS_INVALID_FD || sp_fs_get_path_metadata_at(src, &meta) || meta.kind != SP_FS_KIND_FILE) {
     sp_test_record(t, (sp_test_failure_t) {
       .file = file,
       .line = line,
@@ -2028,7 +2131,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   if (golden.opt) golden_root = sp_cstr_as_str(golden.opt);
   if (!sp_str_empty(golden_root)) {
     runner->golden_root = sp_path_from_str(sp_fs_normalize_path(runner->mem, golden_root));
-    if (runner->golden_root.dir == SP_SYS_INVALID_FD) {
+    if (runner->golden_root.dir.fd == SP_SYS_INVALID_FD) {
       sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(golden_root));
       sp_io_flush(&runner->out.base);
       return 1;
@@ -2126,7 +2229,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   dir_name = sp_fs_normalize_path(runner->mem, dir_name);
 
   sp_path_t root = sp_path_from_str(dir_name);
-  if (root.dir == SP_SYS_INVALID_FD) {
+  if (root.dir.fd == SP_SYS_INVALID_FD) {
     sp_fmt_io(&runner->out.base, "no root serves {.quote}\n", sp_fmt_str(dir_name));
     sp_io_flush(&runner->out.base);
     return 1;
@@ -2141,9 +2244,17 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
 
   sp_str_t cutoff = sp_test_run_name(runner->mem, grace);
   sp_da(sp_str_t) runs = sp_da_new(runner->mem, sp_str_t);
-  sp_fs_for(runner->mem, runs_dir, it) {
-    if (it.entry.kind != SP_FS_KIND_DIR) continue;
-    sp_da_push(runs, sp_str_copy(runner->mem, it.entry.name));
+  sp_sys_dir_t runs_handle = sp_zero;
+  if (!sp_fs_open_dir_at(runs_dir, &runs_handle)) {
+    sp_fs_dir_it_t iter = sp_fs_dir_it(runs_handle);
+    SP_ALIGNED u8 buf [SP_SYS_DIR_MIN_BUF];
+    sp_fs_dir_entry_t entry = sp_zero;
+    while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) {
+      if (entry.kind != SP_FS_KIND_DIR) continue;
+      sp_da_push(runs, sp_str_copy(runner->mem, entry.name));
+    }
+    sp_fs_dir_it_close(&iter);
+    sp_fs_close_dir(runs_handle);
   }
   sp_da_sort(runs, sp_str_sort_kernel_alphabetical);
 

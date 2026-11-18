@@ -103,7 +103,7 @@ UTEST_F(io, file_reader_seek) {
   run_io_file_reader_test(utest_result, ut.file, (io_file_reader_test_t){
     .content = "0123456789",
     .steps = {
-      { .kind = IO_STEP_SEEK, .seek = { 5, SP_IO_SEEK_SET, SP_OK, 5 } },
+      { .kind = IO_STEP_SEEK, .seek = { 5, SP_SYS_SEEK_SET, SP_OK, 5 } },
       { .kind = IO_STEP_READ, .read = { 5, SP_OK, "56789" } },
     },
   });
@@ -125,7 +125,7 @@ UTEST_F(io, file_reader_buffered_seek_discards_buffer) {
     .buffer = 8,
     .steps = {
       { .kind = IO_STEP_READ, .read = { 1,  SP_OK, "0" } },
-      { .kind = IO_STEP_SEEK, .seek = { 10, SP_IO_SEEK_SET, SP_OK, 10 } },
+      { .kind = IO_STEP_SEEK, .seek = { 10, SP_SYS_SEEK_SET, SP_OK, 10 } },
       { .kind = IO_STEP_READ, .read = { 1,  SP_OK, "A" } },
     },
   });
@@ -215,7 +215,7 @@ void run_io_file_writer_test(int* utest_result, sp_mem_t mem, sp_path_t path, io
 
   if (t.expect.content) {
     sp_str_t loaded = sp_zero;
-    sp_io_read_file_at(mem, path, &loaded);
+    sp_fs_read_at(mem, path, &loaded);
     u64 n = sp_cstr_len(t.expect.content);
     EXPECT_EQ(loaded.len, n);
     sp_for(it, n) {
@@ -336,7 +336,7 @@ UTEST_F(io, stream_reader_as_file) {
   sp_io_file_writer_close(&fw);
 
   sp_sys_fd_t file = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &file), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &file), SP_OK);
 
   sp_io_stream_reader_t r = sp_zero;
   sp_io_stream_reader_from_file(&r, file, SP_IO_CLOSE_MODE_AUTO);
@@ -385,7 +385,7 @@ UTEST_F(io, file_to_file_copy) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  sp_io_read_file_at(ut.mem, dst_path, &loaded);
+  sp_fs_read_at(ut.mem, dst_path, &loaded);
   EXPECT_EQ(loaded.len, sizeof(source));
   sp_for(i, sizeof(source)) EXPECT_EQ((u8)loaded.data[i], source[i]);
 }
@@ -405,7 +405,7 @@ UTEST_F(io, stream_file_to_file_copy) {
   sp_path_t dst_path = sp_path(ut.file.dir, sp_str_lit("stream_file_to_file_copy.dst"));
 
   sp_sys_fd_t file = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &file), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &file), SP_OK);
   sp_io_stream_reader_t r = sp_zero;
   sp_io_stream_reader_from_file(&r, file, SP_IO_CLOSE_MODE_AUTO);
   sp_io_file_writer_t w = sp_zero;
@@ -419,7 +419,7 @@ UTEST_F(io, stream_file_to_file_copy) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  sp_io_read_file_at(ut.mem, dst_path, &loaded);
+  sp_fs_read_at(ut.mem, dst_path, &loaded);
   EXPECT_EQ(loaded.len, sizeof(source));
   sp_for(i, sizeof(source)) EXPECT_EQ((u8)loaded.data[i], source[i]);
 }
@@ -444,26 +444,26 @@ UTEST_F(io, file_copy_fast_path_falls_back_for_mem_source) {
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  sp_io_read_file_at(ut.mem, ut.file, &loaded);
+  sp_fs_read_at(ut.mem, ut.file, &loaded);
   EXPECT_EQ(loaded.len, n);
   sp_for(i, n) EXPECT_EQ(loaded.data[i], content[i]);
 }
 
 // A single backend read caps below the request on large files (Linux caps
-// any read at MAX_RW_COUNT = 0x7ffff000), so read_file must loop; a short
+// any read at MAX_RW_COUNT = 0x7ffff000), so sp_fs_read must loop; a short
 // read does not mean the file was smaller. The file is sparse, so it costs
 // no disk — but the read materializes ~2GB in memory.
-UTEST_F(io, read_file_larger_than_single_read) {
+UTEST_F(io, read_larger_than_single_read) {
   const u64 size = (u64)0x7ffff000 + 1;
 
   sp_io_file_writer_t w = sp_zero;
   ASSERT_EQ(sp_io_file_writer_from_path_at(&w, ut.file), SP_OK);
-  ASSERT_EQ(sp_io_file_writer_seek(&w, (s64)(size - 1), SP_IO_SEEK_SET, SP_NULLPTR), SP_OK);
+  ASSERT_EQ(sp_io_file_writer_seek(&w, (s64)(size - 1), SP_SYS_SEEK_SET, SP_NULLPTR), SP_OK);
   ASSERT_EQ(sp_io_write(&w.base, "!", 1, SP_NULLPTR), SP_OK);
   sp_io_file_writer_close(&w);
 
   sp_str_t loaded = sp_zero;
-  EXPECT_EQ(sp_io_read_file_at(ut.mem, ut.file, &loaded), SP_OK);
+  EXPECT_EQ(sp_fs_read_at(ut.mem, ut.file, &loaded), SP_OK);
   EXPECT_EQ(loaded.len, (u32)size);
   if (loaded.len == (u32)size) {
     EXPECT_EQ(loaded.data[size - 1], '!');
@@ -486,7 +486,7 @@ UTEST_F(io, file_reader_from_file_defers_stat) {
   sp_io_file_writer_close(&w);
 
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &fd), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd), SP_OK);
 
   sp_io_file_reader_t r = sp_zero;
   EXPECT_EQ(sp_io_file_reader_from_file(&r, fd, SP_IO_CLOSE_MODE_AUTO), SP_OK);
@@ -506,14 +506,14 @@ UTEST_F(io, file_writer_from_fd_defers_stat) {
   sp_io_file_writer_close(&w);
 
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_WO, 0, &fd), SP_OK);
+  ASSERT_EQ(sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_WO, 0, sp_sys_default_file_perms, &fd), SP_OK);
 
   sp_io_file_writer_t a = sp_zero;
   EXPECT_EQ(sp_io_file_writer_from_fd(&a, fd, SP_IO_CLOSE_MODE_AUTO), SP_OK);
   EXPECT_FALSE(a.size_known);
 
   s64 pos = 0;
-  EXPECT_EQ(sp_io_file_writer_seek(&a, 0, SP_IO_SEEK_END, &pos), SP_OK);
+  EXPECT_EQ(sp_io_file_writer_seek(&a, 0, SP_SYS_SEEK_END, &pos), SP_OK);
   EXPECT_EQ(pos, (s64)3);
   EXPECT_TRUE(a.size_known);
   sp_io_file_writer_close(&a);
@@ -564,7 +564,7 @@ UTEST_F(io, file_writer_from_path_knows_size) {
   EXPECT_EQ(size, (u64)4);
 
   s64 pos = 0;
-  EXPECT_EQ(sp_io_file_writer_seek(&w, -1, SP_IO_SEEK_END, &pos), SP_OK);
+  EXPECT_EQ(sp_io_file_writer_seek(&w, -1, SP_SYS_SEEK_END, &pos), SP_OK);
   EXPECT_EQ(pos, (s64)3);
   sp_io_file_writer_close(&w);
 }
@@ -577,9 +577,9 @@ UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
   sp_io_file_writer_close(&w);
 
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-  sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, &fd);
+  sp_sys_open_s(ut.file.dir, ut.file.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd);
   const s64 parked = 7;
-  sp_sys_lseek(fd, parked, SP_IO_SEEK_SET, SP_NULLPTR);
+  sp_sys_lseek(fd, parked, SP_SYS_SEEK_SET, SP_NULLPTR);
 
   sp_io_file_reader_t r = sp_zero;
   sp_io_file_reader_from_file(&r, fd, SP_IO_CLOSE_MODE_NONE);
@@ -587,7 +587,7 @@ UTEST_F(io, file_reader_positional_does_not_touch_kernel_cursor) {
   u8 buf [4] = sp_zero;
   sp_io_read(&r.base, buf, 4, SP_NULLPTR);
   s64 position = 0;
-  sp_sys_lseek(fd, 0, SP_IO_SEEK_CUR, &position);
+  sp_sys_lseek(fd, 0, SP_SYS_SEEK_CUR, &position);
   EXPECT_EQ(position, parked);
 
   sp_io_file_reader_close(&r);
@@ -603,7 +603,7 @@ UTEST_F(io, file_seek_beyond_4gb) {
   sp_io_file_writer_t w = sp_zero;
   sp_io_file_writer_from_path_at(&w, ut.file);
   s64 seek_pos = 0;
-  EXPECT_EQ(sp_io_file_writer_seek(&w, offset, SP_IO_SEEK_SET, &seek_pos), SP_OK);
+  EXPECT_EQ(sp_io_file_writer_seek(&w, offset, SP_SYS_SEEK_SET, &seek_pos), SP_OK);
   EXPECT_EQ(seek_pos, offset);
   sp_io_write(&w.base, marker, 4, SP_NULLPTR);
   sp_io_file_writer_close(&w);
@@ -615,7 +615,7 @@ UTEST_F(io, file_seek_beyond_4gb) {
   EXPECT_EQ(end, (u64)offset + 4);
 
   s64 read_pos = 0;
-  EXPECT_EQ(sp_io_file_reader_seek(&r, offset, SP_IO_SEEK_SET, &read_pos), SP_OK);
+  EXPECT_EQ(sp_io_file_reader_seek(&r, offset, SP_SYS_SEEK_SET, &read_pos), SP_OK);
   EXPECT_EQ(read_pos, offset);
 
   u8 result [4] = sp_zero;

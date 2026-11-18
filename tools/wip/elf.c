@@ -59,7 +59,7 @@ s32 embed_main(s32 argc, const c8** argv) {
     sp_str_t path = sp_cstr_as_str(argv[2 + i]);
     sp_str_t basename = sp_fs_get_name(path);
     sp_str_t content = sp_zero;
-    sp_io_read_file(mem, path, &content);
+    sp_fs_read(mem, path, &content);
 
     if (sp_str_empty(content)) {
       return 1;

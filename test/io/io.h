@@ -20,12 +20,12 @@ UTEST_F_SETUP(io) {
   sp_test_file_manager_init(&ut.file_manager);
   ut.file.sub = sp_str_lit("sp_io_rw.file");
   sp_test_file_create_empty(&ut.file_manager, ut.file.sub);
-  sp_sys_open_dir_s(sp_sys_get_root(0), ut.file_manager.paths.test, 0, &ut.file.dir);
+  sp_fs_open_dir_at(sp_path_cwd(ut.file_manager.paths.test), &ut.file.dir);
 }
 
 UTEST_F_TEARDOWN(io) {
   SKIP_ON_WASM()
-  sp_sys_close(ut.file.dir);
+  sp_fs_close_dir(ut.file.dir);
   sp_test_file_manager_cleanup(&ut.file_manager);
   sp_mem_arena_destroy(ut.arena);
 }
@@ -54,7 +54,7 @@ typedef struct {
     struct { u64 request; sp_err_t err; const c8* content; } read;
     struct { const c8* data; sp_err_t err; u64 bytes; } write;
     struct { sp_err_t err; } flush;
-    struct { s64 offset; sp_io_whence_t whence; sp_err_t err; s64 pos; } seek;
+    struct { s64 offset; sp_sys_seek_t whence; sp_err_t err; s64 pos; } seek;
     struct { sp_err_t err; u64 size; } size;
     struct { u64 buffer; sp_err_t err; u64 copied; } copy;
     struct { u64 size; sp_err_t err; u64 bytes; } pad;

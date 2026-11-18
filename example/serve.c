@@ -69,7 +69,7 @@ static void serve_client(serve_t* serve, sp_sys_socket_t client) {
   else if (method == SP_HTTP_POST && sp_str_equal_cstr(target, "/screenshot")) {
     sp_str_t data = sp_io_dyn_mem_writer_as_str(&payload);
     sp_str_t path = sp_cstr_as_str(serve->output);
-    if (sp_fs_create_file_str(path, data) != SP_OK) {
+    if (sp_fs_write(path, data, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms) != SP_OK) {
       respond(&writer.base, 500, sp_str_lit("text/plain"), sp_str_lit("could not write capture\n"));
       goto done;
     }

@@ -23,7 +23,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   u64 n = 0;
   switch (c->fn) {
     case PATH_CWD: {
-      sp_err_t err = sp_sys_get_fd_path(sp_fs_get_cwd(), buf, sizeof(buf), &n);
+      sp_err_t err = sp_sys_get_fd_path(sp_fs_get_cwd().fd, buf, sizeof(buf), &n);
       if (err == SP_ERR_SYS_UNSUPPORTED) return sp_test_skip(t, "not available");
       sp_must_ok(t, err);
       break;

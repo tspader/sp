@@ -18,7 +18,9 @@ sp_test(msvc, find) {
 
     sp_str_r lib_ucrt = sp_msvc_sdk_path_buf(buf, sizeof(buf), sdk, SP_MSVC_SDK_PATH_LIB_UCRT);
     sp_must_eq(t, lib_ucrt.err, SP_OK);
-    sp_expect(t, sp_fs_is_dir(lib_ucrt.value));
+    sp_sys_file_meta_t meta = sp_zero;
+    sp_expect_ok(t, sp_fs_get_link_metadata(lib_ucrt.value, &meta));
+    sp_expect_eq(t, meta.kind, SP_FS_KIND_DIR);
     if (it) sp_expect(t, !sp_msvc_version_gt(sdk->version, msvc.sdks[it - 1].version));
   }
 
@@ -31,7 +33,8 @@ sp_test(msvc, find) {
     sp_io_mem_writer_from_buffer(&io, buf, sizeof(buf));
     sp_must_eq(t, sp_msvc_vs_path_io(&io.base, vs, SP_MSVC_VS_PATH_LIB), SP_OK);
     sp_must_eq(t, sp_io_write_str(&io.base, sp_str_lit("/vcruntime.lib"), SP_NULLPTR), SP_OK);
-    sp_expect(t, sp_fs_exists(sp_io_mem_writer_as_str(&io)));
+    sp_sys_file_meta_t meta = sp_zero;
+    sp_expect_ok(t, sp_fs_get_path_metadata(sp_io_mem_writer_as_str(&io), &meta));
     if (it) sp_expect(t, !sp_msvc_version_gt(vs->version.build, msvc.installations[it - 1].version.build));
   }
 

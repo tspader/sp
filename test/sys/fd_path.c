@@ -124,6 +124,8 @@ static bool same_file(sp_path_t a, sp_path_t b) {
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_test_skip_on_wasm()
+  if (c->alias) sp_test_skip_without_hard_links();
+  if (c->fate == FATE_REPLACED) sp_test_skip_without_posix_unlink();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
@@ -137,20 +139,22 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   sp_sys_fd_t fd = SP_SYS_INVALID_FD;
   switch (c->target) {
     case TARGET_FILE: {
-      sp_must_ok(t, sp_fs_create_file_at(path));
+      sp_must_ok(t, sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       if (c->alias) sp_must_ok(t, sp_fs_create_hard_link_at(path, alias));
-      if (c->decoy) sp_must_ok(t, sp_fs_create_file_at(decoy));
-      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, &fd));
+      if (c->decoy) sp_must_ok(t, sp_fs_write_at(decoy, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
+      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_RO, 0, sp_sys_default_file_perms, &fd));
       break;
     }
     case TARGET_DIR: {
+      sp_sys_dir_t dir = sp_zero;
       sp_must_ok(t, sp_fs_create_dir_at(path));
-      sp_must_ok(t, sp_sys_open_dir_s(path.dir, path.sub, 0, &fd));
+      sp_must_ok(t, sp_fs_open_dir_at(path, &dir));
+      fd = dir.fd;
       break;
     }
     case TARGET_CWD: {
       expect = sp_path_cwd(sp_cstr_as_str(c->expect.path));
-      fd = expect.dir;
+      fd = expect.dir.fd;
       break;
     }
     case TARGET_PIPE: {
@@ -177,12 +181,12 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case FATE_RENAMED: {
-      sp_must_ok(t, sp_sys_rename_s(path.dir, path.sub, other.dir, other.sub));
+      sp_must_ok(t, sp_sys_rename_s(path.dir, path.sub, other.dir, other.sub, 0));
       break;
     }
     case FATE_REPLACED: {
       sp_must_ok(t, sp_sys_unlink_s(path.dir, path.sub));
-      sp_must_ok(t, sp_fs_create_file_at(path));
+      sp_must_ok(t, sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       break;
     }
   }
@@ -235,17 +239,17 @@ sp_test_each(sys, fd_path_room, room_t, rooms) {
   sp_test_skip_on_wasm()
 
   sp_path_t sandbox = sp_test_dir(t);
-  sp_sys_fd_t dir = SP_SYS_INVALID_FD;
-  sp_must_ok(t, sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &dir));
+  sp_sys_dir_t dir = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &dir));
 
   c8 full [SP_PATH_MAX];
   u64 len = 0;
-  sp_must_ok(t, sp_sys_get_fd_path(dir, full, sizeof(full), &len));
+  sp_must_ok(t, sp_sys_get_fd_path(dir.fd, full, sizeof(full), &len));
 
   c8 buf [SP_PATH_MAX];
   sp_for(at, sizeof(buf)) buf[at] = (c8)0xAB;
   u64 n = 1;
-  sp_err_t err = sp_sys_get_fd_path(dir, buf, (u64)((s64)len + it->room), &n);
+  sp_err_t err = sp_sys_get_fd_path(dir.fd, buf, (u64)((s64)len + it->room), &n);
 
   sp_expect_err_eq(t, err, it->err);
   if (err) {
@@ -257,6 +261,6 @@ sp_test_each(sys, fd_path_room, room_t, rooms) {
     sp_expect_mem_eq(t, buf, full, len);
   }
 
-  sp_sys_close(dir);
+  sp_fs_close_dir(dir);
   return SP_OK;
 }

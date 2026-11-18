@@ -109,7 +109,7 @@ endif
 
 TESTS = amalg app array asset cli etc env format fmon glob ht io math process ps rb sys thread time mem leak qsort term
 BENCHES = glob heap
-EXAMPLES = app array cli format hash_table io zero_copy ls palette post serve signal tls wc
+EXAMPLES = app array cli format hash_table io zero_copy ls palette post serve signal tls wc fs/iterator
 TRIPLES = \
   x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl \
   aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl \

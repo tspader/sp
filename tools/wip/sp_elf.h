@@ -703,7 +703,7 @@ sp_elf_t* sp_elf_read(sp_mem_t mem, const u8* data, u64 size) {
 
 sp_elf_t* sp_elf_read_from_file(sp_mem_t mem, sp_str_t path) {
   sp_str_t bytes = sp_zero;
-  if (sp_io_read_file(mem, path, &bytes)) {
+  if (sp_fs_read(mem, path, &bytes)) {
     return SP_NULLPTR;
   }
   sp_elf_t* elf = sp_elf_read(mem, (const u8*)bytes.data, bytes.len);

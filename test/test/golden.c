@@ -99,11 +99,11 @@ sp_test_each(runner, golden, test_t, tests) {
   sp_path_t golden = sp_path_join(mem, sandbox, sp_str_lit("S/G"));
   sp_path_t actual = sp_path_join(mem, sandbox, sp_str_lit("S/G.actual"));
   sp_must_ok(t, sp_fs_create_dir_at(sp_path_parent(mem, src)));
-  sp_must_ok(t, sp_fs_create_file_at(src));
+  sp_must_ok(t, sp_fs_write_at(src, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
   sp_str_t file = sp_str_lit("S/main.c");
   if (it->absolute) sp_must_ok(t, sp_fs_canonicalize_path_at(mem, src, &file));
-  if (it->golden) sp_must_ok(t, sp_fs_create_file_cstr_at(golden, it->golden));
-  if (it->update) sp_must_ok(t, sp_fs_create_file_cstr_at(actual, "stale"));
+  if (it->golden) sp_must_ok(t, sp_fs_write_cstr_at(golden, it->golden, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
+  if (it->update) sp_must_ok(t, sp_fs_write_cstr_at(actual, "stale", SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
 
   sp_str_t cwd = it->cwd ? sp_fs_join_path(mem, sandbox.sub, sp_cstr_as_str(it->cwd)) : sandbox.sub;
   sp_must_ok(t, sp_fs_create_dir_at(sp_path(sandbox.dir, cwd)));
@@ -136,15 +136,9 @@ sp_test_each(runner, golden, test_t, tests) {
   sp_expect(t, sp_str_contains(out.out, sp_test_format(t, "\nchild.golden {} ", sp_fmt_cstr(it->expect.status))));
 
   sp_str_t content = sp_zero;
-  sp_expect_eq(t, sp_fs_exists_at(golden), it->expect.golden != SP_NULLPTR);
-  if (it->expect.golden) {
-    sp_expect_ok(t, sp_io_read_file_at(mem, golden, &content));
-    sp_expect_str_eq_c(t, content, it->expect.golden);
-  }
-  sp_expect_eq(t, sp_fs_exists_at(actual), it->expect.actual != SP_NULLPTR);
-  if (it->expect.actual) {
-    sp_expect_ok(t, sp_io_read_file_at(mem, actual, &content));
-    sp_expect_str_eq_c(t, content, it->expect.actual);
-  }
+  sp_expect_err_eq(t, sp_fs_read_at(mem, golden, &content), it->expect.golden ? SP_OK : SP_ERR_SYS_NOT_FOUND);
+  if (it->expect.golden) sp_expect_str_eq_c(t, content, it->expect.golden);
+  sp_expect_err_eq(t, sp_fs_read_at(mem, actual, &content), it->expect.actual ? SP_OK : SP_ERR_SYS_NOT_FOUND);
+  if (it->expect.actual) sp_expect_str_eq_c(t, content, it->expect.actual);
   return SP_OK;
 }

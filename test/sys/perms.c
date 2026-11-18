@@ -1,5 +1,6 @@
 #include "sp.h"
 #include "sp/sp_test.h"
+#include "posix.h"
 
 #define PERMS_TEST_MAX_OPS 2
 
@@ -36,8 +37,9 @@ static const test_t tests [] = {
 
 static sp_err_t run(sp_test_t* t, test_t* it) {
   sp_test_skip_on_wasm();
+  posix_skip_without_modes();
   sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
-  sp_fs_create_file_at(path);
+  sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_err_t err = sp_sys_get_path_metadata_s(path.dir, path.sub, &meta);
@@ -66,12 +68,12 @@ static sp_err_t run(sp_test_t* t, test_t* it) {
 sp_test_each_fn(sys, perms, test_t, tests, run);
 
 sp_test(sys, default_perms_then_read_only) {
+  sp_test_skip_on_wasm();
+  posix_skip_without_modes();
   sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
-  sp_fs_create_file_at(path);
+  sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
 
-  sp_err_t err = sp_sys_set_file_perms_s(path.dir, path.sub, sp_sys_default_file_perms);
-  if (err == SP_ERR_SYS_UNSUPPORTED) return sp_test_skip(t, "set_file_perms not supported");
-  sp_try(err);
+  sp_must_ok(t, sp_sys_set_file_perms_s(path.dir, path.sub, sp_sys_default_file_perms));
 
   sp_sys_file_meta_t meta = sp_zero;
   sp_must_ok(t, sp_sys_get_path_metadata_s(path.dir, path.sub, &meta));
@@ -86,9 +88,25 @@ sp_test(sys, default_perms_then_read_only) {
   return SP_OK;
 }
 
+sp_test(sys, directory_perms_apply_to_file) {
+  sp_path_t dir = sp_test_dir(t);
+  sp_path_t path = sp_path_join(sp_test_arena(t), dir, sp_str_lit("A"));
+  sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
+
+  sp_sys_file_meta_t parent = sp_zero;
+  sp_must_ok(t, sp_sys_get_path_metadata_s(dir.dir, dir.sub, &parent));
+  sp_must_ok(t, sp_sys_set_file_perms_s(path.dir, path.sub, parent.perms));
+
+  sp_sys_file_meta_t after = sp_zero;
+  sp_must_ok(t, sp_sys_get_path_metadata_s(path.dir, path.sub, &after));
+  sp_expect_eq(t, after.kind, SP_FS_KIND_FILE);
+  return SP_OK;
+}
+
 sp_test(sys, mkdir_applies_perms) {
   sp_test_skip_on_win32();
   sp_test_skip_on_wasm();
+  posix_skip_without_modes();
   sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("D"));
 
   sp_sys_file_perms_t perms = sp_sys_default_dir_perms;

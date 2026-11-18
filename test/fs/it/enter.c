@@ -24,41 +24,10 @@ typedef struct {
 
 static const test_t tests [] = {
   {
-    .name = "enters_only_listed",
-    .setup = {
-      { "R/A/B" },
-      { "R/C/D" },
-      { "R/E" },
-    },
-    .enter = { { "A" } },
-    .expect = {
-      .entries = {
-        { "A", SP_FS_KIND_DIR },
-        { "A/B", SP_FS_KIND_FILE },
-        { "C", SP_FS_KIND_DIR },
-        { "E", SP_FS_KIND_FILE },
-      },
-    },
-  },
-  {
-    .name = "nested_enters",
-    .setup = {
-      { "R/A/B/C" },
-    },
-    .enter = { { "A" }, { "A/B" } },
-    .expect = {
-      .entries = {
-        { "A", SP_FS_KIND_DIR },
-        { "A/B", SP_FS_KIND_DIR },
-        { "A/B/C", SP_FS_KIND_FILE },
-      },
-    },
-  },
-  {
     .name = "enter_file_is_not_dir",
     .setup = {
-      { "R/A" },
-      { "R/B" },
+      { "A" },
+      { "B" },
     },
     .enter = { { "A", SP_ERR_SYS_NOT_DIR } },
     .expect = {
@@ -71,9 +40,8 @@ static const test_t tests [] = {
   {
     .name = "enter_symlink_is_loop",
     .setup = {
-      { "R/A", FS_SETUP_DIR },
-      { "R/A/B" },
-      { .path = "R/L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
+      { "A", FS_SETUP_DIR },
+      { .path = "L", .kind = FS_SETUP_DIR_SYMLINK, .target = "A" },
     },
     .enter = { { "L", SP_ERR_SYS_LOOP } },
     .expect = {
@@ -86,8 +54,8 @@ static const test_t tests [] = {
   {
     .name = "enter_vanished_is_not_found",
     .setup = {
-      { "R/A", FS_SETUP_DIR },
-      { "R/C" },
+      { "A", FS_SETUP_DIR },
+      { "C" },
     },
     .enter = { { "A", SP_ERR_SYS_NOT_FOUND, .vanish = true } },
     .expect = {
@@ -99,11 +67,11 @@ static const test_t tests [] = {
   },
 };
 
-static const enter_t* find_enter(sp_mem_t mem, const test_t* test, sp_str_t base, sp_str_t path) {
+static const enter_t* find_enter(const test_t* test, sp_str_t path) {
   sp_carr_for(test->enter, e) {
     const enter_t* enter = &test->enter[e];
     if (!enter->path) break;
-    if (sp_str_equal(sp_fs_join_path(mem, base, sp_cstr_as_str(enter->path)), path)) return enter;
+    if (sp_str_equal_cstr(path, enter->path)) return enter;
   }
   return SP_NULLPTR;
 }
@@ -113,16 +81,14 @@ sp_test_each(fs, it_enter, test_t, tests) {
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
-  fs_apply_setup(t, sandbox, it->setup);
+  sp_must_ok(t, fs_apply_setup(t, sandbox, it->setup));
 
-  sp_path_t root = sp_path_join(mem, sandbox, sp_str_lit("R"));
-  sp_str_t base = root.sub;
   fs_match_t entries [FS_MAX_PATHS] = sp_zero;
   u32 num_entries = 0;
   sp_carr_for(it->expect.entries, e) {
     const entry_t* want = &it->expect.entries[e];
     if (!want->path) break;
-    entries[num_entries++] = (fs_match_t) { .key = sp_fs_join_path(mem, base, sp_cstr_as_str(want->path)), .kind = want->kind };
+    entries[num_entries++] = (fs_match_t) { .key = sp_cstr_as_str(want->path), .kind = want->kind };
   }
 
   fs_match_t leaves [FS_MAX_PATHS] = sp_zero;
@@ -130,27 +96,37 @@ sp_test_each(fs, it_enter, test_t, tests) {
   sp_str_t entered [FS_MAX_PATHS] = sp_zero;
   u32 depth = 0;
 
-  sp_fs_it_t walk = sp_fs_it_new_at(mem, root, 0);
-  while (sp_fs_it_next(&walk)) {
-    sp_expect_str_eq(t, sp_fs_join_path(mem, base, walk.entry.rel), walk.entry.path);
-    switch (walk.yield) {
-      case SP_FS_IT_LEAVE: {
-        fs_match(t, leaves, num_leaves, walk.entry.path, walk.entry.kind);
-        sp_expect_eq(t, (u32)sp_fs_get_kind_at(walk.at), (u32)SP_FS_KIND_DIR);
+  sp_sys_dir_t root = sp_zero;
+  sp_must_ok(t, sp_fs_open_dir_at(sandbox, &root));
+
+  sp_fs_it_t walk = sp_fs_it(mem, root);
+  sp_fs_visit_t visit = sp_zero;
+  while (sp_fs_it_visit(&walk, &visit)) {
+    sp_fs_it_entry_t entry = visit.entry;
+    switch (visit.order) {
+      case SP_FS_POST_ORDER: {
+        fs_match(t, leaves, num_leaves, entry.path, entry.kind);
+        sp_sys_file_meta_t meta = sp_zero;
+        sp_expect_ok(t, sp_fs_get_link_metadata_at(entry.at, &meta));
+        sp_expect_eq(t, (u32)meta.kind, (u32)SP_FS_KIND_DIR);
         sp_must(t, depth > 0);
-        sp_expect_str_eq(t, walk.entry.path, entered[--depth]);
+        sp_expect_str_eq(t, entry.path, entered[--depth]);
         break;
       }
-      case SP_FS_IT_ENTRY: {
-        fs_match(t, entries, num_entries, walk.entry.path, walk.entry.kind);
-        const enter_t* enter = find_enter(mem, it, base, walk.entry.path);
-        if (!enter) break;
-        if (enter->vanish) sp_must_ok(t, sp_sys_rmdir_s(walk.at.dir, walk.at.sub));
-        sp_expect_err_eq(t, sp_fs_it_enter(&walk), enter->err);
-        if (enter->err) break;
-        sp_str_t path = sp_str_copy(mem, walk.entry.path);
-        entered[depth++] = path;
-        leaves[num_leaves++] = (fs_match_t) { .key = path, .kind = SP_FS_KIND_DIR };
+      case SP_FS_PRE_ORDER: {
+        fs_match(t, entries, num_entries, entry.path, entry.kind);
+        bool descend = entry.kind == SP_FS_KIND_DIR;
+        const enter_t* enter = find_enter(it, entry.path);
+        if (enter) {
+          if (enter->vanish) sp_must_ok(t, sp_sys_rmdir_s(entry.at.dir, entry.at.sub));
+          sp_expect_err_eq(t, sp_fs_it_enter(&walk), enter->err);
+          descend = !enter->err;
+        }
+        if (descend) {
+          sp_str_t path = sp_str_copy(mem, entry.path);
+          entered[depth++] = path;
+          leaves[num_leaves++] = (fs_match_t) { .key = path, .kind = SP_FS_KIND_DIR };
+        }
         break;
       }
     }
@@ -158,6 +134,7 @@ sp_test_each(fs, it_enter, test_t, tests) {
   sp_expect_ok(t, walk.err);
   sp_expect_eq(t, depth, (u32)0);
   sp_fs_it_deinit(&walk);
+  sp_fs_close_dir(root);
 
   fs_match_finish(t, entries, num_entries);
   fs_match_finish(t, leaves, num_leaves);

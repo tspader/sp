@@ -16,13 +16,16 @@ source = [
   "test/test/axis.c", "test/test/filter.c", "test/test/matrix.c",
   "test/test/sweep.c", "test/test/tracking.c",
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
-  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
-  "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
+  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/set_times.c", "test/sys/perms.c", "test/sys/self_path.c",
+  "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/pipe/disconnect.c", "test/sys/pipe/truncate.c", "test/sys/transfer.c", "test/sys/readlink.c", "test/sys/rename.c", "test/sys/unlink.c",
+  "test/sys/copy_link.c", "test/sys/reparse.c",
+  "test/sys/sync.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c",
   "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c",
+  "test/fs/atomic/*.c", "test/fs/copy/*.c", "test/fs/create_dir/*.c", "test/fs/path/*.c", "test/fs/read/*.c", "test/fs/write/*.c",
   "test/fs/*.c", "test/fs/windows/nt_path.c",
   "test/str/*.c", "test/str/utf8/*.c",
   "test/msvc/*.c",
@@ -41,8 +44,10 @@ name = "sys"
 source = [
   "test/main.c",
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
-  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/perms.c", "test/sys/self_path.c",
-  "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/transfer.c", "test/sys/readlink.c",
+  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/set_times.c", "test/sys/perms.c", "test/sys/self_path.c",
+  "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/pipe/disconnect.c", "test/sys/pipe/truncate.c", "test/sys/transfer.c", "test/sys/readlink.c", "test/sys/rename.c", "test/sys/unlink.c",
+  "test/sys/copy_link.c", "test/sys/reparse.c",
+  "test/sys/sync.c",
   "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
   "test/sys/tty/contract.c", "test/sys/tty/mode.c",
   "test/sys/wait/event.c", "test/sys/wait/wait.c",
@@ -55,7 +60,8 @@ source = ["test/main.c", "test/atomic.c"]
 
 [[test]]
 name = "fs"
-source = ["test/main.c", "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c", "test/fs/*.c", "test/fs/windows/nt_path.c"]
+source = ["test/main.c", "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c",
+  "test/fs/atomic/*.c", "test/fs/copy/*.c", "test/fs/create_dir/*.c", "test/fs/path/*.c", "test/fs/read/*.c", "test/fs/write/*.c", "test/fs/*.c", "test/fs/windows/nt_path.c"]
 include = [".", "test/fs"]
 
 [[test]]
@@ -90,13 +96,15 @@ source = [
   "test/main.c",
   "test/http/tls/*.c",
 ]
-deps = ["mbedtls"]
 define = [
   "SP_TLS_WITH_MBEDTLS",
   { value = "SP_TLS_MACOS_SECTRUST", when = { os = "macos" } },
   { value = "SP_TLS_MBEDTLS_SINGLE_THREAD", when = { os = "windows" } },
 ]
-macos = { frameworks = ["Security", "CoreFoundation"] }
+system_deps = [
+  { framework = "Security", when = { os = "macos" } },
+  { framework = "CoreFoundation", when = { os = "macos" } },
+]
 
 [[lib]]
 name = "sp"
@@ -111,7 +119,7 @@ define = ["SP_SHARED_LIB"]
 deps = ["sp"]
 
 [deps.test]
-mbedtls = "3.6.6"
+mbedtls = { path = "tools/spn/mbedtls", when = { os = { not = "wasi" } } }
 
 [[example]]
 name = "zero_copy"

@@ -31,8 +31,10 @@ static s64 field_ns(const sp_sys_file_meta_t* meta, field_t field) {
 }
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
+  if (c->moves) sp_test_skip_without_fine_timestamps();
+
   sp_path_t path = sp_path_join(sp_test_arena(t), sp_test_dir(t), sp_str_lit("A"));
-  sp_fs_create_file_str_at(path, sp_str_lit("A"));
+  sp_fs_write_at(path, sp_str_lit("A"), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
 
   sp_sys_file_meta_t before = sp_zero;
   sp_err_t err = sp_sys_get_path_metadata_s(path.dir, path.sub, &before);
@@ -44,7 +46,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
   switch (c->op) {
     case OP_WRITE: {
       sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_APPEND, &fd));
+      sp_must_ok(t, sp_sys_open_s(path.dir, path.sub, SP_SYS_OPEN_MODE_WO, SP_SYS_OPEN_APPEND, sp_sys_default_file_perms, &fd));
       u64 n = 0;
       sp_expect_ok(t, sp_sys_write(fd, "B", 1, &n));
       sp_sys_close(fd);

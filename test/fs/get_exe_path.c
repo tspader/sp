@@ -32,7 +32,8 @@ sp_test(fs, get_exe_path_exists_on_disk) {
 
   sp_str_t exe = sp_zero;
   sp_must_ok(t, sp_fs_get_exe_path(sp_test_arena(t), &exe));
-  sp_must(t, sp_fs_exists(exe));
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_must_ok(t, sp_fs_get_path_metadata(exe, &meta));
   return SP_OK;
 }
 

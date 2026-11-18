@@ -1493,11 +1493,11 @@ s32 ubench_main(s32 argc, const c8 *const argv[]) {
         sp_cstr_copy_to_n(exe.data, exe.len,
                           exe_path_buf, sizeof(exe_path_buf));
         if (exe_path_buf[0]) {
-          struct stat st;
-          if (stat(exe_path_buf, &st) == 0) {
-            exe_size = (s64)st.st_size;
-            sp_str_t mtime = sp_tm_epoch_to_iso8601(
-                s.mem, sp_fs_get_mod_time(exe));
+          sp_sys_file_meta_t meta = sp_zero;
+          if (!sp_fs_get_path_metadata(exe, &meta)) {
+            exe_size = meta.size;
+            sp_tm_epoch_t modified = { .s = (u64)meta.mtime.tv_sec, .ns = (u32)meta.mtime.tv_nsec };
+            sp_str_t mtime = sp_tm_epoch_to_iso8601(s.mem, modified);
             sp_cstr_copy_to_n(mtime.data, mtime.len,
                               exe_mtime_buf, sizeof(exe_mtime_buf));
           }

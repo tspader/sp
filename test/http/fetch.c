@@ -1,5 +1,6 @@
-#define SP_HTTP_IMPLEMENTATION
 #include "http.h"
+
+#if !defined(SP_WASM)
 
 #if !defined(SP_WIN32)
 #include <signal.h>
@@ -646,3 +647,5 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
 }
 
 sp_test_each_fn(http, fetch, test_t, tests, run);
+
+#endif

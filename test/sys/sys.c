@@ -1,9 +1,29 @@
 #include "harness.h"
+#include "posix.h"
 
 static bool sys_case_wants_symlinks(sys_case_t* c) {
   sp_carr_for(c->setup, it) {
     if (!c->setup[it].path) break;
     if (c->setup[it].kind == SYS_SETUP_SYMLINK || c->setup[it].kind == SYS_SETUP_DIR_SYMLINK) return true;
+  }
+  return false;
+}
+
+static bool sys_case_wants_perms(sys_case_t* c) {
+  sp_carr_for(c->setup, it) {
+    if (!c->setup[it].path) break;
+    if (c->setup[it].kind == SYS_SETUP_READ_ONLY_FILE) return true;
+  }
+  sp_carr_for(c->steps, it) {
+    if (c->steps[it].kind == SYS_STEP_OPEN && c->steps[it].open.read_only) return true;
+  }
+  return false;
+}
+
+static bool sys_case_wants_no_replace_rename(sys_case_t* c) {
+  sp_carr_for(c->steps, it) {
+    sys_step_t* step = &c->steps[it];
+    if (step->kind == SYS_STEP_RENAME && (step->rename.flags & SP_SYS_RENAME_NO_REPLACE) && !step->rename.err) return true;
   }
   return false;
 }
@@ -16,8 +36,15 @@ static const c8* sys_step_name(sys_step_kind_t kind) {
     case SYS_STEP_READ:     return "read";
     case SYS_STEP_WRITE:    return "write";
     case SYS_STEP_PWRITE:   return "pwrite";
+    case SYS_STEP_SYNC:     return "sync";
+    case SYS_STEP_RENAME:   return "rename";
+    case SYS_STEP_UNLINK:   return "unlink";
   }
   return "";
+}
+
+static sp_sys_dir_t sys_step_dir(sp_sys_dir_t sandbox, const sp_sys_fd_t* fds, sys_dir_t dir) {
+  return dir == SYS_DIR_SANDBOX ? sandbox : sp_sys_dir(fds[dir - SYS_DIR_SLOT_0]);
 }
 
 static bool sys_check_err(sp_test_t* t, sp_err_t err, sp_err_t want) {
@@ -31,9 +58,12 @@ static bool sys_check_err(sp_test_t* t, sp_err_t err, sp_err_t want) {
 sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
   sp_sys_fd_t fds [SYS_CASE_MAX_FDS];
   sp_carr_for(fds, it) fds[it] = SP_SYS_INVALID_FD;
-  sp_sys_fd_t sandbox_fd = SP_SYS_INVALID_FD;
+  sp_sys_dir_t sandbox_dir = sp_zero;
 
   if (sys_case_wants_symlinks(c)) sp_test_skip_without_symlinks();
+  if (sys_case_wants_perms(c)) sp_test_skip_on_wasm();
+  if (sys_case_wants_perms(c)) posix_skip_without_modes();
+  if (sys_case_wants_no_replace_rename(c)) sp_test_skip_without_no_replace_rename();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_path_t sandbox = sp_test_dir(t);
@@ -44,8 +74,11 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
 
     switch (ent->kind) {
-      case SYS_SETUP_FILE: {
-        sp_fs_create_file_str_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""));
+      case SYS_SETUP_FILE:
+      case SYS_SETUP_READ_ONLY_FILE: {
+        sp_sys_file_perms_t perms = sp_sys_default_file_perms;
+        sp_sys_set_read_only(&perms, ent->kind == SYS_SETUP_READ_ONLY_FILE);
+        sp_fs_write_at(path, ent->content ? sp_cstr_as_str(ent->content) : sp_str_lit(""), SP_FS_WRITE_TRUNCATE, perms);
         break;
       }
       case SYS_SETUP_DIR: {
@@ -65,7 +98,7 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     }
   }
 
-  sp_try(sp_sys_open_dir_s(sandbox.dir, sandbox.sub, 0, &sandbox_fd));
+  sp_try(sp_fs_open_dir_at(sandbox, &sandbox_dir));
 
   sp_carr_for(c->steps, it) {
     sys_step_t* step = &c->steps[it];
@@ -77,7 +110,9 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
 
       case SYS_STEP_OPEN: {
         sp_sys_fd_t fd = SP_SYS_INVALID_FD;
-        sp_err_t err = sp_sys_open_s(sandbox_fd, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, &fd);
+        sp_sys_file_perms_t perms = sp_sys_default_file_perms;
+        sp_sys_set_read_only(&perms, step->open.read_only);
+        sp_err_t err = sp_sys_open_s(sandbox_dir, sp_cstr_as_str(step->open.path), step->open.mode, step->open.flags, perms, &fd);
         sys_check_err(t, err, step->open.err);
         if (!err) {
           if (step->open.err) sp_sys_close(fd);
@@ -86,13 +121,13 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
         break;
       }
       case SYS_STEP_OPEN_DIR: {
-        sp_sys_fd_t fd = SP_SYS_INVALID_FD;
+        sp_sys_dir_t dir = sp_zero;
         sp_str_t path = sp_cstr_as_str(step->open_dir.path);
-        sp_err_t err = sp_sys_open_dir_s(sandbox_fd, path, step->open_dir.flags, &fd);
+        sp_err_t err = sp_sys_open_dir_s(sandbox_dir, path, step->open_dir.flags, &dir);
         sys_check_err(t, err, step->open_dir.err);
         if (!err) {
-          if (step->open_dir.err) sp_sys_close(fd);
-          else                    fds[step->open_dir.slot] = fd;
+          if (step->open_dir.err) sp_fs_close_dir(dir);
+          else                    fds[step->open_dir.slot] = dir.fd;
         }
         break;
       }
@@ -134,6 +169,23 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
         }
         break;
       }
+      case SYS_STEP_SYNC: {
+        sys_check_err(t, sp_sys_sync(fds[step->sync.slot]), step->sync.err);
+        break;
+      }
+      case SYS_STEP_RENAME: {
+        sp_err_t err = sp_sys_rename_s(
+          sys_step_dir(sandbox_dir, fds, step->rename.from_dir), sp_cstr_as_str(step->rename.from),
+          sys_step_dir(sandbox_dir, fds, step->rename.to_dir), sp_cstr_as_str(step->rename.to),
+          step->rename.flags
+        );
+        sys_check_err(t, err, step->rename.err);
+        break;
+      }
+      case SYS_STEP_UNLINK: {
+        sys_check_err(t, sp_sys_unlink_s(sandbox_dir, sp_cstr_as_str(step->unlink.path)), step->unlink.err);
+        break;
+      }
     }
   }
 
@@ -151,15 +203,19 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     if (!ent->path) break;
     sp_path_t path = sp_path_join(mem, sandbox, sp_cstr_as_str(ent->path));
 
-    bool exists = sp_fs_exists_at(path);
+    sp_sys_file_meta_t meta = sp_zero;
+    bool exists = !sp_fs_get_path_metadata_at(path, &meta);
     if (exists != ent->exists) {
       sp_test_fail(t, "expected {} {} exist", sp_fmt_cstr(ent->path), sp_fmt_cstr(ent->exists ? "to" : "not to"));
       continue;
     }
+    if (exists && sp_sys_is_read_only(meta.perms) != ent->read_only) {
+      sp_test_fail(t, "expected {} {} be read-only", sp_fmt_cstr(ent->path), sp_fmt_cstr(ent->read_only ? "to" : "not to"));
+    }
 
     if (ent->content) {
       sp_str_t actual = sp_zero;
-      sp_io_read_file_at(mem, path, &actual);
+      sp_fs_read_at(mem, path, &actual);
       if (!sp_str_equal(actual, sp_cstr_as_str(ent->content))) {
         sp_test_record(t, (sp_test_failure_t) {
           .message = sp_test_format(t, "content of {}", sp_fmt_cstr(ent->path)),
@@ -170,6 +226,6 @@ sp_err_t sys_case_run(sp_test_t* t, sys_case_t* c) {
     }
   }
 
-  sp_sys_close(sandbox_fd);
+  sp_fs_close_dir(sandbox_dir);
   return SP_OK;
 }

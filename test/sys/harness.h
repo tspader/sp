@@ -16,6 +16,7 @@ typedef enum {
   SYS_SETUP_DIR,
   SYS_SETUP_SYMLINK,
   SYS_SETUP_DIR_SYMLINK,
+  SYS_SETUP_READ_ONLY_FILE,
 } sys_setup_kind_t;
 
 typedef struct {
@@ -34,22 +35,37 @@ typedef enum {
   SYS_STEP_READ,
   SYS_STEP_WRITE,
   SYS_STEP_PWRITE,
+  SYS_STEP_SYNC,
+  SYS_STEP_RENAME,
+  SYS_STEP_UNLINK,
 } sys_step_kind_t;
+
+typedef enum {
+  SYS_DIR_SANDBOX,
+  SYS_DIR_SLOT_0,
+  SYS_DIR_SLOT_1,
+  SYS_DIR_SLOT_2,
+  SYS_DIR_SLOT_3,
+} sys_dir_t;
 
 typedef struct {
   sys_step_kind_t kind;
   union {
-    struct { u32 slot; const c8* path; sp_sys_open_mode_t mode; u32 flags; sp_err_t err; } open;
+    struct { u32 slot; const c8* path; sp_sys_open_mode_t mode; u32 flags; bool read_only; sp_err_t err; } open;
     struct { u32 slot; const c8* path; u32 flags; sp_err_t err; } open_dir;
     struct { u32 slot; u64 count; const c8* expect; sp_err_t err; } read;
     struct { u32 slot; const c8* data; sp_err_t err; } write;
     struct { u32 slot; const c8* data; u64 offset; sp_err_t err; } pwrite;
+    struct { u32 slot; sp_err_t err; } sync;
+    struct { const c8* from; sys_dir_t from_dir; const c8* to; sys_dir_t to_dir; u32 flags; sp_err_t err; } rename;
+    struct { const c8* path; sp_err_t err; } unlink;
   };
 } sys_step_t;
 
 typedef struct {
   const c8* path;
   bool exists;
+  bool read_only;
   const c8* content;
 } sys_expect_t;
 

@@ -1,11 +1,16 @@
 #include "sp.h"
 #include "sp/sp_test.h"
+#include "reparse.h"
 
 typedef enum {
   SETUP_NONE,
   SETUP_FILE,
   SETUP_LINK,
   SETUP_LINK_ABSOLUTE,
+#if defined(SP_WIN32)
+  SETUP_JUNCTION,
+  SETUP_STUB,
+#endif
 } setup_t;
 
 typedef struct {
@@ -29,6 +34,10 @@ static const test_t tests [] = {
   { .name = "too_small", .setup = SETUP_LINK, .target = "A", .size = 1, .expect = { .err = SP_ERR_SYS_NAME_TOO_LONG } },
   { .name = "missing", .expect = { .err = SP_ERR_SYS_NOT_FOUND } },
   { .name = "not_a_link", .setup = SETUP_FILE, .expect = { .err = SP_ERR_SYS_INVALID } },
+#if defined(SP_WIN32)
+  { .name = "junction", .setup = SETUP_JUNCTION, .target = "A" },
+  { .name = "reparse_point_that_is_not_a_link", .setup = SETUP_STUB, .expect = { .err = SP_ERR_SYS_INVALID } },
+#endif
 };
 
 static sp_err_t run(sp_test_t* t, test_t* c) {
@@ -42,7 +51,7 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       break;
     }
     case SETUP_FILE: {
-      sp_must_ok(t, sp_fs_create_file_at(path));
+      sp_must_ok(t, sp_fs_write_at(path, sp_str_lit(""), SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms));
       break;
     }
     case SETUP_LINK: {
@@ -59,6 +68,21 @@ static sp_err_t run(sp_test_t* t, test_t* c) {
       sp_must_ok(t, sp_fs_create_sym_link_at(expected, path, SP_FS_KIND_FILE));
       break;
     }
+#if defined(SP_WIN32)
+    case SETUP_JUNCTION: {
+      reparse_skip_unless_supported();
+      sp_str_t root = sp_zero;
+      sp_must_ok(t, sp_fs_canonicalize_path_at(mem, sandbox, &root));
+      expected = sp_fs_join_path(mem, root, sp_cstr_as_str(c->target));
+      sp_must_ok(t, reparse_create_junction(mem, path, expected));
+      break;
+    }
+    case SETUP_STUB: {
+      reparse_skip_unless_supported();
+      sp_must_ok(t, reparse_create_stub(mem, path, SP_FS_KIND_FILE));
+      break;
+    }
+#endif
   }
 
   // sys returns the target as the OS stores it; on Windows the writer stores

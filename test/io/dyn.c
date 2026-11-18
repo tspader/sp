@@ -90,7 +90,7 @@ UTEST_F(io, dyn_seek) {
   run_io_dyn_test(utest_result, ut.mem, SP_RVAL(io_dyn_test_t){
     .steps = {
       { .kind = IO_STEP_WRITE, .write = { "12345678", SP_OK, 8 } },
-      { .kind = IO_STEP_SEEK,  .seek  = { 4, SP_IO_SEEK_SET, SP_OK, 4 } },
+      { .kind = IO_STEP_SEEK,  .seek  = { 4, SP_SYS_SEEK_SET, SP_OK, 4 } },
     },
     .expect = { .content = "12345678" },
   });
