@@ -96,13 +96,15 @@ source = [
   "test/main.c",
   "test/http/tls/*.c",
 ]
-deps = [{ pkg = "mbedtls", when = { os = { not = "wasi" } } }]
 define = [
   "SP_TLS_WITH_MBEDTLS",
   { value = "SP_TLS_MACOS_SECTRUST", when = { os = "macos" } },
   { value = "SP_TLS_MBEDTLS_SINGLE_THREAD", when = { os = "windows" } },
 ]
-macos = { frameworks = ["Security", "CoreFoundation"] }
+system_deps = [
+  { framework = "Security", when = { os = "macos" } },
+  { framework = "CoreFoundation", when = { os = "macos" } },
+]
 
 [[lib]]
 name = "sp"

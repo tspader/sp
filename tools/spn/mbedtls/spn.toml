@@ -193,9 +193,9 @@ source = [
   { path = "3rdparty/p256-m/p256-m/p256-m.c", when = { p256m = true } },
 ]
 system_deps = [
-  { value = "pthread", when = { threading = true } },
-  { value = "ws2_32", when = { os = "windows" } },
-  { value = "bcrypt", when = { os = "windows" } },
+  { lib = "pthread", when = { threading = true } },
+  { lib = "ws2_32", when = { os = "windows" } },
+  { lib = "bcrypt", when = { os = "windows" } },
 ]
 
 [package.publish]
