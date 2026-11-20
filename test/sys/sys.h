@@ -278,7 +278,9 @@ static void run_sys_test(s32* utest_result, sys_test_t t) {
         c8 stack_buf [SYS_TEST_BUF_SIZE] = sp_zero;
         c8* buf = stack_buf;
         if (step->read.count > SYS_TEST_BUF_SIZE) {
-          buf = (c8*)sp_sys_alloc(step->read.count);
+          void* ptr = SP_NULLPTR;
+          sp_sys_alloc(step->read.count, &ptr);
+          buf = (c8*)ptr;
           if (!buf) {
             SP_TEST_REPORT("failed to allocate read buffer of {} bytes", sp_fmt_int((s64)step->read.count));
             SP_FAIL();

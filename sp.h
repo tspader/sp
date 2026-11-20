@@ -936,6 +936,8 @@ typedef enum {
 SP_TYPEDEF_FN(sp_str_t, sp_err_str_fn_t, sp_err_t err);
 
 SP_API sp_str_t sp_err_str(sp_err_t err);
+SP_API bool     sp_err_stash(void** ptr, sp_err_t err);
+SP_API sp_err_t sp_err_take(void** ptr);
 
 typedef enum {
   SP_OPT_NONE = 0,
@@ -1612,7 +1614,7 @@ SP_API sp_err_t    sp_sys_socket_wait(sp_sys_socket_t socket, bool readable, u32
 SP_API sp_err_t    sp_sys_socket_set_nonblocking(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_reuse_addr(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out);
-SP_API void*       sp_sys_alloc(u64 size);
+SP_API sp_err_t    sp_sys_alloc(u64 size, void** out);
 SP_API void        sp_sys_free(void* ptr, u64 size);
 SP_API void*       sp_sys_memcpy(void* dest, const void* src, u64 n);
 SP_API void*       sp_sys_memmove(void* dest, const void* src, u64 n);
@@ -1714,7 +1716,7 @@ typedef struct {
   sp_err_t    (*socket_set_nonblocking)(sp_sys_socket_t socket);
   sp_err_t    (*socket_reuse_addr)(sp_sys_socket_t socket);
   sp_err_t    (*socket_local_port)(sp_sys_socket_t socket, u16* out);
-  void*       (*alloc)(u64 size);
+  sp_err_t    (*alloc)(u64 size, void** out);
   void        (*free)(void* ptr, u64 size);
   void*       (*memcpy)(void* dest, const void* src, u64 n);
   void*       (*memmove)(void* dest, const void* src, u64 n);
@@ -1791,7 +1793,7 @@ SP_API sp_err_t    sp_sys_socket_wait_p(sp_sys_socket_t socket, bool readable, u
 SP_API sp_err_t    sp_sys_socket_set_nonblocking_p(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_reuse_addr_p(sp_sys_socket_t socket);
 SP_API sp_err_t    sp_sys_socket_local_port_p(sp_sys_socket_t socket, u16* out);
-SP_API void*       sp_sys_alloc_p(u64 size);
+SP_API sp_err_t    sp_sys_alloc_p(u64 size, void** out);
 SP_API void        sp_sys_free_p(void* ptr, u64 size);
 SP_API void*       sp_sys_memcpy_p(void* dest, const void* src, u64 n);
 SP_API void*       sp_sys_memmove_p(void* dest, const void* src, u64 n);
@@ -1896,13 +1898,13 @@ typedef s32 (*sp_entry_fn_t)(s32, const c8**);
     } buffers;                                                     \
                                                                    \
     (void)__wasi_args_sizes_get(&args.len, &buffers.args.len);     \
-    args.data = sp_sys_alloc_n(uint8_t*, args.len + 1);            \
-    buffers.args.data = sp_sys_alloc_n(uint8_t, buffers.args.len); \
+    (void)sp_sys_alloc((args.len + 1) * sizeof(uint8_t*), (void**)&args.data); \
+    (void)sp_sys_alloc(buffers.args.len, (void**)&buffers.args.data);          \
     (void)__wasi_args_get(args.data, buffers.args.data);           \
                                                                    \
     (void)__wasi_environ_sizes_get(&env.len, &buffers.env.len);    \
-    env.data = sp_sys_alloc_n(uint8_t*, env.len + 1);              \
-    buffers.env.data = sp_sys_alloc_n(uint8_t, buffers.env.len);   \
+    (void)sp_sys_alloc((env.len + 1) * sizeof(uint8_t*), (void**)&env.data);   \
+    (void)sp_sys_alloc(buffers.env.len, (void**)&buffers.env.data);            \
     (void)__wasi_environ_get(env.data, buffers.env.data);          \
                                                                    \
     environ = (c8**)env.data;                                \
@@ -1953,9 +1955,9 @@ typedef enum {
 } sp_mem_alloc_mode_t;
 
 SP_TYPEDEF_FN(
-  void*,
+  sp_err_t,
   sp_allocator_fn_t,
-  void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size
+  void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out
 );
 
 typedef struct sp_allocator_t {
@@ -1963,6 +1965,10 @@ typedef struct sp_allocator_t {
   void* user_data;
 } sp_mem_t;
 
+SP_API sp_err_t sp_mem_alloc(sp_mem_t mem, u64 size, void** out);
+SP_API sp_err_t sp_mem_alloc_uninitialized(sp_mem_t mem, u64 size, void** out);
+SP_API sp_err_t sp_mem_realloc(sp_mem_t mem, void* ptr, u64 old_size, u64 size, void** out);
+SP_API sp_err_t sp_mem_realloc_uninitialized(sp_mem_t mem, void* ptr, u64 old_size, u64 size, void** out);
 SP_API void*    sp_mem_allocator_alloc(sp_mem_t arena, u64 size);
 SP_API void*    sp_mem_allocator_alloc_uninitialized(sp_mem_t arena, u64 size);
 SP_API void*    sp_mem_allocator_realloc(sp_mem_t arena, void* ptr, u64 old_size, u64 size);
@@ -1984,8 +1990,6 @@ SP_API bool sp_mem_is_equal(const void* a, const void* b, u64 len);
 SP_API void sp_mem_fill(void* buffer, u64 bsize, void* fill, u64 fsize);
 SP_API void sp_mem_fill_u8(void* buffer, u64 buffer_size, u8 fill);
 SP_API void sp_mem_zero(void* buffer, u64 buffer_size);
-#define sp_sys_alloc_n(T, n) (T*)sp_sys_alloc((n) * sizeof(T))
-#define sp_sys_alloc_type(T) sp_sys_alloc_n(T, 1)
 #define sp_mem_allocator_alloc_n(a, T, n) (T*)sp_mem_allocator_alloc(a, (n) * sizeof(T))
 #define sp_mem_allocator_alloc_type(a, T) sp_mem_allocator_alloc_n(a, T, 1)
 #define sp_mem_arena_alloc_n(a, T, n) (T*)sp_mem_arena_alloc((a), (n) * sizeof(T))
@@ -2010,13 +2014,13 @@ SP_API sp_mem_fixed_t sp_mem_fixed_ex(void* buffer, u64 capacity, u8 alignment);
 SP_API sp_mem_t       sp_mem_fixed_as_allocator(sp_mem_fixed_t* fixed);
 SP_API void           sp_mem_fixed_clear(sp_mem_fixed_t* fixed);
 SP_API u64            sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed);
-SP_API void*          sp_mem_fixed_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size);
+SP_API sp_err_t       sp_mem_fixed_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size, void** out);
 
 /////////////////////
 // ERROR ALLOCATOR //
 /////////////////////
 SP_API sp_mem_t sp_mem_error();
-SP_API void*    sp_mem_error_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size);
+SP_API sp_err_t sp_mem_error_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size, void** out);
 
 ////////////////////
 // PAGE ALLOCATOR //
@@ -2024,7 +2028,7 @@ SP_API void*    sp_mem_error_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 si
 SP_API void*                 sp_mem_os_alloc(u64 size);
 SP_API void*                 sp_mem_os_realloc(void* ptr, u64 old_size, u64 size);
 SP_API void                  sp_mem_os_free(void* ptr, u64 size);
-SP_API void*                 sp_mem_os_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size);
+SP_API sp_err_t              sp_mem_os_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out);
 SP_API sp_mem_t              sp_mem_os_new();
 
 /////////////////////
@@ -2058,7 +2062,7 @@ SP_API sp_mem_arena_t*       sp_mem_arena_new_ex(sp_mem_t mem, u64 block_size, u
 SP_API sp_mem_t              sp_mem_arena_as_allocator(sp_mem_arena_t* arena);
 SP_API void                  sp_mem_arena_clear(sp_mem_arena_t* arena);
 SP_API void                  sp_mem_arena_destroy(sp_mem_arena_t* arena);
-SP_API void*                 sp_mem_arena_on_alloc(void* ptr, sp_mem_alloc_mode_t mode, u64 n, void* old, u64 old_size);
+SP_API sp_err_t              sp_mem_arena_on_alloc(void* ptr, sp_mem_alloc_mode_t mode, u64 n, void* old, u64 old_size, void** out);
 SP_API sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* a);
 SP_API void                  sp_mem_arena_pop(sp_mem_arena_marker_t marker);
 SP_API u64                   sp_mem_arena_capacity(sp_mem_arena_t* arena);
@@ -2182,7 +2186,7 @@ typedef struct sp_mem_heap_t {
 SP_API sp_mem_heap_t*       sp_mem_heap_new();
 SP_API void                 sp_mem_heap_destroy(sp_mem_heap_t* heap);
 SP_API sp_mem_t             sp_mem_heap_as_allocator(sp_mem_heap_t* heap);
-SP_API void*                sp_mem_heap_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size);
+SP_API sp_err_t             sp_mem_heap_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out);
 SP_API void*                sp_mem_heap_alloc(sp_mem_heap_t* heap, u64 size);
 SP_API void*                sp_mem_heap_alloc_uninitialized(sp_mem_heap_t* heap, u64 size);
 SP_API void*                sp_mem_heap_realloc(sp_mem_heap_t* heap, void* ptr, u64 size);
@@ -2215,7 +2219,6 @@ SP_API sp_str_t          sp_mem_buffer_as_str(sp_mem_buffer_t* buffer);
 SP_API c8*               sp_mem_buffer_as_cstr(sp_mem_buffer_t* buffer);
 
 
-
 //  █████   █████   █████████    █████████  █████   █████
 // ░░███   ░░███   ███░░░░░███  ███░░░░░███░░███   ░░███
 //  ░███    ░███  ░███    ░███ ░███    ░░░  ░███    ░███
@@ -2242,28 +2245,22 @@ SP_API sp_hash_t sp_hash_bytes(const void* p, u64 len, u64 seed);
 // ░░░░░░░░░░      ░░░░░    ░░░░░    ░░░░░    ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░    ░░░░░
 // @array @dyn_array @da
 
+// sp_da is a resizable array in the spirit of Sean Barrett's stb_ds.h. An array is a plain T* with
+// a header in front of it. A null pointer is an empty array; there is nothing to initialize.
+//
+//   sp_da(s32) arr = SP_NULLPTR;
+//   sp_try(sp_da_push(mem, arr, 69));
+//   s32 value = arr[0];
+//   sp_da_free(mem, arr);
+//
+// An array does not know its allocator. Whatever allocates takes one, and returns whatever error
+// that allocator returned. You must pass the same allocator every time.
 typedef struct SP_ALIGNED {
   u64 size;
   u64 capacity;
-  sp_mem_t allocator;
 } sp_da_header_t;
 
 #define sp_da(T) T*
-#define sp_arr(T, N) struct { sp_da_header_t header; T items [N]; }
-
-#define sp_da_init(__mem, __arr) \
-  *sp_da_vp(__arr) = sp_da_init_ex((__mem), sp_da_stride(__arr))
-
-#define sp_da_new(__a, __T) \
-  ((__T*)sp_da_init_ex((__a), sizeof(__T)))
-
-#define sp_arr_init(__S)\
-  (sp_assert((u8*)(__S)->items - (u8*)(__S) == sizeof(sp_da_header_t)),\
-   (__S)->header = (sp_da_header_t) {\
-     .capacity = sp_carr_len((__S)->items),\
-     .allocator = sp_mem_error(),\
-   },\
-   (__S)->items)
 
 #define sp_da_for(__ARR, __IT)  for (u64 __IT = 0; __IT < sp_da_size((__ARR)); __IT++)
 #define sp_da_rfor(__ARR, __IT) for (u64 __IT = sp_da_size(__ARR); __IT-- > 0; )
@@ -2273,9 +2270,6 @@ typedef struct SP_ALIGNED {
 
 #define sp_da_size(__ARR)\
   (__ARR ? sp_da_head(__ARR)->size : 0)
-
-#define sp_da_mem(__arr) \
-  (sp_da_head(__arr)->allocator)
 
 #define sp_da_stride(__ARR) \
   (sizeof(*(__ARR)))
@@ -2290,29 +2284,32 @@ typedef struct SP_ALIGNED {
   ((sp_da_size(__ARR) == sp_da_capacity(__ARR)))
 
 #define sp_da_clear(__ARR) \
-  sp_da_head(__ARR)->size = 0
+  do {\
+    if (__ARR) {\
+      sp_da_head(__ARR)->size = 0;\
+    }\
+  } while (0)
 
 #define sp_da_vp(__arr) \
   ((void**)&(__arr))
 
-#define sp_da_free(__arr)         \
-  sp_mem_allocator_free(sp_da_mem(__arr), sp_da_head(__arr), sp_da_capacity(__arr) * sp_da_stride(__arr) + sizeof(sp_da_header_t))
+#define sp_da_alloc_size(__cap, __stride) \
+  (sizeof(sp_da_header_t) + ((u64)(__cap) + 1) * (__stride))
 
-#define sp_da_grow(__ARR, __N)\
-  sp_da_grow_ex((__ARR), sp_da_stride(__ARR), (__N))
+#define sp_da_free(__mem, __arr)\
+  sp_da_free_ex((__mem), sp_da_vp(__arr), (u32)sp_da_stride(__arr))
 
-#define sp_da_push(__ARR, __VAL)\
-    do {\
-        *sp_da_vp(__ARR) = sp_da_grow(__ARR, 1);\
-        (__ARR)[sp_da_head(__ARR)->size++] = (__VAL);\
-    } while(0)
+#define sp_da_grow(__mem, __ARR, __N)\
+  sp_da_grow_ex((__mem), sp_da_vp(__ARR), (u32)sp_da_stride(__ARR), (__N))
 
-#define sp_da_reserve(__arr, __n)\
-  do {\
-    if ((u64)(__n) > sp_da_capacity(__arr)) {\
-      *sp_da_vp(__arr) = sp_da_resize(__arr, sp_da_stride(__arr), __n);\
-    }\
-  } while (0)
+#define sp_da_push(__mem, __ARR, __VAL)\
+  (((__ARR) || sp_err_stash(sp_da_vp(__ARR), sp_da_grow(__mem, __ARR, 1)))\
+    ? ((__ARR)[sp_da_head(__ARR)->size] = (__VAL),\
+       sp_da_commit((__mem), sp_da_vp(__ARR), (u32)sp_da_stride(__ARR)))\
+    : sp_err_take(sp_da_vp(__ARR)))
+
+#define sp_da_reserve(__mem, __arr, __n)\
+  sp_da_resize((__mem), sp_da_vp(__arr), (u32)sp_da_stride(__arr), (__n))
 
 #define sp_da_pop(__ARR)\
     do {\
@@ -2327,10 +2324,12 @@ typedef struct SP_ALIGNED {
 #define sp_da_sort(arr, fn) sp_os_qsort(arr, sp_da_size(arr), sizeof((arr)[0]), fn)
 #define sp_da_bounds_ok(arr, it) ((it) < sp_da_size(arr))
 
-SP_API void* sp_da_init_ex(sp_mem_t mem, u32 stride);
-SP_API void* sp_da_resize(void* arr, u32 stride, u64 len);
-SP_API void* sp_da_grow_ex(void* arr, u32 stride, u64 addlen);
-SP_API void  sp_da_push_ex(void** arr, void* val, u32 stride);
+SP_API sp_err_t sp_da_commit(sp_mem_t mem, void** arr, u32 stride);
+SP_API sp_err_t sp_da_resize(sp_mem_t mem, void** arr, u32 stride, u64 capacity);
+SP_API sp_err_t sp_da_grow_ex(sp_mem_t mem, void** arr, u32 stride, u64 n);
+SP_API sp_err_t sp_da_push_ex(sp_mem_t mem, void** arr, void* val, u32 stride);
+SP_API void     sp_da_free_ex(sp_mem_t mem, void** arr, u32 stride);
+
 
 
 //  ███████████   █████ ██████   █████   █████████     ███████████  █████  █████ ███████████ ███████████ ██████████ ███████████
@@ -2347,17 +2346,18 @@ typedef enum sp_rb_mode {
     SP_RQ_MODE_OVERWRITE,
 } sp_rb_mode;
 
-typedef struct sp_ring_buffer {
+typedef struct SP_ALIGNED sp_ring_buffer {
     u32 head;
     u32 size;
     u32 capacity;
     sp_rb_mode mode;
-    sp_mem_t allocator;
 } sp_ring_buffer_t;
 
 #define sp_rb(T) T*
-SP_API void  sp_rb_init_ex(sp_mem_t mem, void** arr, u32 stride, u32 capacity);
-SP_API void* sp_rb_grow_ex(void* arr, u32 stride, u32 new_cap);
+SP_API sp_err_t sp_rb_init_ex(sp_mem_t mem, void** arr, u32 stride, u32 capacity);
+SP_API sp_err_t sp_rb_grow_ex(sp_mem_t mem, void** arr, u32 stride, u32 capacity);
+SP_API sp_err_t sp_rb_commit(sp_mem_t mem, void** arr, u32 stride);
+SP_API void     sp_rb_free_ex(sp_mem_t mem, void** arr, u32 stride);
 
 #define sp_rb_head(__ARR)\
     ((sp_ring_buffer_t*)((u8*)(__ARR) - sizeof(sp_ring_buffer_t)))
@@ -2368,20 +2368,20 @@ SP_API void* sp_rb_grow_ex(void* arr, u32 stride, u32 new_cap);
 #define sp_rb_capacity(__ARR)\
     ((__ARR) == SP_NULLPTR ? 0u : sp_rb_head((__ARR))->capacity)
 
-#define sp_rb_mem(__ARR)\
-    (sp_rb_head(__ARR)->allocator)
-
 #define sp_rb_empty(__ARR)\
     (sp_rb_size(__ARR) == 0)
 
 #define sp_rb_full(__ARR)\
     (sp_rb_size((__ARR)) == sp_rb_capacity((__ARR)))
 
+#define sp_rb_alloc_size(__cap, __stride) \
+    (sizeof(sp_ring_buffer_t) + ((u64)(__cap) + 1) * (__stride))
+
 #define sp_rb_init(__MEM, __ARR)\
-    sp_rb_init_ex((__MEM), (void**)&(__ARR), sizeof(*(__ARR)), 8u)
+    sp_rb_init_ex((__MEM), (void**)&(__ARR), (u32)sizeof(*(__ARR)), 8u)
 
 #define sp_rb_init_cap(__MEM, __ARR, __CAP)\
-    sp_rb_init_ex((__MEM), (void**)&(__ARR), sizeof(*(__ARR)), (__CAP))
+    sp_rb_init_ex((__MEM), (void**)&(__ARR), (u32)sizeof(*(__ARR)), (__CAP))
 
 #define sp_rb_clear(__ARR)\
     do {\
@@ -2391,13 +2391,8 @@ SP_API void* sp_rb_grow_ex(void* arr, u32 stride, u32 new_cap);
         }\
     } while (0)
 
-#define sp_rb_free(__ARR)\
-    do {\
-        if (__ARR) {\
-            sp_mem_allocator_free(sp_rb_mem(__ARR), sp_rb_head(__ARR), sp_rb_capacity(__ARR) * sizeof(*(__ARR)) + sizeof(sp_ring_buffer_t));\
-            (__ARR) = SP_NULLPTR;\
-        }\
-    } while (0)
+#define sp_rb_free(__MEM, __ARR)\
+    sp_rb_free_ex((__MEM), (void**)&(__ARR), (u32)sizeof(*(__ARR)))
 
 #define sp_rb_mode(__ARR)\
     ((__ARR) == SP_NULLPTR ? SP_RQ_MODE_GROW : sp_rb_head(__ARR)->mode)
@@ -2417,21 +2412,11 @@ SP_API void* sp_rb_grow_ex(void* arr, u32 stride, u32 new_cap);
 #define sp_rb_back(__ARR)\
     (sp_rb_empty(__ARR) ? SP_NULLPTR : &sp_rb_at(__ARR, sp_rb_size(__ARR) - 1))
 
-#define sp_rb_push(__ARR, __VAL)\
-    do {\
-        sp_assert((__ARR) != SP_NULLPTR);\
-        if (sp_rb_full(__ARR)) {\
-            if (sp_rb_mode(__ARR) == SP_RQ_MODE_OVERWRITE) {\
-                sp_rb_head(__ARR)->head = (sp_rb_head(__ARR)->head + 1) % sp_rb_capacity(__ARR);\
-                sp_rb_head(__ARR)->size--;\
-            } else {\
-                *((void**)&(__ARR)) = sp_rb_grow_ex(__ARR, sizeof(*(__ARR)), sp_rb_capacity(__ARR) * 2u);\
-            }\
-        }\
-        u32 __sp_rb_tail = (sp_rb_head(__ARR)->head + sp_rb_head(__ARR)->size) % sp_rb_capacity(__ARR);\
-        (__ARR)[__sp_rb_tail] = (__VAL);\
-        sp_rb_head(__ARR)->size++;\
-    } while (0)
+#define sp_rb_push(__MEM, __ARR, __VAL)\
+    (((__ARR) || sp_err_stash((void**)&(__ARR), sp_rb_init(__MEM, __ARR)))\
+      ? ((__ARR)[sp_rb_capacity(__ARR)] = (__VAL),\
+         sp_rb_commit((__MEM), (void**)&(__ARR), (u32)sizeof(*(__ARR))))\
+      : sp_err_take((void**)&(__ARR)))
 
 #define sp_rb_pop(__ARR)\
     do {\
@@ -2464,10 +2449,13 @@ SP_API void* sp_rb_grow_ex(void* arr, u32 stride, u32 new_cap);
 // they can be used immediately, without further initialization.
 //
 //   sp_ht(s32, s32) ht = sp_zero
-//   sp_ht_insert(ht, 69, 420);
-//   s32* value = sp_ht_get(ht, 69, 420);
+//   sp_try(sp_ht_insert(mem, ht, 69, 420));
+//   s32* value = sp_ht_getp(ht, 69);
 //   sp_ht_erase(ht, 69);
-//   sp_ht_free(ht);
+//   sp_ht_free(mem, ht);
+//
+// A hash table does not know its allocator. Whatever allocates takes one, and returns whatever
+// error that allocator returned. You must pass the same allocator every time.
 //
 // ## ITERATORS
 // Hash tables also come with two kinds of iterators. The first, more convenient
@@ -2494,14 +2482,15 @@ SP_API void* sp_rb_grow_ex(void* arr, u32 stride, u32 new_cap);
 //   sp_ht(cell_t, f32) cells = sp_zero;
 //
 // For key types where memcmp() is not correct for hashing or comparison, you need to
-// initialize the hash table with a hash() and compare() function:
+// give the hash table a hash() and compare() function. They are stored when the table is
+// allocated, which is either explicitly or by the first insert:
 //
-//   sp_ht_set_fns(ht, on_hash, on_compare)
+//   sp_ht_init_ex(mem, ht, on_hash, on_compare)
+//   sp_ht_insert_ex(mem, ht, key, value, on_hash, on_compare)
 //
 // This can very much be a footgun. To combat this, sp.h provides specializations for string
-// (both sp_str_t and const c8*) keys which extend the lazy initialization to the hash and
-// compare functions, too. The only functions which need to be specialized are those which
-// actually perform the lazy initialization. See sp_str_ht and sp_cstr_ht.
+// (both sp_str_t and const c8*) keys which pass the right functions for you. The only functions
+// which need to be specialized are those which can allocate the table. See sp_str_ht and sp_cstr_ht.
 //
 // Practically, you'll only need these custom functions for two types of keys:
 // 1. Strings
@@ -2547,20 +2536,8 @@ typedef struct {
     u64 size;
     u64 capacity;
   } header;
-  sp_mem_t allocator;
   u64 tmp_idx;
 } sp_ht_info_t;
-
-#if defined(SP_CPP)
-SP_END_EXTERN_C()
-template<typename T> static T* sp_ht_alloc_type(sp_mem_t a, T* key, size_t size) {
-  (void)key;
-  return (T*)sp_mem_allocator_alloc(a, size);
-}
-SP_BEGIN_EXTERN_C()
-#else
-#define sp_ht_alloc_type(a, key, size) sp_mem_allocator_alloc((a), (size))
-#endif
 
 #define __sp_ht_entry(__K, __V)            \
   struct {                                 \
@@ -2572,8 +2549,7 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_s(__K, __V)                  \
   {                                        \
     __sp_ht_entry(__K, __V)* data;         \
-    __K tmp_key;                           \
-    __V tmp_val;                           \
+    __sp_ht_entry(__K, __V) tmp;           \
     u64 size;                              \
     u64 capacity;                          \
     sp_ht_info_t info;                     \
@@ -2584,12 +2560,6 @@ SP_BEGIN_EXTERN_C()
 
 #define sp_ht(__K, __V)                       \
   struct sp_ht_s(__K, __V)*
-
-#define sp_ht_new(__K, __V) SP_NULLPTR
-
-#define sp_ht_set_fns(ht, hash_fn, cmp_fn) \
-  (ht)->info.fn.hash = (hash_fn);          \
-  (ht)->info.fn.compare = (cmp_fn)
 
 #define sp_ht_size(ht) \
   ((ht) ? (ht)->size : 0)
@@ -2610,53 +2580,45 @@ SP_BEGIN_EXTERN_C()
     }                                                      \
   } while (0)
 
-#define sp_ht_free(ht)        \
-  do {                        \
-    if ((ht)) {               \
-      sp_mem_allocator_free((ht)->info.allocator, (ht)->data, (ht)->capacity * sizeof((ht)->data[0]));    \
-      (ht)->data = SP_NULLPTR;\
-      sp_mem_allocator_free((ht)->info.allocator, (ht), sizeof(*(ht)));            \
-      (ht) = SP_NULLPTR;      \
-    }                         \
-  } while (0)
+#define sp_ht_free(mem, ht) \
+  sp_ht_free_impl((mem), (void**)&(ht), sizeof(*(ht)), sp_ht_capacity(ht) * sizeof((ht)->data[0]))
 
-#define sp_ht_ensure(ht) \
-  if (!(ht)) { sp_ht_init(ht); }
-
-#define sp_ht_data_u8_n(ht, n) ((u8*)(&((ht)->data[n])))
-#define sp_ht_data_u8(ht) sp_ht_data_u8_n(ht, 0)
-#define sp_ht_data_offset_u8(ht, field) (((u8*)(&((ht)->data[0].field))) - sp_ht_data_u8(ht))
 #define sp_ht_field_as_u8(ht, field) ((u8*)&((ht)->field))
 #define sp_ht_as_u8(ht) ((u8*)(ht))
 #define sp_ht_field_offset_u8(ht, field) (sp_ht_field_as_u8(ht, field) - sp_ht_as_u8(ht))
+#define sp_ht_tmp_offset_u8(ht, field) (sp_ht_field_as_u8(ht, tmp.field) - sp_ht_field_as_u8(ht, tmp))
 
-#define sp_ht_init(mem, ht)                                                                  \
-  do {                                                                                         \
-    (ht)                       = sp_ht_alloc_type((mem), ht, sizeof(*(ht)));                 \
-    (ht)->data                 = sp_ht_alloc_type((mem), (ht)->data, 2 * sizeof((ht)->data[0])); \
-    (ht)->info.allocator       = (mem);                                                        \
-    (ht)->size                 = 0;                                                            \
-    (ht)->capacity             = 2;                                                            \
-    (ht)->info.size.key        = sizeof((ht)->data[0].key);                                    \
-    (ht)->info.size.value      = sizeof((ht)->data[0].val);                                    \
-    (ht)->info.stride.entry    = sp_ht_data_u8_n(ht, 1) - sp_ht_data_u8_n(ht, 0);              \
-    (ht)->info.stride.value    = sp_ht_data_offset_u8(ht, val);                                \
-    (ht)->info.stride.kv       = sp_ht_data_offset_u8(ht, state);                              \
-    (ht)->info.header.size     = sp_ht_field_offset_u8(ht, size);                              \
-    (ht)->info.header.capacity = sp_ht_field_offset_u8(ht, capacity);                          \
-    (ht)->info.fn.hash         = sp_ht_on_hash_key;                                            \
-    (ht)->info.fn.compare      = sp_ht_on_compare_key;                                         \
-  } while (0)
+#define sp_ht_first(mem, ht, hash_fn, cmp_fn)                                                  \
+  ((ht) || (                                                                                   \
+    sp_err_stash((void**)&(ht), sp_mem_alloc((mem), sizeof(*(ht)), (void**)&(ht))) && (        \
+    (ht)->info.size.key        = sizeof((ht)->tmp.key),                                        \
+    (ht)->info.size.value      = sizeof((ht)->tmp.val),                                        \
+    (ht)->info.stride.entry    = sizeof((ht)->data[0]),                                        \
+    (ht)->info.stride.value    = sp_ht_tmp_offset_u8(ht, val),                                 \
+    (ht)->info.stride.kv       = sp_ht_tmp_offset_u8(ht, state),                               \
+    (ht)->info.header.size     = sp_ht_field_offset_u8(ht, size),                              \
+    (ht)->info.header.capacity = sp_ht_field_offset_u8(ht, capacity),                          \
+    (ht)->info.fn.hash         = (hash_fn),                                                    \
+    (ht)->info.fn.compare      = (cmp_fn),                                                     \
+    true)))
 
-#define sp_ht_insert_ex(ht, k, v)                                      \
-  do {                                                                 \
-    (ht)->tmp_key = (k);                                               \
-    (ht)->tmp_val = (v);                                               \
-    sp_ht_insert_impl(ht, &(ht)->tmp_key, &(ht)->tmp_val, (ht)->info); \
-  } while (0)
+#define sp_ht_init_ex(mem, ht, hash_fn, cmp_fn)                                \
+  (sp_ht_first(mem, ht, hash_fn, cmp_fn)                                       \
+    ? sp_ht_init_impl((mem), (void**)&(ht), sizeof(*(ht)), (ht)->info)         \
+    : sp_err_take((void**)&(ht)))
 
-#define sp_ht_insert(ht, k, v)                                      \
-  sp_ht_insert_ex(ht, k, v)
+#define sp_ht_init(mem, ht) \
+  sp_ht_init_ex(mem, ht, sp_ht_on_hash_key, sp_ht_on_compare_key)
+
+#define sp_ht_insert_ex(mem, ht, k, v, hash_fn, cmp_fn)                                                    \
+  (sp_ht_first(mem, ht, hash_fn, cmp_fn)                                                                   \
+    ? ((ht)->tmp.key = (k),                                                                                \
+       (ht)->tmp.val = (v),                                                                                \
+       sp_ht_insert_impl((mem), (void**)&(ht), sizeof(*(ht)), &(ht)->tmp.key, &(ht)->tmp.val, (ht)->info)) \
+    : sp_err_take((void**)&(ht)))
+
+#define sp_ht_insert(mem, ht, k, v) \
+  sp_ht_insert_ex(mem, ht, k, v, sp_ht_on_hash_key, sp_ht_on_compare_key)
 
 #define sp_ht_get_key_n(ht, n) \
   (&(ht)->data[(n)].key)
@@ -2667,9 +2629,9 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_get_tmp_n(ht) \
   sp_ht_get_n(ht, (ht)->info.tmp_idx)
 
-#define sp_ht_getp(ht, key) \
+#define sp_ht_getp(ht, k) \
   (!(ht) ? SP_NULLPTR : ( \
-    (ht)->tmp_key = (key), \
+    (ht)->tmp.key = (k), \
     (ht)->info.tmp_idx = sp_ht_tmp_key_index(ht), \
     (ht)->info.tmp_idx == SP_HT_INVALID_INDEX ? \
       SP_NULLPTR : \
@@ -2689,7 +2651,7 @@ SP_BEGIN_EXTERN_C()
 #define sp_ht_erase(ht, k)                               \
   do {                                                   \
     if ((ht)) {                                          \
-      (ht)->tmp_key = (k);                               \
+      (ht)->tmp.key = (k);                               \
       u64 _ht_idx = sp_ht_tmp_key_index(ht);             \
       if (_ht_idx != SP_HT_INVALID_INDEX) {              \
         (ht)->data[_ht_idx].state = SP_HT_ENTRY_DELETED; \
@@ -2737,7 +2699,7 @@ SP_BEGIN_EXTERN_C()
   (!(ht) || !sp_ht_it_valid(ht, sp_ht_it_init(ht)) ? SP_NULLPTR : sp_ht_it_getp(ht, sp_ht_it_init(ht)))
 
 #define sp_ht_tmp_key_index(ht) \
-  sp_ht_get_key_index_fn((void**)&(ht)->data, (void*)&(ht)->tmp_key, (ht)->capacity, (ht)->info)
+  sp_ht_get_key_index_fn((void**)&(ht)->data, (void*)&(ht)->tmp.key, (ht)->capacity, (ht)->info)
 
 #define sp_ht_key_index(ht, key) \
   sp_ht_get_key_index_fn((void**)&(ht)->data, (void*)&(key), (ht)->capacity, (ht)->info)
@@ -2747,18 +2709,11 @@ SP_BEGIN_EXTERN_C()
 ////////////
 #define sp_str_ht(t) sp_ht(sp_str_t, t)
 
-#define sp_str_ht_ensure(ht) \
-  if (!(ht)) sp_str_ht_init(ht)
+#define sp_str_ht_init(mem, ht) \
+  sp_ht_init_ex(mem, ht, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key)
 
-#define sp_str_ht_init(__a, ht)                       \
-  do {                                                  \
-    sp_ht_init((__a), ht);                            \
-    (ht)->info.fn.hash    = sp_ht_on_hash_str_key;      \
-    (ht)->info.fn.compare = sp_ht_on_compare_str_key;   \
-  } while (0)
-
-#define sp_str_ht_insert(ht, key, value)  \
-  sp_ht_insert_ex(ht, key, value);
+#define sp_str_ht_insert(mem, ht, key, value) \
+  sp_ht_insert_ex(mem, ht, key, value, sp_ht_on_hash_str_key, sp_ht_on_compare_str_key)
 
 #define sp_str_ht_get(ht, key)       sp_ht_getp(ht, key)
 #define sp_str_ht_get_ex(ht, key, n) sp_ht_get_ex(ht, key, n)
@@ -2767,7 +2722,7 @@ SP_BEGIN_EXTERN_C()
 #define sp_str_ht_capacity(ht)       sp_ht_capacity(ht)
 #define sp_str_ht_empty(ht)          sp_ht_empty(ht)
 #define sp_str_ht_clear(ht)          sp_ht_clear(ht)
-#define sp_str_ht_free(ht)           sp_ht_free(ht)
+#define sp_str_ht_free(mem, ht)      sp_ht_free(mem, ht)
 #define sp_str_ht_front(ht)          sp_ht_front(ht)
 #define sp_str_ht_for(ht, it)        sp_ht_for(ht, it)
 #define sp_str_ht_for_kv(ht, it)     sp_ht_for_kv(ht, it)
@@ -2782,18 +2737,11 @@ SP_BEGIN_EXTERN_C()
 /////////////
 #define sp_cstr_ht(t) sp_ht(const c8*, t)
 
-#define sp_cstr_ht_ensure(ht) \
-  if (!(ht)) sp_cstr_ht_init(ht)
+#define sp_cstr_ht_init(mem, ht) \
+  sp_ht_init_ex(mem, ht, sp_ht_on_hash_cstr_key, sp_ht_on_compare_cstr_key)
 
-#define sp_cstr_ht_init(__a, ht)                      \
-  do {                                                  \
-    sp_ht_init((__a), ht);                            \
-    (ht)->info.fn.hash    = sp_ht_on_hash_cstr_key;     \
-    (ht)->info.fn.compare = sp_ht_on_compare_cstr_key;  \
-  } while (0)
-
-#define sp_cstr_ht_insert(ht, key, value)  \
-  sp_ht_insert_ex(ht, key, value);
+#define sp_cstr_ht_insert(mem, ht, key, value) \
+  sp_ht_insert_ex(mem, ht, key, value, sp_ht_on_hash_cstr_key, sp_ht_on_compare_cstr_key)
 
 #define sp_cstr_ht_get(ht, key)       sp_ht_getp(ht, key)
 #define sp_cstr_ht_erase(ht, key)     sp_ht_erase(ht, key)
@@ -2801,7 +2749,7 @@ SP_BEGIN_EXTERN_C()
 #define sp_cstr_ht_capacity(ht)       sp_ht_capacity(ht)
 #define sp_cstr_ht_empty(ht)          sp_ht_empty(ht)
 #define sp_cstr_ht_clear(ht)          sp_ht_clear(ht)
-#define sp_cstr_ht_free(ht)           sp_ht_free(ht)
+#define sp_cstr_ht_free(mem, ht)      sp_ht_free(mem, ht)
 #define sp_cstr_ht_front(ht)          sp_ht_front(ht)
 #define sp_cstr_ht_for(ht, it)        sp_ht_for(ht, it)
 #define sp_cstr_ht_for_kv(ht, it)     sp_ht_for_kv(ht, it)
@@ -2812,8 +2760,10 @@ SP_BEGIN_EXTERN_C()
 #define sp_cstr_ht_it_getkp(ht, it)   sp_ht_it_getkp(ht, it)
 
 SP_API u64         sp_ht_get_key_index_fn(void** data, void* key, u64 capacity, sp_ht_info_t info);
-SP_API void        sp_ht_resize_impl(void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info);
-SP_API void        sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info);
+SP_API sp_err_t    sp_ht_init_impl(sp_mem_t mem, void** ht, u64 ht_size, sp_ht_info_t info);
+SP_API sp_err_t    sp_ht_resize_impl(sp_mem_t mem, void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info);
+SP_API sp_err_t    sp_ht_insert_impl(sp_mem_t mem, void** ht, u64 ht_size, void* key, void* val, sp_ht_info_t info);
+SP_API void        sp_ht_free_impl(sp_mem_t mem, void** ht, u64 ht_size, u64 data_size);
 SP_API sp_ht_it_t  sp_ht_it_init_fn(void** data, u64 capacity, sp_ht_info_t info);
 SP_API void        sp_ht_it_advance_fn(void** data, u64 capacity, u64* it, sp_ht_info_t info);
 SP_API sp_hash_t   sp_ht_on_hash_key(void* key, u64 size);
@@ -2822,6 +2772,7 @@ SP_API sp_hash_t   sp_ht_on_hash_str_key(void* key, u64 size);
 SP_API bool        sp_ht_on_compare_str_key(void* ka, void* kb, u64 size);
 SP_API sp_hash_t   sp_ht_on_hash_cstr_key(void* key, u64 size);
 SP_API bool        sp_ht_on_compare_cstr_key(void* ka, void* kb, u64 size);
+
 
 
 /*
@@ -2929,8 +2880,8 @@ SP_API sp_str_t        sp_str_to_upper(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t        sp_str_to_lower(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_t        sp_str_to_pascal_case(sp_mem_t mem, sp_str_t str);
 SP_API sp_str_pair_t   sp_str_cleave_c8(sp_str_t str, c8 delimiter);
-SP_API sp_da(sp_str_t) sp_str_split_c8(sp_mem_t mem, sp_str_t str, c8 c);
-SP_API sp_da(sp_str_t) sp_str_pad_to_longest(sp_mem_t mem, sp_str_t* strs, u32 n);
+SP_API sp_err_t       sp_str_split_c8(sp_mem_t mem, sp_str_t str, c8 c, sp_da(sp_str_t)* out);
+SP_API sp_err_t       sp_str_pad_to_longest(sp_mem_t mem, sp_str_t* strs, u32 n, sp_da(sp_str_t)* out);
 SP_API c8*             sp_cstr_copy(sp_mem_t mem, const c8* cstr);
 SP_API c8*             sp_cstr_copy_n(sp_mem_t mem, const c8* str, u32 len);
 SP_API void            sp_cstr_copy_to(const c8* str, c8* buffer, u32 buffer_len);
@@ -3023,15 +2974,15 @@ typedef struct {
 } sp_env_t;
 
 SP_API void     sp_env_init(sp_mem_t mem, sp_env_t* env);
-SP_API sp_env_t sp_env_capture(sp_mem_t mem);
-SP_API sp_env_t sp_env_copy(sp_mem_t mem, sp_env_t* env);
+SP_API sp_err_t sp_env_capture(sp_mem_t mem, sp_env_t* out);
+SP_API sp_err_t sp_env_copy(sp_mem_t mem, sp_env_t* env, sp_env_t* out);
 SP_API u32      sp_env_count(sp_env_t* env);
 SP_API sp_str_t sp_env_get(sp_env_t* env, sp_str_t name);
 SP_API sp_str_t sp_env_get_c(sp_env_t* env, const c8* name);
 SP_API bool     sp_env_contains(sp_env_t* env, sp_str_t name);
 SP_API bool     sp_env_contains_c(sp_env_t* env, const c8* name);
-SP_API void     sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
-SP_API void     sp_env_insert_c(sp_env_t* env, const c8* name, const c8* value);
+SP_API sp_err_t sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value);
+SP_API sp_err_t sp_env_insert_c(sp_env_t* env, const c8* name, const c8* value);
 SP_API void     sp_env_erase(sp_env_t* env, sp_str_t name);
 SP_API void     sp_env_erase_c(sp_env_t* env, const c8* name);
 SP_API void     sp_env_destroy(sp_env_t* env);
@@ -3336,6 +3287,7 @@ typedef struct {
 } sp_fs_it_frame_t;
 
 typedef struct {
+  sp_mem_t mem;
   sp_da(sp_fs_it_frame_t) stack;
   sp_da(c8) path;
   sp_fs_it_entry_t last;
@@ -5063,8 +5015,8 @@ SP_API sp_ps_t         sp_ps_create(sp_mem_t mem, sp_ps_config_t config);
 SP_API sp_ps_output_t  sp_ps_run(sp_mem_t mem, sp_ps_config_t config);
 SP_API sp_ps_t         sp_ps_create_c(sp_mem_t mem, sp_ps_config_cstr_t config);
 SP_API sp_ps_output_t  sp_ps_run_c(sp_mem_t mem, sp_ps_config_cstr_t config);
-SP_API sp_ps_config_t  sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src);
-SP_API void            sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg);
+SP_API sp_err_t        sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src, sp_ps_config_t* out);
+SP_API sp_err_t        sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg);
 SP_API sp_ps_status_t  sp_ps_wait(sp_ps_t* ps);
 SP_API sp_ps_status_t  sp_ps_poll(sp_ps_t* ps, u32 timeout_ms);
 SP_API sp_ps_output_t  sp_ps_output(sp_ps_t* ps);
@@ -5193,9 +5145,9 @@ struct sp_fmon {
 
 SP_API void sp_fmon_init(sp_mem_t mem, sp_fmon_t* m, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* user_data);
 SP_API void sp_fmon_deinit(sp_fmon_t* monitor);
-SP_API void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
-SP_API void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
-SP_API void sp_fmon_process_changes(sp_fmon_t* monitor);
+SP_API sp_err_t sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_API sp_err_t sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_API sp_err_t sp_fmon_process_changes(sp_fmon_t* monitor);
 SP_API void sp_fmon_emit_changes(sp_fmon_t* monitor);
 
 SP_END_EXTERN_C()
@@ -5236,9 +5188,9 @@ SP_IMP sp_fmt_arg_t        sp_fmt_arg_from_argv(sp_fmt_argv_t v);
 SP_IMP sp_hash_t sp_hash_str(sp_str_t str);
 
 // @memory
-SP_IMP sp_mem_arena_block_t* sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 block_size);
+SP_IMP sp_err_t sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 block_size, sp_mem_arena_block_t** out);
 SP_IMP u64 sp_mem_arena_block_align(sp_mem_arena_block_t* block, u8 alignment);
-SP_IMP sp_mem_arena_block_t* sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 size);
+SP_IMP sp_err_t sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 size, sp_mem_arena_block_t** out);
 SP_IMP u32 sp_mem_heap_bucket_of(u64 size);
 SP_IMP u64 sp_mem_heap_bucket_size(u32 bucket);
 SP_IMP void sp_mem_heap_track_reserve(sp_mem_heap_t* heap, u64 bytes);
@@ -5284,11 +5236,11 @@ SP_IMP s32 sp_app_finalize_rc(sp_app_t* app);
 #if defined(SP_WIN32)
 SP_IMP void sp_fmon_os_init(sp_fmon_t* monitor);
 SP_IMP void sp_fmon_os_deinit(sp_fmon_t* monitor);
-SP_IMP void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
-SP_IMP void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
-SP_IMP void sp_fmon_os_process_changes(sp_fmon_t* monitor);
+SP_IMP sp_err_t sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_IMP sp_err_t sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_IMP sp_err_t sp_fmon_os_process_changes(sp_fmon_t* monitor);
 SP_IMP bool sp_win32_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path);
-SP_IMP void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events);
+SP_IMP sp_err_t sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events);
 SP_IMP sp_env_var_t sp_os_env_parse_var(sp_str_t entry);
 #endif
 #if defined(SP_LINUX)
@@ -5297,12 +5249,11 @@ SP_IMP bool sp_linux_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path);
 #if defined(SP_MACOS) && defined(SP_FMON_MACOS_USE_FSEVENTS)
 SP_IMP void sp_fmon_os_destroy_stream(sp_fmon_os_t* os);
 SP_IMP void sp_fmon_fsevents_recreate_stream(sp_fmon_t* monitor);
-SP_IMP void sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir);
-SP_IMP void sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file);
+SP_IMP sp_err_t sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir);
+SP_IMP sp_err_t sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file);
 #endif
 
 // @env
-SP_IMP void sp_env_table_init(sp_mem_t mem, sp_env_t* env);
 #if defined(SP_WIN32)
 SP_IMP sp_hash_t sp_env_on_hash_key(void* key, u64 size);
 SP_IMP bool      sp_env_on_compare_key(void* ka, void* kb, u64 size);
@@ -5316,7 +5267,7 @@ SP_IMP BOOL WINAPI sp_os_signal_console_ctrl(DWORD type);
 #endif
 
 // @ps
-SP_IMP sp_env_t           sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem);
+SP_IMP sp_err_t           sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem, sp_env_t* out);
 #if defined(SP_POSIX)
 SP_IMP bool               sp_ps_is_fd_valid(sp_sys_fd_t fd);
 SP_IMP void               sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
@@ -5865,7 +5816,6 @@ extern s32 __ulock_wake(u32 operation, void* addr, u64 wake_value);
 #if defined(SP_FREESTANDING)
 SP_IMP void* sp_sys_get_tp(void);
 SP_IMP s32   sp_sys_set_tp(void* tp);
-SP_IMP void  sp_linux_env_it_set_current(sp_os_env_it_t* it);
 #endif
 
 SP_END_EXTERN_C()
@@ -6032,6 +5982,18 @@ sp_str_t sp_err_str(sp_err_t err) {
   }
   return sp_str_lit("");
 }
+
+bool sp_err_stash(void** ptr, sp_err_t err) {
+  if (err) *ptr = (void*)(uintptr_t)err;
+  return !err;
+}
+
+sp_err_t sp_err_take(void** ptr) {
+  sp_err_t err = (sp_err_t)(uintptr_t)*ptr;
+  *ptr = SP_NULLPTR;
+  return err;
+}
+
 sp_tls_block_t sp_tls_block;
 
 sp_err_t sp_sys_is_supported(u32 what) {
@@ -6315,8 +6277,8 @@ sp_err_t sp_sys_socket_local_port(sp_sys_socket_t socket, u16* out) {
   return (sp_rt.vt->socket_local_port)(socket, out);
 }
 
-void* sp_sys_alloc(u64 size) {
-  return (sp_rt.vt->alloc)(size);
+sp_err_t sp_sys_alloc(u64 size, void** out) {
+  return (sp_rt.vt->alloc)(size, out);
 }
 
 void sp_sys_free(void* ptr, u64 size) {
@@ -7436,6 +7398,7 @@ SP_PRIVATE sp_err_t sp_sys_err_from_win32(DWORD e) {
     case ERROR_DISK_FULL:
     case ERROR_HANDLE_DISK_FULL:    return SP_ERR_SYS_NO_SPACE;
     case ERROR_NOT_ENOUGH_MEMORY:
+    case ERROR_COMMITMENT_LIMIT:
     case ERROR_OUTOFMEMORY:         return SP_ERR_SYS_NO_MEMORY;
     case ERROR_TOO_MANY_OPEN_FILES: return SP_ERR_SYS_TOO_MANY_FILES;
     case ERROR_BUFFER_OVERFLOW:
@@ -10737,8 +10700,10 @@ s32 sp_sys_memcmp_p(const void* a, const void* b, u64 n) {
 // SP_SYS_ALLOC //
 //////////////////
 #if defined(SP_WIN32)
-void* sp_sys_alloc_p(u64 size) {
-  return VirtualAlloc(SP_NULLPTR, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+sp_err_t sp_sys_alloc_p(u64 size, void** out) {
+  *out = VirtualAlloc(SP_NULLPTR, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  if (!*out) return sp_sys_err_from_win32(GetLastError());
+  return SP_OK;
 }
 
 void sp_sys_free_p(void* ptr, u64 size) {
@@ -10747,9 +10712,12 @@ void sp_sys_free_p(void* ptr, u64 size) {
 }
 
 #elif defined(SP_LINUX)
-void* sp_sys_alloc_p(u64 size) {
+sp_err_t sp_sys_alloc_p(u64 size, void** out) {
+  *out = SP_NULLPTR;
   s64 p = sp_syscall(SP_SYSCALL_NUM_MMAP, 0, size, SP_PROT_READ | SP_PROT_WRITE, SP_MAP_PRIVATE | SP_MAP_ANONYMOUS, -1, 0);
-  return (u64)p > -4096UL ? SP_NULLPTR : (void*)p;
+  if ((u64)p > -4096UL) return sp_sys_err_from_errno(-p);
+  *out = (void*)p;
+  return SP_OK;
 }
 
 void sp_sys_free_p(void* ptr, u64 size) {
@@ -10758,9 +10726,12 @@ void sp_sys_free_p(void* ptr, u64 size) {
 }
 
 #elif defined(SP_MACOS) || defined(SP_COSMO)
-void* sp_sys_alloc_p(u64 size) {
+sp_err_t sp_sys_alloc_p(u64 size, void** out) {
+  *out = SP_NULLPTR;
   void* p = mmap(SP_NULLPTR, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  return p == MAP_FAILED ? SP_NULLPTR : p;
+  if (p == MAP_FAILED) return sp_sys_err_from_errno(errno);
+  *out = p;
+  return SP_OK;
 }
 
 void sp_sys_free_p(void* ptr, u64 size) {
@@ -10768,12 +10739,14 @@ void sp_sys_free_p(void* ptr, u64 size) {
 }
 
 #elif defined(SP_WASM)
-void* sp_sys_alloc_p(u64 size) {
+sp_err_t sp_sys_alloc_p(u64 size, void** out) {
+  *out = SP_NULLPTR;
   const u64 page_size = 65536;
   u64 pages = (size + page_size - 1) / page_size;
   s32 prev = __builtin_wasm_memory_grow(0, (s32)pages);
-  if (prev == -1) return SP_NULLPTR;
-  return (void*)((u64)prev * page_size);
+  if (prev == -1) return SP_ERR_SYS_NO_MEMORY;
+  *out = (void*)((u64)prev * page_size);
+  return SP_OK;
 }
 
 void sp_sys_free_p(void* ptr, u64 size) {
@@ -11962,16 +11935,36 @@ u64 sp_ht_get_key_index_fn(void** data, void* key, u64 capacity, sp_ht_info_t in
   return SP_HT_INVALID_INDEX;
 }
 
-void sp_ht_resize_impl(void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info) {
-  if (!data || new_cap <= old_cap) return;
+sp_err_t sp_ht_init_impl(sp_mem_t mem, void** ht, u64 ht_size, sp_ht_info_t info) {
+  u8* table = (u8*)*ht;
+  if (*(u64*)(table + info.header.capacity)) return SP_OK;
+
+  void* data = SP_NULLPTR;
+  sp_err_t err = sp_mem_alloc(mem, 2 * info.stride.entry, &data);
+  if (err) {
+    sp_free(mem, table, ht_size);
+    *ht = SP_NULLPTR;
+    return err;
+  }
+
+  *(void**)table = data;
+  *(u64*)(table + info.header.capacity) = 2;
+  return SP_OK;
+}
+
+sp_err_t sp_ht_resize_impl(sp_mem_t mem, void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info) {
+  if (!data || new_cap <= old_cap) return SP_OK;
 
   void* old_data = *data;
-  void* new_data = sp_alloc(info.allocator, new_cap * info.stride.entry);
+  void* new_data = SP_NULLPTR;
+  sp_try(sp_mem_alloc(mem, new_cap * info.stride.entry, &new_data));
 
   for (u64 i = 0; i < old_cap; ++i) {
     u64 offset = i * info.stride.entry;
     sp_ht_entry_state state = *(sp_ht_entry_state*)((c8*)old_data + offset + info.stride.kv);
-    if (state != SP_HT_ENTRY_ACTIVE) continue;
+    if (state != SP_HT_ENTRY_ACTIVE) {
+      continue;
+    }
 
     void* old_key = (c8*)old_data + offset;
     sp_hash_t hash = info.fn.hash(old_key, info.size.key);
@@ -11985,20 +11978,23 @@ void sp_ht_resize_impl(void** data, u64 old_cap, u64 new_cap, sp_ht_info_t info)
     *(sp_ht_entry_state*)((c8*)new_data + new_idx * info.stride.entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
   }
 
-  sp_free(info.allocator, old_data, old_cap * info.stride.entry);
+  sp_free(mem, old_data, old_cap * info.stride.entry);
   *data = new_data;
+  return SP_OK;
 }
 
-void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
-  u8* base = (u8*)ht;
+sp_err_t sp_ht_insert_impl(sp_mem_t mem, void** ht, u64 ht_size, void* key, void* val, sp_ht_info_t info) {
+  sp_try(sp_ht_init_impl(mem, ht, ht_size, info));
+
+  u8* base = (u8*)*ht;
   void** data = (void**)base;
   u64* size = (u64*)(base + info.header.size);
   u64* capacity = (u64*)(base + info.header.capacity);
 
   u64 cap = *capacity;
   if (*size * 4 >= cap * 3) {
-    u64 new_cap = cap ? cap * 2 : 2;
-    sp_ht_resize_impl(data, cap, new_cap, info);
+    u64 new_cap = cap * 2;
+    sp_try(sp_ht_resize_impl(mem, data, cap, new_cap, info));
     *capacity = new_cap;
     cap = new_cap;
   }
@@ -12024,7 +12020,7 @@ void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
     if (info.fn.compare(k, key, info.size.key)) {
       u8* entry = (u8*)(*data) + offset;
       sp_mem_copy(entry + info.stride.value, val, info.size.value);
-      return;
+      return SP_OK;
     }
   }
 
@@ -12034,6 +12030,14 @@ void sp_ht_insert_impl(void* ht, void* key, void* val, sp_ht_info_t info) {
   sp_mem_copy(entry + info.stride.value, val, info.size.value);
   *(sp_ht_entry_state*)(entry + info.stride.kv) = SP_HT_ENTRY_ACTIVE;
   (*size)++;
+  return SP_OK;
+}
+
+void sp_ht_free_impl(sp_mem_t mem, void** ht, u64 ht_size, u64 data_size) {
+  if (!*ht) return;
+  sp_free(mem, *(void**)*ht, data_size);
+  sp_free(mem, *ht, ht_size);
+  *ht = SP_NULLPTR;
 }
 
 sp_ht_it_t sp_ht_it_init_fn(void** data, u64 capacity, sp_ht_info_t info) {
@@ -12071,49 +12075,56 @@ void sp_ht_it_advance_fn(void** data, u64 capacity, u64* it, sp_ht_info_t info) 
 //  ██████████      █████    █████  ░░█████    █████   █████ █████   █████ █████   █████ █████   █████    █████
 // ░░░░░░░░░░      ░░░░░    ░░░░░    ░░░░░    ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░ ░░░░░   ░░░░░    ░░░░░
 // @array @dyn_array @da
-void* sp_da_resize(void* arr, u32 stride, u64 cap) {
-  sp_assert(arr);
+sp_err_t sp_da_resize(sp_mem_t mem, void** arr, u32 stride, u64 capacity) {
+  sp_da_header_t* head = *arr ? sp_da_head(*arr) : SP_NULLPTR;
+  if (head && head->capacity >= capacity) return SP_OK;
 
-  cap = sp_max(cap, 4);
-  sp_da_header_t* header = sp_da_head(arr);
-  u64 old_size = header->capacity * stride + sizeof(sp_da_header_t);
-  header = sp_cast(sp_da_header_t*, sp_realloc_uninitialized(header->allocator, header, old_size, cap * stride + sizeof(sp_da_header_t)));
+  capacity = sp_max(capacity, 4);
+  void* ptr = SP_NULLPTR;
 
-  if (!header) return SP_NULLPTR;
-
-  header->capacity = cap;
-  return header + 1;
-}
-
-void* sp_da_grow_ex(void* arr, u32 stride, u64 n) {
-  sp_assert(arr);
-
-  u64 required = sp_da_size(arr) + n;
-  if (required <= sp_da_capacity(arr)) return arr;
-
-  u64 cap = sp_da_capacity(arr) * 2;
-  cap = sp_max(cap, required);
-  return sp_da_resize(arr, stride, cap);
-}
-
-void sp_da_push_ex(void** arr, void* val, u32 stride) {
-  *arr = sp_da_grow_ex(*arr, stride, 1);
-  if (*arr) {
-    sp_mem_copy(((u8*)(*arr)) + sp_da_size(*arr) * stride, val, stride);
-    sp_da_head(*arr)->size++;
+  if (!head) {
+    sp_try(sp_mem_alloc_uninitialized(mem, sp_da_alloc_size(capacity, stride), &ptr));
+    head = (sp_da_header_t*)ptr;
+    head->size = 0;
   }
+  else {
+    sp_try(sp_mem_realloc_uninitialized(mem, head, sp_da_alloc_size(head->capacity, stride), sp_da_alloc_size(capacity, stride), &ptr));
+    head = (sp_da_header_t*)ptr;
+  }
+
+  head->capacity = capacity;
+  *arr = head + 1;
+  return SP_OK;
 }
 
-void* sp_da_init_ex(sp_mem_t mem, u32 stride) {
-  u32 cap = 4;
-  sp_da_header_t* head = (sp_da_header_t*)sp_alloc_uninitialized(mem, cap * stride + sizeof(sp_da_header_t));
-  *head = (sp_da_header_t) {
-    .size = 0,
-    .capacity = cap,
-    .allocator = mem,
-  };
+sp_err_t sp_da_grow_ex(sp_mem_t mem, void** arr, u32 stride, u64 n) {
+  u64 required = sp_da_size(*arr) + n;
+  if (required <= sp_da_capacity(*arr)) return SP_OK;
+  return sp_da_resize(mem, arr, stride, sp_max(sp_da_capacity(*arr) * 2, required));
+}
 
-  return head + 1;
+sp_err_t sp_da_commit(sp_mem_t mem, void** arr, u32 stride) {
+  sp_da_header_t* head = sp_da_head(*arr);
+  if (head->size == head->capacity) {
+    sp_try(sp_da_resize(mem, arr, stride, head->capacity * 2));
+    head = sp_da_head(*arr);
+  }
+  head->size++;
+  return SP_OK;
+}
+
+sp_err_t sp_da_push_ex(sp_mem_t mem, void** arr, void* val, u32 stride) {
+  sp_try(sp_da_grow_ex(mem, arr, stride, 1));
+  sp_mem_copy(((u8*)(*arr)) + sp_da_size(*arr) * stride, val, stride);
+  sp_da_head(*arr)->size++;
+  return SP_OK;
+}
+
+void sp_da_free_ex(sp_mem_t mem, void** arr, u32 stride) {
+  if (!*arr) return;
+  sp_da_header_t* head = sp_da_head(*arr);
+  sp_free(mem, head, sp_da_alloc_size(head->capacity, stride));
+  *arr = SP_NULLPTR;
 }
 
 
@@ -12127,35 +12138,40 @@ void* sp_da_init_ex(sp_mem_t mem, u32 stride) {
 //  █████   █████ █████ █████  ░░█████ ░░█████████     ███████████  ░░████████   █████       █████       ██████████ █████   █████
 // ░░░░░   ░░░░░ ░░░░░ ░░░░░    ░░░░░   ░░░░░░░░░     ░░░░░░░░░░░    ░░░░░░░░   ░░░░░       ░░░░░       ░░░░░░░░░░ ░░░░░   ░░░░░
 // @ring_buffer @rb
-void sp_rb_init_ex(sp_mem_t mem, void** arr, u32 stride, u32 capacity) {
-  sp_ring_buffer_t* rb = (sp_ring_buffer_t*)sp_alloc(mem, capacity * stride + sizeof(sp_ring_buffer_t));
+sp_err_t sp_rb_init_ex(sp_mem_t mem, void** arr, u32 stride, u32 capacity) {
+  *arr = SP_NULLPTR;
+  capacity = sp_max(capacity, 1);
+
+  void* ptr = SP_NULLPTR;
+  sp_try(sp_mem_alloc(mem, sp_rb_alloc_size(capacity, stride), &ptr));
+
+  sp_ring_buffer_t* rb = (sp_ring_buffer_t*)ptr;
   rb->head = 0;
   rb->size = 0;
   rb->capacity = capacity;
   rb->mode = SP_RQ_MODE_GROW;
-  rb->allocator = mem;
-  *arr = (u8*)(rb + 1);
+  *arr = rb + 1;
+  return SP_OK;
 }
 
-void* sp_rb_grow_ex(void* arr, u32 stride, u32 capacity) {
-  sp_assert(arr);
-  sp_ring_buffer_t* old = sp_rb_head(arr);
-  sp_mem_t mem = old->allocator;
-  sp_ring_buffer_t* rb = (sp_ring_buffer_t*)sp_alloc(mem, capacity * stride + sizeof(sp_ring_buffer_t));
-  if (!rb) return SP_NULLPTR;
+sp_err_t sp_rb_grow_ex(sp_mem_t mem, void** arr, u32 stride, u32 capacity) {
+  sp_ring_buffer_t* old = sp_rb_head(*arr);
 
+  void* ptr = SP_NULLPTR;
+  sp_try(sp_mem_alloc(mem, sp_rb_alloc_size(capacity, stride), &ptr));
+
+  sp_ring_buffer_t* rb = (sp_ring_buffer_t*)ptr;
   rb->head = 0;
   rb->size = old->size;
   rb->capacity = capacity;
   rb->mode = old->mode;
-  rb->allocator = mem;
 
   u32 old_size = old->size;
   u32 old_cap = old->capacity;
   u32 old_head = old->head;
 
   u8* new_arr = (u8*)rb + sizeof(sp_ring_buffer_t);
-  u8* old_arr = (u8*)arr;
+  u8* old_arr = (u8*)*arr;
 
   u32 first_chunk = old_cap - old_head;
   if (first_chunk > old_size) first_chunk = old_size;
@@ -12166,9 +12182,39 @@ void* sp_rb_grow_ex(void* arr, u32 stride, u32 capacity) {
     sp_mem_copy(new_arr + first_chunk * stride, old_arr, second_chunk * stride);
   }
 
-  sp_mem_allocator_free(mem, old, old_cap * stride + sizeof(sp_ring_buffer_t));
+  // Carry whatever is waiting in the hidden slot
+  sp_mem_copy(new_arr + (u64)capacity * stride, old_arr + (u64)old_cap * stride, stride);
 
-  return (u8*)(rb + 1);
+  sp_free(mem, old, sp_rb_alloc_size(old_cap, stride));
+  *arr = rb + 1;
+  return SP_OK;
+}
+
+sp_err_t sp_rb_commit(sp_mem_t mem, void** arr, u32 stride) {
+  sp_ring_buffer_t* rb = sp_rb_head(*arr);
+  if (rb->size == rb->capacity) {
+    if (rb->mode == SP_RQ_MODE_OVERWRITE) {
+      rb->head = (rb->head + 1) % rb->capacity;
+      rb->size--;
+    }
+    else {
+      sp_try(sp_rb_grow_ex(mem, arr, stride, rb->capacity * 2u));
+      rb = sp_rb_head(*arr);
+    }
+  }
+
+  u8* data = (u8*)*arr;
+  u32 tail = (rb->head + rb->size) % rb->capacity;
+  sp_mem_copy(data + (u64)tail * stride, data + (u64)rb->capacity * stride, stride);
+  rb->size++;
+  return SP_OK;
+}
+
+void sp_rb_free_ex(sp_mem_t mem, void** arr, u32 stride) {
+  if (!*arr) return;
+  sp_ring_buffer_t* rb = sp_rb_head(*arr);
+  sp_free(mem, rb, sp_rb_alloc_size(rb->capacity, stride));
+  *arr = SP_NULLPTR;
 }
 
 
@@ -12892,7 +12938,9 @@ sp_tls_rt_t* sp_tls_rt_get() {
     // It's important that you bootstrap the allocator and set the TLS key
     // before doing anything else so you can call functions that allocate
     // while initializing the other TLS stuff.
-    tls = sp_sys_alloc_type(sp_tls_rt_t);
+    void* ptr = SP_NULLPTR;
+    sp_sys_alloc(sizeof(sp_tls_rt_t), &ptr);
+    tls = (sp_tls_rt_t*)ptr;
     tls->allocators.heap = sp_mem_heap_new();
     tls->mem.heap = sp_mem_heap_as_allocator(tls->allocators.heap);
     tls->mem.page = sp_mem_os_new();
@@ -13020,37 +13068,70 @@ void sp_tls_once(sp_tls_once_t* once, sp_tls_once_fn_t fn) {
 // ░░░░░     ░░░░░ ░░░░░░░░░░ ░░░░░     ░░░░░    ░░░░░░░    ░░░░░   ░░░░░    ░░░░░
 // @memory
 
+sp_err_t sp_mem_alloc(sp_mem_t mem, u64 size, void** out) {
+  *out = SP_NULLPTR;
+  return mem.on_alloc(mem.user_data, SP_ALLOCATOR_MODE_ALLOC, size, SP_NULLPTR, 0, out);
+}
+
+sp_err_t sp_mem_alloc_uninitialized(sp_mem_t mem, u64 size, void** out) {
+  *out = SP_NULLPTR;
+  return mem.on_alloc(mem.user_data, SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED, size, SP_NULLPTR, 0, out);
+}
+
+// On failure, ptr is still valid and *out is null
+sp_err_t sp_mem_realloc(sp_mem_t mem, void* ptr, u64 old_size, u64 size, void** out) {
+  *out = SP_NULLPTR;
+  return mem.on_alloc(mem.user_data, SP_ALLOCATOR_MODE_RESIZE, size, ptr, old_size, out);
+}
+
+sp_err_t sp_mem_realloc_uninitialized(sp_mem_t mem, void* ptr, u64 old_size, u64 size, void** out) {
+  *out = SP_NULLPTR;
+  return mem.on_alloc(mem.user_data, SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED, size, ptr, old_size, out);
+}
+
 void* sp_mem_allocator_alloc(sp_mem_t allocator, u64 size) {
-  return allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_ALLOC, size, NULL, 0);
+  void* ptr = SP_NULLPTR;
+  sp_mem_alloc(allocator, size, &ptr);
+  return ptr;
 }
 
 void* sp_mem_allocator_alloc_uninitialized(sp_mem_t allocator, u64 size) {
-  return allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED, size, NULL, 0);
+  void* ptr = SP_NULLPTR;
+  sp_mem_alloc_uninitialized(allocator, size, &ptr);
+  return ptr;
 }
 
 void* sp_mem_allocator_realloc(sp_mem_t allocator, void* memory, u64 old_size, u64 size) {
-  return allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_RESIZE, size, memory, old_size);
+  void* ptr = SP_NULLPTR;
+  sp_mem_realloc(allocator, memory, old_size, size, &ptr);
+  return ptr;
 }
 
 void* sp_mem_allocator_realloc_uninitialized(sp_mem_t allocator, void* memory, u64 old_size, u64 size) {
-  return allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED, size, memory, old_size);
+  void* ptr = SP_NULLPTR;
+  sp_mem_realloc_uninitialized(allocator, memory, old_size, size, &ptr);
+  return ptr;
 }
 
 void sp_mem_allocator_free(sp_mem_t allocator, void* buffer, u64 size) {
-  allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_FREE, 0, buffer, size);
+  void* ptr = SP_NULLPTR;
+  allocator.on_alloc(allocator.user_data, SP_ALLOCATOR_MODE_FREE, 0, buffer, size, &ptr);
 }
 
 u8* sp_mem_arena_block_buffer(sp_mem_arena_block_t* block) {
   return (u8*)(block + 1);
 }
 
-sp_mem_arena_block_t* sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 block_size) {
-  sp_mem_arena_block_t* block = (sp_mem_arena_block_t*)sp_mem_allocator_alloc(arena->allocator, block_size);
-  if (!block) return SP_NULLPTR;
+sp_err_t sp_mem_arena_block_new(sp_mem_arena_t* arena, u64 block_size, sp_mem_arena_block_t** out) {
+  *out = SP_NULLPTR;
+  void* ptr = SP_NULLPTR;
+  sp_try(sp_mem_alloc(arena->allocator, block_size, &ptr));
+  sp_mem_arena_block_t* block = (sp_mem_arena_block_t*)ptr;
   block->next = SP_NULLPTR;
   block->capacity = block_size - sizeof(sp_mem_arena_block_t);
   block->bytes_used = 0;
-  return block;
+  *out = block;
+  return SP_OK;
 }
 
 sp_mem_arena_t* sp_mem_arena_new(sp_mem_t mem) {
@@ -13065,8 +13146,8 @@ sp_mem_arena_t* sp_mem_arena_new_ex(sp_mem_t mem, u64 block_size, u8 alignment) 
   sp_assert((arena->alignment & (arena->alignment - 1)) == 0);
   arena->block_size = sp_max(block_size, sizeof(sp_mem_arena_block_t) + arena->alignment);
 
-  sp_mem_arena_block_t* block = sp_mem_arena_block_new(arena, arena->block_size);
-  if (!block) {
+  sp_mem_arena_block_t* block = SP_NULLPTR;
+  if (sp_mem_arena_block_new(arena, arena->block_size, &block)) {
     sp_mem_allocator_free(mem, arena, sizeof(sp_mem_arena_t));
     return SP_NULLPTR;
   }
@@ -13127,12 +13208,14 @@ bool sp_mem_arena_block_fits(sp_mem_arena_block_t* block, u64 offset, u64 size) 
   return offset <= block->capacity && size <= block->capacity - offset;
 }
 
-sp_mem_arena_block_t* sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 size) {
+sp_err_t sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 size, sp_mem_arena_block_t** out) {
+  *out = SP_NULLPTR;
   sp_mem_arena_block_t* block = arena->current;
   u64 offset = sp_mem_arena_block_align(block, arena->alignment);
   if (sp_mem_arena_block_fits(block, offset, size)) {
     block->bytes_used = offset;
-    return block;
+    *out = block;
+    return SP_OK;
   }
 
   if (block->next) {
@@ -13142,7 +13225,8 @@ sp_mem_arena_block_t* sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 size) {
     if (sp_mem_arena_block_fits(next, next_offset, size)) {
       next->bytes_used = next_offset;
       arena->current = next;
-      return next;
+      *out = next;
+      return SP_OK;
     }
   }
 
@@ -13150,30 +13234,32 @@ sp_mem_arena_block_t* sp_mem_arena_get_block(sp_mem_arena_t* arena, u64 size) {
     arena->block_size = sp_min(arena->block_size * 2, (u64)SP_MEM_ARENA_MAX_BLOCK_SIZE);
   }
   u64 required = sizeof(sp_mem_arena_block_t) + arena->alignment + size;
-  sp_mem_arena_block_t* new_block = sp_mem_arena_block_new(arena, sp_max(arena->block_size, required));
-  if (!new_block) return SP_NULLPTR;
+  sp_mem_arena_block_t* new_block = SP_NULLPTR;
+  sp_try(sp_mem_arena_block_new(arena, sp_max(arena->block_size, required), &new_block));
   new_block->next = block->next;
   block->next = new_block;
   new_block->bytes_used = sp_mem_arena_block_align(new_block, arena->alignment);
   arena->current = new_block;
-  return new_block;
+  *out = new_block;
+  return SP_OK;
 }
 
-void* sp_mem_arena_alloc_size_uninitialized(sp_mem_arena_t* arena, u64 size) {
-  if (size > ((u64)-1) - SP_MEM_ARENA_MAX_BLOCK_SIZE) return SP_NULLPTR;
+sp_err_t sp_mem_arena_alloc_size_uninitialized(sp_mem_arena_t* arena, u64 size, void** out) {
+  *out = SP_NULLPTR;
+  if (size > ((u64)-1) - SP_MEM_ARENA_MAX_BLOCK_SIZE) return SP_ERR_SYS_NO_MEMORY;
 
-  sp_mem_arena_block_t* block = sp_mem_arena_get_block(arena, size);
-  if (!block) return SP_NULLPTR;
+  sp_mem_arena_block_t* block = SP_NULLPTR;
+  sp_try(sp_mem_arena_get_block(arena, size, &block));
 
-  void* ptr = sp_mem_arena_block_buffer(block) + block->bytes_used;
+  *out = sp_mem_arena_block_buffer(block) + block->bytes_used;
   block->bytes_used += size;
-  return ptr;
+  return SP_OK;
 }
 
-void* sp_mem_arena_alloc_size(sp_mem_arena_t* arena, u64 size) {
-  void* ptr = sp_mem_arena_alloc_size_uninitialized(arena, size);
-  if (ptr) sp_mem_zero(ptr, size);
-  return ptr;
+sp_err_t sp_mem_arena_alloc_size(sp_mem_arena_t* arena, u64 size, void** out) {
+  sp_try(sp_mem_arena_alloc_size_uninitialized(arena, size, out));
+  sp_mem_zero(*out, size);
+  return SP_OK;
 }
 
 bool sp_mem_arena_is_top(sp_mem_arena_t* arena, void* ptr, u64 size) {
@@ -13182,72 +13268,79 @@ bool sp_mem_arena_is_top(sp_mem_arena_t* arena, void* ptr, u64 size) {
   return (u8*)ptr >= buffer && (u8*)ptr + size == buffer + block->bytes_used;
 }
 
-void* sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory, u64 old_size) {
+sp_err_t sp_mem_arena_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory, u64 old_size, void** out) {
   sp_mem_arena_t* arena = (sp_mem_arena_t*)user_data;
+  *out = SP_NULLPTR;
 
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC: {
-      return sp_mem_arena_alloc_size(arena, size);
+      return sp_mem_arena_alloc_size(arena, size, out);
     }
     case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED: {
-      return sp_mem_arena_alloc_size_uninitialized(arena, size);
+      return sp_mem_arena_alloc_size_uninitialized(arena, size, out);
     }
     case SP_ALLOCATOR_MODE_RESIZE:
     case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: {
       bool uninitialized = mode == SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED;
-      if (!old_memory) return uninitialized ? sp_mem_arena_alloc_size_uninitialized(arena, size) : sp_mem_arena_alloc_size(arena, size);
+      if (!old_memory) return uninitialized ? sp_mem_arena_alloc_size_uninitialized(arena, size, out) : sp_mem_arena_alloc_size(arena, size, out);
 
       sp_mem_arena_block_t* block = arena->current;
       if (sp_mem_arena_is_top(arena, old_memory, old_size)) {
         if (size <= old_size) {
           block->bytes_used -= old_size - size;
-          return old_memory;
+          *out = old_memory;
+          return SP_OK;
         }
         u64 grow = size - old_size;
         if (grow <= block->capacity - block->bytes_used) {
           if (!uninitialized) sp_mem_zero(sp_mem_arena_block_buffer(block) + block->bytes_used, grow);
           block->bytes_used += grow;
-          return old_memory;
+          *out = old_memory;
+          return SP_OK;
         }
       }
 
-      if (size <= old_size) return old_memory;
+      if (size <= old_size) {
+        *out = old_memory;
+        return SP_OK;
+      }
 
-      void* fresh = sp_mem_arena_alloc_size_uninitialized(arena, size);
-      if (!fresh) return SP_NULLPTR;
+      void* fresh = SP_NULLPTR;
+      sp_try(sp_mem_arena_alloc_size_uninitialized(arena, size, &fresh));
       sp_mem_move(fresh, old_memory, old_size);
       if (!uninitialized) sp_mem_zero((u8*)fresh + old_size, size - old_size);
-      return fresh;
+      *out = fresh;
+      return SP_OK;
     }
     case SP_ALLOCATOR_MODE_FREE: {
       if (old_memory && sp_mem_arena_is_top(arena, old_memory, old_size)) {
         arena->current->bytes_used -= old_size;
       }
-      return SP_NULLPTR;
+      return SP_OK;
     }
   }
 
-  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+  SP_UNREACHABLE_RETURN(SP_ERR);
 }
 
 void* sp_mem_arena_alloc(sp_mem_arena_t* arena, u64 size) {
-  return sp_mem_arena_on_alloc(arena, SP_ALLOCATOR_MODE_ALLOC, size, SP_NULLPTR, 0);
+  return sp_mem_allocator_alloc(sp_mem_arena_as_allocator(arena), size);
 }
 
 void* sp_mem_arena_alloc_uninitialized(sp_mem_arena_t* arena, u64 size) {
-  return sp_mem_arena_on_alloc(arena, SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED, size, SP_NULLPTR, 0);
+  return sp_mem_allocator_alloc_uninitialized(sp_mem_arena_as_allocator(arena), size);
 }
 
 void* sp_mem_arena_realloc(sp_mem_arena_t* arena, void* ptr, u64 old_size, u64 size) {
-  return sp_mem_arena_on_alloc(arena, SP_ALLOCATOR_MODE_RESIZE, size, ptr, old_size);
+  return sp_mem_allocator_realloc(sp_mem_arena_as_allocator(arena), ptr, old_size, size);
 }
 
 void* sp_mem_arena_realloc_uninitialized(sp_mem_arena_t* arena, void* ptr, u64 old_size, u64 size) {
-  return sp_mem_arena_on_alloc(arena, SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED, size, ptr, old_size);
+  return sp_mem_allocator_realloc_uninitialized(sp_mem_arena_as_allocator(arena), ptr, old_size, size);
 }
 
 void sp_mem_arena_free(sp_mem_arena_t* arena, void* ptr, u64 size) {
-  sp_mem_arena_on_alloc(arena, SP_ALLOCATOR_MODE_FREE, 0, ptr, size);
+  sp_mem_allocator_free(sp_mem_arena_as_allocator(arena), ptr, size);
 }
 
 sp_mem_fixed_t sp_mem_fixed(void* buffer, u64 capacity) {
@@ -13278,32 +13371,35 @@ u64 sp_mem_fixed_bytes_used(sp_mem_fixed_t* fixed) {
   return fixed->bytes_used;
 }
 
-void* sp_mem_error_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory, u64 old_size) {
+sp_err_t sp_mem_error_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory, u64 old_size, void** out) {
   sp_assert(false);
-  return SP_NULLPTR;
+  *out = SP_NULLPTR;
+  return SP_ERR_SYS_NO_MEMORY;
 }
 
 sp_mem_t sp_mem_error() {
   return (sp_mem_t) { .on_alloc = sp_mem_error_on_alloc };
 }
 
-void* sp_mem_fixed_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory, u64 old_size) {
+sp_err_t sp_mem_fixed_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* old_memory, u64 old_size, void** out) {
   sp_mem_fixed_t* fixed = (sp_mem_fixed_t*)user_data;
+  *out = SP_NULLPTR;
 
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC:
     case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED: {
       u8* ptr = (u8*)sp_align_up(fixed->buffer + fixed->bytes_used, fixed->alignment);
       u64 offset = (u64)(ptr - fixed->buffer);
-      if (offset > fixed->capacity || size > fixed->capacity - offset) return SP_NULLPTR;
+      if (offset > fixed->capacity || size > fixed->capacity - offset) return SP_ERR_SYS_NO_MEMORY;
       fixed->bytes_used = offset + size;
       if (mode == SP_ALLOCATOR_MODE_ALLOC) sp_mem_zero(ptr, size);
-      return ptr;
+      *out = ptr;
+      return SP_OK;
     }
     case SP_ALLOCATOR_MODE_RESIZE:
     case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: {
       bool uninitialized = mode == SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED;
-      if (!old_memory) return sp_mem_fixed_on_alloc(user_data, uninitialized ? SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED : SP_ALLOCATOR_MODE_ALLOC, size, SP_NULLPTR, 0);
+      if (!old_memory) return sp_mem_fixed_on_alloc(user_data, uninitialized ? SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED : SP_ALLOCATOR_MODE_ALLOC, size, SP_NULLPTR, 0, out);
 
       bool is_top = (u8*)old_memory + old_size == fixed->buffer + fixed->bytes_used;
       if (is_top) {
@@ -13311,27 +13407,32 @@ void* sp_mem_fixed_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size,
         if (size <= fixed->capacity - offset) {
           if (size > old_size && !uninitialized) sp_mem_zero((u8*)old_memory + old_size, size - old_size);
           fixed->bytes_used = offset + size;
-          return old_memory;
+          *out = old_memory;
+          return SP_OK;
         }
       }
 
-      if (size <= old_size) return old_memory;
+      if (size <= old_size) {
+        *out = old_memory;
+        return SP_OK;
+      }
 
-      void* fresh = sp_mem_fixed_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED, size, SP_NULLPTR, 0);
-      if (!fresh) return SP_NULLPTR;
+      void* fresh = SP_NULLPTR;
+      sp_try(sp_mem_fixed_on_alloc(user_data, SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED, size, SP_NULLPTR, 0, &fresh));
       sp_mem_move(fresh, old_memory, old_size);
       if (!uninitialized) sp_mem_zero((u8*)fresh + old_size, size - old_size);
-      return fresh;
+      *out = fresh;
+      return SP_OK;
     }
     case SP_ALLOCATOR_MODE_FREE: {
       if (old_memory && (u8*)old_memory + old_size == fixed->buffer + fixed->bytes_used) {
         fixed->bytes_used -= old_size;
       }
-      return SP_NULLPTR;
+      return SP_OK;
     }
   }
 
-  SP_UNREACHABLE_RETURN(SP_NULLPTR);
+  SP_UNREACHABLE_RETURN(SP_ERR);
 }
 
 sp_mem_arena_marker_t sp_mem_arena_mark(sp_mem_arena_t* arena) {
@@ -13411,7 +13512,9 @@ void sp_mem_zero(void* buffer, u64 buffer_size) {
 }
 
 void* sp_mem_os_alloc(u64 size) {
-  return sp_sys_alloc(size);
+  void* ptr = SP_NULLPTR;
+  sp_sys_alloc(size, &ptr);
+  return ptr;
 }
 
 void sp_mem_os_free(void* ptr, u64 size) {
@@ -13420,17 +13523,8 @@ void sp_mem_os_free(void* ptr, u64 size) {
 }
 
 void* sp_mem_os_realloc(void* ptr, u64 old_size, u64 size) {
-  if (!ptr) return sp_mem_os_alloc(size);
-  if (!size) {
-    sp_mem_os_free(ptr, old_size);
-    return SP_NULLPTR;
-  }
-  if (size == old_size) return ptr;
-
-  void* mem = sp_mem_os_alloc(size);
-  if (!mem) return SP_NULLPTR;
-  sp_mem_copy(mem, ptr, sp_min(old_size, size));
-  sp_mem_os_free(ptr, old_size);
+  void* mem = SP_NULLPTR;
+  sp_mem_os_on_alloc(SP_NULLPTR, SP_ALLOCATOR_MODE_RESIZE, size, ptr, old_size, &mem);
   return mem;
 }
 
@@ -14120,22 +14214,29 @@ sp_str_t sp_str_replace_c8(sp_mem_t mem, sp_str_t str, c8 from, c8 to) {
   return sp_mem_buffer_as_str(&buffer);
 }
 
-sp_da(sp_str_t) sp_str_split_c8(sp_mem_t mem, sp_str_t str, c8 delimiter) {
-  if (sp_str_empty(str)) return SP_NULLPTR;
+sp_err_t sp_str_split_c8(sp_mem_t mem, sp_str_t str, c8 delimiter, sp_da(sp_str_t)* out) {
+  *out = SP_NULLPTR;
+  if (sp_str_empty(str)) return SP_OK;
 
-  sp_da(sp_str_t) result = sp_da_new(mem, sp_str_t);
+  sp_da(sp_str_t) result = SP_NULLPTR;
+  sp_err_t err = SP_OK;
 
   u32 i = 0, j = 0;
   for (; j < str.len; j++) {
     if (sp_str_at(str, j) == delimiter) {
-      sp_da_push(result, sp_str_sub(str, i, j - i));
+      sp_try_goto(sp_da_push(mem, result, sp_str_sub(str, i, j - i)), err, fail);
       i = j + 1;
     }
   }
 
-  sp_da_push(result, sp_str_sub(str, i, j - i));
+  sp_try_goto(sp_da_push(mem, result, sp_str_sub(str, i, j - i)), err, fail);
 
-  return result;
+  *out = result;
+  return SP_OK;
+
+fail:
+  sp_da_free(mem, result);
+  return err;
 }
 sp_str_pair_t sp_str_cleave_c8(sp_str_t str, c8 delimiter) {
   sp_str_pair_t result = sp_zero_s(sp_str_pair_t);
@@ -14286,17 +14387,22 @@ sp_str_t sp_str_truncate(sp_mem_t mem, sp_str_t str, u32 max_len, sp_str_t trail
   return sp_str_concat(mem, sp_str_prefix(str, max_len - trailer.len), trailer);
 }
 
-sp_da(sp_str_t) sp_str_pad_to_longest(sp_mem_t mem, sp_str_t* strs, u32 n) {
+sp_err_t sp_str_pad_to_longest(sp_mem_t mem, sp_str_t* strs, u32 n, sp_da(sp_str_t)* out) {
+  *out = SP_NULLPTR;
+
   u32 max_len = 0;
   sp_for(i, n) {
     if (strs[i].len > max_len) max_len = strs[i].len;
   }
 
-  sp_da(sp_str_t) results = sp_da_new(mem, sp_str_t);
+  sp_da(sp_str_t) results = SP_NULLPTR;
+  sp_try(sp_da_reserve(mem, results, n));
   sp_for(i, n) {
-    sp_da_push(results, sp_str_pad(mem, strs[i], max_len));
+    sp_try(sp_da_push(mem, results, sp_str_pad(mem, strs[i], max_len)));
   }
-  return results;
+
+  *out = results;
+  return SP_OK;
 }
 
 
@@ -15015,71 +15121,6 @@ void sp_os_env_it_next(sp_os_env_it_t* it) {
   }
 }
 
-#elif defined(SP_FREESTANDING)
-typedef struct {
-  sp_env_t env;
-  sp_ht_it_t it;
-} sp_linux_env_it_t;
-
-SP_PRIVATE void sp_linux_env_it_set_current(sp_os_env_it_t* it) {
-  sp_linux_env_it_t* state = (sp_linux_env_it_t*)it->os;
-  it->key = *sp_str_ht_it_getkp(state->env.vars, state->it);
-  it->value = *sp_str_ht_it_getp(state->env.vars, state->it);
-}
-
-sp_str_t sp_os_env_get(sp_str_t key) {
-  for (c8** p = environ; *p; p++) {
-    sp_str_pair_t pair = sp_str_cleave_c8(sp_cstr_as_str(*p), '=');
-    if (sp_str_equal(key, pair.first)) {
-      return pair.second;
-    }
-  }
-  return sp_zero_s(sp_str_t);
-}
-
-sp_os_env_it_t sp_os_env_it_begin() {
-  sp_linux_env_it_t* os = (sp_linux_env_it_t*)sp_mem_os_alloc(sizeof(sp_linux_env_it_t));
-  *os = sp_zero_s(sp_linux_env_it_t);
-
-  sp_mem_t mem = sp_mem_os_new();
-  sp_env_init(mem, &os->env);
-  for (c8** p = environ; *p; p++) {
-    sp_str_pair_t pair = sp_str_cleave_c8(sp_cstr_as_str(*p), '=');
-    sp_str_ht_insert(os->env.vars, pair.first, pair.second);
-  }
-
-  os->it = sp_str_ht_it_init(os->env.vars);
-
-  if (!sp_str_ht_it_valid(os->env.vars, os->it)) {
-    sp_mem_os_free(os, sizeof(sp_linux_env_it_t));
-    return sp_zero_s(sp_os_env_it_t);
-  }
-
-  sp_os_env_it_t it = sp_zero;
-  it.os = os;
-  sp_linux_env_it_set_current(&it);
-  return it;
-}
-
-bool sp_os_env_it_valid(sp_os_env_it_t* it) {
-  sp_linux_env_it_t* state = (sp_linux_env_it_t*)it->os;
-  return state && sp_str_ht_it_valid(state->env.vars, state->it);
-}
-
-void sp_os_env_it_next(sp_os_env_it_t* it) {
-  sp_linux_env_it_t* state = (sp_linux_env_it_t*)it->os;
-  sp_str_ht_it_advance(state->env.vars, state->it);
-
-  if (sp_str_ht_it_valid(state->env.vars, state->it)) {
-    sp_linux_env_it_set_current(it);
-  } else {
-    it->key = sp_zero_s(sp_str_t);
-    it->value = sp_zero_s(sp_str_t);
-    sp_mem_os_free(state, sizeof(sp_linux_env_it_t));
-    it->os = SP_NULLPTR;
-  }
-}
-
 #elif defined(SP_MACOS) || defined(SP_COSMO) || defined(SP_LINUX) || defined(SP_WASM)
 extern c8** environ;
 
@@ -15190,44 +15231,44 @@ bool sp_env_on_compare_key(void* ka, void* kb, u64 size) {
   return true;
 }
 
-void sp_env_table_init(sp_mem_t mem, sp_env_t* env) {
-  sp_ht_init(mem, env->vars);
-  sp_ht_set_fns(env->vars, sp_env_on_hash_key, sp_env_on_compare_key);
-}
+#define sp_env_table_insert(mem, ht, key, value) \
+  sp_ht_insert_ex(mem, ht, key, value, sp_env_on_hash_key, sp_env_on_compare_key)
 #else
-void sp_env_table_init(sp_mem_t mem, sp_env_t* env) {
-  sp_str_ht_init(mem, env->vars);
-}
+#define sp_env_table_insert(mem, ht, key, value) \
+  sp_str_ht_insert(mem, ht, key, value)
 #endif
 
 void sp_env_init(sp_mem_t mem, sp_env_t* env) {
   *env = sp_zero_s(sp_env_t);
   env->mem = mem;
   env->arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
-  sp_env_table_init(mem, env);
 }
 
-sp_env_t sp_env_capture(sp_mem_t mem) {
-  sp_env_t env = sp_zero;
-  sp_env_init(mem, &env);
+sp_err_t sp_env_capture(sp_mem_t mem, sp_env_t* out) {
+  sp_env_init(mem, out);
 
+  sp_err_t err = SP_OK;
   for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
-    sp_env_insert(&env, it.key, it.value);
+    if (!err) err = sp_env_insert(out, it.key, it.value);
   }
-  return env;
+  if (err) sp_env_destroy(out);
+  return err;
 }
 
-sp_env_t sp_env_copy(sp_mem_t mem, sp_env_t* env) {
-  sp_env_t copy = sp_zero;
-  sp_env_init(mem, &copy);
+sp_err_t sp_env_copy(sp_mem_t mem, sp_env_t* env, sp_env_t* out) {
+  sp_env_init(mem, out);
 
   sp_str_ht_for(env->vars, it) {
     sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
     sp_str_t val = *sp_str_ht_it_getp(env->vars, it);
-    sp_env_insert(&copy, key, val);
+    sp_err_t err = sp_env_insert(out, key, val);
+    if (err) {
+      sp_env_destroy(out);
+      return err;
+    }
   }
 
-  return copy;
+  return SP_OK;
 }
 
 u32 sp_env_count(sp_env_t* env) {
@@ -15251,13 +15292,13 @@ bool sp_env_contains_c(sp_env_t* env, const c8* name) {
   return sp_env_contains(env, sp_cstr_as_str(name));
 }
 
-void sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value) {
+sp_err_t sp_env_insert(sp_env_t* env, sp_str_t name, sp_str_t value) {
   sp_mem_t arena = sp_mem_arena_as_allocator(env->arena);
-  sp_str_ht_insert(env->vars, sp_str_copy(arena, name), sp_str_copy(arena, value));
+  return sp_env_table_insert(env->mem, env->vars, sp_str_copy(arena, name), sp_str_copy(arena, value));
 }
 
-void sp_env_insert_c(sp_env_t* env, const c8* name, const c8* value) {
-  sp_env_insert(env, sp_cstr_as_str(name), sp_cstr_as_str(value));
+sp_err_t sp_env_insert_c(sp_env_t* env, const c8* name, const c8* value) {
+  return sp_env_insert(env, sp_cstr_as_str(name), sp_cstr_as_str(value));
 }
 
 void sp_env_erase(sp_env_t* env, sp_str_t name) {
@@ -15269,7 +15310,7 @@ void sp_env_erase_c(sp_env_t* env, const c8* name) {
 }
 
 void sp_env_destroy(sp_env_t* env) {
-  sp_str_ht_free(env->vars);
+  sp_str_ht_free(env->mem, env->vars);
   if (env->arena) sp_mem_arena_destroy(env->arena);
   *env = sp_zero_s(sp_env_t);
 }
@@ -15778,30 +15819,30 @@ u64 sp_thread_get_id() {
 //  █████        █████   █████ ░░░███████░   ░░█████████  ██████████░░█████████ ░░█████████
 // ░░░░░        ░░░░░   ░░░░░    ░░░░░░░      ░░░░░░░░░  ░░░░░░░░░░  ░░░░░░░░░   ░░░░░░░░░
 // @ps @process
-SP_PRIVATE sp_env_t sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem) {
-  sp_env_t env = sp_zero;
+SP_PRIVATE sp_err_t sp_ps_build_env(sp_ps_env_config_t* config, sp_mem_t mem, sp_env_t* out) {
+  *out = sp_zero_s(sp_env_t);
 
   switch (config->mode) {
     case SP_PS_ENV_INHERIT: {
-      env = sp_env_capture(mem);
+      sp_try(sp_env_capture(mem, out));
       break;
     }
     case SP_PS_ENV_EXISTING: {
-      env = sp_env_copy(mem, &config->env);
+      sp_try(sp_env_copy(mem, &config->env, out));
       break;
     }
     case SP_PS_ENV_CLEAN: {
-      sp_env_init(mem, &env);
+      sp_env_init(mem, out);
       break;
     }
   }
 
   sp_for(i, SP_PS_MAX_ENV) {
     if (sp_str_empty(config->extra[i].key)) break;
-    sp_env_insert(&env, config->extra[i].key, config->extra[i].value);
+    sp_try(sp_env_insert(out, config->extra[i].key, config->extra[i].value));
   }
 
-  return env;
+  return SP_OK;
 }
 
 #if defined(SP_POSIX)
@@ -15827,79 +15868,76 @@ struct sp_ps_os {
 };
 
 SP_PRIVATE void sp_ps_set_cwd(posix_spawn_file_actions_t* fa, sp_str_t cwd);
-SP_PRIVATE sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config);
+SP_PRIVATE sp_err_t sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config, sp_da(c8*)* out);
+SP_PRIVATE sp_err_t sp_env_to_posix_envp(sp_mem_t mem, sp_env_t* env, sp_da(c8*)* out);
 
 bool sp_ps_is_fd_valid(sp_sys_fd_t fd) {
   return fd != SP_SYS_INVALID_FD;
 }
 
-sp_da(c8*) sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config) {
-  sp_da(c8*) args = sp_da_new(mem, c8*);
+sp_err_t sp_ps_build_posix_args(sp_mem_t mem, sp_ps_config_t* config, sp_da(c8*)* out) {
+  sp_da(c8*) args = SP_NULLPTR;
 
-  sp_da_push(args, sp_str_to_cstr(mem, config->command));
+  sp_try(sp_da_push(mem, args, sp_str_to_cstr(mem, config->command)));
 
   sp_carr_for(config->args, it) {
     sp_str_t arg = config->args[it];
     if (sp_str_empty(arg)) break;
 
-    sp_da_push(args, sp_str_to_cstr(mem, arg));
+    sp_try(sp_da_push(mem, args, sp_str_to_cstr(mem, arg)));
   }
 
   sp_da_for(config->dyn_args, it) {
-    sp_da_push(args, sp_str_to_cstr(mem, config->dyn_args[it]));
+    sp_try(sp_da_push(mem, args, sp_str_to_cstr(mem, config->dyn_args[it])));
   }
 
-  sp_da_push(args, SP_NULLPTR);
-  return args;
+  sp_try(sp_da_push(mem, args, SP_NULLPTR));
+  *out = args;
+  return SP_OK;
 }
 
-sp_ps_config_t sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src) {
-  sp_ps_config_t dst = sp_zero;
+sp_err_t sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src, sp_ps_config_t* out) {
+  *out = sp_zero_s(sp_ps_config_t);
 
-  dst.command = sp_str_copy(mem, src->command);
-  dst.cwd = sp_str_copy(mem, src->cwd);
+  out->command = sp_str_copy(mem, src->command);
+  out->cwd = sp_str_copy(mem, src->cwd);
 
   for (u32 i = 0; i < SP_PS_MAX_ARGS; i++) {
     if (sp_str_empty(src->args[i])) break;
-    dst.args[i] = sp_str_copy(mem, src->args[i]);
+    out->args[i] = sp_str_copy(mem, src->args[i]);
   }
 
   // Copy dynamic args
-  if (src->dyn_args) {
-    sp_da_init(mem, dst.dyn_args);
-    sp_da_for(src->dyn_args, i) {
-      sp_da_push(dst.dyn_args, sp_str_copy(mem, src->dyn_args[i]));
-    }
+  sp_da_for(src->dyn_args, i) {
+    sp_try(sp_da_push(mem, out->dyn_args, sp_str_copy(mem, src->dyn_args[i])));
   }
 
-  dst.env.mode = src->env.mode;
-  sp_env_init(mem, &dst.env.env);
+  out->env.mode = src->env.mode;
+  sp_env_init(mem, &out->env.env);
 
   sp_env_table_t ht = src->env.env.vars;
   for (sp_ht_it_t it = sp_ht_it_init(ht); sp_ht_it_valid(ht, it); sp_ht_it_advance(ht, it)) {
     sp_str_t key = *sp_ht_it_getkp(ht, it);
     sp_str_t val = *sp_ht_it_getp(ht, it);
-    sp_env_insert(&dst.env.env, key, val);
+    sp_try(sp_env_insert(&out->env.env, key, val));
   }
 
   for (u32 i = 0; i < SP_PS_MAX_ENV; i++) {
     if (sp_str_empty(src->env.extra[i].key)) break;
-    dst.env.extra[i].key = sp_str_copy(mem, src->env.extra[i].key);
-    dst.env.extra[i].value = sp_str_copy(mem, src->env.extra[i].value);
+    out->env.extra[i].key = sp_str_copy(mem, src->env.extra[i].key);
+    out->env.extra[i].value = sp_str_copy(mem, src->env.extra[i].value);
   }
 
-  dst.io = src->io;
+  out->io = src->io;
 
-  return dst;
+  return SP_OK;
 }
 
-void sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg) {
+sp_err_t sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg) {
   SP_ASSERT(config);
 
-  if (!config->dyn_args) sp_da_init(mem, config->dyn_args);
-  if (!sp_str_empty(arg)) {
-    sp_da_push(config->dyn_args, arg);
-  }
+  if (sp_str_empty(arg)) return SP_OK;
+  return sp_da_push(mem, config->dyn_args, arg);
 }
 
 bool sp_ps_configure_io_in(sp_ps_io_in_config_t* io, sp_ps_stdio_config_entry_t* p) {
@@ -15963,8 +16001,8 @@ bool sp_ps_configure_io_out(sp_ps_io_out_config_t* io, sp_ps_stdio_config_entry_
   SP_UNREACHABLE_RETURN(false);
 }
 
-c8** sp_env_to_posix_envp(sp_mem_t mem, sp_env_t* env) {
-  sp_da(c8*) envp = sp_da_new(mem, c8*);
+sp_err_t sp_env_to_posix_envp(sp_mem_t mem, sp_env_t* env, sp_da(c8*)* out) {
+  sp_da(c8*) envp = SP_NULLPTR;
 
   sp_str_ht_for(env->vars, it) {
     sp_str_t key = *sp_str_ht_it_getkp(env->vars, it);
@@ -15976,11 +16014,12 @@ c8** sp_env_to_posix_envp(sp_mem_t mem, sp_env_t* env) {
     entry[key.len] = '=';
     sp_mem_copy(entry + key.len + 1, val.data, val.len);
     entry[size - 1] = 0;
-    sp_da_push(envp, entry);
+    sp_try(sp_da_push(mem, envp, entry));
   }
 
-  sp_da_push(envp, SP_NULLPTR);
-  return envp;
+  sp_try(sp_da_push(mem, envp, SP_NULLPTR));
+  *out = envp;
+  return SP_OK;
 }
 
 sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
@@ -15991,9 +16030,15 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
   SP_ASSERT(!sp_str_empty(config.command));
 
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_for(mem);
-  c8** argv = sp_ps_build_posix_args(scratch.mem, &config);
-  sp_env_t env = sp_ps_build_env(&config.env, scratch.mem);
-  c8** envp = sp_env_to_posix_envp(scratch.mem, &env);
+  sp_da(c8*) argv = SP_NULLPTR;
+  sp_da(c8*) envp = SP_NULLPTR;
+  sp_env_t env = sp_zero;
+  if (sp_ps_build_posix_args(scratch.mem, &config, &argv) ||
+      sp_ps_build_env(&config.env, scratch.mem, &env) ||
+      sp_env_to_posix_envp(scratch.mem, &env, &envp)) {
+    sp_mem_end_scratch(scratch);
+    return sp_zero_s(sp_ps_t);
+  }
 
   posix_spawnattr_t attr;
   posix_spawn_file_actions_t fa;
@@ -16685,53 +16730,48 @@ SP_PRIVATE void sp_ps_win32_close_events(sp_ps_os_t* os) {
   }
 }
 
-sp_ps_config_t sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src) {
-  sp_ps_config_t dst = sp_zero;
+sp_err_t sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src, sp_ps_config_t* out) {
+  *out = sp_zero_s(sp_ps_config_t);
 
-  dst.command = sp_str_copy(mem, src->command);
-  dst.cwd = sp_str_copy(mem, src->cwd);
+  out->command = sp_str_copy(mem, src->command);
+  out->cwd = sp_str_copy(mem, src->cwd);
 
   sp_for(i, SP_PS_MAX_ARGS) {
     if (sp_str_empty(src->args[i])) {
       break;
     }
-    dst.args[i] = sp_str_copy(mem, src->args[i]);
+    out->args[i] = sp_str_copy(mem, src->args[i]);
   }
 
-  if (src->dyn_args) {
-    sp_da_init(mem, dst.dyn_args);
-    sp_da_for(src->dyn_args, i) {
-      sp_da_push(dst.dyn_args, sp_str_copy(mem, src->dyn_args[i]));
-    }
+  sp_da_for(src->dyn_args, i) {
+    sp_try(sp_da_push(mem, out->dyn_args, sp_str_copy(mem, src->dyn_args[i])));
   }
 
-  dst.env.mode = src->env.mode;
-  sp_env_init(mem, &dst.env.env);
+  out->env.mode = src->env.mode;
+  sp_env_init(mem, &out->env.env);
   sp_ht_for(src->env.env.vars, it) {
     sp_str_t key = *sp_ht_it_getkp(src->env.env.vars, it);
     sp_str_t value = *sp_ht_it_getp(src->env.env.vars, it);
-    sp_env_insert(&dst.env.env, key, value);
+    sp_try(sp_env_insert(&out->env.env, key, value));
   }
 
   sp_for(i, SP_PS_MAX_ENV) {
     if (sp_str_empty(src->env.extra[i].key)) {
       break;
     }
-    dst.env.extra[i].key = sp_str_copy(mem, src->env.extra[i].key);
-    dst.env.extra[i].value = sp_str_copy(mem, src->env.extra[i].value);
+    out->env.extra[i].key = sp_str_copy(mem, src->env.extra[i].key);
+    out->env.extra[i].value = sp_str_copy(mem, src->env.extra[i].value);
   }
 
-  dst.io = src->io;
-  return dst;
+  out->io = src->io;
+  return SP_OK;
 }
 
-void sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg) {
+sp_err_t sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg) {
   SP_ASSERT(config);
 
-  if (!config->dyn_args) sp_da_init(mem, config->dyn_args);
-  if (!sp_str_empty(arg)) {
-    sp_da_push(config->dyn_args, arg);
-  }
+  if (sp_str_empty(arg)) return SP_OK;
+  return sp_da_push(mem, config->dyn_args, arg);
 }
 
 sp_str_t sp_env_to_win32_block(sp_mem_t mem, sp_env_t* env) {
@@ -16763,7 +16803,11 @@ sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
 
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch_for(mem);
   c8* cmdline = sp_ps_build_windows_cmdline(scratch.mem, &config);
-  sp_env_t env = sp_ps_build_env(&config.env, scratch.mem);
+  sp_env_t env = sp_zero;
+  if (sp_ps_build_env(&config.env, scratch.mem, &env)) {
+    sp_mem_end_scratch(scratch);
+    return sp_zero_s(sp_ps_t);
+  }
   sp_str_t block = sp_env_to_win32_block(scratch.mem, &env);
 
   c8* cwd = sp_str_empty(config.cwd) ? SP_NULLPTR : sp_str_to_cstr(scratch.mem, config.cwd);
@@ -17175,18 +17219,17 @@ struct sp_ps_os {
   s32 dummy;
 };
 
-sp_ps_config_t sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src) {
+sp_err_t sp_ps_config_copy(sp_mem_t mem, const sp_ps_config_t* src, sp_ps_config_t* out) {
   SP_UNIMPLEMENTED();
   SP_UNUSED(mem);
-  return *src;
+  *out = *src;
+  return SP_OK;
 }
 
-void sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg) {
+sp_err_t sp_ps_config_add_arg(sp_mem_t mem, sp_ps_config_t* config, sp_str_t arg) {
   SP_UNIMPLEMENTED();
-  if (!config->dyn_args) sp_da_init(mem, config->dyn_args);
-  if (!sp_str_empty(arg)) {
-    sp_da_push(config->dyn_args, arg);
-  }
+  if (sp_str_empty(arg)) return SP_OK;
+  return sp_da_push(mem, config->dyn_args, arg);
 }
 
 sp_ps_t sp_ps_create(sp_mem_t mem, sp_ps_config_t config) {
@@ -17310,9 +17353,9 @@ sp_ps_output_t sp_ps_run_c(sp_mem_t mem, sp_ps_config_cstr_t config) {
 // @fmon @file_monitor
 SP_PRIVATE void sp_fmon_os_init(sp_fmon_t* monitor);
 SP_PRIVATE void sp_fmon_os_deinit(sp_fmon_t* monitor);
-SP_PRIVATE void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
-SP_PRIVATE void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
-SP_PRIVATE void sp_fmon_os_process_changes(sp_fmon_t* monitor);
+SP_PRIVATE sp_err_t sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path);
+SP_PRIVATE sp_err_t sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path);
+SP_PRIVATE sp_err_t sp_fmon_os_process_changes(sp_fmon_t* monitor);
 
 void sp_fmon_init(sp_mem_t mem, sp_fmon_t* monitor, sp_fmon_fn_t fn, sp_fmon_event_kind_t events, void* userdata) {
   monitor->mem = mem;
@@ -17320,8 +17363,8 @@ void sp_fmon_init(sp_mem_t mem, sp_fmon_t* monitor, sp_fmon_fn_t fn, sp_fmon_eve
   monitor->events_to_watch = events;
   monitor->userdata = userdata;
   monitor->debounce_time_ms = 0;
-  sp_da_init(mem, monitor->changes);
-  sp_da_init(mem, monitor->cache);
+  monitor->changes = SP_NULLPTR;
+  monitor->cache = SP_NULLPTR;
   sp_fmon_os_init(monitor);
 }
 
@@ -17329,16 +17372,16 @@ void sp_fmon_deinit(sp_fmon_t* monitor) {
   sp_fmon_os_deinit(monitor);
 }
 
-void sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path) {
-  sp_fmon_os_add_dir(monitor, path);
+sp_err_t sp_fmon_add_dir(sp_fmon_t* monitor, sp_str_t path) {
+  return sp_fmon_os_add_dir(monitor, path);
 }
 
-void sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t path) {
-  sp_fmon_os_add_file(monitor, path);
+sp_err_t sp_fmon_add_file(sp_fmon_t* monitor, sp_str_t path) {
+  return sp_fmon_os_add_file(monitor, path);
 }
 
-void sp_fmon_process_changes(sp_fmon_t* monitor) {
-  sp_fmon_os_process_changes(monitor);
+sp_err_t sp_fmon_process_changes(sp_fmon_t* monitor) {
+  return sp_fmon_os_process_changes(monitor);
 }
 
 void sp_fmon_emit_changes(sp_fmon_t* monitor) {
@@ -17390,6 +17433,7 @@ struct sp_fmon_os {
   sp_mem_arena_t* watch_arena;
   sp_mem_arena_t* event_arena;
   struct { sp_mem_t watch; sp_mem_t event; } mem;
+  sp_err_t err;
 };
 #else
 struct sp_fmon_os {
@@ -17406,13 +17450,11 @@ struct sp_fmon_os {
 #endif
 
 #ifdef SP_WIN32
-SP_PRIVATE void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events);
+SP_PRIVATE sp_err_t sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events);
 SP_PRIVATE void sp_win32_fmon_issue_read(sp_fmon_t* monitor, sp_fmon_dir_t* info);
 
 void sp_fmon_os_init(sp_fmon_t* monitor) {
   sp_fmon_os_t* os = sp_alloc_type(monitor->mem, sp_fmon_os_t);
-  sp_da_init(monitor->mem, os->dirs);
-  sp_da_init(monitor->mem, os->watch_files);
   monitor->os = os;
 }
 
@@ -17432,20 +17474,20 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
       sp_free(monitor->mem, info->notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
     }
   }
-  sp_da_free(os->dirs);
-  sp_da_free(os->watch_files);
+  sp_da_free(monitor->mem, os->dirs);
+  sp_da_free(monitor->mem, os->watch_files);
   sp_free(monitor->mem, os, sizeof(sp_fmon_os_t));
   monitor->os = NULL;
 }
 
-void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
+sp_err_t sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   sp_fmon_os_t* os = monitor->os;
 
   sp_win32_handle_t event = CreateEventW(NULL, false, false, NULL);
-  if (!event) return;
+  if (!event) return sp_sys_err_from_win32(GetLastError());
 
   sp_sys_fd_t handle = SP_SYS_INVALID_FD;
-  if (!SP_NT_SUCCESS(sp_sys_nt_open(
+  sp_nt_status_t status = sp_sys_nt_open(
     sp_fs_get_cwd().fd,
     path,
     FILE_LIST_DIRECTORY,
@@ -17454,32 +17496,41 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
     SP_NT_FILE_DIRECTORY_FILE | SP_NT_FILE_OPEN_FOR_BACKUP_INTENT,
     0,
     &handle
-  ))) {
+  );
+  if (!SP_NT_SUCCESS(status)) {
     CloseHandle(event);
-    return;
+    return sp_sys_err_from_nt(status);
   }
 
   sp_fmon_dir_t dir = sp_zero;
   dir.overlapped.hEvent = event;
   dir.handle = (sp_win32_handle_t)handle;
-  if (sp_fs_canonicalize_path(monitor->mem, path, &dir.path)) {
+  sp_err_t err = sp_fs_canonicalize_path(monitor->mem, path, &dir.path);
+  if (err) {
     CloseHandle(dir.handle);
     CloseHandle(event);
-    return;
+    return err;
   }
   dir.notify_information = sp_alloc(monitor->mem, SP_FILE_MONITOR_BUFFER_SIZE);
   sp_mem_zero(dir.notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
 
-  sp_da_push(os->dirs, dir);
+  err = sp_da_push(monitor->mem, os->dirs, dir);
+  if (err) {
+    sp_free(monitor->mem, dir.notify_information, SP_FILE_MONITOR_BUFFER_SIZE);
+    CloseHandle(dir.handle);
+    CloseHandle(event);
+    return err;
+  }
   sp_fmon_dir_t* info = &os->dirs[sp_da_size(os->dirs) - 1];
   sp_win32_fmon_issue_read(monitor, info);
+  return SP_OK;
 }
 
-void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+sp_err_t sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
   sp_fmon_os_t* os = monitor->os;
   sp_str_t canonical = sp_zero;
-  if (sp_fs_canonicalize_path(monitor->mem, file_path, &canonical)) return;
-  sp_da_push(os->watch_files, canonical);
+  sp_try(sp_fs_canonicalize_path(monitor->mem, file_path, &canonical));
+  sp_try(sp_da_push(monitor->mem, os->watch_files, canonical));
 
   sp_str_t dir_path = sp_fs_parent_path(canonical);
   if (dir_path.len > 0) {
@@ -17493,9 +17544,10 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
       }
     }
     if (!found) {
-      sp_fmon_os_add_dir(monitor, dir_path);
+      sp_try(sp_fmon_os_add_dir(monitor, dir_path));
     }
   }
+  return SP_OK;
 }
 
 SP_PRIVATE bool sp_win32_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path) {
@@ -17506,8 +17558,9 @@ SP_PRIVATE bool sp_win32_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path)
   return false;
 }
 
-void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+sp_err_t sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   sp_fmon_os_t* os = monitor->os;
+  sp_err_t err = SP_OK;
 
   sp_da_for(os->dirs, i) {
     sp_fmon_dir_t* info = &os->dirs[i];
@@ -17551,7 +17604,8 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 
         if (sp_win32_fmon_file_matches(os, full_path)) {
           sp_str_t file_name = sp_fs_get_name(full_path);
-          sp_win32_fmon_add_change(monitor, full_path, file_name, events);
+          sp_err_t change_err = sp_win32_fmon_add_change(monitor, full_path, file_name, events);
+          if (!err) err = change_err;
         }
       }
 
@@ -17563,15 +17617,16 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   }
 
   sp_fmon_emit_changes(monitor);
+  return err;
 }
 
-void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events) {
+sp_err_t sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t file_name, sp_fmon_event_kind_t events) {
   sp_sys_file_meta_t meta = sp_zero;
-  if (!sp_fs_get_link_metadata(file_path, &meta) && meta.kind == SP_FS_KIND_DIR) return;
+  if (!sp_fs_get_link_metadata(file_path, &meta) && meta.kind == SP_FS_KIND_DIR) return SP_OK;
 
   if (file_name.data && file_name.len > 0) {
-    if (file_name.data[0] == '.' && file_name.len > 1 && file_name.data[1] == '#') return;
-    if (file_name.data[0] ==  '#') return;
+    if (file_name.data[0] == '.' && file_name.len > 1 && file_name.data[1] == '#') return SP_OK;
+    if (file_name.data[0] ==  '#') return SP_OK;
   }
 
   // Coalesce within the current batch
@@ -17579,7 +17634,7 @@ void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t f
     sp_fmon_event_t* change = &monitor->changes[i];
     if (sp_str_equal(change->file_path, file_path)) {
       change->events = (sp_fmon_event_kind_t)(change->events | events);
-      return;
+      return SP_OK;
     }
   }
 
@@ -17588,7 +17643,7 @@ void sp_win32_fmon_add_change(sp_fmon_t* monitor, sp_str_t file_path, sp_str_t f
     .file_name = sp_str_copy(monitor->mem, file_name),
     .events = events,
   };
-  sp_da_push(monitor->changes, change);
+  return sp_da_push(monitor->mem, monitor->changes, change);
 }
 
 void sp_win32_fmon_issue_read(sp_fmon_t* monitor, sp_fmon_dir_t* info) {
@@ -17617,18 +17672,14 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
     linux_monitor->fd = SP_SYS_INVALID_FD;
   }
 
-  sp_da_init(monitor->mem, linux_monitor->fds);
-  sp_da_init(monitor->mem, linux_monitor->paths);
-  sp_str_ht_init(monitor->mem, linux_monitor->files);
-
   monitor->os = linux_monitor;
 }
 
-void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
-  if (!monitor->os) return;
+sp_err_t sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
+  if (!monitor->os) return SP_OK;
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
 
-  if (os->fd == SP_SYS_INVALID_FD) return;
+  if (os->fd == SP_SYS_INVALID_FD) return SP_OK;
 
   c8 path_cstr[SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path.data, path.len, path_cstr, SP_PATH_MAX);
@@ -17644,13 +17695,16 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
     mask |= SP_IN_DELETE | SP_IN_MOVED_FROM;
   }
 
+  // The two arrays are parallel; neither may end up longer than the other
+  sp_try(sp_da_grow(monitor->mem, os->fds, 1));
+  sp_try(sp_da_grow(monitor->mem, os->paths, 1));
+
   s32 wd = sp_syscall_inotify_add_watch(os->fd, path_cstr, mask);
+  if (wd < 0) return sp_sys_err_from_errno(-wd);
 
-  if (wd >= 0) {
-    sp_da_push(os->fds, wd);
-    sp_da_push(os->paths, sp_str_copy(monitor->mem, path));
-  }
-
+  sp_try(sp_da_push(monitor->mem, os->fds, wd));
+  sp_try(sp_da_push(monitor->mem, os->paths, sp_str_copy(monitor->mem, path)));
+  return SP_OK;
 }
 
 void sp_fmon_os_deinit(sp_fmon_t* monitor) {
@@ -17659,19 +17713,20 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   if (os->fd != SP_SYS_INVALID_FD) {
     sp_sys_close(os->fd);
   }
-  sp_ht_free(os->files);
+  sp_ht_free(monitor->mem, os->files);
 }
 
-void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+sp_err_t sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
   sp_str_t canonical = sp_zero;
-  if (sp_fs_canonicalize_path(monitor->mem, file_path, &canonical)) return;
-  sp_str_ht_insert(os->files, canonical, 1);
+  sp_try(sp_fs_canonicalize_path(monitor->mem, file_path, &canonical));
+  sp_try(sp_str_ht_insert(monitor->mem, os->files, canonical, 1));
 
   sp_str_t dir_path = sp_fs_parent_path(canonical);
   if (!sp_str_empty(dir_path)) {
-    sp_fmon_os_add_dir(monitor, dir_path);
+    sp_try(sp_fmon_os_add_dir(monitor, dir_path));
   }
+  return SP_OK;
 }
 
 SP_PRIVATE bool sp_linux_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path) {
@@ -17679,14 +17734,16 @@ SP_PRIVATE bool sp_linux_fmon_file_matches(sp_fmon_os_t* os, sp_str_t full_path)
   return sp_ht_getp(os->files, full_path);
 }
 
-void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
-  if (!monitor->os) return;
+sp_err_t sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+  if (!monitor->os) return SP_OK;
 
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
-  if (os->fd == SP_SYS_INVALID_FD) return;
+  if (os->fd == SP_SYS_INVALID_FD) return SP_OK;
 
   u64 len = 0;
-  if (sp_sys_read(os->fd, os->buffer, sizeof(os->buffer), &len) != SP_OK || !len) return;
+  if (sp_sys_read(os->fd, os->buffer, sizeof(os->buffer), &len) != SP_OK || !len) return SP_OK;
+
+  sp_err_t err = SP_OK;
 
   u8* buffer = (u8*)os->buffer;
   u8* ptr = buffer;
@@ -17731,7 +17788,8 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
             .events = events,
             .time = 0  // TODO: get actual time
           };
-          sp_da_push(monitor->changes, change);
+          sp_err_t push_err = sp_da_push(monitor->mem, monitor->changes, change);
+          if (!err) err = push_err;
         }
         break;
       }
@@ -17742,6 +17800,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
 
   // Emit changes with debouncing
   sp_fmon_emit_changes(monitor);
+  return err;
 }
 
 #elif defined(SP_MACOS)
@@ -17799,7 +17858,9 @@ SP_PRIVATE void sp_fmon_fsevents_callback(
         .file_name = sp_fs_get_name(file_path),
         .events = kind,
       };
-      sp_da_push(monitor->changes, change);
+      // Nothing to return an error to on the dispatch queue; hand it to the next process_changes()
+      sp_err_t err = sp_da_push(monitor->mem, monitor->changes, change);
+      if (!os->err) os->err = err;
     }
   }
 
@@ -17883,8 +17944,6 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
   os->event_arena = sp_mem_arena_new_ex(monitor->mem, SP_FMON_ARENA_SIZE, SP_MEM_ALIGNMENT);
   os->mem.watch = sp_mem_arena_as_allocator(os->watch_arena);
   os->mem.event = sp_mem_arena_as_allocator(os->event_arena);
-  sp_da_init(monitor->mem, os->watch_paths);
-  sp_da_init(monitor->mem, os->watch_files);
   monitor->os = os;
 }
 
@@ -17906,35 +17965,38 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   monitor->os = SP_NULLPTR;
 }
 
-void sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir) {
+sp_err_t sp_fmon_os_push_dir(sp_fmon_os_t* os, sp_str_t dir) {
   sp_mutex_lock(&os->mutex);
-  sp_da_push(os->watch_paths, sp_str_copy(os->mem.watch, dir));
+  sp_err_t err = sp_da_push(os->monitor->mem, os->watch_paths, sp_str_copy(os->mem.watch, dir));
   sp_mutex_unlock(&os->mutex);
+  return err;
 }
 
-void sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file) {
+sp_err_t sp_fmon_os_push_file(sp_fmon_os_t* os, sp_str_t file) {
   sp_mutex_lock(&os->mutex);
-  sp_da_push(os->watch_files, sp_str_copy(os->mem.watch, file));
+  sp_err_t err = sp_da_push(os->monitor->mem, os->watch_files, sp_str_copy(os->mem.watch, file));
   sp_mutex_unlock(&os->mutex);
+  return err;
 }
 
-void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
-  sp_fmon_os_push_dir(monitor->os, path);
+sp_err_t sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
+  sp_try(sp_fmon_os_push_dir(monitor->os, path));
   sp_fmon_fsevents_recreate_stream(monitor);
+  return SP_OK;
 }
 
-void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
+sp_err_t sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
   sp_fmon_os_t* os = monitor->os;
 
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
   sp_str_t canonical = sp_zero;
-  if (sp_fs_canonicalize_path(scratch.mem, path, &canonical)) {
+  sp_err_t err = sp_fs_canonicalize_path(scratch.mem, path, &canonical);
+  if (!err) err = sp_fmon_os_push_file(os, canonical);
+  if (err) {
     sp_mem_end_scratch(scratch);
-    return;
+    return err;
   }
-
-  sp_fmon_os_push_file(os, canonical);
 
   sp_str_t dir = sp_fs_parent_path(canonical);
 
@@ -17949,22 +18011,26 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
   sp_mutex_unlock(&os->mutex);
 
   if (!found) {
-    sp_fmon_os_push_dir(os, dir);
-    sp_fmon_fsevents_recreate_stream(monitor);
+    err = sp_fmon_os_push_dir(os, dir);
+    if (!err) sp_fmon_fsevents_recreate_stream(monitor);
   }
 
   sp_mem_end_scratch(scratch);
+  return err;
 }
 
-void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+sp_err_t sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   sp_fmon_os_t* os = monitor->os;
 
   dispatch_sync(os->queue, ^{});
 
   sp_mutex_lock(&os->mutex);
+  sp_err_t err = os->err;
+  os->err = SP_OK;
   sp_fmon_emit_changes(monitor);
   sp_mem_arena_clear(os->event_arena);
   sp_mutex_unlock(&os->mutex);
+  return err;
 }
 
 #else
@@ -17977,8 +18043,6 @@ void sp_fmon_os_init(sp_fmon_t* monitor) {
 
   os->kq = kqueue();
 
-  sp_da_init(monitor->mem, os->fds);
-  sp_da_init(monitor->mem, os->watch_paths);
   monitor->os = os;
 }
 
@@ -17994,16 +18058,16 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   }
 }
 
-void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
-  if (!monitor->os) return;
+sp_err_t sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
+  if (!monitor->os) return SP_OK;
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
 
-  if (os->kq == -1) return;
+  if (os->kq == -1) return SP_OK;
 
   c8 cstr[SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
   s32 fd = open(cstr, O_RDONLY | O_EVTONLY);
-  if (fd == -1) return;
+  if (fd == -1) return sp_sys_err_from_errno(errno);
 
   u32 fflags = 0;
   if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
@@ -18019,24 +18083,30 @@ void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t path) {
   struct kevent change;
   EV_SET(&change, fd, EVFILT_VNODE, EV_ADD | EV_CLEAR, fflags, 0, NULL);
 
-  if (kevent(os->kq, &change, 1, NULL, 0, NULL) != -1) {
-    sp_da_push(os->fds, fd);
-    sp_da_push(os->watch_paths, sp_str_copy(monitor->mem, path));
-  } else {
+  // The two arrays are parallel; neither may end up longer than the other
+  sp_err_t err = sp_da_grow(monitor->mem, os->fds, 1);
+  if (!err) err = sp_da_grow(monitor->mem, os->watch_paths, 1);
+  if (!err && kevent(os->kq, &change, 1, NULL, 0, NULL) == -1) err = sp_sys_err_from_errno(errno);
+  if (err) {
     close(fd);
+    return err;
   }
+
+  sp_try(sp_da_push(monitor->mem, os->fds, fd));
+  sp_try(sp_da_push(monitor->mem, os->watch_paths, sp_str_copy(monitor->mem, path)));
+  return SP_OK;
 }
 
-void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
-  if (!monitor->os) return;
+sp_err_t sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
+  if (!monitor->os) return SP_OK;
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
 
-  if (os->kq == -1) return;
+  if (os->kq == -1) return SP_OK;
 
   c8 cstr[SP_PATH_MAX] = sp_zero;
   sp_cstr_copy_to_n(path.data, path.len, cstr, SP_PATH_MAX);
   s32 fd = open(cstr, O_RDONLY | O_EVTONLY);
-  if (fd == -1) return;
+  if (fd == -1) return sp_sys_err_from_errno(errno);
 
   u32 fflags = 0;
   if (monitor->events_to_watch & SP_FILE_CHANGE_EVENT_MODIFIED) {
@@ -18049,25 +18119,33 @@ void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t path) {
   struct kevent change;
   EV_SET(&change, fd, EVFILT_VNODE, EV_ADD | EV_CLEAR, fflags, 0, NULL);
 
-  if (kevent(os->kq, &change, 1, NULL, 0, NULL) != -1) {
-    sp_da_push(os->fds, fd);
-    sp_da_push(os->watch_paths, sp_str_copy(monitor->mem, path));
-  } else {
+  // The two arrays are parallel; neither may end up longer than the other
+  sp_err_t err = sp_da_grow(monitor->mem, os->fds, 1);
+  if (!err) err = sp_da_grow(monitor->mem, os->watch_paths, 1);
+  if (!err && kevent(os->kq, &change, 1, NULL, 0, NULL) == -1) err = sp_sys_err_from_errno(errno);
+  if (err) {
     close(fd);
+    return err;
   }
+
+  sp_try(sp_da_push(monitor->mem, os->fds, fd));
+  sp_try(sp_da_push(monitor->mem, os->watch_paths, sp_str_copy(monitor->mem, path)));
+  return SP_OK;
 }
 
-void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
-  if (!monitor->os) return;
+sp_err_t sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+  if (!monitor->os) return SP_OK;
 
   sp_fmon_os_t* os = (sp_fmon_os_t*)monitor->os;
-  if (os->kq == -1) return;
+  if (os->kq == -1) return SP_OK;
 
   struct kevent events[16];
   struct timespec timeout = {0, 0};
 
   s32 nev = kevent(os->kq, NULL, 0, events, 16, &timeout);
-  if (nev <= 0) return;
+  if (nev <= 0) return SP_OK;
+
+  sp_err_t err = SP_OK;
 
   for (s32 i = 0; i < nev; i++) {
     struct kevent* ev = &events[i];
@@ -18098,7 +18176,8 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
             .events = event_kind,
             .time = 0
           };
-          sp_da_push(monitor->changes, change);
+          sp_err_t push_err = sp_da_push(monitor->mem, monitor->changes, change);
+          if (!err) err = push_err;
         }
         break;
       }
@@ -18106,6 +18185,7 @@ void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   }
 
   sp_fmon_emit_changes(monitor);
+  return err;
 }
 
 #endif // SP_FMON_MACOS_USE_FSEVENTS
@@ -18119,16 +18199,19 @@ void sp_fmon_os_deinit(sp_fmon_t* monitor) {
   sp_unused(monitor);
 }
 
-void sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
+sp_err_t sp_fmon_os_add_dir(sp_fmon_t* monitor, sp_str_t directory_path) {
   sp_unused(monitor); sp_unused(directory_path);
+  return SP_OK;
 }
 
-void sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
+sp_err_t sp_fmon_os_add_file(sp_fmon_t* monitor, sp_str_t file_path) {
   sp_unused(monitor); sp_unused(file_path);
+  return SP_OK;
 }
 
-void sp_fmon_os_process_changes(sp_fmon_t* monitor) {
+sp_err_t sp_fmon_os_process_changes(sp_fmon_t* monitor) {
   sp_unused(monitor);
+  return SP_OK;
 }
 
 #else
@@ -19169,16 +19252,34 @@ SP_API s32 sp_app_run(sp_app_config_t config) {
 
 
 
-void* sp_mem_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
+sp_err_t sp_mem_os_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out) {
   (void)user_data;
+  *out = SP_NULLPTR;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC:
-    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:  return sp_mem_os_alloc(size);
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED: return sp_sys_alloc(size, out);
     case SP_ALLOCATOR_MODE_RESIZE:
-    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: return sp_mem_os_realloc(ptr, old_size, size);
-    case SP_ALLOCATOR_MODE_FREE:       sp_mem_os_free(ptr, old_size); return SP_NULLPTR;
+    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: {
+      if (!ptr) return sp_sys_alloc(size, out);
+      if (!size) {
+        sp_mem_os_free(ptr, old_size);
+        return SP_OK;
+      }
+      if (size == old_size) {
+        *out = ptr;
+        return SP_OK;
+      }
+
+      void* mem = SP_NULLPTR;
+      sp_try(sp_sys_alloc(size, &mem));
+      sp_mem_copy(mem, ptr, sp_min(old_size, size));
+      sp_mem_os_free(ptr, old_size);
+      *out = mem;
+      return SP_OK;
+    }
+    case SP_ALLOCATOR_MODE_FREE: sp_mem_os_free(ptr, old_size); return SP_OK;
   }
-  return SP_NULLPTR;
+  return SP_ERR;
 }
 
 sp_mem_t sp_mem_os_new() {
@@ -19226,8 +19327,9 @@ void sp_mem_heap_track_reserve(sp_mem_heap_t* heap, u64 bytes) {
 }
 
 sp_mem_heap_t* sp_mem_heap_new() {
-  sp_mem_heap_t* heap = sp_sys_alloc_type(sp_mem_heap_t);
-  if (!heap) return SP_NULLPTR;
+  void* ptr = SP_NULLPTR;
+  if (sp_sys_alloc(sizeof(sp_mem_heap_t), &ptr)) return SP_NULLPTR;
+  sp_mem_heap_t* heap = (sp_mem_heap_t*)ptr;
   sp_mem_heap_track_reserve(heap, sp_align_offset(sizeof(sp_mem_heap_t), SP_MEM_HEAP_SPAN_SIZE));
   return heap;
 }
@@ -19261,14 +19363,16 @@ sp_mem_heap_span_t* sp_mem_heap_find_span(sp_mem_heap_t* heap, void* ptr) {
   return span;
 }
 
-static sp_mem_heap_span_t* sp_mem_heap_span_new(sp_mem_heap_t* heap, u32 bucket) {
+static sp_err_t sp_mem_heap_span_new(sp_mem_heap_t* heap, u32 bucket, sp_mem_heap_span_t** out) {
+  *out = SP_NULLPTR;
   sp_mem_heap_span_t* span = heap->recycled;
   if (span) {
     sp_mem_heap_list_unlink(&heap->recycled, span);
   }
   else {
-    sp_mem_heap_segment_t* segment = sp_ptr_cast(sp_mem_heap_segment_t*, sp_sys_alloc(SP_MEM_HEAP_SEGMENT_SIZE));
-    if (!segment) return SP_NULLPTR;
+    void* ptr = SP_NULLPTR;
+    sp_try(sp_sys_alloc(SP_MEM_HEAP_SEGMENT_SIZE, &ptr));
+    sp_mem_heap_segment_t* segment = sp_ptr_cast(sp_mem_heap_segment_t*, ptr);
     sp_assert(sp_align_down(segment, SP_MEM_HEAP_SPAN_SIZE) == sp_uptr(segment));
     segment->next = heap->segments;
     heap->segments = segment;
@@ -19301,7 +19405,8 @@ static sp_mem_heap_span_t* sp_mem_heap_span_new(sp_mem_heap_t* heap, u32 bucket)
   span->free_head = head;
 
   sp_mem_heap_list_push(&heap->buckets[bucket].partial, span);
-  return span;
+  *out = span;
+  return SP_OK;
 }
 
 void sp_mem_heap_span_release(sp_mem_heap_t* heap, sp_mem_heap_span_t* span) {
@@ -19310,10 +19415,10 @@ void sp_mem_heap_span_release(sp_mem_heap_t* heap, sp_mem_heap_span_t* span) {
   sp_mem_heap_list_push(&heap->recycled, span);
 }
 
-void* sp_mem_heap_alloc_chunk(sp_mem_heap_t* heap, u32 bucket) {
+static sp_err_t sp_mem_heap_alloc_chunk(sp_mem_heap_t* heap, u32 bucket, void** out) {
+  *out = SP_NULLPTR;
   sp_mem_heap_span_t* span = heap->buckets[bucket].partial;
-  if (!span) span = sp_mem_heap_span_new(heap, bucket);
-  if (!span) return SP_NULLPTR;
+  if (!span) sp_try(sp_mem_heap_span_new(heap, bucket, &span));
 
   void* chunk = span->free_head;
   span->free_head = *(void**)chunk;
@@ -19324,14 +19429,17 @@ void* sp_mem_heap_alloc_chunk(sp_mem_heap_t* heap, u32 bucket) {
   }
 
   heap->bytes_used += sp_mem_heap_bucket_size(bucket);
-  return chunk;
+  *out = chunk;
+  return SP_OK;
 }
 
-void* sp_mem_heap_alloc_large(sp_mem_heap_t* heap, u64 size) {
+static sp_err_t sp_mem_heap_alloc_large(sp_mem_heap_t* heap, u64 size, void** out) {
+  *out = SP_NULLPTR;
   u64 capacity = sp_align_offset(size + sizeof(sp_mem_heap_large_t), SP_MEM_HEAP_SPAN_SIZE);
-  if (capacity <= size) return SP_NULLPTR;
-  sp_mem_heap_large_t* large = (sp_mem_heap_large_t*)sp_sys_alloc(capacity);
-  if (!large) return SP_NULLPTR;
+  if (capacity <= size) return SP_ERR_SYS_NO_MEMORY;
+  void* ptr = SP_NULLPTR;
+  sp_try(sp_sys_alloc(capacity, &ptr));
+  sp_mem_heap_large_t* large = (sp_mem_heap_large_t*)ptr;
   large->magic = SP_MEM_HEAP_LARGE_MAGIC;
   large->size = size;
   large->capacity = capacity;
@@ -19339,29 +19447,33 @@ void* sp_mem_heap_alloc_large(sp_mem_heap_t* heap, u64 size) {
   sp_mem_heap_list_push(&heap->larges, large);
   sp_mem_heap_track_reserve(heap, capacity);
   heap->bytes_used += size;
-  return large + 1;
+  *out = large + 1;
+  return SP_OK;
+}
+
+static sp_err_t sp_mem_heap_alloc_ex(sp_mem_heap_t* heap, u64 size, bool uninitialized, void** out) {
+  *out = SP_NULLPTR;
+  if (!heap) return SP_ERR_SYS_INVALID;
+
+  u32 bucket = sp_mem_heap_bucket_of(size);
+  if (bucket >= SP_MEM_HEAP_NUM_BUCKETS) return sp_mem_heap_alloc_large(heap, size, out);
+
+  sp_try(sp_mem_heap_alloc_chunk(heap, bucket, out));
+  if (uninitialized) sp_mem_zero((u8*)*out + size, sp_mem_heap_bucket_size(bucket) - size);
+  else sp_mem_zero(*out, sp_mem_heap_bucket_size(bucket));
+  return SP_OK;
 }
 
 void* sp_mem_heap_alloc(sp_mem_heap_t* heap, u64 size) {
-  if (!heap) return SP_NULLPTR;
-
-  u32 bucket = sp_mem_heap_bucket_of(size);
-  if (bucket >= SP_MEM_HEAP_NUM_BUCKETS) return sp_mem_heap_alloc_large(heap, size);
-
-  void* chunk = sp_mem_heap_alloc_chunk(heap, bucket);
-  if (chunk) sp_mem_zero(chunk, sp_mem_heap_bucket_size(bucket));
-  return chunk;
+  void* ptr = SP_NULLPTR;
+  sp_mem_heap_alloc_ex(heap, size, false, &ptr);
+  return ptr;
 }
 
 void* sp_mem_heap_alloc_uninitialized(sp_mem_heap_t* heap, u64 size) {
-  if (!heap) return SP_NULLPTR;
-
-  u32 bucket = sp_mem_heap_bucket_of(size);
-  if (bucket >= SP_MEM_HEAP_NUM_BUCKETS) return sp_mem_heap_alloc_large(heap, size);
-
-  void* chunk = sp_mem_heap_alloc_chunk(heap, bucket);
-  if (chunk) sp_mem_zero((u8*)chunk + size, sp_mem_heap_bucket_size(bucket) - size);
-  return chunk;
+  void* ptr = SP_NULLPTR;
+  sp_mem_heap_alloc_ex(heap, size, true, &ptr);
+  return ptr;
 }
 
 void sp_mem_heap_free(sp_mem_heap_t* heap, void* ptr) {
@@ -19396,27 +19508,32 @@ void sp_mem_heap_free(sp_mem_heap_t* heap, void* ptr) {
 }
 
 void* sp_mem_heap_realloc(sp_mem_heap_t* heap, void* ptr, u64 size) {
-  return sp_mem_heap_on_alloc(heap, SP_ALLOCATOR_MODE_RESIZE, size, ptr, 0);
+  void* out = SP_NULLPTR;
+  sp_mem_heap_on_alloc(heap, SP_ALLOCATOR_MODE_RESIZE, size, ptr, 0, &out);
+  return out;
 }
 
 void* sp_mem_heap_realloc_uninitialized(sp_mem_heap_t* heap, void* ptr, u64 size) {
-  return sp_mem_heap_on_alloc(heap, SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED, size, ptr, 0);
+  void* out = SP_NULLPTR;
+  sp_mem_heap_on_alloc(heap, SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED, size, ptr, 0, &out);
+  return out;
 }
 
-void* sp_mem_heap_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
+sp_err_t sp_mem_heap_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out) {
   sp_unused(old_size);
   sp_mem_heap_t* heap = (sp_mem_heap_t*)user_data;
+  *out = SP_NULLPTR;
   switch (mode) {
-    case SP_ALLOCATOR_MODE_ALLOC:     return sp_mem_heap_alloc(heap, size);
-    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED: return sp_mem_heap_alloc_uninitialized(heap, size);
+    case SP_ALLOCATOR_MODE_ALLOC:               return sp_mem_heap_alloc_ex(heap, size, false, out);
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED: return sp_mem_heap_alloc_ex(heap, size, true, out);
     case SP_ALLOCATOR_MODE_RESIZE:
     case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: {
       bool uninitialized = mode == SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED;
-      if (!heap) return SP_NULLPTR;
-      if (!ptr) return uninitialized ? sp_mem_heap_alloc_uninitialized(heap, size) : sp_mem_heap_alloc(heap, size);
+      if (!heap) return SP_ERR_SYS_INVALID;
+      if (!ptr) return sp_mem_heap_alloc_ex(heap, size, uninitialized, out);
       if (!size) {
         sp_mem_heap_free(heap, ptr);
-        return SP_NULLPTR;
+        return SP_OK;
       }
 
       u64 chunk_size = 0;
@@ -19425,7 +19542,8 @@ void* sp_mem_heap_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, 
         u64 bucket_size = sp_mem_heap_bucket_size(span->bucket);
         if (sp_mem_heap_bucket_of(size) == span->bucket) {
           sp_mem_zero((u8*)ptr + size, bucket_size - size);
-          return ptr;
+          *out = ptr;
+          return SP_OK;
         }
         chunk_size = bucket_size;
       }
@@ -19438,20 +19556,22 @@ void* sp_mem_heap_on_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, 
           heap->bytes_used -= large->size;
           heap->bytes_used += size;
           large->size = size;
-          return ptr;
+          *out = ptr;
+          return SP_OK;
         }
         chunk_size = large->size;
       }
 
-      void* fresh = uninitialized ? sp_mem_heap_alloc_uninitialized(heap, size) : sp_mem_heap_alloc(heap, size);
-      if (!fresh) return SP_NULLPTR;
+      void* fresh = SP_NULLPTR;
+      sp_try(sp_mem_heap_alloc_ex(heap, size, uninitialized, &fresh));
       sp_mem_copy(fresh, ptr, sp_min(chunk_size, size));
       sp_mem_heap_free(heap, ptr);
-      return fresh;
+      *out = fresh;
+      return SP_OK;
     }
-    case SP_ALLOCATOR_MODE_FREE: sp_mem_heap_free(heap, ptr); return SP_NULLPTR;
+    case SP_ALLOCATOR_MODE_FREE: sp_mem_heap_free(heap, ptr); return SP_OK;
   }
-  return SP_NULLPTR;
+  return SP_ERR;
 }
 
 sp_mem_t sp_mem_heap_as_allocator(sp_mem_heap_t* heap) {
@@ -19727,6 +19847,7 @@ typedef enum {
 typedef struct {
   sp_fmt_sink_kind_t kind;
   sp_io_dyn_mem_writer_t* io;
+  sp_mem_t mem;
   sp_da(sp_fmt_span_t) spans;
 } sp_fmt_sink_t;
 
@@ -19810,7 +19931,7 @@ sp_fmt_styled_r sp_fmt_styled_v(sp_mem_t mem, sp_str_t fmt, va_list args) {
   sp_fmt_sink_t sink = {
     .kind = SP_FMT_SINK_SPANS,
     .io = &io,
-    .spans = sp_da_new(mem, sp_fmt_span_t),
+    .mem = mem,
   };
 
   result.err = sp_fmt_io_v_ex(&io.base, fmt, args, &sink);
@@ -20182,7 +20303,7 @@ static sp_err_t sp_fmt_render_ex(sp_io_writer_t* io, sp_fmt_arg_t* arg, sp_fmt_s
             .len = sp_cast(u32, closes[it] - opens[it]),
             .style = style,
           };
-          sp_da_push(sink->spans, span);
+          sp_try(sp_da_push(sink->mem, sink->spans, span));
         }
       }
       break;
@@ -21079,17 +21200,23 @@ SP_PRIVATE sp_err_t sp_fs_it_push(sp_fs_it_t* it, sp_fs_it_entry_t entry) {
     sp_fs_close_dir(dir);
     return frame.dir.err;
   }
-  sp_da_push(it->stack, frame);
-  return SP_OK;
+  sp_err_t err = sp_da_push(it->mem, it->stack, frame);
+  if (err) {
+    sp_fs_dir_it_close(&frame.dir);
+    sp_fs_close_dir(dir);
+  }
+  return err;
 }
 
 sp_fs_it_t sp_fs_it(sp_mem_t mem, sp_sys_dir_t root) {
   sp_fs_it_t it = sp_zero;
-  sp_da_init(mem, it.stack);
-  sp_da_init(mem, it.path);
+  it.mem = mem;
   sp_fs_it_frame_t frame = { .dir = sp_fs_dir_it(root) };
   it.err = frame.dir.err;
-  if (!it.err) sp_da_push(it.stack, frame);
+  if (!it.err) {
+    it.err = sp_da_push(it.mem, it.stack, frame);
+    if (it.err) sp_fs_dir_it_close(&frame.dir);
+  }
   return it;
 }
 
@@ -21113,7 +21240,11 @@ bool sp_fs_it_visit(sp_fs_it_t* it, sp_fs_visit_t* out) {
     if (sp_fs_dir_it_next(&top->dir, sp_mem_slice(top->buf, SP_SYS_DIR_MIN_BUF), &d)) {
       u32 start = top->len ? top->len + 1 : 0;
       u32 len = start + d.name.len;
-      *sp_da_vp(it->path) = sp_da_grow(it->path, len);
+      it->err = sp_da_grow(it->mem, it->path, len);
+      if (it->err) {
+        sp_fs_it_unwind(it);
+        return false;
+      }
       if (top->len) it->path[top->len] = '/';
       sp_str_copy_to(d.name, it->path + start, d.name.len);
 
@@ -21171,10 +21302,8 @@ void sp_fs_it_skip(sp_fs_it_t* it) {
 void sp_fs_it_deinit(sp_fs_it_t* it) {
   if (!it->stack) return;
   sp_fs_it_unwind(it);
-  sp_da_free(it->stack);
-  sp_da_free(it->path);
-  it->stack = SP_NULLPTR;
-  it->path = SP_NULLPTR;
+  sp_da_free(it->mem, it->stack);
+  sp_da_free(it->mem, it->path);
 }
 
 sp_err_t sp_fs_remove_dir(sp_str_t path) {
@@ -21245,11 +21374,11 @@ SP_PRIVATE sp_err_t sp_fs_remove_enter(sp_fs_it_t* it, sp_path_t at) {
 
 SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed, bool* listed) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_da(bool) progress = sp_da_new(s.mem, bool);
-  sp_da_push(progress, false);
+  sp_da(bool) progress = SP_NULLPTR;
+  sp_err_t err = sp_da_push(s.mem, progress, false);
 
   sp_sys_dir_t root = sp_sys_dir(SP_SYS_INVALID_FD);
-  sp_err_t err = sp_sys_open_dir_s(path.dir, path.sub, SP_SYS_OPEN_DIR_NO_FOLLOW, &root);
+  if (!err) err = sp_sys_open_dir_s(path.dir, path.sub, SP_SYS_OPEN_DIR_NO_FOLLOW, &root);
   *listed = err != SP_ERR_SYS_ACCESS_DENIED;
 
   sp_fs_it_t it = sp_zero;
@@ -21258,7 +21387,8 @@ SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed, bool* li
   while (!err && sp_fs_it_visit(&it, &visit)) {
     sp_path_t at = visit.entry.at;
     u64 depth = sp_da_size(it.stack);
-    while (sp_da_size(progress) <= depth) sp_da_push(progress, false);
+    while (!err && sp_da_size(progress) <= depth) err = sp_da_push(s.mem, progress, false);
+    if (err) break;
     switch (visit.order) {
       case SP_FS_POST_ORDER: {
         err = sp_sys_rmdir_s(at.dir, at.sub);
@@ -21287,7 +21417,7 @@ SP_PRIVATE sp_err_t sp_fs_remove_pass(sp_path_t path, bool* progressed, bool* li
   }
   if (!err) err = it.err;
 
-  *progressed = progress[0];
+  *progressed = !sp_da_empty(progress) && progress[0];
   sp_fs_it_deinit(&it);
   if (root.fd != SP_SYS_INVALID_FD) sp_fs_close_dir(root);
   sp_mem_end_scratch(s);
@@ -21598,14 +21728,17 @@ sp_err_t sp_fs_copy_file_at(sp_path_t from, sp_path_t to, sp_fs_write_mode_t mod
 
 sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_write_mode_t mode) {
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
-  sp_da(sp_sys_dir_t) dst = sp_da_new(s.mem, sp_sys_dir_t);
+  sp_da(sp_sys_dir_t) dst = SP_NULLPTR;
 
   sp_sys_dir_t src = sp_sys_dir(SP_SYS_INVALID_FD);
   sp_sys_dir_t dir = sp_zero;
   sp_err_t err = sp_fs_open_dir_at(from, &src);
   if (!err) err = sp_fs_create_dir_at(to);
   if (!err) err = sp_fs_open_dir_at(to, &dir);
-  if (!err) sp_da_push(dst, dir);
+  if (!err) {
+    err = sp_da_push(s.mem, dst, dir);
+    if (err) sp_fs_close_dir(dir);
+  }
 
   sp_sys_file_meta_t source = sp_zero;
   if (!err) err = sp_sys_get_file_metadata(src.fd, &source);
@@ -21638,7 +21771,10 @@ sp_err_t sp_fs_copy_tree_at(sp_path_t from, sp_path_t to, sp_fs_write_mode_t mod
           case SP_FS_KIND_DIR: {
             err = sp_fs_create_dir_at(target);
             if (!err) err = sp_fs_open_dir_at(target, &dir);
-            if (!err) sp_da_push(dst, dir);
+            if (!err) {
+              err = sp_da_push(s.mem, dst, dir);
+              if (err) sp_fs_close_dir(dir);
+            }
             break;
           }
           case SP_FS_KIND_FILE:    err = sp_fs_copy_file_at(visit.entry.at, target, mode); break;

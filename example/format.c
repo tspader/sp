@@ -99,8 +99,7 @@ typedef struct {
 static ctx_t ctx;
 
 void push_row(sp_str_t fmt, sp_str_t args, sp_str_t result) {
-  if (!ctx.rows) sp_da_init(mem, ctx.rows);
-  sp_da_push(ctx.rows, ((row_t){{
+  sp_da_push(mem, ctx.rows, ((row_t){{
     { .text = fmt,    .style = sp_fmt_style_yellow },
     { .text = args,   .style = sp_fmt_style_none },
     { .text = result, .style = sp_fmt_style_none },

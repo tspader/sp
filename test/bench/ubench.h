@@ -928,7 +928,8 @@ sp_str_t sp_cpu_get_model_a(sp_mem_t mem) {
   sp_str_t cpuinfo = ubench_cpu_read_file_a(s.mem, "/proc/cpuinfo");
   sp_str_t result = sp_zero_s(sp_str_t);
 
-  sp_da(sp_str_t) lines = sp_str_split_c8(s.mem, cpuinfo, '\n');
+  sp_da(sp_str_t) lines = SP_NULLPTR;
+  sp_str_split_c8(s.mem, cpuinfo, '\n', &lines);
   sp_da_for(lines, i) {
     sp_str_t line = lines[i];
     if (!sp_str_starts_with(line, sp_str_lit("model name")) &&

@@ -264,7 +264,7 @@ static sp_str_t axis_name_str(const c8* name) {
 sp_test_each(axis, expand, axis_case_t, axis_cases) {
   sp_mem_t mem = sp_test_arena(t);
 
-  sp_da(sp_test_instance_t) instances = sp_da_new(mem, sp_test_instance_t);
+  sp_da(sp_test_instance_t) instances = SP_NULLPTR;
   sp_test_expand(mem, &it->decl, &instances);
 
   u32 want = 0;

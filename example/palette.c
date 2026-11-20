@@ -189,7 +189,7 @@ sp_app_result_t on_poll(sp_app_t* app) {
     }
     case '\n':
     case '\r': {
-      sp_da_push(state->saved_colors, state->current_color);
+      if (sp_da_push(state->mem, state->saved_colors, state->current_color)) return SP_APP_ERR;
       palette_generate_color(state);
       break;
     }
@@ -241,7 +241,7 @@ sp_app_config_t app_main(s32 num_args, const c8** args) {
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
   app_t* app = sp_alloc_type(mem, app_t);
   app->mem = mem;
-  app->saved_colors = sp_da_new(app->mem, sp_color_t);
+  app->saved_colors = SP_NULLPTR;
 
   sp_tm_epoch_t now = sp_tm_now_epoch();
   app->rand_state = now.ns ^ (now.s << 32) ^ (u64)&app;

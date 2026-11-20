@@ -341,12 +341,13 @@ UTEST_F(mem, zero_large) {
   run_mem_zero_test(utest_result, (mem_zero_test_t){ .buffer_size = 400 });
 }
 
-static void* mock_alloc_record_size(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
+static sp_err_t mock_alloc_record_size(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out) {
   (void)mode;
   (void)ptr;
   (void)old_size;
   *(u64*)user_data = size;
-  return SP_NULLPTR;
+  *out = SP_NULLPTR;
+  return SP_ERR_SYS_NO_MEMORY;
 }
 
 UTEST_F(mem, alloc_preserves_u64_size) {
@@ -360,6 +361,52 @@ UTEST_F(mem, alloc_preserves_u64_size) {
   sp_alloc(mock, requested);
 
   EXPECT_EQ(recorded_size, requested);
+}
+
+// Every allocator says why it failed, and hands back nothing
+UTEST_F(mem, failed_allocations_return_an_error) {
+  void* ptr = &ptr;
+  EXPECT_NE(sp_sys_alloc(SP_LIMIT_U64_MAX - 4096, &ptr), SP_OK);
+  EXPECT_TRUE(ptr == SP_NULLPTR);
+
+  ptr = &ptr;
+  EXPECT_NE(sp_mem_alloc(sp_mem_os_new(), SP_LIMIT_U64_MAX - 4096, &ptr), SP_OK);
+  EXPECT_TRUE(ptr == SP_NULLPTR);
+
+  u8 buffer [64];
+  sp_mem_fixed_t fixed = sp_mem_fixed(buffer, sizeof(buffer));
+  ptr = &ptr;
+  EXPECT_EQ(sp_mem_alloc(sp_mem_fixed_as_allocator(&fixed), 128, &ptr), SP_ERR_SYS_NO_MEMORY);
+  EXPECT_TRUE(ptr == SP_NULLPTR);
+
+  // An arena has no memory of its own; it fails the way whatever backs it failed
+  sp_mem_failing_t failing = { .backing = sp_mem_os_new(), .err = SP_ERR_SYS_BUSY, .at = 2 };
+  sp_mem_arena_t* arena = sp_mem_arena_new_ex(sp_mem_failing_as_allocator(&failing), 256, 0);
+  ASSERT_TRUE(arena != SP_NULLPTR);
+  ptr = &ptr;
+  EXPECT_EQ(sp_mem_alloc(sp_mem_arena_as_allocator(arena), 4096, &ptr), SP_ERR_SYS_BUSY);
+  EXPECT_TRUE(ptr == SP_NULLPTR);
+  EXPECT_TRUE(sp_mem_arena_alloc(arena, 4096) != SP_NULLPTR);
+  sp_mem_arena_destroy(arena);
+}
+
+// A failed realloc leaves the old block exactly as it was
+UTEST_F(mem, failed_realloc_keeps_the_old_block) {
+  sp_mem_failing_t failing = { .backing = sp_mem_os_new(), .err = SP_ERR_SYS_BUSY, .at = 1 };
+  sp_mem_t mem = sp_mem_failing_as_allocator(&failing);
+
+  void* ptr = SP_NULLPTR;
+  ASSERT_EQ(sp_mem_alloc(mem, 64, &ptr), SP_OK);
+  sp_mem_fill_u8(ptr, 64, 0xAB);
+
+  void* grown = &grown;
+  EXPECT_EQ(sp_mem_realloc(mem, ptr, 64, 1 << 20, &grown), SP_ERR_SYS_BUSY);
+  EXPECT_TRUE(grown == SP_NULLPTR);
+  sp_for(it, 64) {
+    EXPECT_EQ(((u8*)ptr)[it], 0xAB);
+  }
+
+  sp_free(mem, ptr, 64);
 }
 
 UTEST_F(mem, os_alloc_roundtrip) {

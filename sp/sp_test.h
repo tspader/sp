@@ -444,6 +444,7 @@ typedef struct {
 
 typedef struct {
   sp_mem_t backing;
+  sp_mem_t meta;
   sp_ht(void*, sp_test_alloc_t) allocs;
   u64 live_bytes;
   u32 live_count;
@@ -770,21 +771,28 @@ struct sp_test_runner_t {
 };
 
 
-static void* sp_test_tracking_do_alloc(sp_test_tracking_t* k, u64 size) {
-  if (!size) return SP_NULLPTR;
-  if (!k->backing.on_alloc) return SP_NULLPTR;
+static sp_err_t sp_test_tracking_do_alloc(sp_test_tracking_t* k, u64 size, void** out) {
+  *out = SP_NULLPTR;
+  if (!size) return SP_OK;
+  if (!k->backing.on_alloc) return SP_ERR_SYS_INVALID;
 
-  void* ptr = sp_alloc(k->backing, size);
-  if (!ptr) return SP_NULLPTR;
+  void* ptr = SP_NULLPTR;
+  sp_try(sp_mem_alloc(k->backing, size, &ptr));
 
-  sp_ht_insert(k->allocs, ptr, ((sp_test_alloc_t) {
+  sp_err_t err = sp_ht_insert(k->meta, k->allocs, ptr, ((sp_test_alloc_t) {
     .state = SP_TEST_ALLOC_LIVE,
     .size = size,
-    .id = ++k->next_id,
+    .id = k->next_id + 1,
   }));
+  if (err) {
+    sp_free(k->backing, ptr, size);
+    return err;
+  }
+  k->next_id++;
   k->live_count++;
   k->live_bytes += size;
-  return ptr;
+  *out = ptr;
+  return SP_OK;
 }
 
 static void sp_test_tracking_do_free(sp_test_tracking_t* k, void* ptr, u64 size) {
@@ -807,50 +815,56 @@ static void sp_test_tracking_do_free(sp_test_tracking_t* k, void* ptr, u64 size)
   sp_free(k->backing, ptr, alloc->size);
 }
 
-static void* sp_test_tracking_do_realloc(sp_test_tracking_t* k, void* old, u64 size, u64 old_size) {
-  if (!old)  return sp_test_tracking_do_alloc(k, size);
+static sp_err_t sp_test_tracking_do_realloc(sp_test_tracking_t* k, void* old, u64 size, u64 old_size, void** out) {
+  *out = SP_NULLPTR;
+  if (!old)  return sp_test_tracking_do_alloc(k, size, out);
   if (!size) {
     sp_test_tracking_do_free(k, old, old_size);
-    return SP_NULLPTR;
+    return SP_OK;
   }
 
   sp_test_alloc_t* alloc = sp_ht_getp(k->allocs, old);
   if (!alloc) {
     k->wild_frees++;
-    return SP_NULLPTR;
+    return SP_ERR_SYS_INVALID;
   }
   if (alloc->state == SP_TEST_ALLOC_FREED) {
     k->double_frees++;
-    return SP_NULLPTR;
+    return SP_ERR_SYS_INVALID;
   }
 
   if (alloc->size != old_size) k->bad_sizes++;
-  if (alloc->size == size) return old;
+  if (alloc->size == size) {
+    *out = old;
+    return SP_OK;
+  }
 
   u64 have = alloc->size;
-  void* fresh = sp_test_tracking_do_alloc(k, size);
-  if (!fresh) return SP_NULLPTR;
+  void* fresh = SP_NULLPTR;
+  sp_try(sp_test_tracking_do_alloc(k, size, &fresh));
   sp_mem_copy(fresh, old, sp_min(have, size));
   sp_test_tracking_do_free(k, old, have);
-  return fresh;
+  *out = fresh;
+  return SP_OK;
 }
 
-static void* sp_test_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
+static sp_err_t sp_test_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out) {
   sp_test_tracking_t* k = (sp_test_tracking_t*)ud;
+  *out = SP_NULLPTR;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC:
-    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:  return sp_test_tracking_do_alloc(k, size);
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:  return sp_test_tracking_do_alloc(k, size, out);
     case SP_ALLOCATOR_MODE_RESIZE:
-    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: return sp_test_tracking_do_realloc(k, ptr, size, old_size);
-    case SP_ALLOCATOR_MODE_FREE:       sp_test_tracking_do_free(k, ptr, old_size); return SP_NULLPTR;
+    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: return sp_test_tracking_do_realloc(k, ptr, size, old_size, out);
+    case SP_ALLOCATOR_MODE_FREE:       sp_test_tracking_do_free(k, ptr, old_size); return SP_OK;
   }
-  return SP_NULLPTR;
+  return SP_ERR;
 }
 
 void sp_test_tracking_init(sp_test_tracking_t* k, sp_mem_t meta, sp_mem_t backing) {
   sp_mem_zero(k, sizeof(*k));
   k->backing = backing;
-  sp_ht_init(meta, k->allocs);
+  k->meta = meta;
 }
 
 sp_mem_t sp_test_tracking_as_allocator(sp_test_tracking_t* k) {
@@ -865,7 +879,7 @@ void sp_test_tracking_deinit(sp_test_tracking_t* k) {
     sp_test_alloc_t* alloc = sp_ht_it_getp(k->allocs, it);
     if (alloc->state == SP_TEST_ALLOC_LIVE) sp_free(k->backing, *sp_ht_it_getkp(k->allocs, it), alloc->size);
   }
-  sp_ht_free(k->allocs);
+  sp_ht_free(k->meta, k->allocs);
   sp_mem_zero(k, sizeof(*k));
 }
 
@@ -924,10 +938,20 @@ const void* sp_test_user(sp_test_t* t) {
   return t->instance->user;
 }
 
+// The harness can't report a result it has no memory to record, so running out is fatal
+#define sp_test_must(expr)                                                  \
+  do {                                                                      \
+    sp_err_t sp_test_must_err = (expr);                                     \
+    if (sp_test_must_err) {                                                 \
+      sp_log("sp_test: harness allocation failed: {}", sp_fmt_str(sp_err_str(sp_test_must_err))); \
+      sp_sys_exit(1);                                                       \
+    }                                                                       \
+  } while (0)
+
 static sp_da(sp_test_kv_t) sp_test_kv_snapshot(sp_test_t* t) {
-  sp_da(sp_test_kv_t) copy = sp_da_new(t->mem, sp_test_kv_t);
+  sp_da(sp_test_kv_t) copy = SP_NULLPTR;
   sp_da_for(t->kvs, it) {
-    sp_da_push(copy, t->kvs[it]);
+    sp_test_must(sp_da_push(t->mem, copy, t->kvs[it]));
   }
   return copy;
 }
@@ -939,7 +963,7 @@ void sp_test_record(sp_test_t* t, sp_test_failure_t failure) {
   }
 
   failure.kvs = sp_test_kv_snapshot(t);
-  sp_da_push(t->failures, failure);
+  sp_test_must(sp_da_push(t->mem, t->failures, failure));
 }
 
 void sp_test_fail(sp_test_t* t, const c8* fmt, ...) {
@@ -973,10 +997,10 @@ void sp_test_kv(sp_test_t* t, const c8* key, sp_str_t value) {
     }
   }
 
-  sp_da_push(t->kvs, ((sp_test_kv_t) {
+  sp_test_must(sp_da_push(t->mem, t->kvs, ((sp_test_kv_t) {
     .key = owned_key,
     .value = owned_value,
-  }));
+  })));
 }
 
 void sp_test_kv_c(sp_test_t* t, const c8* key, const c8* value) {
@@ -985,10 +1009,10 @@ void sp_test_kv_c(sp_test_t* t, const c8* key, const c8* value) {
 
 void sp_test_kv_clear(sp_test_t* t, const c8* key) {
   sp_str_t target = sp_cstr_as_str(key);
-  sp_da(sp_test_kv_t) kept = sp_da_new(t->mem, sp_test_kv_t);
+  sp_da(sp_test_kv_t) kept = SP_NULLPTR;
   sp_da_for(t->kvs, it) {
     if (sp_str_equal(t->kvs[it].key, target)) continue;
-    sp_da_push(kept, t->kvs[it]);
+    sp_test_must(sp_da_push(t->mem, kept, t->kvs[it]));
   }
   t->kvs = kept;
 }
@@ -1010,7 +1034,7 @@ void sp_test_log(sp_test_t* t, const c8* fmt, ...) {
   va_start(args, fmt);
   sp_str_r line = sp_fmt_mem_v(t->mem, sp_cstr_as_str(fmt), args);
   va_end(args);
-  sp_da_push(t->logs, line.value);
+  sp_test_must(sp_da_push(t->mem, t->logs, line.value));
 }
 
 void sp_test_note(sp_test_t* t, const c8* fmt, ...) {
@@ -1018,7 +1042,7 @@ void sp_test_note(sp_test_t* t, const c8* fmt, ...) {
   va_start(args, fmt);
   sp_str_r line = sp_fmt_mem_v(t->mem, sp_cstr_as_str(fmt), args);
   va_end(args);
-  sp_da_push(t->notes, line.value);
+  sp_test_must(sp_da_push(t->mem, t->notes, line.value));
 }
 
 
@@ -1273,8 +1297,10 @@ static void sp_test_golden_at(sp_test_t* t, sp_path_t path, sp_str_t actual, sp_
 
   sp_fs_write_at(actual_path, actual, SP_FS_WRITE_TRUNCATE, sp_sys_default_file_perms);
 
-  sp_da(sp_str_t) want_lines = sp_str_split_c8(t->mem, want, '\n');
-  sp_da(sp_str_t) got_lines = sp_str_split_c8(t->mem, actual, '\n');
+  sp_da(sp_str_t) want_lines = SP_NULLPTR;
+  sp_da(sp_str_t) got_lines = SP_NULLPTR;
+  sp_test_must(sp_str_split_c8(t->mem, want, '\n', &want_lines));
+  sp_test_must(sp_str_split_c8(t->mem, actual, '\n', &got_lines));
   u64 shared = sp_min(sp_da_size(want_lines), sp_da_size(got_lines));
 
   u64 diff = 0;
@@ -1455,7 +1481,8 @@ static sp_str_t sp_test_duration(sp_mem_t mem, u64 ns) {
 
 static void sp_test_report_attr(sp_tty_t* term, sp_mem_t mem, sp_str_t key, sp_str_t value, u32 width) {
   value = sp_str_trim_right(value);
-  sp_da(sp_str_t) lines = sp_str_split_c8(mem, value, '\n');
+  sp_da(sp_str_t) lines = SP_NULLPTR;
+  sp_test_must(sp_str_split_c8(mem, value, '\n', &lines));
 
   if (sp_str_empty(key)) {
     sp_da_for(lines, it) {
@@ -1589,10 +1616,6 @@ static sp_test_t* sp_test_context_new(sp_test_runner_t* runner, const sp_test_in
   t->runner = runner;
   t->bookkeeping = arena;
   t->mem = mem;
-  t->failures = sp_da_new(mem, sp_test_failure_t);
-  t->kvs = sp_da_new(mem, sp_test_kv_t);
-  t->logs = sp_da_new(mem, sp_str_t);
-  t->notes = sp_da_new(mem, sp_str_t);
   return t;
 }
 
@@ -1644,10 +1667,10 @@ static void sp_test_report_leaks(sp_test_t* t) {
       sp_fmt_cstr(k->live_count == 1 ? "allocation" : "allocations"),
       sp_fmt_uint(k->live_bytes));
 
-    sp_da(sp_test_alloc_t) leaks = sp_da_new(t->mem, sp_test_alloc_t);
+    sp_da(sp_test_alloc_t) leaks = SP_NULLPTR;
     sp_ht_for(k->allocs, it) {
       sp_test_alloc_t* alloc = sp_ht_it_getp(k->allocs, it);
-      if (alloc->state == SP_TEST_ALLOC_LIVE) sp_da_push(leaks, *alloc);
+      if (alloc->state == SP_TEST_ALLOC_LIVE) sp_test_must(sp_da_push(t->mem, leaks, *alloc));
     }
     sp_os_qsort(leaks, sp_da_size(leaks), sizeof(sp_test_alloc_t), sp_test_leak_order);
 
@@ -1724,9 +1747,9 @@ static void sp_test_run_instance(sp_test_runner_t* runner, const sp_test_instanc
   sp_io_flush(&runner->out.base);
   if (!sp_str_empty(t->dir.sub)) runner->kept = true;
   switch (status) {
-    case SP_TEST_STATUS_FAIL:   sp_da_push(runner->failed, instance->name); break;
-    case SP_TEST_STATUS_SKIP:   sp_da_push(runner->skipped, instance->name); break;
-    case SP_TEST_STATUS_UPDATE: sp_da_push(runner->updated, instance->name); break;
+    case SP_TEST_STATUS_FAIL:   sp_test_must(sp_da_push(runner->mem, runner->failed, instance->name)); break;
+    case SP_TEST_STATUS_SKIP:   sp_test_must(sp_da_push(runner->mem, runner->skipped, instance->name)); break;
+    case SP_TEST_STATUS_UPDATE: sp_test_must(sp_da_push(runner->mem, runner->updated, instance->name)); break;
     case SP_TEST_STATUS_OK: break;
   }
   sp_mutex_unlock(&runner->mutex);
@@ -1873,7 +1896,7 @@ static void sp_test_expand_row(sp_mem_t mem, const sp_test_decl_t* decl, const s
       }
     }
 
-    sp_da_push(*out, ((sp_test_instance_t) {
+    sp_test_must(sp_da_push(mem, *out, ((sp_test_instance_t) {
       .name = name,
       .kind = SP_TEST_INSTANCE_EACH,
       .each = { .fn = fn, .arg = arg },
@@ -1881,7 +1904,7 @@ static void sp_test_expand_row(sp_mem_t mem, const sp_test_decl_t* decl, const s
       .teardown = decl->teardown,
       .user = decl->user,
       .keep = decl->keep,
-    }));
+    })));
   }
 }
 
@@ -1889,7 +1912,7 @@ void sp_test_expand(sp_mem_t mem, const sp_test_decl_t* decl, sp_da(sp_test_inst
   switch (decl->kind) {
     case SP_TEST_DECL_FN: {
       SP_ASSERT(decl->axes[0].kind == SP_TEST_AXIS_NONE);
-      sp_da_push(*out, ((sp_test_instance_t) {
+      sp_test_must(sp_da_push(mem, *out, ((sp_test_instance_t) {
         .name = sp_fmt_mem_cstr(mem, "{}.{}", sp_fmt_cstr(decl->suite), sp_fmt_cstr(decl->name)),
         .kind = SP_TEST_INSTANCE_FN,
         .fn = decl->fn,
@@ -1897,7 +1920,7 @@ void sp_test_expand(sp_mem_t mem, const sp_test_decl_t* decl, sp_da(sp_test_inst
         .teardown = decl->teardown,
         .user = decl->user,
         .keep = decl->keep,
-      }));
+      })));
       return;
     }
     case SP_TEST_DECL_EACH: {
@@ -1958,6 +1981,7 @@ void sp_test_expand(sp_mem_t mem, const sp_test_decl_t* decl, sp_da(sp_test_inst
 #endif
 
 typedef struct {
+  sp_mem_t mem;
   sp_cstr_ht(sp_test_suite_t) suites;
   sp_da(const sp_test_decl_t*) decls;
 } sp_test_collect_t;
@@ -1966,11 +1990,11 @@ static sp_err_t sp_test_collect(sp_test_collect_t* collect, const sp_test_entry_
   switch (entry->kind) {
     case SP_TEST_ENTRY_SUITE: {
       if (sp_cstr_ht_get(collect->suites, entry->suite.name)) return SP_ERR;
-      sp_cstr_ht_insert(collect->suites, entry->suite.name, entry->suite);
+      sp_test_must(sp_cstr_ht_insert(collect->mem, collect->suites, entry->suite.name, entry->suite));
       break;
     }
     case SP_TEST_ENTRY_TEST: {
-      sp_da_push(collect->decls, &entry->decl);
+      sp_test_must(sp_da_push(collect->mem, collect->decls, &entry->decl));
       break;
     }
     case SP_TEST_ENTRY_NONE: SP_UNREACHABLE_CASE();
@@ -2118,9 +2142,6 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   sp_test_runner_t* runner = sp_alloc_type(sp_mem_arena_as_allocator(arena), sp_test_runner_t);
   sp_mem_zero(runner, sizeof(*runner));
   runner->mem = sp_mem_arena_as_allocator(arena);
-  runner->failed = sp_da_new(runner->mem, const c8*);
-  runner->skipped = sp_da_new(runner->mem, const c8*);
-  runner->updated = sp_da_new(runner->mem, const c8*);
   runner->update = update;
   runner->keep = SP_TEST_KEEP_FAILED;
   if (keep.env.name) runner->keep = (sp_test_keep_t)keep.env.value;
@@ -2154,9 +2175,8 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   }
 
   sp_test_collect_t collect = {
-    .decls = sp_da_new(runner->mem, const sp_test_decl_t*),
+    .mem = runner->mem,
   };
-  sp_cstr_ht_init(runner->mem, collect.suites);
 
   if (entries) {
     for (const sp_test_entry_t* entry = entries; entry->kind != SP_TEST_ENTRY_NONE; entry++) {
@@ -2181,7 +2201,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   }
 #endif
 
-  sp_da(sp_test_instance_t) instances = sp_da_new(runner->mem, sp_test_instance_t);
+  sp_da(sp_test_instance_t) instances = SP_NULLPTR;
   sp_da_for(collect.decls, it) {
     const sp_test_decl_t* decl = collect.decls[it];
     const sp_test_suite_t* suite = sp_cstr_ht_get(collect.suites, decl->suite);
@@ -2195,7 +2215,6 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   }
 
   sp_cstr_ht(bool) seen = SP_NULLPTR;
-  sp_cstr_ht_init(runner->mem, seen);
   sp_da_for(instances, it) {
     const c8* name = instances[it].name;
     if (sp_cstr_ht_get(seen, name)) {
@@ -2203,14 +2222,14 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
       sp_io_flush(&runner->out.base);
       return 1;
     }
-    sp_cstr_ht_insert(seen, name, true);
+    sp_test_must(sp_cstr_ht_insert(runner->mem, seen, name, true));
   }
 
   if (glob) {
-    sp_da(sp_test_instance_t) kept = sp_da_new(runner->mem, sp_test_instance_t);
+    sp_da(sp_test_instance_t) kept = SP_NULLPTR;
     sp_da_for(instances, it) {
       if (sp_test_filtered(glob, instances[it].name)) continue;
-      sp_da_push(kept, instances[it]);
+      sp_test_must(sp_da_push(runner->mem, kept, instances[it]));
     }
     instances = kept;
   }
@@ -2243,7 +2262,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
   runner->dir_root = sp_path_join(runner->mem, runs_dir, sp_test_run_name(runner->mem, now));
 
   sp_str_t cutoff = sp_test_run_name(runner->mem, grace);
-  sp_da(sp_str_t) runs = sp_da_new(runner->mem, sp_str_t);
+  sp_da(sp_str_t) runs = SP_NULLPTR;
   sp_sys_dir_t runs_handle = sp_zero;
   if (!sp_fs_open_dir_at(runs_dir, &runs_handle)) {
     sp_fs_dir_it_t iter = sp_fs_dir_it(runs_handle);
@@ -2251,7 +2270,7 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
     sp_fs_dir_entry_t entry = sp_zero;
     while (sp_fs_dir_it_next(&iter, sp_mem_slice(buf, sizeof(buf)), &entry)) {
       if (entry.kind != SP_FS_KIND_DIR) continue;
-      sp_da_push(runs, sp_str_copy(runner->mem, entry.name));
+      sp_test_must(sp_da_push(runner->mem, runs, sp_str_copy(runner->mem, entry.name)));
     }
     sp_fs_dir_it_close(&iter);
     sp_fs_close_dir(runs_handle);
@@ -2272,11 +2291,11 @@ s32 sp_test_main(s32 argc, const c8** argv, const sp_test_entry_t* entries) {
 
   if (jobs == 0) jobs = sp_test_num_cpus();
 
-  sp_da(sp_test_instance_t) parallel = sp_da_new(runner->mem, sp_test_instance_t);
-  sp_da(sp_test_instance_t) serial = sp_da_new(runner->mem, sp_test_instance_t);
+  sp_da(sp_test_instance_t) parallel = SP_NULLPTR;
+  sp_da(sp_test_instance_t) serial = SP_NULLPTR;
   sp_da_for(instances, it) {
-    if (instances[it].serial) sp_da_push(serial, instances[it]);
-    else                      sp_da_push(parallel, instances[it]);
+    if (instances[it].serial) sp_test_must(sp_da_push(runner->mem, serial, instances[it]));
+    else                      sp_test_must(sp_da_push(runner->mem, parallel, instances[it]));
   }
   runner->queue = parallel;
 

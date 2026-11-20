@@ -5,12 +5,12 @@
 
 
 UTEST(stress, dyn_array) {
-  sp_da(u64) arr = sp_da_new(sp_mem_os_new(), u64);
+  sp_da(u64) arr = SP_NULLPTR;
 
   const s32 count = 100000;
 
   sp_for(i, count) {
-    sp_da_push(arr, (u64)i * 12345);
+    sp_da_push(sp_mem_os_new(), arr, (u64)i * 12345);
   }
 
   EXPECT_EQ(sp_da_size(arr), count);
@@ -23,11 +23,11 @@ UTEST(stress, dyn_array) {
   EXPECT_EQ(sp_da_size(arr), 0);
 
   sp_for(i, 1000) {
-    sp_da_push(arr, (u64)i);
+    sp_da_push(sp_mem_os_new(), arr, (u64)i);
   }
   EXPECT_EQ(sp_da_size(arr), 1000);
 
-  sp_da_free(arr);
+  sp_da_free(sp_mem_os_new(), arr);
 }
 
 UTEST(stress, hash_table) {
@@ -37,7 +37,7 @@ UTEST(stress, hash_table) {
   const s32 count = 10000;
 
   sp_for(i, count) {
-    sp_ht_insert(ht, (u64)i, (u64)i * (u64)i);
+    sp_ht_insert(sp_mem_os_new(), ht, (u64)i, (u64)i * (u64)i);
   }
 
   EXPECT_EQ(sp_ht_size(ht), count);
@@ -59,7 +59,7 @@ UTEST(stress, hash_table) {
     EXPECT_EQ(*sp_ht_getp(ht, i), i * i);
   }
 
-  sp_ht_free(ht);
+  sp_ht_free(sp_mem_os_new(), ht);
 }
 
 UTEST(stress, ring_buffer) {
@@ -67,7 +67,7 @@ UTEST(stress, ring_buffer) {
   sp_rb_init(sp_mem_os_new(), rq);
 
   sp_for(i, 1000) {
-    sp_rb_push(rq, (u64)i);
+    sp_rb_push(sp_mem_os_new(), rq, (u64)i);
   }
 
   EXPECT_EQ(1000, sp_rb_size(rq));
@@ -79,7 +79,7 @@ UTEST(stress, ring_buffer) {
   }
 
   for (u64 i = 1000; i < 1500; i++) {
-    sp_rb_push(rq, i);
+    sp_rb_push(sp_mem_os_new(), rq, i);
   }
 
   EXPECT_EQ(1000, sp_rb_size(rq));
@@ -90,7 +90,7 @@ UTEST(stress, ring_buffer) {
     expected++;
   }
 
-  sp_rb_free(rq);
+  sp_rb_free(sp_mem_os_new(), rq);
 }
 
 UTEST(stress, ring_buffer_continuous_overwrite) {
@@ -102,7 +102,7 @@ UTEST(stress, ring_buffer_continuous_overwrite) {
   s32 cap = sp_rb_capacity(rq);
 
   sp_for(i, 10000) {
-    sp_rb_push(rq, i);
+    sp_rb_push(sp_mem_os_new(), rq, i);
   }
 
   EXPECT_EQ(cap, sp_rb_size(rq));
@@ -115,7 +115,7 @@ UTEST(stress, ring_buffer_continuous_overwrite) {
 
   EXPECT_TRUE(sp_rb_empty(rq));
 
-  sp_rb_free(rq);
+  sp_rb_free(sp_mem_os_new(), rq);
 }
 
 UTEST(stress, sp_da_push_ex) {
@@ -124,7 +124,7 @@ UTEST(stress, sp_da_push_ex) {
     c8 data[256];
   } large_struct_t;
 
-  large_struct_t* arr = sp_da_new(sp_mem_os_new(), large_struct_t);
+  large_struct_t* arr = SP_NULLPTR;
 
   sp_for(i, 1000) {
     large_struct_t item;
@@ -144,7 +144,7 @@ UTEST(stress, sp_da_push_ex) {
     }
   }
 
-  sp_da_free(arr);
+  sp_da_free(sp_mem_os_new(), arr);
 }
 
 typedef struct {
@@ -389,7 +389,7 @@ void fmon_stress_poll(sp_fmon_t* monitor) {
 }
 
 void fmon_stress_create_dir_tree(sp_str_t base, s32 depth, sp_da(sp_str_t)* dirs) {
-  sp_da_push(*dirs, sp_str_copy(sp_mem_get_scratch(), base));
+  sp_da_push(sp_mem_get_scratch(), *dirs, sp_str_copy(sp_mem_get_scratch(), base));
   if (depth <= 0) return;
 
   for (s32 i = 0; i < FMON_STRESS_DIRS_PER_LEVEL; i++) {
@@ -417,7 +417,7 @@ UTEST(stress, fmon) {
   sp_fmon_add_dir(monitor, root);
 
   // Create directory tree
-  sp_da(sp_str_t) dirs = sp_da_new(sp_mem_os_new(), sp_str_t);
+  sp_da(sp_str_t) dirs = SP_NULLPTR;
   fmon_stress_create_dir_tree(root, FMON_STRESS_DIR_DEPTH, &dirs);
 
   // Poll to clear initial dir creation events
@@ -430,7 +430,7 @@ UTEST(stress, fmon) {
   UTEST_PRINTF("Created %u directories\n", num_dirs);
 
   // Phase 1: Create files in batches
-  sp_da(sp_str_t) files = sp_da_new(sp_mem_os_new(), sp_str_t);
+  sp_da(sp_str_t) files = SP_NULLPTR;
   u32 files_created = 0;
   u32 dir_idx = 0;
 
@@ -448,7 +448,7 @@ UTEST(stress, fmon) {
       sp_io_write_str(&writer, sp_str_lit("initial"), SP_NULLPTR);
       sp_io_writer_close(&writer);
 
-      sp_da_push(files, path);
+      sp_da_push(sp_mem_os_new(), files, path);
       files_created++;
       dir_idx++;
     }
@@ -509,8 +509,8 @@ UTEST(stress, fmon) {
   // Cleanup
   sp_fmon_deinit(monitor);
   sp_free(sp_mem_os_new(), monitor, sizeof(sp_fmon_t));
-  sp_da_free(files);
-  sp_da_free(dirs);
+  sp_da_free(sp_mem_os_new(), files);
+  sp_da_free(sp_mem_os_new(), dirs);
   sp_test_file_manager_cleanup(&file_manager);
 }
 #endif

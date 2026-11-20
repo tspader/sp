@@ -31,8 +31,8 @@ void pruned(sp_mem_t mem, sp_sys_dir_t dir) {
 }
 
 void ordered(sp_mem_t mem, sp_sys_dir_t dir) {
-  sp_da(u32) counts = sp_da_new(mem, u32);
-  sp_da_push(counts, 0);
+  sp_da(u32) counts = SP_NULLPTR;
+  sp_da_push(mem, counts, 0);
 
   sp_fs_it_t it = sp_fs_it(mem, dir);
   sp_fs_visit_t visit = sp_zero;
@@ -42,7 +42,7 @@ void ordered(sp_mem_t mem, sp_sys_dir_t dir) {
       case SP_FS_PRE_ORDER: {
         if (entry.kind != SP_FS_KIND_DIR) (*sp_da_back(counts))++;
         else if (sp_str_equal(entry.name, sp_str_lit(".git"))) sp_fs_it_skip(&it);
-        else sp_da_push(counts, 0);
+        else sp_da_push(mem, counts, 0);
         break;
       }
       case SP_FS_POST_ORDER: {
@@ -57,7 +57,7 @@ void ordered(sp_mem_t mem, sp_sys_dir_t dir) {
   sp_fs_it_deinit(&it);
 
   sp_log("total: {}", sp_fmt_int(counts[0]));
-  sp_da_free(counts);
+  sp_da_free(mem, counts);
 }
 
 s32 run(s32 num_args, const c8** args) {

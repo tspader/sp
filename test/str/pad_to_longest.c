@@ -43,7 +43,8 @@ sp_test_each(str, pad_to_longest, test_t, tests) {
     count++;
   }
 
-  sp_da(sp_str_t) padded = sp_str_pad_to_longest(sp_test_arena(t), strs, count);
+  sp_da(sp_str_t) padded = SP_NULLPTR;
+  sp_try(sp_str_pad_to_longest(sp_test_arena(t), strs, count, &padded));
   sp_must_eq(t, sp_da_size(padded), count);
   sp_expect_strs_eq(t, padded, count, it->expect);
   return SP_OK;

@@ -426,7 +426,7 @@ typedef struct {
 } sp_test_proc_env_config_t;
 
 sp_da(sp_env_var_t) sp_test_parse_env_output(sp_mem_t mem, u8* buffer, u64 len) {
-  sp_da(sp_env_var_t) vars = sp_da_new(mem, sp_env_var_t);
+  sp_da(sp_env_var_t) vars = SP_NULLPTR;
 
   u32 line_start = 0;
   for (u32 i = 0; i <= len; i++) {
@@ -453,7 +453,7 @@ sp_da(sp_env_var_t) sp_test_parse_env_output(sp_mem_t mem, u8* buffer, u64 len) 
           var.value = sp_str_lit("");
         }
 
-        sp_da_push(vars, var);
+        sp_da_push(mem, vars, var);
       }
       line_start = i + 1;
     }

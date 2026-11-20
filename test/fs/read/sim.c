@@ -98,7 +98,7 @@ typedef struct {
 
 static probe_t probe;
 
-static void* budgeted_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
+static sp_err_t budgeted_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out) {
   budget_t* budget = (budget_t*)user_data;
   switch (mode) {
     case SP_ALLOCATOR_MODE_FREE: {
@@ -108,11 +108,14 @@ static void* budgeted_alloc(void* user_data, sp_mem_alloc_mode_t mode, u64 size,
     case SP_ALLOCATOR_MODE_RESIZE:
     case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:
     case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: {
-      if (++budget->allocs == budget->failing) return SP_NULLPTR;
+      if (++budget->allocs == budget->failing) {
+        *out = SP_NULLPTR;
+        return SP_ERR_SYS_NO_MEMORY;
+      }
       break;
     }
   }
-  return budget->backing.on_alloc(budget->backing.user_data, mode, size, ptr, old_size);
+  return budget->backing.on_alloc(budget->backing.user_data, mode, size, ptr, old_size, out);
 }
 
 static sp_err_t sized_metadata(sp_sys_fd_t fd, sp_sys_file_meta_t* meta) {
