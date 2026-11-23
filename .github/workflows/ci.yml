@@ -32,6 +32,7 @@ jobs:
         with:
           version: canary
           cache: ${{ matrix.id != 'control' }}
+          cache-key: pure
       - if: matrix.id == 'x86_64-linux' || matrix.id == 'control'
         shell: bash
         run: |
