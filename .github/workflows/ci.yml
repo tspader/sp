@@ -40,8 +40,19 @@ jobs:
           for triple in ${{ matrix.triples }}; do
             make ci TRIPLE=$triple
           done
-      - if: contains(matrix.triples, 'wasm32')
-        run: curl -fsSL https://github.com/boonbane/spn/releases/latest/download/install.sh | sh
+      - if: matrix.id == 'x86_64-linux' || matrix.id == 'wasm'
+        uses: boonbane/spn-action@main
+        with:
+          version: latest
+      - if: matrix.id == 'x86_64-linux'
+        shell: bash
+        run: |
+          tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
+          spn build --test --target x86_64-linux-musl $tests
+          for t in $tests; do
+            echo "> $t"
+            build/x86_64-linux-musl/debug/test/$t || exit 1
+          done
       - if: contains(matrix.triples, 'wasm32')
         shell: bash
         run: |
