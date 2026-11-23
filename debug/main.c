@@ -1,6 +1,6 @@
 #include <stdio.h>
 
 int main() {
-  puts("fixture");
+  puts("fixture 2");
   return 0;
 }
