@@ -1,0 +1,7 @@
+[package]
+name = "fixture"
+version = "0.1.0"
+
+[[bin]]
+name = "fixture"
+source = ["main.c"]

@@ -32,10 +32,10 @@ static const test_t tests [] = {
   {
     .name = "load_returns_value",
     .op = OP_LOAD,
-    .initial = 0x12345678,
+    .initial = 0x12345679,
     .expect = {
-      .result = 0x12345678,
-      .value = 0x12345678,
+      .result = 0x12345679,
+      .value = 0x12345679,
     },
   },
   {
