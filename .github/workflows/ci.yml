@@ -36,7 +36,8 @@ jobs:
         shell: bash
         run: |
           tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
-          spn build --test --target x86_64-linux-musl $tests
+          spn --json build --test --target x86_64-linux-musl $tests > events.jsonl
+          grep -E '"event": "(target_build_passed|link_passed|warm_start|build_summary)"' events.jsonl | cut -c1-420 || true
           for t in $tests; do
             echo "> $t"
             build/x86_64-linux-musl/debug/test/$t || exit 1
@@ -45,7 +46,8 @@ jobs:
         shell: bash
         run: |
           tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
-          spn build --test --target wasm32-wasi $tests
+          spn --json build --test --target wasm32-wasi $tests > events.jsonl
+          grep -E '"event": "(target_build_passed|link_passed|warm_start|build_summary)"' events.jsonl | cut -c1-420 || true
           for t in $tests; do
             echo "> $t"
             wasmtime run --dir "$PWD" build/wasm32-wasi-musl/debug/test/$t.wasm || exit 1
