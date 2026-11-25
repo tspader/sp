@@ -2,7 +2,7 @@
 #include "sp/sp_test.h"
 
 #define MAX_THREADS 8
-#define PUBLISH_SPIN_LIMIT 1000000000ull
+#define PUBLISH_SPIN_LIMIT 1000000001ull
 
 typedef enum {
   OP_LOAD,
