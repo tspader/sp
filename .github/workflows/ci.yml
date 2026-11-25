@@ -40,10 +40,20 @@ jobs:
           store="$SPN_STORAGE_DIR/store"
           snap="$RUNNER_TEMP/snap"
           mkdir -p "$snap"
+          empty="$store/blob/af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+          list() {
+            if [ "$1" = blob ]; then
+              (cd "$store/blob" && find . -mindepth 2 -printf '%P %i\n' | sort)
+            else
+              (cd "$store/$1" && ls -i | awk '{ print $2, $1 }' | sort)
+            fi
+          }
+          echo "empty blob: $(ls "$empty" | wc -l) names, $(ls "$empty" | grep -c '^log.txt$' || true) log.txt"
+          ls "$empty" | head -12 || true
           cp -a "$store/weak" "$store/strong" "$snap/"
           for kind in weak strong blob; do
             echo "$kind: $(ls "$store/$kind" | wc -l) entries"
-            (cd "$store/$kind" && ls -i | awk '{ print $2, $1 }' | sort) > "$snap/$kind.before"
+            list $kind > "$snap/$kind.before"
           done
           for n in 1 2; do
             echo "> build $n"
@@ -51,7 +61,7 @@ jobs:
             jq -c 'select(.event == "build_summary") | .data' "$RUNNER_TEMP/events-$n.jsonl"
             jq -r 'select(.event == "target_build_passed" or .event == "link_passed") | [.event, .tid, (.data.source_file // .data.file_name)] | @tsv' "$RUNNER_TEMP/events-$n.jsonl" | head -40 || true
             for kind in weak strong blob; do
-              (cd "$store/$kind" && ls -i | awk '{ print $2, $1 }' | sort) > "$snap/$kind.after"
+              list $kind > "$snap/$kind.after"
               comm -13 "$snap/$kind.before" "$snap/$kind.after" | awk '{ print $1 }' > "$snap/$kind.written"
               comm -23 <(awk '{ print $1 }' "$snap/$kind.before") <(awk '{ print $1 }' "$snap/$kind.after") | sed "s#^#gone $kind/#"
               while read -r name; do
