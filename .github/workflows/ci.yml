@@ -21,7 +21,6 @@ jobs:
         include:
           - { id: x86_64-linux,  os: ubuntu-latest,    triples: x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl }
           - { id: wasm,          os: ubuntu-latest,    triples: wasm32-wasi wasm32-freestanding }
-          - { id: control,       os: ubuntu-latest,    triples: x86_64-linux-musl }
     name: ${{ matrix.id }}
     runs-on: ${{ matrix.os }}
     env:
@@ -34,15 +33,45 @@ jobs:
       - uses: boonbane/spn-action@main
         with:
           version: latest
-          cache: ${{ matrix.id != 'control' }}
       - shell: bash
         run: |
           spn --version
+          export LC_ALL=C
+          store="$SPN_STORAGE_DIR/store"
+          snap="$RUNNER_TEMP/snap"
+          mkdir -p "$snap"
+          cp -a "$store/weak" "$store/strong" "$snap/"
+          for kind in weak strong blob; do
+            echo "$kind: $(ls "$store/$kind" | wc -l) entries"
+            (cd "$store/$kind" && ls -i | awk '{ print $2, $1 }' | sort) > "$snap/$kind.before"
+          done
           for n in 1 2; do
             echo "> build $n"
-            spn --json build --test --target $TARGET $TESTS > events-$n.jsonl
-            jq -c 'select(.event == "build_summary") | .data' events-$n.jsonl
-            jq -r 'select(.event == "target_build_passed" or .event == "link_passed") | [.event, .tid, (.data.source_file // .data.file_name)] | @tsv' events-$n.jsonl | head -40 || true
+            spn --json build --test --target $TARGET $TESTS > "$RUNNER_TEMP/events-$n.jsonl"
+            jq -c 'select(.event == "build_summary") | .data' "$RUNNER_TEMP/events-$n.jsonl"
+            jq -r 'select(.event == "target_build_passed" or .event == "link_passed") | [.event, .tid, (.data.source_file // .data.file_name)] | @tsv' "$RUNNER_TEMP/events-$n.jsonl" | head -40 || true
+            for kind in weak strong blob; do
+              (cd "$store/$kind" && ls -i | awk '{ print $2, $1 }' | sort) > "$snap/$kind.after"
+              comm -13 "$snap/$kind.before" "$snap/$kind.after" | awk '{ print $1 }' > "$snap/$kind.written"
+              comm -23 <(awk '{ print $1 }' "$snap/$kind.before") <(awk '{ print $1 }' "$snap/$kind.after") | sed "s#^#gone $kind/#"
+              while read -r name; do
+                if [ "$kind" = blob ]; then
+                  grep -q "^$name " "$snap/$kind.before" && echo "rewritten blob/$name" || echo "new blob/$name"
+                elif [ ! -e "$snap/$kind/$name" ]; then
+                  echo "new $kind/$name"
+                  head -c 3000 "$store/$kind/$name"
+                elif cmp -s "$snap/$kind/$name" "$store/$kind/$name"; then
+                  echo "rewritten identical $kind/$name"
+                  head -c 3000 "$store/$kind/$name"
+                else
+                  echo "rewritten changed $kind/$name"
+                  diff "$snap/$kind/$name" "$store/$kind/$name" | head -80 || true
+                fi
+              done < "$snap/$kind.written"
+              cp "$snap/$kind.after" "$snap/$kind.before"
+            done
+            rm -rf "$snap/weak" "$snap/strong"
+            cp -a "$store/weak" "$store/strong" "$snap/"
           done
       - if: "!contains(matrix.triples, 'wasm32')"
         shell: bash
