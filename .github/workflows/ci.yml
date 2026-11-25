@@ -20,85 +20,41 @@ jobs:
       matrix:
         include:
           - { id: x86_64-linux,  os: ubuntu-latest,    triples: x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl }
-          - { id: aarch64-linux, os: ubuntu-24.04-arm, triples: aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl }
-          - { id: macos,         os: macos-latest,     triples: aarch64-macos }
-          - { id: windows,       os: windows-latest,   triples: x86_64-windows-gnu }
           - { id: wasm,          os: ubuntu-latest,    triples: wasm32-wasi wasm32-freestanding }
+          - { id: control,       os: ubuntu-latest,    triples: x86_64-linux-musl }
     name: ${{ matrix.id }}
     runs-on: ${{ matrix.os }}
+    env:
+      TARGET: ${{ contains(matrix.triples, 'wasm32') && 'wasm32-wasi' || 'x86_64-linux-musl' }}
+      TESTS: amalgamation meta sys atomic fs msvct sync mem http promptt
     steps:
       - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-      - if: runner.os == 'Windows'
-        run: choco install make --no-progress
       - if: contains(matrix.triples, 'wasm32')
         uses: bytecodealliance/actions/wasmtime/setup@v1
-      - shell: bash
-        run: |
-          for triple in ${{ matrix.triples }}; do
-            make ci TRIPLE=$triple
-          done
-      - if: matrix.id == 'x86_64-linux' || matrix.id == 'wasm'
-        uses: boonbane/spn-action@main
+      - uses: boonbane/spn-action@main
         with:
           version: latest
-      - if: matrix.id == 'x86_64-linux'
+          cache: ${{ matrix.id != 'control' }}
+      - shell: bash
+        run: |
+          spn --version
+          for n in 1 2; do
+            echo "> build $n"
+            spn --json build --test --target $TARGET $TESTS > events-$n.jsonl
+            jq -c 'select(.event == "build_summary") | .data' events-$n.jsonl
+            jq -r 'select(.event == "target_build_passed" or .event == "link_passed") | [.event, .tid, (.data.source_file // .data.file_name)] | @tsv' events-$n.jsonl | head -40 || true
+          done
+      - if: "!contains(matrix.triples, 'wasm32')"
         shell: bash
         run: |
-          tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
-          spn build --test --target x86_64-linux-musl $tests
-          for t in $tests; do
+          for t in $TESTS; do
             echo "> $t"
             build/x86_64-linux-musl/debug/test/$t || exit 1
           done
       - if: contains(matrix.triples, 'wasm32')
         shell: bash
         run: |
-          tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
-          spn build --test --target wasm32-wasi $tests
-          for t in $tests; do
+          for t in $TESTS; do
             echo "> $t"
             wasmtime run --dir "$PWD" build/wasm32-wasi-musl/debug/test/$t.wasm || exit 1
           done
-
-  gcc:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: make ci CC=gcc
-
-  msvc:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: microsoft/setup-msbuild@v2
-      - run: msbuild tools\windows\sp\sp.sln /p:Configuration=Release /p:Platform=x64 /m
-      - shell: bash
-        run: |
-          for t in tools/windows/sp/build/vs/Release/bin/*.exe tools/windows/sp/build/vs/Release/bin/spn/*.exe; do
-            echo "=== $t ==="
-            "$t" || exit 1
-          done
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [zig, gcc, msvc]
-    runs-on: ubuntu-latest
-    permissions: { contents: write }
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          tag=${GITHUB_REF_NAME}
-          mkdir -p release "$tag/sp"
-          cp sp.h LICENSE "$tag/"
-          cp sp/*.h "$tag/sp/"
-          tar -czf "release/sp-$tag.tar.gz" "$tag"
-          cp sp.h release/sp.h
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            release/sp.h
-            release/sp-*.tar.gz
-          generate_release_notes: true

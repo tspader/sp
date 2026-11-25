@@ -142,11 +142,9 @@ name = "cargo"
 source = ["example/cargo.c"]
 
 [profile.sanitizer]
-linkage = "shared"
 sanitize = ["address", "undefined"]
 
 [profile.tsan]
-linkage = "shared"
 sanitize = ["thread"]
 
 [[toolchain]]
