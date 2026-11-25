@@ -221,7 +221,7 @@ sp_test_each(atomic, ops, test_t, tests) {
     sp_expect_eq(t, u.a, u.expected.value);
 
     sp_atomic_u64_t a = it->initial;
-    u64 result = 0;
+    u64 result = 1;
     bool ok = false;
     switch (it->op) {
       case OP_LOAD: result = sp_atomic_u64_load(&a, order); break;
