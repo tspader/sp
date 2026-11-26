@@ -5,11 +5,14 @@
 #include "utest.h"
 
 #if defined(SP_FREESTANDING) || defined(SP_WASM) || defined(SP_WIN32)
-struct gdb {};
+s32 gdb_fixture_main(s32 num_args, const c8** args) { return 0; }
+
 UTEST(gdb, unsupported) {
   UTEST_SKIP("unimplemented");
 }
 #else
+
+#include "gdb_fixture.c"
 
 #define GDB_TEST_MAX_NEEDLES 6
 
@@ -38,13 +41,26 @@ typedef struct gdb {
   sp_mem_arena_t* arena;
   sp_mem_t mem;
   sp_str_t fixture;
+  sp_str_t scripts;
 } sp_gdb;
 
 static sp_str_t gdb_fixture_path(sp_mem_t mem) {
   sp_str_t exe = sp_zero;
   sp_fs_get_exe_path(mem, &exe);
-  sp_str_t fixture = sp_fs_join_path(mem, sp_fs_parent_path(exe), sp_str_lit("gdb_fixture"));
-  return sp_fs_replace_ext(mem, fixture, sp_os_get_executable_ext());
+  return exe;
+}
+
+static sp_str_t gdb_scripts_dir(sp_mem_t mem) {
+  sp_sys_file_meta_t meta = sp_zero;
+  sp_str_t dir = sp_fs_parent_path(gdb_fixture_path(mem));
+  while (!sp_str_empty(dir)) {
+    sp_str_t candidate = sp_fs_join_path(mem, dir, sp_str_lit("tools/gdb"));
+    if (!sp_fs_get_path_metadata(candidate, &meta)) return candidate;
+    sp_str_t parent = sp_fs_parent_path(dir);
+    if (sp_str_equal(parent, dir)) break;
+    dir = parent;
+  }
+  return sp_zero_s(sp_str_t);
 }
 
 static bool gdb_available(void) {
@@ -53,11 +69,10 @@ static bool gdb_available(void) {
     sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
     sp_str_t fixture = gdb_fixture_path(scratch.mem);
     cached = 0;
-    sp_sys_file_meta_t meta = sp_zero;
-    if (!sp_fs_get_path_metadata(fixture, &meta)) {
+    if (!sp_str_empty(gdb_scripts_dir(scratch.mem))) {
       sp_ps_output_t probe = sp_ps_run_c(scratch.mem, (sp_ps_config_cstr_t) {
         .command = "gdb",
-        .args = { "-q", "-nx", "-batch", "-ex", "python 1", "-ex", "run", sp_str_to_cstr(scratch.mem, fixture) },
+        .args = { "-q", "-nx", "-batch", "-ex", "break brk_str", "-ex", "run", "-ex", "python gdb.parse_and_eval('subject')", "--args", sp_str_to_cstr(scratch.mem, fixture), "--gdb" },
         .io = { .err = { .mode = SP_PS_IO_MODE_NULL } },
       });
       cached = probe.status.exit_code == 0;
@@ -84,14 +99,16 @@ static sp_str_t gdb_run(sp_gdb* fix, const c8* mark, const c8* command) {
   gdb_add_ex(fix->mem, &config, "set pagination off");
 
   sp_carr_for(GDB_SCRIPTS, it) {
-    gdb_add_ex(fix->mem, &config, sp_fmt_mem_cstr(fix->mem, "source {}/{}", sp_fmt_cstr(SP_GDB_TOOLS_DIR), sp_fmt_cstr(GDB_SCRIPTS[it])));
+    gdb_add_ex(fix->mem, &config, sp_fmt_mem_cstr(fix->mem, "source {}/{}", sp_fmt_str(fix->scripts), sp_fmt_cstr(GDB_SCRIPTS[it])));
   }
 
   gdb_add_ex(fix->mem, &config, sp_fmt_mem_cstr(fix->mem, "break {}", sp_fmt_cstr(mark)));
   gdb_add_ex(fix->mem, &config, "run");
   gdb_add_ex(fix->mem, &config, command);
   gdb_add_ex(fix->mem, &config, "kill");
+  sp_ps_config_add_arg(fix->mem, &config, sp_str_lit("--args"));
   sp_ps_config_add_arg(fix->mem, &config, fix->fixture);
+  sp_ps_config_add_arg(fix->mem, &config, sp_str_lit("--gdb"));
 
   return sp_ps_run(fix->mem, config).out;
 }
@@ -130,6 +147,7 @@ UTEST_F_SETUP(gdb) {
   ut.arena = sp_mem_arena_new(sp_mem_os_new());
   ut.mem = sp_mem_arena_as_allocator(ut.arena);
   ut.fixture = gdb_fixture_path(ut.mem);
+  ut.scripts = gdb_scripts_dir(ut.mem);
 }
 
 UTEST_F_TEARDOWN(gdb) {
@@ -347,7 +365,7 @@ UTEST_F(gdb, arena_command) {
 UTEST_F(gdb, ps_config) {
   run_gdb_test(&ur, &ut, (gdb_test_t) {
     .mark = "brk_ps_config",
-    .command = "print subject",
+    .command = "print *subject",
     .expect = {
       .present = { "command = \"ls\"", "cwd = \"/home\"", "SP_PS_IO_MODE_NULL" },
     },
@@ -357,7 +375,7 @@ UTEST_F(gdb, ps_config) {
 UTEST_F(gdb, env_var) {
   run_gdb_test(&ur, &ut, (gdb_test_t) {
     .mark = "brk_env_var",
-    .command = "print subject",
+    .command = "print *subject",
     .expect = {
       .present = { "key = \"PATH\"", "value = \"/usr/bin\"" },
     },

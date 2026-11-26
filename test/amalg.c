@@ -11,6 +11,7 @@
 #include "env.c"
 #include "fmon.c"
 #include "format.c"
+#include "gdb.c"
 #include "glob.c"
 #include "ht.c"
 #include "io.c"
@@ -29,6 +30,9 @@
 static s32 entry(s32 num_args, const c8** args) {
   if (num_args > 1 && sp_cstr_equal(args[1], "--fn")) {
     return process_main(num_args, args);
+  }
+  if (num_args > 1 && sp_cstr_equal(args[1], "--gdb")) {
+    return gdb_fixture_main(num_args, args);
   }
   return utest_main(num_args, args);
 }
