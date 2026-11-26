@@ -40,6 +40,7 @@ typedef enum {
   SP_GLOB_ERR_UNCLOSED_CLASS,
   SP_GLOB_ERR_INVALID_RANGE,
   SP_GLOB_ERR_UNCLOSED_ALTERNATES,
+  SP_GLOB_ERR_ALLOC,
 } sp_glob_err_t;
 
 typedef enum {
@@ -101,15 +102,15 @@ SP_API void                sp_glob_free(sp_glob_t* g);
 SP_API bool                sp_glob_match(sp_glob_t* g, sp_str_t path);
 SP_API sp_glob_set_t*      sp_glob_set_new(sp_mem_t mem);
 SP_API void                sp_glob_set_free(sp_glob_set_t* set);
-SP_API void                sp_glob_set_add(sp_glob_set_t* set, const c8* pattern);
-SP_API void                sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern);
-SP_API void                sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* glob);
-SP_API void                sp_glob_set_build(sp_glob_set_t* set);
+SP_API sp_err_t            sp_glob_set_add(sp_glob_set_t* set, const c8* pattern);
+SP_API sp_err_t            sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern);
+SP_API sp_err_t            sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* glob);
+SP_API sp_err_t            sp_glob_set_build(sp_glob_set_t* set);
 SP_API bool                sp_glob_set_match(sp_glob_set_t* set, sp_str_t path);
-SP_API void                sp_glob_set_matches(sp_glob_set_t* set, sp_str_t path, sp_da(u32)* out);
-SP_IMP void                sp_glob_push_literal(sp_da(sp_glob_token_t)* tokens, c8 c);
-SP_IMP void                sp_glob_push_token(sp_da(sp_glob_token_t)* tokens, sp_glob_token_type_t type);
-SP_IMP sp_glob_err_t       sp_glob_parse_star(sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens);
+SP_API sp_err_t            sp_glob_set_matches(sp_mem_t mem, sp_glob_set_t* set, sp_str_t path, sp_da(u32)* out);
+SP_IMP sp_err_t            sp_glob_push_literal(sp_mem_t mem, sp_da(sp_glob_token_t)* tokens, c8 c);
+SP_IMP sp_err_t            sp_glob_push_token(sp_mem_t mem, sp_da(sp_glob_token_t)* tokens, sp_glob_token_type_t type);
+SP_IMP sp_glob_err_t       sp_glob_parse_star(sp_mem_t mem, sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens);
 SP_IMP sp_glob_err_t       sp_glob_parse_class(sp_mem_t mem, sp_str_t pattern, u32* i, sp_da(sp_glob_token_t)* out);
 SP_IMP sp_glob_err_t       sp_glob_parse_alternates(sp_mem_t mem, sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens);
 SP_IMP sp_glob_err_t       sp_glob_parse(sp_mem_t mem, sp_str_t pattern, sp_da(sp_glob_token_t)* tokens);
@@ -120,8 +121,8 @@ SP_IMP bool                sp_glob_match_tokens(sp_da(sp_glob_token_t) tokens, s
 SP_IMP sp_glob_strategy_t  sp_glob_detect_strategy(sp_glob_t* glob);
 SP_IMP sp_str_t            sp_glob_basename(sp_str_t path);
 SP_IMP sp_glob_candidate_t sp_glob_candidate_new(sp_str_t path);
-SP_IMP void                sp_glob_set_ht_add(sp_mem_t mem, sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx);
-SP_IMP void                sp_glob_set_ht_collect(sp_glob_set_index_table_t ht, sp_str_t key, sp_da(u32)* out);
+SP_IMP sp_err_t            sp_glob_set_ht_add(sp_mem_t mem, sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx);
+SP_IMP sp_err_t            sp_glob_set_ht_collect(sp_mem_t mem, sp_glob_set_index_table_t ht, sp_str_t key, sp_da(u32)* out);
 SP_IMP bool                sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* e, sp_str_t path);
 #endif // SP_GLOB_H
 
@@ -136,15 +137,21 @@ SP_IMP bool                sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* 
     if (_sp_glob_result) return _sp_glob_result; \
   } while (0)
 
-void sp_glob_push_literal(sp_da(sp_glob_token_t)* tokens, c8 c) {
-  sp_da_push(*tokens, ((sp_glob_token_t) { .type = SP_GLOB_TOK_LITERAL, .literal = c }));
+// A pattern that can't be stored fails to parse like any other bad pattern
+#define sp_glob_try_alloc(expr) \
+  do { \
+    if (expr) return SP_GLOB_ERR_ALLOC; \
+  } while (0)
+
+sp_err_t sp_glob_push_literal(sp_mem_t mem, sp_da(sp_glob_token_t)* tokens, c8 c) {
+  return sp_da_push(mem, *tokens, ((sp_glob_token_t) { .type = SP_GLOB_TOK_LITERAL, .literal = c }));
 }
 
-void sp_glob_push_token(sp_da(sp_glob_token_t)* tokens, sp_glob_token_type_t type) {
-  sp_da_push(*tokens, ((sp_glob_token_t) { .type = type }));
+sp_err_t sp_glob_push_token(sp_mem_t mem, sp_da(sp_glob_token_t)* tokens, sp_glob_token_type_t type) {
+  return sp_da_push(mem, *tokens, ((sp_glob_token_t) { .type = type }));
 }
 
-sp_glob_err_t sp_glob_parse_star(sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens) {
+sp_glob_err_t sp_glob_parse_star(sp_mem_t mem, sp_str_t pattern, u32* it, sp_da(sp_glob_token_t)* tokens) {
   u32 pos = *it;
   u32 len = pattern.len;
 
@@ -158,21 +165,21 @@ sp_glob_err_t sp_glob_parse_star(sp_str_t pattern, u32* it, sp_da(sp_glob_token_
     bool prev_is_sep = (pos >= 2 && pattern.data[pos - 2] == '/');
 
     if (at_start && (at_end || next_is_sep)) {
-      sp_glob_push_token(tokens, SP_GLOB_TOK_RECURSIVE_PREFIX);
+      sp_glob_try_alloc(sp_glob_push_token(mem, tokens, SP_GLOB_TOK_RECURSIVE_PREFIX));
       if (next_is_sep) {
         (*it)++;
       }
     } else if (prev_is_sep && at_end) {
-      sp_glob_push_token(tokens, SP_GLOB_TOK_RECURSIVE_SUFFIX);
+      sp_glob_try_alloc(sp_glob_push_token(mem, tokens, SP_GLOB_TOK_RECURSIVE_SUFFIX));
     } else if (prev_is_sep && next_is_sep) {
-      sp_glob_push_token(tokens, SP_GLOB_TOK_RECURSIVE_ZERO_OR_MORE);
+      sp_glob_try_alloc(sp_glob_push_token(mem, tokens, SP_GLOB_TOK_RECURSIVE_ZERO_OR_MORE));
       (*it)++;
     } else {
-      sp_glob_push_token(tokens, SP_GLOB_TOK_ZERO_OR_MORE);
-      sp_glob_push_token(tokens, SP_GLOB_TOK_ZERO_OR_MORE);
+      sp_glob_try_alloc(sp_glob_push_token(mem, tokens, SP_GLOB_TOK_ZERO_OR_MORE));
+      sp_glob_try_alloc(sp_glob_push_token(mem, tokens, SP_GLOB_TOK_ZERO_OR_MORE));
     }
   } else {
-    sp_glob_push_token(tokens, SP_GLOB_TOK_ZERO_OR_MORE);
+    sp_glob_try_alloc(sp_glob_push_token(mem, tokens, SP_GLOB_TOK_ZERO_OR_MORE));
   }
 
   return SP_GLOB_ERR_OK;
@@ -193,7 +200,7 @@ sp_glob_err_t sp_glob_parse_class(sp_mem_t mem, sp_str_t pattern, u32* i, sp_da(
     pos++;
   }
 
-  sp_da(sp_glob_char_range_t) ranges = sp_da_new(mem, sp_glob_char_range_t);
+  sp_da(sp_glob_char_range_t) ranges = SP_NULLPTR;
   c8 last_char = 0;
   bool has_content = false;
 
@@ -201,10 +208,10 @@ sp_glob_err_t sp_glob_parse_class(sp_mem_t mem, sp_str_t pattern, u32* i, sp_da(
     c = sp_str_at(pattern, pos);
 
     if (c == ']' && has_content) {
-      sp_da_push(*out, ((sp_glob_token_t) {
+      sp_glob_try_alloc(sp_da_push(mem, *out, ((sp_glob_token_t) {
         .type = SP_GLOB_TOK_RANGES,
         .ranges = { .negated = negated, .ranges = ranges }
-      }));
+      })));
       *i = pos;
       return SP_GLOB_ERR_OK;
     }
@@ -227,7 +234,7 @@ sp_glob_err_t sp_glob_parse_class(sp_mem_t mem, sp_str_t pattern, u32* i, sp_da(
     }
 
 
-    sp_da_push(ranges, ((sp_glob_char_range_t) { .start = c, .end = c }));
+    sp_glob_try_alloc(sp_da_push(mem, ranges, ((sp_glob_char_range_t) { .start = c, .end = c })));
     last_char = c;
     has_content = true;
     pos++;
@@ -240,36 +247,36 @@ sp_glob_err_t sp_glob_parse_alternates(sp_mem_t mem, sp_str_t pattern, u32* it, 
   u32 pos = *it + 1;
   u32 len = pattern.len;
 
-  sp_da(sp_da(sp_glob_token_t)) alts = sp_da_new(mem, sp_da(sp_glob_token_t));
-  sp_da(sp_glob_token_t) alt = sp_da_new(mem, sp_glob_token_t);
+  sp_da(sp_da(sp_glob_token_t)) alts = SP_NULLPTR;
+  sp_da(sp_glob_token_t) alt = SP_NULLPTR;
 
   while (pos < len) {
     c8 c = sp_str_at(pattern, (s32)pos);
 
     if (c == '}') {
-      sp_da_push(alts, alt);
-      sp_da_push(*tokens, ((sp_glob_token_t) {
+      sp_glob_try_alloc(sp_da_push(mem, alts, alt));
+      sp_glob_try_alloc(sp_da_push(mem, *tokens, ((sp_glob_token_t) {
         .type = SP_GLOB_TOK_ALTERNATES,
         .alternates = {.alts = alts}
-      }));
+      })));
       *it = pos;
       return SP_GLOB_ERR_OK;
     }
 
     if (c == ',') {
-      sp_da_push(alts, alt);
-      alt = sp_da_new(mem, sp_glob_token_t);
+      sp_glob_try_alloc(sp_da_push(mem, alts, alt));
+      alt = SP_NULLPTR;
       pos++;
       continue;
     }
 
     switch (c) {
       case '?': {
-        sp_glob_push_token(&alt, SP_GLOB_TOK_ANY);
+        sp_glob_try_alloc(sp_glob_push_token(mem, &alt, SP_GLOB_TOK_ANY));
         break;
       }
       case '*': {
-        sp_glob_try(sp_glob_parse_star(pattern, &pos, &alt));
+        sp_glob_try(sp_glob_parse_star(mem, pattern, &pos, &alt));
         break;
       }
       case '[': {
@@ -277,7 +284,7 @@ sp_glob_err_t sp_glob_parse_alternates(sp_mem_t mem, sp_str_t pattern, u32* it, 
         break;
       }
       default: {
-        sp_glob_push_literal(&alt, c);
+        sp_glob_try_alloc(sp_glob_push_literal(mem, &alt, c));
         break;
       }
     }
@@ -291,11 +298,11 @@ sp_glob_err_t sp_glob_parse(sp_mem_t mem, sp_str_t pattern, sp_da(sp_glob_token_
   for (u32 it = 0; it < pattern.len;) {
     c8 c = pattern.data[it];
     switch (c) {
-      case '?': { sp_glob_push_token(tokens, SP_GLOB_TOK_ANY); break; }
-      case '*': { sp_glob_try(sp_glob_parse_star(pattern, &it, tokens)); break; }
+      case '?': { sp_glob_try_alloc(sp_glob_push_token(mem, tokens, SP_GLOB_TOK_ANY)); break; }
+      case '*': { sp_glob_try(sp_glob_parse_star(mem, pattern, &it, tokens)); break; }
       case '[': { sp_glob_try(sp_glob_parse_class(mem, pattern, &it, tokens)); break; }
       case '{': { sp_glob_try(sp_glob_parse_alternates(mem, pattern, &it, tokens)); break; }
-      default:  { sp_glob_push_literal(tokens, c); break; }
+      default:  { sp_glob_try_alloc(sp_glob_push_literal(mem, tokens, c)); break; }
     }
     it++;
   }
@@ -317,16 +324,18 @@ bool sp_glob_match_alternates(sp_glob_token_t* tok, sp_da(sp_glob_token_t) token
     sp_da(sp_glob_token_t) alt = tok->alternates.alts[i];
 
     sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
-    sp_da(sp_glob_token_t) combined = sp_da_new(scratch.mem, sp_glob_token_t);
+    sp_da(sp_glob_token_t) combined = SP_NULLPTR;
+    sp_err_t err = SP_OK;
     sp_da_for(alt, j) {
-      sp_da_push(combined, alt[j]);
+      if (!err) err = sp_da_push(scratch.mem, combined, alt[j]);
     }
     u64 remaining = sp_da_size(tokens);
     for (u32 j = ti; j < remaining; j++) {
-      sp_da_push(combined, tokens[j]);
+      if (!err) err = sp_da_push(scratch.mem, combined, tokens[j]);
     }
 
-    bool matched = sp_glob_match_impl(combined, 0, path, pi);
+    // A match can't be claimed for a pattern that couldn't be assembled
+    bool matched = !err && sp_glob_match_impl(combined, 0, path, pi);
     sp_mem_end_scratch(scratch);
     if (matched) {
       return true;
@@ -513,7 +522,6 @@ sp_glob_t* sp_glob_new_str(sp_mem_t mem, sp_str_t pattern) {
   sp_glob_t* g = sp_mem_allocator_alloc_type(am, sp_glob_t);
   g->arena = arena;
   g->pattern = pattern;
-  sp_da_init(am, g->tokens);
 
   if (sp_glob_parse(am, pattern, &g->tokens)) {
     sp_mem_arena_destroy(arena);
@@ -616,13 +624,6 @@ sp_glob_set_t* sp_glob_set_new(sp_mem_t mem) {
   sp_mem_t am = sp_mem_arena_as_allocator(arena);
   sp_glob_set_t* set = sp_mem_allocator_alloc_type(am, sp_glob_set_t);
   set->arena = arena;
-  sp_da_init(am, set->globs);
-  sp_da_init(am, set->prefixes);
-  sp_da_init(am, set->suffixes);
-  sp_da_init(am, set->fallbacks);
-  sp_str_ht_init(am, set->literal);
-  sp_str_ht_init(am, set->base_name);
-  sp_str_ht_init(am, set->extension);
   return set;
 }
 
@@ -634,32 +635,33 @@ void sp_glob_set_free(sp_glob_set_t* set) {
   sp_mem_arena_destroy(set->arena);
 }
 
-void sp_glob_set_add(sp_glob_set_t* set, const c8* pattern) {
-  sp_glob_set_add_ex(set, sp_glob_new(set->arena->allocator, pattern));
+sp_err_t sp_glob_set_add(sp_glob_set_t* set, const c8* pattern) {
+  return sp_glob_set_add_ex(set, sp_glob_new(set->arena->allocator, pattern));
 }
 
-void sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern) {
-  sp_glob_set_add_ex(set, sp_glob_new_str(set->arena->allocator, pattern));
+sp_err_t sp_glob_set_add_str(sp_glob_set_t* set, sp_str_t pattern) {
+  return sp_glob_set_add_ex(set, sp_glob_new_str(set->arena->allocator, pattern));
 }
 
-void sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* g) {
+sp_err_t sp_glob_set_add_ex(sp_glob_set_t* set, sp_glob_t* g) {
   SP_ASSERT(set);
   SP_ASSERT(g);
-  sp_da_push(set->globs, g);
+  return sp_da_push(sp_mem_arena_as_allocator(set->arena), set->globs, g);
 }
 
-void sp_glob_set_ht_add(sp_mem_t mem, sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx) {
+sp_err_t sp_glob_set_ht_add(sp_mem_t mem, sp_glob_set_index_table_t* ht, sp_str_t key, u32 idx) {
   sp_da(u32)* indices = sp_ht_getp(*ht, key);
   if (!indices) {
-    sp_da(u32) fresh = sp_da_new(mem, u32);
-    sp_ht_insert(*ht, key, fresh);
+    sp_da(u32) fresh = SP_NULLPTR;
+    sp_try(sp_str_ht_insert(mem, *ht, key, fresh));
     indices = sp_ht_getp(*ht, key);
   }
-  sp_da_push(*indices, idx);
+  return sp_da_push(mem, *indices, idx);
 }
 
-void sp_glob_set_build(sp_glob_set_t* set) {
+sp_err_t sp_glob_set_build(sp_glob_set_t* set) {
   SP_ASSERT(set);
+  sp_mem_t mem = sp_mem_arena_as_allocator(set->arena);
 
   sp_da_for(set->globs, i) {
     sp_glob_t* g = set->globs[i];
@@ -667,56 +669,58 @@ void sp_glob_set_build(sp_glob_set_t* set) {
 
     switch (g->strategy) {
       case SP_GLOB_STRATEGY_LITERAL: {
-        sp_glob_set_ht_add(sp_mem_arena_as_allocator(set->arena), &set->literal, g->literal, idx);
+        sp_try(sp_glob_set_ht_add(mem, &set->literal, g->literal, idx));
         break;
       }
       case SP_GLOB_STRATEGY_BASENAME_LITERAL: {
-        sp_glob_set_ht_add(sp_mem_arena_as_allocator(set->arena), &set->base_name, g->literal, idx);
+        sp_try(sp_glob_set_ht_add(mem, &set->base_name, g->literal, idx));
         break;
       }
       case SP_GLOB_STRATEGY_EXTENSION: {
         sp_str_t ext = sp_str_suffix(g->literal, g->literal.len - 1);
         if (sp_str_find_c8(ext, '.') >= 0) {
-          sp_da_push(set->suffixes, ((sp_glob_set_suffix_entry_t) {
+          sp_try(sp_da_push(mem, set->suffixes, ((sp_glob_set_suffix_entry_t) {
             .suffix = g->literal,
             .idx = idx,
             .component = false
-          }));
+          })));
         }
         else {
-          sp_glob_set_ht_add(sp_mem_arena_as_allocator(set->arena), &set->extension, ext, idx);
+          sp_try(sp_glob_set_ht_add(mem, &set->extension, ext, idx));
         }
         break;
       }
       case SP_GLOB_STRATEGY_PREFIX: {
         sp_glob_set_prefix_entry_t entry = {.literal = g->literal, .idx = idx};
-        sp_da_push(set->prefixes, entry);
+        sp_try(sp_da_push(mem, set->prefixes, entry));
         break;
       }
       case SP_GLOB_STRATEGY_SUFFIX: {
-        sp_da_push(set->suffixes, ((sp_glob_set_suffix_entry_t) {
+        sp_try(sp_da_push(mem, set->suffixes, ((sp_glob_set_suffix_entry_t) {
           .suffix = g->literal,
           .idx = idx,
           .component = sp_str_starts_with(g->literal, sp_str_lit("/"))
-        }));
+        })));
         break;
       }
       case SP_GLOB_STRATEGY_FALLBACK: {
         sp_glob_set_fallback_entry_t entry = {.glob = g, .idx = idx};
-        sp_da_push(set->fallbacks, entry);
+        sp_try(sp_da_push(mem, set->fallbacks, entry));
         break;
       }
     }
   }
+  return SP_OK;
 }
 
-void sp_glob_set_ht_collect(sp_glob_set_index_table_t ht, sp_str_t key, sp_da(u32)* out) {
+sp_err_t sp_glob_set_ht_collect(sp_mem_t mem, sp_glob_set_index_table_t ht, sp_str_t key, sp_da(u32)* out) {
   sp_da(u32)* indices = sp_ht_getp(ht, key);
   if (indices) {
     sp_da_for(*indices, i) {
-      sp_da_push(*out, (*indices)[i]);
+      sp_try(sp_da_push(mem, *out, (*indices)[i]));
     }
   }
+  return SP_OK;
 }
 
 bool sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* e, sp_str_t path) {
@@ -732,37 +736,38 @@ bool sp_glob_set_suffix_match(sp_glob_set_suffix_entry_t* e, sp_str_t path) {
   return false;
 }
 
-void sp_glob_set_matches(sp_glob_set_t* set, sp_str_t path, sp_da(u32)* out) {
+sp_err_t sp_glob_set_matches(sp_mem_t mem, sp_glob_set_t* set, sp_str_t path, sp_da(u32)* out) {
   SP_ASSERT(set);
   SP_ASSERT(out);
 
   sp_glob_candidate_t c = sp_glob_candidate_new(path);
 
-  sp_glob_set_ht_collect(set->literal, c.path, out);
-  sp_glob_set_ht_collect(set->base_name, c.basename, out);
+  sp_try(sp_glob_set_ht_collect(mem, set->literal, c.path, out));
+  sp_try(sp_glob_set_ht_collect(mem, set->base_name, c.basename, out));
   if (!sp_str_empty(c.ext)) {
-    sp_glob_set_ht_collect(set->extension, c.ext, out);
+    sp_try(sp_glob_set_ht_collect(mem, set->extension, c.ext, out));
   }
 
   sp_da_for(set->prefixes, it) {
     sp_glob_set_prefix_entry_t* prefix = &set->prefixes[it];
     if (sp_str_starts_with(c.path, prefix->literal)) {
-      sp_da_push(*out, prefix->idx);
+      sp_try(sp_da_push(mem, *out, prefix->idx));
     }
   }
 
   sp_da_for(set->suffixes, it) {
     if (sp_glob_set_suffix_match(&set->suffixes[it], c.path)) {
-      sp_da_push(*out, set->suffixes[it].idx);
+      sp_try(sp_da_push(mem, *out, set->suffixes[it].idx));
     }
   }
 
   sp_da_for(set->fallbacks, it) {
     sp_glob_set_fallback_entry_t* e = &set->fallbacks[it];
     if (sp_glob_match_tokens(e->glob->tokens, c.path)) {
-      sp_da_push(*out, e->idx);
+      sp_try(sp_da_push(mem, *out, e->idx));
     }
   }
+  return SP_OK;
 }
 
 bool sp_glob_set_match(sp_glob_set_t* set, sp_str_t path) {

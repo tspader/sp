@@ -70,16 +70,17 @@ struct sp_asset_registry {
   sp_da(sp_asset_importer_t) importers;
   sp_rb(sp_asset_import_context_t) import_queue;
   sp_rb(sp_asset_import_context_t) completion_queue;
+  sp_err_t err; // raised on the import thread, which has nobody to return it to; protected by completion_mutex
   bool shutdown_requested;
 };
 
-void              sp_asset_registry_init(sp_asset_registry_t* r, sp_mem_t mem, sp_asset_registry_config_t config);
-void*             sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size);
+sp_err_t          sp_asset_registry_init(sp_asset_registry_t* r, sp_mem_t mem, sp_asset_registry_config_t config);
+sp_err_t          sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size, void** out);
 void              sp_asset_registry_shutdown(sp_asset_registry_t* r);
 sp_asset_t*       sp_asset_registry_import(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* user_data);
 sp_asset_t*       sp_asset_registry_add(sp_asset_registry_t* r, sp_asset_kind_t k, sp_str_t name, void* data);
 sp_asset_t*       sp_asset_registry_find(sp_asset_registry_t* r, sp_asset_kind_t kind, sp_str_t name);
-void              sp_asset_registry_process_completions(sp_asset_registry_t* r);
+sp_err_t          sp_asset_registry_process_completions(sp_asset_registry_t* r);
 sp_asset_importer_t* sp_asset_registry_find_importer(sp_asset_registry_t* r, sp_asset_kind_t kind);
 s32               sp_asset_registry_thread_fn(void* user_data);
 #endif
@@ -92,28 +93,27 @@ s32               sp_asset_registry_thread_fn(void* user_data);
 #endif
 
 #if defined(SP_ASSET_IMPLEMENTATION)
-void* sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size) {
+sp_err_t sp_asset_registry_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* old, u64 old_size, void** out) {
   sp_asset_registry_t* r = (sp_asset_registry_t*)ud;
   sp_mutex_lock(&r->alloc_mutex);
-  void* result = sp_mem_arena_on_alloc(r->arena, mode, size, old, old_size);
+  sp_err_t err = sp_mem_arena_on_alloc(r->arena, mode, size, old, old_size, out);
   sp_mutex_unlock(&r->alloc_mutex);
-  return result;
+  return err;
 }
 
-void sp_asset_registry_init(sp_asset_registry_t* registry, sp_mem_t mem, sp_asset_registry_config_t config) {
+sp_err_t sp_asset_registry_init(sp_asset_registry_t* registry, sp_mem_t mem, sp_asset_registry_config_t config) {
   sp_mutex_init(&registry->mutex);
   sp_mutex_init(&registry->import_mutex);
   sp_mutex_init(&registry->completion_mutex);
   sp_mutex_init(&registry->alloc_mutex);
   sp_semaphore_init(&registry->semaphore);
   registry->shutdown_requested = false;
+  registry->err = SP_OK;
+  registry->importers = SP_NULLPTR;
   registry->import_queue = SP_NULLPTR;
   registry->completion_queue = SP_NULLPTR;
   registry->arena = sp_mem_arena_new(mem);
   registry->mem = (sp_mem_t){ .on_alloc = sp_asset_registry_on_alloc, .user_data = registry };
-  sp_da_init(registry->mem, registry->importers);
-  sp_rb_init(registry->mem, registry->import_queue);
-  sp_rb_init(registry->mem, registry->completion_queue);
 
   sp_for(index, SP_ASSET_REGISTRY_CONFIG_MAX_IMPORTERS) {
     sp_asset_importer_config_t* cfg = &config.importers[index];
@@ -127,11 +127,11 @@ void sp_asset_registry_init(sp_asset_registry_t* registry, sp_mem_t mem, sp_asse
       .fallback = cfg->fallback,
       .assets = SP_NULLPTR,
     };
-    sp_str_ht_init(registry->mem, importer.assets);
-    sp_da_push(registry->importers, importer);
+    sp_try(sp_da_push(registry->mem, registry->importers, importer));
   }
 
   sp_thread_init(&registry->thread, sp_asset_registry_thread_fn, registry);
+  return SP_OK;
 }
 
 void sp_asset_registry_shutdown(sp_asset_registry_t* registry) {
@@ -168,7 +168,7 @@ static sp_asset_t* sp_asset_registry_alloc(sp_asset_registry_t* r, sp_asset_impo
   asset->name = sp_str_copy(r->mem, name);
   sp_atomic_ptr_store(&asset->data, data, SP_ATOMIC_RELEASE);
 
-  sp_str_ht_insert(importer->assets, sp_str_copy(r->mem, name), asset);
+  if (sp_str_ht_insert(r->mem, importer->assets, sp_str_copy(r->mem, name), asset)) return SP_NULLPTR;
 
   return asset;
 }
@@ -179,7 +179,7 @@ sp_asset_t* sp_asset_registry_add(sp_asset_registry_t* r, sp_asset_kind_t k, sp_
 
   sp_mutex_lock(&r->mutex);
   sp_asset_t* asset = sp_asset_registry_alloc(r, importer, name, data);
-  asset->state = SP_ASSET_STATE_COMPLETED;
+  if (asset) asset->state = SP_ASSET_STATE_COMPLETED;
   sp_mutex_unlock(&r->mutex);
   return asset;
 }
@@ -203,6 +203,7 @@ sp_asset_t* sp_asset_registry_import(sp_asset_registry_t* r, sp_asset_kind_t k, 
   sp_mutex_lock(&r->mutex);
   sp_asset_t* asset = sp_asset_registry_alloc(r, importer, name, importer->fallback);
   sp_mutex_unlock(&r->mutex);
+  if (!asset) return SP_NULLPTR;
 
   sp_asset_import_context_t context = {
     .registry = r,
@@ -212,16 +213,26 @@ sp_asset_t* sp_asset_registry_import(sp_asset_registry_t* r, sp_asset_kind_t k, 
   };
 
   sp_mutex_lock(&r->import_mutex);
-  sp_rb_push(r->import_queue, context);
+  sp_err_t err = sp_rb_push(r->mem, r->import_queue, context);
   sp_mutex_unlock(&r->import_mutex);
+
+  if (err) {
+    // Nothing will ever import it; don't leave it findable
+    sp_mutex_lock(&r->mutex);
+    sp_str_ht_erase(importer->assets, name);
+    sp_mutex_unlock(&r->mutex);
+    return SP_NULLPTR;
+  }
 
   sp_semaphore_signal(&r->semaphore);
 
   return asset;
 }
 
-void sp_asset_registry_process_completions(sp_asset_registry_t* r) {
+sp_err_t sp_asset_registry_process_completions(sp_asset_registry_t* r) {
   sp_mutex_lock(&r->completion_mutex);
+  sp_err_t err = r->err;
+  r->err = SP_OK;
   while (!sp_rb_empty(r->completion_queue)) {
     sp_asset_import_context_t context = *sp_rb_peek(r->completion_queue);
     sp_rb_pop(r->completion_queue);
@@ -236,6 +247,7 @@ void sp_asset_registry_process_completions(sp_asset_registry_t* r) {
     sp_mutex_lock(&r->completion_mutex);
   }
   sp_mutex_unlock(&r->completion_mutex);
+  return err;
 }
 
 s32 sp_asset_registry_thread_fn(void* user_data) {
@@ -262,7 +274,8 @@ s32 sp_asset_registry_thread_fn(void* user_data) {
       sp_mutex_unlock(&registry->mutex);
 
       sp_mutex_lock(&registry->completion_mutex);
-      sp_rb_push(registry->completion_queue, context);
+      sp_err_t err = sp_rb_push(registry->mem, registry->completion_queue, context);
+      if (err && !registry->err) registry->err = err;
       sp_mutex_unlock(&registry->completion_mutex);
 
       sp_mutex_lock(&registry->import_mutex);

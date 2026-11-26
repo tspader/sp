@@ -4,7 +4,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sp_gdb
 
-_HT_FIELDS = {"data", "size", "capacity", "info", "tmp_key", "tmp_val"}
+_HT_FIELDS = {"data", "size", "capacity", "info", "tmp"}
 
 
 class SpHtPrinter:

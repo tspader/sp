@@ -130,7 +130,9 @@ UTEST_F(env, copy_is_independent) {
   sp_env_init(ut.mem, &env);
   sp_env_insert_c(&env, "K", "V");
 
-  sp_env_t copy = sp_env_copy(ut.mem, &env);
+  sp_env_t copy = sp_zero;
+
+  ASSERT_EQ(sp_env_copy(ut.mem, &env, &copy), SP_OK);
   EXPECT_EQ(sp_env_count(&copy), (u32)1);
   SP_EXPECT_STR_EQ_CSTR(sp_env_get_c(&copy, "K"), "V");
 
@@ -166,7 +168,8 @@ UTEST_F(env, value_with_equals) {
 UTEST_F(env, capture_has_known_var) {
   SKIP_ON_WASM()
   SKIP_ON_WIN32() // @spader Just for a moment; it's just a CI thing
-  sp_env_t env = sp_env_capture(ut.mem);
+  sp_env_t env = sp_zero;
+  ASSERT_EQ(sp_env_capture(ut.mem, &env), SP_OK);
 
   EXPECT_TRUE(sp_env_count(&env) > 0);
   EXPECT_TRUE(sp_env_contains_c(&env, SP_TEST_ENV_OS_KEY));
@@ -176,13 +179,16 @@ UTEST_F(env, capture_has_known_var) {
 }
 
 UTEST_F(env, capture_is_snapshot) {
-  sp_env_t env = sp_env_capture(ut.mem);
+  sp_env_t env = sp_zero;
+  ASSERT_EQ(sp_env_capture(ut.mem, &env), SP_OK);
   u32 count = sp_env_count(&env);
 
   sp_env_insert_c(&env, "SP_TEST_ONLY_VAR", "hello");
   EXPECT_EQ(sp_env_count(&env), count + 1);
 
-  sp_env_t env2 = sp_env_capture(ut.mem);
+  sp_env_t env2 = sp_zero;
+
+  ASSERT_EQ(sp_env_capture(ut.mem, &env2), SP_OK);
   EXPECT_FALSE(sp_env_contains_c(&env2, "SP_TEST_ONLY_VAR"));
 
   sp_env_destroy(&env);
@@ -209,7 +215,8 @@ UTEST_F(env, to_posix_envp) {
   sp_env_insert_c(&env, "AA", "11");
   sp_env_insert_c(&env, "BB", "22");
 
-  c8** envp = sp_env_to_posix_envp(ut.mem, &env);
+  c8** envp = SP_NULLPTR;
+  ASSERT_EQ(sp_env_to_posix_envp(ut.mem, &env, &envp), SP_OK);
 
   u32 count = 0;
   while (envp[count] != SP_NULLPTR) count++;
@@ -232,7 +239,8 @@ UTEST_F(env, to_posix_envp_empty) {
   sp_env_t env;
   sp_env_init(ut.mem, &env);
 
-  c8** envp = sp_env_to_posix_envp(ut.mem, &env);
+  c8** envp = SP_NULLPTR;
+  ASSERT_EQ(sp_env_to_posix_envp(ut.mem, &env, &envp), SP_OK);
   EXPECT_EQ(envp[0], (c8*)SP_NULLPTR);
 
   sp_env_destroy(&env);
@@ -268,7 +276,8 @@ UTEST_F(env, iterate) {
 }
 
 UTEST_F(env, iterate_matches_capture) {
-  sp_env_t captured = sp_env_capture(ut.mem);
+  sp_env_t captured = sp_zero;
+  ASSERT_EQ(sp_env_capture(ut.mem, &captured), SP_OK);
 
   sp_os_env_it_t it = sp_os_env_it_begin();
   u32 it_count = 0;
@@ -373,13 +382,15 @@ void run_env_host_test(struct env* utest_fixture, s32* utest_result, env_host_te
     env_os_set(t.os[it].key, t.os[it].value);
   }
 
-  sp_env_t env = sp_env_capture(ut.mem);
+  sp_env_t env = sp_zero;
+
+  ASSERT_EQ(sp_env_capture(ut.mem, &env), SP_OK);
   u32 captured = sp_env_count(&env);
 
   sp_ht(sp_str_t, bool) spellings = sp_zero;
   sp_str_ht_init(ut.mem, spellings);
   sp_str_ht_for(env.vars, it) {
-    sp_str_ht_insert(spellings, sp_str_copy(ut.mem, *sp_str_ht_it_getkp(env.vars, it)), true);
+    sp_str_ht_insert(ut.mem, spellings, sp_str_copy(ut.mem, *sp_str_ht_it_getkp(env.vars, it)), true);
   }
 
   sp_carr_for(t.ops, it) {
@@ -397,7 +408,8 @@ void run_env_host_test(struct env* utest_fixture, s32* utest_result, env_host_te
         break;
       }
       case ENV_OP_COPY: {
-        sp_env_t copy = sp_env_copy(ut.mem, &env);
+        sp_env_t copy = sp_zero;
+        ASSERT_EQ(sp_env_copy(ut.mem, &env, &copy), SP_OK);
         sp_env_destroy(&env);
         env = copy;
         break;
@@ -443,7 +455,7 @@ void run_env_host_test(struct env* utest_fixture, s32* utest_result, env_host_te
     env_os_unset(t.os[it].key);
   }
 
-  sp_str_ht_free(spellings);
+  sp_str_ht_free(ut.mem, spellings);
   sp_env_destroy(&env);
 }
 
@@ -596,7 +608,8 @@ UTEST_F(env, host_insert_new) {
 
 UTEST_F(env, capture_values_match_os) {
   SKIP_ON_WASM()
-  sp_env_t captured = sp_env_capture(ut.mem);
+  sp_env_t captured = sp_zero;
+  ASSERT_EQ(sp_env_capture(ut.mem, &captured), SP_OK);
 
   for (sp_os_env_it_t it = sp_os_env_it_begin(); sp_os_env_it_valid(&it); sp_os_env_it_next(&it)) {
     SP_EXPECT_STR_EQ(sp_env_get(&captured, it.key), sp_os_env_get(it.key));

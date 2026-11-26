@@ -138,8 +138,20 @@ void     sp_mem_tracking_init_ex(sp_mem_tracking_t* t, sp_mem_t backing);
 sp_mem_t sp_mem_tracking_as_allocator(sp_mem_tracking_t* t);
 void     sp_mem_tracking_dump(sp_mem_tracking_t* t);
 void     sp_mem_tracking_deinit(sp_mem_tracking_t* t);
-void*    sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size);
+sp_err_t sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out);
 bool     sp_mem_tracking_ok(sp_mem_tracking_t* mem);
+
+// Forwards to backing, except that the allocation numbered `at` (counting from zero) fails
+// with `err`. Frees are not counted.
+typedef struct {
+  sp_mem_t backing;
+  sp_err_t err;
+  u32 at;
+  u32 count;
+} sp_mem_failing_t;
+
+sp_mem_t sp_mem_failing_as_allocator(sp_mem_failing_t* f);
+sp_err_t sp_mem_failing_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out);
 
 #endif
 
@@ -278,10 +290,11 @@ static void sp_mem_tracking_unlink(sp_mem_tracking_node_t** list, sp_mem_trackin
   node->next = SP_NULLPTR;
 }
 
-static void* sp_mem_tracking_do_alloc(sp_mem_tracking_t* t, u64 size) {
-  if (!size) return SP_NULLPTR;
-  void* raw = sp_alloc(t->backing, size + sizeof(sp_mem_tracking_node_t));
-  if (!raw) return SP_NULLPTR;
+static sp_err_t sp_mem_tracking_do_alloc(sp_mem_tracking_t* t, u64 size, void** out) {
+  *out = SP_NULLPTR;
+  if (!size) return SP_OK;
+  void* raw = SP_NULLPTR;
+  sp_try(sp_mem_alloc(t->backing, size + sizeof(sp_mem_tracking_node_t), &raw));
 
   sp_mem_tracking_node_t* node = (sp_mem_tracking_node_t*)raw;
   node->size = size;
@@ -290,7 +303,8 @@ static void* sp_mem_tracking_do_alloc(sp_mem_tracking_t* t, u64 size) {
   sp_mem_tracking_link(&t->live, node);
   t->live_count++;
   t->live_bytes += size;
-  return sp_mem_tracking_user_ptr(node);
+  *out = sp_mem_tracking_user_ptr(node);
+  return SP_OK;
 }
 
 static u32 sp_mem_tracking_peek_magic(void* ptr) {
@@ -324,37 +338,54 @@ static void sp_mem_tracking_do_free(sp_mem_tracking_t* t, void* ptr, u64 size) {
   }
 }
 
-static void* sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 size, u64 old_size) {
-  if (!old)  return sp_mem_tracking_do_alloc(t, size);
-  if (!size) { sp_mem_tracking_do_free(t, old, old_size); return SP_NULLPTR; }
+static sp_err_t sp_mem_tracking_do_realloc(sp_mem_tracking_t* t, void* old, u64 size, u64 old_size, void** out) {
+  *out = SP_NULLPTR;
+  if (!old)  return sp_mem_tracking_do_alloc(t, size, out);
+  if (!size) { sp_mem_tracking_do_free(t, old, old_size); return SP_OK; }
 
   u32 magic = sp_mem_tracking_peek_magic(old);
   if (magic != SP_MEM_TRACKING_LIVE_MAGIC) {
     if (magic == SP_MEM_TRACKING_FREED_MAGIC) t->double_frees++;
     else                                      t->wild_frees++;
-    return SP_NULLPTR;
+    return SP_ERR_SYS_INVALID;
   }
   sp_mem_tracking_node_t* node = sp_mem_tracking_header(old);
   if (node->size != old_size) t->bad_sizes++;
-  if (node->size == size) return old;
+  if (node->size == size) { *out = old; return SP_OK; }
 
-  void* fresh = sp_mem_tracking_do_alloc(t, size);
-  if (!fresh) return SP_NULLPTR;
+  void* fresh = SP_NULLPTR;
+  sp_try(sp_mem_tracking_do_alloc(t, size, &fresh));
   sp_mem_copy(fresh, old, sp_min(node->size, size));
   sp_mem_tracking_do_free(t, old, node->size);
-  return fresh;
+  *out = fresh;
+  return SP_OK;
 }
 
-void* sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size) {
+sp_err_t sp_mem_tracking_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out) {
   sp_mem_tracking_t* t = (sp_mem_tracking_t*)ud;
+  *out = SP_NULLPTR;
   switch (mode) {
     case SP_ALLOCATOR_MODE_ALLOC:
-    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:  return sp_mem_tracking_do_alloc(t, size);
+    case SP_ALLOCATOR_MODE_ALLOC_UNINITIALIZED:  return sp_mem_tracking_do_alloc(t, size, out);
     case SP_ALLOCATOR_MODE_RESIZE:
-    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: return sp_mem_tracking_do_realloc(t, ptr, size, old_size);
-    case SP_ALLOCATOR_MODE_FREE:       sp_mem_tracking_do_free(t, ptr, old_size); return SP_NULLPTR;
+    case SP_ALLOCATOR_MODE_RESIZE_UNINITIALIZED: return sp_mem_tracking_do_realloc(t, ptr, size, old_size, out);
+    case SP_ALLOCATOR_MODE_FREE:       sp_mem_tracking_do_free(t, ptr, old_size); return SP_OK;
   }
-  return SP_NULLPTR;
+  return SP_ERR;
+}
+
+sp_err_t sp_mem_failing_on_alloc(void* ud, sp_mem_alloc_mode_t mode, u64 size, void* ptr, u64 old_size, void** out) {
+  sp_mem_failing_t* f = (sp_mem_failing_t*)ud;
+  *out = SP_NULLPTR;
+  if (mode != SP_ALLOCATOR_MODE_FREE && f->count++ == f->at) return f->err;
+  return f->backing.on_alloc(f->backing.user_data, mode, size, ptr, old_size, out);
+}
+
+sp_mem_t sp_mem_failing_as_allocator(sp_mem_failing_t* f) {
+  return (sp_mem_t) {
+    .on_alloc = sp_mem_failing_on_alloc,
+    .user_data = f,
+  };
 }
 
 void sp_mem_tracking_init_ex(sp_mem_tracking_t* t, sp_mem_t backing) {

@@ -147,21 +147,21 @@ static sp_da(sp_str_t) composite(sp_mem_t mem, sp_str_t bytes) {
     at += count;
   }
 
-  sp_da(sp_str_t) lines = sp_da_new(mem, sp_str_t);
+  sp_da(sp_str_t) lines = SP_NULLPTR;
   sp_for(row, vt->max_row + 1) {
-    sp_da_push(lines, encode_row(mem, vt->cells[row], VT_COLS));
+    sp_da_push(mem, lines, encode_row(mem, vt->cells[row], VT_COLS));
   }
   return lines;
 }
 
 static sp_da(sp_str_t) frame_lines(sp_mem_t mem, sp_prompt_frame_t frame) {
-  sp_da(sp_str_t) lines = sp_da_new(mem, sp_str_t);
+  sp_da(sp_str_t) lines = SP_NULLPTR;
   sp_for(row, frame.rows) {
     u32* codepoints = sp_alloc_n(mem, u32, frame.cols);
     sp_for(col, frame.cols) {
       codepoints[col] = frame.cells[row * frame.cols + col].codepoint;
     }
-    sp_da_push(lines, encode_row(mem, codepoints, frame.cols));
+    sp_da_push(mem, lines, encode_row(mem, codepoints, frame.cols));
   }
   return lines;
 }

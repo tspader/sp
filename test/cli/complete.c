@@ -39,7 +39,8 @@ static void run_cli_complete_test(s32* utest_result, sp_mem_t mem, cli_complete_
   sp_cli_complete(&io.base, (sp_cli_desc_t) { .root = &t.cmd }, t.shell, t.words, num_words);
   sp_str_t actual = sp_io_dyn_mem_writer_as_str(&io);
 
-  sp_da(sp_str_t) lines = sp_str_split_c8(mem, actual, '\n');
+  sp_da(sp_str_t) lines = SP_NULLPTR;
+  sp_str_split_c8(mem, actual, '\n', &lines);
   u32 num_lines = 0;
   sp_da_for(lines, it) {
     if (!sp_str_empty(lines[it])) num_lines++;

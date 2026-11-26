@@ -80,10 +80,10 @@ sp_test_each(runner, filter, filter_case_t, filter_cases) {
     sp_must(t, glob);
   }
 
-  sp_da(sp_str_t) kept = sp_da_new(mem, sp_str_t);
+  sp_da(sp_str_t) kept = SP_NULLPTR;
   sp_carr_for(filter_instances, in) {
     if (sp_test_filtered(glob, filter_instances[in])) continue;
-    sp_da_push(kept, sp_cstr_as_str(filter_instances[in]));
+    sp_da_push(mem, kept, sp_cstr_as_str(filter_instances[in]));
   }
 
   sp_must_strs_eq(t, kept, sp_da_size(kept), it->expect);

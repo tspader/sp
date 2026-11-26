@@ -15,17 +15,18 @@ s32 run(s32 num_args, const c8** args) {
   sp_fs_read(mem, path, &content);
 
   sp_ht(sp_str_t, u32) counts = sp_zero;
-  sp_str_ht_init(mem, counts);
-  sp_da(sp_str_t) lines = sp_str_split_c8(mem, content, '\n');
+  sp_da(sp_str_t) lines = SP_NULLPTR;
+  sp_try(sp_str_split_c8(mem, content, '\n', &lines));
   sp_da_for(lines, i) {
-    sp_da(sp_str_t) words = sp_str_split_c8(mem, lines[i], ' ');
+    sp_da(sp_str_t) words = SP_NULLPTR;
+    sp_try(sp_str_split_c8(mem, lines[i], ' ', &words));
 
     sp_da_for(words, j) {
       u32* count = sp_str_ht_get(counts, words[j]);
       if (count) {
         *count = *count + 1;
       } else {
-        sp_str_ht_insert(counts, words[j], 1);
+        sp_try(sp_str_ht_insert(mem, counts, words[j], 1));
       }
     }
   }

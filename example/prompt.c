@@ -395,9 +395,8 @@ s32 prompt_main(s32 argc, const c8** argv) {
   sp_mem_t mem = sp_mem_heap_as_allocator(heap);
 
   sp_ht(const c8*, sp_prompt_demo_fn_t) demos = sp_zero;
-  sp_cstr_ht_init(mem, demos);
   sp_carr_for(ordered, it) {
-    sp_cstr_ht_insert(demos, ordered[it].name, ordered[it].fn);
+    sp_cstr_ht_insert(mem, demos, ordered[it].name, ordered[it].fn);
   }
 
   if (argc >= 2) {
@@ -421,13 +420,13 @@ s32 prompt_main(s32 argc, const c8** argv) {
 
   s32 result = 0;
   if (run == SP_NULLPTR) {
-    sp_da(sp_prompt_select_option_t) options = sp_da_new(mem, sp_prompt_select_option_t);
+    sp_da(sp_prompt_select_option_t) options = SP_NULLPTR;
     sp_carr_for(ordered, it) {
       sp_prompt_select_option_t option = {
         .label = ordered[it].name,
         .selected = it == 0
       };
-      sp_da_push(options, option);
+      sp_da_push(mem, options, option);
     }
 
     if (!sp_prompt_select(ctx, (sp_prompt_select_t) {

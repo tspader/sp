@@ -18,7 +18,7 @@
     (sm) = sp_void_cast(sm, sp_alloc_hint(sp_mem_os_new(), &(sm), sizeof(*(sm)))); \
     (sm)->arenas.data = darena;                                                \
     (sm)->arenas.metadata = marena;                                           \
-    sp_da_init(sp_mem_arena_as_allocator((sm)->arenas.metadata), (sm)->order); \
+    (sm)->order = SP_NULLPTR; \
     sp_ht_init(sp_mem_arena_as_allocator((sm)->arenas.metadata), (sm)->index); \
   } while (0)
 
@@ -42,16 +42,16 @@
   sp_alloc_hint(sp_mem_arena_as_allocator((sm)->arenas.data),                  \
     &(sm)->temp, sizeof(*(sm)->temp))
 
-#define sp_om_insert(sm, key, val)                                             \
+#define sp_om_insert(sm, k, v)                                                 \
   do {                                                                         \
     sp_om_ensure(sm);                                                          \
-    if (sp_ht_getp((sm)->index, (key)) != SP_NULLPTR) {                        \
+    if (sp_ht_getp((sm)->index, (k)) != SP_NULLPTR) {                          \
       break;                                                                   \
     }                                                                          \
     (sm)->temp = sp_void_cast((sm)->temp, sp_om_alloc_entry(sm));              \
-    *(sm)->temp = (val);                                                       \
-    sp_da_push((sm)->order, (sm)->temp);                                       \
-    sp_ht_insert((sm)->index, (sm)->index->tmp_key, (sm)->temp);              \
+    *(sm)->temp = (v);                                                         \
+    sp_da_push(sp_mem_arena_as_allocator((sm)->arenas.metadata), (sm)->order, (sm)->temp);                                       \
+    sp_ht_insert(sp_mem_arena_as_allocator((sm)->arenas.metadata), (sm)->index, (sm)->index->tmp.key, (sm)->temp);              \
   } while (0)
 
 #define sp_om_free(sm)                                                         \

@@ -44,14 +44,12 @@ SP_API void     sp_table_log(sp_table_writer_t* table);
 void sp_table_init(sp_table_writer_t* table, sp_mem_t mem) {
   sp_mem_zero(table, sizeof(*table));
   table->mem = mem;
-  sp_da_init(mem, table->cols);
-  sp_da_init(mem, table->cells);
 }
 
 void sp_table_add_col(sp_table_writer_t* table, sp_table_col_t col) {
   SP_ASSERT(sp_da_empty(table->cells));
   if (!col.fmt) col.fmt = "{}";
-  sp_da_push(table->cols, col);
+  sp_da_push(table->mem, table->cols, col);
 }
 
 void sp_table_begin(sp_table_writer_t* table) {
@@ -72,7 +70,7 @@ static void sp_table_push_cell(sp_table_writer_t* table, sp_str_t value) {
     .value = value,
     .color = table->color,
   };
-  sp_da_push(table->cells, cell);
+  sp_da_push(table->mem, table->cells, cell);
   table->color = SP_NULLPTR;
 }
 

@@ -107,11 +107,11 @@ sp_test_each(runner, prune, prune_case_t, prune_cases) {
   sp_must_ok(t, out.error);
   sp_must_eq(t, out.status.exit_code, 0);
 
-  sp_da(sp_str_t) survivors = sp_da_new(mem, sp_str_t);
+  sp_da(sp_str_t) survivors = SP_NULLPTR;
   sp_carr_for(it->seeds, at) {
     if (!it->seeds[at].id) break;
     sp_sys_file_meta_t meta = sp_zero;
-    if (!sp_fs_get_path_metadata_at(paths[at], &meta)) sp_da_push(survivors, sp_cstr_as_str(it->seeds[at].id));
+    if (!sp_fs_get_path_metadata_at(paths[at], &meta)) sp_da_push(mem, survivors, sp_cstr_as_str(it->seeds[at].id));
   }
   sp_expect_strs_eq(t, survivors, sp_da_size(survivors), it->expect);
 

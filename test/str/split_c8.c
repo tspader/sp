@@ -74,7 +74,8 @@ sp_test_each(str, split_c8, test_t, tests) {
     count++;
   }
 
-  sp_da(sp_str_t) parts = sp_str_split_c8(sp_test_arena(t), input, it->delimiter);
+  sp_da(sp_str_t) parts = SP_NULLPTR;
+  sp_try(sp_str_split_c8(sp_test_arena(t), input, it->delimiter, &parts));
   sp_must_eq(t, sp_da_size(parts), count);
   sp_expect_strs_eq(t, parts, count, it->parts);
 

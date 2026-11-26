@@ -183,6 +183,9 @@ typedef struct {
   const c8* completer;
 } sp_cli_desc_t;
 
+// Room for an array of exactly N elements, wherever in the buffer it has to start to be aligned
+#define sp_cli_table_size(N, T) (sp_da_alloc_size(N, sizeof(T)) + SP_MEM_ALIGNMENT)
+
 struct sp_cli {
   void* user_data;
   sp_cli_result_t status;
@@ -200,10 +203,10 @@ struct sp_cli {
   sp_da(sp_cli_arg_t) args;
   sp_da(sp_cli_cmd_t*) commands;
   struct {
-    sp_arr(sp_cli_opt_t, SP_CLI_MAX_DEPTH * SP_CLI_MAX_OPTS) opts;
-    sp_arr(sp_cli_env_t, SP_CLI_MAX_DEPTH * SP_CLI_MAX_ENV) envs;
-    sp_arr(sp_cli_arg_t, SP_CLI_MAX_ARGS) args;
-    sp_arr(sp_cli_cmd_t*, SP_CLI_MAX_COMMANDS) cmds;
+    u8 opts [sp_cli_table_size(SP_CLI_MAX_DEPTH * SP_CLI_MAX_OPTS, sp_cli_opt_t)];
+    u8 envs [sp_cli_table_size(SP_CLI_MAX_DEPTH * SP_CLI_MAX_ENV, sp_cli_env_t)];
+    u8 args [sp_cli_table_size(SP_CLI_MAX_ARGS, sp_cli_arg_t)];
+    u8 cmds [sp_cli_table_size(SP_CLI_MAX_COMMANDS, sp_cli_cmd_t*)];
   } buffers;
 };
 
@@ -320,14 +323,25 @@ SP_PRIVATE sp_cli_result_t sp_cli_fail_valued(sp_cli_t* cli, sp_cli_err_kind_t k
 
 SP_PRIVATE const c8* sp_cli_no_rest = SP_NULLPTR;
 
+// The parser never allocates. Its tables are carved out of the parser itself, at their full
+// capacity; outgrowing one is a bug in the command description.
+#define sp_cli_table(buffer, arr, capacity)                                                         \
+  do {                                                                                              \
+    sp_mem_fixed_t sp_cli_fixed = sp_mem_fixed((buffer), sizeof(buffer));                           \
+    sp_assert(!sp_da_reserve(sp_mem_fixed_as_allocator(&sp_cli_fixed), arr, (capacity)));           \
+  } while (0)
+
+#define sp_cli_push(arr, val) \
+  sp_assert(!sp_da_push(sp_mem_error(), arr, val))
+
 SP_PRIVATE void sp_cli_init(sp_cli_t* cli, sp_cli_desc_t desc) {
   *cli = sp_zero_s(sp_cli_t);
   cli->user_data = desc.user_data;
   cli->rest = &sp_cli_no_rest;
-  cli->opts = sp_arr_init(&cli->buffers.opts);
-  cli->env = sp_arr_init(&cli->buffers.envs);
-  cli->args = sp_arr_init(&cli->buffers.args);
-  cli->commands = sp_arr_init(&cli->buffers.cmds);
+  sp_cli_table(cli->buffers.opts, cli->opts, SP_CLI_MAX_DEPTH * SP_CLI_MAX_OPTS);
+  sp_cli_table(cli->buffers.envs, cli->env, SP_CLI_MAX_DEPTH * SP_CLI_MAX_ENV);
+  sp_cli_table(cli->buffers.args, cli->args, SP_CLI_MAX_ARGS);
+  sp_cli_table(cli->buffers.cmds, cli->commands, SP_CLI_MAX_COMMANDS);
 }
 
 SP_PRIVATE void sp_cli_load_opt(sp_cli_t* cli, sp_cli_opt_t* opt) {
@@ -337,7 +351,7 @@ SP_PRIVATE void sp_cli_load_opt(sp_cli_t* cli, sp_cli_opt_t* opt) {
     if (sp_cstr_equal(copy.name, cli->opts[it].name)) return;
     if (copy.brief && cli->opts[it].brief == copy.brief) copy.brief = 0;
   }
-  sp_da_push(cli->opts, copy);
+  sp_cli_push(cli->opts, copy);
 }
 
 SP_PRIVATE void sp_cli_load_env(sp_cli_t* cli, sp_cli_env_t* var) {
@@ -345,7 +359,7 @@ SP_PRIVATE void sp_cli_load_env(sp_cli_t* cli, sp_cli_env_t* var) {
   sp_da_for(cli->env, it) {
     if (sp_cstr_equal(var->name, cli->env[it].name)) return;
   }
-  sp_da_push(cli->env, *var);
+  sp_cli_push(cli->env, *var);
 }
 
 SP_PRIVATE void sp_cli_load_scope(sp_cli_t* cli, sp_cli_cmd_t* scope) {
@@ -375,10 +389,10 @@ SP_PRIVATE void sp_cli_load_cmd(sp_cli_t* cli) {
   sp_carr_for_until(cmd->args, it, cmd->args[it].name) {
     if (it) sp_assert(cmd->args[it - 1].arity != SP_CLI_ARG_REST);
     sp_assert(cmd->args[it].kind != SP_CLI_OPT_CHOICE || cmd->args[it].choices[0].name);
-    sp_da_push(cli->args, cmd->args[it]);
+    sp_cli_push(cli->args, cmd->args[it]);
   }
   sp_carr_for_until(cmd->commands, it, cmd->commands[it]) {
-    sp_da_push(cli->commands, cmd->commands[it]);
+    sp_cli_push(cli->commands, cmd->commands[it]);
   }
 }
 

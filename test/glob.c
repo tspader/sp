@@ -19,7 +19,7 @@ typedef struct {
 
 
 void run_parse_test(int* utest_result, sp_mem_t mem, parse_test_t t) {
-  sp_da(sp_glob_token_t) tokens = sp_da_new(mem, sp_glob_token_t);
+  sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
   sp_glob_err_t err = sp_glob_parse(mem, sp_cstr_as_str(t.pattern), &tokens);
 
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
@@ -89,7 +89,7 @@ typedef struct {
 } parse_error_test_t;
 
 void run_parse_error_test(int* utest_result, sp_mem_t mem, parse_error_test_t t) {
-  sp_da(sp_glob_token_t) tokens = sp_da_new(mem, sp_glob_token_t);
+  sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
   sp_glob_err_t err = sp_glob_parse(mem, sp_cstr_as_str(t.pattern), &tokens);
   EXPECT_EQ(err, t.expected_err);
 }
@@ -703,7 +703,7 @@ typedef struct {
 
 void run_strategy_test(int* utest_result, sp_mem_t mem, strategy_test_t t) {
   sp_glob_t glob = sp_zero;
-  sp_da_init(mem, glob.tokens);
+  glob.tokens = SP_NULLPTR;
   sp_glob_err_t err = sp_glob_parse(mem, sp_cstr_as_str(t.pattern), &glob.tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
   if (err == SP_GLOB_ERR_OK) {
@@ -793,33 +793,30 @@ UTEST_F(glob, set_matches_indices) {
   sp_glob_set_add(set, "Makefile");
   sp_glob_set_build(set);
 
-  sp_da(u32) indices = sp_da_new(ut.mem.arena, u32);
+  sp_da(u32) indices = SP_NULLPTR;
 
-  sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("foo.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
     EXPECT_EQ(indices[0], 0u);
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(ut.mem.arena, indices);
-  sp_glob_set_matches(set, sp_str_lit("foo.h"), &indices);
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("foo.h"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
     EXPECT_EQ(indices[0], 1u);
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(ut.mem.arena, indices);
-  sp_glob_set_matches(set, sp_str_lit("Makefile"), &indices);
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("Makefile"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
     EXPECT_EQ(indices[0], 2u);
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(ut.mem.arena, indices);
-  sp_glob_set_matches(set, sp_str_lit("foo.rs"), &indices);
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("foo.rs"), &indices);
   EXPECT_EQ(sp_da_size(indices), 0u);
 
   sp_glob_set_free(set);
@@ -852,25 +849,23 @@ UTEST_F(glob, set_basename_literal) {
   sp_glob_set_add(set, "*.foo");
   sp_glob_set_build(set);
 
-  sp_da(u32) indices = sp_da_new(ut.mem.arena, u32);
+  sp_da(u32) indices = SP_NULLPTR;
 
-  sp_glob_set_matches(set, sp_str_lit("foo"), &indices);
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
     EXPECT_EQ(indices[0], 0u);
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(ut.mem.arena, indices);
-  sp_glob_set_matches(set, sp_str_lit("a/foo"), &indices);
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("a/foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
     EXPECT_EQ(indices[0], 0u);
   }
 
   indices = SP_NULLPTR;
-  sp_da_init(ut.mem.arena, indices);
-  sp_glob_set_matches(set, sp_str_lit("bar.foo"), &indices);
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("bar.foo"), &indices);
   EXPECT_EQ(sp_da_size(indices), 1u);
   if (sp_da_size(indices) > 0) {
     EXPECT_EQ(indices[0], 1u);
@@ -922,8 +917,8 @@ UTEST_F(glob, set_empty) {
   EXPECT_FALSE(sp_glob_set_match(set, sp_str_lit("foo.c")));
   EXPECT_FALSE(sp_glob_set_match(set, sp_str_lit("")));
 
-  sp_da(u32) indices = sp_da_new(ut.mem.arena, u32);
-  sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
+  sp_da(u32) indices = SP_NULLPTR;
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("foo.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 0u);
 
   sp_glob_set_free(set);
@@ -936,8 +931,8 @@ UTEST_F(glob, set_multiple_matches) {
   sp_glob_set_add(set, "**/foo.c");
   sp_glob_set_build(set);
 
-  sp_da(u32) indices = sp_da_new(ut.mem.arena, u32);
-  sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
+  sp_da(u32) indices = SP_NULLPTR;
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("foo.c"), &indices);
 
   // Should match all three
   EXPECT_EQ(sp_da_size(indices), 3u);
@@ -975,8 +970,8 @@ UTEST_F(glob, set_duplicate_extension) {
   sp_glob_set_add(set, "*.c");
   sp_glob_set_build(set);
 
-  sp_da(u32) indices = sp_da_new(ut.mem.arena, u32);
-  sp_glob_set_matches(set, sp_str_lit("foo.c"), &indices);
+  sp_da(u32) indices = SP_NULLPTR;
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("foo.c"), &indices);
 
   // Both should match
   EXPECT_EQ(sp_da_size(indices), 2u);
@@ -1058,7 +1053,7 @@ UTEST_F(glob, parse_class_literal_dash_end) {
 }
 
 UTEST_F(glob, parse_alternates_empty_branch) {
-  sp_da(sp_glob_token_t) tokens = sp_da_new(ut.mem.arena, sp_glob_token_t);
+  sp_da(sp_glob_token_t) tokens = SP_NULLPTR;
   sp_glob_err_t err = sp_glob_parse(ut.mem.arena, sp_str_lit("{,a}"), &tokens);
   EXPECT_EQ(err, SP_GLOB_ERR_OK);
   EXPECT_EQ(sp_da_size(tokens), 1u);
@@ -1189,8 +1184,8 @@ UTEST_F(glob, set_multiple_prefixes) {
   sp_glob_set_add(set, "src/foo/*");
   sp_glob_set_build(set);
 
-  sp_da(u32) indices = sp_da_new(ut.mem.arena, u32);
-  sp_glob_set_matches(set, sp_str_lit("src/foo/bar.c"), &indices);
+  sp_da(u32) indices = SP_NULLPTR;
+  sp_glob_set_matches(ut.mem.arena, set, sp_str_lit("src/foo/bar.c"), &indices);
   EXPECT_EQ(sp_da_size(indices), 2u);
 
   sp_glob_set_free(set);

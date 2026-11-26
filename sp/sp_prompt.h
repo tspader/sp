@@ -164,7 +164,7 @@
 
     void sp_prompt_intro(sp_prompt_ctx_t* ctx, const c8* text);
     void sp_prompt_outro(sp_prompt_ctx_t* ctx, const c8* text);
-    void sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* text, const c8* title);
+    sp_err_t sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* text, const c8* title);
     void sp_prompt_cancel(sp_prompt_ctx_t* ctx, const c8* text);
     void sp_prompt_info(sp_prompt_ctx_t* ctx, const c8* text);
     void sp_prompt_warn(sp_prompt_ctx_t* ctx, const c8* text);
@@ -727,10 +727,10 @@ void             sp_prompt_multiselect(sp_prompt_ctx_t* ctx, sp_prompt_multisele
 void             sp_prompt_spinner(sp_prompt_ctx_t* ctx, sp_prompt_spinner_t config);
 void             sp_prompt_progress(sp_prompt_ctx_t* ctx, sp_prompt_progress_t config);
 void             sp_prompt_knight_rider(sp_prompt_ctx_t* ctx, sp_prompt_knight_rider_t config);
-void             sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* text, const c8* title);
+sp_err_t         sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* text, const c8* title);
 sp_prompt_note_t sp_prompt_note_new(sp_mem_t mem, const c8* title);
-void             sp_prompt_note_line(sp_prompt_note_t* note, const c8* text);
-void             sp_prompt_note_line_fmt(sp_prompt_note_t* note, const c8* fmt, ...);
+sp_err_t         sp_prompt_note_line(sp_prompt_note_t* note, const c8* text);
+sp_err_t         sp_prompt_note_line_fmt(sp_prompt_note_t* note, const c8* fmt, ...);
 void             sp_prompt_note_ex(sp_prompt_ctx_t* ctx, sp_prompt_note_t note);
 bool             sp_prompt_submitted(sp_prompt_ctx_t* ctx);
 bool             sp_prompt_cancelled(sp_prompt_ctx_t* ctx);
@@ -750,8 +750,8 @@ void             sp_prompt_send_progress_ptr(sp_prompt_ctx_t* ctx, void* value);
 void             sp_prompt_send_progress_bool(sp_prompt_ctx_t* ctx, bool value);
 void             sp_prompt_send_status(sp_prompt_ctx_t* ctx, const c8* text);
 void             sp_prompt_send_status_str(sp_prompt_ctx_t* ctx, sp_str_t text);
-void             sp_prompt_log(sp_prompt_ctx_t* ctx, const c8* text);
-void             sp_prompt_log_str(sp_prompt_ctx_t* ctx, sp_str_t text);
+sp_err_t         sp_prompt_log(sp_prompt_ctx_t* ctx, const c8* text);
+sp_err_t         sp_prompt_log_str(sp_prompt_ctx_t* ctx, sp_str_t text);
 
 // @values
 const c8*        sp_prompt_get_str(sp_prompt_ctx_t* ctx);
@@ -936,14 +936,17 @@ static void sp_prompt_emit_str(sp_prompt_ctx_t* ctx, sp_str_t str) {
 
 #define sp_prompt_emit(ctx, cstr) sp_prompt_emit_bytes(ctx, cstr, sizeof(cstr) - 1)
 
-static sp_da(sp_str_t) sp_prompt_log_rows(sp_mem_t mem, sp_str_t text) {
-  sp_da(sp_str_t) rows = sp_da_new(mem, sp_str_t);
+static sp_err_t sp_prompt_log_rows(sp_mem_t mem, sp_str_t text, sp_da(sp_str_t)* out) {
+  sp_da(sp_str_t) rows = SP_NULLPTR;
+  *out = SP_NULLPTR;
   if (sp_str_empty(text)) {
-    sp_da_push(rows, sp_zero_s(sp_str_t));
-    return rows;
+    sp_try(sp_da_push(mem, rows, sp_zero_s(sp_str_t)));
+    *out = rows;
+    return SP_OK;
   }
 
-  sp_da(sp_str_t) pieces = sp_str_split_c8(mem, text, '\n');
+  sp_da(sp_str_t) pieces = SP_NULLPTR;
+  sp_try(sp_str_split_c8(mem, text, '\n', &pieces));
   u32 count = sp_da_size(pieces);
   if (count > 1 && sp_str_empty(pieces[count - 1])) {
     count--;
@@ -954,9 +957,10 @@ static sp_da(sp_str_t) sp_prompt_log_rows(sp_mem_t mem, sp_str_t text) {
     while (!sp_str_empty(row) && row.data[row.len - 1] == '\r') {
       row.len--;
     }
-    sp_da_push(rows, row);
+    sp_try(sp_da_push(mem, rows, row));
   }
-  return rows;
+  *out = rows;
+  return SP_OK;
 }
 
 static void sp_prompt_ansi_home(sp_prompt_ctx_t* ctx) {
@@ -1087,14 +1091,11 @@ void sp_prompt_ctx_init(sp_prompt_ctx_t* ctx, sp_mem_t mem, u32 cols, u32 rows) 
   };
   ctx->arena = sp_mem_arena_new(mem);
   ctx->mem = sp_mem_arena_as_allocator(ctx->arena);
-  sp_da_init(ctx->mem, ctx->frames);
 
   sp_mutex_init(&ctx->channel.lock);
   ctx->channel.arena = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
   ctx->channel.log.arenas[0] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
   ctx->channel.log.arenas[1] = sp_mem_arena_new_ex(mem, 4096, SP_MEM_ALIGNMENT);
-  sp_da_init(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[0]);
-  sp_da_init(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[1]);
 
   u32 cell_count = ctx->cols * ctx->rows;
   if (ctx->framebuffer == SP_NULLPTR) {
@@ -1253,17 +1254,18 @@ void sp_prompt_send_status(sp_prompt_ctx_t* ctx, const c8* text) {
   sp_prompt_send_status_str(ctx, sp_cstr_as_str(text));
 }
 
-void sp_prompt_log_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
+sp_err_t sp_prompt_log_str(sp_prompt_ctx_t* ctx, sp_str_t text) {
   sp_mutex_lock(&ctx->channel.lock);
   u32 active = ctx->channel.log.active;
   sp_mem_t mem = sp_mem_arena_as_allocator(ctx->channel.log.arenas[active]);
-  sp_da_push(ctx->channel.log.pending[active], sp_str_copy(mem, text));
+  sp_err_t err = sp_da_push(sp_mem_arena_as_allocator(ctx->channel.arena), ctx->channel.log.pending[active], sp_str_copy(mem, text));
   sp_mutex_unlock(&ctx->channel.lock);
-  sp_prompt_wake(ctx);
+  if (!err) sp_prompt_wake(ctx);
+  return err;
 }
 
-void sp_prompt_log(sp_prompt_ctx_t* ctx, const c8* text) {
-  sp_prompt_log_str(ctx, sp_cstr_as_str(text));
+sp_err_t sp_prompt_log(sp_prompt_ctx_t* ctx, const c8* text) {
+  return sp_prompt_log_str(ctx, sp_cstr_as_str(text));
 }
 
 bool sp_prompt_submitted(sp_prompt_ctx_t* ctx) {
@@ -1488,7 +1490,13 @@ void sp_prompt_flush_log(sp_prompt_ctx_t* ctx) {
 
   sp_mem_arena_marker_t s = sp_mem_begin_scratch();
   sp_da_for(ctx->channel.log.pending[retired], it) {
-    sp_da(sp_str_t) rows = sp_prompt_log_rows(s.mem, ctx->channel.log.pending[retired][it]);
+    sp_da(sp_str_t) rows = SP_NULLPTR;
+    if (sp_prompt_log_rows(s.mem, ctx->channel.log.pending[retired][it], &rows)) {
+      // Can't split it into rows; the text still gets out
+      sp_prompt_emit_str(ctx, ctx->channel.log.pending[retired][it]);
+      sp_prompt_emit(ctx, "\r\n");
+      continue;
+    }
     sp_da_for(rows, row_it) {
       sp_str_t row = rows[row_it];
       if (row.len) {
@@ -1581,7 +1589,8 @@ void sp_prompt_app_on_deinit(sp_app_t* app) {
     };
 
     sp_mem_copy(frame.cells, ctx->framebuffer, sizeof(sp_prompt_cell_t) * cell_count);
-    sp_da_push(ctx->frames, frame);
+    // Nobody to report to from a deinit callback; the frame just isn't kept
+    sp_da_push(ctx->mem, ctx->frames, frame);
   }
 }
 
@@ -1589,12 +1598,14 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
   sp_prompt_ctx_t* ctx = (sp_prompt_ctx_t*)app->user_data;
   sp_mem_arena_marker_t scratch = sp_mem_begin_scratch();
 
-  sp_da(sp_prompt_event_t) events = sp_da_new(scratch.mem, sp_prompt_event_t);
+  sp_da(sp_prompt_event_t) events = SP_NULLPTR;
+  sp_err_t err = SP_OK;
 
   // Drain everything. Primed events come first by definition, but there's no specific order
   // between progress, status, and inputs.
   while (ctx->primed.count > ctx->primed.index) {
-    sp_da_push(events, ctx->primed.events[ctx->primed.index++]);
+    if (!err) err = sp_da_push(scratch.mem, events, ctx->primed.events[ctx->primed.index]);
+    ctx->primed.index++;
   }
 
   sp_mutex_lock(&ctx->channel.lock);
@@ -1603,7 +1614,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
       .kind = SP_PROMPT_EVENT_PROGRESS,
       .progress = { .data = ctx->progress.value },
     };
-    sp_da_push(events, event);
+    if (!err) err = sp_da_push(scratch.mem, events, event);
     ctx->progress.dirty = false;
   }
   if (ctx->status.dirty) {
@@ -1611,7 +1622,7 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
       .kind = SP_PROMPT_EVENT_STATUS,
       .status = { .value = ctx->status.value },
     };
-    sp_da_push(events, event);
+    if (!err) err = sp_da_push(scratch.mem, events, event);
     ctx->status.dirty = false;
   }
   sp_mutex_unlock(&ctx->channel.lock);
@@ -1620,7 +1631,12 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
     sp_prompt_event_t event = sp_prompt_drain_stdin(ctx);
     if (event.kind == SP_PROMPT_EVENT_NONE) break;
 
-    sp_da_push(events, event);
+    if (!err) err = sp_da_push(scratch.mem, events, event);
+  }
+
+  if (err) {
+    sp_mem_end_scratch(scratch);
+    return SP_APP_ERR;
   }
 
   // Widgets that don't .on_update have nothing to do without an event, so we prefer to
@@ -1648,7 +1664,10 @@ sp_app_result_t sp_prompt_app_on_poll(sp_app_t* app) {
   }
 
   if (sp_prompt_is_aborted(ctx)) {
-    sp_da_push(events, (sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_ABORT });
+    if (sp_da_push(scratch.mem, events, ((sp_prompt_event_t) { .kind = SP_PROMPT_EVENT_ABORT }))) {
+      sp_mem_end_scratch(scratch);
+      return SP_APP_ERR;
+    }
   }
 
   sp_da_for(events, it) {
@@ -1863,7 +1882,7 @@ static sp_prompt_style_t sp_prompt_style_from_fmt(sp_fmt_style_t style) {
   };
 }
 
-static void sp_prompt_note_append(sp_prompt_note_t* note, sp_str_t text, sp_da(sp_fmt_span_t) spans) {
+static sp_err_t sp_prompt_note_append(sp_prompt_note_t* note, sp_str_t text, sp_da(sp_fmt_span_t) spans) {
   sp_prompt_note_line_t line = {
     .text = text,
   };
@@ -1892,56 +1911,54 @@ static void sp_prompt_note_append(sp_prompt_note_t* note, sp_str_t text, sp_da(s
       }
     }
 
-    if (!line.spans) {
-      line.spans = sp_da_new(note->mem, sp_prompt_span_t);
-    }
-    sp_da_push(line.spans, prompt_span);
+    sp_try(sp_da_push(note->mem, line.spans, prompt_span));
   }
 
-  sp_da_push(note->lines, line);
+  return sp_da_push(note->mem, note->lines, line);
 }
 
 sp_prompt_note_t sp_prompt_note_new(sp_mem_t mem, const c8* title) {
   return (sp_prompt_note_t) {
     .title = sp_str_copy(mem, sp_cstr_as_str(title)),
     .mem = mem,
-    .lines = sp_da_new(mem, sp_prompt_note_line_t),
   };
 }
 
-void sp_prompt_note_line(sp_prompt_note_t* note, const c8* text) {
-  sp_prompt_note_append(note, sp_str_copy(note->mem, sp_cstr_as_str(text)), SP_NULLPTR);
+sp_err_t sp_prompt_note_line(sp_prompt_note_t* note, const c8* text) {
+  return sp_prompt_note_append(note, sp_str_copy(note->mem, sp_cstr_as_str(text)), SP_NULLPTR);
 }
 
-void sp_prompt_note_line_fmt(sp_prompt_note_t* note, const c8* fmt, ...) {
+sp_err_t sp_prompt_note_line_fmt(sp_prompt_note_t* note, const c8* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   sp_fmt_styled_r styled = sp_fmt_styled_v(note->mem, sp_cstr_as_str(fmt), args);
   va_end(args);
 
   if (styled.err) {
-    sp_prompt_note_append(note, sp_str_copy(note->mem, sp_cstr_as_str(fmt)), SP_NULLPTR);
-    return;
+    return sp_prompt_note_append(note, sp_str_copy(note->mem, sp_cstr_as_str(fmt)), SP_NULLPTR);
   }
-  sp_prompt_note_append(note, styled.text, styled.spans);
+  return sp_prompt_note_append(note, styled.text, styled.spans);
 }
 
 void sp_prompt_note_ex(sp_prompt_ctx_t* ctx, sp_prompt_note_t note) {
   sp_prompt_run(ctx, sp_prompt_note_widget(ctx, note));
 }
 
-void sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* message, const c8* title) {
+sp_err_t sp_prompt_note(sp_prompt_ctx_t* ctx, const c8* message, const c8* title) {
   sp_prompt_note_t note = sp_prompt_note_new(sp_mem_arena_as_allocator(ctx->arena), title);
   sp_str_t text = sp_cstr_as_str(message);
   if (!sp_str_empty(text)) {
     sp_mem_arena_marker_t s = sp_mem_begin_scratch_for(note.mem);
-    sp_da(sp_str_t) split = sp_str_split_c8(s.mem, text, '\n');
+    sp_da(sp_str_t) split = SP_NULLPTR;
+    sp_err_t err = sp_str_split_c8(s.mem, text, '\n', &split);
     sp_da_for(split, it) {
-      sp_prompt_note_append(&note, sp_str_copy(note.mem, split[it]), SP_NULLPTR);
+      if (!err) err = sp_prompt_note_append(&note, sp_str_copy(note.mem, split[it]), SP_NULLPTR);
     }
     sp_mem_end_scratch(s);
+    if (err) return err;
   }
   sp_prompt_note_ex(ctx, note);
+  return SP_OK;
 }
 
 void sp_prompt_cancel(sp_prompt_ctx_t* ctx, const c8* message) {
