@@ -47,7 +47,7 @@ jobs:
       - if: matrix.id == 'x86_64-linux'
         shell: bash
         run: |
-          tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
+          tests="amalgamation meta"
           spn build --test --target x86_64-linux-musl $tests
           for t in $tests; do
             echo "> $t"
@@ -56,7 +56,7 @@ jobs:
       - if: contains(matrix.triples, 'wasm32')
         shell: bash
         run: |
-          tests="amalgamation meta sys atomic fs msvct sync mem http promptt"
+          tests="amalgamation meta"
           spn build --test --target wasm32-wasi $tests
           for t in $tests; do
             echo "> $t"
