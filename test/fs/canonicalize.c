@@ -157,7 +157,7 @@ static const test_t tests [] = {
 };
 
 sp_test_each(fs, canonicalize, test_t, tests) {
-  sp_test_skip_on_wasm()
+  sp_test_skip_on_wasm();
   if (fs_setup_needs_symlinks(it->setup)) sp_test_skip_without_symlinks();
 
   sp_mem_t mem = sp_test_arena(t);
@@ -205,7 +205,7 @@ sp_test_each(fs, canonicalize, test_t, tests) {
 }
 
 sp_test(fs, canon_dot_resolves_to_cwd) {
-  sp_test_skip_on_wasm()
+  sp_test_skip_on_wasm();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t canonical = sp_zero;

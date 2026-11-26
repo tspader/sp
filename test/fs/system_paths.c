@@ -11,7 +11,7 @@ static void expect_normalized(sp_test_t* t, sp_str_t path, const c8* label) {
 }
 
 sp_test(fs, system_paths_nonempty) {
-  sp_test_skip_on_wasm()
+  sp_test_skip_on_wasm();
 
   sp_mem_t mem = sp_test_arena(t);
   sp_str_t storage = sp_zero;
@@ -24,7 +24,7 @@ sp_test(fs, system_paths_nonempty) {
 }
 
 sp_test(fs, system_paths_storage_path_normalized) {
-  sp_test_skip_on_wasm()
+  sp_test_skip_on_wasm();
 
   sp_str_t path = sp_zero;
   sp_must_ok(t, sp_fs_get_storage_path(sp_test_arena(t), &path));
@@ -33,7 +33,7 @@ sp_test(fs, system_paths_storage_path_normalized) {
 }
 
 sp_test(fs, system_paths_config_path_normalized) {
-  sp_test_skip_on_wasm()
+  sp_test_skip_on_wasm();
 
   sp_str_t path = sp_zero;
   sp_must_ok(t, sp_fs_get_config_path(sp_test_arena(t), &path));
