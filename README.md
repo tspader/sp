@@ -137,15 +137,14 @@ Please note that `sp.h` is in alpha. I [use](https://github.com/tspader/spn) [it
 Thankfully, since the library is a single file, it's very easy for you or an LLM to diff two copies of the library and make any changes needed. More, since the library is *not* build on decades of cruft, there are very few layers between your code and the syscalls it boils down to. Nevertheless, you should feel comfortable reading the library's source code if you plan to use it seriously.
 
 # development
-Install any C compiler, and then:
+Install [spn](https://github.com/boonbane/spn), and then:
 ```bash
-make
-./build/test/amalg
+spn test
 ```
 
-You can cross compile to any target if you have Zig installed:
+You can cross compile to any target:
 ```bash
-make x86_64-linux-none
+spn build --target x86_64-linux-none
 ```
 
 [^1]: Well, almost. There are still a handful of POSIX calls floating around, and one (unfortunately) hard to rip out GNU extension which is (fortunately) nevertheless implemented by MUSL.

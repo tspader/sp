@@ -1,3 +1,6 @@
+#ifndef SP_TEST_PROCESS_H
+#define SP_TEST_PROCESS_H
+
 #include "sp.h"
 
 #define SP_TEST_PS_CANARY "foo"
@@ -63,4 +66,4 @@ test_proc_function_t test_proc_function_from_str(sp_str_t str) {
   SP_UNREACHABLE_RETURN(TEST_PROC_FUNCTION_INVALID);
 }
 
-
+#endif

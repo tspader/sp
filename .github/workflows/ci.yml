@@ -14,77 +14,51 @@ concurrency:
 permissions: {}
 
 jobs:
-  zig:
+  check:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { id: x86_64-linux,  os: ubuntu-latest,    triples: x86_64-linux-none x86_64-linux-gnu x86_64-linux-musl }
-          - { id: aarch64-linux, os: ubuntu-24.04-arm, triples: aarch64-linux-none aarch64-linux-gnu aarch64-linux-musl }
-          - { id: macos,         os: macos-latest,     triples: aarch64-macos }
-          - { id: windows,       os: windows-latest,   triples: x86_64-windows-gnu }
-          - { id: wasm,          os: ubuntu-latest,    triples: wasm32-wasi wasm32-freestanding }
+          - { id: x86_64-linux,  os: ubuntu-latest,  targets: x86_64-linux-gnu x86_64-linux-musl x86_64-linux-none }
+          - { id: aarch64-linux, os: ubuntu-latest,  targets: aarch64-linux-gnu aarch64-linux-musl aarch64-linux-none }
+          - { id: macos,         os: macos-latest,   targets: aarch64-macos-apple }
+          - { id: windows,       os: windows-latest, targets: x86_64-windows-gnu }
+          - { id: wasm,          os: ubuntu-latest,  targets: wasm32-wasi-musl wasm32-freestanding-none }
     name: ${{ matrix.id }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-      - if: runner.os == 'Windows'
-        run: choco install make --no-progress
-      - if: contains(matrix.triples, 'wasm32')
-        uses: bytecodealliance/actions/wasmtime/setup@v1
-      - shell: bash
-        run: |
-          for triple in ${{ matrix.triples }}; do
-            make ci TRIPLE=$triple
-          done
-      - if: matrix.id == 'x86_64-linux' || matrix.id == 'wasm'
-        uses: boonbane/spn-action@main
+      - uses: boonbane/spn-action@main
         with:
           version: latest
-      - if: matrix.id == 'x86_64-linux'
-        shell: bash
-        run: |
-          tests="amalgamation meta"
-          spn build --test --target x86_64-linux-musl $tests
-          for t in $tests; do
-            echo "> $t"
-            build/x86_64-linux-musl/debug/test/$t || exit 1
-          done
-      - if: contains(matrix.triples, 'wasm32')
-        shell: bash
-        run: |
-          tests="amalgamation meta"
-          spn build --test --target wasm32-wasi $tests
-          for t in $tests; do
-            echo "> $t"
-            wasmtime run --dir "$PWD" build/wasm32-wasi-musl/debug/test/$t.wasm || exit 1
-          done
+      - if: matrix.id == 'wasm'
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+      - run: spn build check
+      - run: ./build/debug/check ${{ matrix.targets }}
 
   gcc:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: make ci CC=gcc
+      - uses: boonbane/spn-action@main
+        with:
+          version: latest
+      - run: spn build --toolchain gcc --sanitize undefined
+      - run: spn test --toolchain gcc --sanitize undefined
 
   msvc:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: microsoft/setup-msbuild@v2
-      - run: msbuild tools\windows\sp\sp.sln /p:Configuration=Release /p:Platform=x64 /m
-      - shell: bash
-        run: |
-          for t in tools/windows/sp/build/vs/Release/bin/*.exe tools/windows/sp/build/vs/Release/bin/spn/*.exe; do
-            echo "=== $t ==="
-            "$t" || exit 1
-          done
+      - uses: boonbane/spn-action@main
+        with:
+          version: latest
+      - run: spn build --toolchain msvc
+      - run: spn test --toolchain msvc
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [zig, gcc, msvc]
+    needs: [check, gcc, msvc]
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
