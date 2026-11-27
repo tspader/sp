@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="sp_str_t">
+    <DisplayString Condition="data == 0">""</DisplayString>
+    <DisplayString Condition="data != 0">{data,[len]s8}</DisplayString>
+    <StringView Condition="data != 0">data,[len]s8</StringView>
+    <Expand>
+      <Item Name="data">data</Item>
+      <Item Name="len">len</Item>
+      <Item Name="text" Condition="data != 0">data,[len]s8</Item>
+    </Expand>
+  </Type>
+  <Type Name="&lt;unnamed-tag&gt;">
+    <DisplayString Condition="sizeof(tmp_key) != 0">ht size={size} capacity={capacity}</DisplayString>
+    <Expand>
+      <CustomListItems MaxItemsPerView="5000">
+        <Variable Name="it" InitialValue="0"/>
+        <Loop Condition="it &lt; capacity">
+          <Item Condition="data[it].state == SP_HT_ENTRY_ACTIVE" Name="[{data[it].key}]">data[it].val</Item>
+          <Exec>it++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+  <Type Name="sp_env_var_t">
+    <DisplayString>{key}={value}</DisplayString>
+  </Type>
+  <Type Name="sp_env_t">
+    <DisplayString Condition="vars == 0">env size=0</DisplayString>
+    <DisplayString Condition="vars != 0">env size={vars->size}</DisplayString>
+    <Expand>
+      <Item Name="vars">vars</Item>
+      <Item Name="arena">arena</Item>
+      <Item Name="allocator_fn">mem.on_alloc</Item>
+      <Item Name="allocator_user_data">mem.user_data</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_mem_arena_block_t">
+    <DisplayString>block used={bytes_used}/{capacity}</DisplayString>
+  </Type>
+  <Type Name="sp_mem_arena_t">
+    <DisplayString Condition="current == 0">arena block_size={block_size} current=null</DisplayString>
+    <DisplayString Condition="current != 0">arena used={current->bytes_used}/{current->capacity} block_size={block_size}</DisplayString>
+    <Expand>
+      <Item Name="allocator_fn">allocator.on_alloc</Item>
+      <Item Name="allocator_user_data">allocator.user_data</Item>
+      <Item Name="current">current</Item>
+      <Item Name="block_size">block_size</Item>
+      <Item Name="alignment">alignment</Item>
+      <LinkedListItems>
+        <HeadPointer>head</HeadPointer>
+        <NextPointer>next</NextPointer>
+        <ValueNode>*this</ValueNode>
+      </LinkedListItems>
+    </Expand>
+  </Type>
+  <Type Name="sp_mem_buffer_t">
+    <DisplayString Condition="data == 0">buffer len={len} cap={capacity} null</DisplayString>
+    <DisplayString Condition="data != 0">buffer len={len} cap={capacity} {data,[len]s8}</DisplayString>
+    <StringView Condition="data != 0">data,[len]s8</StringView>
+    <Expand>
+      <Item Name="data">data</Item>
+      <Item Name="len">len</Item>
+      <Item Name="capacity">capacity</Item>
+      <Item Name="text" Condition="data != 0">data,[len]s8</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_io_reader">
+    <DisplayString>reader buffered={buffer.len}/{buffer.capacity} cursor={cursor}</DisplayString>
+    <Expand>
+      <Item Name="read_fn">read</Item>
+      <Item Name="as_file_fn">as_file</Item>
+      <Item Name="discard_fn">discard</Item>
+      <Item Name="buffer">buffer</Item>
+      <Item Name="cursor">cursor</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_io_writer">
+    <DisplayString>writer buffered={buffer.len}/{buffer.capacity}</DisplayString>
+    <Expand>
+      <Item Name="write_fn">write</Item>
+      <Item Name="transfer_fn">transfer</Item>
+      <Item Name="buffer">buffer</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_fmon">
+    <DisplayString>fmon watch={events_to_watch} debounce={debounce_time_ms}</DisplayString>
+    <Expand>
+      <Item Name="callback">callback</Item>
+      <Item Name="userdata">userdata</Item>
+      <Synthetic Name="changes" Condition="changes != 0">
+        <DisplayString>size={((sp_da_header_t*)changes)[-1].size}</DisplayString>
+        <Expand>
+          <ArrayItems>
+            <Size>((sp_da_header_t*)changes)[-1].size</Size>
+            <ValuePointer>changes</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+      <Synthetic Name="cache" Condition="cache != 0">
+        <DisplayString>size={((sp_da_header_t*)cache)[-1].size}</DisplayString>
+        <Expand>
+          <ArrayItems>
+            <Size>((sp_da_header_t*)cache)[-1].size</Size>
+            <ValuePointer>cache</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+      <Item Name="os">os</Item>
+      <Item Name="events_to_watch">events_to_watch</Item>
+      <Item Name="debounce_time_ms">debounce_time_ms</Item>
+      <Item Name="allocator_fn">mem.on_alloc</Item>
+      <Item Name="allocator_user_data">mem.user_data</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_ps_config_t">
+    <DisplayString>ps_config {command}</DisplayString>
+    <Expand>
+      <Item Name="command">command</Item>
+      <CustomListItems>
+        <Variable Name="it" InitialValue="0"/>
+        <Loop Condition="it &lt; sizeof(args) / sizeof(args[0])">
+          <Break Condition="args[it].len == 0"/>
+          <Item Name="arg{it}">args[it]</Item>
+          <Exec>it++</Exec>
+        </Loop>
+      </CustomListItems>
+      <Synthetic Name="dyn_args" Condition="dyn_args != 0">
+        <DisplayString>size={((sp_da_header_t*)dyn_args)[-1].size}</DisplayString>
+        <Expand>
+          <ArrayItems>
+            <Size>((sp_da_header_t*)dyn_args)[-1].size</Size>
+            <ValuePointer>dyn_args</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+      <Item Name="cwd" Condition="cwd.len != 0">cwd</Item>
+      <Item Name="env">env</Item>
+      <Item Name="stdin">io.in.mode</Item>
+      <Item Name="stdout">io.out.mode</Item>
+      <Item Name="stderr">io.err.mode</Item>
+    </Expand>
+  </Type>
+  <Type Name="sp_ps_t">
+    <DisplayString>ps in={io.in.mode,en} out={io.out.mode,en} err={io.err.mode,en}</DisplayString>
+    <Expand>
+      <Item Name="stdin_fd">io.in.fd</Item>
+      <Item Name="stdin_mode">io.in.mode</Item>
+      <Item Name="stdin_block">io.in.block</Item>
+      <Item Name="stdout_fd">io.out.fd</Item>
+      <Item Name="stdout_mode">io.out.mode</Item>
+      <Item Name="stdout_block">io.out.block</Item>
+      <Item Name="stderr_fd">io.err.fd</Item>
+      <Item Name="stderr_mode">io.err.mode</Item>
+      <Item Name="stderr_block">io.err.block</Item>
+      <Item Name="os">os</Item>
+      <Item Name="allocator_fn">mem.on_alloc</Item>
+      <Item Name="allocator_user_data">mem.user_data</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>

@@ -2,6 +2,9 @@
 name = "sp"
 version = "0.1.0"
 include = ["."]
+define = [
+  { value = "SP_FREESTANDING", when = { os = "linux", abi = "none" } },
+]
 system_deps = [
   { lib = "ws2_32", when = { os = "windows" } },
   { lib = "crypt32", when = { os = "windows" } },
@@ -9,29 +12,34 @@ system_deps = [
   { lib = "bcrypt", when = { os = "windows" } },
 ]
 
+[profile.default]
+standard = "c99"
+
+[profile.sanitizer]
+sanitize = ["address", "undefined"]
+
+[profile.tsan]
+sanitize = ["thread"]
+
 [[test]]
 name = "amalgamation"
 source = [
   "test/main.c",
-  "test/test/axis.c", "test/test/filter.c", "test/test/matrix.c",
-  "test/test/sweep.c", "test/test/tracking.c",
+  "test/atomic.c",
+  "test/mem/uninitialized.c",
   "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
   "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/set_times.c", "test/sys/perms.c", "test/sys/self_path.c",
-  "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/pipe/disconnect.c", "test/sys/pipe/truncate.c", "test/sys/transfer.c", "test/sys/readlink.c", "test/sys/rename.c", "test/sys/unlink.c",
+  "test/sys/transfer.c", "test/sys/readlink.c", "test/sys/rename.c", "test/sys/unlink.c",
   "test/sys/copy_link.c", "test/sys/reparse.c",
   "test/sys/sync.c",
-  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
-  "test/sys/tty/contract.c", "test/sys/tty/mode.c",
-  "test/sys/wait/event.c", "test/sys/wait/wait.c",
   "test/sys/inherit.c",
-  "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c",
-  "test/fs/atomic/*.c", "test/fs/copy/*.c", "test/fs/create_dir/*.c", "test/fs/path/*.c", "test/fs/read/*.c", "test/fs/write/*.c",
-  "test/fs/*.c", "test/fs/windows/nt_path.c",
-  "test/str/*.c", "test/str/utf8/*.c",
+  "test/sys/*/*.c",
+  "test/fs/**/*.c",
+  "test/str/**/*.c",
+  "test/sync/**/*.c",
   "test/msvc/*.c",
-  "test/mem/uninitialized.c",
-  "test/atomic.c",
-  "test/sync/*.c", "test/sync/os/*.c"
+  "test/http/*.c",
+  "test/prompt/*.c",
 ]
 include = [".", "test/fs"]
 
@@ -40,61 +48,21 @@ name = "meta"
 source = ["test/test/*.c"]
 
 [[test]]
-name = "sys"
-source = [
-  "test/main.c",
-  "test/sys/sys.c", "test/sys/open.c", "test/sys/path.c", "test/sys/futex.c",
-  "test/sys/fd.c", "test/sys/fd_path.c", "test/sys/nanosleep.c", "test/sys/timestamps.c", "test/sys/set_times.c", "test/sys/perms.c", "test/sys/self_path.c",
-  "test/sys/pipe/data.c", "test/sys/pipe/blocking.c", "test/sys/pipe/disconnect.c", "test/sys/pipe/truncate.c", "test/sys/transfer.c", "test/sys/readlink.c", "test/sys/rename.c", "test/sys/unlink.c",
-  "test/sys/copy_link.c", "test/sys/reparse.c",
-  "test/sys/sync.c",
-  "test/sys/socket/data.c", "test/sys/socket/listen.c", "test/sys/socket/desc.c",
-  "test/sys/tty/contract.c", "test/sys/tty/mode.c",
-  "test/sys/wait/event.c", "test/sys/wait/wait.c",
-  "test/sys/inherit.c"
-]
+name = "utest"
+source = ["test/amalg.c"]
+include = ["test", "test/tools"]
 
 [[test]]
-name = "atomic"
-source = ["test/main.c", "test/atomic.c"]
-
-[[test]]
-name = "fs"
-source = ["test/main.c", "test/fs/dir/*.c", "test/fs/it/*.c", "test/fs/remove/*.c", "test/fs/wtf8/*.c",
-  "test/fs/atomic/*.c", "test/fs/copy/*.c", "test/fs/create_dir/*.c", "test/fs/path/*.c", "test/fs/read/*.c", "test/fs/write/*.c", "test/fs/*.c", "test/fs/windows/nt_path.c"]
-include = [".", "test/fs"]
-
-[[test]]
-name = "msvct"
-source = ["test/main.c", "test/msvc/*.c"]
-
-[[test]]
-name = "sync"
-source = ["test/main.c", "test/sync/*.c", "test/sync/os/*.c"]
-
-[[test]]
-name = "mem"
-source = ["test/main.c", "test/mem/uninitialized.c"]
-
-[[test]]
-name = "http"
-source = [
-  "test/main.c",
-  "test/http/*.c",
-]
-
-[[test]]
-name = "promptt"
-source = [
-  "test/main.c",
-  "test/prompt/*.c",
-]
+name = "cpp"
+source = [{ path = "test/amalg.cpp", when = { driver = { not = "msvc" } } }]
+include = ["test", "test/tools"]
+cxx = { standard = "c++11" }
 
 [[test]]
 name = "tls"
 source = [
-  "test/main.c",
-  "test/http/tls/*.c",
+  { path = "test/main.c", when = { os = { not = "wasi" }, abi = { not = "none" } } },
+  { path = "test/http/tls/*.c", when = { os = { not = "wasi" }, abi = { not = "none" } } },
 ]
 define = [
   "SP_TLS_WITH_MBEDTLS",
@@ -109,25 +77,66 @@ system_deps = [
 [[lib]]
 name = "sp"
 kinds = ["shared"]
-source = ["test/tools/linkage/lib-impl.c"]
+source = [{ path = "test/tools/linkage/lib-impl.c", when = { os = { not = "wasi" }, abi = { not = "none" } } }]
 define = ["SP_SHARED_LIB"]
 
 [[test]]
 name = "linkage"
-source = ["test/tools/linkage/main-decl.c"]
+source = [{ path = "test/tools/linkage/main-decl.c", when = { os = { not = "wasi" }, abi = { not = "none" } } }]
 define = ["SP_SHARED_LIB"]
 deps = ["sp"]
 
 [deps.test]
-mbedtls = { path = "tools/spn/mbedtls", when = { os = { not = "wasi" } } }
+mbedtls = { path = "tools/spn/mbedtls", when = { os = { not = "wasi" }, abi = { not = "none" } } }
 
 [[example]]
-name = "zero_copy"
-source = ["example/zero_copy.c"]
+name = "app"
+source = ["example/app.c"]
+
+[[example]]
+name = "array"
+source = ["example/array.c"]
+
+[[example]]
+name = "cargo"
+source = ["example/cargo.c"]
+
+[[example]]
+name = "cli"
+source = ["example/cli.c"]
+
+[[example]]
+name = "format"
+source = ["example/format.c"]
+flags = [{ value = "/Zc:preprocessor", when = { driver = "msvc" } }]
+
+[[example]]
+name = "hash_table"
+source = ["example/hash_table.c"]
+
+[[example]]
+name = "io"
+source = ["example/io.c"]
+
+[[example]]
+name = "iterator"
+source = ["example/fs/iterator.c"]
+
+[[example]]
+name = "ls"
+source = ["example/ls.c"]
 
 [[example]]
 name = "msvc"
 source = ["example/msvc.c"]
+
+[[example]]
+name = "palette"
+source = ["example/palette.c"]
+
+[[example]]
+name = "post"
+source = ["example/post.c"]
 
 [[example]]
 name = "prompt"
@@ -138,18 +147,25 @@ name = "prompt_fancy"
 source = ["example/prompt_fancy.c"]
 
 [[example]]
-name = "cargo"
-source = ["example/cargo.c"]
+name = "serve"
+source = ["example/serve.c"]
 
-[profile.sanitizer]
-sanitize = ["address", "undefined"]
+[[example]]
+name = "signal"
+source = ["example/signal.c"]
 
-[profile.tsan]
-sanitize = ["thread"]
+[[example]]
+name = "tls"
+source = ["example/tls.c"]
 
-[[toolchain]]
-name = "clang"
-compiler = "clang"
-linker = "ld"
-archiver = "ar"
-driver = "clang"
+[[example]]
+name = "wc"
+source = ["example/wc.c"]
+
+[[example]]
+name = "zero_copy"
+source = ["example/zero_copy.c"]
+
+[[tool]]
+name = "check"
+source = ["tools/check.c"]

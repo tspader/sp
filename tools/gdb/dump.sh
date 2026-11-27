@@ -4,13 +4,8 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 
-cc="${CC:-cc}"
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-
-fixture="$tmp/gdb_fixture"
-"$cc" -std=c99 -g -DSP_IMPLEMENTATION -I"$root" -I"$root/test/tools" \
-  -o "$fixture" "$root/test/gdb_fixture.c"
+(cd "$root" && spn build utest)
+fixture="$root/build/debug/test/utest"
 
 scripts=(
   sp_str_t.py sp_tm_epoch_t.py sp_da.py sp_ht.py
@@ -31,7 +26,7 @@ dump() {
     "${source_args[@]}" \
     -ex "break $mark" -ex run \
     -ex 'echo __SP_BEGIN__\n' -ex "$command" -ex 'echo __SP_END__\n' \
-    -ex kill "$fixture" 2>/dev/null \
+    -ex kill --args "$fixture" --gdb 2>/dev/null \
     | awk '/__SP_BEGIN__/{f=1;next} /__SP_END__/{f=0} f'
   echo
 }
@@ -60,5 +55,5 @@ dump "sp_om (struct vals)"    brk_om_structval "print subject"
 dump "sp_mem_arena (summary)" brk_arena        "print subject"
 dump "sp_mem_arena (chart)"   brk_arena        "arena subject"
 
-dump "sp_ps_config_t"         brk_ps_config    "print subject"
-dump "sp_env_var_t"           brk_env_var      "print subject"
+dump "sp_ps_config_t"         brk_ps_config    "print *subject"
+dump "sp_env_var_t"           brk_env_var      "print *subject"

@@ -1,8 +1,7 @@
 #include "sp.h"
 
 #if defined(SP_FREESTANDING) || defined(SP_WASM_FREESTANDING)
-int run(int n, const char** a) { return 0; }
-SP_MAIN(run);
+s32 process_main(s32 num_args, const c8** args) { return 0; }
 #else
 
 #ifdef _WIN32
@@ -49,7 +48,7 @@ static u32 read_line(c8* buf, u32 cap) {
   return len;
 }
 
-s32 main(s32 num_args, const c8** args) {
+s32 process_main(s32 num_args, const c8** args) {
   const c8* function_str = NULL;
   s32 exit_code = 0;
   s32 stdout_enabled = 0;

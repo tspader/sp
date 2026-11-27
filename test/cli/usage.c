@@ -17,9 +17,6 @@ static void cli_print_usage_file(sp_str_t path, sp_str_t content) {
 
 static sp_str_t cli_usage_golden_dir(sp_mem_t mem) {
   sp_sys_file_meta_t meta = sp_zero;
-  sp_str_t baked = sp_str_lit(SP_CLI_TEST_DIR);
-  if (!sp_fs_get_path_metadata(baked, &meta)) return sp_fs_join_path(mem, baked, sp_str_lit("golden"));
-
   sp_str_t exe = sp_zero;
   sp_fs_get_exe_path(mem, &exe);
   sp_str_t dir = sp_fs_parent_path(exe);

@@ -1,6 +1,6 @@
 #include "http.h"
 
-#if !defined(SP_WASM)
+#if !defined(SP_WASM) && !defined(SP_FREESTANDING)
 
 #if !defined(SP_WIN32)
 #include <signal.h>

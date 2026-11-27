@@ -1,14 +1,14 @@
 #include "sp.h"
 #include "sp_om.h"
 
-typedef struct { s32 x; s32 y; } point_t;
+typedef struct { s32 x; s32 y; } gdb_point_t;
 
 typedef sp_ht(s32, s32) ht_ints_t;
 typedef sp_ht(s32, const c8*) ht_cstrval_t;
 typedef sp_str_ht(s32) ht_strkey_t;
-typedef sp_ht(point_t, point_t) ht_struct_t;
+typedef sp_ht(gdb_point_t, gdb_point_t) ht_struct_t;
 typedef sp_str_om(s32) om_strkey_t;
-typedef sp_str_om(point_t) om_structval_t;
+typedef sp_str_om(gdb_point_t) om_structval_t;
 
 SP_NOINLINE void brk_da_null(sp_da(s32) subject)        { (void)subject; }
 SP_NOINLINE void brk_da_empty(sp_da(s32) subject)       { (void)subject; }
@@ -34,8 +34,8 @@ SP_NOINLINE void brk_tm(sp_tm_epoch_t subject)        { (void)subject; }
 
 SP_NOINLINE void brk_arena(sp_mem_arena_t* subject)   { (void)subject; }
 
-SP_NOINLINE void brk_ps_config(sp_ps_config_t subject) { (void)subject; }
-SP_NOINLINE void brk_env_var(sp_env_var_t subject)     { (void)subject; }
+SP_NOINLINE void brk_ps_config(sp_ps_config_t* subject) { (void)subject; }
+SP_NOINLINE void brk_env_var(sp_env_var_t* subject)     { (void)subject; }
 
 static void run_da(sp_mem_t mem) {
   brk_da_null(SP_NULLPTR);
@@ -105,8 +105,8 @@ static void run_ht(sp_mem_t mem) {
   {
     ht_struct_t subject = SP_NULLPTR;
     sp_ht_init(mem, subject);
-    point_t k1 = { .x = 1, .y = 2 };
-    point_t v1 = { .x = 3, .y = 4 };
+    gdb_point_t k1 = { .x = 1, .y = 2 };
+    gdb_point_t v1 = { .x = 3, .y = 4 };
     sp_ht_insert(subject, k1, v1);
     brk_ht_struct(subject);
   }
@@ -124,8 +124,8 @@ static void run_om(void) {
   }
   {
     om_structval_t subject = SP_NULLPTR;
-    point_t a = { .x = 10, .y = 20 };
-    point_t b = { .x = 30, .y = 40 };
+    gdb_point_t a = { .x = 10, .y = 20 };
+    gdb_point_t b = { .x = 30, .y = 40 };
     sp_str_om_insert(subject, sp_str_lit("origin"), a);
     sp_str_om_insert(subject, sp_str_lit("corner"), b);
     brk_om_structval(subject);
@@ -158,15 +158,16 @@ static void run_ps(void) {
   config.cwd = sp_str_lit("/home");
   config.io.out.mode = SP_PS_IO_MODE_NULL;
   config.io.err.mode = SP_PS_IO_MODE_INHERIT;
-  brk_ps_config(config);
+  brk_ps_config(&config);
 
-  brk_env_var((sp_env_var_t) {
+  sp_env_var_t var = {
     .key = sp_str_lit("PATH"),
     .value = sp_str_lit("/usr/bin"),
-  });
+  };
+  brk_env_var(&var);
 }
 
-static s32 gdb_fixture_main(s32 num_args, const c8** args) {
+s32 gdb_fixture_main(s32 num_args, const c8** args) {
   (void)num_args;
   (void)args;
 
@@ -182,5 +183,3 @@ static s32 gdb_fixture_main(s32 num_args, const c8** args) {
 
   return 0;
 }
-
-SP_MAIN(gdb_fixture_main)
